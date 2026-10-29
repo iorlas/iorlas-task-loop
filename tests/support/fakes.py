@@ -174,8 +174,8 @@ class FakeRouter(FixedRoute):
     def __init__(self, script=None, route="/fake/route.py", refusal=None):
         resolved = refusal or dl.Resolved(Path(route).parent, route, fake_route.CONTRACT, "explicit")
         super().__init__(resolved, script)
-        self.runners = []  # (idle, wall) per runner handed out
+        self.runners = []  # wall per runner handed out
 
-    def runner(self, log_path, idle=None, wall=None, live="", on_worker=None):
-        self.runners.append((idle, wall))
+    def runner(self, log_path, wall=None, live="", on_worker=None):
+        self.runners.append(wall)
         return self.process

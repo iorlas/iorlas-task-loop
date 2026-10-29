@@ -1,8 +1,11 @@
 """tl-bxk.10.20: the write timeout follows the worker's activity, not the wall clock, and a stopped call's worker is gone before any
 retry (lifesim-fld.27.10, -ae6v and -fld.6 each lost 47 min of live work to the 45 min cap). The engine's runner is stream-proc's
-`run` with a watcher: delegate gets `--timeout` and `--idle`, the `Silence` here is the backstop, and the worker's pids come from
-the live file's first line (WorkerStarted) and from the answer's `worker.end`, never from ps or a stderr line."""
+`run` with a watcher: delegate gets `--timeout` (the one wall cap) and `--idle` (its own silence limit; a hung worker is a typed stop in
+its answer), the engine keeps no silence timer, and the worker's pids come from the live file's first line (WorkerStarted) and from the
+answer's `worker.end`, never from ps or a stderr line."""
 
+import dataclasses
+import inspect
 import json
 import os
 import sys
@@ -21,13 +24,12 @@ from support import engine_case as te
 from support import fake_route
 from support.narrow import must
 
-from taskloop.adapters import delegate as dg
 from taskloop.adapters import procs, runner
 from taskloop.adapters.delegate import Stopped
-from taskloop.app.release import seams
 from taskloop.app.run import engine
 from taskloop.app.wire import slots as wslots
-from taskloop.contracts.delegate import DelegateResult
+from taskloop.contracts.config import ConfigError, EngineConfig, load
+from taskloop.contracts.delegate import DelegateResult, RunRequest
 
 POSIX = os.name != "nt"
 MIN = 60.0
@@ -58,44 +60,18 @@ ROUTE = textwrap.dedent('''
 ''')
 
 
-class SilenceRules(unittest.TestCase):
-    def setUp(self):
-        self.t, self.warns = [1000.0], []
-        self.w = runner.Silence(15 * MIN, 25 * MIN, 120 * MIN, on_warn=self.warns.append, clock=lambda: self.t[0])
-        self.w.begin()
+class NoEngineSideSilence(unittest.TestCase):
+    def test_the_engine_has_no_warn_stop_cap_timer_of_its_own(self):
+        self.assertFalse(hasattr(runner, "Silence") or hasattr(runner, "WATCH_S"))
+        self.assertNotIn("silence", inspect.signature(runner.StreamRunner).parameters)
+        cfg = {f.name for f in dataclasses.fields(EngineConfig)}
+        self.assertTrue({"write_idle_min", "write_cap_min"} <= cfg)
+        self.assertFalse({"write_idle_warn_min", "write_idle_stop_min"} & cfg)
 
-    def test_process_output_counts_as_activity(self):
-        self.t[0] += 24 * MIN
-        self.assertEqual(self.w.check(None), "")
-        self.w.touch()
-        self.t[0] += 24 * MIN
-        self.assertEqual(self.w.check(None), "")  # 48 min in all, 24 since the output
-
-    def test_a_live_file_that_moves_counts_as_activity(self):
-        self.t[0] += 40 * MIN
-        self.assertEqual(self.w.check(self.t[0] - 60), "")
-
-    def test_a_worker_gone_quiet_warns_at_15_min_and_is_stopped_at_25(self):
-        self.t[0] += 16 * MIN
-        self.assertEqual(self.w.check(None), "")
-        self.assertEqual(self.warns, ["write: no worker output for 16 min"])
-        self.t[0] += 10 * MIN
-        self.assertIn("no worker output for 26 min", self.w.check(None))
-
-    def test_a_warning_is_given_once_per_quiet_stretch(self):
-        self.t[0] += 16 * MIN
-        self.w.check(None)
-        self.t[0] += 3 * MIN
-        self.w.check(None)
-        self.assertEqual(len(self.warns), 1)
-        self.w.touch()
-        self.t[0] += 16 * MIN
-        self.w.check(None)
-        self.assertEqual(len(self.warns), 2)
-
-    def test_the_hard_cap_stops_a_worker_that_never_goes_quiet(self):
-        self.t[0] += 121 * MIN
-        self.assertEqual(self.w.check(self.t[0]), "hard cap 120 min")
+    def test_a_retired_tier_key_in_the_profile_fails_loudly(self):
+        for key in ("write_idle_warn_min", "write_idle_stop_min"):
+            with self.assertRaises(ConfigError):
+                load({"engine": {key: 15}})
 
 
 @unittest.skipUnless(POSIX, "process groups")
@@ -105,7 +81,7 @@ class StreamRunnerCall(unittest.TestCase):
         self.d = Path(self.tmp.name)
         (self.d / "route.py").write_text(ROUTE)
         self.live = str(self.d / "x.live" / "01-write.jsonl")
-        for p in (mock.patch.object(runner, "POLL_S", 0.05), mock.patch.object(runner, "WATCH_S", 0.05)):
+        for p in (mock.patch.object(runner, "POLL_S", 0.05),):
             p.start()
             self.addCleanup(p.stop)
         self.addCleanup(self.cleanup_worker)
@@ -116,8 +92,8 @@ class StreamRunnerCall(unittest.TestCase):
             procs.stop_pid(int(f.read_text()), grace=0.2)
         self.tmp.cleanup()
 
-    def run_route(self, mode="", silence=None, wall=60.0, on_worker=None, **env):
-        r = runner.StreamRunner(self.d / "err.log", silence, wall, self.live, on_worker, grace=0.5)
+    def run_route(self, mode="", wall=60.0, on_worker=None, **env):
+        r = runner.StreamRunner(self.d / "err.log", wall, self.live, on_worker, grace=0.5)
         cmd = [sys.executable, str(self.d / "route.py"), "--cwd", str(self.d)]
         return r, lambda: r(cmd, cwd=str(self.d), env=dict(os.environ, FAKE_MODE=mode, DELEGATE_LIVE_FILE=self.live, **env), timeout=wall)
 
@@ -131,23 +107,12 @@ class StreamRunnerCall(unittest.TestCase):
         self.assertEqual((must(r.worker).pid, must(r.worker).run_id), (self.worker_pid(), "run1"))
         self.assertEqual(seen, [r.worker])
 
-    def test_a_live_file_that_keeps_moving_keeps_the_call_alive_past_the_silence_limit(self):
-        sil = runner.Silence(0.3, 0.6, 30.0)
-        r, go = self.run_route("chatty", silence=sil, CHAT_UNTIL=str(time.time() + 1.6))
+    def test_a_quiet_worker_is_not_stopped_by_the_engine_before_its_wall_limit(self):
+        """Silence is delegate's: the engine's runner stops a call only at the wall limit or a stop of the run."""
+        r, go = self.run_route("chatty", CHAT_UNTIL=str(time.time() + 1.2))
         done = go()
         self.assertEqual(done.returncode, 0)
         self.assertEqual(r.stop, {})
-
-    def test_a_silent_worker_is_stopped_with_everything_it_started(self):
-        sil = runner.Silence(0.2, 0.5, 30.0)
-        r, go = self.run_route("stubborn", silence=sil)
-        with self.assertRaises(Stopped) as got:
-            go()
-        self.assertIn("no worker output", got.exception.why)
-        self.assertEqual(r.stop["alive"], [])
-        self.assertFalse(procs.alive(self.worker_pid()))  # it ignored SIGTERM and is gone: stream-proc proved it
-        self.assertIsNotNone(r.obs["kill_t"])
-        self.assertEqual(must(r.worker).run_id, "run1")
 
     def test_the_wall_limit_stops_the_call_through_stream_proc(self):
         r, go = self.run_route("", wall=0.8)
@@ -192,23 +157,25 @@ class SurvivorBlocksTheRetry(te.EngineTest):
         for pid in ("31337", "31338"):
             self.assertIn(pid, self.eng.why)
 
-    def test_the_write_node_gets_the_idle_limits_from_the_config_and_other_nodes_do_not(self):
-        idles = []
+    def test_the_write_call_carries_delegates_idle_limit_and_one_wall_cap_in_its_argv(self):
         script = fake_route.Script({"plan": [te.PLAN], "write": [te.WRITE], "review": [te.CLEAN]})
         c = wslots.load_cfg(str(self.wt))
-        with (
-            te.delegate_stack(script),
-            mock.patch.object(
-                seams.DelegateRoute, "runner", lambda self, log, idle=None, wall=None, live="", on_worker=None: idles.append(idle) or script
-            ),
-        ):
+        argvs = []
+        real = RunRequest.to_argv
+
+        def spy(r, py, route):
+            argvs.append(real(r, py, route))
+            return argvs[-1]
+
+        with te.delegate_stack(script), mock.patch.object(RunRequest, "to_argv", spy):
             engine.Engine("t-1", str(self.wt), c, store=self.store).run()
-        seen = dict(zip([x[0] for x in script.calls], idles, strict=False))  # one runner per call, in call order
-        self.assertEqual(
-            tuple(seen["worker"][:3]), (15 * MIN, 25 * MIN + dg.BACKSTOP_S, 120 * MIN)
-        )  # delegate stops at 25 min (--idle), the engine 2 min after
-        self.assertIsNone(seen["planner"])
-        self.assertIsNone(seen["reviewer"])
+        by_role = {a[a.index("run") + 1]: a for a in argvs}
+        w = by_role["worker"]
+        want = (str(int(c.write_idle_min * 60)), str(int(c.write_cap_min * 60)))
+        self.assertEqual((w[w.index("--idle") + 1], w[w.index("--timeout") + 1]), want)
+        self.assertEqual(w.count("--timeout"), 1)
+        self.assertNotIn("--idle", by_role["reviewer"])  # delegate's own default for the others
+        self.assertNotIn("--idle", by_role["planner"])
 
     def test_a_write_under_the_idle_rules_gets_no_close_to_the_limit_warning(self):
         eng = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)

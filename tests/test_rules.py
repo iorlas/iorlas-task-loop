@@ -515,6 +515,54 @@ class NoShell(unittest.TestCase):
         self.assertEqual(len(got), 5, got)
 
 
+# -- no process probe ------------------------------------------------------------------------------------------------------------------
+PROBES = frozenset({"lsof", "ps", "pgrep", "tasklist"})
+SPAWNERS = frozenset({"run", "Popen", "call", "check_call", "check_output", "capture", "spawn", "which"})
+
+
+def call_name(node):
+    return getattr(node.func, "attr", "") or getattr(node.func, "id", "")
+
+
+def probe_problems(root=ROOT):
+    """Where an argv names lsof, ps, pgrep or tasklist (a list or tuple starting with one, or a spawn call given one): what a process
+    does is read from a typed fact (the live file, the answer's worker.end, a lock's holder record), never guessed from a probe."""
+    found = []
+    for base in ("src", "skills"):
+        for path in sorted((Path(root) / base).rglob("*.py")):
+            rel = path.relative_to(root)
+            if SKIP_DIRS & set(rel.parts) or rel.as_posix().startswith(tuple(d + "/" for d in EXEMPT_DIRS)) or "_vendor" in rel.parts:
+                continue
+            for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+                head = None
+                if isinstance(node, (ast.List, ast.Tuple)) and node.elts:
+                    head = node.elts[0]
+                elif isinstance(node, ast.Call) and node.args and call_name(node) in SPAWNERS:
+                    head = node.args[0]
+                if isinstance(head, ast.Constant) and isinstance(head.value, str) and Path(head.value).name in PROBES:
+                    found.append(f"{rel.as_posix()}:{int(head.lineno)} {head.value}")
+    return found
+
+
+class NoProbe(unittest.TestCase):
+    def test_no_argv_names_lsof_ps_pgrep_or_tasklist(self):
+        self.assertEqual(probe_problems(), [], "no process probe: read the typed fact (live file, worker.end, a lock's holder record)")
+
+    def test_the_rule_finds_each_probe_and_passes_the_rest(self):
+        bad = ("import subprocess\nsubprocess.run(['lsof', '-t', 'f'])\nx = ('/bin/ps', '-p', '1')\nsubprocess.Popen('pgrep')\n"
+               "run(['tasklist'])\n")
+        ok = "import subprocess\nsubprocess.run(['git', 'status'])\nNAMES = ['pstree-not', 'x']\nprint('ps')\n"
+        vend = "x = ['ps', '-p', '1']\n"
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "src" / "_vendor").mkdir(parents=True)
+            (Path(d) / "src" / "bad.py").write_text(bad)
+            (Path(d) / "src" / "ok.py").write_text(ok)
+            (Path(d) / "src" / "_vendor" / "v.py").write_text(vend)
+            got = probe_problems(d)
+        self.assertEqual({g.split(":")[0] for g in got}, {"src/bad.py"})
+        self.assertEqual(len(got), 4, got)
+
+
 # -- the older folder table --------------------------------------------------------------------------
 SKILL = ROOT / "skills" / "task-loop"
 FOLDERS = ("core", "asks", "plan", "slots", "review", "loop", "release", "land", "look", "write", "dash")

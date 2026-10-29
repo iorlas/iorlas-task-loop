@@ -139,26 +139,22 @@ class Retries(Base):
 
     def test_a_check_gets_the_artifact_directory_and_its_own_id(self):
         h = self.host()
-        attempts = Attempts(cast(Any, h), cast(Any, None), {}, lambda s: None)
+        attempts = Attempts(cast(Any, h), cast(Any, None), lambda s: None)
         attempts.run(Check(id="shot", cmd="just shot", retry=0), Path(self.tmp.name) / "l.log", {"A": "1"})
         art = Path(self.tmp.name) / ".task" / "b-1" / "artifacts"
         self.assertEqual(h.envs[0], {"A": "1", "TL_ARTIFACTS": str(art), "TL_ARTIFACT_STEP": "shot"})
         self.assertTrue(art.is_dir())
 
-    def test_a_check_slower_than_20_minutes_is_not_run_again_on_the_output_it_failed_with(self):
+    def test_a_slow_check_that_fails_twice_the_same_way_is_judged_like_a_quick_one(self):
+        """No duration guess: the retry rule sees the output only, a slow check is bounded by its wall limit."""
         h = self.host()
         c = Check(id="slow", cmd="just slow", retry=3)
-        sig = "AssertionError: 1 != 2"
-        clock = iter(range(0, 100000, int(retry.SLOW_S) + 60))  # every reading of the clock is 21 minutes on
+        clock = iter(range(0, 100000, 21 * 60))  # every reading of the clock is 21 minutes on
         with mock.patch("taskloop.app.checks.attempts.time.time", side_effect=lambda: next(clock)):
-            out = Attempts(cast(Any, h), cast(Any, None), {"slow": (sig, 1300.0)}, lambda s: None).run(c, Path(self.tmp.name) / "l.log", {})
-        self.assertEqual((out.tries, len(h.calls)), (1, 1))
-        self.assertTrue(any("not run again" in w for w in h.warned))
-
-    def test_the_same_slow_check_failing_with_other_output_still_gets_its_retry(self):
-        self.assertFalse(retry.skip_slow_rerun("a", "b", retry.SLOW_S + 1))
-        self.assertTrue(retry.skip_slow_rerun("a", "a", retry.SLOW_S + 1))
-        self.assertFalse(retry.skip_slow_rerun("a", "a", 60))
+            out = Attempts(cast(Any, h), cast(Any, None), lambda s: None).run(c, Path(self.tmp.name) / "l.log", {})
+        self.assertEqual((out.tries, len(h.calls)), (2, 2))  # the second red has the first one's output: stop, as for any check
+        self.assertFalse(any("not run again" in w for w in h.warned))
+        self.assertFalse(hasattr(retry, "SLOW_S") or hasattr(retry, "skip_slow_rerun"))
 
 
 class BaseRed(Base):

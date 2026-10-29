@@ -133,9 +133,8 @@ class EngineConfig:
     max_stages: int = 3
     node_timeout_min: float = 45
     review_budget_min: float = 10  # a reviewer call (review, verify, look) over this is stopped through delegate (Overrun): next rung
-    write_idle_warn_min: float = 15
-    write_idle_stop_min: float = 25
-    write_cap_min: float = 120
+    write_idle_min: float = 25  # a write worker silent this long is hung: passed to delegate as --idle, which stops it (a typed stop)
+    write_cap_min: float = 120  # the one wall cap of a write call: --timeout
     writer_check_max_s: float = 60
     base_red: bool = True  # a check's first red is run once on the untouched base: red there too, it is not the writer's
     max_same_red: int = 3  # rounds in a row that end red with the same checks and output: then stop and ask (0: never)

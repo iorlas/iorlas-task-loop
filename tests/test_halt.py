@@ -63,7 +63,7 @@ class Halt(te.EngineTest):
         d = Path(tempfile.mkdtemp())
         self.addCleanup(lambda: __import__("shutil").rmtree(d, ignore_errors=True))
         pidfile = d / "pid"
-        r = runner.StreamRunner(d / "err.log", None, 60.0, "", None, grace=0.5)
+        r = runner.StreamRunner(d / "err.log", 60.0, "", None, grace=0.5)
         r.outer = threading.Event()
         # the flag goes when the call's process has written its pid (a fixed delay can beat a loaded runner's python start)
         threading.Thread(target=lambda: (te.until(pidfile.exists, WAIT), te.until(lambda: pidfile.read_text().strip(), WAIT),

@@ -26,7 +26,6 @@ class Checker:
         self.round = 0
         self.latest: CheckRun | None = None
         self.streak: list[str] = []  # the signatures of the rounds in a row that ended red
-        self.last_red: dict[str, tuple[str, float]] = {}  # check id -> (its red output's signature, secs) from its last red
 
     def run(self, stage_checks: Sequence[str], name: str, markers: str = "", acceptance_first: bool = False,
             groups: Sequence[str] | None = None,
@@ -46,12 +45,11 @@ class Checker:
         tree, base = host.checkout.tree_hash(), host.git("rev-parse", host.cfg.base)
         cache = CheckCache(host.stores.check_cache.of(host.bead), f"{tree} {base}")
         keys = InputKeys(host.wt, tree, base, env)
-        attempts = Attempts(host, BaseCheck(host, cache, base, host.checkout.git_env), self.last_red, self.sleep)
+        attempts = Attempts(host, BaseCheck(host, cache, base, host.checkout.git_env), self.sleep)
         st = CheckExecutor(host, cache, keys, attempts, host.checklog, history).run_group(plan, self.round)
         run = self._finish(st, tree, history, history_doc)
         cache.save(base)
         host.checklog.round(host.steps.id, run)
-        self._remember_reds(run)
         self._stuck(run)
         return run
 
@@ -66,15 +64,6 @@ class Checker:
         host.steps.outcome("red" if run.failed else "green", evidence.round_outcome(run))
         self.latest = run
         return run
-
-    def _remember_reds(self, run: CheckRun) -> None:
-        for c in run.results:
-            if c.exit is None or c.cached:
-                continue
-            if c.red:
-                self.last_red[c.id] = (c.sig, c.secs)
-            else:
-                self.last_red.pop(c.id, None)
 
     def _stuck(self, run: CheckRun) -> None:
         """The same reds with the same output `engine.max_same_red` rounds in a row: more writes will not fix them."""

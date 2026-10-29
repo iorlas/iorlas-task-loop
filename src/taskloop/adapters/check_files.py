@@ -56,23 +56,6 @@ def repo_key(wt: str, env: Mapping[str, str]) -> str:
                       hashlib.sha1(ident.encode("utf-8", "surrogateescape")).hexdigest()[:10])
 
 
-def lock_holders(wt: str, named: Sequence[str]) -> str:
-    """Pids that have the project lockfile open (lsof), '' when none or lsof is missing. The path is one the output names, else
-    Temp/UnityLockfile under the tree."""
-    cands = [Path(n) if os.path.isabs(n) else Path(wt) / n for n in named] + sorted(Path(wt).glob("*/Temp/UnityLockfile"))
-    for f in cands:
-        if not f.exists():
-            continue
-        try:
-            r = subprocess.run(["lsof", "-t", str(f)], capture_output=True, check=False, text=True, timeout=20)
-        except (OSError, subprocess.SubprocessError):
-            return ""
-        pids = [x for x in r.stdout.split() if x.isdigit()]
-        if pids:
-            return ",".join(pids)
-    return ""
-
-
 def read_lines(path: str | Path, n: int = 2000) -> list[str]:
     """The first n lines of a text file, [] when it cannot be read."""
     try:

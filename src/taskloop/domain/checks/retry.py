@@ -3,7 +3,6 @@ from taskloop.domain.checks.matchers import failure_kind
 
 LOCK_BACKOFF = (15, 30, 60)  # seconds; the last repeats until LOCK_WAIT_MAX
 LOCK_WAIT_MAX = 300
-SLOW_S = 20 * 60.0  # a check slower than this is not run again on the output it failed with before
 
 
 def lock_waits() -> list[int]:
@@ -24,9 +23,3 @@ def retry_allowed(retry: int, tries: int, output: str) -> bool:
     if kind == "deterministic":
         return False
     return tries <= (max(retry, 1) if kind == "import" else retry)
-
-
-def skip_slow_rerun(sig: str, last_round_sig: str, took_s: float) -> bool:
-    """True when a check that took over SLOW_S failed with the output it already failed with in the last round: a rerun would cost
-    that long again for the same answer."""
-    return took_s > SLOW_S and bool(last_round_sig) and sig == last_round_sig

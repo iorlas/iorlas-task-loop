@@ -224,25 +224,24 @@ class WorkerCall:
             c.was_resumed = True
 
     # -- one call
-    def limits(self, c: Call) -> tuple[int, int, tuple[float, float, float] | None]:
-        """(delegate's --timeout, its --idle, the engine's silence limits) in seconds. A write follows its worker's activity under a cap;
-        a reviewer call has a wall-time budget; the others have the node limit."""
+    def limits(self, c: Call) -> tuple[int, int]:
+        """(delegate's --timeout, its --idle) in seconds. A write has one wall cap and delegate's silence limit (its watchdog stops a hung
+        worker: a typed stop in the answer); a reviewer call has a wall-time budget; the others have the node limit."""
         cfg = self.e.cfg
         if c.node == "write":
-            idle = tuple(float(getattr(cfg, k)) * 60 for k in ("write_idle_warn_min", "write_idle_stop_min", "write_cap_min"))
-            return int(idle[2]), int(idle[1]), (idle[0], idle[1] + dg.BACKSTOP_S, idle[2])  # delegate stops at idle first, the engine after
+            return int(float(cfg.write_cap_min) * 60), int(float(cfg.write_idle_min) * 60)
         if c.node in READ_ONLY_NODES:
-            return int(float(cfg.review_budget_min) * 60), 0, None
-        return int(float(cfg.node_timeout_min) * 60), 0, None
+            return int(float(cfg.review_budget_min) * 60), 0
+        return int(float(cfg.node_timeout_min) * 60), 0
 
     def call_once(self, c: Call) -> dg.Answer:
         """One `route.py run`: through the process seam, then the records a call leaves."""
         e = self.e
-        timeout_s, idle_s, silence = self.limits(c)
+        timeout_s, idle_s = self.limits(c)
         c.limit_s = float(timeout_s)
         e.delegation.route()
         live = e.live(c.step or c.node)
-        runner = e.router.runner(e.err_path, silence and (*silence, e.warn), None, live, e.lock_worker)
+        runner = e.router.runner(e.err_path, None, live, e.lock_worker)
         runner.outer = e.halt  # a stop of the run ends the call
         req = RunRequest(
             role=c.role,

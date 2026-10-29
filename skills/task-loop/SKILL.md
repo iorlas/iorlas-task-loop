@@ -214,8 +214,9 @@ fails the round under its own name. The plan lint sends a plan back whose check 
 lists, or a file of the evidence folder nothing writes.
 **Red on the base.** The first red of a repo check is run once more on a clean checkout of the base commit (cached by base sha). Red
 there too: the result is `base_red`, the writer is told it is not theirs, and the round does not count it (`engine.base_red: false` turns it
-off). A failed check is run again (`retry`) only when its first two failures differ, never for a hang, a timeout or a compile error, and a
-check slower than 20 minutes is not run again on the output it failed with in the last round. The same red checks with the same output
+off). A failed check is run again (`retry`) only when its first two failures differ, never for a hang, a timeout or a compile error; a
+slow check is bounded only by its wall limit. A project lock that stays after 5 min of waiting ends the check with that message, no
+process is probed for the holder. The same red checks with the same output
 `engine.max_same_red` (3) rounds in a row stop the run with one ask that names them. `engine.max_total_reviews` (12) counts reviews
 over the whole run, replans included.
 **Who runs a check.** A repo check is the writer's to run when its longest green run took at most `engine.writer_check_max_s`, or says

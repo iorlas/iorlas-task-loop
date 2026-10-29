@@ -21,21 +21,22 @@ from taskloop.domain.checks import retry
 
 
 class EngineAsksTest(EngineTest):
-    def test_a_lock_that_stays_fails_after_5_min_with_the_holder_pid(self):
+    def test_a_lock_that_stays_fails_after_5_min_and_no_process_is_probed(self):
         cmd, n = self.counting_check(self.LOCK[2])
         proj = self.wt / "client" / "Temp"
         proj.mkdir(parents=True)
         lockfile = proj / "UnityLockfile"
         lockfile.write_text("")
         eng = self.checks_engine(checks=[{"id": "unity", "cmd": cmd, "group": "tests", "retry": 1}])
-        real = subprocess.run
+        real, argv0 = subprocess.run, []
         with mock.patch.object(eng.checker, "sleep") as sleep, mock.patch.object(
-                subprocess, "run", side_effect=lambda a, *k, **kw: (
-                    mock.Mock(stdout="4242\n") if a[0] == "lsof" else real(a, *k, **kw))):
+                subprocess, "run", side_effect=lambda a, *k, **kw: (argv0.append(a[0]), real(a, *k, **kw))[1]):
             res = eng.run_checks({"checks": [], "files": []}, "s")
+        self.assertNotIn("lsof", argv0)
         self.assertEqual((res[0].status, sum(c[0][0] for c in sleep.call_args_list if c[0][0] >= 15)),
                          ("failed", 300))
-        self.assertIn("lock holder is pid 4242", res[0].tail)
+        self.assertIn("still locked after 300 s of waiting", res[0].tail)
+        self.assertNotIn("holder", res[0].tail)
         self.assertEqual(n.read_text(), str(1 + len(retry.lock_waits())))
 
     def test_writer_question_is_an_owner_decision(self):

@@ -71,7 +71,6 @@ STALE_TREE = re.compile(r"does not contain recipe|This checkout has no |no recip
 COMPILE_FAIL = re.compile(r"error CS(?!0006\b|2001\b)\d+|SyntaxError")
 IMPORT_RACE = re.compile(r"Library/|Temp/|asset import|importing asset|refresh", re.I)
 LOCK_FAIL = re.compile(r"another Unity instance|Multiple Unity instances|It looks like another Unity instance is running", re.I)
-LOCK_FILE = re.compile(r"(\S*Temp/UnityLockfile)")
 SLOT_WAIT = re.compile(r"\bgot slot \S+ after (\d+) ?s\b")
 CS_ERROR = re.compile(r"error CS\d+")
 ELLIPSIS = re.compile(r"\.\.\.|\u2026")
@@ -94,11 +93,6 @@ def stale_tree(tail: str) -> str:
     """The words of the last output that say the tree is older than the config it runs, else ''."""
     m = STALE_TREE.search(tail[-500:])
     return m.group(0) if m else ""
-
-
-def lock_files(text: str) -> list[str]:
-    """The Unity lockfile paths a check's output names."""
-    return LOCK_FILE.findall(text)
 
 
 def slot_wait_secs(text: str) -> int:

@@ -4,7 +4,6 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
-from taskloop.adapters import check_files
 from taskloop.app.checks.base import BaseCheck
 from taskloop.app.checks.host import CheckHost
 from taskloop.contracts.argv import argv_of
@@ -26,9 +25,8 @@ class Outcome:
 
 
 class Attempts:
-    def __init__(self, host: CheckHost, base: BaseCheck, last_red: Mapping[str, tuple[str, float]],
-                 sleep: Callable[[float], None] = time.sleep) -> None:
-        self.host, self.base, self.last_red, self.sleep = host, base, last_red, sleep
+    def __init__(self, host: CheckHost, base: BaseCheck, sleep: Callable[[float], None] = time.sleep) -> None:
+        self.host, self.base, self.sleep = host, base, sleep
 
     def run(self, c: Check, log: Path, env: Mapping[str, str]) -> Outcome:
         """Run the check; a red one again when that can change the answer: only when the first two failures differ, never for a hang,
@@ -45,7 +43,7 @@ class Attempts:
             kind = matchers.failure_kind(seen)
             if kind == "lock":
                 return self._wait_lock(c, log, env, out)
-            if tries == 1 and c.repo and self.base.red(c, took):
+            if tries == 1 and c.repo and self.base.red(c):
                 return Outcome(rc, tail, seen, tries, took, base_red=True, wall_hit=self.host.wall_hit)
             if not self._again(c, out, tries, sig, prior):
                 return out
@@ -80,10 +78,6 @@ class Attempts:
             return False
         if not retry.retry_allowed(c.retry, tries, out.seen):
             return False
-        before = self.last_red.get(c.id)
-        if tries == 1 and before and retry.skip_slow_rerun(sig, before[0], out.secs):
-            self.host.warn(f"`{c.id}` took {round(out.secs / 60, 1):g} min and failed with the output it failed with before: not run again")
-            return False
         if prior and sig == prior:
             self.host.warn(f"`{c.id}` failed twice with the same output: not retried")
             return False
@@ -105,7 +99,5 @@ class Attempts:
             if rc == 0 or matchers.failure_kind(seen) != "lock":
                 break
         if rc and matchers.failure_kind(seen) == "lock":
-            pids = check_files.lock_holders(str(self.host.wt), matchers.lock_files(seen))
-            holder = "; the lock holder is pid " + pids if pids else ""
-            tail += f"\n(still locked after {retry.LOCK_WAIT_MAX} s of waiting{holder})"
+            tail += f"\n(still locked after {retry.LOCK_WAIT_MAX} s of waiting)"
         return Outcome(rc, tail, seen, out.tries, out.secs, wall_hit=self.host.wall_hit)

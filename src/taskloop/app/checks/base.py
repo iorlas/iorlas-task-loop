@@ -9,18 +9,16 @@ from taskloop.app.checks.host import CheckHost
 from taskloop.contracts.argv import argv_of
 from taskloop.contracts.checks import Check
 from taskloop.domain.checks.names import norm
-from taskloop.domain.checks.retry import SLOW_S
 
 
 class BaseCheck:
     def __init__(self, host: CheckHost, cache: CheckCache, base_sha: str, env: Callable[[], Mapping[str, str]]) -> None:
         self.host, self.cache, self.sha, self.env = host, cache, base_sha, env
 
-    def red(self, c: Check, took_s: float) -> bool:
+    def red(self, c: Check) -> bool:
         """Run the check once on a clean checkout of the base commit; red there too: the task did not break it, so it is not the
-        writer's. A timed-out or very slow first run is not asked again (it would cost that long again); the answer is
-        remembered by base sha. Off with engine.base_red: false."""
-        if not self.host.cfg.base_red or not self.sha or took_s > SLOW_S:
+        writer's. The run is bounded by the check's wall limit; the answer is remembered by base sha. Off with engine.base_red: false."""
+        if not self.host.cfg.base_red or not self.sha:
             return False
         known = self.cache.base_was_red(self.sha, c.cmd)
         if known is not None:
@@ -36,6 +34,6 @@ class BaseCheck:
 
     def _rc(self, tree: Path, c: Check) -> int | None:
         started = time.time()
-        rc, _ = self.host.sh(argv_of(c.cmd), timeout=min(c.wall_min * 60, SLOW_S), save=None, env=None, cwd=tree)
+        rc, _ = self.host.sh(argv_of(c.cmd), timeout=c.wall_min * 60, save=None, env=None, cwd=tree)
         self.host.log.note(f"base run of `{norm(c.cmd)[:80]}`: exit {rc} in {time.time() - started:.0f} s ({self.sha[:12]})")
         return None if self.host.killed else rc

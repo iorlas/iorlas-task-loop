@@ -2,7 +2,7 @@
 
 `StreamRunner` is one per call. Its `stop` and `obs` say how the call ended (why it was stopped, which pids outlived the stop, the
 process boundaries); `worker` is the live file's first line (`WorkerStarted`), read while the call runs, never from stderr or `ps`.
-Activity is the live file growing or the call printing: `Silence` turns that into the warn, stop and cap of a write. A call that ends
+Silence is delegate's (`--idle`, its own watchdog, a typed stop in the answer); the engine keeps no silence timer. A call that ends
 by itself returns a `CompletedProcess`-like; one the engine ends raises `Stopped`."""
 
 import contextlib
@@ -23,7 +23,6 @@ from taskloop.contracts import codec
 from taskloop.contracts.delegate import LIVE_EVENT, LiveStart, WorkerStarted
 
 POLL_S = 0.5  # seconds between the looks at the live file while a call runs
-WATCH_S = 5.0  # seconds between the silence checks
 
 
 def live_lines(path: str | Path) -> list[dict[str, Any]]:
@@ -79,40 +78,6 @@ def mtime(path: str | Path) -> float | None:
         return None
 
 
-class Silence:
-    """The write timeout, following the worker: a wall-clock cap lost 47 min of live work to a worker waiting on 5 min runs. Activity is
-    the live file moving or any output of the call. warn / stop: seconds without it; cap: seconds in all, active or not."""
-
-    def __init__(
-        self, warn: float, stop: float, cap: float, on_warn: Callable[[str], None] | None = None, clock: Callable[[], float] = time.time
-    ) -> None:
-        self.warn, self.stop, self.cap, self.on_warn, self.clock = warn, stop, cap, on_warn, clock
-        self.t0 = self.out = 0.0
-        self.warned: float | None = None
-
-    def begin(self) -> None:
-        self.t0 = self.out = self.clock()
-        self.warned = None
-
-    def touch(self) -> None:  # the call printed something
-        self.out = self.clock()
-
-    def check(self, seen: float | None) -> str:
-        """ "" while the call may go on, else why it is stopped. `seen`: the live file's time of last change."""
-        now = self.clock()
-        if now - self.t0 >= self.cap:
-            return f"hard cap {int(self.cap // 60)} min"
-        last = max(self.t0, self.out, seen or 0.0)
-        quiet = now - last
-        if quiet >= self.stop:
-            return f"no worker output for {int(quiet // 60)} min"
-        if quiet >= self.warn and self.warned != last:
-            self.warned = last
-            if self.on_warn:
-                self.on_warn(f"write: no worker output for {int(quiet // 60)} min")
-        return ""
-
-
 class Seam:
     """What the engine reads off a process seam after a call (stop, obs, secs, worker, live_start): a fake lane's defaults."""
 
@@ -131,14 +96,13 @@ class StreamRunner(Seam):
     def __init__(
         self,
         log_path: str | Path,
-        silence: Silence | None = None,
         wall: float | None = None,
         live: str = "",
         on_worker: Callable[[WorkerStarted], None] | None = None,
         grace: float = procs.STOP_GRACE_S,
     ) -> None:
         super().__init__()
-        self.log_path, self.silence, self.wall, self.live, self.on_worker, self.grace = log_path, silence, wall, live, on_worker, grace
+        self.log_path, self.wall, self.live, self.on_worker, self.grace = log_path, wall, live, on_worker, grace
 
     @override
     def live_start(self) -> LiveStart | None:
@@ -146,8 +110,7 @@ class StreamRunner(Seam):
         return worker_start(self.live) if self.live else None
 
     def watch(self, done: threading.Event, halt: threading.Event, live: str) -> None:
-        """While the call runs: note the worker the live file names, and stop the call when the silence says so."""
-        nxt = time.monotonic()
+        """While the call runs: note the worker the live file names, and stop the call when the run is stopped."""
         while not done.wait(POLL_S):
             if self.outer is not None and self.outer.is_set():
                 self.obs.update(kill_t=time.time(), why="interrupted")
@@ -157,13 +120,6 @@ class StreamRunner(Seam):
                 self.worker = worker_started(live)
                 if self.worker and self.on_worker:
                     self.on_worker(self.worker)
-            if self.silence and time.monotonic() >= nxt:
-                nxt = time.monotonic() + WATCH_S
-                why = self.silence.check(mtime(live) if live else None)
-                if why:
-                    self.obs.update(kill_t=time.time(), why=why)
-                    halt.set()
-                    return
 
     def __call__(
         self, cmd: Sequence[str], cwd: str | None = None, env: dict[str, str] | None = None, timeout: float | None = None, **_: Any
@@ -175,14 +131,10 @@ class StreamRunner(Seam):
         self.worker = None
         out: list[str] = []
         done, halt = threading.Event(), threading.Event()
-        if self.silence:
-            self.silence.begin()
 
         def seen(text: str, keep: bool, log: Any = None) -> None:
             if self.obs["kill_t"] is None:
                 self.obs["last_event_t"] = time.time()  # frozen at the stop: shutdown output never moves the boundary
-            if self.silence:
-                self.silence.touch()
             if keep:
                 out.append(text)
             if log is not None:

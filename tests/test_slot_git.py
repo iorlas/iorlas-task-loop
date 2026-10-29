@@ -143,7 +143,7 @@ class SlotGitTest(unittest.TestCase):
         )
         with mock.patch.dict(os.environ, {"GIT_DIR": "/x", "GIT_WORK_TREE": "/y", "GIT_INDEX_FILE": "/z"}):
             r = dlcall.call(dl.Resolved(route.parent, str(route), fake_route.CONTRACT, "explicit"), "worker", "p", {"type": "object"},
-                            str(self.wt), runner.StreamRunner(Path(self.tmp.name) / "err.log", None, 30.0), timeout_s=30)
+                            str(self.wt), runner.StreamRunner(Path(self.tmp.name) / "err.log", 30.0), timeout_s=30)
             eng = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)))
             rc, tail = eng.sh(ENVSHOW)
             self.assertEqual(r.data["env"], [])
