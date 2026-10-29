@@ -2,11 +2,13 @@
 import io
 import json
 import os
+import shlex
 import shutil
 import stat
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from pathlib import Path
@@ -24,9 +26,12 @@ import tl  # noqa: E402
 from contracts import samples as S  # noqa: E402
 from support import (  # noqa: E402
     looptest,
+    procsim,
     tlbd,
 )
 from support.narrow import must  # noqa: E402
+from support.procsim import real_proc  # noqa: E402
+from support.tlmain import tl_main  # noqa: E402
 
 from taskloop.adapters import delegate as lroute  # noqa: E402
 from taskloop.adapters import (  # noqa: E402
@@ -43,25 +48,10 @@ from taskloop.app.wire import slots as wslots  # noqa: E402
 from taskloop.contracts import wire  # noqa: E402
 
 CTX = tl.Ctx(tl.HERE, trail.now, [])
-SH_FAKE = unittest.skipIf(os.name == "nt", "the bd fake is a #!/bin/sh script, which Windows cannot execute")
 
 
 def sh(*args, cwd):
     subprocess.run(list(args), cwd=cwd, check=True, capture_output=True)
-
-
-def tl_main(*args, cwd, env=None):
-    """tl.main(args) in this process, from `cwd`: -> (exit code, stdout, stderr). A SystemExit carries its code, a message is
-    printed to stderr and exits 1, as the interpreter does for a script."""
-    out, err = io.StringIO(), io.StringIO()
-    with contextlib.chdir(cwd), mock.patch.dict(os.environ, env or {}), contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-        try:
-            code = tl.main(list(args))
-        except SystemExit as e:
-            code = e.code if isinstance(e.code, int) else 0 if e.code is None else 1
-            if isinstance(e.code, str):
-                print(e.code, file=sys.stderr)
-    return subprocess.CompletedProcess(list(args), code, out.getvalue(), err.getvalue())
 
 
 class Base(unittest.TestCase):
@@ -113,14 +103,23 @@ class Records(Base):
         self.assertIn(str(self.home), json.loads((ident.config_dir() / "repos.json").read_text()))
 
     @unittest.skipIf(os.name == "nt", "the registry lock is fcntl")
-    def test_processes_registering_at_once_neither_crash_nor_lose_a_repo(self):
+    def test_writers_registering_at_once_neither_crash_nor_lose_a_repo(self):
         # race test (tl-bxk.11.1): every process wrote repos.tmp; the second os.replace found it gone and the event
         # (a claim's, a slot take's) raised. Each writer now has its own tmp file, under a lock, so none is lost.
-        code = ("import sys; sys.path.insert(0, {!r}); from taskloop.app.track import trail\n"
-                "for i in range(10): trail.register_repo('/r/%s-%d' % (sys.argv[1], i))".format(str(ROOT / "src")))
-        ps = [subprocess.Popen([sys.executable, "-c", code, str(n)], stderr=subprocess.PIPE, text=True) for n in range(5)]
-        errs = [p.communicate(timeout=60)[1] for p in ps]
-        self.assertEqual([p.returncode for p in ps], [0] * 5, errs)
+        errs = []
+
+        def writer(n):
+            try:
+                for i in range(10):
+                    trail.register_repo(f"/r/{n}-{i}")
+            except Exception as e:
+                errs.append(e)
+        ps = [threading.Thread(target=writer, args=(n,)) for n in range(5)]  # the lock is on the open file: two descriptors conflict
+        for p in ps:
+            p.start()
+        for p in ps:
+            p.join(60)
+        self.assertEqual(errs, [])
         repos = json.loads((ident.config_dir() / "repos.json").read_text())
         self.assertEqual(len(repos), 50)
 
@@ -221,9 +220,8 @@ class RegisterCLI(Base):
                     else:
                         self.assertFalse(self.config.parent.exists())
 
-    def test_invalid_input_exits_1_with_one_tl_line_on_stderr_and_no_traceback(self):  # the one real process: the interpreter's exit
-        result = subprocess.run([sys.executable, str(ROOT / "skills" / "task-loop" / "tl.py"), "register", str(self.home / "missing")],
-                                cwd=self.home, capture_output=True, text=True, check=False)
+    def test_invalid_input_exits_1_with_one_tl_line_on_stderr_and_no_traceback(self):
+        result = self.cli("register", str(self.home / "missing"))
         self.assertEqual(result.returncode, 1)
         self.assertEqual(result.stdout, "")
         self.assertEqual(len(result.stderr.splitlines()), 1)
@@ -245,17 +243,18 @@ class UsageCLI(Base):
     def test_usage_feeds_the_installed_delegate(self):
         d = self.home / ".claude/plugins/cache/iorlas-marketplace/iorlas-delegate/0.15.0/skills/delegate"
         d.mkdir(parents=True)
-        (d / "route.py").write_text(
-            "import json,sys\nopen({!r},'w').write(json.dumps(sys.argv[1:]))\n"
-            "print(json.dumps({{'lanes': {{'CLAUDE_SUBSCRIPTION': {{'five': 6.0, 'week': 4.0, 'out': False}}}}}}))\n".format(
-                str(self.home / "argv.json")
-            )
-        )
+        (d / "route.py").write_text("")
+        got = []
+
+        def route(cwd, env):  # the delegate's route.py is a process by contract; here it is a fake that notes its argv
+            got.append(list(procsim.argv()[2:]))
+            return 0, json.dumps({"lanes": {"CLAUDE_SUBSCRIPTION": {"five": 6.0, "week": 4.0, "out": False}}})
+        procsim.fake(shlex.join([sys.executable, str(d / "route.py")]), route, args=True)
         env = dict(os.environ, HOME=str(self.home), USERPROFILE=str(self.home))
-        r = tl_main("usage", "[]", cwd=self.home, env=env)  # the route.py it starts stays a process: that is the delegate contract
+        r = tl_main("usage", "[]", cwd=self.home, env=env)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertIn("5h 6.0%, week 4.0%", r.stdout)
-        self.assertEqual(json.loads((self.home / "argv.json").read_text()), ["status", "--claude-usage", "[]", "--json"])
+        self.assertEqual(got, [["status", "--claude-usage", "[]", "--json"]])
 
 
 class TraceCLI(Base):
@@ -355,6 +354,11 @@ class SlotReset(Base):
                 "keep": ["setup.log"],
             }
         }
+        def setup(cwd, env):
+            with (cwd / "setup.log").open("a") as f:
+                f.write("run\n")
+            return 0, ""
+        procsim.fake("sh -c 'echo run >> setup.log'", setup)
         (self.repo / ".task-loop.json").write_text(json.dumps(cfg))
         (self.slot / ".gitignore").write_text("ignored/\nsetup.log\n")
         sh("git", "add", "-A", cwd=self.slot)
@@ -493,6 +497,7 @@ class CutoverCheck(Base):
         rc, out = self.check()
         self.assertEqual((rc, out.split()[0]), (0, "CLEAR:"))
 
+    @real_proc("a live pid (a sleeping child), then a dead one: what cutover check reads off the process table")
     def test_a_live_loop_and_a_live_run_exit_1_and_are_listed_a_dead_one_is_not(self):
         child = subprocess.Popen(["sleep", "60"])
         self.addCleanup(child.kill)
@@ -525,22 +530,17 @@ def ask_file(asks, bead, **over):
 class AskCli(unittest.TestCase):
     """tl ask: the inbox from the terminal. An answer is a typed record on the ask, never a comment."""
 
-    @SH_FAKE
     def test_list_answer_and_withdraw(self):
         with tempfile.TemporaryDirectory() as tmp:
             d = Path(tmp)
-            (d / "bin").mkdir()
-            (d / "bin" / "bd").write_text("#!/bin/sh\necho \"$*\" >> {}\n".format(d / "bd.log"))
-            (d / "bin" / "bd").chmod(0o755)
             asks = d / "task-loop" / "asks"
             asks.mkdir(parents=True)
             for bead in ("x-1", "x-2"):
                 ask_file(asks, bead, parks_at=9e12, repo=str(d), title="T " + bead)
-            env = {"XDG_CONFIG_HOME": str(d), "APPDATA": str(d), "HOME": str(d), "USERPROFILE": str(d),
-                   "PATH": str(d / "bin") + os.pathsep + os.environ["PATH"]}
+            env = {"XDG_CONFIG_HOME": str(d), "APPDATA": str(d), "HOME": str(d), "USERPROFILE": str(d)}
             def ns(**k):
                 return type("A", (), dict({"op": "list", "bead": None, "text": [], "json": False}, **k))()
-            with mock.patch.dict(os.environ, env):
+            with mock.patch.dict(os.environ, env), tlbd.bd_boundary():
                 out = io.StringIO()
                 with mock.patch("sys.stdout", out):
                     self.assertEqual(tl.v_ask(ns(), CTX), 0)
@@ -559,13 +559,9 @@ class AskCli(unittest.TestCase):
 class ParkStaleAsks(unittest.TestCase):
     """tl-bxk.8.25: an ask with no answer 3 days after it was asked is parked, once, with a comment; it still waits."""
 
-    @SH_FAKE
     def test_parks_only_late_unanswered_open_asks(self):
         with tempfile.TemporaryDirectory() as tmp:
             d = Path(tmp)
-            (d / "bin").mkdir()
-            (d / "bin" / "bd").write_text("#!/bin/sh\necho \"$*\" >> {}\n".format(d / "bd.log"))
-            (d / "bin" / "bd").chmod(0o755)
             asks = d / "task-loop" / "asks"
             asks.mkdir(parents=True)
             now = time.time()
@@ -573,14 +569,13 @@ class ParkStaleAsks(unittest.TestCase):
             for bead, parks, extra in (("late", now - 10, {}), ("fresh", now + 9e4, {}), ("done", now - 10, done),
                                        ("closed", now - 10, {"status": "closed"})):
                 ask_file(asks, bead, parks_at=parks, repo=str(d), **extra)
-            env = {"XDG_CONFIG_HOME": str(d), "APPDATA": str(d), "HOME": str(d), "USERPROFILE": str(d),
-                   "PATH": str(d / "bin") + os.pathsep + os.environ["PATH"]}
-            with mock.patch.dict(os.environ, env):
+            env = {"XDG_CONFIG_HOME": str(d), "APPDATA": str(d), "HOME": str(d), "USERPROFILE": str(d)}
+            with mock.patch.dict(os.environ, env), tlbd.bd_boundary() as bd_calls:
                 self.assertEqual(wasks.sweep("park", every=0), ["late"])
                 self.assertEqual(wasks.sweep("park", every=600), [])  # throttled
             def status(b):
                 return json.loads((asks / (f"{b}.json")).read_text())["status"]
             self.assertEqual([status(b) for b in ("late", "fresh", "done", "closed")], ["parked", "open", "answered", "closed"])
-            log = (d / "bd.log").read_text()
+            log = "\n".join(" ".join(c) for c in bd_calls.calls)
             self.assertIn("comments add late Parked (engine): ask late-1 got no answer in 3 days", log)
             self.assertEqual(log.count("comments add"), 1)

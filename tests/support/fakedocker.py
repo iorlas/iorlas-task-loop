@@ -10,7 +10,6 @@ from pathlib import Path
 from unittest import mock
 
 from support import procsim
-
 from taskloop.app.checks import container, container_run
 
 

@@ -6,6 +6,7 @@
 pytest) and removes it when the run ends. Each line is the start's command line (the first 120 characters), so
 `cut -c1-60 | sort | uniq -c` shows which one-liners and scripts make them."""
 import atexit
+import os
 import sys
 
 
@@ -19,7 +20,8 @@ def note(out: str) -> None:
             with open("/proc/self/cmdline", "rb") as f:
                 line = f.read().replace(b"\0", b" ").decode("utf-8", "replace")[:120]
             with open(out, "a", encoding="utf-8") as fh:
-                fh.write(line.replace("\n", " ") + "\n")
+                test = os.environ.get("PYTEST_CURRENT_TEST", "-").split(" ")[0]  # the test that was running in the parent
+                fh.write(test + "\t" + line.replace("\n", " ") + "\n")
         except OSError:
             pass
 

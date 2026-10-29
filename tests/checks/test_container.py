@@ -1,4 +1,5 @@
-"""Checks that say `"in": "container"`: they run through container_run.py on a recorder that stands for docker (no docker anywhere); the result is the host path's."""
+"""Checks that say `"in": "container"`: they run through container_run.py on a recorder that stands for docker (no docker anywhere);
+the result is the host path's."""
 import sys
 from pathlib import Path
 
@@ -11,8 +12,8 @@ import os
 import signal
 from unittest import mock
 
-from support.fakedocker import FakeDocker
 from support import procsim
+from support.fakedocker import FakeDocker
 
 from taskloop.app.checks import container_run
 from taskloop.contracts import config
@@ -91,10 +92,9 @@ class ContainerChecksTest(EngineTest):
         handlers = {}
         self.docker.on_wait = lambda name: handlers[signal.SIGTERM](signal.SIGTERM, None)
         name = "tl-check-t-1-c"
-        with mock.patch.object(container_run.signal, "signal", lambda n, h: handlers.__setitem__(n, h)), \
-                mock.patch.dict(os.environ), mock.patch("os.getcwd", return_value=str(self.wt)):
-            with self.assertRaises(SystemExit) as stop:
-                container_run.main(["--image", "img:1", "--name", name, "--", "box-list"])
+        with mock.patch.object(container_run.signal, "signal", handlers.setdefault), \
+                mock.patch("os.getcwd", return_value=str(self.wt)), self.assertRaises(SystemExit) as stop:
+            container_run.main(["--image", "img:1", "--name", name, "--", "box-list"])
         self.assertEqual(stop.exception.code, 128 + signal.SIGTERM)
         self.assertEqual([c for c in self.docker.calls if c[0] == "kill"], [["kill", name]])
 

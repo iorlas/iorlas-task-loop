@@ -1,32 +1,21 @@
 """`tl check`: the repo's registry of checks run by a person, in a real worktree, through the engine's own runner."""
 import json
-import os
 import subprocess
-import sys
 import tempfile
 import unittest
 from pathlib import Path
 
-from support.procsim import real_proc
-
-ROOT = Path(__file__).resolve().parents[2]
-TL = ROOT / "skills" / "task-loop" / "tl.py"
-PY = sys.executable
-
-
-def argv(code):
-    return [PY, "-c", code]
-
+from support import procsim
+from support.tlmain import tl_main
 
 CHECKS = [
-    {"id": "fmt", "argv": argv("print('fmt fine')"), "group": "static", "run": "gate"},
-    {"id": "unit", "argv": argv("import sys; print('unit saw a failure'); sys.exit(1)"), "run": "gate"},
-    {"id": "docs", "argv": argv("print('docs')"), "run": "stage"},
-    {"id": "ui", "argv": argv("print('ui')"), "run": "gate", "when": ["ui/**"]},
+    {"id": "fmt", "argv": [procsim.default("fmt-fine", procsim.exits(0, "fmt fine"))], "group": "static", "run": "gate"},
+    {"id": "unit", "argv": [procsim.default("unit-red", procsim.exits(1, "unit saw a failure"))], "run": "gate"},
+    {"id": "docs", "argv": [procsim.default("docs-out", procsim.exits(0, "docs"))], "run": "stage"},
+    {"id": "ui", "argv": [procsim.default("ui-out", procsim.exits(0, "ui"))], "run": "gate", "when": ["ui/**"]},
 ]
 
 
-@real_proc("the `tl check` command line end to end, a real tl.py process in a real repo (part 2: INPROC)")
 class TlCheck(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -47,8 +36,7 @@ class TlCheck(unittest.TestCase):
         (self.repo / ".task-loop.json").write_text(json.dumps({"engine": {"checks": checks, "base": "main"}}))
 
     def tl(self, *args):
-        env = dict(os.environ, XDG_CONFIG_HOME=str(Path(self.tmp.name, "cfg")))
-        r = subprocess.run([PY, str(TL), "check", *args], cwd=self.repo, env=env, capture_output=True, text=True, check=False)
+        r = tl_main("check", *args, cwd=self.repo, env={"XDG_CONFIG_HOME": str(Path(self.tmp.name, "cfg"))})
         return r.returncode, r.stdout
 
     def test_it_runs_the_gate_steps_and_exits_1_on_a_red_one(self):
