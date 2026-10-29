@@ -1,179 +1,58 @@
-"""The parallel release gate: the splitter leaves out the serial group, the merge of shard outputs, a crashed shard is red."""
-import json
+"""The release gate's pytest runs: the merge of their outputs, the failure report, the worker count and the per-run HOME."""
 import os
-import subprocess
-import sys
 import tempfile
 import textwrap
 import unittest
 from pathlib import Path
 from unittest import mock
 
-ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT / "tests"))
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-import support.paths  # noqa: E402, F401
+import support.paths  # noqa: F401  (ROOT/src on sys.path)
 
-sys.path.insert(0, str(ROOT / "dev"))
-import shard  # noqa: E402
+from taskloop.adapters.suiteout import Part, failing_tests, failure_report, merge_outputs, ran_line
+from taskloop.app.release import suite as runner
 
-from taskloop.adapters.suiteout import Shard, failure_report, merge_outputs  # noqa: E402
-from taskloop.app.release import suite as runner  # noqa: E402
-
-TREE = {
-    "test_a.py": "import unittest\nclass A(unittest.TestCase):\n    def test_1(self): pass\n    def test_2(self): pass\n",
-    "test_b.py": ("import unittest\nclass B(unittest.TestCase):\n    def test_1(self): pass\nclass C(unittest.TestCase):\n    def "
-                  "test_1(self): pass\n"),
-    "test_c.py": ("import unittest\nclass D(unittest.TestCase):\n    def test_1(self): pass\n    def test_2(self): pass\n    def "
-                  "test_3(self): pass\n"),
-}
-
-
-class Splitter(unittest.TestCase):
-    def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.root = Path(self.tmp.name)
-        for name, src in TREE.items():
-            (self.root / name).write_text(src)
-        self.addCleanup(self.tmp.cleanup)
-        self.drop_modules()
-        self.addCleanup(self.drop_modules)
-        sys.path.insert(0, str(self.root))
-        self.addCleanup(sys.path.remove, str(self.root))
-
-    @staticmethod
-    def drop_modules():
-        for m in ("test_a", "test_b", "test_c"):
-            sys.modules.pop(m, None)
-
-    def all_ids(self):
-        return sorted(t for ids in shard.tests(self.root).values() for t in ids)
-
-    def test_a_serial_entry_leaves_its_tests_out_of_every_shard_and_names_them_in_the_serial_list(self):
-        serial = (("test_a", None, "r"), ("test_b", "C", "r"))
-        p = shard.plan(2, self.root, serial)
-        self.assertEqual(p["serial"], ["test_a.A.test_1", "test_a.A.test_2", "test_b.C.test_1"])
-        placed = [t for s in p["shards"] for t in s]
-        self.assertEqual(sorted(placed + p["serial"]), self.all_ids())
-        self.assertFalse(set(placed) & set(p["serial"]))
-
-    def test_without_serial_every_test_is_in_exactly_one_shard(self):
-        placed = [t for s in shard.split(3, self.root) for t in s]
-        self.assertEqual(sorted(placed), self.all_ids())
-
-    def test_a_test_entry_takes_only_that_test(self):
-        serial = (("test_c", "D.test_2", "r"),)
-        p = shard.plan(2, self.root, serial)
-        self.assertEqual(p["serial"], ["test_c.D.test_2"])
-        self.assertEqual(sorted([t for s in p["shards"] for t in s] + p["serial"]), self.all_ids())
-
-    def test_measured_durations_set_the_balance_and_a_new_test_falls_back_to_its_module_weight(self):
-        (self.root / "durations.json").write_text('{"test_a.A.test_1": 100, "test_a.A.test_2": 100, "test_c.D.test_1": 1}')
-        load = {}
-        shards = shard.split(2, self.root)
-        d = shard.load_durations(self.root)
-        for i, s in enumerate(shards):
-            load[i] = sum(shard.cost(t, d) for t in s)
-        self.assertEqual(shard.cost("test_c.D.test_3", d), shard.DEFAULT_WEIGHT)
-        self.assertEqual(shard.cost("test_engine.X.test_new", d), shard.DEFAULT_WEIGHT)
-        self.assertEqual(shard.cost("test_a.A.test_1", d), 100)
-        heavy = next(sh for sh in shards if "test_a.A.test_1" in sh)
-        self.assertEqual(sorted(heavy), ["test_a.A.test_1", "test_a.A.test_2"])  # 200 s alone; the rest (5 tests) share the other
-
-    def test_a_class_entry_does_not_take_the_other_classes_of_its_module(self):
-        self.assertTrue(shard.is_serial("test_b.C.test_1", (("test_b", "C", "r"),)))
-        self.assertFalse(shard.is_serial("test_b.B.test_1", (("test_b", "C", "r"),)))
-        self.assertTrue(shard.is_serial("test_b.B.test_1", (("test_b", None, "r"),)))
-
-    def test_the_split_is_stable_and_balanced(self):
-        self.assertEqual(shard.split(2, self.root), shard.split(2, self.root))
-        self.assertEqual(sorted(len(s) for s in shard.split(2, self.root)), [3, 4])
-
-    def test_every_real_serial_entry_has_a_reason_and_names_a_real_test(self):
-        every = [t for ids in shard.tests().values() for t in ids]
-        for module, cls, why in shard.SERIAL:
-            self.assertTrue(why.strip(), module)
-            self.assertTrue(any(shard.is_serial(t, ((module, cls, "r"),)) for t in every), (module, cls))
-
-    def test_the_real_plan_covers_every_test_once(self):
-        p = shard.plan(8)
-        every = [t for ids in shard.tests().values() for t in ids]
-        self.assertEqual(sorted([t for s in p["shards"] for t in s] + p["serial"]), sorted(every))
-
-    def test_the_ids_command_runs_exactly_the_listed_tests_and_records_their_times(self):
-        f, times = self.root / "ids.txt", self.root / "times.json"
-        f.write_text("test_a.A.test_2\ntest_c.D.test_3\n")
-        r = subprocess.run(
-            [sys.executable, str(ROOT / "tests" / "shard.py"), "ids", str(f), "--root", str(self.root), "--times", str(times)],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertIn("Ran 2 tests", r.stderr)
-        self.assertEqual(sorted(json.loads(times.read_text())), ["test_a.A.test_2", "test_c.D.test_3"])
-
-
-def ok(n):
-    return "." * n + "\n" + "-" * 70 + f"\nRan {n} tests in 1.500s\n\nOK\n"
+GREEN = "..........\n10 passed, 2 skipped in 1.50s\n"
+RED = textwrap.dedent("""\
+    ..F.E
+    =================================== FAILURES ===================================
+    ____________________________ X.test_b ____________________________
+    Traceback
+    AssertionError: boom
+    =============================== warnings summary ===============================
+    tests/test_x.py::X::test_a
+      DeprecationWarning: noisy
+    =========================== short test summary info ============================
+    FAILED tests/test_x.py::X::test_b - AssertionError: boom
+    ERROR tests/test_x.py::X::test_c - ValueError: bang
+    ======================== 1 failed, 1 error, 3 passed in 0.50s ========================
+    """)
 
 
 class Merge(unittest.TestCase):
-    def test_green_shards_give_one_total(self):
-        out, green = merge_outputs([Shard("s1", 0, ok(3)), Shard("s2", 0, ok(4))], 7)
+    def test_green_runs_are_green_and_each_keeps_its_name_and_exit(self):
+        out, green = merge_outputs([Part("parallel", 0, GREEN), Part("serial", 0, GREEN)])
         self.assertTrue(green)
-        self.assertTrue(out.rstrip().endswith("Ran 7 tests in 1.500s\n\nOK"), out)
-        self.assertEqual(out.count("Ran "), 1)
+        self.assertIn("== parallel (exit 0) ==", out)
+        self.assertIn("== serial (exit 0) ==", out)
 
-    def test_failures_and_errors_add_up_and_their_sections_are_kept(self):
-        red = textwrap.dedent("""\
-            F.E
-            ======================================================================
-            FAIL: test_x (m.C.test_x)
-            Traceback
-            AssertionError: boom
-
-            ======================================================================
-            ERROR: test_y (m.C.test_y)
-            ValueError: bang
-
-            ----------------------------------------------------------------------
-            Ran 3 tests in 0.5s
-
-            FAILED (failures=1, errors=1)
-            """)
-        out, green = merge_outputs([Shard("s1", 1, red), Shard("s2", 1, red.replace("test_x", "test_p").replace("test_y", "test_q")),
-                                            Shard("s3", 0, ok(2))], 8)
+    def test_one_red_run_is_red_and_the_failure_sections_stay(self):
+        out, green = merge_outputs([Part("parallel", 1, RED), Part("serial", 0, GREEN)])
         self.assertFalse(green)
-        for want in ("FAIL: test_x", "FAIL: test_p", "ERROR: test_q", "AssertionError: boom", "Ran 8 tests in 1.500s",
-                     "FAILED (failures=2, errors=2)"):
-            self.assertIn(want, out)
-        rep = failure_report(out)
-        self.assertIn("FAIL: test_p", rep)
-        self.assertIn("FAILED (failures=2, errors=2)", rep)
+        self.assertIn("AssertionError: boom", out)
 
-    def test_skips_are_summed_and_stay_green(self):
-        out, green = merge_outputs(
-            [Shard("s1", 0, ok(2).replace("OK", "OK (skipped=2)")), Shard("s2", 0, ok(1).replace("OK", "OK (skipped=1)"))], 3
-        )
-        self.assertTrue(green)
-        self.assertIn("OK (skipped=3)", out)
+    def test_failure_report_keeps_the_failures_and_the_summary_not_the_warnings_nor_the_dots(self):
+        rep = failure_report(RED)
+        for want in ("FAILURES", "AssertionError: boom", "FAILED tests/test_x.py::X::test_b", "1 failed, 1 error, 3 passed"):
+            self.assertIn(want, rep)
+        self.assertNotIn("noisy", rep)
+        self.assertNotIn("..F.E", rep)
 
-    def test_a_shard_that_died_without_a_summary_is_red_and_its_tail_is_shown(self):
-        out, green = merge_outputs([Shard("s1", 0, ok(2)), Shard("s2", -9, "starting\nSegmentation fault\n")], 5)
-        self.assertFalse(green)
-        self.assertIn("ERROR: shard s2 crashed (exit -9)", out)
-        self.assertIn("Segmentation fault", out)
-        self.assertIn("ERROR: shard s2 crashed", failure_report(out))
+    def test_failing_tests_are_the_node_ids_of_the_short_summary(self):
+        self.assertEqual(failing_tests(RED), ["tests/test_x.py::X::test_b", "tests/test_x.py::X::test_c"])
 
-    def test_fewer_tests_run_than_planned_is_red(self):
-        out, green = merge_outputs([Shard("s1", 0, ok(2))], 3)
-        self.assertFalse(green)
-        self.assertIn("ERROR: 2 tests ran, 3 were planned", out)
-
-    def test_a_nonzero_exit_with_a_clean_summary_is_red(self):
-        _out, green = merge_outputs([Shard("s1", 1, ok(2))], 2)
-        self.assertFalse(green)
+    def test_the_closing_line_is_found_or_there_is_none(self):
+        self.assertEqual(ran_line(RED), "1 failed, 1 error, 3 passed in 0.50s")
+        self.assertEqual(ran_line("Segmentation fault\n"), "no summary")
 
 
 class Workers(unittest.TestCase):
@@ -194,7 +73,7 @@ class Workers(unittest.TestCase):
         with mock.patch.dict(os.environ, {"TASK_LOOP_SUITE_WORKERS": "3"}):
             self.assertEqual(runner.workers(), 3)
 
-    def test_a_shard_gets_its_own_home_config_and_temp_dirs(self):
+    def test_a_run_gets_its_own_home_config_and_temp_dirs(self):
         with tempfile.TemporaryDirectory() as d:
             a, b = runner.isolated_env(Path(d) / "a"), runner.isolated_env(Path(d) / "b")
             for k in ("HOME", "XDG_CONFIG_HOME", "TMPDIR"):

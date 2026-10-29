@@ -61,10 +61,13 @@ This protocol applies when ending a Beads implementation workflow. It is subordi
 ## Build & Test
 
 ```bash
-python3 -m unittest discover -s tests
-just check        # ruff + pyrefly + import-linter + tests/gate_rules.py (tools pinned in mise.toml; `mise install`)
+uv run pytest tests/land -q    # one folder or module (also tests/test_x.py::Class::test); the suite's tests are unittest TestCases
+just test -n auto  # the whole suite in parallel workers (`just test` alone: one process); the `serial` group needs dev/suite.py
+python3 dev/suite.py           # what a release runs: xdist workers, then the serial group alone; takes the host-wide suite lock
+just check                     # ruff + pyrefly + import-linter + tests/gate_rules.py (tools pinned in mise.toml; `mise install`)
 ```
 
+Dev and test tools (pytest, pytest-xdist) are the `dev` group of pyproject.toml, locked in uv.lock; `uv run` syncs them.
 CI runs the suite and `just check` on Ubuntu with Python 3.12. Linux locally: `docker run --rm -v "$PWD":/src:ro python:3.12-slim ...`.
 Caps (tests/gate_rules.py): 400 SLOC per file, 80 per function, 800 per test file; the KNOWN_OVERSIZE table (tests/rules_ratchet.json) may only shrink.
 Architecture (layers, app slices, dashboard, `import re` placement): the `.importlinter` contracts; lazy imports, banned modules, module docstrings: ruff (PLC0415, TID251, D100). Both run in `just rules`.
@@ -81,7 +84,8 @@ reader, and how delegate connects (worker-run, one table in SKILL.md).
 
 ## Conventions & Patterns
 
-- Python 3.12+, standard library only, no third-party packages at runtime; macOS and Linux (in containers too), POSIX only.
+- Python 3.12+; macOS and Linux (in containers too), POSIX only. Dependencies: runtime ones are declared inline in `skills/task-loop/tl.py`
+  (PEP 723) and run with `uv run --script`; dev and test tools live in pyproject.toml's `dev` group; hooks stay light (no dependency).
 - The page is one HTML file, no build, no CDN.
 - The engine requires the iorlas-delegate plugin (worker-run v1) and has no launcher of its own; never add one back.
   Only the contract is shared: never read delegate's files or call anything but `route.py run` and `status`.

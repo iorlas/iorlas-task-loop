@@ -1,6 +1,6 @@
-# just test <feature>: run only that feature's tests (see tests/feature_tests.py); no argument = the whole suite
-test feature="":
-    python3 tests/feature_tests.py {{feature}}
+# just test [pytest args]: the suite through pytest, one process; `just test tests/land -q` runs a folder, `just test -n auto` spreads it
+test *args:
+    uv run pytest {{args}}
 
 # Install the exact tool versions recorded in mise.lock.
 tools:
@@ -9,9 +9,9 @@ tools:
 # The gate: ruff + pyrefly + the structural rules (import-linter contracts, then caps, placement, ratchets). Seconds, not the 35-minute suite.
 check: lint types rules
 
-# check plus the whole unittest suite (what CI runs across its shards).
+# check plus the whole suite as a release runs it: xdist workers, then the serial group alone.
 check-all: check
-    python3 -m unittest discover -s tests
+    python3 dev/suite.py
 
 lint:
     #!/usr/bin/env bash
@@ -27,7 +27,7 @@ rules:
     #!/usr/bin/env bash
     set -euo pipefail
     PYTHONPATH=src uv tool run --from "import-linter@$(just pin pipx:import-linter)" lint-imports
-    python3 -m unittest tests.gate_rules
+    uv run pytest tests/gate_rules.py -q
 
 # The version mise.toml pins for a tool (one source for the pins).
 [private]

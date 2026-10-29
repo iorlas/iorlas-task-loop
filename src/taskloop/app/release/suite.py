@@ -1,7 +1,6 @@
-"""The gate and the suite a release runs before it pushes: `just check`, then the whole unittest suite in parallel shards (or the
+"""The gate and the suite a release runs before it pushes: `just check`, then the whole suite through pytest-xdist workers (or the
 container's), skipped when this exact tree already passed this exact command."""
 import contextlib
-import json
 import os
 import shutil
 import signal
@@ -10,7 +9,6 @@ import tempfile
 import threading
 import time
 from collections.abc import Callable
-from concurrent.futures import ALL_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path
 from types import FrameType
 
@@ -18,14 +16,15 @@ import stream_proc
 
 from taskloop.adapters import landlock, procs
 from taskloop.adapters.ident import config_dir
-from taskloop.adapters.suiteout import Shard, failing_tests, failure_report, merge_outputs, ran_seconds
+from taskloop.adapters.suiteout import Part, failing_tests, failure_report, merge_outputs, ran_line
 from taskloop.app.release.cache import SuiteCache
 from taskloop.app.release.shell import Abort, git, run, say
 
 LONG = 3 * 3600.0  # a hang guard for a whole gate run
 STALE_TMP_S = 2 * LONG  # a tl-suite-* dir this old belongs to a suite that was killed without unwinding (SIGKILL): no live one runs so long
-SHARD_WALL_S = 1200.0  # one shard's wall limit (the longest recorded shard is ~2.5 min at 3 workers: 8x); then its tree is stopped
-SHARD_BUDGET_MB = 2048  # per shard: sets the shard count (RAM / budget), caps its address space (healthy ~430 MB) and is the refusal bar
+RUN_WALL_S = 1200.0  # one pytest run's wall limit (the whole parallel run takes under a minute here: 20x); then its tree is stopped
+WORKER_BUDGET_MB = 2048  # per worker: sets the worker count (RAM / budget), caps its address space (healthy ~430 MB) and is the refusal bar
+NO_TESTS = 5  # pytest's exit code for "no tests collected"
 MEMINFO = Path("/proc/meminfo")
 PROC_CGROUP = Path("/proc/self/cgroup")
 CGROUP_ROOT = Path("/sys/fs/cgroup")
@@ -83,10 +82,10 @@ def host_available_mb() -> int | None:
 
 
 def host_workers(cpus: int | None = None, mem_mb: int | None = None) -> int:
-    """What this host can run at once: min(cpu count, available RAM / SHARD_BUDGET_MB), never below 1 (unreadable RAM counts as enough)."""
+    """What this host can run at once: min(cpu count, available RAM / WORKER_BUDGET_MB), never below 1 (unreadable RAM counts as enough)."""
     cpu = cpus if cpus is not None else (os.cpu_count() or 1)
     mem = mem_mb if mem_mb is not None else available_mb()
-    return max(1, min(cpu, cpu if mem is None else mem // SHARD_BUDGET_MB))
+    return max(1, min(cpu, cpu if mem is None else mem // WORKER_BUDGET_MB))
 
 
 def workers() -> int:
@@ -96,7 +95,8 @@ def workers() -> int:
 
 
 def isolated_env(home: Path) -> dict[str, str]:
-    """The environment of one shard: its own HOME, config dirs and temp dir, so shards do not share state under ~ or in /tmp.
+    """The environment of one pytest run: its own HOME, config dirs and temp dir, so runs do not share state under ~ or in /tmp (the xdist
+    workers of a run each take one of their own, tests/conftest.py).
     The real git config is copied in, since tests commit with the identity it holds."""
     home.mkdir(parents=True, exist_ok=True)
     for sub in ("tmp", ".config"):
@@ -105,17 +105,10 @@ def isolated_env(home: Path) -> dict[str, str]:
     if real.is_file():
         (home / ".gitconfig").write_bytes(real.read_bytes())
     env = dict(os.environ, HOME=str(home), XDG_CONFIG_HOME=str(home / ".config"), TMPDIR=str(home / "tmp"))
+    env["TL_WORKER_MB"] = str(WORKER_BUDGET_MB)  # the address-space cap of each xdist worker (tests/conftest.py)
     for k in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "PYTHONPATH"):  # the tree under test sets its own PYTHONPATH
         env.pop(k, None)
     return env
-
-
-def durations(work: Path) -> dict[str, float]:
-    times: dict[str, float] = {}
-    for f in work.glob("*.times"):
-        with contextlib.suppress(OSError, ValueError):
-            times.update(json.loads(f.read_text(encoding="utf-8")))
-    return times
 
 
 def suite_lock_path() -> Path:
@@ -123,45 +116,38 @@ def suite_lock_path() -> Path:
     return config_dir() / "locks" / "suite-host.lock"
 
 
-def run_shard(argv: list[str], cwd: str, env: dict[str, str], name: str, stop: threading.Event) -> Shard:
-    """One shard through stream-proc: a session of its own, a wall limit, its whole tree stopped on the limit, on `stop`, or when this
-    thread is unwound. A shard that outlived its limit is red, with what it printed."""
+def run_pytest(argv: list[str], cwd: str, env: dict[str, str], name: str, empty_ok: bool = False) -> Part:
+    """One pytest run through stream-proc: a session of its own, a wall limit, its whole tree (the xdist workers) stopped on the limit
+    or when this thread is unwound (an interrupt, SIGTERM). A run that outlived its limit is red, with what it printed. `empty_ok`: pytest's
+    "no tests collected" (exit 5) is green (a tree without a serial group)."""
     out: list[str] = []
-    res = stream_proc.run(argv, cwd=cwd, env=env, on_stdout=out.append, on_stderr=out.append, timeout=SHARD_WALL_S, stop=stop, grace=5.0)
+    res = stream_proc.run(argv, cwd=cwd, env=env, on_stdout=out.append, on_stderr=out.append, timeout=RUN_WALL_S, grace=5.0)
     text = "".join(out)
     if res.timed_out:
-        text += f"\n{name}: stopped after {res.secs:.0f}s ({res.timed_out}; limit {SHARD_WALL_S:.0f}s); its process tree was killed\n"
-        return Shard(name, 124, text)
-    return Shard(name, res.returncode if res.returncode is not None else 128 + (res.signal or 0), text)
+        text += f"\n{name}: stopped after {res.secs:.0f}s ({res.timed_out}; limit {RUN_WALL_S:.0f}s); its process tree was killed\n"
+        return Part(name, 124, text)
+    code = res.returncode if res.returncode is not None else 128 + (res.signal or 0)
+    return Part(name, 0 if empty_ok and code == NO_TESTS else code, text)
 
 
-def run_shards(shard: list[str], root: str, repo: Path, work: Path, todo: list[tuple[str, list[str]]]) -> list[Shard]:
-    """`todo` shards at once, each in its own HOME; whatever ends this stops every shard tree first."""
-    stop = threading.Event()
-    text = Path(shard[-1]).read_text(encoding="utf-8")  # a tree older than these flags runs without them
-    watch = ["--parent", str(os.getpid())] if "--parent" in text else []
-    watch += ["--max-mb", str(SHARD_BUDGET_MB)] if "--max-mb" in text else []
+def pytest_argv(tool_root: Path, *select: str) -> list[str]:
+    """pytest from the venv `uv sync` made for `tool_root`'s pyproject (the tree under test may be a bare fake with none), over tests/."""
+    return [str(tool_root / ".venv" / "bin" / "python"), "-m", "pytest", "-q", "-p", "no:cacheprovider", "-rfE", *select, "tests"]
 
-    def go(name: str, ids: list[str]) -> Shard:
-        f = work / (name + ".ids")
-        f.write_text("\n".join(ids) + "\n", encoding="utf-8")
-        argv = [*shard, "ids", str(f), "--root", root, "--times", str(work / (name + ".times")), *watch]
-        return run_shard(argv, str(repo), isolated_env(work / name), name, stop)
 
+def run_parts(tool_root: Path, repo: Path, work: Path, n: int) -> list[Part]:
+    """The parallel run (n xdist workers, each its own HOME), then the `serial` group alone in one process; SIGTERM unwinds into the
+    run, which stops its tree first."""
     def term(signum: int, _frame: FrameType | None) -> None:
-        stop.set()
         raise SystemExit(128 + signum)
     main = threading.current_thread() is threading.main_thread()
     old = signal.signal(signal.SIGTERM, term) if main else None
     try:
-        with ThreadPoolExecutor(max_workers=max(1, len(todo))) as pool:
-            try:
-                futures = [pool.submit(go, n, i) for n, i in todo]
-                while wait(futures, timeout=0.5, return_when=ALL_COMPLETED).not_done:  # a poll, so an interrupt lands at once
-                    pass
-                return [f.result() for f in futures]
-            finally:
-                stop.set()  # normal end too: a shard still running here is a stray
+        spread = ["-n", str(n)] if n > 1 else []  # one worker is the run's own process
+        parallel = run_pytest(pytest_argv(tool_root, *spread, "-m", "not serial"), str(repo),
+                              isolated_env(work / "parallel"), "parallel")
+        serial = run_pytest(pytest_argv(tool_root, "-m", "serial"), str(repo), isolated_env(work / "serial"), "serial", empty_ok=True)
+        return [parallel, serial]
     finally:
         if old is not None:
             signal.signal(signal.SIGTERM, old)
@@ -176,58 +162,39 @@ def sweep_stale_tmp(now: float | None = None) -> None:
                 shutil.rmtree(d, ignore_errors=True)
 
 
-def host_suite(tool_root: Path, repo: Path, record: bool = False) -> None:
-    """The suite as N parallel shards, each its own process with its own HOME, then the tests of tests/shard.py SERIAL in one process.
-    Holds the host-wide suite lock: a second full suite waits and says who holds it. `tool_root` holds the tests/shard.py that plans and
-    runs them; `repo` is the tree under test. record=True also writes every test's seconds to tests/durations.json (what the splitter
-    balances on) when the run is green."""
+def host_suite(tool_root: Path, repo: Path) -> None:
+    """The suite as N parallel pytest-xdist workers (each its own HOME), then the tests marked `serial` (tests/conftest.py SERIAL) in one
+    process. Holds the host-wide suite lock: a second full suite waits and says who holds it. `tool_root` holds the pyproject (pytest and
+    xdist) that runs them; `repo` is the tree under test."""
     holder = f"pid {os.getpid()} since {time.strftime('%H:%M:%S')}: suite of {repo}"
     with landlock.os_lock(suite_lock_path(), holder, lambda who: say(f"waiting for the suite lock (held by {who})")):
         sweep_stale_tmp()
-        _host_suite(tool_root, repo, record)
+        _host_suite(tool_root, repo)
 
 
 def refuse_if_short(n: int, mem_mb: int | None) -> None:
-    """One line and out when the free RAM is below the n shards' budgets together: no wait, no retry (the suite lock was won already)."""
-    need = n * SHARD_BUDGET_MB
+    """One line and out when the free RAM is below the n workers' budgets together: no wait, no retry (the suite lock was won already)."""
+    need = n * WORKER_BUDGET_MB
     if mem_mb is not None and mem_mb < need:
         raise Abort(f"not enough free memory for the suite: {mem_mb} MB available, {need} MB needed "
-                    f"({n} shards x {SHARD_BUDGET_MB} MB); nothing run")
+                    f"({n} workers x {WORKER_BUDGET_MB} MB); nothing run")
 
 
-def _host_suite(tool_root: Path, repo: Path, record: bool) -> None:
+def _host_suite(tool_root: Path, repo: Path) -> None:
     n = workers()
     refuse_if_short(n, available_mb())
-    say(f"running the full suite in {n} shards, then the serial group")
-    own = repo / "tests" / "shard.py"  # the tree under test runs with its own support code, not the installed checkout's
-    shard = [sys.executable, str(own if own.is_file() else tool_root / "tests" / "shard.py")]
-    root = str(repo / "tests")
-    r = run([*shard, "plan", str(n), "--root", root], repo, check=False)
-    try:
-        plan = json.loads(r.stdout)
-    except ValueError:
-        out = (r.stdout + r.stderr).strip()
-        raise red("could not plan the shards\n" + out, out.splitlines()) from None
+    say(f"running the full suite in {n} workers, then the serial group")
+    run(["uv", "sync", "--frozen", "--quiet", "--project", str(tool_root)], tool_root)  # the dev group exactly as uv.lock records it
     work = Path(tempfile.mkdtemp(prefix="tl-suite-"))
-    began = time.monotonic()
     try:
-        todo = [(f"shard{i}", ids) for i, ids in enumerate(plan["shards"], 1) if ids]
-        parts = run_shards(shard, root, repo, work, todo)
-        if plan["serial"]:
-            parts += run_shards(shard, root, repo, work, [("serial", plan["serial"])])
-        times = durations(work) if record else {}
+        parts = run_parts(tool_root, repo, work, n)
     finally:
         shutil.rmtree(work, ignore_errors=True)
-    planned = sum(len(s) for s in plan["shards"]) + len(plan["serial"])
-    out, green = merge_outputs(parts, planned, time.monotonic() - began)
-    if green and record and times:
-        (repo / "tests" / "durations.json").write_text(json.dumps({k: round(v, 3) for k, v in sorted(times.items())}, indent=0) + "\n",
-                                                       encoding="utf-8")
-        say(f"recorded {len(times)} test durations")
-    say("shards: " + " ".join(f"{p.name}={ran_seconds(p.out) or 0:.0f}s" for p in parts))
+    out, green = merge_outputs(parts)
+    say(" ".join(f"{p.name}: {ran_line(p.out)}" for p in parts))
     if not green:
         raise red(out, out.splitlines())
-    say("suite green: " + " ".join(x for x in out.splitlines()[-3:] if x.strip()))
+    say("suite green")
 
 
 def container_suite(tool_root: Path, repo: Path) -> None:

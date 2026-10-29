@@ -1,5 +1,4 @@
 """The host suite leaves no tl-suite-* dir behind, green or red, and sweeps an old one a killed suite left."""
-import json
 import os
 import sys
 import tempfile
@@ -14,8 +13,6 @@ import support.paths  # noqa: F401
 from taskloop.app.release import suite
 from taskloop.app.release.shell import Abort
 
-PLAN = json.dumps({"shards": [["t.A.test_a"]], "serial": []})
-
 
 class SuiteTmp(unittest.TestCase):
     def setUp(self):
@@ -24,23 +21,23 @@ class SuiteTmp(unittest.TestCase):
         self.tmpdir = Path(self.tmp.name)
         for p in (mock.patch.object(tempfile, "tempdir", str(self.tmpdir)), mock.patch.object(suite, "say"),
                   mock.patch.object(suite, "workers", return_value=1), mock.patch.object(suite, "available_mb", return_value=None),
-                  mock.patch.object(suite, "run", return_value=mock.Mock(stdout=PLAN, stderr=""))):
+                  mock.patch.object(suite, "run")):
             p.start()
             self.addCleanup(p.stop)
 
     def dirs(self):
         return sorted(p.name for p in self.tmpdir.glob("tl-suite-*"))
 
-    def run_suite(self, shards, green=True):
+    def run_suite(self, parts, green=True):
         seen = []
 
-        def fake_shards(*a):
-            seen.append(self.dirs())  # the work dir exists while the shards run
-            return shards()
-        with mock.patch.object(suite, "run_shards", side_effect=fake_shards), \
+        def fake_parts(*a):
+            seen.append(self.dirs())  # the work dir exists while the runs go
+            return parts()
+        with mock.patch.object(suite, "run_parts", side_effect=fake_parts), \
                 mock.patch.object(suite, "merge_outputs", return_value=("out\n", green)):
             try:
-                suite._host_suite(Path("/tool"), Path("/repo"), False)
+                suite._host_suite(Path("/tool"), Path("/repo"))
             finally:
                 self.seen = seen
 
@@ -56,7 +53,7 @@ class SuiteTmp(unittest.TestCase):
 
     def test_a_suite_that_dies_with_an_exception_removes_its_tmp_dir(self):
         def boom():
-            raise RuntimeError("shard pool broke")
+            raise RuntimeError("the run broke")
         with self.assertRaises(RuntimeError):
             self.run_suite(boom)
         self.assertEqual(self.dirs(), [])
@@ -64,7 +61,7 @@ class SuiteTmp(unittest.TestCase):
     def test_a_dir_left_by_a_killed_suite_is_swept_and_a_young_one_stays(self):
         old, young = self.tmpdir / "tl-suite-old", self.tmpdir / "tl-suite-young"
         for d in (old, young):
-            (d / "shard1").mkdir(parents=True)
+            (d / "parallel").mkdir(parents=True)
         long_ago = time.time() - suite.STALE_TMP_S - 60
         os.utime(old, (long_ago, long_ago))
         suite.sweep_stale_tmp()

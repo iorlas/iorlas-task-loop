@@ -12,7 +12,7 @@ claude plugin marketplace add iorlas/iorlas-marketplace
 claude plugin install iorlas-task-loop@iorlas-marketplace
 ```
 
-Then in a repo that uses bd, say "task loop". Requirements: Python 3.12+ (standard library only), git, bd 1.3+,
+Then in a repo that uses bd, say "task loop". Requirements: Python 3.12+, uv, git, bd 1.3+,
 Claude Code. macOS and Linux (also inside a container); Windows is not supported.
 
 Required: [iorlas-delegate](https://github.com/iorlas/iorlas-delegate) 0.14+ from the same marketplace
@@ -87,7 +87,7 @@ src/taskloop_dash/               the dashboard package (stdlib; `python3 -m task
 src/taskloop_dash/static/        the dashboard page: index.html and its ES modules (Preact + HTM vendored; no build)
 src/taskloop_dash/views/         engine logs, asks and bd -> the typed snapshot and bead records (contracts/dash.py)
 hooks/hooks.json                 SessionStart: index session id -> transcript path
-tests/                           python3 -m unittest discover -s tests   (CI: Ubuntu, Python 3.12)
+tests/                           uv run pytest   (pytest + xdist, the dev group of pyproject.toml; CI: Ubuntu, Python 3.12)
 dev/release.py                   the only way to release: release lock, version from origin, suite, marketplace, install
 docs/design/                     design notes
 docs/contracts/dash-api.md       the dashboard's HTTP API: GET /api/snapshot, /api/bead, /api/live, POST /api/<verb>

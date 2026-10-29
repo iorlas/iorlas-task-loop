@@ -19,7 +19,6 @@ import contextlib
 
 from support.narrow import must
 
-from taskloop.adapters.suiteout import failure_report
 from taskloop.app.release import manifest, selfupdate
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -67,9 +66,11 @@ class Release(unittest.TestCase):
         (shim / "just").write_text(
             '#!/bin/sh\necho "$@" >> "{}"\necho "ruff: E501 somewhere"\nexit ${{FAKE_JUST_FAIL:-0}}\n'.format(h / "just.log")
         )
+        (shim / "uv").write_text("#!/bin/sh\nexit 0\n")  # `uv sync` of the release: the tool checkout's venv is already there
         for f in shim.iterdir():
             f.chmod(0o755)
-        self.env = dict(os.environ, TASK_LOOP_SUITE_HOST="1", XDG_CONFIG_HOME=str(h / "cfg"), CLAUDE_CONFIG_DIR=str(h / "claude"),
+        self.env = dict(os.environ, TASK_LOOP_SUITE_HOST="1", TASK_LOOP_SUITE_WORKERS="1",
+                        XDG_CONFIG_HOME=str(h / "cfg"), CLAUDE_CONFIG_DIR=str(h / "claude"),
                         PATH="{}{}{}".format(shim, os.pathsep, os.environ["PATH"]),
                         GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t", GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t")
         for k in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "TL_RELEASE_REEXEC"):
@@ -464,38 +465,6 @@ class Release(unittest.TestCase):
         self.assertIn("worktree", r.stdout)
         self.assertIn("kept", r.stdout)
 
-    def test_failure_report_keeps_every_fail_and_error_section_and_the_summary_lines(self):
-        out = textwrap.dedent("""\
-            ..E.F.
-            ======================================================================
-            ERROR: test_a (tests.test_x.X.test_a)
-            ----------------------------------------------------------------------
-            Traceback (most recent call last):
-              File "x.py", line 1, in test_a
-            ValueError: bang
-
-            ======================================================================
-            FAIL: test_b (tests.test_x.X.test_b)
-            ----------------------------------------------------------------------
-            Traceback (most recent call last):
-            AssertionError: 1 != 2
-
-            ----------------------------------------------------------------------
-            Ran 6 tests in 0.010s
-
-            FAILED (failures=1, errors=1)
-            sys:1: ResourceWarning: unclosed file
-            """)
-        rep = failure_report(out)
-        self.assertIn("ERROR: test_a", rep)
-        self.assertIn("ValueError: bang", rep)
-        self.assertIn("FAIL: test_b", rep)
-        self.assertIn("AssertionError: 1 != 2", rep)
-        self.assertIn("Ran 6 tests in 0.010s", rep)
-        self.assertIn("FAILED (failures=1, errors=1)", rep)
-        self.assertNotIn("ResourceWarning", rep)
-        self.assertNotIn("..E.F.", rep)
-
     def test_a_loop_landing_during_every_suite_run_never_fails_the_release(self):
         # race test (tl-bxk.11.1): loops land on the same origin; each lands when the land lock is free. A land during
         # the suite moved origin/main, the retry's suite saw another land, and the release aborted. The release now
@@ -591,14 +560,14 @@ class Release(unittest.TestCase):
         self.git("pull", "-q", "origin", "main", cwd=self.repo)
         r = self.release("fix", "--bead", "tl-x2")
         self.assertNotEqual(r.returncode, 0)
-        for want in ("FAIL: test_red_one", "ERROR: test_red_two", "AssertionError: boom", "ValueError: bang",
-                     "Ran 3 tests", "FAILED (failures=1, errors=1)"):
+        for want in ("FAILED tests/test_red.py::R::test_red_one", "FAILED tests/test_red.py::R::test_red_two", "AssertionError: boom",
+                     "ValueError: bang", "2 failed"):
             self.assertIn(want, r.stderr)
         m = re.search(r"full output: (\S+)", r.stderr)
         self.assertTrue(m, r.stderr)
         saved = Path(must(m).group(1))
         self.assertIn(str(self.home / "cfg" / "task-loop" / "releases"), str(saved))
-        self.assertIn("FAIL: test_red_one", saved.read_text())
+        self.assertIn("FAILED tests/test_red.py::R::test_red_one", saved.read_text())
         self.assertEqual(self.git("status", "--porcelain", cwd=self.repo), "")
         self.assertEqual((self.tags(self.origin), self.tags(self.repo), self.tags(self.morigin)), ([], [], []))  # no tag when red
         rec = self.last()

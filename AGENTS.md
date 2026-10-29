@@ -28,6 +28,24 @@ This project uses **bd** (beads) for issue tracking. Run `bd prime` for full wor
 
 Work in a worktree. Fork a session only for read-only work of 4 hours or less; otherwise start a fresh one with a written brief.
 
+## Build & Test
+
+```bash
+uv run pytest tests/land -q    # one folder or module (also tests/test_x.py::Class::test); the suite's tests are unittest TestCases
+just test -n auto  # the whole suite in parallel workers (`just test` alone: one process); the `serial` group needs dev/suite.py
+python3 dev/suite.py           # what a release runs: xdist workers, then the serial group alone; takes the host-wide suite lock
+just check                     # ruff + pyrefly + the structural rules (tools pinned in mise.toml; `mise install`)
+```
+
+Dev and test tools (pytest, pytest-xdist) are the `dev` group of pyproject.toml, locked in uv.lock; `uv run` syncs them.
+CI runs the suite and `just check` on Ubuntu with Python 3.12. Linux locally: `docker run --rm -v "$PWD":/src:ro python:3.12-slim ...`.
+Caps (tests/gate_rules.py): 400 SLOC per file, 80 per function, 800 per test file; the KNOWN_OVERSIZE table (tests/rules_ratchet.json) may only shrink.
+
+## Conventions
+
+- Python 3.12+; macOS and Linux (in containers too), POSIX only. Dependencies: runtime ones are declared inline in `skills/task-loop/tl.py`
+  (PEP 723) and run with `uv run --script`; dev and test tools live in pyproject.toml's `dev` group; hooks stay light (no dependency).
+
 ## Quick Reference
 
 ```bash

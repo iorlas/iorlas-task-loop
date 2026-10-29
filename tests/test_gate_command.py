@@ -16,7 +16,7 @@ class GateCommand(unittest.TestCase):
     def test_exit_code_follows_the_suite(self):
         with mock.patch.object(runner, "host_suite", return_value=None) as s:
             self.assertEqual(suite.main(["--repo", "x"]), 0)
-            s.assert_called_once_with(ROOT, Path("x"), False)
+            s.assert_called_once_with(ROOT, Path("x"))
         with mock.patch.object(runner, "host_suite", side_effect=Abort("red")), mock.patch("sys.stderr"):
             self.assertEqual(suite.main(["--repo", "x"]), 1)
 

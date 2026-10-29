@@ -1,0 +1,19 @@
+[project]
+name = "iorlas-task-loop"
+version = "0"
+description = "Task loop engine: dev and test tooling only (the engine has no runtime dependencies)."
+requires-python = ">=3.12"
+dependencies = []
+
+[dependency-groups]
+dev = ["pytest", "pytest-xdist"]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+# maxschedchunk: xdist hands out at most 4 tests at a time, so the slow modules (test_release, land) spread over the workers: 2x faster than the default
+addopts = "-p no:cacheprovider --maxschedchunk=4"
+markers = ["serial: runs alone, after the parallel workers (tests/conftest.py SERIAL)"]
