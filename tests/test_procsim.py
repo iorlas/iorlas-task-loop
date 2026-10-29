@@ -5,8 +5,8 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import support.paths  # noqa: F401  (ROOT/src on sys.path)
 import stream_proc
+import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import procsim
 from support.procsim import real_proc
 
