@@ -5,6 +5,7 @@ import contextlib
 import io
 import json
 import os
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -20,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402, F401
 
 # isort: split
-from support import dlcall, fake_route  # noqa: E402
+from support import dlcall, fake_route, procsim  # noqa: E402
 from support.narrow import must, only  # noqa: E402
 
 from taskloop.adapters import delegate as dl  # noqa: E402
@@ -70,8 +71,13 @@ class Fake(unittest.TestCase):
 
     # --- the seam itself -------------------------------------------------------------------------------------------
 
-    def test_the_fake_speaks_the_handshake_and_the_net_probe(self):  # real processes: route.py as the engine starts it
+    def test_the_fake_speaks_the_handshake_and_the_net_probe(self):  # route.py as the engine starts it: argv in, JSON out, exit code
         self.script_with(["done"], net=[False, True])
+
+        def route(cwd, env):  # the process, as a procsim fake over fake_route.main
+            done = self.runner([sys.executable, FAKE, *procsim.argv()[2:]])
+            return done.returncode, done.stdout
+        procsim.fake(shlex.join([sys.executable, FAKE]), route, args=True)
         out = subprocess.run([sys.executable, FAKE, "contract", "--json"], capture_output=True, text=True, env=self.env, check=False).stdout
         self.assertEqual(sorted(json.loads(out)), ["contract", "reasons", "run_args"])
         self.assertEqual(json.loads(out)["contract"], 3)

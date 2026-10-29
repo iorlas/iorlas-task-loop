@@ -24,7 +24,6 @@ SERIAL = {
 REAL_PROC = {
     "test_release.py": "part 2 (INPROC)",
     "test_check_move.py": "part 2 (INPROC)",
-    "test_fake_route.py": "part 2 (INPROC)",
     "test_delegate.py": "part 2 (INPROC)",
 }
 # The release gate sets TL_WORKER_MB. A healthy worker peaks near 430 MB; a runaway test gets MemoryError, not the host's RAM.
