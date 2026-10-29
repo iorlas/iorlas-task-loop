@@ -1,6 +1,8 @@
 """The fake route.py process (tl-7y6.4.3), contract 3, and the network-resume done-when (tl-7y6.2.13): a vendor that drops
 mid-stream twice and then succeeds is one step, one ref, no lane out, no retry counted. The contract is FAKE_ROUTE_DELEGATE's, else
 the copy in tests/fixtures/delegate3 (compared to a real delegate checkout when ~/Workspaces/iorlas-delegate-R20 or the env names one)."""
+import contextlib
+import io
 import json
 import os
 import subprocess
@@ -51,11 +53,11 @@ class Fake(unittest.TestCase):
     def script_with(self, steps, net=None):
         self.script.write_text(json.dumps({"steps": steps, "net": net or [True]}))
 
-    def runner(self, cmd, **kw: Any):  # route.py is fake_route.py: the same process seam, a different script
-        cmd = list(cmd)
-        cmd[1] = FAKE
-        kw.update(env=self.env, capture_output=True, text=True)
-        return subprocess.run(cmd, **kw, check=False)
+    def runner(self, cmd, **kw: Any):  # route.py is fake_route.main(argv) in this process: the same seam, a different script
+        out, err = io.StringIO(), io.StringIO()
+        with mock.patch.dict(os.environ, self.env), contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = fake_route.main(list(cmd[2:]))
+        return subprocess.CompletedProcess(cmd, code, out.getvalue(), err.getvalue())
 
     def req(self, **kw):
         return dlcall.request("worker", str(self.dir), task="t-1", parent="t-1", title="x", timeout_s=900, **kw)
@@ -68,7 +70,7 @@ class Fake(unittest.TestCase):
 
     # --- the seam itself -------------------------------------------------------------------------------------------
 
-    def test_the_fake_speaks_the_handshake_and_the_net_probe(self):
+    def test_the_fake_speaks_the_handshake_and_the_net_probe(self):  # the real processes: argv and stdout of route.py as the engine starts it
         self.script_with(["done"], net=[False, True])
         out = subprocess.run([sys.executable, FAKE, "contract", "--json"], capture_output=True, text=True, env=self.env, check=False).stdout
         self.assertEqual(sorted(json.loads(out)), ["contract", "reasons", "run_args"])
