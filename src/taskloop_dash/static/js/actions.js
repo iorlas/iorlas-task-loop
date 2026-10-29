@@ -1,4 +1,4 @@
-// Writes: every one a POST /api/v2/<verb> with its WRITES record (docs/contracts/dash-api-v2.md). An answer is held 5 s
+// Writes: every one a POST /api/<verb> with its WRITES record (docs/contracts/dash-api.md). An answer is held 5 s
 // in the page before it is sent; that hold is the Undo (the server has none). What was answered here stays answered in the
 // page until the snapshot drops the ask, so a card never flickers back between polls.
 import * as api from './api.js';

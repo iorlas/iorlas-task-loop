@@ -90,11 +90,11 @@ function Solo() {
   const [st, setSt] = useState(null);
   useEffect(() => {
     (async () => {
-      const snap = await (await fetch('/api/v2/snapshot')).json();
+      const snap = await (await fetch('/api/snapshot')).json();
       const beads = {};
       for (const id of ['6dq0', '5ban.3', 'fld.27', 'd5f.48']) {
         const b = snap.beads.find((x) => x.id === `lifesim-${id}`);
-        if (b) beads[id] = await (await fetch(`/api/v2/bead?project=${b.project}&id=${b.id}`)).json().catch(() => null);
+        if (b) beads[id] = await (await fetch(`/api/bead?project=${b.project}&id=${b.id}`)).json().catch(() => null);
       }
       setSt({ snap, beads });
     })().catch((e) => setSt({ err: String(e) }));

@@ -1,4 +1,4 @@
-/* Kit and view rules, from the approved mock (docs/design/dashboard-v2/dash-round-9-app.html). */
+/* Kit and view rules, from the approved mock (docs/design/dashboard/dash-round-9-app.html). */
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.45 -apple-system,system-ui,sans-serif}
 button{font:inherit;color:inherit}b{font-weight:600}
 /* the line: one bead = one bar, cut into passes */

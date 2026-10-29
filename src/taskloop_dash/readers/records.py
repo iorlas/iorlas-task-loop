@@ -6,21 +6,12 @@ import json
 import os
 from typing import Any
 
-import stream_proc
-
 from taskloop.contracts.runlife import RETAIN
 from taskloop_dash.env import Env
 from taskloop_dash.tails import read_dict
 from taskloop_dash.views import names
 
 Span = dict[str, Any]
-
-
-def pid_alive(pid: object) -> bool:
-    try:
-        return stream_proc.alive(int(str(pid)))
-    except (TypeError, ValueError):
-        return False
 
 
 class Records:
@@ -83,35 +74,3 @@ class Records:
             v.sort()
         return out
 
-    def run_path(self, run: object) -> str | None:
-        if not names.is_run_name(run):
-            return None
-        p = self.env.config.engine_log(str(run))
-        return str(p) if p.exists() else None
-
-    def task_spans(self) -> dict[str, list[Span]]:
-        """For each bead: the spans (session, worktree, from, to) between a claim and that session's next record."""
-        evs = sorted(self.events(), key=lambda e: e.get("t", 0))
-        spans: dict[str, list[Span]] = {}
-        for e in evs:
-            k, b = e.get("kind"), e.get("bead")
-            if k == "claim" and b:
-                for prev in spans.get(b, []):  # the bead moved to another session (reclaim): the old span ended
-                    if prev["to"] is None:
-                        prev["to"], prev["end"] = e["t"], "reclaimed"
-                spans.setdefault(b, []).append({
-                    "bead": b, "session": e.get("session"), "actor": e.get("actor"), "worktree": e.get("worktree"),
-                    "repo": e.get("repo"), "slot": e.get("slot"), "from": e["t"], "to": None, "stage": None,
-                    "title": e.get("title"), "end": None, "workers": []})
-            elif b and b in spans:
-                span = spans[b][-1]
-                if k == "stage":
-                    span["stage"] = e.get("text")
-                    span["stage_t"] = e["t"]
-                elif k == "worker":
-                    span["workers"].append(e)
-                elif k in ("close", "block") and span["to"] is None:
-                    span["to"], span["end"] = e["t"], k
-                elif k == "land":
-                    span["sha"] = e.get("sha")
-        return spans

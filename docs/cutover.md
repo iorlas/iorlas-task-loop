@@ -33,7 +33,7 @@ history version, health state, a delegate contract number. Each is a cutover: no
 |---|---|---|
 | 1 | contract 3 (delegate stop reasons), `lane_policy` replacing the `_ai` ladder | R21, 0.23.69, 2026-10-27; release from a dedicated clone came later in O3c, 0.23.113 |
 | 2 | RunState and `resume_decision` (the checkpoint reader) | E8b, 0.23.108; the engine moved to src/ in E9b, 0.23.116 |
-| 3 | Ask v3 (`v` 2 ask files read as absent: a bead parked on one is re-asked with `tl answer --rerun`), the log tags of dash v2 item 5 | with the dash v2 backend, one freeze window |
+| 3 | Ask v3 (`v` 2 ask files read as absent: a bead parked on one is re-asked with `tl answer --rerun`), the dashboard's engine log tags (Said, Assumed, Stuck) | with the dashboard backend, one freeze window |
 | 4 | the Mac on the converted lifesim profile (argv checks, `wall_min`), task-loop 0.23.127 → 0.23.140 | 2026-10-29 |
 
 Records are typed file stores under src/taskloop/stores/; the records.db import was never built. Contract 3 and its consumer

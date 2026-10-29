@@ -1,4 +1,4 @@
-"""Dashboard v2 wire contract: what the page reads (GET) and sends (POST). docs/contracts/dash-api-v2.md is its prose half.
+"""The dashboard's wire contract: what the page reads (GET) and sends (POST). docs/contracts/dash-api.md is its prose half.
 
 View records, never storage: a builder in taskloop_dash/views/ fills them from the stores, the page lays them out and derives nothing
 the engine decides. Times are Unix seconds; `Snapshot.t` is the server's now at build time, and the page ages from it plus the
@@ -85,7 +85,7 @@ DotState = Literal["todo", "done", "live", "you", "bad"]
 PassEnd = Literal["", "test_failed", "replan", "asked", "parked", "lane_out", "sent_back", "stuck", "exited", "done"]
 
 
-# ---- snapshot: GET /api/v2/snapshot
+# ---- snapshot: GET /api/snapshot
 
 
 @record
@@ -314,7 +314,7 @@ class LaneCard:
 
 @record
 class Snapshot:
-    """GET /api/v2/snapshot[?since=<version>]: everything the four tabs need; 304 when `since` equals `version`.
+    """GET /api/snapshot[?since=<version>]: everything the four tabs need; 304 when `since` equals `version`.
     Trimmed server-side: pieces only inside the Floor window (8 h back, 2 h ahead), done beads only since local midnight,
     backlog capped at 200 with `backlog_more` the rest."""
 
@@ -335,7 +335,7 @@ class Snapshot:
     lanes: list[LaneCard] = field(default_factory=list)
 
 
-# ---- bead drawer: GET /api/v2/bead?project=&id=
+# ---- bead drawer: GET /api/bead?project=&id=
 
 
 @record
@@ -429,7 +429,7 @@ class BeadDetail:
     ask: AskCard | None = None
 
 
-# ---- live tail: GET /api/v2/live?project=&id=&since=<cursor>&wait=<secs>
+# ---- live tail: GET /api/live?project=&id=&since=<cursor>&wait=<secs>
 
 
 @record
@@ -459,7 +459,7 @@ class LivePage:
     tools: list[ToolCall] = field(default_factory=list)
 
 
-# ---- writes: POST /api/v2/<verb>, JSON body, one Result back
+# ---- writes: POST /api/<verb>, JSON body, one Result back
 
 
 @record

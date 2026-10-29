@@ -287,7 +287,7 @@ are done by hand from these traces for now.
 
 Its output is verbose by default (`--quiet` for less): each step, the facts behind it (checks with exit codes, gaps,
 findings, unmet requirements, cost) and **⚠ lines** for what you must look at. Read the output as it comes
-(the job's output file, or the dashboard's Engine run). Never do a step's work yourself; change what makes the
+(the job's output file, or the dashboard's bead page). Never do a step's work yourself; change what makes the
 engine misbehave. Never stop a live run to apply an engine fix: the fix applies to the next bead (the running
 process loaded the old engine anyway; 3 of 5 lifesim-vbo restarts on 2026-10-18 were stops for fixes, one a step before
 landing). Stop a run only when it is burning a paid lane or doing damage.
@@ -361,10 +361,10 @@ container); the session that starts it only watches it.
   is beside it, one file per run. `tl next` prints what the loop would take next and why, claiming nothing.
 - **Reflections into fixes:** `tl reflect digest [--since 24h] [--dry-run]` (the loop starts it once a day) clusters the last day's
   run reflections by cause and files or updates one bead per recurring cause in the repo that owns it, with run ids as
-  evidence. The dashboard's Causes page shows the clusters. See docs/design/dashboard.md.
+  evidence.
 - **Stop:** `tl stop` writes `<config dir>/loop/<repo>-<hash>.command.json` (a `LoopCommand`: the action and the pids of
   the repo's live loops); each named loop ends after its current bead (a loop started after the stop is not named, so
-  it does not read it). The dashboard shows the stop from the same file. Slots off: each loop start reuses its session's worktree (`.worktrees/loop-<session>`); a second loop of
+  it does not read it). Slots off: each loop start reuses its session's worktree (`.worktrees/loop-<session>`); a second loop of
   the session at the same time gets its own. `tl stop --now` sends SIGTERM to the running bead (the
   engine's close step still runs, then the loop puts the bead back in the queue unclaimed and releases the slot).
   A stop during the push waits for it: a push that went through closes the bead landed, and the loop never reopens a
@@ -561,9 +561,6 @@ or judge: its own checks are the facts, and accept is a rule (checks green, noth
 The one thing the engine cannot do itself: read your Claude usage. Since delegate 0.18 Claude steps run without a
 reading, but only a fresh reading keeps delegate's reserve for your own sessions, so while an engine runs feed it every
 20 minutes: call `get_usage`, then `$TL usage '<plan.windows as JSON>'`.
-
-Any launcher can put its runs on the dashboard by writing agent-runs v1 records
-(`docs/contracts/agent-runs-v1.md` in this plugin's repo).
 
 ## Beads are the record
 

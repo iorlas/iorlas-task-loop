@@ -1,4 +1,4 @@
-"""tl-bxk.10.32: the Grok lane (delegate family xai, OpenCode): login hint, transcript reader, context size, fresh-writer limit."""
+"""tl-bxk.10.32: the Grok lane (delegate family xai, OpenCode): login hint, context size, fresh-writer limit."""
 import contextlib
 import io
 import json
@@ -6,7 +6,6 @@ import os
 import sqlite3
 import sys
 import tempfile
-import time
 import types
 import unittest
 from pathlib import Path
@@ -18,7 +17,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402, F401
 from support.builders import cfg_with  # noqa: E402
 from support.dashes import make_dash  # noqa: E402
-from support.lanes import lane_statuses  # noqa: E402
 
 from taskloop.adapters import (  # noqa: E402
     context_size,
@@ -29,7 +27,6 @@ from taskloop.app.track import verbs  # noqa: E402
 from taskloop.app.write.handoff import Handoff  # noqa: E402
 from taskloop.contracts.delegate import DelegateResult  # noqa: E402
 from taskloop.stores.runlog import RunLog  # noqa: E402
-from taskloop_dash.api import lanes as lanes_mod  # noqa: E402
 from taskloop_dash.views import arrows, names  # noqa: E402
 
 SID = "ses_abc123"
@@ -107,41 +104,8 @@ class OpenCode(unittest.TestCase):
         self.assertEqual(names.lane_name("x", "xai"), "Grok")
         self.assertEqual(arrows.pause_reason("paused: logged_out on write; run `opencode auth login` on this machine"),
                          "Grok logged out")
-        lane = {"out": True, "reason": "logged_out", "family": "xai"}
-        b = lanes_mod.lane_banners(lane_statuses({"GROK_SUBSCRIPTION": lane}), time.time())
-        self.assertEqual(b["GROK_SUBSCRIPTION"]["text"], "Grok logged out: run opencode auth login")
 
     # reader
-    def test_events_have_the_shape_of_the_other_readers(self):
-        ev = self.dash.events.opencode_events(SID)
-        self.assertEqual([e["kind"] for e in ev], ["user", "cmd", "cmd", "msg", "cmd"])
-        cmd = ev[1]
-        self.assertEqual((cmd["tool"], cmd["text"], cmd["state"], cmd["dur"], cmd["detail"]), ("bash", "ls", "ok", 2.0, "a\nb"))
-        self.assertEqual((ev[2]["state"], ev[2]["text"]), ("fail", "/x"))
-        self.assertEqual(ev[4]["state"], "run")
-        self.assertEqual(self.dash.runs.adapters["opencode"], self.dash.events.opencode_events)
-        self.assertEqual(self.dash.runs.run_events("opencode:" + SID)[3]["text"], "done")
-        win = self.dash.events.opencode_events("opencode:" + SID, 1_790_000_005.0, None)
-        self.assertEqual([e["kind"] for e in win], ["cmd", "msg", "cmd"])
-
-    def test_a_missing_db_or_unknown_id_is_empty_never_an_error(self):
-        self.assertEqual(self.dash.events.opencode_events("ses_nope"), [])
-        self.assertEqual(self.dash.events.opencode_events("not-an-id"), [])
-        self.assertEqual(self.dash.runs.run_events("opencode:ses_nope"), [])
-        junk = os.path.join(self.tmp.name, "junk.db")
-        Path(junk).write_text("not sqlite")
-        for path in (os.path.join(self.tmp.name, "gone.db"), junk):
-            with mock.patch.dict(os.environ, {"OPENCODE_DB": path}):
-                self.assertEqual(self.dash.events.opencode_events(SID), [])
-                self.assertEqual(opencode.transcript_of("xai", SID), "")
-                self.assertIsNone(context_size.context_tokens("opencode:" + SID))
-
-    def test_the_reader_never_writes(self):
-        before = Path(self.db).read_bytes()
-        self.dash.events.opencode_events(SID)
-        opencode.opencode_context(SID)
-        self.assertEqual(Path(self.db).read_bytes(), before)
-
     # lookups
     def test_transcript_of_xai_is_the_session_reference(self):
         self.assertEqual(opencode.transcript_of("xai", SID), "opencode:" + SID)
@@ -164,72 +128,12 @@ class OpenCode(unittest.TestCase):
 
 
     # review fixes (7e5b07d)
-    def test_api_block_for_xai_names_an_opencode_events_id(self):
-        d = {
-            "session": {"family": "xai", "ref": SID, "transcript": ""},
-            "block": {"who": {"family": "xai"}, "t0": 100.0, "t1": 200.0},
-            "checks": [],
-        }
-        with (
-            mock.patch.object(self.dash.records, "run_path", return_value="/x"),
-            mock.patch.object(self.dash.runlogs, "block_detail", return_value=d),
-        ):
-            out = self.dash.runs.api_block("r", "n", 0)
-        self.assertEqual(out["events_id"], f"opencode:{SID}@70.0@230.0")
-        self.assertEqual(out["transcript"], "opencode:" + SID)
-        d["session"]["ref"] = "ses_unknown"
-        with (
-            mock.patch.object(self.dash.records, "run_path", return_value="/x"),
-            mock.patch.object(self.dash.runlogs, "block_detail", return_value=d),
-        ):
-            out = self.dash.runs.api_block("r", "n", 0)  # a busy or unreadable DB must not blank the block: the id stays, events are empty
-        self.assertEqual(out["events_id"], "opencode:ses_unknown@70.0@230.0")
-        self.assertEqual(self.dash.runs.run_events(out["events_id"]), [])
-
     def test_the_newest_part_update_is_the_sessions_last_sign_of_life(self):
         con = sqlite3.connect(self.db)
         con.execute("INSERT INTO part VALUES ('p9','m3',?,?,?,'{}')", (SID, T + 9000, T + 99000))
         con.commit()
         con.close()
         self.assertAlmostEqual(opencode.opencode_updated(SID) or 0.0, 1_790_000_099.0)  # a part newer than every message
-
-    def test_a_locked_db_reads_as_empty(self):
-        con = sqlite3.connect(self.db, isolation_level=None)
-        con.execute("BEGIN EXCLUSIVE")
-        try:
-            t0 = time.time()
-            self.assertEqual(self.dash.events.opencode_events(SID), [])
-            self.assertIsNone(opencode.opencode_context(SID))
-            self.assertLess(
-                time.time() - t0, 120
-            )  # hang guard only: a read that blocks on the lock never returns; the empty results above are the gate
-        finally:
-            con.execute("ROLLBACK")
-            con.close()
-
-    def test_a_long_session_shows_its_newest_parts_and_a_window_is_cut_in_sql(self):
-        con = sqlite3.connect(self.db)
-        for i in range(5100):
-            con.execute("INSERT INTO part VALUES (?,?,?,?,?,?)", (f"q{int(i):05d}", "m3", SID, T + 10000 + i, T + 10000 + i,
-                                                                  json.dumps({"type": "text", "text": f"t{i}"})))
-        con.commit()
-        con.close()
-        ev = self.dash.events.opencode_events(SID)
-        self.assertEqual(len(ev), 5000)
-        self.assertEqual(ev[-1]["text"], "t5099")
-        self.assertEqual(ev[0]["text"], "t100")
-        win = self.dash.events.opencode_events(SID, (T + 10000) / 1000.0 + 0.5, (T + 10000) / 1000.0 + 1.5)
-        self.assertTrue(0 < len(win) < 4000)  # +-1 s of slack on each side
-
-    def test_a_non_numeric_tool_time_gives_no_duration(self):
-        con = sqlite3.connect(self.db)
-        d = {"type": "tool", "tool": "bash", "state": {"status": "completed", "input": {"command": "x"}, "output": "",
-                                                       "time": {"start": "a", "end": None}}}
-        con.execute("INSERT INTO part VALUES ('z1','m3',?,?,?,?)", (SID, T + 9500, T + 9500, json.dumps(d)))
-        con.commit()
-        con.close()
-        last = self.dash.events.opencode_events(SID)[-1]
-        self.assertEqual((last["text"], "dur" in last), ("x", False))
 
     def test_a_lane_named_openai_xai_is_grok_by_family_or_name(self):
         self.assertEqual(names.lane_name("OPENAI_XAI"), "Grok")

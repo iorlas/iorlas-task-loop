@@ -50,10 +50,6 @@ from taskloop.app.run import (  # noqa: E402
     entry,
 )
 from taskloop.app.wire import slots as wslots  # noqa: E402
-from taskloop_dash.views import (  # noqa: E402
-    graph,
-    roadmap,
-)
 
 PLAN_DEF = "    def plan(self, again: bool = False) -> dict[str, Any]:\n"
 BREAK_PLAN = (PLAN_DEF, PLAN_DEF + "        raise RuntimeError('planted: cannot plan')\n", "src/taskloop/app/plan/planner.py")
@@ -375,32 +371,6 @@ class Reload(te.EngineTest):
         self.assertEqual(catalog.releases_behind("0.1.0"), 2)
         self.assertEqual(catalog.releases_behind("0.2.0"), 1)
         self.assertEqual(catalog.releases_behind("0.10.0"), 0)
-
-    def test_the_dashboard_lane_shows_the_engine_version_and_how_many_releases_it_lags(self):
-        self.assertEqual(roadmap.lag("0.23.40", ["0.23.40", "0.23.41", "0.23.42", "0.9.0"]), 2)
-        self.assertEqual(roadmap.lag("0.23.42", ["0.23.40", "0.23.42"]), 0)
-        self.assertEqual(roadmap.lag("", ["0.23.42"]), 0)
-        lanes, _ = roadmap.lanes_of(
-            ["s1"], {"t-1": "s1"}, [{"pid": 1, "slot": "s1", "bead": "t-1", "since": 1, "started": 1, "version": "0.23.42"}]
-        )
-        lanes[0]["engine"] = "0.23.40"
-        b = {
-            "id": "t-1",
-            "title": "t",
-            "status": "in_progress",
-            "labels": ["auto"],
-            "issue_type": "task",
-            "priority": 2,
-            "dependencies": [],
-            "parent": None,
-        }
-        g = graph.build([b], {"pick_label": "auto", "skip_labels": []}, set(), {"t-1"}, (), now=time.time())
-        out = roadmap.build(g, lanes, [], [], [], {}, now=time.time(), installed=["0.23.40", "0.23.41", "0.23.42"])
-        self.assertEqual((out["lanes"][0]["engine"], out["lanes"][0]["lags"]), ("0.23.40", 2))
-        html = (ROOT / "src" / "taskloop_dash" / "static" / "index.html").read_text(encoding="utf-8")
-        self.assertIn("'engine '+esc(l.engine)", html)
-        self.assertIn("'lags '+l.lags", html)
-
 
 if __name__ == "__main__":
     unittest.main()

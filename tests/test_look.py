@@ -24,7 +24,6 @@ from taskloop.app.wire import slots as wslots
 from taskloop.contracts import answers, codec
 from taskloop.contracts.config import RepoProfile, VisualConfig
 from taskloop.contracts.paths import ConfigDir
-from taskloop_dash.views import graph
 
 VISUAL = {"include": ["*.txt"], "exclude": ["docs/**"]}
 LOOK_ASK = "Whether smiles-front.png matches the rung B ladder image. Only the owner can judge the look."
@@ -259,10 +258,6 @@ class LookTest(T.EngineTest):
         for i in range(25):
             (d / (f"m{int(i):02d}.png")).write_bytes(b"x")
         self.assertEqual(len(self.eng.pictures.shots()), shots.MAX_SHOTS)
-
-    def test_the_dashboard_counts_owner_look_as_waits_on_you(self):
-        self.assertIn("owner-look", graph.OWNER_LABELS)
-
 
 if __name__ == "__main__":
     unittest.main()

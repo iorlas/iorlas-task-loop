@@ -15,7 +15,7 @@ from taskloop_dash.env import Env
 from taskloop_dash.http import make_handler
 
 IDLE_CHECK = 300  # seconds between idle checks
-PAGE = Path(__file__).resolve().parent / "static"
+STATIC = Path(__file__).resolve().parent / "static"
 
 
 def idle_watch(dash: Dash, hours: float) -> None:
@@ -30,8 +30,8 @@ def idle_watch(dash: Dash, hours: float) -> None:
             os._exit(0)
 
 
-def main(env: Env, here: Path, argv: Sequence[str] | None = None, page: Path | None = None) -> None:
-    """`here` is the folder of the code that was started (the installed-copy and dev-checkout rules look at it); `page` the index.html."""
+def main(env: Env, here: Path, argv: Sequence[str] | None = None) -> None:
+    """`here` is the folder of the code that was started (the installed-copy and dev-checkout rules look at it)."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--port", type=int, default=None)
     ap.add_argument("--bind", default=None, help="comma-separated addresses (default: loopback + Tailscale; dev checkout: loopback)")
@@ -50,7 +50,7 @@ def main(env: Env, here: Path, argv: Sequence[str] | None = None, page: Path | N
         sys.exit(2)
     port = servers[0].server_address[1]
     dash = Dash(env)
-    handler = make_handler(dash, port, addrs, page or here / "index.html", PAGE / "live.html",
+    handler = make_handler(dash, port, addrs, STATIC,
                            lambda: bind.token(env.config.root), str(Path(sys.argv[0]).resolve()))
     for s in servers:
         s.RequestHandlerClass = handler

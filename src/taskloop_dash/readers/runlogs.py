@@ -3,7 +3,6 @@
 import dataclasses
 from typing import Any
 
-from taskloop.contracts import log as rec
 from taskloop.contracts.runlife import Liveness, liveness
 from taskloop_dash import jsonl
 from taskloop_dash.cache import FileCache
@@ -41,8 +40,3 @@ class RunLogs:
     def block_detail(self, path: str, node_id: str | int, k: int = 0) -> dict[str, Any]:
         return detail.block_detail(path, node_id, k, self.files)
 
-    @staticmethod
-    def run_start(recs: list[Any]) -> dict[str, str] | None:
-        """The run's start as {worktree, slot}; None when the log has none."""
-        start = next((r for r in recs if isinstance(r, rec.RunStart)), None)
-        return {"worktree": start.worktree, "slot": start.slot or ""} if start else None

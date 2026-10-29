@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""The dashboard v2 page against the contract fixtures, with no engine: the frontend's dev server until /api/v2 exists.
+"""The dashboard page against the contract fixtures, with no engine: the frontend's dev server.
 
     python3 dev/dash_fixtures.py [--port 8766] [--state ok|empty|down|variants]
 
-Serves src/taskloop_dash/static/v2.html at /, components.html, /<asset> (as the dash serves them), the browser harness (check.html), and the
-/api/v2 routes from tests/fixtures/dash_v2/ (docs/contracts/dash-api-v2.md). A POST body is decoded strictly with its WRITES
+Serves static/index.html at /, components.html, /<asset> (as the dash serves them), the browser harness (check.html), and the
+/api routes from tests/fixtures/dash/ (docs/contracts/dash-api.md). A POST body is decoded strictly with its WRITES
 record, so a page that sends a wrong shape gets a 400 here before the backend sees it. --state empty serves a snapshot with
 no beads (first run); --state down answers 503 to every API call (server unreachable); --state variants adds cases the
 recorded fixture lacks (a shared goal child, a stale lane, an exited worker).
@@ -25,9 +25,9 @@ from taskloop.contracts import codec  # noqa: E402
 from taskloop.contracts import dash as D  # noqa: E402
 
 STATIC = ROOT / "src" / "taskloop_dash" / "static"
-FIX = ROOT / "tests" / "fixtures" / "dash_v2"
+FIX = ROOT / "tests" / "fixtures" / "dash"
 TYPES = {".js": "text/javascript", ".css": "text/css", ".html": "text/html; charset=utf-8", ".svg": "image/svg+xml"}
-PAGES = {"/": STATIC / "v2.html", "/index.html": STATIC / "v2.html", "/components.html": STATIC / "components.html",
+PAGES = {"/": STATIC / "index.html", "/index.html": STATIC / "index.html", "/components.html": STATIC / "components.html",
          "/check.html": ROOT / "dev" / "dash_check.html"}
 
 
@@ -81,7 +81,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.json(self.writes)
         if u.path in ("/api/artifact", "/api/look-shot"):
             return self.send(200, placeholder(q.get("name", "shot")).encode(), TYPES[".svg"])
-        route = {"/api/v2/snapshot": self.snap, "/api/v2/bead": self.bead, "/api/v2/live": self.live}.get(u.path)
+        route = {"/api/snapshot": self.snap, "/api/bead": self.bead, "/api/live": self.live}.get(u.path)
         if route is None:  # the assets sit at the root, as the dash serves them: pages load them by relative url
             return self.asset(u.path.removeprefix("/"))
         route(q)
@@ -100,7 +100,7 @@ class Handler(BaseHTTPRequestHandler):
         return self.json(d)
 
     def do_POST(self) -> None:
-        verb = urlparse(self.path).path.removeprefix("/api/v2/")
+        verb = urlparse(self.path).path.removeprefix("/api/")
         if self.state == "down":
             return self.json({"error": "down"}, 503)
         if verb not in D.WRITES:

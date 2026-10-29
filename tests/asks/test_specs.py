@@ -1,5 +1,4 @@
 """Each stop of the engine builds an ask that passes lint, and the card text reads from the record's fields."""
-import dataclasses
 import sys
 import unittest
 from pathlib import Path
@@ -9,7 +8,7 @@ import support.paths  # noqa: F401
 from support.tiers import domain
 
 from taskloop.app.asks.raiser import Asking, build
-from taskloop.contracts.ask import AskAnswer, AskDetail, BudgetLine
+from taskloop.contracts.ask import AskAnswer, BudgetLine
 from taskloop.contracts.enums import AskClass
 from taskloop.domain.asks import specs, text
 from taskloop.domain.asks.lint import lint
@@ -70,20 +69,7 @@ class SpecsTest(unittest.TestCase):
 
 @domain
 class TextTest(unittest.TestCase):
-    def test_markdown_comes_from_the_fields(self) -> None:
-        a = ask_of(specs.over_budget(["189 of 180 min"], [BudgetLine(step="checks", minutes=124.0, rounds=21),
-                                                          BudgetLine(step="write", minutes=57.0, rounds=1)], 0))
-        md = text.markdown(a)
-        self.assertEqual(md.splitlines()[0], "**Run it again with a fresh budget, or split the bead?**")
-        self.assertIn("- Over its limit: 189 of 180 min", md)
-        self.assertIn("- checks took 124 min (21 rounds)", md)
-        self.assertIn("- write took 57 min (1 round)", md)
-
-    def test_odd_text_survives_and_details_are_capped(self) -> None:
-        a = ask_of(specs.open_question("**bold** `x`\n" + LONG + "\nWhich?", []))
-        self.assertLessEqual(len(text.markdown(a)), 1500)
-        a = dataclasses.replace(a, detail=AskDetail(text=""))
-        self.assertNotIn("Details", text.markdown(a))
+    def test_clip_cuts_at_a_word_and_marks_it(self) -> None:
         self.assertEqual(text.clip("a b c d", 5), "a b…")
 
     def test_comment_lists_the_options_and_words_say_what_the_answer_asks(self) -> None:

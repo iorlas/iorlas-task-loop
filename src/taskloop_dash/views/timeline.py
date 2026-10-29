@@ -212,25 +212,6 @@ def exit_move(n: dict, nxt: dict | None) -> dict | None:
     }
 
 
-def because_text(run: dict, prev: dict | None = None) -> str:
-    """Why a run started, in words."""
-    b = run.get("started_because")
-    pe = (prev or {}).get("end") or {}
-    if b == "first":
-        return "first run"
-    if b == "answer":
-        return "you answered" + (" ask {}".format(run["ask"].rsplit("-", 1)[-1]) if run.get("ask") else "")
-    if b == "fresh":
-        return "fresh start"
-    after = {
-        "paused": "after pause" + ((": {} was out".format(pe["lane"])) if pe.get("lane") else ""),
-        "stopped": "after a stop",
-        "failed": "after a failure",
-        "asks": "after the bead changed",
-    }.get(pe.get("outcome") or "", "")
-    return "resumed " + (after or "from the checkpoint") if b == "resume" else "retry" + ((" " + after) if after else "")
-
-
 def run_end(nodes: list[dict], pending: dict | None, alive: bool) -> dict:
     close = next((n for n in reversed(nodes) if n["step"] == "close"), None)
     if not close:
@@ -348,22 +329,3 @@ def last_node(path: str, cache: FileCache | None = None) -> dict | None:
     return nodes[-1] if nodes else None
 
 
-def live_label(n: dict | None) -> str:
-    """What a running task is doing, from its last node."""
-    if not n:
-        return "starting"
-    step, m = n["step"], n["meta"]
-    stage = f" stage {m['stage']}/{m['stages']}" if m.get("stages") and m["stages"] > 1 else ""
-    fix = f"fix round {m['fix']} · " if m.get("fix") else ""
-    if step == "write":
-        return fix + "writing" + stage + (f" (write {m['write']})" if (m.get("write") or 1) > 1 else "")
-    if step in ("checks", "review"):
-        return fix + step + stage
-    return {
-        "reset": "starting",
-        "plan": "planning",
-        "replan": "re-planning",
-        "verify": "checking before land",
-        "land": "landing",
-        "close": "closing",
-    }.get(step, step)

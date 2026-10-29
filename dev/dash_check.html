@@ -4,7 +4,7 @@
 </head><body>
 <iframe id="f"></iframe><pre id="out"></pre>
 <script type="module">
-// Browser harness for the dashboard v2 page (dev/dash_check.py drives it). Headless Chrome will not size a window below
+// Browser harness for the dashboard page (dev/dash_check.py drives it). Headless Chrome will not size a window below
 // 500 px, so the page runs in an iframe of the asked size; same origin, so the harness reads its DOM and storage.
 // ?page=/&hash=#board&w=390&h=844&theme=light|dark&scn=<scenario>  ->  #out holds {"ok":bool,"fails":[...],"notes":[...]}
 const q = new URLSearchParams(location.search);
@@ -27,7 +27,7 @@ function readOnly() {
   };
 }
 // a new document every time: a src that differs only in its hash would not fire load
-// root=/v2.html: the page's path on a server that serves something else at /
+// root=<path>: the page's path when a server serves something else at /
 const ROOT = q.get('root') || '/';
 function load(url) {
   if (url === '/' || url.startsWith('/#') || url.startsWith('/?')) url = ROOT + url.slice(1);
@@ -112,7 +112,7 @@ const SCENARIOS = {
       }
       return;
     }
-    const snap = await (await fetch('/api/v2/snapshot')).json();
+    const snap = await (await fetch('/api/snapshot')).json();
     const pick = [];
     for (const col of ['questions', 'look', 'working', 'review', 'landing', 'backlog', 'done']) pick.push(...snap.beads.filter((b) => b.column === col).slice(0, 3));
     pick.push(...snap.beads.filter((b) => ['stuck', 'exited', 'ask', 'look'].includes(b.marker) && !pick.includes(b)));
@@ -434,12 +434,12 @@ const SCENARIOS = {
       await click('.kc', 'Fix save corruption'); await settle(800);
     }
     await click('.tab', 'Bead');
-    const before = { hash: win().location.hash, ls: win().localStorage.getItem('tl-dash-v2') };
+    const before = { hash: win().location.hash, ls: win().localStorage.getItem('tl-dash-ui') };
     win().location.reload();
     await new Promise((r) => { f.onload = r; });
     await settle(1800);
     must(win().location.hash === before.hash, `hash changed on reload: ${before.hash} -> ${win().location.hash}`);
-    must(win().localStorage.getItem('tl-dash-v2') === before.ls, 'stored state changed on reload');
+    must(win().localStorage.getItem('tl-dash-ui') === before.ls, 'stored state changed on reload');
     must($(phone ? '.pg.on' : '.drw.open'), 'drawer closed after reload');
     must($$('.tab.on').some((t) => t.textContent.includes('Bead')), 'drawer tab lost after reload');
     must(phone ? $('.fsum') : $$('.fc.on').some((c) => c.textContent.includes('lifesim')), 'project filter lost after reload');

@@ -1,23 +1,24 @@
-# dashboard API v2: contract 1
+# dashboard API: contract
 
-Status: proposed; reviewed once by the backend (2026-10-29), its cuts, renames and order applied here. Built so far: `GET /api/v2/snapshot`
-and `GET /api/v2/bead` (backend items 1 and 2: `views/snapshot.py`, `views/bead_detail.py`, `api/v2.py`); every field the "Backend order"
-tables name for items 5, 7 and 9 still keeps its default.
-Source of truth: `src/taskloop/contracts/dash.py` (records, enums, `WRITES`). Sample data: `tests/fixtures/dash_v2/` (built by
+Status: built; the only API the dashboard has. The page (`src/taskloop_dash/static/index.html`) is served at `/`, its modules
+beside it, and talks to nothing else.
+Source of truth: `src/taskloop/contracts/dash.py` (records, enums, `WRITES`). Sample data: `tests/fixtures/dash/` (built by
 `tests/support/dash_fixtures.py` from the round-8b mock; `UPDATE_GOLDEN=1` rewrites it). Test: `tests/contracts/test_dash.py`.
-Design: `docs/design/dashboard-v2/dash-spec.md` §11.
+Design: `docs/design/dashboard/dash-spec.md` §11.
 
-The backend builds these records from engine data; the frontend renders the fixtures until the endpoints exist. Neither side
-changes a field alone: a change is a commit to `dash.py` plus regenerated fixtures, and both sides follow it.
+Neither side changes a field alone: a change is a commit to `dash.py` plus regenerated fixtures, and both sides follow it.
 
 ## Endpoints
 
 | method, path | body / query | answer |
 |---|---|---|
-| GET `/api/v2/snapshot` | `since=<version>` optional | `Snapshot` with `ETag: "<version>"`; 304 when `since` or `If-None-Match` equals the current `version` |
-| GET `/api/v2/bead` | `project`, `id` | `BeadDetail`; 404 for an unknown bead |
-| GET `/api/v2/live` | `project`, `id`, `since=<cursor>`, `wait=<s>` | `LivePage` with lines after the cursor; long-poll over `api/live.py` and `runlife` |
-| POST `/api/v2/<verb>` | the `WRITES[verb]` record as JSON | `Result` |
+| GET `/api/snapshot` | `since=<version>` optional | `Snapshot` with `ETag: "<version>"`; 304 when `since` or `If-None-Match` equals the current `version` |
+| GET `/api/bead` | `project`, `id` | `BeadDetail`; 404 for an unknown bead |
+| GET `/api/live` | `project`, `id`, `since=<cursor>`, `wait=<s>` | `LivePage` with lines after the cursor; long-poll over `api/live.py` and `runlife` |
+| POST `/api/<verb>` | the `WRITES[verb]` record as JSON | `Result` |
+| GET `/api/artifact` | `bead`, `name` | a file the run kept (`ConfigDir.artifacts`); HTML only as a download |
+| GET `/api/look-shot` | `repo`, `path` | a picture an open look item names, read from the repo |
+| GET `/api/version` | | `{version, pid, urls, started, script, binds, port}`: what `tl dash ensure` checks |
 
 Verbs: `answer`, `look`, `stick`, `prune`, `cause`, `ack`, `park`, `stop`, `note`. The dashboard runs no process: a write is an
 in-process Port call (as `Ports.answer` is today), never a raw bd argv. Auth stays `bind.post_allowed`. A refused write is

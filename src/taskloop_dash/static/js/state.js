@@ -3,7 +3,7 @@
 // per browser (localStorage); scroll positions persist per tab (sessionStorage). Each layer the phone's system back closes
 // (sheet, bead page, goal level) is one history entry (§9).
 
-const KEY = 'tl-dash-v2', SCROLL_KEY = 'tl-dash-v2-scroll';
+const KEY = 'tl-dash-ui', SCROLL_KEY = 'tl-dash-ui-scroll';
 const TABS = ['board', 'floor', 'decisions', 'lanes'];
 
 function load(store, key) {
@@ -28,7 +28,7 @@ export const ui = {
   opts: saved.opts || {}, // the view option each tab had last (Board mode, Floor zoom, Decisions tab)
   sheet: null, // {kind, ...}: the phone's bottom sheet; also a history entry
   toast: null, // {text, n}: n changes so the same text shows again
-  hold: null, // the 5 s answer hold (dash-api-v2 Undo): {key, req, label, until}
+  hold: null, // the 5 s answer hold (dash-api Undo): {key, req, label, until}
   sent: {}, // ask id -> {t, label, stick}: answered here; hidden until the snapshot drops it
   pruned: {}, // project/ADR id -> true: retired here, until the snapshot drops it
   outcomes: {}, // ask id -> outcome: made to stick from the Ledger, until the snapshot has it

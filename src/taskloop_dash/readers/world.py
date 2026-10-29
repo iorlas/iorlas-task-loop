@@ -6,7 +6,6 @@ keep to their TTLs."""
 import socket
 from collections.abc import Sequence
 from typing import Any
-from urllib.parse import quote
 
 from taskloop.contracts import codec
 from taskloop.contracts.adrs import AdrStore
@@ -65,7 +64,7 @@ class Worlds:
             loop_key(path) + ".*.json"))) if s is not None]
         _, items = self.looks.look_items(path)
         looks = [LookItem(bead=i["bead"], title=i["title"], shots=tuple(
-            f"/api/look-shot?repo={quote(basename(path))}&path={quote(s['path'])}" for s in i["shots"] if s["role"] == "after"))
+            self.looks.shot_url(basename(path), s["path"]) for s in i["shots"] if s["role"] == "after"))
             for i in items if i["status"] == "open" and i["bead"]]
         return ProjectIn(id=id, name=id, beads=rows, slots=slots, loops=states, looks=looks, adrs=self.adrs(path))
 

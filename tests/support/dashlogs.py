@@ -1,4 +1,4 @@
-"""Typed engine logs for the dashboard v2 tests: `RunScript` writes the records an engine run would (EngineLog v2, as dicts through
+"""Typed engine logs for the dashboard tests: `RunScript` writes the records an engine run would (EngineLog v2, as dicts through
 `typed`), `.records()` decodes them strictly, `.run(now)` makes the dashboard's Run of them, `.write(config)` puts them where the
 dashboard reads them. Times are seconds after T; every method moves the script's clock."""
 

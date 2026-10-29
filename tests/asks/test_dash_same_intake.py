@@ -39,7 +39,8 @@ class SameIntake(unittest.TestCase):
                              split=False, verdict=None)
             cli_asks.run(args, tl_asks, lambda repo: tl_store, lambda: 1000.0, "dash", lambda _line: None)
             dash = make_dash(answering(lambda repo: dash_store, b), config=b)
-            self.assertEqual(dash.asks.answer({"ask": "b-1-1", "text": "go with A"})[0], 200)
+            req = {"project": "b", "ask": "b-1-1", "kind": "answer", "text": "go with A"}
+            self.assertEqual(dash.writes.post("answer", req), (200, {"ok": True, "message": ""}))
             self.assertEqual([c.text for c in dash_store.comments("b-1")], [c.text for c in tl_store.comments("b-1")])
             self.assertIn("Owner (tl) answer", dash_store.comments("b-1")[0].text)
             self.assertEqual(dash_store.beads["b-1"].status, tl_store.beads["b-1"].status)

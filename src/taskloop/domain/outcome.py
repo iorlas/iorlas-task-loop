@@ -7,7 +7,7 @@ no cap. `apply` is pure: the same (outcome, bead, history, now) gives the same D
 imports lifecycle (the one fingerprint normaliser), never engine.
 
 Design: 60-design-A1 sec 2.1 and 61-integration sec 1.2; ASK_VERIFY is retired (68-design-asks sec 8); OWNER_PARK
-is the owner's park (dash v2 backend item 7), so 23 members.
+is the owner's park (the dashboard's park verb), so 23 members.
 """
 
 import enum

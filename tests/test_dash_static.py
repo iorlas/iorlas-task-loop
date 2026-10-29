@@ -1,4 +1,4 @@
-"""Dashboard v2 static assets (dash-spec §12): every JS import resolves to a file that exports the imported names, the vendored
+"""The dashboard's static assets (dash-spec §12): every JS import resolves to a file that exports the imported names, the vendored
 runtime is pinned by hash, no colour value is written outside tokens.css, JS and CSS together stay within 100 KB gzip, and the
 fixture dev server (dev/dash_fixtures.py) answers every route the page uses."""
 import gzip
@@ -15,12 +15,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 STATIC = ROOT / "src" / "taskloop_dash" / "static"
-FIX = ROOT / "tests" / "fixtures" / "dash_v2"
+FIX = ROOT / "tests" / "fixtures" / "dash"
 VENDOR = STATIC / "vendor" / "ui-runtime.js"
 VENDOR_SHA256 = "72284e8e9079c87817145df1110f74e8a2aa040b2fc384922e18dfcb46fc1fd7"  # htm 3.1.1 preact/standalone.module.js
 BUDGET_GZIP = 100 * 1024
-# the v1 page, retired when v2 reaches the slice 4 gate (dash-spec §12)
-LEGACY = {"index.html", "live.html"}
 
 IMPORT = re.compile(r"""^\s*import\s+(?:(\{[^}]*\}|\*\s+as\s+\w+|\w+)\s+from\s+)?['"]([^'"]+)['"]""", re.M)
 EXPORT = re.compile(r"^export\s+(?:async\s+)?(?:function|const|let|class)\s+(\w+)", re.M)
@@ -30,7 +28,7 @@ COLOUR = re.compile(r"#[0-9a-fA-F]{3,8}\b(?![-\w])|\brgba?\(|\bhsla?\(")
 
 def page_files() -> list[Path]:
     return sorted(p for p in STATIC.rglob("*") if p.is_file() and p.suffix in (".js", ".css", ".html")
-                  and p != VENDOR and p.name not in LEGACY)
+                  and p != VENDOR)
 
 
 def exports(path: Path) -> set[str]:
@@ -65,7 +63,7 @@ class StaticAssets(unittest.TestCase):
                     self.assertFalse(missing, f"{spec} does not export {sorted(missing)}")
 
     def test_pages_reference_existing_assets(self):
-        for page in ("v2.html", "components.html"):
+        for page in ("index.html", "components.html"):
             text = (STATIC / page).read_text(encoding="utf-8")
             self.assertNotRegex(text, r'(?:href|src)="/', f"{page}: assets by relative url, so the page works wherever it is served")
             for ref in re.findall(r'(?:href|src)="(?!https?:)([^"]+)"', text):
@@ -90,7 +88,7 @@ class StaticAssets(unittest.TestCase):
                     self.assertFalse(hits, f"colour outside tokens.css: {hits} in {line.strip()[:120]}")
 
     def test_gzip_budget(self):
-        shipped = [p for p in STATIC.rglob("*") if p.suffix in (".js", ".css") and p.name not in LEGACY]
+        shipped = [p for p in STATIC.rglob("*") if p.suffix in (".js", ".css")]
         total = sum(len(gzip.compress(p.read_bytes(), 9)) for p in shipped)
         self.assertLessEqual(total, BUDGET_GZIP, f"JS+CSS is {total / 1024:.1f} KB gzip, budget 100 KB")
 
@@ -142,10 +140,10 @@ class DevServer(unittest.TestCase):
         self.assertEqual(self.get("/../dev/dash_fixtures.py")[0], 404)
 
     def test_snapshot_and_its_304(self):
-        code, body = self.get("/api/v2/snapshot")
+        code, body = self.get("/api/snapshot")
         self.assertEqual(code, 200)
         version = json.loads(body)["version"]
-        self.assertEqual(self.get(f"/api/v2/snapshot?since={version}")[0], 304)
+        self.assertEqual(self.get(f"/api/snapshot?since={version}")[0], 304)
 
     def test_every_bead_and_live_fixture(self):
         snap = json.loads((FIX / "snapshot.json").read_text(encoding="utf-8"))
@@ -153,17 +151,17 @@ class DevServer(unittest.TestCase):
         for kind in ("bead", "live"):
             for f in sorted((FIX / kind).glob("*.json")):
                 with self.subTest(kind=kind, id=f.stem):
-                    code, body = self.get(f"/api/v2/{kind}?project={project[f.stem]}&id={f.stem}")
+                    code, body = self.get(f"/api/{kind}?project={project[f.stem]}&id={f.stem}")
                     self.assertEqual(code, 200)
                     self.assertEqual(json.loads(body), json.loads(f.read_text(encoding="utf-8")))
-        self.assertEqual(self.get("/api/v2/bead?project=x&id=nope")[0], 404)
+        self.assertEqual(self.get("/api/bead?project=x&id=nope")[0], 404)
 
     def test_every_write_and_a_bad_body(self):
         for verb, body in json.loads((FIX / "writes.json").read_text(encoding="utf-8")).items():
             with self.subTest(verb=verb):
-                self.assertEqual(self.post(f"/api/v2/{verb}", json.dumps(body).encode()), 200)
-        self.assertEqual(self.post("/api/v2/answer", b'{"project": "x", "unknown": 1}'), 400)
-        self.assertEqual(self.post("/api/v2/nope", b"{}"), 404)
+                self.assertEqual(self.post(f"/api/{verb}", json.dumps(body).encode()), 200)
+        self.assertEqual(self.post("/api/answer", b'{"project": "x", "unknown": 1}'), 400)
+        self.assertEqual(self.post("/api/nope", b"{}"), 404)
 
 
 if __name__ == "__main__":

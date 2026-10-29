@@ -1,4 +1,4 @@
-"""Read-only static files for the v2 page: .js/.css/.html under the static dir, never outside it."""
+"""Read-only static files for the page: .js/.css/.html under the static dir, never outside it."""
 
 from pathlib import Path
 from types import MappingProxyType
@@ -16,8 +16,8 @@ NOT_FOUND = (404, b"not found", "text/plain")
 def static_file(static: Path, path: str) -> tuple[int, bytes, str]:
     """(200, bytes, type) of `path` when it is a servable file inside `static`, else a bare 404."""
     rel = unquote(path)
-    if path.startswith("/v2") and rel in ("/v2", "/v2.html"):
-        rel = "/v2.html"
+    if rel == "/":
+        rel = "/index.html"
     if not rel.startswith("/") or "\0" in rel or "\\" in rel or rel.startswith("//"):
         return NOT_FOUND
     parts = rel[1:].split("/")

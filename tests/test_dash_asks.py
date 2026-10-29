@@ -1,231 +1,285 @@
-"""The dash reads and answers the current ask version only; its answers land as AskAnswer records."""
+"""The ask records the page shows: the AskCard fields, the soft ask's marker, the ledger rows, the decisions in
+force, the learning series, and POST /api/stick through Ports."""
 import dataclasses
 import json
+import os
 import sys
 import tempfile
 import time
 import unittest
 from pathlib import Path
-from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: F401
 from asks.dash_ports import answering
-from asks.samples import MOCKS
 from support.dashes import make_dash
+from support.dashlogs import T, bead
 from support.narrow import must
 
-from taskloop.adapters.bd import BdRun, BdStore
 from taskloop.adapters.fake_beads import FakeBeads
+from taskloop.app.asks import intake, raiser
 from taskloop.contracts import codec
-from taskloop.contracts.ask import Ask
-from taskloop.contracts.bead import BdError, Bead
-from taskloop.contracts.enums import AskStatus
-from taskloop.contracts.ports import BdFailure
-from taskloop.contracts.stores import ORPHAN
-from taskloop_dash.env import Ports
+from taskloop.contracts.ask import SimilarRef, ThreadEntry
+from taskloop.contracts.bead import Bead
+from taskloop.contracts.dash import Column, Marker, OwnerCause, Result, Stick
+from taskloop.contracts.ledger import Adr
+from taskloop.contracts.stores import AskStore
+from taskloop.domain.asks import specs
+from taskloop.stores.memory import fake_stores
+from taskloop_dash.views import bead_detail, snapshot
+from taskloop_dash.views.board import Board
+from taskloop_dash.views.world import AdrIn, Landing, ProjectIn, World
 
-ASK = dataclasses.replace(MOCKS["lifesim-22b3"], bead="b-1", id="b-1-1")
+DAY = 86400.0
+NOW = T + 20 * DAY
+REPO = "/r/lifesim"
+Q = "Which bills are weekly?"
+OPTS = [{"label": "Rent weekly", "cost": "none", "answer": "rent weekly", "recommended": True},
+        {"label": "All weekly", "cost": "a run", "answer": "all weekly", "recommended": False}]
 
 
-def fake_store(repo):
-    store = FakeBeads()
-    store.beads["b-1"] = Bead(id="b-1", title="", status="blocked")
-    return store
+def iso(t):
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(t))
 
 
-class DashAsks(unittest.TestCase):
+class Case(unittest.TestCase):
+    def setUp(self):
+        self.tz = os.environ.get("TZ")
+        os.environ["TZ"] = "UTC"
+        time.tzset()
+        self.addCleanup(self.restore_tz)
+        self.stores = fake_stores()
+        self.asks = self.stores.asks
+        self.beads = FakeBeads()
+        for k in range(5):
+            self.beads.beads[f"b-{k}"] = Bead(id=f"b-{k}", title="x", status="blocked")
+        self.verbs = intake.Intake(self.asks, self.beads, lambda: NOW - 3 * DAY, "denis", self.stores.adrs)
+
+    def restore_tz(self):
+        if self.tz is None:
+            os.environ.pop("TZ", None)
+        else:
+            os.environ["TZ"] = self.tz
+        time.tzset()
+
+    def raise_(self, bead_id, now, question=Q, cause="decision", default="", adrs=None):
+        return must(raiser.raise_ask(self.asks, specs.open_question(question, OPTS, cause, default), raiser.Asking(
+            bead=bead_id, run="r", brief_hash="h", repo=REPO, title=bead_id, now=now), adrs)[0])
+
+    def world(self, beads, adrs=(), landings=(), live=None):
+        p = ProjectIn(id="lifesim", name="lifesim", beads=beads, adrs=list(adrs))
+        live = live if live is not None else {a.bead: a for a in self.asks.live()}
+        return World(now=NOW, host="box", version="v1", projects=[p], runs={}, asks=live, ledger=self.asks.rows(), landings=list(landings))
+
+    def snap(self, beads, **kw):
+        return snapshot.build(self.world(beads, **kw))
+
+
+class Cards(Case):
+    def test_an_ask_card_carries_the_typed_fields_of_the_ask(self):
+        key = self.raise_("b-0", T).key
+        adr = self.stores.adrs(REPO).add(Adr(id="", n=0, repo=REPO, text="Rent is weekly", question=Q, answer="rent", ask="b-0-1",
+                                             bead="b-0", key=key, t=NOW - 5 * DAY))
+        a = self.raise_("b-1", NOW - DAY, cause="requirement", adrs=self.stores.adrs(REPO))
+        self.assertEqual(a.similar, [SimilarRef(kind="adr", id=adr.id)])
+        self.asks.put(dataclasses.replace(a, thread=[ThreadEntry(by="owner", t=NOW - 100, md="why?"),
+                                                     ThreadEntry(by="helper", t=NOW - 90, md="because")]))
+        beads = [bead("b-1", "Bills"), bead("b-2", "Done after", "closed", closed_at=iso(NOW - 3600)),
+                 bead("b-3", "Done before", "closed", closed_at=iso(NOW - 5 * DAY))]
+        asks = {x.bead: x for x in self.snap(beads, adrs=[AdrIn(adr, 2, NOW - 100)]).asks}
+        card = asks["b-1"]
+        self.assertEqual((card.blocking, card.owner_cause, card.cause_by, card.default), (True, OwnerCause.REQUIREMENT, "agent", ""))
+        self.assertEqual([(m.by, m.md) for m in card.thread], [("owner", "why?"), ("helper", "because")])
+        self.assertEqual((card.ask_backs, card.stale), (1, 1))
+        self.assertEqual(must(card.similar).answer, "Rent is weekly")
+        self.assertEqual((must(card.similar).bead, must(card.similar).t), ("b-0", NOW - 5 * DAY))
+
+    def test_a_card_matches_a_past_answered_ask_when_no_decision_is_in_force(self):
+        first = self.raise_("b-0", NOW - 9 * DAY)
+        self.verbs.answer("b-0", "text", "rent weekly")
+        a = self.raise_("b-1", NOW - DAY)
+        self.assertEqual(a.similar, [SimilarRef(kind="ask", id=first.id)])
+        card = self.snap([bead("b-1", "Bills")]).asks[0]
+        self.assertEqual((must(card.similar).bead, must(card.similar).answer, must(card.similar).question), ("b-0", "rent weekly", Q))
+
+    def test_the_owner_corrects_the_cause_and_the_card_shows_it(self):
+        a = self.raise_("b-1", NOW - DAY, cause="process")
+        self.assertEqual(self.verbs.cause("b-1", a.id, "environment"), "")
+        card = self.snap([bead("b-1", "Bills")]).asks[0]
+        self.assertEqual((card.owner_cause, card.cause_by), (OwnerCause.ENVIRONMENT, "owner"))
+
+    def test_a_soft_ask_marks_the_bead_without_moving_its_column_and_the_drawer_shows_it(self):
+        a = self.raise_("b-1", NOW - DAY, default="went on with weekly rent")
+        beads = [bead("b-1", "Bills", "in_progress", assignee="tl-a")]
+        w = self.world(beads)
+        s = snapshot.build(w)
+        card = s.beads[0]
+        self.assertEqual((card.marker, card.column, card.tone), (Marker.SOFT_ASK, Column.WORKING, "you"))
+        self.assertIn(a.decision, card.status)
+        ask = s.asks[0]
+        self.assertEqual((ask.blocking, ask.default), (False, "went on with weekly rent"))
+        detail = bead_detail.build(Board(w), w.projects[0], beads[0], [], [])
+        self.assertEqual(must(detail.ask).id, a.id)
+
+    def test_a_blocking_ask_still_fills_the_questions_column(self):
+        self.raise_("b-1", NOW - DAY)
+        card = self.snap([bead("b-1", "Bills", "blocked")]).beads[0]
+        self.assertEqual((card.marker, card.column), (Marker.ASK, Column.QUESTIONS))
+
+
+class Ledger(Case):
+    def test_rows_hold_open_soft_and_answered_asks_newest_first_with_cause_and_outcome(self):
+        done = self.raise_("b-1", NOW - 6 * DAY, cause="requirement")
+        self.verbs.answer("b-1", "text", "rent weekly")
+        self.verbs.cause("b-1", done.id, "decision")
+        self.asks.consume("b-1", NOW - 5 * DAY)
+        self.asks.stuck("b-1", done.id, Stick.ONCE, "", NOW - 5 * DAY)
+        hard = self.raise_("b-2", NOW - 2 * DAY)
+        soft = self.raise_("b-3", NOW - DAY, default="weekly")
+        gone = self.raise_("b-4", NOW - 3 * DAY)
+        self.asks.withdraw("b-4", gone.id, "n/a", NOW)
+        rows = self.snap([bead(b, b) for b in ("b-2", "b-3", "b-4")]).ledger
+        self.assertEqual([(r.ask, r.status) for r in rows], [(soft.id, "open_soft"), (hard.id, "open"), (done.id, "answered")])
+        old = rows[2]
+        self.assertEqual((old.answer, old.outcome, old.cause, old.project, old.question, old.t),
+                         ("rent weekly", Stick.ONCE, OwnerCause.DECISION, "lifesim", Q, NOW - 6 * DAY))
+        self.assertEqual((rows[0].outcome, rows[0].cause), (None, OwnerCause.DECISION))
+
+    def test_an_open_row_of_a_bead_the_snapshot_does_not_show_is_left_out_but_an_answered_one_stays(self):
+        self.raise_("b-1", NOW - 6 * DAY)
+        self.verbs.answer("b-1", "text", "x")
+        self.raise_("b-2", NOW - DAY)
+        self.assertEqual([r.status for r in self.snap([bead("b-1", "x", "closed", closed_at=iso(NOW - 4 * DAY))]).ledger], ["answered"])
+
+    def test_the_snapshot_version_moves_with_the_ledger(self):
+        self.raise_("b-1", NOW - DAY)
+        beads = [bead("b-1", "Bills", "blocked")]
+        before = self.snap(beads).version
+        self.assertEqual(self.snap(beads).version, before)
+        self.verbs.cause("b-1", "b-1-1", "environment")
+        self.assertNotEqual(self.snap(beads).version, before)
+
+
+class Decisions(Case):
+    def test_adr_rows_carry_reuse_last_use_and_the_prune_offer(self):
+        adrs = self.stores.adrs(REPO)
+        old = adrs.add(Adr(id="", n=0, repo=REPO, text="old", question="q", answer="a", ask="x-1", bead="x", key="k", t=NOW - 40 * DAY))
+        used = adrs.add(Adr(id="", n=0, repo=REPO, text="used", question="q", answer="a", ask="x-2", bead="x", key="k", t=NOW - 40 * DAY))
+        fresh = adrs.add(Adr(id="", n=0, repo=REPO, text="fresh", question="q", answer="a", ask="x-3", bead="x", key="k", t=NOW - DAY))
+        adrs.use(used.id, "b-1", "r1", NOW - 3 * DAY)
+        adrs.use(used.id, "b-2", "r2", NOW - DAY)
+        reuses = adrs.reuses()
+        ins = [AdrIn(a, reuses.get(a.id, (0, 0.0))[0], reuses.get(a.id, (0, 0.0))[1] or None) for a in adrs.all()]
+        self.assertEqual(adrs.retire(fresh.id, "denis", NOW), "")
+        ins = [AdrIn(a, reuses.get(a.id, (0, 0.0))[0], reuses.get(a.id, (0, 0.0))[1] or None) for a in adrs.in_force()]
+        rows = {r.id: r for r in self.snap([], adrs=ins).adrs}
+        self.assertNotIn(fresh.id, rows)  # retired: no longer in force
+        self.assertEqual([(i, rows[i].reuses, rows[i].last_used, rows[i].prune, rows[i].project) for i in (old.id, used.id)],
+                         [(old.id, 0, None, True, "lifesim"), (used.id, 2, NOW - DAY, False, "lifesim")])
+
+
+class Learning(Case):
+    def test_weekly_series_from_the_ledger_and_the_landed_runs(self):
+        self.raise_("b-0", NOW - 20 * DAY)  # never answered: counts as raised, not as durable
+        last = self.raise_("b-1", NOW - 10 * DAY, cause="requirement")
+        self.verbs.answer("b-1", "text", "x")
+        self.verbs.stick(last.id, Stick.FIX, "clarified")
+        self.raise_("b-2", NOW - 3600, cause="requirement")
+        landings = [Landing(NOW - 10 * DAY + 60, 2), Landing(NOW - 10 * DAY + 90, 0), Landing(NOW - 3600, 1)]
+        got = self.snap([bead("b-2", "x")], landings=landings).learning
+        self.assertEqual(len(got.weeks), 4)  # from the week of the oldest row, not eight padded with zeros
+        for series in (got.asks_per_landed, got.repeat_asks, got.sendbacks_per_bead, got.durable_pct):
+            self.assertEqual(len(series), len(got.weeks))
+        self.assertEqual((got.asks_per_landed[-1], got.sendbacks_per_bead[-1], got.durable_pct[-1]), (1.0, 1.0, 0.0))
+        k = got.durable_pct.index(100.0)  # the week of the answered ask: 1 ask, 2 landed
+        self.assertEqual((got.asks_per_landed[k], got.sendbacks_per_bead[k]), (0.5, 1.0))
+        self.assertEqual([(c.cause, c.now, c.prev) for c in got.causes], [(OwnerCause.REQUIREMENT, 1, 1)])  # this week and last, asks only
+
+    def test_nothing_recorded_is_an_empty_series_not_eight_zeros(self):
+        got = self.snap([]).learning
+        self.assertEqual((got.weeks, got.asks_per_landed, got.causes), ([], [], []))
+
+    def test_a_repeat_counts_in_its_week(self):
+        first = self.raise_("b-0", NOW - 9 * DAY)
+        self.verbs.answer("b-0", "text", "x")
+        again = self.raise_("b-1", NOW - 3600)
+        self.assertEqual(again.similar, [SimilarRef(kind="ask", id=first.id)])
+        got = self.snap([bead("b-1", "x")]).learning
+        self.assertEqual(got.repeat_asks[-1], 1)
+        self.assertEqual(sum(got.repeat_asks), 1)
+
+
+class Stick_(unittest.TestCase):
+    """POST /api/stick: the dashboard's write through Ports into the Intake verb."""
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        self.dash = make_dash(answering(fake_store, self.tmp.name), config=self.tmp.name)
-        self.path = self.dash.env.config.ask("b-1")
-        self.path.parent.mkdir(parents=True)
+        self.fake = FakeBeads()
+        self.fake.beads["b-1"] = Bead(id="b-1", title="Bills", status="blocked", description="Pay the bills.")
+        self.factory = FakeBeads(prefix="tl")
+        self.dash = make_dash(answering(lambda repo: self.fake, self.tmp.name, clock=lambda: NOW, factory=lambda: self.factory),
+                              config=self.tmp.name, clock=lambda: NOW)
+        repo = Path(self.tmp.name) / "demo"
+        repo.mkdir()
+        self.dash.env.config.repos().write_text(json.dumps({str(repo): {}}))
+        self.asks = AskStore.at(self.dash.env.config)
+        self.ask = must(raiser.raise_ask(self.asks, specs.open_question(Q, OPTS), raiser.Asking(
+            bead="b-1", run="r", brief_hash="h", repo=str(repo), title="Bills", now=NOW - 60))[0])
+        self.post("answer", {"project": "demo", "ask": self.ask.id, "kind": "answer", "option": 0})
 
-    def put(self, rec=ASK, **over):
-        self.path.write_text(json.dumps({**codec.to_json(rec), **over}))
+    def post(self, verb, body):
+        code, out = self.dash.writes.post(verb, body)
+        self.assertEqual(code, 200)
+        return codec.from_json(Result, out)
 
-    def read(self):
-        return codec.from_json(Ask, json.loads(self.path.read_text()))
+    def stick(self, outcome, text=""):
+        return self.post("stick", {"project": "demo", "ask": self.ask.id, "outcome": outcome, "text": text})
 
-    def test_the_inbox_shows_the_fields_as_the_page_reads_them(self):
-        self.put()
-        row = self.dash.asks.inbox()[0]
-        self.assertEqual((row["id"], row["question"], len(row["options"])), ("b-1-1", ASK.decision, 3))
-        self.assertEqual(row["options"][0]["consequence"], ASK.options[0].consequence)
+    def test_adr_is_written_under_the_state_dir_and_the_planner_store_reads_it(self):
+        self.assertEqual(self.stick("adr", "Rent is weekly."), Result(ok=True))
+        found = list(Path(self.tmp.name, "decisions").glob("*/ADR-1.json"))
+        self.assertEqual(len(found), 1)
+        self.assertEqual(json.loads(found[0].read_text())["text"], "Rent is weekly.")
+        rows = self.asks.history(self.ask.id)
+        self.assertEqual((rows[-1].event, rows[-1].outcome, rows[-1].outcome_ref), ("stick", Stick.ADR, "ADR-1"))
 
-    def test_a_dropped_ask_is_listed_as_one_typed_line_for_its_bead(self):
-        self.put(v=1)
-        (row,) = self.dash.asks.inbox()
-        self.assertEqual((row["bead"], row["question"], row["orphan"], row["options"]), ("b-1", ORPHAN, True, []))
+    def test_factory_fix_and_the_record_only_outcomes(self):
+        self.assertEqual(self.stick("factory", "prompt: ask which bills"), Result(ok=True))
+        self.assertEqual([b.title for b in self.factory.beads.values()], ["prompt: ask which bills"])
+        self.assertEqual(self.stick("fix", "Rent is weekly."), Result(ok=True))
+        self.assertIn("Rent is weekly.", self.fake.beads["b-1"].description)
+        self.assertEqual(self.stick("demote"), Result(ok=True))
+        self.assertEqual(self.asks.history(self.ask.id)[-1].event, "demote")
+        self.assertEqual(self.stick("once"), Result(ok=True))
+        self.assertEqual(self.asks.history(self.ask.id)[-1].outcome, Stick.ONCE)
 
-    def test_an_old_or_unknown_version_is_absent(self):
-        for v in (1, 9):
-            self.put(v=v)
-            self.assertEqual((self.dash.asks.ask_file("b-1"), self.dash.asks.open_ask("b-1")), ({}, None))  # absent, but listed as dropped
+    def test_ref_needs_a_decision_and_a_refusal_changes_nothing(self):
+        res = self.stick("ref", "ADR-4")
+        self.assertEqual((res.ok, "not a decision" in res.message), (False, True))
+        self.assertEqual(self.stick("fix").ok, False)
+        self.assertEqual(self.asks.history(self.ask.id)[-1].event, "answer")
+        self.assertEqual(self.post("stick", {"project": "nowhere", "ask": self.ask.id, "outcome": "adr"}).ok, False)
 
-    def test_a_typed_option_lands_as_an_ask_answer_and_the_first_wins(self):
-        self.put()
-        self.assertEqual(self.dash.asks.answer({"ask": "b-1-1", "option": 2})[0], 200)
-        got = self.read()
-        given = must(got.answer)
-        self.assertEqual((got.status, given.action, given.by, given.text), (AskStatus.ANSWERED, "text", "dash", "Split the bead"))
-        self.assertEqual(self.dash.asks.answer({"ask": "b-1-1", "text": "x"})[1]["code"], "answered")
-        self.assertEqual(self.dash.asks.answer({"ask": "b-1-1", "text": "better", "amend": True})[0], 200)
-        self.assertEqual(must(self.read().answer).text, "better")
+    def test_prune_retires_a_decision_and_keeps_it_in_the_store(self):
+        self.stick("adr", "Rent is weekly.")
+        res = self.post("prune", {"project": "demo", "adr": "ADR-1"})
+        self.assertEqual(res, Result(ok=True))
+        [path] = Path(self.tmp.name, "decisions").glob("*/ADR-1.json")
+        got = json.loads(path.read_text())
+        self.assertEqual((got["retired_by"], got["retired_t"], got["text"]), ("dash", NOW, "Rent is weekly."))
+        again = self.post("prune", {"project": "demo", "adr": "ADR-1"})
+        self.assertEqual((again.ok, "already retired" in again.message), (False, True))
+        self.assertIn("not a decision", self.post("prune", {"project": "demo", "adr": "ADR-9"}).message)
+        self.assertFalse(self.post("prune", {"project": "nowhere", "adr": "ADR-1"}).ok)
+        self.assertEqual(self.stick("ref", "ADR-1").ok, False)  # a retired decision cannot be linked
 
-    def test_words_are_a_text_answer_and_empty_is_refused(self):
-        self.put()
-        self.assertEqual(self.dash.asks.answer({"ask": "b-1-1", "text": " "})[0], 400)
-        self.assertEqual(self.dash.asks.answer({"ask": "b-1-1", "text": "go with A"})[0], 200)
-        self.assertEqual(must(self.read().answer).text, "go with A")
-        self.assertEqual(self.dash.asks.answer({"ask": "b-9-1", "text": "x"})[0], 404)
-
-    def test_a_newer_ask_supersedes_and_withdraw_keeps_the_record_valid(self):
-        self.put()
-        code, out = self.dash.asks.answer({"ask": "b-1-0", "text": "x"})
-        self.assertEqual((code, out["code"], out["new_ask"]), (409, "superseded", "b-1-1"))
-        self.assertEqual(self.dash.asks.withdraw({"ask": "b-1-1", "why": "moot"})[0], 200)
-        got = self.read()
-        self.assertEqual((got.status, got.closed_why), (AskStatus.WITHDRAWN, "moot"))
-        self.assertEqual(self.dash.asks.answer({"ask": "b-1-1", "text": "x"})[0], 410)
-
-
-class AskFailures(unittest.TestCase):
-    """Every way an answer can fail says what is true and what to do, never a raw bd line."""
-
-    def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(self.tmp.cleanup)
-        self.d = Path(self.tmp.name)
-        self.calls = []
-        self.bd_says = None  # the BdError the next write fails with
-        self.dash = make_dash(answering(self.store, self.tmp.name), config=self.tmp.name)
-        self.dir = self.dash.env.config.ask("x").parent
-        self.dir.mkdir(parents=True)
-
-    def store(self, repo):
-        outer = self
-
-        class Store(FakeBeads):
-            def update(self, bead, patch):
-                outer.calls.append((bead, patch))
-                if outer.bd_says:
-                    raise BdFailure(outer.bd_says)
-        return Store()
-
-    def ask(self, bead="x-1", n=1, **over):
-        rec = dataclasses.replace(ASK, bead=bead, id=f"{bead}-{n:d}", repo=str(self.d), t=time.time(), parks_at=time.time() + 9e4)
-        (self.dir / f"{bead}.json").write_text(json.dumps({**codec.to_json(rec), **over}))
-
-    def read(self, bead="x-1"):
-        return json.loads((self.dir / f"{bead}.json").read_text())
-
-    def test_a_bd_failure_after_the_answer_keeps_the_answer_like_tl_answer_does(self):
-        for kind in ("not_found", "other"):
-            self.bd_says = BdError(kind=kind, text="boom: disk full")
-            self.ask()
-            self.assertEqual(self.dash.asks.answer({"ask": "x-1-1", "text": "b"})[0], 200)
-            self.assertEqual(self.read()["answer"]["text"], "b")  # the answer is the record; opening the bead is best effort
-            (self.dir / "x-1.json").unlink()
-
-    def test_no_bd_on_the_path_is_an_error_message_not_a_dropped_connection(self):
-        self.ask()
-        with mock.patch.object(self.dash.env.ports, "store", side_effect=FileNotFoundError(2, "No such file or directory")):
-            code, out = self.dash.asks.answer({"ask": "x-1-1", "text": "b"})
-        self.assertEqual((code, out["code"]), (502, "no_bd"))
-        self.assertIsNone(must(self.dash.asks.store.get("x-1")).answer)  # nothing was filed
-
-    def test_a_withdrawn_ask_says_why_and_is_not_listed(self):
-        self.ask()
-        self.assertEqual(self.dash.asks.withdraw({"ask": "x-1-1", "why": "fixed in 0.23.5"})[0], 200)
-        code, out = self.dash.asks.answer({"ask": "x-1-1", "text": "b"})
-        self.assertEqual((code, out["code"]), (410, "withdrawn"))
-        self.assertEqual(self.dash.asks.inbox(), [])
-        self.assertEqual(self.dash.asks.withdraw({"ask": "x-1-1"})[0], 200)  # twice is fine
-
-    def test_an_ask_the_engine_replaced_points_at_the_new_one(self):
-        self.ask(n=2)
-        code, out = self.dash.asks.answer({"ask": "x-1-1", "text": "b"})
-        self.assertEqual((code, out["code"], out["new_ask"]), (409, "superseded", "x-1-2"))
-        self.assertEqual(self.dash.asks.answer({"ask": "nope-1", "text": "b"})[1]["code"], "gone")
-
-    def test_withdraw_leaves_the_bead_alone(self):
-        self.ask()
-        self.assertEqual(self.dash.asks.withdraw({"ask": "x-1-1", "why": "stale"})[0], 200)
-        self.assertEqual((self.read()["status"], self.read()["closed_why"]), ("withdrawn", "stale"))
-        self.assertEqual(self.calls, [])
-
-    def test_the_inbox_is_ordered_by_what_each_ask_unblocks_and_drops_closed_beads(self):
-        (self.d / ".beads").mkdir()
-        beads = [{"id": "a", "status": "open"}, {"id": "b", "status": "open"}, {"id": "c", "status": "closed"},
-                 {"id": "d", "status": "open", "dependencies": [{"type": "blocks", "id": "b"}]},
-                 {"id": "e", "status": "open", "dependencies": [{"type": "blocks", "id": "b"}]}]
-        for bead in ("a", "b", "c"):
-            self.ask(bead)
-        with mock.patch.object(self.dash.beads, "beads_of", return_value=beads):
-            rows = self.dash.asks.inbox()
-        self.assertEqual([(r["bead"], r["unblocks"]) for r in rows], [("b", 2), ("a", 0)])
-
-    def test_odd_requests_get_an_error_not_a_crash(self):
-        self.ask()
-        for body in ([], "x", {"ask": ["x-1-1"], "text": "b"}, {"ask": "../../etc-1", "text": "b"}, {"ask": "x-1-1", "text": 5}):
-            self.assertIn(self.dash.asks.answer(body)[0], (400, 404, 409))
-        self.assertEqual(self.dash.asks.withdraw([])[0], 400)
-        self.assertEqual(self.dash.asks.withdraw({"ask": "x-1-1", "why": 7})[0], 200)
-        self.assertEqual(self.read()["closed_why"], "dismissed by the owner")
-
-    def test_a_new_bead_missing_from_a_stale_listing_is_not_hidden_but_an_old_gone_one_is(self):
-        (self.d / ".beads").mkdir()
-        self.ask("fresh")
-        self.ask("old", t=time.time() - 3600)
-        with mock.patch.object(self.dash.beads, "beads_of", return_value=[{"id": "zzz", "status": "open"}]):
-            self.assertEqual([r["bead"] for r in self.dash.asks.inbox()], ["fresh"])
-
-    def test_a_second_process_reuses_the_bead_list_of_the_last_30_seconds(self):
-        """tl-u08: tl ask list is a fresh process every time; bd list takes seconds under load, so it is read once per 30 s."""
-        (self.d / ".beads").mkdir()
-        runs = []
-
-        def run(argv, where):
-            runs.append(argv)
-            return BdRun(0, json.dumps([{"id": "a", "status": "open"}]), "")
-        dash = make_dash(Ports(store=lambda repo: BdStore("tl-dash", repo, exe="bd", run=run)), config=self.tmp.name)
-        for _ in range(2):
-            dash.env.ttl.clear()  # a new process: nothing in memory
-            self.assertEqual([b["id"] for b in dash.beads.beads_of(str(self.d))], ["a"])
-        self.assertEqual(len(runs), 1)
-
-    def test_amend_replaces_an_unused_answer_and_a_used_one_is_final(self):
-        self.ask()
-        self.assertEqual(self.dash.asks.answer({"ask": "x-1-1", "text": "first"})[0], 200)
-        code, out = self.dash.asks.answer({"ask": "x-1-1", "text": "second"})
-        self.assertEqual((code, out["code"]), (409, "answered"))
-        self.assertIn("--amend", out["error"])
-        self.assertEqual(self.dash.asks.answer({"ask": "x-1-1", "text": "second", "amend": True})[0], 200)
-        self.assertEqual(self.read()["answer"]["text"], "second")
-        self.dash.asks.store.consume("x-1", time.time())  # a run used it
-        code, out = self.dash.asks.answer({"ask": "x-1-1", "text": "third", "amend": True})
-        self.assertEqual((code, out["code"]), (409, "consumed"))
-        self.ask("y")  # no answer yet: amend is just the first answer
-        self.assertEqual(self.dash.asks.answer({"ask": "y-1", "text": "one", "amend": True})[0], 200)
-
-    def test_withdrawing_an_answered_but_unused_ask_drops_it_and_a_used_one_cannot_be(self):
-        self.ask()
-        self.assertEqual(self.dash.asks.answer({"ask": "x-1-1", "text": "go with B"})[0], 200)
-        self.assertEqual(self.dash.asks.withdraw({"ask": "x-1-1", "why": "wrong ask"})[0], 200)
-        self.assertEqual(self.read()["status"], "withdrawn")
-        self.ask("z")
-        self.dash.asks.answer({"ask": "z-1", "text": "go"})
-        self.dash.asks.store.consume("z", time.time())
-        self.assertEqual(self.dash.asks.withdraw({"ask": "z-1"})[1]["code"], "consumed")
-
-    def test_a_parked_ask_is_listed_last_flagged_and_answerable(self):
-        self.ask("quiet", status="parked")
-        self.ask("loud")
-        rows = self.dash.asks.inbox()
-        self.assertEqual([(r["bead"], r["parked"]) for r in rows], [("loud", False), ("quiet", True)])
-        self.assertEqual(self.dash.asks.answer({"ask": "quiet-1", "text": "go on"})[0], 200)
+    def test_an_unanswered_ask_cannot_stick(self):
+        other = must(raiser.raise_ask(self.asks, specs.missing_criteria(), raiser.Asking(
+            bead="b-2", run="r", brief_hash="h", repo=self.tmp.name, title="x", now=NOW))[0])
+        res = self.post("stick", {"project": "demo", "ask": other.id, "outcome": "adr"})
+        self.assertEqual((res.ok, res.message), (False, "answer the ask first"))
+        self.assertEqual(self.dash.writes.post("stick", {"project": "demo", "ask": "x", "outcome": "maybe"})[0], 400)
 
 
 if __name__ == "__main__":

@@ -1,5 +1,5 @@
 """The engine's machine-readable trace (step, call, transition, checks and run records of the typed EngineLog) and the dashboard
-timeline built from it: the contract between the engine and taskloop_dash (docs/design/dashboard.md, Timeline records)."""
+timeline built from it: the contract between the engine and taskloop_dash (taskloop.contracts.log)."""
 
 import io
 import json
@@ -25,7 +25,6 @@ from taskloop.app.track import verbs  # noqa: E402
 from taskloop.app.wire import slots as wslots  # noqa: E402
 from taskloop.contracts import log as rec  # noqa: E402
 from taskloop_dash import jsonl  # noqa: E402
-from taskloop_dash.api import runs as runs_api  # noqa: E402
 
 engine = te.engine
 DASH = make_dash()
@@ -240,7 +239,6 @@ class TraceRecords(te.EngineTest):
         self.assertTrue(
             (Path(cast(Any, self).eng.run_dir) / blk["checks"][0]["log"]).is_file()
         )  # found by CheckResult.log, not by a rebuilt file name
-        self.assertFalse(hasattr(runs_api, "safe_name"))
 
 
 if __name__ == "__main__":

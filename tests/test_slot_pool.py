@@ -17,7 +17,7 @@ from taskloop.adapters.fake_slot_git import FakeSlotGit
 from taskloop.adapters.slot_git import classify
 from taskloop.app.slots.env import SlotEnv
 from taskloop.app.slots.lease import Lease
-from taskloop.app.slots.line import queue_rows, wait_slot
+from taskloop.app.slots.line import wait_slot, waiting_line
 from taskloop.app.slots.pool import SlotPool
 from taskloop.cli import slots as cli
 from taskloop.contracts import paths
@@ -234,10 +234,10 @@ class Line(Rig):
         self.assertEqual(self.sleeps, [1, 2, 3, 3])  # a sleep after each of four looks
 
 
-    def test_the_line_is_the_typed_queue_the_loop_state_carries(self):
+    def test_the_line_is_first_in_line_first(self):
         self.tickets.take("r-1", "run-task late", 2, pid=1, now=5.0, bead="x-2")
         self.tickets.take("r-1", "run-task urgent", 0, pid=1, now=6.0, bead="x-1")
-        self.assertEqual([(r.bead, r.prio, r.since, r.ahead) for r in queue_rows(self.env)], [("x-1", 0, 6.0, 0), ("x-2", 2, 5.0, 1)])
+        self.assertEqual([(t.bead, t.prio, t.since) for t in waiting_line(self.env)], [("x-1", 0, 6.0), ("x-2", 2, 5.0)])
 
 
 class OneLease(Rig):

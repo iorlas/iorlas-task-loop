@@ -1,6 +1,6 @@
 """The live feed of one run (87 §2, §6): the engine log and the worker's per-call live files, each a source with its own byte-offset
 cursor, merged by time (a k-way merge of sorted files). `seq` = source tag + offset is the key the page dedupes by; the first load is
-the newest events with a `before` cursor for earlier ones; a long-poll holds the request until a file grows."""
+the newest events; a long-poll holds the request until a file grows."""
 
 import base64
 import heapq
@@ -17,7 +17,6 @@ from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.runlife import Liveness, liveness
 from taskloop_dash import jsonl
 from taskloop_dash.views import live_events as ev
-from taskloop_dash.views import live_state
 
 PAGE = 300  # events on a first load
 MAX_PAGE = 2000  # the most one answer carries
@@ -93,9 +92,6 @@ class LiveRun:
     def offsets(self) -> dict[str, int]:
         return {t: s.offset for t, s in self.sources.items()}
 
-    def sizes(self) -> dict[str, int]:
-        return {t: jsonl.size_of(s.path) for t, s in self.sources.items()}
-
     def select(self, keep: Callable[[str, int], bool]) -> list[tuple[str, int, dict]]:
         """(tag, offset, event) of the chosen events, merged by time (ties: the engine first, then file order)."""
         with self.lock:
@@ -111,29 +107,11 @@ class LiveRun:
             return liveness(self.sources[ev.ENGINE].records, now)
 
 
-def before_cursor(run: LiveRun, shown: list[tuple[str, int, dict]], older: bool) -> str | None:
-    """Where the events before `shown` end, per source; None when nothing is left before them."""
-    if not older:
-        return None
-    first: dict[str, int] = {}
-    for tag, off, _ in shown:
-        first.setdefault(tag, off)
-    return encode({t: first.get(t, s.offset) for t, s in run.sources.items()})
-
-
-def page(run: LiveRun, since: dict[str, int] | None = None, before: dict[str, int] | None = None, limit: int = PAGE) -> dict:
-    """{events, cursor, before}: what is new after `since`; else the newest `limit` events (or those before `before`)."""
-    limit = max(1, min(int(limit), MAX_PAGE))
-    if since is not None:
-        got = run.select(lambda t, off: off >= since.get(t, 0))
-        return {"events": [e for _, _, e in got[-MAX_PAGE:]], "cursor": encode(run.offsets()), "before": None}
-    def limit_of(t: str, off: int) -> bool:
-        return before is None or off < before.get(t, 0)
-
-    got = run.select(limit_of)
-    tail = got[-limit:]
-    left = len(got) > len(tail)
-    return {"events": [e for _, _, e in tail], "cursor": encode(run.offsets()), "before": before_cursor(run, tail, left)}
+def page(run: LiveRun, since: dict[str, int] | None = None, limit: int = PAGE) -> dict:
+    """{events, cursor}: what is new after `since`, else the newest `limit` events."""
+    got = run.select(lambda t, off: since is None or off >= since.get(t, 0))
+    return {"events": [e for _, _, e in got[-(MAX_PAGE if since is not None else max(1, min(int(limit), MAX_PAGE))):]],
+            "cursor": encode(run.offsets())}
 
 
 def poll(
@@ -152,52 +130,3 @@ def poll(
     return page(run, since)
 
 
-def log_mtime(root: Path, run: str, event: dict) -> float | None:
-    """When the log file of an open check or gate last grew (what 'last output Ns ago' counts from)."""
-    rel = event.get("log") or ""
-    if not rel:
-        return None
-    path = Path(rel) if os.path.isabs(rel) else ConfigDir(root).run_dir(run) / rel
-    try:
-        return path.stat().st_mtime
-    except OSError:
-        return None
-
-
-def answer(
-    run: LiveRun,
-    bead: str,
-    newest: str,
-    life: Liveness,
-    since: str | None = None,
-    before: str | None = None,
-    wait: float = 0,
-    limit: int = PAGE,
-    now: float | None = None,
-    sleep: Callable[[float], None] = time.sleep,
-) -> dict:
-    """The /api/live object for one run: its page of events, the state line, the worker, and what the page needs to follow a retry."""
-    now = now or time.time()
-    name = Path(run.log_path).stem
-    root = Path(run.log_path).parent.parent
-    pg = poll(run, decode(since), wait, sleep) if before is None else page(run, None, decode(before), limit)
-    if since is None and before is None:
-        pg = page(run, None, None, limit)
-    every = run.events()
-    state = live_state.state_of(every, now, life is Liveness.LIVE, lambda e: log_mtime(root, name, e))
-    steps = [e for e in every if e["k"] == "step_start"]
-    started = next((e["t"] for e in every if e["k"] == "run_start"), None)
-    return {
-        "found": True,
-        "bead": bead,
-        "run": name,
-        "newest": newest,
-        "now": now,
-        "running": state["what"] != "ended",
-        "liveness": life.value,
-        "state": state,
-        "worker": live_state.worker_of(every),
-        "step": steps[-1]["step"] if steps else None,
-        "started": started,
-        **pg,
-    }

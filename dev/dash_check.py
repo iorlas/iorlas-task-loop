@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Browser checks and screenshots of the dashboard v2 page against the fixtures, in headless Chrome, no third-party package.
+"""Browser checks and screenshots of the dashboard page against the fixtures, in headless Chrome, no third-party package.
 
     python3 dev/dash_check.py [--out DIR] [--shots] [--only NAME]
 
@@ -142,7 +142,7 @@ def main(argv: list[str] | None = None) -> int:
     for name, case in LIVE_CASES if args.base else CASES:
         if args.only and args.only not in name:
             continue
-        query = {k: v for k, v in case.items() if k != "state"} | ({"root": "/v2.html"} if args.base else {})
+        query = {k: v for k, v in case.items() if k != "state"}
         state = str(case.get("state", "ok"))
         if not disk_ok():
             sys.exit("less than 5 GB free: stopping")
@@ -160,7 +160,6 @@ def main(argv: list[str] | None = None) -> int:
                 if not disk_ok():
                     sys.exit("less than 5 GB free: stopping")
                 q = {"scn": "view", "page": page, "hash": h, "w": size[0], "h": size[1], "theme": theme}
-                q |= {"root": "/v2.html"} if args.base else {}
                 path = out / f"{stem}-{'phone' if size[0] <= 600 else 'mid' if size[0] < 1000 else 'desktop'}-{theme}.png"
                 with tempfile.TemporaryDirectory() as prof:
                     _, errs = run(exe, prof, f"{base}/check.html?{urlencode(q)}", (size[0], size[1] + 88), [f"--screenshot={path}"])

@@ -1,5 +1,5 @@
 """The owner-look gallery: items from metadata `looks` (or an old description), pictures served only when an item names
-them, the page's v1 answer through the `look` port, the signal in the Roadmap's strip. The verb itself: tests/asks/test_look_verb.py."""
+them, the page's answer through POST /api/look and the `look` port. The verb itself: tests/asks/test_look_verb.py."""
 
 import json
 import os
@@ -18,7 +18,6 @@ from support.look_world import looks, world  # noqa: E402
 from support.narrow import must  # noqa: E402
 
 from taskloop.contracts import gallery  # noqa: E402
-from taskloop_dash.views import graph, roadmap, signals  # noqa: E402
 
 LOOKS = make_dash().looks
 
@@ -95,30 +94,14 @@ class Hardening(unittest.TestCase):
         self.assertEqual(items[0]["shots"][0]["path"], "docs/e/a.png")
 
 
-class Signal(unittest.TestCase):
+class ShotUrl(unittest.TestCase):
     def test_a_picture_kept_as_an_artifact_is_served_by_the_artifact_url(self):
         self.assertEqual(LOOKS.shot_url("demo", "artifact:tl-1/a b.png"), "/api/artifact?bead=tl-1&name=a%20b.png")
         self.assertEqual(LOOKS.shot_url("demo", "docs/a.png"), "/api/look-shot?repo=demo&path=docs/a.png")
 
-    def test_looks_waiting(self):
-        self.assertEqual(signals.looks_waiting([], NOW), [])
-        (s,) = signals.looks_waiting([{"bead": "tl-1", "filed": NOW - 3600}, {"bead": "tl-2", "filed": NOW - 60}], NOW)
-        self.assertEqual((s["kind"], s["sev"], s["href"], s["title"]), ("looks", "info", "#looks", "2 looks wait for you"))
-        (old,) = signals.looks_waiting([{"bead": "tl-1", "filed": NOW - 13 * 3600}], NOW)
-        self.assertEqual((old["sev"], old["title"]), ("amber", "1 look wait for you"))
-
-
-class RoadmapStrip(unittest.TestCase):
-    def test_open_looks_reach_the_signal_strip_and_answered_ones_do_not(self):
-        g = graph.build([], {"pick_label": "auto", "skip_labels": []}, set(), set(), (), now=NOW)
-        out = roadmap.build(g, [], [], [], [], {}, now=NOW, looks=[{"bead": "tl-1", "filed": NOW - 60}])
-        self.assertEqual([s["title"] for s in out["signals"] if s["kind"] == "looks"], ["1 look wait for you"])
-        out = roadmap.build(g, [], [], [], [], {}, now=NOW)
-        self.assertFalse([s for s in out["signals"] if s["kind"] == "looks"])
-
 
 class Api(unittest.TestCase):
-    def test_api_and_post(self):
+    def test_items_pictures_and_the_answer(self):
         fake = world("open")
         with tempfile.TemporaryDirectory() as home:
             repo = Path(home) / "demo"
@@ -133,23 +116,15 @@ class Api(unittest.TestCase):
             dash.env.ports = answering(lambda repo: fake, home)
             with mock.patch.object(dash.env.ports, "store", lambda repo: fake), \
                     mock.patch.object(dash.beads, "beads_of", lambda r: [{"id": "tl-look", "labels": [gallery.LABEL]}]):
-                out = dash.looks.api_looks("demo")
-                self.assertEqual((out["repo"], out["summary"]["open"]), ("demo", 1))
-                url = out["items"][0]["shots"][1]["url"]
-                self.assertTrue(url.startswith("/api/look-shot?repo=demo&path=docs"), url)
+                path, items = dash.looks.look_items("demo")
+                self.assertEqual((Path(path).name, [i["status"] for i in items]), ("demo", ["open"]))
                 self.assertEqual(dash.looks.look_shot("demo", "docs/evidence/tl-1/m1.png"), (PNG, "image/png"))
                 self.assertIsNone(dash.looks.look_shot("demo", "docs/evidence/tl-1/nope.png"))
-                self.assertEqual(
-                    dash.looks.answer_look({"repo": "demo", "look_bead": "tl-look", "item": "tl-1#1", "verdict": "good"})[0], 200
-                )
-                self.assertEqual(dash.looks.api_looks("demo")["summary"], {"open": 0, "good": 1, "redo": 0})
-                self.assertEqual(dash.looks.api_looks("")["repo"], "demo")  # a bare #looks means the first repo
-                gone = {"repo": "nowhere", "look_bead": "tl-look", "item": "x", "verdict": "good"}
-                self.assertEqual(dash.looks.answer_look(gone)[0], 404)
-                self.assertEqual(dash.looks.answer_look({"repo": "demo"})[0], 400)
-                no_note = {"repo": "demo", "look_bead": "tl-look", "item": "tl-1#1", "verdict": "redo"}
-                self.assertEqual(dash.looks.answer_look(no_note)[0], 409)
-
+                good = {"project": "demo", "bead": "tl-1#1", "verdict": "good", "note": ""}
+                self.assertEqual(dash.writes.post("look", good), (200, {"ok": True, "message": ""}))
+                self.assertEqual([i["status"] for i in dash.looks.look_items("demo")[1]], ["good"])
+                self.assertFalse(dash.writes.post("look", dict(good, project="nowhere"))[1]["ok"])
+                self.assertFalse(dash.writes.post("look", dict(good, verdict="redo"))[1]["ok"])  # redo needs a note
 
 if __name__ == "__main__":
     unittest.main()
