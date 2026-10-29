@@ -1,5 +1,5 @@
-"""dev/release.py against a fake remote: bare git repos in a temp dir, the claude and bd CLIs faked on PATH."""
-import hashlib
+"""dev/release.py against a fake remote: bare git repos in a temp dir. The release runs in this process (support.release_world: git real,
+claude, just, bd and the suite faked); the launcher's re-exec and one red suite through real pytest run as real processes."""
 import json
 import os
 import re
@@ -8,81 +8,49 @@ import stat
 import subprocess
 import sys
 import tempfile
-import textwrap
+import threading
 import time
 import unittest
+import unittest.mock
 from pathlib import Path
-from unittest import mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+import support.paths  # noqa: F401
+
+# isort: split
 import contextlib
 
 from support.narrow import must
+from support.release_world import IDENTITY, MARKET, PLUGIN, World, git
 
-from taskloop.app.release import manifest, selfupdate
+from taskloop.adapters import landlock
+from taskloop.adapters.ident import config_dir
+from taskloop.app.release import clone, manifest, selfupdate
 
 ROOT = Path(__file__).resolve().parents[1]
 RELEASE = ROOT / "dev" / "release.py"
-PLUGIN = ".claude-plugin/plugin.json"
-MARKET = ".claude-plugin/marketplace.json"
+RED_TESTS = ("import unittest\n\n\nclass R(unittest.TestCase):\n"
+             "    def test_red_one(self):\n        self.fail('boom')\n"
+             "    def test_red_two(self):\n        raise ValueError('bang')\n")
 
 
-def sh(*a, cwd):
-    return subprocess.run(list(a), cwd=cwd, check=True, capture_output=True, text=True).stdout.strip()
-
-
-@unittest.skipIf(os.name == "nt", "fake CLIs are shell scripts; the lock is fcntl")
+@unittest.skipIf(os.name == "nt", "the lock is fcntl")
 class Release(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.rmtree)
         h = self.home = Path(self.tmp.name)
-        shim = h / "bin"
-        shim.mkdir()
-        (shim / "bd").write_text('#!/bin/sh\necho "$@" >> "{}"\n'.format(h / "bd.log"))
-        # claude: `plugin update` lays the new version's cache dir out as the real CLI does, unless FAKE_CLAUDE_FAIL is
-        # "always" (the 0.23.0 fetch-pack error, exit 0, nothing installed) or "once" (the first update fails)
-        (shim / "claude").write_text(
-            textwrap.dedent("""\
-            #!/bin/sh
-            echo "$@" >> "%(log)s"
-            # a release holds the lock until the test opens the gate
-            while [ -n "$FAKE_CLAUDE_GATE" ] && [ ! -e "$FAKE_CLAUDE_GATE" ]; do sleep 0.02; done
-            if [ "$1 $2" = "plugin update" ]; then
-              if [ "$FAKE_CLAUDE_FAIL" = always ] || { [ "$FAKE_CLAUDE_FAIL" = once ] && [ ! -e "%(flag)s" ]; }; then
-                touch "%(flag)s"; echo "fatal: fetch-pack: invalid index-pack output"; exit 0
-              fi
-              python3 - "%(market)s" "$CLAUDE_CONFIG_DIR" <<'PY'
-            import json, pathlib, sys
-            v = [p["version"] for p in json.load(open(sys.argv[1]))["plugins"] if p["name"] == "iorlas-task-loop"][0]
-            d = pathlib.Path(sys.argv[2], "plugins/cache/iorlas-marketplace/iorlas-task-loop", v, ".claude-plugin")
-            d.mkdir(parents=True, exist_ok=True)
-            (d / "plugin.json").write_text("{}")
-            PY
-            fi
-            """)
-            % {"log": h / "claude.log", "flag": h / "claude.failed", "market": h / "market" / MARKET}
-        )
-        # just: `just check` exits FAKE_JUST_FAIL (default 0), printing a lint line
-        (shim / "just").write_text(
-            '#!/bin/sh\necho "$@" >> "{}"\necho "ruff: E501 somewhere"\nexit ${{FAKE_JUST_FAIL:-0}}\n'.format(h / "just.log")
-        )
-        (shim / "uv").write_text("#!/bin/sh\nexit 0\n")  # `uv sync` of the release: the tool checkout's venv is already there
-        for f in shim.iterdir():
-            f.chmod(0o755)
-        self.env = dict(os.environ, TASK_LOOP_SUITE_HOST="1", TASK_LOOP_SUITE_WORKERS="1",
-                        XDG_CONFIG_HOME=str(h / "cfg"), CLAUDE_CONFIG_DIR=str(h / "claude"),
-                        PATH="{}{}{}".format(shim, os.pathsep, os.environ["PATH"]),
-                        GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t", GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t")
-        for k in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "TL_RELEASE_REEXEC"):
-            self.env.pop(k, None)
         self.origin, self.seed, self.repo = h / "o.git", h / "seed", h / "repo"
         self.morigin, self.market = h / "m.git", h / "market"
+        self.world = World(h, self.repo, self.market)
+        env = dict(IDENTITY, TASK_LOOP_SUITE_HOST="1", TASK_LOOP_SUITE_WORKERS="1", XDG_CONFIG_HOME=str(h / "cfg"),
+                   CLAUDE_CONFIG_DIR=str(h / "claude"))
+        self.enterContext(self.world.active(env))
         self.git("init", "-q", "--bare", "-b", "main", str(self.origin), cwd=h)
         self.git("clone", "-q", str(self.origin), str(self.seed), cwd=h)
         self.git("checkout", "-q", "-B", "main", cwd=self.seed)  # an empty clone's branch follows init.defaultBranch
         self.write(self.seed / PLUGIN, json.dumps({"name": "iorlas-task-loop", "version": "0.1.0",
                                                    "author": {"name": "t"}}, indent=2) + "\n")
-        self.write(self.seed / ".gitignore", "__pycache__/\n")  # the real repo ignores it; the inner suite writes it when bytecode is on
+        self.write(self.seed / ".gitignore", "__pycache__/\n")
         self.write(self.seed / "tests" / "test_ok.py", "import unittest\n\n\nclass T(unittest.TestCase):\n"
                                                         "    def test_ok(self):\n        pass\n")
         self.commit(self.seed, "init")
@@ -95,7 +63,7 @@ class Release(unittest.TestCase):
             {"name": "iorlas-task-loop", "source": "x", "version": "0.1.0"}]}, indent=2) + "\n")
         self.commit(self.market, "init")
 
-    def tearDown(self):
+    def rmtree(self):
         def force(fn, path, _):
             os.chmod(path, stat.S_IWRITE)
             fn(path)
@@ -104,8 +72,7 @@ class Release(unittest.TestCase):
             self.tmp.cleanup()
 
     def git(self, *a, cwd):
-        return subprocess.run(["git", *a], cwd=cwd, env=self.env, check=True, capture_output=True,
-                              text=True).stdout.strip()
+        return git(*a, cwd=cwd)
 
     def write(self, path, text):
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -120,11 +87,20 @@ class Release(unittest.TestCase):
         self.git("commit", "-qm", msg, cwd=wt)
         self.git("push", "-q", "origin", "HEAD:main", cwd=wt)
 
-    def cmd(self, *args):
-        return [sys.executable, str(RELEASE), *args, "--repo", str(self.repo), "--marketplace", str(self.market)]
-
     def release(self, *args):
-        return subprocess.run(self.cmd(*args), env=self.env, capture_output=True, text=True, timeout=120, check=False)
+        return self.world.release(*args)
+
+    def real_release(self, *args):
+        """dev/release.py as its own process, with a `uv` and a `bd` that only log (the venv is there; the tracker is not)."""
+        shim = self.home / "bin"
+        shim.mkdir(exist_ok=True)
+        (shim / "bd").write_text('#!/bin/sh\necho "$@" >> "{}"\n'.format(self.home / "bd.log"))
+        (shim / "uv").write_text("#!/bin/sh\nexit 0\n")
+        for f in shim.iterdir():
+            f.chmod(0o755)
+        env = dict(os.environ, PATH=str(shim) + os.pathsep + os.environ["PATH"])
+        return subprocess.run([sys.executable, str(RELEASE), *args, "--repo", str(self.repo), "--marketplace", str(self.market)],
+                              env=env, capture_output=True, text=True, timeout=120, check=False)
 
     def version(self, bare, path=PLUGIN):
         return json.loads(self.git("show", "main:" + path, cwd=bare))
@@ -132,26 +108,27 @@ class Release(unittest.TestCase):
     def market_versions(self):
         return {p["name"]: p["version"] for p in self.version(self.morigin, MARKET)["plugins"]}
 
-    def log(self, name):
-        f = self.home / (name + ".log")
-        return f.read_text().splitlines() if f.exists() else []
+    def updates(self):
+        return self.world.claude_log.count(["plugin", "update", "iorlas-task-loop@iorlas-marketplace"])
 
     def test_a_launcher_behind_origin_main_execs_origin_mains_release_once_with_the_same_args_and_no_lock_held(self):
+        """Real process: the launcher replaces itself (os.execv) by origin/main's release.py and the lock is dropped before."""
         self.write(self.seed / "dev" / "release.py", "import os, sys\nprint('CHILD', sys.argv[1:], os.environ.get('TL_RELEASE_REEXEC'))\n"
                    "import fcntl, glob\nfor f in glob.glob(os.environ['XDG_CONFIG_HOME'] + '/task-loop/locks/release-*.lock'):\n"
                    "    fcntl.flock(os.open(f, os.O_RDWR), fcntl.LOCK_EX | fcntl.LOCK_NB)\nprint('LOCK TAKEN')\n")
         self.commit(self.seed, "newer release code")
-        r = self.release("msg", "--minor")
+        r = self.real_release("msg", "--minor")
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertIn(f"CHILD ['msg', '--minor', '--repo', '{self.repo}', '--marketplace', '{self.market}'] 1", r.stdout)
         self.assertIn("LOCK TAKEN", r.stdout)
         self.assertEqual(self.version(self.origin)["version"], "0.1.0")  # the fake child released nothing; this run did not either
-        with_marker = subprocess.run(self.cmd("msg"), env=dict(self.env, TL_RELEASE_REEXEC="1"), capture_output=True, text=True,
-                                     timeout=120, check=False)
-        self.assertNotIn("CHILD", with_marker.stdout)  # an exec'd release never execs again
+        where = clone.clone_dir(config_dir(), str(self.origin))
+        self.assertIsNotNone(selfupdate.newer_release(ROOT, where))
+        with unittest.mock.patch.dict(os.environ, {selfupdate.MARKER: "1"}):
+            self.assertIsNone(selfupdate.newer_release(ROOT, where))  # an exec'd release never execs again, whatever the clone holds
 
     def test_the_exec_marker_is_taken_out_so_what_the_release_starts_does_not_inherit_it(self):
-        with mock.patch.dict(os.environ, {selfupdate.MARKER: "1"}):
+        with unittest.mock.patch.dict(os.environ, {selfupdate.MARKER: "1"}):
             self.assertIsNone(selfupdate.newer_release(self.repo, self.repo))
             self.assertNotIn(selfupdate.MARKER, os.environ)
 
@@ -179,29 +156,29 @@ class Release(unittest.TestCase):
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("dirty", r.stderr)
         self.assertEqual(self.version(self.origin)["version"], "0.1.0")
-        self.assertEqual(self.log("claude"), [])
+        self.assertEqual(self.world.claude_log, [])
 
     def test_a_red_gate_aborts_before_the_suite_with_the_output_tail_and_a_green_one_runs_just_check(self):
         self.write(self.seed / "justfile", "check:\n    true\n")
         self.commit(self.seed, "gate")
         self.git("pull", "-q", cwd=self.repo)
-        self.env["FAKE_JUST_FAIL"] = "1"
+        self.world.just_exit = 1
         r = self.release("fix")
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("gate is red", r.stderr)
         self.assertIn("ruff: E501 somewhere", r.stderr)
         self.assertEqual(self.version(self.origin)["version"], "0.1.0")
         self.assertEqual(self.git("status", "--porcelain", cwd=self.repo), "")
-        self.env["FAKE_JUST_FAIL"] = "0"
+        self.world.just_exit = 0
         r = self.release("fix")
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertEqual(self.version(self.origin)["version"], "0.1.1")
-        self.assertEqual(self.log("just"), ["check", "check"])
+        self.assertEqual([c[-1] for c in self.world.just_log], ["check", "check"])
 
     def test_a_repo_without_a_justfile_skips_the_gate(self):
         r = self.release("fix", "--minor")
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertEqual(self.log("just"), [])
+        self.assertEqual(self.world.just_log, [])
         self.assertEqual(self.version(self.origin)["version"], "0.2.0")  # --minor bumps the minor, resets the patch
 
     def test_a_red_suite_aborts_and_leaves_main_where_it_was(self):
@@ -209,8 +186,7 @@ class Release(unittest.TestCase):
         self.git("config", "rebase.updateRefs", "true", cwd=self.repo)
         start = self.git("rev-parse", "HEAD", cwd=self.repo)
         wt = self.branch_in_worktree("task/x")
-        self.write(wt / "tests" / "test_red.py", "import unittest\n\n\nclass R(unittest.TestCase):\n"
-                                                 "    def test_red(self):\n        self.fail('red after rebase')\n")
+        self.write(wt / "tests" / "RED", "FAILED tests/test_red.py::R::test_red - AssertionError: red after rebase\n1 failed\n")
         self.git("add", "-A", cwd=wt)
         self.git("commit", "-qm", "broken", cwd=wt)
         source = self.git("rev-parse", "task/x", cwd=self.repo)
@@ -228,7 +204,7 @@ class Release(unittest.TestCase):
         self.assertEqual(self.git("rev-parse", "HEAD", cwd=self.repo), start)
         self.assertEqual(self.git("status", "--porcelain", cwd=self.repo), "")
         self.assertEqual(self.market_versions()["iorlas-task-loop"], "0.1.0")
-        self.assertEqual(self.log("claude"), [])
+        self.assertEqual(self.world.claude_log, [])
 
     def test_the_version_comes_from_origin_and_the_branch_lands_fast_forward(self):
         bumped = json.loads((self.seed / PLUGIN).read_text())
@@ -247,7 +223,7 @@ class Release(unittest.TestCase):
         self.assertEqual(self.git("log", "--format=%s", "-2", "main", cwd=self.origin).splitlines(),
                          ["0.1.6: feature", "Add feature (tl-1)"])
         self.assertIn("Co-Authored-By: Claude", self.git("log", "-1", "--format=%B", "main", cwd=self.origin))
-        self.assertEqual([x.split(" ", 2)[2] for x in self.log("bd")], ["close tl-1 --reason landed --json"])  # after --actor NAME
+        self.assertEqual(self.world.store.calls, [("close", "tl-1", "--reason", "landed")])  # bd's own argv: tests/adapters
         self.assertEqual(self.market_versions()["iorlas-task-loop"], "0.1.6")
         self.assertEqual(json.loads((self.repo / PLUGIN).read_text())["author"], {"name": "t"})  # the rest kept
 
@@ -271,18 +247,13 @@ class Release(unittest.TestCase):
                     self.git("worktree", "add", "-q", str(worktree), name, cwd=self.repo)
                 self.git("pull", "-q", "--ff-only", "origin", "main", cwd=self.seed)
                 self.write(self.seed / "other.txt", name + "\n")
-                self.write(self.seed / "tests" / "test_rebased.py", textwrap.dedent('''
-                    import unittest
-                    from pathlib import Path
-                    class Rebased(unittest.TestCase):
-                        def test_both_changes_are_present(self):
-                            self.assertEqual(Path("z.txt").read_text(), {!r})
-                            self.assertEqual(Path("other.txt").read_text(), {!r})
-                '''.format(name + "\n", name + "\n")))
                 self.commit(self.seed, "moved on")
+                runs = len(self.world.trees)
                 r = self.release("z", "--from-branch", name)
                 self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
                 self.assertEqual(r.stdout.count("running the full suite"), 1)
+                tested = self.world.trees[runs:]  # the suite saw both changes: the branch's and the one origin moved on with
+                self.assertEqual([(t["z.txt"], t["other.txt"]) for t in tested], [((name + "\n").encode(),) * 2])
                 if remote_only:  # no local branch to remove: the remote one stays
                     self.assertEqual(self.git("rev-parse", "origin/" + name, cwd=self.repo), source)
                 else:  # the clean worktree and the local branch are gone
@@ -315,31 +286,11 @@ class Release(unittest.TestCase):
         self.assertFalse((self.repo / ".git" / "rebase-merge").exists())
         self.assertFalse((self.repo / ".git" / "rebase-apply").exists())
         self.assertEqual(self.market_versions()["iorlas-task-loop"], "0.1.0")
-        self.assertEqual(self.log("claude"), [])
+        self.assertEqual(self.world.claude_log, [])
 
     def test_two_branch_releases_queue_rebase_and_test_the_pushed_tree(self):
-        ready, proceed = self.home / "ready", self.home / "proceed"
-        snapshots = self.home / "snapshots"
-        snapshots.mkdir()
-        self.write(self.seed / "tests" / "test_queue.py", textwrap.dedent(f'''
-            import json, subprocess, time, unittest
-            from pathlib import Path
-            READY, PROCEED, SNAPSHOTS = Path({str(ready)!r}), Path({str(proceed)!r}), Path({str(snapshots)!r})
-            class Queue(unittest.TestCase):
-                def test_snapshot(self):
-                    version = json.loads(Path({PLUGIN!r}).read_text())["version"]
-                    paths = subprocess.check_output(["git", "ls-files"], text=True).splitlines()
-                    snapshot = {{p: Path(p).read_bytes().hex() for p in paths}}
-                    with (SNAPSHOTS / (version + ".jsonl")).open("a") as out:
-                        out.write(json.dumps(snapshot) + "\\n")
-                    if version == "0.1.1":
-                        READY.touch()
-                        deadline = time.monotonic() + 120
-                        while not PROCEED.exists():
-                            self.assertLess(time.monotonic(), deadline, "first suite was not released")
-                            time.sleep(0.02)
-        '''))
-        self.commit(self.seed, "suite records exactly what was tested")
+        # two releases at once, as threads of this process (the lock is the kernel's, per open file): the first holds its suite open
+        ready, proceed = threading.Event(), threading.Event()
         self.git("pull", "-q", "--ff-only", "origin", "main", cwd=self.repo)
         for name in ("first", "second"):
             self.git("checkout", "-q", "-b", "task/" + name, "main", cwd=self.repo)
@@ -347,7 +298,11 @@ class Release(unittest.TestCase):
             self.git("add", "-A", cwd=self.repo)
             self.git("commit", "-qm", name + " change", cwd=self.repo)
             self.git("checkout", "-q", "main", cwd=self.repo)
-        sources = {name: self.git("rev-parse", "task/" + name, cwd=self.repo) for name in ("first", "second")}
+
+        def hold_first(repo):
+            if json.loads((repo / PLUGIN).read_text())["version"] == "0.1.1":
+                ready.set()
+                self.assertTrue(proceed.wait(120), "first suite was not released")
 
         def wait_for(predicate):
             deadline = time.monotonic() + 120
@@ -355,48 +310,40 @@ class Release(unittest.TestCase):
                 self.assertLess(time.monotonic(), deadline, "release did not reach synchronization point")
                 time.sleep(0.02)
 
-        procs = []
-        outputs = [self.home / (name + ".out") for name in ("first", "second")]
-        with outputs[0].open("w") as first_out, outputs[1].open("w") as second_out:
-            try:
-                procs.append(subprocess.Popen(self.cmd("first", "--from-branch", "task/first"), env=self.env,
-                                              stdout=first_out, stderr=subprocess.STDOUT))
-                wait_for(ready.exists)
-                procs.append(subprocess.Popen(self.cmd("second", "--from-branch", "task/second"), env=self.env,
-                                              stdout=second_out, stderr=subprocess.STDOUT))
-                wait_for(lambda: "waiting for the release lock" in outputs[1].read_text())
-                self.assertRegex(outputs[1].read_text(),
-                                 rf"held by pid {procs[0].pid} since \d{{2}}:\d{{2}}:\d{{2}}: first")
-                self.assertIsNone(procs[1].poll())
-                self.assertEqual(self.version(self.origin)["version"], "0.1.0")
-                self.assertFalse((snapshots / "0.1.2.jsonl").exists())
-                proceed.touch()
-                for p in procs:
-                    p.wait(timeout=20)
-                self.assertEqual([p.returncode for p in procs], [0, 0], [p.read_text() for p in outputs])
-            finally:
-                for p in procs:
-                    if p.poll() is None:
-                        p.kill()
-                    p.wait(timeout=5)
-
+        self.world.on_suite = hold_first
+        results = {}
+        threads = [threading.Thread(target=lambda n=n: results.update({n: self.release(n, "--from-branch", "task/" + n)}))
+                   for n in ("first", "second")]
+        try:
+            threads[0].start()
+            wait_for(ready.is_set)
+            threads[1].start()
+            wait_for(lambda: "waiting for the release lock" in self.world.stdout.bufs["second"].getvalue())
+            self.assertRegex(self.world.stdout.bufs["second"].getvalue(),
+                             rf"held by pid {os.getpid()} since \d{{2}}:\d{{2}}:\d{{2}}: first")
+            self.assertTrue(threads[1].is_alive())
+            self.assertEqual(self.version(self.origin)["version"], "0.1.0")
+            self.assertEqual(len(self.world.trees), 1)  # the second release has not reached its suite
+            proceed.set()
+        finally:
+            proceed.set()
+            for t in threads:
+                t.join(60)
+        self.assertEqual({n: r.returncode for n, r in results.items()}, {"first": 0, "second": 0}, results)
         for version, message in (("0.1.1", "first"), ("0.1.2", "second")):
-            commit = self.git("log", "--format=%H", "--fixed-strings", "--grep=" + version + ": " + message,
-                              "main", cwd=self.origin)
+            commit = self.git("log", "--format=%H", "--fixed-strings", "--grep=" + version + ": " + message, "main", cwd=self.origin)
             self.assertTrue(commit)
             paths = self.git("ls-tree", "-r", "--name-only", commit, cwd=self.origin).splitlines()
-            pushed = {p: subprocess.check_output(["git", "show", commit + ":" + p], cwd=self.origin,
-                                                 env=self.env).hex() for p in paths}
-            tested = [json.loads(line) for line in (snapshots / (version + ".jsonl")).read_text().splitlines()]
+            pushed = {p: subprocess.check_output(["git", "show", commit + ":" + p], cwd=self.origin) for p in paths}
+            tested = [t for t in self.world.trees if json.loads(t[PLUGIN])["version"] == version]
             self.assertEqual(tested, [pushed])  # once, on exactly the tracked contents that landed
-        for name in sources:
+        for name in ("first", "second"):
             self.assertEqual(self.git("branch", "--list", "task/" + name, cwd=self.repo), "")  # landed: removed after the install
             self.assertEqual(self.git("show", "main:" + name + ".txt", cwd=self.origin), name)
-        for output in outputs:
-            self.assertEqual(output.read_text().count("running the full suite"), 1)
+            self.assertEqual(results[name].stdout.count("running the full suite"), 1)
         self.assertEqual(self.version(self.origin)["version"], "0.1.2")
         self.assertEqual(self.market_versions()["iorlas-task-loop"], "0.1.2")
-        self.assertEqual(self.log("claude").count("plugin update iorlas-task-loop@iorlas-marketplace"), 2)
+        self.assertEqual(self.updates(), 2)
         self.assertEqual(self.git("status", "--porcelain", cwd=self.repo), "")
 
     def test_a_push_race_rebases_reruns_the_suite_and_takes_the_next_version(self):
@@ -406,22 +353,18 @@ class Release(unittest.TestCase):
         self.git("add", "-A", cwd=self.repo)
         self.git("commit", "-qm", "branch change", cwd=self.repo)
         self.git("checkout", "-q", "main", cwd=self.repo)
-        # another release lands between our fetch and our push: simulated by a pre-push hook that pushes once
-        hook = self.home / "template" / "hooks" / "pre-push"  # the release clone is cloned from this template
-        hook.parent.mkdir(parents=True)
-        self.env["GIT_TEMPLATE_DIR"] = str(self.home / "template")
-        hook.write_text(
-            "#!/bin/sh\nunset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE\n[ -f '{}' ] && exit 0\ntouch '{}'\ncd '{}' && sed -i.bak "
-            "'s/0.1.0/0.1.1/' {} "
-            "&& rm {}.bak && git commit -qam '0.1.1: racer' && git push -q origin HEAD:main\n".format(
-                self.home / "raced", self.home / "raced", self.seed, PLUGIN, PLUGIN
-            )
-        )
-        hook.chmod(0o755)
+
+        def racer():  # another release lands between our fetch and our push
+            self.write(self.seed / PLUGIN, (self.seed / PLUGIN).read_text().replace("0.1.0", "0.1.1"))
+            self.git("commit", "-qam", "0.1.1: racer", cwd=self.seed)
+            self.git("push", "-q", "origin", "HEAD:main", cwd=self.seed)
+
+        self.world.before_push = racer
         r = self.release("mine", "--from-branch", "task/race")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertIn("push race", r.stdout)
         self.assertRegex(r.stdout, r"origin/main [0-9a-f]{40} is not the base [0-9a-f]{40}")
+        self.assertEqual(len(self.world.trees), 2)  # the suite ran again on the rebased tree
         self.assertEqual(self.git("log", "--format=%s", "-3", "main", cwd=self.origin).splitlines(),
                          ["0.1.2: mine", "branch change", "0.1.1: racer"])
         self.assertEqual(self.git("branch", "--list", "task/race", cwd=self.repo), "")  # landed: removed after the install
@@ -469,39 +412,30 @@ class Release(unittest.TestCase):
         # race test (tl-bxk.11.1): loops land on the same origin; each lands when the land lock is free. A land during
         # the suite moved origin/main, the retry's suite saw another land, and the release aborted. The release now
         # pushes under the land lock: after the first suite no land gets in between its rebase, suite and push.
-        lock = self.home / "cfg" / "task-loop" / "locks" / (
-            f"land-{hashlib.sha1(str(self.origin).encode()).hexdigest()[:12]}.lock")
-        self.write(self.seed / "tests" / "test_land.py", textwrap.dedent('''
-            import fcntl, os, subprocess, time, unittest
-            LOCK, SIDE = {!r}, {!r}
-
-            class Land(unittest.TestCase):
-                def test_a_loop_lands_meanwhile(self):  # what an engine does at land, the lock taken as it takes it
-                    os.makedirs(os.path.dirname(LOCK), exist_ok=True)
-                    with open(LOCK, "a+") as f:
-                        try:
-                            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                        except OSError:
-                            return  # a land would wait here
-                        env = {{k: v for k, v in os.environ.items() if not k.startswith("GIT_DIR")}}
-                        run = lambda *a: subprocess.run(a, cwd=SIDE, env=env, check=True, capture_output=True)
-                        run("git", "pull", "-q", "--rebase", "origin", "main")
-                        name = "land-%s.txt" % time.time_ns()
-                        open(os.path.join(SIDE, name), "w").write("x")
-                        run("git", "add", name)
-                        run("git", "commit", "-qm", "a bead (x-%s)" % name)
-                        run("git", "push", "-q", "origin", "HEAD:main")
-            '''.format(str(lock), str(self.home / "side"))))
-        self.commit(self.seed, "a suite that sees a loop land")
-        self.git("clone", "-q", str(self.origin), str(self.home / "side"), cwd=self.home)
+        side = self.home / "side"
+        self.git("clone", "-q", str(self.origin), str(side), cwd=self.home)
         self.git("pull", "-q", "origin", "main", cwd=self.repo)
+
+        def a_loop_lands_meanwhile(_repo):  # what an engine does at land, the lock taken as it takes it
+            try:
+                with landlock.os_lock(landlock.land_lock_path(str(self.origin)), "a loop's land", timeout=0):
+                    self.git("pull", "-q", "--rebase", "origin", "main", cwd=side)
+                    name = f"land-{time.time_ns()}.txt"
+                    self.write(side / name, "x")
+                    self.git("add", name, cwd=side)
+                    self.git("commit", "-qm", f"a bead (x-{name})", cwd=side)
+                    self.git("push", "-q", "origin", "HEAD:main", cwd=side)
+            except TimeoutError:
+                pass  # a land would wait here
+
+        self.world.on_suite = a_loop_lands_meanwhile
         r = self.release("mine")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         subjects = self.git("log", "--format=%s", "main", cwd=self.origin).splitlines()
         self.assertEqual(subjects[0], "0.1.1: mine")
         self.assertTrue(any(s.startswith("a bead") for s in subjects), subjects)
         self.assertEqual(self.git("rev-list", "--merges", "main", cwd=self.origin), "")
-
+        self.assertEqual(len(self.world.trees), 2)  # the first suite, then the one after the land it let in
 
     def last(self):
         return json.loads((self.home / "cfg" / "task-loop" / "releases" / "last.json").read_text())
@@ -528,37 +462,37 @@ class Release(unittest.TestCase):
         self.assertEqual(manifest.verify(out), ["tests/test_ok.py differs from MANIFEST.sha256"])
 
     def test_a_forced_install_error_exits_nonzero_after_one_retry_and_reports_to_the_bead(self):
-        self.env["FAKE_CLAUDE_FAIL"] = "always"
+        self.world.claude_fail = "always"
         wt = self.branch_in_worktree()
         r = self.release("fix", "--from-branch", "task/y", "--bead", "tl-x1", "--reason", "done")
         self.assertNotEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertTrue(wt.is_dir())  # a failed install keeps the branch and its worktree
         self.assertEqual(self.branches(), ["task/y"])
-        self.assertEqual(self.log("claude").count("plugin update iorlas-task-loop@iorlas-marketplace"), 2)
+        self.assertEqual(self.updates(), 2)
         self.assertIn("claude plugin update iorlas-task-loop@iorlas-marketplace", r.stderr)  # the failing command
         self.assertIn("fetch-pack", r.stderr)
         last_line = r.stderr.strip().splitlines()[-1]
         self.assertTrue(last_line.startswith("release FAILED: 0.1.1 was pushed but"), last_line)
         rec = self.last()
         self.assertEqual((rec["ok"], rec["version"]), (False, "0.1.1"))
-        self.assertIn("comments add tl-x1 release FAILED", " ".join(self.log("bd")))
+        (comment,) = self.world.store.said("comments", "add")
+        self.assertTrue(comment[2] == "tl-x1" and comment[3].startswith("release FAILED"), comment)
         self.assertEqual(self.version(self.origin)["version"], "0.1.1")  # pushed all the same: the failure is the install's
         self.assertEqual(self.tags(self.origin), ["v0.1.1"])
 
     def test_an_install_that_fails_once_is_retried_and_the_release_succeeds(self):
-        self.env["FAKE_CLAUDE_FAIL"] = "once"
+        self.world.claude_fail = "once"
         r = self.release("fix")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertEqual(self.log("claude").count("plugin update iorlas-task-loop@iorlas-marketplace"), 2)
+        self.assertEqual(self.updates(), 2)
         self.assertTrue((self.home / "claude/plugins/cache/iorlas-marketplace/iorlas-task-loop/0.1.1/.claude-plugin/plugin.json").is_file())
 
     def test_a_red_suite_writes_a_failure_record_with_the_failing_tests_and_comments_on_the_bead(self):
-        self.write(self.seed / "tests" / "test_red.py", "import unittest\n\n\nclass R(unittest.TestCase):\n"
-                                                        "    def test_red_one(self):\n        self.fail('boom')\n"
-                                                        "    def test_red_two(self):\n        raise ValueError('bang')\n")
+        """Real process: dev/release.py with the real pytest run of the tree (its output, the failing ids, the saved log)."""
+        self.write(self.seed / "tests" / "test_red.py", RED_TESTS)
         self.commit(self.seed, "red")
         self.git("pull", "-q", "origin", "main", cwd=self.repo)
-        r = self.release("fix", "--bead", "tl-x2")
+        r = self.real_release("fix", "--bead", "tl-x2")
         self.assertNotEqual(r.returncode, 0)
         for want in ("FAILED tests/test_red.py::R::test_red_one", "FAILED tests/test_red.py::R::test_red_two", "AssertionError: boom",
                      "ValueError: bang", "2 failed"):
@@ -575,11 +509,19 @@ class Release(unittest.TestCase):
         self.assertEqual(rec["branch"], "main")
         self.assertTrue(any("test_red_one" in t for t in rec["tests"]), rec)
         self.assertTrue(Path(rec["log"]).is_file())
-        self.assertIn("comments add tl-x2 release FAILED", " ".join(self.log("bd")))
+        bd_log = (self.home / "bd.log").read_text()
+        self.assertIn("comments add tl-x2 release FAILED", bd_log)
         self.assertTrue(r.stderr.strip().splitlines()[-1].startswith("release FAILED: nothing released: "))
-        self.assertNotIn("close tl-x2", " ".join(self.log("bd")))
-        # a later success replaces the failure record
-        self.git("rm", "-q", "tests/test_red.py", cwd=self.repo)
+        self.assertNotIn("close tl-x2", bd_log)
+
+    def test_a_later_success_replaces_the_failure_record(self):
+        self.write(self.seed / "tests" / "RED", "FAILED tests/test_red.py::R::test_red_one - AssertionError: boom\n1 failed\n")
+        self.commit(self.seed, "red")
+        self.git("pull", "-q", "origin", "main", cwd=self.repo)
+        self.assertNotEqual(self.release("fix", "--bead", "tl-x2").returncode, 0)
+        self.assertFalse(self.last()["ok"])
+        self.assertEqual(self.world.store.said("close"), [])
+        self.git("rm", "-q", "tests/RED", cwd=self.repo)
         self.git("commit", "-qm", "green", cwd=self.repo)
         self.git("push", "-q", "origin", "HEAD:main", cwd=self.repo)
         self.assertEqual(self.release("fix").returncode, 0)
