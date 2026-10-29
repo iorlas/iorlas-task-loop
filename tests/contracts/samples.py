@@ -85,7 +85,8 @@ LOCK = locks.EngineLock(pid=1789, bead="tl-1", started=T, by="tl-abc", pid_start
                         route=(10, T), workers=[(11, T), (12, T + 1)])
 CMD = {"gate": ["just", "check"], "pick_label": "auto", "gate_only": [config.GateOnly(argv=["a"]), config.GateOnly(argv=["b"], why="c")],
        "visual_paths": config.VisualConfig(include=["a/**"]), "write_fresh_above_k": 150.0, "max_rounds": 4,
-       "checks": [config.CheckSpec(id="fmt", argv=["just", "fmt"], group="static", when=["x/**"], inputs="a/**")]}
+       "checks": [config.CheckSpec(id="fmt", argv=["just", "fmt"], group="static", when=["x/**"], inputs="a/**", where="container")],
+       "container": config.ContainerConfig(image="img:1")}
 
 
 CHECK_RUN = checks.CheckRun(

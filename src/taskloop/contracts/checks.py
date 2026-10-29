@@ -36,6 +36,7 @@ class Check:
     writer: bool | None = None  # True: the writer may run it, whatever it cost; False: never; None: by its duration
     writer_max_s: float | None = None  # its own cut for "too slow for the writer", else the engine's
     tail_log: str = ""  # a log of the tree whose compile errors join a red check's output when it shows none (project files not made)
+    container: bool = False  # run in a container on a copy of the worktree when docker is reachable (the host otherwise)
 
 
 @record

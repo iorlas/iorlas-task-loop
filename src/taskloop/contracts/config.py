@@ -34,6 +34,14 @@ class VisualConfig:
 
 
 @record
+class ContainerConfig:
+    """Where a check that says `"in": "container"` runs: an image, or a Dockerfile of the repo (built once, tagged by its hash)."""
+
+    image: str = ""
+    dockerfile: str = ""
+
+
+@record
 class CheckSpec:
     id: str
     argv: list[str]
@@ -49,6 +57,7 @@ class CheckSpec:
     writer: bool | None = None  # true: the writer may run it whatever it costs; false: never; absent: by how long it takes
     writer_check_max_s: float | None = None  # this check's own cut for "too slow for the writer" (else engine.writer_check_max_s)
     tail_log: str = ""  # a log of the tree whose first compile errors join this check's red output when it shows none
+    where: Literal["host", "container"] = field(default="host", metadata={"name": "in"})  # container: needs engine.container
 
     @property
     def cmd(self) -> str:
@@ -119,6 +128,7 @@ class EngineConfig:
     delegate: str = ""
     untracked_ignore: list[str] = field(default_factory=list)
     checks: list[CheckSpec] = field(default_factory=list)
+    container: ContainerConfig | None = None
     host: bool = False
     worker_rules: str = ""
     test_pattern: str = TEST_PATTERN
@@ -246,6 +256,12 @@ def load(data: Any, say_to: TextIO | None = None) -> RepoProfile:
         profile = from_json(RepoProfile, data or {})
     except CodecError as e:
         raise ConfigError(f"the repo profile: {e}") from None
+    box = profile.engine.container
+    if box and bool(box.image) == bool(box.dockerfile):
+        raise ConfigError("the repo profile: engine.container takes exactly one of image or dockerfile")
+    boxed = [k.id for k in profile.engine.checks if k.where == "container"]
+    if boxed and not box:
+        raise ConfigError(f"the repo profile: check {boxed[0]} says \"in\": \"container\" but engine.container is not set")
     cmds = [k.argv for k in profile.engine.checks] + [g.argv for g in profile.engine.gate_only] + [profile.engine.land]
     cmds += [c for c in (profile.engine.gate, profile.slots.setup) if c]
     bad = [shape_problem(c) for c in cmds]

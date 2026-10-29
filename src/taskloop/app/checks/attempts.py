@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from taskloop.app.checks.base import BaseCheck
+from taskloop.app.checks.container import Box
 from taskloop.app.checks.host import CheckHost
 from taskloop.contracts.argv import argv_of
 from taskloop.contracts.checks import Check
@@ -27,6 +28,7 @@ class Outcome:
 class Attempts:
     def __init__(self, host: CheckHost, base: BaseCheck, sleep: Callable[[float], None] = time.sleep) -> None:
         self.host, self.base, self.sleep = host, base, sleep
+        self.box = Box(host)
 
     def run(self, c: Check, log: Path, env: Mapping[str, str]) -> Outcome:
         """Run the check; a red one again when that can change the answer: only when the first two failures differ, never for a hang,
@@ -53,12 +55,19 @@ class Attempts:
         t0 = time.time()
         art = RepoDirs(self.host.wt).artifacts(self.host.bead)
         art.mkdir(parents=True, exist_ok=True)  # where a check may drop pictures: ingest copies them at step end
-        rc, tail = self.host.sh(argv_of(c.cmd), timeout=c.wall_min * 60, save=log, what="check",
-                                env={**env, "TL_ARTIFACTS": str(art), "TL_ARTIFACT_STEP": c.id})
+        rc, tail = self._exec(c, log, {**env, "TL_ARTIFACTS": str(art), "TL_ARTIFACT_STEP": c.id})
         seen = self._read(log, tail)
         took = time.time() - t0
         self.host.waits.note_slot_waits(seen, took)
         return rc, tail, seen, took
+
+    def _exec(self, c: Check, log: Path, env: Mapping[str, str]) -> tuple[int, str]:
+        """The check's argv, on the host or (when it says `in: container` and docker is up) in a container; the log says where."""
+        argv, where = self.box.plan(c, argv_of(c.cmd), env)
+        rc, tail = self.host.sh(argv, timeout=c.wall_min * 60, save=log, what="check", env=env)
+        if where:
+            log.write_text(where + "\n" + self._read(log, ""), encoding="utf-8")
+        return rc, tail
 
     @staticmethod
     def _read(log: Path, fallback: str) -> str:
@@ -93,7 +102,7 @@ class Attempts:
             wid = self.host.waits.start(WaitWhat.EDITOR_LOCK)
             self.sleep(wait)
             self.host.waits.add(wait, WaitWhat.EDITOR_LOCK, wid)
-            rc, tail = self.host.sh(argv_of(c.cmd), timeout=c.wall_min * 60, save=log, env=env, what="check")
+            rc, tail = self._exec(c, log, env)
             seen = self._read(log, tail)
             self.host.waits.note_slot_waits(seen, time.time() - started)
             if rc == 0 or matchers.failure_kind(seen) != "lock":

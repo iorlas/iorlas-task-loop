@@ -527,7 +527,8 @@
   "repo": true,
   "writer": false,
   "writer_max_s": 90.0,
-  "tail_log": "client/Logs/unity-project-files.log"
+  "tail_log": "client/Logs/unity-project-files.log",
+  "container": false
  },
  "CheckCacheEntry": {
   "v": 1,
@@ -973,9 +974,14 @@
      "env": {},
      "writer": null,
      "writer_check_max_s": null,
-     "tail_log": ""
+     "tail_log": "",
+     "in": "container"
     }
    ],
+   "container": {
+    "image": "img:1",
+    "dockerfile": ""
+   },
    "host": false,
    "worker_rules": "",
    "test_pattern": "^\\s*(def test_|async def test_|\\[(Test|UnityTest|Fact|Theory|TestMethod|TestCase)\\b|#\\[test\\]|(it|test)\\(|func Test)",
