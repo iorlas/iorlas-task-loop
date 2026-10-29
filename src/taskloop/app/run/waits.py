@@ -15,6 +15,7 @@ from taskloop.domain.checks.matchers import slot_wait_secs
 class Waits:
     def __init__(self, host: Any) -> None:
         self.e = host
+        self.earlier: tuple[int, int] | None = None  # (tokens, runs) of the bead's earlier runs
 
     def start(self, what: Any, holder: str = "", until: Any = None) -> str:
         """A wait begins (before the sleep, so a wait still going shows): its id, which add closes."""
@@ -66,8 +67,26 @@ class Waits:
         is not trusted: all the waits in one run together are at most that run's wall time."""
         self.add(min(slot_wait_secs(text), wall), WaitWhat.UNITY_SLOT)
 
+    def token_cap_check(self) -> None:
+        """engine.bead_token_cap: the bead's tokens (in + out) over its earlier runs (traces.jsonl, read once) and this one so far."""
+        e = self.e
+        cap = int(e.cfg.bead_token_cap)
+        if cap <= 0:
+            return
+        if self.earlier is None:
+            rows = [i.rec for i in e.stores.traces.read_from(0).items if i.rec.bead == e.bead]
+            self.earlier = (sum(r.stats.tokens_in + r.stats.tokens_out for r in rows), len(rows))
+        now = e.stats["tokens_in"] + e.stats["tokens_out"]
+        used = self.earlier[0] + now
+        if used >= cap:
+            runs = self.earlier[1] + (1 if now else 0)
+            raise Blocked(f"bead used {askspecs.million(used)} tokens over {runs} run{'' if runs == 1 else 's'} "
+                          f"(cap {askspecs.million(cap)}): raise engine.bead_token_cap or split the bead",
+                          askspecs.token_cap(used, runs, cap), kind=oc.Kind.ASK_BUDGET)
+
     def budget_check(self) -> None:
         e = self.e
+        self.token_cap_check()
         over = e.budget.over()
         if over:
             steps = outcomes.run_breakdown(e.log_path, e.steps.cur)

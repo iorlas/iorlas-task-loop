@@ -157,6 +157,7 @@ class EngineConfig:
     budget_usd: float = 15
     budget_min: float = 180
     budget_min_by_label: dict[str, float] = field(default_factory=dict)
+    bead_token_cap: int = 0  # tokens (in + out) a bead may use over all its runs: at the cap no worker starts (0: no cap)
     max_rounds: int = 3
     max_check_tries: int = 3
     max_replans: int = 2

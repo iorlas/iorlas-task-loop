@@ -1000,6 +1000,7 @@
    "budget_usd": 15,
    "budget_min": 180,
    "budget_min_by_label": {},
+   "bead_token_cap": 0,
    "max_rounds": 4,
    "max_check_tries": 3,
    "max_replans": 2,

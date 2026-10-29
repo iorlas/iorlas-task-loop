@@ -137,6 +137,18 @@ def over_budget(over: Sequence[str], steps: Sequence[BudgetLine], waited_min: in
                    AskDetail(budget=list(steps)))
 
 
+def token_cap(used: int, runs: int, cap: int) -> AskSpec:
+    """The bead's tokens over all its runs reached engine.bead_token_cap: no worker starts until the owner raises it or splits the bead."""
+    tried = [f"{million(used)} tokens over {runs} run{'' if runs == 1 else 's'}", f"engine.bead_token_cap is {million(cap)}"]
+    return AskSpec(AskClass.OVER_BUDGET, "Raise engine.bead_token_cap, or split the bead?", bullets(tried),
+                   [AskOption(label="I raised the cap", consequence="The bead runs again and counts its tokens against the new cap.",
+                              action="rerun", text="run again", recommended=True, cost="More tokens on this bead"), SPLIT])
+
+
+def million(n: int) -> str:
+    return f"{n / 1e6:.1f}M".replace(".0M", "M")
+
+
 def missing_criteria() -> AskSpec:
     return AskSpec(AskClass.MISSING_CRITERIA, "What proves this bead done?", ["The bead has no acceptance criteria"],
                    [AskOption(label="I added them", consequence="The bead runs again and reads the criteria you added.", action="rerun",
