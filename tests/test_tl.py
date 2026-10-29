@@ -50,6 +50,20 @@ def sh(*args, cwd):
     subprocess.run(list(args), cwd=cwd, check=True, capture_output=True)
 
 
+def tl_main(*args, cwd, env=None):
+    """tl.main(args) in this process, from `cwd`: -> (exit code, stdout, stderr). A SystemExit carries its code, a message is printed to stderr
+    and exits 1, as the interpreter does for a script."""
+    out, err = io.StringIO(), io.StringIO()
+    with contextlib.chdir(cwd), mock.patch.dict(os.environ, env or {}), contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+        try:
+            code = tl.main(list(args))
+        except SystemExit as e:
+            code = e.code if isinstance(e.code, int) else 0 if e.code is None else 1
+            if isinstance(e.code, str):
+                print(e.code, file=sys.stderr)
+    return subprocess.CompletedProcess(list(args), code, out.getvalue(), err.getvalue())
+
+
 class Base(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -128,8 +142,7 @@ class RegisterCLI(Base):
         self.registry = self.config / "repos.json"
 
     def cli(self, *args, cwd=None):
-        return subprocess.run([sys.executable, str(ROOT / "skills" / "task-loop" / "tl.py"), *args],
-                              cwd=cwd or self.home, capture_output=True, text=True, check=False)
+        return tl_main(*args, cwd=cwd or self.home)
 
     def assert_registered(self, result):
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -208,8 +221,9 @@ class RegisterCLI(Base):
                     else:
                         self.assertFalse(self.config.parent.exists())
 
-    def test_invalid_input_exits_1_with_one_tl_line_on_stderr_and_no_traceback(self):  # the one real process
-        result = self.cli("register", str(self.home / "missing"))
+    def test_invalid_input_exits_1_with_one_tl_line_on_stderr_and_no_traceback(self):  # the one real process: the interpreter's exit
+        result = subprocess.run([sys.executable, str(ROOT / "skills" / "task-loop" / "tl.py"), "register", str(self.home / "missing")],
+                                cwd=self.home, capture_output=True, text=True, check=False)
         self.assertEqual(result.returncode, 1)
         self.assertEqual(result.stdout, "")
         self.assertEqual(len(result.stderr.splitlines()), 1)
@@ -238,8 +252,7 @@ class UsageCLI(Base):
             )
         )
         env = dict(os.environ, HOME=str(self.home), USERPROFILE=str(self.home))
-        r = subprocess.run([sys.executable, str(ROOT / "skills" / "task-loop" / "tl.py"), "usage", "[]"],
-                           capture_output=True, text=True, env=env, check=False)
+        r = tl_main("usage", "[]", cwd=self.home, env=env)  # the route.py it starts stays a process: that is the delegate contract
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertIn("5h 6.0%, week 4.0%", r.stdout)
         self.assertEqual(json.loads((self.home / "argv.json").read_text()), ["status", "--claude-usage", "[]", "--json"])
@@ -254,9 +267,7 @@ class TraceCLI(Base):
                "sessions": [{"node": "write", "role": "worker", "family": "openai", "status": "done", "ref": "thr-9"}]}
         other = dict(run, run="b-2-x", bead="b-2")
         (cfg / "traces.jsonl").write_text(json.dumps(run) + "\n" + json.dumps(other) + "\n")
-        env = dict(os.environ, HOME=str(self.home), XDG_CONFIG_HOME=str(self.home / "cfg"))
-        r = subprocess.run([sys.executable, str(ROOT / "skills" / "task-loop" / "tl.py"), "trace", "b-1"],
-                           capture_output=True, text=True, env=env, check=False)
+        r = tl_main("trace", "b-1", cwd=self.home, env={"HOME": str(self.home)})
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertIn("b-1-20261019-010000  b-1  landed  10 min", r.stdout)
         self.assertIn("thr-9", r.stdout)
@@ -339,7 +350,7 @@ class SlotReset(Base):
         cfg = {
             "slots": {
                 "count": 1,
-                "setup": [sys.executable, "-c", "open('setup.log', 'a').write('run\\n')"],
+                "setup": ["sh", "-c", "echo run >> setup.log"],
                 "setup_inputs": ["a.txt"],
                 "keep": ["setup.log"],
             }
@@ -450,13 +461,12 @@ class PinAndRollback(Base):
         self.assertEqual(self.pin("--clear")[0], 0)
         self.assertEqual(target(), ("0.10.0", root.parent / "0.10.0"))
         self.assertIn("0.6.0", must(route()))
-        # the CLI end to end, in a fresh process with only the scratch dirs in its environment
-        env = dict(os.environ, HOME=str(self.home))
-        cli = [sys.executable, str(ROOT / "skills" / "task-loop" / "tl.py"), "pin"]
-        r = subprocess.run([*cli, "0.2.0", "--delegate", "0.5.0"], env=env, capture_output=True, text=True, check=False)
+        # the CLI end to end, main(argv) with only the scratch dirs in its environment
+        cli = ["pin"]
+        r = tl_main(*cli, "0.2.0", "--delegate", "0.5.0", cwd=self.home, env={"HOME": str(self.home)})
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertIn("/iorlas-delegate/0.5.0/", must(route()))
-        r = subprocess.run([*cli, "0.4.0"], env=env, capture_output=True, text=True, check=False)
+        r = tl_main(*cli, "0.4.0", cwd=self.home, env={"HOME": str(self.home)})
         self.assertEqual(r.returncode, 2)
         self.assertEqual(self.pinned()["task-loop"], "0.2.0")
 
@@ -484,7 +494,7 @@ class CutoverCheck(Base):
         self.assertEqual((rc, out.split()[0]), (0, "CLEAR:"))
 
     def test_a_live_loop_and_a_live_run_exit_1_and_are_listed_a_dead_one_is_not(self):
-        child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+        child = subprocess.Popen(["sleep", "60"])
         self.addCleanup(child.kill)
         self.addCleanup(child.wait)
         looptest.write_state(str(self.repo), pid=child.pid, started=time.time(), t=time.time(), bead="x-9")
