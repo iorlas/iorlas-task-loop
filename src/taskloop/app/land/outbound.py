@@ -67,10 +67,15 @@ class Outbound:
         if e.sh(["git", "diff", "--cached", "--quiet"], pin=True)[0]:  # staged work: a wip commit of what the stages meant
             e.tree.wip(f"stage {stage} accepted", everything=False)
         ref = f"refs/heads/task/{e.bead}"
-        argv = ["git", "push", "--no-verify", "--force-with-lease", want[0], f"HEAD:{ref}"]
-        t0 = e.clock.monotonic()
-        rc, tail = e.sh(argv, pin=True)
-        e.log.note(f"{' '.join(argv)}: {'ok' if rc == 0 else 'failed'} in {e.clock.monotonic() - t0:.1f}s")
+        rc, tail = self.lfs_push()  # --no-verify skips git-lfs's own hook: the branch would reach the remote without its LFS files
+        if not rc:
+            argv = ["git", "push", "--no-verify", "--force-with-lease", want[0], f"HEAD:{ref}"]
+            t0 = e.clock.monotonic()
+            rc, tail = e.sh(argv, pin=True)
+            e.log.note(f"{' '.join(argv)}: {'ok' if rc == 0 else 'failed'} in {e.clock.monotonic() - t0:.1f}s")
+        if rc and "stale info" in tail:  # the remote branch was pushed from another machine and this clone has no copy of it
+            raise e.blocked_for(f"failed: {ref} on {want[0]} holds work this clone has never fetched (another machine ran this bead); "
+                                f"fetch it and decide which work to keep, then rerun\n{tail.strip()[-400:]}", "FAULT_LAND")
         if rc:
             kind = "PAUSE_NETWORK" if Push.transient(tail) else "FAULT_LAND"
             raise e.blocked_for(f"{'paused' if kind == 'PAUSE_NETWORK' else 'failed'}: the work-in-progress push of {ref} to {want[0]} "

@@ -71,7 +71,7 @@ class WipPush(EngineTest):
         with mock.patch.object(Engine, "sh", refused):
             self.run_engine(RUN)
         said = " ".join(r["text"] for r in records(self.eng, "warn"))
-        self.assertIn("failed: the work-in-progress push", said)
+        self.assertIn("holds work this clone has never fetched (another machine ran this bead)", said)
         asked = " ".join(str(c) for c in self.store.calls)
         self.assertIn("stale info", asked)
         self.assertIn("engine-fault", asked)
@@ -87,6 +87,16 @@ class WipPush(EngineTest):
             self.run_engine(RUN, land=["git", "log"])
         self.assertFalse([c for c in pushed if c[:2] == ["git", "push"]])
         self.assertFalse(self.origin_ref("refs/heads/task/t-1"))
+
+    def test_an_lfs_repo_pushes_its_lfs_files_first(self):
+        calls = []
+        e = SimpleNamespace(dry=False, cfg=SimpleNamespace(land=["git", "push", "origin", "HEAD:main"]), wt=self.wt, bead="t-1",
+                            checkout=SimpleNamespace(stage_all=lambda: None), clock=SimpleNamespace(monotonic=lambda: 1.0),
+                            log=SimpleNamespace(note=lambda _m: None), sh=lambda cmd, **_kw: (calls.append(cmd) or (0, "")))
+        (self.wt / ".gitattributes").write_text("*.bin filter=lfs diff=lfs merge=lfs -text\n")
+        with mock.patch("taskloop.app.land.outbound.shutil.which", return_value="/usr/bin/git-lfs"):
+            Outbound(e).wip_push(1)
+        self.assertEqual([c[:3] for c in calls if c[:2] != ["git", "diff"]], [["git", "lfs", "push"], ["git", "push", "--no-verify"]])
 
     def test_a_dry_run_pushes_nothing(self):
         e = SimpleNamespace(dry=True, cfg=SimpleNamespace(land=["git", "push", "origin", "HEAD:main"]), sh=mock.Mock(), git=mock.Mock())
