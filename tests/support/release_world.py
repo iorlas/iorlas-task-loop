@@ -13,6 +13,7 @@ import threading
 from contextlib import ExitStack, contextmanager
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 from unittest import mock
 
 import support.paths  # noqa: F401
@@ -86,14 +87,15 @@ class World:
             (d / "plugin.json").write_text("{}")
         return subprocess.CompletedProcess(cmd, 0, "", "")
 
-    def run(self, cmd, **kw):
+    def run(self, cmd, **kw: Any):
         """subprocess.run for the release's calls: claude is faked, a push of main from the release clone first calls `before_push`."""
         if cmd[0] == "claude":
             return self.claude(list(cmd))
         if cmd[:2] == ["git", "push"] and "HEAD:main" in cmd and self.before_push and Path(kw["cwd"]) != self.market:
             hook, self.before_push = self.before_push, None
             hook()
-        return subprocess.run(cmd, **dict(kw, check=False))
+        kw.pop("check", None)  # the release asks for check=False, always
+        return subprocess.run(cmd, check=False, **kw)
 
     def capture(self, argv, cwd, env, timeout_s, **_):
         self.just_log.append(argv)

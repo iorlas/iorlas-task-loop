@@ -70,7 +70,7 @@ class Fake(unittest.TestCase):
 
     # --- the seam itself -------------------------------------------------------------------------------------------
 
-    def test_the_fake_speaks_the_handshake_and_the_net_probe(self):  # the real processes: argv and stdout of route.py as the engine starts it
+    def test_the_fake_speaks_the_handshake_and_the_net_probe(self):  # real processes: route.py as the engine starts it
         self.script_with(["done"], net=[False, True])
         out = subprocess.run([sys.executable, FAKE, "contract", "--json"], capture_output=True, text=True, env=self.env, check=False).stdout
         self.assertEqual(sorted(json.loads(out)), ["contract", "reasons", "run_args"])

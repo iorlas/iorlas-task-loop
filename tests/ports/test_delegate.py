@@ -19,10 +19,10 @@ from support.tags import contract, domain
 from ports import stub_route
 from ports.delegate_contract import SCHEMA, DelegateContract, req
 from taskloop.adapters import delegate_route, delegate_wire
-from taskloop.adapters.procs import Ran
 from taskloop.adapters.delegate_route import RouteDelegate
 from taskloop.adapters.delegate_wire import answer_status
 from taskloop.adapters.fake_delegate import FakeDelegate, Step, done, stopped
+from taskloop.adapters.procs import Ran
 from taskloop.contracts import codec
 from taskloop.contracts.delegate import LiveCmdStart, LiveEnd, LiveMsg
 

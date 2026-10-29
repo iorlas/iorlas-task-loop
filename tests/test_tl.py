@@ -51,8 +51,8 @@ def sh(*args, cwd):
 
 
 def tl_main(*args, cwd, env=None):
-    """tl.main(args) in this process, from `cwd`: -> (exit code, stdout, stderr). A SystemExit carries its code, a message is printed to stderr
-    and exits 1, as the interpreter does for a script."""
+    """tl.main(args) in this process, from `cwd`: -> (exit code, stdout, stderr). A SystemExit carries its code, a message is
+    printed to stderr and exits 1, as the interpreter does for a script."""
     out, err = io.StringIO(), io.StringIO()
     with contextlib.chdir(cwd), mock.patch.dict(os.environ, env or {}), contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
         try:
