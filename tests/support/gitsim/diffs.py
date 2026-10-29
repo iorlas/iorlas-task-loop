@@ -1,5 +1,6 @@
 """diff: the text of the change between two trees, in git's unified format."""
 import difflib
+import re
 
 from . import ignore
 from .ctx import Ctx, blob, flags
@@ -44,12 +45,35 @@ def stat_lines(a: Snap, b: Snap, paths: list[str]) -> list[str]:
     return [*out, tail] if paths else []
 
 
+MARKER = re.compile(r"^(<<<<<<< |=======$|>>>>>>> )")
+
+
+def check_lines(path: str, a: bytes | None, b: bytes | None) -> list[str]:
+    """`git diff --check` for one file: a hit per added line with a conflict marker or trailing whitespace, git's wording."""
+    old, new = lines_of(a or b""), lines_of(b or b"")
+    out = []
+    for tag, _, _, j1, j2 in difflib.SequenceMatcher(None, old, new, autojunk=False).get_opcodes():
+        if tag in ("insert", "replace"):
+            for n in range(j1, j2):
+                text = new[n].rstrip("\n")
+                if text.startswith("\\ No newline"):
+                    continue
+                if MARKER.match(text):
+                    out.append(f"{path}:{n + 1}: leftover conflict marker")
+                elif text != text.rstrip():
+                    out += [f"{path}:{n + 1}: trailing whitespace.", "+" + text]
+    return out
+
+
+def say_check(c: Ctx, hits: list[str]) -> int:
+    for ln in hits:
+        c.say(ln)
+    return 2 if hits else 0  # git diff --check: exit 2 when it reports anything
+
+
 def cmd_diff(c: Ctx) -> int:
     fl, rest = flags(c.args)
-    if "--" in rest:
-        rest, spec = rest[: rest.index("--")], rest[rest.index("--") + 1:]
-    else:
-        spec = []
+    rest, spec = (rest[: rest.index("--")], rest[rest.index("--") + 1:]) if "--" in rest else (rest, [])
     if "--diff-filter=U" in fl:
         for p in sorted(W.conflicts.get(c.r.key, set())):
             c.say(p)
@@ -60,6 +84,8 @@ def cmd_diff(c: Ctx) -> int:
         shas = [c.r.resolve(r) for r in rest]
         a, b = (snap_of(s) for s in [*shas, None, None][:2]) if len(shas) == 2 else (snap_of(shas[0]), c.r.scan()[0])
     paths = changed(a, b, spec)
+    if "--check" in fl:
+        return say_check(c, [x for p in paths for x in check_lines(p, a.get(p), b.get(p))])
     if "--name-only" in fl:
         for p in paths:
             c.say(p)

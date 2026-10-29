@@ -12,10 +12,10 @@ from taskloop.app.checks.checklog import CheckLog
 from taskloop.app.checks.host import CheckFault, CheckHost
 from taskloop.contracts.checks import Check, CheckFaultKind, CheckResult, Durations
 from taskloop.domain.checks.durations import CHEAP_S, expected_secs
-from taskloop.domain.checks.matchers import cs_error_lines, output_signature, safe_name, stale_tree
+from taskloop.domain.checks.matchers import cs_error_lines, diff_check_text, output_signature, safe_name, stale_tree
 from taskloop.domain.checks.names import log_var, norm, rc_var
 from taskloop.domain.checks.plan import CheckPlan, Step
-from taskloop.domain.checks.specs import due
+from taskloop.domain.checks.specs import DIFF_CHECK, due
 
 PROJECT_LOG = "client/Logs/unity-project-files.log"  # where Unity says why the project files could not be regenerated
 PROJECT_LOG_LINES = 20
@@ -165,7 +165,7 @@ class CheckExecutor:
                              "back to open and the next run runs it again (no fix round, no failure counted)", out.rc)
 
     def _result(self, c: Check, out: Outcome, name: str, secs: int) -> CheckResult:
-        tail = out.tail[-1500:]
+        tail = diff_check_text(out.seen) if c.id == DIFF_CHECK and out.rc else out.tail[-1500:]  # the writer's text; the log keeps all
         if out.rc and not out.base_red:
             tail += self._project_log(c, out.seen, self.logs / name)
         return CheckResult(id=c.id, cmd=c.cmd, group=c.group, exit=out.rc, status="passed" if out.rc == 0 else "failed", tries=out.tries,

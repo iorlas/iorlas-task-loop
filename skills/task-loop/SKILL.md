@@ -242,6 +242,12 @@ check): a step green at its inputs (or, with none, on this tree and base) in an 
 `engine.gate` and `engine.gate_only` are gone: a profile that still has one is refused at load with a message to move the steps into
 `engine.checks` with `"run": "gate"`. `TL_CHECKS_GREEN` and the whole-gate cache entry are gone too: the per-check cache replaces them.
 
+**The built-in `diff-check`.** Before any repo check, in every stage round, the gate and `tl check`, the engine runs `git diff --check <base> <tree>`
+(the diff from the merge-base with `engine.base`, untracked files included; only changed files are read, `.gitattributes` decides what
+counts as a whitespace error): leftover conflict markers and trailing whitespace on changed lines. It is a static check, so a red stops the
+expensive ones, and it is cached by tree and base. Clean, it prints nothing and adds nothing to any prompt; red, the writer gets git's
+`file:line: why` lines, the first 20, then `and N more in K files` (the full output stays in the check's log). There is no setting for it.
+
 **`tl check [--repo DIR] [--all] [--list] [ID ...]`.** A person (or a session) runs the registry in the current worktree, with the profile
 file of that worktree, through the engine's own runner and the same per-check cache (under `~/.config/task-loop/check-cache/`, the only
 thing it writes there; no bd, no bead, no run folder). No ID: the gate's steps, those `when` makes due; `--all` ignores `when`; IDs run

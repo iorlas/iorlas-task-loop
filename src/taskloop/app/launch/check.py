@@ -1,6 +1,7 @@
 """The verb `tl check [--repo DIR] [--all] [--list] [ID ...]`: the repo's registry of checks (engine.checks of .task-loop.json), run by a
 person in the current worktree through the engine's own runner. No ID: the gate's steps (run gate or both), the steps `when` makes due; the
-IDs: just those checks, whatever their `run`, always. It claims no bead and writes no bd; of the config folder it writes only the check
+IDs: just those checks, whatever their `run`, always. The engine's own `diff-check` (git diff --check from the merge-base) runs first
+in every case. It claims no bead and writes no bd; of the config folder it writes only the check
 cache the engine's checks use."""
 import json
 from pathlib import Path
@@ -61,11 +62,10 @@ def cmd_check(a: Any, host: CliHost | None = None) -> int:
         return 0
     items = [repo_check(k, cfg, gate=k.run != "stage") for k in chosen(cfg, a.ids)] if a.ids else gate_items(cfg)
     if not items:
-        print("no gate steps: no engine.checks entry says run gate or both")
-        return 0
+        print("no gate steps: no engine.checks entry says run gate or both")  # the built-in diff-check still runs
     box = host or CliHost(repo, cfg)
     try:
-        run = Checker(box).run_items(items, everything=a.all or bool(a.ids), learn=False)
+        run = Checker(box).run_items(items, everything=a.all or bool(a.ids), learn=False, show_clean=True)
     finally:
         box.close()
     print("\n".join(step_line(c) for c in run.results))

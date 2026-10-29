@@ -504,7 +504,8 @@ class EngineLand1Test(EngineTest):
         with mock.patch.object(fake_route.Script, "reply", write_markers):
             rc, _s = self.conflict_run({"plan": [PLAN], "write": [WRITE, marked, WRITE], "review": [CLEAN, CLEAN, CLEAN]})
         recs = [{i["id"]: i["status"] for i in r["run"]["results"]} for r in self.checks_records()]
-        self.assertEqual(recs[1][engine.Engine.MARKERS], "failed")  # the marker check judged it, not a stage check
+        self.assertEqual(recs[1]["diff-check"], "failed")  # git's diff check judged it first; the marker check, a later group, did not run
+        self.assertEqual(recs[1][engine.Engine.MARKERS], "skipped")
         self.assertEqual(rc, 0, self.blocked)
 
     @ENGINE_BASH

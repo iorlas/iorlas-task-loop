@@ -14,7 +14,7 @@ from taskloop.app.checks.host import CheckHost, CheckStuck
 from taskloop.contracts.checks import Check, CheckResult, CheckRun, Durations
 from taskloop.domain.checks.durations import merged, seconds
 from taskloop.domain.checks.plan import CheckPlan
-from taskloop.domain.checks.specs import due, gate_items, items_of
+from taskloop.domain.checks.specs import DIFF_CHECK, diff_check, due, gate_items, items_of
 from taskloop.domain.checks.writer_split import WriterSplit
 
 
@@ -41,10 +41,10 @@ class Checker:
         env = host.checkout.git_env()
         history_doc = host.stores.durations.of(check_files.repo_key(str(host.wt), env))
         history = history_doc.read() or Durations()
-        plan = CheckPlan.build(items_of(host.cfg, stage_checks), history, groups,
-                               acceptance_first, conflict_fix, markers)
-        fix_red = Fixer(host).run(plan, self.round)  # before the tree is hashed: the checks see the fixed files
-        tree, base = host.checkout.tree_hash(), host.git("rev-parse", host.cfg.base)
+        items = items_of(host.cfg, stage_checks)
+        fix_red = Fixer(host).run(CheckPlan.build(items, history, groups, acceptance_first, conflict_fix, markers), self.round)
+        tree, base = host.checkout.tree_hash(), host.git("rev-parse", host.cfg.base)  # after the fixes: the checks see the fixed files
+        plan = CheckPlan.build([*self._diff_check(tree), *items], history, groups, acceptance_first, conflict_fix, markers)
         cache = CheckCache(host.stores.check_cache.of(host.bead), f"{tree} {base}")
         keys = InputKeys(host.wt, tree, base, env)
         attempts = Attempts(host, BaseCheck(host, cache, base, host.checkout.git_env), self.sleep)
@@ -55,18 +55,19 @@ class Checker:
         self._stuck(run)
         return run
 
-    def run_items(self, items: Sequence[Check], everything: bool = False, learn: bool = True) -> CheckRun:
+    def run_items(self, items: Sequence[Check], everything: bool = False, learn: bool = True, show_clean: bool = False) -> CheckRun:
         """The registry's checks (the gate's steps, or the ones `tl check` names) as one block, through the same planner, executor
         and cache as a stage's round: groups in order, a red group skips the groups after it, a step green at its inputs is cached.
-        No fix commands and no base run (the tree is the rebased one: a red is red). everything: `when` is ignored. learn: the
-        durations of what passed are remembered. The rows are the check log's (start and end per step); no step book, no streak."""
+        A clean diff check is left out of the result (show_clean keeps it: `tl check` prints a line for it). No fix commands and no
+        base run (the tree is the rebased one: a red is red). everything: `when` is ignored. learn: the durations of what passed are
+        remembered. The rows are the check log's (start and end per step); no step book, no streak."""
         host = self.host
         self.round += 1
         env = host.checkout.git_env()
         history_doc = host.stores.durations.of(check_files.repo_key(str(host.wt), env))
         history = history_doc.read() or Durations()
-        plan = CheckPlan.build(items, history)
         tree, base = host.checkout.tree_hash(), host.git("rev-parse", host.cfg.base)
+        plan = CheckPlan.build([*self._diff_check(tree), *items], history)
         cache = CheckCache(host.stores.check_cache.of(host.bead), f"{tree} {base}")
         keys = InputKeys(host.wt, tree, base, env)
         attempts = Attempts(host, BaseCheck(host, cache, "", host.checkout.git_env), self.sleep)  # no sha: no base run
@@ -74,29 +75,44 @@ class Checker:
         if learn and st.timings:
             history_doc.write(merged(history, st.timings))
         cache.save(base)
-        host.detail(evidence.round_lines(st.results))
-        hits = sum(1 for c in st.results if c.cached)
-        return CheckRun(round=st.n, tree=tree, results=st.results, hits=hits, misses=len(st.results) - hits)
+        results = st.results if show_clean else self._quiet(st.results)
+        host.detail(evidence.round_lines(results))
+        hits = sum(1 for c in results if c.cached)
+        return CheckRun(round=st.n, tree=tree, results=results, hits=hits, misses=len(results) - hits)
 
     def gate_green(self) -> bool:
         """Every gate step is green on this tree and base already (by its inputs, else by tree and base), or not due (`when`)."""
         host = self.host
-        items, tree = gate_items(host.cfg), host.checkout.tree_hash()
-        if not tree or not items:
+        steps, tree = gate_items(host.cfg), host.checkout.tree_hash()
+        if not tree or not steps:
             return False
+        items = [*self._diff_check(tree), *steps]
         base = host.git("rev-parse", host.cfg.base)
         cache = CheckCache(host.stores.check_cache.of(host.bead), f"{tree} {base}")
         green = cache.green_ids(items, InputKeys(host.wt, tree, base, host.checkout.git_env()))
         changed = host.checkout.changed_paths() if any(c.when for c in items) else []
         return all(c.id in green or not due(c, changed) for c in items)
 
+    def _diff_check(self, tree: str) -> list[Check]:
+        """The built-in `git diff --check` over the diff from the merge-base with the base to the tree (untracked files included; none
+        when the base does not resolve)."""
+        host = self.host
+        base = host.git("merge-base", "HEAD", host.cfg.base) or host.git("rev-parse", host.cfg.base)
+        return [diff_check(base, tree)] if base and tree else []
+
+    @staticmethod
+    def _quiet(results: list[CheckResult]) -> list[CheckResult]:
+        """A clean diff check is not a result anyone reads: it stays in the check log's rows only."""
+        return [c for c in results if not (c.id == DIFF_CHECK and c.exit == 0)]
+
     def _finish(self, st: Round, tree: str, history: Durations, history_doc: Any) -> CheckRun:
         host = self.host
-        host.detail(evidence.round_lines(st.results))
+        results = self._quiet(st.results)
+        host.detail(evidence.round_lines(results))
         if st.timings:
             history_doc.write(merged(history, st.timings))
-        hits = sum(1 for c in st.results if c.cached)
-        run = CheckRun(round=st.n, tree=tree, results=st.results, hits=hits, misses=len(st.results) - hits)
+        hits = sum(1 for c in results if c.cached)
+        run = CheckRun(round=st.n, tree=tree, results=results, hits=hits, misses=len(results) - hits)
         host.stores.check_run(host.run_dir.name, st.n).write(run)
         host.steps.outcome("red" if run.failed else "green", evidence.round_outcome(run))
         self.latest = run

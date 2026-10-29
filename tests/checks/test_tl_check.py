@@ -75,6 +75,18 @@ class TlCheck(unittest.TestCase):
         self.assertNotIn("fmt", out)
         self.assertEqual(self.tl("nope")[0], 1)
 
+    def test_it_prints_a_diff_check_line_first_and_a_red_one_names_the_file_and_line(self):
+        self.profile(CHECKS[:1])
+        rc, out = self.tl()
+        self.assertEqual(rc, 0)
+        self.assertRegex(out.splitlines()[0], r"diff-check\s+ok\s+\d+s")
+        (self.repo / "new.txt").write_text("fine\nbad  \n")  # untracked, new: the diff check reads the tree, not the index
+        rc, out = self.tl()
+        self.assertEqual(rc, 1)
+        self.assertRegex(out, r"diff-check\s+FAILED")
+        self.assertIn("new.txt:2: trailing whitespace.", out)
+        self.assertRegex(out, r"fmt\s+ok")  # the cheap group's other checks still ran
+
     def test_list_prints_the_registry_and_exits_0(self):
         rc, out = self.tl("--list")
         self.assertEqual(rc, 0)

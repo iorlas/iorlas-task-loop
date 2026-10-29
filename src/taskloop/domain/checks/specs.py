@@ -6,6 +6,14 @@ from taskloop.contracts.argv import argv_of, text_of
 from taskloop.contracts.checks import Check
 from taskloop.contracts.config import CheckSpec, EngineConfig
 
+DIFF_CHECK = "diff-check"  # the engine's own check: `git diff --check <base>`, always first, in every round, the gate and `tl check`
+
+
+def diff_check(base: str, tree: str) -> Check:
+    """git's check of the diff from `base` to `tree`: leftover conflict markers and whitespace errors on changed lines (.gitattributes
+    decides what counts), reading only the changed files. Cheap and static, so a red stops the expensive checks. Cached by tree and base."""
+    return Check(id=DIFF_CHECK, cmd=f"git diff --check {base} {tree}", group="static", wall_min=2.0)
+
 
 def spelled(cmd: str) -> str:
     """The command in its one spelling (the argv joined), so two spellings of one argv are one check."""

@@ -154,3 +154,18 @@ def is_name(row: str) -> bool:
 
 def is_notable(row: str) -> bool:
     return bool(NOTABLE.search(row))
+
+
+_DIFF_HIT = re.compile(r"^([^+].*?):\d+: \S")  # git diff --check: "path:LINE: leftover conflict marker" / "path:LINE: trailing whitespace."
+DIFF_CHECK_LINES = 20
+
+
+def diff_check_text(text: str, cap: int = DIFF_CHECK_LINES) -> str:
+    """The output of `git diff --check` for the writer: its first `cap` lines (git's own `path:N: why` lines, each whitespace hit
+    followed by the line itself), then "and N more in K files" for the hits after them."""
+    lines = text.splitlines()
+    if len(lines) <= cap:
+        return "\n".join(lines)
+    rest = [m.group(1) for m in map(_DIFF_HIT.match, lines[cap:]) if m]
+    more = f"and {len(rest)} more in {len(set(rest))} file{'s' if len(set(rest)) != 1 else ''}" if rest else ""
+    return "\n".join([*lines[:cap], *([more] if more else [])])

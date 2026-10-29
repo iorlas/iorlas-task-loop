@@ -6,6 +6,7 @@ from taskloop.contracts.checks import Check, CheckResult, Durations
 from taskloop.domain.checks.matchers import env_refs, is_build, is_unity
 from taskloop.domain.checks.names import mangle, norm
 from taskloop.domain.checks.order import CheckOrder
+from taskloop.domain.checks.specs import DIFF_CHECK
 
 
 @dataclass(frozen=True)
@@ -53,7 +54,7 @@ class CheckPlan:
 
 
 def _conflict_split(items: list[Check], fix: Sequence[str], markers: str) -> tuple[list[Check], list[CheckResult]]:
-    keep = [c for c in items if c.cmd == markers or (c.repo and is_build(c.id + " " + c.cmd))]
+    keep = [c for c in items if c.cmd == markers or c.id == DIFF_CHECK or (c.repo and is_build(c.id + " " + c.cmd))]
     known = {c.cmd for c in items}
     skipped = [CheckResult.skipped(c, "conflict_fix") for c in items if c not in keep]
     skipped += [CheckResult.skipped(Check(id=x, cmd=x, group="acceptance"), "conflict_fix")
