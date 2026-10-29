@@ -367,6 +367,11 @@ container); the session that starts it only watches it.
   engine's close step still runs, then the loop puts the bead back in the queue unclaimed and releases the slot).
   A stop during the push waits for it: a push that went through closes the bead landed, and the loop never reopens a
   bead whose land commit is on the base. Ctrl-C or SIGTERM to the loop itself is `--now`.
+- **Disk:** the loop prunes at its start (`tl prune [--dry-run]`): run folders, check-round logs, engine logs and the event log older than
+  `loop.keep_days` (14; beads not closed, parked ones included, keep theirs), worktrees under `loop.build_dir` (`~/Workspaces/wt`) whose HEAD
+  is on origin/main, clean and idle that long, and local `release/*` branches on origin/main; plain `git worktree remove`, never --force, and
+  it says what it removed and what it kept and why. Below `loop.min_free_gb` (5) free on the config dir's disk the loop claims nothing and
+  exits 0 (reason `low_disk`). A run keeps at most `engine.evidence_cap_mb` (200) of new evidence; a picture identical to one kept before is a link.
 - **Leases:** the loop heartbeats the slot bead and the task bead from the slot take to the release (a slow slot
   setup included); run-task heartbeats both too (`TASK_LOOP_SLOT_BEAD`), so a loop killed with SIGKILL leaves its
   slot held until the running bead ends, then the lease lapses and `bd reclaim` frees it.

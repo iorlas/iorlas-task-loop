@@ -285,11 +285,11 @@ class Release(unittest.TestCase):
                 r = self.release("z", "--from-branch", name)
                 self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
                 self.assertEqual(r.stdout.count("running the full suite"), 1)
-                ref = "origin/" + name if remote_only else name
-                self.assertEqual(self.git("rev-parse", ref, cwd=self.repo), source)
-                if not remote_only:
-                    self.assertEqual(self.git("rev-parse", "HEAD", cwd=worktree), source)
-                    self.assertEqual(self.git("status", "--porcelain", cwd=worktree), "")
+                if remote_only:  # no local branch to remove: the remote one stays
+                    self.assertEqual(self.git("rev-parse", "origin/" + name, cwd=self.repo), source)
+                else:  # the clean worktree and the local branch are gone
+                    self.assertFalse(worktree.exists())
+                    self.assertEqual(self.git("branch", "--list", name, cwd=self.repo), "")
                 self.assertEqual(self.git("show", "main:z.txt", cwd=self.origin), name)
                 self.assertEqual(self.git("show", "main:other.txt", cwd=self.origin), name)
                 self.assertEqual(self.git("rev-list", "--merges", "main", cwd=self.origin), "")
@@ -321,7 +321,10 @@ class Release(unittest.TestCase):
 
                 r = self.release(name, "--from-branch", name)
 
-                self.assertEqual(self.git("rev-parse", name, cwd=self.repo), source, r.stdout + r.stderr)
+                if suite_fails:  # a red release keeps the branch
+                    self.assertEqual(self.git("rev-parse", name, cwd=self.repo), source, r.stdout + r.stderr)
+                else:  # a green one removes it, after the push and the install
+                    self.assertEqual(self.git("branch", "--list", name, cwd=self.repo), "", r.stdout + r.stderr)
                 self.assertEqual(self.git("config", "--get", "rebase.updateRefs", cwd=self.repo), "true")
                 self.assertEqual(self.git("branch", "--show-current", cwd=self.repo), "main")
                 self.assertEqual(self.git("status", "--porcelain", cwd=self.repo), "")
@@ -432,8 +435,8 @@ class Release(unittest.TestCase):
                                                  env=self.env).hex() for p in paths}
             tested = [json.loads(line) for line in (snapshots / (version + ".jsonl")).read_text().splitlines()]
             self.assertEqual(tested, [pushed])  # once, on exactly the tracked contents that landed
-        for name, source in sources.items():
-            self.assertEqual(self.git("rev-parse", "task/" + name, cwd=self.repo), source)
+        for name in sources:
+            self.assertEqual(self.git("branch", "--list", "task/" + name, cwd=self.repo), "")  # landed: removed after the install
             self.assertEqual(self.git("show", "main:" + name + ".txt", cwd=self.origin), name)
         for output in outputs:
             self.assertEqual(output.read_text().count("running the full suite"), 1)
@@ -463,7 +466,6 @@ class Release(unittest.TestCase):
         self.write(self.repo / "feature.txt", "survives the push race\n")
         self.git("add", "-A", cwd=self.repo)
         self.git("commit", "-qm", "branch change", cwd=self.repo)
-        source = self.git("rev-parse", "HEAD", cwd=self.repo)
         self.git("checkout", "-q", "main", cwd=self.repo)
         # another release lands between our fetch and our push: simulated by a pre-push hook that pushes once
         hook = self.home / "template" / "hooks" / "pre-push"  # the release clone is cloned from this template
@@ -483,7 +485,7 @@ class Release(unittest.TestCase):
         self.assertRegex(r.stdout, r"origin/main [0-9a-f]{40} is not the base [0-9a-f]{40}")
         self.assertEqual(self.git("log", "--format=%s", "-3", "main", cwd=self.origin).splitlines(),
                          ["0.1.2: mine", "branch change", "0.1.1: racer"])
-        self.assertEqual(self.git("rev-parse", "task/race", cwd=self.repo), source)
+        self.assertEqual(self.git("branch", "--list", "task/race", cwd=self.repo), "")  # landed: removed after the install
         self.assertEqual(self.git("show", "main:feature.txt", cwd=self.origin), "survives the push race")
         self.assertEqual(self.market_versions()["iorlas-task-loop"], "0.1.2")
 
@@ -499,6 +501,57 @@ class Release(unittest.TestCase):
         self.assertNotIn("push race", r.stdout)
         self.assertEqual(self.git("log", "--format=%s", "-2", "main", cwd=self.origin).splitlines(),
                          ["0.1.1: fix", "a branch commit"])
+
+    def branch_in_worktree(self, name="task/y", dirty=False):
+        """Branch `name` with one commit, checked out in its own worktree next to the main checkout; -> the worktree."""
+        wt = self.home / "wt" / name.split("/")[1]
+        self.git("fetch", "-q", "origin", cwd=self.repo)
+        self.git("worktree", "add", "-q", "-b", name, str(wt), "origin/main", cwd=self.repo)
+        (wt / "feature.txt").write_text("y\n")
+        self.git("add", "-A", cwd=wt)
+        self.git("commit", "-qm", "Add feature (tl-1)", cwd=wt)
+        if dirty:
+            (wt / "scratch.txt").write_text("not committed\n")
+        return wt
+
+    def branches(self):
+        return self.git("for-each-ref", "--format=%(refname:short)", "refs/heads/task/", cwd=self.repo).split()
+
+    def test_from_branch_removes_the_branch_and_its_worktree_after_the_push_and_the_install(self):
+        wt = self.branch_in_worktree()
+        r = self.release("feature", "--from-branch", "task/y")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertFalse(wt.exists())
+        self.assertEqual(self.branches(), [])
+        self.assertIn("removed branch task/y and its worktrees", r.stdout)
+        self.assertEqual(self.git("rev-parse", "--abbrev-ref", "HEAD", cwd=self.repo), "main")  # the main checkout was not touched
+
+    def test_a_failed_install_keeps_the_branch_and_its_worktree(self):
+        self.env["FAKE_CLAUDE_FAIL"] = "always"
+        wt = self.branch_in_worktree()
+        r = self.release("feature", "--from-branch", "task/y")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertTrue(wt.is_dir())
+        self.assertEqual(self.branches(), ["task/y"])
+
+    def test_a_red_suite_keeps_the_branch_and_its_worktree(self):
+        wt = self.branch_in_worktree()
+        self.write(wt / "tests" / "test_red.py", "import unittest\n\n\nclass R(unittest.TestCase):\n"
+                                                 "    def test_red(self):\n        self.fail('r')\n")
+        self.git("add", "-A", cwd=wt)
+        self.git("commit", "-qm", "red", cwd=wt)
+        self.assertNotEqual(self.release("feature", "--from-branch", "task/y").returncode, 0)
+        self.assertTrue(wt.is_dir())
+        self.assertEqual(self.branches(), ["task/y"])
+
+    def test_a_worktree_with_an_untracked_file_is_never_forced_so_it_and_the_branch_stay(self):
+        wt = self.branch_in_worktree(dirty=True)
+        r = self.release("feature", "--from-branch", "task/y")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)  # the release itself succeeded
+        self.assertTrue((wt / "scratch.txt").is_file())
+        self.assertEqual(self.branches(), ["task/y"])
+        self.assertIn("worktree", r.stdout)
+        self.assertIn("kept", r.stdout)
 
     def test_a_red_suite_prints_each_failing_test_and_saves_the_full_output_outside_the_repo(self):
         self.write(self.seed / "tests" / "test_red.py", "import unittest\n\n\nclass R(unittest.TestCase):\n"

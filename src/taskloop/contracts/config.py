@@ -92,6 +92,9 @@ class LoopConfig:
     help_wait: float = 20
     absent: float = 600  # ready beads, no live loop and no beat for this long: the loop is absent
     reload_fallback: float = 120  # a run-task that dies this soon after a re-exec is put back on the version it came from
+    keep_days: float = 14  # `tl prune`: run data older than this goes (open or parked beads exempt), and a merged build tree idle this long
+    min_free_gb: float = 5  # the loop claims nothing, and exits 0, while the config dir's disk has less free than this
+    build_dir: str = "~/Workspaces/wt"  # `tl prune` removes merged, clean worktrees under here (never a loop slot)
 
 
 @record
@@ -145,6 +148,7 @@ class EngineConfig:
     look_rounds: int = 2
     look_max_px: int = 1280
     brief_kb: float = 5
+    evidence_cap_mb: float = 200  # the new bytes of evidence one run keeps (twins are links); the rest is dropped and counted in the log
 
     @property
     def gate_text(self) -> str:

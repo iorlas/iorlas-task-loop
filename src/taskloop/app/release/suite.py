@@ -23,6 +23,7 @@ from taskloop.app.release.cache import SuiteCache
 from taskloop.app.release.shell import Abort, git, run, say
 
 LONG = 3 * 3600.0  # a hang guard for a whole gate run
+STALE_TMP_S = 2 * LONG  # a tl-suite-* dir this old belongs to a suite that was killed without unwinding (SIGKILL): no live one runs so long
 SHARD_WALL_S = 1200.0  # one shard's wall limit (the longest recorded shard is ~2.5 min at 3 workers: 8x); then its tree is stopped
 SHARD_BUDGET_MB = 2048  # per shard: sets the shard count (RAM / budget), caps its address space (healthy ~430 MB) and is the refusal bar
 MEMINFO = Path("/proc/meminfo")
@@ -166,6 +167,15 @@ def run_shards(shard: list[str], root: str, repo: Path, work: Path, todo: list[t
             signal.signal(signal.SIGTERM, old)
 
 
+def sweep_stale_tmp(now: float | None = None) -> None:
+    """The tmp dirs of suites that never reached their `finally` (SIGKILL, power) go; a live suite's is far younger than STALE_TMP_S."""
+    cut = (time.time() if now is None else now) - STALE_TMP_S
+    for d in Path(tempfile.gettempdir()).glob("tl-suite-*"):
+        with contextlib.suppress(OSError):
+            if d.is_dir() and d.stat().st_mtime < cut:
+                shutil.rmtree(d, ignore_errors=True)
+
+
 def host_suite(tool_root: Path, repo: Path, record: bool = False) -> None:
     """The suite as N parallel shards, each its own process with its own HOME, then the tests of tests/shard.py SERIAL in one process.
     Holds the host-wide suite lock: a second full suite waits and says who holds it. `tool_root` holds the tests/shard.py that plans and
@@ -173,6 +183,7 @@ def host_suite(tool_root: Path, repo: Path, record: bool = False) -> None:
     balances on) when the run is green."""
     holder = f"pid {os.getpid()} since {time.strftime('%H:%M:%S')}: suite of {repo}"
     with landlock.os_lock(suite_lock_path(), holder, lambda who: say(f"waiting for the suite lock (held by {who})")):
+        sweep_stale_tmp()
         _host_suite(tool_root, repo, record)
 
 

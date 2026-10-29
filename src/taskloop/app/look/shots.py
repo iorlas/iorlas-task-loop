@@ -3,11 +3,11 @@ the writer's evidence, and the copies that land in the repo."""
 import fnmatch
 import glob
 import os
-import shutil
 from pathlib import Path
 from typing import Any
 
 from taskloop.adapters import looks
+from taskloop.app.look.keep import Keeper, place
 from taskloop.domain.checks.matchers import glob_re
 from taskloop.domain.look.matchers import image_names, safe_name
 
@@ -25,6 +25,20 @@ def visual_hit(vp: Any, paths: Any) -> bool:
 class Pictures:
     def __init__(self, host: Any) -> None:
         self.e = host
+        self.kept: Keeper | None = None
+
+    def keeper(self) -> Keeper:
+        """This run's evidence budget: it writes the worktree's evidence dir and the run dir's; earlier runs are only looked at."""
+        e = self.e
+        if self.kept is None:
+            earlier = sorted(d / "evidence" for d in e.run_dir.parent.glob(glob.escape(e.bead) + "-*") if d != e.run_dir)
+            self.kept = Keeper([e.evidence_dir, e.run_dir / "evidence"], earlier, int(e.cfg.evidence_cap_mb) << 20)
+        return self.kept
+
+    def note_dropped(self) -> None:
+        k = self.keeper()
+        if k.dropped:
+            self.e.log.note(f"evidence over the {k.cap >> 20} MB cap: {k.dropped} file(s) not kept")
 
     def visual_cfg(self):
         e = self.e
@@ -161,7 +175,8 @@ class Pictures:
         while name in names:
             name, j = f"{j}-{f.name}", j + 1
         e.evidence_dir.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(f, e.evidence_dir / name)
+        if not self.keeper().keep(f, e.evidence_dir / name):
+            self.note_dropped()
         looks.downscale(f, base / name, int(e.cfg.look_max_px))
         return name
 
@@ -197,7 +212,7 @@ class Pictures:
         for s in shots:
             to = Path(e.wt) / dest / e.bead / s
             to.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(e.evidence_dir / s, to)
+            place(e.evidence_dir / s, to, e.evidence_dir / s)  # the same bytes as the evidence file: a link, not a second copy
             e.look_paths.append(f"{dest}/{e.bead}/{s}")
         self.persist_look()
 
@@ -216,7 +231,7 @@ class Pictures:
         for f in sorted(e.evidence_dir.rglob("*")):
             if f.is_file() and f.suffix.lower() in (".png", ".jpg", ".jpeg", ".gif", ".webp"):
                 dst = out / f.relative_to(e.evidence_dir)
-                dst.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(f, dst)
-                kept.append(dst)
+                if self.keeper().keep(f, dst):
+                    kept.append(dst)
+        self.note_dropped()
         return kept

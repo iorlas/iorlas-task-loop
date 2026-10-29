@@ -97,3 +97,5 @@ class LoopEnv:
     sleep: Callable[[float], None] = time.sleep
     pid: int = 0
     extra: dict[str, str] = field(default_factory=dict)
+    prune: Callable[[Callable[[str], None]], Any] = lambda say: None  # `tl prune` at the loop's start; it says what it did through `say`
+    free_bytes: Callable[[], int] = lambda: 1 << 62  # free space on the config dir's disk

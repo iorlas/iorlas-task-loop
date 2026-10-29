@@ -64,11 +64,11 @@ def register_repo(path: str | None) -> None:
             os.replace(tmp, f)
 
 
-def prune_events() -> None:
+def prune_events(days: float = RETAIN_DAYS) -> None:
     f = ConfigDir(config_dir()).events()
     if not f.exists() or f.stat().st_size < 2_000_000:
         return
-    cut = now() - RETAIN_DAYS * 86400
+    cut = now() - days * 86400
     keep: list[str] = []
     for ln in f.read_text(encoding="utf-8", errors="replace").splitlines():
         try:

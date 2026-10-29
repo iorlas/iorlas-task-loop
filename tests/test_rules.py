@@ -74,6 +74,7 @@ APP_EDGES = {
     "plan": frozenset({"checks", "asks"}),
     "look": frozenset({"checks", "asks"}),
     "land": frozenset({"checks", "slots", "asks"}),
+    "prune": frozenset({"run", "track", "release"}),  # `tl prune` reuses the run sweeps, the event trim and the release's worktree helpers
     "report": frozenset({"asks"}),  # `tl report` tells the owner's comments from the engine's (asks.intake.engine_written)
     "wire": EVERY,  # the composition root the launcher (tl.py) calls: it builds the world (stores, git, locks) from this machine
     "launch": EVERY,  # what tl's verbs start (the loop, the selftest, the dashboard): nothing under app/ imports it, so it may import run

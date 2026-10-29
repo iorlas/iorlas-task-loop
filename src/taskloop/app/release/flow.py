@@ -10,7 +10,7 @@ from pathlib import Path
 from taskloop.adapters import beadtools, gitrepo, landlock
 from taskloop.adapters.ident import config_dir
 from taskloop.adapters.versionfile import NoVersion, set_version
-from taskloop.app.release import clone, manifest, publish, suite
+from taskloop.app.release import clone, manifest, publish, suite, tidy
 from taskloop.app.release.push import push_main, release_lock_path
 from taskloop.app.release.shell import Abort, git, say
 from taskloop.contracts.ids import MARKETPLACE
@@ -71,6 +71,7 @@ def release(req: Request, repo: Path, market: Path, tool_root: Path, store: Bead
     require_clean_main(market, "marketplace")
     url = git(repo, "remote", "get-url", "origin")
     where = clone.ready(config_dir(), url)
+    tip = git(repo, "rev-parse", "--verify", "-q", "refs/heads/" + req.from_branch, check=False) if req.from_branch else ""
     if req.from_branch:
         clone.replay_branch(where, repo, req.from_branch)
     base = git(where, "rev-parse", "origin/main")
@@ -88,7 +89,20 @@ def release(req: Request, repo: Path, market: Path, tool_root: Path, store: Bead
     say(f"marketplace at {version}")
     publish.tag(market, f"{publish.NAME}-v{version}", "the marketplace")
     publish.install(where, version)
+    drop_landed_branch(req, repo, where, tip)
     return version
+
+
+def drop_landed_branch(req: Request, repo: Path, where: Path, tip: str) -> None:
+    """--from-branch, after the push and the install: B's worktrees and B go, only when B's tip (as the replay took it) is on origin/main
+    patch for patch. Whatever git keeps (changes, a lock) stays and is said; this never fails a release."""
+    if not (req.from_branch and tip and tidy.on_base(where, tip)):
+        return
+    kept = tidy.drop_branch(repo, req.from_branch)
+    for line in kept:
+        say(line)
+    if not kept:
+        say(f"removed branch {req.from_branch} and its worktrees")
 
 
 def record(result: dict[str, object], req: Request, repo: Path, store: Beads | None = None) -> None:

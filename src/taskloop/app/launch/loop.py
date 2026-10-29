@@ -25,6 +25,7 @@ from taskloop.app.loop.env import LoopEnv, ReloadNote, Storm
 from taskloop.app.loop.files import LoopFiles
 from taskloop.app.loop.loop import parse_handover
 from taskloop.app.loop.versions import Installs
+from taskloop.app.prune import verb as prune_verb
 from taskloop.app.release import catalog, pins, reexec, seams
 from taskloop.app.report import reflect
 from taskloop.app.run import console, entry
@@ -49,6 +50,24 @@ HERE = ident.PLUGIN_ROOT / "skills" / "task-loop"  # the install this code runs 
 def cfgdir() -> paths.ConfigDir:
     return paths.ConfigDir(ident.config_dir())
 
+
+
+def profile_of(repo: str) -> RepoProfile:
+    return wslots.cfg_source(repo)[0]
+
+
+def prune_repos(repo: str) -> list[str]:
+    """The repos `tl prune` looks after: this one and every registered one."""
+    known = profiles.registered(ident.config_dir() / "repos.json")
+    return [repo, *(r for r in known if Path(r).resolve() != Path(repo).resolve())]
+
+
+def bd_of(repo: str) -> Beads:
+    return beadtools.bd_store(repo)
+
+
+def free_bytes() -> int:
+    return shutil.disk_usage(ident.config_dir()).free
 
 
 def files_of(repo: str, now: Callable[[], float] = trail.now) -> LoopFiles:
@@ -177,7 +196,7 @@ def build(repo: str, store: Beads | None = None, session_actor: str = "", here: 
     cfg = cfgdir()
 
     def profile() -> RepoProfile:
-        return wslots.cfg_source(repo)[0]
+        return profile_of(repo)
 
     return LoopEnv(
         repo=repo,
@@ -222,6 +241,9 @@ def build(repo: str, store: Beads | None = None, session_actor: str = "", here: 
         say=console.say,
         now=now,
         pid=os.getpid(),
+        prune=lambda say: prune_verb.run(cfg, profile().loop, prune_repos(repo), lambda r: store if r == repo else bd_of(r),
+                                         now(), False, say),
+        free_bytes=free_bytes,
     )
 
 

@@ -78,6 +78,7 @@ skills/task-loop/_vendor/        the shelf packages src/ imports by name (dev/ve
 src/taskloop/                    the engine, the loop and the verbs, in layers: contracts, domain, adapters, stores, app, cli, hook
 src/taskloop/app/launch/         what tl starts: loop.py (tl loop / next / stop), selftest.py (tl selftest: one bead through the
                                  engine with a scripted lane, on this install's code), dash.py (tl dash), dash_ports.py
+src/taskloop/app/prune/          tl prune: run data, merged build worktrees and release branches past loop.keep_days (also run at loop start)
 src/taskloop/app/report/         tl report, lost and reflect digest: the data (cli/report.py prints it)
 src/taskloop_dash/               the dashboard package (stdlib; `python3 -m taskloop_dash`, started by `tl dash ensure`)
 src/taskloop_dash/static/        dashboard pages: index.html is the task view (no build, no dependencies)

@@ -185,6 +185,9 @@ def loop_parsers(sp):
     p.add_argument("--wait-drained", action="store_true", help="no ready bead: poll every 5 min instead of ending")
     p.add_argument("--pin", action="store_true", help="stay on this install (default: between beads, move to the newest installed one)")
     p.add_argument("--last", type=int, default=10, help="status: how many finished beads to show")
+    p = sp.add_parser("prune", help="remove old run data, merged build worktrees and release branches (--dry-run: only say)")
+    p.add_argument("--repo")
+    p.add_argument("--dry-run", action="store_true")
     p = sp.add_parser("stop", help="stop the repo's loop after its current bead (--now: SIGTERM the bead's run)")
     p.add_argument("--repo")
     p.add_argument("--now", action="store_true")
@@ -253,6 +256,10 @@ def v_next(a: Any, c: Ctx) -> int:
     return importlib.import_module("taskloop.cli.loop_cmd").cmd_next(a, c.here, c.now)
 
 
+def v_prune(a: Any, c: Ctx) -> int:
+    return importlib.import_module("taskloop.cli.prune").cmd_prune(a, c.now)
+
+
 def v_stop(a: Any, c: Ctx) -> int:
     return importlib.import_module("taskloop.cli.loop_cmd").cmd_stop(a, c.here, c.now)
 
@@ -299,6 +306,7 @@ VERBS: Final[dict[str, Handler]] = {
     "selftest": lazy("taskloop.app.launch.selftest", "cmd_selftest"),
     "cutover": lazy("taskloop.cli.loop_cmd", "cmd_cutover"),
     "next": v_next, "loop": v_loop, "stop": v_stop,
+    "prune": v_prune,
     "report": lazy("taskloop.cli.report", "cmd_report"),
     "lost": lazy("taskloop.cli.report", "cmd_lost"),
 }

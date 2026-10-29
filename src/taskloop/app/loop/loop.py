@@ -84,6 +84,7 @@ class Loop(Core):
             self.env.event("reload", "", who="loop", old="", new=self.env.version, code_dir=self.env.code_dir,
                            why="handover state dropped: " + self.dropped)
         try:
+            self.prune()
             return self.run()
         except Exception as e:
             self.fall_back(e)
@@ -93,6 +94,13 @@ class Loop(Core):
             with self.files.lock():
                 self.files.remove(self.env.pid)
                 self.files.clean_command()
+
+    def prune(self) -> None:
+        """Old run data, merged build trees and release branches go at the start (tl prune); a failure of it never stops the loop."""
+        try:
+            self.env.prune(self.say)
+        except Exception as e:
+            self.say(f"warn: prune failed: {type(e).__name__}: {e}"[:300])
 
     def fall_back(self, err: Exception) -> None:
         """A loop that breaks soon after a move goes back to the install it came from, once, and says so in red."""
@@ -142,6 +150,12 @@ class Loop(Core):
         if a.max_beads and c.ran >= a.max_beads:
             self.say(f"{c.ran} bead(s) run (--max-beads)")
             self.left("max_beads")
+            return 0
+        free, need = self.env.free_bytes(), int(self.tune().min_free_gb * (1 << 30))
+        if free < need:  # a full disk fails every run: claim nothing, end cleanly
+            why = f"only {free / (1 << 30):.1f} GB free on the config dir's disk, below loop.min_free_gb {self.tune().min_free_gb:g}"
+            self.say(f"stopped: {why}; no bead is claimed (free space, or tl prune, then start the loop again)")
+            self.left("low_disk", why)
             return 0
         storm = self.env.storm()  # another run (any loop) tripped the storm detector: nothing is claimed until it expires
         if storm:
