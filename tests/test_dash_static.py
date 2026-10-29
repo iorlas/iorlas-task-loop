@@ -106,7 +106,7 @@ class DevServer(unittest.TestCase):
     def setUpClass(cls):
         mod = load_dev_server()
         cls.srv = ThreadingHTTPServer(("127.0.0.1", 0), mod.make_handler("ok"))
-        threading.Thread(target=cls.srv.serve_forever, daemon=True).start()
+        threading.Thread(target=cls.srv.serve_forever, args=(0.01,), daemon=True).start()
         cls.base = f"http://127.0.0.1:{cls.srv.server_address[1]}"
 
     @classmethod

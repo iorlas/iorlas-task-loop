@@ -143,7 +143,7 @@ class Wire(Api):
         static = Path(self.tmp.name)
         (static / "index.html").write_text("<html></html>")
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(self.dash, 0, ["127.0.0.1"], static, lambda: "t", "s"))
-        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+        threading.Thread(target=self.server.serve_forever, args=(0.01,), daemon=True).start()  # shutdown waits one poll
         self.base = f"http://127.0.0.1:{self.server.server_address[1]}"
 
     def tearDown(self):
