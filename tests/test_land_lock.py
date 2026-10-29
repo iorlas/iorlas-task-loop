@@ -1,80 +1,165 @@
-"""The land lock around a command: exit code passes through, a second caller waits, the lock is released after a failure."""
+"""The land lock around a command: exit code passes through, a second caller waits, the lock is released after a failure.
+
+flock belongs to the open file description, so two descriptors in one process conflict like two processes: the waits run on threads. The
+wrapped command is a fake (`procs.popen_held`); the one test that needs a real process is the kernel dropping the lock of a
+holder that dies."""
+import contextlib
+import fcntl
 import os
+import signal
 import subprocess
-import sys
 import tempfile
+import threading
 import unittest
 from pathlib import Path
+from unittest import mock
 
-ROOT = Path(__file__).resolve().parents[1]
-TL = ROOT / "skills" / "task-loop" / "tl.py"
-PY = sys.executable
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from support.narrow import must  # noqa: E402
-from support.procsim import real_proc  # noqa: E402
-from support.waits import until  # noqa: E402
+from support.procsim import real_proc
+from support.tlmain import tl_main
+from support.waits import until
+
+from taskloop.adapters import landlock, procs
 
 NO_FCNTL = unittest.skipIf(os.name == "nt", "the lock is fcntl; tl has none on Windows (documented no-op)")
 
 
-@real_proc("the land-lock command line is a real process: a flock held across processes, the wrapped command's exit")
+class Held:
+    def replay(self) -> None:
+        pass
+
+
+class Child:
+    """The wrapped command as run_locked sees it: `wait` runs `body` and returns its exit code."""
+
+    def __init__(self, body) -> None:
+        self.body, self.rc = body, None
+
+    def poll(self):
+        return self.rc
+
+    def wait(self):
+        self.rc = self.body()
+        return self.rc
+
+
+@NO_FCNTL
 class LandLockTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.repo = self.tmp.name
-        self.env = dict(os.environ, XDG_CONFIG_HOME=str(Path(self.tmp.name) / "cfg"))
+        self.env = {"XDG_CONFIG_HOME": str(Path(self.tmp.name) / "cfg")}
         subprocess.run(["git", "init", "-q", self.repo], check=True)
+        self.cmds = []
+        patched = mock.patch.object(procs, "popen_held", self.start)
+        patched.start()
+        self.addCleanup(patched.stop)
+        self.body = lambda: 0
+
+    def start(self, cmd):
+        self.cmds.append(cmd)
+        return Child(self.body), Held()
 
     def run_ll(self, *args):
-        return subprocess.run([PY, str(TL), "land-lock", "--repo", self.repo, *args], env=self.env,
-                              capture_output=True, text=True, timeout=30, check=False)
+        return tl_main("land-lock", "--repo", self.repo, *args, cwd=self.repo, env=self.env)
 
-    def holder(self, secs, ready):
-        self.release = Path(ready).with_name("release")  # the test touches it when the holder has served its purpose
-        code = (f"import time,pathlib;pathlib.Path({str(ready)!r}).write_text('x');end=time.time()+{secs}\n"
-                f"while time.time()<end and not pathlib.Path({str(self.release)!r}).exists(): time.sleep(0.01)")
-        p = subprocess.Popen([PY, str(TL), "land-lock", "--repo", self.repo, "--", PY, "-c", code], env=self.env,
-                             stdout=subprocess.PIPE, text=True)
-        self.addCleanup(p.wait)
-        self.assertTrue(until(Path(ready).exists), "the holder never took the lock")
-        return p
+    @contextlib.contextmanager
+    def holder(self):
+        """Another taker of the same lock (its own descriptor) until the block ends."""
+        got, release = threading.Event(), threading.Event()
 
-    def test_exit_code_passes_through(self):
-        r = self.run_ll("--", PY, "-c", "import sys; print('hi'); sys.exit(3)")
+        def hold():
+            with mock.patch.dict(os.environ, self.env), landlock.os_lock(self.path(), "the holder"):
+                got.set()
+                release.wait(30)
+        t = threading.Thread(target=hold, daemon=True)
+        t.start()
+        self.assertTrue(got.wait(10), "the holder never took the lock")
+        try:
+            yield release
+        finally:
+            release.set()
+            t.join(10)
+
+    def path(self):
+        with mock.patch.dict(os.environ, self.env):
+            return landlock.land_lock_path(self.repo)
+
+    def held_now(self):
+        """True when another descriptor cannot take the lock right now."""
+        with open(self.path(), "a+") as f:
+            try:
+                fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except OSError:
+                return True
+            return False
+
+    def test_exit_code_passes_through_and_the_lock_is_held_while_it_runs(self):
+        seen = []
+
+        def body():
+            seen.append(self.held_now())
+            print("hi")
+            return 3
+        self.body = body
+        r = self.run_ll("--", "wrapped")
         self.assertEqual(r.returncode, 3)
         self.assertIn("hi", r.stdout)
-        self.assertEqual(self.run_ll("--", PY, "-c", "pass").returncode, 0)
+        self.assertEqual((seen, self.cmds), ([True], [["wrapped"]]))
+        self.body = lambda: 0
+        self.assertEqual(self.run_ll("--", "wrapped").returncode, 0)
+        self.assertFalse(self.held_now())
 
-    @NO_FCNTL
     def test_second_waits_while_first_holds(self):
-        p = self.holder(30, Path(self.tmp.name) / "ready")
-        w = subprocess.Popen([PY, str(TL), "land-lock", "--repo", self.repo, "--", PY, "-c", "print('ran')"], env=self.env,
-                             stdout=subprocess.PIPE, text=True)
-        stream = must(w.stdout)
-        self.addCleanup(w.wait)
-        self.addCleanup(stream.close)
-        self.assertIn("waiting for the land lock (held by", stream.readline())  # it waits until the holder lets go
-        self.release.touch()
-        out, _ = w.communicate(timeout=30)
-        self.assertEqual((w.returncode, out.strip()), (0, "ran"))
-        p.wait()
+        told, ran = [], []
+
+        def second():
+            with mock.patch.dict(os.environ, self.env), landlock.os_lock(self.path(), "second", told.append):
+                ran.append(1)
+        with self.holder() as release:
+            t = threading.Thread(target=second, daemon=True)
+            t.start()
+            self.assertTrue(until(lambda: told), "the second taker was never told it waits")
+            self.assertEqual((told, ran), (["the holder"], []))  # it waits until the holder lets go
+            release.set()
+            t.join(10)
+        self.assertEqual(ran, [1])
 
     def test_released_after_failing_command(self):
-        self.assertEqual(self.run_ll("--", PY, "-c", "raise SystemExit(7)").returncode, 7)
-        r = self.run_ll("--", PY, "-c", "pass")
+        self.body = lambda: 7
+        self.assertEqual(self.run_ll("--", "wrapped").returncode, 7)
+        self.body = lambda: 0
+        r = self.run_ll("--", "wrapped")
         self.assertEqual(r.returncode, 0)
         self.assertNotIn("waiting", r.stdout)  # a lock still held would print "waiting"; no timing needed
 
-    @NO_FCNTL
     def test_wait_min_times_out_with_75(self):
-        p = self.holder(30, Path(self.tmp.name) / "ready")
-        r = self.run_ll("--wait-min", "0.002", "--", PY, "-c", "print('never')")
+        with self.holder():
+            r = self.run_ll("--wait-min", "0.002", "--", "wrapped")
         self.assertEqual(r.returncode, 75)
-        self.assertNotIn("never", r.stdout)
+        self.assertEqual(self.cmds, [])  # the command never ran
         self.assertIn("land lock", r.stderr)
-        self.release.touch()
-        p.wait()
+
+    @real_proc("the kernel drops the flock of a holder that is SIGKILLed (a forked child), so the next taker is not stuck")
+    def test_a_holder_that_dies_frees_the_lock(self):
+        ready = Path(self.tmp.name, "ready")
+        pid = os.fork()
+        if pid == 0:  # the holder
+            try:
+                with mock.patch.dict(os.environ, self.env), landlock.os_lock(self.path(), "doomed"):
+                    ready.write_text("x")
+                    signal.pause()
+            finally:
+                os._exit(0)
+        try:
+            self.assertTrue(until(ready.exists), "the holder never took the lock")
+            self.assertTrue(self.held_now())
+            os.kill(pid, signal.SIGKILL)
+            os.waitpid(pid, 0)
+        finally:
+            with contextlib.suppress(ProcessLookupError):
+                os.kill(pid, signal.SIGKILL)
+        self.assertEqual(self.run_ll("--wait-min", "0.05", "--", "wrapped").returncode, 0)
 
 
 if __name__ == "__main__":
