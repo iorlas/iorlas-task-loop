@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402, F401
 from support import tlbd  # noqa: E402
-from support.procsim import real_proc  # noqa: E402
+from support.tlmain import tl_main  # noqa: E402
 
 from taskloop.adapters import gitrepo  # noqa: E402
 from taskloop.app.wire import doctor  # noqa: E402
@@ -72,10 +72,10 @@ class DoctorSource(unittest.TestCase):
         return commit
 
     def doctor(self, cwd=None, cli=False):
-        """The doctor's report from `cwd`: in this process (a child python costs a second), or as `tl.py doctor` when `cli`."""
+        """The doctor's report from `cwd`: through doctor.run, or through `tl doctor` (tl.main) when `cli`."""
         if cli:
-            result = subprocess.run([sys.executable, str(ROOT / "skills" / "task-loop" / "tl.py"), "doctor"],
-                                    cwd=cwd or self.wt, env=self.env, capture_output=True, text=True, check=True)
+            result = tl_main("doctor", cwd=cwd or self.wt, env=self.env)
+            self.assertEqual(result.returncode, 0)
             self.assertEqual(result.stderr, "")
             return result.stdout
         out, here = io.StringIO(), os.getcwd()
@@ -129,10 +129,9 @@ class DoctorSource(unittest.TestCase):
         self.assertIn("WARN extensions.worktreeConfig", out)
         self.assertNotIn("ok:", out)
 
-    @real_proc("the doctor command line end to end: a real tl.py process reports the source commit")
     def test_reports_exact_commit_when_ok(self):
         commit = self.advance_base(self.config("good", "old.txt"))
-        out = self.doctor(cli=True)  # the one run through tl.py itself
+        out = self.doctor(cli=True)  # the one run through tl.main
         self.assertIn("base origin/main at commit " + commit, out)
         self.assertIn("ok: no setup problems found in " + shown(self.wt), out)
         self.assertNotIn("WARN", out)
