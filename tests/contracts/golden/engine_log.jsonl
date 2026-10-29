@@ -24,4 +24,5 @@
 {"v": 2, "kind": "checks", "t": 1793050200.5, "node_id": "n5", "run": {"round": 1, "tree": "deadbeef", "results": [{"id": "unittest", "cmd": "python3 -m unittest", "group": "tests", "exit": 1, "status": "failed", "tries": 2, "tail": "", "secs": 43.4, "log": "checks/01.log", "wall_hit": false, "wall_min": 0.0, "cached": false, "reused": false, "why": "", "note": "", "base_red": true, "producer": "", "sig": "boom"}, {"id": "lint", "cmd": "ruff check", "group": "static", "exit": 0, "status": "passed", "tries": 1, "tail": "", "secs": 0.0, "log": "", "wall_hit": false, "wall_min": 0.0, "cached": true, "reused": false, "why": "", "note": "inputs unchanged", "base_red": false, "producer": "", "sig": ""}], "hits": 1, "misses": 1}}
 {"v": 2, "kind": "warn", "t": 1793050200.5, "text": "careful"}
 {"v": 2, "kind": "note", "t": 1793050200.5, "text": "fyi"}
+{"v": 2, "kind": "beat", "t": 1793050200.5}
 {"v": 2, "kind": "close", "t": 1793050200.5, "outcome": "landed", "why_code": null, "sha": "abc", "why": "landed abc"}

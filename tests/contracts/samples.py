@@ -205,6 +205,7 @@ LOG = {
     "checks": _log(log.Checks, node_id="n5", run=CHECK_RUN),
     "warn": _log(log.Warn, text="careful"),
     "note": _log(log.Note, text="fyi"),
+    "beat": _log(log.Beat),
     "close": _log(log.Close, outcome=Outcome.LANDED, why_code=None, sha="abc", why="landed abc"),
 }
 EVENTS = {
