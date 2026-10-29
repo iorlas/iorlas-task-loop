@@ -30,18 +30,6 @@ def fill_slot_env(values: Any, **names: str) -> dict[str, str]:
 
 
 @record
-class GateOnly:
-    """A command no plan check may run: only the gate at land."""
-
-    argv: list[str]
-    why: str = ""
-
-    @property
-    def cmd(self) -> str:
-        return text_of(self.argv)
-
-
-@record
 class VisualConfig:
     """Globs saying which changes are visual (a look judge reads the pictures)."""
 
@@ -62,6 +50,7 @@ class CheckSpec:
     id: str
     argv: list[str]
     group: Literal["static", "tests", "acceptance"] = "tests"
+    run: Literal["stage", "gate", "both"] = "stage"  # stage: the round after each write; gate: land's gate steps (and `tl check`); both
     when: list[str] = field(default_factory=list)
     retry: int = 0
     wall_min: float | None = None  # this check's wall-time limit; absent: engine.check_wall_min
@@ -74,6 +63,7 @@ class CheckSpec:
     writer_check_max_s: float | None = None  # this check's own cut for "too slow for the writer" (else engine.writer_check_max_s)
     tail_log: str = ""  # a log of the tree whose first compile errors join this check's red output when it shows none
     where: Literal["host", "container"] = field(default="host", metadata={"name": "in"})  # container: needs engine.container
+    why: str = ""  # run gate: why no plan check may run this command (it is told to the planner)
     fix: list[str] = field(default_factory=list)  # argv run in the worktree before the checks (a formatter); what it changes is checked
 
     @property
@@ -125,7 +115,6 @@ class LoopConfig:
 class EngineConfig:
     """The `engine` block; every key has the default the engine uses today."""
 
-    gate: list[str] = field(default_factory=list)  # argv; empty: no gate
     land: list[str] = field(default_factory=lambda: ["git", "push", "origin", "HEAD:main"])
     land_optimistic_tries: int = 2  # gate re-runs outside the land lock when main moved under it, then inside (0: inside)
     base: str = "origin/main"
@@ -135,7 +124,6 @@ class EngineConfig:
     skip_labels: list[str] = field(default_factory=list)
     epic_order: list[str] = field(default_factory=list)
     epic_only: bool = False
-    gate_only: list[GateOnly] = field(default_factory=list)
     reflect: bool = True
     planner_notes: str = ""
     shot_table: str = ""
@@ -178,9 +166,19 @@ class EngineConfig:
     evidence_cap_mb: float = 200  # the new bytes of evidence one run keeps (twins are links); the rest is dropped and counted in the log
 
     @property
+    def gate_checks(self) -> list[CheckSpec]:
+        """The gate's steps, in the registry's order: the checks that say run gate or both. None: no gate."""
+        return [k for k in self.checks if k.run != "stage"]
+
+    @property
+    def stage_checks(self) -> list[CheckSpec]:
+        """The checks of a stage's round: run stage or both."""
+        return [k for k in self.checks if k.run != "gate"]
+
+    @property
     def gate_text(self) -> str:
-        """The gate as one line of text ('' when there is none)."""
-        return text_of(self.gate) if self.gate else ""
+        """The gate as one line of text ('' when there is none): its steps' commands."""
+        return "; ".join(k.cmd for k in self.gate_checks)
 
 
 @record
@@ -198,10 +196,8 @@ def _string_commands(data: Any) -> list[str]:
     eng_name, slots_name = (f.name for f in fields(RepoProfile)[:2])  # the first two fields: engine, slots
     eng, slots = root.get(eng_name), root.get(slots_name)
     eng, slots = (eng if isinstance(eng, dict) else {}), (slots if isinstance(slots, dict) else {})
-    found = [f"{eng_name}.{k}" for k in ("gate", "land") if isinstance(eng.get(k), str)]
+    found = [f"{eng_name}.land"] if isinstance(eng.get("land"), str) else []
     found += [f"{eng_name}.checks[{n}].cmd" for n, c in enumerate(eng.get("checks") or []) if isinstance(c, dict) and "cmd" in c]
-    found += [f"{eng_name}.gate_only[{n}]" for n, c in enumerate(eng.get("gate_only") or [])
-              if isinstance(c, str) or (isinstance(c, dict) and "cmd" in c)]
     if isinstance(slots.get("setup"), str):
         found.append(f"{slots_name}.setup")
     return found
@@ -210,6 +206,10 @@ def _string_commands(data: Any) -> list[str]:
 ENG = next(f.name for f in fields(RepoProfile))  # the profile's first block, engine
 RETIRED_ENGINE = ("check_idle_min",)  # keys that once did something and now do nothing: loaded without them, not an error
 RETIRED_CHECK = ("idle_min",)  # the same, on one entry of engine.checks
+GONE_ENGINE = {  # key -> what to do instead: refused at load (the old spelling is not read)
+    "gate": "engine.gate is gone: move the gate's steps into engine.checks, each with \"run\": \"gate\" (or \"both\") and its argv",
+    "gate_only": "engine.gate_only is gone: a command only the gate runs is a check in engine.checks with \"run\": \"gate\"",
+}
 RENAMED_ENGINE: dict[str, str] = {"check_timeout_min": "check_wall_min"}  # old key -> new key: the old one fails, naming the new
 RENAMED_CHECK: dict[str, str] = {"timeout_min": "wall_min"}  # the same, on one entry of engine.checks
 
@@ -266,6 +266,10 @@ def load(data: Any, say_to: TextIO | None = None) -> RepoProfile:
     moved = renamed_keys(data)
     if moved:
         raise ConfigError("the repo profile: " + "; ".join(moved))
+    eng_data = data.get(ENG) if isinstance(data, dict) else None
+    gone = [why for k, why in GONE_ENGINE.items() if isinstance(eng_data, dict) and k in eng_data]
+    if gone:
+        raise ConfigError("the repo profile: " + "; ".join(gone))
     old = _string_commands(data)
     if old:
         raise ConfigError(f"the repo profile: {', '.join(old)} is a string command: {FORM}")
@@ -280,9 +284,9 @@ def load(data: Any, say_to: TextIO | None = None) -> RepoProfile:
     if boxed and not box:
         raise ConfigError(f"the repo profile: check {boxed[0]} says \"in\": \"container\" but engine.container is not set")
     fill_slot_env(profile.engine.slot_env, **dict.fromkeys(SLOT_PLACEHOLDERS, ""))
-    cmds = [k.argv for k in profile.engine.checks] + [g.argv for g in profile.engine.gate_only] + [profile.engine.land]
+    cmds = [k.argv for k in profile.engine.checks] + [profile.engine.land]
     cmds += [k.fix for k in profile.engine.checks if k.fix]
-    cmds += [c for c in (profile.engine.gate, profile.slots.setup) if c]
+    cmds += [c for c in (profile.slots.setup,) if c]
     bad = [shape_problem(c) for c in cmds]
     if any(bad):
         raise ConfigError("the repo profile: " + next(b for b in bad if b))

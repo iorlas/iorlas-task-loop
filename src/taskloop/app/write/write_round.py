@@ -46,9 +46,9 @@ class WriteRound:
         """(the whole prompt, the delta a resumed writer gets instead or None)."""
         e, st = self.e, s.st
         stage_checks = e.briefing.stage_checks_text(st["checks"], skip=s.failed_cmds)
-        where_text = e.briefing.where("write", [c.cmd for c in e.cfg.checks] + st["checks"], s.failed_cmds, listed=st["checks"])
+        where_text = e.briefing.where("write", [c.cmd for c in e.cfg.stage_checks] + st["checks"], s.failed_cmds, listed=st["checks"])
         tail = CASES_TAIL + ("" if s.last else LATER_CASES) + UNCHECKED_TEXT + e.judge.look_write(st)
-        gate = f" (`{e.cfg.gate_text}`)" if e.cfg.gate else ""
+        gate = f" (`{e.cfg.gate_text}`)" if e.cfg.gate_checks else ""
         prompt = write_prompt(e.cases.rules_text(), brief=e.briefs.text(), plan=e.cases.plan_text(s.i), n=s.i + 1, goal=st["goal"],
                               files=", ".join(st["files"]), anchors=anchors_text(st), checks=stage_checks, feedback=s.feedback,
                               evidence=e.evidence_dir, where=where_text, gate=gate,

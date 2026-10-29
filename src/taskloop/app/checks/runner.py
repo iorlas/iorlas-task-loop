@@ -11,10 +11,10 @@ from taskloop.app.checks.cache import CheckCache, InputKeys
 from taskloop.app.checks.executor import CheckExecutor, Round
 from taskloop.app.checks.fixer import Fixer
 from taskloop.app.checks.host import CheckHost, CheckStuck
-from taskloop.contracts.checks import CheckResult, CheckRun, Durations
+from taskloop.contracts.checks import Check, CheckResult, CheckRun, Durations
 from taskloop.domain.checks.durations import merged, seconds
 from taskloop.domain.checks.plan import CheckPlan
-from taskloop.domain.checks.specs import items_of, repo_check
+from taskloop.domain.checks.specs import due, gate_items, items_of
 from taskloop.domain.checks.writer_split import WriterSplit
 
 
@@ -55,6 +55,41 @@ class Checker:
         self._stuck(run)
         return run
 
+    def run_items(self, items: Sequence[Check], everything: bool = False, learn: bool = True) -> CheckRun:
+        """The registry's checks (the gate's steps, or the ones `tl check` names) as one block, through the same planner, executor
+        and cache as a stage's round: groups in order, a red group skips the groups after it, a step green at its inputs is cached.
+        No fix commands and no base run (the tree is the rebased one: a red is red). everything: `when` is ignored. learn: the
+        durations of what passed are remembered. The rows are the check log's (start and end per step); no step book, no streak."""
+        host = self.host
+        self.round += 1
+        env = host.checkout.git_env()
+        history_doc = host.stores.durations.of(check_files.repo_key(str(host.wt), env))
+        history = history_doc.read() or Durations()
+        plan = CheckPlan.build(items, history)
+        tree, base = host.checkout.tree_hash(), host.git("rev-parse", host.cfg.base)
+        cache = CheckCache(host.stores.check_cache.of(host.bead), f"{tree} {base}")
+        keys = InputKeys(host.wt, tree, base, env)
+        attempts = Attempts(host, BaseCheck(host, cache, "", host.checkout.git_env), self.sleep)  # no sha: no base run
+        st = CheckExecutor(host, cache, keys, attempts, host.checklog, history, everything=everything).run_group(plan, self.round)
+        if learn and st.timings:
+            history_doc.write(merged(history, st.timings))
+        cache.save(base)
+        host.detail(evidence.round_lines(st.results))
+        hits = sum(1 for c in st.results if c.cached)
+        return CheckRun(round=st.n, tree=tree, results=st.results, hits=hits, misses=len(st.results) - hits)
+
+    def gate_green(self) -> bool:
+        """Every gate step is green on this tree and base already (by its inputs, else by tree and base), or not due (`when`)."""
+        host = self.host
+        items, tree = gate_items(host.cfg), host.checkout.tree_hash()
+        if not tree or not items:
+            return False
+        base = host.git("rev-parse", host.cfg.base)
+        cache = CheckCache(host.stores.check_cache.of(host.bead), f"{tree} {base}")
+        green = cache.green_ids(items, InputKeys(host.wt, tree, base, host.checkout.git_env()))
+        changed = host.checkout.changed_paths() if any(c.when for c in items) else []
+        return all(c.id in green or not due(c, changed) for c in items)
+
     def _finish(self, st: Round, tree: str, history: Durations, history_doc: Any) -> CheckRun:
         host = self.host
         host.detail(evidence.round_lines(st.results))
@@ -87,10 +122,3 @@ class Checker:
     def reds(self) -> list[CheckResult]:
         """The checks the last round found red."""
         return self.latest.failed if self.latest else []
-
-    def green_ids(self, tree: str) -> list[str]:
-        """Ids of the repo checks with a green result on this tree: by their inputs hash, else by tree and base."""
-        host = self.host
-        base = host.git("rev-parse", host.cfg.base)
-        cache = CheckCache(host.stores.check_cache.of(host.bead), f"{tree} {base}")
-        return cache.green_ids([repo_check(k, host.cfg) for k in host.cfg.checks], InputKeys(host.wt, tree, base, host.checkout.git_env()))

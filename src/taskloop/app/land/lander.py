@@ -126,7 +126,7 @@ class Lander:
         """The gate runs before the lock: there is a gate, tries are allowed, and no push may have gone through unseen."""
         e = self.e
         tries = int(e.cfg.land_optimistic_tries)
-        return bool(e.cfg.gate) and tries > 0 and st.moved <= tries and not st.net_failed
+        return bool(e.cfg.gate_checks) and tries > 0 and st.moved <= tries and not st.net_failed
 
     def outside(self, st: Land) -> Problem | None:
         """Without the lock: fetch, rebase, gate. -> the problem for a fix round, or None (the gate is cached for tree + base)."""
@@ -138,7 +138,7 @@ class Lander:
         problem = self.rebase(rc, tail)
         where = ""
         if problem is None:
-            where = "cached" if self.gate.green(e.git("rev-parse", "HEAD^{tree}")) else "outside"
+            where = "cached" if self.gate.green() else "outside"
             problem = self.gate.run()
         self.emit(st, before, head, problem, where)
         st.open_step = problem is None
@@ -153,9 +153,9 @@ class Lander:
         """Where the gate runs in the lock: "" no gate, "cached" it passed on this tree and base, "stale" main moved under the outside gate
         (let the lock go, gate outside again), "inside" the tries are used up: gate here, as a busy main must not starve a bead."""
         e = self.e
-        if not e.cfg.gate:
+        if not e.cfg.gate_checks:
             return ""
-        if self.gate.green(e.git("rev-parse", "HEAD^{tree}")):
+        if self.gate.green():
             return "cached"
         if st.moved < int(e.cfg.land_optimistic_tries):
             st.moved += 1
@@ -281,7 +281,7 @@ class Lander:
         if e.fixes < int(e.cfg.max_fix_rounds):
             cause = {"gate": "gate_red", "verify": "checks_red", "conflict": "conflict"}[problem.kind]
             first = problem.text.strip().splitlines() or [""]
-            red = f"gate red on the rebased tree: {first[-1][:200]}"
+            red = f"gate red on the rebased tree: {(problem.named or first[-1])[:200]}"
             e.steps.move("fix", cause, red if problem.kind == "gate" else problem.text.splitlines()[0])
         fixed = e.fixer.fix(problem.kind, problem.text)
         stages = len((e.plan_data or {}).get("stages") or [])

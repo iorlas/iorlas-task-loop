@@ -69,9 +69,8 @@ class Fixer:
             return TEXT[kind].format(tail)
         if kind == "conflict":
             return TEXT[kind].format("", check_evidence.compact([CheckResult.failed_run("rebase", tail)]))
-        gate = f" (`{e.cfg.gate_text}`)" if e.cfg.gate else ""
-        red = CheckResult.failed_run(e.cfg.gate_text or "rebase", tail, log=str(e.gate_log or ""))
-        return TEXT[kind].format(gate, check_evidence.failure_brief([red], e.run_dir))
+        gate = f" (`{e.cfg.gate_text}`)" if e.cfg.gate_checks else ""
+        return TEXT[kind].format(gate, tail)  # the gate's text is already the red steps' brief (Gate.run)
 
     def continue_rebase(self, done: str, tail: str, resume: bool) -> str:
         e = self.e

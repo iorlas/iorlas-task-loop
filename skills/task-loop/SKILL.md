@@ -23,15 +23,15 @@ records what the loop does for the dashboard, and runs slots. Python 3.12+, stan
 
 `docs/agents/task-loop.md` in the repo (or the file the repo's AGENTS.md names) is for you and for people; the engine
 reads only `.task-loop.json` at the repo root, as committed on the base branch (`engine.base`): a rule counts once
-pushed, after the next fetch; the working tree only when there is no remote. Put everything the engine must act on there: `engine.gate`,
-`engine.checks` (repo checks with their group and the paths that trigger them), `engine.worker_rules` (the file the
+pushed, after the next fetch; the working tree only when there is no remote. Put everything the engine must act on there:
+`engine.checks` (the registry of the repo's checks: their group, `run`, and the paths that trigger them), `engine.worker_rules` (the file the
 writer reads first). The profile gives:
 
 | key | what |
 |---|---|
 | setup | the argv list a fresh worktree runs once (no shell) |
 | pick | the `bd ready` filter: labels, lanes, what to exclude |
-| gate | the command that must be green, and whether the pre-push hook runs it |
+| gate | the checks that say `"run": "gate"` (or `"both"`) in `engine.checks`: the steps that must be green at land |
 | land | the branch to land on and any rule about how (default: `git push origin HEAD:main`) |
 | workers | how workers run here (what a sandbox can and cannot run, build flags): `engine.worker_rules` points at it |
 | checks | the repo's own checks beyond each stage's (Unity, screenshots, log greps), as `engine.checks` |
@@ -44,13 +44,14 @@ writer reads first). The profile gives:
 {"slots": {"count": 3, "dir": ".slots", "base": "origin/main",
            "setup": ["just", "agent-setup"], "setup_inputs": ["mise.toml", "client/Packages/manifest.json"],
            "keep": [".task/"]},
- "engine": {"gate": ["just", "check"], "worker_rules": "docs/agents/codex.md",
-            "checks": [{"id": "fmt", "argv": ["just", "fmt-check"], "group": "static"},
+ "engine": {"worker_rules": "docs/agents/codex.md",
+            "checks": [{"id": "fmt", "argv": ["just", "fmt-check"], "group": "static", "run": "both"},
+                       {"id": "dotnet", "argv": ["just", "check-dotnet"], "group": "tests", "run": "gate", "inputs": ["src/**"]},
                        {"id": "unity-tests", "argv": ["just", "unity-tests"], "group": "tests", "when": ["client/**", "content/**"],
                         "retry": 1}]}}
 ```
 
-Every command in the profile (`gate`, `land`, `gate_only[].argv`, `checks[].argv`, `slots.setup`) is an **argv list**: the program and
+Every command in the profile (`land`, `checks[].argv`, `slots.setup`) is an **argv list**: the program and
 its arguments as separate strings, exec'd as given, no shell. A string where a list belongs, or the old `cmd` key, is refused
 with a one-line error naming the allowed form: a pipeline, redirect or loop goes into a repo recipe (a just target or a script)
 that the argv calls, `["just", "name"]`.
@@ -115,8 +116,8 @@ A check proves the code and the tree only, never the tracker: the planner is tol
 titles, so a replan in a later run that names one again files no second bead. A plan with such a check in a stage,
 risk or case is sent back to the planner once naming them; a second such plan fails the run.
 
-A check never runs a gate-only command either: the gate (`engine.gate`) always, and each command prefix in
-`engine.gate_only` (`{"argv": ["just", "unity-check"], "why": "fails on uncommitted client/"}`),
+A plan check never runs a gate-only command either: every check of `engine.checks` that says `"run": "gate"`
+(`{"id": "unity", "argv": ["just", "unity-check"], "run": "gate", "why": "fails on uncommitted client/"}`; `why` is told to the planner),
 for commands red by design on the uncommitted tree a writer leaves (lifesim-fld.27.9: 68 min stuck on
 `just unity-check`). The planner is told the list; a plan with one as a command (its argv starts with the prefix, wrappers like `env` aside;
 `["just", "check-fmt"]` is another command) is sent back once with `<cmd> runs only in the gate at land:
@@ -200,7 +201,7 @@ list that carries a shell operator word or a shell run on a command string) with
 dry-run checks that the program resolves on PATH (or is a file of the tree). `when` runs a
 check only when the task changed a matching path; `retry` reruns a known flaky one, but never a check that timed out (exit 124: the engine's limit or the command's own; the log says "no retry: timed out after N min"). `wall_min` sets one check's time limit in place of `engine.check_wall_min` (60). `fix` (an argv list, e.g. a formatter's write mode) runs in the slot worktree before the round and what it changed is staged and checked, so the engine applies formatting instead of failing on it; a failing fix is that check's red, its output kept; the log notes "<ids>: the fix changed N files". A repo check that passed on the
 same tree and base is reused; mark one `"cache": false` when it reads state git cannot see. Stage checks always run. A repo check that ran in this block exports its log and exit code to the checks after it as `TL_CHECK_LOG_<ID>` and `TL_CHECK_RC_<ID>` (id upper-cased, other characters `_`); a plan check asserts through a script that reads the variable from its environment (`["python3", "tools/assert_log.py", "TL_CHECK_LOG_UNITY_TESTS", "Passed: 12"]`; the variable's name in the argv orders the check after that repo check) and never re-runs the command (a plan check containing a repo check's argv is logged "re-runs <id>" and still runs as written). Within one checks block each distinct command (whitespace stripped, same directory and time limit) runs once; a repeat gets the first result. Time spent waiting for a shared resource (a Unity slot, read from `unity-slot: ... got slot N after Ns` in a check's output and capped at that run's wall time; a lane wait; an editor-lock wait) is not counted in `budget_min`; the over-budget ask gives wall and waited minutes. `engine.budget_min_by_label` (`{"unity": 300}`) gives a bead with that label that larger budget. `engine.bead_token_cap` (tokens, 0 = none, the default) caps a bead over all its runs: once its earlier runs' `tokens_in + tokens_out` (cached counted in, from `traces.jsonl`) plus this run's reach it, no worker starts and the bead is blocked as a budget ask with the total (checked before every worker call). The gate runs once, on the rebased
-tree at land. **Repo git hooks do not run at land:** a `git push` land command is run with `--no-verify` (the engine inserts it), so every check belongs in the profile (the gate and the checks), never in a pre-push hook. A custom `land` command (not `git push`) is left as written: the repo's command owns its hooks, and the engine's LFS push below is skipped for it. **LFS and bd are the engine's:** when the worktree's `.gitattributes` has a `filter=lfs` line, the engine runs `git lfs push <remote> <ref>` for the pushed ref only, inside the land lock right before the push (git-lfs missing: the land fails, branch kept; a network error rests like the push's); after a landed bead and with the lock let go it runs `bd dolt push` (a failure blocks the bead with bd's words and the landed sha: fix the remote and rerun, the rerun finds the land and pushes again; a repo with no Dolt remote is a quiet no-op; never in a dry run). Both log their time as notes. **Work in progress is pushed:** after each accepted stage (committed as a wip commit) and only when the land is a `git push`, the engine runs `git push --no-verify --force-with-lease <remote> HEAD:refs/heads/task/<bead>` (never `-u`, never `git config`; never in a dry run), so the work survives a lost box and the other machine sees it. A failure blocks the bead with git's words (`PAUSE_NETWORK` for a network error, else `FAULT_LAND`). `tl prune` deletes that remote `task/<bead>` once the bead is closed and its land commit is on the checkout's HEAD.
+tree at land (see **The gate**). **Repo git hooks do not run at land:** a `git push` land command is run with `--no-verify` (the engine inserts it), so every check belongs in the profile (the gate and the checks), never in a pre-push hook. A custom `land` command (not `git push`) is left as written: the repo's command owns its hooks, and the engine's LFS push below is skipped for it. **LFS and bd are the engine's:** when the worktree's `.gitattributes` has a `filter=lfs` line, the engine runs `git lfs push <remote> <ref>` for the pushed ref only, inside the land lock right before the push (git-lfs missing: the land fails, branch kept; a network error rests like the push's); after a landed bead and with the lock let go it runs `bd dolt push` (a failure blocks the bead with bd's words and the landed sha: fix the remote and rerun, the rerun finds the land and pushes again; a repo with no Dolt remote is a quiet no-op; never in a dry run). Both log their time as notes. **Work in progress is pushed:** after each accepted stage (committed as a wip commit) and only when the land is a `git push`, the engine runs `git push --no-verify --force-with-lease <remote> HEAD:refs/heads/task/<bead>` (never `-u`, never `git config`; never in a dry run), so the work survives a lost box and the other machine sees it. A failure blocks the bead with git's words (`PAUSE_NETWORK` for a network error, else `FAULT_LAND`). `tl prune` deletes that remote `task/<bead>` once the bead is closed and its land commit is on the checkout's HEAD.
 
 **Check inputs (per-check cache).** A repo check may list `inputs`, globs over repo paths (`*` and `?` stay in one folder, `**` crosses folders, `{a,b}` is either; the same rules for tracked and gitignored files; `when` still uses shell-style matching, where `*` crosses `/`):
 `"checks": [{"id": "unity-tests", "argv": ["just", "unity-tests"], "group": "tests", "inputs": ["client/**", "content/**", "src/**"]}]`.
@@ -226,10 +227,28 @@ process is probed for the holder. The same red checks with the same output
 `engine.max_same_red` (3) rounds in a row stop the run with one ask that names them. `engine.max_total_reviews` (12) counts reviews
 over the whole run, replans included.
 **Who runs a check.** A repo check is the writer's to run when its longest green run took at most `engine.writer_check_max_s`, or says
-`"writer": true` (`false`: never) or its own `"writer_check_max_s"`; the gate always is the engine's. `"tail_log"` names a log of the tree
+`"writer": true` (`false`: never) or its own `"writer_check_max_s"`; a `run: gate` check always is the engine's. `"tail_log"` names a log of the tree
 whose first 20 `error CS` lines join a red's output when it shows none (the analyzers default to `client/Logs/unity-project-files.log`).
-**Duplicates.** A stage check whose argv is exactly a repo check's argv is that check: it takes the repo check's result (the repo check runs first) instead of running again. Anything else runs as written, and the repo check always runs too. At land the gate is skipped when it already passed on the same tree; the gate gets
-`TL_CHECKS_GREEN=<id>,<id>` (repo checks green at their inputs), which a gate script may honour to skip those parts.
+**Duplicates.** A stage check whose argv is exactly a repo check's argv is that check: it takes the repo check's result (the repo check runs first) instead of running again. Anything else runs as written, and the repo check always runs too. 
+
+**The gate (a registry of checks).** `engine.checks` is the one registry of the repo's checks, each named once. A check says where it runs
+with `"run"`: `"stage"` (default: the round after each write), `"gate"` (a step of the gate at land; a plan check may not run its command),
+or `"both"`. The gate is the checks with run `gate` or `both`, run on the rebased tree through the same machinery as a stage's round
+(groups static, tests, acceptance in order; a red group skips the groups after it; `when`, `inputs`, `retry`, `env`, `in` as for any
+check): a step green at its inputs (or, with none, on this tree and base) in an earlier stage round or gate run is skipped and logged
+`cached`, each step has its own start and end record (seconds, exit, status) in the check log, and a red gate names the red steps
+(`gate steps red: unit`) and hands their output tails to the fix round. Each step's limit is its `wall_min`, else
+`engine.gate_timeout_min` (90). A step's argv may call a repo recipe (`["just", "check-dotnet"]`), so one step can be run alone by a person.
+`engine.gate` and `engine.gate_only` are gone: a profile that still has one is refused at load with a message to move the steps into
+`engine.checks` with `"run": "gate"`. `TL_CHECKS_GREEN` and the whole-gate cache entry are gone too: the per-check cache replaces them.
+
+**`tl check [--repo DIR] [--all] [--list] [ID ...]`.** A person (or a session) runs the registry in the current worktree, with the profile
+file of that worktree, through the engine's own runner and the same per-check cache (under `~/.config/task-loop/check-cache/`, the only
+thing it writes there; no bd, no bead, no run folder). No ID: the gate's steps, those `when` makes due; `--all` ignores `when`; IDs run
+just those checks, whatever their `run`. One line per step (id, `ok` / `FAILED` / `cached` / `skipped (why)`, seconds), then the tail of
+each red step; exit 0 when all are green, 1 otherwise. `--list` prints the registry (id, run, group, when, argv), one line each, exit 0.
+A repo's `just check` is then one line, `tl check` (`~/.config/task-loop/bin/tl` is the shim), and each step's own recipe
+(`just check-dotnet`) stays available alone.
 
 No `slots` (or `count` 0): slots are off. No profile: say so in one line, use
 `bd ready --exclude-type epic --exclude-label slot`, the gate the repo's AGENTS.md names, and land on main by push.
@@ -281,7 +300,7 @@ second `> log` on the same path truncates a live run's log (the engine writes in
 the cut, without a hole). It claims the bead, then: reset → plan → per stage (write →
 checks run by the engine → review by the other model family) → gate → land → close. Every AI step is a headless
 worker with a schema-checked answer; the close step always runs; the plan, findings and a Reflect line go into the
-bead. Engine settings: `.task-loop.json` → `engine` (gate, land, budgets). Every run appends one line to
+bead. Engine settings: `.task-loop.json` → `engine` (checks, land, budgets). Every run appends one line to
 `<config dir>/task-loop/traces.jsonl` (never pruned): bead, repo, branch, outcome, your session id, and every worker
 session (Codex thread, `claude -p` session) with its transcript. `tl trace <id>` lists them; reflection and improvement
 are done by hand from these traces for now.

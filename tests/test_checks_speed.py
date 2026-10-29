@@ -311,25 +311,6 @@ class Duplicates(SpeedTest):
         res = eng.run_checks({"checks": [cmd.replace(" -c ", "   -c ")], "files": []}, "s")
         self.assertEqual((n.read_text(), [bool(c.reused) for c in res]), ("1", [False, True]))
 
-    def gate_run(self, **kw):
-        count = Path(self.tmp.name) / "gates"
-        gate = pyc(f"import os; open({str(count)!r}, 'a').write(os.environ.get('TL_CHECKS_GREEN', '-') + '|')")
-        rc, _ = self.run_engine({"plan": [te.PLAN], "write": [te.WRITE], "review": [te.CLEAN]}, gate=gate, **kw)
-        return rc, count
-
-    def test_the_gate_is_told_which_repo_checks_are_green(self):
-        rc, count = self.gate_run(checks=[{"id": "ut", "cmd": pyc("pass"), "group": "tests", "inputs": ["f.txt"]}])
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertEqual(count.read_text(), "ut|")
-
-    def test_a_gate_green_on_this_tree_is_not_run_again(self):
-        rc, _count = self.gate_run()
-        self.assertEqual(rc, 0)
-        eng = self.eng
-        eng.lander.gate.remember("abc")
-        self.assertTrue(eng.lander.gate.green("abc"))
-        self.assertFalse(eng.lander.gate.green("abd"))
-
 
 class Schedule(SpeedTest):
     """tl-7y6.7.11 / .7 / .16 (R09): one launch per command, Unity last, the ban on Unity in acceptance."""

@@ -37,7 +37,7 @@ class ReviewRound:
     def prompt(self, s: StageState, kinds: dict[str, Any]) -> str:
         """The review prompt, then what the review needs of the run (the cases, the unchecked items, what earlier rounds noted)."""
         e, st = self.e, s.st
-        gate = f" (`{e.cfg.gate_text}`)" if e.cfg.gate else ""
+        gate = f" (`{e.cfg.gate_text}`)" if e.cfg.gate_checks else ""
         text = review_prompt(
             bool(s.fix), s.last, s.state["scope"] if s.fix else "", round_no=s.rounds + 1, prior=e.hand.rounds_text(last=3),
             acceptance=acceptance_text(self.items(s)), brief=e.briefs.text(), plan=e.cases.plan_text(s.i),

@@ -16,14 +16,14 @@ class WriterSplit:
 
     def __init__(self, cfg: EngineConfig, secs: Mapping[str, float]) -> None:
         self.cfg, self.secs = cfg, secs
-        self.repo = [repo_check(k, cfg) for k in cfg.checks]
+        self.repo = [repo_check(k, cfg) for k in cfg.stage_checks]
 
     def _spec(self, cmd: str) -> Check | None:
         want = norm(cmd)
         return next((k for k in self.repo if norm(k.cmd) == want), None)
 
     def engine_only(self, cmd: str) -> bool:
-        if cmd == self.cfg.gate_text:
+        if norm(cmd) in {norm(k.cmd) for k in self.cfg.checks if k.run == "gate"}:
             return True
         spec = self._spec(cmd)
         if spec is not None and spec.writer is not None:

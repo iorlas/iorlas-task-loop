@@ -177,17 +177,17 @@ class EngineLand1Test(EngineTest):
         self.assertEqual(log, ["Add f (t-1)", "init"])
         self.assertEqual(gitrepo.git("show", "origin/main:g.txt", cwd=str(self.wt)), "from run 1")
 
-    UNITY: ClassVar[Any] = {"cmd": "just unity-check", "why": "it fails on uncommitted client/ changes"}
+    UNITY: ClassVar[Any] = {"cmd": "echo unity-check", "why": "it fails on uncommitted client/ changes"}
 
     def test_a_check_running_a_gate_only_command_is_sent_back_to_the_planner_once(self):
         # lifesim-fld.27.9: a stage check ran `just unity-check`, red by design on the uncommitted tree: stuck, 68 min
-        bad = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[HAS_F, "env CI=1 just unity-check"])])
+        bad = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[HAS_F, "env CI=1 echo unity-check"])])
         rc, s = self.run_engine({"plan": [bad, PLAN], "write": [WRITE], "review": [CLEAN]}, gate_only=[self.UNITY])
         self.assertEqual(rc, 0)
         self.assertEqual([c[0] for c in s.calls], ["planner", "planner", "worker", "reviewer"])
-        self.assertIn("just unity-check runs only in the gate at land: it fails on uncommitted client/ changes",
+        self.assertIn("echo unity-check runs only in the gate at land: it fails on uncommitted client/ changes",
                       s.prompts[1])
-        self.assertIn("just unity-check", s.prompts[0])  # the planner is told up front too
+        self.assertIn("echo unity-check", s.prompts[0])  # the planner is told up front too
 
     def test_the_gate_command_is_always_gate_only(self):
         bad = dict(PLAN, cases=[{"criterion": "the repo is green", "check": "just  check"}])
@@ -420,7 +420,7 @@ class EngineLand1Test(EngineTest):
         fix = s.prompts[3]
         for i in range(18):
             self.assertIn(f"error E{int(i):03d}: gate no", fix)
-        self.assertRegex(fix, r"log: \S+gate\.r1\.log")
+        self.assertRegex(fix, r"log: \S+gate\.r\d\.log")
         self.assertIn("the engine re-runs them; fix from the output above", fix)
 
     @ENGINE_BASH

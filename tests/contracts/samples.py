@@ -83,9 +83,10 @@ OUTCOME = run.RunOutcome(outcome=Outcome.BLOCKED, bead="tl-1", run=str(RUN), why
                          rounds=2, tests_added=4, asked=True, retry_after=None, cost=0.25)
 LOCK = locks.EngineLock(pid=1789, bead="tl-1", started=T, by="tl-abc", pid_start=T - 5, slot="s1", slot_bead="slot-1",
                         route=(10, T), workers=[(11, T), (12, T + 1)])
-CMD = {"gate": ["just", "check"], "pick_label": "auto", "gate_only": [config.GateOnly(argv=["a"]), config.GateOnly(argv=["b"], why="c")],
+CMD = {"pick_label": "auto",
        "visual_paths": config.VisualConfig(include=["a/**"]), "write_fresh_above_k": 150.0, "max_rounds": 4,
-       "checks": [config.CheckSpec(id="fmt", argv=["just", "fmt"], group="static", when=["x/**"], inputs="a/**", where="container")],
+       "checks": [config.CheckSpec(id="fmt", argv=["just", "fmt"], group="static", when=["x/**"], inputs="a/**", where="container"),
+                  config.CheckSpec(id="unity", argv=["just", "check-unity"], run="gate")],
        "container": config.ContainerConfig(image="img:1")}
 
 

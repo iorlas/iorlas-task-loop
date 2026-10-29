@@ -917,10 +917,6 @@
  },
  "RepoProfile": {
   "engine": {
-   "gate": [
-    "just",
-    "check"
-   ],
    "land": [
     "git",
     "push",
@@ -935,20 +931,6 @@
    "skip_labels": [],
    "epic_order": [],
    "epic_only": false,
-   "gate_only": [
-    {
-     "argv": [
-      "a"
-     ],
-     "why": ""
-    },
-    {
-     "argv": [
-      "b"
-     ],
-     "why": "c"
-    }
-   ],
    "reflect": true,
    "planner_notes": "",
    "shot_table": "",
@@ -964,6 +946,7 @@
       "fmt"
      ],
      "group": "static",
+     "run": "stage",
      "when": [
       "x/**"
      ],
@@ -978,6 +961,30 @@
      "writer_check_max_s": null,
      "tail_log": "",
      "in": "container",
+     "why": "",
+     "fix": []
+    },
+    {
+     "id": "unity",
+     "argv": [
+      "just",
+      "check-unity"
+     ],
+     "group": "tests",
+     "run": "gate",
+     "when": [],
+     "retry": 0,
+     "wall_min": null,
+     "cache": null,
+     "inputs": [],
+     "inputs_only": false,
+     "exclude": [],
+     "env": {},
+     "writer": null,
+     "writer_check_max_s": null,
+     "tail_log": "",
+     "in": "host",
+     "why": "",
      "fix": []
     }
    ],

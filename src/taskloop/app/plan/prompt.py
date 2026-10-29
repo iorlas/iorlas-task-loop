@@ -81,14 +81,14 @@ class PlanPrompt:
             rules.append(VISUAL_STAGES % (", ".join(e.pictures.visual_cfg().include)[:300], e.pictures.shot_table()))
         rules.append("Proof files that a check reads or a reviewer looks at (screenshots, logs, probe output) go under "
                      f"{e.evidence_dir}: it is kept across runs, and nothing else under {e.task_dir} is.")
-        gate, has = e.cfg.gate_text, bool(e.cfg.gate)
+        gate, has = e.cfg.gate_text, bool(e.cfg.gate_checks)
         rules.append("Checks run on the uncommitted working tree after each write. The engine runs the gate{} once, on "
                      "the rebased tree at land: never put {} in a stage's checks, and a criterion that names it is proven "
                      "by that land gate: write no case for it.".format((f" (`{gate}`)") if has else "", f"`{gate}`" if has else "it"))
-        extra_gated = [(c, w) for c, w in lint.gate_only(e.cfg) if c != gate]
+        extra_gated = [(c, w) for c, w in lint.gate_only(e.cfg) if w != lint.GATE_WHY]
         if extra_gated:
-            rules.append("These run only in the gate at land too, never in a check: " + "; ".join(
-                f"`{c}`" + (f" ({w})" if w else "") for c, w in extra_gated) + ".")
+            rules.append("These run only in the gate at land too, never in a check: "
+                         + "; ".join(f"`{c}` ({w})" for c, w in extra_gated) + ".")
         return rules
 
     def tail(self) -> str:

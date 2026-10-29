@@ -1,6 +1,7 @@
 """The gate runs before the land lock (land_optimistic_tries); the lock covers fetch, rebase and push, and the gate only when main moved
 under the outside gate more often than allowed. The pushed tree is always one the gate passed on the same base. Git is a small world
-(a base tip that moves on fetch; a rebase gives the tree of the base it lands on), the gate cache is the real one on an in-memory doc."""
+(a base tip that moves on fetch; a rebase gives the tree of the base it lands on); the gate's cache is a recorder with the engine's rule: a
+green gate is a fact about a tree and its base (the per-check cache itself is tests/checks/test_gate_steps.py)."""
 import contextlib
 import sys
 import unittest
@@ -11,9 +12,9 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
-from taskloop.app.land.gate import Gate
 from taskloop.app.land.lander import Lander
-from taskloop.contracts.checks import CheckCacheEntry
+from taskloop.contracts.checks import CacheHit, CheckCacheEntry, CheckResult, CheckRun
+from taskloop.contracts.config import CheckSpec, EngineConfig
 
 REJECTED = (1, " ! [rejected]        HEAD -> main (fetch first)")
 PUSHED = (0, "")
@@ -58,15 +59,17 @@ class World:
         def stop_deferred():
             yield []
         self.host = SimpleNamespace(
-            git=self.git, sh=self.sh, cfg=SimpleNamespace(base="origin/main", gate=["gate"], gate_text="gate", land=["git", "push"],
-                                                         land_optimistic_tries=tries, max_fix_rounds=2, gate_timeout_min=1),
+            git=self.git, sh=self.sh, halt_point=lambda *a, **k: None,
+            cfg=EngineConfig(base="origin/main", checks=[CheckSpec(id="gate", argv=["gate"], run="gate")], land=["git", "push"],
+                             land_optimistic_tries=tries, max_fix_rounds=2, gate_timeout_min=1),
             wt=Path("/nonexistent"),
             bead="t-1", dry=False, landed_sha="", pending_land_validation="", fixes=0, gate_log=None, run_dir=Path("run"), killed=False,
             steps=SimpleNamespace(begin=lambda *a, **k: None, outcome=lambda *a: None, move=lambda *a: None),
             newfiles=SimpleNamespace(quarantine_strays=lambda: None), checkout=SimpleNamespace(fetch=self.fetch),
             log=SimpleNamespace(emit=self.emitted.append, note=lambda *_: None), waits=SimpleNamespace(locked=locked),
             land_lock_path=lambda: "lock", stop_deferred=stop_deferred, record_land=lambda sha: None, warn=lambda m: None,
-            stores=SimpleNamespace(check_cache=SimpleNamespace(of=lambda _bead: self.doc)), checker=SimpleNamespace(green_ids=lambda t: []),
+            stores=SimpleNamespace(check_cache=SimpleNamespace(of=lambda _bead: self.doc)),
+            checker=SimpleNamespace(gate_green=self.gate_green, run_items=self.run_items),
             plan_data=None, cases=SimpleNamespace(case_checks=lambda: []), checkpoints=SimpleNamespace(save=lambda **kw: None),
             stage_checks=SimpleNamespace(stoppable=lambda *a: self.events.append("checks") or SimpleNamespace(failed=[])),
             blocked_for=lambda why, kind, **kw: Stop(why, kind), fixer=SimpleNamespace(fix=self.fix))
@@ -106,6 +109,16 @@ class World:
                 return 1, "red"
             return 0, ""
         raise AssertionError(argv)
+
+    def gate_green(self) -> bool:
+        return f"tree@{self.sat_on}" in self.gate_passed()
+
+    def run_items(self, items: list[Any]) -> CheckRun:
+        rc, tail = self.sh(["gate"])
+        res = CheckResult(id="gate", cmd="gate", group="tests", exit=rc, status="failed" if rc else "passed", tail=tail)
+        if not rc:
+            self.doc.rec = CheckCacheEntry(key=f"tree@{self.sat_on} {self.base}", whole={"gate": CacheHit(result=res)})
+        return CheckRun(round=1, results=[res])
 
     def gate_passed(self) -> list[str]:
         rec = self.doc.rec
@@ -154,16 +167,6 @@ class GateOutsideLock(unittest.TestCase):
         self.assertEqual(w.events.count("gate"), 2)
         self.assertTrue(all(p[3] and p[0] == p[1] for p in w.pushed))
         self.assertEqual(len(w.pushed), 2)
-
-    def test_the_cache_key_is_tree_and_base(self):
-        w = World([], [])
-        gate = Gate(w.host)
-        w.sat_on = w.base = "b0"
-        gate.remember("tree@b0")
-        self.assertTrue(gate.green("tree@b0"))
-        self.assertFalse(gate.green("tree@other"))  # another tree on the same base
-        w.base = "b1"
-        self.assertFalse(gate.green("tree@b0"))  # the same tree on another base
 
     def test_a_red_gate_outside_goes_to_a_fix_round_without_ever_taking_the_lock(self):
         w = World(["b0", "b0", "b0"], [PUSHED], reds=1)

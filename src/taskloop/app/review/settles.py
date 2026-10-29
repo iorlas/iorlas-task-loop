@@ -24,7 +24,7 @@ class Settles:
         tools = Tools.named(what)
         if not tools:
             return ""
-        engine_text = " ".join([self.e.cfg.gate_text] + [str(c) for c in self.e.cfg.checks])
+        engine_text = " ".join(str(c) for c in self.e.cfg.checks)
         said = []
         for t in tools:
             r = run_git(self.e.wt, "grep", "-w", "-I", "-l", "-F", t, capture_output=True, text=True, encoding="utf-8", errors="replace")
@@ -52,7 +52,7 @@ class Settles:
         its id, its command, and the command without its runner (`just unity-tests` -> unity-tests)."""
         e = self.e
         stages = (e.plan_data or {}).get("stages") or []
-        cmds = [e.cfg.gate_text] + [c.cmd for c in e.cfg.checks] + [c for st in stages for c in st["checks"]] + e.cases.case_checks()
+        cmds = [c.cmd for c in e.cfg.checks] + [c for st in stages for c in st["checks"]] + e.cases.case_checks()
         names = [c.id for c in e.cfg.checks]
         for cmd in cmds:
             c = " ".join(cmd.split())

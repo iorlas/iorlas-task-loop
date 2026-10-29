@@ -28,6 +28,8 @@
                                                 run ready beads one after another, each in any free slot
   tl.py loop status [--repo DIR] [--last N]     the running loop and its last beads
   tl.py stop [--repo DIR] [--now]               stop the loop after its current bead, or now (SIGTERM)
+  tl.py check [--repo DIR] [--all] [--list] [ID ...]
+                                                run the repo's registry of checks (engine.checks): the gate's steps, or the named checks
   tl.py report [--repo DIR] [--since T] [--until T] [--json]
                                                  the M2 scorecard of a window (see SKILL.md, Report)
   tl.py lost [--repo DIR] [--since T] [--json]  bead-branch commits that are not landed, reclaimed or pending
@@ -230,12 +232,21 @@ def loop_parsers(sp):
     p.add_argument("--repo")
 
 
+def check_parser(sp):
+    p = sp.add_parser("check", help="run the repo's registry of checks in this worktree: the gate's steps, or the named checks")
+    p.add_argument("ids", nargs="*", metavar="ID", help="check ids to run (any check, whatever its run); none: the gate's steps")
+    p.add_argument("--repo", default=".", metavar="DIR", help="the worktree (default: the current directory)")
+    p.add_argument("--all", action="store_true", help="ignore `when`: every gate step runs")
+    p.add_argument("--list", action="store_true", help="print the registry (id, run, group, when, argv) and exit 0")
+
+
 def build_parser():
     ap = argparse.ArgumentParser(prog="tl.py", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sp = ap.add_subparsers(dest="cmd", required=True)
     owner_parsers(sp)
     engine_parsers(sp)
     loop_parsers(sp)
+    check_parser(sp)
     return ap
 
 
@@ -329,6 +340,7 @@ VERBS: Final[dict[str, Handler]] = {
     "next": v_next, "loop": v_loop, "stop": v_stop,
     "prune": v_prune,
     "lint": v_lint,
+    "check": lazy("taskloop.app.launch.check", "cmd_check"),
     "report": lazy("taskloop.cli.report", "cmd_report"),
     "lost": lazy("taskloop.cli.report", "cmd_lost"),
 }

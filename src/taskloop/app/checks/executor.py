@@ -1,7 +1,6 @@
 """CheckExecutor: run the steps of a round in order, deciding for each whether it runs, is skipped, is answered by an earlier
 run, or is answered by the cache."""
 import dataclasses
-import fnmatch
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -16,6 +15,7 @@ from taskloop.domain.checks.durations import CHEAP_S, expected_secs
 from taskloop.domain.checks.matchers import cs_error_lines, output_signature, safe_name, stale_tree
 from taskloop.domain.checks.names import log_var, norm, rc_var
 from taskloop.domain.checks.plan import CheckPlan, Step
+from taskloop.domain.checks.specs import due
 
 PROJECT_LOG = "client/Logs/unity-project-files.log"  # where Unity says why the project files could not be regenerated
 PROJECT_LOG_LINES = 20
@@ -39,8 +39,9 @@ class Round:
 
 class CheckExecutor:
     def __init__(self, host: CheckHost, cache: CheckCache, keys: InputKeys, attempts: Attempts, checklog: CheckLog,
-                 history: Durations, fix_red: dict[str, CheckResult] | None = None) -> None:
+                 history: Durations, fix_red: dict[str, CheckResult] | None = None, everything: bool = False) -> None:
         self.host, self.cache, self.keys, self.attempts, self.checklog, self.history = host, cache, keys, attempts, checklog, history
+        self.everything = everything  # `when` is ignored: every check is due (tl check --all)
         self.fix_red = fix_red or {}  # id -> the red of a check whose fix command failed: it does not run
         self.logs = host.run_dir / "checks"
 
@@ -99,9 +100,9 @@ class CheckExecutor:
             # a red group skips the groups after it, and any red skips every expensive check (the cheap ones of its own group run to
             # the end, so the writer sees all the cheap failures at once; the Unity group never runs after a red)
             return CheckResult.skipped(c, st.red + FAILED_FIRST)
-        if c.when:
+        if c.when and not self.everything:
             st.changed = self.host.checkout.changed_paths() if st.changed is None else st.changed
-            if not any(fnmatch.fnmatch(p, g) for p in st.changed for g in c.when):
+            if not due(c, st.changed):
                 return CheckResult.skipped(c, "no change under {}".format(", ".join(c.when)))
         return None
 
@@ -158,10 +159,10 @@ class CheckExecutor:
         stale = stale_tree(out.seen or out.tail) if out.rc and c.repo else ""
         if stale:
             raise CheckFault(CheckFaultKind.STALE_BASE, f"failed: infrastructure: the configured check `{c.id}` needs something this tree "
-                             f"lacks (\"{stale}\"): the tree is older than the base's .task-loop.json, which no writer can fix")
+                             f"lacks (\"{stale}\"): the tree is older than the base's .task-loop.json, which no writer can fix", out.rc)
         if out.rc < 0 and not self.host.killed:
             raise CheckFault(CheckFaultKind.KILLED, f"failed: stopped: check `{c.id}` was killed by signal {-out.rc}; the bead goes "
-                             "back to open and the next run runs it again (no fix round, no failure counted)")
+                             "back to open and the next run runs it again (no fix round, no failure counted)", out.rc)
 
     def _result(self, c: Check, out: Outcome, name: str, secs: int) -> CheckResult:
         tail = out.tail[-1500:]

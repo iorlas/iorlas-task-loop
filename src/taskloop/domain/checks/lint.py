@@ -33,10 +33,12 @@ def tracker_checks(plan: Plan) -> list[str]:
     return [c for c in plan_checks(plan) if sh.reads_tracker(argv_of(c))]
 
 
+GATE_WHY = "the engine runs the gate once, on the rebased tree"
+
+
 def gate_only(cfg: EngineConfig) -> list[tuple[str, str]]:
-    """[(cmd, why)]: the gate command and engine.gate_only's entries ("cmd" or {cmd, why})."""
-    out = [(cfg.gate_text, "the engine runs the gate once, on the rebased tree")]
-    out += [(x.cmd, x.why) for x in cfg.gate_only]
+    """[(cmd, why)]: the commands only the gate runs: the checks that say run gate."""
+    out = [(k.cmd, k.why or GATE_WHY) for k in cfg.checks if k.run == "gate"]
     return [(norm(c), why) for c, why in out if c.strip()]
 
 
@@ -44,7 +46,7 @@ def rerun_checks(plan: Plan, cfg: EngineConfig) -> list[tuple[str, str]]:
     """[(check, id)]: the plan's checks that contain a configured check's command as a run of whole words."""
     out: list[tuple[str, str]] = []
     for c in plan_checks(plan):
-        for k in cfg.checks:
+        for k in cfg.stage_checks:
             if sh.contains_argv(argv_of(c), k.argv):
                 out.append((c, k.id))
                 break
@@ -79,7 +81,7 @@ def own_timeout_problems(plan: Plan, cap_min: float) -> list[str]:
 def repo_check_of(cmd: str, cfg: EngineConfig) -> str | None:
     """The id of the configured check a plan check is, or None."""
     want = norm(cmd)
-    return next((k.id for k in cfg.checks if norm(k.cmd) == want), None)
+    return next((k.id for k in cfg.stage_checks if norm(k.cmd) == want), None)
 
 
 def unity_problems(plan: Plan, cfg: EngineConfig) -> list[str]:
@@ -90,7 +92,7 @@ def unity_problems(plan: Plan, cfg: EngineConfig) -> list[str]:
         recipe = sh.just_recipe(argv_of(c), JUST_PLAIN_FLAGS)
         if not recipe.startswith("unity-"):
             continue
-        rid = repo_check_of(c, cfg) or next((k.id for k in cfg.checks if k.cmd.split()[-1:] == [recipe]), None)
+        rid = repo_check_of(c, cfg) or next((k.id for k in cfg.stage_checks if k.cmd.split()[-1:] == [recipe]), None)
         use = (f"the repo check `{rid}` already runs it: read ${log_var(rid)} and ${rc_var(rid)}"
                if rid else "it is a Unity run the repo's checks own: do not launch it from acceptance")
         out.append(f"`{clip(c, 120)}`: runs `just {recipe}`; {use}")
@@ -109,7 +111,7 @@ def producer_problems(plan: Plan, cfg: EngineConfig) -> list[str]:
     """[why] for a plan check that reads $TL_CHECK_LOG_/RC_<ID> of a repo check whose `when` matches no file any stage lists (it
     never runs, so the variable is never set), or of a check the repo does not have: nothing produces what it reads."""
     files = [f for st in plan.get("stages") or [] for f in st["files"]]
-    by_name = {mangle(k.id): k for k in cfg.checks}
+    by_name = {mangle(k.id): k for k in cfg.stage_checks}
     out = []
     for c in plan_checks(plan):
         for name in matchers.env_refs(c):

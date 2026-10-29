@@ -1,9 +1,5 @@
 {
   "engine": {
-    "gate": [
-      "python3",
-      "dev/suite-docker.py"
-    ],
     "land": [
       "git",
       "push",
@@ -11,6 +7,17 @@
       "HEAD:main"
     ],
     "pick_label": "auto",
-    "needs_info_label": "needs-info"
+    "needs_info_label": "needs-info",
+    "checks": [
+      {
+        "id": "suite",
+        "argv": [
+          "python3",
+          "dev/suite-docker.py"
+        ],
+        "group": "tests",
+        "run": "gate"
+      }
+    ]
   }
 }

@@ -17,7 +17,7 @@ returns an error for that request; parsers skip lines they cannot read).
 
 ## Commands the repo profile and the plan carry
 
-Every command task-loop runs for a repo (`gate`, `land`, `gate_only`, `slots.setup`, a profile check, a plan check, a shot-table
+Every command task-loop runs for a repo (`land`, `slots.setup`, a profile check (`engine.checks`, which holds the gate's steps: `run` gate or both), a plan check, a shot-table
 method) is an argv list: a program and its arguments, run by `subprocess` with no shell. A string there is refused (the profile
 load and the plan lint say so in one line). A pipeline, redirect or loop belongs in a repo recipe, called `["just", "name"]`.
 Inside the engine the canonical text of a check is `shlex.join(argv)` (check identity, logs, the dashboard); `shlex.split`

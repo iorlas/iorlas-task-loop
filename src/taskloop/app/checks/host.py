@@ -13,10 +13,11 @@ from taskloop.stores.runlog import RunLog
 class CheckFault(Exception):
     """A check ended the run's step: the engine turns it into a Blocked of the matching kind."""
 
-    def __init__(self, kind: CheckFaultKind, text: str) -> None:
+    def __init__(self, kind: CheckFaultKind, text: str, rc: int | None = None) -> None:
         super().__init__(text)
         self.kind = kind
         self.text = text
+        self.rc = rc  # the exit code of the check that caused it
 
 
 class CheckStuck(Exception):
