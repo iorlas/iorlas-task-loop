@@ -15,7 +15,7 @@ from typing import Any
 from taskloop.adapters import delegate as dg
 from taskloop.adapters import delegate_wire
 from taskloop.adapters import procs as sproc
-from taskloop.app.run import done_memo
+from taskloop.app.run import done_memo, strays
 from taskloop.app.run.calls import timing
 from taskloop.app.run.lane_acts import LaneActs
 from taskloop.contracts import answers
@@ -70,8 +70,7 @@ class Call:
     ) -> None:
         self.node, self.role, self.schema, self.cwd, self.full, self.text = node, role, schema, cwd, full, text
         self.writer, self.resume, self.key, self.resume_key, self.writer_family = writer, resume or None, key, resume_key, writer_family
-        self.step, self.title = step, title
-        self.visual = False
+        self.step, self.title, self.visual = step, title, False
         self.tries = 1  # calls that came back with no valid answer, from 1: two at most (RetryPlan invalid_output)
         self.counts: dict[str, float] = {
             "attempt": 0,
@@ -265,7 +264,7 @@ class WorkerCall:
         c.state = callstate.begin(
             e.call_dir(), e.log_path.stem, e.bead, c.key, c.role, resume_of=c.resume or "", prompt_sha=c.sha, now=e.clock.now()
         )
-        t0 = time.time()
+        t0, trees = time.time(), strays.worktrees(e)  # the worktrees the repo holds before the worker runs
         try:
             ans = dg.call(e.resolved, req, c.text, c.schema, runner, env=sproc.current_env(e.bead_env))
         except BaseException as exc:  # an interruption stopped the delegate inside the process seam: record that stop here
@@ -291,6 +290,7 @@ class WorkerCall:
                 "FAULT_SLOT",
             )
         e.halt_point()  # the call was ended by a stop: no retry, no verdict from it
+        strays.check(e, trees, self.ops.blocked)  # tl-7y6.24: a worker that went outside its slot fails the bead; nothing is repaired
         self.note_result(c, ans, runner)
         return ans
 
