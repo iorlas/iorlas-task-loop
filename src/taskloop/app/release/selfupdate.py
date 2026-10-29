@@ -19,9 +19,10 @@ def code_ids(root: Path) -> list[str]:
 
 def newer_release(tool_root: Path, where: Path) -> Path | None:
     """The clone's dev/release.py when `where` (on origin/main) holds release code other than `tool_root`'s; None when they are the
-    same, the clone has no such script, or this process is already the exec'd one."""
+    same, the clone has no such script, or this process is already the exec'd one. The marker is taken out of the environment here,
+    so nothing the release starts (the suite, its release tests) inherits it."""
     script = where / "dev" / "release.py"
-    if os.environ.get(MARKER) or not script.is_file() or code_ids(tool_root) == code_ids(where):
+    if os.environ.pop(MARKER, None) or not script.is_file() or code_ids(tool_root) == code_ids(where):
         return None
     return script
 

@@ -12,6 +12,7 @@ import textwrap
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 import contextlib
@@ -20,7 +21,7 @@ from support import waits
 from support.narrow import must
 
 from taskloop.adapters.suiteout import failure_report
-from taskloop.app.release import manifest
+from taskloop.app.release import manifest, selfupdate
 
 ROOT = Path(__file__).resolve().parents[1]
 RELEASE = ROOT / "dev" / "release.py"
@@ -72,7 +73,7 @@ class Release(unittest.TestCase):
         self.env = dict(os.environ, TASK_LOOP_SUITE_HOST="1", XDG_CONFIG_HOME=str(h / "cfg"), CLAUDE_CONFIG_DIR=str(h / "claude"),
                         PATH="{}{}{}".format(shim, os.pathsep, os.environ["PATH"]),
                         GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t", GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t")
-        for k in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"):
+        for k in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "TL_RELEASE_REEXEC"):
             self.env.pop(k, None)
         self.origin, self.seed, self.repo = h / "o.git", h / "seed", h / "repo"
         self.morigin, self.market = h / "m.git", h / "market"
@@ -181,6 +182,11 @@ class Release(unittest.TestCase):
         with_marker = subprocess.run(self.cmd("msg"), env=dict(self.env, TL_RELEASE_REEXEC="1"), capture_output=True, text=True,
                                      timeout=120, check=False)
         self.assertNotIn("CHILD", with_marker.stdout)  # an exec'd release never execs again
+
+    def test_the_exec_marker_is_taken_out_so_what_the_release_starts_does_not_inherit_it(self):
+        with mock.patch.dict(os.environ, {selfupdate.MARKER: "1"}):
+            self.assertIsNone(selfupdate.newer_release(self.repo, self.repo))
+            self.assertNotIn(selfupdate.MARKER, os.environ)
 
     def test_a_dirty_main_checkout_on_another_branch_is_released_from_and_left_byte_identical(self):
         self.git("checkout", "-q", "-b", "task/wip", cwd=self.repo)
