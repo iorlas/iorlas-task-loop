@@ -528,6 +528,7 @@
   "writer": false,
   "writer_max_s": 90.0,
   "tail_log": "client/Logs/unity-project-files.log",
+  "fix": "",
   "container": false
  },
  "CheckCacheEntry": {
@@ -976,7 +977,8 @@
      "writer": null,
      "writer_check_max_s": null,
      "tail_log": "",
-     "in": "container"
+     "in": "container",
+     "fix": []
     }
    ],
    "slot_env": {},
