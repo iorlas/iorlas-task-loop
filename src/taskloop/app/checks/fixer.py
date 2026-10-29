@@ -1,11 +1,10 @@
 """Fixer: the fix command of a check (a formatter) runs before the round, so the tree the checks see is already formatted."""
-import fnmatch
-
 from taskloop.app.checks.host import CheckHost
 from taskloop.contracts.argv import argv_of
 from taskloop.contracts.checks import Check, CheckResult
 from taskloop.domain.checks.matchers import output_signature, safe_name
 from taskloop.domain.checks.plan import CheckPlan
+from taskloop.domain.checks.specs import due
 
 
 class Fixer:
@@ -39,9 +38,7 @@ class Fixer:
 
     def _due(self, c: Check) -> bool:
         """A check the round skips for its `when` does not fix either."""
-        if not c.when:
-            return True
-        return any(fnmatch.fnmatch(p, g) for p in self.host.checkout.changed_paths() for g in c.when)
+        return not c.when or due(c, self.host.checkout.changed_paths())
 
     def _once(self, c: Check, name: str) -> tuple[int, str]:
         return self.host.sh(argv_of(c.fix), timeout=c.wall_min * 60, save=self.host.run_dir / "checks" / name, what="check fix")

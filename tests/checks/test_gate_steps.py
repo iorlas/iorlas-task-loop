@@ -10,7 +10,8 @@ from support.engine_case import CLEAN, PLAN, WRITE, EngineTest, pyc
 # isort: split
 from support.logs import records
 
-from taskloop.domain.checks.specs import gate_items, items_of
+from taskloop.contracts.checks import Check
+from taskloop.domain.checks.specs import due, gate_items, items_of
 
 STEP = pyc("pass")
 RED_ON_D2 = pyc("import sys; t=open('f.txt').read().strip(); print('step saw', t); sys.exit(1 if t == 'd2' else 0)")
@@ -64,3 +65,14 @@ class GateSteps(EngineTest):
     def test_a_gate_with_no_steps_is_no_gate(self):
         rc, _ = self.run_engine(ANSWERS, checks=[{"id": "s", "cmd": STEP}])
         self.assertEqual((rc, records(self.eng, "gate_start")), (0, []))
+
+
+class When(EngineTest):
+    def test_when_uses_the_inputs_glob_dialect_star_stays_in_one_folder(self):
+        c = Check(id="w", cmd="true", when=["client/*.cs", "src/**", "{a,b}/x"])
+        self.assertTrue(due(c, ["client/A.cs"]))
+        self.assertFalse(due(c, ["client/deep/A.cs"]))  # fnmatch's * crossed folders: the same glob said two things
+        self.assertTrue(due(c, ["src/a/b/c.py"]))
+        self.assertTrue(due(c, ["b/x"]))
+        self.assertFalse(due(c, ["docs/x"]))
+        self.assertTrue(due(Check(id="n", cmd="true"), []))

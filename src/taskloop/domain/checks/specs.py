@@ -1,10 +1,10 @@
 """The checks of a round as Check records: the repo's (engine.checks) and the plan's (a stage's commands and cases)."""
-import fnmatch
 from collections.abc import Sequence
 
 from taskloop.contracts.argv import argv_of, text_of
 from taskloop.contracts.checks import Check
 from taskloop.contracts.config import CheckSpec, EngineConfig
+from taskloop.domain.checks.matchers import glob_re
 
 DIFF_CHECK = "diff-check"  # the engine's own check: `git diff --check <base>`, always first, in every round, the gate and `tl check`
 
@@ -46,5 +46,6 @@ def gate_items(cfg: EngineConfig) -> list[Check]:
 
 
 def due(c: Check, changed: Sequence[str]) -> bool:
-    """A check with `when` is due only when a changed path matches one of its globs."""
-    return not c.when or any(fnmatch.fnmatch(p, g) for p in changed for g in c.when)
+    """A check with `when` is due only when a changed path matches one of its globs (the one glob dialect: ** crosses
+    folders, * stays in one)."""
+    return not c.when or any(glob_re(g).match(p) for p in changed for g in c.when)
