@@ -12,7 +12,7 @@ ignore = [
     "PLR0917",  # positional-argument count, same reason as PLR0913
 ]
 
-# No per-file ignores, none for tests, skills or dev either: tests/test_rules.py fails if one comes back. A genuine boundary gets one
+# No per-file ignores, none for tests, skills or dev either: tests/gate_rules.py fails if one comes back. A genuine boundary gets one
 # `# noqa: RULE  reason` on its own line (E402 after a sys.path edit, F401 for an import kept for its side effect, PLC0415, SIM115).
 
 [lint.mccabe]

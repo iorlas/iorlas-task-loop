@@ -1,4 +1,4 @@
-# Type checking (88 sec 6). `just check` runs `pyrefly check`; there is no baseline (tests/test_rules.py).
+# Type checking (88 sec 6). `just check` runs `pyrefly check`; there is no baseline (tests/gate_rules.py).
 python-version = "3.12"
 project-includes = ["src", "skills", "tests", "dev"]
 # Vendored copies are byte-identical to their source repos and checked there; this repo only imports them.

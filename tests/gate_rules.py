@@ -4,7 +4,7 @@ What it enforces, over every .py under src/, skills/, dev/ and tests/ (src/<pkg>
 skipped by the caps):
   caps      400 SLOC per file, 80 per function, 800 per test file; SLOC = non-blank, non-comment, non-docstring lines by tokenize.
             Every cap violation that exists today is listed by file name in tests/rules_ratchet.json ("oversize" / "oversize_functions").
-            A listed entry may be removed or lowered, never added. Run `python3 tests/test_rules.py --measure` to see the current table.
+            A listed entry may be removed or lowered, never added. Run `python3 tests/gate_rules.py --measure` to see the current table.
   layers    src/<pkg>/{contracts,domain,adapters,app,cli,hook} edges (LAYER_EDGES), app-slice edges (APP_EDGES), no cycle between slices,
             the dashboard package imports `<pkg>.contracts` only, the two plugins never import each other.
   launch    only app/launch (the verbs that start the loop, selftest, dashboard) may import the dashboard package.
@@ -15,6 +15,7 @@ skipped by the caps):
 The older folder table for skills/task-loop (ALLOWED, formerly tests/test_layers.py) stays here.
 """
 import ast
+import functools
 import importlib
 import io
 import json
@@ -128,10 +129,21 @@ def walk_defs(node, prefix=""):
             yield from walk_defs(child, prefix)
 
 
+@functools.cache
+def _parsed(path: str, _stamp: tuple[int, int]) -> tuple[str, ast.Module]:
+    text = Path(path).read_text(encoding="utf-8")
+    return text, ast.parse(text, path)
+
+
+def parsed(path) -> tuple[str, ast.Module]:
+    """(text, tree) of a .py file, parsed once per process for every check that reads it (keyed on its mtime and size)."""
+    st = os.stat(path)
+    return _parsed(str(path), (st.st_mtime_ns, st.st_size))
+
+
 def measure(path):
     """(file SLOC, {qualified function name: SLOC}) for one .py file."""
-    text = Path(path).read_text(encoding="utf-8")
-    tree = ast.parse(text, str(path))
+    text, tree = parsed(path)
     lines = sloc_lines(text, tree)
     funcs = {}
     for qual, node in walk_defs(tree):
@@ -289,7 +301,7 @@ def layer_problems(root):
     out, all_slice_edges = [], set()
     for path, parts in src_files(root):
         rel = "src/" + "/".join(parts)
-        tree = ast.parse(path.read_text(encoding="utf-8"), str(path))
+        tree = parsed(path)[1]
         targets = list(imports_of(parts, tree))
         out += edge_problems(rel, parts, targets)
         for a, b in slice_edges(parts, targets):
@@ -370,8 +382,7 @@ def placement_problems(root):
     out = []
     for path, parts in src_files(root):
         rel, layer = "src/" + "/".join(parts), layer_of(parts)
-        text = path.read_text(encoding="utf-8")
-        tree = ast.parse(text, str(path))
+        text, tree = parsed(path)
         if imports_re(tree) and not (layer == "adapters" or (layer == "domain" and parts[-1] == "matchers.py")):
             out.append(f"{rel}: import re is allowed only in adapters/ and domain/**/matchers.py")
         out += [f"{rel}:{n}: import inside a function body (a needed lazy import is a cycle)" for n in lazy_imports(tree)]
@@ -464,7 +475,7 @@ def shell_problems(root=ROOT):
             rel = path.relative_to(root)
             if SKIP_DIRS & set(rel.parts) or rel.as_posix().startswith(tuple(d + "/" for d in EXEMPT_DIRS)):
                 continue
-            tree = ast.parse(path.read_text(encoding="utf-8"))
+            tree = parsed(path)[1]
             docs = {id(d.value) for d in docstring_nodes(tree)}
             for node in ast.walk(tree):
                 why = ""
@@ -534,7 +545,7 @@ def probe_problems(root=ROOT):
             rel = path.relative_to(root)
             if SKIP_DIRS & set(rel.parts) or rel.as_posix().startswith(tuple(d + "/" for d in EXEMPT_DIRS)) or "_vendor" in rel.parts:
                 continue
-            for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            for node in ast.walk(parsed(path)[1]):
                 head = None
                 if isinstance(node, (ast.List, ast.Tuple)) and node.elts:
                     head = node.elts[0]
@@ -606,7 +617,7 @@ def violations(skill=SKILL):
     found = []
     for src in FOLDERS:
         for py in sorted((skill / src).rglob("*.py")):
-            for top in sorted(set(imported_tops(ast.parse(py.read_text(encoding="utf-8"), str(py))))):
+            for top in sorted(set(imported_tops(parsed(py)[1]))):
                 if top in ALL and top not in flat and top != src and top not in ALLOWED[src]:
                     found.append(f"{py.relative_to(skill)}: {src}/ imports {top}/ ({src} -> {top} is not allowed)")
     return found

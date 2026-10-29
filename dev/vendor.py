@@ -23,7 +23,7 @@ no edits, no added files). Remove when the plugins depend on shelf directly: del
     dev/vendor.json                      the recorded tag, commit and tree hash (JSON has no comments, so the list is only here)
     src/taskloop/__init__.py             the one bootstrap that puts _vendor on sys.path
     skills/task-loop/_vendor/            the copy
-    tests/test_rules.py                  test_vendor_drift, the no-edit guard, the RealRepo/FakeRepo smoke test, and EXEMPT_DIRS,
+    tests/gate_rules.py                  test_vendor_drift, the no-edit guard, the RealRepo/FakeRepo smoke test, and EXEMPT_DIRS,
                                          the rules-gate exemption of _vendor/ from the 400/80 caps and file-count rules
 
 Python 3.12, standard library only, POSIX only.

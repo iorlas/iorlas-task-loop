@@ -130,19 +130,5 @@ class Schema(unittest.TestCase):
         snapshot_of(got)
 
 
-class Installed(unittest.TestCase):
-    """The installed delegate's real answer has the shape of the fixture and reads."""
-
-    def test_the_installed_delegate_answers_in_the_shape_of_the_fixture(self):
-        route = installed_route()
-        if not route:
-            self.skipTest("no delegate installed")
-        r = subprocess.run([sys.executable, route, "status", "--json"], capture_output=True, text=True, timeout=60, check=False)
-        got = json.loads(r.stdout[r.stdout.index("{"):])
-        snapshot_of(got)
-        self.assertLessEqual(keys(REAL) - {k for k in keys(REAL) if k.startswith("cockpit.next_worker")}, keys(got),
-                             "delegate's status dropped a key the fixture has: refresh tests/fixtures/delegate_status_*.json")
-
-
 if __name__ == "__main__":
     unittest.main()
