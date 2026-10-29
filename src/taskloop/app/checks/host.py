@@ -64,6 +64,7 @@ class CheckHost(Protocol):
     stores: Stores
     killed: bool  # the last sh() was stopped by the engine
     wall_hit: bool  # the last sh() was stopped at its wall limit
+    bead_env: Mapping[str, str]  # the slot's environment (sh() gives it to every command)
 
     def sh(self, cmd: Sequence[str], timeout: float = ..., check: bool = ..., save: Path | None = ..., env: Mapping[str, str] | None = ...,
            pin: bool = ..., what: str = ..., cwd: Path | None = ...) -> tuple[int, str]:

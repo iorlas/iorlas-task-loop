@@ -34,6 +34,7 @@ from taskloop.app.review.settles import Settles
 from taskloop.app.review.verifier import Verifier
 from taskloop.app.run import summaries
 from taskloop.app.run.ask_flow import AskFlow
+from taskloop.app.run.bead_env import bead_env
 from taskloop.app.run.blocked import Blocked, FixFailed, blocked_for
 from taskloop.app.run.closer import Closer
 from taskloop.app.run.console import say
@@ -133,6 +134,7 @@ class Engine(RunFields):
 
     # the parts: each is built when first asked for, from this engine
     tree = cached_property(Tree)
+    bead_env = cached_property(bead_env)  # the slot's environment: every command of the bead gets it (Shell.stream, the worker call)
     rebase = cached_property(Rebase)
     fixer = cached_property(Fixer)
     lander = cached_property(Lander)

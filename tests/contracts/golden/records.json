@@ -979,6 +979,7 @@
      "in": "container"
     }
    ],
+   "slot_env": {},
    "container": {
     "image": "img:1",
     "dockerfile": ""

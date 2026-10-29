@@ -508,6 +508,16 @@ local to one machine, hence the host in the title.
   reader. A named take (`run-task --slot S`, `tl slot hold S`) does not queue. Every slot claim runs under one
   per-repo lock with a fresh look at the slot bead: bd lets an actor re-claim its own bead, and hand runs of one
   session share its actor. The locks are the vendored ProcessLock (the kernel drops one with its process); POSIX only.
+- **Each slot has its own environment (tl-7y6.18).** Every command the engine runs for a bead (stage checks, the gate, the
+  land command, shot methods, and the workers it starts through `route.py run`) gets: `TMPDIR`/`TMP`/`TEMP`,
+  `DOTNET_CLI_HOME`, `NUGET_SCRATCH`, `NUGET_HTTP_CACHE_PATH` and `NUGET_PLUGINS_CACHE_PATH` under the slot's state folder
+  (`<config dir>/slot-state/<repo>/<slot>/`: outside the worktree, made on use, kept when the slot is reused),
+  `SharedCompilationId` and `MSBUILDNODEHANDSHAKESALT` = `<repo>-<slot>` (no shared compiler server or MSBuild node), and
+  `TL_SLOT`. A run with no slot (a plain worktree) uses the worktree's name as the slot. `engine.slot_env` (str to str) adds or
+  overrides keys; values may use `{slot}`, `{slot_dir}` (the state folder) and `{repo}`, any other `{name}` is refused when
+  the profile loads. A check that runs in a container gets `TL_SLOT` only (host paths mean nothing inside).
+  **Still shared:** the Unity licence, the user's NuGet package folder (`~/.nuget/packages`), and whatever a repo's own tools keep
+  under `~/.cache` or the home folder; give those a `slot_env` key when they collide.
 - `tl slot list`: name, bead, status, holder, why (and since when, or until when for a hold), the live engine if any,
   folder.
 

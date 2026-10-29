@@ -13,6 +13,22 @@ class ConfigError(ValueError):
     """.task-loop.json is not a RepoProfile (an unknown key is the usual cause)."""
 
 
+SLOT_PLACEHOLDERS = ("slot", "slot_dir", "repo")
+
+
+def fill_slot_env(values: Any, **names: str) -> dict[str, str]:
+    """engine.slot_env with {slot} {slot_dir} {repo} filled in; ConfigError for any other placeholder (or a stray brace)."""
+    out: dict[str, str] = {}
+    for key, value in values.items():
+        try:
+            out[key] = value.format(**names)
+        except (KeyError, IndexError, ValueError, AttributeError) as e:
+            allowed = ", ".join("{" + n + "}" for n in SLOT_PLACEHOLDERS)
+            raise ConfigError(f"the repo profile: engine.slot_env.{key} = {value!r}: only {allowed} can be used "
+                              f"({type(e).__name__}: {e})") from None
+    return out
+
+
 @record
 class GateOnly:
     """A command no plan check may run: only the gate at land."""
@@ -129,6 +145,7 @@ class EngineConfig:
     delegate: str = ""
     untracked_ignore: list[str] = field(default_factory=list)
     checks: list[CheckSpec] = field(default_factory=list)
+    slot_env: dict[str, str] = field(default_factory=dict)  # added to (over) the slot's environment; {slot} {slot_dir} {repo} filled in
     container: ContainerConfig | None = None
     host: bool = False
     worker_rules: str = ""
@@ -262,6 +279,7 @@ def load(data: Any, say_to: TextIO | None = None) -> RepoProfile:
     boxed = [k.id for k in profile.engine.checks if k.where == "container"]
     if boxed and not box:
         raise ConfigError(f"the repo profile: check {boxed[0]} says \"in\": \"container\" but engine.container is not set")
+    fill_slot_env(profile.engine.slot_env, **dict.fromkeys(SLOT_PLACEHOLDERS, ""))
     cmds = [k.argv for k in profile.engine.checks] + [g.argv for g in profile.engine.gate_only] + [profile.engine.land]
     cmds += [c for c in (profile.engine.gate, profile.slots.setup) if c]
     bad = [shape_problem(c) for c in cmds]

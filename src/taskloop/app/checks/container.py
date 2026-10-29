@@ -30,7 +30,7 @@ class Box:
         if why:
             return list(argv), why
         tl = {k: v for k, v in sproc.current_env().items() if k.startswith("TL_")}
-        forward = {**tl, **env}
+        forward = {**tl, "TL_SLOT": self.host.bead_env["TL_SLOT"], **env}  # the slot's name only: its host paths mean nothing inside
         art = forward.pop("TL_ARTIFACTS", "")
         name = "tl-check-" + "".join(ch if ch.isalnum() or ch in "_.-" else "-" for ch in f"{self.host.run_dir.name}-{c.id}")
         cmd = [sys.executable, str(RUNNER), "--image", self._image, "--name", name, "--art", art]

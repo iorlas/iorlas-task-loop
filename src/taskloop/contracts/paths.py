@@ -119,6 +119,10 @@ class ConfigDir:
     def ticket_counter(self, repo_key: str) -> Path:
         return self.root / "slots" / repo_key / "seq"
 
+    def slot_state(self, repo_key: str, slot: str) -> Path:
+        """What one slot of one repo keeps for its commands (temp, dotnet and NuGet scratch): outside the worktree, kept across reuse."""
+        return self.root / "slot-state" / repo_key / slot
+
     def slot_setup_mark(self, key: str) -> Path:
         return self.root / "slots" / (f"{key}.setup")
 
