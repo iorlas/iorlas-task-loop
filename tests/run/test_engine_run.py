@@ -6,25 +6,22 @@ from typing import Any, ClassVar
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
+from support import procsim
 from support.engine_case import (
     BEAD,
     CAP_PARKS,
     CAT_ENV,
     CLEAN,
     FALSE,
-    PY,
+    PLAN,
     WRITE,
     EngineTest,
     full,
     no_repo,
     review,
     sh,
-    shq,
     stop,
     verdict,
-)
-from support.engine_case import (
-    FAST_PLAN as PLAN,
 )
 
 # isort: split
@@ -164,9 +161,12 @@ class EngineRunTest(EngineTest):
 
     def test_an_unclassified_failure_keeps_the_retry(self):
         n = Path(self.tmp.name) / "runs-differ"
-        code = (f"import sys,os; p={str(n)!r}; k=(int(open(p).read()) if os.path.exists(p) else 0)+1; open(p,'w').write(str(k)); "
-                "print('AssertionError: %d != 2' % k); sys.exit(1)")
-        eng = self.checks_engine(checks=[{"id": "u", "cmd": PY + " -c " + shq(code), "group": "tests", "retry": 2}])
+
+        def differ(cwd, env):
+            k = (int(n.read_text()) if n.exists() else 0) + 1
+            n.write_text(str(k))
+            return 1, f"AssertionError: {k} != 2"
+        eng = self.checks_engine(checks=[{"id": "u", "cmd": procsim.fake("differ", differ), "group": "tests", "retry": 2}])
         res = eng.run_checks({"checks": [], "files": []}, "s")
         self.assertEqual((res[0].tries, n.read_text()), (3, "3"))  # each failure says something else: the retry may change the answer
 
@@ -321,10 +321,15 @@ class EngineRunTest(EngineTest):
         self.assertTrue(ok)
         self.assertIn(("update", "t-1", "--status", "open", "--if-assignee", "tl-61ba34e7", "--assignee", ""), up)
 
-    ERRORS = PY + ' -c "import sys; [print(\'src/F.cs(%d,1): error CS%04d: analyzer says no\' % (i % 18, i % 18)) for i in range(36)]; ' \
-                 'print(\'Build FAILED\'); sys.exit(1 if open(\'f.txt\').read().strip() == \'d2\' else 0)"'
+    ERRORS = "build-errors"  # a procsim fake (registered in the test): 36 compiler errors, red while f.txt reads d2
+
+    @staticmethod
+    def build_errors(cwd, env):
+        out = "".join(f"src/F.cs({i % 18},1): error CS{i % 18:04d}: analyzer says no\n" for i in range(36)) + "Build FAILED"
+        return (1 if procsim.f_txt(cwd) == "d2" else 0), out
 
     def test_a_fix_brief_carries_every_error_line_and_the_log_path_not_a_400_char_cut(self):
+        procsim.fake(self.ERRORS, self.build_errors)
         rc, s = self.run_engine({"plan": [self.plan_with(self.ERRORS)], "write": [WRITE, WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         fix = s.prompts[2]
@@ -364,7 +369,7 @@ class EngineRunTest(EngineTest):
         big, small = Path(self.tmp.name, "big.jsonl"), Path(self.tmp.name, "small.jsonl")
         for f, k in ((big, 160), (small, 40)):
             f.write_text(json.dumps({"type": "assistant", "message": {"usage": {"input_tokens": k * 1000}}}) + "\n")
-        red = PY + ' -c "import sys; sys.exit(0 if open(\'f.txt\').read().strip() == \'d4\' else 1)"'
+        red = procsim.fake("green-on-d4", lambda cwd, env: (0 if procsim.f_txt(cwd) == "d4" else 1, ""))
         ex = [{"family": "claude", "transcript": str(f)} for f in (big, small, small)]
         with self.store.stub(show=dict(BEAD, description=self.MARK)):
             rc, s = self.run_engine({"plan": [self.plan_with(red)], "write": [WRITE] * 3, "review": [CLEAN]}, j_extra={"write": ex})
@@ -375,10 +380,13 @@ class EngineRunTest(EngineTest):
 
     def test_a_resumed_write_gets_the_engines_brief_back_in_the_worktree(self):
         brief = Path(self.wt) / ".task" / "t-1" / "brief.md"
-        red = PY + (
-            " -c \"import sys; t=open('f.txt').read().strip(); "
-            "t == 'd2' and open('{}', 'w').write('tampered'); sys.exit(0 if t == 'd3' else 1)\"".format(str(brief).replace("\\", "/"))
-        )
+
+        def tamper(cwd, env):
+            t = procsim.f_txt(cwd)
+            if t == "d2":
+                brief.write_text("tampered")
+            return (0 if t == "d3" else 1), ""
+        red = procsim.fake("tamper-until-d3", tamper)
         with self.store.stub(show=dict(BEAD, description=self.MARK)):
             rc, s = self.run_engine({"plan": [self.plan_with(red)], "write": [WRITE, WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)

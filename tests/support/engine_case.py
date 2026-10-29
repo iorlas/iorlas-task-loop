@@ -26,13 +26,14 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 # isort: split
 from contracts import samples as S
 
-from support import fake_route, gitsim
+from support import fake_route, gitsim, procsim
 from support.builders import argv_cfg, cfg_with, make_engine
 from support.checkpoints import flat_ck, stored_ck
 from support.checks import res
 from support.fakes import FakeBeadStore
 from support.logs import records
 from support.narrow import must
+from support.procsim import real_proc  # noqa: F401
 from support.push_race import PushRace
 from support.waits import until
 from taskloop.adapters import (
@@ -128,10 +129,13 @@ def pyc(code, *args):
     return shlex.join([sys.executable, "-c", code, *args])
 
 
-HAS_F = shlex.join([sys.executable, "-c", "import os,sys; sys.exit(0 if os.path.exists('f.txt') else 1)"])
+HAS_F = "has-f"  # a procsim fake: exit 0 iff f.txt exists in the check's directory
 
 
-FALSE = shlex.join([sys.executable, "-c", "import sys; sys.exit(1)"])
+FALSE = "false"  # a procsim fake: exit 1
+
+
+RED_ONCE = "green-on-d3"  # a procsim fake (registered in setUp): exit 0 iff f.txt reads d3, red until the writer wrote it
 
 
 PLAN: dict[str, Any] = {
@@ -152,11 +156,6 @@ PLAN: dict[str, Any] = {
     "cases": [],
     "leftovers": [],
 }
-
-
-# PLAN with `test -f` as its check: a bash builtin-sized spawn instead of a Python interpreter (about 30 ms less per check run); for
-# tests that do not look at the check's text
-FAST_PLAN: dict[str, Any] = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=["test -f f.txt"])])
 
 
 WRITE = {
@@ -368,6 +367,9 @@ class EngineTest(unittest.TestCase):
                 gitsim.new_world(home)
         elif not getattr(method, "no_repo", False):
             copy_origin_and_clone(home)
+        procsim.fake(engine.Engine.MARKERS, procsim.markers)
+        procsim.fake(f"{shlex.quote(sys.executable)} /fake/route.py net", procsim.exits(2, "no such file"))  # the network probe: no answer
+        procsim.fake(RED_ONCE, lambda cwd, env: (0 if procsim.f_txt(cwd) == "d3" else 1, ""))
         self.store = FakeBeadStore()  # bd, show and comments of every engine this test builds (pass store=self.store)
         self.bd_calls = self.store.calls
         self.closed = Recorded(lambda: [c[3] for c in self.store.said("close")])  # the reasons the engine closed its bead with
@@ -433,11 +435,14 @@ class EngineTest(unittest.TestCase):
             "Multiple Unity instances: Temp/UnityLockfile in use", "another Unity instance has the project open"]
 
     def counting_check(self, line, ok_after=None):
-        """A check that prints `line` and exits 1, counting its runs in a file; green from run ok_after on."""
+        """A check (a procsim fake) that prints `line` and exits 1, counting its runs in a file; green from run ok_after on."""
         n = Path(self.tmp.name) / (f"runs-{self._testMethodName}")
-        code = (f"import sys,os; p={str(n)!r}; k=(int(open(p).read()) if os.path.exists(p) else 0)+1; open(p,'w').write(str(k)); "
-                f"print({line!r}); sys.exit(0 if {ok_after is not None!r} and k>={ok_after!r} else 1)")
-        return PY + " -c " + shq(code), n
+
+        def run(cwd, env):
+            k = (int(n.read_text()) if n.exists() else 0) + 1
+            n.write_text(str(k))
+            return (0 if ok_after is not None and k >= ok_after else 1), line
+        return procsim.fake(shlex.join(["count-check", n.name, line]), run), n
 
     R10 = "R10: a general rule never names a single item"
 
@@ -530,7 +535,7 @@ class EngineTest(unittest.TestCase):
     def plan_with(self, *checks):
         return dict(PLAN, stages=[dict(PLAN["stages"][0], checks=list(checks))])
 
-    RED_ONCE = PY + ' -c "import sys; sys.exit(0 if open(\'f.txt\').read().strip() == \'d3\' else 1)"'
+    RED_ONCE = RED_ONCE
 
     MARK = "BRIEF-MARKER-4f1c"
 
@@ -562,8 +567,14 @@ class EngineTest(unittest.TestCase):
         return records(eng, "wait_end")
 
     def counter(self, name):
+        """A check (a procsim fake) that adds one '1' to a file per run: (the file, the check)."""
         f = Path(self.tmp.name, name)
-        return f, PY + f' -c "open({str(f)!r}, \'a\').write(\'1\')"'
+
+        def run(cwd, env):
+            with f.open("a") as out:
+                out.write("1")
+            return 0, ""
+        return f, procsim.fake(f"count {name}", run)
 
     def said(self):
         """The engine's own comments (Engine failed / Engine paused): where a machine fault or pause now says why."""

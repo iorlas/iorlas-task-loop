@@ -14,10 +14,11 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as te
 from support import (
     fake_route,
+    procsim,
     tlbd,
 )
 from support.checkpoints import put_ck, read_ck
-from support.engine_case import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, engine, lint, real_git  # noqa: F401
+from support.engine_case import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, engine, lint, real_git, real_proc  # noqa: F401
 from support.fakes import as_bead
 from test_stages import StagesTest
 
@@ -115,8 +116,7 @@ class StaleTree(StagesTest):
         miss = [
             {
                 "id": "fmt",
-                "cmd": te.PY
-                + " -c \"import sys; sys.stderr.write('error: Justfile does not contain recipe `fmt-check-changed`.'); sys.exit(1)\"",
+                "cmd": procsim.fake("fmt", procsim.exits(1, "error: Justfile does not contain recipe `fmt-check-changed`.")),
                 "group": "static",
             }
         ]
@@ -157,7 +157,7 @@ class StaleTree(StagesTest):
         self.assertNotIn("infrastructure", self.eng.why)
 
     def test_a_plan_check_that_prints_the_same_words_is_the_writers_not_the_engines(self):
-        words = te.PY + " -c \"import sys; sys.stderr.write('Justfile does not contain recipe x'); sys.exit(1)\""
+        words = procsim.fake("prints-justfile-words", procsim.exits(1, "Justfile does not contain recipe x"))
         plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[words])])
         _rc, _s = self.run_engine({"plan": [plan], "write": [WRITE, WRITE, WRITE]}, max_check_tries=2)
         self.assertNotIn("infrastructure", self.eng.why)
@@ -325,6 +325,7 @@ class Contracts(StagesTest):
         script.write_text(self.FLAKY % (str(Path(self.tmp.name, "flaky-count")), fails))
         return te.PY + " " + str(script).replace("\\", "/")
 
+    @real_proc("the land script is a real child process that runs git push itself")
     @real_git("the land script is a child process that runs git push itself")
     def test_a_network_failure_on_the_push_is_retried_with_a_rest_and_lands(self):
         rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, land=self.land_with(2))
@@ -334,6 +335,7 @@ class Contracts(StagesTest):
         self.assertIsNone(self.eng.__dict__.get("asked") or None)
         self.assertTrue(self.closed and self.closed[0].startswith("merged"))
 
+    @real_proc("the land script is a real child process that runs git push itself")
     def test_a_push_that_keeps_failing_pauses_the_bead_and_asks_nobody(self):
         rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, land=self.land_with(99))
         self.assertNotEqual(rc, 0)
@@ -692,15 +694,15 @@ class EngineOnlyFlags(StagesTest):
     """The write step's request lists the engine-only recipes (route.py run --engine-only); read-only steps pass none."""
 
     def test_only_the_write_step_names_the_recipes_the_writer_must_not_run(self):
-        checks = [{"id": "slow", "cmd": "just slow", "group": "tests", "writer": False},
-                  {"id": "fmt", "cmd": "just fmt", "group": "static", "writer": True}]
+        checks = [{"id": "slow", "cmd": procsim.fake("just slow", procsim.exits(0)), "group": "tests", "writer": False},
+                  {"id": "fmt", "cmd": procsim.fake("just fmt", procsim.exits(0)), "group": "static", "writer": True}]
         _rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, checks=checks)
         flags = {role: [a[i + 1] for i, x in enumerate(a) if x == "--engine-only"] for a in s.argvs for role in [a[3]]}
         self.assertEqual(flags.get("worker"), ["slow"])
         self.assertEqual([r for r, v in flags.items() if v and r != "worker"], [])
 
     def test_an_engine_only_just_recipe_of_a_plan_stage_is_named_too(self):
-        plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[HAS_F, "just full-check"])])
+        plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[HAS_F, procsim.fake("just full-check", procsim.exits(0))])])
         _rc, s = self.run_engine({"plan": [plan], "write": [WRITE, WRITE, WRITE], "review": [CLEAN]})
         flags = {role: [a[i + 1] for i, x in enumerate(a) if x == "--engine-only"] for a in s.argvs for role in [a[3]]}
         self.assertEqual(flags.get("worker"), ["full-check"])

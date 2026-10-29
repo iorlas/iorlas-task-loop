@@ -13,12 +13,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as te
 from support import (
+    procsim,
     tools,
 )
 from support.builders import make_engine
 from support.checkpoints import put_ck, read_ck
 from support.checks import res
-from support.engine_case import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, engine, lint
+from support.engine_case import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, engine, lint, real_proc
 from support.fakes import as_bead, must_bead
 from support.narrow import must
 
@@ -380,7 +381,7 @@ class Fdyo(StagesTest):
     """13.11-13.14, from the lifesim-fdyo run (15.7M tokens): checks only the engine can pass, a late fresh writer, a check that
     cannot run, slow tests before a fast verdict."""
 
-    PASS = te.PY + ' -c "pass"'
+    PASS = "true"
 
     def test_a_check_red_two_rounds_running_tells_the_writer_it_may_flag_it(self):
         plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[FALSE])])
@@ -421,7 +422,7 @@ class Fdyo(StagesTest):
 
     def test_the_reorder_is_off_when_an_acceptance_check_reads_a_repo_checks_log(self):
         eng = self.checks_engine(checks=[{"id": "slow", "cmd": self.PASS, "group": "tests"}])
-        st = {"checks": ['grep -q . "$TL_CHECK_LOG_SLOW" || true'], "files": []}
+        st = {"checks": [procsim.fake('grep -q . "$TL_CHECK_LOG_SLOW" || true', procsim.exits(0))], "files": []}
         res = eng.run_checks(st, "s", acceptance_first=True)
         self.assertEqual([c.group for c in res], ["tests", "acceptance"])
 
@@ -449,12 +450,10 @@ class Fdyo(StagesTest):
         self.assertNotIn("failed in the last round too", writes[2])
 
     def test_a_wall_hit_parks_at_once_with_no_second_write_and_no_retry(self):
-        t = time.time()
         rc, s = self.run_engine(
             {"plan": [PLAN], "write": [WRITE, WRITE, WRITE], "review": [CLEAN]},
-            checks=[{"id": "slow", "cmd": te.pyc("import time; time.sleep(60)"), "group": "tests", "wall_min": 0.01, "retry": 2}],
+            checks=[{"id": "slow", "cmd": procsim.fake("sleep-60", procsim.takes(60)), "group": "tests", "wall_min": 0.01, "retry": 2}],
         )
-        self.assertLess(time.time() - t, 45)
         self.assertEqual([c[0] for c in s.calls], ["planner", "worker"])  # one write, no fix task, no review
         self.assertNotEqual(rc, 0)
         eng = cast(Any, self).eng
@@ -481,6 +480,7 @@ class Executable(StagesTest):
         for ok in ("grep -q x a.txt", "env FOO=1 git status", "git status --short", "python3 -c 'a;b'", te.PY + " -c 'pass'"):
             self.assertEqual(self.problems(ok), [], ok)
 
+    @real_proc("the plan lint trusts the recipe list the real just prints for the tree's justfile")
     def test_a_just_recipe_must_exist_in_the_tree(self):
         tools.need(self, "just")
         self.enterContext(tools.on_path("just"))
@@ -498,6 +498,7 @@ class Executable(StagesTest):
         for ok in ("env -i PATH=x git --version", "make", "node_modules/.bin/jest", "~/bin/foo", ".venv/bin/python -c pass"):
             self.assertEqual(self.problems(ok, probe), [], ok)
 
+    @real_proc("the plan lint trusts the recipe list the real just prints for the tree's justfile")
     def test_just_aliases_private_recipes_options_and_a_recipe_a_stage_adds(self):
         tools.need(self, "just")
         self.enterContext(tools.on_path("just"))
@@ -524,6 +525,11 @@ class Executable(StagesTest):
 
     PATH1 = ".task/t-1/evidence/sleeper-on-bed.txt"
 
+    def writes_path1(self, cwd, env):
+        (cwd / self.PATH1).parent.mkdir(parents=True, exist_ok=True)
+        (cwd / self.PATH1).write_text("ok")
+        return 0, ""
+
     def two_stage(self):
         return dict(
             PLAN,
@@ -531,7 +537,7 @@ class Executable(StagesTest):
                 dict(
                     PLAN["stages"][0],
                     goal="stage one",
-                    checks=[te.pyc("open(__import__('sys').argv[1], 'w').write('ok')", self.PATH1), HAS_F],
+                    checks=[procsim.fake(f"writes {self.PATH1}", self.writes_path1), HAS_F],
                 ),
                 dict(PLAN["stages"][0], goal="stage two", checks=[f"test -s {self.PATH1}"]),
             ],

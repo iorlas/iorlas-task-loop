@@ -36,6 +36,7 @@ from support.checks import res  # noqa: E402
 from support.engine_case import (  # noqa: E402
     BRIEFS,
     CLEAN,
+    PLAN,
     WRITE,
     finding,
     full,
@@ -47,7 +48,6 @@ from support.engine_case import (  # noqa: E402
     stored_brief,
     verdict,
 )
-from support.engine_case import FAST_PLAN as PLAN  # noqa: E402
 from support.fakes import as_bead, as_comment  # noqa: E402
 from support.logs import records  # noqa: E402
 from support.narrow import must  # noqa: E402
@@ -68,7 +68,7 @@ from taskloop.domain.checks import (  # noqa: E402
     lint,  # noqa: F401
 )
 from taskloop.domain.checks.writer_split import WriterSplit  # noqa: E402
-from taskloop.domain.lanes import netgate  # noqa: E402, F401
+from taskloop.domain.lanes import netgate  # noqa: E402
 from taskloop.domain.lanes.notes import FRESH_WRITER_TEXT  # noqa: E402
 
 
@@ -425,7 +425,7 @@ class DelegateLauncher(T.EngineTest):
 
     def test_network_down_waits_and_retries(self):
         down = stop("network", "ref-review", say="ENOTFOUND api.anthropic.com")
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [down, CLEAN]})
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [down, CLEAN]}, probe=netgate.FakeProbe([False, True]))
         self.assertEqual(rc, 0)
         self.assertEqual([c[0] for c in s.calls].count("reviewer"), 2)
         self.assertIn("network", self.eng.log_path.read_text())

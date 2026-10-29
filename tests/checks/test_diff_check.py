@@ -4,7 +4,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
-from support.engine_case import PY, EngineTest, shq
+from support import procsim
+from support.engine_case import EngineTest
 from support.narrow import must
 
 # isort: split
@@ -12,7 +13,7 @@ from taskloop.app.checks import evidence
 from taskloop.domain.checks import matchers
 
 ST = {"checks": [], "files": []}
-TESTS = {"id": "unit", "cmd": PY + " -c " + shq("print('unit ran')"), "group": "tests"}
+TESTS = {"id": "unit", "cmd": procsim.default("unit-tests", procsim.exits(0, "unit ran")), "group": "tests"}
 
 
 class DiffCheckTest(EngineTest):

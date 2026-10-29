@@ -1,16 +1,24 @@
 """A check may name a fix command: it runs before the round and what it changed is what the checks see."""
+import shlex
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
-from support.engine_case import PY, EngineTest, shq
+from support import procsim
+from support.engine_case import EngineTest
 
 # isort: split
 from taskloop.contracts.config import ConfigError, load
 
-FIX = ["python3", "-c", "open('a.txt', 'w').write('formatted\\n')"]  # a formatter: rewrites a.txt
-SEES = PY + " -c " + shq("import sys; sys.exit(0 if open('a.txt').read() == 'formatted\\n' else 1)")  # green only on the fixed file
+
+def format_a(cwd, env):
+    (cwd / "a.txt").write_text("formatted\n")
+    return 0, ""
+
+
+FIX = shlex.split(procsim.default("format-a", format_a))  # a formatter: rewrites a.txt
+SEES = procsim.default("sees-formatted", lambda cwd, env: (0 if (cwd / "a.txt").read_text() == "formatted\n" else 1, ""))  # green only then
 
 
 class CheckFixTest(EngineTest):
@@ -30,7 +38,7 @@ class CheckFixTest(EngineTest):
         self.assertNotEqual((self.wt / "a.txt").read_text(), "formatted\n")
 
     def test_a_failing_fix_is_the_checks_red_and_keeps_its_error(self):
-        boom = ["python3", "-c", "import sys; print('csharpier exploded'); sys.exit(3)"]
+        boom = shlex.split(procsim.fake("csharpier", procsim.exits(3, "csharpier exploded")))
         _, res = self.run_round(fix=boom)
         self.assertEqual((res[0].status, res[0].exit), ("failed", 3))
         self.assertIn("csharpier exploded", res[0].tail)

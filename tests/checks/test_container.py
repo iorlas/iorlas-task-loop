@@ -4,7 +4,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
-from support.engine_case import PY, EngineTest, no_repo, real_git, shq
+from support.engine_case import PY, EngineTest, no_repo, real_git, real_proc, shq
 
 # isort: split
 import dataclasses
@@ -24,6 +24,7 @@ WRITE = PY + " -c " + shq(
 BOX = {"image": "img:1"}
 
 
+@real_proc("container_run.py is a real process driving a fake docker script: the verbs it sends and the stop that kills the container")
 class ContainerChecksTest(EngineTest):
     def setUp(self):
         super().setUp()

@@ -28,6 +28,7 @@ from support import (  # noqa: E402
     tlbd,
 )
 from support.narrow import must  # noqa: E402
+from support.procsim import real_proc  # noqa: E402
 from support.waits import until  # noqa: E402
 
 from taskloop.adapters import (  # noqa: E402
@@ -56,6 +57,9 @@ def bead(id, priority=2, parent=None, labels=(), type="task"):
     if labels:
         b["labels"] = list(labels)
     return b
+
+
+LIVE_PID = "a live pid that is not this process: a real sleep child (an engine lock, a second loop, a waiter)"
 
 
 class FakeBd:
@@ -814,11 +818,12 @@ class Loop(LoopBase):
 
     def other_loop(self):
         """A second live loop on the repo: its state names a live process that is not this one."""
-        k = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+        k = subprocess.Popen(["sleep", "60"])
         self.addCleanup(lambda: (k.kill(), k.wait()))
         looptest.write_state(str(self.repo), pid=k.pid, started=self.clock.t, bead="x-9", slot="s2", since=self.clock.t)
         return k
 
+    @real_proc(LIVE_PID)
     def test_a_second_loop_on_a_repo_runs_beside_the_first_with_its_own_state(self):
         # tl-bxk.11.1: N loops on one repo; the first's state, stop and log stay as they were
         self.beads({"x-1": [rec("landed")]})
@@ -864,6 +869,7 @@ class Loop(LoopBase):
                 os.environ.pop("TASK_LOOP_ACTOR", None)
         self.assertEqual(names, ["abcdef12"] * 2)  # tl-abcdef12: the session's actor, not the per-loop one
 
+    @real_proc(LIVE_PID)
     def test_without_slots_a_second_loop_of_the_session_takes_its_own_worktree(self):
         # two loops in one worktree would reset it under each other's engine
         (self.repo / ".task-loop.json").write_text(json.dumps({"engine": {}}))
@@ -888,6 +894,7 @@ class Loop(LoopBase):
         self.assertNotIn("REMOVED", out.getvalue())
         self.assertTrue(wt.is_dir())
 
+    @real_proc(LIVE_PID)
     def test_a_stop_reaches_every_loop_and_a_loop_started_later_ignores_it(self):
         self.beads({"x-1": [rec("landed")]})
         k = self.other_loop()

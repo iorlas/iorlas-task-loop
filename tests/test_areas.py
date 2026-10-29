@@ -32,6 +32,7 @@ from support.fakes import (
     as_bead,
 )
 from support.narrow import must
+from support.procsim import real_proc
 from test_slots import Slots
 
 from taskloop.adapters import ident
@@ -52,6 +53,8 @@ from taskloop.app.wire import slots as wslots
 from taskloop.contracts.bead import BdError
 from taskloop.contracts.config import LoopConfig
 from taskloop.contracts.ports import BdFailure
+
+LIVE_PID = "a live pid that is not this process: a real sleep child (an engine lock, a second loop, a waiter)"
 
 HERE = Path(__file__).resolve().parents[1] / "skills" / "task-loop"
 AREAS_JSON = {"area_label_prefix": "lane:", "areas": {"core": ["e-core"], "build": ["build"]}}
@@ -114,6 +117,7 @@ class Areas(AreasBase):
         self.assertIn("NEXT x-3", out)
         self.assertIn("skip x-2: area live busy: x-1 in s1", out)
 
+    @real_proc(LIVE_PID)
     def test_a_live_engine_lock_naming_a_bead_makes_its_area_busy_a_dead_one_does_not(self):
         bd = self.lanes({"x-1": [], "x-2": []}, {"x-1": "live", "x-2": "live"})
         bd.beads["x-1"].update(status="in_progress", assignee="denis")
@@ -276,6 +280,7 @@ class Line(Slots):
         self.assertEqual(served, [("w1", "s1"), ("w2", "s1"), ("w3", "s1")])
         self.assertEqual(self.tickets(), [])
 
+    @real_proc(LIVE_PID)
     def test_a_waiter_behind_a_live_ticket_never_takes_a_free_slot_and_a_killed_waiter_does_not_block(self):
         self.beads({}, slots=1)
         k = subprocess.Popen(

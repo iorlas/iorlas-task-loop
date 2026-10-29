@@ -7,6 +7,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from support.procsim import real_proc
+
 ROOT = Path(__file__).resolve().parents[2]
 TL = ROOT / "skills" / "task-loop" / "tl.py"
 PY = sys.executable
@@ -24,6 +26,7 @@ CHECKS = [
 ]
 
 
+@real_proc("the `tl check` command line end to end, a real tl.py process in a real repo (part 2: INPROC)")
 class TlCheck(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

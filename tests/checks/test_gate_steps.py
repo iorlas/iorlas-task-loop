@@ -5,7 +5,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
-from support.engine_case import CLEAN, PLAN, WRITE, EngineTest, pyc
+from support import procsim
+from support.engine_case import CLEAN, PLAN, WRITE, EngineTest
 
 # isort: split
 from support.logs import records
@@ -13,8 +14,8 @@ from support.logs import records
 from taskloop.contracts.checks import Check
 from taskloop.domain.checks.specs import due, gate_items, items_of
 
-STEP = pyc("pass")
-RED_ON_D2 = pyc("import sys; t=open('f.txt').read().strip(); print('step saw', t); sys.exit(1 if t == 'd2' else 0)")
+STEP = "true"
+RED_ON_D2 = procsim.default("red-on-d2", lambda cwd, env: (1 if procsim.f_txt(cwd) == "d2" else 0, f"step saw {procsim.f_txt(cwd)}"))
 ANSWERS = {"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}
 
 
@@ -54,7 +55,7 @@ class GateSteps(EngineTest):
 
     def test_a_step_green_at_its_inputs_is_skipped_and_logged_as_cached(self):
         count = Path(self.tmp.name) / "runs"
-        both = pyc(f"open({str(count)!r}, 'a').write('1')")
+        both = procsim.fake("both", procsim.appends(count))
         rc, _ = self.run_engine(ANSWERS, checks=[{"id": "ut", "cmd": both, "run": "both", "inputs": ["f.txt"]}])
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual(count.read_text(), "1")  # the stage round ran it; the gate on the same inputs did not

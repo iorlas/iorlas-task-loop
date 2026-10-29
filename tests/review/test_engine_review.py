@@ -16,6 +16,7 @@ from support.engine_case import (
     CLEAN,
     EXIT_127,
     FALSE,
+    PLAN,
     STILL_OPEN,
     WRITE,
     EngineTest,
@@ -25,9 +26,6 @@ from support.engine_case import (
     stop,
     verdict,
     without_shims,
-)
-from support.engine_case import (
-    FAST_PLAN as PLAN,
 )
 
 # isort: split

@@ -10,7 +10,8 @@ from pathlib import Path
 from unittest import mock
 
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
-from support.engine_case import CLEAN, HAS_F, PLAN, POSIX_CHECK, STILL_OPEN, WRITE, EngineTest, pyc, verdict
+from support import procsim
+from support.engine_case import CLEAN, HAS_F, PLAN, POSIX_CHECK, STILL_OPEN, WRITE, EngineTest, verdict
 from support.logs import records
 from support.waits import until
 
@@ -70,7 +71,7 @@ class EngineLand2Test(EngineTest):
 
     def test_the_gate_named_as_unchecked_lands_without_an_ask(self):
         # lifesim-5ban.3: 'the full gate and diff coverage, reserved for the engine' stopped the land; the gate runs there
-        gate = pyc("pass")
+        gate = "true"
         r = dict(CLEAN, unchecked=[{"what": f"the full `{gate}` gate and diff coverage", "kind": "requirement"}])
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [r]}, gate=gate)
         self.assertEqual(rc, 0, self.blocked)
@@ -80,7 +81,7 @@ class EngineLand2Test(EngineTest):
         self.assertIn("write no case for it", s.prompts[0])
 
     def test_a_repo_check_that_passed_this_round_named_as_unchecked_lands_without_an_ask(self):
-        unit = pyc("print(1)")
+        unit = procsim.fake("print-1", procsim.exits(0, "1"))
         r = dict(CLEAN, unchecked=[{"what": f"{unit} on the whole tree", "kind": "case"}])
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [r]},
                                 checks=[{"id": "unit", "cmd": unit, "group": "tests"}])
@@ -92,7 +93,7 @@ class EngineLand2Test(EngineTest):
         # lifesim-gfr.31.1: 'there is no nographics.out in evidence yet' reached the owner after the case writing it passed
         plan = dict(
             PLAN,
-            cases=[{"criterion": "f.txt exists", "check": pyc("import os,sys; sys.exit(0 if os.path.exists('f.txt') else 1)", "case")}],
+            cases=[{"criterion": "f.txt exists", "check": procsim.fake("has-f case", procsim.has_f)}],
         )
         r = dict(CLEAN, unchecked=[{"what": "I could not run the case 'f.txt exists': there is no evidence.out yet",
                                     "kind": "case"}])

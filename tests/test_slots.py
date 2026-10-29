@@ -24,6 +24,7 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import slots as sl
 from support import tlbd
 from support.fakes import as_bead
+from support.procsim import real_proc
 from test_loop import LoopBase, rec
 
 from taskloop.adapters import ident, pidcheck
@@ -41,6 +42,8 @@ from taskloop.app.slots import (
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts.config import SlotsConfig
 
+LIVE_PID = "a live pid that is not this process: a real sleep child (an engine lock, a second loop, a waiter)"
+
 POSIX = os.name != "nt"
 REAL_PREPARE = Taker.prepare  # LoopBase stubs it
 
@@ -49,7 +52,7 @@ NO_FCNTL = unittest.skipIf(os.name == "nt", "the lock is fcntl; tl has none on W
 
 
 def sleeper():
-    return subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+    return subprocess.Popen(["sleep", "60"])
 
 
 class ExplodingGit:
@@ -199,6 +202,7 @@ class RunTaskTakesItsSlot(Slots):
         self.assertNotIn(("unclaim", "sl-1"), bd.calls)
         self.assertNotIn(("update", "sl-1", "--claim"), bd.calls)
 
+    @real_proc(LIVE_PID)
     def test_run_task_refuses_a_worktree_with_a_live_engine(self):
         self.beads({"x-1": []})
         k = self.live_lock("s1", bead="x-0")
@@ -208,6 +212,7 @@ class RunTaskTakesItsSlot(Slots):
         self.made.assert_not_called()
         self.assertTrue(engine_lock.engine_lock_path(self.slot("s1")).exists())  # never removes another run's lock
 
+    @real_proc(LIVE_PID)
     def test_a_dead_engines_lock_is_no_obstacle(self):
         self.beads({"x-1": []})
         k = self.live_lock("s1")
@@ -218,6 +223,7 @@ class RunTaskTakesItsSlot(Slots):
 
 
 class LiveEngineBackstop(Slots):
+    @real_proc(LIVE_PID)
     def test_the_loop_skips_a_slot_whose_worktree_has_a_live_engine_though_its_bead_is_open(self):
         bd = self.beads({"x-1": [rec("landed")]})
         self.live_lock("s1")
@@ -225,6 +231,7 @@ class LiveEngineBackstop(Slots):
         self.assertEqual(self.started, [("x-1", "s2")])
         self.assertEqual(bd.slots["sl-1"]["status"], "open")
 
+    @real_proc(LIVE_PID)
     def test_a_live_worker_left_by_a_dead_engine_keeps_the_slot_busy(self):
         self.beads({"x-1": [rec("landed")]})
         k = sleeper()
@@ -236,6 +243,7 @@ class LiveEngineBackstop(Slots):
         self.run_loop("--max-beads", "1")
         self.assertEqual(self.started, [("x-1", "s2")])
 
+    @real_proc(LIVE_PID)
     def test_slot_reset_never_touches_a_slot_with_a_live_engine(self):
         self.beads({"x-1": []})
         self.live_lock("s1")
@@ -247,6 +255,7 @@ class LiveEngineBackstop(Slots):
         with redirect_stdout(io.StringIO()):
             self.assertIsNotNone(REAL_PREPARE(Taker(env, mock.Mock(), mock.Mock(), mock.Mock(), mock.Mock(), {}), "s1", "x-1"))
 
+    @real_proc(LIVE_PID)
     def test_slot_list_shows_the_live_engine(self):
         self.beads({})
         k = self.live_lock("s1", bead="x-7")
@@ -291,6 +300,7 @@ class Hold(Slots):
         self.run_loop("--max-beads", "1")
         self.assertEqual(self.started, [("x-1", "s1")])
 
+    @real_proc(LIVE_PID)
     def test_a_slot_in_use_cannot_be_held(self):
         bd = self.beads({})
         bd.slots["sl-1"].update(status="in_progress", assignee="tl-loop0000")
@@ -300,6 +310,7 @@ class Hold(Slots):
         self.live_lock("s2")
         self.assertNotEqual(self.cli("slot", "hold", "s2", "--why", "x")[0], 0)
 
+    @real_proc(LIVE_PID)
     def test_release_refuses_a_slot_with_a_live_engine(self):
         bd = self.beads({})
         bd.slots["sl-1"].update(status="in_progress", assignee="tl-hand0000")
@@ -313,6 +324,7 @@ class Hold(Slots):
 class StaleLocks(Slots):
     """A lock outlives a SIGKILLed engine: its pid may be reused or a zombie; neither keeps the slot busy forever."""
 
+    @real_proc(LIVE_PID)
     def test_a_reused_pid_with_another_start_time_is_dead(self):
         k = sleeper()
         self.kids.append(k)
@@ -325,6 +337,7 @@ class StaleLocks(Slots):
         f.write_text(json.dumps({"pid": 0, "workers": [[k.pid, "Mon Jan  1 00:00:00 2001"]]}))
         self.assertEqual(engine_lock.engine_busy(self.slot("s1")), "")
 
+    @real_proc(LIVE_PID)
     def test_a_zombie_is_dead(self):
         z = subprocess.Popen([sys.executable, "-c", "pass"])
         try:
@@ -340,6 +353,7 @@ class StaleLocks(Slots):
         finally:
             z.wait()
 
+    @real_proc(LIVE_PID)
     def test_busy_names_the_lock_and_force_drops_it_on_reset_and_release(self):
         self.beads({})
         k = self.live_lock("s1")

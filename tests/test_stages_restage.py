@@ -5,10 +5,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as te
+from support import procsim
 from support.engine_case import CLEAN, PLAN, WRITE
 from test_stages import StagesTest
 
-HAS_G = te.shlex.join([sys.executable, "-c", "import os,sys; sys.exit(0 if os.path.exists('g.txt') else 1)"])
+HAS_G = procsim.default("has-g", lambda cwd, env: (0 if (cwd / "g.txt").exists() else 1, ""))
 TWO = dict(PLAN, stages=[PLAN["stages"][0], dict(PLAN["stages"][0], goal="add g", files=["g.txt"], checks=[HAS_G], anchors=[])])
 
 

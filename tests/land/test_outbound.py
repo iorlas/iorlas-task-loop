@@ -1,5 +1,6 @@
 """What leaves the machine at a land: --no-verify on the push, the LFS objects before it, bd's Dolt data after the lock is let go."""
 import os
+import shutil
 import stat
 import sys
 from contextlib import contextmanager
@@ -115,7 +116,8 @@ class Land(EngineTest):
 
     def test_an_lfs_repo_without_git_lfs_is_a_fault_with_the_branch_kept(self):
         self.put_repo_file(".gitattributes", ATTR)
-        with mock.patch("taskloop.app.land.outbound.shutil.which", return_value=None):
+        which = shutil.which
+        with mock.patch("taskloop.app.land.outbound.shutil.which", lambda w, *a, **kw: None if w == "git-lfs" else which(w, *a, **kw)):
             rc, _ = self.run_engine(RUN)
         self.assertNotEqual(rc, 0)
         self.assertTrue(any("git-lfs is not installed" in r["text"] for r in records(self.eng, "warn")))

@@ -10,6 +10,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
+from support import procsim
 
 from taskloop.contracts import codec, paths
 from taskloop.contracts.enums import LockWhat
@@ -33,9 +34,7 @@ time.sleep(secs)
 
 
 def dead_pid() -> int:
-    p = subprocess.Popen([sys.executable, "-c", "pass"])
-    p.wait()
-    return p.pid
+    return procsim.DEAD_PID
 
 
 class RealRig:

@@ -4,7 +4,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
-from support.engine_case import BEAD, CLEAN, FALSE, HAS_F, PLAN, PY, WRITE, EngineTest, no_repo, pid_gone, pyc, sh, shq
+from support import procsim
+from support.engine_case import BEAD, CLEAN, FALSE, HAS_F, PLAN, PY, WRITE, EngineTest, no_repo, pid_gone, real_proc, sh
 
 # isort: split
 import contextlib
@@ -46,7 +47,7 @@ from taskloop.domain.write.matchers import count_tests
 class EngineChecksTest(EngineTest):
     def test_repo_checks_on_an_equal_tree_and_base_are_reused(self):
         count = Path(self.tmp.name) / "count"
-        bump = PY + f' -c "open({str(count)!r}, \'a\').write(\'1\')"'
+        bump = procsim.fake("bump", procsim.appends(count))
         eng = self.checks_engine(checks=[{"id": "bump", "cmd": bump, "group": "tests"}])
         st = {"checks": [], "files": []}
         first = eng.run_checks(st, "s")
@@ -58,6 +59,7 @@ class EngineChecksTest(EngineTest):
         self.assertEqual(count.read_text(), "11")
         self.assertEqual(first[0].exit, 0)
 
+    @real_proc("the child's environment is what the process gets: the engine strips the launcher's session variables")
     def test_checks_run_without_the_launchers_claude_session(self):
         c = wslots.load_cfg(str(self.wt))
         eng = engine.Engine("t-1", str(self.wt), c, store=self.store)
@@ -67,15 +69,15 @@ class EngineChecksTest(EngineTest):
         self.assertEqual(res[0].exit, 0)
 
     def test_checks_run_in_groups_fastest_first_and_stop_at_a_red_group(self):
-        eng = self.checks_engine(checks=[{"id": "unit", "cmd": PY + ' -c "pass"', "group": "tests"},
+        eng = self.checks_engine(checks=[{"id": "unit", "cmd": "true", "group": "tests"},
                                          {"id": "lint", "cmd": FALSE, "group": "static"}])
-        res = eng.run_checks({"checks": [PY + ' -c "pass"'], "files": []}, "s")
+        res = eng.run_checks({"checks": ["true"], "files": []}, "s")
         self.assertEqual([(c.group, c.status) for c in res],
                          [("static", "failed"), ("tests", "skipped"), ("acceptance", "skipped")])
         self.assertIn("static failed", res[1].why)
 
     def test_a_repo_check_runs_only_when_its_paths_changed(self):
-        eng = self.checks_engine(checks=[{"id": "unity", "cmd": PY + ' -c "pass"', "group": "tests", "when": ["client/**"]}])
+        eng = self.checks_engine(checks=[{"id": "unity", "cmd": "true", "group": "tests", "when": ["client/**"]}])
         eng.git("checkout", "-q", "-b", "task/t-1")
         self.assertEqual(eng.run_checks({"checks": [], "files": []}, "s")[0].status, "skipped")
         (self.wt / "client").mkdir()
@@ -84,17 +86,19 @@ class EngineChecksTest(EngineTest):
 
     def test_a_flaky_check_gets_its_retries(self):
         mark = Path(self.tmp.name) / "seen"
-        flaky = (
-            PY + f" -c \"import os,sys; p={str(mark)!r}; first=not os.path.exists(p); open(p,'w').close(); sys.exit(1 if first else 0)\""
-        )
+
+        def red_first(cwd, env):
+            first = not mark.exists()
+            mark.write_text("")
+            return (1 if first else 0), ""
+        flaky = procsim.fake("flaky", red_first)
         eng = self.checks_engine(checks=[{"id": "flaky", "cmd": flaky, "group": "tests", "retry": 1}])
         res = eng.run_checks({"checks": [], "files": []}, "s")
         self.assertEqual((res[0].exit, res[0].status, res[0].tries), (0, "passed", 2))
 
     def sleeping_check(self, secs, counter):
-        code = (f"import time,os; p={str(counter)!r}; k=(int(open(p).read()) if os.path.exists(p) else 0)+1; open(p,'w').write(str(k)); "
-                f"time.sleep({secs!r})")
-        return PY + " -c " + shq(code)
+        """A check that counts its runs in `counter` and would take `secs` seconds (the sim stops it at the wall limit, nothing sleeps)."""
+        return procsim.fake(f"sleep-{secs}", procsim.takes(secs, then=procsim.appends(counter)))
 
     def test_a_timed_out_check_is_never_retried(self):
         n = Path(self.tmp.name) / "runs-timeout"
@@ -106,8 +110,8 @@ class EngineChecksTest(EngineTest):
         self.assertIn("no retry: timed out after", warn.call_args[0][0])
 
     def test_exit_124_from_the_command_itself_is_not_retried_either(self):
-        cmd, n = self.counting_check("timeout: the command ran too long", ok_after=1)
-        cmd = cmd.replace("sys.exit(0 if", "sys.exit(124 if").replace(" else 1)", " else 124)")
+        n = Path(self.tmp.name) / "runs-124"
+        cmd = procsim.fake("exits-124", procsim.appends(n, code=124, out="timeout: the command ran too long"))
         eng = self.checks_engine(checks=[{"id": "t", "cmd": cmd, "group": "tests", "retry": 2}])
         res = eng.run_checks({"checks": [], "files": []}, "s")
         self.assertEqual((res[0].tries, n.read_text()), (1, "1"))
@@ -125,8 +129,10 @@ class EngineChecksTest(EngineTest):
     def test_a_configured_checks_log_and_exit_reach_the_checks_after_it(self):
         cmd, n = self.counting_check("Passed: 12", ok_after=1)
         eng = self.checks_engine(checks=[{"id": "unity-tests", "cmd": cmd, "group": "tests"}])
-        read = pyc("import os,sys; log=os.environ[sys.argv[1]]; sys.exit(0 if 'Passed: 12' in open(log).read() "
-                   "and os.environ[sys.argv[2]] == '0' else 1)", "TL_CHECK_LOG_UNITY_TESTS", "TL_CHECK_RC_UNITY_TESTS")
+        def reads(cwd, env):
+            ok = "Passed: 12" in Path(env["TL_CHECK_LOG_UNITY_TESTS"]).read_text() and env["TL_CHECK_RC_UNITY_TESTS"] == "0"
+            return (0 if ok else 1), ""
+        read = procsim.fake("reads-the-log TL_CHECK_LOG_UNITY_TESTS TL_CHECK_RC_UNITY_TESTS", reads)
         res = eng.run_checks({"checks": [read], "files": []}, "s")
         self.assertEqual([c.exit for c in res], [0, 0])  # the plan check ran after the repo check and read its log
         self.assertEqual(n.read_text(), "1")
@@ -185,7 +191,8 @@ class EngineChecksTest(EngineTest):
     def test_a_stage_check_always_reruns_it_can_read_state_outside_the_tree(self):
         state = Path(self.tmp.name) / "editor-open"  # a running editor, a log, a bead comment: git cannot see them
         eng = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
-        st = {"checks": [pyc("import os,sys; sys.exit(1 if os.path.exists(sys.argv[1]) else 0)", str(state))], "files": []}
+        gone = procsim.fake(f"editor-closed {state}", lambda cwd, env: (1 if state.exists() else 0, ""))
+        st = {"checks": [gone], "files": []}
         self.assertEqual(eng.run_checks(st, "s")[0].exit, 0)
         state.write_text("x")
         again = eng.run_checks(st, "s")
@@ -194,7 +201,7 @@ class EngineChecksTest(EngineTest):
 
     def test_a_repo_check_marked_cache_false_always_reruns(self):
         count = Path(self.tmp.name) / "count"
-        bump = PY + f' -c "open({str(count)!r}, \'a\').write(\'1\')"'
+        bump = procsim.fake("bump", procsim.appends(count))
         eng = self.checks_engine(checks=[{"id": "bump", "cmd": bump, "group": "tests", "cache": False}])
         eng.run_checks({"checks": [], "files": []}, "s")
         eng.run_checks({"checks": [], "files": []}, "s")
@@ -202,7 +209,7 @@ class EngineChecksTest(EngineTest):
 
     def test_a_failed_check_is_never_reused(self):
         count = Path(self.tmp.name) / "count"
-        fails = PY + f' -c "import sys; open({str(count)!r}, \'a\').write(\'1\'); sys.exit(1)"'
+        fails = procsim.fake("fails", procsim.appends(count, code=1))
         eng = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
         st = {"checks": [fails], "files": []}
         eng.run_checks(st, "s")
@@ -224,6 +231,7 @@ class EngineChecksTest(EngineTest):
         self.assertIn('["just", "name"]', errs[0])
         self.assertEqual(answers.check("plan", False, checks_to_wire(PLAN)), [])
 
+    @real_proc("a stop kills a real child and everything it started")
     def test_a_stop_during_a_check_stops_the_check_and_everything_it_started(self):
         if os.name == "nt":
             self.skipTest("POSIX process groups")
@@ -258,7 +266,7 @@ class EngineChecksTest(EngineTest):
 
     def test_a_write_prompt_names_each_check_command_once_in_its_may_run_lists(self):
         # tl-7y6.6.12: the stage's checks and the where() text both listed "You may run these"
-        cmd = pyc("print(1)")
+        cmd = procsim.fake("print-1", procsim.exits(0, "1"))
         plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[cmd, HAS_F])])
         rc, s = self.run_engine({"plan": [plan], "write": [WRITE], "review": [CLEAN]},
                                 raw={"checks": [{"id": "x", "cmd": cmd, "group": "static"}, {"id": "y", "cmd": "echo only-repo"}]})
@@ -271,12 +279,11 @@ class EngineChecksTest(EngineTest):
 
     def test_a_sleeping_check_is_cut_at_check_wall_min_not_node_timeout_min(self):
         eng = self.checks_engine(check_wall_min=0.01, node_timeout_min=45)
-        t = time.time()
-        res = eng.run_checks({"checks": [PY + ' -c "import time; time.sleep(30)"'], "files": []}, "s")
-        self.assertLess(time.time() - t, 15)
+        res = eng.run_checks({"checks": [procsim.fake("sleep-30", procsim.takes(30))], "files": []}, "s")
         self.assertEqual((res[0].exit, res[0].status), (124, "failed"))
         self.assertIn("timed out after 0.01 min", res[0].tail)
 
+    @real_proc("a SIGTERM to the engine kills a real child and its tree")
     def test_sigterm_during_a_stage_check_stops_its_tree_and_still_closes(self):
         pidfile = Path(self.tmp.name, "child.pid")
         check = self.spawn(pidfile, term=True)
@@ -307,8 +314,8 @@ class EngineChecksTest(EngineTest):
         self.assertIn("changed since", self.eng.log_path.read_text())
 
     def test_a_slow_check_is_the_engines_and_a_fast_failed_check_is_the_writers_to_rerun(self):
-        slow = pyc("pass", "unity-tests")
-        fast = pyc("import sys; sys.exit(1 if open('f.txt').read().strip() == 'd2' else 0)", "fast-one")
+        slow = "true unity-tests"
+        fast = procsim.fake("red-on-d2 fast-one", lambda cwd, env: (1 if procsim.f_txt(cwd) == "d2" else 0, ""))
         rc, s = self.run_engine({"plan": [self.plan_with(slow, fast)], "write": [WRITE, WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         first, again = s.prompts[1], s.prompts[2]

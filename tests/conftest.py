@@ -12,11 +12,21 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
+from support import procsim
 
 # Tests that must not share a clock, a port, a lock or a process group with another test running at the same moment: they are marked
 # `serial`, and the release gate runs them in ONE process after the parallel workers (`-m "not serial"`, then `-m serial`).
 SERIAL = {
     "test_write_idle": "starts real worker process groups and asserts how long a writer stays idle against the wall clock",
+}
+# Files whose tests still start real processes and are not on procsim yet: marked `real_proc` here until they are (a file leaves the list
+# when its tests run on fakes).
+REAL_PROC = {
+    "test_release.py": "part 2 (INPROC)",
+    "test_tl.py": "part 2 (INPROC)",
+    "test_check_move.py": "part 2 (INPROC)",
+    "test_fake_route.py": "part 2 (INPROC)",
+    "test_delegate.py": "part 2 (INPROC)",
 }
 # The release gate sets TL_WORKER_MB. A healthy worker peaks near 430 MB; a runaway test gets MemoryError, not the host's RAM.
 WORKER_MB = int(os.environ.get("TL_WORKER_MB") or 2048)
@@ -26,6 +36,19 @@ def pytest_collection_modifyitems(items):
     for item in items:
         if item.module.__name__ in SERIAL:
             item.add_marker(pytest.mark.serial)
+        if item.path.name in REAL_PROC or item.path.name.startswith("test_dash"):
+            item.add_marker(procsim.real_proc("part 2 (INPROC)"))
+
+
+@pytest.fixture(autouse=True)
+def procs(request):
+    """The process sim of this test (tests/support/procsim.py): fakes answer the checks, a real spawn fails the test unless it is marked
+    `real_proc` (git is the gitsim's, or a `real_git` test's)."""
+    world = procsim.Procs(request.node.nodeid, guarded=request.node.get_closest_marker("real_proc") is None)
+    with contextlib.ExitStack() as stack:
+        world.install(stack)
+        yield world
+    world.check()
 
 
 def cap_memory(megabytes):

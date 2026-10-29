@@ -22,6 +22,7 @@ from support import (  # noqa: E402
     looptest,
     tlbd,
 )
+from support.procsim import real_proc  # noqa: E402
 
 from taskloop.adapters import pidcheck  # noqa: E402
 from taskloop.app.loop import verdict as vd  # noqa: E402
@@ -30,6 +31,8 @@ from taskloop.app.run import (  # noqa: E402
     entry,
 )
 from taskloop.app.slots import engine_lock  # noqa: E402
+
+LIVE_PID = "a live pid that is not this process: a real sleep child (an engine lock, a second loop, a waiter)"
 
 
 def sh(*a, cwd):
@@ -98,8 +101,9 @@ class HeldBranch(unittest.TestCase):
         self.assertEqual(sh("git", "rev-parse", "HEAD", cwd=self.old), self.tip)
         self.assertEqual(subprocess.run(["git", "symbolic-ref", "-q", "HEAD"], cwd=str(self.old), check=False).returncode, 1)
 
+    @real_proc(LIVE_PID)
     def test_a_worktree_with_a_live_lock_keeps_the_branch_and_the_answer_is_taken(self):
-        k = tlp.subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+        k = tlp.subprocess.Popen(["sleep", "60"])
         self.addCleanup(k.wait)
         self.addCleanup(k.kill)
         engine_lock.write_engine_lock(str(self.old), {"pid": k.pid, "start": pidcheck.proc_start(k.pid), "bead": "x-1", "started": 1})

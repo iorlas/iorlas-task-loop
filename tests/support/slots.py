@@ -1,9 +1,8 @@
 """Slot helpers for tests: the slot code reached through tl's composition root, under short names."""
 import os
-import subprocess
-import sys
 import time
 
+from support import procsim
 from taskloop.adapters import ident
 from taskloop.app.slots.pool import SlotPool
 from taskloop.app.wire import slots as wslots
@@ -46,6 +45,4 @@ def ticket_dir(repo):
 
 def dead_pid():
     """The pid of a process that has ended."""
-    p = subprocess.Popen([sys.executable, "-c", "pass"])
-    p.wait()
-    return p.pid
+    return procsim.DEAD_PID

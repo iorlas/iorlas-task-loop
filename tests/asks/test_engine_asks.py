@@ -9,8 +9,7 @@ from pathlib import Path
 from unittest import mock
 
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
-from support.engine_case import BEAD, CAT_ENV, CLEAN, WRITE, EngineTest, ask_rec, review, stop, verdict
-from support.engine_case import FAST_PLAN as PLAN
+from support.engine_case import BEAD, CAT_ENV, CLEAN, PLAN, WRITE, EngineTest, ask_rec, review, stop, verdict
 
 from taskloop.adapters import (
     gitrepo,

@@ -4,15 +4,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
-from support.engine_case import BEAD, CAP_PARKS, CLEAN, FALSE, HAS_F, PY, WRITE, EngineTest, review, sh, stop
-from support.engine_case import FAST_PLAN as PLAN
+from support.engine_case import BEAD, CAP_PARKS, CLEAN, FALSE, HAS_F, PLAN, WRITE, EngineTest, review, sh, stop
 
 # isort: split
 import json
 from pathlib import Path
 from unittest import mock
 
-from support import fake_route
+from support import fake_route, procsim
 from support.builders import cfg_with
 from support.logs import records
 
@@ -58,8 +57,9 @@ class EnginePlanTest(EngineTest):
 
     def test_a_plan_with_just_unity_in_acceptance_is_sent_back_once(self):
         bad = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=["just unity-tests"])])
+        procsim.fake("pass-check", procsim.exits(0))
         _rc, s = self.run_engine({"plan": [bad, PLAN], "write": [WRITE], "review": [CLEAN]},
-                                checks=[{"id": "unity-tests", "cmd": PY + ' -c "pass"', "group": "tests"}])
+                                checks=[{"id": "unity-tests", "cmd": "pass-check", "group": "tests"}])
         self.assertEqual([c[0] for c in s.calls], ["planner", "planner", "worker", "reviewer"])
         self.assertIn("runs `just unity-tests`", s.prompts[1])
 
@@ -226,7 +226,7 @@ class EnginePlanTest(EngineTest):
     def test_a_fix_round_runs_the_acceptance_cases_again(self):
         seen, case = self.counter("case")
         plan = dict(PLAN, cases=[{"criterion": "f.txt exists", "check": case}])
-        gate = PY + ' -c "import sys; sys.exit(1 if open(\'f.txt\').read().strip() == \'d2\' else 0)"'
+        gate = procsim.fake("red-on-d2", lambda cwd, env: (1 if procsim.f_txt(cwd) == "d2" else 0, ""))
         rc, _s = self.run_engine({"plan": [plan], "write": [WRITE, WRITE], "review": [CLEAN, CLEAN]}, gate=gate)
         self.assertEqual(rc, 0)
         self.assertEqual(seen.read_text(), "11")
@@ -481,7 +481,8 @@ class EnginePlanTest(EngineTest):
         self.assertNotIn("planner", [c[0] for c in s.calls])
 
     def test_a_stop_during_the_checks_send_back_resumes_with_the_first_plan(self):
-        bad = dict(PLAN, summary="first", stages=[dict(PLAN["stages"][0], checks=["cat <(echo x)"])])
+        cat = procsim.fake("cat <(echo x)", procsim.exits(1, "cat: '<(echo': No such file or directory"))
+        bad = dict(PLAN, summary="first", stages=[dict(PLAN["stages"][0], checks=[cat])])
         with self.stop_at("planner", 2):
             rc, _ = self.run_engine({"plan": [bad, PLAN]})
         self.assertEqual(rc, 2)

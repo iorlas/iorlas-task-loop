@@ -13,6 +13,7 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as te
 from support import (
     fake_route,
+    procsim,
     )
 from support.builders import cfg_with, make_engine
 from support.checkpoints import read_ck
@@ -38,10 +39,16 @@ from taskloop.domain.prompts.plan import REPLAN_CAP
 class VisualWork(StagesTest):
     """tl-bxk.13.15: the engine renders the writer's shots, a look judge judges, the owner decides taste."""
 
-    SHOT = ("import sys, pathlib\n"
-            "out = pathlib.Path(sys.argv[1]); out.mkdir(parents=True, exist_ok=True)\n"
-            "name = sys.argv[2] if len(sys.argv) > 2 else 'screen'\n"
-            "(out / (name + '.png')).write_bytes(b'\\x89PNG fake ' + name.encode())\n")
+    @staticmethod
+    def shot(code):
+        """The repo's shot tool as a procsim fake: `shot-tool OUT [NAME]` saves OUT/NAME.png, then exits `code`."""
+        def run(cwd, env):
+            out, name = Path(procsim.argv()[1]), (procsim.argv()[2:3] or ["screen"])[0]
+            out.mkdir(parents=True, exist_ok=True)
+            (out / (name + ".png")).write_bytes(b"\x89PNG fake " + name.encode())
+            return code, ""
+        return run
+
     TABLE: ClassVar[Any] = {
         "v": 1,
         "methods": [
@@ -49,7 +56,7 @@ class VisualWork(StagesTest):
                 "method": "ScreenShots",
                 "summary": "the main screen",
                 "timeout_min": 1,
-                "argv": [sys.executable, "tools/shot.py", "{out}", "{args}"],
+                "argv": ["shot-tool", "{out}", "{args}"],
                 "args": [{"name": "name", "flag": "", "pattern": "[a-z-]+"}],
             }
         ],
@@ -58,10 +65,10 @@ class VisualWork(StagesTest):
 
     def setUp(self):
         super().setUp()
+        procsim.fake("shot-tool", self.shot(0), args=True)
+        procsim.fake("shot-tool-fails", self.shot(3), args=True)
         base = Path(self.tmp.name, "base-files")
         te.sh("git", "clone", "-q", str(Path(self.tmp.name, "o.git")), str(base), cwd=self.tmp.name)
-        (base / "tools").mkdir()
-        (base / "tools" / "shot.py").write_text(self.SHOT)
         (base / "shots.json").write_text(json.dumps(self.TABLE))
         te.sh("git", "add", "-A", cwd=base)
         te.sh("git", "commit", "-qm", "shot table", cwd=base)
@@ -258,8 +265,7 @@ class VisualWork(StagesTest):
 
     @te.POSIX_CHECK
     def test_a_failed_shot_command_is_a_defect_even_if_it_left_a_picture(self):
-        self.TABLE["methods"][0]["argv"] = [sys.executable, "-c", "import sys, runpy; sys.argv = ['shot.py'] + sys.argv[1:]; "
-                                            "runpy.run_path('tools/shot.py', run_name='__main__'); sys.exit(3)", "{out}", "{args}"]
+        self.TABLE["methods"][0]["argv"] = ["shot-tool-fails", "{out}", "{args}"]
         try:
             base = Path(self.tmp.name, "base-files")
             (base / "shots.json").write_text(json.dumps(self.TABLE))
@@ -268,12 +274,12 @@ class VisualWork(StagesTest):
             te.sh("git", "pull", "-q", "origin", "main", cwd=self.wt)
             _rc, s = self.go({"plan": [PLAN], "write": [self.write(), self.write()], "review": [CLEAN]})
         finally:
-            self.TABLE["methods"][0]["argv"] = [sys.executable, "tools/shot.py", "{out}", "{args}"]
+            self.TABLE["methods"][0]["argv"] = ["shot-tool", "{out}", "{args}"]
         self.assertEqual(self.roles(s)[:3], ["planner", "worker", "worker"])  # no judge call: the render failed
         self.assertIn("failed (exit 3)", s.prompts[2])
 
     def test_pictures_made_before_a_later_fix_are_rendered_again_before_the_land(self):
-        red_once = te.PY + ' -c "import sys; sys.exit(0 if open(\'f.txt\').read().strip() != \'d2\' else 1)"'  # red after the first write
+        red_once = procsim.fake("red-on-d2", lambda cwd, env: (1 if procsim.f_txt(cwd) == "d2" else 0, ""))  # red after the first write
         plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[red_once])])
         rc, _s = self.go(
             {

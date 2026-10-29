@@ -13,6 +13,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as te
+from support import procsim
 from support.builders import cfg_with
 from support.engine_case import PY, engine, pyc, real_git  # noqa: F401
 from support.waits import until
@@ -41,7 +42,12 @@ class SpeedTest(te.EngineTest):
 
     def bump(self, name="count"):
         n = Path(self.tmp.name) / name
-        return pyc(f"open({str(n)!r}, 'a').write('1')"), n
+        return procsim.fake(f"bump {name}", procsim.appends(n)), n
+
+    def sh_counter(self, code=0):
+        """The unity-tests command: counts its runs in a file, prints 'Passed: 12', exits `code`."""
+        n = Path(self.tmp.name) / "unity-runs"
+        return procsim.fake(f"unity-run {code}", procsim.appends(n, code=int(code), out="Passed: 12")), n
 
     def notes(self, eng):
         return [json.loads(ln).get("text", "") for ln in eng.log_path.read_text().splitlines() if '"kind": "note"' in ln]
@@ -80,7 +86,8 @@ class InputCache(SpeedTest):
         eng2 = self.checks_engine(checks=[{"id": "unity", "cmd": cmd + " ", "group": "tests", "inputs": ["client/**"]}])
         eng2.run_checks(self.ST, "s")  # same text after whitespace normalisation: still a hit
         self.assertEqual(n.read_text(), "11")
-        eng3 = self.checks_engine(checks=[{"id": "unity", "cmd": cmd + " # other", "group": "tests", "inputs": ["client/**"]}])
+        other = procsim.fake(cmd + " other", procsim.appends(n))
+        eng3 = self.checks_engine(checks=[{"id": "unity", "cmd": other, "group": "tests", "inputs": ["client/**"]}])
         eng3.run_checks(self.ST, "s")
         self.assertEqual(n.read_text(), "111")
 
@@ -220,8 +227,8 @@ class InputCache(SpeedTest):
 class CheapFirst(SpeedTest):
     def slow_then_fast(self):
         mark = Path(self.tmp.name) / "order"
-        def step(name, tail=""):
-            return pyc(f"open({str(mark)!r}, 'a').write('{name} '); {tail}")
+        def step(name):
+            return procsim.fake(f"step-{name}", procsim.appends(mark, f"{name} "))
         return mark, step("slow"), step("quick")
 
     def seed(self, eng, cmd, secs):
@@ -230,7 +237,7 @@ class CheapFirst(SpeedTest):
 
     def test_the_cheaper_check_runs_first_and_a_red_stops_the_round(self):
         mark, slow, _ = self.slow_then_fast()
-        quick_red = pyc(f"import sys; open({str(mark)!r}, 'a').write('quick '); sys.exit(1)")
+        quick_red = procsim.fake("quick-red", procsim.appends(mark, "quick ", code=1))
         eng = self.checks_engine(checks=[{"id": "slow", "cmd": slow, "group": "tests"},
                                          {"id": "quick", "cmd": quick_red, "group": "tests"}])
         self.seed(eng, slow, 400)
@@ -264,10 +271,10 @@ class CheapFirst(SpeedTest):
         self.assertEqual(len(hist[norm(slow)]), 4)
 
     def test_a_check_reading_another_checks_log_stays_after_it(self):
-        reader = pyc("import os,sys; sys.exit(0 if os.environ.get(sys.argv[1]) else 1)", "TL_CHECK_LOG_SLOW")
-        eng = self.checks_engine(checks=[{"id": "slow", "cmd": pyc("pass"), "group": "tests"},
+        reader = procsim.fake("reader TL_CHECK_LOG_SLOW", lambda cwd, env: (0 if env.get("TL_CHECK_LOG_SLOW") else 1, ""))
+        eng = self.checks_engine(checks=[{"id": "slow", "cmd": "true", "group": "tests"},
                                          {"id": "reader", "cmd": reader, "group": "tests"}])
-        self.seed(eng, pyc("pass"), 300)
+        self.seed(eng, "true", 300)
         res = eng.run_checks({"checks": [], "files": []}, "s")
         self.assertEqual([(c.id, c.status) for c in res], [("slow", "passed"), ("reader", "passed")])
 
@@ -278,10 +285,6 @@ class CheapFirst(SpeedTest):
 
 
 class Duplicates(SpeedTest):
-    def sh_counter(self, code=0):
-        n = Path(self.tmp.name) / "unity-runs"
-        return pyc(f"import sys; open({str(n)!r}, 'a').write('1'); print('Passed: 12'); sys.exit({int(code)})"), n
-
     def test_a_plan_check_that_is_the_repo_checks_argv_takes_its_result(self):
         cmd, n = self.sh_counter()
         eng = self.checks_engine(checks=[{"id": "unity-tests", "cmd": cmd, "group": "tests"}])
@@ -308,7 +311,7 @@ class Duplicates(SpeedTest):
     def test_equal_argv_lists_are_one_command_whatever_the_spelling(self):
         cmd, n = self.sh_counter()
         eng = self.checks_engine(checks=[{"id": "unity-tests", "cmd": cmd, "group": "tests"}])
-        res = eng.run_checks({"checks": [cmd.replace(" -c ", "   -c ")], "files": []}, "s")
+        res = eng.run_checks({"checks": [cmd.replace(" ", "   ")], "files": []}, "s")
         self.assertEqual((n.read_text(), [bool(c.reused) for c in res]), ("1", [False, True]))
 
 
@@ -371,13 +374,9 @@ class Schedule(SpeedTest):
         self.assertEqual(eng.cfg.check_wall_min, 60)
         self.assertEqual((n.read_text(), [bool(c.reused) for c in res]), ("1", [False, True]))
 
-    def sh_counter(self, code=0):
-        n = Path(self.tmp.name) / "unity-runs"
-        return PY + f' -c "import sys; open({str(n)!r}, \'a\').write(\'1\'); print(\'Passed: 12\'); sys.exit({int(code)})"', n
-
     def test_a_first_run_that_timed_out_under_a_shorter_limit_is_not_reused_by_a_longer_one(self):
         n = Path(self.tmp.name) / "slow-runs"
-        slow = pyc(f"import time; open({str(n)!r}, 'a').write('1'); time.sleep(1.2)")
+        slow = procsim.fake("slow-1.2", procsim.takes(1.2, then=procsim.appends(n)))
         eng = self.checks_engine(checks=[{"id": "short", "cmd": slow, "group": "tests", "wall_min": 0.01, "cache": False},
                                          {"id": "long", "cmd": slow, "group": "tests", "wall_min": 1, "cache": False}])
         res = eng.run_checks({"checks": [], "files": []}, "s")
@@ -436,6 +435,7 @@ class WallLimit(SpeedTest):
         return subprocess.run(["pgrep", "-f", "sleep " + mark], capture_output=True, text=True, check=False).stdout.strip()
 
     @te.POSIX_CHECK
+    @te.real_proc("a wall-limit kill reaches a descendant that left the process group (setsid): only a real tree shows it")
     def test_a_timeout_keeps_the_output_and_kills_a_setsid_descendant(self):
         mark = f"72.{os.getpid()}"
         code = (f"import os,subprocess,sys,time\nprint('before', flush=True)\nsubprocess.Popen(['sleep','{mark}'], "

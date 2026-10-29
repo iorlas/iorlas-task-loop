@@ -16,4 +16,7 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 # maxschedchunk: xdist hands out at most 4 tests at a time, so the slow modules (test_release, land) spread over the workers: 2x faster than the default
 addopts = "-p no:cacheprovider --maxschedchunk=4"
-markers = ["serial: runs alone, after the parallel workers (tests/conftest.py SERIAL)"]
+markers = [
+    "serial: runs alone, after the parallel workers (tests/conftest.py SERIAL)",
+    "real_proc(reason): starts real processes; the process sim guard is off (tests/support/procsim.py)",
+]

@@ -13,7 +13,6 @@ from support.engine_case import (
     HAS_F,
     PLAN,
     POSIX_CHECK,
-    PY,
     WRITE,
     EngineTest,
     _cells,
@@ -21,6 +20,7 @@ from support.engine_case import (
     no_repo,
     pyc,
     real_git,
+    real_proc,
     review,
     sh,
     stop,
@@ -37,7 +37,7 @@ import time
 from pathlib import Path
 from unittest import mock
 
-from support import fake_route
+from support import fake_route, procsim
 from support.builders import cfg_with
 from support.interrupts import Interrupter, Recovery
 from support.logs import records
@@ -104,7 +104,7 @@ class EngineLand1Test(EngineTest):
         self.assertEqual(gitrepo.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
 
     def test_a_hung_gate_is_cut_at_gate_timeout_min_and_goes_red(self):
-        gate = PY + ' -c "import time; time.sleep(30)"'
+        gate = procsim.fake("hung-gate", procsim.hangs())
         t = time.time()
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, gate=gate,
                                 gate_timeout_min=0.02, max_fix_rounds=0)
@@ -117,7 +117,7 @@ class EngineLand1Test(EngineTest):
         # tl-y35: `gate: exit -15` (the parent stopped it) is the machine's outcome, not the code's
         rc, s = self.run_engine(
             {"plan": [PLAN], "write": [WRITE], "review": [CLEAN]},
-            gate=pyc("import os,signal; os.kill(os.getpid(), signal.SIGTERM)"),
+            gate=procsim.fake("killed-gate", procsim.exits(-15)),
             max_fix_rounds=2,
         )
         self.assertNotEqual(rc, 0)
@@ -150,7 +150,7 @@ class EngineLand1Test(EngineTest):
 
     def test_the_gate_runs_once_at_land(self):
         count = Path(self.tmp.name) / "gates"
-        gate = PY + f' -c "open({str(count)!r}, \'a\').write(\'1\')"'
+        gate = procsim.fake("count-gate", procsim.appends(count))
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, gate=gate)
         self.assertEqual(rc, 0)
         self.assertEqual(count.read_text(), "1")
@@ -158,13 +158,13 @@ class EngineLand1Test(EngineTest):
     def test_writer_is_told_the_repo_worker_rules_and_never_to_run_the_gate(self):
         self.put_repo_file("docs/agents/worker-rules.md", "RULES-MARK: unity runs on the host\n")
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]},
-                                worker_rules="docs/agents/worker-rules.md", gate=PY + ' -c "pass"')
+                                worker_rules="docs/agents/worker-rules.md", gate="true")
         self.assertEqual(rc, 0)
         w = next(p for (c, p) in zip(s.calls, s.prompts, strict=False) if c[0] == "worker")
         self.assertEqual(w.count("RULES-MARK"), 1)  # inlined once, by text
         self.assertNotIn("worker-rules.md", w)  # no path to read (tl-7y6.6.1)
         self.assertNotIn("Read ", w.split("<worker_rules>")[0].rsplit("Your stage", 1)[-1])
-        self.assertIn('-c pass`) or the issue tracker (bd)', w)
+        self.assertIn('(`true`) or the issue tracker (bd)', w)
 
     def test_wip_from_an_earlier_run_lands_as_one_titled_commit(self):
         sh("git", "checkout", "-q", "-b", "task/t-1", cwd=self.wt)
@@ -199,7 +199,7 @@ class EngineLand1Test(EngineTest):
 
     def test_acceptance_that_is_only_the_gate_is_sent_back_naming_the_rule(self):
         # tl-7y6.7.15: the engine runs the gate at land; "just check green" as acceptance proves nothing the land does not
-        gate = PY + ' -c "pass"'
+        gate = "true"
         crit = f"`{gate}` passes (green)"
         only = dict(PLAN, cases=[{"criterion": crit, "check": "", "class": "taste"}])
         good = dict(PLAN, cases=[{"criterion": "f.txt exists", "check": HAS_F}])
@@ -243,7 +243,7 @@ class EngineLand1Test(EngineTest):
 
     def test_the_planner_gets_the_repo_rules_and_is_told_the_engine_owns_the_gate(self):
         _rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]},
-                                worker_rules="docs/agents/codex.md", gate="just check", max_fix_rounds=0)
+                                worker_rules="docs/agents/codex.md", gate=procsim.fake("just check", procsim.exits(0)), max_fix_rounds=0)
         self.assertNotIn("codex.md", s.prompts[0])
         self.assertIn("never put `just check` in a stage", s.prompts[0])
 
@@ -254,6 +254,7 @@ class EngineLand1Test(EngineTest):
     def test_check_timeout_defaults_to_60_min_and_the_gate_to_90(self):
         self.assertEqual((EngineConfig().check_wall_min, EngineConfig().gate_timeout_min), (60, 90))
 
+    @real_proc("a SIGTERM landing in Popen still stops the new child's whole tree")
     def test_sigterm_landing_inside_popen_still_stops_the_new_child(self):
         # tl-10s: the stop arrived before Popen() returned (a loaded machine runs the check ahead of the engine), the handler's
         # raise left the constructor, and the check's whole tree ran on unowned
@@ -271,6 +272,7 @@ class EngineLand1Test(EngineTest):
         self.assertEqual(cm.exception.kind, oc.Kind.PAUSE_KILLED)
         self.assertDead(self.child_of(pidfile))
 
+    @real_proc("a SIGTERM during the gate must leave no child alive: a real sleeping child is killed")
     def test_sigterm_during_the_land_gate_stops_it_and_pushes_nothing(self):
         pidfile = Path(self.tmp.name, "child.pid")
         with self.stoppable():
@@ -283,6 +285,7 @@ class EngineLand1Test(EngineTest):
         self.assertEqual(gitrepo.git("show", "origin/main:f.txt", cwd=str(self.wt)), "")
         self.assertEqual(gitrepo.git("status", "--porcelain", cwd=str(self.wt)), "")
 
+    @real_proc("the land command is a real child that signals its parent, the engine, mid-command")
     @real_git("the land command is a child process that runs git push itself: only a real git answers it")
     def test_a_stop_during_the_push_waits_for_it_and_the_bead_lands(self):
         # a stop between the push and cmd_land left a landed bead failed, and the loop reopened it
@@ -310,6 +313,7 @@ class EngineLand1Test(EngineTest):
         self.assertEqual((rc, self.eng.result()["outcome"]), (0, "landed"))
         self.assertEqual(self.blocked, [])
 
+    @real_proc("the land command is a real child that signals its parent, the engine, mid-command")
     def test_a_stop_during_a_rejected_push_stops_after_it(self):
         with self.stoppable():
             rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]},
@@ -347,7 +351,8 @@ class EngineLand1Test(EngineTest):
 
     def test_reviewed_work_stopped_in_the_gate_goes_straight_to_land(self):
         with self.stoppable():
-            rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, gate="kill -TERM $PPID; sleep 5")
+            gate = procsim.fake("kill -TERM $PPID; sleep 5", procsim.exits(1, "kill: illegal pid"))
+            rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, gate=gate)
         self.assertEqual(rc, 2)
         self.assertEqual(self.checkpoint()["step"], "land")
         rc, s = self.run_engine({})
@@ -356,7 +361,7 @@ class EngineLand1Test(EngineTest):
         self.assertEqual(gitrepo.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
 
     def test_a_red_gate_replans_with_its_output_and_keeps_the_accepted_stages(self):
-        red = PY + ' -c "import sys; print(\'RS0016 ContentPack ctor\'); sys.exit(1)"'
+        red = procsim.fake("red-gate", procsim.exits(1, "RS0016 ContentPack ctor"))
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE] * 3, "review": [CLEAN] * 3}, gate=red)
         self.assertEqual(rc, 2)  # two fix rounds could not make it green: the next run re-plans with the gate's output
         self.assertEqual(self.checkpoint()["step"], "gate-red")
@@ -400,7 +405,10 @@ class EngineLand1Test(EngineTest):
         self.assertIn("conflict", s.prompts[0])
 
     def test_a_red_gate_goes_to_a_fix_round_and_lands(self):
-        gate = PY + ' -c "import sys; t=open(\'f.txt\').read().strip(); print(\'gate saw\', t); sys.exit(1 if t == \'d2\' else 0)"'
+        def saw(cwd, env):
+            t = procsim.f_txt(cwd)
+            return (1 if t == "d2" else 0), f"gate saw {t}"
+        gate = procsim.fake("gate-saw", saw)
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, WRITE], "review": [CLEAN, CLEAN]}, gate=gate)
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "reviewer", "worker", "reviewer"])
@@ -412,9 +420,10 @@ class EngineLand1Test(EngineTest):
         self.assertEqual(sum("(t-1)" in x for x in subjects), 1)
 
     def test_a_gate_fix_brief_has_the_gate_error_lines_its_log_and_the_engine_reruns_the_gate(self):
-        gate = PY + (' -c "import sys; t=open(\'f.txt\').read().strip(); '
-                     '[print(\'error E%03d: gate no\' % i) for i in range(18) if t == \'d2\']; '
-                     'sys.exit(1 if t == \'d2\' else 0)"')
+        def errors(cwd, env):
+            red = procsim.f_txt(cwd) == "d2"
+            return (1 if red else 0), "".join(f"error E{i:03d}: gate no\n" for i in range(18) if red)
+        gate = procsim.fake("gate-errors", errors)
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, WRITE], "review": [CLEAN, CLEAN]}, gate=gate)
         self.assertEqual(rc, 0, self.blocked)
         fix = s.prompts[3]
@@ -462,7 +471,7 @@ class EngineLand1Test(EngineTest):
 
     def count_check(self, name):
         log = Path(self.tmp.name, name + ".count")
-        return pyc(f"open(r'{log}','a').write('x')"), log
+        return procsim.fake(f"count-{name}", procsim.appends(log, "x")), log
 
     def checks_records(self):
         recs = [json.loads(x) for x in self.eng.log_path.read_text().splitlines()]
@@ -511,7 +520,11 @@ class EngineLand1Test(EngineTest):
     @ENGINE_BASH
     def test_a_red_gate_after_a_conflict_fix_still_gets_a_fix_round_and_the_gate_ran_once_on_the_result(self):
         flag = Path(self.tmp.name, "gate-ran")
-        gate = f"{PY} -c \"import os,sys; g=r'{flag}'; r=os.path.exists(g); open(g,'a').write('x'); sys.exit(0 if r else 1)\""
+        def red_once(cwd, env):
+            seen = flag.exists()
+            procsim.appends(flag, "x")(cwd, env)
+            return (0 if seen else 1), ""
+        gate = procsim.fake("red-once-gate", red_once)
         rc, s = self.conflict_run({"plan": [PLAN], "write": [WRITE] * 3, "review": [CLEAN] * 3}, gate=gate)
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual([c[0] for c in s.calls].count("worker"), 3)  # the stage, the conflict fix, the gate fix
@@ -542,7 +555,7 @@ class EngineLand1Test(EngineTest):
         counts = {key: Path(self.tmp.name, key) for key in ("changed", "same", "whole", "uncached", "stage", "case", "conservative")}
 
         def bump(key):
-            return PY + f' -c "open({str(counts[key])!r}, \'a\').write(\'1\')"'
+            return procsim.fake(f"bump-{key}", procsim.appends(counts[key]))
 
         checks = [{"id": key, "cmd": bump(key), "group": "tests", "inputs": [path], "inputs_only": True}
                   for key, path in (("changed", "a.txt"), ("same", "f.txt"))]
@@ -607,7 +620,7 @@ class EngineLand1Test(EngineTest):
         self.assertEqual(gitrepo.git("ls-tree", "--name-only", "main", "f.txt", cwd=str(self.race_origin)), "")
 
     def push_race_interrupted_cell(self, interruption, role):
-        gate = PY + ' -c "pass"'
+        gate = "true"
         with self.stoppable():
             cut, recovery, closed_before = Interrupter(self, interruption, role), Recovery(self), len(self.closed)
             with cut.patched():
@@ -678,6 +691,7 @@ class EngineLand1Test(EngineTest):
         self.assertEqual(len(self.closed), closed_before + 1)
         self.assertEqual(len(self.lands), 1)
 
+    @real_proc("a SIGTERM during the gate must leave no child alive: a real sleeping child is killed")
     def test_push_race_sigterm_during_retry_check_stops_child_and_keeps_barrier(self):
         with self.stoppable():
             rc, events, race = self.run_push_race(failure="checks_stop", check_wall_min=0.03)
@@ -701,6 +715,7 @@ class EngineLand1Test(EngineTest):
             self.assertIn("retry checks", ck["pending_land_validation"])
             self.assertEqual(ck["feedback"], ck["pending_land_validation"])
 
+    @real_proc("flock is per process: a second real interpreter shows the lock held across processes")
     def test_land_lock_is_one_per_repo_across_processes(self):
         if os.name == "nt":
             self.skipTest("POSIX flock")

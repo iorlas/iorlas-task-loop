@@ -4,7 +4,6 @@ import dataclasses
 import os
 import signal
 import subprocess
-import sys
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
@@ -49,7 +48,7 @@ class PushRace:
         self.state: dict[str, Any] = {"pushes": 0, "fetches": 0, "gates": 0, "results": []}
         self.real = {"lock": Lander.lock, "sh": engine.Engine.sh, "wait": Waits.add, "fetch": Checkout.fetch,
                      "checks": engine.Engine.run_checks, "fix": Fixer.fix}
-        self.gate = [sys.executable, "-c", "pass"]
+        self.gate = ["true"]
 
     # -- the seams, each called with the object it replaces a method of as `this` ----------------------------------------------
 

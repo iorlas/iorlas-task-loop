@@ -11,8 +11,9 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as te
+from support import procsim
 from support.builders import cfg_with
-from support.engine_case import CLEAN, PLAN, PY, WRITE, review
+from support.engine_case import CLEAN, PLAN, WRITE, review
 
 from taskloop.app.checks import evidence
 from taskloop.app.checks.attempts import Attempts
@@ -121,9 +122,12 @@ class SameRed(Base):
 
     def test_reds_that_differ_do_not_stop_the_run(self):
         n = Path(self.tmp.name) / "k"
-        code = (f"import os,sys; k=(int(open({str(n)!r}).read()) if os.path.exists({str(n)!r}) else 0)+1; "
-                f"open({str(n)!r},'w').write(str(k)); print('red number', k); sys.exit(1)")
-        plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[PY + " -c " + te.shq(code)])])
+
+        def numbered(cwd, env):
+            k = (int(n.read_text()) if n.exists() else 0) + 1
+            n.write_text(str(k))
+            return 1, f"red number {k}"
+        plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[procsim.fake("numbered", numbered)])])
         _rc, s = self.run_engine({"plan": [plan], "write": [WRITE] * 4}, max_check_tries=4, max_rounds=4, max_replans=0)
         self.assertGreaterEqual([c[0] for c in s.calls].count("worker"), 4)  # none of them stopped for a repeated red
         self.assertFalse([b for b in self.blocked if "same" in b])
@@ -169,7 +173,8 @@ class BaseRed(Base):
 
     def test_a_red_the_task_made_is_the_writers(self):
         mark = f"wip-{id(self):d}.txt"
-        eng = self.checks_engine(checks=[{"id": "clean", "cmd": "test ! -e " + mark, "group": "tests"}], base_red=True)
+        absent = procsim.fake("test ! -e " + mark, lambda cwd, env: (1 if (cwd / mark).exists() else 0, ""))
+        eng = self.checks_engine(checks=[{"id": "clean", "cmd": absent, "group": "tests"}], base_red=True)
         (self.wt / mark).write_text("x\n")  # in the tree, not in the base
         run = eng.run_checks(ST, "s")
         self.assertEqual(([c.base_red for c in run], [c.id for c in run.failed]), ([False], ["clean"]))
@@ -190,7 +195,7 @@ class BaseRed(Base):
 
 class WriterAndProjectLog(Base):
     def test_a_check_says_writer_true_and_the_prompt_lists_it_for_the_writer(self):
-        slow = PY + ' -c "pass"'
+        slow = "true"
         eng = self.checks_engine(checks=[{"id": "an", "cmd": slow, "group": "static", "writer": True},
                                          {"id": "full", "cmd": "just full", "group": "tests", "writer": False}], writer_check_max_s=1)
         text = eng.briefing.stage_checks_text([slow, "just full"])
@@ -201,7 +206,7 @@ class WriterAndProjectLog(Base):
         (self.wt / "client" / "Logs").mkdir(parents=True)
         (self.wt / "client" / "Logs" / "unity-project-files.log").write_text(
             "Compiling\n" + "".join(f"A{i:d}.cs(1,1): error CS{1000 + i:04d}: broken {i:d}\n" for i in range(30)))
-        cmd = PY + ' -c "import sys; print(\'project files could not be regenerated\'); sys.exit(1)"'
+        cmd = procsim.fake("project-files", procsim.exits(1, "project files could not be regenerated"))
         eng = self.checks_engine(checks=[{"id": "unity-analyzers", "cmd": cmd, "group": "static"}])
         res = eng.run_checks(ST, "s").results[0]
         self.assertEqual(res.tail.count("error CS"), 20)
@@ -212,7 +217,7 @@ class WriterAndProjectLog(Base):
     def test_a_red_with_its_own_compile_errors_is_left_alone(self):
         (self.wt / "client" / "Logs").mkdir(parents=True)
         (self.wt / "client" / "Logs" / "unity-project-files.log").write_text("B.cs(1,1): error CS0001: other\n")
-        cmd = PY + ' -c "import sys; print(\'A.cs(1,1): error CS1002: ; expected\'); sys.exit(1)"'
+        cmd = procsim.fake("compile", procsim.exits(1, "A.cs(1,1): error CS1002: ; expected"))
         eng = self.checks_engine(checks=[{"id": "unity-analyzers", "cmd": cmd, "group": "static"}])
         self.assertNotIn("other", eng.run_checks(ST, "s").results[0].tail)
 

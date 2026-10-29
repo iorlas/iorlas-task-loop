@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402, F401
 from support import tlbd  # noqa: E402
+from support.procsim import real_proc  # noqa: E402
 
 from taskloop.adapters import gitrepo  # noqa: E402
 from taskloop.app.wire import doctor  # noqa: E402
@@ -128,6 +129,7 @@ class DoctorSource(unittest.TestCase):
         self.assertIn("WARN extensions.worktreeConfig", out)
         self.assertNotIn("ok:", out)
 
+    @real_proc("the doctor command line end to end: a real tl.py process reports the source commit")
     def test_reports_exact_commit_when_ok(self):
         commit = self.advance_base(self.config("good", "old.txt"))
         out = self.doctor(cli=True)  # the one run through tl.py itself
