@@ -34,14 +34,23 @@ history version, health state, a delegate contract number. Each is a cutover: no
 | 1 | contract 3 (delegate stop reasons), `lane_policy` replacing the `_ai` ladder | R21, 0.23.69, 2026-10-27; release from a dedicated clone came later in O3c, 0.23.113 |
 | 2 | RunState and `resume_decision` (the checkpoint reader) | E8b, 0.23.108; the engine moved to src/ in E9b, 0.23.116 |
 | 3 | Ask v3 (`v` 2 ask files read as absent: a bead parked on one is re-asked with `tl answer --rerun`), the log tags of dash v2 item 5 | with the dash v2 backend, one freeze window |
+| 4 | the Mac on the converted lifesim profile (argv checks, `wall_min`), task-loop 0.23.127 → 0.23.140 | 2026-10-29 |
 
 Records are typed file stores under src/taskloop/stores/; the records.db import was never built. Contract 3 and its consumer
 landed together; `tl pin <tl> --delegate <dg>` holds a pair while one of them is rolled back.
 
-The next cutover is the Mac. It runs task-loop 0.23.99 and moves to the current version only after the owner converts the
-lifesim profile: the `checks` in `.task-loop.json` become argv lists, and `timeout_min` becomes `wall_min`. It needs the
-converted profile on lifesim's base branch, the tag of the version the Mac runs (`v0.23.99`), no live loop or run on
-the Mac (`tl cutover check` prints `CLEAR`), then the plugin update on the Mac (step 3).
+The Mac moved from 0.23.127 to 0.23.140 on 2026-10-29, after lifesim's profile was converted on its base branch (`checks` as
+argv lists, `timeout_min` → `wall_min`). The order that worked, for any machine whose checkouts lag a profile change:
+
+1. Stop the loop (step 2 above).
+2. Fast-forward every registered checkout on that machine (lifesim, and iorlas-task-loop: its own `.task-loop.json` is a
+   profile too). Local edits and untracked files that block the fast-forward are reverted or moved aside first, with the
+   owner's word.
+3. Update the task-loop plugin. The old version cannot read the converted profile, so `tl cutover check` fails on it
+   (exit 1 on the renamed keys) until the new version runs it.
+4. `tl cutover check` until `CLEAR`, one `tl run-task --dry-run`, then `tl loop`.
+
+Before the first loop on a new version, `tl lint --ready` shows which ready beads the loop will refuse and label `needs-ac`.
 
 ## By hand or by the loop
 
