@@ -21,7 +21,8 @@ from support import (
     procsim,
     tlbd,
 )
-from support.engine_case import CLEAN, PLAN, WRITE, real_git, real_proc, stop, verdict
+from support.engine_case import CLEAN, PLAN, WRITE, real_git, stop, verdict
+from support.pushsim import CUT, pusher
 
 from taskloop.adapters import gitrepo, ident
 from taskloop.app.loop.gate import GateRole
@@ -167,21 +168,10 @@ class Checks(NetBase):
 class Land(NetBase):
     """The push is the one step with no AI call: a network error waits for the probe, and a push the server took is not repeated."""
 
-    def push_script(self, name, body):
-        p = Path(self.tmp.name, name)
-        p.write_text(body)
-        return te.PY + " " + str(p).replace("\\", "/")
-
-    CUT = "error: RPC failed; curl 56 Send failure: Broken pipe\nfatal: the remote end hung up unexpectedly\n"
-
-    @real_proc("the land script is a real child process that runs git push itself")
     @real_git("the land script is a child process that runs git push itself")
     def test_a_push_the_network_cut_resumes_after_the_probe_and_lands_once(self):
         count = Path(self.tmp.name, "pushes")
-        land = self.push_script("cut_push.py",
-                                f"import os, subprocess, sys\nm = {str(count)!r}\nn = int(open(m).read()) if os.path.exists(m) else 0\n"
-                                f"open(m, 'w').write(str(n + 1))\nif n < 2:\n    sys.stderr.write({self.CUT!r}); sys.exit(1)\n"
-                                "sys.exit(subprocess.call(['git', 'push', 'origin', 'HEAD:main']))\n")
+        land = pusher("cut-push", count, cut_first=2)
         probe = Cycling(2)
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, probe=probe, land=land)
         self.assertEqual(rc, 0, self.blocked)
@@ -192,14 +182,10 @@ class Land(NetBase):
         self.assertEqual(count.read_text(), "3")  # two cuts, then the push
         self.assert_no_charge()
 
-    @real_proc("the land script is a real child process that runs git push itself")
     @real_git("the land script is a child process that runs git push itself")
     def test_a_push_the_server_took_before_the_connection_dropped_is_not_pushed_again(self):
         count = Path(self.tmp.name, "pushes")
-        land = self.push_script("took_push.py",
-                                f"import os, subprocess, sys\nm = {str(count)!r}\nopen(m, 'a').write('1')\n"
-                                "subprocess.call(['git', 'push', 'origin', 'HEAD:main'])\n"
-                                f"sys.stderr.write({self.CUT!r}); sys.exit(1)\n")
+        land = pusher("took-push", count, then_fail=CUT)
         rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, probe=Cycling(1), land=land)
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual(count.read_text(), "1")  # pushed once; the second look found it on the base
@@ -209,15 +195,11 @@ class Land(NetBase):
         self.assertIn("already", self.eng.log_path.read_text())
         self.assert_no_charge()
 
-    @real_proc("the land script is a real child process that runs git push itself")
     @real_git("the land script is a child process that runs git push itself")
     def test_a_rerun_after_a_push_that_went_through_but_was_never_seen_closes_without_pushing(self):
         count = Path(self.tmp.name, "pushes")
-        pushed = self.push_script("odd_push.py", f"import subprocess, sys\nopen({str(count)!r}, 'a').write('1')\n"
-                                  "subprocess.call(['git', 'push', 'origin', 'HEAD:main'])\n"
-                                  "sys.stderr.write('fatal: the hook lost its answer\\n'); sys.exit(1)\n")
-        again = self.push_script("counted_push.py", f"import subprocess, sys\nopen({str(count)!r}, 'a').write('1')\n"
-                                 "sys.exit(subprocess.call(['git', 'push', 'origin', 'HEAD:main']))\n")
+        pushed = pusher("odd-push", count, then_fail="fatal: the hook lost its answer\n")
+        again = pusher("counted-push", count)
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, land=pushed)
         self.assertEqual(rc, 2)  # the run reported a failed land: the bead is open, the branch is kept
         self.assertEqual((count.read_text(), self.closed), ("1", []))

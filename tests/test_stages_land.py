@@ -20,6 +20,7 @@ from support import (
 from support.checkpoints import put_ck, read_ck
 from support.engine_case import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, engine, lint, real_git, real_proc  # noqa: F401
 from support.fakes import as_bead
+from support.pushsim import pusher
 from test_stages import StagesTest
 
 from taskloop.adapters import (
@@ -312,20 +313,9 @@ class DeadLane(StagesTest):
 class Contracts(StagesTest):
     """tl-bxk.13.16: infrastructure is retried with a rest, never asked; the version is recorded."""
 
-    FLAKY = (
-        "import os, subprocess, sys\nm = %r\nn = int(open(m).read()) if os.path.exists(m) else 0\n"
-        "open(m, 'w').write(str(n + 1))\n"
-        "if n < %d:\n    sys.stderr.write('error: RPC failed; curl 56 Send failure: Broken pipe\\nfatal: the remote end hung up "
-        "unexpectedly\\n'); sys.exit(1)\n"
-        "sys.exit(subprocess.call(['git', 'push', 'origin', 'HEAD:main']))\n"
-    )
-
     def land_with(self, fails):
-        script = Path(self.tmp.name, "flaky_push.py")
-        script.write_text(self.FLAKY % (str(Path(self.tmp.name, "flaky-count")), fails))
-        return te.PY + " " + str(script).replace("\\", "/")
+        return pusher("flaky-push", Path(self.tmp.name, "flaky-count"), cut_first=fails)
 
-    @real_proc("the land script is a real child process that runs git push itself")
     @real_git("the land script is a child process that runs git push itself")
     def test_a_network_failure_on_the_push_is_retried_with_a_rest_and_lands(self):
         rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, land=self.land_with(2))
@@ -335,7 +325,6 @@ class Contracts(StagesTest):
         self.assertIsNone(self.eng.__dict__.get("asked") or None)
         self.assertTrue(self.closed and self.closed[0].startswith("merged"))
 
-    @real_proc("the land script is a real child process that runs git push itself")
     def test_a_push_that_keeps_failing_pauses_the_bead_and_asks_nobody(self):
         rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, land=self.land_with(99))
         self.assertNotEqual(rc, 0)
