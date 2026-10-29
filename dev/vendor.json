@@ -30,6 +30,12 @@
     "tree_hash": "89dfc861debbb99386e84f672479b6f28ef15156e19f4537e94a9c26a742e377"
   },
   {
+    "name": "static_page_check",
+    "shelf_tag": "static-page-check-v0.1.0",
+    "shelf_commit": "6c4d3dde605c64bb1476e4d5b7f0ba73962f0ac8",
+    "tree_hash": "32756b569d3ced95562880b2e10772bf304ac50ce8f39fc02b18922d90db247d"
+  },
+  {
     "name": "stream_proc",
     "shelf_tag": "stream-proc-v0.2.1",
     "shelf_commit": "cc2d51190e27117f9b2475d49a7b9b54608d9047",

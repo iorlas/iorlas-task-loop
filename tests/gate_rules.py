@@ -630,7 +630,9 @@ class VendorGuard(unittest.TestCase):
 
     def test_every_vendored_package_imports_by_its_absolute_name(self):
         names = [e["name"] for e in vendor.load()]
-        self.assertEqual(names, ["atomic_io", "child_env", "git_porcelain", "jsonl_log", "process_lock", "stream_proc"])
+        self.assertEqual(
+            names, ["atomic_io", "child_env", "git_porcelain", "jsonl_log", "process_lock", "static_page_check", "stream_proc"]
+        )
         for name in names:
             with self.subTest(name):
                 mod = importlib.import_module(name)

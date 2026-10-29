@@ -1,11 +1,8 @@
-"""The dashboard's static assets (dash-spec §12): every JS import resolves to a file that exports the imported names, the vendored
-runtime is pinned by hash, no colour value is written outside tokens.css, JS and CSS together stay within 100 KB gzip, and the
-fixture dev server (dev/dash_fixtures.py) answers every route the page uses."""
-import gzip
-import hashlib
+"""The dashboard's static assets (dash-spec §12), checked by shelf's static_page_check: every JS import resolves to a file that
+exports the imported names, the vendored runtime is pinned by hash, no colour value is written outside tokens.css, JS and CSS
+together stay within 100 KB gzip; and the fixture dev server (dev/dash_fixtures.py) answers every route the page uses."""
 import importlib.util
 import json
-import re
 import threading
 import unittest
 import urllib.error
@@ -13,84 +10,30 @@ import urllib.request
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 
+import static_page_check as spc
+
 ROOT = Path(__file__).resolve().parents[1]
 STATIC = ROOT / "src" / "taskloop_dash" / "static"
 FIX = ROOT / "tests" / "fixtures" / "dash"
-VENDOR = STATIC / "vendor" / "ui-runtime.js"
-VENDOR_SHA256 = "72284e8e9079c87817145df1110f74e8a2aa040b2fc384922e18dfcb46fc1fd7"  # htm 3.1.1 preact/standalone.module.js
-BUDGET_GZIP = 100 * 1024
-
-IMPORT = re.compile(r"""^\s*import\s+(?:(\{[^}]*\}|\*\s+as\s+\w+|\w+)\s+from\s+)?['"]([^'"]+)['"]""", re.M)
-EXPORT = re.compile(r"^export\s+(?:async\s+)?(?:function|const|let|class)\s+(\w+)", re.M)
-EXPORT_LIST = re.compile(r"^export\s*\{([^}]*)\}", re.M)
-COLOUR = re.compile(r"#[0-9a-fA-F]{3,8}\b(?![-\w])|\brgba?\(|\bhsla?\(")
-
-
-def page_files() -> list[Path]:
-    return sorted(p for p in STATIC.rglob("*") if p.is_file() and p.suffix in (".js", ".css", ".html")
-                  and p != VENDOR)
-
-
-def exports(path: Path) -> set[str]:
-    text = path.read_text(encoding="utf-8")
-    names = set(EXPORT.findall(text))
-    for group in EXPORT_LIST.findall(text):
-        names |= {n.split(" as ")[-1].strip() for n in group.split(",") if n.strip()}
-    return names
-
-
-def strip_css_selectors(text: str) -> str:
-    """CSS with comments dropped; an id selector (#ph) is not a colour."""
-    return re.sub(r"/\*.*?\*/", "", text, flags=re.S)
+RUNTIME = "vendor/ui-runtime.js"
+RUNTIME_SHA256 = "72284e8e9079c87817145df1110f74e8a2aa040b2fc384922e18dfcb46fc1fd7"  # htm 3.1.1 preact/standalone.module.js
 
 
 class StaticAssets(unittest.TestCase):
     def test_every_import_resolves_and_its_names_are_exported(self):
-        js = sorted(p for p in STATIC.rglob("*.js") if p != VENDOR)
-        self.assertTrue(js)
-        vendor = VENDOR.read_text(encoding="utf-8")
-        for path in js:
-            for names, spec in IMPORT.findall(path.read_text(encoding="utf-8")):
-                with self.subTest(file=path.relative_to(STATIC).as_posix(), spec=spec):
-                    self.assertTrue(spec.startswith("."), "imports are relative, no CDN")
-                    target = (path.parent / spec).resolve()
-                    self.assertTrue(target.is_file(), f"{spec} does not exist")
-                    if not names.startswith("{"):
-                        continue
-                    wanted = {n.split(" as ")[0].strip() for n in names.strip("{}").split(",") if n.strip()}
-                    missing = ({n for n in wanted if not re.search(rf"\b{n}\b", vendor)} if target == VENDOR
-                               else wanted - exports(target))
-                    self.assertFalse(missing, f"{spec} does not export {sorted(missing)}")
+        self.assertEqual(spc.import_problems(STATIC, vendored=[RUNTIME]), [])
 
     def test_pages_reference_existing_assets(self):
-        for page in ("index.html", "components.html"):
-            text = (STATIC / page).read_text(encoding="utf-8")
-            self.assertNotRegex(text, r'(?:href|src)="/', f"{page}: assets by relative url, so the page works wherever it is served")
-            for ref in re.findall(r'(?:href|src)="(?!https?:)([^"]+)"', text):
-                with self.subTest(page=page, ref=ref):
-                    self.assertTrue((STATIC / ref).is_file())
+        self.assertEqual(spc.page_problems(STATIC), [])
 
     def test_runtime_is_pinned(self):
-        self.assertEqual(hashlib.sha256(VENDOR.read_bytes()).hexdigest(), VENDOR_SHA256,
-                         "vendor/ui-runtime.js changed: it is never edited, only replaced with a new pin")
+        self.assertEqual(spc.pin_problems(STATIC, {RUNTIME: RUNTIME_SHA256}), [])
 
     def test_colours_live_only_in_tokens(self):
-        for path in page_files():
-            if path.name == "tokens.css":
-                continue
-            text = path.read_text(encoding="utf-8")
-            if path.suffix == ".css":
-                text = strip_css_selectors(text)
-            for n, line in enumerate(text.splitlines(), 1):
-                # a CSS id selector or an html id is not a colour: only values after ":" or in style/JS strings count
-                hits = [m.group(0) for m in COLOUR.finditer(line) if not re.match(r"#[a-zA-Z][\w-]*\s*[{,.:\s>]", line[m.start():])]
-                with self.subTest(file=path.relative_to(STATIC).as_posix(), line=n):
-                    self.assertFalse(hits, f"colour outside tokens.css: {hits} in {line.strip()[:120]}")
+        self.assertEqual(spc.colour_problems(STATIC, "css/tokens.css", vendored=[RUNTIME]), [])
 
     def test_gzip_budget(self):
-        shipped = [p for p in STATIC.rglob("*") if p.suffix in (".js", ".css")]
-        total = sum(len(gzip.compress(p.read_bytes(), 9)) for p in shipped)
-        self.assertLessEqual(total, BUDGET_GZIP, f"JS+CSS is {total / 1024:.1f} KB gzip, budget 100 KB")
+        self.assertEqual(spc.budget_problems(STATIC, 100 * 1024), [])
 
 
 def load_dev_server():
