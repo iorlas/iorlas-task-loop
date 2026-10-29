@@ -77,7 +77,7 @@ class Sessions(unittest.TestCase):
         self.assertEqual(session.start(self.event(source="startup"), self.root), "")
         self.assertEqual(json.loads((self.cfg / "sessions" / "s1.json").read_text())["transcript"], "/t.jsonl")
         shim = (self.cfg / "bin" / "tl").read_text()
-        self.assertIn(str(self.root / "skills" / "task-loop" / "tl.py"), shim)
+        self.assertIn("exec uv run --quiet --script " + str(self.root / "skills" / "task-loop" / "tl.py"), shim)
         self.assertTrue(os.access(self.cfg / "bin" / "tl", os.X_OK))
 
     def test_session_start_never_fails_on_input_it_cannot_read(self):
@@ -156,7 +156,7 @@ class Texts(unittest.TestCase):
 
 
 class Speed(unittest.TestCase):
-    """A hook runs before every tool call: pretool pulls in no store, adapter or app module; an unknown event is an error."""
+    """A hook runs before every tool call: pretool imports no store, adapter, app, record or pydantic module; an unknown event fails."""
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -164,10 +164,11 @@ class Speed(unittest.TestCase):
         self.env = dict(os.environ, XDG_CONFIG_HOME=self.tmp.name, CLAUDE_CONFIG_DIR=self.tmp.name)
 
     @real_proc("a fresh interpreter shows the hook's import graph and exit code")
-    def test_pretool_imports_no_store_adapter_or_app_module(self):
+    def test_pretool_imports_no_store_adapter_app_module_record_or_pydantic(self):
         code = (
             "import sys; sys.path.insert(0, {!r}); from taskloop.hook import main, pretool; pretool.main('{{}}'); "
-            "print([m for m in sys.modules if m.startswith(('taskloop.app', 'taskloop.adapters', 'taskloop.stores'))])"
+            "print([m for m in sys.modules if m.startswith(('taskloop.app', 'taskloop.adapters', 'taskloop.stores', 'taskloop.contracts', "
+            "'pydantic'))])"
         ).format(str(ROOT / "src"))
         r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
         self.assertEqual(r.stdout.strip(), "[]")

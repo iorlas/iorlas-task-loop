@@ -10,7 +10,7 @@ HANDOFF_BYTES = 4 * 1024
 # The standing rules a fresh session must not have to rediscover (CLAUDE.md of this repo and the skill).
 RULES = (
     "work in a worktree; never edit a plugin cache dir or the main checkout by hand",
-    "release only through python3 dev/release.py; never bump a version by hand",
+    "release only through uv run --script dev/release.py; never bump a version by hand",
     "never pkill/killall or kill by pattern: only a PID you confirmed is yours",
     "a human decision is relayed with the quoted words and a timestamp; an empty approval is refused for an override",
     "fork a session only for read-only work of 4 h or less; otherwise start fresh with a written brief",

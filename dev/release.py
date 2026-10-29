@@ -1,7 +1,11 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.12"
+# dependencies = ["pydantic==2.14.2"]
+# ///
 """Release the plugin: one release at a time, the version from origin, the suite green, the marketplace bumped.
 
-    python3 dev/release.py "message" [--bead ID --reason R] [--from-branch B] [--minor]
+    uv run --script dev/release.py "message" [--bead ID --reason R] [--from-branch B] [--minor]
                            [--repo DIR] [--marketplace DIR]
 
 A thin caller of src/taskloop/app/release/, always running origin/main's release code: once the clone is on origin/main, a launching

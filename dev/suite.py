@@ -1,7 +1,11 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.12"
+# dependencies = ["pydantic==2.14.2"]
+# ///
 """The land gate: the full suite through pytest-xdist workers (taskloop.app.release.suite), exit 0 when green, 1 when red.
 
-    python3 dev/suite.py [--repo DIR]      (default: the checkout this file is in)
+    uv run --script dev/suite.py [--repo DIR]      (default: the checkout this file is in)
 
 The runner lives in src/taskloop/app/release/suite.py; this is only its command line.
 """

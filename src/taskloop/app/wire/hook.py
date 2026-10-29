@@ -22,13 +22,17 @@ def session_start(stdin_text: str) -> None:
         pass
 
 
-SHIM = "#!/bin/sh\nexec python3 {tl} \"$@\"\n"
+SHIM = (
+    "#!/bin/sh\n"
+    "command -v uv >/dev/null 2>&1 || { echo 'tl: uv is required (https://docs.astral.sh/uv/)' >&2; exit 127; }\n"
+    "exec uv run --quiet --script {tl} \"$@\"\n"
+)
 
 
 def write_shim(plugin_root: Path) -> None:
-    """<config>/bin/tl: a path that does not change with the plugin version, running this install's tl.py."""
+    """<config>/bin/tl: a path that does not change with the plugin version, running this install's tl.py through `uv run --script`."""
     f = config_dir() / "bin" / "tl"
-    text = SHIM.format(tl=shlex.quote(str(plugin_root / "skills" / "task-loop" / "tl.py")))
+    text = SHIM.replace("{tl}", shlex.quote(str(plugin_root / "skills" / "task-loop" / "tl.py")))
     try:
         if f.is_file() and f.read_text(encoding="utf-8") == text:
             return

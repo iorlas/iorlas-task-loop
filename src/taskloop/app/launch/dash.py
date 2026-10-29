@@ -137,6 +137,7 @@ def start_server(port: int, bind: str | None = None) -> tuple[dict[str, Any] | N
     more = [env["PYTHONPATH"]] if env.get("PYTHONPATH") else []
     env["PYTHONPATH"] = os.pathsep.join([str(SRC), str(VENDOR), *more])
     bind = bind or ",".join(default_binds())
+    # sys.executable, not uv: the server imports taskloop.contracts (pydantic), and tl.py, which starts it, runs under `uv run --script`
     cmd = [sys.executable, "-m", "taskloop_dash", "--ports", "taskloop.app.launch.dash_ports:ports", "--port", str(port), "--bind", bind]
     proc = procs.spawn(cmd, stdin=subprocess.DEVNULL, stdout=log, stderr=log, env=env, cwd=str(config_dir()), close_fds=True,
                        start_new_session=True)

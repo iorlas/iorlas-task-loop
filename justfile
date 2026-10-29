@@ -27,7 +27,8 @@ types:
 rules:
     #!/usr/bin/env bash
     set -euo pipefail
-    PYTHONPATH=src uv tool run --from "import-linter@$(just pin pipx:import-linter)" lint-imports
+    # --with pydantic: .importlinter names pydantic as a root package (the hook contract), and grimp must find it
+    PYTHONPATH=src uv tool run --with pydantic --from "import-linter@$(just pin pipx:import-linter)" lint-imports
     uv run pytest tests/gate_rules.py -q
 
 # The version mise.toml pins for a tool (one source for the pins).

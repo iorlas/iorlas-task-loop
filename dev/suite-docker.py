@@ -27,7 +27,7 @@ _DOCKERFILE_SHA = hashlib.sha1((HERE / "Dockerfile.suite").read_bytes()).hexdige
 DEFAULT_IMAGE = "task-loop-suite:" + _DOCKERFILE_SHA  # a new Dockerfile is a new image
 SUITE_WALL_S = 3 * 3600.0  # a hang guard for the whole host suite; each shard has its own, shorter, limit
 INSIDE = ("git clone -q /src.git /w && cd /w && git checkout -q \"$SHA\" && cat > /tmp/p"
-          " && { [ ! -s /tmp/p ] || git apply /tmp/p; } && python3 dev/suite.py")
+          " && { [ ! -s /tmp/p ] || git apply /tmp/p; } && uv run --script dev/suite.py")
 
 
 def docker_ok():
@@ -56,7 +56,7 @@ def host_suite(repo, why):
     print(f"suite-docker: WARNING {why}; running the suite on the host", file=sys.stderr, flush=True)
     old = signal.signal(signal.SIGTERM, lambda signum, _frame: sys.exit(128 + signum))  # unwinds into stream_proc.run, which stops the tree
     try:
-        res = stream_proc.run([sys.executable, str(HERE / "suite.py"), "--repo", str(repo)],
+        res = stream_proc.run(["uv", "run", "--quiet", "--script", str(HERE / "suite.py"), "--repo", str(repo)],
                               on_stdout=lambda t: print(t, end="", flush=True),
                               on_stderr=lambda t: print(t, end="", file=sys.stderr, flush=True), timeout=SUITE_WALL_S)
     finally:

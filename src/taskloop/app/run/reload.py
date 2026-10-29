@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from taskloop.adapters import ident
+from taskloop.adapters import ident, procs
 from taskloop.adapters.halt import RUN_SLOT
 from taskloop.app.loop.versions import Installs
 from taskloop.app.release import catalog, pins, reexec
@@ -119,7 +119,7 @@ class Reload:
             with contextlib.suppress(Exception):
                 f.flush()
         try:
-            (e.exec_fn or reexec.exec_in_place)([sys.executable, str(d / "skills" / "task-loop" / "tl.py"), *argv])
+            (e.exec_fn or reexec.exec_in_place)([*procs.script_argv(d / "skills" / "task-loop" / "tl.py"), *argv])
             e.moved = True
             raise Exec()  # reached only when the exec function is a test's
         except OSError as exc:  # exec itself failed: this version goes on where it is

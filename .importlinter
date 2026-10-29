@@ -5,6 +5,7 @@
 root_packages =
     taskloop
     taskloop_dash
+    pydantic
     re
     urllib
     http
@@ -43,6 +44,32 @@ forbidden_modules =
     http
     multiprocessing
 allow_indirect_imports = True
+
+[importlinter:contract:hot-hook-path-is-light]
+name = the PreToolUse hook (every Bash call) imports no pydantic and no record model
+type = forbidden
+source_modules =
+    taskloop.hook.main
+    taskloop.hook.pretool
+    taskloop.hook.rules
+forbidden_modules =
+    pydantic
+    taskloop.contracts
+    taskloop.app
+    taskloop.adapters
+    taskloop.stores
+    taskloop.domain
+
+[importlinter:contract:pydantic-in-contracts-only]
+name = only taskloop.contracts imports pydantic
+type = forbidden
+source_modules =
+    taskloop
+    taskloop_dash
+forbidden_modules = pydantic
+allow_indirect_imports = True
+ignore_imports =
+    taskloop.contracts.** -> pydantic
 
 [importlinter:contract:layers-no-skips]
 name = cli and hook never import domain or adapters

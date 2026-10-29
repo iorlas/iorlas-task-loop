@@ -1,9 +1,14 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.12"
+# dependencies = ["pydantic==2.14.2"]
+# ///
 """The real-process race (tl-bxk.11.1, tl-vgo): two `tl loop`s, a hand `run-task --slot s1`, a hand `run-task --slot any --wait`,
 a `tl slot hold s2` and two `dev/release.py` at once, all real processes, on a fake repo (bare origin, fake bd, fake
-delegate, fake marketplace). About 40 s per seed, more under load; NOT in the default gate (python3 dev/suite.py).
+delegate, fake marketplace). About 40 s per seed, more under load; NOT in the default gate (uv run --script dev/suite.py).
 
-    python3 dev/race.py                  seeds 1..5, one after another
-    python3 dev/race.py --seeds 3        one seed (or 1,4,7 or 2-6)
+    uv run --script dev/race.py                  seeds 1..5, one after another
+    uv run --script dev/race.py --seeds 3        one seed (or 1,4,7 or 2-6)
     TASK_LOOP_RACE=1 python3 -m unittest dev.race     the same, one seed (RACE_SEED, default 1)
 
 Exit 0 when every seed passed, 1 when one failed. A failed seed prints `RACE_SEED=n FAILED` and then the checks that broke,
@@ -82,7 +87,7 @@ def shim(path, script):
 
 @unittest.skipIf(os.name == "nt", "fcntl locks and POSIX process groups")
 @unittest.skipUnless(
-    __name__ == "__main__" or os.environ.get("TASK_LOOP_RACE"), "a real-process race: python3 dev/race.py, or TASK_LOOP_RACE=1"
+    __name__ == "__main__" or os.environ.get("TASK_LOOP_RACE"), "a real-process race: uv run --script dev/race.py, or TASK_LOOP_RACE=1"
 )
 class Race(unittest.TestCase):
     def setUp(self):

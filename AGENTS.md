@@ -33,7 +33,7 @@ Work in a worktree. Fork a session only for read-only work of 4 hours or less; o
 ```bash
 uv run pytest tests/land -q    # one folder or module (also tests/test_x.py::Class::test); the suite's tests are unittest TestCases
 just test -n auto  # the whole suite in parallel workers (`just test` alone: one process); the `serial` group needs dev/suite.py
-python3 dev/suite.py           # what a release runs: xdist workers, then the serial group alone; takes the host-wide suite lock
+uv run --script dev/suite.py  # what a release runs: xdist workers, then the serial group alone; takes the host-wide suite lock
 just check                     # ruff + pyrefly + the structural rules (tools pinned in mise.toml; `mise install`)
 ```
 
@@ -44,7 +44,9 @@ Caps (tests/gate_rules.py): 400 SLOC per file, 80 per function, 800 per test fil
 ## Conventions
 
 - Python 3.12+; macOS and Linux (in containers too), POSIX only. Dependencies: runtime ones are declared inline in `skills/task-loop/tl.py`
-  (PEP 723) and run with `uv run --script`; dev and test tools live in pyproject.toml's `dev` group; hooks stay light (no dependency).
+  (PEP 723, the same pin as pyproject.toml's `dependencies`; tests/test_pep723.py holds them equal) and run with `uv run --script`: the
+  `tl` shim, the loop's own spawns, dev/release.py and dev/suite.py. Dev and test tools live in pyproject.toml's `dev` group. The
+  PreToolUse hook (every Bash call) stays on plain `python3` and imports no pydantic and no record (.importlinter, tests/test_hook.py).
 
 ## Quick Reference
 

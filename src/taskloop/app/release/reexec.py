@@ -3,7 +3,6 @@ the process that takes it over: the exec hand-over, the network pause, and the a
 import contextlib
 import json
 import os
-import sys
 import time
 from collections.abc import Sequence
 from pathlib import Path
@@ -84,4 +83,4 @@ def reexec_args(argv: Sequence[str], slot: str, wt: object) -> list[str] | None:
 
 def exec_in_place(argv: list[str]) -> None:
     applog.close_all()
-    os.execv(sys.executable, argv)
+    os.execv(argv[0], argv)

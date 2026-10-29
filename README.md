@@ -25,7 +25,7 @@ yourself.
 A Claude Code session (attended mode) picks ready beads and runs the **engine** on each, watching its output:
 
 ```sh
-python3 skills/task-loop/tl.py run-task <bead id> --worktree <dir>
+uv run --script skills/task-loop/tl.py run-task <bead id> --worktree <dir>
 ```
 
 The engine claims the bead and runs reset → plan → per stage (write → checks run by the engine → review by the other
@@ -36,7 +36,7 @@ answer. Code routes and accepts by rule (checks green, nothing blocking in the r
 Or let the loop run the queue by itself, one bead after another, each in any free slot:
 
 ```sh
-python3 skills/task-loop/tl.py loop [--max-beads N] [--until HH:MM]   # tl loop status to watch, tl stop [--now] to end
+uv run --script skills/task-loop/tl.py loop [--max-beads N] [--until HH:MM]   # tl loop status to watch, tl stop [--now] to end
 ```
 
 Everything is recorded in the bead (plan, review findings, reflect stats, provenance of who claimed and landed it).
@@ -83,10 +83,10 @@ src/taskloop/app/launch/         what tl starts: loop.py (tl loop / next / stop)
                                  engine with a scripted lane, on this install's code), dash.py (tl dash), dash_ports.py
 src/taskloop/app/prune/          tl prune: run data, merged build worktrees and release branches past loop.keep_days (also run at loop start)
 src/taskloop/app/report/         tl report, lost and reflect digest: the data (cli/report.py prints it)
-src/taskloop_dash/               the dashboard package (stdlib; `python3 -m taskloop_dash`, started by `tl dash ensure`)
+src/taskloop_dash/               the dashboard package (imports taskloop.contracts, so pydantic; runs on the interpreter `tl dash ensure` runs on)
 src/taskloop_dash/static/        the dashboard page: index.html and its ES modules (Preact + HTM vendored; no build)
 src/taskloop_dash/views/         engine logs, asks and bd -> the typed snapshot and bead records (contracts/dash.py)
-hooks/hooks.json                 SessionStart: index session id -> transcript path
+hooks/hooks.json                 SessionStart: index session id -> transcript path (uv run --script); PreToolUse: python3, no pydantic
 tests/                           uv run pytest   (pytest + xdist, the dev group of pyproject.toml; CI: Ubuntu, Python 3.12)
 dev/release.py                   the only way to release: release lock, version from origin, suite, marketplace, install
 docs/design/                     design notes

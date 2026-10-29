@@ -177,7 +177,8 @@ def exec_into(repo: str, d: Path, argv: list[str], handover: str, start_cwd: str
     sys.stderr.flush()
     applog.close_all()
     try:
-        os.execv(sys.executable, [sys.executable, str(d / "skills" / "task-loop" / "tl.py"), *argv])
+        cmd = [*sproc.script_argv(d / "skills" / "task-loop" / "tl.py"), *argv]
+        os.execv(cmd[0], cmd)
     except OSError:
         os.environ.pop("TL_LOOP_STATE", None)
         with contextlib.suppress(OSError):
@@ -219,7 +220,7 @@ def build(repo: str, store: Beads | None = None, session_actor: str = "", here: 
         stop_now=stop_now,
         stop_tree=stop_tree,
         run_task_argv=lambda bead, wt, slot, out, code: (
-            [sys.executable, str((code or here) / "tl.py"), "run-task", bead, "--worktree", wt, "--outcome-file", out]
+            [*sproc.script_argv((code or here) / "tl.py"), "run-task", bead, "--worktree", wt, "--outcome-file", out]
             + (["--slot", slot] if slot else [])
         ),
         landed_on_base=lambda wt, bead: landed_on_base(repo, store, wt, bead),

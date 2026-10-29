@@ -28,11 +28,12 @@ from test_loop import Base, LoopBase, bead, rec  # noqa: E402
 from taskloop.adapters import (  # noqa: E402
     beadtools,
     ident,
+    procs,
 )
 from taskloop.app.launch import loop as wloop  # noqa: E402
 from taskloop.app.loop.core import Core  # noqa: E402
 from taskloop.cli import loop_cmd  # noqa: E402
-from taskloop.contracts import codec  # noqa: E402
+from taskloop.contracts import wire  # noqa: E402
 from taskloop.contracts.config import LoopConfig  # noqa: E402
 from taskloop.contracts.loop import LoopCommand, LoopState  # noqa: E402
 from taskloop.domain.lanes import netgate  # noqa: E402
@@ -330,7 +331,7 @@ class StopRequests(LoopBase):
         looptest.write_state(self.repo_s, pid=os.getpid(), started=self.clock.t - 100)
         self.stop()
         st = LoopState(pid=os.getpid(), started=self.clock.t - 100, t=1.0, repo=self.repo_s, version="0.0.1", code_dir="/x", actor="tl-a")
-        with mock.patch.dict(os.environ, {"TL_LOOP_STATE": json.dumps(codec.to_json(st))}):
+        with mock.patch.dict(os.environ, {"TL_LOOP_STATE": json.dumps(wire.dump(st))}):
             self.assertEqual(self.run_loop(), 0)
         self.assertEqual(self.started, [])
 
@@ -369,9 +370,9 @@ class LoopSelfUpdate(LoopBase):
         self.assertEqual([b for b, _ in self.started], ["x-1"])  # never mid-bead: x-1 ran to its end on 0.1.0
         self.assertEqual([ln["outcome"] for ln in self.lines()], ["landed"])
         exe, argv, state, _ = self.execs[0]
-        self.assertEqual(exe, sys.executable)
-        self.assertEqual(argv[:2], [sys.executable, str(self.cache / "0.2.0" / "skills" / "task-loop" / "tl.py")])
-        self.assertEqual(argv[2:], ["loop", "--repo", str(self.repo), "--max-beads", "5"])
+        self.assertEqual(exe, argv[0])
+        self.assertEqual(argv[:5], procs.script_argv(self.cache / "0.2.0" / "skills" / "task-loop" / "tl.py"))
+        self.assertEqual(argv[5:], ["loop", "--repo", str(self.repo), "--max-beads", "5"])
         self.assertEqual(json.loads(state)["carry"]["ran"], 1)
 
     def test_the_move_is_logged_and_the_newest_of_several_wins(self):
@@ -382,7 +383,7 @@ class LoopSelfUpdate(LoopBase):
         with self.assertRaises(Moved), redirect_stdout(io.StringIO()) as out:
             self.main(["loop", "--repo", str(self.repo)])
         self.assertIn("loop: moving to 0.10.0 (was 0.1.0)", out.getvalue())
-        self.assertIn("0.10.0", self.execs[0][1][1])
+        self.assertIn("0.10.0", self.execs[0][1][4])
         self.assertEqual(self.started, [])  # the first look is before any bead
 
     def pin(self, **v):
@@ -395,7 +396,7 @@ class LoopSelfUpdate(LoopBase):
         self.pin(**{"task-loop": "0.2.0"})
         with self.assertRaises(Moved):
             self.run_loop()
-        self.assertEqual(self.execs[0][1][1], str(self.cache / "0.2.0" / "skills" / "task-loop" / "tl.py"))
+        self.assertEqual(self.execs[0][1][:5], procs.script_argv(self.cache / "0.2.0" / "skills" / "task-loop" / "tl.py"))
 
     def test_a_pin_to_an_older_install_moves_the_loop_back(self):
         self.beads({"x-1": [rec("landed")]})
@@ -404,7 +405,7 @@ class LoopSelfUpdate(LoopBase):
         self.pin(**{"task-loop": "0.0.5"})
         with self.assertRaises(Moved):
             self.run_loop()
-        self.assertIn("0.0.5", self.execs[0][1][1])
+        self.assertIn("0.0.5", self.execs[0][1][4])
 
     def test_a_pin_to_the_running_version_stays_though_a_newer_one_is_installed(self):
         self.beads({"x-1": [rec("landed")], "x-2": [rec("landed")]})
@@ -466,7 +467,7 @@ class LoopSelfUpdate(LoopBase):
     def test_a_state_of_another_version_is_dropped_the_same_way(self):
         self.beads({"x-1": [rec("landed")]})
         st = LoopState(pid=1, started=1.0, t=1.0, repo="r", version="0.0.1", code_dir="/x", actor="tl-a")
-        os.environ["TL_LOOP_STATE"] = json.dumps(dict(codec.to_json(st), v=1))
+        os.environ["TL_LOOP_STATE"] = json.dumps(dict(wire.dump(st), v=1))
         self.assertEqual(self.run_loop(), 0)
         self.assertIn("state handed over could not be read", self.out)
         self.assertEqual([b for b, _ in self.started], ["x-1"])

@@ -60,9 +60,9 @@ class Reflector:
         lines = []
         for it in JsonlStore(e.log_path, rec.decode).read_from().items:
             if isinstance(it.rec, rec.Transition):
-                lines.append(f"{it.rec.KIND}: " + clip(f"{it.rec.cause} -> {it.rec.to}: {it.rec.detail}", 200))
+                lines.append(f"{it.rec.kind}: " + clip(f"{it.rec.cause} -> {it.rec.to}: {it.rec.detail}", 200))
             elif isinstance(it.rec, rec.Warn):
-                lines.append(f"{it.rec.KIND}: " + clip(it.rec.text, 200))
+                lines.append(f"{it.rec.kind}: " + clip(it.rec.text, 200))
         stats = "; ".join(f"{k}={v}" for k, v in e.stats.items())
         return REFLECT_PROMPT % (e.bead, clip(e.bead_title, 120), outcome, clip(why or "(none)", 600), stats, "\n".join(rows[:40]),
                                  "\n".join(lines[-70:]) or "(none)")

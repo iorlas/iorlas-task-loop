@@ -1,11 +1,10 @@
 """A release runs origin/main's release code, not the code of the checkout it was launched from (that checkout lags: only the release
 clone is reset to origin/main). When the clone's code differs, the launcher execs the clone's dev/release.py."""
 import os
-import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from taskloop.adapters import applog
+from taskloop.adapters import applog, procs
 from taskloop.app.release.shell import git, say
 
 MARKER = "TL_RELEASE_REEXEC"  # set in the exec'd release: it never execs again
@@ -34,4 +33,5 @@ def exec_release(script: Path, argv: Sequence[str], repo: Path) -> None:
     say(f"this checkout's release code is not origin/main's; running {script}")
     os.environ[MARKER] = "1"
     applog.close_all()
-    os.execv(sys.executable, [sys.executable, str(script), *args])
+    cmd = [*procs.script_argv(script), *args]
+    os.execv(cmd[0], cmd)

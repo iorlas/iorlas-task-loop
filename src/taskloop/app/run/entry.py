@@ -14,7 +14,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, cast
 
-from taskloop.adapters import beadtools, gitrepo, ident
+from taskloop.adapters import beadtools, gitrepo, ident, procs
 from taskloop.adapters import halt as halting
 from taskloop.app.asks import intake
 from taskloop.app.loop.queue import has_areas
@@ -258,7 +258,7 @@ def _worktree_of(a: Any, repo: Any) -> tuple[str, Any]:
     if not wt and a.slot:  # the slot is the worktree
         wt = wslots.slot_dir(repo, a.slot, wslots.profile_slots(repo))
     if not wt:
-        r = subprocess.run([sys.executable, str(TL_PY), "worktree", "start"],
+        r = subprocess.run([*procs.script_argv(TL_PY), "worktree", "start"],
                            capture_output=True, text=True, encoding="utf-8", errors="replace", check=False)
         wt = r.stdout.strip().splitlines()[-1] if r.returncode == 0 and r.stdout.strip() else ""
         if not wt:

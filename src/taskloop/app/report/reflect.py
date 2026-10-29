@@ -9,7 +9,6 @@ happens again gets a new bead that names the old one. State: ~/.config/task-loop
 import json
 import os
 import subprocess
-import sys
 import time
 from collections import Counter
 from collections.abc import Sequence
@@ -240,7 +239,7 @@ def maybe_run(now: float | None = None) -> str:
             if not due(now):
                 return ""
             pass
-        sproc.spawn([sys.executable, str(ident.PLUGIN_ROOT / "skills" / "task-loop" / "tl.py"), "reflect", "digest"],
+        sproc.spawn([*sproc.script_argv(ident.PLUGIN_ROOT / "skills" / "task-loop" / "tl.py"), "reflect", "digest"],
                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         st = read_state()
         st["tried"] = now or time.time()

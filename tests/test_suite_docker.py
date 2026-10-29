@@ -23,7 +23,7 @@ class SuiteDocker(unittest.TestCase):
                 mock.patch("sys.stderr") as err:
             run.return_value.returncode = 3
             self.assertEqual(sd.main(["--repo", "x"]), 3)
-        self.assertEqual(run.call_args[0][0][:2], [sys.executable, str(ROOT / "dev" / "suite.py")])
+        self.assertEqual(run.call_args[0][0][:5], ["uv", "run", "--quiet", "--script", str(ROOT / "dev" / "suite.py")])
         warned = "".join(c.args[0] for c in err.write.call_args_list)
         self.assertEqual(warned.count("WARNING"), 1)
 

@@ -4,14 +4,14 @@
     "SessionStart": [
       {
         "hooks": [
-          {"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/hook.py\" session-start", "timeout": 5}
+          {"type": "command", "command": "uv run --quiet --script \"${CLAUDE_PLUGIN_ROOT}/hooks/hook.py\" session-start", "timeout": 20}
         ]
       }
     ],
     "PreCompact": [
       {
         "hooks": [
-          {"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/hook.py\" precompact", "timeout": 10}
+          {"type": "command", "command": "uv run --quiet --script \"${CLAUDE_PLUGIN_ROOT}/hooks/hook.py\" precompact", "timeout": 20}
         ]
       }
     ],

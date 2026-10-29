@@ -55,7 +55,7 @@ line; a message between sessions is never the guard. Clashes may happen; they mu
 | a stopped engine's worker | engine SIGTERMs route.py, which kills the worker's group; SIGKILL after a grace | | |
 
 Each rule has its own deterministic test in the gate (tl-vgo, `tests/test_race_invariants.py`: threads, events and a fake
-clock on the real lock and lease code, no child process). The end-to-end check is `python3 dev/race.py` (seeds 1..5, outside
+clock on the real lock and lease code, no child process). The end-to-end check is `uv run --script dev/race.py` (seeds 1..5, outside
 the gate): two loops, a hand run, a `--slot any --wait` waiter, a slot hold and two releases at once, on beads in two areas,
 real processes on a fake repo.
 

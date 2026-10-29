@@ -1,6 +1,12 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.12"
+# dependencies = ["pydantic==2.14.2"]
+# ///
 """The task-loop plugin's hooks: `hook.py pretool | session-start | precompact`, the event JSON on stdin (see hooks.json).
-Each must finish in well under a second (tests/test_hook.py times a real process): the PreToolUse one imports only the rules."""
+PreToolUse runs before every Bash call, under plain `python3`, and imports only the rules: no pydantic, no record model (the
+.importlinter contract and tests/test_hook.py hold it). SessionStart and PreCompact read and write records (the handoff, the `tl` shim),
+so hooks.json runs them with `uv run --script` and the dependencies this header declares."""
 import sys
 from pathlib import Path
 

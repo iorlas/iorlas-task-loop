@@ -1,7 +1,11 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.12"
+# dependencies = ["pydantic==2.14.2"]
+# ///
 """The dashboard page against the contract fixtures, with no engine: the frontend's dev server.
 
-    python3 dev/dash_fixtures.py [--port 8766] [--state ok|empty|down|variants]
+    uv run --script dev/dash_fixtures.py [--port 8766] [--state ok|empty|down|variants]
 
 Serves static/index.html at /, components.html, /<asset> (as the dash serves them), the browser harness (check.html), and the
 /api routes from tests/fixtures/dash/ (docs/contracts/dash-api.md). A POST body is decoded strictly with its WRITES
@@ -21,8 +25,8 @@ from urllib.parse import parse_qs, urlparse
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
-from taskloop.contracts import codec  # noqa: E402
 from taskloop.contracts import dash as D  # noqa: E402
+from taskloop.contracts import wire  # noqa: E402
 
 STATIC = ROOT / "src" / "taskloop_dash" / "static"
 FIX = ROOT / "tests" / "fixtures" / "dash"
@@ -107,7 +111,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(404, b"not found", "text/plain")
         try:
             body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
-            codec.from_json(D.WRITES[verb], body)
+            wire.load(D.WRITES[verb], body)
         except Exception as e:  # the page sent a shape the contract refuses
             return self.json({"error": f"{type(e).__name__}: {e}"}, 400)
         self.writes.append([verb, body])

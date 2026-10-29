@@ -63,7 +63,7 @@ This protocol applies when ending a Beads implementation workflow. It is subordi
 ```bash
 uv run pytest tests/land -q    # one folder or module (also tests/test_x.py::Class::test); the suite's tests are unittest TestCases
 just test -n auto  # the whole suite in parallel workers (`just test` alone: one process); the `serial` group needs dev/suite.py
-python3 dev/suite.py           # what a release runs: xdist workers, then the serial group alone; takes the host-wide suite lock
+uv run --script dev/suite.py  # what a release runs: xdist workers, then the serial group alone; takes the host-wide suite lock
 just check                     # ruff + pyrefly + import-linter + tests/gate_rules.py (tools pinned in mise.toml; `mise install`)
 ```
 
@@ -85,11 +85,13 @@ reader, and how delegate connects (worker-run, one table in SKILL.md).
 ## Conventions & Patterns
 
 - Python 3.12+; macOS and Linux (in containers too), POSIX only. Dependencies: runtime ones are declared inline in `skills/task-loop/tl.py`
-  (PEP 723) and run with `uv run --script`; dev and test tools live in pyproject.toml's `dev` group; hooks stay light (no dependency).
+  (PEP 723, the same pin as pyproject.toml's `dependencies`; tests/test_pep723.py holds them equal) and run with `uv run --script`: the
+  `tl` shim, the loop's own spawns, dev/release.py and dev/suite.py. Dev and test tools live in pyproject.toml's `dev` group. The
+  PreToolUse hook (every Bash call) stays on plain `python3` and imports no pydantic and no record (.importlinter, tests/test_hook.py).
 - The page is one HTML file, no build, no CDN.
 - The engine requires the iorlas-delegate plugin (worker-run v1) and has no launcher of its own; never add one back.
   Only the contract is shared: never read delegate's files or call anything but `route.py run` and `status`.
 - Never touch a transcript or another tool's state: the dashboard reads, `tl.py` writes only `~/.config/task-loop` and bd.
-- Release only through `python3 dev/release.py "message" [--bead ID --reason R] [--from-branch B]`: it takes the
+- Release only through `uv run --script dev/release.py "message" [--bead ID --reason R] [--from-branch B]`: it takes the
   release lock, works in its own persistent clone (`<config>/release/`; the main checkout is never touched), bumps `.claude-plugin/plugin.json` from origin/main and the iorlas-marketplace entry, runs the suite,
   pushes and installs. Never bump a version by hand.

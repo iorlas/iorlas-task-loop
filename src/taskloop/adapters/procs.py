@@ -4,12 +4,14 @@ Nothing here (nor anywhere in the repo outside `_vendor/`) sends a signal: a sto
 `stream_proc.alive`. A process this program did not spawn (the dashboard server, a recorded lock holder) is stopped through a
 `PidHandle`, which gives stop_tree the few attributes of a `Popen` it uses; the process-group detail stays inside stream-proc."""
 
+import shutil
 import subprocess
 import threading
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from os import environ
+from pathlib import Path
 from typing import Any
 
 import child_env
@@ -33,6 +35,12 @@ def child_env_of(env: Mapping[str, str], extra: Mapping[str, str] | None = None)
     out.update({"TASK_LOOP_WORKER": "1", "DELEGATE_DEPTH": "1"})
     out.update(extra or {})
     return out
+
+
+def script_argv(script: str | Path) -> list[str]:
+    """The argv that runs a script with a PEP 723 header (tl.py, dev/release.py): `uv run --script` installs its dependencies into
+    a cached environment. `UV` is the uv that started this process, when one did."""
+    return [environ.get("UV") or shutil.which("uv") or "uv", "run", "--quiet", "--script", str(script)]
 
 
 def current_env(extra: Mapping[str, str] | None = None) -> dict[str, str]:
