@@ -373,7 +373,7 @@ container); the session that starts it only watches it.
   bead whose land commit is on the base. Ctrl-C or SIGTERM to the loop itself is `--now`.
 - **Disk:** the loop prunes at its start (`tl prune [--dry-run]`): run folders, check-round logs, engine logs and the event log older than
   `loop.keep_days` (14; beads not closed, parked ones included, keep theirs), worktrees under `loop.build_dir` (`~/Workspaces/wt`) whose HEAD
-  is on origin/main, clean and idle that long, and local `release/*` branches on origin/main; plain `git worktree remove`, never --force, and
+  is on origin/main, clean and idle that long, local `release/*` branches on origin/main, and local `task/*` branches of closed beads (`git branch -d` only: git's refusal keeps one); plain `git worktree remove`, never --force, and
   it says what it removed and what it kept and why. Below `loop.min_free_gb` (5) free on the config dir's disk the loop claims nothing and
   exits 0 (reason `low_disk`). A run keeps at most `engine.evidence_cap_mb` (200) of new evidence; a picture identical to one kept before is a link.
 - **Leases:** the loop heartbeats the slot bead and the task bead from the slot take to the release (a slow slot

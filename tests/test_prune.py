@@ -6,6 +6,7 @@ import sys
 import tempfile
 import time
 import unittest
+from collections.abc import Callable
 from pathlib import Path
 from typing import cast
 from unittest import mock
@@ -13,7 +14,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: F401
 
-from taskloop.app.prune import runs, trees, verb
+from taskloop.app.prune import branches, runs, trees, verb
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.config import LoopConfig
 from taskloop.contracts.paths import ConfigDir
@@ -241,6 +242,70 @@ class Trees(unittest.TestCase):
         self.assertFalse(d.exists())
         self.assertTrue(any(ln.startswith("prune: removed worktree") for ln in out[0]))
         self.assertFalse(any("removed worktree" in ln for ln in out[1]))
+
+
+class Landed(unittest.TestCase):
+    """Closed beads' local task/* branches: `git branch -d` only."""
+
+    commit = cast(Callable[..., None], Trees.commit)
+    origin: Path
+    repo: Path
+    build: Path
+
+    def store(self, **meta):
+        states = (("a-1", "closed"), ("a-2", "open"), ("a-3", "closed"), ("a-4", "closed"), ("a-5", "closed"))
+        beads = [Bead(id=i, title="", status=s, metadata=meta.get(i, {})) for i, s in states]
+        return type("S", (), {"find": lambda self, q: beads})()
+
+    def prune(self, dry_run=False, **meta):
+        return branches.prune_branches([str(self.repo)], lambda r: cast(Beads, self.store(**meta)), dry_run)
+
+    def heads(self):
+        return git(self.repo, "for-each-ref", "--format=%(refname:short)", "refs/heads/").split()
+
+    def setUp(self):
+        Trees.setUp(cast(Trees, self))
+        for b in ("task/a-1", "task/a-2", "worker/a-1", "claude/a-1", "task/a-9", "task/custom"):
+            git(self.repo, "branch", b, "origin/main")
+        git(self.repo, "checkout", "-q", "-b", "task/a-3")  # unmerged: has a commit of its own
+        (self.repo / "own.txt").write_text("x")
+        git(self.repo, "add", "own.txt")
+        git(self.repo, "commit", "-q", "-m", "own")
+        git(self.repo, "checkout", "-q", "main")
+        git(self.repo, "worktree", "add", "-q", str(self.build / "held"), "-b", "task/a-4", "origin/main")
+
+    def test_a_closed_beads_merged_branch_goes_and_the_rest_stay_with_reasons(self):
+        removed, kept = self.prune(**{"a-5": {"branch": "task/custom"}})
+        self.assertEqual(sorted(r.split()[1] for r in removed), ["task/a-1", "task/custom"])
+        self.assertEqual(sorted(self.heads()), ["claude/a-1", "main", "task/a-2", "task/a-3", "task/a-4", "task/a-9", "worker/a-1"])
+        why = {k.split()[1].rstrip(":"): k for k in kept}
+        self.assertIn("not fully merged", why["task/a-3"])
+        self.assertIn("checked out in a worktree", why["task/a-4"])
+        self.assertIn("not closed", why["task/a-2"])
+        self.assertIn("not closed", why["task/a-9"])
+        self.assertFalse(any("worker/" in k or "claude/" in k for k in removed + kept))
+
+    def test_dry_run_only_says_and_a_second_run_finds_nothing(self):
+        before = self.heads()
+        removed, _ = self.prune(dry_run=True)
+        self.assertEqual(self.heads(), before)
+        self.assertTrue(removed[0].startswith("would remove branch task/a-1"))
+        self.assertEqual(len(self.prune()[0]), 1)
+        self.assertEqual(self.prune()[0], [])
+
+    def test_no_remote_ref_is_touched_and_the_code_never_forces(self):
+        git(self.repo, "push", "-q", "origin", "task/a-1")
+        self.prune()
+        self.assertIn("refs/heads/task/a-1", git(self.origin, "for-each-ref", "--format=%(refname)"))
+        src = Path(branches.__file__).read_text(encoding="utf-8")
+        self.assertNotIn('"-D"', src)
+        self.assertNotIn("--force", src)
+        self.assertNotIn("push", src)
+
+    def test_bd_not_answering_keeps_every_branch(self):
+        removed, kept = branches.prune_branches([str(self.repo)], lambda r: cast(Beads, Store(fail=True)), False)
+        self.assertEqual(removed, [])
+        self.assertIn("bd did not answer", kept[0])
 
 
 if __name__ == "__main__":

@@ -1,9 +1,10 @@
-"""`tl prune [--dry-run]`: the run data, build trees and release branches that are past `loop.keep_days`, removed; what stays, with why.
+"""`tl prune [--dry-run]`: the run data, build trees, release branches and landed task branches that are past `loop.keep_days`, removed;
+what stays, with why.
 Idempotent: a second run finds nothing. The loop runs it at its start."""
 from collections.abc import Callable
 from pathlib import Path
 
-from taskloop.app.prune import runs, trees
+from taskloop.app.prune import branches, runs, trees
 from taskloop.app.release.shell import REAL, Shell
 from taskloop.contracts.config import LoopConfig
 from taskloop.contracts.paths import ConfigDir
@@ -37,4 +38,9 @@ def run(cfg: ConfigDir, loop: LoopConfig, repos: list[str], store_of: Callable[[
         say(f"prune: {line if dry_run else 'removed ' + line}")
     for line in kept:
         say(f"prune: kept {line}")
-    return count + len(removed)
+    gone, stays = branches.prune_branches(repos, store_of, dry_run, sh)
+    for line in gone:
+        say(f"prune: {line if dry_run else 'removed ' + line}")
+    for line in stays:
+        say(f"prune: kept {line}")
+    return count + len(removed) + len(gone)
