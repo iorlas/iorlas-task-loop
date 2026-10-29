@@ -11,6 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402, F401
+from support.procsim import real_proc  # noqa: E402
 
 from taskloop.adapters import procs  # noqa: E402
 
@@ -26,6 +27,9 @@ subprocess.Popen([sys.executable, "-c", kid, out + ".setsid"], start_new_session
 open(out + ".shim", "w").write(str(os.getpid()))
 time.sleep(300)
 """
+
+
+pytestmark = real_proc("a stop reaches a whole real process tree: the same group, a setsid child, a shim")
 
 
 def read_pid(path, wait=15):

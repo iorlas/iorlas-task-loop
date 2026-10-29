@@ -11,10 +11,14 @@ from pathlib import Path
 from unittest import mock
 
 import support.paths  # noqa: F401
+from support.procsim import real_proc
 
 from taskloop.adapters import procs
 
 POSIX = os.name != "nt"
+
+
+pytestmark = real_proc("the procs adapter is real processes: child env, capture, a SIGTERM landing in Popen, the tree stop")
 
 
 class Interrupted(Exception):

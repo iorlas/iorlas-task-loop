@@ -19,6 +19,7 @@ from support import dlcall, fake_route  # noqa: E402
 from support import engine_case as te  # noqa: E402
 from support.builders import make_engine  # noqa: E402
 from support.fakes import FakeBeadStore  # noqa: E402
+from support.procsim import real_proc  # noqa: E402
 
 from taskloop.adapters import delegate as dl  # noqa: E402
 from taskloop.adapters import (  # noqa: E402
@@ -131,6 +132,7 @@ class SlotGitTest(unittest.TestCase):
         self.assertEqual(sh("git", "diff", "--cached", "--name-status", cwd=self.wt).split("\n"),
                          ["D\ta.txt", "A\tnew file.txt"])
 
+    @real_proc("the child's environment: the engine pins its own git, the worker and the checks get no GIT_DIR")
     @te.POSIX_CHECK
     def test_workers_and_checks_are_not_pinned_but_the_engines_own_git_is(self):
         route = Path(self.tmp.name) / "route.py"

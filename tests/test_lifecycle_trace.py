@@ -5,7 +5,6 @@ import _thread
 import json
 import os
 import signal
-import sys
 import threading
 import time
 import unittest
@@ -13,8 +12,8 @@ from unittest import mock
 
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as te
-from support import fake_route
-from support.engine_case import CLEAN, PLAN, PY, WRITE, stop
+from support import fake_route, procsim
+from support.engine_case import CLEAN, PLAN, WRITE, real_proc, stop
 
 from taskloop.adapters import delegate as dl
 from taskloop.adapters import ident
@@ -226,7 +225,7 @@ class TraceTelemetry(te.EngineTest):
 
     def test_gate_and_check_cache_boundaries_leave_structured_records(self):
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]},
-                                gate=PY + ' -c "pass"')
+                                gate="true")
         self.assertEqual(rc, 0)
         (start,), (end,) = self.records("gate_start"), self.records("gate_end")
         self.assertEqual(end["exit"], 0)
@@ -241,6 +240,7 @@ class TraceTelemetry(te.EngineTest):
     @unittest.skipIf(os.name == "nt", "the engine stops a process group; sleep and bash are POSIX")
     def test_a_timed_out_command_leaves_a_kill_record(self):
         eng = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), verbose=False, store=self.store)
+        procsim.fake("sleep 5", procsim.takes(5))
         rc, _ = eng.sh(["sleep", "5"], timeout=0.05)
         self.assertEqual(rc, 124)
         kills = [json.loads(line) for line in eng.log_path.read_text().splitlines()
@@ -253,13 +253,14 @@ class TraceTelemetry(te.EngineTest):
 
     def test_a_command_that_exits_124_by_itself_is_not_a_kill(self):
         eng = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), verbose=False, store=self.store)
-        rc, _ = eng.sh([sys.executable, "-c", "import sys; sys.exit(124)"], timeout=10)
+        rc, _ = eng.sh([procsim.fake("exits-124", procsim.exits(124))], timeout=10)
         self.assertEqual(rc, 124)
         kills = [json.loads(line) for line in eng.log_path.read_text().splitlines()
                  if json.loads(line)["kind"] == "kill"]
         self.assertEqual(kills, [])
 
     @unittest.skipIf(os.name == "nt", "the engine stops a process group; sleep is POSIX")
+    @real_proc("a SIGINT reaches a real child tree and the engine stops it")
     def test_an_interrupted_command_leaves_a_kill_record_and_its_tree_is_stopped(self):
         eng = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), verbose=False, store=self.store)
         started = self.wt / "child-started"

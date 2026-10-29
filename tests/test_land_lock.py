@@ -11,11 +11,13 @@ TL = ROOT / "skills" / "task-loop" / "tl.py"
 PY = sys.executable
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from support.narrow import must  # noqa: E402
+from support.procsim import real_proc  # noqa: E402
 from support.waits import until  # noqa: E402
 
 NO_FCNTL = unittest.skipIf(os.name == "nt", "the lock is fcntl; tl has none on Windows (documented no-op)")
 
 
+@real_proc("the land-lock command line is a real process: a flock held across processes, the wrapped command's exit")
 class LandLockTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

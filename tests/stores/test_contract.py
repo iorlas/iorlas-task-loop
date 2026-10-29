@@ -19,6 +19,7 @@ import jsonl_log as jsonl
 import suites
 from contracts import samples as S
 from rigs import FakeRig, RealRig
+from support.procsim import real_proc
 from support.tiers import contract
 
 from taskloop.contracts.enums import LockWhat
@@ -49,6 +50,7 @@ class RealRaces(unittest.TestCase):
     def spawn(self, *args: str) -> subprocess.Popen[bytes]:
         return subprocess.Popen([sys.executable, "-I", WORKER, *args])
 
+    @real_proc("the file locks and the append-only log hold across real processes: races, a killed holder")
     def test_many_processes_appending_never_interleave_a_line(self) -> None:
         path = self.cfg.root / "x.jsonl"
         procs = [self.spawn("append", str(path), "60", f"p{i}") for i in range(6)]
@@ -60,6 +62,7 @@ class RealRaces(unittest.TestCase):
             self.assertEqual([e.data["i"] for e in entries if e.data["who"] == f"p{i}"], list(range(60)))  # each writer's order holds
         self.assertEqual(len({e.start for e in entries}), 360)
 
+    @real_proc("the file locks and the append-only log hold across real processes: races, a killed holder")
     def test_a_reader_following_a_cursor_while_processes_append_sees_each_line_once(self) -> None:
         path = self.cfg.root / "y.jsonl"
         procs = [self.spawn("append", str(path), "80", f"p{i}") for i in range(3)]
@@ -95,6 +98,7 @@ class RealRaces(unittest.TestCase):
         self.assertEqual(bad, [])
         self.assertEqual([p.name for p in cast(Any, doc).path.parent.iterdir()], [cast(Any, doc).path.name])  # no temp file left behind
 
+    @real_proc("the file locks and the append-only log hold across real processes: races, a killed holder")
     def test_processes_taking_one_lock_do_not_lose_updates(self) -> None:
         counter = self.cfg.root / "count.txt"
         counter.parent.mkdir(parents=True, exist_ok=True)
@@ -103,6 +107,7 @@ class RealRaces(unittest.TestCase):
         self.assertEqual([p.wait(90) for p in procs], [0] * 4)
         self.assertEqual(int(counter.read_text()), 100)
 
+    @real_proc("the file locks and the append-only log hold across real processes: races, a killed holder")
     def test_a_killed_holder_frees_its_lock_at_once(self) -> None:
         self.rig.plant_lock(LockWhat.AREA, "a", "victim", os.getpid())
         holder = self.rig.procs[-1]

@@ -1,12 +1,14 @@
 """CallState (the vendor call on disk) and the network gate (tl-7y6.2.13): checkpoints survive, finished output is never discarded."""
 import json
-import shutil
+import shlex
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 import support.paths  # noqa: E402, F401
+from support import procsim  # noqa: E402
 from support.narrow import must  # noqa: E402
 
 from taskloop.adapters import delegate as dl  # noqa: E402
@@ -122,24 +124,26 @@ class Gate(unittest.TestCase):
         self.assertFalse(s.poll(p, 0.0))
         self.assertTrue(s.poll(p, 60.0))
 
-    def probe(self, body):
-        d = Path(tempfile.mkdtemp())
-        self.addCleanup(shutil.rmtree, d, True)
-        (d / "route.py").write_text(
-            "import sys, pathlib\npathlib.Path(__file__).with_name('argv').write_text(' '.join(sys.argv[1:]))\n" + body
-        )
-        return dl.RouteProbe(str(d / "route.py"), ("a.com", "b.com")), d
+    def probe(self, out, code=0):
+        """A RouteProbe over a route.py that is a procsim fake printing `out`; the fake notes the argv it was run with."""
+        seen = []
+
+        def route(cwd, env):
+            seen.append(" ".join(procsim.argv()[2:]))
+            return code, out
+        procsim.fake(f"{shlex.quote(sys.executable)} /fake/route.py", route, args=True)
+        return dl.RouteProbe("/fake/route.py", ("a.com", "b.com")), seen
 
     def test_route_probe_parses_the_last_line_and_reads_a_failure_as_unknown(self):
-        for body, want in (("print('noise')\nprint('{\"v\": 1, \"up\": true}')", True), ("print('{\"v\": 1, \"up\": false}')", False),
-                           ("", None), ("raise SystemExit('Traceback')", None)):
-            probe, _ = self.probe(body)
-            self.assertIs(probe.up(), want, body)
+        for out, code, want in (("noise\n{\"v\": 1, \"up\": true}", 0, True), ("{\"v\": 1, \"up\": false}", 0, False),
+                                ("", 0, None), ("Traceback", 1, None)):
+            probe, _ = self.probe(out, code)
+            self.assertIs(probe.up(), want, out)
 
     def test_route_probe_asks_route_py_net_with_the_hosts(self):
-        probe, d = self.probe("print('{\"up\": true}')")
+        probe, seen = self.probe("{\"up\": true}")
         probe.up()
-        self.assertEqual((d / "argv").read_text(), "net --host a.com --host b.com")
+        self.assertEqual(seen, ["net --host a.com --host b.com"])
 
 
 if __name__ == "__main__":

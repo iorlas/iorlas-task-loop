@@ -14,7 +14,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as te
-from support.engine_case import pyc
+from support import procsim
+from support.engine_case import pyc, real_proc
 from test_checks_speed import SpeedTest
 
 from taskloop.app.wire import slots as wslots
@@ -31,23 +32,25 @@ class Quiet(SpeedTest):
         return [r for r in rows if r["kind"] == kind]
 
     def test_a_silent_sleeping_check_is_not_stopped(self):
-        eng, res = self.run_one(pyc("import time; time.sleep(1)"))
+        eng, res = self.run_one(procsim.fake("sleep-1", procsim.takes(1)))
         self.assertEqual((res.status, res.exit), ("passed", 0))
         self.assertEqual(self.log(eng, "kill"), [])
 
     def test_a_busy_silent_check_passes(self):
-        _eng, res = self.run_one(pyc("import time\nt=time.time()\nwhile time.time()-t < 0.3: sum(range(10000))"))
+        _eng, res = self.run_one(procsim.fake("busy", procsim.exits(0)))
         self.assertEqual(res.status, "passed")
 
+    @real_proc("the records of a real wall kill: the engine stops a sleeping check and the time between its start and end is real")
     def test_a_wall_hit_check_leaves_one_start_and_end_with_wall_hit_and_a_quiet_one_does_not(self):
         eng, res = self.run_one(pyc("import time; time.sleep(30)"), wall_min=0.01)
         self.assertEqual((res.exit, res.wall_hit), (124, True))
         start, end = self.log(eng, "check_start")[-1], self.log(eng, "check_end")[-1]
         self.assertEqual((end["id"], end["exit"], end["wall_hit"]), (start["id"], 124, True))
         self.assertGreaterEqual(end["t"] - start["t"], 0.5)
-        eng, res = self.run_one(pyc("pass"))
+        eng, res = self.run_one("true")
         self.assertFalse(self.log(eng, "check_end")[-1]["wall_hit"])
 
+    @real_proc("a stop flag kills a real check's tree: the sleeping grandchild is gone")
     def test_the_stop_flag_ends_a_running_check_and_its_tree(self):
         mark = f"74.{os.getpid()}"
         eng = self.checks_engine(checks=[{"id": "q", "cmd": pyc(f"import subprocess; subprocess.call(['sleep', {mark!r}])"),  # pyrefly: ignore[bad-argument-type]

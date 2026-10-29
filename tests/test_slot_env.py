@@ -11,7 +11,7 @@ import support.paths  # noqa: F401
 from support import engine_case as te
 from support import fake_route
 from support.builders import make_engine
-from support.engine_case import CLEAN, PLAN, WRITE, pyc, real_git
+from support.engine_case import CLEAN, PLAN, WRITE, pyc, real_git, real_proc
 
 from taskloop.app.checks.container import Box
 from taskloop.contracts import config
@@ -47,6 +47,7 @@ class Pure(unittest.TestCase):
         self.assertEqual(ok.engine.slot_env["K"], "{slot}-{slot_dir}-{repo}")
 
 
+@real_proc("the environment of every spawn path (check, gate, land, worker) is what a real child reads")
 class EverySpawnPath(te.EngineTest):
     def dumps(self, name):
         return json.loads((Path(self.tmp.name) / name).read_text())

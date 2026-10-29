@@ -18,6 +18,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
+from support.procsim import real_proc
 
 # isort: split
 from support import engine_case as te
@@ -58,6 +59,9 @@ ROUTE = textwrap.dedent('''
     w.wait()
     print(json.dumps({"contract": 3, "data": {}, "ref": "r"}))
 ''')
+
+
+pytestmark = real_proc("starts real worker process groups and measures how long a writer stays idle")
 
 
 class NoEngineSideSilence(unittest.TestCase):

@@ -13,7 +13,8 @@ from typing import Any, cast
 
 import test_engine_units
 from support import engine_case as te
-from support.engine_case import CLEAN, FALSE, PLAN, PY, WRITE, review, stop
+from support import procsim
+from support.engine_case import CLEAN, FALSE, PLAN, WRITE, review, stop
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -30,7 +31,7 @@ engine = te.engine
 DASH = make_dash()
 
 # red the first time it runs, green after: the fake writer writes d<call number> to f.txt (plan = call 1)
-GREEN_ON_2ND_WRITE = PY + ' -c "import sys; sys.exit(0 if open(\'f.txt\').read().strip() == \'d3\' else 1)"'
+GREEN_ON_2ND_WRITE = te.RED_ONCE
 
 
 def num(ident):
@@ -152,7 +153,7 @@ class TraceRecords(te.EngineTest):
         self.assertEqual({num(r.id): r for r in records(self.eng, rec.StepEnd)}[3].outcome, "paused")
 
     def test_a_red_gate_goes_to_a_fix_round_with_its_counters(self):
-        gate = PY + ' -c "import sys; t=open(\'f.txt\').read().strip(); sys.exit(1 if t == \'d2\' else 0)"'
+        gate = procsim.fake("red-on-d2", lambda cwd, env: (1 if procsim.f_txt(cwd) == "d2" else 0, ""))
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE, WRITE], "review": [CLEAN, CLEAN]}, gate=gate)
         self.assertEqual(rc, 0, self.blocked)
         self.assertIn((6, "fix", "gate_red"), self.transitions())

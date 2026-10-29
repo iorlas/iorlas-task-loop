@@ -18,9 +18,10 @@ import support.paths  # noqa: F401
 import test_stages_visual
 from support import engine_case as te
 from support import (
+    procsim,
     tlbd,
 )
-from support.engine_case import CLEAN, PLAN, WRITE, real_git, stop, verdict
+from support.engine_case import CLEAN, PLAN, WRITE, real_git, real_proc, stop, verdict
 
 from taskloop.adapters import gitrepo, ident
 from taskloop.app.loop.gate import GateRole
@@ -148,7 +149,7 @@ class Checks(NetBase):
 
     def test_a_network_pause_then_a_new_run_does_not_run_the_green_checks_again(self):
         count = Path(self.tmp.name) / "count"
-        bump = te.PY + f' -c "open({str(count)!r}, \'a\').write(\'1\')"'
+        bump = procsim.fake("bump", procsim.appends(count))
         cfg = {"checks": [{"id": "bump", "cmd": bump, "group": "tests"}]}
         answers = {"plan": [PLAN], "write": [WRITE], "review": [drop("net-review")] * 40}
         rc, s = self.run_engine(answers, probe=netgate.FakeProbe([False]), **cfg)  # the network stays down: the run pauses
@@ -173,6 +174,7 @@ class Land(NetBase):
 
     CUT = "error: RPC failed; curl 56 Send failure: Broken pipe\nfatal: the remote end hung up unexpectedly\n"
 
+    @real_proc("the land script is a real child process that runs git push itself")
     @real_git("the land script is a child process that runs git push itself")
     def test_a_push_the_network_cut_resumes_after_the_probe_and_lands_once(self):
         count = Path(self.tmp.name, "pushes")
@@ -190,6 +192,7 @@ class Land(NetBase):
         self.assertEqual(count.read_text(), "3")  # two cuts, then the push
         self.assert_no_charge()
 
+    @real_proc("the land script is a real child process that runs git push itself")
     @real_git("the land script is a child process that runs git push itself")
     def test_a_push_the_server_took_before_the_connection_dropped_is_not_pushed_again(self):
         count = Path(self.tmp.name, "pushes")
@@ -206,6 +209,7 @@ class Land(NetBase):
         self.assertIn("already", self.eng.log_path.read_text())
         self.assert_no_charge()
 
+    @real_proc("the land script is a real child process that runs git push itself")
     @real_git("the land script is a child process that runs git push itself")
     def test_a_rerun_after_a_push_that_went_through_but_was_never_seen_closes_without_pushing(self):
         count = Path(self.tmp.name, "pushes")

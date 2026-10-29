@@ -15,6 +15,7 @@ SRC = ROOT / "skills" / "task-loop"
 sys.path.insert(0, str(SRC))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402, F401
+from support.procsim import real_proc  # noqa: E402
 
 # isort: split
 import tl  # noqa: E402
@@ -29,6 +30,7 @@ class SelfTest(unittest.TestCase):
         p.start()
         self.addCleanup(p.stop)
 
+    @real_proc("the subject is how many real processes the scenario starts")
     def test_the_scenario_through_engine_run_passes_in_a_bounded_number_of_processes(self):
         """`tl selftest` as tl.main(argv) in this process (one scenario run, not a second one in a child). The old gate was "under 10 s",
         which a loaded machine fails. A slow selftest is one that spawns far more processes than the ~140 (git calls, one check) it

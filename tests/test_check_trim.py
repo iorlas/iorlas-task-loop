@@ -10,6 +10,7 @@ import support.paths  # noqa: E402, F401
 
 sys.path.insert(0, str(ROOT / "tests"))
 from support import engine_case as te  # noqa: E402
+from support import procsim  # noqa: E402
 from support.checks import res  # noqa: E402
 
 from taskloop.app.checks import evidence  # noqa: E402
@@ -119,15 +120,12 @@ class RedCheckPrompt(te.EngineTest):
     """The writer's prompt after a red check carries the trimmed form, not the log."""
 
     def test_the_second_write_sees_failure_lines_and_the_log_path_not_the_whole_log(self):
-        script = Path(self.tmp.name, "noisy_check.py")
-        script.write_text(
-            "import sys\n"
-            "for i in range(600): print('setup step %d ok, nothing to see here' % i)\n"
-            "print('FAIL: test_refund_rounds (tests.test_orders.OrderTests)')\n"
-            "print('AssertionError: 10.04 != 10.05')\n"
-            "for i in range(80): print('teardown %d' % i)\n"
-            "sys.exit(0 if open('f.txt').read().strip() == 'd3' else 1)\n")
-        check = te.PY + f' "{script}"'
+        def noisy(cwd, env):
+            lines = [f"setup step {i} ok, nothing to see here" for i in range(600)]
+            lines += ["FAIL: test_refund_rounds (tests.test_orders.OrderTests)", "AssertionError: 10.04 != 10.05"]
+            lines += [f"teardown {i}" for i in range(80)]
+            return (0 if procsim.f_txt(cwd) == "d3" else 1), "\n".join(lines)
+        check = procsim.fake("noisy-check", noisy)
         plan = dict(te.PLAN, stages=[dict(te.PLAN["stages"][0], checks=[check])])
         rc, s = self.run_engine({"plan": [plan], "write": [te.WRITE, te.WRITE], "review": [te.CLEAN]})
         self.assertEqual(rc, 0, self.blocked)

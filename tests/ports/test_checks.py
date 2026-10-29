@@ -7,6 +7,7 @@ from typing import Any, ClassVar
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
+from support.procsim import real_proc
 from support.tags import contract, domain
 
 from taskloop.adapters.checks_argv import ArgvChecks
@@ -60,6 +61,7 @@ class FakeChecksContract(ChecksContract, unittest.TestCase):
 
 
 @contract
+@real_proc("the ArgvChecks adapter is the real process: exit codes, output, the environment, no shell, the wall kill")
 class ArgvChecksContract(ChecksContract, unittest.TestCase):
     PASS: ClassVar[Any] = [sys.executable, "-c", "print('fine')"]
     FAIL: ClassVar[Any] = [sys.executable, "-c", "import sys; print('boom'); sys.exit(3)"]

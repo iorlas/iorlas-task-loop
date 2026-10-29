@@ -11,12 +11,14 @@ from unittest import mock
 
 import stream_proc
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
+from support.procsim import real_proc
 from support.waits import until
 
 from taskloop.adapters import landlock, procs
 from taskloop.app.release import suite
 from taskloop.app.release.shell import Abort
 
+pytestmark = real_proc("the suite runner leaves no orphan: real pytest and worker processes are started and reaped")
 ROOT = Path(__file__).resolve().parent.parent
 SLEEPER = """import os, time, unittest
 class S(unittest.TestCase):

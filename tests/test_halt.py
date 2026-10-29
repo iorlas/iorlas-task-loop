@@ -15,7 +15,7 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 
 # isort: split
 from support import engine_case as te
-from support.engine_case import CLEAN, PLAN, WRITE, engine
+from support.engine_case import CLEAN, PLAN, WRITE, engine, real_proc
 
 from taskloop.adapters import delegate, gitrepo, runner
 from taskloop.adapters import halt as halting
@@ -29,6 +29,7 @@ class Halt(te.EngineTest):
     tmp: Any
     eng: Any
 
+    @real_proc("a stop flag kills a real sleeping child and its tree")
     def test_sigterm_during_a_real_sleeping_check_ends_the_check_and_its_tree_and_the_run_closes_cleanly(self):
         pidfile = Path(self.tmp.name, "child.pid")
         plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[self.spawn(pidfile)])])
@@ -59,6 +60,7 @@ class Halt(te.EngineTest):
         self.assertLess(time.time() - t, 10)
         self.assertEqual(cm.exception.kind, oc.Kind.PAUSE_KILLED)
 
+    @real_proc("a stop flag ends a real worker call and the process is gone")
     def test_a_worker_call_is_stopped_by_the_run_flag_and_its_process_is_gone(self):
         d = Path(tempfile.mkdtemp())
         self.addCleanup(lambda: __import__("shutil").rmtree(d, ignore_errors=True))

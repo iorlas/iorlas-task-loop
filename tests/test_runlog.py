@@ -6,7 +6,8 @@ import unittest
 from pathlib import Path
 
 from support import engine_case as te
-from support.engine_case import CLEAN, PLAN, PY, WRITE
+from support import procsim
+from support.engine_case import CLEAN, PLAN, WRITE
 from support.logs import pairs, records
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -40,7 +41,7 @@ class RunLog(te.EngineTest):
 
     def test_a_cached_check_writes_both_records(self):
         count = Path(self.tmp.name) / "count"
-        bump = PY + f' -c "open({str(count)!r}, \'a\').write(\'1\')"'
+        bump = procsim.fake("bump", procsim.appends(count))
         eng = self.checks_engine(checks=[{"id": "bump", "cmd": bump, "group": "tests"}])
         st = {"checks": [], "files": []}
         eng.run_checks(st, "s")

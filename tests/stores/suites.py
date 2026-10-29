@@ -10,6 +10,7 @@ from typing import Any, cast
 from contracts import samples as S
 from rigs import dead_pid
 from support.narrow import must
+from support.procsim import real_proc
 
 from taskloop.contracts import codec
 from taskloop.contracts.ask import Ask, AskAnswer
@@ -242,6 +243,7 @@ class LockContract(Base):
         [t.join(30) for t in ts]
         self.assertEqual((worst[0], hits[0]), (1, 20))
 
+    @real_proc("the lock's holder must be another live process: the real rig starts one")
     def test_a_lock_whose_recorded_holder_is_alive_is_not_broken(self) -> None:
         self.rig.plant_lock(self.W, "r", "other", os.getpid())
         self.assertEqual(self.s.locks.holder(self.W, "r").holder, "other")
