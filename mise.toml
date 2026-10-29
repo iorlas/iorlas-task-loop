@@ -1,5 +1,5 @@
 # Dev tools, pinned exactly (88 sec 6). Install: `mise install`. The justfile reads these pins; CI installs the same versions with uv.
-# Runtime needs none of them: the plugin runs on bare python3 (3.12+) and the standard library.
+# Runtime needs none of them: the plugin runs through `uv run --script`, which installs its one dependency (msgspec) from the PEP 723 headers.
 [tools]
 "aqua:gastownhall/beads" = "1.3.1"
 just = "1.58.0"

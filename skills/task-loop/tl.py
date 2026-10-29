@@ -3,7 +3,7 @@
 # requires-python = ">=3.12"
 # dependencies = ["msgspec==0.22.0"]
 # ///
-"""tl.py: the task-loop command line; every verb lives in src/taskloop. Python 3.12+, standard library only; macOS, Linux.
+"""tl.py: the task-loop command line; every verb lives in src/taskloop. Python 3.12+ and msgspec, run with `uv run --script`; macOS, Linux.
 
   tl.py actor                                   the --actor name this session uses for every bd call
   tl.py bd ARGS...                              run bd with this session's actor (in the current directory)
