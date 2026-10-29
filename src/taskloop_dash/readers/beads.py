@@ -1,6 +1,5 @@
 """bd, read only: a repo's beads (listed once, kept until bd's marker moves), one bead with its comments, and the repo a link means."""
 
-import dataclasses
 import hashlib
 import json
 import os
@@ -20,7 +19,7 @@ SHARED = 30  # seconds another process's listing on disk is good enough
 
 def row_of(b: TypedBead) -> dict[str, Any]:
     """A typed bead as the dash's views read it: a dict, its dependencies as {id, type, title, status}."""
-    out = dataclasses.asdict(b)
+    out = b.model_dump()
     out["dependencies"] = [{k: d.get(k) for k in ("id", "type", "title", "status")} for d in out["dependencies"]]
     return out
 
@@ -88,7 +87,7 @@ class Beads:
 
     def comments(self, repo: str, bead: str) -> list[dict[str, Any]]:
         try:
-            return [dataclasses.asdict(c) for c in self.env.ports.store(repo).comments(bead)] if repo else []
+            return [c.model_dump() for c in self.env.ports.store(repo).comments(bead)] if repo else []
         except (BdFailure, ValueError, OSError):
             return []
 

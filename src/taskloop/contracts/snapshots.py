@@ -1,19 +1,18 @@
 """Files other readers build their view from: the delegate status snapshot, the indexes, pins and the release result."""
-from dataclasses import field
 from typing import ClassVar
 
-from taskloop.contracts.codec import record
+from pydantic import Field
+
+from taskloop.contracts.wire import Rec
 
 
-@record
-class WindowStatus:
+class WindowStatus(Rec):
     name: str
     used_pct: float | None = None
     resets_at: float | None = None
 
 
-@record
-class LaneStatus:
+class LaneStatus(Rec):
     """One lane as the lane cards and the banner show it: delegate's `cockpit.lanes` row joined with its top-level `lanes` entry."""
 
     id: str
@@ -25,36 +24,33 @@ class LaneStatus:
     emoji: str = ""
     reason: str = ""
     unlock_at: float | None = None
-    warnings: list[str] = field(default_factory=list)
-    windows: list[WindowStatus] = field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    windows: list[WindowStatus] = Field(default_factory=list)
     five: float | None = None  # the contract's typed 5-hour window, percent used (the top-level `lanes[id].five`); windows[] names are free
     week: float | None = None  # the contract's typed weekly window, percent used (`lanes[id].week`)
     out: bool = False
     out_until: float | None = None
     out_reason: str | None = None
-    notes: list[str] = field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
 
 
-@record
-class NeedInput:
+class NeedInput(Rec):
     what: str
     why: str = ""
     how: str = ""
 
 
-@record
-class StatusSnapshot:
+class StatusSnapshot(Rec):
     """snapshots/delegate.status.json: delegate's `route.py status --json` read once by `tl lanes` / `tl usage`; the dashboard reads
     this and never runs delegate. `at` is delegate's own clock."""
 
     V: ClassVar[int] = 1
     at: float
-    lanes: list[LaneStatus] = field(default_factory=list)
-    needs_input: list[NeedInput] = field(default_factory=list)
+    lanes: list[LaneStatus] = Field(default_factory=list)
+    needs_input: list[NeedInput] = Field(default_factory=list)
 
 
-@record
-class SessionIndex:
+class SessionIndex(Rec):
     """sessions/<id>.json: a Claude session id -> its transcript."""
 
     V: ClassVar[int] = 1
@@ -64,37 +60,32 @@ class SessionIndex:
     t: float = 0.0
 
 
-@record
-class RepoEntry:
+class RepoEntry(Rec):
     added: float
 
 
-@record
-class ReposIndex:
+class ReposIndex(Rec):
     V: ClassVar[int] = 1
-    repos: dict[str, RepoEntry] = field(default_factory=dict)
+    repos: dict[str, RepoEntry] = Field(default_factory=dict)
 
 
-@record
-class SharedNotes:
+class SharedNotes(Rec):
     """shared/<repo_key>.json: what runs of one repo tell each other (flaky tests, facts)."""
 
     V: ClassVar[int] = 1
-    flakes: dict[str, float] = field(default_factory=dict)
-    notes: list[str] = field(default_factory=list)
+    flakes: dict[str, float] = Field(default_factory=dict)
+    notes: list[str] = Field(default_factory=list)
 
 
-@record
-class Pin:
+class Pin(Rec):
     """pinned.json: the install a loop and run-task use; each key optional."""
 
     V: ClassVar[int] = 1
-    task_loop: str | None = field(default=None, metadata={"name": "task-loop"})
+    task_loop: str | None = Field(default=None, alias="task-loop")
     delegate: str | None = None
 
 
-@record
-class ReleaseResult:
+class ReleaseResult(Rec):
     """releases/last.json: what the last dev/release.py run did."""
 
     V: ClassVar[int] = 1
@@ -105,8 +96,7 @@ class ReleaseResult:
     sha: str = ""
 
 
-@record
-class DashState:
+class DashState(Rec):
     """dash.json: the one dashboard server of this machine."""
 
     V: ClassVar[int] = 1
@@ -120,8 +110,7 @@ class DashState:
     idle_until: float | None = None
 
 
-@record
-class SlotSetupMarker:
+class SlotSetupMarker(Rec):
     """slots/<repo_key>.setup.json: the hash of the setup command a slot last ran, so a changed command runs again."""
 
     V: ClassVar[int] = 1

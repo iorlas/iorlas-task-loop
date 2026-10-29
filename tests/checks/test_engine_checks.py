@@ -227,7 +227,7 @@ class EngineChecksTest(EngineTest):
         bad = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=["test -f f.txt && echo ok"])])
         errs = answers.check("plan", False, bad)
         self.assertEqual(len(errs), 1)
-        self.assertIn("stages[0].checks[0]: expected an array", errs[0])
+        self.assertIn("stages[0].checks[0]: Input should be a valid array", errs[0])
         self.assertIn('["just", "name"]', errs[0])
         self.assertEqual(answers.check("plan", False, checks_to_wire(PLAN)), [])
 

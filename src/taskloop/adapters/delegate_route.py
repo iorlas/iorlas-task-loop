@@ -1,6 +1,5 @@
 """`Delegate` over `route.py run`: temp files for the brief and schema, the live file tailed while the child runs."""
 import contextlib
-import dataclasses
 import json
 import os
 import sys
@@ -14,7 +13,6 @@ from jsonl_log import Jsonl
 from taskloop.adapters import delegate_wire
 from taskloop.adapters.procs import capture as run_group
 from taskloop.adapters.runner import live_event
-from taskloop.contracts import codec
 from taskloop.contracts.delegate import DelegateResult, RunRequest
 from taskloop.contracts.ports import EventSink
 
@@ -33,7 +31,7 @@ class LiveTail:
         for e in entries:
             if self.sink is None or "k" not in e.data:
                 continue
-            with contextlib.suppress(codec.CodecError):
+            with contextlib.suppress(ValueError):
                 self.sink(live_event(e.data))
 
 
@@ -58,7 +56,7 @@ class RouteDelegate:
             brief_path, schema_path, live = Path(d, "brief.md"), Path(d, "schema.json"), Path(d, "live.jsonl")
             brief_path.write_text(brief, encoding="utf-8")
             schema_path.write_text(json.dumps(schema), encoding="utf-8")
-            call = dataclasses.replace(req, brief_path=str(brief_path), schema_path=str(schema_path), live_file=str(live))
+            call = req.model_copy(update={"brief_path": str(brief_path), "schema_path": str(schema_path), "live_file": str(live)})
             tail = LiveTail(live, on_event)
             ran = run_group(call.to_argv(self.python, self.route), req.cwd or None, self._env(call.env()),
                             self.timeout_s + self.backstop_s, tail.drain)

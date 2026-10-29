@@ -1,15 +1,16 @@
-"""schema.py: the six answer dataclasses generate the engine's own contracts, and their strict form is valid strict output."""
+"""schema.py: the six answer records generate the engine's own contracts, and their strict form is valid strict output."""
 import json
 import sys
 import unittest
-from dataclasses import field
 from pathlib import Path
 from typing import Any, Literal
+
+from pydantic import Field
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
-from taskloop.contracts import answers, codec, schema
+from taskloop.contracts import answers, schema, wire
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tests"))
@@ -17,6 +18,7 @@ import test_response_format as strict_test  # noqa: E402
 
 from contracts import samples  # noqa: E402
 from taskloop.contracts import enums  # noqa: E402
+from taskloop.contracts.wire import Rec  # noqa: E402
 
 FIXTURES = ROOT / "tests" / "fixtures" / "schemas"  # the hand-written schemas the engine sent before E6, frozen
 VARIANTS = [(n, v) for n in answers.NODES for v in (False, True) if not v or n in answers.VISUAL]
@@ -64,34 +66,33 @@ class AnswerSchemas(unittest.TestCase):
 
     def test_a_worker_answer_decodes_into_the_dataclass(self):
         data = {"items": [{"n": 1, "verdict": "settled", "evidence": "e", "why": "w", "kind": "checkable", "source": ""}]}
-        got = codec.from_json(answers.VerifyAnswer, data)
+        got = wire.load(answers.VerifyAnswer, data)
         self.assertEqual(got.items[0].verdict, "settled")
         data["items"][0]["verdict"] = "maybe"
-        with self.assertRaises(codec.CodecError):
-            codec.from_json(answers.VerifyAnswer, data)
+        with self.assertRaises(ValueError):
+            wire.load(answers.VerifyAnswer, data)
 
     def test_an_optional_field_may_be_left_out_of_an_answer(self):
         base = {"summary": "s", "checks_run": [], "question": "", "options": [], "decided": "", "bad_checks": [], "new_cases": [],
                 "unchecked": []}
-        got = codec.from_json(answers.WriteAnswer, base)
+        got = wire.load(answers.WriteAnswer, base)
         self.assertEqual((got.shots, got.flakes), ([], []))
-        self.assertEqual(codec.from_json(answers.Case, {"criterion": "c", "check": ["k"], "class": "taste"}).class_, "taste")
+        self.assertEqual(wire.load(answers.Case, {"criterion": "c", "check": ["k"], "class": "taste"}).class_, "taste")
 
 
 class Generator(unittest.TestCase):
     def test_scalars_enums_nullable_and_docs(self):
 
-        @codec.record
-        class Probe:
-            name: str = field(metadata={"doc": "what it is called"})
+        class Probe(Rec):
+            name: str = Field(description="what it is called")
             n: int
             ratio: float
             ok: bool
             kind: Literal["a", "b"]
             step: enums.Step
             maybe: str | None
-            items: list[int] = field(default_factory=list)
-            table: dict[str, float] = field(default_factory=dict)
+            items: list[int] = Field(default_factory=list)
+            table: dict[str, float] = Field(default_factory=dict)
 
         s = schema.of(Probe)
         self.assertEqual(s["required"], ["name", "n", "ratio", "ok", "kind", "step", "maybe"])
@@ -109,9 +110,8 @@ class Generator(unittest.TestCase):
         self.assertEqual(strict["properties"]["items"]["type"], ["array", "null"])
 
     def test_a_type_with_no_schema_is_an_error(self):
-        @codec.record
-        class Bad:
-            x: set[complex] = field(default_factory=set)
+        class Bad(Rec):
+            x: set[complex] = Field(default_factory=set)
 
         with self.assertRaises(TypeError):
             schema.of(Bad)
@@ -121,7 +121,7 @@ class Generator(unittest.TestCase):
             for name, rec in coll.items():
                 with self.subTest(name):
                     s = schema.of(type(rec))
-                    self.assertEqual(list(s["properties"]), list(codec.to_json(rec)))
+                    self.assertEqual(list(s["properties"]), list(wire.dump(rec)))
 
 
 if __name__ == "__main__":

@@ -14,7 +14,7 @@ import support.paths  # noqa: F401
 from jsonl_log import Jsonl, cursor
 
 from contracts import samples as S
-from taskloop.contracts import codec, paths, stores
+from taskloop.contracts import paths, stores, wire
 from taskloop.contracts.ask import Ask
 from taskloop.contracts.loop import LoopState
 from taskloop.contracts.snapshots import Pin
@@ -199,7 +199,7 @@ class StoresTest(unittest.TestCase):
         tr = stores.TraceStore(self.cfg)
         tr.append(S.TRACE)
         self.assertEqual(tr.read_from(0).items[0].rec, S.TRACE)
-        self.assertEqual(codec.to_json(tr.read_from(0).items[0].rec), codec.to_json(S.TRACE))
+        self.assertEqual(wire.dump(tr.read_from(0).items[0].rec), wire.dump(S.TRACE))
 
 
 if __name__ == "__main__":

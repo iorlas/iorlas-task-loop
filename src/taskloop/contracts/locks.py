@@ -1,11 +1,11 @@
 """Lock records: who holds the engine, a slot ticket, a named lock. Liveness is a pid probe, nothing more."""
-from dataclasses import field
 from typing import ClassVar
 
 import stream_proc
+from pydantic import Field
 
-from taskloop.contracts.codec import record
 from taskloop.contracts.enums import LockWhat
+from taskloop.contracts.wire import Rec
 
 
 def pid_alive(pid: int) -> bool:
@@ -21,8 +21,7 @@ class LockTimeout(TimeoutError):
         self.holder = holder
 
 
-@record
-class EngineLock:
+class EngineLock(Rec):
     """<worktree>/.task/engine.lock: the run-task process that owns the worktree, with the processes it started."""
 
     V: ClassVar[int] = 2
@@ -34,14 +33,13 @@ class EngineLock:
     slot: str | None = None
     slot_bead: str | None = None
     route: tuple[int, float] | None = None
-    workers: list[tuple[int, float]] = field(default_factory=list)
+    workers: list[tuple[int, float]] = Field(default_factory=list)
 
     def alive(self) -> bool:
         return pid_alive(self.pid)
 
 
-@record
-class Ticket:
+class Ticket(Rec):
     """slots/<repo_key>/<seq>.json: a place in the line for a slot."""
 
     V: ClassVar[int] = 1
@@ -57,8 +55,7 @@ class Ticket:
         return pid_alive(self.pid)
 
 
-@record
-class LockRecord:
+class LockRecord(Rec):
     """locks/<what>-<id>.lock: who holds a named lock, as JSON."""
 
     V: ClassVar[int] = 1

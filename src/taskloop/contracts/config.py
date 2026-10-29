@@ -1,11 +1,13 @@
 """RepoProfile: the repo's .task-loop.json as typed records . An unknown key is an error, not a silent no-op."""
-from dataclasses import field, fields
 from typing import Any, Literal, TextIO
 
-from taskloop.contracts.argv import FORM, shape_problem, text_of
-from taskloop.contracts.codec import CodecError, from_json, record
+from pydantic import Field
 
-FRESH_ABOVE_K = {"claude": 150, "codex": 100, "xai": 100}
+from taskloop.contracts import wire
+from taskloop.contracts.argv import FORM, shape_problem, text_of
+from taskloop.contracts.wire import Rec
+
+FRESH_ABOVE_K = {"claude": 150.0, "codex": 100.0, "xai": 100.0}
 TEST_PATTERN = r"^\s*(def test_|async def test_|\[(Test|UnityTest|Fact|Theory|TestMethod|TestCase)\b|#\[test\]|(it|test)\(|func Test)"
 
 
@@ -29,42 +31,39 @@ def fill_slot_env(values: Any, **names: str) -> dict[str, str]:
     return out
 
 
-@record
-class VisualConfig:
+class VisualConfig(Rec):
     """Globs saying which changes are visual (a look judge reads the pictures)."""
 
-    include: list[str] = field(default_factory=list)
-    exclude: list[str] = field(default_factory=list)
+    include: list[str] = Field(default_factory=list)
+    exclude: list[str] = Field(default_factory=list)
 
 
-@record
-class ContainerConfig:
+class ContainerConfig(Rec):
     """Where a check that says `"in": "container"` runs: an image, or a Dockerfile of the repo (built once, tagged by its hash)."""
 
     image: str = ""
     dockerfile: str = ""
 
 
-@record
-class CheckSpec:
+class CheckSpec(Rec):
     id: str
     argv: list[str]
     group: Literal["static", "tests", "acceptance"] = "tests"
     run: Literal["stage", "gate", "both"] = "stage"  # stage: the round after each write; gate: land's gate steps (and `tl check`); both
-    when: list[str] = field(default_factory=list)
+    when: list[str] = Field(default_factory=list)
     retry: int = 0
     wall_min: float | None = None  # this check's wall-time limit; absent: engine.check_wall_min
     cache: bool | None = None
-    inputs: list[str] | str = field(default_factory=list)
+    inputs: list[str] | str = Field(default_factory=list)
     inputs_only: bool = False
-    exclude: list[str] = field(default_factory=list)
-    env: dict[str, str] = field(default_factory=dict)
+    exclude: list[str] = Field(default_factory=list)
+    env: dict[str, str] = Field(default_factory=dict)
     writer: bool | None = None  # true: the writer may run it whatever it costs; false: never; absent: by how long it takes
     writer_check_max_s: float | None = None  # this check's own cut for "too slow for the writer" (else engine.writer_check_max_s)
     tail_log: str = ""  # a log of the tree whose first compile errors join this check's red output when it shows none
-    where: Literal["host", "container"] = field(default="host", metadata={"name": "in"})  # container: needs engine.container
+    where: Literal["host", "container"] = Field(default="host", alias="in")  # container: needs engine.container
     why: str = ""  # run gate: why no plan check may run this command (it is told to the planner)
-    fix: list[str] = field(default_factory=list)  # argv run in the worktree before the checks (a formatter); what it changes is checked
+    fix: list[str] = Field(default_factory=list)  # argv run in the worktree before the checks (a formatter); what it changes is checked
 
     @property
     def cmd(self) -> str:
@@ -72,18 +71,16 @@ class CheckSpec:
         return text_of(self.argv)
 
 
-@record
-class SlotsConfig:
+class SlotsConfig(Rec):
     count: int = 0
     dir: str = ".slots"
     base: str = "origin/main"
-    setup: list[str] = field(default_factory=list)  # argv
-    setup_inputs: list[str] = field(default_factory=list)
-    keep: list[str] = field(default_factory=list)
+    setup: list[str] = Field(default_factory=list)  # argv
+    setup_inputs: list[str] = Field(default_factory=list)
+    keep: list[str] = Field(default_factory=list)
 
 
-@record
-class LoopConfig:
+class LoopConfig(Rec):
     """The `loop` block: the loop's constants. A key left out keeps the code default; read again at every tick."""
 
     poll: float = 2  # seconds between looks at a running child (stop command, slot lease)
@@ -111,38 +108,37 @@ class LoopConfig:
     build_dir: str = "~/Workspaces/wt"  # `tl prune` removes merged, clean worktrees under here (never a loop slot)
 
 
-@record
-class EngineConfig:
+class EngineConfig(Rec):
     """The `engine` block; every key has the default the engine uses today."""
 
-    land: list[str] = field(default_factory=lambda: ["git", "push", "origin", "HEAD:main"])
+    land: list[str] = Field(default_factory=lambda: ["git", "push", "origin", "HEAD:main"])
     land_optimistic_tries: int = 2  # gate re-runs outside the land lock when main moved under it, then inside (0: inside)
     base: str = "origin/main"
     check_links: bool = True
     pick_label: str = ""
     needs_info_label: str = "needs-info"
-    skip_labels: list[str] = field(default_factory=list)
-    epic_order: list[str] = field(default_factory=list)
+    skip_labels: list[str] = Field(default_factory=list)
+    epic_order: list[str] = Field(default_factory=list)
     epic_only: bool = False
     reflect: bool = True
     planner_notes: str = ""
     shot_table: str = ""
     write_fresh_stage_k: float = 100
-    write_fresh_above_k: float | dict[str, float] = field(default_factory=lambda: dict(FRESH_ABOVE_K))
+    write_fresh_above_k: float | dict[str, float] = Field(default_factory=lambda: dict(FRESH_ABOVE_K))
     delegate: str = ""
-    untracked_ignore: list[str] = field(default_factory=list)
-    checks: list[CheckSpec] = field(default_factory=list)
-    slot_env: dict[str, str] = field(default_factory=dict)  # added to (over) the slot's environment; {slot} {slot_dir} {repo} filled in
+    untracked_ignore: list[str] = Field(default_factory=list)
+    checks: list[CheckSpec] = Field(default_factory=list)
+    slot_env: dict[str, str] = Field(default_factory=dict)  # added to (over) the slot's environment; {slot} {slot_dir} {repo} filled in
     container: ContainerConfig | None = None
     host: bool = False
     worker_rules: str = ""
     test_pattern: str = TEST_PATTERN
     area_label_prefix: str = ""
-    areas: dict[str, Any] = field(default_factory=dict)
+    areas: dict[str, Any] = Field(default_factory=dict)
     visual_paths: VisualConfig | None = None
     budget_usd: float = 15
     budget_min: float = 180
-    budget_min_by_label: dict[str, float] = field(default_factory=dict)
+    budget_min_by_label: dict[str, float] = Field(default_factory=dict)
     bead_token_cap: int = 0  # tokens (in + out) a bead may use over all its runs: at the cap no worker starts (0: no cap)
     max_rounds: int = 3
     max_check_tries: int = 3
@@ -181,19 +177,18 @@ class EngineConfig:
         return "; ".join(k.cmd for k in self.gate_checks)
 
 
-@record
-class RepoProfile:
+class RepoProfile(Rec):
     """A person writes the file, so it carries no `v`."""
 
-    engine: EngineConfig = field(default_factory=EngineConfig)
-    slots: SlotsConfig = field(default_factory=SlotsConfig)
-    loop: LoopConfig = field(default_factory=LoopConfig)
+    engine: EngineConfig = Field(default_factory=EngineConfig)
+    slots: SlotsConfig = Field(default_factory=SlotsConfig)
+    loop: LoopConfig = Field(default_factory=LoopConfig)
 
 
 def _string_commands(data: Any) -> list[str]:
     """Where the profile still has a command as a string: every command is an argv list."""
     root = data if isinstance(data, dict) else {}
-    eng_name, slots_name = (f.name for f in fields(RepoProfile)[:2])  # the first two fields: engine, slots
+    eng_name, slots_name = list(RepoProfile.model_fields)[:2]  # the first two fields: engine, slots
     eng, slots = root.get(eng_name), root.get(slots_name)
     eng, slots = (eng if isinstance(eng, dict) else {}), (slots if isinstance(slots, dict) else {})
     found = [f"{eng_name}.land"] if isinstance(eng.get("land"), str) else []
@@ -203,7 +198,7 @@ def _string_commands(data: Any) -> list[str]:
     return found
 
 
-ENG = next(f.name for f in fields(RepoProfile))  # the profile's first block, engine
+ENG = next(iter(RepoProfile.model_fields))  # the profile's first block, engine
 RETIRED_ENGINE = ("check_idle_min",)  # keys that once did something and now do nothing: loaded without them, not an error
 RETIRED_CHECK = ("idle_min",)  # the same, on one entry of engine.checks
 GONE_ENGINE = {  # key -> what to do instead: refused at load (the old spelling is not read)
@@ -274,8 +269,8 @@ def load(data: Any, say_to: TextIO | None = None) -> RepoProfile:
     if old:
         raise ConfigError(f"the repo profile: {', '.join(old)} is a string command: {FORM}")
     try:
-        profile = from_json(RepoProfile, data or {})
-    except CodecError as e:
+        profile = wire.load(RepoProfile, data or {})
+    except ValueError as e:
         raise ConfigError(f"the repo profile: {e}") from None
     box = profile.engine.container
     if box and bool(box.image) == bool(box.dockerfile):

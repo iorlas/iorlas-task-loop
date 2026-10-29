@@ -1,6 +1,5 @@
 """dash.py: the dashboard's view contract. The committed fixtures are what the builder makes, every one decodes strictly and
 re-encodes byte for byte, every dash record appears in them, and every bead id they name exists in the snapshot."""
-import dataclasses
 import json
 import os
 import sys
@@ -11,8 +10,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support import dash_fixtures as fx
 
-from taskloop.contracts import codec, schema
 from taskloop.contracts import dash as D
+from taskloop.contracts import schema, wire
+from taskloop.contracts.wire import Rec
 
 CLASS = {"snapshot.json": D.Snapshot, "bead/": D.BeadDetail, "live/": D.LivePage, "result.json": D.Result}
 
@@ -22,10 +22,10 @@ def cls_of(rel: str) -> type:
 
 
 def records(obj, seen: set) -> None:
-    if dataclasses.is_dataclass(obj):
+    if isinstance(obj, Rec):
         seen.add(type(obj))
-        for f in dataclasses.fields(obj):
-            records(getattr(obj, f.name), seen)
+        for name in type(obj).model_fields:
+            records(getattr(obj, name), seen)
     elif isinstance(obj, (list, tuple)):
         for v in obj:
             records(v, seen)
@@ -52,20 +52,20 @@ class DashFixtures(unittest.TestCase):
             if rel == "writes.json":
                 self.assertEqual(set(raw), set(D.WRITES))
                 for verb, body in raw.items():
-                    self.assertEqual(codec.to_json(codec.from_json(D.WRITES[verb], body)), body, verb)
+                    self.assertEqual(wire.dump(wire.load(D.WRITES[verb], body)), body, verb)
                 continue
-            self.assertEqual(codec.to_json(codec.from_json(cls_of(rel), raw)), raw, rel)
+            self.assertEqual(wire.dump(wire.load(cls_of(rel), raw)), raw, rel)
 
     def test_unknown_keys_are_refused(self) -> None:
         raw = json.loads((fx.DIR / "snapshot.json").read_text(encoding="utf-8"))
         raw["beads"][0]["surprise"] = 1
-        with self.assertRaises(codec.CodecError):
-            codec.from_json(D.Snapshot, raw)
+        with self.assertRaises(ValueError):
+            wire.load(D.Snapshot, raw)
 
     def test_every_dash_record_is_in_a_fixture(self) -> None:
         seen: set = set()
         records(self.built, seen)
-        mine = {c for c in vars(D).values() if isinstance(c, type) and dataclasses.is_dataclass(c) and c.__module__ == D.__name__}
+        mine = {c for c in vars(D).values() if isinstance(c, type) and issubclass(c, Rec) and c.__module__ == D.__name__}
         self.assertEqual({c.__name__ for c in mine - seen}, set())
 
     def test_every_record_has_a_schema(self) -> None:

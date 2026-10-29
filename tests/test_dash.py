@@ -1,5 +1,4 @@
 """The dashboard server: pages, API and live state."""
-import dataclasses
 import json
 import os
 import socket
@@ -19,7 +18,7 @@ import support.paths  # noqa: E402, F401
 from asks.samples import MOCKS  # noqa: E402
 from support.dashes import make_dash  # noqa: E402
 
-from taskloop.contracts import codec  # noqa: E402
+from taskloop.contracts import wire  # noqa: E402
 from taskloop_dash import bind as bind_mod  # noqa: E402
 
 SH_FAKE = unittest.skipIf(os.name == "nt", "the bd fake is a #!/bin/sh script, which Windows cannot execute")
@@ -141,8 +140,8 @@ class Asks(unittest.TestCase):
             (bin_ / "bd").chmod(0o755)
             asks = d / "task-loop" / "asks"
             asks.mkdir(parents=True)
-            rec = codec.to_json(dataclasses.replace(MOCKS["lifesim-22b3"], bead="x-1", id="x-1-1", repo=str(d), t=time.time() - 3600,
-                                                    parks_at=time.time() + 86400))
+            rec = wire.dump(MOCKS["lifesim-22b3"].model_copy(update={"bead": "x-1", "id": "x-1-1", "repo": str(d), "t": time.time() - 3600,
+                                                    "parks_at": time.time() + 86400}))
             (asks / "x-1.json").write_text(json.dumps(rec))
             env = dict(os.environ, XDG_CONFIG_HOME=str(d), APPDATA=str(d), TASK_LOOP_DASH_BIND="127.0.0.1", HOME=str(d),
                        USERPROFILE=str(d), PATH=str(bin_) + os.pathsep + os.environ["PATH"],

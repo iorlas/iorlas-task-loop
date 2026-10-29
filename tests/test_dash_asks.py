@@ -1,6 +1,5 @@
 """The ask records the page shows: the AskCard fields, the soft ask's marker, the ledger rows, the decisions in
 force, the learning series, and POST /api/stick through Ports."""
-import dataclasses
 import json
 import os
 import sys
@@ -18,7 +17,7 @@ from support.narrow import must
 
 from taskloop.adapters.fake_beads import FakeBeads
 from taskloop.app.asks import intake, raiser
-from taskloop.contracts import codec
+from taskloop.contracts import wire
 from taskloop.contracts.ask import SimilarRef, ThreadEntry
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.dash import Column, Marker, OwnerCause, Result, Stick
@@ -82,8 +81,8 @@ class Cards(Case):
                                              bead="b-0", key=key, t=NOW - 5 * DAY))
         a = self.raise_("b-1", NOW - DAY, cause="requirement", adrs=self.stores.adrs(REPO))
         self.assertEqual(a.similar, [SimilarRef(kind="adr", id=adr.id)])
-        self.asks.put(dataclasses.replace(a, thread=[ThreadEntry(by="owner", t=NOW - 100, md="why?"),
-                                                     ThreadEntry(by="helper", t=NOW - 90, md="because")]))
+        self.asks.put(a.model_copy(update={"thread": [ThreadEntry(by="owner", t=NOW - 100, md="why?"),
+                                                     ThreadEntry(by="helper", t=NOW - 90, md="because")]}))
         beads = [bead("b-1", "Bills"), bead("b-2", "Done after", "closed", closed_at=iso(NOW - 3600)),
                  bead("b-3", "Done before", "closed", closed_at=iso(NOW - 5 * DAY))]
         asks = {x.bead: x for x in self.snap(beads, adrs=[AdrIn(adr, 2, NOW - 100)]).asks}
@@ -231,7 +230,7 @@ class Stick_(unittest.TestCase):
     def post(self, verb, body):
         code, out = self.dash.writes.post(verb, body)
         self.assertEqual(code, 200)
-        return codec.from_json(Result, out)
+        return wire.load(Result, out)
 
     def stick(self, outcome, text=""):
         return self.post("stick", {"project": "demo", "ask": self.ask.id, "outcome": outcome, "text": text})

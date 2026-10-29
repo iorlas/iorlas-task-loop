@@ -3,7 +3,6 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import dataclasses
 from pathlib import Path
 from typing import cast
 from unittest import mock
@@ -239,7 +238,7 @@ class LandReview(LandReviewBase):
         for how in ("red", "older", "unknown"):
             e = self.evidenced(self.engine_checks(**({"unity-tests": {"exit": 1, "status": "failed", "why": ""}} if how == "red" else {})))
             if how == "older":
-                e.last_run = dataclasses.replace(cast(CheckRun, e.last_run), tree="0" * 40)
+                e.last_run = cast(CheckRun, e.last_run).model_copy(update={"tree": "0" * 40})
             if how == "unknown":
                 e.last_run = None
                 e.run_dir = Path(self.tmp.name, "nope")

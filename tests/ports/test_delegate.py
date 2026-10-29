@@ -23,7 +23,7 @@ from taskloop.adapters.delegate_route import RouteDelegate
 from taskloop.adapters.delegate_wire import answer_status
 from taskloop.adapters.fake_delegate import FakeDelegate, Step, done, stopped
 from taskloop.adapters.procs import Ran
-from taskloop.contracts import codec
+from taskloop.contracts import wire
 from taskloop.contracts.delegate import LiveCmdStart, LiveEnd, LiveMsg
 
 STUB = str(Path(__file__).parent / "stub_route.py")
@@ -173,7 +173,7 @@ class RouteDelegateFailures(RouteHarness, unittest.TestCase):
 
 def wire_line(event: Any) -> dict[str, Any]:
     """One live-file line as delegate writes it: `k` names the kind, and there is no `v`."""
-    j = codec.to_json(event)
+    j = wire.dump(event)
     j.pop("v", None)
     return {"k": j.pop("kind"), **j}
 

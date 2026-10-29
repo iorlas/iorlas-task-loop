@@ -1,7 +1,6 @@
 """The slot code (src/taskloop/app/slots) on fakes: bd in memory, git in memory with injected faults, the ticket line in a dict.
 Every test here runs in milliseconds; the real git and the real files are in test_tl (SlotReset) and test_slots."""
 import contextlib
-import dataclasses
 import sys
 import tempfile
 import time
@@ -170,7 +169,7 @@ class Taking(Rig):
         assert got is not None
         name, _, sb = got
         self.assertEqual(name, "s2")
-        self.bd.beads[sb] = dataclasses.replace(self.bd.beads[sb], metadata={"held_by": "someone-else"})
+        self.bd.beads[sb] = self.bd.beads[sb].model_copy(update={"metadata": {"held_by": "someone-else"}})
         self.slot("s2").release(mine=True)
         self.assertEqual(self.bd.beads[sb].status, "in_progress")
         self.assertIn("left alone", self.err[0])

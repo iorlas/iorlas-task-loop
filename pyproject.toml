@@ -1,9 +1,11 @@
 [project]
 name = "iorlas-task-loop"
 version = "0"
-description = "Task loop engine: dev and test tooling only (the engine has no runtime dependencies)."
+description = "Task loop engine: the dependencies of tl.py (PEP 723 header, same pin) and the dev and test tooling."
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "pydantic==2.14.2",
+]
 
 [dependency-groups]
 dev = ["pytest", "pytest-xdist"]

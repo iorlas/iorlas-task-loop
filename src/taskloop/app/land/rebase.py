@@ -1,6 +1,5 @@
 """A resumed branch is rebased onto the latest base before it is planned; a conflict is fixed in place when few files are in it, else the
 task starts again on the base (the branch kept under another name)."""
-import dataclasses
 import time
 from pathlib import Path
 from typing import Any
@@ -77,7 +76,7 @@ class Rebase:
                 return ck
             # unsquashed, the wip commit reset() made on top of the checkpoint's head is still on top of it
             above = not self.squashed and len(e.rebase_pre) > 1 and ck.head == e.rebase_pre[1]
-            return dataclasses.replace(ck, head=e.git("rev-parse", "HEAD~1" if above else "HEAD"))
+            return ck.model_copy(update={"head": e.git("rev-parse", "HEAD~1" if above else "HEAD")})
 
         e.checkpoints.amend(move)
 

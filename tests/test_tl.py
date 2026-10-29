@@ -40,7 +40,7 @@ from taskloop.app.slots import engine_lock  # noqa: E402
 from taskloop.app.track import trail  # noqa: E402
 from taskloop.app.wire import asks as wasks  # noqa: E402
 from taskloop.app.wire import slots as wslots  # noqa: E402
-from taskloop.contracts import codec  # noqa: E402
+from taskloop.contracts import wire  # noqa: E402
 
 CTX = tl.Ctx(tl.HERE, trail.now, [])
 SH_FAKE = unittest.skipIf(os.name == "nt", "the bd fake is a #!/bin/sh script, which Windows cannot execute")
@@ -517,7 +517,7 @@ if __name__ == "__main__":
 
 def ask_file(asks, bead, **over):
     """A current-version ask record on disk, the way the engine files one."""
-    base = codec.to_json(S.ASK)
+    base = wire.dump(S.ASK)
     rec = {**base, "id": bead + "-1", "bead": bead, "status": "open", "answer": None, "answered": None, "consumed": None, **over}
     (asks / (f"{bead}.json")).write_text(json.dumps(rec))
 

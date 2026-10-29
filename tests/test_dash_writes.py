@@ -1,5 +1,4 @@
 """POST /api/<verb>: answer, look, cause and ack through the real Intake over a bd in memory; the Result shape; the refused cases."""
-import dataclasses
 import json
 import sys
 import tempfile
@@ -16,14 +15,14 @@ from support.look_world import world
 from support.narrow import must
 
 from taskloop.app.run import requests
-from taskloop.contracts import codec
+from taskloop.contracts import wire
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.dash import Result
 from taskloop.contracts.enums import AskStatus
 from taskloop.contracts.stores import AskStore
 
 NOW = 1_800_000_000.0
-ASK = dataclasses.replace(MOCKS["lifesim-22b3"], bead="b-1", id="b-1-1")
+ASK = MOCKS["lifesim-22b3"].model_copy(update={"bead": "b-1", "id": "b-1-1"})
 RUN = "tl-5-20261026-100000"
 
 
@@ -41,7 +40,7 @@ class Writes(unittest.TestCase):
         self.asks = AskStore.at(self.dash.env.config)
         path = self.dash.env.config.ask("b-1")
         path.parent.mkdir(parents=True)
-        path.write_text(json.dumps(codec.to_json(ASK)))
+        path.write_text(json.dumps(wire.dump(ASK)))
         log = self.dash.env.config.engine_log(RUN)
         log.parent.mkdir(parents=True, exist_ok=True)
         log.write_text(json.dumps(typed("run_start", NOW - 5, run=RUN, bead="tl-5", worktree="")) + "\n")
@@ -49,7 +48,7 @@ class Writes(unittest.TestCase):
     def post(self, verb, body):
         code, out = self.dash.writes.post(verb, body)
         self.assertEqual(code, 200)
-        return codec.from_json(Result, out)
+        return wire.load(Result, out)
 
     def meta(self, bead, key):
         raw = self.fake.beads[bead].metadata.get(key)

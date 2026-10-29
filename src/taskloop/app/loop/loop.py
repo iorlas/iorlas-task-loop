@@ -1,6 +1,5 @@
 """The loop: one process runs ready beads one after another, each through `tl run-task` in any free slot."""
 import contextlib
-import dataclasses
 import datetime
 import json
 import time
@@ -20,7 +19,7 @@ from taskloop.app.loop.versions import Installs
 from taskloop.app.slots import line as slots_line
 from taskloop.app.slots.lease import Lease
 from taskloop.app.slots.pool import SlotPool
-from taskloop.contracts import codec
+from taskloop.contracts import wire
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.loop import LoopState, QueueRow
 from taskloop.contracts.ports import BdFailure, BeadQuery
@@ -55,8 +54,8 @@ def parse_handover(raw: str) -> tuple[LoopState | None, str]:
     if not raw:
         return None, ""
     try:
-        return codec.from_json(LoopState, json.loads(raw)), ""
-    except ValueError as e:  # CodecError, StaleRecord and bad JSON are ValueErrors
+        return wire.load(LoopState, json.loads(raw)), ""
+    except ValueError as e:  # ValidationError, StaleRecord and bad JSON are ValueErrors
         return None, str(e)[:200]
 
 
@@ -113,16 +112,16 @@ class Loop(Core):
         self.installs.record_bad(self.installs.mine, why)
         env.event("reload_fallback", "", who="loop", old=env.version, new=Path(c.back).name, why=why)
         self.say(f"RED: task-loop {env.version} broke after the move; going back to {Path(c.back).name}")
-        self.carry_in = dataclasses.replace(c, fallback=True)
+        self.carry_in = c.model_copy(update={"fallback": True})
         self.exec_to(Path(c.back), back=env.code_dir)
 
     def exec_to(self, d: Path, back: str) -> bool:
         """Exec into the install in `d` with this loop's argv and state. Returns only when the exec itself failed."""
         env = self.env
-        self.carry_in = dataclasses.replace(self.carry_in, back=back, moved_at=env.now())
-        self.st = dataclasses.replace(self.st, carry=self.carry())
+        self.carry_in = self.carry_in.model_copy(update={"back": back, "moved_at": env.now()})
+        self.st = self.st.model_copy(update={"carry": self.carry()})
         try:
-            env.exec_into(d, list(self.args.argv), json.dumps(codec.to_json(self.st)))
+            env.exec_into(d, list(self.args.argv), json.dumps(wire.dump(self.st)))
         except OSError as e:  # execv itself failed: the loop goes on where it is
             self.say(f"warn: could not move: {e}")
         return False

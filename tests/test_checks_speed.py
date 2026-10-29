@@ -5,7 +5,6 @@ import shlex
 import subprocess
 import sys
 import unittest
-from dataclasses import replace
 from pathlib import Path
 from typing import Any, ClassVar, cast
 from unittest import mock
@@ -173,7 +172,7 @@ class InputCache(SpeedTest):
         self.assertEqual(key(), k)
         (self.wt / "client" / "a.cs").write_text("2\n")
         self.assertNotEqual(key(), k)
-        self.assertNotEqual(InputKeys(self.wt, self.tree(), "b", os.environ).key(replace(c, exclude=[])), key())
+        self.assertNotEqual(InputKeys(self.wt, self.tree(), "b", os.environ).key(c.model_copy(update={"exclude": []})), key())
 
     def tree(self):
         return self.eng_tree.checkout.tree_hash()

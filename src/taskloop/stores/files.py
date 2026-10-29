@@ -9,7 +9,7 @@ from pathlib import Path
 
 from atomic_io import atomic_write_text
 
-from taskloop.contracts import codec, paths
+from taskloop.contracts import paths, wire
 from taskloop.contracts.locks import Ticket
 from taskloop.contracts.stores import JsonStore
 from taskloop.stores.api import Doc
@@ -51,7 +51,7 @@ class FileTickets:
         while True:
             ticket = Ticket(pid=pid, why=why, since=now, prio=prio, seq=seq, pid_start=pid_start, bead=bead)  # pyrefly: ignore[unexpected-keyword]
             tmp = folder / (f".{pid}.{threading.get_ident()}.{int(seq)}.tmp")  # threads of one process may race for a number
-            tmp.write_text(json.dumps(codec.to_json(ticket)), encoding="utf-8")
+            tmp.write_text(json.dumps(wire.dump(ticket)), encoding="utf-8")
             try:
                 os.link(tmp, self.cfg.ticket(repo_key, seq))
                 if seq > self._last(counter):  # numbers only grow, also across an empty line; a lost race here is harmless
@@ -73,7 +73,7 @@ class FileTickets:
             if self._seq(p) == 0:
                 continue
             try:
-                ticket = codec.from_json(Ticket, json.loads(p.read_text(encoding="utf-8")))
+                ticket = wire.load(Ticket, json.loads(p.read_text(encoding="utf-8")))
             except (OSError, ValueError):
                 continue  # gone meanwhile, or not ours
             if ticket.alive():

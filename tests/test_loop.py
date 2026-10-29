@@ -43,7 +43,7 @@ from taskloop.app.loop.take import Taker  # noqa: E402
 from taskloop.app.slots import verbs  # noqa: E402
 from taskloop.app.track import trail  # noqa: E402
 from taskloop.app.wire import slots as wslots  # noqa: E402
-from taskloop.contracts import codec  # noqa: E402
+from taskloop.contracts import wire  # noqa: E402
 from taskloop.contracts.config import LoopConfig  # noqa: E402
 from taskloop.contracts.loop import Carry, LoopState  # noqa: E402
 from taskloop.domain import outcome as oc  # noqa: E402
@@ -750,7 +750,7 @@ class Loop(LoopBase):
     def test_the_held_beads_go_across_a_move_to_a_newer_install(self):
         st = LoopState(pid=1, started=1.0, t=1.0, repo="r", version="0.0.1", code_dir="/x", actor="tl-a",
                        carry=Carry(gated={"x-1": ("worker", 5.0)}, ran=1))
-        got, why = parse_handover(json.dumps(codec.to_json(st)))
+        got, why = parse_handover(json.dumps(wire.dump(st)))
         assert got is not None
         self.assertEqual((got.carry.gated, got.carry.ran, why), ({"x-1": ("worker", 5.0)}, 1, ""))
         got, why = parse_handover(json.dumps({"gated": {"x-1": ["worker", 5.0]}, "ran": 1}))  # an old shape: absent, never trusted

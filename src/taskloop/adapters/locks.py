@@ -16,7 +16,7 @@ from pathlib import Path
 from atomic_io import atomic_write_json
 from process_lock import LockHeldError, ProcessLock, held
 
-from taskloop.contracts import codec, paths
+from taskloop.contracts import paths, wire
 from taskloop.contracts.enums import LockWhat
 from taskloop.contracts.locks import LockRecord, LockTimeout
 
@@ -38,7 +38,7 @@ def holder_file(path: Path) -> Path:
 def read_holder(path: Path, pid: int | None = None) -> LockRecord | None:
     """The record the holder wrote; when it has not written one yet (or never does), only its pid, as `pid N`."""
     try:
-        return codec.from_json(LockRecord, json.loads(holder_file(path).read_text(encoding="utf-8")))
+        return wire.load(LockRecord, json.loads(holder_file(path).read_text(encoding="utf-8")))
     except (OSError, ValueError):
         return None if pid is None else LockRecord(what=LockWhat.LAND, holder=f"pid {pid}", pid=pid, t=0.0)  # pyrefly: ignore[unexpected-keyword]
 
@@ -75,7 +75,7 @@ def hold_path(path: Path | str, holder: str, *, what: LockWhat = LockWhat.LAND, 
     rec = LockRecord(what=what, holder=holder, pid=os.getpid(), t=time.time())  # pyrefly: ignore[unexpected-keyword]
     try:
         with contextlib.suppress(OSError):
-            atomic_write_json(holder_file(key), codec.to_json(rec), fsync=False)
+            atomic_write_json(holder_file(key), wire.dump(rec), fsync=False)
         yield rec
     finally:
         holder_file(key).unlink(missing_ok=True)

@@ -1,10 +1,10 @@
-"""The reads (GET /api/snapshot, GET /api/bead): typed records from the builders, encoded by the contracts codec. The snapshot's
+"""The reads (GET /api/snapshot, GET /api/bead): typed records from the builders, encoded by the contracts wire form. The snapshot's
 `version` is its ETag: a request that already holds it (`since=` or If-None-Match) gets a 304 and no body."""
 
 import json
 from typing import Any
 
-from taskloop.contracts import codec
+from taskloop.contracts import wire
 from taskloop.contracts.dash import BeadDetail, Snapshot
 from taskloop_dash.env import Env
 from taskloop_dash.readers.world import Worlds
@@ -17,7 +17,7 @@ Reply = tuple[int, bytes, dict[str, str]]
 
 
 def encode(rec: Any) -> bytes:
-    return json.dumps(codec.to_json(rec), separators=(",", ":")).encode("utf-8")
+    return json.dumps(wire.dump(rec), separators=(",", ":")).encode("utf-8")
 
 
 def etag(version: str) -> str:

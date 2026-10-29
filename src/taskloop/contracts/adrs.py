@@ -1,10 +1,9 @@
 """The decision store of one repo: ADR documents plus the log of plans that cited them. One reader and one writer; the engine and `tl`
 write it, the dashboard reads it. It lives under the task-loop state dir (decisions/<repo key>/), not in the repo: the engine and
 `tl` write only there and to bd, never into a checkout."""
-import dataclasses
 from pathlib import Path
 
-from taskloop.contracts import codec, paths
+from taskloop.contracts import paths, wire
 from taskloop.contracts.ids import loop_key
 from taskloop.contracts.ledger import Adr, AdrUse
 from taskloop.contracts.stores import AskDocs, JsonlStore, JsonStore
@@ -16,7 +15,7 @@ def is_adr_id(text: str) -> bool:
 
 
 def decode_use(data: object) -> AdrUse:
-    return codec.from_json(AdrUse, data)
+    return wire.load(AdrUse, data)
 
 
 class AdrFiles:
@@ -53,7 +52,7 @@ class AdrStore:
             return f"{adr} is not a decision of this repo"
         if found.retired_t is not None:
             return f"{adr} is already retired"
-        self.put(dataclasses.replace(found, retired_by=by, retired_t=now))
+        self.put(found.model_copy(update={"retired_by": by, "retired_t": now}))
         return ""
 
     def get(self, adr: str) -> Adr | None:
@@ -62,7 +61,7 @@ class AdrStore:
     def add(self, adr: Adr) -> Adr:
         """File the ADR under the next free number; `adr.id` and `adr.n` are replaced."""
         n = max([a.n for a in self.all()], default=0) + 1
-        done = dataclasses.replace(adr, id=f"ADR-{n}", n=n)
+        done = adr.model_copy(update={"id": f"ADR-{n}", "n": n})
         self.docs.of(done.id).write(done)
         return done
 

@@ -1,5 +1,4 @@
-"""The codec: every record round-trips, a golden JSON locks each kind's wire shape, and bad data is refused by name."""
-import dataclasses
+"""The wire form of the records: every record round-trips, a golden JSON locks each kind's wire shape, and bad data is refused."""
 import enum
 import importlib
 import json
@@ -8,29 +7,36 @@ import pkgutil
 import sys
 import unittest
 from pathlib import Path
-from typing import Any
+from typing import Any, get_args
+
+from pydantic import ValidationError
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
 import taskloop.contracts as pkg
 from contracts import samples as S
-from taskloop.contracts import codec, delegate, enums, events, ids, log, trace
+from taskloop.contracts import delegate, enums, events, ids, log, trace, wire
 from taskloop.contracts.ask import Ask
-from taskloop.contracts.codec import CodecError, StaleRecord
 from taskloop.contracts.loop import LoopCommand
 from taskloop.contracts.run import LoopLogLine
+from taskloop.contracts.wire import Rec, SortedSet, StaleRecord
 
 GOLDEN = Path(__file__).resolve().parent / "golden"
-FAMILIES = {"engine_log": (S.LOG, log.ENGINE_LOG), "events": (S.EVENTS, events.EVENT), "live_events": (S.LIVE, delegate.LIVE_EVENT)}
+FAMILIES = {"engine_log": (S.LOG, log.EngineLog), "events": (S.EVENTS, events.Event), "live_events": (S.LIVE, delegate.LiveEvent)}
+
+
+def kinds(union: Any) -> set[str]:
+    """The tags of a discriminated union's members."""
+    return {m.model_fields["kind"].default for m in get_args(get_args(union)[0])}
 
 
 def reachable(obj: Any, out: set) -> None:
-    """Every dataclass type found in `obj`, nested ones included."""
-    if dataclasses.is_dataclass(obj) and not isinstance(obj, type):
+    """Every record type found in `obj`, nested ones included."""
+    if isinstance(obj, Rec):
         out.add(type(obj))
-        for f in dataclasses.fields(obj):
-            reachable(getattr(obj, f.name), out)
+        for name in type(obj).model_fields:
+            reachable(getattr(obj, name), out)
     elif isinstance(obj, (list, tuple, set, frozenset)):
         for x in obj:
             reachable(x, out)
@@ -52,10 +58,10 @@ class RoundTrip(unittest.TestCase):
         for coll in (S.LOG, S.EVENTS, S.LIVE, S.OTHERS):
             for name, rec in coll.items():
                 with self.subTest(name):
-                    wire = json.loads(json.dumps(codec.to_json(rec)))
-                    back = codec.from_json(type(rec), wire)
+                    body = json.loads(json.dumps(wire.dump(rec)))
+                    back = wire.load(type(rec), body)
                     self.assertEqual(back, rec)
-                    self.assertEqual(codec.to_json(back), wire)
+                    self.assertEqual(wire.dump(back), body)
 
     def test_every_record_class_of_the_package_has_a_sample(self):
         found: set = set()
@@ -67,7 +73,7 @@ class RoundTrip(unittest.TestCase):
         missing = []
         for m in pkgutil.iter_modules(pkg.__path__):
             if (
-                m.name in ("codec", "jsonl", "stores", "schema", "paths", "ports", "answers", "dash")
+                m.name in ("wire", "jsonl", "stores", "schema", "paths", "ports", "answers", "dash")
             # plumbing, not records (ports: call arguments, never written; answers: the workers' replies, tests/contracts/test_schema.py;
             # dash: the dashboard view, sampled by tests/fixtures/dash and tests/contracts/test_dash.py)
             ):
@@ -76,7 +82,7 @@ class RoundTrip(unittest.TestCase):
             for n, c in vars(mod).items():
                 if (
                     isinstance(c, type)
-                    and dataclasses.is_dataclass(c)
+                    and issubclass(c, Rec)
                     and c.__module__ == mod.__name__
                     and n not in bases
                     and c not in found
@@ -85,120 +91,116 @@ class RoundTrip(unittest.TestCase):
         self.assertEqual(missing, [], "add a sample for each record in tests/contracts/samples.py")
 
     def test_union_tables_cover_every_member(self):
-        self.assertEqual(set(log.ENGINE_LOG), set(S.LOG))
-        self.assertEqual(set(events.EVENT), set(S.EVENTS))
-        self.assertEqual(set(delegate.LIVE_EVENT), set(S.LIVE))
+        self.assertEqual(kinds(log.EngineLog), set(S.LOG))
+        self.assertEqual(kinds(events.Event), set(S.EVENTS))
+        self.assertEqual(kinds(delegate.LiveEvent), set(S.LIVE))
 
     def test_a_union_member_decodes_by_its_kind(self):
         for name, (coll, table) in FAMILIES.items():
             for kind, rec in coll.items():
                 with self.subTest(f"{name}/{kind}"):
-                    self.assertIs(type(codec.from_tagged(table, codec.to_json(rec))), type(rec))
+                    self.assertIs(type(wire.load(table, wire.dump(rec))), type(rec))
 
 
 class Golden(unittest.TestCase):
     def test_one_line_per_kind_of_each_union(self):
         for name, (coll, _) in FAMILIES.items():
-            produced = "".join(json.dumps(codec.to_json(rec)) + "\n" for rec in coll.values())
+            produced = "".join(json.dumps(wire.dump(rec)) + "\n" for rec in coll.values())
             golden_check(self, name + ".jsonl", produced)
 
     def test_the_other_records(self):
-        produced = json.dumps({k: codec.to_json(v) for k, v in S.OTHERS.items()}, indent=1, sort_keys=False) + "\n"
+        produced = json.dumps({k: wire.dump(v) for k, v in S.OTHERS.items()}, indent=1, sort_keys=False) + "\n"
         golden_check(self, "records.json", produced)
 
     def test_a_golden_line_decodes_to_its_sample(self):
         for name, (coll, table) in FAMILIES.items():
             lines = (GOLDEN / (name + ".jsonl")).read_text(encoding="utf-8").splitlines()
             for line, rec in zip(lines, coll.values(), strict=False):
-                self.assertEqual(codec.from_tagged(table, json.loads(line)), rec)
+                self.assertEqual(wire.load(table, json.loads(line)), rec)
 
 
 class Refusals(unittest.TestCase):
     def wire(self, **kw):
-        d = codec.to_json(S.OUTCOME)
+        d = wire.dump(S.OUTCOME)
         d.update(kw)
         return d
 
     def test_a_foreign_version_is_stale(self):
         with self.assertRaises(StaleRecord) as cm:
-            codec.from_json(type(S.OUTCOME), self.wire(v=1))
+            wire.load(type(S.OUTCOME), self.wire(v=1))
         self.assertEqual((cm.exception.found, cm.exception.want), (1, 2))
         with self.assertRaises(StaleRecord):
-            codec.from_json(type(S.OUTCOME), {k: v for k, v in self.wire().items() if k != "v"})
+            wire.load(type(S.OUTCOME), {k: v for k, v in self.wire().items() if k != "v"})
 
     def test_an_unknown_key_is_refused(self):
-        with self.assertRaisesRegex(CodecError, "unknown key extra"):
-            codec.from_json(type(S.OUTCOME), self.wire(extra=1))
+        with self.assertRaisesRegex(ValidationError, "extra"):
+            wire.load(type(S.OUTCOME), self.wire(extra=1))
 
     def test_a_missing_required_key_is_named(self):
         d = self.wire()
         del d["bead"]
-        with self.assertRaisesRegex(CodecError, "bead: missing"):
-            codec.from_json(type(S.OUTCOME), d)
+        with self.assertRaisesRegex(ValidationError, "bead"):
+            wire.load(type(S.OUTCOME), d)
 
     def test_types_are_not_coerced(self):
         for key, bad in (("minutes", "3"), ("rounds", 2.5), ("rounds", True), ("asked", 1), ("bead", 7), ("outcome", "nope")):
-            with self.subTest(key), self.assertRaises(CodecError):
-                codec.from_json(type(S.OUTCOME), self.wire(**{key: bad}))
+            with self.subTest(key), self.assertRaises(ValidationError):
+                wire.load(type(S.OUTCOME), self.wire(**{key: bad}))
 
     def test_an_int_is_a_float_but_a_float_is_not_an_int(self):
-        self.assertEqual(codec.from_json(type(S.OUTCOME), self.wire(minutes=3)).minutes, 3.0)
+        self.assertEqual(wire.load(type(S.OUTCOME), self.wire(minutes=3)).minutes, 3.0)
 
     def test_the_path_names_the_nested_field(self):
-        d = codec.to_json(S.LOG["call_end"])
+        d = wire.dump(S.LOG["call_end"])
         d["tokens"]["out"] = "many"
-        with self.assertRaisesRegex(CodecError, r"CallEnd\.tokens\.out"):
-            codec.from_json(log.CallEnd, d)
+        with self.assertRaises(ValidationError) as cm:
+            wire.load(log.CallEnd, d)
+        self.assertEqual(cm.exception.errors()[0]["loc"], ("tokens", "out"))
 
     def test_a_wrong_kind_and_an_unknown_kind(self):
-        d = codec.to_json(S.LOG["warn"])
-        with self.assertRaisesRegex(CodecError, "kind 'warn', expected 'note'"):
-            codec.from_json(log.Note, d)
-        with self.assertRaisesRegex(CodecError, "unknown kind"):
-            codec.from_tagged(log.ENGINE_LOG, dict(d, kind="nope"))
-        with self.assertRaisesRegex(CodecError, "expected an object"):
-            codec.from_json(log.Note, [])
+        d = wire.dump(S.LOG["warn"])
+        with self.assertRaises(ValidationError):
+            wire.load(log.Note, d)
+        with self.assertRaisesRegex(ValidationError, "union_tag_invalid|does not match"):
+            wire.load(log.EngineLog, dict(d, kind="nope"))
+        with self.assertRaises(ValidationError):
+            wire.load(log.Note, [])
 
     def test_a_literal_takes_only_its_members(self):
-        d = codec.to_json(S.other(LoopCommand))
+        d = wire.dump(S.other(LoopCommand))
         d["action"] = "explode"
-        with self.assertRaisesRegex(CodecError, "not one of"):
-            codec.from_json(type(S.other(LoopCommand)), d)
+        with self.assertRaisesRegex(ValidationError, "action"):
+            wire.load(type(S.other(LoopCommand)), d)
 
 
 class Wire(unittest.TestCase):
     def test_a_keyword_field_keeps_its_wire_name(self):
-        self.assertEqual(codec.to_json(trace.Tokens(in_=3, cached=2, out=1)), {"in": 3, "cached": 2, "out": 1})
-        self.assertEqual(codec.from_json(trace.Tokens, {"in": 3}).in_, 3)
+        self.assertEqual(wire.dump(trace.Tokens(in_=3, cached=2, out=1)), {"in": 3, "cached": 2, "out": 1})
+        self.assertEqual(wire.load(trace.Tokens, {"in": 3}).in_, 3)
 
     def test_v_and_kind_come_first(self):
-        self.assertEqual(list(codec.to_json(S.LOG["lock"]))[:3], ["v", "kind", "t"])
+        self.assertEqual(list(wire.dump(S.LOG["lock"]))[:3], ["v", "kind", "t"])
 
     def test_a_set_is_written_sorted_and_a_tuple_as_an_array(self):
-        @codec.record
-        class WithSet:
-            features: frozenset[str]
+        class WithSet(Rec):
+            features: SortedSet
 
-        self.assertEqual(codec.to_json(WithSet(features=frozenset({"b", "a"})))["features"], ["a", "b"])
-        self.assertEqual(codec.to_json(S.LOCK)["route"], [10, S.T])
+        self.assertEqual(wire.dump(WithSet(features={"b", "a"}))["features"], ["a", "b"])
+        self.assertEqual(wire.dump(S.LOCK)["route"], [10, S.T])
 
     def test_an_optional_nested_record_is_null_or_a_dict(self):
         a = S.other(Ask)
-        self.assertEqual(codec.to_json(a)["answer"]["action"], "confirm")
-        self.assertIsNone(codec.to_json(dataclasses.replace(a, answer=None))["answer"])
+        self.assertEqual(wire.dump(a)["answer"]["action"], "confirm")
+        self.assertIsNone(wire.dump(a.model_copy(update={"answer": None}))["answer"])
 
     def test_nested_records_carry_no_version(self):
-        d = codec.to_json(S.other(LoopLogLine))
+        d = wire.dump(S.other(LoopLogLine))
         self.assertEqual(d["v"], 2)
         self.assertNotIn("v", d["outcome"])
 
-    def test_the_hints_are_read_once_per_class(self):
-        codec.plan.cache_clear()
-        for _ in range(3):
-            codec.to_json(S.TRACE)
-        seen: set = set()
-        reachable(S.TRACE, seen)
-        self.assertEqual(codec.plan.cache_info().misses, len(seen))
+    def test_a_record_is_frozen(self):
+        with self.assertRaises(ValidationError):
+            S.OUTCOME.rounds = 9  # type: ignore[misc]
 
 
 class Ids(unittest.TestCase):

@@ -1,6 +1,5 @@
 """Ask v3: the new fields round-trip, an older ask file is absent, every transition leaves one ledger row, a repeat
 matches a past ask and a decision in force, and a soft ask never makes a run wait."""
-import dataclasses
 import json
 import sys
 import tempfile
@@ -14,7 +13,7 @@ from support.tiers import domain
 
 from taskloop.adapters.fake_beads import FakeBeads
 from taskloop.app.asks import intake, raiser, sweeps
-from taskloop.contracts import codec
+from taskloop.contracts import wire
 from taskloop.contracts.ask import Ask, AskAnswer, SimilarRef, ThreadEntry
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.dash import OwnerCause, Stick
@@ -46,13 +45,12 @@ class AskV3(unittest.TestCase):
         self.asks = self.stores.asks
 
     def test_the_new_fields_round_trip_and_an_ask_is_version_3(self) -> None:
-        ask = dataclasses.replace(
-            must(raiser.raise_ask(self.asks, question("requirement", "keep v1"), asking())[0]),
-            cause_by="owner", similar=[SimilarRef(kind="adr", id="ADR-2"), SimilarRef(kind="ask", id="t-0-1")],
-            thread=[ThreadEntry(by="owner", t=T, md="why?")], outcome=Stick.ADR, outcome_ref="ADR-3")
-        wire = codec.to_json(ask)
-        self.assertEqual(wire["v"], 3)
-        self.assertEqual(codec.from_json(Ask, json.loads(json.dumps(wire))), ask)
+        ask = must(raiser.raise_ask(self.asks, question("requirement", "keep v1"), asking())[0]).model_copy(update={
+            "cause_by": "owner", "similar": [SimilarRef(kind="adr", id="ADR-2"), SimilarRef(kind="ask", id="t-0-1")],
+            "thread": [ThreadEntry(by="owner", t=T, md="why?")], "outcome": Stick.ADR, "outcome_ref": "ADR-3"})
+        body = wire.dump(ask)
+        self.assertEqual(body["v"], 3)
+        self.assertEqual(wire.load(Ask, json.loads(json.dumps(body))), ask)
         self.assertEqual((ask.owner_cause, ask.blocking, ask.default), (OwnerCause.REQUIREMENT, False, "keep v1"))
 
     def test_an_agent_declared_cause_outside_the_list_is_unknown(self) -> None:
@@ -65,7 +63,7 @@ class AskV3(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             cfg = ConfigDir(tmp)
             asks = AskStore.at(cfg)
-            old = codec.to_json(must(raiser.raise_ask(fake_stores().asks, question(), asking())[0])) | {"v": 2}
+            old = wire.dump(must(raiser.raise_ask(fake_stores().asks, question(), asking())[0])) | {"v": 2}
             cfg.ask("t-1").parent.mkdir(parents=True)
             cfg.ask("t-1").write_text(json.dumps(old))
             self.assertEqual((asks.get("t-1"), asks.orphans(), asks.live()), (None, ["t-1"], []))

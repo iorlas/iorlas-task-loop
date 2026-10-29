@@ -3,16 +3,15 @@ window's use at its reset from the recent rows. The window name is kept as deleg
 string): this module never reads a name's meaning, it only groups rows by it."""
 from typing import ClassVar, Final
 
-from taskloop.contracts.codec import record
 from taskloop.contracts.snapshots import StatusSnapshot
+from taskloop.contracts.wire import Rec
 
 USAGE_KEEP_S: Final = 30 * 86400  # a row older than this is pruned; the only way a row leaves the file
 FORECAST_ROWS: Final = 12  # the projection fits the last this many rows of the current window
 RESET_JITTER_S: Final = 600  # two rows whose resets_at differ by more are of two windows
 
 
-@record
-class UsageRow:
+class UsageRow(Rec):
     """usage-history.jsonl: one window of one lane as the snapshot filed at `at` (delegate's clock) saw it."""
 
     V: ClassVar[int] = 1

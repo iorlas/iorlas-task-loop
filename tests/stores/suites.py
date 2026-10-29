@@ -1,6 +1,5 @@
 """One suite per store family. Each is a mixin over `make_rig()`; test_contract.py runs it against the file-backed stores and
 against the in-memory ones, so a fake cannot drift from the real thing without a test going red."""
-import dataclasses
 import os
 import threading
 import time
@@ -12,7 +11,7 @@ from rigs import dead_pid
 from support.narrow import must
 from support.procsim import real_proc
 
-from taskloop.contracts import codec
+from taskloop.contracts import wire
 from taskloop.contracts.ask import Ask, AskAnswer
 from taskloop.contracts.checkpoint import Checkpoint
 from taskloop.contracts.enums import AskStatus, LockWhat
@@ -44,7 +43,7 @@ class DocContract(Base):
     def test_a_write_replaces_whole_and_delete_removes(self) -> None:
         doc = self.s.loop_rest("k")
         doc.write(S.other(Rest))
-        doc.write(dataclasses.replace(S.other(Rest), beads={"b-2": 7.0}))
+        doc.write(S.other(Rest).model_copy(update={"beads": {"b-2": 7.0}}))
         self.assertEqual(doc.read().beads, {"b-2": 7.0})
         doc.delete()
         self.assertIsNone(doc.read())
@@ -62,7 +61,8 @@ class DocContract(Base):
 
 class AskContract(Base):
     def raise_ask(self, bead: str, status: AskStatus = AskStatus.OPEN, t: float = S.T) -> Ask:
-        a = dataclasses.replace(S.ASK, bead=bead, id=bead + "-1", status=status, answer=None, answered=None, consumed=None, t=t)
+        a = S.ASK.model_copy(update={
+            "bead": bead, "id": bead + "-1", "status": status, "answer": None, "answered": None, "consumed": None, "t": t})
         self.s.asks.of(bead).write(a)
         return a
 
@@ -118,9 +118,9 @@ class CheckpointContract(Base):
 
     def test_open_beads_leaves_out_a_closed_one(self) -> None:
         self.s.checkpoints.of("tl-1").write(CK)
-        self.s.checkpoints.of("tl-2").write(dataclasses.replace(CK, bead="tl-2"))
+        self.s.checkpoints.of("tl-2").write(CK.model_copy(update={"bead": "tl-2"}))
         self.assertEqual(self.s.checkpoints.open_beads(), ["tl-1", "tl-2"])
-        self.s.checkpoints.of("tl-1").write(dataclasses.replace(CK, closed=True))
+        self.s.checkpoints.of("tl-1").write(CK.model_copy(update={"closed": True}))
         self.assertEqual(self.s.checkpoints.open_beads(), ["tl-2"])
 
     def test_delete_removes_the_record(self) -> None:
@@ -132,7 +132,7 @@ class CheckpointContract(Base):
 class LogContract(Base):
     def logs(self) -> list[tuple[Any, list[Any]]]:
         return [(self.s.run_log("r1"), list(S.LOG.values())), (self.s.events, list(S.EVENTS.values())),
-                (self.s.traces, [S.TRACE, dataclasses.replace(S.TRACE, bead="tl-2")])]
+                (self.s.traces, [S.TRACE, S.TRACE.model_copy(update={"bead": "tl-2"})])]
 
     def test_append_returns_offsets_and_reading_from_a_cursor_gives_only_the_new(self) -> None:
         for log, recs in self.logs():
@@ -162,7 +162,7 @@ class LogContract(Base):
     def test_a_torn_last_line_waits_and_is_whole_once_finished(self) -> None:
         log, recs = self.logs()[0]
         log.append(recs[0])
-        line = (__import__("json").dumps(codec.to_json(recs[1]), ensure_ascii=False, separators=(", ", ": ")) + "\n").encode()
+        line = (__import__("json").dumps(wire.dump(recs[1]), ensure_ascii=False, separators=(", ", ": ")) + "\n").encode()
         self.rig.tear(log, line[:20])
         page = log.read_from(0)
         self.assertEqual([i.rec for i in page.items], [recs[0]])

@@ -2,18 +2,18 @@
 
 Mirrors of what delegate emits; delegate's generated contract.json is the authority and a later release checks these fields
 against it. `RunRequest.to_argv` is the only place that builds the `route.py run` argv."""
-from dataclasses import field
-from typing import Any, ClassVar, Literal
+from typing import Annotated, Any, ClassVar, Literal
 
-from taskloop.contracts.codec import record, table_of
+from pydantic import Field
+
 from taskloop.contracts.trace import Tokens
+from taskloop.contracts.wire import Rec
 
 REASON_TIMEOUT = "timeout"  # the wire id of a worker that did not finish within --timeout
 REASON_OVERRUN = "overrun"  # made by the engine: a reviewer call used its budget
 
 
-@record
-class RunRequest:
+class RunRequest(Rec):
     """One `route.py run`. The engine's limits travel as flags (`timeout_s`, `idle_s`): delegate stops the worker's tree at them."""
 
     role: str
@@ -30,7 +30,7 @@ class RunRequest:
     timeout_s: int = 0
     idle_s: int = 0
     live_file: str = ""  # DELEGATE_LIVE_FILE: where delegate appends the worker's live events
-    engine_only: list[str] = field(default_factory=list)  # bare `just` recipe names a write step must not run: --engine-only once each
+    engine_only: list[str] = Field(default_factory=list)  # bare `just` recipe names a write step must not run: --engine-only once each
 
     def to_argv(self, python: str, route: str) -> list[str]:
         out = [python, route, "run", self.role, "--brief", self.brief_path, "--cwd", self.cwd, "--schema", self.schema_path]
@@ -49,14 +49,12 @@ class RunRequest:
         return {"DELEGATE_LIVE_FILE": self.live_file} if self.live_file else {}
 
 
-@record
-class Retry:
+class Retry(Rec):
     kind: Literal["none", "predicted", "poll"]
     at: float | None = None
 
 
-@record
-class StopFacts:
+class StopFacts(Rec):
     reason: str
     scope: Literal["bead", "caller", "machine", "lane", "model"]
     permanence: Literal["transient", "needs_owner"]
@@ -67,8 +65,7 @@ class StopFacts:
     partial: bool = False
 
 
-@record
-class UsageTokens:
+class UsageTokens(Rec):
     """Per call, never cumulative; in_fresh is the uncached input, cache_write null when the vendor does not report it."""
 
     in_fresh: int | None = None
@@ -78,8 +75,7 @@ class UsageTokens:
     cache_write_by_ttl: dict[str, int] | None = None
 
 
-@record
-class Usage:
+class Usage(Rec):
     tokens: UsageTokens | None = None
     cost: float = 0.0
     secs: float = 0.0
@@ -96,35 +92,31 @@ class Usage:
     accounting: Literal["exact", "estimated", "unknown"] = "unknown"
 
 
-@record
-class Denial:
+class Denial(Rec):
     """One refusal in the answer; `sandbox_limit` ones are noise."""
 
     kind: Literal["policy", "sandbox_limit", "secret"]
     tool: str | None = None
     path: str | None = None
-    input: dict[str, Any] = field(default_factory=dict)
+    input: dict[str, Any] = Field(default_factory=dict)
 
 
-@record
-class TranscriptInfo:
+class TranscriptInfo(Rec):
     """The transcript file and the byte window this call wrote."""
 
     path: str
     kind: Literal["codex", "claude", "opencode_export"]
-    from_: int = field(metadata={"name": "from"})
+    from_: int = Field(alias="from")
     to: int
     bytes: int
 
 
-@record
-class Survivor:
+class Survivor(Rec):
     pid: int
     start: str | None = None
 
 
-@record
-class WorkerEnd:
+class WorkerEnd(Rec):
     """How the worker's life ended (worker-run v1 `worker`): the delegate stopped its whole tree before it answered. `worker_survived`
     names pids that outlived SIGTERM and SIGKILL; pid, pgid and start name the process it launched."""
 
@@ -133,14 +125,13 @@ class WorkerEnd:
     term_sent: bool = False
     kill_sent: bool = False
     waited_s: float = 0.0
-    survivors: list[Survivor] = field(default_factory=list)
+    survivors: list[Survivor] = Field(default_factory=list)
     pid: int | None = None
     pgid: int | None = None
     start: str | None = None
 
 
-@record
-class DelegateResult:
+class DelegateResult(Rec):
     """The answer of `route.py run` (delegate contract 3): `stop` is None for a done call or the agent-tool handoff
     (`agent_model` set); no status, next, reason or retry_after."""
 
@@ -156,7 +147,7 @@ class DelegateResult:
     flag: str | None = None
     cost: float = 0.0
     tokens: Tokens | None = None
-    denied: list[Denial] = field(default_factory=list)
+    denied: list[Denial] = Field(default_factory=list)
     secs: float = 0.0
     run_id: str | None = None
     call_id: str | None = None
@@ -164,7 +155,7 @@ class DelegateResult:
     transcript_info: TranscriptInfo | None = None
     transcript_status: str | None = None
     say: str = ""
-    git_violation: list[str] = field(default_factory=list)
+    git_violation: list[str] = Field(default_factory=list)
     usage: Usage | None = None
     context: dict[str, Any] | None = None
     worker: WorkerEnd | None = None
@@ -174,12 +165,11 @@ class DelegateResult:
     first_lane: str | None = None
     warning: str = ""
     ask_kind: str = ""
-    warnings: list[str] = field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
     agent_model: str | None = None
 
 
-@record
-class WorkerStarted:
+class WorkerStarted(Rec):
     """The first line of a live file: the worker's process ids."""
 
     V: ClassVar[int] = 1
@@ -188,15 +178,14 @@ class WorkerStarted:
     run_id: str
 
 
-@record
-class LiveRec:
+class LiveRec(Rec):
     V: ClassVar[int] = 1
+    kind: str = ""  # each member narrows it to its tag; declared here so `kind` is written right after `v`
     t: float
 
 
-@record
 class LiveStart(LiveRec):
-    KIND: ClassVar[str] = "start"
+    kind: Literal["start"] = "start"
     harness: str
     pid: int
     lane: str = ""
@@ -205,89 +194,79 @@ class LiveStart(LiveRec):
     role: str = ""
 
 
-@record
 class LiveCmdStart(LiveRec):
-    KIND: ClassVar[str] = "cmd_start"
+    kind: Literal["cmd_start"] = "cmd_start"
     id: str
     text: str
     cwd: str = ""
     prov: bool = False
 
 
-@record
 class LiveCmdEnd(LiveRec):
-    KIND: ClassVar[str] = "cmd_end"
+    kind: Literal["cmd_end"] = "cmd_end"
     id: str
     exit: int | None = None  # null: the harness did not say
     secs: float = 0.0
     out: str = ""
 
 
-@record
 class LiveToolStart(LiveRec):
-    KIND: ClassVar[str] = "tool_start"
+    kind: Literal["tool_start"] = "tool_start"
     id: str
     text: str
     prov: bool = False
 
 
-@record
 class LiveToolEnd(LiveRec):
-    KIND: ClassVar[str] = "tool_end"
+    kind: Literal["tool_end"] = "tool_end"
     id: str
     secs: float = 0.0
     out: str = ""
 
 
-@record
 class LiveMsg(LiveRec):
-    KIND: ClassVar[str] = "msg"
+    kind: Literal["msg"] = "msg"
     text: str
 
 
-@record
 class LiveThink(LiveRec):
-    KIND: ClassVar[str] = "think"
+    kind: Literal["think"] = "think"
     text: str
 
 
-@record
 class LiveTokens(LiveRec):
-    KIND: ClassVar[str] = "tokens"
-    in_: int = field(default=0, metadata={"name": "in"})
+    kind: Literal["tokens"] = "tokens"
+    in_: int = Field(default=0, alias="in")
     cached: int = 0
     out: int = 0
 
 
-@record
 class LiveStall(LiveRec):
-    KIND: ClassVar[str] = "stall"
+    kind: Literal["stall"] = "stall"
     secs: float
 
 
-@record
 class LiveRetry(LiveRec):
-    KIND: ClassVar[str] = "retry"
+    kind: Literal["retry"] = "retry"
     n: int = 0
     of: int = 0
     why: str = ""
 
 
-@record
 class LiveEnd(LiveRec):
-    KIND: ClassVar[str] = "end"
+    kind: Literal["end"] = "end"
     status: Literal["done", "timeout", "killed", "error"]
     secs: float = 0.0
     cost_usd: float = 0.0
 
 
-@record
 class LiveRaw(LiveRec):
-    KIND: ClassVar[str] = "raw"
+    kind: Literal["raw"] = "raw"
     type: str
 
 
-LiveEvent = (LiveStart | LiveCmdStart | LiveCmdEnd | LiveToolStart | LiveToolEnd | LiveMsg | LiveThink | LiveTokens | LiveStall | LiveRetry
-             | LiveEnd | LiveRaw)
-LIVE_EVENT = table_of(LiveStart, LiveCmdStart, LiveCmdEnd, LiveToolStart, LiveToolEnd, LiveMsg, LiveThink, LiveTokens, LiveStall, LiveRetry,
-                      LiveEnd, LiveRaw)
+LiveEvent = Annotated[
+    LiveStart | LiveCmdStart | LiveCmdEnd | LiveToolStart | LiveToolEnd | LiveMsg | LiveThink | LiveTokens | LiveStall | LiveRetry
+    | LiveEnd | LiveRaw,
+    Field(discriminator="kind"),
+]

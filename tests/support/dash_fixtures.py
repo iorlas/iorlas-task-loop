@@ -12,8 +12,8 @@ from typing import Any, Literal
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
-from taskloop.contracts import codec
 from taskloop.contracts import dash as D
+from taskloop.contracts import wire
 
 ROOT = Path(__file__).resolve().parents[2]
 DIR = ROOT / "tests" / "fixtures" / "dash"
@@ -451,8 +451,8 @@ def build() -> dict[str, Any]:
 
 def encode(obj: Any) -> str:
     if isinstance(obj, dict):
-        return json.dumps({k: codec.to_json(v) for k, v in obj.items()}, ensure_ascii=False, indent=1) + "\n"
-    return json.dumps(codec.to_json(obj), ensure_ascii=False, indent=1) + "\n"
+        return json.dumps({k: wire.dump(v) for k, v in obj.items()}, ensure_ascii=False, indent=1) + "\n"
+    return json.dumps(wire.dump(obj), ensure_ascii=False, indent=1) + "\n"
 
 
 def write() -> list[str]:

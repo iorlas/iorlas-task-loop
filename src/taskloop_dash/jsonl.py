@@ -7,7 +7,6 @@ from collections.abc import Callable
 from typing import Any
 
 from taskloop.contracts import log
-from taskloop.contracts.codec import CodecError
 
 CHUNK = 1 << 20  # bytes read from one file per call; a long backlog arrives over several polls
 
@@ -16,7 +15,7 @@ def parse(raw: bytes | str, decode: Callable[[object], Any] = log.decode) -> Any
     """The typed record of one line, None when it is not one."""
     try:
         return decode(json.loads(raw))
-    except (ValueError, CodecError):
+    except ValueError:
         return None
 
 

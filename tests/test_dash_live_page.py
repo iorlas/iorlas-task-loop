@@ -10,7 +10,7 @@ import support.paths  # noqa: F401
 from support.dashes import make_dash
 from support.logs import typed
 
-from taskloop.contracts import codec
+from taskloop.contracts import wire
 from taskloop.contracts.dash import LivePage
 from taskloop.contracts.runlife import CRASHED_AFTER
 from taskloop_dash.api import live
@@ -46,7 +46,7 @@ class LivePageApi(unittest.TestCase):
     def get(self, since="", wait="0"):
         code, body = self.dash.live.page(BEAD, since, wait)
         self.assertEqual(code, 200)
-        return codec.from_json(LivePage, body)  # strict: an unknown or missing key raises
+        return wire.load(LivePage, body)  # strict: an unknown or missing key raises
 
     def test_first_load_is_typed_lines_in_time_order_without_beats(self):
         page = self.get()

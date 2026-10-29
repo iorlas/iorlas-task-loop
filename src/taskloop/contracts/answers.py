@@ -1,12 +1,13 @@
 """The six worker answers (plan, write, review, reflect, look, verify) as records. The JSON Schema a node sends is generated from
 its record (`schema.of`), the strict form from that (`schema.strict`), and an answer is validated by decoding it into the record
 (`check`): one definition, no hand-written schema. A visual stage's write and review also require their look field."""
-from dataclasses import field
 from typing import Any, Literal, get_args
+
+from pydantic import Field, ValidationError
 
 from taskloop.contracts import schema
 from taskloop.contracts.argv import FORM
-from taskloop.contracts.codec import CodecError, from_json, record
+from taskloop.contracts.wire import Rec, load
 
 Kind = Literal["engine_step", "checkable", "external_fact", "taste", "owner_decision", "requirement", "number", "deletion", "link",
                "case", "tooling", "other"]
@@ -22,7 +23,6 @@ Axis = Literal["spec", "standards"]
 Status = Literal["met", "unmet", "engine"]
 
 ARGV_DOC = "argv: " + FORM  # a check: the program and its arguments, never a shell string
-NOT_AN_ARRAY = "expected an array"
 KINDS = get_args(Kind)
 ROUTED_KINDS = ("engine_step", "checkable", "external_fact", "taste", "owner_decision")
 LEGACY_KINDS = ("requirement", "number", "deletion", "link", "case", "tooling")
@@ -40,71 +40,62 @@ CITED_DOC = "the id (ADR-n) of each decision in force that this plan relied on, 
 ASSUMPTION = "Assumption: "  # the stable prefix of an assumption line (plan comment, plan summary)
 
 
-@record
-class Option:
+class Option(Rec):
     label: str
     cost: str
     answer: str
     recommended: bool
 
 
-@record
-class Leftover:
+class Leftover(Rec):
     title: str
     why: str
 
 
-@record
-class Unchecked:
+class Unchecked(Rec):
     what: str
     kind: Kind
     source: str = ""
 
 
-@record
-class Anchor:
+class Anchor(Rec):
     path: str
     lines: str
     symbol: str
     why: str
 
 
-@record
-class Stage:
+class Stage(Rec):
     goal: str
     files: list[str]
-    checks: list[list[str]] = field(metadata={"doc": ARGV_DOC})
+    checks: list[list[str]] = Field(description=ARGV_DOC)
     hard: bool
-    anchors: list[Anchor] = field(default_factory=list, metadata={"doc": "at most 8: where in the code the stage's work starts"})
-    read_first: list[str] = field(default_factory=list, metadata={"doc": "files to read before touching anything"})
-    patterns: list[str] = field(default_factory=list, metadata={"doc": "existing code to follow, one line each"})
-    constraints: str | None = field(default=None, metadata={"doc": "what the stage must not break or touch"})
+    anchors: list[Anchor] = Field(default_factory=list, description="at most 8: where in the code the stage's work starts")
+    read_first: list[str] = Field(default_factory=list, description="files to read before touching anything")
+    patterns: list[str] = Field(default_factory=list, description="existing code to follow, one line each")
+    constraints: str | None = Field(default=None, description="what the stage must not break or touch")
 
 
-@record
-class Risk:
+class Risk(Rec):
     what: str
-    check: list[str] = field(metadata={"doc": ARGV_DOC})
+    check: list[str] = Field(description=ARGV_DOC)
 
 
-@record
-class Unresolved:
+class Unresolved(Rec):
     what: str
     kind: InputKind
     path: str
 
 
-@record
-class Case:
+class Case(Rec):
     criterion: str
-    check: list[str] = field(metadata={"doc": ARGV_DOC})
-    class_: CaseClass = field(default="test", metadata={"name": "class"})
+    check: list[str] = Field(description=ARGV_DOC)
+    class_: CaseClass = Field(default="test", alias="class")
     proved_by: ProvedBy = "check"
     via: str = ""
 
 
-@record
-class PlanAnswer:
+class PlanAnswer(Rec):
     summary: str
     stages: list[Stage]
     risks: list[Risk]
@@ -114,51 +105,44 @@ class PlanAnswer:
     cases: list[Case]
     leftovers: list[Leftover]
     irreversible: Irreversible = ""
-    unresolved: list[Unresolved] = field(default_factory=list)
-    owner_cause: AskCause = field(default="unknown", metadata={"doc": CAUSE_DOC})
-    cited: list[str] = field(default_factory=list, metadata={"doc": CITED_DOC})
+    unresolved: list[Unresolved] = Field(default_factory=list)
+    owner_cause: AskCause = Field(default="unknown", description=CAUSE_DOC)
+    cited: list[str] = Field(default_factory=list, description=CITED_DOC)
 
 
-@record
-class ShotArg:
+class ShotArg(Rec):
     name: str
     value: str
 
 
-@record
-class Shot:
+class Shot(Rec):
     method: str
     args: list[ShotArg]
     names: list[str]
 
 
-@record
-class Flake:
+class Flake(Rec):
     test: str
     note: str
 
 
-@record
-class NewCase:
+class NewCase(Rec):
     criterion: str
-    check: list[str] = field(metadata={"doc": ARGV_DOC})
+    check: list[str] = Field(description=ARGV_DOC)
     why: str
 
 
-@record
-class BadCheck:
+class BadCheck(Rec):
     cmd: str
     why: str
 
 
-@record
-class CheckRan:
+class CheckRan(Rec):
     cmd: str
     exit: int
 
 
-@record
-class WriteAnswer:
+class WriteAnswer(Rec):
     summary: str
     checks_run: list[CheckRan]
     question: str
@@ -167,87 +151,77 @@ class WriteAnswer:
     bad_checks: list[BadCheck]
     new_cases: list[NewCase]
     unchecked: list[Unchecked]
-    shots: list[Shot] = field(default_factory=list)
-    flakes: list[Flake] = field(default_factory=list)
-    handoff: str = field(default="", metadata={"doc": "at most 1 KB: what a fresh writer taking over needs that the diff does not show"})
-    owner_cause: AskCause = field(default="unknown", metadata={"doc": CAUSE_DOC})
+    shots: list[Shot] = Field(default_factory=list)
+    flakes: list[Flake] = Field(default_factory=list)
+    handoff: str = Field(default="", description="at most 1 KB: what a fresh writer taking over needs that the diff does not show")
+    owner_cause: AskCause = Field(default="unknown", description=CAUSE_DOC)
 
 
-@record
 class WriteAnswerLook(WriteAnswer):
-    logic_only: str = field(kw_only=True)
+    logic_only: str = Field(kw_only=True)
 
 
-@record
-class Finding:
+class Finding(Rec):
     file: str
     line: int
     severity: Severity
     fix: str
-    axis: Axis = field(metadata={"doc": "spec: a requirement is unmet or unasked behaviour; standards: a break of the repo's rules"})
-    category: str = field(metadata={"doc": "one word: logic, contract, test, docs, security, convention"})
-    scenario: str = field(metadata={"doc": "the inputs and the wrong output; empty when you cannot state one (then it is only a note)"})
+    axis: Axis = Field(description="spec: a requirement is unmet or unasked behaviour; standards: a break of the repo's rules")
+    category: str = Field(description="one word: logic, contract, test, docs, security, convention")
+    scenario: str = Field(description="the inputs and the wrong output; empty when you cannot state one (then it is only a note)")
 
 
-@record
-class Criterion:
-    item: str = field(metadata={"doc": "the id of an acceptance item as listed in the prompt (A1, A2, ...)"})
+class Criterion(Rec):
+    item: str = Field(description="the id of an acceptance item as listed in the prompt (A1, A2, ...)")
     status: Status
-    evidence: str = field(metadata={"doc": "what shows it: a check, a file and line, the evidence folder; empty only for engine"})
+    evidence: str = Field(description="what shows it: a check, a file and line, the evidence folder; empty only for engine")
 
 
-@record
-class ReviewAnswer:
+class ReviewAnswer(Rec):
     findings: list[Finding]
     unmet: list[str]
-    criteria: list[Criterion] = field(metadata={"doc": "one entry per acceptance item the prompt lists; [] when it lists none"})
+    criteria: list[Criterion] = Field(description="one entry per acceptance item the prompt lists; [] when it lists none")
     question: str
     options: list[Option]
     decided: str
     leftovers: list[Leftover]
     unchecked: list[Unchecked]
-    accept_files: list[str] = field(default_factory=list)
-    reject_files: list[str] = field(default_factory=list)
-    owner_cause: AskCause = field(default="unknown", metadata={"doc": CAUSE_DOC})
+    accept_files: list[str] = Field(default_factory=list)
+    reject_files: list[str] = Field(default_factory=list)
+    owner_cause: AskCause = Field(default="unknown", description=CAUSE_DOC)
 
 
-@record
 class ReviewAnswerLook(ReviewAnswer):
-    look: str = field(kw_only=True)
+    look: str = Field(kw_only=True)
 
 
-@record
-class WentBadly:
+class WentBadly(Rec):
     what: str
     cause: Cause
     session: str
     evidence: str
 
 
-@record
-class ReflectAnswer:
+class ReflectAnswer(Rec):
     went_well: list[str]
     went_badly: list[WentBadly]
     wasted: list[str]
     change: list[str]
 
 
-@record
-class LookFinding:
+class LookFinding(Rec):
     item: str
     verdict: Literal["pass", "defect"]
     where: str
     why: str
 
 
-@record
-class LookAnswer:
+class LookAnswer(Rec):
     findings: list[LookFinding]
     summary: str
 
 
-@record
-class VerifyItem:
+class VerifyItem(Rec):
     n: int
     verdict: Verdict
     evidence: str
@@ -256,8 +230,7 @@ class VerifyItem:
     source: str
 
 
-@record
-class VerifyAnswer:
+class VerifyAnswer(Rec):
     items: list[VerifyItem]
 
 
@@ -289,8 +262,17 @@ def check(node: str, visual: bool, data: Any) -> list[str]:
     (`schema.unstrict`); a key the contract does not name is ignored."""
     if node == "write" and len(str((data or {}).get("handoff") or "").encode()) > HANDOFF_MAX:
         return [f"WriteAnswer.handoff: over {HANDOFF_MAX} bytes; keep what a fresh writer needs and nothing else"]
+    rec = record_for(node, visual)
     try:
-        from_json(record_for(node, visual), schema.prune(data, schema_for(node, visual)))
-    except CodecError as e:
-        return [f"{e} ({ARGV_DOC})" if str(e).endswith(NOT_AN_ARRAY) and ".check" in str(e) else str(e)]
+        load(rec, schema.prune(data, schema_for(node, visual)))
+    except ValidationError as e:
+        return [_reason(rec, x) for x in e.errors(include_url=False)]
     return []
+
+
+def _reason(rec: type[Rec], err: Any) -> str:
+    """One validation error as `Record.path: what is wrong`; a command that is not an argv array also gets the form."""
+    where = "".join(f"[{p}]" if isinstance(p, int) else f".{p}" for p in err["loc"])[1:]
+    said = "missing" if err["type"] == "missing" else err["msg"]
+    form = f" ({ARGV_DOC})" if err["type"] == "list_type" and ".check" in where else ""
+    return f"{rec.__name__}.{where}: {said}{form}"

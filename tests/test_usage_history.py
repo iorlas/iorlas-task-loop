@@ -12,7 +12,7 @@ import support.paths  # noqa: F401
 from support.narrow import must
 
 from taskloop.app.wire import lanes
-from taskloop.contracts import codec
+from taskloop.contracts import wire
 from taskloop.contracts.dash import Snapshot
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.snapshots import LaneStatus, StatusSnapshot, WindowStatus
@@ -143,14 +143,14 @@ class Cards(unittest.TestCase):
         w = World(now=T + 60, host="h", version="v", projects=[], runs={}, asks={}, status=snap(T, five=41.0))
         built = snapshot.build(w)
         self.assertEqual([c.window_pct for c in built.lanes], [41.0])
-        self.assertEqual(codec.from_json(Snapshot, codec.to_json(built)), built)
-        bad = codec.to_json(built)
+        self.assertEqual(wire.load(Snapshot, wire.dump(built)), built)
+        bad = wire.dump(built)
         bad["lanes"][0]["window_pct"] = "41"
         with self.assertRaises(ValueError):
-            codec.from_json(Snapshot, bad)
-        bad["lanes"][0] = {**codec.to_json(built)["lanes"][0], "extra": 1}
+            wire.load(Snapshot, bad)
+        bad["lanes"][0] = {**wire.dump(built)["lanes"][0], "extra": 1}
         with self.assertRaises(ValueError):
-            codec.from_json(Snapshot, bad)
+            wire.load(Snapshot, bad)
 
 
 if __name__ == "__main__":

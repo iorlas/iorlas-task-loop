@@ -1,6 +1,5 @@
 """CheckCache: the green results a round may reuse. A pass is a fact about the tree and base (or about a check's own `inputs`);
 a failure can come from outside git (stale build output, a held editor, a flake) and always reruns."""
-import dataclasses
 import os
 from collections.abc import Mapping
 from pathlib import Path
@@ -62,7 +61,7 @@ class CheckCache:
     def cached(self, c: Check, hit: CacheHit, ikey: str) -> CheckResult:
         """The remembered result as this round's: cached, with the round it ran in said."""
         note = "inputs unchanged since round %s" % (hit.round or "?") if ikey else ""
-        return dataclasses.replace(hit.result, id=c.id, cmd=c.cmd, group=c.group, cached=True, log="", note=note)
+        return hit.result.model_copy(update={"id": c.id, "cmd": c.cmd, "group": c.group, "cached": True, "log": "", "note": note})
 
     def remember(self, c: Check, res: CheckResult, rnd: int, log_abs: str, ikey: str) -> None:
         """Only a pass is a fact about the tree."""

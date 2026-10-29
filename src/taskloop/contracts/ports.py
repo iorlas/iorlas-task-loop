@@ -3,14 +3,15 @@
 A port is a Protocol plus the typed requests and results that cross it. Adapters implement it against the real thing
 (`route.py`, `bd`, an exec); fakes implement it in memory, so a test needs no process, no files and no bash."""
 from collections.abc import Callable
-from dataclasses import field
 from typing import Any, Protocol
+
+from pydantic import Field
 
 from taskloop.contracts.argv import text_of
 from taskloop.contracts.ask import Ask, AskAction
 from taskloop.contracts.bead import BdError, Bead, Comment
-from taskloop.contracts.codec import record
 from taskloop.contracts.delegate import DelegateResult, LiveEvent, RunRequest
+from taskloop.contracts.wire import Rec
 
 EventSink = Callable[[LiveEvent], None]
 
@@ -34,21 +35,19 @@ class Delegate(Protocol):
         ...
 
 
-@record
-class NewBead:
+class NewBead(Rec):
     title: str
     issue_type: str = "task"
     priority: int | None = None
     description: str = ""
     acceptance_criteria: str = ""
-    labels: list[str] = field(default_factory=list)
+    labels: list[str] = Field(default_factory=list)
     parent: str = ""
-    deps: list[str] = field(default_factory=list)
+    deps: list[str] = Field(default_factory=list)
     no_inherit_labels: bool = False
 
 
-@record
-class BeadPatch:
+class BeadPatch(Rec):
     """What `update` changes; a field left at its default is not touched. assignee "" clears it."""
 
     status: str = ""
@@ -57,12 +56,11 @@ class BeadPatch:
     description: str | None = None
     notes: str | None = None
     metadata: dict[str, Any] | None = None  # the whole metadata object replaced (set_metadata changes single keys)
-    set_metadata: dict[str, str] = field(default_factory=dict)
-    unset_metadata: list[str] = field(default_factory=list)
+    set_metadata: dict[str, str] = Field(default_factory=dict)
+    unset_metadata: list[str] = Field(default_factory=list)
 
 
-@record
-class BeadQuery:
+class BeadQuery(Rec):
     status: str = ""
     label: str = ""
     include_closed: bool = False
@@ -108,20 +106,18 @@ class Beads(Protocol):
         ...
 
 
-@record
-class CheckSpec:
+class CheckSpec(Rec):
     argv: list[str]
     cwd: str
     timeout_s: float = 3600.0
-    env: dict[str, str] = field(default_factory=dict)
+    env: dict[str, str] = Field(default_factory=dict)
 
     @property
     def cmd(self) -> str:
         return text_of(self.argv)
 
 
-@record
-class CheckResult:
+class CheckResult(Rec):
     exit: int
     out: str = ""
     secs: float = 0.0

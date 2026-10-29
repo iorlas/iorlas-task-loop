@@ -1,4 +1,4 @@
-"""In-memory stores for logic tests. Each goes through the same codec as the real one (a record that cannot be written to a
+"""In-memory stores for logic tests. Each goes through the same wire form as the real one (a record that cannot be written to a
 file cannot be written here) and the log is the real JsonlStore over an in-memory byte buffer, so cursors and torn tails behave
 the same. The contract suite runs these and the file-backed stores through one set of tests."""
 import contextlib
@@ -13,7 +13,7 @@ from typing import Any, override
 from jsonl_log import Entry, Jsonl, decode_object
 from jsonl_log.cursor import _parse  # shelf lacks: a public parse of in-memory bytes
 
-from taskloop.contracts import codec, events, log
+from taskloop.contracts import events, log, wire
 from taskloop.contracts.adrs import AdrStore
 from taskloop.contracts.ask import Ask
 from taskloop.contracts.checkpoint import Checkpoint
@@ -36,12 +36,12 @@ class MemDoc[T](Doc[T]):
 
     def read(self) -> T | None:
         try:
-            return None if self.data is None else codec.from_json(self.cls, self.data)
+            return None if self.data is None else wire.load(self.cls, self.data)
         except ValueError:
             return None
 
     def write(self, rec: T) -> None:
-        self.data = json.loads(json.dumps(codec.to_json(rec)))
+        self.data = json.loads(json.dumps(wire.dump(rec)))
 
     def delete(self) -> None:
         self.data = None
@@ -104,7 +104,7 @@ class MemLog[T](JsonlStore[T]):
 
 
 def _decode(cls: type) -> Callable[[Any], Any]:
-    return lambda data: codec.from_json(cls, data)
+    return lambda data: wire.load(cls, data)
 
 
 class MemLockTable:

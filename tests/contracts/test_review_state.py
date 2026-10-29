@@ -1,5 +1,4 @@
 """ReviewState is the one review/verify field of the run state: its fields are listed here, it round-trips through dump."""
-import dataclasses
 import json
 import sys
 import unittest
@@ -9,15 +8,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
 from contracts import samples as S
-from taskloop.contracts.codec import CodecError, StaleRecord
 from taskloop.contracts.review import ReviewState
+from taskloop.contracts.wire import StaleRecord
 
 FIELDS = ["reviews", "rounds", "unchecked", "unverified", "verified", "filed", "unfiled"]
 
 
 class ReviewStateFields(unittest.TestCase):
     def test_the_fields_are_exactly_these(self):
-        self.assertEqual([f.name for f in dataclasses.fields(ReviewState)], FIELDS)
+        self.assertEqual(list(ReviewState.model_fields), FIELDS)
 
     def test_an_empty_state_dumps_and_reads_back(self):
         d = ReviewState().dump()
@@ -31,7 +30,7 @@ class ReviewStateFields(unittest.TestCase):
     def test_a_foreign_version_or_key_is_refused(self):
         with self.assertRaises(StaleRecord):
             ReviewState.from_dump({"v": 2})
-        with self.assertRaises(CodecError):
+        with self.assertRaises(ValueError):
             ReviewState.from_dump({"v": 1, "extra": 1})
 
 

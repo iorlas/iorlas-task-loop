@@ -6,7 +6,7 @@ adapter (the only place that reads git's words), never by the caller.
 """
 from typing import Literal, Protocol
 
-from taskloop.contracts.codec import record
+from taskloop.contracts.wire import Rec
 
 SlotFailCode = Literal["slot_broken", "bead_pinned", "busy"]
 
@@ -50,8 +50,7 @@ class IndexLocked(SlotGitError):
     """index.lock exists in the worktree's git dir: another git runs there, or one died."""
 
 
-@record
-class Hold:
+class Hold(Rec):
     """A slot reserved for a person (tl slot hold): the loop and run-task keep off it until `until`."""
 
     by: str
@@ -60,8 +59,7 @@ class Hold:
     until: float
 
 
-@record
-class Checkout:
+class Checkout(Rec):
     """One worktree of a repo (git worktree list): where it is, the branch it has out (empty when detached), the main one."""
 
     path: str

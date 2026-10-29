@@ -1,9 +1,8 @@
 """RunLog: what the engine calls to record a run. Typed records in, one log out; quiet kinds are logged but not echoed."""
-import dataclasses
 import time
 from collections.abc import Callable
 
-from taskloop.contracts import codec
+from taskloop.contracts import wire
 from taskloop.contracts.log import EngineLog, Note, Warn
 from taskloop.stores.api import Log
 
@@ -22,9 +21,9 @@ class RunLog:
     def emit(self, rec: EngineLog) -> int:
         """Append the record (stamped with the time when it has none); echo a line of it unless its kind is quiet. Returns its offset."""
         if not rec.t:
-            rec = dataclasses.replace(rec, t=self.clock())
+            rec = rec.model_copy(update={"t": self.clock()})
         at = self.log.append(rec)
-        if self.echo is not None and rec.KIND not in self.quiet:
+        if self.echo is not None and rec.kind not in self.quiet:
             line = self.render(rec) if self.render else self.plain(rec)
             if line is not None:
                 self.echo(line)
@@ -44,5 +43,5 @@ class RunLog:
     @staticmethod
     def plain(rec: EngineLog) -> str:
         return "{} {}".format(
-            rec.KIND, " ".join("{}={}".format(*kv) for kv in codec.to_json(rec).items() if kv[0] not in ("v", "kind", "t"))
+            rec.kind, " ".join("{}={}".format(*kv) for kv in wire.dump(rec).items() if kv[0] not in ("v", "kind", "t"))
         )

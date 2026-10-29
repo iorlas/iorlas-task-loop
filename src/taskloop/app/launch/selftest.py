@@ -1,6 +1,5 @@
 """`tl selftest`: one bead through Engine.run (plan, write, review, land) with a scripted lane in a temp repo and a temp config
 dir, on this install's code. A newer install must pass it before a loop moves to it."""
-import dataclasses
 import json
 import os
 import shlex
@@ -96,7 +95,7 @@ def run_engine(home: Path, wt: Path) -> tuple[int, Bead]:
     resolved = dg.Resolved(Path("/selftest"), "/selftest/route.py", contract, "explicit")
     store = FakeBeads()
     store.beads["t-1"] = Bead(id="t-1", title="Add f", status="open", acceptance_criteria="f.txt exists")
-    cfg = dataclasses.replace(cfg, reflect=False)
+    cfg = cfg.model_copy(update={"reflect": False})
     os.chdir(wt)  # the engine reads cwd
     try:
         with mock.patch.object(time, "sleep"):

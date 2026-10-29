@@ -1,7 +1,6 @@
 """The re-plan cap: when the planner has run too often the bead asks the owner; the owner's answer (or an override on the bead)
 allows one more run."""
 
-import dataclasses
 from typing import Any
 
 from taskloop.adapters.bdsafe import attempt, peek
@@ -57,7 +56,7 @@ class ReplanCap:
         e = self.e
 
         def one_more(ck: Checkpoint) -> Checkpoint:
-            return dataclasses.replace(ck, state=dataclasses.replace(ck.state, extra=ck.state.extra + 1))
+            return ck.model_copy(update={"state": ck.state.model_copy(update={"extra": ck.state.extra + 1})})
 
         if not e.checkpoints.amend(one_more):
             e.extra += 1

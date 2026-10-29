@@ -6,7 +6,6 @@ node, close at the end, keep the follow-ups, follow a rebase, drop.
 """
 
 import copy
-import dataclasses
 import time
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
@@ -41,7 +40,7 @@ class StateAttrs:
 
 
 def state_names() -> tuple[str, ...]:
-    return tuple(f.name for f in dataclasses.fields(RunState) if f.name not in NOT_ATTRS)
+    return tuple(name for name in RunState.model_fields if name not in NOT_ATTRS)
 
 
 def carries_state[T](cls: type[T]) -> type[T]:
@@ -96,11 +95,11 @@ class Checkpoints:
         if ck is None:
             return
         red = why.startswith("gate red") and not ck.state.pending_land_validation
-        review = dataclasses.replace(ck.state.review, filed=list(self.e.filed))
-        state = dataclasses.replace(ck.state, review=review)
-        done = dataclasses.replace(ck, head=self.e.git("rev-parse", "HEAD"), closed=True, state=state)
+        review = ck.state.review.model_copy(update={"filed": list(self.e.filed)})
+        state = ck.state.model_copy(update={"review": review})
+        done = ck.model_copy(update={"head": self.e.git("rev-parse", "HEAD"), "closed": True, "state": state})
         if red:
-            done = dataclasses.replace(done, step="gate-red", gate_tail=trim.trim_log(why, log=str(self.e.gate_log or "")))
+            done = done.model_copy(update={"step": "gate-red", "gate_tail": trim.trim_log(why, log=str(self.e.gate_log or ""))})
         self.doc.write(done)
 
     def keep_filed(self, lost: list[dict[str, str]] | None = None) -> None:
@@ -108,21 +107,18 @@ class Checkpoints:
         self.e.unfiled += [Unfiled(title=lo["title"], why=lo["why"]) for lo in lost or []]
         ck = self.read()
         if ck is not None:
-            kept = dataclasses.replace(ck.state, review=review_of(self.e))
-            self.doc.write(dataclasses.replace(ck, state=kept))
+            kept = ck.state.model_copy(update={"review": review_of(self.e)})
+            self.doc.write(ck.model_copy(update={"state": kept}))
 
     def keep_look(self) -> None:
         """What the owner-look bead needs goes into the record, so a crash after the land still files it."""
         ck, e = self.read(), self.e
         if ck is not None:
-            kept = dataclasses.replace(
-                ck.state,
-                look_paths=list(e.look_paths),
-                look_notes=list(e.look_notes),
-                look_unjudged=dict(e.look_unjudged),
-                review=review_of(e),
-            )
-            self.doc.write(dataclasses.replace(ck, state=kept))
+            kept = ck.state.model_copy(update={"look_paths": list(e.look_paths),
+                "look_notes": list(e.look_notes),
+                "look_unjudged": dict(e.look_unjudged),
+                "review": review_of(e)})
+            self.doc.write(ck.model_copy(update={"state": kept}))
 
     def amend(self, fn: Callable[[Checkpoint], Checkpoint]) -> bool:
         """Rewrite the stored record with `fn` (a rebase moves its head, a cap grant adds an amend). False when there is none."""

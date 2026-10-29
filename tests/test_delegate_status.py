@@ -12,7 +12,7 @@ import support.paths  # noqa: E402, F401
 
 from taskloop.adapters import delegate as sdelegate  # noqa: E402
 from taskloop.adapters.ident import claude_dir  # noqa: E402
-from taskloop.contracts import codec  # noqa: E402
+from taskloop.contracts import wire  # noqa: E402
 from taskloop.contracts.delegate_status import snapshot_of  # noqa: E402
 from taskloop.contracts.snapshots import StatusSnapshot  # noqa: E402
 
@@ -38,7 +38,7 @@ class Reader(unittest.TestCase):
         for ln in snap.lanes:
             self.assertTrue(ln.label and ln.family and ln.kind and ln.model and ln.state and ln.emoji and ln.reason, ln)
         self.assertEqual(snap.at, REAL["ts"])
-        self.assertEqual(codec.from_json(StatusSnapshot, codec.to_json(snap)), snap)
+        self.assertEqual(wire.load(StatusSnapshot, wire.dump(snap)), snap)
 
     def test_a_dropped_or_renamed_key_fails_the_reader(self):
         for drop in ("ts", "lanes", "cockpit"):

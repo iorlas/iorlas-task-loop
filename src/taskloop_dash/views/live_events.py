@@ -3,8 +3,7 @@ appended to its call's live file. Every event carries `seq` (file tag + byte off
 
 from typing import Any
 
-from taskloop.contracts import codec
-from taskloop.contracts.codec import CodecError
+from taskloop.contracts import wire
 
 ENGINE = "engine"
 
@@ -13,11 +12,11 @@ def decode_worker(data: object) -> dict:
     """A worker line is an object with a time and a kind; anything else is not an event."""
     if isinstance(data, dict) and isinstance(data.get("t"), (int, float)) and isinstance(data.get("k"), str) and data["k"]:
         return data
-    raise CodecError("not a worker event")
+    raise ValueError("not a worker event")
 
 
 def engine_event(record: Any, offset: int) -> dict:
-    d = codec.to_json(record)
+    d = wire.dump(record)
     kind = d.pop("kind")
     d.pop("v", None)
     return dict(d, k=kind, src=ENGINE, seq=f"{ENGINE}:{offset}")

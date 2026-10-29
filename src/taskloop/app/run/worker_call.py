@@ -9,7 +9,7 @@ file's first line (`WorkerStarted`) and the answer's `worker`, and stops a call 
 import hashlib
 import json
 import time
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from typing import Any
 
 from taskloop.adapters import delegate as dg
@@ -316,9 +316,8 @@ class WorkerCall:
         stop = StopFacts(
             reason=REASON_OVERRUN, scope="lane", permanence="transient", retry=delegate_wire.Retry(kind="none"), ref=res.ref or ""
         )
-        return dg.Answer(
-            replace(res, stop=stop, lane=lane or None, say=f"the {c.node} call used its {int(c.limit_s // 60)} min budget"), ans.raw
-        )
+        said = f"the {c.node} call used its {int(c.limit_s // 60)} min budget"
+        return dg.Answer(res.model_copy(update={"stop": stop, "lane": lane or None, "say": said}), ans.raw)
 
     def note_result(self, c: Call, ans: dg.Answer, runner: Any) -> None:
         """The records a returned call leaves: the vendor error of a stop, the CallState."""

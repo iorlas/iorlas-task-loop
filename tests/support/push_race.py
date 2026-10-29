@@ -1,6 +1,5 @@
 """A land whose push is rejected because main moved: a local origin that a second clone advances right before each rejected push, with
 the real land lock held around the land and a trace of what ran inside it (events). Used by EngineTest.run_push_race."""
-import dataclasses
 import os
 import signal
 import subprocess
@@ -86,9 +85,8 @@ class PushRace:
                 return CheckRun(round=0, results=[res("retry check", 1, tail="red")])
         result = self.real["checks"](this, st, name, *a, **kw)
         if self.failure == "checks_exhausted" and (name.startswith("fix ") or state.get("resuming")):
-            result = dataclasses.replace(
-                result, results=[dataclasses.replace(c, status="failed", exit=1, tail="still red") for c in result]
-            )
+            red = {"status": "failed", "exit": 1, "tail": "still red"}
+            result = result.model_copy(update={"results": [c.model_copy(update=red) for c in result]})
         if state.get("resuming"):
             state.setdefault("resume_checks", []).append(result)
         if name == "land retry":

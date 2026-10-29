@@ -1,5 +1,4 @@
 """Ask lint: the 8 quoted bad asks fail, the 3 rewrites pass, and each rule is one failing case."""
-import dataclasses
 import sys
 import unittest
 from pathlib import Path
@@ -28,14 +27,14 @@ class QuotedAsksTest(unittest.TestCase):
 
     def test_infra_classes_never_become_asks(self) -> None:
         for cls in INFRA:
-            self.assertIn("never an ask", " ".join(lint(dataclasses.replace(GOOD, ask_class=cls))), cls)
+            self.assertIn("never an ask", " ".join(lint(GOOD.model_copy(update={"ask_class": cls}))), cls)
         self.assertEqual(set(AskClass) - INFRA, set(KIND_OF))
 
 
 @domain
 class RuleTest(unittest.TestCase):
     def problems(self, **kw) -> str:
-        return " | ".join(lint(dataclasses.replace(GOOD, **kw)))
+        return " | ".join(lint(GOOD.model_copy(update=kw)))
 
     def test_decision_is_one_short_sentence_that_asks(self) -> None:
         self.assertIn("does not end", self.problems(decision="Run again."))
@@ -53,9 +52,9 @@ class RuleTest(unittest.TestCase):
         self.assertIn("need 2 to 5", self.problems(options=o[:1]))
         self.assertIn("need 2 to 5", self.problems(options=o * 3))
         self.assertIn("not first", self.problems(options=[o[1], o[0]]))
-        self.assertIn("more than one", self.problems(options=[o[0], dataclasses.replace(o[1], recommended=True)]))
-        self.assertIn("no consequence", self.problems(options=[o[0], dataclasses.replace(o[1], consequence="")]))
-        self.assertIn("share a label", self.problems(options=[o[0], dataclasses.replace(o[1], label=o[0].label)]))
+        self.assertIn("more than one", self.problems(options=[o[0], o[1].model_copy(update={"recommended": True})]))
+        self.assertIn("no consequence", self.problems(options=[o[0], o[1].model_copy(update={"consequence": ""})]))
+        self.assertIn("share a label", self.problems(options=[o[0], o[1].model_copy(update={"label": o[0].label})]))
 
     def test_the_class_matches_the_kind(self) -> None:
         self.assertIn("not a stuck ask", self.problems(kind=AskKind.STUCK, ask_class=AskClass.OPEN_QUESTION))

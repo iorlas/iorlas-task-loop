@@ -6,11 +6,12 @@ browser time elapsed since the fetch (a 304 keeps the old `t`). Ids are bd ids a
 wherever a row can come from more than one. A field with no source yet keeps its default and the doc names the
 slice that fills it.
 """
-from dataclasses import field
 from enum import StrEnum
 from typing import ClassVar, Literal
 
-from taskloop.contracts.codec import record
+from pydantic import Field
+
+from taskloop.contracts.wire import Rec
 
 
 class Column(StrEnum):
@@ -88,28 +89,24 @@ PassEnd = Literal["", "test_failed", "replan", "asked", "parked", "lane_out", "s
 # ---- snapshot: GET /api/snapshot
 
 
-@record
-class LoopInfo:
+class LoopInfo(Rec):
     project: str
     running: bool
     last_activity: float | None = None
 
 
-@record
-class ServerInfo:
-    version: str = field(metadata={"doc": "server code hash; a change means reload the page"})
+class ServerInfo(Rec):
+    version: str = Field(description="server code hash; a change means reload the page")
     host: str
-    loops: list[LoopInfo] = field(default_factory=list)
+    loops: list[LoopInfo] = Field(default_factory=list)
 
 
-@record
-class Project:
+class Project(Rec):
     id: str
     name: str
 
 
-@record
-class Epic:
+class Epic(Rec):
     id: str
     project: str
     title: str
@@ -117,26 +114,23 @@ class Epic:
     total: int = 0
 
 
-@record
-class Totals:
+class Totals(Rec):
     """Bead totals over the passes still in the run logs (7 days); `tone` is decided server-side from the per-lane usual
     (dash-spec §2.6)."""
 
     secs: int = 0
-    tokens: int = field(default=0, metadata={"doc": "fresh tokens: input - cached + output"})
+    tokens: int = Field(default=0, description="fresh tokens: input - cached + output")
     usual: int | None = None
     usual_n: int = 0
     tone: Literal["", "watch", "bad", "grey"] = ""
 
 
-@record
-class PhaseDot:
+class PhaseDot(Rec):
     phase: Phase
     state: DotState
 
 
-@record
-class BeadCard:
+class BeadCard(Rec):
     """One bead as the Board, the Goals tree, lane chips and the drawer header show it."""
 
     id: str
@@ -144,36 +138,34 @@ class BeadCard:
     title: str
     column: Column
     marker: Marker
-    status: str = field(metadata={"doc": "one line; for a running bead its last action"})
+    status: str = Field(description="one line; for a running bead its last action")
     tone: Tone = ""
-    t: float | None = field(default=None, metadata={"doc": "when the bead entered its current state; the age"})
+    t: float | None = Field(default=None, description="when the bead entered its current state; the age")
     epic: str | None = None
     slot: str | None = None
     lane: str | None = None
     loops: int = 0
-    dots: list[PhaseDot] = field(default_factory=list)
-    needs: list[str] = field(
-        default_factory=list, metadata={"doc": "open blockers only; a landed one is dropped, so every id is in the snapshot"}
+    dots: list[PhaseDot] = Field(default_factory=list)
+    needs: list[str] = Field(
+        default_factory=list, description="open blockers only; a landed one is dropped, so every id is in the snapshot"
     )
     goal: bool = False
-    waits_why: str = field(default="", metadata={"doc": "a ready bead no slot took: why it waits; only while a loop runs"})
+    waits_why: str = Field(default="", description="a ready bead no slot took: why it waits; only while a loop runs")
     cause: OwnerCause | None = None
     ack: bool = False
-    totals: Totals = field(default_factory=Totals)
+    totals: Totals = Field(default_factory=Totals)
     assumptions: int = 0
     shots: int = 0
 
 
-@record
-class Seg:
+class Seg(Rec):
     label: str
     kind: SegKind
     t0: float
     t1: float
 
 
-@record
-class Piece:
+class Piece(Rec):
     """A bead's stretch on one slot, for the Floor: a comeback in another slot is a new piece with `from_slot` set."""
 
     bead: str
@@ -186,11 +178,10 @@ class Piece:
     landed: bool = False
 
 
-@record
-class Slot:
+class Slot(Rec):
     id: str
     name: str
-    lane: str = field(metadata={"doc": "lane of the slot's current or last call"})
+    lane: str = Field(description="lane of the slot's current or last call")
     state: Literal["running", "stuck", "look", "free", "idle", "held"]
     project: str | None = None
     bead: str | None = None
@@ -199,8 +190,7 @@ class Slot:
     idle_why: str = ""
 
 
-@record
-class AskOptionCard:
+class AskOptionCard(Rec):
     """Picked by its 0-based index in `AskCard.options`, as /api/asks does today."""
 
     label: str
@@ -208,23 +198,20 @@ class AskOptionCard:
     recommended: bool = False
 
 
-@record
-class ThreadMsg:
+class ThreadMsg(Rec):
     by: Literal["owner", "helper", "agent"]
     t: float
     md: str
 
 
-@record
-class Similar:
+class Similar(Rec):
     bead: str
     question: str
     answer: str
     t: float
 
 
-@record
-class AskCard:
+class AskCard(Rec):
     """An open ask or look, whole: the page never shows a one-liner (dash-spec §5.1)."""
 
     id: str
@@ -235,20 +222,19 @@ class AskCard:
     t: float
     blocking: bool = True
     why: str = ""
-    tried: list[str] = field(default_factory=list)
-    options: list[AskOptionCard] = field(default_factory=list)
-    default: str = field(default="", metadata={"doc": "what a non-blocking ask went on with"})
+    tried: list[str] = Field(default_factory=list)
+    options: list[AskOptionCard] = Field(default_factory=list)
+    default: str = Field(default="", description="what a non-blocking ask went on with")
     owner_cause: OwnerCause = OwnerCause.UNKNOWN
     cause_by: Literal["agent", "owner"] = "agent"
-    shots: list[str] = field(default_factory=list, metadata={"doc": "artifact urls"})
-    thread: list[ThreadMsg] = field(default_factory=list)
+    shots: list[str] = Field(default_factory=list, description="artifact urls")
+    thread: list[ThreadMsg] = Field(default_factory=list)
     ask_backs: int = 0
     similar: Similar | None = None
-    stale: int = field(default=0, metadata={"doc": "beads landed since the ask was made"})
+    stale: int = Field(default=0, description="beads landed since the ask was made")
 
 
-@record
-class LedgerRow:
+class LedgerRow(Rec):
     t: float
     ask: str
     bead: str
@@ -261,8 +247,7 @@ class LedgerRow:
     cause: OwnerCause = OwnerCause.UNKNOWN
 
 
-@record
-class AdrRow:
+class AdrRow(Rec):
     """A decision in force. `id` is the repo's own number (ADR-3); `project` says which repo, since two repos both have an ADR-1."""
 
     id: str
@@ -274,27 +259,24 @@ class AdrRow:
     prune: bool = False
 
 
-@record
-class CauseCount:
+class CauseCount(Rec):
     cause: OwnerCause
     now: int
     prev: int
 
 
-@record
-class Learning:
+class Learning(Rec):
     """'Is the factory learning?': 8 weekly points, oldest first, the last one this week (dash-spec §7.1)."""
 
-    weeks: list[str] = field(default_factory=list)
-    asks_per_landed: list[float] = field(default_factory=list)
-    repeat_asks: list[int] = field(default_factory=list)
-    sendbacks_per_bead: list[float] = field(default_factory=list)
-    durable_pct: list[float] = field(default_factory=list)
-    causes: list[CauseCount] = field(default_factory=list)
+    weeks: list[str] = Field(default_factory=list)
+    asks_per_landed: list[float] = Field(default_factory=list)
+    repeat_asks: list[int] = Field(default_factory=list)
+    sendbacks_per_bead: list[float] = Field(default_factory=list)
+    durable_pct: list[float] = Field(default_factory=list)
+    causes: list[CauseCount] = Field(default_factory=list)
 
 
-@record
-class LaneCard:
+class LaneCard(Rec):
     id: str
     name: str
     plan: str
@@ -306,14 +288,13 @@ class LaneCard:
     week_pct: float | None = None
     locked_until: float | None = None
     forecast: str = ""
-    slots: list[str] = field(default_factory=list)
-    running: list[str] = field(default_factory=list)
-    waiting: list[str] = field(default_factory=list)
+    slots: list[str] = Field(default_factory=list)
+    running: list[str] = Field(default_factory=list)
+    waiting: list[str] = Field(default_factory=list)
     status_t: float | None = None
 
 
-@record
-class Snapshot:
+class Snapshot(Rec):
     """GET /api/snapshot[?since=<version>]: everything the four tabs need; 304 when `since` equals `version`.
     Trimmed server-side: pieces only inside the Floor window (8 h back, 2 h ahead), done beads only since local midnight,
     backlog capped at 200 with `backlog_more` the rest."""
@@ -322,24 +303,23 @@ class Snapshot:
     version: str
     t: float
     server: ServerInfo
-    projects: list[Project] = field(default_factory=list)
-    epics: list[Epic] = field(default_factory=list)
-    slots: list[Slot] = field(default_factory=list)
-    beads: list[BeadCard] = field(default_factory=list)
+    projects: list[Project] = Field(default_factory=list)
+    epics: list[Epic] = Field(default_factory=list)
+    slots: list[Slot] = Field(default_factory=list)
+    beads: list[BeadCard] = Field(default_factory=list)
     backlog_more: int = 0
-    pieces: list[Piece] = field(default_factory=list)
-    asks: list[AskCard] = field(default_factory=list)
-    ledger: list[LedgerRow] = field(default_factory=list)
-    adrs: list[AdrRow] = field(default_factory=list)
-    learning: Learning = field(default_factory=Learning)
-    lanes: list[LaneCard] = field(default_factory=list)
+    pieces: list[Piece] = Field(default_factory=list)
+    asks: list[AskCard] = Field(default_factory=list)
+    ledger: list[LedgerRow] = Field(default_factory=list)
+    adrs: list[AdrRow] = Field(default_factory=list)
+    learning: Learning = Field(default_factory=Learning)
+    lanes: list[LaneCard] = Field(default_factory=list)
 
 
 # ---- bead drawer: GET /api/bead?project=&id=
 
 
-@record
-class Msg:
+class Msg(Rec):
     t: float
     icon: str
     who: str
@@ -347,34 +327,30 @@ class Msg:
     phase: Phase | None = None
 
 
-@record
-class Cell:
+class Cell(Rec):
     phase: Phase
     state: CellState
     secs: int = 0
     tokens: int = 0
-    last: str = field(default="", metadata={"doc": "last comment of the stage, for the hover"})
+    last: str = Field(default="", description="last comment of the stage, for the hover")
 
 
-@record
-class Resumed:
+class Resumed(Rec):
     slot: str
     branch: str
     waited_secs: int
 
 
-@record
-class Pass:
+class Pass(Rec):
     n: int
     cells: list[Cell]
     end: PassEnd = ""
     end_text: str = ""
     resumed: Resumed | None = None
-    messages: list[Msg] = field(default_factory=list, metadata={"doc": "this pass only, newest first"})
+    messages: list[Msg] = Field(default_factory=list, description="this pass only, newest first")
 
 
-@record
-class Artifact:
+class Artifact(Rec):
     name: str
     url: str
     kind: Literal["image", "file"]
@@ -383,14 +359,12 @@ class Artifact:
     phase: Phase | None = None
 
 
-@record
-class Subtask:
+class Subtask(Rec):
     text: str
     done: bool
 
 
-@record
-class CheckCount:
+class CheckCount(Rec):
     """From the typed check results (Checks.run), never from log text."""
 
     passed: int
@@ -398,33 +372,31 @@ class CheckCount:
     total: int
 
 
-@record
-class LiveBox:
+class LiveBox(Rec):
     kind: Literal["run", "stuck", "exited"]
     phase: Phase
     pass_n: int
     t: float
     cmd: str = ""
     tokens: int = 0
-    subtasks: list[Subtask] = field(default_factory=list)
+    subtasks: list[Subtask] = Field(default_factory=list)
     checks: CheckCount | None = None
-    why: str = field(default="", metadata={"doc": "stuck or exited: what happened, one line"})
+    why: str = Field(default="", description="stuck or exited: what happened, one line")
     silent_secs: int | None = None
     exit_code: int | None = None
 
 
-@record
-class BeadDetail:
+class BeadDetail(Rec):
     V: ClassVar[int] = 1
     t: float
     card: BeadCard
     description: str = ""
     acceptance: str = ""
-    comments: list[Msg] = field(default_factory=list)
-    passes: list[Pass] = field(default_factory=list)
-    artifacts: list[Artifact] = field(default_factory=list)
-    waits_for: list[str] = field(default_factory=list)
-    unblocks: list[str] = field(default_factory=list)
+    comments: list[Msg] = Field(default_factory=list)
+    passes: list[Pass] = Field(default_factory=list)
+    artifacts: list[Artifact] = Field(default_factory=list)
+    waits_for: list[str] = Field(default_factory=list)
+    unblocks: list[str] = Field(default_factory=list)
     live: LiveBox | None = None
     ask: AskCard | None = None
 
@@ -432,15 +404,13 @@ class BeadDetail:
 # ---- live tail: GET /api/live?project=&id=&since=<cursor>&wait=<secs>
 
 
-@record
-class TermLine:
+class TermLine(Rec):
     t: float
     text: str
     tone: Literal["", "err", "ok", "dim"] = ""
 
 
-@record
-class ToolCall:
+class ToolCall(Rec):
     """Name and argument only until delegate types the outcome of a tool call."""
 
     t: float
@@ -448,22 +418,20 @@ class ToolCall:
     arg: str = ""
 
 
-@record
-class LivePage:
+class LivePage(Rec):
     """Long-poll page of the running worker. `state` is the run-liveness rule (live, ended, crashed)."""
 
     V: ClassVar[int] = 1
     cursor: str
     state: Literal["live", "ended", "crashed"]
-    lines: list[TermLine] = field(default_factory=list)
-    tools: list[ToolCall] = field(default_factory=list)
+    lines: list[TermLine] = Field(default_factory=list)
+    tools: list[ToolCall] = Field(default_factory=list)
 
 
 # ---- writes: POST /api/<verb>, JSON body, one Result back
 
 
-@record
-class AnswerReq:
+class AnswerReq(Rec):
     """The page holds an answer 5 s before sending it; that hold is the undo, so the server has none."""
 
     project: str
@@ -473,16 +441,14 @@ class AnswerReq:
     text: str = ""
 
 
-@record
-class LookReq:
+class LookReq(Rec):
     project: str
     bead: str
     verdict: Literal["good", "redo"]
     note: str = ""
 
 
-@record
-class StickReq:
+class StickReq(Rec):
     """Records the outcome request; the engine writes and commits an ADR or a factory change, the dashboard never runs git."""
 
     project: str
@@ -491,46 +457,40 @@ class StickReq:
     text: str = ""
 
 
-@record
-class CauseReq:
+class CauseReq(Rec):
     project: str
     bead: str
     cause: OwnerCause
     ask: str | None = None
 
 
-@record
-class AckReq:
+class AckReq(Rec):
     project: str
     bead: str
     ack: bool
 
 
-@record
-class PruneReq:
+class PruneReq(Rec):
     """Retire a decision in force: it stays in the store, marked retired, and the plan stage stops reading it."""
 
     project: str
     adr: str
 
 
-@record
-class BeadReq:
+class BeadReq(Rec):
     """Body of park and stop."""
 
     project: str
     bead: str
 
 
-@record
-class NoteReq:
+class NoteReq(Rec):
     project: str
     bead: str
     text: str
 
 
-@record
-class Result:
+class Result(Rec):
     ok: bool
     message: str = ""
 

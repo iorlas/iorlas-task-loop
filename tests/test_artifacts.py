@@ -67,7 +67,7 @@ class AtStepEnd(unittest.TestCase):
             steps.begin("write", "write")
             (src / "b.pdf").write_bytes(b"2")
             steps.end()
-            kinds = [(r.KIND, getattr(r, "names", None)) for r in (i.rec for i in stores.run_log("r").read_from().items)]
+            kinds = [(r.kind, getattr(r, "names", None)) for r in (i.rec for i in stores.run_log("r").read_from().items)]
             self.assertEqual([k for k in kinds if k[1]], [("artifacts", ["a.png"]), ("artifacts", ["b.pdf"])])
             self.assertEqual([k[0] for k in kinds[:3]], ["step_start", "artifacts", "step_end"])
             self.assertEqual(sorted(p.name for p in dest.iterdir()), ["a.png", "b.pdf"])

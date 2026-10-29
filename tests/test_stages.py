@@ -5,7 +5,6 @@ import subprocess
 import sys
 import time
 import unittest
-from dataclasses import replace
 from pathlib import Path
 from typing import Any, ClassVar, cast
 
@@ -106,7 +105,7 @@ class BadChecks(StagesTest):
         )
         self.assertEqual(why(c, [{"cmd": "grep -qE 'name=\"GameLogTests\"...unity-tests.xml", "why": "c"}]), "c")
         self.assertEqual(why(c, [{"cmd": "`" + c.cmd + "`", "why": "d"}]), "d")
-        self.assertEqual(why(replace(c, id="unity-tests"), [{"cmd": "unity-tests", "why": "e"}]), "e")
+        self.assertEqual(why(c.model_copy(update={"id": "unity-tests"}), [{"cmd": "unity-tests", "why": "e"}]), "e")
         self.assertEqual(why(c, [{"cmd": "grep -qE 'other'...nothing.xml", "why": "f"}]), "")
         self.assertEqual(why(c, [{"cmd": "grep", "why": "g"}]), "")  # too short to say which check
         self.assertEqual(why(c, []), "")

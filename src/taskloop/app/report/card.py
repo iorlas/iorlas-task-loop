@@ -13,7 +13,6 @@ from taskloop.app.report.lost import lost_work
 from taskloop.app.report.planner import input_tokens
 from taskloop.contracts import paths
 from taskloop.contracts.bead import Comment
-from taskloop.contracts.codec import CodecError
 from taskloop.contracts.ids import loop_key
 from taskloop.contracts.log import Beat, EngineLog, decode
 from taskloop.contracts.runlife import Liveness, liveness
@@ -25,7 +24,7 @@ def typed_log(path: Path) -> list[EngineLog]:
     """The engine log's records; a line that is not one is skipped."""
     out: list[EngineLog] = []
     for d in read_jsonl(path):
-        with contextlib.suppress(CodecError):
+        with contextlib.suppress(ValueError):
             out.append(decode(d))
     return out
 

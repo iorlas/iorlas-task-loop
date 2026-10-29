@@ -6,15 +6,16 @@ The run state holds exactly this one field of the review/verify side and never r
 It holds the counters the caps read, what the last review says nobody checked, what the verify step settled and what it left for the
 owner, and the follow-ups filed or refused by bd.
 """
-from dataclasses import field
 from typing import Any, ClassVar
 
-from taskloop.contracts.codec import from_json, record, to_json
+from pydantic import Field
+
+from taskloop.contracts import wire
 from taskloop.contracts.trace import Verified
+from taskloop.contracts.wire import Rec
 
 
-@record
-class Unchecked:
+class Unchecked(Rec):
     what: str
     kind: str = ""
     source: str = ""
@@ -22,36 +23,33 @@ class Unchecked:
     proof_round: bool = False
 
 
-@record
-class Unverified:
+class Unverified(Rec):
     what: str
     kind: str = ""
     why: str = ""
     source: str = ""
 
 
-@record
-class Unfiled:
+class Unfiled(Rec):
     """A follow-up bd refused: kept here so none is lost or counted as filed."""
 
     title: str
     why: str
 
 
-@record
-class ReviewState:
+class ReviewState(Rec):
     V: ClassVar[int] = 1
     reviews: int = 0
     rounds: int = 0
-    unchecked: list[Unchecked] = field(default_factory=list)
-    unverified: list[Unverified] = field(default_factory=list)
-    verified: list[Verified] = field(default_factory=list)
-    filed: list[str] = field(default_factory=list)
-    unfiled: list[Unfiled] = field(default_factory=list)
+    unchecked: list[Unchecked] = Field(default_factory=list)
+    unverified: list[Unverified] = Field(default_factory=list)
+    verified: list[Verified] = Field(default_factory=list)
+    filed: list[str] = Field(default_factory=list)
+    unfiled: list[Unfiled] = Field(default_factory=list)
 
     def dump(self) -> dict[str, Any]:
-        return to_json(self)
+        return wire.dump(self)
 
     @classmethod
     def from_dump(cls, data: Any) -> "ReviewState":
-        return from_json(cls, data)
+        return wire.load(cls, data)

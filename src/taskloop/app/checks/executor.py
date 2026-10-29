@@ -1,6 +1,5 @@
 """CheckExecutor: run the steps of a round in order, deciding for each whether it runs, is skipped, is answered by an earlier
 run, or is answered by the cache."""
-import dataclasses
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -125,7 +124,7 @@ class CheckExecutor:
         if before is None or (before[0].exit == 124 and before[1] < c.wall_min):
             return None
         self.host.log.note(f"`{c.cmd[:120]}` already ran in this block: its result is reused")
-        return dataclasses.replace(before[0], id=c.id, cmd=c.cmd, group=c.group, cached=False, reused=True, log="")
+        return before[0].model_copy(update={"id": c.id, "cmd": c.cmd, "group": c.group, "cached": False, "reused": True, "log": ""})
 
     def _key(self, c: Check) -> tuple[str, bool]:
         """(the cache key of the check's inputs, whether this round may not cache it). A glob that selects nothing would cache a

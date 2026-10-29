@@ -6,9 +6,8 @@ bead's newest run; the engine acts on them at its next step boundary (stop at on
 from collections.abc import Callable
 from typing import Any, Final
 
-from taskloop.contracts import codec
+from taskloop.contracts import wire
 from taskloop.contracts.ask import Ask, AskAction
-from taskloop.contracts.codec import CodecError
 from taskloop.contracts.dash import WRITES, AckReq, AnswerReq, BeadReq, CauseReq, LookReq, NoteReq, PruneReq, Result, StickReq
 from taskloop.contracts.stores import AskStore
 from taskloop_dash.api.looks import Looks
@@ -57,12 +56,12 @@ class Writes:
         if cls is None:
             return 404, {"error": "unknown verb"}
         try:
-            req = codec.from_json(cls, body)
-        except CodecError as err:
+            req = wire.load(cls, body)
+        except ValueError as err:
             return 400, {"error": str(err)}
         self.env.touch()
         write = self.verbs.get(verb)
-        return 200, codec.to_json(write(req) if write else LATER)
+        return 200, wire.dump(write(req) if write else LATER)
 
     def find(self, ask_id: str) -> tuple[Ask | None, str]:
         """(the ask, "") when `ask_id` is the bead's current ask, else (the bead's ask or None, why not)."""

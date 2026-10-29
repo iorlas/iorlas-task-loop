@@ -269,7 +269,8 @@ class EnginePlanTest(EngineTest):
         bare = {k: v for k, v in checks_to_wire(PLAN).items() if k != "options"}
         self.assertEqual(answers.check("plan", False, bare), ["PlanAnswer.options: missing"])
         self.assertEqual(answers.check("plan", False, checks_to_wire(dict(PLAN, options=[{"label": "A"}]))),
-                         ["PlanAnswer.options[0].cost: missing"])
+                         ["PlanAnswer.options[0].cost: missing", "PlanAnswer.options[0].answer: missing",
+                          "PlanAnswer.options[0].recommended: missing"])
 
     def test_a_verify_answer_with_a_yes_and_a_change_plans_it(self):
         more = dict(PLAN, stages=[dict(PLAN["stages"][0], goal="test Y")])

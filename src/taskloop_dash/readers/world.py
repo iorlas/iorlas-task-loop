@@ -7,11 +7,11 @@ import socket
 from collections.abc import Sequence
 from typing import Any
 
-from taskloop.contracts import codec
+from taskloop.contracts import wire
 from taskloop.contracts.adrs import AdrStore
 from taskloop.contracts.ask import Ask
 from taskloop.contracts.bead import Bead, Comment
-from taskloop.contracts.delegate import LIVE_EVENT, LiveEvent
+from taskloop.contracts.delegate import LiveEvent
 from taskloop.contracts.ledger import LedgerEntry
 from taskloop.contracts.loop import LoopState
 from taskloop.contracts.stores import AskStore, JsonStore, LedgerStore, StatusStore
@@ -35,8 +35,8 @@ def typed_beads(rows: Sequence[dict[str, Any]]) -> list[Bead]:
     out: list[Bead] = []
     for r in rows:
         try:
-            out.append(codec.from_json(Bead, r))
-        except codec.CodecError:
+            out.append(wire.load(Bead, r))
+        except ValueError:
             continue  # a row that is not a bead of this contract is not shown
     return out
 
@@ -44,8 +44,8 @@ def typed_beads(rows: Sequence[dict[str, Any]]) -> list[Bead]:
 def live_event(data: object) -> LiveEvent:
     """A live-file line as its typed event (`k` names the kind; the file carries no `v`), as the runner reads it."""
     if not isinstance(data, dict):
-        raise codec.CodecError("not a live event")
-    return codec.from_tagged(LIVE_EVENT, {**{k: v for k, v in data.items() if k != "k"}, "kind": data.get("k"), "v": 1})
+        raise ValueError("not a live event")
+    return wire.load(LiveEvent, {**{k: v for k, v in data.items() if k != "k"}, "kind": data.get("k"), "v": 1})
 
 
 class Worlds:

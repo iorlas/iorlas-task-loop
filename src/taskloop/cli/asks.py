@@ -9,7 +9,7 @@ from typing import Any, Final
 
 from taskloop.app.asks import intake, sweeps
 from taskloop.app.run import requests
-from taskloop.contracts import codec
+from taskloop.contracts import wire
 from taskloop.contracts.ask import Ask, AskAction
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdFailure, Beads
@@ -43,7 +43,7 @@ def action_of(a: Namespace, ask: Ask | None) -> tuple[AskAction, str]:
 
 def listing(asks: list[Ask], out: Out, as_json: bool, orphans: list[str]) -> None:
     if as_json:
-        out(json.dumps([codec.to_json(x) for x in asks], indent=1))
+        out(json.dumps([wire.dump(x) for x in asks], indent=1))
         return
     for k in asks:
         out(f"{k.bead:<22} {k.kind.value:<8} {(k.title or k.decision)[:70]}")

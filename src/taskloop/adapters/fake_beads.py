@@ -1,6 +1,5 @@
 """`FakeBeads`: bd in memory, with the behaviour the code relies on (claim only an open bead, closed beads leave `find`, labels
 sorted and unique, metadata values are strings, a write to an unknown bead is refused)."""
-import dataclasses
 from typing import Any
 
 from taskloop.contracts.bead import BdError, Bead, Comment, Dep
@@ -20,7 +19,7 @@ class FakeBeads:
         return self.beads[bead]
 
     def _put(self, b: Bead, **changes: Any) -> None:
-        self.beads[b.id] = dataclasses.replace(b, **changes)
+        self.beads[b.id] = b.model_copy(update=changes)
 
     def show(self, bead: str) -> Bead | None:
         return self.beads.get(bead)

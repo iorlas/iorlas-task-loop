@@ -1,5 +1,4 @@
 """What the loop tests ask of the loop's files and queue, through the same code the loop uses (wloop, app/loop)."""
-import dataclasses
 import json
 import os
 from pathlib import Path
@@ -46,7 +45,7 @@ def write_state(repo, pid=None, **fields):
     pid = pid or os.getpid()
     st = LoopState(pid=pid, started=fields.pop("started", 1.0), t=fields.pop("t", 1.0), repo=repo, version="0.0.1", code_dir="/x",
                    actor="tl-x")
-    files(repo).write(dataclasses.replace(st, **fields))
+    files(repo).write(st.model_copy(update=fields))
 
 
 def read_state(repo, pid=None):

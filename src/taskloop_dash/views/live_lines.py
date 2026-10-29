@@ -5,8 +5,7 @@ the records type is filled: no text is parsed, and a ToolCall carries delegate's
 from collections.abc import Callable
 from typing import Any, Final, Literal
 
-from taskloop.contracts import codec, delegate, log
-from taskloop.contracts.codec import CodecError
+from taskloop.contracts import delegate, log, wire
 from taskloop.contracts.dash import LivePage, TermLine, ToolCall
 from taskloop.contracts.runlife import Liveness
 from taskloop_dash.views.live_events import ENGINE
@@ -23,8 +22,8 @@ def retype(event: dict[str, Any]) -> Any | None:
     try:
         if event["src"] == ENGINE:
             return log.decode(dict(body, kind=event["k"], v=log.LogRec.V))
-        return codec.from_tagged(delegate.LIVE_EVENT, dict(body, kind=event["k"], v=delegate.LiveRec.V))
-    except CodecError:
+        return wire.load(delegate.LiveEvent, dict(body, kind=event["k"], v=delegate.LiveRec.V))
+    except ValueError:
         return None
 
 

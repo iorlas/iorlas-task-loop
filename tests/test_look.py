@@ -21,7 +21,7 @@ from taskloop.app.look import shots
 from taskloop.app.look.owner_look import OwnerLook
 from taskloop.app.run.closer import Closer
 from taskloop.app.wire import slots as wslots
-from taskloop.contracts import answers, codec
+from taskloop.contracts import answers, wire
 from taskloop.contracts.config import RepoProfile, VisualConfig
 from taskloop.contracts.paths import ConfigDir
 
@@ -133,7 +133,7 @@ class LookTest(T.EngineTest):
         self.assertNotIn("home-screen.png", tree)  # pyrefly: ignore[unsupported-operation]
         kept = ConfigDir(ident.config_dir()).artifacts("t-1")
         self.assertEqual((kept / "home-screen.png").read_bytes(), b"PNG fake")
-        recs = [i.rec for i in self.eng.stores.run_log(self.eng.run_dir.name).read_from().items if i.rec.KIND == "artifacts"]
+        recs = [i.rec for i in self.eng.stores.run_log(self.eng.run_dir.name).read_from().items if i.rec.kind == "artifacts"]
         self.assertIn(["home-screen.png"], [getattr(x, "names", None) for x in recs])
         (c,) = self.creates()
         self.assertEqual(c[1], "Look review: Add f")
@@ -167,7 +167,7 @@ class LookTest(T.EngineTest):
 
     def test_a_profile_that_still_sets_evidence_dir_is_refused(self):
         with self.assertRaises(Exception) as cm:
-            codec.from_json(RepoProfile, {"engine": {"evidence_dir": "design/look-reviews"}})
+            wire.load(RepoProfile, {"engine": {"evidence_dir": "design/look-reviews"}})
         self.assertIn("evidence_dir", str(cm.exception))
 
     def test_a_non_visual_answer_needs_no_look_field_and_a_visual_one_does(self):

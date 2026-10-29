@@ -1,32 +1,28 @@
 """RunTrace: one engine run as the report reads it (traces.jsonl, v2). A defaulted field is one the older rows did not carry."""
-from dataclasses import field
 from typing import Any, ClassVar
 
-from taskloop.contracts.codec import record
+from pydantic import Field
+
 from taskloop.contracts.enums import Outcome, WhyCode
-from taskloop.contracts.ids import RunId
+from taskloop.contracts.wire import Rec, RunIdWire
 
 
-@record
-class Tokens:
-    in_: int = field(default=0, metadata={"name": "in"})
+class Tokens(Rec):
+    in_: int = Field(default=0, alias="in")
     cached: int = 0
     out: int = 0
 
 
-@record
-class Cost:
+class Cost(Rec):
     usd: float = 0.0
 
 
-@record
-class Denied:
+class Denied(Rec):
     tool: str
-    input: dict[str, Any] = field(default_factory=dict)
+    input: dict[str, Any] = Field(default_factory=dict)
 
 
-@record
-class AiCall:
+class AiCall(Rec):
     """One worker session: the engine's `session` row, `traces.sessions[]` and the delegate echo in one shape."""
 
     node: str
@@ -46,10 +42,10 @@ class AiCall:
     flag: str | None = None
     host: bool | None = None
     cost: float | None = None
-    tokens: Tokens = field(default_factory=Tokens)
+    tokens: Tokens = Field(default_factory=Tokens)
     turns: int | None = None
     context_k: int | None = None
-    denied: list[Denied] = field(default_factory=list)
+    denied: list[Denied] = Field(default_factory=list)
     next: str | None = None
     reason: str | None = None
     stopped: str | None = None
@@ -58,8 +54,7 @@ class AiCall:
     warning: str | None = None
 
 
-@record
-class Stats:
+class Stats(Rec):
     writes: int = 0
     rounds: int = 0
     reviews: int = 0
@@ -72,24 +67,21 @@ class Stats:
     tokens_out: int = 0
 
 
-@record
-class WentBadly:
+class WentBadly(Rec):
     what: str
     cause: str
     session: str
     evidence: str
 
 
-@record
-class Reflection:
-    went_well: list[str] = field(default_factory=list)
-    went_badly: list[WentBadly] = field(default_factory=list)
-    wasted: list[str] = field(default_factory=list)
-    change: list[str] = field(default_factory=list)
+class Reflection(Rec):
+    went_well: list[str] = Field(default_factory=list)
+    went_badly: list[WentBadly] = Field(default_factory=list)
+    wasted: list[str] = Field(default_factory=list)
+    change: list[str] = Field(default_factory=list)
 
 
-@record
-class WriteRound:
+class WriteRound(Rec):
     write: int
     round: int
     node_id: int
@@ -102,8 +94,7 @@ class WriteRound:
     fresh: str = ""
 
 
-@record
-class Verified:
+class Verified(Rec):
     what: str
     kind: str
     verdict: str
@@ -111,8 +102,7 @@ class Verified:
     why: str
 
 
-@record
-class Fault:
+class Fault(Rec):
     """A step that failed inside the run; `fingerprint` of a trace hashes (why_code, step, lane, exit), never prose."""
 
     step: str
@@ -122,10 +112,9 @@ class Fault:
     t: float | None = None
 
 
-@record
-class RunTrace:
+class RunTrace(Rec):
     V: ClassVar[int] = 2
-    run: RunId
+    run: RunIdWire
     bead: str
     repo_url: str
     worktree: str
@@ -140,24 +129,24 @@ class RunTrace:
     version: str = ""
     why_code: WhyCode | None = None
     fingerprint: str = ""
-    cost: Cost = field(default_factory=Cost)
-    stats: Stats = field(default_factory=Stats)
+    cost: Cost = Field(default_factory=Cost)
+    stats: Stats = Field(default_factory=Stats)
     host: bool | None = None
     delegate_path: str = ""
     log: str = ""
     stderr: str = ""
-    lanes: dict[str, Any] = field(default_factory=dict)
-    sessions: list[AiCall] = field(default_factory=list)
-    verified: list[Verified] = field(default_factory=list)
-    write_rounds: list[WriteRound] = field(default_factory=list)
-    strays: list[str] = field(default_factory=list)
+    lanes: dict[str, Any] = Field(default_factory=dict)
+    sessions: list[AiCall] = Field(default_factory=list)
+    verified: list[Verified] = Field(default_factory=list)
+    write_rounds: list[WriteRound] = Field(default_factory=list)
+    strays: list[str] = Field(default_factory=list)
     reflection: Reflection | None = None
-    lane_notes: list[str] = field(default_factory=list)
+    lane_notes: list[str] = Field(default_factory=list)
     salvaged: bool = False
     backfilled: bool = False
     ask: str = ""
     prev_run: str = ""
     started_because: str = ""
-    faults: list[Fault] = field(default_factory=list)
+    faults: list[Fault] = Field(default_factory=list)
     kind: str = ""  # the run's outcome.Kind value, and its fingerprint: what the storm detector counts
     kfp: str = ""

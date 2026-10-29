@@ -5,12 +5,11 @@ pieces, the open asks and looks, the ask ledger, the decisions in force, the lea
 Left at their default until the backend item that records the fact: on a card the cause and ack only. `version` is a hash of the
 encoded snapshot without `t`, so it moves exactly when a field the page shows moves."""
 
-import dataclasses
 import hashlib
 import json
 import time
 
-from taskloop.contracts import codec
+from taskloop.contracts import wire
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.dash import AskCard, BeadCard, Column, Epic, LoopInfo, Piece, Project, ServerInfo, Slot, Snapshot
 from taskloop_dash.views import floor, learning, ledger, passes
@@ -95,16 +94,16 @@ def build(w: World) -> Snapshot:
     board = Board(w)
     cards, more = cards_of(w, board)
     ids = {(c.project, c.id) for c in cards}
-    cards = [dataclasses.replace(c, needs=[n for n in c.needs if (c.project, n) in ids]) for c in cards]
+    cards = [c.model_copy(update={"needs": [n for n in c.needs if (c.project, n) in ids]}) for c in cards]
     snap = Snapshot(
         version="", t=0.0, server=ServerInfo(version=w.version, host=w.host, loops=[loop_info(p, w.now) for p in w.projects]),
         projects=[Project(id=p.id, name=p.name) for p in w.projects], epics=[e for p in w.projects for e in epics_of(p)],
         slots=slots_of(w), beads=cards, backlog_more=more, pieces=pieces_of(w, board, ids), asks=asks_of(w, cards),
         lanes=lane_cards(w.status, w.now), ledger=ledger.ledger_rows(w, ids), adrs=ledger.adr_rows(w), learning=learning.build(w))
-    return dataclasses.replace(snap, version=version_of(snap), t=w.now)
+    return snap.model_copy(update={"version": version_of(snap), "t": w.now})
 
 
 def version_of(snap: Snapshot) -> str:
     """A hash of the snapshot as encoded, `t` left out: it changes when anything the page shows changes."""
-    body = json.dumps(codec.to_json(dataclasses.replace(snap, version="", t=0.0)), sort_keys=True, separators=(",", ":"))
+    body = json.dumps(wire.dump(snap.model_copy(update={"version": "", "t": 0.0})), sort_keys=True, separators=(",", ":"))
     return hashlib.sha1(body.encode("utf-8")).hexdigest()[:16]

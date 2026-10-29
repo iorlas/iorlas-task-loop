@@ -10,7 +10,7 @@ import support.paths  # noqa: F401
 from contracts import samples as S
 from taskloop.adapters import delegate as dl
 from taskloop.adapters import delegate_wire
-from taskloop.contracts import codec, delegate
+from taskloop.contracts import delegate, wire
 from taskloop.domain.lanes import policy as lp
 
 
@@ -29,18 +29,18 @@ class Contract3(unittest.TestCase):
         self.assertFalse(fields & {"status", "next", "reason", "retry_after", "v"})
 
     def test_the_sample_answer_is_read_by_the_adapter_into_the_same_result(self):
-        wire = codec.to_json(S.other(delegate.DelegateResult))
-        self.assertNotIn("v", wire)
-        self.assertEqual(codec.from_json(delegate.DelegateResult, wire), S.other(delegate.DelegateResult))
-        r = delegate_wire.result_of(wire)
+        body = wire.dump(S.other(delegate.DelegateResult))
+        self.assertNotIn("v", body)
+        self.assertEqual(wire.load(delegate.DelegateResult, body), S.other(delegate.DelegateResult))
+        r = delegate_wire.result_of(body)
         st, facts = r.stop, S.other(delegate.DelegateResult).stop
         self.assertEqual(st, facts)
         self.assertEqual((r.worker, r.exit_code, r.first_error), (S.other(delegate.DelegateResult).worker, -15, "429 rate limited"))
 
     def test_a_done_answer_has_a_null_stop(self):
-        wire = {**codec.to_json(S.other(delegate.DelegateResult)), "stop": None}
-        self.assertIsNone(delegate_wire.result_of(wire).stop)
-        self.assertIsNone(codec.from_json(delegate.DelegateResult, wire).stop)
+        body = {**wire.dump(S.other(delegate.DelegateResult)), "stop": None}
+        self.assertIsNone(delegate_wire.result_of(body).stop)
+        self.assertIsNone(wire.load(delegate.DelegateResult, body).stop)
 
     def test_the_run_argv_is_built_by_the_request_alone(self):
         req = delegate.RunRequest(role="worker", brief_path="b", cwd="/w", schema_path="s", parent="p", task="t", title="T",

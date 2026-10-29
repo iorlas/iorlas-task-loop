@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support import procsim
 
-from taskloop.contracts import codec, paths
+from taskloop.contracts import paths, wire
 from taskloop.contracts.enums import LockWhat
 from taskloop.contracts.locks import LockRecord
 from taskloop.contracts.stores import JsonStore
@@ -66,7 +66,7 @@ class RealRig:
         """Another process holds the lock (flock) and its record names `pid`."""
         path = self.cfg.lock_record(what.value, ident)
         path.parent.mkdir(parents=True, exist_ok=True)
-        rec = json.dumps(codec.to_json(LockRecord(what=what, holder=holder, pid=pid, t=time.time())))  # pyrefly: ignore[unexpected-keyword]
+        rec = json.dumps(wire.dump(LockRecord(what=what, holder=holder, pid=pid, t=time.time())))  # pyrefly: ignore[unexpected-keyword]
         p = subprocess.Popen([sys.executable, "-c", HOLDER, str(path), rec, str(secs)], stdout=subprocess.PIPE, text=True)
         self.procs.append(p)
         assert p.stdout is not None and p.stdout.readline().strip() == "held"

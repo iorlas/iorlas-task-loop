@@ -7,7 +7,7 @@ import shlex
 from support.fakes import FakeBeadStore, FakeClock, FakeRouter
 from taskloop.app.run import engine
 from taskloop.app.wire import slots as wslots
-from taskloop.contracts.codec import from_json, to_json
+from taskloop.contracts import wire
 from taskloop.contracts.config import EngineConfig
 
 
@@ -49,7 +49,7 @@ def argv_cfg(cfg):
 
 def cfg_with(base=None, **changes):
     """An EngineConfig: `base` (default: all defaults) with `changes` over it. Values may be plain JSON (a `checks` list of dicts)."""
-    d = to_json(base or EngineConfig())
+    d = wire.dump(base or EngineConfig())
     gated = "gate" in changes or "gate_only" in changes
     explicit = "checks" in changes
     changes = argv_cfg(changes)
@@ -58,4 +58,4 @@ def cfg_with(base=None, **changes):
         changes["checks"] = keep + changes.get("checks", [])
     d["base_red"] = False  # an always-red command in a test would otherwise be asked again on the base; the tests of that ask turn it on
     d.update(changes)
-    return from_json(EngineConfig, d)
+    return wire.load(EngineConfig, d)

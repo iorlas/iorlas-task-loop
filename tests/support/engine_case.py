@@ -2,7 +2,6 @@
 import atexit
 import collections.abc
 import contextlib
-import dataclasses
 import functools
 import json
 import os
@@ -52,7 +51,7 @@ from taskloop.app.run import (
 )
 from taskloop.app.wire import slots as wslots
 from taskloop.app.write.newfiles import NewFiles
-from taskloop.contracts import codec
+from taskloop.contracts import wire
 from taskloop.contracts.ask import AskAnswer
 from taskloop.contracts.checks import CheckRun
 from taskloop.contracts.paths import ConfigDir
@@ -310,7 +309,7 @@ def card_of(a):
 
 def ask_rec(**over):
     """A current-version ask record as a dict, open and unanswered, with fields overridden."""
-    base = codec.to_json(S.ASK)
+    base = wire.dump(S.ASK)
     return {**base, "status": "open", "answer": None, "answered": None, "consumed": None, **over}
 
 
@@ -737,7 +736,7 @@ class LandReviewBase(EngineTest):
             res("just unity-tests", None, id="unity-tests", why="no change under client/**, content/**"),
             res(self.SUITE, 0, id=self.SUITE, group="acceptance", secs=3, log="checks/06-tests_Sim.Properties.r2.log", tail="succeeded: 4"),
         ]
-        return [dataclasses.replace(r, **over.get(r.id, {})) for r in rows]
+        return [r.model_copy(update=over.get(r.id, {})) for r in rows]
 
     def evidenced(self, checks=None, attrs=None):
         e = self.verifier(attrs, checks=self.CFG_CHECKS[:2], gate="just check")

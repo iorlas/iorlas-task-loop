@@ -1,6 +1,5 @@
 """Raising an ask and starting from an answered one: the engine's two moments with the owner. Pure of bd and git except for the
 queue label, which goes through the Beads port."""
-import dataclasses
 from dataclasses import dataclass
 
 from taskloop.contracts.adrs import AdrStore
@@ -45,7 +44,7 @@ def raise_ask(asks: AskStore, spec: AskSpec, at: Asking, adrs: AdrStore | None =
     problems = lint(ask)
     if problems:
         return None, problems
-    ask = dataclasses.replace(ask, similar=similar.find(ask.key, ask.id, asks.rows(), adrs.in_force() if adrs else []))
+    ask = ask.model_copy(update={"similar": similar.find(ask.key, ask.id, asks.rows(), adrs.in_force() if adrs else [])})
     asks.file(ask)
     return ask, []
 

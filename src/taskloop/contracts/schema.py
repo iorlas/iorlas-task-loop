@@ -2,39 +2,33 @@
 
 `of(cls)` is the contract form: an object with `additionalProperties: false`, every field without a default in `required`, an
 optional (defaulted) field left out of it. `strict(schema)` is the wire form OpenAI-style strict structured output takes: every
-property required, a field the contract left optional may be null. A field's description is `field(metadata={"doc": ...})`.
+property required, a field the contract left optional may be null. A field's description is `Field(description=...)`.
 """
 import copy
-import dataclasses
 import enum
 import types
 from typing import Any, Literal, Union, get_args, get_origin
 
-from taskloop.contracts.codec import plan
+from taskloop.contracts.wire import Rec
 
 SCALARS: dict[Any, str] = {str: "string", int: "integer", float: "number", bool: "boolean"}
 
 
-def of(cls: type) -> dict[str, Any]:
-    """The contract schema of a dataclass."""
-    fields = {f.name: f for f in dataclasses.fields(cls)}
+def of(cls: type[Rec]) -> dict[str, Any]:
+    """The contract schema of a record class."""
     props: dict[str, Any] = {}
     required = []
-    version, kind = getattr(cls, "V", None), getattr(cls, "KIND", None)
-    if version is not None:
-        props["v"] = {"type": "integer", "enum": [version]}
+    if cls.V is not None:
+        props["v"] = {"type": "integer", "enum": [cls.V]}
         required.append("v")
-    if kind is not None:
-        props["kind"] = {"type": "string", "enum": [kind]}
-        required.append("kind")
-    for p in plan(cls):
-        node = _hint(p.hint)
-        doc = fields[p.attr].metadata.get("doc")
-        if doc:
-            node = {**node, "description": doc}
-        props[p.wire] = node
-        if p.required:
-            required.append(p.wire)
+    for name, f in cls.model_fields.items():
+        node = _hint(f.annotation)
+        if f.description:
+            node = {**node, "description": f.description}
+        wire = f.alias or name
+        props[wire] = node
+        if f.is_required():
+            required.append(wire)
     return {"type": "object", "additionalProperties": False, "required": required, "properties": props}
 
 
@@ -55,7 +49,7 @@ def _hint_plain(h: Any) -> dict[str, Any]:
         return {"type": "string"}
     if isinstance(h, type) and issubclass(h, enum.Enum):
         return {"type": "string", "enum": [m.value for m in h]}
-    if isinstance(h, type) and dataclasses.is_dataclass(h):
+    if isinstance(h, type) and issubclass(h, Rec):
         return of(h)
     raise TypeError(f"no JSON schema for {h!r}")
 

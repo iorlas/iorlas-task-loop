@@ -1,13 +1,13 @@
 """Run records: what a run-task process reports to its loop, and the hand-over between two engine versions."""
-from dataclasses import field
 from typing import ClassVar
 
-from taskloop.contracts.codec import record
+from pydantic import Field
+
 from taskloop.contracts.enums import Outcome, WhyCode
+from taskloop.contracts.wire import Rec
 
 
-@record
-class RunOutcome:
+class RunOutcome(Rec):
     """The last line run-task prints and loop/<key>/<bead>-<stamp>.outcome.json."""
 
     V: ClassVar[int] = 2
@@ -25,8 +25,7 @@ class RunOutcome:
     cost: float = 0.0
 
 
-@record
-class LoopLogLine:
+class LoopLogLine(Rec):
     """A line of loop/<key>.jsonl: the outcome plus where it ran."""
 
     V: ClassVar[int] = 2
@@ -36,8 +35,7 @@ class LoopLogLine:
     run_log: str = ""
 
 
-@record
-class Reexec:
+class Reexec(Rec):
     """runs/<run>/reexec.json: the one record an old process writes and a newer install reads (TL_REEXEC)."""
 
     V: ClassVar[int] = 1
@@ -46,6 +44,6 @@ class Reexec:
     from_version: str
     to_version: str
     step: str
-    owned: list[str] = field(default_factory=list)
+    owned: list[str] = Field(default_factory=list)
     fallback: str = ""
-    counters: dict[str, int] = field(default_factory=dict)
+    counters: dict[str, int] = Field(default_factory=dict)

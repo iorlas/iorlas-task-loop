@@ -4,7 +4,6 @@ retry (lifesim-fld.27.10, -ae6v and -fld.6 each lost 47 min of live work to the 
 its answer), the engine keeps no silence timer, and the worker's pids come from the live file's first line (WorkerStarted) and from the
 answer's `worker.end`, never from ps or a stderr line."""
 
-import dataclasses
 import inspect
 import json
 import os
@@ -68,7 +67,7 @@ class NoEngineSideSilence(unittest.TestCase):
     def test_the_engine_has_no_warn_stop_cap_timer_of_its_own(self):
         self.assertFalse(hasattr(runner, "Silence") or hasattr(runner, "WATCH_S"))
         self.assertNotIn("silence", inspect.signature(runner.StreamRunner).parameters)
-        cfg = {f.name for f in dataclasses.fields(EngineConfig)}
+        cfg = set(EngineConfig.model_fields)
         self.assertTrue({"write_idle_min", "write_cap_min"} <= cfg)
         self.assertFalse({"write_idle_warn_min", "write_idle_stop_min"} & cfg)
 

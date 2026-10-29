@@ -19,8 +19,8 @@ import stream_proc
 
 from taskloop.adapters import procs
 from taskloop.adapters.delegate import Stopped
-from taskloop.contracts import codec
-from taskloop.contracts.delegate import LIVE_EVENT, LiveStart, WorkerStarted
+from taskloop.contracts import wire
+from taskloop.contracts.delegate import LiveEvent, LiveStart, WorkerStarted
 
 POLL_S = 0.5  # seconds between the looks at the live file while a call runs
 
@@ -44,21 +44,21 @@ def worker_started(path: str | Path) -> WorkerStarted | None:
     """The first line of the live file, when it is a `WorkerStarted`."""
     lines = live_lines(path)[:1]
     if lines and "k" not in lines[0]:
-        with contextlib.suppress(codec.CodecError):
-            return codec.from_json(WorkerStarted, lines[0])
+        with contextlib.suppress(ValueError):
+            return wire.load(WorkerStarted, lines[0])
     return None
 
 
 def live_event(j: dict[str, Any]) -> Any:
-    """The typed event of a live-file line (`k` names the kind; the file carries no `v`). CodecError for a kind we do not know."""
-    return codec.from_tagged(LIVE_EVENT, dict({a: b for a, b in j.items() if a != "k"}, kind=j.get("k"), v=1))
+    """The typed event of a live-file line (`k` names the kind; the file carries no `v`). ValueError for a kind we do not know."""
+    return wire.load(LiveEvent, dict({a: b for a, b in j.items() if a != "k"}, kind=j.get("k"), v=1))
 
 
 def worker_start(path: str | Path) -> LiveStart | None:
     """The first `start` event of the live file: the harness, lane, model and effort the call ran on."""
     for j in live_lines(path):
         if j.get("k") == "start":
-            with contextlib.suppress(codec.CodecError):
+            with contextlib.suppress(ValueError):
                 return live_event(j)
     return None
 

@@ -13,8 +13,8 @@ from atomic_io import atomic_write_json
 
 from taskloop.adapters import locks
 from taskloop.app.asks.intake import Intake, receipt
-from taskloop.contracts import codec
 from taskloop.contracts import log as rec
+from taskloop.contracts import wire
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.requests import OwnerNote, OwnerRequest
 from taskloop.contracts.runlife import Liveness, liveness
@@ -37,7 +37,7 @@ def locked(cfg: ConfigDir, run: str) -> Iterator[Path]:
 
 def read(path: Path) -> OwnerRequest | None:
     try:
-        return codec.from_json(OwnerRequest, json.loads(path.read_text(encoding="utf-8")))
+        return wire.load(OwnerRequest, json.loads(path.read_text(encoding="utf-8")))
     except (OSError, ValueError):  # none, torn, or a foreign version: no request
         return None
 
@@ -57,7 +57,7 @@ def post(cfg: ConfigDir, run: str, by: str, now: float, *, park: bool = False, s
     with locked(cfg, run) as path:
         old = read(path) or OwnerRequest()
         notes = old.notes + ([OwnerNote(text=note.strip(), t=now, by=by)] if note.strip() else [])
-        atomic_write_json(path, codec.to_json(OwnerRequest(park=old.park or park, stop=old.stop or stop, notes=notes, by=by, t=now)),
+        atomic_write_json(path, wire.dump(OwnerRequest(park=old.park or park, stop=old.stop or stop, notes=notes, by=by, t=now)),
                           indent=1, fsync=False)
     return ""
 

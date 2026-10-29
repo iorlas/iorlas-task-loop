@@ -1,5 +1,4 @@
 """One code path: an answer from the dashboard and `tl answer` leave the same ask record and the same bead comments."""
-import dataclasses
 import sys
 import tempfile
 import unittest
@@ -19,7 +18,7 @@ from taskloop.contracts.bead import Bead
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.stores import AskStore
 
-ASK = dataclasses.replace(MOCKS["lifesim-22b3"], bead="b-1", id="b-1-1")
+ASK = MOCKS["lifesim-22b3"].model_copy(update={"bead": "b-1", "id": "b-1-1"})
 
 
 def world(root: str):
@@ -45,7 +44,7 @@ class SameIntake(unittest.TestCase):
             self.assertIn("Owner (tl) answer", dash_store.comments("b-1")[0].text)
             self.assertEqual(dash_store.beads["b-1"].status, tl_store.beads["b-1"].status)
             mine, theirs = dash_asks.get("b-1"), tl_asks.get("b-1")
-            self.assertEqual(dataclasses.replace(must(must(mine).answer), t=0), dataclasses.replace(must(must(theirs).answer), t=0))
+            self.assertEqual(must(must(mine).answer).model_copy(update={"t": 0}), must(must(theirs).answer).model_copy(update={"t": 0}))
 
 
 if __name__ == "__main__":

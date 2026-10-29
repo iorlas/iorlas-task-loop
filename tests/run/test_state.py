@@ -1,5 +1,4 @@
 """RunState and its one writer: every field survives a park, adding one is one edit, and nothing else writes the record."""
-import dataclasses
 import sys
 import unittest
 from pathlib import Path
@@ -90,8 +89,8 @@ class Fields(unittest.TestCase):
 
     def test_the_dump_holds_every_field_and_nothing_else(self):
         dump = RunState().dump()
-        self.assertEqual(set(dump), {f.name for f in dataclasses.fields(RunState)})
-        self.assertEqual(set(dump["review"]), {f.name for f in dataclasses.fields(ReviewState)})
+        self.assertEqual(set(dump), set(RunState.model_fields))
+        self.assertEqual(set(dump["review"]), set(ReviewState.model_fields))
 
     def test_a_dump_loads_back_to_the_same_state(self):
         s = RunState(**SAMPLE)

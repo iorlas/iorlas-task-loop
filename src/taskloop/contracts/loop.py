@@ -1,12 +1,12 @@
 """Loop records: one state file per loop, the commands sent to it, and its rests."""
-from dataclasses import field
 from typing import ClassVar, Literal
 
-from taskloop.contracts.codec import record
+from pydantic import Field
+
+from taskloop.contracts.wire import Rec
 
 
-@record
-class StopRequest:
+class StopRequest(Rec):
     kind: Literal["now", "after_current"]
     by: str = ""
     t: float = 0.0
@@ -15,8 +15,7 @@ class StopRequest:
 SkipKind = Literal["epic", "slot", "label", "epic_only", "lint", "area", "rest", "lane", "taken", "hold"]
 
 
-@record
-class Skip:
+class Skip(Rec):
     """Why a ready bead is not taken now. `kind` is the rule that skipped it, never parsed back out of `why`."""
 
     why: str
@@ -27,8 +26,7 @@ class Skip:
     where: str = ""
 
 
-@record
-class QueueRow:
+class QueueRow(Rec):
     bead: str
     prio: int
     since: float
@@ -38,16 +36,15 @@ class QueueRow:
     title: str = ""
 
 
-@record
-class Carry:
+class Carry(Rec):
     """What a loop hands to the install it moves to (the state JSON in TL_LOOP_STATE): counters and rests of this loop run."""
 
-    fails: list[str] = field(default_factory=list)
+    fails: list[str] = Field(default_factory=list)
     ran: int = 0
-    later: dict[str, float] = field(default_factory=dict)
-    pauses: dict[str, int] = field(default_factory=dict)
-    gated: dict[str, tuple[str, float]] = field(default_factory=dict)
-    warned: list[str] = field(default_factory=list)
+    later: dict[str, float] = Field(default_factory=dict)
+    pauses: dict[str, int] = Field(default_factory=dict)
+    gated: dict[str, tuple[str, float]] = Field(default_factory=dict)
+    warned: list[str] = Field(default_factory=list)
     until: float = 0.0
     wt: str = ""
     back: str = ""  # the install dir this loop moved from, and when: a crash soon after the move goes back to it once
@@ -55,8 +52,7 @@ class Carry:
     fallback: bool = False
 
 
-@record
-class LoopState:
+class LoopState(Rec):
     """loop/<repo_key>.<pid>.json, rewritten by the loop every pass; the dashboard and `tl status` read it."""
 
     V: ClassVar[int] = 2
@@ -75,14 +71,13 @@ class LoopState:
     run_log: str = ""
     worktree: str = ""
     stop: StopRequest | None = None
-    queue: list[QueueRow] = field(default_factory=list)
-    lanes_seen: list[str] = field(default_factory=list)
+    queue: list[QueueRow] = Field(default_factory=list)
+    lanes_seen: list[str] = Field(default_factory=list)
     log: str = ""
-    carry: Carry = field(default_factory=Carry)
+    carry: Carry = Field(default_factory=Carry)
 
 
-@record
-class LoopCommand:
+class LoopCommand(Rec):
     """loop/<repo_key>.command.json: `tl stop` writes it. The loops it names (the repo's live loops when it was written) obey
     it; a loop started later ignores it; the last named loop to end deletes it."""
 
@@ -90,20 +85,18 @@ class LoopCommand:
     action: Literal["stop_now", "stop_after_current", "resume"]
     by: str
     t: float
-    targets: list[int] = field(default_factory=list)
+    targets: list[int] = Field(default_factory=list)
 
 
-@record
-class Rest:
+class Rest(Rec):
     """loop/<key>-rest.json: {bead: when it may be taken again} for the beads that failed before their engine started or
     cooled after a fault; shared by every loop on the repo."""
 
     V: ClassVar[int] = 2
-    beads: dict[str, float] = field(default_factory=dict)
+    beads: dict[str, float] = Field(default_factory=dict)
 
 
-@record
-class BadVersion:
+class BadVersion(Rec):
     """An install that failed its selftest or crashed a run. It holds while the install's `key` is the one recorded."""
 
     version: str
@@ -113,9 +106,8 @@ class BadVersion:
     key: str = ""
 
 
-@record
-class BadVersions:
+class BadVersions(Rec):
     """bad-versions.json."""
 
     V: ClassVar[int] = 1
-    entries: list[BadVersion] = field(default_factory=list)
+    entries: list[BadVersion] = Field(default_factory=list)

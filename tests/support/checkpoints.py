@@ -1,6 +1,6 @@
 """Checkpoints as a test reads and arranges them: through the engine's own stores, never by JSON shape."""
 from taskloop.adapters import ident
-from taskloop.contracts import codec
+from taskloop.contracts import wire
 from taskloop.contracts.checkpoint import Checkpoint, RunState
 from taskloop.contracts.paths import ConfigDir
 from taskloop.stores.real import real_stores
@@ -22,7 +22,7 @@ def flat_ck(ck):
     """A checkpoint as one dict: the envelope's fields and the run state's, with the names a test reads (plan, brief)."""
     if ck is None:
         return None
-    out = {k: v for k, v in codec.to_json(ck).items() if k != "state"}
+    out = {k: v for k, v in wire.dump(ck).items() if k != "state"}
     out.update(ck.state.dump())
     w = ck.state.writer
     out.update(

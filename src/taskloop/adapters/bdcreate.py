@@ -1,6 +1,5 @@
 """bd create that is known to have worked: bd's lint refuses a body that lacks sections (Touches, Acceptance Criteria);
 they are added once."""
-import dataclasses
 import re
 from collections.abc import Callable
 
@@ -32,6 +31,6 @@ def create_checked(store: Beads, new: NewBead, bead: str, note: Callable[[str], 
             return "", e.error.text
     note(f"bd refused the create ({', '.join(need)}): trying again with the sections it names")
     try:
-        return store.create(dataclasses.replace(new, description=with_sections(new.description, need, bead))), ""
+        return store.create(new.model_copy(update={"description": with_sections(new.description, need, bead)})), ""
     except BdFailure as e:
         return "", e.error.text

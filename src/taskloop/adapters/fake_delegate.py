@@ -1,6 +1,5 @@
 """`FakeDelegate`: scripted answers and live events, no process. Each `run` takes the next step; the last step repeats.
 Like the stand-in route.py it replaces: `--resume X` is echoed as the answer's `ref`, a call without one opens `fake-<n>`."""
-import dataclasses
 from dataclasses import dataclass
 from typing import Any
 
@@ -54,4 +53,4 @@ class FakeDelegate:
             for e in step.events:
                 on_event(e)
         res = step.result
-        return res if res.ref else dataclasses.replace(res, ref=req.resume or f"fake-{int(n + 1)}")
+        return res if res.ref else res.model_copy(update={"ref": req.resume or f"fake-{int(n + 1)}"})

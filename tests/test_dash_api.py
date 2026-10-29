@@ -1,7 +1,6 @@
 """GET /api/snapshot and /api/bead end to end: a Dash over a temp config dir (recorded typed logs on disk, a registered repo, an ask
 file, a fake bd), its handler on a loopback port. The snapshot's version is its ETag: an unchanged one answers 304, a poll never runs bd."""
 
-import dataclasses
 import json
 import sys
 import tempfile
@@ -18,7 +17,7 @@ from support.dashlogs import RunScript, T, bead
 from support.fakes import FakeBeadStore
 from support.narrow import must
 
-from taskloop.contracts import codec
+from taskloop.contracts import wire
 from taskloop.contracts.ask import Ask, AskOption
 from taskloop.contracts.dash import BeadDetail, Snapshot
 from taskloop.contracts.enums import AskClass, AskKind, AskStatus
@@ -73,7 +72,7 @@ class Api(unittest.TestCase):
             return real_find(query)
 
         self.store.find = counting
-        slots = [dataclasses.asdict(bead("s-a", "slot box a", "in_progress", labels=["slot"], assignee="tl-a"))]
+        slots = [bead("s-a", "slot box a", "in_progress", labels=["slot"], assignee="tl-a").model_dump()]
         self.now = NOW
         ports = Ports(store=lambda repo: self.store, slot_beads=lambda repo: slots)
         self.dash = Dash(Env(config=self.cfg, home=root, ports=ports, clock=lambda: self.now, version="v-test"))
@@ -87,7 +86,7 @@ class Api(unittest.TestCase):
     def test_snapshot_decodes_strictly_with_the_facts_of_the_machine(self):
         code, body, headers = self.get("/api/snapshot")
         self.assertEqual(code, 200)
-        snap = codec.from_json(Snapshot, json.loads(body))
+        snap = wire.load(Snapshot, json.loads(body))
         self.assertEqual(headers["ETag"], f'"{snap.version}"')
         by = {c.id: c for c in snap.beads}
         self.assertEqual((by["b-1"].column.value, by["b-1"].marker.value, by["b-1"].slot, by["b-1"].lane), ("working", "run", "a", "OC Go"))
@@ -123,7 +122,7 @@ class Api(unittest.TestCase):
     def test_the_bead_drawer(self):
         code, body, _ = self.get("/api/bead", {"project": "lifesim", "id": "b-1"})
         self.assertEqual(code, 200)
-        d = codec.from_json(BeadDetail, json.loads(body))
+        d = wire.load(BeadDetail, json.loads(body))
         self.assertEqual((d.card.id, d.description, d.acceptance), ("b-1", "Clamp it.", "mood >= 0"))
         self.assertEqual([(m.who, m.md) for m in d.comments], [("denis", "mind the old save")])
         self.assertEqual([(p.n, [c.state for c in p.cells if c.state != "empty"]) for p in d.passes], [(1, ["small", "live"])])

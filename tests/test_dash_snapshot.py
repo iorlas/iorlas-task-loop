@@ -13,7 +13,7 @@ import support.paths  # noqa: F401
 from support.dashlogs import RunScript, T, bead
 from support.narrow import must
 
-from taskloop.contracts import codec
+from taskloop.contracts import wire
 from taskloop.contracts.ask import Ask, AskOption
 from taskloop.contracts.bead import Comment, Dep
 from taskloop.contracts.dash import BeadDetail, Column, Marker, Snapshot
@@ -140,7 +140,7 @@ class Case(unittest.TestCase):
 class Cards(Case):
     def test_strict_decode_round_trips(self):
         s = self.snap()
-        self.assertEqual(codec.from_json(Snapshot, codec.to_json(s)), s)
+        self.assertEqual(wire.load(Snapshot, wire.dump(s)), s)
 
     def test_columns_and_markers_of_every_bead(self):
         s = self.snap()
@@ -208,9 +208,8 @@ class Cards(Case):
 
     def test_needs_never_name_a_bead_the_snapshot_trimmed(self):
         w = self.world()
-        gone = dataclasses.replace(
-            w.projects[0], beads=[*w.projects[0].beads, bead("x-1", "blocked by an epic", dependencies=[Dep(id="e-1", type="blocks")])]
-        )
+        blocked = bead("x-1", "blocked by an epic", dependencies=[Dep(id="e-1", type="blocks")])
+        gone = dataclasses.replace(w.projects[0], beads=[*w.projects[0].beads, blocked])
         s = snapshot.build(dataclasses.replace(w, projects=[gone]))
         self.assertEqual(self.card(s, "x-1").needs, [])  # e-1 is an epic: no card, so no id
 
@@ -278,7 +277,7 @@ class Detail(Case):
 
     def test_strict_decode_and_the_card(self):
         d = self.detail("b-run")
-        self.assertEqual(codec.from_json(BeadDetail, codec.to_json(d)), d)
+        self.assertEqual(wire.load(BeadDetail, wire.dump(d)), d)
         self.assertEqual(d.card, self.card(self.snap(), "b-run"))
 
     def test_text_comments_and_links(self):

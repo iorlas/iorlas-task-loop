@@ -17,8 +17,8 @@ from support.engine_case import CLEAN, PLAN, WRITE, review
 
 from taskloop.app.checks import evidence
 from taskloop.app.checks.attempts import Attempts
+from taskloop.contracts import wire
 from taskloop.contracts.checks import Check, CheckRun
-from taskloop.contracts.codec import from_json
 from taskloop.domain.checks import lint, retry
 
 ST = {"checks": [], "files": []}
@@ -57,7 +57,7 @@ class OneCheckRun(Base):
         self.assertEqual(rc, 0)
         stored = self.eng.stores.check_run(self.eng.run_dir.name, 1).read()
         rows = [json.loads(x) for x in self.eng.log_path.read_text().splitlines() if '"kind": "checks"' in x]
-        self.assertEqual(from_json(CheckRun, dict(rows[0]["run"], v=CheckRun.V)), stored)
+        self.assertEqual(wire.load(CheckRun, dict(rows[0]["run"], v=CheckRun.V)), stored)
         self.assertTrue(stored.results and all(c.log for c in stored.results))
 
 

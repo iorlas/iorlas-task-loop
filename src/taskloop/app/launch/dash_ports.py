@@ -1,7 +1,6 @@
 """The dashboard's ports, made from the engine code: the read-only facts the package taskloop_dash may not import (the slot beads),
 the owner's writes through the intake, and bd through the engine's adapter."""
 
-import dataclasses
 import os
 import shutil
 from collections.abc import Callable
@@ -129,7 +128,7 @@ def owner_intake(asks: AskStore, store_of: Callable[[str], Any], clock: Callable
 
 
 def slot_beads(repo: str) -> list[dict[str, Any]]:
-    return [dataclasses.asdict(b) for b in wslots.slot_beads(repo)]
+    return [b.model_dump() for b in wslots.slot_beads(repo)]
 
 
 def ports() -> Ports:

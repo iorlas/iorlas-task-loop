@@ -1,5 +1,4 @@
 """The loop process itself: its log, its state file, its stop and its nap. The pass logic is in loop.py."""
-import dataclasses
 import threading
 import time
 from dataclasses import dataclass
@@ -88,10 +87,10 @@ class Core:
         mode = self.stop_mode()
         stop = LoopFiles.stop_request(mode, "tl", self.env.now()) if mode else None
         r = self.now_running
-        self.st = dataclasses.replace(
-            self.st, t=self.env.now(), queue=self.rows, carry=self.carry(), stop=stop, log=str(self.log or ""),
-            worktree=r.worktree if r else self.wt, bead=r.bead if r else None, slot=r.slot if r else None,
-            since=r.since if r else None, child=r.child if r else None, run_log=r.run_log if r else "")
+        self.st = self.st.model_copy(update={
+            "t": self.env.now(), "queue": self.rows, "carry": self.carry(), "stop": stop, "log": str(self.log or ""),
+            "worktree": r.worktree if r else self.wt, "bead": r.bead if r else None, "slot": r.slot if r else None,
+            "since": r.since if r else None, "child": r.child if r else None, "run_log": r.run_log if r else ""})
         self.beat_at = self.env.now()
         self.files.write(self.st)
 

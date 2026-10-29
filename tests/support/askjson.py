@@ -2,14 +2,13 @@
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 
 # isort: split
-import dataclasses
 from typing import Any
 
 from asks.samples import MOCKS
 
-from taskloop.contracts import codec
+from taskloop.contracts import wire
 
 
 def ask_json(bead: str, n: int = 1, **over: Any) -> dict[str, Any]:
-    rec = dataclasses.replace(MOCKS["lifesim-22b3"], bead=bead, id=f"{bead}-{n}")
-    return {**codec.to_json(rec), **over}
+    rec = MOCKS["lifesim-22b3"].model_copy(update={"bead": bead, "id": f"{bead}-{n}"})
+    return {**wire.dump(rec), **over}

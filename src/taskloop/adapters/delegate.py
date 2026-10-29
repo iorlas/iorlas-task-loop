@@ -6,7 +6,6 @@ glob over the cache), and refuses a contract it does not speak (contract 3: ever
 a call that printed nothing is a synthesized `no_answer`, an answer that breaks the shape a `contract_violation`, a call the engine had
 to stop a `timeout`. Facts of a synthesized stop come from the install's contract.json. Nothing here reads prose."""
 
-import dataclasses
 import json
 import os
 import subprocess
@@ -184,7 +183,7 @@ def call(
             bf, sf = os.path.join(d, "brief.md"), os.path.join(d, "schema.json")
             Path(bf).write_text(brief, encoding="utf-8")
             Path(sf).write_text(json.dumps(schema), encoding="utf-8")
-            argv = dataclasses.replace(req, brief_path=bf, schema_path=sf).to_argv(sys.executable, resolved.route)
+            argv = req.model_copy(update={"brief_path": bf, "schema_path": sf}).to_argv(sys.executable, resolved.route)
             wall = (req.timeout_s + BACKSTOP_S) if req.timeout_s else None
             p = runner(argv, cwd=req.cwd or None, env=dict(procs.current_env() if env is None else env, **req.env()), timeout=wall)
     except (Stopped, subprocess.TimeoutExpired) as e:

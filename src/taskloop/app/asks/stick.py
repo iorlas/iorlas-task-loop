@@ -3,7 +3,6 @@ ledger row. The ADR is written under the task-loop state dir (the engine and `tl
 in the task-loop repo; a fix amends the bead's own text; demote and once record the outcome only.
 
 `Stick.REF` links the ask to a decision already in force (the one its repeat key matched, or the id named in `text`)."""
-import dataclasses
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -68,7 +67,7 @@ def ref(fx: Effects, raised: LedgerEntry, text: str) -> tuple[str, str]:
     if found is None or found.retired_t is not None:
         return "", "name a decision in force (ADR-n) to link this ask to" if not named else f"{named} is not a decision of this repo"
     if raised.ask not in found.refs:
-        store.put(dataclasses.replace(found, refs=[*found.refs, raised.ask]))
+        store.put(found.model_copy(update={"refs": [*found.refs, raised.ask]}))
     return found.id, ""
 
 

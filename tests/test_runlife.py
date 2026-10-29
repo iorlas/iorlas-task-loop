@@ -160,7 +160,7 @@ class BeatsAreNoEvents(unittest.TestCase):
         run.refresh()
         self.assertEqual([e["k"] for e in live_api.page(run)["events"]], ["run_start", "step_start", "warn"])
         self.assertEqual(dash.live.page(BEAD)[1]["state"], "live")
-        self.assertEqual(dash.runlogs.read(str(self.log))[-1].KIND, "warn")
+        self.assertEqual(dash.runlogs.read(str(self.log))[-1].kind, "warn")
 
     def test_liveness_reads_the_newest_records_after_the_log_rotates(self):
         self.log.parent.mkdir(parents=True)
