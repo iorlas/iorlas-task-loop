@@ -20,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # src/: a script r
 from taskloop.adapters import procs
 
 INSIDE = ('t=${TMPDIR:-/tmp}; rm -rf "$t/tl-w" "$t/tl-art"; mkdir -p "$t/tl-w" "$t/tl-art" && tar -x -C "$t/tl-w"'
-          ' && cd "$t/tl-w/$TL_BOX_CWD" && export TL_ARTIFACTS="$t/tl-art" && exec "$@"')
+          ' && cd "$t/tl-w/$TL_BOX_CWD" && export TL_ARTIFACTS="$t/tl-art" && exec "$@"')  # the image must not set TMPDIR
 ART_IN_BOX = "/tmp/tl-art"
 
 
@@ -62,6 +62,7 @@ def main(argv: list[str] | None = None) -> int:
     cmd = ["docker", "run", "--init", "-i", "--name", args.name, "-w", "/", "-e", "TL_BOX_CWD=" + args.cwd]
     for kv in args.env:
         cmd += ["-e", kv]
+    docker("rm", "-f", args.name)  # one left by a run that was SIGKILLed would refuse the name
     p = procs.spawn([*cmd, args.image, "sh", "-c", INSIDE, "sh", *args.cmd], stdin=subprocess.PIPE)
 
     def stop(signum: int, _frame: Any) -> None:
