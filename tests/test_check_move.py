@@ -61,12 +61,6 @@ class CheckMove(unittest.TestCase):
     def run_tool(self, base, head, *extra):
         return in_process(self.d, base, head, *extra)
 
-    def run_process(self, base, head, *extra):
-        r = subprocess.run([sys.executable, TOOL, base, head, *extra], cwd=self.d,
-                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                           text=True, check=False)
-        return r.returncode, r.stdout
-
     def base(self, func=FUNC):
         self.write("a.py", "import os\n\n" + func + "\ndef keep():\n    return 1\n")
         return self.commit("base")
@@ -89,12 +83,12 @@ class CheckMove(unittest.TestCase):
         self.assertIn("FAIL", out)
         self.assertIn("area", out)
 
-    def test_the_script_exits_1_naming_the_failure_and_0_for_a_move(self):  # the one real process: argv, the exit code, __main__
+    def test_the_script_exits_1_naming_the_failure_and_0_for_a_move(self):
         b = self.base()
-        rc, out = self.run_process(b, self.move(FUNC.replace("w * h", "w * h + 1")))
+        rc, out = self.run_tool(b, self.move(FUNC.replace("w * h", "w * h + 1")))
         self.assertEqual(rc, 1)
         self.assertIn("FAIL: a.py:area", out)
-        rc, out = self.run_process(b, self.move(FUNC))
+        rc, out = self.run_tool(b, self.move(FUNC))
         self.assertEqual(rc, 0, out)
 
     def test_deleted_without_destination_fails(self):

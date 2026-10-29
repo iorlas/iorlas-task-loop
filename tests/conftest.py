@@ -22,8 +22,6 @@ SERIAL = {
 # Files whose tests still start real processes and are not on procsim yet: marked `real_proc` here until they are (a file leaves the list
 # when its tests run on fakes).
 REAL_PROC = {
-    "test_release.py": "part 2 (INPROC)",
-    "test_check_move.py": "part 2 (INPROC)",
     "test_delegate.py": "part 2 (INPROC)",
 }
 # The release gate sets TL_WORKER_MB. A healthy worker peaks near 430 MB; a runaway test gets MemoryError, not the host's RAM.

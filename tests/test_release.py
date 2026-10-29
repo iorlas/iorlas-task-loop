@@ -20,6 +20,7 @@ import support.paths  # noqa: F401
 import contextlib
 
 from support.narrow import must
+from support.procsim import real_proc
 from support.release_world import IDENTITY, MARKET, PLUGIN, World, git
 
 from taskloop.adapters import landlock
@@ -28,9 +29,8 @@ from taskloop.app.release import clone, manifest, selfupdate
 
 ROOT = Path(__file__).resolve().parents[1]
 RELEASE = ROOT / "dev" / "release.py"
-RED_TESTS = ("import unittest\n\n\nclass R(unittest.TestCase):\n"
-             "    def test_red_one(self):\n        self.fail('boom')\n"
-             "    def test_red_two(self):\n        raise ValueError('bang')\n")
+PYTEST_RED = ("FAILED tests/test_red.py::R::test_red_one - AssertionError: boom\n"  # the summary lines of a real pytest run
+              "FAILED tests/test_red.py::R::test_red_two - ValueError: bang\n2 failed in 0.05s\n")
 
 
 @unittest.skipIf(os.name == "nt", "the lock is fcntl")
@@ -111,8 +111,8 @@ class Release(unittest.TestCase):
     def updates(self):
         return self.world.claude_log.count(["plugin", "update", "iorlas-task-loop@iorlas-marketplace"])
 
+    @real_proc("the launcher replaces itself (os.execv) by origin/main's release.py: an exec, the lock dropped before it")
     def test_a_launcher_behind_origin_main_execs_origin_mains_release_once_with_the_same_args_and_no_lock_held(self):
-        """Real process: the launcher replaces itself (os.execv) by origin/main's release.py and the lock is dropped before."""
         self.write(self.seed / "dev" / "release.py", "import os, sys\nprint('CHILD', sys.argv[1:], os.environ.get('TL_RELEASE_REEXEC'))\n"
                    "import fcntl, glob\nfor f in glob.glob(os.environ['XDG_CONFIG_HOME'] + '/task-loop/locks/release-*.lock'):\n"
                    "    fcntl.flock(os.open(f, os.O_RDWR), fcntl.LOCK_EX | fcntl.LOCK_NB)\nprint('LOCK TAKEN')\n")
@@ -488,11 +488,11 @@ class Release(unittest.TestCase):
         self.assertTrue((self.home / "claude/plugins/cache/iorlas-marketplace/iorlas-task-loop/0.1.1/.claude-plugin/plugin.json").is_file())
 
     def test_a_red_suite_writes_a_failure_record_with_the_failing_tests_and_comments_on_the_bead(self):
-        """Real process: dev/release.py with the real pytest run of the tree (its output, the failing ids, the saved log)."""
-        self.write(self.seed / "tests" / "test_red.py", RED_TESTS)
+        """The suite's output (pytest's summary lines): the failing ids, the saved log, the record."""
+        self.write(self.seed / "tests" / "RED", PYTEST_RED)
         self.commit(self.seed, "red")
         self.git("pull", "-q", "origin", "main", cwd=self.repo)
-        r = self.real_release("fix", "--bead", "tl-x2")
+        r = self.release("fix", "--bead", "tl-x2")
         self.assertNotEqual(r.returncode, 0)
         for want in ("FAILED tests/test_red.py::R::test_red_one", "FAILED tests/test_red.py::R::test_red_two", "AssertionError: boom",
                      "ValueError: bang", "2 failed"):
@@ -509,10 +509,10 @@ class Release(unittest.TestCase):
         self.assertEqual(rec["branch"], "main")
         self.assertTrue(any("test_red_one" in t for t in rec["tests"]), rec)
         self.assertTrue(Path(rec["log"]).is_file())
-        bd_log = (self.home / "bd.log").read_text()
-        self.assertIn("comments add tl-x2 release FAILED", bd_log)
+        (comment,) = self.world.store.said("comments", "add")
+        self.assertTrue(comment[2] == "tl-x2" and comment[3].startswith("release FAILED"), comment)
         self.assertTrue(r.stderr.strip().splitlines()[-1].startswith("release FAILED: nothing released: "))
-        self.assertNotIn("close tl-x2", bd_log)
+        self.assertEqual(self.world.store.said("close"), [])
 
     def test_a_later_success_replaces_the_failure_record(self):
         self.write(self.seed / "tests" / "RED", "FAILED tests/test_red.py::R::test_red_one - AssertionError: boom\n1 failed\n")
