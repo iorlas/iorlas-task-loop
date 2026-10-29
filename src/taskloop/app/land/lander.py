@@ -52,9 +52,9 @@ class Lander:
         return self.synced(self.land())
 
     def synced(self, sha: str) -> str:
-        """The land is done and the lock is let go: bd's data follows it (a failure there only warns)."""
+        """The land is done and the lock is let go: bd's data follows it (a failure there blocks the bead)."""
         if sha and not self.e.dry:
-            self.out.bd_sync()
+            self.out.bd_sync(sha)
         return sha
 
     def commit(self, bead: Any) -> None:

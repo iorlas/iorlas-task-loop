@@ -54,17 +54,18 @@ class Outbound:
         e.log.note(f"{' '.join(argv)}: {'ok' if rc == 0 else 'failed'} in {e.clock.monotonic() - t0:.1f}s")
         return rc, tail
 
-    def bd_sync(self) -> None:
-        """After the land, outside the lock: the Dolt push bd's own hook makes. A failure is a warning; no remote is a quiet no-op."""
+    def bd_sync(self, sha: str) -> None:
+        """After the land, outside the lock: the Dolt push bd's own hook makes. No remote is a quiet no-op; a failure blocks the bead
+        (tl-7y6.21: a warning let a box that cannot reach the remote keep every bead to itself). The rerun finds the land, pushes again."""
         e = self.e
         t0 = e.clock.monotonic()
         try:
             rc, text = e.store.dolt_push()
-        except Exception as err:  # the sync is a courtesy: nothing it does may undo a landed bead
+        except Exception as err:  # bd itself failed: the same block, the land stands
             rc, text = 1, str(err)
         if rc != 0 and no_dolt_remote(text):
             return
-        secs = e.clock.monotonic() - t0
-        e.log.note(f"bd dolt push: {'ok' if rc == 0 else 'failed'} in {secs:.1f}s")
+        e.log.note(f"bd dolt push: {'ok' if rc == 0 else 'failed'} in {e.clock.monotonic() - t0:.1f}s")
         if rc != 0:
-            e.warn(f"bd dolt push after the land failed (the land stands): {text.strip()[-200:]}")
+            raise e.blocked_for(f"failed: landed {sha[:12]}, but bd dolt push after the land failed (fix bd's Dolt remote, then rerun: "
+                                f"the rerun finds the land and pushes again)\n{text.strip()[-400:]}", "FAULT_LAND")

@@ -16,6 +16,7 @@ from support.logs import records
 from taskloop.adapters import gitrepo
 from taskloop.app.land import outbound
 from taskloop.app.land.lander import Lander
+from taskloop.app.run.blocked import Blocked, blocked_for
 
 ATTR = "*.bin filter=lfs diff=lfs merge=lfs -text\n"
 RUN = ({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
@@ -43,7 +44,7 @@ class Sync(EngineTest):
     def host(self, dry=False, result=(0, "")):
         notes, warns = [], []
         store = SimpleNamespace(dolt_push=mock.Mock(return_value=result))
-        e = SimpleNamespace(dry=dry, store=store, clock=SimpleNamespace(monotonic=lambda: 1.0), warn=warns.append,
+        e = SimpleNamespace(dry=dry, store=store, blocked_for=blocked_for, clock=SimpleNamespace(monotonic=lambda: 1.0), warn=warns.append,
                             log=SimpleNamespace(note=notes.append))
         return e, store, notes, warns
 
@@ -57,19 +58,23 @@ class Sync(EngineTest):
         Lander(e).synced("")
         store.dolt_push.assert_not_called()
 
-    def test_a_failed_sync_only_warns_and_a_missing_remote_is_quiet(self):
-        e, _, notes, warns = self.host(result=(1, "dolt: connection refused"))
-        self.assertEqual(Lander(e).synced("abc"), "abc")
-        self.assertEqual((len(warns), "failed in" in notes[0]), (1, True))
+    def test_a_failed_sync_blocks_the_bead_with_the_error_and_a_missing_remote_is_quiet(self):
+        e, _, notes, warns = self.host(result=(1, "dolt: could not read Username for 'https://github.com'"))
+        with self.assertRaises(Blocked) as cm:
+            Lander(e).synced("abc1234567890")
+        self.assertEqual((cm.exception.kind.name, warns, "failed in" in notes[0]), ("FAULT_LAND", [], True))
+        self.assertIn("landed abc123456789", cm.exception.why)
+        self.assertIn("could not read Username", cm.exception.why)
         e, _, notes, warns = self.host(result=(1, "Error: no remote configured"))
-        Lander(e).synced("abc")
+        self.assertEqual(Lander(e).synced("abc"), "abc")
         self.assertEqual((warns, notes), ([], []))
 
-    def test_a_sync_that_raises_only_warns(self):
-        e, store, _, warns = self.host()
+    def test_a_sync_that_raises_blocks_the_bead(self):
+        e, store, _, _ = self.host()
         store.dolt_push.side_effect = OSError("bd gone")
-        self.assertEqual(Lander(e).synced("abc"), "abc")
-        self.assertEqual(len(warns), 1)
+        with self.assertRaises(Blocked) as cm:
+            Lander(e).synced("abc")
+        self.assertIn("bd gone", cm.exception.why)
 
     no_repo = True
 
