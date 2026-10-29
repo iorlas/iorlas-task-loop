@@ -20,6 +20,7 @@ from support.engine_case import (
     finding,
     no_repo,
     pyc,
+    real_git,
     review,
     sh,
     stop,
@@ -33,7 +34,6 @@ import shlex
 import signal
 import subprocess
 import time
-import unittest
 from pathlib import Path
 from unittest import mock
 
@@ -91,24 +91,16 @@ class EngineLand1Test(EngineTest):
         self.assertIn(f"task-loop {want}", self.eng.log_path.read_text())
         self.assertEqual(r["version"], want)
 
-    @unittest.skipIf(os.name == "nt", "the git shim is a shell script")
     def test_a_fetch_that_loses_the_ref_lock_to_a_sibling_worktree_is_tried_again(self):
         # race test (tl-bxk.11.1): worktrees share refs/remotes/origin/main; a fetch at the same time as another
         # process's (a loop's queue, a slot reset, a release) fails "incorrect old value provided" though the ref is
         # then right. The reset's fetch failed the bead; the land's failed it as "fetch or rebase ... failed".
-        bin_ = Path(self.tmp.name, "bin")
-        bin_.mkdir()
-        real = subprocess.run(["which", "git"], capture_output=True, text=True, check=False).stdout.strip()
-        mark = Path(self.tmp.name, "fetches")
-        (bin_ / "git").write_text(
-            f'#!/bin/sh\ncase " $* " in *" fetch "*) echo x >> "{mark}"\n'
-            f'  [ $(( $(wc -l < "{mark}") % 2 )) -eq 1 ] && {{ echo "error: fetching ref refs/remotes/origin/main failed: '
-            f'incorrect old value provided" >&2; exit 1; }} ;;\nesac\nexec "{real}" "$@"\n')
-        (bin_ / "git").chmod(0o755)
-        with mock.patch.dict(os.environ, {"PATH": "{}{}{}".format(bin_, os.pathsep, os.environ["PATH"])}):
-            rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        assert self.sim
+        self.sim.fail(("fetch",), "error: fetching ref refs/remotes/origin/main failed: incorrect old value provided",
+                      when=lambda n: n % 2 == 1)  # every first try of a fetch loses
+        rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
-        self.assertGreaterEqual(len(mark.read_text().splitlines()), 4)  # reset and land: each lost once, then won
+        self.assertGreaterEqual(sum(c[:1] == ("fetch",) for c in self.sim.calls), 4)  # reset and land: each lost once, then won
         self.assertEqual(gitrepo.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
 
     def test_a_hung_gate_is_cut_at_gate_timeout_min_and_goes_red(self):
@@ -298,6 +290,7 @@ class EngineLand1Test(EngineTest):
         self.assertEqual(gitrepo.git("show", "origin/main:f.txt", cwd=str(self.wt)), "")
         self.assertEqual(gitrepo.git("status", "--porcelain", cwd=str(self.wt)), "")
 
+    @real_git("the land command is a child process that runs git push itself: only a real git answers it")
     def test_a_stop_during_the_push_waits_for_it_and_the_bead_lands(self):
         # a stop between the push and cmd_land left a landed bead failed, and the loop reopened it
         with self.stoppable():

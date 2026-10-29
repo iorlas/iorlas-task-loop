@@ -26,7 +26,7 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 # isort: split
 from contracts import samples as S
 
-from support import fake_route
+from support import fake_route, gitsim
 from support.builders import argv_cfg, cfg_with, make_engine
 from support.checkpoints import flat_ck, stored_ck
 from support.checks import res
@@ -277,6 +277,15 @@ def copy_origin_and_clone(home):
     cfg.write_text(cfg.read_text().replace(str(t / "o.git"), str(home / "o.git")))
 
 
+def real_git(reason):
+    """A test that runs on a real git repo (origin + clone) instead of the gitsim: `reason`, one line, is what only real git can
+    show. The marked cells are the integration set; every other engine test runs on the sim, and a real git spawned there fails it."""
+    def mark(fn):
+        fn.real_git = reason
+        return fn
+    return mark
+
+
 def no_repo(fn):
     """The test calls code directly and never touches the repo: setUp skips building origin and clone."""
     fn.no_repo = True
@@ -342,7 +351,17 @@ class EngineTest(unittest.TestCase):
         )  # a bd that slips past the store finds nothing to write
         self.env.start()
         self.wt = home / "wt"
-        if not getattr(getattr(self, self._testMethodName), "no_repo", False):
+        method = getattr(self, self._testMethodName)
+        self.sim = None
+        if not getattr(method, "real_git", None):
+            gitsim.reset()
+            self.sim = gitsim.Sim(self)
+            stack = contextlib.ExitStack()
+            self.addCleanup(stack.close)
+            self.sim.install(stack)
+            if not getattr(method, "no_repo", False):
+                gitsim.new_world(home)
+        elif not getattr(method, "no_repo", False):
             copy_origin_and_clone(home)
         self.store = FakeBeadStore()  # bd, show and comments of every engine this test builds (pass store=self.store)
         self.bd_calls = self.store.calls
@@ -380,6 +399,8 @@ class EngineTest(unittest.TestCase):
         applog.close_all()  # tl-64i: the held log handles live in the temp dir that goes now
         self.env.stop()
         self.tmp.cleanup()
+        if self.sim:
+            self.sim.check()
 
     def fake_bd(self, *a, **kw):
         return mock.Mock(returncode=0, stdout="", stderr="")  # the store records the call itself
