@@ -32,11 +32,9 @@ from taskloop.adapters import delegate as dl  # noqa: E402
 from taskloop.adapters import (  # noqa: E402
     gitrepo,
     ident,
-    installs,
 )
 from taskloop.adapters.fake_beads import FakeBeads  # noqa: E402
 from taskloop.app.launch import loop as wloop  # noqa: E402
-from taskloop.app.loop import versions  # noqa: E402
 from taskloop.app.loop.run import BeadRun, Where  # noqa: E402
 from taskloop.app.release import (  # noqa: E402
     catalog,
@@ -60,7 +58,7 @@ class Reload(te.EngineTest):
         te.EngineTest.setUp(self)
         self.cache = Path(self.tmp.name, "cache")
         here = self.install("0.1.0", fake=True)
-        self.here = here  # the install the engine under test runs from (wloop.vet_newer / build take it)
+        self.here = here  # the install the engine under test runs from (wloop.newer / build take it)
         p = mock.patch.object(ident, "plugin_version", return_value="0.1.0")
         p.start()
         self.addCleanup(p.stop)
@@ -76,7 +74,7 @@ class Reload(te.EngineTest):
 
     def install(self, ver, plant=None, fake=False):
         """An installed version: this checkout's skill and src (linked, not copied: only a planted break gets its own copy;
-        its selftest is the real one), or a stub for the running one."""
+        nothing tests it before a move), or a stub for the running one."""
         d = self.cache / ver / "skills" / "task-loop"
         if fake:
             d.mkdir(parents=True)
@@ -109,7 +107,7 @@ class Reload(te.EngineTest):
         def fake_exec(argv):
             self.execs.append({"argv": argv, "env": json.loads(os.environ["TL_REEXEC"]), "marker": reexec.read_reexec("t-1")})
         eng.exec_fn = fake_exec
-        eng.newer_fn = lambda: wloop.vet_newer(self.here)  # pyrefly: ignore[bad-assignment]
+        eng.newer_fn = lambda: wloop.newer(self.here)  # pyrefly: ignore[bad-assignment]
         return eng
 
     def patches(self, script, during=None):
@@ -138,7 +136,6 @@ class Reload(te.EngineTest):
                 p.stop()
 
     # -- point 5: a newer install mid-bead -> exec at the next boundary, same run id, finished on the new version
-    @te.real_git("the child tl.py selftest runs git init and git push itself")
     def test_a_newer_install_mid_bead_execs_at_the_next_step_boundary_and_the_bead_finishes_on_it_with_the_same_run(self):
         script = fake_route.Script({"plan": [te.PLAN], "write": [te.WRITE], "review": [te.CLEAN]})
         eng = self.engine_for(script)
@@ -192,8 +189,7 @@ class Reload(te.EngineTest):
             os.environ.pop("TL_REEXEC", None)
             self.assertFalse(entry._handed_slot("s2"))
 
-    @mock.patch("taskloop.adapters.installs.selftest_fails", return_value=None)  # a good install, whatever its selftest would say
-    def test_a_dry_run_and_a_run_not_started_by_run_task_never_move(self, _selftest):
+    def test_a_dry_run_and_a_run_not_started_by_run_task_never_move(self):
         self.install("0.2.0")
         script = fake_route.Script({"plan": [te.PLAN], "write": [te.WRITE], "review": [te.CLEAN]})
         eng = self.engine_for(script)
@@ -202,40 +198,17 @@ class Reload(te.EngineTest):
         self.assertEqual(self.execs, [])
         self.assertEqual([e for e in self.events() if e["kind"] == "reload"], [])
 
-    # -- a broken install keeps the old one running, one red event, tested once
-    @te.real_git("the child tl.py selftest runs git init and git push itself")
-    def test_a_broken_install_keeps_the_old_one_running_with_one_red_event_and_is_tested_once(self):
-        script = fake_route.Script({"plan": [te.PLAN], "write": [te.WRITE], "review": [te.CLEAN]})
-        eng = self.engine_for(script)
-        tests = []
-        real = wloop.installs.__globals__["Installs"].complete.__globals__["installs"].selftest_fails
-        with mock.patch("taskloop.adapters.installs.selftest_fails", side_effect=lambda here, wait: tests.append(here) or real(here, wait)):
-            rc = self.run_with(eng, script, during=lambda: self.install("0.2.0", plant=BREAK_PLAN))
-        self.assertEqual(rc, 0)  # finished on 0.1.0
-        self.assertEqual(self.execs, [])
-        red = [e for e in self.events() if e["kind"] == "reload_refused"]
-        self.assertEqual(len(red), 1)
-        self.assertEqual((red[0]["version"], red[0]["running"], red[0]["who"]), ("0.2.0", "0.1.0", "engine"))
-        self.assertIn("planted: cannot plan", red[0]["why"])
-        d = self.cache / "0.2.0"
-        here = d / "skills" / "task-loop"
-        self.assertIsNone(installs.import_fails(here, d / "src", versions.MODULES, 60))  # it imports fine; only planning fails
-        self.assertEqual(len(tests), 1)  # the next boundaries read bad-versions.json instead of testing it again
-        self.assertEqual([e["version"] for e in json.loads((ident.config_dir() / "bad-versions.json").read_text())["entries"]], ["0.2.0"])
-        self.assertEqual(json.loads((ident.config_dir() / "bad-versions.json").read_text())["entries"][0]["seen_by"], "0.1.0")
-        self.assertEqual([e for e in self.events() if e["kind"] == "reload"], [])
-
-    def test_a_refused_version_is_tried_again_when_it_is_installed_again_and_a_newer_one_is_tried(self):
+    def test_a_refused_version_is_skipped_until_it_is_installed_again_and_a_newer_one_is_taken(self):
+        inst = wloop.installs(wloop.cfgdir(), here=self.here)
         self.install("0.2.0", plant=BREAK_PLAN)  # a copy: a link would share the files the install key is made of
-        with (mock.patch("taskloop.adapters.installs.import_fails", return_value=None),  # the verdicts only
-              mock.patch("taskloop.adapters.installs.selftest_fails", side_effect=["planted: cannot plan", None, None])):
-            self.assertEqual(must(wloop.vet_newer(self.here))[:2], ("0.2.0", self.cache / "0.2.0"))
-            self.assertIsNone(wloop.vet_newer(self.here))  # refused, key unchanged: not looked at
-            shutil.rmtree(self.cache / "0.2.0")
-            self.install("0.2.0")  # the same number, re-released
-            self.assertIsNone(must(wloop.vet_newer(self.here))[2])
-            self.install("0.3.0")
-            self.assertEqual(must(wloop.vet_newer(self.here))[0], "0.3.0")
+        self.assertEqual(must(wloop.newer(self.here)), ("0.2.0", self.cache / "0.2.0"))
+        inst.record_bad("0.2.0", "run-task died (exit 1) 3 s after the exec into it")  # what the crash fallback writes
+        self.assertIsNone(wloop.newer(self.here))  # refused, key unchanged
+        shutil.rmtree(self.cache / "0.2.0")
+        self.install("0.2.0")  # the same number, re-released
+        self.assertEqual(must(wloop.newer(self.here))[0], "0.2.0")
+        self.install("0.3.0")
+        self.assertEqual(must(wloop.newer(self.here))[0], "0.3.0")
 
     # -- the crash after an exec: the loop puts the run back on the version it came from, once
     def test_a_run_task_that_dies_right_after_the_exec_is_restarted_once_on_the_old_version(self):

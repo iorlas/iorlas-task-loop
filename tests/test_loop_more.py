@@ -31,7 +31,6 @@ from taskloop.adapters import (  # noqa: E402
 )
 from taskloop.app.launch import loop as wloop  # noqa: E402
 from taskloop.app.loop.core import Core  # noqa: E402
-from taskloop.app.loop.versions import Installs  # noqa: E402
 from taskloop.cli import loop_cmd  # noqa: E402
 from taskloop.contracts import codec  # noqa: E402
 from taskloop.contracts.config import LoopConfig  # noqa: E402
@@ -341,7 +340,7 @@ class Moved(Exception):
 
 
 class LoopSelfUpdate(LoopBase):
-    """Between beads the loop re-execs into the newest complete install of the plugin (fake version trees)."""
+    """Between beads the loop re-execs into the newest install of the plugin (fake version trees)."""
 
     def setUp(self):
         super().setUp()
@@ -359,8 +358,8 @@ class LoopSelfUpdate(LoopBase):
         self.here = self.install("0.1.0")
         os.environ.pop("TL_LOOP_STATE", None)
 
-    def install(self, ver, tl_py="import sys\n", missing=(), loop_py=""):
-        return looptest.fake_install(self.cache, ver, tl_py, missing, loop_py)
+    def install(self, ver, tl_py="import sys\n"):
+        return looptest.fake_install(self.cache, ver, tl_py)
 
     def test_it_moves_to_a_newer_complete_install_between_beads_with_the_same_argv(self):
         self.beads({"x-1": [rec("landed")], "x-2": [rec("landed")]})
@@ -385,37 +384,6 @@ class LoopSelfUpdate(LoopBase):
         self.assertIn("loop: moving to 0.10.0 (was 0.1.0)", out.getvalue())
         self.assertIn("0.10.0", self.execs[0][1][1])
         self.assertEqual(self.started, [])  # the first look is before any bead
-
-    def test_an_incomplete_or_failing_install_is_ignored_and_warned_once_per_version(self):
-        self.beads({"x-1": [rec("landed")], "x-2": [rec("landed")]})
-        self.install("0.2.0", missing=("tl.py",))
-        self.install("0.3.0", tl_py="raise SystemExit(3)\n")
-        self.assertEqual(self.run_loop(), 0)
-        self.assertEqual(self.execs, [])
-        self.assertEqual([b for b, _ in self.started], ["x-1", "x-2"])
-        self.assertEqual(self.out.count("not moving to 0.3.0"), 1)  # three looks, one warn (and one check)
-        self.assertEqual(self.out.count("not moving to 0.2.0"), 1)  # once 0.3.0 failed, 0.2.0 is the newest left
-
-    def test_an_incomplete_newest_warns_once(self):
-        self.beads({"x-1": [rec("landed")], "x-2": [rec("landed")]})
-        self.install("0.2.0", missing=("tl.py",))
-        self.assertEqual(self.run_loop(), 0)
-        self.assertEqual(self.out.count("not moving to 0.2.0: tl.py is missing"), 1)
-
-    def test_a_half_copied_loop_module_is_not_moved_to(self):
-        self.beads({"x-1": [rec("landed")]})
-        self.install("0.2.0", loop_py="def broken(:\n")  # --help alone would pass; the import does not
-        self.assertEqual(self.run_loop(), 0)
-        self.assertEqual(self.execs, [])
-        self.assertIn("not moving to 0.2.0", self.out)
-
-    def test_an_install_without_plugin_json_is_not_moved_to(self):
-        self.beads({"x-1": [rec("landed")]})
-        self.install("0.2.0")
-        (self.cache / "0.2.0" / ".claude-plugin" / "plugin.json").unlink()
-        self.assertEqual(self.run_loop(), 0)
-        self.assertEqual(self.execs, [])
-        self.assertIn("plugin.json is missing", self.out)
 
     def pin(self, **v):
         (ident.config_dir() / "pinned.json").write_text(json.dumps(v))
@@ -484,18 +452,6 @@ class LoopSelfUpdate(LoopBase):
         self.assertEqual(os.path.realpath(self.execs[0][3]), os.path.realpath(start))
         self.assertIn(self.repo.name, self.execs[0][1])
 
-    def test_a_stop_written_during_the_check_cancels_the_move(self):
-        self.beads({"x-1": [rec("landed")]})
-        self.install("0.2.0")
-
-        def slow_check(d):
-            self.assertEqual(self.main(["stop", "--repo", str(self.repo)]), 0)
-        with mock.patch.object(Installs, "complete", side_effect=slow_check):
-            self.assertEqual(self.run_loop(), 0)
-        self.assertEqual(self.execs, [])
-        self.assertEqual(self.started, [])
-        self.assertIn("stopped on request", self.out)
-
     def test_a_state_in_an_old_shape_is_dropped_with_one_reload_record_and_a_clean_pass(self):
         self.beads({"x-1": [rec("landed")], "x-2": [rec("landed")]})
         os.environ["TL_LOOP_STATE"] = json.dumps({"ran": "many", "fails": ["x-0"], "later": [1]})
@@ -514,14 +470,6 @@ class LoopSelfUpdate(LoopBase):
         self.assertEqual(self.run_loop(), 0)
         self.assertIn("state handed over could not be read", self.out)
         self.assertEqual([b for b, _ in self.started], ["x-1"])
-
-    def test_a_help_that_hangs_is_not_moved_to(self):
-        self.beads({"x-1": [rec("landed")]})
-        self.install("0.2.0", tl_py="import time\ntime.sleep(60)\n")
-        (self.repo / ".task-loop.json").write_text(json.dumps({"slots": {"count": 2}, "loop": {"help_wait": 0.5}}))
-        self.assertEqual(self.run_loop(), 0)
-        self.assertEqual(self.execs, [])
-        self.assertIn("did not finish", self.out)
 
     def test_the_failure_counter_and_the_actor_survive_the_move(self):
         self.beads({"x-1": [rec("failed")], "x-2": [rec("failed")], "x-3": [rec("landed")]})

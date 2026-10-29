@@ -20,7 +20,7 @@ class Counters:
     ran: int = 0
     later: dict[str, float] = field(default_factory=dict)  # a paused or taken bead -> when to try it again
     pauses: dict[str, int] = field(default_factory=dict)
-    warned: list[str] = field(default_factory=list)  # installs not moved to
+    warned: list[str] = field(default_factory=list)  # once-per-loop-run warnings (a missing install dir)
     slot_quick: dict[str, list[str]] = field(default_factory=dict)  # slot -> the beads that failed in an instant there, in a row
     net_first: list[str] = field(default_factory=list)  # beads the network paused: they go first when it is back
     net_down_t: float = 0.0

@@ -188,8 +188,7 @@ class Loop(Core):
         if self.net_wait():
             return None
         self.refresh()
-        if self.maybe_move():
-            return None
+        self.maybe_move()
         self.start_worktree()
         self.reclaim()
         self.env.chores()
@@ -335,29 +334,20 @@ class Loop(Core):
                              "run_log": v.run_log, "why": v.why[:300]})
         self.say(f"{bead} {v.outcome}{': ' + v.why[:160] if v.why else ''}")
 
-    def maybe_move(self) -> bool:
+    def maybe_move(self) -> None:
         """Between beads: exec the target install with the loop's own argv and state. The pid stays, so what is keyed by it
-        (slot line, state file) carries over. A broken install is warned about once per version and never stops the loop.
-        True when a stop arrived during the check: the caller looks at it first."""
+        (slot line, state file) carries over. Nothing is tested first: a loop that breaks soon after goes back (fall_back)."""
         a, env, c = self.args, self.env, self.c
         if a.pin or not a.argv:
-            return False
-        found = self.installs.vet(set(c.warned))  # a version that failed is not looked at again (bad-versions.json)
+            return
+        found = self.installs.move_to()  # a version a run broke in soon after the move is skipped (bad-versions.json)
         gone = self.installs.dangling
         if gone and f"missing:{gone}" not in c.warned:  # once per loop run (the carry keeps it across a move), not per pass
             c.warned.append(f"missing:{gone}")
             self.say(f"warn: installed_plugins.json names {gone}, its directory is missing; falling back to the highest directory")
             env.event("install_missing", "", who="loop", version=gone, running=env.version, target=found.version if found else "")
         if not found:
-            return False
-        if found.why:
-            c.warned.append(found.version)
-            self.say(f"warn: not moving to {found.version}: {found.why}; staying on {env.version}")
-            env.event("reload_refused", "", who="loop", version=found.version, why=found.why[:300], running=env.version)
-            return False
-        if self.stop_mode():  # the check took a while; a stop written meanwhile is read by this process
-            return True
+            return
         self.say(f"moving to {found.version} (was {env.version})")
         env.event("reload", "", who="loop", old=env.version, new=found.version, code_dir=str(found.dir))
         self.exec_to(found.dir, back=str(self.installs.root))
-        return False

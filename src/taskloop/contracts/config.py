@@ -113,8 +113,6 @@ class LoopConfig:
     area_poll: float = 60
     area_say: float = 600
     fault_cooldown: float = 1800
-    selftest_wait: float = 30
-    help_wait: float = 20
     absent: float = 600  # ready beads, no live loop and no beat for this long: the loop is absent
     reload_fallback: float = 120  # a run-task that dies this soon after a re-exec is put back on the version it came from
     keep_days: float = 14  # `tl prune`: run data older than this goes (open or parked beads exempt), and a merged build tree idle this long

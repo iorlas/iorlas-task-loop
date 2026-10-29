@@ -1,22 +1,19 @@
 """Which install the loop runs on, and the moves between installs.
 
 The target is the version `installed_plugins.json` names (the owner's `tl pin` wins over it); without a readable entry, the
-highest version dir above the running one. A dir that is not installed is never a target. A target must import and pass its
-own selftest before the loop execs into it; a refusal is remembered (bad-versions.json) for as long as the install is the
-one that failed."""
+highest version dir above the running one. A dir that is not installed is never a target. Nothing is tested before a move: a
+move that breaks soon after goes back to the old install, and that version is remembered (bad-versions.json) for as long as
+the install is the one that broke."""
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from taskloop.adapters import installs
 from taskloop.contracts import paths
-from taskloop.contracts.config import LoopConfig
 from taskloop.contracts.loop import BadVersion, BadVersions
 from taskloop.contracts.stores import JsonStore
 
 CORE = ("tl.py",)
-MODULES = ("tl", "taskloop.app.launch.loop", "taskloop.app.run.engine")
 
 
 def version_key(name: str) -> tuple[int, ...] | None:
@@ -29,7 +26,6 @@ def version_key(name: str) -> tuple[int, ...] | None:
 class Target:
     version: str
     dir: Path
-    why: str | None = None  # why it is refused; None: usable
 
 
 def install_key(d: Path) -> str:
@@ -48,9 +44,9 @@ def install_key(d: Path) -> str:
 
 class Installs:
     def __init__(self, cfg: paths.ConfigDir, root: Path, installed: Callable[[], str], pinned: Callable[[], str],
-                 tune: Callable[[], LoopConfig] = LoopConfig, now: Callable[[], float] = time.time) -> None:
+                 now: Callable[[], float] = time.time) -> None:
         self.root, self.installed, self.pinned = root, installed, pinned  # root: the running install's dir
-        self.tune, self.now = tune, now
+        self.now = now
         self.bad = JsonStore(cfg.bad_versions(), BadVersions)
         self.dangling = ""  # the installed entry whose dir is gone, set by the last target() that fell through to the highest dir
 
@@ -92,27 +88,10 @@ class Installs:
                 best = (k, d)
         return (best[1].name, best[1]) if best else None
 
-    def complete(self, d: Path) -> str | None:
-        """None when the install in `d` looks usable, else why not: its plugin.json and core files exist and import, and its
-        selftest passes (an install that imports but cannot plan a bead is refused and recorded)."""
-        if not (d / ".claude-plugin" / "plugin.json").is_file():
-            return "plugin.json is missing"
-        here = d / "skills" / "task-loop"
-        for f in CORE:
-            if not (here / f).is_file():
-                return f"{f} is missing"
-        why = installs.import_fails(here, d / "src", MODULES, self.tune().help_wait)
-        if why is None:
-            fail = installs.selftest_fails(here, self.tune().selftest_wait)
-            why = f"selftest failed: {fail}" if fail else None
-        if why and not why.startswith("python did not start"):
-            self.record_bad(d.name, why)
-        return why
-
-    def vet(self, skip: set[str] | frozenset[str] = frozenset()) -> Target | None:
-        """The target with `why` set when it is refused. One test per call; the caller is a step boundary."""
+    def move_to(self, skip: set[str] | frozenset[str] = frozenset()) -> Target | None:
+        """The install to move to, or None."""
         found = self.target(skip)
-        return Target(found[0], found[1], self.complete(found[1])) if found else None
+        return Target(found[0], found[1]) if found else None
 
     def previous(self, before: str) -> str:
         """The highest installed version below `before` ("" when none)."""
