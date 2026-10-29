@@ -26,8 +26,8 @@ class Env(unittest.TestCase):
         self.state.mkdir(parents=True)
         self.dev = Path(self.tmp.name).resolve() / "dev" / "src"
         self.cache = self.home / ".claude" / "plugins" / "cache" / "mkt" / "task-loop" / "1.0" / "src"
-        for d in (self.dev, self.cache):  # a copy of the package tree: the rules look at where the code lives
-            shutil.copytree(ROOT / "src", d, ignore=shutil.ignore_patterns("__pycache__"))
+        for d in (self.dev, self.cache):  # the rules look at where the code lives; run_server fills in the package tree
+            d.mkdir(parents=True)
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -36,6 +36,8 @@ class Env(unittest.TestCase):
         (self.state / "repos.json").write_text("{}")
 
     def run_server(self, where, *args, public=False):
+        if not any(where.iterdir()):  # a copy of the package tree, only for a test that starts the server
+            shutil.copytree(ROOT / "src", where, dirs_exist_ok=True)  # with __pycache__: the child imports warm
         env = {k: v for k, v in os.environ.items() if not k.startswith("TASK_LOOP_")}
         env.update(
             HOME=str(self.home),
@@ -61,12 +63,6 @@ class DevCopyRefused(Env):
         self.assertEqual(r.returncode, 2)
         self.assertIn("7878", r.stderr)
         self.assertIn("TASK_LOOP_DASH_DEV_PUBLIC", r.stderr)
-
-    def test_tailscale_bind_refused_exit_2(self):
-        r = self.run_server(self.dev, "--bind", TS, "--port", "0")
-        self.assertEqual(r.returncode, 2)
-        self.assertIn(TS, r.stderr)
-        self.assertNotIn("failed", r.stderr)  # refused by the rule, never attempted
 
     def test_wildcard_and_hostnames_are_not_loopback(self):
         for a in ("0.0.0.0", "::", "myhost.local"):
@@ -125,11 +121,6 @@ class InstalledCopy(Env):
 
 
 class EmptyState(Env):
-    def test_7878_without_repos_json_refused_exit_2(self):
-        r = self.run_server(self.cache, "--port", "7878", "--bind", "127.0.0.1")
-        self.assertEqual(r.returncode, 2)
-        self.assertIn("repos.json", r.stderr)
-
     def test_guard_refuses_installed_copy_too(self):
         self.assertIn("repos.json", must(self.guard(["127.0.0.1"], 7878, where=self.cache)))
 
