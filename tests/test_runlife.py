@@ -12,6 +12,7 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402, F401
+from jsonl_log import JsonlLog  # noqa: E402
 from support.dashes import make_dash  # noqa: E402
 from support.logs import typed  # noqa: E402
 
@@ -23,6 +24,7 @@ from taskloop.contracts.enums import Outcome  # noqa: E402
 from taskloop.contracts.paths import ConfigDir  # noqa: E402
 from taskloop.contracts.runlife import BEAT_EVERY, CRASHED_AFTER, RETAIN, Liveness, liveness  # noqa: E402
 from taskloop.domain.report import matchers  # noqa: E402
+from taskloop_dash import jsonl  # noqa: E402
 
 BEAD, STAMP = "t-1", "20261026-100000"
 RUN = f"{BEAD}-{STAMP}"
@@ -142,6 +144,40 @@ class Sweep(unittest.TestCase):
             self.assertEqual(left, sorted(f"{r}.{e}" for r in ("t-2-20261020-100000", "t-3-20261029-100000")
                                           for e in ("jsonl", "stderr", "live")))
             self.assertTrue((cfg.live_dir("t-3-20261029-100000") / "01-write.jsonl").exists())
+
+
+class BeatsAreNoEvents(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        self.addCleanup(self.tmp.cleanup)
+        self.cfg = Path(self.tmp.name) / "task-loop"
+        self.t0 = 1_800_000_000.0
+        self.log = self.cfg / "engine" / f"{RUN}.jsonl"
+
+    def test_100_beats_between_two_events_are_two_events_and_no_timeline_row(self):
+        put(self.log, started(self.t0))
+        put(self.log, [typed("beat", self.t0 + 2 + i) for i in range(100)])
+        put(self.log, [typed("warn", self.t0 + 200, text="slow")])
+        os.utime(self.log, (self.t0 + 200, self.t0 + 200))
+        dash = make_dash(config=self.cfg, clock=lambda: self.t0 + 201)
+        got = dash.live.api_live(BEAD)
+        self.assertEqual([e["k"] for e in got["events"]], ["run_start", "step_start", "warn"])
+        self.assertEqual(got["liveness"], "live")
+        tl = json.dumps(dash.tasks.api_task_timeline("", BEAD))
+        self.assertNotIn("beat", tl)
+        self.assertEqual(dash.runlogs.read(str(self.log))[-1].KIND, "warn")
+
+    def test_liveness_reads_the_newest_records_after_the_log_rotates(self):
+        self.log.parent.mkdir(parents=True)
+        with JsonlLog.open(self.log, rotate_bytes=400, keep=3) as lg:
+            for i in range(30):
+                lg.append((json.dumps(typed("beat", self.t0 + i)) + "\n").encode())
+        self.assertTrue(self.log.with_name(self.log.name + ".1").exists())  # it did rotate
+        recs = jsonl.records(str(self.log), beats=True)
+        self.assertTrue(0 < len(recs) < 30)
+        self.assertEqual(recs[-1].t, self.t0 + 29)
+        self.assertIs(liveness(recs, self.t0 + 29 + 1), Liveness.LIVE)
+        self.assertIs(liveness(recs, self.t0 + 29 + N), Liveness.CRASHED)
 
 
 class LongLog(unittest.TestCase):

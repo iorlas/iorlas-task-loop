@@ -3,6 +3,8 @@
 from typing import Any
 
 from taskloop.contracts import log as rec
+from taskloop.contracts.runlife import Liveness, liveness
+from taskloop_dash import jsonl
 from taskloop_dash.cache import FileCache
 from taskloop_dash.views import detail
 from taskloop_dash.views import timeline as tlv
@@ -11,9 +13,13 @@ from taskloop_dash.views import timeline as tlv
 class RunLogs:
     def __init__(self, files: FileCache) -> None:
         self.files = files
+        self.life = FileCache()  # the same logs with their Beat records: what runlife.liveness reads
 
     def read(self, path: str) -> list[Any]:
         return tlv.read(path, self.files)
+
+    def liveness(self, path: str, now: float) -> Liveness:
+        return liveness(self.life.get(path, lambda p: jsonl.records(p, beats=True), []), now)
 
     def run_timeline(self, path: str, alive: bool = False, now: float | None = None) -> dict[str, Any]:
         return tlv.run_timeline(path, alive=alive, now=now, cache=self.files)

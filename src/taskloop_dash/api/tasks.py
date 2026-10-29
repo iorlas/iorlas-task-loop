@@ -4,7 +4,7 @@ import socket
 from typing import Any, Final
 
 from taskloop.contracts import log as rec
-from taskloop.contracts.runlife import Liveness, liveness
+from taskloop.contracts.runlife import Liveness
 from taskloop_dash.api.asks import Asks
 from taskloop_dash.api.lanes import Lanes
 from taskloop_dash.env import Env
@@ -115,7 +115,7 @@ class Tasks:
         span = (spans.get(bead) or [None])[-1]
         recs = self.runlogs.read(newest)
         run_rec = self.runlogs.run_start(recs)
-        lv = liveness(recs, self.env.clock())
+        lv = self.runlogs.liveness(newest, self.env.clock())
         alive = lv is Liveness.LIVE
         run = self.runlogs.run_timeline(newest, alive=alive)
         trace = tr.get(name)
@@ -150,7 +150,7 @@ class Tasks:
         spans, tr = self.records.task_spans(), self.records.traces()
         runs: list[Row] = []
         for p in paths:
-            alive = p == paths[-1] and liveness(self.runlogs.read(p), self.env.clock()) is Liveness.LIVE
+            alive = p == paths[-1] and self.runlogs.liveness(p, self.env.clock()) is Liveness.LIVE
             r = self.runlogs.run_timeline(p, alive=alive)
             r["because"] = tlv.because_text(r, runs[-1] if runs else None)
             runs.append(r)

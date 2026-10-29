@@ -15,7 +15,7 @@ from taskloop.contracts import paths
 from taskloop.contracts.bead import Comment
 from taskloop.contracts.codec import CodecError
 from taskloop.contracts.ids import loop_key
-from taskloop.contracts.log import EngineLog, decode
+from taskloop.contracts.log import Beat, EngineLog, decode
 from taskloop.contracts.runlife import Liveness, liveness
 from taskloop.domain.report import matchers
 
@@ -59,7 +59,7 @@ def crashes(repo: str, since: float, until: float, traces: list[dict[str, Any]],
         recs = typed_log(f)
         if liveness(recs, now) is not Liveness.CRASHED:
             continue
-        last = getattr(recs[-1], "text", "") if recs else ""
+        last = getattr(next((r for r in reversed(recs) if not isinstance(r, Beat)), None), "text", "")
         out[f.stem] = {"bead": bead, "t": t, "run": f.stem, "why": f"the engine log ends with no close: {last[:120]}"}
     for r in traces:  # the engine caught it and closed (engine.py: Engine.run): an engine bug all the same
         if overlaps(r, since, until) and (r.get("why") or "").startswith("failed: engine error"):

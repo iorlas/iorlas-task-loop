@@ -58,7 +58,7 @@ class Source:
         def build(r: Any, off: int) -> dict:
             return ev.worker_event(r, self.tag, off) if self.worker else ev.engine_event(r, off)
 
-        self.items += [(off, build(r, off)) for off, r in rows]
+        self.items += [(off, build(r, off)) for off, r in rows if not isinstance(r, log.Beat)]  # a Beat is no event: only liveness reads it
         if not self.worker:
             self.records += [r for _, r in rows]
 
