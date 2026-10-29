@@ -1,4 +1,7 @@
 """dev/check_move.py: a pure move passes; a planted edit or a deletion without a destination fails."""
+import contextlib
+import importlib.util
+import io
 import os
 import subprocess
 import sys
@@ -7,6 +10,18 @@ import unittest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TOOL = os.path.join(ROOT, "dev", "check_move.py")
+
+spec = importlib.util.spec_from_file_location("check_move", TOOL)
+check_move = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(check_move)
+
+
+def in_process(cwd, *argv):
+    """check_move.main(argv) from `cwd` in this process -> (exit code, stdout and stderr)."""
+    out = io.StringIO()
+    with contextlib.chdir(cwd), contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
+        return check_move.main(list(argv)), out.getvalue()
+
 
 FUNC = 'def area(self, w, h):\n    """Rectangle area."""\n    return self.scale * w * h\n'
 
@@ -41,6 +56,9 @@ class CheckMove(unittest.TestCase):
         return self.git("rev-parse", "HEAD")
 
     def run_tool(self, base, head, *extra):
+        return in_process(self.d, base, head, *extra)
+
+    def run_process(self, base, head, *extra):
         r = subprocess.run([sys.executable, TOOL, base, head, *extra], cwd=self.d,
                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                            text=True, check=False)
@@ -67,6 +85,14 @@ class CheckMove(unittest.TestCase):
         self.assertNotEqual(rc, 0)
         self.assertIn("FAIL", out)
         self.assertIn("area", out)
+
+    def test_the_script_exits_1_naming_the_failure_and_0_for_a_move(self):  # the one real process: argv, the exit code, __main__
+        b = self.base()
+        rc, out = self.run_process(b, self.move(FUNC.replace("w * h", "w * h + 1")))
+        self.assertEqual(rc, 1)
+        self.assertIn("FAIL: a.py:area", out)
+        rc, out = self.run_process(b, self.move(FUNC))
+        self.assertEqual(rc, 0, out)
 
     def test_deleted_without_destination_fails(self):
         b = self.base()
@@ -137,17 +163,16 @@ class CheckMove(unittest.TestCase):
             self.skipTest("trim.py history unavailable")
 
         def run(*extra):
-            return subprocess.run([sys.executable, TOOL, sha + "~1", sha, *extra], cwd=ROOT,
-                                  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, check=False)
-        r = run()
-        self.assertNotEqual(r.returncode, 0, r.stdout)
-        self.assertIn("engine.py:Engine.fix changed in place", r.stdout)
+            return in_process(ROOT, sha + "~1", sha, *extra)
+        rc, out = run()
+        self.assertNotEqual(rc, 0, out)
+        self.assertIn("engine.py:Engine.fix changed in place", out)
         allow = []
-        for line in r.stdout.splitlines():
+        for line in out.splitlines():
             if line.startswith("FAIL: "):
                 allow += ["--allow-edit", line[6:].split(" ")[0]]
-        r = run(*allow)
-        self.assertEqual(r.returncode, 0, r.stdout)
+        rc, out = run(*allow)
+        self.assertEqual(rc, 0, out)
 
 
 if __name__ == "__main__":
