@@ -52,8 +52,16 @@ class Looks:
         items = sorted(items, key=lambda i: (order[i["status"]], -(i["answered"] or 0)))
         for i in items:
             for sh in i["shots"]:
-                sh["url"] = "/api/look-shot?repo={}&path={}".format(quote(basename(path)), quote(sh["path"]))
+                sh["url"] = self.shot_url(basename(path), sh["path"])
         return {"repo": basename(path), "items": items, "summary": gallery.summary(items), "repos": repos}
+
+    @staticmethod
+    def shot_url(repo: str, path: str) -> str:
+        """A picture kept as an artifact ("artifact:<bead>/<name>") is served by /api/artifact, an old repo one by /api/look-shot."""
+        if path.startswith("artifact:") and "/" in path:
+            bead, name = path[9:].split("/", 1)
+            return f"/api/artifact?bead={quote(bead)}&name={quote(name)}"
+        return f"/api/look-shot?repo={quote(repo)}&path={quote(path)}"
 
     def look_shot(self, repo: str, rel: str) -> tuple[bytes, str] | None:
         path, items = self.look_items(repo)

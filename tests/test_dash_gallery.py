@@ -96,6 +96,10 @@ class Hardening(unittest.TestCase):
 
 
 class Signal(unittest.TestCase):
+    def test_a_picture_kept_as_an_artifact_is_served_by_the_artifact_url(self):
+        self.assertEqual(LOOKS.shot_url("demo", "artifact:tl-1/a b.png"), "/api/artifact?bead=tl-1&name=a%20b.png")
+        self.assertEqual(LOOKS.shot_url("demo", "docs/a.png"), "/api/look-shot?repo=demo&path=docs/a.png")
+
     def test_looks_waiting(self):
         self.assertEqual(signals.looks_waiting([], NOW), [])
         (s,) = signals.looks_waiting([{"bead": "tl-1", "filed": NOW - 3600}, {"bead": "tl-2", "filed": NOW - 60}], NOW)

@@ -26,8 +26,8 @@ class NewFiles:
         p = path.replace("\\", "/")
         if any(fnmatch.fnmatchcase(p, g) for g in e.cfg.untracked_ignore or []):
             return "ignored"
-        if p in e.look_paths or p.startswith(TASK_EXCLUDE):  # the look flow's own screenshot copies (copy_looks) are meant
-            return "meant" if p in e.look_paths else "ignored"
+        if p.startswith(TASK_EXCLUDE):
+            return "ignored"
         for q in (p, p[:-5]) if p.endswith(".meta") else (p,):
             if q in e.accepted_new or q + ".meta" in e.accepted_new or writer_names(q, e.writer_said) or self.planned(q):
                 return "meant"

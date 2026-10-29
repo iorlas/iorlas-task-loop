@@ -1,13 +1,14 @@
 """The pictures of a visual change: which stages are visual, the shot methods the repo can render, the engine's own renders,
-the writer's evidence, and the copies that land in the repo."""
-import fnmatch
+the writer's evidence, and the copies kept as artifacts."""
 import glob
 import os
 from pathlib import Path
 from typing import Any
 
-from taskloop.adapters import looks
+from taskloop.adapters import ident, looks
 from taskloop.app.look.keep import Keeper, place
+from taskloop.contracts.log import Artifacts
+from taskloop.contracts.paths import ConfigDir
 from taskloop.domain.checks.matchers import glob_re
 from taskloop.domain.look.matchers import image_names, safe_name
 
@@ -94,29 +95,37 @@ class Pictures:
     def look_ready(self, st: Any):
         return bool(self.shot_methods()) and self.stage_visual(st)
 
+    def artifacts_dir(self, bead: str | None = None) -> Path:
+        """Where this bead's pictures are kept (the dashboard serves them): outside the repo and every worktree."""
+        return ConfigDir(ident.config_dir()).artifacts(bead or self.e.bead)
+
+    def earlier_pictures(self, pattern: str) -> list[Path]:
+        """Pictures matching `pattern` in other beads' artifact folders of this repo's beads (same id prefix, e.g. "lifesim-"),
+        oldest first."""
+        e = self.e
+        root, prefix = self.artifacts_dir(e.bead).parent, e.bead.split("-")[0] + "-"
+        found = [f for d in root.glob(glob.escape(prefix) + "*") if d.name != e.bead and d.is_dir() and not d.is_symlink()
+                 for f in d.glob(pattern) if f.is_file() and not f.is_symlink()]
+        return sorted(found, key=lambda f: f.stat().st_mtime)
+
     def references_text(self):
-        """What the planner is told the task already has to look at: image files its text names, and the last landed shots."""
+        """What the planner is told the task already has to look at: image files its text names, and the last kept shots."""
         e = self.e
         found = []
         for rel in image_names(e.briefs.text()):
             if (Path(e.wt) / rel).is_file():
                 found.append(rel)
-        dest = (e.cfg.evidence_dir or "").strip("/")
-        before = sorted(Path(e.wt, dest).glob("*/*.png"))[-6:] if dest and Path(e.wt, dest).is_dir() else []
+        before = self.earlier_pictures("*.png")[-6:]
         if not (found or before):
-            return ("No reference image is in the task or under the repo's look reviews. If the task does not say what it should "
+            return ("No reference image is in the task or among the kept look pictures. If the task does not say what it should "
                     "look like (a mockup, a target, a screen to match), plan from the bead text and assume the look; "
                     "say the assumption in the summary.")
-        return f"Reference images the task has: {', '.join(found + [str(b.relative_to(e.wt)) for b in before])}."
+        return f"Reference images the task has: {', '.join(found + [str(b) for b in before])}."
 
     def before_shot(self, name: Any):
-        """A landed picture of the same screen (same file name under evidence_dir, another bead's folder): the newest."""
-        e = self.e
-        dest = (e.cfg.evidence_dir or "").strip("/")
-        if not dest or not Path(e.wt, dest).is_dir():
-            return None
-        cands = [f for f in Path(e.wt, dest).glob("*/" + glob.escape(name)) if f.parent.name != e.bead]
-        return max(cands, key=lambda f: f.stat().st_mtime) if cands else None
+        """A kept picture of the same screen (same file name in another bead's artifact folder): the newest."""
+        cands = self.earlier_pictures(glob.escape(name))
+        return cands[-1] if cands else None
 
     def render_shots(self, reqs: Any, rnd: Any) -> tuple[list[str], list[str]]:
         """([picture names under the evidence dir], [errors]): the requested shot methods run by the engine, outside any lane's
@@ -180,40 +189,27 @@ class Pictures:
         looks.downscale(f, base / name, int(e.cfg.look_max_px))
         return name
 
-    def lfs_ok(self, shots: Any):
-        """False when .gitattributes sends these pictures to LFS and git lfs is not installed."""
-        e = self.e
-        try:
-            rows = (Path(e.wt) / ".gitattributes").read_text(errors="replace").splitlines()
-        except OSError:
-            return True
-        lfs = [r.split()[0] for r in rows if r.split() and not r.startswith("#") and "filter=lfs" in r]
-        if not any(fnmatch.fnmatch(Path(sh).name, pat.split("/")[-1]) for sh in shots for pat in lfs):
-            return True
-        rc, _ = e.sh(["git", "lfs", "version"], pin=True)
-        return rc == 0
-
     def copy_looks(self):
-        """The screenshots of a visual change go into the repo (engine.evidence_dir/<bead>/), in the land's commit."""
+        """The screenshots of a visual change are kept like artifacts (config dir, the dashboard's bead page), never in the repo;
+        one Artifacts record names them."""
         e = self.e
-        vp, dest = self.visual_cfg(), (e.cfg.evidence_dir or "").strip("/")
-        shots = self.shots()
+        vp, shots = self.visual_cfg(), self.shots()
         if not (vp and shots and visual_hit(vp, e.checkout.changed_paths())):
             self.persist_look()
             return
-        if not dest:
-            e.warn("screenshots saved but engine.evidence_dir is not set: they are not kept in the repo")
-            return
-        if not self.lfs_ok(shots):
-            e.warn("engine.evidence_dir pictures go to git LFS (.gitattributes) but git lfs is not installed: "
-                      "no screenshot is copied into the repo")
-            return
-        e.look_paths = list[str]()
+        dest, names = self.artifacts_dir(), list[str]()
         for s in shots:
-            to = Path(e.wt) / dest / e.bead / s
-            to.parent.mkdir(parents=True, exist_ok=True)
-            place(e.evidence_dir / s, to, e.evidence_dir / s)  # the same bytes as the evidence file: a link, not a second copy
-            e.look_paths.append(f"{dest}/{e.bead}/{s}")
+            name = s.replace("/", "-")
+            try:
+                place(e.evidence_dir / s, dest / name, None)
+            except OSError as err:
+                e.warn(f"screenshot {s} not kept: {err}")
+                continue
+            names.append(name)
+        if names:
+            cur = e.steps.cur
+            e.log.emit(Artifacts(id=cur.id if cur else "land", step=cur.step if cur else "land", bead=e.bead, names=names))
+        e.look_paths = names
         self.persist_look()
 
     def persist_look(self):

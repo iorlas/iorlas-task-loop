@@ -5,6 +5,7 @@ import hashlib
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 from taskloop.adapters import bdcreate, beadtools, ident
 from taskloop.contracts.ports import BdFailure, BeadPatch, BeadQuery, NewBead
@@ -51,10 +52,11 @@ class OwnerLook:
         e = self.e
         parts = [f"## {e.bead}: {e.bead_title}"]
         if e.look_paths or e.look_unjudged or not e.unverified:
-            shots = "\n".join("- " + p for p in e.look_paths) or "(none)"
+            shots = "\n".join(f"- [{n}]({self.link(n)})" for n in e.look_paths) or "(none)"
             judged = " ".join(e.look_notes) or "(the reviewer gave no judgement)"
             unjudged = ("\n" + "\n".join(f"{w} ({u})" for u, w in e.look_unjudged.items()) + "\n") if e.look_unjudged else ""
-            parts.append(f"Screenshots of {e.bead} ({e.bead_title}), committed with its land:\n{shots}\n\nWhat the agent judged: {judged}\n"
+            parts.append(f"Screenshots of {e.bead} ({e.bead_title}), kept on the dashboard (bead page {e.bead}), not in the repo:\n"
+                         f"{shots}\n\nWhat the agent judged: {judged}\n"
                          f"{unjudged}\nNot automatable: the owner reviews the look and feel in a later batch.")
         if e.cases.cases_of("taste"):
             taste = "\n".join("- " + t for t in e.cases.cases_of("taste"))
@@ -62,6 +64,10 @@ class OwnerLook:
         if e.unverified:
             parts.append(self.unverified_text())
         return "\n".join(parts)
+
+    def link(self, name: str) -> str:
+        """The dashboard's own address of a kept picture (relative to the dashboard: the engine does not know its host)."""
+        return f"/api/artifact?bead={quote(self.e.bead)}&name={quote(name)}"
 
     def file_owner_look(self) -> None:
         """After the land: one bead per epic for the owner's later round (look and feel, and what no check could prove),
@@ -111,11 +117,11 @@ class OwnerLook:
         keeps one the owner already answered (good or redo)."""
         e = self.e
         shots: list[dict[str, str]] = []
-        for p in e.look_paths:
-            b = e.pictures.before_shot(Path(p).name)
+        for n in e.look_paths:
+            b = e.pictures.before_shot(n)
             if b:
-                shots.append({"path": str(b.relative_to(e.wt)), "role": "before", "label": Path(p).stem})
-            shots.append({"path": p, "role": "after", "label": Path(p).stem})
+                shots.append({"path": f"artifact:{b.parent.name}/{b.name}", "role": "before", "label": Path(n).stem})
+            shots.append({"path": f"artifact:{e.bead}/{n}", "role": "after", "label": Path(n).stem})
         mine = [{"id": f"{e.bead}#{k}", "bead": e.bead, "title": t, "note": " ".join(e.look_notes)[:600], "shots": shots, "status": "open"}
                 for k, t in enumerate(e.cases.cases_of("taste"), 1)]
         shown = beadtools.peek(e.store, bead_id)

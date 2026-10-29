@@ -32,7 +32,7 @@ M2 blocks M3 and M4. Passing M2 is what "runs reliably" means.
 - **Review is async.** The loop writes a summary line per bead; a supervisor (or later the reflect step, tl-05s)
   reviews it while the next bead runs. Engine fixes still go tests first.
 - **Look and feel is judged by the agent, held for the owner (tl-bxk.10.23).** A visual change (`engine.visual_paths`)
-  saves screenshots; the reviewer and verifier judge them; the land commits them to `engine.evidence_dir`; an
+  saves screenshots; the reviewer and verifier judge them; the land keeps them as bead artifacts (config dir, dashboard), never in the repo; an
   `owner-look` bead (waits on you) holds them for a later batch round. Nothing waits on the owner's eye.
 - **A Claude session is still needed until M4** to feed delegate the Claude usage windows (`tl.py usage`, tl-bxk.2).
 

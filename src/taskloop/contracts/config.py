@@ -134,7 +134,6 @@ class EngineConfig:
     test_pattern: str = TEST_PATTERN
     area_label_prefix: str = ""
     areas: dict[str, Any] = field(default_factory=dict)
-    evidence_dir: str = ""
     visual_paths: VisualConfig | None = None
     budget_usd: float = 15
     budget_min: float = 180

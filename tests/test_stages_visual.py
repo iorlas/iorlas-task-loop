@@ -69,7 +69,7 @@ class VisualWork(StagesTest):
         te.sh("git", "pull", "-q", "origin", "main", cwd=self.wt)
 
     def go(self, answers, table="shots.json", **cfg):
-        raw = {"visual_paths": self.VIS, "shot_table": table, "evidence_dir": "design/look-reviews"}
+        raw = {"visual_paths": self.VIS, "shot_table": table}
         return self.run_engine(answers, raw=raw, **cfg)
 
     SHOTS: ClassVar[Any] = [{"method": "ScreenShots", "args": [{"name": "name", "value": "main"}], "names": ["main screen"]}]
@@ -314,7 +314,7 @@ class VisualWork(StagesTest):
     def test_the_gallery_data_lands_in_the_owner_look_beads_metadata(self):
         e = make_engine(self.wt, store=self.store, attrs={
             "plan_data": dict(PLAN, cases=[{"criterion": "it reads well", "check": "", "class": "taste"}]),
-            "look_paths": ["design/look-reviews/t-1/main.png"],
+            "look_paths": ["main.png"],
             "look_notes": ["the main screen shows"],
             })
         sent = []
@@ -339,7 +339,7 @@ class VisualWork(StagesTest):
         entry = json.loads(sent[0][3])["looks"][-1]
         self.assertEqual((entry["id"], entry["bead"], entry["title"], entry["status"]), ("t-1#1", "t-1", "it reads well", "open"))
         self.assertEqual(entry["note"], "the main screen shows")
-        self.assertEqual(entry["shots"], [{"path": "design/look-reviews/t-1/main.png", "role": "after", "label": "main"}])
+        self.assertEqual(entry["shots"], [{"path": "artifact:t-1/main.png", "role": "after", "label": "main"}])
 
 
 class ResumeCount(StagesTest):

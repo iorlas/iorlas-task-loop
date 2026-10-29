@@ -1,5 +1,6 @@
-"""tl-bxk.10.23: look and feel. A visual change saves screenshots; the agent judges them; the land keeps them in the repo
-and files an owner-look bead for the owner's later round."""
+"""tl-bxk.10.23: look and feel. A visual change saves screenshots; the agent judges them; the land keeps them as artifacts
+(never in the repo) and files an owner-look bead for the owner's later round."""
+import os
 import sys
 import unittest
 from pathlib import Path
@@ -15,13 +16,14 @@ from support.checkpoints import read_ck
 from support.engine_case import BEAD, CLEAN, PLAN, WRITE, engine, verdict
 from support.fakes import as_bead
 
-from taskloop.adapters import gitrepo
+from taskloop.adapters import gitrepo, ident
 from taskloop.app.look import shots
 from taskloop.app.look.owner_look import OwnerLook
 from taskloop.app.run.closer import Closer
 from taskloop.app.wire import slots as wslots
-from taskloop.contracts import answers
-from taskloop.contracts.config import VisualConfig
+from taskloop.contracts import answers, codec
+from taskloop.contracts.config import RepoProfile, VisualConfig
+from taskloop.contracts.paths import ConfigDir
 from taskloop_dash.views import graph
 
 VISUAL = {"include": ["*.txt"], "exclude": ["docs/**"]}
@@ -123,14 +125,17 @@ class LookTest(T.EngineTest):
         self.assertIsNone(self.ask())
         self.assertIn("no screenshot to judge the look from", s.prompts[4])
 
-    def test_land_commits_the_screenshots_and_files_the_owner_look_bead(self):
+    def test_land_keeps_the_screenshots_as_artifacts_not_in_the_repo_and_files_the_owner_look_bead(self):
         bead = dict(BEAD, parent="t-0")
         r = dict(CLEAN, look="The home screen shows the new button, matching the reference.")
-        rc, _s = self.go({"plan": [PLAN], "write": [WRITE], "review": [r]}, first_shot=1, bead=bead,
-                        visual_paths=VISUAL, evidence_dir="design/look-reviews")
+        rc, _s = self.go({"plan": [PLAN], "write": [WRITE], "review": [r]}, first_shot=1, bead=bead, visual_paths=VISUAL)
         self.assertEqual(rc, 0, self.blocked)
-        shot = "design/look-reviews/t-1/home-screen.png"
-        self.assertEqual(gitrepo.git("show", "origin/main:" + shot, cwd=str(self.wt)), "PNG fake")  # pyrefly: ignore[missing-attribute]
+        tree = gitrepo.git("ls-tree", "-r", "--name-only", "origin/main", cwd=str(self.wt))
+        self.assertNotIn("home-screen.png", tree)  # pyrefly: ignore[unsupported-operation]
+        kept = ConfigDir(ident.config_dir()).artifacts("t-1")
+        self.assertEqual((kept / "home-screen.png").read_bytes(), b"PNG fake")
+        recs = [i.rec for i in self.eng.stores.run_log(self.eng.run_dir.name).read_from().items if i.rec.KIND == "artifacts"]
+        self.assertIn(["home-screen.png"], [getattr(x, "names", None) for x in recs])
         (c,) = self.creates()
         self.assertEqual(c[1], "Look review: Add f")
         self.assertEqual(c[c.index("--labels") + 1], "owner-look")
@@ -138,8 +143,33 @@ class LookTest(T.EngineTest):
         self.assertIn("related:t-1", c)
         self.assertIn("--no-inherit-labels", c)
         body = c[c.index("--description") + 1]
-        self.assertIn(shot, body)
+        self.assertIn("[home-screen.png](/api/artifact?bead=t-1&name=home-screen.png)", body)
+        self.assertNotIn("design/", body)
         self.assertIn("matching the reference", body)
+
+    def test_before_shots_and_references_come_from_other_beads_artifacts_of_the_same_prefix(self):
+        self.eng = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
+        self.eng.run_dir.mkdir(parents=True, exist_ok=True)
+        (self.eng.run_dir / "brief.md").write_text("no pictures named")
+        root = ConfigDir(ident.config_dir())
+        for bead, data in (("t-0", b"old"), ("t-1", b"mine"), ("zz-9", b"other repo")):
+            root.artifacts(bead).mkdir(parents=True)
+            (root.artifacts(bead) / "home.png").write_bytes(data)
+        os.utime(root.artifacts("t-0") / "home.png", (1, 1))
+        root.artifacts("t-5").mkdir(parents=True)
+        (root.artifacts("t-5") / "home.png").write_bytes(b"newer")
+        self.assertEqual(self.eng.pictures.before_shot("home.png"), root.artifacts("t-5") / "home.png")
+        self.assertIsNone(self.eng.pictures.before_shot("nothing.png"))
+        text = self.eng.pictures.references_text()
+        self.assertIn(str(root.artifacts("t-0") / "home.png"), text)
+        self.assertIn(str(root.artifacts("t-5") / "home.png"), text)
+        self.assertNotIn("zz-9", text)
+        self.assertNotIn(str(root.artifacts("t-1")), text)
+
+    def test_a_profile_that_still_sets_evidence_dir_is_refused(self):
+        with self.assertRaises(Exception) as cm:
+            codec.from_json(RepoProfile, {"engine": {"evidence_dir": "design/look-reviews"}})
+        self.assertIn("evidence_dir", str(cm.exception))
 
     def test_a_non_visual_answer_needs_no_look_field_and_a_visual_one_does(self):
         w = {k: v for k, v in WRITE.items() if k != "logic_only"}
@@ -170,7 +200,7 @@ class LookTest(T.EngineTest):
         r = dict(CLEAN, unchecked=[item], look="front smile")
         opn = {"items": [verdict(1, "open", why="cannot tell the rung")]}
         rc, s = self.go({"plan": [PLAN], "write": [WRITE, WRITE], "review": [r, r], "verify": [opn, opn]},
-                        first_shot=1, visual_paths=VISUAL, evidence_dir="design/look-reviews")
+                        first_shot=1, visual_paths=VISUAL)
         self.assertEqual(rc, 0, self.blocked)
         self.assertIsNone(self.ask())
         self.assertEqual(len([c for c in s.calls if c[0] == "worker"]), 2)  # one fix round, not more
@@ -180,7 +210,7 @@ class LookTest(T.EngineTest):
     def test_a_re_land_updates_the_owner_look_bead_instead_of_filing_again(self):
         bead = dict(BEAD, parent="t-0")
         rc, _s = self.go({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, first_shot=1, bead=bead,
-                        visual_paths=VISUAL, evidence_dir="design/look-reviews")
+                        visual_paths=VISUAL)
         self.assertEqual(rc, 0, self.blocked)
         self.bd_calls.clear()
         cast(Any, self.eng).look_notes, self.eng.look_filed = ["second look"], False  # a later run
@@ -195,10 +225,10 @@ class LookTest(T.EngineTest):
         with (mock.patch.object(Closer, "close"), mock.patch.object(OwnerLook, "file_owner_look", side_effect=SystemExit),
               self.assertRaises(SystemExit)):  # the process died after the push: no close, the checkpoint stays
             self.go({"plan": [PLAN], "write": [WRITE], "review": [dict(CLEAN, look="matches")]}, first_shot=1,
-                    visual_paths=VISUAL, evidence_dir="design/look-reviews")
+                    visual_paths=VISUAL)
         self.assertEqual(self.creates(), [])
         saved = read_ck(self.eng).state
-        self.assertEqual(saved.look_paths, ["design/look-reviews/t-1/home-screen.png"])
+        self.assertEqual(saved.look_paths, ["home-screen.png"])
         eng2 = engine.Engine("t-1", str(self.wt), self.eng.cfg, store=self.store)
         eng2.tree.reset(as_bead(BEAD))
         eng2.bead_title = "Add f"
@@ -229,15 +259,6 @@ class LookTest(T.EngineTest):
         for i in range(25):
             (d / (f"m{int(i):02d}.png")).write_bytes(b"x")
         self.assertEqual(len(self.eng.pictures.shots()), shots.MAX_SHOTS)
-
-    def test_no_lfs_means_no_copy(self):
-        self.eng = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
-        Path(self.wt, ".gitattributes").write_text("*.png filter=lfs diff=lfs merge=lfs -text\n")
-        with mock.patch.object(self.eng, "sh", return_value=(1, "")):
-            self.assertFalse(self.eng.pictures.lfs_ok(["a.png"]))
-        with mock.patch.object(self.eng, "sh", return_value=(0, "")):
-            self.assertTrue(self.eng.pictures.lfs_ok(["a.png"]))
-        self.assertTrue(self.eng.pictures.lfs_ok(["a.jpg"]))
 
     def test_the_dashboard_counts_owner_look_as_waits_on_you(self):
         self.assertIn("owner-look", graph.OWNER_LABELS)

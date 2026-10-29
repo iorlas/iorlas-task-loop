@@ -76,7 +76,7 @@ Rendering is the engine's job. Judging taste is the owner's job. The writer writ
 | 2 writer asks for shots | `SCHEMAS["write"].shots` `[{method, args[{name,value}], names}]`; `LOOK_WRITE_TABLE` replaces the old "save a screenshot" text when `engine.shot_table` is set |
 | 3 render loop | `Engine.look_step` after a visual write: static checks, `render_shots` (the table's commands only, `looks.build`), `judge_shots` (node `look`, role reviewer, other family, cwd = `<run>/looks/rN/` with shrunk copies, references, before pictures), at most `engine.look_rounds` (2) per stage, then the full checks once |
 | 4 taste | cases of class taste file into the owner-look bead; its metadata `looks` carries `[{id, bead, title, note, shots[{path, role before/after, label}], status}]` (`write_looks`); the gallery UI is dash-chain's |
-| 5 references | `references_text`: image paths in the task and last landed shots go to the planner, or the planner is told to ask "what should it look like?"; `before_shot`: the newest landed picture of the same name under `engine.evidence_dir` |
+| 5 references | `references_text`: image paths in the task and the last kept shots go to the planner, or the planner is told to ask "what should it look like?"; `before_shot`: the newest kept picture of the same name in another bead's artifacts (same id prefix); pictures are never committed to the repo |
 | 6 fail fast | a defect of round 2 that says the same as round 1's (`looks.same_defect`), and every defect left after the last round, is filed as a leftover `Look: ...` with the pictures; no third write |
 
 ### The shot table (`engine.shot_table`, a repo path read from the base branch)
