@@ -3,6 +3,7 @@
 
 import json
 import os
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -15,11 +16,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402, F401
 
 sys.path.insert(0, str(ROOT / "tests"))
-from support import dlcall, fake_route  # noqa: E402
+from support import (  # noqa: E402
+    dlcall,
+    fake_route,
+    procsim,
+)
 from support import engine_case as te  # noqa: E402
 from support.builders import make_engine  # noqa: E402
 from support.fakes import FakeBeadStore  # noqa: E402
-from support.procsim import real_proc  # noqa: E402
 
 from taskloop.adapters import delegate as dl  # noqa: E402
 from taskloop.adapters import (  # noqa: E402
@@ -31,12 +35,15 @@ from taskloop.app.run import engine  # noqa: E402
 from taskloop.app.wire import doctor  # noqa: E402
 from taskloop.app.wire import slots as wslots  # noqa: E402
 
-ENVSHOW = [
-    sys.executable,
-    "-c",
-    "import os; print('[%s|%s|%s]' % tuple(os.environ.get(k, '') for k in ('GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE')))",
-]
-ENVPAIR = [sys.executable, "-c", "import os; print('%s|%s' % (os.environ.get('GIT_DIR', ''), os.environ.get('GIT_WORK_TREE', '')))"]
+GIT_KEYS = ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE")
+
+
+def env_show(cwd, env):
+    return 0, "[" + "|".join(env.get(k, "") for k in GIT_KEYS) + "]"
+
+
+def env_pair(cwd, env):
+    return 0, env.get("GIT_DIR", "") + "|" + env.get("GIT_WORK_TREE", "")
 
 
 def sh(*a, cwd):
@@ -132,25 +139,24 @@ class SlotGitTest(unittest.TestCase):
         self.assertEqual(sh("git", "diff", "--cached", "--name-status", cwd=self.wt).split("\n"),
                          ["D\ta.txt", "A\tnew file.txt"])
 
-    @real_proc("the child's environment: the engine pins its own git, the worker and the checks get no GIT_DIR")
     @te.POSIX_CHECK
     def test_workers_and_checks_are_not_pinned_but_the_engines_own_git_is(self):
         route = Path(self.tmp.name) / "route.py"
-        route.write_text(
-            "import json, os, sys\nsys.path.insert(0, {!r})\nimport fake_route\n"
-            "env = [k for k in ('GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE') if k in os.environ]\n"
-            "print(json.dumps(fake_route.answer(fake_route.contract(), None, 'r1', False, {{'env': env}})))\n".format(
-                str(ROOT / "tests" / "support")
-            )
-        )
+        route.write_text("")
+
+        def worker(cwd, env):  # the route.py of the worker call: what git variables its environment holds
+            env_names = [k for k in GIT_KEYS if k in env]
+            return 0, json.dumps(fake_route.answer(fake_route.contract(), None, "r1", False, {"env": env_names}))
+        procsim.fake(shlex.join([sys.executable, str(route)]), worker, args=True)
+        show, pair = procsim.fake("env-show", env_show), procsim.fake("env-pair", env_pair)
         with mock.patch.dict(os.environ, {"GIT_DIR": "/x", "GIT_WORK_TREE": "/y", "GIT_INDEX_FILE": "/z"}):
             r = dlcall.call(dl.Resolved(route.parent, str(route), fake_route.CONTRACT, "explicit"), "worker", "p", {"type": "object"},
                             str(self.wt), runner.StreamRunner(Path(self.tmp.name) / "err.log", 30.0), timeout_s=30)
             eng = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)))
-            rc, tail = eng.sh(ENVSHOW)
+            rc, tail = eng.sh([show])
             self.assertEqual(r.data["env"], [])
             self.assertEqual((rc, tail), (0, "[||]"))
-            rc, tail = eng.sh(ENVPAIR, pin=True)
+            rc, tail = eng.sh([pair], pin=True)
         gitdir = os.path.realpath(str(self.repo / ".git" / "worktrees" / "s1"))
         d, w = tail.split("|")
         self.assertEqual((os.path.realpath(d), os.path.realpath(w)), (gitdir, str(self.wt)))

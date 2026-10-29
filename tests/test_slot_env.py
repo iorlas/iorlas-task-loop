@@ -1,6 +1,7 @@
 """tl-7y6.18: every command a bead runs in a slot gets that slot's environment (temp, dotnet, NuGet, compiler-server id, TL_SLOT)."""
 import copy
 import json
+import subprocess
 import sys
 import unittest
 from pathlib import Path
@@ -9,9 +10,9 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: F401
 from support import engine_case as te
-from support import fake_route
+from support import fake_route, procsim
 from support.builders import make_engine
-from support.engine_case import CLEAN, PLAN, WRITE, pyc, real_git, real_proc
+from support.engine_case import CLEAN, PLAN, WRITE, real_git
 
 from taskloop.app.checks.container import Box
 from taskloop.contracts import config
@@ -21,8 +22,17 @@ KEYS = ("TMPDIR", "TMP", "TEMP", "DOTNET_CLI_HOME", "NUGET_SCRATCH", "NUGET_HTTP
         "SharedCompilationId", "MSBUILDNODEHANDSHAKESALT", "TL_SLOT")
 
 
-def dumper(out):
-    return ["python3", "-c", f"import os,json; open({str(out)!r},'w').write(json.dumps(dict(os.environ)))"]
+def dumper(name, out, then=None):
+    """A procsim fake command `name` that writes the environment it was given to `out`, then runs `then(cwd)`."""
+    def run(cwd, env):
+        out.write_text(json.dumps(dict(env)))
+        return then(cwd) if then else (0, "")
+    return procsim.fake(name, run)
+
+
+def push(cwd):
+    done = subprocess.run(["git", "push", "-q", "origin", "HEAD:main"], cwd=cwd, capture_output=True, text=True, check=False)
+    return done.returncode, done.stdout + done.stderr
 
 
 class Pure(unittest.TestCase):
@@ -47,7 +57,6 @@ class Pure(unittest.TestCase):
         self.assertEqual(ok.engine.slot_env["K"], "{slot}-{slot_dir}-{repo}")
 
 
-@real_proc("the environment of every spawn path (check, gate, land, worker) is what a real child reads")
 class EverySpawnPath(te.EngineTest):
     def dumps(self, name):
         return json.loads((Path(self.tmp.name) / name).read_text())
@@ -56,16 +65,15 @@ class EverySpawnPath(te.EngineTest):
     def test_checks_gate_land_and_the_worker_get_the_slot_values(self):
         out = lambda n: Path(self.tmp.name) / n  # noqa: E731
         plan = copy.deepcopy(PLAN)
-        plan["stages"][0]["checks"] = [pyc(f"import os,json; open({str(out('check'))!r},'w').write(json.dumps(dict(os.environ)))")]
+        plan["stages"][0]["checks"] = [dumper("dump-check", out("check"))]
         seen = []
         real = fake_route.Script.__call__
         def spy(script, cmd, **kw):
             seen.append(kw["env"])
             return real(script, cmd, **kw)
-        dump = f"import os,json; open({str(out('land'))!r},'w').write(json.dumps(dict(os.environ)))"
-        land = ["sh", "-c", f"python3 -c \"{dump}\"; git push -q origin HEAD:main"]
         with mock.patch.object(fake_route.Script, "__call__", spy):
-            rc, _ = self.run_engine({"plan": [plan], "write": [WRITE], "review": [CLEAN]}, gate=dumper(out("gate")), land=land,
+            gate, land = dumper("dump-gate", out("gate")), dumper("dump-land", out("land"), push)
+            rc, _ = self.run_engine({"plan": [plan], "write": [WRITE], "review": [CLEAN]}, gate=gate, land=land,
                                     slot_env={"MY": "{repo}/{slot}"})
         self.assertEqual(rc, 0, self.blocked)
         slot = self.wt.name
