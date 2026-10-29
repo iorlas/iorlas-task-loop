@@ -1,22 +1,30 @@
 """Delegate: the shared contract on the fake and on RouteDelegate (against stub_route.py, a python script), wire-mapping
 checks, the failures only a real process has, and logic tests on the fake."""
+import contextlib
+import io
 import json
+import os
 import sys
 import tempfile
 import unittest
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support.tags import contract, domain
 
+from ports import stub_route
 from ports.delegate_contract import SCHEMA, DelegateContract, req
-from taskloop.adapters import delegate_wire
+from taskloop.adapters import delegate_route, delegate_wire
+from taskloop.adapters.procs import Ran
 from taskloop.adapters.delegate_route import RouteDelegate
 from taskloop.adapters.delegate_wire import answer_status
 from taskloop.adapters.fake_delegate import FakeDelegate, Step, done, stopped
 from taskloop.contracts import codec
+from taskloop.contracts.delegate import LiveCmdStart, LiveEnd, LiveMsg
 
 STUB = str(Path(__file__).parent / "stub_route.py")
 
@@ -44,11 +52,28 @@ class FakeDelegateContract(DelegateContract, unittest.TestCase):
         return [{"role": c.req.role, "task": c.req.task, "brief": c.brief, "schema": c.schema} for c in self.fake.calls]
 
 
+def stub_in_process(argv: list[str], cwd: str | None, env: Mapping[str, str] | None, timeout_s: float, tick: Any = None) -> Ran:
+    """procs.capture for RouteDelegate with stub_route.main(argv) run in this process (argv is `python route.py ...`); the live file
+    is drained once the call ends, as capture's tick does after the child."""
+    out = io.StringIO()
+    with mock.patch.dict(os.environ, env or {}), contextlib.redirect_stdout(out):
+        code = stub_route.main(list(argv[2:]))
+    if tick:
+        tick()
+    return Ran(code, out.getvalue(), "", 0.0, False)
+
+
 class RouteHarness:
+    IN_PROCESS = True  # the stub runs in this process; a class that sets False starts it as route.py is started
+
     def setUp(self) -> None:
         self.tmp = tempfile.TemporaryDirectory()
         self.script = Path(self.tmp.name, "script.json")
         self.addCleanup(self.tmp.cleanup)  # type: ignore[attr-defined]
+        if self.IN_PROCESS:
+            p = mock.patch.object(delegate_route, "run_group", stub_in_process)
+            p.start()
+            self.addCleanup(p.stop)  # type: ignore[attr-defined]
 
     def write(self, **script: Any) -> None:
         self.script.write_text(json.dumps(script), encoding="utf-8")
@@ -56,14 +81,13 @@ class RouteHarness:
     def route(self, **kw: Any) -> RouteDelegate:
         return RouteDelegate(STUB, env={"STUB_SCRIPT": str(self.script)}, **kw)
 
+    def make(self, *steps: Step) -> RouteDelegate:
+        self.write(answer=answer_of(steps[0]), live=[wire_line(e) for e in steps[0].events])
+        return self.route()
+
 
 @contract
 class RouteDelegateContract(RouteHarness, DelegateContract, unittest.TestCase):
-    def make(self, *steps: Step) -> RouteDelegate:
-        self.write(answer=answer_of(steps[0]), live=[wire_line(e) for e in steps[0].events])
-        self.steps = steps
-        return self.route()
-
     def seen(self) -> list[dict[str, Any]]:
         rows = [json.loads(x) for x in Path(str(self.script) + ".calls").read_text(encoding="utf-8").splitlines()]
         return [{"role": r["argv"][r["argv"].index("run") + 1], "task": r["argv"][r["argv"].index("--task") + 1],
@@ -71,6 +95,31 @@ class RouteDelegateContract(RouteHarness, DelegateContract, unittest.TestCase):
 
     def test_steps_play_in_order_and_the_last_repeats(self) -> None:
         self.skipTest("one script per process: sequencing is the fake's feature")
+
+
+@contract
+class RouteDelegateProcess(RouteHarness, unittest.TestCase):
+    """Real processes: what only a child has (argv and stdout through a pipe, the live file tailed while it runs, the engine's stop)."""
+    IN_PROCESS = False
+
+    def test_the_child_speaks_contract_3_and_its_stdout_is_the_answer(self) -> None:
+        got = self.make(done({"x": 1}, "all good", ref="r-1"))
+        self.assertEqual(got.speaks(), 3)
+        res = got.run(req(), "do it", SCHEMA)
+        self.assertEqual((answer_status(res), res.data, res.text, res.ref, res.stop), ("done", {"x": 1}, "all good", "r-1", None))
+
+    def test_live_events_arrive_in_order_before_the_result(self) -> None:
+        events = (LiveCmdStart(t=1.0, id="c1", text="ls"), LiveMsg(t=2.0, text="hi"), LiveEnd(t=3.0, status="done", secs=2.0))
+        seen: list[Any] = []
+        self.make(done(None, "ok", *events, ref="r")).run(req(), "b", SCHEMA, seen.append)
+        self.assertEqual(seen, list(events))
+
+    def test_a_child_past_the_deadline_is_stopped(self) -> None:
+        self.write(answer=None, sleep=30)
+        got = self.route(timeout_s=0.5, backstop_s=0.0).run(req(), "b", SCHEMA)
+        assert got.stop is not None, got
+        self.assertEqual((answer_status(got), got.stop.reason), ("timeout", "timeout"))
+        self.assertLess(got.secs, 5)
 
 
 @contract
@@ -94,11 +143,6 @@ class RouteDelegateFailures(RouteHarness, unittest.TestCase):
     def test_a_malformed_stop_is_a_violation(self) -> None:
         self.assertEqual(self.stop_of(answer={"contract": 3, "stop": {"reason": "x", "scope": "galaxy"}}).stop.reason,
                          "contract_violation")
-
-    def test_a_child_past_the_deadline_is_stopped(self) -> None:
-        got = self.stop_of(answer=None, sleep=30)
-        self.assertEqual((answer_status(got), got.stop.reason), ("timeout", "timeout"))
-        self.assertLess(got.secs, 5)
 
     def test_the_old_contract_is_visible_to_the_gate(self) -> None:
         self.write(contract=2)
