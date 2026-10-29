@@ -44,7 +44,8 @@ class Host(SimpleNamespace):
         def stop_deferred():
             yield []
         super().__init__(
-            git=git.git, sh=git.sh, cfg=SimpleNamespace(base="origin/main", gate="", land=["git", "push", "-q", "origin", "HEAD:main"]),
+            git=git.git, sh=git.sh, cfg=SimpleNamespace(base="origin/main", gate="", land_optimistic_tries=2,
+                                                         land=["git", "push", "-q", "origin", "HEAD:main"]),
             bead="t-1", dry=False, dry_run=False, landed_sha="", pending_land_validation="", fixes=0,
             steps=SimpleNamespace(begin=lambda *a, **k: None, outcome=lambda *a: None, move=lambda *a: None),
             newfiles=SimpleNamespace(quarantine_strays=lambda: None),

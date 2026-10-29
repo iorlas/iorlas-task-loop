@@ -12,7 +12,7 @@
 {"v": 2, "kind": "check_end", "t": 1793050200.5, "id": "k5.1", "exit": 1, "status": "failed", "tries": 2, "secs": 43.4, "wall_hit": true}
 {"v": 2, "kind": "gate_start", "t": 1793050200.5, "cmd": "just check", "log": "g.log", "tree": "deadbeef"}
 {"v": 2, "kind": "gate_end", "t": 1793050200.5, "exit": 0, "secs": 2101.0, "skipped": false}
-{"v": 2, "kind": "land_try", "t": 1793050200.5, "n": 2, "base_before": "1a2b3c4d5e6f", "base_after": "6f5e4d3c2b1a", "rebase_moved": true, "failing": "gate"}
+{"v": 2, "kind": "land_try", "t": 1793050200.5, "n": 2, "base_before": "1a2b3c4d5e6f", "base_after": "6f5e4d3c2b1a", "rebase_moved": true, "failing": "gate", "gate": "outside"}
 {"v": 2, "kind": "wait_start", "t": 1793050200.5, "id": "w1", "what": "lane", "holder": "", "until": 1793050260.5}
 {"v": 2, "kind": "wait_end", "t": 1793050200.5, "id": "w1", "secs": 60.0, "in_budget": true}
 {"v": 2, "kind": "lock", "t": 1793050200.5, "what": "land", "holder": "tl-7y6.1.2"}

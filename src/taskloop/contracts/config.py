@@ -112,6 +112,7 @@ class EngineConfig:
 
     gate: list[str] = field(default_factory=list)  # argv; empty: no gate
     land: list[str] = field(default_factory=lambda: ["git", "push", "origin", "HEAD:main"])
+    land_optimistic_tries: int = 2  # gate re-runs outside the land lock when main moved under it, then inside (0: inside)
     base: str = "origin/main"
     check_links: bool = True
     pick_label: str = ""

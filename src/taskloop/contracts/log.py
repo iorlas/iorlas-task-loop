@@ -146,7 +146,8 @@ class LandTry(LogRec):
     base_before: str = ""
     base_after: str = ""
     rebase_moved: bool = False
-    failing: str = ""  # "gate", "conflict" or "verify" when the try ended in a fix round; "" when it went on to the push
+    failing: str = ""  # "gate", "conflict" or "verify": a fix round; "stale": main moved under the outside gate; "": on to the push
+    gate: str = ""  # where the gate ran: "outside" the lock, "inside" it, "cached" (passed on this tree and base before); "" none
 
 
 @record

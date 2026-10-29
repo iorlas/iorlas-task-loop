@@ -1,6 +1,7 @@
-"""The land: one commit per task, then (one land at a time per repo) fetch, rebase, the repo's checks again after a lost push race, the
-gate, and the push. A red gate, a conflict or red checks are fixed outside the lock; a rejected push tries again (three times); a network
-error rests until the network is back."""
+"""The land: one commit per task, then fetch, rebase and the gate outside the land lock (land_optimistic_tries), then (one land at a time
+per repo) fetch, rebase, the repo's checks again after a lost push race, the gate only when main moved under the outside gate and the
+tries are used up, and the push. A red gate, a conflict or red checks are fixed outside the lock; a rejected push tries again (three
+times); a network error rests until the network is back. The pushed tree is always one the gate passed on the same base."""
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from typing import Any
@@ -21,6 +22,7 @@ class Land:
     pushes: int = 0  # rejected pushes so far
     flaky: int = 0  # network errors on the push while the network looked up
     net_failed: bool = False  # the last push died of the network: look again before pushing
+    moved: int = 0  # times the lock was let go because main moved under the gate: the gate runs outside again (land_optimistic_tries)
 
 
 class Lander:
@@ -92,14 +94,58 @@ class Lander:
                     raise e.blocked_for(f"paused: no network for the land push after {waited} s; the branch is kept, the next run lands it",
                                         "PAUSE_NETWORK")
                 resting = False
+            if self.optimistic(st):
+                problem = self.outside(st)  # fetch, rebase and the gate without the lock
+                if problem is not None:
+                    self.fix_outside_lock(problem)
+                    continue
             with self.lock():
                 sha, problem = self.tries(st)
             if sha:
                 return sha
             if problem is None:
                 resting = True
-                continue
-            self.fix_outside_lock(problem)
+            elif problem.kind != "stale":  # stale: main moved under the gate, the lock is let go and the gate runs outside again
+                self.fix_outside_lock(problem)
+
+    def optimistic(self, st: Land) -> bool:
+        """The gate runs before the lock: there is a gate, tries are allowed, and no push may have gone through unseen."""
+        e = self.e
+        tries = int(e.cfg.land_optimistic_tries)
+        return bool(e.cfg.gate) and tries > 0 and st.moved <= tries and not st.net_failed
+
+    def outside(self, st: Land) -> Problem | None:
+        """Without the lock: fetch, rebase, gate. -> the problem for a fix round, or None (the gate is cached for tree + base)."""
+        e = self.e
+        e.steps.begin("land", f"land (gate before the lock, try {st.pushes + 1})", **{"try": st.pushes + 1})
+        e.newfiles.quarantine_strays()
+        before, head = e.git("rev-parse", e.cfg.base), e.git("rev-parse", "HEAD")
+        rc, tail = e.checkout.fetch()
+        problem = self.rebase(rc, tail)
+        where = ""
+        if problem is None:
+            where = "cached" if self.gate.green(e.git("rev-parse", "HEAD^{tree}")) else "outside"
+            problem = self.gate.run()
+        self.emit(st, before, head, problem, where)
+        return problem
+
+    def emit(self, st: Land, before: str, head: str, problem: Problem | None, where: str) -> None:
+        e = self.e
+        e.log.emit(rec.LandTry(n=st.pushes + 1, base_before=before[:12], base_after=e.git("rev-parse", e.cfg.base)[:12],
+                               rebase_moved=e.git("rev-parse", "HEAD") != head, failing=problem.kind if problem else "", gate=where))
+
+    def placing(self, st: Land) -> str:
+        """Where the gate runs in the lock: "" no gate, "cached" it passed on this tree and base, "stale" main moved under the outside gate
+        (let the lock go, gate outside again), "inside" the tries are used up: gate here, as a busy main must not starve a bead."""
+        e = self.e
+        if not e.cfg.gate:
+            return ""
+        if self.gate.green(e.git("rev-parse", "HEAD^{tree}")):
+            return "cached"
+        if st.moved < int(e.cfg.land_optimistic_tries):
+            st.moved += 1
+            return "stale"
+        return "inside"
 
     def tries(self, st: Land) -> tuple[str, Problem | None]:
         """Inside the lock: an initial push plus at most two main-moved retries. -> (sha, None) landed; ("", problem) to fix outside the
@@ -114,13 +160,18 @@ class Lander:
                 found = self.already(fetch=False)  # an earlier push of this land may have gone through
                 if found:
                     return self.found(found), None
+                st.net_failed = False  # looked: not landed
             problem = self.rebase(rc, tail)
+            where = self.placing(st) if problem is None else ""
+            if where == "stale":
+                problem = Problem("stale", "")
             if problem is None and st.pushes:
                 problem = self.recheck(st)
-            if problem is None and e.cfg.gate:
+            if problem is None and where == "cached":
+                e.log.note(f"gate passed outside the lock on this tree and base ({e.git('rev-parse', 'HEAD^{tree}')[:12]}): pushing")
+            elif problem is None and where:
                 problem = self.gate.run()
-            e.log.emit(rec.LandTry(n=st.pushes + 1, base_before=before[:12], base_after=e.git("rev-parse", e.cfg.base)[:12],
-                                   rebase_moved=e.git("rev-parse", "HEAD") != head, failing=problem.kind if problem else ""))
+            self.emit(st, before, head, problem, "" if where == "stale" else where)
             if problem is not None:
                 return "", problem
             sha, again = self.push(st)

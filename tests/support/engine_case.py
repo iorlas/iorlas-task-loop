@@ -546,6 +546,7 @@ class EngineTest(unittest.TestCase):
     def run_push_race(self, rejections=1, failure="", plan=PLAN, resume_failed_fix=False, **cfg):
         """Advance a local remote immediately before each rejected push, under the real land lock (support/push_race.py)."""
         self.race_runs = getattr(self, "race_runs", 0) + 1
+        cfg.setdefault("land_optimistic_tries", 0)  # these cells: the gate inside one lock (the outside gate: test_gate_outside_lock)
         race = PushRace(self, self.race_runs, rejections, failure)
         self.race_origin = race.origin
         return race.run(plan, resume_failed_fix, cfg, CLEAN, WRITE, review(findings=[finding("high")]))

@@ -926,6 +926,7 @@
     "origin",
     "HEAD:main"
    ],
+   "land_optimistic_tries": 2,
    "base": "origin/main",
    "check_links": true,
    "pick_label": "auto",
