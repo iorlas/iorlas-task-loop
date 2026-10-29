@@ -106,8 +106,10 @@ class Land(EngineTest):
         with self.fake_lfs():
             rc, _ = self.run_engine(RUN)
         self.assertEqual(rc, 0, self.blocked)
-        said, at_lfs = self.lfs_log.read_text().splitlines()
+        lines = self.lfs_log.read_text().splitlines()
+        said, at_lfs = lines[-2:]  # the land's own LFS push (each accepted stage's WIP push sent one before it)
         self.assertEqual(said, "push origin HEAD")
+        self.assertEqual(len(lines) % 2, 0)
         self.assertNotEqual(at_lfs, gitrepo.git("rev-parse", "origin/main", cwd=str(self.wt)))  # origin had not the commit yet
         self.assertTrue(any("git lfs push origin HEAD" in r["text"] for r in records(self.eng, "note")))
 

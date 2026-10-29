@@ -266,6 +266,8 @@ class TraceTelemetry(te.EngineTest):
         stop_waiting, delivered = threading.Event(), threading.Event()
 
         def raising(signum, frame):  # the test owns SIGINT: interrupt_main does nothing unless a Python handler is installed
+            if delivered.is_set():  # a second interrupt the watcher queued before the first landed: it must not hit tearDown
+                return
             delivered.set()
             raise KeyboardInterrupt
 
