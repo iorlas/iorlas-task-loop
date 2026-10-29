@@ -388,7 +388,7 @@ class EnginePlanTest(EngineTest):
         self.assertEqual(s.calls[0][0], "planner")
         self.assertIn("<old_plan>", s.prompts[0])
         self.assertIn("Use the new format.", s.prompts[0])
-        self.assertIn("bead changed: the owner answered ask t-1-1", self.eng.plan_log[-1]["why"])
+        self.assertIn("the owner answered ask t-1-1", self.eng.plan_log[-1]["why"])
 
     def test_a_bead_that_changed_in_nothing_the_plan_reads_keeps_its_plan_and_calls_no_planner(self):
         self.stopped_run()
@@ -433,6 +433,30 @@ class EnginePlanTest(EngineTest):
         rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, max_rounds=1, max_replans=1)
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual(self.eng.extra, 1)
+
+    def cap_answered_rerun(self):
+        """Run to the stage-level cap (max_replans=1), answer 'allow one more run' with a typed word."""
+        rc, _s = self.run_engine({"plan": [PLAN, PLAN], "write": [WRITE, WRITE],
+                                 "review": [review(unmet=["x"]), review(unmet=["x"])]}, max_rounds=1, max_replans=1)
+        self.assertEqual(rc, 2)
+        self.file_answer("rerun", "Allow one more run. The amends were supervisor comments, not requirement changes")
+
+    def test_tl_9un_12_supervisor_comments_after_a_cap_answer_never_ask_at_the_replan_cap(self):
+        self.cap_answered_rerun()
+        before = len(self.blocked)
+        for n in range(3):  # more comment-only amends than the cap allows
+            with self.stop_at("reviewer", 1), self.store.stub(comments=[{"author": "supervisor", "text": f"Keep it small {n}."}]):
+                self.run_engine({"plan": [PLAN], "write": [WRITE]}, max_rounds=1, max_replans=1)
+            self.assertNotIn("re-planned", " ".join(self.blocked[before:]))
+        amends = [e for e in self.eng.plan_log if "comments only" in e["why"]]
+        self.assertTrue(amends and not any(e["counted"] for e in amends), self.eng.plan_log)
+        self.assertLessEqual(self.eng.planned, 1 + 1 + self.eng.extra)  # the planner's total stays inside the cap
+
+    def test_tl_9un_12_a_requirement_change_still_counts_against_the_replan_cap(self):
+        self.cap_answered_rerun()
+        with self.store.stub(show=dict(BEAD, description="Also say hi.")):
+            self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, max_rounds=1, max_replans=1)
+        self.assertTrue(self.eng.plan_log[-1]["counted"], self.eng.plan_log)
 
     def test_max_replans_is_read_from_the_config(self):
         self.stopped_run()

@@ -15,6 +15,7 @@ from taskloop.contracts.answers import ASSUMPTION, IRREVERSIBLE
 from taskloop.contracts.enums import AskClass
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.matchers import clip
+from taskloop.domain.plan.brief import COMMENTS_ONLY
 from taskloop.domain.plan.stored import stored
 from taskloop.domain.prompts.common import DECIDED_TEXT
 from taskloop.domain.prompts.plan import ASSUME_TEXT, PLAN_BRIEF_KB, PLAN_DECIDED_TEXT
@@ -64,8 +65,10 @@ class Planner:
     def count(self, old: Any, again: bool, why: str) -> None:
         """The planner is about to run: against the cap, unless the owner's answer or edit of the bead caused it (tl-19i)."""
         e = self.e
-        owner = (bool(old) and not again and (e.amend_why or "").startswith("bead changed: the owner answered")
+        why_amend = e.amend_why or ""
+        owner = (bool(old) and not again and why_amend.startswith("bead changed: the owner answered")
                  and not (e.answered and e.answered.ask_class == AskClass.CAP_REACHED))  # a cap ask answered 'split' stays blocked
+        owner = owner or (bool(old) and not again and why_amend.startswith(f"bead changed ({COMMENTS_ONLY})"))  # tl-9un.12
         if not owner and e.planned >= 1 + int(e.cfg.max_replans) + e.extra:
             raise self.cap.blocked()
         if not owner:

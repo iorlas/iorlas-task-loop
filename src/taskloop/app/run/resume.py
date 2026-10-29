@@ -70,10 +70,11 @@ class Resume:
         a = e.answered
         given = a is not None and a.answer is not None
         words = e.planner.cap.answered_words() if a is not None or ck is not None else ""
-        snap_diff = quiet = None
+        snap_diff = quiet = req = None
         if ck is not None and ck.state.snap:
             snap_diff = brief.diff(ck.state.snap, e.snap, words)
             quiet = brief.diff(ck.state.snap, e.snap, words, comments=False)
+            req = brief.diff(ck.state.snap, e.snap, "", comments=False)
         return World(
             fresh=e.fresh,
             branch=e.git("symbolic-ref", "--short", "-q", "HEAD"),
@@ -90,6 +91,7 @@ class Resume:
             answer_action=a.answer.action if given and a is not None and a.answer is not None else "",
             brief_diff=snap_diff,
             brief_diff_quiet=quiet,
+            brief_diff_req=req,
             missing_stage=self.missing(ck) if ck is not None else None,
         )
 

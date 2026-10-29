@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from taskloop.contracts.checkpoint import Checkpoint
+from taskloop.domain.plan.brief import COMMENTS_ONLY
 
 OUTSIDE = "the branch changed outside the engine"
 CONFIRMED = "the owner confirmed the verify ask"
@@ -35,6 +36,7 @@ class World:
     answer_action: str = ""
     brief_diff: str | None = None  # what the plan reads changed, as text; "" = nothing; None = no snapshot to compare
     brief_diff_quiet: str | None = None  # the same, ignoring comments
+    brief_diff_req: str | None = None  # the same, ignoring comments and the answer: what the bead asks for changed (tl-9un.12)
     missing_stage: int | None = None  # an accepted stage whose evidence file is gone: it runs again
 
 
@@ -77,7 +79,9 @@ def bead_changed(ck: Checkpoint, w: World) -> Decision | None:
         return None
     who = f"the owner answered ask {w.answer_id}" if w.answered else "an edit with no ask"
     text = diff or "The bead changed since the old plan (the checkpoint holds no copy of the old text): read the task above."
-    return Decision("amend", "bead changed", amend_why="bead changed: " + who, amend_text=text)
+    free = w.brief_diff_req == ""  # only comments, hints or an answer moved: no requirement changed, so the cap is not charged
+    return Decision("amend", "bead changed", amend_why=("bead changed (" + COMMENTS_ONLY + "): " if free else "bead changed: ") + who,
+                    amend_text=text)
 
 
 def after_stages(ck: Checkpoint, w: World) -> Decision | None:
