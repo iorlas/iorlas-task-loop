@@ -239,6 +239,10 @@ def delegate_stack(script, route="/fake/route.py"):
 
 
 _TEMPLATE = []
+# No background git: a push's receive-pack and a commit run `gc --auto` / `maintenance run --auto` detached, writing into the
+# repo (objects/maintenance.lock) while a test copytrees it. Env covers every git call, repo config covers the rest.
+NO_GC = {"GIT_CONFIG_COUNT": "2", "GIT_CONFIG_KEY_0": "maintenance.auto", "GIT_CONFIG_VALUE_0": "false",
+         "GIT_CONFIG_KEY_1": "gc.auto", "GIT_CONFIG_VALUE_1": "0"}
 
 
 def _template():
@@ -247,11 +251,15 @@ def _template():
     if not _TEMPLATE:
         d = Path(tempfile.mkdtemp(prefix="tl-engine-template-"))
         atexit.register(shutil.rmtree, d, True)
-        env = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
+        env = {**os.environ, **NO_GC}
+        env.update(GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t", GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t")
         def g(*a, cwd):
             subprocess.run(list(a), cwd=cwd, check=True, capture_output=True, env=env)
         g("git", "init", "-q", "--bare", "-b", "main", str(d / "o.git"), cwd=d)
         g("git", "clone", "-q", str(d / "o.git"), str(d / "wt"), cwd=d)
+        for repo in ("o.git", "wt"):
+            g("git", "config", "maintenance.auto", "false", cwd=d / repo)
+            g("git", "config", "gc.auto", "0", cwd=d / repo)
         (d / "wt" / "a.txt").write_text("a\n")
         g("git", "add", "-A", cwd=d / "wt")
         g("git", "commit", "-qm", "init", cwd=d / "wt")
@@ -329,6 +337,7 @@ class EngineTest(unittest.TestCase):
                 "GIT_COMMITTER_NAME": "t",
                 "GIT_COMMITTER_EMAIL": "t@t",
                 "BEADS_DIR": str(home / "no-beads"),
+                **NO_GC,
             },
         )  # a bd that slips past the store finds nothing to write
         self.env.start()

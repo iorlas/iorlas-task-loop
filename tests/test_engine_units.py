@@ -7,6 +7,7 @@ import json
 import os
 import re
 import signal
+import subprocess
 import sys
 import tempfile
 import time
@@ -559,6 +560,20 @@ ENGINE_LINE = re.compile(
     r"^(?:- [^:\n]*: )?(?:(?:Lane|Verify|Resume|Look|Land|Plan|Review|Reflect|Ask|Evidence|Follow-up|Parked) \(engine|Blocked:"
     r"|Engine (?:paused|failed):)"
 )
+
+
+class NoBackgroundGit(T.EngineTest):
+    def test_template_and_clone_repos_never_auto_gc_or_maintain(self):
+        for repo in (T._template() / "o.git", T._template() / "wt", self.tmp_repo("o.git"), self.tmp_repo("wt")):
+            for key, want in (("maintenance.auto", "false"), ("gc.auto", "0")):
+                got = subprocess.run(
+                    ["git", "-C", str(repo), "config", "--local", "--get", key], capture_output=True, text=True, check=False
+                )
+                self.assertEqual(got.stdout.strip(), want, f"{repo} {key}")
+        self.assertEqual(os.environ["GIT_CONFIG_KEY_0"], "maintenance.auto")  # the env covers every other git call
+
+    def tmp_repo(self, name):
+        return Path(self.tmp.name) / name
 
 
 class StoredBriefs(unittest.TestCase):
