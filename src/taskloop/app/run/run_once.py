@@ -150,6 +150,7 @@ class RunOnce:
             e.accepted.append(i)
             e.done.append(plan["stages"][i]["goal"])
             i += 1
+            e.lander.out.wip_push(i)  # before the checkpoint: its head is the pushed commit
             if i == len(plan["stages"]):
                 e.pending_land_validation = ""  # every recovery stage passed checks and review
             e.checkpoints.save(stage=i, rounds=0, n=0, feedback="", step="write" if i < len(plan["stages"]) else "land")

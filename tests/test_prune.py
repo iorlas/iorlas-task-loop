@@ -245,7 +245,7 @@ class Trees(unittest.TestCase):
 
 
 class Landed(unittest.TestCase):
-    """Closed beads' local task/* branches: `git branch -d` only."""
+    """Closed beads' local task/* branches: `git branch -d`; origin's task/<bead> of a landed one: `git push origin --delete`."""
 
     commit = cast(Callable[..., None], Trees.commit)
     origin: Path
@@ -293,14 +293,35 @@ class Landed(unittest.TestCase):
         self.assertEqual(len(self.prune()[0]), 1)
         self.assertEqual(self.prune()[0], [])
 
-    def test_no_remote_ref_is_touched_and_the_code_never_forces(self):
+    def land_commit(self, bead):
+        (self.repo / f"{bead}.txt").write_text("x")
+        git(self.repo, "add", f"{bead}.txt")
+        git(self.repo, "commit", "-q", "-m", f"work ({bead})")
+
+    def test_the_remote_task_branch_of_a_landed_closed_bead_goes_and_no_other_ref(self):
+        for b in ("task/a-1", "task/a-2", "task/a-3", "claude/a-1"):
+            git(self.repo, "push", "-q", "origin", b)
+        git(self.repo, "checkout", "-q", "main")
+        self.land_commit("a-1")  # a-1 landed; a-3 is closed but never landed; a-2 is open
+        self.land_commit("a-0")  # landed but no remote ref
+        removed, _ = self.prune()
+        remote = git(self.origin, "for-each-ref", "--format=%(refname)").split()
+        self.assertEqual(sorted(r for r in remote if "task/" in r or "claude/" in r),
+                         ["refs/heads/claude/a-1", "refs/heads/task/a-2", "refs/heads/task/a-3"])
+        self.assertEqual([r for r in removed if r.startswith("remote branch")], ["remote branch task/a-1 (repo)"])
+
+    def test_a_dry_run_keeps_the_remote_branch_and_says_so(self):
         git(self.repo, "push", "-q", "origin", "task/a-1")
-        self.prune()
+        git(self.repo, "checkout", "-q", "main")
+        self.land_commit("a-1")
+        removed, _ = self.prune(dry_run=True)
         self.assertIn("refs/heads/task/a-1", git(self.origin, "for-each-ref", "--format=%(refname)"))
+        self.assertTrue(any(r.startswith("would remove remote branch task/a-1") for r in removed))
+
+    def test_the_code_never_forces_a_branch_delete(self):
         src = Path(branches.__file__).read_text(encoding="utf-8")
         self.assertNotIn('"-D"', src)
         self.assertNotIn("--force", src)
-        self.assertNotIn("push", src)
 
     def test_bd_not_answering_keeps_every_branch(self):
         removed, kept = branches.prune_branches([str(self.repo)], lambda r: cast(Beads, Store(fail=True)), False)

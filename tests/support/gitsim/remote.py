@@ -75,16 +75,17 @@ def cmd_pull(c: Ctx) -> int:
 
 
 def cmd_push(c: Ctx) -> int:
-    _, rest = flags(c.args)
+    fl, rest = flags(c.args)
     remote = remote_of(c, rest[0])
     for spec in rest[1:] or [c.r.head_ref()]:
-        src, _, dst = spec.partition(":")
-        dst = dst or src
+        forced = spec.startswith("+") or any(f.startswith("--force") for f in fl)
+        src, _, dst = spec.lstrip("+").partition(":")
+        dst = (dst or src).removeprefix("refs/heads/")
         sha = c.r.resolve(src)
         if sha is None:
             raise Fail(f"error: src refspec {src} does not match any", 1)
         cur = remote.ref("refs/heads/" + dst)
-        if cur and not is_ancestor(cur, sha):
+        if cur and not forced and not is_ancestor(cur, sha):
             raise Fail(f" ! [rejected]        {src} -> {dst} (fetch first)\nerror: failed to push some refs to '{remote.git}'", 1)
         remote.set_ref("refs/heads/" + dst, sha)
         c.r.set_ref("refs/remotes/origin/" + dst, sha)

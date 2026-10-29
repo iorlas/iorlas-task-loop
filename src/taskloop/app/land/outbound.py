@@ -5,7 +5,7 @@ import shutil
 from pathlib import Path
 from typing import Any
 
-from taskloop.domain.land.matchers import lfs_in, no_dolt_remote
+from taskloop.domain.land.matchers import Push, lfs_in, no_dolt_remote
 
 
 def is_push(argv: list[str]) -> bool:
@@ -53,6 +53,28 @@ class Outbound:
         rc, tail = e.sh(argv, pin=True)
         e.log.note(f"{' '.join(argv)}: {'ok' if rc == 0 else 'failed'} in {e.clock.monotonic() - t0:.1f}s")
         return rc, tail
+
+    def wip_push(self, stage: int) -> None:
+        """tl-7y6.22: an accepted stage is committed (wip) and the task branch goes to the land's remote, so the work survives a lost box
+        and the other machine sees it. Only when the land is a `git push` (a custom command has no remote here), never in a dry run.
+        No -u and no git config (the repo's .git/config is shared by every worktree); force-with-lease because the branch is rebased at
+        land and at resume. A failure blocks the bead with git's words."""
+        e = self.e
+        want = target(e.cfg.land)
+        if e.dry or want is None:
+            return
+        e.checkout.stage_all()
+        if e.sh(["git", "diff", "--cached", "--quiet"], pin=True)[0]:  # staged work: a wip commit of what the stages meant
+            e.tree.wip(f"stage {stage} accepted", everything=False)
+        ref = f"refs/heads/task/{e.bead}"
+        argv = ["git", "push", "--no-verify", "--force-with-lease", want[0], f"HEAD:{ref}"]
+        t0 = e.clock.monotonic()
+        rc, tail = e.sh(argv, pin=True)
+        e.log.note(f"{' '.join(argv)}: {'ok' if rc == 0 else 'failed'} in {e.clock.monotonic() - t0:.1f}s")
+        if rc:
+            kind = "PAUSE_NETWORK" if Push.transient(tail) else "FAULT_LAND"
+            raise e.blocked_for(f"{'paused' if kind == 'PAUSE_NETWORK' else 'failed'}: the work-in-progress push of {ref} to {want[0]} "
+                                f"failed after stage {stage}; the branch is kept, the next run continues it\n{tail.strip()[-400:]}", kind)
 
     def bd_sync(self, sha: str) -> None:
         """After the land, outside the lock: the Dolt push bd's own hook makes. No remote is a quiet no-op; a failure blocks the bead

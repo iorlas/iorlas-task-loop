@@ -84,10 +84,11 @@ class Tree:
                 e.git_in(path, "checkout", "-q", "--detach")
                 e.log.note(f"{branch} was checked out in {path}: detached it there to resume here")
 
-    def wip(self, why: str) -> bool:
-        """Save the slot's work as a commit on its branch (nothing the bead made is left behind in a slot that is reset to the base)."""
+    def wip(self, why: str, everything: bool = True) -> bool:
+        """Save the slot's work as a commit on its branch (nothing the bead made is left behind in a slot that is reset to the base).
+        everything=False: only what a stage meant (a mid-run save; the strays are quarantined at the land, not committed)."""
         e = self.e
-        e.checkout.stage_all(everything=True)  # tl-g6a
+        e.checkout.stage_all(everything=everything)  # tl-g6a
         # --no-verify: a wip commit saves work, it does not judge it; a pre-commit hook that refused it left staged files in the
         # slot and failed the next bead there (lifesim-6pld, then rl4s)
         rc, tail = e.sh(["git", "commit", "-q", "--no-verify", "-m", f"wip ({e.bead}): {why}"], pin=True)
