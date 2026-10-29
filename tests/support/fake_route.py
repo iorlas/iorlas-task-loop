@@ -227,11 +227,15 @@ class Script:
             return self.mapped(node, prompt, a)
         if node == "write":
             Path(cwd, "f.txt").write_text(f"d{len(self.calls)}\n")
-        j = answer(self.c, None, "ref-" + node, bool(resume), a, cost=0.5, secs=1, family="openai" if node == "write" else "claude",
+        # like the real route, a reader comes from another family than the last writer's (tl-9un.15); j_extra may say otherwise
+        family = "openai" if node == "write" else ("xai" if getattr(self, "writer_family", "") == "claude" else "claude")
+        j = answer(self.c, None, "ref-" + node, bool(resume), a, cost=0.5, secs=1, family=family,
                    lane="L", model="m", tokens={"in": 1000, "cached": 800, "out": 50},
                    context={"instructions": ["/repo/AGENTS.md"], "env_keys": ["PATH"]})
         if self.j_extra.get(node):
             j.update(self.j_extra[node].pop(0))
+        if node == "write":
+            self.writer_family = j.get("family", "")
         return self.mapped(node, prompt, j)
 
     def mapped(self, node, prompt, j):
