@@ -9,9 +9,6 @@ root_packages =
     urllib
     http
     multiprocessing
-    urllib
-    http
-    multiprocessing
 include_external_packages = True
 
 [importlinter:contract:layers]
