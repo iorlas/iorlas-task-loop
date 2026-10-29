@@ -21,11 +21,11 @@ def fake_install(cache, ver, tl_py="import sys\n", missing=(), loop_py=""):
     if "tl.py" not in missing:
         (d / "tl.py").write_text(tl_py)
     app = d.parents[1] / "src" / "taskloop" / "app"  # the loop and engine modules the loop imports to vet an install
-    for pkg in (app.parent, app, app / "run", app / "wire"):
-        pkg.mkdir(exist_ok=True)
+    for pkg in (app.parent, app, app / "run", app / "launch"):
+        pkg.mkdir(parents=True, exist_ok=True)
         (pkg / "__init__.py").write_text("")
     (app / "run" / "engine.py").write_text("")
-    (app / "wire" / "loop.py").write_text(loop_py)
+    (app / "launch" / "loop.py").write_text(loop_py)
     return d
 
 
