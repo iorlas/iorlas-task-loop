@@ -10,18 +10,6 @@ from pathlib import Path
 CAP_BYTES = 200 << 20
 
 
-def twin_of(src: Path, size: int, dirs: Iterable[Path], but: tuple[Path, ...]) -> Path | None:
-    """A file under `dirs` with exactly the content of `src` (same size first, then the bytes), never one of `but`."""
-    for d in dirs:
-        for f in sorted(d.rglob("*")) if d.is_dir() else []:
-            try:
-                if f not in but and f.is_file() and f.stat().st_size == size and filecmp.cmp(src, f, shallow=False):
-                    return f
-            except OSError:
-                continue
-    return None
-
-
 def inodes(dirs: Iterable[Path]) -> dict[tuple[int, int], int]:
     """{(device, inode): size} of every file under `dirs`: names linked to one file are one entry."""
     found: dict[tuple[int, int], int] = {}
@@ -57,17 +45,71 @@ def place(src: Path, dst: Path, twin: Path | None) -> None:
 
 
 class Keeper:
-    """One run's evidence: `mine` are the dirs it writes (their new bytes count against the cap), `seen` also the earlier runs'."""
+    """One run's evidence: `mine` are the dirs it writes (their new bytes count against the cap), `seen` also the earlier runs'.
+    The dirs are walked once, here; `keep` then looks a twin up by size and keeps the index and the byte total current."""
 
     def __init__(self, mine: list[Path], seen: list[Path], cap: int = CAP_BYTES) -> None:
         self.mine, self.seen, self.cap, self.dropped = mine, seen, cap, 0
+        self.by_size: dict[int, list[Path]] = {}
+        self.mine_keys: dict[tuple[int, int], int] = {}
+        self.seen_keys: set[tuple[int, int]] = set()
+        for d in seen:  # earlier runs first: what they hold is not this run's bytes
+            for f in d.rglob("*") if d.is_dir() else []:
+                st = self.stat(f)
+                if st is not None:
+                    self.by_size.setdefault(st.st_size, []).append(f)
+                    self.seen_keys.add((st.st_dev, st.st_ino))
+        for d in mine:
+            for f in d.rglob("*") if d.is_dir() else []:
+                st = self.stat(f)
+                if st is not None:
+                    self.by_size.setdefault(st.st_size, []).append(f)
+                    if (st.st_dev, st.st_ino) not in self.seen_keys:
+                        self.mine_keys[(st.st_dev, st.st_ino)] = st.st_size
+        self.used = sum(self.mine_keys.values())
+
+    @staticmethod
+    def stat(f: Path) -> os.stat_result | None:
+        try:
+            st = f.stat()
+        except OSError:
+            return None
+        return st if f.is_file() else None
+
+    def twin(self, src: Path, size: int, dst: Path) -> Path | None:
+        for f in self.by_size.get(size, []):
+            try:
+                if f not in (src, dst) and filecmp.cmp(src, f, shallow=False):
+                    return f
+            except OSError:
+                continue
+        return None
+
+    def forget(self, dst: Path) -> None:
+        """`dst` is about to be replaced: its name leaves the index, and its bytes the total when nothing else names that file."""
+        st = self.stat(dst)
+        if st is None:
+            return
+        names = self.by_size.get(st.st_size, [])
+        if dst in names:
+            names.remove(dst)
+        if st.st_nlink == 1 and self.mine_keys.pop((st.st_dev, st.st_ino), None) is not None:
+            self.used -= st.st_size
 
     def keep(self, src: Path, dst: Path) -> bool:
         """False when the file was dropped for the cap (counted in `dropped`); a twin costs nothing and is never dropped."""
         size = src.stat().st_size
-        twin = twin_of(src, size, [*self.mine, *self.seen], (src, dst))
-        if twin is None and used_bytes(self.mine, self.seen) + size > self.cap:
+        twin = self.twin(src, size, dst)
+        self.forget(dst)
+        if twin is None and self.used + size > self.cap:
             self.dropped += 1
             return False
         place(src, dst, twin)
+        st = self.stat(dst)
+        if st is not None:
+            self.by_size.setdefault(st.st_size, []).append(dst)
+            key = (st.st_dev, st.st_ino)
+            if key not in self.mine_keys and key not in self.seen_keys:
+                self.mine_keys[key] = st.st_size
+                self.used += st.st_size
         return True
