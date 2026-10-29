@@ -21,6 +21,7 @@ lint:
 types:
     #!/usr/bin/env bash
     set -euo pipefail
+    uv sync --frozen -q  # pyrefly resolves pytest and the dev group from .venv; a fresh clone has none
     uv tool run "pyrefly@$(just pin pipx:pyrefly)" check
 
 rules:
