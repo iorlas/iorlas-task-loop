@@ -240,11 +240,14 @@ class Outcome(T.EngineTest):
 
 class DelegateLauncher(T.EngineTest):
 
-    def test_same_family_review_is_recorded(self):
+    def test_a_review_from_the_writers_family_pauses_the_step_and_is_not_taken(self):  # tl-9un.15
         same = full(CLEAN, "r", family="openai", flag="same_family")
-        rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [same]})
-        self.assertEqual(rc, 0)
-        self.assertTrue(any(c[:2] == ("comments", "add") and "same family as the writer" in c[3] for c in self.bd_calls))
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [same]})
+        self.assertNotEqual(rc, 0)
+        self.assertFalse(self.closed)
+        self.assertEqual([c[2] for c in s.calls if c[0] == "reviewer"], ["openai"])
+        self.assertEqual(self.eng.pause_role, "reviewer")
+        self.assertFalse(any("same family" in str(c) for c in self.bd_calls if c[:2] == ("comments", "add")))
 
     def test_lane_out_waits_then_runs(self):
         out = stop("rate_limited", at=time.time() + 30, say="codex out")
@@ -255,7 +258,8 @@ class DelegateLauncher(T.EngineTest):
     # lifesim-d5f.58 2026-10-21: a resumed Codex writer answered lane_out for an hour and the bead paused; delegate never
     # switches lanes on a resume, but a fresh call gets the role's next rung (Sonnet on the claude lane) at once
     OUT_LONG = stop("rate_limited", at=time.time() + 3600, say="cannot continue t now")
-    FRESH = full(WRITE, "w2", fallback=True, first_lane="OPENAI_SUBSCRIPTION")  # delegate says the writer fell back off its first lane
+    # delegate says the writer fell back off its first lane (to xai, so the reviewer, claude, is another family)
+    FRESH = full(WRITE, "w2", fallback=True, first_lane="OPENAI_SUBSCRIPTION", family="xai")
 
     def test_a_resumed_write_whose_lane_is_out_goes_on_at_once_as_a_new_thread(self):
         with self.lanes(OPENAI_SUBSCRIPTION=True):
@@ -264,7 +268,7 @@ class DelegateLauncher(T.EngineTest):
         self.assertEqual(rc, 0, self.blocked)  # no wait: the lane is out for an hour, past lane_wait_min
         workers = [(c, p) for c, p in zip(s.calls, s.prompts, strict=False) if c[0] == "worker"]
         self.assertEqual([c[1] for c, _ in workers], [None, "ref-write", None, "w2"])  # Codex still out: resumed
-        self.assertEqual([c[2] for c in s.calls if c[0] == "reviewer"], ["openai", "claude", "claude"])
+        self.assertEqual([c[2] for c in s.calls if c[0] == "reviewer"], ["openai", "xai", "xai"])
         self.assertNotIn(FRESH_WRITER_TEXT, workers[1][1])
         self.assertIn(FRESH_WRITER_TEXT, workers[2][1])
         self.assertNotIn(FRESH_WRITER_TEXT, workers[3][1])
@@ -292,7 +296,7 @@ class DelegateLauncher(T.EngineTest):
         self.assertEqual([c[1] for c, _ in workers], [None, "ref-write", None, None, "w3"])
         self.assertIn(FRESH_WRITER_TEXT, workers[3][1])
         self.assertNotIn(FRESH_WRITER_TEXT, workers[4][1])
-        self.assertEqual([c[2] for c in s.calls if c[0] == "reviewer"], ["openai", "claude", "openai", "openai"])
+        self.assertEqual([c[2] for c in s.calls if c[0] == "reviewer"], ["openai", "xai", "openai", "openai"])
         self.assertTrue(any(t["cause"] == "fallback_retake" and t["to"] == "write" for t in self.transitions()))
 
     def test_a_fallback_writer_is_resumed_while_its_lane_is_still_out(self):
@@ -344,7 +348,7 @@ class DelegateLauncher(T.EngineTest):
                                      "review": [review(unmet=["more"])] * 2 + [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual([c[1] for c in s.calls if c[0] == "worker"], [None, None, "w3"])
-        self.assertEqual([c[2] for c in s.calls if c[0] == "reviewer"], ["claude", "openai", "openai"])
+        self.assertEqual([c[2] for c in s.calls if c[0] == "reviewer"], ["xai", "openai", "openai"])
 
     def test_the_answer_a_fallback_answer_is_resumed_while_its_first_lane_is_out(self):
         with self.lanes(OPENAI_SUBSCRIPTION=True):

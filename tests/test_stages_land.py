@@ -275,39 +275,32 @@ class DeadLane(StagesTest):
         """vendor_blip (lane / transient / poll): the lane failed to start. Three polls wait for it, the next try goes elsewhere."""
         return [te.stop("vendor_blip", family="xai", lane=lane, say="opencode failed before any work: spending limit")] * n
 
-    def test_a_retry_from_a_failing_family_routes_the_next_try_past_it(self):
+    def test_a_reviewer_retry_still_avoids_the_writers_family(self):  # tl-9un.15: the failing family was sent as the writer
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [*self.blips(4), CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         reviews = [c for c in s.calls if c[0] == "reviewer"]
         self.assertEqual(len(reviews), 5)  # three polls of the lane, then the route is asked again
-        self.assertEqual(reviews[4][2], "xai")  # authored-by the failing family: the route puts the others first
-        self.assertNotEqual(reviews[0][2], "xai")
+        self.assertEqual({c[2] for c in reviews}, {"openai"})  # authored-by the writer's family on every try
 
-    def test_the_writers_own_family_after_a_dead_lane_is_flagged_same_family(self):
-        rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [*self.blips(4), CLEAN]},
-                                j_extra={"review": [{"family": "openai"}]})  # the route landed on openai, the writer's family
+    def test_a_reviewer_retry_after_a_writer_reroute_avoids_the_family_that_wrote(self):
+        fallback = te.full(WRITE, "w2", family="xai")  # the write was routed to xai
+        plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[])])  # the fallback write leaves no f.txt
+        rc, s = self.run_engine({"plan": [plan], "write": [fallback], "review": [*self.blips(4, "OTHER"), CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
-        self.assertEqual(self.eng.last_flag, "same_family")
-        self.assertIn("review is from the writer's own model family", self.eng.log_path.read_text())
+        self.assertEqual({c[2] for c in s.calls if c[0] == "reviewer"}, {"xai"})
 
-    def test_a_same_family_step_with_delegates_warning_is_logged_traced_and_commented_never_paused(self):
+    def test_a_review_that_only_the_writers_family_could_give_pauses_the_step(self):
+        rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [*self.blips(4), te.full(CLEAN, "r", family="openai")]})
+        self.assertNotEqual(rc, 0)
+        self.assertFalse(self.closed)
+        self.assertEqual((self.eng.pause_role, self.eng.retry_after), ("reviewer", 0.0))
+        self.assertIn("no lane of another family", self.eng.log_path.read_text())
+
+    def test_delegates_same_family_flag_pauses_the_step_too(self):
         extra = {"review": [{"flag": "same_family", "warning": "only the Codex lane is up: the review is the writer's own model"}]}
         rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, j_extra=extra)
-        self.assertEqual(rc, 0, self.blocked)
-        note = "the review step ran on the writer's own model family: only the Codex lane is up"
-        self.assertIn(note, self.eng.log_path.read_text())
-        comments = [c[3] for c in self.bd_calls if c[:2] == ("comments", "add") and c[3].startswith("Lane (engine)")]
-        self.assertEqual(len(comments), 1)
-        self.assertIn(note, comments[0])
-        last = json.loads((ident.config_dir() / "traces.jsonl").read_text().splitlines()[-1])
-        self.assertEqual(last["lane_notes"], [note + last["lane_notes"][0][len(note):]])
-        self.assertIn("only the Codex lane is up", next(s_["warning"] for s_ in last["sessions"] if s_["node"] == "review"))
-        self.assertTrue(self.closed)  # it landed
-
-    def test_one_family_failing_twice_is_not_switched_back_and_forth(self):
-        _rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [*self.blips(5, "GROK"), CLEAN]})
-        reviews = [c for c in s.calls if c[0] == "reviewer"]
-        self.assertEqual([c[2] for c in reviews][4:], ["xai", "xai"])  # rebound once, kept
+        self.assertNotEqual(rc, 0)
+        self.assertFalse(self.closed)
 
     def test_a_busy_lane_is_waited_for_as_before(self):
         busy = te.stop("busy", family="openai", lane="OPENAI_SUBSCRIPTION", say="no free slot")

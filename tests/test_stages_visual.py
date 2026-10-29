@@ -98,11 +98,11 @@ class VisualWork(StagesTest):
         _rc, _s = self.go({"plan": [PLAN], "write": [self.write()], "look": [out, out]})
         self.assertIn("paused", self.eng.why)
 
-    def test_the_judge_from_the_same_family_says_so(self):
+    def test_the_judge_from_the_writers_family_is_not_taken(self):
         rc, _s = self.go({"plan": [PLAN], "write": [self.write()], "look": [self.judged()], "review": [CLEAN]},
                         j_extra={"look": [{"flag": "same_family"}]})
         self.assertEqual(rc, 0, self.blocked)
-        self.assertIn("same family as the writer", " ".join(self.eng.look_notes))
+        self.assertIn("no lane for the look judge", " ".join(self.eng.look_notes))
 
     def test_the_writer_is_asked_for_shot_requests_not_screenshots(self):
         rc, s = self.go({"plan": [PLAN], "write": [self.write()], "look": [self.judged()], "review": [CLEAN]})

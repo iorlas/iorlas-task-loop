@@ -136,6 +136,8 @@ class WorkerCall:
                 self.acts.note_net(c, stop)
                 self.acts.act(c, res, stop, lp.decide(stop, self.acts.ctx_of(c)))
                 continue
+            if self.acts.same_family(c, res):
+                self.acts.refuse_same_family(c, res)
             errs = self.take_answer(c, res)
             if res.denied and self.refused(c, res, res.denied, errs):
                 continue
