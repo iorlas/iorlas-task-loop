@@ -32,12 +32,14 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "dev"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 import taskloop  # noqa: E402, F401  (puts the vendored shelf packages on sys.path)
 
 # isort: split
 import vendor  # noqa: E402
 from git_porcelain import GitUnavailable, Identity, RealRepo  # noqa: E402
 from git_porcelain.testing import FakeRepo, git, hermetic_env  # noqa: E402
+from support.procsim import real_proc  # noqa: E402
 
 RATCHET = Path(__file__).with_name("rules_ratchet.json")
 SCAN = ("src", "skills", "dev", "tests")
@@ -655,6 +657,7 @@ class VendorGuard(unittest.TestCase):
         self.assertEqual(EXEMPT_DIRS, ("skills/task-loop/_vendor",))
         self.assertIn(str(ROOT / EXEMPT_DIRS[0]), sys.path)  # importing taskloop put it there
 
+    @real_proc("dev/vendor.py check is the gate's own command line, run against the shelf checkout")
     def test_vendor_drift(self):
         shelf = vendor.shelf_home()
         if not shelf:
