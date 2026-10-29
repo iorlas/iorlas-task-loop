@@ -168,6 +168,20 @@ class Release(unittest.TestCase):
         self.assertEqual(self.log("claude").count("plugin marketplace update iorlas-marketplace"), 2)
         self.assertEqual(self.git("status", "--porcelain", cwd=self.repo), "")
 
+    def test_a_launcher_behind_origin_main_execs_origin_mains_release_once_with_the_same_args_and_no_lock_held(self):
+        self.write(self.seed / "dev" / "release.py", "import os, sys\nprint('CHILD', sys.argv[1:], os.environ.get('TL_RELEASE_REEXEC'))\n"
+                   "import fcntl, glob\nfor f in glob.glob(os.environ['XDG_CONFIG_HOME'] + '/task-loop/locks/release-*.lock'):\n"
+                   "    fcntl.flock(os.open(f, os.O_RDWR), fcntl.LOCK_EX | fcntl.LOCK_NB)\nprint('LOCK TAKEN')\n")
+        self.commit(self.seed, "newer release code")
+        r = self.release("msg", "--minor")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn(f"CHILD ['msg', '--minor', '--repo', '{self.repo}', '--marketplace', '{self.market}'] 1", r.stdout)
+        self.assertIn("LOCK TAKEN", r.stdout)
+        self.assertEqual(self.version(self.origin)["version"], "0.1.0")  # the fake child released nothing; this run did not either
+        with_marker = subprocess.run(self.cmd("msg"), env=dict(self.env, TL_RELEASE_REEXEC="1"), capture_output=True, text=True,
+                                     timeout=120, check=False)
+        self.assertNotIn("CHILD", with_marker.stdout)  # an exec'd release never execs again
+
     def test_a_dirty_main_checkout_on_another_branch_is_released_from_and_left_byte_identical(self):
         self.git("checkout", "-q", "-b", "task/wip", cwd=self.repo)
         (self.repo / "stray.txt").write_text("x")

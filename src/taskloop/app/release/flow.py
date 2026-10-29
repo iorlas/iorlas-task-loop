@@ -10,7 +10,7 @@ from pathlib import Path
 from taskloop.adapters import beadtools, gitrepo, landlock
 from taskloop.adapters.ident import config_dir
 from taskloop.adapters.versionfile import NoVersion, set_version
-from taskloop.app.release import clone, manifest, publish, suite, tidy
+from taskloop.app.release import clone, manifest, publish, selfupdate, suite, tidy
 from taskloop.app.release.push import push_main, release_lock_path
 from taskloop.app.release.shell import Abort, git, say
 from taskloop.contracts.ids import MARKETPLACE
@@ -138,8 +138,12 @@ def main(argv: list[str] | None, tool_root: Path, doc: str = "") -> int:
     holder = f"pid {os.getpid()} since {time.strftime('%H:%M:%S')}: {req.message}"
     try:
         path = release_lock_path(config_dir(), url)
+        newer = None
         with landlock.os_lock(path, holder, lambda who: say(f"waiting for the release lock (held by {who})")):
-            version = release(req, repo, market, tool_root)
+            newer = selfupdate.newer_release(tool_root, clone.ready(config_dir(), url))
+            version = "" if newer else release(req, repo, market, tool_root)
+        if newer:  # the lock is released above: the exec'd release takes it
+            selfupdate.exec_release(newer, sys.argv[1:] if argv is None else argv, repo)
         record({"ok": True, "version": version, "summary": "released " + version}, req, repo)
     except Abort as e:
         print("release: " + str(e), file=sys.stderr)
