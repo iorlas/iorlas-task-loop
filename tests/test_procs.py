@@ -39,7 +39,7 @@ class ChildEnv(unittest.TestCase):
     def test_a_worker_process_really_sees_it(self):
         with mock.patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": "/home/u/.claude-alt", "CLAUDE_CODE_SESSION_ID": "s"}):
             ran = procs.capture(
-                [sys.executable, "-c", "import os; print(os.environ.get('CLAUDE_CONFIG_DIR'), os.environ.get('CLAUDE_CODE_SESSION_ID'))"],
+                ["sh", "-c", 'echo "${CLAUDE_CONFIG_DIR:-None} ${CLAUDE_CODE_SESSION_ID:-None}"'],
                 None,
                 procs.current_env(),
                 30,
@@ -50,13 +50,13 @@ class ChildEnv(unittest.TestCase):
 @unittest.skipUnless(POSIX, "process groups")
 class Capture(unittest.TestCase):
     def test_it_collects_output_and_the_exit_code(self):
-        ran = procs.capture([sys.executable, "-c", "import sys; print('out'); print('err', file=sys.stderr); sys.exit(3)"], None, None, 30)
+        ran = procs.capture(["sh", "-c", "echo out; echo err >&2; exit 3"], None, None, 30)
         self.assertEqual((ran.exit, ran.out.strip(), ran.err.strip(), ran.timed_out), (3, "out", "err", False))
 
     def test_a_timeout_stops_the_child_and_everything_it_started(self):
         with tempfile.TemporaryDirectory() as d:
             code = ("import subprocess, sys, time\n"
-                    "w = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'], start_new_session=True)\n"
+                    "w = subprocess.Popen(['sleep', '60'], start_new_session=True)\n"
                     "open(sys.argv[1], 'w').write(str(w.pid)); time.sleep(60)\n")
             ran = procs.capture([sys.executable, "-c", code, str(Path(d) / "pid")], None, None, 1.5)
             self.assertEqual((ran.exit, ran.timed_out), (124, True))
@@ -100,18 +100,18 @@ class SigtermWhileSpawning(unittest.TestCase):
 
     def test_a_detached_spawn_leaves_no_child_alive(self):
         with self.assertRaises(Interrupted):
-            procs.spawn([sys.executable, "-c", "import time; time.sleep(60)"])
+            procs.spawn(["sleep", "60"])
         self.assertEqual(len(self.pids), 1)
         self.assertTrue(self.gone(self.pids[0]))
 
     def test_a_captured_run_leaves_no_child_alive(self):
         with self.assertRaises(Interrupted):
-            procs.capture([sys.executable, "-c", "import time; time.sleep(60)"], None, None, 60)
+            procs.capture(["sleep", "60"], None, None, 60)
         self.assertEqual(len(self.pids), 1)
         self.assertTrue(self.gone(self.pids[0]))
 
     def test_the_held_spawn_the_loop_uses_stops_the_child_when_the_signal_is_replayed(self):
-        p, hold = procs.popen_held([sys.executable, "-c", "import time; time.sleep(60)"], start_new_session=True)
+        p, hold = procs.popen_held(["sleep", "60"], start_new_session=True)
         try:
             with self.assertRaises(Interrupted):
                 hold.replay()

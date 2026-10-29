@@ -1,7 +1,6 @@
 """tl-64i: log files held open. One handle per path per process, every line readable at once, closed at run end and on exec."""
 import json
 import os
-import sys
 import tempfile
 import unittest
 import warnings
@@ -81,12 +80,12 @@ class AppLogTest(unittest.TestCase):
     def test_a_handle_does_not_survive_an_exec(self):
         applog.append(self.path, "x\n")
         fd = applog._open[str(self.path)][1].fileno()
-        code = f"import os,sys\ntry:\n os.fstat({fd})\nexcept OSError:\n sys.exit(0)\nsys.exit(1)"
+        code = f"test -e /dev/fd/{fd} && exit 1; exit 0"  # a shell, not an interpreter: it is the fd table that is looked at
         # a child started the way os.execv does: the fd table survives only for inheritable descriptors
         pid = os.fork()
         if pid == 0:
             try:
-                os.execv(sys.executable, [sys.executable, "-c", code])
+                os.execv("/bin/sh", ["sh", "-c", code])
             finally:
                 os._exit(9)
         _, status = os.waitpid(pid, 0)

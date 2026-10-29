@@ -63,16 +63,16 @@ class FakeChecksContract(ChecksContract, unittest.TestCase):
 @contract
 @real_proc("the ArgvChecks adapter is the real process: exit codes, output, the environment, no shell, the wall kill")
 class ArgvChecksContract(ChecksContract, unittest.TestCase):
-    PASS: ClassVar[Any] = [sys.executable, "-c", "print('fine')"]
-    FAIL: ClassVar[Any] = [sys.executable, "-c", "import sys; print('boom'); sys.exit(3)"]
-    HANG: ClassVar[Any] = [sys.executable, "-c", "import time; time.sleep(60)"]
-    ENV: ClassVar[Any] = [sys.executable, "-c", "import os; print(os.environ['PROBE'])"]
+    PASS: ClassVar[Any] = ["echo", "fine"]  # no interpreter: the adapter's subject is a process, not Python
+    FAIL: ClassVar[Any] = ["sh", "-c", "echo boom; exit 3"]
+    HANG: ClassVar[Any] = ["sleep", "60"]
+    ENV: ClassVar[Any] = ["sh", "-c", 'echo "$PROBE"']
 
     def make(self) -> ArgvChecks:
         return ArgvChecks()
 
     def test_no_shell_stands_between_the_argv_and_the_program(self) -> None:
-        r = self.go([sys.executable, "-c", "import sys; print(sys.argv[1])", "$HOME && x"])
+        r = self.go(["echo", "$HOME && x"])
         self.assertIn("$HOME && x", r.out)  # type: ignore[attr-defined]
 
 

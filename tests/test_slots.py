@@ -339,7 +339,7 @@ class StaleLocks(Slots):
 
     @real_proc(LIVE_PID)
     def test_a_zombie_is_dead(self):
-        z = subprocess.Popen([sys.executable, "-c", "pass"])
+        z = subprocess.Popen(["true"])
         try:
             for _ in range(100):
                 if not pidcheck.pid_alive(z.pid):
