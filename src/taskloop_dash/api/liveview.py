@@ -6,11 +6,12 @@ import threading
 import time
 from typing import Any
 
+from taskloop.contracts.runlife import Liveness
 from taskloop_dash.api import live as live_api
 from taskloop_dash.api import overview as overview_api
 from taskloop_dash.api.lanes import Lanes
 from taskloop_dash.api.tasks import repo_name
-from taskloop_dash.env import STALE_RUN, Env
+from taskloop_dash.env import Env
 from taskloop_dash.readers.beads import basename
 from taskloop_dash.readers.records import Records
 from taskloop_dash.views import names
@@ -33,10 +34,6 @@ class Live:
                     self.runs.pop(next(iter(self.runs)))
                 self.runs[path] = live_api.LiveRun(path)
             return self.runs[path]
-
-    def alive(self, lr: live_api.LiveRun) -> bool:
-        """From the typed log alone (no pid probe): running until the close record, stale when nothing was written for STALE_RUN."""
-        return lr.is_alive(self.env.clock(), STALE_RUN)
 
     def api_live(
         self, bead: str, run: str = "", since: str = "", before: str = "", wait: str | float = "0", limit: str | int = "300"
@@ -61,7 +58,8 @@ class Live:
             wait, limit = 0.0, 300
         lr.refresh()
         newest = names.run_name((logs or [path])[-1])
-        return live_api.answer(lr, bead, newest, self.alive(lr), since or None, before or None, wait, limit, now=self.env.clock())
+        now = self.env.clock()
+        return live_api.answer(lr, bead, newest, lr.liveness(now), since or None, before or None, wait, limit, now=now)
 
     def entries(self) -> list[dict[str, Any]]:
         """The newest run of each bead that is alive or ended lately, as the overview takes them."""
@@ -75,7 +73,7 @@ class Live:
             lr.refresh()
             span = (spans.get(bead) or [None])[-1]
             out.append({"bead": bead, "repo": repo_name(span, None, None), "title": (span or {}).get("title") or "",
-                        "name": names.run_name(path), "run": lr, "alive": self.alive(lr)})
+                        "name": names.run_name(path), "run": lr, "alive": lr.liveness(self.env.clock()) is Liveness.LIVE})
         return out
 
     def queue_rows(self) -> list[dict[str, Any]]:

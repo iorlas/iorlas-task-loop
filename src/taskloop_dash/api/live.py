@@ -14,6 +14,7 @@ from typing import Any
 
 from taskloop.contracts import log
 from taskloop.contracts.paths import ConfigDir
+from taskloop.contracts.runlife import Liveness, liveness
 from taskloop_dash import jsonl
 from taskloop_dash.views import live_events as ev
 from taskloop_dash.views import live_state
@@ -45,17 +46,21 @@ class Source:
         self.tag, self.path, self.worker = tag, path, worker
         self.offset = 0
         self.items: list[tuple[int, dict]] = []
+        self.records: list[log.EngineLog] = []  # the engine source's typed records (the worker's are not EngineLog)
 
     def refresh(self) -> None:
         if jsonl.size_of(self.path) < self.offset:  # the file was replaced
             self.offset = 0
             self.items = []
+            self.records = []
         decode_one = ev.decode_worker if self.worker else log.decode
         rows, self.offset = jsonl.read_from(self.path, self.offset, decode_one)
         def build(r: Any, off: int) -> dict:
             return ev.worker_event(r, self.tag, off) if self.worker else ev.engine_event(r, off)
 
         self.items += [(off, build(r, off)) for off, r in rows]
+        if not self.worker:
+            self.records += [r for _, r in rows]
 
 
 class LiveRun:
@@ -100,18 +105,10 @@ class LiveRun:
     def events(self) -> list[dict]:
         return [e for _, _, e in self.select(lambda t, off: True)]
 
-    def is_alive(self, now: float, stale: float) -> bool:
-        """Running until the end record is written; stale only when no file of the run (engine log, worker live files) was
-        written for `stale` seconds, the engine's heartbeat having lapsed. No process is probed: a scripted lane has none."""
-        if any(e["k"] == "close" for e in self.events()):
-            return False
-        newest = 0.0
-        for s in self.sources.values():
-            try:
-                newest = max(newest, os.stat(s.path).st_mtime)
-            except OSError:
-                continue
-        return now - newest < stale
+    def liveness(self, now: float) -> Liveness:
+        """The run's state from its engine records alone (taskloop.contracts.runlife); the worker's files do not count."""
+        with self.lock:
+            return liveness(self.sources[ev.ENGINE].records, now)
 
 
 def before_cursor(run: LiveRun, shown: list[tuple[str, int, dict]], older: bool) -> str | None:
@@ -171,7 +168,7 @@ def answer(
     run: LiveRun,
     bead: str,
     newest: str,
-    alive: bool,
+    life: Liveness,
     since: str | None = None,
     before: str | None = None,
     wait: float = 0,
@@ -187,7 +184,7 @@ def answer(
     if since is None and before is None:
         pg = page(run, None, None, limit)
     every = run.events()
-    state = live_state.state_of(every, now, alive, lambda e: log_mtime(root, name, e))
+    state = live_state.state_of(every, now, life is Liveness.LIVE, lambda e: log_mtime(root, name, e))
     steps = [e for e in every if e["k"] == "step_start"]
     started = next((e["t"] for e in every if e["k"] == "run_start"), None)
     return {
@@ -197,6 +194,7 @@ def answer(
         "newest": newest,
         "now": now,
         "running": state["what"] != "ended",
+        "liveness": life.value,
         "state": state,
         "worker": live_state.worker_of(every),
         "step": steps[-1]["step"] if steps else None,

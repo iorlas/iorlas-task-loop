@@ -111,6 +111,7 @@ The engine log `engine/<bead>-<YYYYMMDD-HHMMSS>.jsonl` keeps its old records and
 | `gate` | `tree`, `cmd`, `exit`, `secs`, `cached` (already green on this tree), `node_id` |
 | `vendor_error` | `node`, `step`, `attempt`, `status`, `reason`, `error`, `stop`, `secs`, `lane`, `model`, `family`, `node_id`, `error_observed`; `started_t`, `first_error_t`, `last_event_t`, `ended_t`, `kill_t` (null when the boundary was not observed) |
 | `kill` | `what` (check/command/delegate), `why`, `exit`, `secs`, `node_id`, `alive` (worker pids that survived), `observed_t` (actual stop time), `started_t`, `last_event_t` , `kill_t`, `ended_t`; written only when the engine really stopped a tree, so a command that exits 124 by itself has no kill record. Shutdown output and the synthetic hang notice do not advance `last_event_t` or `kill_t` |
+| `beat` | `t` only: the run's proof of life, one per minute while its process lives (the lease thread writes it) |
 | `cache` | `round`, `tree`, `base`, `hits`, `misses`, `items`, `changed` (task paths), `node_id` |
 | `session`, `msg` (existing) | + `node_id`; session + `resume`, `flag` |
 
@@ -183,6 +184,9 @@ of every run (`api_bead` -> `timeline`); hover a segment for its name, length, h
 - **Segments.** A wait that starts inside a step is cut out of that step (nothing counts twice); a lock wait is a bar of its own
   between steps. Unexplained time inside a run of 10 s or more is "between steps" (idle). Time between runs is "owner ask" (the
   earlier run ended asking), "paused" (it ended paused) or "between runs" (idle).
+- **One liveness rule** (`taskloop.contracts.runlife.liveness`, read by the dash and `tl report`): a `close` record = ended; none and a
+  record younger than 300 s = live; none and older = crashed. No pid is probed. The same module holds RETAIN (7 days): the dash shows
+  that window and `RunLayout.open` (`app/run/layout.py`) deletes older logs with their `.live/` folders and `.stderr`.
 - **Live runs end now.** `run_timeline(alive=True)` gives the open step and the run an end of now, not of the last record.
 - **Not recorded yet** (outside the engine's log, so no segment): the slot-take lock (tl.py), the area lock (app/launch/loop.py), the gap
   from claim to the engine's start, push duration while running. They show up as the unexplained start of a run.

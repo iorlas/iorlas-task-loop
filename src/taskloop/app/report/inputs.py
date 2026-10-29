@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import Any
 
 from taskloop.adapters import beadtools, gitrepo, ident
-from taskloop.adapters import procs as sproc
 from taskloop.contracts.ports import BdFailure, Beads
 
 
@@ -50,14 +49,6 @@ def repo_traces(repo: str) -> list[dict[str, Any]]:
         if inside or (url and r.get("repo") == url):
             out.append(r)
     return out
-
-
-def run_alive(bead: str) -> bool | None:
-    """A run-task of this bead is a live process (from /proc); None when that cannot be told."""
-    rows = sproc.table()
-    if rows is None:
-        return None
-    return any("run-task" in p.cmd and bead in p.cmd.split() for p in rows.values())
 
 
 def prefix(bead: str | None) -> str:

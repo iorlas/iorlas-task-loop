@@ -1,12 +1,15 @@
 """Where a run's files live: its engine log and stderr, its run folder outside the worktree (brief, plan, node answers, check results,
 where no worker can write them; in lifesim-vbo a writer's sandbox runs kept in .task/ were read as engine results by four planners), and
 the writer's scratch folder in the worktree."""
+import contextlib
+import shutil
 import time
 from dataclasses import dataclass
 from pathlib import Path
 
 from taskloop.adapters import ident
-from taskloop.contracts.paths import TASK_EXCLUDE
+from taskloop.contracts.paths import TASK_EXCLUDE, ConfigDir
+from taskloop.contracts.runlife import RETAIN
 
 CHECK_ROUNDS_DAYS = 14
 
@@ -22,6 +25,18 @@ def prune_check_rounds(runs: Path, days: int = CHECK_ROUNDS_DAYS) -> None:
                 f.unlink()
         except OSError:
             pass
+
+
+def prune_run_logs(cfg: ConfigDir, now: float, retain: float = RETAIN) -> None:
+    """An engine log not written for `retain` seconds goes with its .live/ folder (the worker's per-call files) and its .stderr. The
+    dashboard only reads: this, at each run's start, is the one place that deletes them. A live run beats every minute and is never old."""
+    for log in cfg.engine_log("*").parent.glob("*.jsonl"):
+        with contextlib.suppress(OSError):
+            if log.stat().st_mtime >= now - retain:
+                continue
+            shutil.rmtree(cfg.live_dir(log.stem), ignore_errors=True)
+            log.with_suffix(".stderr").unlink(missing_ok=True)
+            log.unlink()
 
 
 def fresh_stem(bead: str, logs: Path) -> str:
@@ -52,6 +67,7 @@ class RunLayout:
         run_dir = ident.config_dir() / "runs" / stem
         run_dir.mkdir(parents=True, exist_ok=True)
         prune_check_rounds(ident.config_dir() / "runs")
+        prune_run_logs(ConfigDir(ident.config_dir()), time.time())
         task_dir = Path(wt) / TASK_EXCLUDE.rstrip("/") / bead
         task_dir.mkdir(parents=True, exist_ok=True)
         evidence = task_dir / "evidence"

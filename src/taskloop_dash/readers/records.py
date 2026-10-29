@@ -8,8 +8,8 @@ from typing import Any
 
 import stream_proc
 
-from taskloop.contracts.paths import RepoDirs
-from taskloop_dash.env import RETAIN, STALE_RUN, Env
+from taskloop.contracts.runlife import RETAIN
+from taskloop_dash.env import Env
 from taskloop_dash.tails import read_dict
 from taskloop_dash.views import names
 
@@ -88,24 +88,6 @@ class Records:
             return None
         p = self.env.config.engine_log(str(run))
         return str(p) if p.exists() else None
-
-    def run_alive(self, path: str, run: dict[str, Any] | None, span: Span | None) -> bool:
-        """A run with no close: running while the engine lock in its worktree names a live process for its bead; without a lock to
-        read, while its log moved lately."""
-        bead = names.bead_of(names.run_name(path))
-        wt = (run or {}).get("worktree") or (span or {}).get("worktree") or ""
-        if wt:
-            lock = read_dict(RepoDirs(wt).engine_lock())
-            if lock:
-                return lock.get("bead") == bead and bool(lock.get("pid")) and pid_alive(lock.get("pid"))
-            if run:
-                return False
-        stderr = path[:-6] + ".stderr"
-        try:
-            m = max(os.path.getmtime(path), os.path.getmtime(stderr) if os.path.exists(stderr) else 0)
-        except OSError:
-            return False
-        return self.env.clock() - m < STALE_RUN
 
     def task_spans(self) -> dict[str, list[Span]]:
         """For each bead: the spans (session, worktree, from, to) between a claim and that session's next record."""

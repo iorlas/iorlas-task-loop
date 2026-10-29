@@ -26,6 +26,7 @@ from taskloop.adapters import delegate as dl  # noqa: E402
 from taskloop.adapters import runner as live_runner  # noqa: E402
 from taskloop.app.run import engine  # noqa: E402
 from taskloop.contracts.locks import Ticket  # noqa: E402
+from taskloop.contracts.runlife import CRASHED_AFTER, Liveness  # noqa: E402
 from taskloop_dash.api import live, overview  # noqa: E402
 from taskloop_dash.env import Ports  # noqa: E402
 from taskloop_dash.views import live_state  # noqa: E402
@@ -231,7 +232,7 @@ class SlotLine(unittest.TestCase):
 
 
 class RunningFromTheLog(unittest.TestCase):
-    """running comes from the typed log alone: no end record, no stale heartbeat, no process needed (a scripted lane has none)."""
+    """running comes from the typed log alone (runlife.liveness): no end record and a recent record; no process is probed."""
 
     def test_steps_and_no_end_record_is_running_with_no_process(self):
         with tempfile.TemporaryDirectory() as d:
@@ -240,18 +241,19 @@ class RunningFromTheLog(unittest.TestCase):
             put(log, [typed("step_start", T + 1, id="n1", step="write", text="write")])
             run = live.LiveRun(log)
             run.refresh()
-            now = os.stat(log).st_mtime + 1
-            self.assertTrue(run.is_alive(now, 1200))
-            ans = live.answer(run, BEAD, "n", run.is_alive(now, 1200), now=now)
+            now = T + 2
+            self.assertIs(run.liveness(now), Liveness.LIVE)
+            ans = live.answer(run, BEAD, "n", run.liveness(now), now=now)
             self.assertTrue(ans["running"])
+            self.assertEqual(ans["liveness"], "live")
             rows = overview.overview(
-                [{"bead": BEAD, "repo": "r", "title": "", "name": "n", "run": run, "alive": run.is_alive(now, 1200)}], [], [], now
+                [{"bead": BEAD, "repo": "r", "title": "", "name": "n", "run": run, "alive": True}], [], [], now
             )["beads"]
             self.assertEqual([r["bead"] for r in rows], [BEAD])
-            self.assertFalse(run.is_alive(now + 5000, 1200))  # the heartbeat lapsed
+            self.assertIs(run.liveness(T + 1 + CRASHED_AFTER), Liveness.CRASHED)  # no record since: the process died
             put(log, [typed("close", T + 9, outcome="landed", why="")])
             run.refresh()
-            self.assertFalse(run.is_alive(now, 1200))
+            self.assertIs(run.liveness(now), Liveness.ENDED)
 
 
 class Page(unittest.TestCase):
@@ -303,7 +305,8 @@ class CallSite(unittest.TestCase):
 class Served(unittest.TestCase):
     def test_endpoint_and_page(self):
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as d:
-            _log, lf = make_run(d)
+            log, lf = make_run(d)
+            put(log, [typed("beat", time.time())])  # the run is alive now: its last beat
             port = free_port()
             env = dict(os.environ, XDG_CONFIG_HOME=d, APPDATA=d, TASK_LOOP_DASH_BIND="127.0.0.1", HOME=d, USERPROFILE=d)
             p = subprocess.Popen([sys.executable, "-m", "taskloop_dash", "--port", str(port)], env=env,

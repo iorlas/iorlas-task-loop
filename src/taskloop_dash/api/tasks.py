@@ -4,6 +4,7 @@ import socket
 from typing import Any, Final
 
 from taskloop.contracts import log as rec
+from taskloop.contracts.runlife import Liveness, liveness
 from taskloop_dash.api.asks import Asks
 from taskloop_dash.api.lanes import Lanes
 from taskloop_dash.env import Env
@@ -113,14 +114,15 @@ class Tasks:
         name = names.run_name(newest)
         span = (spans.get(bead) or [None])[-1]
         recs = self.runlogs.read(newest)
-        run_rec, closed = self.runlogs.run_facts(recs)
-        alive = not closed and self.records.run_alive(newest, run_rec, span)
+        run_rec = self.runlogs.run_start(recs)
+        lv = liveness(recs, self.env.clock())
+        alive = lv is Liveness.LIVE
         run = self.runlogs.run_timeline(newest, alive=alive)
         trace = tr.get(name)
         ask, blocked, state, label = self.state_of(bead, newest, recs, run, alive, span, trace)
         started = run["started"] or 0
         last_t = (recs[-1].t if recs else None) or started
-        return {"id": bead, "title": (span or {}).get("title") or (ask or {}).get("title") or "", "state": state,
+        return {"id": bead, "title": (span or {}).get("title") or (ask or {}).get("title") or "", "state": state, "liveness": lv.value,
                 "label": label, "slot": slot_of(run_rec, span, trace), "repo": repo_name(span, trace, ask),
                 "runs": len(paths), "run": name, "started": started, "updated": last_t,
                 "since": round(self.env.clock() - started) if alive and started else None,
@@ -148,10 +150,7 @@ class Tasks:
         spans, tr = self.records.task_spans(), self.records.traces()
         runs: list[Row] = []
         for p in paths:
-            alive = False
-            if p == paths[-1]:
-                rr, closed = self.runlogs.run_facts(self.runlogs.read(p))
-                alive = not closed and self.records.run_alive(p, rr, (spans.get(bead) or [None])[-1])
+            alive = p == paths[-1] and liveness(self.runlogs.read(p), self.env.clock()) is Liveness.LIVE
             r = self.runlogs.run_timeline(p, alive=alive)
             r["because"] = tlv.because_text(r, runs[-1] if runs else None)
             runs.append(r)

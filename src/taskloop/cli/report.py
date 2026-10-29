@@ -10,7 +10,7 @@ from taskloop.app.launch import repos
 from taskloop.app.report import card as cards
 from taskloop.app.report import lost as lostwork
 from taskloop.app.report import planner, reflect
-from taskloop.app.report.inputs import prefix, run_alive
+from taskloop.app.report.inputs import prefix
 from taskloop.app.report.window import digest_time, since_of, window
 
 
@@ -84,7 +84,7 @@ def cmd_report(a: Any) -> int:
             print_planner(p)
         return 0
     repo = repos.repo_root(a.repo)
-    c = cards.scorecard(repo, since, until, base=repos.default_base(repo), alive=run_alive)
+    c = cards.scorecard(repo, since, until, base=repos.default_base(repo))
     c["planner"] = planner.planner_stats(since, until, {prefix(x["bead"]) for x in c["per_bead"]})
     if a.json:
         print(json.dumps(c, indent=1, ensure_ascii=False))

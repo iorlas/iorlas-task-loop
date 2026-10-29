@@ -25,6 +25,7 @@ from support import (  # noqa: E402
     tlbd,
 )
 from support.fakes import FakeBeadStore, as_comment  # noqa: E402
+from support.logs import typed  # noqa: E402
 
 from taskloop.adapters import (  # noqa: E402
     beadtools,
@@ -33,7 +34,6 @@ from taskloop.adapters import (  # noqa: E402
 )
 from taskloop.app.launch import repos  # noqa: E402
 from taskloop.app.report import card, inputs, lost, planner  # noqa: E402
-from taskloop.cli import report as cli_report  # noqa: E402
 from taskloop.domain.report import matchers  # noqa: E402
 
 T0 = datetime(2026, 10, 21, 6, 0).timestamp()  # the window's start in the fixtures: local 06:00
@@ -248,11 +248,10 @@ class Scorecard(Base):
             {"t": T0, "kind": "note", "text": "ask t-7-1 (verify) is answered: the bead changed since it was asked"}) + "\n")
         # a crash: an engine log with no close and no trace, long quiet
         dead = ident.config_dir() / "engine" / ("t-8-{}.jsonl".format(time.strftime("%Y%m%d-%H%M%S", time.localtime(T0 + 5 * MIN))))
-        dead.write_text(json.dumps({"t": T0 + 5 * MIN, "kind": "cmd", "text": "git commit -q -m wip (t-8): failed"}) + "\n")
-        os.utime(dead, (T0 + 6 * MIN, T0 + 6 * MIN))
+        dead.write_text(json.dumps(typed("note", T0 + 5 * MIN, text="git commit -q -m wip (t-8): failed")) + "\n")
         # a run that is still going: no trace yet, but alive
         live = ident.config_dir() / "engine" / ("t-9-{}.jsonl".format(time.strftime("%Y%m%d-%H%M%S", time.localtime(T0 + 100 * MIN))))
-        live.write_text(json.dumps({"t": T0 + 100 * MIN, "kind": "node", "text": "write"}) + "\n")
+        live.write_text(json.dumps(typed("beat", T0 + 200 * MIN - 30)) + "\n")  # its last beat, 30 s before the report's now
         # the loop's own record of a run-task that died before its engine wrote anything
         looptest.log(gitrepo.repo_root(str(self.repo))).parent.mkdir(parents=True, exist_ok=True)
         with open(looptest.log(gitrepo.repo_root(str(self.repo))), "w") as f:  # the loop keys it so
@@ -281,7 +280,7 @@ class Scorecard(Base):
     def card(self, until=None):
         return card.scorecard(str(self.repo), T0, until or T0 + 200 * MIN, base="main",
                                 comments_of=lambda b: [as_comment(c) for c in self.comments.get(b, [])], status_of=self.status.get,
-                                alive=lambda bead: bead == "t-9", now=T0 + 200 * MIN)
+                                now=T0 + 200 * MIN)
 
     def test_the_six_counts(self):
         c = self.card()
@@ -323,7 +322,7 @@ class Scorecard(Base):
         store.notes = {b: [as_comment(x) for x in c] for b, c in self.comments.items()}
         with mock.patch.object(repos, "default_base", return_value="main"), mock.patch.object(beadtools, "bd_store", return_value=store), \
                 mock.patch.object(lost, "bead_status", lambda b, repo: self.status.get(b)), \
-                mock.patch.object(cli_report, "run_alive", lambda bead: bead == "t-9"):
+                mock.patch.object(card, "time", mock.Mock(wraps=time, time=lambda: T0 + 200 * MIN)):  # the CLI reads the clock itself
             out = io.StringIO()
             with redirect_stdout(out):
                 rc = tl.main(args)

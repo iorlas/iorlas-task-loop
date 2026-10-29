@@ -25,9 +25,7 @@ class RunLogs:
         return detail.block_detail(path, node_id, k, self.files)
 
     @staticmethod
-    def run_facts(recs: list[Any]) -> tuple[dict[str, str] | None, bool]:
-        """(the run's start as {worktree, slot} or None, whether a close record is among the last 40)."""
+    def run_start(recs: list[Any]) -> dict[str, str] | None:
+        """The run's start as {worktree, slot}; None when the log has none."""
         start = next((r for r in recs if isinstance(r, rec.RunStart)), None)
-        return ({"worktree": start.worktree, "slot": start.slot or ""} if start else None), any(
-            isinstance(r, rec.Close) for r in recs[-40:]
-        )
+        return {"worktree": start.worktree, "slot": start.slot or ""} if start else None

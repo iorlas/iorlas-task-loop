@@ -1,4 +1,5 @@
 """`tl report`: the M2 scorecard over a time window. Reads only: traces.jsonl, the loop's log, engine/*.jsonl, the repo's git refs, bd."""
+import contextlib
 import statistics
 import time
 from collections.abc import Callable, Sequence
@@ -7,24 +8,32 @@ from typing import Any, Final
 
 from taskloop.adapters import beadtools, gitrepo, ident
 from taskloop.app.asks import intake
-from taskloop.app.report.inputs import prefix, read_jsonl, repo_traces, run_alive
+from taskloop.app.report.inputs import prefix, read_jsonl, repo_traces
 from taskloop.app.report.lost import lost_work
 from taskloop.app.report.planner import input_tokens
 from taskloop.contracts import paths
 from taskloop.contracts.bead import Comment
+from taskloop.contracts.codec import CodecError
 from taskloop.contracts.ids import loop_key
+from taskloop.contracts.log import EngineLog, decode
+from taskloop.contracts.runlife import Liveness, liveness
 from taskloop.domain.report import matchers
 
 M2: Final = {"beads": 10, "landed_no_ask": 7}  # at least; lost and crashes must be 0 (docs/roadmap.md)
-QUIET_MIN = 30  # an engine log with no close and no trace, untouched this long and with no live run-task: a crash
+
+def typed_log(path: Path) -> list[EngineLog]:
+    """The engine log's records; a line that is not one is skipped."""
+    out: list[EngineLog] = []
+    for d in read_jsonl(path):
+        with contextlib.suppress(CodecError):
+            out.append(decode(d))
+    return out
 
 
-def crashes(repo: str, since: float, until: float, traces: list[dict[str, Any]], alive: Callable[[str], bool | None] | None = None,
-            now: float | None = None) -> list[dict[str, Any]]:
-    """Engine crashes: the loop saw run-task exit with no outcome; an engine log in the window with no close record and
-    no trace, quiet for QUIET_MIN and with no live run-task; or a trace closed as 'failed: engine error' (an exception
+def crashes(repo: str, since: float, until: float, traces: list[dict[str, Any]], now: float | None = None) -> list[dict[str, Any]]:
+    """Engine crashes: the loop saw run-task exit with no outcome; an engine log in the window with no trace that reads `crashed`
+    (runlife.liveness: no close, and no record for CRASHED_AFTER); or a trace closed as 'failed: engine error' (an exception
     the engine caught). A run's .stderr is route.py's, where a worker's test tracebacks land too: never read."""
-    alive = alive or run_alive
     now = time.time() if now is None else now
     out: dict[Any, dict[str, Any]] = {}
     log = paths.ConfigDir(ident.config_dir()).loop_log(loop_key(repo))
@@ -47,17 +56,10 @@ def crashes(repo: str, since: float, until: float, traces: list[dict[str, Any]],
         t = matchers.stem_time(parts[1])
         if not since <= t < until:
             continue
-        recs = read_jsonl(f)
-        if any(x.get("kind") == "close" for x in recs):
+        recs = typed_log(f)
+        if liveness(recs, now) is not Liveness.CRASHED:
             continue
-        try:
-            quiet = (now - f.stat().st_mtime) / 60
-        except OSError:
-            continue
-        live = alive(bead)
-        if live or (live is None and quiet < QUIET_MIN):
-            continue
-        last = (recs[-1].get("text") or "") if recs else ""
+        last = getattr(recs[-1], "text", "") if recs else ""
         out[f.stem] = {"bead": bead, "t": t, "run": f.stem, "why": f"the engine log ends with no close: {last[:120]}"}
     for r in traces:  # the engine caught it and closed (engine.py: Engine.run): an engine bug all the same
         if overlaps(r, since, until) and (r.get("why") or "").startswith("failed: engine error"):
@@ -159,13 +161,12 @@ def _tokens(runs: list[dict[str, Any]]) -> dict[str, dict[str, dict[str, int]]]:
 
 
 def scorecard(repo: str, since: float, until: float, base: str, comments_of: Callable[[str], Sequence[Comment]] | None = None,
-              status_of: Callable[[str], str | None] | None = None, alive: Callable[[str], bool | None] | None = None,
-              now: float | None = None) -> dict[str, Any]:
+              status_of: Callable[[str], str | None] | None = None, now: float | None = None) -> dict[str, Any]:
     repo = gitrepo.repo_root(repo)  # the loop keys its log by this path
     comments_of = comments_of or beadtools.bd_store(repo).comments
     traces = repo_traces(repo)
     runs = sorted([r for r in traces if overlaps(r, since, until)], key=lambda r: r.get("started") or 0)
-    crash = crashes(repo, since, until, traces, alive=alive, now=now)
+    crash = crashes(repo, since, until, traces, now=now)
     beads: dict[str, dict[str, list[dict[str, Any]]]] = {}
     for r in runs:
         beads.setdefault(r["bead"], {"runs": [], "crashes": []})["runs"].append(r)

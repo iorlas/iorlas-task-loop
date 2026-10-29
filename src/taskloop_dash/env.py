@@ -18,9 +18,7 @@ from taskloop_dash.cache import FileCache, TtlCache
 from taskloop_dash.tails import Tails
 
 Bead = dict[str, Any]
-RETAIN = 7 * 86400  # finished tasks and runs stay visible this long
 LIVE_SECONDS = 90  # a transcript written within this is still running
-STALE_RUN = 20 * 60  # a run with no close, no engine lock to ask and no log write for this long has stopped
 
 
 def _no_beads(repo: str) -> list[Bead]:

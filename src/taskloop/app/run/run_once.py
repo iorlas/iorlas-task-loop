@@ -1,4 +1,5 @@
 """One run of the engine: claim checks, the stages, the land, and the close-out that always runs."""
+import contextlib
 import os
 from dataclasses import dataclass
 from typing import Any, cast
@@ -10,6 +11,7 @@ from taskloop.app.run import outcomes
 from taskloop.app.run.reload import Exec
 from taskloop.app.slots.lease import Lease
 from taskloop.contracts.enums import AskClass
+from taskloop.contracts.log import Beat
 from taskloop.domain import outcome as oc
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.plan.matchers import AcceptanceText
@@ -33,7 +35,7 @@ class RunOnce:
     def go(self) -> int:
         e = self.e
         end = Ended()
-        hb = Lease(e.store, e.bead, os.environ.get("TASK_LOOP_SLOT_BEAD", ""))
+        hb = Lease(e.store, e.bead, os.environ.get("TASK_LOOP_SLOT_BEAD", ""), on_beat=self.beat)
         ck = e.checkpoints.read()
         e.prev_ck = ck.run if ck else ""
         try:
@@ -49,6 +51,11 @@ class RunOnce:
         finally:
             self.close_out(hb, end)
         return 0 if e.moved or end.outcome in ("landed", "done") else 2
+
+    def beat(self) -> None:
+        """The run's proof of life in its log (runlife.liveness reads it); a log that cannot be written must not kill the beat thread."""
+        with contextlib.suppress(OSError):
+            self.e.log.emit(Beat())
 
     def run(self, hb: Any, end: Ended) -> None:
         e = self.e
@@ -81,6 +88,7 @@ class RunOnce:
             raise e.Blocked(f"failed: bead {e.bead} not found", kind=oc.Kind.FAULT_INFRA)
         e.bead_title, e.bead_parent = bead.title, bead.parent
         hb.start()
+        self.beat()
         e.delegation.route()
         if not e.route:
             why = e.refusal or dg.Refusal("not_installed")

@@ -26,6 +26,7 @@ from support.logs import typed, write_log  # noqa: E402
 from support.narrow import must  # noqa: E402
 from test_dash import free_port  # noqa: E402
 
+from taskloop.contracts.runlife import CRASHED_AFTER  # noqa: E402
 from taskloop_dash import tails as tails_mod  # noqa: E402
 from taskloop_dash.cache import FileCache  # noqa: E402
 from taskloop_dash.readers import events as events_mod  # noqa: E402
@@ -298,22 +299,23 @@ class Api(unittest.TestCase):
         self.dash.env.files.items.clear()
         self.assertEqual(self.task("x-1")["label"], "writing")
 
-    def test_a_running_run_shows_its_stage_from_its_engine_lock(self):
+    def test_a_running_run_shows_its_stage_from_its_log_and_a_silent_one_reads_crashed(self):
         wt = Path(self.tmp.name) / "slots" / "s1"
-        (wt / ".task").mkdir(parents=True)
-        (wt / ".task" / "engine.lock").write_text(json.dumps({"pid": os.getpid(), "bead": "x-1", "slot": "s1"}))
-        recs = [{"v": 2, "t": time.time() - 600, "kind": "run_start", "run": "x-1-20261021-120000", "bead": "x-1",
+        now = time.time()
+        recs = [{"v": 2, "t": now - 600, "kind": "run_start", "run": "x-1-20261021-120000", "bead": "x-1",
                  "worktree": str(wt), "slot": "s1", "started_because": "first", "prev_run": "", "ask": ""},
-                {"v": 2, "t": time.time() - 590, "kind": "step_start", "text": "write: stage 2/3 write 1", "id": "n3", "step": "write",
-                 "stage": 2, "stages": 3, "write": 1, "round": 1}]
+                {"v": 2, "t": now - 590, "kind": "step_start", "text": "write: stage 2/3 write 1", "id": "n3", "step": "write",
+                 "stage": 2, "stages": 3, "write": 1, "round": 1},
+                {"v": 2, "t": now - 10, "kind": "beat"}]
         (self.cfg / "engine" / "x-1-20261021-120000.jsonl").write_text("".join(json.dumps(r) + "\n" for r in recs))
         t = self.task("x-1")
-        self.assertEqual((t["state"], t["label"], t["slot"]), ("running", "writing stage 2/3", "s1"))
+        self.assertEqual((t["state"], t["label"], t["slot"], t["liveness"]), ("running", "writing stage 2/3", "s1", "live"))
         self.assertGreaterEqual(t["since"], 590)
-        (wt / ".task" / "engine.lock").unlink()
+        self.dash.env.clock = lambda: now + CRASHED_AFTER  # no beat since: the process died without a close
         self.dash.env.ttl.clear()
         self.dash.env.files.items.clear()
-        self.assertEqual(self.task("x-1")["state"], "stopped")
+        t = self.task("x-1")
+        self.assertEqual((t["state"], t["liveness"]), ("stopped", "crashed"))
 
     def test_the_task_timeline_is_every_run_of_the_bead_oldest_first(self):
         d = self.dash.tasks.api_task_timeline("", BEAD)

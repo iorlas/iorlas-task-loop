@@ -3,17 +3,19 @@ setup, lifesim 5-12 min, outlasts a 5-minute lease), and run-task's own (the bea
 Both a loop killed with SIGKILL and a run that outlives it then leave no slot free under a live run."""
 import contextlib
 import threading
+from collections.abc import Callable
 from types import TracebackType
 from typing import Self
 
 from taskloop.contracts.ports import BdFailure, Beads
+from taskloop.contracts.runlife import BEAT_EVERY
 
-EVERY = 60.0  # seconds between beats; bd leases last 5 minutes
+EVERY = BEAT_EVERY  # seconds between beats; bd leases last 5 minutes
 
 
 class Lease:
-    def __init__(self, store: Beads, *ids: str | None, every: float = EVERY) -> None:
-        self.store, self.every = store, every
+    def __init__(self, store: Beads, *ids: str | None, every: float = EVERY, on_beat: Callable[[], None] | None = None) -> None:
+        self.store, self.every, self.on_beat = store, every, on_beat
         self.ids: list[str] = [i for i in ids if i]
         self.stopped = threading.Event()
         self.thread = threading.Thread(target=self.run, daemon=True)
@@ -33,6 +35,8 @@ class Lease:
         for i in list(self.ids):
             with contextlib.suppress(BdFailure):  # a refused beat changes nothing: the next one tries again
                 self.store.heartbeat(i)
+        if self.on_beat is not None:
+            self.on_beat()
 
     def run(self) -> None:
         while not self.stopped.wait(self.every):

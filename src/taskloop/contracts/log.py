@@ -288,6 +288,13 @@ class Note(LogRec):
 
 
 @record
+class Beat(LogRec):
+    """The proof of life: appended every runlife.BEAT_EVERY seconds while the run's process lives (it is what runlife.liveness reads)."""
+
+    KIND: ClassVar[str] = "beat"
+
+
+@record
 class Close(LogRec):
     KIND: ClassVar[str] = "close"
     outcome: Outcome
@@ -298,10 +305,10 @@ class Close(LogRec):
 
 EngineLog = (RunStart | StepStart | StepEnd | CallStart | CallEnd | CmdStart | CmdEnd | CheckStart | CheckEnd | GateStart | GateEnd
              | LandTry | WaitStart | WaitEnd | Lock | Unlock | VendorError | Kill | Overrun | RetryDecision | Transition
-             | Reload | Checks | Artifacts | Warn | Note | Close)
+             | Reload | Checks | Artifacts | Warn | Note | Beat | Close)
 ENGINE_LOG = table_of(RunStart, StepStart, StepEnd, CallStart, CallEnd, CmdStart, CmdEnd, CheckStart, CheckEnd, GateStart,
                       GateEnd, LandTry, WaitStart, WaitEnd, Lock, Unlock, VendorError, Kill, Overrun, RetryDecision, Transition,
-                      Reload, Checks, Artifacts, Warn, Note, Close)
+                      Reload, Checks, Artifacts, Warn, Note, Beat, Close)
 
 
 def decode(data: object) -> EngineLog:

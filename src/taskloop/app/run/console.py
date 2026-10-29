@@ -27,6 +27,7 @@ QUIET = frozenset(
         "transition",
         "reload",
         "checks",
+        "beat",
         "close",
     }
 )
