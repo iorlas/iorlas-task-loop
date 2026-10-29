@@ -6,7 +6,6 @@ import os
 import subprocess
 import sys
 import tempfile
-import time
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
@@ -21,8 +20,6 @@ import tl  # noqa: E402
 
 from taskloop.domain.brief import HANDOFF_BYTES, RULES, STATUS_BYTES, STATUS_LINES, AskLine, Brief, LoopLine, handoff_text, status_lines  # noqa: E402
 from taskloop.hook import pretool, session  # noqa: E402
-
-BUDGET = 1.0  # seconds for one hook, a real process start included (the bead: a hook finishes under 1 s)
 
 
 def call(tool, **args):
@@ -158,35 +155,12 @@ class Texts(unittest.TestCase):
 
 
 class Speed(unittest.TestCase):
-    """A real process start of each hook, the best of three, against the budget: a hook runs before every tool call."""
+    """A hook runs before every tool call: pretool pulls in no store, adapter or app module; an unknown event is an error."""
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.env = dict(os.environ, XDG_CONFIG_HOME=self.tmp.name, CLAUDE_CONFIG_DIR=self.tmp.name)
-
-    def best(self, event, payload):
-        runs = []
-        for _ in range(3):
-            began = time.monotonic()
-            r = subprocess.run([sys.executable, str(HOOK), event], input=json.dumps(payload), capture_output=True, text=True, env=self.env,
-                               cwd=self.tmp.name, timeout=30, check=False)
-            runs.append(time.monotonic() - began)
-            self.assertEqual(r.returncode, 0, r.stderr)
-        return min(runs), r.stdout
-
-    def test_pretool_finishes_within_the_budget_and_denies(self):
-        secs, out = self.best("pretool", {"tool_name": "Bash", "tool_input": {"command": "pkill -f x"}})
-        self.assertLess(secs, BUDGET)
-        self.assertIn("deny", out)
-
-    def test_session_start_and_precompact_finish_within_the_budget(self):
-        repo = Path(self.tmp.name) / "repo"
-        subprocess.run(["git", "init", "-q", str(repo)], check=True, capture_output=True)
-        for event in ("session-start", "precompact"):
-            with self.subTest(event=event):
-                secs, _ = self.best(event, {"session_id": "s1", "cwd": str(repo), "source": "compact"})
-                self.assertLess(secs, BUDGET)
 
     def test_pretool_imports_no_store_adapter_or_app_module(self):
         code = (

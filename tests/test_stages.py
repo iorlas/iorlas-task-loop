@@ -452,7 +452,7 @@ class Fdyo(StagesTest):
         t = time.time()
         rc, s = self.run_engine(
             {"plan": [PLAN], "write": [WRITE, WRITE, WRITE], "review": [CLEAN]},
-            checks=[{"id": "slow", "cmd": te.pyc("import time; time.sleep(60)"), "group": "tests", "wall_min": 0.05, "retry": 2}],
+            checks=[{"id": "slow", "cmd": te.pyc("import time; time.sleep(60)"), "group": "tests", "wall_min": 0.01, "retry": 2}],
         )
         self.assertLess(time.time() - t, 45)
         self.assertEqual([c[0] for c in s.calls], ["planner", "worker"])  # one write, no fix task, no review
@@ -460,7 +460,7 @@ class Fdyo(StagesTest):
         eng = cast(Any, self).eng
         res = eng.result()
         self.assertEqual(res["outcome"], "parked")
-        self.assertIn("check slow timed out after 0.05 min (wall_min=0.05)", res["why"])
+        self.assertIn("check slow timed out after 0.01 min (wall_min=0.01)", res["why"])
         ends = [json.loads(x) for x in eng.log_path.read_text().splitlines() if '"kind": "check_end"' in x]
         self.assertEqual([(e["exit"], e["wall_hit"], e["tries"]) for e in ends if e["exit"] is not None], [(124, True, 1)])
 

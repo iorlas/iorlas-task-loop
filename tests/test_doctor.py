@@ -1,4 +1,6 @@
 """Doctor and the engine inspect the same committed base, even from a stale worktree."""
+import contextlib
+import io
 import json
 import os
 import subprocess
@@ -68,11 +70,21 @@ class DoctorSource(unittest.TestCase):
         self.git("update-ref", ref, commit)
         return commit
 
-    def doctor(self, cwd=None):
-        result = subprocess.run([sys.executable, str(ROOT / "skills" / "task-loop" / "tl.py"), "doctor"],
-                                cwd=cwd or self.wt, env=self.env, capture_output=True, text=True, check=True)
-        self.assertEqual(result.stderr, "")
-        return result.stdout
+    def doctor(self, cwd=None, cli=False):
+        """The doctor's report from `cwd`: in this process (a child python costs a second), or as `tl.py doctor` when `cli`."""
+        if cli:
+            result = subprocess.run([sys.executable, str(ROOT / "skills" / "task-loop" / "tl.py"), "doctor"],
+                                    cwd=cwd or self.wt, env=self.env, capture_output=True, text=True, check=True)
+            self.assertEqual(result.stderr, "")
+            return result.stdout
+        out, here = io.StringIO(), os.getcwd()
+        os.chdir(cwd or self.wt)
+        try:
+            with contextlib.redirect_stdout(out):
+                self.assertEqual(doctor.run(ROOT), 0)
+        finally:
+            os.chdir(here)
+        return out.getvalue()
 
     def test_stale_main_newer_base(self):
         commit = self.advance_base(self.config("new-base"))
@@ -118,7 +130,7 @@ class DoctorSource(unittest.TestCase):
 
     def test_reports_exact_commit_when_ok(self):
         commit = self.advance_base(self.config("good", "old.txt"))
-        out = self.doctor()
+        out = self.doctor(cli=True)  # the one run through tl.py itself
         self.assertIn("base origin/main at commit " + commit, out)
         self.assertIn("ok: no setup problems found in " + shown(self.wt), out)
         self.assertNotIn("WARN", out)

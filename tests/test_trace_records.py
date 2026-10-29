@@ -164,7 +164,6 @@ class TraceRecords(te.EngineTest):
     def test_the_trace_says_why_each_run_started_and_which_run_came_before(self):
         rc, _ = self.run_engine({"plan": [dict(PLAN, irreversible="push_shared", question="Old format or new?")]})
         first = self.eng.log_path.stem
-        time.sleep(1.05)  # a run's name is its start second
         with self.store.stub(comments=[{"author": "denis", "text": "Old format."}]):
             rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0)
@@ -180,7 +179,6 @@ class TraceRecords(te.EngineTest):
         with te.EngineTest.stop_at(self, "reviewer", 2):
             self.run_engine({"plan": [two], "write": [WRITE, WRITE], "review": [CLEAN]})
         first = self.eng.log_path.stem
-        time.sleep(1.05)
         rc, _ = self.run_engine({"write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0)
         run = records(self.eng, rec.RunStart)[-1]
@@ -190,7 +188,6 @@ class TraceRecords(te.EngineTest):
         self.run_engine({"plan": [stop("worker_failed", say="boom")] * 2})
         first = self.eng.log_path.stem
         self.assertFalse((ident.config_dir() / "checkpoints" / "t-1.json").exists())
-        time.sleep(1.05)
         self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         run = records(self.eng, rec.RunStart)[-1]
         self.assertEqual((run.started_because, run.prev_run), ("retry", first))

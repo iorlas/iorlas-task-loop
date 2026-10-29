@@ -154,6 +154,11 @@ PLAN: dict[str, Any] = {
 }
 
 
+# PLAN with `test -f` as its check: a bash builtin-sized spawn instead of a Python interpreter (about 30 ms less per check run); for
+# tests that do not look at the check's text
+FAST_PLAN: dict[str, Any] = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=["test -f f.txt"])])
+
+
 WRITE = {
     "summary": "wrote f",
     "checks_run": [{"cmd": "test -f f.txt", "exit": 0}],

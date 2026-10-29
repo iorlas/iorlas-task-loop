@@ -12,7 +12,6 @@ from support.engine_case import (
     CAT_ENV,
     CLEAN,
     FALSE,
-    PLAN,
     PY,
     WRITE,
     EngineTest,
@@ -23,6 +22,9 @@ from support.engine_case import (
     shq,
     stop,
     verdict,
+)
+from support.engine_case import (
+    FAST_PLAN as PLAN,
 )
 
 # isort: split

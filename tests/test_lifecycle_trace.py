@@ -218,7 +218,6 @@ class TraceTelemetry(te.EngineTest):
     def test_a_second_failure_after_another_run_is_a_retry_with_its_own_fingerprint(self):
         self.run_engine({}, route="")
         first = self.traces()[-1]
-        time.sleep(1.05)  # a run's name is its start second
         rc, _ = self.run_engine({"plan": [stop("worker_failed", say="different cause")] * 2})
         self.assertEqual(rc, 2)
         row = self.assert_row("failed", because="retry")

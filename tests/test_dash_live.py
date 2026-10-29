@@ -5,7 +5,6 @@ import os
 import subprocess
 import sys
 import tempfile
-import time
 import unittest
 from pathlib import Path
 
@@ -119,14 +118,23 @@ class Feed(unittest.TestCase):
             _log, lf, run = self.run_of(d)
             self.assertTrue(live.poll(run, None))
             cur = live.page(run)["cursor"]
-            t0 = time.monotonic()
-            self.assertEqual(live.poll(run, live.decode(cur), wait=0.5)["events"], [])
-            self.assertGreaterEqual(time.monotonic() - t0, 0.5)
-            threading = __import__("threading")
-            threading.Timer(0.2, put, (lf, [{"t": T + 30, "k": "tool_start", "id": "9", "text": "edit"}])).start()
-            t0 = time.monotonic()
-            got = live.poll(run, live.decode(cur), wait=2)
-            self.assertLess(time.monotonic() - t0, 1.5)
+            now = [0.0]
+            naps = []
+
+            def nap(secs):
+                naps.append(secs)
+                now[0] += secs
+
+            self.assertEqual(live.poll(run, live.decode(cur), wait=0.5, sleep=nap, clock=lambda: now[0])["events"], [])
+            self.assertGreaterEqual(sum(naps), 0.5)  # nothing grew: it held the whole wait
+
+            def grow(secs):
+                nap(secs)
+                put(lf, [{"t": T + 30, "k": "tool_start", "id": "9", "text": "edit"}])
+
+            now[0], naps[:] = 0.0, []
+            got = live.poll(run, live.decode(cur), wait=2, sleep=grow, clock=lambda: now[0])
+            self.assertEqual(len(naps), 1)  # a file grew: it returned at once
             self.assertEqual([e["k"] for e in got["events"]], ["tool_start"])
 
 

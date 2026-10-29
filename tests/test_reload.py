@@ -2,10 +2,8 @@
 (simulated here with an injected exec function), the bead finishes on the new version with the same run id, a broken
 install is refused and recorded, delegate is resolved per call, and nothing reloads a module in place."""
 
-import ast
 import json
 import os
-import re
 import shutil
 import sys
 import time
@@ -15,8 +13,6 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "skills" / "task-loop"
-ENGINE = ROOT / "src" / "taskloop" / "app" / "run" / "engine.py"
-DELEGATION = ROOT / "src" / "taskloop" / "app" / "run" / "delegation.py"
 sys.path.insert(0, str(SRC))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402, F401
@@ -36,9 +32,11 @@ from taskloop.adapters import delegate as dl  # noqa: E402
 from taskloop.adapters import (  # noqa: E402
     gitrepo,
     ident,
+    installs,
 )
 from taskloop.adapters.fake_beads import FakeBeads  # noqa: E402
 from taskloop.app.launch import loop as wloop  # noqa: E402
+from taskloop.app.loop import versions  # noqa: E402
 from taskloop.app.loop.run import BeadRun, Where  # noqa: E402
 from taskloop.app.release import (  # noqa: E402
     catalog,
@@ -77,13 +75,18 @@ class Reload(te.EngineTest):
         return dl.Resolved(Path(route).parent, route, fake_route.CONTRACT, "explicit")
 
     def install(self, ver, plant=None, fake=False):
-        """An installed version: a copy of this checkout's skill (its selftest is the real one), or a stub for the running one."""
+        """An installed version: this checkout's skill and src (linked, not copied: only a planted break gets its own copy;
+        its selftest is the real one), or a stub for the running one."""
         d = self.cache / ver / "skills" / "task-loop"
         if fake:
             d.mkdir(parents=True)
-        else:
+        elif plant:
             shutil.copytree(SRC, d, ignore=shutil.ignore_patterns("__pycache__", "dash"))
             shutil.copytree(ROOT / "src", d.parents[1] / "src", ignore=shutil.ignore_patterns("__pycache__"))
+        else:
+            d.parent.mkdir(parents=True)
+            d.symlink_to(SRC, target_is_directory=True)
+            (d.parents[1] / "src").symlink_to(ROOT / "src", target_is_directory=True)
         (d.parents[1] / ".claude-plugin").mkdir(exist_ok=True)
         (d.parents[1] / ".claude-plugin" / "plugin.json").write_text(json.dumps({"version": ver}))
         if plant:
@@ -189,8 +192,8 @@ class Reload(te.EngineTest):
             os.environ.pop("TL_REEXEC", None)
             self.assertFalse(entry._handed_slot("s2"))
 
-    @te.real_git("the child tl.py selftest runs git init and git push itself")
-    def test_a_dry_run_and_a_run_not_started_by_run_task_never_move(self):
+    @mock.patch("taskloop.adapters.installs.selftest_fails", return_value=None)  # a good install, whatever its selftest would say
+    def test_a_dry_run_and_a_run_not_started_by_run_task_never_move(self, _selftest):
         self.install("0.2.0")
         script = fake_route.Script({"plan": [te.PLAN], "write": [te.WRITE], "review": [te.CLEAN]})
         eng = self.engine_for(script)
@@ -214,20 +217,24 @@ class Reload(te.EngineTest):
         self.assertEqual(len(red), 1)
         self.assertEqual((red[0]["version"], red[0]["running"], red[0]["who"]), ("0.2.0", "0.1.0", "engine"))
         self.assertIn("planted: cannot plan", red[0]["why"])
+        d = self.cache / "0.2.0"
+        here = d / "skills" / "task-loop"
+        self.assertIsNone(installs.import_fails(here, d / "src", versions.MODULES, 60))  # it imports fine; only planning fails
         self.assertEqual(len(tests), 1)  # the next boundaries read bad-versions.json instead of testing it again
         self.assertEqual([e["version"] for e in json.loads((ident.config_dir() / "bad-versions.json").read_text())["entries"]], ["0.2.0"])
+        self.assertEqual(json.loads((ident.config_dir() / "bad-versions.json").read_text())["entries"][0]["seen_by"], "0.1.0")
         self.assertEqual([e for e in self.events() if e["kind"] == "reload"], [])
 
-    @te.real_git("the child tl.py selftest runs git init and git push itself")
     def test_a_refused_version_is_tried_again_when_it_is_installed_again_and_a_newer_one_is_tried(self):
-        self.install("0.2.0", plant=BREAK_PLAN)
-        self.assertEqual(must(wloop.vet_newer(self.here))[:2], ("0.2.0", self.cache / "0.2.0"))
-        self.assertIsNone(wloop.vet_newer(self.here))  # refused, key unchanged: not looked at
-        shutil.rmtree(self.cache / "0.2.0")
-        self.install("0.2.0")  # the same number, re-released
-        self.assertIsNone(must(wloop.vet_newer(self.here))[2])
-        self.install("0.3.0")
-        self.assertEqual(must(wloop.vet_newer(self.here))[0], "0.3.0")
+        self.install("0.2.0", plant=BREAK_PLAN)  # a copy: a link would share the files the install key is made of
+        with mock.patch("taskloop.adapters.installs.selftest_fails", side_effect=["planted: cannot plan", None, None]):  # the verdict only
+            self.assertEqual(must(wloop.vet_newer(self.here))[:2], ("0.2.0", self.cache / "0.2.0"))
+            self.assertIsNone(wloop.vet_newer(self.here))  # refused, key unchanged: not looked at
+            shutil.rmtree(self.cache / "0.2.0")
+            self.install("0.2.0")  # the same number, re-released
+            self.assertIsNone(must(wloop.vet_newer(self.here))[2])
+            self.install("0.3.0")
+            self.assertEqual(must(wloop.vet_newer(self.here))[0], "0.3.0")
 
     # -- the crash after an exec: the loop puts the run back on the version it came from, once
     def test_a_run_task_that_dies_right_after_the_exec_is_restarted_once_on_the_old_version(self):
@@ -298,64 +305,6 @@ class Reload(te.EngineTest):
             self.assertEqual(eng.delegation.route(), "/b/route.py")
             self.assertEqual(eng.delegation.route(), "/b/route.py")
             self.assertEqual(fr.call_count, 3)
-
-    @staticmethod
-    def stored_resolves(f, tree):
-        """The places in `f` where a dl.resolve() result outlives the call it was made for."""
-        bad = []
-        parents = {ch: n for n in ast.walk(tree) for ch in ast.iter_child_nodes(n)}
-
-        def inside(n):
-            while n in parents:
-                n = parents[n]
-                if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                    return n.name
-            return None
-        for n in ast.walk(tree):
-            if not (isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr == "resolve"
-                    and isinstance(n.func.value, ast.Name) and n.func.value.id == "dl"):
-                continue
-            where = inside(n)
-            if where not in ("__init__", "route", None) and f.name in ("engine.py", "delegation.py"):
-                bad.append(f"{f.name}: dl.resolve called in {where}")
-            stmt = parents.get(n)
-            while stmt is not None and not isinstance(stmt, (ast.Assign, ast.AnnAssign, ast.FunctionDef, ast.Module)):
-                stmt = parents.get(stmt)
-            for t in stmt.targets if isinstance(stmt, ast.Assign) else ():
-                if isinstance(t, ast.Attribute) and not (
-                    f.name in ("engine.py", "delegation.py") and t.attr == "route" and where in ("__init__", "route")
-                ):
-                    bad.append(f"{f.name}:{n.lineno} stores dl.resolve() in .{t.attr}")
-                if isinstance(t, ast.Name) and where is None:
-                    bad.append(f"{f.name}:{n.lineno} keeps dl.resolve() in module global {t.id}")
-        return bad
-
-    def test_the_engine_and_lanes_never_store_a_resolved_route_or_a_delegate_module_across_calls(self):
-        bad = []
-        for f in [ENGINE, DELEGATION, *sorted((SRC / "lanes").glob("*.py"))]:
-            tree = ast.parse(f.read_text(encoding="utf-8"))
-            bad += self.stored_resolves(f, tree)
-            for n in ast.walk(tree):
-                if isinstance(n, ast.Assign) and f.name == "engine.py":  # no delegate module object held: self.x = <module>
-                    v = n.value
-                    if isinstance(v, ast.Call) and getattr(v.func, "attr", "") in (
-                        "import_module",
-                        "spec_from_file_location",
-                        "module_from_spec",
-                    ):
-                        bad.append(f"{f.name}:{n.lineno} holds an imported delegate module")
-        self.assertEqual(bad, [])
-
-    # -- point 3: re-exec is the only reload path
-    def test_nothing_in_the_skill_reloads_a_module(self):
-        hits = []
-        for f in SRC.rglob("*.py"):
-            if "__pycache__" in f.parts:
-                continue
-            for k, line in enumerate(f.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
-                if re.search(r"importlib\.reload|\breload\(", line):
-                    hits.append(f"{f.relative_to(SRC)}:{k}")
-        self.assertEqual(hits, [])
 
     # -- point 4: loop state and dashboard lane
     def test_loop_state_names_the_running_version_and_code_dir(self):

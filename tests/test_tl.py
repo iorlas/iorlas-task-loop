@@ -170,6 +170,16 @@ class RegisterCLI(Base):
         for path, metadata in existing.items():
             self.assertEqual(repos[path], metadata)
 
+    def in_process(self, *args):
+        out, err, cwd = io.StringIO(), io.StringIO(), os.getcwd()
+        os.chdir(self.home)
+        try:
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                rc = tl.main(list(args))
+        finally:
+            os.chdir(cwd)
+        return rc, out.getvalue(), err.getvalue()
+
     def test_invalid_input_leaves_configuration_unchanged(self):
         ordinary = self.home / "ordinary"
         ordinary.mkdir()
@@ -186,17 +196,24 @@ class RegisterCLI(Base):
                      ("register", str(self.home / "missing\nwith newline"))]
             for args in cases:
                 with self.subTest(configured=configured, args=args):
-                    result = self.cli(*args)
-                    self.assertEqual(result.returncode, 1)
-                    self.assertEqual(result.stdout, "")
-                    self.assertEqual(len(result.stderr.splitlines()), 1)
-                    self.assertTrue(result.stderr.startswith("tl: "), result.stderr)
-                    self.assertNotIn("Traceback", result.stderr)
+                    rc, out, err = self.in_process(*args)
+                    self.assertEqual(rc, 1)
+                    self.assertEqual(out, "")
+                    self.assertEqual(len(err.splitlines()), 1)
+                    self.assertTrue(err.startswith("tl: "), err)
                     if configured:
                         self.assertEqual(self.registry.read_bytes(), original)
                         self.assertEqual([p for p in self.config.iterdir() if p.name != "locks"], [self.registry])  # no tmp left
                     else:
                         self.assertFalse(self.config.parent.exists())
+
+    def test_invalid_input_exits_1_with_one_tl_line_on_stderr_and_no_traceback(self):  # the one real process
+        result = self.cli("register", str(self.home / "missing"))
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(result.stdout, "")
+        self.assertEqual(len(result.stderr.splitlines()), 1)
+        self.assertTrue(result.stderr.startswith("tl: "), result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
 
     def test_help_documents_register_and_optional_directory(self):
         result = self.cli("--help")

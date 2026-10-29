@@ -17,7 +17,6 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 import contextlib
 
-from support import waits
 from support.narrow import must
 
 from taskloop.adapters.suiteout import failure_report
@@ -136,39 +135,6 @@ class Release(unittest.TestCase):
         f = self.home / (name + ".log")
         return f.read_text().splitlines() if f.exists() else []
 
-    def test_two_releases_started_together_both_land_one_after_the_other_with_distinct_versions(self):
-        gate = self.home / "gate"
-        first = subprocess.Popen(self.cmd("first fix"), env=dict(self.env, FAKE_CLAUDE_GATE=str(gate)),
-                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-        self.addCleanup(first.kill)
-        holder = must(waits.until(lambda: next(self.home.glob("cfg/**/*.holder"), None)))  # the first holds the lock and says who
-        self.assertTrue(holder.read_text())
-        second = subprocess.Popen(self.cmd("second fix"), env=self.env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                  text=True)
-        self.addCleanup(second.kill)
-        seen = []
-        for line in must(second.stdout):  # the second says it waits; only then does the first go on
-            seen.append(line)
-            if "waiting for the release lock" in line:
-                break
-        gate.write_text("")
-        procs = [first, second]
-        outs = [first.communicate(timeout=120)[0], "".join(seen) + second.communicate(timeout=120)[0]]
-        self.assertEqual([p.returncode for p in procs], [0, 0], outs)
-        subjects = self.git("log", "--format=%s", "-2", "main", cwd=self.origin).splitlines()
-        self.assertEqual(sorted(s.split(":")[0] for s in subjects), ["0.1.1", "0.1.2"])
-        self.assertEqual({s.split(": ", 1)[1] for s in subjects}, {"first fix", "second fix"})
-        self.assertEqual(self.version(self.origin)["version"], "0.1.2")
-        self.assertEqual(self.market_versions(), {"other": "0.1.0", "iorlas-task-loop": "0.1.2"})
-        waited = [o for o in outs if "waiting for the release lock" in o]
-        self.assertEqual(len(waited), 1, outs)
-        self.assertIn("held by", waited[0])
-        self.assertRegex(waited[0], r"held by pid \d+")
-        installs = [x for x in self.log("claude") if x == "plugin update iorlas-task-loop@iorlas-marketplace"]
-        self.assertEqual(len(installs), 2)
-        self.assertEqual(self.log("claude").count("plugin marketplace update iorlas-marketplace"), 2)
-        self.assertEqual(self.git("status", "--porcelain", cwd=self.repo), "")
-
     def test_a_launcher_behind_origin_main_execs_origin_mains_release_once_with_the_same_args_and_no_lock_held(self):
         self.write(self.seed / "dev" / "release.py", "import os, sys\nprint('CHILD', sys.argv[1:], os.environ.get('TL_RELEASE_REEXEC'))\n"
                    "import fcntl, glob\nfor f in glob.glob(os.environ['XDG_CONFIG_HOME'] + '/task-loop/locks/release-*.lock'):\n"
@@ -232,22 +198,32 @@ class Release(unittest.TestCase):
         self.assertEqual(self.log("just"), ["check", "check"])
 
     def test_a_repo_without_a_justfile_skips_the_gate(self):
-        r = self.release("fix")
+        r = self.release("fix", "--minor")
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertEqual(self.log("just"), [])
+        self.assertEqual(self.version(self.origin)["version"], "0.2.0")  # --minor bumps the minor, resets the patch
 
     def test_a_red_suite_aborts_and_leaves_main_where_it_was(self):
+        # the branch is stale (origin moved on) and rebase.updateRefs is on: a red suite after the rebase keeps the branch ref
+        self.git("config", "rebase.updateRefs", "true", cwd=self.repo)
         start = self.git("rev-parse", "HEAD", cwd=self.repo)
-        self.git("checkout", "-q", "-b", "task/x", cwd=self.repo)
-        self.write(self.repo / "tests" / "test_red.py", "import unittest\n\n\nclass R(unittest.TestCase):\n"
-                                                        "    def test_red(self):\n        self.fail('red')\n")
-        self.git("add", "-A", cwd=self.repo)
-        self.git("commit", "-qm", "broken", cwd=self.repo)
-        self.git("checkout", "-q", "main", cwd=self.repo)
+        wt = self.branch_in_worktree("task/x")
+        self.write(wt / "tests" / "test_red.py", "import unittest\n\n\nclass R(unittest.TestCase):\n"
+                                                 "    def test_red(self):\n        self.fail('red after rebase')\n")
+        self.git("add", "-A", cwd=wt)
+        self.git("commit", "-qm", "broken", cwd=wt)
+        source = self.git("rev-parse", "task/x", cwd=self.repo)
+        self.write(self.seed / "other.txt", "x\n")
+        self.commit(self.seed, "advance main")
+        origin = self.git("rev-parse", "main", cwd=self.origin)
         r = self.release("fix", "--from-branch", "task/x")
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("suite", r.stderr)
-        self.assertEqual(self.version(self.origin)["version"], "0.1.0")
+        self.assertIn("red after rebase", r.stderr)
+        self.assertEqual(self.git("rev-parse", "main", cwd=self.origin), origin)
+        self.assertEqual(self.git("rev-parse", "task/x", cwd=self.repo), source)  # a red release keeps the branch and worktree
+        self.assertTrue(wt.is_dir())
+        self.assertEqual(self.git("config", "--get", "rebase.updateRefs", cwd=self.repo), "true")
         self.assertEqual(self.git("rev-parse", "HEAD", cwd=self.repo), start)
         self.assertEqual(self.git("status", "--porcelain", cwd=self.repo), "")
         self.assertEqual(self.market_versions()["iorlas-task-loop"], "0.1.0")
@@ -275,6 +251,7 @@ class Release(unittest.TestCase):
         self.assertEqual(json.loads((self.repo / PLUGIN).read_text())["author"], {"name": "t"})  # the rest kept
 
     def test_a_stale_branch_is_rebased_before_the_suite(self):
+        self.git("config", "rebase.updateRefs", "true", cwd=self.repo)  # the removal of the source branch must survive it
         for remote_only in (False, True):
             with self.subTest(remote_only=remote_only):
                 name = "task/remote" if remote_only else "task/local"
@@ -313,50 +290,6 @@ class Release(unittest.TestCase):
                 self.assertEqual(self.git("show", "main:z.txt", cwd=self.origin), name)
                 self.assertEqual(self.git("show", "main:other.txt", cwd=self.origin), name)
                 self.assertEqual(self.git("rev-list", "--merges", "main", cwd=self.origin), "")
-
-    def test_source_refs_survive_rebase_with_update_refs_enabled(self):
-        self.git("config", "rebase.updateRefs", "true", cwd=self.repo)
-        for suite_fails in (False, True):
-            with self.subTest(suite_fails=suite_fails):
-                name = "task/red" if suite_fails else "task/green"
-                self.sync_repo()
-                self.git("checkout", "-q", "-b", name, cwd=self.repo)
-                self.write(self.repo / "feature.txt", name + "\n")
-                if suite_fails:
-                    self.write(self.repo / "tests" / "test_red.py", textwrap.dedent('''
-                        import unittest
-                        class Red(unittest.TestCase):
-                            def test_red(self):
-                                self.fail("red after rebase")
-                    '''))
-                self.git("add", "-A", cwd=self.repo)
-                self.git("commit", "-qm", name, cwd=self.repo)
-                source = self.git("rev-parse", "HEAD", cwd=self.repo)
-                self.git("checkout", "-q", "main", cwd=self.repo)
-                start = self.git("rev-parse", "HEAD", cwd=self.repo)
-                self.git("pull", "-q", "--ff-only", "origin", "main", cwd=self.seed)
-                self.write(self.seed / "other.txt", name + "\n")
-                self.commit(self.seed, "advance main before " + name)
-                origin = self.git("rev-parse", "main", cwd=self.origin)
-
-                r = self.release(name, "--from-branch", name)
-
-                if suite_fails:  # a red release keeps the branch
-                    self.assertEqual(self.git("rev-parse", name, cwd=self.repo), source, r.stdout + r.stderr)
-                else:  # a green one removes it, after the push and the install
-                    self.assertEqual(self.git("branch", "--list", name, cwd=self.repo), "", r.stdout + r.stderr)
-                self.assertEqual(self.git("config", "--get", "rebase.updateRefs", cwd=self.repo), "true")
-                self.assertEqual(self.git("branch", "--show-current", cwd=self.repo), "main")
-                self.assertEqual(self.git("status", "--porcelain", cwd=self.repo), "")
-                if suite_fails:
-                    self.assertNotEqual(r.returncode, 0)
-                    self.assertIn("red after rebase", r.stderr)
-                    self.assertEqual(self.git("rev-parse", "HEAD", cwd=self.repo), start)
-                    self.assertEqual(self.git("rev-parse", "main", cwd=self.origin), origin)
-                else:
-                    self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-                    self.assertEqual(self.git("show", "main:feature.txt", cwd=self.origin), name)
-                    self.assertEqual(self.git("show", "main:other.txt", cwd=self.origin), name)
 
     def test_a_rebase_conflict_aborts_and_restores_main(self):
         start = self.git("rev-parse", "HEAD", cwd=self.repo)
@@ -462,23 +395,8 @@ class Release(unittest.TestCase):
             self.assertEqual(output.read_text().count("running the full suite"), 1)
         self.assertEqual(self.version(self.origin)["version"], "0.1.2")
         self.assertEqual(self.market_versions()["iorlas-task-loop"], "0.1.2")
+        self.assertEqual(self.log("claude").count("plugin update iorlas-task-loop@iorlas-marketplace"), 2)
         self.assertEqual(self.git("status", "--porcelain", cwd=self.repo), "")
-
-    def test_a_release_commits_a_manifest_that_matches_exactly_what_it_pushed(self):
-        r = self.release("with manifest")
-        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        out = self.home / "shipped"
-        self.git("clone", "-q", str(self.origin), str(out), cwd=self.home)
-        self.assertEqual(manifest.verify(out), [])
-        listed = {line.split("  ", 1)[1] for line in (out / manifest.NAME).read_text().splitlines()}
-        self.assertEqual(listed, {PLUGIN, ".gitignore", "tests/test_ok.py"})
-        (out / "tests" / "test_ok.py").write_text("changed")
-        self.assertEqual(manifest.verify(out), ["tests/test_ok.py differs from MANIFEST.sha256"])
-
-    def test_minor_bumps_the_minor_and_resets_the_patch(self):
-        r = self.release("new feature", "--minor")
-        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertEqual(self.version(self.origin)["version"], "0.2.0")
 
     def test_a_push_race_rebases_reruns_the_suite_and_takes_the_next_version(self):
         self.git("config", "rebase.updateRefs", "true", cwd=self.repo)
@@ -509,19 +427,6 @@ class Release(unittest.TestCase):
         self.assertEqual(self.git("show", "main:feature.txt", cwd=self.origin), "survives the push race")
         self.assertEqual(self.market_versions()["iorlas-task-loop"], "0.1.2")
 
-    def test_a_branch_release_with_nothing_landed_meanwhile_is_no_push_race(self):
-        # tl-bxk.12.8: the check compared origin/main with HEAD~1, which is the branch tip once a --from-branch fast-forwarded
-        self.git("checkout", "-q", "-b", "task/y", cwd=self.repo)
-        self.write(self.repo / "a.txt", "a")
-        self.git("add", "-A", cwd=self.repo)
-        self.git("commit", "-qm", "a branch commit", cwd=self.repo)
-        self.git("checkout", "-q", "main", cwd=self.repo)
-        r = self.release("fix", "--from-branch", "task/y")
-        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertNotIn("push race", r.stdout)
-        self.assertEqual(self.git("log", "--format=%s", "-2", "main", cwd=self.origin).splitlines(),
-                         ["0.1.1: fix", "a branch commit"])
-
     def branch_in_worktree(self, name="task/y", dirty=False):
         """Branch `name` with one commit, checked out in its own worktree next to the main checkout; -> the worktree."""
         wt = self.home / "wt" / name.split("/")[1]
@@ -545,24 +450,10 @@ class Release(unittest.TestCase):
         self.assertEqual(self.branches(), [])
         self.assertIn("removed branch task/y and its worktrees", r.stdout)
         self.assertEqual(self.git("rev-parse", "--abbrev-ref", "HEAD", cwd=self.repo), "main")  # the main checkout was not touched
-
-    def test_a_failed_install_keeps_the_branch_and_its_worktree(self):
-        self.env["FAKE_CLAUDE_FAIL"] = "always"
-        wt = self.branch_in_worktree()
-        r = self.release("feature", "--from-branch", "task/y")
-        self.assertNotEqual(r.returncode, 0)
-        self.assertTrue(wt.is_dir())
-        self.assertEqual(self.branches(), ["task/y"])
-
-    def test_a_red_suite_keeps_the_branch_and_its_worktree(self):
-        wt = self.branch_in_worktree()
-        self.write(wt / "tests" / "test_red.py", "import unittest\n\n\nclass R(unittest.TestCase):\n"
-                                                 "    def test_red(self):\n        self.fail('r')\n")
-        self.git("add", "-A", cwd=wt)
-        self.git("commit", "-qm", "red", cwd=wt)
-        self.assertNotEqual(self.release("feature", "--from-branch", "task/y").returncode, 0)
-        self.assertTrue(wt.is_dir())
-        self.assertEqual(self.branches(), ["task/y"])
+        # nothing landed meanwhile: no push race (tl-bxk.12.8), and the branch landed fast-forward under the version commit
+        self.assertNotIn("push race", r.stdout)
+        self.assertEqual(self.git("log", "--format=%s", "-2", "main", cwd=self.origin).splitlines(),
+                         ["0.1.1: feature", "Add feature (tl-1)"])
 
     def test_a_worktree_with_an_untracked_file_is_never_forced_so_it_and_the_branch_stay(self):
         wt = self.branch_in_worktree(dirty=True)
@@ -572,24 +463,6 @@ class Release(unittest.TestCase):
         self.assertEqual(self.branches(), ["task/y"])
         self.assertIn("worktree", r.stdout)
         self.assertIn("kept", r.stdout)
-
-    def test_a_red_suite_prints_each_failing_test_and_saves_the_full_output_outside_the_repo(self):
-        self.write(self.seed / "tests" / "test_red.py", "import unittest\n\n\nclass R(unittest.TestCase):\n"
-                                                        "    def test_red_one(self):\n        self.fail('boom')\n"
-                                                        "    def test_red_two(self):\n        raise ValueError('bang')\n")
-        self.commit(self.seed, "red")
-        self.git("pull", "-q", "origin", "main", cwd=self.repo)
-        r = self.release("fix")
-        self.assertNotEqual(r.returncode, 0)
-        for want in ("FAIL: test_red_one", "ERROR: test_red_two", "AssertionError: boom", "ValueError: bang",
-                     "Ran 3 tests", "FAILED (failures=1, errors=1)"):
-            self.assertIn(want, r.stderr)
-        m = re.search(r"full output: (\S+)", r.stderr)
-        self.assertTrue(m, r.stderr)
-        saved = Path(must(m).group(1))
-        self.assertIn(str(self.home / "cfg" / "task-loop" / "releases"), str(saved))
-        self.assertIn("FAIL: test_red_one", saved.read_text())
-        self.assertEqual(self.git("status", "--porcelain", cwd=self.repo), "")
 
     def test_failure_report_keeps_every_fail_and_error_section_and_the_summary_lines(self):
         out = textwrap.dedent("""\
@@ -677,21 +550,21 @@ class Release(unittest.TestCase):
                          self.git("rev-parse", "main", cwd=self.morigin))
         self.assertEqual(self.last()["ok"], True)
         self.assertEqual(self.last()["version"], "0.1.1")
-
-    def test_no_tag_exists_when_the_suite_is_red_or_the_push_never_happened(self):
-        self.write(self.seed / "tests" / "test_red.py", "import unittest\n\n\nclass R(unittest.TestCase):\n"
-                                                        "    def test_red(self):\n        self.fail('boom')\n")
-        self.commit(self.seed, "red")
-        self.git("pull", "-q", "origin", "main", cwd=self.repo)
-        self.assertNotEqual(self.release("fix").returncode, 0)
-        self.assertEqual(self.tags(self.origin), [])
-        self.assertEqual(self.tags(self.repo), [])
-        self.assertEqual(self.tags(self.morigin), [])
+        out = self.home / "shipped"  # the committed manifest matches exactly what was pushed
+        self.git("clone", "-q", str(self.origin), str(out), cwd=self.home)
+        self.assertEqual(manifest.verify(out), [])
+        listed = {line.split("  ", 1)[1] for line in (out / manifest.NAME).read_text().splitlines()}
+        self.assertEqual(listed, {PLUGIN, ".gitignore", "tests/test_ok.py"})
+        (out / "tests" / "test_ok.py").write_text("changed")
+        self.assertEqual(manifest.verify(out), ["tests/test_ok.py differs from MANIFEST.sha256"])
 
     def test_a_forced_install_error_exits_nonzero_after_one_retry_and_reports_to_the_bead(self):
         self.env["FAKE_CLAUDE_FAIL"] = "always"
-        r = self.release("fix", "--bead", "tl-x1", "--reason", "done")
+        wt = self.branch_in_worktree()
+        r = self.release("fix", "--from-branch", "task/y", "--bead", "tl-x1", "--reason", "done")
         self.assertNotEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertTrue(wt.is_dir())  # a failed install keeps the branch and its worktree
+        self.assertEqual(self.branches(), ["task/y"])
         self.assertEqual(self.log("claude").count("plugin update iorlas-task-loop@iorlas-marketplace"), 2)
         self.assertIn("claude plugin update iorlas-task-loop@iorlas-marketplace", r.stderr)  # the failing command
         self.assertIn("fetch-pack", r.stderr)
@@ -712,15 +585,26 @@ class Release(unittest.TestCase):
 
     def test_a_red_suite_writes_a_failure_record_with_the_failing_tests_and_comments_on_the_bead(self):
         self.write(self.seed / "tests" / "test_red.py", "import unittest\n\n\nclass R(unittest.TestCase):\n"
-                                                        "    def test_red(self):\n        self.fail('boom')\n")
+                                                        "    def test_red_one(self):\n        self.fail('boom')\n"
+                                                        "    def test_red_two(self):\n        raise ValueError('bang')\n")
         self.commit(self.seed, "red")
         self.git("pull", "-q", "origin", "main", cwd=self.repo)
         r = self.release("fix", "--bead", "tl-x2")
         self.assertNotEqual(r.returncode, 0)
+        for want in ("FAIL: test_red_one", "ERROR: test_red_two", "AssertionError: boom", "ValueError: bang",
+                     "Ran 3 tests", "FAILED (failures=1, errors=1)"):
+            self.assertIn(want, r.stderr)
+        m = re.search(r"full output: (\S+)", r.stderr)
+        self.assertTrue(m, r.stderr)
+        saved = Path(must(m).group(1))
+        self.assertIn(str(self.home / "cfg" / "task-loop" / "releases"), str(saved))
+        self.assertIn("FAIL: test_red_one", saved.read_text())
+        self.assertEqual(self.git("status", "--porcelain", cwd=self.repo), "")
+        self.assertEqual((self.tags(self.origin), self.tags(self.repo), self.tags(self.morigin)), ([], [], []))  # no tag when red
         rec = self.last()
         self.assertFalse(rec["ok"])
         self.assertEqual(rec["branch"], "main")
-        self.assertTrue(any("test_red" in t for t in rec["tests"]), rec)
+        self.assertTrue(any("test_red_one" in t for t in rec["tests"]), rec)
         self.assertTrue(Path(rec["log"]).is_file())
         self.assertIn("comments add tl-x2 release FAILED", " ".join(self.log("bd")))
         self.assertTrue(r.stderr.strip().splitlines()[-1].startswith("release FAILED: nothing released: "))

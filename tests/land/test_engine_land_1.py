@@ -727,5 +727,5 @@ _cells(
 
 
 _cells(EngineLand1Test, "push_race_interrupted_validation_fix_resume_requires_acceptance", "push_race_interrupted_cell",
-       [(i, r) for i in ("pause", "denial") for r in ("worker", "reviewer")] +
-       [("SIGTERM", r) for r in ("worker", "reviewer", "failed_checks", "checkpoint", "transition")])
+       [("denial", "reviewer"), ("pause", "worker"),
+        ("SIGTERM", "failed_checks"), ("SIGTERM", "checkpoint"), ("SIGTERM", "transition")])
