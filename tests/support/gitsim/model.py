@@ -41,6 +41,7 @@ class World:
         self.index: dict[str, Snap] = {}  # index file path -> staged snapshot
         self.rebases: dict[str, dict] = {}  # git dir -> the rebase in progress
         self.conflicts: dict[str, set[str]] = {}  # git dir -> paths with conflict markers not yet added
+        self.prev: dict[str, str] = {}  # git dir -> where HEAD was before its last checkout (what `checkout -` goes back to)
         self.seq = 0
 
 
@@ -105,6 +106,12 @@ def atomic_write(path: Path, text: str) -> None:
 class Repo:
     def __init__(self, git: Path, work: Path | None) -> None:
         self.git, self.work = git, work
+        self.common = git  # a linked worktree's git dir keeps its own HEAD and index; refs and config live in the common dir
+        with contextlib.suppress(OSError):
+            self.common = (git / (git / "commondir").read_text(encoding="utf-8").strip()).resolve()
+
+    def base(self, name: str) -> Path:
+        return self.git / name if name == "HEAD" else self.common / name
 
     @property
     def key(self) -> str:
@@ -114,16 +121,16 @@ class Repo:
 
     def ref(self, name: str) -> str | None:
         try:
-            return (self.git / name).read_text(encoding="utf-8").strip() or None
+            return self.base(name).read_text(encoding="utf-8").strip() or None
         except OSError:
             return None
 
     def set_ref(self, name: str, sha: str) -> None:
-        atomic_write(self.git / name, sha + "\n")
+        atomic_write(self.base(name), sha + "\n")
 
     def heads(self, prefix: str = "refs/heads") -> dict[str, str]:
         out: dict[str, str] = {}
-        root = self.git / prefix
+        root = self.common / prefix
         for p in sorted(root.rglob("*")) if root.is_dir() else []:
             if p.is_file():
                 out[str(p.relative_to(root))] = p.read_text(encoding="utf-8").strip()
@@ -157,7 +164,7 @@ class Repo:
         out: dict[str, str] = {}
         sec = ""
         try:
-            lines = (self.git / "config").read_text(encoding="utf-8").splitlines()
+            lines = (self.common / "config").read_text(encoding="utf-8").splitlines()
         except OSError:
             return out
         for ln in lines:
@@ -176,7 +183,7 @@ class Repo:
             sec, _, name = k.rpartition(".")
             groups.setdefault(sec, []).append(f"\t{name} = {v}")
         head = lambda s: f'[{s.partition(".")[0]} "{s.partition(".")[2]}"]' if "." in s else f"[{s}]"  # noqa: E731
-        atomic_write(self.git / "config", "".join(f"{head(s)}\n" + "\n".join(v) + "\n" for s, v in groups.items()))
+        atomic_write(self.common / "config", "".join(f"{head(s)}\n" + "\n".join(v) + "\n" for s, v in groups.items()))
 
     # -- names -----------------------------------------------------------------------------------------------------------------
 
@@ -202,7 +209,7 @@ class Repo:
         if HEX40.fullmatch(name) and (name in W.commits or name in W.trees):
             return name
         for pre in ("", "refs/", "refs/heads/", "refs/remotes/", "refs/tags/"):
-            if not name.startswith("-") and (self.git / (pre + name)).is_file():
+            if not name.startswith("-") and self.base(pre + name).is_file():
                 return self.ref(pre + name)
         return None
 
@@ -214,7 +221,7 @@ class Repo:
         files: Snap = {}
         for d, dirs, names in os.walk(self.work):
             dirs[:] = [x for x in dirs if x != ".git"]
-            for n in names:
+            for n in (x for x in names if x != ".git"):  # a linked worktree has a .git file
                 p = Path(d, n)
                 if p.is_file() or p.is_symlink():
                     files[p.relative_to(self.work).as_posix()] = p.read_bytes() if p.exists() else b""
@@ -223,7 +230,7 @@ class Repo:
         for p in gi:
             rules += ignore.rules_of(p[: -len(".gitignore")].rstrip("/"), files[p].decode("utf-8", "replace"))
         with contextlib.suppress(OSError):
-            rules = ignore.rules_of("", (self.git / "info" / "exclude").read_text(encoding="utf-8")) + rules
+            rules = ignore.rules_of("", (self.common / "info" / "exclude").read_text(encoding="utf-8")) + rules
         return files, rules
 
     def read_work(self, path: str) -> bytes | None:
@@ -262,6 +269,8 @@ def locate(cwd: str | os.PathLike[str] | None, env: dict[str, str]) -> Repo | No
     for d in (start, *start.parents):
         if (d / ".git").is_dir():
             return Repo(d / ".git", d)
+        if (d / ".git").is_file():
+            return Repo((d / (d / ".git").read_text(encoding="utf-8").split("gitdir:")[1].strip()).resolve(), d)
         if (d / "HEAD").is_file() and (d / "refs").is_dir():
             return Repo(d, None)
     return None

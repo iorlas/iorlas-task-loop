@@ -20,7 +20,7 @@ from support import engine_case as te
 from support import (
     tlbd,
 )
-from support.engine_case import CLEAN, PLAN, WRITE, stop, verdict
+from support.engine_case import CLEAN, PLAN, WRITE, real_git, stop, verdict
 
 from taskloop.adapters import gitrepo, ident
 from taskloop.app.loop.gate import GateRole
@@ -173,6 +173,7 @@ class Land(NetBase):
 
     CUT = "error: RPC failed; curl 56 Send failure: Broken pipe\nfatal: the remote end hung up unexpectedly\n"
 
+    @real_git("the land script is a child process that runs git push itself")
     def test_a_push_the_network_cut_resumes_after_the_probe_and_lands_once(self):
         count = Path(self.tmp.name, "pushes")
         land = self.push_script("cut_push.py",
@@ -189,6 +190,7 @@ class Land(NetBase):
         self.assertEqual(count.read_text(), "3")  # two cuts, then the push
         self.assert_no_charge()
 
+    @real_git("the land script is a child process that runs git push itself")
     def test_a_push_the_server_took_before_the_connection_dropped_is_not_pushed_again(self):
         count = Path(self.tmp.name, "pushes")
         land = self.push_script("took_push.py",
@@ -204,6 +206,7 @@ class Land(NetBase):
         self.assertIn("already", self.eng.log_path.read_text())
         self.assert_no_charge()
 
+    @real_git("the land script is a child process that runs git push itself")
     def test_a_rerun_after_a_push_that_went_through_but_was_never_seen_closes_without_pushing(self):
         count = Path(self.tmp.name, "pushes")
         pushed = self.push_script("odd_push.py", f"import subprocess, sys\nopen({str(count)!r}, 'a').write('1')\n"

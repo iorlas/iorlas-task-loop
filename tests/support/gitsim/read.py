@@ -10,7 +10,9 @@ from .model import Fail, W, is_ancestor, merge_base, snap_of, walk
 def cmd_rev_parse(c: Ctx) -> int:
     fl, rest = flags(c.args)
     r = c.r
-    if "--git-common-dir" in fl or "--absolute-git-dir" in fl or "--git-dir" in fl:
+    if "--git-common-dir" in fl:
+        c.say(str(r.common))
+    elif "--absolute-git-dir" in fl or "--git-dir" in fl:
         c.say(str(r.git))
     if "--show-toplevel" in fl:
         if r.work is None:
@@ -115,8 +117,7 @@ def cmd_ls_files(c: Ctx) -> int:
     spec = rest[rest.index("--") + 1:] if "--" in rest else []
     if "-o" in fl:
         for p in sorted(files):
-            inside = not spec or any(p == s or p.startswith(s.rstrip("/") + "/") for s in spec)
-            if p not in idx and ("-i" in fl) == ignore.ignored(p, rules) and inside:
+            if p not in idx and ("-i" in fl) == ignore.ignored(p, rules) and (not spec or ignore.spec_match(p, spec)):
                 c.say(p, end)
     else:
         for p in sorted(idx):
@@ -178,14 +179,6 @@ def cmd_merge_base(c: Ctx) -> int:
     if base is None:
         return 1
     c.say(base)
-    return 0
-
-
-def cmd_worktree(c: Ctx) -> int:
-    c.say(f"worktree {c.r.work or c.r.git}")
-    c.say(f"HEAD {c.r.head_sha() or '0' * 40}")
-    c.say(f"branch refs/heads/{c.r.head_ref()}" if c.r.head_ref() else "detached")
-    c.say()
     return 0
 
 

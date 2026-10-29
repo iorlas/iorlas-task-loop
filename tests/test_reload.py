@@ -139,6 +139,7 @@ class Reload(te.EngineTest):
                 p.stop()
 
     # -- point 5: a newer install mid-bead -> exec at the next boundary, same run id, finished on the new version
+    @te.real_git("the child tl.py selftest runs git init and git push itself")
     def test_a_newer_install_mid_bead_execs_at_the_next_step_boundary_and_the_bead_finishes_on_it_with_the_same_run(self):
         script = fake_route.Script({"plan": [te.PLAN], "write": [te.WRITE], "review": [te.CLEAN]})
         eng = self.engine_for(script)
@@ -192,6 +193,7 @@ class Reload(te.EngineTest):
             os.environ.pop("TL_REEXEC", None)
             self.assertFalse(entry._handed_slot("s2"))
 
+    @te.real_git("the child tl.py selftest runs git init and git push itself")
     def test_a_dry_run_and_a_run_not_started_by_run_task_never_move(self):
         self.install("0.2.0")
         script = fake_route.Script({"plan": [te.PLAN], "write": [te.WRITE], "review": [te.CLEAN]})
@@ -202,6 +204,7 @@ class Reload(te.EngineTest):
         self.assertEqual([e for e in self.events() if e["kind"] == "reload"], [])
 
     # -- a broken install keeps the old one running, one red event, tested once
+    @te.real_git("the child tl.py selftest runs git init and git push itself")
     def test_a_broken_install_keeps_the_old_one_running_with_one_red_event_and_is_tested_once(self):
         script = fake_route.Script({"plan": [te.PLAN], "write": [te.WRITE], "review": [te.CLEAN]})
         eng = self.engine_for(script)
@@ -219,6 +222,7 @@ class Reload(te.EngineTest):
         self.assertEqual([e["version"] for e in json.loads((ident.config_dir() / "bad-versions.json").read_text())["entries"]], ["0.2.0"])
         self.assertEqual([e for e in self.events() if e["kind"] == "reload"], [])
 
+    @te.real_git("the child tl.py selftest runs git init and git push itself")
     def test_a_refused_version_is_tried_again_when_it_is_installed_again_and_a_newer_one_is_tried(self):
         self.install("0.2.0", plant=BREAK_PLAN)
         self.assertEqual(must(wloop.vet_newer(self.here))[:2], ("0.2.0", self.cache / "0.2.0"))

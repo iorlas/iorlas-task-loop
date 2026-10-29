@@ -17,7 +17,7 @@ from support import (
     tlbd,
 )
 from support.checkpoints import put_ck, read_ck
-from support.engine_case import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, engine, lint  # noqa: F401
+from support.engine_case import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, engine, lint, real_git  # noqa: F401
 from support.fakes import as_bead
 from test_stages import StagesTest
 
@@ -211,6 +211,7 @@ class SlotHygiene(StagesTest):
         Path(self.wt, "client/src.cs").write_text("real\n")
         self.assertEqual(sorted(ln[3:] for ln in e.checkout.dirty_status().splitlines()), ["client/keep.log", "client/src.cs"])
 
+    @real_git("reads the user's own global git excludes file, which only a real git does")
     def test_the_users_own_global_excludes_still_apply(self):
         self.put_ignore_on_main("client/log.txt\n")
         glob = Path(self.tmp.name, "global-ignore")
@@ -349,6 +350,7 @@ class Contracts(StagesTest):
         script.write_text(self.FLAKY % (str(Path(self.tmp.name, "flaky-count")), fails))
         return te.PY + " " + str(script).replace("\\", "/")
 
+    @real_git("the land script is a child process that runs git push itself")
     def test_a_network_failure_on_the_push_is_retried_with_a_rest_and_lands(self):
         rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, land=self.land_with(2))
         self.assertEqual(rc, 0, self.blocked)

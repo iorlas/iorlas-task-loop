@@ -55,3 +55,20 @@ def ignored(path: str, rules: list[Rule]) -> bool:
         if verdict:
             return True
     return False
+
+
+def spec_match(path: str, spec: list[str]) -> bool:
+    """Whether `path` is under the git pathspecs `spec`: `:(literal)` and plain words name a file or a folder, `:(glob)` a pattern,
+    `:(exclude,...)` takes paths out."""
+    def one(item: str) -> tuple[bool, bool]:
+        magic, rest = (item[2:].split(")", 1)[0].split(","), item.split(")", 1)[1]) if item.startswith(":(") else ([], item)
+        if "glob" in magic:
+            hit = bool(re.fullmatch(glob_re(rest), path))
+        elif "literal" in magic or not any(ch in rest for ch in "*?["):
+            hit = rest in (".", "") or path == rest or path.startswith(rest.rstrip("/") + "/")
+        else:
+            hit = bool(re.fullmatch(glob_re(rest).replace("[^/]*", ".*"), path))
+        return hit, "exclude" in magic
+    marks = [one(s) for s in spec]
+    inc = [h for h, ex in marks if not ex]
+    return (any(inc) or not inc) and not any(h for h, ex in marks if ex)

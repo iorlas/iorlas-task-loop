@@ -6,6 +6,7 @@ naming it, and so does a git command the sim does not know. Real git stays in th
 behaviour of git itself is the point."""
 import contextlib
 import os
+import re
 import stat
 import subprocess
 import tempfile
@@ -16,18 +17,20 @@ from unittest import mock
 
 import stream_proc
 
-from . import diffs, read, rebase, remote, status, write
+from . import diffs, read, rebase, remote, status, trees, write
 from .ctx import Ctx
 from .model import Fail, W, locate
 
 HANDLERS: dict[str, Callable[[Ctx], int]] = {
-    "add": write.cmd_add, "check-ignore": read.cmd_check_ignore, "checkout": write.cmd_checkout, "clone": remote.cmd_clone,
+    "add": write.cmd_add,
+    "branch": write.cmd_branch, "update-ref": write.cmd_update_ref,
+    "check-ignore": read.cmd_check_ignore, "checkout": write.cmd_checkout, "clone": remote.cmd_clone,
     "commit": write.cmd_commit, "config": read.cmd_config, "diff": diffs.cmd_diff,
     "fetch": remote.cmd_fetch, "grep": read.cmd_grep, "init": remote.cmd_init, "log": read.cmd_log, "ls-files": read.cmd_ls_files,
     "ls-tree": read.cmd_ls_tree, "merge-base": read.cmd_merge_base, "pull": remote.cmd_pull, "push": remote.cmd_push,
     "read-tree": write.cmd_read_tree, "rebase": rebase.cmd_rebase, "remote": read.cmd_remote, "reset": write.cmd_reset,
     "rev-list": read.cmd_rev_list, "rev-parse": read.cmd_rev_parse, "show": read.cmd_show, "status": status.cmd_status,
-    "symbolic-ref": read.cmd_symbolic_ref, "worktree": read.cmd_worktree, "write-tree": write.cmd_write_tree,
+    "symbolic-ref": read.cmd_symbolic_ref, "worktree": trees.cmd_worktree, "write-tree": write.cmd_write_tree,
 }
 GLOBAL_FLAGS = ("--no-optional-locks", "--literal-pathspecs", "--no-pager")
 
@@ -70,6 +73,7 @@ def run_git(argv: list[str], cwd: Any = None, env: Mapping[str, str] | None = No
             args = args[1:]
         else:
             break
+    args = [x for a in args for x in (["-" + ch for ch in a[1:]] if re.fullmatch(r"-[a-zA-Z]{2,}", a) else [a])]  # -qam -> -q -a -m
     env_d = dict(os.environ if env is None else env)
     handler = HANDLERS.get(args[0]) if args else None
     if handler is None:

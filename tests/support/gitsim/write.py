@@ -1,7 +1,10 @@
 """The commands that change a checkout: add, commit, checkout, reset, read-tree, write-tree."""
+import fnmatch
+
 from . import ignore
 from .ctx import Ctx, flags
-from .model import Fail, W, atomic_write, put_commit, put_tree, snap_of
+from .model import HEX40, Fail, W, atomic_write, put_commit, put_tree, snap_of
+from .trees import pin
 
 
 def cmd_add(c: Ctx) -> int:
@@ -39,6 +42,9 @@ def cmd_commit(c: Ctx) -> int:
     r = c.r
     if W.conflicts.get(r.key):
         raise Fail("error: Committing is not possible because you have unmerged files.", 128)
+    if "-a" in args:  # stage what tracked files changed or lost
+        files, idx = r.scan()[0], c.index()
+        c.set_index({p: files[p] for p in idx if p in files})
     head, idx = r.head_sha(), c.index()
     if "--amend" in args and head:
         parents, msg = W.commits[head].parents, msg or W.commits[head].msg
@@ -65,6 +71,21 @@ def force_tree(c: Ctx, old: dict, new: dict) -> None:
 
 
 def cmd_checkout(c: Ctx) -> int:
+    r = c.r
+    here = r.head_ref() or r.head_sha() or ""
+    if "-" in c.args:
+        back = W.prev.get(r.key)
+        if back is None:
+            raise Fail("error: pathspec '-' did not match any file(s) known to git", 1)
+        c.args = [back if a == "-" else a for a in c.args]
+        if HEX40.fullmatch(back):
+            c.args.insert(c.args.index(back), "--detach")
+    rc = checkout(c)
+    W.prev[r.key] = here
+    return rc
+
+
+def checkout(c: Ctx) -> int:
     args, r = c.args, c.r
     old = r.head_snap()
     for flag in ("-b", "-B"):
@@ -76,13 +97,15 @@ def cmd_checkout(c: Ctx) -> int:
                 raise Fail(f"fatal: '{start}' is not a commit and a branch '{name}' cannot be created from it", 128)
             if flag == "-b" and r.ref("refs/heads/" + name):
                 raise Fail(f"fatal: a branch named '{name}' already exists", 128)
+            pin(r, name)
             r.switch_tree(old, snap_of(sha))
             r.set_ref("refs/heads/" + name, sha)
             r.set_head_branch(name)
             c.set_index(snap_of(sha))
             return 0
     if "--detach" in args:
-        sha = r.resolve(args[args.index("--detach") + 1])
+        after = args[args.index("--detach") + 1:]
+        sha = r.resolve(after[0] if after else "HEAD")
         if sha is None:
             raise Fail("fatal: invalid reference", 128)
         r.switch_tree(old, snap_of(sha))
@@ -96,6 +119,7 @@ def cmd_checkout(c: Ctx) -> int:
         r.set_ref("refs/heads/" + name, sha)
     if sha is None:
         raise Fail(f"error: pathspec '{name}' did not match any file(s) known to git", 1)
+    pin(r, name)
     r.switch_tree(old, snap_of(sha))
     r.set_head_branch(name)
     c.set_index(snap_of(sha))
@@ -117,6 +141,43 @@ def cmd_reset(c: Ctx) -> int:
     W.conflicts.pop(r.key, None)
     if "--hard" in fl:
         force_tree(c, old_head, snap_of(sha))
+    return 0
+
+
+def cmd_branch(c: Ctx) -> int:
+    fl, rest = flags(c.args)
+    r = c.r
+    if "-m" in fl or "-M" in fl:
+        old, new = (rest if len(rest) == 2 else [r.head_ref(), rest[0]])
+        sha = r.ref("refs/heads/" + old)
+        if sha is None:
+            raise Fail(f"error: refname refs/heads/{old} not found", 1)
+        r.set_ref("refs/heads/" + new, sha)
+        (r.git / "refs" / "heads" / old).unlink()
+        if r.head_ref() == old:
+            r.set_head_branch(new)
+    elif "-D" in fl or "-d" in fl:
+        for name in rest:
+            (r.git / "refs" / "heads" / name).unlink(missing_ok=True)
+    elif rest and "--list" not in fl:
+        sha = r.resolve(rest[1] if len(rest) > 1 else "HEAD")
+        if sha is None or r.ref("refs/heads/" + rest[0]):
+            raise Fail(f"fatal: a branch named '{rest[0]}' already exists" if sha else "fatal: not a valid object name", 128)
+        r.set_ref("refs/heads/" + rest[0], sha)
+    else:
+        for name in r.heads():
+            if rest and not fnmatch.fnmatch(name, rest[0]):
+                continue
+            c.say(("* " if name == r.head_ref() else "  ") + name)
+    return 0
+
+
+def cmd_update_ref(c: Ctx) -> int:
+    _, rest = flags(c.args)
+    sha = c.r.resolve(rest[1])
+    if sha is None:
+        raise Fail(f"fatal: {rest[1]}: not a valid SHA1", 128)
+    c.r.set_ref(rest[0], sha)
     return 0
 
 

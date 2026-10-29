@@ -1,6 +1,7 @@
 """diff: the text of the change between two trees, in git's unified format."""
 import difflib
 
+from . import ignore
 from .ctx import Ctx, blob, flags
 from .model import Snap, W, snap_of
 
@@ -26,8 +27,7 @@ def file_diff(path: str, a: bytes | None, b: bytes | None) -> list[str]:
 
 
 def changed(a: Snap, b: Snap, spec: list[str]) -> list[str]:
-    skip = {s.split(")", 1)[1] for s in spec if s.startswith(":(exclude")}
-    return [p for p in sorted(set(a) | set(b)) if a.get(p) != b.get(p) and p not in skip]
+    return [p for p in sorted(set(a) | set(b)) if a.get(p) != b.get(p) and (not spec or ignore.spec_match(p, spec))]
 
 
 def stat_lines(a: Snap, b: Snap, paths: list[str]) -> list[str]:

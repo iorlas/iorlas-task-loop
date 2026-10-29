@@ -33,7 +33,7 @@ from support import engine_case as T  # noqa: E402
 from support.briefs import brief_digest  # noqa: E402
 from support.builders import cfg_with  # noqa: E402
 from support.checks import res  # noqa: E402
-from support.engine_case import BRIEFS, CLEAN, PLAN, WRITE, finding, full, review, sh, shown, stop, stored_brief, verdict  # noqa: E402
+from support.engine_case import BRIEFS, CLEAN, PLAN, WRITE, finding, full, real_git, review, sh, shown, stop, stored_brief, verdict  # noqa: E402
 from support.fakes import as_bead, as_comment  # noqa: E402
 from support.logs import records  # noqa: E402
 from support.narrow import must  # noqa: E402
@@ -563,6 +563,7 @@ ENGINE_LINE = re.compile(
 
 
 class NoBackgroundGit(T.EngineTest):
+    @real_git("asserts the git config of the real template and clone repos")
     def test_template_and_clone_repos_never_auto_gc_or_maintain(self):
         for repo in (T._template() / "o.git", T._template() / "wt", self.tmp_repo("o.git"), self.tmp_repo("wt")):
             for key, want in (("maintenance.auto", "false"), ("gc.auto", "0")):

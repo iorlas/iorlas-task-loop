@@ -15,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as te
 from support.builders import cfg_with
-from support.engine_case import PY, engine, pyc  # noqa: F401
+from support.engine_case import PY, engine, pyc, real_git  # noqa: F401
 
 from taskloop.adapters import (
     check_files,
@@ -320,16 +320,19 @@ class Duplicates(SpeedTest):
         rc, _ = self.run_engine({"plan": [te.PLAN], "write": [te.WRITE], "review": [te.CLEAN]}, gate=gate, land=land, **kw)
         return rc, count, seen
 
+    @real_git("the land script is a child process that runs git push itself")
     def test_the_push_is_told_the_gated_tree_as_a_plain_git_tree_hash(self):
         rc, _count, seen = self.gate_run()
         self.assertEqual(rc, 0)
         self.assertEqual(seen.read_text(), gitrepo.git("rev-parse", "HEAD^{tree}", cwd=str(self.wt)))
 
+    @real_git("the land script is a child process that runs git push itself")
     def test_the_gate_is_told_which_repo_checks_are_green(self):
         rc, count, _seen = self.gate_run(checks=[{"id": "ut", "cmd": pyc("pass"), "group": "tests", "inputs": ["f.txt"]}])
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual(count.read_text(), "ut|")
 
+    @real_git("the land script is a child process that runs git push itself")
     def test_a_gate_green_on_this_tree_is_not_run_again(self):
         rc, _count, _seen = self.gate_run()
         self.assertEqual(rc, 0)
