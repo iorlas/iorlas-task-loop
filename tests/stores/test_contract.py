@@ -1,9 +1,9 @@
-"""The store contract: every suite runs on the file-backed stores and on the in-memory ones. Real-FS only here: temp dirs, real
-processes for the races (atomic replace, concurrent append, lock exclusion across processes)."""
+"""The store contract: every suite runs on the file-backed stores and on the in-memory ones. Real-FS only here: temp dirs, threads with
+their own descriptors for the races (atomic replace, concurrent append, lock exclusion: flock and O_APPEND hold per open file, so
+this is what two processes see), a real killed holder for the lock the OS drops."""
 import json
 import os
 import signal
-import subprocess
 import sys
 import threading
 import unittest
@@ -22,10 +22,11 @@ from rigs import FakeRig, RealRig
 from support.procsim import real_proc
 from support.tiers import contract
 
+from taskloop.adapters.locks import ProcessLockTable
+from taskloop.contracts import paths
 from taskloop.contracts.enums import LockWhat
 from taskloop.contracts.loop import Rest
 
-WORKER = str(Path(__file__).resolve().parent / "races_worker.py")
 SUITES = [suites.DocContract, suites.AskContract, suites.CheckpointContract, suites.LogContract, suites.LockContract,
           suites.TicketContract]
 
@@ -47,14 +48,21 @@ class RealRaces(unittest.TestCase):
         self.addCleanup(self.rig.close)
         self.cfg = self.rig.cfg
 
-    def spawn(self, *args: str) -> subprocess.Popen[bytes]:
-        return subprocess.Popen([sys.executable, "-I", WORKER, *args])
+    def append_from(self, path: Path, n: int, tags: list[str]) -> list[threading.Thread]:
+        """One writer per tag, each with its own Jsonl (own descriptors, as a process has): started, to be joined."""
+        def write(tag: str) -> None:
+            j = jsonl.Jsonl(path)
+            for i in range(n):
+                j.append({"who": tag, "i": i, "pad": "é" * (i % 50 + 1) * 40})
+        ts = [threading.Thread(target=write, args=(tag,)) for tag in tags]
+        for t in ts:
+            t.start()
+        return ts
 
-    @real_proc("the file locks and the append-only log hold across real processes: races, a killed holder")
-    def test_many_processes_appending_never_interleave_a_line(self) -> None:
+    def test_many_writers_appending_never_interleave_a_line(self) -> None:
         path = self.cfg.root / "x.jsonl"
-        procs = [self.spawn("append", str(path), "60", f"p{i}") for i in range(6)]
-        self.assertEqual([p.wait(60) for p in procs], [0] * 6)
+        for t in self.append_from(path, 60, [f"p{i}" for i in range(6)]):
+            t.join(60)
         entries, cursor = jsonl.Jsonl(path).read_from(0)
         self.assertEqual(len(entries), 360)
         self.assertEqual(cursor, path.stat().st_size)
@@ -62,12 +70,11 @@ class RealRaces(unittest.TestCase):
             self.assertEqual([e.data["i"] for e in entries if e.data["who"] == f"p{i}"], list(range(60)))  # each writer's order holds
         self.assertEqual(len({e.start for e in entries}), 360)
 
-    @real_proc("the file locks and the append-only log hold across real processes: races, a killed holder")
-    def test_a_reader_following_a_cursor_while_processes_append_sees_each_line_once(self) -> None:
+    def test_a_reader_following_a_cursor_while_writers_append_sees_each_line_once(self) -> None:
         path = self.cfg.root / "y.jsonl"
-        procs = [self.spawn("append", str(path), "80", f"p{i}") for i in range(3)]
+        writers = self.append_from(path, 80, [f"p{i}" for i in range(3)])
         seen, cursor = [], 0
-        while any(p.poll() is None for p in procs):
+        while any(t.is_alive() for t in writers):
             entries, cursor = jsonl.Jsonl(path).read_from(cursor)
             seen += [(e.data["who"], e.data["i"]) for e in entries]
         entries, cursor = jsonl.Jsonl(path).read_from(cursor)
@@ -98,13 +105,22 @@ class RealRaces(unittest.TestCase):
         self.assertEqual(bad, [])
         self.assertEqual([p.name for p in cast(Any, doc).path.parent.iterdir()], [cast(Any, doc).path.name])  # no temp file left behind
 
-    @real_proc("the file locks and the append-only log hold across real processes: races, a killed holder")
-    def test_processes_taking_one_lock_do_not_lose_updates(self) -> None:
+    def test_holders_taking_one_lock_do_not_lose_updates(self) -> None:
         counter = self.cfg.root / "count.txt"
         counter.parent.mkdir(parents=True, exist_ok=True)
         counter.write_text("0")
-        procs = [self.spawn("count", str(self.cfg.root), str(counter), "25") for _ in range(4)]
-        self.assertEqual([p.wait(90) for p in procs], [0] * 4)
+
+        def count() -> None:
+            table = ProcessLockTable(paths.ConfigDir(str(self.cfg.root)))  # its own table: its own descriptors, like a process
+            for _ in range(25):
+                with table.hold(LockWhat.LAND, "r", "worker", timeout=60):
+                    n = int(counter.read_text() or 0)  # read, then write: a lost update unless the lock really excludes
+                    counter.write_text(str(n + 1))
+        ts = [threading.Thread(target=count) for _ in range(4)]
+        for t in ts:
+            t.start()
+        for t in ts:
+            t.join(90)
         self.assertEqual(int(counter.read_text()), 100)
 
     @real_proc("the file locks and the append-only log hold across real processes: races, a killed holder")
