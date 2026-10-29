@@ -34,7 +34,7 @@ class Fixer:
         if after != before:
             files = [p for p in host.git("diff", "--name-only", before, after).splitlines() if p]
             host.checkout.stage_all(check=True)
-            host.log.note(f"fmt: fixed {len(files)} files ({', '.join(c.id for c in todo)})")
+            host.log.note(f"{', '.join(c.id for c in todo)}: the fix changed {len(files)} file{'s' if len(files) != 1 else ''}")
         return red
 
     def _due(self, c: Check) -> bool:
