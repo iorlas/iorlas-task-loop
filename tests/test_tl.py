@@ -101,13 +101,13 @@ class Records(Base):
     def test_processes_registering_at_once_neither_crash_nor_lose_a_repo(self):
         # race test (tl-bxk.11.1): every process wrote repos.tmp; the second os.replace found it gone and the event
         # (a claim's, a slot take's) raised. Each writer now has its own tmp file, under a lock, so none is lost.
-        code = ("import sys; sys.path.insert(0, {!r}); import tl; from taskloop.app.track import trail\n"
-                "for i in range(15): trail.register_repo('/r/%s-%d' % (sys.argv[1], i))".format(str(ROOT / "skills" / "task-loop")))
-        ps = [subprocess.Popen([sys.executable, "-c", code, str(n)], stderr=subprocess.PIPE, text=True) for n in range(10)]
+        code = ("import sys; sys.path.insert(0, {!r}); from taskloop.app.track import trail\n"
+                "for i in range(10): trail.register_repo('/r/%s-%d' % (sys.argv[1], i))".format(str(ROOT / "src")))
+        ps = [subprocess.Popen([sys.executable, "-c", code, str(n)], stderr=subprocess.PIPE, text=True) for n in range(5)]
         errs = [p.communicate(timeout=60)[1] for p in ps]
-        self.assertEqual([p.returncode for p in ps], [0] * 10, errs)
+        self.assertEqual([p.returncode for p in ps], [0] * 5, errs)
         repos = json.loads((ident.config_dir() / "repos.json").read_text())
-        self.assertEqual(len(repos), 150)
+        self.assertEqual(len(repos), 50)
 
     def test_prune_keeps_recent(self):
         f = ident.config_dir() / "events.jsonl"

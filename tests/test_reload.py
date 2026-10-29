@@ -81,8 +81,8 @@ class Reload(te.EngineTest):
         if fake:
             d.mkdir(parents=True)
         elif plant:
-            shutil.copytree(SRC, d, ignore=shutil.ignore_patterns("__pycache__", "dash"))
-            shutil.copytree(ROOT / "src", d.parents[1] / "src", ignore=shutil.ignore_patterns("__pycache__"))
+            shutil.copytree(SRC, d, ignore=shutil.ignore_patterns("dash"))  # with __pycache__: the child imports warm, only the
+            shutil.copytree(ROOT / "src", d.parents[1] / "src")  # planted file (newer mtime) compiles again
         else:
             d.parent.mkdir(parents=True)
             d.symlink_to(SRC, target_is_directory=True)
@@ -227,7 +227,8 @@ class Reload(te.EngineTest):
 
     def test_a_refused_version_is_tried_again_when_it_is_installed_again_and_a_newer_one_is_tried(self):
         self.install("0.2.0", plant=BREAK_PLAN)  # a copy: a link would share the files the install key is made of
-        with mock.patch("taskloop.adapters.installs.selftest_fails", side_effect=["planted: cannot plan", None, None]):  # the verdict only
+        with (mock.patch("taskloop.adapters.installs.import_fails", return_value=None),  # the verdicts only
+              mock.patch("taskloop.adapters.installs.selftest_fails", side_effect=["planted: cannot plan", None, None])):
             self.assertEqual(must(wloop.vet_newer(self.here))[:2], ("0.2.0", self.cache / "0.2.0"))
             self.assertIsNone(wloop.vet_newer(self.here))  # refused, key unchanged: not looked at
             shutil.rmtree(self.cache / "0.2.0")

@@ -1,5 +1,5 @@
 {
- "_": "Ratchet for tests/test_rules.py. oversize / oversize_functions list every cap violation that existed at A1, by file; an entry may be lowered or deleted, never added.",
+ "_": "Ratchet for tests/gate_rules.py. oversize / oversize_functions list every cap violation that existed at A1, by file; an entry may be lowered or deleted, never added.",
  "oversize": {},
  "oversize_functions": {}
 }

@@ -24,7 +24,7 @@ types:
     uv tool run "pyrefly@$(just pin pipx:pyrefly)" check
 
 rules:
-    python3 -m unittest tests.test_rules
+    python3 -m unittest tests.gate_rules
 
 # The version mise.toml pins for a tool (one source for the pins).
 [private]

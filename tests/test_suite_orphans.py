@@ -25,7 +25,7 @@ class S(unittest.TestCase):
         time.sleep(300)
 """
 LAUNCH = textwrap.dedent("""\
-    import sys, signal, threading, _thread, tempfile
+    import os, sys, signal, threading, time, _thread, tempfile
     signal.signal(signal.SIGINT, signal.default_int_handler)  # a background shell starts us with SIGINT ignored
     from pathlib import Path
     sys.path[:0] = [{src!r}, {vendor!r}]
@@ -34,7 +34,11 @@ LAUNCH = textwrap.dedent("""\
     root = Path({root!r})
     work = Path(tempfile.mkdtemp())
     if {interrupt}:
-        threading.Timer(3, _thread.interrupt_main).start()
+        def interrupt():  # once the shard is inside its test
+            while not os.path.exists(os.environ["PIDFILE"]):
+                time.sleep(0.02)
+            _thread.interrupt_main()
+        threading.Thread(target=interrupt, daemon=True).start()
     try:
         parts = suite.run_shards([sys.executable, {shard!r}], str(root), root, work, [("shard1", ["test_sleep.S.test_sleep"])])
         print("exit", parts[0].code, parts[0].out.strip().splitlines()[-1], flush=True)
@@ -75,7 +79,7 @@ class Orphans(unittest.TestCase):
         return p
 
     def test_a_shard_past_its_wall_limit_is_stopped_and_red(self):
-        p = self.launcher(wall=4, interrupt=False)
+        p = self.launcher(wall=1.5, interrupt=False)  # room for the shard to start its test under load
         out, _ = p.communicate(timeout=60)
         pid = self.shard_pid()
         self.assertIn("exit 124", out)

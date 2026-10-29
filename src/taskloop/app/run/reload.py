@@ -71,9 +71,14 @@ class Reload:
     def safe_point(self, step: str) -> None:
         """A step boundary whose checkpoint is current (tl-7y6.9): when a newer task-loop is installed and its selftest
         passes, exec into it and go on with this bead and run from the checkpoint. A refused version stays on this one
-        with a red event; the refusal is recorded (bad-versions.json), so the next boundary does not test it again."""
+        with a red event; the refusal is recorded (bad-versions.json), so the next boundary does not test it again. A run
+        not started by `tl.py run-task` cannot move, so it never tests an install (each test is a child python)."""
         e = self.e
         if e.dry:
+            return
+        slot = (engine_lock.LOCK.data.get("slot") if engine_lock.LOCK else "") or ""
+        argv = reexec.reexec_args(e.argv if e.argv is not None else sys.argv[1:], slot, e.wt)
+        if argv is None:
             return
         try:
             found = (e.newer_fn or vet_newer)()
@@ -88,7 +93,7 @@ class Reload:
             e.warn(f"not moving to task-loop {ver} at {step}: {why}; staying on {here}")
             trail.event("reload_refused", e.bead, who="engine", version=ver, why=why[:300], running=here, step=step, run=e.log_path.stem)
             return
-        self.switch(step, ver, d, here)
+        self.switch(step, ver, d, here, argv)
 
     def hand_over(self, step: str, ver: str, here: str) -> str:
         """The note the next process reads; "" when it was written, else why not."""
@@ -103,13 +108,8 @@ class Reload:
             return str(err)
         return ""
 
-    def switch(self, step: str, ver: str, d: Path, here: str) -> None:
+    def switch(self, step: str, ver: str, d: Path, here: str, argv: list[str]) -> None:
         e = self.e
-        slot = (engine_lock.LOCK.data.get("slot") if engine_lock.LOCK else "") or ""
-        argv = reexec.reexec_args(e.argv if e.argv is not None else sys.argv[1:], slot, e.wt)
-        if argv is None:
-            e.log.note(f"not moving to task-loop {ver}: this run was not started by `tl.py run-task`")
-            return
         run = e.log_path.stem
         e.steps.end("moved")
         err = self.hand_over(step, ver, here)

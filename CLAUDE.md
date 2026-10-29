@@ -66,7 +66,7 @@ just check        # ruff + pyrefly + the suite (tools pinned in mise.toml; `mise
 ```
 
 CI runs the suite and `just check` on Ubuntu with Python 3.12. Linux locally: `docker run --rm -v "$PWD":/src:ro python:3.12-slim ...`.
-Caps (tests/test_rules.py): 400 SLOC per file, 80 per function, 800 per test file; the KNOWN_OVERSIZE table (tests/rules_ratchet.json) may only shrink.
+Caps (tests/gate_rules.py): 400 SLOC per file, 80 per function, 800 per test file; the KNOWN_OVERSIZE table (tests/rules_ratchet.json) may only shrink.
 
 ## Architecture Overview
 
