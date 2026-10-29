@@ -19,7 +19,6 @@ from support.engine_case import PY, engine, pyc, real_git  # noqa: F401
 
 from taskloop.adapters import (
     check_files,
-    gitrepo,
 )
 from taskloop.app.checks.cache import InputKeys
 from taskloop.app.wire import doctor
@@ -313,28 +312,18 @@ class Duplicates(SpeedTest):
         self.assertEqual((n.read_text(), [bool(c.reused) for c in res]), ("1", [False, True]))
 
     def gate_run(self, **kw):
-        count, seen = Path(self.tmp.name) / "gates", Path(self.tmp.name) / "passed"
+        count = Path(self.tmp.name) / "gates"
         gate = pyc(f"import os; open({str(count)!r}, 'a').write(os.environ.get('TL_CHECKS_GREEN', '-') + '|')")
-        land = pyc(f"import os,subprocess,sys; open({str(seen)!r}, 'w').write(os.environ.get('TL_GATE_PASSED', '')); "
-                   "sys.exit(subprocess.call(['git', 'push', '-q', 'origin', 'HEAD:main']))")
-        rc, _ = self.run_engine({"plan": [te.PLAN], "write": [te.WRITE], "review": [te.CLEAN]}, gate=gate, land=land, **kw)
-        return rc, count, seen
+        rc, _ = self.run_engine({"plan": [te.PLAN], "write": [te.WRITE], "review": [te.CLEAN]}, gate=gate, **kw)
+        return rc, count
 
-    @real_git("the land script is a child process that runs git push itself")
-    def test_the_push_is_told_the_gated_tree_as_a_plain_git_tree_hash(self):
-        rc, _count, seen = self.gate_run()
-        self.assertEqual(rc, 0)
-        self.assertEqual(seen.read_text(), gitrepo.git("rev-parse", "HEAD^{tree}", cwd=str(self.wt)))
-
-    @real_git("the land script is a child process that runs git push itself")
     def test_the_gate_is_told_which_repo_checks_are_green(self):
-        rc, count, _seen = self.gate_run(checks=[{"id": "ut", "cmd": pyc("pass"), "group": "tests", "inputs": ["f.txt"]}])
+        rc, count = self.gate_run(checks=[{"id": "ut", "cmd": pyc("pass"), "group": "tests", "inputs": ["f.txt"]}])
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual(count.read_text(), "ut|")
 
-    @real_git("the land script is a child process that runs git push itself")
     def test_a_gate_green_on_this_tree_is_not_run_again(self):
-        rc, _count, _seen = self.gate_run()
+        rc, _count = self.gate_run()
         self.assertEqual(rc, 0)
         eng = self.eng
         eng.lander.gate.remember("abc")

@@ -148,19 +148,12 @@ class EngineLand1Test(EngineTest):
             (start["holder"], start["id"], end["id"], end["secs"], end["in_budget"]), ("tl-266", end["id"], start["id"], 2251, False)
         )
 
-    def test_the_gate_runs_once_at_land_and_tells_the_push_which_tree_it_gated(self):
-        count, seen = Path(self.tmp.name) / "gates", Path(self.tmp.name) / "gated-tree"
+    def test_the_gate_runs_once_at_land(self):
+        count = Path(self.tmp.name) / "gates"
         gate = PY + f' -c "open({str(count)!r}, \'a\').write(\'1\')"'
-        land = (
-            PY
-            + (f" -c \"import os; open({str(seen)!r}, 'w').write(os.environ.get('TASK_LOOP_GATED_TREE', ''))\" && git push -q origin "
-               f"HEAD:main")
-        )
-        rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]},
-                                gate=gate, land=land)
+        rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, gate=gate)
         self.assertEqual(rc, 0)
         self.assertEqual(count.read_text(), "1")
-        self.assertEqual(seen.read_text(), gitrepo.git("rev-parse", "HEAD^{tree}", cwd=str(self.wt)))
 
     def test_writer_is_told_the_repo_worker_rules_and_never_to_run_the_gate(self):
         self.put_repo_file("docs/agents/worker-rules.md", "RULES-MARK: unity runs on the host\n")

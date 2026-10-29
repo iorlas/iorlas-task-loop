@@ -60,6 +60,7 @@ class World:
         self.host = SimpleNamespace(
             git=self.git, sh=self.sh, cfg=SimpleNamespace(base="origin/main", gate=["gate"], gate_text="gate", land=["git", "push"],
                                                          land_optimistic_tries=tries, max_fix_rounds=2, gate_timeout_min=1),
+            wt=Path("/nonexistent"),
             bead="t-1", dry=False, landed_sha="", pending_land_validation="", fixes=0, gate_log=None, run_dir=Path("run"), killed=False,
             steps=SimpleNamespace(begin=lambda *a, **k: None, outcome=lambda *a: None, move=lambda *a: None),
             newfiles=SimpleNamespace(quarantine_strays=lambda: None), checkout=SimpleNamespace(fetch=self.fetch),
@@ -93,7 +94,7 @@ class World:
             self.events.append("rebase")
             self.sat_on = self.base
             return 0, ""
-        if argv == ["git", "push"]:
+        if argv == ["git", "push", "--no-verify"]:
             self.events.append("push")
             self.pushed.append((self.sat_on, self.base, self.held, f"tree@{self.sat_on}" in self.gate_passed()))
             return self.pushes.pop(0)

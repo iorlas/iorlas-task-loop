@@ -98,5 +98,8 @@ class FakeBeads:
     def provenance(self, bead: str, kind: str, source: str, ref: str = "", ref_kind: str = "", at: str = "", payload: str = "") -> None:
         self._get(bead)
 
+    def dolt_push(self) -> tuple[int, str]:
+        return 0, ""
+
     def at(self, cwd: str) -> "FakeBeads":
         return self

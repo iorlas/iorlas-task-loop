@@ -14,6 +14,7 @@ from support.checks import res
 from taskloop.app.land.checkout import Checkout
 from taskloop.app.land.fixer import Fixer
 from taskloop.app.land.lander import Lander
+from taskloop.app.land.outbound import land_argv
 from taskloop.app.run import engine
 from taskloop.app.run.waits import Waits
 from taskloop.contracts.checks import CheckRun
@@ -104,7 +105,7 @@ class PushRace:
             state["gates"] += 1
             if self.failure == "gate" and state["gates"] == 2:
                 return 1, "gate red"
-        if cmd == this.cfg.land:
+        if cmd == land_argv(this.cfg.land):
             self.case.assertTrue(self.held)
             self.events.append("push")
             state["pushes"] += 1

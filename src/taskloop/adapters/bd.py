@@ -180,6 +180,11 @@ class BdStore:
         """`tl bd ...`: whatever the person typed, with the actor and JSON like every call."""
         return self._call(*args)
 
+    def dolt_push(self) -> tuple[int, str]:
+        """`bd dolt push`: bd's Dolt data to its remote. -> (exit code, bd's words)."""
+        r = self._call("dolt", "push")
+        return r.code, (r.err or r.out).strip()
+
     def show(self, bead: str) -> Bead | None:
         r = self._call("show", bead)
         if r.code != 0:

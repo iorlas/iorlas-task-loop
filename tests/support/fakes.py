@@ -163,6 +163,9 @@ class FakeBeadStore:
     def provenance(self, bead, kind, source, ref="", ref_kind="", at="", payload=""):
         self.run(["provenance", "record", "--issue", bead, "--kind", kind, "--source", source])
 
+    def dolt_push(self):
+        return self.run(["dolt", "push"], failing=True)
+
     def said(self, *head):
         """The writes that start with `head`, e.g. said("comments", "add")."""
         return [c for c in self.calls if c[:len(head)] == head]

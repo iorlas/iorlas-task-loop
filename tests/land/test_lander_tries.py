@@ -46,7 +46,7 @@ class Host(SimpleNamespace):
         super().__init__(
             git=git.git, sh=git.sh, cfg=SimpleNamespace(base="origin/main", gate="", land_optimistic_tries=2,
                                                          land=["git", "push", "-q", "origin", "HEAD:main"]),
-            bead="t-1", dry=False, dry_run=False, landed_sha="", pending_land_validation="", fixes=0,
+            wt=Path("/nonexistent"), bead="t-1", dry=False, dry_run=False, landed_sha="", pending_land_validation="", fixes=0,
             steps=SimpleNamespace(begin=lambda *a, **k: None, outcome=lambda *a: None, move=lambda *a: None),
             newfiles=SimpleNamespace(quarantine_strays=lambda: None),
             checkout=SimpleNamespace(fetch=lambda: (0, "")),

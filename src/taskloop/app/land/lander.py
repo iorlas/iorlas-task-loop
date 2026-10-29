@@ -8,6 +8,7 @@ from typing import Any
 
 from taskloop.app.checks import evidence as check_evidence
 from taskloop.app.land.gate import Gate, Problem
+from taskloop.app.land.outbound import Outbound, land_argv
 from taskloop.contracts import log as rec
 from taskloop.domain.land.matchers import Push
 from taskloop.domain.lanes import policy as lp
@@ -30,6 +31,7 @@ class Lander:
     def __init__(self, host: Any) -> None:
         self.e = host
         self.gate = Gate(host)
+        self.out = Outbound(host)
 
     def finish(self, bead: Any) -> str:
         """The task's one commit, then the land. -> the landed sha, or "" (nothing changed, or a dry run)."""
@@ -38,7 +40,7 @@ class Lander:
             raise e.blocked_for("land retry validation still needs accepted checks and review; branch kept", "FAULT_LAND")
         found = self.already()  # the last run's push may have gone through before the network cut its answer
         if found:
-            return self.found(found)
+            return self.synced(self.found(found))
         if not e.git("status", "--porcelain") and e.git("rev-list", "--count", f"{e.cfg.base}..HEAD") in ("", "0"):
             e.log.note("nothing changed")
             return ""
@@ -47,7 +49,13 @@ class Lander:
             e.log.note("dry run: not landing")
             return ""
         e.task_branch = e.git("symbolic-ref", "--short", "-q", "HEAD")
-        return self.land()
+        return self.synced(self.land())
+
+    def synced(self, sha: str) -> str:
+        """The land is done and the lock is let go: bd's data follows it (a failure there only warns)."""
+        if sha and not self.e.dry:
+            self.out.bd_sync()
+        return sha
 
     def commit(self, bead: Any) -> None:
         """One commit per task, titled after the bead: earlier runs' wip commits are folded in."""
@@ -224,8 +232,8 @@ class Lander:
         """-> (sha, _) landed; ("", True) rejected, try again; ("", False) a network error, rest first. Anything else raises."""
         e = self.e
         with e.stop_deferred() as stop:  # a push half done is no state to stop in: finish it, then stop
-            gated = e.git("rev-parse", "HEAD^{tree}")  # a pre-push hook may skip a gate this exact tree passed
-            rc, tail = e.sh(e.cfg.land, pin=True, env={"TASK_LOOP_GATED_TREE": gated, "TL_GATE_PASSED": gated} if e.cfg.gate else None)
+            lrc, ltail = self.out.lfs_push()  # the pushed ref's LFS objects first: the push must not point at objects origin lacks
+            rc, tail = e.sh(land_argv(e.cfg.land), pin=True) if lrc == 0 else (lrc, ltail)  # no repo hook runs: --no-verify
             sha = ""
             if rc == 0:
                 e.landed_sha = sha = e.git("rev-parse", "HEAD")
@@ -237,8 +245,8 @@ class Lander:
             return sha, False
         if stop:
             raise e.blocked_for("failed: stopped (SIGTERM)", "PAUSE_KILLED")
-        if not Push.rejected(tail):
-            return "", self.not_rejected(st, tail)
+        if lrc or not Push.rejected(tail):
+            return "", self.not_rejected(st, tail, "git lfs push failed" if lrc else "land failed")
         st.pushes += 1
         e.steps.outcome("rejected", "main moved")
         if st.pushes >= PUSH_TRIES:
@@ -247,11 +255,11 @@ class Lander:
         e.steps.move("land", "push_race", f"push rejected (main moved): try {st.pushes + 1} of {PUSH_TRIES}")
         return "", True
 
-    def not_rejected(self, st: Land, tail: str) -> bool:
+    def not_rejected(self, st: Land, tail: str, what: str = "land failed") -> bool:
         """A push that failed for another reason: a network error rests (-> False), anything else is a fault."""
         e = self.e
         if not Push.transient(tail):
-            raise e.blocked_for("land failed\n" + tail, "FAULT_LAND")
+            raise e.blocked_for(what + "\n" + tail, "FAULT_LAND")
         if e.worker.acts.net_up() is not False:  # the probe cannot see the fault: counted, a proxy or DNS looks like this
             st.flaky += 1
         if st.flaky >= PUSH_UP_FAILS:

@@ -8,6 +8,8 @@ _TRANSIENT = re.compile(
     re.I,
 )
 _REJECTED = re.compile(r"rejected|non-fast-forward|fetch first|stale info")
+_LFS_ATTR = re.compile(r"^[^#\n]*\bfilter=lfs\b", re.M)
+_NO_REMOTE = re.compile(r"no (?:dolt )?remotes?\b|remote[^\n]{0,40}not (?:configured|found)|no such remote|no upstream", re.I)
 _FAILED_PREFIX = re.compile(r"^(failed|paused): ")
 
 
@@ -21,6 +23,16 @@ class Push:
     @staticmethod
     def rejected(tail: str) -> bool:
         return _REJECTED.search(tail) is not None
+
+
+def lfs_in(attributes: str) -> bool:
+    """A .gitattributes with a line that puts files in Git LFS."""
+    return _LFS_ATTR.search(attributes) is not None
+
+
+def no_dolt_remote(text: str) -> bool:
+    """bd's words when the repo has no Dolt remote to push to."""
+    return _NO_REMOTE.search(text) is not None
 
 
 def without_prefix(why: str) -> str:
