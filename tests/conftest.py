@@ -19,11 +19,6 @@ from support import procsim
 SERIAL = {
     "test_write_idle": "starts real worker process groups and asserts how long a writer stays idle against the wall clock",
 }
-# Files whose tests still start real processes and are not on procsim yet: marked `real_proc` here until they are (a file leaves the list
-# when its tests run on fakes).
-REAL_PROC = {
-    "test_delegate.py": "part 2 (INPROC)",
-}
 # The release gate sets TL_WORKER_MB. A healthy worker peaks near 430 MB; a runaway test gets MemoryError, not the host's RAM.
 WORKER_MB = int(os.environ.get("TL_WORKER_MB") or 2048)
 
@@ -32,8 +27,6 @@ def pytest_collection_modifyitems(items):
     for item in items:
         if item.module.__name__ in SERIAL:
             item.add_marker(pytest.mark.serial)
-        if item.path.name in REAL_PROC or item.path.name.startswith("test_dash"):
-            item.add_marker(procsim.real_proc("part 2 (INPROC)"))
 
 
 @pytest.fixture(autouse=True)

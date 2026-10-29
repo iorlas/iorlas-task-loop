@@ -14,6 +14,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
+from support.procsim import real_proc
 from support.tags import contract, domain
 
 from ports import stub_route
@@ -98,15 +99,10 @@ class RouteDelegateContract(RouteHarness, DelegateContract, unittest.TestCase):
 
 
 @contract
+@real_proc("argv and stdout through a real pipe, the live file tailed while the child runs, the engine's stop of a child past its deadline")
 class RouteDelegateProcess(RouteHarness, unittest.TestCase):
     """Real processes: what only a child has (argv and stdout through a pipe, the live file tailed while it runs, the engine's stop)."""
     IN_PROCESS = False
-
-    def test_the_child_speaks_contract_3_and_its_stdout_is_the_answer(self) -> None:
-        got = self.make(done({"x": 1}, "all good", ref="r-1"))
-        self.assertEqual(got.speaks(), 3)
-        res = got.run(req(), "do it", SCHEMA)
-        self.assertEqual((answer_status(res), res.data, res.text, res.ref, res.stop), ("done", {"x": 1}, "all good", "r-1", None))
 
     def test_live_events_arrive_in_order_before_the_result(self) -> None:
         events = (LiveCmdStart(t=1.0, id="c1", text="ls"), LiveMsg(t=2.0, text="hi"), LiveEnd(t=3.0, status="done", secs=2.0))
