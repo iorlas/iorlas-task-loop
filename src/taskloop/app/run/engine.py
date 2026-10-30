@@ -158,7 +158,6 @@ class Engine(RunFields):
     shared = cached_property(Shared)
     briefing = cached_property(Briefing)
     checkout = cached_property(Checkout)
-    tree_writer = checkout  # the same object: app/checks gets the right to stage only through this name (tests/rules/test_tree_writer.py)
     newfiles = cached_property(NewFiles)
     pictures = cached_property(Pictures)
     judge = cached_property(Judge)
@@ -288,6 +287,11 @@ class Engine(RunFields):
 
     def land_lock_path(self) -> Path:
         return landlock.land_lock_path(self.git("remote", "get-url", "origin") or str(self.wt))
+
+    @property
+    def tree_writer(self) -> Checkout:
+        """The same checkout: app/checks gets the right to stage only through this name (tests/rules/test_tree_writer.py)."""
+        return self.checkout
 
     def lock_worker(self, started: Any) -> None:
         """The worker delegate launched (the live file's first line) goes into the engine lock, so a SIGKILLed engine leaves it findable."""
