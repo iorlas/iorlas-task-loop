@@ -21,6 +21,7 @@ lint:
 types:
     #!/usr/bin/env bash
     set -euo pipefail
+    unset VIRTUAL_ENV  # a caller under `uv run --script` (release.py) passes its script env, which has no dev group
     uv sync --frozen -q  # pyrefly resolves pytest and the dev group from .venv; a fresh clone has none
     uv tool run "pyrefly@$(just pin pipx:pyrefly)" check
 
