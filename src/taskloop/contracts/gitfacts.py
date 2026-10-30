@@ -61,3 +61,21 @@ class RebaseOutcome(Rec):
 
     ok: bool
     output: str = ""
+
+
+@final
+class GrepHit(Rec):
+    """One matching line of `git grep -n`: the tracked file, its 1-based line number and the line."""
+
+    path: str
+    line: int
+    text: str
+
+
+@final
+class ConfigEntry(Rec):
+    """One setting of `git config --show-origin`: where it was set (file:<path>, ...), its key and its value."""
+
+    where: str
+    key: str
+    value: str

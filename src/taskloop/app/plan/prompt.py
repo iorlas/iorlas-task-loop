@@ -4,8 +4,10 @@ import json
 from pathlib import Path
 from typing import Any
 
+from taskloop.adapters.git import REAL
 from taskloop.app.plan.decisions import Decisions
 from taskloop.contracts import plancheck
+from taskloop.contracts.ports import Git
 from taskloop.domain.checks import lint
 from taskloop.domain.prompts.plan import PLAN_PROMPT, VISUAL_PLAN, VISUAL_STAGES
 
@@ -13,8 +15,9 @@ REPLAN_CALLS = 6  # the calls a replan may spend looking (study 63: the median r
 
 
 class PlanPrompt:
-    def __init__(self, host: Any) -> None:
+    def __init__(self, host: Any, git: Git = REAL) -> None:
         self.e = host
+        self.git = git
         self.decisions = Decisions(host)
 
     def notes(self) -> str:
@@ -55,7 +58,7 @@ class PlanPrompt:
         """What a replan starts from beyond the old plan, the cause and the rounds: what the tree holds now, and a budget for looking."""
         e = self.e
         tree = e.checkout.tree_hash()
-        stat = (e.git("diff", "--stat", e.checkout.base_sha(), tree) if tree else "").strip()
+        stat = (self.git.diff(e.wt, e.checkout.base_sha(), tree, stat=True) if tree else "").strip()
         return (f"\n\nThe tree now, against the task's base (git diff --stat):\n<tree>\n{stat or '(no file changed yet)'}\n</tree>\n"
                 f"The old plan, the cause and the rounds above are your start: read at most {REPLAN_CALLS} files or run at most "
                 f"{REPLAN_CALLS} commands before you answer.\n")

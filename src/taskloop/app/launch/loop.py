@@ -11,10 +11,10 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
-from taskloop.adapters import applog, beadtools, childenv, gitrepo, ident, pidcheck
+from taskloop.adapters import applog, beadtools, childenv, ident, pidcheck
 from taskloop.adapters import delegate as dg
 from taskloop.adapters import storm as storm_file
-from taskloop.adapters.gitenv import run_git
+from taskloop.adapters.git import REAL
 from taskloop.adapters.locks import hold_path
 from taskloop.app.asks import sweeps as ask_sweeps
 from taskloop.app.doctor import profiles
@@ -43,7 +43,8 @@ from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.landed import LandedStore
 from taskloop.contracts.loop import LoopState
-from taskloop.contracts.ports import Beads, Child, Hold, Spawner
+from taskloop.contracts.ports import Beads, Child, Git, Hold, Spawner
+from taskloop.contracts.slots import SlotGitError
 from taskloop.contracts.stores import ReposStore
 from taskloop.domain import outcome as oc
 from taskloop.domain.beads import rules as beadlint
@@ -101,8 +102,8 @@ def make_probe(repo: str | Path) -> dg.RouteProbe | None:
     return dg.RouteProbe(route) if route else None
 
 
-def storm(repo: str, now: Callable[[], float] = trail.now) -> Storm | None:
-    rid = gitrepo.git("remote", "get-url", "origin", cwd=repo) or repo
+def storm(repo: str, now: Callable[[], float] = trail.now, git: Git = REAL) -> Storm | None:
+    rid = git.remote_url(repo, "origin") or repo
     path = storm_file.storm_path(ident.config_dir(), rid)
     rec = storm_file.read_storm(path, now(), oc.KNOBS["storm_window_s"])
     if not rec:
@@ -114,7 +115,7 @@ def storm(repo: str, now: Callable[[], float] = trail.now) -> Storm | None:
     return Storm(rec.get("fingerprint") or "", banner)
 
 
-def landed_on_base(repo: str, store: Beads, wt: str, bead_id: BeadId) -> bool:
+def landed_on_base(repo: str, store: Beads, wt: str, bead_id: BeadId, git: Git = REAL) -> bool:
     """True when the bead's landed record names a sha that is on the base. LEGACY, only for a bead with no record (landed before
     0.23.179): its land commit (titled `... (<id>)`) is the tip of its branch and already on the base; this can go with them."""
     if not os.path.isdir(wt):
@@ -122,13 +123,15 @@ def landed_on_base(repo: str, store: Beads, wt: str, bead_id: BeadId) -> bool:
     base = wslots.load_cfg(repo).base
     rec = LandedStore(paths.ConfigDir(ident.config_dir())).get(bead_id)
     if rec is not None:
-        return run_git(wt, "merge-base", "--is-ancestor", rec.sha, base, capture_output=True).returncode == 0
+        return git.is_ancestor(wt, rec.sha, base)
     branch = getattr(beadtools.peek(store, bead_id), "metadata", {}).get("branch") or "task/" + bead_id
-    gitrepo.fetch(wt)
-    tip = gitrepo.git("rev-parse", "--verify", "-q", "refs/heads/" + branch, cwd=wt)
-    if not tip or not gitrepo.git("log", "-1", "--format=%s", tip, cwd=wt).endswith(f"({bead_id})"):
+    with contextlib.suppress(SlotGitError):
+        git.fetch(wt)
+    tip = git.rev_parse(wt, "refs/heads/" + branch)
+    last = git.log(wt, [tip], limit=1) if tip else []
+    if not last or not last[0].subject.endswith(f"({bead_id})"):
         return False
-    return run_git(wt, "merge-base", "--is-ancestor", tip, base, capture_output=True).returncode == 0
+    return git.is_ancestor(wt, tip, base)
 
 
 def reload_note(bead: BeadId) -> ReloadNote | None:
@@ -139,8 +142,9 @@ def reload_note(bead: BeadId) -> ReloadNote | None:
     return ReloadNote(run=rec.run, to=rec.to, frm=rec.frm, from_dir=rec.from_dir, t=rec.t)
 
 
-def fetch(repo: str) -> None:
-    gitrepo.fetch(repo)
+def fetch(repo: str, git: Git = REAL) -> None:
+    with contextlib.suppress(SlotGitError):
+        git.fetch(repo)
 
 
 def chores(repo: str, spawner: Spawner, env: Env) -> None:

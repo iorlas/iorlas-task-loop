@@ -847,6 +847,16 @@
   "index": " ",
   "work": "M"
  },
+ "GrepHit": {
+  "path": "a.txt",
+  "line": 2,
+  "text": "t"
+ },
+ "ConfigEntry": {
+  "where": "file:/r/.git/config",
+  "key": "core.bare",
+  "value": "true"
+ },
  "RebaseOutcome": {
   "ok": false,
   "output": "conflict"

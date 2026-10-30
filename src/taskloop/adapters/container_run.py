@@ -18,6 +18,7 @@ from typing import IO, Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # src/: a script run by path finds taskloop (which adds _vendor)
 from taskloop.adapters import procs
+from taskloop.adapters.git import REAL
 
 INSIDE = ('t=${TMPDIR:-/tmp}; rm -rf "$t/tl-w" "$t/tl-art"; mkdir -p "$t/tl-w" "$t/tl-art" && tar -x -C "$t/tl-w"'
           ' && cd "$t/tl-w/$TL_BOX_CWD" && export TL_ARTIFACTS="$t/tl-art" && exec "$@"')  # the image must not set TMPDIR
@@ -30,8 +31,7 @@ def docker(*args: str, **kw: Any) -> subprocess.CompletedProcess[bytes]:
 
 def files(root: str) -> list[str]:
     """The tracked and the untracked non-ignored files of the worktree that still exist."""
-    out = subprocess.run(["git", "ls-files", "-co", "--exclude-standard", "-z"], cwd=root, capture_output=True, check=True).stdout
-    return [os.fsdecode(p) for p in out.split(b"\0") if p and os.path.lexists(os.path.join(root, os.fsdecode(p)))]
+    return [p for p in REAL.ls_files(root, "unignored") if os.path.lexists(os.path.join(root, p))]
 
 
 def send(stream: IO[bytes], root: str) -> None:

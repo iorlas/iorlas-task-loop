@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from taskloop.adapters import gitrepo
+from taskloop.adapters.git import REAL
 from taskloop.app.checks.runner import Checker
 from taskloop.app.launch.check_host import CliHost
 from taskloop.app.wire import slots as wslots
@@ -58,7 +58,7 @@ def profile_of(repo: str) -> EngineConfig:
 
 
 def cmd_check(a: Any, host: CliHost | None = None, *, env: Env) -> int:
-    repo = gitrepo.git("rev-parse", "--show-toplevel", cwd=a.repo) or str(Path(a.repo).resolve())
+    repo = REAL.toplevel(a.repo) or str(Path(a.repo).resolve())
     cfg = profile_of(repo)
     if a.list:
         print("\n".join(listing(cfg)) or "(no checks in engine.checks)")

@@ -49,10 +49,9 @@ def say(msg: str) -> None:
 
 @dataclass(frozen=True)
 class Shell:
-    """The calls a release step makes to the outside; `of(spawner)` builds the real ones, a test hands a step its own.
+    """The calls a release step makes to the outside; `of(spawner, port)` builds the real ones, a test hands a step its own.
     `run(cmd, cwd, check)`: `extra` goes over the child's environment, `timeout_s` ends it (exit 124). `port`: the Git port, which every
     step that reads or moves refs asks (clone, push, publish, tidy)."""
-    git: Callable[..., str]
     fetch: Callable[[str | Path], None]
     run: Callable[..., Finished]
     say: Callable[[str], None]
@@ -69,7 +68,4 @@ def of(spawner: Spawner, port: Git, env: Env) -> Shell:
             raise Abort("{} failed in {}:\n{}".format(" ".join(cmd), cwd, (r.out + r.err).strip()[-2000:]))
         return Done(r.exit, r.out, r.err)
 
-    def git(cwd: str | Path, *a: str, check: bool = True) -> str:
-        return run(["git", *a], cwd, check).stdout.strip()
-
-    return Shell(git=git, fetch=lambda cwd: fetch_or_abort(port, cwd), run=run, say=say, port=port, env=env)
+    return Shell(fetch=lambda cwd: fetch_or_abort(port, cwd), run=run, say=say, port=port, env=env)

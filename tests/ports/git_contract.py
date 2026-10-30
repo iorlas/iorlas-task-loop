@@ -369,3 +369,82 @@ class GitContract(_Base):
         self.commit_file(self.repo, "m.txt", "m\n", "m")
         self.git.pull_rebase(str(self.repo), "origin", "main")
         self.assertEqual(sh(self.repo, "log", "--format=%s", "-2"), "m\nn")
+
+    # -- files, config and the work tree ---------------------------------------------------------------------------------------
+
+    def test_show_reads_a_file_at_a_rev_and_refuses_a_missing_one(self) -> None:
+        self.assertEqual(self.git.show(str(self.repo), "origin/main", "a.txt"), "a\n")
+        with self.assertRaises(SlotGitError):
+            self.git.show(str(self.repo), "origin/main", "nope.txt")
+
+    def test_ls_files_lists_tracked_unignored_and_ignored_files(self) -> None:
+        (self.repo / ".gitignore").write_text("*.log\n")
+        (self.repo / "x.log").write_text("l\n")
+        (self.repo / "new.txt").write_text("n\n")
+        self.git.stage(str(self.repo), ".gitignore")
+        self.assertEqual(self.git.ls_files(str(self.repo)), [".gitignore", "a.txt"])
+        loose = [p for p in self.git.ls_files(str(self.repo), "unignored") if not p.startswith(".slots")]
+        self.assertEqual(sorted(loose), [".gitignore", "a.txt", "new.txt"])
+        self.assertEqual(self.git.ls_files(str(self.repo), "ignored"), ["x.log"])
+        self.assertEqual(self.git.ls_files(str(self.repo), "ignored", "*.txt"), [])
+
+    def test_grep_finds_lines_of_tracked_files_by_regex_or_whole_word(self) -> None:
+        (self.repo / "b.txt").write_text("one\n<<<<<<< x\nfoobar foo\n")
+        self.git.stage(str(self.repo), "b.txt")
+        self.assertEqual([(h.path, h.line, h.text) for h in self.git.grep(str(self.repo), r"^(<<<<<<<|>>>>>>>)( |$)")],
+                         [("b.txt", 2, "<<<<<<< x")])
+        self.assertEqual([h.line for h in self.git.grep(str(self.repo), "foo", fixed=True, word=True)], [3])
+        self.assertEqual(self.git.grep(str(self.repo), "absent", fixed=True), [])
+
+    def test_stage_and_commit_staged_commit_only_what_was_staged(self) -> None:
+        (self.repo / "a.txt").write_text("changed\n")
+        (self.repo / "s.txt").write_text("s\n")
+        self.git.stage(str(self.repo), "s.txt")
+        self.git.commit_staged(str(self.repo), "staged")
+        self.assertEqual(sh(self.repo, "show", "--name-only", "--format=", "HEAD"), "s.txt")
+
+    def test_config_get_entries_and_the_dirs(self) -> None:
+        self.assertEqual(self.git.config_get(str(self.repo), "remote.origin.url"), str(self.origin))
+        self.assertEqual(self.git.config_get(str(self.repo), "no.such"), "")
+        self.assertEqual([(e.key, e.value) for e in self.git.config_entries(str(self.repo), r"^remote\.origin\.url$")],
+                         [("remote.origin.url", str(self.origin))])
+        self.assertEqual(self.git.config_entries(str(self.repo), r"^no\.such$"), [])
+        self.assertEqual(os.path.realpath(self.git.common_dir(str(self.slot))), str(self.repo / ".git"))
+        self.assertEqual(os.path.realpath(self.git.toplevel(str(self.slot))), str(self.slot))
+        self.assertEqual(self.git.common_dir(str(self.home)), "")
+
+    def test_tree_of_is_the_tree_the_work_tree_would_commit_and_leaves_the_index_alone(self) -> None:
+        clean = self.git.tree_of(self.s())
+        self.assertEqual(clean, sh(self.slot, "rev-parse", "HEAD^{tree}"))
+        (self.slot / "f.txt").write_text("f\n")
+        self.assertNotEqual(self.git.tree_of(self.s()), clean)
+        self.assertEqual(sh(self.slot, "status", "--porcelain"), "?? f.txt")
+
+    def test_worktree_state_changes_with_the_work_tree(self) -> None:
+        before = self.git.worktree_state(self.s())
+        assert before is not None
+        (self.slot / "f.txt").write_text("f\n")
+        after = self.git.worktree_state(self.s())
+        assert after is not None
+        self.assertIn(b"f.txt", after)
+        self.assertNotEqual(before, after)
+        self.assertIsNone(self.git.worktree_state(str(self.home)))
+
+    def test_diff_between_trees_leaves_out_excluded_paths(self) -> None:
+        base = self.git.rev_parse(self.s(), "HEAD")
+        (self.slot / "a.txt").write_text("changed\n")
+        (self.slot / "n.txt").write_text("n\n")
+        tree = self.git.tree_of(self.s())
+        both = self.git.diff(self.s(), base, tree)
+        self.assertTrue("a.txt" in both and "n.txt" in both)
+        only = self.git.diff(self.s(), base, tree, exclude=["n.txt"])
+        self.assertTrue("a.txt" in only and "n.txt" not in only)
+        self.assertIn("a.txt", self.git.diff(self.s(), base, tree, stat=True))
+
+    def test_a_forced_worktree_is_added_removed_and_pruned(self) -> None:
+        extra = str(self.home / "extra")
+        self.git.add_worktree_force(str(self.repo), extra, "origin/main")
+        self.assertTrue((self.home / "extra" / "a.txt").is_file())
+        self.git.remove_worktree_force(str(self.repo), extra)
+        self.git.prune_worktrees(str(self.repo))
+        self.assertFalse((self.home / "extra").exists())

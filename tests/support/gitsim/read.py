@@ -130,6 +130,9 @@ def cmd_ls_files(c: Ctx) -> int:
     idx = c.index()
     spec = rest[rest.index("--") + 1:] if "--" in rest else []
     if "-o" in fl:
+        if "-c" in fl:
+            for p in sorted(idx):
+                c.say(p, end)
         for p in sorted(files):
             if p not in idx and ("-i" in fl) == ignore.ignored(p, rules) and (not spec or ignore.spec_match(p, spec)):
                 c.say(p, end)
@@ -141,7 +144,11 @@ def cmd_ls_files(c: Ctx) -> int:
 
 def cmd_grep(c: Ctx) -> int:
     fl, rest = flags(c.args)
-    pat = rest[0]
+    if "-e" in c.args:  # -e PATTERN: the pattern is the word after it
+        pat = c.args[c.args.index("-e") + 1]
+        rest = [x for x in rest if x != pat]
+    else:
+        pat = rest[0]
     rx = re.compile(re.escape(pat) if "-F" in fl else pat)
     if "-w" in fl:
         rx = re.compile(r"\b(?:" + rx.pattern + r")\b")
@@ -157,7 +164,8 @@ def cmd_grep(c: Ctx) -> int:
                 c.say(p)
             else:
                 for n, ln in lines:
-                    c.say(f"{p}:{n}:{ln}" if "-n" in fl else f"{p}:{ln}")
+                    sep = "\0" if "-z" in fl else ":"
+                    c.say(f"{p}{sep}{n}{sep}{ln}" if "-n" in fl else f"{p}{sep}{ln}")
     return 0 if hits else 1
 
 

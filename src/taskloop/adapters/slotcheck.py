@@ -1,33 +1,24 @@
 """Is git at a slot the slot's own checkout? A core.worktree or core.bare in the shared .git/config points every slot's git at
 another folder (lifesim-1mm); read as ambient config has it, unpinned, as a worker's or check's git would see it."""
-import subprocess
 from pathlib import Path
 from typing import Any
 
 from taskloop.adapters import gitrepo
-from taskloop.adapters.childenv import without
-from taskloop.contracts import env as penv
+from taskloop.adapters.git import RealGit
+
+AMBIENT = RealGit(pinned=False)
 
 _MEMO: dict[tuple[Any, ...], tuple[str, str] | None] = {}  # (slot, what the config files and environment are now) -> tree_problem's answer
-
-
-def _git(wt: str | Path, *args: str) -> str:
-    clean = without(penv.snapshot().vars, "GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR")
-    r = subprocess.run(["git", "-C", str(wt), *args], env=clean, capture_output=True, text=True, encoding="utf-8", errors="replace",
-                       check=False)
-    return r.stdout.strip() if r.returncode == 0 else ""
 
 
 def _config_origin(wt: str | Path) -> tuple[str, str]:
     """(where core.worktree is set and to what, core.bare's value): the last of each key wins, as `--get` does."""
     origin = bare = ""
-    for ln in _git(wt, "config", "--show-origin", "--get-regexp", r"^core\.(worktree|bare)$").splitlines():
-        where, _, kv = ln.partition("\t")
-        k, _, v = kv.partition(" ")
-        if k.lower() == "core.worktree":
-            origin = f"{where}\t{v}" if v else where
-        elif k.lower() == "core.bare":
-            bare = v
+    for e in AMBIENT.config_entries(str(wt), r"^core\.(worktree|bare)$"):
+        if e.key.lower() == "core.worktree":
+            origin = f"{e.where}\t{e.value}" if e.value else e.where
+        elif e.key.lower() == "core.bare":
+            bare = e.value
     return origin.strip(), bare
 
 
@@ -44,11 +35,7 @@ def tree_problem(wt: str | Path) -> tuple[str, str] | None:
 
 
 def _problem(wt: str | Path) -> tuple[str, str] | None:
-    both = _git(wt, "rev-parse", "--path-format=absolute", "--git-common-dir", "--show-toplevel").split("\n")
-    if len(both) == 2:
-        common, top = both
-    else:  # one of the two fails (core.bare=true has no top level): ask for each alone, as the message needs what is left
-        common, top = _git(wt, "rev-parse", "--path-format=absolute", "--git-common-dir"), ""
+    common, top = AMBIENT.common_dir(str(wt)), AMBIENT.toplevel(str(wt))  # core.bare=true has no top level: the message needs what is left
     repo = str(Path(common or ".").parent)
     origin, bare = _config_origin(wt)
     if origin:
@@ -60,7 +47,6 @@ def _problem(wt: str | Path) -> tuple[str, str] | None:
         return ("core.bare is true",
                 "core.bare=true in the repo's config makes git refuse the work tree. Fix: `git config core.bare false` "
                 f"in {repo}, then rerun.")
-    top = top or _git(wt, "rev-parse", "--show-toplevel")
     if not top or not gitrepo.same_dir(top, wt):
         return (f"git's top-level folder is {top or '(none)'}, not the slot {wt}",
                 f"Something redirects git away from the slot. Check `git config --show-origin --list` in {repo} for "

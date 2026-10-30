@@ -385,6 +385,8 @@ OTHERS = {
     "LogRow": gitfacts.LogRow(oid="a" * 40, time=5, subject="s"),
     "TreeEntry": gitfacts.TreeEntry(mode="100644", kind="blob", oid="a" * 40, path="a.txt"),
     "StatusRow": gitfacts.StatusRow(path="a.txt", index=" ", work="M"),
+    "GrepHit": gitfacts.GrepHit(path="a.txt", line=2, text="t"),
+    "ConfigEntry": gitfacts.ConfigEntry(where="file:/r/.git/config", key="core.bare", value="true"),
     "RebaseOutcome": gitfacts.RebaseOutcome(ok=False, output="conflict"),
     "Checkout": slots.Checkout(path="/r/.slots/s1", branch="task/x-1", main=False),
     "WindowStatus": snapshots.WindowStatus(name="weekly", used_pct=9.0, resets_at=T + 600),

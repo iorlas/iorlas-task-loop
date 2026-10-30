@@ -8,16 +8,18 @@ from typing import Any
 from urllib.parse import quote
 
 from taskloop.adapters import bdcreate, beadtools, ident
+from taskloop.adapters.git import REAL
 from taskloop.contracts.ids import BeadId, is_bead_id
-from taskloop.contracts.ports import BdFailure, BeadPatch, BeadQuery, NewBead
+from taskloop.contracts.ports import BdFailure, BeadPatch, BeadQuery, Git, NewBead
 from taskloop.domain.look.matchers import sections
 
 LOOK_LABEL = "owner-look"
 
 
 class OwnerLook:
-    def __init__(self, host: Any) -> None:
+    def __init__(self, host: Any, git: Git = REAL) -> None:
         self.e = host
+        self.git = git
 
     def look_epic(self) -> str:
         """The bead's epic: parents walked up to the first epic, else the direct parent."""
@@ -84,7 +86,7 @@ class OwnerLook:
     def review_lock(self) -> Generator[None]:
         """One filer at a time per (repo, epic), across slots and sessions."""
         e = self.e
-        key = f"{e.git('remote', 'get-url', 'origin') or str(e.wt)}|{self.look_epic() or e.bead}"
+        key = f"{self.git.remote_url(str(e.wt), 'origin') or str(e.wt)}|{self.look_epic() or e.bead}"
         with e.waits.locked("review_lock", ident.config_dir() / "locks" / f"review-{hashlib.sha1(key.encode()).hexdigest()[:12]}.lock"):
             yield
 

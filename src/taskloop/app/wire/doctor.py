@@ -3,16 +3,16 @@ import os
 from pathlib import Path
 
 from taskloop import contracts
-from taskloop.adapters import gitrepo
 from taskloop.adapters.beadtools import bd_store
-from taskloop.adapters.gitrepo import git as real_git
+from taskloop.adapters.git import REAL
 from taskloop.adapters.ident import config_dir
 from taskloop.app.doctor import profiles
 from taskloop.app.release import catalog, manifest
-from taskloop.app.wire.slots import Git, cfg_source
+from taskloop.app.wire.slots import cfg_source
 from taskloop.contracts.config import RepoProfile
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import BdFailure, BeadQuery, Beads
+from taskloop.contracts.ports import BdFailure, BeadQuery, Beads, Git
+from taskloop.contracts.slots import SlotGitError
 from taskloop.contracts.stores import ReposStore
 from taskloop.domain.beads import matchers as beadlint
 from taskloop.domain.checks.inputs import dead_globs
@@ -20,10 +20,10 @@ from taskloop.domain.checks.inputs import dead_globs
 Source = tuple[RepoProfile, str, str]
 
 
-def git_warnings(repo: str, source: Source | None = None, git: Git = gitrepo.git) -> list[str]:
+def git_warnings(repo: str, source: Source | None = None, git: Git = REAL) -> list[str]:
     """What is off in the repo's git setup for slots (tl-bxk.10.12) and in the globs of its checks."""
     out: list[str] = []
-    if git("config", "--get", "extensions.worktreeConfig", cwd=repo).lower() != "true":
+    if git.config_get(repo, "extensions.worktreeConfig").lower() != "true":
         out.append(f"extensions.worktreeConfig is off in {repo}: per-worktree settings (core.worktree, core.bare) then live in "
                    "the one .git/config every slot shares, so a stray one redirects all slots; `git config "
                    "extensions.worktreeConfig true` gives each worktree its own config file.")
@@ -31,8 +31,11 @@ def git_warnings(repo: str, source: Source | None = None, git: Git = gitrepo.git
         profile, _, commit = source or cfg_source(repo, git)
     except (SystemExit, OSError, ValueError):  # a bad profile is the profile report's to say
         return out
-    listing = git("ls-tree", "-r", "--name-only", "-z", commit, cwd=repo) if commit else git("ls-files", "-z", cwd=repo)
-    files = [p for p in listing.split("\0") if p]
+    files: list[str]
+    try:
+        files = [e.path for e in git.ls_tree(repo, commit, recursive=True)] if commit else git.ls_files(repo)
+    except SlotGitError:
+        files = []
     for c in profile.engine.checks:  # inputs globs that match no tracked file would cache a green over changed code
         ins = [c.inputs] if isinstance(c.inputs, str) else list(c.inputs)
         for g in dead_globs(files, ins):
@@ -80,7 +83,7 @@ def install_problems(plugin_root: Path) -> list[str]:
 
 
 def run(plugin_root: Path) -> int:
-    repo = real_git("rev-parse", "--show-toplevel") or os.getcwd()
+    repo = REAL.toplevel(".") or os.getcwd()
     if profiles.report(repo, ReposStore(ConfigDir(config_dir()))):  # a bad profile is a red row of its repo, not a traceback
         return 1
     source = cfg_source(repo)

@@ -5,16 +5,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from taskloop.adapters import beadtools, gitrepo, ident
+from taskloop.adapters import beadtools, ident
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdFailure, Beads, Git
 from taskloop.contracts.stores import TraceStore
 from taskloop.contracts.trace import RunTrace
-
-
-def git(repo: str, *args: str) -> str:
-    return gitrepo.git(*args, cwd=repo)
 
 
 def read_jsonl(path: str | Path) -> list[dict[str, Any]]:

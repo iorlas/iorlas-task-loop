@@ -6,8 +6,8 @@ from pathlib import Path
 from typing import Any
 
 from taskloop.adapters.beadtools import attempt, bd_store, peek
-from taskloop.adapters.gitenv import run_git
-from taskloop.adapters.gitrepo import git, repo_root
+from taskloop.adapters.git import REAL
+from taskloop.adapters.gitrepo import repo_root
 from taskloop.adapters.ident import actor, config_dir, session_id
 from taskloop.adapters.opencode import transcript_of
 from taskloop.app.track.trail import event, provenance, prune_events, register_repo
@@ -15,10 +15,10 @@ from taskloop.contracts import fence
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import BdFailure, BeadPatch, Beads
+from taskloop.contracts.ports import BdFailure, BeadPatch, Beads, Git
 
 
-def claim(bead: BeadId, worktree: str | None = None, slot: str | None = None, store: Beads | None = None) -> int:
+def claim(bead: BeadId, worktree: str | None = None, slot: str | None = None, store: Beads | None = None, git: Git = REAL) -> int:
     st = store or bd_store()
     if not st.claim(bead):
         print("TAKEN")
@@ -27,7 +27,7 @@ def claim(bead: BeadId, worktree: str | None = None, slot: str | None = None, st
     if b.assignee not in ("", actor()):
         print("TAKEN by " + b.assignee)
         return 1
-    wt = str(Path(worktree).resolve()) if worktree else git("rev-parse", "--show-toplevel")
+    wt = str(Path(worktree).resolve()) if worktree else git.toplevel(".")
     branch = b.metadata.get("branch") or "task/" + bead
     attempt(st.update, bead, BeadPatch(set_metadata=dict({"branch": branch}, **({"slot": slot} if slot else {}))))
     event("claim", bead, worktree=wt, branch=branch, title=b.title, slot=slot)
@@ -38,7 +38,7 @@ def claim(bead: BeadId, worktree: str | None = None, slot: str | None = None, st
 
 
 def land(bead: BeadId, sha: str, worktree: str | None = None, store: Beads | None = None, base: str | None = None,
-         claim: fence.Claim | None = None) -> int:
+         claim: fence.Claim | None = None, git: Git = REAL) -> int:
     """Record a land. With `base`, provenance gets the sha only once it is an ancestor of that base: a sha that never reached it
     is no land (the event stays, as what was claimed). An engine run passes its claim and a stale one is refused; `tl land` by hand
     passes none."""
@@ -46,9 +46,10 @@ def land(bead: BeadId, sha: str, worktree: str | None = None, store: Beads | Non
     if claim is not None and (why := fence.stale(st, claim)):
         sys.stderr.write(f"fenced: land of {bead} not recorded: {why}\n")
         return 1
-    full = git("rev-parse", "--verify", "-q", sha + "^{commit}", cwd=worktree) or sha
+    where = worktree or "."
+    full = git.rev_parse(where, sha + "^{commit}") or sha
     event("land", bead, sha=full)
-    if base and run_git(worktree or ".", "merge-base", "--is-ancestor", full, base, capture_output=True).returncode != 0:
+    if base and not git.is_ancestor(where, full, base):
         sys.stderr.write(f"{bead}: {full[:12]} is not on {base}: no land recorded in provenance\n")
         return 1
     provenance(bead, "land", full, "git-sha", store=store)
@@ -118,10 +119,10 @@ def passthrough(rest: list[str]) -> int:
     return r.code
 
 
-def register(directory: str) -> int:
+def register(directory: str, git: Git = REAL) -> int:
     """`tl register [DIR]`: add the repo of a working directory to the dashboard."""
     try:
-        path = repo_root(directory) if git("rev-parse", "--is-inside-work-tree", cwd=directory) == "true" else None
+        path = repo_root(directory) if git.toplevel(directory) else None
     except (OSError, ValueError):
         path = None
     if path is None:

@@ -14,7 +14,7 @@ CODE = ("src", "dev/release.py")  # what a release runs: the engine package and 
 
 def code_ids(root: Path, sh: Shell) -> list[str]:
     """The tree ids of CODE at the HEAD of `root` ("" for one that is missing or not a git repo)."""
-    return [sh.git(root, "rev-parse", "-q", "--verify", f"HEAD:{p}", check=False) for p in CODE]
+    return [sh.port.rev_parse(str(root), f"HEAD:{p}") for p in CODE]
 
 
 def newer_release(tool_root: Path, where: Path, sh: Shell) -> Path | None:

@@ -1,5 +1,6 @@
 """The slot code's world, built from this machine: the repo's profile, its bd, git and ticket line, the worktrees of the repo and the
 loop's own worktree when slots are off. The composition root for `tl slot ...`, the loop and the engine."""
+import contextlib
 import json
 import os
 import sys
@@ -8,11 +9,9 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from taskloop.adapters import gitrepo
 from taskloop.adapters.beadtools import bd_store, peek
-from taskloop.adapters.git import RealGit
-from taskloop.adapters.gitenv import run_git
-from taskloop.adapters.gitrepo import fetch, git, repo_root
+from taskloop.adapters.git import REAL, RealGit
+from taskloop.adapters.gitrepo import repo_root
 from taskloop.adapters.ident import actor, config_dir, hostname
 from taskloop.adapters.landlock import os_lock
 from taskloop.app.slots import line as slots_line
@@ -28,27 +27,25 @@ from taskloop.contracts.config import EngineConfig, RepoProfile, SlotsConfig
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ids import loop_key as repo_key
 from taskloop.contracts.paths import TASK_EXCLUDE, ConfigDir
-from taskloop.contracts.ports import BdFailure, BeadQuery, Beads, Spawner
-from taskloop.contracts.slots import SlotFail
+from taskloop.contracts.ports import BdFailure, BeadQuery, Beads, Git, Spawner
+from taskloop.contracts.slots import SlotFail, SlotGitError
 from taskloop.stores.files import FileTickets
 
-Git = Callable[..., str]  # `git(*args, cwd=...)` -> stdout: gitrepo.git, or a spy
 
-
-def profile(repo: str, base: str | None = None, git: Git = gitrepo.git) -> dict[str, Any]:
+def profile(repo: str, base: str | None = None, git: Git = REAL) -> dict[str, Any]:
     """The repo's loop profile (.task-loop.json, parsed). With `base` (a ref such as origin/main), the copy committed there, so a pushed
     rule counts after a fetch even when nobody pulled the checkout; the working tree only when `base` does not resolve here (no remote).
     A file missing on the base is {}: committed wins."""
     return profile_source(repo, base, git)[0]
 
 
-def profile_source(repo: str, base: str | None = None, git: Git = gitrepo.git) -> tuple[dict[str, Any], str]:
+def profile_source(repo: str, base: str | None = None, git: Git = REAL) -> tuple[dict[str, Any], str]:
     """The profile and its exact commit, or an empty commit for the working-tree fallback."""
-    commit = git("rev-parse", "--verify", "-q", base + "^{commit}", cwd=repo) if base else ""
+    commit = git.rev_parse(repo, base + "^{commit}") if base else ""
     if commit:
         try:
-            return json.loads(git("show", f"{commit}:.task-loop.json", cwd=repo) or "{}"), commit
-        except ValueError:
+            return json.loads(git.show(repo, commit, ".task-loop.json").strip() or "{}"), commit
+        except (ValueError, SlotGitError):
             return {}, commit
     try:
         return json.loads((Path(repo) / ".task-loop.json").read_text(encoding="utf-8")), ""
@@ -64,7 +61,7 @@ def load_profile(data: Any) -> RepoProfile:
         sys.exit(f"task-loop: {e}")
 
 
-def cfg_source(repo: str, git: Git = gitrepo.git) -> tuple[RepoProfile, str, str]:
+def cfg_source(repo: str, git: Git = REAL) -> tuple[RepoProfile, str, str]:
     """(the RepoProfile, the base hint, the pinned commit: empty for a local fallback). A bad .task-loop.json exits loudly."""
     base = load_profile(profile(repo, None, git)).engine.base
     data, commit = profile_source(repo, base, git)
@@ -92,7 +89,7 @@ def slot_dir(repo: str, name: str, cfg: SlotsConfig) -> str:
 
 def exclude_local(repo: str, *patterns: str) -> None:
     """Keep the loop's own folders out of `git add -A` in every repo, without touching its tracked .gitignore."""
-    common = git("rev-parse", "--path-format=absolute", "--git-common-dir", cwd=repo)
+    common = REAL.common_dir(repo)
     if not common:
         return
     f = Path(common) / "info" / "exclude"
@@ -180,8 +177,7 @@ def bead_priority(repo: str, bead_id: BeadId, store: Beads | None = None) -> int
 def worktrees(repo: str, slots: list[Bead] | None = None) -> list[str]:
     """Every worktree of the repo (git worktree list) and every slot folder (`slots`: the slot beads, when the caller has them): where an
     engine lock may be."""
-    out = git("worktree", "list", "--porcelain", cwd=repo) or ""
-    found = [ln[9:] for ln in out.splitlines() if ln.startswith("worktree ")]
+    found = [c.path for c in REAL.checkouts(repo)]
     cfg = profile_slots(repo)
     found += [slot_dir(repo, b.title.split()[-1], cfg) for b in (slot_beads(repo) if slots is None else slots)]
     seen: set[str] = set()
@@ -199,11 +195,12 @@ def start_worktree(repo: str, name: str | None = None) -> str:
     exclude_local(repo, ".worktrees/", TASK_EXCLUDE)
     d = Path(repo) / ".worktrees" / ("loop-" + (name or actor()[3:]))
     if not d.exists():
-        fetch(repo)
-        r = run_git(repo, "worktree", "add", "--detach", str(d), "origin/main", capture_output=True, text=True, encoding="utf-8",
-                    errors="replace")
-        if r.returncode != 0:
-            sys.exit(r.stderr)
+        with contextlib.suppress(SlotGitError):
+            REAL.fetch(repo)
+        try:
+            REAL.add_worktree(repo, str(d), "origin/main")
+        except SlotGitError as e:
+            sys.exit(e.tail)
     event("worktree-start", "", worktree=str(d), repo=repo)
     return str(d)
 
@@ -234,11 +231,11 @@ def worktree(op: str, self_too: bool = False) -> int:
             continue
         if owner != actor() and any(w == owner or w.startswith(owner + "-") for w in live if w):
             continue  # a loop of that session claims as <owner>-<suffix>
-        if git("status", "--porcelain", cwd=str(d)):
+        if REAL.dirty(str(d)):
             print("KEEP dirty " + str(d))
             continue
-        run_git(repo, "worktree", "remove", str(d), capture_output=True)
+        REAL.remove_worktree(repo, str(d))
         event("worktree-sunset", "", worktree=str(d), repo=repo)
         print("REMOVED " + str(d))
-    git("worktree", "prune", cwd=repo)
+    REAL.prune_worktrees(repo)
     return 0

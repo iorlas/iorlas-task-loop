@@ -1,4 +1,5 @@
-"""A release `Shell` for tests that must not start a process: every command ends 0 with no output, git answers "", and the log is kept."""
+"""A release `Shell` for tests that must not start a process: every command ends 0 with no output and the log is kept. Its git port
+is the real one: a test that must not start git puts the gitsim in."""
 from pathlib import Path
 
 from taskloop.adapters.git import RealGit
@@ -12,8 +13,4 @@ def quiet_shell(calls: list[list[str]] | None = None) -> Shell:
         log.append(cmd)
         return Done(0, "", "")
 
-    def git(cwd: str | Path, *a: str, check: bool = True) -> str:
-        log.append(["git", *a])
-        return ""
-
-    return Shell(git=git, fetch=lambda cwd: None, run=run, say=lambda msg: None, port=RealGit())
+    return Shell(fetch=lambda cwd: None, run=run, say=lambda msg: None, port=RealGit())

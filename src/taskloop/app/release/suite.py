@@ -241,7 +241,7 @@ def run_checks(tool_root: Path, repo: Path, sh: Shell) -> None:
 def verify(tool_root: Path, repo: Path, sh: Shell, checks: Callable[[Path, Path, Shell], None] = run_checks) -> bool:
     """The gate and the suite on the tree at `repo`'s HEAD (nothing uncommitted). The same tree under the same command passed before:
     both are skipped, and the log says so (True). Only a green run is remembered; a red one raises and remembers nothing."""
-    tree = sh.git(repo, "rev-parse", "HEAD^{tree}")
+    tree = sh.port.rev_parse(str(repo), "HEAD^{tree}")
     command = " ".join(gate_command()) + " + " + ("host" if sh.env.get(EnvVar.TASK_LOOP_SUITE_HOST) else "container") + " suite"
     cache = SuiteCache(ConfigDir(config_dir()))
     if cache.hit(tree, command):

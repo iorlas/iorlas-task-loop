@@ -4,7 +4,9 @@ whether the engine ran a check is settled by the engine's own results; one that 
 import shlex
 from typing import Any, Final, NewType
 
-from taskloop.adapters.gitenv import run_git
+from taskloop.adapters.git import REAL
+from taskloop.contracts.ports import Git
+from taskloop.contracts.slots import SlotGitError
 from taskloop.domain.checks import planref
 from taskloop.domain.plan.matchers import without_runner
 from taskloop.domain.review.matchers import KNOWN_TOOLS, GateProof, Tools, word_in
@@ -25,8 +27,9 @@ def lint_argv(tool: str) -> LintArgv | None:
 
 
 class Settles:
-    def __init__(self, host: Any) -> None:
+    def __init__(self, host: Any, git: Git = REAL) -> None:
         self.e = host
+        self.git = git
 
     # -- tools the repo does not use
     def unused_tool(self, what: str) -> str:
@@ -39,10 +42,11 @@ class Settles:
         engine_text = " ".join(str(c) for c in self.e.cfg.checks)
         said = []
         for t in tools:
-            r = run_git(self.e.wt, "grep", "-w", "-I", "-l", "-F", t, capture_output=True, text=True, encoding="utf-8", errors="replace")
-            if r.returncode not in (0, 1):  # no git tree to read: no evidence, the item stays
+            try:
+                used = bool(self.git.grep(self.e.wt, t, fixed=True, word=True))
+            except SlotGitError:  # no git tree to read: no evidence, the item stays
                 return ""
-            if r.stdout.strip() or word_in(t, engine_text) or self.e.on_path(t):
+            if used or word_in(t, engine_text) or self.e.on_path(t):
                 return ""
             said.append(f"git grep -w -I {t}: no match in the tracked tree nor the engine's gate and checks; which {t}: not found")
         return "not a check here: the repo does not use it ({})".format("; ".join(said))
@@ -116,7 +120,7 @@ class Settles:
     def work_summary(self) -> str:
         """The task's changed files with their line counts, untracked files included."""
         tree = self.e.checkout.tree_hash()
-        return (self.e.git("diff", "--stat", self.e.checkout.base_sha(), tree) if tree else "") or "(no files changed)"
+        return (self.git.diff(self.e.wt, self.e.checkout.base_sha(), tree, stat=True) if tree else "") or "(no files changed)"
 
     # -- settling
     def settle(self, gaps: list[Item]) -> tuple[list[Item], list[Item]]:

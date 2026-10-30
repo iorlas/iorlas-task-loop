@@ -15,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: E402, F401
 from support.tlmain import tl_main  # noqa: E402
 
-from taskloop.adapters import gitrepo  # noqa: E402
+from taskloop.adapters.git import RealGit  # noqa: E402
 from taskloop.app.wire import doctor  # noqa: E402
 from taskloop.app.wire import slots as wslots  # noqa: E402
 
@@ -205,22 +205,33 @@ class DoctorSource(unittest.TestCase):
 
     def test_config_and_paths_use_one_resolved_commit(self):
         commit = self.advance_base(self.config("good", "old.txt"))
-        real_git = gitrepo.git
         calls = []
+        test = self
 
-        def moving_ref(*args, **kwargs):
-            calls.append(args)
-            result = real_git(*args, **kwargs)
-            if args[:3] == ("rev-parse", "--verify", "-q"):
-                self.git("update-ref", "refs/remotes/origin/main", "main")
-            return result
+        class MovingRef(RealGit):
+            """A base that moves between the commit's two reads: the answer of the first one must be the one used."""
 
+            def rev_parse(self, d, rev):
+                calls.append(("rev-parse", rev))
+                out = super().rev_parse(d, rev)
+                test.git("update-ref", "refs/remotes/origin/main", "main")
+                return out
+
+            def show(self, d, rev, path):
+                calls.append(("show", f"{rev}:{path}"))
+                return super().show(d, rev, path)
+
+            def ls_tree(self, d, rev, *paths, recursive=False):
+                calls.append(("ls-tree", rev))
+                return super().ls_tree(d, rev, *paths, recursive=recursive)
+
+        moving_ref = MovingRef()
         source = wslots.cfg_source(str(self.wt), moving_ref)
         self.assertEqual(doctor.git_warnings(str(self.wt), source, moving_ref), [])
         self.assertEqual(source[2], commit)
         self.assertIn(("show", commit + ":.task-loop.json"), calls)
-        self.assertIn(("ls-tree", "-r", "--name-only", "-z", commit), calls)
-        self.assertEqual(sum(c[:3] == ("rev-parse", "--verify", "-q") for c in calls), 1)
+        self.assertIn(("ls-tree", commit), calls)
+        self.assertEqual(sum(c[0] == "rev-parse" for c in calls), 1)
 
 
 if __name__ == "__main__":

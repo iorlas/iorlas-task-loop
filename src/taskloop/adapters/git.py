@@ -3,12 +3,15 @@ a failure becomes one of the typed SlotGitErrors (BranchPinned, DirtyTree, RefRa
 import os
 import re
 import subprocess
+import tempfile
 import time
 from collections.abc import Callable
-from typing import Literal
+from typing import Final, Literal
 
-from taskloop.adapters.gitenv import run_git
-from taskloop.contracts.gitfacts import LogRow, Pick, RebaseOutcome, Ref, StatusRow, TreeEntry
+from taskloop.adapters.childenv import without
+from taskloop.adapters.gitenv import git_env, run_git
+from taskloop.contracts import env as penv
+from taskloop.contracts.gitfacts import ConfigEntry, GrepHit, LogRow, Pick, RebaseOutcome, Ref, StatusRow, TreeEntry
 from taskloop.contracts.slots import BranchPinned, Checkout, DirtyTree, IndexLocked, RefRace, SlotGitError
 
 INDEX_LOCK = re.compile(r"index\.lock")
@@ -38,13 +41,19 @@ def classify(stderr: str) -> SlotGitError:
 
 
 class RealGit:
-    def __init__(self, sleep: Callable[[float], None] = time.sleep) -> None:
-        self.sleep = sleep
+    """`pinned=False` reads git as the ambient environment has it (no GIT_DIR/GIT_WORK_TREE/GIT_COMMON_DIR), as a worker's or a check's git
+    would see the folder: for the questions whether the pin itself is right (core.worktree, core.bare in the shared config)."""
 
-    @staticmethod
-    def _run(d: str, *args: str, stdin: str | None = None) -> subprocess.CompletedProcess[str]:
-        extra = {} if stdin is None else {"input": stdin}
-        return run_git(d, *args, capture_output=True, text=True, encoding="utf-8", errors="replace", **extra)
+    def __init__(self, sleep: Callable[[float], None] = time.sleep, pinned: bool = True) -> None:
+        self.sleep = sleep
+        self.pinned = pinned
+
+    def _run(self, d: str, *args: str, stdin: str | None = None) -> subprocess.CompletedProcess[str]:
+        if not self.pinned:
+            env = without(penv.snapshot().vars, "GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR")
+            return subprocess.run(["git", "-C", d, *args], env=env, check=False, capture_output=True, text=True, encoding="utf-8",
+                                  errors="replace", input=stdin)
+        return run_git(d, *args, capture_output=True, text=True, encoding="utf-8", errors="replace", input=stdin)
 
     def _must(self, d: str, *args: str) -> str:
         r = self._run(d, *args)
@@ -247,3 +256,89 @@ class RealGit:
     def pull_rebase(self, d: str, remote: str, branch: str) -> None:
         self._must(d, "pull", "-q", "--rebase", remote, branch)
 
+
+    def stage(self, d: str, *paths: str) -> None:
+        self._must(d, "add", "--", *paths)
+
+    def commit_staged(self, d: str, message: str) -> None:
+        self._must(d, "commit", "-q", "-m", message)
+
+    # -- reads of files, config and the work tree --------------------------------------------------------------------------------
+
+    def show(self, d: str, rev: str, path: str) -> str:
+        r = self._run(d, "show", f"{rev}:{path}")
+        if r.returncode != 0:
+            raise classify(r.stderr or r.stdout)
+        return r.stdout
+
+    def ls_files(self, d: str, scope: Literal["tracked", "unignored", "ignored"] = "tracked", *spec: str) -> list[str]:
+        opts = {"tracked": [], "unignored": ["-co", "--exclude-standard"], "ignored": ["-o", "-i", "--exclude-standard"]}[scope]
+        r = self._run(d, "ls-files", "-z", *opts, *(["--", *spec] if spec else []))
+        if r.returncode != 0:
+            raise classify(r.stderr or r.stdout)
+        return [p for p in r.stdout.split("\0") if p]
+
+    def grep(self, d: str, pattern: str, fixed: bool = False, word: bool = False) -> list[GrepHit]:
+        r = self._run(d, "grep", "-z", "-n", "-I", *(["-F"] if fixed else ["-E"]), *(["-w"] if word else []), "-e", pattern, "--", ".")
+        if r.returncode == 1:
+            return []
+        if r.returncode != 0:
+            raise classify(r.stderr or r.stdout)
+        found = []
+        for ln in r.stdout.split("\n"):
+            path, nul, rest = ln.partition("\0")
+            num, nul2, text = rest.partition("\0")
+            if nul and nul2 and num.isdigit():
+                found.append(GrepHit(path=path, line=int(num), text=text))
+        return found
+
+    def config_get(self, d: str, key: str) -> str:
+        return self._ask(d, "config", "--get", key)
+
+    def config_entries(self, d: str, pattern: str) -> list[ConfigEntry]:
+        found = []
+        for ln in self._ask(d, "config", "--show-origin", "--get-regexp", pattern).splitlines():
+            where, _, kv = ln.partition("\t")
+            key, _, value = kv.partition(" ")
+            found.append(ConfigEntry(where=where, key=key, value=value))
+        return found
+
+    def common_dir(self, d: str) -> str:
+        return self._ask(d, "rev-parse", "--path-format=absolute", "--git-common-dir")
+
+    def toplevel(self, d: str) -> str:
+        return self._ask(d, "rev-parse", "--show-toplevel")
+
+    def tree_of(self, d: str) -> str:
+        """HEAD's tree plus every change and untracked file, written from a throwaway index in a temp folder."""
+        with tempfile.TemporaryDirectory() as tmp:
+            env = dict(git_env(d), GIT_INDEX_FILE=os.path.join(tmp, "index"))
+            out = ""
+            for args in (["read-tree", "HEAD"], ["add", "-A"], ["write-tree"]):
+                r = subprocess.run(["git", *args], cwd=d, env=env, capture_output=True, text=True, check=False)
+                if r.returncode != 0:
+                    raise SlotGitError(f"git {args[0]} failed ({r.returncode}): {(r.stderr or '').strip()[:300]}")
+                out = r.stdout.strip()
+        return out
+
+    def worktree_state(self, d: str) -> bytes | None:
+        r = subprocess.run(["git", "--no-optional-locks", "status", "--porcelain=v2", "--branch", "-z", "--untracked-files=all"],
+                           cwd=d, env=git_env(d), capture_output=True, check=False)
+        return r.stdout if r.returncode == 0 else None
+
+    def diff(self, d: str, a: str, b: str, exclude: list[str] | None = None, stat: bool = False) -> str:
+        spec = ["--", ".", *(":(exclude,literal)" + p for p in exclude)] if exclude else []
+        r = self._run(d, "diff", *(["--stat"] if stat else []), a, b, *spec)
+        return r.stdout.strip() if r.returncode == 0 else ""
+
+    def add_worktree_force(self, repo: str, path: str, ref: str) -> None:
+        self._must(repo, "worktree", "add", "--detach", "--force", path, ref)
+
+    def remove_worktree_force(self, repo: str, path: str) -> None:
+        self._run(repo, "worktree", "remove", "--force", path)
+
+    def prune_worktrees(self, repo: str) -> None:
+        self._run(repo, "worktree", "prune")
+
+
+REAL: Final = RealGit()  # the default of a function that takes the port as an argument (a test passes its own)

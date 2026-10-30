@@ -4,16 +4,13 @@ import json
 from collections.abc import Callable
 from pathlib import Path
 
-from taskloop.adapters.gitenv import run_git
+from taskloop.adapters.git import REAL
 from taskloop.contracts import config
+from taskloop.contracts.ports import Git
+from taskloop.contracts.slots import SlotGitError
 from taskloop.contracts.stores import ReposStore
 
 FILE = ".task-loop.json"
-
-
-def _git(repo: str | Path, *args: str) -> str:
-    r = run_git(repo, *args, capture_output=True, text=True, encoding="utf-8", errors="replace")
-    return r.stdout.strip() if r.returncode == 0 else ""
 
 
 def _base_name(repo: str | Path) -> str:
@@ -26,12 +23,16 @@ def _base_name(repo: str | Path) -> str:
     return name if isinstance(name, str) and name else config.RepoProfile().engine.base
 
 
-def source(repo: str | Path) -> tuple[str, str]:
+def source(repo: str | Path, git: Git = REAL) -> tuple[str, str]:
     """(the profile text, where it came from): what the loop reads, the profile as committed on the base ref ("base <sha7>"),
     the working tree's copy ("working tree") only when the base does not resolve here. ("", ...) when there is no file."""
-    commit = _git(repo, "rev-parse", "--verify", "-q", _base_name(repo) + "^{commit}")
+    commit = git.rev_parse(str(repo), _base_name(repo) + "^{commit}")
     if commit:
-        return _git(repo, "show", f"{commit}:{FILE}"), f"base {commit[:7]}"
+        try:
+            text = git.show(str(repo), commit, FILE).strip()
+        except SlotGitError:
+            text = ""
+        return text, f"base {commit[:7]}"
     try:
         return (Path(repo) / FILE).read_text(encoding="utf-8"), "working tree"
     except OSError:

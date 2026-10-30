@@ -6,10 +6,13 @@ from pathlib import Path
 from typing import Any
 
 from taskloop.adapters import ident, looks
+from taskloop.adapters.git import REAL
 from taskloop.app.look.keep import Keeper, place
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.log import Artifacts
 from taskloop.contracts.paths import ConfigDir
+from taskloop.contracts.ports import Git
+from taskloop.contracts.slots import SlotGitError
 from taskloop.domain.checks.matchers import glob_re
 from taskloop.domain.look.matchers import image_names, safe_name
 
@@ -25,8 +28,9 @@ def visual_hit(vp: Any, paths: Any) -> bool:
 
 
 class Pictures:
-    def __init__(self, host: Any) -> None:
+    def __init__(self, host: Any, git: Git = REAL) -> None:
         self.e = host
+        self.git = git
         self.kept: Keeper | None = None
 
     def keeper(self) -> Keeper:
@@ -82,7 +86,10 @@ class Pictures:
             e.shot_cache = dict[str, Any]()
             rel = (e.cfg.shot_table or "").strip()
             if rel:
-                text = e.git("show", f"{e.cfg.base}:{rel}")
+                try:
+                    text = self.git.show(e.wt, e.cfg.base, rel).strip()
+                except SlotGitError:
+                    text = ""
                 methods, err = looks.parse_table(text) if text else ({}, f"{rel} is not on {e.cfg.base}")
                 if err:
                     e.warn(f"engine.shot_table: {err}; visual stages work the old way")
@@ -174,7 +181,7 @@ class Pictures:
     def warn_if_untracked(self, m: Any, files: list[Path]) -> None:
         e = self.e
         inside = [f for f in files if str(f).startswith(str(Path(e.wt)) + os.sep)]
-        if inside and e.sh(["git", "check-ignore", "-q", str(inside[0])], pin=True)[0] != 0:
+        if inside and not self.git.check_ignore(str(e.wt), [str(inside[0])]):
             e.warn(f"shot method {m['method']} writes pictures in the worktree ({m['out'] or inside[0].parent}) and that folder is not "
                    "ignored by git: they will show up as unexplained new files; add it to .gitignore")
 

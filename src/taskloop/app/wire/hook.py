@@ -4,6 +4,7 @@ import shlex
 from pathlib import Path
 
 from taskloop.adapters import gitrepo
+from taskloop.adapters.git import REAL
 from taskloop.adapters.ident import config_dir
 from taskloop.app.track.trail import now
 from taskloop.contracts.paths import ConfigDir
@@ -45,7 +46,7 @@ def write_shim(plugin_root: Path) -> None:
 
 def main_checkout(cwd: str) -> str:
     """The repo the loop's files are keyed by: the main checkout of the work tree at `cwd` (a worktree or slot of it too), else cwd."""
-    common = Path(gitrepo.git("rev-parse", "--path-format=absolute", "--git-common-dir", cwd=cwd) or ".")
+    common = Path(REAL.common_dir(cwd) or ".")
     return str(common.parent) if common.name == ".git" else gitrepo.repo_root(cwd)
 
 

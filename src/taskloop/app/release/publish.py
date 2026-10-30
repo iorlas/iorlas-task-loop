@@ -41,10 +41,10 @@ def bump_marketplace(market: Path, version: str, sh: Shell) -> None:
         git_must(lambda: git.push(d, "origin", "HEAD:main"), market)
 
 
-def git_must(call: Callable[[], None], where: Path) -> None:
+def git_must[T](call: Callable[[], T], where: Path) -> T:
     """A git step of the release that must work: the port's error becomes the release's refusal."""
     try:
-        call()
+        return call()
     except SlotGitError as e:
         raise Abort(f"git failed in {where}:\n{e.tail}") from None
 

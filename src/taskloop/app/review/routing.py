@@ -3,7 +3,9 @@ goes to the writer for a test, an item no check can prove lands unverified for t
 plan (what it defers, what it leaves to the engine) is read before the item's kind."""
 from typing import Any
 
+from taskloop.adapters.git import REAL
 from taskloop.contracts.plancheck import PlanData
+from taskloop.contracts.ports import Git
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.plan.matchers import word_set
 from taskloop.domain.review import kinds
@@ -15,8 +17,9 @@ AT_LAND = "the engine does this at land"
 
 
 class Routing:
-    def __init__(self, host: Any) -> None:
+    def __init__(self, host: Any, git: Git = REAL) -> None:
         self.e = host
+        self.git = git
 
     def ledger(self) -> Ledger:
         return Ledger(self.e.plan_data, self.e.leftovers)
@@ -36,7 +39,7 @@ class Routing:
 
     def names_code(self, what: str) -> bool:
         e = self.e
-        files = set(e.git("ls-files").splitlines()) | set(e.checkout.changed_paths())
+        files = set(self.git.ls_files(e.wt)) | set(e.checkout.changed_paths())
         return kinds.names_code(what, files, {f.rsplit("/", 1)[-1] for f in files}, e.diff_text)
 
     def resolve_kind(self, u: Item, a: Item) -> tuple[str, str]:

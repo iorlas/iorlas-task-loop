@@ -31,16 +31,16 @@ class Request:
 
 
 def next_version(where: Path, minor: bool, sh: Shell) -> str:
-    v = json.loads(sh.git(where, "show", "origin/main:" + publish.PLUGIN))["version"]
+    v = json.loads(publish.git_must(lambda: sh.port.show(str(where), "origin/main", publish.PLUGIN), where))["version"]
     major, mi, patch = (int(x) for x in v.split("."))
     return f"{major}.{mi + 1}.0" if minor else f"{major}.{mi}.{patch + 1}"
 
 
 def require_clean_main(wt: Path, what: str, sh: Shell) -> None:
-    branch = sh.git(wt, "rev-parse", "--abbrev-ref", "HEAD")
+    branch = publish.git_must(lambda: sh.port.branch(str(wt)), wt)
     if branch != "main":
-        raise Abort(f"the {what} checkout {wt} is on {branch}, not main")
-    dirty = sh.git(wt, "status", "--porcelain")
+        raise Abort(f"the {what} checkout {wt} is on {branch or 'a detached HEAD'}, not main")
+    dirty = "\n".join(f"{r.index}{r.work} {r.path}" for r in publish.git_must(lambda: sh.port.status(str(wt)), wt))
     if dirty:
         raise Abort(f"the {what} checkout {wt} is dirty; commit or stash first:\n{dirty}")
 
@@ -53,9 +53,9 @@ def bump_and_commit(tool_root: Path, where: Path, req: Request, sh: Shell) -> st
         f.write_text(set_version(f.read_text(encoding="utf-8"), version), encoding="utf-8")
     except NoVersion as e:
         raise Abort(str(e)) from None
-    manifest.write(where, sh.git(where, "ls-files").splitlines())  # after the bump: it lists plugin.json as it ships
-    sh.git(where, "add", publish.PLUGIN, manifest.NAME)
-    sh.git(where, "commit", "-q", "-m", f"{version}: {req.message}{publish.TRAILER}")
+    manifest.write(where, publish.git_must(lambda: sh.port.ls_files(str(where)), where))  # after the bump: it lists plugin.json as it ships
+    publish.git_must(lambda: sh.port.stage(str(where), publish.PLUGIN, manifest.NAME), where)
+    publish.git_must(lambda: sh.port.commit_staged(str(where), f"{version}: {req.message}{publish.TRAILER}"), where)
     suite.verify(tool_root, where, sh)
     return version
 
@@ -87,12 +87,14 @@ def release(req: Request, repo: Path, market: Path, tool_root: Path, sh: Shell, 
     checkout must be clean on main (it is pushed from)."""
     refuse_open_children(req, repo, store)
     require_clean_main(market, "marketplace", sh)
-    url = sh.git(repo, "remote", "get-url", "origin")
+    url = sh.port.remote_url(str(repo), "origin")
+    if not url:
+        raise Abort(f"{repo} has no origin remote")
     where = clone.ready(config_dir(), url, sh)
-    tip = sh.git(repo, "rev-parse", "--verify", "-q", "refs/heads/" + req.from_branch, check=False) if req.from_branch else ""
+    tip = sh.port.rev_parse(str(repo), "refs/heads/" + req.from_branch) if req.from_branch else ""
     if req.from_branch:
         clone.replay_branch(where, repo, req.from_branch, sh)
-    base = sh.git(where, "rev-parse", "origin/main")
+    base = sh.port.rev_parse(str(where), "origin/main")
     def again() -> str:
         return bump_and_commit(tool_root, where, req, sh)
     version = push_main(where, req.message, again(), base, again, sh)
@@ -148,7 +150,7 @@ def main(argv: list[str] | None, tool_root: Path, spawner: Spawner, port: Git, e
     a = ap.parse_args(argv)
     req = Request(a.message, a.bead, a.reason, a.from_branch, a.minor)
     repo, market = Path(gitrepo.repo_root(a.repo)), Path(a.marketplace)
-    url = sh.git(repo, "remote", "get-url", "origin", check=False) or str(repo)
+    url = sh.port.remote_url(str(repo), "origin") or str(repo)
     holder = f"pid {os.getpid()} since {time.strftime('%H:%M:%S')}: {req.message}"
     try:
         path = release_lock_path(config_dir(), url)

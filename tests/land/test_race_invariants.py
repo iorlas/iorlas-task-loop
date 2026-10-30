@@ -41,8 +41,8 @@ from loop import test_loop
 
 # isort: split
 import tl
+from support import gitsim, tlbd
 from support import slots as sl
-from support import tlbd
 from support.builders import cfg_with
 from support.engine_locks import put_lock
 from support.fake_clock import FakeClock
@@ -127,6 +127,11 @@ class Invariants(test_loop.Base):
         rebind(self, pidcheck.proc_alive, lambda pid, start="": int(pid) in self.live)
         rebind(self, pidcheck.proc_start, lambda pid: f"T{pid}")
         rebind(self, gitrepo.git, lambda *a, **k: "")  # no git, no child process
+        gitsim.reset()
+        stack = contextlib.ExitStack()
+        self.addCleanup(stack.close)
+        sim = gitsim.Sim(self)
+        sim.install(stack)  # the port's own git calls (RealGit) are answered in process: no repo here, so they find nothing
         p = mock.patch.object(sys, "stdout", self.out)
         p.start()
         self.addCleanup(p.stop)

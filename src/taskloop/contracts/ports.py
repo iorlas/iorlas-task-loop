@@ -12,7 +12,7 @@ from taskloop.contracts.argv import text_of
 from taskloop.contracts.ask import Ask, AskAction
 from taskloop.contracts.bead import BdError, Bead, Comment
 from taskloop.contracts.delegate import DelegateResult, LiveEvent, RunRequest
-from taskloop.contracts.gitfacts import LogRow, Pick, RebaseOutcome, Ref, StatusRow, TreeEntry
+from taskloop.contracts.gitfacts import ConfigEntry, GrepHit, LogRow, Pick, RebaseOutcome, Ref, StatusRow, TreeEntry
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.slots import Checkout
 from taskloop.contracts.wire import Rec
@@ -224,6 +224,56 @@ class Git(SlotGit, Protocol):
         ...
 
     def has_commit(self, d: str, oid: str) -> bool: ...
+    def show(self, d: str, rev: str, path: str) -> str:
+        """The text of the file `path` as it is at `rev`; raises when there is no such file there."""
+        ...
+
+    def ls_files(self, d: str, scope: Literal["tracked", "unignored", "ignored"] = "tracked", *spec: str) -> list[str]:
+        """The tracked files; with `unignored` those and the untracked files the ignore rules do not cover; with `ignored` the untracked
+        ones they cover, optionally only those under the pathspecs `spec`."""
+        ...
+
+    def grep(self, d: str, pattern: str, fixed: bool = False, word: bool = False) -> list[GrepHit]:
+        """The lines of the tracked text files that match (a regex, or the literal text with `fixed`; `word`: whole words only)."""
+        ...
+
+    def config_get(self, d: str, key: str) -> str:
+        """The value of one setting, empty when it is unset."""
+        ...
+
+    def config_entries(self, d: str, pattern: str) -> list[ConfigEntry]:
+        """Every setting whose key matches the regex, each with the file it was set in."""
+        ...
+
+    def common_dir(self, d: str) -> str:
+        """The absolute git dir the worktrees of `d`'s repo share, empty when `d` is in no repo."""
+        ...
+
+    def toplevel(self, d: str) -> str:
+        """The root folder of the work tree `d` is in, empty when there is none."""
+        ...
+
+    def tree_of(self, d: str) -> str:
+        """The tree id the work tree would commit now, untracked files included, without touching its index; raises when git cannot say."""
+        ...
+
+    def worktree_state(self, d: str) -> bytes | None:
+        """git's own account of what differs from HEAD (branch line, changed and untracked paths), raw; None when git cannot say."""
+        ...
+
+    def diff(self, d: str, a: str, b: str, exclude: list[str] | None = None, stat: bool = False) -> str:
+        """The patch (or with `stat` the summary) from tree a to tree b, leaving out the literal paths in `exclude`."""
+        ...
+
+    def add_worktree_force(self, repo: str, path: str, ref: str) -> None:
+        """Like add_worktree, again if the path is registered but missing."""
+        ...
+
+    def remove_worktree_force(self, repo: str, path: str) -> None:
+        """Remove a worktree whatever it holds; a failure is not an error."""
+        ...
+
+    def prune_worktrees(self, repo: str) -> None: ...
 
     # -- writes ----------------------------------------------------------------------------------------------------------------
     def rebase(self, d: str, onto: str, update_refs: bool = True) -> RebaseOutcome: ...
@@ -247,6 +297,11 @@ class Git(SlotGit, Protocol):
 
     def commit_tracked(self, d: str, message: str) -> None:
         """Commit the changes of the tracked files (commit -a); untracked files stay out."""
+        ...
+
+    def stage(self, d: str, *paths: str) -> None: ...
+    def commit_staged(self, d: str, message: str) -> None:
+        """Commit what is staged, hooks included."""
         ...
 
     def pull_rebase(self, d: str, remote: str, branch: str) -> None: ...

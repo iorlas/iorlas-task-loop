@@ -6,8 +6,10 @@ import hashlib
 from collections.abc import Sequence
 from typing import Any
 
+from taskloop.adapters.git import REAL
 from taskloop.contracts.config import FRESH_ABOVE_K
 from taskloop.contracts.paths import RunFiles
+from taskloop.contracts.ports import Git
 from taskloop.contracts.run import HandoffMirror
 from taskloop.contracts.stores import JsonStore
 from taskloop.domain.prompts.write import DONE_SO_FAR, STAGES_DONE, WRITE_RESUME_PROMPT
@@ -17,8 +19,9 @@ HANDOFF_CAP = 1500  # characters of round history one prompt carries (tl-bxk.13.
 
 
 class Handoff:
-    def __init__(self, host: Any) -> None:
+    def __init__(self, host: Any, git: Git = REAL) -> None:
         self.e = host
+        self.git = git
 
     def seen_now(self) -> list[str]:
         """What a writer session holds of the task once it has answered: the brief's and the plan's hash."""
@@ -50,14 +53,14 @@ class Handoff:
     def so_far_text(self) -> str:
         """What a fresh writer is told its predecessor did: the diff --stat of the stage so far, and its last summary."""
         tree = self.e.checkout.tree_hash()
-        stat = self.e.git("diff", "--stat", self.e.stage_tree or self.e.checkout.base_sha(), tree) if tree else ""
+        stat = self.git.diff(self.e.wt, self.e.stage_tree or self.e.checkout.base_sha(), tree, stat=True) if tree else ""
         return DONE_SO_FAR % ((stat or "(no file changed yet)").strip(), (self.e.last_summary or "(none)").strip(),
                               self.rounds_text(last=4) or "(none)\n")
 
     def accepted_text(self) -> str:
         """What a fresh writer starting a later stage is told: the accepted stages and their diff from the task's base."""
         tree = self.e.checkout.tree_hash()
-        stat = self.e.git("diff", "--stat", self.e.checkout.base_sha(), tree) if tree else ""
+        stat = self.git.diff(self.e.wt, self.e.checkout.base_sha(), tree, stat=True) if tree else ""
         goals = "".join(f"- {g}\n" for g in self.e.done) or "(none)\n"
         return STAGES_DONE % (goals, (stat or "(no file changed yet)").strip(), self.rounds_text(last=4) or "(none)\n")
 

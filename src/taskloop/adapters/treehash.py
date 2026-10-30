@@ -4,15 +4,13 @@ import contextlib
 import hashlib
 import os
 import stat
-import subprocess
 import tempfile
 from collections.abc import Iterable
 from pathlib import Path
 
-from taskloop.adapters import childenv
-from taskloop.adapters.gitenv import git_env
-from taskloop.contracts import env as penv
+from taskloop.adapters.git import REAL
 from taskloop.contracts.ids import TreeSha
+from taskloop.contracts.slots import SlotGitError
 
 State = tuple[bytes, tuple[object, ...]]
 
@@ -23,15 +21,10 @@ class TreeHashError(RuntimeError):
 
 def tree_of(wt: str | Path) -> TreeSha:
     """The worktree as git would commit it now, untracked files included."""
-    with tempfile.TemporaryDirectory() as d:
-        env = dict(git_env(wt), GIT_INDEX_FILE=os.path.join(d, "index"))
-        out = ""
-        for args in (["read-tree", "HEAD"], ["add", "-A"], ["write-tree"]):
-            r = subprocess.run(["git", *args], cwd=wt, env=env, capture_output=True, text=True, check=False)
-            if r.returncode != 0:
-                raise TreeHashError(f"git {args[0]} failed ({r.returncode}): {(r.stderr or '').strip()[:300]}")
-            out = r.stdout.strip()
-    return TreeSha(out)
+    try:
+        return TreeSha(REAL.tree_of(str(wt)))
+    except SlotGitError as e:
+        raise TreeHashError(e.tail) from None
 
 
 def changed_paths(records: list[bytes]) -> list[bytes]:
@@ -69,12 +62,11 @@ def file_stat(base: bytes, p: bytes) -> object:
 def state_of(wt: str | Path) -> State | None:
     """Everything that decides the tree, from one `git status`: HEAD, every path that differs from it or is untracked, and the stat
     of each of those files (status alone says 'modified' before and after a second edit). None when git cannot say."""
-    r = subprocess.run(["git", "--no-optional-locks", "status", "--porcelain=v2", "--branch", "-z", "--untracked-files=all"],
-                       cwd=wt, env=git_env(wt), capture_output=True, check=False)
-    if r.returncode != 0:
+    out = REAL.worktree_state(str(wt))
+    if out is None:
         return None
     base = os.fsencode(str(wt))
-    return (r.stdout, tuple(file_stat(base, p) for p in changed_paths(r.stdout.split(b"\0"))))
+    return (out, tuple(file_stat(base, p) for p in changed_paths(out.split(b"\0"))))
 
 
 def ignore_rules(base: str, lines_of: dict[str, list[str]]) -> list[str]:
@@ -104,10 +96,9 @@ def ignored_by(wt: str | Path, rules: list[str], paths: Iterable[str]) -> set[st
         f.write("\n".join(rules) + "\n")
         ex = f.name
     try:
-        r = subprocess.run(["git", "-C", str(wt), "-c", "core.excludesFile=" + ex, "check-ignore", "--no-index", "--stdin", "-z"],
-                           input="\0".join(paths) + "\0", capture_output=True, text=True, encoding="utf-8", errors="replace",
-                           env=childenv.current_env(penv.snapshot()), check=False)
-        return set(r.stdout.split("\0")) if r.returncode in (0, 1) else set()
+        return set(REAL.check_ignore(str(wt), list(paths), excludes=ex))
+    except SlotGitError:
+        return set()
     finally:
         with contextlib.suppress(OSError):
             os.unlink(ex)

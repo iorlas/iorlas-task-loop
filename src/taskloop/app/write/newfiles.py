@@ -5,15 +5,17 @@ import shutil
 from pathlib import Path
 from typing import Any
 
-from taskloop.adapters import gitrepo
+from taskloop.adapters.git import REAL
 from taskloop.contracts.paths import TASK_EXCLUDE
+from taskloop.contracts.ports import Git
 from taskloop.domain.look.matchers import writer_names
 from taskloop.domain.prompts.review import NEW_FILES_TEXT
 
 
 class NewFiles:
-    def __init__(self, host: Any) -> None:
+    def __init__(self, host: Any, git: Git = REAL) -> None:
         self.e = host
+        self.git = git
 
     STRAY_LINES, STRAY_CHARS = 80, 6000
     STAGE_DIFF_CAP = 40000
@@ -100,13 +102,13 @@ class NewFiles:
         base = e.stage_tree or e.checkout.base_sha()
         if not tree:
             return f"The work: `git diff {base}` and new files."
-        skip = ["--", "."] + [":(exclude,literal)" + p for p in unexplained + ignored]
-        diff = gitrepo.git("diff", base, tree, *skip, cwd=e.wt)
+        skip = unexplained + ignored
+        diff = self.git.diff(e.wt, base, tree, exclude=skip)
         if len(diff) <= self.STAGE_DIFF_CAP:
             if not diff:
                 return "The work of this stage: no file changed."
             return ("The work of this stage (the diff from where the stage started to now; earlier stages are in the tree "
                     f"but not in this diff):\n<diff>\n{diff if diff.endswith(chr(10)) else diff + chr(10)}</diff>")
-        stat = gitrepo.git("diff", "--stat", base, tree, *skip, cwd=e.wt)
+        stat = self.git.diff(e.wt, base, tree, exclude=skip, stat=True)
         return (f"The work of this stage is too big to inline ({len(diff)} chars; the cap is {self.STAGE_DIFF_CAP}). Its changed files:\n"
                 f"{stat}\nRead only the changed files plus the plan; do not diff the whole task.")
