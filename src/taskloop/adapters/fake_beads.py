@@ -78,7 +78,7 @@ class FakeBeads:
         b = self._get(bead)
         if if_assignee and b.assignee != if_assignee:
             raise BdFailure(BdError(kind="other", text="assignee changed"))
-        self._put(b, status="closed")
+        self._put(b, status="closed", close_reason=reason)
 
     def add_comment(self, bead: str, text: str) -> None:
         self._get(bead)

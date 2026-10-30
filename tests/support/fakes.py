@@ -147,10 +147,8 @@ class FakeBeadStore:
 
     def close(self, bead, reason, if_assignee=""):
         if if_assignee:
-            self.update(bead, BeadPatch(status="closed", if_assignee=if_assignee))
-            self.add_comment(bead, "Closed: " + reason)
-        else:
-            self.run(["close", bead, "--reason", reason])
+            self.update(bead, BeadPatch(assignee=if_assignee, if_assignee=if_assignee))
+        self.run(["close", bead, "--reason", reason])
 
     def add_comment(self, bead, text):
         self.run(["comments", "add", bead, text])

@@ -238,8 +238,9 @@ class BdStore:
         if not if_assignee:
             self._must("close", bead, "--reason", reason)
             return
-        self._must(*update_argv(bead, BeadPatch(status="closed", if_assignee=if_assignee)))
-        self._must("comments", "add", bead, "Closed: " + reason)
+        # bd close has no guard and bd update sets no close reason: fence with a same-value update, then close
+        self._must(*update_argv(bead, BeadPatch(assignee=if_assignee, if_assignee=if_assignee)))
+        self._must("close", bead, "--reason", reason)
 
     def add_comment(self, bead: str, text: str) -> None:
         self._must("comments", "add", bead, text)

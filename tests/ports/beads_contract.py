@@ -92,6 +92,17 @@ class BeadsContract(_Base):
         closed = self.ours(self.beads.find(BeadQuery(status="closed")))
         self.assertEqual((shown, everything, closed), ({keep}, {keep, gone}, {gone}))
 
+    def test_a_fenced_close_keeps_its_reason_and_a_stale_fence_changes_nothing(self) -> None:
+        mine, theirs = self.new("mine"), self.new("theirs")
+        self.beads.claim(mine)
+        self.beads.claim(theirs)
+        self.beads.close(mine, "landed", if_assignee=self.ACTOR)
+        with self.assertRaises(BdFailure):
+            self.beads.close(theirs, "landed", if_assignee="someone-else")
+        a, b = self.beads.show(mine), self.beads.show(theirs)
+        assert a is not None and b is not None
+        self.assertEqual((a.status, a.close_reason, b.status, b.close_reason), ("closed", "landed", "in_progress", ""))
+
     def test_find_by_label_and_status(self) -> None:
         a, b = self.new("a", labels=["slot"]), self.new("b")
         self.beads.claim(b)

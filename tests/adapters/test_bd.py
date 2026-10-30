@@ -90,6 +90,18 @@ class GoldenBd(unittest.TestCase):
         self.assertEqual((b.status, b.assignee, b.metadata), ("in_progress", "x", {"slot": "s1", "held_bead": "t-dhc"}))
         self.assertTrue(b.lease_expires_at)
 
+    def test_a_fenced_close_guards_with_a_same_value_update_then_closes_with_the_reason(self) -> None:
+        b = self.beads(update=BdRun(0, "", ""), close=BdRun(0, "", ""))
+        b.close("t-1", "landed", if_assignee="loop")
+        self.assertEqual([c[3:] for c in b.calls], [  # type: ignore[attr-defined]
+            ["update", "t-1", "--if-assignee", "loop", "--assignee", "loop", "--json"], ["close", "t-1", "--reason", "landed", "--json"]])
+
+    def test_a_fenced_close_on_a_moved_bead_never_closes(self) -> None:
+        b = self.beads(update=BdRun(13, "", "assignee mismatch"))
+        with self.assertRaises(BdFailure):
+            b.close("t-1", "landed", if_assignee="loop")
+        self.assertEqual([c[3] for c in b.calls], ["update"])  # type: ignore[attr-defined]
+
     def test_show_missing_is_none(self) -> None:
         self.assertIsNone(self.beads(show=BdRun(1, gold("show_missing.out"), gold("show_missing.err"))).show("nope"))
 
