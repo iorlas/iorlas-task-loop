@@ -52,6 +52,8 @@ class Taker:
         None with an empty `why`: go on."""
         env = self.env
         with env.area_lock() if has_areas(ecfg) else contextlib.nullcontext():
+            if has_areas(ecfg):
+                rule.running = env.running()  # now, not as the queue was read: the slot wait since can be minutes (tl-na3)
             area, busy = rule.area_busy(b) if has_areas(ecfg) else ("", None)
             if busy:  # another run took the area since the queue was read
                 self.say(f"{b.id}: {busy.why}; the next bead")

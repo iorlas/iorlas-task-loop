@@ -5,7 +5,8 @@
 # ///
 """The real-process race (tl-bxk.11.1, tl-vgo): two `tl loop`s, a hand `run-task --slot s1`, a hand `run-task --slot any --wait`,
 a `tl slot hold s2` and two `dev/release.py` at once, all real processes, on a fake repo (bare origin, fake bd, fake
-delegate, fake marketplace). About 40 s per seed, more under load; NOT in the default gate (uv run --script dev/suite.py).
+delegate, fake marketplace). About 40 s per seed, more under load; NOT in the gate or the suite:
+`just test-live` runs seeds 1-2 (tests/live/test_race.py).
 
     uv run --script dev/race.py                  seeds 1..5, one after another
     uv run --script dev/race.py --seeds 3        one seed (or 1,4,7 or 2-6)

@@ -31,6 +31,7 @@ from slots.test_slots import Slots
 from taskloop.adapters import ident
 from taskloop.app.launch import loop as wloop
 from taskloop.app.loop.core import Core
+from taskloop.app.loop.loop import Loop
 from taskloop.app.loop.queue import QueueRule
 from taskloop.app.run import (
     entry,
@@ -129,6 +130,28 @@ class Areas(AreasBase):
         self.assertEqual(self.started, [("x-2", "s1")])
         self.assertEqual(bd.beads["x-1"]["status"], "open")
         self.assertFalse([c for c in bd.calls if c[:1] == ("update",) and c[1:2] == ("x-1",) and "--claim" in c])
+
+    def test_the_claim_sees_a_bead_that_began_to_run_while_the_loop_waited_for_its_slot(self):
+        """tl-na3: the loop read the queue (x-1 and x-2 of one area, nothing running), then waited in the slot line; a hand run
+        of x-1 began meanwhile. The claim's area check read the running set from before the wait and let x-2 start beside x-1."""
+        bd = self.lanes({"x-1": [], "x-2": [rec("landed")]}, {"x-1": "live", "x-2": "live"}, slots=3)
+        real, seen = Loop.acquire, {}
+
+        def acquire(loop, prio):
+            got = real(loop, prio)
+            if "x1" not in seen:
+                seen["x1"] = ""
+                self.running(bd, "x-1", "s3", "sl-3")  # the hand run of x-1 got in while this loop waited
+            return got
+
+        def nap(secs, *a, **kw):
+            bd.beads["x-1"].update(status="closed", assignee="")  # x-1 ends
+            bd.slots["sl-3"].update(status="open", assignee="", metadata={})
+        self.during.append(lambda: seen.update(x1=bd.beads["x-1"]["status"]))
+        with mock.patch.object(Loop, "acquire", acquire), mock.patch.object(Core, "nap", staticmethod(nap)):
+            self.assertEqual(self.run_loop("--max-beads", "1"), 0)
+        self.assertEqual([b for b, _ in self.started], ["x-2"])
+        self.assertEqual(seen["x1"], "closed", "x-2 ran while x-1 of its area was running")
 
     def test_the_loop_marks_its_slot_with_the_bead_it_runs(self):
         bd = self.lanes({"x-1": [rec("landed")]}, {"x-1": "live"})
