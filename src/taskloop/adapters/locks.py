@@ -53,14 +53,19 @@ def hold_path(path: Path | str, holder: str, *, what: LockWhat = LockWhat.LAND, 
     key = Path(path).resolve()
     mutex, end, told, delay = _mutex(key), None if timeout is None else time.monotonic() + timeout, False, POLL
     while True:
-        blocker: LockRecord | None
+        blocker: LockRecord | None = None
+        got: ProcessLock | None = None
         if mutex.acquire(blocking=False):
             try:
-                lock = ProcessLock.acquire(key)
-                break
+                got = ProcessLock.acquire(key)
             except LockHeldError as e:
-                mutex.release()
                 blocker = read_holder(key, e.pid)
+            finally:
+                if got is None:  # held by another process, or any other error: the mutex never stays taken without the lock
+                    mutex.release()
+            if got is not None:
+                lock = got
+                break
         else:
             blocker = read_holder(key)
         if not told and waiting is not None:
