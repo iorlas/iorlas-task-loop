@@ -90,7 +90,7 @@ class Entry(Moving):
         inst = wloop.installs(wloop.cfgdir(), here=must(self.here))
         self.assertEqual(inst.target(), ("0.3.0", self.cache / "0.3.0"))
         self.assertEqual(inst.dangling, "0.2.0")
-        (ident.config_dir() / "pinned.json").write_text(json.dumps({"task-loop": "0.3.0"}))
+        (ident.config_dir() / "pinned.json").write_text(json.dumps({"v": 1, "task-loop": "0.3.0"}))
         inst.target()
         self.assertEqual(inst.dangling, "")  # a pin is strict: nothing fell through
         os.unlink(ident.config_dir() / "pinned.json")

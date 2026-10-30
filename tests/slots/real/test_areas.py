@@ -13,6 +13,7 @@ import time
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
+from typing import Any
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # python3 -m unittest tests.test_areas, from the repo root
@@ -99,7 +100,7 @@ class Areas(AreasBase):
 
     def test_the_area_is_free_again_once_the_running_bead_ends(self):
         bd = self.lanes({"x-1": [], "x-2": [], "x-3": [rec("landed")]}, {"x-1": "live", "x-2": "live", "x-3": "shell"})
-        seen = {}
+        seen: dict[str, Any] = {}
 
         def during():  # a second loop starts while x-1 runs in s1 by hand
             bd.beads["x-1"].update(status="in_progress", assignee=ident.actor())  # run-task's claim (stubbed here)
@@ -155,12 +156,12 @@ class Areas(AreasBase):
 
     def test_the_loop_marks_its_slot_with_the_bead_it_runs(self):
         bd = self.lanes({"x-1": [rec("landed")]}, {"x-1": "live"})
-        seen = {}
+        seen: dict[str, Any] = {}
         self.during.append(lambda: seen.update(meta=dict(bd.slots["sl-1"].get("metadata") or {}),
                                                lock=engine_lock.read_engine_lock(self.slot("s1"))))
         self.run_loop()
         self.assertEqual(seen["meta"].get("held_bead"), "x-1")
-        self.assertEqual(seen["lock"].get("bead"), "x-1")
+        self.assertEqual(seen["lock"].bead, "x-1")
 
     def test_a_failed_bead_gives_back_its_slot_and_its_area_so_the_loop_goes_on(self):
         """tl-bjd: w-5 of the race failed and its area stayed busy. The slot's release clears the bead's mark, whatever the outcome."""

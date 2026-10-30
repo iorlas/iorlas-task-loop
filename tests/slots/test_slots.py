@@ -66,7 +66,7 @@ class Slots(LoopBase):
         self.kids.append(k)
         f = engine_lock.engine_lock_path(self.slot(n))
         f.parent.mkdir(parents=True, exist_ok=True)
-        f.write_text(json.dumps({"pid": k.pid, "bead": bead, "started": time.time()}))
+        put_lock(self.slot(n), {"pid": k.pid, "bead": bead, "started": time.time()})
         return k
 
     def cli(self, *args):

@@ -78,7 +78,7 @@ class RegisterCLI(Base):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout, "REGISTERED " + str(self.repo.resolve()) + "\n")
         self.assertEqual(result.stderr, "")
-        repos = json.loads(self.registry.read_text())
+        repos = json.loads(self.registry.read_text())["repos"]
         self.assertIn(str(self.repo.resolve()), repos)
         self.assertIsInstance(repos[str(self.repo.resolve())]["added"], (int, float))
 
@@ -99,17 +99,17 @@ class RegisterCLI(Base):
         self.assert_registered(self.cli("register", cwd=worktree))
         self.assert_registered(self.cli("register", str(worktree)))
         self.assertEqual(self.registry.read_bytes(), original)
-        self.assertEqual(len(json.loads(original)), 1)
+        self.assertEqual(len(json.loads(original)["repos"]), 1)
 
     def test_repeated_registration_preserves_entries_and_metadata(self):
         self.config.mkdir(parents=True)
-        existing = {str(self.home / "other"): {"added": 123, "extra": "keep"}}
-        self.registry.write_text(json.dumps(existing))
+        existing = {str(self.home / "other"): {"added": 123}}
+        self.registry.write_text(json.dumps({"v": 1, "repos": existing}))
         self.assert_registered(self.cli("register", str(self.repo)))
         original = self.registry.read_bytes()
         self.assert_registered(self.cli("register", str(self.repo)))
         self.assertEqual(self.registry.read_bytes(), original)
-        repos = json.loads(original)
+        repos = json.loads(original)["repos"]
         self.assertEqual(len(repos), 2)
         for path, metadata in existing.items():
             self.assertEqual(repos[path], metadata)

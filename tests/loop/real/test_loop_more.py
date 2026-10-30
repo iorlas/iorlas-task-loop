@@ -386,7 +386,7 @@ class LoopSelfUpdate(LoopBase):
         self.assertEqual(self.started, [])  # the first look is before any bead
 
     def pin(self, **v):
-        (ident.config_dir() / "pinned.json").write_text(json.dumps(v))
+        (ident.config_dir() / "pinned.json").write_text(json.dumps({"v": 1, **v}))
 
     def test_a_pin_beats_the_newest_install(self):
         self.beads({"x-1": [rec("landed")]})

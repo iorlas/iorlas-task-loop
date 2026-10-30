@@ -24,6 +24,7 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from loop.test_loop import LoopBase, rec
 from support import slots as sl
 from support import tlbd
+from support.engine_locks import put_lock
 from support.fakes import as_bead
 
 from taskloop.adapters import ident, pidcheck
@@ -81,7 +82,7 @@ class Slots(LoopBase):
         self.kids.append(k)
         f = engine_lock.engine_lock_path(self.slot(n))
         f.parent.mkdir(parents=True, exist_ok=True)
-        f.write_text(json.dumps({"pid": k.pid, "bead": bead, "started": time.time()}))
+        put_lock(self.slot(n), {"pid": k.pid, "bead": bead, "started": time.time()})
         return k
 
     def cli(self, *args):
@@ -229,7 +230,7 @@ class LiveEngineBackstop(Slots):
         self.kids.append(k)
         f = engine_lock.engine_lock_path(self.slot("s1"))
         f.parent.mkdir(parents=True, exist_ok=True)
-        f.write_text(json.dumps({"pid": 0, "bead": "x-0", "workers": [k.pid]}))
+        put_lock(self.slot("s1"), {"pid": 0, "bead": "x-0", "workers": [(k.pid, pidcheck.proc_start(k.pid))]})
         self.assertIn(str(k.pid), engine_lock.engine_busy(self.slot("s1")))
         self.run_loop("--max-beads", "1")
         self.assertEqual(self.started, [("x-1", "s2")])
@@ -311,11 +312,11 @@ class StaleLocks(Slots):
         self.kids.append(k)
         f = engine_lock.engine_lock_path(self.slot("s1"))
         f.parent.mkdir(parents=True)
-        f.write_text(json.dumps({"pid": k.pid, "start": "Mon Jan  1 00:00:00 2001", "bead": "x-0"}))
+        put_lock(self.slot("s1"), {"pid": k.pid, "start": "Mon Jan  1 00:00:00 2001", "bead": "x-0"})
         self.assertEqual(engine_lock.engine_busy(self.slot("s1")), "")
-        f.write_text(json.dumps({"pid": k.pid, "start": pidcheck.proc_start(k.pid), "bead": "x-0"}))
+        put_lock(self.slot("s1"), {"pid": k.pid, "start": pidcheck.proc_start(k.pid), "bead": "x-0"})
         self.assertIn(f"pid {k.pid}", engine_lock.engine_busy(self.slot("s1")))
-        f.write_text(json.dumps({"pid": 0, "workers": [[k.pid, "Mon Jan  1 00:00:00 2001"]]}))
+        put_lock(self.slot("s1"), {"pid": 0, "workers": [(k.pid, "Mon Jan  1 00:00:00 2001")]})
         self.assertEqual(engine_lock.engine_busy(self.slot("s1")), "")
     def test_a_zombie_is_dead(self):
         z = subprocess.Popen(["true"])
@@ -327,7 +328,7 @@ class StaleLocks(Slots):
             self.assertFalse(pidcheck.pid_alive(z.pid))  # exited and not yet reaped: stream-proc reads it as gone
             f = engine_lock.engine_lock_path(self.slot("s1"))
             f.parent.mkdir(parents=True)
-            f.write_text(json.dumps({"pid": z.pid, "bead": "x-0"}))
+            put_lock(self.slot("s1"), {"pid": z.pid, "bead": "x-0"})
             self.assertEqual(engine_lock.engine_busy(self.slot("s1")), "")
         finally:
             z.wait()
