@@ -12,7 +12,7 @@ import support.paths  # noqa: F401
 from taskloop.adapters import ident
 from taskloop.app.report import reflect as rd
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.stores import Refused
+from taskloop.contracts.wire import Refused
 
 
 class TornReflect(unittest.TestCase):

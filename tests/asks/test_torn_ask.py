@@ -11,7 +11,8 @@ from contracts import samples as S
 
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.stores import AskStore, Refused
+from taskloop.contracts.stores import AskStore
+from taskloop.contracts.wire import Refused
 
 
 class TornAsk(unittest.TestCase):

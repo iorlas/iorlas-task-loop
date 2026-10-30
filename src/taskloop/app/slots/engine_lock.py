@@ -16,7 +16,8 @@ from taskloop.contracts.enums import LockWhat
 from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.locks import EngineLock as Lock
 from taskloop.contracts.paths import RepoDirs
-from taskloop.contracts.stores import JsonStore, Refused
+from taskloop.contracts.stores import JsonStore
+from taskloop.contracts.wire import Refused
 
 
 def engine_lock_path(wt: str | Path) -> Path:

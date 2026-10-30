@@ -22,8 +22,9 @@ from taskloop.contracts.enums import LockWhat
 from taskloop.contracts.ledger import Adr, AdrUse, LedgerEntry
 from taskloop.contracts.locks import LockRecord, LockTimeout, Ticket, pid_alive
 from taskloop.contracts.loop import LoopCommand, LoopState, Rest
-from taskloop.contracts.stores import Absent, AskStore, ForeignVersion, JsonlStore, Present, Read, Refused, Torn, refusal
+from taskloop.contracts.stores import Absent, AskStore, ForeignVersion, JsonlStore, Present, Read, Torn, refusal
 from taskloop.contracts.trace import RunTrace
+from taskloop.contracts.wire import Refused
 from taskloop.stores.api import Doc, DocSet
 from taskloop.stores.books import CheckpointBook
 from taskloop.stores.bundle import Stores
