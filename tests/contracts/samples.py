@@ -293,6 +293,10 @@ OTHERS = {
         n=4,
         head="abc",
         feedback="f",
+        applied=["tl-1/r/save_branch"],
+        ended=checkpoint.EndRec(run="r", kind="ask_decision", fingerprint="fp", detail="d", spec='{"ask_class":"decision","decision":"q"}',
+                                fp="fp0", comment=False, escalated=True),
+        notes=checkpoint.Notes(filed=2, unfiled=1),
         state=checkpoint.RunState(
             brief_hash="b0",
             plan_data={"summary": "s", "stages": [{"goal": "g"}]},

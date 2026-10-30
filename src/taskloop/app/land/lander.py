@@ -5,7 +5,9 @@ times); a network error rests until the network is back. The pushed tree is alwa
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from enum import Enum
+from functools import cached_property
 from pathlib import Path
+from typing import assert_never
 
 from taskloop.app.checks import evidence as check_evidence
 from taskloop.app.land import verified
@@ -16,6 +18,8 @@ from taskloop.contracts import fence
 from taskloop.contracts import log as rec
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.checks import CheckRun
+from taskloop.domain import effects
+from taskloop.domain.interpret import CheckpointLedger, interpret
 from taskloop.domain.land.matchers import Push
 from taskloop.domain.lanes import policy as lp
 
@@ -63,6 +67,10 @@ class Lander:
         self.gate = Gate(host)
         self.out = Outbound(host)
 
+    @cached_property
+    def ledger(self) -> CheckpointLedger:
+        return CheckpointLedger(self.e.checkpoints)
+
     def finish(self, bead: Bead) -> str:
         """The task's one commit, then the land. -> the landed sha, or "" (nothing changed, or a dry run)."""
         e = self.e
@@ -91,10 +99,21 @@ class Lander:
             raise self.e.blocked_for(why, "FAULT_LAND")
 
     def synced(self, sha: str) -> str:
-        """The land is done and the lock is let go: bd's data follows it (a failure there blocks the bead)."""
-        if sha and not self.e.dry:
-            self.out.bd_sync(sha)
+        """The land is done and the lock is let go: what follows the push is a plan of effects (the landed fact, then bd's data; a failure
+        of the second blocks the bead), applied once each by key under this run's id."""
+        e = self.e
+        if sha and not e.dry:
+            interpret(e.bead, e.log_path.stem, effects.plan_land(sha), self.ledger, self.apply)
         return sha
+
+    def apply(self, eff: effects.LandEffect) -> None:
+        match eff:
+            case effects.RecordLand():
+                self.e.record_land(eff.sha)
+            case effects.BdSync():
+                self.out.bd_sync(eff.sha)
+            case _:
+                assert_never(eff)
 
     def commit(self, bead: Bead) -> bool:
         """One commit per task, titled after the bead: earlier runs' wip commits are folded in. -> False: they add up to nothing."""
@@ -126,7 +145,6 @@ class Lander:
     def found(self, sha: str) -> str:
         e = self.e
         e.landed_sha = sha
-        e.record_land(sha)
         e.steps.outcome("landed", sha[:12])
         e.warn(f"the push had already gone through ({sha[:12]} is on {e.cfg.base}): not pushed again")
         return sha
@@ -311,7 +329,6 @@ class Lander:
                 sha = ""
             else:
                 e.landed_sha = sha
-                e.record_land(sha)
         if rc == 0:
             e.steps.outcome("landed", sha[:12])
             if stop:

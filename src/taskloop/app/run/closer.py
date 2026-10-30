@@ -12,21 +12,22 @@ from taskloop.adapters import beadtools, ident
 from taskloop.adapters import storm as storm_file
 from taskloop.app.asks import raiser
 from taskloop.app.land.followups import file_follow_ups
+from taskloop.app.run import ended as stored_end
 from taskloop.app.run import outcomes
 from taskloop.app.run import trace as runtrace
 from taskloop.app.run.closer_host import CloserHost
 from taskloop.app.run.console import say
-from taskloop.app.run.interpret import interpret
-from taskloop.app.run.state import CheckpointLedger
 from taskloop.app.track import verbs as track
 from taskloop.contracts import fence
 from taskloop.contracts import log as rec
 from taskloop.contracts.answers import VERDICTS
+from taskloop.contracts.checkpoint import Checkpoint, Notes
 from taskloop.contracts.enums import Outcome
 from taskloop.contracts.ports import BeadPatch
 from taskloop.domain import effects, storm
 from taskloop.domain import outcome as oc
 from taskloop.domain.asks import specs as askspecs
+from taskloop.domain.interpret import CheckpointLedger, interpret
 from taskloop.domain.land.matchers import without_prefix
 from taskloop.domain.review import followups as fu
 
@@ -38,6 +39,7 @@ class Closer:
 
     def __init__(self, host: CloserHost) -> None:
         self.e = host
+        self.noted: Notes | None = None  # FileNotes' result, for a run with no checkpoint to keep it in
 
     def close(self, ended: oc.RunOutcome) -> None:
         e = self.e
@@ -46,7 +48,10 @@ class Closer:
         if hasattr(signal, "SIGTERM") and threading.current_thread() is threading.main_thread():
             old = signal.signal(signal.SIGTERM, signal.SIG_IGN)  # a second stop must not break the close-out
         try:
-            self.run(ended)
+            if e.dead is not None:  # a run died inside its close: finish that close, from the outcome it kept
+                self.resume(e.dead)
+            else:
+                self.run(ended)
         finally:  # what the process starts after this (a notify command, the next test) must stay stoppable
             if old is not None:
                 signal.signal(signal.SIGTERM, old)
@@ -95,18 +100,30 @@ class Closer:
         if e.disp and e.disp.escalated and spec is None:
             spec = askspecs.repeated_fault(oc.KNOBS["fault_retries"], why.splitlines()[0][:200])
         done = oc.make(kind, why, sha=ended.sha, spec=spec if kind in oc.ASKS else None)  # the final outcome: its word is the trace's
+        if not e.dry:
+            # before the first effect: a restart rebuilds the plan from it
+            e.checkpoints.keep_end(stored_end.stored(e.log_path.stem, done, e.disp, e.fp, e.leftovers))
+        self.finish(done)
+
+    def resume(self, ck: Checkpoint) -> None:
+        """The close of a run that died: its outcome and decision come from the checkpoint (POLICY and the storm check are not asked
+        again), and the effects whose keys are not there run, under the dead run's id."""
+        e = self.e
+        assert ck.ended is not None
+        done, e.disp, e.fp = stored_end.loaded(ck.ended)
+        e.kind = done.kind
+        e.warn(f"finishing the close of {ck.ended.run}, which died inside it: {done.word}")
+        self.finish(done)
+
+    def finish(self, done: oc.RunOutcome) -> None:
+        e = self.e
         counts = "; ".join(f"{k}={v}" for k, v in e.stats.items())
         stats = f"cost=${e.cost:.2f}; minutes={int((time.time() - e.t0) / 60)}; {counts}"
         branch = e.git("symbolic-ref", "--short", "-q", "HEAD")
-        slot_gen = e.claim.slot_gen
-        plan = effects.plan_close(done, dry=e.dry, branch=branch, slot_gen=slot_gen)
-        new = fu.batch(e.bead, e.leftovers, e.filed).file  # one per typed key, at most the cap
-        lost: list[dict[str, str]] = []
-        interpret(e.bead, e.log_path.stem, plan, CheckpointLedger(e.checkpoints),
-                  lambda eff: self.apply(eff, done, stats, new, lost))
+        plan = effects.plan_close(done, dry=e.dry, branch=branch, slot_gen=e.claim.slot_gen)
+        interpret(e.bead, e.log_path.stem, plan, CheckpointLedger(e.checkpoints), lambda eff: self.apply(eff, done, stats))
 
-    def apply(self, eff: effects.Effect, done: oc.RunOutcome, stats: str, new: Sequence[Mapping[str, str]],
-              lost: list[dict[str, str]]) -> None:
+    def apply(self, eff: effects.CloseEffect, done: oc.RunOutcome, stats: str) -> None:
         """One effect of the close plan, done. The match is closed: a new effect is one more case here."""
         e = self.e
         outcome, why = done.word, done.detail
@@ -122,15 +139,25 @@ class Closer:
             case effects.RaiseAsk():
                 e.asked = bool(done.spec and outcome not in DONE and e.ask_flow.raise_ask(done.spec, why, done.kind))
             case effects.FileNotes():
-                lost[:] = self.follow_ups(outcome)
+                self.file_notes(outcome)
             case effects.Reflect():
-                self.reflect_comment(outcome, why, new, lost, stats)
+                self.reflect_comment(outcome, why, stats)
             case effects.CloseBead() | effects.BlockBead() | effects.LeaveBead():
                 self.settle(done, stats)
             case effects.ReleaseSlot():
                 self.release_slot(eff, outcome)
+            case effects.DropCheckpoint():
+                e.checkpoints.drop_unless_fenced()
             case _:
                 assert_never(eff)
+
+    def file_notes(self, outcome: Outcome) -> None:
+        """The follow-ups filed; what was filed and what bd refused is kept in the checkpoint, where Reflect reads it."""
+        e = self.e
+        todo = len(fu.batch(e.bead, e.leftovers, e.filed).file)  # one per typed key, at most the cap
+        lost = self.follow_ups(outcome)
+        self.noted = Notes(filed=todo - len(lost), unfiled=len(lost))
+        e.checkpoints.keep_notes(self.noted)
 
     def release_slot(self, eff: effects.ReleaseSlot, outcome: Outcome) -> None:
         """Last: the trace and the comments read the branch. A slot whose lease moved on (another generation) is not this run's to touch."""
@@ -196,14 +223,15 @@ class Closer:
             e.owner_look.file_owner_look()
         return lost
 
-    def reflect_comment(self, outcome: Outcome, why: str, new: Sequence[Mapping[str, str]], lost: Sequence[object], stats: str) -> None:
+    def reflect_comment(self, outcome: Outcome, why: str, stats: str) -> None:
         e = self.e
+        notes = e.checkpoints.notes() or self.noted or Notes(filed=0, unfiled=0)  # the checkpoint's: a restart has no memory of FileNotes
         verified = ""
         if e.verified:
             verified = "; self-verified=" + ", ".join("{} {}".format(sum(x["verdict"] == k for x in e.verified), k) for k in VERDICTS)
-        unfiled = f" unfiled={len(lost)};" if lost else ""
+        unfiled = f" unfiled={notes.unfiled};" if notes.unfiled else ""
         text = outcomes.reflection_text(e.reflection)
-        e.comment(f"Reflect (engine): outcome={outcome};{text} filed={len(new) - len(lost)};{unfiled} {stats}"
+        e.comment(f"Reflect (engine): outcome={outcome};{text} filed={notes.filed};{unfiled} {stats}"
                   f"{verified}{('; why=' + why) if why else ''}; trace={e.log_path.stem} (tl trace {e.bead})")
 
     def settle(self, done: oc.RunOutcome, stats: str) -> None:

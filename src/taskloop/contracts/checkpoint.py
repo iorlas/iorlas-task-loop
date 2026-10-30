@@ -75,6 +75,31 @@ class RunState(Rec, frozen=False):
 
 
 @final
+class EndRec(Rec):
+    """The final outcome of a run (after POLICY and any escalation), kept before the close's first effect, with what the effects read of
+    the decision: a restart rebuilds the same plan from it. `spec` is the ask (domain/asks/spec.AskSpec) as JSON text."""
+
+    run: str  # the run that closed (its id is in every key; the checkpoint's own `run` is the run that saved it)
+    kind: str
+    fingerprint: str
+    detail: str
+    sha: str = ""
+    spec: str = ""  # the ask as JSON text ("" for no ask)
+    fp: str = ""  # the fault's fingerprint before any escalation (the trace and the report carry it)
+    comment: bool = True  # False: the same fault was said within the hour
+    escalated: bool = False
+    leftovers: list[dict[str, str]] = msgspec.field(default_factory=list)  # the follow-ups FileNotes files (they live in memory only)
+
+
+@final
+class Notes(Rec):
+    """What the FileNotes effect did: the follow-ups filed and the ones bd refused (Reflect says these counts)."""
+
+    filed: int
+    unfiled: int
+
+
+@final
 class Checkpoint(Rec):
     V: ClassVar[int] = 3
     bead: str
@@ -90,4 +115,6 @@ class Checkpoint(Rec):
     feedback: str = ""
     gate_tail: str = ""
     applied: list[str] = msgspec.field(default_factory=list)  # keys of the close effects already applied (domain/effects.key_of)
+    ended: EndRec | None = None  # the close's outcome, stored before its first effect: a restart finishes the close from it
+    notes: Notes | None = None  # the FileNotes result
     state: RunState = msgspec.field(default_factory=RunState)

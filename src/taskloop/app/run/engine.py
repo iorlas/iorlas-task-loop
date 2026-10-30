@@ -31,7 +31,7 @@ from taskloop.app.review.link_check import LinkCheck
 from taskloop.app.review.routing import Routing
 from taskloop.app.review.settles import Settles
 from taskloop.app.review.verifier import Verifier
-from taskloop.app.run import summaries
+from taskloop.app.run import ended, summaries
 from taskloop.app.run.ask_flow import AskFlow
 from taskloop.app.run.bead_env import bead_env
 from taskloop.app.run.blocked import Blocked, FixFailed, blocked_for
@@ -111,8 +111,13 @@ class Engine(RunFields):
             self.reexec = {}
         # a run paused for the network: its run id and counters go on
         pause = None if self.reexec else reexec.take_net_pause(bead)
+        self.stores = stores or real_stores(ConfigDir(ident.config_dir()))
+        # a run that died inside its close: its id goes on (the keys of the effects it applied are under it)
+        ck = None if dry_run or self.reexec or pause else self.checkpoints.read()
+        self.dead = ck if ended.unfinished(ck) else None
         # the same run id: log, run dir and trace go on
-        layout = RunLayout.open(bead, wt, self.reexec.get("run") or (pause.run if pause else None))
+        taken = self.reexec.get("run") or (pause.run if pause else None) or (self.dead.ended.run if self.dead and self.dead.ended else None)
+        layout = RunLayout.open(bead, wt, taken)
         self.log_path, self.err_path, self.run_dir = layout.log_path, layout.err_path, layout.run_dir
         self.task_dir, self.brief_file, self.evidence_dir = layout.task_dir, layout.brief_file, layout.evidence_dir
         self.exec_fn: Any = None  # a test's exec, newer-install lookup, run-task argv, the cross-process lock
@@ -120,7 +125,6 @@ class Engine(RunFields):
         self.argv: Any = None
         self.moved = False
         self.os_lock = landlock.os_lock
-        self.stores = stores or real_stores(ConfigDir(ident.config_dir()))
         stem = self.log_path.stem
         self.ctx = RunContext.open(bead, cfg, Path(wt), stem, self.run_dir, self.stores, store, route, self.clock, self.sessions,
                                    self.stats, opencode.opencode_id, context_size.context_tokens, say, verbose, dry_run,

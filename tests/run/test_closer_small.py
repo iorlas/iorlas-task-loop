@@ -32,7 +32,7 @@ def host(kind: oc.Kind) -> tuple[SimpleNamespace, FakeWaitsHost]:
 class Effects(unittest.TestCase):
     def test_a_dry_run_says_so_and_changes_nothing(self):
         e, base = host(oc.Kind.DONE)
-        Closer(e).apply(fx.NoteDry(), oc.make(oc.Kind.DONE), "cost=$0.00", [], [])
+        Closer(e).apply(fx.NoteDry(), oc.make(oc.Kind.DONE), "cost=$0.00")
         said = base.stores.run_log("run").read_from(0).items[0].rec
         self.assertEqual(said, Note(text="dry run: bead left as it was. cost=$0.00", t=said.t))
         e.store.update.assert_not_called()
@@ -47,7 +47,7 @@ class Effects(unittest.TestCase):
 
     def test_the_slot_is_left_with_the_outcome_and_the_branch(self):
         e, _ = host(oc.Kind.DONE)
-        Closer(e).apply(fx.ReleaseSlot(branch="task/t-1", slot_gen=0), oc.make(oc.Kind.DONE), "", [], [])
+        Closer(e).apply(fx.ReleaseSlot(branch="task/t-1", slot_gen=0), oc.make(oc.Kind.DONE), "")
         e.tree.leave_slot.assert_called_once_with(Outcome.DONE, "task/t-1")
 
 

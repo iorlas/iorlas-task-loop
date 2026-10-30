@@ -9,6 +9,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
+from support.fake_clock import FakeClock
 from support.fakegit import FakeGit
 
 from taskloop.app.land.gate import Problem, ProblemKind, mint
@@ -28,8 +29,30 @@ class Stop(Exception):
         self.why, self.kind = why, kind
 
 
+class Keys:
+    """The checkpoint, as the ledger of applied effects uses it (and the saves the land makes)."""
+
+    def __init__(self) -> None:
+        self.keys: set[str] = set()
+
+    def save(self, **kw: Any) -> None:
+        pass
+
+    def applied(self) -> frozenset[str]:
+        return frozenset(self.keys)
+
+    def mark_applied(self, key: str) -> None:
+        self.keys.add(key)
+
+
 class Host(SimpleNamespace):
     """What the lander reads off the engine, with every collaborator but git a recorder."""
+
+    def dolt_push(self) -> tuple[int, str]:
+        if self.store.fail:
+            return 1, "no route to the remote"
+        self.events.append("sync")
+        return 0, ""
 
     def __init__(self, git: FakeGit) -> None:
         self.events: list[str] = []
@@ -50,7 +73,8 @@ class Host(SimpleNamespace):
         super().__init__(
             git=git.git, sh=git.sh, cfg=SimpleNamespace(base="origin/main", gate_checks=[], land_optimistic_tries=2,
                                                          land=["git", "push", "-q", "origin", "HEAD:main"]),
-            wt=Path("/nonexistent"), store=None, claim=fence.offline(BeadId("t-1")),
+            wt=Path("/nonexistent"), store=SimpleNamespace(fail=False, dolt_push=self.dolt_push), clock=FakeClock(),
+            claim=fence.offline(BeadId("t-1")),
             bead="t-1", dry=False, dry_run=False, landed_sha="", pending_land_validation="", fixes=0,
             steps=SimpleNamespace(begin=lambda *a, **k: None, outcome=lambda *a: None, move=lambda *a: None),
             newfiles=SimpleNamespace(quarantine_strays=lambda: None),
@@ -59,7 +83,7 @@ class Host(SimpleNamespace):
             waits=SimpleNamespace(locked=locked), land_lock_path=lambda: "lock", stop_deferred=stop_deferred,
             record_land=lambda sha: self.events.append("record " + sha), warn=self.warnings.append,
             plan_data=None, cases=SimpleNamespace(case_checks=lambda: []), run_dir="run",
-            checkpoints=SimpleNamespace(save=lambda **kw: None),
+            checkpoints=Keys(), log_path=Path("/runs/t-1-r1.jsonl"),
             last_run=None, stores=SimpleNamespace(check_run=lambda *a: SimpleNamespace(read=lambda: None)),
             stage_checks=SimpleNamespace(stoppable=lambda *a: self.events.append("checks") or SimpleNamespace(failed=[], unverified=[])),
             blocked_for=lambda why, kind, **kw: Stop(why, kind))
@@ -99,8 +123,22 @@ class PushedSha(unittest.TestCase):
         g = repo(["a"] * 4, ["h", "h", "pushed", "moved-after"], [PUSHED])
         lander, host = land_with(g)
         self.assertEqual(lander.tries(Land()), ("pushed", None))
-        self.assertIn("record pushed", host.events)
+        self.assertEqual(host.landed_sha, "pushed")
+        self.assertNotIn("record pushed", host.events)  # the push is not an effect: what follows it is a plan, applied by synced
         self.assertTrue(g.ran("push", "--no-verify", "-q", "origin", "pushed:main"))
+        lander.synced("pushed")
+        self.assertEqual(host.events, ["record pushed", "sync"])
+
+    def test_a_kill_after_the_landed_fact_resumes_at_bd_sync_and_records_nothing_twice(self):
+        g = repo(["a"] * 4, ["h", "h", "pushed", "moved-after"], [PUSHED])
+        lander, host = land_with(g)
+        host.store.fail = True  # bd's Dolt push cannot be reached: the first call stops the land after RecordLand
+        with self.assertRaises(Stop):
+            lander.synced("pushed")
+        host.store.fail = False
+        lander.synced("pushed")  # the same run again: the keys in the checkpoint say what is done
+        self.assertEqual(host.events.count("record pushed"), 1)
+        self.assertEqual(host.events.count("sync"), 1)
 
 
 class Pushing(unittest.TestCase):
@@ -167,7 +205,7 @@ class Lock(unittest.TestCase):
         g = repo(["a"] * 12, ["h"] * 8 + ["landed"], [REJECTED, REJECTED, PUSHED])
         lander, host = land_with(g)
         self.assertEqual(lander.land(), "landed")
-        self.assertEqual(host.events, ["enter", "checks", "checks", "record landed", "exit"])
+        self.assertEqual(host.events, ["enter", "checks", "checks", "exit"])
         self.assertEqual([e.n for e in host.emitted], [1, 2, 3])
         self.assertEqual(sum(1 for c in g.calls if c[0] == "push"), 3)
 

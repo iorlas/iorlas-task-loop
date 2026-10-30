@@ -5,7 +5,7 @@ from typing import Any
 from taskloop.adapters import beadtools, ident
 from taskloop.app.run.state import Checkpoints, StateAttrs
 from taskloop.contracts import fence
-from taskloop.contracts.checkpoint import RunState
+from taskloop.contracts.checkpoint import Checkpoint, RunState
 from taskloop.contracts.ids import BeadId
 from taskloop.domain import outcome as oc
 
@@ -15,6 +15,7 @@ class RunFields(StateAttrs):
                  fresh: bool, claim: fence.Claim | None = None) -> None:
         self.bead, self.cfg, self.dry, self.verbose = bead, cfg, dry_run, verbose
         self.claim = claim or fence.offline(bead)  # the run's right to act on its bead (app/track/fence.py); offline: nothing to check
+        self.dead: Checkpoint | None = None  # a run died inside its close: its checkpoint, to finish that close (app/run/ended.py)
         self.fenced = ""  # why this run was fenced out (its bead or slot taken again), once it was
         self.wt: Any = wt
         self.store, self.router, self.repo = store or beadtools.bd_store(), route, git

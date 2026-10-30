@@ -6,6 +6,7 @@ from typing import Any
 from taskloop.adapters import beadtools, ident
 from taskloop.adapters import delegate as dg
 from taskloop.app.release import reexec
+from taskloop.app.run import ended as stored_end
 from taskloop.app.run import requests
 from taskloop.app.run.reload import Exec
 from taskloop.app.slots.lease import Lease
@@ -37,7 +38,10 @@ class RunOnce:
         ck = e.checkpoints.read()
         e.prev_ck = ck.run if ck else ""
         try:
-            self.run(hb, end)
+            if e.dead is not None:  # the last run died inside its close: this process only finishes it
+                self.finish_dead(end)
+            else:
+                self.run(hb, end)
         except e.Blocked as b:
             end.outcome = b.outcome
             if b.kind is oc.Kind.PAUSE_KILLED and e.requests.stopped:  # the stop flag was the owner's request, not a SIGTERM
@@ -52,6 +56,19 @@ class RunOnce:
         finally:
             self.close_out(hb, end)
         return 0 if e.moved or end.outcome.finished else 2
+
+    def finish_dead(self, end: Ended) -> None:
+        """The state the close's effects read comes back from the dead run's checkpoint; the outcome is the one it kept."""
+        e = self.e
+        ck = e.dead
+        assert ck is not None and ck.ended is not None
+        end.outcome, _, _ = stored_end.loaded(ck.ended)
+        e.resume.restore(ck, late=True)
+        e.leftovers = [dict(lo) for lo in ck.ended.leftovers]  # in memory only until the close stored them
+        e.plan_data = ck.state.plan_data
+        e.plan_summary = (e.plan_data or {}).get("summary", "")
+        e.accepted = list(ck.state.accepted)
+        e.branch = ck.branch
 
     def beat(self) -> None:
         """The run's proof of life in its log (runlife.liveness reads it), then the stuck tick and the owner's stop; a log that cannot
@@ -79,7 +96,7 @@ class RunOnce:
         end.outcome = oc.make(oc.Kind.LANDED, sha=sha) if sha else oc.make(oc.Kind.DONE)
         if sha:
             e.owner_look.file_owner_look()  # before the checkpoint goes: a crash from here on still files it on resume
-        e.checkpoints.drop()
+        # the checkpoint stays: the close drops it as its last effect, and until then it holds the outcome a restart finishes from
 
     def begin(self, hb: Any) -> Any:
         """The bead, claimed and checked: the delegate there, the tree reset, the ask read, the acceptance known."""

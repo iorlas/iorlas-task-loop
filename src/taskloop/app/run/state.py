@@ -9,11 +9,11 @@ import contextlib
 import copy
 import time
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Any
 
 from taskloop.app.run.review_glue import review_of
 from taskloop.contracts import fence, wire
-from taskloop.contracts.checkpoint import Checkpoint, RunState
+from taskloop.contracts.checkpoint import Checkpoint, EndRec, Notes, RunState
 from taskloop.contracts.review import Unfiled
 from taskloop.domain.checks import trim
 from taskloop.stores.api import Doc
@@ -120,6 +120,20 @@ class Checkpoints:
         if ck is not None and key not in ck.applied:
             self.writer().write(ck.replace(applied=[*ck.applied, key]))
 
+    def keep_end(self, end: EndRec) -> None:
+        """The close's outcome goes into the record before its first effect: a restart finishes the close from it. No record, none kept."""
+        with contextlib.suppress(fence.Fenced):
+            self.amend(lambda ck: ck.replace(ended=end))
+
+    def keep_notes(self, notes: Notes) -> None:
+        """What FileNotes filed and what bd refused, so the Reflect comment says the same after a restart."""
+        with contextlib.suppress(fence.Fenced):
+            self.amend(lambda ck: ck.replace(notes=notes))
+
+    def notes(self) -> Notes | None:
+        ck = self.read()
+        return ck.notes if ck else None
+
     def keep_filed(self, lost: list[dict[str, str]] | None = None) -> None:
         """The follow-ups filed so far and the ones bd refused (`lost`: kept, none lost): written at once, a kill loses no title."""
         self.e.unfiled += [Unfiled(title=lo["title"], why=lo["why"]) for lo in lost or []]
@@ -149,25 +163,7 @@ class Checkpoints:
     def drop(self) -> None:
         self.writer().delete()
 
-
-class AppliedKeys(Protocol):
-    """The checkpoint, as the close ledger uses it."""
-
-    def applied(self) -> frozenset[str]: ...
-    def mark_applied(self, key: str) -> None: ...
-
-
-class CheckpointLedger:
-    """The applied close effects (app/run/interpret.py): kept in the process and in the checkpoint, so a restart finds them."""
-
-    def __init__(self, checkpoints: AppliedKeys) -> None:
-        self.checkpoints = checkpoints
-        self.keys: set[str] = set()
-
-    def applied(self) -> frozenset[str]:
-        return frozenset(self.keys) | self.checkpoints.applied()
-
-    def mark(self, key: str) -> None:
-        self.keys.add(key)
-        with contextlib.suppress(fence.Fenced):  # a run whose lease moved on keeps its keys in memory only
-            self.checkpoints.mark_applied(key)
+    def drop_unless_fenced(self) -> None:
+        """The close's last effect: a run whose lease moved on leaves the record to the run that holds the bead."""
+        with contextlib.suppress(fence.Fenced):
+            self.drop()

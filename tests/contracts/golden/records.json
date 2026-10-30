@@ -299,7 +299,25 @@
   "n": 4,
   "feedback": "f",
   "gate_tail": "",
-  "applied": [],
+  "applied": [
+   "tl-1/r/save_branch"
+  ],
+  "ended": {
+   "run": "r",
+   "kind": "ask_decision",
+   "fingerprint": "fp",
+   "detail": "d",
+   "sha": "",
+   "spec": "{\"ask_class\":\"decision\",\"decision\":\"q\"}",
+   "fp": "fp0",
+   "comment": false,
+   "escalated": true,
+   "leftovers": []
+  },
+  "notes": {
+   "filed": 2,
+   "unfiled": 1
+  },
   "state": {
    "plan_data": {
     "summary": "s",

@@ -1,4 +1,4 @@
-"""The close of a run as a list of effects: `plan_close` is pure, `key_of` names each effect once, an interpreter (app/run/interpret.py)
+"""The close of a run as a list of effects: `plan_close` is pure, `key_of` names each effect once, an interpreter (domain/interpret.py)
 applies them.
 
 What a run does when it ends (save the branch, write the log and trace, raise the ask, file the notes, close or block or free the bead,
@@ -81,12 +81,35 @@ class ReleaseSlot:
     slot_gen: int
 
 
-Effect = SaveBranch | RecordRun | NoteDry | NoteWait | RaiseAsk | FileNotes | Reflect | CloseBead | BlockBead | LeaveBead | ReleaseSlot
+@final
+@dataclass(frozen=True)
+class DropCheckpoint:
+    """A finished run's checkpoint goes, last: until then it holds the outcome and the keys a restart resumes from."""
+
+
+@final
+@dataclass(frozen=True)
+class RecordLand:
+    """The landed fact: the landed store and bd's land record."""
+    sha: str
+
+
+@final
+@dataclass(frozen=True)
+class BdSync:
+    """After the push, outside the lock: bd's Dolt data follows the land (a failure blocks the bead)."""
+    sha: str
+
+
+CloseEffect = (SaveBranch | RecordRun | NoteDry | NoteWait | RaiseAsk | FileNotes | Reflect | CloseBead | BlockBead | LeaveBead
+               | ReleaseSlot | DropCheckpoint)
+LandEffect = RecordLand | BdSync
+Effect = CloseEffect | LandEffect
 
 NAMES: Final = {
     SaveBranch: "save_branch", RecordRun: "record_run", NoteDry: "note_dry", NoteWait: "note_wait", RaiseAsk: "raise_ask",
     FileNotes: "file_notes", Reflect: "reflect", CloseBead: "close_bead", BlockBead: "block_bead", LeaveBead: "leave_bead",
-    ReleaseSlot: "release_slot",
+    ReleaseSlot: "release_slot", DropCheckpoint: "drop_checkpoint", RecordLand: "record_land", BdSync: "bd_sync",
 }
 
 
@@ -94,7 +117,7 @@ def name_of(effect: Effect) -> str:
     """The effect kind in a key."""
     match effect:
         case (SaveBranch() | RecordRun() | NoteDry() | NoteWait() | RaiseAsk() | FileNotes() | Reflect() | CloseBead()
-              | BlockBead() | LeaveBead() | ReleaseSlot()):
+              | BlockBead() | LeaveBead() | ReleaseSlot() | DropCheckpoint() | RecordLand() | BdSync()):
             return NAMES[type(effect)]
         case _:
             assert_never(effect)
@@ -118,13 +141,19 @@ def settling(done: oc.RunOutcome) -> CloseBead | BlockBead | LeaveBead:
             assert_never(fault)
 
 
-def plan_close(done: oc.RunOutcome, *, dry: bool, branch: str, slot_gen: int) -> list[Effect]:
+def plan_land(sha: str) -> list[LandEffect]:
+    """The effects that follow a push that went through (the push itself is no effect: it is guarded by the gate pass and the land lock)."""
+    return [RecordLand(sha), BdSync(sha)]
+
+
+def plan_close(done: oc.RunOutcome, *, dry: bool, branch: str, slot_gen: int) -> list[CloseEffect]:
     """The effects that end a run, in order. `done` is the final outcome (after POLICY and any escalation)."""
-    head: list[Effect] = [SaveBranch(), RecordRun()]
+    head: list[CloseEffect] = [SaveBranch(), RecordRun()]
+    tail: list[CloseEffect] = [DropCheckpoint()] if done.finished else []
     if dry:
-        return [*head, NoteDry()]
+        return [*head, NoteDry(), *tail]
     release = ReleaseSlot(branch, slot_gen)
     if done.kind is oc.Kind.WAIT_ASK:
         return [*head, NoteWait(), release]
-    ask: list[Effect] = [RaiseAsk()] if done.kind in oc.ASKS and done.spec is not None else []
-    return [*head, *ask, FileNotes(), Reflect(), settling(done), release]
+    ask: list[CloseEffect] = [RaiseAsk()] if done.kind in oc.ASKS and done.spec is not None else []
+    return [*head, *ask, FileNotes(), Reflect(), settling(done), release, *tail]
