@@ -1,7 +1,8 @@
 """Text shaping that needs a regular expression. `import re` is allowed in domain/**/matchers.py only."""
 import re
+from typing import Final
 
-OPEN_CODE = re.compile(r"\s*-?\s*`[^`]*?(?: \.\.\.)?$")
+OPEN_CODE: Final = re.compile(r"\s*-?\s*`[^`]*?(?: \.\.\.)?$")
 
 
 def clip(text: str | None, n: int = 170) -> str:

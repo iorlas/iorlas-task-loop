@@ -1,6 +1,5 @@
 """The reflection prompt."""
 
-
 REFLECT_PROMPT = """You write a short reflection on one run of an unattended task engine, for the engineer who maintains the engine. Do not
 edit files; judge only from what is below.
 Bead %s: %s

@@ -1,10 +1,11 @@
 """Names of a check: its normal command text and the environment variables later checks read it by."""
 from itertools import groupby
+from typing import Final
 
 from taskloop.contracts.ids import CheckId
 
-LOG_PREFIX = "TL_CHECK_LOG_"
-RC_PREFIX = "TL_CHECK_RC_"
+LOG_PREFIX: Final = "TL_CHECK_LOG_"
+RC_PREFIX: Final = "TL_CHECK_RC_"
 
 
 def norm(cmd: object) -> str:

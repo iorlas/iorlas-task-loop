@@ -2,13 +2,14 @@
 or --json) and the handoff (for the next session). Never summarised by a model: every line is a field."""
 import time
 from dataclasses import asdict, dataclass
+from typing import Final
 
-STATUS_LINES = 40
-STATUS_BYTES = 8 * 1024
-HANDOFF_BYTES = 4 * 1024
+STATUS_LINES: Final = 40
+STATUS_BYTES: Final = 8 * 1024
+HANDOFF_BYTES: Final = 4 * 1024
 
 # The standing rules a fresh session must not have to rediscover (CLAUDE.md of this repo and the skill).
-RULES = (
+RULES: Final = (
     "work in a worktree; never edit a plugin cache dir or the main checkout by hand",
     "release only through uv run --script dev/release.py; never bump a version by hand",
     "never pkill/killall or kill by pattern: only a PID you confirmed is yours",

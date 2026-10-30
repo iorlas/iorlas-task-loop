@@ -5,7 +5,7 @@ from taskloop.contracts.ask import Ask, AskAnswer
 
 KIND_TITLE: Final = {"decision": "Decision needed", "stuck": "Stuck: direction needed", "budget": "Over its time limit",
               "ticket": "The bead needs sorting out"}
-SPLIT_WORDS = "split this bead: keep what is done as this bead and file the rest as new beads"
+SPLIT_WORDS: Final = "split this bead: keep what is done as this bead and file the rest as new beads"
 
 
 def clip(text: str, n: int) -> str:

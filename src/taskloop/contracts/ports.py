@@ -3,7 +3,7 @@
 A port is a Protocol plus the typed requests and results that cross it. Adapters implement it against the real thing
 (`route.py`, `bd`, an exec); fakes implement it in memory, so a test needs no process, no files and no bash."""
 from collections.abc import Callable
-from typing import Any, NamedTuple, Protocol
+from typing import Any, NamedTuple, Protocol, final
 
 import msgspec
 
@@ -35,6 +35,7 @@ class Delegate(Protocol):
         ...
 
 
+@final
 class NewBead(Rec):
     title: str
     issue_type: str = "task"
@@ -47,6 +48,7 @@ class NewBead(Rec):
     no_inherit_labels: bool = False
 
 
+@final
 class BeadPatch(Rec):
     """What `update` changes; a field left at its default is not touched. assignee "" clears it."""
 
@@ -60,6 +62,7 @@ class BeadPatch(Rec):
     unset_metadata: list[str] = msgspec.field(default_factory=list)
 
 
+@final
 class BeadQuery(Rec):
     status: str = ""
     label: str = ""
@@ -112,6 +115,7 @@ class Beads(Protocol):
         ...
 
 
+@final
 class CheckSpec(Rec):
     argv: list[str]
     cwd: str
@@ -123,6 +127,7 @@ class CheckSpec(Rec):
         return text_of(self.argv)
 
 
+@final
 class CheckResult(Rec):
     exit: int
     out: str = ""

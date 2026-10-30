@@ -21,14 +21,14 @@ from taskloop.domain.prompts import reflect as fp  # noqa: E402
 from taskloop.domain.prompts import review as rp  # noqa: E402
 from taskloop.domain.prompts import verify as vp  # noqa: E402
 from taskloop.domain.prompts import write as wp  # noqa: E402
-from taskloop.domain.prompts.land import FIX_GOAL  # noqa: E402
+from taskloop.domain.prompts.land import FIX_GOAL as _FIX_GOALS  # noqa: E402
 from taskloop.domain.prompts.review import acceptance_text  # noqa: E402
 
 TEMPLATES = {"PLAN_PROMPT": pp, "WRITE_PROMPT": wp, "WRITE_RESUME_PROMPT": wp, "REVIEW_PROMPT": rp, "VERIFY_PROMPT": vp,
              "REFLECT_PROMPT": fp}
 GOLDEN = ROOT / "tests" / "fixtures" / "prompts"
-FIX_SCOPE = f"the fix only: it must {FIX_GOAL['gate']} without breaking what the accepted stages built"
-FIX_GOAL = "Fix: " + FIX_GOAL["gate"]
+FIX_SCOPE = f"the fix only: it must {_FIX_GOALS['gate']} without breaking what the accepted stages built"
+FIX_GOAL = "Fix: " + _FIX_GOALS["gate"]
 
 
 def render_review(fix=False, last=False):

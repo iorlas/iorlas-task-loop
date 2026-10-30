@@ -1,7 +1,7 @@
 """Plan-check lint: the plan's checks, and which of them can run. Pure; what the tree and the machine say comes in as a TreeProbe."""
 import os
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, Final
 
 from taskloop.contracts.argv import FORM, argv_of, argv_problems
 from taskloop.contracts.config import EngineConfig
@@ -13,9 +13,9 @@ from taskloop.domain.checks.names import log_var, mangle, norm, rc_var
 from taskloop.domain.matchers import clip
 
 Plan = Any  # the plan's JSON until E6 types it
-JUST_PLAIN_FLAGS = frozenset({"--unstable", "-q", "--quiet", "-v", "--verbose", "--dry-run", "-n", "--no-deps", "--highlight",
+JUST_PLAIN_FLAGS: Final = frozenset({"--unstable", "-q", "--quiet", "-v", "--verbose", "--dry-run", "-n", "--no-deps", "--highlight",
                               "--no-highlight"})
-GATE_ONLY_TEXT = ("\n\nYour plan was sent back: these checks run a command that runs only in the gate at land (the engine "
+GATE_ONLY_TEXT: Final = ("\n\nYour plan was sent back: these checks run a command that runs only in the gate at land (the engine "
                   "runs it once, on the rebased tree), never on a stage's uncommitted tree:\n%s\nRewrite them without "
                   "it: the land gate proves what it proves.")
 
@@ -33,7 +33,7 @@ def tracker_checks(plan: Plan) -> list[str]:
     return [c for c in plan_checks(plan) if sh.reads_tracker(argv_of(c))]
 
 
-GATE_WHY = "the engine runs the gate once, on the rebased tree"
+GATE_WHY: Final = "the engine runs the gate once, on the rebased tree"
 
 
 def gate_only(cfg: EngineConfig) -> list[tuple[str, str]]:

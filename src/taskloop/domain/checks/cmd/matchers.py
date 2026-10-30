@@ -4,25 +4,26 @@ import re
 import shlex
 from collections.abc import Sequence
 from types import MappingProxyType
+from typing import Final
 
 from taskloop.contracts.argv import OPERATORS, SHELL_FLAGS, SHELLS
 
 # a check that runs bd or reads the beads files proves the tracker, not the code: no writer can satisfy it (writers cannot run bd)
-BEADS_DIR = re.compile(r"(?<![\w-])\.beads\b")
-WRAPPERS = frozenset({"env", "command", "exec", "time", "xargs", "nice"})
-ASSIGN = re.compile(r"\w+=.*")
-PYTHON = re.compile(r"python3?(?:\.\d+)?")
-ISOLATED_FLAG = re.compile(r"-[A-Za-z]*I[A-Za-z]*")
-DOTTED = re.compile(r"[A-Za-z_]\w*(?:\.\w+)+")
-FILE_READERS = frozenset({"cat", "bash", "sh", "node", "python", "python3"})
-TEST_FLAGS = frozenset({"-f", "-e", "-s", "-r"})
-RECIPE = re.compile(r"[\w-]+")
-PATH_MAGIC = re.compile(r"[$*?{}~`]")
-TIMEOUT_MS = re.compile(r"timeout[_-]?ms\s*[=: ]\s*(\d+)", re.I)
-TIMEOUT_MIN = re.compile(r"timeout[_-]?min(?:ute)?s?\s*[=: ]\s*(\d+(?:\.\d+)?)", re.I)
-TIMEOUT_SEC = re.compile(r"timeout[_-]?sec(?:ond)?s?\s*[=: ]\s*(\d+(?:\.\d+)?)", re.I)
-TIMEOUT_ANY = re.compile(r"(?<![\w-])(?:--timeout|-timeout|timeout)(?:=|\s+)(\d+(?:\.\d+)?)([smhd]?)(?![\w.])", re.I)
-UNIT = MappingProxyType({"": 1 / 60.0, "s": 1 / 60.0, "m": 1.0, "h": 60.0, "d": 1440.0})
+BEADS_DIR: Final = re.compile(r"(?<![\w-])\.beads\b")
+WRAPPERS: Final = frozenset({"env", "command", "exec", "time", "xargs", "nice"})
+ASSIGN: Final = re.compile(r"\w+=.*")
+PYTHON: Final = re.compile(r"python3?(?:\.\d+)?")
+ISOLATED_FLAG: Final = re.compile(r"-[A-Za-z]*I[A-Za-z]*")
+DOTTED: Final = re.compile(r"[A-Za-z_]\w*(?:\.\w+)+")
+FILE_READERS: Final = frozenset({"cat", "bash", "sh", "node", "python", "python3"})
+TEST_FLAGS: Final = frozenset({"-f", "-e", "-s", "-r"})
+RECIPE: Final = re.compile(r"[\w-]+")
+PATH_MAGIC: Final = re.compile(r"[$*?{}~`]")
+TIMEOUT_MS: Final = re.compile(r"timeout[_-]?ms\s*[=: ]\s*(\d+)", re.I)
+TIMEOUT_MIN: Final = re.compile(r"timeout[_-]?min(?:ute)?s?\s*[=: ]\s*(\d+(?:\.\d+)?)", re.I)
+TIMEOUT_SEC: Final = re.compile(r"timeout[_-]?sec(?:ond)?s?\s*[=: ]\s*(\d+(?:\.\d+)?)", re.I)
+TIMEOUT_ANY: Final = re.compile(r"(?<![\w-])(?:--timeout|-timeout|timeout)(?:=|\s+)(\d+(?:\.\d+)?)([smhd]?)(?![\w.])", re.I)
+UNIT: Final = MappingProxyType({"": 1 / 60.0, "s": 1 / 60.0, "m": 1.0, "h": 60.0, "d": 1440.0})
 
 
 def head(argv: Sequence[str]) -> list[str]:

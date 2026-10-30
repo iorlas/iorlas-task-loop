@@ -1,5 +1,5 @@
 """RunTrace: one engine run as the report reads it (traces.jsonl, v2). A defaulted field is one the older rows did not carry."""
-from typing import Any, ClassVar
+from typing import Any, ClassVar, final
 
 import msgspec
 
@@ -8,21 +8,25 @@ from taskloop.contracts.ids import RunId
 from taskloop.contracts.wire import Rec
 
 
+@final
 class Tokens(Rec):
     in_: int = msgspec.field(default=0, name="in")
     cached: int = 0
     out: int = 0
 
 
+@final
 class Cost(Rec):
     usd: float = 0.0
 
 
+@final
 class Denied(Rec):
     tool: str
     input: dict[str, Any] = msgspec.field(default_factory=dict)
 
 
+@final
 class AiCall(Rec):
     """One worker session: the engine's `session` row, `traces.sessions[]` and the delegate echo in one shape."""
 
@@ -55,6 +59,7 @@ class AiCall(Rec):
     warning: str | None = None
 
 
+@final
 class Stats(Rec):
     writes: int = 0
     rounds: int = 0
@@ -68,6 +73,7 @@ class Stats(Rec):
     tokens_out: int = 0
 
 
+@final
 class WentBadly(Rec):
     what: str
     cause: str
@@ -75,6 +81,7 @@ class WentBadly(Rec):
     evidence: str
 
 
+@final
 class Reflection(Rec):
     went_well: list[str] = msgspec.field(default_factory=list)
     went_badly: list[WentBadly] = msgspec.field(default_factory=list)
@@ -82,6 +89,7 @@ class Reflection(Rec):
     change: list[str] = msgspec.field(default_factory=list)
 
 
+@final
 class WriteRound(Rec):
     write: int
     round: int
@@ -95,6 +103,7 @@ class WriteRound(Rec):
     fresh: str = ""
 
 
+@final
 class Verified(Rec):
     what: str
     kind: str
@@ -103,6 +112,7 @@ class Verified(Rec):
     why: str
 
 
+@final
 class Fault(Rec):
     """A step that failed inside the run; `fingerprint` of a trace hashes (why_code, step, lane, exit), never prose."""
 
@@ -113,6 +123,7 @@ class Fault(Rec):
     t: float | None = None
 
 
+@final
 class RunTrace(Rec):
     V: ClassVar[int] = 2
     run: RunId

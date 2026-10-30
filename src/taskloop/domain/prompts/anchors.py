@@ -1,8 +1,8 @@
 """A stage's anchors, as the writer reads them: where in the code the work starts, what to read first, the patterns to follow."""
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, Final
 
-MAX_ANCHORS = 8
+MAX_ANCHORS: Final = 8
 
 
 def anchor_line(a: Mapping[str, Any]) -> str:

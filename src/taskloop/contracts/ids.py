@@ -2,13 +2,13 @@
 import datetime
 import hashlib
 from pathlib import Path
-from typing import NewType
+from typing import Final, NewType, final
 
 BeadId = NewType("BeadId", str)
 CheckId = NewType("CheckId", str)  # a check's id in the registry or the plan: never a bead id
 TreeSha = NewType("TreeSha", str)  # the hash of a worktree's files (adapters/treehash.py): never a commit sha
-STAMP = "%Y%m%d-%H%M%S"
-_BEAD_CHARS = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.-")
+STAMP: Final = "%Y%m%d-%H%M%S"
+_BEAD_CHARS: Final = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.-")
 
 
 def parse_bead_id(text: str) -> BeadId:
@@ -18,6 +18,7 @@ def parse_bead_id(text: str) -> BeadId:
     return BeadId(text)
 
 
+@final
 class RunId:
     """`<bead>-YYYYMMDD-HHMMSS`: the run's name and the stem of its files. The stamp is the engine's wall clock."""
 
@@ -56,6 +57,7 @@ class RunId:
         return hash((self.bead, self.started))
 
 
+@final
 class Version(tuple[int, ...]):
     """A dotted version as an ordered tuple of ints: `Version.parse("0.23.56") > Version.parse("0.9.1")`."""
 
@@ -77,7 +79,7 @@ class Version(tuple[int, ...]):
         return ".".join(str(n) for n in self)
 
 
-MARKETPLACE = "iorlas-marketplace"  # the only marketplace a plugin cache dir may come from
+MARKETPLACE: Final = "iorlas-marketplace"  # the only marketplace a plugin cache dir may come from
 
 
 def repo_key(common_dir: str) -> str:

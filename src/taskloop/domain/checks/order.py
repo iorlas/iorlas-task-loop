@@ -1,12 +1,13 @@
 """CheckOrder: the order a round runs its checks in, cheapest first."""
 from collections.abc import Mapping, Sequence
 from types import MappingProxyType
+from typing import Final
 
 from taskloop.contracts.checks import Check, Durations
 from taskloop.domain.checks.durations import expected_secs
 
-RANK = MappingProxyType({"static": 0, "tests": 1, "acceptance": 2})
-RANK_ACCEPTANCE_FIRST = MappingProxyType({"static": 0, "acceptance": 1, "tests": 2})
+RANK: Final = MappingProxyType({"static": 0, "tests": 1, "acceptance": 2})
+RANK_ACCEPTANCE_FIRST: Final = MappingProxyType({"static": 0, "acceptance": 1, "tests": 2})
 
 
 class CheckOrder:

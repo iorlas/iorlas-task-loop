@@ -3,13 +3,13 @@ back with shlex.split: a pure round trip, no shell semantics anywhere."""
 import copy
 import shlex
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, Final
 
-FORM = ('a check is an argv list of strings, e.g. ["python3", "-m", "unittest"]; a pipeline, redirect or loop goes into a '
+FORM: Final = ('a check is an argv list of strings, e.g. ["python3", "-m", "unittest"]; a pipeline, redirect or loop goes into a '
         'repo recipe (a just target or a script) that the argv calls, e.g. ["just", "name"]')
-OPERATORS = frozenset({"&&", "||", "|", ";", "&", ">", ">>", "<", "<<", "2>&1", "&>", "|&", "(", ")"})
-SHELLS = frozenset({"sh", "bash", "zsh", "dash", "ksh", "fish"})
-SHELL_FLAGS = ("-c", "-lc", "-ic", "-cl")
+OPERATORS: Final = frozenset({"&&", "||", "|", ";", "&", ">", ">>", "<", "<<", "2>&1", "&>", "|&", "(", ")"})
+SHELLS: Final = frozenset({"sh", "bash", "zsh", "dash", "ksh", "fish"})
+SHELL_FLAGS: Final = ("-c", "-lc", "-ic", "-cl")
 
 
 def text_of(argv: Sequence[str]) -> str:

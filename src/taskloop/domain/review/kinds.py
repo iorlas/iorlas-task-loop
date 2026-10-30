@@ -6,7 +6,7 @@ from typing import Final
 from taskloop.contracts.answers import LEGACY_KINDS, ROUTED_KINDS
 from taskloop.domain.review.matchers import CodeNames, EngineActions
 
-UNCHECKED_KINDS = ROUTED_KINDS + LEGACY_KINDS  # one of these unchecked is verified before the land
+UNCHECKED_KINDS: Final = ROUTED_KINDS + LEGACY_KINDS  # one of these unchecked is verified before the land
 # a kind may move only toward a stricter route (never to a looser one): the engine settles the loosest, asks the strictest
 KIND_RANK: Final = dict({"engine_step": 0, "external_fact": 1, "taste": 1, "checkable": 2, "owner_decision": 3},
                         **dict.fromkeys(LEGACY_KINDS, 2))

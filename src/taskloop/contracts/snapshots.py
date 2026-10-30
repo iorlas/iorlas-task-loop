@@ -1,17 +1,19 @@
 """Files other readers build their view from: the delegate status snapshot, the indexes, pins and the release result."""
-from typing import ClassVar
+from typing import ClassVar, final
 
 import msgspec
 
 from taskloop.contracts.wire import Rec
 
 
+@final
 class WindowStatus(Rec):
     name: str
     used_pct: float | None = None
     resets_at: float | None = None
 
 
+@final
 class LaneStatus(Rec):
     """One lane as the lane cards and the banner show it: delegate's `cockpit.lanes` row joined with its top-level `lanes` entry."""
 
@@ -34,12 +36,14 @@ class LaneStatus(Rec):
     notes: list[str] = msgspec.field(default_factory=list)
 
 
+@final
 class NeedInput(Rec):
     what: str
     why: str = ""
     how: str = ""
 
 
+@final
 class StatusSnapshot(Rec):
     """snapshots/delegate.status.json: delegate's `route.py status --json` read once by `tl lanes` / `tl usage`; the dashboard reads
     this and never runs delegate. `at` is delegate's own clock."""
@@ -50,6 +54,7 @@ class StatusSnapshot(Rec):
     needs_input: list[NeedInput] = msgspec.field(default_factory=list)
 
 
+@final
 class SessionIndex(Rec):
     """sessions/<id>.json: a Claude session id -> its transcript."""
 
@@ -60,15 +65,18 @@ class SessionIndex(Rec):
     t: float = 0.0
 
 
+@final
 class RepoEntry(Rec):
     added: float
 
 
+@final
 class ReposIndex(Rec):
     V: ClassVar[int] = 1
     repos: dict[str, RepoEntry] = msgspec.field(default_factory=dict)
 
 
+@final
 class SharedNotes(Rec):
     """shared/<repo_key>.json: what runs of one repo tell each other (flaky tests, facts)."""
 
@@ -77,6 +85,7 @@ class SharedNotes(Rec):
     notes: list[str] = msgspec.field(default_factory=list)
 
 
+@final
 class Pin(Rec):
     """pinned.json: the install a loop and run-task use; each key optional."""
 
@@ -85,6 +94,7 @@ class Pin(Rec):
     delegate: str | None = None
 
 
+@final
 class ReleaseResult(Rec):
     """releases/last.json: what the last dev/release.py run did."""
 
@@ -96,6 +106,7 @@ class ReleaseResult(Rec):
     sha: str = ""
 
 
+@final
 class DashState(Rec):
     """dash.json: the one dashboard server of this machine."""
 
@@ -110,6 +121,7 @@ class DashState(Rec):
     idle_until: float | None = None
 
 
+@final
 class SlotSetupMarker(Rec):
     """slots/<repo_key>.setup.json: the hash of the setup command a slot last ran, so a changed command runs again."""
 

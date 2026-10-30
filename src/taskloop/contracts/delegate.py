@@ -2,17 +2,18 @@
 
 Mirrors of what delegate emits; delegate's generated contract.json is the authority and a later release checks these fields
 against it. `RunRequest.to_argv` is the only place that builds the `route.py run` argv."""
-from typing import Any, ClassVar, Literal
+from typing import Any, ClassVar, Final, Literal, final
 
 import msgspec
 
 from taskloop.contracts.trace import Tokens
 from taskloop.contracts.wire import Rec, Tagged
 
-REASON_TIMEOUT = "timeout"  # the wire id of a worker that did not finish within --timeout
-REASON_OVERRUN = "overrun"  # made by the engine: a reviewer call used its budget
+REASON_TIMEOUT: Final = "timeout"  # the wire id of a worker that did not finish within --timeout
+REASON_OVERRUN: Final = "overrun"  # made by the engine: a reviewer call used its budget
 
 
+@final
 class RunRequest(Rec):
     """One `route.py run`. The engine's limits travel as flags (`timeout_s`, `idle_s`): delegate stops the worker's tree at them."""
 
@@ -50,11 +51,13 @@ class RunRequest(Rec):
         return {"DELEGATE_LIVE_FILE": self.live_file} if self.live_file else {}
 
 
+@final
 class Retry(Rec):
     kind: Literal["none", "predicted", "poll"]
     at: float | None = None
 
 
+@final
 class StopFacts(Rec):
     reason: str
     scope: Literal["bead", "caller", "machine", "lane", "model"]
@@ -66,6 +69,7 @@ class StopFacts(Rec):
     partial: bool = False
 
 
+@final
 class UsageTokens(Rec):
     """Per call, never cumulative; in_fresh is the uncached input, cache_write null when the vendor does not report it."""
 
@@ -76,6 +80,7 @@ class UsageTokens(Rec):
     cache_write_by_ttl: dict[str, int] | None = None
 
 
+@final
 class Usage(Rec):
     tokens: UsageTokens | None = None
     cost: float = 0.0
@@ -93,6 +98,7 @@ class Usage(Rec):
     accounting: Literal["exact", "estimated", "unknown"] = "unknown"
 
 
+@final
 class Denial(Rec):
     """One refusal in the answer; `sandbox_limit` ones are noise."""
 
@@ -102,6 +108,7 @@ class Denial(Rec):
     input: dict[str, Any] = msgspec.field(default_factory=dict)
 
 
+@final
 class TranscriptInfo(Rec):
     """The transcript file and the byte window this call wrote."""
 
@@ -112,11 +119,13 @@ class TranscriptInfo(Rec):
     bytes: int
 
 
+@final
 class Survivor(Rec):
     pid: int
     start: str | None = None
 
 
+@final
 class WorkerEnd(Rec):
     """How the worker's life ended (worker-run v1 `worker`): the delegate stopped its whole tree before it answered. `worker_survived`
     names pids that outlived SIGTERM and SIGKILL; pid, pgid and start name the process it launched."""
@@ -132,6 +141,7 @@ class WorkerEnd(Rec):
     start: str | None = None
 
 
+@final
 class DelegateResult(Rec):
     """The answer of `route.py run` (delegate contract 3): `stop` is None for a done call or the agent-tool handoff
     (`agent_model` set); no status, next, reason or retry_after."""
@@ -170,6 +180,7 @@ class DelegateResult(Rec):
     agent_model: str | None = None
 
 
+@final
 class WorkerStarted(Rec):
     """The first line of a live file: the worker's process ids."""
 
@@ -184,6 +195,7 @@ class LiveRec(Tagged):
     t: float
 
 
+@final
 class LiveStart(LiveRec, tag="start"):
     harness: str
     pid: int
@@ -193,6 +205,7 @@ class LiveStart(LiveRec, tag="start"):
     role: str = ""
 
 
+@final
 class LiveCmdStart(LiveRec, tag="cmd_start"):
     id: str
     text: str
@@ -200,6 +213,7 @@ class LiveCmdStart(LiveRec, tag="cmd_start"):
     prov: bool = False
 
 
+@final
 class LiveCmdEnd(LiveRec, tag="cmd_end"):
     id: str
     exit: int | None = None  # null: the harness did not say
@@ -207,48 +221,57 @@ class LiveCmdEnd(LiveRec, tag="cmd_end"):
     out: str = ""
 
 
+@final
 class LiveToolStart(LiveRec, tag="tool_start"):
     id: str
     text: str
     prov: bool = False
 
 
+@final
 class LiveToolEnd(LiveRec, tag="tool_end"):
     id: str
     secs: float = 0.0
     out: str = ""
 
 
+@final
 class LiveMsg(LiveRec, tag="msg"):
     text: str
 
 
+@final
 class LiveThink(LiveRec, tag="think"):
     text: str
 
 
+@final
 class LiveTokens(LiveRec, tag="tokens"):
     in_: int = msgspec.field(default=0, name="in")
     cached: int = 0
     out: int = 0
 
 
+@final
 class LiveStall(LiveRec, tag="stall"):
     secs: float
 
 
+@final
 class LiveRetry(LiveRec, tag="retry"):
     n: int = 0
     of: int = 0
     why: str = ""
 
 
+@final
 class LiveEnd(LiveRec, tag="end"):
     status: Literal["done", "timeout", "killed", "error"]
     secs: float = 0.0
     cost_usd: float = 0.0
 
 
+@final
 class LiveRaw(LiveRec, tag="raw"):
     type: str
 

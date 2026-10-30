@@ -44,10 +44,10 @@ class Kind(enum.Enum):
     FAULT_CRASHED = "fault_crashed"
 
 
-FINISH = (Kind.LANDED, Kind.DONE)
-ASKS = tuple(k for k in Kind if k.name.startswith("ASK_"))
-PAUSES = tuple(k for k in Kind if k.name.startswith("PAUSE_"))
-FAULTS = tuple(k for k in Kind if k.name.startswith("FAULT_"))
+FINISH: Final = (Kind.LANDED, Kind.DONE)
+ASKS: Final = tuple(k for k in Kind if k.name.startswith("ASK_"))
+PAUSES: Final = tuple(k for k in Kind if k.name.startswith("PAUSE_"))
+FAULTS: Final = tuple(k for k in Kind if k.name.startswith("FAULT_"))
 
 # The tunables, in one place. Cells are values: a predicate goes to code.
 KNOBS: Final = {

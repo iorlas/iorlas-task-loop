@@ -1,7 +1,9 @@
 """The writer's prompts: the first one of a stage, the delta of a resumed writer, and what a fresh writer is told of its predecessor."""
+from typing import Final
+
 from taskloop.domain.prompts.common import DECIDED_RULE, OPTIONS_RULE
 
-REPEAT_RED = ("\nThese checks failed in the last round too:\n%s\nIf one measures a threshold the task does not ask for (the task "
+REPEAT_RED: Final = ("\nThese checks failed in the last round too:\n%s\nIf one measures a threshold the task does not ask for (the task "
               "says the owner judges it, or the number is the plan's own), do not keep tuning the work to it: list it in "
               "bad_checks, with why, and the plan is changed instead.\n")
 
@@ -15,10 +17,10 @@ LOOK_WRITE_TABLE = ("\nThis stage changes how something looks (it touches visual
                     "states you changed, in words). At most %d entries. Do not save screenshots yourself.\n%s\nIf nothing on "
                     "screen differs, leave `shots` empty and put a one-line reason in logic_only.")
 
-LOOK_FEEDBACK = ("\nThe engine rendered your shots and the look judge found these defects:\n%s\nThe pictures are at (open one only "
+LOOK_FEEDBACK: Final = ("\nThe engine rendered your shots and the look judge found these defects:\n%s\nThe pictures are at (open one only "
                  "if you need to):\n%s\nFix what the judge saw, and list the shots to render again in `shots`.\n")
 
-WRITE_PROMPT = """You are the writer for one stage of a task, in an unattended engine. Nobody is watching.
+WRITE_PROMPT: Final = """You are the writer for one stage of a task, in an unattended engine. Nobody is watching.
 
 <task>
 {brief}
@@ -54,7 +56,7 @@ Rules: no suppressions; do not weaken, skip or delete tests; stay inside the
 stage. question: empty unless only the owner can decide something about the task itself (then explain it for a
 phone); never a question about tools or access.""" + "\n" + OPTIONS_RULE + "\n" + DECIDED_RULE
 
-WRITE_RULES = """
+WRITE_RULES: Final = """
 This repo's rules for work in your sandbox (what runs there, what does not):
 <worker_rules>
 %s
@@ -64,7 +66,7 @@ def write_prompt(rules: str, **fields: object) -> str:
     """WRITE_PROMPT with the repo's worker rules inlined (a resumed writer's delta never repeats them)."""
     return WRITE_PROMPT.format(rules=WRITE_RULES % rules if rules else "", **fields)
 
-WRITE_RESUME_PROMPT = """You are still the writer of this task, in an unattended engine. Nobody is watching. This session has the
+WRITE_RESUME_PROMPT: Final = """You are still the writer of this task, in an unattended engine. Nobody is watching. This session has the
 task, the plan and your rules from before; only what changed is below.
 The brief is unchanged; it is in {brief}; re-read it if unsure.
 {plan}
@@ -75,7 +77,7 @@ Files: {files}
 {where}
 {feedback}"""
 
-STAGES_DONE = """
+STAGES_DONE: Final = """
 Earlier stages of this task are accepted and their work is in this tree; you are a fresh session for the next one (the last
 session had grown large). Do not redo them.
 Accepted stages:
@@ -84,7 +86,7 @@ Accepted stages:
 The last rounds (the writer's summary, then what was sent back):
 %s"""
 
-DONE_SO_FAR = """
+DONE_SO_FAR: Final = """
 You take over from an earlier writer of this task, whose session grew too large to go on. Its work is in this tree, committed
 on this branch or not: do not start over.
 Done so far (git diff --stat from where this stage started):

@@ -1,7 +1,9 @@
 """The reviewer's prompt."""
+from typing import Final
+
 from taskloop.domain.prompts.common import DECIDED_RULE, OPTIONS_RULE
 
-REVIEW_PROMPT = """You review one stage of a task, from another model family than the writer. Do not edit files.
+REVIEW_PROMPT: Final = """You review one stage of a task, from another model family than the writer. Do not edit files.
 <task>
 {brief}
 </task>
@@ -37,9 +39,9 @@ there is met. The engine counted tests in the task's diff: {added} added, {remov
 HOST_RULE = ("The host is macOS, and the engine runs the gate there. Only the coordinator can run bd: the engine files follow-up beads\n"
              "itself, so never ask for a bead to be filed, closed or commented, nor for a check on another operating system; put\n"
              "such work in leftovers.")
-FIRST_ROUND = ("This is the first review of this stage: return the complete list of its blocking findings now; later rounds only\n"
+FIRST_ROUND: Final = ("This is the first review of this stage: return the complete list of its blocking findings now; later rounds only\n"
                "check that they were fixed.\n")
-LATER_ROUND = ("This is review round {n} of this stage. Verify that each earlier finding below is fixed; report a new finding only\n"
+LATER_ROUND: Final = ("This is review round {n} of this stage. Verify that each earlier finding below is fixed; report a new finding only\n"
                "for code changed since your last review or for a regression, and no low findings.\n{prior}")
 
 
@@ -63,7 +65,7 @@ def review_prompt(fix: bool, last: bool, fix_scope: str, round_no: int = 1, prio
     return REVIEW_PROMPT.format(scope=scope, fix_line=f"Scope of this fix round: {fix_scope}\n" if fix else "", host_rule=HOST_RULE,
                                 round_rule=round_rule(round_no, prior), acceptance=acceptance, **fields)
 
-NEW_FILES_TEXT = ("\nUnexplained new files: untracked, and no stage lists them nor the writer names them. They are NOT in the "
+NEW_FILES_TEXT: Final = ("\nUnexplained new files: untracked, and no stage lists them nor the writer names them. They are NOT in the "
                   "commit unless you accept them, and they are moved out of the tree before the land gate. Decide EVERY one: "
                   "put its path in accept_files if the task needs it (it is staged), or in reject_files if it is a stray (a "
                   "test run's leftover). One you do not decide becomes a medium finding that sends the stage back. Each file "

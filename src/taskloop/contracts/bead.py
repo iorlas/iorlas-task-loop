@@ -1,5 +1,5 @@
 """Beads as the code reads them from bd (an external contract: no `v`, never written by us). `adapters/bd.py` is the one reader."""
-from typing import Any
+from typing import Any, final
 
 import msgspec
 
@@ -12,12 +12,14 @@ def is_bead_id(text: object) -> bool:
     return bool(s) and s[0].isalnum() and s.isascii() and all(c.isalnum() or c in "_.-" for c in s)
 
 
+@final
 class Comment(Rec):
     author: str
     text: str
     created_at: str = ""
 
 
+@final
 class Dep(Rec):
     """What a bead waits on. `type`: blocks, parent-child, related, ... (bd prints it `dependency_type` in show, `type` in list)."""
 
@@ -28,6 +30,7 @@ class Dep(Rec):
     close_reason: str = ""
 
 
+@final
 class Bead(Rec):
     id: str
     title: str
@@ -50,6 +53,7 @@ class Bead(Rec):
     updated_at: str = ""
 
 
+@final
 class BdError(Rec):
     kind: str  # lint, not_found, not_claimable, other
     missing_sections: list[str] = msgspec.field(default_factory=list)

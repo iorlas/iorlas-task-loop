@@ -1,6 +1,6 @@
 """Ask: a question the engine puts to the owner (asks/<bead>.json, v2), and the owner's answer. Every field is typed: the page and the
 engine read fields, never prose."""
-from typing import ClassVar, Literal
+from typing import ClassVar, Literal, final
 
 import msgspec
 
@@ -12,6 +12,7 @@ AskAction = Literal["rerun", "confirm", "split", "text"]
 CauseBy = Literal["agent", "owner"]
 
 
+@final
 class AskOption(Rec):
     """One way out: what it does next, what it costs, and the typed answer a click files. `edit`: the click fills the text box."""
 
@@ -24,6 +25,7 @@ class AskOption(Rec):
     edit: bool = False
 
 
+@final
 class AskAnswer(Rec):
     """What the owner chose; the dashboard and `tl` write it, the next run consumes it."""
 
@@ -33,6 +35,7 @@ class AskAnswer(Rec):
     by: str = ""
 
 
+@final
 class BudgetLine(Rec):
     step: str
     minutes: float
@@ -40,11 +43,13 @@ class BudgetLine(Rec):
     usd: float = 0.0
 
 
+@final
 class ReplanLine(Rec):
     n: int
     why: str
 
 
+@final
 class AskDetail(Rec):
     """The structured part of an ask, so a page renders it without parsing prose. `text`: the worker's own words, whole."""
 
@@ -53,6 +58,7 @@ class AskDetail(Rec):
     text: str = ""
 
 
+@final
 class SimilarRef(Rec):
     """A past ask (`id` is its ask id) or a decision in force (`id` its ADR id) that has this ask's repeat key."""
 
@@ -60,6 +66,7 @@ class SimilarRef(Rec):
     id: str
 
 
+@final
 class ThreadEntry(Rec):
     """One ask-back exchange on an ask. Only recorded here; the helper that answers an ask-back is a separate piece."""
 
@@ -68,6 +75,7 @@ class ThreadEntry(Rec):
     md: str
 
 
+@final
 class Ask(Rec):
     """`owner_cause` is declared by the agent at raise and corrected by the owner (`cause_by`); `blocking=False` is a soft ask: the
     run went on with `default` and the owner may still answer. `key` is the repeat key (domain/asks/similar.py), `similar` what it

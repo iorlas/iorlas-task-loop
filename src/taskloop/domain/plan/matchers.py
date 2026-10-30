@@ -1,6 +1,7 @@
 """Policy over the bead's and the plan's prose: the only regexes of the plan feature, each a named matcher with a table test
 (tests/plan/test_matchers.py)."""
 import re
+from typing import Final
 
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.config import EngineConfig
@@ -10,19 +11,19 @@ from taskloop.domain.checks import lint
 STOP_WORDS = frozenset({"that", "this", "with", "from", "into", "have", "been", "were", "which", "their", "there", "than", "then", "when",
                         "what", "does", "should", "would", "could", "also", "only", "each", "every", "about", "after", "before", "bead",
                         "beads", "task", "work", "tests", "test", "file", "files", "code", "check", "checks"})
-_FILLER_TEXT = (
+_FILLER_TEXT: Final = (
     "the a an of and or is are be pass passes passed passing green succeed succeeds succeeded success "
     "clean ok okay exit exits exited code zero 0 run runs running ran must should shall without no error "
     "errors fail fails failure failures all full complete completes whole gate check checks done when it "
     "that on with"
 )
-GATE_FILLER = frozenset(_FILLER_TEXT.split())
-GATE_RUNNER = re.compile(r"^(?:just|make|npm run|npm|yarn|pnpm run|pnpm|cargo|task|poe|tox|nox)\s+")
-_WORD = re.compile(r"[^\W_]{3,}")
-_GATE_PUNCT = re.compile(r"[`'\"*_.,;:()\[\]]")
-_HEADING = re.compile(r"^#{1,6}\s*(?:Acceptance Criteria|Done when)\s*:?\s*$(.*?)(?=^#{1,6}\s|\Z)", re.M | re.S | re.I)
-_DONE_LINE = re.compile(r"^[ \t>*_#-]*Done when[ \t]*[:*_]+[ \t]*(?:[^\s:*_]|\n\s*[-*\d])", re.M | re.I)
-_ACCEPT_START = re.compile(r"^[ \t>*_#-]*(?:Acceptance Criteria|Done when)\b", re.M | re.I)
+GATE_FILLER: Final = frozenset(_FILLER_TEXT.split())
+GATE_RUNNER: Final = re.compile(r"^(?:just|make|npm run|npm|yarn|pnpm run|pnpm|cargo|task|poe|tox|nox)\s+")
+_WORD: Final = re.compile(r"[^\W_]{3,}")
+_GATE_PUNCT: Final = re.compile(r"[`'\"*_.,;:()\[\]]")
+_HEADING: Final = re.compile(r"^#{1,6}\s*(?:Acceptance Criteria|Done when)\s*:?\s*$(.*?)(?=^#{1,6}\s|\Z)", re.M | re.S | re.I)
+_DONE_LINE: Final = re.compile(r"^[ \t>*_#-]*Done when[ \t]*[:*_]+[ \t]*(?:[^\s:*_]|\n\s*[-*\d])", re.M | re.I)
+_ACCEPT_START: Final = re.compile(r"^[ \t>*_#-]*(?:Acceptance Criteria|Done when)\b", re.M | re.I)
 
 
 def word_set(text: object) -> set[str]:

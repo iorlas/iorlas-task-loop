@@ -8,12 +8,13 @@ it can read what git cannot see."""
 import hashlib
 import json
 from collections.abc import Iterable, Mapping
+from typing import Final
 
 from taskloop.contracts.checks import Check
 from taskloop.domain.checks.matchers import expand_braces, glob_re, literal_prefix
 from taskloop.domain.checks.names import norm
 
-ROOT_FILES = ("justfile", "Justfile", ".justfile", "*.lock", "packages-lock.json", "package-lock.json", "Directory.Packages.props",
+ROOT_FILES: Final = ("justfile", "Justfile", ".justfile", "*.lock", "packages-lock.json", "package-lock.json", "Directory.Packages.props",
               "Directory.Build.props", "Directory.Build.targets", "global.json", "nuget.config", ".task-loop.json")
 
 

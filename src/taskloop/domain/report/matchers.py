@@ -13,30 +13,31 @@ import os
 import re
 import time
 from datetime import datetime, timedelta
+from typing import Final
 
 # origin() writes one of these; an older row may have none at all.
-STARTED_BECAUSE = ("first", "answer", "resume", "retry", "fresh")
+STARTED_BECAUSE: Final = ("first", "answer", "resume", "retry", "fresh")
 
-ANSI = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
-URL = re.compile(r"\bhttps?://\S+", re.I)
-UUID = re.compile(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b", re.I)
-SHA = re.compile(r"\b[0-9a-f]{7,40}\b", re.I)
+ANSI: Final = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
+URL: Final = re.compile(r"\bhttps?://\S+", re.I)
+UUID: Final = re.compile(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b", re.I)
+SHA: Final = re.compile(r"\b[0-9a-f]{7,40}\b", re.I)
 # A token that may be a bead id: tl-19i, lifesim-d5f.46, tl-fsj, t-1-1. _bead_token decides.
-CANDIDATE = re.compile(r"\b[a-z][a-z0-9]*(?:[.-][a-z0-9]+)+\b", re.I)
-BEAD_PREFIXES = ("tl", "lifesim", "task", "bead", "fld")
-SESSION = re.compile(r"\b(?:ref|ses|session|run|thread)[-_][A-Za-z0-9._-]+\b", re.I)
+CANDIDATE: Final = re.compile(r"\b[a-z][a-z0-9]*(?:[.-][a-z0-9]+)+\b", re.I)
+BEAD_PREFIXES: Final = ("tl", "lifesim", "task", "bead", "fld")
+SESSION: Final = re.compile(r"\b(?:ref|ses|session|run|thread)[-_][A-Za-z0-9._-]+\b", re.I)
 # Absolute POSIX/Windows paths, and relative paths with a separator and a file extension (Assets/Player.cs,
 # Assets\Player.cs). A bare word pair such as and/or is not a path.
-PATH = re.compile(r"(?:[A-Za-z]:)?(?:[\\/][\w.@%+~-]+){2,}"
+PATH: Final = re.compile(r"(?:[A-Za-z]:)?(?:[\\/][\w.@%+~-]+){2,}"
                   r"|(?:[\w.@%+~-]+[\\/])+[\w.@%+~-]*\.[A-Za-z0-9]{1,8}\b")
-QUOTED = re.compile(r"`[^`]*`|\"[^\"]*\"|'[^']*'")
-BRACES = re.compile(r"\{[^{}]*\}")
-NUMBER = re.compile(r"\b\d+(?:\.\d+)?\b")
-SPACE = re.compile(r"\s+")
-EDGE = " :;,.-|/"
+QUOTED: Final = re.compile(r"`[^`]*`|\"[^\"]*\"|'[^']*'")
+BRACES: Final = re.compile(r"\{[^{}]*\}")
+NUMBER: Final = re.compile(r"\b\d+(?:\.\d+)?\b")
+SPACE: Final = re.compile(r"\s+")
+EDGE: Final = " :;,.-|/"
 
 
-RUN_STAMP = re.compile(r"^\d{8}-\d{6}$")
+RUN_STAMP: Final = re.compile(r"^\d{8}-\d{6}$")
 
 
 def is_run_stamp(text: str) -> bool:
@@ -85,7 +86,7 @@ def fingerprint(why: object) -> str:
     return text
 
 
-HASH_TAIL = re.compile(r"#[0-9a-f]{8}$")
+HASH_TAIL: Final = re.compile(r"#[0-9a-f]{8}$")
 
 
 def fingerprint_head(why: object) -> str:
@@ -103,17 +104,17 @@ def run_fingerprint(outcome: object, why: object) -> str:
 # ---- what `tl report` and the reflect digest read out of text ------------------------------------------------------------------------
 
 # how the supervising session marks its own answers ("relayed by Claude" carries the owner's words: the owner's)
-SUPERVISOR = re.compile(r"\(Claude, supervising|checked by Claude|delegated the call to Claude")
-ANSWERED = re.compile(r"\bask (\S+) \(\w+\) is answered|\banswered verify ask (\S+)")
-STEM = re.compile(r"^(.+)-(\d{8}-\d{6})$")
-LAND_TAIL = re.compile(r"\(([^()\s]+)\)\s*$")
-BACK = re.compile(r"^(\d+(?:\.\d+)?)\s*([mhd])$")
-CLOCK = re.compile(r"^(\d{1,2}):(\d{2})$")
-HOURS = re.compile(r"(\d+)h")
-EPOCH = re.compile(r"^\d{9,}(\.\d+)?$")
-WORD = re.compile(r"[^\W\d_]{4,}")
-FILE = re.compile(r"[\w./-]+\.(?:py|md|cs|json|ya?ml|toml|html|js|ts|sh|cfg|txt)\b")
-GIT_SUFFIX = re.compile(r"\.git$")
+SUPERVISOR: Final = re.compile(r"\(Claude, supervising|checked by Claude|delegated the call to Claude")
+ANSWERED: Final = re.compile(r"\bask (\S+) \(\w+\) is answered|\banswered verify ask (\S+)")
+STEM: Final = re.compile(r"^(.+)-(\d{8}-\d{6})$")
+LAND_TAIL: Final = re.compile(r"\(([^()\s]+)\)\s*$")
+BACK: Final = re.compile(r"^(\d+(?:\.\d+)?)\s*([mhd])$")
+CLOCK: Final = re.compile(r"^(\d{1,2}):(\d{2})$")
+HOURS: Final = re.compile(r"(\d+)h")
+EPOCH: Final = re.compile(r"^\d{9,}(\.\d+)?$")
+WORD: Final = re.compile(r"[^\W\d_]{4,}")
+FILE: Final = re.compile(r"[\w./-]+\.(?:py|md|cs|json|ya?ml|toml|html|js|ts|sh|cfg|txt)\b")
+GIT_SUFFIX: Final = re.compile(r"\.git$")
 
 
 def parse_time(text: str | None, now: float, forward: bool = False) -> float:
@@ -168,7 +169,7 @@ def split_stem(stem: str) -> tuple[str, str] | None:
     return (m.group(1), m.group(2)) if m else None
 
 
-STALE_TAIL = re.compile(r"-stale-\d{8}-\d{6}$")
+STALE_TAIL: Final = re.compile(r"-stale-\d{8}-\d{6}$")
 
 
 def unstale(name: str) -> tuple[str, bool]:

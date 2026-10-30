@@ -1,5 +1,5 @@
 """Run records: what a run-task process reports to its loop, and the hand-over between two engine versions."""
-from typing import ClassVar
+from typing import ClassVar, final
 
 import msgspec
 
@@ -7,6 +7,7 @@ from taskloop.contracts.enums import Outcome, WhyCode
 from taskloop.contracts.wire import Rec
 
 
+@final
 class RunOutcome(Rec):
     """The last line run-task prints and loop/<key>/<bead>-<stamp>.outcome.json."""
 
@@ -25,6 +26,7 @@ class RunOutcome(Rec):
     cost: float = 0.0
 
 
+@final
 class LoopLogLine(Rec):
     """A line of loop/<key>.jsonl: the outcome plus where it ran."""
 
@@ -35,6 +37,7 @@ class LoopLogLine(Rec):
     run_log: str = ""
 
 
+@final
 class Reexec(Rec):
     """runs/<run>/reexec.json: the one record an old process writes and a newer install reads (TL_REEXEC)."""
 

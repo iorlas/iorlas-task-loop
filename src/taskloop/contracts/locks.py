@@ -1,5 +1,5 @@
 """Lock records: who holds the engine, a slot ticket, a named lock. Liveness is a pid probe, nothing more."""
-from typing import ClassVar
+from typing import ClassVar, final
 
 import msgspec
 import stream_proc
@@ -21,6 +21,7 @@ class LockTimeout(TimeoutError):
         self.holder = holder
 
 
+@final
 class EngineLock(Rec):
     """<worktree>/.task/engine.lock: the run-task process that owns the worktree, with the processes it started."""
 
@@ -39,6 +40,7 @@ class EngineLock(Rec):
         return pid_alive(self.pid)
 
 
+@final
 class Ticket(Rec):
     """slots/<repo_key>/<seq>.json: a place in the line for a slot."""
 
@@ -55,6 +57,7 @@ class Ticket(Rec):
         return pid_alive(self.pid)
 
 
+@final
 class LockRecord(Rec):
     """locks/<what>-<id>.lock: who holds a named lock, as JSON."""
 

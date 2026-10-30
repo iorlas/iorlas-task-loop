@@ -7,7 +7,7 @@ wherever a row can come from more than one. A field with no source yet keeps its
 slice that fills it.
 """
 from enum import StrEnum
-from typing import Annotated, ClassVar, Literal
+from typing import Annotated, ClassVar, Literal, final
 
 import msgspec
 
@@ -89,23 +89,27 @@ PassEnd = Literal["", "test_failed", "replan", "asked", "parked", "lane_out", "s
 # ---- snapshot: GET /api/snapshot
 
 
+@final
 class LoopInfo(Rec):
     project: str
     running: bool
     last_activity: float | None = None
 
 
+@final
 class ServerInfo(Rec):
     version: Annotated[str, msgspec.Meta(description="server code hash; a change means reload the page")]
     host: str
     loops: list[LoopInfo] = msgspec.field(default_factory=list)
 
 
+@final
 class Project(Rec):
     id: str
     name: str
 
 
+@final
 class Epic(Rec):
     id: str
     project: str
@@ -114,6 +118,7 @@ class Epic(Rec):
     total: int = 0
 
 
+@final
 class Totals(Rec):
     """Bead totals over the passes still in the run logs (7 days); `tone` is decided server-side from the per-lane usual
     (dash-spec §2.6)."""
@@ -125,11 +130,13 @@ class Totals(Rec):
     tone: Literal["", "watch", "bad", "grey"] = ""
 
 
+@final
 class PhaseDot(Rec):
     phase: Phase
     state: DotState
 
 
+@final
 class BeadCard(Rec):
     """One bead as the Board, the Goals tree, lane chips and the drawer header show it."""
 
@@ -158,6 +165,7 @@ class BeadCard(Rec):
     shots: int = 0
 
 
+@final
 class Seg(Rec):
     label: str
     kind: SegKind
@@ -165,6 +173,7 @@ class Seg(Rec):
     t1: float
 
 
+@final
 class Piece(Rec):
     """A bead's stretch on one slot, for the Floor: a comeback in another slot is a new piece with `from_slot` set."""
 
@@ -178,6 +187,7 @@ class Piece(Rec):
     landed: bool = False
 
 
+@final
 class Slot(Rec):
     id: str
     name: str
@@ -190,6 +200,7 @@ class Slot(Rec):
     idle_why: str = ""
 
 
+@final
 class AskOptionCard(Rec):
     """Picked by its 0-based index in `AskCard.options`, as /api/asks does today."""
 
@@ -198,12 +209,14 @@ class AskOptionCard(Rec):
     recommended: bool = False
 
 
+@final
 class ThreadMsg(Rec):
     by: Literal["owner", "helper", "agent"]
     t: float
     md: str
 
 
+@final
 class Similar(Rec):
     bead: str
     question: str
@@ -211,6 +224,7 @@ class Similar(Rec):
     t: float
 
 
+@final
 class AskCard(Rec):
     """An open ask or look, whole: the page never shows a one-liner (dash-spec §5.1)."""
 
@@ -234,6 +248,7 @@ class AskCard(Rec):
     stale: Annotated[int, msgspec.Meta(description="beads landed since the ask was made")] = 0
 
 
+@final
 class LedgerRow(Rec):
     t: float
     ask: str
@@ -247,6 +262,7 @@ class LedgerRow(Rec):
     cause: OwnerCause = OwnerCause.UNKNOWN
 
 
+@final
 class AdrRow(Rec):
     """A decision in force. `id` is the repo's own number (ADR-3); `project` says which repo, since two repos both have an ADR-1."""
 
@@ -259,12 +275,14 @@ class AdrRow(Rec):
     prune: bool = False
 
 
+@final
 class CauseCount(Rec):
     cause: OwnerCause
     now: int
     prev: int
 
 
+@final
 class Learning(Rec):
     """'Is the factory learning?': 8 weekly points, oldest first, the last one this week (dash-spec §7.1)."""
 
@@ -276,6 +294,7 @@ class Learning(Rec):
     causes: list[CauseCount] = msgspec.field(default_factory=list)
 
 
+@final
 class LaneCard(Rec):
     id: str
     name: str
@@ -294,6 +313,7 @@ class LaneCard(Rec):
     status_t: float | None = None
 
 
+@final
 class Snapshot(Rec):
     """GET /api/snapshot[?since=<version>]: everything the four tabs need; 304 when `since` equals `version`.
     Trimmed server-side: pieces only inside the Floor window (8 h back, 2 h ahead), done beads only since local midnight,
@@ -319,6 +339,7 @@ class Snapshot(Rec):
 # ---- bead drawer: GET /api/bead?project=&id=
 
 
+@final
 class Msg(Rec):
     t: float
     icon: str
@@ -327,6 +348,7 @@ class Msg(Rec):
     phase: Phase | None = None
 
 
+@final
 class Cell(Rec):
     phase: Phase
     state: CellState
@@ -335,12 +357,14 @@ class Cell(Rec):
     last: Annotated[str, msgspec.Meta(description="last comment of the stage, for the hover")] = ""
 
 
+@final
 class Resumed(Rec):
     slot: str
     branch: str
     waited_secs: int
 
 
+@final
 class Pass(Rec):
     n: int
     cells: list[Cell]
@@ -350,6 +374,7 @@ class Pass(Rec):
     messages: Annotated[list[Msg], msgspec.Meta(description="this pass only, newest first")] = msgspec.field(default_factory=list)
 
 
+@final
 class Artifact(Rec):
     name: str
     url: str
@@ -359,11 +384,13 @@ class Artifact(Rec):
     phase: Phase | None = None
 
 
+@final
 class Subtask(Rec):
     text: str
     done: bool
 
 
+@final
 class CheckCount(Rec):
     """From the typed check results (Checks.run), never from log text."""
 
@@ -372,6 +399,7 @@ class CheckCount(Rec):
     total: int
 
 
+@final
 class LiveBox(Rec):
     kind: Literal["run", "stuck", "exited"]
     phase: Phase
@@ -386,6 +414,7 @@ class LiveBox(Rec):
     exit_code: int | None = None
 
 
+@final
 class BeadDetail(Rec):
     V: ClassVar[int] = 1
     t: float
@@ -404,12 +433,14 @@ class BeadDetail(Rec):
 # ---- live tail: GET /api/live?project=&id=&since=<cursor>&wait=<secs>
 
 
+@final
 class TermLine(Rec):
     t: float
     text: str
     tone: Literal["", "err", "ok", "dim"] = ""
 
 
+@final
 class ToolCall(Rec):
     """Name and argument only until delegate types the outcome of a tool call."""
 
@@ -418,6 +449,7 @@ class ToolCall(Rec):
     arg: str = ""
 
 
+@final
 class LivePage(Rec):
     """Long-poll page of the running worker. `state` is the run-liveness rule (live, ended, crashed)."""
 
@@ -431,6 +463,7 @@ class LivePage(Rec):
 # ---- writes: POST /api/<verb>, JSON body, one Result back
 
 
+@final
 class AnswerReq(Rec):
     """The page holds an answer 5 s before sending it; that hold is the undo, so the server has none."""
 
@@ -441,6 +474,7 @@ class AnswerReq(Rec):
     text: str = ""
 
 
+@final
 class LookReq(Rec):
     project: str
     bead: str
@@ -448,6 +482,7 @@ class LookReq(Rec):
     note: str = ""
 
 
+@final
 class StickReq(Rec):
     """Records the outcome request; the engine writes and commits an ADR or a factory change, the dashboard never runs git."""
 
@@ -457,6 +492,7 @@ class StickReq(Rec):
     text: str = ""
 
 
+@final
 class CauseReq(Rec):
     project: str
     bead: str
@@ -464,12 +500,14 @@ class CauseReq(Rec):
     ask: str | None = None
 
 
+@final
 class AckReq(Rec):
     project: str
     bead: str
     ack: bool
 
 
+@final
 class PruneReq(Rec):
     """Retire a decision in force: it stays in the store, marked retired, and the plan stage stops reading it."""
 
@@ -477,6 +515,7 @@ class PruneReq(Rec):
     adr: str
 
 
+@final
 class BeadReq(Rec):
     """Body of park and stop."""
 
@@ -484,12 +523,14 @@ class BeadReq(Rec):
     bead: str
 
 
+@final
 class NoteReq(Rec):
     project: str
     bead: str
     text: str
 
 
+@final
 class Result(Rec):
     ok: bool
     message: str = ""

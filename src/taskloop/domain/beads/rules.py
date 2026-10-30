@@ -3,13 +3,14 @@
 spike without an Output file; plus the tl-f52 rule (matchers.py): its text cites nothing outside the repo. Pure functions."""
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Final
 
 from taskloop.contracts.bead import Bead
 from taskloop.domain.beads import matchers
 
-MAX_TOUCHES = 8
-NEEDS_AC = "needs-ac"  # the label the loop puts on a bead it refused
-AUTO = "auto"  # the label that says a bead may be taken unattended
+MAX_TOUCHES: Final = 8
+NEEDS_AC: Final = "needs-ac"  # the label the loop puts on a bead it refused
+AUTO: Final = "auto"  # the label that says a bead may be taken unattended
 
 
 @dataclass(frozen=True)

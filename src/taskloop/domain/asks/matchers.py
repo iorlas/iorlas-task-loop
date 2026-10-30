@@ -1,7 +1,8 @@
 """Word matching for asks: the one place a pattern is applied to an ask's text, and only to compare two questions."""
 import re
+from typing import Final
 
-WORD = re.compile(r"[a-z][a-z0-9_.-]{2,}")
+WORD: Final = re.compile(r"[a-z][a-z0-9_.-]{2,}")
 
 
 def words(text: str) -> list[str]:

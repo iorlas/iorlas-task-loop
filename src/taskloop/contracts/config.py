@@ -1,5 +1,5 @@
 """RepoProfile: the repo's .task-loop.json as typed records . An unknown key is an error, not a silent no-op."""
-from typing import Any, Literal, TextIO
+from typing import Any, Final, Literal, TextIO, final
 
 import msgspec
 
@@ -8,7 +8,7 @@ from taskloop.contracts.argv import FORM, shape_problem, text_of
 from taskloop.contracts.ids import CheckId
 from taskloop.contracts.wire import Rec
 
-FRESH_ABOVE_K = {"claude": 150.0, "codex": 100.0, "xai": 100.0}
+FRESH_ABOVE_K: Final = {"claude": 150.0, "codex": 100.0, "xai": 100.0}
 TEST_PATTERN = r"^\s*(def test_|async def test_|\[(Test|UnityTest|Fact|Theory|TestMethod|TestCase)\b|#\[test\]|(it|test)\(|func Test)"
 
 
@@ -16,7 +16,7 @@ class ConfigError(ValueError):
     """.task-loop.json is not a RepoProfile (an unknown key is the usual cause)."""
 
 
-SLOT_PLACEHOLDERS = ("slot", "slot_dir", "repo")
+SLOT_PLACEHOLDERS: Final = ("slot", "slot_dir", "repo")
 
 
 def fill_slot_env(values: Any, **names: str) -> dict[str, str]:
@@ -32,6 +32,7 @@ def fill_slot_env(values: Any, **names: str) -> dict[str, str]:
     return out
 
 
+@final
 class VisualConfig(Rec):
     """Globs saying which changes are visual (a look judge reads the pictures)."""
 
@@ -39,6 +40,7 @@ class VisualConfig(Rec):
     exclude: list[str] = msgspec.field(default_factory=list)
 
 
+@final
 class ContainerConfig(Rec):
     """Where a check that says `"in": "container"` runs: an image, or a Dockerfile of the repo (built once, tagged by its hash)."""
 
@@ -46,6 +48,7 @@ class ContainerConfig(Rec):
     dockerfile: str = ""
 
 
+@final
 class CheckSpec(Rec):
     id: CheckId
     argv: list[str]
@@ -73,6 +76,7 @@ class CheckSpec(Rec):
         return text_of(self.argv)
 
 
+@final
 class SlotsConfig(Rec):
     count: int = 0
     dir: str = ".slots"
@@ -82,6 +86,7 @@ class SlotsConfig(Rec):
     keep: list[str] = msgspec.field(default_factory=list)
 
 
+@final
 class LoopConfig(Rec):
     """The `loop` block: the loop's constants. A key left out keeps the code default; read again at every tick."""
 
@@ -110,6 +115,7 @@ class LoopConfig(Rec):
     build_dir: str = "~/Workspaces/wt"  # `tl prune` removes merged, clean worktrees under here (never a loop slot)
 
 
+@final
 class EngineConfig(Rec):
     """The `engine` block; every key has the default the engine uses today."""
 
@@ -180,6 +186,7 @@ class EngineConfig(Rec):
         return "; ".join(k.cmd for k in self.gate_checks)
 
 
+@final
 class RepoProfile(Rec):
     """A person writes the file, so it carries no `v`."""
 
@@ -201,10 +208,10 @@ def _string_commands(data: Any) -> list[str]:
     return found
 
 
-ENG = next(iter(wire.names(RepoProfile)))  # the profile's first block, engine
-RETIRED_ENGINE = ("check_idle_min",)  # keys that once did something and now do nothing: loaded without them, not an error
-RETIRED_CHECK = ("idle_min",)  # the same, on one entry of engine.checks
-GONE_ENGINE = {  # key -> what to do instead: refused at load (the old spelling is not read)
+ENG: Final = next(iter(wire.names(RepoProfile)))  # the profile's first block, engine
+RETIRED_ENGINE: Final = ("check_idle_min",)  # keys that once did something and now do nothing: loaded without them, not an error
+RETIRED_CHECK: Final = ("idle_min",)  # the same, on one entry of engine.checks
+GONE_ENGINE: Final = {  # key -> what to do instead: refused at load (the old spelling is not read)
     "gate": "engine.gate is gone: move the gate's steps into engine.checks, each with \"run\": \"gate\" (or \"both\") and its argv",
     "gate_only": "engine.gate_only is gone: a command only the gate runs is a check in engine.checks with \"run\": \"gate\"",
 }

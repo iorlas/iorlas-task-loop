@@ -5,7 +5,7 @@ other with StaleRecord and never migrates. A union of records is tagged on `kind
 renamed on the wire (`in` is a keyword) says so with `msgspec.field(name="in")`. `load` is strict: no coercion (a string is not a
 number, a bool is not an int); a violation raises msgspec.ValidationError, a ValueError like StaleRecord.
 """
-from typing import Any, ClassVar, dataclass_transform, get_args
+from typing import Any, ClassVar, dataclass_transform, final, get_args
 
 import msgspec
 
@@ -19,6 +19,7 @@ class StaleRecord(ValueError):
         self.want = want
 
 
+@final
 @dataclass_transform(frozen_default=True, kw_only_default=True)
 class _RecordMeta(type(msgspec.Struct)):
     """The config of every record: keyword-only, frozen, no unknown keys. msgspec applies `kw_only` to the class that sets it, not to its

@@ -7,7 +7,7 @@ from typing import Any, Final
 from taskloop.domain.review.ledger import Ledger
 from taskloop.domain.review.matchers import BdDemand
 
-SEVERITY = ("low", "medium", "high")
+SEVERITY: Final = ("low", "medium", "high")
 Finding = Mapping[str, Any]
 
 

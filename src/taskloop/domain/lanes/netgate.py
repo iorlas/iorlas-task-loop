@@ -6,9 +6,9 @@ The loop's offline detector is app/loop/net.py. No sockets of its own.
 """
 
 from collections.abc import Sequence
-from typing import Protocol
+from typing import Final, Protocol
 
-PROBE_EVERY = 60  # seconds between probes while the network is down (tl-kyy: about every minute)
+PROBE_EVERY: Final = 60  # seconds between probes while the network is down (tl-kyy: about every minute)
 
 
 class NetProbe(Protocol):

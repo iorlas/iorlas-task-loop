@@ -1,7 +1,7 @@
 """The ask each stop of the engine puts to the owner: built from facts the raise site holds (numbers, lists, the worker's own words),
 never from the text of a message. Each returns an AskSpec that passes lint."""
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, Final
 
 from taskloop.contracts.ask import AskDetail, AskOption, BudgetLine, ReplanLine
 from taskloop.contracts.dash import OwnerCause
@@ -10,14 +10,14 @@ from taskloop.domain.asks.lint import DECISION_MAX, LABEL_MAX, TRIED_MAX
 from taskloop.domain.asks.spec import AskSpec
 from taskloop.domain.asks.text import SPLIT_WORDS, clip
 
-RAW_CAP = 4000
-ONE_BULLET = 160
-DROPPED = str.maketrans({"{": "(", "}": ")", "\n": " "})
+RAW_CAP: Final = 4000
+ONE_BULLET: Final = 160
+DROPPED: Final = str.maketrans({"{": "(", "}": ")", "\n": " "})
 SPLIT = AskOption(label="Split the bead", consequence="The bead is cut down from your answer, then the work goes on from where it stopped.",
                   action="split", text=SPLIT_WORDS, cost="One planning run")
 
 
-MARKS = (". ", "? ", "! ")
+MARKS: Final = (". ", "? ", "! ")
 
 
 def question(text: str, how: str = "What should the engine do about this?") -> str:

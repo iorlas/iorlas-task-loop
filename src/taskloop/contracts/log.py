@@ -1,6 +1,6 @@
 """EngineLog: the union of records an engine run appends to engine/<run>.jsonl (v2). Start/end pairs share an `id`, unique
 within the file; an end without its start, or the reverse, is a run that died in between."""
-from typing import ClassVar, Literal
+from typing import ClassVar, Literal, final
 
 import msgspec
 
@@ -15,6 +15,7 @@ class LogRec(Tagged, kw_only=True):
     t: float = 0.0  # unset (0): RunLog.emit stamps the time of the append
 
 
+@final
 class RunStart(LogRec, tag="run_start"):
     run: str
     bead: str
@@ -26,6 +27,7 @@ class RunStart(LogRec, tag="run_start"):
     branch: str = ""  # the task branch the run works on ("" when HEAD is detached)
 
 
+@final
 class StepStart(LogRec, tag="step_start"):
     id: str
     step: str
@@ -37,6 +39,7 @@ class StepStart(LogRec, tag="step_start"):
     fix: int | None = None
 
 
+@final
 class StepEnd(LogRec, tag="step_end"):
     id: str
     step: str
@@ -45,6 +48,7 @@ class StepEnd(LogRec, tag="step_end"):
     secs: float = 0.0
 
 
+@final
 class CallStart(LogRec, tag="call_start"):
     id: str
     n: int
@@ -54,6 +58,7 @@ class CallStart(LogRec, tag="call_start"):
     resume: bool = False
 
 
+@final
 class CallEnd(LogRec, tag="call_end"):
     id: str
     status: str
@@ -71,12 +76,14 @@ class CallEnd(LogRec, tag="call_end"):
     exit: int | None = None  # the worker's exit code (delegate's answer `exit_code`; negative: ended by that signal)
 
 
+@final
 class CmdStart(LogRec, tag="cmd_start"):
     id: str
     text: str
     cwd: str = ""
 
 
+@final
 class CmdEnd(LogRec, tag="cmd_end"):
     id: str
     exit: int
@@ -84,6 +91,7 @@ class CmdEnd(LogRec, tag="cmd_end"):
     out: str = ""
 
 
+@final
 class CheckStart(LogRec, tag="check_start"):
     id: str
     check: str
@@ -94,6 +102,7 @@ class CheckStart(LogRec, tag="check_start"):
     timeout_s: float | None = None
 
 
+@final
 class CheckEnd(LogRec, tag="check_end"):
     id: str
     exit: int | None
@@ -103,18 +112,21 @@ class CheckEnd(LogRec, tag="check_end"):
     wall_hit: bool = False  # the engine stopped it at its wall limit (start: the CheckStart of the same id; end: this record's t)
 
 
+@final
 class GateStart(LogRec, tag="gate_start"):
     cmd: str
     log: str = ""
     tree: str = ""
 
 
+@final
 class GateEnd(LogRec, tag="gate_end"):
     exit: int | None
     secs: float = 0.0
     skipped: bool = False
 
 
+@final
 class LandTry(LogRec, tag="land_try"):
     """One try of the land: what main was before the fetch and after it, whether the rebase moved the branch, and the recipe that failed."""
 
@@ -126,6 +138,7 @@ class LandTry(LogRec, tag="land_try"):
     gate: str = ""  # where the gate ran: "outside" the lock, "inside" it, "cached" (passed on this tree and base before); "" none
 
 
+@final
 class WaitStart(LogRec, tag="wait_start"):
     id: str
     what: WaitWhat
@@ -133,12 +146,14 @@ class WaitStart(LogRec, tag="wait_start"):
     until: float | None = None
 
 
+@final
 class WaitEnd(LogRec, tag="wait_end"):
     id: str
     secs: float
     in_budget: bool = False
 
 
+@final
 class Checks(LogRec, tag="checks"):
     """One round of checks: the CheckRun (every check with its result, and what the round's cache saved)."""
 
@@ -146,16 +161,19 @@ class Checks(LogRec, tag="checks"):
     run: CheckRun
 
 
+@final
 class Lock(LogRec, tag="lock"):
     what: str
     holder: str = ""
 
 
+@final
 class Unlock(LogRec, tag="unlock"):
     what: str
     secs: float = 0.0
 
 
+@final
 class VendorError(LogRec, tag="vendor_error"):
     node: str
     reason: str
@@ -171,6 +189,7 @@ class VendorError(LogRec, tag="vendor_error"):
     error_observed: bool = False
 
 
+@final
 class Kill(LogRec, tag="kill"):
     what: str
     why: str
@@ -185,6 +204,7 @@ class Kill(LogRec, tag="kill"):
     observed_t: float | None = None
 
 
+@final
 class Overrun(LogRec, tag="overrun"):
     """A call that used its wall-time budget (the reviewer's) and was stopped through delegate; the loop goes on with the next rung."""
 
@@ -194,6 +214,7 @@ class Overrun(LogRec, tag="overrun"):
     lane: str = ""
 
 
+@final
 class RetryDecision(LogRec, tag="retry_decision"):
     """What the RetryPlan decided about a stopped call, with the facts it decided on."""
 
@@ -208,6 +229,7 @@ class RetryDecision(LogRec, tag="retry_decision"):
     evidence: str = ""
 
 
+@final
 class Transition(LogRec, tag="transition"):
     from_id: str = msgspec.field(name="from")
     to: str
@@ -215,12 +237,14 @@ class Transition(LogRec, tag="transition"):
     detail: str = ""
 
 
+@final
 class Reload(LogRec, tag="reload"):
     old: str
     new: str
     step: str
 
 
+@final
 class Artifacts(LogRec, tag="artifacts"):
     """The files ingest copied into the bead's artifact directory when a step ended (one record per ingest that copied something)."""
 
@@ -230,14 +254,17 @@ class Artifacts(LogRec, tag="artifacts"):
     names: list[str] = msgspec.field(default_factory=list)
 
 
+@final
 class Warn(LogRec, tag="warn"):
     text: str
 
 
+@final
 class Note(LogRec, tag="note"):
     text: str
 
 
+@final
 class Said(LogRec, tag="said"):
     """One comment the engine posted on the bead (Engine.comment, the one poster), tied to the step that was open."""
 
@@ -246,6 +273,7 @@ class Said(LogRec, tag="said"):
     text: str
 
 
+@final
 class Assumed(LogRec, tag="assumed"):
     """What the planner could not decide or find and planned around instead of asking (tl-ntp)."""
 
@@ -257,6 +285,7 @@ class Assumed(LogRec, tag="assumed"):
 StuckWhy = Literal["silent", "same_red"]
 
 
+@final
 class Stuck(LogRec, tag="stuck"):
     """The run is stuck (domain/stuck.py decides, at the Beat tick): silent past its step's limit, or the same red checks
     runlife.SAME_RED rounds in a row. One record per episode; the episode ends with new activity or a different round."""
@@ -268,10 +297,12 @@ class Stuck(LogRec, tag="stuck"):
     sig: str = ""  # same_red: CheckRun.signature() of the rounds
 
 
+@final
 class Beat(LogRec, tag="beat"):
     """The proof of life: appended every runlife.BEAT_EVERY seconds while the run's process lives (it is what runlife.liveness reads)."""
 
 
+@final
 class Close(LogRec, tag="close"):
     outcome: Outcome
     why_code: WhyCode | None = None

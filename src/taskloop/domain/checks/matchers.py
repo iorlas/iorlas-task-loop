@@ -1,6 +1,7 @@
 """Every regular expression the checks need over text: globs, command text, a check's output. The one place in domain/checks
 that imports `re` (rule: import re only in domain/**/matchers.py)."""
 import re
+from typing import Final
 
 from taskloop.contracts.ids import CheckId
 
@@ -44,10 +45,10 @@ def literal_prefix(g: str) -> str:
 
 
 # -- command text -------------------------------------------------------------------------------------------------------
-UNITY = re.compile(r"(?i)unity")  # the Unity group: repo checks that name Unity in their id or command (slot queue, minutes each)
-ENV_REF = re.compile(r"TL_CHECK_(?:LOG|RC)_(\w+)")
-CONFLICT_BUILD = re.compile(r"(?i)(?<![a-z])(build|compile)(?![a-z])")  # a repo check a conflict fix still runs
-SLOW_CMD = re.compile(r"(?i)(?<![a-z])(unity|play|test[-_]all|check|build|dotnet)")
+UNITY: Final = re.compile(r"(?i)unity")  # the Unity group: repo checks that name Unity in their id or command (slot queue, minutes each)
+ENV_REF: Final = re.compile(r"TL_CHECK_(?:LOG|RC)_(\w+)")
+CONFLICT_BUILD: Final = re.compile(r"(?i)(?<![a-z])(build|compile)(?![a-z])")  # a repo check a conflict fix still runs
+SLOW_CMD: Final = re.compile(r"(?i)(?<![a-z])(unity|play|test[-_]all|check|build|dotnet)")
 
 
 def is_unity(text: str) -> bool:
@@ -69,15 +70,15 @@ def env_refs(cmd: str) -> list[str]:
 
 
 # -- a check's output ---------------------------------------------------------------------------------------------------
-STALE_TREE = re.compile(r"does not contain recipe|This checkout has no |no recipe (?:named|called)|Justfile does not contain", re.I)
-COMPILE_FAIL = re.compile(r"error CS(?!0006\b|2001\b)\d+|SyntaxError")
-IMPORT_RACE = re.compile(r"Library/|Temp/|asset import|importing asset|refresh", re.I)
-LOCK_FAIL = re.compile(r"another Unity instance|Multiple Unity instances|It looks like another Unity instance is running", re.I)
-SLOT_WAIT = re.compile(r"\bgot slot \S+ after (\d+) ?s\b")
-CS_ERROR = re.compile(r"error CS\d+")
-ELLIPSIS = re.compile(r"\.\.\.|\u2026")
-SAFE_NAME = re.compile(r"[^\w.-]+")
-TIMING = re.compile(r"\[\d+ ?m?s\]|\b\d+(?:\.\d+)?\s?(?:ms|s|sec|secs|seconds|min|mins)\b", re.I)
+STALE_TREE: Final = re.compile(r"does not contain recipe|This checkout has no |no recipe (?:named|called)|Justfile does not contain", re.I)
+COMPILE_FAIL: Final = re.compile(r"error CS(?!0006\b|2001\b)\d+|SyntaxError")
+IMPORT_RACE: Final = re.compile(r"Library/|Temp/|asset import|importing asset|refresh", re.I)
+LOCK_FAIL: Final = re.compile(r"another Unity instance|Multiple Unity instances|It looks like another Unity instance is running", re.I)
+SLOT_WAIT: Final = re.compile(r"\bgot slot \S+ after (\d+) ?s\b")
+CS_ERROR: Final = re.compile(r"error CS\d+")
+ELLIPSIS: Final = re.compile(r"\.\.\.|\u2026")
+SAFE_NAME: Final = re.compile(r"[^\w.-]+")
+TIMING: Final = re.compile(r"\[\d+ ?m?s\]|\b\d+(?:\.\d+)?\s?(?:ms|s|sec|secs|seconds|min|mins)\b", re.I)
 
 
 def failure_kind(text: str) -> str:
@@ -133,13 +134,13 @@ def safe_name(check_id: CheckId, width: int = 40) -> str:
 
 
 # -- trimming a log ------------------------------------------------------------------------------------------------------
-FAIL_LINE = re.compile(r"(?i)fail|error|assert|traceback|exception|panic|fatal|\bnot ok\b|\bexpected\b|\bbut was\b|✗|✘|: E\b|^E\s")
-NOISE_LINE = re.compile(r"(?i)\b0 errors?\b|\b0 error\(s\)|\b0 fail\w*|\bfail\w*[:=] ?0\b|\berrors?[:=] ?0\b|"
+FAIL_LINE: Final = re.compile(r"(?i)fail|error|assert|traceback|exception|panic|fatal|\bnot ok\b|\bexpected\b|\bbut was\b|✗|✘|: E\b|^E\s")
+NOISE_LINE: Final = re.compile(r"(?i)\b0 errors?\b|\b0 error\(s\)|\b0 fail\w*|\bfail\w*[:=] ?0\b|\berrors?[:=] ?0\b|"
                         r"\bwarning [A-Z]+\d+:|\bwarn(?:ing)?:")
-NAME_LINE = re.compile(
+NAME_LINE: Final = re.compile(
     r"^\s*(?:FAIL(?:ED)?\b|ERROR\b|Failed\b|\[FAIL\]|not ok\b|\d+\) )|^_{2,} .+ _{2,}$|^=+ (?:FAILURES|ERRORS) =+|"
     r"\berror [A-Za-z]*\d+|: error\b|^\s*Traceback \(|\bfailed\b.*\[\d+ ?m?s\]|\bFAILED \(")
-NOTABLE = re.compile(r"(?i)\b(skip|skipped|steps run|passed|failed|warnings?|errors?)\b")
+NOTABLE: Final = re.compile(r"(?i)\b(skip|skipped|steps run|passed|failed|warnings?|errors?)\b")
 
 
 def is_failure(row: str) -> bool:
@@ -159,7 +160,7 @@ def is_notable(row: str) -> bool:
 
 
 _DIFF_HIT = re.compile(r"^([^+].*?):\d+: \S")  # git diff --check: "path:LINE: leftover conflict marker" / "path:LINE: trailing whitespace."
-DIFF_CHECK_LINES = 20
+DIFF_CHECK_LINES: Final = 20
 
 
 def diff_check_text(text: str, cap: int = DIFF_CHECK_LINES) -> str:

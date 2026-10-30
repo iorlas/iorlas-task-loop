@@ -1,7 +1,7 @@
 """The ask ledger and the decision store as typed records. The ledger (ask-ledger.jsonl) is append-only and never swept: one row per
 transition of an ask, so history outlives the one-file-per-bead ask document. An ADR is a decision of the owner that the plan stage
 reads; its uses (a plan cited it) are rows of their own, so a reuse counter never rewrites the ADR."""
-from typing import ClassVar, Literal
+from typing import ClassVar, Final, Literal, final
 
 import msgspec
 
@@ -10,9 +10,10 @@ from taskloop.contracts.dash import OwnerCause, Stick
 from taskloop.contracts.wire import Rec
 
 LedgerEvent = Literal["raise", "answer", "consume", "close", "withdraw", "cause", "stick", "demote"]
-LEDGER_EVENTS = ("raise", "answer", "consume", "close", "withdraw", "cause", "stick", "demote")
+LEDGER_EVENTS: Final = ("raise", "answer", "consume", "close", "withdraw", "cause", "stick", "demote")
 
 
+@final
 class LedgerEntry(Rec):
     """One transition of an ask. `question`, `key`, `repo` and `similar` are set at raise; `cause` and `outcome` are what was known at
     this row (the newest row of an ask says the current cause and outcome)."""
@@ -35,6 +36,7 @@ class LedgerEntry(Rec):
     why: str = ""
 
 
+@final
 class Adr(Rec):
     """A decision in force for one repo (adrs/<repo key>/<id>.json): the owner's answer to `ask`, worded for the plan stage."""
 
@@ -55,6 +57,7 @@ class Adr(Rec):
     retired_t: float | None = None
 
 
+@final
 class AdrUse(Rec):
     """A plan of `bead` relied on the ADR (it named its id in `PlanAnswer.cited`)."""
 

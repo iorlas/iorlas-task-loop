@@ -2,6 +2,7 @@
 write it, the dashboard reads it. It lives under the task-loop state dir (decisions/<repo key>/), not in the repo: the engine and
 `tl` write only there and to bd, never into a checkout."""
 from pathlib import Path
+from typing import final
 
 from taskloop.contracts import paths, wire
 from taskloop.contracts.ids import loop_key
@@ -18,6 +19,7 @@ def decode_use(data: object) -> AdrUse:
     return wire.load(AdrUse, data)
 
 
+@final
 class AdrFiles:
     def __init__(self, cfg: paths.ConfigDir, repo: str) -> None:
         self.cfg, self.repo = cfg, loop_key(repo)
@@ -29,6 +31,7 @@ class AdrFiles:
         return self.cfg.adr_ids(self.repo)
 
 
+@final
 class AdrStore:
     def __init__(self, docs: AskDocs, uses: JsonlStore[AdrUse]) -> None:
         self.docs, self.log = docs, uses

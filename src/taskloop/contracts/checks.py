@@ -2,7 +2,7 @@
 `Checks` row of the run log are the same record), the cache of green results and the history of how long a command takes."""
 from collections.abc import Iterator
 from enum import StrEnum
-from typing import ClassVar, Literal, override
+from typing import ClassVar, Literal, final, override
 
 import msgspec
 
@@ -19,6 +19,7 @@ class CheckFaultKind(StrEnum):
     KILLED = "killed"  # a signal ended the check, not its verdict
 
 
+@final
 class Check(Rec):
     """One check of a round: a repo check (engine.checks) or a command of the plan (a stage's check, a case)."""
 
@@ -41,6 +42,7 @@ class Check(Rec):
     container: bool = False  # run in a container on a copy of the worktree when docker is reachable (the host otherwise)
 
 
+@final
 class CheckResult(Rec):
     id: CheckId
     cmd: str
@@ -85,6 +87,7 @@ class CheckResult(Rec):
         return self.exit not in (0, None)
 
 
+@final
 class CheckRun(Rec):
     """Every result of one round, in the order the checks were decided."""
 
@@ -123,12 +126,14 @@ class CheckRun(Rec):
         return "|".join(sorted(f"{c.id}:{c.exit}:{c.sig}" for c in self.failed))
 
 
+@final
 class CacheHit(Rec):
     result: CheckResult
     round: int = 0
     log_abs: str = ""  # the saved output of the run the result came from
 
 
+@final
 class CheckCacheEntry(Rec):
     """check-cache/<bead>.json: green results of the latest tree (by command) and of every check's inputs (by their hash)."""
 
@@ -139,6 +144,7 @@ class CheckCacheEntry(Rec):
     base_red: dict[str, bool] = msgspec.field(default_factory=dict)  # "<base sha> <command>" -> red on that base
 
 
+@final
 class Durations(Rec):
     """check-durations/<repo>.json: the seconds of the last runs of each command, newest last."""
 

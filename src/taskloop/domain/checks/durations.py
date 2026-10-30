@@ -1,11 +1,12 @@
 """What a command costs: the median of its last runs. Pure; the history file is a store."""
 import statistics
+from typing import Final
 
 from taskloop.contracts.checks import Durations
 from taskloop.domain.checks.names import norm
 
-CHEAP_S = 5.0  # a median under this counts as free: sub-second noise never reorders a round
-KEEP_RUNS = 9  # durations kept per command
+CHEAP_S: Final = 5.0  # a median under this counts as free: sub-second noise never reorders a round
+KEEP_RUNS: Final = 9  # durations kept per command
 
 
 def expected_secs(cmd: str, history: Durations) -> float:

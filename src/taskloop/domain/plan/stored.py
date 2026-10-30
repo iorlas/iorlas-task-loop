@@ -2,11 +2,11 @@
 reads (is the stage risky, a question for the owner, its options, what was decided, what was left unresolved); once the plan is accepted
 none of it is stored, published or sent to a worker."""
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, Final
 
-PLAN_ONLY = ("question", "options", "decided", "unresolved")
-STAGE_ONLY = ("hard",)
-WORKER_SKIPS = ("risks", "cases", "leftovers", "stages")  # the assumptions, the summary and the rest stay
+PLAN_ONLY: Final = ("question", "options", "decided", "unresolved")
+STAGE_ONLY: Final = ("hard",)
+WORKER_SKIPS: Final = ("risks", "cases", "leftovers", "stages")  # the assumptions, the summary and the rest stay
 
 
 def stored(plan: dict[str, Any]) -> dict[str, Any]:

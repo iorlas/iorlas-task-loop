@@ -6,7 +6,7 @@ The run state holds exactly this one field of the review/verify side and never r
 It holds the counters the caps read, what the last review says nobody checked, what the verify step settled and what it left for the
 owner, and the follow-ups filed or refused by bd.
 """
-from typing import Any, ClassVar
+from typing import Any, ClassVar, final
 
 import msgspec
 
@@ -15,6 +15,7 @@ from taskloop.contracts.trace import Verified
 from taskloop.contracts.wire import Rec
 
 
+@final
 class Unchecked(Rec):
     what: str
     kind: str = ""
@@ -23,6 +24,7 @@ class Unchecked(Rec):
     proof_round: bool = False
 
 
+@final
 class Unverified(Rec):
     what: str
     kind: str = ""
@@ -30,6 +32,7 @@ class Unverified(Rec):
     source: str = ""
 
 
+@final
 class Unfiled(Rec):
     """A follow-up bd refused: kept here so none is lost or counted as filed."""
 
@@ -37,6 +40,7 @@ class Unfiled(Rec):
     why: str
 
 
+@final
 class ReviewState(Rec):
     V: ClassVar[int] = 1
     reviews: int = 0

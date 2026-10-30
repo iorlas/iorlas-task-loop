@@ -1,5 +1,6 @@
 """The checks of a round as Check records: the repo's (engine.checks) and the plan's (a stage's commands and cases)."""
 from collections.abc import Sequence
+from typing import Final
 
 from taskloop.contracts.argv import argv_of, text_of
 from taskloop.contracts.checks import Check
@@ -7,7 +8,7 @@ from taskloop.contracts.config import CheckSpec, EngineConfig
 from taskloop.contracts.ids import CheckId
 from taskloop.domain.checks.matchers import glob_re
 
-DIFF_CHECK = CheckId("diff-check")  # the engine's own check: `git diff --check <base>`, always first in every round and the gate
+DIFF_CHECK: Final = CheckId("diff-check")  # the engine's own check: `git diff --check <base>`, always first in every round and the gate
 
 
 def diff_check(base: str, tree: str) -> Check:

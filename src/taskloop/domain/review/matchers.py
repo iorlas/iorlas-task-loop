@@ -3,21 +3,22 @@ table test (tests/review/test_matchers.py). An item is what a worker wrote ("the
 what the item is about, nothing more."""
 import re
 from collections.abc import Iterable
+from typing import Final
 
-KNOWN_TOOLS = frozenset({
+KNOWN_TOOLS: Final = frozenset({
     "ruff", "black", "flake8", "pylint", "mypy", "pyright", "isort", "bandit", "eslint", "prettier", "tsc", "biome", "stylelint",
     "shellcheck", "shfmt", "hadolint", "yamllint", "markdownlint", "actionlint", "golangci-lint", "gofmt", "staticcheck", "clippy",
     "rustfmt", "rubocop", "ktlint", "detekt", "swiftlint", "clang-tidy", "clang-format", "cppcheck", "csharpier", "semgrep",
     "codespell", "vale", "pre-commit", "prek"})
-_RUN_VERB = r"(?:run|runs|ran|running|lint|lints|linted|linting|format|formats|formatted|check|checks|checked)"
-_BACKTICKED = re.compile(r"`([^`]+)`")
-_PLAIN_WORD = re.compile(r"[a-z][a-z0-9+-]*")
-_TOOL_AFTER_VERB = re.compile(rf"\b{_RUN_VERB}\s+(?:(?:with|by|using|the)\s+)?([a-z][a-z0-9+-]*)")
-_CODE_EXT = re.compile(r"\.(?:py|cs|js|jsx|ts|tsx|go|rs|java|kt|rb|sh|c|h|cpp|hpp|json|ya?ml|toml|md|txt|csv|sql|css|html|gd|"
+_RUN_VERB: Final = r"(?:run|runs|ran|running|lint|lints|linted|linting|format|formats|formatted|check|checks|checked)"
+_BACKTICKED: Final = re.compile(r"`([^`]+)`")
+_PLAIN_WORD: Final = re.compile(r"[a-z][a-z0-9+-]*")
+_TOOL_AFTER_VERB: Final = re.compile(rf"\b{_RUN_VERB}\s+(?:(?:with|by|using|the)\s+)?([a-z][a-z0-9+-]*)")
+_CODE_EXT: Final = re.compile(r"\.(?:py|cs|js|jsx|ts|tsx|go|rs|java|kt|rb|sh|c|h|cpp|hpp|json|ya?ml|toml|md|txt|csv|sql|css|html|gd|"
                        r"lua|swift|asmdef|unity|prefab)$", re.I)
-_SYMBOL = re.compile(r"\b(?:[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]*)+|[a-z][a-z0-9]*(?:_[a-z0-9]+)+)\b")
-_URL = re.compile(r"https?://\S+")
-_PATH_LIKE = re.compile(r"[\w][\w./-]*[\w]")
+_SYMBOL: Final = re.compile(r"\b(?:[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]*)+|[a-z][a-z0-9]*(?:_[a-z0-9]+)+)\b")
+_URL: Final = re.compile(r"https?://\S+")
+_PATH_LIKE: Final = re.compile(r"[\w][\w./-]*[\w]")
 
 
 def word_in(name: str, text: str) -> bool:

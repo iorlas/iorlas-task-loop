@@ -4,7 +4,7 @@ A slot is one worktree plus the bd bead that is its lease. `Slot.take`, `ready_f
 whose `code` is one of three closed values; git's own failures are the typed `SlotGitError`s below, classified once by the
 adapter (the only place that reads git's words), never by the caller.
 """
-from typing import Literal, Protocol
+from typing import Literal, Protocol, final
 
 from taskloop.contracts.wire import Rec
 
@@ -50,6 +50,7 @@ class IndexLocked(SlotGitError):
     """index.lock exists in the worktree's git dir: another git runs there, or one died."""
 
 
+@final
 class Hold(Rec):
     """A slot reserved for a person (tl slot hold): the loop and run-task keep off it until `until`."""
 
@@ -59,6 +60,7 @@ class Hold(Rec):
     until: float
 
 
+@final
 class Checkout(Rec):
     """One worktree of a repo (git worktree list): where it is, the branch it has out (empty when detached), the main one."""
 

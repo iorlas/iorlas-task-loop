@@ -1,7 +1,7 @@
 """Lane usage history: one row per delegate usage window each time `tl lanes` files a status snapshot, and the projection of a
 window's use at its reset from the recent rows. The window name is kept as delegate printed it (the contract types it as a free
 string): this module never reads a name's meaning, it only groups rows by it."""
-from typing import ClassVar, Final
+from typing import ClassVar, Final, final
 
 from taskloop.contracts.snapshots import StatusSnapshot
 from taskloop.contracts.wire import Rec
@@ -11,6 +11,7 @@ FORECAST_ROWS: Final = 12  # the projection fits the last this many rows of the 
 RESET_JITTER_S: Final = 600  # two rows whose resets_at differ by more are of two windows
 
 
+@final
 class UsageRow(Rec):
     """usage-history.jsonl: one window of one lane as the snapshot filed at `at` (delegate's clock) saw it."""
 

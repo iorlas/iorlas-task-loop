@@ -3,13 +3,15 @@
 A red check keeps its failure lines (test names, the first assertion or compile error under each, one line of context)
 and the last `tail_lines` lines, within `cap` bytes; the full log stays on disk and its path is the last line.
 A green check is one line. Generic: unittest, pytest, dotnet/NUnit/xUnit, compilers, shell exit-only output."""
+from typing import Final
+
 from taskloop.domain.checks.matchers import is_failure, is_name, is_noise
 
-CAP = 4096
-TAIL = 40
-LINE_MAX = 240  # a longer line (minified output, a JSON blob) is cut
-GAP = "..."
-GAP_COST = len(GAP) + 1
+CAP: Final = 4096
+TAIL: Final = 40
+LINE_MAX: Final = 240  # a longer line (minified output, a JSON blob) is cut
+GAP: Final = "..."
+GAP_COST: Final = len(GAP) + 1
 
 
 def _clip(line: str, n: int = LINE_MAX) -> str:

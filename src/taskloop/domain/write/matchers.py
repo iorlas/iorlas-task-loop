@@ -1,7 +1,8 @@
 """Policy over the task's diff: how many tests it adds and removes (tests/write/test_matchers.py)."""
 import re
+from typing import Final
 
-GHERKIN_TEST = re.compile(r"^\s*Scenario( Outline)?:")  # a use-case scenario (Reqnroll, lifesim-fld.26.10)
+GHERKIN_TEST: Final = re.compile(r"^\s*Scenario( Outline)?:")  # a use-case scenario (Reqnroll, lifesim-fld.26.10)
 
 
 def count_tests(diff: str, pattern: str) -> tuple[int, int]:

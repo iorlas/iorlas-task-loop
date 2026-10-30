@@ -1,18 +1,20 @@
 """The planner's prompt, its visual-stage rules, and the texts a plan is sent back with."""
+from typing import Final
+
 from taskloop.domain.prompts.common import COMMON, DECIDED_RULE, OPTIONS_RULE
 
-PLAN_BRIEF_KB = 12            # the planner's whole brief should stay under this
+PLAN_BRIEF_KB: Final = 12            # the planner's whole brief should stay under this
 
 ASSUME_TEXT = ("\nYou asked: %s\nNothing in that question cannot be undone, so the engine does not ask the owner: it records it as an "
                "Assumption. Plan the work on your best assumption now, with at least one stage.\n")
 
-PLAN_DECIDED_TEXT = "Plan the work that meets it; ask nothing it already answers.\n"
+PLAN_DECIDED_TEXT: Final = "Plan the work that meets it; ask nothing it already answers.\n"
 
-TRACKER_TEXT = ("\n\nYour plan was sent back: these checks read the issue tracker (they run bd or read .beads/), which "
+TRACKER_TEXT: Final = ("\n\nYour plan was sent back: these checks read the issue tracker (they run bd or read .beads/), which "
                 "no writer can run and no code change can satisfy:\n%s\nRewrite them to prove the code and the tree only. "
                 "Follow-up work the task wants filed goes in leftovers: the engine files it.")
 
-UNANCHORED_TEXT = ("\n\nYour plan was sent back: these stages change files that exist but name no anchor for them:\n%s\nGive each "
+UNANCHORED_TEXT: Final = ("\n\nYour plan was sent back: these stages change files that exist but name no anchor for them:\n%s\nGive each "
                    "such file an anchor in the stage's `anchors` (path, lines, symbol, why; at most 8 per stage) so the writer "
                    "starts where you already looked instead of searching the tree again.")
 
@@ -21,16 +23,16 @@ EMPTY_PLAN_TEXT = ("\n\nYour plan was sent back: it has no stages, no question a
                    "stage that checks it. If only follow-up work is left, list it in leftovers. If the task cannot be done without "
                    "an owner's decision, ask it in question.")
 
-DRY_CHECK_TEXT = ("\n\nYour plan was sent back: the engine dry-ran its checks and these cannot run:\n%s\nReturn the plan "
+DRY_CHECK_TEXT: Final = ("\n\nYour plan was sent back: the engine dry-ran its checks and these cannot run:\n%s\nReturn the plan "
                   "with only these checks fixed.")
 
-GATE_ONLY_ACCEPTANCE = "plan-lint rule gate-only-acceptance"
+GATE_ONLY_ACCEPTANCE: Final = "plan-lint rule gate-only-acceptance"
 
-GATE_ONLY_ACCEPTANCE_TEXT = ("\n\nYour plan was sent back (%s): these acceptance cases or Done-when items are only the "
+GATE_ONLY_ACCEPTANCE_TEXT: Final = ("\n\nYour plan was sent back (%s): these acceptance cases or Done-when items are only the "
                              "gate command, and the engine runs the gate (`%s`) once at land on its own:\n%s\nReplace each with what "
                              "the task asks for that the gate does not show (a behaviour, a number, a file), or drop it.")
 
-VISUAL_PLAN = """This repo has visual work (screens). Give every case a class in `class`:
+VISUAL_PLAN: Final = """This repo has visual work (screens). Give every case a class in `class`:
 - test: a command proves it (the usual case with its check).
 - look-objective: a picture can prove it: it shows, nothing is clipped or overlapped, no error text, magenta or missing
   texture, the state asked for is visible. Leave `check` empty: the engine renders the shots and a look judge reads them.
@@ -41,14 +43,14 @@ tokens, a rule under config/). Never invent one as a check: if you think one is 
 your proposal first) and plan no check for it.
 %s"""
 
-VISUAL_STAGES = """A stage whose files match this repo's visual paths (%s) changes how something looks. Its writer cannot \
+VISUAL_STAGES: Final = """A stage whose files match this repo's visual paths (%s) changes how something looks. Its writer cannot \
 render: it names the
 pictures to render in `shots` (a method from the table below, its args, names) or gives a `logic_only` reason; an answer with
 neither is sent back. Plan such stages knowing that, and never plan a check that needs a picture the writer is to make.
 Shot methods:
 %s"""
 
-PLAN_PROMPT = COMMON + """
+PLAN_PROMPT: Final = COMMON + """
 
 The task (the bead, with its acceptance criteria and comments: review findings, the owner's answers):
 <task>
@@ -105,4 +107,4 @@ each stage has its files and its checks. Budget: about 12 tool calls. Then plan.
   file, an unclear scope, a product or architecture choice are all reversible: assume.
 """ + OPTIONS_RULE + "\n" + DECIDED_RULE
 
-REPLAN_CAP = "stuck: the bead was re-planned "  # the cap's ask; an owner's answer to it allows one more
+REPLAN_CAP: Final = "stuck: the bead was re-planned "  # the cap's ask; an owner's answer to it allows one more

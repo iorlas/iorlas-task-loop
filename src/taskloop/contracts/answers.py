@@ -1,7 +1,7 @@
 """The six worker answers (plan, write, review, reflect, look, verify) as records. The JSON Schema a node sends is generated from
 its record (`schema.of`), the strict form from that (`schema.strict`), and an answer is validated by decoding it into the record
 (`check`): one definition, no hand-written schema. A visual stage's write and review also require their look field."""
-from typing import Annotated, Any, Literal, get_args
+from typing import Annotated, Any, Final, Literal, final, get_args
 
 import msgspec
 
@@ -22,24 +22,25 @@ Verdict = Literal["settled", "wrong", "open"]
 Axis = Literal["spec", "standards"]
 Status = Literal["met", "unmet", "engine"]
 
-ARGV_DOC = "argv: " + FORM  # a check: the program and its arguments, never a shell string
-KINDS = get_args(Kind)
-ROUTED_KINDS = ("engine_step", "checkable", "external_fact", "taste", "owner_decision")
-LEGACY_KINDS = ("requirement", "number", "deletion", "link", "case", "tooling")
-INPUT_KINDS = get_args(InputKind)
-PROVED_BY = get_args(ProvedBy)
-CAUSE_CLASSES = get_args(Cause)
-VERDICTS = get_args(Verdict)
+ARGV_DOC: Final = "argv: " + FORM  # a check: the program and its arguments, never a shell string
+KINDS: Final = get_args(Kind)
+ROUTED_KINDS: Final = ("engine_step", "checkable", "external_fact", "taste", "owner_decision")
+LEGACY_KINDS: Final = ("requirement", "number", "deletion", "link", "case", "tooling")
+INPUT_KINDS: Final = get_args(InputKind)
+PROVED_BY: Final = get_args(ProvedBy)
+CAUSE_CLASSES: Final = get_args(Cause)
+VERDICTS: Final = get_args(Verdict)
 
 # tl-ntp (owner ruling 82 item 1): agents assume and record an Assumption; only a step that cannot be undone may ask the owner.
-IRREVERSIBLE = {"push_shared": "a push to a shared branch", "delete_outside": "a deletion outside the worktree",
+IRREVERSIBLE: Final = {"push_shared": "a push to a shared branch", "delete_outside": "a deletion outside the worktree",
                 "close_epic": "closing an epic", "spend_money": "spending money"}
 CAUSE_DOC = ("why you ask, if you ask: requirement (the bead leaves out something it needs), decision (a choice only the owner makes), "
              "environment (a tool, access or machine you lack), process (how the factory works), unknown")
-CITED_DOC = "the id (ADR-n) of each decision in force that this plan relied on, as listed in the prompt; [] when it relied on none"
-ASSUMPTION = "Assumption: "  # the stable prefix of an assumption line (plan comment, plan summary)
+CITED_DOC: Final = "the id (ADR-n) of each decision in force that this plan relied on, as listed in the prompt; [] when it relied on none"
+ASSUMPTION: Final = "Assumption: "  # the stable prefix of an assumption line (plan comment, plan summary)
 
 
+@final
 class Option(Rec):
     label: str
     cost: str
@@ -47,17 +48,20 @@ class Option(Rec):
     recommended: bool
 
 
+@final
 class Leftover(Rec):
     title: str
     why: str
 
 
+@final
 class Unchecked(Rec):
     what: str
     kind: Kind
     source: str = ""
 
 
+@final
 class Anchor(Rec):
     path: str
     lines: str
@@ -65,6 +69,7 @@ class Anchor(Rec):
     why: str
 
 
+@final
 class Stage(Rec):
     goal: str
     files: list[str]
@@ -80,11 +85,13 @@ class Stage(Rec):
     constraints: Annotated[str | None, msgspec.Meta(description="what the stage must not break or touch")] = None
 
 
+@final
 class Risk(Rec):
     what: str
     check: Annotated[list[str], msgspec.Meta(description=ARGV_DOC)]
 
 
+@final
 class Unresolved(Rec):
     what: str
     kind: InputKind
@@ -99,6 +106,7 @@ class Case(Rec):
     via: str = ""
 
 
+@final
 class PlanAnswer(Rec):
     summary: str
     stages: list[Stage]
@@ -114,33 +122,39 @@ class PlanAnswer(Rec):
     cited: Annotated[list[str], msgspec.Meta(description=CITED_DOC)] = msgspec.field(default_factory=list)
 
 
+@final
 class ShotArg(Rec):
     name: str
     value: str
 
 
+@final
 class Shot(Rec):
     method: str
     args: list[ShotArg]
     names: list[str]
 
 
+@final
 class Flake(Rec):
     test: str
     note: str
 
 
+@final
 class NewCase(Rec):
     criterion: str
     check: Annotated[list[str], msgspec.Meta(description=ARGV_DOC)]
     why: str
 
 
+@final
 class BadCheck(Rec):
     cmd: str
     why: str
 
 
+@final
 class CheckRan(Rec):
     cmd: str
     exit: int
@@ -163,10 +177,12 @@ class WriteAnswer(Rec):
     owner_cause: Annotated[AskCause, msgspec.Meta(description=CAUSE_DOC)] = "unknown"
 
 
+@final
 class WriteAnswerLook(WriteAnswer, kw_only=True):
     logic_only: str
 
 
+@final
 class Finding(Rec):
     file: str
     line: int
@@ -181,6 +197,7 @@ class Finding(Rec):
     ]
 
 
+@final
 class Criterion(Rec):
     item: Annotated[str, msgspec.Meta(description="the id of an acceptance item as listed in the prompt (A1, A2, ...)")]
     status: Status
@@ -203,10 +220,12 @@ class ReviewAnswer(Rec):
     owner_cause: Annotated[AskCause, msgspec.Meta(description=CAUSE_DOC)] = "unknown"
 
 
+@final
 class ReviewAnswerLook(ReviewAnswer, kw_only=True):
     look: str
 
 
+@final
 class WentBadly(Rec):
     what: str
     cause: Cause
@@ -214,6 +233,7 @@ class WentBadly(Rec):
     evidence: str
 
 
+@final
 class ReflectAnswer(Rec):
     went_well: list[str]
     went_badly: list[WentBadly]
@@ -221,6 +241,7 @@ class ReflectAnswer(Rec):
     change: list[str]
 
 
+@final
 class LookFinding(Rec):
     item: str
     verdict: Literal["pass", "defect"]
@@ -228,11 +249,13 @@ class LookFinding(Rec):
     why: str
 
 
+@final
 class LookAnswer(Rec):
     findings: list[LookFinding]
     summary: str
 
 
+@final
 class VerifyItem(Rec):
     n: int
     verdict: Verdict
@@ -242,6 +265,7 @@ class VerifyItem(Rec):
     source: str
 
 
+@final
 class VerifyAnswer(Rec):
     items: list[VerifyItem]
 
@@ -266,7 +290,7 @@ def sent_schema(node: str, visual: bool = False) -> dict[str, Any]:
     return schema.strict(schema_for(node, visual))
 
 
-HANDOFF_MAX = 1024
+HANDOFF_MAX: Final = 1024
 
 
 def check(node: str, visual: bool, data: Any) -> list[str]:

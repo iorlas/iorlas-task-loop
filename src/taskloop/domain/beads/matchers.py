@@ -7,15 +7,16 @@ Pure functions.
 """
 
 import re
+from typing import Final
 
 from taskloop.contracts.bead import Bead
 
-ESCAPE_LABEL = "facts-inline"
-REASON = "needs inlined facts"
-FIELDS = ("title", "description", "acceptance_criteria", "design", "notes")
+ESCAPE_LABEL: Final = "facts-inline"
+REASON: Final = "needs inlined facts"
+FIELDS: Final = ("title", "description", "acceptance_criteria", "design", "notes")
 
-_PATH = r"""[^\s`'"<>)\]}]*"""
-PATTERNS = (
+_PATH: Final = r"""[^\s`'"<>)\]}]*"""
+PATTERNS: Final = (
     ("a home path", re.compile(r"(?<![\w./-])~/" + _PATH.replace("*", "+", 1))),
     ("a home path", re.compile(r"(?<![\w.-])/(?:Users|home)/[\w.-]+/" + _PATH)),
     ("a Drop folder", re.compile(r"\bDocuments/Drop\b" + _PATH)),
@@ -23,7 +24,7 @@ PATTERNS = (
     ("a study reference", re.compile(r"\bstud(?:y|ies)\s+#?\d{1,3}\b", re.I)),
     ("a numbered study file", re.compile(r"(?<![\w/.-])\d{2,3}-[a-z][\w-]*\.md\b", re.I)),
 )
-ESCAPE_LINE = re.compile(r"^\s*facts-inline\b", re.I | re.M)
+ESCAPE_LINE: Final = re.compile(r"^\s*facts-inline\b", re.I | re.M)
 
 
 def outside_root(path: str, root: str) -> bool:
@@ -57,11 +58,11 @@ def why(bead: Bead, root: str = "") -> str:
     return f"{REASON} ({r[0][0]}: {r[0][1][:80]})" + (f" +{len(r) - 1} more" if len(r) > 1 else "") if r else ""
 
 
-_TOUCHES = re.compile(r"^\s*(?:[-*]\s*)?(?:#+\s*)?\**Touches\**\s*:?\**\s*(.*)$", re.I)
-_BULLET = re.compile(r"^\s*[-*]\s+(.*)$")
-_WORDS = re.compile(r"[\s,]+")
-_OUTPUT = re.compile(r"^\s*(?:[-*]\s*)?\**Output\**\s*:\**\s*(\S.*)$", re.I | re.M)
-_AC_HEADING = re.compile(r"^\s*#+\s*Acceptance Criteria\b", re.I | re.M)
+_TOUCHES: Final = re.compile(r"^\s*(?:[-*]\s*)?(?:#+\s*)?\**Touches\**\s*:?\**\s*(.*)$", re.I)
+_BULLET: Final = re.compile(r"^\s*[-*]\s+(.*)$")
+_WORDS: Final = re.compile(r"[\s,]+")
+_OUTPUT: Final = re.compile(r"^\s*(?:[-*]\s*)?\**Output\**\s*:\**\s*(\S.*)$", re.I | re.M)
+_AC_HEADING: Final = re.compile(r"^\s*#+\s*Acceptance Criteria\b", re.I | re.M)
 
 
 def _paths(text: str) -> list[str]:

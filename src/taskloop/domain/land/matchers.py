@@ -1,16 +1,17 @@
 """Policy over the text of a push: the only regular expressions of the land feature, each one a named class."""
 import re
+from typing import Final
 
-_TRANSIENT = re.compile(
+_TRANSIENT: Final = re.compile(
     r"curl \d+|Broken pipe|Connection (?:reset|timed out|refused)|Could not resolve host|early EOF|RPC failed|"
     r"remote end hung up|SSL_ERROR|TLS|Operation timed out|Network is unreachable|"
     r"Temporary failure in name resolution|error: 5\d\d|HTTP/\d(?:\.\d)? 5\d\d",
     re.I,
 )
-_REJECTED = re.compile(r"rejected|non-fast-forward|fetch first|stale info")
-_LFS_ATTR = re.compile(r"^[^#\n]*\bfilter=lfs\b", re.M)
-_NO_REMOTE = re.compile(r"no (?:dolt )?remotes?\b|remote[^\n]{0,40}not (?:configured|found)|no such remote|no upstream", re.I)
-_FAILED_PREFIX = re.compile(r"^(failed|paused): ")
+_REJECTED: Final = re.compile(r"rejected|non-fast-forward|fetch first|stale info")
+_LFS_ATTR: Final = re.compile(r"^[^#\n]*\bfilter=lfs\b", re.M)
+_NO_REMOTE: Final = re.compile(r"no (?:dolt )?remotes?\b|remote[^\n]{0,40}not (?:configured|found)|no such remote|no upstream", re.I)
+_FAILED_PREFIX: Final = re.compile(r"^(failed|paused): ")
 
 
 class Push:

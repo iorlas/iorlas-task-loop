@@ -1,6 +1,7 @@
 """Every file location, once. Nothing else in the package names a file or a folder of ours."""
 import os
 from pathlib import Path
+from typing import Final, final
 
 from taskloop.contracts.ids import BeadId, RunId
 
@@ -11,6 +12,7 @@ def default_root() -> Path:
     return Path(base) / "task-loop"
 
 
+@final
 class ConfigDir:
     """The per-user state folder."""
 
@@ -171,10 +173,11 @@ class ConfigDir:
         return self.root / "usage-history.jsonl"
 
 
-PLAN_FILE = "plan.json"  # the run directory's copy of the plan the dashboard reads
-TASK_EXCLUDE = ".task/"  # the line a repo's info/exclude carries so the scratch folder is never committed
+PLAN_FILE: Final = "plan.json"  # the run directory's copy of the plan the dashboard reads
+TASK_EXCLUDE: Final = ".task/"  # the line a repo's info/exclude carries so the scratch folder is never committed
 
 
+@final
 class RepoDirs:
     """The scratch folder a worktree carries (.task/, never committed)."""
 

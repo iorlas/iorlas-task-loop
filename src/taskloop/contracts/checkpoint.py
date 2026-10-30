@@ -7,7 +7,7 @@ stood: branch, head, step and the stage counters. The big nested parts the plann
 this module never opens. An old checkpoint (another `v`) reads as absent: nothing is migrated.
 """
 
-from typing import Any, ClassVar
+from typing import Any, ClassVar, final
 
 import msgspec
 
@@ -23,6 +23,7 @@ def fresh_handoff() -> dict[str, Any]:
     return {"rounds": rounds, "seen_lows": lows}
 
 
+@final
 class RunState(Rec, frozen=False):
     """What a run carries across a park. The only place these attributes are declared."""
 
@@ -73,6 +74,7 @@ class RunState(Rec, frozen=False):
         return wire.load(cls, data)
 
 
+@final
 class Checkpoint(Rec):
     V: ClassVar[int] = 3
     bead: str

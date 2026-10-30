@@ -55,7 +55,7 @@ READ_ONLY_GIT: Final = {
 FIND_WRITES: Final = {"-exec", "-execdir", "-ok", "-okdir", "-delete", "-fprint", "-fprint0", "-fprintf", "-fls"}
 
 
-SED_PRINT = re.compile(r"^\s*(?:\d+|\$)?(?:,\s*(?:\d+|\$))?\s*[pd]\s*$")  # sed -n 'N,Mp': the one script that only prints
+SED_PRINT: Final = re.compile(r"^\s*(?:\d+|\$)?(?:,\s*(?:\d+|\$))?\s*[pd]\s*$")  # sed -n 'N,Mp': the one script that only prints
 GIT_BAD = ("--output", "--ext-diff", "--open-files-in-pager", "-O", "-c", "-C", "--git-dir", "--work-tree", "--exec-path", "--textconv")
 
 

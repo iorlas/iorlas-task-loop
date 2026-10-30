@@ -1,8 +1,9 @@
 """Text shaping for the look flow that needs a regular expression: picture names in prose, a file-safe method name,
 an owner-look body's sections."""
 import re
+from typing import Final
 
-IMAGE_NAME = re.compile(r"[\w./-]+\.(?:png|jpe?g)\b", re.I)
+IMAGE_NAME: Final = re.compile(r"[\w./-]+\.(?:png|jpe?g)\b", re.I)
 
 
 def image_names(text: str) -> list[str]:

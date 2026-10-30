@@ -10,7 +10,7 @@ import time
 from pathlib import Path
 from typing import Any, Final
 
-LABEL = "owner-look"
+LABEL: Final = "owner-look"
 PICTURES: Final = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp"}
 Item = dict[str, Any]
 
