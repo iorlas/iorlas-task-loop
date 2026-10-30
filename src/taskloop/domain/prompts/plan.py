@@ -50,6 +50,8 @@ VISUAL_STAGES: Final = """A stage whose files match this repo's visual paths (%s
 render: it names the
 pictures to render in `shots` (a method from the table below, its args, names) or gives a `logic_only` reason; an answer with
 neither is sent back. Plan such stages knowing that, and never plan a check that needs a picture the writer is to make.
+Verify runs after the stages only on a visual bead (such a stage, or criteria that ask for a picture): plan a check for every
+other criterion.
 Shot methods:
 %s"""
 
@@ -100,9 +102,6 @@ each stage has its files and its checks. Budget: about 12 tool calls. Then plan.
   number you chose: the check proves the evidence exists (the screenshot or sheet is saved, a count the tool reports), and
   the judgement goes in leftovers for the owner. A threshold you invent is a requirement nobody asked for, and the writer
   will tune the work to it.
-- Verify (a read-only check of what the workers could not check) runs only on a visual bead: one whose stage files match the repo's
-  visual paths or whose criteria ask for a picture. For any other bead a check you plan is the only proof there is, and what is
-  left unchecked lands as one follow-up bead: plan a check for every criterion you can.
 - Name the risks ahead of time: what could break something users or other code rely on (a saved format, a public
   member, shared files), each with the check that proves it safe. None is fine.
 - A check proves the code and the tree only: it never reads the tracker (no `bd`, nothing under `.beads/`) nor
