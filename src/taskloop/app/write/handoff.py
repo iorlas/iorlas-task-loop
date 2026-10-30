@@ -10,7 +10,7 @@ from taskloop.adapters.git import REAL
 from taskloop.contracts.config import FRESH_ABOVE_K
 from taskloop.contracts.paths import RunFiles
 from taskloop.contracts.ports import Git
-from taskloop.contracts.run import HandoffMirror
+from taskloop.contracts.run import HandoffMirror, Round
 from taskloop.contracts.stores import JsonStore
 from taskloop.domain.prompts.write import DONE_SO_FAR, STAGES_DONE, WRITE_RESUME_PROMPT
 from taskloop.domain.review.findings import blocks
@@ -38,15 +38,15 @@ class Handoff:
         """tl-bxk.10.29: -> why a new writer starts, or "". The session's last context is above write_fresh_above_k for its
         family: it is not resumed (every later turn would carry it all); the next write is a new session. At a stage
         boundary the lower write_fresh_stage_k applies (tl-bxk.13.7): lifesim-yxbb.9 carried 276K into stage 2 (11.7M tokens)."""
-        ref, ctx = self.e.writer.get("delegate"), self.e.writer.get("ctx")
+        ref, ctx = self.e.writer.delegate, self.e.writer.ctx
         limit = self.fresh_above_k(self.e.writer_family or "")
         if boundary and limit:  # write_fresh_above_k 0 means never: the stage limit does not override it
             b = float(self.e.cfg.write_fresh_stage_k or 0)
             limit = min(limit, b) if b else limit
         if not ref or not ctx or not limit or ctx <= limit:
             return ""
-        self.e.writer.pop("delegate")
-        why = f"session at {ctx:d}k"
+        self.e.writer.delegate = None
+        why = f"session at {ctx:.0f}k"
         self.e.log.note(f"fresh writer: {why} (above {limit:g}k for {self.e.writer_family})")
         return why
 
@@ -67,7 +67,7 @@ class Handoff:
     def delta(self, n: int, goal: str, files: str, anchors: str, checks: str, where: str, feedback: str, tail: str) -> str | None:
         """The prompt of a resumed writer: what changed since its session last saw the brief and the plan. None when the brief
         changed (the owner edited it, an answer came in): that session gets the whole prompt again."""
-        seen = self.e.writer.get("seen")
+        seen = self.e.writer.seen
         if not seen or seen[0] != self.seen_now()[0]:
             return None
         same = seen[1] == self.seen_now()[1]
@@ -76,7 +76,7 @@ class Handoff:
                                           where=where, feedback=feedback) + tail
 
     def seen_lows_text(self) -> str:
-        lows = self.e.handoff["seen_lows"]
+        lows = self.e.handoff.seen_lows
         if not lows:
             return ""
         return ("\nLow findings earlier reviews of this task already noted (do not list one again unless the code under it "
@@ -86,12 +86,12 @@ class Handoff:
         """The newest rounds first kept, oldest dropped when the text would pass `cap` characters."""
         out: list[str] = []
         size = 0
-        for r in reversed(self.e.handoff["rounds"][-last:]):
-            line = "- {}, round {} ({})".format(r["stage"], r["round"], r["kind"])
-            if r.get("writer"):
-                line += "; the writer said: {}".format(r["writer"][:each])
-            if r.get("open"):
-                line += "; sent back: " + " | ".join(r["open"])
+        for r in reversed(self.e.handoff.rounds[-last:]):
+            line = f"- {r.stage}, round {r.round} ({r.kind})"
+            if r.writer:
+                line += f"; the writer said: {r.writer[:each]}"
+            if r.open:
+                line += "; sent back: " + " | ".join(r.open)
             line = line[:each + 400]
             if out and size + len(line) > cap:
                 break
@@ -100,23 +100,24 @@ class Handoff:
         return ("\n".join(reversed(out)) + "\n") if out else ""
 
     def note_round(self, name: str, rnd: int, kind: str, writer: str = "", open_items: Sequence[str] = ()) -> None:
-        self.e.handoff["rounds"].append({"stage": name, "round": rnd, "kind": kind, "writer": " ".join(writer.split())[:300],
-                                       "open": [" ".join(x.split())[:200] for x in list(open_items)[:6]]})
-        self.e.handoff["rounds"] = self.e.handoff["rounds"][-12:]
+        h = self.e.handoff
+        h.rounds.append(Round(stage=name, round=rnd, kind=kind, writer=" ".join(writer.split())[:300],
+                              open=[" ".join(x.split())[:200] for x in list(open_items)[:6]]))
+        h.rounds = h.rounds[-12:]
         self.save()
 
     def note_lows(self, findings: Sequence[dict[str, Any]]) -> None:
         for f in findings:
             if not blocks(f):
                 x = ("{}:{} {}".format(f["file"], f["line"], " ".join(str(f["fix"]).split())))[:160]
-                if x not in self.e.handoff["seen_lows"]:
-                    self.e.handoff["seen_lows"].append(x)
-        self.e.handoff["seen_lows"] = self.e.handoff["seen_lows"][-20:]
+                if x not in self.e.handoff.seen_lows:
+                    self.e.handoff.seen_lows.append(x)
+        self.e.handoff.seen_lows = self.e.handoff.seen_lows[-20:]
         self.save()
 
     def save(self) -> None:
         with contextlib.suppress(OSError):
             h = self.e.handoff
             JsonStore(RunFiles(self.e.run_dir).handoff(), HandoffMirror).write(HandoffMirror(
-                rounds=list(h["rounds"]), seen_lows=list(h["seen_lows"]),
+                rounds=list(h.rounds), seen_lows=list(h.seen_lows),
                 deferred=[{"what": t, "why": w} for t, w in self.e.routing.ledger().deferred()], filed=list(self.e.filed)))

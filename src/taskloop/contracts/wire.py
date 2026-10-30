@@ -12,6 +12,10 @@ import msgspec
 type Open = dict[str, Any]  # a record still kept as an open dict (the planner's and the writer's own, until their records land)
 
 
+class Refused(ValueError):
+    """Something that must not be read as empty or as a fresh start is torn or of another version; the message names it."""
+
+
 class StaleRecord(ValueError):
     """The data carries another `v` than the class: the record is treated as absent, never migrated."""
 

@@ -58,7 +58,7 @@ class WriteRound:
         if fresh:
             prompt += e.hand.accepted_text() if boundary else e.hand.so_far_text()
         dtail = ""  # what a resumed writer still needs that its first prompt did not say for this stage
-        if s.last and not e.writer.get("last_stage"):  # the acceptance cases run now: it has not been told
+        if s.last and not e.writer.last_stage:  # the acceptance cases run now: it has not been told
             dtail += CASES_NOW
         if e.unchecked:
             dtail += UNCHECKED_TEXT
@@ -74,7 +74,7 @@ class WriteRound:
         """The writer's thread, its summary and its flakes, as the later rounds read them."""
         e, w = self.e, s.w
         e.writer_family = s.wfam
-        e.writer["last_stage"] = s.last
+        e.writer.last_stage = s.last
         wr = e.sessions[-1] if e.sessions else {}
         e.write_rounds.append({"write": s.n, "round": s.rounds + 1, "node_id": wr.get("node_id"), "ref": wr.get("ref"),
                                "resumed": "yes" if wr.get("resume") else "no", "input_tokens": (wr.get("tokens") or {}).get("in"),
@@ -119,7 +119,7 @@ class WriteRound:
                         round=s.rounds + 1, at=(s.sk, s.rounds, s.n + 500), **s.meta)
         e.stats["writes"] += 1
         s.wfam = e.writer_family = wfam
-        e.writer["last_stage"] = s.last
+        e.writer.last_stage = s.last
         e.writer_said += "\n" + w2["summary"]
         e.last_summary = w2["summary"]
         if w2["question"].strip():

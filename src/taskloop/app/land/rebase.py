@@ -3,7 +3,7 @@ else the task starts again on the base (land/restart.py)."""
 from collections.abc import Callable
 from typing import Protocol
 
-from taskloop.contracts.checkpoint import Checkpoint
+from taskloop.contracts.checkpoint import Checkpoint, PlanStep
 from taskloop.contracts.ports import Sh
 from taskloop.stores.runlog import RunLog
 
@@ -35,7 +35,7 @@ class RebaseHost(Protocol):
     salvage_tail: str  # the conflict's words for the fix round
     planned: int
     rebase_resets: int
-    plan_log: list[dict[str, object]]
+    plan_log: list[PlanStep]
 
     @property
     def bead(self) -> str: ...
@@ -134,7 +134,7 @@ class Rebase:
         if e.planned and e.rebase_resets < MAX_REBASE_RESETS:
             # tl-19i: plans made on the old base say nothing about this one. At most twice per bead
             e.log.note(f"the plan count starts again: {e.planned} earlier plan{'' if e.planned == 1 else 's'} were made on another base")
-            e.plan_log.append({"mode": "rebase", "counted": False,
-                               "why": f"the branch moved to a new base; {e.planned} plan(s) before it do not count"})
+            e.plan_log.append(PlanStep(mode="rebase", counted=False,
+                                       why=f"the branch moved to a new base; {e.planned} plan(s) before it do not count"))
             e.planned, e.rebase_resets = 0, e.rebase_resets + 1
         return "rebased"

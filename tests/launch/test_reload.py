@@ -190,7 +190,7 @@ class Reload(te.EngineTest):
         self.assertEqual(reexec.reexec_args(["run-task", "t-1", "--slot", "any", "--wait", "--worktree", "/w", "--quiet"], "s2", "/wt"),
                          ["run-task", "t-1", "--quiet", "--slot", "s2", "--worktree", "/wt"])
         self.assertIsNone(reexec.reexec_args(["loop", "--repo", "."], "", "/wt"))
-        handed = Env({"TL_REEXEC": json.dumps({"run": "x", "owned": "s2"})})
+        handed = Env({"TL_REEXEC": json.dumps({"v": 1, "run": "x", "bead": "t-1", "from": "0.1.0", "owned": "s2"})})
         self.assertTrue(entry._handed_slot("s2", handed))
         self.assertFalse(entry._handed_slot("s3", handed))
         self.assertFalse(entry._handed_slot("s2", Env()))

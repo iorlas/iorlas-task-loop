@@ -13,12 +13,13 @@ from support.fake_beads import FakeBeads
 from taskloop.app.run.resume import KEEP_FOR_ACTIVE, LATE, Resume
 from taskloop.app.run.state import Checkpoints, StateAttrs, carries_state, state_names
 from taskloop.contracts import fence, wire
-from taskloop.contracts.checkpoint import Checkpoint, RunState
+from taskloop.contracts.checkpoint import BriefSnap, Checkpoint, Defect, Handoff, PlanStep, RunState, WriterSession
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.review import (
     ReviewState,
     Unfiled,
 )
+from taskloop.contracts.run import Round
 from taskloop.stores.memory import fake_stores
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -26,19 +27,19 @@ ROOT = Path(__file__).resolve().parents[2]
 SAMPLE: dict[str, Any] = {
     "plan_data": {"summary": "s", "stages": []},
     "brief_hash": "b",
-    "snap": {"title": "t"},
+    "snap": BriefSnap(fields={"title": "t"}, issue_type="task", deps=[], comments=[]),
     "planner_ref": "ref",
     "planned": 2,
     "replans": 1,
     "fixes": 1,
     "extra": 1,
     "rebase_resets": 1,
-    "plan_log": [{"mode": "plan"}],
+    "plan_log": [PlanStep(mode="plan", why="w")],
     "done": ["g"],
     "accepted": [0],
     "accepted_new": ["f.txt"],
     "denials": ["rm"],
-    "writer": {"delegate": "w1", "ctx": 5, "seen": ["a"]},
+    "writer": WriterSession(delegate="w1", ctx=5, seen=["a"], last_stage=True),
     "writer_family": "codex",
     "writer_fallback": True,
     "fallback_lane": "L",
@@ -47,11 +48,11 @@ SAMPLE: dict[str, Any] = {
     "look_notes": ["n"],
     "look_unjudged": {"i": "why"},
     "look_done": 1,
-    "look_prev": [{"item": "i"}],
+    "look_prev": [Defect(item="i", why="w")],
     "rendered_names": ["a.png"],
     "last_reqs": [{"method": "m"}],
     "render_stale": True,
-    "handoff": {"rounds": [{"r": 1}], "seen_lows": ["l"]},
+    "handoff": Handoff(rounds=[Round(stage="s", round=1, kind="k", writer="w", open=["o"])], seen_lows=["l"]),
     "stage_tree": "T",
     "pending_land_validation": "red",
 }
@@ -122,7 +123,8 @@ class Park(unittest.TestCase):
 
     def test_every_field_but_the_run_s_own_comes_back_after_a_park(self):
         a, b = self.parked()
-        b.state.snap, b.state.brief_hash, b.state.plan_data = {"now": 1}, "now", None
+        snap = BriefSnap(fields={"now": "1"}, issue_type="", deps=[], comments=[])
+        b.state.snap, b.state.brief_hash, b.state.plan_data = snap, "now", None
         ck = stored(b)
         Resume(b).restore(ck, late=True)
         kept = set(KEEP_FOR_ACTIVE)

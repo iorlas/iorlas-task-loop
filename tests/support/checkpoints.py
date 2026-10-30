@@ -28,9 +28,9 @@ def flat_ck(ck):
     out.update(
         plan=ck.state.plan_data,
         brief=ck.state.brief_hash,
-        writer=w.get("delegate") or "",
-        writer_ctx=w.get("ctx"),
-        writer_seen=w.get("seen"),
+        writer=w.delegate or "",
+        writer_ctx=w.ctx,
+        writer_seen=w.seen,
     )
     return out
 

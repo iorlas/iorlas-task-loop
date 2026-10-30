@@ -39,8 +39,8 @@ class Records:
             return
         e.run_logged = True
         if e.reexec:  # the run record is in the log already (the exec kept the log): a note says what happened
-            fallback = " (fallback after a crash)" if e.reexec.get("fallback") else ""
-            e.log.note(f"task-loop {ident.plugin_version() or '?'} took over run {e.log_path.stem} from {e.reexec.get('from')}{fallback}")
+            fallback = " (fallback after a crash)" if e.reexec.fallback else ""
+            e.log.note(f"task-loop {ident.plugin_version() or '?'} took over run {e.log_path.stem} from {e.reexec.frm}{fallback}")
             return
         lock = engine_lock.LOCK
         why = self.origin()

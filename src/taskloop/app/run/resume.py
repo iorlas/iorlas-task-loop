@@ -73,7 +73,7 @@ class Resume:
         given = a is not None and a.answer is not None
         words = e.planner.cap.answered_words() if a is not None or ck is not None else ""
         snap_diff = quiet = req = None
-        if ck is not None and ck.state.snap:
+        if ck is not None and ck.state.snap is not None and e.snap is not None:
             snap_diff = brief.diff(ck.state.snap, e.snap, words)
             quiet = brief.diff(ck.state.snap, e.snap, words, comments=False)
             req = brief.diff(ck.state.snap, e.snap, "", comments=False)

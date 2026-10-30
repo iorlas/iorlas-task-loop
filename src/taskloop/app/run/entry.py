@@ -35,7 +35,7 @@ from taskloop.contracts.ids import BeadId
 from taskloop.contracts.kinds import Kind
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdFailure, BeadPatch, Spawner
-from taskloop.contracts.run import RunReport
+from taskloop.contracts.run import Reexec, RunReport
 from taskloop.contracts.stores import AskStore
 
 say = console.say
@@ -251,10 +251,8 @@ def take_area(a: Any, repo: Any, cfg: Any, lock: Any, sb: Any = "", store: Any =
 
 def _handed_slot(slot: Any, env: Env) -> Any:
     """True when TL_REEXEC (set by the run-task that exec'd into this one, not yet read by the Engine) says it took `slot` itself."""
-    try:
-        return json.loads(env.get(EnvVar.TL_REEXEC) or "{}").get("owned") == slot
-    except (ValueError, AttributeError):
-        return False
+    handed = Reexec.parse(env.get(EnvVar.TL_REEXEC))
+    return handed is not None and handed.owned == slot
 
 
 def _worktree_of(a: Any, repo: Any, spawner: Spawner) -> tuple[str, Any]:

@@ -114,7 +114,7 @@ class EveryStepResumes(NetBase):
 
     def test_a_drop_in_the_write_resumes_the_writer_thread_and_the_work_is_kept(self):
         self.drop_at("write")
-        self.assertEqual(self.eng.writer["delegate"], "ref-write")  # the thread the engine now holds is the one the answer named
+        self.assertEqual(self.eng.writer.delegate, "ref-write")  # the thread the engine now holds is the one the answer named
 
     def test_a_drop_in_the_review_resumes_the_reviewer_thread(self):
         self.drop_at("review")

@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from taskloop.adapters import looks
+from taskloop.contracts.checkpoint import Defect
 from taskloop.domain.look.matchers import image_names
 from taskloop.domain.prompts.write import LOOK_FEEDBACK, LOOK_WRITE_TABLE
 from taskloop.domain.review.matchers import Wording
@@ -20,7 +21,7 @@ class Judge:
     def __init__(self, host: Any) -> None:
         self.e = host
 
-    def judge_shots(self, names: list[str], rnd: int, summary: str, last: bool = True) -> tuple[list[dict[str, str]], str]:
+    def judge_shots(self, names: list[str], rnd: int, summary: str, last: bool = True) -> tuple[list[Defect], str]:
         """The look judge's findings: a fresh call from another family, in a folder with only the shrunk pictures, the
         references and the 'before' pictures. -> (defects [{item, where, why}], its summary)."""
         e = self.e
@@ -43,9 +44,11 @@ class Judge:
         except e.Blocked as b:
             return self.unjudged(b, rnd)
         note = "[same family as the writer: no other lane was free] " if e.last_flag == "same_family" else ""
-        return [f for f in d["findings"] if f["verdict"] == "defect"], note + d["summary"]
+        found = [Defect(item=f.get("item", ""), why=f.get("why", ""), where=f.get("where", ""))
+                 for f in d["findings"] if f["verdict"] == "defect"]
+        return found, note + d["summary"]
 
-    def unjudged(self, b: Any, rnd: int) -> tuple[list[dict[str, str]], str]:
+    def unjudged(self, b: Any, rnd: int) -> tuple[list[Defect], str]:
         """No lane for the judge: the pictures go unjudged to the owner-look bead; a look judge never parks the bead."""
         e = self.e
         st = getattr(b, "stop", None)
@@ -72,7 +75,7 @@ class Judge:
         e.look_done += 1
         rnd = e.look_done
         names, errs = e.pictures.render_shots(reqs, rnd)
-        defects = [{"item": "render", "where": "", "why": msg} for msg in errs]
+        defects = [Defect(item="render", why=msg) for msg in errs]
         summary = ""
         if names:
             found, summary = self.judge_shots(names, rnd, w.get("summary", ""), last)
@@ -81,7 +84,7 @@ class Judge:
             e.look_notes = [summary.strip()]
         e.pictures.persist_look()
         prev, e.look_prev = e.look_prev, defects
-        again = [d for d in defects if any(looks.same_defect(d["why"] + " " + d["where"], p["why"] + " " + p["where"]) for p in prev)]
+        again = [d for d in defects if any(looks.same_defect(d.why + " " + d.where, p.why + " " + p.where) for p in prev)]
         fresh = [d for d in defects if d not in again]
         out_of_rounds = e.look_done >= int(e.cfg.look_rounds)
         for d in again + (fresh if out_of_rounds else []):  # tl-bxk.13.15.5: the same defect twice is not the writer's to fix again
@@ -89,17 +92,17 @@ class Judge:
         if not fresh or out_of_rounds:
             return ""
         e.steps.move("write", "look_defects", f"{plural(len(fresh), 'defect')} from the look judge, round {rnd}")
-        lines = [f"- {d['item']}{(' (' + d['where'] + ')') if d['where'] else ''}: {d['why']}" for d in fresh]
+        lines = [f"- {d.item}{(' (' + d.where + ')') if d.where else ''}: {d.why}" for d in fresh]
         return LOOK_FEEDBACK % ("\n".join(lines), "\n".join(f"{e.evidence_dir}/{n}" for n in names))
 
-    def look_leftover(self, d: dict[str, str], names: list[str]) -> None:
+    def look_leftover(self, d: Defect, names: list[str]) -> None:
         e = self.e
-        title = f"Look: {d['why']}"[:120]
+        title = f"Look: {d.why}"[:120]
         if title not in {lo["title"] for lo in e.leftovers}:
             e.leftovers.append({"title": title, "why": (
-                f"The look judge found this on {e.bead_title or e.bead} ({d['item']}); it came back after a fix or the render rounds were "
-                f"used up. Pictures: {', '.join(names) or 'none'}. Defect: {d['where']} {d['why']}")})
-            e.log.note(f"look defect filed as a follow-up: {d['why'][:200]}")
+                f"The look judge found this on {e.bead_title or e.bead} ({d.item}); it came back after a fix or the render rounds were "
+                f"used up. Pictures: {', '.join(names) or 'none'}. Defect: {d.where} {d.why}")})
+            e.log.note(f"look defect filed as a follow-up: {d.why[:200]}")
 
     def look_write(self, st: Any) -> str:
         e = self.e

@@ -317,7 +317,7 @@ class EngineChecksTest(EngineTest):
         (self.eng.run_dir / "brief.md").write_text("the owner answered: use X\n")  # an answer came in
         self.assertIsNone(self.eng.hand.delta(*args))
         (self.eng.run_dir / "brief.md").write_text(self.eng.brief_file.read_text())
-        self.eng.writer["seen"] = None  # a checkpoint of before this existed
+        self.eng.writer.seen = []  # a checkpoint of before this existed
         self.assertIsNone(self.eng.hand.delta(*args))
 
     @no_repo

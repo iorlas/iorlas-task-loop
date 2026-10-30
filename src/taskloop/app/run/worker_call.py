@@ -163,7 +163,7 @@ class WorkerCall:
     ) -> Call:
         e = self.e
         writer = writer_family if node in READ_ONLY_NODES else None
-        resume = resume_ref or (e.writer.get("delegate") if resume_key else None)
+        resume = resume_ref or (e.writer.delegate if resume_key else None)
         if resume and resume_key and e.writer_fallback:  # tl-bxk.10.5: a fallback writer would keep the bead off Codex for good
             lane = dg.lane_status(e.delegation.route() or "", e.env).get(e.fallback_lane) if e.fallback_lane else None
             if e.fallback_lane and not isinstance(lane, dict):  # that lane is not configured here: no fallback
@@ -365,9 +365,9 @@ class WorkerCall:
             if res.fallback is not None:  # delegate says it on every answer that picked a lane, a resumed one too
                 e.writer_fallback = res.fallback
                 e.fallback_lane = (res.first_lane or c.out_on or e.fallback_lane) if res.fallback else ""
-            e.writer["delegate"] = c.resume = res.ref
-            e.writer["ctx"] = (e.sessions[-1] if e.sessions else {}).get("context_k")  # k tokens, None = unknown
-            e.writer["seen"] = e.hand.seen_now()  # the brief and plan this session now holds
+            e.writer.delegate = c.resume = res.ref
+            e.writer.ctx = (e.sessions[-1] if e.sessions else {}).get("context_k")  # k tokens, None = unknown
+            e.writer.seen = e.hand.seen_now()  # the brief and plan this session now holds
         data = unstrict(res.data, answers.schema_for(c.node, c.visual)) if res.data is not None else None
         return answers.check(c.node, c.visual, data) if data is not None else [f"no structured output: {(res.say or res.text)[:300]}"]
 

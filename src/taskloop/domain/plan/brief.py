@@ -1,11 +1,12 @@
 """The brief a worker reads, built from the bead, and the bead's snapshot and diff. The brief keeps its section boundaries, so code that
 accounts for tokens can say how many bytes the description, the comments or the linked beads cost (tl-7y6.4.9) without parsing text."""
 import difflib
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any, Final
 
 from taskloop.contracts.bead import Bead, Comment
+from taskloop.contracts.checkpoint import BriefSnap
 from taskloop.domain.plan.matchers import bead_ids
 
 FIELDS: Final = ("title", "description", "acceptance_criteria", "design", "notes")
@@ -114,12 +115,12 @@ def boundaries(parts: Sequence[tuple[str, str]]) -> tuple[Section, ...]:
     return tuple(out)
 
 
-def snapshot(bead: Bead, comments: Sequence[Comment], is_engine: Callable[[str], bool]) -> dict[str, Any]:
+def snapshot(bead: Bead, comments: Sequence[Comment], is_engine: Callable[[str], bool]) -> BriefSnap:
     """What a later amend diffs against: the bead's text fields, issue type, dependencies (id:type) and the people's comments, as the
     planner saw them."""
     deps = sorted(f"{d.id}:{d.type}" for d in bead.dependencies if d.id)
-    return {"fields": {k: (people_lines if k == "notes" else str.strip)(getattr(bead, k)) for k in FIELDS},
-            "issue_type": bead.issue_type.strip(), "deps": deps, "comments": [c.text.strip() for c in comments if not is_engine(c.text)]}
+    return BriefSnap(fields={k: (people_lines if k == "notes" else str.strip)(getattr(bead, k)) for k in FIELDS},
+                     issue_type=bead.issue_type.strip(), deps=deps, comments=[c.text.strip() for c in comments if not is_engine(c.text)])
 
 
 def field_diff(a: str, b: str) -> str:
@@ -130,21 +131,21 @@ def field_diff(a: str, b: str) -> str:
     return d[:DIFF_CAP] + f"\n... (diff cut at 4 KB; {len(d) - DIFF_CAP} more characters not shown)"
 
 
-def diff(old: Mapping[str, Any], new: Mapping[str, Any], answer: str = "", comments: bool = True) -> str:
+def diff(old: BriefSnap, new: BriefSnap, answer: str = "", comments: bool = True) -> str:
     """What changed in the bead since the plan (fields as a unified diff of at most 4 KB each, issue type, dependencies, new comments,
     the owner's answer). '' when nothing."""
     out = []
     for k in FIELDS:
-        a, b = old["fields"].get(k, ""), new["fields"].get(k, "")
+        a, b = old.fields.get(k, ""), new.fields.get(k, "")
         if a != b:
             out.append(f"- {k} changed:\n{field_diff(a, b)}")
-    if "issue_type" in old and old["issue_type"] != new.get("issue_type", ""):
-        out.append(f"- issue_type was: {old['issue_type'] or '(empty)'}\n  now: {new.get('issue_type') or '(empty)'}")
-    if "deps" in old and old["deps"] != new.get("deps", []):
-        was, now = set(old["deps"]), set(new.get("deps", []))
+    if old.issue_type != new.issue_type:
+        out.append(f"- issue_type was: {old.issue_type or '(empty)'}\n  now: {new.issue_type or '(empty)'}")
+    if old.deps != new.deps:
+        was, now = set(old.deps), set(new.deps)
         out.append(f"- dependencies: added {', '.join(sorted(now - was)) or 'none'}; removed {', '.join(sorted(was - now)) or 'none'}")
-    seen = list(old.get("comments") or [])
-    for t in new["comments"] if comments else []:
+    seen = list(old.comments)
+    for t in new.comments if comments else []:
         if t in seen:
             seen.remove(t)
         else:

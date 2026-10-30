@@ -1,7 +1,6 @@
 """A run that goes on in another process: the counters kept across a network pause or an exec into a newer install, and the exec at a
 step boundary."""
 import contextlib
-import json
 import sys
 import time
 from pathlib import Path
@@ -17,7 +16,7 @@ from taskloop.contracts import env as penv
 from taskloop.contracts import log as rec
 from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.paths import ConfigDir, RunFiles
-from taskloop.contracts.run import NetPause, ReexecNote, RunCounters
+from taskloop.contracts.run import NetPause, Reexec, ReexecNote, RunCounters
 from taskloop.contracts.stores import JsonStore
 
 
@@ -110,7 +109,7 @@ class Reload:
         trail.event("reload", e.bead, who="engine", old=here, new=ver, step=step, run=run, code_dir=str(d))
         e.log.note(f"moving to task-loop {ver} (was {here}) at {step}; run {run} goes on from its checkpoint")
         e.log.emit(rec.Reload(old=here, new=ver, step=step))
-        penv.export(EnvVar.TL_REEXEC, json.dumps({"run": run, "bead": e.bead, "from": here, "owned": RUN_SLOT["owned"]}))
+        penv.export(EnvVar.TL_REEXEC, Reexec(run=run, bead=e.bead, frm=here, owned=RUN_SLOT["owned"]).text())
         for f in (sys.stdout, sys.stderr):
             with contextlib.suppress(Exception):
                 f.flush()

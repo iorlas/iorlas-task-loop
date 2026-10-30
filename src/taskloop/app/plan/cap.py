@@ -21,7 +21,7 @@ class ReplanCap:
     def blocked(self, detail: str = "") -> Exception:
         """The cap's ask: the planner ran `planned` times. An answer that allows one more (action rerun) gives one."""
         e = self.e
-        runs = [(x["mode"], x["why"]) for x in e.plan_log]
+        runs = [(x.mode, x.why) for x in e.plan_log]
         why = "; ".join(f"{k + 1}. {m}: {w}" for k, (m, w) in enumerate(runs))[:1500]
         limit = int(e.cfg.max_replans) + e.extra
         text = f"{REPLAN_CAP}{e.planned} times (the limit is 1 plan + {limit} amends): {why}{('; ' + detail) if detail else ''}"

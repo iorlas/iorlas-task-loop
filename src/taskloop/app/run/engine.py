@@ -73,7 +73,7 @@ from taskloop.contracts.landed import Landed, LandedStore
 from taskloop.contracts.log import Assumed, Said
 from taskloop.contracts.paths import PLAN_FILE, ConfigDir, RunFiles
 from taskloop.contracts.ports import Clock, Spawner
-from taskloop.contracts.run import RunReport
+from taskloop.contracts.run import Reexec, RunReport
 from taskloop.domain import outcome as oc
 from taskloop.domain.lanes.matchers import read_only_command
 from taskloop.domain.lanes.says import stop_say, stop_why
@@ -120,9 +120,9 @@ class Engine(RunFields):
         self.spawner = spawner
         super().__init__(bead, wt, cfg, dry_run, verbose, store, route, fresh, claim)
         self.clock = clock or SystemClock()
-        self.reexec: dict[str, Any] = reexec.take_reexec_env()  # this run-task came from an exec into a newer install, or a fallback
-        if self.reexec.get("bead") != bead:
-            self.reexec = {}
+        self.reexec: Reexec | None = reexec.take_reexec()  # this run-task came from an exec into a newer install, or a fallback
+        if self.reexec and self.reexec.bead != bead:
+            self.reexec = None
         # a run paused for the network: its run id and counters go on
         pause = None if self.reexec else reexec.take_net_pause(bead)
         self.stores = stores or real_stores(ConfigDir(ident.config_dir()))
@@ -130,7 +130,8 @@ class Engine(RunFields):
         ck = None if dry_run or self.reexec or pause else self.checkpoints.read()
         self.dead = ck if ended.unfinished(ck) else None
         # the same run id: log, run dir and trace go on
-        taken = self.reexec.get("run") or (pause.run if pause else None) or (self.dead.ended.run if self.dead and self.dead.ended else None)
+        dead_run = self.dead.ended.run if self.dead and self.dead.ended else None
+        taken = (self.reexec.run if self.reexec else None) or (pause.run if pause else None) or dead_run
         layout = RunLayout.open(bead, wt, taken)
         self.log_path, self.err_path, self.run_dir = layout.log_path, layout.err_path, layout.run_dir
         self.task_dir, self.brief_file, self.evidence_dir = layout.task_dir, layout.brief_file, layout.evidence_dir

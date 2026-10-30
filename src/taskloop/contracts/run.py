@@ -1,11 +1,13 @@
 """Run records: what a run-task process reports to its loop, and the hand-over between two engine versions."""
+import json
 from typing import Any, ClassVar, final
 
 import msgspec
 
+from taskloop.contracts import wire
 from taskloop.contracts.enums import Result, WhyCode
 from taskloop.contracts.ids import BeadId
-from taskloop.contracts.wire import Rec
+from taskloop.contracts.wire import Rec, Refused
 
 
 @final
@@ -54,17 +56,30 @@ class LoopLogLine(Rec):
 
 @final
 class Reexec(Rec):
-    """runs/<run>/reexec.json: the one record an old process writes and a newer install reads (TL_REEXEC)."""
+    """The TL_REEXEC hand-over (an environment variable, JSON of this record): what an engine that moves into a newer install, or the
+    loop that puts a crashed move back on the old one, tells the run-task it starts. `owned`: the slot the old process took itself;
+    `fallback`: the loop restarted the run on the install it came from."""
 
     V: ClassVar[int] = 1
     run: str
     bead: str
-    from_version: str
-    to_version: str
-    step: str
-    owned: list[str] = msgspec.field(default_factory=list)
-    fallback: str = ""
-    counters: dict[str, int] = msgspec.field(default_factory=dict)
+    frm: str = msgspec.field(name="from")
+    owned: str = ""
+    fallback: bool = False
+
+    def text(self) -> str:
+        return json.dumps(wire.dump(self))
+
+    @classmethod
+    def parse(cls, raw: str) -> Reexec | None:
+        """The hand-over in `raw` (the TL_REEXEC text); None for "". A text that is not a Reexec of this version is Refused, naming the
+        variable: a run-task never starts as a fresh run when its parent meant it to go on."""
+        if not raw:
+            return None
+        try:
+            return wire.load(cls, raw)
+        except ValueError as err:
+            raise Refused(f"TL_REEXEC is not a Reexec v{cls.V} ({err}): {raw[:200]!r}") from None
 
 
 @final
@@ -121,11 +136,22 @@ class DoneMemo(Rec):
 
 
 @final
+class Round(Rec):
+    """One writer/review round, as the next writer is told of it (app/write/handoff)."""
+
+    stage: str
+    round: int
+    kind: str
+    writer: str = ""  # what the writer said, cut
+    open: list[str] = msgspec.field(default_factory=list)  # what the review sent back, cut
+
+
+@final
 class HandoffMirror(Rec):
     """runs/<run>/handoff.json: a copy of the writer's handoff (rounds so far, lows already noted) for whoever reads the run dir."""
 
     V: ClassVar[int] = 1
-    rounds: list[dict[str, Any]] = msgspec.field(default_factory=list)
+    rounds: list[Round] = msgspec.field(default_factory=list)
     seen_lows: list[str] = msgspec.field(default_factory=list)
     deferred: list[dict[str, str]] = msgspec.field(default_factory=list)
     filed: list[Any] = msgspec.field(default_factory=list)

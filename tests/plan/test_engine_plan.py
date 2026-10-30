@@ -344,7 +344,7 @@ class EnginePlanTest(EngineTest):
         self.assertIn("description changed:", p)
         self.assertIn("+Also say hi.", p)
         self.assertIn("new comment:\nKeep it small.", p)
-        self.assertEqual(self.eng.plan_log[-1]["mode"], "amend")
+        self.assertEqual(self.eng.plan_log[-1].mode, "amend")
 
     def test_a_comment_alone_is_not_an_amend_and_costs_no_replan(self):
         self.stopped_run(plan=self.TWO, answers={"plan": [self.TWO], "write": [WRITE]})
@@ -391,7 +391,7 @@ class EnginePlanTest(EngineTest):
         self.assertEqual(s.calls[0][0], "planner")
         self.assertIn("<old_plan>", s.prompts[0])
         self.assertIn("Use the new format.", s.prompts[0])
-        self.assertIn("the owner answered ask t-1-1", self.eng.plan_log[-1]["why"])
+        self.assertIn("the owner answered ask t-1-1", self.eng.plan_log[-1].why)
 
     def test_a_bead_that_changed_in_nothing_the_plan_reads_keeps_its_plan_and_calls_no_planner(self):
         self.stopped_run()
@@ -422,7 +422,7 @@ class EnginePlanTest(EngineTest):
         self.assertIn("<old_plan>", again)
         self.assertIn(json.dumps(FALSE)[1:-1], again)  # the plan is quoted as JSON: a Windows path has doubled backslashes
         self.assertIn("it exits 1 whatever the code does", again)
-        self.assertEqual([e["mode"] for e in self.eng.plan_log], ["plan", "amend"])
+        self.assertEqual([e.mode for e in self.eng.plan_log], ["plan", "amend"])
 
     def test_the_stage_level_cap_is_the_replan_cap_ask_and_allow_one_more_works_on_it(self):
         rc, _s = self.run_engine({"plan": [PLAN, PLAN], "write": [WRITE, WRITE],
@@ -451,15 +451,15 @@ class EnginePlanTest(EngineTest):
             with self.stop_at("reviewer", 1), self.store.stub(comments=[{"author": "supervisor", "text": f"Keep it small {n}."}]):
                 self.run_engine({"plan": [PLAN], "write": [WRITE]}, max_rounds=1, max_replans=1)
             self.assertNotIn("re-planned", " ".join(self.blocked[before:]))
-        amends = [e for e in self.eng.plan_log if "comments only" in e["why"]]
-        self.assertTrue(amends and not any(e["counted"] for e in amends), self.eng.plan_log)
+        amends = [e for e in self.eng.plan_log if "comments only" in e.why]
+        self.assertTrue(amends and not any(e.counted for e in amends), self.eng.plan_log)
         self.assertLessEqual(self.eng.planned, 1 + 1 + self.eng.extra)  # the planner's total stays inside the cap
 
     def test_tl_9un_12_a_requirement_change_still_counts_against_the_replan_cap(self):
         self.cap_answered_rerun()
         with self.store.stub(show=dict(BEAD, description="Also say hi.")):
             self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, max_rounds=1, max_replans=1)
-        self.assertTrue(self.eng.plan_log[-1]["counted"], self.eng.plan_log)
+        self.assertTrue(self.eng.plan_log[-1].counted, self.eng.plan_log)
 
     def test_max_replans_is_read_from_the_config(self):
         self.stopped_run()

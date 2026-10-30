@@ -13,6 +13,7 @@ from taskloop.app.plan.prompt import PlanPrompt
 from taskloop.app.plan.sendback import SendBack
 from taskloop.contracts import plancheck
 from taskloop.contracts.answers import ASSUMPTION, IRREVERSIBLE
+from taskloop.contracts.checkpoint import PlanStep
 from taskloop.contracts.enums import AskClass
 from taskloop.contracts.plancheck import PlanData
 from taskloop.domain.asks import specs as askspecs
@@ -74,8 +75,8 @@ class Planner:
             raise self.cap.blocked()
         if not owner:
             e.planned += 1
-        e.plan_log.append({"mode": "amend" if old else "plan", "counted": not owner,
-                           "why": clip(e.amend_why or ("a re-plan: " + clip(why, 160) if again else "first plan"), 240)})
+        e.plan_log.append(PlanStep(mode="amend" if old else "plan", counted=not owner,
+                                   why=clip(e.amend_why or ("a re-plan: " + clip(why, 160) if again else "first plan"), 240)))
         if old and not again and not e.amend_text:
             e.amend_text = "The bead is the same as when the old plan was made."
 
@@ -106,7 +107,7 @@ class Planner:
             e.steps.outcome("sent back", "an accepted requirement decides its question")
             e.steps.move(step, "planner_decided", f"an accepted requirement decides it: {decided}")
             e.planned += 1  # a planner run like the others: the cap counts it
-            e.plan_log.append({"mode": "plan", "why": "an accepted requirement decides its question"})
+            e.plan_log.append(PlanStep(mode="plan", why="an accepted requirement decides its question"))
             data = self.ask(prompt + DECIDED_TEXT % (q, decided) + PLAN_DECIDED_TEXT, step, "plan to meet it", "checks_back")
         data = copy.deepcopy(data)  # the engine's own copy: cases are added to it as the task runs
         if data["question"].strip() and data.get("irreversible") not in IRREVERSIBLE:
@@ -124,7 +125,7 @@ class Planner:
             e.steps.outcome("sent back", "its question is about a step that can be undone")
             e.steps.move(step, "planner_assumed", f"a question about a reversible step is an assumption: {asked[:200]}")
             e.planned += 1
-            e.plan_log.append({"mode": "plan", "why": "its question is about a step that can be undone"})
+            e.plan_log.append(PlanStep(mode="plan", why="its question is about a step that can be undone"))
             prior = data["assumptions"]
             data = copy.deepcopy(self.ask(prompt + ASSUME_TEXT % asked, step, "plan on assumptions", "checks_back"))
             data["assumptions"] = prior + data.get("assumptions", [])

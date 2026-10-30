@@ -7,7 +7,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
-from taskloop.contracts.run import NetPause
+from taskloop.contracts.run import NetPause, Reexec
 from taskloop.contracts.stores import Absent, ForeignVersion, JsonStore, Present, Refused, Torn
 
 
@@ -39,6 +39,17 @@ class SealedRead(unittest.TestCase):
         with self.assertRaises(Refused) as ctx:
             self.store.need()
         self.assertIn(str(self.path), str(ctx.exception))
+
+
+class Handover(unittest.TestCase):
+    def test_the_tl_reexec_text_round_trips_and_a_bad_one_is_refused_by_name(self) -> None:
+        rec = Reexec(run="r", bead="b", frm="0.1.0", owned="s1", fallback=True)
+        self.assertEqual(Reexec.parse(rec.text()), rec)
+        self.assertIsNone(Reexec.parse(""))
+        for bad in ('{"run": "r", "bead": "b", "from": "x", "owned": "s1"}', "{", '{"v": 1, "run": "r"}'):
+            with self.assertRaises(Refused) as ctx:
+                Reexec.parse(bad)
+            self.assertIn("TL_REEXEC", str(ctx.exception))
 
 
 if __name__ == "__main__":

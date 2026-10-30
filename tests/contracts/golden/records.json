@@ -330,7 +330,18 @@
     ]
    },
    "brief_hash": "b0",
-   "snap": {},
+   "snap": {
+    "fields": {
+     "title": "t"
+    },
+    "issue_type": "task",
+    "deps": [
+     "x:blocks"
+    ],
+    "comments": [
+     "c"
+    ]
+   },
    "planner_ref": "",
    "planned": 0,
    "replans": 0,
@@ -340,8 +351,8 @@
    "plan_log": [
     {
      "mode": "plan",
-     "counted": true,
-     "why": "first"
+     "why": "first",
+     "counted": true
     }
    ],
    "done": [
@@ -354,10 +365,11 @@
    "denials": [],
    "writer": {
     "delegate": "codex",
+    "ctx": 35,
     "seen": [
      "abc"
     ],
-    "ctx": 35
+    "last_stage": false
    },
    "writer_family": null,
    "writer_fallback": false,
@@ -370,7 +382,8 @@
    "look_prev": [
     {
      "item": "i",
-     "verdict": "defect"
+     "why": "w",
+     "where": ""
     }
    ],
    "rendered_names": [
@@ -388,7 +401,11 @@
    "handoff": {
     "rounds": [
      {
-      "stage": "1/1"
+      "stage": "1/1",
+      "round": 1,
+      "kind": "bad_checks",
+      "writer": "",
+      "open": []
      }
     ],
     "seen_lows": []
@@ -679,16 +696,9 @@
   "v": 1,
   "run": "tl-7y6.3.1-20261027-002239",
   "bead": "tl-1",
-  "from_version": "0.23.56",
-  "to_version": "0.23.57",
-  "step": "write",
-  "owned": [
-   "a"
-  ],
-  "fallback": "f",
-  "counters": {
-   "rounds": 2
-  }
+  "from": "0.23.56",
+  "owned": "s1",
+  "fallback": true
  },
  "LoopState": {
   "v": 2,
@@ -1071,7 +1081,11 @@
   "v": 1,
   "rounds": [
    {
-    "stage": "s"
+    "stage": "s",
+    "round": 1,
+    "kind": "k",
+    "writer": "",
+    "open": []
    }
   ],
   "seen_lows": [

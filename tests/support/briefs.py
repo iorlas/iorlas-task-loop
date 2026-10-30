@@ -5,6 +5,7 @@ from typing import Any
 from taskloop.app.asks import intake
 from taskloop.app.plan.briefs import ENGINE_LABELS
 from taskloop.contracts.bead import Bead, Comment
+from taskloop.contracts.checkpoint import BriefSnap
 from taskloop.domain.plan import brief as bf
 
 
@@ -17,7 +18,7 @@ def linked_text(bead_id: str, bead: Bead, comments: Sequence[Comment], show: Any
     return bf.linked(bead_id, bead, comments, intake.engine_written, show, comments_of, cap, each)
 
 
-def bead_snapshot(bead: Bead, comments: Sequence[Comment]) -> dict[str, Any]:
+def bead_snapshot(bead: Bead, comments: Sequence[Comment]) -> BriefSnap:
     return bf.snapshot(bead, comments, intake.engine_written)
 
 

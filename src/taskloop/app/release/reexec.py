@@ -1,17 +1,15 @@
 """Moving to a newer install between steps (tl-7y6.9): by exec only, no module is ever reloaded in place. The notes a run leaves for
 the process that takes it over: the exec hand-over, the network pause, and the argv that goes on from the checkpoint."""
-import json
 import os
 import time
 from collections.abc import Sequence
-from typing import Any
 
 from taskloop.adapters import applog, ident
 from taskloop.contracts import env as penv
 from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.paths import ConfigDir, RunFiles
-from taskloop.contracts.run import NetPause, ReexecNote
+from taskloop.contracts.run import NetPause, Reexec, ReexecNote
 from taskloop.contracts.stores import JsonStore
 from taskloop.domain.lanes import policy as lp
 
@@ -51,14 +49,9 @@ def take_net_pause(bead: BeadId) -> NetPause | None:
     return note if RunFiles(cfg().run_dir(note.run)).pause().is_file() else None
 
 
-def take_reexec_env() -> dict[str, Any]:
-    """The hand-over an exec'd (or fallback) run-task finds in TL_REEXEC: {run, bead, from, owned}; {} on a normal start."""
-    raw = penv.take(EnvVar.TL_REEXEC)
-    try:
-        note = json.loads(raw) if raw else {}
-    except ValueError:
-        return {}
-    return note if isinstance(note, dict) and isinstance(note.get("run"), str) else {}
+def take_reexec() -> Reexec | None:
+    """The hand-over an exec'd (or fallback) run-task finds in TL_REEXEC, taken once; None on a normal start."""
+    return Reexec.parse(penv.take(EnvVar.TL_REEXEC))
 
 
 def reexec_args(argv: Sequence[str], slot: str, wt: object) -> list[str] | None:

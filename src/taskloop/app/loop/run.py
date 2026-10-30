@@ -1,6 +1,5 @@
 """One bead through `tl run-task` as a child of the loop: wait for it, watch for a stop, read what it gave."""
 import contextlib
-import json
 import os
 import time
 from collections.abc import Callable
@@ -17,6 +16,7 @@ from taskloop.contracts.config import LoopConfig
 from taskloop.contracts.enums import Result
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ports import BdFailure, BeadPatch, WaitTimeout
+from taskloop.contracts.run import Reexec
 
 
 @dataclass
@@ -55,7 +55,7 @@ class BeadRun:
             self.env.stop_tree(child)
             raise
 
-    def run(self, b: Bead, at: Where, code: Path | None = None, handover: dict[str, object] | None = None) -> vd.Verdict:
+    def run(self, b: Bead, at: Where, code: Path | None = None, handover: Reexec | None = None) -> vd.Verdict:
         """The verdict of one bead (failed when run-task gave none). `code`: the install to run from (the fallback after a
         crash-after-exec; default this loop's own); `handover`: TL_REEXEC for that fallback run."""
         env = self.env
@@ -65,7 +65,7 @@ class BeadRun:
         cmd = env.run_task_argv(b.id, at.wt, at.slot, str(out), code)
         t0 = env.now()
         extra = {"TASK_LOOP_SLOT_BEAD": at.slot_bead or "", "TASK_LOOP_LOOP_PID": str(os.getpid()),  # run-task's parent is uv, not us
-                 **({"TL_REEXEC": json.dumps(handover)} if handover else {})}
+                 **({"TL_REEXEC": handover.text()} if handover else {})}
         with open(log_path, "ab") as log:  # append: a rerun of the same stem never cuts a log another reader follows
             child, hold = env.spawn(cmd, log, extra)
             self.publish(Running(b.id, at.slot, t0, child.pid, str(log_path), "" if at.slot else at.wt))
@@ -81,7 +81,7 @@ class BeadRun:
                 self.installs.record_bad(moved.to, why)
                 env.event("reload_fallback", b.id, who="loop", old=moved.to, new=moved.frm, why=why, run=moved.run)
                 self.say(f"RED: {b.id} died after the move to task-loop {moved.to}; {b.id} goes on from its checkpoint on {moved.frm}")
-                return self.run(b, at, back, {"run": moved.run, "bead": b.id, "from": moved.to, "owned": "", "fallback": True})
+                return self.run(b, at, back, Reexec(run=moved.run, bead=b.id, frm=moved.to, fallback=True))
         if stopped and v.outcome is Result.FAILED:  # a stop is no verdict on the bead: back to the queue, unclaimed,
             if env.landed_on_base(at.wt, b.id):  # unless the stop came during a land that went through
                 v = v.with_(why=f"{v.why or 'stopped'}; its land commit is on the base: not reopened, close it by hand")

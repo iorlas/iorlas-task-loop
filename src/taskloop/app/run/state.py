@@ -13,7 +13,7 @@ from typing import Any
 
 from taskloop.app.run.review_glue import review_of
 from taskloop.contracts import fence, wire
-from taskloop.contracts.checkpoint import Checkpoint, EndRec, Notes, RunState
+from taskloop.contracts.checkpoint import BriefSnap, Checkpoint, Defect, EndRec, Handoff, Notes, PlanStep, RunState, WriterSession
 from taskloop.contracts.plancheck import PlanData
 from taskloop.contracts.review import Unfiled
 from taskloop.contracts.wire import Open
@@ -42,19 +42,19 @@ class StateAttrs:
 
     plan_data: PlanData | None
     brief_hash: str
-    snap: Open
+    snap: BriefSnap | None
     planner_ref: str
     planned: int
     replans: int
     fixes: int
     extra: int
     rebase_resets: int
-    plan_log: list[Open]
+    plan_log: list[PlanStep]
     done: list[str]
     accepted: list[int]
     accepted_new: list[str]
     denials: list[str]
-    writer: Open
+    writer: WriterSession
     writer_family: str | None
     writer_fallback: bool
     fallback_lane: str
@@ -63,11 +63,11 @@ class StateAttrs:
     look_notes: list[str]
     look_unjudged: dict[str, str]
     look_done: int
-    look_prev: list[Open]
+    look_prev: list[Defect]
     rendered_names: list[str]
     last_reqs: list[Open]
     render_stale: bool
-    handoff: Open
+    handoff: Handoff
     stage_tree: str
     pending_land_validation: str
 

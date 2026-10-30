@@ -34,8 +34,10 @@ from taskloop.app.run import (
 from taskloop.app.run import running as wrunning
 from taskloop.app.track import verbs
 from taskloop.app.wire import slots as wslots
+from taskloop.contracts.checkpoint import Defect
 from taskloop.contracts.env import snapshot
 from taskloop.contracts.ids import BeadId
+from taskloop.contracts.run import Round
 from taskloop.domain.prompts.plan import REPLAN_CAP
 
 
@@ -302,7 +304,7 @@ class VisualWork(StagesTest):
     def test_a_resumed_stage_keeps_its_render_rounds(self):
         e = make_engine(self.wt, store=self.store, attrs={
             "look_done": 1,
-            "look_prev": [{"why": "x", "where": ""}],
+            "look_prev": [Defect(item="i", why="x")],
             "rendered_names": ["a.png"],
             "last_reqs": self.SHOTS,
             "render_stale": True,
@@ -381,7 +383,7 @@ class ResumeCount(StagesTest):
             rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, max_replans=0)
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual(s.calls[0][0], "planner")  # it amended
-        self.assertEqual((self.eng.planned, self.eng.plan_log[-1]["counted"]), (1, False))
+        self.assertEqual((self.eng.planned, self.eng.plan_log[-1].counted), (1, False))
 
     def test_an_edit_with_no_ask_still_counts(self):
         # who edited the bead is not known: a comment from a sibling agent must not lift the limit
@@ -390,7 +392,7 @@ class ResumeCount(StagesTest):
         path.unlink()
         with self.store.stub(show=dict(BEAD, description="Also say hi.")):
             _rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, max_replans=1)
-        self.assertEqual(self.eng.plan_log[-1]["counted"], True)
+        self.assertEqual(self.eng.plan_log[-1].counted, True)
 
     def test_a_failed_plan_still_counts_and_the_limit_still_stops(self):
         flag = dict(WRITE, bad_checks=[{"cmd": FALSE, "why": "never passes"}])
@@ -405,7 +407,7 @@ class ResumeCount(StagesTest):
         e.git("checkout", "-q", "task/t-1")
         self.assertEqual(e.rebase.onto_base(), "rebased")
         self.assertEqual((e.planned, e.rebase_resets), (0, 1))
-        self.assertEqual(e.plan_log[-1]["counted"], False)  # the history stays, with a note
+        self.assertEqual(e.plan_log[-1].counted, False)  # the history stays, with a note
         self.assertEqual(e.rebase.onto_base(), "")  # nothing behind now
 
     def test_the_count_starts_again_after_a_rebase_at_most_twice_per_bead(self):
@@ -560,9 +562,9 @@ class ResumeCount(StagesTest):
             },
         )
         e.git("checkout", "-q", "task/t-1")
-        e.handoff["rounds"] = [{"r": 1}]
+        e.handoff.rounds = [Round(stage="s", round=1, kind="k")]
         self.assertTrue(e.restart.again("x"))
-        self.assertEqual((e.unverified, e.look_paths, e.handoff["rounds"], e.fixes, e.replans, e.rendered_names), ([], [], [], 0, 0, []))
+        self.assertEqual((e.unverified, e.look_paths, e.handoff.rounds, e.fixes, e.replans, e.rendered_names), ([], [], [], 0, 0, []))
         self.assertEqual(e.verify_answer, "Use the old format")  # the owner's word still goes to the planner
 
 

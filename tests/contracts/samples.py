@@ -300,15 +300,16 @@ OTHERS = {
         notes=checkpoint.Notes(filed=2, unfiled=1),
         state=checkpoint.RunState(
             brief_hash="b0",
+            snap=checkpoint.BriefSnap(fields={"title": "t"}, issue_type="task", deps=["x:blocks"], comments=["c"]),
             plan_data={"summary": "s", "stages": [{"goal": "g", "files": [], "checks": []}]},
-            plan_log=[{"mode": "plan", "counted": True, "why": "first"}],
+            plan_log=[checkpoint.PlanStep(mode="plan", counted=True, why="first")],
             done=["g1"],
             accepted=[0],
-            writer={"delegate": "codex", "seen": ["abc"], "ctx": 35},
-            look_prev=[{"item": "i", "verdict": "defect"}],
+            writer=checkpoint.WriterSession(delegate="codex", seen=["abc"], ctx=35),
+            look_prev=[checkpoint.Defect(item="i", why="w")],
             rendered_names=["r"],
             last_reqs=[{"method": "Shots", "names": ["n"]}],
-            handoff={"rounds": [{"stage": "1/1"}], "seen_lows": []},
+            handoff=checkpoint.Handoff(rounds=[run.Round(stage="1/1", round=1, kind="bad_checks")], seen_lows=[]),
             pending_land_validation="red",
             review=REVIEW_STATE,
         ),
@@ -343,16 +344,7 @@ OTHERS = {
     "Durations": checks.Durations(runs={"just fmt": [3.1, 2.9]}),
     "RunReport": OUTCOME,
     "LoopLogLine": run.LoopLogLine(ts="2026-10-15T10:00:00", bead=BeadId("tl-1"), slot="s1", outcome=Result.LANDED, run_log="/rl"),
-    "Reexec": run.Reexec(
-        run=str(RUN),
-        bead="tl-1",
-        from_version="0.23.56",
-        to_version="0.23.57",
-        step="write",
-        owned=["a"],
-        fallback="f",
-        counters={"rounds": 2},
-    ),
+    "Reexec": run.Reexec(run=str(RUN), bead="tl-1", frm="0.23.56", owned="s1", fallback=True),
     "LoopState": loop.LoopState(
         pid=1789,
         started=T,
@@ -429,7 +421,8 @@ OTHERS = {
     "ReexecNote": run.ReexecNote(run=str(RUN), bead="tl-1", frm="0.1.0", to="0.2.0", step="write", from_dir="/d", t=T),
     "NetPause": run.NetPause(run=str(RUN), bead="tl-1", t=T),
     "DoneMemo": run.DoneMemo(done={"[1]": run.DoneEntry(sha="s", file="/f")}),
-    "HandoffMirror": run.HandoffMirror(rounds=[{"stage": "s"}], seen_lows=["x"], deferred=[{"what": "w", "why": "y"}], filed=["f"]),
+    "HandoffMirror": run.HandoffMirror(
+        rounds=[run.Round(stage="s", round=1, kind="k")], seen_lows=["x"], deferred=[{"what": "w", "why": "y"}], filed=["f"]),
     "DashState": snapshots.DashState(
         pid=9, port=7878, bind="127.0.0.1", token="tok", version="0.23.56", started=T, pid_start=T, idle_until=None
     ),

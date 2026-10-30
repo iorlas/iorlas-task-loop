@@ -14,14 +14,56 @@ import msgspec
 from taskloop.contracts import wire
 from taskloop.contracts.plancheck import PlanData
 from taskloop.contracts.review import ReviewState
+from taskloop.contracts.run import Round
 from taskloop.contracts.wire import Open, Rec
 
 
-def fresh_handoff() -> Open:
-    """What the rounds did and what a review already noted: nothing yet."""
-    rounds: list[dict[str, Any]] = []
-    lows: list[str] = []
-    return {"rounds": rounds, "seen_lows": lows}
+@final
+class Handoff(Rec, frozen=False):
+    """What the rounds did and what a review already noted (nothing yet): the next writer is told of it."""
+
+    rounds: list[Round] = msgspec.field(default_factory=list)
+    seen_lows: list[str] = msgspec.field(default_factory=list)
+
+
+@final
+class WriterSession(Rec, frozen=False):
+    """The writer's thread: its delegate session, how much context it holds (k tokens, None = unknown), the brief and plan hashes it has
+    seen, and whether the last stage's note reached it."""
+
+    delegate: str | None = None
+    ctx: float | None = None
+    seen: list[str] = msgspec.field(default_factory=list)
+    last_stage: bool = False
+
+
+@final
+class BriefSnap(Rec):
+    """What a later amend diffs against: the bead's text fields, issue type, dependencies (id:type) and the people's comments, as the
+    planner saw them."""
+
+    fields: dict[str, str]
+    issue_type: str
+    deps: list[str]
+    comments: list[str]
+
+
+@final
+class Defect(Rec):
+    """A finding of the look judge (or a render error) on the pictures of a stage."""
+
+    item: str
+    why: str
+    where: str = ""
+
+
+@final
+class PlanStep(Rec):
+    """One entry of the plan log: a plan, an amend or a rebase reset, and whether it counts toward the plan cap."""
+
+    mode: str
+    why: str
+    counted: bool = True
 
 
 @final
@@ -30,19 +72,19 @@ class RunState(Rec, frozen=False):
 
     plan_data: PlanData | None = None
     brief_hash: str = ""
-    snap: Open = msgspec.field(default_factory=dict)
+    snap: BriefSnap | None = None
     planner_ref: str = ""
     planned: int = 0
     replans: int = 0
     fixes: int = 0
     extra: int = 0
     rebase_resets: int = 0
-    plan_log: list[Open] = msgspec.field(default_factory=list)
+    plan_log: list[PlanStep] = msgspec.field(default_factory=list)
     done: list[str] = msgspec.field(default_factory=list)
     accepted: list[int] = msgspec.field(default_factory=list)
     accepted_new: list[str] = msgspec.field(default_factory=list)
     denials: list[str] = msgspec.field(default_factory=list)
-    writer: Open = msgspec.field(default_factory=dict)
+    writer: WriterSession = msgspec.field(default_factory=WriterSession)
     writer_family: str | None = None
     writer_fallback: bool = False
     fallback_lane: str = ""
@@ -51,11 +93,11 @@ class RunState(Rec, frozen=False):
     look_notes: list[str] = msgspec.field(default_factory=list)
     look_unjudged: dict[str, str] = msgspec.field(default_factory=dict)
     look_done: int = 0
-    look_prev: list[Open] = msgspec.field(default_factory=list)
+    look_prev: list[Defect] = msgspec.field(default_factory=list)
     rendered_names: list[str] = msgspec.field(default_factory=list)  # sorted: the pictures rendered so far
     last_reqs: list[Open] = msgspec.field(default_factory=list)
     render_stale: bool = False
-    handoff: Open = msgspec.field(default_factory=fresh_handoff)
+    handoff: Handoff = msgspec.field(default_factory=Handoff)
     stage_tree: str = ""
     pending_land_validation: str = ""
     review: ReviewState = msgspec.field(default_factory=ReviewState)

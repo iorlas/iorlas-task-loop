@@ -33,6 +33,7 @@ from taskloop.contracts.snapshots import (
 )
 from taskloop.contracts.trace import RunTrace
 from taskloop.contracts.usage import USAGE_KEEP_S, UsageRow, rows_of
+from taskloop.contracts.wire import Refused
 
 LIVE = (AskStatus.OPEN, AskStatus.PARKED)
 HAD_PICK: Final = "had_pick_label"  # bead metadata: the pick label the park took off, to give back
@@ -67,10 +68,6 @@ class ForeignVersion:
 
 
 type Read[T] = Present[T] | Absent | Torn | ForeignVersion
-
-
-class Refused(ValueError):
-    """A state file that must not be read as empty is torn or of another version; the message names the file."""
 
 
 def refusal(r: Torn | ForeignVersion) -> str:
@@ -312,11 +309,13 @@ class AskStore:
 
     def orphans(self) -> list[str]:
         """Beads whose ask file is of another version: their ask was dropped at upgrade, and the bead may still be parked on it."""
-        return [k for k in self.docs.keys() if isinstance(self.docs.of(k).read(), ForeignVersion)]
+        names = self.docs.keys()
+        return [k for k in names if isinstance(self.docs.of(k).read(), ForeignVersion)]
 
     def torn(self) -> list[str]:
         """Beads whose ask file is torn: left as it is, listed by what is wrong; the owner fixes or deletes it."""
-        return [f"{k}: {refusal(r)}" for k in self.docs.keys() if isinstance(r := self.docs.of(k).read(), Torn)]
+        names = self.docs.keys()
+        return [f"{k}: {refusal(r)}" for k in names if isinstance(r := self.docs.of(k).read(), Torn)]
 
     def drop(self, bead: BeadId) -> None:
         """Delete the bead's ask file, whatever it holds (an unreadable one is the only caller's case)."""
