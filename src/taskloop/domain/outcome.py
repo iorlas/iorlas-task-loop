@@ -22,6 +22,7 @@ from taskloop.contracts.kinds import (
     Kind,
     fault_of,
 )
+from taskloop.contracts.reconcile import LOOP_ABSENT_S
 from taskloop.domain.asks.spec import AskSpec
 from taskloop.domain.report import matchers as lifecycle
 
@@ -32,7 +33,7 @@ KNOBS: Final = {
     "fault_retries": 3,          # the same fingerprint on one bead this often escalates to one ASK_STUCK
     "fault_cooldown_s": 1800,    # a faulted bead is not picked again for this long (read by the loop when it takes over)
     "comment_dedupe_s": 3600,    # one engine comment per (bead, kind, fingerprint) per this long
-    "loop_absent_s": 600,        # ready beads, no live loop and no beat for this long: the loop is absent
+    "loop_absent_s": LOOP_ABSENT_S,        # ready beads, no live loop and no beat for this long: the loop is absent
 }
 
 

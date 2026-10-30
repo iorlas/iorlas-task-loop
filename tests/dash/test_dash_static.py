@@ -29,6 +29,11 @@ class StaticAssets(unittest.TestCase):
     def test_gzip_budget(self):
         self.assertEqual(spc.budget_problems(STATIC, 100 * 1024), [])
 
+    def test_the_phone_lists_what_needs_the_owner_before_the_board(self):
+        """No browser here to read the DOM: the order is the order of the two children of the phone's <main>."""
+        main = (STATIC / "js" / "views" / "phone.js").read_text(encoding="utf-8").split('<main id="phM">')[1].split("</main>")[0]
+        self.assertLess(main.index("<${Needs}"), main.index("${body}"))
+
 
 if __name__ == "__main__":
     unittest.main()

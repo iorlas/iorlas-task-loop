@@ -11,6 +11,7 @@ import { FilterChips, Sheet } from '../ui/kit.js';
 import { PhoneFlow } from './board.js';
 import { NoteSheet, StopSheet } from './controls.js';
 import { Decisions } from './decisions.js';
+import { Needs } from './needs.js';
 import { PhoneGoals } from './goals.js';
 import { PhoneLanes } from './lanes.js';
 import { PhoneFloor } from './floor.js';
@@ -118,7 +119,7 @@ export function Phone({ snap, now }) {
   return html`<div id="ph">
     <header class="ph-h"><h1>${TABS.find((t) => t[0] === ui.tab)[2]}</h1><${LanePill} snap=${snap} /></header>
     <${Banners} snap=${snap} now=${now} />
-    <main id="phM">${body}</main>
+    <main id="phM">${ui.tab === 'board' && html`<${Needs} snap=${snap} now=${now} />`}${body}</main>
     <nav class="tb">${TABS.map(([k, e, n]) => html`<button key=${k} class=${ui.tab === k ? 'on' : ''} onClick=${() => setTab(k)}>
       <i>${e}</i>${n}${k === 'floor' && html`<span class=${`bd r ${c.stuck ? 'on' : ''}`}>${c.stuck}</span>`}${k === 'decisions' && html`<span class=${`bd b ${c.asks ? 'on' : ''}`}>${c.asks}</span>`}</button>`)}</nav>
     <div class=${`pg ${card ? 'on' : ''}`} ref=${pg}>${card && html`<${BeadPage} key=${card.project + card.id} snap=${snap} card=${card} now=${now} phone />`}</div>

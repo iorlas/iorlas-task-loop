@@ -15,6 +15,7 @@ import support.paths  # noqa: F401
 from taskloop.contracts import dash as D
 from taskloop.contracts import wire
 from taskloop.contracts.ids import BeadId
+from taskloop.contracts.needs import NeedRow
 
 ROOT = Path(__file__).resolve().parents[2]
 DIR = ROOT / "tests" / "fixtures" / "dash"
@@ -393,6 +394,25 @@ def full_ids(data: dict) -> dict:
     return data
 
 
+def needs(cards: list[Any]) -> list[NeedRow]:
+    """One row of each kind of the needs-you list (the beads are the first cards of the fixture)."""
+    ids = [c.id for c in cards[:4]]
+    return [
+        NeedRow(kind="stalled", project="lifesim", bead=None, why="2 ready bead(s), nothing happened for 40 min", since=NOW - 2400),
+        NeedRow(kind="label", project="lifesim", bead=ids[0], why="needs acceptance criteria", since=NOW - 7200, title="needs-ac"),
+        NeedRow(kind="block", project="lifesim", bead=ids[1], why="needs a human: pick the save format", since=NOW - 5400),
+        NeedRow(kind="parked", project="lifesim", bead=ids[2], why="ended on a question twice with this text", since=NOW - 3600),
+        NeedRow(kind="capped", project="lifesim", bead=ids[3], why="3 runs, the cap", since=NOW - 3000),
+        NeedRow(kind="slot_aside", project="lifesim", bead=None, why="slot a: 3 runs failed within 5 min each", since=NOW - 1200,
+                   until=NOW + 9000),
+        NeedRow(kind="slot_held", project="lifesim", bead=None, why="slot b: testing by hand", since=NOW - 900, until=NOW + 1800),
+        NeedRow(kind="slot_setup", project="lifesim", bead=None, why="slot c: setup failed (exit 1)", since=NOW - 600),
+        NeedRow(kind="stray", project="lifesim", bead=ids[0], why="claimed by tl-x, no live run (lease ended)"),
+        NeedRow(kind="paused", project="", bead=None, why="lane codex is out", until=NOW + 5400),
+        NeedRow(kind="absent", project="task-loop", bead=None, why="3 ready bead(s) and no loop alive", since=NOW - 7200),
+    ]
+
+
 def build() -> dict[str, Any]:
     """Every fixture: relative path -> record."""
     data = full_ids(json.loads((DIR / "mock-8b.json").read_text(encoding="utf-8")))
@@ -413,9 +433,9 @@ def build() -> dict[str, Any]:
     snap = D.Snapshot(
         version="fx-1", t=NOW,
         server=D.ServerInfo(version="0000fixture", host="mac", loops=[
-            D.LoopInfo(project="lifesim", running=True, last_activity=NOW - 4),
-            D.LoopInfo(project="task-loop", running=False, last_activity=NOW - 7200),
-        ]),
+            D.LoopInfo(project="lifesim", running=True, last_activity=NOW - 4, ready=2, quiet_since=NOW - 2400, health="stalled"),
+            D.LoopInfo(project="task-loop", running=False, last_activity=NOW - 7200, ready=3, health="absent"),
+        ]), needs=needs(cards),
         projects=[D.Project(id="lifesim", name="lifesim"), D.Project(id="task-loop", name="task-loop")],
         epics=[D.Epic(id=k, project=v["project"], title=v["title"], done=v["done"], total=v["total"]) for k, v in epics.items()],
         slots=slots(data, all_pieces), beads=cards, pieces=all_pieces,

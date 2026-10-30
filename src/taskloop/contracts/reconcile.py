@@ -6,6 +6,8 @@ from typing import Final
 
 from taskloop.contracts.ids import BeadId
 
+LOOP_ABSENT_S: Final = 600  # ready beads, no live loop and no beat for this long: the loop is absent (NoLoop)
+LOOP_STALL_S: Final = 1800  # a loop beats, ready beads wait and the repo logged no event for this long: the loop is stalled
 ACTOR_PREFIX: Final = "tl-"  # an engine's or a loop's actor; any other holder is a person's hand claim and never swept
 
 

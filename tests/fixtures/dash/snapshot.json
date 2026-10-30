@@ -9,12 +9,18 @@
    {
     "project": "lifesim",
     "running": true,
-    "last_activity": 1793050196.0
+    "last_activity": 1793050196.0,
+    "health": "stalled",
+    "ready": 2,
+    "quiet_since": 1793047800.0
    },
    {
     "project": "task-loop",
     "running": false,
-    "last_activity": 1793043000.0
+    "last_activity": 1793043000.0,
+    "health": "absent",
+    "ready": 3,
+    "quiet_since": null
    }
   ]
  },
@@ -1952,6 +1958,107 @@
    "running": [],
    "waiting": [],
    "status_t": 1793049900.0
+  }
+ ],
+ "needs": [
+  {
+   "kind": "stalled",
+   "project": "lifesim",
+   "bead": null,
+   "why": "2 ready bead(s), nothing happened for 40 min",
+   "since": 1793047800.0,
+   "until": null,
+   "title": ""
+  },
+  {
+   "kind": "label",
+   "project": "lifesim",
+   "bead": "lifesim-d5f.48",
+   "why": "needs acceptance criteria",
+   "since": 1793043000.0,
+   "until": null,
+   "title": "needs-ac"
+  },
+  {
+   "kind": "block",
+   "project": "lifesim",
+   "bead": "lifesim-6dq0",
+   "why": "needs a human: pick the save format",
+   "since": 1793044800.0,
+   "until": null,
+   "title": ""
+  },
+  {
+   "kind": "parked",
+   "project": "lifesim",
+   "bead": "lifesim-fld.27",
+   "why": "ended on a question twice with this text",
+   "since": 1793046600.0,
+   "until": null,
+   "title": ""
+  },
+  {
+   "kind": "capped",
+   "project": "lifesim",
+   "bead": "lifesim-7hv.2",
+   "why": "3 runs, the cap",
+   "since": 1793047200.0,
+   "until": null,
+   "title": ""
+  },
+  {
+   "kind": "slot_aside",
+   "project": "lifesim",
+   "bead": null,
+   "why": "slot a: 3 runs failed within 5 min each",
+   "since": 1793049000.0,
+   "until": 1793059200.0,
+   "title": ""
+  },
+  {
+   "kind": "slot_held",
+   "project": "lifesim",
+   "bead": null,
+   "why": "slot b: testing by hand",
+   "since": 1793049300.0,
+   "until": 1793052000.0,
+   "title": ""
+  },
+  {
+   "kind": "slot_setup",
+   "project": "lifesim",
+   "bead": null,
+   "why": "slot c: setup failed (exit 1)",
+   "since": 1793049600.0,
+   "until": null,
+   "title": ""
+  },
+  {
+   "kind": "stray",
+   "project": "lifesim",
+   "bead": "lifesim-d5f.48",
+   "why": "claimed by tl-x, no live run (lease ended)",
+   "since": null,
+   "until": null,
+   "title": ""
+  },
+  {
+   "kind": "paused",
+   "project": "",
+   "bead": null,
+   "why": "lane codex is out",
+   "since": null,
+   "until": 1793055600.0,
+   "title": ""
+  },
+  {
+   "kind": "absent",
+   "project": "task-loop",
+   "bead": null,
+   "why": "3 ready bead(s) and no loop alive",
+   "since": 1793043000.0,
+   "until": null,
+   "title": ""
   }
  ]
 }

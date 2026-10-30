@@ -62,6 +62,15 @@ in-process Port call (as `Ports.answer` is today), never a raw bd argv. Auth sta
   landed run (at most 8 weeks), so it has fewer than 8 points until the ledger is old enough. `sendbacks_per_bead` is plan redos
   (`RunTrace.stats.replans`) per landed run: look send-backs are not retained. `causes` counts asks only, this week against last.
   `AdrRow.project` was added (two repos both have an ADR-1).
+- **Needs you** `Snapshot.needs` (`NeedRow {kind, project, bead, why, since, until, title}`, oldest first, `views/needs.py`) is a view over
+  records the engine already writes, no new recorder: beads labelled `needs-ac`/`needs-info`/`owner-taste`/`owner-look`; blocked beads
+  (the newest `block` event's reason); the queue's `parked` and `capped` skips (`Park.t` gives the time); `pauses/<bead>.json`
+  (network); a lane that is out and delegate's `needs_input`; held and set-aside slots (slot bead metadata, `slot_hold`/`slot_aside`
+  events) and failed `slot_setup`; reconcile strays; a stalled loop. Beads with an open ask are not rows (Decisions). `ServerInfo.loops[]`
+  carries the strip: `health` ok, `stalled` (a loop beats, holds no bead, `ready` beads wait and the repo logged no event for
+  `LOOP_STALL_S`, `contracts/reconcile.py`) or `absent` (the reconcile NoLoop rule, `LOOP_ABSENT_S`). Not shown: the storm stop (its file
+  is read by an adapter) and a loop's in-memory network wait. events.jsonl rows carry no `v` and spell kinds `slot-hold`, so the
+  dashboard reads them tolerantly (`Records.seen_events`), not through `events.decode`.
 - **park, stop, note** (built, backend item 7) are the bead's newest run's request file `runs/<run>/owner-request.json`
   (`contracts/requests.py` `OwnerRequest {park, stop, notes[], by, t}`, merged under `owner-request.lock`, `app/run/requests.py`).
   The engine takes it at every step boundary (`Steps` guard, and before each worker call): `park` ends the run there as

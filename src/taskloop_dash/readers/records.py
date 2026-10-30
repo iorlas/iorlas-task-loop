@@ -9,11 +9,14 @@ from typing import Any
 
 from taskloop.contracts import wire
 from taskloop.contracts.ids import BeadId
+from taskloop.contracts.parks import Park
+from taskloop.contracts.run import NetPause
 from taskloop.contracts.runlife import RETAIN
-from taskloop.contracts.stores import ReposStore
+from taskloop.contracts.stores import JsonStore, ReposStore
 from taskloop.contracts.trace import RunTrace
 from taskloop_dash.env import Env
 from taskloop_dash.views import names
+from taskloop_dash.views.world import Seen
 
 Span = dict[str, Any]
 
@@ -48,6 +51,32 @@ class Records:
                 pass
             return out
         return self.env.files.get(str(self.env.config.events()), load, [])
+
+    def seen_events(self) -> list[Seen]:
+        """The events of the last week the needs list reads, as written: the writer (app/track/trail.event) sets no `v` and spells a kind
+        `slot-hold`, so the strict contracts.events.decode would drop every row; only the fields the list uses are read."""
+        out: list[Seen] = []
+        for e in self.events():
+            try:
+                out.append(Seen(kind=str(e["kind"]).replace("-", "_"), t=float(e["t"]), bead=str(e.get("bead") or ""),
+                                repo=str(e.get("repo") or ""),
+                                why=str(e.get("why") or ""), until=float(e["until"]) if e.get("until") else None,
+                                exit=int(e.get("exit") or 0), slot=str(e.get("slot") or "")))
+            except (KeyError, TypeError, ValueError):
+                continue
+        return out
+
+    def parks(self) -> dict[str, Park]:
+        """bead -> its Park record (left by runs that ended on a question; the loop skips the bead while its text is the same)."""
+        folder = self.env.config.park(BeadId("x")).parent
+        found = (JsonStore(f, Park).get() for f in sorted(folder.glob("*.json")))
+        return {r.bead: r for r in found if r is not None}
+
+    def net_pauses(self) -> dict[str, NetPause]:
+        """bead -> the NetPause a run left when it paused for the network and no run has taken up yet."""
+        folder = self.env.config.net_pause(BeadId("x")).parent
+        found = (JsonStore(f, NetPause).get() for f in sorted(folder.glob("*.json")))
+        return {r.bead: r for r in found if r is not None}
 
     def repos(self) -> list[str]:
         known = ReposStore(self.env.config).known()

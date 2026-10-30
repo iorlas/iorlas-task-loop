@@ -11,10 +11,10 @@ import time
 
 from taskloop.contracts import wire
 from taskloop.contracts.bead import Bead
-from taskloop.contracts.dash import AskCard, BeadCard, Column, Epic, LoopInfo, Piece, Project, ServerInfo, Slot, Snapshot
-from taskloop_dash.views import floor, learning, ledger, passes
+from taskloop.contracts.dash import AskCard, BeadCard, Column, Epic, Piece, Project, ServerInfo, Slot, Snapshot
+from taskloop_dash.views import floor, learning, ledger, needs, passes
 from taskloop_dash.views.askcards import ask_card, look_card, stale_of
-from taskloop_dash.views.board import LOOP_STALE, Board, is_infra, is_work, when
+from taskloop_dash.views.board import Board, is_infra, is_work, when
 from taskloop_dash.views.lanecards import lane_cards
 from taskloop_dash.views.world import ProjectIn, World
 
@@ -35,11 +35,6 @@ def epics_of(p: ProjectIn) -> list[Epic]:
         if kids and not is_infra(e):
             out.append(Epic(id=e.id, project=p.id, title=e.title, done=sum(1 for b in kids if b.status == "closed"), total=len(kids)))
     return out
-
-
-def loop_info(p: ProjectIn, now: float) -> LoopInfo:
-    beat = max((s.t for s in p.loops), default=None)
-    return LoopInfo(project=p.id, running=beat is not None and now - beat < LOOP_STALE, last_activity=beat)
 
 
 def shown(b: Bead, since: float) -> bool:
@@ -95,8 +90,9 @@ def build(w: World) -> Snapshot:
     cards, more = cards_of(w, board)
     ids = {(c.project, c.id) for c in cards}
     cards = [c.replace(needs=[n for n in c.needs if (c.project, n) in ids]) for c in cards]
+    loops = [needs.health(w, p) for p in w.projects]
     snap = Snapshot(
-        version="", t=0.0, server=ServerInfo(version=w.version, host=w.host, loops=[loop_info(p, w.now) for p in w.projects]),
+        version="", t=0.0, server=ServerInfo(version=w.version, host=w.host, loops=loops), needs=needs.needs_of(w, loops),
         projects=[Project(id=p.id, name=p.name, profile_error=p.profile_error) for p in w.projects],
         epics=[e for p in w.projects for e in epics_of(p)],
         slots=slots_of(w), beads=cards, backlog_more=more, pieces=pieces_of(w, board, ids), asks=asks_of(w, cards),

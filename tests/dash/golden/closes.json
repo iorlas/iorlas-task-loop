@@ -2786,6 +2786,17 @@
    "weeks": []
   },
   "ledger": [],
+  "needs": [
+   {
+    "bead": null,
+    "kind": "absent",
+    "project": "lifesim",
+    "since": null,
+    "title": "",
+    "until": null,
+    "why": "16 ready bead(s) and no loop alive"
+   }
+  ],
   "pieces": [],
   "projects": [
    {
@@ -2798,8 +2809,11 @@
    "host": "devbox",
    "loops": [
     {
+     "health": "absent",
      "last_activity": null,
      "project": "lifesim",
+     "quiet_since": null,
+     "ready": 16,
      "running": false
     }
    ],
@@ -2808,6 +2822,6 @@
   "slots": [],
   "t": 1800036000.0,
   "v": 1,
-  "version": "f2b56792d2cec837"
+  "version": "19227450080d655c"
  }
 }

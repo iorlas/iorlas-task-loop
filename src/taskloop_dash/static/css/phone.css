@@ -215,3 +215,8 @@ html.phone .dtabs .nb{font-size:12px}
 html.phone .row6.th img{min-height:40px;object-fit:cover}
 html.phone .lanesp{margin-top:4px}.lc.stale{opacity:.55}
 .lc .bx .chip{height:40px;line-height:40px;padding:0 12px;margin:0;border-radius:99px;background:var(--cell);font-size:13px}
+.needs{margin:0 16px 8px}.hs{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:13px;color:var(--mut);padding:2px 0 8px}.hsi{display:inline-flex;align-items:center;gap:5px}
+.nh{font-size:13px;font-weight:600;color:var(--mut);text-transform:uppercase;letter-spacing:.04em;padding:4px 0}.nl{display:grid;gap:6px}
+.nr{display:flex;align-items:flex-start;gap:10px;width:100%;text-align:left;border:1px solid var(--line);background:var(--card);border-radius:11px;padding:10px 12px;font:inherit;color:var(--tx);min-height:44px}
+.ni{font-style:normal;font-size:18px;line-height:1.2}.nt{flex:1;min-width:0;display:flex;flex-direction:column;font-size:14px}.nt b{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.nt span{color:var(--mut);overflow-wrap:anywhere}
+.nw{flex:none;font-size:12px;color:var(--mut);font-variant-numeric:tabular-nums;text-align:right}

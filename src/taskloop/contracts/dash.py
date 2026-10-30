@@ -12,6 +12,7 @@ from typing import Annotated, ClassVar, Literal, final
 import msgspec
 
 from taskloop.contracts.ids import WireBead
+from taskloop.contracts.needs import NeedRow
 from taskloop.contracts.wire import Rec
 
 
@@ -92,9 +93,15 @@ PassEnd = Literal["", "test_failed", "replan", "asked", "parked", "lane_out", "s
 
 @final
 class LoopInfo(Rec):
+    """One repo's loop. `health` is the strip: ok (a loop runs, or nothing is ready), stalled (a loop beats, ready beads wait and nothing
+    happened for LOOP_STALL_S), absent (the reconcile NoLoop finding: ready beads, no loop and no beat for LOOP_ABSENT_S)."""
+
     project: str
     running: bool
     last_activity: float | None = None
+    health: Literal["ok", "stalled", "absent"] = "ok"
+    ready: int = 0
+    quiet_since: Annotated[float | None, msgspec.Meta(description="the last event of the repo: the stall is counted from it")] = None
 
 
 @final
@@ -336,6 +343,7 @@ class Snapshot(Rec):
     adrs: list[AdrRow] = msgspec.field(default_factory=list)
     learning: Learning = msgspec.field(default_factory=Learning)
     lanes: list[LaneCard] = msgspec.field(default_factory=list)
+    needs: list[NeedRow] = msgspec.field(default_factory=list)  # everything that waits on the owner without an ask; first on the phone
 
 
 # ---- bead drawer: GET /api/bead?project=&id=

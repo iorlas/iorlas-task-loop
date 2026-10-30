@@ -107,10 +107,13 @@ class Worlds:
         env = self.env
         now, runs = env.clock(), self.runs(full)
         projects = [self.project(i, p) for i, p in self.repos().items()]
-        projects = [replace(p, strays=strays_of(p.beads, p.slots, runs, now)) for p in projects]
+        events = self.records.seen_events()
+        paths = self.repos()
+        projects = [replace(p, strays=strays_of(p.beads, p.slots, runs, now),
+                            events=[e for e in events if e.repo and (e.repo == paths[p.id] or basename(e.repo) == p.id)]) for p in projects]
         return World(now=now, host=socket.gethostname(), version=env.version, projects=projects, runs=runs, asks=self.asks(),
                      status=StatusStore(env.config).get(), ledger=self.ledger(), landings=self.landings(),
-                     skipped_traces=self.records.traces().skipped)
+                     parks=self.records.parks(), net_pauses=self.records.net_pauses(), skipped_traces=self.records.traces().skipped)
 
     def comments(self, path: str, bead: BeadId) -> list[Comment]:
         def load() -> list[Comment]:
