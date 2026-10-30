@@ -16,6 +16,7 @@ from taskloop.adapters import delegate as dg
 from taskloop.adapters import delegate_wire
 from taskloop.adapters import procs as sproc
 from taskloop.app.run import done_memo, strays
+from taskloop.app.run.blocked import refuse_over_cap
 from taskloop.app.run.calls import timing
 from taskloop.app.run.lane_acts import LaneActs
 from taskloop.contracts import answers
@@ -235,6 +236,7 @@ class WorkerCall:
     def call_once(self, c: Call) -> dg.Answer:
         """One `route.py run`: through the process seam, then the records a call leaves."""
         e = self.e
+        refuse_over_cap(c.node, c.role, c.text)  # before anything spawns
         timeout_s, idle_s = self.limits(c)
         c.limit_s = float(timeout_s)
         e.delegation.route()

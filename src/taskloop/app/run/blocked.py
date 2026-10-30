@@ -2,7 +2,9 @@
 from typing import Any
 
 from taskloop.domain import outcome as oc
+from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.asks.spec import AskSpec
+from taskloop.domain.lanes import caps
 
 
 class Blocked(Exception):
@@ -32,3 +34,10 @@ def blocked_for(why: str, kind: str, stop: Any = None, spec: AskSpec | None = No
     err = (FixFailed if fix else Blocked)(why, spec, kind=oc.Kind[kind])
     err.stop = stop
     return err
+
+
+def refuse_over_cap(node: str, role: str, text: str) -> None:
+    """Raise the Task fault (ASK_TICKET) when `text` is over its role's input cap; call it before a delegate call spawns."""
+    over = caps.check(role, text)
+    if over is not None:
+        raise blocked_for(over.why(node), "ASK_TICKET", spec=askspecs.input_too_big(node, over.size, over.cap))

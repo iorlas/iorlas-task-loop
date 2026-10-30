@@ -7,6 +7,7 @@ from taskloop.contracts import log as rec
 from taskloop.contracts.delegate import RunRequest
 from taskloop.contracts.schema import unstrict
 from taskloop.contracts.stores import JsonlStore
+from taskloop.domain.lanes import caps
 from taskloop.domain.matchers import clip
 from taskloop.domain.prompts.reflect import REFLECT_PROMPT
 
@@ -32,6 +33,10 @@ class Reflector:
             return None
         try:
             prompt = self.reflect_prompt(outcome, why)
+            over = caps.check("reviewer", prompt)
+            if over is not None:  # never blocks the close: an over-cap reflection is no reflection
+                e.warn(f"no reflection: {over.why('reflect')}")
+                return None
             # a short wait: the close step ignores a stop while this runs (route.py adds 120 s to the limit)
             e.delegation.route()
             req = RunRequest(role="reviewer", brief_path="", cwd=str(e.wt), schema_path="", task=e.bead, parent=e.session,

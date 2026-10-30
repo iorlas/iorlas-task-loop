@@ -169,6 +169,16 @@ def too_big(goals: Sequence[str], big: int) -> AskSpec:
                    AskDetail(text="\n".join(f"{k + 1}. {g}" for k, g in enumerate(goals))[:RAW_CAP]))
 
 
+def input_too_big(node: str, size: int, cap: int) -> AskSpec:
+    return AskSpec(AskClass.TOO_BIG,
+                   f"The {node} step's input is {size // 1024} KB, over its {cap // 1024} KB cap; split or shorten the bead?",
+                   bullets([f"input {size} bytes, cap {cap} bytes", "nothing was sent to a worker"]),
+                   [AskOption(label="I will split it", consequence="The bead stays stopped until you cut it into smaller beads.",
+                              action="split", text="split", recommended=True),
+                    AskOption(label="I shortened it", consequence="The bead runs again and reads its shorter text.", action="rerun",
+                              text="run again")])
+
+
 def repeated_fault(n: int, first_line: str) -> AskSpec:
     return AskSpec(AskClass.NO_PROGRESS, f"The engine failed the same way {n} times; how should it go on?", bullets([first_line]),
                    [AskOption(label="Run again", consequence="The bead runs again, after you fixed the cause.", action="rerun",
