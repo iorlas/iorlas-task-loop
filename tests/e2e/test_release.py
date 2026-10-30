@@ -26,6 +26,7 @@ from support.release_world import IDENTITY, MARKET, PLUGIN, World, git
 from taskloop.adapters import landlock
 from taskloop.adapters.ident import config_dir
 from taskloop.app.release import clone, manifest, selfupdate, shell
+from taskloop.contracts.env import snapshot
 from taskloop.contracts.envvars import EnvVar
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -43,7 +44,7 @@ class Release(unittest.TestCase):
         self.origin, self.seed, self.repo = h / "o.git", h / "seed", h / "repo"
         self.morigin, self.market = h / "m.git", h / "market"
         self.world = World(h, self.repo, self.market)
-        self.sh = shell.of(self.world.spawner, self.world.port)
+        self.sh = shell.of(self.world.spawner, self.world.port, snapshot())
         env = dict(IDENTITY, TASK_LOOP_SUITE_HOST="1", TASK_LOOP_SUITE_WORKERS="1", XDG_CONFIG_HOME=str(h / "cfg"),
                    CLAUDE_CONFIG_DIR=str(h / "claude"))
         self.enterContext(self.world.active(env))

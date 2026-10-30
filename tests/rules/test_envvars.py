@@ -16,7 +16,8 @@ TEXTS = (*(ROOT / "docs").rglob("*.md"), ROOT / "README.md", ROOT / "skills/task
 CODE = tuple((ROOT / "src").rglob("*.py"))
 # The edge modules: where the process environment is read or written (contracts/env.py owns os.environ; this list may only shrink).
 ENV_EDGE = frozenset({"src/taskloop/contracts/env.py"})
-# os.environ outside the edge today (none under taskloop; the dashboard server is its own package and reads its own settings).
+# os.environ outside the edge today (none under taskloop or taskloop_dash;
+# the dashboard takes its environment once, in taskloop_dash/cli/dash.py, through contracts/env).
 ENV_ALLOWLIST: frozenset[str] = frozenset()
 
 
@@ -44,7 +45,7 @@ class Registry(unittest.TestCase):
 
 class EnvEdge(unittest.TestCase):
     def test_os_environ_only_at_the_edge(self):
-        hits = {str(p.relative_to(ROOT)) for p in (ROOT / "src/taskloop").rglob("*.py")
+        hits = {str(p.relative_to(ROOT)) for p in (*(ROOT / "src/taskloop").rglob("*.py"), *(ROOT / "src/taskloop_dash").rglob("*.py"))
                 if re.search(r"\bos\.(environ|getenv|putenv)\b|from os import[^\n]*\benviron\b", p.read_text())}
         self.assertEqual(sorted(hits - ENV_EDGE - ENV_ALLOWLIST), [], "read the environment through taskloop.contracts.env")
 

@@ -405,7 +405,7 @@ class LoopBase(Base):
         self.script, self.hold, self.started, self.during = {}, {}, [], []
         for p in (mock.patch.object(Core, "nap", self.clock.nap),
                   mock.patch.object(wloop, "delegate_route", return_value="/fake/route.py"),
-                  mock.patch.object(wloop.dg, "role_status", side_effect=lambda route: self.roles()),
+                  mock.patch.object(wloop.dg, "role_status", side_effect=lambda route, env: self.roles()),
                   mock.patch.object(wloop.real, "spawner", return_value=mock.Mock(
                       start_held=lambda cmd, out=None, extra=None, **kw: (FakeChild(self, cmd, extra), mock.Mock()))),
                   mock.patch.object(Taker, "prepare", return_value=None)):

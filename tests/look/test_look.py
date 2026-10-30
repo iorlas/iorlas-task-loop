@@ -23,6 +23,7 @@ from taskloop.app.run.closer import Closer
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts import answers, wire
 from taskloop.contracts.config import RepoProfile, VisualConfig
+from taskloop.contracts.env import snapshot
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.paths import ConfigDir
 
@@ -148,7 +149,7 @@ class LookTest(T.EngineTest):
         self.assertIn("matching the reference", body)
 
     def test_before_shots_and_references_come_from_other_beads_artifacts_of_the_same_prefix(self):
-        self.eng = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
+        self.eng = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store, env=snapshot())
         self.eng.run_dir.mkdir(parents=True, exist_ok=True)
         (self.eng.run_dir / "brief.md").write_text("no pictures named")
         root = ConfigDir(ident.config_dir())
@@ -229,7 +230,7 @@ class LookTest(T.EngineTest):
         self.assertEqual(self.creates(), [])
         saved = read_ck(self.eng).state
         self.assertEqual(saved.look_paths, ["home-screen.png"])
-        eng2 = engine.Engine(BeadId("t-1"), str(self.wt), self.eng.cfg, store=self.store)
+        eng2 = engine.Engine(BeadId("t-1"), str(self.wt), self.eng.cfg, store=self.store, env=snapshot())
         eng2.tree.reset(must_bead(BEAD))
         eng2.bead_title = "Add f"
         eng2.resume.point()
@@ -249,7 +250,7 @@ class LookTest(T.EngineTest):
             self.assertEqual(self.eng.owner_look.look_epic(), "t-3")
 
     def test_shots_are_images_capped_and_sized(self):
-        self.eng = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
+        self.eng = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store, env=snapshot())
         d = self.eng.evidence_dir
         d.mkdir(parents=True, exist_ok=True)
         (d / "a.png").write_bytes(b"x")

@@ -6,16 +6,14 @@ import time
 from collections.abc import Callable, Mapping
 from pathlib import Path
 
-from taskloop.contracts import env as penv
-
 WORD_TTL_S = 120.0  # a tool installed since is found within two minutes
 JUSTFILES = ("justfile", "Justfile", ".justfile")
 
 
 class PathProbe:
-    def __init__(self, wt: str | Path, env: Mapping[str, str] | None = None, clock: Callable[[], float] = time.time) -> None:
+    def __init__(self, wt: str | Path, env: Mapping[str, str], clock: Callable[[], float] = time.time) -> None:
         self.wt = Path(wt)
-        self.env = dict(penv.snapshot().vars if env is None else env)
+        self.env = dict(env)
         self.clock = clock
         self.words: dict[str, tuple[bool, float]] = {}
         self.justfile: tuple[int, set[str] | None] | None = None

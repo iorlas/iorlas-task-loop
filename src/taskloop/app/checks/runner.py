@@ -97,7 +97,7 @@ class Checker:
         on is what the engine hands every child: the slot's, and the registered names that reach it."""
         host = self.host
         keys = InputKeys(host.wt, tree, host.checkout.git_env())
-        engine_env = {**childenv.reaching(childenv.current_env()), **host.bead_env}
+        engine_env = {**childenv.reaching(childenv.current_env(host.env)), **host.bead_env}
         return RunMemo(host.stores.check_cache.of(host.bead), keys, BaseSha(base), engine_env)
 
     def _executor(self, memo: RunMemo, history: Durations, base_run: bool, fix_red: dict[str, CheckResult] | None = None,

@@ -32,6 +32,7 @@ from taskloop.app.wire import slots as wslots
 from taskloop.contracts import answers, plancheck
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.enums import WaitWhat
+from taskloop.contracts.env import snapshot
 from taskloop.contracts.ids import BeadId, CheckId
 from taskloop.contracts.plancheck import Adhoc, adhoc
 from taskloop.domain.checks import lint
@@ -58,7 +59,7 @@ class EngineChecksTest(EngineTest):
 
     def test_checks_run_without_the_launchers_claude_session(self):
         c = wslots.load_cfg(str(self.wt))
-        eng = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store)
+        eng = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot())
         with mock.patch.dict(os.environ, {"CLAUDE_CODE_ENTRYPOINT": "cli"}):
             session_env = procsim.fake("session-env", lambda cwd, env: (1 if env.get("CLAUDE_CODE_ENTRYPOINT") else 0, ""))
             res = eng.run_checks({"checks": ck([session_env]), "files": []}, "s")
@@ -186,7 +187,7 @@ class EngineChecksTest(EngineTest):
 
     def test_a_stage_check_always_reruns_it_can_read_state_outside_the_tree(self):
         state = Path(self.tmp.name) / "editor-open"  # a running editor, a log, a bead comment: git cannot see them
-        eng = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
+        eng = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store, env=snapshot())
         gone = procsim.fake(f"editor-closed {state}", lambda cwd, env: (1 if state.exists() else 0, ""))
         st = {"checks": ck([gone]), "files": []}
         self.assertEqual(eng.run_checks(st, "s")[0].exit, 0)
@@ -206,7 +207,7 @@ class EngineChecksTest(EngineTest):
     def test_a_failed_check_is_never_reused(self):
         count = Path(self.tmp.name) / "count"
         fails = procsim.fake("fails", procsim.appends(count, code=1))
-        eng = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
+        eng = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store, env=snapshot())
         st = {"checks": ck([fails]), "files": []}
         eng.run_checks(st, "s")
         again = eng.run_checks(st, "s")
@@ -214,7 +215,7 @@ class EngineChecksTest(EngineTest):
         self.assertFalse(again[0].cached)
 
     def test_checks_run_without_a_shell(self):
-        eng = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
+        eng = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store, env=snapshot())
         res = eng.run_checks({"checks": [Adhoc(argv=("echo", "$HOME", "&&", "x;", "(y)"), reads=())], "files": []}, "s")
         self.assertEqual(res[0].exit, 0, res[0].tail)
         self.assertIn("$HOME && x; (y)", res[0].tail)  # no expansion, no operator: every word reached the program as written
@@ -326,14 +327,14 @@ class EngineChecksTest(EngineTest):
     def test_run_task_refuses_the_main_checkout(self):
         a = mock.Mock(id="t-1", worktree=str(self.wt), slot=None, dry_run=True, fresh=False, quiet=True, outcome_file=None)
         with mock.patch.object(entry, "Engine") as made, contextlib.chdir(self.wt):
-            rc = entry.main(a, self.store)
+            rc = entry.main(a, self.store, env=snapshot())
         self.assertEqual(rc, 1)
         made.assert_not_called()
 
     def test_dry_check_reads_the_argv_not_a_shell_string(self):
         def plan(*checks, files=("new.txt",)):
             return typed(dict(PLAN, stages=[dict(PLAN["stages"][0], checks=list(checks), files=list(files))]))
-        wt = PathProbe(self.wt, childenv.current_env())
+        wt = PathProbe(self.wt, childenv.current_env(snapshot()))
         self.assertEqual(lint.dry_check(plan("test -f a.txt", "test -f new.txt", "grep -q '<(' a.txt", HAS_F), wt), [])
         self.assertEqual(lint.dry_check(plan("test -f $HOME/x", "cat dir/*.txt"), wt), [])  # no shell: a plain word, not judged as a path
         self.assertEqual(lint.dry_check(plan("python3 -m pytest -q tests", "python3 -c pass"), wt), [])

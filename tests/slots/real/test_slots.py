@@ -41,6 +41,7 @@ from taskloop.app.slots import (
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts.config import SlotsConfig
 from taskloop.contracts.enums import Result
+from taskloop.contracts.env import snapshot
 from taskloop.contracts.kinds import Kind
 from taskloop.contracts.run import RunReport
 
@@ -111,7 +112,7 @@ class Slots(LoopBase):
         with mock.patch.dict(os.environ, env), mock.patch.object(entry, "reclaim", return_value=(True, "")), \
                 mock.patch.object(entry, "Engine", made), \
                 mock.patch.object(signal, "signal"), redirect_stdout(out):
-            rc = entry.main(a)
+            rc = entry.main(a, env=snapshot())
         self.made = made
         return rc, json.loads(f.read_text()), out.getvalue()
 
@@ -190,7 +191,7 @@ class RunTaskTakesItsSlot(Slots):
             a = entry.Args(id="x-1", worktree=None, slot="s1", dry_run=False, fresh=False, quiet=True,
                             outcome_file=str(f))
             with mock.patch.object(signal, "signal"), redirect_stdout(io.StringIO()):
-                rc = entry.main(a)
+                rc = entry.main(a, env=snapshot())
         self.assertNotEqual(rc, 0)
         self.assertEqual(json.loads(f.read_text())["outcome"], "failed")
         self.assertEqual(bd.slots["sl-1"]["status"], "open")
@@ -243,8 +244,8 @@ class LiveEngineBackstop(Slots):
         rc, out = self.cli("slot", "reset", "s1", "--bead", "x-1")
         self.assertEqual(rc, 4)
         self.assertIn("BUSY", out)
-        senv = dataclasses.replace(wloop.build(str(self.repo)).slot_env(), git=ExplodingGit())  # pyrefly: ignore[bad-argument-type]  # any git in the live slot fails the test
-        env = dataclasses.replace(wloop.build(str(self.repo)), slot_env=lambda: senv)
+        senv = dataclasses.replace(wloop.build(str(self.repo), env=snapshot()).slot_env(), git=ExplodingGit())  # pyrefly: ignore[bad-argument-type]  # any git in the live slot fails the test
+        env = dataclasses.replace(wloop.build(str(self.repo), env=snapshot()), slot_env=lambda: senv)
         with redirect_stdout(io.StringIO()):
             self.assertIsNotNone(REAL_PREPARE(Taker(env, mock.Mock(), mock.Mock(), mock.Mock(), mock.Mock(), {}), "s1", "x-1"))
     def test_slot_list_shows_the_live_engine(self):

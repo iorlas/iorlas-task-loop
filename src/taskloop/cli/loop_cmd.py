@@ -10,32 +10,33 @@ from taskloop.app.launch import loop as wloop
 from taskloop.app.launch import repos
 from taskloop.app.track import trail
 from taskloop.cli import loop as cli
+from taskloop.contracts.env import Env
 
 
-def cmd_next(a: Any, here: Path = wloop.HERE, now: Callable[[], float] = trail.now) -> int:
+def cmd_next(a: Any, env: Env, here: Path = wloop.HERE, now: Callable[[], float] = trail.now) -> int:
     repo = repos.repo_root(a.repo)
-    return cli.cmd_next(wloop.build(repo, here=here, now=now), a)
+    return cli.cmd_next(wloop.build(repo, here=here, now=now, env=env), a)
 
 
-def cmd_stop(a: Any, here: Path = wloop.HERE, now: Callable[[], float] = trail.now) -> int:
+def cmd_stop(a: Any, env: Env, here: Path = wloop.HERE, now: Callable[[], float] = trail.now) -> int:
     repo = repos.repo_root(a.repo)
-    return cli.cmd_stop(wloop.build(repo, here=here, now=now), wloop.files_of(repo, now), a)
+    return cli.cmd_stop(wloop.build(repo, here=here, now=now, env=env), wloop.files_of(repo, now), a)
 
 
-def cmd_loop(a: Any, here: Path = wloop.HERE, now: Callable[[], float] = trail.now) -> int:
+def cmd_loop(a: Any, env: Env, here: Path = wloop.HERE, now: Callable[[], float] = trail.now) -> int:
     repo = repos.repo_root(a.repo)
     if profiles.red_row(repo):
         print(profiles.red_row(repo))
         return 1
-    env = wloop.build(repo, here=here, now=now)
+    loop_env = wloop.build(repo, here=here, now=now, env=env)
     files = wloop.files_of(repo, now)
     if a.op == "status":
         for row in wloop.other_red_rows(repo):
             print(row)  # another repo's bad profile: its red row here, nothing else changes
-        return cli.cmd_status(env, files, wloop.installs(env.cfgdir, here, now), a)
-    start_cwd, session = wloop.begin_loop(repo)
-    env = wloop.build(repo, session_actor=session, here=here, now=now, start_cwd=start_cwd)
-    return cli.cmd_loop(env, files, wloop.installs(env.cfgdir, here, now), a)
+        return cli.cmd_status(loop_env, files, wloop.installs(loop_env.cfgdir, here, now), a)
+    start_cwd, session = wloop.begin_loop(repo, env)
+    loop_env = wloop.build(repo, session_actor=session, here=here, now=now, start_cwd=start_cwd, env=env)
+    return cli.cmd_loop(loop_env, files, wloop.installs(loop_env.cfgdir, here, now), a)
 
 
 def cmd_cutover(a: Any) -> int:

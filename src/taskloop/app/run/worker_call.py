@@ -165,7 +165,7 @@ class WorkerCall:
         writer = writer_family if node in READ_ONLY_NODES else None
         resume = resume_ref or (e.writer.get("delegate") if resume_key else None)
         if resume and resume_key and e.writer_fallback:  # tl-bxk.10.5: a fallback writer would keep the bead off Codex for good
-            lane = dg.lane_status(e.delegation.route() or "").get(e.fallback_lane) if e.fallback_lane else None
+            lane = dg.lane_status(e.delegation.route() or "", e.env).get(e.fallback_lane) if e.fallback_lane else None
             if e.fallback_lane and not isinstance(lane, dict):  # that lane is not configured here: no fallback
                 e.writer_fallback, e.fallback_lane = False, ""
             elif lane is None or lane.get("out") is False:  # back again, or no lane known to wait for
@@ -263,7 +263,7 @@ class WorkerCall:
         )
         t0, trees = time.time(), strays.worktrees(e)  # the worktrees the repo holds before the worker runs
         try:
-            ans = dg.call(e.resolved, req, c.text, c.schema, runner, env=childenv.current_env(e.bead_env))
+            ans = dg.call(e.resolved, req, c.text, c.schema, runner, env=childenv.current_env(e.env, e.bead_env))
         except BaseException as exc:  # an interruption stopped the delegate inside the process seam: record that stop here
             if runner.obs.get("kill_t") or runner.stop.get("alive"):
                 self.log_kill(c, runner, exc)

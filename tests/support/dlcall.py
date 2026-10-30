@@ -3,8 +3,10 @@ a test asserts on (the typed result, its wire object, the policy's Stop)."""
 from typing import Any
 
 import support.paths  # noqa: F401
+from taskloop.adapters import childenv
 from taskloop.adapters import delegate as dl
 from taskloop.contracts.delegate import RunRequest
+from taskloop.contracts.env import snapshot
 from taskloop.domain.lanes import policy as lp
 
 
@@ -23,4 +25,5 @@ def request(role, cwd, **kw: Any):
 
 
 def call(resolved, role, brief, schema, cwd, runner, env=None, **kw):
-    return Got(dl.call(resolved, request(role, cwd, **kw), brief, schema, runner, env))
+    base = childenv.current_env(snapshot()) if env is None else env
+    return Got(dl.call(resolved, request(role, cwd, **kw), brief, schema, runner, base))

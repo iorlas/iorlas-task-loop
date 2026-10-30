@@ -17,6 +17,7 @@ from taskloop.adapters import ident
 from taskloop.app.plan.planner import Planner
 from taskloop.app.run import engine
 from taskloop.app.wire import slots as wslots
+from taskloop.contracts.env import snapshot
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.kinds import Kind
 from taskloop.domain.report import matchers as lifecycle
@@ -230,7 +231,7 @@ class TraceTelemetry(te.EngineTest):
 
     @unittest.skipIf(os.name == "nt", "the engine stops a process group; sleep and bash are POSIX")
     def test_a_timed_out_command_leaves_a_kill_record(self):
-        eng = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), verbose=False, store=self.store)
+        eng = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), verbose=False, store=self.store, env=snapshot())
         procsim.fake("sleep 5", procsim.takes(5))
         rc, _ = eng.sh(["sleep", "5"], timeout=0.05)
         self.assertEqual(rc, 124)
@@ -243,7 +244,7 @@ class TraceTelemetry(te.EngineTest):
         self.assertIn("started_t", kills[-1])
 
     def test_a_command_that_exits_124_by_itself_is_not_a_kill(self):
-        eng = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), verbose=False, store=self.store)
+        eng = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), verbose=False, store=self.store, env=snapshot())
         rc, _ = eng.sh([procsim.fake("exits-124", procsim.exits(124))], timeout=10)
         self.assertEqual(rc, 124)
         kills = [json.loads(line) for line in eng.log_path.read_text().splitlines()
@@ -252,7 +253,7 @@ class TraceTelemetry(te.EngineTest):
 
 
     def test_a_stopped_delegate_worker_that_survives_still_leaves_a_kill_record(self):
-        eng = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), verbose=False, store=self.store)
+        eng = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), verbose=False, store=self.store, env=snapshot())
 
         class Survivor(fake_route.Script):  # the engine ended the call, and the worker outlived every signal
             def reply(this, *a, **kw):
@@ -274,7 +275,7 @@ class TraceTelemetry(te.EngineTest):
                                 kill_t=101.5, why="interrupted", alive=[4242])
                 raise KeyboardInterrupt()
 
-        eng = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), verbose=False, store=self.store)
+        eng = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), verbose=False, store=self.store, env=snapshot())
         with te.delegate_stack(Interrupted({})), self.assertRaises(KeyboardInterrupt):
             eng.ai("plan", "title", "prompt")
         kills = [json.loads(line) for line in eng.log_path.read_text().splitlines()

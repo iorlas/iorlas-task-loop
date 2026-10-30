@@ -11,6 +11,9 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
+from taskloop.contracts.env import Env as ProcessEnv
+from taskloop.contracts.envvars import EnvVar
+
 CGNAT = ipaddress.ip_network("100.64.0.0/10")  # Tailscale's range
 DEFAULT_PORT = 7878
 
@@ -56,10 +59,10 @@ def post_allowed(addr: object, authorization: str | None, secret: Callable[[], s
     return bool(got) and hmac.compare_digest(got, secret())
 
 
-def bind_addrs() -> list[str]:
-    env = os.environ.get("TASK_LOOP_DASH_BIND")
-    if env:
-        return [x.strip() for x in env.split(",") if x.strip()]
+def bind_addrs(process: ProcessEnv) -> list[str]:
+    given = process.get(EnvVar.TASK_LOOP_DASH_BIND)
+    if given:
+        return [x.strip() for x in given.split(",") if x.strip()]
     return ["127.0.0.1"]  # the launcher (`tl dash`) names a Tailscale address with --bind; the server looks at no network tool
 
 
@@ -71,14 +74,14 @@ def is_dev_checkout(here: Path | str) -> bool:
     return any((d / ".git").exists() for d in [path, *path.parents])
 
 
-def plan(port: int | None, bind: str | None, dev: bool) -> tuple[list[str], int]:
+def plan(port: int | None, bind: str | None, dev: bool, process: ProcessEnv) -> tuple[list[str], int]:
     """(addresses, port): installed copy = loopback + Tailscale on 7878; a dev checkout = loopback on a random port."""
     if bind:
         addrs = [x.strip() for x in bind.split(",") if x.strip()]
-    elif dev and not os.environ.get("TASK_LOOP_DASH_BIND"):
+    elif dev and not process.get(EnvVar.TASK_LOOP_DASH_BIND):
         addrs = ["127.0.0.1"]
     else:
-        addrs = bind_addrs()
+        addrs = bind_addrs(process)
     return addrs, (port if port is not None else (0 if dev else DEFAULT_PORT))
 
 
@@ -101,10 +104,10 @@ def is_loopback(addr: str) -> bool:
         return False
 
 
-def bind_refusal(addrs: list[str], port: int, here: Path | str, home: Path | str, state: Path | str) -> str | None:
+def bind_refusal(addrs: list[str], port: int, here: Path | str, home: Path | str, state: Path | str, process: ProcessEnv) -> str | None:
     """Why this server must not bind, else None: a dev copy once took :7878 on the Tailscale address with an empty state dir and
     blanked the phone dashboard. Only TASK_LOOP_DASH_DEV_PUBLIC=1 overrides."""
-    if not is_installed_copy(here, home) and os.environ.get("TASK_LOOP_DASH_DEV_PUBLIC") != "1":
+    if not is_installed_copy(here, home) and process.get(EnvVar.TASK_LOOP_DASH_DEV_PUBLIC) != "1":
         bad = [a for a in addrs if not is_loopback(a)]
         if bad or port == DEFAULT_PORT:
             return (

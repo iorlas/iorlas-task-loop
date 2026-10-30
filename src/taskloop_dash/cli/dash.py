@@ -9,6 +9,7 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from types import ModuleType
 
+from taskloop.contracts import env as penv
 from taskloop_dash import serve
 from taskloop_dash.env import Env, Ports
 
@@ -40,4 +41,4 @@ def main(argv: Sequence[str] | None = None, load: Callable[[str], ModuleType] = 
     ap.add_argument("--ports", default=None, help="MODULE:FUNC returning the Ports (the engine's read-only facts)")
     known, rest = ap.parse_known_args(argv)
     env = Env(ports=resolve_ports(known.ports, load), version=code_version())
-    serve.main(env, here, rest)
+    serve.main(env, here, penv.snapshot(), rest)  # the dash's edge: the process environment is taken here, once

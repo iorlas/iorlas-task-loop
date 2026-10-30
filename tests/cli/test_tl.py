@@ -40,8 +40,9 @@ from taskloop.app.release import pins  # noqa: E402
 from taskloop.app.track import trail  # noqa: E402
 from taskloop.app.wire import asks as wasks  # noqa: E402
 from taskloop.contracts import wire  # noqa: E402
+from taskloop.contracts.env import Env  # noqa: E402
 
-CTX = tl.Ctx(tl.HERE, trail.now, [])
+CTX = tl.Ctx(tl.HERE, trail.now, [], Env({}))
 
 
 def sh(*args, cwd):

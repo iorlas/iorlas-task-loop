@@ -18,6 +18,7 @@ from support.fakes import FakeBeadStore
 from taskloop.app.run import engine
 from taskloop.app.run.closer import Closer
 from taskloop.app.wire import slots as wslots
+from taskloop.contracts.env import snapshot
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.kinds import Kind
 from taskloop.domain import outcome as oc
@@ -44,7 +45,7 @@ def main(argv: list[str]) -> None:
     mode, journal = argv[0], argv[-1] if argv[0] == "restart" else argv[2]
     store = FakeBeadStore()
     store.calls = Journal(journal)
-    eng = engine.Engine(BeadId("t-1"), os.environ["CLOSE_WT"], wslots.load_cfg(os.environ["CLOSE_WT"]), store=store)
+    eng = engine.Engine(BeadId("t-1"), os.environ["CLOSE_WT"], wslots.load_cfg(os.environ["CLOSE_WT"]), store=store, env=snapshot())
     real = Closer.apply
 
     def apply(self, eff, *a):

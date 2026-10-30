@@ -10,6 +10,7 @@ from taskloop.app.checks.host import CheckHost
 from taskloop.contracts.argv import argv_of
 from taskloop.contracts.checks import UNVERIFIED_EXIT, Check
 from taskloop.contracts.enums import WaitWhat
+from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.paths import RepoDirs
 from taskloop.domain.checks import matchers, retry
 
@@ -55,7 +56,7 @@ class Attempts:
         t0 = time.time()
         art = RepoDirs(self.host.wt).artifacts(self.host.bead)
         art.mkdir(parents=True, exist_ok=True)  # where a check may drop pictures: ingest copies them at step end
-        rc, tail = self._exec(c, log, {**env, "TL_ARTIFACTS": str(art), "TL_ARTIFACT_STEP": c.id})
+        rc, tail = self._exec(c, log, {**env, EnvVar.TL_ARTIFACTS.value: str(art), EnvVar.TL_ARTIFACT_STEP.value: c.id})
         seen = self._read(log, tail)
         took = time.time() - t0
         self.host.waits.note_slot_waits(seen, took)
@@ -63,6 +64,7 @@ class Attempts:
 
     def _exec(self, c: Check, log: Path, env: Mapping[str, str]) -> tuple[int, str]:
         """The check's argv, on the host or (when it says `in: container` and docker is up) in a container; the log says where."""
+        env = {**c.env, **env}  # what the repo's check declares in its `env` (it is part of the cache key: it must reach the child too)
         argv, where = self.box.plan(c, argv_of(c.cmd), env)
         rc, tail = self.host.sh(argv, timeout=c.wall_min * 60, save=log, what="check", env=env)
         if where:

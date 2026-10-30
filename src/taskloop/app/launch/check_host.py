@@ -16,6 +16,8 @@ from taskloop.app.run.shell import Shell
 from taskloop.app.wire import real
 from taskloop.contracts import paths
 from taskloop.contracts.config import EngineConfig
+from taskloop.contracts.env import Env
+from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.ids import TreeSha
 from taskloop.contracts.ports import Spawner
 from taskloop.stores.bundle import Stores
@@ -41,8 +43,9 @@ class _NewFiles:
 
 class CliHost:
     def __init__(self, wt: str | Path, cfg: EngineConfig, stores: Stores | None = None, root: Path | None = None,
-                 spawner: Spawner | None = None) -> None:
-        self.spawner = spawner or real.spawner()
+                 spawner: Spawner | None = None, *, env: Env) -> None:
+        self.env = env
+        self.spawner = spawner or real.spawner(env)
         self.wt: str | Path = Path(wt)
         self.cfg = cfg
         self.stores = stores or real_stores(paths.ConfigDir(root))
@@ -50,7 +53,7 @@ class CliHost:
         self.log = RunLog(fake_stores().run_log("check"))
         self.checklog = CheckLog(self.log)
         self.run_dir = Path(tempfile.mkdtemp(prefix="tl-check-"))
-        self.bead_env: Mapping[str, str] = {"TL_SLOT": "check"}
+        self.bead_env: Mapping[str, str] = {EnvVar.TL_SLOT.value: "check"}
         self.killed = self.wall_hit = False
         self.halt = threading.Event()
         self.tree_memo: tuple[treehash.State, TreeSha] | None = None

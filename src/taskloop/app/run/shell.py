@@ -52,7 +52,7 @@ class Shell:
     def stream(self, cmd: Any, cwd: Any, env: Any, pin: bool, chunks: list[str], timeout: float, cid: str, what: str,
                started: float) -> Any:
         e = self.e
-        full_env = dict(childenv.current_env(), **e.bead_env, **(pinned_env(e.wt) if pin else {}), **(env or {}))
+        full_env = childenv.tool_env(e.env.vars, {**childenv.WORKER_MARK, **e.bead_env, **(pinned_env(e.wt) if pin else {}), **(env or {})})
         try:
             return stream_proc.run(list(cmd), cwd=cwd, env=full_env, on_stdout=chunks.append, on_stderr=chunks.append, timeout=timeout,
                                    stop=e.halt)

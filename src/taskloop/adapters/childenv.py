@@ -9,10 +9,10 @@ from pathlib import Path
 import child_env
 
 from taskloop.contracts import env as penv
+from taskloop.contracts.env import Env
 from taskloop.contracts.envvars import PREFIXES, EnvVar, registered
 
 VENV_VARS = ("VIRTUAL_ENV", "VIRTUAL_ENV_PROMPT", "PYTHONHOME", "__PYVENV_LAUNCHER__", "PYTHONEXECUTABLE")
-ENGINE_PREFIXES = ("TL_", "TASK_LOOP_")
 
 
 def without_venv(env: Mapping[str, str]) -> dict[str, str]:
@@ -25,9 +25,32 @@ def without_venv(env: Mapping[str, str]) -> dict[str, str]:
     return out
 
 
+# The only names (besides the registered engine ones and LC_*) a tool, a check or git inherits. Anything else is declared by the repo's
+# check (its `env`) or by the engine (`extra`), never picked up from whoever started the engine. A name is added below only when a real
+# tool needed it (tests/checks/real/test_allowlist.py runs lifesim's and task-loop's own checks), with the reason.
+ALLOWED = frozenset({
+    "PATH",  # cleaned of the virtualenv's bin (without_venv)
+    "HOME", "USER", "LANG", "TERM", "TMPDIR", "SHELL",
+    # Added after the real-git tests and the real-tool checks (tests/checks/real/test_allowlist.py, the suite) went red without them:
+    # git's identity where no user.name is configured (CI, a fresh HOME)
+    "GIT_AUTHOR_NAME", "GIT_AUTHOR_EMAIL", "GIT_COMMITTER_NAME", "GIT_COMMITTER_EMAIL",
+    "UV",  # the uv that started the engine (uv run sets it): script_argv re-runs tl.py and release.py with it, not a PATH shim
+    "SSH_AUTH_SOCK", "GIT_SSH_COMMAND",  # a push over ssh finds its key in the agent / the owner's ssh command
+})
+ALLOWED_PREFIXES = (
+    "LC_",
+    "GIT_CONFIG_",  # git's own config injection: GIT_CONFIG_GLOBAL, GIT_CONFIG_NOSYSTEM, GIT_CONFIG_COUNT/KEY_n/VALUE_n (tests, CI)
+)
+ENGINE_PREFIXES = ("TL_", "TASK_LOOP_")
+
+
+def allowed(name: str) -> bool:
+    return name in ALLOWED or name.startswith(ALLOWED_PREFIXES) or (name.startswith(ENGINE_PREFIXES) and registered(name))
+
+
 def tool_env(base: Mapping[str, str], extra: Mapping[str, str] | None = None) -> dict[str, str]:
-    """For a tool, a check or git: `base` without the virtualenv and without unregistered engine names, then `extra` over it."""
-    env = {k: v for k, v in without_venv(base).items() if not k.startswith(ENGINE_PREFIXES) or registered(k)}
+    """For a tool, a check or git: only the allowlisted names of `base` (PATH without the virtualenv), then `extra` over it."""
+    env = {k: v for k, v in without_venv(base).items() if allowed(k)}
     env.update(extra or {})
     return env
 
@@ -53,6 +76,9 @@ GIT_PIN_VARS = ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE")  # the engine's ow
 KEEP = ("CLAUDE_CONFIG_DIR",)  # a worker on a custom Claude login must find it
 
 
+WORKER_MARK = {"TASK_LOOP_WORKER": "1", "DELEGATE_DEPTH": "1"}  # what a child of the engine is told: it never delegates further
+
+
 def child_env_of(env: Mapping[str, str], extra: Mapping[str, str] | None = None) -> dict[str, str]:
     """`env` without what an agent session exports (CLAUDE_*, ANTHROPIC_*, DELEGATE_*, MCP_*, OTEL_*, CODEX_COMPANION*) and without
     TASK_LOOP_* and the git pins, but with CLAUDE_CONFIG_DIR. Credentials stay: delegate scrubs its workers itself (its own
@@ -60,7 +86,7 @@ def child_env_of(env: Mapping[str, str], extra: Mapping[str, str] | None = None)
     gone = (*child_env.APP_PREFIXES, "TASK_LOOP_")
     drop = (*child_env.APP_NAMES, *GIT_PIN_VARS)
     out = {k: v for k, v in without_venv(env).items() if k in KEEP or not (k.startswith(gone) or k in drop)}
-    out.update({"TASK_LOOP_WORKER": "1", "DELEGATE_DEPTH": "1"})
+    out.update(WORKER_MARK)
     out.update(extra or {})
     return out
 
@@ -71,5 +97,6 @@ def script_argv(script: str | Path) -> list[str]:
     return [penv.ambient("UV") or shutil.which("uv") or "uv", "run", "--quiet", "--script", str(script)]
 
 
-def current_env(extra: Mapping[str, str] | None = None) -> dict[str, str]:
-    return child_env_of(penv.snapshot().vars, extra)
+def current_env(env: Env, extra: Mapping[str, str] | None = None) -> dict[str, str]:
+    """The environment of a worker started from `env` (child_env_of over the taken copy of the process's)."""
+    return child_env_of(env.vars, extra)

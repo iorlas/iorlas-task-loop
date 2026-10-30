@@ -33,8 +33,9 @@ class EnvVar(StrEnum):
 CHECK_LOG_PREFIX: Final = "TL_CHECK_LOG_"
 CHECK_RC_PREFIX: Final = "TL_CHECK_RC_"
 PREFIXES: Final = (CHECK_LOG_PREFIX, CHECK_RC_PREFIX)
-# Names a text may mention that are no variable: a Python constant, and a name SKILL.md says is gone.
-NOT_VARIABLES: Final = frozenset({"TL_PY", "TL_CHECKS_GREEN"})
+TL_PREFIX: Final = "TL_"  # the names a check inside a container is given (app/checks/container.py)
+# Names a text may mention that are no variable: Python constants, and a name SKILL.md says is gone.
+NOT_VARIABLES: Final = frozenset({"TL_PY", "TL_PREFIX", "TL_CHECKS_GREEN"})
 
 
 def registered(name: str) -> bool:

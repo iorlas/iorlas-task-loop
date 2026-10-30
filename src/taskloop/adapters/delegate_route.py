@@ -13,8 +13,8 @@ from taskloop.adapters import delegate_wire
 from taskloop.adapters.childenv import tool_env
 from taskloop.adapters.procs import capture as run_group
 from taskloop.adapters.runner import live_event
-from taskloop.contracts import env as penv
 from taskloop.contracts.delegate import DelegateResult, RunRequest
+from taskloop.contracts.env import Env
 from taskloop.contracts.ports import EventSink
 
 BACKSTOP_S = 120.0  # the default grace past `timeout_s` before the engine stops route.py itself
@@ -37,12 +37,13 @@ class LiveTail:
 
 
 class RouteDelegate:
-    def __init__(self, route: str, python: str = sys.executable, env: Mapping[str, str] | None = None,
+    def __init__(self, route: str, base: Env, python: str = sys.executable, env: Mapping[str, str] | None = None,
                  timeout_s: float = 3600.0, backstop_s: float = BACKSTOP_S) -> None:
         self.route, self.python, self.env, self.timeout_s, self.backstop_s = route, python, dict(env or {}), timeout_s, backstop_s
+        self.base = base  # the process environment taken at the edge; `env` is what this route adds
 
     def _env(self, extra: Mapping[str, str]) -> dict[str, str]:
-        return tool_env(penv.snapshot().vars, {**self.env, **extra})
+        return tool_env(self.base.vars, {**self.env, **extra})
 
     def speaks(self) -> int:
         ran = run_group([self.python, self.route, "contract", "--json"], None, self._env({}), 60.0)

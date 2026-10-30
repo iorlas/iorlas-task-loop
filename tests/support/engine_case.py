@@ -54,6 +54,7 @@ from taskloop.app.write.newfiles import NewFiles
 from taskloop.contracts import wire
 from taskloop.contracts.ask import AskAnswer
 from taskloop.contracts.checks import CheckRun
+from taskloop.contracts.env import snapshot
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.kinds import Kind
 from taskloop.contracts.paths import ConfigDir
@@ -421,7 +422,7 @@ class EngineTest(unittest.TestCase):
         fresh = cfg.pop("fresh", False)
         c = cfg_with(c, **{"reflect": False, **cfg, **(raw or {})})  # the reflection is one more call; its own tests switch it on
         with delegate_stack(script, route):
-            self.eng = engine.Engine(BeadId(bead), str(self.wt), c, store=self.store, fresh=fresh)
+            self.eng = engine.Engine(BeadId(bead), str(self.wt), c, store=self.store, fresh=fresh, env=snapshot())
             if probe is not None:
                 self.eng.probe = probe
             if prep is not None:
@@ -716,7 +717,7 @@ class LandReviewBase(EngineTest):
 
     def run_with(self, script):
         with delegate_stack(script, "/r.py"):
-            self.eng = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
+            self.eng = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store, env=snapshot())
             return self.eng.run()
 
     def landed(self):

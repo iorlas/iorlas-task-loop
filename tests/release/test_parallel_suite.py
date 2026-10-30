@@ -10,6 +10,7 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 
 from taskloop.adapters.suiteout import Part, failing_tests, failure_report, merge_outputs, ran_line
 from taskloop.app.release import suite as runner
+from taskloop.contracts.env import Env, snapshot
 
 GREEN = "..........\n10 passed, 2 skipped in 1.50s\n"
 RED = textwrap.dedent("""\
@@ -61,21 +62,18 @@ class Workers(unittest.TestCase):
         cases = ((8, 30 * gb, 8), (8, 6 * gb, 3), (14, 64 * gb, 14), (8, 100, 1), (1, 30 * gb, 1), (4, None, 4), (None, 8 * gb, 1))
         for cpus, mem, want in cases:
             self.assertEqual(runner.host_workers(cpus or 1, mem), want, (cpus, mem))
-        env = {k: v for k, v in os.environ.items() if k != "TASK_LOOP_SUITE_WORKERS"}
-        with mock.patch.dict(os.environ, env, clear=True), mock.patch.object(runner, "available_mb", return_value=5 * gb), \
-                mock.patch.object(os, "cpu_count", return_value=8):
-            self.assertEqual(runner.workers(), 2)
+        with mock.patch.object(runner, "available_mb", return_value=5 * gb), mock.patch.object(os, "cpu_count", return_value=8):
+            self.assertEqual(runner.workers(Env()), 2)
 
     def test_available_ram_is_read_from_the_host(self):
         self.assertGreater(runner.available_mb() or 1, 0)
 
     def test_the_environment_overrides_it(self):
-        with mock.patch.dict(os.environ, {"TASK_LOOP_SUITE_WORKERS": "3"}):
-            self.assertEqual(runner.workers(), 3)
+        self.assertEqual(runner.workers(Env({"TASK_LOOP_SUITE_WORKERS": "3"})), 3)
 
     def test_a_run_gets_its_own_home_config_and_temp_dirs(self):
         with tempfile.TemporaryDirectory() as d:
-            a, b = runner.isolated_env(Path(d) / "a"), runner.isolated_env(Path(d) / "b")
+            a, b = runner.isolated_env(Path(d) / "a", snapshot()), runner.isolated_env(Path(d) / "b", snapshot())
             for k in ("HOME", "XDG_CONFIG_HOME", "TMPDIR"):
                 self.assertNotEqual(a[k], b[k])
                 self.assertTrue(a[k].startswith(str(Path(d) / "a")))

@@ -18,6 +18,7 @@ from typing import Any
 
 from taskloop.adapters import childenv, delegate_wire, procs
 from taskloop.contracts.delegate import REASON_TIMEOUT, DelegateResult, Permanence, RunRequest, Scope
+from taskloop.contracts.env import Env
 from taskloop.contracts.ids import MARKETPLACE
 
 CONTRACT = delegate_wire.CONTRACT  # the contract number this engine speaks
@@ -133,21 +134,21 @@ def _last_json(text: str) -> Any:
         return None
 
 
-def _status(route: str) -> dict[str, Any]:
-    ran = procs.capture([sys.executable, route, "status", "--json"], None, childenv.current_env(), STATUS_TIMEOUT_S)
+def _status(route: str, env: Env) -> dict[str, Any]:
+    ran = procs.capture([sys.executable, route, "status", "--json"], None, childenv.current_env(env), STATUS_TIMEOUT_S)
     j = _last_json(ran.out) if ran.exit == 0 else None
     return j if isinstance(j, dict) else {}
 
 
-def lane_status(route: str) -> dict[str, Any]:
+def lane_status(route: str, env: Env) -> dict[str, Any]:
     """`route.py status --json` lanes (name -> {out, out_until, ...}); {} when it cannot be read."""
-    lanes = _status(route).get("lanes")
+    lanes = _status(route, env).get("lanes")
     return lanes if isinstance(lanes, dict) else {}
 
 
-def role_status(route: str) -> dict[str, Any]:
+def role_status(route: str, env: Env) -> dict[str, Any]:
     """`route.py status --json` roles{}: {role: {"usable": True | False | None, "lane", "why", "until", ...}}; {} when unreadable."""
-    roles = _status(route).get("roles")
+    roles = _status(route, env).get("roles")
     return roles if isinstance(roles, dict) else {}
 
 
@@ -177,7 +178,7 @@ def synth_for(contract: Mapping[str, Any], reason: str, default: tuple[Scope, Pe
 
 
 def call(
-    resolved: Resolved, req: RunRequest, brief: str, schema: dict[str, Any], runner: Runner, env: Mapping[str, str] | None = None
+    resolved: Resolved, req: RunRequest, brief: str, schema: dict[str, Any], runner: Runner, env: Mapping[str, str]
 ) -> Answer:
     """One delegate call. Never raises (but an interruption: BaseException goes on). `runner(argv, cwd=, env=, timeout=)` -> an object
     with `.returncode`, `.stdout`, `.stderr`; it raises Stopped when the engine had to end the call."""
@@ -189,7 +190,7 @@ def call(
             Path(sf).write_text(json.dumps(schema), encoding="utf-8")
             argv = req.replace(brief_path=bf, schema_path=sf).to_argv(sys.executable, resolved.route)
             wall = (req.timeout_s + BACKSTOP_S) if req.timeout_s else None
-            p = runner(argv, cwd=req.cwd or None, env=dict(childenv.current_env() if env is None else env, **req.env()), timeout=wall)
+            p = runner(argv, cwd=req.cwd or None, env=dict(env, **req.env()), timeout=wall)
     except (Stopped, subprocess.TimeoutExpired) as e:
         why = e.why if isinstance(e, Stopped) else "its wall limit ran out"
         return Answer(

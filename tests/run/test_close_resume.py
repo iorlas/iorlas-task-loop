@@ -14,6 +14,7 @@ from support.checkpoints import read_ck
 from taskloop.app.run import ended, engine
 from taskloop.app.run.closer import Closer, closer_over
 from taskloop.app.wire import slots as wslots
+from taskloop.contracts.env import snapshot
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.kinds import Kind
 from taskloop.domain import effects as fx
@@ -28,7 +29,7 @@ class Killed(BaseException):
 class Base(T.EngineTest):
     def engine(self) -> engine.Engine:
         c = wslots.load_cfg(str(self.wt))
-        eng = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store)
+        eng = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot())
         eng.checkpoints.save(step="close")  # the record the keys go into
         return eng
 
@@ -85,7 +86,7 @@ class ColdRestart(Base):
 
     def cold(self):
         c = wslots.load_cfg(str(self.wt))
-        return engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store)
+        return engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot())
 
     def test_a_new_process_takes_the_dead_runs_id_from_its_checkpoint(self):
         dead = self.killed_at(fx.CloseBead)

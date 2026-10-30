@@ -8,6 +8,7 @@ from pathlib import Path
 from taskloop.adapters import childenv
 from taskloop.app.checks.host import CheckHost
 from taskloop.contracts.checks import Check
+from taskloop.contracts.envvars import TL_PREFIX, EnvVar
 from taskloop.contracts.ports import Spawner
 
 RUNNER = Path(__file__).parents[2] / "adapters" / "container_run.py"
@@ -29,9 +30,10 @@ class Box:
         why = self._ready()
         if why:
             return list(argv), why
-        tl = {k: v for k, v in childenv.current_env().items() if k.startswith("TL_")}
-        forward = {**tl, "TL_SLOT": self.host.bead_env["TL_SLOT"], **env}  # the slot's name only: its host paths mean nothing inside
-        art = forward.pop("TL_ARTIFACTS", "")
+        tl = {k: v for k, v in childenv.current_env(self.host.env).items() if k.startswith(TL_PREFIX)}
+        # the slot's name only: its host paths mean nothing inside
+        forward = {**tl, EnvVar.TL_SLOT.value: self.host.bead_env[EnvVar.TL_SLOT], **env}
+        art = forward.pop(EnvVar.TL_ARTIFACTS, "")
         name = "tl-check-" + "".join(ch if ch.isalnum() or ch in "_.-" else "-" for ch in f"{self.host.run_dir.name}-{c.id}")
         cmd = [sys.executable, str(RUNNER), "--image", self._image, "--name", name, "--art", art]
         cmd += [x for k, v in forward.items() for x in ("--env", f"{k}={v}")]

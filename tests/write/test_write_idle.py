@@ -27,6 +27,7 @@ from taskloop.app.wire import slots as wslots
 from taskloop.contracts import wire
 from taskloop.contracts.config import ConfigError, EngineConfig, load
 from taskloop.contracts.delegate import DelegateResult, RunRequest
+from taskloop.contracts.env import snapshot
 from taskloop.contracts.ids import BeadId
 
 POSIX = os.name != "nt"
@@ -86,7 +87,7 @@ class SurvivorBlocksTheRetry(te.EngineTest):
         script = Script({"plan": [te.PLAN], "write": [te.WRITE], "review": [te.CLEAN]})
         c = wslots.load_cfg(str(self.wt))
         with te.delegate_stack(script):
-            self.eng = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store)
+            self.eng = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot())
             rc = self.eng.run()
         return rc, script
 
@@ -117,7 +118,7 @@ class SurvivorBlocksTheRetry(te.EngineTest):
             return argvs[-1]
 
         with te.delegate_stack(script), mock.patch.object(RunRequest, "to_argv", spy):
-            engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store).run()
+            engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot()).run()
         by_role = {a[a.index("run") + 1]: a for a in argvs}
         w = by_role["worker"]
         want = (str(int(c.write_idle_min * 60)), str(int(c.write_cap_min * 60)))
@@ -127,7 +128,7 @@ class SurvivorBlocksTheRetry(te.EngineTest):
         self.assertNotIn("--idle", by_role["planner"])
 
     def test_a_write_under_the_idle_rules_gets_no_close_to_the_limit_warning(self):
-        eng = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
+        eng = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store, env=snapshot())
         r = DelegateResult(data=te.CLEAN, secs=40 * 60)
         eng.records.anomalies("write", r, 1)
         eng.records.anomalies("review", r, 1)

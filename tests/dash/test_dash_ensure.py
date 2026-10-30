@@ -17,11 +17,13 @@ from support.narrow import must  # noqa: E402
 
 from taskloop.adapters import procs  # noqa: E402
 from taskloop.app.launch import dash as dash_server  # noqa: E402
+from taskloop.contracts.env import Env as ProcessEnv  # noqa: E402
+from taskloop.contracts.env import snapshot  # noqa: E402
 from taskloop_dash import bind  # noqa: E402
 
 
 def _const(value):
-    return lambda *a: value
+    return lambda *a, **k: value
 
 
 def free_port():
@@ -99,10 +101,10 @@ class EnsureFlow(unittest.TestCase):
         proc = mock.Mock()
         proc.poll.return_value = None
         with mock.patch.object(dash_server, "ping", side_effect=pings), \
-                mock.patch.object(dash_server, "stop_server", side_effect=lambda v=None: stops.append(v)), \
+                mock.patch.object(dash_server, "stop_server", side_effect=lambda v=None, *a, **k: stops.append(v)), \
                 mock.patch.object(procs, "spawn", side_effect=lambda *a, **k: popens.append(a) or proc), \
                 mock.patch.object(dash_server.time, "sleep"):
-            rc = dash_server.run("ensure")
+            rc = dash_server.run("ensure", snapshot())
         return rc, stops, popens
 
     def test_current_server_is_kept(self):
@@ -137,7 +139,7 @@ class EnsureFlow(unittest.TestCase):
                 mock.patch.object(dash_server, "log_tail", return_value="bind 100.1.2.3:7878 failed (held by pid 99)"), \
                 mock.patch.object(dash_server.time, "sleep"), \
                 mock.patch("builtins.print") as pr:
-            rc = dash_server.run("ensure")
+            rc = dash_server.run("ensure", snapshot())
         self.assertEqual(rc, 1)
         out = " ".join(str(c.args[0]) for c in pr.call_args_list)
         self.assertIn("100.1.2.3", out)
@@ -154,7 +156,7 @@ class EnsureFlow(unittest.TestCase):
             with mock.patch.object(dash_server, "ping", ping), mock.patch.object(dash_server, "stop_server", stop), \
                     mock.patch.object(procs, "spawn", return_value=proc) as popen, \
                     mock.patch.object(dash_server.time, "sleep"):
-                rc = dash_server.run("ensure")
+                rc = dash_server.run("ensure", snapshot())
         self.assertEqual(rc, 0)
         stop.assert_not_called()
         cmd = popen.call_args.args[0]
@@ -183,23 +185,20 @@ class DevCheckout(unittest.TestCase):
             self.assertFalse(bind.is_dev_checkout(Path(d)))
 
     def test_dev_defaults_to_loopback_random_port(self):
-        with mock.patch.dict(os.environ, {}, clear=False):
-            os.environ.pop("TASK_LOOP_DASH_BIND", None)
-            addrs, port = bind.plan(None, None, dev=True)
+        addrs, port = bind.plan(None, None, dev=True, process=ProcessEnv())
         self.assertEqual(addrs, ["127.0.0.1"])
         self.assertEqual(port, 0)
 
     def test_dev_with_explicit_port_or_bind_is_honoured(self):
-        addrs, port = bind.plan(9999, "127.0.0.1,100.9.9.9", dev=True)
+        addrs, port = bind.plan(9999, "127.0.0.1,100.9.9.9", dev=True, process=ProcessEnv())
         self.assertEqual((addrs, port), (["127.0.0.1", "100.9.9.9"], 9999))
-        addrs, port = bind.plan(9999, None, dev=True)
+        addrs, port = bind.plan(9999, None, dev=True, process=ProcessEnv())
         self.assertEqual((addrs, port), (["127.0.0.1"], 9999))
 
     def test_the_server_alone_binds_loopback_on_7878_and_the_launcher_adds_tailscale(self):
-        os.environ.pop("TASK_LOOP_DASH_BIND", None)
-        self.assertEqual(bind.plan(None, None, dev=False), (["127.0.0.1"], 7878))  # the server runs no network tool
+        self.assertEqual(bind.plan(None, None, dev=False, process=ProcessEnv()), (["127.0.0.1"], 7878))  # the server runs no network tool
         with mock.patch.object(dash_server, "tailscale_ip", return_value="100.1.2.3"):
-            self.assertEqual(dash_server.default_binds(), ["127.0.0.1", "100.1.2.3"])
+            self.assertEqual(dash_server.default_binds(ProcessEnv()), ["127.0.0.1", "100.1.2.3"])
         self.assertEqual(dash_server.inet_addrs("2: eth0 inet 100.64.0.5/32 scope global\n inet6 fe80::1/64 inet bogus"), ["100.64.0.5"])
 
 

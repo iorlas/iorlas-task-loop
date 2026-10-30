@@ -4,6 +4,7 @@ import os
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -31,7 +32,7 @@ class DoctorBeads(unittest.TestCase):
                  {"id": "x-3", "description": "study 84 s.2: facts inline", "labels": ["facts-inline"]},
                  {"id": "x-4", "acceptance_criteria": "matches 79-test-impact-and-land-gate.md"},
                  {"id": "x-5", "issue_type": "epic", "description": "study 49"}]
-        with tlbd.bd_boundary(result=tlbd.done(json.dumps(beads))):
+        with mock.patch.dict(os.environ, {"TASK_LOOP_ACTOR": "tl-test"}), tlbd.bd_boundary(result=tlbd.done(json.dumps(beads))):
             out = doctor.bead_lint_warnings("/work/repo")
         self.assertEqual([w.split(":")[0] for w in out], ["bead x-1", "bead x-4"])
         self.assertTrue(all("needs inlined facts" in w for w in out))

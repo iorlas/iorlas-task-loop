@@ -31,6 +31,7 @@ from taskloop.app.loop.take import Taker  # noqa: E402
 from taskloop.app.run import (  # noqa: E402
     entry,
 )
+from taskloop.contracts.env import snapshot  # noqa: E402
 
 LIVE_PID = "a live pid that is not this process: a real sleep child (an engine lock, a second loop, a waiter)"
 
@@ -75,7 +76,7 @@ class HeldBranch(unittest.TestCase):
         a = entry.Args(op="reset", name="s1", bead="x-1", n=None, force=False)
         out = io.StringIO()
         with redirect_stdout(out), redirect_stderr(io.StringIO()):
-            rc = tl.v_slot(a, tl.Ctx(tl.HERE, tl.trail.now, []))
+            rc = tl.v_slot(a, tl.Ctx(tl.HERE, tl.trail.now, [], snapshot()))
         return rc, out.getvalue(), getattr(a, "error", "")
 
     def branch_in_slot(self):

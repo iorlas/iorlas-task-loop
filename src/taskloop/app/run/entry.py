@@ -29,6 +29,7 @@ from taskloop.contracts import env as penv
 from taskloop.contracts import fence, wire
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.enums import AskStatus, Result
+from taskloop.contracts.env import Env
 from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.fence import SLOT_GEN
 from taskloop.contracts.ids import BeadId
@@ -165,9 +166,9 @@ def report(a: Any, rec: RunReport) -> Any:
     say(line)
 
 
-def main(a: Any, store: Any = None) -> Any:
+def main(a: Any, store: Any = None, *, env: Env) -> Any:
     try:
-        rc = run_main(a, store)
+        rc = run_main(a, store, env=env)
     except Blocked as b:  # a stop (SIGTERM) before the engine ran: the slot and the lock are already given back
         rc = RunReport(outcome=Result.FAILED, bead=a.id, why=b.why, kind=b.kind.value)
     if isinstance(rc, RunReport):  # stopped before the engine ran: nothing in the bead changed
@@ -176,24 +177,24 @@ def main(a: Any, store: Any = None) -> Any:
     return rc
 
 
-def run_main(a: Any, store: Any = None) -> Any:
+def run_main(a: Any, store: Any = None, *, env: Env) -> Any:
     with halting.halt_on_sigterm():
-        return run_main_stoppable(a, store)
+        return run_main_stoppable(a, store, env=env)
 
 
-def run_main_stoppable(a: Any, store: Any = None) -> Any:
+def run_main_stoppable(a: Any, store: Any = None, *, env: Env) -> Any:
     for f in (sys.stdout, sys.stderr):
         append_output(f)
-    if not penv.ambient(EnvVar.TASK_LOOP_SESSION) and not ident.session_id():
+    if not env.get(EnvVar.TASK_LOOP_SESSION) and not ident.session_id():
         penv.export(EnvVar.TASK_LOOP_SESSION, "engine-" + uuid.uuid4().hex[:12])
     repo = gitrepo.repo_root()
     cfg = wslots.load_cfg(repo)
     if a.slot == "any":
-        return run_any_slot(a, repo, cfg, store)
-    return run_in(a, repo, cfg, store)
+        return run_any_slot(a, repo, cfg, store, env=env)
+    return run_in(a, repo, cfg, store, env=env)
 
 
-def run_any_slot(a: Any, repo: Any, cfg: Any, store: Any = None) -> Any:
+def run_any_slot(a: Any, repo: Any, cfg: Any, store: Any = None, *, env: Env) -> Any:
     """--slot any: the next free slot, taken in the repo's slot line (first come, first served; --wait: wait in it),
     run there as `--slot NAME`, given back at the end."""
     if a.dry_run:
@@ -219,7 +220,7 @@ def run_any_slot(a: Any, repo: Any, cfg: Any, store: Any = None) -> Any:
     halting.RUN_SLOT["owned"] = a.slot  # a re-exec hands the slot on (TL_REEXEC) and its next run-task gives it back
     with penv.handover(EnvVar.TASK_LOOP_SLOT_BEAD, sb):  # run_in sees the slot as taken; the engine heartbeats it
         try:
-            return run_in(a, repo, cfg, store)
+            return run_in(a, repo, cfg, store, env=env)
         finally:
             with _sigterm_ignored():
                 wslots.release_slot(repo, a.slot, bead=a.id, mine=True, store=store, gen=a.slot_gen)
@@ -249,21 +250,21 @@ def take_area(a: Any, repo: Any, cfg: Any, lock: Any, sb: Any = "", store: Any =
         return why
 
 
-def _handed_slot(slot: Any) -> Any:
+def _handed_slot(slot: Any, env: Env) -> Any:
     """True when TL_REEXEC (set by the run-task that exec'd into this one, not yet read by the Engine) says it took `slot` itself."""
     try:
-        return json.loads(penv.ambient(EnvVar.TL_REEXEC) or "{}").get("owned") == slot
+        return json.loads(env.get(EnvVar.TL_REEXEC) or "{}").get("owned") == slot
     except (ValueError, AttributeError):
         return False
 
 
-def _worktree_of(a: Any, repo: Any) -> tuple[str, Any]:
+def _worktree_of(a: Any, repo: Any, env: Env) -> tuple[str, Any]:
     """(worktree, failure): the directory the run works in (the slot's, the named one, or a new one), or the outcome that says why none."""
     wt = a.worktree
     if not wt and a.slot:  # the slot is the worktree
         wt = wslots.slot_dir(repo, a.slot, wslots.profile_slots(repo))
     if not wt:
-        r = real.spawner().run([*childenv.script_argv(TL_PY), "worktree", "start"])
+        r = real.spawner(env).run([*childenv.script_argv(TL_PY), "worktree", "start"])
         wt = r.out.strip().splitlines()[-1] if r.exit == 0 and r.out.strip() else ""
         if not wt:
             print("tl: no worktree: " + r.err, file=sys.stderr)
@@ -276,10 +277,10 @@ def _worktree_of(a: Any, repo: Any) -> tuple[str, Any]:
     return wt, None
 
 
-def _slot_taken(a: Any, repo: Any, wt: str, slot: str, sb: BeadId | None, store: Any) -> tuple[BeadId | None, Any]:
+def _slot_taken(a: Any, repo: Any, wt: str, slot: str, sb: BeadId | None, store: Any, env: Env) -> tuple[BeadId | None, Any]:
     """(slot bead taken here, taken outcome): a hand run takes its slot's bead as the loop does; one the loop started has it already."""
     named = sb is not None and penv.ambient_bead(EnvVar.TASK_LOOP_SLOT_BEAD) == sb
-    if slot and sb and named and _handed_slot(slot):
+    if slot and sb and named and _handed_slot(slot, env):
         halting.RUN_SLOT["owned"] = slot
         return sb, None  # exec'd by the run-task that took this slot: it is still ours, and this process gives it back
     if slot and not (sb and named):
@@ -305,12 +306,12 @@ def _sigterm_ignored() -> Generator[None]:
             signal.signal(signal.SIGTERM, old)
 
 
-def run_in(a: Any, repo: Any, cfg: Any, store: Any = None) -> Any:
-    wt, failed = _worktree_of(a, repo)
+def run_in(a: Any, repo: Any, cfg: Any, store: Any = None, *, env: Env) -> Any:
+    wt, failed = _worktree_of(a, repo, env)
     if failed:
         return failed
     if a.dry_run:
-        return run_bead(a, repo, cfg, wt, store)
+        return run_bead(a, repo, cfg, wt, store, env=env)
     took, slot = "", ""
     try:
         # a hand run takes its slot's bead as the loop does (a --worktree that is a slot too); one the loop started has
@@ -318,7 +319,7 @@ def run_in(a: Any, repo: Any, cfg: Any, store: Any = None) -> Any:
         slot = a.slot or wslots.slot_of(repo, wt, store)
         sb_row = wslots.slot_bead(repo, slot, store) if slot else None
         sb = sb_row.id if sb_row else None
-        took, taken = _slot_taken(a, repo, wt, slot, sb, store)
+        took, taken = _slot_taken(a, repo, wt, slot, sb, store, env)
         if taken:
             return taken
         if took:
@@ -330,7 +331,7 @@ def run_in(a: Any, repo: Any, cfg: Any, store: Any = None) -> Any:
             print(f"TAKEN: {why}")
             return RunReport(outcome=Result.TAKEN, bead=a.id, why=why)
         engine_lock.LOCK = lock
-        return run_bead(a, repo, cfg, wt, store)
+        return run_bead(a, repo, cfg, wt, store, env=env)
     finally:
         with _sigterm_ignored():
             if engine_lock.LOCK:
@@ -344,7 +345,7 @@ def run_in(a: Any, repo: Any, cfg: Any, store: Any = None) -> Any:
 defer_stop = halting.stop_deferred  # no state: also before an Engine exists
 
 
-def run_bead(a: Any, repo: Any, cfg: Any, wt: Any, store: Any = None) -> Any:
+def run_bead(a: Any, repo: Any, cfg: Any, wt: Any, store: Any = None, *, env: Env) -> Any:
     # a stop during the reclaim and claim waits for them, then the engine closes the run as stopped (trace, bead)
     with defer_stop(None) as stop:
         if not a.dry_run:
@@ -360,7 +361,7 @@ def run_bead(a: Any, repo: Any, cfg: Any, wt: Any, store: Any = None) -> Any:
         claim = None if a.dry_run else fence.take(store or beadtools.bd_store(), a.id, ident.actor(),
                                                   penv.ambient_bead(EnvVar.TASK_LOOP_SLOT_BEAD), getattr(a, "slot_gen", None))
         eng = Engine(a.id, wt, cfg, dry_run=a.dry_run, verbose=not getattr(a, "quiet", False),
-                     fresh=bool(getattr(a, "fresh", False)), store=store, claim=claim)
+                     fresh=bool(getattr(a, "fresh", False)), store=store, claim=claim, env=env)
         eng.stop_pending = bool(stop)
         say(f"engine log: {eng.log_path}")
     rc = eng.run()

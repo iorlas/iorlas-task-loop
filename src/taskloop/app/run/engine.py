@@ -64,6 +64,7 @@ from taskloop.app.write.stage_loop import StageLoop
 from taskloop.contracts import fence, plancheck
 from taskloop.contracts.argv import text_of
 from taskloop.contracts.enums import Result
+from taskloop.contracts.env import Env
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.kinds import Kind
 from taskloop.contracts.landed import Landed, LandedStore
@@ -113,9 +114,10 @@ class Engine(RunFields):
 
     def __init__(self, bead: BeadId, wt: str, cfg: Any, dry_run: bool = False, verbose: bool = True, store: Any = None,
                  route: Any = None, clock: Any = None, git: Any = None, stores: Any = None, fresh: bool = False,
-                 claim: fence.Claim | None = None, spawner: Any = None) -> None:
+                 claim: fence.Claim | None = None, spawner: Any = None, *, env: Env) -> None:
         route = route or seams.DelegateRoute()
-        self.spawner = spawner or wire_real.spawner()
+        self.env = env  # the process environment, taken once at the edge (tl.py); every child is built from it
+        self.spawner = spawner or wire_real.spawner(self.env)
         super().__init__(bead, wt, cfg, dry_run, verbose, store, route, git, fresh, claim)
         self.clock = clock or SystemClock()
         self.reexec: dict[str, Any] = reexec.take_reexec_env()  # this run-task came from an exec into a newer install, or a fallback
@@ -281,7 +283,7 @@ class Engine(RunFields):
     def shell_probe(self) -> PathProbe:
         """What the plan lint may ask of this tree: PATH, just, the files (one per engine, so its answers are remembered)."""
         if self._probe is None:
-            self._probe = PathProbe(self.wt, childenv.current_env())
+            self._probe = PathProbe(self.wt, childenv.current_env(self.env))
         return self._probe
 
     @staticmethod

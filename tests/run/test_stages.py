@@ -30,6 +30,7 @@ from taskloop.app.write.handoff import HANDOFF_CAP
 from taskloop.contracts.answers import IRREVERSIBLE
 from taskloop.contracts.argv import argv_of
 from taskloop.contracts.config import EngineConfig
+from taskloop.contracts.env import snapshot
 from taskloop.contracts.ids import BeadId, CheckId
 from taskloop.contracts.plancheck import adhoc
 from taskloop.domain.checks import planref
@@ -38,7 +39,7 @@ from taskloop.domain.plan.matchers import AcceptanceText
 
 class StagesTest(te.EngineTest):
     def probe(self):
-        return PathProbe(cast(Any, self).wt, childenv.current_env())
+        return PathProbe(cast(Any, self).wt, childenv.current_env(snapshot()))
 
     wt: Path
 
@@ -187,7 +188,7 @@ class Scope(StagesTest):
         self.assertIn("Sit To Stand", e.leftovers[0]["title"])
 
     def test_with_no_acceptance_text_nothing_moves(self):
-        e = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
+        e = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store, env=snapshot())
         item = {"what": "Sit To Stand was not probed", "kind": "checkable"}
         self.assertEqual(e.cases.out_of_scope([item]), [item])
         self.assertEqual(e.leftovers, [])
@@ -240,7 +241,7 @@ class Handoff(StagesTest):
         self.assertIn("rename the helper", reviews[1])
 
     def test_the_rounds_text_keeps_the_newest_within_its_cap(self):
-        e = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
+        e = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store, env=snapshot())
         for k in range(8):
             e.hand.note_round("stage 1/1", k + 1, "review", "w" * 300, ["x" * 200])
         text = e.hand.rounds_text()
@@ -524,7 +525,7 @@ class Executable(StagesTest):
         )
 
     def test_a_file_an_accepted_stage_promised_and_a_later_check_reads(self):
-        e = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
+        e = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store, env=snapshot())
         plan = self.two_stage()
         self.assertEqual(e.cases.promised_missing(plan, 1), 0)  # stage 1 is accepted, the file is gone, stage 2 reads it
         Path(self.wt, self.PATH1).parent.mkdir(parents=True, exist_ok=True)
@@ -534,30 +535,30 @@ class Executable(StagesTest):
         self.assertIsNone(e.cases.promised_missing(plan, 0))  # nothing accepted yet
 
     def test_a_replanned_runs_goals_survive_the_stage_that_runs_again(self):
-        e = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
+        e = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store, env=snapshot())
         e.tree.reset(must_bead(BEAD))
         e.plan_data = self.two_stage()
         e.done, e.accepted = ["an earlier plan's goal", "stage one"], [0]
         e.checkpoints.save(stage=1, rounds=0, n=0, feedback="", step="write")
-        again = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
+        again = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store, env=snapshot())
         again.tree.reset(must_bead(BEAD))
         again.resume.point()
         self.assertEqual(again.done, ["an earlier plan's goal"])
 
     def test_a_resume_runs_the_stage_again_when_its_file_is_gone(self):
-        e = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
+        e = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store, env=snapshot())
         e.tree.reset(must_bead(BEAD))
         e.plan_data = self.two_stage()
         e.done, e.accepted = ["stage one"], [0]
         e.checkpoints.save(stage=1, rounds=0, n=0, feedback="", step="write")
-        again = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
+        again = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store, env=snapshot())
         again.tree.reset(must_bead(BEAD))
         _plan, i, state = again.resume.point()
         self.assertEqual((i, state, again.accepted, again.done), (0, None, [], []))
         self.assertIn("a file stage 1 promised is missing", again.log_path.read_text())
         Path(self.wt, self.PATH1).parent.mkdir(parents=True, exist_ok=True)
         Path(self.wt, self.PATH1).write_text("ok\n")
-        third = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
+        third = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store, env=snapshot())
         third.tree.reset(must_bead(BEAD))
         self.assertEqual(third.resume.point()[1], 1)  # the file is there: stage 2 goes on
 

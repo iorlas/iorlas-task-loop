@@ -21,6 +21,7 @@ from taskloop.app.reconcile.sweep import sweep
 from taskloop.app.release.shell import of
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.config import LoopConfig
+from taskloop.contracts.env import snapshot
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.landed import Landed as LandedRec
 from taskloop.contracts.landed import LandedStore
@@ -38,7 +39,7 @@ def git(cwd, *args):
 
 
 GIT: Git = RealGit()
-SH = of(RealSpawner(), GIT)
+SH = of(RealSpawner(snapshot()), GIT, snapshot())
 
 
 def racing(verb: str, hook: Callable[[], None]) -> Git:

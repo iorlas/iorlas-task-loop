@@ -60,6 +60,7 @@ from taskloop.app.slots.lease import Lease
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.enums import Result, WaitWhat
+from taskloop.contracts.env import snapshot
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.kinds import Kind
 from taskloop.contracts.run import RunReport
@@ -246,7 +247,7 @@ class EngineRunTest(EngineTest):
         with self.stoppable(), mock.patch.object(entry, "Engine", made), \
                 mock.patch.object(entry, "reclaim", return_value=(True, "")), \
                 self.store.stub(bd_fn=claim), mock.patch.object(entry, "say", side_effect=say):
-            rc = entry.run_bead(a, str(self.wt), {}, str(self.wt), self.store)
+            rc = entry.run_bead(a, str(self.wt), {}, str(self.wt), self.store, env=snapshot())
         return rc, made, said
 
     def test_a_stop_during_the_claim_waits_and_the_engine_closes_it(self):
@@ -707,7 +708,7 @@ class EngineRunTest(EngineTest):
             mock.patch.object(dl, "resolve", return_value=refusal),
             mock.patch.object(seams.DelegateRoute, "runner", lambda self, *a, **k: script),
         ):
-            rc = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store).run()
+            rc = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot()).run()
         self.assertEqual(rc, 2)
         self.assertEqual(script.calls, [])
         self.assertIn("contract 3", self.said())

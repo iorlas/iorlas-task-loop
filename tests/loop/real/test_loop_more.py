@@ -35,6 +35,7 @@ from taskloop.app.loop.core import Core  # noqa: E402
 from taskloop.cli import loop_cmd  # noqa: E402
 from taskloop.contracts import wire  # noqa: E402
 from taskloop.contracts.config import LoopConfig  # noqa: E402
+from taskloop.contracts.env import snapshot  # noqa: E402
 from taskloop.contracts.ids import BeadId  # noqa: E402
 from taskloop.contracts.loop import LoopCommand, LoopState, LoopTarget  # noqa: E402
 from taskloop.domain.lanes import netgate  # noqa: E402
@@ -308,7 +309,7 @@ class StopRequests(LoopBase):
         def stop():
             attempted.set()
             try:
-                loop_cmd.cmd_stop(mock.Mock(repo=self.repo_s, now=True))
+                loop_cmd.cmd_stop(mock.Mock(repo=self.repo_s, now=True), snapshot())
             except Exception as e:
                 errors.append(e)
             finally:

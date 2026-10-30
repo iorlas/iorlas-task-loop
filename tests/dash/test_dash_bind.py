@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: E402, F401
 from support.narrow import must  # noqa: E402
 
+from taskloop.contracts.env import Env as ProcessEnv  # noqa: E402
 from taskloop_dash import bind  # noqa: E402
 from taskloop_dash.cli import dash as dash_cli  # noqa: E402
 
@@ -50,8 +51,7 @@ class Env(unittest.TestCase):
         return stop.exception.code, err.getvalue()
 
     def guard(self, addrs, port, where=None, **kw):
-        os.environ.pop("TASK_LOOP_DASH_DEV_PUBLIC", None)
-        return bind.bind_refusal(addrs, port, here=where or self.dev, home=self.home, state=self.state, **kw)
+        return bind.bind_refusal(addrs, port, here=where or self.dev, home=self.home, state=self.state, process=ProcessEnv(), **kw)
 
 
 class DevCopyRefused(Env):
@@ -77,19 +77,13 @@ class DevCopyRefused(Env):
 class Override(Env):
     def test_env_allows_dev_public_address_and_port(self):
         self.with_repos()
-        os.environ["TASK_LOOP_DASH_DEV_PUBLIC"] = "1"
-        try:
-            self.assertIsNone(bind.bind_refusal([TS], 7878, here=self.dev, home=self.home, state=self.state))
-        finally:
-            os.environ.pop("TASK_LOOP_DASH_DEV_PUBLIC")
+        process = ProcessEnv({"TASK_LOOP_DASH_DEV_PUBLIC": "1"})
+        self.assertIsNone(bind.bind_refusal([TS], 7878, here=self.dev, home=self.home, state=self.state, process=process))
 
 
     def test_only_value_1_counts(self):
-        os.environ["TASK_LOOP_DASH_DEV_PUBLIC"] = "0"
-        try:
-            self.assertTrue(bind.bind_refusal([TS], 0, here=self.dev, home=self.home, state=self.state))
-        finally:
-            os.environ.pop("TASK_LOOP_DASH_DEV_PUBLIC")
+        process = ProcessEnv({"TASK_LOOP_DASH_DEV_PUBLIC": "0"})
+        self.assertTrue(bind.bind_refusal([TS], 0, here=self.dev, home=self.home, state=self.state, process=process))
 
 
 class InstalledCopy(Env):

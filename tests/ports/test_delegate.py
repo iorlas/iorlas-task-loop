@@ -26,6 +26,7 @@ from taskloop.adapters.delegate_wire import answer_status
 from taskloop.adapters.procs import Ran
 from taskloop.contracts import wire
 from taskloop.contracts.delegate import LiveCmdStart, LiveEnd, LiveMsg
+from taskloop.contracts.env import snapshot
 
 STUB = str(Path(__file__).parent / "stub_route.py")
 
@@ -80,7 +81,7 @@ class RouteHarness:
         self.script.write_text(json.dumps(script), encoding="utf-8")
 
     def route(self, **kw: Any) -> RouteDelegate:
-        return RouteDelegate(STUB, env={"STUB_SCRIPT": str(self.script)}, **kw)
+        return RouteDelegate(STUB, snapshot(), env={"STUB_SCRIPT": str(self.script)}, **kw)
 
     def make(self, *steps: Step) -> RouteDelegate:
         self.write(answer=answer_of(steps[0]), live=[wire_line(e) for e in steps[0].events])

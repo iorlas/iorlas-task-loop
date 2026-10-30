@@ -8,10 +8,11 @@ from taskloop.app.prune import verb
 from taskloop.app.release import shell
 from taskloop.app.track import trail
 from taskloop.app.wire import real
+from taskloop.contracts.env import Env
 
 
-def cmd_prune(a: Any, now: Callable[[], float] = trail.now) -> int:
+def cmd_prune(a: Any, env: Env, now: Callable[[], float] = trail.now) -> int:
     repo = repos.repo_root(a.repo)
     verb.run(wloop.cfgdir(), wloop.profile_of(repo).loop, wloop.prune_repos(repo), wloop.bd_of, now(), a.dry_run,
-             shell.of(real.spawner(), real.git()))
+             shell.of(real.spawner(env), real.git(), env))
     return 0

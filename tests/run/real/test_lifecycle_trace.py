@@ -14,6 +14,7 @@ from support import engine_case as te
 from taskloop.adapters import ident
 from taskloop.app.run import engine
 from taskloop.app.wire import slots as wslots
+from taskloop.contracts.env import snapshot
 from taskloop.contracts.ids import BeadId
 from taskloop.domain.report import matchers as lifecycle
 
@@ -52,7 +53,7 @@ class TraceTelemetry(te.EngineTest):
 
     @unittest.skipIf(os.name == "nt", "the engine stops a process group; sleep is POSIX")
     def test_an_interrupted_command_leaves_a_kill_record_and_its_tree_is_stopped(self):
-        eng = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), verbose=False, store=self.store)
+        eng = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), verbose=False, store=self.store, env=snapshot())
         started = self.wt / "child-started"
         stop_waiting, delivered = threading.Event(), threading.Event()
 

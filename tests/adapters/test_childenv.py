@@ -32,3 +32,16 @@ class Venv(unittest.TestCase):
         from taskloop.contracts import env as penv  # noqa: PLC0415
         with penv.patched({"VIRTUAL_ENV": "/venv"}):
             self.assertNotIn("VIRTUAL_ENV", childenv.tool_env(penv.snapshot().vars))
+
+
+class Allowlist(unittest.TestCase):
+    def test_only_the_listed_names_reach_a_child(self):
+        base = {"PATH": "/usr/bin", "HOME": "/h", "USER": "u", "LANG": "C", "LC_ALL": "C", "LC_TIME": "C", "TERM": "xterm", "TMPDIR": "/t",
+                "SHELL": "/bin/sh", "TL_SLOT": "s", "AWS_SECRET_ACCESS_KEY": "no", "ANTHROPIC_API_KEY": "no", "GITHUB_TOKEN": "no",
+                "SSH_AUTH_SOCK": "/s", "EDITOR": "vi", "PYTHONPATH": "/p"}
+        out = childenv.tool_env(base, {"DECLARED": "1"})
+        self.assertEqual(sorted(out), ["DECLARED", "HOME", "LANG", "LC_ALL", "LC_TIME", "PATH", "SHELL", "SSH_AUTH_SOCK", "TERM", "TL_SLOT",
+                                       "TMPDIR", "USER"])
+
+    def test_an_empty_environment_stays_empty(self):
+        self.assertEqual(childenv.tool_env({}), {})

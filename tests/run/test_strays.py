@@ -13,6 +13,7 @@ from support import fake_route
 from taskloop.adapters import gitrepo
 from taskloop.app.run import engine
 from taskloop.app.wire import slots as wslots
+from taskloop.contracts.env import snapshot
 from taskloop.contracts.ids import BeadId
 
 
@@ -41,7 +42,7 @@ class Strays(te.EngineTest):
             return real(this, why, kind, *a, **kw)
 
         with te.delegate_stack(script), mock.patch.object(engine.Engine, "blocked_for", spy):
-            eng = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
+            eng = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store, env=snapshot())
             return eng.run(), eng
 
     def test_a_worker_that_stays_passes(self):

@@ -19,6 +19,7 @@ sys.path.insert(0, str(HERE.parent / "src"))  # importing taskloop puts the vend
 from taskloop.app.release import shell, suite  # noqa: E402
 from taskloop.app.release.shell import Abort  # noqa: E402
 from taskloop.app.wire import real  # noqa: E402
+from taskloop.contracts.env import snapshot  # noqa: E402
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -26,7 +27,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--repo", default=str(HERE.parent), help="the checkout whose tests run (default: this one)")
     args = ap.parse_args(argv)
     try:
-        suite.host_suite(HERE.parent, Path(args.repo), shell.of(real.spawner(), real.git()))
+        process = snapshot()  # the one place this script takes the process environment
+        suite.host_suite(HERE.parent, Path(args.repo), shell.of(real.spawner(process), real.git(), process))
     except Abort as e:
         print(str(e), file=sys.stderr)
         return 1

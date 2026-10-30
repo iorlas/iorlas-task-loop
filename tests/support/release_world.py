@@ -25,6 +25,7 @@ from taskloop.adapters.git import RealGit
 from taskloop.adapters.ident import claude_dir
 from taskloop.app.release import flow, shell, suite
 from taskloop.app.release.shell import say
+from taskloop.contracts.env import snapshot
 from taskloop.contracts.ports import Ran, Spawner
 
 PLUGIN = ".claude-plugin/plugin.json"
@@ -148,7 +149,7 @@ class World:
         self.stderr.start(args[0])
         try:
             code = flow.main([*args, "--repo", str(self.repo), "--marketplace", str(self.market)], Path(__file__).resolve().parents[2],
-                             self.spawner, self.port)
+                             self.spawner, self.port, snapshot())
         except SystemExit as e:
             code = e.code
         return Result(returncode=code, stdout=self.stdout.text(), stderr=self.stderr.text())

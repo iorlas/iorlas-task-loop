@@ -20,7 +20,7 @@ from taskloop.adapters.ident import config_dir
 from taskloop.adapters.suiteout import Part, failing_tests, failure_report, merge_outputs, ran_line
 from taskloop.app.release.cache import SuiteCache
 from taskloop.app.release.shell import Abort, Shell, say
-from taskloop.contracts import env as penv
+from taskloop.contracts.env import Env
 from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.paths import ConfigDir
 
@@ -92,13 +92,13 @@ def host_workers(cpus: int | None = None, mem_mb: int | None = None) -> int:
     return max(1, min(cpu, cpu if mem is None else mem // WORKER_BUDGET_MB))
 
 
-def workers() -> int:
+def workers(env: Env) -> int:
     """How many shards the suite runs in at once: TASK_LOOP_SUITE_WORKERS, else host_workers()."""
-    n = penv.ambient(EnvVar.TASK_LOOP_SUITE_WORKERS)
+    n = env.get(EnvVar.TASK_LOOP_SUITE_WORKERS)
     return max(1, int(n)) if n and n.isdigit() else host_workers()
 
 
-def isolated_env(home: Path) -> dict[str, str]:
+def isolated_env(home: Path, base: Env) -> dict[str, str]:
     """The environment of one pytest run: its own HOME, config dirs and temp dir, so runs do not share state under ~ or in /tmp (the xdist
     workers of a run each take one of their own, tests/conftest.py).
     The real git config is copied in, since tests commit with the identity it holds."""
@@ -108,7 +108,7 @@ def isolated_env(home: Path) -> dict[str, str]:
     real = Path.home() / ".gitconfig"
     if real.is_file():
         (home / ".gitconfig").write_bytes(real.read_bytes())
-    env = tool_env(penv.snapshot().vars, {"HOME": str(home), "XDG_CONFIG_HOME": str(home / ".config"), "TMPDIR": str(home / "tmp")})
+    env = tool_env(base.vars, {"HOME": str(home), "XDG_CONFIG_HOME": str(home / ".config"), "TMPDIR": str(home / "tmp")})
     env[EnvVar.TL_WORKER_MB.value] = str(WORKER_BUDGET_MB)  # the address-space cap of each xdist worker (tests/conftest.py)
     for k in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "PYTHONPATH"):  # the tree under test sets its own PYTHONPATH
         env.pop(k, None)
@@ -139,7 +139,7 @@ def pytest_argv(tool_root: Path, *select: str) -> list[str]:
     return [str(tool_root / ".venv" / "bin" / "python"), "-m", "pytest", "-q", "-p", "no:cacheprovider", "-rfE", *select, "tests"]
 
 
-def run_parts(tool_root: Path, repo: Path, work: Path, n: int) -> list[Part]:
+def run_parts(tool_root: Path, repo: Path, work: Path, n: int, env: Env) -> list[Part]:
     """The parallel run (n xdist workers, each its own HOME), then the `serial` group alone in one process; SIGTERM unwinds into the
     run, which stops its tree first."""
     def term(signum: int, _frame: FrameType | None) -> None:
@@ -149,8 +149,8 @@ def run_parts(tool_root: Path, repo: Path, work: Path, n: int) -> list[Part]:
     try:
         spread = ["-n", str(n)] if n > 1 else []  # one worker is the run's own process
         parallel = run_pytest(pytest_argv(tool_root, *spread, "-m", "not serial"), str(repo),
-                              isolated_env(work / "parallel"), "parallel")
-        serial = run_pytest(pytest_argv(tool_root, "-m", "serial"), str(repo), isolated_env(work / "serial"), "serial", empty_ok=True)
+                              isolated_env(work / "parallel", env), "parallel")
+        serial = run_pytest(pytest_argv(tool_root, "-m", "serial"), str(repo), isolated_env(work / "serial", env), "serial", empty_ok=True)
         return [parallel, serial]
     finally:
         if old is not None:
@@ -185,13 +185,13 @@ def refuse_if_short(n: int, mem_mb: int | None) -> None:
 
 
 def _host_suite(tool_root: Path, repo: Path, sh: Shell) -> None:
-    n = workers()
+    n = workers(sh.env)
     refuse_if_short(n, available_mb())
     say(f"running the full suite in {n} workers, then the serial group")
     sh.run(["uv", "sync", "--frozen", "--quiet", "--project", str(tool_root)], tool_root)  # the dev group exactly as uv.lock records it
     work = Path(tempfile.mkdtemp(prefix="tl-suite-"))
     try:
-        parts = run_parts(tool_root, repo, work, n)
+        parts = run_parts(tool_root, repo, work, n, sh.env)
     finally:
         shutil.rmtree(work, ignore_errors=True)
     out, green = merge_outputs(parts)
@@ -204,7 +204,7 @@ def _host_suite(tool_root: Path, repo: Path, sh: Shell) -> None:
 def container_suite(tool_root: Path, repo: Path, sh: Shell) -> None:
     """The suite through dev/suite-docker.py (a Linux container's own disk; the host suite when docker is not reachable).
     TASK_LOOP_SUITE_HOST=1 runs it on the host. A fake repo (the tests') has no runner of its own: it takes the host runner."""
-    if penv.ambient(EnvVar.TASK_LOOP_SUITE_HOST) or not (repo / "dev" / "suite.py").is_file():
+    if sh.env.get(EnvVar.TASK_LOOP_SUITE_HOST) or not (repo / "dev" / "suite.py").is_file():
         return host_suite(tool_root, repo, sh)
     say("running the full suite in a container (dev/suite-docker.py)")
     ran = sh.run([sys.executable, str(tool_root / "dev" / "suite-docker.py"), "--repo", str(repo)], None, check=False, timeout_s=LONG)
@@ -242,7 +242,7 @@ def verify(tool_root: Path, repo: Path, sh: Shell, checks: Callable[[Path, Path,
     """The gate and the suite on the tree at `repo`'s HEAD (nothing uncommitted). The same tree under the same command passed before:
     both are skipped, and the log says so (True). Only a green run is remembered; a red one raises and remembers nothing."""
     tree = sh.git(repo, "rev-parse", "HEAD^{tree}")
-    command = " ".join(gate_command()) + " + " + ("host" if penv.ambient(EnvVar.TASK_LOOP_SUITE_HOST) else "container") + " suite"
+    command = " ".join(gate_command()) + " + " + ("host" if sh.env.get(EnvVar.TASK_LOOP_SUITE_HOST) else "container") + " suite"
     cache = SuiteCache(ConfigDir(config_dir()))
     if cache.hit(tree, command):
         say(f"suite cache hit: tree {tree[:12]} already passed `{command}`")

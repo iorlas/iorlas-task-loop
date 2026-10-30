@@ -1,9 +1,10 @@
 """What every step of a release shares: its refusal, the git and process calls (through its edge's Spawner), and its voice."""
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
+from taskloop.contracts.env import Env
 from taskloop.contracts.ports import Git, Spawner
 from taskloop.contracts.slots import SlotGitError
 
@@ -56,9 +57,10 @@ class Shell:
     run: Callable[..., Finished]
     say: Callable[[str], None]
     port: Git
+    env: Env = field(default_factory=Env)  # the process environment taken at the edge: the suite's settings and the base of its children
 
 
-def of(spawner: Spawner, port: Git) -> Shell:
+def of(spawner: Spawner, port: Git, env: Env) -> Shell:
     """The shell whose every process is started through `spawner`, and whose git port is `port`."""
     def run(cmd: list[str], cwd: str | Path | None, check: bool = True, *, extra: Mapping[str, str] | None = None,
             timeout_s: float | None = None) -> Done:
@@ -70,4 +72,4 @@ def of(spawner: Spawner, port: Git) -> Shell:
     def git(cwd: str | Path, *a: str, check: bool = True) -> str:
         return run(["git", *a], cwd, check).stdout.strip()
 
-    return Shell(git=git, fetch=lambda cwd: fetch_or_abort(port, cwd), run=run, say=say, port=port)
+    return Shell(git=git, fetch=lambda cwd: fetch_or_abort(port, cwd), run=run, say=say, port=port, env=env)

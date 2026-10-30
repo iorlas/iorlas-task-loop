@@ -34,6 +34,7 @@ from taskloop.adapters.gitenv import pinned_env  # noqa: E402
 from taskloop.app.run import engine  # noqa: E402
 from taskloop.app.wire import doctor  # noqa: E402
 from taskloop.app.wire import slots as wslots  # noqa: E402
+from taskloop.contracts.env import snapshot  # noqa: E402
 from taskloop.contracts.ids import BeadId  # noqa: E402
 
 GIT_KEYS = ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE")
@@ -111,18 +112,18 @@ class SlotGitTest(unittest.TestCase):
 
     def test_core_bare_true_stops_the_run_too(self):
         sh("git", "config", "core.bare", "true", cwd=self.repo)
-        eng = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)))
+        eng = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), env=snapshot())
         with self.assertRaises(engine.Blocked) as cm:
             eng.assert_tree("write")
         self.assertIn("core.bare", cm.exception.why)
 
     def test_a_clean_slot_passes_the_tree_assert(self):
-        eng = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)))
+        eng = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), env=snapshot())
         eng.assert_tree("plan")
 
     def test_pinned_git_stays_in_the_slot_whatever_the_shared_config_says(self):
         self.plant_decoy()
-        eng = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)))
+        eng = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), env=snapshot())
         self.assertEqual(os.path.realpath(eng.git("rev-parse", "--show-toplevel")), str(self.wt))
         (self.wt / "f.txt").write_text("f\n")
         eng.writer_said = "added f.txt"  # an untracked file is staged only when the writer names it (tl-bxk.10.24)
@@ -132,7 +133,7 @@ class SlotGitTest(unittest.TestCase):
         self.assertEqual(staged, "f.txt")  # only the slot's own path; nothing from the decoy
 
     def test_stage_all_takes_only_the_slots_status_paths_deletions_and_untracked_included(self):
-        eng = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)))
+        eng = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), env=snapshot())
         (self.wt / "a.txt").unlink()
         (self.wt / "new file.txt").write_text("n\n")
         eng.writer_said = "added new file.txt"
@@ -153,7 +154,7 @@ class SlotGitTest(unittest.TestCase):
         with mock.patch.dict(os.environ, {"GIT_DIR": "/x", "GIT_WORK_TREE": "/y", "GIT_INDEX_FILE": "/z"}):
             r = dlcall.call(dl.Resolved(route.parent, str(route), fake_route.CONTRACT, "explicit"), "worker", "p", {"type": "object"},
                             str(self.wt), runner.StreamRunner(Path(self.tmp.name) / "err.log", 30.0), timeout_s=30)
-            eng = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)))
+            eng = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), env=snapshot())
             rc, tail = eng.sh([show])
             self.assertEqual(r.data["env"], [])
             self.assertEqual((rc, tail), (0, "[||]"))
@@ -171,7 +172,7 @@ class SlotGitTest(unittest.TestCase):
         sh("git", "add", "-A", cwd=other)
         sh("git", "commit", "-qm", "o", cwd=other)
         sha = sh("git", "rev-parse", "HEAD", cwd=other)
-        eng = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)))
+        eng = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), env=snapshot())
         rc, tail = eng.sh(["git", "-C", str(other), "rev-parse", "HEAD"])
         self.assertEqual((rc, tail), (0, sha))
         rc, tail = eng.sh(["git", "-C", str(other), "cat-file", "-e", sha])

@@ -38,6 +38,7 @@ from taskloop.contracts import env as penv
 from taskloop.contracts import paths
 from taskloop.contracts.config import RepoProfile
 from taskloop.contracts.enums import LockWhat
+from taskloop.contracts.env import Env
 from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.landed import LandedStore
@@ -88,11 +89,11 @@ def delegate_route(repo: str | Path) -> str | None:
     return res.route if isinstance(res, dg.Resolved) else None
 
 
-def roles(repo: str | Path) -> dict[str, bool | None] | None:
+def roles(repo: str | Path, env: Env) -> dict[str, bool | None] | None:
     route = delegate_route(repo)
     if not route:
         return None
-    return {role: v.get("usable") if isinstance((v or {}).get("usable"), bool) else None for role, v in dg.role_status(route).items()}
+    return {role: v.get("usable") if isinstance((v or {}).get("usable"), bool) else None for role, v in dg.role_status(route, env).items()}
 
 
 def make_probe(repo: str | Path) -> dg.RouteProbe | None:
@@ -142,8 +143,8 @@ def fetch(repo: str) -> None:
     gitrepo.fetch(repo)
 
 
-def chores(repo: str, spawner: Spawner) -> None:
-    wlanes.chore(console.say)  # delegate's lane status filed again when the snapshot is 20 min old (the dash reads the file)
+def chores(repo: str, spawner: Spawner, env: Env) -> None:
+    wlanes.chore(console.say, env=env)  # delegate's lane status filed again when the snapshot is 20 min old (the dash reads the file)
     wasks.sweep_asks(console.say, wslots.load_cfg(repo))  # asks of closed beads closed, unanswered ones parked, answers no run used flagged
     try:
         reflect.maybe_run(spawner)  # the run reflections into beads, once a day (tl-bl5)
@@ -197,9 +198,9 @@ def loop_lock(wt: str, slot: str, slot_bead: str | None, bead: str) -> None:
 
 
 def build(repo: str, store: Beads | None = None, session_actor: str = "", here: Path = HERE, now: Callable[[], float] = trail.now,
-          start_cwd: str = "", spawner: Spawner | None = None) -> LoopEnv:
+          start_cwd: str = "", spawner: Spawner | None = None, *, env: Env) -> LoopEnv:
     """The LoopEnv of `repo` on this install."""
-    spawner = spawner or real.spawner()
+    spawner = spawner or real.spawner(env)
     store = store or beadtools.bd_store(repo)
     cfg = cfgdir()
 
@@ -231,11 +232,11 @@ def build(repo: str, store: Beads | None = None, session_actor: str = "", here: 
         ),
         landed_on_base=lambda wt, bead: landed_on_base(repo, store, wt, bead),
         reload_note=reload_note,
-        chores=lambda: chores(repo, spawner),
+        chores=lambda: chores(repo, spawner, env),
         ask_lines=lambda: ask_sweeps.orphan_lines(wasks.store()),
         storm=lambda: storm(repo, now),
         probe=lambda: make_probe(repo),
-        roles=lambda: roles(repo),
+        roles=lambda: roles(repo, env),
         has_delegate=lambda: bool(delegate_route(repo)),
         event=trail.event,
         pid_alive=pidcheck.pid_alive,
@@ -250,7 +251,7 @@ def build(repo: str, store: Beads | None = None, session_actor: str = "", here: 
         now=now,
         pid=os.getpid(),
         prune=lambda say: prune_verb.run(cfg, profile().loop, prune_repos(repo), lambda r: store if r == repo else bd_of(r),
-                                         now(), False, shell.of(spawner, real.git()), say),
+                                         now(), False, shell.of(spawner, real.git(), env), say),
         free_bytes=free_bytes,
     )
 
@@ -272,12 +273,12 @@ def other_red_rows(repo: str) -> list[str]:
     return profiles.red_rows(profiles.registered(ReposStore(cfgdir())), but=repo)
 
 
-def begin_loop(repo: str) -> tuple[str, str]:
+def begin_loop(repo: str, env: Env) -> tuple[str, str]:
     """Make this process the loop of `repo`: its working directory, its own actor. -> (the start directory, the session's actor)."""
     start_cwd = os.getcwd()
     os.chdir(repo)  # every tl helper and bd call works on the current directory's repo
     inherited, _ = parse_handover(
-        penv.ambient(EnvVar.TL_LOOP_STATE)
+        env.get(EnvVar.TL_LOOP_STATE)
     )  # set when this process is the same loop, exec'd into a newer install
     if not ident.session_id():  # without a Claude session the actor would be per folder: two loops would share it
         penv.export(EnvVar.TASK_LOOP_SESSION, "loop-" + uuid.uuid4().hex[:12])

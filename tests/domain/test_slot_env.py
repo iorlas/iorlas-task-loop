@@ -13,6 +13,7 @@ from support.builders import make_engine
 
 from taskloop.app.checks.container import Box
 from taskloop.contracts import config
+from taskloop.contracts.env import snapshot
 from taskloop.domain import slot_env
 
 KEYS = ("TMPDIR", "TMP", "TEMP", "DOTNET_CLI_HOME", "NUGET_SCRATCH", "NUGET_HTTP_CACHE_PATH", "NUGET_PLUGINS_CACHE_PATH",
@@ -62,7 +63,7 @@ class EverySpawnPath(te.EngineTest):
 
     def test_a_container_check_is_given_the_slot_name_only(self):
         e = make_engine(self.wt, store=self.store)
-        host = mock.Mock(bead_env=e.bead_env, run_dir=Path("r"), cfg=mock.Mock(container=None))
+        host = mock.Mock(env=snapshot(), bead_env=e.bead_env, run_dir=Path("r"), cfg=mock.Mock(container=None))
         box = Box(host, mock.Mock())
         box._why, box._image = "", "img"
         check = mock.Mock(container=True, id="c")

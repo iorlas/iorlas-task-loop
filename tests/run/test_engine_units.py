@@ -26,6 +26,7 @@ from taskloop.app.plan.planner import Planner  # noqa: E402
 from taskloop.app.wire import slots as wslots  # noqa: E402
 from taskloop.contracts import answers  # noqa: E402
 from taskloop.contracts.enums import Result  # noqa: E402
+from taskloop.contracts.env import snapshot  # noqa: E402
 from taskloop.contracts.ids import BeadId  # noqa: E402
 from taskloop.contracts.kinds import Kind  # noqa: E402
 from taskloop.contracts.run import RunReport  # noqa: E402
@@ -190,7 +191,7 @@ class Outcome(T.EngineTest):
         Path(a.worktree).mkdir(exist_ok=True)
         out = io.StringIO()
         with contextlib.chdir(self.wt), redirect_stdout(out), mock.patch.object(signal, "signal"):  # pyrefly: ignore[missing-attribute]
-            rc = entry.main(a, self.store)  # pyrefly: ignore[missing-attribute]
+            rc = entry.main(a, self.store, env=snapshot())  # pyrefly: ignore[missing-attribute]
         last = json.loads(out.getvalue().strip().splitlines()[-1])
         return rc, json.loads(Path(outcome_file).read_text()), last
 
@@ -215,7 +216,7 @@ class Outcome(T.EngineTest):
         out = io.StringIO()
         with mock.patch.object(entry, "reclaim", return_value=(True, "")), mock.patch.object(entry, "Engine", made), \
                 contextlib.chdir(self.wt), redirect_stdout(out), mock.patch.object(signal, "signal"):  # pyrefly: ignore[missing-attribute]
-            entry.main(a, self.store)  # pyrefly: ignore[missing-attribute]
+            entry.main(a, self.store, env=snapshot())  # pyrefly: ignore[missing-attribute]
         lines = out.getvalue().strip().splitlines()
         self.assertEqual(json.loads(lines[-1])["retry_after"], due)  # the loop reads the last line: still the outcome
         self.assertTrue(
@@ -383,10 +384,10 @@ class DelegateLauncher(T.EngineTest):
         def ran(text, rc=0):
             return sproc.Ran(rc, text, "", 0.1, False)
         with mock.patch.object(sproc, "capture", return_value=ran(out + "\n")) as cap:
-            self.assertEqual(lroute.lane_status("/r/route.py"), {"OPENAI_SUBSCRIPTION": {"out": True}})
+            self.assertEqual(lroute.lane_status("/r/route.py", snapshot()), {"OPENAI_SUBSCRIPTION": {"out": True}})
         self.assertEqual(cap.call_args[0][0][1:], ["/r/route.py", "status", "--json"])
         with mock.patch.object(sproc, "capture", return_value=ran("", 1)):
-            self.assertEqual(lroute.lane_status("/r/route.py"), {})
+            self.assertEqual(lroute.lane_status("/r/route.py", snapshot()), {})
 
     # lifesim-5ar.6 2026-10-21: the resumed writer's lane_out came with no retry_after, so next was owner, and the bead
     # blocked "needs a human" after 114 min of work
@@ -520,7 +521,7 @@ class DelegateLauncher(T.EngineTest):
 
     def test_close_with_an_empty_reason_still_closes(self):
         c = wslots.load_cfg(str(self.wt))
-        eng = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store)
+        eng = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot())
         eng.closer.close(oc.make(Kind.FAULT_ENGINE))
         self.assertIn("stopped before a reason was recorded", self.said())  # a fault: the bead stays open, the comment says why
 
@@ -572,7 +573,7 @@ class DelegateLauncher(T.EngineTest):
     def test_no_delegate_blocks_with_the_install_command(self):
         c = wslots.load_cfg(str(self.wt))
         with mock.patch.object(dl, "resolve", return_value=dl.Refusal("not_installed")):
-            rc = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store).run()
+            rc = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot()).run()
         self.assertEqual(rc, 2)
         self.assertIn("claude plugin update iorlas-delegate", self.said())
 

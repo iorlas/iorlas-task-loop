@@ -18,11 +18,12 @@ from support.engine_case import CLEAN, HAS_F, PLAN, WRITE, lint
 from taskloop.adapters import childenv
 from taskloop.adapters.check_probe import PathProbe
 from taskloop.contracts.argv import argv_of
+from taskloop.contracts.env import snapshot
 
 
 class StagesTest(te.EngineTest):
     def probe(self):
-        return PathProbe(cast(Any, self).wt, childenv.current_env())
+        return PathProbe(cast(Any, self).wt, childenv.current_env(snapshot()))
 
     wt: Path
 

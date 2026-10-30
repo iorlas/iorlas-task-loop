@@ -47,6 +47,10 @@ from taskloop.app.run import (  # noqa: E402
     entry,
 )
 from taskloop.app.wire import slots as wslots  # noqa: E402
+from taskloop.contracts.env import (  # noqa: E402
+    Env,
+    snapshot,
+)
 from taskloop.contracts.ids import BeadId  # noqa: E402
 
 PLAN_DEF = "    def plan(self, again: bool = False) -> dict[str, Any]:\n"
@@ -103,7 +107,7 @@ class Reload(te.EngineTest):
     def engine_for(self, script, **cfg):
         c = wslots.load_cfg(str(self.wt))
         c = cfg_with(c, **{"reflect": False, **cfg})
-        eng = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store)
+        eng = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot())
         eng.argv = ["run-task", "t-1", "--worktree", str(self.wt), "--fresh", "--outcome-file", "/x/out.json"]
 
         def fake_exec(argv):
@@ -185,12 +189,10 @@ class Reload(te.EngineTest):
         self.assertEqual(reexec.reexec_args(["run-task", "t-1", "--slot", "any", "--wait", "--worktree", "/w", "--quiet"], "s2", "/wt"),
                          ["run-task", "t-1", "--quiet", "--slot", "s2", "--worktree", "/wt"])
         self.assertIsNone(reexec.reexec_args(["loop", "--repo", "."], "", "/wt"))
-        with mock.patch.dict(os.environ, {"TL_REEXEC": json.dumps({"run": "x", "owned": "s2"})}):
-            self.assertTrue(entry._handed_slot("s2"))
-            self.assertFalse(entry._handed_slot("s3"))
-        with mock.patch.dict(os.environ, {}, clear=False):
-            os.environ.pop("TL_REEXEC", None)
-            self.assertFalse(entry._handed_slot("s2"))
+        handed = Env({"TL_REEXEC": json.dumps({"run": "x", "owned": "s2"})})
+        self.assertTrue(entry._handed_slot("s2", handed))
+        self.assertFalse(entry._handed_slot("s3", handed))
+        self.assertFalse(entry._handed_slot("s2", Env()))
 
     def test_a_dry_run_and_a_run_not_started_by_run_task_never_move(self):
         self.install("0.2.0")
@@ -257,7 +259,7 @@ class Reload(te.EngineTest):
         repo = str(self.wt)
         said = []
         with mock.patch.object(wloop.real, "spawner", return_value=holder), mock.patch.dict(os.environ, {}):
-            env = wloop.build(repo, store=FakeBeads(), here=self.here)
+            env = wloop.build(repo, store=FakeBeads(), here=self.here, env=snapshot())
             run = BeadRun(env, looptest.files(repo), wloop.installs(env.cfgdir, here=self.here), lambda: env.profile().loop, lambda: "",
                           lambda running: None, lambda: None, said.append)
             # the first child is the one that exec'd: its note appears while it runs
@@ -283,7 +285,7 @@ class Reload(te.EngineTest):
         with mock.patch.object(
             dl, "resolve", side_effect=[self.res("/a/route.py"), self.res("/b/route.py"), self.res("/b/route.py")]
         ) as fr:
-            eng = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store)
+            eng = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot())
             self.assertEqual(eng.delegation.route(), "/b/route.py")
             self.assertEqual(eng.delegation.route(), "/b/route.py")
             self.assertEqual(fr.call_count, 3)
@@ -291,7 +293,7 @@ class Reload(te.EngineTest):
     # -- point 4: loop state and dashboard lane
     def test_loop_state_names_the_running_version_and_code_dir(self):
         repo = str(self.wt)
-        env = wloop.build(repo, store=FakeBeads(), here=self.here)
+        env = wloop.build(repo, store=FakeBeads(), here=self.here, env=snapshot())
         self.assertEqual((env.version, env.code_dir), ("0.1.0", str(self.here)))
 
     def test_releases_behind_counts_installed_versions_above_it(self):

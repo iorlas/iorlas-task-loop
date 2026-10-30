@@ -25,9 +25,10 @@ from support import dlcall, fake_route, procsim  # noqa: E402
 from support.fake_clock import FakeClock  # noqa: E402
 from support.narrow import must, only  # noqa: E402
 
+from taskloop.adapters import childenv, delegate_wire  # noqa: E402
 from taskloop.adapters import delegate as dl  # noqa: E402
-from taskloop.adapters import delegate_wire  # noqa: E402
 from taskloop.app.loop.net import NetState  # noqa: E402
+from taskloop.contracts.env import snapshot  # noqa: E402
 from taskloop.contracts.kinds import Kind  # noqa: E402
 from taskloop.domain import outcome as oc  # noqa: E402
 from taskloop.domain.lanes import netgate  # noqa: E402
@@ -65,7 +66,8 @@ class Fake(unittest.TestCase):
         return dlcall.request("worker", str(self.dir), task="t-1", parent="t-1", title="x", timeout_s=900, **kw)
 
     def call(self, runner=None, **kw):
-        return dlcall.Got(dl.call(self.resolved, self.req(**kw), "do it", {"type": "object"}, runner or self.runner))
+        return dlcall.Got(dl.call(self.resolved, self.req(**kw), "do it", {"type": "object"}, runner or self.runner,
+                                       childenv.current_env(snapshot())))
 
     def argv_log(self):
         return [json.loads(x) for x in Path(str(self.script) + ".log").read_text().splitlines()]

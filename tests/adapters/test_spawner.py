@@ -12,6 +12,7 @@ import support.paths  # noqa: F401
 from support import procsim
 
 from taskloop.adapters.spawner import RealSpawner
+from taskloop.contracts.env import snapshot
 
 SRC = Path(__file__).resolve().parents[2] / "src" / "taskloop"
 
@@ -19,12 +20,12 @@ SRC = Path(__file__).resolve().parents[2] / "src" / "taskloop"
 class SpawnerOnProcsim(unittest.TestCase):
     def test_a_fake_command_answers_with_its_exit_and_output(self):
         procsim.fake("say-hi", procsim.exits(3, "hi"))
-        r = RealSpawner().run(["say-hi"])
+        r = RealSpawner(snapshot()).run(["say-hi"])
         self.assertEqual((r.exit, r.out, r.timed_out), (3, "hi", False))
 
     def test_a_fake_that_outlasts_the_timeout_is_exit_124(self):
         procsim.fake("slow", procsim.hangs("partial"))
-        r = RealSpawner().run(["slow"], timeout_s=5)
+        r = RealSpawner(snapshot()).run(["slow"], timeout_s=5)
         self.assertEqual((r.exit, r.timed_out), (124, True))
 
     def test_the_child_env_has_no_virtualenv_and_no_unregistered_engine_name(self):
@@ -34,10 +35,11 @@ class SpawnerOnProcsim(unittest.TestCase):
             seen.update(env)
             return 0, ""
         procsim.fake("spy-env", spy)
-        base = {"PATH": "/usr/bin", "VIRTUAL_ENV": "/v", "TL_NOT_A_NAME": "1", "KEEP": "k"}
+        base = {"PATH": "/usr/bin", "VIRTUAL_ENV": "/v", "TL_NOT_A_NAME": "1", "KEEP": "k", "LC_ALL": "C"}
         with mock.patch.dict(os.environ, base, clear=True):
-            RealSpawner().run(["spy-env"], extra={"X": "1"})
-        self.assertEqual((seen.get("KEEP"), seen.get("X")), ("k", "1"))
+            RealSpawner(snapshot()).run(["spy-env"], extra={"X": "1"})
+        self.assertEqual((seen.get("LC_ALL"), seen.get("X")), ("C", "1"))
+        self.assertNotIn("KEEP", seen)  # not on the allowlist
         self.assertNotIn("VIRTUAL_ENV", seen)
         self.assertNotIn("TL_NOT_A_NAME", seen)
 

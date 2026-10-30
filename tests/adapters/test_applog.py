@@ -17,6 +17,7 @@ from taskloop.adapters import (
 from taskloop.app.release import reexec
 from taskloop.app.run import engine
 from taskloop.app.track import trail
+from taskloop.contracts.env import snapshot
 from taskloop.contracts.ids import BeadId
 
 warnings.filterwarnings("ignore", message=".*multi-threaded.*fork", category=DeprecationWarning)
@@ -84,12 +85,13 @@ class WiringTest(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.addCleanup(applog.close_all)
         env = mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": str(Path(self.tmp.name) / "cfg"),
-                                           "APPDATA": str(Path(self.tmp.name) / "cfg")})
+                                           "APPDATA": str(Path(self.tmp.name) / "cfg"),
+                                           "TASK_LOOP_ACTOR": "tl-test"})  # the actor is named: git is not asked for one
         env.start()
         self.addCleanup(env.stop)
 
     def test_engine_log_is_one_typed_line_per_record_readable_at_once(self):
-        eng = engine.Engine(BeadId("t-1"), self.tmp.name, cfg_with())
+        eng = engine.Engine(BeadId("t-1"), self.tmp.name, cfg_with(), env=snapshot())
         with mock.patch.object(engine, "say"):
             for i in range(1000):
                 eng.log.note(f"line {i}")

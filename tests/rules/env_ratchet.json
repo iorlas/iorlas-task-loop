@@ -1,0 +1,15 @@
+{
+  "src/taskloop/adapters/childenv.py": 1,
+  "src/taskloop/adapters/gitenv.py": 1,
+  "src/taskloop/adapters/gitrepo.py": 4,
+  "src/taskloop/adapters/ident.py": 9,
+  "src/taskloop/adapters/opencode.py": 2,
+  "src/taskloop/adapters/slotcheck.py": 1,
+  "src/taskloop/adapters/treehash.py": 1,
+  "src/taskloop/app/run/entry.py": 2,
+  "src/taskloop/app/run/run_once.py": 1,
+  "src/taskloop/app/slots/engine_lock.py": 3,
+  "src/taskloop/app/wire/real.py": 1,
+  "src/taskloop/app/wire/slots.py": 1,
+  "src/taskloop/contracts/paths.py": 1
+}

@@ -33,6 +33,7 @@ from taskloop.app.slots import (
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts.config import SlotsConfig
 from taskloop.contracts.enums import Result
+from taskloop.contracts.env import snapshot
 from taskloop.contracts.run import RunReport
 
 LIVE_PID = "a live pid that is not this process: a real sleep child (an engine lock, a second loop, a waiter)"
@@ -94,7 +95,7 @@ class Slots(LoopBase):
         with mock.patch.dict(os.environ, env), mock.patch.object(entry, "reclaim", return_value=(True, "")), \
                 mock.patch.object(entry, "Engine", made), \
                 mock.patch.object(signal, "signal"), redirect_stdout(out):
-            rc = entry.main(a)
+            rc = entry.main(a, env=snapshot())
         self.made = made
         return rc, json.loads(f.read_text()), out.getvalue()
 
@@ -158,5 +159,5 @@ class NeverSignalOneself(unittest.TestCase):
     def test_run_main_leaves_no_sigterm_handler_behind(self):
         before = signal.getsignal(signal.SIGTERM)
         with mock.patch.object(entry, "run_main_stoppable", return_value=0):
-            entry.run_main(mock.Mock())
+            entry.run_main(mock.Mock(), env=snapshot())
         self.assertIs(signal.getsignal(signal.SIGTERM), before)

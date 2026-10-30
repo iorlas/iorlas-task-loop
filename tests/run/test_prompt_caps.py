@@ -13,6 +13,7 @@ from support import fake_route
 
 from taskloop.app.run import engine
 from taskloop.app.wire import slots as wslots
+from taskloop.contracts.env import snapshot
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.kinds import Kind, Task, fault_of
 from taskloop.domain.lanes import caps
@@ -46,7 +47,7 @@ class Refusal(te.EngineTest):
     def go(self, role, script):
         c = wslots.load_cfg(str(self.wt))
         with te.delegate_stack(script), mock.patch.dict(caps.CAPS, {role: 1}):
-            self.eng = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store)
+            self.eng = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot())
             rc = self.eng.run()
         return rc
 

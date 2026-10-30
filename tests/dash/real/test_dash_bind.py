@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: E402, F401
 
+from taskloop.contracts.env import Env as ProcessEnv  # noqa: E402
 from taskloop_dash import bind  # noqa: E402
 from taskloop_dash.cli import dash as dash_cli  # noqa: E402
 
@@ -47,8 +48,7 @@ class Env(unittest.TestCase):
         return stop.exception.code, err.getvalue()
 
     def guard(self, addrs, port, where=None, **kw):
-        os.environ.pop("TASK_LOOP_DASH_DEV_PUBLIC", None)
-        return bind.bind_refusal(addrs, port, here=where or self.dev, home=self.home, state=self.state, **kw)
+        return bind.bind_refusal(addrs, port, here=where or self.dev, home=self.home, state=self.state, process=ProcessEnv(), **kw)
 
 
 class Override(Env):

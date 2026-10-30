@@ -47,6 +47,7 @@ from taskloop.app.wire import slots as wslots
 from taskloop.contracts import paths
 from taskloop.contracts.config import LoopConfig
 from taskloop.contracts.enums import Result
+from taskloop.contracts.env import snapshot
 from taskloop.contracts.ids import BeadId, loop_key
 from taskloop.contracts.run import RunReport
 from taskloop.stores.files import FileTickets
@@ -375,7 +376,7 @@ class ReviewFixes(AreasBase):
             f = Path(self.home, f"out-{b}.json")
             a = entry.Args(id=b, worktree=None, slot=slot, dry_run=False, fresh=False, quiet=True,
                             outcome_file=str(f), exclusive_area=True)
-            entry.main(a)
+            entry.main(a, env=snapshot())
             outs[b] = json.loads(f.read_text())["outcome"]
         made = mock.Mock()
         made.return_value.run.return_value = 0

@@ -68,7 +68,7 @@ from taskloop.app.launch import dash as wire_dash
 from taskloop.app.release import pins
 from taskloop.app.track import trail, verbs
 from taskloop.app.wire import asks as wire_asks
-from taskloop.app.wire import doctor
+from taskloop.app.wire import doctor, real
 from taskloop.app.wire import hook as hook_wire
 from taskloop.app.wire import lanes as wire_lanes
 from taskloop.app.wire import slots as wslots
@@ -77,6 +77,7 @@ from taskloop.cli import asks as cli_asks
 from taskloop.cli import slots as slots_cli
 from taskloop.cli import status
 from taskloop.cli import wait as cli_wait
+from taskloop.contracts.env import Env, snapshot
 from taskloop.contracts.paths import ConfigDir
 
 HERE = Path(__file__).resolve().parent
@@ -88,13 +89,14 @@ class Ctx:
     here: Path
     now: Callable[[], float]
     argv: list[str]
+    env: Env  # the process environment, taken once here; everything below is handed this copy
 
 
 Handler = Callable[[Any, Ctx], int]
 
 
 def v_slot(a: Any, c: Ctx) -> int:
-    return slots_cli.run(wslots.slot_env(gitrepo.repo_root(), now=c.now), a)
+    return slots_cli.run(wslots.slot_env(gitrepo.repo_root(), now=c.now, spawner=real.spawner(c.env)), a)
 
 
 def v_ask(a: Any, c: Ctx) -> int:
@@ -265,6 +267,13 @@ def lazy(module: str, name: str) -> Handler:
     return call
 
 
+def lazy_env(module: str, name: str) -> Handler:
+    """A lazy verb that takes the environment too: `name(a, env=...)`."""
+    def call(a: Any, c: Ctx) -> int:
+        return int(getattr(importlib.import_module(module), name)(a, env=c.env))
+    return call
+
+
 def of_args(fn: Callable[..., int], *names: str) -> Handler:
     """A verb that is a function of some of its parsed arguments, by name."""
     def call(a: Any, c: Ctx) -> int:
@@ -279,15 +288,15 @@ def v_actor(a: Any, c: Ctx) -> int:
 
 def v_loop(a: Any, c: Ctx) -> int:
     a.argv = list(c.argv)  # the loop re-execs itself with these
-    return importlib.import_module("taskloop.cli.loop_cmd").cmd_loop(a, c.here, c.now)
+    return importlib.import_module("taskloop.cli.loop_cmd").cmd_loop(a, c.env, c.here, c.now)
 
 
 def v_next(a: Any, c: Ctx) -> int:
-    return importlib.import_module("taskloop.cli.loop_cmd").cmd_next(a, c.here, c.now)
+    return importlib.import_module("taskloop.cli.loop_cmd").cmd_next(a, c.env, c.here, c.now)
 
 
 def v_prune(a: Any, c: Ctx) -> int:
-    return importlib.import_module("taskloop.cli.prune").cmd_prune(a, c.now)
+    return importlib.import_module("taskloop.cli.prune").cmd_prune(a, c.env, c.now)
 
 
 def v_lint(a: Any, c: Ctx) -> int:
@@ -295,7 +304,7 @@ def v_lint(a: Any, c: Ctx) -> int:
 
 
 def v_stop(a: Any, c: Ctx) -> int:
-    return importlib.import_module("taskloop.cli.loop_cmd").cmd_stop(a, c.here, c.now)
+    return importlib.import_module("taskloop.cli.loop_cmd").cmd_stop(a, c.env, c.here, c.now)
 
 
 def repo_of(a: Any) -> str:
@@ -328,10 +337,10 @@ VERBS: Final[dict[str, Handler]] = {
     "close": of_args(verbs.close, "id", "reason"),
     "block": of_args(verbs.block, "id", "why"),
     "trace": of_args(verbs.trace, "id", "last", "json"),
-    "usage": of_args(wire_usage.feed, "windows"),
-    "lanes": of_args(wire_lanes.refresh),
+    "usage": lambda a, c: wire_usage.feed(a.windows, c.env),
+    "lanes": lambda a, c: wire_lanes.refresh(c.env),
     "worktree": of_args(wslots.worktree, "op", "self_too"),
-    "dash": of_args(wire_dash.run, "op"),
+    "dash": lambda a, c: wire_dash.run(a.op, c.env),
     "pin": of_args(pins.run_pin, "version", "delegate", "clear"),
     "rollback": of_args(pins.run_rollback),
     "doctor": v_doctor,
@@ -342,13 +351,13 @@ VERBS: Final[dict[str, Handler]] = {
     "status": v_status,
     "handoff": v_handoff,
     "wait": v_wait,
-    "run-task": lazy("taskloop.app.run.entry", "main"),
-    "selftest": lazy("taskloop.app.launch.selftest", "cmd_selftest"),
+    "run-task": lazy_env("taskloop.app.run.entry", "main"),
+    "selftest": lazy_env("taskloop.app.launch.selftest", "cmd_selftest"),
     "cutover": lazy("taskloop.cli.loop_cmd", "cmd_cutover"),
     "next": v_next, "loop": v_loop, "stop": v_stop,
     "prune": v_prune,
     "lint": v_lint,
-    "check": lazy("taskloop.app.launch.check", "cmd_check"),
+    "check": lazy_env("taskloop.app.launch.check", "cmd_check"),
     "report": lazy("taskloop.cli.report", "cmd_report"),
     "lost": lazy("taskloop.cli.report", "cmd_lost"),
 }
@@ -357,7 +366,7 @@ VERBS: Final[dict[str, Handler]] = {
 def main(argv: list[str] | None = None, here: Path = HERE, now: Callable[[], float] = trail.now) -> int:
     """`here`: the install this run executes from, `now`: the clock (a test runs the loop as another version, at another time)."""
     a = build_parser().parse_args(argv)
-    return VERBS[a.cmd](a, Ctx(here, now, list(argv) if argv is not None else sys.argv[1:]))
+    return VERBS[a.cmd](a, Ctx(here, now, list(argv) if argv is not None else sys.argv[1:], snapshot()))
 
 
 if __name__ == "__main__":

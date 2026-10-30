@@ -12,6 +12,7 @@ from support.procsim import real_proc
 from support.tags import contract, domain
 
 from taskloop.adapters.checks_argv import ArgvChecks
+from taskloop.contracts.env import snapshot
 from taskloop.contracts.ports import Checks, CheckSpec
 
 
@@ -69,7 +70,7 @@ class ArgvChecksContract(ChecksContract, unittest.TestCase):
     ENV: ClassVar[Any] = ["sh", "-c", 'echo "$PROBE"']
 
     def make(self) -> ArgvChecks:
-        return ArgvChecks()
+        return ArgvChecks(snapshot())
 
     def test_no_shell_stands_between_the_argv_and_the_program(self) -> None:
         r = self.go(["echo", "$HOME && x"])

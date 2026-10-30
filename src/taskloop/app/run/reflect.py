@@ -1,6 +1,7 @@
 """The run's reflection (tl-05s): one cheap read-only call at the close that says what went well and badly."""
 from typing import Any
 
+from taskloop.adapters import childenv
 from taskloop.adapters import delegate as dg
 from taskloop.contracts import answers
 from taskloop.contracts import log as rec
@@ -43,7 +44,7 @@ class Reflector:
                              title=f"{e.bead} · reflect", timeout_s=45)
             cid = e.calls.start("reflect", "reflect", "reviewer", False, e.live_n)
             runner = e.router.runner(e.err_path, None, e.live("reflect"))
-            res = dg.call(e.resolved, req, prompt, answers.sent_schema("reflect"), runner).res
+            res = dg.call(e.resolved, req, prompt, answers.sent_schema("reflect"), runner, childenv.current_env(e.env)).res
             saved = {k: v for k, v in e.stats.items() if k.startswith("tokens_")}
             e.calls.end(cid, "reflect", "reviewer", 1, res)
             e.stats.update(saved)  # the run's counts are the run's, as the Reflect comment says them

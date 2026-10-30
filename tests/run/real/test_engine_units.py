@@ -32,6 +32,7 @@ from taskloop.adapters import delegate as lroute  # noqa: E402
 from taskloop.app.run import (  # noqa: E402
     entry,
 )
+from taskloop.contracts.env import snapshot  # noqa: E402
 from taskloop.domain.checks import (  # noqa: E402
     lint,  # noqa: F401
 )
@@ -47,7 +48,7 @@ class Outcome(T.EngineTest):
         Path(a.worktree).mkdir(exist_ok=True)
         out = io.StringIO()
         with contextlib.chdir(self.wt), redirect_stdout(out), mock.patch.object(signal, "signal"):  # pyrefly: ignore[missing-attribute]
-            rc = entry.main(a, self.store)  # pyrefly: ignore[missing-attribute]
+            rc = entry.main(a, self.store, env=snapshot())  # pyrefly: ignore[missing-attribute]
         last = json.loads(out.getvalue().strip().splitlines()[-1])
         return rc, json.loads(Path(outcome_file).read_text()), last
 

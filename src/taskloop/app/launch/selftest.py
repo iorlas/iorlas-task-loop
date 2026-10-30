@@ -20,6 +20,7 @@ from taskloop.app.wire import real
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts import env as penv
 from taskloop.contracts.bead import Bead
+from taskloop.contracts.env import Env
 from taskloop.contracts.ids import parse_bead_id
 from taskloop.contracts.ports import Git
 from taskloop.contracts.slots import SlotGitError
@@ -90,7 +91,7 @@ def git_repo(home: Path, wt: Path, git: Git) -> str | None:
     return None
 
 
-def run_engine(home: Path, wt: Path) -> tuple[int, Bead]:
+def run_engine(home: Path, wt: Path, env: Env) -> tuple[int, Bead]:
     """(exit code, the bead as the fake bd holds it) after one bead ran through the engine on the scripted lane."""
     cfg = wslots.load_cfg(str(wt))
     res = seams.resolve_delegate(cfg.delegate)  # the configured delegate's own contract when there is one; else a bare one
@@ -103,13 +104,13 @@ def run_engine(home: Path, wt: Path) -> tuple[int, Bead]:
     os.chdir(wt)  # the engine reads cwd
     try:
         with mock.patch.object(time, "sleep"):
-            rc = Engine(t1, str(wt), cfg, route=seams.FixedRoute(resolved, Runner()), store=store).run()
+            rc = Engine(t1, str(wt), cfg, route=seams.FixedRoute(resolved, Runner()), store=store, env=env).run()
     finally:
         os.chdir(home.parent)  # out of the directory that is removed next
     return rc, store.beads[t1]
 
 
-def selftest():
+def selftest(process: Env):
     """None when one bead lands and closes, else why not. Nothing real is touched: no bd, no delegate, no network, no model."""
     with tempfile.TemporaryDirectory(prefix="tl-selftest-") as tmp:
         home = Path(os.path.realpath(tmp))
@@ -120,16 +121,16 @@ def selftest():
             why = git_repo(home, home / "wt", real.git())
             if why:
                 return why
-            rc, bead = run_engine(home, home / "wt")
+            rc, bead = run_engine(home, home / "wt", Env({**process.vars, **env}))
     if rc != 0 or bead.status != "closed":
         return f"the engine ended {rc} with the bead {bead.status} instead of closed"
     return None
 
 
-def cmd_selftest(a: Any) -> int:
+def cmd_selftest(a: Any, *, env: Env) -> int:
     started = time.monotonic()
     try:
-        why = selftest()
+        why = selftest(env)
     except Exception as e:  # any raise is a failure; the traceback tail says where
         why = "{}: {}\n{}".format(type(e).__name__, e, "".join(traceback.format_exc().splitlines(True)[-6:]))
     secs = time.monotonic() - started
