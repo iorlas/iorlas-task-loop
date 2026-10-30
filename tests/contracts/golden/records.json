@@ -478,6 +478,7 @@
     "note": "",
     "base_red": true,
     "producer": "",
+    "tags": [],
     "sig": "boom"
    },
    {
@@ -498,6 +499,7 @@
     "note": "inputs unchanged",
     "base_red": false,
     "producer": "",
+    "tags": [],
     "sig": ""
    }
   ],
@@ -532,7 +534,8 @@
   "container": false,
   "reads": [
    "unity-build"
-  ]
+  ],
+  "tags": []
  },
  "plancheck.Ref": {
   "kind": "ref",
@@ -586,6 +589,7 @@
       "note": "inputs unchanged",
       "base_red": false,
       "producer": "",
+      "tags": [],
       "sig": ""
      },
      "round": 1,

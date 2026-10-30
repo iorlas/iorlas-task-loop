@@ -3,12 +3,24 @@ never a process or a bd argv. A refused write is Result(ok=false) with status 20
 unknown verb 404. Every verb is routed to a Port (one with no backend answers a Result that says so). park, stop and note name the
 bead's newest run; the engine acts on them at its next step boundary (stop at once, through its stop flag)."""
 
-from collections.abc import Callable
-from typing import Any, Final
+from typing import Any, Final, assert_never
 
 from taskloop.contracts import wire
 from taskloop.contracts.ask import Ask, AskAction
-from taskloop.contracts.dash import WRITES, AckReq, AnswerReq, BeadReq, CauseReq, LookReq, NoteReq, PruneReq, Result, StickReq
+from taskloop.contracts.dash import (
+    WRITES,
+    AckReq,
+    AnswerReq,
+    CauseReq,
+    DashCommand,
+    LookReq,
+    NoteReq,
+    ParkReq,
+    PruneReq,
+    Result,
+    StickReq,
+    StopReq,
+)
 from taskloop.contracts.ids import BeadId, is_bead_id
 from taskloop.contracts.stores import AskStore
 from taskloop_dash.api.looks import Looks
@@ -18,7 +30,6 @@ from taskloop_dash.readers.records import Records
 from taskloop_dash.views import names
 
 Reply = tuple[int, dict[str, Any]]
-LATER: Final = Result(ok=False, message="Not available yet.")
 NO_PROJECT: Final = Result(ok=False, message="That project is not registered.")
 PROBLEMS: Final = {
     "withdrawn": "The engine withdrew this ask. Nothing to answer.",
@@ -48,21 +59,42 @@ class Writes:
     def __init__(self, env: Env, records: Records, beads: Beads, looks: Looks) -> None:
         self.env, self.records, self.beads, self.looks = env, records, beads, looks
         self.store = AskStore.at(env.config)
-        self.verbs: dict[str, Callable[[Any], Result]] = {"answer": self.answer, "look": self.look, "cause": self.cause, "ack": self.ack,
-                                                          "park": self.park, "stop": self.stop, "note": self.note, "stick": self.stick,
-                                                          "prune": self.prune}
 
     def post(self, verb: str, body: object) -> Reply:
         cls = WRITES.get(verb)
         if cls is None:
             return 404, {"error": "unknown verb"}
         try:
-            req = wire.load(cls, body)
+            req: DashCommand = wire.load(cls, body)
         except ValueError as err:
             return 400, {"error": str(err)}
         self.env.touch()
-        write = self.verbs.get(verb)
-        return 200, wire.dump(write(req) if write else LATER)
+        return 200, wire.dump(self.dispatch(req))
+
+    def dispatch(self, req: DashCommand) -> Result:
+        """The write a command asks for. The match is exhaustive: a new member of DashCommand with no case here is a type error."""
+        match req:
+            case AnswerReq():
+                out = self.answer(req)
+            case LookReq():
+                out = self.look(req)
+            case CauseReq():
+                out = self.cause(req)
+            case AckReq():
+                out = self.ack(req)
+            case ParkReq():
+                out = self.park(req)
+            case StopReq():
+                out = self.stop(req)
+            case NoteReq():
+                out = self.note(req)
+            case StickReq():
+                out = self.stick(req)
+            case PruneReq():
+                out = self.prune(req)
+            case never:
+                assert_never(never)
+        return out
 
     def find(self, ask_id: str) -> tuple[Ask | None, str]:
         """(the ask, "") when `ask_id` is the bead's current ask, else (the bead's ask or None, why not)."""
@@ -124,11 +156,11 @@ class Writes:
             return NO_PROJECT
         return self.env.ports.ack(repo, req.bead, self.run_of(req.bead), req.ack)
 
-    def park(self, req: BeadReq) -> Result:
+    def park(self, req: ParkReq) -> Result:
         repo = self.repo_of(req.project)
         return self.env.ports.park(repo, req.bead, self.run_of(req.bead)) if repo else NO_PROJECT
 
-    def stop(self, req: BeadReq) -> Result:
+    def stop(self, req: StopReq) -> Result:
         repo = self.repo_of(req.project)
         return self.env.ports.stop(repo, req.bead, self.run_of(req.bead)) if repo else NO_PROJECT
 

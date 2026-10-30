@@ -518,9 +518,13 @@ class PruneReq(Rec):
 
 
 @final
-class BeadReq(Rec):
-    """Body of park and stop."""
+class ParkReq(Rec):
+    project: str
+    bead: WireBead
 
+
+@final
+class StopReq(Rec):
     project: str
     bead: WireBead
 
@@ -545,7 +549,10 @@ WRITES: dict[str, type] = {
     "cause": CauseReq,
     "ack": AckReq,
     "prune": PruneReq,
-    "park": BeadReq,
-    "stop": BeadReq,
+    "park": ParkReq,
+    "stop": StopReq,
     "note": NoteReq,
 }
+
+# every write the page can send, one type per verb: the server matches on it and a verb nobody handles is a type error
+DashCommand = AnswerReq | LookReq | StickReq | CauseReq | AckReq | PruneReq | ParkReq | StopReq | NoteReq

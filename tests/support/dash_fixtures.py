@@ -442,8 +442,8 @@ def build() -> dict[str, Any]:
         "cause": D.CauseReq(project="lifesim", bead=BeadId(L("5ban.3")), cause=D.OwnerCause.FLAKY_TEST),
         "ack": D.AckReq(project="lifesim", bead=BeadId(L("5ban.3")), ack=True),
         "prune": D.PruneReq(project="lifesim", adr="ADR-007"),
-        "park": D.BeadReq(project="lifesim", bead=BeadId(L("6dq0"))),
-        "stop": D.BeadReq(project="lifesim", bead=BeadId(L("6dq0"))),
+        "park": D.ParkReq(project="lifesim", bead=BeadId(L("6dq0"))),
+        "stop": D.StopReq(project="lifesim", bead=BeadId(L("6dq0"))),
         "note": D.NoteReq(project="lifesim", bead=BeadId(L("6dq0")), text="keep the old save format readable"),
     }
     out["result.json"] = D.Result(ok=True, message="Sent. lifesim-fld.27 resumes in its slot.")

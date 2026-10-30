@@ -1,8 +1,10 @@
 """dash.py: the dashboard's view contract. The committed fixtures are what the builder makes, every one decodes strictly and
 re-encodes byte for byte, every dash record appears in them, and every bead id they name exists in the snapshot."""
+import inspect
 import json
 import os
 import sys
+import typing
 import unittest
 from pathlib import Path
 
@@ -13,6 +15,7 @@ from support import dash_fixtures as fx
 from taskloop.contracts import dash as D
 from taskloop.contracts import schema, wire
 from taskloop.contracts.wire import Rec
+from taskloop_dash.api.writes import Writes
 
 CLASS = {"snapshot.json": D.Snapshot, "bead/": D.BeadDetail, "live/": D.LivePage, "result.json": D.Result}
 
@@ -89,3 +92,15 @@ class DashFixtures(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DashCommandUnion(unittest.TestCase):
+    def test_the_command_union_is_exactly_the_record_of_each_verb(self) -> None:
+        self.assertEqual(set(typing.get_args(D.DashCommand)), set(D.WRITES.values()))
+        self.assertEqual(len(set(D.WRITES.values())), len(D.WRITES), "two verbs share a record: the server could not tell them apart")
+
+    def test_every_verb_is_handled_by_the_server_match(self) -> None:
+        # a member the match does not handle reaches assert_never; the 404/400/200 paths of each verb are in tests/dash/test_dash_writes.py
+        src = inspect.getsource(Writes.dispatch)
+        for cls in D.WRITES.values():
+            self.assertIn(f"case {cls.__name__}():", src)
