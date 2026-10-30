@@ -162,7 +162,7 @@ class World:
             for k in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "TL_RELEASE_REEXEC"):
                 os.environ.pop(k, None)
             st.enter_context(mock.patch.object(flow.suite, "verify", self.verify))
-            st.enter_context(mock.patch.object(beadtools, "bd_store", lambda cwd=None: self.store))
+            st.enter_context(mock.patch.object(beadtools, "bd_store", lambda actor, cwd=None: self.store))
             st.enter_context(mock.patch("sys.stdout", self.stdout))
             st.enter_context(mock.patch("sys.stderr", self.stderr))
             yield self
