@@ -42,7 +42,7 @@ rules:
     set -euo pipefail
     # --with msgspec: .importlinter names msgspec as a root package (the hook contract), and grimp must find it
     PYTHONPATH=src uv tool run --with msgspec --from "import-linter@$(just pin pipx:import-linter)" lint-imports
-    uv run pytest tests/rules/gate_rules.py -q -m ""
+    uv run pytest tests/rules/gate_rules.py tests/rules/test_type_ratchet.py -q -m ""  # the type ratchet too: a builder sees a new Any in just check, not in the release
 
 # The version mise.toml pins for a tool (one source for the pins).
 [private]

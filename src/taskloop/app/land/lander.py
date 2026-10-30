@@ -11,6 +11,7 @@ from taskloop.app.land import verified
 from taskloop.app.land.gate import Gate, Problem
 from taskloop.app.land.outbound import Outbound, land_argv, pin_head
 from taskloop.contracts import log as rec
+from taskloop.contracts.checks import CheckRun
 from taskloop.domain.land.matchers import Push
 from taskloop.domain.lanes import policy as lp
 
@@ -39,7 +40,7 @@ class Lander:
         e = self.e
         if e.pending_land_validation:
             raise e.blocked_for("land retry validation still needs accepted checks and review; branch kept", "FAULT_LAND")
-        self.refuse_unverified(verified.latest(e))
+        self.refuse_unverified(verified.latest(e.last_run, lambda: e.stores.check_run(e.run_dir.name, None).read()))
         found = self.already()  # the last run's push may have gone through before the network cut its answer
         if found:
             return self.synced(self.found(found))
@@ -55,7 +56,7 @@ class Lander:
         e.task_branch = e.git("symbolic-ref", "--short", "-q", "HEAD")
         return self.synced(self.land())
 
-    def refuse_unverified(self, run: Any) -> None:
+    def refuse_unverified(self, run: CheckRun | None) -> None:
         """A required check that could not verify is no pass: nothing is committed or pushed (verified.deferred is tl-7k8.5's hook)."""
         why = verified.refusal(run) if run else ""
         if why:

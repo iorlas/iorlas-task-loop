@@ -1,5 +1,6 @@
 """The land and a check that could not verify (exit UNVERIFIED_EXIT): such a check is not a pass, so the land refuses to land on it."""
-from typing import Any
+
+from collections.abc import Callable
 
 from taskloop.contracts.checks import UNVERIFIED_EXIT, CheckResult, CheckRun
 
@@ -21,6 +22,6 @@ def refusal(run: CheckRun) -> str:
             "lacks), then run the bead again")
 
 
-def latest(e: Any) -> CheckRun | None:
+def latest(last: CheckRun | None, saved: Callable[[], CheckRun | None]) -> CheckRun | None:
     """The last round of the engine's checks: in memory, else the saved one (after a resume)."""
-    return e.last_run or e.stores.check_run(e.run_dir.name, None).read()
+    return last or saved()
