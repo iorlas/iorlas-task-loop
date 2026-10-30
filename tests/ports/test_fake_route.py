@@ -1,0 +1,283 @@
+"""The fake route.py process (tl-7y6.4.3), contract 3, and the network-resume done-when (tl-7y6.2.13): a vendor that drops
+mid-stream twice and then succeeds is one step, one ref, no lane out, no retry counted. The contract is FAKE_ROUTE_DELEGATE's, else
+the copy in tests/fixtures/delegate3 (compared to a real delegate checkout when ~/Workspaces/iorlas-delegate-R20 or the env names one)."""
+import contextlib
+import io
+import json
+import os
+import shlex
+import subprocess
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+from typing import Any
+from unittest import mock
+
+ROOT = Path(__file__).resolve().parents[2]
+SKILL = ROOT / "skills" / "task-loop"
+sys.path.insert(0, str(SKILL))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import support.paths  # noqa: E402, F401
+
+# isort: split
+from support import dlcall, fake_route, procsim  # noqa: E402
+from support.narrow import must, only  # noqa: E402
+
+from taskloop.adapters import delegate as dl  # noqa: E402
+from taskloop.adapters import delegate_wire  # noqa: E402
+from taskloop.adapters.fake_clock import FakeClock  # noqa: E402
+from taskloop.app.loop.net import NetState  # noqa: E402
+from taskloop.domain import outcome as oc  # noqa: E402
+from taskloop.domain.lanes import netgate  # noqa: E402
+from taskloop.domain.lanes import policy as lp  # noqa: E402
+from taskloop.stores import call_state as cs  # noqa: E402
+
+DELEGATE = fake_route.delegate_dir()
+CONTRACT = dl.read_contract_file(DELEGATE / "skills" / "delegate" / "contract.json") or {}
+FIXTURES = sorted((DELEGATE / "tests" / "contract" / "fixtures").glob("*.json"))
+FAKE = str(Path(__file__).resolve().parents[1] / "support" / "fake_route.py")
+
+
+class Fake(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self.tmp.name)
+        self.script = self.dir / "script.json"
+        self.env = dict(os.environ, FAKE_ROUTE_SCRIPT=str(self.script), FAKE_ROUTE_DELEGATE=str(DELEGATE))
+        self.resolved = dl.Resolved(DELEGATE, FAKE, CONTRACT, "explicit")
+        self.addCleanup(self.tmp.cleanup)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def script_with(self, steps, net=None):
+        self.script.write_text(json.dumps({"steps": steps, "net": net or [True]}))
+
+    def runner(self, cmd, **kw: Any):  # route.py is fake_route.main(argv) in this process: the same seam, a different script
+        out, err = io.StringIO(), io.StringIO()
+        with mock.patch.dict(os.environ, self.env), contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = fake_route.main(list(cmd[2:]))
+        return subprocess.CompletedProcess(cmd, code, out.getvalue(), err.getvalue())
+
+    def req(self, **kw):
+        return dlcall.request("worker", str(self.dir), task="t-1", parent="t-1", title="x", timeout_s=900, **kw)
+
+    def call(self, runner=None, **kw):
+        return dlcall.Got(dl.call(self.resolved, self.req(**kw), "do it", {"type": "object"}, runner or self.runner))
+
+    def argv_log(self):
+        return [json.loads(x) for x in Path(str(self.script) + ".log").read_text().splitlines()]
+
+    # --- the seam itself -------------------------------------------------------------------------------------------
+
+    def test_the_fake_speaks_the_handshake_and_the_net_probe(self):  # route.py as the engine starts it: argv in, JSON out, exit code
+        self.script_with(["done"], net=[False, True])
+
+        def route(cwd, env):  # the process, as a procsim fake over fake_route.main
+            done = self.runner([sys.executable, FAKE, *procsim.argv()[2:]])
+            return done.returncode, done.stdout
+        procsim.fake(shlex.join([sys.executable, FAKE]), route, args=True)
+        out = subprocess.run([sys.executable, FAKE, "contract", "--json"], capture_output=True, text=True, env=self.env, check=False).stdout
+        self.assertEqual(sorted(json.loads(out)), ["contract", "reasons", "run_args"])
+        self.assertEqual(json.loads(out)["contract"], 3)
+        with mock.patch.dict(os.environ, self.env):
+            probe = dl.RouteProbe(FAKE)
+            got = [probe.up(), probe.up(), probe.up()]
+        self.assertEqual(got, [False, True, True])
+
+    def test_argv_uses_only_flags_the_contract_lists(self):
+        argv = self.req(resume="r", authored_by="a", call_id="c", brief_path="b.md", schema_path="s.json").to_argv("python3", "route.py")
+        self.assertNotIn("--host", argv)
+        self.assertNotIn("--no-wait", argv)
+        flags = {x for x in argv if x.startswith("--")}
+        self.assertLessEqual(flags, set(CONTRACT["run_args"]))
+        self.assertIn("--timeout", flags)
+        self.assertEqual(argv[argv.index("--timeout") + 1], "900")
+
+    def test_a_done_answer_has_no_stop_and_carries_the_ref(self):
+        self.script_with([{"step": "done", "data": {"a": 1}}])
+        r = self.call()
+        self.assertEqual((r.done, r.stop, r.data, r.ref, r.source), (True, None, {"a": 1}, "fake-1", "delegate"))
+
+    def test_every_fixture_replays_to_its_expected_reason_and_a_policy_action(self):
+        replayed = 0
+        for fx in FIXTURES:
+            exp = (json.loads(fx.read_text(encoding="utf-8")).get("expected_stop") or {}).get("reason")
+            if not exp:
+                continue
+            self.script.unlink() if self.script.exists() else None
+            for p in self.dir.glob("script.json.*"):
+                p.unlink()
+            self.script_with([fx.stem])
+            r = self.call()
+            replayed += 1
+            self.assertEqual(must(r.stop).reason, exp, fx.name)
+            self.assertEqual((must(r.stop).scope, must(r.stop).permanence, must(r.stop).retry_kind), lp_facts(exp), fx.name)
+            a = lp.decide(must(r.stop), lp.Ctx(now=1000.0))
+            self.assertFalse(isinstance(a, (lp.Yield, lp.Fail)) and oc.make(oc.Kind[a.kind]).rule.makes_ask, fx.name)
+        self.assertGreaterEqual(replayed, 5)
+
+    # --- the contract and the table agree ---------------------------------------------------------------------------
+
+    def test_the_closed_lists_equal_contract_json_and_every_reason_has_a_policy_row(self):
+        self.assertEqual(tuple(CONTRACT["scopes"]), tuple(sorted(lp.SCOPES, key=CONTRACT["scopes"].index)))
+        self.assertEqual(set(CONTRACT["scopes"]), set(lp.SCOPES))
+        self.assertEqual(set(CONTRACT["permanences"]), set(lp.PERMANENCES))
+        self.assertEqual(set(CONTRACT["retry_kinds"]), set(lp.RETRY_KINDS))
+        for reason, r in CONTRACT["reasons"].items():  # adding a reason without a row fails here
+            facts = (r["scope"], r["permanence"], r["retry"])
+            self.assertIn(facts, lp.TABLE, f"reason {reason} has no lane_policy row for {facts}")
+
+    # --- synthesized stops, never a raise ---------------------------------------------------------------------------
+
+    def test_no_answer_is_a_synthesized_stop_of_the_machine_that_tries_again(self):
+        r = self.call(runner=lambda cmd, **kw: subprocess.CompletedProcess(cmd, 1, "", "Traceback"), resume="r1")
+        self.assertEqual((r.source, must(r.stop).reason), ("synthesized", "no_answer"))  # not delegate's own `crash` (needs_owner)
+        self.assertEqual((must(r.stop).scope, must(r.stop).permanence, must(r.stop).retry_kind), ("machine", "transient", "none"))
+        self.assertEqual(must(r.stop).ref, "r1")
+
+    def test_a_wrong_shape_is_a_contract_violation_and_a_call_the_engine_ended_is_a_timeout(self):
+        for bad in ('{"v": 2, "status": "done"}', '{"contract": 2, "stop": null}', '{"contract": 3}', '{"contract": 3, "stop": 7}'):
+            r = self.call(runner=lambda cmd, _bad=bad, **kw: subprocess.CompletedProcess(cmd, 0, _bad, ""))
+            self.assertEqual(must(r.stop).reason, "contract_violation", bad)
+            self.assertEqual((must(r.stop).scope, must(r.stop).permanence), ("machine", "needs_owner"))
+
+        def hang(cmd, **kw):
+            raise dl.Stopped("no worker output for 20 min")
+        r = self.call(runner=hang, resume="r9")
+        self.assertEqual((must(r.stop).reason, must(r.stop).scope, must(r.stop).ref), ("timeout", "bead", "r9"))
+        self.assertIn("no worker output", r.say)
+
+        def backstop(cmd, **kw):
+            raise subprocess.TimeoutExpired(cmd, 1)
+        self.assertEqual(must(self.call(runner=backstop).stop).reason, "timeout")
+
+        def missing(cmd, **kw):
+            raise FileNotFoundError("python")
+        self.assertEqual(must(self.call(runner=missing).stop).reason, "no_answer")
+
+    def test_a_killed_stop_is_a_signal_and_sandbox_limit_denials_do_not_count(self):
+        k = lp.stop_of(delegate_wire.result_of(fake_route.stop_answer("killed", "r1")))
+        self.assertEqual(
+            (must(k).scope, must(k).permanence, must(k).retry_kind, bool(must(k).signal)), ("machine", "transient", "none", True)
+        )
+        self.assertIsInstance(lp.decide(must(k), lp.Ctx(now=1.0)), lp.Yield)
+        n = lp.stop_of(delegate_wire.result_of(fake_route.stop_answer("network", "r1", partial=True)))
+        self.assertEqual(
+            (must(n).reason, must(n).ref, must(n).resumable, must(n).partial, must(n).signal), ("network", "r1", True, True, 0)
+        )
+        j = {
+            "denied": [
+                {"kind": "sandbox_limit", "tool": "Bash", "input": {}},
+                {"kind": "policy", "tool": "Bash", "input": {"command": "ls"}},
+            ]
+        }
+        self.assertEqual([d.kind for d in delegate_wire.denied_of(j["denied"])], ["policy"])
+
+    def test_the_copy_of_the_contract_in_this_repo_is_delegates(self):
+        real = Path(os.environ.get("DELEGATE_R20") or Path.home() / "Workspaces" / "iorlas-delegate-R20")
+        mine = fake_route.VENDORED / "skills" / "delegate" / "contract.json"
+        if not (real / "skills" / "delegate" / "contract.json").is_file():
+            self.skipTest("no delegate checkout of contract 3 here")
+        self.assertEqual(json.loads(mine.read_text()), json.loads((real / "skills" / "delegate" / "contract.json").read_text()))
+
+    # --- the done-when: drops twice, then succeeds ------------------------------------------------------------------
+
+    def drive(self, steps, probe, key=("write", 1, 0, 1)):
+        """The executor loop of the engine (R21's), in miniature: call, decide, wait for the net, resume the same ref."""
+        self.script_with(steps)
+        clk, net = FakeClock(), NetState()
+        st = cs.begin(self.dir / "ck", "run-1", "t-1", key, role="worker", now=clk.now())
+        resume, ctx_kw, actions, calls = "", {}, [], 0
+        while True:
+            calls += 1
+            r = self.call(resume=resume)
+            if r.ref:
+                st.note_ref(r.ref, clk.now())
+            if r.stop is None:
+                st.returned(r.raw, self.dir / "ck" / "write-1.raw.json", clk.now())
+                return r, st, actions, calls, clk
+            a = lp.decide(r.stop, lp.Ctx(now=clk.now(), resumed=bool(resume), **ctx_kw))
+            actions.append(a)
+            if not isinstance(a, lp.WaitNet):
+                return r, st, actions, calls, clk
+            net.mark_down(clk.now())
+            t0 = clk.now()
+            while not net.poll(probe, clk.now()):
+                clk.advance(netgate.PROBE_EVERY)
+            ctx_kw["waited_net_s"] = ctx_kw.get("waited_net_s", 0) + (clk.now() - t0)
+            resume = a.resume
+
+    def test_a_vendor_that_drops_twice_then_succeeds_is_one_step_with_one_ref(self):
+        probe = netgate.FakeProbe([False, False, True, False, True])
+        r, st, actions, calls, _ = self.drive([{"step": "network", "partial": True}, {"step": "network", "partial": True}, "done"], probe)
+        self.assertEqual((r.done, r.stop, calls), (True, None, 3))
+        self.assertEqual({r.ref, st.ref}, {"fake-1"})                       # the ref of call 1 is the ref of the answer
+        runs = [a for a in self.argv_log() if a[0] == "run"]
+        self.assertEqual(len(runs), 3)
+        self.assertNotIn("--resume", runs[0])
+        self.assertEqual([a[a.index("--resume") + 1] for a in runs[1:]], ["fake-1", "fake-1"])
+        self.assertEqual(len(actions), 2)
+        self.assertTrue(all(isinstance(a, lp.WaitNet) and a.resume == "fake-1" and a.charges == "" for a in actions))
+        self.assertEqual(st.phase, "returned")
+        self.assertEqual(must(cs.reattach(cs.load_for(self.dir / "ck", "t-1", ("write", 1, 0, 1))))[0], "answer")
+
+    def test_a_dropped_call_charges_no_counter_and_marks_no_lane(self):
+        r, _st, actions, _calls, _clk = self.drive(["network", "done"], netgate.FakeProbe([False, True]))
+        a = actions[0]
+        for charged in ("attempt", "crashes", "polls", "waited_lane_s"):
+            self.assertNotEqual(a.charges, charged)
+        self.assertNotIsInstance(a, (lp.Reroute, lp.NewThread, lp.Retry, lp.Fail))
+        self.assertTrue(r.done)
+
+    def test_a_restart_after_the_first_drop_resumes_the_ref_from_the_call_state(self):
+        self.script_with(["network", "done"])
+        st = cs.begin(self.dir / "ck", "run-1", "t-1", ("write", 1, 0, 1))
+        first = self.call()
+        st.note_ref(first.ref)
+        what = cs.reattach(cs.load_for(self.dir / "ck", "t-1", ("write", 1, 0, 1)))  # the loop was killed here
+        self.assertEqual(must(what)[:2], ("resume", "fake-1"))
+        again = self.call(resume=must(what)[1])
+        self.assertEqual((again.done, again.ref), (True, "fake-1"))
+
+
+def lp_facts(reason):
+    r = CONTRACT["reasons"][reason]
+    return (r["scope"], r["permanence"], r["retry"])
+
+
+class Resolve(unittest.TestCase):
+    def make(self, root, contract):
+        d = Path(root) / "delegate"
+        (d / "skills" / "delegate").mkdir(parents=True)
+        (d / "skills" / "delegate" / "contract.json").write_text(json.dumps({"contract": contract, "reasons": {}}))
+        return d
+
+    def test_an_explicit_dir_wins_a_missing_pin_refuses_and_skew_refuses(self):
+        with tempfile.TemporaryDirectory() as t:
+            d = self.make(t, dl.CONTRACT)
+            self.assertEqual(only(dl.Resolved, dl.resolve(path=str(d))).source, "explicit")
+            self.assertEqual(
+                only(dl.Refusal, dl.resolve(pinned=Path(t) / "gone", installed=d)).kind, "pin_missing_dir"
+            )  # a pin never falls through
+            self.assertEqual(only(dl.Resolved, dl.resolve(pinned=d, installed=None)).source, "pinned")
+            self.assertEqual(only(dl.Refusal, dl.resolve(pinned=Path(t), installed=None)).kind, "pin_unreadable")
+            with mock.patch.object(dl, "installed_dir", return_value=None):
+                self.assertEqual(only(dl.Refusal, dl.resolve(pinned=None)).kind, "not_installed")
+            self.assertEqual(
+                only(dl.Refusal, dl.resolve(path=str(self.make(Path(t) / "n", dl.CONTRACT + 1)))).kind, "skew_delegate_newer_no_match"
+            )
+            self.assertEqual(only(dl.Refusal, dl.resolve(path=str(self.make(Path(t) / "o", dl.CONTRACT - 1)))).kind, "skew_delegate_older")
+
+    def test_installed_dir_reads_the_user_scope_record_not_a_glob(self):
+        with tempfile.TemporaryDirectory() as t:
+            (Path(t) / "plugins").mkdir()
+            (Path(t) / "plugins" / "installed_plugins.json").write_text(json.dumps({"plugins": {
+                "iorlas-delegate@m": [{"scope": "project", "installPath": "/p"}, {"scope": "user", "installPath": "/u"}]}}))
+            self.assertEqual(dl.installed_dir(Path(t)), Path("/u"))
+            self.assertIsNone(dl.installed_dir(Path(t) / "none"))
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -34,7 +34,7 @@ rules:
     set -euo pipefail
     # --with msgspec: .importlinter names msgspec as a root package (the hook contract), and grimp must find it
     PYTHONPATH=src uv tool run --with msgspec --from "import-linter@$(just pin pipx:import-linter)" lint-imports
-    uv run pytest tests/gate_rules.py -q
+    uv run pytest tests/rules/gate_rules.py -q
 
 # The version mise.toml pins for a tool (one source for the pins).
 [private]

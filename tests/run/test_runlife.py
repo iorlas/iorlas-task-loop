@@ -1,0 +1,179 @@
+"""One liveness rule and one retention (taskloop.contracts.runlife): a run is live, ended or crashed from its typed log alone, the dash
+API and `tl report` read it the same way, the run-start sweep removes old logs with their .live/ folders, and the live API pages a long log.
+A fake clock throughout: no process runs and none is probed."""
+import json
+import os
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+from unittest import mock
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import support.paths  # noqa: E402, F401
+from jsonl_log import JsonlLog  # noqa: E402
+from support.dashes import make_dash  # noqa: E402
+from support.logs import typed  # noqa: E402
+
+from taskloop.app.report import card  # noqa: E402
+from taskloop.app.run import layout  # noqa: E402
+from taskloop.app.slots.lease import Lease  # noqa: E402
+from taskloop.contracts import log as rec  # noqa: E402
+from taskloop.contracts.enums import Outcome  # noqa: E402
+from taskloop.contracts.paths import ConfigDir  # noqa: E402
+from taskloop.contracts.runlife import BEAT_EVERY, CRASHED_AFTER, RETAIN, Liveness, liveness  # noqa: E402
+from taskloop.domain.report import matchers  # noqa: E402
+from taskloop_dash import jsonl  # noqa: E402
+from taskloop_dash.api import live as live_api  # noqa: E402
+
+BEAD, STAMP = "t-1", "20261026-100000"
+RUN = f"{BEAD}-{STAMP}"
+N = CRASHED_AFTER
+
+
+def put(path: Path, rows: list[dict]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "a", encoding="utf-8") as f:
+        f.writelines(json.dumps(r) + "\n" for r in rows)
+
+
+def started(t: float) -> list[dict]:
+    return [typed("run_start", t, run=RUN, bead=BEAD, worktree="/w"), typed("step_start", t + 1, id="n1", step="write", text="write")]
+
+
+class Rule(unittest.TestCase):
+    def test_the_three_states_and_the_limit(self):
+        beat = rec.Beat(t=1000.0)
+        self.assertIs(liveness([beat], 1000 + N - 1), Liveness.LIVE)
+        self.assertIs(liveness([beat], 1000 + N), Liveness.CRASHED)
+        self.assertIs(liveness([beat, rec.Close(t=1010.0, outcome=Outcome.LANDED)], 1000 + 99 * N), Liveness.ENDED)
+        self.assertIs(liveness([], 1000.0), Liveness.CRASHED)
+
+    def test_the_limit_leaves_room_for_missed_beats(self):
+        self.assertGreaterEqual(N, 2 * BEAT_EVERY)  # a run is silent at most one beat; N/2 is that and a margin
+
+
+class Beats(unittest.TestCase):
+    def test_every_beat_of_the_lease_also_writes_a_beat_record(self):
+        class Store:
+            def heartbeat(self, bead):
+                pass
+
+        seen: list[str] = []
+        lease = Lease(mock.Mock(wraps=Store()), "t-1", on_beat=lambda: seen.append("beat"))
+        lease.beat()
+        lease.beat()
+        self.assertEqual(seen, ["beat", "beat"])
+        self.assertEqual(lease.every, BEAT_EVERY)
+
+
+class Crash(unittest.TestCase):
+    """A kill -9: the log has no close and its newest record ages. The dashboard's live view and the report both say crashed within
+    2N seconds, live before it, ended with a close."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        home = Path(self.tmp.name)
+        self.cfg = home / "task-loop"
+        self.t0 = 1_800_000_000.0
+        env = mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": str(home), "APPDATA": str(home)})
+        env.start()
+        self.addCleanup(env.stop)
+        self.log = self.cfg / "engine" / f"{RUN}.jsonl"
+        put(self.log, [*started(self.t0), typed("beat", self.t0 + 5)])
+        os.utime(self.log, (self.t0 + 5, self.t0 + 5))
+        self.now = self.t0 + 5
+        self.dash = make_dash(config=self.cfg, clock=lambda: self.now)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def dash_says(self) -> str:
+        self.dash.env.files.items.clear()
+        return self.dash.live.page(BEAD)[1]["state"]
+
+    def report_crashes(self) -> list[str]:
+        trace = [{"bead": BEAD, "run": "other", "worktree": "", "repo": ""}]  # makes the bead's prefix one the report knows
+        at = matchers.stem_time(STAMP)  # a run belongs to the window its name's stamp is in
+        found = card.crashes("/no/repo", at - 3600, at + 3600, trace, now=self.now)
+        return [c["run"] for c in found]
+
+    def test_a_recent_record_reads_live_in_both(self):
+        self.now = self.t0 + 5 + N - 1
+        self.assertEqual(self.dash_says(), "live")
+        self.assertEqual(self.report_crashes(), [])
+
+    def test_a_run_killed_without_an_end_record_reads_crashed_within_2n_seconds(self):
+        for age in (N, 2 * N):
+            self.now = self.t0 + 5 + age
+            self.assertEqual(self.dash_says(), "crashed", age)
+            self.assertEqual(self.report_crashes(), [RUN], age)
+
+    def test_a_run_with_an_end_record_reads_ended_in_both(self):
+        put(self.log, [typed("close", self.t0 + 9, outcome="landed", why="")])
+        os.utime(self.log, (self.t0 + 9, self.t0 + 9))
+        self.now = self.t0 + 9 + 50 * N
+        self.assertEqual(self.dash_says(), "ended")
+        self.assertEqual(self.report_crashes(), [])
+
+
+class Sweep(unittest.TestCase):
+    def test_a_log_older_than_retain_goes_with_its_live_folder_and_a_recent_or_live_one_stays(self):
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as d:
+            cfg = ConfigDir(Path(d) / "task-loop")
+            now = 1_800_000_000.0
+
+            def make(run: str, written: float) -> None:
+                put(cfg.engine_log(run), [typed("beat", written)])
+                cfg.engine_log(run).with_suffix(".stderr").write_text("x")
+                (cfg.live_dir(run)).mkdir()
+                (cfg.live_dir(run) / "01-write.jsonl").write_text("{}\n")
+                for p in (cfg.engine_log(run), cfg.engine_log(run).with_suffix(".stderr")):
+                    os.utime(p, (written, written))
+
+            make("t-1-20261001-100000", now - RETAIN - 10)  # old
+            make("t-2-20261020-100000", now - RETAIN + 3600)  # recent
+            make("t-3-20261029-100000", now - 20)  # a live run
+            layout.prune_run_logs(cfg, now)
+            left = sorted(p.name for p in (cfg.root / "engine").iterdir())
+            self.assertEqual(left, sorted(f"{r}.{e}" for r in ("t-2-20261020-100000", "t-3-20261029-100000")
+                                          for e in ("jsonl", "stderr", "live")))
+            self.assertTrue((cfg.live_dir("t-3-20261029-100000") / "01-write.jsonl").exists())
+
+
+class BeatsAreNoEvents(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        self.addCleanup(self.tmp.cleanup)
+        self.cfg = Path(self.tmp.name) / "task-loop"
+        self.t0 = 1_800_000_000.0
+        self.log = self.cfg / "engine" / f"{RUN}.jsonl"
+
+    def test_100_beats_between_two_events_are_no_events(self):
+        put(self.log, started(self.t0))
+        put(self.log, [typed("beat", self.t0 + 2 + i) for i in range(100)])
+        put(self.log, [typed("warn", self.t0 + 200, text="slow")])
+        os.utime(self.log, (self.t0 + 200, self.t0 + 200))
+        dash = make_dash(config=self.cfg, clock=lambda: self.t0 + 201)
+        run = dash.live.live_run(str(self.log))
+        run.refresh()
+        self.assertEqual([e["k"] for e in live_api.page(run)["events"]], ["run_start", "step_start", "warn"])
+        self.assertEqual(dash.live.page(BEAD)[1]["state"], "live")
+        self.assertEqual(dash.runlogs.read(str(self.log))[-1].kind, "warn")
+
+    def test_liveness_reads_the_newest_records_after_the_log_rotates(self):
+        self.log.parent.mkdir(parents=True)
+        with JsonlLog.open(self.log, rotate_bytes=400, keep=3) as lg:
+            for i in range(30):
+                lg.append((json.dumps(typed("beat", self.t0 + i)) + "\n").encode())
+        self.assertTrue(self.log.with_name(self.log.name + ".1").exists())  # it did rotate
+        recs = jsonl.records(str(self.log), beats=True)
+        self.assertTrue(0 < len(recs) < 30)
+        self.assertEqual(recs[-1].t, self.t0 + 29)
+        self.assertIs(liveness(recs, self.t0 + 29 + 1), Liveness.LIVE)
+        self.assertIs(liveness(recs, self.t0 + 29 + N), Liveness.CRASHED)
+
+
+if __name__ == "__main__":
+    unittest.main()
