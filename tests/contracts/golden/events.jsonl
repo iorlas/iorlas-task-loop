@@ -1,12 +1,19 @@
 {"v": 2, "kind": "claim", "t": 1793050200.5, "bead": "tl-1", "session": "s", "actor": "tl-abc", "repo": "/r", "host": "h", "branch": "task/tl-1", "slot": "s1", "title": "T", "worktree": "/w"}
 {"v": 2, "kind": "stage", "t": 1793050200.5, "bead": "tl-1", "session": "s", "actor": "tl-abc", "repo": "/r", "host": "h", "step": "write", "text": "writing"}
 {"v": 2, "kind": "slot_take", "t": 1793050200.5, "bead": "tl-1", "session": "s", "actor": "tl-abc", "repo": "/r", "host": "h", "slot": "s1", "slot_bead": "slot-1", "ticket": 3, "worktree": "/w"}
-{"v": 2, "kind": "slot_release", "t": 1793050200.5, "bead": "tl-1", "session": "s", "actor": "tl-abc", "repo": "/r", "host": "h", "slot": "s1"}
-{"v": 2, "kind": "slot_setup", "t": 1793050200.5, "bead": "tl-1", "session": "s", "actor": "tl-abc", "repo": "/r", "host": "h", "exit": 0, "secs": 12.5}
-{"v": 2, "kind": "slot_hold", "t": 1793050200.5, "bead": "tl-1", "session": "s", "actor": "tl-abc", "repo": "/r", "host": "h", "until": 1793053800.5, "why": "screenshots"}
-{"v": 2, "kind": "slot_aside", "t": 1793050200.5, "bead": "tl-1", "session": "s", "actor": "tl-abc", "repo": "/r", "host": "h", "held": "tl-2", "why": "busy"}
+{"v": 2, "kind": "slot_release", "t": 1793050200.5, "bead": "tl-1", "session": "s", "actor": "tl-abc", "repo": "/r", "host": "h", "slot": "s1", "slot_bead": "slot-1"}
+{"v": 2, "kind": "slot_setup", "t": 1793050200.5, "bead": "tl-1", "session": "s", "actor": "tl-abc", "repo": "/r", "host": "h", "slot": "s1", "worktree": "/w", "exit": 0, "secs": 12.5}
+{"v": 2, "kind": "slot_hold", "t": 1793050200.5, "bead": "tl-1", "session": "s", "actor": "tl-abc", "repo": "/r", "host": "h", "slot": "s1", "slot_bead": "slot-1", "until": 1793053800.5, "why": "screenshots"}
+{"v": 2, "kind": "slot_aside", "t": 1793050200.5, "bead": "tl-1", "session": "s", "actor": "tl-abc", "repo": "/r", "host": "h", "slot": "s1", "held": true, "why": "busy"}
 {"v": 2, "kind": "block", "t": 1793050200.5, "bead": "tl-1", "session": "s", "actor": "tl-abc", "repo": "/r", "host": "h", "why_code": "needs_human", "why": "needs a human"}
 {"v": 2, "kind": "close", "t": 1793050200.5, "bead": "tl-1", "session": "s", "actor": "tl-abc", "repo": "/r", "host": "h", "reason": "done"}
 {"v": 2, "kind": "land", "t": 1793050200.5, "bead": "tl-1", "session": "s", "actor": "tl-abc", "repo": "/r", "host": "h", "sha": "abc"}
-{"v": 2, "kind": "reload", "t": 1793050200.5, "bead": "tl-1", "session": "s", "actor": "tl-abc", "repo": "/r", "host": "h", "code_dir": "/c", "new": "2", "old": "1", "who": "tl-abc", "why": ""}
+{"v": 2, "kind": "reload", "t": 1793050200.5, "bead": "tl-1", "session": "s", "actor": "tl-abc", "repo": "/r", "host": "h", "code_dir": "/c", "new": "2", "old": "1", "who": "tl-abc", "why": "", "step": "n3", "run": "r1"}
+{"v": 2, "kind": "reload_fallback", "t": 1793050200.5, "bead": "tl-1", "session": "s", "actor": "tl-abc", "repo": "/r", "host": "h", "who": "loop", "old": "2", "new": "1", "why": "crashed", "run": "r1"}
+{"v": 2, "kind": "slot_hold_expired", "t": 1793050200.5, "bead": "tl-1", "session": "s", "actor": "tl-abc", "repo": "/r", "host": "h", "slot": "s1", "slot_bead": "slot-1"}
 {"v": 2, "kind": "worktree_start", "t": 1793050200.5, "bead": "tl-1", "session": "s", "actor": "tl-abc", "repo": "/r", "host": "h", "worktree": "/w"}
+{"v": 2, "kind": "worktree_sunset", "t": 1793050200.5, "bead": "tl-1", "session": "s", "actor": "tl-abc", "repo": "/r", "host": "h", "worktree": "/w"}
+{"v": 2, "kind": "loop_exit", "t": 1793050200.5, "bead": "tl-1", "session": "s", "actor": "tl-abc", "repo": "/r", "host": "h", "who": "loop", "pid": 42, "reason": "idle", "detail": "no ready bead"}
+{"v": 2, "kind": "net_up", "t": 1793050200.5, "bead": "tl-1", "session": "s", "actor": "tl-abc", "repo": "/r", "host": "h", "who": "loop", "down_s": 90.0}
+{"v": 2, "kind": "net_down", "t": 1793050200.5, "bead": "tl-1", "session": "s", "actor": "tl-abc", "repo": "/r", "host": "h", "who": "loop", "why": "no route"}
+{"v": 2, "kind": "install_missing", "t": 1793050200.5, "bead": "tl-1", "session": "s", "actor": "tl-abc", "repo": "/r", "host": "h", "who": "loop", "version": "1", "running": "2", "target": "3"}

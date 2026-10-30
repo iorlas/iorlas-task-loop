@@ -52,7 +52,7 @@ class Slot:
         if not self.claimed():
             raise SlotFail("busy", f"slot {self.name} held by {held_by(peek(self.env.store, sb.id) or sb)}")
         mark_held(self.env, sb.id, why, bead=bead, gen=next_gen(sb))
-        self.env.event("slot-take", "", slot=self.name, slot_bead=sb.id, worktree=self.dir, repo=self.env.repo,
+        self.env.event("slot_take", "", slot=self.name, slot_bead=sb.id, worktree=self.dir, repo=self.env.repo,
                        **({"ticket": ticket} if ticket is not None else {}))
         return sb.id
 
@@ -100,7 +100,7 @@ class Slot:
         # its marks to this clean-up (race test, tl-bxk.11.1)
         clear_marks(self.env, b.id)
         self.pool.unclaim(b, force)
-        self.env.event("slot-release", "", slot=self.name, slot_bead=b.id, repo=self.env.repo)
+        self.env.event("slot_release", "", slot=self.name, slot_bead=b.id, repo=self.env.repo)
         return True
 
 
@@ -176,5 +176,5 @@ class SlotPool:
                 clear_marks(self.env, b.id)  # first: see Slot.release_locked
                 if b.status == "in_progress" and (b.assignee in ("", b.metadata.get("held_by")) or b.assignee.startswith("tl-")):
                     self.unclaim(b, force=True)
-                self.env.event("slot-hold-expired", "", slot=b.title.split()[-1], slot_bead=b.id, repo=self.env.repo)
+                self.env.event("slot_hold_expired", "", slot=b.title.split()[-1], slot_bead=b.id, repo=self.env.repo)
 

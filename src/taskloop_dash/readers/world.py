@@ -107,7 +107,7 @@ class Worlds:
         env = self.env
         now, runs = env.clock(), self.runs(full)
         projects = [self.project(i, p) for i, p in self.repos().items()]
-        events = self.records.seen_events()
+        events = self.records.events()
         paths = self.repos()
         projects = [replace(p, strays=strays_of(p.beads, p.slots, runs, now),
                             events=[e for e in events if e.repo and (e.repo == paths[p.id] or basename(e.repo) == p.id)]) for p in projects]

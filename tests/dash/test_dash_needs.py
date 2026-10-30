@@ -11,6 +11,7 @@ from support.dashlogs import T, bead
 
 from taskloop.contracts.ask import Ask, AskOption
 from taskloop.contracts.enums import AskClass, AskKind, AskStatus
+from taskloop.contracts.events import Block, Claim, SlotAside, SlotHold, SlotSetup
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.loop import LoopState, QueueRow, Skip
 from taskloop.contracts.parks import Park
@@ -19,7 +20,7 @@ from taskloop.contracts.run import NetPause
 from taskloop.contracts.snapshots import LaneStatus, NeedInput, StatusSnapshot
 from taskloop_dash.readers.observed import strays_of
 from taskloop_dash.views import snapshot
-from taskloop_dash.views.world import ProjectIn, Seen, World
+from taskloop_dash.views.world import ProjectIn, World
 
 NOW = T + 36000
 
@@ -67,8 +68,8 @@ class Kinds(unittest.TestCase):
 
     def test_a_blocked_bead_says_the_reason_of_its_block_event_and_when(self):
         w = world([bead("p-2", "Pick format", "blocked", updated_at=iso(NOW - 100))],
-                  events=[Seen(kind="block", t=NOW - 7000, bead="p-2", why="needs a human: pick the format"),
-                          Seen(kind="block", t=NOW - 5000, bead="p-2", why="needs a human: later")])
+                  events=[Block(t=NOW - 7000, bead="p-2", why="needs a human: pick the format"),
+                          Block(t=NOW - 5000, bead="p-2", why="needs a human: later")])
         r = one(w, "block")
         self.assertEqual((r.bead, r.why, r.since), ("p-2", "needs a human: later", NOW - 5000))
 
@@ -102,13 +103,13 @@ class Kinds(unittest.TestCase):
 
     def test_a_held_slot_shows_who_why_until_when_and_since_its_hold_event(self):
         w = world(slots=[slot("a", hold_until=str(int(NOW) + 1800), held_by="denis", held_why="testing by hand")],
-                  events=[Seen(kind="slot_hold", t=NOW - 300, slot="a", why="testing by hand", until=NOW + 1800)])
+                  events=[SlotHold(bead="", t=NOW - 300, slot="a", why="testing by hand", until=NOW + 1800)])
         r = one(w, "slot_held")
         self.assertEqual((r.why, r.since, r.until, r.bead), ("slot a: testing by hand", NOW - 300, NOW + 1800, None))
 
     def test_a_slot_the_loop_set_aside_is_told_from_one_a_person_holds(self):
         w = world(slots=[slot("b", hold_until=str(int(NOW) + 900), held_why="set aside by tl loop: 3 runs failed")],
-                  events=[Seen(kind="slot_hold", t=NOW - 400, slot="b"), Seen(kind="slot_aside", t=NOW - 300, bead="p-1", slot="b")])
+                  events=[SlotHold(bead="", t=NOW - 400, slot="b"), SlotAside(t=NOW - 300, bead="p-1", slot="b")])
         r = one(w, "slot_aside")
         self.assertEqual((r.why, r.since), ("slot b: set aside by tl loop: 3 runs failed", NOW - 300))
 
@@ -116,10 +117,10 @@ class Kinds(unittest.TestCase):
         self.assertEqual(needs(world(slots=[slot("a", hold_until=str(int(NOW) - 5))])), [])
 
     def test_a_slot_whose_last_setup_failed_is_a_row_until_a_setup_passes(self):
-        bad = [Seen(kind="slot_setup", t=NOW - 800, slot="c", exit=2)]
+        bad = [SlotSetup(bead="", t=NOW - 800, slot="c", exit=2)]
         r = one(world(slots=[slot("c")], events=bad), "slot_setup")
         self.assertEqual((r.why, r.since), ("slot c: setup failed (exit 2)", NOW - 800))
-        self.assertEqual(needs(world(slots=[slot("c")], events=[*bad, Seen(kind="slot_setup", t=NOW - 100, slot="c")])), [])
+        self.assertEqual(needs(world(slots=[slot("c")], events=[*bad, SlotSetup(bead="", t=NOW - 100, slot="c")])), [])
 
     def test_a_claim_nothing_runs_under_is_a_stray_row(self):
         b = bead("p-6", "Lost", "in_progress", assignee="tl-x", lease_expires_at=iso(NOW - 60))
@@ -159,7 +160,7 @@ class Health(unittest.TestCase):
 
     def test_a_loop_with_ready_beads_and_no_event_for_the_stall_time_is_stalled(self):
         w = world([bead("p-1", "x")], loops=[loop([row("p-1")], started=NOW - 9000)],
-                  events=[Seen(kind="claim", t=NOW - LOOP_STALL_S - 60, bead="p-0", repo="/r/p")])
+                  events=[Claim(t=NOW - LOOP_STALL_S - 60, bead="p-0", repo="/r/p")])
         i = self.info(w)
         self.assertEqual((i.health, i.ready, i.quiet_since), ("stalled", 1, NOW - LOOP_STALL_S - 60))
         r = one(w, "stalled")
@@ -167,8 +168,8 @@ class Health(unittest.TestCase):
         self.assertIn("1 ready bead(s)", r.why)
 
     def test_an_event_inside_the_stall_time_a_running_bead_or_nothing_ready_is_no_stall(self):
-        ev = [Seen(kind="claim", t=NOW - LOOP_STALL_S + 60)]
-        quiet = [Seen(kind="claim", t=NOW - LOOP_STALL_S - 60)]
+        ev = [Claim(bead="", t=NOW - LOOP_STALL_S + 60)]
+        quiet = [Claim(bead="", t=NOW - LOOP_STALL_S - 60)]
         for name, w in {
             "recent event": world([bead("p-1", "x")], loops=[loop([row("p-1")])], events=ev),
             "running bead": world([bead("p-1", "x")], loops=[loop([row("p-1")], bead="p-9")], events=quiet),
@@ -179,7 +180,7 @@ class Health(unittest.TestCase):
                 self.assertEqual(self.info(w).health, "ok")
 
     def test_a_loop_that_just_started_is_not_stalled_before_it_has_had_the_time(self):
-        w = world([bead("p-1", "x")], loops=[loop([row("p-1")], started=NOW - 100)], events=[Seen(kind="claim", t=NOW - 99999)])
+        w = world([bead("p-1", "x")], loops=[loop([row("p-1")], started=NOW - 100)], events=[Claim(bead="", t=NOW - 99999)])
         self.assertEqual(self.info(w).health, "ok")
 
     def test_ready_beads_and_no_loop_for_the_absent_time_is_the_noloop_finding(self):

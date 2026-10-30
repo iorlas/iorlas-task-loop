@@ -13,6 +13,7 @@ from typing import Final, Literal
 
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.dash import LoopInfo
+from taskloop.contracts.events import Block, EventRec, SlotAside, SlotHold, SlotSetup
 from taskloop.contracts.loop import LoopState
 from taskloop.contracts.needs import NeedRow
 from taskloop.contracts.reconcile import LOOP_ABSENT_S, LOOP_STALL_S, LoopFact, loop_absent
@@ -20,7 +21,7 @@ from taskloop.contracts.snapshots import LaneStatus, NeedInput
 from taskloop_dash.views import floor
 from taskloop_dash.views.board import LOOP_STALE, ask_facts, blockers, is_work, when
 from taskloop_dash.views.lanecards import state_of
-from taskloop_dash.views.world import ProjectIn, Seen, World
+from taskloop_dash.views.world import ProjectIn, World
 
 WAITS: Final = {  # the labels that put a bead on the owner, and what each asks of him
     "needs-ac": "needs acceptance criteria",
@@ -34,8 +35,9 @@ def live_loops(p: ProjectIn, now: float) -> list[LoopState]:
     return [s for s in p.loops if now - s.t < LOOP_STALE]
 
 
-def last_event(p: ProjectIn, *kinds: str, slot: str = "", bead: str = "") -> Seen | None:
-    hits = [e for e in p.events if (not kinds or e.kind in kinds) and (not slot or e.slot == slot) and (not bead or e.bead == bead)]
+def last_event[E: EventRec](p: ProjectIn, kinds: type[E], slot: str = "", bead: str = "") -> E | None:
+    """The newest event of the record class `kinds` (a class or a union of classes) of this slot (events that name one) or bead."""
+    hits = [e for e in p.events if isinstance(e, kinds) and (not slot or getattr(e, "slot", "") == slot) and (not bead or e.bead == bead)]
     return max(hits, key=lambda e: e.t, default=None)
 
 
@@ -88,7 +90,7 @@ def bead_rows(w: World, p: ProjectIn) -> list[NeedRow]:
         if hit:
             out.append(NeedRow(kind="label", project=p.id, bead=b.id, why=WAITS[hit], since=since_of(b), title=b.title))
         elif b.status == "blocked":
-            ev = last_event(p, "block", bead=b.id)
+            ev = last_event(p, Block, bead=b.id)
             out.append(NeedRow(kind="block", project=p.id, bead=b.id, why=ev.why if ev and ev.why else "blocked, no reason recorded",
                                since=ev.t if ev else since_of(b), title=b.title))
         elif park and park[1].kind in ("parked", "capped"):
@@ -106,11 +108,11 @@ def slot_rows(w: World, p: ProjectIn) -> list[NeedRow]:
     for b in p.slots:
         name = floor.slot_name(b)
         if floor.hold_until(b) > w.now:
-            ev = last_event(p, "slot_hold", "slot_aside", slot=name)
-            out.append(NeedRow(kind="slot_aside" if ev and ev.kind == "slot_aside" else "slot_held", project=p.id, bead=None,
+            ev = last_event(p, SlotHold | SlotAside, slot=name)
+            out.append(NeedRow(kind="slot_aside" if isinstance(ev, SlotAside) else "slot_held", project=p.id, bead=None,
                                why=f"slot {name}: {b.metadata.get('held_why') or (ev and ev.why) or 'held'}",
                                since=ev.t if ev else None, until=floor.hold_until(b)))
-        setup = last_event(p, "slot_setup", slot=name)
+        setup = last_event(p, SlotSetup, slot=name)
         if setup and setup.exit:
             out.append(NeedRow(kind="slot_setup", project=p.id, bead=None,
                                why=f"slot {name}: setup failed (exit {setup.exit})", since=setup.t))

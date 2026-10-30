@@ -133,7 +133,7 @@ def setup(slot: Slot, force: bool = False) -> None:
         return
     t = env.now()
     rc = env.run_setup(cfg.setup, d)
-    env.event("slot-setup", "", slot=slot.name, worktree=d, exit=rc, secs=round(env.now() - t), repo=env.repo)
+    env.event("slot_setup", "", slot=slot.name, worktree=d, exit=rc, secs=round(env.now() - t), repo=env.repo)
     if rc != 0:
         raise SlotFail("slot_broken", f"setup exited {rc}")
     mark.write_text(digest)

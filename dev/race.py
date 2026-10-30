@@ -353,7 +353,7 @@ class Race(unittest.TestCase):
     def check_the_slot_line(self, msg):
         # the slot line: takes by waiters in ticket order; no ticket left
         events = jsonl(self.h / "cfg" / "task-loop" / "events.jsonl")
-        tickets = [e["ticket"] for e in events if e["kind"] == "slot-take" and "ticket" in e]
+        tickets = [e["ticket"] for e in events if e["kind"] == "slot_take" and "ticket" in e]
         self.assertGreaterEqual(len(tickets), 2, msg)
         self.assertEqual(tickets, sorted(set(tickets)), "slots not served in ticket order" + msg)
         self.assertEqual(list((self.h / "cfg" / "task-loop" / "slots").glob("*/*.json")), [], msg)
@@ -361,9 +361,9 @@ class Race(unittest.TestCase):
         # the race happened: two slots were in use at once (from the slot takes and releases tl.py records)
         inuse, busy = {}, 0
         for e in events:
-            if e["kind"] == "slot-take":  # a loop's or the hand run's, never the hold
+            if e["kind"] == "slot_take":  # a loop's or the hand run's, never the hold
                 inuse[e["slot"]] = True
-            elif e["kind"] == "slot-release":
+            elif e["kind"] == "slot_release":
                 inuse.pop(e["slot"], None)
             busy = max(busy, len(inuse))
         self.assertGreaterEqual(busy, 2, "never two slots in use at once: the race never happened" + msg)

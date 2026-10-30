@@ -7,7 +7,8 @@ import os
 from dataclasses import dataclass
 from typing import Any
 
-from taskloop.contracts import wire
+from taskloop.contracts import events, wire
+from taskloop.contracts.events import Event
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.parks import Park
 from taskloop.contracts.run import NetPause
@@ -16,7 +17,6 @@ from taskloop.contracts.stores import JsonStore, ReposStore
 from taskloop.contracts.trace import RunTrace
 from taskloop_dash.env import Env
 from taskloop_dash.views import names
-from taskloop_dash.views.world import Seen
 
 Span = dict[str, Any]
 
@@ -32,39 +32,26 @@ class Records:
     def __init__(self, env: Env) -> None:
         self.env = env
 
-    def events(self) -> list[dict[str, Any]]:
-        """events.jsonl rows of the last week, re-read when the file changes."""
+    def events(self) -> list[Event]:
+        """The events of the last week, re-read when the file changes. A row that is not an Event of this version (an older `v`, an
+        unknown kind, bad JSON) is skipped, never read as something it is not."""
         cut = self.env.clock() - RETAIN
 
-        def load(path: str) -> list[dict[str, Any]]:
-            out: list[dict[str, Any]] = []
+        def load(path: str) -> list[Event]:
+            out: list[Event] = []
             try:
                 with open(path, encoding="utf-8", errors="replace") as fh:
                     for ln in fh:
                         try:
-                            e = json.loads(ln)
+                            e = events.decode(json.loads(ln))
                         except ValueError:
                             continue
-                        if isinstance(e, dict) and e.get("t", 0) >= cut:
+                        if e.t >= cut:
                             out.append(e)
             except OSError:
                 pass
             return out
         return self.env.files.get(str(self.env.config.events()), load, [])
-
-    def seen_events(self) -> list[Seen]:
-        """The events of the last week the needs list reads, as written: the writer (app/track/trail.event) sets no `v` and spells a kind
-        `slot-hold`, so the strict contracts.events.decode would drop every row; only the fields the list uses are read."""
-        out: list[Seen] = []
-        for e in self.events():
-            try:
-                out.append(Seen(kind=str(e["kind"]).replace("-", "_"), t=float(e["t"]), bead=str(e.get("bead") or ""),
-                                repo=str(e.get("repo") or ""),
-                                why=str(e.get("why") or ""), until=float(e["until"]) if e.get("until") else None,
-                                exit=int(e.get("exit") or 0), slot=str(e.get("slot") or "")))
-            except (KeyError, TypeError, ValueError):
-                continue
-        return out
 
     def parks(self) -> dict[str, Park]:
         """bead -> its Park record (left by runs that ended on a question; the loop skips the bead while its text is the same)."""

@@ -109,12 +109,12 @@ class WiringTest(unittest.TestCase):
     def test_tl_event_keeps_one_handle_for_events_jsonl_and_flushes_each_line(self):
         path = ident.config_dir() / "events.jsonl"
         path.parent.mkdir(parents=True, exist_ok=True)
-        trail.event("a", "b-1", repo=self.tmp.name)  # a given repo: no git to ask (its answer is memoized by earlier tests)
+        trail.event("stage", "b-1", repo=self.tmp.name)  # a given repo: no git to ask (its answer is memoized by earlier tests)
         with open(path, encoding="utf-8") as reader:
-            self.assertEqual(json.loads(reader.readline())["kind"], "a")
+            self.assertEqual(json.loads(reader.readline())["kind"], "stage")
             for i in range(100):
-                trail.event("n", "b-1", repo=self.tmp.name, i=i)
-                self.assertEqual(json.loads(reader.readline())["i"], i)
+                trail.event("stage", "b-1", repo=self.tmp.name, text=str(i))
+                self.assertEqual(json.loads(reader.readline())["text"], str(i))
         lines = path.read_text(encoding="utf-8").splitlines()
         self.assertEqual(len(lines), 101)
         self.assertEqual(applog.open_count(path), 1)

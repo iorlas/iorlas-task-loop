@@ -210,7 +210,7 @@ def start_worktree(repo: str, name: str | None = None) -> str:
             REAL.add_worktree(repo, str(d), "origin/main")
         except SlotGitError as e:
             sys.exit(e.tail)
-    event("worktree-start", "", worktree=str(d), repo=repo)
+    event("worktree_start", "", worktree=str(d), repo=repo)
     return str(d)
 
 
@@ -244,7 +244,7 @@ def worktree(op: str, self_too: bool = False) -> int:
             print("KEEP dirty " + str(d))
             continue
         REAL.remove_worktree(repo, str(d))
-        event("worktree-sunset", "", worktree=str(d), repo=repo)
+        event("worktree_sunset", "", worktree=str(d), repo=repo)
         print("REMOVED " + str(d))
     REAL.prune_worktrees(repo)
     return 0

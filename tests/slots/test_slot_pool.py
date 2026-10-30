@@ -170,7 +170,7 @@ class Taking(Rig):
         self.assertTrue(self.slot().release(mine=True))
         b = self.bd.beads[sb]
         self.assertEqual((b.status, b.metadata.get("held_by")), ("open", None))
-        self.assertEqual([e[0] for e in self.events], ["slot-take", "slot-release"])
+        self.assertEqual([e[0] for e in self.events], ["slot_take", "slot_release"])
 
     def test_busy_when_held_or_running_and_broken_when_there_is_no_such_slot(self):
         self.slot().take("a")

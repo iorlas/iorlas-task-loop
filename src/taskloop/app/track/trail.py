@@ -13,6 +13,8 @@ from taskloop.adapters import applog
 from taskloop.adapters.beadtools import bd_store
 from taskloop.adapters.gitrepo import repo_root
 from taskloop.adapters.ident import actor, config_dir, session_id
+from taskloop.contracts import events, wire
+from taskloop.contracts.events import Event, EventRec
 from taskloop.contracts.guard import guard
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.paths import ConfigDir
@@ -27,14 +29,16 @@ def now() -> float:
     return time.time()
 
 
-def event(kind: str, bead: str = "", **fields: Any) -> dict[str, Any]:
-    """One line per event in events.jsonl: the dashboard's fast local index (transcripts are local too)."""
-    rec: dict[str, Any] = {"t": now(), "kind": kind, "bead": bead, "session": session_id(), "actor": actor(),
-                           "repo": fields.pop("repo", None) or repo_root(), "host": socket.gethostname()}
-    rec.update({k: v for k, v in fields.items() if v is not None})
-    with guard(events_lock(ConfigDir(config_dir()))):  # prune_events rewrites the file under this lock
-        applog.append(ConfigDir(config_dir()).events(), json.dumps(rec, ensure_ascii=False) + "\n")  # tl-64i: one held handle per process
-    register_repo(rec["repo"])
+def event(kind: str, bead: str = "", **fields: Any) -> Event:
+    """The one writer of events.jsonl (the dashboard's fast local index): a line is the typed Event record of `kind` (a name of
+    contracts/events.py) with its fields, `v` first. A kind or field the contract does not name is refused here, never written."""
+    head = {"t": now(), "kind": kind, "bead": bead, "session": session_id(), "actor": actor(),
+            "repo": fields.pop("repo", None) or repo_root(), "host": socket.gethostname()}
+    rec = events.decode({"v": EventRec.V, **head, **{k: v for k, v in fields.items() if v is not None}})
+    cfg = ConfigDir(config_dir())
+    with guard(events_lock(cfg)):  # prune_events rewrites the file under this lock
+        applog.append(cfg.events(), json.dumps(wire.dump(rec), ensure_ascii=False) + "\n")  # tl-64i: one held handle per process
+    register_repo(rec.repo)
     return rec
 
 

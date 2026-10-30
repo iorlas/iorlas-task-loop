@@ -62,7 +62,7 @@ def hold(env: SlotEnv, a: Any) -> int:
             return 1
         until = env.now() + float(a.for_min if a.for_min is not None else 60) * 60
         mark_held(env, b.id, a.why, until, gen=next_gen(b))
-    env.event("slot-hold", "", slot=a.name, slot_bead=b.id, why=a.why, until=until, repo=env.repo)
+    env.event("slot_hold", "", slot=a.name, slot_bead=b.id, why=a.why, until=until, repo=env.repo)
     env.say(f"HELD {a.name} until {stamp(until)}: {a.why}")
     return 0
 

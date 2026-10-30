@@ -141,9 +141,9 @@ class Logs(unittest.TestCase):
             f = ConfigDir(Path(tmp.name) / "task-loop").events()
             f.parent.mkdir(parents=True)
             f.write_text((json.dumps({"t": 0, "kind": "old"}) + "\n") * 120000)
-            wrapped, started = during(os.replace, lambda: trail.event("late", "tl-1", repo="/r/x"))
+            wrapped, started = during(os.replace, lambda: trail.event("stage", "tl-1", repo="/r/x"))
             with mock.patch("os.replace", wrapped):
                 trail.prune_events()
             for t in started:
                 t.join(30)
-            self.assertEqual([json.loads(ln)["kind"] for ln in f.read_text().splitlines()], ["late"])
+            self.assertEqual([json.loads(ln)["kind"] for ln in f.read_text().splitlines()], ["stage"])

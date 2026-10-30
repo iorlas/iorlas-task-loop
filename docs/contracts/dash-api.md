@@ -69,8 +69,8 @@ in-process Port call (as `Ports.answer` is today), never a raw bd argv. Auth sta
   events) and failed `slot_setup`; reconcile strays; a stalled loop. Beads with an open ask are not rows (Decisions). `ServerInfo.loops[]`
   carries the strip: `health` ok, `stalled` (a loop beats, holds no bead, `ready` beads wait and the repo logged no event for
   `LOOP_STALL_S`, `contracts/reconcile.py`) or `absent` (the reconcile NoLoop rule, `LOOP_ABSENT_S`). Not shown: the storm stop (its file
-  is read by an adapter) and a loop's in-memory network wait. events.jsonl rows carry no `v` and spell kinds `slot-hold`, so the
-  dashboard reads them tolerantly (`Records.seen_events`), not through `events.decode`.
+  is read by an adapter) and a loop's in-memory network wait. events.jsonl rows are the typed `Event` records
+  (`trail.event` is the one writer); the dashboard reads them with `events.decode` and skips a row that does not decode.
 - **park, stop, note** (built, backend item 7) are the bead's newest run's request file `runs/<run>/owner-request.json`
   (`contracts/requests.py` `OwnerRequest {park, stop, notes[], by, t}`, merged under `owner-request.lock`, `app/run/requests.py`).
   The engine takes it at every step boundary (`Steps` guard, and before each worker call): `park` ends the run there as

@@ -50,6 +50,11 @@ class StateFilesHaveOneWriter(unittest.TestCase):
         stale = {k: v for k, v in ALLOWED.items() if got.get(k, 0) < v}
         self.assertEqual(stale, {}, "a listed site moved: lower or delete its entry")
 
+    def test_events_jsonl_has_one_writer(self):
+        """EVENTSV: under app only trail.py names the events file (`.events()`): every event goes through trail.event."""
+        named = sorted(str(f.relative_to(ROOT)) for f in APP.rglob("*.py") if ".events()" in f.read_text(encoding="utf-8"))
+        self.assertEqual(named, ["src/taskloop/app/track/trail.py"])
+
     def test_the_scan_sees_planted_writes(self):
         src = "import os\nos.replace(a, b)\np.write_text(json.dumps(x))\np.write_text('md')\n"
         self.assertEqual(hand_writes(ast.parse(src)), [2, 3])

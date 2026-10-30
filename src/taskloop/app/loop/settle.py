@@ -43,7 +43,7 @@ class Settle:
         held = verbs.hold(self.env.slot_env(), ask) == 0
         hours = int(t.slot_aside_min // 60)
         self.say(f"SLOT {name} " + (f"SET ASIDE for {hours} h" if held else "could not be set aside (another loop has it)") + f": {why}")
-        self.env.event("slot-aside", bid, slot=name, why=why, held=held, repo=self.env.repo)
+        self.env.event("slot_aside", bid, slot=name, why=why, held=held, repo=self.env.repo)
         if held:
             self.c.fails = [f for f in self.c.fails if f not in quick]
             self.c.slot_quick[name] = []
