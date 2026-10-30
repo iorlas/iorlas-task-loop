@@ -1,6 +1,6 @@
 """The one stores rule no linter holds: only the real implementations touch the disk. The rest of the stores rules are the layer
 contracts in .importlinter (no domain, no re), ruff TID251 in stores/ruff.toml (no subprocess, no socket), D100 (a docstring on every
-module) and tests/gate_rules.py (the caps)."""
+module) and tests/rules/gate_rules.py (the caps)."""
 import ast
 import sys
 import unittest

@@ -15,7 +15,6 @@ from taskloop.contracts import answers, schema, wire
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tests"))
 import contracts.test_response_format as strict_test  # noqa: E402
-
 from contracts import samples  # noqa: E402
 from taskloop.contracts import enums  # noqa: E402
 from taskloop.contracts.wire import Rec  # noqa: E402

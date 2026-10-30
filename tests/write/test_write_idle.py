@@ -8,23 +8,19 @@ import inspect
 import json
 import os
 import sys
-import tempfile
 import textwrap
-import time
 import unittest
 from pathlib import Path
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
-from support.procsim import real_proc
 
 # isort: split
 from support import engine_case as te
 from support import fake_route
-from support.narrow import must
 
-from taskloop.adapters import procs, runner
+from taskloop.adapters import runner
 from taskloop.adapters.delegate import Stopped
 from taskloop.app.run import engine
 from taskloop.app.wire import slots as wslots
@@ -72,51 +68,6 @@ class NoEngineSideSilence(unittest.TestCase):
         for key in ("write_idle_warn_min", "write_idle_stop_min"):
             with self.assertRaises(ConfigError):
                 load({"engine": {key: 15}})
-
-
-@real_proc("a real route.py with a worker in its own session: the live file read while it runs, the wall-limit kill of its group")
-@unittest.skipUnless(POSIX, "process groups")
-class StreamRunnerCall(unittest.TestCase):
-    def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
-        self.d = Path(self.tmp.name)
-        (self.d / "route.py").write_text(ROUTE)
-        self.live = str(self.d / "x.live" / "01-write.jsonl")
-        for p in (mock.patch.object(runner, "POLL_S", 0.05),):
-            p.start()
-            self.addCleanup(p.stop)
-        self.addCleanup(self.cleanup_worker)
-
-    def cleanup_worker(self):
-        f = self.d / "w.pid"
-        if f.exists() and f.read_text():
-            procs.stop_pid(int(f.read_text()), grace=0.2)
-        self.tmp.cleanup()
-
-    def run_route(self, mode="", wall=60.0, on_worker=None, **env):
-        r = runner.StreamRunner(self.d / "err.log", wall, self.live, on_worker, grace=0.5)
-        cmd = [sys.executable, str(self.d / "route.py"), "--cwd", str(self.d)]
-        return r, lambda: r(cmd, cwd=str(self.d), env=dict(os.environ, FAKE_MODE=mode, DELEGATE_LIVE_FILE=self.live, **env), timeout=wall)
-
-    def worker_pid(self):
-        return int((self.d / "w.pid").read_text())
-
-    def test_the_worker_is_read_from_the_live_files_first_line_and_a_quiet_one_is_not_stopped(self):
-        """Silence is delegate's: the engine's runner stops a call only at the wall limit or a stop of the run."""
-        seen = []
-        r, go = self.run_route("chatty", on_worker=seen.append, CHAT_UNTIL=str(time.time() + 0.4))
-        done = go()
-        self.assertEqual((must(r.worker).pid, must(r.worker).run_id), (self.worker_pid(), "run1"))
-        self.assertEqual(seen, [r.worker])
-        self.assertEqual(done.returncode, 0)
-        self.assertEqual(r.stop, {})
-
-    def test_the_wall_limit_stops_the_call_through_stream_proc(self):
-        r, go = self.run_route("", wall=0.8)
-        with self.assertRaises(Stopped):
-            go()
-        self.assertEqual(r.stop["kind"], "wall")
-        self.assertFalse(procs.alive(self.worker_pid()))
 
 
 class SurvivorBlocksTheRetry(te.EngineTest):

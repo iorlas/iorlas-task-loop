@@ -1,4 +1,9 @@
-"""pytest wiring: per-worker isolation for `pytest -n N`, the address-space cap and the serial group."""
+"""pytest wiring: per-worker isolation for `pytest -n N`, the address-space cap, the serial group and the three test kinds.
+
+A test's kind comes from its path, never from a hand marker: a file under tests/e2e/ is `e2e` (a whole flow), a file under a `real/`
+folder (tests/<slice>/real/) is `real` (real git, processes or sockets), anything else is logic (fakes, in process, fast). The older
+`@real_proc(reason)` and `@real_git(reason)` marks on a single test fold into `real`. Guards (tests/support/procsim.py): a logic test that
+spawns, forks or runs real git fails; a `real` test that never spawns fails. A test over its kind's time limit fails (LIMITS_S)."""
 import contextlib
 import ctypes
 import os
@@ -14,6 +19,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import procsim
 
+KIND = pytest.StashKey[str]()
+SKIPPED = pytest.StashKey[bool]()
+
 # Tests that must not share a clock, a port, a lock or a process group with another test running at the same moment: they are marked
 # `serial`, and the release gate runs them in ONE process after the parallel workers (`-m "not serial"`, then `-m serial`).
 SERIAL = {
@@ -23,10 +31,51 @@ SERIAL = {
 WORKER_MB = int(os.environ.get("TL_WORKER_MB") or 2048)
 
 
+# Seconds a test's call may take, by kind, set from measured runs under 8 xdist workers (2026-10-30): logic max 1.4 s (the gitsim engine
+# tests; 311 of 2261 pass 0.2 s, the target the limit comes down to as they speed up), real max 4.4 s, e2e max 2.5 s.
+# TL_TIME_SCALE multiplies them.
+LIMITS_S = {"logic": 2.0, "real": 15.0, "e2e": 30.0}
+RULES_LIMIT_S = 15.0
+TESTS_DIR = Path(__file__).resolve().parent
+
+
+def kind_of(item) -> str:
+    """logic / real / e2e: by path first (tests/e2e/..., tests/<slice>/real/...), then a single test's own real_proc / real_git mark."""
+    here = Path(str(item.path)).resolve()
+    if TESTS_DIR not in here.parents:  # this file loaded as a plugin (-p conftest) into a tree that is not ours
+        return "logic"
+    parts = here.relative_to(TESTS_DIR).parts
+    if parts[0] == "e2e":
+        return "e2e"
+    func = getattr(item, "obj", None)
+    if "real" in parts[:-1] or item.get_closest_marker("real_proc") or getattr(func, "real_git", None):
+        return "real"
+    return "logic"
+
+
 def pytest_collection_modifyitems(items):
     for item in items:
-        if item.module.__name__ in SERIAL:
+        if item.module.__name__.rpartition(".")[2] in SERIAL:
             item.add_marker(pytest.mark.serial)
+        kind = kind_of(item)
+        item.stash[KIND] = kind
+        if kind != "logic":
+            item.add_marker(getattr(pytest.mark, kind))
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    """A test whose call ran past its kind's limit fails, with the limit and the time in the message."""
+    outcome = yield
+    report = outcome.get_result()
+    if call.when == "call" and report.skipped:
+        item.stash[SKIPPED] = True  # a skipped test spawned nothing, and a real one is not failed for it
+    limit = LIMITS_S[item.stash.get(KIND, "logic")] * float(os.environ.get("TL_TIME_SCALE") or 1)
+    if (TESTS_DIR / "rules") in Path(str(item.path)).parents:
+        limit = max(limit, RULES_LIMIT_S)  # the gate's rules read the whole tree
+    if call.when == "call" and report.passed and call.duration > limit:
+        report.outcome = "failed"
+        report.longrepr = f"{item.nodeid}: a {item.stash.get(KIND, 'logic')} test took {call.duration:.2f} s, over its {limit:.2f} s limit"
 
 
 def pytest_ignore_collect(collection_path, config):
@@ -40,13 +89,14 @@ def pytest_ignore_collect(collection_path, config):
 
 @pytest.fixture(autouse=True)
 def procs(request):
-    """The process sim of this test (tests/support/procsim.py): fakes answer the checks, a real spawn fails the test unless it is marked
-    `real_proc` (git is the gitsim's, or a `real_git` test's)."""
-    world = procsim.Procs(request.node.nodeid, guarded=request.node.get_closest_marker("real_proc") is None)
+    """The process sim of this test (tests/support/procsim.py): fakes answer the checks, a real spawn (git too) fails a logic test, and a
+    `real` test that spawned nothing fails."""
+    kind = request.node.stash.get(KIND, "logic")
+    world = procsim.Procs(request.node.nodeid, guarded=kind == "logic")
     with contextlib.ExitStack() as stack:
         world.install(stack)
         yield world
-    world.check()
+    world.check(must_spawn=kind == "real" and not request.node.stash.get(SKIPPED, False))
 
 
 def cap_memory(megabytes):

@@ -21,10 +21,9 @@ from support import (
     procsim,
     tlbd,
 )
-from support.engine_case import CLEAN, PLAN, WRITE, real_git, stop, verdict
-from support.pushsim import CUT, pusher
+from support.engine_case import CLEAN, PLAN, WRITE, stop, verdict
 
-from taskloop.adapters import gitrepo, ident
+from taskloop.adapters import ident
 from taskloop.app.loop.gate import GateRole
 from taskloop.app.release import reexec
 from taskloop.contracts.config import LoopConfig
@@ -163,53 +162,6 @@ class Checks(NetBase):
         self.assertEqual(s.calls[0][1], "net-review")
         self.assertEqual(count.read_text(), "1")  # the tree did not change: the green result was kept
         self.assertEqual(self.eng.result()["outcome"], "landed")
-
-
-class Land(NetBase):
-    """The push is the one step with no AI call: a network error waits for the probe, and a push the server took is not repeated."""
-
-    @real_git("the land script is a child process that runs git push itself")
-    def test_a_push_the_network_cut_resumes_after_the_probe_and_lands_once(self):
-        count = Path(self.tmp.name, "pushes")
-        land = pusher("cut-push", count, cut_first=2)
-        probe = Cycling(2)
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, probe=probe, land=land)
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertEqual(Counter(s.nodes), Counter({"plan": 1, "write": 1, "review": 1}))  # no step again for a failed push
-        self.assertTrue(self.closed and self.closed[0].startswith("merged"))
-        self.assertEqual(gitrepo.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
-        self.assertGreaterEqual(probe.calls, 2)
-        self.assertEqual(count.read_text(), "3")  # two cuts, then the push
-        self.assert_no_charge()
-
-    @real_git("the land script is a child process that runs git push itself")
-    def test_a_push_the_server_took_before_the_connection_dropped_is_not_pushed_again(self):
-        count = Path(self.tmp.name, "pushes")
-        land = pusher("took-push", count, then_fail=CUT)
-        rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, probe=Cycling(1), land=land)
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertEqual(count.read_text(), "1")  # pushed once; the second look found it on the base
-        self.assertTrue(self.closed and self.closed[0].startswith("merged"))
-        subjects = gitrepo.git("log", "--format=%s", "origin/main", cwd=str(self.wt)).splitlines()  # pyrefly: ignore[missing-attribute]
-        self.assertEqual(sum("(t-1)" in x for x in subjects), 1)  # one commit of the bead on the base
-        self.assertIn("already", self.eng.log_path.read_text())
-        self.assert_no_charge()
-
-    @real_git("the land script is a child process that runs git push itself")
-    def test_a_rerun_after_a_push_that_went_through_but_was_never_seen_closes_without_pushing(self):
-        count = Path(self.tmp.name, "pushes")
-        pushed = pusher("odd-push", count, then_fail="fatal: the hook lost its answer\n")
-        again = pusher("counted-push", count)
-        rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, land=pushed)
-        self.assertEqual(rc, 2)  # the run reported a failed land: the bead is open, the branch is kept
-        self.assertEqual((count.read_text(), self.closed), ("1", []))
-        self.assertEqual(gitrepo.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")  # but it is on the base
-        rc, _s = self.run_engine({"write": [WRITE], "review": [CLEAN]}, land=again)  # the next run
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertEqual(count.read_text(), "1")  # not pushed again
-        self.assertTrue(self.closed and self.closed[0].startswith("merged"))
-        subjects = gitrepo.git("log", "--format=%s", "origin/main", cwd=str(self.wt)).splitlines()  # pyrefly: ignore[missing-attribute]
-        self.assertEqual(sum("(t-1)" in x for x in subjects), 1)
 
 
 class Pause(NetBase):
@@ -363,7 +315,6 @@ class ResumeLook(test_stages_visual.VisualWork):
 
     def log(self):
         return [json.loads(x) for x in self.eng.log_path.read_text().splitlines()]
-
 
 
 for _name in dir(test_stages_visual.VisualWork):  # the visual fixture only: not every test of its class again

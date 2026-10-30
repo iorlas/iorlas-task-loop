@@ -10,11 +10,10 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
-from support.engine_case import CLEAN, PLAN, WRITE, EngineTest, real_git
+from support.engine_case import CLEAN, PLAN, WRITE, EngineTest
 from support.logs import records
 
 # isort: split
-from taskloop.adapters import gitrepo
 from taskloop.app.land import outbound
 from taskloop.app.land.lander import Lander
 from taskloop.app.run.blocked import Blocked, blocked_for
@@ -92,27 +91,6 @@ class Land(EngineTest):
         tool.chmod(tool.stat().st_mode | stat.S_IXUSR)
         return mock.patch.dict(os.environ, {"PATH": f"{d}{os.pathsep}{os.environ['PATH']}"})
 
-    @real_git("a pre-push hook is git's own: the land must push past it")
-    def test_a_pre_push_hook_that_fails_does_not_stop_the_land(self):
-        hook = self.wt / ".git" / "hooks" / "pre-push"
-        hook.write_text("#!/bin/sh\necho hook ran >&2\nexit 1\n")
-        hook.chmod(0o755)
-        rc, _ = self.run_engine(RUN)
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertEqual(gitrepo.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
-
-    @real_git("git runs git-lfs: the order of lfs push and push is what git does")
-    def test_an_lfs_repo_pushes_the_ref_s_objects_before_the_push(self):
-        self.put_repo_file(".gitattributes", ATTR)
-        with self.fake_lfs():
-            rc, _ = self.run_engine(RUN)
-        self.assertEqual(rc, 0, self.blocked)
-        lines = self.lfs_log.read_text().splitlines()
-        said, at_lfs = lines[-2:]  # the land's own LFS push (each accepted stage's WIP push sent one before it)
-        self.assertEqual(said, "push origin HEAD")
-        self.assertEqual(len(lines) % 2, 0)
-        self.assertNotEqual(at_lfs, gitrepo.git("rev-parse", "origin/main", cwd=str(self.wt)))  # origin had not the commit yet
-        self.assertTrue(any("git lfs push origin HEAD" in r["text"] for r in records(self.eng, "note")))
 
     def test_an_lfs_repo_without_git_lfs_is_a_fault_with_the_branch_kept(self):
         self.put_repo_file(".gitattributes", ATTR)

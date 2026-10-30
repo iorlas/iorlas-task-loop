@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 from taskloop.adapters import gitrepo, slotcheck, treehash  # noqa: E402
 from taskloop.app.run import engine  # noqa: E402
 

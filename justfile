@@ -1,10 +1,18 @@
-# just test [pytest args]: the suite through pytest, one process; `just test tests/land -q` runs a folder, `just test -n auto` spreads it
+# just test [pytest args]: the logic kind, in one process (pyproject addopts skip the real and e2e kinds); `just test tests/land -q` runs a folder, `just test -n auto` spreads it
 test *args:
     uv run pytest {{args}}
 
 # just test-live [pytest args]: the explicit-only scenarios of tests/live (real git remote, real processes, real tl and dashboard, docker when it answers); no default run collects them
 test-live *args:
     uv run pytest -m live -s tests/live {{args}}
+
+# The inner loop: logic tests only (fakes, in process, under 200 ms each). `just test-fast tests/land -q`, `just test-fast -n auto`.
+test-fast *args:
+    uv run pytest -m "not real and not e2e" {{args}}
+
+# Every kind (logic, real, e2e) in one process; `just test-all -n auto` spreads it. A release runs them all through dev/suite.py.
+test-all *args:
+    uv run pytest -m "" {{args}}
 
 # Install the exact tool versions recorded in mise.lock.
 tools:
@@ -34,7 +42,7 @@ rules:
     set -euo pipefail
     # --with msgspec: .importlinter names msgspec as a root package (the hook contract), and grimp must find it
     PYTHONPATH=src uv tool run --with msgspec --from "import-linter@$(just pin pipx:import-linter)" lint-imports
-    uv run pytest tests/rules/gate_rules.py -q
+    uv run pytest tests/rules/gate_rules.py -q -m ""
 
 # The version mise.toml pins for a tool (one source for the pins).
 [private]

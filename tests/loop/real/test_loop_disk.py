@@ -9,13 +9,13 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401
 
 # isort: split
 from support import looptest
-from loop.test_loop import Base, LoopBase, rec
 
+from loop.test_loop import Base, LoopBase, rec
 from taskloop.app.launch import loop as wloop
 
 GB = 1 << 30

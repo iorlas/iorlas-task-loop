@@ -16,7 +16,7 @@ the stderr of every process that exited non-zero, and the tail of every process 
 (the jitter is seeded, the machine's load is not).
 
 The invariants it checks are each proven deterministically, at the lock and lease level and in the gate, by
-tests/test_race_invariants.py; this run is the end-to-end check that the pieces still fit together under real processes.
+tests/land/test_race_invariants.py; this run is the end-to-end check that the pieces still fit together under real processes.
 Nothing may be shared that is not taken through a lock or lease: no bead claimed or run twice, no slot used by two at
 once (a hold included), no two beads of one area at once (tl-bxk.11.4), slots served in ticket order (tl-bxk.11.5), no
 checkout in a worktree under another process's live engine lock, every land rebased onto the base and pushed once,

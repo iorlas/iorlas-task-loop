@@ -3,7 +3,7 @@
 `FakeGit` is the `git` and `sh` the land classes read off their host. A reply is keyed by the argv it answers: leading words joined by
 `__`, `_` standing for `-` (`rev_parse`, `diff__name_only`);
 the longest key that starts the call wins; a call nothing answers fails the test by name, so a new git call cannot slip in unseen.
-Real git stays in the integration tests (tests/test_stages_land.py and the push-race cells), where the behaviour of git itself is the point.
+Real git stays in the real/ tests (tests/land/real/ and the push-race cells), where the behaviour of git itself is the point.
 """
 from typing import Any
 

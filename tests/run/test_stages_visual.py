@@ -14,7 +14,7 @@ from support import engine_case as te
 from support import (
     fake_route,
     procsim,
-    )
+)
 from support.builders import cfg_with, make_engine
 from support.checkpoints import read_ck
 from support.engine_case import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, engine, lint  # noqa: F401
@@ -22,8 +22,8 @@ from support.fakes import (
     FakeBeadStore,
     as_bead,
 )
-from run.test_stages import StagesTest
 
+from run.test_stages import StagesTest
 from taskloop.adapters import gitrepo, ident
 from taskloop.app.land.rebase import MAX_REBASE_RESETS
 from taskloop.app.run import (

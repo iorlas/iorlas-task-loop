@@ -12,11 +12,10 @@ from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest import mock
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: E402, F401
-import loop.test_loop as tlp  # noqa: E402
 import tl  # noqa: E402
 from support import (  # noqa: E402
     looptest,
@@ -24,6 +23,7 @@ from support import (  # noqa: E402
 )
 from support.procsim import real_proc  # noqa: E402
 
+import loop.test_loop as tlp  # noqa: E402
 from taskloop.adapters import pidcheck  # noqa: E402
 from taskloop.app.loop import verdict as vd  # noqa: E402
 from taskloop.app.loop.take import Taker  # noqa: E402

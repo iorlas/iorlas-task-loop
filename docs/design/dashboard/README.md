@@ -13,7 +13,7 @@ One read-only server per machine (`python3 -m taskloop_dash` on the interpreter 
 
 | where | what |
 |---|---|
-| `src/taskloop_dash/static/` | the page: `index.html`, ES modules under `js/`, CSS under `css/`, Preact + HTM vendored in `vendor/` (pinned by hash). No build, no CDN, 100 KB gzip budget (`tests/test_dash_static.py`) |
+| `src/taskloop_dash/static/` | the page: `index.html`, ES modules under `js/`, CSS under `css/`, Preact + HTM vendored in `vendor/` (pinned by hash). No build, no CDN, 100 KB gzip budget (`tests/dash/test_dash_static.py`) |
 | `src/taskloop_dash/http.py` | the routes: the page and its modules, GET `/api/snapshot`, `/api/bead`, `/api/live`, `/api/artifact`, `/api/look-shot`, `/api/version`, POST `/api/<verb>` |
 | `src/taskloop_dash/api/` | `reads.py` (snapshot with ETag, bead), `liveview.py` + `live.py` (the live tail), `writes.py` (the verbs), `looks.py`, `artifacts.py` |
 | `src/taskloop_dash/readers/` | `world.py` gathers one `World` per snapshot from records, bd, runs and looks |

@@ -83,11 +83,6 @@ class Override(Env):
         finally:
             os.environ.pop("TASK_LOOP_DASH_DEV_PUBLIC")
 
-    def test_the_server_override_gets_past_the_rule(self):
-        # TEST-NET-1 address cannot be bound: the bind itself fails, proving the rule let it through
-        code, err = self.run_server(self.dev, "--bind", "192.0.2.1", "--port", "0", public=True)
-        self.assertEqual(code, 2)
-        self.assertIn("bind 192.0.2.1", err)
 
     def test_only_value_1_counts(self):
         os.environ["TASK_LOOP_DASH_DEV_PUBLIC"] = "0"

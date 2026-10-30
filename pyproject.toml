@@ -17,9 +17,12 @@ package = false
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 # maxschedchunk: xdist hands out at most 4 tests at a time, so the slow modules (test_release, land) spread over the workers: 2x faster than the default
-addopts = "-p no:cacheprovider --maxschedchunk=4"
+# -m: the default run is the logic kind only; `just test-all`, a release (dev/suite.py: -m "not serial", then -m serial) and any -m of yours run real and e2e
+addopts = "-p no:cacheprovider --maxschedchunk=4 -m 'not real and not e2e'"
 markers = [
     "serial: runs alone, after the parallel workers (tests/conftest.py SERIAL)",
     "live: a scenario that runs the real pieces (docker, git remote, processes); only `just test-live` / `pytest -m live` collects tests/live",
-    "real_proc(reason): starts real processes; the process sim guard is off (tests/support/procsim.py)",
+    "real: real git, processes or sockets; set by a real/ folder, or by @real_proc(reason) / @real_git(reason) on one test (tests/conftest.py)",
+    "e2e: a whole flow (tests/e2e/); set by the folder",
+    "real_proc(reason): one test starts real processes; folds into real (tests/support/procsim.py)",
 ]

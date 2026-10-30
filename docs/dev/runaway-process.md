@@ -24,5 +24,5 @@ Read the state first: a kill destroys the evidence. Everything below reads /proc
 A test that does `mock.patch.object(time, "sleep")` replaces `time.sleep` for every thread in the process. A second thread
 that loops on `time.sleep(...)` then spins at full speed, and the MagicMock records every call and argument, so RSS grows by about
 110 MB/s until the shard hits its memory cap (GB-sized shards). Fix: patch only the calling thread
-(`tests/support/engine_case.no_sleep_here`) or a sleep seam; `tests/test_no_global_sleep_patch.py` fails on the global patch.
+(`tests/support/engine_case.no_sleep_here`) or a sleep seam; `tests/rules/test_no_global_sleep_patch.py` fails on the global patch.
 The full analysis is the RCA at `~/Workspaces/handoff/rca-shards-2026-10-28.md`.

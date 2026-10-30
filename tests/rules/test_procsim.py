@@ -1,4 +1,5 @@
 """The process sim and its guard: a fake answers an argv in memory, a real spawn in a logic test fails it, real_proc turns the guard off."""
+import os
 import subprocess
 import sys
 import unittest
@@ -8,7 +9,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import stream_proc
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import procsim
-from support.procsim import real_proc
 
 
 class Fakes(unittest.TestCase):
@@ -47,13 +47,24 @@ class Guard(unittest.TestCase):
             stream_proc.run(["sleep", "0.01"], cwd=".")
         procsim.WORLD[-1].problems.clear()
 
-    def test_git_is_left_to_the_gitsim(self):
-        self.assertEqual(subprocess.run(["git", "--version"], capture_output=True, check=False).returncode, 0)
+    def test_a_planted_real_git_call_fails_the_test_too(self):
+        with self.assertRaises(AssertionError) as caught:
+            subprocess.run(["git", "--version"], capture_output=True, check=False)
+        self.assertIn("spawned a real process: git --version", str(caught.exception))
+        procsim.WORLD[-1].problems.clear()
 
-    @real_proc("the guard is off for a test whose subject is the process")
-    def test_a_marked_test_may_spawn(self):
-        self.assertEqual(subprocess.run(["true"], check=False).returncode, 0)  # a fake still answers; a real command runs
-        self.assertEqual(subprocess.run(["sleep", "0.01"], check=False).returncode, 0)
+    def test_a_planted_fork_fails_the_test_too(self):
+        with self.assertRaises(AssertionError):
+            os.fork()
+        procsim.WORLD[-1].problems.clear()
+
+    def test_a_real_test_that_never_spawned_fails(self):
+        idle = procsim.Procs("tests/x/real/test_y.py::T::test_z", guarded=False)
+        with self.assertRaises(AssertionError) as caught:
+            idle.check(must_spawn=True)
+        self.assertIn("never started a process", str(caught.exception))
+        idle.spawns = 1
+        idle.check(must_spawn=True)
 
 
 if __name__ == "__main__":

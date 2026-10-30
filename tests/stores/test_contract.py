@@ -30,8 +30,16 @@ SUITES = [suites.DocContract, suites.AskContract, suites.CheckpointContract, sui
           suites.TicketContract]
 
 
+LIVE_HOLDER = "test_a_lock_whose_recorded_holder_is_alive_is_not_broken"
+
+
 def _make(base: type, name: str, rig: type) -> type:
-    return contract(type(f"{name}{base.__name__}", (base,), {"make_rig": lambda self: rig()}))
+    body: dict = {"make_rig": lambda self: rig()}
+    if rig is RealRig and hasattr(base, LIVE_HOLDER):  # the one test whose holder is another live process: only the real rig starts one
+        def live_holder(self) -> None:
+            getattr(base, LIVE_HOLDER)(self)
+        body[LIVE_HOLDER] = real_proc("the lock's holder must be another live process: the real rig starts one")(live_holder)
+    return contract(type(f"{name}{base.__name__}", (base,), body))
 
 
 for _base in SUITES:

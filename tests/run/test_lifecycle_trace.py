@@ -1,11 +1,8 @@
 """Lifecycle telemetry: a stable fingerprint and started_because on every trace row, whatever ended the run, plus
 the structured timing records the lifecycle report reads (gate, vendor error, kill, check cache)."""
 
-import _thread
 import json
 import os
-import signal
-import threading
 import time
 import unittest
 from unittest import mock
@@ -13,7 +10,7 @@ from unittest import mock
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as te
 from support import fake_route, procsim
-from support.engine_case import CLEAN, PLAN, WRITE, real_proc, stop
+from support.engine_case import CLEAN, PLAN, WRITE, stop
 
 from taskloop.adapters import delegate as dl
 from taskloop.adapters import ident
@@ -259,38 +256,6 @@ class TraceTelemetry(te.EngineTest):
                  if json.loads(line)["kind"] == "kill"]
         self.assertEqual(kills, [])
 
-    @unittest.skipIf(os.name == "nt", "the engine stops a process group; sleep is POSIX")
-    @real_proc("a SIGINT reaches a real child tree and the engine stops it")
-    def test_an_interrupted_command_leaves_a_kill_record_and_its_tree_is_stopped(self):
-        eng = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), verbose=False, store=self.store)
-        started = self.wt / "child-started"
-        stop_waiting, delivered = threading.Event(), threading.Event()
-
-        def raising(signum, frame):  # the test owns SIGINT: interrupt_main does nothing unless a Python handler is installed
-            if delivered.is_set():  # a second interrupt the watcher queued before the first landed: it must not hit tearDown
-                return
-            delivered.set()
-            raise KeyboardInterrupt
-
-        old = signal.signal(signal.SIGINT, raising)
-        self.addCleanup(signal.signal, signal.SIGINT, old)
-
-        def interrupt_once_the_child_runs():  # the command itself says it runs: the interrupt cannot land before the child exists
-            while not started.exists() and not stop_waiting.wait(0.005):
-                pass
-            while started.exists() and not delivered.is_set() and not stop_waiting.wait(0.05):
-                _thread.interrupt_main()  # sent again until the handler ran: an interrupt that did not land is not a verdict
-        watcher = threading.Thread(target=interrupt_once_the_child_runs, daemon=True)
-        watcher.start()
-        self.addCleanup(watcher.join)
-        self.addCleanup(stop_waiting.set)
-        with self.assertRaises(KeyboardInterrupt):
-            eng.sh(["sh", "-c", 'touch "$0"; exec sleep 30', str(started)], timeout=60)
-        kills = [json.loads(line) for line in eng.log_path.read_text().splitlines()
-                 if json.loads(line)["kind"] == "kill"]
-        self.assertTrue(kills)
-        self.assertEqual(kills[-1]["why"], "interrupted")
-        self.assertIn("observed_t", kills[-1])
 
     def test_a_stopped_delegate_worker_that_survives_still_leaves_a_kill_record(self):
         eng = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), verbose=False, store=self.store)

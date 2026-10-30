@@ -13,12 +13,11 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as te
 from support import (
     procsim,
-    tools,
 )
 from support.builders import make_engine
 from support.checkpoints import put_ck, read_ck
 from support.checks import res
-from support.engine_case import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, engine, lint, real_proc
+from support.engine_case import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, engine, lint
 from support.fakes import as_bead, must_bead
 from support.narrow import must
 
@@ -479,16 +478,6 @@ class Executable(StagesTest):
         for ok in ("grep -q x a.txt", "env FOO=1 git status", "git status --short", "python3 -c 'a;b'", te.PY + " -c 'pass'"):
             self.assertEqual(self.problems(ok), [], ok)
 
-    @real_proc("the plan lint trusts the recipe list the real just prints for the tree's justfile")
-    def test_a_just_recipe_must_exist_in_the_tree(self):
-        tools.need(self, "just")
-        self.enterContext(tools.on_path("just"))
-        (self.wt / "justfile").write_text("fmt-check:\n\techo ok\n")
-        self.assertEqual(self.problems("just fmt-check"), [])
-        bad = self.problems("just unity-play-tests")
-        self.assertEqual(len(bad), 1)
-        self.assertIn("no recipe unity-play-tests", bad[0])
-        self.assertIn("fmt-check", bad[0])
 
     def test_valid_checks_the_word_check_must_not_block(self):
         probe = self.probe()
@@ -497,17 +486,6 @@ class Executable(StagesTest):
         for ok in ("env -i PATH=x git --version", "make", "node_modules/.bin/jest", "~/bin/foo", ".venv/bin/python -c pass"):
             self.assertEqual(self.problems(ok, probe), [], ok)
 
-    @real_proc("the plan lint trusts the recipe list the real just prints for the tree's justfile")
-    def test_just_aliases_private_recipes_options_and_a_recipe_a_stage_adds(self):
-        tools.need(self, "just")
-        self.enterContext(tools.on_path("just"))
-        (self.wt / "justfile").write_text("alias ci := check\ncheck:\n\techo ok\n_private:\n\techo p\n")
-        for ok in ("just ci", "just _private", "just --justfile justfile check", "just --set v x check", "just -d . check", "just check"):
-            self.assertEqual(self.problems(ok), [], ok)
-        self.assertEqual(len(self.problems("just nope")), 1)
-        self.assertEqual(self.problems("just newrecipe", made=["justfile"]), [])  # a stage adds it
-        (self.wt / "justfile").write_text("newrecipe:\n\techo n\n")  # a rebase changes the file: seen at once
-        self.assertEqual(self.problems("just newrecipe"), [])
 
     def test_a_missing_script_is_found_unless_a_stage_makes_it(self):
         check = "./tools/probe.sh --all"

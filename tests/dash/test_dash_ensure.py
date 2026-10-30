@@ -1,7 +1,5 @@
 """tl-bxk.12.4: dash ensure replaces stale servers, binds fail loudly, dev checkouts stay on loopback."""
-import contextlib
 import gc
-import io
 import os
 import socket
 import sys
@@ -18,9 +16,7 @@ import support.paths  # noqa: E402, F401
 from support.narrow import must  # noqa: E402
 
 from taskloop.app.launch import dash as dash_server  # noqa: E402
-from taskloop_dash import bind, serve  # noqa: E402
-from taskloop_dash.cli import dash as dash_cli  # noqa: E402
-from taskloop_dash.env import Env, Ports  # noqa: E402
+from taskloop_dash import bind  # noqa: E402
 
 
 def _const(value):
@@ -166,40 +162,6 @@ class EnsureFlow(unittest.TestCase):
         ping.assert_called_with(54321)
 
 
-class LoudBind(unittest.TestCase):
-    def setUp(self):
-        p = mock.patch.object(socket, "getfqdn", lambda name="": name)
-        p.start()
-        self.addCleanup(p.stop)
-
-    def test_open_servers_fails_on_any_address(self):
-        port = free_port()
-        with self.assertRaises(bind.BindError) as cm:
-            bind.open_servers(["127.0.0.1", "203.0.113.9"], port, mock.Mock())
-        self.assertIn(f"203.0.113.9:{port}", str(cm.exception))
-
-    def test_open_servers_closes_earlier_sockets_on_failure(self):
-        port = free_port()
-        with self.assertRaises(bind.BindError):
-            bind.open_servers(["127.0.0.1", "203.0.113.9"], port, mock.Mock())
-        s = socket.socket()
-        s.bind(("127.0.0.1", port))  # would raise if the first server were left open
-        s.close()
-
-    def test_the_server_exits_nonzero_and_serves_nothing(self):
-        port = free_port()
-        cfg = tempfile.mkdtemp()
-        err = io.StringIO()
-        with mock.patch.dict(os.environ, {"TASK_LOOP_DASH_DEV_PUBLIC": "1", "XDG_CONFIG_HOME": cfg, "APPDATA": cfg}), \
-                contextlib.redirect_stderr(err), self.assertRaises(SystemExit) as stop:
-            dash_cli.main(["--port", str(port), "--bind", "127.0.0.1,203.0.113.9"])
-        self.assertNotEqual(stop.exception.code, 0)
-        self.assertIn(f"203.0.113.9:{port}", err.getvalue())
-        s = socket.socket()
-        self.assertNotEqual(s.connect_ex(("127.0.0.1", port)), 0)
-        s.close()
-
-
 class DevCheckout(unittest.TestCase):
     def test_git_worktree_is_dev(self):
         with tempfile.TemporaryDirectory() as d:
@@ -238,21 +200,6 @@ class DevCheckout(unittest.TestCase):
         with mock.patch.object(dash_server, "tailscale_ip", return_value="100.1.2.3"):
             self.assertEqual(dash_server.default_binds(), ["127.0.0.1", "100.1.2.3"])
         self.assertEqual(dash_server.inet_addrs("2: eth0 inet 100.64.0.5/32 scope global\n inet6 fe80::1/64 inet bogus"), ["100.64.0.5"])
-
-    def test_dev_server_listens_on_random_loopback_port(self):
-        cfg = tempfile.mkdtemp()
-        with mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": cfg, "APPDATA": cfg, "TASK_LOOP_DASH_BIND": ""}):
-            servers, addrs, port, _dash = serve.start(Env(ports=Ports()), dash_cli.PACKAGE, [])
-        try:
-            first = ", ".join(bind.urls(addrs, port))  # what the server prints on its first line
-            self.assertIn("127.0.0.1:", first)
-            self.assertNotIn(":7878", first)
-            self.assertNotIn("100.", first)
-        finally:
-            for s in servers:
-                s.server_close()
-        # a dev server must not claim the shared pid file
-        self.assertFalse((Path(cfg) / "task-loop" / "dash.pid").exists())
 
 
 if __name__ == "__main__":

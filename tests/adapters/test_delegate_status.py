@@ -9,6 +9,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: E402, F401
+from support.procsim import real_proc  # noqa: E402
 
 from taskloop.adapters import delegate as sdelegate  # noqa: E402
 from taskloop.adapters.ident import claude_dir  # noqa: E402
@@ -121,6 +122,7 @@ class Schema(unittest.TestCase):
         for k in ("out", "out_until", "reason", "notes"):
             self.assertIn(k, old, "delegate's flat lane dropped a key snapshot_of reads")
 
+    @real_proc("the installed delegate's route.py status is run for real; no delegate installed, no test")
     def test_the_installed_answer_has_exactly_the_keys_the_schema_names(self):
         schema = installed_schema()
         r = subprocess.run([sys.executable, str(installed_route()), "status", "--json"],

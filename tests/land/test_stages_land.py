@@ -11,6 +11,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
+from run.test_stages import StagesTest
 from support import engine_case as te
 from support import (
     fake_route,
@@ -21,7 +22,6 @@ from support.checkpoints import put_ck, read_ck
 from support.engine_case import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, engine, lint, real_git, real_proc  # noqa: F401
 from support.fakes import as_bead
 from support.pushsim import pusher
-from run.test_stages import StagesTest
 
 from taskloop.adapters import (
     bd,
@@ -194,17 +194,6 @@ class SlotHygiene(StagesTest):
         Path(self.wt, "client/src.cs").write_text("real\n")
         self.assertEqual(sorted(ln[3:] for ln in e.checkout.dirty_status().splitlines()), ["client/keep.log", "client/src.cs"])
 
-    @real_git("reads the user's own global git excludes file, which only a real git does")
-    def test_the_users_own_global_excludes_still_apply(self):
-        self.put_ignore_on_main("client/log.txt\n")
-        glob = Path(self.tmp.name, "global-ignore")
-        glob.write_text("*.swp\n")
-        te.sh("git", "config", "core.excludesFile", str(glob), cwd=self.wt)
-        (self.wt / "notes.swp").write_text("editor\n")
-        (self.wt / "client").mkdir()
-        (self.wt / "client" / "log.txt").write_text("unity\n")
-        e = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
-        self.assertEqual(e.checkout.dirty_status(), "")
 
     def test_files_the_base_does_not_ignore_keep_a_parked_slot_where_it_is(self):
         rc, _s = self.run_engine({"plan": [PLAN], "write": [dict(WRITE, question="Which format?")]})
@@ -316,14 +305,6 @@ class Contracts(StagesTest):
     def land_with(self, fails):
         return pusher("flaky-push", Path(self.tmp.name, "flaky-count"), cut_first=fails)
 
-    @real_git("the land script is a child process that runs git push itself")
-    def test_a_network_failure_on_the_push_is_retried_with_a_rest_and_lands(self):
-        rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, land=self.land_with(2))
-        self.assertEqual(rc, 0, self.blocked)
-        text = self.eng.log_path.read_text()
-        self.assertEqual(text.count("the push failed with a network error"), 2)
-        self.assertIsNone(self.eng.__dict__.get("asked") or None)
-        self.assertTrue(self.closed and self.closed[0].startswith("merged"))
 
     def test_a_push_that_keeps_failing_pauses_the_bead_and_asks_nobody(self):
         rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, land=self.land_with(99))

@@ -5,13 +5,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import procsim
-from support.engine_case import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, EngineTest, no_repo, pid_gone, real_proc, sh
+from support.engine_case import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, EngineTest, no_repo, sh
 
 # isort: split
 import contextlib
 import os
 import shlex
-import signal
 import time
 from pathlib import Path
 from unittest import mock
@@ -21,9 +20,7 @@ from support.builders import cfg_with
 from support.checks import res
 from support.fakes import as_bead, must_bead
 from support.narrow import must
-from support.waits import until
 
-from taskloop.adapters import gitrepo
 from taskloop.adapters import procs as sproc
 from taskloop.adapters.check_probe import PathProbe
 from taskloop.app.checks import evidence as check_evidence
@@ -36,7 +33,6 @@ from taskloop.contracts import answers
 from taskloop.contracts.argv import checks_to_wire
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.enums import WaitWhat
-from taskloop.domain import outcome as oc
 from taskloop.domain.checks import lint
 from taskloop.domain.checks import matchers as check_matchers
 from taskloop.domain.checks.writer_split import WriterSplit
@@ -230,26 +226,6 @@ class EngineChecksTest(EngineTest):
         self.assertIn('["just", "name"]', errs[0])
         self.assertEqual(answers.check("plan", False, checks_to_wire(PLAN)), [])
 
-    @real_proc("a stop kills a real child and everything it started")
-    def test_a_stop_during_a_check_stops_the_check_and_everything_it_started(self):
-        if os.name == "nt":
-            self.skipTest("POSIX process groups")
-        eng = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
-        pidfile = Path(self.wt, "child.pid")
-
-        def stopped(*_):  # what the run's SIGTERM handler does, from the same thread, once the check has started its child
-            until(lambda: pidfile.exists() and pidfile.read_text().strip(), 5)
-            raise engine.Blocked("failed: stopped (SIGTERM)", kind=oc.Kind.PAUSE_KILLED)
-        old = signal.signal(signal.SIGALRM, stopped)
-        self.addCleanup(signal.signal, signal.SIGALRM, old)
-        signal.setitimer(signal.ITIMER_REAL, 0.5)
-        self.addCleanup(signal.setitimer, signal.ITIMER_REAL, 0)
-        with self.assertRaises(engine.Blocked):
-            eng.sh(shlex.split(self.spawn(pidfile)))
-        child = int(pidfile.read_text())
-        if not until(lambda: pid_gone(child), 2.5):
-            os.kill(child, 9)
-            self.fail("the check's child outlived the stop")
 
     def test_a_unity_play_mode_test_counts(self):  # lifesim-d5f.59: a [UnityTest] read as tests_added=0
         diff = ("+++ b/client/Assets/Tests/PlayMode/LiveSpeedBarTests.cs\n+        [UnityTest]\n"
@@ -283,17 +259,6 @@ class EngineChecksTest(EngineTest):
         self.assertEqual((res[0].exit, res[0].status), (124, "failed"))
         self.assertIn("timed out after 0.01 min", res[0].tail)
 
-    @real_proc("a SIGTERM to the engine kills a real child and its tree")
-    def test_sigterm_during_a_stage_check_stops_its_tree_and_still_closes(self):
-        pidfile = Path(self.tmp.name, "child.pid")
-        check = self.spawn(pidfile, term=True)
-        plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[check])])
-        with self.stoppable():
-            rc, _ = self.run_engine({"plan": [plan], "write": [WRITE], "review": [CLEAN]})
-        self.assertEqual(rc, 2)
-        self.assertIn("stopped (SIGTERM)", self.said())
-        self.assertDead(self.child_of(pidfile))
-        self.assertIn("wip (t-1)", gitrepo.git("log", "-1", "--format=%s", "task/t-1", cwd=str(self.wt)))
 
     def test_fresh_drops_the_checkpoint(self):
         with self.stop_at("reviewer", 2):

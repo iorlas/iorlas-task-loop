@@ -3,11 +3,7 @@ sleeps), short limits. On 0.23.101 a silent sleeping check was stopped as hung a
 import contextlib
 import io
 import json
-import os
-import subprocess
 import sys
-import threading
-import time
 import unittest
 from pathlib import Path
 
@@ -15,9 +11,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as te
 from support import procsim
-from support.engine_case import real_proc
-from checks.test_checks_speed import SpeedTest
 
+from checks.test_checks_speed import SpeedTest
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts import config
 
@@ -39,32 +34,6 @@ class Quiet(SpeedTest):
     def test_a_busy_silent_check_passes(self):
         _eng, res = self.run_one(procsim.fake("busy", procsim.exits(0)))
         self.assertEqual(res.status, "passed")
-
-    @real_proc("the records of a real wall kill: the engine stops a sleeping check and the time between its start and end is real")
-    def test_a_wall_hit_check_leaves_one_start_and_end_with_wall_hit_and_a_quiet_one_does_not(self):
-        eng, res = self.run_one("sleep 30", wall_min=0.01)
-        self.assertEqual((res.exit, res.wall_hit), (124, True))
-        start, end = self.log(eng, "check_start")[-1], self.log(eng, "check_end")[-1]
-        self.assertEqual((end["id"], end["exit"], end["wall_hit"]), (start["id"], 124, True))
-        self.assertGreaterEqual(end["t"] - start["t"], 0.5)
-        eng, res = self.run_one("true")
-        self.assertFalse(self.log(eng, "check_end")[-1]["wall_hit"])
-
-    @real_proc("a stop flag kills a real check's tree: the sleeping grandchild is gone")
-    def test_the_stop_flag_ends_a_running_check_and_its_tree(self):
-        mark = f"74.{os.getpid()}"
-        sleeper = self.script("sleeper.sh", f"sleep {mark}\n:\n")  # the shell stays the parent of the sleep
-        eng = self.checks_engine(checks=[{"id": "q", "cmd": sleeper, "group": "tests"}])
-        timer = threading.Timer(1.0, eng.halt.set)
-        timer.start()
-        self.addCleanup(timer.cancel)
-        t = time.time()
-        res = eng.run_checks({"checks": [], "files": []}, "s")[0]
-        self.assertLess(time.time() - t, 30)
-        self.assertEqual((res.status, res.wall_hit), ("failed", False))
-        self.assertEqual([k["why"] for k in self.log(eng, "kill")], ["stopped"])
-        time.sleep(0.5)
-        self.assertEqual(subprocess.run(["pgrep", "-f", "sleep " + mark], capture_output=True, text=True, check=False).stdout.strip(), "")
 
 
 class RetiredKeys(unittest.TestCase):

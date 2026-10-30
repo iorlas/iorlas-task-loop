@@ -2,8 +2,9 @@
 
 What it enforces, over every .py under src/, skills/, dev/ and tests/ (EXEMPT_DIRS is skipped by the caps):
   caps      400 SLOC per file, 80 per function, 800 per test file; SLOC = non-blank, non-comment, non-docstring lines by tokenize.
-            Every cap violation that exists today is listed by file name in tests/rules_ratchet.json ("oversize" / "oversize_functions").
-            A listed entry may be removed or lowered, never added. Run `python3 tests/gate_rules.py --measure` to see the current table.
+            Every cap violation that exists today is listed by file name in tests/rules/rules_ratchet.json
+            ("oversize" / "oversize_functions"). A listed entry may be removed or lowered, never added.
+            Run `python3 tests/rules/gate_rules.py --measure` to see the current table.
   layers    not here: the `.importlinter` contracts (layers, app slices, dashboard, `import re` placement) run in `just rules`;
             lazy imports are ruff PLC0415, banned modules TID251, module docstrings D100 (ruff.toml).
   placement our file names only in contracts/paths.py; no mutable module global in domain/app/cli/hook/dash.
@@ -156,7 +157,7 @@ def ratchet_problems(actual, known, label, ceiling=lambda key: True):
         elif ceiling(key) and size > known[key]:
             out.append(f"{label} grew: {key} = {int(size)} > recorded {int(known[key])}")
     for key in sorted(set(known) - set(actual)):
-        out.append(f'{label} now within its cap (or gone): delete "{key}" from tests/rules_ratchet.json')
+        out.append(f'{label} now within its cap (or gone): delete "{key}" from tests/rules/rules_ratchet.json')
     return out
 
 
@@ -668,6 +669,7 @@ class VendorGuard(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stderr)
 
 
+@real_proc("the gate rules run against a real git repo and the fake one: the same answers")
 class Smoke(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp()).resolve()

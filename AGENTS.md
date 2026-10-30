@@ -31,22 +31,31 @@ Work in a worktree. Fork a session only for read-only work of 4 hours or less; o
 ## Build & Test
 
 ```bash
-uv run pytest tests/land -q    # one folder or module (also tests/test_x.py::Class::test); the suite's tests are unittest TestCases
-just test -n auto  # the whole suite in parallel workers (`just test` alone: one process); the `serial` group needs dev/suite.py
-uv run --script dev/suite.py  # what a release runs: xdist workers, then the serial group alone; takes the host-wide suite lock
+just test-fast -n auto         # the inner loop: logic tests only (-m "not real and not e2e"; also what plain `just test` / `uv run pytest` run)
+uv run pytest tests/land -q    # one slice folder, module or test (tests/land/test_x.py::Class::test); the tests are unittest TestCases
+just test-all -n auto          # every kind: logic, real, e2e (`serial` ones need dev/suite.py to run alone)
+uv run --script dev/suite.py  # what a release runs: every kind, xdist workers, then the serial group alone; takes the host-wide suite lock
 just check                     # ruff + pyrefly + the structural rules (tools pinned in mise.toml; `mise install`)
 ```
 
+Tests live in `tests/<slice>/`, mirroring `src/taskloop/app/<slice>` (a test's home is the slice whose code changes if its assertion breaks);
+the other layers have their own folders (`contracts`, `stores`, `adapters`, `ports`, `domain`, `cli`, `hook`, `dash`, `rules` for the gate).
+A test's kind comes from its path (tests/conftest.py), never from a hand marker: unmarked = logic (fakes, in process, fast);
+`tests/<slice>/real/` = real (real git, processes, sockets; only where one exists; `@real_proc` / `@real_git` on a single test also mean real);
+`tests/e2e/` = a whole flow (selftest, release). `serial` stays a marker (shared clock, port or lock). Guards (tests/support/procsim.py): a
+logic test that spawns, forks or runs real git fails; a real test that never spawns fails. A test over its kind's limit fails (LIMITS_S in
+conftest).
+
 Dev and test tools (pytest, pytest-xdist) are the `dev` group of pyproject.toml, locked in uv.lock; `uv run` syncs them.
 CI runs the suite and `just check` on Ubuntu with Python 3.15. Linux locally: `docker run --rm -v "$PWD":/src:ro python:3.15-slim ...`.
-Caps (tests/gate_rules.py): 400 SLOC per file, 80 per function, 800 per test file; the KNOWN_OVERSIZE table (tests/rules_ratchet.json) may only shrink.
+Caps (tests/rules/gate_rules.py): 400 SLOC per file, 80 per function, 800 per test file; the KNOWN_OVERSIZE table (tests/rules/rules_ratchet.json) may only shrink.
 
 ## Conventions
 
 - Python 3.15+; macOS and Linux (in containers too), POSIX only. Dependencies: runtime ones are declared inline in `skills/task-loop/tl.py`
-  (PEP 723, the same pin as pyproject.toml's `dependencies`; tests/test_pep723.py holds them equal) and run with `uv run --script`: the
+  (PEP 723, the same pin as pyproject.toml's `dependencies`; tests/rules/test_pep723.py holds them equal) and run with `uv run --script`: the
   `tl` shim, the loop's own spawns, dev/release.py and dev/suite.py. Dev and test tools live in pyproject.toml's `dev` group. The
-  PreToolUse hook (every Bash call) stays on plain `python3` and imports no msgspec and no record (.importlinter, tests/test_hook.py).
+  PreToolUse hook (every Bash call) stays on plain `python3` and imports no msgspec and no record (.importlinter, tests/hook/test_hook.py).
 
 ## Quick Reference
 

@@ -2,15 +2,17 @@
 
 A fake is `(cwd, env) -> (exit, output)` registered under a short command text (`fake("has-f", fn)` returns the text to put in a plan);
 `install` puts the fakes where the engine's spawns go (stream-proc's `run`, which the shell and every adapter use, and `subprocess.run`)
-and guards the rest: a real process (a Popen of anything but git, which the gitsim answers or a `real_git` test runs) fails the test
-naming its argv. A test whose subject is the process itself (a tree kill, a signal, a child's environment) is marked `@real_proc(reason)`;
-the guard is off there and an unregistered command runs for real. A fake may add a third value, the seconds it would take: past the
-engine's wall limit for the command it is reported stopped there (a check that sleeps past its limit), and nothing sleeps."""
+and guards the rest: a real process (any Popen, git too, which the gitsim answers) or a fork in a logic test fails it naming its
+argv. A test whose subject is the process itself (a tree kill, a signal, real git) lives under a real/ folder (kind: tests/conftest.py) or
+is marked `@real_proc(reason)`; the guard is off there and an unregistered command runs for real, and a real test that never spawned
+fails. A fake may add a third value, the seconds it would take: past the engine's wall limit for the command it is reported stopped
+there (a check that sleeps past its limit), and nothing sleeps."""
 import contextlib
 import os
 import re
 import shlex
 import shutil
+import socket
 import subprocess
 from collections.abc import Callable, Mapping
 from pathlib import Path
@@ -97,6 +99,7 @@ class Procs:
         self.argv: tuple[str, ...] = ()  # the command of the fake that is running
         self.calls: list[tuple[str, ...]] = []  # the fake commands that ran
         self.problems: list[str] = []
+        self.spawns = 0  # real processes, forks and sockets this test made: a real/ test must make at least one
 
     def find(self, argv: Any) -> tuple[Fake, dict[str, str]] | None:
         """The fake an argv stands for, and the variables of an `env K=V ...` prefix; None when it is a real command."""
@@ -113,7 +116,7 @@ class Procs:
             return None
         if os.path.basename(words[0]) == "bd" and "tl-nobd-" in words[0]:  # the stub support/paths.py puts first on PATH: no tracker here
             return exits(99, "bd: the suite must not run a real bd (support.tlbd, FakeBeadStore)"), extra
-        if words[0] == "echo":
+        if words[0] == "echo" and self.guarded:  # a real test runs the real echo
             return exits(0, " ".join(words[1:])), extra
         fake = self.fakes.get(words) or (self.fakes.get(words[:1]) if words[0] in ("true", "false") else None)  # they ignore arguments
         fake = fake or next((f for k, f in self.prefixes.items() if words[: len(k)] == k), None)
@@ -164,13 +167,28 @@ class Procs:
 
     def guard(self, real_init: Callable[..., Any]) -> Callable[..., Any]:
         def init(popen: Any, args: Any, *a: Any, **kw: Any) -> Any:
-            first = args[0] if isinstance(args, (list, tuple)) and args else args
-            if self.guarded and os.path.basename(str(first)) != "git":  # git is the gitsim's to answer, or a real_git test's to run
+            if self.guarded:  # git too: the gitsim answers it, and a test that needs the real one is real
                 shown = " ".join(map(str, args))[:200] if isinstance(args, (list, tuple)) else str(args)[:200]
                 self.problems.append(f"{self.test_id}: spawned a real process: {shown}")
                 raise AssertionError(self.problems[-1] + ": a logic test runs its checks as procsim fakes; "
-                                     "mark it @real_proc(reason) if the process itself is the point")
+                                     "move it under real/ if the process itself is the point")
+            self.spawns += 1
             return real_init(popen, args, *a, **kw)
+        return init
+
+    def counted(self, real: Callable[..., Any]) -> Callable[..., Any]:
+        def fork() -> Any:
+            if self.guarded:
+                self.problems.append(f"{self.test_id}: forked a real process")
+                raise AssertionError(self.problems[-1] + ": a logic test forks nothing; move it under real/")
+            self.spawns += 1
+            return real()
+        return fork
+
+    def counted_init(self, real_init: Callable[..., Any]) -> Callable[..., Any]:
+        def init(sock: Any, *a: Any, **kw: Any) -> Any:
+            self.spawns += 1  # a socket is real I/O, but a logic test may open one (a loopback pair); only a real/ test must
+            return real_init(sock, *a, **kw)
         return init
 
     def install(self, stack: contextlib.ExitStack) -> None:
@@ -178,12 +196,17 @@ class Procs:
         stack.enter_context(mock.patch.object(stream_proc, "run", self.sp_stream(stream_proc.run)))
         stack.enter_context(mock.patch.object(shutil, "which", self.which(shutil.which)))
         stack.enter_context(mock.patch.object(subprocess.Popen, "__init__", self.guard(subprocess.Popen.__init__)))
+        stack.enter_context(mock.patch.object(os, "fork", self.counted(os.fork)))
+        stack.enter_context(mock.patch.object(socket.socket, "__init__", self.counted_init(socket.socket.__init__)))
         WORLD.append(self)
         stack.callback(WORLD.pop)
 
-    def check(self) -> None:
+    def check(self, must_spawn: bool = False) -> None:
         if self.problems:
             raise AssertionError("; ".join(self.problems))
+        if must_spawn and not self.spawns:
+            raise AssertionError(f"{self.test_id}: a real/ test never started a process, a fork or a socket: it is a logic test "
+                                 "(fakes, in process); move it out of real/")
 
 
 def default(text: str, fn: Fake) -> str:

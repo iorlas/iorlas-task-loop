@@ -2,7 +2,6 @@
 import json
 import os
 import shlex
-import subprocess
 import sys
 import unittest
 from pathlib import Path
@@ -15,7 +14,6 @@ from support import engine_case as te
 from support import procsim
 from support.builders import cfg_with
 from support.engine_case import PY, engine, pyc, real_git  # noqa: F401
-from support.waits import until
 
 from taskloop.adapters import (
     check_files,
@@ -424,23 +422,6 @@ class Schedule(SpeedTest):
         self.assertIn("TL_CHECK_LOG_UNITY_PLAY_TESTS", got[1])
         over = dict(te.PLAN, stages=[dict(te.PLAN["stages"][0], checks=["just play --timeout_ms 7200000"])])
         self.assertEqual(len(lint.own_timeout_problems(over, 60)), 1)
-
-
-class WallLimit(SpeedTest):
-    def alive(self, mark):
-        return subprocess.run(["pgrep", "-f", "sleep " + mark], capture_output=True, text=True, check=False).stdout.strip()
-
-    @te.POSIX_CHECK
-    @te.real_proc("a wall-limit kill reaches a descendant that left the process group (setsid): only a real tree shows it")
-    def test_a_timeout_keeps_the_output_and_kills_a_setsid_descendant(self):
-        mark = f"72.{os.getpid()}"
-        code = (f"import os,subprocess,sys,time\nprint('before', flush=True)\nsubprocess.Popen(['sleep','{mark}'], "
-                f"start_new_session=True)\ntime.sleep(30)")
-        eng = self.checks_engine(checks=[{"id": "t", "cmd": PY + " -c " + te.shq(code), "group": "tests", "wall_min": 0.01}])
-        res = eng.run_checks({"checks": [], "files": []}, "s")
-        self.assertEqual(res[0].exit, 124)
-        self.assertIn("before", (Path(eng.run_dir) / res[0].log).read_text())
-        self.assertTrue(until(lambda: self.alive(mark) == "", limit=5), "the setsid descendant outlived the check")
 
 
 if __name__ == "__main__":
