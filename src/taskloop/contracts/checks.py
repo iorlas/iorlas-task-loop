@@ -22,6 +22,13 @@ def verdict_of(rc: int) -> Verdict:
     return "passed" if rc == 0 else "unverified" if rc == UNVERIFIED_EXIT else "failed"
 
 
+class Phase(StrEnum):
+    """Where a repo check runs: the round after each write (STAGE) or land's gate (GATE). The wall limit follows the phase."""
+
+    STAGE = "stage"
+    GATE = "gate"
+
+
 class CheckFaultKind(StrEnum):
     STALE_BASE = "stale_base"  # the configured check needs something the tree lacks: older than the base's .task-loop.json
     KILLED = "killed"  # a signal ended the check, not its verdict

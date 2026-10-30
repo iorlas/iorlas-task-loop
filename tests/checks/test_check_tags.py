@@ -10,12 +10,12 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 # isort: split
 import msgspec
 
-from taskloop.contracts.checks import Check, CheckResult, Durations
+from taskloop.contracts.checks import Check, CheckResult, Durations, Phase
 from taskloop.contracts.config import CheckSpec, EngineConfig
 from taskloop.contracts.ids import CheckId
 from taskloop.contracts.wire import load
 from taskloop.domain.checks.plan import CheckPlan
-from taskloop.domain.checks.specs import diff_check, repo_check, tags_of
+from taskloop.domain.checks.specs import diff_check, gate_items, repo_check, tags_of, wall_limit
 
 
 def chk(name: str, cmd: str = "true", **kw) -> Check:
@@ -55,3 +55,21 @@ class Tags(unittest.TestCase):
     def test_tags_round_trip(self):
         c = chk("x", tags=["build"])
         self.assertEqual(msgspec.json.decode(msgspec.json.encode(c), type=Check).tags, ["build"])
+
+
+class Phases(unittest.TestCase):
+    def test_an_unknown_phase_fails_to_parse(self):
+        self.assertEqual(Phase("gate"), Phase.GATE)
+        with self.assertRaises(ValueError):
+            Phase("land")
+
+    def test_the_wall_limit_is_decided_by_the_phase_in_one_place(self):
+        cfg = EngineConfig(check_wall_min=10, gate_timeout_min=45)
+        k = CheckSpec(id=CheckId("t"), argv=["t"])
+        own = CheckSpec(id=CheckId("o"), argv=["o"], wall_min=7)
+        self.assertEqual((wall_limit(k, cfg, Phase.STAGE), wall_limit(k, cfg, Phase.GATE)), (10.0, 45.0))
+        self.assertEqual((wall_limit(own, cfg, Phase.STAGE), wall_limit(own, cfg, Phase.GATE)), (7.0, 7.0))
+        self.assertEqual(repo_check(k, cfg, Phase.GATE).wall_min, 45.0)
+        self.assertEqual(repo_check(k, cfg).wall_min, 10.0)
+        gated = EngineConfig(checks=[CheckSpec(id=CheckId("g"), argv=["g"], run="gate")], gate_timeout_min=33)
+        self.assertEqual(gate_items(gated)[0].wall_min, 33.0)

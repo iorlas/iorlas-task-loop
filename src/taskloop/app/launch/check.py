@@ -12,7 +12,7 @@ from taskloop.app.checks.runner import Checker
 from taskloop.app.launch.check_host import CliHost
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts.argv import text_of
-from taskloop.contracts.checks import CheckResult
+from taskloop.contracts.checks import CheckResult, Phase
 from taskloop.contracts.config import CheckSpec, EngineConfig
 from taskloop.domain.checks.specs import gate_items, repo_check
 
@@ -62,7 +62,7 @@ def cmd_check(a: Any, host: CliHost | None = None) -> int:
     if a.list:
         print("\n".join(listing(cfg)) or "(no checks in engine.checks)")
         return 0
-    items = [repo_check(k, cfg, gate=k.run != "stage") for k in chosen(cfg, a.ids)] if a.ids else gate_items(cfg)
+    items = [repo_check(k, cfg, Phase.STAGE if k.run == "stage" else Phase.GATE) for k in chosen(cfg, a.ids)] if a.ids else gate_items(cfg)
     if not items:
         print("no gate steps: no engine.checks entry says run gate or both")  # the built-in diff-check still runs
     box = host or CliHost(repo, cfg)
