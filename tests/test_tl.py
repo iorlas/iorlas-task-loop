@@ -500,8 +500,8 @@ class CutoverCheck(Base):
     @real_proc("a live pid (a sleeping child), then a dead one: what cutover check reads off the process table")
     def test_a_live_loop_and_a_live_run_exit_1_and_are_listed_a_dead_one_is_not(self):
         child = subprocess.Popen(["sleep", "60"])
+        self.addCleanup(child.wait)  # cleanups run last-in first-out: kill, then wait
         self.addCleanup(child.kill)
-        self.addCleanup(child.wait)
         looptest.write_state(str(self.repo), pid=child.pid, started=time.time(), t=time.time(), bead="x-9")
         engine_lock.write_engine_lock(str(self.repo), {"pid": child.pid, "start": pidcheck.proc_start(child.pid), "bead": "x-7",
                                               "by": "engine", "started": time.time()})
