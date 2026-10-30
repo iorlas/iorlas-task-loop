@@ -332,7 +332,7 @@ class EngineRunTest(EngineTest):
         self.assertEqual(rc, 0, self.blocked)
         fix = s.prompts[2]
         for i in range(18):
-            self.assertEqual(fix.count(f"src/F.cs({i},1): error CS{int(i):04d}: analyzer says no"), 1, i)
+            self.assertEqual(fix.count(f"src/F.cs:{i}:1: error CS{int(i):04d}: analyzer says no"), 1, i)
         self.assertIn("Build FAILED", fix)
         self.assertRegex(fix, r"log: \S+checks[\\/]\d\d-.*\.r1\.log")
         self.assertGreater(len(fix[fix.index("These checks fail"):]), 500)

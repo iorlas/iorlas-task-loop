@@ -56,10 +56,13 @@ def _raw(m: re.Match[str]) -> Raw:
 
 def single(line: str) -> Raw | None:
     """The diagnostic one line holds, by the first format of SINGLE that reads it."""
-    for _name, pat in SINGLE:
+    for name, pat in SINGLE:
         m = pat.match(line)
         if m:
-            return _raw(m)
+            raw = _raw(m)
+            if name == "generic" and not (raw.severity or raw.rule):  # `tests/a.py:31: AssertionError` is a traceback line, not a finding
+                return None
+            return raw
     return None
 
 

@@ -43,6 +43,7 @@ class CheckDiagnostics:
     rest: str = ""
     last: str = ""
     note: str = ""
+    warnings: int = 0  # warnings left out because errors are listed
 
 
 def parse(text: object) -> list[Diagnostic]:
@@ -70,8 +71,11 @@ def _last_words(text: str) -> str:
 def of_check(cmd: str, exit: int | None, text: str, log: str, note: str = "") -> CheckDiagnostics:
     """The check's diagnostics, or (none read) its output trimmed. The trim is sized at render time: `rest` here is the whole text."""
     items = parse(text)
-    if items:
-        return CheckDiagnostics(cmd=cmd, exit=exit, log=log, items=tuple(items), last=_last_words(text), note=note)
+    errors = [d for d in items if d.severity != "warning"]
+    if items:  # a build that has errors is red for them: the warnings (analyzer noise) wait until the errors are gone
+        keep = errors or items
+        return CheckDiagnostics(cmd=cmd, exit=exit, log=log, items=tuple(keep), last=_last_words(text), note=note,
+                                warnings=len(items) - len(keep))
     return CheckDiagnostics(cmd=cmd, exit=exit, log=log, rest=text, note=note)
 
 
@@ -97,6 +101,8 @@ def render(c: CheckDiagnostics, room: int, tail_lines: int = trim.TAIL) -> str:
     lines = [f"  {len(c.items)} diagnostic{'s' if len(c.items) != 1 else ''} (file:line:col, severity, rule, message):", *rows]
     if more:
         lines.append(f"  ... {more} more not shown: see the log")
+    if c.warnings:
+        lines.append(f"  ({c.warnings} warning{'s' if c.warnings != 1 else ''} not listed: fix the errors first)")
     if c.last:
         lines += ["  its last words:", *("  " + x for x in c.last.splitlines())]
     return "\n".join([head, *lines, *([c.note] if c.note else [])])

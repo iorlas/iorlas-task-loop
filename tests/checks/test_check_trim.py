@@ -1,4 +1,5 @@
 """tl-7y6.7.17: a check's output is trimmed before any agent prompt carries it."""
+import re
 import sys
 import tempfile
 import unittest
@@ -98,8 +99,8 @@ class BriefPaths(unittest.TestCase):
                 out = evidence.failure_brief([res(cmd="c", exit=1, log="checks/" + name)], self.run_dir)
                 self.assertLessEqual(len(out.encode()), trim.CAP)
                 self.assertIn(str(self.run_dir / "checks" / name), out)
-                for line in must:
-                    self.assertIn(line, out)
+                for line in must:  # a compiler's diagnostics are listed as file:line:col (diagnostics.py)
+                    self.assertIn(re.sub(r"\((\d+),(\d+)\)", r":\1:\2", line), out)
 
     def test_compact_red_keeps_the_failing_name_and_green_stays_one_line(self):
         tail = (FIX / "unittest_fail.log").read_text()[-1500:]
