@@ -26,7 +26,8 @@ def make_dash(ports=None, **kw):
 def serving(ports=None, *argv):
     """The dash server (the code `python3 -m taskloop_dash` starts, minus the process): a real socket served from a thread. Yields its
     base URL. The environment (HOME, XDG_CONFIG_HOME, TASK_LOOP_DASH_BIND) is read now, so patch it first."""
-    servers, _addrs, port, _dash = serve.start(Env(ports=ports or Ports(), version=dash_cli.code_version()), dash_cli.PACKAGE, list(argv) or ["--port", "0"])
+    env = Env(ports=ports or Ports(), version=dash_cli.code_version())
+    servers, _addrs, port, _dash = serve.start(env, dash_cli.PACKAGE, list(argv) or ["--port", "0"])
     thread = threading.Thread(target=servers[0].serve_forever, daemon=True)
     thread.start()
     try:
