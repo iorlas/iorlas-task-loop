@@ -1,6 +1,8 @@
 """Names of a check: its normal command text and the environment variables later checks read it by."""
 from itertools import groupby
 
+from taskloop.contracts.ids import CheckId
+
 LOG_PREFIX = "TL_CHECK_LOG_"
 RC_PREFIX = "TL_CHECK_RC_"
 
@@ -10,7 +12,7 @@ def norm(cmd: object) -> str:
     return " ".join(str(cmd).split())
 
 
-def mangle(check_id: str) -> str:
+def mangle(check_id: CheckId) -> str:
     """The id as an environment name: each run of non-word characters becomes one `_`, upper case."""
     out = []
     for word, run in groupby(check_id, key=lambda ch: ch.isalnum() or ch == "_"):
@@ -18,9 +20,9 @@ def mangle(check_id: str) -> str:
     return "".join(out).upper()
 
 
-def log_var(check_id: str) -> str:
+def log_var(check_id: CheckId) -> str:
     return LOG_PREFIX + mangle(check_id)
 
 
-def rc_var(check_id: str) -> str:
+def rc_var(check_id: CheckId) -> str:
     return RC_PREFIX + mangle(check_id)

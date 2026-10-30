@@ -6,6 +6,7 @@ from pathlib import Path
 
 from taskloop.adapters import check_files
 from taskloop.contracts.checks import CacheHit, Check, CheckCacheEntry, CheckResult
+from taskloop.contracts.ids import CheckId
 from taskloop.domain.checks import inputs
 from taskloop.domain.checks.names import norm
 from taskloop.stores.api import Doc
@@ -79,7 +80,7 @@ class CheckCache:
     def set_base_red(self, base: str, cmd: str, red: bool) -> None:
         self.base_red[f"{base} {norm(cmd)}"] = red
 
-    def green_ids(self, checks: list[Check], keys: InputKeys) -> list[str]:
+    def green_ids(self, checks: list[Check], keys: InputKeys) -> list[CheckId]:
         """Ids of the repo checks with a green result on this tree: by their inputs hash, else by tree and base."""
         out = []
         for c in checks:

@@ -19,6 +19,7 @@ from taskloop.app.checks import evidence
 from taskloop.app.checks.attempts import Attempts
 from taskloop.contracts import wire
 from taskloop.contracts.checks import Check, CheckRun
+from taskloop.contracts.ids import CheckId
 from taskloop.domain.checks import lint, retry
 
 ST = {"checks": [], "files": []}
@@ -144,7 +145,7 @@ class Retries(Base):
     def test_a_check_gets_the_artifact_directory_and_its_own_id(self):
         h = self.host()
         attempts = Attempts(cast(Any, h), cast(Any, None), lambda s: None)
-        attempts.run(Check(id="shot", cmd="just shot", retry=0), Path(self.tmp.name) / "l.log", {"A": "1"})
+        attempts.run(Check(id=CheckId("shot"), cmd="just shot", retry=0), Path(self.tmp.name) / "l.log", {"A": "1"})
         art = Path(self.tmp.name) / ".task" / "b-1" / "artifacts"
         self.assertEqual(h.envs[0], {"A": "1", "TL_ARTIFACTS": str(art), "TL_ARTIFACT_STEP": "shot"})
         self.assertTrue(art.is_dir())
@@ -152,7 +153,7 @@ class Retries(Base):
     def test_a_slow_check_that_fails_twice_the_same_way_is_judged_like_a_quick_one(self):
         """No duration guess: the retry rule sees the output only, a slow check is bounded by its wall limit."""
         h = self.host()
-        c = Check(id="slow", cmd="just slow", retry=3)
+        c = Check(id=CheckId("slow"), cmd="just slow", retry=3)
         clock = iter(range(0, 100000, 21 * 60))  # every reading of the clock is 21 minutes on
         with mock.patch("taskloop.app.checks.attempts.time.time", side_effect=lambda: next(clock)):
             out = Attempts(cast(Any, h), cast(Any, None), lambda s: None).run(c, Path(self.tmp.name) / "l.log", {})

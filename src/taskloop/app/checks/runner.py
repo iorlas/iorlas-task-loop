@@ -12,6 +12,7 @@ from taskloop.app.checks.executor import CheckExecutor, Round
 from taskloop.app.checks.fixer import Fixer
 from taskloop.app.checks.host import CheckHost, CheckStuck
 from taskloop.contracts.checks import Check, CheckResult, CheckRun, Durations
+from taskloop.contracts.ids import TreeSha
 from taskloop.domain.checks.durations import merged, seconds
 from taskloop.domain.checks.plan import CheckPlan
 from taskloop.domain.checks.specs import DIFF_CHECK, diff_check, due, gate_items, items_of
@@ -105,7 +106,7 @@ class Checker:
         """A clean diff check is not a result anyone reads: it stays in the check log's rows only."""
         return [c for c in results if not (c.id == DIFF_CHECK and c.exit == 0)]
 
-    def _finish(self, st: Round, tree: str, history: Durations, history_doc: Any) -> CheckRun:
+    def _finish(self, st: Round, tree: TreeSha, history: Durations, history_doc: Any) -> CheckRun:
         host = self.host
         results = self._quiet(st.results)
         host.detail(evidence.round_lines(results))

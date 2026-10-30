@@ -15,6 +15,7 @@ import support.paths  # noqa: F401
 from taskloop.app.land.lander import Lander
 from taskloop.contracts.checks import CacheHit, CheckCacheEntry, CheckResult, CheckRun
 from taskloop.contracts.config import CheckSpec, EngineConfig
+from taskloop.contracts.ids import CheckId
 
 REJECTED = (1, " ! [rejected]        HEAD -> main (fetch first)")
 PUSHED = (0, "")
@@ -60,7 +61,7 @@ class World:
             yield []
         self.host = SimpleNamespace(
             git=self.git, sh=self.sh, halt_point=lambda *a, **k: None,
-            cfg=EngineConfig(base="origin/main", checks=[CheckSpec(id="gate", argv=["gate"], run="gate")], land=["git", "push"],
+            cfg=EngineConfig(base="origin/main", checks=[CheckSpec(id=CheckId("gate"), argv=["gate"], run="gate")], land=["git", "push"],
                              land_optimistic_tries=tries, max_fix_rounds=2, gate_timeout_min=1),
             wt=Path("/nonexistent"),
             bead="t-1", dry=False, landed_sha="", pending_land_validation="", fixes=0, gate_log=None, run_dir=Path("run"), killed=False,
@@ -115,7 +116,7 @@ class World:
 
     def run_items(self, items: list[Any]) -> CheckRun:
         rc, tail = self.sh(["gate"])
-        res = CheckResult(id="gate", cmd="gate", group="tests", exit=rc, status="failed" if rc else "passed", tail=tail)
+        res = CheckResult(id=CheckId("gate"), cmd="gate", group="tests", exit=rc, status="failed" if rc else "passed", tail=tail)
         if not rc:
             self.doc.rec = CheckCacheEntry(key=f"tree@{self.sat_on} {self.base}", whole={"gate": CacheHit(result=res)})
         return CheckRun(round=1, results=[res])

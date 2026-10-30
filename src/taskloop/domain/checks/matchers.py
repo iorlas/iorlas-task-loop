@@ -2,6 +2,8 @@
 that imports `re` (rule: import re only in domain/**/matchers.py)."""
 import re
 
+from taskloop.contracts.ids import CheckId
+
 # -- globs: ** crosses folders, * and ? stay in one, {a,b} is either --------------------------------------------------
 
 
@@ -125,7 +127,7 @@ def names_shortened(said: str, mine: str) -> bool:
     return len(said) >= 20 and (said in mine or mine in said) and min(len(said), len(mine)) >= 0.8 * max(len(said), len(mine))
 
 
-def safe_name(check_id: str, width: int = 40) -> str:
+def safe_name(check_id: CheckId, width: int = 40) -> str:
     """A check's id as a file name part."""
     return SAFE_NAME.sub("_", check_id)[:width]
 

@@ -37,7 +37,7 @@ def step_line(c: CheckResult) -> str:
 
 def chosen(cfg: EngineConfig, ids: list[str]) -> list[CheckSpec]:
     """The named checks of the registry, in the order named."""
-    known = {k.id: k for k in cfg.checks}
+    known = {str(k.id): k for k in cfg.checks}
     missing = [i for i in ids if i not in known]
     if missing:
         raise SystemExit(f"tl check: not in the registry: {', '.join(missing)} (tl check --list: {', '.join(known) or 'none'})")

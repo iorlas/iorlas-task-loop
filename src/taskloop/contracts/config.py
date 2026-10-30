@@ -5,6 +5,7 @@ import msgspec
 
 from taskloop.contracts import wire
 from taskloop.contracts.argv import FORM, shape_problem, text_of
+from taskloop.contracts.ids import CheckId
 from taskloop.contracts.wire import Rec
 
 FRESH_ABOVE_K = {"claude": 150.0, "codex": 100.0, "xai": 100.0}
@@ -46,7 +47,7 @@ class ContainerConfig(Rec):
 
 
 class CheckSpec(Rec):
-    id: str
+    id: CheckId
     argv: list[str]
     group: Literal["static", "tests", "acceptance"] = "tests"
     run: Literal["stage", "gate", "both"] = "stage"  # stage: the round after each write; gate: land's gate steps (and `tl check`); both

@@ -11,6 +11,7 @@ from pathlib import Path
 
 from taskloop.adapters import procs as sproc
 from taskloop.adapters.gitenv import git_env
+from taskloop.contracts.ids import TreeSha
 
 State = tuple[bytes, tuple[object, ...]]
 
@@ -19,7 +20,7 @@ class TreeHashError(RuntimeError):
     """git could not say what the worktree would commit (read-tree, add or write-tree failed): no hash beats a half-built index's."""
 
 
-def tree_of(wt: str | Path) -> str:
+def tree_of(wt: str | Path) -> TreeSha:
     """The worktree as git would commit it now, untracked files included."""
     with tempfile.TemporaryDirectory() as d:
         env = dict(git_env(wt), GIT_INDEX_FILE=os.path.join(d, "index"))
@@ -29,7 +30,7 @@ def tree_of(wt: str | Path) -> str:
             if r.returncode != 0:
                 raise TreeHashError(f"git {args[0]} failed ({r.returncode}): {(r.stderr or '').strip()[:300]}")
             out = r.stdout.strip()
-    return out
+    return TreeSha(out)
 
 
 def changed_paths(records: list[bytes]) -> list[bytes]:

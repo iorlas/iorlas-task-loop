@@ -12,6 +12,7 @@ from support.engine_case import CLEAN, PLAN, WRITE, EngineTest
 from support.logs import records
 
 from taskloop.contracts.checks import Check
+from taskloop.contracts.ids import CheckId
 from taskloop.domain.checks.specs import due, gate_items, items_of
 
 STEP = "true"
@@ -70,10 +71,10 @@ class GateSteps(EngineTest):
 
 class When(EngineTest):
     def test_when_uses_the_inputs_glob_dialect_star_stays_in_one_folder(self):
-        c = Check(id="w", cmd="true", when=["client/*.cs", "src/**", "{a,b}/x"])
+        c = Check(id=CheckId("w"), cmd="true", when=["client/*.cs", "src/**", "{a,b}/x"])
         self.assertTrue(due(c, ["client/A.cs"]))
         self.assertFalse(due(c, ["client/deep/A.cs"]))  # fnmatch's * crossed folders: the same glob said two things
         self.assertTrue(due(c, ["src/a/b/c.py"]))
         self.assertTrue(due(c, ["b/x"]))
         self.assertFalse(due(c, ["docs/x"]))
-        self.assertTrue(due(Check(id="n", cmd="true"), []))
+        self.assertTrue(due(Check(id=CheckId("n"), cmd="true"), []))

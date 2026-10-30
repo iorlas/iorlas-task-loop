@@ -31,6 +31,7 @@ from taskloop.contracts import (
     usage,
 )
 from taskloop.contracts.enums import AskClass, AskKind, AskStatus, LockWhat, Outcome, WaitWhat, WhyCode
+from taskloop.contracts.ids import CheckId, TreeSha
 
 T = 1793050200.5
 RUN = ids.RunId(ids.BeadId("tl-7y6.3.1"), datetime.datetime(2026, 10, 27, 0, 22, 39))
@@ -86,19 +87,20 @@ LOCK = locks.EngineLock(pid=1789, bead="tl-1", started=T, by="tl-abc", pid_start
                         route=(10, T), workers=[(11, T), (12, T + 1)])
 CMD = {"pick_label": "auto",
        "visual_paths": config.VisualConfig(include=["a/**"]), "write_fresh_above_k": 150.0, "max_rounds": 4,
-       "checks": [config.CheckSpec(id="fmt", argv=["just", "fmt"], group="static", when=["x/**"], inputs="a/**", where="container"),
-                  config.CheckSpec(id="unity", argv=["just", "check-unity"], run="gate")],
+       "checks": [config.CheckSpec(id=CheckId("fmt"), argv=["just", "fmt"], group="static", when=["x/**"], inputs="a/**",
+                                  where="container"),
+                  config.CheckSpec(id=CheckId("unity"), argv=["just", "check-unity"], run="gate")],
        "container": config.ContainerConfig(image="img:1")}
 
 
 CHECK_RUN = checks.CheckRun(
     round=1,
-    tree="deadbeef",
+    tree=TreeSha("deadbeef"),
     hits=1,
     misses=1,
     results=[
         checks.CheckResult(
-            id="unittest",
+            id=CheckId("unittest"),
             cmd="python3 -m unittest",
             group="tests",
             exit=1,
@@ -109,7 +111,8 @@ CHECK_RUN = checks.CheckRun(
             sig="boom",
             base_red=True,
         ),
-        checks.CheckResult(id="lint", cmd="ruff check", group="static", exit=0, status="passed", cached=True, note="inputs unchanged"),
+        checks.CheckResult(id=CheckId("lint"), cmd="ruff check", group="static", exit=0, status="passed", cached=True,
+                            note="inputs unchanged"),
     ],
 )
 
@@ -303,7 +306,7 @@ OTHERS = {
     "ReviewState": REVIEW_STATE,
     "CheckRun": CHECK_RUN,
     "Check": checks.Check(
-        id="unity-tests",
+        id=CheckId("unity-tests"),
         cmd="just unity-tests",
         group="tests",
         when=["client/**"],

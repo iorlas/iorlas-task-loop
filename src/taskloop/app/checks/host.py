@@ -6,6 +6,7 @@ from typing import Protocol
 from taskloop.app.checks.checklog import CheckLog
 from taskloop.contracts.checks import CheckFaultKind
 from taskloop.contracts.config import EngineConfig
+from taskloop.contracts.ids import TreeSha
 from taskloop.stores.bundle import Stores
 from taskloop.stores.runlog import RunLog
 
@@ -41,7 +42,7 @@ class CheckSteps(Protocol):
 class CheckoutView(Protocol):
     """The slot's checkout (app/land/checkout.py), as the checks see it."""
 
-    def tree_hash(self) -> str: ...
+    def tree_hash(self) -> TreeSha: ...
     def git_env(self) -> Mapping[str, str]: ...
     def changed_paths(self) -> list[str]: ...
     def stage_all(self, check: bool = ..., everything: bool = ...) -> int: ...

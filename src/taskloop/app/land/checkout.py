@@ -5,6 +5,7 @@ from typing import Any
 
 from taskloop.adapters import gitrepo, treehash
 from taskloop.adapters.gitenv import git_env, run_git
+from taskloop.contracts.ids import TreeSha
 
 
 class Checkout:
@@ -96,13 +97,13 @@ class Checkout:
             raise e.blocked_for(f"failed: staging the slot's paths exit {rc}\n{st.stderr.decode('utf-8', 'replace')[-600:]}", "FAULT_SLOT")
         return rc
 
-    def tree_hash(self) -> str:
+    def tree_hash(self) -> TreeSha:
         """The worktree as git would commit it now, untracked files included, without touching the real index."""
         e = self.e
         state = treehash.state_of(e.wt)
         memo = e.tree_memo
         if state and memo and memo[0] == state:
-            return str(memo[1])
+            return TreeSha(memo[1])
         tree = treehash.tree_of(e.wt)
         if state:
             e.tree_memo = (state, tree)

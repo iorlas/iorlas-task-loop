@@ -7,6 +7,7 @@ from typing import ClassVar, Literal, override
 import msgspec
 
 from taskloop.contracts.enums import CheckStatus
+from taskloop.contracts.ids import CheckId, TreeSha
 from taskloop.contracts.wire import Rec
 
 Group = Literal["static", "tests", "acceptance"]
@@ -21,7 +22,7 @@ class CheckFaultKind(StrEnum):
 class Check(Rec):
     """One check of a round: a repo check (engine.checks) or a command of the plan (a stage's check, a case)."""
 
-    id: str
+    id: CheckId
     cmd: str
     group: Group = "tests"
     when: list[str] = msgspec.field(default_factory=list)
@@ -41,7 +42,7 @@ class Check(Rec):
 
 
 class CheckResult(Rec):
-    id: str
+    id: CheckId
     cmd: str
     group: str
     exit: int | None  # None: it did not run
@@ -68,7 +69,7 @@ class CheckResult(Rec):
     @classmethod
     def failed_run(cls, cmd: str, tail: str, group: str = "gate", log: str = "") -> CheckResult:
         """A red run of a command that is not a check of a round (the gate, a rebase), to be shown like one."""
-        return cls(id=cmd, cmd=cmd, group=group, exit=1, status="failed", tail=tail, log=log)
+        return cls(id=CheckId(cmd), cmd=cmd, group=group, exit=1, status="failed", tail=tail, log=log)
 
     @property
     def word(self) -> CheckStatus:
@@ -89,7 +90,7 @@ class CheckRun(Rec):
 
     V: ClassVar[int] = 1
     round: int
-    tree: str = ""
+    tree: TreeSha = TreeSha("")
     results: list[CheckResult] = msgspec.field(default_factory=list)
     hits: int = 0
     misses: int = 0

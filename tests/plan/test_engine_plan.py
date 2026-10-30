@@ -21,6 +21,7 @@ from taskloop.app.run import engine
 from taskloop.contracts import answers
 from taskloop.contracts.argv import checks_to_wire
 from taskloop.contracts.config import EngineConfig
+from taskloop.contracts.ids import CheckId
 from taskloop.domain import outcome as oc
 from taskloop.domain.checks import lint
 from taskloop.domain.checks.names import log_var
@@ -55,7 +56,7 @@ class EnginePlanTest(EngineTest):
         got = lint.rerun_problems(plan, cfg)
         self.assertEqual(len(got), 1)
         self.assertIn("`unity-tests`", got[0])
-        self.assertEqual(log_var("unity-tests"), "TL_CHECK_LOG_UNITY_TESTS")
+        self.assertEqual(log_var(CheckId("unity-tests")), "TL_CHECK_LOG_UNITY_TESTS")
 
     def test_a_plan_with_just_unity_in_acceptance_is_sent_back_once(self):
         bad = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=["just unity-tests"])])

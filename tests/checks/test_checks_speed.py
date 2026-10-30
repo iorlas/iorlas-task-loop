@@ -22,6 +22,7 @@ from taskloop.app.checks.cache import InputKeys
 from taskloop.app.wire import doctor
 from taskloop.contracts.argv import text_of
 from taskloop.contracts.checks import Check, Durations
+from taskloop.contracts.ids import CheckId
 from taskloop.domain.checks import durations, inputs, lint
 from taskloop.domain.checks.names import norm
 from taskloop.domain.checks.order import CheckOrder
@@ -160,7 +161,7 @@ class InputCache(SpeedTest):
         (self.wt / "client" / "a.cs").write_text("1\n")
         (self.wt / "client" / "Gen" / "t.cs").write_text("1\n")
         (self.wt / "client" / "Gen" / "i.gen").write_text("1\n")
-        c = Check(id="x", cmd="x", inputs=["client/**"], inputs_only=True, exclude=["client/Gen/**"])
+        c = Check(id=CheckId("x"), cmd="x", inputs=["client/**"], inputs_only=True, exclude=["client/Gen/**"])
 
         def key():
             return InputKeys(self.wt, self.tree(), "b", os.environ).key(c)
@@ -276,7 +277,7 @@ class CheapFirst(SpeedTest):
         self.assertEqual([(c.id, c.status) for c in res], [("slow", "passed"), ("reader", "passed")])
 
     def test_order_ignores_sub_five_second_noise(self):
-        items = [Check(id="a", cmd="a"), Check(id="b", cmd="b")]
+        items = [Check(id=CheckId("a"), cmd="a"), Check(id=CheckId("b"), cmd="b")]
         order = CheckOrder(Durations(runs={"a": [3.0], "b": [0.1]}))
         self.assertEqual(order.sort(items, {}), [0, 1])
 

@@ -5,6 +5,8 @@ from pathlib import Path
 from typing import NewType
 
 BeadId = NewType("BeadId", str)
+CheckId = NewType("CheckId", str)  # a check's id in the registry or the plan: never a bead id
+TreeSha = NewType("TreeSha", str)  # the hash of a worktree's files (adapters/treehash.py): never a commit sha
 STAMP = "%Y%m%d-%H%M%S"
 _BEAD_CHARS = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.-")
 

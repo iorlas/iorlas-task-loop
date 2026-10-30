@@ -4,9 +4,10 @@ from collections.abc import Sequence
 from taskloop.contracts.argv import argv_of, text_of
 from taskloop.contracts.checks import Check
 from taskloop.contracts.config import CheckSpec, EngineConfig
+from taskloop.contracts.ids import CheckId
 from taskloop.domain.checks.matchers import glob_re
 
-DIFF_CHECK = "diff-check"  # the engine's own check: `git diff --check <base>`, always first, in every round, the gate and `tl check`
+DIFF_CHECK = CheckId("diff-check")  # the engine's own check: `git diff --check <base>`, always first in every round and the gate
 
 
 def diff_check(base: str, tree: str) -> Check:
@@ -35,7 +36,7 @@ def repo_check(k: CheckSpec, cfg: EngineConfig, gate: bool = False) -> Check:
 
 def items_of(cfg: EngineConfig, stage_checks: Sequence[str]) -> list[Check]:
     """The repo's checks, then the plan's: a plan's check is its command, always run (it can read what git cannot see)."""
-    plan = [Check(id=c, cmd=c, group="acceptance", wall_min=float(cfg.check_wall_min), cache=False)
+    plan = [Check(id=CheckId(c), cmd=c, group="acceptance", wall_min=float(cfg.check_wall_min), cache=False)
             for c in map(spelled, stage_checks)]
     return [repo_check(k, cfg) for k in cfg.stage_checks] + plan
 

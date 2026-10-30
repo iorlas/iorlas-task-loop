@@ -17,6 +17,7 @@ from taskloop.contracts import log as rec
 from taskloop.contracts.checks import CheckResult, CheckRun
 from taskloop.contracts.dash import Marker
 from taskloop.contracts.enums import WaitWhat
+from taskloop.contracts.ids import CheckId
 from taskloop.contracts.runlife import SAME_RED, silent_limit
 from taskloop.domain.stuck import StuckWatch
 from taskloop.stores.memory import MemLog
@@ -29,8 +30,8 @@ WRITE_LIMIT = silent_limit("write")
 
 
 def round_of(n, sig="boom", red=True):
-    res = CheckResult(id="unit", cmd="python3 -m unittest", group="tests", exit=1 if red else 0, status="failed" if red else "passed",
-                      sig=sig)
+    res = CheckResult(id=CheckId("unit"), cmd="python3 -m unittest", group="tests", exit=1 if red else 0,
+                      status="failed" if red else "passed", sig=sig)
     return rec.Checks(t=T + n, node_id=f"n{n}", run=CheckRun(round=n, results=[res]))
 
 
