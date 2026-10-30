@@ -2,10 +2,11 @@
 from typing import Protocol
 
 from taskloop.app.land.gate import Problem, ProblemKind
+from taskloop.app.land.gitcall import must
 from taskloop.app.land.parts import MoveSteps, StageCheckout
 from taskloop.contracts import plancheck
 from taskloop.contracts.plancheck import PlanData
-from taskloop.contracts.ports import Sh
+from taskloop.contracts.ports import Git
 
 
 class FixRounds(Protocol):
@@ -42,8 +43,9 @@ class FixOutsideHost(Protocol):
     @property
     def checkout(self) -> StageCheckout: ...
     @property
-    def sh(self) -> Sh: ...
-    def git(self, *args: str) -> str: ...
+    def git(self) -> Git: ...
+    @property
+    def wt(self) -> str: ...
     def blocked_for(self, why: str, kind: str) -> Exception: ...
 
 
@@ -67,6 +69,6 @@ class FixOutside:
         if problem.kind is ProblemKind.VERIFY:
             e.pending_land_validation = ""
             e.checkpoints.save(stage=stages, step="land")
-            if e.git("status", "--porcelain"):  # unlike verification before finish(), a retry check's fix follows the task commit
+            if e.git.dirty(e.wt):  # unlike verification before finish(), a retry check's fix follows the task commit
                 e.checkout.stage_all(check=True)
-                e.sh(["git", "commit", "-q", "--no-verify", "--amend", "--no-edit"], check=True, pin=True)
+                must(e, "commit --amend", lambda: e.git.amend(e.wt))

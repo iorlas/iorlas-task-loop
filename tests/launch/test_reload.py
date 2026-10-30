@@ -16,6 +16,7 @@ SRC = ROOT / "skills" / "task-loop"
 sys.path.insert(0, str(SRC))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: E402, F401
+from support import gitq  # noqa: E402
 from support.checkpoints import read_ck  # noqa: E402
 
 sys.path.insert(0, str(ROOT / "tests"))
@@ -28,11 +29,10 @@ from support.builders import cfg_with  # noqa: E402
 from support.fake_beads import FakeBeads  # noqa: E402
 from support.fakes import as_bead  # noqa: E402
 from support.narrow import must  # noqa: E402
-from support.spawn import real_spawner  # noqa: E402
+from support.spawn import port_git, real_spawner  # noqa: E402
 
 from taskloop.adapters import (  # noqa: E402
     childenv,
-    gitrepo,
     ident,
 )
 from taskloop.adapters import delegate as dl  # noqa: E402
@@ -108,7 +108,7 @@ class Reload(te.EngineTest):
     def engine_for(self, script, **cfg):
         c = wslots.load_cfg(str(self.wt))
         c = cfg_with(c, **{"reflect": False, **cfg})
-        eng = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner())
+        eng = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(), git=port_git())
         eng.argv = ["run-task", "t-1", "--worktree", str(self.wt), "--fresh", "--outcome-file", "/x/out.json"]
 
         def fake_exec(argv):
@@ -175,7 +175,7 @@ class Reload(te.EngineTest):
             rc = self.run_with(eng2, script)
         self.assertEqual(rc, 0)
         self.assertTrue(self.closed and self.closed[0].startswith("merged "))
-        self.assertEqual(gitrepo.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")  # pyrefly: ignore[missing-attribute]
+        self.assertEqual(gitq.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")  # pyrefly: ignore[missing-attribute]
         self.assertFalse(reexec.cfg().reexec_note(BeadId("t-1")).exists())  # a run that ended is no crash after an exec
         logs = [json.loads(x) for x in eng.log_path.read_text().splitlines()]
         self.assertEqual(len([x for x in logs if x["kind"] == "run_start"]), 1)  # one run record for the one run
@@ -286,7 +286,7 @@ class Reload(te.EngineTest):
         with mock.patch.object(
             dl, "resolve", side_effect=[self.res("/a/route.py"), self.res("/b/route.py"), self.res("/b/route.py")]
         ) as fr:
-            eng = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner())
+            eng = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(), git=port_git())
             self.assertEqual(eng.delegation.route(), "/b/route.py")
             self.assertEqual(eng.delegation.route(), "/b/route.py")
             self.assertEqual(fr.call_count, 3)

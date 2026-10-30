@@ -9,6 +9,7 @@ import support.paths  # noqa: F401
 
 from taskloop.adapters.git import RealGit
 from taskloop.app.plan.prompt import REPLAN_CALLS, PlanPrompt
+from taskloop.contracts.env import snapshot
 
 
 class StatGit(RealGit):
@@ -25,16 +26,16 @@ def host(tree="abc"):
 
 class Digest(unittest.TestCase):
     def test_a_replan_gets_the_diff_stat_and_the_budget(self):
-        text = PlanPrompt(host(), StatGit()).history({"stages": []}, False)
+        text = PlanPrompt(host(), StatGit(snapshot())).history({"stages": []}, False)
         self.assertIn("<tree>\na.py | 2 +-\n</tree>", text)
         self.assertIn(f"at most {REPLAN_CALLS} files", text)
         self.assertIn("sent back: x", text)
 
     def test_a_first_plan_gets_neither(self):
-        self.assertEqual(PlanPrompt(host(), StatGit()).history(None, False), "")
+        self.assertEqual(PlanPrompt(host(), StatGit(snapshot())).history(None, False), "")
 
     def test_no_tree_says_nothing_changed(self):
-        self.assertIn("(no file changed yet)", PlanPrompt(host(tree=""), StatGit()).history(None, True))
+        self.assertIn("(no file changed yet)", PlanPrompt(host(tree=""), StatGit(snapshot())).history(None, True))
 
 
 if __name__ == "__main__":

@@ -44,4 +44,4 @@ from taskloop.contracts.env import snapshot  # noqa: E402
 
 if __name__ == "__main__":
     process = snapshot()  # the one place this script takes the process environment
-    sys.exit(flow.main(None, HERE.parent, real.spawner(process), real.git(), process, __doc__.split("\n\n")[0]))
+    sys.exit(flow.main(None, HERE.parent, real.spawner(process), real.git(process), process, __doc__.split("\n\n")[0]))

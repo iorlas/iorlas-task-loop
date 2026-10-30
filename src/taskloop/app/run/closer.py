@@ -126,7 +126,7 @@ class Closer:
         e = self.e
         counts = "; ".join(f"{k}={v}" for k, v in e.stats.items())
         stats = f"cost=${e.cost:.2f}; minutes={int((time.time() - e.t0) / 60)}; {counts}"
-        branch = e.git("symbolic-ref", "--short", "-q", "HEAD")
+        branch = e.git.branch(e.wt)
         plan = effects.plan_close(done, dry=e.dry, branch=branch, slot_gen=e.claim.slot_gen)
         interpret(e.bead, e.log_path.stem, plan, CheckpointLedger(e.checkpoints), lambda eff: self.apply(eff, done, stats))
 

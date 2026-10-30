@@ -21,6 +21,7 @@ from taskloop.app.reconcile.sweep import sweep
 from taskloop.app.run import layout
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.config import LoopConfig
+from taskloop.contracts.env import snapshot
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdError, BdFailure, Beads
@@ -35,7 +36,7 @@ def git(cwd, *args):
     return r.stdout.strip()
 
 
-GIT = RealGit()  # the helper classes below drive real git; their tests are in real/
+GIT = RealGit(snapshot())  # the helper classes below drive real git; their tests are in real/
 
 
 class Store:

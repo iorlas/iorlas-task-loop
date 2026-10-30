@@ -13,6 +13,7 @@ from taskloop.app.report import planner, reflect
 from taskloop.app.report.inputs import bead_status, prefix, repo_traces
 from taskloop.app.report.window import digest_time, since_of, window
 from taskloop.app.wire import real
+from taskloop.contracts.env import Env
 
 
 def stamp(t: float) -> str:
@@ -74,7 +75,7 @@ def print_card(c: dict[str, Any]) -> None:
     print("M2 {}{}".format("PASS" if c["m2"]["pass"] else "FAIL", ": " + "; ".join(bad) if bad else ""))
 
 
-def cmd_report(a: Any) -> int:
+def cmd_report(a: Any, env: Env) -> int:
     since, until = window(getattr(a, "since", None), getattr(a, "until", None), time.time())
     if getattr(a, "planner", False):
         pre = {x.strip() for x in (getattr(a, "prefix", "") or "").split(",") if x.strip()}
@@ -85,7 +86,7 @@ def cmd_report(a: Any) -> int:
             print_planner(p)
         return 0
     repo = repos.repo_root(a.repo)
-    c = cards.scorecard(repo, since, until, base=repos.default_base(repo), git=real.git())
+    c = cards.scorecard(repo, since, until, base=repos.default_base(repo), git=real.git(env))
     c["planner"] = planner.planner_stats(since, until, {prefix(x["bead"]) for x in c["per_bead"]})
     if a.json:
         print(json.dumps(c, indent=1, ensure_ascii=False))
@@ -94,10 +95,10 @@ def cmd_report(a: Any) -> int:
     return 0 if c["m2"]["pass"] else 1
 
 
-def cmd_lost(a: Any) -> int:
+def cmd_lost(a: Any, env: Env) -> int:
     repo = repos.repo_root(a.repo)
     since = since_of(a.since, time.time())
-    git = real.git()
+    git = real.git(env)
     rows = lostwork.lost_work(repo, repos.default_base(repo), lambda b: bead_status(b, repo), repo_traces(repo, git).runs, git, since=since)
     if a.json:
         print(json.dumps(rows, indent=1, ensure_ascii=False))

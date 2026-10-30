@@ -13,6 +13,8 @@ from support.narrow import must
 from support.narrow_hosts import Stopped, table_kit
 
 # isort: split
+from support.spawn import port_git
+
 from taskloop.app.checks import evidence
 from taskloop.app.checks.cache import InputKeys, RunMemo
 from taskloop.app.land import verified
@@ -59,7 +61,7 @@ class Recorded(EngineTest):
 class Cache(unittest.TestCase):
     def memo(self, seed=None):
         doc = MemDoc(CheckCacheEntry)
-        keys = InputKeys("/nonexistent", TreeSha("t"), {})
+        keys = InputKeys(port_git(), "/nonexistent", TreeSha("t"))
         if seed:
             doc.write(CheckCacheEntry(runs=[RunEntry(key=must(RunMemo(MemDoc(CheckCacheEntry), keys, BaseSha("b"), {}).key(seed[0])),
                                                       hit=CacheHit(result=seed[1], round=1))]))

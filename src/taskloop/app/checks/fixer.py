@@ -31,7 +31,7 @@ class Fixer:
                 red[c.id] = self._red(c, rc, tail, f"checks/{n:02d}-{safe_name(c.id)}.fix.r{rnd}.log")
         after = host.checkout.tree_hash()
         if after != before:
-            files = [p for p in host.git("diff", "--name-only", before, after).splitlines() if p]
+            files = host.git.changed_paths(str(host.wt), before, after)
             host.tree_writer.stage_all(check=True)
             host.log.note(f"{', '.join(c.id for c in todo)}: the fix changed {len(files)} file{'s' if len(files) != 1 else ''}")
         return red

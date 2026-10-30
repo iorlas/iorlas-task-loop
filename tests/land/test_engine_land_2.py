@@ -10,13 +10,12 @@ from pathlib import Path
 from unittest import mock
 
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
-from support import procsim
+from support import gitq, procsim
 from support.engine_case import CLEAN, HAS_F, PLAN, POSIX_CHECK, STILL_OPEN, WRITE, EngineTest, verdict
 from support.logs import records
 from support.waits import until
 
 from taskloop.adapters import (
-    gitrepo,
     ident,
     landlock,
 )
@@ -27,7 +26,7 @@ class EngineLand2Test(EngineTest):
         if os.name == "nt":
             self.skipTest("POSIX flock")
         eng = self.checks_engine()
-        path = landlock.land_lock_path(eng.git("remote", "get-url", "origin") or str(eng.wt))
+        path = landlock.land_lock_path(gitq.git("remote", "get-url", "origin", cwd=eng.wt) or str(eng.wt))
         eng.steps.begin("review", "review")
         got, go = [], threading.Event()
 
@@ -67,7 +66,7 @@ class EngineLand2Test(EngineTest):
         a = self.ask()
         self.assertEqual(a["class"], "external_fact")
         self.assertIn("the cited spec link did not open", a["detail"]["text"])
-        self.assertEqual(gitrepo.git("show", "origin/main:f.txt", cwd=str(self.wt)), "")
+        self.assertEqual(gitq.git("show", "origin/main:f.txt", cwd=str(self.wt)), "")
 
     def test_the_gate_named_as_unchecked_lands_without_an_ask(self):
         # lifesim-5ban.3: 'the full gate and diff coverage, reserved for the engine' stopped the land; the gate runs there
@@ -122,7 +121,7 @@ class EngineLand2Test(EngineTest):
             rc, s = self.run_engine({})
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual(s.calls, [])
-        self.assertEqual(gitrepo.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
+        self.assertEqual(gitq.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
 
     def test_a_verify_answer_with_a_yes_and_evidence_goes_straight_to_land(self):
         text = "Right. The log shows the link opens and returns the spec."
@@ -136,7 +135,7 @@ class EngineLand2Test(EngineTest):
             rc, s = self.run_engine({"plan": [dict(PLAN, stages=[], summary="nothing left")]})
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual([c[0] for c in s.calls], ["planner"])
-        self.assertEqual(gitrepo.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
+        self.assertEqual(gitq.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
         self.assertEqual(self.eng.plan_summary, "do it")  # the commit is titled after the work, not the empty plan
 
     def test_a_verify_answer_on_the_dashboard_lands_it(self):

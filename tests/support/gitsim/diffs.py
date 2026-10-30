@@ -4,7 +4,7 @@ import re
 
 from . import ignore
 from .ctx import Ctx, blob, flags
-from .model import Snap, W, snap_of
+from .model import Fail, Snap, W, snap_of
 
 
 def lines_of(data: bytes) -> list[str]:
@@ -71,6 +71,15 @@ def say_check(c: Ctx, hits: list[str]) -> int:
     return 2 if hits else 0  # git diff --check: exit 2 when it reports anything
 
 
+def known_revs(c: Ctx, names: list[str]) -> list[str | None]:
+    """The shas of the revs; a name nothing answers to is git's fatal."""
+    shas = [c.r.resolve(r) for r in names]
+    for name, sha in zip(names, shas, strict=True):
+        if sha is None:
+            raise Fail(f"fatal: bad revision '{name}'", 128)
+    return shas
+
+
 def cmd_diff(c: Ctx) -> int:
     fl, rest = flags(c.args)
     rest, spec = (rest[: rest.index("--")], rest[rest.index("--") + 1:]) if "--" in rest else (rest, [])
@@ -81,7 +90,7 @@ def cmd_diff(c: Ctx) -> int:
     if "--cached" in fl:
         a, b = c.r.head_snap(), c.index()
     else:
-        shas = [c.r.resolve(r) for r in rest]
+        shas = known_revs(c, rest)
         a, b = (snap_of(s) for s in [*shas, None, None][:2]) if len(shas) == 2 else (snap_of(shas[0]), c.r.scan()[0])
     paths = changed(a, b, spec)
     if "--check" in fl:

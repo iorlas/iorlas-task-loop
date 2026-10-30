@@ -18,6 +18,7 @@ from taskloop.contracts import log as rec
 from taskloop.contracts.checks import Check, CheckFaultKind, CheckRun
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.ids import TreeSha
+from taskloop.contracts.ports import Git
 from taskloop.contracts.runkey import BaseSha
 from taskloop.domain.checks.specs import gate_items
 from taskloop.stores.runlog import RunLog
@@ -87,7 +88,10 @@ class GateHost(Protocol):
     def steps(self) -> GateSteps: ...
     @property
     def checker(self) -> GateChecker: ...
-    def git(self, *args: str) -> str: ...
+    @property
+    def git(self) -> Git: ...
+    @property
+    def wt(self) -> str: ...
     def halt_point(self, when: bool = ..., wait: float = ...) -> None: ...
     def blocked_for(self, why: str, kind: str) -> Exception: ...
 
@@ -109,13 +113,13 @@ class Gate:
 
     def issue(self) -> GatePass:
         e = self.e
-        return mint(TreeSha(e.git("rev-parse", "HEAD^{tree}")), BaseSha(e.git("rev-parse", e.cfg.base)))
+        return mint(TreeSha(e.git.rev_parse(e.wt, "HEAD^{tree}")), BaseSha(e.git.rev_parse(e.wt, e.cfg.base)))
 
     def run(self) -> GatePass | Problem:
         """-> the pass when the gate passed (or already had on this tree), else the problem for a fix round."""
         e = self.e
         e.gate_log = None
-        tree = e.git("rev-parse", "HEAD^{tree}")
+        tree = e.git.rev_parse(e.wt, "HEAD^{tree}")
         started = time.time()
         e.log.emit(rec.GateStart(cmd=e.cfg.gate_text, log=str(e.run_dir / "checks"), tree=tree))
         try:

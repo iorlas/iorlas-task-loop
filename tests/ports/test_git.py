@@ -8,11 +8,13 @@ import support.paths  # noqa: F401
 from support import gitsim
 
 from ports.git_contract import GitContract, contract
+from ports.git_contract_land import LandContract
 from taskloop.adapters.git import RealGit
+from taskloop.contracts.env import snapshot
 
 
 @contract
-class GitSimContract(GitContract, unittest.TestCase):
+class GitSimContract(GitContract, LandContract, unittest.TestCase):
     def start(self) -> None:
         gitsim.reset()
         stack = contextlib.ExitStack()
@@ -22,4 +24,4 @@ class GitSimContract(GitContract, unittest.TestCase):
         self.addCleanup(sim.check)
 
     def make(self) -> RealGit:
-        return RealGit()
+        return RealGit(snapshot())

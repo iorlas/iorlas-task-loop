@@ -14,7 +14,7 @@ def git(cwd, *args):
 def test_given_a_bead_on_a_real_remote_when_the_engine_runs_then_it_lands_and_pushes(world):
     # Given: a bare origin, a clone with one commit, an open bead that asks for f.txt
     wt = world / "wt"
-    assert selftest.git_repo(world, wt, RealGit()) is None
+    assert selftest.git_repo(world, wt, RealGit(snapshot())) is None
     before = git(world / "o.git", "rev-parse", "main")
     # When: the engine runs the bead with the stub worker
     rc, bead = selftest.run_engine(world, wt, snapshot())

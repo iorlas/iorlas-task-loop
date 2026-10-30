@@ -13,6 +13,13 @@ from taskloop.contracts.env import Env
 
 def cmd_prune(a: Any, env: Env, now: Callable[[], float] = trail.now) -> int:
     repo = repos.repo_root(a.repo)
-    verb.run(wloop.cfgdir(), wloop.profile_of(repo).loop, wloop.prune_repos(repo), wloop.bd_of, now(), a.dry_run,
-             shell.of(real.spawner(env), real.git(), env))
+    verb.run(
+        wloop.cfgdir(),
+        wloop.profile_of(repo).loop,
+        wloop.prune_repos(repo),
+        wloop.bd_of,
+        now(),
+        a.dry_run,
+        shell.of(real.spawner(env), real.git(env), env),
+    )
     return 0

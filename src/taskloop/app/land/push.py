@@ -9,7 +9,7 @@ from taskloop.app.land.outbound import land_argv, pin_head
 from taskloop.app.land.parts import NetWorker, OutcomeMoveSteps
 from taskloop.app.land.state import PUSH_TRIES, PUSH_UP_FAILS, Land, Next, Phase
 from taskloop.contracts import fence
-from taskloop.contracts.ports import Beads, Sh
+from taskloop.contracts.ports import Beads, Git, Sh
 from taskloop.domain.land.matchers import Push as PushText
 
 
@@ -23,8 +23,8 @@ class Lfs(Protocol):
 
 
 class PushHost(Protocol):
-    """What the push reads of the engine: the base and the land command, git and its shell, the fence, the stop point, the steps
-    and warnings; the landed sha it sets; the network probe."""
+    """What the push reads of the engine: the base and the land command, git and the shell for the land command, the fence, the stop point,
+    the steps and warnings; the landed sha it sets; the network probe."""
 
     landed_sha: str  # set the moment the push goes through
 
@@ -40,7 +40,10 @@ class PushHost(Protocol):
     def steps(self) -> OutcomeMoveSteps: ...
     @property
     def worker(self) -> NetWorker: ...
-    def git(self, *args: str) -> str: ...
+    @property
+    def git(self) -> Git: ...
+    @property
+    def wt(self) -> str: ...
     def warn(self, text: str) -> None: ...
     def stop_deferred(self) -> AbstractContextManager[list[bool]]: ...
     def blocked_for(self, why: str, kind: str) -> Exception: ...
@@ -55,14 +58,14 @@ class Pusher:
         """-> the sha landed; Next.AGAIN rejected, try again; Next.REST a network error, rest first; a stale Problem when the tree or the
         base is no longer the one the pass is for (nothing is pushed). Anything else raises."""
         e = self.e
-        tree, base = e.git("rev-parse", "HEAD^{tree}"), e.git("rev-parse", e.cfg.base)
+        tree, base = e.git.rev_parse(e.wt, "HEAD^{tree}"), e.git.rev_parse(e.wt, e.cfg.base)
         if (tree, base) != (gate_pass.tree, gate_pass.base):
             now = f"{tree[:12]} on {base[:12]}"
             return Problem(ProblemKind.STALE, f"the gate passed tree {gate_pass.tree[:12]} on {gate_pass.base[:12]}; now {now}")
         fence.check(e.store, e.claim)  # a run whose bead or slot was taken again pushes nothing (Fenced; RunOnce closes nothing)
         with e.stop_deferred() as stop:  # a push half done is no state to stop in: finish it, then stop
             lrc, ltail = self.out.lfs_push()  # the pushed ref's LFS objects first: the push must not point at objects origin lacks
-            sha = e.git("rev-parse", "HEAD")  # the commit pushed, named in the refspec
+            sha = e.git.rev_parse(e.wt, "HEAD")  # the commit pushed, named in the refspec
             rc, tail = e.sh(land_argv(pin_head(e.cfg.land, sha)), pin=True) if lrc == 0 else (lrc, ltail)  # no repo hook runs: --no-verify
             if rc != 0:
                 sha = ""

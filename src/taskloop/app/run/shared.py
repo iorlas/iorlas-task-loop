@@ -11,6 +11,7 @@ from atomic_io import atomic_write_json
 from taskloop.adapters import ident
 from taskloop.adapters.gitrepo import same_dir
 from taskloop.app.slots import engine_lock
+from taskloop.contracts.slots import SlotGitError
 
 FLAKE_DAYS = 14  # how long a writer-reported flaky test stays in the shared notes
 
@@ -25,7 +26,7 @@ class Shared:
 
     def shared_path(self) -> Path:
         e = self.e
-        common = e.git("rev-parse", "--path-format=absolute", "--git-common-dir") or str(e.wt)
+        common = e.git.common_dir(e.wt) or str(e.wt)
         return ident.config_dir() / "shared" / f"{hashlib.sha1(common.encode('utf-8')).hexdigest()[:12]}.json"
 
     def known_flakes(self) -> list[dict[str, Any]]:
@@ -60,10 +61,8 @@ class Shared:
         """[(bead, summary, files)]: tasks running in other worktrees of this repo right now (a live engine lock)."""
         e = self.e
         out: list[tuple[str, str, list[str]]] = []
-        for line in e.git("worktree", "list", "--porcelain").splitlines():
-            if not line.startswith("worktree "):
-                continue
-            wt = line[len("worktree "):]
+        for there in e.git.checkouts(e.wt):
+            wt = there.path
             if same_dir(wt, e.wt):
                 continue
             lock = engine_lock.peek_engine_lock(wt)
@@ -78,8 +77,11 @@ class Shared:
     def landed_since(self) -> list[str]:
         """Subjects of what landed on the base since this task's branch left it (as far as the last fetch knows)."""
         e = self.e
-        log = e.git("log", "--format=%s", "-n", "8", f"{e.checkout.base_sha()}..{e.cfg.base}")
-        return [x[:100] for x in log.splitlines() if x.strip()]
+        try:
+            rows = e.git.log(e.wt, [e.cfg.base], [e.checkout.base_sha()], limit=8)
+        except SlotGitError:
+            return []
+        return [r.subject[:100] for r in rows if r.subject.strip()]
 
     def flakes_text(self) -> str:
         flakes = self.known_flakes()

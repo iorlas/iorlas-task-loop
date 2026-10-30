@@ -1,11 +1,10 @@
 """The close's work on the slot: the branch saved (a wip commit, the checkpoint marked closed), the slot left."""
 import contextlib
-from pathlib import Path
 from typing import Protocol
 
 from taskloop.contracts import fence
 from taskloop.contracts.enums import Outcome
-from taskloop.contracts.ports import Beads, Sh
+from taskloop.contracts.ports import Beads, Git
 
 DONE = (Outcome.LANDED, Outcome.DONE)
 
@@ -19,17 +18,18 @@ class BranchCheckpoints(Protocol):
 
 
 class SaveBranchHost(Protocol):
-    """What saving the branch reads of the engine: git and its shell, the run's branch, the wip commit and the closed checkpoint."""
+    """What saving the branch reads of the engine: git, the run's branch, the wip commit and the closed checkpoint."""
 
     @property
     def branch(self) -> str: ...
     @property
-    def sh(self) -> Sh: ...
+    def wt(self) -> str: ...
+    @property
+    def git(self) -> Git: ...
     @property
     def tree(self) -> BranchTree: ...
     @property
     def checkpoints(self) -> BranchCheckpoints: ...
-    def git(self, *args: str) -> str: ...
 
 
 class SaveBranch:
@@ -40,12 +40,11 @@ class SaveBranch:
         """A run stopped mid-conflict-fix goes back to its branch; an unfinished branch keeps its work as a wip commit and a
         closed checkpoint."""
         e = self.e
-        gd = Path(e.git("rev-parse", "--absolute-git-dir") or ".")
-        if (gd / "rebase-merge").exists() or (gd / "rebase-apply").exists():
-            e.sh(["git", "rebase", "--abort"], pin=True)
-        branch = e.git("symbolic-ref", "--short", "-q", "HEAD")
+        if e.git.rebasing(e.wt):
+            e.git.rebase_abort(e.wt)
+        branch = e.git.branch(e.wt)
         if outcome not in DONE and branch and branch == (e.branch or None):
-            if e.git("status", "--porcelain"):
+            if e.git.dirty(e.wt):
                 e.tree.wip(outcome)  # the next run continues this branch
             e.checkpoints.close(why)
 

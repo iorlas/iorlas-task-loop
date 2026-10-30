@@ -9,6 +9,7 @@ from typing import Any
 from unittest import mock
 
 from support.checks import ck, res
+from taskloop.adapters.git import RealGit
 from taskloop.app.land.checkout import Checkout
 from taskloop.app.land.fixer import Fixer
 from taskloop.app.land.lander import Lander
@@ -47,7 +48,7 @@ class PushRace:
         self.held: list[bool] = []
         self.state: dict[str, Any] = {"pushes": 0, "fetches": 0, "gates": 0, "results": []}
         self.real = {"lock": Lander.lock, "sh": engine.Engine.sh, "wait": Waits.add, "fetch": Checkout.fetch,
-                     "checks": engine.Engine.run_checks, "fix": Fixer.fix}
+                     "checks": engine.Engine.run_checks, "fix": Fixer.fix, "rebase": RealGit.rebase}
         self.gate = ["true"]
 
     # -- the seams, each called with the object it replaces a method of as `this` ----------------------------------------------
@@ -71,6 +72,11 @@ class PushRace:
             if self.failure == "fetch" and self.state["fetches"] == 2:
                 return 1, "fetch failed"
         return self.real["fetch"](this, *a, **kw)
+
+    def rebase(self, this, *a, **kw):
+        if self.held:
+            self.events.append("rebase")
+        return self.real["rebase"](this, *a, **kw)
 
     def checks(self, this, st, name, *a, **kw):
         state = self.state
@@ -96,8 +102,6 @@ class PushRace:
 
     def command(self, this, cmd, *a, **kw):
         state = self.state
-        if self.held and isinstance(cmd, list) and cmd[:3] == ["git", "rebase", "-q"]:
-            self.events.append("rebase")
         if self.held and cmd == self.gate:
             self.events.append("gate")
             state["gates"] += 1
@@ -150,6 +154,7 @@ class PushRace:
                 mock.patch.object(Checkout, "fetch", seam(self.fetch)), \
                 mock.patch.object(engine.Engine, "run_checks", seam(self.checks)), \
                 mock.patch.object(engine.Engine, "sh", seam(self.command)), \
+                mock.patch.object(RealGit, "rebase", seam(self.rebase)), \
                 mock.patch.object(Fixer, "fix", seam(self.fix)), \
                 mock.patch.object(Waits, "add", seam(self.wait)):
             reviews = [clean, review_with_finding] if self.failure == "review_exhausted" else [clean] * 2

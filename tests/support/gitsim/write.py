@@ -157,6 +157,8 @@ def cmd_branch(c: Ctx) -> int:
         sha = r.ref("refs/heads/" + old)
         if sha is None:
             raise Fail(f"error: refname refs/heads/{old} not found", 1)
+        if "-m" in fl and r.ref("refs/heads/" + new):  # -M would overwrite
+            raise Fail(f"fatal: a branch named '{new}' already exists", 128)
         r.set_ref("refs/heads/" + new, sha)
         (r.git / "refs" / "heads" / old).unlink()
         if r.head_ref() == old:

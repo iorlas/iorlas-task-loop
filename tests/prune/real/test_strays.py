@@ -14,6 +14,7 @@ from prune.real.test_prune import git
 from taskloop.adapters.git import RealGit
 from taskloop.app.reconcile.apply import apply
 from taskloop.app.reconcile.observe import observe
+from taskloop.contracts.env import snapshot
 from taskloop.contracts.ports import BeadPatch, NewBead
 from taskloop.domain.reconcile.diff import diff
 from taskloop.domain.reconcile.facts import FreeSlot, ReleaseClaim
@@ -39,13 +40,15 @@ class Strays(unittest.TestCase):
         self.store.update(self.slot, BeadPatch(set_metadata={"held_by": "tl-dead", "held_bead": self.work}))
 
     def plan(self, live=None):
-        seen = observe([str(self.repo)], lambda r: self.store, None, 14, time.time(), RealGit(), None, lambda r: live or {}, "host")
+        seen = observe(
+            [str(self.repo)], lambda r: self.store, None, 14, time.time(), RealGit(snapshot()), None, lambda r: live or {}, "host"
+        )
         return diff(seen)
 
     def test_a_stray_slot_and_its_dead_claim_are_given_back(self):
         plan = self.plan()
         self.assertEqual([type(a) for a in plan], [ReleaseClaim, FreeSlot])
-        removed, kept = apply(plan, False, RealGit(), lambda r: self.store)
+        removed, kept = apply(plan, False, RealGit(snapshot()), lambda r: self.store)
         self.assertEqual((len(removed), kept), (2, []))
         slot, work = self.store.show(self.slot), self.store.show(self.work)
         self.assertEqual((slot.status, slot.assignee, work.status, work.assignee), ("open", "", "open", ""))  # type: ignore[union-attr]
@@ -60,7 +63,7 @@ class Strays(unittest.TestCase):
         plan = self.plan()
         for b, key in ((self.slot, "held_gen"), (self.work, "fence_gen")):  # a new run takes them under the same actor
             self.store.update(b, BeadPatch(set_metadata={key: "6"}))
-        removed, kept = apply(plan, False, RealGit(), lambda r: self.store)
+        removed, kept = apply(plan, False, RealGit(snapshot()), lambda r: self.store)
         self.assertEqual(removed, [])
         self.assertTrue(all("taken again" in k for k in kept) and len(kept) == 2)
         self.assertEqual((self.store.show(self.slot).assignee, self.store.show(self.work).assignee), ("tl-dead", "tl-dead"))  # type: ignore[union-attr]
@@ -68,7 +71,7 @@ class Strays(unittest.TestCase):
     def test_a_slot_retaken_by_another_actor_is_left_alone(self):
         plan = self.plan()
         self.store.update(self.slot, BeadPatch(assignee="tl-new", set_metadata={"held_gen": "6"}))
-        removed, kept = apply([a for a in plan if isinstance(a, FreeSlot)], False, RealGit(), lambda r: self.store)
+        removed, kept = apply([a for a in plan if isinstance(a, FreeSlot)], False, RealGit(snapshot()), lambda r: self.store)
         self.assertEqual((removed, self.store.show(self.slot).assignee), ([], "tl-new"))  # type: ignore[union-attr]
         self.assertIn("no longer held", kept[0])
 

@@ -1,7 +1,7 @@
 """Check rounds that cost less: per-check input cache, cheap-first order, duplicate runs, wall limits."""
 import json
-import os
 import shlex
+import subprocess
 import sys
 import unittest
 from pathlib import Path
@@ -15,6 +15,7 @@ from support import procsim
 from support.builders import cfg_with
 from support.checks import ck, typed
 from support.engine_case import PY, engine, pyc, real_git  # noqa: F401
+from support.spawn import port_git
 
 from taskloop.adapters import (
     check_files,
@@ -31,7 +32,7 @@ from taskloop.domain.checks.order import CheckOrder
 
 
 def ignored_paths(wt, globs, exclude=()):
-    listed = check_files.ignored_files(str(wt), inputs.pathspec(globs, exclude), os.environ)
+    listed = check_files.ignored_files(port_git(), str(wt), inputs.pathspec(globs, exclude))
     return inputs.matching(listed, globs, exclude)
 
 
@@ -148,8 +149,8 @@ class InputCache(SpeedTest):
 
     def test_the_ignored_walk_is_cut_to_the_globs_folders_and_the_excluded_ones(self):
         seen = []
-        real = check_files.subprocess.run
-        with mock.patch.object(check_files.subprocess, "run", side_effect=lambda args, **kw: (seen.append(args), real(args, **kw))[1]):
+        real = subprocess.run
+        with mock.patch.object(subprocess, "run", side_effect=lambda args, **kw: (seen.append(args), real(args, **kw))[1]):
             ignored_paths(str(self.wt), ["client/Assets/{App,Core}/**"], ["client/Assets/App/*/Gen/**"])
         spec = " ".join(seen[0])
         self.assertIn(":(literal)client/Assets/App/", spec)
@@ -166,14 +167,15 @@ class InputCache(SpeedTest):
         c = Check(id=CheckId("x"), cmd="x", inputs=["client/**"], inputs_only=True, exclude=["client/Gen/**"])
 
         def key():
-            return InputKeys(self.wt, self.tree(), os.environ).key(c)
+            return InputKeys(port_git(), self.wt, self.tree()).key(c)
+
         k = key()
         (self.wt / "client" / "Gen" / "i.gen").write_text("2\n")  # an excluded ignored file
         (self.wt / "client" / "Gen" / "t.cs").write_text("2\n")  # an excluded tracked (here: untracked-new) file
         self.assertEqual(key(), k)
         (self.wt / "client" / "a.cs").write_text("2\n")
         self.assertNotEqual(key(), k)
-        self.assertNotEqual(InputKeys(self.wt, self.tree(), os.environ).key(c.replace(exclude=[])), key())
+        self.assertNotEqual(InputKeys(port_git(), self.wt, self.tree()).key(c.replace(exclude=[])), key())
 
     def tree(self):
         return self.eng_tree.checkout.tree_hash()
@@ -232,7 +234,7 @@ class CheapFirst(SpeedTest):
         return mark, step("slow"), step("quick")
 
     def seed(self, eng, cmd, secs):
-        doc = eng.stores.durations.of(check_files.repo_key(str(self.wt), eng.checkout.git_env()))
+        doc = eng.stores.durations.of(check_files.repo_key(eng.git, str(self.wt)))
         doc.write(durations.merged(doc.get() or Durations(), [(cmd, secs)] * 3))
 
     def test_the_cheaper_check_runs_first_and_a_red_stops_the_round(self):
@@ -255,7 +257,7 @@ class CheapFirst(SpeedTest):
         self.seed(eng, slow, 400)
         res = eng.run_checks({"checks": [], "files": []}, "s")
         self.assertEqual([(c.id, c.status) for c in res], [("a", "failed"), ("b", "passed"), ("c", "skipped")])
-        hist = (eng.stores.durations.of(check_files.repo_key(str(self.wt), eng.checkout.git_env())).get() or Durations()).runs
+        hist = (eng.stores.durations.of(check_files.repo_key(eng.git, str(self.wt))).get() or Durations()).runs
         self.assertNotIn(norm(red), hist)
         self.assertIn(norm(quick), hist)
 
@@ -266,7 +268,7 @@ class CheapFirst(SpeedTest):
         self.seed(eng, slow, 90)
         res = eng.run_checks({"checks": [], "files": []}, "s")
         self.assertEqual([c.id for c in res], ["new", "known"])
-        hist = (eng.stores.durations.of(check_files.repo_key(str(self.wt), eng.checkout.git_env())).get() or Durations()).runs
+        hist = (eng.stores.durations.of(check_files.repo_key(eng.git, str(self.wt))).get() or Durations()).runs
         self.assertEqual(len(hist[norm(quick)]), 1)
         self.assertEqual(len(hist[norm(slow)]), 4)
 

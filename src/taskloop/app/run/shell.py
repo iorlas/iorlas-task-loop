@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from taskloop.adapters import childenv
-from taskloop.adapters.gitenv import pinned_env
+from taskloop.adapters.gitrepo import pinned_env
 from taskloop.app.run.blocked import Blocked
 from taskloop.contracts import log as rec
 from taskloop.contracts.argv import text_of

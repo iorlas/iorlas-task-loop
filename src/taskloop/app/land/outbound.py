@@ -7,7 +7,7 @@ from typing import Protocol
 
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.ids import BeadId
-from taskloop.contracts.ports import Clock, DoltPush, Sh
+from taskloop.contracts.ports import Clock, DoltPush, Git
 from taskloop.domain.land.matchers import Push, lfs_in, no_dolt_remote
 from taskloop.stores.runlog import RunLog
 
@@ -59,7 +59,8 @@ class OutboundTree(Protocol):
 
 
 class OutboundHost(Protocol):
-    """What the pushes read of the engine: the land command, the clock, git and its shell, bd's dolt push, the log."""
+    """What the pushes read of the engine: the land command, the clock, git, the shell for the land command, bd's dolt push, the log."""
+
 
 
     @property
@@ -67,7 +68,9 @@ class OutboundHost(Protocol):
     @property
     def cfg(self) -> EngineConfig: ...
     @property
-    def wt(self) -> str | Path: ...
+    def wt(self) -> str: ...
+    @property
+    def git(self) -> Git: ...
     @property
     def dry(self) -> bool: ...
     @property
@@ -80,8 +83,6 @@ class OutboundHost(Protocol):
     def checkout(self) -> OutboundCheckout: ...
     @property
     def tree(self) -> OutboundTree: ...
-    @property
-    def sh(self) -> Sh: ...
     def blocked_for(self, why: str, kind: str) -> Exception: ...
 
 
@@ -97,13 +98,14 @@ class Outbound:
         if want is None or not uses_lfs(e.wt):
             return 0, ""
         if shutil.which("git-lfs") is None:
-            raise e.blocked_for("failed: .gitattributes puts files in Git LFS but git-lfs is not installed here (install git-lfs); "
-                                "branch kept", "FAULT_LAND")
-        argv = ["git", "lfs", "push", want[0], *want[1]]
+            raise e.blocked_for(
+                "failed: .gitattributes puts files in Git LFS but git-lfs is not installed here (install git-lfs); branch kept",
+                "FAULT_LAND",
+            )
         t0 = e.clock.monotonic()
-        rc, tail = e.sh(argv, pin=True)
-        e.log.note(f"{' '.join(argv)}: {'ok' if rc == 0 else 'failed'} in {e.clock.monotonic() - t0:.1f}s")
-        return rc, tail
+        done = e.git.lfs_push(e.wt, want[0], want[1])
+        e.log.note(f"git lfs push {' '.join([want[0], *want[1]])}: {'ok' if done.ok else 'failed'} in {e.clock.monotonic() - t0:.1f}s")
+        return (0, done.output) if done.ok else (1, done.output)
 
     def wip_push(self, stage: int) -> None:
         """tl-7y6.22: an accepted stage is committed (wip) and the task branch goes to the land's remote, so the work survives a lost box
@@ -115,15 +117,18 @@ class Outbound:
         if e.dry or want is None:
             return
         e.checkout.stage_all()
-        if e.sh(["git", "diff", "--cached", "--quiet"], pin=True)[0]:  # staged work: a wip commit of what the stages meant
+        if e.git.staged(e.wt):  # staged work: a wip commit of what the stages meant
             e.tree.wip(f"stage {stage} accepted", everything=False)
         ref = f"refs/heads/task/{e.bead}"
         rc, tail = self.lfs_push()  # --no-verify skips git-lfs's own hook: the branch would reach the remote without its LFS files
         if not rc:
-            argv = ["git", "push", "--no-verify", "--force-with-lease", want[0], f"HEAD:{ref}"]
             t0 = e.clock.monotonic()
-            rc, tail = e.sh(argv, pin=True)
-            e.log.note(f"{' '.join(argv)}: {'ok' if rc == 0 else 'failed'} in {e.clock.monotonic() - t0:.1f}s")
+            done = e.git.push_lease(e.wt, want[0], f"HEAD:{ref}")
+            rc, tail = (0 if done.ok else 1), done.output
+            e.log.note(
+                f"git push --no-verify --force-with-lease {want[0]} HEAD:{ref}: {'ok' if rc == 0 else 'failed'} in "
+                f"{e.clock.monotonic() - t0:.1f}s"
+            )
         if rc and "stale info" in tail:  # the remote branch was pushed from another machine and this clone has no copy of it
             raise e.blocked_for(f"failed: {ref} on {want[0]} holds work this clone has never fetched (another machine ran this bead); "
                                 f"fetch it and decide which work to keep, then rerun\n{tail.strip()[-400:]}", "FAULT_LAND")

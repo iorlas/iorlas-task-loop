@@ -10,14 +10,14 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as T
-from support import fake_route
+from support import fake_route, gitq
 from support.builders import make_engine
 from support.checkpoints import read_ck
 from support.engine_case import BEAD, CLEAN, PLAN, WRITE, engine, verdict
 from support.fakes import must_bead
-from support.spawn import real_spawner
+from support.spawn import port_git, real_spawner
 
-from taskloop.adapters import gitrepo, ident
+from taskloop.adapters import ident
 from taskloop.app.look import shots
 from taskloop.app.look.owner_look import OwnerLook
 from taskloop.app.run.closer import Closer
@@ -132,7 +132,7 @@ class LookTest(T.EngineTest):
         r = dict(CLEAN, look="The home screen shows the new button, matching the reference.")
         rc, _s = self.go({"plan": [PLAN], "write": [WRITE], "review": [r]}, first_shot=1, bead=bead, visual_paths=VISUAL)
         self.assertEqual(rc, 0, self.blocked)
-        tree = gitrepo.git("ls-tree", "-r", "--name-only", "origin/main", cwd=str(self.wt))
+        tree = gitq.git("ls-tree", "-r", "--name-only", "origin/main", cwd=str(self.wt))
         self.assertNotIn("home-screen.png", tree)  # pyrefly: ignore[unsupported-operation]
         kept = ConfigDir(ident.config_dir()).artifacts(BeadId("t-1"))
         self.assertEqual((kept / "home-screen.png").read_bytes(), b"PNG fake")
@@ -150,8 +150,15 @@ class LookTest(T.EngineTest):
         self.assertIn("matching the reference", body)
 
     def test_before_shots_and_references_come_from_other_beads_artifacts_of_the_same_prefix(self):
-        self.eng = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store, env=snapshot(),
-            spawner=real_spawner())
+        self.eng = engine.Engine(
+            BeadId("t-1"),
+            str(self.wt),
+            wslots.load_cfg(str(self.wt)),
+            store=self.store,
+            env=snapshot(),
+            spawner=real_spawner(),
+            git=port_git(),
+        )
         self.eng.run_dir.mkdir(parents=True, exist_ok=True)
         (self.eng.run_dir / "brief.md").write_text("no pictures named")
         root = ConfigDir(ident.config_dir())
@@ -232,7 +239,9 @@ class LookTest(T.EngineTest):
         self.assertEqual(self.creates(), [])
         saved = read_ck(self.eng).state
         self.assertEqual(saved.look_paths, ["home-screen.png"])
-        eng2 = engine.Engine(BeadId("t-1"), str(self.wt), self.eng.cfg, store=self.store, env=snapshot(), spawner=real_spawner())
+        eng2 = engine.Engine(
+            BeadId("t-1"), str(self.wt), self.eng.cfg, store=self.store, env=snapshot(), spawner=real_spawner(), git=port_git()
+        )
         eng2.tree.reset(must_bead(BEAD))
         eng2.bead_title = "Add f"
         eng2.resume.point()
@@ -252,8 +261,15 @@ class LookTest(T.EngineTest):
             self.assertEqual(self.eng.owner_look.look_epic(), "t-3")
 
     def test_shots_are_images_capped_and_sized(self):
-        self.eng = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store, env=snapshot(),
-            spawner=real_spawner())
+        self.eng = engine.Engine(
+            BeadId("t-1"),
+            str(self.wt),
+            wslots.load_cfg(str(self.wt)),
+            store=self.store,
+            env=snapshot(),
+            spawner=real_spawner(),
+            git=port_git(),
+        )
         d = self.eng.evidence_dir
         d.mkdir(parents=True, exist_ok=True)
         (d / "a.png").write_bytes(b"x")

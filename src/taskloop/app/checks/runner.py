@@ -45,7 +45,8 @@ class Checker:
         history_doc, history = self._history()
         items = items_of(host.cfg, stage_checks)
         fix_red = Fixer(host).run(CheckPlan.build(items, history, groups, acceptance_first, conflict_fix, markers), self.round)
-        tree, base = host.checkout.tree_hash(), host.git("rev-parse", host.cfg.base)  # after the fixes: the checks see the fixed files
+        # after the fixes: the checks see the fixed files
+        tree, base = host.checkout.tree_hash(), host.git.rev_parse(str(host.wt), host.cfg.base)
         plan = CheckPlan.build([*self._diff_check(tree), *items], history, groups, acceptance_first, conflict_fix, markers)
         memo = self._memo(tree, base)
         st = self._executor(memo, history, base_run=True, fix_red=fix_red).run_group(plan, self.round)
@@ -64,7 +65,7 @@ class Checker:
         host = self.host
         self.round += 1
         history_doc, history = self._history()
-        tree, base = host.checkout.tree_hash(), host.git("rev-parse", host.cfg.base)
+        tree, base = host.checkout.tree_hash(), host.git.rev_parse(str(host.wt), host.cfg.base)
         plan = CheckPlan.build([*self._diff_check(tree), *items], history)
         memo = self._memo(tree, base)
         st = self._executor(memo, history, base_run=False, everything=everything).run_group(plan, self.round)  # no base run
@@ -83,34 +84,35 @@ class Checker:
         if not tree or not steps:
             return False
         items = [*self._diff_check(tree), *steps]
-        memo = self._memo(tree, host.git("rev-parse", host.cfg.base))
+        memo = self._memo(tree, host.git.rev_parse(str(host.wt), host.cfg.base))
         changed = host.checkout.changed_paths() if any(c.when for c in items) else []
         return all(memo.has(c) or not due(c, changed) for c in items)
 
     def _history(self) -> tuple[Doc[Durations], Durations]:
         host = self.host
-        doc = host.stores.durations.of(check_files.repo_key(str(host.wt), host.checkout.git_env()))
+        doc = host.stores.durations.of(check_files.repo_key(host.git, str(host.wt)))
         return doc, doc.get() or Durations()
 
     def _memo(self, tree: TreeSha, base: str) -> RunMemo:
         """The run memo of this tree and base: the one place a round, `tl check` and the gate's question get theirs. The env it keys
         on is what the engine hands every child: the slot's, and the registered names that reach it."""
         host = self.host
-        keys = InputKeys(host.wt, tree, host.checkout.git_env())
+        keys = InputKeys(host.git, host.wt, tree)
         engine_env = {**childenv.reaching(childenv.current_env(host.env)), **host.bead_env}
         return RunMemo(host.stores.check_cache.of(host.bead), keys, BaseSha(base), engine_env)
 
     def _executor(self, memo: RunMemo, history: Durations, base_run: bool, fix_red: dict[str, CheckResult] | None = None,
                   everything: bool = False) -> CheckExecutor:
         host = self.host
-        attempts = Attempts(host, BaseCheck(host, memo, host.checkout.git_env, base_run), self.sleep)
+        attempts = Attempts(host, BaseCheck(host, memo, base_run), self.sleep)
         return CheckExecutor(host, memo, attempts, host.checklog, history, fix_red, everything)
 
     def _diff_check(self, tree: str) -> list[Check]:
         """The built-in `git diff --check` over the diff from the merge-base with the base to the tree (untracked files included; none
         when the base does not resolve)."""
         host = self.host
-        base = host.git("merge-base", "HEAD", host.cfg.base) or host.git("rev-parse", host.cfg.base)
+        wt = str(host.wt)
+        base = host.git.merge_base(wt, "HEAD", host.cfg.base) or host.git.rev_parse(wt, host.cfg.base)
         return [diff_check(base, tree)] if base and tree else []
 
     @staticmethod
@@ -143,7 +145,7 @@ class Checker:
         return seconds(self.history())
 
     def history(self) -> Durations:
-        return self.host.stores.durations.of(check_files.repo_key(str(self.host.wt), self.host.checkout.git_env())).get() or Durations()
+        return self.host.stores.durations.of(check_files.repo_key(self.host.git, str(self.host.wt))).get() or Durations()
 
     def split(self) -> WriterSplit:
         return WriterSplit(self.host.cfg, self.seconds())

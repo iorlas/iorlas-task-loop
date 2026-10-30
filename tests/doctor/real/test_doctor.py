@@ -18,6 +18,7 @@ from support.tlmain import tl_main  # noqa: E402
 from taskloop.adapters.git import RealGit  # noqa: E402
 from taskloop.app.wire import doctor  # noqa: E402
 from taskloop.app.wire import slots as wslots  # noqa: E402
+from taskloop.contracts.env import snapshot  # noqa: E402
 
 
 def shown(p):
@@ -225,7 +226,7 @@ class DoctorSource(unittest.TestCase):
                 calls.append(("ls-tree", rev))
                 return super().ls_tree(d, rev, *paths, recursive=recursive)
 
-        moving_ref = MovingRef()
+        moving_ref = MovingRef(snapshot())
         source = wslots.cfg_source(str(self.wt), moving_ref)
         self.assertEqual(doctor.git_warnings(str(self.wt), source, moving_ref), [])
         self.assertEqual(source[2], commit)

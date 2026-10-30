@@ -1,6 +1,4 @@
 {
   "src/taskloop/adapters/git.py": 1,
-  "src/taskloop/adapters/gitenv.py": 1,
-  "src/taskloop/adapters/gitrepo.py": 4,
   "src/taskloop/adapters/ident.py": 9
 }

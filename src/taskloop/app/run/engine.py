@@ -9,7 +9,7 @@ from functools import cached_property
 from pathlib import Path
 from typing import Any, ClassVar
 
-from taskloop.adapters import beadtools, childenv, context_size, gitrepo, ident, landlock, opencode, pidcheck, slotcheck
+from taskloop.adapters import beadtools, childenv, context_size, ident, landlock, opencode, pidcheck, slotcheck
 from taskloop.adapters import halt as halting
 from taskloop.adapters.check_probe import PathProbe
 from taskloop.adapters.clock import SystemClock
@@ -72,7 +72,7 @@ from taskloop.contracts.kinds import Kind
 from taskloop.contracts.landed import Landed, LandedStore
 from taskloop.contracts.log import Assumed, Said
 from taskloop.contracts.paths import PLAN_FILE, ConfigDir, RunFiles
-from taskloop.contracts.ports import Clock, Spawner
+from taskloop.contracts.ports import Clock, Git, Spawner
 from taskloop.contracts.run import Reexec, RunReport
 from taskloop.domain import outcome as oc
 from taskloop.domain.lanes.matchers import read_only_command
@@ -112,12 +112,28 @@ class Engine(RunFields):
     accepted: list[int]
     stage_tree: str
 
-    def __init__(self, bead: BeadId, wt: str, cfg: EngineConfig, dry_run: bool = False, verbose: bool = True, store: Any = None,
-                 route: Any = None, clock: Clock | None = None, stores: Stores | None = None, fresh: bool = False,
-                 claim: fence.Claim | None = None, *, env: Env, spawner: Spawner) -> None:
+    def __init__(
+        self,
+        bead: BeadId,
+        wt: str,
+        cfg: EngineConfig,
+        dry_run: bool = False,
+        verbose: bool = True,
+        store: Any = None,
+        route: Any = None,
+        clock: Clock | None = None,
+        stores: Stores | None = None,
+        fresh: bool = False,
+        claim: fence.Claim | None = None,
+        *,
+        env: Env,
+        spawner: Spawner,
+        git: Git,
+    ) -> None:
         route = route or seams.DelegateRoute()
         self.env = env  # the process environment, taken once at the edge (tl.py); every child is built from it
         self.spawner = spawner
+        self.git = git  # the port every git call of the run goes through, pinned to the slot, built at the edge with the same env
         super().__init__(bead, wt, cfg, dry_run, verbose, store, route, fresh, claim)
         self.clock = clock or SystemClock()
         self.reexec: Reexec | None = reexec.take_reexec()  # this run-task came from an exec into a newer install, or a fallback
@@ -217,12 +233,6 @@ class Engine(RunFields):
            what: str = "command", cwd: Any = None) -> tuple[int, str]:
         return self.shell.run(cmd, timeout, check, save, env, pin, what, cwd)
 
-    def git(self, *a: str) -> str:
-        return gitrepo.git(*a, cwd=self.wt)
-
-    def git_in(self, path: Any, *a: str) -> str:
-        return gitrepo.git(*a, cwd=path)
-
     def run_checks(self, *a: Any, **kw: Any) -> Any:
         return self.stage_checks.run(*a, **kw)
 
@@ -278,7 +288,7 @@ class Engine(RunFields):
         """Before and after every node, and before the land: this slot's git is the slot (lifesim-1mm: a core.worktree in the shared
         .git/config pointed every slot's git at another folder). Unpinned, as a worker's or check's git would see it. A wrong tree
         stops the run with an owner ask, never a skip."""
-        bad = slotcheck.tree_problem(self.wt)
+        bad = slotcheck.tree_problem(self.wt, self.git.unpinned(), self.env)
         if bad:
             self.steps.move("fault", "wrong_tree", bad[0])
             raise Blocked(f"failed: tree: {bad[0]} ({when} {step}). {bad[1]}", kind=Kind.FAULT_SLOT)
@@ -308,10 +318,10 @@ class Engine(RunFields):
 
     def record_land(self, sha: str) -> None:
         LandedStore(ident.config_dir()).put(Landed(bead=self.bead, sha=sha, base=self.cfg.base, t=self.now()))
-        verbs.land(self.bead, sha, str(self.wt), self.store, base=self.cfg.base, claim=self.claim)
+        verbs.land(self.bead, sha, self.wt, self.store, base=self.cfg.base, claim=self.claim)
 
     def land_lock_path(self) -> Path:
-        return landlock.land_lock_path(self.git("remote", "get-url", "origin") or str(self.wt))
+        return landlock.land_lock_path(self.git.remote_url(self.wt, "origin") or self.wt)
 
     @property
     def tree_writer(self) -> Checkout:
@@ -341,7 +351,7 @@ class Engine(RunFields):
 
     def diff_text(self) -> str:
         tree = self.checkout.tree_hash()
-        return (gitrepo.git("diff", self.checkout.base_sha(), tree, cwd=self.wt) if tree else "") or ""
+        return self.git.diff(self.wt, self.checkout.base_sha(), tree) if tree else ""
 
     def run(self) -> int:
         return RunOnce(self).go()

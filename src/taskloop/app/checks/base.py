@@ -1,6 +1,5 @@
 """BaseCheck: was this check already red before the task touched anything? Asked once per check and base commit."""
 import time
-from collections.abc import Callable, Mapping
 from pathlib import Path
 
 from taskloop.adapters.base_tree import base_tree
@@ -12,8 +11,8 @@ from taskloop.domain.checks.names import norm
 
 
 class BaseCheck:
-    def __init__(self, host: CheckHost, memo: RunMemo, env: Callable[[], Mapping[str, str]], enabled: bool) -> None:
-        self.host, self.memo, self.env = host, memo, env
+    def __init__(self, host: CheckHost, memo: RunMemo, enabled: bool) -> None:
+        self.host, self.memo = host, memo
         self.sha = str(memo.base) if enabled else ""  # no sha, no base run (the gate's tree is the rebased one: a red is red)
 
     def red(self, c: Check) -> bool:
@@ -26,7 +25,7 @@ class BaseCheck:
             return known
         dest = self.host.run_dir / "base" / self.sha[:12]
         dest.parent.mkdir(parents=True, exist_ok=True)
-        with base_tree(self.host.wt, self.sha, dest, self.env()) as tree:
+        with base_tree(self.host.git, self.host.wt, self.sha, dest) as tree:
             red = tree is not None and self._rc(tree, c) not in (0, None)
         self.memo.set_base_red(c, red)
         if red:

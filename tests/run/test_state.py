@@ -9,6 +9,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support.fake_beads import FakeBeads
+from support.fakegit import ScriptedGit
 
 from taskloop.app.run.resume import KEEP_FOR_ACTIVE, LATE, Resume
 from taskloop.app.run.state import Checkpoints, StateAttrs, carries_state, state_names
@@ -58,6 +59,15 @@ SAMPLE: dict[str, Any] = {
 }
 
 
+class HeadGit(ScriptedGit):
+    def __init__(self, host: Host) -> None:
+        super().__init__()
+        self.host = host
+
+    def rev_parse(self, d: str, rev: str) -> str:
+        return self.host.head
+
+
 @carries_state
 class Host(StateAttrs):
     def __init__(self) -> None:
@@ -71,8 +81,11 @@ class Host(StateAttrs):
         self.look_paths, self.look_notes, self.look_unjudged = [], [], {}
         self.task_branch, self.gate_log, self.head = "task/t-1", None, "h0"
 
-    def git(self, *args: str) -> str:
-        return self.head
+    @property
+    def git(self) -> HeadGit:
+        return HeadGit(self)
+
+    wt = "/wt"
 
     checkout = SimpleNamespace(branch_now=lambda: "task/t-1")
 

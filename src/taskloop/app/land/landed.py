@@ -3,7 +3,7 @@ from typing import Protocol
 
 from taskloop.app.land.parts import FetchCheckout, OutcomeSteps
 from taskloop.contracts.ids import BeadId
-from taskloop.contracts.ports import Sh
+from taskloop.contracts.ports import Git
 
 
 class LandedConfig(Protocol):
@@ -23,12 +23,13 @@ class LandedHost(Protocol):
     @property
     def dry(self) -> bool: ...
     @property
-    def sh(self) -> Sh: ...
+    def git(self) -> Git: ...
+    @property
+    def wt(self) -> str: ...
     @property
     def checkout(self) -> FetchCheckout: ...
     @property
     def steps(self) -> OutcomeSteps: ...
-    def git(self, *args: str) -> str: ...
     def warn(self, text: str) -> None: ...
 
 
@@ -42,10 +43,11 @@ class Landed:
         e = self.e
         if e.dry or (fetch and e.checkout.fetch()[0]):
             return ""
-        tip = e.git("rev-parse", "--verify", "-q", "HEAD")
-        if not tip or not e.git("log", "-1", "--format=%s").endswith(f"({e.bead})"):
+        last = e.git.log(e.wt, ["HEAD"], limit=1)
+        if not last or not last[0].subject.endswith(f"({e.bead})"):
             return ""
-        return tip if e.sh(["git", "merge-base", "--is-ancestor", tip, e.cfg.base], pin=True)[0] == 0 else ""
+        tip = last[0].oid
+        return tip if e.git.is_ancestor(e.wt, tip, e.cfg.base) else ""
 
     def found(self, sha: str) -> str:
         e = self.e

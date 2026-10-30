@@ -4,7 +4,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
-from support import procsim
+from support import gitq, procsim
 from support.engine_case import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, EngineTest, no_repo, sh
 
 # isort: split
@@ -20,7 +20,7 @@ from support.builders import cfg_with
 from support.checks import ck, res, typed
 from support.fakes import as_bead, must_bead
 from support.narrow import must
-from support.spawn import real_spawner
+from support.spawn import port_git, real_spawner
 
 from taskloop.adapters import childenv
 from taskloop.adapters.check_probe import PathProbe
@@ -60,7 +60,7 @@ class EngineChecksTest(EngineTest):
 
     def test_checks_run_without_the_launchers_claude_session(self):
         c = wslots.load_cfg(str(self.wt))
-        eng = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner())
+        eng = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(), git=port_git())
         with mock.patch.dict(os.environ, {"CLAUDE_CODE_ENTRYPOINT": "cli"}):
             session_env = procsim.fake("session-env", lambda cwd, env: (1 if env.get("CLAUDE_CODE_ENTRYPOINT") else 0, ""))
             res = eng.run_checks({"checks": ck([session_env]), "files": []}, "s")
@@ -76,7 +76,7 @@ class EngineChecksTest(EngineTest):
 
     def test_a_repo_check_runs_only_when_its_paths_changed(self):
         eng = self.checks_engine(checks=[{"id": "unity", "cmd": "true", "group": "tests", "when": ["client/**"]}])
-        eng.git("checkout", "-q", "-b", "task/t-1")
+        gitq.git("checkout", "-q", "-b", "task/t-1", cwd=eng.wt)
         self.assertEqual(eng.run_checks({"checks": [], "files": []}, "s")[0].status, "skipped")
         (self.wt / "client").mkdir()
         (self.wt / "client" / "a.cs").write_text("x\n")
@@ -188,8 +188,15 @@ class EngineChecksTest(EngineTest):
 
     def test_a_stage_check_always_reruns_it_can_read_state_outside_the_tree(self):
         state = Path(self.tmp.name) / "editor-open"  # a running editor, a log, a bead comment: git cannot see them
-        eng = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store, env=snapshot(),
-            spawner=real_spawner())
+        eng = engine.Engine(
+            BeadId("t-1"),
+            str(self.wt),
+            wslots.load_cfg(str(self.wt)),
+            store=self.store,
+            env=snapshot(),
+            spawner=real_spawner(),
+            git=port_git(),
+        )
         gone = procsim.fake(f"editor-closed {state}", lambda cwd, env: (1 if state.exists() else 0, ""))
         st = {"checks": ck([gone]), "files": []}
         self.assertEqual(eng.run_checks(st, "s")[0].exit, 0)
@@ -209,8 +216,15 @@ class EngineChecksTest(EngineTest):
     def test_a_failed_check_is_never_reused(self):
         count = Path(self.tmp.name) / "count"
         fails = procsim.fake("fails", procsim.appends(count, code=1))
-        eng = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store, env=snapshot(),
-            spawner=real_spawner())
+        eng = engine.Engine(
+            BeadId("t-1"),
+            str(self.wt),
+            wslots.load_cfg(str(self.wt)),
+            store=self.store,
+            env=snapshot(),
+            spawner=real_spawner(),
+            git=port_git(),
+        )
         st = {"checks": ck([fails]), "files": []}
         eng.run_checks(st, "s")
         again = eng.run_checks(st, "s")
@@ -218,8 +232,15 @@ class EngineChecksTest(EngineTest):
         self.assertFalse(again[0].cached)
 
     def test_checks_run_without_a_shell(self):
-        eng = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store, env=snapshot(),
-            spawner=real_spawner())
+        eng = engine.Engine(
+            BeadId("t-1"),
+            str(self.wt),
+            wslots.load_cfg(str(self.wt)),
+            store=self.store,
+            env=snapshot(),
+            spawner=real_spawner(),
+            git=port_git(),
+        )
         res = eng.run_checks({"checks": [Adhoc(argv=("echo", "$HOME", "&&", "x;", "(y)"), reads=())], "files": []}, "s")
         self.assertEqual(res[0].exit, 0, res[0].tail)
         self.assertIn("$HOME && x; (y)", res[0].tail)  # no expansion, no operator: every word reached the program as written

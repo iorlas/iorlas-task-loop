@@ -38,7 +38,7 @@ class Verify(unittest.TestCase):
 
     @staticmethod
     def shell_now() -> Shell:
-        return shell.of(RealSpawner(snapshot()), RealGit(), snapshot())
+        return shell.of(RealSpawner(snapshot()), RealGit(snapshot()), snapshot())
 
     def git(self, *a: str) -> None:
         subprocess.run(["git", *a], cwd=self.repo, check=True, capture_output=True)

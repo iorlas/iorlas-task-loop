@@ -38,7 +38,7 @@ def git(cwd, *args):
     return r.stdout.strip()
 
 
-GIT: Git = RealGit()
+GIT: Git = RealGit(snapshot())
 SH = of(RealSpawner(snapshot()), GIT, snapshot())
 
 
@@ -60,7 +60,8 @@ def racing(verb: str, hook: Callable[[], None]) -> Git:
         def delete_remote_at(self, d: str, remote: str, ref: str, oid: str) -> None:
             before("delete_remote_at")
             super().delete_remote_at(d, remote, ref, oid)
-    return Racing()
+
+    return Racing(snapshot())
 
 
 class Store:

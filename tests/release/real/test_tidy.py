@@ -11,8 +11,9 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 
 from taskloop.adapters.git import RealGit
 from taskloop.app.release import tidy
+from taskloop.contracts.env import snapshot
 
-GIT = RealGit()
+GIT = RealGit(snapshot())
 
 ENV = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@x", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@x"}
 

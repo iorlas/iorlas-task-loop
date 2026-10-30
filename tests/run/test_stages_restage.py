@@ -5,7 +5,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as te
-from support import procsim
+from support import gitq, procsim
 from support.engine_case import CLEAN, PLAN, WRITE
 
 from run.test_stages import StagesTest
@@ -65,11 +65,11 @@ class Restage(StagesTest):
         self.assertEqual(rc, 0, self.blocked)
         self.assertIn("conflict", s.prompts[2])
         self.assertIn("fixed in place", self.eng.log_path.read_text())
-        self.assertEqual(self.eng.git("show", "origin/main:a.txt"), "merged")
+        self.assertEqual(gitq.git("show", "origin/main:a.txt", cwd=self.eng.wt), "merged")
 
     def test_a_failed_fix_blocks_with_the_branch_kept(self):
         rc, _s = self.run_engine({"plan": [TWO], "write": [self.mine, WRITE, WRITE],
                                   "review": [self.move_main("a.txt", "theirs\n"), CLEAN, CLEAN]}, max_check_tries=1, max_rounds=1)
         self.assertNotEqual(rc, 0)
         self.assertIn("no longer fits", self.eng.log_path.read_text())
-        self.assertEqual(self.eng.git("show", "task/t-1:a.txt"), "mine")  # the work is kept as it was
+        self.assertEqual(gitq.git("show", "task/t-1:a.txt", cwd=self.eng.wt), "mine")  # the work is kept as it was

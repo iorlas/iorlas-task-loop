@@ -18,6 +18,7 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 import support.paths  # noqa: E402, F401
+from support import gitq  # noqa: E402
 from support.checkpoints import read_ck  # noqa: E402
 
 from taskloop.adapters import delegate as dl  # noqa: E402
@@ -55,11 +56,10 @@ from support.engine_case import (  # noqa: E402
 from support.fakes import as_bead, as_comment  # noqa: E402
 from support.logs import records  # noqa: E402
 from support.narrow import must  # noqa: E402
-from support.spawn import real_spawner  # noqa: E402
+from support.spawn import port_git, real_spawner  # noqa: E402
 
 from taskloop.adapters import delegate as lroute  # noqa: E402
 from taskloop.adapters import (  # noqa: E402
-    gitrepo,
     ident,
 )
 from taskloop.app.checks import evidence  # noqa: E402
@@ -522,7 +522,7 @@ class DelegateLauncher(T.EngineTest):
 
     def test_close_with_an_empty_reason_still_closes(self):
         c = wslots.load_cfg(str(self.wt))
-        eng = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner())
+        eng = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(), git=port_git())
         eng.closer.close(oc.make(Kind.FAULT_ENGINE))
         self.assertIn("stopped before a reason was recorded", self.said())  # a fault: the bead stays open, the comment says why
 
@@ -553,8 +553,8 @@ class DelegateLauncher(T.EngineTest):
         sh("git", "worktree", "add", "-q", str(other), "task/t-1", cwd=self.wt)
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
-        self.assertEqual(gitrepo.git("show", "origin/main:g.txt", cwd=str(self.wt)), "from slot s2")
-        self.assertEqual(gitrepo.git("symbolic-ref", "-q", "HEAD", cwd=str(other)), "")  # s2 let go of the branch
+        self.assertEqual(gitq.git("show", "origin/main:g.txt", cwd=str(self.wt)), "from slot s2")
+        self.assertEqual(gitq.git("symbolic-ref", "-q", "HEAD", cwd=str(other)), "")  # s2 let go of the branch
 
     def test_a_bead_branch_with_uncommitted_work_in_another_slot_is_never_taken(self):
         sh("git", "branch", "task/t-1", cwd=self.wt)
@@ -574,7 +574,9 @@ class DelegateLauncher(T.EngineTest):
     def test_no_delegate_blocks_with_the_install_command(self):
         c = wslots.load_cfg(str(self.wt))
         with mock.patch.object(dl, "resolve", return_value=dl.Refusal("not_installed")):
-            rc = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner()).run()
+            rc = engine.Engine(
+                BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(), git=port_git()
+            ).run()
         self.assertEqual(rc, 2)
         self.assertIn("claude plugin update iorlas-delegate", self.said())
 

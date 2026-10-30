@@ -5,7 +5,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
-from support import procsim
+from support import gitq, procsim
 from support.engine_case import EngineTest
 
 # isort: split
@@ -30,7 +30,7 @@ class CheckFixTest(EngineTest):
         eng, res = self.run_round(fix=FIX)
         self.assertEqual(res[0].exit, 0)
         self.assertEqual((self.wt / "a.txt").read_text(), "formatted\n")
-        self.assertIn("a.txt", eng.git("diff", "--cached", "--name-only"))  # staged like the stage's own changes
+        self.assertIn("a.txt", gitq.git("diff", "--cached", "--name-only", cwd=eng.wt))  # staged like the stage's own changes
 
     def test_without_a_fix_the_check_sees_the_tree_as_it_is(self):
         _, res = self.run_round()

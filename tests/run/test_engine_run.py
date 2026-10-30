@@ -6,7 +6,7 @@ from typing import Any, ClassVar
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
-from support import procsim
+from support import gitq, procsim
 from support.checks import ck
 from support.engine_case import (
     BEAD,
@@ -41,11 +41,10 @@ from support.builders import cfg_with
 from support.checkpoints import stored_ck
 from support.fakes import as_bead, as_comment, must_bead
 from support.logs import records
-from support.spawn import real_spawner
+from support.spawn import port_git, real_spawner
 
 from taskloop.adapters import (
     context_size,
-    gitrepo,
     ident,
 )
 from taskloop.adapters import delegate as dl
@@ -283,9 +282,7 @@ class EngineRunTest(EngineTest):
         assert ck is not None
         sh("git", "checkout", "-q", "task/t-1", cwd=self.wt)  # (a parked slot is left detached at the base: back on the bead's branch)
         sh("git", "reset", "-q", "--soft", "HEAD~1", cwd=self.wt)
-        self.eng.stores.checkpoints.of("t-1").write(
-            ck.replace(closed=False, head=gitrepo.git("rev-parse", "HEAD", cwd=str(self.wt)))
-        )
+        self.eng.stores.checkpoints.of("t-1").write(ck.replace(closed=False, head=gitq.git("rev-parse", "HEAD", cwd=str(self.wt))))
         rc, s = self.run_engine({"write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0)
         self.assertEqual([c[0] for c in s.calls], ["worker", "reviewer"])
@@ -703,7 +700,9 @@ class EngineRunTest(EngineTest):
             mock.patch.object(dl, "resolve", return_value=refusal),
             mock.patch.object(seams.DelegateRoute, "runner", lambda self, *a, **k: script),
         ):
-            rc = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner()).run()
+            rc = engine.Engine(
+                BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(), git=port_git()
+            ).run()
         self.assertEqual(rc, 2)
         self.assertEqual(script.calls, [])
         self.assertIn("contract 3", self.said())
@@ -760,7 +759,7 @@ class EngineRunTest(EngineTest):
     def test_worker_rules_are_clipped_at_a_line_and_missing_ones_say_nothing(self):
         self.put_repo_file("r.md", "line\n" * 1000)
         eng = engine.Engine.__new__(engine.Engine)
-        eng.cfg, eng.wt, eng.warn = cfg_with(worker_rules="r.md"), self.wt, mock.Mock()
+        eng.cfg, eng.wt, eng.warn = cfg_with(worker_rules="r.md"), str(self.wt), mock.Mock()
         sh("git", "pull", "-q", "origin", "main", cwd=self.wt)
         text = eng.cases.rules_text()
         self.assertLessEqual(len(text.encode("utf-8")), RULES_MAX)

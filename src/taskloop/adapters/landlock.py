@@ -11,7 +11,6 @@ from subprocess import Popen
 from types import FrameType
 
 from taskloop.adapters import locks, procs
-from taskloop.adapters.gitrepo import git
 from taskloop.adapters.ident import config_dir
 from taskloop.contracts.locks import LockRecord, LockTimeout
 
@@ -56,9 +55,10 @@ def land_lock_path(url: str) -> Path:
     return config_dir() / "locks" / f"land-{lock_key(url)}.lock"
 
 
-def run_locked(cmd: list[str], repo: str, wait_min: float | None) -> int:
-    """Run `cmd` while holding the land lock of `repo`; its exit code, 127 when it cannot start, 75 after `wait_min` minutes of waiting."""
-    path = land_lock_path(git("remote", "get-url", "origin", cwd=repo) or repo)
+def run_locked(cmd: list[str], repo: str, wait_min: float | None, origin: str) -> int:
+    """Run `cmd` while holding the land lock of `repo`; its exit code, 127 when it cannot start, 75 after `wait_min` minutes of waiting.
+    `origin`: the repo's origin url ('' when it has none), which names the lock."""
+    path = land_lock_path(origin or repo)
     holder = f"land-lock pid {os.getpid()} ({' '.join(cmd)[:80]})"
     secs = wait_min * 60 if wait_min is not None else None
     child: list[Popen[bytes]] = []

@@ -33,8 +33,16 @@ def tries_of(kit: LandKit) -> list[rec.LandTry]:
 
 def repo(bases, heads, pushes) -> FakeGit:
     """Git as the land sees it: the base tip and the branch tip once before the rebase and once after, per try, then what each push said."""
-    return FakeGit(**{"rev_parse__origin/main": list(bases), "rev_parse__HEAD": list(heads), "rev_parse__HEAD^{tree}": "tree",
-                      "rev_parse__--verify__-q__HEAD": "", "rebase": (0, ""), "push": list(pushes)})
+    return FakeGit(
+        **{
+            "rev_parse__origin/main": list(bases),
+            "rev_parse__HEAD": list(heads),
+            "rev_parse__HEAD^{tree}": "tree",
+            "rebase": (0, ""),
+            "log": "",
+            "push": list(pushes),
+        }
+    )
 
 
 class Tries(unittest.TestCase):
@@ -44,9 +52,10 @@ class Tries(unittest.TestCase):
         sha, problem = lander.tries(Land())
         self.assertEqual((sha, problem), ("landed", None))
         (got,) = tries_of(host)
-        self.assertEqual(got, rec.LandTry(t=got.t, n=1, base_before="aaaa1111aaaa", base_after="bbbb3333bbbb",
-                                           rebase_moved=True, failing=""))
-        self.assertTrue(g.ran("rebase", "-q", "origin/main"))
+        self.assertEqual(
+            got, rec.LandTry(t=got.t, n=1, base_before="aaaa1111aaaa", base_after="bbbb3333bbbb", rebase_moved=True, failing="")
+        )
+        self.assertTrue(g.ran("rebase", "origin/main"))
 
     def test_when_main_stands_still_nothing_moved(self):
         g = repo(["aaa"] * 4, ["h", "h", "landed"], [PUSHED])

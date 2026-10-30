@@ -24,7 +24,7 @@ class RunFields(StateAttrs):
         self.claim = claim or fence.offline(bead)  # the run's right to act on its bead (app/track/fence.py); offline: nothing to check
         self.dead: Checkpoint | None = None  # a run died inside its close: its checkpoint, to finish that close (app/run/ended.py)
         self.fenced = ""  # why this run was fenced out (its bead or slot taken again), once it was
-        self.wt: str | Path = wt
+        self.wt: str = wt
         self.store, self.router = store or beadtools.bd_store(), route
         self.stats: dict[str, int] = {"writes": 0, "rounds": 0, "reviews": 0, "replans": 0, "nodes": 0, "tests_added": 0,
                                       "tests_removed": 0, "tokens_in": 0, "tokens_cached": 0, "tokens_out": 0}

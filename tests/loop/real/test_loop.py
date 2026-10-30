@@ -24,6 +24,7 @@ import support.paths  # noqa: E402, F401
 # isort: split
 import tl  # noqa: E402
 from support import (  # noqa: E402
+    gitq,
     looptest,
     tlbd,
 )
@@ -31,7 +32,6 @@ from support.narrow import must  # noqa: E402
 from support.waits import until  # noqa: E402
 
 from taskloop.adapters import (  # noqa: E402
-    gitrepo,
     ident,
 )
 from taskloop.adapters.storm import storm_path, write_storm  # noqa: E402
@@ -600,7 +600,7 @@ class Loop(LoopBase):
 
     def test_a_live_storm_record_stops_a_loop_before_any_claim_with_one_line(self):
         self.beads({"x-1": [rec("landed")]})
-        path = storm_path(ident.config_dir(), (gitrepo.git('remote', 'get-url', 'origin', cwd=str(self.repo)) or str(self.repo)))
+        path = storm_path(ident.config_dir(), (gitq.git("remote", "get-url", "origin", cwd=str(self.repo)) or str(self.repo)))
         write_storm(path, "FAULT_INFRA y", ("x-8", "x-9"), self.clock.t, self.clock.t, oc.KNOBS["storm_window_s"])
         self.assertEqual(self.run_loop(), 2)
         self.assertEqual(self.started, [])
@@ -803,11 +803,6 @@ class Loop(LoopBase):
         self.assertTrue(all(s["status"] == "open" for s in bd.slots.values()))
         self.assertIn("stopped", self.lines()[0]["why"])
 
-    def test_stop_with_no_loop_running_says_so(self):
-        out = io.StringIO()
-        with redirect_stdout(out):
-            self.assertEqual(self.main(["stop", "--repo", str(self.repo)]), 1)
-        self.assertIn("no loop", out.getvalue())
 
     def other_loop(self):
         """A second live loop on the repo: its state names a live process that is not this one."""

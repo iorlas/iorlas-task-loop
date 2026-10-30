@@ -90,9 +90,11 @@ def cmd_push(c: Ctx) -> int:
     fl, rest = flags(c.args)
     remote = remote_of(c, rest[0])
     for spec in rest[1:] or [c.r.head_ref()]:
-        forced = spec.startswith("+") or any(f.startswith("--force") for f in fl if not f.startswith("--force-with-lease="))
+        forced = spec.startswith("+") or any(f.startswith("--force") for f in fl)
         src, _, dst = spec.lstrip("+").partition(":")
         dst = (dst or src).removeprefix("refs/heads/")
+        if "--force-with-lease" in fl and remote.ref("refs/heads/" + dst) != c.r.ref("refs/remotes/origin/" + dst):  # the bare lease: the
+            raise Fail(f" ! [rejected]        {dst} (stale info)\nerror: failed to push some refs to '{remote.git}'", 1)  # tracking ref
         for lease in (f for f in fl if f.startswith("--force-with-lease=")):
             ref, _, want = lease[len("--force-with-lease="):].partition(":")
             if ref.removeprefix("refs/heads/") == dst and remote.ref("refs/heads/" + dst) != want:

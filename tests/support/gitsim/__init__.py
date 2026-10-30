@@ -10,7 +10,7 @@ import re
 import stat
 import subprocess
 import tempfile
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 from unittest import mock
@@ -92,6 +92,19 @@ def textual(kw: Mapping[str, Any]) -> bool:
     return bool(kw.get("text") or kw.get("encoding") or kw.get("universal_newlines"))
 
 
+def verbs(argv: Sequence[str]) -> list[str]:
+    """A call's words after the flags that only say where and how git runs (-C dir, --no-pager, ...)."""
+    out, skip = [], False
+    for a in argv:
+        if skip:
+            skip = False
+        elif a == "-C":
+            skip = True
+        elif a not in GLOBAL_FLAGS:
+            out.append(a)
+    return out
+
+
 class Sim:
     def __init__(self, case: Any) -> None:
         self.case = case
@@ -106,8 +119,8 @@ class Sim:
     def answer(self, argv: list[str], cwd: Any, env: Any, stdin: bytes) -> tuple[int, bytes, str]:
         self.calls.append(tuple(str(a) for a in argv[1:]))
         for prefix, stderr, when in self.faults:
-            words = [a for a in self.calls[-1] if a not in GLOBAL_FLAGS]
-            n = sum(tuple(w for w in x if w not in GLOBAL_FLAGS)[: len(prefix)] == prefix for x in self.calls)
+            words = verbs(self.calls[-1])
+            n = sum(tuple(verbs(x)[: len(prefix)]) == prefix for x in self.calls)
             if tuple(words[: len(prefix)]) == prefix and when(n):
                 return 1, b"", stderr + "\n"
         try:

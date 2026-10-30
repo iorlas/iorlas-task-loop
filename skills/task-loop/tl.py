@@ -119,7 +119,8 @@ def v_land_lock(a: Any, c: Ctx) -> int:
     if not cmd:
         print("land-lock: no command (usage: tl.py land-lock [--repo DIR] -- CMD...)", file=sys.stderr)
         return 2
-    return landlock.run_locked(cmd, str(Path(a.repo).resolve()), a.wait_min)
+    repo = str(Path(a.repo).resolve())
+    return landlock.run_locked(cmd, repo, a.wait_min, real.git(c.env).remote_url(repo, "origin"))
 
 
 def owner_parsers(sp):
@@ -368,8 +369,8 @@ VERBS: Final[dict[str, Handler]] = {
     "prune": v_prune,
     "lint": v_lint,
     "check": lazy_spawn("taskloop.app.launch.check", "cmd_check"),
-    "report": lazy("taskloop.cli.report", "cmd_report"),
-    "lost": lazy("taskloop.cli.report", "cmd_lost"),
+    "report": lazy_env("taskloop.cli.report", "cmd_report"),
+    "lost": lazy_env("taskloop.cli.report", "cmd_lost"),
 }
 
 

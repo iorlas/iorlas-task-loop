@@ -44,23 +44,59 @@ class Records:
             return
         lock = engine_lock.LOCK
         why = self.origin()
-        e.log.emit(rec.RunStart(run=e.log_path.stem, bead=e.bead, worktree=str(e.wt), slot=(lock.rec.slot if lock else "") or None,
-                                prev_run=why["prev_run"], started_because=why["started_because"], ask=why["ask"],
-                                branch=e.git("symbolic-ref", "--short", "-q", "HEAD") or ""))
+        e.log.emit(
+            rec.RunStart(
+                run=e.log_path.stem,
+                bead=e.bead,
+                worktree=str(e.wt),
+                slot=(lock.rec.slot if lock else "") or None,
+                prev_run=why["prev_run"],
+                started_because=why["started_because"],
+                ask=why["ask"],
+                branch=e.git.branch(e.wt),
+            )
+        )
 
     def file_trace(self, outcome: Outcome, why: str, sha: str) -> None:
         """One line per engine run in traces.jsonl, never pruned: bead, repo, branch, every session, the outcome."""
         e = self.e
         kind = e.kind.value
         try:
-            e.stores.traces.append(runtrace.run_trace(e.log_path.stem, dict(
-                self.origin(), bead=e.bead, repo_url=e.git("remote", "get-url", "origin") or str(e.wt), worktree=str(e.wt),
-                branch=e.git("symbolic-ref", "--short", "-q", "HEAD"), coordinator_session=e.session, version=ident.plugin_version(),
-                started=e.t0, ended=time.time(), outcome=outcome, why=(why or "")[:500], sha=sha or "", kind=kind, kfp=e.fp,
-                why_code=runtrace.why_code(kind, outcome), fingerprint=lifecycle.run_fingerprint(outcome, why), cost=e.cost,
-                stats=e.stats, delegate_path=e.route or "", log=str(e.log_path), stderr=str(e.err_path),
-                sessions=e.sessions, verified=e.verified, write_rounds=e.write_rounds, strays=e.strays,
-                reflection=e.reflection, lane_notes=e.lane_notes, salvaged=e.salvaged)))
+            e.stores.traces.append(
+                runtrace.run_trace(
+                    e.log_path.stem,
+                    dict(
+                        self.origin(),
+                        bead=e.bead,
+                        repo_url=e.git.remote_url(e.wt, "origin") or str(e.wt),
+                        worktree=str(e.wt),
+                        branch=e.git.branch(e.wt),
+                        coordinator_session=e.session,
+                        version=ident.plugin_version(),
+                        started=e.t0,
+                        ended=time.time(),
+                        outcome=outcome,
+                        why=(why or "")[:500],
+                        sha=sha or "",
+                        kind=kind,
+                        kfp=e.fp,
+                        why_code=runtrace.why_code(kind, outcome),
+                        fingerprint=lifecycle.run_fingerprint(outcome, why),
+                        cost=e.cost,
+                        stats=e.stats,
+                        delegate_path=e.route or "",
+                        log=str(e.log_path),
+                        stderr=str(e.err_path),
+                        sessions=e.sessions,
+                        verified=e.verified,
+                        write_rounds=e.write_rounds,
+                        strays=e.strays,
+                        reflection=e.reflection,
+                        lane_notes=e.lane_notes,
+                        salvaged=e.salvaged,
+                    ),
+                )
+            )
         except (OSError, ValueError) as err:
             e.warn(f"could not write the trace: {err}")
 

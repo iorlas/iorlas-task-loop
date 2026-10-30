@@ -7,13 +7,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401
 
 from ports.git_contract import GitContract, contract
+from ports.git_contract_land import LandContract
 from taskloop.adapters.git import RealGit
+from taskloop.contracts.env import snapshot
 
 
 @contract
-class RealGitContract(GitContract, unittest.TestCase):
+class RealGitContract(GitContract, LandContract, unittest.TestCase):
     def start(self) -> None:
         pass
 
     def make(self) -> RealGit:
-        return RealGit()
+        return RealGit(snapshot())

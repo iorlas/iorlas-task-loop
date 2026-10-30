@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from taskloop.adapters.beadtools import bd_store, peek
-from taskloop.adapters.git import REAL, RealGit
+from taskloop.adapters.git import REAL
 from taskloop.adapters.gitrepo import repo_root
 from taskloop.adapters.ident import actor, config_dir, hostname
 from taskloop.adapters.landlock import os_lock
@@ -105,8 +105,15 @@ def slot_env(repo: str, store: Beads | None = None, cfg: SlotsConfig | None = No
     """The slot code's world (app/slots): this repo's bd, git, ticket line and take lock, and the effects it may cause."""
     cdir = ConfigDir(config_dir())
     return SlotEnv(
-        repo=repo, repo_key=repo_key(repo), cfg=cfg or profile_slots(repo), store=store or bd_store(repo), git=RealGit(),
-        tickets=FileTickets(cdir), cfgdir=cdir, actor=actor(), host=hostname(),
+        repo=repo,
+        repo_key=repo_key(repo),
+        cfg=cfg or profile_slots(repo),
+        store=store or bd_store(repo),
+        git=REAL,
+        tickets=FileTickets(cdir),
+        cfgdir=cdir,
+        actor=actor(),
+        host=hostname(),
         take_lock=lambda: os_lock(config_dir() / "locks" / f"slot-take-{repo_key(repo)}.lock", f"pid {os.getpid()}"),
         busy=engine_busy, lock_pid=lock_pid,
         drop_engine_lock=lambda wt, pid: drop_engine_lock(wt, pid) if pid is not None else None, event=event, say=print,

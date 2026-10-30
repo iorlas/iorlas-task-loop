@@ -28,7 +28,7 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
     try:
         process = snapshot()  # the one place this script takes the process environment
-        suite.host_suite(HERE.parent, Path(args.repo), shell.of(real.spawner(process), real.git(), process))
+        suite.host_suite(HERE.parent, Path(args.repo), shell.of(real.spawner(process), real.git(process), process))
     except Abort as e:
         print(str(e), file=sys.stderr)
         return 1

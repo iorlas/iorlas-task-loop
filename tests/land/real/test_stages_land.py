@@ -11,7 +11,7 @@ from run.test_stages import StagesTest
 from support import engine_case as te
 from support.engine_case import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, engine, lint, real_git, real_proc  # noqa: F401
 from support.pushsim import pusher
-from support.spawn import real_spawner
+from support.spawn import port_git, real_spawner
 
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts.env import snapshot
@@ -44,8 +44,15 @@ class SlotHygiene(StagesTest):
         (self.wt / "notes.swp").write_text("editor\n")
         (self.wt / "client").mkdir()
         (self.wt / "client" / "log.txt").write_text("unity\n")
-        e = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store, env=snapshot(),
-            spawner=real_spawner())
+        e = engine.Engine(
+            BeadId("t-1"),
+            str(self.wt),
+            wslots.load_cfg(str(self.wt)),
+            store=self.store,
+            env=snapshot(),
+            spawner=real_spawner(),
+            git=port_git(),
+        )
         self.assertEqual(e.checkout.dirty_status(), "")
 
 

@@ -7,9 +7,9 @@ import json
 from pathlib import Path
 from typing import Any
 
-from taskloop.adapters.git import REAL
 from taskloop.app.checks.runner import Checker
 from taskloop.app.launch.check_host import CliHost
+from taskloop.app.wire import real
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts.argv import text_of
 from taskloop.contracts.checks import CheckResult, Phase
@@ -59,7 +59,8 @@ def profile_of(repo: str) -> EngineConfig:
 
 
 def cmd_check(a: Any, host: CliHost | None = None, *, env: Env, spawner: Spawner) -> int:
-    repo = REAL.toplevel(a.repo) or str(Path(a.repo).resolve())
+    git = real.git(env)
+    repo = git.toplevel(a.repo) or str(Path(a.repo).resolve())
     cfg = profile_of(repo)
     if a.list:
         print("\n".join(listing(cfg)) or "(no checks in engine.checks)")
@@ -67,7 +68,7 @@ def cmd_check(a: Any, host: CliHost | None = None, *, env: Env, spawner: Spawner
     items = [repo_check(k, cfg, Phase.STAGE if k.run == "stage" else Phase.GATE) for k in chosen(cfg, a.ids)] if a.ids else gate_items(cfg)
     if not items:
         print("no gate steps: no engine.checks entry says run gate or both")  # the built-in diff-check still runs
-    box = host or CliHost(repo, cfg, env=env, spawner=spawner)
+    box = host or CliHost(repo, cfg, env=env, spawner=spawner, git=git)
     try:
         run = Checker(box).run_items(items, everything=a.all or bool(a.ids), learn=False, show_clean=True)
     finally:

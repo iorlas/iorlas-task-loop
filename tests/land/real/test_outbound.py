@@ -7,11 +7,11 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
+from support import gitq
 from support.engine_case import CLEAN, PLAN, WRITE, EngineTest, real_git
 from support.logs import records
 
 # isort: split
-from taskloop.adapters import gitrepo
 
 ATTR = "*.bin filter=lfs diff=lfs merge=lfs -text\n"
 RUN = ({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
@@ -36,7 +36,7 @@ class Land(EngineTest):
         hook.chmod(0o755)
         rc, _ = self.run_engine(RUN)
         self.assertEqual(rc, 0, self.blocked)
-        self.assertEqual(gitrepo.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
+        self.assertEqual(gitq.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
 
     @real_git("git runs git-lfs: the order of lfs push and push is what git does")
     def test_an_lfs_repo_pushes_the_ref_s_objects_before_the_push(self):
@@ -48,7 +48,7 @@ class Land(EngineTest):
         said, at_lfs = lines[-2:]  # the land's own LFS push (each accepted stage's WIP push sent one before it)
         self.assertEqual(said, "push origin HEAD")
         self.assertEqual(len(lines) % 2, 0)
-        self.assertNotEqual(at_lfs, gitrepo.git("rev-parse", "origin/main", cwd=str(self.wt)))  # origin had not the commit yet
+        self.assertNotEqual(at_lfs, gitq.git("rev-parse", "origin/main", cwd=str(self.wt)))  # origin had not the commit yet
         self.assertTrue(any("git lfs push origin HEAD" in r["text"] for r in records(self.eng, "note")))
 
 

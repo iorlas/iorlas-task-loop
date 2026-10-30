@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as te
 from support import fake_route
-from support.spawn import real_spawner
+from support.spawn import port_git, real_spawner
 
 from taskloop.app.run import engine
 from taskloop.app.wire import slots as wslots
@@ -48,7 +48,9 @@ class Refusal(te.EngineTest):
     def go(self, role, script):
         c = wslots.load_cfg(str(self.wt))
         with te.delegate_stack(script), mock.patch.dict(caps.CAPS, {role: 1}):
-            self.eng = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner())
+            self.eng = engine.Engine(
+                BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(), git=port_git()
+            )
             rc = self.eng.run()
         return rc
 

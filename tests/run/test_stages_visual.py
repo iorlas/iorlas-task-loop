@@ -13,6 +13,7 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as te
 from support import (
     fake_route,
+    gitq,
     procsim,
 )
 from support.builders import cfg_with, make_engine, plan_of
@@ -22,10 +23,10 @@ from support.fakes import (
     FakeBeadStore,
     must_bead,
 )
-from support.spawn import real_spawner
+from support.spawn import port_git, real_spawner
 
 from run.test_stages import StagesTest
-from taskloop.adapters import gitrepo, ident
+from taskloop.adapters import ident
 from taskloop.app.land.rebase import MAX_REBASE_RESETS
 from taskloop.app.run import (
     entry,
@@ -38,6 +39,7 @@ from taskloop.contracts.checkpoint import Defect
 from taskloop.contracts.env import snapshot
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.run import Round
+from taskloop.contracts.slots import SlotGitError
 from taskloop.domain.prompts.plan import REPLAN_CAP
 
 
@@ -222,12 +224,12 @@ class VisualWork(StagesTest):
     def test_the_table_is_read_from_the_base_branch_not_the_working_copy(self):
         (self.wt / "shots.json").write_text(json.dumps({"v": 1, "methods": [{"method": "Evil", "argv": ["touch", "pwned"]}]}))
         cfg = cfg_with(wslots.load_cfg(str(self.wt)), shot_table="shots.json")
-        e = engine.Engine(BeadId("t-1"), str(self.wt), cfg, store=self.store, env=snapshot(), spawner=real_spawner())
+        e = engine.Engine(BeadId("t-1"), str(self.wt), cfg, store=self.store, env=snapshot(), spawner=real_spawner(), git=port_git())
         self.assertEqual(list(e.pictures.shot_methods()), ["ScreenShots"])
 
     def test_a_missing_table_is_warned_once_and_the_old_way_stands(self):
         cfg = cfg_with(wslots.load_cfg(str(self.wt)), shot_table="nowhere.json")
-        e = engine.Engine(BeadId("t-1"), str(self.wt), cfg, store=self.store, env=snapshot(), spawner=real_spawner())
+        e = engine.Engine(BeadId("t-1"), str(self.wt), cfg, store=self.store, env=snapshot(), spawner=real_spawner(), git=port_git())
         self.assertEqual(e.pictures.shot_methods(), {})
         self.assertEqual(e.pictures.shot_methods(), {})
 
@@ -302,21 +304,32 @@ class VisualWork(StagesTest):
         self.assertEqual(self.eng.render_stale, False)
 
     def test_a_resumed_stage_keeps_its_render_rounds(self):
-        e = make_engine(self.wt, store=self.store, attrs={
-            "look_done": 1,
-            "look_prev": [Defect(item="i", why="x")],
-            "rendered_names": ["a.png"],
-            "last_reqs": self.SHOTS,
-            "render_stale": True,
-            "plan_data": dict(PLAN),
-            "branch": "task/t-1",
-            })
-        e.git("checkout", "-q", "-b", "task/t-1")
+        e = make_engine(
+            self.wt,
+            store=self.store,
+            attrs={
+                "look_done": 1,
+                "look_prev": [Defect(item="i", why="x")],
+                "rendered_names": ["a.png"],
+                "last_reqs": self.SHOTS,
+                "render_stale": True,
+                "plan_data": dict(PLAN),
+                "branch": "task/t-1",
+            },
+        )
+        gitq.git("checkout", "-q", "-b", "task/t-1", cwd=e.wt)
         e.checkpoints.save(stage=0, rounds=0, n=1, feedback="", step="write")
         ck = read_ck(e).state
         self.assertEqual((ck.look_done, sorted(ck.rendered_names), ck.render_stale), (1, ["a.png"], True))
-        again = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store, env=snapshot(),
-            spawner=real_spawner())
+        again = engine.Engine(
+            BeadId("t-1"),
+            str(self.wt),
+            wslots.load_cfg(str(self.wt)),
+            store=self.store,
+            env=snapshot(),
+            spawner=real_spawner(),
+            git=port_git(),
+        )
         again.tree.reset(must_bead(BEAD))
         again.resume.point()
         self.assertEqual((again.look_done, again.rendered_names, again.render_stale), (1, ["a.png"], True))
@@ -404,7 +417,7 @@ class ResumeCount(StagesTest):
     def test_a_rebase_onto_a_new_base_starts_the_plan_count_again(self):
         self.behind_branch()
         e = make_engine(self.wt, store=self.store, attrs={"planned": 3, "plan_log": [{"mode": "plan", "why": "x"}] * 3})
-        e.git("checkout", "-q", "task/t-1")
+        gitq.git("checkout", "-q", "task/t-1", cwd=e.wt)
         self.assertEqual(e.rebase.onto_base(), "rebased")
         self.assertEqual((e.planned, e.rebase_resets), (0, 1))
         self.assertEqual(e.plan_log[-1].counted, False)  # the history stays, with a note
@@ -413,7 +426,7 @@ class ResumeCount(StagesTest):
     def test_the_count_starts_again_after_a_rebase_at_most_twice_per_bead(self):
         e = make_engine(self.wt, store=self.store, attrs={"rebase_resets": MAX_REBASE_RESETS, "planned": 3})
         self.behind_branch()
-        e.git("checkout", "-q", "task/t-1")
+        gitq.git("checkout", "-q", "task/t-1", cwd=e.wt)
         self.assertEqual(e.rebase.onto_base(), "rebased")
         self.assertEqual(e.planned, 3)  # a bead stuck for a real reason still reaches the limit while main moves
 
@@ -453,8 +466,15 @@ class ResumeCount(StagesTest):
         te.sh("git", "add", "-A", cwd=base)
         te.sh("git", "commit", "-qm", "main moves", cwd=base)
         te.sh("git", "push", "-q", "origin", "HEAD:main", cwd=base)
-        e = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store, env=snapshot(),
-            spawner=real_spawner())
+        e = engine.Engine(
+            BeadId("t-1"),
+            str(self.wt),
+            wslots.load_cfg(str(self.wt)),
+            store=self.store,
+            env=snapshot(),
+            spawner=real_spawner(),
+            git=port_git(),
+        )
         e.tree.reset(must_bead(BEAD))
         e.plan_data = plan_of(PLAN)
         e.checkpoints.save(stage=0, rounds=0, n=1, feedback="", step="write")
@@ -472,7 +492,7 @@ class ResumeCount(StagesTest):
         self.assertIn("squashed the branch's wip commits into one", text)
         self.assertNotIn("resume_conflict", text)
         self.assertFalse(self.last_trace()["salvaged"])
-        self.assertEqual(gitrepo.git("show", "origin/main:a.txt", cwd=str(self.wt)), "main moved on")
+        self.assertEqual(gitq.git("show", "origin/main:a.txt", cwd=str(self.wt)), "main moved on")
         self.assertEqual(
             subprocess.run(
                 ["git", "branch", "--list", "task/t-1-stale-*"], cwd=self.wt, capture_output=True, text=True, check=False
@@ -493,7 +513,7 @@ class ResumeCount(StagesTest):
         ).stdout
         self.assertIn("task/t-1-stale-", out)
         stale = out.split()[-1]
-        self.assertEqual(gitrepo.git("show", stale + ":c0.txt", cwd=str(self.wt)), "mine 2")  # the work is kept whole
+        self.assertEqual(gitq.git("show", stale + ":c0.txt", cwd=str(self.wt)), "mine 2")  # the work is kept whole
 
     def test_exactly_ten_conflicted_files_are_still_fixed(self):
         files = [f"c{n}.txt" for n in range(10)]
@@ -513,7 +533,7 @@ class ResumeCount(StagesTest):
         self.assertIn("conflict", s.prompts[0])
         self.assertNotIn("resume_conflict", self.eng.log_path.read_text())
         self.assertTrue(self.last_trace()["salvaged"])
-        self.assertEqual(gitrepo.git("show", "origin/main:c0.txt", cwd=str(self.wt)), "merged")
+        self.assertEqual(gitq.git("show", "origin/main:c0.txt", cwd=str(self.wt)), "merged")
         self.assertEqual(self.eng.fixes, 0)  # the land's two fix rounds are its own
         stale = subprocess.run(["git", "branch", "--list", "task/t-1-stale-*"], cwd=self.wt, capture_output=True, text=True, check=False)
         self.assertEqual(stale.stdout, "")
@@ -528,22 +548,21 @@ class ResumeCount(StagesTest):
             ["git", "branch", "--list", "task/t-1-stale-*"], cwd=self.wt, capture_output=True, text=True, check=False
         ).stdout
         stale = out.split()[-1]
-        self.assertEqual(gitrepo.git("show", stale + ":a.txt", cwd=str(self.wt)), "mine 2")  # the original work, not a half-fixed rebase
+        self.assertEqual(gitq.git("show", stale + ":a.txt", cwd=str(self.wt)), "mine 2")  # the original work, not a half-fixed rebase
         self.assertEqual(self.eng.fixes, 0)
 
     def test_a_branch_that_cannot_be_kept_aside_is_not_reset(self):
         self.behind_branch(conflict=True)
         e = make_engine(self.wt, store=self.store, attrs={"branch": "task/t-1"})
-        e.git("checkout", "-q", "task/t-1")
-        before = e.git("rev-parse", "HEAD")
-        real = e.sh
-        patch = mock.patch.object(e, "sh", new=lambda cmd, **kw: (1, "refused") if cmd[:3] == ["git", "branch", "-m"] else real(cmd, **kw))
+        gitq.git("checkout", "-q", "task/t-1", cwd=e.wt)
+        before = gitq.git("rev-parse", "HEAD", cwd=e.wt)
+        patch = mock.patch.object(type(e.git), "rename_branch", side_effect=SlotGitError("refused"))
         patch.start()
         self.addCleanup(patch.stop)
         self.assertFalse(e.restart.again("x"))
-        self.assertEqual(e.git("rev-parse", "HEAD"), before)  # the work is where it was
-        e.sh = real
-        e.git("checkout", "-q", "--detach")
+        self.assertEqual(gitq.git("rev-parse", "HEAD", cwd=e.wt), before)  # the work is where it was
+        patch.stop()
+        gitq.git("checkout", "-q", "--detach", cwd=e.wt)
         self.assertFalse(e.restart.again("x"))  # detached: nothing renamed or reset
 
     def test_a_fresh_start_clears_what_the_old_attempt_left(self):
@@ -561,7 +580,7 @@ class ResumeCount(StagesTest):
                 "verify_answer": "Use the old format",
             },
         )
-        e.git("checkout", "-q", "task/t-1")
+        gitq.git("checkout", "-q", "task/t-1", cwd=e.wt)
         e.handoff.rounds = [Round(stage="s", round=1, kind="k")]
         self.assertTrue(e.restart.again("x"))
         self.assertEqual((e.unverified, e.look_paths, e.handoff.rounds, e.fixes, e.replans, e.rendered_names), ([], [], [], 0, 0, []))

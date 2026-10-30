@@ -24,6 +24,7 @@ from taskloop.app.run import console, running
 from taskloop.app.run.engine import Blocked, Engine
 from taskloop.app.slots import engine_lock
 from taskloop.app.track import verbs
+from taskloop.app.wire import real
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts import env as penv
 from taskloop.contracts import fence, wire
@@ -359,10 +360,30 @@ def run_bead(a: Any, repo: Any, cfg: Any, wt: Any, store: Any = None, *, env: En
         if not a.dry_run and verbs.claim(a.id, wt, a.slot, store=store) != 0:
             # bd lets this session re-claim its own bead (a reopened one); another session's claim stops here
             return RunReport(outcome=Result.TAKEN, bead=a.id, why="claimed by another session")
-        claim = None if a.dry_run else fence.take(store or beadtools.bd_store(), a.id, ident.actor(),
-                                                  env.bead(EnvVar.TASK_LOOP_SLOT_BEAD), getattr(a, "slot_gen", None))
-        eng = Engine(a.id, wt, cfg, dry_run=a.dry_run, verbose=not getattr(a, "quiet", False),
-                     fresh=bool(getattr(a, "fresh", False)), store=store, claim=claim, env=env, spawner=spawner)
+        claim = (
+            None
+            if a.dry_run
+            else fence.take(
+                store or beadtools.bd_store(),
+                a.id,
+                ident.actor(),
+                env.bead(EnvVar.TASK_LOOP_SLOT_BEAD),
+                getattr(a, "slot_gen", None),
+            )
+        )
+        eng = Engine(
+            a.id,
+            wt,
+            cfg,
+            dry_run=a.dry_run,
+            verbose=not getattr(a, "quiet", False),
+            fresh=bool(getattr(a, "fresh", False)),
+            store=store,
+            claim=claim,
+            env=env,
+            spawner=spawner,
+            git=real.git(env),
+        )
         eng.stop_pending = bool(stop)
         say(f"engine log: {eng.log_path}")
     rc = eng.run()

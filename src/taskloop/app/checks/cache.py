@@ -11,6 +11,7 @@ from pathlib import Path
 from taskloop.adapters import check_files
 from taskloop.contracts.checks import BaseEntry, CacheHit, Check, CheckCacheEntry, CheckResult, RunEntry
 from taskloop.contracts.ids import CheckId, TreeSha
+from taskloop.contracts.ports import Git
 from taskloop.contracts.runkey import BaseSha, Digest, RunKey
 from taskloop.domain.checks import inputs
 from taskloop.domain.checks.names import norm
@@ -20,14 +21,14 @@ from taskloop.stores.api import Doc
 class InputKeys:
     """What the checks of one tree read: its file list is read once, the ignored files under each set of globs once."""
 
-    def __init__(self, wt: str | Path, tree: TreeSha, env: Mapping[str, str]) -> None:
-        self.wt, self.tree, self.env = str(wt), tree, env
+    def __init__(self, git: Git, wt: str | Path, tree: TreeSha) -> None:
+        self.git, self.wt, self.tree = git, str(wt), tree
         self.files: dict[str, str] | None = None
         self.ignored: dict[tuple[tuple[str, ...], tuple[str, ...]], dict[str, str]] = {}
 
     def tracked(self) -> dict[str, str]:
         if self.files is None:
-            self.files = check_files.tree_files(self.wt, self.tree, self.env)
+            self.files = check_files.tree_files(self.git, self.wt, self.tree)
         return self.files
 
     def dead(self, c: Check) -> list[str]:
@@ -42,7 +43,7 @@ class InputKeys:
         """{path: content digest} of the gitignored files under the check's globs (tree_hash never sees them)."""
         at = (tuple(c.inputs), tuple(c.exclude))
         if at not in self.ignored:
-            listed = check_files.ignored_files(self.wt, inputs.pathspec(c.inputs, c.exclude), self.env)
+            listed = check_files.ignored_files(self.git, self.wt, inputs.pathspec(c.inputs, c.exclude))
             self.ignored[at] = {p: check_files.file_digest(os.path.join(self.wt, p)) for p in inputs.matching(listed, c.inputs, c.exclude)}
         return self.ignored[at]
 

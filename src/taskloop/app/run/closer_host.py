@@ -16,6 +16,7 @@ from taskloop.contracts import fence
 from taskloop.contracts.checkpoint import Checkpoint, EndRec
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.kinds import Kind
+from taskloop.contracts.ports import Git
 from taskloop.domain import outcome as oc
 from taskloop.domain.asks.spec import AskSpec
 from taskloop.stores.runlog import RunLog
@@ -65,7 +66,10 @@ class CloseHost(Protocol):
     def t0(self) -> float: ...
     @property
     def halt(self) -> threading.Event: ...
-    def git(self, *args: str) -> str: ...
+    @property
+    def git(self) -> Git: ...
+    @property
+    def wt(self) -> str: ...
     def warn(self, text: str) -> None: ...
 
 

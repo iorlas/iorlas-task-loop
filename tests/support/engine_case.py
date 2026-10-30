@@ -25,7 +25,7 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 # isort: split
 from contracts import samples as S
 
-from support import fake_route, gitsim, procsim
+from support import fake_route, gitq, gitsim, procsim
 from support.builders import argv_cfg, cfg_with, make_engine
 from support.checkpoints import flat_ck, stored_ck
 from support.checks import res
@@ -34,11 +34,10 @@ from support.logs import records
 from support.narrow import must
 from support.procsim import real_proc  # noqa: F401
 from support.push_race import PushRace
-from support.spawn import real_spawner
+from support.spawn import port_git, real_spawner
 from support.waits import until
 from taskloop.adapters import (
     applog,
-    gitrepo,
     ident,
 )
 from taskloop.adapters import delegate as dl
@@ -423,7 +422,9 @@ class EngineTest(unittest.TestCase):
         fresh = cfg.pop("fresh", False)
         c = cfg_with(c, **{"reflect": False, **cfg, **(raw or {})})  # the reflection is one more call; its own tests switch it on
         with delegate_stack(script, route):
-            self.eng = engine.Engine(BeadId(bead), str(self.wt), c, store=self.store, fresh=fresh, env=snapshot(), spawner=real_spawner())
+            self.eng = engine.Engine(
+                BeadId(bead), str(self.wt), c, store=self.store, fresh=fresh, env=snapshot(), spawner=real_spawner(), git=port_git()
+            )
             if probe is not None:
                 self.eng.probe = probe
             if prep is not None:
@@ -705,7 +706,7 @@ class LandReviewBase(EngineTest):
         return make_engine(self.wt, cfg=cfg, store=self.store, attrs=dict({"plan_data": plan}, **(attrs or {})))
 
     def staged(self):
-        return sorted(gitrepo.git("diff", "--cached", "--name-only", cwd=str(self.wt)).split())
+        return sorted(gitq.git("diff", "--cached", "--name-only", cwd=str(self.wt)).split())
 
     def make_files(self, *names):
         for n in names:
@@ -714,12 +715,19 @@ class LandReviewBase(EngineTest):
 
     def run_with(self, script):
         with delegate_stack(script, "/r.py"):
-            self.eng = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store, env=snapshot(),
-                spawner=real_spawner())
+            self.eng = engine.Engine(
+                BeadId("t-1"),
+                str(self.wt),
+                wslots.load_cfg(str(self.wt)),
+                store=self.store,
+                env=snapshot(),
+                spawner=real_spawner(),
+                git=port_git(),
+            )
             return self.eng.run()
 
     def landed(self):
-        return sorted(gitrepo.git("show", "--name-only", "--format=", "origin/main", cwd=str(self.wt)).split())
+        return sorted(gitq.git("show", "--name-only", "--format=", "origin/main", cwd=str(self.wt)).split())
 
     CFG_CHECKS: ClassVar[Any] = [{"id": "unity-analyzers", "cmd": "just unity-analyzers", "group": "static"},
                   {"id": "unity-tests", "cmd": "just unity-tests", "group": "tests"},

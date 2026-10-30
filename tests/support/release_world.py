@@ -82,7 +82,7 @@ class World:
         """The real git port, except that a push of main from the release clone first calls the world's `before_push`."""
 
         def __init__(self, world: World) -> None:
-            super().__init__()
+            super().__init__(snapshot())
             self.world = world
 
         def push(self, d: str, remote: str, refspec: str) -> None:

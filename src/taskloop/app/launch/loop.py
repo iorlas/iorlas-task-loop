@@ -257,8 +257,16 @@ def build(repo: str, store: Beads | None = None, session_actor: str = "", here: 
         say=console.say,
         now=now,
         pid=os.getpid(),
-        prune=lambda say: prune_verb.run(cfg, profile().loop, prune_repos(repo), lambda r: store if r == repo else bd_of(r),
-                                         now(), False, shell.of(spawner, real.git(), env), say),
+        prune=lambda say: prune_verb.run(
+            cfg,
+            profile().loop,
+            prune_repos(repo),
+            lambda r: store if r == repo else bd_of(r),
+            now(),
+            False,
+            shell.of(spawner, real.git(env), env),
+            say,
+        ),
         free_bytes=free_bytes,
     )
 

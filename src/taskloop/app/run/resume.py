@@ -4,6 +4,7 @@ import copy
 from pathlib import Path
 from typing import Any
 
+from taskloop.app.land.gitcall import oneline
 from taskloop.app.run.decide import CONFIRMED, OUTSIDE, Decision, World, resume_decision, stage_count
 from taskloop.app.run.review_glue import apply_review
 from taskloop.app.run.state import state_names
@@ -79,9 +80,9 @@ class Resume:
             req = brief.diff(ck.state.snap, e.snap, "", comments=False)
         return World(
             fresh=e.fresh,
-            branch=e.git("symbolic-ref", "--short", "-q", "HEAD"),
-            head=e.git("rev-parse", "HEAD"),
-            parent=e.git("rev-parse", "HEAD~1") if e.left_dirty else "",
+            branch=e.git.branch(e.wt),
+            head=e.git.rev_parse(e.wt, "HEAD"),
+            parent=e.git.rev_parse(e.wt, "HEAD~1") if e.left_dirty else "",
             left_dirty=e.left_dirty,
             brief_hash=e.brief_hash,
             answered=a is not None,
@@ -180,6 +181,6 @@ class Resume:
         return (
             "The branch changed outside the engine since the old plan (commits after {}):\n{}\nNo stage of the old plan is known to "
             "be in the tree; read `git status` and the diff from the base.".format(
-                ck.head[:12], (e.git("log", "--oneline", "-n", "15", f"{ck.head}..HEAD") or "(none)")[:800]
+                ck.head[:12], (oneline(e.git, e.wt, ["HEAD"], [ck.head], 15) or "(none)")[:800]
             )
         )

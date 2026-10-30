@@ -4,7 +4,8 @@ from collections.abc import Callable
 from typing import Protocol
 
 from taskloop.contracts.checkpoint import Checkpoint, PlanStep
-from taskloop.contracts.ports import Sh
+from taskloop.contracts.ports import Git
+from taskloop.contracts.slots import SlotGitError
 from taskloop.stores.runlog import RunLog
 
 MAX_REBASE_RESETS = 2  # the plan count starts again at most this often per bead: a red gate for a real reason must still reach the limit
@@ -26,7 +27,7 @@ class RebaseCheckpoints(Protocol):
 
 
 class RebaseHost(Protocol):
-    """What the resume rebase reads of the engine: git and its shell, the base, the checkout's dirt, the checkpoint it follows, and the
+    """What the resume rebase reads of the engine: git, the base, the checkout's dirt, the checkpoint it follows, and the
     plan count a move to a new base starts again."""
 
     left_dirty: bool
@@ -44,14 +45,15 @@ class RebaseHost(Protocol):
     @property
     def cfg(self) -> RebaseConfig: ...
     @property
-    def sh(self) -> Sh: ...
+    def git(self) -> Git: ...
+    @property
+    def wt(self) -> str: ...
     @property
     def log(self) -> RunLog: ...
     @property
     def checkout(self) -> RebaseCheckout: ...
     @property
     def checkpoints(self) -> RebaseCheckpoints: ...
-    def git(self, *args: str) -> str: ...
     def warn(self, text: str) -> None: ...
 
 
@@ -71,16 +73,16 @@ class Rebase:
         self.between = between
         if e.dry or e.checkout.dirty_status():  # (the base-ignored files of an old branch are no reason not to rebase)
             return ""
-        behind = e.git("rev-list", "--count", f"HEAD..{e.cfg.base}")
-        if behind in ("", "0"):
+        behind = e.git.count(e.wt, [e.cfg.base], ["HEAD"])
+        if behind == 0:
             return ""
-        orig = e.git("rev-parse", "HEAD")
-        old_parent = e.git("rev-parse", "-q", "--verify", "HEAD~1") if e.left_dirty else ""
+        orig = e.git.rev_parse(e.wt, "HEAD")
+        old_parent = e.git.rev_parse(e.wt, "HEAD~1") if e.left_dirty else ""
         self.squash_wip(orig)
         e.rebase_orig, e.rebase_pre = orig, [x for x in (orig, old_parent) if x]
-        rc, tail = e.sh(["git", "rebase", "-q", e.cfg.base], pin=True)
-        if rc:
-            return self.stopped(salvage, tail, orig)
+        done = e.git.rebase(e.wt, e.cfg.base)
+        if not done.ok:
+            return self.stopped(salvage, done.output, orig)
         self.follow_checkpoint()
         when = "between stages" if between else "before planning"
         e.log.note(f"rebased the task branch onto the latest {e.cfg.base} ({behind} commits behind) {when}")
@@ -89,27 +91,29 @@ class Rebase:
     def squash_wip(self, orig: str) -> None:
         e = self.e
         self.squashed = False
-        mb = e.git("merge-base", "HEAD", e.cfg.base)
-        if not mb or e.git("rev-list", "--count", f"{mb}..HEAD") in ("", "0", "1"):
+        mb = e.git.merge_base(e.wt, "HEAD", e.cfg.base)
+        if not mb or e.git.count(e.wt, ["HEAD"], [mb]) <= 1:
             return
-        rc, _ = e.sh(["git", "reset", "-q", "--soft", mb], pin=True)
-        if not rc:
-            rc, _ = e.sh(["git", "commit", "-q", "--no-verify", "--allow-empty", "-m", f"wip ({e.bead}): earlier work, squashed"], pin=True)
-        if rc:  # the branch stays as it was
-            e.sh(["git", "reset", "-q", "--hard", orig], pin=True)
+        try:
+            e.git.reset(e.wt, mb, "soft")
+            ok = e.git.try_commit(e.wt, f"wip ({e.bead}): earlier work, squashed", verify=False, allow_empty=True).ok
+        except SlotGitError:
+            ok = False
+        if not ok:  # the branch stays as it was
+            e.git.reset(e.wt, orig, "hard")
         else:
             self.squashed = True
             e.log.note("squashed the branch's wip commits into one before rebasing")
 
     def stopped(self, salvage: bool, tail: str, orig: str) -> str:
         e = self.e
-        unmerged = e.git("diff", "--name-only", "--diff-filter=U").split()
+        unmerged = e.git.unmerged(e.wt)
         if salvage and unmerged and len(unmerged) <= SALVAGE_MAX_FILES:
             e.salvage_tail = "Conflicted files: {}\n{}".format(", ".join(unmerged), tail)
             return "conflict-fixable"
-        e.sh(["git", "rebase", "--abort"], pin=True)
+        e.git.rebase_abort(e.wt)
         if self.squashed:
-            e.sh(["git", "reset", "-q", "--hard", orig], pin=True)
+            e.git.reset(e.wt, orig, "hard")
         last = tail.strip().splitlines()[-1][:200] if tail.strip() else "conflict"
         e.warn(f"the task branch could not be rebased onto {e.cfg.base} before planning: {last}")
         return "conflict"
@@ -123,7 +127,7 @@ class Rebase:
                 return ck
             # unsquashed, the wip commit reset() made on top of the checkpoint's head is still on top of it
             above = not self.squashed and len(e.rebase_pre) > 1 and ck.head == e.rebase_pre[1]
-            return ck.replace(head=e.git("rev-parse", "HEAD~1" if above else "HEAD"))
+            return ck.replace(head=e.git.rev_parse(e.wt, "HEAD~1" if above else "HEAD"))
 
         e.checkpoints.amend(move)
 

@@ -104,7 +104,16 @@ def run_engine(home: Path, wt: Path, env: Env) -> tuple[int, Bead]:
     os.chdir(wt)  # the engine reads cwd
     try:
         with mock.patch.object(time, "sleep"):
-            rc = Engine(t1, str(wt), cfg, route=seams.FixedRoute(resolved, Runner()), store=store, env=env, spawner=real.spawner(env)).run()
+            rc = Engine(
+                t1,
+                str(wt),
+                cfg,
+                route=seams.FixedRoute(resolved, Runner()),
+                store=store,
+                env=env,
+                spawner=real.spawner(env),
+                git=real.git(env),
+            ).run()
     finally:
         os.chdir(home.parent)  # out of the directory that is removed next
     return rc, store.beads[t1]
@@ -114,14 +123,25 @@ def selftest(process: Env):
     """None when one bead lands and closes, else why not. Nothing real is touched: no bd, no delegate, no network, no model."""
     with tempfile.TemporaryDirectory(prefix="tl-selftest-") as tmp:
         home = Path(os.path.realpath(tmp))
-        env = {"XDG_CONFIG_HOME": str(home / "cfg"), "APPDATA": str(home / "cfg"), "HOME": str(home), "USERPROFILE": str(home),
-               "CLAUDE_CODE_SESSION_ID": "selftest-0", "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
-               "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t", "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": os.devnull}
+        env = {
+            "XDG_CONFIG_HOME": str(home / "cfg"),
+            "APPDATA": str(home / "cfg"),
+            "HOME": str(home),
+            "USERPROFILE": str(home),
+            "CLAUDE_CODE_SESSION_ID": "selftest-0",
+            "GIT_AUTHOR_NAME": "t",
+            "GIT_AUTHOR_EMAIL": "t@t",
+            "GIT_COMMITTER_NAME": "t",
+            "GIT_COMMITTER_EMAIL": "t@t",
+            "GIT_CONFIG_NOSYSTEM": "1",
+            "GIT_CONFIG_GLOBAL": os.devnull,
+        }
+        engine_env = Env({**process.vars, **env})
         with penv.patched(env):
-            why = git_repo(home, home / "wt", real.git())
+            why = git_repo(home, home / "wt", real.git(engine_env))
             if why:
                 return why
-            rc, bead = run_engine(home, home / "wt", Env({**process.vars, **env}))
+            rc, bead = run_engine(home, home / "wt", engine_env)
     if rc != 0 or bead.status != "closed":
         return f"the engine ended {rc} with the bead {bead.status} instead of closed"
     return None

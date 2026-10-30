@@ -1,70 +1,20 @@
 """Git (the port in contracts/ports.py) on the real git binary, pinned to the checkout. git's words are read here and nowhere else:
 a failure becomes one of the typed SlotGitErrors (BranchPinned, DirtyTree, RefRace, IndexLocked) or the plain SlotGitError."""
 import os
-import re
 import subprocess
 import tempfile
-import time
-from collections.abc import Callable
 from typing import Final, Literal
 
-from taskloop.adapters.childenv import without
-from taskloop.adapters.gitenv import git_env, run_git
+from taskloop.adapters.git_base import classify
+from taskloop.adapters.git_ops import LandGit
 from taskloop.contracts import env as penv
-from taskloop.contracts.gitfacts import ConfigEntry, GrepHit, LogRow, Pick, RebaseOutcome, Ref, StatusRow, TreeEntry
-from taskloop.contracts.slots import BranchPinned, Checkout, DirtyTree, IndexLocked, RefRace, SlotGitError
+from taskloop.contracts.gitfacts import ConfigEntry, GitOutcome, GrepHit, LogRow, Pick, Ref, StatusRow, TreeEntry
+from taskloop.contracts.slots import Checkout, RefRace, SlotGitError
 
-INDEX_LOCK = re.compile(r"index\.lock")
-REF_RACE = re.compile(r"incorrect old value|cannot lock ref|unable to update local ref|Unable to create '[^']*\.lock'")
-PINNED = re.compile(r"already (?:checked out|used by worktree) at '?([^'\n]*)'?")
-DIRTY = re.compile(r"would be overwritten|commit your changes|local changes|unmerged|unresolved|cannot (?:do a )?(?:commit|merge)")
 FETCH_TRIES = 5
 
 
-def error_line(text: str) -> str:
-    """The line of git's stderr that says what went wrong: the first fatal/error one, else the last."""
-    lines = [ln.strip() for ln in (text or "").splitlines() if ln.strip()]
-    return next((ln for ln in lines if ln.startswith(("fatal:", "error:"))), lines[-1] if lines else "no message from git")
-
-
-def classify(stderr: str) -> SlotGitError:
-    tail = error_line(stderr)
-    if INDEX_LOCK.search(stderr):
-        return IndexLocked(tail)
-    if m := PINNED.search(stderr):
-        return BranchPinned(tail, m.group(1).strip())
-    if REF_RACE.search(stderr):
-        return RefRace(tail)
-    if DIRTY.search(stderr):
-        return DirtyTree(tail)
-    return SlotGitError(tail)
-
-
-class RealGit:
-    """`pinned=False` reads git as the ambient environment has it (no GIT_DIR/GIT_WORK_TREE/GIT_COMMON_DIR), as a worker's or a check's git
-    would see the folder: for the questions whether the pin itself is right (core.worktree, core.bare in the shared config)."""
-
-    def __init__(self, sleep: Callable[[float], None] = time.sleep, pinned: bool = True) -> None:
-        self.sleep = sleep
-        self.pinned = pinned
-
-    def _run(self, d: str, *args: str, stdin: str | None = None) -> subprocess.CompletedProcess[str]:
-        if not self.pinned:
-            env = without(penv.snapshot().vars, "GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR")
-            return subprocess.run(["git", "-C", d, *args], env=env, check=False, capture_output=True, text=True, encoding="utf-8",
-                                  errors="replace", input=stdin)
-        return run_git(d, *args, capture_output=True, text=True, encoding="utf-8", errors="replace", input=stdin)
-
-    def _must(self, d: str, *args: str) -> str:
-        r = self._run(d, *args)
-        if r.returncode != 0:
-            raise classify(r.stderr or r.stdout)
-        return r.stdout.strip()
-
-    def _ask(self, d: str, *args: str) -> str:
-        r = self._run(d, *args)
-        return r.stdout.strip() if r.returncode == 0 else ""
-
+class RealGit(LandGit):
     def fetch(self, d: str) -> None:
         """`git fetch -q origin`, again while it loses a ref lock to a concurrent fetch (worktrees share refs/remotes)."""
         for i in range(FETCH_TRIES):
@@ -188,8 +138,8 @@ class RealGit:
                 found.append(TreeEntry(mode=mode, kind=kind, oid=oid, path=path))
         return found
 
-    def status(self, d: str) -> list[StatusRow]:
-        r = self._run(d, "status", "--porcelain", "-z")
+    def status(self, d: str, all_untracked: bool = False) -> list[StatusRow]:
+        r = self._run(d, "status", "--porcelain", "-z", *(["--untracked-files=all"] if all_untracked else []))
         if r.returncode:
             raise classify(r.stderr or r.stdout)
         fields = r.stdout.split("\0")
@@ -221,10 +171,9 @@ class RealGit:
 
     # -- writes ----------------------------------------------------------------------------------------------------------------
 
-    def rebase(self, d: str, onto: str, update_refs: bool = True) -> RebaseOutcome:
+    def rebase(self, d: str, onto: str, update_refs: bool = True) -> GitOutcome:
         opts = [] if update_refs else ["-c", "rebase.updateRefs=false"]
-        r = self._run(d, *opts, "rebase", "-q", onto)
-        return RebaseOutcome(ok=r.returncode == 0, output=(r.stdout + r.stderr).strip())
+        return self._try(d, *opts, "rebase", "-q", onto)
 
     def reset(self, d: str, rev: str, mode: Literal["soft", "mixed", "hard"] = "mixed") -> None:
         self._must(d, "reset", "-q", "--" + mode, rev)
@@ -312,7 +261,7 @@ class RealGit:
     def tree_of(self, d: str) -> str:
         """HEAD's tree plus every change and untracked file, written from a throwaway index in a temp folder."""
         with tempfile.TemporaryDirectory() as tmp:
-            env = dict(git_env(d), GIT_INDEX_FILE=os.path.join(tmp, "index"))
+            env = dict(self.git_env(d), GIT_INDEX_FILE=os.path.join(tmp, "index"))
             out = ""
             for args in (["read-tree", "HEAD"], ["add", "-A"], ["write-tree"]):
                 r = subprocess.run(["git", *args], cwd=d, env=env, capture_output=True, text=True, check=False)
@@ -322,8 +271,13 @@ class RealGit:
         return out
 
     def worktree_state(self, d: str) -> bytes | None:
-        r = subprocess.run(["git", "--no-optional-locks", "status", "--porcelain=v2", "--branch", "-z", "--untracked-files=all"],
-                           cwd=d, env=git_env(d), capture_output=True, check=False)
+        r = subprocess.run(
+            ["git", "--no-optional-locks", "status", "--porcelain=v2", "--branch", "-z", "--untracked-files=all"],
+            cwd=d,
+            env=self.git_env(d),
+            capture_output=True,
+            check=False,
+        )
         return r.stdout if r.returncode == 0 else None
 
     def diff(self, d: str, a: str, b: str, exclude: list[str] | None = None, stat: bool = False) -> str:
@@ -341,4 +295,4 @@ class RealGit:
         self._run(repo, "worktree", "prune")
 
 
-REAL: Final = RealGit()  # the default of a function that takes the port as an argument (a test passes its own)
+REAL: Final = RealGit(penv.snapshot())  # the default of a function that takes the port as an argument (a test passes its own)

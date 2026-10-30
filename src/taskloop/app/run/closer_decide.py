@@ -2,7 +2,6 @@
 fingerprint, and the storm check (never for a pause or an ask)."""
 import contextlib
 from collections.abc import Mapping, Sequence
-from pathlib import Path
 from typing import Protocol
 
 from taskloop.adapters import ident
@@ -10,7 +9,7 @@ from taskloop.adapters import storm as storm_file
 from taskloop.app.run.console import say
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.kinds import Kind
-from taskloop.contracts.ports import Clock
+from taskloop.contracts.ports import Clock, Git
 from taskloop.domain import outcome as oc
 from taskloop.domain import storm
 
@@ -27,12 +26,13 @@ class DecideHost(Protocol):
     @property
     def bead(self) -> BeadId: ...
     @property
-    def wt(self) -> str | Path: ...
+    def wt(self) -> str: ...
+    @property
+    def git(self) -> Git: ...
     @property
     def dry(self) -> bool: ...
     @property
     def clock(self) -> Clock: ...
-    def git(self, *args: str) -> str: ...
     def warn(self, text: str) -> None: ...
 
 
@@ -41,7 +41,7 @@ class Decide:
         self.e = host
 
     def repo_id(self) -> str:
-        return self.e.git("remote", "get-url", "origin") or str(self.e.wt)
+        return self.e.git.remote_url(self.e.wt, "origin") or self.e.wt
 
     def run(self, o: oc.RunOutcome) -> Kind:
         """The close's Kind after POLICY. The trace fields, the fingerprint and the storm check are set here."""

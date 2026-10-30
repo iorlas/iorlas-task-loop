@@ -116,7 +116,7 @@ class Checkpoints:
                 run=e.log_path.stem,
                 t=time.time(),
                 branch=e.checkout.branch_now() or e.task_branch,
-                head=e.git("rev-parse", "HEAD"),
+                head=e.git.rev_parse(e.wt, "HEAD"),
                 step=step,
                 stage=stage,
                 rounds=rounds,
@@ -135,7 +135,7 @@ class Checkpoints:
         red = why.startswith("gate red") and not ck.state.pending_land_validation
         review = ck.state.review.replace(filed=list(self.e.filed))
         state = ck.state.replace(review=review)
-        done = ck.replace(head=self.e.git("rev-parse", "HEAD"), closed=True, state=state)
+        done = ck.replace(head=self.e.git.rev_parse(self.e.wt, "HEAD"), closed=True, state=state)
         if red:
             done = done.replace(step="gate-red", gate_tail=trim.trim_log(why, log=str(self.e.gate_log or "")))
         self.writer().write(done)

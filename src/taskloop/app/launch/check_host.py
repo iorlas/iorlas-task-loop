@@ -8,8 +8,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from taskloop.adapters import check_files, gitrepo, treehash
-from taskloop.adapters.gitenv import git_env
+from taskloop.adapters import check_files, treehash
 from taskloop.app.checks.checklog import CheckLog
 from taskloop.app.land.checkout import Checkout
 from taskloop.app.run.shell import Shell
@@ -19,7 +18,7 @@ from taskloop.contracts.enums import WaitWhat
 from taskloop.contracts.env import Env
 from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.ids import TreeSha
-from taskloop.contracts.ports import Spawner
+from taskloop.contracts.ports import Git, Spawner
 from taskloop.stores.bundle import Stores
 from taskloop.stores.memory import fake_stores
 from taskloop.stores.real import real_stores
@@ -42,14 +41,24 @@ class _NewFiles:
 
 
 class CliHost:
-    def __init__(self, wt: str | Path, cfg: EngineConfig, stores: Stores | None = None, root: Path | None = None,
-                 *, env: Env, spawner: Spawner) -> None:
+    def __init__(
+        self,
+        wt: str | Path,
+        cfg: EngineConfig,
+        stores: Stores | None = None,
+        root: Path | None = None,
+        *,
+        env: Env,
+        spawner: Spawner,
+        git: Git,
+    ) -> None:
         self.env = env
         self.spawner = spawner
-        self.wt: str | Path = Path(wt)
+        self.git = git
+        self.wt = str(wt)
         self.cfg = cfg
         self.stores = stores or real_stores(paths.ConfigDir(root or paths.default_root(env)))
-        self.bead = "tl-check-" + check_files.repo_key(str(wt), git_env(wt))
+        self.bead = "tl-check-" + check_files.repo_key(git, str(wt))
         self.log = RunLog(fake_stores().run_log("check"))
         self.checklog = CheckLog(self.log)
         self.run_dir = Path(tempfile.mkdtemp(prefix="tl-check-"))
@@ -65,9 +74,6 @@ class CliHost:
     def sh(self, cmd: Sequence[str], timeout: float = 3600, check: bool = False, save: Path | None = None,
            env: Mapping[str, str] | None = None, pin: bool = False, what: str = "command", cwd: Path | None = None) -> tuple[int, str]:
         return self.shell.run(cmd, timeout, check, save, env, pin, what, cwd)
-
-    def git(self, *args: str) -> str:
-        return gitrepo.git(*args, cwd=self.wt)
 
     def blocked_for(self, why: str, kind: str) -> Exception:
         return RuntimeError(why)

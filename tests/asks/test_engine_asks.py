@@ -9,10 +9,10 @@ from pathlib import Path
 from unittest import mock
 
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
+from support import gitq
 from support.engine_case import BEAD, CAT_ENV, CLEAN, PLAN, WRITE, EngineTest, ask_rec, review, stop, verdict
 
 from taskloop.adapters import (
-    gitrepo,
     ident,
     links,
 )
@@ -87,8 +87,8 @@ class EngineAsksTest(EngineTest):
     def test_blocked_work_is_committed_on_the_task_branch(self):
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [review(question="A or B?")]})
         self.assertEqual(rc, 2)
-        self.assertEqual(gitrepo.git("status", "--porcelain", cwd=str(self.wt)), "")
-        self.assertIn("wip (t-1)", gitrepo.git("log", "-1", "--format=%s", "task/t-1", cwd=str(self.wt)))
+        self.assertEqual(gitq.git("status", "--porcelain", cwd=str(self.wt)), "")
+        self.assertIn("wip (t-1)", gitq.git("log", "-1", "--format=%s", "task/t-1", cwd=str(self.wt)))
 
     def ask_rec(self, **over):
         return ask_rec(**over)

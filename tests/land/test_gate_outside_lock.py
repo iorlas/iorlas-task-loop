@@ -10,12 +10,14 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
+from support.fakegit import ScriptedGit
 from support.narrow_hosts import Fetches, LandKit, Locks
 
 # isort: split
 from taskloop.contracts import log as rec
 from taskloop.contracts.checks import CacheHit, Check, CheckCacheEntry, CheckResult, CheckRun, RunEntry
 from taskloop.contracts.config import CheckSpec, EngineConfig
+from taskloop.contracts.gitfacts import GitOutcome, LogRow
 from taskloop.contracts.ids import CheckId, TreeSha
 from taskloop.contracts.runkey import BaseSha, Digest, RunKey
 
@@ -34,6 +36,29 @@ class Doc:
         self.rec = rec
 
 
+class WorldGit(ScriptedGit):
+    """The world's git: the base, the tree and the head it sits on, and the rebase that moves it onto the base."""
+
+    def __init__(self, world: World) -> None:
+        super().__init__()
+        self.world = world
+
+    def rev_parse(self, d: str, rev: str) -> str:
+        w = self.world
+        known = {"origin/main": w.base, "HEAD^{tree}": f"tree@{w.sat_on}", "HEAD": f"head@{w.sat_on}"}
+        if rev not in known:
+            raise AssertionError(rev)
+        return known[rev]
+
+    def log(self, d: str, include: list[str], exclude: list[str] | None = None, limit: int = 0, grep: str = "") -> list[LogRow]:
+        return []  # the task branch's tip is not a landed commit
+
+    def rebase(self, d: str, onto: str, update_refs: bool = True) -> GitOutcome:
+        self.world.events.append("rebase")
+        self.world.sat_on = self.world.base
+        return GitOutcome(ok=True)
+
+
 class World:
     """origin/main moves to the next of `tips` on each fetch; the rebased tree is named after the base it sits on."""
 
@@ -43,10 +68,22 @@ class World:
         self.doc = Doc()
 
         self.locks = Locks(self.events)
-        self.kit = LandKit(self.git, self.sh, cfg=EngineConfig(
-            base="origin/main", checks=[CheckSpec(id=CheckId("gate"), argv=["gate"], run="gate")], land=["git", "push"],
-            land_optimistic_tries=tries, max_fix_rounds=2, gate_timeout_min=1),
-            fetch=Fetches(on_fetch=self.on_fetch), locks=self.locks, checker=self, events=self.events)
+        self.kit = LandKit(
+            WorldGit(self),
+            self.sh,
+            cfg=EngineConfig(
+                base="origin/main",
+                checks=[CheckSpec(id=CheckId("gate"), argv=["gate"], run="gate")],
+                land=["git", "push"],
+                land_optimistic_tries=tries,
+                max_fix_rounds=2,
+                gate_timeout_min=1,
+            ),
+            fetch=Fetches(on_fetch=self.on_fetch),
+            locks=self.locks,
+            checker=self,
+            events=self.events,
+        )
         self.lander = self.kit.lander
 
     @property
@@ -66,22 +103,7 @@ class World:
         if self.tips:
             self.base = self.tips.pop(0)
 
-    def git(self, *argv: str) -> str:
-        if argv == ("rev-parse", "origin/main"):
-            return self.base
-        if argv == ("rev-parse", "HEAD^{tree}"):
-            return f"tree@{self.sat_on}"
-        if argv == ("rev-parse", "HEAD"):
-            return f"head@{self.sat_on}"
-        if argv == ("rev-parse", "--verify", "-q", "HEAD"):
-            return ""  # the task branch's tip is not a landed commit
-        raise AssertionError(argv)
-
     def sh(self, argv: list[str], **kw: Any) -> tuple[int, str]:
-        if argv[:2] == ["git", "rebase"]:
-            self.events.append("rebase")
-            self.sat_on = self.base
-            return 0, ""
         if argv == ["git", "push", "--no-verify"]:
             self.events.append("push")
             self.pushed.append((self.sat_on, self.base, self.held, f"tree@{self.sat_on}" in self.gate_passed()))

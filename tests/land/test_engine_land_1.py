@@ -6,6 +6,7 @@ from typing import Any, ClassVar, cast
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
+from support import gitq
 from support.checks import typed
 from support.engine_case import (
     CLEAN,
@@ -25,6 +26,7 @@ from support.engine_case import (
     sh,
     stop,
 )
+from support.gitsim import verbs
 
 # isort: split
 import contextlib
@@ -45,7 +47,6 @@ from support.logs import records
 from support.narrow import must
 
 from taskloop.adapters import (
-    gitrepo,
     ident,
 )
 from taskloop.app.run import engine
@@ -63,10 +64,10 @@ class EngineLand1Test(EngineTest):
         self.assertEqual(rc, 0)
         self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "reviewer"])
         self.assertTrue(self.closed and self.closed[0].startswith("merged "))
-        self.assertEqual(gitrepo.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
+        self.assertEqual(gitq.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
         landed = LandedStore(ident.config_dir()).get(BeadId("t-1"))  # the one landed record: the sha pushed, which origin/main now is
         assert landed is not None
-        remote = gitrepo.git("rev-parse", "origin/main", cwd=str(self.wt))
+        remote = gitq.git("rev-parse", "origin/main", cwd=str(self.wt))
         self.assertEqual((landed.sha, landed.base), (remote, "origin/main"))
         self.assertTrue(any(c[:2] == ("comments", "add") and "Reflect (engine)" in c[3] for c in self.bd_calls))
         # the facets of this one run, each of which used to be a run of its own
@@ -90,7 +91,7 @@ class EngineLand1Test(EngineTest):
         self.assertEqual(res.outcome, "landed")
         self.assertEqual((res.bead, res.run, res.log), ("t-1", self.eng.log_path.stem, str(self.eng.log_path)))
         self.assertFalse(res.asked)
-        self.assertTrue(self.eng.git("symbolic-ref", "--short", "-q", "HEAD"))  # a landed bead leaves the slot on a branch
+        self.assertTrue(gitq.git("symbolic-ref", "--short", "-q", "HEAD", cwd=self.eng.wt))  # a landed bead leaves the slot on a branch
         want = json.loads((ident.PLUGIN_ROOT / ".claude-plugin" / "plugin.json").read_text())["version"]
         self.assertEqual(ident.plugin_version(), want)  # the log and trace record the plugin version
         self.assertIn(f"task-loop {want}", self.eng.log_path.read_text())
@@ -105,8 +106,8 @@ class EngineLand1Test(EngineTest):
                       when=lambda n: n % 2 == 1)  # every first try of a fetch loses
         rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
-        self.assertGreaterEqual(sum(c[:1] == ("fetch",) for c in self.sim.calls), 4)  # reset and land: each lost once, then won
-        self.assertEqual(gitrepo.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
+        self.assertGreaterEqual(sum(verbs(c)[:1] == ["fetch"] for c in self.sim.calls), 4)  # reset and land: each lost once, then won
+        self.assertEqual(gitq.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
 
     def test_a_hung_gate_is_cut_at_gate_timeout_min_and_goes_red(self):
         gate = procsim.fake("hung-gate", procsim.hangs())
@@ -178,9 +179,9 @@ class EngineLand1Test(EngineTest):
         sh("git", "commit", "-qm", "wip (t-1): blocked", cwd=self.wt)
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0)
-        log = gitrepo.git("log", "--format=%s", "origin/main", cwd=str(self.wt)).splitlines()
+        log = gitq.git("log", "--format=%s", "origin/main", cwd=str(self.wt)).splitlines()
         self.assertEqual(log, ["Add f (t-1)", "init"])
-        self.assertEqual(gitrepo.git("show", "origin/main:g.txt", cwd=str(self.wt)), "from run 1")
+        self.assertEqual(gitq.git("show", "origin/main:g.txt", cwd=str(self.wt)), "from run 1")
 
     UNITY: ClassVar[Any] = {"cmd": "echo unity-check", "why": "it fails on uncommitted client/ changes"}
 
@@ -287,8 +288,8 @@ class EngineLand1Test(EngineTest):
         self.assertIn("stopped (SIGTERM)", self.said())
         self.assertDead(self.child_of(pidfile))
         self.assertEqual(self.closed, [])
-        self.assertEqual(gitrepo.git("show", "origin/main:f.txt", cwd=str(self.wt)), "")
-        self.assertEqual(gitrepo.git("status", "--porcelain", cwd=str(self.wt)), "")
+        self.assertEqual(gitq.git("show", "origin/main:f.txt", cwd=str(self.wt)), "")
+        self.assertEqual(gitq.git("status", "--porcelain", cwd=str(self.wt)), "")
 
     @real_proc("the land command is a real child that signals its parent, the engine, mid-command")
     @real_git("the land command is a child process that runs git push itself: only a real git answers it")
@@ -301,7 +302,7 @@ class EngineLand1Test(EngineTest):
             )
         self.assertEqual(rc, 0)
         self.assertEqual(self.eng.result().outcome, "landed")
-        self.assertEqual(gitrepo.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
+        self.assertEqual(gitq.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
         self.assertTrue(self.closed and self.closed[0].startswith("merged "))
         self.assertEqual(self.blocked, [])
 
@@ -327,16 +328,16 @@ class EngineLand1Test(EngineTest):
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, gate=FALSE, max_fix_rounds=0)
         self.assertEqual(rc, 2)
         self.assertIn("gate red", self.blocked[0])
-        first = gitrepo.git("rev-parse", "task/t-1", cwd=str(self.wt))
-        self.assertEqual(gitrepo.git("show", "task/t-1:f.txt", cwd=str(self.wt)), "d2")
+        first = gitq.git("rev-parse", "task/t-1", cwd=str(self.wt))
+        self.assertEqual(gitq.git("show", "task/t-1:f.txt", cwd=str(self.wt)), "d2")
         idle = dict(WRITE, summary="re-proved, no change")
         with mock.patch.object(fake_route.Script, "reply", self.no_write(fake_route.Script.reply)), \
                 self.store.stub(comments=[{"author": "denis", "text": "Rerun it."}]):
             rc, _ = self.run_engine({"plan": [PLAN], "write": [idle], "review": [CLEAN]})
         self.assertEqual(rc, 0)
-        self.assertEqual(gitrepo.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
-        self.assertEqual(gitrepo.git("rev-list", "--count", "origin/main", f"^{first}~1", cwd=str(self.wt)), "1")
-        subjects = gitrepo.git("log", "--format=%s", "origin/main", cwd=str(self.wt)).splitlines()
+        self.assertEqual(gitq.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
+        self.assertEqual(gitq.git("rev-list", "--count", "origin/main", f"^{first}~1", cwd=str(self.wt)), "1")
+        subjects = gitq.git("log", "--format=%s", "origin/main", cwd=str(self.wt)).splitlines()
         self.assertEqual(sum("(t-1)" in x for x in subjects), 1)
         self.assertFalse(any(x.startswith("wip") for x in subjects))
 
@@ -359,7 +360,7 @@ class EngineLand1Test(EngineTest):
         rc, s = self.run_engine({})
         self.assertEqual(rc, 0)
         self.assertEqual(s.calls, [])
-        self.assertEqual(gitrepo.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
+        self.assertEqual(gitq.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
 
     def test_a_red_gate_replans_with_its_output_and_keeps_the_accepted_stages(self):
         red = procsim.fake("red-gate", procsim.exits(1, "RS0016 ContentPack ctor"))
@@ -399,7 +400,7 @@ class EngineLand1Test(EngineTest):
         self.assertEqual(rc, 2)
         self.assertIsNone(self.ask())  # tl-7y6.2.2: the refusal is a machine fault; the checkpoint is what resumes the run
         ck = self.checkpoint()
-        self.assertEqual((ck["step"], ck["branch"]), ("land", gitrepo.git("symbolic-ref", "--short", "HEAD", cwd=str(self.wt))))
+        self.assertEqual((ck["step"], ck["branch"]), ("land", gitq.git("symbolic-ref", "--short", "HEAD", cwd=str(self.wt))))
         rc, s = self.run_engine({"write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual([c[0] for c in s.calls], ["worker", "reviewer"])  # the fix round again, no plan
@@ -416,8 +417,8 @@ class EngineLand1Test(EngineTest):
         fix = s.prompts[3]
         self.assertIn("gate saw d2", fix)
         self.assertIn("fix", s.prompts[4].lower())
-        self.assertEqual(gitrepo.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d4")
-        subjects = gitrepo.git("log", "--format=%s", "origin/main", cwd=str(self.wt)).splitlines()
+        self.assertEqual(gitq.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d4")
+        subjects = gitq.git("log", "--format=%s", "origin/main", cwd=str(self.wt)).splitlines()
         self.assertEqual(sum("(t-1)" in x for x in subjects), 1)
 
     def test_a_gate_fix_brief_has_the_gate_error_lines_its_log_and_the_engine_reruns_the_gate(self):
@@ -450,9 +451,9 @@ class EngineLand1Test(EngineTest):
             rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, WRITE], "review": [CLEAN, CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         self.assertIn("conflict", s.prompts[3])
-        log = gitrepo.git("log", "--format=%s", "origin/main", cwd=str(self.wt)).splitlines()
+        log = gitq.git("log", "--format=%s", "origin/main", cwd=str(self.wt)).splitlines()
         self.assertEqual(log[:2], ["Add f (t-1)", "theirs"])
-        self.assertEqual(gitrepo.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d4")
+        self.assertEqual(gitq.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d4")
 
     def conflict_run(self, answers, **cfg):
         """A run where another task lands f.txt while this one is reviewed: the land hits a planted conflict."""
@@ -499,7 +500,7 @@ class EngineLand1Test(EngineTest):
         for skipped in ("unit", HAS_F, stage_check):
             self.assertEqual((fix[skipped]["status"], fix[skipped]["why"]), ("skipped", "conflict_fix"), skipped)
         self.assertEqual((len(build_log.read_text()), len(unit_log.read_text()), len(stage_log.read_text())), (2, 1, 1))
-        self.assertEqual(gitrepo.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d4")
+        self.assertEqual(gitq.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d4")
 
     @ENGINE_BASH
     def test_a_conflict_fix_leaving_markers_is_not_accepted_the_marker_check_still_runs(self):
@@ -547,10 +548,9 @@ class EngineLand1Test(EngineTest):
         self.assertEqual(state["pushes"], 2)
         self.assertEqual(self.eng.result().outcome, "landed")
         self.assertTrue(self.closed[0].startswith("merged "))
-        self.assertEqual(gitrepo.git("show", "origin/main:a.txt", cwd=str(self.wt)), "concurrent 1")
-        self.assertEqual(gitrepo.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
-        self.assertEqual(gitrepo.git("rev-parse", "HEAD", cwd=str(self.wt)),
-                         gitrepo.git("rev-parse", "main", cwd=str(self.race_origin)))
+        self.assertEqual(gitq.git("show", "origin/main:a.txt", cwd=str(self.wt)), "concurrent 1")
+        self.assertEqual(gitq.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
+        self.assertEqual(gitq.git("rev-parse", "HEAD", cwd=str(self.wt)), gitq.git("rev-parse", "main", cwd=str(self.race_origin)))
 
     def test_push_race_retries_use_input_cache(self):
         counts = {key: Path(self.tmp.name, key) for key in ("changed", "same", "whole", "uncached", "stage", "case", "conservative")}
@@ -588,7 +588,7 @@ class EngineLand1Test(EngineTest):
         self.assertEqual(events.count("enter"), 2)
         self.assertEqual(events.count("exit"), 2)
         self.assertEqual(events[events.index("fix:verify") - 1], "exit")
-        self.assertEqual(gitrepo.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d4")
+        self.assertEqual(gitq.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d4")
         self.assertEqual(self.eng.result().outcome, "landed")
 
     def push_race_exhausted_cell(self, failure):
@@ -617,8 +617,8 @@ class EngineLand1Test(EngineTest):
         self.assertNotEqual(self.eng.result().outcome, "landed")
         self.assertFalse(self.closed)
         self.assertEqual(self.lands, [])
-        self.assertEqual(gitrepo.git("show", "main:a.txt", cwd=str(self.race_origin)), "concurrent 1")
-        self.assertEqual(gitrepo.git("ls-tree", "--name-only", "main", "f.txt", cwd=str(self.race_origin)), "")
+        self.assertEqual(gitq.git("show", "main:a.txt", cwd=str(self.race_origin)), "concurrent 1")
+        self.assertEqual(gitq.git("ls-tree", "--name-only", "main", "f.txt", cwd=str(self.race_origin)), "")
 
     def push_race_interrupted_cell(self, interruption, role):
         gate = "true"

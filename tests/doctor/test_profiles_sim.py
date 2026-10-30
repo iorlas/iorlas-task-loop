@@ -14,6 +14,7 @@ from support import gitsim
 
 from taskloop.adapters.git import RealGit
 from taskloop.app.doctor import profiles
+from taskloop.contracts.env import snapshot
 
 BAD = {"engine": {"checks": [{"id": "t", "cmd": "just test"}]}}
 
@@ -31,7 +32,7 @@ class ProfilesOnTheSim(unittest.TestCase):
         self.home = Path(tmp.name).resolve()
         gitsim.new_world(self.home)
         self.wt = self.home / "wt"
-        self.git = RealGit()
+        self.git = RealGit(snapshot())
 
     def commit_profile(self, profile: dict) -> None:
         (self.wt / profiles.FILE).write_text(json.dumps(profile))

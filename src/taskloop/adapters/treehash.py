@@ -8,8 +8,8 @@ import tempfile
 from collections.abc import Iterable
 from pathlib import Path
 
-from taskloop.adapters.git import REAL
 from taskloop.contracts.ids import TreeSha
+from taskloop.contracts.ports import Git
 from taskloop.contracts.slots import SlotGitError
 
 State = tuple[bytes, tuple[object, ...]]
@@ -19,10 +19,10 @@ class TreeHashError(RuntimeError):
     """git could not say what the worktree would commit (read-tree, add or write-tree failed): no hash beats a half-built index's."""
 
 
-def tree_of(wt: str | Path) -> TreeSha:
+def tree_of(git: Git, wt: str | Path) -> TreeSha:
     """The worktree as git would commit it now, untracked files included."""
     try:
-        return TreeSha(REAL.tree_of(str(wt)))
+        return TreeSha(git.tree_of(str(wt)))
     except SlotGitError as e:
         raise TreeHashError(e.tail) from None
 
@@ -59,10 +59,10 @@ def file_stat(base: bytes, p: bytes) -> object:
         return None
 
 
-def state_of(wt: str | Path) -> State | None:
+def state_of(git: Git, wt: str | Path) -> State | None:
     """Everything that decides the tree, from one `git status`: HEAD, every path that differs from it or is untracked, and the stat
     of each of those files (status alone says 'modified' before and after a second edit). None when git cannot say."""
-    out = REAL.worktree_state(str(wt))
+    out = git.worktree_state(str(wt))
     if out is None:
         return None
     base = os.fsencode(str(wt))
@@ -90,13 +90,13 @@ def ignore_rules(base: str, lines_of: dict[str, list[str]]) -> list[str]:
     return rules
 
 
-def ignored_by(wt: str | Path, rules: list[str], paths: Iterable[str]) -> set[str]:
+def ignored_by(git: Git, wt: str | Path, rules: list[str], paths: Iterable[str]) -> set[str]:
     """The subset of `paths` that `rules` ignore (the user's own global excludes are not replaced; only the rules given are read)."""
     with tempfile.NamedTemporaryFile("w", suffix=".ignore", delete=False, encoding="utf-8") as f:
         f.write("\n".join(rules) + "\n")
         ex = f.name
     try:
-        return set(REAL.check_ignore(str(wt), list(paths), excludes=ex))
+        return set(git.check_ignore(str(wt), list(paths), excludes=ex))
     except SlotGitError:
         return set()
     finally:

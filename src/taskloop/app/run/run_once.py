@@ -5,6 +5,7 @@ from typing import Any
 
 from taskloop.adapters import beadtools, ident
 from taskloop.adapters import delegate as dg
+from taskloop.app.land.gitcall import oneline
 from taskloop.app.release import reexec
 from taskloop.app.run import ended as stored_end
 from taskloop.app.run import requests
@@ -151,7 +152,7 @@ class RunOnce:
 
     def its_work(self) -> str:
         e = self.e
-        log = (e.git("log", "--oneline", "-n", "3", f"{e.cfg.base}..HEAD") or "").replace("\n", "; ")
+        log = oneline(e.git, e.wt, ["HEAD"], [e.cfg.base], 3).replace("\n", "; ")
         return f"Its work: {log}"
 
     def stages(self, plan: PlanData, i: int, state: RoundState | None) -> None:

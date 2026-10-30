@@ -5,12 +5,13 @@ from pathlib import Path
 from typing import ClassVar, Protocol
 
 from taskloop.app.checks import evidence as check_evidence
+from taskloop.app.land.gitcall import must
 from taskloop.app.land.parts import CaseChecks, StageCheckout
 from taskloop.contracts import plancheck
 from taskloop.contracts.checks import CheckResult
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.plancheck import PlanCheck, PlanData, RoundState, StageData
-from taskloop.contracts.ports import Sh
+from taskloop.contracts.ports import Git, Sh
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.asks.spec import AskSpec
 from taskloop.domain.checks import planref, trim
@@ -29,7 +30,7 @@ class FixerStageLoop(Protocol):
 
 class FixerHost(Protocol):
     """What a fix round reads of the engine: the rounds used, the plan and its cases, the repo's config, the stage loop that runs the fix,
-    the checkpoint, git and its shell, the conflict-marker check, and the gate's log."""
+    the checkpoint, git, its shell for the conflict-marker check, and the gate's log."""
 
     fixes: int
     gate_log: Path | None  # the log of the first red step, for the fix round
@@ -50,7 +51,10 @@ class FixerHost(Protocol):
     def checkout(self) -> StageCheckout: ...
     @property
     def sh(self) -> Sh: ...
-    def git(self, *args: str) -> str: ...
+    @property
+    def git(self) -> Git: ...
+    @property
+    def wt(self) -> str: ...
     def warn(self, text: str) -> None: ...
     def blocked_for(self, why: str, kind: str, stop: object = ..., spec: AskSpec | None = ..., fix: bool = ...) -> Exception: ...
 
@@ -74,9 +78,9 @@ class Fixer:
         done = e.stage_loop.run({"stages": [self.stage(kind)]}, 0, self.round_state(kind, tail, limit))
         if kind == "conflict":
             return self.continue_rebase(done, tail, resume)
-        if kind == "gate" and e.git("status", "--porcelain"):
+        if kind == "gate" and e.git.dirty(e.wt):
             e.checkout.stage_all(check=True)
-            e.sh(["git", "commit", "-q", "--no-verify", "--amend", "--no-edit"], check=True, pin=True)
+            must(e, "commit --amend", lambda: e.git.amend(e.wt))
         if done != "accept" and kind != "verify":
             e.warn("land: the fix round did not pass its checks and review; landing tries the gate again")
         return done
@@ -84,7 +88,7 @@ class Fixer:
     def give_up(self, kind: str, tail: str, limit: int) -> None:
         e = self.e
         if kind == "conflict":
-            e.sh(["git", "rebase", "--abort"], pin=True)
+            e.git.rebase_abort(e.wt)
         trimmed = trim.trim_log(tail, log=str(e.gate_log or "") if kind == "gate" else "")
         raise e.blocked_for(f"{WHAT[kind]} after {limit} fix rounds: it needs the owner's hint\n{trimmed}", "ASK_STUCK",
                             spec=askspecs.no_progress(WHAT[kind], limit, trimmed), fix=kind == "conflict")
@@ -121,10 +125,10 @@ class Fixer:
         if e.sh([*e.MARKERS_ARGV], pin=True)[0]:
             return self.fix("conflict", "conflict markers are still in the tree after the fix", resume=resume)
         e.checkout.stage_all(check=True)
-        rc, out = e.sh(["git", "-c", "core.editor=true", "rebase", "--continue"], pin=True)
-        if rc:
-            e.sh(["git", "rebase", "--abort"], pin=True)
-            raise e.blocked_for("failed: the rebase did not continue after the conflict fix\n" + out, "FAULT_LAND", fix=True)
+        went = e.git.rebase_continue(e.wt)
+        if not went.ok:
+            e.git.rebase_abort(e.wt)
+            raise e.blocked_for("failed: the rebase did not continue after the conflict fix\n" + went.output, "FAULT_LAND", fix=True)
         if done != "accept":
             e.warn("land: the fix round did not pass its checks and review; landing tries the gate again")
         return done

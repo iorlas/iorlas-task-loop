@@ -10,5 +10,6 @@ def spawner(env: Env) -> Spawner:
     return RealSpawner(env)
 
 
-def git() -> Git:
-    return RealGit()
+def git(env: Env) -> Git:
+    """The real Git port on `env`, the environment taken at the edge."""
+    return RealGit(env)

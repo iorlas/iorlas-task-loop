@@ -15,6 +15,7 @@ from run.test_stages import StagesTest
 from support import engine_case as te
 from support import (
     fake_route,
+    gitq,
     procsim,
     tlbd,
 )
@@ -22,7 +23,7 @@ from support.checkpoints import put_ck, read_ck
 from support.checks import typed
 from support.engine_case import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, engine, lint, real_git, real_proc  # noqa: F401
 from support.pushsim import pusher
-from support.spawn import real_spawner
+from support.spawn import port_git, real_spawner
 
 from taskloop.adapters import (
     bd,
@@ -34,6 +35,7 @@ from taskloop.app.run import running as wrunning
 from taskloop.app.wire import asks as wasks
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts.env import snapshot
+from taskloop.contracts.gitfacts import GitOutcome
 from taskloop.contracts.ids import BeadId
 from taskloop.domain.checks import matchers
 from taskloop.domain.checks.cmd import matchers as sh_matchers
@@ -88,7 +90,9 @@ class StaleTree(StagesTest):
         rc, _s = self.run_engine({"write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         self.assertIn("rebased the task branch onto the latest origin/main", self.eng.log_path.read_text())
-        self.assertTrue(Path(self.wt, "justfile").exists() or "justfile" in self.eng.git("ls-tree", "-r", "--name-only", "HEAD"))
+        self.assertTrue(
+            Path(self.wt, "justfile").exists() or "justfile" in gitq.git("ls-tree", "-r", "--name-only", "HEAD", cwd=self.eng.wt)
+        )
 
     def test_an_answer_start_rebases_even_with_a_base_ignored_file_in_the_slot(self):
         # lifesim-6pld-20261024-224705: started_because answer, the same
@@ -105,8 +109,15 @@ class StaleTree(StagesTest):
 
     def test_a_tracked_change_in_the_slot_still_stops_the_rebase(self):
         te.sh("git", "checkout", "-q", "-b", "task/t-1", cwd=self.wt)
-        e = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store, env=snapshot(),
-            spawner=real_spawner())
+        e = engine.Engine(
+            BeadId("t-1"),
+            str(self.wt),
+            wslots.load_cfg(str(self.wt)),
+            store=self.store,
+            env=snapshot(),
+            spawner=real_spawner(),
+            git=port_git(),
+        )
         self.junk_and_moving_main()
         (self.wt / "a.txt").write_text("edited and not committed\n")
         self.assertEqual(e.rebase.onto_base(), "")
@@ -142,9 +153,16 @@ class StaleTree(StagesTest):
         (self.wt / "g.txt").write_text("work\n")
         te.sh("git", "add", "-A", cwd=self.wt)
         te.sh("git", "commit", "-qm", "work", cwd=self.wt)
-        e = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store, env=snapshot(),
-            spawner=real_spawner())
-        before = e.git("rev-parse", "HEAD")
+        e = engine.Engine(
+            BeadId("t-1"),
+            str(self.wt),
+            wslots.load_cfg(str(self.wt)),
+            store=self.store,
+            env=snapshot(),
+            spawner=real_spawner(),
+            git=port_git(),
+        )
+        before = gitq.git("rev-parse", "HEAD", cwd=e.wt)
         (self.wt / "g.txt").write_text("more work\n")
         te.sh("git", "commit", "-qam", "wip (t-1): blocked", cwd=self.wt)  # what reset() does with a dirty tree
         e.left_dirty = True
@@ -152,8 +170,8 @@ class StaleTree(StagesTest):
         self.main_moves()
         te.sh("git", "fetch", "-q", "origin", cwd=self.wt)
         self.assertEqual(e.rebase.onto_base(), "rebased")
-        self.assertEqual(read_ck(e).head, e.git("rev-parse", "HEAD"))  # tl-7y6.2.19: the wip commit is squashed in
-        self.assertEqual(e.git("rev-list", "--count", "origin/main..HEAD"), "1")
+        self.assertEqual(read_ck(e).head, gitq.git("rev-parse", "HEAD", cwd=e.wt))  # tl-7y6.2.19: the wip commit is squashed in
+        self.assertEqual(gitq.git("rev-list", "--count", "origin/main..HEAD", cwd=e.wt), "1")
 
     def test_the_lifesim_wording_is_found_too_and_a_plain_red_check_is_not(self):
         self.assertTrue(matchers.stale_tree("This checkout has no fmt-check-changed; rebase onto main"))
@@ -192,10 +210,17 @@ class SlotHygiene(StagesTest):
         for f in ("client/log.txt", "client/Logs.log", "client/deep/x.log"):
             Path(self.wt, f).parent.mkdir(parents=True, exist_ok=True)
             Path(self.wt, f).write_text("noise\n")
-        e = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store, env=snapshot(),
-            spawner=real_spawner())
+        e = engine.Engine(
+            BeadId("t-1"),
+            str(self.wt),
+            wslots.load_cfg(str(self.wt)),
+            store=self.store,
+            env=snapshot(),
+            spawner=real_spawner(),
+            git=port_git(),
+        )
         self.assertEqual(e.checkout.dirty_status(), "")
-        self.assertIn("?? client/", e.git("status", "--porcelain"))  # git alone calls it dirty: the old tree has no such rule
+        self.assertIn("?? client/", gitq.git("status", "--porcelain", cwd=e.wt))  # git alone calls it dirty: the old tree has no such rule
         Path(self.wt, "client/keep.log").write_text("real\n")  # negated by the base: real work
         Path(self.wt, "client/src.cs").write_text("real\n")
         self.assertEqual(sorted(ln[3:] for ln in e.checkout.dirty_status().splitlines()), ["client/keep.log", "client/src.cs"])
@@ -206,10 +231,10 @@ class SlotHygiene(StagesTest):
         self.assertEqual(rc, 2)
         # the bead's branch is checked out again by the next run; a stray untracked file the commit left out blocks the detach
         e = self.eng
-        e.git("checkout", "-q", "task/t-1")
+        gitq.git("checkout", "-q", "task/t-1", cwd=e.wt)
         (self.wt / "stray.dat").write_text("not ignored, not committed\n")
         e.tree.leave_slot("blocked", "task/t-1")
-        self.assertEqual(e.git("symbolic-ref", "--short", "-q", "HEAD"), "task/t-1")
+        self.assertEqual(gitq.git("symbolic-ref", "--short", "-q", "HEAD", cwd=e.wt), "task/t-1")
 
     def test_a_slot_left_on_an_old_branch_with_only_ignored_files_is_not_another_branchs_work(self):
         te.sh("git", "checkout", "-qb", "task/old-bead", cwd=self.wt)
@@ -233,13 +258,13 @@ class SlotHygiene(StagesTest):
         self.assertEqual(rc, 2)
         head = subprocess.run(["git", "symbolic-ref", "-q", "HEAD"], cwd=self.wt, capture_output=True, text=True, check=False)
         self.assertNotEqual(head.returncode, 0)  # detached
-        self.assertEqual(self.eng.git("rev-parse", "HEAD"), self.eng.git("rev-parse", "origin/main"))
-        self.assertTrue(self.eng.git("rev-parse", "--verify", "-q", "refs/heads/task/t-1"))  # the branch keeps the bead's work
+        self.assertEqual(gitq.git("rev-parse", "HEAD", cwd=self.eng.wt), gitq.git("rev-parse", "origin/main", cwd=self.eng.wt))
+        self.assertTrue(gitq.git("rev-parse", "--verify", "-q", "refs/heads/task/t-1", cwd=self.eng.wt))  # the branch keeps the bead's work
 
     def test_a_parked_bead_with_work_commits_it_to_its_branch_first(self):
         rc, _s = self.run_engine({"plan": [PLAN], "write": [dict(WRITE, question="Which format?")]})
         self.assertEqual(rc, 2)
-        log = self.eng.git("log", "--format=%s", "task/t-1")
+        log = gitq.git("log", "--format=%s", "task/t-1", cwd=self.eng.wt)
         self.assertIn("wip (t-1)", log)  # f.txt was written by the writer: kept on the bead's branch
         self.assertEqual(Path(self.wt, "f.txt").exists(), False)  # and gone from the slot
 
@@ -257,11 +282,11 @@ class SlotHygiene(StagesTest):
         with mock.patch.object(fake_route, "Script", Writer):
             rc, _s = self.run_engine({"plan": [PLAN], "write": [dict(WRITE, question="Which format?")]})
         self.assertEqual(rc, 2)
-        branch_files = self.eng.git("ls-tree", "-r", "--name-only", "task/t-1").splitlines()
+        branch_files = gitq.git("ls-tree", "-r", "--name-only", "task/t-1", cwd=self.eng.wt).splitlines()
         self.assertIn("tests/edit_content.feature", branch_files)  # not lost: it is on the bead's branch
         self.assertNotIn("client/log.txt", branch_files)  # the base ignores it: no junk on the branch
         self.assertFalse(Path(self.wt, "tests", "edit_content.feature").exists())  # and the slot is at the base
-        self.assertFalse(self.eng.git("symbolic-ref", "--short", "-q", "HEAD"))
+        self.assertFalse(gitq.git("symbolic-ref", "--short", "-q", "HEAD", cwd=self.eng.wt))
 
 
 class DeadLane(StagesTest):
@@ -340,16 +365,17 @@ class Contracts(StagesTest):
     def test_the_wip_commit_skips_the_pre_commit_hook_and_a_failed_one_is_loud(self):
         self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         eng = self.eng
-        hook = Path(eng.git("rev-parse", "--path-format=absolute", "--git-common-dir")) / "hooks" / "pre-commit"
+        hook = Path(gitq.git("rev-parse", "--path-format=absolute", "--git-common-dir", cwd=eng.wt)) / "hooks" / "pre-commit"
         hook.parent.mkdir(exist_ok=True)
         hook.write_text("#!/bin/sh\necho 'csharpier: unformatted' >&2\nexit 1\n")
         os.chmod(str(hook), 0o755)
         (Path(eng.wt) / "wip-file.txt").write_text("x\n")
         self.assertTrue(eng.tree.wip("paused"))
-        self.assertEqual(eng.git("status", "--porcelain"), "")
-        self.assertIn("wip (t-1): paused", eng.git("log", "-1", "--format=%s"))
+        self.assertEqual(gitq.git("status", "--porcelain", cwd=eng.wt), "")
+        self.assertIn("wip (t-1): paused", gitq.git("log", "-1", "--format=%s", cwd=eng.wt))
         (Path(eng.wt) / "wip-file2.txt").write_text("y\n")
-        with mock.patch.object(eng, "sh", return_value=(1, "fatal: boom")), mock.patch.object(eng, "warn") as warn:
+        boom = GitOutcome(ok=False, output="fatal: boom")
+        with mock.patch.object(type(eng.git), "try_commit", return_value=boom), mock.patch.object(eng, "warn") as warn:
             self.assertFalse(eng.tree.wip("paused"))
         self.assertIn("wip commit", warn.call_args[0][0])
         self.assertIn("boom", warn.call_args[0][0])
@@ -553,7 +579,7 @@ class FreshAside(StagesTest):
         te.sh("git", "checkout", "-q", "-", cwd=self.wt)
 
     def branches(self):
-        return self.eng.git("branch", "--list", "task/t-1*", "--format=%(refname:short)").split()
+        return gitq.git("branch", "--list", "task/t-1*", "--format=%(refname:short)", cwd=self.eng.wt).split()
 
     def test_fresh_keeps_the_old_branch_aside_and_starts_on_the_base(self):
         self.old_branch(2)
@@ -564,9 +590,9 @@ class FreshAside(StagesTest):
         self.assertNotIn("git checkout -q task/t-1\n", text)  # the old branch was never checked out
         stale = [b for b in self.branches() if "-stale-" in b]
         self.assertEqual(len(stale), 1)
-        kept = self.eng.git("ls-tree", "-r", "--name-only", stale[0]).split()
+        kept = gitq.git("ls-tree", "-r", "--name-only", stale[0], cwd=self.eng.wt).split()
         self.assertIn("old1.txt", kept)  # the earlier work is there
-        self.assertNotIn("old0.txt", self.eng.git("ls-tree", "-r", "--name-only", "origin/main").split())
+        self.assertNotIn("old0.txt", gitq.git("ls-tree", "-r", "--name-only", "origin/main", cwd=self.eng.wt).split())
         self.assertTrue(any("Fresh (engine)" in str(c) for c in self.bd_calls))
 
     def test_fresh_on_a_branch_with_no_work_of_its_own_just_starts_on_the_base(self):
@@ -579,7 +605,7 @@ class FreshAside(StagesTest):
         self.old_branch(1)
         _rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual([b for b in self.branches() if "-stale-" in b], [])
-        self.assertIn("git checkout -q task/t-1", self.eng.log_path.read_text())
+        self.assertIn("task/t-1", self.branches())  # the old branch itself, not a fresh one beside it
 
 
 class FollowUps(StagesTest):

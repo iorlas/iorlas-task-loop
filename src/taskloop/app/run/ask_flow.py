@@ -30,7 +30,7 @@ class AskFlow:
     def repo(self) -> str:
         """The repo's path as asks and decisions name it: the parent of the git common dir (the worktree when git cannot say)."""
         e = self.e
-        common = e.git("rev-parse", "--path-format=absolute", "--git-common-dir")
+        common = e.git.common_dir(e.wt)
         return str(Path(common).parent) if common else str(e.wt)
 
     def raise_ask(self, spec: Any, why: str, kind: Any) -> Any:

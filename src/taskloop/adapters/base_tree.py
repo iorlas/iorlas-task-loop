@@ -1,17 +1,22 @@
 """A clean checkout of a commit, for asking whether a check was already red before the task touched anything."""
 import contextlib
-import subprocess
-from collections.abc import Generator, Mapping
+from collections.abc import Generator
 from pathlib import Path
+
+from taskloop.contracts.ports import Git
+from taskloop.contracts.slots import SlotGitError
 
 
 @contextlib.contextmanager
-def base_tree(wt: str | Path, sha: str, dest: Path, env: Mapping[str, str]) -> Generator[Path | None]:
+def base_tree(git: Git, wt: str | Path, sha: str, dest: Path) -> Generator[Path | None]:
     """`dest` holds the commit `sha` for the `with` block (a detached git worktree of the repo of `wt`); None when git could not make it."""
-    made = subprocess.run(["git", "worktree", "add", "--detach", "--force", str(dest), sha], cwd=str(wt), env=dict(env),
-                          capture_output=True, check=False)
+    made = True
     try:
-        yield dest if made.returncode == 0 else None
+        git.add_worktree_force(str(wt), str(dest), sha)
+    except SlotGitError:
+        made = False
+    try:
+        yield dest if made else None
     finally:
-        subprocess.run(["git", "worktree", "remove", "--force", str(dest)], cwd=str(wt), env=dict(env), capture_output=True, check=False)
-        subprocess.run(["git", "worktree", "prune"], cwd=str(wt), env=dict(env), capture_output=True, check=False)
+        git.remove_worktree_force(str(wt), str(dest))
+        git.prune_worktrees(str(wt))

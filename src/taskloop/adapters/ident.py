@@ -1,9 +1,10 @@
 """Who and where this process is: the task-loop config dir, Claude's dir, the session it acts for, and the bd actor name."""
 import json
+import os
 import socket
 from pathlib import Path
 
-from taskloop.adapters.gitrepo import git
+from taskloop.adapters.gitrepo import pinned_env
 from taskloop.contracts import env as penv
 from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.paths import default_root
@@ -39,7 +40,7 @@ def actor() -> str:
         return "tl-" + sid[:8]
     if penv.ambient("CLAUDE_PID"):  # older Claude Code: one name per session process, never per folder
         return f"tl-{hostname()}-{penv.ambient('CLAUDE_PID')}"
-    top = git("rev-parse", "--show-toplevel")
+    top = pinned_env(os.getcwd()).get("GIT_WORK_TREE", "")  # the checkout this process runs in
     return "tl-" + (Path(top).name if top else socket.gethostname())
 
 

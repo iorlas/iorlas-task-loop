@@ -16,11 +16,11 @@ from taskloop.domain.land.matchers import Push
 
 def rebase(git: FakeGit) -> LandRebase:
     """The land's rebase over a host with just what it reads (support/narrow_hosts.py FakeLandRebaseHost)."""
-    return LandRebase(FakeLandRebaseHost(git.git, git.sh))
+    return LandRebase(FakeLandRebaseHost(git, git.sh))
 
 
 def landed(git: FakeGit) -> Landed:
-    return Landed(FakeLandedHost(git.git, git.sh))
+    return Landed(FakeLandedHost(git, git.sh))
 
 
 class Rebase(unittest.TestCase):
@@ -29,37 +29,37 @@ class Rebase(unittest.TestCase):
         self.assertIsNone(rebase(g).run(0, ""))
 
     def test_a_conflict_is_a_problem_for_a_fix_round_naming_the_files(self):
-        g = FakeGit(rebase=(1, "CONFLICT"), diff="a.txt\nb.txt")
+        g = FakeGit(rebase=(1, "CONFLICT"), unmerged="a.txt\nb.txt")
         problem = rebase(g).run(0, "")
         assert problem is not None
         self.assertEqual(problem.kind, "conflict")
         self.assertIn("a.txt, b.txt", problem.text)
 
     def test_a_failed_rebase_with_no_conflict_aborts_and_stops_the_run(self):
-        g = FakeGit(rebase=[(1, "boom"), (0, "")], diff="")
+        g = FakeGit(rebase=[(1, "boom"), (0, "")], unmerged="")
         with self.assertRaises(Stopped) as cm:
             rebase(g).run(0, "")
         self.assertEqual(cm.exception.kind, "FAULT_LAND")
-        self.assertTrue(g.ran("rebase", "--abort"))
+        self.assertTrue(g.ran("rebase_abort"))
 
     def test_a_failed_fetch_goes_to_the_same_branches_without_rebasing(self):
-        g = FakeGit(diff="", rebase=(0, ""))
+        g = FakeGit(unmerged="", rebase=(0, ""))
         with self.assertRaises(Stopped):
             rebase(g).run(1, "no route to host")
-        self.assertFalse(g.ran("rebase", "-q"))
+        self.assertFalse(g.ran("rebase"))
 
 
 class Already(unittest.TestCase):
     def test_a_tip_titled_after_the_bead_and_on_the_base_is_already_landed(self):
-        g = FakeGit(rev_parse="abc123", log="Do the thing (t-1)", merge_base=(0, ""))
+        g = FakeGit(log=("abc123", "Do the thing (t-1)"), is_ancestor=True)
         self.assertEqual(landed(g).already(fetch=False), "abc123")
 
     def test_another_beads_tip_is_not(self):
-        g = FakeGit(rev_parse="abc123", log="Do the thing (t-2)")
+        g = FakeGit(log=("abc123", "Do the thing (t-2)"))
         self.assertEqual(landed(g).already(fetch=False), "")
 
     def test_a_tip_not_on_the_base_is_not(self):
-        g = FakeGit(rev_parse="abc123", log="Do the thing (t-1)", merge_base=(1, ""))
+        g = FakeGit(log=("abc123", "Do the thing (t-1)"), is_ancestor=False)
         self.assertEqual(landed(g).already(fetch=False), "")
 
 

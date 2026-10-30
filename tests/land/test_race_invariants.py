@@ -23,7 +23,6 @@ import contextlib
 import io
 import json
 import os
-import subprocess
 import sys
 import threading
 import types
@@ -52,7 +51,6 @@ from support.spawn import real_spawner
 
 from taskloop.adapters import (
     beadtools,
-    gitrepo,
     ident,
     landlock,
     pidcheck,
@@ -73,10 +71,10 @@ from taskloop.app.track import (
 )
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts.env import snapshot
-from taskloop.contracts.gitfacts import LogRow, RebaseOutcome
+from taskloop.contracts.gitfacts import GitOutcome, LogRow
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ports import Git
-from taskloop.contracts.slots import SlotGitError
+from taskloop.contracts.slots import Checkout, SlotGitError
 
 try:
     import fcntl
@@ -127,7 +125,6 @@ class Invariants(test_loop.Base):
         rebind(self, ident.actor, lambda: self.actors.get(threading.current_thread().name, threading.current_thread().name))
         rebind(self, pidcheck.proc_alive, lambda pid, start="": int(pid) in self.live)
         rebind(self, pidcheck.proc_start, lambda pid: f"T{pid}")
-        rebind(self, gitrepo.git, lambda *a, **k: "")  # no git, no child process
         gitsim.reset()
         stack = contextlib.ExitStack()
         self.addCleanup(stack.close)
@@ -397,14 +394,12 @@ class Invariants(test_loop.Base):
         self.assertIn("busy", wslots.take_named_slot(self.repo_s, "s1", self.cfg, "hand", spawner=real_spawner())[1])
         self.assertEqual(self.hold("s1"), 1)
         self.assertIn("BUSY", self.out.getvalue())
-        with mock.patch.object(git_adapter, "run_git", side_effect=AssertionError("git ran in a live slot")):
+        with mock.patch.object(git_adapter.RealGit, "_run", side_effect=AssertionError("git ran in a live slot")):
             self.assertEqual(self.main(["slot", "reset", "s1", "--bead", "w-1"]), 4)  # the reset stops before any git
             self.assertEqual(self.main(["slot", "release", "s1"]), 1)
         listing = "task/w-9"
-        listed = subprocess.CompletedProcess(
-            [], 0, f"worktree {s1}\nHEAD abc\nbranch refs/heads/{listing}\n\nworktree {s2}\nHEAD abc\n", ""
-        )
-        with mock.patch.object(git_adapter, "run_git", return_value=listed):  # any other git call would find the same text
+        listed = [Checkout(path=s1, branch=listing, main=False), Checkout(path=s2, branch="", main=False)]
+        with mock.patch.object(git_adapter.RealGit, "checkouts", return_value=listed):  # any other git call would find the same text
             self.assertIn(
                 "runs w-9", reset.free_branch(sl.pool(self.repo_s, cfg=self.cfg).named("s2"), listing)
             )  # its branch is not taken from it
@@ -459,7 +454,7 @@ class Invariants(test_loop.Base):
             with self.o.mu:
                 self.o.local[d]["base"] = self.o.head
                 self.o.log.append((d, "rebase"))
-            return RebaseOutcome(ok=True)
+            return GitOutcome(ok=True)
 
         def rebase_abort(self, d):
             raise AssertionError("no rebase fails here")

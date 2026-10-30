@@ -102,7 +102,7 @@ class Lander:
         found = self.landed.already()  # the last run's push may have gone through before the network cut its answer
         if found:
             return self.synced(self.landed.found(found))
-        if not e.git("status", "--porcelain") and e.git("rev-list", "--count", f"{e.cfg.base}..HEAD") in ("", "0"):
+        if not e.git.dirty(e.wt) and e.git.count(e.wt, ["HEAD"], [e.cfg.base]) == 0:
             e.log.note("nothing changed")
             return ""
         if not self.committing.run(bead, e.cfg.base):
@@ -111,7 +111,7 @@ class Lander:
         if e.dry:
             e.log.note("dry run: not landing")
             return ""
-        e.task_branch = e.git("symbolic-ref", "--short", "-q", "HEAD")
+        e.task_branch = e.git.branch(e.wt)
         return self.synced(self.land())
 
     def synced(self, sha: str) -> str:
@@ -157,7 +157,7 @@ class Lander:
         e = self.e
         e.steps.begin("land", f"land (gate before the lock, try {st.pushes + 1})", **{"try": st.pushes + 1})
         e.newfiles.quarantine_strays()
-        before, head = e.git("rev-parse", e.cfg.base), e.git("rev-parse", "HEAD")
+        before, head = e.git.rev_parse(e.wt, e.cfg.base), e.git.rev_parse(e.wt, "HEAD")
         rc, tail = e.checkout.fetch()
         problem = self.rebasing.run(rc, tail)
         where = Placing.NO_GATE
@@ -171,9 +171,16 @@ class Lander:
 
     def emit(self, st: Land, before: str, head: str, problem: Problem | None, where: Placing) -> None:
         e = self.e
-        e.log.emit(rec.LandTry(n=st.pushes + 1, base_before=before[:12], base_after=e.git("rev-parse", e.cfg.base)[:12],
-                               rebase_moved=e.git("rev-parse", "HEAD") != head, failing=problem.kind.value if problem else "",
-                               gate=where.value))
+        e.log.emit(
+            rec.LandTry(
+                n=st.pushes + 1,
+                base_before=before[:12],
+                base_after=e.git.rev_parse(e.wt, e.cfg.base)[:12],
+                rebase_moved=e.git.rev_parse(e.wt, "HEAD") != head,
+                failing=problem.kind.value if problem else "",
+                gate=where.value,
+            )
+        )
 
     def placing(self, st: Land) -> Placing:
         """Where the gate runs in the lock (see Placing)."""
@@ -197,7 +204,7 @@ class Lander:
             if st.phase is Phase.STEP_OPEN:
                 st.phase = Phase.FRESH
             e.newfiles.quarantine_strays()
-            before, head = e.git("rev-parse", e.cfg.base), e.git("rev-parse", "HEAD")
+            before, head = e.git.rev_parse(e.wt, e.cfg.base), e.git.rev_parse(e.wt, "HEAD")
             rc, tail = e.checkout.fetch()
             if rc == 0 and (st.pushes or st.phase is Phase.NET_DOWN):
                 found = self.landed.already(fetch=False)  # an earlier push of this land may have gone through

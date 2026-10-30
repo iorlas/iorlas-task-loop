@@ -2,29 +2,29 @@
 import hashlib
 import os
 import re
-import subprocess
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from pathlib import Path
+
+from taskloop.contracts.ports import Git
+from taskloop.contracts.slots import SlotGitError
 
 BIG = 16 * 1024 * 1024  # an ignored input bigger than this counts by size, not content
 
 
-def tree_files(wt: str, tree: str, env: Mapping[str, str]) -> dict[str, str]:
-    """{path: "mode type sha"} for a git tree, from `git ls-tree -r -z`."""
-    r = subprocess.run(["git", "ls-tree", "-r", "-z", tree], cwd=wt, env=dict(env), capture_output=True, check=False)
-    out: dict[str, str] = {}
-    for ent in r.stdout.decode("utf-8", "surrogateescape").split("\0"):
-        meta, _, path = ent.partition("\t")
-        if path:
-            out[path] = meta
-    return out
+def tree_files(git: Git, wt: str, tree: str) -> dict[str, str]:
+    """{path: "mode type sha"} for a git tree (every file under it); {} when git cannot list it."""
+    try:
+        return {t.path: f"{t.mode} {t.kind} {t.oid}" for t in git.ls_tree(wt, tree, recursive=True)}
+    except SlotGitError:
+        return {}
 
 
-def ignored_files(wt: str, spec: Sequence[str], env: Mapping[str, str]) -> list[str]:
+def ignored_files(git: Git, wt: str, spec: Sequence[str]) -> list[str]:
     """Ignored (untracked, gitignored) files in the worktree under the git pathspecs `spec` (all of them when empty)."""
-    r = subprocess.run(["git", "ls-files", "-z", "-o", "-i", "--exclude-standard"] + (["--", *spec] if spec else []),
-                       cwd=wt, env=dict(env), capture_output=True, check=False)
-    return [p for p in r.stdout.decode("utf-8", "surrogateescape").split("\0") if p]
+    try:
+        return git.ls_files(wt, "ignored", *spec)
+    except SlotGitError:
+        return []
 
 
 def file_digest(path: str) -> str:
@@ -41,19 +41,13 @@ def file_digest(path: str) -> str:
     return h.hexdigest()
 
 
-def origin_url(wt: str, env: Mapping[str, str]) -> str:
-    """`git config --get remote.origin.url`, '' when there is none."""
-    r = subprocess.run(["git", "config", "--get", "remote.origin.url"], cwd=wt, env=dict(env), capture_output=True, check=False, text=True)
-    return r.stdout.strip() if r.returncode == 0 else ""
-
-
-def repo_key(wt: str, env: Mapping[str, str]) -> str:
+def repo_key(git: Git, wt: str) -> str:
     """One name per repo, shared by its slots and worktrees: the origin url, else the common git dir."""
-    common = subprocess.run(["git", "rev-parse", "--path-format=absolute", "--git-common-dir"], cwd=wt, env=dict(env),
-                            capture_output=True, check=False, text=True)
-    ident = origin_url(wt, env) or (common.stdout.strip() if common.returncode == 0 else "") or wt
-    return "{}-{}".format(re.sub(r"[^\w.-]+", "_", Path(ident.rstrip("/")).name)[:40] or "repo",
-                      hashlib.sha1(ident.encode("utf-8", "surrogateescape")).hexdigest()[:10])
+    ident = git.config_get(wt, "remote.origin.url") or git.common_dir(wt) or wt
+    return "{}-{}".format(
+        re.sub(r"[^\w.-]+", "_", Path(ident.rstrip("/")).name)[:40] or "repo",
+        hashlib.sha1(ident.encode("utf-8", "surrogateescape")).hexdigest()[:10],
+    )
 
 
 def read_lines(path: str | Path, n: int = 2000) -> list[str]:

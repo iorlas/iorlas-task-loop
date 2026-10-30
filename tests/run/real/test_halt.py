@@ -15,9 +15,10 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 
 # isort: split
 from support import engine_case as te
+from support import gitq
 from support.engine_case import CLEAN, PLAN, WRITE
 
-from taskloop.adapters import delegate, gitrepo, runner
+from taskloop.adapters import delegate, runner
 from taskloop.adapters import halt as halting
 
 WAIT = 120  # the longest a helper waits for a started process on a loaded runner (it ends the moment the process is there)
@@ -45,7 +46,7 @@ class Halt(te.EngineTest):
         self.assertDead(self.child_of(pidfile))
         rows = [json.loads(line) for line in self.eng.log_path.read_text().splitlines()]
         self.assertEqual([r["why"] for r in rows if r["kind"] == "kill"], ["stopped"])
-        self.assertIn("wip (t-1)", gitrepo.git("log", "-1", "--format=%s", "task/t-1", cwd=str(self.wt)))
+        self.assertIn("wip (t-1)", gitq.git("log", "-1", "--format=%s", "task/t-1", cwd=str(self.wt)))
         self.assertIsNone(halting.RUN_HALT["ev"])
     def test_a_worker_call_is_stopped_by_the_run_flag_and_its_process_is_gone(self):
         d = Path(tempfile.mkdtemp())

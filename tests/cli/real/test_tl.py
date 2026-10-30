@@ -22,6 +22,7 @@ import contextlib  # noqa: E402
 
 import tl  # noqa: E402
 from support import (  # noqa: E402
+    gitq,
     looptest,
     procsim,
     tlbd,
@@ -30,7 +31,6 @@ from support.engine_locks import put_lock  # noqa: E402
 from support.tlmain import tl_main  # noqa: E402
 
 from taskloop.adapters import (  # noqa: E402
-    gitrepo,
     pidcheck,
 )
 from taskloop.app.track import trail  # noqa: E402
@@ -206,7 +206,7 @@ class SlotReset(Base):
         sh("git", "add", "junk.tmp", cwd=self.slot)
         sh("git", "commit", "-qm", "junk", cwd=self.slot)  # committed work on a detached head is not our concern
         self.assertEqual(self.reset("t-1"), 0)
-        self.assertEqual(gitrepo.git("symbolic-ref", "--short", "HEAD", cwd=str(self.slot)), "task/t-1")
+        self.assertEqual(gitq.git("symbolic-ref", "--short", "HEAD", cwd=str(self.slot)), "task/t-1")
         self.assertTrue((self.slot / "ignored" / "big").exists())
 
     def test_dirty_slot_work_is_committed_not_wiped(self):
@@ -214,9 +214,9 @@ class SlotReset(Base):
         (self.slot / "a.txt").write_text("changed by a dead session\n")
         (self.slot / "new.txt").write_text("new\n")
         self.assertEqual(self.reset("t-1"), 0)
-        self.assertEqual(gitrepo.git("status", "--porcelain", cwd=str(self.slot)), "")
-        self.assertEqual(gitrepo.git("show", "task/t-0:new.txt", cwd=str(self.slot)), "new")
-        self.assertEqual(gitrepo.git("show", "task/t-0:a.txt", cwd=str(self.slot)), "changed by a dead session")
+        self.assertEqual(gitq.git("status", "--porcelain", cwd=str(self.slot)), "")
+        self.assertEqual(gitq.git("show", "task/t-0:new.txt", cwd=str(self.slot)), "new")
+        self.assertEqual(gitq.git("show", "task/t-0:a.txt", cwd=str(self.slot)), "changed by a dead session")
 
     def test_reset_for_a_bead_keeps_its_existing_branch(self):
         sh("git", "checkout", "-q", "-b", "task/t-1", cwd=self.slot)
@@ -225,7 +225,7 @@ class SlotReset(Base):
         sh("git", "commit", "-qm", "wip (t-1): blocked", cwd=self.slot)
         sh("git", "checkout", "-q", "--detach", "origin/main", cwd=self.slot)
         self.assertEqual(self.reset("t-1"), 0)
-        self.assertEqual(gitrepo.git("symbolic-ref", "--short", "HEAD", cwd=str(self.slot)), "task/t-1")
+        self.assertEqual(gitq.git("symbolic-ref", "--short", "HEAD", cwd=str(self.slot)), "task/t-1")
         self.assertEqual((self.slot / "work.txt").read_text(), "reviewed work\n")
 
     def test_loop_folders_are_excluded_from_git_add(self):
@@ -233,14 +233,14 @@ class SlotReset(Base):
         wslots.exclude_local(str(self.repo), ".slots/")
         exclude = (self.repo / ".git" / "info" / "exclude").read_text()
         self.assertEqual(exclude.split().count(".slots/"), 1)
-        self.assertNotIn(".slots", gitrepo.git("status", "--porcelain", "--untracked-files=all", cwd=str(self.repo)))
+        self.assertNotIn(".slots", gitq.git("status", "--porcelain", "--untracked-files=all", cwd=str(self.repo)))
 
     def test_detached_dirty_work_goes_to_wip_branch(self):
         (self.slot / "new.txt").write_text("new\n")
         self.assertEqual(self.reset("t-2"), 0)
-        wip = [b for b in gitrepo.git("branch", "--list", "wip/*", cwd=str(self.slot)).split() if b.startswith("wip/")]
+        wip = [b for b in gitq.git("branch", "--list", "wip/*", cwd=str(self.slot)).split() if b.startswith("wip/")]
         self.assertEqual(len(wip), 1)
-        self.assertEqual(gitrepo.git("show", wip[0] + ":new.txt", cwd=str(self.slot)), "new")
+        self.assertEqual(gitq.git("show", wip[0] + ":new.txt", cwd=str(self.slot)), "new")
 
     def test_setup_runs_only_when_inputs_change(self):
         cfg = {

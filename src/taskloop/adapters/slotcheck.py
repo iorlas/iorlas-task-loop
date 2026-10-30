@@ -3,18 +3,17 @@ another folder (lifesim-1mm); read as ambient config has it, unpinned, as a work
 from pathlib import Path
 from typing import Any
 
-from taskloop.adapters import gitrepo
-from taskloop.adapters.git import RealGit
-
-AMBIENT = RealGit(pinned=False)
+from taskloop.adapters import gitmemo, gitrepo
+from taskloop.contracts.env import Env
+from taskloop.contracts.ports import Git
 
 _MEMO: dict[tuple[Any, ...], tuple[str, str] | None] = {}  # (slot, what the config files and environment are now) -> tree_problem's answer
 
 
-def _config_origin(wt: str | Path) -> tuple[str, str]:
+def _config_origin(ambient: Git, wt: str | Path) -> tuple[str, str]:
     """(where core.worktree is set and to what, core.bare's value): the last of each key wins, as `--get` does."""
     origin = bare = ""
-    for e in AMBIENT.config_entries(str(wt), r"^core\.(worktree|bare)$"):
+    for e in ambient.config_entries(str(wt), r"^core\.(worktree|bare)$"):
         if e.key.lower() == "core.worktree":
             origin = f"{e.where}\t{e.value}" if e.value else e.where
         elif e.key.lower() == "core.bare":
@@ -22,22 +21,23 @@ def _config_origin(wt: str | Path) -> tuple[str, str]:
     return origin.strip(), bare
 
 
-def tree_problem(wt: str | Path) -> tuple[str, str] | None:
-    """(what is wrong, the owner's fix) when git at `wt`, read as ambient config has it, is not that checkout; else None.
+def tree_problem(wt: str | Path, ambient: Git, env: Env) -> tuple[str, str] | None:
+    """(what is wrong, the owner's fix) when git at `wt`, asked through the unpinned port `ambient` (as ambient config has it), is not
+    that checkout; else None.
     Two git calls, none while the config files are as they were: a run asks eleven times."""
-    key = gitrepo.config_key(wt)
+    key = gitmemo.config_key(env, wt)
     if key and key in _MEMO:
         return _MEMO[key]
-    out = _problem(wt)
+    out = _problem(wt, ambient)
     if key:
         _MEMO[key] = out
     return out
 
 
-def _problem(wt: str | Path) -> tuple[str, str] | None:
-    common, top = AMBIENT.common_dir(str(wt)), AMBIENT.toplevel(str(wt))  # core.bare=true has no top level: the message needs what is left
+def _problem(wt: str | Path, ambient: Git) -> tuple[str, str] | None:
+    common, top = ambient.common_dir(str(wt)), ambient.toplevel(str(wt))  # core.bare=true has no top level: the message needs what is left
     repo = str(Path(common or ".").parent)
-    origin, bare = _config_origin(wt)
+    origin, bare = _config_origin(ambient, wt)
     if origin:
         where = origin.split("\t")[0].replace("file:", "")
         return (f"core.worktree is set ({origin.replace(chr(9), ' = ', 1)})",

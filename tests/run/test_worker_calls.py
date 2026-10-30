@@ -14,7 +14,7 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as te
 from support import fake_route
 from support.logs import records
-from support.spawn import real_spawner
+from support.spawn import port_git, real_spawner
 
 from taskloop.adapters.delegate import Stopped
 from taskloop.app.run import engine
@@ -55,7 +55,9 @@ class Calls(te.EngineTest):
         c = wslots.load_cfg(str(self.wt))
         nap = mock.Mock()
         with te.delegate_stack(script), mock.patch("taskloop.app.run.lane_acts.time", napper(nap)):
-            self.eng = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner())
+            self.eng = engine.Engine(
+                BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(), git=port_git()
+            )
             rc = self.eng.run()
         return rc, nap
 

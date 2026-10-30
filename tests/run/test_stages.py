@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as te
 from support import (
+    gitq,
     procsim,
 )
 from support.builders import make_engine, plan_of
@@ -21,7 +22,7 @@ from support.engine_case import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, engine, 
 from support.engine_locks import put_lock
 from support.fakes import must_bead
 from support.narrow import must
-from support.spawn import real_spawner
+from support.spawn import port_git, real_spawner
 
 from taskloop.adapters import childenv, ident, pidcheck
 from taskloop.adapters.check_probe import PathProbe
@@ -189,8 +190,15 @@ class Scope(StagesTest):
         self.assertIn("Sit To Stand", e.leftovers[0]["title"])
 
     def test_with_no_acceptance_text_nothing_moves(self):
-        e = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store, env=snapshot(),
-            spawner=real_spawner())
+        e = engine.Engine(
+            BeadId("t-1"),
+            str(self.wt),
+            wslots.load_cfg(str(self.wt)),
+            store=self.store,
+            env=snapshot(),
+            spawner=real_spawner(),
+            git=port_git(),
+        )
         item = {"what": "Sit To Stand was not probed", "kind": "checkable"}
         self.assertEqual(e.cases.out_of_scope([item]), [item])
         self.assertEqual(e.leftovers, [])
@@ -243,8 +251,15 @@ class Handoff(StagesTest):
         self.assertIn("rename the helper", reviews[1])
 
     def test_the_rounds_text_keeps_the_newest_within_its_cap(self):
-        e = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store, env=snapshot(),
-            spawner=real_spawner())
+        e = engine.Engine(
+            BeadId("t-1"),
+            str(self.wt),
+            wslots.load_cfg(str(self.wt)),
+            store=self.store,
+            env=snapshot(),
+            spawner=real_spawner(),
+            git=port_git(),
+        )
         for k in range(8):
             e.hand.note_round("stage 1/1", k + 1, "review", "w" * 300, ["x" * 200])
         text = e.hand.rounds_text()
@@ -371,12 +386,12 @@ class SharedNotes(StagesTest):
         te.sh("git", "add", "-A", cwd=self.wt)
         te.sh("git", "commit", "-qm", "earlier work", cwd=self.wt)
         e = self.eng_()
-        old = e.git("rev-parse", "HEAD")
+        old = gitq.git("rev-parse", "HEAD", cwd=e.wt)
         put_ck(e, head=old)
         self.commit_base_cfg({"gate": ""})
         te.sh("git", "fetch", "-q", "origin", cwd=self.wt)
         e.rebase.onto_base()
-        new = e.git("rev-parse", "HEAD")
+        new = gitq.git("rev-parse", "HEAD", cwd=e.wt)
         self.assertNotEqual(old, new)
         self.assertEqual(read_ck(e).head, new)
 
@@ -528,8 +543,15 @@ class Executable(StagesTest):
         ))
 
     def test_a_file_an_accepted_stage_promised_and_a_later_check_reads(self):
-        e = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store, env=snapshot(),
-            spawner=real_spawner())
+        e = engine.Engine(
+            BeadId("t-1"),
+            str(self.wt),
+            wslots.load_cfg(str(self.wt)),
+            store=self.store,
+            env=snapshot(),
+            spawner=real_spawner(),
+            git=port_git(),
+        )
         plan = self.two_stage()
         self.assertEqual(e.cases.promised_missing(plan, 1), 0)  # stage 1 is accepted, the file is gone, stage 2 reads it
         Path(self.wt, self.PATH1).parent.mkdir(parents=True, exist_ok=True)
@@ -539,35 +561,70 @@ class Executable(StagesTest):
         self.assertIsNone(e.cases.promised_missing(plan, 0))  # nothing accepted yet
 
     def test_a_replanned_runs_goals_survive_the_stage_that_runs_again(self):
-        e = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store, env=snapshot(),
-            spawner=real_spawner())
+        e = engine.Engine(
+            BeadId("t-1"),
+            str(self.wt),
+            wslots.load_cfg(str(self.wt)),
+            store=self.store,
+            env=snapshot(),
+            spawner=real_spawner(),
+            git=port_git(),
+        )
         e.tree.reset(must_bead(BEAD))
         e.plan_data = self.two_stage()
         e.done, e.accepted = ["an earlier plan's goal", "stage one"], [0]
         e.checkpoints.save(stage=1, rounds=0, n=0, feedback="", step="write")
-        again = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store, env=snapshot(),
-            spawner=real_spawner())
+        again = engine.Engine(
+            BeadId("t-1"),
+            str(self.wt),
+            wslots.load_cfg(str(self.wt)),
+            store=self.store,
+            env=snapshot(),
+            spawner=real_spawner(),
+            git=port_git(),
+        )
         again.tree.reset(must_bead(BEAD))
         again.resume.point()
         self.assertEqual(again.done, ["an earlier plan's goal"])
 
     def test_a_resume_runs_the_stage_again_when_its_file_is_gone(self):
-        e = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store, env=snapshot(),
-            spawner=real_spawner())
+        e = engine.Engine(
+            BeadId("t-1"),
+            str(self.wt),
+            wslots.load_cfg(str(self.wt)),
+            store=self.store,
+            env=snapshot(),
+            spawner=real_spawner(),
+            git=port_git(),
+        )
         e.tree.reset(must_bead(BEAD))
         e.plan_data = self.two_stage()
         e.done, e.accepted = ["stage one"], [0]
         e.checkpoints.save(stage=1, rounds=0, n=0, feedback="", step="write")
-        again = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store, env=snapshot(),
-            spawner=real_spawner())
+        again = engine.Engine(
+            BeadId("t-1"),
+            str(self.wt),
+            wslots.load_cfg(str(self.wt)),
+            store=self.store,
+            env=snapshot(),
+            spawner=real_spawner(),
+            git=port_git(),
+        )
         again.tree.reset(must_bead(BEAD))
         _plan, i, state = again.resume.point()
         self.assertEqual((i, state, again.accepted, again.done), (0, None, [], []))
         self.assertIn("a file stage 1 promised is missing", again.log_path.read_text())
         Path(self.wt, self.PATH1).parent.mkdir(parents=True, exist_ok=True)
         Path(self.wt, self.PATH1).write_text("ok\n")
-        third = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store, env=snapshot(),
-            spawner=real_spawner())
+        third = engine.Engine(
+            BeadId("t-1"),
+            str(self.wt),
+            wslots.load_cfg(str(self.wt)),
+            store=self.store,
+            env=snapshot(),
+            spawner=real_spawner(),
+            git=port_git(),
+        )
         third.tree.reset(must_bead(BEAD))
         self.assertEqual(third.resume.point()[1], 1)  # the file is there: stage 2 goes on
 

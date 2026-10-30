@@ -56,8 +56,9 @@ class StatusRow(Rec):
 
 
 @final
-class RebaseOutcome(Rec):
-    """How a rebase ended: `ok`, else git's words. A failed rebase is left in progress (rebase_abort undoes it)."""
+class GitOutcome(Rec):
+    """How a git command that may fail for a reason the caller reads ended: `ok`, and git's words (stdout and stderr). A rebase that
+    failed is left in progress (rebase_abort undoes it)."""
 
     ok: bool
     output: str = ""

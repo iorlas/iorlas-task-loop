@@ -13,7 +13,7 @@ from taskloop.contracts.argv import text_of
 from taskloop.contracts.ask import Ask, AskAction
 from taskloop.contracts.bead import BdError, Bead, Comment
 from taskloop.contracts.delegate import DelegateResult, LiveEvent, RunRequest
-from taskloop.contracts.gitfacts import ConfigEntry, GrepHit, LogRow, Pick, RebaseOutcome, Ref, StatusRow, TreeEntry
+from taskloop.contracts.gitfacts import ConfigEntry, GitOutcome, GrepHit, LogRow, Pick, Ref, StatusRow, TreeEntry
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.slots import Checkout
 from taskloop.contracts.wire import Rec
@@ -212,7 +212,10 @@ class Git(SlotGit, Protocol):
         ...
 
     def ls_tree(self, d: str, rev: str, *paths: str, recursive: bool = False) -> list[TreeEntry]: ...
-    def status(self, d: str) -> list[StatusRow]: ...
+    def status(self, d: str, all_untracked: bool = False) -> list[StatusRow]:
+        """Every changed and untracked path; untracked folders are listed whole with `all_untracked`, else as the folder."""
+        ...
+
     def check_ignore(self, d: str, paths: list[str], excludes: str = "") -> list[str]:
         """Those of `paths` the ignore rules (and the excludes file, when given) cover, without asking the index."""
         ...
@@ -273,8 +276,58 @@ class Git(SlotGit, Protocol):
 
     def prune_worktrees(self, repo: str) -> None: ...
 
+    def unpinned(self) -> Git:
+        """The same port asked as a worker's or a check's git would see the folder (no pin): for whether the pin itself is right."""
+        ...
+
+    # -- what a task's land, close and checks ask --------------------------------------------------------------------------------
+    def count(self, d: str, include: list[str], exclude: list[str] | None = None) -> int:
+        """How many commits are reachable from `include` and not from `exclude`."""
+        ...
+
+    def unmerged(self, d: str) -> list[str]:
+        """The paths a stopped rebase or merge left in conflict."""
+        ...
+
+    def changed_paths(self, d: str, a: str, b: str) -> list[str]:
+        """The paths that differ between the trees a and b, empty when git cannot say."""
+        ...
+
+    def staged(self, d: str) -> bool:
+        """Whether the index holds work that is not committed."""
+        ...
+
+    def stage_literal(self, d: str, paths: list[str]) -> None:
+        """Stage exactly these paths (as given, no globbing; a deleted one stages its deletion), however many there are."""
+        ...
+
+    def rename_branch(self, d: str, old: str, new: str) -> None: ...
+    def checkout_reset(self, d: str, branch: str, start: str) -> None:
+        """Point `branch` at `start` (created if missing) and check it out; refuses when local changes would be lost."""
+        ...
+
+    def try_commit(self, d: str, message: str, verify: bool = True, allow_empty: bool = False) -> GitOutcome:
+        """Commit what is staged; `verify=False` skips the hooks. Never raises for git's refusal: the words are in the outcome."""
+        ...
+
+    def amend(self, d: str) -> None:
+        """Fold what is staged into the last commit, keeping its message and skipping the hooks."""
+        ...
+
+    def rebase_continue(self, d: str) -> GitOutcome:
+        """Go on with a stopped rebase once its conflicts are staged."""
+        ...
+
+    def push_lease(self, d: str, remote: str, refspec: str) -> GitOutcome:
+        """Push without hooks, force-with-lease: the refspec's ref is replaced only if the remote still has what was last fetched."""
+        ...
+
+    def lfs_push(self, d: str, remote: str, refs: list[str]) -> GitOutcome:
+        """Upload the LFS objects of the refs to the remote."""
+        ...
+
     # -- writes ----------------------------------------------------------------------------------------------------------------
-    def rebase(self, d: str, onto: str, update_refs: bool = True) -> RebaseOutcome: ...
+    def rebase(self, d: str, onto: str, update_refs: bool = True) -> GitOutcome: ...
     def reset(self, d: str, rev: str, mode: Literal["soft", "mixed", "hard"] = "mixed") -> None: ...
     def tag(self, d: str, name: str, rev: str = "HEAD") -> None: ...
     def checkout_force(self, d: str, branch: str, start: str) -> None:

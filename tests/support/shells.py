@@ -5,7 +5,7 @@ from pathlib import Path
 from taskloop.adapters.git import RealGit
 from taskloop.adapters.spawner import RealSpawner
 from taskloop.app.release.shell import Done, Shell
-from taskloop.contracts.env import Env
+from taskloop.contracts.env import Env, snapshot
 
 
 def quiet_shell(calls: list[list[str]] | None = None) -> Shell:
@@ -15,4 +15,4 @@ def quiet_shell(calls: list[list[str]] | None = None) -> Shell:
         log.append(cmd)
         return Done(0, "", "")
 
-    return Shell(fetch=lambda cwd: None, run=run, say=lambda msg: None, port=RealGit(), spawner=RealSpawner(Env()))
+    return Shell(fetch=lambda cwd: None, run=run, say=lambda msg: None, port=RealGit(snapshot()), spawner=RealSpawner(Env()))

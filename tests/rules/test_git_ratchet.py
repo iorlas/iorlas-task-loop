@@ -1,6 +1,6 @@
 """A ratchet on git calls that skip the Git port (contracts/ports.py): a process started for `git` (an argv list that begins
 "git", run_git), or a call to a string-in string-out `git(...)` helper (gitrepo.git, the engine's e.git), anywhere in src/ but the
-three modules that hold git itself. tests/rules/git_ratchet.json records the count per file left today; a file may only get
+modules that hold git itself. tests/rules/git_ratchet.json records the count per file left today; a file may only get
 fewer (above its record, or absent from it, fails; below fails until the record is lowered), so the remainder cannot grow back.
 New git work goes through a Git port method (adapters/git.py RealGit, contracts/ports.py Git) that tests/ports/git_contract.py
 holds the sim and real git to.
@@ -16,7 +16,12 @@ import support.paths  # noqa: F401
 
 ROOT = Path(__file__).resolve().parents[2]
 RECORD = Path(__file__).with_name("git_ratchet.json")
-HOME = frozenset({"src/taskloop/adapters/git.py", "src/taskloop/adapters/gitenv.py", "src/taskloop/adapters/gitrepo.py"})
+HOME = frozenset({"src/taskloop/adapters/git.py", "src/taskloop/adapters/git_base.py", "src/taskloop/adapters/git_ops.py"})
+# Why a file outside HOME still names git, each one a command that is data or a script git cannot be asked through.
+STAYS = {
+    "src/taskloop/adapters/markers.py": "a plain-python3 script run in the slot (conflict markers): it imports no taskloop code",
+    "src/taskloop/contracts/config.py": "the default of the repo's land command, an argv the shell runs: data, not a call",
+}
 
 
 def count_source(text: str) -> int:
@@ -28,7 +33,8 @@ def count_source(text: str) -> int:
         elif isinstance(node, ast.Call):
             fn = node.func
             name = fn.id if isinstance(fn, ast.Name) else fn.attr if isinstance(fn, ast.Attribute) else ""
-            n += name == "run_git" or (name == "git" and bool(node.args))  # git() with no argument builds the port
+            built = isinstance(fn, ast.Attribute) and getattr(fn.value, "id", "") == "real"  # real.git(env) builds the port
+            n += name == "run_git" or (name == "git" and bool(node.args) and not built)
     return n
 
 
@@ -59,11 +65,20 @@ class GitRatchet(unittest.TestCase):
         self.assertEqual(problems(count_tree(), json.loads(RECORD.read_text(encoding="utf-8"))), [])
 
     def test_each_kind_of_escape_is_counted(self):
-        for text in ('subprocess.run(["git", "status"])', 'argv = ["git", "push"]', "run_git(d, 'x')", "gitrepo.git('x', cwd=d)",
-                     "e.git('x')", "git('x')"):
+        for text in (
+            'subprocess.run(["git", "status"])',
+            'argv = ["git", "push"]',
+            "run_git(d, 'x')",
+            "gitq.git('x', cwd=d)",
+            "e.git('x')",
+            "git('x')",
+        ):
             with self.subTest(text):
                 self.assertEqual(count_source(text), 1)
-        self.assertEqual(count_source("port.fetch(d)\nx = ['git']\ngit.fetch(d)"), 0)
+        self.assertEqual(count_source("port.fetch(d)\nx = ['git']\ngit.fetch(d)\nreal.git(env)"), 0)
+
+    def test_what_is_left_is_only_what_cannot_go_through_the_port(self):
+        self.assertEqual(sorted(json.loads(RECORD.read_text(encoding="utf-8"))), sorted(STAYS))
 
     def test_a_new_call_fails_and_a_removed_one_asks_for_the_record_to_drop(self):
         self.assertEqual(len(problems({"a.py": 2}, {"a.py": 1})), 1)

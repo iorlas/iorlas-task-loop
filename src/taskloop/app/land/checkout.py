@@ -1,25 +1,14 @@
 """The slot's checkout as git sees it: the base, a fetch, what is dirty, the tree git would commit now, what the task changed,
 what to stage."""
-import time
-from pathlib import Path
+
 from typing import Protocol
 
-from taskloop.adapters import gitrepo, treehash
-from taskloop.adapters.gitenv import git_env, run_git
+from taskloop.adapters import treehash
+from taskloop.contracts.gitfacts import StatusRow
 from taskloop.contracts.ids import TreeSha
-from taskloop.contracts.ports import Sh
+from taskloop.contracts.ports import Git
+from taskloop.contracts.slots import SlotGitError
 from taskloop.stores.runlog import RunLog
-
-
-class GitResult(Protocol):
-    """What run_git answers that the checkout reads."""
-
-    @property
-    def returncode(self) -> int: ...
-    @property
-    def stdout(self) -> bytes: ...
-    @property
-    def stderr(self) -> bytes: ...
 
 
 class CheckoutConfig(Protocol):
@@ -32,80 +21,69 @@ class CheckoutNewFiles(Protocol):
 
 
 class CheckoutHost(Protocol):
-    """What the checkout reads of the engine: the slot's path, git and its shell, the base, the log, the new-file verdicts and the memo
+    """What the checkout reads of the engine: the slot's path, git, the base, the log, the new-file verdicts and the memo
     of the last tree hash (which it sets)."""
 
     tree_memo: tuple[treehash.State, TreeSha] | None  # (git status, file stats) -> tree hash, of the last tree_hash()
 
     @property
-    def wt(self) -> str | Path: ...
+    def wt(self) -> str: ...
     @property
-    def sh(self) -> Sh: ...
+    def git(self) -> Git: ...
     @property
     def cfg(self) -> CheckoutConfig: ...
     @property
     def log(self) -> RunLog: ...
     @property
     def newfiles(self) -> CheckoutNewFiles: ...
-    def git(self, *args: str) -> str: ...
     def blocked_for(self, why: str, kind: str) -> Exception: ...
+
+
+def line(r: StatusRow) -> str:
+    """One path as `git status --porcelain` prints it."""
+    return f"{r.index}{r.work} {r.path}"
 
 
 class Checkout:
     def __init__(self, host: CheckoutHost) -> None:
         self.e = host
 
-    def slot_status(self) -> tuple[list[str], list[str], GitResult]:
-        """(tracked paths changed, untracked paths, git's result) from the slot's own `git status`."""
-        st = run_git(self.e.wt, "status", "--porcelain", "-z", "--untracked-files=all", capture_output=True)
-        parts = st.stdout.decode("utf-8", "surrogateescape").split("\0")
-        paths: list[str] = []
-        new: list[str] = []
-        k = 0
-        while k < len(parts):
-            entry = parts[k]
-            k += 1
-            if len(entry) > 3:
-                (new if entry[:2] == "??" else paths).append(entry[3:])
-                if entry[0] in "RC":  # the next entry is the path it came from: gone from the tree, staged already
-                    k += 1
-        return paths, new, st
+    def slot_status(self) -> tuple[list[str], list[str], str]:
+        """(tracked paths changed, untracked paths, git's complaint or "") from the slot's own `git status`."""
+        try:
+            rows = self.e.git.status(self.e.wt, all_untracked=True)
+        except SlotGitError as err:
+            return [], [], str(err)
+        return [r.path for r in rows if not r.untracked], [r.path for r in rows if r.untracked], ""
 
     def fetch(self, check: bool = False) -> tuple[int, str]:
-        """git fetch, again while it loses a ref lock to another process's fetch into this repo (gitrepo.REF_RACE)."""
+        """git fetch (the port goes again while it loses a ref lock to another process's fetch into this repo). -> (0, "") or (1, why)."""
         e = self.e
-        for i in range(5):
-            rc, tail = e.sh(["git", "fetch", "-q", "origin"], pin=True)
-            if rc == 0 or not gitrepo.REF_RACE.search(tail):
-                break
-            time.sleep(0.1 * (i + 1))
-        if check and rc:
-            raise e.blocked_for(f"failed: `git fetch -q origin` exit {rc}\n{tail}", "FAULT_INFRA")
-        return rc, tail
-
-    def git_env(self) -> dict[str, str]:
-        """The environment for a git command on this checkout (pinned to it)."""
-        return git_env(self.e.wt)
+        try:
+            e.git.fetch(e.wt)
+        except SlotGitError as err:
+            if check:
+                raise e.blocked_for(f"failed: `git fetch -q origin`: {err}", "FAULT_INFRA") from err
+            return 1, str(err)
+        return 0, ""
 
     def base_sha(self) -> str:
         """Where the task's work starts: an earlier run's commits on the task branch count as the task's diff."""
         e = self.e
-        return e.git("merge-base", e.cfg.base, "HEAD") or e.cfg.base
+        return e.git.merge_base(e.wt, e.cfg.base, "HEAD") or e.cfg.base
 
     def branch_now(self) -> str:
         """The branch HEAD is on; "" when detached."""
-        return self.e.git("symbolic-ref", "--short", "-q", "HEAD")
+        return self.e.git.branch(self.e.wt)
 
     def dirty_status(self) -> str:
         """`git status --porcelain` of the slot, leaving out what the BASE's .gitignore files ignore (tl-g6a): Unity's client/log.txt
         is untracked on an old branch and ignored on main, and made a slot 'dirty with another branch's work' for 7 beads."""
-        out = self.e.git("status", "--porcelain", "--untracked-files=all")
-        if not out:
+        rows = self.e.git.status(self.e.wt, all_untracked=True)
+        if not rows:
             return ""
-        lines = out.splitlines()
-        untracked = [ln[3:] for ln in lines if ln.startswith("?? ")]
-        ignored = self.base_ignored(untracked)
-        return "\n".join(ln for ln in lines if not (ln.startswith("?? ") and ln[3:] in ignored))
+        ignored = self.base_ignored([r.path for r in rows if r.untracked])
+        return "\n".join(line(r) for r in rows if not (r.untracked and r.path in ignored))
 
     def base_ignored(self, paths: list[str]) -> set[str]:
         """The subset of `paths` that the BASE's .gitignore files ignore (the user's own global excludes are not replaced)."""
@@ -113,10 +91,19 @@ class Checkout:
             return set()
         e = self.e
         base = e.cfg.base
-        files = {p: (e.git("show", f"{base}:{p}") or "").splitlines()
-                 for p in (e.git("ls-tree", "-r", "--name-only", base) or "").splitlines() if p.split("/")[-1] == ".gitignore"}
+        files = {
+            t.path: self.read_base(base, t.path).splitlines()
+            for t in e.git.ls_tree(e.wt, base, recursive=True)
+            if t.path.split("/")[-1] == ".gitignore"
+        }
         rules = treehash.ignore_rules(base, files)
-        return treehash.ignored_by(e.wt, rules, paths) if rules else set()
+        return treehash.ignored_by(e.git, e.wt, rules, paths) if rules else set()
+
+    def read_base(self, base: str, path: str) -> str:
+        try:
+            return self.e.git.show(self.e.wt, base, path)
+        except SlotGitError:
+            return ""
 
     def stage_all(self, check: bool = False, everything: bool = False) -> int:
         """Stage the slot's own changes: exactly the paths `git status --porcelain` lists under the pinned env, never a
@@ -124,30 +111,29 @@ class Checkout:
         (new_file_kind, tl-bxk.10.24). Returns the exit code."""
         e = self.e
         e.log.note("git add -A (the slot's own status paths)")
-        paths, new, st = self.slot_status()
+        paths, new, why = self.slot_status()
         if everything:  # a parked bead's work: every new file the base does not ignore goes to its branch, the unexplained ones too
             ignored = self.base_ignored(new)
             paths += [p for p in new if p not in ignored]
         else:
             paths += [p for p in new if e.newfiles.new_file_kind(p) == "meant"]
-        rc = st.returncode
-        if rc == 0 and paths:
-            r = run_git(e.wt, "--literal-pathspecs", "add", "-A", "--pathspec-from-file=-", "--pathspec-file-nul",
-                        input="\0".join(paths).encode("utf-8", "surrogateescape"), capture_output=True)
-            rc = r.returncode
-            st = r
-        if check and rc:
-            raise e.blocked_for(f"failed: staging the slot's paths exit {rc}\n{st.stderr.decode('utf-8', 'replace')[-600:]}", "FAULT_SLOT")
-        return rc
+        if not why and paths:
+            try:
+                e.git.stage_literal(e.wt, paths)
+            except SlotGitError as err:
+                why = str(err)
+        if check and why:
+            raise e.blocked_for(f"failed: staging the slot's paths: {why[-600:]}", "FAULT_SLOT")
+        return 1 if why else 0
 
     def tree_hash(self) -> TreeSha:
         """The worktree as git would commit it now, untracked files included, without touching the real index."""
         e = self.e
-        state = treehash.state_of(e.wt)
+        state = treehash.state_of(e.git, e.wt)
         memo = e.tree_memo
         if state and memo and memo[0] == state:
             return memo[1]
-        tree = treehash.tree_of(e.wt)
+        tree = treehash.tree_of(e.git, e.wt)
         if state:
             e.tree_memo = (state, tree)
         return tree
@@ -156,10 +142,9 @@ class Checkout:
         """The task's diff against where it started, untracked files included."""
         e = self.e
         tree = self.tree_hash()
-        return gitrepo.git("diff", self.base_sha(), tree, cwd=e.wt) if tree else e.git("diff", self.base_sha())
+        return e.git.diff(e.wt, self.base_sha(), tree) if tree else ""
 
     def changed_paths(self) -> list[str]:
         """Paths the task changed since it started, untracked files included."""
         tree = self.tree_hash()
-        out = gitrepo.git("diff", "--name-only", self.base_sha(), tree, cwd=self.e.wt) if tree else ""
-        return [p for p in out.splitlines() if p]
+        return self.e.git.changed_paths(self.e.wt, self.base_sha(), tree) if tree else []

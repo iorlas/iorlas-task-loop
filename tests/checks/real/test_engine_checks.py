@@ -4,7 +4,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
-from support import procsim
+from support import gitq, procsim
 from support.engine_case import CLEAN, PLAN, WRITE, EngineTest, pid_gone
 
 # isort: split
@@ -13,10 +13,9 @@ import shlex
 import signal
 from pathlib import Path
 
-from support.spawn import real_spawner
+from support.spawn import port_git, real_spawner
 from support.waits import until
 
-from taskloop.adapters import gitrepo
 from taskloop.app.run import (
     engine,
 )
@@ -35,8 +34,15 @@ class EngineChecksTest(EngineTest):
     def test_a_stop_during_a_check_stops_the_check_and_everything_it_started(self):
         if os.name == "nt":
             self.skipTest("POSIX process groups")
-        eng = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store, env=snapshot(),
-            spawner=real_spawner())
+        eng = engine.Engine(
+            BeadId("t-1"),
+            str(self.wt),
+            wslots.load_cfg(str(self.wt)),
+            store=self.store,
+            env=snapshot(),
+            spawner=real_spawner(),
+            git=port_git(),
+        )
         pidfile = Path(self.wt, "child.pid")
 
         def stopped(*_):  # what the run's SIGTERM handler does, from the same thread, once the check has started its child
@@ -61,6 +67,4 @@ class EngineChecksTest(EngineTest):
         self.assertEqual(rc, 2)
         self.assertIn("stopped (SIGTERM)", self.said())
         self.assertDead(self.child_of(pidfile))
-        self.assertIn("wip (t-1)", gitrepo.git("log", "-1", "--format=%s", "task/t-1", cwd=str(self.wt)))
-
-
+        self.assertIn("wip (t-1)", gitq.git("log", "-1", "--format=%s", "task/t-1", cwd=str(self.wt)))

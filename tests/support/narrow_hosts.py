@@ -10,7 +10,7 @@ from typing import Any
 import support.paths  # noqa: F401
 from support.fake_beads import FakeBeads
 from support.fake_clock import FakeClock
-from support.fakegit import FakeGit
+from support.fakegit import FakeGit, ScriptedGit
 from taskloop.app.land.commit import Commit
 from taskloop.app.land.fix_outside import FixOutside
 from taskloop.app.land.gate import Gate, GateChecker
@@ -31,7 +31,7 @@ from taskloop.contracts.enums import Outcome
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.kinds import Kind
 from taskloop.contracts.plancheck import PlanCheck, PlanData, StageData
-from taskloop.contracts.ports import Beads, Clock, DoltPush
+from taskloop.contracts.ports import Beads, Clock, DoltPush, Git
 from taskloop.domain import outcome as oc
 from taskloop.domain.asks.spec import AskSpec
 from taskloop.stores.bundle import Stores
@@ -71,13 +71,14 @@ class FakeOutboundHost:
     def __init__(self, dry: bool = False, result: tuple[int, str] = (0, "")) -> None:
         self.bead = BeadId("t-1")
         self.cfg = EngineConfig(land=["git", "push", "origin", "HEAD:main"])
-        self.wt: str | Path = "."
+        self.wt = "."
         self.dry = dry
         self.lines: list[str] = []  # what the log said
         self.log = RunLog(fake_stores().run_log("run"), echo=self.lines.append)
         self.clock = FakeClock()
         self.result = result
         self.ran: list[Sequence[str]] = []
+        self.git: Git = ScriptedGit()
 
     @property
     def store(self) -> FakeBd:
@@ -120,7 +121,6 @@ class FakeBd:
 
 # ---- the land: one small fake per step (app/land/*.py), each with just the members that step's host Protocol lists ----
 
-GitFn = Callable[..., str]
 ShFn = Callable[..., tuple[int, str]]
 
 
@@ -285,9 +285,10 @@ class Checks:
 class FakeCommitHost:
     """CommitHost."""
 
-    def __init__(self, git: GitFn, sh: ShFn) -> None:
+    def __init__(self, git: Git, sh: ShFn) -> None:
         self.bead = BeadId("t-1")
         self.git, self.sh = git, sh
+        self.wt = "/wt"
         self.pictures = Looks()
         self.checkout = Stages()
         self.newfiles = Strays()
@@ -299,12 +300,13 @@ class FakeCommitHost:
 class FakeLandedHost:
     """LandedHost."""
 
-    def __init__(self, git: GitFn, sh: ShFn, dry: bool = False, fetch: Fetches | None = None) -> None:
+    def __init__(self, git: Git, sh: ShFn, dry: bool = False, fetch: Fetches | None = None) -> None:
         self.landed_sha = ""
         self.bead = BeadId("t-1")
         self.cfg = EngineConfig(base="origin/main")
         self.dry = dry
         self.git, self.sh = git, sh
+        self.wt = "/wt"
         self.checkout = fetch or Fetches()
         self.steps = Outcomes()
         self.warnings: list[str] = []
@@ -316,9 +318,10 @@ class FakeLandedHost:
 class FakeLandRebaseHost:
     """LandRebaseHost."""
 
-    def __init__(self, git: GitFn, sh: ShFn) -> None:
+    def __init__(self, git: Git, sh: ShFn) -> None:
         self.cfg = EngineConfig(base="origin/main")
         self.git, self.sh = git, sh
+        self.wt = "/wt"
         self.steps = Outcomes()
 
     def blocked_for(self, why: str, kind: str) -> Exception:
@@ -328,10 +331,11 @@ class FakeLandRebaseHost:
 class FakePushHost:
     """PushHost: a bd that is never asked (the claim is offline), a network that is `up`, a land command."""
 
-    def __init__(self, git: GitFn, sh: ShFn, up: bool | None = True, cfg: EngineConfig | None = None) -> None:
+    def __init__(self, git: Git, sh: ShFn, up: bool | None = True, cfg: EngineConfig | None = None) -> None:
         self.landed_sha = ""
         self.cfg = cfg or EngineConfig(base="origin/main", land=["git", "push", "-q", "origin", "HEAD:main"])
         self.git, self.sh = git, sh
+        self.wt = "/wt"
         self.store: Beads = FakeBeads()
         self.claim = fence.offline(BeadId("t-1"))
         self.steps = OutcomesMoves()
@@ -380,7 +384,7 @@ class Fixes:
 class FakeFixOutsideHost:
     """FixOutsideHost: every fix is accepted."""
 
-    def __init__(self, git: GitFn, sh: ShFn, events: list[str], rounds: int = 2) -> None:
+    def __init__(self, git: Git, sh: ShFn, events: list[str], rounds: int = 2) -> None:
         self.pending_land_validation = ""
         self.fixes = 0
         self.stuck_why = ""
@@ -391,6 +395,7 @@ class FakeFixOutsideHost:
         self.checkpoints = Keys()
         self.checkout = Stages()
         self.git, self.sh = git, sh
+        self.wt = "/wt"
 
     def blocked_for(self, why: str, kind: str) -> Exception:
         return stopped(why, kind)
@@ -435,9 +440,10 @@ class Gating:
 class FakeGateHost:
     """GateHost: `checker` answers the gate (none by default: the repo has no gate step)."""
 
-    def __init__(self, git: GitFn, cfg: EngineConfig, log: RunLog, checker: GateChecker | None = None) -> None:
+    def __init__(self, git: Git, cfg: EngineConfig, log: RunLog, checker: GateChecker | None = None) -> None:
         self.gate_log: Path | None = None
         self.cfg, self.log, self.git = cfg, log, git
+        self.wt = "/wt"
         self.run_dir = Path("run")
         self.steps = Outcomes()
         self.checker: GateChecker = checker or Gating()
@@ -457,8 +463,15 @@ class NoRun:
 class FakeLandHost:
     """LandHost: the Lander's own flow. `emitted()` is what its log said."""
 
-    def __init__(self, git: GitFn, events: list[str], cfg: EngineConfig, fetch: Fetches | None = None, last_run: CheckRun | None = None,
-                 dry: bool = False) -> None:
+    def __init__(
+        self,
+        git: Git,
+        events: list[str],
+        cfg: EngineConfig,
+        fetch: Fetches | None = None,
+        last_run: CheckRun | None = None,
+        dry: bool = False,
+    ) -> None:
         self.pending_land_validation = ""
         self.task_branch = ""
         self.cfg = cfg
@@ -473,6 +486,7 @@ class FakeLandHost:
         self.waits = Locks(events)
         self.worker = Worker(True)
         self.git = git
+        self.wt = "/wt"
 
     def land_lock_path(self) -> Path:
         return Path("lock")
@@ -487,10 +501,21 @@ class FakeLandHost:
 class LandKit:
     """A Lander composed of real steps, each over its own small fake host (the hosts are fields, to look into)."""
 
-    def __init__(self, git_fn: GitFn, sh_fn: ShFn, cfg: EngineConfig | None = None, gate: GateStep | None = None, up: bool | None = True,
-                 fetch: Fetches | None = None, last_run: CheckRun | None = None, dry: bool = False,
-                 run: CheckRun | None = None, locks: Locks | None = None, checker: GateChecker | None = None,
-                 events: list[str] | None = None) -> None:
+    def __init__(
+        self,
+        git_fn: Git,
+        sh_fn: ShFn,
+        cfg: EngineConfig | None = None,
+        gate: GateStep | None = None,
+        up: bool | None = True,
+        fetch: Fetches | None = None,
+        last_run: CheckRun | None = None,
+        dry: bool = False,
+        run: CheckRun | None = None,
+        locks: Locks | None = None,
+        checker: GateChecker | None = None,
+        events: list[str] | None = None,
+    ) -> None:
         self.events: list[str] = [] if events is None else events
         self.cfg = cfg or EngineConfig(base="origin/main", land_optimistic_tries=2, land=["git", "push", "-q", "origin", "HEAD:main"])
         self.land = FakeLandHost(git_fn, self.events, self.cfg, fetch, last_run, dry)
@@ -523,7 +548,7 @@ class NoWip:
 
 def table_kit(table: FakeGit, **kw: Any) -> LandKit:
     """A LandKit whose git and shell answer from a FakeGit table."""
-    return LandKit(table.git, table.sh, **kw)
+    return LandKit(table, table.sh, **kw)
 
 
 # ---- the close: one small fake per step (app/run/closer_*.py) ----
@@ -604,8 +629,13 @@ class FakeCloseHost(Said):
         self.t0 = 0.0
         self.halt = threading.Event()
 
-    def git(self, *args: str) -> str:
-        return ""
+    @property
+    def git(self) -> Git:
+        return ScriptedGit()
+
+    @property
+    def wt(self) -> str:
+        return "/wt"
 
     def said(self) -> list[object]:
         return [row.rec for row in self.stores.run_log("run").read_from(0).items]

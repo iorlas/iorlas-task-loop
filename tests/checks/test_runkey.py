@@ -15,6 +15,8 @@ from support.logs import records
 from support.narrow import must
 
 # isort: split
+from support.spawn import port_git
+
 from taskloop.app.checks.cache import InputKeys, RunMemo
 from taskloop.contracts import paths
 from taskloop.contracts.checks import Check, CheckCacheEntry
@@ -28,7 +30,7 @@ ST = {"checks": [], "files": []}
 
 
 def memo(env=None, doc=None, tree="t", base="b"):
-    return RunMemo(doc or MemDoc(CheckCacheEntry), InputKeys("/nonexistent", TreeSha(tree), {}), BaseSha(base), env or {})
+    return RunMemo(doc or MemDoc(CheckCacheEntry), InputKeys(port_git(), "/nonexistent", TreeSha(tree)), BaseSha(base), env or {})
 
 
 class Gate(te.EngineTest):
@@ -124,7 +126,7 @@ class OldFormat(unittest.TestCase):
             path.parent.mkdir(parents=True)
             path.write_text('{"v": 1, "key": "t b", "whole": {}, "inputs": {}, "base_red": {}}')
             self.assertIsNone(doc.get())
-            m = RunMemo(doc, InputKeys("/nonexistent", TreeSha("t"), {}), BaseSha("b"), {})
+            m = RunMemo(doc, InputKeys(port_git(), "/nonexistent", TreeSha("t")), BaseSha("b"), {})
             self.assertFalse(m.has(Check(id=CheckId("e"), cmd="e")))
             m.save()
             self.assertEqual(doc.get(), CheckCacheEntry())
