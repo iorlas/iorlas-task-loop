@@ -2,16 +2,68 @@
 import shutil
 import time
 from pathlib import Path
-from typing import Any
+from typing import Protocol
 
+from taskloop.app.land.parts import BeginSteps, FetchCheckout, StageCheckout
+from taskloop.contracts.bead import Bead
+from taskloop.contracts.ids import BeadId
 from taskloop.contracts.paths import TASK_EXCLUDE
+from taskloop.contracts.ports import Sh
+from taskloop.stores.runlog import RunLog
+
+
+class TreeConfig(Protocol):
+    @property
+    def base(self) -> str: ...
+
+
+class TreeCheckout(FetchCheckout, StageCheckout, Protocol):
+    def dirty_status(self) -> str: ...
+
+
+class TreeBriefs(Protocol):
+    def export(self) -> object: ...
+
+
+class TreeHost(Protocol):
+    """What the slot's tree reads of the engine: the bead, the slot and its task folder, the base, git and its shell, the checkout, the
+    briefs, the log; the branch and the dirty flag it sets."""
+
+    left_dirty: bool  # the slot held work from an earlier run, saved as a wip commit
+    branch: str
+
+    @property
+    def bead(self) -> BeadId: ...
+    @property
+    def wt(self) -> str | Path: ...
+    @property
+    def task_dir(self) -> Path: ...
+    @property
+    def fresh(self) -> bool: ...
+    @property
+    def cfg(self) -> TreeConfig: ...
+    @property
+    def sh(self) -> Sh: ...
+    @property
+    def steps(self) -> BeginSteps: ...
+    @property
+    def checkout(self) -> TreeCheckout: ...
+    @property
+    def briefs(self) -> TreeBriefs: ...
+    @property
+    def log(self) -> RunLog: ...
+    def git(self, *args: str) -> str: ...
+    def git_in(self, path: str | Path, *args: str) -> str: ...
+    def comment(self, text: str) -> None: ...
+    def warn(self, text: str) -> None: ...
+    def blocked_for(self, why: str, kind: str) -> Exception: ...
 
 
 class Tree:
-    def __init__(self, host: Any) -> None:
+    def __init__(self, host: TreeHost) -> None:
         self.e = host
 
-    def reset(self, bead: Any) -> str:
+    def reset(self, bead: Bead) -> str:
         """The first node: fetch, make the slot's tree the task branch (resumed, or started again on the base) and clear the task folder."""
         e = self.e
         e.steps.begin("reset", "reset")

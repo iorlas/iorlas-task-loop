@@ -1,6 +1,7 @@
 """The land and a check that could not verify (exit UNVERIFIED_EXIT): such a check is not a pass, so the land refuses to land on it."""
 
 from collections.abc import Callable
+from typing import Protocol
 
 from taskloop.contracts.checks import UNVERIFIED_EXIT, CheckResult, CheckRun
 
@@ -25,3 +26,14 @@ def refusal(run: CheckRun) -> str:
 def latest(last: CheckRun | None, saved: Callable[[], CheckRun | None]) -> CheckRun | None:
     """The last round of the engine's checks: in memory, else the saved one (after a resume)."""
     return last or saved()
+
+
+class Blocks(Protocol):
+    def blocked_for(self, why: str, kind: str) -> Exception: ...
+
+
+def refuse(run: CheckRun | None, host: Blocks) -> None:
+    """A required check that could not verify is no pass: nothing is committed or pushed (`deferred` is tl-7k8.5's hook)."""
+    why = refusal(run) if run else ""
+    if why:
+        raise host.blocked_for(why, "FAULT_LAND")

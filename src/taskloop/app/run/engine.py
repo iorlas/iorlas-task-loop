@@ -17,7 +17,7 @@ from taskloop.adapters.runner import live_path
 from taskloop.app.checks.runner import Checker
 from taskloop.app.land.checkout import Checkout
 from taskloop.app.land.fixer import Fixer
-from taskloop.app.land.lander import Lander
+from taskloop.app.land.lander import Lander, lander_over
 from taskloop.app.land.rebase import Rebase
 from taskloop.app.land.tree import Tree
 from taskloop.app.look.judge import Judge
@@ -35,7 +35,7 @@ from taskloop.app.run import ended, summaries
 from taskloop.app.run.ask_flow import AskFlow
 from taskloop.app.run.bead_env import bead_env
 from taskloop.app.run.blocked import Blocked, FixFailed, blocked_for
-from taskloop.app.run.closer import Closer
+from taskloop.app.run.closer import Closer, closer_over
 from taskloop.app.run.console import say
 from taskloop.app.run.context import RunContext
 from taskloop.app.run.delegation import Delegation
@@ -80,6 +80,17 @@ __all__ = ["Blocked", "Engine", "FixFailed", "tool_on_path"]
 
 def tool_on_path(name: str) -> str | None:
     return shutil.which(name)
+
+
+def land_with_engine(engine: Any) -> Lander:
+    """The Lander over this engine. (The engine's run state is reached through __getattr__, so the type checker cannot prove it is a
+    LanderHost; the proof is the narrow fakes in tests/support/narrow_hosts.py, one per step.)"""
+    return lander_over(engine)
+
+
+def close_with_engine(engine: Any) -> Closer:
+    """The Closer over this engine (see land_with_engine)."""
+    return closer_over(engine)
 
 
 @carries_state
@@ -150,8 +161,8 @@ class Engine(RunFields):
     bead_env = cached_property(bead_env)  # the slot's environment: every command of the bead gets it (Shell.stream, the worker call)
     rebase = cached_property(Rebase)
     fixer = cached_property(Fixer)
-    lander = cached_property(Lander)
-    closer = cached_property(Closer)
+    lander = cached_property(land_with_engine)
+    closer = cached_property(close_with_engine)
     waits = cached_property(Waits)
     delegation = cached_property(Delegation)
     ask_flow = cached_property(AskFlow)

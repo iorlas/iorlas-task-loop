@@ -1,15 +1,90 @@
 """A resumed branch is rebased onto the latest base before it is planned; a conflict is fixed in place when few files are in it, else the
 task starts again on the base (the branch kept under another name)."""
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Protocol
+
+from taskloop.app.land.parts import MoveSteps
+from taskloop.contracts.checkpoint import Checkpoint, RunState
+from taskloop.contracts.plancheck import PlanData
+from taskloop.contracts.ports import Sh
+from taskloop.stores.runlog import RunLog
 
 MAX_REBASE_RESETS = 2  # the plan count starts again at most this often per bead: a red gate for a real reason must still reach the limit
 SALVAGE_MAX_FILES = 10  # a resume conflict in more files than this starts again
 
 
+class RebaseConfig(Protocol):
+    @property
+    def base(self) -> str: ...
+
+
+class RebaseCheckout(Protocol):
+    def dirty_status(self) -> str: ...
+
+
+class RebaseCheckpoints(Protocol):
+    def amend(self, fn: Callable[[Checkpoint], Checkpoint]) -> bool: ...
+    def drop(self) -> None: ...
+
+
+class RebaseFixer(Protocol):
+    def fix(self, kind: str, tail: str, resume: bool = ...) -> str: ...
+
+
+class RebaseHost(Protocol):
+    """What the resume rebase reads of the engine: git and its shell, the base, the checkout's dirt, the checkpoint it follows, the one fix
+    round it may ask for, and the run's plan bookkeeping that a restart on the base clears."""
+
+    left_dirty: bool
+    rebase_orig: str  # the branch's head before the rebase, for start_again
+    rebase_pre: list[str]  # the heads the checkpoint may name before the rebase
+    salvage_tail: str  # the conflict's words for the fix round
+    salvaged: bool
+    fixes: int
+    planned: int
+    rebase_resets: int
+    old_plan: PlanData | None
+    amend_why: str
+    amend_text: str
+    replan_first: bool
+    plan_summary: str
+    last_summary: str
+    amended: bool
+    state: RunState
+    unverified: list[dict[str, str]]
+    unchecked: list[dict[str, str]]
+    plan_log: list[dict[str, object]]
+    FixFailed: type[Exception]
+
+    @property
+    def bead(self) -> str: ...
+    @property
+    def branch(self) -> str: ...
+    @property
+    def dry(self) -> bool: ...
+    @property
+    def cfg(self) -> RebaseConfig: ...
+    @property
+    def sh(self) -> Sh: ...
+    @property
+    def log(self) -> RunLog: ...
+    @property
+    def steps(self) -> MoveSteps: ...
+    @property
+    def checkout(self) -> RebaseCheckout: ...
+    @property
+    def checkpoints(self) -> RebaseCheckpoints: ...
+    @property
+    def fixer(self) -> RebaseFixer: ...
+    def git(self, *args: str) -> str: ...
+    def warn(self, text: str) -> None: ...
+    def comment(self, text: str) -> None: ...
+
+
 class Rebase:
-    def __init__(self, host: Any) -> None:
+    def __init__(self, host: RebaseHost) -> None:
         self.e = host
         self.squashed = False
         self.between = False
@@ -71,7 +146,7 @@ class Rebase:
         """The checkpoint's head follows a rebase (or squash), or the next resume reads this as an edit from outside."""
         e = self.e
 
-        def move(ck: Any) -> Any:
+        def move(ck: Checkpoint) -> Checkpoint:
             if ck.head not in e.rebase_pre:
                 return ck
             # unsquashed, the wip commit reset() made on top of the checkpoint's head is still on top of it

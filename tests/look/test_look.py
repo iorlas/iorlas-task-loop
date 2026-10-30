@@ -14,7 +14,7 @@ from support import fake_route
 from support.builders import make_engine
 from support.checkpoints import read_ck
 from support.engine_case import BEAD, CLEAN, PLAN, WRITE, engine, verdict
-from support.fakes import as_bead
+from support.fakes import must_bead
 
 from taskloop.adapters import gitrepo, ident
 from taskloop.app.look import shots
@@ -230,7 +230,7 @@ class LookTest(T.EngineTest):
         saved = read_ck(self.eng).state
         self.assertEqual(saved.look_paths, ["home-screen.png"])
         eng2 = engine.Engine(BeadId("t-1"), str(self.wt), self.eng.cfg, store=self.store)
-        eng2.tree.reset(as_bead(BEAD))
+        eng2.tree.reset(must_bead(BEAD))
         eng2.bead_title = "Add f"
         eng2.resume.point()
         self.assertEqual(eng2.look_paths, saved.look_paths)

@@ -19,7 +19,7 @@ from support.checkpoints import put_ck, read_ck
 from support.checks import ck, res, typed
 from support.engine_case import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, engine, lint
 from support.engine_locks import put_lock
-from support.fakes import as_bead, must_bead
+from support.fakes import must_bead
 from support.narrow import must
 
 from taskloop.adapters import childenv, ident, pidcheck
@@ -535,30 +535,30 @@ class Executable(StagesTest):
 
     def test_a_replanned_runs_goals_survive_the_stage_that_runs_again(self):
         e = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
-        e.tree.reset(as_bead(BEAD))
+        e.tree.reset(must_bead(BEAD))
         e.plan_data = self.two_stage()
         e.done, e.accepted = ["an earlier plan's goal", "stage one"], [0]
         e.checkpoints.save(stage=1, rounds=0, n=0, feedback="", step="write")
         again = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
-        again.tree.reset(as_bead(BEAD))
+        again.tree.reset(must_bead(BEAD))
         again.resume.point()
         self.assertEqual(again.done, ["an earlier plan's goal"])
 
     def test_a_resume_runs_the_stage_again_when_its_file_is_gone(self):
         e = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
-        e.tree.reset(as_bead(BEAD))
+        e.tree.reset(must_bead(BEAD))
         e.plan_data = self.two_stage()
         e.done, e.accepted = ["stage one"], [0]
         e.checkpoints.save(stage=1, rounds=0, n=0, feedback="", step="write")
         again = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
-        again.tree.reset(as_bead(BEAD))
+        again.tree.reset(must_bead(BEAD))
         _plan, i, state = again.resume.point()
         self.assertEqual((i, state, again.accepted, again.done), (0, None, [], []))
         self.assertIn("a file stage 1 promised is missing", again.log_path.read_text())
         Path(self.wt, self.PATH1).parent.mkdir(parents=True, exist_ok=True)
         Path(self.wt, self.PATH1).write_text("ok\n")
         third = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
-        third.tree.reset(as_bead(BEAD))
+        third.tree.reset(must_bead(BEAD))
         self.assertEqual(third.resume.point()[1], 1)  # the file is there: stage 2 goes on
 
 

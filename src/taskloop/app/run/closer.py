@@ -1,45 +1,82 @@
 """The close: the one step every run ends with. The branch is saved (a wip commit, the checkpoint marked closed), the outcome is decided by
-POLICY, the run is written to the log and the trace, follow-ups are filed, and the bead is closed, blocked or left open."""
-import contextlib
+POLICY, the run is written to the log and the trace, follow-ups are filed, and the bead is closed, blocked or left open. Each of those is
+a step of its own with its own small host (closer_*.py); the Closer is the order they run in."""
 import signal
 import threading
 import time
-from collections.abc import Mapping, Sequence
-from pathlib import Path
-from typing import assert_never
+from dataclasses import dataclass
+from typing import Protocol, assert_never
 
-from taskloop.adapters import beadtools, ident
-from taskloop.adapters import storm as storm_file
 from taskloop.app.asks import raiser
-from taskloop.app.land.followups import file_follow_ups
 from taskloop.app.run import ended as stored_end
-from taskloop.app.run import outcomes
-from taskloop.app.run import trace as runtrace
-from taskloop.app.run.closer_host import CloserHost
-from taskloop.app.run.console import say
-from taskloop.app.track import verbs as track
-from taskloop.contracts import fence
-from taskloop.contracts import log as rec
-from taskloop.contracts.answers import VERDICTS
+from taskloop.app.run.closer_branch import DONE, ReleaseSlot, SaveBranch
+from taskloop.app.run.closer_decide import Decide
+from taskloop.app.run.closer_host import CloseHost, CloserHost
+from taskloop.app.run.closer_notes import FileNotes, Reflect
+from taskloop.app.run.closer_record import RecordRun
+from taskloop.app.run.closer_settle import Settle
 from taskloop.contracts.checkpoint import Checkpoint, Notes
 from taskloop.contracts.enums import Outcome
-from taskloop.contracts.kinds import ASKS, Infra, Kind, Owner, Task
-from taskloop.contracts.ports import BeadPatch
-from taskloop.domain import effects, storm
+from taskloop.contracts.kinds import ASKS, Kind
+from taskloop.domain import effects
 from taskloop.domain import outcome as oc
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.interpret import CheckpointLedger, interpret
-from taskloop.domain.land.matchers import without_prefix
-from taskloop.domain.review import followups as fu
 
-DONE = (Outcome.LANDED, Outcome.DONE)
+
+class DecideStep(Protocol):
+    def run(self, o: oc.RunOutcome) -> Kind: ...
+
+
+class BranchStep(Protocol):
+    def run(self, outcome: Outcome, why: str) -> None: ...
+
+
+class SlotStep(Protocol):
+    def run(self, branch: str, outcome: Outcome) -> None: ...
+
+
+class RecordStep(Protocol):
+    def run(self, done: oc.RunOutcome, stats: str) -> None: ...
+
+
+class NotesStep(Protocol):
+    def run(self, outcome: Outcome) -> Notes: ...
+
+
+class ReflectStep(Protocol):
+    def comment(self, outcome: Outcome, why: str, stats: str, noted: Notes | None) -> None: ...
+
+
+class SettleStep(Protocol):
+    def run(self, done: oc.RunOutcome, stats: str) -> None: ...
+
+
+@dataclass(frozen=True)
+class CloseParts:
+    """The steps the Closer composes; each is built over its own small host (see Closer.of)."""
+
+    decide: DecideStep
+    branch: BranchStep
+    slot: SlotStep
+    record: RecordStep
+    notes: NotesStep
+    reflect: ReflectStep
+    settle: SettleStep
 
 
 class Closer:
-    """The close of a run: the outcome's policy, the log and trace, the bead's last state."""
+    """The close of a run: the order of its steps."""
 
-    def __init__(self, host: CloserHost) -> None:
+    def __init__(self, host: CloseHost, parts: CloseParts) -> None:
         self.e = host
+        self.decide = parts.decide
+        self.branch = parts.branch
+        self.slot = parts.slot
+        self.recording = parts.record
+        self.notes = parts.notes
+        self.reflecting = parts.reflect
+        self.settling = parts.settle
         self.noted: Notes | None = None  # FileNotes' result, for a run with no checkpoint to keep it in
 
     def close(self, ended: oc.RunOutcome) -> None:
@@ -57,37 +94,6 @@ class Closer:
             if old is not None:
                 signal.signal(signal.SIGTERM, old)
 
-    def repo_id(self) -> str:
-        return self.e.git("remote", "get-url", "origin") or str(self.e.wt)
-
-    def decide(self, o: oc.RunOutcome) -> Kind:
-        """The close's Kind after POLICY: a fault seen too often on one bead becomes one ask; the trace fields, the fingerprint and
-        the storm check (never for a pause or an ask) are set here."""
-        e = self.e
-        e.disp = None
-        kind, why = o.kind, o.detail
-        now = e.clock.now()
-        e.fp = o.fingerprint
-        history: Sequence[Mapping[str, object]] = ()
-        with contextlib.suppress(OSError):
-            history = storm_file.recent_closes(ident.config_dir() / "traces.jsonl", self.repo_id(), now)
-        e.disp = oc.apply(o, e.bead, history, now)
-        e.kind = e.disp.kind
-        if e.disp.escalated:
-            e.warn(f"the same fault {oc.KNOBS['fault_retries']} times on this bead: asking the owner once")
-        self.storm(history, kind, o, why)
-        return e.kind
-
-    def storm(self, history: Sequence[Mapping[str, object]], kind: Kind, o: oc.RunOutcome, why: str) -> None:
-        e = self.e
-        trip = storm.storm_trip(history, e.bead, kind, o.fingerprint, e.clock.now())
-        if trip and not e.dry:
-            path = storm_file.storm_path(ident.config_dir(), self.repo_id())
-            if storm_file.write_storm(path, trip.fingerprint, trip.beads, trip.t, e.clock.now(), oc.KNOBS["storm_window_s"], why):
-                e.storm = storm.banner(trip)
-                e.warn(e.storm)
-                say(e.storm)
-
     def run(self, ended: oc.RunOutcome) -> None:
         e = self.e
         why = ended.detail or ("stopped before a reason was recorded" if ended.word is Outcome.FAILED else "")
@@ -96,7 +102,7 @@ class Closer:
             first = why.splitlines()[0][:200] if why else ""
             why = f"failed: ask_lint: {'; '.join(bad)[:300]} ({first})"
             ended = oc.make(Kind.FAULT_ENGINE, why)
-        kind = self.decide(oc.make(ended.kind, why, spec=ended.spec))
+        kind = self.decide.run(oc.make(ended.kind, why, spec=ended.spec))
         spec = ended.spec
         if e.disp and e.disp.escalated and spec is None:
             spec = askspecs.repeated_fault(oc.KNOBS["fault_retries"], why.splitlines()[0][:200])
@@ -130,9 +136,9 @@ class Closer:
         outcome, why = done.word, done.detail
         match eff:
             case effects.SaveBranch():
-                self.save_branch(outcome, why)
+                self.branch.run(outcome, why)
             case effects.RecordRun():
-                self.record(done, stats)
+                self.recording.run(done, stats)
             case effects.NoteDry():
                 e.log.note(f"dry run: bead left as it was. {stats}")
             case effects.NoteWait():  # asked already: the bead stays as the ask left it
@@ -140,133 +146,20 @@ class Closer:
             case effects.RaiseAsk():
                 e.asked = bool(done.spec and outcome not in DONE and e.ask_flow.raise_ask(done.spec, why, done.kind))
             case effects.FileNotes():
-                self.file_notes(outcome)
+                self.noted = self.notes.run(outcome)
             case effects.Reflect():
-                self.reflect_comment(outcome, why, stats)
+                self.reflecting.comment(outcome, why, stats, self.noted)
             case effects.CloseBead() | effects.BlockBead() | effects.LeaveBead():
-                self.settle(done, stats)
+                self.settling.run(done, stats)
             case effects.ReleaseSlot():
-                self.release_slot(eff, outcome)
+                self.slot.run(eff.branch, outcome)
             case effects.DropCheckpoint():
                 e.checkpoints.drop_unless_fenced()
             case _:
                 assert_never(eff)
 
-    def file_notes(self, outcome: Outcome) -> None:
-        """The follow-ups filed; what was filed and what bd refused is kept in the checkpoint, where Reflect reads it."""
-        e = self.e
-        todo = len(fu.batch(e.bead, e.leftovers, e.filed).file)  # one per typed key, at most the cap
-        lost = self.follow_ups(outcome)
-        self.noted = Notes(filed=todo - len(lost), unfiled=len(lost))
-        e.checkpoints.keep_notes(self.noted)
 
-    def release_slot(self, eff: effects.ReleaseSlot, outcome: Outcome) -> None:
-        """Last: the trace and the comments read the branch. A slot whose lease moved on (another generation) is not this run's to touch."""
-        e = self.e
-        with contextlib.suppress(Exception):
-            if e.claim.slot_bead and fence.stale(e.store, e.claim):
-                return
-            e.tree.leave_slot(outcome, eff.branch)
-
-    def save_branch(self, outcome: Outcome, why: str) -> None:
-        """A run stopped mid-conflict-fix goes back to its branch; an unfinished branch keeps its work as a wip commit and a
-        closed checkpoint."""
-        e = self.e
-        gd = Path(e.git("rev-parse", "--absolute-git-dir") or ".")
-        if (gd / "rebase-merge").exists() or (gd / "rebase-apply").exists():
-            e.sh(["git", "rebase", "--abort"], pin=True)
-        branch = e.git("symbolic-ref", "--short", "-q", "HEAD")
-        if outcome not in DONE and branch and branch == (e.branch or None):
-            if e.git("status", "--porcelain"):
-                e.tree.wip(outcome)  # the next run continues this branch
-            e.checkpoints.close(why)
-
-    def record(self, done: oc.RunOutcome, stats: str) -> None:
-        """The run's log and trace: the close node, the reflection, the owner's question."""
-        e = self.e
-        outcome, why, sha, spec, kind = done.word, done.detail, done.sha, done.spec, done.kind
-        e.records.log_run()
-        last = e.steps.cur or e.steps.last
-        if last and (e.steps.moved_from != last.n or e.steps.moved_to not in ("ask", "pause", "close")):
-            to, cause = outcomes.close_move(kind)  # no move out of the run was logged from the last node: the close is it
-            e.steps.move(to, cause, why.splitlines()[0][:200] if why else outcome)
-        e.steps.end(outcomes.node_outcome(outcome, kind))
-        e.steps.begin("close", f"close: {outcome}")
-        code = runtrace.why_code(kind.value, outcome)
-        e.log.emit(rec.Close(outcome=Outcome(outcome), why_code=code, sha=sha or "", why=why[:500]))
-        e.steps.outcome(outcome, why.splitlines()[0][:200] if why else "")
-        e.steps.end()
-        e.reflection = e.reflector.reflect_run(outcome, why)  # after the close node: the outcome is decided and nothing here changes it
-        e.records.file_trace(outcome, why, sha)
-        e.detail([stats] + ([why[:400]] if why else []) + (["question: " + spec.decision[:400]] if spec else []))
-        if outcome is Outcome.FAILED:
-            e.warn(f"task failed: {why.splitlines()[0][:200]}")
-
-    def follow_ups(self, outcome: Outcome) -> list[dict[str, str]]:
-        """Landed work leaves its notes: the ask closed, the unverified items and the unchecked look items said, evidence kept, and each
-        follow-up filed as a bead (what bd refuses is kept in the checkpoint, none lost)."""
-        e = self.e
-        if outcome in DONE:
-            old = e.stores.asks.get(e.bead)
-            if old:
-                e.stores.asks.close(e.bead, old.id, "the run landed", time.time())
-            if e.unverified:
-                e.comment("Land (engine): " + e.owner_look.unverified_text())
-            look = [u for u in e.unchecked if u["kind"] == "other" and not e.judge.is_look(u)]
-            if look:
-                beadtools.attempt(e.store.add_label, e.bead, "needs-owner-check")
-                e.comment("Look (engine): landed, but nobody checked: " + "; ".join(u["what"] for u in look))
-        shots = e.pictures.keep_evidence()
-        if shots:
-            e.comment("Evidence (engine): " + ", ".join(str(p) for p in shots))
-        lost = file_follow_ups(e)
-        if outcome is Outcome.LANDED:
-            e.owner_look.file_owner_look()
-        return lost
-
-    def reflect_comment(self, outcome: Outcome, why: str, stats: str) -> None:
-        e = self.e
-        notes = e.checkpoints.notes() or self.noted or Notes(filed=0, unfiled=0)  # the checkpoint's: a restart has no memory of FileNotes
-        verified = ""
-        if e.verified:
-            verified = "; self-verified=" + ", ".join("{} {}".format(sum(x["verdict"] == k for x in e.verified), k) for k in VERDICTS)
-        unfiled = f" unfiled={notes.unfiled};" if notes.unfiled else ""
-        text = outcomes.reflection_text(e.reflection)
-        e.comment(f"Reflect (engine): outcome={outcome};{text} filed={notes.filed};{unfiled} {stats}"
-                  f"{verified}{('; why=' + why) if why else ''}; trace={e.log_path.stem} (tl trace {e.bead})")
-
-    def settle(self, done: oc.RunOutcome, stats: str) -> None:
-        """The bead's status: closed (landed or done), left open (a machine fault, a pause, the owner's hold) or blocked on the owner."""
-        e = self.e
-        summary = e.plan_summary[:300]
-        match done.fault:
-            case None if done.kind is Kind.LANDED:
-                base = e.cfg.base.split("/")[-1]
-                rc = track.close_as(e.claim, f"merged {done.sha[:12]} to {base}: {summary or 'the task stages passed'}; {stats}", e.store)
-            case None:
-                rc = track.close_as(e.claim, "done with nothing to land: " + (summary or stats), e.store)
-            case Infra() | Owner():  # a machine fault, a pause or the owner's hold: the bead stays open, unassigned
-                rc = self.leave_open(done.kind, done.detail)
-            case Task():
-                q = ("\n\nQuestion: " + done.spec.decision) if done.spec else ""
-                rc = track.block_as(e.claim, done.detail + q, e.store, e.comment)
-            case fault:
-                assert_never(fault)
-        if rc:  # a repo's bd rules can refuse (e.g. a minimum reason length): say so, never report a clean close
-            e.warn(f"bd refused to {'close' if done.finished else 'block'} {e.bead} (exit {rc}): close it by hand")
-
-    def leave_open(self, kind: Kind, why: str) -> int:
-        e = self.e
-        fault = kind.name.startswith("FAULT_")
-        if not fault:
-            e.warn(why)
-        if why_not := fence.stale(e.store, e.claim):  # a run whose bead or slot was taken again lets go of nothing
-            e.warn(f"fenced: {e.bead} left as it is: {why_not}")
-            return 1
-        patch = BeadPatch(status="open", assignee="", if_assignee=fence.guard(e.claim))  # (tl-kwo: it lets go; only its own claim)
-        rc = 0 if beadtools.attempt(e.store.update, e.bead, patch) else 1
-        if oc.POLICY[kind].label:
-            beadtools.attempt(e.store.add_label, e.bead, oc.POLICY[kind].label)
-        if e.disp and e.disp.comment:  # a comment, never Notes (tl-7y6.6.2); one per (bead, kind, fingerprint) per hour
-            e.comment("Engine {}: {}".format("failed" if fault else "paused", without_prefix(why)[:400]))
-        return rc
+def closer_over(host: CloserHost) -> Closer:
+    """The Closer over the engine: each step gets the host typed as that step's own Protocol."""
+    return Closer(host, CloseParts(decide=Decide(host), branch=SaveBranch(host), slot=ReleaseSlot(host), record=RecordRun(host),
+                                   notes=FileNotes(host), reflect=Reflect(host), settle=Settle(host)))

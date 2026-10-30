@@ -2,7 +2,6 @@
 import sys
 import unittest
 from pathlib import Path
-from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -11,24 +10,18 @@ from support.checks import res
 from support.engine_case import EngineTest
 from support.fakegit import FakeGit
 from support.narrow import must
+from support.narrow_hosts import Stopped, table_kit
 
 # isort: split
 from taskloop.app.checks import evidence
 from taskloop.app.checks.cache import InputKeys, RunMemo
 from taskloop.app.land import verified
-from taskloop.app.land.lander import Lander
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.checks import UNVERIFIED_EXIT, CacheHit, Check, CheckCacheEntry, CheckResult, CheckRun, RunEntry, verdict_of
 from taskloop.contracts.enums import CheckStatus
 from taskloop.contracts.ids import BeadId, CheckId, TreeSha
 from taskloop.contracts.runkey import BaseSha
 from taskloop.stores.memory import MemDoc
-
-
-class Stop(Exception):
-    def __init__(self, why: str, kind: str) -> None:
-        super().__init__(why)
-        self.why, self.kind = why, kind
 
 
 def unverified(id="render") -> CheckResult:
@@ -87,12 +80,10 @@ class Cache(unittest.TestCase):
 
 class Land(unittest.TestCase):
     def lander(self, run):
-        e = SimpleNamespace(git=FakeGit().git, sh=FakeGit().sh, cfg=SimpleNamespace(base="origin/main"), bead="t-1", dry=False,
-                            last_run=run, pending_land_validation="", blocked_for=lambda why, kind, **kw: Stop(why, kind))
-        return Lander(e)
+        return table_kit(FakeGit(), last_run=run).lander
 
     def test_the_land_refuses_on_an_unverified_check_and_names_it(self):
-        with self.assertRaises(Stop) as cm:
+        with self.assertRaises(Stopped) as cm:
             self.lander(CheckRun(round=1, results=[res("ok", 0), unverified("render-evidence")])).finish(
                 Bead(id=BeadId("t-1"), title="t", status="open"))
         self.assertIn("`render-evidence` is unverified", cm.exception.why)

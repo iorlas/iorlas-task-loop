@@ -1,114 +1,87 @@
-"""What the Lander reads of the engine that is landing: one small Protocol per part it calls, and LanderHost for the engine itself.
-It includes what the gate and the pushes read (GateHost, OutboundHost), as the Lander hands its host to both."""
-from collections.abc import Sequence
-from contextlib import AbstractContextManager
+"""What the Lander reads of the engine that is landing. LandHost holds only what the Lander's own flow reads (the tries, the lock, the
+placing of the gate); every step it composes (the commit, the look for an earlier push, the rebase, the retry checks, the push, the fix
+outside the lock, the after-steps, the gate, the outbound pushes) has its own host Protocol next to it, with just the members it calls.
+LanderHost is only their sum: the Lander hands each step the host typed as that step's Protocol and never a wider one."""
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Protocol
 
-from taskloop.app.land.gate import GateHost
-from taskloop.app.land.outbound import OutboundHost
-from taskloop.contracts import fence
+from taskloop.app.land.commit import CommitHost
+from taskloop.app.land.fix_outside import FixOutsideHost
+from taskloop.app.land.gate import GateHost, GateSteps
+from taskloop.app.land.land_rebase import LandRebaseHost
+from taskloop.app.land.landed import LandedHost
+from taskloop.app.land.outbound import OutboundCheckout, OutboundHost
+from taskloop.app.land.parts import BeginSteps, FetchCheckout, LandLocks, MoveSteps, NetWorker, OutcomeSteps, StageCheckout, Strays
+from taskloop.app.land.push import PushHost
+from taskloop.app.land.recheck import RecheckCheckpoints, RecheckHost
+from taskloop.app.land.sync import SyncCheckpoints, SyncHost
 from taskloop.contracts.checks import CheckRun
-from taskloop.contracts.ports import Beads, Sh
 from taskloop.stores.bundle import Stores
+from taskloop.stores.runlog import RunLog
 
 
-class LandSteps(Protocol):
-    def begin(self, step: str, text: str, **meta: object) -> int: ...
-    def outcome(self, outcome: str, detail: str = ...) -> None: ...
-    def move(self, to: str, cause: str, detail: str = ...) -> None: ...
-
-
-class LandCheckout(Protocol):
-    def fetch(self, check: bool = ...) -> tuple[int, str]: ...
-    def stage_all(self, check: bool = ..., everything: bool = ...) -> int: ...
-
-
-class LandPictures(Protocol):
-    def copy_looks(self) -> object: ...
-
-
-class LandNewFiles(Protocol):
-    def quarantine_strays(self) -> list[str]: ...
-
-
-class LandWaits(Protocol):
-    def locked(self, what: str, path: Path | str, holder: str | None = ...) -> AbstractContextManager[Path | str]: ...
-
-
-class LandNet(Protocol):
-    def net_up(self) -> bool | None: ...
-    def await_net(self, up: bool | None, max_s: float) -> tuple[float, bool]: ...
-
-
-class LandWorker(Protocol):
+class LandConfig(Protocol):
     @property
-    def acts(self) -> LandNet: ...
+    def base(self) -> str: ...
+    @property
+    def gate_checks(self) -> object: ...
+    @property
+    def land_optimistic_tries(self) -> int: ...
 
 
-class LandCases(Protocol):
-    def case_checks(self) -> Sequence[object]: ...
-
-
-class LandStageChecks(Protocol):
-    def stoppable(self, st: dict[str, Any], name: str) -> CheckRun: ...
-
-
-class LandFixer(Protocol):
-    def fix(self, kind: str, tail: str, resume: bool = ...) -> str: ...
-
-
-class LandCheckpoints(Protocol):
-    def applied(self) -> frozenset[str]: ...
-    def mark_applied(self, key: str) -> None: ...
-    def save(self, *, step: str = ..., stage: int = ..., rounds: int = ..., n: int = ..., feedback: str = ...) -> None: ...
-
-
-class LanderHost(GateHost, OutboundHost, Protocol):
-    """The engine, as the land reads it."""
+class LandHost(Protocol):
+    """The Lander's own flow: the guards before the commit, the tries, the optimistic gate outside the lock, and the lock."""
 
     pending_land_validation: str  # set while the land's retry checks still need accepted checks and review
     task_branch: str
-    landed_sha: str  # set the moment the push goes through
-    fixes: int
-    stuck_why: str
 
+    @property
+    def cfg(self) -> LandConfig: ...
+    @property
+    def dry(self) -> bool: ...
+    @property
+    def log(self) -> RunLog: ...
     @property
     def last_run(self) -> CheckRun | None: ...
     @property
-    def store(self) -> Beads: ...
-    @property
-    def claim(self) -> fence.Claim: ...
-    @property
     def stores(self) -> Stores: ...
     @property
-    def plan_data(self) -> dict[str, Any] | None: ...
+    def run_dir(self) -> Path: ...
+    @property
+    def steps(self) -> BeginSteps: ...
+    @property
+    def checkout(self) -> FetchCheckout: ...
+    @property
+    def newfiles(self) -> Strays: ...
+    @property
+    def waits(self) -> LandLocks: ...
+    @property
+    def worker(self) -> NetWorker: ...
+    def git(self, *args: str) -> str: ...
+    def land_lock_path(self) -> Path: ...
+    def blocked_for(self, why: str, kind: str) -> Exception: ...
+
+
+class LandSteps(BeginSteps, OutcomeSteps, MoveSteps, GateSteps, Protocol):
+    pass
+
+
+class LandCheckout(FetchCheckout, StageCheckout, OutboundCheckout, Protocol):
+    pass
+
+
+class LandCheckpoints(SyncCheckpoints, RecheckCheckpoints, Protocol):
+    pass
+
+
+class LanderHost(LandHost, CommitHost, LandedHost, LandRebaseHost, RecheckHost, PushHost, FixOutsideHost, SyncHost, GateHost,
+                 OutboundHost, Protocol):
+    """The engine, as the land reads it: the sum of the parts above (no member of its own)."""
+
+    # the parts that two steps type differently: the sum of what each reads
     @property
     def steps(self) -> LandSteps: ...
     @property
     def checkout(self) -> LandCheckout: ...
     @property
-    def pictures(self) -> LandPictures: ...
-    @property
-    def newfiles(self) -> LandNewFiles: ...
-    @property
-    def waits(self) -> LandWaits: ...
-    @property
-    def worker(self) -> LandWorker: ...
-    @property
-    def cases(self) -> LandCases: ...
-    @property
-    def stage_checks(self) -> LandStageChecks: ...
-    @property
-    def fixer(self) -> LandFixer: ...
-    @property
     def checkpoints(self) -> LandCheckpoints: ...
-    @property
-    def sh(self) -> Sh: ...
-
-    @property
-    def log_path(self) -> Path: ...
-    def record_land(self, sha: str) -> None: ...
-    def warn(self, text: str) -> None: ...
-    def land_lock_path(self) -> Path: ...
-    def stop_deferred(self) -> AbstractContextManager[list[bool]]: ...

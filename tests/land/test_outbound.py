@@ -5,18 +5,18 @@ import stat
 import sys
 from contextlib import contextmanager
 from pathlib import Path
-from types import SimpleNamespace
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support.engine_case import CLEAN, PLAN, WRITE, EngineTest
 from support.logs import records
-from support.narrow_hosts import FakeOutboundHost
+from support.narrow_hosts import BdOut, FakeOutboundHost, FakeSyncHost
 
 # isort: split
 from taskloop.app.land import outbound
 from taskloop.app.land.lander import Lander
+from taskloop.app.land.sync import Sync as AfterLand
 
 ATTR = "*.bin filter=lfs diff=lfs merge=lfs -text\n"
 RUN = ({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
@@ -41,17 +41,17 @@ class Argv(EngineTest):
 
 
 class Sync(EngineTest):
-    """bd's Dolt data after the land, over a small typed host (support/narrow_hosts.py FakeOutboundHost), not an Engine."""
+    """bd's Dolt data after the land, over a small typed host (support/narrow_hosts.py FakeSyncHost, FakeOutboundHost), not an Engine."""
 
     def test_a_dry_run_syncs_nothing(self):
-        e = SimpleNamespace(dry=True, store=SimpleNamespace(dolt_push=mock.Mock()))
-        self.assertEqual(Lander(e).synced("abc"), "abc")
-        e.store.dolt_push.assert_not_called()
+        events: list[str] = []
+        self.assertEqual(AfterLand(FakeSyncHost(events, dry=True), BdOut(events)).run("abc"), "abc")
+        self.assertEqual(events, [])
 
     def test_no_landed_sha_syncs_nothing(self):
-        e = SimpleNamespace(dry=False, store=SimpleNamespace(dolt_push=mock.Mock()))
-        Lander(e).synced("")
-        e.store.dolt_push.assert_not_called()
+        events: list[str] = []
+        AfterLand(FakeSyncHost(events), BdOut(events)).run("")
+        self.assertEqual(events, [])
 
     def test_a_failed_sync_blocks_the_bead_with_the_error_and_a_missing_remote_is_quiet(self):
         host = FakeOutboundHost(result=(1, "dolt: could not read Username for 'https://github.com'"))

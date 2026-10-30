@@ -1,0 +1,55 @@
+"""A push that went through before the network cut its answer: the task branch's tip is the land commit and it is on the base."""
+from typing import Protocol
+
+from taskloop.app.land.parts import FetchCheckout, OutcomeSteps
+from taskloop.contracts.ids import BeadId
+from taskloop.contracts.ports import Sh
+
+
+class LandedConfig(Protocol):
+    @property
+    def base(self) -> str: ...
+
+
+class LandedHost(Protocol):
+    """What the look for an earlier push reads of the engine: the bead, the base, git, the fetch, and the landed sha it sets."""
+
+    landed_sha: str  # set the moment the push goes through
+
+    @property
+    def bead(self) -> BeadId: ...
+    @property
+    def cfg(self) -> LandedConfig: ...
+    @property
+    def dry(self) -> bool: ...
+    @property
+    def sh(self) -> Sh: ...
+    @property
+    def checkout(self) -> FetchCheckout: ...
+    @property
+    def steps(self) -> OutcomeSteps: ...
+    def git(self, *args: str) -> str: ...
+    def warn(self, text: str) -> None: ...
+
+
+class Landed:
+    def __init__(self, host: LandedHost) -> None:
+        self.e = host
+
+    def already(self, fetch: bool = True) -> str:
+        """tl-7y6.2.13: a push that died of the network after origin took it. The task branch's tip is the land commit (titled
+        `... (<bead>)`) and it is on the base: it landed, and nothing is pushed twice. -> its sha, or ''."""
+        e = self.e
+        if e.dry or (fetch and e.checkout.fetch()[0]):
+            return ""
+        tip = e.git("rev-parse", "--verify", "-q", "HEAD")
+        if not tip or not e.git("log", "-1", "--format=%s").endswith(f"({e.bead})"):
+            return ""
+        return tip if e.sh(["git", "merge-base", "--is-ancestor", tip, e.cfg.base], pin=True)[0] == 0 else ""
+
+    def found(self, sha: str) -> str:
+        e = self.e
+        e.landed_sha = sha
+        e.steps.outcome("landed", sha[:12])
+        e.warn(f"the push had already gone through ({sha[:12]} is on {e.cfg.base}): not pushed again")
+        return sha

@@ -8,7 +8,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from taskloop.adapters import check_files, gitrepo
+from taskloop.adapters import check_files, gitrepo, treehash
 from taskloop.adapters.gitenv import git_env
 from taskloop.app.checks.checklog import CheckLog
 from taskloop.app.land.checkout import Checkout
@@ -16,6 +16,7 @@ from taskloop.app.run.shell import Shell
 from taskloop.app.wire import real
 from taskloop.contracts import paths
 from taskloop.contracts.config import EngineConfig
+from taskloop.contracts.ids import TreeSha
 from taskloop.contracts.ports import Spawner
 from taskloop.stores.bundle import Stores
 from taskloop.stores.memory import fake_stores
@@ -29,6 +30,13 @@ class _Waits:
         return ""
 
     def add(self, secs: float, what: str, wid: str | None = None) -> None: ...
+
+
+class _NewFiles:
+    """A person's check run stages nothing: no new file is one a stage meant."""
+
+    def new_file_kind(self, path: str) -> str:
+        return "unexplained"
 
 
 class CliHost:
@@ -45,7 +53,8 @@ class CliHost:
         self.bead_env: Mapping[str, str] = {"TL_SLOT": "check"}
         self.killed = self.wall_hit = False
         self.halt = threading.Event()
-        self.tree_memo: Any = None
+        self.tree_memo: tuple[treehash.State, TreeSha] | None = None
+        self.newfiles = _NewFiles()
         self.steps: Any = None  # the step book is the engine's; a person's run has none
         self.shell, self.checkout, self.waits = Shell(self), Checkout(self), _Waits()
         self.tree_writer = self.checkout
@@ -56,6 +65,9 @@ class CliHost:
 
     def git(self, *args: str) -> str:
         return gitrepo.git(*args, cwd=self.wt)
+
+    def blocked_for(self, why: str, kind: str) -> Exception:
+        return RuntimeError(why)
 
     def warn(self, text: str) -> None:
         print(f"warning: {text}")

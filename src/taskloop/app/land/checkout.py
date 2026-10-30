@@ -1,18 +1,61 @@
 """The slot's checkout as git sees it: the base, a fetch, what is dirty, the tree git would commit now, what the task changed,
 what to stage."""
 import time
-from typing import Any
+from pathlib import Path
+from typing import Protocol
 
 from taskloop.adapters import gitrepo, treehash
 from taskloop.adapters.gitenv import git_env, run_git
 from taskloop.contracts.ids import TreeSha
+from taskloop.contracts.ports import Sh
+from taskloop.stores.runlog import RunLog
+
+
+class GitResult(Protocol):
+    """What run_git answers that the checkout reads."""
+
+    @property
+    def returncode(self) -> int: ...
+    @property
+    def stdout(self) -> bytes: ...
+    @property
+    def stderr(self) -> bytes: ...
+
+
+class CheckoutConfig(Protocol):
+    @property
+    def base(self) -> str: ...
+
+
+class CheckoutNewFiles(Protocol):
+    def new_file_kind(self, path: str) -> str: ...
+
+
+class CheckoutHost(Protocol):
+    """What the checkout reads of the engine: the slot's path, git and its shell, the base, the log, the new-file verdicts and the memo
+    of the last tree hash (which it sets)."""
+
+    tree_memo: tuple[treehash.State, TreeSha] | None  # (git status, file stats) -> tree hash, of the last tree_hash()
+
+    @property
+    def wt(self) -> str | Path: ...
+    @property
+    def sh(self) -> Sh: ...
+    @property
+    def cfg(self) -> CheckoutConfig: ...
+    @property
+    def log(self) -> RunLog: ...
+    @property
+    def newfiles(self) -> CheckoutNewFiles: ...
+    def git(self, *args: str) -> str: ...
+    def blocked_for(self, why: str, kind: str) -> Exception: ...
 
 
 class Checkout:
-    def __init__(self, host: Any) -> None:
+    def __init__(self, host: CheckoutHost) -> None:
         self.e = host
 
-    def slot_status(self) -> tuple[list[str], list[str], Any]:
+    def slot_status(self) -> tuple[list[str], list[str], GitResult]:
         """(tracked paths changed, untracked paths, git's result) from the slot's own `git status`."""
         st = run_git(self.e.wt, "status", "--porcelain", "-z", "--untracked-files=all", capture_output=True)
         parts = st.stdout.decode("utf-8", "surrogateescape").split("\0")
@@ -47,11 +90,11 @@ class Checkout:
     def base_sha(self) -> str:
         """Where the task's work starts: an earlier run's commits on the task branch count as the task's diff."""
         e = self.e
-        return str(e.git("merge-base", e.cfg.base, "HEAD") or e.cfg.base)
+        return e.git("merge-base", e.cfg.base, "HEAD") or e.cfg.base
 
     def branch_now(self) -> str:
         """The branch HEAD is on; "" when detached."""
-        return str(self.e.git("symbolic-ref", "--short", "-q", "HEAD"))
+        return self.e.git("symbolic-ref", "--short", "-q", "HEAD")
 
     def dirty_status(self) -> str:
         """`git status --porcelain` of the slot, leaving out what the BASE's .gitignore files ignore (tl-g6a): Unity's client/log.txt
@@ -70,7 +113,7 @@ class Checkout:
             return set()
         e = self.e
         base = e.cfg.base
-        files = {str(p): str(e.git("show", f"{base}:{p}") or "").splitlines()
+        files = {p: (e.git("show", f"{base}:{p}") or "").splitlines()
                  for p in (e.git("ls-tree", "-r", "--name-only", base) or "").splitlines() if p.split("/")[-1] == ".gitignore"}
         rules = treehash.ignore_rules(base, files)
         return treehash.ignored_by(e.wt, rules, paths) if rules else set()
@@ -103,7 +146,7 @@ class Checkout:
         state = treehash.state_of(e.wt)
         memo = e.tree_memo
         if state and memo and memo[0] == state:
-            return TreeSha(memo[1])
+            return memo[1]
         tree = treehash.tree_of(e.wt)
         if state:
             e.tree_memo = (state, tree)
@@ -113,7 +156,7 @@ class Checkout:
         """The task's diff against where it started, untracked files included."""
         e = self.e
         tree = self.tree_hash()
-        return str(gitrepo.git("diff", self.base_sha(), tree, cwd=e.wt) if tree else e.git("diff", self.base_sha()))
+        return gitrepo.git("diff", self.base_sha(), tree, cwd=e.wt) if tree else e.git("diff", self.base_sha())
 
     def changed_paths(self) -> list[str]:
         """Paths the task changed since it started, untracked files included."""

@@ -59,7 +59,7 @@ from taskloop.adapters import (
 from taskloop.adapters import (
     git as git_adapter,
 )
-from taskloop.app.land.lander import Lander
+from taskloop.app.land.lander import lander_over
 from taskloop.app.release import push as release_push
 from taskloop.app.run import (
     entry,
@@ -531,7 +531,7 @@ class Invariants(test_loop.Base):
                 joined.set()
             return self.real_os_lock(*a, **kw)
         with self.watching(watch):
-            self.together({"X": section(Lander(eng()).lock()), "Y": section(Lander(eng()).lock()),
+            self.together({"X": section(lander_over(eng()).lock()), "Y": section(lander_over(eng()).lock()),
                            "Z": section(landlock.os_lock(landlock.land_lock_path(url), "release: z"))})
         self.assertEqual((most[0], sorted(entered)), (1, ["X", "Y", "Z"]))
         o = self.releases()

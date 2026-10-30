@@ -20,7 +20,7 @@ from support.checkpoints import read_ck
 from support.engine_case import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, engine, lint  # noqa: F401
 from support.fakes import (
     FakeBeadStore,
-    as_bead,
+    must_bead,
 )
 
 from run.test_stages import StagesTest
@@ -310,7 +310,7 @@ class VisualWork(StagesTest):
         ck = read_ck(e).state
         self.assertEqual((ck.look_done, sorted(ck.rendered_names), ck.render_stale), (1, ["a.png"], True))
         again = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
-        again.tree.reset(as_bead(BEAD))
+        again.tree.reset(must_bead(BEAD))
         again.resume.point()
         self.assertEqual((again.look_done, again.rendered_names, again.render_stale), (1, ["a.png"], True))
 
@@ -447,7 +447,7 @@ class ResumeCount(StagesTest):
         te.sh("git", "commit", "-qm", "main moves", cwd=base)
         te.sh("git", "push", "-q", "origin", "HEAD:main", cwd=base)
         e = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
-        e.tree.reset(as_bead(BEAD))
+        e.tree.reset(must_bead(BEAD))
         e.plan_data = dict(PLAN)
         e.checkpoints.save(stage=0, rounds=0, n=1, feedback="", step="write")
         te.sh("git", "checkout", "-q", "--detach", "origin/main", cwd=self.wt)

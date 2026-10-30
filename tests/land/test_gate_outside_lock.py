@@ -2,31 +2,25 @@
 under the outside gate more often than allowed. The pushed tree is always one the gate passed on the same base. Git is a small world
 (a base tip that moves on fetch; a rebase gives the tree of the base it lands on); the gate's cache is a recorder with the engine's rule: a
 green gate is a fact about a tree and its base (the per-check cache itself is tests/checks/test_gate_steps.py)."""
-import contextlib
 import sys
 import unittest
+from collections.abc import Sequence
 from pathlib import Path
-from types import SimpleNamespace
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
+from support.narrow_hosts import Fetches, LandKit, Locks
 
-from taskloop.app.land.lander import Lander
-from taskloop.contracts import fence
-from taskloop.contracts.checks import CacheHit, CheckCacheEntry, CheckResult, CheckRun, RunEntry
+# isort: split
+from taskloop.contracts import log as rec
+from taskloop.contracts.checks import CacheHit, Check, CheckCacheEntry, CheckResult, CheckRun, RunEntry
 from taskloop.contracts.config import CheckSpec, EngineConfig
-from taskloop.contracts.ids import BeadId, CheckId, TreeSha
+from taskloop.contracts.ids import CheckId, TreeSha
 from taskloop.contracts.runkey import BaseSha, Digest, RunKey
 
 REJECTED = (1, " ! [rejected]        HEAD -> main (fetch first)")
 PUSHED = (0, "")
-
-
-class Stop(Exception):
-    def __init__(self, why: str, kind: str) -> None:
-        super().__init__(why)
-        self.why, self.kind = why, kind
 
 
 class Doc:
@@ -45,45 +39,32 @@ class World:
 
     def __init__(self, tips: list[str], pushes: list[tuple[int, str]], reds: int = 0, tries: int = 2) -> None:
         self.tips, self.pushes, self.reds = list(tips), list(pushes), reds
-        self.base, self.sat_on, self.events, self.gated, self.pushed, self.emitted = "b0", "b0", [], [], [], []
-        self.doc, self.held, self.fixes = Doc(), False, []
+        self.base, self.sat_on, self.events, self.gated, self.pushed = "b0", "b0", [], [], []
+        self.doc = Doc()
 
-        @contextlib.contextmanager
-        def locked(*_):
-            self.held = True
-            self.events.append("enter")
-            try:
-                yield
-            finally:
-                self.held = False
-                self.events.append("exit")
+        self.locks = Locks(self.events)
+        self.kit = LandKit(self.git, self.sh, cfg=EngineConfig(
+            base="origin/main", checks=[CheckSpec(id=CheckId("gate"), argv=["gate"], run="gate")], land=["git", "push"],
+            land_optimistic_tries=tries, max_fix_rounds=2, gate_timeout_min=1),
+            fetch=Fetches(on_fetch=self.on_fetch), locks=self.locks, checker=self, events=self.events)
+        self.lander = self.kit.lander
 
-        @contextlib.contextmanager
-        def stop_deferred():
-            yield []
-        self.host = SimpleNamespace(
-            git=self.git, sh=self.sh, halt_point=lambda *a, **k: None,
-            cfg=EngineConfig(base="origin/main", checks=[CheckSpec(id=CheckId("gate"), argv=["gate"], run="gate")], land=["git", "push"],
-                             land_optimistic_tries=tries, max_fix_rounds=2, gate_timeout_min=1),
-            wt=Path("/nonexistent"),
-            store=None, claim=fence.offline(BeadId("t-1")),
-            bead="t-1", dry=False, landed_sha="", pending_land_validation="", fixes=0, gate_log=None, run_dir=Path("run"), killed=False,
-            steps=SimpleNamespace(begin=lambda *a, **k: None, outcome=lambda *a: None, move=lambda *a: None),
-            newfiles=SimpleNamespace(quarantine_strays=lambda: None), checkout=SimpleNamespace(fetch=self.fetch),
-            log=SimpleNamespace(emit=self.emitted.append, note=lambda *_: None), waits=SimpleNamespace(locked=locked),
-            land_lock_path=lambda: "lock", stop_deferred=stop_deferred, record_land=lambda sha: None, warn=lambda m: None,
-            stores=SimpleNamespace(check_cache=SimpleNamespace(of=lambda _bead: self.doc)),
-            checker=SimpleNamespace(gate_green=self.gate_green, run_items=self.run_items),
-            plan_data=None, cases=SimpleNamespace(case_checks=lambda: []), checkpoints=SimpleNamespace(save=lambda **kw: None),
-            stage_checks=SimpleNamespace(stoppable=lambda *a: self.events.append("checks") or SimpleNamespace(failed=[], unverified=[])),
-            blocked_for=lambda why, kind, **kw: Stop(why, kind), fixer=SimpleNamespace(fix=self.fix))
-        self.lander = Lander(self.host)
+    @property
+    def held(self) -> bool:
+        return self.locks.held
 
-    def fetch(self) -> tuple[int, str]:
+    @property
+    def emitted(self) -> list[rec.LandTry]:
+        return [r for r in self.kit.land.emitted() if isinstance(r, rec.LandTry)]
+
+    @property
+    def fixes(self) -> list[str]:
+        return self.kit.fixing.fixer.kinds
+
+    def on_fetch(self) -> None:
         self.events.append("fetch" + ("*" if self.held else ""))
         if self.tips:
             self.base = self.tips.pop(0)
-        return 0, ""
 
     def git(self, *argv: str) -> str:
         if argv == ("rev-parse", "origin/main"):
@@ -117,7 +98,7 @@ class World:
     def gate_green(self) -> bool:
         return f"tree@{self.sat_on}" in self.gate_passed()
 
-    def run_items(self, items: list[Any]) -> CheckRun:
+    def run_items(self, items: Sequence[Check], everything: bool = False, learn: bool = False, show_clean: bool = False) -> CheckRun:
         rc, tail = self.sh(["gate"])
         res = CheckResult(id=CheckId("gate"), cmd="gate", group="tests", exit=rc, status="failed" if rc else "passed", tail=tail)
         if not rc:
@@ -130,13 +111,7 @@ class World:
         rec = self.doc.rec
         return [e.key.tree for e in rec.runs if e.key.base == self.base] if rec else []
 
-    def fix(self, kind: str, text: str) -> str:
-        self.events.append("fix:" + kind)
-        self.fixes.append(kind)
-        return "accept"
-
     def land(self) -> str:
-        self.host.sh = self.sh
         return self.lander.land()
 
 
@@ -147,7 +122,7 @@ class GateOutsideLock(unittest.TestCase):
         self.assertEqual(w.gated, ["b0"])
         self.assertEqual(w.events, ["fetch", "rebase", "gate", "enter", "fetch*", "rebase", "push", "exit"])
         self.assertEqual(w.pushed, [("b0", "b0", True, True)])
-        self.assertEqual([(t.gate, t.failing) for t in w.emitted if hasattr(t, "gate")], [("outside", ""), ("cached", "")])
+        self.assertEqual([(t.gate, t.failing) for t in w.emitted], [("outside", ""), ("cached", "")])
 
     def test_main_moved_lets_the_lock_go_and_gates_outside_again_up_to_the_tries_then_inside(self):
         w = World(["b0", "b1", "b1", "b2", "b2", "b3", "b3"], [PUSHED])
@@ -157,9 +132,9 @@ class GateOutsideLock(unittest.TestCase):
         self.assertEqual(w.events.count("gate*"), 1)
         self.assertEqual(w.events.count("enter"), 3)
         self.assertEqual([p[:2] for p in w.pushed], [("b3", "b3")])
-        wheres = [t.gate for t in w.emitted if hasattr(t, "gate")]
+        wheres = [t.gate for t in w.emitted]
         self.assertEqual(wheres, ["outside", "", "outside", "", "outside", "inside"])
-        self.assertEqual([t.failing for t in w.emitted if hasattr(t, "gate")][1], "stale")
+        self.assertEqual([t.failing for t in w.emitted][1], "stale")
 
     def test_no_tries_gates_inside_the_lock_as_before(self):
         w = World(["b0"], [PUSHED], tries=0)
@@ -186,7 +161,7 @@ class GateOutsideLock(unittest.TestCase):
         w.land()
         self.assertEqual(w.events[:5], ["fetch", "rebase", "gate", "fix:gate", "fetch"])
         self.assertEqual(w.events.index("enter"), w.events.index("fix:gate") + 4)  # a second gate (green) before the lock
-        first = next(t for t in w.emitted if hasattr(t, "gate"))
+        first = next(t for t in w.emitted)
         self.assertEqual((first.gate, first.failing), ("outside", "gate"))
 
     def test_main_moving_under_the_gate_is_not_a_fix_round(self):

@@ -12,7 +12,7 @@ from support import engine_case as T
 from support.checkpoints import read_ck
 
 from taskloop.app.run import ended, engine
-from taskloop.app.run.closer import Closer
+from taskloop.app.run.closer import Closer, closer_over
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.kinds import Kind
@@ -59,7 +59,7 @@ class CloseResume(Base):
                         eng.closer.close(oc.make(Kind.DONE))
                     keys = read_ck(eng).applied
                     self.assertEqual(len(keys), kill_at)
-                    again = Closer(eng)  # a new process: the ledger is the checkpoint
+                    again = closer_over(eng)  # a new process: the ledger is the checkpoint
                     again.close(oc.make(Kind.DONE))
                 self.assertEqual(len(seen), n, "every effect ran, none twice")
                 self.assertEqual(self.closes(), 1)

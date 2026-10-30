@@ -3,7 +3,7 @@ its id, or `Adhoc`, an argv of the plan's own with the registered checks it read
 exports their logs). A check has no other identity: a wrapper of a registered check is unwritable (domain/checks/planref.py refuses it)."""
 import copy
 import shlex
-from typing import Any, assert_never, final
+from typing import Any, NotRequired, TypedDict, assert_never, final
 
 from taskloop.contracts.argv import FORM
 from taskloop.contracts.ids import CheckId
@@ -34,6 +34,43 @@ class Adhoc(Tagged, tag="adhoc"):
 
 
 PlanCheck = Ref | Adhoc
+
+
+class StageData(TypedDict):
+    """One stage of a parsed plan (answers.Stage in its working form: every check a PlanCheck). A fix round and the land's retry checks
+    build one with just the checks and the files."""
+
+    files: list[str]
+    checks: list[PlanCheck]
+    goal: NotRequired[str]
+    hard: NotRequired[bool]
+
+
+class PlanData(TypedDict, total=False):
+    """The plan as the land reads it: its summary and its stages. (The rest of the planner's answer rides in the same dict.)"""
+
+    summary: str
+    stages: list[StageData]
+
+
+def stages_of(plan: PlanData | None) -> list[StageData]:
+    """The plan's stages (none before the first plan is accepted)."""
+    return (plan or {}).get("stages") or []
+
+
+class RoundState(TypedDict, total=False):
+    """A stage loop's starting counters: a resumed stage's, or a fix round's."""
+
+    fix: bool
+    conflict_fix: list[str] | None
+    name: str
+    fix_n: int
+    fix_of: int
+    failed: list[str] | None
+    feedback: str
+    scope: str
+    rounds: int
+    n: int
 CHECK_DOC = ("a check is {kind: ref, check: <id of a repo check>} (the repo's own check, named) or {kind: adhoc, argv, reads} (your own "
              "command; reads lists the ids of the repo checks whose saved log it reads). " + FORM)
 
