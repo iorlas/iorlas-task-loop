@@ -85,7 +85,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.json(self.writes)
         if u.path in ("/api/artifact", "/api/look-shot"):
             return self.send(200, placeholder(q.get("name", "shot")).encode(), TYPES[".svg"])
-        route = {"/api/snapshot": self.snap, "/api/bead": self.bead, "/api/live": self.live}.get(u.path)
+        route = {"/api/snapshot": self.snap, "/api/bead": self.bead, "/api/live": self.live,
+                 "/api/cost": lambda q: self.fixture(FIX / "cost.json")}.get(u.path)
         if route is None:  # the assets sit at the root, as the dash serves them: pages load them by relative url
             return self.asset(u.path.removeprefix("/"))
         route(q)

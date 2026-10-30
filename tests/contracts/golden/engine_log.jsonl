@@ -3,7 +3,7 @@
 {"v": 2, "kind": "step_end", "t": 1793050200.5, "id": "n4", "step": "write", "outcome": "done", "detail": "", "secs": 231.0}
 {"v": 2, "kind": "artifacts", "t": 1793050200.5, "id": "n4", "step": "write", "bead": "tl-1", "names": ["menu.png", "report.pdf"]}
 {"v": 2, "kind": "call_start", "t": 1793050200.5, "id": "c3", "n": 3, "step": "write", "node": "n4", "role": "worker", "resume": true}
-{"v": 2, "kind": "call_end", "t": 1793050200.5, "id": "c3", "status": "done", "reason": null, "ref": "ses", "lane": "L", "model": "m", "effort": "high", "secs": 229.0, "tokens": {"in": 412000, "cached": 380000, "out": 5100}, "cost": 0.0, "family": "openai", "flag": "same_family", "transcript": "/t.jsonl", "exit": -15}
+{"v": 2, "kind": "call_end", "t": 1793050200.5, "id": "c3", "status": "done", "reason": null, "ref": "ses", "lane": "L", "model": "m", "effort": "high", "secs": 229.0, "tokens": {"in": 412000, "cached": 380000, "out": 5100}, "cost": 0.0, "cost_source": "free", "family": "openai", "flag": "same_family", "transcript": "/t.jsonl", "exit": -15}
 {"v": 2, "kind": "overrun", "t": 1793050200.5, "stage": "review", "budget_s": 600.0, "elapsed_s": 601.5, "lane": "CLAUDE"}
 {"v": 2, "kind": "retry_decision", "t": 1793050200.5, "step": "write", "plan": "worker_failed", "action": "reroute", "attempt": 1, "reason": "timeout", "timeout_s": 2820.0, "exit": -15, "lane": "OPENAI", "evidence": "timeout after 47 min, exit -15"}
 {"v": 2, "kind": "cmd_start", "t": 1793050200.5, "id": "k1", "text": "git status", "cwd": "/w"}

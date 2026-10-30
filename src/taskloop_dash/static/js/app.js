@@ -14,6 +14,7 @@ import { Phone } from './views/phone.js';
 import { Floor } from './views/floor.js';
 import { Goals } from './views/goals.js';
 import { Lanes } from './views/lanes.js';
+import { Cost } from './views/cost.js';
 import { Banners, closeBead, filterGroups, laneValue, openBead, STALE_S, TABS } from './views/shell.js';
 
 const PHONE = matchMedia('(max-width:600px)');
@@ -57,6 +58,8 @@ function Desktop({ snap, now }) {
     body = html`<${Decisions} snap=${snap} now=${now} />`;
   } else if (ui.tab === 'floor') {
     body = html`<${Floor} snap=${snap} now=${now} filters=${html`<${Filters} snap=${snap} />`} />`;
+  } else if (ui.tab === 'cost') {
+    body = html`<${Cost} snap=${snap} />`;
   } else {
     body = html`<${Lanes} snap=${snap} now=${now} />`;
   }

@@ -4,7 +4,7 @@
 // (sheet, bead page, goal level) is one history entry (§9).
 
 const KEY = 'tl-dash-ui', SCROLL_KEY = 'tl-dash-ui-scroll';
-const TABS = ['board', 'floor', 'decisions', 'lanes'];
+const TABS = ['board', 'floor', 'decisions', 'lanes', 'cost'];
 
 function load(store, key) {
   try { return JSON.parse(store.getItem(key) || '{}'); } catch { return {}; }

@@ -32,16 +32,17 @@ class RunScript:
         self.t += secs
         return self
 
-    def step(self, step, secs, tokens=0, lane="", text="", outcome="done", end=True):
+    def step(self, step, secs, tokens=0, lane="", text="", outcome="done", end=True, role="writer", cost=0.0, source=""):
         """One step of `secs` seconds with a worker call of `tokens` fresh tokens (all output); an open step when end=False."""
         self.n += 1
         sid = f"n{self.n}"
         self.add("step_start", id=sid, step=step, text=text)
         if tokens:
-            self.add("call_start", id=f"c{self.n}", n=1, step=step, node=step, role="writer")
+            self.add("call_start", id=f"c{self.n}", n=1, step=step, node=step, role=role)
         self.t += secs
         if tokens:
-            self.add("call_end", id=f"c{self.n}", status="ok", lane=lane, secs=secs, tokens={"in": 0, "cached": 0, "out": tokens})
+            self.add("call_end", id=f"c{self.n}", status="ok", lane=lane, secs=secs, tokens={"in": 0, "cached": 0, "out": tokens},
+                     cost=cost, cost_source=source)
         if end:
             self.add("step_end", id=sid, step=step, outcome=outcome, secs=secs)
         return self

@@ -1,4 +1,4 @@
-"""The HTTP face: the page and its modules from the static dir, the reads under /api/ (snapshot, bead, live, artifact, look-shot,
+"""The HTTP face: the page and its modules from the static dir, the reads under /api/ (snapshot, bead, cost, live, artifact, look-shot,
 version), and POST /api/<verb>, the only writes. A broken transcript or log answers 500 with the error, never takes the page down."""
 
 import json
@@ -28,7 +28,7 @@ def put_headers(h: BaseHTTPRequestHandler, headers: Headers) -> None:
 def route(dash: Dash, static: Path, path: str, q: Query, held: str | None = None) -> tuple[int, bytes, str, Headers] | None:
     """(status, body, content type, extra headers) of a GET other than /api/version; None for an unknown path. `held`: the request's
     If-None-Match."""
-    if path in ("/api/snapshot", "/api/bead"):
+    if path in ("/api/snapshot", "/api/bead", "/api/cost"):
         code, body, extra = dash.reads.get(path, q, held)
         return code, body, "application/json", list(extra.items())
     if path == "/api/live":

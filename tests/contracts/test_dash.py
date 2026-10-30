@@ -13,11 +13,12 @@ import support.paths  # noqa: F401
 from support import dash_fixtures as fx
 
 from taskloop.contracts import dash as D
+from taskloop.contracts import dashcost as DC
 from taskloop.contracts import schema, wire
 from taskloop.contracts.wire import Rec
 from taskloop_dash.api.writes import Writes
 
-CLASS = {"snapshot.json": D.Snapshot, "bead/": D.BeadDetail, "live/": D.LivePage, "result.json": D.Result}
+CLASS = {"snapshot.json": D.Snapshot, "bead/": D.BeadDetail, "live/": D.LivePage, "result.json": D.Result, "cost.json": DC.CostPage}
 
 
 def cls_of(rel: str) -> type:
@@ -72,7 +73,7 @@ class DashFixtures(unittest.TestCase):
         self.assertEqual({c.__name__ for c in mine - seen}, set())
 
     def test_every_record_has_a_schema(self) -> None:
-        for c in (D.Snapshot, D.BeadDetail, D.LivePage, D.Result, *D.WRITES.values()):
+        for c in (D.Snapshot, D.BeadDetail, D.LivePage, D.Result, DC.CostPage, *D.WRITES.values()):
             self.assertIn("properties", schema.of(c), c.__name__)
 
     def test_bead_ids_resolve(self) -> None:

@@ -88,3 +88,9 @@ svg.jmp path{fill:none;stroke:var(--mut);stroke-width:1.5;stroke-dasharray:4 4}s
 .ring small{max-width:84px;overflow:hidden;text-overflow:ellipsis}
 /* real epic titles are long: a chip is one line, cut with its full title on hover */
 .bbar .grp{flex-wrap:wrap}.bbar .fc{max-width:220px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;vertical-align:middle}
+.cost{padding:14px;max-width:900px}.cw{display:flex;gap:6px;margin-bottom:10px}.cw button{border:1px solid var(--line);background:var(--card);color:var(--tx);border-radius:14px;padding:5px 12px;font-size:13px}.cw button.on{background:var(--tx);color:var(--bg)}
+.csum{font-size:12px;color:var(--mut);margin:0 0 8px}.cg{margin:16px 0}.cg h3{font-size:14px;margin:0 0 6px}.cs{display:grid;grid-template-columns:52px 1fr;gap:8px;align-items:center;font-size:12px;color:var(--mut);margin:4px 0}
+.cbar{display:flex;height:14px;border-radius:4px;overflow:hidden;background:var(--cell)}.cbar i{display:block;height:100%;min-width:2px}
+.c0{background:var(--run)}.c1{background:var(--amb)}.c2{background:var(--you)}.c3{background:var(--ok)}.c4{background:var(--red)}.c5{background:var(--v4)}
+.ct{width:100%;border-collapse:collapse;font-size:13px;margin-top:6px}.ct th{font-weight:400;color:var(--mut);font-size:12px;text-align:left;padding:4px 6px}.ct td{border-top:1px solid var(--line);padding:6px;word-break:break-word}
+.ct td:not(:first-child),.ct th:not(:first-child){text-align:right;white-space:nowrap}.ct .sw{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px}.ct .dr{cursor:pointer}.ct .sub td{color:var(--mut);padding-left:22px}.ct .unk{color:var(--amb)}

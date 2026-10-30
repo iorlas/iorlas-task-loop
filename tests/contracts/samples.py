@@ -151,6 +151,7 @@ LOG = {
         secs=229.0,
         tokens=TOK,
         cost=0.0,
+        cost_source="free",
         family="openai",
         flag="same_family",
         transcript="/t.jsonl",

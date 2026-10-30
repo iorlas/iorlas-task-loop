@@ -70,6 +70,7 @@ class CallEnd(LogRec, tag="call_end"):
     secs: float = 0.0
     tokens: Tokens = msgspec.field(default_factory=Tokens)
     cost: float = 0.0
+    cost_source: str = ""  # delegate's usage.cost_source (harness, free, unknown); "" in a log written before it: cost 0 then is not known
     family: str = ""
     flag: str | None = None
     transcript: str = ""

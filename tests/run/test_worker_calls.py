@@ -112,6 +112,15 @@ class Calls(te.EngineTest):
         ends = [r for r in records(self.eng, "call_end") if r.get("exit") is not None]
         self.assertEqual([r["exit"] for r in ends], [0])  # the write's; the planner and the reviewer ran no worker
 
+    def test_call_end_names_where_its_cost_came_from(self):
+        script = fake_route.Script({"plan": [te.PLAN], "write": [te.full(te.WRITE, "w1", exit_code=0)], "review": [te.CLEAN]})
+        self.go(script)
+        ends = records(self.eng, "call_end")
+        self.assertTrue(ends)
+        answered = [r for r in ends if r["status"] != "stopped"]  # an interrupted call has no answer, so no source
+        self.assertTrue(answered)
+        self.assertEqual({r["cost_source"] for r in answered} - {"harness", "free", "unknown"}, set())
+
 
 for _name in dir(te.EngineTest):  # the engine fixture only
     if _name.startswith("test_") and _name not in Calls.__dict__:

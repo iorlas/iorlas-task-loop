@@ -6,7 +6,7 @@ import { age, pct, unit } from '../format.js';
 import { set, ui } from '../state.js';
 
 export const STALE_S = 30, STALE_BANNER_S = 300;
-export const TABS = [['board', '🗂️', 'Board'], ['floor', '🏭', 'Floor'], ['decisions', '🙋', 'Decisions'], ['lanes', '🎛', 'Lanes']];
+export const TABS = [['board', '🗂️', 'Board'], ['floor', '🏭', 'Floor'], ['decisions', '🙋', 'Decisions'], ['lanes', '🎛', 'Lanes'], ['cost', '💲', 'Cost']];
 
 // §10: unreachable (red line, retry with backoff, last data greyed), stale > 5 min, loop not running
 export function Banners({ snap, now }) {

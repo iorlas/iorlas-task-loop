@@ -34,6 +34,12 @@ class StaticAssets(unittest.TestCase):
         main = (STATIC / "js" / "views" / "phone.js").read_text(encoding="utf-8").split('<main id="phM">')[1].split("</main>")[0]
         self.assertLess(main.index("<${Needs}"), main.index("${body}"))
 
+    def test_the_phone_has_the_cost_tab(self):
+        """The same Cost view as the desktop, behind the bottom tab bar (the bar lists shell.js TABS)."""
+        phone = (STATIC / "js" / "views" / "phone.js").read_text(encoding="utf-8")
+        self.assertIn("ui.tab === 'cost'", phone)
+        self.assertIn("['cost',", (STATIC / "js" / "views" / "shell.js").read_text(encoding="utf-8"))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -21,6 +21,7 @@ from support.repos import write_repos
 from taskloop.contracts import wire
 from taskloop.contracts.ask import Ask, AskOption
 from taskloop.contracts.dash import BeadDetail, Snapshot
+from taskloop.contracts.dashcost import CostPage
 from taskloop.contracts.enums import AskClass, AskKind, AskStatus
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.stores import AskStore
@@ -132,6 +133,13 @@ class Api(unittest.TestCase):
             self.get("/api/snapshot")
             self.now += 1.5
         self.assertEqual(self.finds, 1)
+
+    def test_the_cost_page_decodes_and_refuses_a_bad_window(self):
+        code, body, _ = self.get("/api/cost", {"window": "7d", "project": "lifesim"})
+        page = wire.load(CostPage, json.loads(body))
+        self.assertEqual((code, page.window, page.runs, [r.key for r in page.stages]), (200, "7d", 2, ["plan", "write"]))
+        self.assertEqual(self.get("/api/cost", {"window": "3y"})[0], 400)
+        self.assertEqual(self.get("/api/cost", {"last": "x"})[0], 400)
 
     def test_the_bead_drawer(self):
         code, body, _ = self.get("/api/bead", {"project": "lifesim", "id": "b-1"})

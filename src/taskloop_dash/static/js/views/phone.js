@@ -14,6 +14,7 @@ import { Decisions } from './decisions.js';
 import { Needs } from './needs.js';
 import { PhoneGoals } from './goals.js';
 import { PhoneLanes } from './lanes.js';
+import { Cost } from './cost.js';
 import { PhoneFloor } from './floor.js';
 import { BeadPage } from './drawer.js';
 import { Banners, epicProject, filterGroups, openBead, TABS } from './shell.js';
@@ -115,6 +116,7 @@ export function Phone({ snap, now }) {
   if (ui.tab === 'board') body = html`<${BoardTab} snap=${snap} now=${now} />`;
   else if (ui.tab === 'decisions') body = html`<${Decisions} snap=${snap} now=${now} phone />`;
   else if (ui.tab === 'floor') body = html`<${PhoneFloor} snap=${snap} now=${now} />`;
+  else if (ui.tab === 'cost') body = html`<${Cost} snap=${snap} />`;
   else body = html`<${PhoneLanes} snap=${snap} now=${now} />`;
   return html`<div id="ph">
     <header class="ph-h"><h1>${TABS.find((t) => t[0] === ui.tab)[2]}</h1><${LanePill} snap=${snap} /></header>

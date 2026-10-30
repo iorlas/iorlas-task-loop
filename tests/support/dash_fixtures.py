@@ -13,6 +13,7 @@ from typing import Any, Literal
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from taskloop.contracts import dash as D
+from taskloop.contracts import dashcost as DC
 from taskloop.contracts import wire
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.needs import NeedRow
@@ -466,8 +467,25 @@ def build() -> dict[str, Any]:
         "stop": D.StopReq(project="lifesim", bead=BeadId(L("6dq0"))),
         "note": D.NoteReq(project="lifesim", bead=BeadId(L("6dq0")), text="keep the old save format readable"),
     }
+    out["cost.json"] = cost_page()
     out["result.json"] = D.Result(ok=True, message="Sent. lifesim-fld.27 resumes in its slot.")
     return out
+
+
+def cost_page() -> DC.CostPage:
+    """Seven days of a few beads: one cost unknown (its calls are counted apart, never summed as 0)."""
+    def row(key: str, secs: int, tokens: int, cost: float, calls: int, unknown: int = 0, bead: str = "") -> DC.CostRow:
+        return DC.CostRow(key=key, secs=secs, tokens=tokens, cost=cost, calls=calls, unknown=unknown, bead=bead)
+    return DC.CostPage(
+        t=NOW, window="7d", runs=4,
+        stages=[row("write", 5400, 700_000, 6.1, 6, 1), row("plan", 1500, 190_000, 0.9, 3), row("test", 900, 0, 0.0, 0),
+                row("review", 600, 70_000, 0.0, 2, 2), row("land", 80, 0, 0.0, 0)],
+        roles=[row("writer", 5400, 700_000, 6.1, 6, 1), row("planner", 1500, 190_000, 0.9, 3), row("reviewer", 600, 70_000, 0.0, 2, 2)],
+        lanes=[row("OC Go", 6200, 800_000, 7.0, 8, 0), row("CLAUDE", 1300, 160_000, 0.0, 3, 3), row("host", 40, 0, 0.0, 0)],
+        beads=[row("lifesim-d5f.58", 6300, 760_000, 5.5, 8, 2), row("lifesim-d5f.56", 2180, 200_000, 1.5, 3, 1)],
+        drill=[row("write", 4000, 500_000, 4.5, 4, 1, "lifesim-d5f.58"), row("plan", 900, 120_000, 0.5, 2, 0, "lifesim-d5f.58"),
+               row("review", 600, 70_000, 0.0, 2, 2, "lifesim-d5f.58")],
+        waits=[row("lane", 1800, 0, 0.0, 0), row("resource", 120, 0, 0.0, 0)])
 
 
 def encode(obj: Any) -> str:

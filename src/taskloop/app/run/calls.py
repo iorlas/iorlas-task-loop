@@ -106,6 +106,7 @@ class Calls:
                 effort=row["effort"],
                 secs=float(row["secs"]),
                 cost=float(row["cost"]),
+                cost_source=res.usage.cost_source if res.usage else "unknown",
                 tokens=Tokens(in_=int(tk.get("in") or 0), cached=int(tk.get("cached") or 0), out=int(tk.get("out") or 0)),
                 family=row["family"] or "",
                 flag=row["flag"],
