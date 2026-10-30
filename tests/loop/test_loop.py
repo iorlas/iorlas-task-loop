@@ -55,7 +55,7 @@ LIVE_PID = "a live pid that is not this process: a real sleep child (an engine l
 
 
 class FakeBd:
-    """bd as the loop calls it: ready, show, claim, unclaim, heartbeat, reclaim and the slot beads."""
+    """bd as the loop calls it: ready, show, claim, unclaim, heartbeat and the slot beads."""
 
     def __init__(self, beads=(), slots=0, parents=None):
         self.beads: dict[str, dict[str, Any]] = {b["id"]: dict(b) for b in beads}

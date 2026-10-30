@@ -167,12 +167,10 @@ class GoldenBd(unittest.TestCase):
         self.assertEqual(bd.error_of(gold("provenance_refused.err"), gold("provenance_refused.out")).kind, "other")
         self.assertIn("unknown kind", bd.error_of("", gold("provenance_refused.out")).text)
 
-    def test_reclaim_and_provenance_argv(self) -> None:
-        store = self.beads(reclaim=BdRun(0, gold("reclaim.json"), ""), provenance=BdRun(0, "{}", ""))
-        store.reclaim("15m", ["a", "b"])
+    def test_provenance_argv(self) -> None:
+        store = self.beads(provenance=BdRun(0, "{}", ""))
         store.provenance(BeadId("b-1"), "k", "tl", at="2026-01-01T00:00:00Z")
-        self.assertEqual(store.calls[0][3:], ["reclaim", "--older-than", "15m", "--assignee", "a", "--assignee", "b", "--json"])  # type: ignore[attr-defined]
-        self.assertEqual(store.calls[1][3:7], ["provenance", "record", "--issue", "b-1"])  # type: ignore[attr-defined]
+        self.assertEqual(store.calls[0][3:7], ["provenance", "record", "--issue", "b-1"])  # type: ignore[attr-defined]
 
     REJECTED = ("error: failed to push some refs to 'git+https://x/y.git'\nhint: Updates were rejected because the tip of your "
                 "current branch is behind")

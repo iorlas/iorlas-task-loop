@@ -65,6 +65,7 @@ class LoopEnv:
     landed_on_base: Callable[[str, BeadId], bool]
     reload_note: Callable[[BeadId], ReloadNote | None]  # taken once: read and dropped
     chores: Callable[[], None]  # stale asks, the daily reflection
+    release_dead: Callable[[], list[str]]  # the claims and slots of dead runs given back (the reconcile lease rules); a line each
     ask_lines: Callable[[], list[str]]  # `tl status`: the beads parked on a dropped ask
     storm: Callable[[], Storm | None]
     has_delegate: Callable[[], bool]

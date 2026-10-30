@@ -285,7 +285,7 @@ bead's provenance.
 
 ## 1. Pick (before every task)
 
-1. `tl bd reclaim --older-than 15m` (returns dead sessions' beads, slots included, to ready).
+1. `tl prune` (its reconcile sweep returns the beads and slots of dead sessions, whose lease ended, to ready; the loop and `run-task` run the same lease rules).
 2. Candidates: the profile's pick filter over `bd ready --json`, never a bead labelled `slot`, never `in_progress`,
    never an epic. `tl lint BEAD|--ready [--fix]` runs the bead rules (goal, acceptance criteria, Touches <= 8, no epic with
    children, no decision or output-less spike, nothing cited outside the repo); the loop refuses a failing bead once with the
@@ -294,7 +294,7 @@ bead's provenance.
    them, by priority. Overlap lowers the order, never skips a bead: the engine's rebase before landing resolves shared files.
 4. Take the first one to the engine (step 2): it claims the bead as this session (`TAKEN`, exit 1 → the next
    candidate), continues `metadata.branch` when the bead was worked before, and keeps the claim alive while it runs.
-   Nothing left after a fresh reclaim → step 5.
+   Nothing left after a fresh sweep → step 5.
 5. Slots on: before the engine, `tl slot reset <name> --bead <id>` (commits leftover work, never wipes it; reruns the
    setup only when its inputs changed). `DIRTY` → block the slot's last bead with the output, release the slot, take
    another. A bead with `metadata.slot` set continues in that slot.
@@ -353,7 +353,7 @@ container); the session that starts it only watches it.
 
 - **Start:** `tl loop [--repo DIR] [--max-beads N] [--until HH:MM] [--wait-slot-min M] [--wait-drained] [--pin]`. Several loops
   may run on one repo, each with its own actor (never its session's: bd lets an actor re-claim its own bead) and its
-  own state; the race test (tl-bxk.11.1) runs two with a hand run, a hold and releases at once. Each pass: `bd reclaim` of tl- actors' lapsed claims only (never a person's), take any free slot (none free: wait in the repo's slot line, first come first served, a line every M minutes;
+  own state; the race test (tl-bxk.11.1) runs two with a hand run, a hold and releases at once. Each pass: the reconcile lease rules give back tl- actors' lapsed claims and slots only (never a person's), take any free slot (none free: wait in the repo's slot line, first come first served, a line every M minutes;
   slots off: the loop's one worktree; never a held slot or one whose worktree has a live engine, see Slots), pick by the queue rule, check the bead's area and claim it under the area lock (area busy or taken → the next bead), `tl slot reset`, then
   `tl run-task` as a child with its own log, release the slot, record the outcome, next pass. `--until`: no bead
   starts after that time. No ready bead: `DRAINED`, exit 0 (`--wait-drained`: look again every 5 minutes). Every
@@ -403,7 +403,7 @@ container); the session that starts it only watches it.
   exits 0 (reason `low_disk`). A run keeps at most `engine.evidence_cap_mb` (200) of new evidence; a picture identical to one kept before is a link.
 - **Leases:** the loop heartbeats the slot bead and the task bead from the slot take to the release (a slow slot
   setup included); run-task heartbeats both too (`TASK_LOOP_SLOT_BEAD`), so a loop killed with SIGKILL leaves its
-  slot held until the running bead ends, then the lease lapses and `bd reclaim` frees it.
+  slot held until the running bead ends, then the lease lapses and the next sweep (the loop's step, `run-task`, `tl prune`) frees it.
 - **Stopped means stopped:** a SIGTERM to the engine (`tl stop --now`, Ctrl-C to the loop) sends SIGTERM to the running
   delegate call (route.py stops its worker, which runs in a process group of its own; 0.31.1+ names it on stderr,
   `delegate: worker pid=N pgid=N`, kept in the engine lock), waits 10 s, then SIGKILLs a route.py still alive and the
@@ -499,11 +499,10 @@ base and its local/remote twin). Exit 1 when any is lost.
 
 A slot is a persistent worktree, set up once and reused task after task, so a heavy setup (an engine import, a large
 restore) is paid once per slot, not once per task. Each slot is a bead labelled `slot` and titled
-`slot <host> <name>`: holding a slot is claiming its bead, so the lease, heartbeat and reclaim come from bd. Leases are
+`slot <host> <name>`: holding a slot is claiming its bead, so the lease and heartbeat come from bd and the sweep gives a lapsed one back. Leases are
 local to one machine, hence the host in the title.
 
-- A held slot belongs to one session; a dead session's slot returns through `reclaim` once its lease lapses
-  (about 20 minutes with `--older-than 15m`).
+- A held slot belongs to one session; a dead session's slot returns through the sweep once its lease lapses.
 - `tl slot reset` never discards work: leftover changes are committed on the branch they were on (or on
   `wip/<slot>/<time>` if detached) before the next task's branch is checked out.
 - Setup runs again only when a file in `setup_inputs` changed; when it is heavy and several slots could rerun it at

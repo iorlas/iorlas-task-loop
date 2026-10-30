@@ -524,17 +524,13 @@ class EngineTest(unittest.TestCase):
     def assertNoCheckpoint(self):
         self.assertIsNone(flat_ck(stored_ck()))
 
-    def reclaim(self, bead, comments=(), ask=None, live=()):
+    def admit(self, bead, comments=(), ask=None):
         if ask:
             p = ident.config_dir() / "asks" / "t-1.json"
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_text(json.dumps(ask))
-        leases = [
-            dict(BEAD, id=f"live-{n}", status="in_progress", assignee=who, lease_expires_at="2999-01-01T00:00:00Z")
-            for n, who in enumerate(live)
-        ]
-        with self.store.stub(show=dict(BEAD, **bead), comments=list(comments), find_fn=lambda q: leases):
-            ok, why = entry.reclaim("t-1", str(self.wt), store=self.store)
+        with self.store.stub(show=dict(BEAD, **bead), comments=list(comments)):
+            ok, why = entry.admit("t-1", str(self.wt), store=self.store)
         updates = [c for c in self.bd_calls if c[:1] == ("update",)]
         return ok, why, updates
 

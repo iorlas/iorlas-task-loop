@@ -160,9 +160,6 @@ class FakeBeadStore:
     def remove_label(self, bead: BeadId, label):
         self.run(["label", "remove", bead, label])
 
-    def reclaim(self, older_than, assignees):
-        self.run(["reclaim", "--older-than", older_than] + [x for w in assignees for x in ("--assignee", w)])
-
     def provenance(self, bead: BeadId, kind, source, ref="", ref_kind="", at="", payload=""):
         self.run(["provenance", "record", "--issue", bead, "--kind", kind, "--source", source])
 

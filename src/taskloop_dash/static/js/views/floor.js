@@ -132,7 +132,7 @@ function SlotCard({ snap, slot, now }) {
   } else if (b) {
     body = html`<div class="t">Free · ${bid(b.id, b.project, ui.project === 'all')} parked here</div><div class="s">${slot.idle_why || 'waits on your answer'}</div>`;
   } else {
-    body = html`<div class="t">Idle · no ${slot.lane} work ready</div>${slot.idle_why && html`<div class="s">${slot.idle_why}</div>`}`;
+    body = html`<div class="t">${slot.lane ? `Idle · no ${slot.lane} work ready` : 'Stray claim'}</div>${slot.idle_why && html`<div class="s">${slot.idle_why}</div>`}`;
   }
   const m = machineOf(slot);
   return html`<article class=${`slc ${busy ? '' : 'idle'}`} role=${b ? 'button' : undefined} onClick=${b ? () => openBead(b) : undefined}>

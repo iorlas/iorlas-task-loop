@@ -23,7 +23,8 @@ class Lease:
 @dataclass(frozen=True)
 class SlotFact:
     """A slot bead: `bead` its id, `name` the slot, `claimed` it is in progress, `holder` its assignee, `gen` its `held_gen`,
-    `expires` bd's lease end (0 none), `hold_until` a person's hold (0 none), `live`: a run is on the slot now."""
+    `expires` bd's lease end (0 none), `hold_until` a person's hold (0 none), `live`: a run is on the slot now, `held`: the bead
+    its holder marked it for (`held_bead`), "" when none."""
     bead: BeadId
     name: str
     claimed: bool
@@ -32,6 +33,7 @@ class SlotFact:
     expires: float = 0.0
     hold_until: float = 0.0
     live: bool = False
+    held: str = ""
 
 
 @dataclass(frozen=True)
@@ -46,7 +48,8 @@ class LoopFact:
 @dataclass(frozen=True)
 class Stray:
     """A claim nothing runs under. `kind`: "bead" or "slot"; `ref`: the bead id (the slot bead's id for a slot); `gen`: the
-    generation seen, which an action must still find; `expired`: bd's lease on it has ended, so it may be given back."""
+    generation seen, which an action must still find; `expired`: it may be given back (bd's lease on it ended, a bead's claim has
+    no lease, or its holder went on to another bead)."""
     kind: str
     ref: BeadId
     name: str
@@ -73,8 +76,14 @@ def ended(expires: float, now: float) -> bool:
 
 def strays(leases: tuple[Lease, ...], slots: tuple[SlotFact, ...], now: float) -> list[Stray]:
     """Every claimed bead of an engine actor and every claimed slot (not held by a person) with no live run. A lease still running
-    is shown, not swept: only `expired` ones are for an action."""
-    found = [Stray("bead", x.bead, x.bead, x.holder, x.gen, ended(x.expires, now))
+    is shown, not swept: only `expired` ones are for an action. A bead's claim is also given back when it has no lease at all, or
+    when its holder keeps a slot inside its lease that is marked for another bead (the holder went on and left this claim)."""
+    marked: dict[str, set[str]] = {}
+    for s in slots:
+        if s.claimed and s.held and not ended(s.expires, now):
+            marked.setdefault(s.holder, set()).add(s.held)
+    found = [Stray("bead", x.bead, x.bead, x.holder, x.gen,
+                   not x.expires or ended(x.expires, now) or bool(marked.get(x.holder, set()) - {x.bead}))
              for x in leases if x.holder.startswith(ACTOR_PREFIX) and not x.live]
     found += [Stray("slot", s.bead, s.name, s.holder, s.gen, ended(s.expires, now))
               for s in slots if s.claimed and s.hold_until <= now and not s.live]

@@ -24,6 +24,7 @@ from taskloop.app.loop.files import LoopFiles
 from taskloop.app.loop.loop import parse_handover
 from taskloop.app.loop.versions import Installs
 from taskloop.app.prune import verb as prune_verb
+from taskloop.app.reconcile import leases
 from taskloop.app.release import catalog, pins, reexec, seams, shell
 from taskloop.app.report import reflect
 from taskloop.app.run import console, entry
@@ -147,6 +148,10 @@ def fetch(repo: str, git: Git = REAL) -> None:
         git.fetch(repo)
 
 
+def release_dead(repo: str, store: Beads, now: float) -> list[str]:
+    return leases.release_dead(repo, store, running(repo, store), ident.hostname(), now)
+
+
 def chores(repo: str, spawner: Spawner) -> None:
     wlanes.chore(console.say, spawner)  # delegate's lane status filed again when the snapshot is 20 min old (the dash reads the file)
     wasks.sweep_asks(console.say, wslots.load_cfg(repo))  # asks of closed beads closed, unanswered ones parked, answers no run used flagged
@@ -157,9 +162,7 @@ def chores(repo: str, spawner: Spawner) -> None:
 
 
 def claim(repo: str, store: Beads, bead: BeadId, wt: str, slot: str, now: Callable[[], float] = trail.now) -> tuple[bool, str]:
-    ok, why = entry.reclaim(
-        bead, repo, store, now()
-    )  # a paused run leaves its bead open and still assigned: released here when that run is gone
+    ok, why = entry.admit(bead, repo, store, now())  # a paused run's claim was released by the step's sweep; a live claim stops here
     if not ok:
         return False, why
     return verbs.claim(bead, wt, slot, store=store) == 0, "claimed by another session"
@@ -236,6 +239,7 @@ def build(repo: str, store: Beads | None = None, session_actor: str = "", here: 
         landed_on_base=lambda wt, bead: landed_on_base(repo, store, wt, bead),
         reload_note=reload_note,
         chores=lambda: chores(repo, spawner),
+        release_dead=lambda: release_dead(repo, store, now()),
         ask_lines=lambda: ask_sweeps.orphan_lines(wasks.store()),
         storm=lambda: storm(repo, now),
         probe=lambda: make_probe(repo),

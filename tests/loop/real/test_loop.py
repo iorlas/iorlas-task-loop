@@ -60,13 +60,13 @@ LIVE_PID = "a live pid that is not this process: a real sleep child (an engine l
 
 
 class FakeBd:
-    """bd as the loop calls it: ready, show, claim, unclaim, heartbeat, reclaim and the slot beads."""
+    """bd as the loop calls it: ready, show, claim, unclaim, heartbeat and the slot beads."""
 
     def __init__(self, beads=(), slots=0, parents=None):
         self.beads: dict[str, dict[str, Any]] = {b["id"]: dict(b) for b in beads}
         self.parents = dict(parents or {})  # beads not in the ready list (epics): id -> parent
         self.slots: dict[str, dict[str, Any]] = {f"sl-{i}": {"id": f"sl-{i}", "title": f"slot {ident.hostname()} s{i}", "status": "open",
-                                    "assignee": ""} for i in range(1, slots + 1)}
+                                    "assignee": "", "labels": ["slot"]} for i in range(1, slots + 1)}
         self.taken_by_other = set()  # claims another session wins
         self.calls = []
 
@@ -98,6 +98,8 @@ class FakeBd:
         elif a[0] == "list" and "in_progress" in a:
             out = json.dumps([b for b in list(self.beads.values()) + list(self.slots.values())
                               if b.get("status") == "in_progress"])
+        elif a[0] == "list" and "--all" not in a:  # every bead not closed, slot beads too
+            out = json.dumps([b for b in list(self.beads.values()) + list(self.slots.values()) if b.get("status") != "closed"])
         elif a[0] == "show":
             b = self.beads.get(a[1]) or self.slots.get(a[1])
             out = json.dumps([b] if b else [{"id": a[1], "parent": self.parents.get(a[1])}])
@@ -113,7 +115,7 @@ class FakeBd:
         b = self.beads.get(a[1]) or self.slots.get(a[1])
         if a[1] in self.taken_by_other or must(b).get("status") != "open" or must(b).get("assignee") not in (None, "", ident.actor()):
             return 1  # bd 1.3: an open bead still assigned to another actor (a paused run's) refuses the claim
-        must(b).update(status="in_progress", assignee=ident.actor())
+        must(b).update(status="in_progress", assignee=ident.actor(), lease_expires_at="2999-01-01T00:00:00Z")  # bd's claim carries a lease
         return 0
 
     def _unclaim(self, a):
@@ -471,7 +473,7 @@ class Loop(LoopBase):
         bd.beads["x-2"].update(assignee="tl-live", lease_expires_at="2999-01-01T00:00:00Z")
         self.run_loop("--max-beads", "1")
         self.assertEqual([b for b, _ in self.started], ["x-1"])
-        self.assertIn(("update", "x-1", "--if-assignee", "tl-dead", "--assignee", ""), bd.calls)
+        self.assertIn(("update", "x-1", "--status", "open", "--if-assignee", "tl-dead", "--assignee", ""), bd.calls)
 
     def test_when_every_ready_bead_is_held_elsewhere_the_loop_sleeps_instead_of_spinning(self):
         bd = self.beads({"x-1": []})
@@ -481,23 +483,19 @@ class Loop(LoopBase):
         self.assertLessEqual(len(self.lines()), 5)
         self.assertIn(LoopConfig().pause_retry, self.clock.naps)
 
-    def test_reclaim_returns_only_beads_of_tl_actors_never_a_persons_claim(self):
+    def test_the_step_gives_back_a_dead_tl_claim_before_the_pick_never_a_persons(self):
         bd = self.beads({"x-1": [rec("landed")], "x-2": [], "x-3": []})
-        bd.beads["x-2"].update(status="in_progress", assignee="tl-dead0000")
-        bd.beads["x-3"].update(status="in_progress", assignee="denis")
+        bd.beads["x-2"].update(status="in_progress", assignee="tl-dead0000", lease_expires_at="2000-01-01T00:00:00Z")
+        bd.beads["x-3"].update(status="in_progress", assignee="denis", lease_expires_at="2000-01-01T00:00:00Z")
         self.run_loop("--max-beads", "1")
-        reclaims = [c for c in bd.calls if c[0] == "reclaim"]
-        self.assertTrue(reclaims)
-        for c in reclaims:
-            self.assertIn("--assignee", c)
-            self.assertIn("tl-dead0000", c)
-            self.assertNotIn("denis", c)
+        self.assertEqual((bd.beads["x-2"]["assignee"], bd.beads["x-2"]["status"]), ("", "open"))
+        self.assertEqual(bd.beads["x-3"]["assignee"], "denis")
 
-    def test_no_tl_claim_means_no_reclaim_at_all(self):
-        bd = self.beads({"x-1": [rec("landed")], "x-3": []})
-        bd.beads["x-3"].update(status="in_progress", assignee="denis")
+    def test_a_claim_inside_its_lease_is_not_given_back(self):
+        bd = self.beads({"x-1": [rec("landed")], "x-2": []})
+        bd.beads["x-2"].update(status="in_progress", assignee="tl-other000", lease_expires_at="2999-01-01T00:00:00Z")
         self.run_loop("--max-beads", "1")
-        self.assertFalse([c for c in bd.calls if c[0] == "reclaim"])
+        self.assertEqual(bd.beads["x-2"]["assignee"], "tl-other000")
 
     def test_bead_and_slot_leases_are_kept_alive_through_a_slow_slot_setup(self):
         bd = self.beads({"x-1": [rec("landed")]})

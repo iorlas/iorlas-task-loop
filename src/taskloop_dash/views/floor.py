@@ -54,3 +54,9 @@ def slot_of(p: ProjectIn, b: Bead, runs: Mapping[str, Sequence[Run]], now: float
         return Slot(id=name, name=name, lane=lane, state="idle", project=p.id,
                     idle_why=stray.why if stray else f"claimed by {b.assignee or '?'}, no live run")
     return Slot(id=name, name=name, lane=lane, state="free", project=p.id)
+
+
+def stray_rows(p: ProjectIn) -> list[Slot]:
+    """A bead claimed by an engine actor with no live run, as an idle row like a stray slot's (its line says why and whether the lease
+    ended); `tl prune`, the loop's step and the next run of the bead give it back."""
+    return [Slot(id=x.ref, name=x.ref, lane="", state="idle", project=p.id, idle_why=x.why) for x in p.strays if x.kind == "bead"]

@@ -9,6 +9,8 @@ import support.paths  # noqa: F401
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.ids import BeadId
 from taskloop_dash.readers.observed import strays_of
+from taskloop_dash.views.floor import stray_rows
+from taskloop_dash.views.world import ProjectIn
 
 NOW = 1793318400.0  # 2026-10-30T00:00:00Z
 ENDED, RUNNING = "2026-10-29T23:00:00Z", "2026-10-30T01:00:00Z"
@@ -33,6 +35,22 @@ class Strays(unittest.TestCase):
         beads = [Bead(id=BeadId("a-1"), title="", status="in_progress", assignee="tl-x", lease_expires_at=ENDED),
                  Bead(id=BeadId("a-2"), title="", status="in_progress", assignee="denis", lease_expires_at=ENDED)]
         self.assertEqual([s.ref for s in strays_of(beads, [], {}, NOW)], ["a-1"])
+
+    def test_a_paused_open_bead_still_assigned_and_a_leaseless_claim_are_strays_ready_to_give_back(self):
+        beads = [Bead(id=BeadId("a-1"), title="", status="open", assignee="tl-x", lease_expires_at=ENDED),
+                 Bead(id=BeadId("a-2"), title="", status="in_progress", assignee="tl-x", lease_expires_at=""),
+                 Bead(id=BeadId("a-3"), title="", status="in_progress", assignee="tl-x", lease_expires_at=RUNNING)]
+        self.assertEqual([(s.ref, s.expired) for s in strays_of(beads, [], {}, NOW)], [("a-1", True), ("a-2", True), ("a-3", False)])
+
+    def test_a_claim_inside_its_lease_whose_holder_went_on_to_another_bead_is_ready_to_give_back(self):
+        beads = [Bead(id=BeadId("a-1"), title="", status="in_progress", assignee="tl-x", lease_expires_at=RUNNING)]
+        got = strays_of(beads, [slot("sb-1", "s1", ends=RUNNING, held_bead="a-2")], {}, NOW)
+        self.assertEqual([(s.kind, s.ref, s.expired) for s in got], [("bead", "a-1", True), ("slot", "sb-1", False)])
+
+    def test_the_floor_shows_a_stray_bead_as_an_idle_row_with_its_why(self):
+        beads = [Bead(id=BeadId("a-1"), title="", status="in_progress", assignee="tl-x", lease_expires_at=ENDED)]
+        rows = stray_rows(ProjectIn(id="p", name="p", beads=beads, strays=strays_of(beads, [slot("sb-1", "s1")], {}, NOW)))
+        self.assertEqual([(r.name, r.state, r.idle_why) for r in rows], [("a-1", "idle", "claimed by tl-x, no live run (lease ended)")])
 
 
 if __name__ == "__main__":

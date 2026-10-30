@@ -52,8 +52,9 @@ Live = Callable[[str], dict[BeadId, str]]  # a repo -> {bead: slot or tree} of t
 
 
 def lease_of(b: Bead, live: dict[BeadId, str]) -> Lease | None:
-    """The lease a bead is held under, None when nobody holds it in progress. A slot bead is no work: its lease is a SlotFact."""
-    if b.status != "in_progress" or not b.assignee or "slot" in b.labels:
+    """The lease a bead is held under, None when nobody holds it. In progress, or open and still assigned (a paused run leaves it so);
+    a blocked bead is the run entry's to reopen. A slot bead is no work: its lease is a SlotFact."""
+    if b.status not in ("in_progress", "open") or not b.assignee or "slot" in b.labels:
         return None
     return Lease(b.id, b.assignee, fence.gen_of(b), epoch(b.lease_expires_at), b.id in live)
 
@@ -73,7 +74,7 @@ def slot_facts(beads: list[Bead], host: str, live: dict[BeadId, str]) -> tuple[S
         except (TypeError, ValueError):
             until = 0.0
         out.append(SlotFact(b.id, name, b.status == "in_progress", b.assignee, fence.gen_of(b, fence.SLOT_GEN), epoch(b.lease_expires_at),
-                            until, name in on or (isinstance(held, str) and held in live)))
+                            until, name in on or (isinstance(held, str) and held in live), held if isinstance(held, str) else ""))
     return tuple(out)
 
 

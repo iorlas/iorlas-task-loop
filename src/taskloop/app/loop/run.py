@@ -90,5 +90,5 @@ class BeadRun:
         return v.with_(minutes=v.minutes if v.minutes is not None else round((env.now() - t0) / 60, 1), run_log=str(log_path))
 
     def reopen(self, bead: BeadId) -> None:
-        with contextlib.suppress(BdFailure):  # bd refused: the bead stays where it is, reclaim gets it
+        with contextlib.suppress(BdFailure):  # bd refused: the bead stays where it is, the lease sweep gets it
             self.env.store.update(bead, BeadPatch(status="open", assignee=""))

@@ -23,7 +23,6 @@ from taskloop.contracts import wire
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.loop import LoopState, QueueRow
-from taskloop.contracts.ports import BdFailure, BeadQuery
 from taskloop.contracts.run import LoopLogLine
 from taskloop.contracts.slots import SlotFail
 
@@ -191,7 +190,8 @@ class Loop(Core):
         self.refresh()
         self.maybe_move()
         self.start_worktree()
-        self.reclaim()
+        for line in self.env.release_dead():  # a dead run's claims and slots back to ready before the next pick
+            self.say(line)
         self.env.chores()
         q, rule = self.queue()
         cands = self.candidates(q)
@@ -216,17 +216,6 @@ class Loop(Core):
         name = env.session_actor[3:]
         taken = {st.worktree for st in self.files.live(but=env.pid)}
         return env.actor()[3:] if str(Path(env.repo) / ".worktrees" / ("loop-" + name)) in taken else name
-
-    def reclaim(self) -> None:
-        """A dead loop's or session's beads and slots back to ready: only claims of tl- actors (bd's lease rule decides
-        which are dead), never a person's hand claim."""
-        store = self.env.store
-        try:
-            who = sorted({b.assignee for b in store.find(BeadQuery(status="in_progress")) if b.assignee.startswith("tl-")})
-            if who:
-                store.reclaim("15m", who)
-        except BdFailure:
-            pass
 
     def queue(self) -> tuple[Queue, QueueRule]:
         q, rule = rank_ready(self.env, self.prof.engine, self.say)

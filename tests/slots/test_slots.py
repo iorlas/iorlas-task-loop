@@ -93,7 +93,7 @@ class Slots(LoopBase):
         made.return_value.result.return_value = RunReport(outcome=Result.LANDED, bead=bead_id)
         made.return_value.log_path = Path(self.home, "e.jsonl")
         out = io.StringIO()
-        with mock.patch.dict(os.environ, env), mock.patch.object(entry, "reclaim", return_value=(True, "")), \
+        with mock.patch.dict(os.environ, env), mock.patch.object(entry, "admit", return_value=(True, "")), \
                 mock.patch.object(entry, "Engine", made), \
                 mock.patch.object(signal, "signal"), redirect_stdout(out):
             rc = entry.main(a, env=snapshot(), spawner=real_spawner())

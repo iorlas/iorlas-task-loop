@@ -29,7 +29,7 @@ def held_by(b: Bead) -> str:
 
 def mark_held(env: SlotEnv, bead_id: str, why: str, until: float = 0, bead: str = "", gen: int = 0) -> None:
     """Write the marks: tl slot list and a refused run-task read them. `until`: a hold (tl slot hold), which outlives the
-    bead's lease. `bead`: the bead run there (held_bead), which makes its area busy. A key not set is unset: bd reclaim frees a
+    bead's lease. `bead`: the bead run there (held_bead), which makes its area busy. A key not set is unset: the lease sweep frees a
     dead holder's slot bead but keeps its metadata, its bead's area with it."""
     sets = {"held_by": env.actor, "held_since": stamp(env.now()), "held_why": why}
     if gen:

@@ -94,11 +94,6 @@ class MemoryBeads:
         b = self._get(bead)
         self._put(b, labels=[x for x in b.labels if x != label])
 
-    def reclaim(self, older_than: str, assignees: list[str]) -> None:
-        for b in list(self.beads.values()):
-            if b.status == "in_progress" and (not assignees or b.assignee in assignees) and b.lease_expires_at:
-                self._put(b, status="open", assignee="", lease_expires_at="")
-
     def provenance(self, bead: BeadId, kind: str, source: str, ref: str = "", ref_kind: str = "", at: str = "", payload: str = "") -> None:
         self._get(bead)
 

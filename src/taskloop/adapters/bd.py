@@ -263,9 +263,6 @@ class BdStore:
     def remove_label(self, bead: BeadId, label: str) -> None:
         self._must("label", "remove", bead, label)
 
-    def reclaim(self, older_than: str, assignees: list[str]) -> None:
-        self._must("reclaim", "--older-than", older_than, *[x for w in assignees for x in ("--assignee", w)])
-
     def provenance(self, bead: BeadId, kind: str, source: str, ref: str = "", ref_kind: str = "", at: str = "", payload: str = "") -> None:
         a = ["provenance", "record", "--issue", bead, "--kind", kind, "--source", source]
         a += ["--ref", ref, "--ref-kind", ref_kind] if ref else ["--at", at]

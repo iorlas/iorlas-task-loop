@@ -29,7 +29,7 @@ from taskloop.domain.reconcile.facts import (
 )
 
 NOW = 100 * DAY
-A1, SB1 = BeadId("a-1"), BeadId("sb-1")
+A1, B2, SB1 = BeadId("a-1"), BeadId("b-2"), BeadId("sb-1")
 R = "/r"
 
 
@@ -135,8 +135,15 @@ ROWS: list[tuple[str, Observed, list[Action]]] = [
      world(repo(leases=(lease(),))), [ReleaseClaim(R, "r", A1, "tl-x", 2)]),
     ("a claim whose lease runs on is left (the dashboard shows it)",
      world(repo(leases=(lease(ends=NOW + 60),))), []),
-    ("a claim with no lease end is left",
-     world(repo(leases=(lease(ends=0),))), []),
+    ("a claim with no lease at all goes back (an old path released it; bd's own claim always has one)",
+     world(repo(leases=(lease(ends=0),))), [ReleaseClaim(R, "r", A1, "tl-x", 2)]),
+    ("a claim inside its lease whose holder went on to another bead goes back",
+     world(repo(leases=(lease(ends=NOW + 60),), slots=(slot(expires=NOW + 60, live=True, held=B2),))),
+     [ReleaseClaim(R, "r", A1, "tl-x", 2)]),
+    ("a claim inside its lease on the bead its holder's slot is marked for is left",
+     world(repo(leases=(lease(ends=NOW + 60),), slots=(slot(expires=NOW + 60, live=True, held=A1),))), []),
+    ("a holder's slot past its lease marks nothing: the claim inside its lease is left",
+     world(repo(leases=(lease(ends=NOW + 60),), slots=(slot(held=B2, live=True),))), []),
     ("a claim with a live run is left even when its lease ended",
      world(repo(leases=(lease(live=True),))), []),
     ("a person's hand claim is never swept",

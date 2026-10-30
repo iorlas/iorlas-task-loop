@@ -246,7 +246,7 @@ class EngineRunTest(EngineTest):
         made.return_value.result.return_value = RunReport(outcome=Result.FAILED, bead=BeadId("t-1"), why="failed: stopped (SIGTERM)")
         made.return_value.stop_pending = False
         with self.stoppable(), mock.patch.object(entry, "Engine", made), \
-                mock.patch.object(entry, "reclaim", return_value=(True, "")), \
+                mock.patch.object(entry, "admit", return_value=(True, "")), \
                 self.store.stub(bd_fn=claim), mock.patch.object(entry, "say", side_effect=say):
             rc = entry.run_bead(a, str(self.wt), {}, str(self.wt), self.store, env=snapshot(), spawner=real_spawner())
         return rc, made, said
@@ -290,18 +290,12 @@ class EngineRunTest(EngineTest):
         self.assertEqual(rc, 0)
         self.assertEqual([c[0] for c in s.calls], ["worker", "reviewer"])
 
-    def test_reclaim_releases_a_dead_engine_claim(self):
-        ok, _, up = self.reclaim({"status": "in_progress", "assignee": "tl-61ba34e7",
-                                  "lease_expires_at": "2020-01-01T00:00:00Z"})
-        self.assertTrue(ok)
-        self.assertIn(("update", "t-1", "--if-assignee", "tl-61ba34e7", "--assignee", ""), up)  # conditional on the claim just read
-
-    def test_reclaim_refuses_a_live_claim_and_a_persons_claim(self):
-        ok, why, up = self.reclaim({"status": "in_progress", "assignee": "tl-61ba34e7",
+    def test_admit_refuses_a_live_claim_and_a_persons_claim(self):
+        ok, why, up = self.admit({"status": "in_progress", "assignee": "tl-61ba34e7",
                                     "lease_expires_at": "2999-01-01T00:00:00Z"})
         self.assertFalse(ok)
         self.assertIn("tl-61ba34e7", why)
-        ok, why, up = self.reclaim({"status": "in_progress", "assignee": "denis"})
+        ok, why, up = self.admit({"status": "in_progress", "assignee": "denis"})
         self.assertFalse(ok)
         self.assertEqual(up, [])
 
@@ -320,8 +314,8 @@ class EngineRunTest(EngineTest):
             f.write("[07:00] review\n")
         self.assertEqual(log.read_bytes(), b"TAKEN\n[07:00] review\n")
 
-    def test_reclaim_reopens_a_bead_the_engine_blocked_on_a_failed_run(self):
-        ok, _, up = self.reclaim({"status": "blocked", "assignee": "tl-61ba34e7"}, [self.BLOCKED])
+    def test_admit_reopens_a_bead_the_engine_blocked_on_a_failed_run(self):
+        ok, _, up = self.admit({"status": "blocked", "assignee": "tl-61ba34e7"}, [self.BLOCKED])
         self.assertTrue(ok)
         self.assertIn(("update", "t-1", "--status", "open", "--if-assignee", "tl-61ba34e7", "--assignee", ""), up)
 
@@ -737,7 +731,7 @@ class EngineRunTest(EngineTest):
         calls = []
         with self.store.stub(show=blocked), self.store.stub(comments=cs), \
                 self.store.stub(bd_fn=lambda *a, **k: calls.append(a) or mock.Mock(returncode=0)):
-            ok, why = entry.reclaim("t-1", str(self.wt), store=self.store)
+            ok, why = entry.admit("t-1", str(self.wt), store=self.store)
         self.assertTrue(ok, why)
 
     def test_a_pause_is_a_comment_never_a_line_of_notes(self):

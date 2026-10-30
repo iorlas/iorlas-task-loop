@@ -21,7 +21,6 @@ from support import (
 from support.checkpoints import put_ck, read_ck
 from support.checks import typed
 from support.engine_case import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, engine, lint, real_git, real_proc  # noqa: F401
-from support.fakes import as_bead
 from support.pushsim import pusher
 from support.spawn import real_spawner
 
@@ -497,14 +496,12 @@ class PlanTimeout(StagesTest):
 
 
 class ClaimPerBead(StagesTest):
-    """tl-kwo: a claim is live when an engine runs that bead, not because the claiming actor's loop is alive."""
+    """tl-kwo: a claim that is left after the lease sweep is live. The dead ones (a loop that went on, an ended lease, a paused run) are
+    given back by the reconcile lease rules, before admit: tests/prune/test_leases.py."""
 
-    def reclaim_when(self, bead, slots, running, hand_live=False):
-        with self.store.stub(show=bead), mock.patch.object(wslots, "slot_beads", return_value=[as_bead(x) for x in slots]), \
-                mock.patch.object(wslots, "live_actors", return_value={"tl-2be89f88"} if hand_live or slots else set()), \
-                mock.patch.object(wrunning, "running", return_value=running), self.store.stub(comments=[]), \
-                self.store.stub(bd_fn=lambda *a, **k: mock.Mock(returncode=0)):
-            return entry.reclaim("o67g", str(self.wt), store=self.store)
+    def admit_when(self, bead, running):
+        with self.store.stub(show=bead), mock.patch.object(wrunning, "running", return_value=running), self.store.stub(comments=[]):
+            return entry.admit("o67g", str(self.wt), store=self.store)
 
     BEAD: ClassVar[Any] = {
         "id": "o67g",
@@ -513,53 +510,23 @@ class ClaimPerBead(StagesTest):
         "lease_expires_at": "2999-01-01T00:00:00Z",
         "dependencies": [],
     }
-    SLOT: ClassVar[Any] = {"id": "sl-5", "status": "in_progress", "assignee": "tl-2be89f88", "lease_expires_at": "2999-01-01T00:00:00Z",
-            "metadata": {"held_bead": "fld.27.12"}, "title": "slot h s5"}
 
-    def test_a_bead_the_loop_left_for_another_is_takeable(self):
-        ok, why = self.reclaim_when(self.BEAD, [self.SLOT], {"fld.27.12": "s5"})
-        self.assertTrue(ok, why)
-        self.assertIn("released tl-2be89f88", why)
-
-    def test_an_engine_running_the_bead_is_a_live_claim(self):
-        ok, why = self.reclaim_when(self.BEAD, [self.SLOT], {"fld.27.12": "s5", "o67g": "s2"})
+    def test_an_engine_running_a_blocked_bead_is_a_live_claim(self):
+        ok, why = self.admit_when(dict(self.BEAD, status="blocked"), {"o67g": "s2"})
         self.assertFalse(ok)
         self.assertIn("a live claim", why)
 
-    def test_the_loop_running_this_very_bead_keeps_its_claim(self):
-        slot = dict(self.SLOT, metadata={"held_bead": "o67g"})
-        ok, _why = self.reclaim_when(self.BEAD, [slot], {})  # the slot says it, the engine is just starting
-        self.assertFalse(ok)
-
-    def test_a_session_working_by_hand_keeps_its_claim(self):
-        ok, why = self.reclaim_when(self.BEAD, [], {}, hand_live=True)
+    def test_a_claim_left_after_the_sweep_is_a_live_claim(self):
+        ok, why = self.admit_when(self.BEAD, {})
         self.assertFalse(ok)
         self.assertIn("a live claim", why)
-
-    def test_the_release_is_conditional_on_the_claim_just_read(self):
-        calls = []
-        with (
-            self.store.stub(show=self.BEAD),
-            mock.patch.object(wslots, "slot_beads", return_value=[as_bead(self.SLOT)]),
-            mock.patch.object(wslots, "live_actors", return_value={"tl-2be89f88"}),
-            mock.patch.object(wrunning, "running", return_value={}),
-            self.store.stub(comments=[]),
-            self.store.stub(bd_fn=lambda *a, **k: calls.append(a) or mock.Mock(returncode=0)),
-        ):
-            ok, why = entry.reclaim("o67g", str(self.wt), store=self.store)
-        self.assertTrue(ok, why)
-        self.assertEqual(calls[-1], ("update", "o67g", "--if-assignee", "tl-2be89f88", "--assignee", ""))
 
     def test_a_claim_that_changed_hands_meanwhile_is_not_taken(self):
-        with (
-            self.store.stub(show=self.BEAD),
-            mock.patch.object(wslots, "slot_beads", return_value=[as_bead(self.SLOT)]),
-            mock.patch.object(wslots, "live_actors", return_value={"tl-2be89f88"}),
-            mock.patch.object(wrunning, "running", return_value={}),
-            self.store.stub(comments=[]),
-            self.store.stub(bd_fn=lambda *a, **k: mock.Mock(returncode=1)),
-        ):
-            ok, why = entry.reclaim("o67g", str(self.wt), store=self.store)
+        blocked = dict(self.BEAD, status="blocked")
+        cs = [{"author": "tl-x", "text": "Blocked: stuck", "created_at": "2026-10-25T10:00:00Z"}]
+        with self.store.stub(show=blocked), mock.patch.object(wrunning, "running", return_value={}), self.store.stub(comments=cs), \
+                self.store.stub(bd_fn=lambda *a, **k: mock.Mock(returncode=1)):
+            ok, why = entry.admit("o67g", str(self.wt), store=self.store)
         self.assertFalse(ok)
         self.assertIn("changed hands", why)
 

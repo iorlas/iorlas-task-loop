@@ -98,49 +98,49 @@ class EngineAsksTest(EngineTest):
         logs = ident.config_dir() / "engine"
         logs.mkdir(parents=True, exist_ok=True)
         (logs / "t-1-20261021-063408.jsonl").write_text("")
-        ok, why, _ = self.reclaim({"status": "in_progress", "assignee": "tl-61ba34e7"}, live=["tl-61ba34e7"])
+        ok, why, _ = self.admit({"status": "in_progress", "assignee": "tl-61ba34e7"})
         self.assertFalse(ok)
         self.assertIn("another run of t-1 is still running as tl-61ba34e7", why)
         self.assertIn(str(logs / "t-1-20261021-063408.jsonl"), why)
 
-    def test_reclaim_reopens_when_a_comment_answers_the_open_ask(self):
+    def test_admit_reopens_when_a_comment_answers_the_open_ask(self):
         ask = self.ask_rec(id="t-1-1")
-        ok, _, up = self.reclaim({"status": "blocked"}, [self.BLOCKED, {"author": "denis", "text": "Rerun.",
+        ok, _, up = self.admit({"status": "blocked"}, [self.BLOCKED, {"author": "denis", "text": "Rerun.",
                                                                       "created_at": "2026-10-20T23:25:00Z"}], ask)
         self.assertTrue(ok)
         self.assertIn(("update", "t-1", "--status", "open", "--assignee", ""), up)
 
-    def test_reclaim_reopens_a_bead_whose_ask_has_an_answer_filed_on_it_with_no_comment_after_the_block(self):
+    def test_admit_reopens_a_bead_whose_ask_has_an_answer_filed_on_it_with_no_comment_after_the_block(self):
         """tl-gy4 (sims qs, lifesim-hclf.32-2): answered on the ask, status open, no comment after 'Blocked:': run-task and --fresh
         (both go through this gate) said 'waiting for the answer'. Only a bead comment after the block got past it."""
         said = {"action": "rerun", "text": "run again", "t": 1.0, "by": "denis"}
         for status in ("open", "parked"):
             ask = self.ask_rec(id="t-1-2", status=status, answer=said)
-            ok, why, up = self.reclaim({"status": "blocked"}, [self.BLOCKED], ask)
+            ok, why, up = self.admit({"status": "blocked"}, [self.BLOCKED], ask)
             self.assertTrue(ok, why)
             self.assertIn(("update", "t-1", "--status", "open", "--assignee", ""), up)
         ask = self.ask_rec(id="t-1-2")  # no answer filed
-        ok, why, _ = self.reclaim({"status": "blocked"}, [self.BLOCKED], ask)
+        ok, why, _ = self.admit({"status": "blocked"}, [self.BLOCKED], ask)
         self.assertFalse(ok)
         self.assertIn("waiting for the answer", why)
         later = {"author": "denis", "text": "Parked.", "created_at": "2026-10-21T00:05:00Z"}
         ask = self.ask_rec(id="t-1-2", status="answered", answer=said, consumed=2.0)  # consumed, then a person spoke
-        ok, why, _ = self.reclaim({"status": "blocked"}, [self.BLOCKED, later], ask)
+        ok, why, _ = self.admit({"status": "blocked"}, [self.BLOCKED, later], ask)
         self.assertFalse(ok)
         self.assertIn("commented after", why)
 
     def test_reclaim_leaves_blocked_what_a_person_parked_or_an_unanswered_ask_holds(self):
         later = {"author": "denis", "text": "Parked until People is designed.", "created_at": "2026-10-21T00:05:00Z"}
-        ok, why, up = self.reclaim({"status": "blocked"}, [self.BLOCKED, later])
+        ok, why, up = self.admit({"status": "blocked"}, [self.BLOCKED, later])
         self.assertFalse(ok)
         self.assertIn("commented after", why)
         ask = self.ask_rec(id="t-1-1")
-        ok, why, up = self.reclaim({"status": "blocked"}, [self.BLOCKED], ask)
+        ok, why, up = self.admit({"status": "blocked"}, [self.BLOCKED], ask)
         self.assertFalse(ok)
         self.assertIn("t-1-1", why)
-        ok, why, up = self.reclaim({"status": "blocked"}, [])
+        ok, why, up = self.admit({"status": "blocked"}, [])
         self.assertFalse(ok)  # blocked by a person, not by the engine
-        ok, why, up = self.reclaim({"status": "blocked", "dependencies": [
+        ok, why, up = self.admit({"status": "blocked", "dependencies": [
             {"id": "t-0", "title": "design", "status": "open", "type": "blocks"}]}, [self.BLOCKED])
         self.assertFalse(ok)
         self.assertIn("t-0", why)

@@ -87,7 +87,7 @@ def asks_of(w: World, cards: list[BeadCard]) -> list[AskCard]:
 
 
 def slots_of(w: World) -> list[Slot]:
-    return [floor.slot_of(p, b, w.runs, w.now) for p in w.projects for b in p.slots]
+    return [x for p in w.projects for x in [*(floor.slot_of(p, b, w.runs, w.now) for b in p.slots), *floor.stray_rows(p)]]
 
 
 def build(w: World) -> Snapshot:
