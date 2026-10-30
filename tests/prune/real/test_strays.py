@@ -8,6 +8,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401
+from support import homes
 from support.fake_beads import FakeBeads
 
 from prune.real.test_prune import git
@@ -41,7 +42,7 @@ class Strays(unittest.TestCase):
 
     def plan(self, live=None):
         seen = observe(
-            [str(self.repo)], lambda r: self.store, None, 14, time.time(), RealGit(snapshot()), None, lambda r: live or {}, "host"
+            [str(self.repo)], lambda r: self.store, None, 14, time.time(), RealGit(snapshot()), homes.cfg(), lambda r: live or {}, "host"
         )
         return diff(seen)
 

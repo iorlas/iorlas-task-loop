@@ -16,9 +16,9 @@ from taskloop.contracts.ports import Git
 def cmd_prune(a: Any, env: Env, git: Git, who: Identity, now: Callable[[], float] = trail.now) -> int:
     repo = repos.repo_root(a.repo)
     verb.run(
-        wloop.cfgdir(),
+        who.config,
         wloop.profile_of(repo, git).loop,
-        wloop.prune_repos(repo),
+        wloop.prune_repos(repo, who.config),
         lambda r: wloop.bd_of(who, r),
         now(),
         a.dry_run,

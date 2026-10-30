@@ -77,7 +77,7 @@ def close_as(who: Identity, claim: fence.Claim, reason: str | None, store: Beads
         sys.stderr.write(e.error.text + "\n")
         return 1
     event(who, "close", bead, reason=reason)
-    prune_events()
+    prune_events(who.config)
     return 0
 
 
@@ -119,7 +119,7 @@ def passthrough(store: BdStore, rest: list[str]) -> int:
     return r.code
 
 
-def register(git: Git, directory: str) -> int:
+def register(git: Git, directory: str, who: Identity) -> int:
     """`tl register [DIR]`: add the repo of a working directory to the dashboard."""
     try:
         path = repo_root(directory) if git.toplevel(directory) else None
@@ -128,7 +128,7 @@ def register(git: Git, directory: str) -> int:
     if path is None:
         print("tl: not a Git working directory: " + repr(directory), file=sys.stderr)
         return 1
-    register_repo(path)
+    register_repo(path, who.config)
     print("REGISTERED " + path)
     return 0
 
@@ -146,7 +146,7 @@ def trace_line(r: dict[str, Any]) -> str:
 
 def trace(bead: BeadId, last: int, as_json: bool, env: Env) -> int:
     """`tl trace [ID] [--last N] [--json]`: engine runs and every worker session of each, with where its transcript lives."""
-    path = ConfigDir(config_dir()).traces()
+    path = ConfigDir(config_dir(env)).traces()
     runs: list[dict[str, Any]] = []
     if path.exists():
         for line in path.read_text(encoding="utf-8", errors="replace").splitlines():

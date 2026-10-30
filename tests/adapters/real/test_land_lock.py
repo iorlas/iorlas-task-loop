@@ -14,6 +14,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from support import homes
 from support.procsim import real_proc
 from support.tlmain import tl_main
 from support.waits import until
@@ -83,7 +84,7 @@ class LandLockTests(unittest.TestCase):
 
     def path(self):
         with mock.patch.dict(os.environ, self.env):
-            return landlock.land_lock_path(self.repo)
+            return landlock.land_lock_path(homes.cfg(), self.repo)
 
     def held_now(self):
         """True when another descriptor cannot take the lock right now."""

@@ -12,11 +12,11 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401
+from support import homes
 from support.repos import write_repos
 from support.spawn import port_git
 from support.who import who
 
-from taskloop.adapters import ident
 from taskloop.app.doctor import profiles
 from taskloop.app.launch import dash_ports
 from taskloop.app.launch import loop as wloop
@@ -54,7 +54,7 @@ class BadProfile(unittest.TestCase):
         os.chdir(repo)
         try:
             with contextlib.redirect_stdout(out):
-                rc = doctor.run(plugin_root, port_git(), who())
+                rc = doctor.run(plugin_root, snapshot(), port_git(), who())
         finally:
             os.chdir(old)
         return rc, out.getvalue()
@@ -86,7 +86,7 @@ class BadProfile(unittest.TestCase):
         self.assertEqual(sum(1 for ln in text.splitlines() if ln.startswith("RED ")), 1)
 
     def test_walking_the_registered_repos_skips_the_one_asked_from(self) -> None:
-        rows = profiles.red_rows(port_git(),profiles.registered(ReposStore(ConfigDir(ident.config_dir()))), but=str(self.good))
+        rows = profiles.red_rows(port_git(),profiles.registered(ReposStore(homes.cfg())), but=str(self.good))
         self.assertEqual(len(rows), 1)
         self.assertEqual(profiles.red_rows(port_git(),[str(self.bad)], but=str(self.bad)), [])
 
@@ -149,8 +149,8 @@ class OtherViews(BadProfile):
 
     def test_status_in_the_good_repo_shows_the_bad_repos_red_row(self) -> None:
         with mock.patch.object(brief.wslots, "slot_beads", return_value=[]):
-            text = brief.status_text(str(self.good), ROOT, 0.0, False, who(), port_git())
-            data = json.loads(brief.status_text(str(self.good), ROOT, 0.0, True, who(), port_git()))
+            text = brief.status_text(str(self.good), ROOT, 0.0, False, snapshot(), who(), port_git())
+            data = json.loads(brief.status_text(str(self.good), ROOT, 0.0, True, snapshot(), who(), port_git()))
         self.assertIn(f"RED {self.bad}", text)
         self.assertIn(str(self.bad / ".task-loop.json"), text)
         self.assertEqual([r.split(":")[0] for r in data["red"]], [f"RED {self.bad}"])

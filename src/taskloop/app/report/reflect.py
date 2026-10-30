@@ -41,23 +41,23 @@ from taskloop.domain.report.reflect import (
 DAY = 86400
 
 
-def state_store() -> ReflectStateStore:
-    return ReflectStateStore(ConfigDir(ident.config_dir()))
+def state_store(cfg: ConfigDir) -> ReflectStateStore:
+    return ReflectStateStore(cfg)
 
 
-def read_state() -> dict[str, Any]:
+def read_state(cfg: ConfigDir) -> dict[str, Any]:
     """The digest's state as a plain dict the digest edits (fields at their defaults when there is no file; Refused when the file is torn or
     of another version: the memory of what was filed is never read as empty, or every cluster would be filed again)."""
-    return (state_store().need() or ReflectState()).to_dict()
+    return (state_store(cfg).need() or ReflectState()).to_dict()
 
 
-def write_state(st: dict[str, Any]) -> None:
-    state_store().write(wire.load(ReflectState, {"v": ReflectState.V, **st}))
+def write_state(cfg: ConfigDir, st: dict[str, Any]) -> None:
+    state_store(cfg).write(wire.load(ReflectState, {"v": ReflectState.V, **st}))
 
 
-def items(since: float, until: float, traces: str | Path | None = None) -> list[dict[str, Any]]:
+def items(cfg: ConfigDir, since: float, until: float, traces: str | Path | None = None) -> list[dict[str, Any]]:
     """The went_badly items of the reflected runs ended in the window, oldest first."""
-    path = traces or ident.config_dir() / "traces.jsonl"
+    path = traces or cfg.traces()
     rows: list[Any] = []
     try:
         lines = Path(path).read_text(encoding="utf-8", errors="replace").splitlines()
@@ -71,8 +71,8 @@ def items(since: float, until: float, traces: str | Path | None = None) -> list[
     return items_of(rows, since, until)
 
 
-def registered() -> list[str]:
-    return [p for p in ReposStore(ConfigDir(ident.config_dir())).known() if (Path(p) / ".beads").is_dir()]
+def registered(cfg: ConfigDir) -> list[str]:
+    return [p for p in ReposStore(cfg).known() if (Path(p) / ".beads").is_dir()]
 
 
 def resolve_repo(value: object, repos: Sequence[str]) -> str:
@@ -93,9 +93,9 @@ def resolve_repo(value: object, repos: Sequence[str]) -> str:
     return ""
 
 
-def owner_repo(c: dict[str, Any], repos: Sequence[str] | None = None) -> str:
+def owner_repo(c: dict[str, Any], cfg: ConfigDir, repos: Sequence[str] | None = None) -> str:
     """The repo whose bead list takes this cause: task-loop, delegate, or the project most of its runs ran in."""
-    repos = registered() if repos is None else repos
+    repos = registered(cfg) if repos is None else repos
     want = OWNERS.get(c["cause"])
     if want:
         for p in repos:
@@ -160,7 +160,7 @@ def _update_known(who: Identity, c: dict[str, Any], repo: str, bead: str, state:
 def file_cluster(who: Identity, c: dict[str, Any], state: dict[str, Any], dry: bool = False,
     repos: Sequence[str] | None = None) -> dict[str, Any]:
     """File or update the bead for one recurring cause. -> {action: filed|commented|skipped|none, bead, repo, cause, runs}."""
-    repo = owner_repo(c, repos)
+    repo = owner_repo(c, who.config, repos)
     res = {"cause": c["cause"], "title": c["title"], "repo": repo, "runs": c["runs"], "bead": "", "action": "none"}
     if not repo:
         return res
@@ -199,7 +199,7 @@ def digest(who: Identity, since: float, until: float, dry: bool = False, traces:
     if dry:
         return _digest(who, since, until, True, traces, repos)
     try:
-        with landlock.os_lock(ident.config_dir() / "locks" / "reflect-digest-run.lock", f"pid {os.getpid()}", timeout=120):
+        with landlock.os_lock(who.config.root / "locks" / "reflect-digest-run.lock", f"pid {os.getpid()}", timeout=120):
             return _digest(who, since, until, False, traces, repos)
     except TimeoutError:
         return {"since": since, "until": until, "items": 0, "clusters": [], "actions": [], "busy": True}
@@ -207,9 +207,9 @@ def digest(who: Identity, since: float, until: float, dry: bool = False, traces:
 
 def _digest(who: Identity, since: float, until: float, dry: bool, traces: str | Path | None,
     repos: Sequence[str] | None) -> dict[str, Any]:
-    cs = cluster(items(since, until, traces))
+    cs = cluster(items(who.config, since, until, traces))
     out: dict[str, Any] = {"since": since, "until": until, "items": sum(len(c["items"]) for c in cs), "clusters": [], "actions": []}
-    state = read_state()
+    state = read_state(who.config)
     for c in cs:
         row = {"cause": c["cause"], "title": c["title"], "runs": len(c["runs"]), "run_ids": c["runs"], "beads": c["beads"],
                "files": c["files"], "recurring": is_recurring(c)}
@@ -219,28 +219,28 @@ def _digest(who: Identity, since: float, until: float, dry: bool, traces: str | 
             out["actions"].append(a)
             row["bead"], row["repo"] = a["bead"], a["repo"]
             if not dry and a["action"] in ("filed", "commented"):
-                write_state(state)
+                write_state(who.config, state)
     return out
 
 
-def due(now: float | None = None) -> bool:
-    return (now or time.time()) - float(read_state().get("tried") or 0) >= DAY
+def due(cfg: ConfigDir, now: float | None = None) -> bool:
+    return (now or time.time()) - float(read_state(cfg).get("tried") or 0) >= DAY
 
 
-def maybe_run(spawner: Spawner, env: Env, now: float | None = None) -> str:
+def maybe_run(spawner: Spawner, env: Env, cfg: ConfigDir, now: float | None = None) -> str:
     """The loop's call: once a day a detached `tl reflect digest` (it asks bd about every open bead of the target repos: a loop
     pass never waits for it). -> 'started' or ''."""
-    if not due(now) or not (ident.config_dir() / "traces.jsonl").is_file() or not registered():
+    if not due(cfg, now) or not cfg.traces().is_file() or not registered(cfg):
         return ""  # nothing to read or nowhere to file
     try:
-        with landlock.os_lock(ident.config_dir() / "locks" / "reflect-digest.lock", f"pid {os.getpid()}"):
-            if not due(now):
+        with landlock.os_lock(cfg.root / "locks" / "reflect-digest.lock", f"pid {os.getpid()}"):
+            if not due(cfg, now):
                 return ""
             pass
         spawner.start([*childenv.script_argv(ident.PLUGIN_ROOT / "skills" / "task-loop" / "tl.py", env), "reflect", "digest"])
-        st = read_state()
+        st = read_state(cfg)
         st["tried"] = now or time.time()
-        write_state(st)
+        write_state(cfg, st)
     except OSError:
         return ""
     return "started"

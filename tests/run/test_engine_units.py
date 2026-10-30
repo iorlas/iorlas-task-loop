@@ -18,7 +18,7 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 import support.paths  # noqa: E402, F401
-from support import gitq  # noqa: E402
+from support import gitq, homes  # noqa: E402
 from support.checkpoints import read_ck  # noqa: E402
 
 from taskloop.adapters import delegate as dl  # noqa: E402
@@ -60,9 +60,6 @@ from support.spawn import port_git, real_spawner  # noqa: E402
 from support.who import who  # noqa: E402
 
 from taskloop.adapters import delegate as lroute  # noqa: E402
-from taskloop.adapters import (  # noqa: E402
-    ident,
-)
 from taskloop.app.checks import evidence  # noqa: E402
 from taskloop.app.run import (  # noqa: E402
     engine,
@@ -488,7 +485,7 @@ class DelegateLauncher(T.EngineTest):
         rc, s = self.run_engine({"plan": [PLAN], "write": [out, WRITE]})
         self.assertEqual(rc, 2)
         self.assertEqual([c[0] for c in s.calls].count("worker"), 1)
-        self.assertEqual((self.blocked, (ident.config_dir() / "asks" / "t-1.json").exists()), ([], False))
+        self.assertEqual((self.blocked, (homes.config_dir() / "asks" / "t-1.json").exists()), ([], False))
         self.assertTrue(any(c[:3] == ("comments", "add", "t-1") and any("run `claude auth login`" in x for x in c)
                             for c in self.bd_calls))
 

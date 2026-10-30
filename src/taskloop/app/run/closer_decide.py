@@ -4,11 +4,11 @@ import contextlib
 from collections.abc import Mapping, Sequence
 from typing import Protocol
 
-from taskloop.adapters import ident
 from taskloop.adapters import storm as storm_file
 from taskloop.app.run.console import say
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.kinds import Kind
+from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import Clock, Git
 from taskloop.domain import outcome as oc
 from taskloop.domain import storm
@@ -27,6 +27,8 @@ class DecideHost(Protocol):
     def bead(self) -> BeadId: ...
     @property
     def wt(self) -> str: ...
+    @property
+    def home(self) -> ConfigDir: ...
     @property
     def git(self) -> Git: ...
     @property
@@ -52,7 +54,7 @@ class Decide:
         e.fp = o.fingerprint
         history: Sequence[Mapping[str, object]] = ()
         with contextlib.suppress(OSError):
-            history = storm_file.recent_closes(ident.config_dir() / "traces.jsonl", self.repo_id(), now)
+            history = storm_file.recent_closes(self.e.home.traces(), self.repo_id(), now)
         e.disp = oc.apply(o, e.bead, history, now)
         e.kind = e.disp.kind
         if e.disp.escalated:
@@ -64,7 +66,7 @@ class Decide:
         e = self.e
         trip = storm.storm_trip(history, e.bead, kind, o.fingerprint, e.clock.now())
         if trip and not e.dry:
-            path = storm_file.storm_path(ident.config_dir(), self.repo_id())
+            path = storm_file.storm_path(e.home.root, self.repo_id())
             if storm_file.write_storm(path, trip.fingerprint, trip.beads, trip.t, e.clock.now(), oc.KNOBS["storm_window_s"], why):
                 e.storm = storm.banner(trip)
                 e.warn(e.storm)

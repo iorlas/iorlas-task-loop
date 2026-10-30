@@ -12,6 +12,7 @@ from support.spawn import real_spawner
 
 from taskloop.app.wire import lanes
 from taskloop.contracts.delegate_status import snapshot_of
+from taskloop.contracts.env import Env
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.stores import StatusStore
 
@@ -22,12 +23,12 @@ class Chore(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        self.cfg = ConfigDir(self.tmp.name)
+        self.cfg = ConfigDir(Path(self.tmp.name) / "task-loop")
         self.said = []
 
     def chore(self, now, why=None):
         with mock.patch.object(lanes, "file_status", return_value=why) as ask:
-            return lanes.chore(self.said.append, real_spawner(), self.cfg, now), ask.call_count
+            return lanes.chore(self.said.append, real_spawner(), Env({"XDG_CONFIG_HOME": self.tmp.name}), now), ask.call_count
 
     def test_nothing_filed_asks_once_then_waits_20_minutes_even_when_it_failed(self):
         self.assertEqual(self.chore(5000.0, "delegate status exited 1: x"), (True, 1))

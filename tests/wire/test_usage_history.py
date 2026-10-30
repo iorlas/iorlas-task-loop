@@ -5,7 +5,6 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
-from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -69,8 +68,7 @@ class History(unittest.TestCase):
         UsageHistory(self.cfg).record(snap(T - USAGE_KEEP_S - 5))
         window = {"name": "x", "used_pct": 3, "resets_at": T + H}
         answer = json.dumps({"ts": T, "lanes": {}, "cockpit": {"lanes": [{"id": "A", "state": "ready", "windows": [window]}]}})
-        with mock.patch.object(lanes.paths, "ConfigDir", return_value=self.cfg):
-            self.assertIsNone(lanes.file_answer(answer))
+        self.assertIsNone(lanes.file_answer(answer, self.cfg))
         self.assertEqual([(r.at, r.used_pct) for r in self.h.rows()], [(T, 3.0)])
 
 

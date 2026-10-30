@@ -9,11 +9,10 @@ from unittest import mock
 
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as te
-from support import fake_route, procsim
+from support import fake_route, homes, procsim
 from support.engine_case import CLEAN, PLAN, WRITE, stop
 
 from taskloop.adapters import delegate as dl
-from taskloop.adapters import ident
 from taskloop.app.plan.planner import Planner
 from taskloop.app.run import engine
 from taskloop.app.wire import slots as wslots
@@ -125,7 +124,7 @@ class Fingerprint(unittest.TestCase):
 class TraceTelemetry(te.EngineTest):
 
     def traces(self):
-        path = ident.config_dir() / "traces.jsonl"
+        path = homes.config_dir() / "traces.jsonl"
         return [json.loads(line) for line in path.read_text().splitlines()]
 
     def records(self, kind):

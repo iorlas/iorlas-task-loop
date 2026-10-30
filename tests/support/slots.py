@@ -2,13 +2,11 @@
 import os
 import time
 
-from support import procsim
+from support import homes, procsim
 from support.spawn import port_git, real_spawner
 from support.who import who
-from taskloop.adapters import ident
 from taskloop.app.slots.pool import SlotPool
 from taskloop.app.wire import slots as wslots
-from taskloop.contracts import paths
 from taskloop.stores.files import FileTickets
 
 
@@ -28,7 +26,7 @@ def free_expired(repo):
 
 
 def tickets():
-    return FileTickets(paths.ConfigDir(ident.config_dir()))
+    return FileTickets(homes.cfg())
 
 
 def take_ticket(repo, why, prio=2):

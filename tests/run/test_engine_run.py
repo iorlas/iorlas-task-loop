@@ -6,7 +6,7 @@ from typing import Any, ClassVar
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
-from support import gitq, procsim
+from support import gitq, homes, procsim
 from support.checks import ck
 from support.engine_case import (
     BEAD,
@@ -46,7 +46,6 @@ from support.who import who
 
 from taskloop.adapters import (
     context_size,
-    ident,
 )
 from taskloop.adapters import delegate as dl
 from taskloop.app.land.checkout import Checkout
@@ -214,7 +213,7 @@ class EngineRunTest(EngineTest):
                                                  side_effect=lambda *a: os.kill(os.getpid(), sig.SIGTERM)):
             rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0)
-        runs = [json.loads(ln) for ln in (ident.config_dir() / "traces.jsonl").read_text().splitlines()]
+        runs = [json.loads(ln) for ln in (homes.config_dir() / "traces.jsonl").read_text().splitlines()]
         self.assertEqual([r["outcome"] for r in runs], ["landed"])
 
     def test_a_stop_before_the_engine_ran_still_closes_with_a_trace(self):
@@ -222,7 +221,7 @@ class EngineRunTest(EngineTest):
             rc, s = self.run_engine({"plan": [PLAN]})
         self.assertEqual((rc, s.calls), (2, []))
         self.assertIn("stopped (SIGTERM)", self.said())
-        runs = [json.loads(ln) for ln in (ident.config_dir() / "traces.jsonl").read_text().splitlines()]
+        runs = [json.loads(ln) for ln in (homes.config_dir() / "traces.jsonl").read_text().splitlines()]
         self.assertEqual(runs[-1]["why"], "failed: stopped (SIGTERM)")
 
     def run_bead_stopped_in(self, where):
@@ -561,7 +560,7 @@ class EngineRunTest(EngineTest):
         ):
             denied = [dict(x, kind="policy", path="") for x in denied0]
             stuck = stop("secrets", "w1", denied=denied) if reason else full(None, "w1", text="no", denied=denied)
-            for f in (ident.config_dir() / "asks" / "t-1.json", ident.config_dir() / "checkpoints" / "t-1.json"):
+            for f in (homes.config_dir() / "asks" / "t-1.json", homes.config_dir() / "checkpoints" / "t-1.json"):
                 f.unlink() if f.exists() else None  # each case starts as a new bead: an open ask would make the run wait
             # a secrets stop gets the one new thread told to use apply_patch (lane_policy), then the fault; the rest is not retried
             rc, s = self.run_engine({"plan": [PLAN], "write": [stuck, stuck if reason else WRITE], "review": [CLEAN]})
@@ -691,7 +690,7 @@ class EngineRunTest(EngineTest):
         self.assertEqual(rc, 0)
         self.assertEqual(self.eng.sessions[1]["reason"], "rate_limited")
         self.assertEqual(self.eng.sessions[-1]["context"]["instructions"], ["/repo/AGENTS.md"])
-        trace = [json.loads(ln) for ln in (ident.config_dir() / "traces.jsonl").read_text().splitlines()][-1]
+        trace = [json.loads(ln) for ln in (homes.config_dir() / "traces.jsonl").read_text().splitlines()][-1]
         self.assertEqual(trace["lanes"], {})
 
     def test_a_delegate_of_another_contract_blocks_before_any_step(self):

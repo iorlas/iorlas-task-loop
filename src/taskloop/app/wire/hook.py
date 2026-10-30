@@ -6,18 +6,19 @@ from pathlib import Path
 from taskloop.adapters import gitrepo
 from taskloop.adapters.ident import config_dir
 from taskloop.app.track.trail import now
+from taskloop.contracts.env import Env
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import Git
 from taskloop.contracts.snapshots import SessionIndex
 from taskloop.contracts.stores import SessionStore
 
 
-def session_start(stdin_text: str) -> None:
+def session_start(stdin_text: str, env: Env) -> None:
     try:
         d = json.loads(stdin_text or "{}")
         sid = d.get("session_id")
         if sid:
-            SessionStore(ConfigDir(config_dir()), sid).write(SessionIndex(
+            SessionStore(ConfigDir(config_dir(env)), sid).write(SessionIndex(
                 session=sid, transcript=d.get("transcript_path") or "", cwd=d.get("cwd") or "", source=d.get("source") or "", t=now()))
     except Exception:
         pass
@@ -30,9 +31,9 @@ SHIM = (
 )
 
 
-def write_shim(plugin_root: Path) -> None:
+def write_shim(plugin_root: Path, env: Env) -> None:
     """<config>/bin/tl: a path that does not change with the plugin version, running this install's tl.py through `uv run --script`."""
-    f = config_dir() / "bin" / "tl"
+    f = config_dir(env) / "bin" / "tl"
     text = SHIM.replace("{tl}", shlex.quote(str(plugin_root / "skills" / "task-loop" / "tl.py")))
     try:
         if f.is_file() and f.read_text(encoding="utf-8") == text:

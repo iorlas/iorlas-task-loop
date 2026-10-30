@@ -176,7 +176,7 @@ class Line(Slots):
         repo = str(self.repo)
         a, b = sl.take_ticket(repo, "loop"), sl.take_ticket(repo, "run-task x-1")
         self.assertLess(a.seq, b.seq)
-        line = wslots.waiting_line(repo)
+        line = wslots.waiting_line(repo, who())
         self.assertEqual([t.seq for t in line], [a.seq, b.seq])
         self.assertEqual((line[0].pid, line[1].why), (os.getpid(), "run-task x-1"))
         sl.drop_ticket(repo, a)
@@ -192,7 +192,7 @@ class Line(Slots):
         p2 = sl.take_ticket(repo, "run-task p2-bead", 2)  # joined first, alive (this process)
         p0 = sl.take_ticket(repo, "run-task p0-bead", 0)
         self.assertLess(p2.seq, p0.seq)
-        self.assertEqual([t.why for t in wslots.waiting_line(repo)], ["run-task p0-bead", "run-task p2-bead"])
+        self.assertEqual([t.why for t in wslots.waiting_line(repo, who())], ["run-task p0-bead", "run-task p2-bead"])
         sl.drop_ticket(repo, p0)
         got = wslots.wait_slot(repo, self.cfg, "late p0", poll=(0.01, 0.01), stop=lambda: True, prio=0, spawner=real_spawner(),
             git=port_git(), who=who())
@@ -221,7 +221,7 @@ class Line(Slots):
     def test_equal_priorities_keep_arrival_order_and_an_unreadable_priority_is_p2(self):
         repo = str(self.repo)
         ts = [sl.take_ticket(repo, "a", 1), sl.take_ticket(repo, "b", 1), sl.take_ticket(repo, "c")]
-        self.assertEqual([t.why for t in wslots.waiting_line(repo)], [*["a", "b", "c"][:2], "c"])
+        self.assertEqual([t.why for t in wslots.waiting_line(repo, who())], [*["a", "b", "c"][:2], "c"])
         self.assertEqual((wslots.prio_of(tbead("x-1", 0)), wslots.prio_of(tbead("x-1", 1)), wslots.prio_of(None)), (0, 1, 2))
         for t in ts:
             sl.drop_ticket(repo, t)
@@ -323,7 +323,7 @@ class ReviewFixes(AreasBase):
         old.write_text("{")
         fresh.write_text("{")
         os.utime(old, (time.time() - 700, time.time() - 700))
-        self.assertEqual(wslots.waiting_line(repo), [])
+        self.assertEqual(wslots.waiting_line(repo, who()), [])
         self.assertIsNotNone(
             wslots.wait_slot(repo, wslots.profile_slots(repo), "x", stop=lambda: True, spawner=real_spawner(), git=port_git(), who=who())
         )  # nobody is ahead: the free slot is taken

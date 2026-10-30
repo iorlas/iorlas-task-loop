@@ -16,7 +16,7 @@ SRC = ROOT / "skills" / "task-loop"
 sys.path.insert(0, str(SRC))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: E402, F401
-from support import gitq  # noqa: E402
+from support import gitq, homes  # noqa: E402
 from support.checkpoints import read_ck  # noqa: E402
 
 sys.path.insert(0, str(ROOT / "tests"))
@@ -48,11 +48,9 @@ from taskloop.app.run import (  # noqa: E402
     engine,
     entry,
 )
+from taskloop.app.run import reload as run_reload  # noqa: E402
 from taskloop.app.wire import slots as wslots  # noqa: E402
-from taskloop.contracts.env import (  # noqa: E402
-    Env,
-    snapshot,
-)
+from taskloop.contracts.env import Env, snapshot  # noqa: E402
 from taskloop.contracts.ids import BeadId  # noqa: E402
 
 PLAN_DEF = "    def plan(self, again: bool = False) -> PlanData:\n"
@@ -103,7 +101,7 @@ class Reload(te.EngineTest):
         return d
 
     def events(self):
-        f = ident.config_dir() / "events.jsonl"
+        f = homes.config_dir() / "events.jsonl"
         return [json.loads(x) for x in f.read_text().splitlines()] if f.exists() else []
 
     def engine_for(self, script, env=None, **cfg):
@@ -114,10 +112,10 @@ class Reload(te.EngineTest):
         eng.argv = ["run-task", "t-1", "--worktree", str(self.wt), "--fresh", "--outcome-file", "/x/out.json"]
 
         def fake_exec(argv, environ):
-            marker = reexec.read_reexec(BeadId("t-1"))
+            marker = reexec.read_reexec(homes.cfg(), BeadId("t-1"))
             self.execs.append({"argv": argv, "env": json.loads(environ["TL_REEXEC"]), "marker": marker.to_dict() if marker else None})
         eng.exec_fn = fake_exec
-        eng.newer_fn = lambda: wloop.newer(self.here)  # pyrefly: ignore[bad-assignment]
+        eng.newer_fn = lambda: run_reload.newer(snapshot(), self.here.parents[1])  # pyrefly: ignore[bad-assignment]
         return eng
 
     def patches(self, script, during=None):
@@ -175,7 +173,7 @@ class Reload(te.EngineTest):
         self.assertEqual(rc, 0)
         self.assertTrue(self.closed and self.closed[0].startswith("merged "))
         self.assertEqual(gitq.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")  # pyrefly: ignore[missing-attribute]
-        self.assertFalse(reexec.cfg().reexec_note(BeadId("t-1")).exists())  # a run that ended is no crash after an exec
+        self.assertFalse(homes.cfg().reexec_note(BeadId("t-1")).exists())  # a run that ended is no crash after an exec
         logs = [json.loads(x) for x in eng.log_path.read_text().splitlines()]
         self.assertEqual(len([x for x in logs if x["kind"] == "run_start"]), 1)  # one run record for the one run
         self.assertTrue(
@@ -204,16 +202,16 @@ class Reload(te.EngineTest):
         self.assertEqual([e for e in self.events() if e["kind"] == "reload"], [])
 
     def test_a_refused_version_is_skipped_until_it_is_installed_again_and_a_newer_one_is_taken(self):
-        inst = wloop.installs(wloop.cfgdir(), here=self.here)
+        inst = wloop.installs(homes.cfg(), snapshot(), here=self.here)
         self.install("0.2.0", plant=BREAK_PLAN)  # a copy: a link would share the files the install key is made of
-        self.assertEqual(must(wloop.newer(self.here)), ("0.2.0", self.cache / "0.2.0"))
+        self.assertEqual(must(run_reload.newer(snapshot(), self.here.parents[1])), ("0.2.0", self.cache / "0.2.0"))
         inst.record_bad("0.2.0", "run-task died (exit 1) 3 s after the exec into it")  # what the crash fallback writes
-        self.assertIsNone(wloop.newer(self.here))  # refused, key unchanged
+        self.assertIsNone(run_reload.newer(snapshot(), self.here.parents[1]))  # refused, key unchanged
         shutil.rmtree(self.cache / "0.2.0")
         self.install("0.2.0")  # the same number, re-released
-        self.assertEqual(must(wloop.newer(self.here))[0], "0.2.0")
+        self.assertEqual(must(run_reload.newer(snapshot(), self.here.parents[1]))[0], "0.2.0")
         self.install("0.3.0")
-        self.assertEqual(must(wloop.newer(self.here))[0], "0.3.0")
+        self.assertEqual(must(run_reload.newer(snapshot(), self.here.parents[1]))[0], "0.3.0")
 
     # -- the crash after an exec: the loop puts the run back on the version it came from, once
     def test_a_run_task_that_dies_right_after_the_exec_is_restarted_once_on_the_old_version(self):
@@ -228,8 +226,8 @@ class Reload(te.EngineTest):
                 if len(spawned) == 2:  # the fallback run gives its outcome
                     Path(self.cmd[self.cmd.index("--outcome-file") + 1]).write_text(json.dumps({"v": 2, "outcome": "landed", "bead": "t"}))
                     return 0
-                reexec.cfg().reexec_note(BeadId("t-1")).parent.mkdir(parents=True, exist_ok=True)
-                reexec.cfg().reexec_note(BeadId("t-1")).write_text(
+                homes.cfg().reexec_note(BeadId("t-1")).parent.mkdir(parents=True, exist_ok=True)
+                homes.cfg().reexec_note(BeadId("t-1")).write_text(
                     json.dumps(
                         {
                             "v": 1,
@@ -260,7 +258,8 @@ class Reload(te.EngineTest):
         said = []
         with mock.patch.dict(os.environ, {}):
             env = wloop.build(repo, store=FakeBeads(), here=self.here, env=snapshot(), spawner=holder, git=port_git(), who=who())
-            run = BeadRun(env, looptest.files(repo), wloop.installs(env.cfgdir, here=self.here), lambda: env.profile().loop, lambda: "",
+            run = BeadRun(env, looptest.files(repo), wloop.installs(env.cfgdir, snapshot(), here=self.here),
+                          lambda: env.profile().loop, lambda: "",
                           lambda running: None, lambda: None, said.append)
             # the first child is the one that exec'd: its note appears while it runs
             t1 = as_bead({"id": "t-1"})
@@ -275,9 +274,9 @@ class Reload(te.EngineTest):
         self.assertEqual(pids, [str(os.getpid())] * 2)  # run-task's parent is uv: the loop names itself for the lock handoff
         fb = [e for e in self.events() if e["kind"] == "reload_fallback"]
         self.assertEqual([(e["old"], e["new"]) for e in fb], [("0.2.0", "0.1.0")])
-        self.assertIn("0.2.0", [e["version"] for e in json.loads((ident.config_dir() / "bad-versions.json").read_text())["entries"]])
+        self.assertIn("0.2.0", [e["version"] for e in json.loads((homes.config_dir() / "bad-versions.json").read_text())["entries"]])
         self.assertTrue(any("RED" in c for c in said))
-        self.assertFalse(reexec.cfg().reexec_note(BeadId("t-1")).exists())
+        self.assertFalse(homes.cfg().reexec_note(BeadId("t-1")).exists())
 
     # -- point 2: delegate is resolved per call, never held
     def test_delegate_route_is_resolved_again_each_call(self):
@@ -302,9 +301,9 @@ class Reload(te.EngineTest):
             main = Path(self.tmp.name, "claude", "plugins", "cache", "m", "iorlas-task-loop", v, "skills", "task-loop", "tl.py")
             main.parent.mkdir(parents=True)
             main.write_text("")
-        self.assertEqual(catalog.releases_behind("0.1.0"), 2)
-        self.assertEqual(catalog.releases_behind("0.2.0"), 1)
-        self.assertEqual(catalog.releases_behind("0.10.0"), 0)
+        self.assertEqual(catalog.releases_behind("0.1.0", homes.claude_dir()), 2)
+        self.assertEqual(catalog.releases_behind("0.2.0", homes.claude_dir()), 1)
+        self.assertEqual(catalog.releases_behind("0.10.0", homes.claude_dir()), 0)
 
 if __name__ == "__main__":
     unittest.main()

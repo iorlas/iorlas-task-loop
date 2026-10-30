@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: E402, F401
 from jsonl_log import JsonlLog  # noqa: E402
+from support import homes  # noqa: E402
 from support.dashes import make_dash  # noqa: E402
 from support.logs import typed  # noqa: E402
 from support.narrow import must  # noqa: E402
@@ -101,7 +102,7 @@ class Crash(unittest.TestCase):
         trace = [RunTrace(run=run, bead=BEAD, repo_url="", worktree="", branch="", coordinator_session="",
                           started=0.0, ended=0.0, outcome=Outcome.FAILED, why="", sha="")]  # makes the bead's prefix one the report knows
         at = matchers.stem_time(STAMP)  # a run belongs to the window its name's stamp is in
-        found = card.crashes("/no/repo", at - 3600, at + 3600, trace, now=self.now)
+        found = card.crashes("/no/repo", at - 3600, at + 3600, trace, homes.cfg(), now=self.now)
         return [c["run"] for c in found]
 
     def test_a_recent_record_reads_live_in_both(self):

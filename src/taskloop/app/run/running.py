@@ -4,13 +4,12 @@ import time
 from pathlib import Path
 from typing import Any
 
-from taskloop.adapters import beadtools, ident
+from taskloop.adapters import beadtools
 from taskloop.adapters.locks import hold_path
 from taskloop.app.loop.queue import QueueRule, area_busy_text
 from taskloop.app.run import console
 from taskloop.app.slots import engine_lock
 from taskloop.app.wire import slots as wslots
-from taskloop.contracts import paths
 from taskloop.contracts.enums import LockWhat
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId, is_bead_id
@@ -34,8 +33,8 @@ def running(repo: str, git: Git, who: Identity, store: Beads | None = None) -> d
     return out
 
 
-def area_lock(repo: Any) -> Any:
-    record = paths.ConfigDir(ident.config_dir()).lock_record(LockWhat.AREA.value, wslots.repo_key(repo))
+def area_lock(repo: Any, who: Identity) -> Any:
+    record = who.config.lock_record(LockWhat.AREA.value, wslots.repo_key(repo))
     return hold_path(record, f"pid {os.getpid()}", what=LockWhat.AREA)
 
 

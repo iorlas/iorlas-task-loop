@@ -15,6 +15,7 @@ import unittest.mock
 from pathlib import Path
 
 import support.paths  # noqa: F401
+from support import homes
 
 # isort: split
 import contextlib
@@ -24,7 +25,6 @@ from support.procsim import real_proc
 from support.release_world import IDENTITY, MARKET, PLUGIN, World, git
 
 from taskloop.adapters import childenv, landlock
-from taskloop.adapters.ident import config_dir
 from taskloop.app.release import clone, manifest, selfupdate, shell
 from taskloop.contracts.env import Env, snapshot
 from taskloop.contracts.envvars import EnvVar
@@ -125,7 +125,7 @@ class Release(unittest.TestCase):
         self.assertIn(f"CHILD ['msg', '--minor', '--repo', '{self.repo}', '--marketplace', '{self.market}'] 1", r.stdout)
         self.assertIn("LOCK TAKEN", r.stdout)
         self.assertEqual(self.version(self.origin)["version"], "0.1.0")  # the fake child released nothing; this run did not either
-        where = clone.clone_dir(config_dir(), str(self.origin))
+        where = clone.clone_dir(homes.config_dir(), str(self.origin))
         self.assertIsNotNone(selfupdate.newer_release(ROOT, where, self.sh, Env({})))
         handed = Env({EnvVar.TL_RELEASE_REEXEC.value: "1"})
         self.assertIsNone(selfupdate.newer_release(ROOT, where, self.sh, handed))  # an exec'd release never execs again
@@ -381,7 +381,7 @@ class Release(unittest.TestCase):
         before = self.git("rev-parse", "main", cwd=self.origin)
 
         def reset_clone(tree):
-            where = clone.clone_dir(config_dir(), str(self.origin))
+            where = clone.clone_dir(homes.config_dir(), str(self.origin))
             self.git("reset", "-q", "--hard", "origin/main", cwd=where)
         self.world.on_suite = reset_clone
         r = self.release("fix")
@@ -437,7 +437,7 @@ class Release(unittest.TestCase):
 
         def a_loop_lands_meanwhile(_repo):  # what an engine does at land, the lock taken as it takes it
             try:
-                with landlock.os_lock(landlock.land_lock_path(str(self.origin)), "a loop's land", timeout=0):
+                with landlock.os_lock(landlock.land_lock_path(homes.cfg(), str(self.origin)), "a loop's land", timeout=0):
                     self.git("pull", "-q", "--rebase", "origin", "main", cwd=side)
                     name = f"land-{time.time_ns()}.txt"
                     self.write(side / name, "x")

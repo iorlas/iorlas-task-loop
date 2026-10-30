@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: E402, F401
+from support import homes  # noqa: E402
 
 # isort: split
 import contextlib  # noqa: E402
@@ -274,7 +275,7 @@ class CutoverCheck(Base):
         self.repo = self.home / "repo"
         self.repo.mkdir()
         sh("git", "init", "-q", cwd=self.repo)
-        trail.register_repo(str(self.repo))
+        trail.register_repo(str(self.repo), homes.cfg())
         p = mock.patch.object(wslots, "slot_beads", return_value=[])
         p.start()
         self.addCleanup(p.stop)

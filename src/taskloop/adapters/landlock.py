@@ -11,8 +11,8 @@ from subprocess import Popen
 from types import FrameType
 
 from taskloop.adapters import locks, procs
-from taskloop.adapters.ident import config_dir
 from taskloop.contracts.locks import LockRecord, LockTimeout
+from taskloop.contracts.paths import ConfigDir
 
 
 @contextlib.contextmanager
@@ -50,15 +50,15 @@ def lock_key(url: str) -> str:
     return hashlib.sha1(canonical_remote(url).encode()).hexdigest()[:12]
 
 
-def land_lock_path(url: str) -> Path:
+def land_lock_path(home: ConfigDir, url: str) -> Path:
     """The repo's land lock (one per origin, however its URL is spelled): every land, and a release's push, take it (os_lock)."""
-    return config_dir() / "locks" / f"land-{lock_key(url)}.lock"
+    return home.root / "locks" / f"land-{lock_key(url)}.lock"
 
 
-def run_locked(cmd: list[str], repo: str, wait_min: float | None, origin: str) -> int:
+def run_locked(cmd: list[str], repo: str, wait_min: float | None, origin: str, home: ConfigDir) -> int:
     """Run `cmd` while holding the land lock of `repo`; its exit code, 127 when it cannot start, 75 after `wait_min` minutes of waiting.
     `origin`: the repo's origin url ('' when it has none), which names the lock."""
-    path = land_lock_path(origin or repo)
+    path = land_lock_path(home, origin or repo)
     holder = f"land-lock pid {os.getpid()} ({' '.join(cmd)[:80]})"
     secs = wait_min * 60 if wait_min is not None else None
     child: list[Popen[bytes]] = []

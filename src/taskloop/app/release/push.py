@@ -2,9 +2,10 @@
 from collections.abc import Callable
 from pathlib import Path
 
-from taskloop.adapters import landlock
+from taskloop.adapters import ident, landlock
 from taskloop.app.release import clone
 from taskloop.app.release.shell import Abort, Shell, fetch_or_abort
+from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.slots import SlotGitError
 
 
@@ -22,7 +23,7 @@ def push_main(repo: Path, message: str, version: str, base: str, bump: Callable[
     git = sh.port
     d = str(repo)
     url = git.remote_url(d, "origin") or d
-    with landlock.os_lock(landlock.land_lock_path(url), "release: " + message,
+    with landlock.os_lock(landlock.land_lock_path(ConfigDir(ident.config_dir(sh.env)), url), "release: " + message,
                           lambda who: sh.say(f"waiting for the land lock (held by {who})")):
         for _ in range(2):
             fetch_or_abort(git, repo)

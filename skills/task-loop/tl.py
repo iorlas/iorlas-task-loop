@@ -79,7 +79,6 @@ from taskloop.cli import status
 from taskloop.cli import wait as cli_wait
 from taskloop.contracts.env import Env, snapshot
 from taskloop.contracts.identity import Identity
-from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import Git, Spawner
 
 HERE = Path(__file__).resolve().parent
@@ -108,10 +107,10 @@ def v_ask(a: Any, c: Ctx) -> int:
     """The owner's inbox and typed verbs (answer, hint, hold, override, park, note) from the terminal: src/taskloop/cli/asks.py over the
     AskStore. A bead's ask names its repo, and the bd of that repo takes the bead's state."""
     if a.op == "list":
-        for b in wire_asks.sweep("close", c.who):  # throttled: the loop sweeps too
+        for b in wire_asks.sweep("close", c.who, c.who.config):  # throttled: the loop sweeps too
             print(f"closed the ask of {b}: its bead is closed or gone")
-    return cli_asks.run(a, wire_asks.store(), lambda repo: beadtools.bd_store(c.who.actor, repo or None), c.now, c.who.actor,
-                       ConfigDir(ident.config_dir()))
+    return cli_asks.run(a, wire_asks.store(c.who.config), lambda repo: beadtools.bd_store(c.who.actor, repo or None), c.now, c.who.actor,
+                       c.who.config)
 
 
 def v_land_lock(a: Any, c: Ctx) -> int:
@@ -123,7 +122,7 @@ def v_land_lock(a: Any, c: Ctx) -> int:
         print("land-lock: no command (usage: tl.py land-lock [--repo DIR] -- CMD...)", file=sys.stderr)
         return 2
     repo = str(Path(a.repo).resolve())
-    return landlock.run_locked(cmd, repo, a.wait_min, real.git(c.env).remote_url(repo, "origin"))
+    return landlock.run_locked(cmd, repo, a.wait_min, real.git(c.env).remote_url(repo, "origin"), c.who.config)
 
 
 def owner_parsers(sp):
@@ -293,7 +292,7 @@ def v_bd(a: Any, c: Ctx) -> int:
 
 
 def v_register(a: Any, c: Ctx) -> int:
-    return verbs.register(c.git, a.directory)
+    return verbs.register(c.git, a.directory, c.who)
 
 
 def v_claim(a: Any, c: Ctx) -> int:
@@ -343,21 +342,21 @@ def repo_of(a: Any, c: Ctx) -> str:
 
 
 def v_doctor(a: Any, c: Ctx) -> int:
-    return doctor.run(c.here.parents[1], c.git, c.who)
+    return doctor.run(c.here.parents[1], c.env, c.git, c.who)
 
 
 def v_status(a: Any, c: Ctx) -> int:
-    return status.run_status(repo_of(a, c), c.here.parents[1], c.now(), a.json, c.who, c.git)
+    return status.run_status(repo_of(a, c), c.here.parents[1], c.now(), a.json, c.env, c.who, c.git)
 
 
 def v_wait(a: Any, c: Ctx) -> int:
     repo = repo_of(a, c)
-    return cli_wait.wait(a, ConfigDir(ident.config_dir()), wire_asks.store(), repo, lambda cwd: hook_wire.main_checkout(c.git, cwd),
+    return cli_wait.wait(a, c.who.config, wire_asks.store(c.who.config), repo, lambda cwd: hook_wire.main_checkout(c.git, cwd),
         now=c.now)
 
 
 def v_handoff(a: Any, c: Ctx) -> int:
-    return status.run_handoff(a.op, repo_of(a, c), c.here.parents[1], c.now(), c.who)
+    return status.run_handoff(a.op, repo_of(a, c), c.here.parents[1], c.now(), c.env, c.who)
 
 
 VERBS: Final[dict[str, Handler]] = {
@@ -369,12 +368,12 @@ VERBS: Final[dict[str, Handler]] = {
     "close": v_close,
     "block": v_block,
     "trace": lambda a, c: verbs.trace(a.id, a.last, a.json, c.env),
-    "usage": lambda a, c: wire_usage.feed(a.windows, c.spawner),
-    "lanes": lambda a, c: wire_lanes.refresh(c.spawner),
+    "usage": lambda a, c: wire_usage.feed(a.windows, c.spawner, c.env),
+    "lanes": lambda a, c: wire_lanes.refresh(c.spawner, c.env),
     "worktree": lambda a, c: wslots.worktree(c.git, c.who, a.op, a.self_too),
     "dash": lambda a, c: wire_dash.run(a.op, c.env, c.spawner),
-    "pin": of_args(pins.run_pin, "version", "delegate", "clear"),
-    "rollback": of_args(pins.run_rollback),
+    "pin": lambda a, c: pins.run_pin(c.env, a.version, a.delegate, a.clear),
+    "rollback": lambda a, c: pins.run_rollback(c.env),
     "doctor": v_doctor,
     "slot": v_slot,
     "ask": v_ask, "answer": v_ask, "hint": v_ask, "hold": v_ask, "override": v_ask, "park": v_ask, "note": v_ask,

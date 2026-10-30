@@ -13,6 +13,7 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: E402, F401
+from support import homes  # noqa: E402
 
 # isort: split
 
@@ -21,9 +22,6 @@ from support import (  # noqa: E402
 )
 
 from loop.test_loop import LoopBase  # noqa: E402
-from taskloop.adapters import (  # noqa: E402
-    ident,
-)
 
 NET = {"kind": "pause_network", "why": "paused: network on write; resume when it is back"}
 
@@ -100,7 +98,7 @@ class LoopSelfUpdate(LoopBase):
 
 
     def pin(self, **v):
-        (ident.config_dir() / "pinned.json").write_text(json.dumps(v))
+        (homes.config_dir() / "pinned.json").write_text(json.dumps(v))
 
 
 if __name__ == "__main__":

@@ -80,7 +80,7 @@ def cmd_report(a: Any, env: Env, git: Git, who: Identity) -> int:
     since, until = window(getattr(a, "since", None), getattr(a, "until", None), time.time())
     if getattr(a, "planner", False):
         pre = {x.strip() for x in (getattr(a, "prefix", "") or "").split(",") if x.strip()}
-        p = planner.planner_stats(since, until, pre)
+        p = planner.planner_stats(who.config, since, until, pre)
         if a.json:
             print(json.dumps(p, indent=1, ensure_ascii=False))
         else:
@@ -88,7 +88,7 @@ def cmd_report(a: Any, env: Env, git: Git, who: Identity) -> int:
         return 0
     repo = repos.repo_root(a.repo)
     c = cards.scorecard(repo, since, until, base=repos.default_base(repo, git), git=git, who=who)
-    c["planner"] = planner.planner_stats(since, until, {prefix(x["bead"]) for x in c["per_bead"]})
+    c["planner"] = planner.planner_stats(who.config, since, until, {prefix(x["bead"]) for x in c["per_bead"]})
     if a.json:
         print(json.dumps(c, indent=1, ensure_ascii=False))
     else:
@@ -99,8 +99,9 @@ def cmd_report(a: Any, env: Env, git: Git, who: Identity) -> int:
 def cmd_lost(a: Any, env: Env, git: Git, who: Identity) -> int:
     repo = repos.repo_root(a.repo)
     since = since_of(a.since, time.time())
-    rows = lostwork.lost_work(repo, repos.default_base(repo, git), lambda b: bead_status(b, repo, who), repo_traces(repo, git).runs, git,
-        since=since)
+    traces = repo_traces(repo, git, who.config).runs
+    rows = lostwork.lost_work(repo, repos.default_base(repo, git), lambda b: bead_status(b, repo, who), traces, git,
+        who.config, since=since)
     if a.json:
         print(json.dumps(rows, indent=1, ensure_ascii=False))
     else:
@@ -163,14 +164,14 @@ def cmd_reflect(a: Any, env: Env, git: Git, who: Identity) -> int:
     def at(text: str | None, default: float) -> float:
         return digest_time(text, now) if text else default
 
-    st = reflect.read_state()
+    st = reflect.read_state(who.config)
     last = float(st.get("until") or 0) or now - reflect.DAY  # the last digest's end, 3 days back at most
     since = at(a.since, max(now - 3 * reflect.DAY, last))
     d = reflect.digest(who, since, at(a.until, now), dry=a.dry_run)
     if not a.dry_run and not a.since and not d.get("busy"):
-        st = reflect.read_state()
+        st = reflect.read_state(who.config)
         st["until"] = now
-        reflect.write_state(st)
+        reflect.write_state(who.config, st)
     if a.json:
         print(json.dumps(d, indent=1, default=str))
         return 0

@@ -59,5 +59,5 @@ def prune_runs(cfg: ConfigDir, days: float, exempt: set[str], now: float, dry_ru
                 layout.drop_run_log(cfg, log)
         for f in suites:
             f.unlink(missing_ok=True)
-        trail.prune_events(days)
+        trail.prune_events(cfg, days)
     return found

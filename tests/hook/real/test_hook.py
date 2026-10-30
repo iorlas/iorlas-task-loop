@@ -19,6 +19,7 @@ import support.paths  # noqa: E402, F401
 import tl  # noqa: E402
 from support.spawn import port_git  # noqa: E402
 
+from taskloop.contracts.env import snapshot  # noqa: E402
 from taskloop.domain.brief import HANDOFF_BYTES, RULES  # noqa: E402
 from taskloop.hook import pretool, session  # noqa: E402
 
@@ -54,20 +55,20 @@ class Sessions(unittest.TestCase):
         return json.dumps({"session_id": "s1", "transcript_path": "/t.jsonl", "cwd": str(self.repo), **kw})
 
     def test_session_start_indexes_the_session_and_points_the_tl_shim_at_this_install(self):
-        self.assertEqual(session.start(self.event(source="startup"), self.root, port_git()), "")
+        self.assertEqual(session.start(self.event(source="startup"), self.root, snapshot(), port_git()), "")
         self.assertEqual(json.loads((self.cfg / "sessions" / "s1.json").read_text())["transcript"], "/t.jsonl")
         shim = (self.cfg / "bin" / "tl").read_text()
         self.assertIn("exec uv run --quiet --script " + str(self.root / "skills" / "task-loop" / "tl.py"), shim)
         self.assertTrue(os.access(self.cfg / "bin" / "tl", os.X_OK))
 
     def test_session_start_never_fails_on_input_it_cannot_read(self):
-        self.assertEqual(session.start("not json", self.root, port_git()), "")
-        self.assertEqual(session.start("", self.root, port_git()), "")
+        self.assertEqual(session.start("not json", self.root, snapshot(), port_git()), "")
+        self.assertEqual(session.start("", self.root, snapshot(), port_git()), "")
 
     def test_a_compaction_writes_the_handoff_and_the_session_that_follows_gets_it_as_context(self):
-        self.assertEqual(session.start(self.event(source="compact"), self.root, port_git()), "")  # nothing written yet
-        session.precompact(self.event(), self.root, port_git())
-        out = json.loads(session.start(self.event(source="compact"), self.root, port_git()))["hookSpecificOutput"]
+        self.assertEqual(session.start(self.event(source="compact"), self.root, snapshot(), port_git()), "")  # nothing written yet
+        session.precompact(self.event(), self.root, snapshot(), port_git())
+        out = json.loads(session.start(self.event(source="compact"), self.root, snapshot(), port_git()))["hookSpecificOutput"]
         self.assertEqual(out["hookEventName"], "SessionStart")
         text = out["additionalContext"]
         self.assertIn("loop NOT RUNNING", text)
@@ -75,16 +76,18 @@ class Sessions(unittest.TestCase):
         self.assertLessEqual(len(text.encode()), HANDOFF_BYTES)
         for rule in RULES:
             self.assertIn(rule, text)
-        self.assertEqual(session.start(self.event(source="startup"), self.root, port_git()), "")  # a fresh session gets no handoff
+        fresh = session.start(self.event(source="startup"), self.root, snapshot(), port_git())
+        self.assertEqual(fresh, "")  # a fresh session gets no handoff
 
     def test_a_worktree_shares_the_handoff_of_its_main_checkout(self):
         subprocess.run(["git", "-C", str(self.repo), "commit", "-q", "--allow-empty", "-m", "x"], check=True, capture_output=True)
         wt = self.home / "wt"
         subprocess.run(["git", "-C", str(self.repo), "worktree", "add", "-q", "-b", "b", str(wt)], check=True, capture_output=True)
-        session.precompact(self.event(cwd=str(wt)), self.root, port_git())
+        session.precompact(self.event(cwd=str(wt)), self.root, snapshot(), port_git())
         self.assertIn(
             "loop NOT RUNNING",
-            json.loads(session.start(self.event(source="compact"), self.root, port_git()))["hookSpecificOutput"]["additionalContext"],
+            json.loads(session.start(self.event(source="compact"), self.root, snapshot(), port_git()))["hookSpecificOutput"][
+                "additionalContext"],
         )
 
     def test_tl_status_and_handoff_read_the_stores(self):

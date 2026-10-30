@@ -6,7 +6,7 @@ from typing import Any, ClassVar, cast
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
-from support import gitq
+from support import gitq, homes
 from support.checks import typed
 from support.engine_case import (
     CLEAN,
@@ -65,7 +65,7 @@ class EngineLand1Test(EngineTest):
         self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "reviewer"])
         self.assertTrue(self.closed and self.closed[0].startswith("merged "))
         self.assertEqual(gitq.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
-        landed = LandedStore(ident.config_dir()).get(BeadId("t-1"))  # the one landed record: the sha pushed, which origin/main now is
+        landed = LandedStore(homes.config_dir()).get(BeadId("t-1"))  # the one landed record: the sha pushed, which origin/main now is
         assert landed is not None
         remote = gitq.git("rev-parse", "origin/main", cwd=str(self.wt))
         self.assertEqual((landed.sha, landed.base), (remote, "origin/main"))
@@ -77,7 +77,7 @@ class EngineLand1Test(EngineTest):
         self.assertIn("<diff>\ndiff --git a/f.txt b/f.txt", rv)  # the stage's diff, inline (tl-bxk.10.18)
         for fact in ("exit 0", "wrote f", "evidence", "add f"):
             self.assertIn(fact, rv)
-        runs = [json.loads(ln) for ln in (ident.config_dir() / "traces.jsonl").read_text().splitlines()]
+        runs = [json.loads(ln) for ln in (homes.config_dir() / "traces.jsonl").read_text().splitlines()]
         self.assertEqual(len(runs), 1)
         r = runs[0]
         self.assertEqual((r["bead"], r["outcome"], r["coordinator_session"]), ("t-1", "landed", "sess1234-x"))

@@ -5,8 +5,8 @@ from collections.abc import Collection
 from pathlib import Path
 from typing import Any
 
-from taskloop.adapters import ident
 from taskloop.app.report.inputs import prefix, read_jsonl
+from taskloop.contracts.paths import ConfigDir
 from taskloop.domain.report import matchers
 
 HISTORY = "~/.claude/plugins/data/iorlas-delegate-iorlas-marketplace/history.jsonl"
@@ -27,13 +27,13 @@ def input_tokens(tk: dict[str, Any] | None) -> int:
     return i if i >= c else i + c
 
 
-def planner_stats(since: float, until: float, prefixes: Collection[str] = (), history: str | Path | None = None,
-                  engine_dir: str | Path | None = None) -> dict[str, Any]:
+def planner_stats(cfg: ConfigDir, since: float, until: float, prefixes: Collection[str] = (),
+                  history: str | Path | None = None) -> dict[str, Any]:
     """Planner calls per bead from delegate's history (input: `in`, plus cached on rows from before delegate 0.22), split by the engine
     logs' plan nodes:
     first plan, full plans again (a new thread from scratch), amends, check send-backs. Reads only."""
     history = Path(history or os.path.expanduser(HISTORY))
-    engine_dir = Path(engine_dir or ident.config_dir() / "engine")
+    engine_dir = cfg.root / "engine"
     calls = {}
     for r in read_jsonl(history):
         t = r.get("ts") or 0

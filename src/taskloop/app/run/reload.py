@@ -13,6 +13,7 @@ from taskloop.app.release import catalog, pins, reexec
 from taskloop.app.slots import engine_lock
 from taskloop.app.track import trail
 from taskloop.contracts import log as rec
+from taskloop.contracts.env import Env
 from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.paths import ConfigDir, RunFiles
 from taskloop.contracts.run import NetPause, Reexec, ReexecNote, RunCounters
@@ -23,10 +24,10 @@ class Exec(BaseException):
     """Raised after a test's injected exec function returns (the real exec never does): unwinds run() without its close."""
 
 
-def newer(root: Path = ident.PLUGIN_ROOT) -> tuple[str, Path] | None:
+def newer(env: Env, root: Path = ident.PLUGIN_ROOT) -> tuple[str, Path] | None:
     """(version, dir) of the install the loop would move to, or None: the engine's step-boundary look."""
-    found = Installs(ConfigDir(ident.config_dir()), root, lambda: catalog.installed_version("task-loop"),
-                     lambda: pins.read_pin().task_loop or "", now=trail.now).move_to()
+    found = Installs(ConfigDir(ident.config_dir(env)), root, lambda: catalog.installed_version("task-loop", ident.claude_dir(env)),
+                     lambda: pins.read_pin(env).task_loop or "", now=trail.now).move_to()
     return (found.version, found.dir) if found else None
 
 
@@ -59,7 +60,7 @@ class Reload:
         e = self.e
         try:
             JsonStore(RunFiles(e.run_dir).pause(), RunCounters).write(self.counters())
-            reexec.net_pause_store(e.bead).write(NetPause(run=e.log_path.stem, bead=e.bead, t=time.time()))
+            reexec.net_pause_store(e.home, e.bead).write(NetPause(run=e.log_path.stem, bead=e.bead, t=time.time()))
         except OSError as err:
             e.warn(f"could not keep the network pause for the next run: {err}")
 
@@ -75,7 +76,7 @@ class Reload:
         if argv is None:
             return
         try:
-            found = (e.newer_fn or newer)()
+            found = (e.newer_fn or (lambda: newer(e.env)))()
         except Exception as err:  # looking for a newer install never stops a run
             e.warn(f"looking for a newer task-loop failed: {err}")
             return
@@ -90,7 +91,7 @@ class Reload:
         e = self.e
         try:
             JsonStore(RunFiles(e.run_dir).reexec(), RunCounters).write(self.counters())
-            reexec.reexec_store(e.bead).write(ReexecNote(
+            reexec.reexec_store(e.home, e.bead).write(ReexecNote(
                 run=e.log_path.stem, bead=e.bead, frm=here, to=ver, step=step, from_dir=str(ident.PLUGIN_ROOT / "skills" / "task-loop"),
                 t=time.time()))
         except OSError as err:
@@ -117,5 +118,5 @@ class Reload:
             e.moved = True
             raise Exec()  # reached only when the exec function is a test's
         except OSError as exc:  # exec itself failed: this version goes on where it is
-            reexec.drop_reexec(e.bead)
+            reexec.drop_reexec(e.home, e.bead)
             e.warn(f"could not move to task-loop {ver}: {exc}")

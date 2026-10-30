@@ -61,16 +61,16 @@ def _foreign_claim(b: Any, repo: Any, git: Git, who: Identity, store: Any, fresh
     """Why another actor's claim on the bead stops a run-task, "" when it does not: the sweep already gave back every dead one, so a claim
     that is left is live (a lease running, or a run on it). A blocked bead is the actor's still: it goes only when its engine is gone;
     so does any claim the owner's --fresh asks for (tl-159): the check is per bead (is an engine on THIS bead), never per actor."""
-    bead_id, who = b.id, b.assignee
-    if not who.startswith("tl-"):
-        return f"claimed by {who}"
+    bead_id, holder = b.id, b.assignee
+    if not holder.startswith("tl-"):
+        return f"claimed by {holder}"
     if (b.status == "blocked" or fresh) and bead_id not in running.running(repo, git, who, store):
         return ""
-    logs = sorted((ident.config_dir() / "engine").glob(f"{bead_id}-*.jsonl"))
-    return f"another run of {bead_id} is still running as {who} (a live claim)" + (f"; its engine log: {logs[-1]}" if logs else "")
+    logs = sorted((who.config.root / "engine").glob(f"{bead_id}-*.jsonl"))
+    return f"another run of {bead_id} is still running as {holder} (a live claim)" + (f"; its engine log: {logs[-1]}" if logs else "")
 
 
-def _blocked_by_engine(b: Any, store: Any) -> str:
+def _blocked_by_engine(b: Any, store: Any, home: ConfigDir) -> str:
     """Why a bead the engine blocked stays blocked ("" when a plain retry may reopen it)."""
     bead_id = b.id
     held = [d.id for d in b.dependencies if d.type == "blocks" and d.status != "closed"]
@@ -81,7 +81,7 @@ def _blocked_by_engine(b: Any, store: Any) -> str:
     if not blocks:
         return "blocked by a person, not by the engine"
     after = [c for c in cs if c.created_at > blocks[-1].created_at and not engine_written(c.text)]
-    ask = AskStore.at(ConfigDir(ident.config_dir())).get(bead_id)
+    ask = AskStore.at(home).get(bead_id)
     asking = ask is not None and ask.consumed is None and ask.status in (AskStatus.OPEN, AskStatus.PARKED, AskStatus.ANSWERED)
     if ask is not None and asking and ask.answer is not None:  # tl-gy4: an answer filed on the ask (dashboard, tl ask answer) is an answer
         after, asking = after[:0], False  # whether or not a comment followed the block; the run's check_ask consumes it
@@ -110,7 +110,7 @@ def admit(bead_id: Any, repo: Any, git: Git, who: Identity, store: Any = None, a
     takeover = bool(fresh and holder and holder != me)  # _foreign_claim let it through: no engine runs the bead
     if b.status != "blocked" and not takeover:
         return True, ""
-    why = _blocked_by_engine(b, store) if b.status == "blocked" else ""
+    why = _blocked_by_engine(b, store, who.config) if b.status == "blocked" else ""
     if why:
         return False, why
     # tl-kwo: only if the claim is still the one just read (bd applies --if-assignee atomically): two loops looking at one freed bead
@@ -128,7 +128,7 @@ def parked(bead_id: BeadId, fresh: bool, repo: str, who: Identity, store: Beads 
     """Why run-task will not take a bead whose run ended on a question ("" when it may): its text is unchanged (--fresh or an answer
     lets it run), or this would be the third run on that text (nothing does). An answered ask starts the count again (tl-7y6.7.3)."""
     b = beadtools.peek(store or beadtools.bd_store(who.actor, repo), bead_id)
-    cfg = ConfigDir(ident.config_dir())
+    cfg = who.config
     verdict = parks.gate(cfg, b, fresh=fresh) if b else None
     if b and verdict is None:
         parks.entering(cfg, b)
@@ -239,7 +239,7 @@ def take_area(a: Any, repo: Any, cfg: Any, lock: Any, git: Git, who: Identity, s
         if not why:
             mark()
         return why
-    with running.area_lock(repo):
+    with running.area_lock(repo, who):
         bead = beadtools.peek(store or beadtools.bd_store(who.actor, repo), a.id) or Bead(id=a.id, title="", status="")
         _area, busy = running.area_busy(repo, cfg, bead, git, who)
         if busy and getattr(a, "exclusive_area", False):

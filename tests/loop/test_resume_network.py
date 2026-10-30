@@ -13,6 +13,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
+from support import homes
 
 # isort: split
 from run import test_stages_visual
@@ -23,7 +24,6 @@ from support import (
 )
 from support.engine_case import CLEAN, PLAN, WRITE, stop, verdict
 
-from taskloop.adapters import ident
 from taskloop.app.loop.gate import GateRole
 from taskloop.app.release import reexec
 from taskloop.contracts.config import LoopConfig
@@ -79,7 +79,7 @@ class NetBase(te.EngineTest):
         self.assertEqual((eng.stats["replans"], eng.stats["rounds"]), (0, 0))
         self.assertEqual((self.blocked, self.ask()), ([], None))
         self.assertFalse([c for c in self.bd_calls if c[:2] == ("label", "add")], self.bd_calls)
-        self.assertFalse(list((ident.config_dir() / "storm").glob("*.json")) if (ident.config_dir() / "storm").is_dir() else [])
+        self.assertFalse(list((homes.config_dir() / "storm").glob("*.json")) if (homes.config_dir() / "storm").is_dir() else [])
 
     def thread_of(self, s, node):
         """(resume ref of each call of `node`, in order)."""
@@ -249,7 +249,7 @@ class Pause(NetBase):
             self.assertLess(second.budget.spent_min(), 30)  # the two hours of pause are not charged to the time budget
         self.assertEqual(s.nodes, ["review"])
         self.assertEqual(s.calls[0][1], "net-review")
-        self.assertFalse((ident.config_dir() / "pauses" / "t-1.json").exists())  # taken once
+        self.assertFalse((homes.config_dir() / "pauses" / "t-1.json").exists())  # taken once
 
     def test_the_engine_comment_of_a_pause_does_not_make_the_next_run_plan_again(self):
         self.pause_in_review()

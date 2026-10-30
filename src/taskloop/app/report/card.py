@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Final
 
-from taskloop.adapters import beadtools, gitrepo, ident
+from taskloop.adapters import beadtools, gitrepo
 from taskloop.app.asks import intake
 from taskloop.app.reconcile.lost import lost_work
 from taskloop.app.report.inputs import bead_status, prefix, read_jsonl, repo_traces
@@ -36,13 +36,14 @@ def typed_log(path: Path) -> list[EngineLog]:
     return out
 
 
-def crashes(repo: str, since: float, until: float, traces: Sequence[RunTrace], now: float | None = None) -> list[dict[str, Any]]:
+def crashes(repo: str, since: float, until: float, traces: Sequence[RunTrace], cfg: paths.ConfigDir,
+            now: float | None = None) -> list[dict[str, Any]]:
     """Engine crashes: the loop saw run-task exit with no outcome; an engine log in the window with no trace that reads `crashed`
     (runlife.liveness: no close, and no record for CRASHED_AFTER); or a trace closed as an engine fault (an exception the engine
     caught). A run's .stderr is route.py's, where a worker's test tracebacks land too: never read."""
     now = time.time() if now is None else now
     out: dict[Any, dict[str, Any]] = {}
-    loop_lines = [i.rec for i in LoopLog(paths.ConfigDir(ident.config_dir()), loop_key(repo)).read_from(0).items]
+    loop_lines = [i.rec for i in LoopLog(cfg, loop_key(repo)).read_from(0).items]
     for r in loop_lines:
         try:
             t = time.mktime(time.strptime(r.ts, "%Y-%m-%dT%H:%M:%S"))
@@ -52,7 +53,7 @@ def crashes(repo: str, since: float, until: float, traces: Sequence[RunTrace], n
             out[f"loop:{r.bead}:{r.ts}"] = {"bead": r.bead, "t": t, "run": None, "why": r.why[:200]}
     traced = {str(r.run) for r in traces} | {Path(r.log).stem for r in traces if r.log}
     prefixes = {prefix(r.bead) for r in traces} | {prefix(r.bead) for r in loop_lines}
-    for f in sorted((ident.config_dir() / "engine").glob("*.jsonl")):
+    for f in sorted((cfg.root / "engine").glob("*.jsonl")):
         parts = matchers.split_stem(f.stem)
         if not parts or f.stem in traced or prefix(parts[0]) not in prefixes:
             continue
@@ -179,10 +180,10 @@ def scorecard(repo: str, since: float, until: float, base: str, comments_of: Cal
                   str | None] | None = None, now: float | None = None, *, git: Git, who: Identity) -> dict[str, Any]:
     repo = gitrepo.repo_root(repo)  # the loop keys its log by this path
     comments_of = comments_of or beadtools.bd_store(who.actor, repo).comments
-    book = repo_traces(repo, git)
+    book = repo_traces(repo, git, who.config)
     traces = book.runs
     runs = sorted([r for r in traces if overlaps(r, since, until)], key=lambda r: r.started)
-    crash = crashes(repo, since, until, traces, now=now)
+    crash = crashes(repo, since, until, traces, who.config, now=now)
     beads: dict[str, dict[str, list[Any]]] = {}
     for r in runs:
         beads.setdefault(r.bead, {"runs": [], "crashes": []})["runs"].append(r)
@@ -190,7 +191,7 @@ def scorecard(repo: str, since: float, until: float, base: str, comments_of: Cal
         beads.setdefault(c["bead"], {"runs": [], "crashes": []})["crashes"].append(c)
     rows, asks = _bead_rows(beads, comments_of)
     tokens = _tokens(runs)
-    lost = [x for x in lost_work(repo, base, status_of or (lambda b: bead_status(b, repo, who)), traces, git, since=since)
+    lost = [x for x in lost_work(repo, base, status_of or (lambda b: bead_status(b, repo, who)), traces, git, who.config, since=since)
             if x["class"] in ("lost", "pending", "unknown")]
     mins = [x["minutes"] for x in rows if x["runs"]]
     c: dict[str, Any] = {"repo": repo, "since": since, "until": until, "beads": len(rows),

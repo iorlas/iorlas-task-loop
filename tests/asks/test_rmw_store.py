@@ -13,6 +13,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from contracts import samples as S
+from support import homes
 from support.narrow import must
 from support.who import who
 
@@ -144,7 +145,7 @@ class Logs(unittest.TestCase):
             f.write_text((json.dumps({"t": 0, "kind": "old"}) + "\n") * 120000)
             wrapped, started = during(os.replace, lambda: trail.event(who(), "stage", "tl-1", repo="/r/x"))
             with mock.patch("os.replace", wrapped):
-                trail.prune_events()
+                trail.prune_events(homes.cfg())
             for t in started:
                 t.join(30)
             self.assertEqual([json.loads(ln)["kind"] for ln in f.read_text().splitlines()], ["stage"])

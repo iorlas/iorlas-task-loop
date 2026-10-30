@@ -17,6 +17,7 @@ from support.builders import cfg_with  # noqa: E402
 
 from taskloop.app.release import seams  # noqa: E402
 from taskloop.app.run.delegation import Delegation  # noqa: E402
+from taskloop.contracts.env import snapshot  # noqa: E402
 
 C3 = {"contract": 3, "reasons": {}}
 OLD = {"contract": 2, "reasons": {}}
@@ -26,7 +27,7 @@ class Stub:
     """Just what Delegation.route touches."""
     def __init__(self, cfg, route):
         self.cfg, self.route, self.contract, self.notes = cfg_with(**cfg), route, {"contract": 3}, []
-        self.resolved, self.refusal, self.router = None, None, seams.DelegateRoute()
+        self.resolved, self.refusal, self.router = None, None, seams.DelegateRoute(snapshot())
         self.log = types.SimpleNamespace(note=self.notes.append)
 
 

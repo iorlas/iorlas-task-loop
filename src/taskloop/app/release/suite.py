@@ -33,17 +33,17 @@ PROC_CGROUP = Path("/proc/self/cgroup")
 CGROUP_ROOT = Path("/sys/fs/cgroup")
 
 
-def save_output(out: str) -> Path:
+def save_output(out: str, env: Env) -> Path:
     """The full suite output, in the config dir: a file inside the checkout would make the tree dirty and block the release."""
-    d = config_dir() / "releases"
+    d = config_dir(env) / "releases"
     d.mkdir(parents=True, exist_ok=True)
     f = d / f"suite-{time.strftime('%Y%m%d-%H%M%S')}-{os.getpid()}.log"
     f.write_text(out, encoding="utf-8")
     return f
 
 
-def red(out: str, lines: list[str]) -> Abort:
-    log = save_output(out)
+def red(out: str, lines: list[str], env: Env) -> Abort:
+    log = save_output(out, env)
     return Abort("the suite is red; nothing released:\n{}\nfull output: {}".format(failure_report(out) or "\n".join(lines[-40:]), log),
                  log, failing_tests(out))
 
@@ -114,9 +114,9 @@ def isolated_env(home: Path, base: Env) -> dict[str, str]:
     return env
 
 
-def suite_lock_path() -> Path:
+def suite_lock_path(env: Env) -> Path:
     """One full suite per host: every host_suite run (a release's, dev/suite.py's, the container wrapper's fallback) takes this lock."""
-    return config_dir() / "locks" / "suite-host.lock"
+    return config_dir(env) / "locks" / "suite-host.lock"
 
 
 def run_pytest(spawner: Spawner, argv: list[str], cwd: str, env: dict[str, str], name: str, empty_ok: bool = False) -> Part:
@@ -172,7 +172,7 @@ def host_suite(tool_root: Path, repo: Path, sh: Shell) -> None:
     process. Holds the host-wide suite lock: a second full suite waits and says who holds it. `tool_root` holds the pyproject (pytest and
     xdist) that runs them; `repo` is the tree under test."""
     holder = f"pid {os.getpid()} since {time.strftime('%H:%M:%S')}: suite of {repo}"
-    with landlock.os_lock(suite_lock_path(), holder, lambda who: say(f"waiting for the suite lock (held by {who})")):
+    with landlock.os_lock(suite_lock_path(sh.env), holder, lambda who: say(f"waiting for the suite lock (held by {who})")):
         sweep_stale_tmp()
         _host_suite(tool_root, repo, sh)
 
@@ -198,7 +198,7 @@ def _host_suite(tool_root: Path, repo: Path, sh: Shell) -> None:
     out, green = merge_outputs(parts)
     say(" ".join(f"{p.name}: {ran_line(p.out)}" for p in parts))
     if not green:
-        raise red(out, out.splitlines())
+        raise red(out, out.splitlines(), sh.env)
     say("suite green")
 
 
@@ -212,7 +212,7 @@ def container_suite(tool_root: Path, repo: Path, sh: Shell) -> None:
     out = ran.stdout + ran.stderr
     sys.stdout.write(out)
     if ran.returncode:
-        raise red(out, out.splitlines())
+        raise red(out, out.splitlines(), sh.env)
 
 
 def gate_command() -> list[str]:
@@ -244,7 +244,7 @@ def verify(tool_root: Path, repo: Path, sh: Shell, checks: Callable[[Path, Path,
     both are skipped, and the log says so (True). Only a green run is remembered; a red one raises and remembers nothing."""
     tree = sh.port.rev_parse(str(repo), "HEAD^{tree}")
     command = " ".join(gate_command()) + " + " + ("host" if sh.env.get(EnvVar.TASK_LOOP_SUITE_HOST) else "container") + " suite"
-    cache = SuiteCache(ConfigDir(config_dir()))
+    cache = SuiteCache(ConfigDir(config_dir(sh.env)))
     if cache.hit(tree, command):
         say(f"suite cache hit: tree {tree[:12]} already passed `{command}`")
         return True

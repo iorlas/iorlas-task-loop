@@ -5,11 +5,10 @@ import os
 from pathlib import Path
 from typing import Any
 
-from taskloop.adapters import ident, looks
+from taskloop.adapters import looks
 from taskloop.app.look.keep import Keeper, place
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.log import Artifacts
-from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import Git
 from taskloop.contracts.slots import SlotGitError
 from taskloop.domain.checks.matchers import glob_re
@@ -104,7 +103,7 @@ class Pictures:
 
     def artifacts_dir(self, bead: BeadId | None = None) -> Path:
         """Where this bead's pictures are kept (the dashboard serves them): outside the repo and every worktree."""
-        return ConfigDir(ident.config_dir()).artifacts(bead or self.e.bead)
+        return self.e.home.artifacts(bead or self.e.bead)
 
     def earlier_pictures(self, pattern: str) -> list[Path]:
         """Pictures matching `pattern` in other beads' artifact folders of this repo's beads (same id prefix, e.g. "lifesim-"),

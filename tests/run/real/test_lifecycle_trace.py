@@ -10,8 +10,8 @@ import unittest
 
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as te
+from support import homes
 
-from taskloop.adapters import ident
 from taskloop.app.run import engine
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts.env import snapshot
@@ -29,7 +29,7 @@ DASH = make_dash()
 class TraceTelemetry(te.EngineTest):
 
     def traces(self):
-        path = ident.config_dir() / "traces.jsonl"
+        path = homes.config_dir() / "traces.jsonl"
         return [json.loads(line) for line in path.read_text().splitlines()]
 
     def records(self, kind):

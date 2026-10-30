@@ -6,7 +6,6 @@ import shutil
 from collections.abc import Callable
 from typing import Any
 
-from taskloop.adapters import ident
 from taskloop.adapters.bd import BdStore
 from taskloop.adapters.ident import config_dir
 from taskloop.app.asks.intake import Intake
@@ -23,11 +22,11 @@ from taskloop.contracts.env import Env
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import BdFailure, Beads
+from taskloop.contracts.ports import AnswerAsk, BdFailure, Beads
 from taskloop.contracts.stores import AskStore, ReposStore
 from taskloop_dash.env import Ports
 
-DASH = Identity(actor="tl-dash")  # the dashboard's bd actor
+DASH_ACTOR = "tl-dash"  # the dashboard's bd actor
 
 
 def quiet(fn: Callable[..., Any], default: Any) -> Callable[..., Any]:
@@ -44,24 +43,22 @@ def store(repo: str) -> BdStore:
     """The dashboard's bd: the engine's typed adapter (--actor, --json), the one process site."""
     if not shutil.which("bd"):
         raise OSError(2, "bd is not installed")
-    return BdStore(DASH.actor, repo or None, timeout=30)
+    return BdStore(DASH_ACTOR, repo or None, timeout=30)
 
 
-def answer(repo: str, bead: BeadId, action: AskAction, text: str, amend: bool) -> tuple[Ask | None, str]:
+def answer_via(home: ConfigDir) -> AnswerAsk:
     """The dashboard's answer is `tl answer`'s: the same Intake (record, bead opened, receipt comment), only `by` is "dash"."""
-    return owner_intake(wire_asks.store(), store, now)(repo).answer(bead, action, text, amend)
+    def answer(repo: str, bead: BeadId, action: AskAction, text: str, amend: bool) -> tuple[Ask | None, str]:
+        return owner_intake(wire_asks.store(home), store, now)(repo).answer(bead, action, text, amend)
+    return answer
 
 
 FACTORY_REPO = "iorlas-task-loop"  # a factory bead is filed in the registered repo of this name
 
 
-def adrs_of(repo: str) -> AdrStore:
-    return AdrStore.at(ConfigDir(config_dir()), repo)
-
-
-def factory_store() -> Beads | None:
+def factory_store(home: ConfigDir) -> Beads | None:
     """The tracker of the task-loop repo: the registered repo named `iorlas-task-loop`; None when none is registered."""
-    index = ReposStore(ConfigDir(config_dir())).get()
+    index = ReposStore(home).get()
     path = next((p for p in (index.repos if index else {}) if os.path.basename(p.rstrip("/")) == FACTORY_REPO and os.path.isdir(p)), "")
     return store(path) if path else None
 
@@ -92,7 +89,7 @@ def ask_writes(intake: Callable[[str], Intake]) -> dict[str, Any]:
     return {"stick": stick, "prune": prune, "ask_back": ask_back}
 
 
-def owner_writes(intake: Callable[[str], Intake], cfg: ConfigDir | None = None) -> dict[str, Any]:
+def owner_writes(intake: Callable[[str], Intake], cfg: ConfigDir) -> dict[str, Any]:
     """The owner's writes the dashboard makes beyond an answer, as Ports fields: each is an in-process Intake verb of the repo's tracker
     (park, stop and note also a run's request file under `cfg`), its failure a Result the page shows. The dash runs no process and never
     sees a bd argv."""
@@ -111,7 +108,7 @@ def owner_writes(intake: Callable[[str], Intake], cfg: ConfigDir | None = None) 
 
         def act() -> str:
             owner = intake(repo)
-            why, ok = do(OwnerVerbs(owner, cfg or ConfigDir(ident.config_dir()), owner.now()))
+            why, ok = do(OwnerVerbs(owner, cfg, owner.now()))
             said.append(ok)
             return why
         out = guarded(act)
@@ -134,17 +131,19 @@ def owner_intake(asks: AskStore, store_of: Callable[[str], Any], clock: Callable
     return lambda repo: Intake(asks, store_of(repo), clock, by, adrs, factory)
 
 
-def slot_beads(repo: str) -> list[dict[str, Any]]:
-    return [b.to_dict() for b in wslots.slot_beads(repo, DASH)]
-
-
 def ports(env: Env) -> Ports:
     """`python3 -m taskloop_dash --ports taskloop.app.launch.dash_ports:ports`: the dashboard builds its ports from the engine's code."""
     git = real.git(env)
+    home = ConfigDir(config_dir(env))
+    dash = Identity(actor=DASH_ACTOR, home=str(home.root))
+
+    def slot_beads(repo: str) -> list[dict[str, Any]]:
+        return [b.to_dict() for b in wslots.slot_beads(repo, dash)]
 
     def red_row(repo: str) -> str:
         return profiles.red_row(git, repo)
 
-    return Ports(store=store, answer=answer,
-                 **owner_writes(owner_intake(wire_asks.store(), store, now, adrs=adrs_of, factory=factory_store)),
+    return Ports(store=store, answer=answer_via(home),
+                 **owner_writes(owner_intake(wire_asks.store(home), store, now, adrs=lambda repo: AdrStore.at(home, repo),
+                                             factory=lambda: factory_store(home)), home),
                  slot_beads=quiet(slot_beads, []), profile_error=quiet(red_row, ""))

@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import support.paths  # noqa: F401
+from support import homes
 from support.fake_beads import FakeBeads
 from support.fake_clock import FakeClock
 from support.fakegit import FakeGit, ScriptedGit
@@ -587,6 +588,7 @@ class FakeSettleHost(Said):
         self.bead = BeadId("t-1")
         self.claim = fence.offline(BeadId("t-1"))
         self.who = who()
+        self.home = homes.cfg()
         self.store = FakeBeads()
         self.cfg = EngineConfig(base="origin/main")
         self.plan_summary = ""

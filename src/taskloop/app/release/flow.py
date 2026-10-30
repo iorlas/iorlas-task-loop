@@ -91,7 +91,7 @@ def release(req: Request, repo: Path, market: Path, tool_root: Path, sh: Shell, 
     url = sh.port.remote_url(str(repo), "origin")
     if not url:
         raise Abort(f"{repo} has no origin remote")
-    where = clone.ready(config_dir(), url, sh)
+    where = clone.ready(config_dir(sh.env), url, sh)
     tip = sh.port.rev_parse(str(repo), "refs/heads/" + req.from_branch) if req.from_branch else ""
     if req.from_branch:
         clone.replay_branch(where, repo, req.from_branch, sh)
@@ -126,9 +126,9 @@ def drop_landed_branch(req: Request, repo: Path, where: Path, tip: str, sh: Shel
         say(f"removed branch {req.from_branch} and its worktrees")
 
 
-def record(result: ReleaseResult, req: Request, repo: Path, who: Identity, store: Beads | None = None) -> None:
+def record(result: ReleaseResult, req: Request, repo: Path, who: Identity, home: ConfigDir, store: Beads | None = None) -> None:
     """releases/last.json: the latest release's result (a later success replaces a failure); and, when it failed, a comment on --bead."""
-    ReleaseResultStore(ConfigDir(config_dir())).write(result)
+    ReleaseResultStore(home).write(result)
     if not result.ok and req.bead:
         text = "release FAILED: {}{}".format(result.summary, ("; log " + result.log) if result.log else "")
         try:
@@ -141,6 +141,7 @@ def main(argv: list[str] | None, tool_root: Path, spawner: Spawner, port: Git, e
     """One release from the command line; every process it starts goes through `spawner` (the edge makes it)."""
     sh = shell.of(spawner, port, env)
     who = ident.identity(env)
+    home = ConfigDir(config_dir(env))
     ap = argparse.ArgumentParser(prog="release.py", description=doc)
     ap.add_argument("message")
     ap.add_argument("--bead", type=parse_bead_id, default=None, help="close this bead after the push")
@@ -155,21 +156,21 @@ def main(argv: list[str] | None, tool_root: Path, spawner: Spawner, port: Git, e
     url = sh.port.remote_url(str(repo), "origin") or str(repo)
     holder = f"pid {os.getpid()} since {time.strftime('%H:%M:%S')}: {req.message}"
     try:
-        path = release_lock_path(config_dir(), url)
+        path = release_lock_path(home.root, url)
         newer = None
         with landlock.os_lock(path, holder, lambda by: say(f"waiting for the release lock (held by {by})")):
-            newer = selfupdate.newer_release(tool_root, clone.ready(config_dir(), url, sh), sh, env)
+            newer = selfupdate.newer_release(tool_root, clone.ready(home.root, url, sh), sh, env)
             version = "" if newer else release(req, repo, market, tool_root, sh, who)
         if newer:  # the lock is released above: the exec'd release takes it
             selfupdate.exec_release(newer, sys.argv[1:] if argv is None else argv, repo, env)
         record(ReleaseResult(ok=True, version=version, summary="released " + version, at=time.time(), branch=req.from_branch or "main",
-                             message=req.message), req, repo, who)
+                             message=req.message), req, repo, who, home)
     except Abort as e:
         print("release: " + str(e), file=sys.stderr)
         first = str(e).strip().splitlines()[0] if str(e).strip() else "failed"
         summary = (f"{e.version} was pushed but " if e.version else "nothing released: ") + first
         record(ReleaseResult(ok=False, version=e.version, summary=summary, tests=list(e.tests), log=e.log, at=time.time(),
-                             branch=req.from_branch or "main", message=req.message), req, repo, who)
+                             branch=req.from_branch or "main", message=req.message), req, repo, who, home)
         print("release FAILED: " + summary + ((f" (log {e.log})") if e.log else ""), file=sys.stderr)
         return 1
     return 0

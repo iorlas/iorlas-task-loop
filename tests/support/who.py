@@ -8,7 +8,7 @@ import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
 
-from taskloop.adapters.ident import identity
+from taskloop.adapters.ident import config_dir, identity
 from taskloop.contracts.env import snapshot
 from taskloop.contracts.identity import Identity
 
@@ -28,8 +28,8 @@ def acting(actor: str) -> Iterator[None]:
 
 def who() -> Identity:
     if getattr(_serving, "actor", None):
-        return Identity(actor=_serving.actor)
+        return Identity(actor=_serving.actor, home=str(config_dir(snapshot())))
     if PER_THREAD is not None:
         name = threading.current_thread().name
-        return Identity(actor=PER_THREAD.get(name, name))
+        return Identity(actor=PER_THREAD.get(name, name), home=str(config_dir(snapshot())))
     return identity(snapshot())

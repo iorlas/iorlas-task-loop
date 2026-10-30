@@ -4,13 +4,14 @@ import json
 from pathlib import Path
 
 from taskloop.adapters import pidcheck
-from taskloop.adapters.ident import config_dir
+from taskloop.adapters.ident import claude_dir, config_dir
 from taskloop.app.doctor import profiles
 from taskloop.app.loop.files import LoopFiles
 from taskloop.app.release import catalog, pins
 from taskloop.app.slots import marks
 from taskloop.app.wire import asks as wire_asks
 from taskloop.app.wire import slots as wslots
+from taskloop.contracts.env import Env
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import loop_key
 from taskloop.contracts.paths import ConfigDir
@@ -42,33 +43,33 @@ def slot_lines(repo: str, who: Identity, now: float) -> tuple[str, ...]:
     return tuple(out)
 
 
-def build(repo: str, plugin_root: Path, now: float, who: Identity | None = None) -> Brief:
+def build(repo: str, plugin_root: Path, now: float, env: Env, who: Identity | None = None) -> Brief:
     """`who`: ask bd for the slots too, as that actor (one subprocess; the hooks that must be fast leave it out)."""
-    cfg = ConfigDir(config_dir())
+    cfg = ConfigDir(config_dir(env))
     files = LoopFiles(cfg, loop_key(repo), pidcheck.pid_alive, lambda: now)
     loops = files.live()
     last = files.last_exit()
     beats = [st.t or st.started for st in loops] or [st.t or st.started for st in files.died()]
     last_beat = max([*beats, float(str(last.get("t") or 0))])
-    asks = tuple(AskLine(a.bead, a.kind, a.decision, a.t) for a in wire_asks.store().live() if not a.repo or a.repo == repo)
+    asks = tuple(AskLine(a.bead, a.kind, a.decision, a.t) for a in wire_asks.store(cfg).live() if not a.repo or a.repo == repo)
     recent = tuple(f"{i.rec.bead} {i.rec.outcome.value} ({i.rec.minutes} min)" for i in files.log_rows(RECENT).items)
-    pin = pins.read_pin().task_loop
+    pin = pins.read_pin(env).task_loop
     return Brief(
         repo=repo, now=now,
         loops=tuple(LoopLine(st.pid, st.started, st.bead or "", st.slot or "", st.version) for st in loops),
         last_beat=last_beat, last_exit=str(last.get("reason") or ""), asks=asks,
         slots=slot_lines(repo, who, now) if who else (), recent=recent,
-        version=running_version(plugin_root), installed=catalog.installed_version("task-loop"), pinned=(pin or ""))
+        version=running_version(plugin_root), installed=catalog.installed_version("task-loop", claude_dir(env)), pinned=(pin or ""))
 
 
-def handoff_file(repo: str) -> Path:
-    return ConfigDir(config_dir()).handoff(loop_key(repo))
+def handoff_file(repo: str, env: Env) -> Path:
+    return ConfigDir(config_dir(env)).handoff(loop_key(repo))
 
 
-def status_text(repo: str, plugin_root: Path, now: float, as_json: bool, who: Identity, git: Git) -> str:
-    b = build(repo, plugin_root, now, who)
+def status_text(repo: str, plugin_root: Path, now: float, as_json: bool, env: Env, who: Identity, git: Git) -> str:
+    b = build(repo, plugin_root, now, env, who)
     # a bad profile is its repo's row
-    red = profiles.red_rows(git, sorted({repo, *profiles.registered(ReposStore(ConfigDir(config_dir())))}))
+    red = profiles.red_rows(git, sorted({repo, *profiles.registered(ReposStore(ConfigDir(config_dir(env))))}))
     if as_json:
         return json.dumps({**status_json(b), "red": red}, ensure_ascii=False)
     return "\n".join([*red, *status_lines(b)])

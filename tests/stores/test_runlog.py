@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 
 from support import engine_case as te
-from support import procsim
+from support import homes, procsim
 from support.engine_case import CLEAN, PLAN, WRITE
 from support.logs import pairs, records
 
@@ -14,9 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: E402, F401
 
-from taskloop.adapters import ident  # noqa: E402
 from taskloop.contracts import log as rec  # noqa: E402
-from taskloop.contracts.paths import ConfigDir  # noqa: E402
 from taskloop.stores.real import real_stores  # noqa: E402
 
 engine = te.engine
@@ -61,7 +59,7 @@ class RunLog(te.EngineTest):
     def test_the_trace_decodes_through_the_contracts(self):
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0)
-        stores = real_stores(ConfigDir(ident.config_dir()))
+        stores = real_stores(homes.cfg())
         got = stores.traces.read_from().items
         self.assertEqual([str(t.rec.run) for t in got], [self.eng.log_path.stem])
 

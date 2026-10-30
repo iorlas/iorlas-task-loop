@@ -10,7 +10,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as T
-from support import fake_route, gitq
+from support import fake_route, gitq, homes
 from support.builders import make_engine
 from support.checkpoints import read_ck
 from support.engine_case import BEAD, CLEAN, PLAN, WRITE, engine, verdict
@@ -18,7 +18,6 @@ from support.fakes import must_bead
 from support.spawn import port_git, real_spawner
 from support.who import who
 
-from taskloop.adapters import ident
 from taskloop.app.look import shots
 from taskloop.app.look.owner_look import OwnerLook
 from taskloop.app.run.closer import Closer
@@ -27,7 +26,6 @@ from taskloop.contracts import answers, wire
 from taskloop.contracts.config import RepoProfile, VisualConfig
 from taskloop.contracts.env import snapshot
 from taskloop.contracts.ids import BeadId
-from taskloop.contracts.paths import ConfigDir
 
 VISUAL = {"include": ["*.txt"], "exclude": ["docs/**"]}
 LOOK_ASK = "Whether smiles-front.png matches the rung B ladder image. Only the owner can judge the look."
@@ -135,7 +133,7 @@ class LookTest(T.EngineTest):
         self.assertEqual(rc, 0, self.blocked)
         tree = gitq.git("ls-tree", "-r", "--name-only", "origin/main", cwd=str(self.wt))
         self.assertNotIn("home-screen.png", tree)  # pyrefly: ignore[unsupported-operation]
-        kept = ConfigDir(ident.config_dir()).artifacts(BeadId("t-1"))
+        kept = homes.cfg().artifacts(BeadId("t-1"))
         self.assertEqual((kept / "home-screen.png").read_bytes(), b"PNG fake")
         recs = [i.rec for i in self.eng.stores.run_log(self.eng.run_dir.name).read_from().items if i.rec.kind == "artifacts"]
         self.assertIn(["home-screen.png"], [getattr(x, "names", None) for x in recs])
@@ -161,7 +159,7 @@ class LookTest(T.EngineTest):
             git=port_git(), who=who())
         self.eng.run_dir.mkdir(parents=True, exist_ok=True)
         (self.eng.run_dir / "brief.md").write_text("no pictures named")
-        root = ConfigDir(ident.config_dir())
+        root = homes.cfg()
         for bead, data in (("t-0", b"old"), ("t-1", b"mine"), ("zz-9", b"other repo")):
             root.artifacts(BeadId(bead)).mkdir(parents=True)
             (root.artifacts(BeadId(bead)) / "home.png").write_bytes(data)

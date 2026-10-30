@@ -19,6 +19,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # python3 -m unittest tests.test_areas, from the repo root
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from loop.test_loop import rec
+from support import homes
 
 # isort: split
 from support import (
@@ -31,7 +32,6 @@ from support.spawn import port_git, real_spawner
 from support.who import who
 
 from slots.test_slots import Slots
-from taskloop.adapters import ident
 from taskloop.app.launch import loop as wloop
 from taskloop.app.loop.core import Core
 from taskloop.app.loop.loop import Loop
@@ -46,7 +46,6 @@ from taskloop.app.slots import (
 from taskloop.app.slots import line as slots_line
 from taskloop.app.track import verbs
 from taskloop.app.wire import slots as wslots
-from taskloop.contracts import paths
 from taskloop.contracts.config import LoopConfig
 from taskloop.contracts.enums import Result
 from taskloop.contracts.env import snapshot
@@ -264,7 +263,7 @@ class Line(Slots):
         self.beads({}, slots=1)
         k = subprocess.Popen(["sleep", "60"])  # a live pid for the first in line
         self.kids.append(k)
-        FileTickets(paths.ConfigDir(ident.config_dir())).take(loop_key(str(self.repo)), "first", 2, pid=k.pid, now=time.time())
+        FileTickets(homes.cfg()).take(loop_key(str(self.repo)), "first", 2, pid=k.pid, now=time.time())
         tries = []
         got = wslots.wait_slot(str(self.repo), self.cfg, "second", poll=(0.01, 0.01),
                            stop=lambda: tries.append(1) or len(tries) >= 5, spawner=real_spawner(), git=port_git(), who=who())

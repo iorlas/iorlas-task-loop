@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from taskloop.adapters import beadtools, ident
+from taskloop.adapters import beadtools
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.paths import ConfigDir
@@ -37,11 +37,11 @@ class Traces:
     skipped: int
 
 
-def repo_traces(repo: str, git: Git) -> Traces:
+def repo_traces(repo: str, git: Git, cfg: ConfigDir) -> Traces:
     """Every engine run of this repo: its worktree is inside the repo, or its origin is the repo's origin."""
     root = str(Path(repo).resolve())
     url = git.remote_url(repo, "origin")
-    page = TraceStore(ConfigDir(ident.config_dir())).read_from(0)
+    page = TraceStore(cfg).read_from(0)
     out: list[RunTrace] = []
     for item in page.items:
         t = item.rec

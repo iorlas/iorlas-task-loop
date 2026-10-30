@@ -18,7 +18,10 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: E402, F401
+from support import homes  # noqa: E402
 from support.spawn import port_git  # noqa: E402
+
+from taskloop.contracts.env import snapshot  # noqa: E402
 
 # isort: split
 import contextlib  # noqa: E402
@@ -35,17 +38,17 @@ from support.tlmain import tl_main  # noqa: E402
 from support.who import who  # noqa: E402
 
 from taskloop.adapters import delegate as lroute  # noqa: E402
-from taskloop.adapters import (  # noqa: E402
-    ident,
-)
 from taskloop.app.launch import loop as wloop  # noqa: E402
 from taskloop.app.release import pins  # noqa: E402
 from taskloop.app.track import trail  # noqa: E402
 from taskloop.app.wire import asks as wasks  # noqa: E402
 from taskloop.contracts import wire  # noqa: E402
-from taskloop.contracts.env import Env  # noqa: E402
 
-CTX = tl.Ctx(tl.HERE, trail.now, [], Env({}), spawner=real_spawner(), git=port_git(), who=who())
+
+def ctx() -> tl.Ctx:
+    """The verbs' context from the environment as the test set it up (the edge's own way)."""
+    env = snapshot()
+    return tl.Ctx(tl.HERE, trail.now, [], env, spawner=real_spawner(), git=port_git(), who=who())
 
 
 def sh(*args, cwd):
@@ -88,17 +91,17 @@ class Identity(Base):
         self.assertEqual(who().actor, "me")
 
     def test_config_dir_is_created(self):
-        self.assertTrue(ident.config_dir().is_dir())
+        self.assertTrue(homes.config_dir().is_dir())
 
 
 class Records(Base):
     def test_event_appends_and_registers_repo(self):
         trail.event(who(),"claim", "x-1", repo=str(self.home), worktree="/w")
         trail.event(who(),"close", "x-1", repo=str(self.home))
-        lines = (ident.config_dir() / "events.jsonl").read_text().splitlines()
+        lines = (homes.config_dir() / "events.jsonl").read_text().splitlines()
         self.assertEqual([json.loads(ln)["kind"] for ln in lines], ["claim", "close"])
         self.assertEqual(json.loads(lines[0])["session"], "abcdef12-3456")
-        self.assertIn(str(self.home), json.loads((ident.config_dir() / "repos.json").read_text())["repos"])
+        self.assertIn(str(self.home), json.loads((homes.config_dir() / "repos.json").read_text())["repos"])
 
     @unittest.skipIf(os.name == "nt", "the registry lock is fcntl")
     def test_writers_registering_at_once_neither_crash_nor_lose_a_repo(self):
@@ -109,7 +112,7 @@ class Records(Base):
         def writer(n):
             try:
                 for i in range(10):
-                    trail.register_repo(f"/r/{n}-{i}")
+                    trail.register_repo(f"/r/{n}-{i}", homes.cfg())
             except Exception as e:
                 errs.append(e)
         ps = [threading.Thread(target=writer, args=(n,)) for n in range(5)]  # the lock is on the open file: two descriptors conflict
@@ -118,15 +121,15 @@ class Records(Base):
         for p in ps:
             p.join(60)
         self.assertEqual(errs, [])
-        repos = json.loads((ident.config_dir() / "repos.json").read_text())["repos"]
+        repos = json.loads((homes.config_dir() / "repos.json").read_text())["repos"]
         self.assertEqual(len(repos), 50)
 
     def test_prune_keeps_recent(self):
-        f = ident.config_dir() / "events.jsonl"
+        f = homes.config_dir() / "events.jsonl"
         old = json.dumps({"t": 0, "kind": "old"})
         new = json.dumps({"t": trail.now(), "kind": "new"})
         f.write_text((old + "\n") * 120000 + new + "\n")
-        trail.prune_events()
+        trail.prune_events(homes.cfg())
         self.assertEqual([json.loads(ln)["kind"] for ln in f.read_text().splitlines()], ["new"])
 
 
@@ -230,7 +233,7 @@ class PinAndRollback(Base):
         return rc, out.getvalue(), err.getvalue()
 
     def pinned(self):
-        return json.loads((ident.config_dir() / "pinned.json").read_text())
+        return json.loads((homes.config_dir() / "pinned.json").read_text())
 
     def test_pin_writes_both_versions_and_clear_removes_the_file(self):
         rc, out, _ = self.pin("0.2.0", "--delegate", "0.5.0")
@@ -240,7 +243,7 @@ class PinAndRollback(Base):
         self.assertEqual(self.pin("--delegate", "0.6.0")[0], 0)  # one side only: the other stays
         self.assertEqual((self.pinned()["task-loop"], self.pinned()["delegate"]), ("0.2.0", "0.6.0"))
         self.assertEqual(self.pin("--clear")[0], 0)
-        self.assertFalse((ident.config_dir() / "pinned.json").exists())
+        self.assertFalse((homes.config_dir() / "pinned.json").exists())
         self.assertEqual(self.pin("--clear")[0], 0)  # clearing nothing is fine
 
     def test_a_pin_to_a_missing_cache_dir_is_refused_and_writes_nothing(self):
@@ -249,7 +252,7 @@ class PinAndRollback(Base):
         self.assertIn("0.3.0 is not installed", err)
         self.assertIn("0.1.0, 0.2.0, 0.10.0", err)
         self.assertEqual(self.pin("0.2.0", "--delegate", "9.9.9")[0], 2)
-        self.assertFalse((ident.config_dir() / "pinned.json").exists())  # not even the valid half
+        self.assertFalse((homes.config_dir() / "pinned.json").exists())  # not even the valid half
         shutil.rmtree(self.claude / "plugins/cache/iorlas-marketplace/iorlas-task-loop/0.1.0/skills")  # half-copied
         self.assertEqual(self.pin("0.1.0")[0], 2)
 
@@ -269,8 +272,8 @@ class PinAndRollback(Base):
     def test_find_route_follows_the_pin_then_the_installed_entry_not_the_newest_directory(self):
         self.record("iorlas-delegate", "0.5.0")  # the plugin manager installed 0.5.0; 0.6.0 is only a directory
         def route():
-            return lroute.find_route("", pins.pinned_dir("delegate"), ident.claude_dir() / "plugins" / "cache",
-                                                  lroute.installed_dir(ident.claude_dir()))
+            return lroute.find_route("", pins.pinned_dir("delegate", snapshot()), homes.claude_dir() / "plugins" / "cache",
+                                                  lroute.installed_dir(homes.claude_dir()))
         self.assertIn("/iorlas-delegate/0.5.0/", must(route()))
         self.assertEqual(self.pin("0.1.0", "--delegate", "0.6.0")[0], 0)
         self.assertIn("/iorlas-delegate/0.6.0/", must(route()))
@@ -278,13 +281,13 @@ class PinAndRollback(Base):
     def test_the_drill_pin_decides_what_loop_and_find_route_pick_then_clear_returns_to_the_newest(self):
 
         def route():
-            return lroute.find_route("", pins.pinned_dir("delegate"), ident.claude_dir() / "plugins" / "cache")
+            return lroute.find_route("", pins.pinned_dir("delegate", snapshot()), homes.claude_dir() / "plugins" / "cache")
         self.assertIn("0.6.0", must(route()))  # no pin: the newest
         self.assertEqual(self.pin("0.1.0", "--delegate", "0.5.0")[0], 0)
         self.assertIn("/iorlas-delegate/0.5.0/", must(route()))
         root = self.claude / "plugins/cache/iorlas-marketplace/iorlas-task-loop/0.2.0"
         def target(**kw):
-            return wloop.installs(wloop.cfgdir(), here=root / "skills" / "task-loop").target(**kw)
+            return wloop.installs(homes.cfg(), snapshot(), here=root / "skills" / "task-loop").target(**kw)
         self.assertEqual(target(), ("0.1.0", root.parent / "0.1.0"))  # older than the running one: still the pin
         self.assertEqual(target(skip=["0.1.0"]), None)
         self.assertEqual(self.pin("--clear")[0], 0)
@@ -327,12 +330,13 @@ class AskCli(unittest.TestCase):
             with mock.patch.dict(os.environ, env), tlbd.bd_boundary():
                 out = io.StringIO()
                 with mock.patch("sys.stdout", out):
-                    self.assertEqual(tl.v_ask(ns(), CTX), 0)
-                    self.assertEqual(tl.v_ask(ns(op="answer", bead="x-1", text=["right"]), CTX), 0)
-                    self.assertEqual(tl.v_ask(ns(op="withdraw", bead="x-2", text=["no", "longer"]), CTX), 0)
-                    self.assertEqual(tl.v_ask(ns(op="answer", bead="nope", text=["x"]), CTX), 1)
-                    self.assertEqual(tl.v_ask(ns(op="answer", bead="x-1", text=["again"]), CTX), 1)  # already answered
-                    self.assertEqual(tl.v_ask(ns(op="answer", bead="x-1", text=["again"], amend=True), CTX), 0)
+                    c = ctx()
+                    self.assertEqual(tl.v_ask(ns(), c), 0)
+                    self.assertEqual(tl.v_ask(ns(op="answer", bead="x-1", text=["right"]), c), 0)
+                    self.assertEqual(tl.v_ask(ns(op="withdraw", bead="x-2", text=["no", "longer"]), c), 0)
+                    self.assertEqual(tl.v_ask(ns(op="answer", bead="nope", text=["x"]), c), 1)
+                    self.assertEqual(tl.v_ask(ns(op="answer", bead="x-1", text=["again"]), c), 1)  # already answered
+                    self.assertEqual(tl.v_ask(ns(op="answer", bead="x-1", text=["again"], amend=True), c), 0)
                 self.assertIn("x-1", out.getvalue())
                 a = json.loads((asks / "x-1.json").read_text())
                 self.assertEqual((a["status"], a["answer"]["action"], a["answer"]["text"]), ("answered", "text", "again"))
@@ -355,8 +359,8 @@ class ParkStaleAsks(unittest.TestCase):
                 ask_file(asks, bead, parks_at=parks, repo=str(d), **extra)
             env = {"XDG_CONFIG_HOME": str(d), "APPDATA": str(d), "HOME": str(d), "USERPROFILE": str(d)}
             with mock.patch.dict(os.environ, env), tlbd.bd_boundary() as bd_calls:
-                self.assertEqual(wasks.sweep("park", who(), every=0), ["late"])
-                self.assertEqual(wasks.sweep("park", who(), every=600), [])  # throttled
+                self.assertEqual(wasks.sweep("park", who(), homes.cfg(), every=0), ["late"])
+                self.assertEqual(wasks.sweep("park", who(), homes.cfg(), every=600), [])  # throttled
             def status(b):
                 return json.loads((asks / (f"{b}.json")).read_text())["status"]
             self.assertEqual([status(b) for b in ("late", "fresh", "done", "closed")], ["parked", "open", "answered", "closed"])

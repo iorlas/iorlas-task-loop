@@ -3,8 +3,6 @@ import hashlib
 from pathlib import Path
 from typing import Any
 
-from taskloop.adapters import ident
-from taskloop.contracts.paths import ConfigDir
 from taskloop.domain import slot_env
 
 
@@ -14,7 +12,7 @@ def bead_env(e: Any) -> dict[str, str]:
     origin = e.git.remote_url(e.wt, "origin") or str(e.wt)
     repo, slot = slot_env.repo_id(origin, str(e.wt)), Path(str(e.wt)).name
     key = f"{repo}-{hashlib.sha1(origin.encode('utf-8', 'surrogateescape')).hexdigest()[:10]}"
-    state = ConfigDir(ident.config_dir()).slot_state(key, slot)
+    state = e.home.slot_state(key, slot)
     env = slot_env.slot_env(state, repo, slot, e.cfg.slot_env)
     for folder in slot_env.folders(env):
         Path(folder).mkdir(parents=True, exist_ok=True)

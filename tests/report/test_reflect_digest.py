@@ -9,13 +9,13 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
+from support import homes
 from support.who import who
 
 # isort: split
 from support import tlbd
 from support.repos import write_repos
 
-from taskloop.adapters import ident
 from taskloop.app.report import reflect as rd
 from taskloop.contracts.env import snapshot
 from taskloop.domain.report import reflect as rules
@@ -35,14 +35,14 @@ class Base(unittest.TestCase):
         self.env = mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": str(self.root / "cfg"), "APPDATA": str(self.root / "cfg"),
                                                 "HOME": str(self.root)})
         self.env.start()
-        ident.config_dir().mkdir(parents=True, exist_ok=True)
+        homes.config_dir().mkdir(parents=True, exist_ok=True)
         self.repos = {}
         for n in ("iorlas-task-loop", "iorlas-delegate", "lifesim"):
             d = self.root / n
             (d / ".beads").mkdir(parents=True)
             self.repos[n] = str(d)
-        write_repos(ident.config_dir() / "repos.json", *self.repos.values())
-        self.traces = ident.config_dir() / "traces.jsonl"
+        write_repos(homes.config_dir() / "repos.json", *self.repos.values())
+        self.traces = homes.config_dir() / "traces.jsonl"
         self.calls, self.open_rows, self.status, self.fail_create = [], [], {}, False
         self.n = 0
         self.patch = tlbd.bd_boundary(self.bd)
@@ -85,14 +85,14 @@ class Clusters(Base):
         self.trace("r1", [("writer reran the full Unity test suite after every edit", "prompt", "9 runs, 41 min")])
         self.trace("r2", [("writer reran the Unity test suite after each edit again", "prompt", "7 runs")], bead="b2")
         self.trace("r3", [("writer reran the Unity test suite after every edit", "engine", "x")], bead="b3")
-        cs = rules.cluster(rd.items(NOW - 86400, NOW))
+        cs = rules.cluster(rd.items(homes.cfg(), NOW - 86400, NOW))
         self.assertEqual([(c["cause"], len(c["runs"])) for c in cs], [("prompt", 2), ("engine", 1)])
         self.assertEqual([c["cause"] for c in rules.recurring(cs)], ["prompt"])
 
     def test_a_bare_shared_file_alone_does_not_merge_unrelated_items(self):
         self.trace("r1", [("planner missed the dependency edge", "engine", "engine.py")])
         self.trace("r2", [("close crashed because zebra giraffe", "engine", "engine.py")], bead="b2")
-        self.assertEqual(len(rules.cluster(rd.items(NOW - 86400, NOW))), 2)
+        self.assertEqual(len(rules.cluster(rd.items(homes.cfg(), NOW - 86400, NOW))), 2)
 
     def test_a_trace_repo_url_or_worktree_path_resolves_to_the_registered_repo(self):
         repos = list(self.repos.values())
@@ -106,28 +106,29 @@ class Clusters(Base):
     def test_one_beads_two_runs_are_not_recurring_but_three_are(self):
         self.trace("r1", [("writer reran the whole test suite after every edit", "prompt", "9")])
         self.trace("r2", [("writer reran the whole test suite after every edit again", "prompt", "7")])
-        self.assertEqual(rules.recurring(rules.cluster(rd.items(NOW - 86400, NOW))), [])
+        self.assertEqual(rules.recurring(rules.cluster(rd.items(homes.cfg(), NOW - 86400, NOW))), [])
         self.trace("r3", [("writer reran the whole test suite after every edit", "prompt", "5")])
-        self.assertEqual(len(rules.recurring(rules.cluster(rd.items(NOW - 86400, NOW)))), 1)
+        self.assertEqual(len(rules.recurring(rules.cluster(rd.items(homes.cfg(), NOW - 86400, NOW)))), 1)
 
     def test_a_shared_file_joins_items_that_say_different_things(self):
         self.trace("r1", [("planner missed the dependency edge", "engine", "see skills/task-loop/engine.py line 12")])
         self.trace("r2", [("planner crashed on the dependency list", "engine", "engine.py")], bead="b2")
         self.trace("r3", [("nothing alike whatsoever here", "engine", "other.py")], bead="b3")
-        cs = rules.cluster(rd.items(NOW - 86400, NOW))
+        cs = rules.cluster(rd.items(homes.cfg(), NOW - 86400, NOW))
         self.assertEqual(sorted(len(c["runs"]) for c in cs), [1, 2])
 
     def test_only_the_window_counts_and_runs_without_a_reflection_are_skipped(self):
         self.trace("old", [("a thing went wrong", "bead", "e")], t=NOW - 3 * 86400)
         with open(self.traces, "a") as f:
             f.write(json.dumps({"run": "x", "ended": NOW - 10, "reflection": None}) + "\nnot json\n")
-        self.assertEqual(rd.items(NOW - 86400, NOW), [])
+        self.assertEqual(rd.items(homes.cfg(), NOW - 86400, NOW), [])
 
     def test_the_owner_repo_follows_the_cause(self):
         for cause, _want in (("engine", "iorlas-task-loop"), ("prompt", "iorlas-task-loop"), ("delegate", "iorlas-delegate"),
                             ("repo_profile", "lifesim"), ("sandbox", "lifesim")):
             self.trace("r-" + cause, [(f"x {cause} thing", cause, "e")])
-        owners = {c["cause"]: Path(rd.owner_repo(c) or "").name for c in rules.cluster(rd.items(NOW - 86400, NOW))}
+        cs = rules.cluster(rd.items(homes.cfg(), NOW - 86400, NOW))
+        owners = {c["cause"]: Path(rd.owner_repo(c, homes.cfg()) or "").name for c in cs}
         self.assertEqual(owners, {"engine": "iorlas-task-loop", "prompt": "iorlas-task-loop", "delegate": "iorlas-delegate",
                                   "repo_profile": "lifesim", "sandbox": "lifesim"})
 
@@ -148,7 +149,7 @@ class Filing(Base):
         self.assertIn("--acceptance", args)
         self.assertEqual(args[args.index("--labels") + 1], "reflect,cause-prompt")
         self.assertEqual([a["action"] for a in d["actions"]], ["filed"])
-        self.assertEqual(rd.read_state()["filed"][0]["bead"], "tl-new1")
+        self.assertEqual(rd.read_state(homes.cfg())["filed"][0]["bead"], "tl-new1")
 
     def test_a_cause_seen_once_files_nothing(self):
         self.trace("r1", [("writer reran the whole test suite", "prompt", "e")])
@@ -209,26 +210,26 @@ class Filing(Base):
         self.two()
         d = rd.digest(who(), NOW - 86400, NOW, dry=True)
         self.assertEqual(d["actions"][0]["action"], "filed")
-        self.assertEqual((self.creates(), rd.read_state()["filed"]), ([], []))
+        self.assertEqual((self.creates(), rd.read_state(homes.cfg())["filed"]), ([], []))
 
     def test_a_failed_create_records_nothing_so_the_next_day_tries_again(self):
         self.two()
         self.fail_create = True
         d = rd.digest(who(), NOW - 86400, NOW)
-        self.assertEqual((d["actions"][0]["action"], rd.read_state()["filed"]), ("failed", []))
+        self.assertEqual((d["actions"][0]["action"], rd.read_state(homes.cfg())["filed"]), ("failed", []))
 
 class Daily(Base):
     def test_nothing_to_read_means_no_process(self):
         sp = mock.Mock()
-        self.assertEqual(rd.maybe_run(sp, snapshot(), NOW), "")
+        self.assertEqual(rd.maybe_run(sp, snapshot(), homes.cfg(), NOW), "")
         sp.start.assert_not_called()
 
     def test_once_a_day(self):
         self.traces.write_text("")
         sp = mock.Mock()
-        self.assertEqual(rd.maybe_run(sp, snapshot(), NOW), "started")
-        self.assertEqual(rd.maybe_run(sp, snapshot(), NOW + 60), "")
-        self.assertEqual(rd.maybe_run(sp, snapshot(), NOW + 86400 + 1), "started")
+        self.assertEqual(rd.maybe_run(sp, snapshot(), homes.cfg(), NOW), "started")
+        self.assertEqual(rd.maybe_run(sp, snapshot(), homes.cfg(), NOW + 60), "")
+        self.assertEqual(rd.maybe_run(sp, snapshot(), homes.cfg(), NOW + 86400 + 1), "started")
         self.assertEqual(sp.start.call_count, 2)
         self.assertEqual(sp.start.call_args[0][0][-2:], ["reflect", "digest"])
 

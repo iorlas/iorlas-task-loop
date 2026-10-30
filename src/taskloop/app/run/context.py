@@ -5,7 +5,6 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from taskloop.adapters.ident import config_dir
 from taskloop.app.checks.checklog import CheckLog
 from taskloop.app.run import console
 from taskloop.app.run.artifacts import StepArtifacts
@@ -45,6 +44,7 @@ class RunContext:
         wt: Path,
         run: str,
         run_dir: Path,
+        home: ConfigDir,
         stores: Stores,
         store: Any,
         route: Any,
@@ -64,7 +64,7 @@ class RunContext:
         now = now or clock.now
         seen = stores.run_log(run).read_from()
         log = RunLog(stores.run_log(run), echo, console.QUIET, console.line(verbose), now, len(seen.items) + seen.skipped)
-        art = StepArtifacts(bead, RepoDirs(wt).artifacts(bead), ConfigDir(config_dir()).artifacts(bead), log)
+        art = StepArtifacts(bead, RepoDirs(wt).artifacts(bead), home.artifacts(bead), log)
         steps = Steps(log, now, guard, on_step, art)
         return cls(
             bead,

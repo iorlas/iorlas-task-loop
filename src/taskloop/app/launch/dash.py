@@ -129,30 +129,31 @@ def stop_server(v: dict[str, Any] | None, port: int, spawner: Spawner) -> None:
         time.sleep(0.2)
 
 
-def log_tail(n: int = 5) -> str:
+def log_tail(env: Env, n: int = 5) -> str:
     try:
-        return "\n".join((config_dir() / "dash.log").read_text(errors="replace").strip().splitlines()[-n:])
+        return "\n".join((config_dir(env) / "dash.log").read_text(errors="replace").strip().splitlines()[-n:])
     except OSError:
         return ""
 
 
 def start_server(port: int, env: Env, spawner: Spawner, bind: str | None = None) -> tuple[dict[str, Any] | None, str]:
     """Start detached; wait until it answers. Returns (version dict or None, failure text)."""
-    log = open(config_dir() / "dash.log", "ab")  # noqa: SIM115  the detached child keeps it
+    home = config_dir(env)
+    log = open(home / "dash.log", "ab")  # noqa: SIM115  the detached child keeps it
     more = [env.get("PYTHONPATH")] if env.get("PYTHONPATH") else []
     path = {"PYTHONPATH": os.pathsep.join([str(SRC), str(VENDOR), *more])}  # the server imports taskloop.contracts: not in the allowlist
     bind = bind or ",".join(default_binds(env, spawner))
     # sys.executable, not uv: the server imports taskloop.contracts (msgspec), and tl.py, which starts it, runs under `uv run --script`
     cmd = [sys.executable, "-m", "taskloop_dash", "--ports", "taskloop.app.launch.dash_ports:ports", "--port", str(port), "--bind", bind]
-    proc = spawner.start(cmd, extra=path, cwd=str(config_dir()), out=log)
+    proc = spawner.start(cmd, extra=path, cwd=str(home), out=log)
     for _ in range(40):
         if proc.poll() not in (None, 0):
-            return None, f"dashboard exited {proc.poll()}: {log_tail() or 'see ' + str(config_dir() / 'dash.log')}"
+            return None, f"dashboard exited {proc.poll()}: {log_tail(env) or 'see ' + str(home / 'dash.log')}"
         v = ping(port)
         if v:
             return v, ""
         time.sleep(0.25)
-    return None, "dashboard did not start; see " + str(config_dir() / "dash.log")
+    return None, "dashboard did not start; see " + str(home / "dash.log")
 
 
 def print_urls(v: dict[str, Any] | None, port: int) -> None:
@@ -201,7 +202,7 @@ def url(env: Env) -> int:
     v = ping(port)
     print_urls(v, port)
     try:  # the links that may answer asks: open one on the phone once, the page keeps the token
-        t = (config_dir() / "dash.token").read_text().strip()
+        t = (config_dir(env) / "dash.token").read_text().strip()
     except OSError:
         t = ""
     for u in (v or {}).get("urls", []) if t else []:

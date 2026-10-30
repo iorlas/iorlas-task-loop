@@ -11,16 +11,20 @@ from taskloop.adapters import ident
 from taskloop.adapters.runner import Seam, StreamRunner
 from taskloop.app.release import pins
 from taskloop.contracts.delegate import WorkerStarted
+from taskloop.contracts.env import Env
 
 
-def resolve_delegate(configured: str = "") -> dg.Resolved | dg.Refusal:
+def resolve_delegate(env: Env, configured: str = "") -> dg.Resolved | dg.Refusal:
     """The delegate install for the next call: a configured path, then the pin, then the installed one."""
-    return dg.resolve(configured, pins.pinned_dir("delegate"), dg.installed_dir(ident.claude_dir()))
+    return dg.resolve(configured, pins.pinned_dir("delegate", env), dg.installed_dir(ident.claude_dir(env)))
 
 
 class DelegateRoute:
+    def __init__(self, env: Env) -> None:
+        self.env = env
+
     def resolve(self, configured: str = "") -> dg.Resolved | dg.Refusal:
-        return resolve_delegate(configured)
+        return resolve_delegate(self.env, configured)
 
     def runner(self, log_path: str | Path, wall: float | None = None, live: str = "",
                on_worker: Callable[[WorkerStarted], None] | None = None) -> Seam:

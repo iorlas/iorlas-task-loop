@@ -17,12 +17,12 @@ from typing import Any, cast
 from unittest import mock
 
 import support.paths  # noqa: F401
+from support import homes
 
 # isort: split
 from support.fakes import FakeBeadStore
 from taskloop.adapters import beadtools
 from taskloop.adapters.git import RealGit
-from taskloop.adapters.ident import claude_dir
 from taskloop.app.release import flow, shell, suite
 from taskloop.app.release.shell import say
 from taskloop.contracts.env import snapshot
@@ -108,7 +108,7 @@ class World:
                 return subprocess.CompletedProcess(cmd, 0, FETCH_PACK, "")
             plugins = json.loads((self.market / MARKET).read_text())["plugins"]
             v = next(p["version"] for p in plugins if p["name"] == "iorlas-task-loop")
-            d = claude_dir() / "plugins/cache/iorlas-marketplace/iorlas-task-loop" / v / ".claude-plugin"
+            d = homes.claude_dir() / "plugins/cache/iorlas-marketplace/iorlas-task-loop" / v / ".claude-plugin"
             d.mkdir(parents=True, exist_ok=True)
             (d / "plugin.json").write_text("{}")
         return subprocess.CompletedProcess(cmd, 0, "", "")
@@ -137,7 +137,7 @@ class World:
             self.on_suite(repo)
         if "tests/RED" in tree:
             out = tree["tests/RED"].decode()
-            raise suite.red(out, out.splitlines())
+            raise suite.red(out, out.splitlines(), snapshot())
         say("suite green")
 
     def verify(self, tool_root: Path, repo: Path, sh: shell.Shell) -> bool:

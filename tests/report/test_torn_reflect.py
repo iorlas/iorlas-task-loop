@@ -8,10 +8,9 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
+from support import homes
 
-from taskloop.adapters import ident
 from taskloop.app.report import reflect as rd
-from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.wire import Refused
 
 
@@ -23,16 +22,16 @@ class TornReflect(unittest.TestCase):
         env = mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": str(root / "cfg"), "APPDATA": str(root / "cfg"), "HOME": str(root)})
         env.start()
         self.addCleanup(env.stop)
-        self.path = ConfigDir(ident.config_dir()).reflect_state()
+        self.path = homes.cfg().reflect_state()
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.path.write_text('{"v": 1, "filed"')
 
     def test_read_and_write_back_refuse_with_the_path(self) -> None:
         with self.assertRaises(Refused) as ctx:
-            rd.read_state()
+            rd.read_state(homes.cfg())
         self.assertIn(str(self.path), str(ctx.exception))
         with self.assertRaises(Refused):
-            rd.due()
+            rd.due(homes.cfg())
         self.assertEqual(self.path.read_text(), '{"v": 1, "filed"')
 
 

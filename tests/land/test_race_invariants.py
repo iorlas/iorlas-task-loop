@@ -34,6 +34,7 @@ from unittest import mock
 
 import support.paths  # noqa: F401
 import support.who as support_who
+from support import homes
 from support.shells import quiet_shell
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # python3 -m unittest tests.test_race_invariants, from the repo root
@@ -52,7 +53,6 @@ from support.spawn import port_git, real_spawner
 
 from taskloop.adapters import (
     beadtools,
-    ident,
     landlock,
     pidcheck,
 )
@@ -358,7 +358,7 @@ class Invariants(test_loop.Base):
             waiters[name] = Waiter(name, prio)
             waiters[name].start()
             self.assertTrue(waiters[name].settled.wait(GUARD))  # it has its ticket and has looked once
-        line = [t.why for t in wslots.waiting_line(self.repo_s)]
+        line = [t.why for t in wslots.waiting_line(self.repo_s, support_who.who())]
         self.assertEqual(line, ["W3", "W1", "W2"])
         # the owner lets go
         wslots.release_slot(self.repo_s, "s1", force=True, spawner=real_spawner(), git=port_git(), who=support_who.who())
@@ -379,7 +379,7 @@ class Invariants(test_loop.Base):
         # a waiter whose process is gone is dropped by whoever reads the line, and blocks nobody
         d = sl.ticket_dir(self.repo_s)
         (d / "000099.json").write_text(json.dumps({"v": 1, "seq": 99, "prio": 0, "pid": sl.dead_pid(), "why": "dead", "since": 1}))
-        self.assertEqual(wslots.waiting_line(self.repo_s), [])
+        self.assertEqual(wslots.waiting_line(self.repo_s, support_who.who()), [])
         self.assertFalse((d / "000099.json").exists())
         self.assertEqual(must(wslots.wait_slot(self.repo_s, self.cfg, "late", stop=lambda: True, spawner=real_spawner(),
             git=port_git(), who=support_who.who()))[0], "s1")
@@ -522,7 +522,7 @@ class Invariants(test_loop.Base):
         self.tracker()
         url = "file:///origin.git"
         def eng():
-            return types.SimpleNamespace(land_lock_path=lambda: landlock.land_lock_path(url),
+            return types.SimpleNamespace(land_lock_path=lambda: landlock.land_lock_path(homes.cfg(), url),
                                                     waits=types.SimpleNamespace(locked=lambda what, path: landlock.os_lock(path, "bead")))
         mu, inside, most, entered, joined = threading.Lock(), [0], [0], [], threading.Event()
 
@@ -550,7 +550,7 @@ class Invariants(test_loop.Base):
             return self.real_os_lock(*a, **kw)
         with self.watching(watch):
             self.together({"X": section(lander_over(eng()).lock()), "Y": section(lander_over(eng()).lock()),
-                           "Z": section(landlock.os_lock(landlock.land_lock_path(url), "release: z"))})
+                           "Z": section(landlock.os_lock(landlock.land_lock_path(homes.cfg(), url), "release: z"))})
         self.assertEqual((most[0], sorted(entered)), (1, ["X", "Y", "Z"]))
         o = self.releases()
         self.assertEqual(o.most, 1)  # never two pushes inside the lock at once
@@ -579,7 +579,7 @@ class Invariants(test_loop.Base):
         self.assertEqual(list(sl.ticket_dir(self.repo_s).glob("*.json")), [])
         for n in slots:
             self.assertFalse(engine_lock.engine_lock_path(wslots.slot_dir(self.repo_s, n, self.cfg)).exists(), n)
-        for lock in (ident.config_dir() / "locks").glob("*.lock"):
+        for lock in (homes.config_dir() / "locks").glob("*.lock"):
             with open(str(lock), "a+") as f:
                 must(fcntl).flock(f, must(fcntl).LOCK_EX | must(fcntl).LOCK_NB)  # raises while a holder is left
 
@@ -631,7 +631,7 @@ class Invariants(test_loop.Base):
             sb = wslots.take_named_slot(repo, name, cfg, "next", spawner=real_spawner(), git=port_git(), who=support_who.who())[0]
             self.assertTrue(sb, name)  # the expired hold and the dead engine's lock are no obstacle
             wslots.release_slot(repo, name, mine=True, spawner=real_spawner(), git=port_git(), who=support_who.who())
-        self.assertEqual(wslots.waiting_line(repo), [])
+        self.assertEqual(wslots.waiting_line(repo, support_who.who()), [])
         engine_lock.drop_engine_lock(d2, 5252)
         self.nothing_held(names)
 

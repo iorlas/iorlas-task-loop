@@ -714,6 +714,7 @@
  },
  "Identity": {
   "actor": "tl-abcdef12",
+  "home": "/home/u/.config/task-loop",
   "session": "abcdef12-0000"
  },
  "Reexec": {

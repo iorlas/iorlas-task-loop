@@ -9,10 +9,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: E402, F401
+from support import homes  # noqa: E402
 from support.procsim import real_proc  # noqa: E402
 
 from taskloop.adapters import delegate as sdelegate  # noqa: E402
-from taskloop.adapters.ident import claude_dir  # noqa: E402
 from taskloop.contracts import wire  # noqa: E402
 from taskloop.contracts.delegate_status import snapshot_of  # noqa: E402
 from taskloop.contracts.snapshots import StatusSnapshot  # noqa: E402
@@ -83,7 +83,7 @@ def key_errors(data: object, schema: dict, path: str = "$") -> list[str]:
 
 
 def installed_route() -> str | None:
-    return sdelegate.find_route("", None, claude_dir() / "plugins" / "cache", sdelegate.installed_dir(claude_dir()))
+    return sdelegate.find_route("", None, homes.claude_dir() / "plugins" / "cache", sdelegate.installed_dir(homes.claude_dir()))
 
 
 def installed_schema() -> dict:

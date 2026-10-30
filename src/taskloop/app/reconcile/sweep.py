@@ -10,7 +10,7 @@ from taskloop.domain.reconcile.diff import diff
 
 
 def sweep(repos: list[str], store_of: Callable[[str], Beads] | None, build: Path | None, days: float, now: float, dry_run: bool,
-          git: Git, cfg: ConfigDir | None = None, live_of: Live | None = None,
+          git: Git, cfg: ConfigDir, live_of: Live | None = None,
           host: str = "") -> tuple[list[str], list[str]]:
     """(removed lines, kept lines with the reason). `live_of`: the runs running now (leases and slots are swept only
     when it is given). The dry run prints the plan, the real run executes exactly it."""

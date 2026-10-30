@@ -14,6 +14,7 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: E402, F401
+from support import homes  # noqa: E402
 from support.spawn import port_git  # noqa: E402
 from support.who import who  # noqa: E402
 
@@ -29,7 +30,6 @@ from loop.test_loop import Base, LoopBase, bead, rec  # noqa: E402
 from taskloop.adapters import (  # noqa: E402
     beadtools,
     childenv,
-    ident,
 )
 from taskloop.app.launch import loop as wloop  # noqa: E402
 from taskloop.app.loop.core import Core  # noqa: E402
@@ -167,7 +167,7 @@ class LoopHealth(LoopBase):
         self.assertIn(f"tl loop --repo {self.repo}", out)
 
     def test_a_bead_parked_on_a_dropped_ask_shows_in_status(self):
-        f = ident.config_dir() / "asks" / "x-1.json"
+        f = homes.config_dir() / "asks" / "x-1.json"
         f.parent.mkdir(parents=True, exist_ok=True)
         f.write_text(json.dumps({"v": 1, "id": "x-1-2", "bead": "x-1", "status": "open"}))
         self.assertIn("x-1  ", self.status())
@@ -331,7 +331,7 @@ class LoopSelfUpdate(LoopBase):
         self.assertEqual(self.started, [])  # the first look is before any bead
 
     def pin(self, **v):
-        (ident.config_dir() / "pinned.json").write_text(json.dumps({"v": 1, **v}))
+        (homes.config_dir() / "pinned.json").write_text(json.dumps({"v": 1, **v}))
 
     def test_a_pin_beats_the_newest_install(self):
         self.beads({"x-1": [rec("landed")]})
@@ -371,12 +371,12 @@ class LoopSelfUpdate(LoopBase):
         self.install("0.2.0")
         with self.assertRaises(Moved):
             self.run_loop()
-        self.assertFalse((ident.config_dir() / "pinned.json").exists())
+        self.assertFalse((homes.config_dir() / "pinned.json").exists())
         self.pin(**{"task-loop": "0.1.0"})
-        before = (ident.config_dir() / "pinned.json").read_bytes()
+        before = (homes.config_dir() / "pinned.json").read_bytes()
         self.beads({"x-3": [rec("landed")]})
         self.run_loop()
-        self.assertEqual((ident.config_dir() / "pinned.json").read_bytes(), before)
+        self.assertEqual((homes.config_dir() / "pinned.json").read_bytes(), before)
         for f in (ROOT / "src" / "taskloop" / "app" / "loop").glob("*.py"):
             src = f.read_text(encoding="utf-8")
             self.assertNotIn("write_pin", src)
@@ -479,17 +479,16 @@ class LandedOnBase(Base):
         sh("git", "checkout", "-q", "-b", "task/x-2", "origin/main")
         sh("git", "commit", "-q", "--allow-empty", "-m", "wip (x-2): failed")
         sh("git", "checkout", "-q", "-b", "task/x-3", "origin/main")
-        self.assertTrue(wloop.landed_on_base(str(self.repo), beadtools.bd_store(who().actor, str(self.repo)), str(wt), BeadId("x-1"),
-            port_git()))
+        bd = beadtools.bd_store(who().actor, str(self.repo))
+
+        def landed(bead_id):
+            return wloop.landed_on_base(str(self.repo), homes.cfg(), bd, str(wt), BeadId(bead_id), port_git())
+        self.assertTrue(landed("x-1"))
         # not on main
-        self.assertFalse(wloop.landed_on_base(str(self.repo), beadtools.bd_store(who().actor, str(self.repo)), str(wt), BeadId("x-2"),
-            port_git()))
-        self.assertFalse(
-            wloop.landed_on_base(str(self.repo), beadtools.bd_store(who().actor, str(self.repo)), str(wt), BeadId("x-3"), port_git())
-        )  # no work: the tip is someone else's
+        self.assertFalse(landed("x-2"))
+        self.assertFalse(landed("x-3"))  # no work: the tip is someone else's
         # no branch
-        self.assertFalse(wloop.landed_on_base(str(self.repo), beadtools.bd_store(who().actor, str(self.repo)), str(wt), BeadId("x-9"),
-            port_git()))
+        self.assertFalse(landed("x-9"))
 
 
 if __name__ == "__main__":

@@ -7,10 +7,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
+from support import homes
 from support.engine_case import CLEAN, PLAN, WRITE, EngineTest
 from support.narrow import must
 
-from taskloop.adapters import ident
 from taskloop.app.asks import intake
 from taskloop.contracts.adrs import AdrStore
 from taskloop.contracts.ask import SimilarRef
@@ -18,7 +18,6 @@ from taskloop.contracts.dash import OwnerCause
 from taskloop.contracts.enums import AskStatus
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ledger import Adr
-from taskloop.contracts.paths import ConfigDir
 from taskloop.domain.asks import similar, specs
 
 OPTS = [{"label": "Push", "cost": "shared", "answer": "push", "recommended": True},
@@ -35,7 +34,7 @@ class EngineDecisions(EngineTest):
         return str(Path(common).parent)
 
     def adrs(self) -> AdrStore:
-        return AdrStore.at(ConfigDir(ident.config_dir()), self.repo())
+        return AdrStore.at(homes.cfg(), self.repo())
 
     def decide(self, text: str, key: str = "") -> Adr:
         return self.adrs().add(Adr(id="", n=0, repo=self.repo(), text=text, question="q?", answer="a", ask="x-1", bead="x", key=key, t=1.0))
@@ -100,4 +99,4 @@ class EngineDecisions(EngineTest):
         first = must(self.asks().get(BeadId("t-1")))
         self.assertEqual((first.key, first.similar), (key, [SimilarRef(kind="adr", id=adr.id)]))
         intake.Intake(self.asks(), self.store, lambda: 5.0, "denis").answer(BeadId("t-1"), "text", "hold")
-        self.assertEqual(json.loads((ident.config_dir() / "ask-ledger.jsonl").read_text().splitlines()[0])["event"], "raise")
+        self.assertEqual(json.loads((homes.config_dir() / "ask-ledger.jsonl").read_text().splitlines()[0])["event"], "raise")

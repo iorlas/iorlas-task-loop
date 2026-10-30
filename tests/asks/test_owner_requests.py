@@ -15,12 +15,12 @@ from unittest import mock
 
 import support.paths  # noqa: F401
 from support import engine_case as te
+from support import homes
 from support.engine_case import PLAN, WRITE
 from support.fake_beads import FakeBeads
 from support.logs import typed
 from support.narrow import must
 
-from taskloop.adapters import ident
 from taskloop.app.asks import intake
 from taskloop.app.run import requests
 from taskloop.app.run.layout import prune_run_logs
@@ -105,7 +105,7 @@ class Cli(unittest.TestCase):
         env = mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": self.tmp.name})
         env.start()
         self.addCleanup(env.stop)
-        self.cfg = ConfigDir(ident.config_dir())
+        self.cfg = homes.cfg()
         self.store = FakeBeads()
         self.store.create(NewBead(title="x"))
         self.out: list[str] = []
@@ -146,7 +146,7 @@ class EngineRequests(te.EngineTest):
 
             def planned(*a, **kw):
                 out = plan(*a, **kw)
-                self.assertEqual(requests.post(ConfigDir(ident.config_dir()), eng.log_path.stem, "denis", time.time(), **request), "")
+                self.assertEqual(requests.post(homes.cfg(), eng.log_path.stem, "denis", time.time(), **request), "")
                 return out
             eng.planner.plan = planned
         return prep
@@ -164,7 +164,7 @@ class EngineRequests(te.EngineTest):
         self.assertIsNotNone(self.eng.checkpoints.read())
         te.sh("git", "rev-parse", "--verify", "-q", "task/t-1", cwd=self.wt)  # the branch is kept
         self.assertEqual(self.eng.result().outcome, "parked")
-        self.assertFalse(Path(self.eng.run_dir, ConfigDir(ident.config_dir()).run_request("x").name).exists())
+        self.assertFalse(Path(self.eng.run_dir, homes.cfg().run_request("x").name).exists())
 
     def test_stop_ends_the_run_through_the_halt_path(self):
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [te.review()]}, prep=self.after_plan(stop=True))

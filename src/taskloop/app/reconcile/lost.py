@@ -8,7 +8,6 @@ or it is on a wip/* branch of a dead session)."""
 from collections.abc import Callable, Sequence
 from typing import Any
 
-from taskloop.adapters import ident
 from taskloop.app.reconcile.commits import observe_commits
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.landed import LandedStore
@@ -20,10 +19,10 @@ from taskloop.domain.reconcile.facts import Observed
 
 
 def lost_work(repo: str, base: str, status_of: Callable[[BeadId], str | None], traces: Sequence[RunTrace], git: Git,
-              since: float | None = None, cfg: ConfigDir | None = None) -> list[dict[str, Any]]:
+              cfg: ConfigDir, since: float | None = None) -> list[dict[str, Any]]:
     """Every commit on a task/<bead> or wip/* branch that is not on the base, classed. `status_of`: a bead's bd status (None: no such
     bead, "?": bd failed); `traces`: the engine's runs of this repo."""
-    store = LandedStore(cfg or ConfigDir(ident.config_dir()))
+    store = LandedStore(cfg)
     commits = observe_commits(git, repo, base, since, status_of, traces, store)
     seen = Observed(now=0.0, keep_days=0.0, commits=commits)
     return [{"branch": f.commit.branch, "bead": f.commit.bead, "sha": f.commit.sha, "time": f.commit.time, "subject": f.commit.subject,

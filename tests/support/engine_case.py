@@ -21,6 +21,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
+from support import homes
 
 # isort: split
 from contracts import samples as S
@@ -39,7 +40,6 @@ from support.waits import until
 from support.who import who
 from taskloop.adapters import (
     applog,
-    ident,
 )
 from taskloop.adapters import delegate as dl
 from taskloop.adapters import delegate as lroute  # noqa: F401
@@ -58,7 +58,6 @@ from taskloop.contracts.checks import CheckRun
 from taskloop.contracts.env import snapshot
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.kinds import Kind
-from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.plancheck import adhoc
 from taskloop.contracts.stores import AskStore
 from taskloop.domain.checks import (
@@ -301,7 +300,7 @@ def no_repo(fn):
 
 def read_ask(bead="t-1") -> Any:
     """The bead's ask record as the dict on disk, or None."""
-    p = ident.config_dir() / "asks" / (f"{bead}.json")
+    p = homes.config_dir() / "asks" / (f"{bead}.json")
     return json.loads(p.read_text()) if p.exists() else None
 
 
@@ -529,7 +528,7 @@ class EngineTest(unittest.TestCase):
 
     def admit(self, bead, comments=(), ask=None):
         if ask:
-            p = ident.config_dir() / "asks" / "t-1.json"
+            p = homes.config_dir() / "asks" / "t-1.json"
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_text(json.dumps(ask))
         with self.store.stub(show=dict(BEAD, **bead), comments=list(comments)):
@@ -595,7 +594,7 @@ class EngineTest(unittest.TestCase):
         return card_of(self.ask())
 
     def asks(self):
-        return AskStore.at(ConfigDir(ident.config_dir()))
+        return AskStore.at(homes.cfg())
 
     def file_answer(self, action, text="", bead="t-1"):
         """The owner answers the bead's ask the way the dashboard and `tl answer` do: an AskAnswer record, never a comment."""

@@ -72,7 +72,7 @@ from taskloop.contracts.ids import BeadId
 from taskloop.contracts.kinds import Kind
 from taskloop.contracts.landed import Landed, LandedStore
 from taskloop.contracts.log import Assumed, Said
-from taskloop.contracts.paths import PLAN_FILE, ConfigDir, RunFiles
+from taskloop.contracts.paths import PLAN_FILE, RunFiles
 from taskloop.contracts.ports import Clock, Git, Spawner
 from taskloop.contracts.run import Reexec, RunReport
 from taskloop.domain import outcome as oc
@@ -133,10 +133,11 @@ class Engine(RunFields):
         git: Git,
         who: Identity,
     ) -> None:
-        route = route or seams.DelegateRoute()
+        route = route or seams.DelegateRoute(env)
         self.env = env  # the process environment, taken once at the edge (tl.py); every child is built from it
         self.spawner = spawner
         self.who = who  # the session and bd actor this run acts as, built at the edge
+        self.home = who.config  # the config dir of the identity, built at the edge
         self.git = git  # the port every git call of the run goes through, pinned to the slot, built at the edge with the same env
         super().__init__(bead, wt, cfg, dry_run, verbose, store, route, fresh, claim, who)
         self.clock = clock or SystemClock()
@@ -144,15 +145,15 @@ class Engine(RunFields):
         if self.reexec and self.reexec.bead != bead:
             self.reexec = None
         # a run paused for the network: its run id and counters go on
-        pause = None if self.reexec else reexec.take_net_pause(bead)
-        self.stores = stores or real_stores(ConfigDir(ident.config_dir()))
+        pause = None if self.reexec else reexec.take_net_pause(self.home, bead)
+        self.stores = stores or real_stores(self.home)
         # a run that died inside its close: its id goes on (the keys of the effects it applied are under it)
         ck = None if dry_run or self.reexec or pause else self.checkpoints.read()
         self.dead = ck if ended.unfinished(ck) else None
         # the same run id: log, run dir and trace go on
         dead_run = self.dead.ended.run if self.dead and self.dead.ended else None
         taken = (self.reexec.run if self.reexec else None) or (pause.run if pause else None) or dead_run
-        layout = RunLayout.open(bead, wt, taken)
+        layout = RunLayout.open(bead, wt, taken, self.home)
         self.log_path, self.err_path, self.run_dir = layout.log_path, layout.err_path, layout.run_dir
         self.task_dir, self.brief_file, self.evidence_dir = layout.task_dir, layout.brief_file, layout.evidence_dir
         self.exec_fn: Any = None  # a test's exec, newer-install lookup, run-task argv, the cross-process lock
@@ -161,7 +162,7 @@ class Engine(RunFields):
         self.moved = False
         self.os_lock = landlock.os_lock
         stem = self.log_path.stem
-        self.ctx = RunContext.open(bead, cfg, Path(wt), stem, self.run_dir, self.stores, store, route, self.clock, self.sessions,
+        self.ctx = RunContext.open(bead, cfg, Path(wt), stem, self.run_dir, self.home, self.stores, store, route, self.clock, self.sessions,
                                    self.stats, opencode.opencode_id, lambda p: context_size.context_tokens(p, self.env), say,
                                    verbose, dry_run, self.now, self.step_guard, self.on_step)
         c = self.ctx
@@ -340,18 +341,18 @@ class Engine(RunFields):
         trail.event(self.who, "stage", self.bead, text=text)
 
     def call_dir(self) -> Path:
-        return ident.config_dir() / "checkpoints"
+        return self.home.root / "checkpoints"
 
     def publish_plan(self) -> None:
         if self.plan_data:
             (self.run_dir / PLAN_FILE).write_text(json.dumps(plancheck.to_wire(self.plan_data), indent=1))
 
     def record_land(self, sha: str) -> None:
-        LandedStore(ident.config_dir()).put(Landed(bead=self.bead, sha=sha, base=self.cfg.base, t=self.now()))
+        LandedStore(self.home).put(Landed(bead=self.bead, sha=sha, base=self.cfg.base, t=self.now()))
         verbs.land(self.who, self.bead, sha, self.store, self.git, self.wt, base=self.cfg.base, claim=self.claim)
 
     def land_lock_path(self) -> Path:
-        return landlock.land_lock_path(self.git.remote_url(self.wt, "origin") or self.wt)
+        return landlock.land_lock_path(self.home, self.git.remote_url(self.wt, "origin") or self.wt)
 
     @property
     def tree_writer(self) -> Checkout:

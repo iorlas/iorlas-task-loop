@@ -14,6 +14,7 @@ from support import engine_case as te
 from support import (
     fake_route,
     gitq,
+    homes,
     procsim,
 )
 from support.builders import cfg_with, make_engine, plan_of
@@ -27,7 +28,6 @@ from support.spawn import port_git, real_spawner
 from support.who import who
 
 from run.test_stages import StagesTest
-from taskloop.adapters import ident
 from taskloop.app.land.rebase import MAX_REBASE_RESETS
 from taskloop.app.run import (
     entry,
@@ -403,7 +403,7 @@ class ResumeCount(StagesTest):
     def test_an_edit_with_no_ask_still_counts(self):
         # who edited the bead is not known: a comment from a sibling agent must not lift the limit
         self.run_engine({"plan": [PLAN], "write": [dict(WRITE, question="Which format?")]}, max_replans=1)
-        path = ident.config_dir() / "asks" / "t-1.json"
+        path = homes.config_dir() / "asks" / "t-1.json"
         path.unlink()
         with self.store.stub(show=dict(BEAD, description="Also say hi.")):
             _rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, max_replans=1)
@@ -482,7 +482,7 @@ class ResumeCount(StagesTest):
         te.sh("git", "checkout", "-q", "--detach", "origin/main", cwd=self.wt)
 
     def last_trace(self):
-        return json.loads((ident.config_dir() / "traces.jsonl").read_text().splitlines()[-1])
+        return json.loads((homes.config_dir() / "traces.jsonl").read_text().splitlines()[-1])
 
     def test_wip_commits_that_conflict_only_unsquashed_are_squashed_and_rebase_without_a_fix(self):
         self.wip_branch(["step 1", "step 2", "step 3", "main moved on"], "main moved on")
@@ -671,7 +671,7 @@ class Claims(StagesTest):
         self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "reviewer", "reviewer"])  # the reflection is the last call
         self.assertIn("Bead t-1: Add f", s.prompts[3])
         self.assertIn("session ref-write", s.prompts[3])  # the sessions to cite
-        last = json.loads((ident.config_dir() / "traces.jsonl").read_text().splitlines()[-1])
+        last = json.loads((homes.config_dir() / "traces.jsonl").read_text().splitlines()[-1])
         self.assertEqual(last["reflection"]["went_badly"][0]["cause"], "prompt")
         self.assertEqual(last["reflection"]["went_badly"][0]["session"], "ref-review")
         comment = next(c[3] for c in self.bd_calls if c[:2] == ("comments", "add") and c[3].startswith("Reflect (engine)"))
@@ -683,7 +683,7 @@ class Claims(StagesTest):
         crash = fake_route.NO_ANSWER
         rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN], "reflect": [crash, crash, crash]}, reflect=True)
         self.assertEqual(rc, 0, self.blocked)
-        last = json.loads((ident.config_dir() / "traces.jsonl").read_text().splitlines()[-1])
+        last = json.loads((homes.config_dir() / "traces.jsonl").read_text().splitlines()[-1])
         self.assertEqual((last["outcome"], last["reflection"]), ("landed", None))
         self.assertTrue(self.closed and self.closed[0].startswith("merged"))
 

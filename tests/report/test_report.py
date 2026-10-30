@@ -18,13 +18,11 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: E402, F401
+from support import homes  # noqa: E402
 
 # isort: split
 import tl  # noqa: E402
 
-from taskloop.adapters import (  # noqa: E402
-    ident,
-)
 from taskloop.app.report import planner  # noqa: E402
 from taskloop.domain.report import matchers  # noqa: E402
 
@@ -111,7 +109,7 @@ def trace(bead, outcome, start_min, end_min, why="", sha="", rounds=0, replans=0
     stem = run or "{}-{}".format(bead, time.strftime("%Y%m%d-%H%M%S", time.localtime(started)))
     return {"v": 1, "run": stem, "bead": bead, "repo": "https://example.invalid/r.git", "worktree": worktree,
             "started": started, "ended": ended, "outcome": outcome, "why": why, "sha": sha,
-            "stats": {"rounds": rounds, "replans": replans}, "log": str(ident.config_dir() / "engine" / (stem + ".jsonl")),
+            "stats": {"rounds": rounds, "replans": replans}, "log": str(homes.config_dir() / "engine" / (stem + ".jsonl")),
             "sessions": list(sessions), "stderr": stderr, "kind": kind}
 
 
@@ -129,7 +127,7 @@ class PlannerReport(unittest.TestCase):
                                                 "APPDATA": str(home / "cfg")})
         self.env.start()
         self.hist = home / "history.jsonl"
-        self.eng = ident.config_dir() / "engine"
+        self.eng = homes.config_dir() / "engine"
         self.eng.mkdir(parents=True)
         t = T0
         rows = [("planner", "x-1", 1000, 9000), ("planner", "x-1", 500, 4500), ("planner", "x-1", 200, 800),
@@ -149,15 +147,15 @@ class PlannerReport(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_calls_are_split_into_first_again_amend_and_send_back_and_input_is_in_plus_cached(self):
-        p = planner.planner_stats(T0 - 1, T0 + 100, history=self.hist)
+        p = planner.planner_stats(homes.cfg(), T0 - 1, T0 + 100, history=self.hist)
         by = {x["bead"]: x for x in p["per_bead"]}
         self.assertEqual({k: by["x-1"][k] for k in ("calls", "first", "again", "amend", "back", "other", "input")},
                          {"calls": 4, "first": 1, "again": 1, "amend": 1, "back": 1, "other": 0, "input": 16100})
         self.assertEqual((by["x-2"]["calls"], by["x-2"]["first"], by["x-2"]["input"]), (1, 1, 1000))
         self.assertEqual((p["calls"], p["beads"], p["input"]), (6, 3, 17101))  # the worker call is no planner call
-        only = planner.planner_stats(T0 - 1, T0 + 100, {"x"}, history=self.hist)
+        only = planner.planner_stats(homes.cfg(), T0 - 1, T0 + 100, {"x"}, history=self.hist)
         self.assertEqual((only["calls"], only["beads"]), (5, 2))
-        self.assertEqual(planner.planner_stats(T0 + 50, T0 + 100, history=self.hist)["calls"], 0)  # outside the window
+        self.assertEqual(planner.planner_stats(homes.cfg(), T0 + 50, T0 + 100, history=self.hist)["calls"], 0)  # outside the window
 
     def test_input_is_in_when_in_already_holds_the_cache_else_in_plus_cached(self):
         self.assertEqual(planner.input_tokens({"in": 10000, "cached": 9000}), 10000)   # delegate 0.22+ and Codex

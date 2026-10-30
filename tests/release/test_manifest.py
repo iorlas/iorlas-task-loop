@@ -13,6 +13,7 @@ import support.paths  # noqa: E402, F401
 
 from taskloop.app.release import manifest  # noqa: E402
 from taskloop.app.wire import doctor  # noqa: E402
+from taskloop.contracts.env import snapshot  # noqa: E402
 
 NAME, MARKET = "iorlas-task-loop", "iorlas-marketplace"
 
@@ -69,7 +70,7 @@ class DoctorInstall(unittest.TestCase):
         (self.root / "AGENTS.md").write_text("# x\n\n## Ownership\n\n| a | b |\n")
 
     def problems(self):
-        return doctor.install_problems(self.root)
+        return doctor.install_problems(self.root, snapshot())
 
     def test_a_clean_install_and_an_agents_file_with_its_section_have_no_problem(self):
         self.assertEqual(self.problems(), [])
@@ -83,7 +84,7 @@ class DoctorInstall(unittest.TestCase):
         self.assertIn("Ownership", self.problems()[0])
 
     def test_the_repos_own_agents_file_has_the_section(self):
-        self.assertEqual([p for p in doctor.install_problems(ROOT) if "Ownership" in p], [])
+        self.assertEqual([p for p in doctor.install_problems(ROOT, snapshot()) if "Ownership" in p], [])
 
 
 if __name__ == "__main__":

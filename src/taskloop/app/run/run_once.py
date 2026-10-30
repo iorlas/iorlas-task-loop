@@ -220,7 +220,7 @@ class RunOnce:
                 return
             e.stuck.tick()  # the last tick: a run that stops on its third same red says it before its Close
             e.requests.drop()  # what the run did not take is for a run that ended
-            reexec.drop_reexec(e.bead)  # a run that ended is no crash after an exec
+            reexec.drop_reexec(e.home, e.bead)  # a run that ended is no crash after an exec
             if end.outcome.kind is Kind.PAUSE_NETWORK and not e.dry:
                 e.reload.save_net_pause()
             e.why = end.outcome.detail

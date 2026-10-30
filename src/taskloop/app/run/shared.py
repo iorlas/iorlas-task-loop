@@ -8,7 +8,6 @@ from typing import Any
 
 from atomic_io import atomic_write_json
 
-from taskloop.adapters import ident
 from taskloop.adapters.gitrepo import same_dir
 from taskloop.app.slots import engine_lock
 from taskloop.contracts.slots import SlotGitError
@@ -27,7 +26,7 @@ class Shared:
     def shared_path(self) -> Path:
         e = self.e
         common = e.git.common_dir(e.wt) or str(e.wt)
-        return ident.config_dir() / "shared" / f"{hashlib.sha1(common.encode('utf-8')).hexdigest()[:12]}.json"
+        return e.home.root / "shared" / f"{hashlib.sha1(common.encode('utf-8')).hexdigest()[:12]}.json"
 
     def known_flakes(self) -> list[dict[str, Any]]:
         """[{test, note, bead}]: tests known to fail without cause. A writer reports one (flakes); the owner may edit the file."""

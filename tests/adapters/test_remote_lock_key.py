@@ -11,7 +11,9 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from taskloop.adapters import landlock
 from taskloop.app.release import clone
 from taskloop.app.release.push import release_lock_path
+from taskloop.contracts.paths import ConfigDir
 
+HOME = ConfigDir(Path("/c"))
 SPELLINGS = ["git@github.com:iorlas/task-loop.git", "ssh://git@github.com/iorlas/task-loop", "ssh://git@github.com:22/iorlas/task-loop.git",
              "https://github.com/iorlas/task-loop.git", "https://github.com/iorlas/task-loop/", "HTTPS://me@GitHub.com/iorlas/task-loop.git",
              "github.com:iorlas/task-loop"]
@@ -22,7 +24,7 @@ class RemoteLockKey(unittest.TestCase):
         self.assertEqual({landlock.canonical_remote(u) for u in SPELLINGS}, {"github.com/iorlas/task-loop"})
 
     def test_one_land_lock_per_remote(self):
-        self.assertEqual(len({landlock.land_lock_path(u) for u in SPELLINGS}), 1)
+        self.assertEqual(len({landlock.land_lock_path(HOME, u) for u in SPELLINGS}), 1)
 
     def test_the_release_lock_is_named_from_the_release_clone(self):
         # the 0.23.198 incident: the lock key changed while the clone path did not, so two releases shared one clone
@@ -31,9 +33,9 @@ class RemoteLockKey(unittest.TestCase):
         self.assertEqual(release_lock_path(Path("/c"), "git@github.com:iorlas/iorlas-task-loop.git").name, "release-a21d40806183.lock")
 
     def test_another_repo_or_host_is_another_lock(self):
-        a = landlock.land_lock_path("git@github.com:iorlas/task-loop.git")
-        self.assertNotEqual(a, landlock.land_lock_path("git@github.com:iorlas/other.git"))
-        self.assertNotEqual(a, landlock.land_lock_path("git@gitlab.com:iorlas/task-loop.git"))
+        a = landlock.land_lock_path(HOME, "git@github.com:iorlas/task-loop.git")
+        self.assertNotEqual(a, landlock.land_lock_path(HOME, "git@github.com:iorlas/other.git"))
+        self.assertNotEqual(a, landlock.land_lock_path(HOME, "git@gitlab.com:iorlas/task-loop.git"))
 
     def test_a_local_path_stays_as_it_is(self):
         self.assertEqual(landlock.canonical_remote("/srv/git/repo.git"), "/srv/git/repo.git")

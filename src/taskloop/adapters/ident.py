@@ -5,24 +5,22 @@ import socket
 from pathlib import Path
 
 from taskloop.adapters.gitrepo import pinned_env
-from taskloop.contracts import env as penv
 from taskloop.contracts.env import Env
 from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.paths import default_root
 
 
-def config_dir() -> Path:
-    """~/.config/task-loop (XDG_CONFIG_HOME moves it), made on first ask."""
-    # the one variable default_root reads, not a copy of all of them: this is asked about 40 times in a run
-    d = default_root(penv.Env({"XDG_CONFIG_HOME": penv.ambient("XDG_CONFIG_HOME")}))
+def config_dir(env: Env) -> Path:
+    """~/.config/task-loop (XDG_CONFIG_HOME of `env` moves it), made on first ask."""
+    d = default_root(env)
     if not d.is_dir():
         d.mkdir(parents=True, exist_ok=True)
     return d
 
 
-def claude_dir() -> Path:
-    return Path(penv.ambient("CLAUDE_CONFIG_DIR") or Path.home() / ".claude")
+def claude_dir(env: Env) -> Path:
+    return Path(env.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude")
 
 
 def hostname() -> str:
@@ -32,15 +30,16 @@ def hostname() -> str:
 def identity(env: Env) -> Identity:
     """The session this process acts for (a Claude session, or the engine's own id when nobody drives it) and its bd actor: one name per
     session, since two sessions with one actor both 'win' a claim (bd lets the same actor re-claim)."""
+    home = str(default_root(env))  # not made here: a verb that refuses its input leaves no folder behind
     session = env.get(EnvVar.TASK_LOOP_SESSION) or env.get("CLAUDE_CODE_SESSION_ID") or env.get("CLAUDE_SESSION_ID")
     if env.get(EnvVar.TASK_LOOP_ACTOR):
-        return Identity(actor=env.get(EnvVar.TASK_LOOP_ACTOR), session=session)
+        return Identity(actor=env.get(EnvVar.TASK_LOOP_ACTOR), home=home, session=session)
     if session:
-        return Identity(actor="tl-" + session[:8], session=session)
+        return Identity(actor="tl-" + session[:8], home=home, session=session)
     if env.get("CLAUDE_PID"):  # older Claude Code: one name per session process, never per folder
-        return Identity(actor=f"tl-{hostname()}-{env.get('CLAUDE_PID')}", session="")
+        return Identity(actor=f"tl-{hostname()}-{env.get('CLAUDE_PID')}", home=home)
     top = pinned_env(os.getcwd()).get("GIT_WORK_TREE", "")  # the checkout this process runs in
-    return Identity(actor="tl-" + (Path(top).name if top else socket.gethostname()), session="")
+    return Identity(actor="tl-" + (Path(top).name if top else socket.gethostname()), home=home)
 
 
 PLUGIN_ROOT = Path(__file__).resolve().parents[3]  # the install this code runs from (src/taskloop/adapters/ident.py)

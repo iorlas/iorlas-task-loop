@@ -12,7 +12,7 @@ from typing import Any
 
 from taskloop.adapters.beadtools import bd_store, peek
 from taskloop.adapters.gitrepo import repo_root
-from taskloop.adapters.ident import config_dir, hostname
+from taskloop.adapters.ident import hostname
 from taskloop.adapters.landlock import os_lock
 from taskloop.app.slots import line as slots_line
 from taskloop.app.slots.engine_lock import drop_engine_lock, engine_busy, lock_pid
@@ -26,7 +26,7 @@ from taskloop.contracts.config import EngineConfig, RepoProfile, SlotsConfig
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ids import loop_key as repo_key
-from taskloop.contracts.paths import TASK_EXCLUDE, ConfigDir
+from taskloop.contracts.paths import TASK_EXCLUDE
 from taskloop.contracts.ports import BdFailure, BeadQuery, Beads, Git, Spawner
 from taskloop.contracts.slots import SlotFail, SlotGitError
 from taskloop.stores.files import FileTickets
@@ -104,18 +104,17 @@ def exclude_local(git: Git, repo: str, *patterns: str) -> None:
 def slot_env(repo: str, store: Beads | None = None, cfg: SlotsConfig | None = None, now: Callable[[], float] | None = None,
              *, spawner: Spawner, git: Git, who: Identity) -> SlotEnv:
     """The slot code's world (app/slots): this repo's bd, git, ticket line and take lock, and the effects it may cause."""
-    cdir = ConfigDir(config_dir())
     return SlotEnv(
         repo=repo,
         repo_key=repo_key(repo),
         cfg=cfg or profile_slots(repo),
         store=store or bd_store(who.actor, repo),
         git=git,
-        tickets=FileTickets(cdir),
-        cfgdir=cdir,
+        tickets=FileTickets(who.config),
+        cfgdir=who.config,
         actor=who.actor,
         host=hostname(),
-        take_lock=lambda: os_lock(config_dir() / "locks" / f"slot-take-{repo_key(repo)}.lock", f"pid {os.getpid()}"),
+        take_lock=lambda: os_lock(who.config.root / "locks" / f"slot-take-{repo_key(repo)}.lock", f"pid {os.getpid()}"),
         busy=engine_busy, lock_pid=lock_pid,
         drop_engine_lock=lambda wt, pid: drop_engine_lock(wt, pid) if pid is not None else None, event=functools.partial(event,
             who), say=print,
@@ -140,9 +139,9 @@ def slot_of(repo: str, wt: str, who: Identity, store: Beads | None = None) -> st
         cfg)).resolve() == here), "")
 
 
-def waiting_line(repo: str) -> list[Any]:
+def waiting_line(repo: str, who: Identity) -> list[Any]:
     """The live tickets (Ticket), first in line first; a dead waiter's ticket is removed."""
-    return list(FileTickets(ConfigDir(config_dir())).line(repo_key(repo)))
+    return list(FileTickets(who.config).line(repo_key(repo)))
 
 
 def wait_slot(repo: str, cfg: SlotsConfig, why: str, bead: str = "", stop: Callable[[], bool] | None = None,

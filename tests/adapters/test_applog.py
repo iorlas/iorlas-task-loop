@@ -8,13 +8,13 @@ from pathlib import Path
 from unittest import mock
 
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
+from support import homes
 from support.builders import cfg_with
 from support.spawn import port_git, real_spawner
 from support.who import who
 
 from taskloop.adapters import (
     applog,
-    ident,
 )
 from taskloop.app.release import reexec
 from taskloop.app.run import engine
@@ -108,7 +108,7 @@ class WiringTest(unittest.TestCase):
             reexec.exec_in_place(["x"], {})
 
     def test_tl_event_keeps_one_handle_for_events_jsonl_and_flushes_each_line(self):
-        path = ident.config_dir() / "events.jsonl"
+        path = homes.config_dir() / "events.jsonl"
         path.parent.mkdir(parents=True, exist_ok=True)
         trail.event(who(), "stage", "b-1", repo=self.tmp.name)  # a given repo: no git to ask (its answer is memoized by earlier tests)
         with open(path, encoding="utf-8") as reader:

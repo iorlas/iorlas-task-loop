@@ -4,6 +4,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
+from support import homes
 from support.checks import typed
 from support.engine_case import BEAD, CAP_PARKS, CLEAN, FALSE, HAS_F, PLAN, WRITE, EngineTest, review, sh, stop
 
@@ -16,7 +17,6 @@ from support import fake_route, procsim
 from support.builders import cfg_with
 from support.logs import records
 
-from taskloop.adapters import ident
 from taskloop.app.plan.planner import Planner
 from taskloop.app.run import engine
 from taskloop.contracts import answers, plancheck
@@ -328,7 +328,7 @@ class EnginePlanTest(EngineTest):
         self.run_engine({"plan": [PLAN], "write": [self.bad_request()]}, bead="t-3")
         self.assertEqual(self.eng.result().storm, "")  # the record is live: no second banner
         self.assertEqual((self.blocked, self.ask()), ([], None))
-        self.assertEqual(len(list((ident.config_dir() / "storm").glob("*.json"))), 1)
+        self.assertEqual(len(list((homes.config_dir() / "storm").glob("*.json"))), 1)
 
     def test_a_changed_bead_amends_the_old_plan_it_does_not_plan_again(self):
         self.stopped_run(plan=self.TWO, answers={"plan": [self.TWO], "write": [WRITE]})

@@ -13,6 +13,7 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as te
 from support import (
     gitq,
+    homes,
     procsim,
 )
 from support.builders import make_engine, plan_of
@@ -25,7 +26,7 @@ from support.narrow import must
 from support.spawn import port_git, real_spawner
 from support.who import who
 
-from taskloop.adapters import childenv, ident, pidcheck
+from taskloop.adapters import childenv, pidcheck
 from taskloop.adapters.check_probe import PathProbe
 from taskloop.app.checks import evidence as check_evidence
 from taskloop.app.wire import slots as wslots
@@ -740,7 +741,7 @@ class Inputs(StagesTest):
         self.assertIn("Windows PC", s.prompts[1])  # the writer reads the plan, assumptions included
 
     def ask(self):
-        p = ident.config_dir() / "asks" / "t-1.json"
+        p = homes.config_dir() / "asks" / "t-1.json"
         return json.loads(p.read_text()) if p.exists() else None
 
     def test_a_plan_question_about_missing_inputs_proceeds_to_write_with_an_assumption(self):

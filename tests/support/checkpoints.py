@@ -1,8 +1,7 @@
 """Checkpoints as a test reads and arranges them: through the engine's own stores, never by JSON shape."""
-from taskloop.adapters import ident
+from support import homes
 from taskloop.contracts import wire
 from taskloop.contracts.checkpoint import Checkpoint, RunState
-from taskloop.contracts.paths import ConfigDir
 from taskloop.stores.real import real_stores
 
 
@@ -37,4 +36,4 @@ def flat_ck(ck):
 
 def stored_ck(bead="t-1"):
     """The stored Checkpoint of `bead` in the test's config dir, read through the real stores."""
-    return real_stores(ConfigDir(ident.config_dir())).checkpoints.of(bead).get()
+    return real_stores(homes.cfg()).checkpoints.of(bead).get()

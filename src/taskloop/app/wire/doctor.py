@@ -4,11 +4,12 @@ from pathlib import Path
 
 from taskloop import contracts
 from taskloop.adapters.beadtools import bd_store
-from taskloop.adapters.ident import config_dir
+from taskloop.adapters.ident import claude_dir, config_dir
 from taskloop.app.doctor import profiles
 from taskloop.app.release import catalog, manifest
 from taskloop.app.wire.slots import cfg_source
 from taskloop.contracts.config import RepoProfile
+from taskloop.contracts.env import Env
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdFailure, BeadQuery, Beads, Git
@@ -65,7 +66,7 @@ def bead_lint_warnings(repo: str, who: Identity, store: Beads | None = None) -> 
 OWNERSHIP = "## Ownership"
 
 
-def install_problems(plugin_root: Path) -> list[str]:
+def install_problems(plugin_root: Path, env: Env) -> list[str]:
     """What is wrong with the plugin install this tl runs from and the one Claude Code records as installed: a file that differs from
     MANIFEST.sha256 (named), an AGENTS.md without its ownership section. A source checkout has no manifest and is checked for none."""
     out: list[str] = []
@@ -75,16 +76,17 @@ def install_problems(plugin_root: Path) -> list[str]:
         agents = ""
     if OWNERSHIP not in agents.splitlines():
         out.append(f"{plugin_root / 'AGENTS.md'} has no '{OWNERSHIP}' section (who may write the checkout, the cache, the ports)")
-    version = catalog.installed_version("task-loop")
-    installed = catalog.cache_dirs("task-loop").get(version)
+    claude = claude_dir(env)
+    version = catalog.installed_version("task-loop", claude)
+    installed = catalog.cache_dirs("task-loop", claude).get(version)
     if installed:
         out += [f"installed task-loop {version}: {p}" for p in manifest.verify(installed)]
     return out
 
 
-def run(plugin_root: Path, git: Git, who: Identity) -> int:
+def run(plugin_root: Path, env: Env, git: Git, who: Identity) -> int:
     repo = git.toplevel(".") or os.getcwd()
-    if profiles.report(git, repo, ReposStore(ConfigDir(config_dir()))):  # a bad profile is a red row of its repo, not a traceback
+    if profiles.report(git, repo, ReposStore(ConfigDir(config_dir(env)))):  # a bad profile is a red row of its repo, not a traceback
         return 1
     source = cfg_source(repo, git)
     _, base, commit = source
@@ -94,7 +96,7 @@ def run(plugin_root: Path, git: Git, who: Identity) -> int:
     print(f"contracts: {Path(contracts.__file__).resolve().parent}")
     for w in warns:
         print("WARN " + w)
-    fails = install_problems(plugin_root)
+    fails = install_problems(plugin_root, env)
     for p in fails:
         print("FAIL " + p)
     if not warns and not fails:

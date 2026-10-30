@@ -9,7 +9,7 @@ from collections.abc import Collection
 from dataclasses import dataclass
 from pathlib import Path
 
-from taskloop.adapters import ident, locks
+from taskloop.adapters import locks
 from taskloop.contracts.paths import TASK_EXCLUDE, ConfigDir
 from taskloop.contracts.runlife import RETAIN
 
@@ -85,12 +85,12 @@ def drop_run_log(cfg: ConfigDir, log: Path) -> None:
     log.unlink()
 
 
-def fresh_stem(bead: str, logs: Path) -> str:
+def fresh_stem(bead: str, logs: Path, home: ConfigDir) -> str:
     """A fresh run has its own id, also when the last run of this bead began in the same second: the stamp moves on."""
     t0, n = time.time(), 0
     while True:
         stem = f"{bead}-{time.strftime('%Y%m%d-%H%M%S', time.localtime(t0 + n))}"
-        if not ((logs / f"{stem}.jsonl").exists() or (ident.config_dir() / "runs" / stem).exists()):
+        if not ((logs / f"{stem}.jsonl").exists() or (home.root / "runs" / stem).exists()):
             return stem
         n += 1
 
@@ -105,15 +105,15 @@ class RunLayout:
     evidence_dir: Path  # the writer's proof of what the engine cannot rerun
 
     @classmethod
-    def open(cls, bead: str, wt: str | Path, taken: str | None) -> RunLayout:
+    def open(cls, bead: str, wt: str | Path, taken: str | None, home: ConfigDir) -> RunLayout:
         """The layout of the run `taken` (a run that goes on after an exec or a pause), else of a new one; its folders are made."""
-        logs = ident.config_dir() / "engine"
-        logs.mkdir(exist_ok=True)
-        stem = taken or fresh_stem(bead, logs)
-        run_dir = ident.config_dir() / "runs" / stem
+        logs = home.root / "engine"
+        logs.mkdir(parents=True, exist_ok=True)
+        stem = taken or fresh_stem(bead, logs, home)
+        run_dir = home.root / "runs" / stem
         run_dir.mkdir(parents=True, exist_ok=True)
-        prune_check_rounds(ident.config_dir() / "runs")
-        prune_run_logs(ConfigDir(ident.config_dir()), time.time())
+        prune_check_rounds(home.root / "runs")
+        prune_run_logs(home, time.time())
         task_dir = Path(wt) / TASK_EXCLUDE.rstrip("/") / bead
         task_dir.mkdir(parents=True, exist_ok=True)
         evidence = task_dir / "evidence"

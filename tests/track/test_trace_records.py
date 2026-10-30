@@ -12,7 +12,7 @@ from pathlib import Path
 
 from run import test_engine_units
 from support import engine_case as te
-from support import procsim
+from support import homes, procsim
 from support.engine_case import CLEAN, FALSE, PLAN, WRITE, review, stop
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -22,7 +22,6 @@ from support.dashes import make_dash  # noqa: E402
 from support.spawn import port_git, real_spawner  # noqa: E402
 from support.who import who  # noqa: E402
 
-from taskloop.adapters import ident  # noqa: E402
 from taskloop.app.track import verbs  # noqa: E402
 from taskloop.app.wire import slots as wslots  # noqa: E402
 from taskloop.contracts import log as rec  # noqa: E402
@@ -171,7 +170,7 @@ class TraceRecords(te.EngineTest):
         with self.store.stub(comments=[{"author": "denis", "text": "Old format."}]):
             rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0)
-        traces = [json.loads(x) for x in (ident.config_dir() / "traces.jsonl").read_text().splitlines()]
+        traces = [json.loads(x) for x in (homes.config_dir() / "traces.jsonl").read_text().splitlines()]
         self.assertEqual([(t["started_because"], t["prev_run"], t["ask"]) for t in traces],
                          [("first", "", ""), ("answer", first, "t-1-1")])
         run = records(self.eng, rec.RunStart)[-1]
@@ -191,18 +190,18 @@ class TraceRecords(te.EngineTest):
     def test_a_rerun_without_a_checkpoint_is_a_retry(self):
         self.run_engine({"plan": [stop("worker_failed", say="boom")] * 2})
         first = self.eng.log_path.stem
-        self.assertFalse((ident.config_dir() / "checkpoints" / "t-1.json").exists())
+        self.assertFalse((homes.config_dir() / "checkpoints" / "t-1.json").exists())
         self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         run = records(self.eng, rec.RunStart)[-1]
         self.assertEqual((run.started_because, run.prev_run), ("retry", first))
 
     def test_check_logs_of_runs_older_than_two_weeks_are_pruned_at_start(self):
-        old = ident.config_dir() / "runs" / "t-0-20261001-000000" / "checks"
+        old = homes.config_dir() / "runs" / "t-0-20261001-000000" / "checks"
         old.mkdir(parents=True)
         for name in ("00-a.r1.log", "00-a.log"):
             (old / name).write_text("x")
             os.utime(str(old / name), (time.time() - 15 * 86400,) * 2)
-        new = ident.config_dir() / "runs" / "t-0-20261020-000000" / "checks"
+        new = homes.config_dir() / "runs" / "t-0-20261020-000000" / "checks"
         new.mkdir(parents=True)
         (new / "00-a.r1.log").write_text("x")
         engine.Engine(

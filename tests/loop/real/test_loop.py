@@ -20,6 +20,7 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: E402, F401
+from support import homes  # noqa: E402
 
 # isort: split
 import tl  # noqa: E402
@@ -604,7 +605,7 @@ class Loop(LoopBase):
 
     def test_a_live_storm_record_stops_a_loop_before_any_claim_with_one_line(self):
         self.beads({"x-1": [rec("landed")]})
-        path = storm_path(ident.config_dir(), (gitq.git("remote", "get-url", "origin", cwd=str(self.repo)) or str(self.repo)))
+        path = storm_path(homes.config_dir(), (gitq.git("remote", "get-url", "origin", cwd=str(self.repo)) or str(self.repo)))
         write_storm(path, "FAULT_INFRA y", ("x-8", "x-9"), self.clock.t, self.clock.t, oc.KNOBS["storm_window_s"])
         self.assertEqual(self.run_loop(), 2)
         self.assertEqual(self.started, [])

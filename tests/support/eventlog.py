@@ -3,12 +3,12 @@ recorded."""
 
 import json
 
-from taskloop.adapters import ident
+from support import homes
 
 
 def read():
     """Every event so far, oldest first, as the dicts the code wrote."""
-    f = ident.config_dir() / "events.jsonl"
+    f = homes.config_dir() / "events.jsonl"
     return [json.loads(x) for x in f.read_text(encoding="utf-8").splitlines()] if f.exists() else []
 
 

@@ -10,6 +10,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401
+from support import homes
 
 # isort: split
 from run import test_stages_visual
@@ -18,7 +19,6 @@ from support import gitq
 from support.engine_case import CLEAN, PLAN, WRITE, real_git, stop
 from support.pushsim import CUT, pusher
 
-from taskloop.adapters import ident
 from taskloop.app.loop.gate import GateRole
 
 SAY = "codex: Reconnecting... waiting for network (Connection failed: error sending request)"
@@ -58,7 +58,7 @@ class NetBase(te.EngineTest):
         self.assertEqual((eng.stats["replans"], eng.stats["rounds"]), (0, 0))
         self.assertEqual((self.blocked, self.ask()), ([], None))
         self.assertFalse([c for c in self.bd_calls if c[:2] == ("label", "add")], self.bd_calls)
-        self.assertFalse(list((ident.config_dir() / "storm").glob("*.json")) if (ident.config_dir() / "storm").is_dir() else [])
+        self.assertFalse(list((homes.config_dir() / "storm").glob("*.json")) if (homes.config_dir() / "storm").is_dir() else [])
 
     def thread_of(self, s, node):
         """(resume ref of each call of `node`, in order)."""

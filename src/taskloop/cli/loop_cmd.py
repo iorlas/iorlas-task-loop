@@ -24,7 +24,8 @@ def cmd_next(a: Any, env: Env, spawner: Spawner, git: Git, who: Identity, here: 
 def cmd_stop(a: Any, env: Env, spawner: Spawner, git: Git, who: Identity, here: Path = wloop.HERE, now: Callable[[],
     float] = trail.now) -> int:
     repo = repos.repo_root(a.repo)
-    return cli.cmd_stop(wloop.build(repo, here=here, now=now, env=env, spawner=spawner, git=git, who=who), wloop.files_of(repo, now), a)
+    loop_env = wloop.build(repo, here=here, now=now, env=env, spawner=spawner, git=git, who=who)
+    return cli.cmd_stop(loop_env, wloop.files_of(repo, who.config, now), a)
 
 
 def cmd_loop(a: Any, env: Env, spawner: Spawner, git: Git, who: Identity, here: Path = wloop.HERE, now: Callable[[],
@@ -34,14 +35,14 @@ def cmd_loop(a: Any, env: Env, spawner: Spawner, git: Git, who: Identity, here: 
         print(profiles.red_row(git, repo))
         return 1
     loop_env = wloop.build(repo, here=here, now=now, env=env, spawner=spawner, git=git, who=who)
-    files = wloop.files_of(repo, now)
+    files = wloop.files_of(repo, who.config, now)
     if a.op == "status":
-        for row in wloop.other_red_rows(git, repo):
+        for row in wloop.other_red_rows(git, repo, who.config):
             print(row)  # another repo's bad profile: its red row here, nothing else changes
-        return cli.cmd_status(loop_env, files, wloop.installs(loop_env.cfgdir, here, now), a)
+        return cli.cmd_status(loop_env, files, wloop.installs(loop_env.cfgdir, env, here, now), a)
     start_cwd, session, who = wloop.begin_loop(repo, env)
     loop_env = wloop.build(repo, session_actor=session, here=here, now=now, start_cwd=start_cwd, env=env, spawner=spawner, git=git, who=who)
-    return cli.cmd_loop(loop_env, files, wloop.installs(loop_env.cfgdir, here, now), a)
+    return cli.cmd_loop(loop_env, files, wloop.installs(loop_env.cfgdir, env, here, now), a)
 
 
 def cmd_cutover(a: Any, git: Git, who: Identity) -> int:

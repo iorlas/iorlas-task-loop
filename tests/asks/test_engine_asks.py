@@ -9,11 +9,10 @@ from pathlib import Path
 from unittest import mock
 
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
-from support import gitq
+from support import gitq, homes
 from support.engine_case import BEAD, CAT_ENV, CLEAN, PLAN, WRITE, EngineTest, ask_rec, review, stop, verdict
 
 from taskloop.adapters import (
-    ident,
     links,
 )
 from taskloop.app.land.checkout import Checkout
@@ -79,7 +78,7 @@ class EngineAsksTest(EngineTest):
             self.assertEqual(rc, 2, q)
             self.assertEqual(self.ask()["kind"], "decision")
             self.assertEqual([c[0] for c in s.calls], ["planner"])
-            (ident.config_dir() / "asks" / "t-1.json").unlink()
+            (homes.config_dir() / "asks" / "t-1.json").unlink()
 
     def test_a_missing_requirement_is_still_a_decision_ask(self):
         self.asks_the_owner("No requirement says what the empty filter shows: nothing, or everything?")
@@ -95,7 +94,7 @@ class EngineAsksTest(EngineTest):
 
     def test_a_live_claim_says_another_run_of_the_bead_holds_it_and_where_its_log_is(self):
         # lifesim-gfr.31.1: a restarted session relaunched the bead; TAKEN read like a stale claim of its own session
-        logs = ident.config_dir() / "engine"
+        logs = homes.config_dir() / "engine"
         logs.mkdir(parents=True, exist_ok=True)
         (logs / "t-1-20261021-063408.jsonl").write_text("")
         ok, why, _ = self.admit({"status": "in_progress", "assignee": "tl-61ba34e7"})
@@ -186,7 +185,7 @@ class EngineAsksTest(EngineTest):
         self.assertLess(b["prompt_chars"], a["prompt_chars"])
 
     def test_a_bead_parked_on_a_dropped_v1_ask_asks_again_with_a_v3_ask(self):
-        p = ident.config_dir() / "asks" / "t-1.json"
+        p = homes.config_dir() / "asks" / "t-1.json"
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(json.dumps({"v": 1, "id": "t-1-4", "bead": "t-1", "status": "open", "kind": "verify", "question": "old?"}))
         self.assertEqual(self.asks().orphans(), ["t-1"])
@@ -247,7 +246,7 @@ class EngineAsksTest(EngineTest):
         self.run_engine({"plan": [dict(PLAN, irreversible="push_shared", question="Old format or new?")]})
         a = self.ask()
         a["status"] = "parked"
-        (ident.config_dir() / "asks" / ("{}.json".format(a["bead"]))).write_text(json.dumps(a))
+        (homes.config_dir() / "asks" / ("{}.json".format(a["bead"]))).write_text(json.dumps(a))
         rc, s = self.run_engine({})
         self.assertEqual((rc, s.calls), (2, []))
         self.assertEqual(self.ask()["status"], "parked")

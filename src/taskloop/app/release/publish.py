@@ -66,14 +66,14 @@ def tag(cwd: Path, name: str, what: str, sh: Shell) -> None:
         sh.say(f"tagged {name} in {what}")
 
 
-def installed_manifest(version: str) -> Path:
-    return claude_dir() / "plugins" / "cache" / MARKETPLACE / NAME / version / ".claude-plugin" / "plugin.json"
+def installed_manifest(version: str, claude: Path) -> Path:
+    return claude / "plugins" / "cache" / MARKETPLACE / NAME / version / ".claude-plugin" / "plugin.json"
 
 
 def install(cwd: Path, version: str, sh: Shell) -> None:
     """Update the marketplace and the plugin, then check the new version's cache dir exists. A silent failure (0.23.0: a git
     fetch-pack error with exit 0) leaves the old version installed: run both commands once more, then fail loudly."""
-    cache = installed_manifest(version)
+    cache = installed_manifest(version, claude_dir(sh.env))
     cmds = [["claude", "plugin", "marketplace", "update", MARKETPLACE], ["claude", "plugin", "update", f"{NAME}@{MARKETPLACE}"]]
     failing: list[str] | None = None
     text = ""

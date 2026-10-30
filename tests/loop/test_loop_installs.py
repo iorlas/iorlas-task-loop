@@ -11,8 +11,10 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
+from support import homes
 
 from loop.test_loop import LoopBase
+from taskloop.contracts.env import snapshot
 
 # isort: split
 from support import (
@@ -21,7 +23,6 @@ from support import (
 from support.narrow import must
 
 import loop.test_loop_more as more
-from taskloop.adapters import ident
 from taskloop.app.launch import loop as wloop
 
 
@@ -51,13 +52,13 @@ class Moving(LoopBase):
 class Entry(Moving):
     def installed(self, version):
         """installed_plugins.json (user scope) names `version` for task-loop."""
-        f = ident.claude_dir() / "plugins" / "installed_plugins.json"
+        f = homes.claude_dir() / "plugins" / "installed_plugins.json"
         f.parent.mkdir(parents=True, exist_ok=True)
         f.write_text(json.dumps({"plugins": {"iorlas-task-loop@iorlas-marketplace": [
             {"scope": "user", "installPath": str(self.cache / version)}]}}))
 
     def target(self):
-        return wloop.installs(wloop.cfgdir(), here=must(self.here)).target()
+        return wloop.installs(homes.cfg(), snapshot(), here=must(self.here)).target()
 
 
     def test_with_no_entry_the_highest_directory_above_the_running_one_is_the_fallback(self):
@@ -69,7 +70,7 @@ class Entry(Moving):
         self.install("0.2.0")
         self.install("0.3.0")
         self.installed("0.3.0")
-        (ident.config_dir() / "pinned.json").write_text(json.dumps({"v": 1, "task-loop": "0.2.0"}))
+        (homes.config_dir() / "pinned.json").write_text(json.dumps({"v": 1, "task-loop": "0.2.0"}))
         self.assertEqual(self.target(), ("0.2.0", self.cache / "0.2.0"))
 
 

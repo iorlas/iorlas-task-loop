@@ -10,13 +10,12 @@ from pathlib import Path
 from unittest import mock
 
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
-from support import gitq, procsim
+from support import gitq, homes, procsim
 from support.engine_case import CLEAN, HAS_F, PLAN, POSIX_CHECK, STILL_OPEN, WRITE, EngineTest, verdict
 from support.logs import records
 from support.waits import until
 
 from taskloop.adapters import (
-    ident,
     landlock,
 )
 
@@ -26,7 +25,7 @@ class EngineLand2Test(EngineTest):
         if os.name == "nt":
             self.skipTest("POSIX flock")
         eng = self.checks_engine()
-        path = landlock.land_lock_path(gitq.git("remote", "get-url", "origin", cwd=eng.wt) or str(eng.wt))
+        path = landlock.land_lock_path(homes.cfg(), gitq.git("remote", "get-url", "origin", cwd=eng.wt) or str(eng.wt))
         eng.steps.begin("review", "review")
         got, go = [], threading.Event()
 
@@ -194,7 +193,7 @@ class EngineLand2Test(EngineTest):
         self.assertIn("settled", verify)
         reflect = next(c for c in said if c.startswith("Reflect (engine)"))
         self.assertIn("self-verified=3 settled, 0 wrong, 0 open", reflect)
-        trace = json.loads((ident.config_dir() / "traces.jsonl").read_text().splitlines()[-1])
+        trace = json.loads((homes.config_dir() / "traces.jsonl").read_text().splitlines()[-1])
         self.assertEqual([v["verdict"] for v in trace["verified"]], ["settled"] * 3)
         self.assertEqual(trace["verified"][1]["evidence"], "Boot.cs:14 `Wire();`")
         self.assertEqual(trace["verified"][1]["what"], "Boot() calls the new Wire()")

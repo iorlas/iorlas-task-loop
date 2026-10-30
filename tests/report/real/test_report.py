@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: E402, F401
+from support import homes  # noqa: E402
 
 # isort: split
 import tl  # noqa: E402
@@ -32,7 +33,6 @@ from support.who import who  # noqa: E402
 from taskloop.adapters import (  # noqa: E402
     beadtools,
     gitrepo,
-    ident,
 )
 from taskloop.adapters.git import RealGit  # noqa: E402
 from taskloop.app.launch import repos  # noqa: E402
@@ -99,7 +99,7 @@ class LostWork(Base):
         return shas
 
     def lost(self, status, traces=(), since=None):
-        return lost.lost_work(str(self.repo), "main", status.get, list(traces), RealGit(snapshot()), since=since)
+        return lost.lost_work(str(self.repo), "main", status.get, list(traces), RealGit(snapshot()), homes.cfg(), since=since)
 
     def by_class(self, rows):
         out = {}
@@ -146,13 +146,13 @@ class LostWork(Base):
     def test_the_landed_record_covers_the_branch_whatever_the_land_title_says(self):
         self.branch("task/t-1", [("f.txt", "one\n", "wip (t-1): blocked")], T0)
         land = self.squash_land("a title the bead lost")
-        LandedStore(ident.config_dir()).put(Landed(bead=BeadId("t-1"), sha=land, base="main", t=T0 + 31 * MIN))
+        LandedStore(homes.config_dir()).put(Landed(bead=BeadId("t-1"), sha=land, base="main", t=T0 + 31 * MIN))
         self.assertEqual(set(self.by_class(self.lost({"t-1": "closed"}))), {"landed"})
 
     def test_a_record_whose_sha_is_not_on_the_base_is_no_land(self):
         self.branch("task/t-1", [("f.txt", "one\n", "wip (t-1): blocked")], T0)
         off = self.branch("task/other", [("g.txt", "x\n", "other")], T0)[0]
-        LandedStore(ident.config_dir()).put(Landed(bead=BeadId("t-1"), sha=off, base="main", t=T0 + 31 * MIN))
+        LandedStore(homes.config_dir()).put(Landed(bead=BeadId("t-1"), sha=off, base="main", t=T0 + 31 * MIN))
         self.assertIn("lost", self.by_class(self.lost({"t-1": "closed"})))
 
     def test_a_revert_that_names_the_bead_is_no_land(self):
@@ -224,7 +224,7 @@ def trace(bead, outcome, start_min, end_min, why="", sha="", rounds=0, replans=0
     stem = run or "{}-{}".format(bead, time.strftime("%Y%m%d-%H%M%S", time.localtime(started)))
     return {"v": 2, "run": stem, "bead": bead, "repo_url": "https://example.invalid/r.git", "worktree": worktree or "", "branch": "",
             "coordinator_session": "", "started": started, "ended": ended, "outcome": outcome, "why": why, "sha": sha,
-            "stats": {"rounds": rounds, "replans": replans}, "log": str(ident.config_dir() / "engine" / (stem + ".jsonl")),
+            "stats": {"rounds": rounds, "replans": replans}, "log": str(homes.config_dir() / "engine" / (stem + ".jsonl")),
             "sessions": list(sessions), "stderr": stderr, "kind": kind or outcome if outcome in ("landed", "done") else kind}
 
 
@@ -237,7 +237,7 @@ class Scorecard(Base):
     def setUp(self):
         super().setUp()
         self.wt = str(self.repo / ".slots" / "s1")
-        (ident.config_dir() / "engine").mkdir(parents=True, exist_ok=True)
+        (homes.config_dir() / "engine").mkdir(parents=True, exist_ok=True)
         w = self.wt
         runs = [
             trace("t-0", "landed", -200, -150, sha="x", worktree=w),  # before the window: not counted
@@ -255,19 +255,19 @@ class Scorecard(Base):
             trace("t-12", "failed", 110, 112, why="failed: engine error KeyError: 'x'", worktree=w, kind="fault_engine"),  # a caught crash
             trace("o-1", "landed", 10, 20, sha="z", worktree="/elsewhere/repo"),  # another repo
         ]
-        with open(ident.config_dir() / "traces.jsonl", "w") as f:
+        with open(homes.config_dir() / "traces.jsonl", "w") as f:
             for r in runs:
                 f.write(json.dumps(r) + "\n")
         # route.py's stderr carries a worker's test traceback: no engine crash
         (self.home / "t-1.stderr").write_text("Traceback (most recent call last):\n  File x\nAssertionError\n")
         # t-7's landing run resumed after an answer given before the window: it landed with an ask
-        (ident.config_dir() / "engine" / (str(runs[-4]["run"]) + ".jsonl")).write_text(json.dumps(
+        (homes.config_dir() / "engine" / (str(runs[-4]["run"]) + ".jsonl")).write_text(json.dumps(
             {"t": T0, "kind": "note", "text": "ask t-7-1 (verify) is answered: the bead changed since it was asked"}) + "\n")
         # a crash: an engine log with no close and no trace, long quiet
-        dead = ident.config_dir() / "engine" / ("t-8-{}.jsonl".format(time.strftime("%Y%m%d-%H%M%S", time.localtime(T0 + 5 * MIN))))
+        dead = homes.config_dir() / "engine" / ("t-8-{}.jsonl".format(time.strftime("%Y%m%d-%H%M%S", time.localtime(T0 + 5 * MIN))))
         dead.write_text(json.dumps(typed("note", T0 + 5 * MIN, text="git commit -q -m wip (t-8): failed")) + "\n")
         # a run that is still going: no trace yet, but alive
-        live = ident.config_dir() / "engine" / ("t-9-{}.jsonl".format(time.strftime("%Y%m%d-%H%M%S", time.localtime(T0 + 100 * MIN))))
+        live = homes.config_dir() / "engine" / ("t-9-{}.jsonl".format(time.strftime("%Y%m%d-%H%M%S", time.localtime(T0 + 100 * MIN))))
         live.write_text(json.dumps(typed("beat", T0 + 200 * MIN - 30)) + "\n")  # its last beat, 30 s before the report's now
         # the loop's own record of a run-task that died before its engine wrote anything
         looptest.log(gitrepo.repo_root(str(self.repo))).parent.mkdir(parents=True, exist_ok=True)
@@ -309,7 +309,7 @@ class Scorecard(Base):
 
     def test_a_trace_line_of_another_version_is_skipped_and_counted(self):
         before = self.card()["skipped_traces"]
-        with open(ident.config_dir() / "traces.jsonl", "a") as f:
+        with open(homes.config_dir() / "traces.jsonl", "a") as f:
             f.write(json.dumps(dict(trace("t-1", "landed", 10, 40, sha="a1", worktree=self.wt), v=1)) + "\n")
             f.write(json.dumps({"run": "t-1-old", "outcome": "landed"}) + "\n")
         c = self.card()

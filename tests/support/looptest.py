@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
+from support import homes
 from support.spawn import port_git, real_spawner
 from support.who import who
 from taskloop.app.launch import loop as wloop
@@ -24,7 +25,7 @@ def fake_install(cache, ver, tl_py="import sys\n"):
 
 
 def files(repo):
-    return wloop.files_of(repo)
+    return wloop.files_of(repo, homes.cfg())
 
 
 def queue(repo, store=None, say=lambda _: None):
@@ -36,11 +37,11 @@ def queue(repo, store=None, say=lambda _: None):
 
 
 def log(repo):
-    return wloop.cfgdir().loop_log(wslots.repo_key(repo))
+    return homes.cfg().loop_log(wslots.repo_key(repo))
 
 
 def state_path(repo, pid):
-    return wloop.cfgdir().loop_state(f"{wslots.repo_key(repo)}.{pid}")
+    return homes.cfg().loop_state(f"{wslots.repo_key(repo)}.{pid}")
 
 
 def write_state(repo, pid=None, **fields):
@@ -60,7 +61,7 @@ def live(repo):
 
 
 def command(repo):
-    return wloop.cfgdir().loop_command(wslots.repo_key(repo))
+    return homes.cfg().loop_command(wslots.repo_key(repo))
 
 
 def rests(repo):
@@ -68,7 +69,7 @@ def rests(repo):
 
 
 def rest_file(repo):
-    return wloop.cfgdir().loop_rest(wslots.repo_key(repo))
+    return homes.cfg().loop_rest(wslots.repo_key(repo))
 
 
 def last_exit(repo):

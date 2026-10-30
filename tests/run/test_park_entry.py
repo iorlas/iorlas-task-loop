@@ -6,6 +6,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
+from support import homes
 
 # isort: split
 from support import engine_case as te
@@ -15,14 +16,12 @@ from support.narrow import must
 from support.spawn import port_git
 from support.who import who
 
-from taskloop.adapters import ident
 from taskloop.app.asks import parks
 from taskloop.app.run import entry
 from taskloop.app.run import running as wrunning
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.kinds import Kind
 from taskloop.contracts.parks import ParkStore
-from taskloop.contracts.paths import ConfigDir
 from taskloop.domain.beads import park
 
 BEAD = {"id": "t-1", "title": "Add f", "status": "open", "description": "Add f.", "acceptance_criteria": "- f.txt exists", "metadata": {}}
@@ -30,7 +29,7 @@ BEAD = {"id": "t-1", "title": "Add f", "status": "open", "description": "Add f."
 
 class Entry(te.EngineTest):
     def cfg(self):
-        return ConfigDir(ident.config_dir())
+        return homes.cfg()
 
     def test_a_parked_bead_is_refused_at_the_entry_until_its_text_changes(self):
         store = FakeBeadStore().put(BEAD)

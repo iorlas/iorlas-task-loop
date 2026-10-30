@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
-from taskloop.adapters import bdcreate, beadtools, ident
+from taskloop.adapters import bdcreate, beadtools
 from taskloop.contracts.ids import BeadId, is_bead_id
 from taskloop.contracts.ports import BdFailure, BeadPatch, BeadQuery, Git, NewBead
 from taskloop.domain.look.matchers import sections
@@ -86,7 +86,7 @@ class OwnerLook:
         """One filer at a time per (repo, epic), across slots and sessions."""
         e = self.e
         key = f"{self.git.remote_url(str(e.wt), 'origin') or str(e.wt)}|{self.look_epic() or e.bead}"
-        with e.waits.locked("review_lock", ident.config_dir() / "locks" / f"review-{hashlib.sha1(key.encode()).hexdigest()[:12]}.lock"):
+        with e.waits.locked("review_lock", e.home.root / "locks" / f"review-{hashlib.sha1(key.encode()).hexdigest()[:12]}.lock"):
             yield
 
     def file_review(self, section: str) -> None:

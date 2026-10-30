@@ -16,6 +16,7 @@ from support import engine_case as te
 from support import (
     fake_route,
     gitq,
+    homes,
     procsim,
     tlbd,
 )
@@ -29,7 +30,6 @@ from support.who import who
 from taskloop.adapters import (
     bd,
     bdcreate,
-    ident,
 )
 from taskloop.app.run import entry
 from taskloop.app.run import running as wrunning
@@ -432,7 +432,7 @@ class Contracts(StagesTest):
         self.assertEqual(s.calls[0][0], "planner")
 
     def test_asks_of_closed_or_missing_beads_are_closed_and_others_left(self):
-        asks = ident.config_dir() / "asks"
+        asks = homes.config_dir() / "asks"
         asks.mkdir(exist_ok=True)
         other = Path(self.tmp.name) / "other-repo"
         (other / ".beads").mkdir(parents=True)
@@ -458,9 +458,9 @@ class Contracts(StagesTest):
             )
 
         with tlbd.bd_boundary(fake_bd):
-            closed = wasks.sweep("close", who(), every=0)
+            closed = wasks.sweep("close", who(), homes.cfg(), every=0)
             self.assertEqual(sorted(closed), ["b-closed", "b-gone"])
-            self.assertEqual(wasks.sweep("close", who()), [])  # throttled
+            self.assertEqual(wasks.sweep("close", who(), homes.cfg()), [])  # throttled
         self.assertEqual(
             [c[0][0] for c in calls].count("list"), 2
         )  # one list per repo, not one read per ask (a show only for an absent id)

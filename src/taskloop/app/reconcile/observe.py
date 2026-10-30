@@ -4,7 +4,6 @@ from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
 
-from taskloop.adapters.ident import config_dir
 from taskloop.app.release import tidy
 from taskloop.contracts import fence
 from taskloop.contracts.bead import Bead
@@ -79,10 +78,10 @@ def slot_facts(beads: list[Bead], host: str, live: dict[BeadId, str]) -> tuple[S
     return tuple(out)
 
 
-def landed(repo: Path, bead: BeadId, git: Git, cfg: ConfigDir | None = None) -> bool:
+def landed(repo: Path, bead: BeadId, git: Git, cfg: ConfigDir) -> bool:
     """The bead's landed record names a sha that is on the checkout's HEAD. LEGACY, only for a bead with no record (landed before
     0.23.179): its land commit (subject ends `(<bead>)`, not a revert) is on HEAD; this can go when no such bead is left."""
-    rec = LandedStore(cfg or ConfigDir(config_dir())).get(bead)
+    rec = LandedStore(cfg).get(bead)
     if rec is not None:
         return git.is_ancestor(str(repo), rec.sha, "HEAD")
     try:
@@ -122,7 +121,7 @@ def release_branches(repo: Path, git: Git) -> tuple[LocalBranch, ...]:
                  for b, oid in refs_of(repo, RELEASE, git))
 
 
-def remote_branches(repo: Path, closed: list[str], git: Git, cfg: ConfigDir | None) -> tuple[RemoteBranch, ...]:
+def remote_branches(repo: Path, closed: list[str], git: Git, cfg: ConfigDir) -> tuple[RemoteBranch, ...]:
     """origin's task/<bead> of each closed, landed bead, at the oid ls-remote showed (one ls-remote for the lot; an origin that does
     not answer shows nothing)."""
     try:
@@ -161,7 +160,7 @@ def worktree(d: Path, repo: Path, git: Git) -> Worktree:
 
 
 def repo_view(repo: Path, store_of: Callable[[str], Beads] | None, release: bool, git: Git,
-              cfg: ConfigDir | None, live_of: Live | None = None, host: str = "") -> RepoView:
+              cfg: ConfigDir, live_of: Live | None = None, host: str = "") -> RepoView:
     checkouts = tuple(Checkout(str(Path(t.path).resolve()), t.branch) for t in git.checkouts(str(repo)))
     view = RepoView(str(repo), repo.name, checkouts, release_branches=release_branches(repo, git) if release else ())
     if store_of is None:
@@ -181,7 +180,7 @@ def repo_view(repo: Path, store_of: Callable[[str], Beads] | None, release: bool
 
 
 def observe(repos: list[str], store_of: Callable[[str], Beads] | None, build: Path | None, keep_days: float, now: float,
-            git: Git, cfg: ConfigDir | None = None, live_of: Live | None = None, host: str = "") -> Observed:
+            git: Git, cfg: ConfigDir, live_of: Live | None = None, host: str = "") -> Observed:
     """The world once. `store_of` None: bd and the task branches are not looked at; `build` None: no build trees and no release/*
     branches; `live_of` None: leases and slots are not looked at (no run is known, so none could be called dead)."""
     known = sorted({r for p in repos if (r := main_repo(Path(p)))})

@@ -84,7 +84,7 @@ class DoctorSource(unittest.TestCase):
         os.chdir(cwd or self.wt)
         try:
             with contextlib.redirect_stdout(out):
-                self.assertEqual(doctor.run(ROOT, port_git(), who()), 0)
+                self.assertEqual(doctor.run(ROOT, snapshot(), port_git(), who()), 0)
         finally:
             os.chdir(here)
         return out.getvalue()

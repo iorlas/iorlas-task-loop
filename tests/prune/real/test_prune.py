@@ -12,6 +12,7 @@ from typing import cast
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401
+from support import homes
 from support.who import who
 
 from taskloop.adapters.git import RealGit
@@ -106,7 +107,7 @@ class Trees(unittest.TestCase):
         return d
 
     def prune(self, dry_run=False, now=None, repos=None, days=14):
-        return sweep(repos or [str(self.repo)], None, self.build, days, now or self.later, dry_run, GIT)
+        return sweep(repos or [str(self.repo)], None, self.build, days, now or self.later, dry_run, GIT, homes.cfg())
 
     def test_a_merged_clean_tree_is_removed_with_plain_git_and_the_main_checkout_stays(self):
         d = self.tree("done")
@@ -178,7 +179,8 @@ class Trees(unittest.TestCase):
             self.commit(self.repo, "late.txt")
             keep.append(git(self.repo, "rev-parse", "HEAD"))
             git(self.repo, "checkout", "-q", "main")
-        removed, kept = sweep([str(self.repo)], None, self.build, 14, self.later, False, racing("delete_branch_at", land_one_more))
+        removed, kept = sweep([str(self.repo)], None, self.build, 14, self.later, False,
+                              racing("delete_branch_at", land_one_more), homes.cfg())
         self.assertEqual(removed, [])
         self.assertTrue(any("release/merged" in k for k in kept))
         self.assertEqual(git(self.repo, "rev-parse", "release/merged"), keep[0])
@@ -232,7 +234,7 @@ class Landed(unittest.TestCase):
         return type("S", (), {"find": lambda self, q: beads})()
 
     def prune(self, dry_run=False, **meta):
-        return sweep([str(self.repo)], lambda r: cast(Beads, self.store(**meta)), None, 14, 0, dry_run, GIT)
+        return sweep([str(self.repo)], lambda r: cast(Beads, self.store(**meta)), None, 14, 0, dry_run, GIT, homes.cfg())
 
     def heads(self):
         return git(self.repo, "for-each-ref", "--format=%(refname:short)", "refs/heads/").split()
@@ -298,7 +300,7 @@ class Landed(unittest.TestCase):
             self.commit(self.repo, "late.txt")
             git(self.repo, "checkout", "-q", "main")
         sh = racing("delete_branch_at", late)
-        removed, kept = sweep([str(self.repo)], lambda r: cast(Beads, self.store()), None, 14, 0, False, sh)
+        removed, kept = sweep([str(self.repo)], lambda r: cast(Beads, self.store()), None, 14, 0, False, sh, homes.cfg())
         self.assertEqual(removed, [])
         self.assertIn("task/a-1", self.heads())
         self.assertTrue(any(k.startswith("branch task/a-1") for k in kept))
@@ -315,7 +317,7 @@ class Landed(unittest.TestCase):
             self.commit(other, "late.txt")
             git(other, "push", "-q", "origin", "task/a-1")
         sh = racing("delete_remote_at", late)
-        removed, kept = sweep([str(self.repo)], lambda r: cast(Beads, self.store()), None, 14, 0, False, sh)
+        removed, kept = sweep([str(self.repo)], lambda r: cast(Beads, self.store()), None, 14, 0, False, sh, homes.cfg())
         self.assertEqual([r for r in removed if r.startswith("remote")], [])
         self.assertIn("refs/heads/task/a-1", git(self.origin, "for-each-ref", "--format=%(refname)"))
         self.assertTrue(any(k.startswith("remote branch task/a-1") for k in kept))
@@ -326,7 +328,7 @@ class Landed(unittest.TestCase):
         self.assertNotIn("--force", src)
 
     def test_bd_not_answering_keeps_every_branch(self):
-        removed, kept = sweep([str(self.repo)], lambda r: cast(Beads, Store(fail=True)), None, 14, 0, False, GIT)
+        removed, kept = sweep([str(self.repo)], lambda r: cast(Beads, Store(fail=True)), None, 14, 0, False, GIT, homes.cfg())
         self.assertEqual(removed, [])
         self.assertIn("bd did not answer", kept[0])
 
