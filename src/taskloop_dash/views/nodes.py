@@ -2,6 +2,7 @@
 
 from taskloop.contracts import log as rec
 from taskloop_dash.jsonrec import Json
+from taskloop_dash.readers import closes
 from taskloop_dash.views import names
 from taskloop_dash.views.names import num
 
@@ -80,7 +81,7 @@ def new_node(r: rec.StepStart) -> Json:
         "checks": None,
         "outcome": "",
         "detail": "",
-        "close": {},
+        "close": None,
         "open": True,
     }
 
@@ -137,7 +138,7 @@ class NodeBuilder:
         elif isinstance(r, rec.Checks):
             self.node_for(r.node_id)["checks"] = r
         elif isinstance(r, rec.Close):
-            self.current()["close"] = {"outcome": str(r.outcome), "why": r.why, "sha": r.sha, "why_code": r.why_code}
+            self.current()["close"] = closes.read(r)
         elif (ln := line_of(r, i)) is not None:
             self.current()["lines"].append(ln)
             if isinstance(r, rec.Artifacts):  # the step's files, for the thumbs under its block

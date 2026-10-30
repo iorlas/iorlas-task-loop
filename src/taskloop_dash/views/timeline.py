@@ -5,13 +5,14 @@ are: no row format of its own, no regex."""
 import json
 import time
 from pathlib import Path
-from typing import Final
+from typing import Final, assert_never
 
 from taskloop.contracts import log as rec
 from taskloop.contracts.paths import ConfigDir
 from taskloop_dash import jsonl
 from taskloop_dash.cache import FileCache
 from taskloop_dash.jsonrec import Json
+from taskloop_dash.readers.closes import End, Ended
 from taskloop_dash.views import arrows
 from taskloop_dash.views.names import FAMILY, bead_of, lane_name, nice_model, run_name, when
 from taskloop_dash.views.nodes import nodes_of
@@ -220,32 +221,39 @@ def run_end(nodes: list[Json], pending: Json | None, alive: bool) -> Json:
         if alive:
             return {"outcome": "running", "status": "run", "cause": "running", "text": "running", "t": t}
         return {"outcome": "stopped", "status": "fail", "cause": "stopped", "t": t, "text": "stopped: the run ended without a close record"}
-    outcome, why = close["close"].get("outcome") or "", close["close"].get("why") or ""
+    ended: Ended | None = close["close"]
+    if ended is None:
+        return {"outcome": "unreadable", "status": "fail", "cause": "unreadable", "t": close["t0"], "text": "the close record is not one this version reads"}
+    why = ended.why
     mv = pending or {}
-    cause = arrows.close_move(outcome, why)[1]
+    cause = arrows.close_move(ended)[1]
     cause = mv.get("cause") if mv.get("to") in ("ask", "pause", "close") else cause
     end = {"t": close["t0"], "why": why[:600], "cause": cause}
-    if outcome in ("landed", "done"):
-        end.update(outcome=outcome, status="ok", text="{} {}".format(outcome, when(close["t0"])))
-    elif why.startswith("paused:"):
-        end.update(
-            outcome="paused",
-            status="wait",
-            lane=arrows.lane_of(why),
-            until=arrows.until_of(why),
-            reason=arrows.pause_reason(why),
-            text=arrows.arrow_text("paused", why),
-        )
-    elif why.startswith("waiting:"):
-        end.update(outcome="waiting", status="ask", text=arrows.arrow_text("waiting"))
-    elif outcome == "blocked" and arrows.ask_kind(why):
-        end.update(outcome="asks", status="ask", text=arrows.arrow_text(cause if cause in arrows.ASKS else arrows.ask_kind(why) or ""))
-    elif why.startswith("failed: stopped"):
-        end.update(outcome="stopped", status="fail", text="stopped")
-    else:
-        end.update(
-            outcome="failed" if outcome == "failed" else "blocked", status="fail", text=arrows.arrow_text("failed", why.split("\n")[0])
-        )
+    match ended.end:
+        case End.FINISHED:
+            word = ended.outcome.value
+            end.update(outcome=word, status="ok", text="{} {}".format(word, when(close["t0"])))
+        case End.PAUSED:
+            end.update(
+                outcome="paused",
+                status="wait",
+                lane=arrows.lane_of(why),
+                until=arrows.until_of(why),
+                reason=arrows.pause_reason(why),
+                text=arrows.arrow_text("paused", why),
+            )
+        case End.WAITING:
+            end.update(outcome="waiting", status="ask", text=arrows.arrow_text("waiting"))
+        case End.ASKED:
+            end.update(outcome="asks", status="ask", text=arrows.arrow_text(cause if cause in arrows.ASKS else ""))
+        case End.PARKED:
+            end.update(outcome="parked", status="wait", text=arrows.arrow_text("parked"))
+        case End.STOPPED:
+            end.update(outcome="stopped", status="fail", text="stopped")
+        case End.FAILED:
+            end.update(outcome="failed", status="fail", text=arrows.arrow_text("failed", why.split("\n")[0]))
+        case _:
+            assert_never(ended.end)
     return end
 
 

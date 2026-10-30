@@ -60,3 +60,4 @@ class World:
     status: StatusSnapshot | None = None  # delegate's status as `tl lanes` last filed it
     ledger: Sequence[LedgerEntry] = ()  # the ask ledger, oldest row first
     landings: Sequence[Landing] = ()  # runs that landed, from the traces (the learning series' denominator)
+    skipped_traces: int = 0  # trace lines that are not a RunTrace of this version: left out, never guessed at

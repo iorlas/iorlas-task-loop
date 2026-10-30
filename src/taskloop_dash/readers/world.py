@@ -12,6 +12,7 @@ from taskloop.contracts.adrs import AdrStore
 from taskloop.contracts.ask import Ask
 from taskloop.contracts.bead import Bead, Comment
 from taskloop.contracts.delegate import LiveEvent
+from taskloop.contracts.enums import Outcome
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ledger import LedgerEntry
 from taskloop.contracts.loop import LoopState
@@ -96,19 +97,15 @@ class Worlds:
     def landings(self) -> list[Landing]:
         """The runs of the traces that landed: when each ended and how many plans it redid."""
         def load() -> list[Landing]:
-            out: list[Landing] = []
-            for r in self.records.traces().values():
-                stats = r.get("stats")
-                if r.get("outcome") == "landed" and isinstance(r.get("ended"), (int, float)):
-                    out.append(Landing(float(r["ended"]), int(stats.get("replans") or 0) if isinstance(stats, dict) else 0))
-            return out
+            return [Landing(t.ended, t.stats.replans) for t in self.records.traces().runs.values() if t.outcome is Outcome.LANDED]
         return self.env.ttl.get("v2landings", LEDGER_TTL, load)
 
     def world(self, full: BeadId | None = None) -> World:
         env = self.env
         return World(now=env.clock(), host=socket.gethostname(), version=env.version,
                      projects=[self.project(i, p) for i, p in self.repos().items()], runs=self.runs(full), asks=self.asks(),
-                     status=StatusStore(env.config).read(), ledger=self.ledger(), landings=self.landings())
+                     status=StatusStore(env.config).read(), ledger=self.ledger(), landings=self.landings(),
+                     skipped_traces=self.records.traces().skipped)
 
     def comments(self, path: str, bead: BeadId) -> list[Comment]:
         def load() -> list[Comment]:

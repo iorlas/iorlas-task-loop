@@ -3418,11 +3418,11 @@
     }
    ],
    "end": {
-    "cause": "verify",
+    "cause": "decision",
     "outcome": "asks",
     "status": "ask",
     "t": 1800000370.0,
-    "text": "needs your check \u2192 asks you",
+    "text": "decision needed \u2192 asks you",
     "why": "verify: before land, the workers could not check: the look (other)"
    },
    "ended": 1800000371.0,
@@ -4300,11 +4300,11 @@
     }
    ],
    "end": {
-    "cause": "stuck",
-    "outcome": "asks",
-    "status": "ask",
+    "cause": "parked",
+    "outcome": "parked",
+    "status": "wait",
     "t": 1800001170.0,
-    "text": "stuck \u2192 asks you",
+    "text": "parked by you",
     "why": "parked: by the owner (the branch and the checkpoint are kept; release the hold to go on)"
    },
    "ended": 1800001171.0,

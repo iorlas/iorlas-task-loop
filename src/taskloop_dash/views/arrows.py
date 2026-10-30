@@ -4,6 +4,8 @@ import itertools
 from typing import Final, assert_never
 
 from taskloop.contracts.checks import RoundVerdict, round_verdict_of
+from taskloop.contracts.kinds import ASK_NAME, Task
+from taskloop_dash.readers.closes import End, Ended
 from taskloop_dash.jsonrec import Json
 from taskloop_dash.views.names import hhmm, lane_name
 
@@ -51,32 +53,32 @@ def pause_reason(why: str) -> str:
     return f"{lane} out" if lane else "no lane"
 
 
-def ask_kind(why: str) -> str | None:
-    if why.startswith(("paused:", "waiting:", "failed:")):
-        return None
-    for head, kind in (
-        ("owner decision needed", "decision"),
-        ("over budget", "budget"),
-        ("needs a human", "denied"),
-        ("verify:", "verify"),
-        ("ticket:", "ticket"),
-    ):
-        if why.startswith(head):
-            return kind
-    return "stuck"
+def ask_cause(fault: Task) -> str:
+    """The word an ask's arrow is named by (decision, stuck, budget, ticket)."""
+    return ASK_NAME[fault.kind]
 
 
-def close_move(outcome: str, why: str) -> tuple[str, str]:
-    if outcome in ("landed", "done"):
-        return "close", outcome
-    if why.startswith("paused:"):
-        return "pause", "paused"
-    if why.startswith("waiting:"):
-        return "ask", "waiting"
-    kind = ask_kind(why) if outcome == "blocked" else None
-    if kind:
-        return "ask", kind
-    return "close", "stopped" if why.startswith("failed: stopped") else "failed"
+def close_move(end: Ended) -> tuple[str, str]:
+    """(to, cause) of the move into the close: from what the close says, never from its words."""
+    fault = end.fault
+    match end.end:
+        case End.FINISHED:
+            return "close", end.outcome.value
+        case End.PAUSED:
+            return "pause", "paused"
+        case End.PARKED:
+            return "pause", "parked"
+        case End.WAITING:
+            return "ask", "waiting"
+        case End.ASKED:
+            assert isinstance(fault, Task)
+            return "ask", ask_cause(fault)
+        case End.STOPPED:
+            return "close", "stopped"
+        case End.FAILED:
+            return "close", "failed"
+        case _:
+            assert_never(end.end)
 
 
 def same_round(a: Json, b: Json) -> bool:
@@ -121,9 +123,11 @@ def infer_move(a: Json, b: Json) -> Json | None:
     """The move from node a to node b when no transition record says it."""
     sa, sb = a["step"], b["step"]
     if sb == "close":
-        why = b["close"].get("why") or ""
-        to, cause = close_move(b["close"].get("outcome") or "", why)
-        return mv(to, cause, why.split("\n")[0])
+        end: Ended | None = b["close"]
+        if end is None:
+            return None
+        to, cause = close_move(end)
+        return mv(to, cause, end.why.split("\n")[0])
     if sa in ("plan", "replan"):
         return mv("write", "planned", a["outcome"]) if sb == "write" else None
     if sa == "verify":
@@ -178,6 +182,7 @@ FIXED: Final = {
     "landed": "landed",
     "done": "done",
     "stopped": "stopped",
+    "parked": "parked by you",
 }
 
 

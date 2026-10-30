@@ -4,15 +4,25 @@ bead's claims make. Each is one file or folder under the config dir (taskloop.co
 import glob
 import json
 import os
+from dataclasses import dataclass
 from typing import Any
 
+from taskloop.contracts import wire
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.runlife import RETAIN
 from taskloop.contracts.stores import ReposStore
+from taskloop.contracts.trace import RunTrace
 from taskloop_dash.env import Env
 from taskloop_dash.views import names
 
 Span = dict[str, Any]
+
+
+@dataclass(frozen=True)
+class TraceBook:
+    """The retained traces by run, and how many lines of the file were not one this version reads."""
+    runs: dict[str, RunTrace]
+    skipped: int
 
 
 class Records:
@@ -43,19 +53,21 @@ class Records:
         known = ReposStore(self.env.config).known()
         return [p for p in known if os.path.isdir(p)]
 
-    def traces(self) -> dict[str, dict[str, Any]]:
-        """run -> its traces.jsonl line, re-read when the file changes."""
-        def load(path: str) -> dict[str, dict[str, Any]]:
-            out: dict[str, dict[str, Any]] = {}
+    def traces(self) -> TraceBook:
+        """run -> its RunTrace, re-read when the file changes. A line that is not a RunTrace of this version (an older `v`, bad
+        JSON) is skipped and counted, never read as something it is not."""
+        def load(path: str) -> TraceBook:
+            runs: dict[str, RunTrace] = {}
+            skipped = 0
             for ln in self.env.tails.tail_lines(path, 20_000_000):
                 try:
-                    r = json.loads(ln)
+                    t = wire.load(RunTrace, json.loads(ln))
                 except ValueError:
+                    skipped += 1
                     continue
-                if isinstance(r, dict) and r.get("run"):
-                    out[r["run"]] = r
-            return out
-        return self.env.files.get(str(self.env.config.traces()), load, {})
+                runs[str(t.run)] = t
+            return TraceBook(runs, skipped)
+        return self.env.files.get(str(self.env.config.traces()), load, TraceBook({}, 0))
 
     def engine_logs(self, retain: bool = True) -> dict[BeadId, list[str]]:
         """bead -> its engine logs, oldest first."""
