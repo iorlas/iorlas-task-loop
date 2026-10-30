@@ -57,7 +57,30 @@ def problems(actual: dict[str, int], recorded: dict[str, int]) -> list[str]:
     return out
 
 
+def open_matches(text: str) -> list[int]:
+    """The lines of `match` statements whose last case is not `case _: assert_never(...)`."""
+    out = []
+    for node in ast.walk(ast.parse(text)):
+        if isinstance(node, ast.Match):
+            last = node.cases[-1]
+            body = last.body[-1]
+            closed = isinstance(last.pattern, ast.MatchAs) and last.pattern.pattern is None and isinstance(body, ast.Expr) \
+                and isinstance(body.value, ast.Call) and ast.unparse(body.value.func).endswith("assert_never")
+            if not closed:
+                out.append(node.lineno)
+    return out
+
+
 class TypeRatchet(unittest.TestCase):
+    def test_every_match_in_src_ends_in_assert_never(self):
+        bad = [f"{p.relative_to(ROOT)}:{n}" for p in sorted((ROOT / "src").rglob("*.py")) if "_vendor" not in p.parts
+               for n in open_matches(p.read_text(encoding="utf-8"))]
+        self.assertEqual(bad, [])
+
+    def test_an_open_match_is_found(self):
+        self.assertEqual(open_matches("match x:\n    case 1:\n        pass\n"), [1])
+        self.assertEqual(open_matches("match x:\n    case 1:\n        pass\n    case _:\n        assert_never(x)\n"), [])
+
     def test_the_counts_in_src_match_the_record_and_never_rise(self):
         self.assertEqual(problems(count_tree(), json.loads(RECORD.read_text(encoding="utf-8"))), [])
 

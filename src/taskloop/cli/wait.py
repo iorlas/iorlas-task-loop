@@ -4,7 +4,7 @@ import argparse
 import time
 from argparse import Namespace
 from collections.abc import Callable
-from typing import Any, Final
+from typing import Any, Final, assert_never
 
 from taskloop.app.run import requests
 from taskloop.contracts import log as rec
@@ -54,6 +54,8 @@ def verdict(cfg: ConfigDir, run: str, now: float) -> tuple[int, str] | None:
         return None
     if state is Liveness.CRASHED:
         return CRASHED, f"crashed: {run} stopped writing without closing"
+    if state is not Liveness.ENDED:
+        assert_never(state)
     close = next(r for r in recs if isinstance(r, rec.Close))
     why = f": {close.why}" if close.why else ""
     return (ENDED_OK if close.outcome in (Outcome.LANDED, Outcome.DONE) else ENDED_NOT_OK), f"ended {close.outcome}: {run}{why}"

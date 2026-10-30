@@ -5,6 +5,7 @@ in the task-loop repo; a fix amends the bead's own text; demote and once record 
 `Stick.REF` links the ask to a decision already in force (the one its repeat key matched, or the id named in `text`)."""
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import assert_never
 
 from taskloop.contracts.adrs import AdrStore, is_adr_id
 from taskloop.contracts.dash import Stick
@@ -42,7 +43,9 @@ def decide(fx: Effects, raised: LedgerEntry, answered: LedgerEntry, outcome: Sti
         return factory(fx, raised, answered, text)
     if outcome is Stick.FIX:
         return fix(fx, raised, answered, text)
-    return "", ""
+    if outcome is Stick.DEMOTE or outcome is Stick.ONCE:  # no effect beyond the ledger's own record
+        return "", ""
+    assert_never(outcome)
 
 
 def adr(fx: Effects, raised: LedgerEntry, answered: LedgerEntry, text: str, by: str, now: float) -> tuple[str, str]:
