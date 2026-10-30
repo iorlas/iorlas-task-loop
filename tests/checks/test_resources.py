@@ -170,17 +170,24 @@ class Engine(EngineTest):
         return [{"id": "ut", "cmd": cmd, "run": "both", "inputs": inputs, "needs": ["unity"]}]
 
     def test_the_wait_for_the_lease_is_recorded_on_the_check_result_and_its_end_row(self):
-        gate = threading.Event()
+        gate, polled = threading.Event(), threading.Event()  # the holder has the lease; the check polled and found it taken
+        real_init = Resources.__init__
+
+        def init(res, host, sleep=time.sleep):
+            real_init(res, host, sleep)
+            res.sleep = lambda s: (polled.set(), sleep(s))[1]  # the check's first wait is its first poll that lost
 
         def hold_it(eng):
             def hold():
                 with eng.stores.locks.hold(LockWhat.RESOURCE, "unity-0", "another slot"):
                     gate.set()
-                    time.sleep(0.4)
+                    polled.wait(30)  # freed only after the check lost a poll, however slow the engine start is
+                    time.sleep(0.25)  # a fixed hold after that: the check waits at least this long
+
             threading.Thread(target=hold, daemon=True).start()
             gate.wait(5)
 
-        with mock.patch.object(resources, "POLL_S", 0.02):
+        with mock.patch.object(resources, "POLL_S", 0.02), mock.patch.object(Resources, "__init__", init):
             rc, _ = self.run_engine(ANSWERS, prep=hold_it, resources=UNITY, checks=self.checks(["f.txt"]))
         self.assertEqual(rc, 0, self.blocked)
         waits = sorted(r["waited"] for r in records(self.eng, "check_end"))
