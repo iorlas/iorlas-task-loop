@@ -1,0 +1,35 @@
+{
+ "summary": "add f",
+ "stages": [
+  {
+   "goal": "add f",
+   "files": [
+    "f.txt"
+   ],
+   "checks": [
+    {
+     "kind": "adhoc",
+     "argv": [
+      "has-f"
+     ],
+     "reads": []
+    }
+   ],
+   "hard": false,
+   "anchors": [
+    {
+     "path": "f.txt",
+     "lines": "1",
+     "symbol": "",
+     "why": "the file"
+    }
+   ]
+  }
+ ],
+ "risks": [],
+ "question": "",
+ "options": [],
+ "decided": "",
+ "cases": [],
+ "leftovers": []
+}

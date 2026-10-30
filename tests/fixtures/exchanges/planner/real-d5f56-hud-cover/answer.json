@@ -1,0 +1,294 @@
+{
+ "summary": "Add the knob live.hud_max_cover (PLACEHOLDER) to content/ui/default.yaml and to the theme schema. Then add an edit-mode Unity test that builds the live HUD, lays it out at 1280x720 and 3840x2160, checks that each group sits in its corner, and checks that the at-rest screen cover is within the knob.\n\nWhat the code already does:\n- LiveScreen.Ui() builds the HUD from parts that can be constructed without a scene: QueueRow (.queue-corner, top-left), PortraitRow (.portrait-row, bottom-left), CharacterPanel via MoodLayer (.character-panel spanning the full width, with the .tab-strip at rest), and .speed-row bottom-right holding the clock, the SpeedBar and the NoticeCards button. GameMenu is an Esc scrim and is hidden at rest.\n- No live/build switch or game-menu button exists. Adding them is out of scope (\"moving groups the spec does not ask to move\"), so they become a leftover.\n- Edit-mode tests in this repo already enter play mode in batch (`yield return new EnterPlayMode()`, see BuildToolTests.cs and ShellTests.cs), and play tests already read worldBound once layout has run. So the new test is a [UnityTest] that enters play mode and makes a UIDocument whose PanelSettings match the scene's (UiPanel.Settings: ScaleWithScreenSize, 1280x720 reference, match 0.5). It uses a targetTexture of each size so the panel takes that screen size, adds Theme.uss and Live.uss, and waits frames until layout has a non-zero width.\n\nPlan for the cover measurement:\n- Cover = the sum of the four groups' drawn boxes divided by the root's area. For the panel the box is the tab strip, not the full-width container.\n- A sum is an upper bound on the union of the boxes.\n- The test asserts this in NUnit and also logs a machine-readable line, which the checks copy into the evidence folder.",
+ "stages": [
+  {
+   "goal": "Add the knob: in content/ui/default.yaml under `live:`, next to panel_open_max_cover, add `hud_max_cover: 0.12 # PLACEHOLDER: maximum screen share the live interface covers with every panel at rest (interface.R5)`. In content/schema/theme.schema.json add `\"hud_max_cover\": { \"type\": \"number\", \"exclusiveMinimum\": 0, \"maximum\": 1 }` to live.properties and add \"hud_max_cover\" to live.required. If tools/build_uss.py emits live keys into client/Assets/Kit/UI/Theme.uss, regenerate it with the tool. Never hand-edit it.",
+   "files": [
+    "content/ui/default.yaml",
+    "content/schema/theme.schema.json"
+   ],
+   "checks": [
+    {
+     "kind": "adhoc",
+     "argv": [
+      "grep",
+      "-Eq",
+      "^  hud_max_cover: 0?\\.[0-9]+ +# PLACEHOLDER",
+      "content/ui/default.yaml"
+     ],
+     "reads": []
+    },
+    {
+     "kind": "adhoc",
+     "argv": [
+      "jq",
+      "-e",
+      "(.properties.live.properties.hud_max_cover.maximum == 1) and (.properties.live.properties.hud_max_cover.exclusiveMinimum == 0) and (.properties.live.required | index(\"hud_max_cover\") != null)",
+      "content/schema/theme.schema.json"
+     ],
+     "reads": []
+    },
+    {
+     "kind": "adhoc",
+     "argv": [
+      "just",
+      "content"
+     ],
+     "reads": []
+    },
+    {
+     "kind": "adhoc",
+     "argv": [
+      "just",
+      "theme-check"
+     ],
+     "reads": []
+    },
+    {
+     "kind": "adhoc",
+     "argv": [
+      "just",
+      "design-tests"
+     ],
+     "reads": []
+    },
+    {
+     "kind": "adhoc",
+     "argv": [
+      "just",
+      "design"
+     ],
+     "reads": []
+    }
+   ],
+   "hard": false
+  },
+  {
+   "goal": "Add the layout test, building the HUD the way the screen does.\n\n(1) Pull the HUD-building half of LiveScreen.Ui() into a reusable piece in client/Assets/Features/Live/ (for example a LiveHud class or a static method). It takes what it needs as arguments (the sim content, the theme, the input file, callbacks) so that LiveScreen and the test build the same tree with no duplicate. Keep LiveScreen's public serialized fields (pieces, cast, document, styles) and its public members unchanged.\n\n(2) Add client/Assets/Tests/Editor/LiveHudLayoutTests.cs, a [UnityTest] that does the following:\n- Enter play mode the way BuildToolTests does.\n- For each of 1280x720 and 3840x2160, make a GameObject with a UIDocument. Its PanelSettings has the same scale settings as Lifesim.Editor.UiPanel.Settings, and a RenderTexture of that size as targetTexture.\n- Build the HUD through the shared builder, with the styles Assets/Kit/UI/Theme.uss and Assets/Features/Live/Live.uss.\n- Give it a household so the queue, portraits and tab strip are actually drawn. Use LiveWorld.Open or OpenSaved, as GameMenuTests does.\n- Leave every panel at rest: character panel closed, game menu closed, pie closed, inspector hidden, no notice cards.\n- Yield frames until the root layout width is above 0. Fail with a clear message if it never is.\n- Read the boxes (worldBound) of .queue-corner, .portrait-row, .tab-strip and .speed-row. Assert each is non-empty and sits in its corner: queue in the top-left quarter; portraits in the bottom-left quarter; the tab strip's centre x within a small tolerance of the screen centre and the strip in the bottom half; the speed row, which holds the clock, the speed bar and the notifications button, in the bottom-right quarter.\n- Compute cover = (sum of the four box areas) / (root area). Assert 0 < cover <= theme.Number(\"live.hud_max_cover\").\n- Log exactly one line per size with Debug.Log, using InvariantCulture: `[hud-cover] <W>x<H> cover=<0.0000> max=<knob> corners=ok`. Write corners=ok only once the corner asserts have passed.\n- Clean up in finally (DestroyImmediate on the GameObject, the RenderTexture and the PanelSettings), then exit play mode.\n\nDo not change any stylesheet positions. The task does not move any group. If the measured cover is above 0.12, stop and report the number rather than raising the knob above 0.2. Let Unity import the new file and write its .meta, and keep that .meta.",
+   "files": [
+    "client/Assets/Features/Live/LiveScreen.cs",
+    "client/Assets/Features/Live/LiveHud.cs",
+    "client/Assets/Features/Live/LiveHud.cs.meta",
+    "client/Assets/Tests/Editor/LiveHudLayoutTests.cs",
+    "client/Assets/Tests/Editor/LiveHudLayoutTests.cs.meta"
+   ],
+   "checks": [
+    {
+     "kind": "adhoc",
+     "argv": [
+      "just",
+      "unity-tests"
+     ],
+     "reads": []
+    },
+    {
+     "kind": "adhoc",
+     "argv": [
+      "test",
+      "-f",
+      "client/Assets/Tests/Editor/LiveHudLayoutTests.cs.meta"
+     ],
+     "reads": []
+    },
+    {
+     "kind": "adhoc",
+     "argv": [
+      "grep",
+      "-q",
+      "live.hud_max_cover",
+      "client/Assets/Tests/Editor/LiveHudLayoutTests.cs"
+     ],
+     "reads": []
+    },
+    {
+     "kind": "adhoc",
+     "argv": [
+      "grep",
+      "-Eq",
+      "<test-case [^>]*fullname=\"[^\"]*LiveHudLayoutTests[^\"]*\"[^>]*result=\"Passed\"",
+      "client/Logs/unity-tests.xml"
+     ],
+     "reads": []
+    },
+    {
+     "kind": "adhoc",
+     "argv": [
+      "!",
+      "grep",
+      "-Eq",
+      "<test-case [^>]*fullname=\"[^\"]*LiveHudLayoutTests[^\"]*\"[^>]*result=\"(Failed|Skipped|Inconclusive)\"",
+      "client/Logs/unity-tests.xml"
+     ],
+     "reads": []
+    },
+    {
+     "kind": "adhoc",
+     "argv": [
+      "mkdir",
+      "-p",
+      ".task/lifesim-d5f.56/evidence",
+      "&&",
+      "grep",
+      "-o",
+      "\\[hud-cover\\] [0-9]*x[0-9]* .*",
+      "client/Logs/unity-tests.log",
+      ">",
+      ".task/lifesim-d5f.56/evidence/hud-cover.txt",
+      "&&",
+      "grep",
+      "-q",
+      "\\] 1280x720 ",
+      ".task/lifesim-d5f.56/evidence/hud-cover.txt",
+      "&&",
+      "grep",
+      "-q",
+      "\\] 3840x2160 ",
+      ".task/lifesim-d5f.56/evidence/hud-cover.txt"
+     ],
+     "reads": []
+    },
+    {
+     "kind": "adhoc",
+     "argv": [
+      "!",
+      "grep",
+      "-v",
+      "corners=ok",
+      ".task/lifesim-d5f.56/evidence/hud-cover.txt"
+     ],
+     "reads": []
+    },
+    {
+     "kind": "adhoc",
+     "argv": [
+      "awk",
+      "{delete v; for(i=3;i<=NF;i++){split($i,kv,\"=\"); v[kv[1]]=kv[2]} if (!((v[\"cover\"]+0) > 0 && (v[\"cover\"]+0) <= (v[\"max\"]+0))) bad=1; n++} END{exit (bad || n < 2)}",
+      ".task/lifesim-d5f.56/evidence/hud-cover.txt"
+     ],
+     "reads": []
+    },
+    {
+     "kind": "adhoc",
+     "argv": [
+      "grep",
+      "-q",
+      "public UIDocument document",
+      "client/Assets/Features/Live/LiveScreen.cs",
+      "&&",
+      "grep",
+      "-q",
+      "public StyleSheet\\[\\] styles",
+      "client/Assets/Features/Live/LiveScreen.cs",
+      "&&",
+      "grep",
+      "-q",
+      "public LotPieces pieces",
+      "client/Assets/Features/Live/LiveScreen.cs",
+      "&&",
+      "grep",
+      "-q",
+      "public LiveCast cast",
+      "client/Assets/Features/Live/LiveScreen.cs"
+     ],
+     "reads": []
+    },
+    {
+     "kind": "adhoc",
+     "argv": [
+      "just",
+      "unity-analyzers"
+     ],
+     "reads": []
+    },
+    {
+     "kind": "adhoc",
+     "argv": [
+      "just",
+      "fmt-check"
+     ],
+     "reads": []
+    },
+    {
+     "kind": "adhoc",
+     "argv": [
+      "just",
+      "client-layers"
+     ],
+     "reads": []
+    },
+    {
+     "kind": "adhoc",
+     "argv": [
+      "just",
+      "text"
+     ],
+     "reads": []
+    }
+   ],
+   "hard": true
+  }
+ ],
+ "risks": [
+  {
+   "what": "Taking the HUD builder out of LiveScreen.Ui() could change what the live scene builds or breaks: the order the parts are added, which callbacks are wired to the world, or the serialized fields the generated Live scene binds to.",
+   "check": {
+    "kind": "adhoc",
+    "argv": [
+     "just",
+     "unity-tests"
+    ],
+    "reads": []
+   }
+  },
+  {
+   "what": "The theme schema has additionalProperties:false and now requires hud_max_cover, so every content load (the bake, the client's ThemeFile) must accept the new key.",
+   "check": {
+    "kind": "adhoc",
+    "argv": [
+     "just",
+     "content"
+    ],
+    "reads": []
+   }
+  },
+  {
+   "what": "build_uss.py might emit live keys into the generated Theme.uss. If so, adding the key without regenerating would leave the generated stylesheet out of date.",
+   "check": {
+    "kind": "adhoc",
+    "argv": [
+     "just",
+     "theme-check"
+    ],
+    "reads": []
+   }
+  },
+  {
+   "what": "The new play-mode test leaves objects behind (a UIDocument, a PanelSettings, a RenderTexture, a world) and this disturbs later edit-mode tests.",
+   "check": {
+    "kind": "adhoc",
+    "argv": [
+     "!",
+     "grep",
+     "-Eq",
+     "<test-run [^>]*failed=\"[1-9]",
+     "client/Logs/unity-tests.xml"
+    ],
+    "reads": []
+   }
+  }
+ ],
+ "question": "",
+ "cases": [],
+ "leftovers": [
+  {
+   "title": "Live HUD: add the live/build switch and a game-menu button to the bottom-right group (interface.R5)",
+   "why": "interface.R5 places the live/build switch and the game menu bottom-right, but the live screen has no switch and only an Esc scrim for the menu. This task's layout test can only check the groups that exist, and adding new controls is out of its scope."
+  },
+  {
+   "title": "Live HUD cover test: also measure at both ends of ui.scale_range (0.5 and 1.25) at the smallest window",
+   "why": "design/research/live-hud-footprint item 1 says to measure the cover at both ends of config/game.yaml#ui.scale_range and the smallest window. lifesim-d5f.56 measures only at UI scale 1 at 1280x720 and 3840x2160. At 1.25 the cover grows by about 1.56x and may exceed the placeholder knob."
+  }
+ ],
+ "options": [],
+ "decided": ""
+}

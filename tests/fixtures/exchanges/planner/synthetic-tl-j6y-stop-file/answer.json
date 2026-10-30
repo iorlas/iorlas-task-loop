@@ -1,0 +1,35 @@
+{
+ "summary": "Make the stop file name its target loops and make a loop obey only a stop meant for it.",
+ "stages": [
+  {
+   "goal": "tl stop writes the target loop pids into the stop file; a loop obeys only a stop naming it or written after it started by more than the clock skew; tl loop start clears a stop older than every running loop",
+   "files": [
+    "f.txt"
+   ],
+   "checks": [
+    {
+     "kind": "adhoc",
+     "argv": [
+      "has-f"
+     ],
+     "reads": []
+    }
+   ],
+   "hard": false,
+   "anchors": [
+    {
+     "path": "f.txt",
+     "lines": "1",
+     "symbol": "",
+     "why": "the stop file code"
+    }
+   ]
+  }
+ ],
+ "risks": [],
+ "question": "",
+ "options": [],
+ "decided": "",
+ "cases": [],
+ "leftovers": []
+}

@@ -1,0 +1,7 @@
+{
+ "id": "lifesim-d5f.56",
+ "title": "Live HUD: layout test with a screen-cover knob",
+ "metadata": {},
+ "description": "Add the knob live.hud_max_cover (PLACEHOLDER) to content/ui/default.yaml and to the theme schema. Then add an edit-mode Unity test that builds the live HUD, lays it out at 1280x720 and 3840x2160, checks that each group sits in its corner, and checks that the at-rest screen cover is within the knob.",
+ "acceptance_criteria": "Done when: content/ui/default.yaml and the theme schema carry live.hud_max_cover; a new edit-mode test builds the live HUD, lays it out at 1280x720 and 3840x2160, asserts each group sits in its corner and the at-rest cover is within the knob; just unity-tests passes."
+}

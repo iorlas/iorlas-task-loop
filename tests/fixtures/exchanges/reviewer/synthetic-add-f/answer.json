@@ -1,0 +1,17 @@
+{
+ "findings": [],
+ "unmet": [],
+ "criteria": [
+  {
+   "item": "A1",
+   "status": "met",
+   "evidence": "f.txt exists in the diff; the stage check has-f passes"
+  }
+ ],
+ "question": "",
+ "options": [],
+ "decided": "",
+ "leftovers": [],
+ "unchecked": [],
+ "look": ""
+}

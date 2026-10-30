@@ -1,0 +1,7 @@
+{
+ "id": "tl-j6y",
+ "title": "Loop: a stop file written in the same second a new loop starts stops that loop",
+ "metadata": {},
+ "description": "2026-10-24 01:27: old loops were stopped (stop file 'after') and 3 new loops started in the same minute. Loop pid 48713 saw the stale stop (mtime >= its STARTED) and would have stopped after hclf.40; removed by hand at 05:45. Fix: tl stop writes the target loop pids (or a nonce) into the file, and a loop only obeys a stop naming it or written after it started by more than clock skew; tl loop start clears a stop older than any running loop.",
+ "acceptance_criteria": "Done when: tl stop writes the target loop ids (or a nonce plus time) into the stop file; a loop obeys only a stop meant for it or written after it started; a stop older than every running loop is cleared at loop start; a test reproduces a stop written in the same second a new loop starts and the new loop keeps running."
+}

@@ -1,0 +1,10 @@
+{
+ "node": "plan",
+ "answer": "synthetic",
+ "input": "real",
+ "source": "bead text from tests/fixtures/briefs/tl-j6y-20261025-045924.md (a real brief); the answer is written by hand",
+ "calls": [
+  "planner",
+  "worker"
+ ]
+}

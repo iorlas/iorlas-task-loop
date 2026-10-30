@@ -1,0 +1,16 @@
+{
+ "summary": "Wrote f.txt with one line.",
+ "checks_run": [
+  {
+   "cmd": "test -f f.txt",
+   "exit": 0
+  }
+ ],
+ "question": "",
+ "options": [],
+ "decided": "",
+ "bad_checks": [],
+ "new_cases": [],
+ "unchecked": [],
+ "logic_only": ""
+}

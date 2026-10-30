@@ -1,0 +1,7 @@
+{
+ "id": "t-1",
+ "title": "Add f",
+ "metadata": {},
+ "description": "Add the file f.txt.",
+ "acceptance_criteria": "f.txt exists"
+}

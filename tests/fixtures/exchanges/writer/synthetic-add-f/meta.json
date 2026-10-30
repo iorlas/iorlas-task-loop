@@ -1,0 +1,11 @@
+{
+ "node": "write",
+ "answer": "synthetic",
+ "input": "synthetic",
+ "source": "hand-written; no real writer or reviewer answer is kept anywhere (an engine log records the call, never its answer)",
+ "calls": [
+  "planner",
+  "worker",
+  "reviewer"
+ ]
+}

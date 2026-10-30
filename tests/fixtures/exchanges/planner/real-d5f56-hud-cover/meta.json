@@ -1,0 +1,12 @@
+{
+ "node": "plan",
+ "answer": "real",
+ "input": "synthetic",
+ "source": "tests/fixtures/state/runs/lifesim-d5f.56-20261021-224641/plan.json, the planner's answer in a run of 2026-10-21 (opus-5.5 on CLAUDE_SUBSCRIPTION)",
+ "migrated": "the answer predates three schema changes: each check string became {kind: adhoc, argv} by shlex.split, and the fields options and decided (missing then) are []/\"\"; nothing else is touched. The bead is a stand-in: that run's brief was not kept.",
+ "calls": [
+  "planner",
+  "planner"
+ ],
+ "calls_why": "the engine sends the plan back once: two of its checks use shell syntax (a leading '!' and '&&' as argv words), which the argv rule refuses"
+}
