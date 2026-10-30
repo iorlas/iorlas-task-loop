@@ -17,7 +17,7 @@ from taskloop.contracts.plancheck import PlanCheck
 from taskloop.contracts.runkey import BaseSha
 from taskloop.domain.checks.durations import merged, seconds
 from taskloop.domain.checks.plan import CheckPlan
-from taskloop.domain.checks.specs import DIFF_CHECK, diff_check, due, gate_items, items_of
+from taskloop.domain.checks.specs import diff_check, due, gate_items, items_of
 from taskloop.domain.checks.writer_split import WriterSplit
 from taskloop.stores.api import Doc
 
@@ -116,7 +116,7 @@ class Checker:
     @staticmethod
     def _quiet(results: list[CheckResult]) -> list[CheckResult]:
         """A clean diff check is not a result anyone reads: it stays in the check log's rows only."""
-        return [c for c in results if not (c.id == DIFF_CHECK and c.exit == 0)]
+        return [c for c in results if not ("diff" in c.tags and c.exit == 0)]
 
     def _finish(self, st: Round, tree: TreeSha, history: Durations, history_doc: Doc[Durations]) -> CheckRun:
         host = self.host

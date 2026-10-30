@@ -47,4 +47,4 @@ class Fixer:
     def _red(c: Check, rc: int, tail: str, log: str) -> CheckResult:
         tail = f"the fix command `{c.fix}` failed (exit {rc})\n{tail[-1500:]}"
         return CheckResult(id=c.id, cmd=c.cmd, group=c.group, exit=rc, status="failed", tail=tail, log=log, wall_min=c.wall_min,
-                           sig=output_signature(tail))
+                           sig=output_signature(tail), tags=list(c.tags))

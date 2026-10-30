@@ -12,6 +12,7 @@ from taskloop.contracts.runkey import RunKey
 from taskloop.contracts.wire import Rec
 
 Group = Literal["static", "tests", "acceptance"]
+Tag = Literal["diff", "unity", "build"]  # diff: the engine's own; unity: queues for a slot; build: a conflict fix keeps it
 Verdict = Literal["passed", "failed", "skipped", "unverified"]
 UNVERIFIED_EXIT = 86  # exit code of a check that could not verify (a missing tool, host or resource): never a pass
 
@@ -48,6 +49,7 @@ class Check(Rec):
     fix: str = ""  # a command (text) run before the round on the worktree: it rewrites what the check would only complain of
     container: bool = False  # run in a container on a copy of the worktree when docker is reachable (the host otherwise)
     reads: list[CheckId] = msgspec.field(default_factory=list)  # registered checks whose log and exit code it reads: it runs after them
+    tags: list[Tag] = msgspec.field(default_factory=list)
 
 
 @final
@@ -69,12 +71,14 @@ class CheckResult(Rec):
     note: str = ""  # why a cached result stands
     base_red: bool = False  # red on the untouched base too: not the writer's
     producer: str = ""  # a skip because the check it reads did not run: that check's id
+    tags: list[Tag] = msgspec.field(default_factory=list)
     sig: str = ""  # what a red's output says, timings aside: two reds with one sig failed the same way
 
     @classmethod
     def skipped(cls, check: Check, why: str, producer: str = "") -> CheckResult:
         """The result of a check that did not run, and why."""
-        return cls(id=check.id, cmd=check.cmd, group=check.group, exit=None, status="skipped", why=why, producer=producer)
+        return cls(id=check.id, cmd=check.cmd, group=check.group, exit=None, status="skipped", why=why, producer=producer,
+                   tags=list(check.tags))
 
     @classmethod
     def failed_run(cls, cmd: str, tail: str, group: str = "gate", log: str = "") -> CheckResult:

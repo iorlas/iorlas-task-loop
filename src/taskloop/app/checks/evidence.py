@@ -7,7 +7,6 @@ from typing import assert_never
 from taskloop.contracts.checks import UNVERIFIED_EXIT, CheckResult, CheckRun
 from taskloop.domain.checks import matchers, trim
 from taskloop.domain.checks.names import norm
-from taskloop.domain.checks.specs import DIFF_CHECK
 
 
 def mark_of(c: CheckResult) -> str:
@@ -85,7 +84,7 @@ def failure_brief(checks: Sequence[CheckResult], run_dir: Path, each: int = trim
     for c in checks:
         log = Path(run_dir, c.log) if c.log else None
         try:
-            text = log.read_text(encoding="utf-8", errors="replace") if log and c.id != DIFF_CHECK else c.tail  # its tail is already capped
+            text = log.read_text(encoding="utf-8", errors="replace") if log and "diff" not in c.tags else c.tail
         except OSError:
             text, log = c.tail, None
         end = ""

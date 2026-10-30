@@ -3,11 +3,11 @@ from collections.abc import Sequence
 from typing import Final
 
 from taskloop.contracts.argv import text_of
-from taskloop.contracts.checks import Check
+from taskloop.contracts.checks import Check, Tag
 from taskloop.contracts.config import CheckSpec, EngineConfig
 from taskloop.contracts.ids import CheckId
 from taskloop.contracts.plancheck import Adhoc, PlanCheck
-from taskloop.domain.checks.matchers import glob_re
+from taskloop.domain.checks.matchers import glob_re, is_build, is_unity
 from taskloop.domain.checks.planref import adhocs
 
 DIFF_CHECK: Final = CheckId("diff-check")  # the engine's own check: `git diff --check <base>`, always first in every round and the gate
@@ -16,7 +16,18 @@ DIFF_CHECK: Final = CheckId("diff-check")  # the engine's own check: `git diff -
 def diff_check(base: str, tree: str) -> Check:
     """git's check of the diff from `base` to `tree`: leftover conflict markers and whitespace errors on changed lines (.gitattributes
     decides what counts), reading only the changed files. Cheap and static, so a red stops the expensive checks. Cached by tree and base."""
-    return Check(id=DIFF_CHECK, cmd=f"git diff --check {base} {tree}", group="static", wall_min=2.0)
+    return Check(id=DIFF_CHECK, cmd=f"git diff --check {base} {tree}", group="static", wall_min=2.0, tags=["diff"])
+
+
+def tags_of(check_id: str, cmd: str) -> list[Tag]:
+    """The tags of a repo check: read from its id and command once, here, so nothing downstream matches text again."""
+    text = f"{check_id} {cmd}"
+    tags: list[Tag] = []
+    if is_unity(text):
+        tags.append("unity")
+    if is_build(text):
+        tags.append("build")
+    return tags
 
 
 def repo_check(k: CheckSpec, cfg: EngineConfig, gate: bool = False) -> Check:
@@ -26,7 +37,7 @@ def repo_check(k: CheckSpec, cfg: EngineConfig, gate: bool = False) -> Check:
                  wall_min=float(k.wall_min or (cfg.gate_timeout_min if gate else cfg.check_wall_min)), cache=k.cache is not False,
                  inputs=inputs, inputs_only=k.inputs_only, exclude=list(k.exclude), env=dict(k.env), repo=True, writer=k.writer,
                  writer_max_s=k.writer_check_max_s, tail_log=k.tail_log,
-                 fix=text_of(k.fix) if k.fix else "", container=k.where == "container", reads=list(k.reads))
+                 fix=text_of(k.fix) if k.fix else "", container=k.where == "container", reads=list(k.reads), tags=tags_of(k.id, k.cmd))
 
 
 def adhoc_check(a: Adhoc, cfg: EngineConfig) -> Check:

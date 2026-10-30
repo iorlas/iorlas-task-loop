@@ -4,9 +4,7 @@ from dataclasses import dataclass
 
 from taskloop.contracts.checks import Check, CheckResult, Durations
 from taskloop.contracts.ids import CheckId
-from taskloop.domain.checks.matchers import is_build, is_unity
 from taskloop.domain.checks.order import CheckOrder
-from taskloop.domain.checks.specs import DIFF_CHECK
 
 
 @dataclass(frozen=True)
@@ -39,7 +37,7 @@ class CheckPlan:
         where = {c.id: i for i, c in enumerate(chosen)}
         env = {i: [where[r] for r in c.reads if r in where] for i, c in enumerate(chosen)}
         repo = [i for i, c in enumerate(chosen) if c.group != "acceptance"]
-        unity = frozenset(i for i in repo if is_unity(chosen[i].id + " " + chosen[i].cmd))
+        unity = frozenset(i for i in repo if "unity" in chosen[i].tags)
         order = CheckOrder(history, acceptance_first).sort(chosen, env, unity)
         pos = {o: n for n, o in enumerate(order)}
         steps = tuple(Step(chosen[o], tuple(pos[e] for e in env[o]), tuple(r for r in chosen[o].reads if r not in where), o in unity)
@@ -48,7 +46,7 @@ class CheckPlan:
 
 
 def _conflict_split(items: list[Check], fix: Sequence[str], markers: str) -> tuple[list[Check], list[CheckResult]]:
-    keep = [c for c in items if c.cmd == markers or c.id == DIFF_CHECK or (c.repo and is_build(c.id + " " + c.cmd))]
+    keep = [c for c in items if c.cmd == markers or "diff" in c.tags or (c.repo and "build" in c.tags)]
     known = {c.cmd for c in items}
     skipped = [CheckResult.skipped(c, "conflict_fix") for c in items if c not in keep]
     skipped += [CheckResult.skipped(Check(id=CheckId(x), cmd=x, group="acceptance"), "conflict_fix")
