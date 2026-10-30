@@ -1,8 +1,10 @@
 """The plugin's hooks (hooks/hook.py): what PreToolUse refuses, what SessionStart and PreCompact do, and that each finishes fast as a real
 process. The status and the handoff text they share: size caps and the first line."""
+import contextlib
 import io
 import json
 import os
+import runpy
 import subprocess
 import sys
 import tempfile
@@ -183,10 +185,12 @@ class Speed(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertIn("deny", r.stdout)
 
-    @real_proc("a fresh interpreter shows the hook's import graph and exit code")
+
     def test_an_unknown_event_is_an_error_not_a_silent_pass(self):
-        r = subprocess.run([sys.executable, str(HOOK), "nonsense"], input="{}", capture_output=True, text=True, env=self.env, check=False)
-        self.assertEqual(r.returncode, 2)
+        with mock.patch.object(sys, "argv", [str(HOOK), "nonsense"]), mock.patch.object(sys, "stdin", io.StringIO("{}")), \
+                mock.patch.dict(os.environ, self.env), contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as stop:
+            runpy.run_path(str(HOOK), run_name="__main__")
+        self.assertEqual(stop.exception.code, 2)
 
 
 if __name__ == "__main__":

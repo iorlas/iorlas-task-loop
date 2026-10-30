@@ -5,7 +5,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import procsim
-from support.engine_case import BEAD, CLEAN, FALSE, HAS_F, PLAN, PY, WRITE, EngineTest, no_repo, pid_gone, real_proc, sh
+from support.engine_case import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, EngineTest, no_repo, pid_gone, real_proc, sh
 
 # isort: split
 import contextlib
@@ -59,13 +59,12 @@ class EngineChecksTest(EngineTest):
         self.assertEqual(count.read_text(), "11")
         self.assertEqual(first[0].exit, 0)
 
-    @real_proc("the child's environment is what the process gets: the engine strips the launcher's session variables")
     def test_checks_run_without_the_launchers_claude_session(self):
         c = wslots.load_cfg(str(self.wt))
         eng = engine.Engine("t-1", str(self.wt), c, store=self.store)
         with mock.patch.dict(os.environ, {"CLAUDE_CODE_ENTRYPOINT": "cli"}):
-            res = eng.run_checks({"checks": [PY + ' -c "import os,sys; sys.exit(1 if os.environ.get(\'CLAUDE_CODE_ENTRYPOINT\') else 0)"'],
-                                  "files": []}, "s")
+            session_env = procsim.fake("session-env", lambda cwd, env: (1 if env.get("CLAUDE_CODE_ENTRYPOINT") else 0, ""))
+            res = eng.run_checks({"checks": [session_env], "files": []}, "s")
         self.assertEqual(res[0].exit, 0)
 
     def test_checks_run_in_groups_fastest_first_and_stop_at_a_red_group(self):

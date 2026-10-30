@@ -50,9 +50,12 @@ from taskloop.app.slots import line as slots_line
 from taskloop.app.slots.pool import Slot, SlotPool
 from taskloop.app.track import verbs
 from taskloop.app.wire import slots as wslots
+from taskloop.contracts import paths
 from taskloop.contracts.bead import BdError
 from taskloop.contracts.config import LoopConfig
+from taskloop.contracts.ids import loop_key
 from taskloop.contracts.ports import BdFailure
+from taskloop.stores.files import FileTickets
 
 LIVE_PID = "a live pid that is not this process: a real sleep child (an engine lock, a second loop, a waiter)"
 
@@ -283,22 +286,9 @@ class Line(Slots):
     @real_proc(LIVE_PID)
     def test_a_waiter_behind_a_live_ticket_never_takes_a_free_slot_and_a_killed_waiter_does_not_block(self):
         self.beads({}, slots=1)
-        k = subprocess.Popen(
-            [
-                sys.executable,
-                "-c",
-                f"import sys, time; sys.path.insert(0, {str(HERE)!r}); import tl; from taskloop.adapters import ident; "
-                "from taskloop.contracts.ids import loop_key; "
-                "from taskloop.contracts import paths; from taskloop.stores.files import FileTickets; "
-                f"FileTickets(paths.ConfigDir(ident.config_dir())).take(loop_key({str(self.repo)!r}), 'first', 2, "
-                "pid=__import__('os').getpid(), now=time.time()); "
-                "print('in line', flush=True); time.sleep(60)",
-            ],
-            stdout=subprocess.PIPE,
-            text=True,
-        )
+        k = subprocess.Popen(["sleep", "60"])  # a live pid for the first in line
         self.kids.append(k)
-        self.assertEqual(must(k.stdout).readline().strip(), "in line")
+        FileTickets(paths.ConfigDir(ident.config_dir())).take(loop_key(str(self.repo)), "first", 2, pid=k.pid, now=time.time())
         tries = []
         got = wslots.wait_slot(str(self.repo), self.cfg, "second", poll=(0.01, 0.01),
                            stop=lambda: tries.append(1) or len(tries) >= 5)
@@ -306,7 +296,6 @@ class Line(Slots):
         self.assertEqual(len(self.tickets()), 1)  # its own ticket gone, the first one's kept
         k.kill()
         k.wait()
-        must(k.stdout).close()
         got = wslots.wait_slot(str(self.repo), self.cfg, "second", poll=(0.01, 0.01), stop=lambda: True)
         self.assertEqual(must(got)[0], "s1")
         self.assertEqual(self.tickets(), [])  # the dead waiter's ticket was dropped
