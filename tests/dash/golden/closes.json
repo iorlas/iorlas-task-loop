@@ -1,0 +1,4836 @@
+{
+ "beads": {
+  "ask-budget": {
+   "acceptance": "",
+   "artifacts": [],
+   "ask": null,
+   "card": {
+    "ack": false,
+    "assumptions": 0,
+    "cause": null,
+    "column": "backlog",
+    "dots": [
+     {
+      "phase": "plan",
+      "state": "done"
+     },
+     {
+      "phase": "write",
+      "state": "done"
+     },
+     {
+      "phase": "test",
+      "state": "todo"
+     },
+     {
+      "phase": "review",
+      "state": "todo"
+     },
+     {
+      "phase": "look",
+      "state": "todo"
+     },
+     {
+      "phase": "land",
+      "state": "todo"
+     }
+    ],
+    "epic": null,
+    "goal": false,
+    "id": "g-6",
+    "lane": "OC Go",
+    "loops": 0,
+    "marker": "parked",
+    "needs": [],
+    "project": "lifesim",
+    "shots": 0,
+    "slot": null,
+    "status": "over budget: write 61 min of 60",
+    "t": 1800000571.0,
+    "title": "ask-budget",
+    "tone": "",
+    "totals": {
+     "secs": 70,
+     "tokens": 3000,
+     "tone": "grey",
+     "usual": 3000,
+     "usual_n": 2
+    },
+    "waits_why": ""
+   },
+   "comments": [],
+   "description": "",
+   "live": null,
+   "passes": [
+    {
+     "cells": [
+      {
+       "last": "",
+       "phase": "plan",
+       "secs": 30,
+       "state": "small",
+       "tokens": 1000
+      },
+      {
+       "last": "",
+       "phase": "write",
+       "secs": 40,
+       "state": "you",
+       "tokens": 2000
+      },
+      {
+       "last": "",
+       "phase": "test",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      },
+      {
+       "last": "",
+       "phase": "review",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      },
+      {
+       "last": "",
+       "phase": "look",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      },
+      {
+       "last": "",
+       "phase": "land",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      }
+     ],
+     "end": "asked",
+     "end_text": "over budget: write 61 min of 60",
+     "messages": [],
+     "n": 1,
+     "resumed": null
+    }
+   ],
+   "t": 1800036000.0,
+   "unblocks": [],
+   "v": 1,
+   "waits_for": []
+  },
+  "ask-decision": {
+   "acceptance": "",
+   "artifacts": [],
+   "ask": null,
+   "card": {
+    "ack": false,
+    "assumptions": 0,
+    "cause": null,
+    "column": "backlog",
+    "dots": [
+     {
+      "phase": "plan",
+      "state": "done"
+     },
+     {
+      "phase": "write",
+      "state": "done"
+     },
+     {
+      "phase": "test",
+      "state": "todo"
+     },
+     {
+      "phase": "review",
+      "state": "todo"
+     },
+     {
+      "phase": "look",
+      "state": "todo"
+     },
+     {
+      "phase": "land",
+      "state": "todo"
+     }
+    ],
+    "epic": null,
+    "goal": false,
+    "id": "g-3",
+    "lane": "OC Go",
+    "loops": 0,
+    "marker": "parked",
+    "needs": [],
+    "project": "lifesim",
+    "shots": 0,
+    "slot": null,
+    "status": "owner decision needed: old format or new?",
+    "t": 1800000271.0,
+    "title": "ask-decision",
+    "tone": "",
+    "totals": {
+     "secs": 70,
+     "tokens": 3000,
+     "tone": "grey",
+     "usual": 3000,
+     "usual_n": 2
+    },
+    "waits_why": ""
+   },
+   "comments": [],
+   "description": "",
+   "live": null,
+   "passes": [
+    {
+     "cells": [
+      {
+       "last": "",
+       "phase": "plan",
+       "secs": 30,
+       "state": "small",
+       "tokens": 1000
+      },
+      {
+       "last": "",
+       "phase": "write",
+       "secs": 40,
+       "state": "you",
+       "tokens": 2000
+      },
+      {
+       "last": "",
+       "phase": "test",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      },
+      {
+       "last": "",
+       "phase": "review",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      },
+      {
+       "last": "",
+       "phase": "look",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      },
+      {
+       "last": "",
+       "phase": "land",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      }
+     ],
+     "end": "asked",
+     "end_text": "owner decision needed: old format or new?",
+     "messages": [],
+     "n": 1,
+     "resumed": null
+    }
+   ],
+   "t": 1800036000.0,
+   "unblocks": [],
+   "v": 1,
+   "waits_for": []
+  },
+  "ask-stuck": {
+   "acceptance": "",
+   "artifacts": [],
+   "ask": null,
+   "card": {
+    "ack": false,
+    "assumptions": 0,
+    "cause": null,
+    "column": "backlog",
+    "dots": [
+     {
+      "phase": "plan",
+      "state": "done"
+     },
+     {
+      "phase": "write",
+      "state": "done"
+     },
+     {
+      "phase": "test",
+      "state": "todo"
+     },
+     {
+      "phase": "review",
+      "state": "todo"
+     },
+     {
+      "phase": "look",
+      "state": "todo"
+     },
+     {
+      "phase": "land",
+      "state": "todo"
+     }
+    ],
+    "epic": null,
+    "goal": false,
+    "id": "g-5",
+    "lane": "OC Go",
+    "loops": 0,
+    "marker": "parked",
+    "needs": [],
+    "project": "lifesim",
+    "shots": 0,
+    "slot": null,
+    "status": "stage 1 stuck after 3 rounds and 1 re-plan(s)",
+    "t": 1800000471.0,
+    "title": "ask-stuck",
+    "tone": "",
+    "totals": {
+     "secs": 70,
+     "tokens": 3000,
+     "tone": "grey",
+     "usual": 3000,
+     "usual_n": 2
+    },
+    "waits_why": ""
+   },
+   "comments": [],
+   "description": "",
+   "live": null,
+   "passes": [
+    {
+     "cells": [
+      {
+       "last": "",
+       "phase": "plan",
+       "secs": 30,
+       "state": "small",
+       "tokens": 1000
+      },
+      {
+       "last": "",
+       "phase": "write",
+       "secs": 40,
+       "state": "small",
+       "tokens": 2000
+      },
+      {
+       "last": "",
+       "phase": "test",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      },
+      {
+       "last": "",
+       "phase": "review",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      },
+      {
+       "last": "",
+       "phase": "look",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      },
+      {
+       "last": "",
+       "phase": "land",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      }
+     ],
+     "end": "",
+     "end_text": "stage 1 stuck after 3 rounds and 1 re-plan(s)",
+     "messages": [],
+     "n": 1,
+     "resumed": null
+    }
+   ],
+   "t": 1800036000.0,
+   "unblocks": [],
+   "v": 1,
+   "waits_for": []
+  },
+  "ask-ticket": {
+   "acceptance": "",
+   "artifacts": [],
+   "ask": null,
+   "card": {
+    "ack": false,
+    "assumptions": 0,
+    "cause": null,
+    "column": "backlog",
+    "dots": [
+     {
+      "phase": "plan",
+      "state": "done"
+     },
+     {
+      "phase": "write",
+      "state": "done"
+     },
+     {
+      "phase": "test",
+      "state": "todo"
+     },
+     {
+      "phase": "review",
+      "state": "todo"
+     },
+     {
+      "phase": "look",
+      "state": "todo"
+     },
+     {
+      "phase": "land",
+      "state": "todo"
+     }
+    ],
+    "epic": null,
+    "goal": false,
+    "id": "g-7",
+    "lane": "OC Go",
+    "loops": 0,
+    "marker": "parked",
+    "needs": [],
+    "project": "lifesim",
+    "shots": 0,
+    "slot": null,
+    "status": "ticket: the bead has no acceptance criteria",
+    "t": 1800000671.0,
+    "title": "ask-ticket",
+    "tone": "",
+    "totals": {
+     "secs": 70,
+     "tokens": 3000,
+     "tone": "grey",
+     "usual": 3000,
+     "usual_n": 2
+    },
+    "waits_why": ""
+   },
+   "comments": [],
+   "description": "",
+   "live": null,
+   "passes": [
+    {
+     "cells": [
+      {
+       "last": "",
+       "phase": "plan",
+       "secs": 30,
+       "state": "small",
+       "tokens": 1000
+      },
+      {
+       "last": "",
+       "phase": "write",
+       "secs": 40,
+       "state": "you",
+       "tokens": 2000
+      },
+      {
+       "last": "",
+       "phase": "test",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      },
+      {
+       "last": "",
+       "phase": "review",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      },
+      {
+       "last": "",
+       "phase": "look",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      },
+      {
+       "last": "",
+       "phase": "land",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      }
+     ],
+     "end": "asked",
+     "end_text": "ticket: the bead has no acceptance criteria",
+     "messages": [],
+     "n": 1,
+     "resumed": null
+    }
+   ],
+   "t": 1800036000.0,
+   "unblocks": [],
+   "v": 1,
+   "waits_for": []
+  },
+  "ask-verify": {
+   "acceptance": "",
+   "artifacts": [],
+   "ask": null,
+   "card": {
+    "ack": false,
+    "assumptions": 0,
+    "cause": null,
+    "column": "backlog",
+    "dots": [
+     {
+      "phase": "plan",
+      "state": "done"
+     },
+     {
+      "phase": "write",
+      "state": "done"
+     },
+     {
+      "phase": "test",
+      "state": "todo"
+     },
+     {
+      "phase": "review",
+      "state": "todo"
+     },
+     {
+      "phase": "look",
+      "state": "todo"
+     },
+     {
+      "phase": "land",
+      "state": "todo"
+     }
+    ],
+    "epic": null,
+    "goal": false,
+    "id": "g-4",
+    "lane": "OC Go",
+    "loops": 0,
+    "marker": "parked",
+    "needs": [],
+    "project": "lifesim",
+    "shots": 0,
+    "slot": null,
+    "status": "verify: before land, the workers could not check: the look (other)",
+    "t": 1800000371.0,
+    "title": "ask-verify",
+    "tone": "",
+    "totals": {
+     "secs": 70,
+     "tokens": 3000,
+     "tone": "grey",
+     "usual": 3000,
+     "usual_n": 2
+    },
+    "waits_why": ""
+   },
+   "comments": [],
+   "description": "",
+   "live": null,
+   "passes": [
+    {
+     "cells": [
+      {
+       "last": "",
+       "phase": "plan",
+       "secs": 30,
+       "state": "small",
+       "tokens": 1000
+      },
+      {
+       "last": "",
+       "phase": "write",
+       "secs": 40,
+       "state": "you",
+       "tokens": 2000
+      },
+      {
+       "last": "",
+       "phase": "test",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      },
+      {
+       "last": "",
+       "phase": "review",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      },
+      {
+       "last": "",
+       "phase": "look",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      },
+      {
+       "last": "",
+       "phase": "land",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      }
+     ],
+     "end": "asked",
+     "end_text": "verify: before land, the workers could not check: the look (other)",
+     "messages": [],
+     "n": 1,
+     "resumed": null
+    }
+   ],
+   "t": 1800036000.0,
+   "unblocks": [],
+   "v": 1,
+   "waits_for": []
+  },
+  "done": {
+   "acceptance": "",
+   "artifacts": [],
+   "ask": null,
+   "card": {
+    "ack": false,
+    "assumptions": 0,
+    "cause": null,
+    "column": "backlog",
+    "dots": [
+     {
+      "phase": "plan",
+      "state": "done"
+     },
+     {
+      "phase": "write",
+      "state": "done"
+     },
+     {
+      "phase": "test",
+      "state": "todo"
+     },
+     {
+      "phase": "review",
+      "state": "todo"
+     },
+     {
+      "phase": "look",
+      "state": "todo"
+     },
+     {
+      "phase": "land",
+      "state": "todo"
+     }
+    ],
+    "epic": null,
+    "goal": false,
+    "id": "g-2",
+    "lane": "OC Go",
+    "loops": 0,
+    "marker": "ready",
+    "needs": [],
+    "project": "lifesim",
+    "shots": 0,
+    "slot": null,
+    "status": "ready",
+    "t": 1800000171.0,
+    "title": "done",
+    "tone": "",
+    "totals": {
+     "secs": 70,
+     "tokens": 3000,
+     "tone": "grey",
+     "usual": 3000,
+     "usual_n": 2
+    },
+    "waits_why": ""
+   },
+   "comments": [],
+   "description": "",
+   "live": null,
+   "passes": [
+    {
+     "cells": [
+      {
+       "last": "",
+       "phase": "plan",
+       "secs": 30,
+       "state": "small",
+       "tokens": 1000
+      },
+      {
+       "last": "",
+       "phase": "write",
+       "secs": 40,
+       "state": "small",
+       "tokens": 2000
+      },
+      {
+       "last": "",
+       "phase": "test",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      },
+      {
+       "last": "",
+       "phase": "review",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      },
+      {
+       "last": "",
+       "phase": "look",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      },
+      {
+       "last": "",
+       "phase": "land",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      }
+     ],
+     "end": "done",
+     "end_text": "landed",
+     "messages": [],
+     "n": 1,
+     "resumed": null
+    }
+   ],
+   "t": 1800036000.0,
+   "unblocks": [],
+   "v": 1,
+   "waits_for": []
+  },
+  "fault-denied": {
+   "acceptance": "",
+   "artifacts": [],
+   "ask": null,
+   "card": {
+    "ack": false,
+    "assumptions": 0,
+    "cause": null,
+    "column": "backlog",
+    "dots": [
+     {
+      "phase": "plan",
+      "state": "done"
+     },
+     {
+      "phase": "write",
+      "state": "done"
+     },
+     {
+      "phase": "test",
+      "state": "todo"
+     },
+     {
+      "phase": "review",
+      "state": "todo"
+     },
+     {
+      "phase": "look",
+      "state": "todo"
+     },
+     {
+      "phase": "land",
+      "state": "todo"
+     }
+    ],
+    "epic": null,
+    "goal": false,
+    "id": "g-13",
+    "lane": "OC Go",
+    "loops": 0,
+    "marker": "ready",
+    "needs": [],
+    "project": "lifesim",
+    "shots": 0,
+    "slot": null,
+    "status": "ready",
+    "t": 1800001271.0,
+    "title": "fault-denied",
+    "tone": "",
+    "totals": {
+     "secs": 70,
+     "tokens": 3000,
+     "tone": "grey",
+     "usual": 3000,
+     "usual_n": 2
+    },
+    "waits_why": ""
+   },
+   "comments": [],
+   "description": "",
+   "live": null,
+   "passes": [
+    {
+     "cells": [
+      {
+       "last": "",
+       "phase": "plan",
+       "secs": 30,
+       "state": "small",
+       "tokens": 1000
+      },
+      {
+       "last": "",
+       "phase": "write",
+       "secs": 40,
+       "state": "you",
+       "tokens": 2000
+      },
+      {
+       "last": "",
+       "phase": "test",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      },
+      {
+       "last": "",
+       "phase": "review",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      },
+      {
+       "last": "",
+       "phase": "look",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      },
+      {
+       "last": "",
+       "phase": "land",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      }
+     ],
+     "end": "asked",
+     "end_text": "needs a human: the write step was denied rm and gave no answer",
+     "messages": [],
+     "n": 1,
+     "resumed": null
+    }
+   ],
+   "t": 1800036000.0,
+   "unblocks": [],
+   "v": 1,
+   "waits_for": []
+  },
+  "fault-engine": {
+   "acceptance": "",
+   "artifacts": [],
+   "ask": null,
+   "card": {
+    "ack": false,
+    "assumptions": 0,
+    "cause": null,
+    "column": "backlog",
+    "dots": [
+     {
+      "phase": "plan",
+      "state": "done"
+     },
+     {
+      "phase": "write",
+      "state": "done"
+     },
+     {
+      "phase": "test",
+      "state": "todo"
+     },
+     {
+      "phase": "review",
+      "state": "todo"
+     },
+     {
+      "phase": "look",
+      "state": "todo"
+     },
+     {
+      "phase": "land",
+      "state": "todo"
+     }
+    ],
+    "epic": null,
+    "goal": false,
+    "id": "g-16",
+    "lane": "OC Go",
+    "loops": 0,
+    "marker": "ready",
+    "needs": [],
+    "project": "lifesim",
+    "shots": 0,
+    "slot": null,
+    "status": "ready",
+    "t": 1800001571.0,
+    "title": "fault-engine",
+    "tone": "",
+    "totals": {
+     "secs": 70,
+     "tokens": 3000,
+     "tone": "grey",
+     "usual": 3000,
+     "usual_n": 2
+    },
+    "waits_why": ""
+   },
+   "comments": [],
+   "description": "",
+   "live": null,
+   "passes": [
+    {
+     "cells": [
+      {
+       "last": "",
+       "phase": "plan",
+       "secs": 30,
+       "state": "small",
+       "tokens": 1000
+      },
+      {
+       "last": "",
+       "phase": "write",
+       "secs": 40,
+       "state": "small",
+       "tokens": 2000
+      },
+      {
+       "last": "",
+       "phase": "test",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      },
+      {
+       "last": "",
+       "phase": "review",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      },
+      {
+       "last": "",
+       "phase": "look",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      },
+      {
+       "last": "",
+       "phase": "land",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      }
+     ],
+     "end": "",
+     "end_text": "failed: engine error KeyError: 'x'",
+     "messages": [],
+     "n": 1,
+     "resumed": null
+    }
+   ],
+   "t": 1800036000.0,
+   "unblocks": [],
+   "v": 1,
+   "waits_for": []
+  },
+  "fault-infra": {
+   "acceptance": "",
+   "artifacts": [],
+   "ask": null,
+   "card": {
+    "ack": false,
+    "assumptions": 0,
+    "cause": null,
+    "column": "backlog",
+    "dots": [
+     {
+      "phase": "plan",
+      "state": "done"
+     },
+     {
+      "phase": "write",
+      "state": "done"
+     },
+     {
+      "phase": "test",
+      "state": "todo"
+     },
+     {
+      "phase": "review",
+      "state": "todo"
+     },
+     {
+      "phase": "look",
+      "state": "todo"
+     },
+     {
+      "phase": "land",
+      "state": "todo"
+     }
+    ],
+    "epic": null,
+    "goal": false,
+    "id": "g-15",
+    "lane": "OC Go",
+    "loops": 0,
+    "marker": "ready",
+    "needs": [],
+    "project": "lifesim",
+    "shots": 0,
+    "slot": null,
+    "status": "ready",
+    "t": 1800001471.0,
+    "title": "fault-infra",
+    "tone": "",
+    "totals": {
+     "secs": 70,
+     "tokens": 3000,
+     "tone": "grey",
+     "usual": 3000,
+     "usual_n": 2
+    },
+    "waits_why": ""
+   },
+   "comments": [],
+   "description": "",
+   "live": null,
+   "passes": [
+    {
+     "cells": [
+      {
+       "last": "",
+       "phase": "plan",
+       "secs": 30,
+       "state": "small",
+       "tokens": 1000
+      },
+      {
+       "last": "",
+       "phase": "write",
+       "secs": 40,
+       "state": "small",
+       "tokens": 2000
+      },
+      {
+       "last": "",
+       "phase": "test",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      },
+      {
+       "last": "",
+       "phase": "review",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      },
+      {
+       "last": "",
+       "phase": "look",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      },
+      {
+       "last": "",
+       "phase": "land",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      }
+     ],
+     "end": "",
+     "end_text": "failed: infrastructure: no slot",
+     "messages": [],
+     "n": 1,
+     "resumed": null
+    }
+   ],
+   "t": 1800036000.0,
+   "unblocks": [],
+   "v": 1,
+   "waits_for": []
+  },
+  "fault-land": {
+   "acceptance": "",
+   "artifacts": [],
+   "ask": null,
+   "card": {
+    "ack": false,
+    "assumptions": 0,
+    "cause": null,
+    "column": "backlog",
+    "dots": [
+     {
+      "phase": "plan",
+      "state": "done"
+     },
+     {
+      "phase": "write",
+      "state": "done"
+     },
+     {
+      "phase": "test",
+      "state": "todo"
+     },
+     {
+      "phase": "review",
+      "state": "todo"
+     },
+     {
+      "phase": "look",
+      "state": "todo"
+     },
+     {
+      "phase": "land",
+      "state": "todo"
+     }
+    ],
+    "epic": null,
+    "goal": false,
+    "id": "g-14",
+    "lane": "OC Go",
+    "loops": 0,
+    "marker": "ready",
+    "needs": [],
+    "project": "lifesim",
+    "shots": 0,
+    "slot": null,
+    "status": "ready",
+    "t": 1800001371.0,
+    "title": "fault-land",
+    "tone": "",
+    "totals": {
+     "secs": 70,
+     "tokens": 3000,
+     "tone": "grey",
+     "usual": 3000,
+     "usual_n": 2
+    },
+    "waits_why": ""
+   },
+   "comments": [],
+   "description": "",
+   "live": null,
+   "passes": [
+    {
+     "cells": [
+      {
+       "last": "",
+       "phase": "plan",
+       "secs": 30,
+       "state": "small",
+       "tokens": 1000
+      },
+      {
+       "last": "",
+       "phase": "write",
+       "secs": 40,
+       "state": "small",
+       "tokens": 2000
+      },
+      {
+       "last": "",
+       "phase": "test",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      },
+      {
+       "last": "",
+       "phase": "review",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      },
+      {
+       "last": "",
+       "phase": "look",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      },
+      {
+       "last": "",
+       "phase": "land",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      }
+     ],
+     "end": "",
+     "end_text": "failed: the land gate is red on main",
+     "messages": [],
+     "n": 1,
+     "resumed": null
+    }
+   ],
+   "t": 1800036000.0,
+   "unblocks": [],
+   "v": 1,
+   "waits_for": []
+  },
+  "landed": {
+   "acceptance": "",
+   "artifacts": [],
+   "ask": null,
+   "card": {
+    "ack": false,
+    "assumptions": 0,
+    "cause": null,
+    "column": "backlog",
+    "dots": [
+     {
+      "phase": "plan",
+      "state": "done"
+     },
+     {
+      "phase": "write",
+      "state": "done"
+     },
+     {
+      "phase": "test",
+      "state": "todo"
+     },
+     {
+      "phase": "review",
+      "state": "todo"
+     },
+     {
+      "phase": "look",
+      "state": "todo"
+     },
+     {
+      "phase": "land",
+      "state": "todo"
+     }
+    ],
+    "epic": null,
+    "goal": false,
+    "id": "g-1",
+    "lane": "OC Go",
+    "loops": 0,
+    "marker": "ready",
+    "needs": [],
+    "project": "lifesim",
+    "shots": 0,
+    "slot": null,
+    "status": "ready",
+    "t": 1800000071.0,
+    "title": "landed",
+    "tone": "",
+    "totals": {
+     "secs": 70,
+     "tokens": 3000,
+     "tone": "grey",
+     "usual": 3000,
+     "usual_n": 2
+    },
+    "waits_why": ""
+   },
+   "comments": [],
+   "description": "",
+   "live": null,
+   "passes": [
+    {
+     "cells": [
+      {
+       "last": "",
+       "phase": "plan",
+       "secs": 30,
+       "state": "small",
+       "tokens": 1000
+      },
+      {
+       "last": "",
+       "phase": "write",
+       "secs": 40,
+       "state": "small",
+       "tokens": 2000
+      },
+      {
+       "last": "",
+       "phase": "test",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      },
+      {
+       "last": "",
+       "phase": "review",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      },
+      {
+       "last": "",
+       "phase": "look",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      },
+      {
+       "last": "",
+       "phase": "land",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      }
+     ],
+     "end": "done",
+     "end_text": "landed",
+     "messages": [],
+     "n": 1,
+     "resumed": null
+    }
+   ],
+   "t": 1800036000.0,
+   "unblocks": [],
+   "v": 1,
+   "waits_for": []
+  },
+  "owner-park": {
+   "acceptance": "",
+   "artifacts": [],
+   "ask": null,
+   "card": {
+    "ack": false,
+    "assumptions": 0,
+    "cause": null,
+    "column": "backlog",
+    "dots": [
+     {
+      "phase": "plan",
+      "state": "done"
+     },
+     {
+      "phase": "write",
+      "state": "done"
+     },
+     {
+      "phase": "test",
+      "state": "todo"
+     },
+     {
+      "phase": "review",
+      "state": "todo"
+     },
+     {
+      "phase": "look",
+      "state": "todo"
+     },
+     {
+      "phase": "land",
+      "state": "todo"
+     }
+    ],
+    "epic": null,
+    "goal": false,
+    "id": "g-12",
+    "lane": "OC Go",
+    "loops": 0,
+    "marker": "parked",
+    "needs": [],
+    "project": "lifesim",
+    "shots": 0,
+    "slot": null,
+    "status": "parked: by the owner (the branch and the checkpoint are kept; release the hold to go on)",
+    "t": 1800001171.0,
+    "title": "owner-park",
+    "tone": "",
+    "totals": {
+     "secs": 70,
+     "tokens": 3000,
+     "tone": "grey",
+     "usual": 3000,
+     "usual_n": 2
+    },
+    "waits_why": ""
+   },
+   "comments": [],
+   "description": "",
+   "live": null,
+   "passes": [
+    {
+     "cells": [
+      {
+       "last": "",
+       "phase": "plan",
+       "secs": 30,
+       "state": "small",
+       "tokens": 1000
+      },
+      {
+       "last": "",
+       "phase": "write",
+       "secs": 40,
+       "state": "small",
+       "tokens": 2000
+      },
+      {
+       "last": "",
+       "phase": "test",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      },
+      {
+       "last": "",
+       "phase": "review",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      },
+      {
+       "last": "",
+       "phase": "look",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      },
+      {
+       "last": "",
+       "phase": "land",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      }
+     ],
+     "end": "parked",
+     "end_text": "parked: by the owner (the branch and the checkpoint are kept; release the hold to go on)",
+     "messages": [],
+     "n": 1,
+     "resumed": null
+    }
+   ],
+   "t": 1800036000.0,
+   "unblocks": [],
+   "v": 1,
+   "waits_for": []
+  },
+  "pause-killed": {
+   "acceptance": "",
+   "artifacts": [],
+   "ask": null,
+   "card": {
+    "ack": false,
+    "assumptions": 0,
+    "cause": null,
+    "column": "backlog",
+    "dots": [
+     {
+      "phase": "plan",
+      "state": "done"
+     },
+     {
+      "phase": "write",
+      "state": "done"
+     },
+     {
+      "phase": "test",
+      "state": "todo"
+     },
+     {
+      "phase": "review",
+      "state": "todo"
+     },
+     {
+      "phase": "look",
+      "state": "todo"
+     },
+     {
+      "phase": "land",
+      "state": "todo"
+     }
+    ],
+    "epic": null,
+    "goal": false,
+    "id": "g-11",
+    "lane": "OC Go",
+    "loops": 0,
+    "marker": "ready",
+    "needs": [],
+    "project": "lifesim",
+    "shots": 0,
+    "slot": null,
+    "status": "ready",
+    "t": 1800001071.0,
+    "title": "pause-killed",
+    "tone": "",
+    "totals": {
+     "secs": 70,
+     "tokens": 3000,
+     "tone": "grey",
+     "usual": 3000,
+     "usual_n": 2
+    },
+    "waits_why": ""
+   },
+   "comments": [],
+   "description": "",
+   "live": null,
+   "passes": [
+    {
+     "cells": [
+      {
+       "last": "",
+       "phase": "plan",
+       "secs": 30,
+       "state": "small",
+       "tokens": 1000
+      },
+      {
+       "last": "",
+       "phase": "write",
+       "secs": 40,
+       "state": "small",
+       "tokens": 2000
+      },
+      {
+       "last": "",
+       "phase": "test",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      },
+      {
+       "last": "",
+       "phase": "review",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      },
+      {
+       "last": "",
+       "phase": "look",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      },
+      {
+       "last": "",
+       "phase": "land",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      }
+     ],
+     "end": "parked",
+     "end_text": "failed: stopped (SIGTERM)",
+     "messages": [],
+     "n": 1,
+     "resumed": null
+    }
+   ],
+   "t": 1800036000.0,
+   "unblocks": [],
+   "v": 1,
+   "waits_for": []
+  },
+  "pause-lane": {
+   "acceptance": "",
+   "artifacts": [],
+   "ask": null,
+   "card": {
+    "ack": false,
+    "assumptions": 0,
+    "cause": null,
+    "column": "backlog",
+    "dots": [
+     {
+      "phase": "plan",
+      "state": "done"
+     },
+     {
+      "phase": "write",
+      "state": "done"
+     },
+     {
+      "phase": "test",
+      "state": "todo"
+     },
+     {
+      "phase": "review",
+      "state": "todo"
+     },
+     {
+      "phase": "look",
+      "state": "todo"
+     },
+     {
+      "phase": "land",
+      "state": "todo"
+     }
+    ],
+    "epic": null,
+    "goal": false,
+    "id": "g-9",
+    "lane": "OC Go",
+    "loops": 0,
+    "marker": "parked",
+    "needs": [],
+    "project": "lifesim",
+    "shots": 0,
+    "slot": null,
+    "status": "paused: no lane for the write step (CODEX_SUBSCRIPTION out until 14:00)",
+    "t": 1800000871.0,
+    "title": "pause-lane",
+    "tone": "",
+    "totals": {
+     "secs": 70,
+     "tokens": 3000,
+     "tone": "grey",
+     "usual": 3000,
+     "usual_n": 2
+    },
+    "waits_why": ""
+   },
+   "comments": [],
+   "description": "",
+   "live": null,
+   "passes": [
+    {
+     "cells": [
+      {
+       "last": "",
+       "phase": "plan",
+       "secs": 30,
+       "state": "small",
+       "tokens": 1000
+      },
+      {
+       "last": "",
+       "phase": "write",
+       "secs": 40,
+       "state": "small",
+       "tokens": 2000
+      },
+      {
+       "last": "",
+       "phase": "test",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      },
+      {
+       "last": "",
+       "phase": "review",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      },
+      {
+       "last": "",
+       "phase": "look",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      },
+      {
+       "last": "",
+       "phase": "land",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      }
+     ],
+     "end": "lane_out",
+     "end_text": "paused: no lane for the write step (CODEX_SUBSCRIPTION out until 14:00)",
+     "messages": [],
+     "n": 1,
+     "resumed": null
+    }
+   ],
+   "t": 1800036000.0,
+   "unblocks": [],
+   "v": 1,
+   "waits_for": []
+  },
+  "pause-network": {
+   "acceptance": "",
+   "artifacts": [],
+   "ask": null,
+   "card": {
+    "ack": false,
+    "assumptions": 0,
+    "cause": null,
+    "column": "backlog",
+    "dots": [
+     {
+      "phase": "plan",
+      "state": "done"
+     },
+     {
+      "phase": "write",
+      "state": "done"
+     },
+     {
+      "phase": "test",
+      "state": "todo"
+     },
+     {
+      "phase": "review",
+      "state": "todo"
+     },
+     {
+      "phase": "look",
+      "state": "todo"
+     },
+     {
+      "phase": "land",
+      "state": "todo"
+     }
+    ],
+    "epic": null,
+    "goal": false,
+    "id": "g-10",
+    "lane": "OC Go",
+    "loops": 0,
+    "marker": "parked",
+    "needs": [],
+    "project": "lifesim",
+    "shots": 0,
+    "slot": null,
+    "status": "paused: no network for the land push after 90 s; the branch is kept",
+    "t": 1800000971.0,
+    "title": "pause-network",
+    "tone": "",
+    "totals": {
+     "secs": 70,
+     "tokens": 3000,
+     "tone": "grey",
+     "usual": 3000,
+     "usual_n": 2
+    },
+    "waits_why": ""
+   },
+   "comments": [],
+   "description": "",
+   "live": null,
+   "passes": [
+    {
+     "cells": [
+      {
+       "last": "",
+       "phase": "plan",
+       "secs": 30,
+       "state": "small",
+       "tokens": 1000
+      },
+      {
+       "last": "",
+       "phase": "write",
+       "secs": 40,
+       "state": "small",
+       "tokens": 2000
+      },
+      {
+       "last": "",
+       "phase": "test",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      },
+      {
+       "last": "",
+       "phase": "review",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      },
+      {
+       "last": "",
+       "phase": "look",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      },
+      {
+       "last": "",
+       "phase": "land",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      }
+     ],
+     "end": "parked",
+     "end_text": "paused: no network for the land push after 90 s; the branch is kept",
+     "messages": [],
+     "n": 1,
+     "resumed": null
+    }
+   ],
+   "t": 1800036000.0,
+   "unblocks": [],
+   "v": 1,
+   "waits_for": []
+  },
+  "wait-ask": {
+   "acceptance": "",
+   "artifacts": [],
+   "ask": null,
+   "card": {
+    "ack": false,
+    "assumptions": 0,
+    "cause": null,
+    "column": "backlog",
+    "dots": [
+     {
+      "phase": "plan",
+      "state": "done"
+     },
+     {
+      "phase": "write",
+      "state": "done"
+     },
+     {
+      "phase": "test",
+      "state": "todo"
+     },
+     {
+      "phase": "review",
+      "state": "todo"
+     },
+     {
+      "phase": "look",
+      "state": "todo"
+     },
+     {
+      "phase": "land",
+      "state": "todo"
+     }
+    ],
+    "epic": null,
+    "goal": false,
+    "id": "g-8",
+    "lane": "OC Go",
+    "loops": 0,
+    "marker": "parked",
+    "needs": [],
+    "project": "lifesim",
+    "shots": 0,
+    "slot": null,
+    "status": "waiting: for the owner's answer to ask g-1 (decision): which?",
+    "t": 1800000771.0,
+    "title": "wait-ask",
+    "tone": "",
+    "totals": {
+     "secs": 70,
+     "tokens": 3000,
+     "tone": "grey",
+     "usual": 3000,
+     "usual_n": 2
+    },
+    "waits_why": ""
+   },
+   "comments": [],
+   "description": "",
+   "live": null,
+   "passes": [
+    {
+     "cells": [
+      {
+       "last": "",
+       "phase": "plan",
+       "secs": 30,
+       "state": "small",
+       "tokens": 1000
+      },
+      {
+       "last": "",
+       "phase": "write",
+       "secs": 40,
+       "state": "you",
+       "tokens": 2000
+      },
+      {
+       "last": "",
+       "phase": "test",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      },
+      {
+       "last": "",
+       "phase": "review",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      },
+      {
+       "last": "",
+       "phase": "look",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      },
+      {
+       "last": "",
+       "phase": "land",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      }
+     ],
+     "end": "asked",
+     "end_text": "waiting: for the owner's answer to ask g-1 (decision): which?",
+     "messages": [],
+     "n": 1,
+     "resumed": null
+    }
+   ],
+   "t": 1800036000.0,
+   "unblocks": [],
+   "v": 1,
+   "waits_for": []
+  }
+ },
+ "snapshot": {
+  "adrs": [],
+  "asks": [],
+  "backlog_more": 0,
+  "beads": [
+   {
+    "ack": false,
+    "assumptions": 0,
+    "cause": null,
+    "column": "backlog",
+    "dots": [
+     {
+      "phase": "plan",
+      "state": "done"
+     },
+     {
+      "phase": "write",
+      "state": "done"
+     },
+     {
+      "phase": "test",
+      "state": "todo"
+     },
+     {
+      "phase": "review",
+      "state": "todo"
+     },
+     {
+      "phase": "look",
+      "state": "todo"
+     },
+     {
+      "phase": "land",
+      "state": "todo"
+     }
+    ],
+    "epic": null,
+    "goal": false,
+    "id": "g-1",
+    "lane": "OC Go",
+    "loops": 0,
+    "marker": "ready",
+    "needs": [],
+    "project": "lifesim",
+    "shots": 0,
+    "slot": null,
+    "status": "ready",
+    "t": 1800000071.0,
+    "title": "landed",
+    "tone": "",
+    "totals": {
+     "secs": 70,
+     "tokens": 3000,
+     "tone": "grey",
+     "usual": 3000,
+     "usual_n": 2
+    },
+    "waits_why": ""
+   },
+   {
+    "ack": false,
+    "assumptions": 0,
+    "cause": null,
+    "column": "backlog",
+    "dots": [
+     {
+      "phase": "plan",
+      "state": "done"
+     },
+     {
+      "phase": "write",
+      "state": "done"
+     },
+     {
+      "phase": "test",
+      "state": "todo"
+     },
+     {
+      "phase": "review",
+      "state": "todo"
+     },
+     {
+      "phase": "look",
+      "state": "todo"
+     },
+     {
+      "phase": "land",
+      "state": "todo"
+     }
+    ],
+    "epic": null,
+    "goal": false,
+    "id": "g-2",
+    "lane": "OC Go",
+    "loops": 0,
+    "marker": "ready",
+    "needs": [],
+    "project": "lifesim",
+    "shots": 0,
+    "slot": null,
+    "status": "ready",
+    "t": 1800000171.0,
+    "title": "done",
+    "tone": "",
+    "totals": {
+     "secs": 70,
+     "tokens": 3000,
+     "tone": "grey",
+     "usual": 3000,
+     "usual_n": 2
+    },
+    "waits_why": ""
+   },
+   {
+    "ack": false,
+    "assumptions": 0,
+    "cause": null,
+    "column": "backlog",
+    "dots": [
+     {
+      "phase": "plan",
+      "state": "done"
+     },
+     {
+      "phase": "write",
+      "state": "done"
+     },
+     {
+      "phase": "test",
+      "state": "todo"
+     },
+     {
+      "phase": "review",
+      "state": "todo"
+     },
+     {
+      "phase": "look",
+      "state": "todo"
+     },
+     {
+      "phase": "land",
+      "state": "todo"
+     }
+    ],
+    "epic": null,
+    "goal": false,
+    "id": "g-3",
+    "lane": "OC Go",
+    "loops": 0,
+    "marker": "parked",
+    "needs": [],
+    "project": "lifesim",
+    "shots": 0,
+    "slot": null,
+    "status": "owner decision needed: old format or new?",
+    "t": 1800000271.0,
+    "title": "ask-decision",
+    "tone": "",
+    "totals": {
+     "secs": 70,
+     "tokens": 3000,
+     "tone": "grey",
+     "usual": 3000,
+     "usual_n": 2
+    },
+    "waits_why": ""
+   },
+   {
+    "ack": false,
+    "assumptions": 0,
+    "cause": null,
+    "column": "backlog",
+    "dots": [
+     {
+      "phase": "plan",
+      "state": "done"
+     },
+     {
+      "phase": "write",
+      "state": "done"
+     },
+     {
+      "phase": "test",
+      "state": "todo"
+     },
+     {
+      "phase": "review",
+      "state": "todo"
+     },
+     {
+      "phase": "look",
+      "state": "todo"
+     },
+     {
+      "phase": "land",
+      "state": "todo"
+     }
+    ],
+    "epic": null,
+    "goal": false,
+    "id": "g-4",
+    "lane": "OC Go",
+    "loops": 0,
+    "marker": "parked",
+    "needs": [],
+    "project": "lifesim",
+    "shots": 0,
+    "slot": null,
+    "status": "verify: before land, the workers could not check: the look (other)",
+    "t": 1800000371.0,
+    "title": "ask-verify",
+    "tone": "",
+    "totals": {
+     "secs": 70,
+     "tokens": 3000,
+     "tone": "grey",
+     "usual": 3000,
+     "usual_n": 2
+    },
+    "waits_why": ""
+   },
+   {
+    "ack": false,
+    "assumptions": 0,
+    "cause": null,
+    "column": "backlog",
+    "dots": [
+     {
+      "phase": "plan",
+      "state": "done"
+     },
+     {
+      "phase": "write",
+      "state": "done"
+     },
+     {
+      "phase": "test",
+      "state": "todo"
+     },
+     {
+      "phase": "review",
+      "state": "todo"
+     },
+     {
+      "phase": "look",
+      "state": "todo"
+     },
+     {
+      "phase": "land",
+      "state": "todo"
+     }
+    ],
+    "epic": null,
+    "goal": false,
+    "id": "g-5",
+    "lane": "OC Go",
+    "loops": 0,
+    "marker": "parked",
+    "needs": [],
+    "project": "lifesim",
+    "shots": 0,
+    "slot": null,
+    "status": "stage 1 stuck after 3 rounds and 1 re-plan(s)",
+    "t": 1800000471.0,
+    "title": "ask-stuck",
+    "tone": "",
+    "totals": {
+     "secs": 70,
+     "tokens": 3000,
+     "tone": "grey",
+     "usual": 3000,
+     "usual_n": 2
+    },
+    "waits_why": ""
+   },
+   {
+    "ack": false,
+    "assumptions": 0,
+    "cause": null,
+    "column": "backlog",
+    "dots": [
+     {
+      "phase": "plan",
+      "state": "done"
+     },
+     {
+      "phase": "write",
+      "state": "done"
+     },
+     {
+      "phase": "test",
+      "state": "todo"
+     },
+     {
+      "phase": "review",
+      "state": "todo"
+     },
+     {
+      "phase": "look",
+      "state": "todo"
+     },
+     {
+      "phase": "land",
+      "state": "todo"
+     }
+    ],
+    "epic": null,
+    "goal": false,
+    "id": "g-6",
+    "lane": "OC Go",
+    "loops": 0,
+    "marker": "parked",
+    "needs": [],
+    "project": "lifesim",
+    "shots": 0,
+    "slot": null,
+    "status": "over budget: write 61 min of 60",
+    "t": 1800000571.0,
+    "title": "ask-budget",
+    "tone": "",
+    "totals": {
+     "secs": 70,
+     "tokens": 3000,
+     "tone": "grey",
+     "usual": 3000,
+     "usual_n": 2
+    },
+    "waits_why": ""
+   },
+   {
+    "ack": false,
+    "assumptions": 0,
+    "cause": null,
+    "column": "backlog",
+    "dots": [
+     {
+      "phase": "plan",
+      "state": "done"
+     },
+     {
+      "phase": "write",
+      "state": "done"
+     },
+     {
+      "phase": "test",
+      "state": "todo"
+     },
+     {
+      "phase": "review",
+      "state": "todo"
+     },
+     {
+      "phase": "look",
+      "state": "todo"
+     },
+     {
+      "phase": "land",
+      "state": "todo"
+     }
+    ],
+    "epic": null,
+    "goal": false,
+    "id": "g-7",
+    "lane": "OC Go",
+    "loops": 0,
+    "marker": "parked",
+    "needs": [],
+    "project": "lifesim",
+    "shots": 0,
+    "slot": null,
+    "status": "ticket: the bead has no acceptance criteria",
+    "t": 1800000671.0,
+    "title": "ask-ticket",
+    "tone": "",
+    "totals": {
+     "secs": 70,
+     "tokens": 3000,
+     "tone": "grey",
+     "usual": 3000,
+     "usual_n": 2
+    },
+    "waits_why": ""
+   },
+   {
+    "ack": false,
+    "assumptions": 0,
+    "cause": null,
+    "column": "backlog",
+    "dots": [
+     {
+      "phase": "plan",
+      "state": "done"
+     },
+     {
+      "phase": "write",
+      "state": "done"
+     },
+     {
+      "phase": "test",
+      "state": "todo"
+     },
+     {
+      "phase": "review",
+      "state": "todo"
+     },
+     {
+      "phase": "look",
+      "state": "todo"
+     },
+     {
+      "phase": "land",
+      "state": "todo"
+     }
+    ],
+    "epic": null,
+    "goal": false,
+    "id": "g-8",
+    "lane": "OC Go",
+    "loops": 0,
+    "marker": "parked",
+    "needs": [],
+    "project": "lifesim",
+    "shots": 0,
+    "slot": null,
+    "status": "waiting: for the owner's answer to ask g-1 (decision): which?",
+    "t": 1800000771.0,
+    "title": "wait-ask",
+    "tone": "",
+    "totals": {
+     "secs": 70,
+     "tokens": 3000,
+     "tone": "grey",
+     "usual": 3000,
+     "usual_n": 2
+    },
+    "waits_why": ""
+   },
+   {
+    "ack": false,
+    "assumptions": 0,
+    "cause": null,
+    "column": "backlog",
+    "dots": [
+     {
+      "phase": "plan",
+      "state": "done"
+     },
+     {
+      "phase": "write",
+      "state": "done"
+     },
+     {
+      "phase": "test",
+      "state": "todo"
+     },
+     {
+      "phase": "review",
+      "state": "todo"
+     },
+     {
+      "phase": "look",
+      "state": "todo"
+     },
+     {
+      "phase": "land",
+      "state": "todo"
+     }
+    ],
+    "epic": null,
+    "goal": false,
+    "id": "g-9",
+    "lane": "OC Go",
+    "loops": 0,
+    "marker": "parked",
+    "needs": [],
+    "project": "lifesim",
+    "shots": 0,
+    "slot": null,
+    "status": "paused: no lane for the write step (CODEX_SUBSCRIPTION out until 14:00)",
+    "t": 1800000871.0,
+    "title": "pause-lane",
+    "tone": "",
+    "totals": {
+     "secs": 70,
+     "tokens": 3000,
+     "tone": "grey",
+     "usual": 3000,
+     "usual_n": 2
+    },
+    "waits_why": ""
+   },
+   {
+    "ack": false,
+    "assumptions": 0,
+    "cause": null,
+    "column": "backlog",
+    "dots": [
+     {
+      "phase": "plan",
+      "state": "done"
+     },
+     {
+      "phase": "write",
+      "state": "done"
+     },
+     {
+      "phase": "test",
+      "state": "todo"
+     },
+     {
+      "phase": "review",
+      "state": "todo"
+     },
+     {
+      "phase": "look",
+      "state": "todo"
+     },
+     {
+      "phase": "land",
+      "state": "todo"
+     }
+    ],
+    "epic": null,
+    "goal": false,
+    "id": "g-10",
+    "lane": "OC Go",
+    "loops": 0,
+    "marker": "parked",
+    "needs": [],
+    "project": "lifesim",
+    "shots": 0,
+    "slot": null,
+    "status": "paused: no network for the land push after 90 s; the branch is kept",
+    "t": 1800000971.0,
+    "title": "pause-network",
+    "tone": "",
+    "totals": {
+     "secs": 70,
+     "tokens": 3000,
+     "tone": "grey",
+     "usual": 3000,
+     "usual_n": 2
+    },
+    "waits_why": ""
+   },
+   {
+    "ack": false,
+    "assumptions": 0,
+    "cause": null,
+    "column": "backlog",
+    "dots": [
+     {
+      "phase": "plan",
+      "state": "done"
+     },
+     {
+      "phase": "write",
+      "state": "done"
+     },
+     {
+      "phase": "test",
+      "state": "todo"
+     },
+     {
+      "phase": "review",
+      "state": "todo"
+     },
+     {
+      "phase": "look",
+      "state": "todo"
+     },
+     {
+      "phase": "land",
+      "state": "todo"
+     }
+    ],
+    "epic": null,
+    "goal": false,
+    "id": "g-11",
+    "lane": "OC Go",
+    "loops": 0,
+    "marker": "ready",
+    "needs": [],
+    "project": "lifesim",
+    "shots": 0,
+    "slot": null,
+    "status": "ready",
+    "t": 1800001071.0,
+    "title": "pause-killed",
+    "tone": "",
+    "totals": {
+     "secs": 70,
+     "tokens": 3000,
+     "tone": "grey",
+     "usual": 3000,
+     "usual_n": 2
+    },
+    "waits_why": ""
+   },
+   {
+    "ack": false,
+    "assumptions": 0,
+    "cause": null,
+    "column": "backlog",
+    "dots": [
+     {
+      "phase": "plan",
+      "state": "done"
+     },
+     {
+      "phase": "write",
+      "state": "done"
+     },
+     {
+      "phase": "test",
+      "state": "todo"
+     },
+     {
+      "phase": "review",
+      "state": "todo"
+     },
+     {
+      "phase": "look",
+      "state": "todo"
+     },
+     {
+      "phase": "land",
+      "state": "todo"
+     }
+    ],
+    "epic": null,
+    "goal": false,
+    "id": "g-12",
+    "lane": "OC Go",
+    "loops": 0,
+    "marker": "parked",
+    "needs": [],
+    "project": "lifesim",
+    "shots": 0,
+    "slot": null,
+    "status": "parked: by the owner (the branch and the checkpoint are kept; release the hold to go on)",
+    "t": 1800001171.0,
+    "title": "owner-park",
+    "tone": "",
+    "totals": {
+     "secs": 70,
+     "tokens": 3000,
+     "tone": "grey",
+     "usual": 3000,
+     "usual_n": 2
+    },
+    "waits_why": ""
+   },
+   {
+    "ack": false,
+    "assumptions": 0,
+    "cause": null,
+    "column": "backlog",
+    "dots": [
+     {
+      "phase": "plan",
+      "state": "done"
+     },
+     {
+      "phase": "write",
+      "state": "done"
+     },
+     {
+      "phase": "test",
+      "state": "todo"
+     },
+     {
+      "phase": "review",
+      "state": "todo"
+     },
+     {
+      "phase": "look",
+      "state": "todo"
+     },
+     {
+      "phase": "land",
+      "state": "todo"
+     }
+    ],
+    "epic": null,
+    "goal": false,
+    "id": "g-13",
+    "lane": "OC Go",
+    "loops": 0,
+    "marker": "ready",
+    "needs": [],
+    "project": "lifesim",
+    "shots": 0,
+    "slot": null,
+    "status": "ready",
+    "t": 1800001271.0,
+    "title": "fault-denied",
+    "tone": "",
+    "totals": {
+     "secs": 70,
+     "tokens": 3000,
+     "tone": "grey",
+     "usual": 3000,
+     "usual_n": 2
+    },
+    "waits_why": ""
+   },
+   {
+    "ack": false,
+    "assumptions": 0,
+    "cause": null,
+    "column": "backlog",
+    "dots": [
+     {
+      "phase": "plan",
+      "state": "done"
+     },
+     {
+      "phase": "write",
+      "state": "done"
+     },
+     {
+      "phase": "test",
+      "state": "todo"
+     },
+     {
+      "phase": "review",
+      "state": "todo"
+     },
+     {
+      "phase": "look",
+      "state": "todo"
+     },
+     {
+      "phase": "land",
+      "state": "todo"
+     }
+    ],
+    "epic": null,
+    "goal": false,
+    "id": "g-14",
+    "lane": "OC Go",
+    "loops": 0,
+    "marker": "ready",
+    "needs": [],
+    "project": "lifesim",
+    "shots": 0,
+    "slot": null,
+    "status": "ready",
+    "t": 1800001371.0,
+    "title": "fault-land",
+    "tone": "",
+    "totals": {
+     "secs": 70,
+     "tokens": 3000,
+     "tone": "grey",
+     "usual": 3000,
+     "usual_n": 2
+    },
+    "waits_why": ""
+   },
+   {
+    "ack": false,
+    "assumptions": 0,
+    "cause": null,
+    "column": "backlog",
+    "dots": [
+     {
+      "phase": "plan",
+      "state": "done"
+     },
+     {
+      "phase": "write",
+      "state": "done"
+     },
+     {
+      "phase": "test",
+      "state": "todo"
+     },
+     {
+      "phase": "review",
+      "state": "todo"
+     },
+     {
+      "phase": "look",
+      "state": "todo"
+     },
+     {
+      "phase": "land",
+      "state": "todo"
+     }
+    ],
+    "epic": null,
+    "goal": false,
+    "id": "g-15",
+    "lane": "OC Go",
+    "loops": 0,
+    "marker": "ready",
+    "needs": [],
+    "project": "lifesim",
+    "shots": 0,
+    "slot": null,
+    "status": "ready",
+    "t": 1800001471.0,
+    "title": "fault-infra",
+    "tone": "",
+    "totals": {
+     "secs": 70,
+     "tokens": 3000,
+     "tone": "grey",
+     "usual": 3000,
+     "usual_n": 2
+    },
+    "waits_why": ""
+   },
+   {
+    "ack": false,
+    "assumptions": 0,
+    "cause": null,
+    "column": "backlog",
+    "dots": [
+     {
+      "phase": "plan",
+      "state": "done"
+     },
+     {
+      "phase": "write",
+      "state": "done"
+     },
+     {
+      "phase": "test",
+      "state": "todo"
+     },
+     {
+      "phase": "review",
+      "state": "todo"
+     },
+     {
+      "phase": "look",
+      "state": "todo"
+     },
+     {
+      "phase": "land",
+      "state": "todo"
+     }
+    ],
+    "epic": null,
+    "goal": false,
+    "id": "g-16",
+    "lane": "OC Go",
+    "loops": 0,
+    "marker": "ready",
+    "needs": [],
+    "project": "lifesim",
+    "shots": 0,
+    "slot": null,
+    "status": "ready",
+    "t": 1800001571.0,
+    "title": "fault-engine",
+    "tone": "",
+    "totals": {
+     "secs": 70,
+     "tokens": 3000,
+     "tone": "grey",
+     "usual": 3000,
+     "usual_n": 2
+    },
+    "waits_why": ""
+   }
+  ],
+  "epics": [],
+  "lanes": [],
+  "learning": {
+   "asks_per_landed": [],
+   "causes": [],
+   "durable_pct": [],
+   "repeat_asks": [],
+   "sendbacks_per_bead": [],
+   "weeks": []
+  },
+  "ledger": [],
+  "pieces": [],
+  "projects": [
+   {
+    "id": "lifesim",
+    "name": "lifesim"
+   }
+  ],
+  "server": {
+   "host": "devbox",
+   "loops": [
+    {
+     "last_activity": null,
+     "project": "lifesim",
+     "running": false
+    }
+   ],
+   "version": "v-test"
+  },
+  "slots": [],
+  "t": 1800036000.0,
+  "v": 1,
+  "version": "74212a1a2d8c1d41"
+ },
+ "timeline": {
+  "ask-budget": {
+   "alive": false,
+   "ask": "",
+   "bead": "g-6",
+   "blocks": [
+    {
+     "arrow": null,
+     "files": [],
+     "fix": null,
+     "fixes": null,
+     "k": 0,
+     "kind": "plan",
+     "label": "Plan",
+     "node": 1,
+     "result": {
+      "status": "fail",
+      "text": "ok"
+     },
+     "round": null,
+     "same_family": false,
+     "secs": 30.0,
+     "session": {
+      "family": "",
+      "reason": "",
+      "ref": null,
+      "status": "ok",
+      "transcript": ""
+     },
+     "stage": null,
+     "stage_count": null,
+     "stage_index": null,
+     "stage_title": null,
+     "t0": 1800000500.0,
+     "t1": 1800000530.0,
+     "tokens": {
+      "cached": 0,
+      "in": 0,
+      "out": 1000
+     },
+     "who": {
+      "effort": "",
+      "fallback": "",
+      "family": "",
+      "flag": "",
+      "lane": "OC Go",
+      "model": "",
+      "name": "?",
+      "resumed": false
+     },
+     "write": null
+    },
+    {
+     "arrow": {
+      "cause": "planned",
+      "detail": "done",
+      "text": "done",
+      "to": "write"
+     },
+     "files": [],
+     "fix": null,
+     "fixes": null,
+     "k": 0,
+     "kind": "write",
+     "label": "Write 1",
+     "node": 2,
+     "result": {
+      "status": "fail",
+      "text": "ok"
+     },
+     "round": null,
+     "same_family": false,
+     "secs": 40.0,
+     "session": {
+      "family": "",
+      "reason": "",
+      "ref": null,
+      "status": "ok",
+      "transcript": ""
+     },
+     "stage": null,
+     "stage_count": null,
+     "stage_index": null,
+     "stage_title": null,
+     "t0": 1800000530.0,
+     "t1": 1800000570.0,
+     "tokens": {
+      "cached": 0,
+      "in": 0,
+      "out": 2000
+     },
+     "who": {
+      "effort": "",
+      "fallback": "",
+      "family": "",
+      "flag": "",
+      "lane": "",
+      "model": "",
+      "name": "",
+      "resumed": false
+     },
+     "write": null
+    }
+   ],
+   "end": {
+    "cause": "budget",
+    "outcome": "asks",
+    "status": "ask",
+    "t": 1800000570.0,
+    "text": "over its time limit \u2192 asks you",
+    "why": "over budget: write 61 min of 60"
+   },
+   "ended": 1800000571.0,
+   "prev_run": "",
+   "run": "g-6-20261015-100000",
+   "secs": 71,
+   "slot": "a",
+   "started": 1800000500.0,
+   "started_because": "",
+   "tokens": {
+    "cached": 0,
+    "in": 0,
+    "out": 3000
+   },
+   "waits": [],
+   "worktree": "/w/a"
+  },
+  "ask-decision": {
+   "alive": false,
+   "ask": "",
+   "bead": "g-3",
+   "blocks": [
+    {
+     "arrow": null,
+     "files": [],
+     "fix": null,
+     "fixes": null,
+     "k": 0,
+     "kind": "plan",
+     "label": "Plan",
+     "node": 1,
+     "result": {
+      "status": "fail",
+      "text": "ok"
+     },
+     "round": null,
+     "same_family": false,
+     "secs": 30.0,
+     "session": {
+      "family": "",
+      "reason": "",
+      "ref": null,
+      "status": "ok",
+      "transcript": ""
+     },
+     "stage": null,
+     "stage_count": null,
+     "stage_index": null,
+     "stage_title": null,
+     "t0": 1800000200.0,
+     "t1": 1800000230.0,
+     "tokens": {
+      "cached": 0,
+      "in": 0,
+      "out": 1000
+     },
+     "who": {
+      "effort": "",
+      "fallback": "",
+      "family": "",
+      "flag": "",
+      "lane": "OC Go",
+      "model": "",
+      "name": "?",
+      "resumed": false
+     },
+     "write": null
+    },
+    {
+     "arrow": {
+      "cause": "planned",
+      "detail": "done",
+      "text": "done",
+      "to": "write"
+     },
+     "files": [],
+     "fix": null,
+     "fixes": null,
+     "k": 0,
+     "kind": "write",
+     "label": "Write 1",
+     "node": 2,
+     "result": {
+      "status": "fail",
+      "text": "ok"
+     },
+     "round": null,
+     "same_family": false,
+     "secs": 40.0,
+     "session": {
+      "family": "",
+      "reason": "",
+      "ref": null,
+      "status": "ok",
+      "transcript": ""
+     },
+     "stage": null,
+     "stage_count": null,
+     "stage_index": null,
+     "stage_title": null,
+     "t0": 1800000230.0,
+     "t1": 1800000270.0,
+     "tokens": {
+      "cached": 0,
+      "in": 0,
+      "out": 2000
+     },
+     "who": {
+      "effort": "",
+      "fallback": "",
+      "family": "",
+      "flag": "",
+      "lane": "",
+      "model": "",
+      "name": "",
+      "resumed": false
+     },
+     "write": null
+    }
+   ],
+   "end": {
+    "cause": "decision",
+    "outcome": "asks",
+    "status": "ask",
+    "t": 1800000270.0,
+    "text": "decision needed \u2192 asks you",
+    "why": "owner decision needed: old format or new?"
+   },
+   "ended": 1800000271.0,
+   "prev_run": "",
+   "run": "g-3-20261015-100000",
+   "secs": 71,
+   "slot": "a",
+   "started": 1800000200.0,
+   "started_because": "",
+   "tokens": {
+    "cached": 0,
+    "in": 0,
+    "out": 3000
+   },
+   "waits": [],
+   "worktree": "/w/a"
+  },
+  "ask-stuck": {
+   "alive": false,
+   "ask": "",
+   "bead": "g-5",
+   "blocks": [
+    {
+     "arrow": null,
+     "files": [],
+     "fix": null,
+     "fixes": null,
+     "k": 0,
+     "kind": "plan",
+     "label": "Plan",
+     "node": 1,
+     "result": {
+      "status": "fail",
+      "text": "ok"
+     },
+     "round": null,
+     "same_family": false,
+     "secs": 30.0,
+     "session": {
+      "family": "",
+      "reason": "",
+      "ref": null,
+      "status": "ok",
+      "transcript": ""
+     },
+     "stage": null,
+     "stage_count": null,
+     "stage_index": null,
+     "stage_title": null,
+     "t0": 1800000400.0,
+     "t1": 1800000430.0,
+     "tokens": {
+      "cached": 0,
+      "in": 0,
+      "out": 1000
+     },
+     "who": {
+      "effort": "",
+      "fallback": "",
+      "family": "",
+      "flag": "",
+      "lane": "OC Go",
+      "model": "",
+      "name": "?",
+      "resumed": false
+     },
+     "write": null
+    },
+    {
+     "arrow": {
+      "cause": "planned",
+      "detail": "done",
+      "text": "done",
+      "to": "write"
+     },
+     "files": [],
+     "fix": null,
+     "fixes": null,
+     "k": 0,
+     "kind": "write",
+     "label": "Write 1",
+     "node": 2,
+     "result": {
+      "status": "fail",
+      "text": "ok"
+     },
+     "round": null,
+     "same_family": false,
+     "secs": 40.0,
+     "session": {
+      "family": "",
+      "reason": "",
+      "ref": null,
+      "status": "ok",
+      "transcript": ""
+     },
+     "stage": null,
+     "stage_count": null,
+     "stage_index": null,
+     "stage_title": null,
+     "t0": 1800000430.0,
+     "t1": 1800000470.0,
+     "tokens": {
+      "cached": 0,
+      "in": 0,
+      "out": 2000
+     },
+     "who": {
+      "effort": "",
+      "fallback": "",
+      "family": "",
+      "flag": "",
+      "lane": "",
+      "model": "",
+      "name": "",
+      "resumed": false
+     },
+     "write": null
+    }
+   ],
+   "end": {
+    "cause": "stuck",
+    "outcome": "asks",
+    "status": "ask",
+    "t": 1800000470.0,
+    "text": "stuck \u2192 asks you",
+    "why": "stage 1 stuck after 3 rounds and 1 re-plan(s)"
+   },
+   "ended": 1800000471.0,
+   "prev_run": "",
+   "run": "g-5-20261015-100000",
+   "secs": 71,
+   "slot": "a",
+   "started": 1800000400.0,
+   "started_because": "",
+   "tokens": {
+    "cached": 0,
+    "in": 0,
+    "out": 3000
+   },
+   "waits": [],
+   "worktree": "/w/a"
+  },
+  "ask-ticket": {
+   "alive": false,
+   "ask": "",
+   "bead": "g-7",
+   "blocks": [
+    {
+     "arrow": null,
+     "files": [],
+     "fix": null,
+     "fixes": null,
+     "k": 0,
+     "kind": "plan",
+     "label": "Plan",
+     "node": 1,
+     "result": {
+      "status": "fail",
+      "text": "ok"
+     },
+     "round": null,
+     "same_family": false,
+     "secs": 30.0,
+     "session": {
+      "family": "",
+      "reason": "",
+      "ref": null,
+      "status": "ok",
+      "transcript": ""
+     },
+     "stage": null,
+     "stage_count": null,
+     "stage_index": null,
+     "stage_title": null,
+     "t0": 1800000600.0,
+     "t1": 1800000630.0,
+     "tokens": {
+      "cached": 0,
+      "in": 0,
+      "out": 1000
+     },
+     "who": {
+      "effort": "",
+      "fallback": "",
+      "family": "",
+      "flag": "",
+      "lane": "OC Go",
+      "model": "",
+      "name": "?",
+      "resumed": false
+     },
+     "write": null
+    },
+    {
+     "arrow": {
+      "cause": "planned",
+      "detail": "done",
+      "text": "done",
+      "to": "write"
+     },
+     "files": [],
+     "fix": null,
+     "fixes": null,
+     "k": 0,
+     "kind": "write",
+     "label": "Write 1",
+     "node": 2,
+     "result": {
+      "status": "fail",
+      "text": "ok"
+     },
+     "round": null,
+     "same_family": false,
+     "secs": 40.0,
+     "session": {
+      "family": "",
+      "reason": "",
+      "ref": null,
+      "status": "ok",
+      "transcript": ""
+     },
+     "stage": null,
+     "stage_count": null,
+     "stage_index": null,
+     "stage_title": null,
+     "t0": 1800000630.0,
+     "t1": 1800000670.0,
+     "tokens": {
+      "cached": 0,
+      "in": 0,
+      "out": 2000
+     },
+     "who": {
+      "effort": "",
+      "fallback": "",
+      "family": "",
+      "flag": "",
+      "lane": "",
+      "model": "",
+      "name": "",
+      "resumed": false
+     },
+     "write": null
+    }
+   ],
+   "end": {
+    "cause": "ticket",
+    "outcome": "asks",
+    "status": "ask",
+    "t": 1800000670.0,
+    "text": "needs a split or criteria \u2192 asks you",
+    "why": "ticket: the bead has no acceptance criteria"
+   },
+   "ended": 1800000671.0,
+   "prev_run": "",
+   "run": "g-7-20261015-100000",
+   "secs": 71,
+   "slot": "a",
+   "started": 1800000600.0,
+   "started_because": "",
+   "tokens": {
+    "cached": 0,
+    "in": 0,
+    "out": 3000
+   },
+   "waits": [],
+   "worktree": "/w/a"
+  },
+  "ask-verify": {
+   "alive": false,
+   "ask": "",
+   "bead": "g-4",
+   "blocks": [
+    {
+     "arrow": null,
+     "files": [],
+     "fix": null,
+     "fixes": null,
+     "k": 0,
+     "kind": "plan",
+     "label": "Plan",
+     "node": 1,
+     "result": {
+      "status": "fail",
+      "text": "ok"
+     },
+     "round": null,
+     "same_family": false,
+     "secs": 30.0,
+     "session": {
+      "family": "",
+      "reason": "",
+      "ref": null,
+      "status": "ok",
+      "transcript": ""
+     },
+     "stage": null,
+     "stage_count": null,
+     "stage_index": null,
+     "stage_title": null,
+     "t0": 1800000300.0,
+     "t1": 1800000330.0,
+     "tokens": {
+      "cached": 0,
+      "in": 0,
+      "out": 1000
+     },
+     "who": {
+      "effort": "",
+      "fallback": "",
+      "family": "",
+      "flag": "",
+      "lane": "OC Go",
+      "model": "",
+      "name": "?",
+      "resumed": false
+     },
+     "write": null
+    },
+    {
+     "arrow": {
+      "cause": "planned",
+      "detail": "done",
+      "text": "done",
+      "to": "write"
+     },
+     "files": [],
+     "fix": null,
+     "fixes": null,
+     "k": 0,
+     "kind": "write",
+     "label": "Write 1",
+     "node": 2,
+     "result": {
+      "status": "fail",
+      "text": "ok"
+     },
+     "round": null,
+     "same_family": false,
+     "secs": 40.0,
+     "session": {
+      "family": "",
+      "reason": "",
+      "ref": null,
+      "status": "ok",
+      "transcript": ""
+     },
+     "stage": null,
+     "stage_count": null,
+     "stage_index": null,
+     "stage_title": null,
+     "t0": 1800000330.0,
+     "t1": 1800000370.0,
+     "tokens": {
+      "cached": 0,
+      "in": 0,
+      "out": 2000
+     },
+     "who": {
+      "effort": "",
+      "fallback": "",
+      "family": "",
+      "flag": "",
+      "lane": "",
+      "model": "",
+      "name": "",
+      "resumed": false
+     },
+     "write": null
+    }
+   ],
+   "end": {
+    "cause": "verify",
+    "outcome": "asks",
+    "status": "ask",
+    "t": 1800000370.0,
+    "text": "needs your check \u2192 asks you",
+    "why": "verify: before land, the workers could not check: the look (other)"
+   },
+   "ended": 1800000371.0,
+   "prev_run": "",
+   "run": "g-4-20261015-100000",
+   "secs": 71,
+   "slot": "a",
+   "started": 1800000300.0,
+   "started_because": "",
+   "tokens": {
+    "cached": 0,
+    "in": 0,
+    "out": 3000
+   },
+   "waits": [],
+   "worktree": "/w/a"
+  },
+  "done": {
+   "alive": false,
+   "ask": "",
+   "bead": "g-2",
+   "blocks": [
+    {
+     "arrow": null,
+     "files": [],
+     "fix": null,
+     "fixes": null,
+     "k": 0,
+     "kind": "plan",
+     "label": "Plan",
+     "node": 1,
+     "result": {
+      "status": "fail",
+      "text": "ok"
+     },
+     "round": null,
+     "same_family": false,
+     "secs": 30.0,
+     "session": {
+      "family": "",
+      "reason": "",
+      "ref": null,
+      "status": "ok",
+      "transcript": ""
+     },
+     "stage": null,
+     "stage_count": null,
+     "stage_index": null,
+     "stage_title": null,
+     "t0": 1800000100.0,
+     "t1": 1800000130.0,
+     "tokens": {
+      "cached": 0,
+      "in": 0,
+      "out": 1000
+     },
+     "who": {
+      "effort": "",
+      "fallback": "",
+      "family": "",
+      "flag": "",
+      "lane": "OC Go",
+      "model": "",
+      "name": "?",
+      "resumed": false
+     },
+     "write": null
+    },
+    {
+     "arrow": {
+      "cause": "planned",
+      "detail": "done",
+      "text": "done",
+      "to": "write"
+     },
+     "files": [],
+     "fix": null,
+     "fixes": null,
+     "k": 0,
+     "kind": "write",
+     "label": "Write 1",
+     "node": 2,
+     "result": {
+      "status": "fail",
+      "text": "ok"
+     },
+     "round": null,
+     "same_family": false,
+     "secs": 40.0,
+     "session": {
+      "family": "",
+      "reason": "",
+      "ref": null,
+      "status": "ok",
+      "transcript": ""
+     },
+     "stage": null,
+     "stage_count": null,
+     "stage_index": null,
+     "stage_title": null,
+     "t0": 1800000130.0,
+     "t1": 1800000170.0,
+     "tokens": {
+      "cached": 0,
+      "in": 0,
+      "out": 2000
+     },
+     "who": {
+      "effort": "",
+      "fallback": "",
+      "family": "",
+      "flag": "",
+      "lane": "",
+      "model": "",
+      "name": "",
+      "resumed": false
+     },
+     "write": null
+    }
+   ],
+   "end": {
+    "cause": "done",
+    "outcome": "done",
+    "status": "ok",
+    "t": 1800000170.0,
+    "text": "done Fri 08:02",
+    "why": ""
+   },
+   "ended": 1800000171.0,
+   "prev_run": "",
+   "run": "g-2-20261015-100000",
+   "secs": 71,
+   "slot": "a",
+   "started": 1800000100.0,
+   "started_because": "",
+   "tokens": {
+    "cached": 0,
+    "in": 0,
+    "out": 3000
+   },
+   "waits": [],
+   "worktree": "/w/a"
+  },
+  "fault-denied": {
+   "alive": false,
+   "ask": "",
+   "bead": "g-13",
+   "blocks": [
+    {
+     "arrow": null,
+     "files": [],
+     "fix": null,
+     "fixes": null,
+     "k": 0,
+     "kind": "plan",
+     "label": "Plan",
+     "node": 1,
+     "result": {
+      "status": "fail",
+      "text": "ok"
+     },
+     "round": null,
+     "same_family": false,
+     "secs": 30.0,
+     "session": {
+      "family": "",
+      "reason": "",
+      "ref": null,
+      "status": "ok",
+      "transcript": ""
+     },
+     "stage": null,
+     "stage_count": null,
+     "stage_index": null,
+     "stage_title": null,
+     "t0": 1800001200.0,
+     "t1": 1800001230.0,
+     "tokens": {
+      "cached": 0,
+      "in": 0,
+      "out": 1000
+     },
+     "who": {
+      "effort": "",
+      "fallback": "",
+      "family": "",
+      "flag": "",
+      "lane": "OC Go",
+      "model": "",
+      "name": "?",
+      "resumed": false
+     },
+     "write": null
+    },
+    {
+     "arrow": {
+      "cause": "planned",
+      "detail": "done",
+      "text": "done",
+      "to": "write"
+     },
+     "files": [],
+     "fix": null,
+     "fixes": null,
+     "k": 0,
+     "kind": "write",
+     "label": "Write 1",
+     "node": 2,
+     "result": {
+      "status": "fail",
+      "text": "ok"
+     },
+     "round": null,
+     "same_family": false,
+     "secs": 40.0,
+     "session": {
+      "family": "",
+      "reason": "",
+      "ref": null,
+      "status": "ok",
+      "transcript": ""
+     },
+     "stage": null,
+     "stage_count": null,
+     "stage_index": null,
+     "stage_title": null,
+     "t0": 1800001230.0,
+     "t1": 1800001270.0,
+     "tokens": {
+      "cached": 0,
+      "in": 0,
+      "out": 2000
+     },
+     "who": {
+      "effort": "",
+      "fallback": "",
+      "family": "",
+      "flag": "",
+      "lane": "",
+      "model": "",
+      "name": "",
+      "resumed": false
+     },
+     "write": null
+    }
+   ],
+   "end": {
+    "cause": "failed",
+    "outcome": "failed",
+    "status": "fail",
+    "t": 1800001270.0,
+    "text": "failed: needs a human: the write step was denied rm and gave no answer",
+    "why": "needs a human: the write step was denied rm and gave no answer"
+   },
+   "ended": 1800001271.0,
+   "prev_run": "",
+   "run": "g-13-20261015-100000",
+   "secs": 71,
+   "slot": "a",
+   "started": 1800001200.0,
+   "started_because": "",
+   "tokens": {
+    "cached": 0,
+    "in": 0,
+    "out": 3000
+   },
+   "waits": [],
+   "worktree": "/w/a"
+  },
+  "fault-engine": {
+   "alive": false,
+   "ask": "",
+   "bead": "g-16",
+   "blocks": [
+    {
+     "arrow": null,
+     "files": [],
+     "fix": null,
+     "fixes": null,
+     "k": 0,
+     "kind": "plan",
+     "label": "Plan",
+     "node": 1,
+     "result": {
+      "status": "fail",
+      "text": "ok"
+     },
+     "round": null,
+     "same_family": false,
+     "secs": 30.0,
+     "session": {
+      "family": "",
+      "reason": "",
+      "ref": null,
+      "status": "ok",
+      "transcript": ""
+     },
+     "stage": null,
+     "stage_count": null,
+     "stage_index": null,
+     "stage_title": null,
+     "t0": 1800001500.0,
+     "t1": 1800001530.0,
+     "tokens": {
+      "cached": 0,
+      "in": 0,
+      "out": 1000
+     },
+     "who": {
+      "effort": "",
+      "fallback": "",
+      "family": "",
+      "flag": "",
+      "lane": "OC Go",
+      "model": "",
+      "name": "?",
+      "resumed": false
+     },
+     "write": null
+    },
+    {
+     "arrow": {
+      "cause": "planned",
+      "detail": "done",
+      "text": "done",
+      "to": "write"
+     },
+     "files": [],
+     "fix": null,
+     "fixes": null,
+     "k": 0,
+     "kind": "write",
+     "label": "Write 1",
+     "node": 2,
+     "result": {
+      "status": "fail",
+      "text": "ok"
+     },
+     "round": null,
+     "same_family": false,
+     "secs": 40.0,
+     "session": {
+      "family": "",
+      "reason": "",
+      "ref": null,
+      "status": "ok",
+      "transcript": ""
+     },
+     "stage": null,
+     "stage_count": null,
+     "stage_index": null,
+     "stage_title": null,
+     "t0": 1800001530.0,
+     "t1": 1800001570.0,
+     "tokens": {
+      "cached": 0,
+      "in": 0,
+      "out": 2000
+     },
+     "who": {
+      "effort": "",
+      "fallback": "",
+      "family": "",
+      "flag": "",
+      "lane": "",
+      "model": "",
+      "name": "",
+      "resumed": false
+     },
+     "write": null
+    }
+   ],
+   "end": {
+    "cause": "failed",
+    "outcome": "failed",
+    "status": "fail",
+    "t": 1800001570.0,
+    "text": "failed: failed: engine error KeyError: 'x'",
+    "why": "failed: engine error KeyError: 'x'"
+   },
+   "ended": 1800001571.0,
+   "prev_run": "",
+   "run": "g-16-20261015-100000",
+   "secs": 71,
+   "slot": "a",
+   "started": 1800001500.0,
+   "started_because": "",
+   "tokens": {
+    "cached": 0,
+    "in": 0,
+    "out": 3000
+   },
+   "waits": [],
+   "worktree": "/w/a"
+  },
+  "fault-infra": {
+   "alive": false,
+   "ask": "",
+   "bead": "g-15",
+   "blocks": [
+    {
+     "arrow": null,
+     "files": [],
+     "fix": null,
+     "fixes": null,
+     "k": 0,
+     "kind": "plan",
+     "label": "Plan",
+     "node": 1,
+     "result": {
+      "status": "fail",
+      "text": "ok"
+     },
+     "round": null,
+     "same_family": false,
+     "secs": 30.0,
+     "session": {
+      "family": "",
+      "reason": "",
+      "ref": null,
+      "status": "ok",
+      "transcript": ""
+     },
+     "stage": null,
+     "stage_count": null,
+     "stage_index": null,
+     "stage_title": null,
+     "t0": 1800001400.0,
+     "t1": 1800001430.0,
+     "tokens": {
+      "cached": 0,
+      "in": 0,
+      "out": 1000
+     },
+     "who": {
+      "effort": "",
+      "fallback": "",
+      "family": "",
+      "flag": "",
+      "lane": "OC Go",
+      "model": "",
+      "name": "?",
+      "resumed": false
+     },
+     "write": null
+    },
+    {
+     "arrow": {
+      "cause": "planned",
+      "detail": "done",
+      "text": "done",
+      "to": "write"
+     },
+     "files": [],
+     "fix": null,
+     "fixes": null,
+     "k": 0,
+     "kind": "write",
+     "label": "Write 1",
+     "node": 2,
+     "result": {
+      "status": "fail",
+      "text": "ok"
+     },
+     "round": null,
+     "same_family": false,
+     "secs": 40.0,
+     "session": {
+      "family": "",
+      "reason": "",
+      "ref": null,
+      "status": "ok",
+      "transcript": ""
+     },
+     "stage": null,
+     "stage_count": null,
+     "stage_index": null,
+     "stage_title": null,
+     "t0": 1800001430.0,
+     "t1": 1800001470.0,
+     "tokens": {
+      "cached": 0,
+      "in": 0,
+      "out": 2000
+     },
+     "who": {
+      "effort": "",
+      "fallback": "",
+      "family": "",
+      "flag": "",
+      "lane": "",
+      "model": "",
+      "name": "",
+      "resumed": false
+     },
+     "write": null
+    }
+   ],
+   "end": {
+    "cause": "failed",
+    "outcome": "failed",
+    "status": "fail",
+    "t": 1800001470.0,
+    "text": "failed: failed: infrastructure: no slot",
+    "why": "failed: infrastructure: no slot"
+   },
+   "ended": 1800001471.0,
+   "prev_run": "",
+   "run": "g-15-20261015-100000",
+   "secs": 71,
+   "slot": "a",
+   "started": 1800001400.0,
+   "started_because": "",
+   "tokens": {
+    "cached": 0,
+    "in": 0,
+    "out": 3000
+   },
+   "waits": [],
+   "worktree": "/w/a"
+  },
+  "fault-land": {
+   "alive": false,
+   "ask": "",
+   "bead": "g-14",
+   "blocks": [
+    {
+     "arrow": null,
+     "files": [],
+     "fix": null,
+     "fixes": null,
+     "k": 0,
+     "kind": "plan",
+     "label": "Plan",
+     "node": 1,
+     "result": {
+      "status": "fail",
+      "text": "ok"
+     },
+     "round": null,
+     "same_family": false,
+     "secs": 30.0,
+     "session": {
+      "family": "",
+      "reason": "",
+      "ref": null,
+      "status": "ok",
+      "transcript": ""
+     },
+     "stage": null,
+     "stage_count": null,
+     "stage_index": null,
+     "stage_title": null,
+     "t0": 1800001300.0,
+     "t1": 1800001330.0,
+     "tokens": {
+      "cached": 0,
+      "in": 0,
+      "out": 1000
+     },
+     "who": {
+      "effort": "",
+      "fallback": "",
+      "family": "",
+      "flag": "",
+      "lane": "OC Go",
+      "model": "",
+      "name": "?",
+      "resumed": false
+     },
+     "write": null
+    },
+    {
+     "arrow": {
+      "cause": "planned",
+      "detail": "done",
+      "text": "done",
+      "to": "write"
+     },
+     "files": [],
+     "fix": null,
+     "fixes": null,
+     "k": 0,
+     "kind": "write",
+     "label": "Write 1",
+     "node": 2,
+     "result": {
+      "status": "fail",
+      "text": "ok"
+     },
+     "round": null,
+     "same_family": false,
+     "secs": 40.0,
+     "session": {
+      "family": "",
+      "reason": "",
+      "ref": null,
+      "status": "ok",
+      "transcript": ""
+     },
+     "stage": null,
+     "stage_count": null,
+     "stage_index": null,
+     "stage_title": null,
+     "t0": 1800001330.0,
+     "t1": 1800001370.0,
+     "tokens": {
+      "cached": 0,
+      "in": 0,
+      "out": 2000
+     },
+     "who": {
+      "effort": "",
+      "fallback": "",
+      "family": "",
+      "flag": "",
+      "lane": "",
+      "model": "",
+      "name": "",
+      "resumed": false
+     },
+     "write": null
+    }
+   ],
+   "end": {
+    "cause": "failed",
+    "outcome": "failed",
+    "status": "fail",
+    "t": 1800001370.0,
+    "text": "failed: failed: the land gate is red on main",
+    "why": "failed: the land gate is red on main"
+   },
+   "ended": 1800001371.0,
+   "prev_run": "",
+   "run": "g-14-20261015-100000",
+   "secs": 71,
+   "slot": "a",
+   "started": 1800001300.0,
+   "started_because": "",
+   "tokens": {
+    "cached": 0,
+    "in": 0,
+    "out": 3000
+   },
+   "waits": [],
+   "worktree": "/w/a"
+  },
+  "landed": {
+   "alive": false,
+   "ask": "",
+   "bead": "g-1",
+   "blocks": [
+    {
+     "arrow": null,
+     "files": [],
+     "fix": null,
+     "fixes": null,
+     "k": 0,
+     "kind": "plan",
+     "label": "Plan",
+     "node": 1,
+     "result": {
+      "status": "fail",
+      "text": "ok"
+     },
+     "round": null,
+     "same_family": false,
+     "secs": 30.0,
+     "session": {
+      "family": "",
+      "reason": "",
+      "ref": null,
+      "status": "ok",
+      "transcript": ""
+     },
+     "stage": null,
+     "stage_count": null,
+     "stage_index": null,
+     "stage_title": null,
+     "t0": 1800000000.0,
+     "t1": 1800000030.0,
+     "tokens": {
+      "cached": 0,
+      "in": 0,
+      "out": 1000
+     },
+     "who": {
+      "effort": "",
+      "fallback": "",
+      "family": "",
+      "flag": "",
+      "lane": "OC Go",
+      "model": "",
+      "name": "?",
+      "resumed": false
+     },
+     "write": null
+    },
+    {
+     "arrow": {
+      "cause": "planned",
+      "detail": "done",
+      "text": "done",
+      "to": "write"
+     },
+     "files": [],
+     "fix": null,
+     "fixes": null,
+     "k": 0,
+     "kind": "write",
+     "label": "Write 1",
+     "node": 2,
+     "result": {
+      "status": "fail",
+      "text": "ok"
+     },
+     "round": null,
+     "same_family": false,
+     "secs": 40.0,
+     "session": {
+      "family": "",
+      "reason": "",
+      "ref": null,
+      "status": "ok",
+      "transcript": ""
+     },
+     "stage": null,
+     "stage_count": null,
+     "stage_index": null,
+     "stage_title": null,
+     "t0": 1800000030.0,
+     "t1": 1800000070.0,
+     "tokens": {
+      "cached": 0,
+      "in": 0,
+      "out": 2000
+     },
+     "who": {
+      "effort": "",
+      "fallback": "",
+      "family": "",
+      "flag": "",
+      "lane": "",
+      "model": "",
+      "name": "",
+      "resumed": false
+     },
+     "write": null
+    }
+   ],
+   "end": {
+    "cause": "landed",
+    "outcome": "landed",
+    "status": "ok",
+    "t": 1800000070.0,
+    "text": "landed Fri 08:01",
+    "why": ""
+   },
+   "ended": 1800000071.0,
+   "prev_run": "",
+   "run": "g-1-20261015-100000",
+   "secs": 71,
+   "slot": "a",
+   "started": 1800000000.0,
+   "started_because": "",
+   "tokens": {
+    "cached": 0,
+    "in": 0,
+    "out": 3000
+   },
+   "waits": [],
+   "worktree": "/w/a"
+  },
+  "owner-park": {
+   "alive": false,
+   "ask": "",
+   "bead": "g-12",
+   "blocks": [
+    {
+     "arrow": null,
+     "files": [],
+     "fix": null,
+     "fixes": null,
+     "k": 0,
+     "kind": "plan",
+     "label": "Plan",
+     "node": 1,
+     "result": {
+      "status": "fail",
+      "text": "ok"
+     },
+     "round": null,
+     "same_family": false,
+     "secs": 30.0,
+     "session": {
+      "family": "",
+      "reason": "",
+      "ref": null,
+      "status": "ok",
+      "transcript": ""
+     },
+     "stage": null,
+     "stage_count": null,
+     "stage_index": null,
+     "stage_title": null,
+     "t0": 1800001100.0,
+     "t1": 1800001130.0,
+     "tokens": {
+      "cached": 0,
+      "in": 0,
+      "out": 1000
+     },
+     "who": {
+      "effort": "",
+      "fallback": "",
+      "family": "",
+      "flag": "",
+      "lane": "OC Go",
+      "model": "",
+      "name": "?",
+      "resumed": false
+     },
+     "write": null
+    },
+    {
+     "arrow": {
+      "cause": "planned",
+      "detail": "done",
+      "text": "done",
+      "to": "write"
+     },
+     "files": [],
+     "fix": null,
+     "fixes": null,
+     "k": 0,
+     "kind": "write",
+     "label": "Write 1",
+     "node": 2,
+     "result": {
+      "status": "fail",
+      "text": "ok"
+     },
+     "round": null,
+     "same_family": false,
+     "secs": 40.0,
+     "session": {
+      "family": "",
+      "reason": "",
+      "ref": null,
+      "status": "ok",
+      "transcript": ""
+     },
+     "stage": null,
+     "stage_count": null,
+     "stage_index": null,
+     "stage_title": null,
+     "t0": 1800001130.0,
+     "t1": 1800001170.0,
+     "tokens": {
+      "cached": 0,
+      "in": 0,
+      "out": 2000
+     },
+     "who": {
+      "effort": "",
+      "fallback": "",
+      "family": "",
+      "flag": "",
+      "lane": "",
+      "model": "",
+      "name": "",
+      "resumed": false
+     },
+     "write": null
+    }
+   ],
+   "end": {
+    "cause": "stuck",
+    "outcome": "asks",
+    "status": "ask",
+    "t": 1800001170.0,
+    "text": "stuck \u2192 asks you",
+    "why": "parked: by the owner (the branch and the checkpoint are kept; release the hold to go on)"
+   },
+   "ended": 1800001171.0,
+   "prev_run": "",
+   "run": "g-12-20261015-100000",
+   "secs": 71,
+   "slot": "a",
+   "started": 1800001100.0,
+   "started_because": "",
+   "tokens": {
+    "cached": 0,
+    "in": 0,
+    "out": 3000
+   },
+   "waits": [],
+   "worktree": "/w/a"
+  },
+  "pause-killed": {
+   "alive": false,
+   "ask": "",
+   "bead": "g-11",
+   "blocks": [
+    {
+     "arrow": null,
+     "files": [],
+     "fix": null,
+     "fixes": null,
+     "k": 0,
+     "kind": "plan",
+     "label": "Plan",
+     "node": 1,
+     "result": {
+      "status": "fail",
+      "text": "ok"
+     },
+     "round": null,
+     "same_family": false,
+     "secs": 30.0,
+     "session": {
+      "family": "",
+      "reason": "",
+      "ref": null,
+      "status": "ok",
+      "transcript": ""
+     },
+     "stage": null,
+     "stage_count": null,
+     "stage_index": null,
+     "stage_title": null,
+     "t0": 1800001000.0,
+     "t1": 1800001030.0,
+     "tokens": {
+      "cached": 0,
+      "in": 0,
+      "out": 1000
+     },
+     "who": {
+      "effort": "",
+      "fallback": "",
+      "family": "",
+      "flag": "",
+      "lane": "OC Go",
+      "model": "",
+      "name": "?",
+      "resumed": false
+     },
+     "write": null
+    },
+    {
+     "arrow": {
+      "cause": "planned",
+      "detail": "done",
+      "text": "done",
+      "to": "write"
+     },
+     "files": [],
+     "fix": null,
+     "fixes": null,
+     "k": 0,
+     "kind": "write",
+     "label": "Write 1",
+     "node": 2,
+     "result": {
+      "status": "fail",
+      "text": "stopped"
+     },
+     "round": null,
+     "same_family": false,
+     "secs": 40.0,
+     "session": {
+      "family": "",
+      "reason": "",
+      "ref": null,
+      "status": "ok",
+      "transcript": ""
+     },
+     "stage": null,
+     "stage_count": null,
+     "stage_index": null,
+     "stage_title": null,
+     "t0": 1800001030.0,
+     "t1": 1800001070.0,
+     "tokens": {
+      "cached": 0,
+      "in": 0,
+      "out": 2000
+     },
+     "who": {
+      "effort": "",
+      "fallback": "",
+      "family": "",
+      "flag": "",
+      "lane": "",
+      "model": "",
+      "name": "",
+      "resumed": false
+     },
+     "write": null
+    }
+   ],
+   "end": {
+    "cause": "stopped",
+    "outcome": "stopped",
+    "status": "fail",
+    "t": 1800001070.0,
+    "text": "stopped",
+    "why": "failed: stopped (SIGTERM)"
+   },
+   "ended": 1800001071.0,
+   "prev_run": "",
+   "run": "g-11-20261015-100000",
+   "secs": 71,
+   "slot": "a",
+   "started": 1800001000.0,
+   "started_because": "",
+   "tokens": {
+    "cached": 0,
+    "in": 0,
+    "out": 3000
+   },
+   "waits": [],
+   "worktree": "/w/a"
+  },
+  "pause-lane": {
+   "alive": false,
+   "ask": "",
+   "bead": "g-9",
+   "blocks": [
+    {
+     "arrow": null,
+     "files": [],
+     "fix": null,
+     "fixes": null,
+     "k": 0,
+     "kind": "plan",
+     "label": "Plan",
+     "node": 1,
+     "result": {
+      "status": "fail",
+      "text": "ok"
+     },
+     "round": null,
+     "same_family": false,
+     "secs": 30.0,
+     "session": {
+      "family": "",
+      "reason": "",
+      "ref": null,
+      "status": "ok",
+      "transcript": ""
+     },
+     "stage": null,
+     "stage_count": null,
+     "stage_index": null,
+     "stage_title": null,
+     "t0": 1800000800.0,
+     "t1": 1800000830.0,
+     "tokens": {
+      "cached": 0,
+      "in": 0,
+      "out": 1000
+     },
+     "who": {
+      "effort": "",
+      "fallback": "",
+      "family": "",
+      "flag": "",
+      "lane": "OC Go",
+      "model": "",
+      "name": "?",
+      "resumed": false
+     },
+     "write": null
+    },
+    {
+     "arrow": {
+      "cause": "planned",
+      "detail": "done",
+      "text": "done",
+      "to": "write"
+     },
+     "files": [],
+     "fix": null,
+     "fixes": null,
+     "k": 0,
+     "kind": "write",
+     "label": "Write 1",
+     "node": 2,
+     "result": {
+      "status": "fail",
+      "text": "ok"
+     },
+     "round": null,
+     "same_family": false,
+     "secs": 40.0,
+     "session": {
+      "family": "",
+      "reason": "",
+      "ref": null,
+      "status": "ok",
+      "transcript": ""
+     },
+     "stage": null,
+     "stage_count": null,
+     "stage_index": null,
+     "stage_title": null,
+     "t0": 1800000830.0,
+     "t1": 1800000870.0,
+     "tokens": {
+      "cached": 0,
+      "in": 0,
+      "out": 2000
+     },
+     "who": {
+      "effort": "",
+      "fallback": "",
+      "family": "",
+      "flag": "",
+      "lane": "",
+      "model": "",
+      "name": "",
+      "resumed": false
+     },
+     "write": null
+    }
+   ],
+   "end": {
+    "cause": "paused",
+    "lane": "Codex",
+    "outcome": "paused",
+    "reason": "Codex out",
+    "status": "wait",
+    "t": 1800000870.0,
+    "text": "Codex out \u2192 paused until 14:00",
+    "until": "14:00",
+    "why": "paused: no lane for the write step (CODEX_SUBSCRIPTION out until 14:00)"
+   },
+   "ended": 1800000871.0,
+   "prev_run": "",
+   "run": "g-9-20261015-100000",
+   "secs": 71,
+   "slot": "a",
+   "started": 1800000800.0,
+   "started_because": "",
+   "tokens": {
+    "cached": 0,
+    "in": 0,
+    "out": 3000
+   },
+   "waits": [],
+   "worktree": "/w/a"
+  },
+  "pause-network": {
+   "alive": false,
+   "ask": "",
+   "bead": "g-10",
+   "blocks": [
+    {
+     "arrow": null,
+     "files": [],
+     "fix": null,
+     "fixes": null,
+     "k": 0,
+     "kind": "plan",
+     "label": "Plan",
+     "node": 1,
+     "result": {
+      "status": "fail",
+      "text": "ok"
+     },
+     "round": null,
+     "same_family": false,
+     "secs": 30.0,
+     "session": {
+      "family": "",
+      "reason": "",
+      "ref": null,
+      "status": "ok",
+      "transcript": ""
+     },
+     "stage": null,
+     "stage_count": null,
+     "stage_index": null,
+     "stage_title": null,
+     "t0": 1800000900.0,
+     "t1": 1800000930.0,
+     "tokens": {
+      "cached": 0,
+      "in": 0,
+      "out": 1000
+     },
+     "who": {
+      "effort": "",
+      "fallback": "",
+      "family": "",
+      "flag": "",
+      "lane": "OC Go",
+      "model": "",
+      "name": "?",
+      "resumed": false
+     },
+     "write": null
+    },
+    {
+     "arrow": {
+      "cause": "planned",
+      "detail": "done",
+      "text": "done",
+      "to": "write"
+     },
+     "files": [],
+     "fix": null,
+     "fixes": null,
+     "k": 0,
+     "kind": "write",
+     "label": "Write 1",
+     "node": 2,
+     "result": {
+      "status": "fail",
+      "text": "ok"
+     },
+     "round": null,
+     "same_family": false,
+     "secs": 40.0,
+     "session": {
+      "family": "",
+      "reason": "",
+      "ref": null,
+      "status": "ok",
+      "transcript": ""
+     },
+     "stage": null,
+     "stage_count": null,
+     "stage_index": null,
+     "stage_title": null,
+     "t0": 1800000930.0,
+     "t1": 1800000970.0,
+     "tokens": {
+      "cached": 0,
+      "in": 0,
+      "out": 2000
+     },
+     "who": {
+      "effort": "",
+      "fallback": "",
+      "family": "",
+      "flag": "",
+      "lane": "",
+      "model": "",
+      "name": "",
+      "resumed": false
+     },
+     "write": null
+    }
+   ],
+   "end": {
+    "cause": "paused",
+    "lane": "",
+    "outcome": "paused",
+    "reason": "no network",
+    "status": "wait",
+    "t": 1800000970.0,
+    "text": "no network \u2192 paused",
+    "until": "",
+    "why": "paused: no network for the land push after 90 s; the branch is kept"
+   },
+   "ended": 1800000971.0,
+   "prev_run": "",
+   "run": "g-10-20261015-100000",
+   "secs": 71,
+   "slot": "a",
+   "started": 1800000900.0,
+   "started_because": "",
+   "tokens": {
+    "cached": 0,
+    "in": 0,
+    "out": 3000
+   },
+   "waits": [],
+   "worktree": "/w/a"
+  },
+  "wait-ask": {
+   "alive": false,
+   "ask": "",
+   "bead": "g-8",
+   "blocks": [
+    {
+     "arrow": null,
+     "files": [],
+     "fix": null,
+     "fixes": null,
+     "k": 0,
+     "kind": "plan",
+     "label": "Plan",
+     "node": 1,
+     "result": {
+      "status": "fail",
+      "text": "ok"
+     },
+     "round": null,
+     "same_family": false,
+     "secs": 30.0,
+     "session": {
+      "family": "",
+      "reason": "",
+      "ref": null,
+      "status": "ok",
+      "transcript": ""
+     },
+     "stage": null,
+     "stage_count": null,
+     "stage_index": null,
+     "stage_title": null,
+     "t0": 1800000700.0,
+     "t1": 1800000730.0,
+     "tokens": {
+      "cached": 0,
+      "in": 0,
+      "out": 1000
+     },
+     "who": {
+      "effort": "",
+      "fallback": "",
+      "family": "",
+      "flag": "",
+      "lane": "OC Go",
+      "model": "",
+      "name": "?",
+      "resumed": false
+     },
+     "write": null
+    },
+    {
+     "arrow": {
+      "cause": "planned",
+      "detail": "done",
+      "text": "done",
+      "to": "write"
+     },
+     "files": [],
+     "fix": null,
+     "fixes": null,
+     "k": 0,
+     "kind": "write",
+     "label": "Write 1",
+     "node": 2,
+     "result": {
+      "status": "fail",
+      "text": "ok"
+     },
+     "round": null,
+     "same_family": false,
+     "secs": 40.0,
+     "session": {
+      "family": "",
+      "reason": "",
+      "ref": null,
+      "status": "ok",
+      "transcript": ""
+     },
+     "stage": null,
+     "stage_count": null,
+     "stage_index": null,
+     "stage_title": null,
+     "t0": 1800000730.0,
+     "t1": 1800000770.0,
+     "tokens": {
+      "cached": 0,
+      "in": 0,
+      "out": 2000
+     },
+     "who": {
+      "effort": "",
+      "fallback": "",
+      "family": "",
+      "flag": "",
+      "lane": "",
+      "model": "",
+      "name": "",
+      "resumed": false
+     },
+     "write": null
+    }
+   ],
+   "end": {
+    "cause": "waiting",
+    "outcome": "waiting",
+    "status": "ask",
+    "t": 1800000770.0,
+    "text": "waiting for your answer \u2192 asks you",
+    "why": "waiting: for the owner's answer to ask g-1 (decision): which?"
+   },
+   "ended": 1800000771.0,
+   "prev_run": "",
+   "run": "g-8-20261015-100000",
+   "secs": 71,
+   "slot": "a",
+   "started": 1800000700.0,
+   "started_because": "",
+   "tokens": {
+    "cached": 0,
+    "in": 0,
+    "out": 3000
+   },
+   "waits": [],
+   "worktree": "/w/a"
+  }
+ }
+}
