@@ -177,7 +177,7 @@ class GoldenBd(unittest.TestCase):
     def test_a_synced_push_is_ok_and_runs_bd_sync(self) -> None:
         store = self.beads(sync=BdRun(0, "", "Pushing to Dolt remote..."), dolt=BdRun(0, "", "Pushing to Dolt remote..."))
         self.assertEqual(store.dolt_push().code, 0)
-        self.assertEqual(store.calls[0][3:], ["sync", "--json"])  # type: ignore[attr-defined]
+        self.assertEqual(store.calls[0][3:], ["sync", "--no-adopt", "--json"])  # type: ignore[attr-defined]
         self.assertEqual(store.passthrough(["dolt", "push"]).code, 0)
 
     def test_every_golden_file_is_json_or_text(self) -> None:

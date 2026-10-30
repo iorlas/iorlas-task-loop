@@ -190,7 +190,7 @@ class BdStore:
         """`bd sync`: pull, merge-conflict check, push with retries. It is the land's push because its exit codes are positive
         (0 synced, 1 error, 2 conflict, 3 retries exhausted, 4 stuck) where `bd dolt push` exits 0 on a rejection; a rejection
         text under exit 0 still counts as a failure."""
-        r = self._call("sync")
+        r = self._call("sync", "--no-adopt")  # never adopt git origin as a Dolt remote on its own: no remote stays a quiet skip
         text = (r.err or r.out).strip()
         if r.code == 0 and PUSH_REJECTED.search(r.err + r.out):
             return DoltPush(1, text)
