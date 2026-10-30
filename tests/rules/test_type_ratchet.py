@@ -23,11 +23,11 @@ def count_source(text: str) -> dict[str, int]:
     """The four counts in one module's source: Any names and attributes outside imports, ignore comments, cast calls."""
     out = dict.fromkeys(KINDS, 0)
     for node in ast.walk(ast.parse(text)):
-        if isinstance(node, ast.Name) and node.id == "Any" or isinstance(node, ast.Attribute) and node.attr == "Any":
+        if (isinstance(node, ast.Name) and node.id == "Any") or (isinstance(node, ast.Attribute) and node.attr == "Any"):
             out["any"] += 1
         elif isinstance(node, ast.Call):
             fn = node.func
-            if isinstance(fn, ast.Name) and fn.id == "cast" or isinstance(fn, ast.Attribute) and fn.attr == "cast":
+            if (isinstance(fn, ast.Name) and fn.id == "cast") or (isinstance(fn, ast.Attribute) and fn.attr == "cast"):
                 out["cast"] += 1
     for tok in tokenize.generate_tokens(io.StringIO(text).readline):
         if tok.type == tokenize.COMMENT:
