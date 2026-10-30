@@ -26,7 +26,8 @@ class ReviewSkip(unittest.TestCase):
 
     def go(self, cfg, plan=PLAN, writes=1):
         with self.store.stub(show=BEAD):
-            return self.run_engine({"plan": [plan], "write": [WRITE] * writes, "review": [CLEAN] * writes}, **({"skip_review": cfg} if cfg else {}))
+            answers = {"plan": [plan], "write": [WRITE] * writes, "review": [CLEAN] * writes}
+            return self.run_engine(answers, **({"skip_review": cfg} if cfg else {}))
 
     def reviews(self, s, writes=1):
         return len(s.prompts) - 1 - writes
