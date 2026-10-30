@@ -91,11 +91,12 @@ class TypeRatchet(unittest.TestCase):
             "type_ignore": "x = 1  # type: ignore\n",
             "cast": "from typing import cast\nx = cast(int, 1)\n",
         }
+        base = dict.fromkeys(KINDS, 5)
         for kind, text in planted.items():
             with self.subTest(kind):
                 self.assertEqual(count_source(text)[kind], 1)
-                bumped = {k: v + (k == kind) for k, v in count_tree().items()}
-                self.assertEqual(len(problems(bumped, count_tree())), 1)
+                bumped = {k: v + (k == kind) for k, v in base.items()}
+                self.assertEqual(len(problems(bumped, base)), 1)
 
     def test_the_recorded_kinds_are_exactly_the_counted_ones(self):
         self.assertEqual(sorted(json.loads(RECORD.read_text(encoding="utf-8"))), sorted(KINDS))
