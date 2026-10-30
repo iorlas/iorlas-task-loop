@@ -1,11 +1,13 @@
 """After main is pushed: the marketplace entry, the tags, the install and its check."""
 import json
+from collections.abc import Callable
 from pathlib import Path
 
 from taskloop.adapters.ident import claude_dir
 from taskloop.adapters.versionfile import NoVersion, entry_offset, set_version
-from taskloop.app.release.shell import Abort, Shell
+from taskloop.app.release.shell import Abort, Shell, fetch_or_abort
 from taskloop.contracts.ids import MARKETPLACE
+from taskloop.contracts.slots import SlotGitError
 
 PLUGIN = ".claude-plugin/plugin.json"
 MARKET = ".claude-plugin/marketplace.json"
@@ -14,8 +16,10 @@ TRAILER = "\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 
 def bump_marketplace(market: Path, version: str, sh: Shell) -> None:
-    sh.fetch(market)
-    sh.git(market, "merge", "-q", "--ff-only", "origin/main")
+    git = sh.port
+    d = str(market)
+    fetch_or_abort(git, market)
+    git_must(lambda: git.merge_ff(d, "origin/main"), market)
     f = market / MARKET
     text = f.read_text(encoding="utf-8")
     at = entry_offset(text, NAME)
@@ -29,23 +33,35 @@ def bump_marketplace(market: Path, version: str, sh: Shell) -> None:
     if not entry or entry[0].get("version") != version:
         raise Abort(f"could not set {NAME}'s version in {f}")
     f.write_text(text, encoding="utf-8")
-    sh.git(market, "commit", "-q", "-am", f"{NAME} {version}{TRAILER}")
-    if sh.run(["git", "push", "-q", "origin", "HEAD:main"], market, check=False).returncode:
-        sh.git(market, "pull", "-q", "--rebase", "origin", "main")
-        sh.git(market, "push", "-q", "origin", "HEAD:main")
+    git_must(lambda: git.commit_tracked(d, f"{NAME} {version}{TRAILER}"), market)
+    try:
+        git.push(d, "origin", "HEAD:main")
+    except SlotGitError:
+        git_must(lambda: git.pull_rebase(d, "origin", "main"), market)
+        git_must(lambda: git.push(d, "origin", "HEAD:main"), market)
+
+
+def git_must(call: Callable[[], None], where: Path) -> None:
+    """A git step of the release that must work: the port's error becomes the release's refusal."""
+    try:
+        call()
+    except SlotGitError as e:
+        raise Abort(f"git failed in {where}:\n{e.tail}") from None
 
 
 def tag(cwd: Path, name: str, what: str, sh: Shell) -> None:
     """Tag HEAD of `cwd` as `name` and push the tag. Called only after the branch push succeeded. A tag that cannot be made or
     pushed is a warning: the release is out and must not be reported as failed for it."""
-    if sh.git(cwd, "rev-parse", "-q", "--verify", "refs/tags/" + name, check=False):
+    git = sh.port
+    d = str(cwd)
+    if git.rev_parse(d, "refs/tags/" + name):
         sh.say(f"warning: {what} already has the tag {name}; left as it is")
         return
-    r = sh.run(["git", "tag", name, "HEAD"], cwd, check=False)
-    if not r.returncode:
-        r = sh.run(["git", "push", "-q", "origin", "refs/tags/" + name], cwd, check=False)
-    if r.returncode:
-        sh.say(f"warning: tag {name} in {what} failed: {(r.stdout + r.stderr).strip()[-300:]}")
+    try:
+        git.tag(d, name, "HEAD")
+        git.push(d, "origin", "refs/tags/" + name)
+    except SlotGitError as e:
+        sh.say(f"warning: tag {name} in {what} failed: {e.tail[-300:]}")
     else:
         sh.say(f"tagged {name} in {what}")
 

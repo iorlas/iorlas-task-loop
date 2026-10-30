@@ -11,6 +11,7 @@ from taskloop.domain.reconcile.facts import (
     RepoView,
     Worktree,
 )
+from taskloop.domain.reconcile.lost import Finding, classify
 
 DAY = 86400
 
@@ -85,3 +86,8 @@ def diff(o: Observed) -> list[Action]:
     for r in o.repos:
         acts += task_actions(r, going)
     return acts
+
+
+def findings(o: Observed) -> list[Finding]:
+    """The class of every observed bead-branch commit (landed, superseded, reclaimed, pending, unknown, lost), in the order seen."""
+    return [classify(c) for c in o.commits]

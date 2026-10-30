@@ -8,23 +8,13 @@ from typing import Any
 from taskloop.adapters import beadtools, gitrepo, ident
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import BdFailure, Beads
+from taskloop.contracts.ports import BdFailure, Beads, Git
 from taskloop.contracts.stores import TraceStore
 from taskloop.contracts.trace import RunTrace
 
 
 def git(repo: str, *args: str) -> str:
     return gitrepo.git(*args, cwd=repo)
-
-
-def bases_of(repo: str, base: str) -> list[str]:
-    """The base and its local or remote twin, those that exist: a stale local main must not hide a land on origin."""
-    names = [base]
-    if base.startswith("origin/"):
-        names.append(base[len("origin/"):])
-    else:
-        names.append("origin/" + base)
-    return [n for n in names if git(repo, "rev-parse", "--verify", "-q", n + "^{commit}")]
 
 
 def read_jsonl(path: str | Path) -> list[dict[str, Any]]:
@@ -50,10 +40,10 @@ class Traces:
     skipped: int
 
 
-def repo_traces(repo: str) -> Traces:
+def repo_traces(repo: str, git: Git) -> Traces:
     """Every engine run of this repo: its worktree is inside the repo, or its origin is the repo's origin."""
     root = str(Path(repo).resolve())
-    url = git(repo, "remote", "get-url", "origin")
+    url = git.remote_url(repo, "origin")
     page = TraceStore(ConfigDir(ident.config_dir())).read_from(0)
     out: list[RunTrace] = []
     for item in page.items:

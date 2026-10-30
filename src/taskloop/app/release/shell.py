@@ -4,8 +4,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
-from taskloop.adapters import gitrepo
-from taskloop.contracts.ports import Spawner
+from taskloop.adapters.git import RealGit
+from taskloop.contracts.ports import Git, Spawner
+from taskloop.contracts.slots import SlotGitError
 
 
 class Abort(Exception):
@@ -34,11 +35,12 @@ class Done:
     stderr: str
 
 
-def fetch(cwd: str | Path) -> None:
-    """A fetch into the repo, again while it loses a ref lock to a loop's fetch at the same moment (gitrepo.fetch)."""
-    r = gitrepo.fetch(str(cwd))
-    if r.returncode:
-        raise Abort(f"git fetch failed in {cwd}:\n{r.stderr.strip()[-2000:]}")
+def fetch_or_abort(git: Git, cwd: str | Path) -> None:
+    """A fetch into the repo (the port's fetch survives a ref-lock race with a loop's fetch at the same moment); a failure aborts."""
+    try:
+        git.fetch(str(cwd))
+    except SlotGitError as e:
+        raise Abort(f"git fetch failed in {cwd}:\n{e.tail[-2000:]}") from None
 
 
 def say(msg: str) -> None:
@@ -47,16 +49,20 @@ def say(msg: str) -> None:
 
 @dataclass(frozen=True)
 class Shell:
-    """The four calls a release step makes to the outside; `of(spawner)` builds the real ones, a test hands a step its own.
-    `run(cmd, cwd, check)`: `extra` goes over the child's environment, `timeout_s` ends it (exit 124)."""
+    """The calls a release step makes to the outside; `of(spawner)` builds the real ones, a test hands a step its own.
+    `run(cmd, cwd, check)`: `extra` goes over the child's environment, `timeout_s` ends it (exit 124). `port`: the Git port, which every
+    step that reads or moves refs asks (clone, push, publish, tidy)."""
     git: Callable[..., str]
     fetch: Callable[[str | Path], None]
     run: Callable[..., Finished]
     say: Callable[[str], None]
+    port: Git
 
 
-def of(spawner: Spawner) -> Shell:
-    """The shell whose every process is started through `spawner`."""
+def of(spawner: Spawner, port: Git | None = None) -> Shell:
+    """The shell whose every process is started through `spawner`, and whose git port is `port` (the real git by default)."""
+    git_port = port or RealGit()
+
     def run(cmd: list[str], cwd: str | Path | None, check: bool = True, *, extra: Mapping[str, str] | None = None,
             timeout_s: float | None = None) -> Done:
         r = spawner.run(cmd, cwd=None if cwd is None else str(cwd), extra=extra, timeout_s=timeout_s)
@@ -67,4 +73,4 @@ def of(spawner: Spawner) -> Shell:
     def git(cwd: str | Path, *a: str, check: bool = True) -> str:
         return run(["git", *a], cwd, check).stdout.strip()
 
-    return Shell(git=git, fetch=fetch, run=run, say=say)
+    return Shell(git=git, fetch=lambda cwd: fetch_or_abort(git_port, cwd), run=run, say=say, port=git_port)

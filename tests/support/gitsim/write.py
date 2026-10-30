@@ -3,7 +3,8 @@ import fnmatch
 
 from . import ignore
 from .ctx import Ctx, flags
-from .model import HEX40, Fail, W, atomic_write, put_commit, put_tree, snap_of
+from .model import HEX40, Fail, W, atomic_write, is_ancestor, put_commit, put_tree, snap_of
+from .refs import list_merged
 from .status import rows
 from .trees import pin
 
@@ -99,7 +100,10 @@ def checkout(c: Ctx) -> int:
             if flag == "-b" and r.ref("refs/heads/" + name):
                 raise Fail(f"fatal: a branch named '{name}' already exists", 128)
             pin(r, name)
-            r.switch_tree(old, snap_of(sha))
+            if "-f" in args:
+                force_tree(c, old, snap_of(sha))
+            else:
+                r.switch_tree(old, snap_of(sha))
             r.set_ref("refs/heads/" + name, sha)
             r.set_head_branch(name)
             c.set_index(snap_of(sha))
@@ -160,6 +164,8 @@ def cmd_branch(c: Ctx) -> int:
     elif "-D" in fl or "-d" in fl:
         for name in rest:
             (r.git / "refs" / "heads" / name).unlink(missing_ok=True)
+    elif "--merged" in fl:
+        return list_merged(c, rest[0] if rest else "HEAD", fl)
     elif rest and "--list" not in fl:
         sha = r.resolve(rest[1] if len(rest) > 1 else "HEAD")
         if sha is None or r.ref("refs/heads/" + rest[0]):
@@ -174,7 +180,15 @@ def cmd_branch(c: Ctx) -> int:
 
 
 def cmd_update_ref(c: Ctx) -> int:
-    _, rest = flags(c.args)
+    fl, rest = flags(c.args)
+    if "-d" in fl:
+        have = c.r.ref(rest[0])
+        if have is None:
+            return 0
+        if len(rest) > 1 and have != rest[1]:
+            raise Fail(f"error: cannot lock ref '{rest[0]}': is at {have} but expected {rest[1]}", 1)
+        (c.r.common / rest[0]).unlink()
+        return 0
     sha = c.r.resolve(rest[1])
     if sha is None:
         raise Fail(f"fatal: {rest[1]}: not a valid SHA1", 128)
@@ -196,13 +210,34 @@ def cmd_write_tree(c: Ctx) -> int:
     return 0
 
 
+def cmd_merge(c: Ctx) -> int:
+    """merge --ff-only <rev>: move the branch forward, or fail when it has to be a real merge."""
+    _, rest = flags(c.args)
+    r = c.r
+    theirs, mine = r.resolve(rest[0]), r.head_sha()
+    if theirs is None:
+        raise Fail(f"merge: {rest[0]} - not something we can merge", 1)
+    if mine == theirs or (mine and is_ancestor(theirs, mine)):
+        return 0
+    if mine and not is_ancestor(mine, theirs):
+        raise Fail("fatal: Not possible to fast-forward, aborting.", 128)
+    r.switch_tree(snap_of(mine), snap_of(theirs))
+    r.move_head(theirs)
+    c.set_index(snap_of(theirs))
+    return 0
+
+
 def cmd_clean(c: Ctx) -> int:
     """clean -f[d][q] [-e pattern]...: delete the untracked files (ignored ones stay, as without -x) except what a -e pattern keeps."""
     fl, keep = flags(c.args)
     if "-f" not in fl:
         raise Fail("fatal: clean.requireForce defaults to true and neither -i, -n, nor -f given; refusing to clean", 128)
     kept = ignore.rules_of("", "\n".join(keep))
-    for p, x, _ in rows(c):
-        if x == "?" and not ignore.ignored(p, kept) and c.r.work is not None:
+    paths = [p for p, x, _ in rows(c) if x == "?"]
+    if "-x" in fl and c.r.work is not None:
+        idx = c.index()
+        paths += [p for p in c.r.scan()[0] if p not in idx and p not in paths]
+    for p in paths:
+        if not ignore.ignored(p, kept) and c.r.work is not None:
             (c.r.work / p).unlink(missing_ok=True)
     return 0

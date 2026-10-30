@@ -7,25 +7,25 @@ import tempfile
 import time
 import unittest
 from collections.abc import Callable
-from dataclasses import replace
 from pathlib import Path
 from typing import cast
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401
 
+from taskloop.adapters.git import RealGit
 from taskloop.adapters.spawner import RealSpawner
 from taskloop.app.prune import verb
 from taskloop.app.reconcile import apply, observe
 from taskloop.app.reconcile.sweep import sweep
-from taskloop.app.release.shell import Shell, of
+from taskloop.app.release.shell import of
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.config import LoopConfig
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.landed import Landed as LandedRec
 from taskloop.contracts.landed import LandedStore
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import BdError, BdFailure, Beads
+from taskloop.contracts.ports import BdError, BdFailure, Beads, Git
 
 DAY = 86400
 GIT_ENV = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@x", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@x"}
@@ -37,19 +37,29 @@ def git(cwd, *args):
     return r.stdout.strip()
 
 
-REAL = of(RealSpawner())
+GIT: Git = RealGit()
+SH = of(RealSpawner())
 
 
-def racing(verb: str, hook: Callable[[], None]) -> Shell:
-    """The real shell, except that just before the first git command with `verb` (the delete) `hook` runs: a commit lands in between."""
+def racing(verb: str, hook: Callable[[], None]) -> Git:
+    """The real git port, except that just before the first compare-and-delete (`verb`: delete_branch_at or delete_remote_at) `hook`
+    runs: a commit lands in between."""
     fired: list[int] = []
 
-    def run(cmd, cwd, check=True):
-        if verb in cmd and not fired:
+    def before(name: str) -> None:
+        if name == verb and not fired:
             fired.append(1)
             hook()
-        return REAL.run(cmd, cwd, check)
-    return replace(REAL, run=run)
+
+    class Racing(RealGit):
+        def delete_branch_at(self, d: str, branch: str, oid: str) -> None:
+            before("delete_branch_at")
+            super().delete_branch_at(d, branch, oid)
+
+        def delete_remote_at(self, d: str, remote: str, ref: str, oid: str) -> None:
+            before("delete_remote_at")
+            super().delete_remote_at(d, remote, ref, oid)
+    return Racing()
 
 
 class Store:
@@ -93,7 +103,7 @@ class Trees(unittest.TestCase):
         return d
 
     def prune(self, dry_run=False, now=None, repos=None, days=14):
-        return sweep(repos or [str(self.repo)], None, self.build, days, now or self.later, dry_run, REAL)
+        return sweep(repos or [str(self.repo)], None, self.build, days, now or self.later, dry_run, GIT)
 
     def test_a_merged_clean_tree_is_removed_with_plain_git_and_the_main_checkout_stays(self):
         d = self.tree("done")
@@ -165,7 +175,7 @@ class Trees(unittest.TestCase):
             self.commit(self.repo, "late.txt")
             keep.append(git(self.repo, "rev-parse", "HEAD"))
             git(self.repo, "checkout", "-q", "main")
-        removed, kept = sweep([str(self.repo)], None, self.build, 14, self.later, False, racing("update-ref", land_one_more))
+        removed, kept = sweep([str(self.repo)], None, self.build, 14, self.later, False, racing("delete_branch_at", land_one_more))
         self.assertEqual(removed, [])
         self.assertTrue(any("release/merged" in k for k in kept))
         self.assertEqual(git(self.repo, "rev-parse", "release/merged"), keep[0])
@@ -198,7 +208,7 @@ class Trees(unittest.TestCase):
         for _ in range(2):
             out.append([])
             verb.run(cfg, LoopConfig(build_dir=str(self.build)), [str(self.repo)], lambda r: cast(Beads, Store()), self.later, False,
-                     REAL, out[-1].append)
+                     SH, out[-1].append)
         self.assertFalse(d.exists())
         self.assertTrue(any(ln.startswith("prune: removed worktree") for ln in out[0]))
         self.assertFalse(any("removed worktree" in ln for ln in out[1]))
@@ -219,7 +229,7 @@ class Landed(unittest.TestCase):
         return type("S", (), {"find": lambda self, q: beads})()
 
     def prune(self, dry_run=False, **meta):
-        return sweep([str(self.repo)], lambda r: cast(Beads, self.store(**meta)), None, 14, 0, dry_run, REAL)
+        return sweep([str(self.repo)], lambda r: cast(Beads, self.store(**meta)), None, 14, 0, dry_run, GIT)
 
     def heads(self):
         return git(self.repo, "for-each-ref", "--format=%(refname:short)", "refs/heads/").split()
@@ -284,7 +294,7 @@ class Landed(unittest.TestCase):
             git(self.repo, "checkout", "-q", "task/a-1")
             self.commit(self.repo, "late.txt")
             git(self.repo, "checkout", "-q", "main")
-        sh = racing("update-ref", late)
+        sh = racing("delete_branch_at", late)
         removed, kept = sweep([str(self.repo)], lambda r: cast(Beads, self.store()), None, 14, 0, False, sh)
         self.assertEqual(removed, [])
         self.assertIn("task/a-1", self.heads())
@@ -301,7 +311,7 @@ class Landed(unittest.TestCase):
             git(other, "checkout", "-q", "task/a-1")
             self.commit(other, "late.txt")
             git(other, "push", "-q", "origin", "task/a-1")
-        sh = racing("push", late)
+        sh = racing("delete_remote_at", late)
         removed, kept = sweep([str(self.repo)], lambda r: cast(Beads, self.store()), None, 14, 0, False, sh)
         self.assertEqual([r for r in removed if r.startswith("remote")], [])
         self.assertIn("refs/heads/task/a-1", git(self.origin, "for-each-ref", "--format=%(refname)"))
@@ -313,7 +323,7 @@ class Landed(unittest.TestCase):
         self.assertNotIn("--force", src)
 
     def test_bd_not_answering_keeps_every_branch(self):
-        removed, kept = sweep([str(self.repo)], lambda r: cast(Beads, Store(fail=True)), None, 14, 0, False, REAL)
+        removed, kept = sweep([str(self.repo)], lambda r: cast(Beads, Store(fail=True)), None, 14, 0, False, GIT)
         self.assertEqual(removed, [])
         self.assertIn("bd did not answer", kept[0])
 
@@ -321,11 +331,11 @@ class Landed(unittest.TestCase):
         cfg = ConfigDir(self.root / "cfg")
         self.land_commit("a-1")  # titled (a-1) but a revert-like title is not what counts
         git(self.repo, "commit", "-q", "--amend", "-m", 'Revert "work (a-1)"')
-        self.assertFalse(observe.landed(self.repo, BeadId("a-1"), REAL, cfg))  # no record, a revert subject: not landed
+        self.assertFalse(observe.landed(self.repo, BeadId("a-1"), GIT, cfg))  # no record, a revert subject: not landed
         LandedStore(cfg).put(LandedRec(bead=BeadId("a-1"), sha=git(self.repo, "rev-parse", "HEAD"), base="origin/main", t=1.0))
-        self.assertTrue(observe.landed(self.repo, BeadId("a-1"), REAL, cfg))  # the record's sha is on HEAD
+        self.assertTrue(observe.landed(self.repo, BeadId("a-1"), GIT, cfg))  # the record's sha is on HEAD
         LandedStore(cfg).put(LandedRec(bead=BeadId("a-1"), sha=git(self.repo, "rev-parse", "task/a-3"), base="origin/main", t=1.0))
-        self.assertFalse(observe.landed(self.repo, BeadId("a-1"), REAL, cfg))  # a sha that never reached HEAD
+        self.assertFalse(observe.landed(self.repo, BeadId("a-1"), GIT, cfg))  # a sha that never reached HEAD
 
 
 if __name__ == "__main__":

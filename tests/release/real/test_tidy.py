@@ -9,10 +9,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 
-from taskloop.adapters.spawner import RealSpawner
-from taskloop.app.release import shell, tidy
+from taskloop.adapters.git import RealGit
+from taskloop.app.release import tidy
 
-SH = shell.of(RealSpawner())
+GIT = RealGit()
 
 ENV = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@x", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@x"}
 
@@ -34,19 +34,19 @@ class DropBranch(unittest.TestCase):
         git(self.repo, "branch", "feat")
 
     def test_the_branch_goes_at_the_checked_tip(self):
-        tip = tidy.tip_of(self.repo, "feat", SH)
-        self.assertEqual(tidy.drop_branch(self.repo, "feat", tip, SH), [])
-        self.assertEqual(tidy.tip_of(self.repo, "feat", SH), "")
+        tip = tidy.tip_of(GIT, str(self.repo), "feat")
+        self.assertEqual(tidy.drop_branch(GIT, str(self.repo), "feat", tip), [])
+        self.assertEqual(tidy.tip_of(GIT, str(self.repo), "feat"), "")
 
     def test_a_commit_added_after_the_check_keeps_the_branch(self):
-        tip = tidy.tip_of(self.repo, "feat", SH)  # checked here (the suite runs next)
+        tip = tidy.tip_of(GIT, str(self.repo), "feat")  # checked here (the suite runs next)
         git(self.repo, "checkout", "-q", "feat")
         git(self.repo, "commit", "-q", "--allow-empty", "-m", "added during the suite")
         git(self.repo, "checkout", "-q", "main")
-        kept = tidy.drop_branch(self.repo, "feat", tip, SH)
+        kept = tidy.drop_branch(GIT, str(self.repo), "feat", tip)
         self.assertEqual(len(kept), 1)
         self.assertIn("branch feat kept", kept[0])
-        self.assertNotEqual(tidy.tip_of(self.repo, "feat", SH), tip)
+        self.assertNotEqual(tidy.tip_of(GIT, str(self.repo), "feat"), tip)
 
 
 if __name__ == "__main__":

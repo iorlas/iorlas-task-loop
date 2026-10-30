@@ -53,6 +53,15 @@ def remote_of(c: Ctx, name: str) -> Repo:
 
 def cmd_fetch(c: Ctx) -> int:
     _, rest = flags(c.args)
+    if len(rest) > 1:  # fetch <path> <ref>: the ref's commit lands in FETCH_HEAD
+        src = locate(rest[0], {})
+        if src is None:
+            raise Fail(f"fatal: '{rest[0]}' does not appear to be a git repository", 128)
+        sha = src.resolve(rest[1])
+        if sha is None:
+            raise Fail(f"fatal: couldn't find remote ref {rest[1]}", 128)
+        c.r.set_ref("FETCH_HEAD", sha)
+        return 0
     remote = remote_of(c, rest[0] if rest else "origin")
     for name, sha in remote.heads().items():
         c.r.set_ref("refs/remotes/origin/" + name, sha)
@@ -60,8 +69,11 @@ def cmd_fetch(c: Ctx) -> int:
 
 
 def cmd_pull(c: Ctx) -> int:
-    _, rest = flags(c.args)
+    fl, rest = flags(c.args)
     cmd_fetch(Ctx(c.repo, rest[:1], c.env, c.cwd))
+    if "--rebase" in fl:
+        from .rebase import start  # noqa: PLC0415  (rebase imports write, which imports refs, which imports this module)
+        return start(c, f"{rest[0]}/{rest[1]}")
     r = c.r
     theirs, mine = r.ref(f"refs/remotes/origin/{rest[1]}"), r.head_sha()
     if theirs is None or mine == theirs or (mine and is_ancestor(theirs, mine)):
@@ -78,9 +90,17 @@ def cmd_push(c: Ctx) -> int:
     fl, rest = flags(c.args)
     remote = remote_of(c, rest[0])
     for spec in rest[1:] or [c.r.head_ref()]:
-        forced = spec.startswith("+") or any(f.startswith("--force") for f in fl)
+        forced = spec.startswith("+") or any(f.startswith("--force") for f in fl if not f.startswith("--force-with-lease="))
         src, _, dst = spec.lstrip("+").partition(":")
         dst = (dst or src).removeprefix("refs/heads/")
+        for lease in (f for f in fl if f.startswith("--force-with-lease=")):
+            ref, _, want = lease[len("--force-with-lease="):].partition(":")
+            if ref.removeprefix("refs/heads/") == dst and remote.ref("refs/heads/" + dst) != want:
+                raise Fail(f" ! [rejected]        {dst} (stale info)\nerror: failed to push some refs to '{remote.git}'", 1)
+        if not src:  # ":ref" deletes the remote's ref
+            (remote.common / "refs" / "heads" / dst).unlink(missing_ok=True)
+            c.r.base("refs/remotes/origin/" + dst).unlink(missing_ok=True)
+            continue
         sha = c.r.resolve(src)
         if sha is None:
             raise Fail(f"error: src refspec {src} does not match any", 1)

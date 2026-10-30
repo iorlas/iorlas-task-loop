@@ -821,6 +821,34 @@
   "why": "screenshots",
   "until": 1793050200.5
  },
+ "Ref": {
+  "name": "refs/heads/task/x-1",
+  "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+ },
+ "Pick": {
+  "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "upstream": true
+ },
+ "LogRow": {
+  "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "time": 5,
+  "subject": "s"
+ },
+ "TreeEntry": {
+  "mode": "100644",
+  "kind": "blob",
+  "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "path": "a.txt"
+ },
+ "StatusRow": {
+  "path": "a.txt",
+  "index": " ",
+  "work": "M"
+ },
+ "RebaseOutcome": {
+  "ok": false,
+  "output": "conflict"
+ },
  "Checkout": {
   "path": "/r/.slots/s1",
   "branch": "task/x-1",

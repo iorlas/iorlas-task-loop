@@ -29,7 +29,7 @@ import threading
 import types
 import unittest
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from unittest import mock
 
 import support.paths  # noqa: F401
@@ -70,7 +70,10 @@ from taskloop.app.track import (
     verbs,
 )
 from taskloop.app.wire import slots as wslots
+from taskloop.contracts.gitfacts import LogRow, RebaseOutcome
 from taskloop.contracts.ids import BeadId
+from taskloop.contracts.ports import Git
+from taskloop.contracts.slots import SlotGitError
 
 try:
     import fcntl
@@ -410,25 +413,62 @@ class Invariants(test_loop.Base):
             self.inside = self.most = 0
             self.got: dict[str, Any] = {}
 
-        def git(self, repo, *a, check=True):
-            repo = str(repo)
-            if a[:2] == ("remote", "get-url"):
-                return "file:///origin.git"
-            with self.mu:
-                if a == ("rev-parse", "origin/main"):
-                    return f"h{int(self.head)}"
-                if a[:1] == ("reset",):
-                    self.log.append((repo, "reset"))
-                    return ""
-                if a == ("log", "-1", "--format=%s", "HEAD"):  # the release commit's subject: "<version>: <message>"
-                    return f"{self.local[repo]['version']}: race release"
-            raise AssertionError(f"git {a}")
-
         def bump(self, repo):  # flow.next_version reads origin/main's version
             with self.mu:
                 self.local[repo]["version"] = f"0.1.{int(self.patch + 1)}"
                 self.log.append((repo, "bump"))
                 return self.local[repo]["version"]
+
+    class OriginGit:
+        """The Git port as push_main uses it: origin/main is `self.o.head`, a push from a base that is not the head is refused."""
+
+        def __init__(self, o, arrived):
+            self.o, self.arrived = o, arrived
+
+        def remote_url(self, d, remote):
+            return "file:///origin.git"
+
+        def fetch(self, d):
+            pass
+
+        def rev_parse(self, d, rev):
+            assert rev == "origin/main", rev
+            with self.o.mu:
+                return f"h{int(self.o.head)}"
+
+        def reset(self, d, rev, mode="mixed"):
+            with self.o.mu:
+                self.o.log.append((d, "reset"))
+
+        def log(self, d, include, exclude=None, limit=0, grep=""):  # the release commit's subject: "<version>: <message>"
+            with self.o.mu:
+                return [LogRow(oid="x", time=0, subject=f"{self.o.local[d]['version']}: race release")]
+
+        def rebase(self, d, onto, update_refs=True):
+            with self.o.mu:
+                self.o.local[d]["base"] = self.o.head
+                self.o.log.append((d, "rebase"))
+            return RebaseOutcome(ok=True)
+
+        def rebase_abort(self, d):
+            raise AssertionError("no rebase fails here")
+
+        def push(self, d, remote, refspec):
+            with self.o.mu:
+                loc = self.o.local[d]
+                self.o.inside += 1
+                self.o.most = max(self.o.most, self.o.inside)
+            if not self.o.versions and not self.arrived.wait(GUARD):  # the first push is held until the other release is at the lock
+                raise AssertionError("the other release never reached the lock")
+            with self.o.mu:
+                self.o.inside -= 1
+                self.o.log.append((d, "push"))
+                if loc["base"] != self.o.head:  # a push from a base that is not origin's head is refused
+                    raise SlotGitError("! [rejected] non-fast-forward")
+                self.o.head += 1
+                self.o.patch = int(loc["version"].split(".")[2])
+                self.o.versions.append((d, loc["version"]))
+                self.o.log.append((d, "accepted"))
 
     def releases(self):
         """Two releases bumped on h0 (both 0.1.1) race through release.push_main; whichever pushes first is held in its push until the
@@ -440,34 +480,6 @@ class Invariants(test_loop.Base):
         def me():
             return threading.current_thread().name
 
-        def fetch(repo):
-            pass
-
-        def run(cmd, repo, check=True):
-            repo = str(repo)
-            with o.mu:
-                loc = o.local[repo]
-                if "rebase" in cmd:
-                    loc["base"] = o.head
-                    o.log.append((repo, "rebase"))
-                    return subprocess.CompletedProcess(cmd, 0, "", "")
-            assert "push" in cmd, cmd
-            with o.mu:
-                o.inside += 1
-                o.most = max(o.most, o.inside)
-            if not o.versions and not arrived.wait(GUARD):  # the first push is held until the other release is at the lock
-                raise AssertionError("the other release never reached the lock")
-            with o.mu:
-                o.inside -= 1
-                o.log.append((repo, "push"))
-                if loc["base"] != o.head:  # a push from a base that is not origin's head is refused
-                    return subprocess.CompletedProcess(cmd, 1, "", "! [rejected] non-fast-forward")
-                o.head += 1
-                o.patch = int(loc["version"].split(".")[2])
-                o.versions.append((repo, loc["version"]))
-                o.log.append((repo, "accepted"))
-                return subprocess.CompletedProcess(cmd, 0, "", "")
-
         calls = []
 
         def watch(*a, **kw):
@@ -475,10 +487,11 @@ class Invariants(test_loop.Base):
             if len(calls) == 2:
                 arrived.set()
             return self.real_os_lock(*a, **kw)
-        sh = Shell(git=o.git, fetch=fetch, run=run, say=lambda msg: None)
+        sh = Shell(say=lambda msg: None)
+        port = cast(Git, self.OriginGit(o, arrived))
         with self.watching(watch):
             got = self.together(
-                {n: (lambda n=n: release_push.push_main(Path(n), "race release", "0.1.1", "h0", lambda: o.bump(n), sh)) for n in "AB"}
+                {n: (lambda n=n: release_push.push_main(Path(n), "race release", "0.1.1", "h0", lambda: o.bump(n), sh, port)) for n in "AB"}
             )
         o.got = got
         return o

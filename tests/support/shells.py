@@ -1,6 +1,7 @@
 """A release `Shell` for tests that must not start a process: every command ends 0 with no output, git answers "", and the log is kept."""
 from pathlib import Path
 
+from taskloop.adapters.git import RealGit
 from taskloop.app.release.shell import Done, Shell
 
 
@@ -15,4 +16,4 @@ def quiet_shell(calls: list[list[str]] | None = None) -> Shell:
         log.append(["git", *a])
         return ""
 
-    return Shell(git=git, fetch=lambda cwd: None, run=run, say=lambda msg: None)
+    return Shell(git=git, fetch=lambda cwd: None, run=run, say=lambda msg: None, port=RealGit())

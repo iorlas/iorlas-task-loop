@@ -34,7 +34,7 @@ def run(cfg: ConfigDir, loop: LoopConfig, repos: list[str], store_of: Callable[[
         held = sum(1 for d in folders if d.name.rsplit("-", 2)[0] in exempt)
         say(f"prune: run data: {would}{len(gone)} item(s), {mb(sum(g.bytes for g in gone))}; kept every run folder newer than "
             f"{loop.keep_days:g} days and {held} of beads still open or parked")
-    gone, stays = sweep(repos, store_of, Path(loop.build_dir).expanduser(), loop.keep_days, now, dry_run, sh)
+    gone, stays = sweep(repos, store_of, Path(loop.build_dir).expanduser(), loop.keep_days, now, dry_run, sh.port)
     for line in gone:
         say(f"prune: {line if dry_run else 'removed ' + line}")
     for line in stays:

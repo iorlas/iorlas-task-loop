@@ -38,6 +38,7 @@ def cmd_symbolic_ref(c: Ctx) -> int:
 
 
 def cmd_log(c: Ctx) -> int:
+    """log [-n N|-N] [--oneline|--format=...] [--grep=X] [revs] [--not revs]: %H, %ct (the commit's sequence number) and %s only."""
     fl, rest = flags(c.args)
     limit = None
     args = list(c.args)
@@ -47,9 +48,22 @@ def cmd_log(c: Ctx) -> int:
             rest = [x for x in rest if x != args[i + 1]]
         elif re.fullmatch(r"-\d+", a):
             limit = int(a[1:])
-    inc, exc = c.revs(rest or ["HEAD"]) if c.r.head_sha() or rest else ([], [])
-    for cm in walk(inc, exc)[:limit]:
-        c.say(f"{cm.sha[:7]} {cm.msg}" if "--oneline" in fl else cm.msg.splitlines()[0] if cm.msg else "")
+    fmt = next((f[len("--format="):] for f in fl if f.startswith("--format=")), None)
+    grep = next((f[len("--grep="):] for f in fl if f.startswith("--grep=")), "")
+    words = [x for i, x in enumerate(c.args) if (x == "--not" or not x.startswith("-")) and not (i and c.args[i - 1] == "-n")]
+    cut = words.index("--not") if "--not" in words else len(words)
+    names = words[:cut]
+    inc, exc = (c.revs(names or ["HEAD"]) if c.r.head_sha() or names else ([], []))
+    if cut < len(words):
+        more, nots = c.revs(words[cut + 1:])
+        exc = exc + more + nots
+    found = [cm for cm in walk(inc, exc) if grep in cm.msg]
+    for cm in found[:limit]:
+        subject = cm.msg.splitlines()[0] if cm.msg else ""
+        if fmt is not None:
+            c.say(fmt.replace("%x00", "\0").replace("%H", cm.sha).replace("%ct", str(cm.seq)).replace("%s", subject))
+        else:
+            c.say(f"{cm.sha[:7]} {cm.msg}" if "--oneline" in fl else subject)
     return 0
 
 

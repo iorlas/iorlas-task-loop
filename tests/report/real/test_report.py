@@ -34,7 +34,9 @@ from taskloop.adapters import (  # noqa: E402
     ident,
 )
 from taskloop.app.launch import repos  # noqa: E402
-from taskloop.app.report import card, inputs, lost  # noqa: E402
+from taskloop.adapters.git import RealGit  # noqa: E402
+from taskloop.app.reconcile import lost  # noqa: E402
+from taskloop.app.report import card, inputs  # noqa: E402
 from taskloop.contracts import wire  # noqa: E402
 from taskloop.contracts.ids import BeadId  # noqa: E402
 from taskloop.contracts.landed import Landed, LandedStore  # noqa: E402
@@ -95,8 +97,7 @@ class LostWork(Base):
         return shas
 
     def lost(self, status, traces=(), since=None):
-        return lost.lost_work(str(self.repo), since=since, base="main", status_of=status.get,
-                                traces=list(traces))
+        return lost.lost_work(str(self.repo), "main", status.get, list(traces), RealGit(), since=since)
 
     def by_class(self, rows):
         out = {}
@@ -294,7 +295,7 @@ class Scorecard(Base):
     def card(self, until=None):
         return card.scorecard(str(self.repo), T0, until or T0 + 200 * MIN, base="main",
                                 comments_of=lambda b: [as_comment(c) for c in self.comments.get(b, [])], status_of=self.status.get,
-                                now=T0 + 200 * MIN)
+                                now=T0 + 200 * MIN, git=RealGit())
 
     def test_a_trace_line_of_another_version_is_skipped_and_counted(self):
         before = self.card()["skipped_traces"]

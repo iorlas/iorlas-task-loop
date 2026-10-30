@@ -5,13 +5,13 @@ from dataclasses import replace
 from pathlib import Path
 
 from taskloop.app.release import tidy
-from taskloop.app.release.shell import Shell
 from taskloop.contracts import fence
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.ids import BeadId, is_bead_id
 from taskloop.contracts.landed import LandedStore
 from taskloop.contracts.paths import ConfigDir, RepoDirs
-from taskloop.contracts.ports import BdFailure, BeadQuery, Beads
+from taskloop.contracts.ports import BdFailure, BeadQuery, Beads, Git
+from taskloop.contracts.slots import SlotGitError
 from taskloop.domain.reconcile.facts import (
     BeadFact,
     Checkout,
@@ -55,54 +55,70 @@ def lease_of(b: Bead) -> Lease | None:
     return Lease(b.id, b.assignee, fence.gen_of(b), b.lease_expires_at)
 
 
-def landed(repo: Path, bead: BeadId, sh: Shell, cfg: ConfigDir | None = None) -> bool:
+def landed(repo: Path, bead: BeadId, git: Git, cfg: ConfigDir | None = None) -> bool:
     """The bead's landed record names a sha that is on the checkout's HEAD. LEGACY, only for a bead with no record (landed before
     0.23.179): its land commit (subject ends `(<bead>)`, not a revert) is on HEAD; this can go when no such bead is left."""
     rec = LandedStore(cfg or ConfigDir()).get(bead)
     if rec is not None:
-        return sh.run(["git", "merge-base", "--is-ancestor", rec.sha, "HEAD"], repo, check=False).returncode == 0
-    subject = sh.run(["git", "log", "-1", "--format=%s", "--fixed-strings", f"--grep=({bead})", "HEAD"], repo, check=False).stdout.strip()
-    return land_bead(subject) == bead
+        return git.is_ancestor(str(repo), rec.sha, "HEAD")
+    try:
+        rows = git.log(str(repo), ["HEAD"], limit=1, grep=f"({bead})")
+    except SlotGitError:
+        return False
+    return bool(rows) and land_bead(rows[0].subject) == bead
 
 
-def refs_of(repo: Path, prefix: str, sh: Shell) -> list[tuple[str, str]]:
-    out = sh.run(["git", "for-each-ref", "--format=%(refname:short) %(objectname)", "refs/heads/" + prefix], repo, check=False).stdout
-    return [(b, oid) for b, _, oid in (row.partition(" ") for row in out.splitlines())]
+def refs_of(repo: Path, prefix: str, git: Git) -> list[tuple[str, str]]:
+    """(branch, oid) of the local branches under a prefix; git failing shows none."""
+    try:
+        rows = git.for_each_ref(str(repo), "refs/heads/" + prefix)
+    except SlotGitError:
+        return []
+    return [(r.name.removeprefix("refs/heads/"), r.oid) for r in rows]
 
 
-def task_branches(repo: Path, sh: Shell) -> tuple[LocalBranch, ...]:
-    merged = set(sh.run(["git", "branch", "--merged", "HEAD", "--format=%(refname:short) %(objectname)"], repo, check=False)
-                 .stdout.splitlines())
-    return tuple(LocalBranch(b, oid, on_head=f"{b} {oid}" in merged) for b, oid in refs_of(repo, TASK, sh))
+def task_branches(repo: Path, git: Git) -> tuple[LocalBranch, ...]:
+    try:
+        merged = {(r.name, r.oid) for r in git.merged(str(repo), "HEAD")}
+    except SlotGitError:
+        merged = set()
+    return tuple(LocalBranch(b, oid, on_head=(b, oid) in merged) for b, oid in refs_of(repo, TASK, git))
 
 
-def release_branches(repo: Path, sh: Shell) -> tuple[LocalBranch, ...]:
-    found = []
-    for b, oid in refs_of(repo, RELEASE, sh):
-        ts = sh.run(["git", "log", "-1", "--format=%ct", oid], repo, check=False).stdout.strip()
-        found.append(LocalBranch(b, oid, on_base=tidy.on_base(repo, oid, sh), last_commit=int(ts) if ts.isdigit() else 0))
-    return tuple(found)
+def commit_time(repo: Path, oid: str, git: Git) -> int:
+    try:
+        rows = git.log(str(repo), [oid], limit=1)
+    except SlotGitError:
+        return 0
+    return rows[0].time if rows else 0
 
 
-def remote_branches(repo: Path, closed: list[str], sh: Shell, cfg: ConfigDir | None) -> tuple[RemoteBranch, ...]:
+def release_branches(repo: Path, git: Git) -> tuple[LocalBranch, ...]:
+    return tuple(LocalBranch(b, oid, on_base=tidy.on_base(git, str(repo), oid), last_commit=commit_time(repo, oid, git))
+                 for b, oid in refs_of(repo, RELEASE, git))
+
+
+def remote_branches(repo: Path, closed: list[str], git: Git, cfg: ConfigDir | None) -> tuple[RemoteBranch, ...]:
     """origin's task/<bead> of each closed, landed bead, at the oid ls-remote showed (one ls-remote for the lot; an origin that does
     not answer shows nothing)."""
-    ls = sh.run(["git", "ls-remote", "--heads", "origin", f"refs/heads/{TASK}*"], repo, check=False)
-    there = {ref: oid for oid, _, ref in (ln.partition("\t") for ln in ls.stdout.splitlines())} if ls.returncode == 0 else {}
+    try:
+        there = {r.name: r.oid for r in git.ls_remote(str(repo), "origin", f"refs/heads/{TASK}*")}
+    except SlotGitError:
+        there: dict[str, str] = {}
     found: list[RemoteBranch] = []
     for bead in closed:
         ref = f"refs/heads/{TASK}{bead}"
-        if ref not in there or not is_bead_id(bead) or not landed(repo, bead, sh, cfg):
+        if ref not in there or not is_bead_id(bead) or not landed(repo, bead, git, cfg):
             continue
         oid = there[ref]
-        known = sh.run(["git", "cat-file", "-e", oid + "^{commit}"], repo, check=False).returncode == 0
-        found.append(RemoteBranch(ref, oid, known, known and tidy.on_base(repo, oid, sh, "HEAD")))
+        known = git.has_commit(str(repo), oid)
+        found.append(RemoteBranch(ref, oid, known, known and tidy.on_base(git, str(repo), oid, "HEAD")))
     return tuple(found)
 
 
-def last_used(d: Path, sh: Shell) -> float:
+def last_used(d: Path, git: Git) -> float:
     """When git last moved HEAD or the index of this worktree (its own admin folder), 0 when unknown."""
-    admin = Path(sh.run(["git", "rev-parse", "--absolute-git-dir"], d, check=False).stdout.strip())
+    admin = Path(git.git_dir(str(d)))
     stamps = []
     for name in ("HEAD", "index", "logs/HEAD"):
         with contextlib.suppress(OSError):
@@ -110,19 +126,20 @@ def last_used(d: Path, sh: Shell) -> float:
     return max(stamps, default=0.0)
 
 
-def worktree(d: Path, repo: Path, sh: Shell) -> Worktree:
-    status = sh.run(["git", "status", "--porcelain"], d, check=False)
-    dirty = "" if status.returncode == 0 and not status.stdout.strip() else (
-        "uncommitted or untracked files" if status.returncode == 0 else "git status failed")
+def worktree(d: Path, repo: Path, git: Git) -> Worktree:
+    try:
+        dirty = "uncommitted or untracked files" if git.status(str(d)) else ""
+    except SlotGitError:
+        dirty = "git status failed"
     here = d.resolve()
     return Worktree(str(d), str(here), str(repo), RepoDirs(d).engine_lock().exists(), Path.cwd().resolve().is_relative_to(here),
-                    dirty, tidy.on_base(d, "HEAD", sh), last_used(d, sh))
+                    dirty, tidy.on_base(git, str(d), "HEAD"), last_used(d, git))
 
 
-def repo_view(repo: Path, store_of: Callable[[str], Beads] | None, release: bool, sh: Shell,
+def repo_view(repo: Path, store_of: Callable[[str], Beads] | None, release: bool, git: Git,
               cfg: ConfigDir | None) -> tuple[RepoView, list[Lease]]:
-    checkouts = tuple(Checkout(str(t.path.resolve()), t.branch) for t in tidy.trees(repo, sh))
-    view = RepoView(str(repo), repo.name, checkouts, release_branches=release_branches(repo, sh) if release else ())
+    checkouts = tuple(Checkout(str(Path(t.path).resolve()), t.branch) for t in git.checkouts(str(repo)))
+    view = RepoView(str(repo), repo.name, checkouts, release_branches=release_branches(repo, git) if release else ())
     if store_of is None:
         return view, []
     try:
@@ -132,23 +149,23 @@ def repo_view(repo: Path, store_of: Callable[[str], Beads] | None, release: bool
     facts = tuple(bead_fact(b) for b in beads)
     closed = sorted({f.id for f in facts if f.status == "closed"})
     leases = [ls for b in beads if (ls := lease_of(b))]
-    return replace(view, beads=facts, task_branches=task_branches(repo, sh), remotes=remote_branches(repo, closed, sh, cfg)), leases
+    return replace(view, beads=facts, task_branches=task_branches(repo, git), remotes=remote_branches(repo, closed, git, cfg)), leases
 
 
 def observe(repos: list[str], store_of: Callable[[str], Beads] | None, build: Path | None, keep_days: float, now: float,
-            sh: Shell, cfg: ConfigDir | None = None) -> Observed:
+            git: Git, cfg: ConfigDir | None = None) -> Observed:
     """The world once. `store_of` None: bd and the task branches are not looked at; `build` None: no build trees and no release/*
     branches."""
     known = sorted({r for p in repos if (r := main_repo(Path(p)))})
     views: list[RepoView] = []
     leases: list[Lease] = []
     for repo in known:
-        v, ls = repo_view(repo, store_of, build is not None, sh, cfg)
+        v, ls = repo_view(repo, store_of, build is not None, git, cfg)
         views.append(v)
         leases += ls
     trees: list[Worktree] = []
     for d in sorted(build.iterdir()) if build is not None and build.is_dir() else []:
         # a main checkout (a .git folder) or a worktree of a repo we never ran in is not ours to tidy
         if (d / ".git").is_file() and (repo := main_repo(d)) in known:
-            trees.append(worktree(d, repo, sh))
+            trees.append(worktree(d, repo, git))
     return Observed(now, keep_days, tuple(views), tuple(trees), tuple(leases))

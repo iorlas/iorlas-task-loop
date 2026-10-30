@@ -358,7 +358,7 @@ forbidden_modules =
 allow_indirect_imports = True
 
 [importlinter:contract:app-report]
-name = app slice report imports only asks
+name = app slice report imports only asks, reconcile
 type = forbidden
 source_modules = taskloop.app.report
 forbidden_modules =
@@ -370,7 +370,6 @@ forbidden_modules =
     taskloop.app.loop
     taskloop.app.plan
     taskloop.app.prune
-    taskloop.app.reconcile
     taskloop.app.release
     taskloop.app.review
     taskloop.app.run

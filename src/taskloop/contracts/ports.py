@@ -12,6 +12,7 @@ from taskloop.contracts.argv import text_of
 from taskloop.contracts.ask import Ask, AskAction
 from taskloop.contracts.bead import BdError, Bead, Comment
 from taskloop.contracts.delegate import DelegateResult, LiveEvent, RunRequest
+from taskloop.contracts.gitfacts import LogRow, Pick, RebaseOutcome, Ref, StatusRow, TreeEntry
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.slots import Checkout
 from taskloop.contracts.wire import Rec
@@ -137,9 +138,9 @@ class Beads(Protocol):
         ...
 
 
-class Git(Protocol):
-    """git, the one port every git call goes through (RealGit on the binary; logic tests run the same
-    adapter over tests/support/gitsim). Every method takes the worktree it acts in and raises a SlotGitError subclass."""
+class SlotGit(Protocol):
+    """What a slot's life asks of git (reset, checkout, commit, worktrees). Every method takes the worktree it acts in and raises a
+    SlotGitError subclass."""
 
     def fetch(self, d: str) -> None: ...
     def rebasing(self, d: str) -> bool: ...
@@ -158,6 +159,7 @@ class Git(Protocol):
     def checkout_new(self, d: str, branch: str, start: str) -> None: ...
     def checkout_detached(self, d: str, ref: str) -> None: ...
     def clean(self, d: str, keep: list[str]) -> None: ...
+
     def checkouts(self, d: str) -> list[Checkout]: ...
     def remove_worktree(self, repo: str, path: str) -> bool: ...
     def add_worktree(self, repo: str, path: str, ref: str) -> None: ...
@@ -167,6 +169,94 @@ class Git(Protocol):
 
     def clone(self, src: str, dst: str) -> None: ...
     def push(self, d: str, remote: str, refspec: str) -> None: ...
+
+
+class Git(SlotGit, Protocol):
+    """git, the one port every git call goes through (RealGit on the binary; a logic test runs it over tests/support/gitsim,
+    and one contract suite, tests/ports/git_contract.py, holds both to the same answers). Reads return typed rows, not text to re-parse."""
+
+    def clean(self, d: str, keep: list[str], ignored: bool = False) -> None:
+        """Delete the untracked files (and the ignored ones with `ignored`) except those matching a `keep` pattern."""
+        ...
+
+    def remove_worktree_why(self, repo: str, path: str) -> str:
+        """Remove one worktree without force; empty when it is gone, else the line of git's words that says why it stayed."""
+        ...
+
+    # -- reads that return rows (each raises a SlotGitError when git cannot answer) ------------------------------------------------
+    def for_each_ref(self, d: str, *prefixes: str) -> list[Ref]:
+        """Every ref under the prefixes (refs/heads/task/ ...), by full refname, with its oid."""
+        ...
+
+    def ls_remote(self, d: str, remote: str, *patterns: str) -> list[Ref]:
+        """The refs `remote` shows for the patterns (refs/heads/task/*); raises when the remote does not answer."""
+        ...
+
+    def cherry(self, d: str, upstream: str, head: str) -> list[Pick]:
+        """The commits of `head` not on `upstream`, each marked when its patch is already there."""
+        ...
+
+    def merged(self, d: str, into: str) -> list[Ref]:
+        """The local branches (short names) whose tip is an ancestor of `into`."""
+        ...
+
+    def merge_base(self, d: str, a: str, b: str) -> str:
+        """The best common ancestor of a and b, empty when they share none."""
+        ...
+
+    def is_ancestor(self, d: str, a: str, b: str) -> bool: ...
+    def rev_parse(self, d: str, rev: str) -> str:
+        """The oid `rev` names, empty when it names nothing."""
+        ...
+
+    def log(self, d: str, include: list[str], exclude: list[str] | None = None, limit: int = 0, grep: str = "") -> list[LogRow]:
+        """The commits reachable from `include` and not from `exclude`, newest first; `grep`: only subjects that contain it."""
+        ...
+
+    def ls_tree(self, d: str, rev: str, *paths: str, recursive: bool = False) -> list[TreeEntry]: ...
+    def status(self, d: str) -> list[StatusRow]: ...
+    def check_ignore(self, d: str, paths: list[str], excludes: str = "") -> list[str]:
+        """Those of `paths` the ignore rules (and the excludes file, when given) cover, without asking the index."""
+        ...
+
+    def git_dir(self, d: str) -> str:
+        """The absolute git dir of the worktree `d` (its own admin folder), empty when `d` is no checkout."""
+        ...
+
+    def has_commit(self, d: str, oid: str) -> bool: ...
+
+    # -- writes ----------------------------------------------------------------------------------------------------------------
+    def rebase(self, d: str, onto: str, update_refs: bool = True) -> RebaseOutcome: ...
+    def reset(self, d: str, rev: str, mode: Literal["soft", "mixed", "hard"] = "mixed") -> None: ...
+    def tag(self, d: str, name: str, rev: str = "HEAD") -> None: ...
+    def checkout_force(self, d: str, branch: str, start: str) -> None:
+        """Point `branch` at `start` and check it out, throwing away local changes (checkout -f -B)."""
+        ...
+
+    def fetch_ref(self, d: str, source: str, ref: str) -> None:
+        """Fetch one `ref` of another repository (a path or url) into FETCH_HEAD; raises when it has no such ref."""
+        ...
+
+    def remote_url(self, d: str, remote: str) -> str:
+        """The url of the remote, empty when there is none."""
+        ...
+
+    def merge_ff(self, d: str, rev: str) -> None:
+        """Fast-forward the checked-out branch to `rev`; raises when it would need a merge."""
+        ...
+
+    def commit_tracked(self, d: str, message: str) -> None:
+        """Commit the changes of the tracked files (commit -a); untracked files stay out."""
+        ...
+
+    def pull_rebase(self, d: str, remote: str, branch: str) -> None: ...
+    def delete_branch_at(self, d: str, branch: str, oid: str) -> None:
+        """Delete a local branch only while it is at `oid`; raises RefRace-or-other SlotGitError when it moved."""
+        ...
+
+    def delete_remote_at(self, d: str, remote: str, ref: str, oid: str) -> None:
+        """Delete the remote's `ref` only while it is at `oid` (force-with-lease)."""
+        ...
 
 
 @final

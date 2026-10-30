@@ -11,7 +11,7 @@ from taskloop.contracts import paths
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.config import SlotsConfig
 from taskloop.contracts.ids import BeadId
-from taskloop.contracts.ports import BdFailure, Beads, Git
+from taskloop.contracts.ports import BdFailure, Beads, SlotGit
 from taskloop.stores.api import Tickets
 
 DEFAULT_PRIO = 2
@@ -24,7 +24,7 @@ class SlotEnv:
     repo_key: str
     cfg: SlotsConfig
     store: Beads
-    git: Git
+    git: SlotGit
     tickets: Tickets
     cfgdir: paths.ConfigDir
     actor: str

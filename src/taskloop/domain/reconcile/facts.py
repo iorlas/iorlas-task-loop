@@ -1,6 +1,8 @@
 """What `observe` sees, as plain facts (no IO, no git, no bd), and what `diff` answers with: the actions."""
 from dataclasses import dataclass
 
+from taskloop.domain.reconcile.lost import BranchCommit
+
 
 @dataclass(frozen=True)
 class BeadFact:
@@ -83,6 +85,7 @@ class Observed:
     repos: tuple[RepoView, ...] = ()
     trees: tuple[Worktree, ...] = ()
     leases: tuple[Lease, ...] = ()
+    commits: tuple[BranchCommit, ...] = ()  # the bead-branch commits off the base (observe_commits), classed by diff.findings
 
 
 @dataclass(frozen=True)

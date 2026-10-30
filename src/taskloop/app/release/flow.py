@@ -113,9 +113,9 @@ def release(req: Request, repo: Path, market: Path, tool_root: Path, sh: Shell, 
 def drop_landed_branch(req: Request, repo: Path, where: Path, tip: str, sh: Shell) -> None:
     """--from-branch, after the push and the install: B's worktrees and B go, only when B's tip (as the replay took it) is on origin/main
     patch for patch. Whatever git keeps (changes, a lock) stays and is said; this never fails a release."""
-    if not (req.from_branch and tip and tidy.on_base(where, tip, sh)):
+    if not (req.from_branch and tip and tidy.on_base(sh.port, str(where), tip)):
         return
-    kept = tidy.drop_branch(repo, req.from_branch, tip, sh)
+    kept = tidy.drop_branch(sh.port, str(repo), req.from_branch, tip)
     for line in kept:
         say(line)
     if not kept:
