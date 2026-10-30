@@ -8,7 +8,5 @@
   "src/taskloop/app/run/entry.py": 2,
   "src/taskloop/app/run/run_once.py": 1,
   "src/taskloop/app/slots/engine_lock.py": 3,
-  "src/taskloop/app/wire/real.py": 1,
-  "src/taskloop/app/wire/slots.py": 1,
   "src/taskloop/contracts/paths.py": 1
 }

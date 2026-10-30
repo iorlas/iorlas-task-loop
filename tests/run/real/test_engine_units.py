@@ -27,6 +27,7 @@ from support.engine_case import (  # noqa: E402
     real_git,
     stop,
 )
+from support.spawn import real_spawner  # noqa: E402
 
 from taskloop.adapters import delegate as lroute  # noqa: E402
 from taskloop.app.run import (  # noqa: E402
@@ -48,7 +49,7 @@ class Outcome(T.EngineTest):
         Path(a.worktree).mkdir(exist_ok=True)
         out = io.StringIO()
         with contextlib.chdir(self.wt), redirect_stdout(out), mock.patch.object(signal, "signal"):  # pyrefly: ignore[missing-attribute]
-            rc = entry.main(a, self.store, env=snapshot())  # pyrefly: ignore[missing-attribute]
+            rc = entry.main(a, self.store, env=snapshot(), spawner=real_spawner())  # pyrefly: ignore[missing-attribute]
         last = json.loads(out.getvalue().strip().splitlines()[-1])
         return rc, json.loads(Path(outcome_file).read_text()), last
 

@@ -48,6 +48,7 @@ from support.engine_locks import put_lock
 from support.fake_clock import FakeClock
 from support.narrow import must
 from support.rebind import rebind
+from support.spawn import real_spawner
 
 from taskloop.adapters import (
     beadtools,
@@ -221,7 +222,7 @@ class Invariants(test_loop.Base):
     def hold(self, name, minutes=30, why="shots"):
         return tl.v_slot(
             Args(op="hold", name=name, why=why, for_min=minutes, n=None, bead=None, force=False),
-            tl.Ctx(tl.HERE, self.clock.now, [], snapshot())
+            tl.Ctx(tl.HERE, self.clock.now, [], snapshot(), spawner=real_spawner())
         )
 
     # -- 1: no bead claimed or run twice ---------------------------------------------------------------------------------
@@ -248,19 +249,21 @@ class Invariants(test_loop.Base):
         bd = self.tracker(slots=3)
         self.actors.update(A="tl-one", B="tl-one", MainThread="tl-main")
         got = self.race(
-            lambda: sl.take_slot(self.repo_s, self.cfg, "loop"), lambda: wslots.take_named_slot(self.repo_s, "s1", self.cfg, "hand")
+            lambda: sl.take_slot(self.repo_s, self.cfg, "loop"), lambda: wslots.take_named_slot(self.repo_s, "s1", self.cfg, "hand",
+                spawner=real_spawner())
         )
         self.assertEqual(got["A"][0], "s1")
         self.assertIsNone(got["B"][0], got)  # refused: the slot is held
         self.assertIn("held by", got["B"][1])
-        got = self.race(lambda: self.hold("s2"), lambda: wslots.take_named_slot(self.repo_s, "s2", self.cfg, "hand"))
+        got = self.race(lambda: self.hold("s2"), lambda: wslots.take_named_slot(self.repo_s, "s2", self.cfg, "hand",
+            spawner=real_spawner()))
         self.assertEqual(got["A"], 0)
         self.assertIsNone(got["B"][0], got)
         self.assertIn("held by", got["B"][1])
         # the hold stays: no loop take, no hand run, no second hold gets it
         self.assertEqual(must(sl.take_slot(self.repo_s, self.cfg, "loop"))[0], "s3")
         self.assertIsNone(sl.take_slot(self.repo_s, self.cfg, "loop"))  # s1 and s3 used, s2 held
-        self.assertIn("held by", wslots.take_named_slot(self.repo_s, "s2", self.cfg, "hand")[1])
+        self.assertIn("held by", wslots.take_named_slot(self.repo_s, "s2", self.cfg, "hand", spawner=real_spawner())[1])
         self.actors["MainThread"] = "tl-other"
         self.assertEqual(self.hold("s1"), 1)  # a slot in use is never held
         self.assertEqual(self.hold("s2"), 1)  # another session's hold is not taken over
@@ -341,7 +344,7 @@ class Invariants(test_loop.Base):
 
             def run(self):
                 try:
-                    self.got = wslots.wait_slot(test.repo_s, test.cfg, self.name, sleep=self.nap, prio=self.prio)
+                    self.got = wslots.wait_slot(test.repo_s, test.cfg, self.name, sleep=self.nap, prio=self.prio, spawner=real_spawner())
                 finally:
                     self.settled.set()
         test = self
@@ -351,7 +354,7 @@ class Invariants(test_loop.Base):
             self.assertTrue(waiters[name].settled.wait(GUARD))  # it has its ticket and has looked once
         line = [t.why for t in wslots.waiting_line(self.repo_s)]
         self.assertEqual(line, ["W3", "W1", "W2"])
-        wslots.release_slot(self.repo_s, "s1", force=True)  # the owner lets go
+        wslots.release_slot(self.repo_s, "s1", force=True, spawner=real_spawner())  # the owner lets go
         pending = ["W2", "W1", "W3"]  # woken against the line
         while pending:
             for n in pending:
@@ -361,7 +364,7 @@ class Invariants(test_loop.Base):
             (done,) = [n for n in pending if waiters[n].got]
             served.append(done)
             pending.remove(done)
-            wslots.release_slot(self.repo_s, "s1", force=True)
+            wslots.release_slot(self.repo_s, "s1", force=True, spawner=real_spawner())
         for w in waiters.values():
             w.join(GUARD)
         self.assertEqual(served, ["W3", "W1", "W2"])
@@ -371,7 +374,7 @@ class Invariants(test_loop.Base):
         (d / "000099.json").write_text(json.dumps({"v": 1, "seq": 99, "prio": 0, "pid": sl.dead_pid(), "why": "dead", "since": 1}))
         self.assertEqual(wslots.waiting_line(self.repo_s), [])
         self.assertFalse((d / "000099.json").exists())
-        self.assertEqual(must(wslots.wait_slot(self.repo_s, self.cfg, "late", stop=lambda: True))[0], "s1")
+        self.assertEqual(must(wslots.wait_slot(self.repo_s, self.cfg, "late", stop=lambda: True, spawner=real_spawner()))[0], "s1")
         # tickets taken at once are all different and numbered in arrival order
         seqs = self.together({f"T{i}": (lambda: sl.take_ticket(self.repo_s, "x").seq) for i in range(6)})
         self.assertEqual(sorted(seqs.values()), list(range(min(seqs.values()), min(seqs.values()) + 6)))
@@ -391,7 +394,7 @@ class Invariants(test_loop.Base):
         self.assertIn(f"pid {int(OTHER_ENGINE)} runs w-9", engine_lock.engine_busy(s1))
         self.assertEqual(bd.slots["sl-1"]["status"], "open")  # the slot bead says free
         self.assertEqual(must(sl.take_slot(self.repo_s, self.cfg, "loop"))[0], "s2")  # a loop passes over s1
-        self.assertIn("busy", wslots.take_named_slot(self.repo_s, "s1", self.cfg, "hand")[1])
+        self.assertIn("busy", wslots.take_named_slot(self.repo_s, "s1", self.cfg, "hand", spawner=real_spawner())[1])
         self.assertEqual(self.hold("s1"), 1)
         self.assertIn("BUSY", self.out.getvalue())
         with mock.patch.object(git_adapter, "run_git", side_effect=AssertionError("git ran in a live slot")):
@@ -408,7 +411,7 @@ class Invariants(test_loop.Base):
         self.assertEqual(getattr(engine_lock.read_engine_lock(s1), "pid", None), OTHER_ENGINE)  # and its lock is still there
         self.live.discard(OTHER_ENGINE)  # the engine died: its lock is no obstacle
         self.assertEqual(engine_lock.engine_busy(s1), "")
-        self.assertEqual(wslots.take_named_slot(self.repo_s, "s1", self.cfg, "hand")[1], "")
+        self.assertEqual(wslots.take_named_slot(self.repo_s, "s1", self.cfg, "hand", spawner=real_spawner())[1], "")
 
     # -- 6/7: lands and releases, on one lock, against one origin --------------------------------------------------------
 
@@ -586,22 +589,24 @@ class Invariants(test_loop.Base):
                 if got:
                     engine_lock.loop_lock(got[1], got[0], got[2], bead=bead)
                     engine_lock.drop_engine_lock(got[1], os.getpid())
-                    wslots.release_slot(repo, got[0], mine=True)
+                    wslots.release_slot(repo, got[0], mine=True, spawner=real_spawner())
             return go
 
         def hand():
-            sb, _why = wslots.take_named_slot(repo, "s5", cfg, "hand run")
+            sb, _why = wslots.take_named_slot(repo, "s5", cfg, "hand run", spawner=real_spawner())
             if sb:
-                wslots.release_slot(repo, "s5", mine=True)
+                wslots.release_slot(repo, "s5", mine=True, spawner=real_spawner())
 
         def waiter():
-            got = wslots.wait_slot(repo, cfg, "waiter", sleep=lambda d: None)  # slots are free soon: no wait to sleep through
+            got = wslots.wait_slot(repo, cfg, "waiter", sleep=lambda d: None,
+                spawner=real_spawner())  # slots are free soon: no wait to sleep through
             assert got
-            wslots.release_slot(repo, got[0], mine=True)
+            wslots.release_slot(repo, got[0], mine=True, spawner=real_spawner())
 
         def holder():
             if self.hold("s4") == 0:
-                tl.v_slot(Args(op="release", name="s4", force=False), tl.Ctx(tl.HERE, self.clock.now, [], snapshot()))
+                tl.v_slot(Args(op="release", name="s4", force=False), tl.Ctx(tl.HERE, self.clock.now, [], snapshot(),
+                    spawner=real_spawner()))
         self.together({"L1": loop_run("w-1"), "L2": loop_run("w-2"), "H": hand, "W": waiter, "P": holder})
         self.nothing_held(names)
         # left behind by processes that died
@@ -615,9 +620,9 @@ class Invariants(test_loop.Base):
         )
         self.actors["MainThread"] = "tl-main"
         for name in ("s1", "s2"):
-            sb = wslots.take_named_slot(repo, name, cfg, "next")[0]
+            sb = wslots.take_named_slot(repo, name, cfg, "next", spawner=real_spawner())[0]
             self.assertTrue(sb, name)  # the expired hold and the dead engine's lock are no obstacle
-            wslots.release_slot(repo, name, mine=True)
+            wslots.release_slot(repo, name, mine=True, spawner=real_spawner())
         self.assertEqual(wslots.waiting_line(repo), [])
         engine_lock.drop_engine_lock(d2, 5252)
         self.nothing_held(names)

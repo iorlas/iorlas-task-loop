@@ -28,6 +28,7 @@ from support.builders import cfg_with  # noqa: E402
 from support.fake_beads import FakeBeads  # noqa: E402
 from support.fakes import as_bead  # noqa: E402
 from support.narrow import must  # noqa: E402
+from support.spawn import real_spawner  # noqa: E402
 
 from taskloop.adapters import (  # noqa: E402
     childenv,
@@ -107,7 +108,7 @@ class Reload(te.EngineTest):
     def engine_for(self, script, **cfg):
         c = wslots.load_cfg(str(self.wt))
         c = cfg_with(c, **{"reflect": False, **cfg})
-        eng = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot())
+        eng = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner())
         eng.argv = ["run-task", "t-1", "--worktree", str(self.wt), "--fresh", "--outcome-file", "/x/out.json"]
 
         def fake_exec(argv):
@@ -258,8 +259,8 @@ class Reload(te.EngineTest):
         self.install("0.2.0")
         repo = str(self.wt)
         said = []
-        with mock.patch.object(wloop.real, "spawner", return_value=holder), mock.patch.dict(os.environ, {}):
-            env = wloop.build(repo, store=FakeBeads(), here=self.here, env=snapshot())
+        with mock.patch.dict(os.environ, {}):
+            env = wloop.build(repo, store=FakeBeads(), here=self.here, env=snapshot(), spawner=holder)
             run = BeadRun(env, looptest.files(repo), wloop.installs(env.cfgdir, here=self.here), lambda: env.profile().loop, lambda: "",
                           lambda running: None, lambda: None, said.append)
             # the first child is the one that exec'd: its note appears while it runs
@@ -285,7 +286,7 @@ class Reload(te.EngineTest):
         with mock.patch.object(
             dl, "resolve", side_effect=[self.res("/a/route.py"), self.res("/b/route.py"), self.res("/b/route.py")]
         ) as fr:
-            eng = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot())
+            eng = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner())
             self.assertEqual(eng.delegation.route(), "/b/route.py")
             self.assertEqual(eng.delegation.route(), "/b/route.py")
             self.assertEqual(fr.call_count, 3)
@@ -293,7 +294,7 @@ class Reload(te.EngineTest):
     # -- point 4: loop state and dashboard lane
     def test_loop_state_names_the_running_version_and_code_dir(self):
         repo = str(self.wt)
-        env = wloop.build(repo, store=FakeBeads(), here=self.here, env=snapshot())
+        env = wloop.build(repo, store=FakeBeads(), here=self.here, env=snapshot(), spawner=real_spawner())
         self.assertEqual((env.version, env.code_dir), ("0.1.0", str(self.here)))
 
     def test_releases_behind_counts_installed_versions_above_it(self):

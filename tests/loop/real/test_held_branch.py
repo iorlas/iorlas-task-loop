@@ -23,6 +23,7 @@ from support import (  # noqa: E402
 )
 from support.engine_locks import put_lock  # noqa: E402
 from support.procsim import real_proc  # noqa: E402
+from support.spawn import real_spawner  # noqa: E402
 
 import loop.test_loop as tlp  # noqa: E402
 from taskloop.adapters import pidcheck  # noqa: E402
@@ -76,7 +77,7 @@ class HeldBranch(unittest.TestCase):
         a = entry.Args(op="reset", name="s1", bead="x-1", n=None, force=False)
         out = io.StringIO()
         with redirect_stdout(out), redirect_stderr(io.StringIO()):
-            rc = tl.v_slot(a, tl.Ctx(tl.HERE, tl.trail.now, [], snapshot()))
+            rc = tl.v_slot(a, tl.Ctx(tl.HERE, tl.trail.now, [], snapshot(), spawner=real_spawner()))
         return rc, out.getvalue(), getattr(a, "error", "")
 
     def branch_in_slot(self):

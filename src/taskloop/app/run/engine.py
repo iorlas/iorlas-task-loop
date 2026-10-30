@@ -58,7 +58,6 @@ from taskloop.app.run.waits import Waits
 from taskloop.app.run.worker_call import Ops, WorkerCall
 from taskloop.app.slots import engine_lock
 from taskloop.app.track import trail, verbs
-from taskloop.app.wire import real as wire_real
 from taskloop.app.write.briefing import Briefing
 from taskloop.app.write.handoff import Handoff
 from taskloop.app.write.newfiles import NewFiles
@@ -115,10 +114,10 @@ class Engine(RunFields):
 
     def __init__(self, bead: BeadId, wt: str, cfg: EngineConfig, dry_run: bool = False, verbose: bool = True, store: Any = None,
                  route: Any = None, clock: Clock | None = None, stores: Stores | None = None, fresh: bool = False,
-                 claim: fence.Claim | None = None, spawner: Spawner | None = None, *, env: Env) -> None:
+                 claim: fence.Claim | None = None, *, env: Env, spawner: Spawner) -> None:
         route = route or seams.DelegateRoute()
         self.env = env  # the process environment, taken once at the edge (tl.py); every child is built from it
-        self.spawner = spawner or wire_real.spawner(self.env)
+        self.spawner = spawner
         super().__init__(bead, wt, cfg, dry_run, verbose, store, route, fresh, claim)
         self.clock = clock or SystemClock()
         self.reexec: dict[str, Any] = reexec.take_reexec_env()  # this run-task came from an exec into a newer install, or a fallback

@@ -20,6 +20,7 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as te
 from support import fake_route
 from support.narrow import must
+from support.spawn import real_spawner
 
 from taskloop.adapters import procs, runner
 from taskloop.adapters.delegate import Stopped
@@ -113,7 +114,7 @@ class SurvivorBlocksTheRetry(te.EngineTest):
         script = Script({"plan": [te.PLAN], "write": [te.WRITE], "review": [te.CLEAN]})
         c = wslots.load_cfg(str(self.wt))
         with te.delegate_stack(script):
-            self.eng = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot())
+            self.eng = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner())
             rc = self.eng.run()
         return rc, script
 

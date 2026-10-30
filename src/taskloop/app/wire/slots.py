@@ -17,10 +17,9 @@ from taskloop.adapters.landlock import os_lock
 from taskloop.app.slots import line as slots_line
 from taskloop.app.slots.engine_lock import drop_engine_lock, engine_busy, lock_pid
 from taskloop.app.slots.env import DEFAULT_PRIO, SlotEnv
-from taskloop.app.slots.pool import SlotPool
+from taskloop.app.slots.pool import SlotPool, machine_slots
 from taskloop.app.track import trail
 from taskloop.app.track.trail import event
-from taskloop.app.wire import real
 from taskloop.contracts import config
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.config import EngineConfig, RepoProfile, SlotsConfig
@@ -102,10 +101,9 @@ def exclude_local(repo: str, *patterns: str) -> None:
 
 
 def slot_env(repo: str, store: Beads | None = None, cfg: SlotsConfig | None = None, now: Callable[[], float] | None = None,
-             spawner: Spawner | None = None) -> SlotEnv:
+             *, spawner: Spawner) -> SlotEnv:
     """The slot code's world (app/slots): this repo's bd, git, ticket line and take lock, and the effects it may cause."""
     cdir = ConfigDir(config_dir())
-    spawn = spawner or real.spawner()
     return SlotEnv(
         repo=repo, repo_key=repo_key(repo), cfg=cfg or profile_slots(repo), store=store or bd_store(repo), git=RealGit(),
         tickets=FileTickets(cdir), cfgdir=cdir, actor=actor(), host=hostname(),
@@ -113,21 +111,23 @@ def slot_env(repo: str, store: Beads | None = None, cfg: SlotsConfig | None = No
         busy=engine_busy, lock_pid=lock_pid,
         drop_engine_lock=lambda wt, pid: drop_engine_lock(wt, pid) if pid is not None else None, event=event, say=print,
         warn=lambda m: print(m, file=sys.stderr), pid=os.getpid(),
-        run_setup=lambda argv, d: spawn.run(argv, cwd=d, capture=False).exit,
+        run_setup=lambda argv, d: spawner.run(argv, cwd=d, capture=False).exit,
         exclude_local=lambda r: exclude_local(r, ".slots/", TASK_EXCLUDE), now=now or trail.now)
 
 
 def slot_beads(repo: str, store: Beads | None = None) -> list[Bead]:
-    return SlotPool(slot_env(repo, store)).beads()
+    """This machine's slot beads of `repo`."""
+    return machine_slots(store or bd_store(repo), hostname())
 
 
 def slot_bead(repo: str, name: str, store: Beads | None = None) -> Bead | None:
-    return SlotPool(slot_env(repo, store)).bead(name)
+    return next((b for b in slot_beads(repo, store) if b.title.split()[-1] == name), None)
 
 
 def slot_of(repo: str, wt: str, store: Beads | None = None) -> str:
     """The slot whose worktree `wt` is, or ""."""
-    return SlotPool(slot_env(repo, store)).name_of(wt)
+    here, cfg = Path(wt).resolve(), profile_slots(repo)
+    return next((n for n in (b.title.split()[-1] for b in slot_beads(repo, store)) if Path(slot_dir(repo, n, cfg)).resolve() == here), "")
 
 
 def waiting_line(repo: str) -> list[Any]:
@@ -138,25 +138,25 @@ def waiting_line(repo: str) -> list[Any]:
 def wait_slot(repo: str, cfg: SlotsConfig, why: str, bead: str = "", stop: Callable[[], bool] | None = None,
               sleep: Callable[[float], object] = time.sleep, poll: tuple[float, float] | None = None,
               on_wait: Callable[[int], None] | None = None, prio: int = DEFAULT_PRIO,
-              store: Beads | None = None) -> tuple[str, str, BeadId] | None:
+              store: Beads | None = None, *, spawner: Spawner) -> tuple[str, str, BeadId] | None:
     """(name, dir, slot bead) once this waiter is first in line and a slot is free; None when stop() says so (see app/slots/line.py)."""
-    return slots_line.wait_slot(slot_env(repo, store, cfg), why, bead, stop, sleep, poll, on_wait, prio)
+    return slots_line.wait_slot(slot_env(repo, store, cfg, spawner=spawner), why, bead, stop, sleep, poll, on_wait, prio)
 
 
 def take_named_slot(repo: str, name: str, cfg: SlotsConfig, why: str, bead: str = "",
-                    store: Beads | None = None) -> tuple[BeadId | None, str]:
+                    store: Beads | None = None, *, spawner: Spawner) -> tuple[BeadId | None, str]:
     """(slot bead, "") when this session now holds slot `name`, or (None, why not)."""
     try:
-        return SlotPool(slot_env(repo, store, cfg)).slot(name).take(why, bead), ""
+        return SlotPool(slot_env(repo, store, cfg, spawner=spawner)).slot(name).take(why, bead), ""
     except SlotFail as e:
         return None, e.why
 
 
 def release_slot(repo: str, name: str, bead: str | None = None, mine: bool = False, force: bool = False,
-                 store: Beads | None = None, gen: int | None = None) -> bool:
+                 store: Beads | None = None, gen: int | None = None, *, spawner: Spawner) -> bool:
     """Frees slot `name` (see Slot.release); False when there is no such slot."""
     try:
-        return SlotPool(slot_env(repo, store)).slot(name).release(bead, mine=mine, force=force, gen=gen)
+        return SlotPool(slot_env(repo, store, spawner=spawner)).slot(name).release(bead, mine=mine, force=force, gen=gen)
     except SlotFail:
         return False
 

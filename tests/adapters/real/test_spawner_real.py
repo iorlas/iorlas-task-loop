@@ -30,6 +30,14 @@ class RealSpawn(unittest.TestCase):
             r = RealSpawner(snapshot()).run([sys.executable, "-c", "import os; print(os.environ.get('VIRTUAL_ENV', 'none'))"])
         self.assertEqual(r.out.strip(), "none")
 
+    def test_stream_passes_both_streams_in_order_and_stops_a_tree_at_its_limit(self):
+        got: list[str] = []
+        r = RealSpawner(snapshot()).stream([sys.executable, "-c", "print('a', flush=True)"], on_output=got.append)
+        self.assertEqual(("".join(got), r.returncode, r.timed_out), ("a\n", 0, None))
+        sleeper = [sys.executable, "-c", "import time; time.sleep(30)"]
+        r = RealSpawner(snapshot()).stream(sleeper, on_output=got.append, timeout_s=0.3, grace=0.5)
+        self.assertEqual((r.timed_out, r.survivors), ("wall", ()))
+
     def test_a_started_child_waits_times_out_and_stops(self):
         child = RealSpawner(snapshot()).start([sys.executable, "-c", "import time; time.sleep(60)"])
         try:

@@ -23,6 +23,7 @@ from support import (  # noqa: E402
     eventlog,
     looptest,
 )
+from support.spawn import real_spawner  # noqa: E402
 
 from loop.test_loop import Base, LoopBase, bead, rec  # noqa: E402
 from taskloop.adapters import (  # noqa: E402
@@ -309,7 +310,7 @@ class StopRequests(LoopBase):
         def stop():
             attempted.set()
             try:
-                loop_cmd.cmd_stop(mock.Mock(repo=self.repo_s, now=True), snapshot())
+                loop_cmd.cmd_stop(mock.Mock(repo=self.repo_s, now=True), snapshot(), spawner=real_spawner())
             except Exception as e:
                 errors.append(e)
             finally:

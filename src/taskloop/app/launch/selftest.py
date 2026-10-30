@@ -104,7 +104,7 @@ def run_engine(home: Path, wt: Path, env: Env) -> tuple[int, Bead]:
     os.chdir(wt)  # the engine reads cwd
     try:
         with mock.patch.object(time, "sleep"):
-            rc = Engine(t1, str(wt), cfg, route=seams.FixedRoute(resolved, Runner()), store=store, env=env).run()
+            rc = Engine(t1, str(wt), cfg, route=seams.FixedRoute(resolved, Runner()), store=store, env=env, spawner=real.spawner(env)).run()
     finally:
         os.chdir(home.parent)  # out of the directory that is removed next
     return rc, store.beads[t1]

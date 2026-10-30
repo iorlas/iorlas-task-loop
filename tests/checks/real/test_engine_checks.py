@@ -13,6 +13,7 @@ import shlex
 import signal
 from pathlib import Path
 
+from support.spawn import real_spawner
 from support.waits import until
 
 from taskloop.adapters import gitrepo
@@ -34,7 +35,8 @@ class EngineChecksTest(EngineTest):
     def test_a_stop_during_a_check_stops_the_check_and_everything_it_started(self):
         if os.name == "nt":
             self.skipTest("POSIX process groups")
-        eng = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store, env=snapshot())
+        eng = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store, env=snapshot(),
+            spawner=real_spawner())
         pidfile = Path(self.wt, "child.pid")
 
         def stopped(*_):  # what the run's SIGTERM handler does, from the same thread, once the check has started its child

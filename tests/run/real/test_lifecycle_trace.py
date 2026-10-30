@@ -20,6 +20,7 @@ from taskloop.domain.report import matchers as lifecycle
 
 ROOT = te.ROOT
 from support.dashes import make_dash  # noqa: E402
+from support.spawn import real_spawner  # noqa: E402
 
 DASH = make_dash()
 
@@ -53,7 +54,8 @@ class TraceTelemetry(te.EngineTest):
 
     @unittest.skipIf(os.name == "nt", "the engine stops a process group; sleep is POSIX")
     def test_an_interrupted_command_leaves_a_kill_record_and_its_tree_is_stopped(self):
-        eng = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), verbose=False, store=self.store, env=snapshot())
+        eng = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), verbose=False, store=self.store, env=snapshot(),
+            spawner=real_spawner())
         started = self.wt / "child-started"
         stop_waiting, delivered = threading.Event(), threading.Event()
 

@@ -16,7 +16,9 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support.waits import until
 
 from taskloop.adapters import procs
+from taskloop.adapters.spawner import RealSpawner
 from taskloop.app.release import suite
+from taskloop.contracts.env import snapshot
 
 ROOT = Path(__file__).resolve().parents[3]
 SLEEPER = """import os, time, unittest
@@ -54,7 +56,7 @@ class Orphans(unittest.TestCase):
     def run_in_thread(self, wall, argv):
         """suite.run_pytest as the launcher runs it, here in this process (no launcher interpreter) -> (the part, or the exception)."""
         with mock.patch.object(suite, "RUN_WALL_S", wall):
-            return suite.run_pytest(argv, str(self.root), dict(self.env), "parallel")
+            return suite.run_pytest(RealSpawner(snapshot()), argv, str(self.root), dict(self.env), "parallel")
 
     def test_a_run_past_its_wall_limit_is_stopped_and_red(self):
         sleeper = ["sh", "-c", 'echo $$ > "$PIDFILE"; sleep 300']  # the stand-in for a hung worker: a shell, not an interpreter

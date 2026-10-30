@@ -68,6 +68,13 @@ def capture(
     )
 
 
+def stream(argv: list[str], *, cwd: str | None, env: Mapping[str, str], on_output: Callable[[str], None], timeout_s: float | None,
+           stop: threading.Event | None, grace: float) -> stream_proc.Result:
+    """One child in a session of its own, its lines (stdout and stderr) to `on_output`; stream-proc stops its tree at the limit, on `stop`
+    and on any exception, and proves it dead."""
+    return stream_proc.run(argv, cwd=cwd, env=env, on_stdout=on_output, on_stderr=on_output, timeout=timeout_s, stop=stop, grace=grace)
+
+
 def spawn(argv: list[str] | str, **kw: Any) -> subprocess.Popen[bytes]:
     """A child that outlives this call (a detached server, a digest): through stream-proc's held spawn, in a session of its own."""
     kw.setdefault("start_new_session", True)

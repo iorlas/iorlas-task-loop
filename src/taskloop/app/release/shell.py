@@ -56,6 +56,7 @@ class Shell:
     run: Callable[..., Finished]
     say: Callable[[str], None]
     port: Git
+    spawner: Spawner  # the same one `run` goes through, for the calls that stream (the suite's pytest runs)
     env: Env = field(default_factory=Env)  # the process environment taken at the edge: the suite's settings and the base of its children
 
 
@@ -68,4 +69,4 @@ def of(spawner: Spawner, port: Git, env: Env) -> Shell:
             raise Abort("{} failed in {}:\n{}".format(" ".join(cmd), cwd, (r.out + r.err).strip()[-2000:]))
         return Done(r.exit, r.out, r.err)
 
-    return Shell(fetch=lambda cwd: fetch_or_abort(port, cwd), run=run, say=say, port=port, env=env)
+    return Shell(fetch=lambda cwd: fetch_or_abort(port, cwd), run=run, say=say, port=port, spawner=spawner, env=env)

@@ -8,10 +8,8 @@ from collections.abc import Callable
 from taskloop.adapters import delegate as sdelegate
 from taskloop.adapters.ident import claude_dir
 from taskloop.app.release.pins import pinned_dir
-from taskloop.app.wire import real
 from taskloop.contracts import paths
 from taskloop.contracts.delegate_status import snapshot_of
-from taskloop.contracts.env import Env
 from taskloop.contracts.ports import Spawner
 from taskloop.contracts.snapshots import StatusTried
 from taskloop.contracts.stores import StatusStore, StatusTriedStore, UsageHistory
@@ -37,20 +35,20 @@ def file_answer(text: str) -> str | None:
     return None
 
 
-def file_status(env: Env | None = None, spawner: Spawner | None = None) -> str | None:
+def file_status(spawner: Spawner) -> str | None:
     """Ask delegate and file the answer. None when filed, else a line saying why not (no delegate is not a failure: None)."""
     route = find()
     if not route:
         return None
-    r = (spawner or real.spawner(env)).run([sys.executable, route, "status", "--json"], timeout_s=60.0)
+    r = spawner.run([sys.executable, route, "status", "--json"], timeout_s=60.0)
     return file_answer(r.out) if r.exit == 0 else f"delegate status exited {r.exit}: {(r.err or r.out)[-200:]}"
 
 
-def refresh(env: Env | None = None, spawner: Spawner | None = None) -> int:
+def refresh(spawner: Spawner) -> int:
     if not find():
         print("no delegate installed: nothing to file")
         return 0
-    why = file_status(env, spawner)
+    why = file_status(spawner)
     print(why or f"filed delegate status at {time.strftime('%H:%M:%S')}")
     return 1 if why else 0
 
@@ -63,15 +61,14 @@ def due(cfg: paths.ConfigDir, now: float, every: float = EVERY_S) -> bool:
     return now - max(snap.at if snap else 0.0, tried) >= every
 
 
-def chore(say: Callable[[str], None], cfg: paths.ConfigDir | None = None, now: float | None = None, spawner: Spawner | None = None,
-          env: Env | None = None) -> bool:
+def chore(say: Callable[[str], None], spawner: Spawner, cfg: paths.ConfigDir | None = None, now: float | None = None) -> bool:
     """The loop's `chores` step: file delegate's status again when the snapshot is `EVERY_S` old. -> whether it asked."""
     cfg = cfg or paths.ConfigDir()
     when = time.time() if now is None else now
     if not due(cfg, when):
         return False
     StatusTriedStore(cfg).write(StatusTried(t=when))
-    why = file_status(env, spawner)
+    why = file_status(spawner)
     if why:
         say(f"loop: {why}")
     return True

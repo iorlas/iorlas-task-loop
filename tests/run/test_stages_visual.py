@@ -22,6 +22,7 @@ from support.fakes import (
     FakeBeadStore,
     must_bead,
 )
+from support.spawn import real_spawner
 
 from run.test_stages import StagesTest
 from taskloop.adapters import gitrepo, ident
@@ -219,12 +220,12 @@ class VisualWork(StagesTest):
     def test_the_table_is_read_from_the_base_branch_not_the_working_copy(self):
         (self.wt / "shots.json").write_text(json.dumps({"v": 1, "methods": [{"method": "Evil", "argv": ["touch", "pwned"]}]}))
         cfg = cfg_with(wslots.load_cfg(str(self.wt)), shot_table="shots.json")
-        e = engine.Engine(BeadId("t-1"), str(self.wt), cfg, store=self.store, env=snapshot())
+        e = engine.Engine(BeadId("t-1"), str(self.wt), cfg, store=self.store, env=snapshot(), spawner=real_spawner())
         self.assertEqual(list(e.pictures.shot_methods()), ["ScreenShots"])
 
     def test_a_missing_table_is_warned_once_and_the_old_way_stands(self):
         cfg = cfg_with(wslots.load_cfg(str(self.wt)), shot_table="nowhere.json")
-        e = engine.Engine(BeadId("t-1"), str(self.wt), cfg, store=self.store, env=snapshot())
+        e = engine.Engine(BeadId("t-1"), str(self.wt), cfg, store=self.store, env=snapshot(), spawner=real_spawner())
         self.assertEqual(e.pictures.shot_methods(), {})
         self.assertEqual(e.pictures.shot_methods(), {})
 
@@ -312,7 +313,8 @@ class VisualWork(StagesTest):
         e.checkpoints.save(stage=0, rounds=0, n=1, feedback="", step="write")
         ck = read_ck(e).state
         self.assertEqual((ck.look_done, sorted(ck.rendered_names), ck.render_stale), (1, ["a.png"], True))
-        again = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store, env=snapshot())
+        again = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store, env=snapshot(),
+            spawner=real_spawner())
         again.tree.reset(must_bead(BEAD))
         again.resume.point()
         self.assertEqual((again.look_done, again.rendered_names, again.render_stale), (1, ["a.png"], True))
@@ -449,7 +451,8 @@ class ResumeCount(StagesTest):
         te.sh("git", "add", "-A", cwd=base)
         te.sh("git", "commit", "-qm", "main moves", cwd=base)
         te.sh("git", "push", "-q", "origin", "HEAD:main", cwd=base)
-        e = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store, env=snapshot())
+        e = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store, env=snapshot(),
+            spawner=real_spawner())
         e.tree.reset(must_bead(BEAD))
         e.plan_data = plan_of(PLAN)
         e.checkpoints.save(stage=0, rounds=0, n=1, feedback="", step="write")

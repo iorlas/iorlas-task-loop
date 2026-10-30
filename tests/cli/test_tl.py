@@ -29,6 +29,7 @@ from support import (  # noqa: E402
     tlbd,
 )
 from support.narrow import must  # noqa: E402
+from support.spawn import real_spawner  # noqa: E402
 from support.tlmain import tl_main  # noqa: E402
 
 from taskloop.adapters import delegate as lroute  # noqa: E402
@@ -42,7 +43,7 @@ from taskloop.app.wire import asks as wasks  # noqa: E402
 from taskloop.contracts import wire  # noqa: E402
 from taskloop.contracts.env import Env  # noqa: E402
 
-CTX = tl.Ctx(tl.HERE, trail.now, [], Env({}))
+CTX = tl.Ctx(tl.HERE, trail.now, [], Env({}), spawner=real_spawner())
 
 
 def sh(*args, cwd):

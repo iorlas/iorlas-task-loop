@@ -8,7 +8,7 @@ from taskloop.app.slots.reset import ready_for
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.fence import SLOT_GEN, gen_of
 from taskloop.contracts.ids import BeadId
-from taskloop.contracts.ports import BdFailure, BeadQuery
+from taskloop.contracts.ports import BdFailure, BeadQuery, Beads
 from taskloop.contracts.slots import Hold, SlotFail
 
 
@@ -104,17 +104,21 @@ class Slot:
         return True
 
 
+def machine_slots(store: Beads, host: str) -> list[Bead]:
+    """The slot beads of `host` (title `slot <host> <name>`): a lease is local to one machine's bd."""
+    try:
+        found = store.find(BeadQuery(label="slot", include_closed=True))
+    except BdFailure:
+        return []
+    return sorted((b for b in found if b.status != "closed" and b.title.split()[1:2] == [host]), key=lambda b: b.title)
+
+
 class SlotPool:
     def __init__(self, env: SlotEnv) -> None:
         self.env = env
 
     def beads(self) -> list[Bead]:
-        """This machine's slot beads (title `slot <host> <name>`): a lease is local to one machine's bd."""
-        try:
-            found = self.env.store.find(BeadQuery(label="slot", include_closed=True))
-        except BdFailure:
-            return []
-        return sorted((b for b in found if b.status != "closed" and b.title.split()[1:2] == [self.env.host]), key=lambda b: b.title)
+        return machine_slots(self.env.store, self.env.host)
 
     def slots(self) -> list[Slot]:
         return [Slot(self, b.title.split()[-1], b) for b in self.beads()]

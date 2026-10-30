@@ -13,6 +13,7 @@ from loop.test_loop import LoopBase, rec
 
 # isort: split
 from support import looptest
+from support.spawn import real_spawner
 
 from taskloop.app.launch import loop as wloop
 from taskloop.app.slots.pool import SlotPool
@@ -44,7 +45,7 @@ class Tune(LoopBase):
         slot["metadata"] = meta
 
     def pool(self):
-        return SlotPool(wloop.build(str(self.repo), env=snapshot()).slot_env())
+        return SlotPool(wloop.build(str(self.repo), env=snapshot(), spawner=real_spawner()).slot_env())
 
     def test_a_smaller_slots_count_applies_to_the_next_take_and_never_to_a_held_slot(self):
         bd = self.beads({}, slots=2)

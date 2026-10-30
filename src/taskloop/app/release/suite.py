@@ -12,8 +12,6 @@ from collections.abc import Callable
 from pathlib import Path
 from types import FrameType
 
-import stream_proc
-
 from taskloop.adapters import landlock
 from taskloop.adapters.childenv import tool_env
 from taskloop.adapters.ident import config_dir
@@ -23,6 +21,7 @@ from taskloop.app.release.shell import Abort, Shell, say
 from taskloop.contracts.env import Env
 from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.paths import ConfigDir
+from taskloop.contracts.ports import Spawner
 
 LONG = 3 * 3600.0  # a hang guard for a whole gate run
 STALE_TMP_S = 2 * LONG  # a tl-suite-* dir this old belongs to a suite that was killed without unwinding (SIGKILL): no live one runs so long
@@ -120,12 +119,13 @@ def suite_lock_path() -> Path:
     return config_dir() / "locks" / "suite-host.lock"
 
 
-def run_pytest(argv: list[str], cwd: str, env: dict[str, str], name: str, empty_ok: bool = False) -> Part:
-    """One pytest run through stream-proc: a session of its own, a wall limit, its whole tree (the xdist workers) stopped on the limit
+def run_pytest(spawner: Spawner, argv: list[str], cwd: str, env: dict[str, str], name: str, empty_ok: bool = False) -> Part:
+    """One pytest run through the Spawner's stream (`env`: the run's own environment, over the
+    spawner's): a session of its own, a wall limit, its whole tree (the xdist workers) stopped on the limit
     or when this thread is unwound (an interrupt, SIGTERM). A run that outlived its limit is red, with what it printed. `empty_ok`: pytest's
     "no tests collected" (exit 5) is green (a tree without a serial group)."""
     out: list[str] = []
-    res = stream_proc.run(argv, cwd=cwd, env=env, on_stdout=out.append, on_stderr=out.append, timeout=RUN_WALL_S, grace=5.0)
+    res = spawner.stream(argv, cwd=cwd, extra=env, on_output=out.append, timeout_s=RUN_WALL_S)
     text = "".join(out)
     if res.timed_out:
         text += f"\n{name}: stopped after {res.secs:.0f}s ({res.timed_out}; limit {RUN_WALL_S:.0f}s); its process tree was killed\n"
@@ -139,7 +139,7 @@ def pytest_argv(tool_root: Path, *select: str) -> list[str]:
     return [str(tool_root / ".venv" / "bin" / "python"), "-m", "pytest", "-q", "-p", "no:cacheprovider", "-rfE", *select, "tests"]
 
 
-def run_parts(tool_root: Path, repo: Path, work: Path, n: int, env: Env) -> list[Part]:
+def run_parts(spawner: Spawner, tool_root: Path, repo: Path, work: Path, n: int, env: Env) -> list[Part]:
     """The parallel run (n xdist workers, each its own HOME), then the `serial` group alone in one process; SIGTERM unwinds into the
     run, which stops its tree first."""
     def term(signum: int, _frame: FrameType | None) -> None:
@@ -148,9 +148,10 @@ def run_parts(tool_root: Path, repo: Path, work: Path, n: int, env: Env) -> list
     old = signal.signal(signal.SIGTERM, term) if main else None
     try:
         spread = ["-n", str(n)] if n > 1 else []  # one worker is the run's own process
-        parallel = run_pytest(pytest_argv(tool_root, *spread, "-m", "not serial"), str(repo),
+        parallel = run_pytest(spawner, pytest_argv(tool_root, *spread, "-m", "not serial"), str(repo),
                               isolated_env(work / "parallel", env), "parallel")
-        serial = run_pytest(pytest_argv(tool_root, "-m", "serial"), str(repo), isolated_env(work / "serial", env), "serial", empty_ok=True)
+        serial = run_pytest(spawner, pytest_argv(tool_root, "-m", "serial"), str(repo), isolated_env(work / "serial", env), "serial",
+                            empty_ok=True)
         return [parallel, serial]
     finally:
         if old is not None:
@@ -191,7 +192,7 @@ def _host_suite(tool_root: Path, repo: Path, sh: Shell) -> None:
     sh.run(["uv", "sync", "--frozen", "--quiet", "--project", str(tool_root)], tool_root)  # the dev group exactly as uv.lock records it
     work = Path(tempfile.mkdtemp(prefix="tl-suite-"))
     try:
-        parts = run_parts(tool_root, repo, work, n, sh.env)
+        parts = run_parts(sh.spawner, tool_root, repo, work, n, sh.env)
     finally:
         shutil.rmtree(work, ignore_errors=True)
     out, green = merge_outputs(parts)

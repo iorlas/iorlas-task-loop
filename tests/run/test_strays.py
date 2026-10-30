@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as te
 from support import fake_route
+from support.spawn import real_spawner
 
 from taskloop.adapters import gitrepo
 from taskloop.app.run import engine
@@ -42,7 +43,8 @@ class Strays(te.EngineTest):
             return real(this, why, kind, *a, **kw)
 
         with te.delegate_stack(script), mock.patch.object(engine.Engine, "blocked_for", spy):
-            eng = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store, env=snapshot())
+            eng = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store, env=snapshot(),
+                spawner=real_spawner())
             return eng.run(), eng
 
     def test_a_worker_that_stays_passes(self):

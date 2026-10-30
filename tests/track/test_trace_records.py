@@ -19,6 +19,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: E402, F401
 from support.dashes import make_dash  # noqa: E402
+from support.spawn import real_spawner  # noqa: E402
 
 from taskloop.adapters import ident  # noqa: E402
 from taskloop.app.track import verbs  # noqa: E402
@@ -203,7 +204,7 @@ class TraceRecords(te.EngineTest):
         new = ident.config_dir() / "runs" / "t-0-20261020-000000" / "checks"
         new.mkdir(parents=True)
         (new / "00-a.r1.log").write_text("x")
-        engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store, env=snapshot())
+        engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store, env=snapshot(), spawner=real_spawner())
         self.assertFalse((old / "00-a.r1.log").exists())
         self.assertTrue((old / "00-a.log").exists())  # an old run's single log is its only one: kept
         self.assertTrue((new / "00-a.r1.log").exists())

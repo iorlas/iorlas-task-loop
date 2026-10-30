@@ -481,7 +481,3 @@ forbidden_modules =
     taskloop.adapters.procs
     stream_proc
 allow_indirect_imports = True
-# The allowlist may only shrink: one line per module that still spawns itself; a new line fails review.
-ignore_imports =
-    taskloop.app.release.suite -> stream_proc
-    taskloop.app.run.shell -> stream_proc

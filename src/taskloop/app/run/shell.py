@@ -3,8 +3,6 @@ import time
 from pathlib import Path
 from typing import Any
 
-import stream_proc
-
 from taskloop.adapters import childenv
 from taskloop.adapters.gitenv import pinned_env
 from taskloop.app.run.blocked import Blocked
@@ -52,10 +50,10 @@ class Shell:
     def stream(self, cmd: Any, cwd: Any, env: Any, pin: bool, chunks: list[str], timeout: float, cid: str, what: str,
                started: float) -> Any:
         e = self.e
-        full_env = childenv.tool_env(e.env.vars, {**childenv.WORKER_MARK, **e.bead_env, **(pinned_env(e.wt) if pin else {}), **(env or {})})
+        extra = {**childenv.WORKER_MARK, **e.bead_env, **(pinned_env(e.wt) if pin else {}), **(env or {})}
         try:
-            return stream_proc.run(list(cmd), cwd=cwd, env=full_env, on_stdout=chunks.append, on_stderr=chunks.append, timeout=timeout,
-                                   stop=e.halt)
+            return e.spawner.stream(list(cmd), cwd=None if cwd is None else str(cwd), extra=extra, on_output=chunks.append,
+                                    timeout_s=timeout, stop=e.halt)
         except BaseException:  # stopped (stream-proc stopped the tree first): never leave a check (just check, Unity) running
             now = time.time()
             e.killed = True

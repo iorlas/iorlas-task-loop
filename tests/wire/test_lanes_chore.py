@@ -8,6 +8,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
+from support.spawn import real_spawner
 
 from taskloop.app.wire import lanes
 from taskloop.contracts.delegate_status import snapshot_of
@@ -26,7 +27,7 @@ class Chore(unittest.TestCase):
 
     def chore(self, now, why=None):
         with mock.patch.object(lanes, "file_status", return_value=why) as ask:
-            return lanes.chore(self.said.append, self.cfg, now), ask.call_count
+            return lanes.chore(self.said.append, real_spawner(), self.cfg, now), ask.call_count
 
     def test_nothing_filed_asks_once_then_waits_20_minutes_even_when_it_failed(self):
         self.assertEqual(self.chore(5000.0, "delegate status exited 1: x"), (True, 1))

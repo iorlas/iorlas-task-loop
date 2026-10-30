@@ -3,6 +3,7 @@ import os
 import time
 
 from support import procsim
+from support.spawn import real_spawner
 from taskloop.adapters import ident
 from taskloop.app.slots.pool import SlotPool
 from taskloop.app.wire import slots as wslots
@@ -11,7 +12,7 @@ from taskloop.stores.files import FileTickets
 
 
 def pool(repo, store=None, cfg=None):
-    return SlotPool(wslots.slot_env(str(repo), store, cfg))
+    return SlotPool(wslots.slot_env(str(repo), store, cfg, spawner=real_spawner()))
 
 
 def take_slot(repo, cfg=None, why="tl loop", bead="", ticket=None, store=None):

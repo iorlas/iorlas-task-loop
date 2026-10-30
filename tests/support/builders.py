@@ -7,6 +7,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from support.fakes import FakeBeadStore, FakeClock, FakeRouter
+from support.spawn import real_spawner
 from taskloop.app.run import engine
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts import wire
@@ -24,7 +25,7 @@ def make_engine(wt, bead="t-1", cfg=None, script=None, attrs=None, **seams):
     seams.setdefault("store", FakeBeadStore())
     seams.setdefault("route", FakeRouter(script))
     seams.setdefault("clock", FakeClock())
-    e = engine.Engine(BeadId(bead), str(wt), c, **seams, env=snapshot())
+    e = engine.Engine(BeadId(bead), str(wt), c, **seams, env=snapshot(), spawner=real_spawner())
     for k, v in (attrs or {}).items():
         setattr(e, k, v)
     return e

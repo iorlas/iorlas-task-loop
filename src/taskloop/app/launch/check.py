@@ -15,6 +15,7 @@ from taskloop.contracts.argv import text_of
 from taskloop.contracts.checks import CheckResult, Phase
 from taskloop.contracts.config import CheckSpec, EngineConfig
 from taskloop.contracts.env import Env
+from taskloop.contracts.ports import Spawner
 from taskloop.domain.checks.specs import gate_items, repo_check
 
 TAIL_LINES = 15
@@ -57,7 +58,7 @@ def profile_of(repo: str) -> EngineConfig:
     return wslots.load_profile(data).engine
 
 
-def cmd_check(a: Any, host: CliHost | None = None, *, env: Env) -> int:
+def cmd_check(a: Any, host: CliHost | None = None, *, env: Env, spawner: Spawner) -> int:
     repo = REAL.toplevel(a.repo) or str(Path(a.repo).resolve())
     cfg = profile_of(repo)
     if a.list:
@@ -66,7 +67,7 @@ def cmd_check(a: Any, host: CliHost | None = None, *, env: Env) -> int:
     items = [repo_check(k, cfg, Phase.STAGE if k.run == "stage" else Phase.GATE) for k in chosen(cfg, a.ids)] if a.ids else gate_items(cfg)
     if not items:
         print("no gate steps: no engine.checks entry says run gate or both")  # the built-in diff-check still runs
-    box = host or CliHost(repo, cfg, env=env)
+    box = host or CliHost(repo, cfg, env=env, spawner=spawner)
     try:
         run = Checker(box).run_items(items, everything=a.all or bool(a.ids), learn=False, show_clean=True)
     finally:

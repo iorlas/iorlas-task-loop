@@ -34,6 +34,7 @@ from support.logs import records
 from support.narrow import must
 from support.procsim import real_proc  # noqa: F401
 from support.push_race import PushRace
+from support.spawn import real_spawner
 from support.waits import until
 from taskloop.adapters import (
     applog,
@@ -422,7 +423,7 @@ class EngineTest(unittest.TestCase):
         fresh = cfg.pop("fresh", False)
         c = cfg_with(c, **{"reflect": False, **cfg, **(raw or {})})  # the reflection is one more call; its own tests switch it on
         with delegate_stack(script, route):
-            self.eng = engine.Engine(BeadId(bead), str(self.wt), c, store=self.store, fresh=fresh, env=snapshot())
+            self.eng = engine.Engine(BeadId(bead), str(self.wt), c, store=self.store, fresh=fresh, env=snapshot(), spawner=real_spawner())
             if probe is not None:
                 self.eng.probe = probe
             if prep is not None:
@@ -717,7 +718,8 @@ class LandReviewBase(EngineTest):
 
     def run_with(self, script):
         with delegate_stack(script, "/r.py"):
-            self.eng = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store, env=snapshot())
+            self.eng = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store, env=snapshot(),
+                spawner=real_spawner())
             return self.eng.run()
 
     def landed(self):

@@ -21,6 +21,7 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from loop.test_loop import LoopBase
 from support import slots as sl
 from support.engine_locks import put_lock
+from support.spawn import real_spawner
 
 from taskloop.adapters import pidcheck
 from taskloop.app.launch import dash as dash_server
@@ -95,7 +96,7 @@ class Slots(LoopBase):
         with mock.patch.dict(os.environ, env), mock.patch.object(entry, "reclaim", return_value=(True, "")), \
                 mock.patch.object(entry, "Engine", made), \
                 mock.patch.object(signal, "signal"), redirect_stdout(out):
-            rc = entry.main(a, env=snapshot())
+            rc = entry.main(a, env=snapshot(), spawner=real_spawner())
         self.made = made
         return rc, json.loads(f.read_text()), out.getvalue()
 
@@ -132,9 +133,9 @@ class HoldRaces(Slots):
         bd = self.beads({})
         self.assertTrue(sl.take_slot(str(self.repo), SlotsConfig()))
         bd.slots["sl-1"].update(status="in_progress", assignee="tl-551cf8ee")
-        wslots.release_slot(str(self.repo), "s1")
+        wslots.release_slot(str(self.repo), "s1", spawner=real_spawner())
         self.assertEqual(bd.slots["sl-1"]["assignee"], "tl-551cf8ee")  # without --force another actor's claim is left alone
-        wslots.release_slot(str(self.repo), "s1", force=True)
+        wslots.release_slot(str(self.repo), "s1", force=True, spawner=real_spawner())
         self.assertEqual((bd.slots["sl-1"]["status"], bd.slots["sl-1"]["assignee"]), ("open", ""))
 
     def test_an_expired_hold_frees_the_claim_of_the_loop_that_held_the_slot(self):
@@ -153,11 +154,11 @@ class NeverSignalOneself(unittest.TestCase):
     def test_stop_server_never_stops_the_calling_process(self):
         v = {"version": "1", "pid": os.getpid(), "urls": [], "started": 0}
         spawner = mock.Mock()
-        dash_server.stop_server(v, spawner=spawner)
+        dash_server.stop_server(v, dash_server.DEFAULT_PORT, spawner)
         spawner.stop_pid.assert_not_called()
 
     def test_run_main_leaves_no_sigterm_handler_behind(self):
         before = signal.getsignal(signal.SIGTERM)
         with mock.patch.object(entry, "run_main_stoppable", return_value=0):
-            entry.run_main(mock.Mock(), env=snapshot())
+            entry.run_main(mock.Mock(), env=snapshot(), spawner=real_spawner())
         self.assertIs(signal.getsignal(signal.SIGTERM), before)

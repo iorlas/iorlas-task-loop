@@ -19,6 +19,7 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 # isort: split
 from support import engine_case as te
 from support import fake_route
+from support.spawn import real_spawner
 
 from taskloop.adapters import runner
 from taskloop.adapters.delegate import Stopped
@@ -87,7 +88,7 @@ class SurvivorBlocksTheRetry(te.EngineTest):
         script = Script({"plan": [te.PLAN], "write": [te.WRITE], "review": [te.CLEAN]})
         c = wslots.load_cfg(str(self.wt))
         with te.delegate_stack(script):
-            self.eng = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot())
+            self.eng = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner())
             rc = self.eng.run()
         return rc, script
 
@@ -118,7 +119,7 @@ class SurvivorBlocksTheRetry(te.EngineTest):
             return argvs[-1]
 
         with te.delegate_stack(script), mock.patch.object(RunRequest, "to_argv", spy):
-            engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot()).run()
+            engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner()).run()
         by_role = {a[a.index("run") + 1]: a for a in argvs}
         w = by_role["worker"]
         want = (str(int(c.write_idle_min * 60)), str(int(c.write_cap_min * 60)))
@@ -128,7 +129,8 @@ class SurvivorBlocksTheRetry(te.EngineTest):
         self.assertNotIn("--idle", by_role["planner"])
 
     def test_a_write_under_the_idle_rules_gets_no_close_to_the_limit_warning(self):
-        eng = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store, env=snapshot())
+        eng = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store, env=snapshot(),
+            spawner=real_spawner())
         r = DelegateResult(data=te.CLEAN, secs=40 * 60)
         eng.records.anomalies("write", r, 1)
         eng.records.anomalies("review", r, 1)

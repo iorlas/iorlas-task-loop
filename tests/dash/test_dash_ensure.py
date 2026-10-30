@@ -14,6 +14,7 @@ import support.paths  # noqa: E402, F401
 
 # isort: split
 from support.narrow import must  # noqa: E402
+from support.spawn import real_spawner  # noqa: E402
 
 from taskloop.adapters import procs  # noqa: E402
 from taskloop.app.launch import dash as dash_server  # noqa: E402
@@ -104,7 +105,7 @@ class EnsureFlow(unittest.TestCase):
                 mock.patch.object(dash_server, "stop_server", side_effect=lambda v=None, *a, **k: stops.append(v)), \
                 mock.patch.object(procs, "spawn", side_effect=lambda *a, **k: popens.append(a) or proc), \
                 mock.patch.object(dash_server.time, "sleep"):
-            rc = dash_server.run("ensure", snapshot())
+            rc = dash_server.run("ensure", snapshot(), spawner=real_spawner())
         return rc, stops, popens
 
     def test_current_server_is_kept(self):
@@ -139,7 +140,7 @@ class EnsureFlow(unittest.TestCase):
                 mock.patch.object(dash_server, "log_tail", return_value="bind 100.1.2.3:7878 failed (held by pid 99)"), \
                 mock.patch.object(dash_server.time, "sleep"), \
                 mock.patch("builtins.print") as pr:
-            rc = dash_server.run("ensure", snapshot())
+            rc = dash_server.run("ensure", snapshot(), spawner=real_spawner())
         self.assertEqual(rc, 1)
         out = " ".join(str(c.args[0]) for c in pr.call_args_list)
         self.assertIn("100.1.2.3", out)
@@ -156,7 +157,7 @@ class EnsureFlow(unittest.TestCase):
             with mock.patch.object(dash_server, "ping", ping), mock.patch.object(dash_server, "stop_server", stop), \
                     mock.patch.object(procs, "spawn", return_value=proc) as popen, \
                     mock.patch.object(dash_server.time, "sleep"):
-                rc = dash_server.run("ensure", snapshot())
+                rc = dash_server.run("ensure", snapshot(), spawner=real_spawner())
         self.assertEqual(rc, 0)
         stop.assert_not_called()
         cmd = popen.call_args.args[0]
@@ -198,7 +199,7 @@ class DevCheckout(unittest.TestCase):
     def test_the_server_alone_binds_loopback_on_7878_and_the_launcher_adds_tailscale(self):
         self.assertEqual(bind.plan(None, None, dev=False, process=ProcessEnv()), (["127.0.0.1"], 7878))  # the server runs no network tool
         with mock.patch.object(dash_server, "tailscale_ip", return_value="100.1.2.3"):
-            self.assertEqual(dash_server.default_binds(ProcessEnv()), ["127.0.0.1", "100.1.2.3"])
+            self.assertEqual(dash_server.default_binds(ProcessEnv(), spawner=real_spawner()), ["127.0.0.1", "100.1.2.3"])
         self.assertEqual(dash_server.inet_addrs("2: eth0 inet 100.64.0.5/32 scope global\n inet6 fe80::1/64 inet bogus"), ["100.64.0.5"])
 
 

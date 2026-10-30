@@ -147,8 +147,8 @@ def fetch(repo: str, git: Git = REAL) -> None:
         git.fetch(repo)
 
 
-def chores(repo: str, spawner: Spawner, env: Env) -> None:
-    wlanes.chore(console.say, env=env)  # delegate's lane status filed again when the snapshot is 20 min old (the dash reads the file)
+def chores(repo: str, spawner: Spawner) -> None:
+    wlanes.chore(console.say, spawner)  # delegate's lane status filed again when the snapshot is 20 min old (the dash reads the file)
     wasks.sweep_asks(console.say, wslots.load_cfg(repo))  # asks of closed beads closed, unanswered ones parked, answers no run used flagged
     try:
         reflect.maybe_run(spawner)  # the run reflections into beads, once a day (tl-bl5)
@@ -202,9 +202,8 @@ def loop_lock(wt: str, slot: str, slot_bead: str | None, bead: str) -> None:
 
 
 def build(repo: str, store: Beads | None = None, session_actor: str = "", here: Path = HERE, now: Callable[[], float] = trail.now,
-          start_cwd: str = "", spawner: Spawner | None = None, *, env: Env) -> LoopEnv:
+          start_cwd: str = "", *, env: Env, spawner: Spawner) -> LoopEnv:
     """The LoopEnv of `repo` on this install."""
-    spawner = spawner or real.spawner(env)
     store = store or beadtools.bd_store(repo)
     cfg = cfgdir()
 
@@ -216,7 +215,7 @@ def build(repo: str, store: Beads | None = None, session_actor: str = "", here: 
         repo_key=wslots.repo_key(repo),
         cfgdir=cfg,
         store=store,
-        slot_env=lambda: wslots.slot_env(repo, store, profile().slots, now),
+        slot_env=lambda: wslots.slot_env(repo, store, profile().slots, now, spawner=spawner),
         profile=profile,
         fetch=lambda: fetch(repo),
         lint=lambda b: beadlint.why(b, repo, lambda: lintrun.has_children(store, b.id)),
@@ -236,7 +235,7 @@ def build(repo: str, store: Beads | None = None, session_actor: str = "", here: 
         ),
         landed_on_base=lambda wt, bead: landed_on_base(repo, store, wt, bead),
         reload_note=reload_note,
-        chores=lambda: chores(repo, spawner, env),
+        chores=lambda: chores(repo, spawner),
         ask_lines=lambda: ask_sweeps.orphan_lines(wasks.store()),
         storm=lambda: storm(repo, now),
         probe=lambda: make_probe(repo),

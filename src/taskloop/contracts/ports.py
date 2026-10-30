@@ -2,6 +2,7 @@
 
 A port is a Protocol plus the typed requests and results that cross it. Adapters implement it against the real thing
 (`route.py`, `bd`, an exec); fakes implement it in memory, so a test needs no process, no files and no bash."""
+import threading  # noqa: TID251  only the type of a stop flag (Spawner.stream); contracts starts no thread
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import IO, Any, Literal, NamedTuple, Protocol, final
@@ -403,6 +404,17 @@ class RanBytes(Rec):
     err: bytes = b""
 
 
+@final
+class Streamed(Rec):
+    """How `Spawner.stream` ended. `returncode` is None when a signal ended the child (then `signal` is its number). `timed_out` is why
+    the engine stopped it ("wall", "stopped"), None when it ended by itself. `survivors`: pids of its tree still alive after the stop."""
+    returncode: int | None
+    signal: int | None
+    timed_out: str | None
+    secs: float
+    survivors: tuple[int, ...] = ()
+
+
 class Spawner(Protocol):
     """Starting a process, as a capability: the only way app/ and cli/ run a child (RealSpawner in adapters/spawner.py; the logic tests
     run the same adapter over tests/support/procsim). The child's environment is built by adapters/childenv.py: `env` is the base (the
@@ -414,6 +426,15 @@ class Spawner(Protocol):
         ...
 
     def run_bytes(self, argv: list[str], *, cwd: str | None = None, extra: Mapping[str, str] | None = None) -> RanBytes: ...
+
+    def stream(self, argv: list[str], *, cwd: str | None = None, env: Mapping[str, str] | None = None,
+               extra: Mapping[str, str] | None = None,
+               on_output: Callable[[str], None], timeout_s: float | None = None, stop: threading.Event | None = None,
+               grace: float = 5.0) -> Streamed:
+        """Run in a session of its own, each line of stdout and stderr to `on_output` as it comes. It ends by itself, at `timeout_s` of wall
+        time or when `stop` is set; then its whole tree is stopped (SIGTERM, `grace` seconds, SIGKILL) and proven dead. Any exception
+        raised while it runs (an interrupt, a raising SIGTERM handler) stops the tree first."""
+        ...
 
     def start(self, argv: list[str], *, cwd: str | None = None, env: Mapping[str, str] | None = None,
               extra: Mapping[str, str] | None = None, stdin: Literal["null", "pipe"] = "null",

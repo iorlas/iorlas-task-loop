@@ -28,6 +28,7 @@ from support.fakes import (
     as_bead,
 )
 from support.narrow import must
+from support.spawn import real_spawner
 
 from slots.test_slots import Slots
 from taskloop.adapters import ident
@@ -110,10 +111,10 @@ class Line(Slots):
 
     def waiter(self, label, served):
         def go():
-            got = wslots.wait_slot(str(self.repo), self.cfg, label, poll=(0.01, 0.02))
+            got = wslots.wait_slot(str(self.repo), self.cfg, label, poll=(0.01, 0.02), spawner=real_spawner())
             served.append((label, got[0] if got else None))
             assert got
-            wslots.release_slot(str(self.repo), got[0])
+            wslots.release_slot(str(self.repo), got[0], spawner=real_spawner())
         th = threading.Thread(target=go, daemon=True)
         th.start()
         return th
@@ -135,7 +136,8 @@ class Line(Slots):
         while time.monotonic() < end:  # a short watch, polled: nobody steals the held slot
             self.assertEqual(served, [])
             time.sleep(0.01)
-        wslots.release_slot(str(self.repo), "s1", force=True)  # tl-other's claim: bd frees another actor's only with --force
+        wslots.release_slot(str(self.repo), "s1", force=True,
+            spawner=real_spawner())  # tl-other's claim: bd frees another actor's only with --force
         for th in threads:
             th.join(60)
         self.assertEqual(served, [("w1", "s1"), ("w2", "s1"), ("w3", "s1")])
@@ -158,7 +160,8 @@ class Line(Slots):
         def claim(slot):  # the hand run takes s1 between this taker's look and its claim
             if "thread" in won or threading.current_thread() is not threading.main_thread():
                 return real_claim(slot)
-            th = threading.Thread(target=lambda: won.update(hand=wslots.take_named_slot(str(self.repo), "s1", self.cfg, "hand")[0]))
+            th = threading.Thread(target=lambda: won.update(hand=wslots.take_named_slot(str(self.repo), "s1", self.cfg, "hand",
+                spawner=real_spawner())[0]))
             won["thread"] = th
             th.start()
             th.join(0.3)
@@ -190,14 +193,15 @@ class Line(Slots):
         self.assertLess(p2.seq, p0.seq)
         self.assertEqual([t.why for t in wslots.waiting_line(repo)], ["run-task p0-bead", "run-task p2-bead"])
         sl.drop_ticket(repo, p0)
-        got = wslots.wait_slot(repo, self.cfg, "late p0", poll=(0.01, 0.01), stop=lambda: True, prio=0)
+        got = wslots.wait_slot(repo, self.cfg, "late p0", poll=(0.01, 0.01), stop=lambda: True, prio=0, spawner=real_spawner())
         self.assertEqual(must(got)[0], "s1")  # the P0 newcomer passes the P2 waiter that was there first
-        wslots.release_slot(repo, "s1")
+        wslots.release_slot(repo, "s1", spawner=real_spawner())
         self.assertIsNone(
-            wslots.wait_slot(repo, self.cfg, "late p3", poll=(0.01, 0.01), stop=lambda: True, prio=3)
+            wslots.wait_slot(repo, self.cfg, "late p3", poll=(0.01, 0.01), stop=lambda: True, prio=3, spawner=real_spawner())
         )  # the P2 waiter is ahead
         p0b = sl.take_ticket(repo, "p0 again", 0)
-        self.assertIsNone(wslots.wait_slot(repo, self.cfg, "p2 behind p0", poll=(0.01, 0.01), stop=lambda: True, prio=2))  # a P0 is ahead
+        self.assertIsNone(wslots.wait_slot(repo, self.cfg, "p2 behind p0", poll=(0.01, 0.01), stop=lambda: True, prio=2,
+            spawner=real_spawner()))  # a P0 is ahead
         for t in (p2, p0b):
             sl.drop_ticket(repo, t)
 
@@ -247,7 +251,8 @@ class ReviewFixes(AreasBase):
             return real_bd(*a, **kw)
 
         def taker(name):
-            env = dataclasses.replace(wslots.slot_env(repo, None, cfg), actor=name)  # each thread is its own session
+            env = dataclasses.replace(wslots.slot_env(repo, None, cfg,
+                spawner=real_spawner()), actor=name)  # each thread is its own session
             won[name] = SlotPool(env).take_any(name, "", None)
         with (
             tlbd.bd_boundary(bd_pause),
@@ -276,11 +281,11 @@ class ReviewFixes(AreasBase):
         before = json.loads(json.dumps(bd.slots["sl-1"]))
         err = io.StringIO()
         with mock.patch.dict(os.environ, {"TASK_LOOP_ACTOR": "tl-old00000"}), mock.patch.object(sys, "stderr", err):
-            self.assertTrue(wslots.release_slot(repo, "s1", bead="x-1", mine=True))
+            self.assertTrue(wslots.release_slot(repo, "s1", bead="x-1", mine=True, spawner=real_spawner()))
         self.assertEqual(bd.slots["sl-1"], before)
         self.assertIn("left alone", err.getvalue())
         with mock.patch.dict(os.environ, {"TASK_LOOP_ACTOR": "tl-new00000"}):  # the right bead of the right actor
-            wslots.release_slot(repo, "s1", bead="x-2", mine=True)
+            wslots.release_slot(repo, "s1", bead="x-2", mine=True, spawner=real_spawner())
         self.assertEqual((bd.slots["sl-1"]["status"], bd.slots["sl-1"].get("metadata")), ("open", {"held_gen": "1"}))  # kept
 
     def test_a_same_actor_retake_keeps_the_new_holders_slot_when_the_old_run_ends(self):
@@ -291,17 +296,19 @@ class ReviewFixes(AreasBase):
         with mock.patch.dict(os.environ, {"TASK_LOOP_ACTOR": "tl-same0000"}):
             self.assertTrue(sl.take_slot(repo, wslots.profile_slots(repo), "run x-1", bead="x-1"))
             old = fence.gen_of(wslots.slot_bead(repo, "s1"), SLOT_GEN)
-            wslots.release_slot(repo, "s1", bead="x-1", mine=True, gen=old)  # the old run's slot lapsed and was freed
+            wslots.release_slot(repo, "s1", bead="x-1", mine=True, gen=old,
+                spawner=real_spawner())  # the old run's slot lapsed and was freed
             self.assertTrue(sl.take_slot(repo, wslots.profile_slots(repo), "run x-1 again", bead="x-1"))  # same actor, same bead
             new = fence.gen_of(wslots.slot_bead(repo, "s1"), SLOT_GEN)
             self.assertGreater(new, old)
             before = json.loads(json.dumps(bd.slots["sl-1"]))
             err = io.StringIO()
             with mock.patch.object(sys, "stderr", err):
-                self.assertTrue(wslots.release_slot(repo, "s1", bead="x-1", mine=True, gen=old))  # the old run ends late
+                self.assertTrue(wslots.release_slot(repo, "s1", bead="x-1", mine=True, gen=old,
+                    spawner=real_spawner()))  # the old run ends late
             self.assertEqual(bd.slots["sl-1"], before)
             self.assertIn("left alone", err.getvalue())
-            wslots.release_slot(repo, "s1", bead="x-1", mine=True, gen=new)
+            wslots.release_slot(repo, "s1", bead="x-1", mine=True, gen=new, spawner=real_spawner())
         self.assertEqual(bd.slots["sl-1"]["status"], "open")
 
 
@@ -316,7 +323,7 @@ class ReviewFixes(AreasBase):
         os.utime(old, (time.time() - 700, time.time() - 700))
         self.assertEqual(wslots.waiting_line(repo), [])
         self.assertIsNotNone(
-            wslots.wait_slot(repo, wslots.profile_slots(repo), "x", stop=lambda: True)
+            wslots.wait_slot(repo, wslots.profile_slots(repo), "x", stop=lambda: True, spawner=real_spawner())
         )  # nobody is ahead: the free slot is taken
         self.assertFalse(old.exists())
         self.assertTrue(fresh.exists())

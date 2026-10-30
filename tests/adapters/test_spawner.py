@@ -28,6 +28,17 @@ class SpawnerOnProcsim(unittest.TestCase):
         r = RealSpawner(snapshot()).run(["slow"], timeout_s=5)
         self.assertEqual((r.exit, r.timed_out), (124, True))
 
+    def test_stream_hands_each_output_chunk_over_and_reports_how_it_ended(self):
+        procsim.fake("say-hi", procsim.exits(3, "hi"))
+        chunks: list[str] = []
+        r = RealSpawner(snapshot()).stream(["say-hi"], on_output=chunks.append)
+        self.assertEqual(("".join(chunks), r.returncode, r.signal, r.timed_out), ("hi\n", 3, None, None))
+
+    def test_a_streamed_fake_that_outlasts_its_limit_is_a_wall_stop(self):
+        procsim.fake("slow", procsim.hangs("partial"))
+        r = RealSpawner(snapshot()).stream(["slow"], on_output=lambda s: None, timeout_s=5)
+        self.assertEqual((r.timed_out, r.returncode), ("wall", None))
+
     def test_the_child_env_has_no_virtualenv_and_no_unregistered_engine_name(self):
         seen: dict[str, str] = {}
 

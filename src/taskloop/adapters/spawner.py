@@ -2,13 +2,14 @@
 Every child's environment is built by `childenv.tool_env` (an allowlist of names, no virtualenv); a child that outlives the call
 is spawned through stream-proc's held spawn (adapters/procs.py), in a session of its own."""
 import subprocess
-from collections.abc import Mapping
+import threading
+from collections.abc import Callable, Mapping
 from typing import IO, Literal
 
 from taskloop.adapters import procs
 from taskloop.adapters.childenv import tool_env
 from taskloop.contracts.env import Env
-from taskloop.contracts.ports import Hold, Ran, RanBytes, WaitTimeout
+from taskloop.contracts.ports import Hold, Ran, RanBytes, Streamed, WaitTimeout
 
 GRACE_S = procs.STOP_GRACE_S
 
@@ -66,6 +67,14 @@ class RealSpawner:
     def run_bytes(self, argv: list[str], *, cwd: str | None = None, extra: Mapping[str, str] | None = None) -> RanBytes:
         r = subprocess.run(argv, cwd=cwd, env=self._env(None, extra), capture_output=True, check=False)
         return RanBytes(exit=r.returncode, out=r.stdout or b"", err=r.stderr or b"")
+
+    def stream(self, argv: list[str], *, cwd: str | None = None, env: Mapping[str, str] | None = None,
+               extra: Mapping[str, str] | None = None,
+               on_output: Callable[[str], None], timeout_s: float | None = None, stop: threading.Event | None = None,
+               grace: float = procs.STOP_GRACE_S) -> Streamed:
+        res = procs.stream(argv, cwd=cwd, env=self._env(env, extra), on_output=on_output, timeout_s=timeout_s, stop=stop, grace=grace)
+        return Streamed(returncode=res.returncode, signal=res.signal, timed_out=res.timed_out, secs=res.secs,
+                        survivors=tuple(res.survivors))
 
     def start(self, argv: list[str], *, cwd: str | None = None, env: Mapping[str, str] | None = None,
               extra: Mapping[str, str] | None = None, stdin: Literal["null", "pipe"] = "null",

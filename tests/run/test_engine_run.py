@@ -41,6 +41,7 @@ from support.builders import cfg_with
 from support.checkpoints import stored_ck
 from support.fakes import as_bead, as_comment, must_bead
 from support.logs import records
+from support.spawn import real_spawner
 
 from taskloop.adapters import (
     context_size,
@@ -247,7 +248,7 @@ class EngineRunTest(EngineTest):
         with self.stoppable(), mock.patch.object(entry, "Engine", made), \
                 mock.patch.object(entry, "reclaim", return_value=(True, "")), \
                 self.store.stub(bd_fn=claim), mock.patch.object(entry, "say", side_effect=say):
-            rc = entry.run_bead(a, str(self.wt), {}, str(self.wt), self.store, env=snapshot())
+            rc = entry.run_bead(a, str(self.wt), {}, str(self.wt), self.store, env=snapshot(), spawner=real_spawner())
         return rc, made, said
 
     def test_a_stop_during_the_claim_waits_and_the_engine_closes_it(self):
@@ -708,7 +709,7 @@ class EngineRunTest(EngineTest):
             mock.patch.object(dl, "resolve", return_value=refusal),
             mock.patch.object(seams.DelegateRoute, "runner", lambda self, *a, **k: script),
         ):
-            rc = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot()).run()
+            rc = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner()).run()
         self.assertEqual(rc, 2)
         self.assertEqual(script.calls, [])
         self.assertIn("contract 3", self.said())
