@@ -431,7 +431,8 @@ class ReposStore(JsonStore[ReposIndex]):
         try:
             return wire.load(ReposIndex, json.loads(text))
         except ValueError:
-            raise ValueError(f"{self.path} is not a repos index of this version: delete it; every tl process registers its repo again") from None
+            why = f"{self.path} is not a repos index of this version: delete it; every tl process registers its repo again"
+            raise ValueError(why) from None
 
     def known(self) -> list[str]:
         """The repo paths, oldest first."""
