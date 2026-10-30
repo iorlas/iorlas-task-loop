@@ -24,23 +24,30 @@ class ReviewSkip(unittest.TestCase):
     run_engine: Any = T.EngineTest.run_engine
     ask: Any = T.EngineTest.ask
 
-    def go(self, cfg):
+    def go(self, cfg, plan=PLAN, writes=1):
         with self.store.stub(show=BEAD):
-            return self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, **({"skip_review": cfg} if cfg else {}))
+            return self.run_engine({"plan": [plan], "write": [WRITE] * writes, "review": [CLEAN] * writes}, **({"skip_review": cfg} if cfg else {}))
 
-    def reviews(self, s):
-        return len(s.prompts) - 2
+    def reviews(self, s, writes=1):
+        return len(s.prompts) - 1 - writes
 
-    def test_a_stage_that_changes_only_allow_listed_paths_is_not_reviewed(self):
+    def test_a_single_stage_tests_only_bead_is_reviewed(self):
         rc, s = self.go(ALLOW)
-        self.assertEqual((rc, self.reviews(s)), (0, 0))
+        self.assertEqual((rc, self.reviews(s)), (0, 1))
+
+    def test_a_mechanical_middle_stage_is_not_reviewed_but_the_last_one_is(self):
+        stage = PLAN["stages"][0]
+        plan = dict(PLAN, stages=[stage, dict(stage, goal="again")])
+        rc, s = self.go(ALLOW, plan, writes=2)
+        self.assertEqual((rc, self.reviews(s, 2)), (0, 1))
         log = [json.loads(x) for x in Path(self.eng.log_path).read_text().splitlines() if x.strip()]
         ends = [r for r in log if r.get("step") == "review" and r.get("outcome") == "skipped"]
         self.assertEqual([r["detail"] for r in ends], ["tests"])
 
     def test_a_path_outside_the_list_is_reviewed(self):
-        rc, s = self.go(ReviewSkipConfig(tests=["other.txt"]))
-        self.assertEqual((rc, self.reviews(s)), (0, 1))
+        stage = PLAN["stages"][0]
+        rc, s = self.go(ReviewSkipConfig(tests=["other.txt"]), dict(PLAN, stages=[stage, dict(stage, goal="again")]), writes=2)
+        self.assertEqual((rc, self.reviews(s, 2)), (0, 2))
 
     def test_no_allow_list_is_reviewed(self):
         rc, s = self.go(None)

@@ -18,9 +18,10 @@ def mod(path: str) -> DiffEntry:
     return DiffEntry(status="M", path=path)
 
 
-def go(*entries: DiffEntry, loud: tuple[str, ...] | None = None, formatter: bool = True, rules: ReviewSkipConfig = RULES):
+def go(*entries: DiffEntry, loud: tuple[str, ...] | None = None, formatter: bool = True, rules: ReviewSkipConfig = RULES,
+       maps_acceptance: bool = False):
     significant = frozenset(e.path for e in entries) if loud is None else frozenset(loud)
-    return decide(list(entries), significant, rules, has_formatter=formatter)
+    return decide(list(entries), significant, rules, has_formatter=formatter, maps_acceptance=maps_acceptance)
 
 
 class SkipKinds(unittest.TestCase):
@@ -53,6 +54,10 @@ class SkipKinds(unittest.TestCase):
 class CodeChangeMeansReview(unittest.TestCase):
     def test_one_code_path_among_mechanical_ones_is_reviewed(self):
         self.assertEqual(go(mod("config/a.json"), mod("tests/t.py"), mod("src/app.py")), ())
+
+    def test_the_stage_that_maps_the_acceptance_is_reviewed_whatever_its_paths(self):
+        self.assertEqual(go(mod("tests/t.py"), maps_acceptance=True), ())
+        self.assertEqual(go(DiffEntry(status="R", path="b", old="a"), maps_acceptance=True), ())
 
     def test_nothing_changed_is_reviewed(self):
         self.assertEqual(go(), ())

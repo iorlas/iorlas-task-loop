@@ -49,11 +49,12 @@ def _kind(e: DiffEntry, quiet: bool, rules: ReviewSkipConfig, has_formatter: boo
 
 
 def decide(entries: Sequence[DiffEntry], significant: Collection[str], rules: ReviewSkipConfig, *,
-           has_formatter: bool) -> tuple[SkipKind, ...]:
+           has_formatter: bool, maps_acceptance: bool) -> tuple[SkipKind, ...]:
     """The reasons the review is skipped (each kind once, in enum order), or () when it runs. `entries` is the stage's whole diff with
     exact renames; `significant` the paths that still differ when whitespace is ignored; `has_formatter` that the repo registers a
-    formatter (a check with a fix command), which has already run over this tree."""
-    if not entries:
+    formatter (a check with a fix command), which has already run over this tree. The stage that maps the bead's acceptance
+    (`maps_acceptance`) is always reviewed: nobody else checks the acceptance."""
+    if maps_acceptance or not entries:
         return ()
     kinds = {_kind(e, e.path not in significant, rules, has_formatter) for e in entries}
     if None in kinds:

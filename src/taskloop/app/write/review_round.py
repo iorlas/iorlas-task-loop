@@ -44,7 +44,8 @@ class ReviewRound:
         e = self.e
         if s.fix or s.wrote_unchecked or e.unchecked:
             return False
-        why = review_skip.why(e.git, str(e.wt), e.stage_tree or e.checkout.base_sha(), e.checkout.tree_hash(), e.cfg)
+        why = review_skip.why(e.git, str(e.wt), e.stage_tree or e.checkout.base_sha(), e.checkout.tree_hash(), e.cfg,
+                          maps_acceptance=s.last)
         if not why:
             return False
         said = ", ".join(why)
