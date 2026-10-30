@@ -125,6 +125,7 @@ layers =
     write | review | plan | look
     report
     checks
+    reconcile
     release | track | doctor
     slots
     asks
@@ -145,6 +146,7 @@ forbidden_modules =
     taskloop.app.loop
     taskloop.app.plan
     taskloop.app.prune
+    taskloop.app.reconcile
     taskloop.app.release
     taskloop.app.report
     taskloop.app.review
@@ -168,6 +170,7 @@ forbidden_modules =
     taskloop.app.loop
     taskloop.app.plan
     taskloop.app.prune
+    taskloop.app.reconcile
     taskloop.app.release
     taskloop.app.report
     taskloop.app.review
@@ -191,6 +194,7 @@ forbidden_modules =
     taskloop.app.loop
     taskloop.app.plan
     taskloop.app.prune
+    taskloop.app.reconcile
     taskloop.app.release
     taskloop.app.report
     taskloop.app.review
@@ -212,6 +216,7 @@ forbidden_modules =
     taskloop.app.loop
     taskloop.app.plan
     taskloop.app.prune
+    taskloop.app.reconcile
     taskloop.app.release
     taskloop.app.report
     taskloop.app.review
@@ -232,6 +237,7 @@ forbidden_modules =
     taskloop.app.loop
     taskloop.app.plan
     taskloop.app.prune
+    taskloop.app.reconcile
     taskloop.app.release
     taskloop.app.report
     taskloop.app.review
@@ -254,6 +260,7 @@ forbidden_modules =
     taskloop.app.look
     taskloop.app.plan
     taskloop.app.prune
+    taskloop.app.reconcile
     taskloop.app.review
     taskloop.app.track
     taskloop.app.wire
@@ -271,6 +278,7 @@ forbidden_modules =
     taskloop.app.look
     taskloop.app.loop
     taskloop.app.prune
+    taskloop.app.reconcile
     taskloop.app.release
     taskloop.app.report
     taskloop.app.review
@@ -282,7 +290,7 @@ forbidden_modules =
 allow_indirect_imports = True
 
 [importlinter:contract:app-prune]
-name = app slice prune imports only release, run, track
+name = app slice prune imports only reconcile, release, run, track
 type = forbidden
 source_modules = taskloop.app.prune
 forbidden_modules =
@@ -301,6 +309,29 @@ forbidden_modules =
     taskloop.app.write
 allow_indirect_imports = True
 
+[importlinter:contract:app-reconcile]
+name = app slice reconcile imports only release
+type = forbidden
+source_modules = taskloop.app.reconcile
+forbidden_modules =
+    taskloop.app.asks
+    taskloop.app.checks
+    taskloop.app.doctor
+    taskloop.app.land
+    taskloop.app.launch
+    taskloop.app.look
+    taskloop.app.loop
+    taskloop.app.plan
+    taskloop.app.prune
+    taskloop.app.report
+    taskloop.app.review
+    taskloop.app.run
+    taskloop.app.slots
+    taskloop.app.track
+    taskloop.app.wire
+    taskloop.app.write
+allow_indirect_imports = True
+
 [importlinter:contract:app-release]
 name = app slice release imports only itself
 type = forbidden
@@ -315,6 +346,7 @@ forbidden_modules =
     taskloop.app.loop
     taskloop.app.plan
     taskloop.app.prune
+    taskloop.app.reconcile
     taskloop.app.report
     taskloop.app.review
     taskloop.app.run
@@ -337,6 +369,7 @@ forbidden_modules =
     taskloop.app.loop
     taskloop.app.plan
     taskloop.app.prune
+    taskloop.app.reconcile
     taskloop.app.release
     taskloop.app.review
     taskloop.app.run
@@ -358,6 +391,7 @@ forbidden_modules =
     taskloop.app.loop
     taskloop.app.plan
     taskloop.app.prune
+    taskloop.app.reconcile
     taskloop.app.release
     taskloop.app.report
     taskloop.app.run
@@ -381,6 +415,7 @@ forbidden_modules =
     taskloop.app.loop
     taskloop.app.plan
     taskloop.app.prune
+    taskloop.app.reconcile
     taskloop.app.release
     taskloop.app.report
     taskloop.app.review
@@ -404,6 +439,7 @@ forbidden_modules =
     taskloop.app.loop
     taskloop.app.plan
     taskloop.app.prune
+    taskloop.app.reconcile
     taskloop.app.release
     taskloop.app.report
     taskloop.app.review
@@ -425,6 +461,7 @@ forbidden_modules =
     taskloop.app.loop
     taskloop.app.plan
     taskloop.app.prune
+    taskloop.app.reconcile
     taskloop.app.release
     taskloop.app.report
     taskloop.app.review

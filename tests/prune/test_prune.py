@@ -14,7 +14,8 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
-from taskloop.app.prune import branches, runs, trees, verb
+from taskloop.app.prune import runs, verb
+from taskloop.app.reconcile.sweep import sweep
 from taskloop.app.run import layout
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.config import LoopConfig
@@ -164,7 +165,7 @@ class Trees(unittest.TestCase):
         return d
 
     def prune(self, dry_run=False, now=None, repos=None, days=14):
-        return trees.prune_trees(self.build, repos or [str(self.repo)], days, now or self.later, dry_run)
+        return sweep(repos or [str(self.repo)], None, self.build, days, now or self.later, dry_run)
 
 
 class Landed(unittest.TestCase):
@@ -181,7 +182,7 @@ class Landed(unittest.TestCase):
         return type("S", (), {"find": lambda self, q: beads})()
 
     def prune(self, dry_run=False, **meta):
-        return branches.prune_branches([str(self.repo)], lambda r: cast(Beads, self.store(**meta)), dry_run)
+        return sweep([str(self.repo)], lambda r: cast(Beads, self.store(**meta)), None, 14, 0, dry_run)
 
     def heads(self):
         return git(self.repo, "for-each-ref", "--format=%(refname:short)", "refs/heads/").split()

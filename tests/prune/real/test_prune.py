@@ -14,7 +14,9 @@ from typing import cast
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401
 
-from taskloop.app.prune import branches, trees, verb
+from taskloop.app.prune import verb
+from taskloop.app.reconcile import apply, observe
+from taskloop.app.reconcile.sweep import sweep
 from taskloop.app.release.shell import REAL, Shell
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.config import LoopConfig
@@ -87,7 +89,7 @@ class Trees(unittest.TestCase):
         return d
 
     def prune(self, dry_run=False, now=None, repos=None, days=14):
-        return trees.prune_trees(self.build, repos or [str(self.repo)], days, now or self.later, dry_run)
+        return sweep(repos or [str(self.repo)], None, self.build, days, now or self.later, dry_run)
 
     def test_a_merged_clean_tree_is_removed_with_plain_git_and_the_main_checkout_stays(self):
         d = self.tree("done")
@@ -159,7 +161,7 @@ class Trees(unittest.TestCase):
             self.commit(self.repo, "late.txt")
             keep.append(git(self.repo, "rev-parse", "HEAD"))
             git(self.repo, "checkout", "-q", "main")
-        removed, kept = trees.prune_trees(self.build, [str(self.repo)], 14, self.later, False, racing("update-ref", land_one_more))
+        removed, kept = sweep([str(self.repo)], None, self.build, 14, self.later, False, racing("update-ref", land_one_more))
         self.assertEqual(removed, [])
         self.assertTrue(any("release/merged" in k for k in kept))
         self.assertEqual(git(self.repo, "rev-parse", "release/merged"), keep[0])
@@ -213,7 +215,7 @@ class Landed(unittest.TestCase):
         return type("S", (), {"find": lambda self, q: beads})()
 
     def prune(self, dry_run=False, **meta):
-        return branches.prune_branches([str(self.repo)], lambda r: cast(Beads, self.store(**meta)), dry_run)
+        return sweep([str(self.repo)], lambda r: cast(Beads, self.store(**meta)), None, 14, 0, dry_run)
 
     def heads(self):
         return git(self.repo, "for-each-ref", "--format=%(refname:short)", "refs/heads/").split()
@@ -279,7 +281,7 @@ class Landed(unittest.TestCase):
             self.commit(self.repo, "late.txt")
             git(self.repo, "checkout", "-q", "main")
         sh = racing("update-ref", late)
-        removed, kept = branches.prune_branches([str(self.repo)], lambda r: cast(Beads, self.store()), False, sh)
+        removed, kept = sweep([str(self.repo)], lambda r: cast(Beads, self.store()), None, 14, 0, False, sh)
         self.assertEqual(removed, [])
         self.assertIn("task/a-1", self.heads())
         self.assertTrue(any(k.startswith("branch task/a-1") for k in kept))
@@ -296,18 +298,18 @@ class Landed(unittest.TestCase):
             self.commit(other, "late.txt")
             git(other, "push", "-q", "origin", "task/a-1")
         sh = racing("push", late)
-        removed, kept = branches.prune_branches([str(self.repo)], lambda r: cast(Beads, self.store()), False, sh)
+        removed, kept = sweep([str(self.repo)], lambda r: cast(Beads, self.store()), None, 14, 0, False, sh)
         self.assertEqual([r for r in removed if r.startswith("remote")], [])
         self.assertIn("refs/heads/task/a-1", git(self.origin, "for-each-ref", "--format=%(refname)"))
         self.assertTrue(any(k.startswith("remote branch task/a-1") for k in kept))
 
     def test_the_code_never_forces_a_branch_delete(self):
-        src = Path(branches.__file__).read_text(encoding="utf-8")
+        src = Path(apply.__file__).read_text(encoding="utf-8") + Path(observe.__file__).read_text(encoding="utf-8")
         self.assertNotIn('"-D"', src)
         self.assertNotIn("--force", src)
 
     def test_bd_not_answering_keeps_every_branch(self):
-        removed, kept = branches.prune_branches([str(self.repo)], lambda r: cast(Beads, Store(fail=True)), False)
+        removed, kept = sweep([str(self.repo)], lambda r: cast(Beads, Store(fail=True)), None, 14, 0, False)
         self.assertEqual(removed, [])
         self.assertIn("bd did not answer", kept[0])
 
@@ -315,11 +317,11 @@ class Landed(unittest.TestCase):
         cfg = ConfigDir(self.root / "cfg")
         self.land_commit("a-1")  # titled (a-1) but a revert-like title is not what counts
         git(self.repo, "commit", "-q", "--amend", "-m", 'Revert "work (a-1)"')
-        self.assertFalse(branches.landed(self.repo, BeadId("a-1"), REAL, cfg))  # no record, a revert subject: not landed
+        self.assertFalse(observe.landed(self.repo, BeadId("a-1"), REAL, cfg))  # no record, a revert subject: not landed
         LandedStore(cfg).put(LandedRec(bead=BeadId("a-1"), sha=git(self.repo, "rev-parse", "HEAD"), base="origin/main", t=1.0))
-        self.assertTrue(branches.landed(self.repo, BeadId("a-1"), REAL, cfg))  # the record's sha is on HEAD
+        self.assertTrue(observe.landed(self.repo, BeadId("a-1"), REAL, cfg))  # the record's sha is on HEAD
         LandedStore(cfg).put(LandedRec(bead=BeadId("a-1"), sha=git(self.repo, "rev-parse", "task/a-3"), base="origin/main", t=1.0))
-        self.assertFalse(branches.landed(self.repo, BeadId("a-1"), REAL, cfg))  # a sha that never reached HEAD
+        self.assertFalse(observe.landed(self.repo, BeadId("a-1"), REAL, cfg))  # a sha that never reached HEAD
 
 
 if __name__ == "__main__":

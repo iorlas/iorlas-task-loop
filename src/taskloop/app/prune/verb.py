@@ -1,10 +1,11 @@
-"""`tl prune [--dry-run]`: the run data, build trees, release branches and landed task branches that are past `loop.keep_days`, removed;
-what stays, with why.
+"""`tl prune [--dry-run]`: the run data past `loop.keep_days`, then one reconcile sweep (build trees, release branches, landed task
+branches), removed; what stays, with why.
 Idempotent: a second run finds nothing. The loop runs it at its start."""
 from collections.abc import Callable
 from pathlib import Path
 
-from taskloop.app.prune import branches, runs, trees
+from taskloop.app.prune import runs
+from taskloop.app.reconcile.sweep import sweep
 from taskloop.app.release.shell import REAL, Shell
 from taskloop.contracts.config import LoopConfig
 from taskloop.contracts.paths import ConfigDir
@@ -33,14 +34,9 @@ def run(cfg: ConfigDir, loop: LoopConfig, repos: list[str], store_of: Callable[[
         held = sum(1 for d in folders if d.name.rsplit("-", 2)[0] in exempt)
         say(f"prune: run data: {would}{len(gone)} item(s), {mb(sum(g.bytes for g in gone))}; kept every run folder newer than "
             f"{loop.keep_days:g} days and {held} of beads still open or parked")
-    removed, kept = trees.prune_trees(Path(loop.build_dir).expanduser(), repos, loop.keep_days, now, dry_run, sh)
-    for line in removed:
-        say(f"prune: {line if dry_run else 'removed ' + line}")
-    for line in kept:
-        say(f"prune: kept {line}")
-    gone, stays = branches.prune_branches(repos, store_of, dry_run, sh)
+    gone, stays = sweep(repos, store_of, Path(loop.build_dir).expanduser(), loop.keep_days, now, dry_run, sh)
     for line in gone:
         say(f"prune: {line if dry_run else 'removed ' + line}")
     for line in stays:
         say(f"prune: kept {line}")
-    return count + len(removed) + len(gone)
+    return count + len(gone)
