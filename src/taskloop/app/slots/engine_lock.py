@@ -51,13 +51,15 @@ def loop_lock(wt: str | Path, slot: str, slot_bead: str, bead: str = "") -> None
 
 def engine_busy(wt: str | Path, handoff: bool = False) -> str:
     """What runs in this worktree, with the lock's path ("engine pid N runs BEAD since T; lock P"), or "". handoff: a run-task the loop
-    started takes over its parent loop's lock for the same slot bead."""
+    started takes over its loop's lock for the same slot bead. The loop names itself in TASK_LOOP_LOOP_PID: run-task's parent is
+    `uv run --script`, not the loop, so the parent pid would never match."""
     lock = read_engine_lock(wt)
     if not lock:
         return ""
     mine = {os.getpid()}
     if handoff and lock.get("by") == "loop" and lock.get("slot_bead", "") == os.environ.get("TASK_LOOP_SLOT_BEAD", ""):
-        mine.add(os.getppid())
+        with contextlib.suppress(ValueError):
+            mine.add(int(os.environ.get("TASK_LOOP_LOOP_PID") or ""))
     where = f"; lock {engine_lock_path(wt)}"
     pid = lock.get("pid")
     if pid and int(pid) not in mine and proc_alive(pid, lock.get("start") or ""):

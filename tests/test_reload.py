@@ -239,10 +239,11 @@ class Reload(te.EngineTest):
                 )
                 return 1  # import error of the new image: no outcome, the note is still there
 
-        spawned_env = []
+        spawned_env, pids = [], []
 
         def spawn(cmd, log, extra):
             spawned.append(cmd)
+            pids.append(extra.get("TASK_LOOP_LOOP_PID"))
             if len(spawned) == 2:
                 spawned_env.append(json.loads(extra["TL_REEXEC"]))
             return Child(cmd), mock.Mock()
@@ -264,6 +265,7 @@ class Reload(te.EngineTest):
         self.assertEqual(spawned[1][:5], procs.script_argv(old / "tl.py"))
         self.assertIsNone(leaked)  # the loop's own environment keeps no hand-over for its later run-tasks
         self.assertEqual(spawned_env[0]["run"], "t-1-20261026-120000")  # the fallback child got it
+        self.assertEqual(pids, [str(os.getpid())] * 2)  # run-task's parent is uv: the loop names itself for the lock handoff
         fb = [e for e in self.events() if e["kind"] == "reload_fallback"]
         self.assertEqual([(e["old"], e["new"]) for e in fb], [("0.2.0", "0.1.0")])
         self.assertIn("0.2.0", [e["version"] for e in json.loads((ident.config_dir() / "bad-versions.json").read_text())["entries"]])

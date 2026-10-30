@@ -1,6 +1,7 @@
 """One bead through `tl run-task` as a child of the loop: wait for it, watch for a stop, read what it gave."""
 import contextlib
 import json
+import os
 import subprocess
 import time
 from collections.abc import Callable
@@ -62,7 +63,8 @@ class BeadRun:
         out, log_path = runs / (stem + ".outcome.json"), runs / (stem + ".log")
         cmd = env.run_task_argv(b.id, at.wt, at.slot, str(out), code)
         t0 = env.now()
-        extra = {"TASK_LOOP_SLOT_BEAD": at.slot_bead or "", **({"TL_REEXEC": json.dumps(handover)} if handover else {})}
+        extra = {"TASK_LOOP_SLOT_BEAD": at.slot_bead or "", "TASK_LOOP_LOOP_PID": str(os.getpid()),  # run-task's parent is uv, not us
+                 **({"TL_REEXEC": json.dumps(handover)} if handover else {})}
         with open(log_path, "ab") as log:  # append: a rerun of the same stem never cuts a log another reader follows
             child, hold = env.spawn(cmd, log, extra)
             self.publish(Running(b.id, at.slot, t0, child.pid, str(log_path), "" if at.slot else at.wt))
