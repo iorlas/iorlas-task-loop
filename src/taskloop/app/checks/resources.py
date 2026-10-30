@@ -16,6 +16,7 @@ from taskloop.contracts.checks import Check
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.enums import LockWhat, WaitWhat
 from taskloop.contracts.locks import LockTimeout
+from taskloop.domain.checks import affinity
 from taskloop.stores.bundle import Stores
 
 POLL_S = 0.5  # how often a waiting check looks for a free lease
@@ -55,8 +56,7 @@ class Resources:
     def have(self) -> set[str]:
         """The resources this host has: host.json's list; no file: every resource the repo declares."""
         if self._have is None:
-            rec = self.host.stores.host.need()
-            self._have = set(self.host.cfg.resources) if rec is None else set(rec.resources)
+            self._have = affinity.have(self.host.cfg, self.host.stores.host.need())
         return self._have
 
     def lacking(self, c: Check) -> list[str]:

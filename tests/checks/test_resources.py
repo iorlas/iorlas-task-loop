@@ -16,6 +16,7 @@ from support.logs import records
 from taskloop.app.checks import resources
 from taskloop.app.checks.resources import Resources
 from taskloop.app.land import verified
+from taskloop.app.plan.planner import Planner
 from taskloop.contracts.checks import UNVERIFIED_EXIT, Check, CheckResult, CheckRun
 from taskloop.contracts.config import ConfigError, EngineConfig, HostResources, ResourceSpec, load
 from taskloop.contracts.enums import LockWhat, WaitWhat
@@ -154,8 +155,9 @@ class Deferral(unittest.TestCase):
 
     def test_a_deferred_check_with_changed_inputs_waits_for_a_host_with_the_resource(self):
         run = CheckRun(round=1, results=[self.deferred(True)])
-        self.assertEqual(verified.kind_of(run), "PAUSE_RESOURCE")
-        self.assertIn("waits for a host that has unity", verified.refusal(run))
+        self.assertEqual(verified.kind_of(run), "PAUSE_MOVED")
+        self.assertIn("labelled needs:unity", verified.refusal(run))
+        self.assertEqual(verified.moves(run), ["unity"])
 
     def test_another_unverified_check_keeps_the_land_a_fault(self):
         other = CheckResult(id=CheckId("r"), cmd="r", group="tests", exit=UNVERIFIED_EXIT, status="unverified")
@@ -202,13 +204,29 @@ class Engine(EngineTest):
         self.assertIn("deferred checks", notes)
         self.assertIn("ut", notes)
 
-    def test_a_host_without_the_resource_keeps_the_bead_when_the_diff_touches_the_inputs(self):
+    def test_a_plan_that_touches_the_inputs_moves_the_bead_before_any_code_is_written(self):
         rc, _ = self.run_engine(ANSWERS, prep=self.lacking, resources=UNITY, checks=self.checks(["f.txt"]))
         self.assertNotEqual(rc, 0)
         r = self.eng.result()
-        self.assertEqual((r.outcome, r.kind), ("paused", "pause_resource"))
-        self.assertIn("waits for a host that has unity", r.why)
+        self.assertEqual((r.outcome, r.kind), ("paused", "pause_moved"))
+        self.assertIn("labelled needs:unity", r.why)
+        self.assertEqual(self.store.said("label", "add"), [("label", "add", "t-1", "needs:unity")])
         self.assertEqual(records(self.eng, "gate_end"), [])
+
+    def test_a_diff_that_hits_the_inputs_the_plan_did_not_name_moves_the_bead_at_the_land(self):
+        with mock.patch.object(Planner, "move_if_lacking"):  # the plan did not see it: the land is the second look
+            rc, _ = self.run_engine(ANSWERS, prep=self.lacking, resources=UNITY, checks=[dict(self.checks(["f.txt"])[0], run="gate")])
+        self.assertNotEqual(rc, 0)
+        r = self.eng.result()
+        self.assertEqual((r.outcome, r.kind), ("paused", "pause_moved"))
+        self.assertEqual(self.store.said("label", "add"), [("label", "add", "t-1", "needs:unity")])
+        self.assertEqual(self.store.said("close"), [])
+        self.assertEqual([g["exit"] for g in records(self.eng, "gate_end")], [1])  # it got as far as the land's gate
+
+    def test_a_host_that_has_the_resource_adds_no_label_and_lands(self):
+        rc, _ = self.run_engine(ANSWERS, resources=UNITY, checks=self.checks(["f.txt"]))
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual(self.store.said("label", "add"), [])
 
 
 if __name__ == "__main__":

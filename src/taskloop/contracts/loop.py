@@ -12,7 +12,7 @@ class StopRequest(Rec):
     t: float = 0.0
 
 
-SkipKind = Literal["epic", "slot", "label", "epic_only", "lint", "area", "rest", "lane", "taken", "hold", "parked", "capped"]
+SkipKind = Literal["epic", "slot", "label", "epic_only", "lint", "area", "rest", "lane", "taken", "hold", "parked", "capped", "needs"]
 
 
 class Skip(Rec):

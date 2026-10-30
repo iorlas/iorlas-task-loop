@@ -370,6 +370,10 @@ class FakeRecheckHost:
     def blocked_for(self, why: str, kind: str) -> Exception:
         return stopped(why, kind)
 
+    def move_host(self, needs: list[str], why: str) -> Exception:
+        self.moved = [*getattr(self, "moved", []), *needs]
+        return stopped(why, "PAUSE_MOVED")
+
 
 class Fixes:
     def __init__(self, events: list[str]) -> None:
@@ -454,6 +458,10 @@ class FakeGateHost:
     def blocked_for(self, why: str, kind: str) -> Exception:
         return stopped(why, kind)
 
+    def move_host(self, needs: list[str], why: str) -> Exception:
+        self.moved = [*getattr(self, "moved", []), *needs]
+        return stopped(why, "PAUSE_MOVED")
+
 
 class NoRun:
     def read(self) -> CheckRun | None:
@@ -493,6 +501,9 @@ class FakeLandHost:
 
     def blocked_for(self, why: str, kind: str) -> Exception:
         return stopped(why, kind)
+
+    def move_host(self, needs: list[str], why: str) -> Exception:
+        return stopped(why, "PAUSE_MOVED")
 
     def emitted(self) -> list[object]:
         return [row.rec for row in self.stores.run_log("run").read_from(0).items]

@@ -154,7 +154,9 @@ class FakeBeadStore:
     def add_comment(self, bead: BeadId, text):
         self.run(["comments", "add", bead, text])
 
-    def add_label(self, bead: BeadId, label):
+    def add_label(self, bead: BeadId, label, if_assignee=""):
+        if if_assignee:
+            self.update(bead, BeadPatch(assignee=if_assignee, if_assignee=if_assignee))
         self.run(["label", "add", bead, label])
 
     def remove_label(self, bead: BeadId, label):

@@ -94,6 +94,7 @@ class GateHost(Protocol):
     def wt(self) -> str: ...
     def halt_point(self, when: bool = ..., wait: float = ...) -> None: ...
     def blocked_for(self, why: str, kind: str) -> Exception: ...
+    def move_host(self, needs: list[str], why: str) -> Exception: ...
 
 
 class Gate:
@@ -127,10 +128,9 @@ class Gate:
         except CheckFault as fault:
             e.log.emit(rec.GateEnd(exit=fault.rc, secs=round(time.time() - started)))
             raise e.blocked_for(fault.text, FAULTS[fault.kind]) from fault
-        why = verified.refusal(run)
-        if why:
+        if verified.refusal(run):
             e.log.emit(rec.GateEnd(exit=1, secs=round(time.time() - started)))
-            raise e.blocked_for(why, verified.kind_of(run))
+            raise verified.stop(run, e)
         e.halt_point()  # a stop ended a step, which then reports itself red: the run stops here, not in a fix round
         reds = [c for c in run.results if c.red and not verified.deferred(c)]
         skipped = not reds and all(c.cached or c.exit is None for c in run.results)

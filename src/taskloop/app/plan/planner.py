@@ -17,6 +17,8 @@ from taskloop.contracts.checkpoint import PlanStep
 from taskloop.contracts.enums import AskClass
 from taskloop.contracts.plancheck import PlanData
 from taskloop.domain.asks import specs as askspecs
+from taskloop.domain.checks import affinity
+from taskloop.domain.checks.specs import repo_check
 from taskloop.domain.matchers import clip
 from taskloop.domain.plan.brief import COMMENTS_ONLY
 from taskloop.domain.plan.stored import stored
@@ -171,8 +173,20 @@ class Planner:
             return data
         raise e.blocked_for("failed: the plan has no stages", "FAULT_PLAN")
 
+    def move_if_lacking(self, data: PlanData) -> None:
+        """Bead affinity (tl-7k8.8): the planned files hit a repo check that needs a resource this host lacks: the needs label is set and
+        the bead goes back to the queue for a host that has it."""
+        e = self.e
+        files = sorted({f for s in data["stages"] for f in s["files"]})
+        need = affinity.planned([repo_check(k, e.cfg) for k in e.cfg.checks], files, e.cfg, e.stores.host.need())
+        if need:
+            names = ", ".join(need)
+            raise e.move_host(need, f"paused: the plan changes files that a check needing {names} reads, and this host does not have "
+                                    f"{names}; the bead is labelled needs:{names} and goes back to the queue for a host that has it")
+
     def finish(self, data: PlanData) -> PlanData:
         e = self.e
+        self.move_if_lacking(data)
         big = int(e.cfg.max_stages)
         if len(data["stages"]) > big and not self.cap.kept_whole():
             why = f"ticket: the plan has {len(data['stages'])} stages (more than {big}): the bead may be too big for one task"

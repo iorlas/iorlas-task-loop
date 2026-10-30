@@ -27,9 +27,14 @@ def waiting(run: CheckRun) -> list[CheckResult]:
 
 
 def kind_of(run: CheckRun) -> str:
-    """The outcome kind of a refusal: PAUSE_RESOURCE when every check held is waiting for a resource's host, else FAULT_LAND."""
+    """The outcome kind of a refusal: PAUSE_MOVED (to a host with the resource) when every check held waits for one, else FAULT_LAND."""
     held = _held(run)
-    return "PAUSE_RESOURCE" if held and len(waiting(run)) == len(held) else "FAULT_LAND"
+    return "PAUSE_MOVED" if held and len(waiting(run)) == len(held) else "FAULT_LAND"
+
+
+def moves(run: CheckRun) -> list[str]:
+    """The resources the bead must move to a host for: what the waiting checks need and this host lacks."""
+    return sorted({r for c in waiting(run) for r in c.deferred})
 
 
 def refusal(run: CheckRun) -> str:
@@ -38,10 +43,10 @@ def refusal(run: CheckRun) -> str:
     if not held:
         return ""
     names = ", ".join(f"`{c.id[:80]}`" for c in held)
-    if kind_of(run) == "PAUSE_RESOURCE":
-        need = ", ".join(sorted({r for c in held for r in c.deferred}))
+    if kind_of(run) == "PAUSE_MOVED":
+        need = ", ".join(moves(run))
         return (f"paused: not landed: check {names} needs {need}, which this host does not have, and this diff changes what it reads; "
-                f"the branch is kept and the bead waits for a host that has {need}")
+                f"the branch is kept, the bead is labelled needs:{need} and goes back to the queue for a host that has it")
     return (f"failed: not landed: required check {names} is unverified (it exited {UNVERIFIED_EXIT}: it could not verify what it checks), "
             "and an unverified check is not a pass; the branch is kept. Make the check able to run (the tool, host or resource it "
             "lacks), then run the bead again")
@@ -54,12 +59,18 @@ def latest(last: CheckRun | None, saved: Callable[[], CheckRun | None]) -> Check
 
 class Blocks(Protocol):
     def blocked_for(self, why: str, kind: str) -> Exception: ...
+    def move_host(self, needs: list[str], why: str) -> Exception: ...
+
+
+def stop(run: CheckRun, host: Blocks) -> Exception:
+    """The stop for a run `refusal` refuses: a move to a capable host (the needs label set, the bead released), else a land fault."""
+    why = refusal(run)
+    return host.move_host(moves(run), why) if kind_of(run) == "PAUSE_MOVED" else host.blocked_for(why, kind_of(run))
 
 
 def refuse(run: CheckRun | None, host: Blocks) -> list[str]:
     """A required check that could not verify is no pass: nothing is committed or pushed. -> the deferred checks the land goes on
     past (it says so in a note)."""
-    why = refusal(run) if run else ""
-    if why and run:
-        raise host.blocked_for(why, kind_of(run))
+    if run and refusal(run):
+        raise stop(run, host)
     return passed_over(run) if run else []

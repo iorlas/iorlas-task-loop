@@ -37,7 +37,7 @@ from taskloop.app.wire import real
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts import env as penv
 from taskloop.contracts import paths
-from taskloop.contracts.config import RepoProfile
+from taskloop.contracts.config import HostResources, RepoProfile
 from taskloop.contracts.enums import LockWhat
 from taskloop.contracts.env import Env
 from taskloop.contracts.envvars import EnvVar
@@ -46,7 +46,7 @@ from taskloop.contracts.landed import LandedStore
 from taskloop.contracts.loop import LoopState
 from taskloop.contracts.ports import Beads, Child, Git, Hold, Spawner
 from taskloop.contracts.slots import SlotGitError
-from taskloop.contracts.stores import ReposStore
+from taskloop.contracts.stores import JsonStore, ReposStore
 from taskloop.domain import outcome as oc
 from taskloop.domain.beads import rules as beadlint
 
@@ -254,6 +254,7 @@ def build(repo: str, store: Beads | None = None, session_actor: str = "", here: 
         actor=ident.actor,
         exec_into=lambda d, argv, handover: exec_into(repo, d, argv, handover, env, start_cwd),
         take_handover=lambda: penv.take(EnvVar.TL_LOOP_STATE),
+        host=lambda: JsonStore(cfg.host(), HostResources).need(),
         say=console.say,
         now=now,
         pid=os.getpid(),

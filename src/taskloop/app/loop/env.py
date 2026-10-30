@@ -11,7 +11,7 @@ from typing import Any, Protocol
 from taskloop.app.slots.env import SlotEnv
 from taskloop.contracts import paths
 from taskloop.contracts.bead import Bead
-from taskloop.contracts.config import RepoProfile
+from taskloop.contracts.config import HostResources, RepoProfile
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ports import Beads, Child, Hold
 
@@ -80,6 +80,7 @@ class LoopEnv:
     actor: Callable[[], str]
     exec_into: Callable[[Path, list[str], str], None]  # (install dir, argv, handover JSON): replace this process; returns only on failure
     take_handover: Callable[[], str]  # the state JSON an older install of this loop handed over ("" on a fresh start)
+    host: Callable[[], HostResources | None] = lambda: None  # ~/.config/task-loop/host.json (None: no file, the host has every resource)
     say: Callable[[str], None] = print
     now: Callable[[], float] = time.time
     sleep: Callable[[float], None] = time.sleep

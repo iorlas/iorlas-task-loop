@@ -257,7 +257,9 @@ class BdStore:
     def add_comment(self, bead: BeadId, text: str) -> None:
         self._must("comments", "add", bead, text)
 
-    def add_label(self, bead: BeadId, label: str) -> None:
+    def add_label(self, bead: BeadId, label: str, if_assignee: str = "") -> None:
+        if if_assignee:
+            self._must(*update_argv(bead, BeadPatch(assignee=if_assignee, if_assignee=if_assignee)))
         self._must("label", "add", bead, label)
 
     def remove_label(self, bead: BeadId, label: str) -> None:

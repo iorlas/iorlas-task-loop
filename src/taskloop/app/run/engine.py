@@ -75,6 +75,7 @@ from taskloop.contracts.paths import PLAN_FILE, ConfigDir, RunFiles
 from taskloop.contracts.ports import Clock, Git, Spawner
 from taskloop.contracts.run import Reexec, RunReport
 from taskloop.domain import outcome as oc
+from taskloop.domain.checks import affinity
 from taskloop.domain.lanes.matchers import read_only_command
 from taskloop.domain.lanes.says import stop_say, stop_why
 from taskloop.stores.bundle import Stores
@@ -238,6 +239,14 @@ class Engine(RunFields):
 
     def blocked_for(self, why: str, kind: str, stop: Any = None, spec: Any = None, fix: bool = False) -> Blocked:
         return blocked_for(why, kind, stop, spec, fix)
+
+    def move_host(self, needs: list[str], why: str) -> Blocked:
+        """The stop of a bead that needs a resource this host lacks: the needs labels are written under the claim's fence (only add,
+        never remove), then the run ends PAUSE_MOVED and the close releases the bead for a host that has them."""
+        lost = [n for n in needs if not beadtools.attempt(self.store.add_label, self.bead, affinity.label(n), fence.guard(self.claim))]
+        if lost:
+            return self.blocked_for(f"failed: could not label {self.bead} needs:{', '.join(lost)} ({why})", "FAULT_ENGINE")
+        return self.blocked_for(why, "PAUSE_MOVED")
 
     def warn(self, text: str) -> None:
         """Something a watching coordinator should look at: printed with a warning sign, kept in the log, shown on the dashboard."""

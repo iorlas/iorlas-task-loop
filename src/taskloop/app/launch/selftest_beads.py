@@ -86,8 +86,10 @@ class MemoryBeads:
         self._get(bead)
         self.notes.setdefault(bead, []).append(Comment(author=self.actor, text=text))
 
-    def add_label(self, bead: BeadId, label: str) -> None:
+    def add_label(self, bead: BeadId, label: str, if_assignee: str = "") -> None:
         b = self._get(bead)
+        if if_assignee and b.assignee != if_assignee:
+            raise BdFailure(BdError(kind="other", text="assignee changed"))
         self._put(b, labels=sorted({*b.labels, label}))
 
     def remove_label(self, bead: BeadId, label: str) -> None:
