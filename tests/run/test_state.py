@@ -133,7 +133,7 @@ class Park(unittest.TestCase):
                 continue
             want = a.state.pending_land_validation if name == "pending_land_validation" else getattr(a.state, name)
             self.assertEqual(getattr(b, name), want, name)
-        self.assertEqual((b.snap, b.brief_hash), ({"now": 1}, "now"))  # the bead as it is now, not as it was planned
+        self.assertEqual((b.snap, b.brief_hash), (snap, "now"))  # the bead as it is now, not as it was planned
         self.assertEqual((b.unverified, b.filed, b.unfiled), (a.unverified, a.filed, a.unfiled))  # the ReviewState folds them in
 
     def test_an_edit_from_outside_hands_back_only_what_every_resume_keeps(self):
