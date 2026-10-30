@@ -41,7 +41,7 @@ def main(a):
     name = "f-%s.txt" % bead
     if "stages" in props:
         node, data = "plan", {"summary": "add " + name, "stages": [{"goal": "add " + name, "files": [name],
-                                                                   "checks": ["test -f " + name], "hard": False}],
+                                                                   "checks": [["test", "-f", name]], "hard": False}],
                               "risks": [], "question": "", "options": [], "decided": "", "cases": [], "leftovers": []}
     elif "checks_run" in props:
         node = "write"
@@ -58,7 +58,8 @@ def main(a):
         data = {"summary": "wrote " + name, "checks_run": [{"cmd": "test -f " + name, "exit": 0}], "question": "",
                 "options": [], "decided": "", "bad_checks": [], "new_cases": [], "unchecked": [], "logic_only": ""}
     else:
-        node, data = "review", {"findings": [], "unmet": [], "question": "", "options": [], "decided": "", "leftovers": [],
+        node, data = "review", {"findings": [], "unmet": [], "question": "",
+                                "criteria": [{"item": "A1", "status": "met", "evidence": "the check passes"}], "options": [], "decided": "", "leftovers": [],
                                 "unchecked": [], "look": ""}
     ref, family = "ref-%s-%s" % (node, bead), "openai" if node == "write" else "claude"
     tokens = {"in": 1, "cached": 0, "out": 1}

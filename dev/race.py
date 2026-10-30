@@ -148,7 +148,7 @@ class Race(unittest.TestCase):
         for s in SLOTS:
             sh("git", "worktree", "add", "-q", "--detach", str(r / ".slots" / s), "origin/main", cwd=r, env=env)
         beads = {b: {"id": b, "title": "bead " + b, "status": "open", "priority": 2, "issue_type": "task",
-                     "acceptance_criteria": f"f-{b}.txt exists", "labels": []} for b in BEADS}
+                     "description": f"Create f-{b}.txt.", "acceptance_criteria": f"f-{b}.txt exists", "labels": []} for b in BEADS}
         for b, area in AREA.items():
             if area == "a":
                 beads[b]["labels"] = ["lane:a"]
