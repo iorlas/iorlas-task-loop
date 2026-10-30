@@ -48,6 +48,7 @@ class CliHost:
         self.tree_memo: Any = None
         self.steps: Any = None  # the step book is the engine's; a person's run has none
         self.shell, self.checkout, self.waits = Shell(self), Checkout(self), _Waits()
+        self.tree_writer = self.checkout
 
     def sh(self, cmd: Sequence[str], timeout: float = 3600, check: bool = False, save: Path | None = None,
            env: Mapping[str, str] | None = None, pin: bool = False, what: str = "command", cwd: Path | None = None) -> tuple[int, str]:
