@@ -75,6 +75,7 @@ class Check(Rec):
     reads: list[CheckId] = msgspec.field(default_factory=list)  # registered checks whose log and exit code it reads: it runs after them
     tags: list[Tag] = msgspec.field(default_factory=list)
     needs: list[str] = msgspec.field(default_factory=list)  # resources it holds a machine-wide lease on while it runs
+    lane: str = ""  # its lane: the checks of one run in order, the lanes in parallel
 
 
 @final
@@ -100,13 +101,21 @@ class CheckResult(Rec):
     waited: float = 0.0  # seconds it queued for the leases of its `needs` before it ran (not part of secs)
     deferred: list[str] = msgspec.field(default_factory=list)  # the resources this host lacks: it did not run (exit UNVERIFIED_EXIT)
     inputs_changed: bool = False  # deferred: the diff touches what it reads, so the land may not go on past it
+    lane: str = ""  # the lane it ran in
+    at: float = 0.0  # seconds after its block began that it started (lane timing; with `secs` and `waited`: where its lane's time went)
+    cancelled: bool = False  # not run, or stopped, because another lane went red first: not a verdict on this check
     sig: str = ""  # what a red's output says, timings aside: two reds with one sig failed the same way
 
     @classmethod
     def skipped(cls, check: Check, why: str, producer: str = "") -> CheckResult:
         """The result of a check that did not run, and why."""
         return cls(id=check.id, cmd=check.cmd, group=check.group, exit=None, status="skipped", why=why, producer=producer,
-                   tags=list(check.tags))
+                   tags=list(check.tags), lane=check.lane)
+
+    @classmethod
+    def cancelled_by(cls, check: Check, red: str, log: str = "", at: float = 0.0, secs: float = 0.0) -> CheckResult:
+        """A check another lane's red stopped (or kept from starting): skipped, never a verdict; `log` holds what it printed before."""
+        return cls.skipped(check, f"cancelled: {red} failed first").replace(cancelled=True, log=log, at=at, secs=secs)
 
     @classmethod
     def failed_run(cls, cmd: str, tail: str, group: str = "gate", log: str = "") -> CheckResult:

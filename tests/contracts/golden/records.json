@@ -520,6 +520,9 @@
     "waited": 0.0,
     "deferred": [],
     "inputs_changed": false,
+    "lane": "",
+    "at": 0.0,
+    "cancelled": false,
     "sig": "boom"
    },
    {
@@ -544,6 +547,9 @@
     "waited": 0.0,
     "deferred": [],
     "inputs_changed": false,
+    "lane": "",
+    "at": 0.0,
+    "cancelled": false,
     "sig": ""
    }
   ],
@@ -580,7 +586,8 @@
    "unity-build"
   ],
   "tags": [],
-  "needs": []
+  "needs": [],
+  "lane": ""
  },
  "plancheck.Ref": {
   "kind": "ref",
@@ -638,6 +645,9 @@
       "waited": 0.0,
       "deferred": [],
       "inputs_changed": false,
+      "lane": "",
+      "at": 0.0,
+      "cancelled": false,
       "sig": ""
      },
      "round": 1,
@@ -1193,6 +1203,7 @@
      "in": "container",
      "why": "",
      "reads": [],
+     "lane": "",
      "needs": [],
      "fix": []
     },
@@ -1218,6 +1229,7 @@
      "in": "host",
      "why": "",
      "reads": [],
+     "lane": "",
      "needs": [
       "unity"
      ],

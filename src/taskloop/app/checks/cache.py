@@ -5,6 +5,7 @@ memo (`has`) the round does (`hit`): there is no second copy of the decision."""
 import hashlib
 import json
 import os
+import threading
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -57,6 +58,7 @@ class RunMemo:
         was = doc.get() or CheckCacheEntry()
         self.runs = {e.key: e.hit for e in was.runs}
         self.base_red = {e.key: e.red for e in was.base}
+        self.lock = threading.Lock()  # lanes remember at the same time
         self.ran: dict[RunKey, tuple[CheckResult, float]] = {}  # this block's runs by command -> result, wall limit
 
     def env_of(self, c: Check) -> Digest:
@@ -104,8 +106,9 @@ class RunMemo:
         """Only a pass is a fact; one entry per check, the latest."""
         if res.status != "passed":
             return
-        self.runs = {k: v for k, v in self.runs.items() if k.check != key.check}
-        self.runs[key] = CacheHit(result=res, round=rnd, log_abs=log_abs)
+        with self.lock:
+            self.runs = {k: v for k, v in self.runs.items() if k.check != key.check}
+            self.runs[key] = CacheHit(result=res, round=rnd, log_abs=log_abs)
 
     def base_was_red(self, c: Check) -> bool | None:
         """True or False when the command has run on this base; None when it has not."""

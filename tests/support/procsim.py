@@ -72,6 +72,15 @@ def takes(secs: float, code: int = 0, out: str = "", then: Fake | None = None) -
     return run
 
 
+BLOCKS = -1.0  # the seconds a check that runs until the engine stops it reports (`blocks`)
+
+
+def blocks(out: str = "") -> Fake:
+    """A check that runs until the engine stops it (its lane is cancelled, the run is halted): the stream returns "stopped" then, and
+    with no stop flag in reach it fails the test after 10 s."""
+    return takes(BLOCKS, out=out)
+
+
 def hangs(out: str = "") -> Fake:
     """A check that sleeps far past any wall limit."""
     return takes(float("inf"), out=out)
@@ -123,10 +132,12 @@ class Procs:
         self.argv = words
         return (fake, extra) if fake else None
 
-    def answer(self, hit: tuple[Fake, dict[str, str]], argv: Any, cwd: Any, env: Any, timeout: Any) -> tuple[int, str, bool]:
-        """(exit, output, hit the wall limit) of a fake command."""
+    def answer(self, hit: tuple[Fake, dict[str, str]], argv: Any, cwd: Any, env: Any, timeout: Any) -> tuple[int, str, bool | str]:
+        """(exit, output, hit the wall limit or "blocks") of a fake command."""
         self.calls.append(tuple(str(a) for a in argv))
         rc, out, *rest = hit[0](Path(cwd or os.getcwd()), {**(os.environ if env is None else env), **hit[1]})
+        if rest and rest[0] == BLOCKS:
+            return rc, out, "blocks"
         return rc, out, bool(rest) and timeout is not None and rest[0] > timeout
 
     def sp_run(self, real: Callable[..., Any]) -> Callable[..., Any]:
@@ -153,6 +164,12 @@ class Procs:
             rc, out, wall = self.answer(hit, argv, cwd, env, kw.get("timeout"))
             if out and on_stdout:
                 on_stdout(out if out.endswith("\n") else out + "\n")
+            if wall == "blocks":
+                stop = kw.get("stop")
+                if stop is None or not stop.wait(10):
+                    self.problems.append(f"{self.test_id}: a blocking check was never stopped")
+                    raise AssertionError(self.problems[-1])
+                return stream_proc.Result(None, 15, "stopped", 0, 0, None, 0.0)
             if wall:
                 return stream_proc.Result(None, None, "wall", 0, 0, None, float(kw.get("timeout") or 0))
             return stream_proc.Result(None if rc < 0 else rc, -rc if rc < 0 else None, None, 0, 0, None, 0.0)

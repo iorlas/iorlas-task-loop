@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from taskloop.adapters import check_files, treehash
+from taskloop.adapters.threadflag import ThreadFlag
 from taskloop.app.checks.checklog import CheckLog
 from taskloop.app.land.checkout import Checkout
 from taskloop.app.run.shell import Shell
@@ -41,6 +42,9 @@ class _NewFiles:
 
 
 class CliHost:
+    killed = ThreadFlag()
+    wall_hit = ThreadFlag()
+
     def __init__(
         self,
         wt: str | Path,
@@ -72,8 +76,9 @@ class CliHost:
         self.tree_writer = self.checkout
 
     def sh(self, cmd: Sequence[str], timeout: float = 3600, check: bool = False, save: Path | None = None,
-           env: Mapping[str, str] | None = None, pin: bool = False, what: str = "command", cwd: Path | None = None) -> tuple[int, str]:
-        return self.shell.run(cmd, timeout, check, save, env, pin, what, cwd)
+           env: Mapping[str, str] | None = None, pin: bool = False, what: str = "command", cwd: Path | None = None,
+           stop: threading.Event | None = None) -> tuple[int, str]:
+        return self.shell.run(cmd, timeout, check, save, env, pin, what, cwd, stop)
 
     def blocked_for(self, why: str, kind: str) -> Exception:
         return RuntimeError(why)

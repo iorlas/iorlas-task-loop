@@ -96,6 +96,7 @@ class CheckSpec(Rec):
     where: Literal["host", "container"] = msgspec.field(default="host", name="in")  # container: needs engine.container
     why: str = ""  # run gate: why no plan check may run this command (it is told to the planner)
     reads: list[CheckId] = msgspec.field(default_factory=list)  # checks whose log and exit code it reads: it runs after them
+    lane: str = ""  # checks of one lane run in order, lanes run in parallel; the first red cancels the other lanes ("": the default lane)
     needs: list[str] = msgspec.field(default_factory=list)  # engine.resources it holds a machine-wide lease on while it runs
     # argv run in the worktree before the checks (a formatter); what it changes is checked
     fix: list[str] = msgspec.field(default_factory=list)
@@ -309,6 +310,11 @@ def graph_problem(checks: list[CheckSpec]) -> str:
         gone = [r for r in k.reads if r not in known]
         if gone:
             return f"check {k.id} reads {gone[0]}, which engine.checks does not have"
+        lane = {c.id: c.lane for c in checks}
+        apart = [r for r in k.reads if lane[r] != k.lane]
+        if apart:
+            return (f"check {k.id} (lane {k.lane!r}) reads {apart[0]} of lane {lane[apart[0]]!r}: "
+                    "lanes run at the same time, a read stays in its lane")
     try:
         TopologicalSorter({k.id: k.reads for k in checks}).prepare()
     except CycleError as e:

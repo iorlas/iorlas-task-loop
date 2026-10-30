@@ -1,7 +1,6 @@
 """CheckExecutor: run the steps of a round in order, deciding for each whether it runs, is skipped, is answered by an earlier
 run, or is answered by the cache."""
 import time
-from dataclasses import dataclass, field
 from pathlib import Path
 
 from taskloop.adapters import check_files
@@ -9,7 +8,9 @@ from taskloop.app.checks.attempts import Attempts, Outcome
 from taskloop.app.checks.cache import RunMemo
 from taskloop.app.checks.checklog import CheckLog
 from taskloop.app.checks.host import CheckFault, CheckHost
-from taskloop.app.checks.resources import Resources
+from taskloop.app.checks.lanes import Lanes
+from taskloop.app.checks.resources import LeaseCancelled, Resources
+from taskloop.app.checks.round import Round
 from taskloop.contracts.checks import UNVERIFIED_EXIT, Check, CheckFaultKind, CheckResult, Durations, verdict_of
 from taskloop.contracts.runkey import RunKey
 from taskloop.domain.checks.durations import CHEAP_S, expected_secs
@@ -24,20 +25,6 @@ PROJECT_LOG_LINES = 20
 FAILED_FIRST = " failed first"
 
 
-@dataclass
-class Round:
-    """What a round has decided so far."""
-
-    n: int  # the round's number in the run
-    results: list[CheckResult] = field(default_factory=list)
-    by_step: dict[int, CheckResult] = field(default_factory=dict)
-    red: str = ""  # the group of the first red: later groups, and every expensive check, are skipped
-    red_skipped: set[int] = field(default_factory=set)  # steps left out because of a red
-    env: dict[str, str] = field(default_factory=dict)  # $TL_CHECK_LOG_/RC_<ID> of what ran, for the checks after it
-    timings: list[tuple[str, float]] = field(default_factory=list)  # (command, secs) of what passed, for the duration history
-    changed: list[str] | None = None
-
-
 class CheckExecutor:
     def __init__(self, host: CheckHost, memo: RunMemo, attempts: Attempts, checklog: CheckLog,
                  history: Durations, fix_red: dict[str, CheckResult] | None = None, everything: bool = False) -> None:
@@ -46,17 +33,33 @@ class CheckExecutor:
         self.fix_red = fix_red or {}  # id -> the red of a check whose fix command failed: it does not run
         self.logs = host.run_dir / "checks"
         self.resources = Resources(host)
+        self.began = time.time()  # the block's start: where a check's `at` counts from
 
     def run_group(self, plan: CheckPlan, rnd: int) -> Round:
         """Run every step of the plan, in order, as one block (the cheap checks first, the Unity group last)."""
         st = Round(rnd, results=list(plan.skipped))
         self.logs.mkdir(exist_ok=True)
+        self.began = time.time()
+        lanes = plan.lanes()
+        if len(lanes) > 1:  # lanes run at the same time; the first red cancels the rest
+            return Lanes(self.host, self.step, self.drop).run(plan, lanes, st)
         for n, step in enumerate(plan.steps):
-            res, cid = self._decide(step, n, st)
-            st.results.append(res)
-            st.by_step[n] = res
-            self.checklog.close(step.check, res, cid, rnd)
+            self.step(step, n, st)
         return st
+
+    def step(self, step: Step, n: int, st: Round) -> None:
+        """One step: decided, run if it must, recorded."""
+        res, cid = self._decide(step, n, st)
+        st.results.append(res)
+        st.by_step[n] = res
+        self.checklog.close(step.check, res, cid, st.n)
+
+    def drop(self, step: Step, n: int, st: Round, red: str) -> None:
+        """A step its lane never began because another lane went red first."""
+        res = CheckResult.cancelled_by(step.check, red, at=round(time.time() - self.began, 1))
+        st.results.append(res)
+        st.by_step[n] = res
+        self.checklog.close(step.check, res, None, st.n)
 
     def _decide(self, step: Step, n: int, st: Round) -> tuple[CheckResult, str | None]:
         c = step.check
@@ -79,7 +82,7 @@ class CheckExecutor:
         hit = self.memo.hit(key)
         cid, name = None, self._log_name(n, c, st.n)
         if hit is not None:
-            res, where = self.memo.cached(c, hit), hit.log_abs
+            res, where = self.memo.cached(c, hit).replace(lane=c.lane), hit.log_abs
             if res.note:
                 self.host.log.note(f"cached: {c.id}, {res.note}")
         elif self.resources.lacking(c):
@@ -87,6 +90,8 @@ class CheckExecutor:
         else:
             cid = self.checklog.start(c, st.n, "checks/" + name)
             res, where = self._launch(step, st, name, key), str(self.logs / name)
+            if res.cancelled:  # another lane's red stopped it: no verdict, nothing to remember, no red of its own
+                return res, cid
         self.memo.ran[self.memo.command_key(c)] = (res, c.wall_min)
         self._publish(c, res, where, st)
         if res.exit != 0 and not res.base_red:
@@ -103,7 +108,7 @@ class CheckExecutor:
         why = f"deferred: needs {', '.join(lack)}, which this host does not have; {said}"
         self.host.log.note(f"`{c.id}` {why}")
         return CheckResult(id=c.id, cmd=c.cmd, group=c.group, exit=UNVERIFIED_EXIT, status="unverified", why=why, deferred=lack,
-                           inputs_changed=changed, tags=list(c.tags))
+                           inputs_changed=changed, tags=list(c.tags), lane=c.lane)
 
     @staticmethod
     def _log_name(n: int, c: Check, rnd: int) -> str:
@@ -144,7 +149,8 @@ class CheckExecutor:
         if before is None or (before[0].exit == 124 and before[1] < c.wall_min):
             return None
         self.host.log.note(f"`{c.cmd[:120]}` already ran in this block: its result is reused")
-        return before[0].replace(id=c.id, cmd=c.cmd, group=c.group, cached=False, reused=True, log="", waited=0.0)
+        return before[0].replace(id=c.id, cmd=c.cmd, group=c.group, cached=False, reused=True, log="", waited=0.0,
+                                lane=c.lane)
 
     def _key(self, c: Check) -> RunKey | None:
         """The memo key of this run, None when it may not be cached. A glob that selects nothing would cache a green over changed
@@ -161,12 +167,18 @@ class CheckExecutor:
 
     def _launch(self, step: Step, st: Round, name: str, key: RunKey | None) -> CheckResult:
         c = step.check
-        with self.resources.hold(c) as lease:
-            t0 = time.time()  # the wait for a lease is not the check's time
-            out = self.attempts.run(c, self.logs / name, st.env)
-            took = round(time.time() - t0)
+        t0 = time.time()
+        try:
+            with self.resources.hold(c, st.cancel) as lease:
+                t0 = time.time()  # the wait for a lease is not the check's time
+                out = self.attempts.run(c, self.logs / name, st.env, st.cancel)
+                took = round(time.time() - t0)
+        except LeaseCancelled:
+            return CheckResult.cancelled_by(c, st.cancel.red if st.cancel else "", at=round(t0 - self.began, 1))
+        if out.stopped:  # the lease is back already: the block above ended
+            return CheckResult.cancelled_by(c, st.cancel.red if st.cancel else "", "checks/" + name, round(t0 - self.began, 1), took)
         self._fault(c, out, st)
-        res = self._result(c, out, name, took).replace(waited=round(lease.waited, 1))
+        res = self._result(c, out, name, took).replace(waited=round(lease.waited, 1), lane=c.lane, at=round(t0 - self.began, 1))
         if out.rc == 0:  # only a green run says what the check costs: a red one stops early
             st.timings.append((c.cmd, time.time() - t0))
             if key is not None:

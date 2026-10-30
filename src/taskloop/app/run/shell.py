@@ -1,4 +1,5 @@
 """A command of the run: an argv list run by stream-proc in a group of its own, recorded in the engine log."""
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -16,15 +17,18 @@ class Shell:
         self.e = host
 
     def run(self, cmd: Any, timeout: float = 3600, check: bool = False, save: Any = None, env: Any = None, pin: bool = False,
-            what: str = "command", cwd: Any = None) -> tuple[int, str]:
+            what: str = "command", cwd: Any = None,
+            stop: threading.Event | None = None) -> tuple[int, str]:
         """A command: an argv list, exec'd as given (no shell, no quoting rules; a string is a programming error), run by stream-proc
         in a group of its own. It ends by itself, at `timeout` seconds of wall time (exit 124; its tree is stopped), or when
         the run's halt is set. Nothing else stops it: a quiet command may be waiting. pin=True: an engine git command, run with
-        GIT_DIR/GIT_WORK_TREE of the slot; checks and gates run unpinned (they may run git on other repos)."""
+        GIT_DIR/GIT_WORK_TREE of the slot; checks and gates run unpinned (they may run git on other repos). `stop`: the flag of one
+        lane of a gate (a first red elsewhere sets it) in place of the run's halt, which the lanes' owner passes on to it."""
         e = self.e
         if isinstance(cmd, str):
             raise TypeError(f"a command is an argv list, never a string: {cmd[:80]!r}")
-        if what == "check" and e.halt.is_set():  # a stop: no check starts; it reports itself failed, the run stops at its next safe point
+        if what == "check" and (stop or e.halt).is_set():  # a stop: no check starts; it reports itself failed, the run stops at its next
+            # safe point
             e.killed = True
             return -15, ""
         cid = e.log.next_id("m")
@@ -33,7 +37,7 @@ class Shell:
         started = time.time()
         chunks: list[str] = []
         e.killed = e.wall_hit = False
-        res = self.stream(cmd, cwd, env, pin, chunks, timeout, cid, what, started)
+        res = self.stream(cmd, cwd, env, pin, chunks, timeout, cid, what, started, stop or e.halt)
         rc = 124 if res.timed_out == "wall" else -res.signal if res.signal else res.returncode or 0
         text = "".join(chunks)
         if res.timed_out:  # only a stop the engine performed; a command that exits 124 by itself is not a kill
@@ -48,12 +52,12 @@ class Shell:
         return rc, tail
 
     def stream(self, cmd: Any, cwd: Any, env: Any, pin: bool, chunks: list[str], timeout: float, cid: str, what: str,
-               started: float) -> Any:
+               started: float, stop: threading.Event) -> Any:
         e = self.e
         extra = {**childenv.WORKER_MARK, **e.bead_env, **(pinned_env(e.wt) if pin else {}), **(env or {})}
         try:
             return e.spawner.stream(list(cmd), cwd=None if cwd is None else str(cwd), extra=extra, on_output=chunks.append,
-                                    timeout_s=timeout, stop=e.halt)
+                                    timeout_s=timeout, stop=stop)
         except BaseException:  # stopped (stream-proc stopped the tree first): never leave a check (just check, Unity) running
             now = time.time()
             e.killed = True

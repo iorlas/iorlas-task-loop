@@ -7,6 +7,7 @@ recorded: in the wait log (WaitWhat.RESOURCE, outside the run's budget) and per 
 Which resources this host has is ~/.config/task-loop/host.json (HostResources); a check that needs one the host lacks is not run here
 (`lacking`): the executor defers it."""
 import contextlib
+import threading
 import time
 from collections.abc import Callable, Generator
 from dataclasses import dataclass
@@ -43,6 +44,10 @@ class ResourceHost(Protocol):
     def halt_point(self, when: bool = ..., wait: float = ...) -> None: ...
 
 
+class LeaseCancelled(Exception):
+    """The lane of a check that was queuing for a lease went red-elsewhere: it stops waiting (nothing is held)."""
+
+
 @dataclass
 class Lease:
     waited: float = 0.0  # seconds spent queuing for the leases of one check
@@ -64,22 +69,25 @@ class Resources:
         return [n for n in c.needs if n not in self.have()]
 
     @contextlib.contextmanager
-    def hold(self, c: Check) -> Generator[Lease]:
-        """Hold a lease on each resource the check needs (in name order, so two checks never wait on each other), for the block."""
+    def hold(self, c: Check, cancel: threading.Event | None = None) -> Generator[Lease]:
+        """Hold a lease on each resource the check needs (in name order, so two checks never wait on each other), for the block, which
+        frees them however it ends. `cancel` set while it queues: LeaseCancelled, holding none."""
         lease = Lease()
         if not c.needs:
             yield lease
             return
         with contextlib.ExitStack() as stack:
             for name in sorted(c.needs):
-                lease.waited += self._take(stack, name, f"{self.host.bead}:{c.id}")
+                lease.waited += self._take(stack, name, f"{self.host.bead}:{c.id}", cancel)
             yield lease
 
-    def _take(self, stack: contextlib.ExitStack, name: str, who: str) -> float:
+    def _take(self, stack: contextlib.ExitStack, name: str, who: str, cancel: threading.Event | None) -> float:
         """Win one of the resource's `limit` leases (waiting for one); -> the seconds waited."""
         locks, limit = self.host.stores.locks, self.host.cfg.resources[name].limit
         started, wid = time.time(), None
         while True:
+            if cancel is not None and cancel.is_set():
+                raise LeaseCancelled(name)
             for i in range(limit):
                 try:
                     stack.enter_context(locks.hold(LockWhat.RESOURCE, f"{name}-{i}", who, timeout=0))
@@ -93,4 +101,7 @@ class Resources:
                 wid = self.host.waits.start(WaitWhat.RESOURCE, name)
                 self.host.warn(f"waiting for the {name} resource ({limit} at a time on this machine)")
             self.host.halt_point()
-            self.sleep(POLL_S)
+            if cancel is None:
+                self.sleep(POLL_S)
+            else:
+                cancel.wait(POLL_S)

@@ -5,6 +5,7 @@ from typing import Any
 
 from taskloop.adapters import beadtools, ident
 from taskloop.adapters import delegate as dg
+from taskloop.adapters.threadflag import ThreadFlag
 from taskloop.app.run.state import Checkpoints, StateAttrs
 from taskloop.contracts import fence
 from taskloop.contracts.checkpoint import Checkpoint, RunState
@@ -18,6 +19,9 @@ from taskloop.domain import outcome as oc
 
 
 class RunFields(StateAttrs):
+    killed = ThreadFlag()  # the last sh() of the calling thread was stopped by the engine
+    wall_hit = ThreadFlag()  # ...at its wall limit
+
     def __init__(self, bead: BeadId, wt: str, cfg: EngineConfig, dry_run: bool, verbose: bool, store: Any, route: Any,
                  fresh: bool, claim: fence.Claim | None = None) -> None:
         self.bead, self.cfg, self.dry, self.verbose = bead, cfg, dry_run, verbose
@@ -87,5 +91,5 @@ class RunFields(StateAttrs):
         self.landed_sha = ""  # set the moment the push goes through: whatever stops the run after it, the bead landed
         self.last_run: CheckRun | None = None  # the CheckRun of the last stage round: the engine's evidence for the verifier (tl-bxk.10.25)
         self.prev_ck, self.ck_run, self.resumed, self.run_logged = "", "", False, False
-        self.killed = False  # the last sh() was stopped by the engine
-        self.wall_hit = False  # ...at its wall limit
+        self.killed = False
+        self.wall_hit = False

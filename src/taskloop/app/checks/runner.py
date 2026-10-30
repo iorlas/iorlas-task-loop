@@ -8,9 +8,10 @@ from taskloop.app.checks import evidence
 from taskloop.app.checks.attempts import Attempts
 from taskloop.app.checks.base import BaseCheck
 from taskloop.app.checks.cache import InputKeys, RunMemo
-from taskloop.app.checks.executor import CheckExecutor, Round
+from taskloop.app.checks.executor import CheckExecutor
 from taskloop.app.checks.fixer import Fixer
 from taskloop.app.checks.host import CheckHost, CheckStuck
+from taskloop.app.checks.round import Round
 from taskloop.contracts.checks import Check, CheckResult, CheckRun, Durations
 from taskloop.contracts.ids import TreeSha
 from taskloop.contracts.plancheck import PlanCheck

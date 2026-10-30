@@ -12,14 +12,15 @@ class CheckLog:
     def start(self, c: Check, rnd: int, log: str = "") -> str:
         """A check begins running: its id, which `close` ends."""
         cid = self.log.next_id("k")
-        self.log.emit(CheckStart(id=cid, check=c.id, group=c.group, cmd=c.cmd, round=rnd, log=log, timeout_s=c.wall_min * 60))
+        self.log.emit(CheckStart(id=cid, check=c.id, group=c.group, cmd=c.cmd, round=rnd, log=log, timeout_s=c.wall_min * 60,
+                               lane=c.lane))
         return cid
 
     def close(self, c: Check, res: CheckResult, cid: str | None, rnd: int) -> None:
         """The check's result; `cid` None: it did not run (skipped, cached, reused), so its start is written now."""
         cid = cid or self.start(c, rnd, res.log)
         self.log.emit(CheckEnd(id=cid, exit=res.exit, status=res.word, tries=res.tries, secs=res.secs, wall_hit=res.wall_hit,
-                               waited=res.waited))
+                               waited=res.waited, lane=c.lane, at=res.at, cancelled=res.cancelled))
 
     def round(self, node_id: str, run: CheckRun) -> None:
         self.log.emit(Checks(node_id=node_id, run=run))

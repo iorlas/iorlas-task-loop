@@ -1,4 +1,5 @@
 """Attempts: one check run until it is decided: passed, red for good, timed out, or held by an editor lock and waited out."""
+import threading
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -24,6 +25,7 @@ class Outcome:
     secs: float  # of the last run
     base_red: bool = False
     wall_hit: bool = False  # stopped at the check's wall limit
+    stopped: bool = False  # stopped by the flag it ran under (its lane was cancelled)
 
 
 class Attempts:
@@ -31,42 +33,45 @@ class Attempts:
         self.host, self.base, self.sleep = host, base, sleep
         self.box = Box(host, host.spawner)
 
-    def run(self, c: Check, log: Path, env: Mapping[str, str]) -> Outcome:
+    def run(self, c: Check, log: Path, env: Mapping[str, str], stop: threading.Event | None = None) -> Outcome:
         """Run the check; a red one again when that can change the answer: only when the first two failures differ, never for a hang,
-        a timeout or a compile error."""
+        a timeout or a compile error. `stop` set (the lane is cancelled): the run ends there, `stopped`, with no rerun and no base run."""
         tries, prior = 0, ""
         while True:
             tries += 1
-            rc, tail, seen, took = self._once(c, log, env)
+            rc, tail, seen, took = self._once(c, log, env, stop)
             out = Outcome(rc, tail, seen, tries, took, wall_hit=self.host.wall_hit)
+            if stop is not None and stop.is_set() and rc != 0 and self.host.killed:
+                out.stopped = True
+                return out
             if rc in {0, 124, UNVERIFIED_EXIT}:  # a rerun cannot make a check verify what the host lacks
                 self._say_stop(c, out)
                 return out
             sig = matchers.output_signature(seen)
             kind = matchers.failure_kind(seen)
             if kind == "lock":
-                return self._wait_lock(c, log, env, out)
-            if tries == 1 and c.repo and self.base.red(c):
+                return self._wait_lock(c, log, env, out, stop)
+            if tries == 1 and c.repo and self.base.red(c, stop):
                 return Outcome(rc, tail, seen, tries, took, base_red=True, wall_hit=self.host.wall_hit)
             if not self._again(c, out, tries, sig, prior):
                 return out
             prior = sig
 
-    def _once(self, c: Check, log: Path, env: Mapping[str, str]) -> tuple[int, str, str, float]:
+    def _once(self, c: Check, log: Path, env: Mapping[str, str], stop: threading.Event | None) -> tuple[int, str, str, float]:
         t0 = time.time()
         art = RepoDirs(self.host.wt).artifacts(self.host.bead)
         art.mkdir(parents=True, exist_ok=True)  # where a check may drop pictures: ingest copies them at step end
-        rc, tail = self._exec(c, log, {**env, EnvVar.TL_ARTIFACTS.value: str(art), EnvVar.TL_ARTIFACT_STEP.value: c.id})
+        rc, tail = self._exec(c, log, {**env, EnvVar.TL_ARTIFACTS.value: str(art), EnvVar.TL_ARTIFACT_STEP.value: c.id}, stop)
         seen = self._read(log, tail)
         took = time.time() - t0
         self.host.waits.note_slot_waits(seen, took)
         return rc, tail, seen, took
 
-    def _exec(self, c: Check, log: Path, env: Mapping[str, str]) -> tuple[int, str]:
+    def _exec(self, c: Check, log: Path, env: Mapping[str, str], stop: threading.Event | None) -> tuple[int, str]:
         """The check's argv, on the host or (when it says `in: container` and docker is up) in a container; the log says where."""
         env = {**c.env, **env}  # what the repo's check declares in its `env` (it is part of the cache key: it must reach the child too)
         argv, where = self.box.plan(c, argv_of(c.cmd), env)
-        rc, tail = self.host.sh(argv, timeout=c.wall_min * 60, save=log, what="check", env=env)
+        rc, tail = self.host.sh(argv, timeout=c.wall_min * 60, save=log, what="check", env=env, stop=stop)
         if where:
             log.write_text(where + "\n" + self._read(log, ""), encoding="utf-8")
         return rc, tail
@@ -95,20 +100,24 @@ class Attempts:
         self.host.warn(f"`{c.id}` failed (exit {out.rc}), retrying: it is marked flaky")
         return True
 
-    def _wait_lock(self, c: Check, log: Path, env: Mapping[str, str], out: Outcome) -> Outcome:
+    def _wait_lock(self, c: Check, log: Path, env: Mapping[str, str], out: Outcome, stop: threading.Event | None) -> Outcome:
         """An editor or project lock: wait, then rerun, 15/30/60 s up to 5 min in all."""
         rc, tail, seen = out.rc, out.tail, out.seen
         started = time.time() - out.secs
         for n, wait in enumerate(retry.lock_waits(), 1):
             self.host.warn(f"`{c.id}` is held by an editor or project lock; waiting {wait} s ({n})")
             wid = self.host.waits.start(WaitWhat.EDITOR_LOCK)
-            self.sleep(wait)
+            if stop is None:
+                self.sleep(wait)
+            elif stop.wait(wait):  # the lane was cancelled while it waited
+                return Outcome(rc, tail, seen, out.tries, out.secs, stopped=True)
             self.host.waits.add(wait, WaitWhat.EDITOR_LOCK, wid)
-            rc, tail = self._exec(c, log, env)
+            rc, tail = self._exec(c, log, env, stop)
             seen = self._read(log, tail)
             self.host.waits.note_slot_waits(seen, time.time() - started)
             if rc == 0 or matchers.failure_kind(seen) != "lock":
                 break
         if rc and matchers.failure_kind(seen) == "lock":
             tail += f"\n(still locked after {retry.LOCK_WAIT_MAX} s of waiting)"
-        return Outcome(rc, tail, seen, out.tries, out.secs, wall_hit=self.host.wall_hit)
+        return Outcome(rc, tail, seen, out.tries, out.secs, wall_hit=self.host.wall_hit,
+                       stopped=stop is not None and stop.is_set() and self.host.killed and rc != 0)

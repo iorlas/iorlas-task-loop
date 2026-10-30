@@ -100,6 +100,7 @@ class CheckStart(LogRec, tag="check_start"):
     round: int
     log: str = ""
     timeout_s: float | None = None
+    lane: str = ""
 
 
 @final
@@ -111,6 +112,9 @@ class CheckEnd(LogRec, tag="check_end"):
     secs: float = 0.0
     wall_hit: bool = False  # the engine stopped it at its wall limit (start: the CheckStart of the same id; end: this record's t)
     waited: float = 0.0  # seconds it queued for a machine-wide resource lease before it began
+    lane: str = ""
+    at: float = 0.0  # seconds after its block began that it started
+    cancelled: bool = False  # another lane's red stopped it
 
 
 @final

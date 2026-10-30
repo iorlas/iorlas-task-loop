@@ -231,8 +231,8 @@ class Engine(RunFields):
             raise Blocked("failed: stopped (SIGTERM)", kind=Kind.PAUSE_KILLED)
 
     def sh(self, cmd: Any, timeout: float = 3600, check: bool = False, save: Any = None, env: Any = None, pin: bool = False,
-           what: str = "command", cwd: Any = None) -> tuple[int, str]:
-        return self.shell.run(cmd, timeout, check, save, env, pin, what, cwd)
+           what: str = "command", cwd: Any = None, stop: threading.Event | None = None) -> tuple[int, str]:
+        return self.shell.run(cmd, timeout, check, save, env, pin, what, cwd, stop)
 
     def run_checks(self, *a: Any, **kw: Any) -> Any:
         return self.stage_checks.run(*a, **kw)

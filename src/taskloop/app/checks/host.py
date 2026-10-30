@@ -1,4 +1,5 @@
 """What the checks need of the engine that runs them, and the two ways a round stops the run."""
+import threading
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Protocol
@@ -85,13 +86,15 @@ class CheckHost(Protocol):
     def spawner(self) -> Spawner: ...  # how a check's helper processes (docker) are started
     @property
     def env(self) -> Env: ...  # the process environment, taken once at the edge: what the children are built from
-    killed: bool  # the last sh() was stopped by the engine
-    wall_hit: bool  # the last sh() was stopped at its wall limit
+    @property
+    def killed(self) -> bool: ...  # the last sh() of this thread was stopped by the engine
+    @property
+    def wall_hit(self) -> bool: ...  # ...at its wall limit
     @property
     def bead_env(self) -> Mapping[str, str]: ...  # the slot's environment (sh() gives it to every command)
 
     def sh(self, cmd: Sequence[str], timeout: float = ..., check: bool = ..., save: Path | None = ..., env: Mapping[str, str] | None = ...,
-           pin: bool = ..., what: str = ..., cwd: Path | None = ...) -> tuple[int, str]:
+           pin: bool = ..., what: str = ..., cwd: Path | None = ..., stop: threading.Event | None = ...) -> tuple[int, str]:
         """Run a command, an argv with no shell: (exit code, the last lines of its output). The whole output goes to `save`."""
         ...
 

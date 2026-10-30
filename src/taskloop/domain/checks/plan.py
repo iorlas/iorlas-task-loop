@@ -22,6 +22,13 @@ class CheckPlan:
     steps: tuple[Step, ...]
     skipped: tuple[CheckResult, ...] = ()  # left out before the round began (a conflict fix)
 
+    def lanes(self) -> dict[str, list[int]]:
+        """{lane: the positions of its steps, in plan order}, lanes in the order their first step comes. No lane named: one lane ("")."""
+        out: dict[str, list[int]] = {}
+        for n, step in enumerate(self.steps):
+            out.setdefault(step.check.lane, []).append(n)
+        return out
+
     @classmethod
     def build(cls, items: Sequence[Check], history: Durations, groups: Sequence[str] | None = None,
               acceptance_first: bool = False, conflict_fix: Sequence[str] | None = None, markers: str = "") -> CheckPlan:
