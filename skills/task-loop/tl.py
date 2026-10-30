@@ -57,6 +57,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Final
 
+try:
+    import msgspec  # noqa: F401  (declared above; present only under `uv run --script`)
+except ModuleNotFoundError:
+    sys.exit(f"tl: run through uv: `uv run --script {__file__} ...` or the shim ~/.config/task-loop/bin/tl (plain python3 has no msgspec)")
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))  # taskloop ships in the plugin dir; importing it adds _vendor
 
 from taskloop.adapters import beadtools, gitrepo, ident, landlock
