@@ -14,6 +14,7 @@ from taskloop.app.plan.sendback import SendBack
 from taskloop.contracts import plancheck
 from taskloop.contracts.answers import ASSUMPTION, IRREVERSIBLE
 from taskloop.contracts.enums import AskClass
+from taskloop.contracts.plancheck import PlanData
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.matchers import clip
 from taskloop.domain.plan.brief import COMMENTS_ONLY
@@ -33,7 +34,7 @@ class Planner:
         self.sendback = SendBack(host)
 
     # -- one planner answer
-    def ask(self, prompt: str, step: str, title: str, mode: str = "plan") -> dict[str, Any]:
+    def ask(self, prompt: str, step: str, title: str, mode: str = "plan") -> PlanData:
         """One planner answer, its checks validated before any write; the bad ones go back once."""
         e = self.e
         data, _ = e.ai("plan", title, prompt, step=step, mode=mode, at=(e.planned, 0, 0))
@@ -50,12 +51,12 @@ class Planner:
             self.sendback.after_rewrite(data)
         return data
 
-    def fits(self, data: dict[str, Any]) -> bool:
+    def fits(self, data: PlanData) -> bool:
         """A plan worth keeping through a stop: it has stages, asks nothing, and is not a split ask."""
         return bool(data["stages"] and not data["question"].strip() and (
             len(data["stages"]) <= int(self.e.cfg.max_stages) or self.cap.kept_whole()))
 
-    def add_leftovers(self, data: dict[str, Any]) -> None:
+    def add_leftovers(self, data: PlanData) -> None:
         """The follow-up work the plan wants filed: filed at the close with the reviews' leftovers. Only a plan the run goes on with
         adds them, so a plan that asks the owner is not filed twice by the plan after the answer."""
         have = {lo["title"] for lo in self.e.leftovers}
@@ -78,7 +79,7 @@ class Planner:
         if old and not again and not e.amend_text:
             e.amend_text = "The bead is the same as when the old plan was made."
 
-    def plan(self, again: bool = False) -> dict[str, Any]:
+    def plan(self, again: bool = False) -> PlanData:
         e = self.e
         old = e.old_plan or (e.plan_data if again and e.plan_data else None)
         e.amended = e.amended or bool(old)  # tl-bxk.10.24: work exists before this plan's first stage
@@ -94,7 +95,7 @@ class Planner:
         data = self.settle_question(self.ask(prompt, step, "amend" if old else "plan", "amend" if old else "plan"), prompt, step)
         return self.accept(data, again)
 
-    def settle_question(self, data: dict[str, Any], prompt: str, step: str) -> dict[str, Any]:
+    def settle_question(self, data: PlanData, prompt: str, step: str) -> PlanData:
         """A question an accepted requirement answers, or about a step that can be undone, is no ask: the planner plans again once."""
         e = self.e
         q = data["question"].strip()
@@ -112,7 +113,7 @@ class Planner:
             data = self.assume_question(data, prompt, step)
         return data
 
-    def assume_question(self, data: dict[str, Any], prompt: str, step: str) -> dict[str, Any]:
+    def assume_question(self, data: PlanData, prompt: str, step: str) -> PlanData:
         """tl-ntp: a question about anything that can be undone is an assumption, not an ask (82 item 1)."""
         e = self.e
         asked = data["question"].strip()
@@ -131,7 +132,7 @@ class Planner:
                 data = assume.assume_question(data, e.assumed, e.ask_flow.raise_soft)
         return data
 
-    def accept(self, data: dict[str, Any], again: bool) -> dict[str, Any]:
+    def accept(self, data: PlanData, again: bool) -> PlanData:
         """The answer is the run's plan, or a stop: a question for the owner, a finished-work plan, a plan with no stages or too many."""
         e = self.e
         if self.fits(data):
@@ -156,7 +157,7 @@ class Planner:
             return self.finished_work(data, again)
         return self.finish(data)
 
-    def finished_work(self, data: dict[str, Any], again: bool) -> dict[str, Any]:
+    def finished_work(self, data: PlanData, again: bool) -> PlanData:
         """tl-bxk.13.2: the work is done and only the filing is left: the engine files and closes. Never after a failed stage (a
         re-plan), and never over work no review accepted: that tree is not "done"."""
         e = self.e
@@ -169,7 +170,7 @@ class Planner:
             return data
         raise e.blocked_for("failed: the plan has no stages", "FAULT_PLAN")
 
-    def finish(self, data: dict[str, Any]) -> dict[str, Any]:
+    def finish(self, data: PlanData) -> PlanData:
         e = self.e
         big = int(e.cfg.max_stages)
         if len(data["stages"]) > big and not self.cap.kept_whole():
@@ -188,7 +189,7 @@ class Planner:
         return data
 
     @staticmethod
-    def summary(data: dict[str, Any]) -> str:
+    def summary(data: PlanData) -> str:
         """The plan as the bead's comment says it."""
         lines = ["Plan (engine): " + data["summary"]]
         for n, s in enumerate(data["stages"]):

@@ -3,6 +3,7 @@ goes to the writer for a test, an item no check can prove lands unverified for t
 plan (what it defers, what it leaves to the engine) is read before the item's kind."""
 from typing import Any
 
+from taskloop.contracts.plancheck import PlanData
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.plan.matchers import word_set
 from taskloop.domain.review import kinds
@@ -20,7 +21,7 @@ class Routing:
     def ledger(self) -> Ledger:
         return Ledger(self.e.plan_data, self.e.leftovers)
 
-    def ledger_of(self, plan: dict[str, Any]) -> Ledger:
+    def ledger_of(self, plan: PlanData) -> Ledger:
         """The ledger of a plan not yet accepted (the engine's leftovers count as deferred)."""
         return Ledger(plan, self.e.leftovers)
 

@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from taskloop.contracts import plancheck
+from taskloop.contracts.plancheck import PlanData
 from taskloop.domain.checks import lint, planref
 from taskloop.domain.plan.matchers import gate_only_criteria
 from taskloop.domain.prompts.anchors import MAX_ANCHORS, unanchored
@@ -45,7 +46,7 @@ class SendBack:
     def __init__(self, host: Any) -> None:
         self.e = host
 
-    def find(self, data: dict[str, Any]) -> Problems:
+    def find(self, data: PlanData) -> Problems:
         """The problems of a first answer."""
         e = self.e
         dry = lint.dry_check(data, e.shell_probe())
@@ -58,7 +59,7 @@ class SendBack:
         return Problems(empty, gate_only_criteria(data, e.cfg), lint.tracker_checks(data),
                         lint.gate_only_checks(data, e.cfg), dry, self.loose(data), planref.refusals(planref.plan_checks(data), e.cfg))
 
-    def loose(self, data: dict[str, Any]) -> list[str]:
+    def loose(self, data: PlanData) -> list[str]:
         """Stages that change an existing file no anchor names; a stage with more than 8 anchors keeps the first 8."""
         e, out = self.e, list[str]()
         for n, st in enumerate(data["stages"], 1):
@@ -93,7 +94,7 @@ class SendBack:
             why += DRY_CHECK_TEXT % "\n".join("- " + d for d in p.dry)
         return why
 
-    def rewrite(self, data: dict[str, Any], prompt: str, step: str, why: str) -> dict[str, Any]:
+    def rewrite(self, data: PlanData, prompt: str, step: str, why: str) -> PlanData:
         """Ask once more, on the same planner thread when there is one."""
         e = self.e
         ref = e.planner_ref
@@ -102,7 +103,7 @@ class SendBack:
         again, _ = e.ai("plan", "rewrite checks", back, step=step, mode="checks_back", resume_ref=ref or None, at=(e.planned, 1, 0))
         return again
 
-    def after_rewrite(self, data: dict[str, Any]) -> None:
+    def after_rewrite(self, data: PlanData) -> None:
         """What the rewrite still gets wrong: a stop, or (the heuristics) a warning; there is no second send-back."""
         e = self.e
         only, bad, gated = gate_only_criteria(data, e.cfg), lint.tracker_checks(data), lint.gate_only_checks(data, e.cfg)

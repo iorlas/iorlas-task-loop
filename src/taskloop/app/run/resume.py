@@ -10,6 +10,7 @@ from taskloop.app.run.state import state_names
 from taskloop.contracts import plancheck
 from taskloop.contracts.checkpoint import Checkpoint
 from taskloop.contracts.enums import AskClass
+from taskloop.contracts.plancheck import PlanData, RoundState
 from taskloop.domain.plan import brief
 
 KEEP_FOR_ACTIVE = ("plan_data", "accepted", "extra", "planner_ref", "brief_hash", "snap", "review")  # restored one by one, not copied over
@@ -37,7 +38,7 @@ class Resume:
     def __init__(self, host: Any) -> None:
         self.e = host
 
-    def point(self) -> tuple[Any, int, Any]:
+    def point(self) -> tuple[PlanData | None, int, RoundState | None]:
         """(plan, stage index, stage state) from the last run's checkpoint, or (None, 0, None) to plan afresh. A tree changed since
         (someone edited the branch) amends the plan; a changed bead keeps the accepted stages and amends the rest; otherwise the
         run goes on at the same stage and round, with the same writer thread, or straight to land when every stage was accepted."""
@@ -99,7 +100,7 @@ class Resume:
     def missing(self, ck: Checkpoint) -> int | None:
         n = stage_count(ck)
         plan = ck.state.plan_data or {}
-        plancheck.parse(plan)  # a saved plan comes back as dicts: its checks are parsed again
+        plancheck.parse_stored(plan)  # a saved plan comes back with its risks and cases as dicts: their checks are parsed again
         return self.e.cases.promised_missing(plan, n if (ck.step == "land" or ck.stage >= n) else ck.stage) if plan else None
 
     def restore(self, ck: Checkpoint, late: bool) -> None:
@@ -113,11 +114,11 @@ class Resume:
         e.planner_ref = saved.planner_ref or e.planner_ref
         self.e.pending_land_validation = saved.pending_land_validation or (ck.feedback if ck.step == "land-verify-red" else "")
 
-    def apply(self, ck: Checkpoint, d: Decision) -> tuple[Any, int, Any]:
+    def apply(self, ck: Checkpoint, d: Decision) -> tuple[PlanData | None, int, RoundState | None]:
         e = self.e
         plan = ck.state.plan_data
         if plan:
-            plancheck.parse(plan)  # a saved plan comes back as dicts: its checks are parsed again
+            plancheck.parse_stored(plan)  # a saved plan comes back with its risks and cases as dicts: their checks are parsed again
         if d.kind in ("amend", "replan"):
             return self.amend(ck, d)
         e.plan_data, e.plan_summary, e.accepted = plan, (plan or {})["summary"], list(ck.state.accepted)
@@ -132,7 +133,7 @@ class Resume:
         e.log.note(f"resuming {ck.run} at stage {ck.stage + 1}/{stage_count(ck)}, round {ck.rounds + 1} (write {ck.n + 1})")
         return plan, ck.stage, {"rounds": ck.rounds, "n": ck.n, "feedback": ck.feedback}
 
-    def redo(self, ck: Checkpoint, d: Decision) -> tuple[Any, int, Any]:
+    def redo(self, ck: Checkpoint, d: Decision) -> tuple[PlanData | None, int, RoundState | None]:
         """A file a stage promised is gone (the resume is in another slot): that stage runs again."""
         e, again = self.e, d.stage
         e.log.note(f"resuming {ck.run}: a file stage {again + 1} promised is missing, so that stage runs again")
@@ -142,7 +143,7 @@ class Resume:
         e.unchecked = list[dict[str, Any]]()
         return ck.state.plan_data, again, None
 
-    def amend(self, ck: Checkpoint, d: Decision) -> tuple[Any, int, Any]:
+    def amend(self, ck: Checkpoint, d: Decision) -> tuple[PlanData | None, int, RoundState | None]:
         """The plan is made again: the old one is kept for the planner to amend, with why and what changed."""
         e = self.e
         if d.verify_answer:

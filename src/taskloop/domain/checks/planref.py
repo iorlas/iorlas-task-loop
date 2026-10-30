@@ -1,11 +1,11 @@
 """The plan's checks against the registry: which checks a plan names, what the registry refuses of them (a ref to a check that is not
 one, a read of one, a wrapper of one's command), and the commands a worker is told. Pure."""
 from collections.abc import Iterable, Mapping, Sequence
-from typing import Any, Final, assert_never
+from typing import Final, assert_never
 
 from taskloop.contracts.config import CheckSpec, EngineConfig
 from taskloop.contracts.ids import CheckId
-from taskloop.contracts.plancheck import Adhoc, PlanCheck, Ref
+from taskloop.contracts.plancheck import Adhoc, PlanCheck, PlanData, Ref
 from taskloop.domain.checks.cmd import matchers as sh
 from taskloop.domain.checks.names import log_var, rc_var
 from taskloop.domain.matchers import clip
@@ -14,13 +14,13 @@ JUST_PLAIN_FLAGS: Final = frozenset({"--unstable", "-q", "--quiet", "-v", "--ver
                                      "--no-highlight"})
 
 
-type Plan = Mapping[str, Any]  # the plan after parse: every check in it is a PlanCheck
+type Plan = PlanData  # the plan after parse: every check in it is a PlanCheck
 
 
 def plan_checks(plan: Plan) -> list[PlanCheck]:
     """The plan's checks, once each: stages, risks, cases."""
     return list(dict.fromkeys([c for s in plan.get("stages") or [] for c in s["checks"]] + [
-        x["check"] for k in ("risks", "cases") for x in plan.get(k) or []
+        x["check"] for x in [*(plan.get("risks") or []), *(plan.get("cases") or [])]
         if x.get("check") and x.get("class", "test") == "test"
         and x.get("proved_by", "check") in ("check", "stage")]))  # a look, taste, leftover or engine-step case has no command
 

@@ -4,12 +4,14 @@ none of it is stored, published or sent to a worker."""
 from collections.abc import Mapping
 from typing import Any, Final
 
+from taskloop.contracts.plancheck import PlanData
+
 PLAN_ONLY: Final = ("question", "options", "decided", "unresolved")
 STAGE_ONLY: Final = ("hard",)
 WORKER_SKIPS: Final = ("risks", "cases", "leftovers", "stages")  # the assumptions, the summary and the rest stay
 
 
-def stored(plan: dict[str, Any]) -> dict[str, Any]:
+def stored(plan: PlanData) -> PlanData:
     """`plan` without the accept-step-only keys (in place; returns it)."""
     for k in PLAN_ONLY:
         plan.pop(k, None)

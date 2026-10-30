@@ -7,7 +7,7 @@ property required, a field the contract left optional may be null. A field's des
 import copy
 import enum
 import types
-from typing import Annotated, Any, Literal, Union, get_args, get_origin
+from typing import Annotated, Any, Literal, TypeAliasType, Union, get_args, get_origin, get_type_hints, is_typeddict
 
 import msgspec
 
@@ -49,6 +49,8 @@ def _meta(h: Any) -> tuple[Any, str]:
 def _hint(h: Any) -> dict[str, Any]:
     if h is Any:
         return {}
+    if isinstance(h, TypeAliasType):  # `type Open = dict[str, Any]`
+        return _hint(h.__value__)
     sup = getattr(h, "__supertype__", None)
     if sup is not None:
         return _hint(sup)
@@ -65,7 +67,15 @@ def _hint_plain(h: Any) -> dict[str, Any]:
         return {"type": "string", "enum": [m.value for m in h]}
     if isinstance(h, type) and issubclass(h, Rec):
         return of(h)
+    if is_typeddict(h):
+        return _typed_dict(h)
     raise TypeError(f"no JSON schema for {h!r}")
+
+
+def _typed_dict(cls: Any) -> dict[str, Any]:
+    """A typed dict (a plan, a stage): its keys, the ones not marked NotRequired required."""
+    props = {k: _hint(t) for k, t in get_type_hints(cls).items()}
+    return {"type": "object", "additionalProperties": False, "required": sorted(cls.__required_keys__), "properties": props}
 
 
 def _hint_generic(h: Any, origin: Any, args: tuple[Any, ...]) -> dict[str, Any]:

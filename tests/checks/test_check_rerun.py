@@ -17,7 +17,7 @@ from support.engine_case import CLEAN, PLAN, WRITE
 from checks.test_check_rules import Base
 from taskloop.contracts import answers, plancheck
 from taskloop.contracts.ids import CheckId
-from taskloop.contracts.plancheck import Adhoc, Ref, adhoc
+from taskloop.contracts.plancheck import Adhoc, PlanData, Ref, adhoc
 from taskloop.domain.checks import planref
 
 REPO: list[dict[str, Any]] = [{"id": "unity-tests", "cmd": "just unity-tests", "group": "tests"}]
@@ -25,8 +25,8 @@ YXBB = "mkdir -p x && just unity-tests > x/out && grep -q passed x/out"
 UNITY = CheckId("unity-tests")
 
 
-def plan_of(*checks: Any) -> dict[str, Any]:
-    return typed(dict(PLAN, stages=[dict(PLAN["stages"][0], checks=list(checks))]))
+def plan_of(*checks: Any) -> PlanData:
+    return PlanData(**typed(dict(PLAN, stages=[dict(PLAN["stages"][0], checks=list(checks))])))
 
 
 def reads_log(cwd: Path, env: Mapping[str, str]) -> tuple[int, str]:

@@ -300,7 +300,7 @@ OTHERS = {
         notes=checkpoint.Notes(filed=2, unfiled=1),
         state=checkpoint.RunState(
             brief_hash="b0",
-            plan_data={"summary": "s", "stages": [{"goal": "g"}]},
+            plan_data={"summary": "s", "stages": [{"goal": "g", "files": [], "checks": []}]},
             plan_log=[{"mode": "plan", "counted": True, "why": "first"}],
             done=["g1"],
             accepted=[0],

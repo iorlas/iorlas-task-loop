@@ -30,6 +30,7 @@ from support.engine_case import (
 
 # isort: split
 from support.builders import cfg_with
+from support.narrow import must
 
 from taskloop.app.land.checkout import Checkout
 from taskloop.app.review.settles import Settles
@@ -112,7 +113,7 @@ class EngineReviewTest(EngineTest):
         rv = s.prompts[2]
         self.assertIn("added by the writer", rv)
         self.assertIn("found an edge", rv)
-        self.assertEqual(self.eng.plan_data["cases"][0]["by"], "writer")
+        self.assertEqual(must(self.eng.plan_data)["cases"][0]["by"], "writer")
 
     def test_a_verify_ask_is_a_decision_and_takes_the_bead_out_of_the_pick_queue(self):
         r = dict(CLEAN, unchecked=[{"what": "the cited spec link did not open", "kind": "link"}])

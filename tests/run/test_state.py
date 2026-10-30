@@ -1,5 +1,6 @@
 """RunState and its one writer: every field survives a park, adding one is one edit, and nothing else writes the record."""
 import sys
+import typing
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -84,6 +85,11 @@ def stored(h: Host) -> Checkpoint:
 class Fields(unittest.TestCase):
     def test_the_sample_names_every_field_so_a_new_one_cannot_pass_unnoticed(self):
         self.assertEqual(set(SAMPLE), set(state_names()))
+
+    def test_the_engine_declares_every_field_with_the_type_the_state_holds(self):
+        declared, held = typing.get_type_hints(StateAttrs), typing.get_type_hints(RunState)
+        self.assertEqual({k: declared[k] for k in state_names()}, {k: held[k] for k in state_names()})
+        self.assertFalse(hasattr(StateAttrs, "__getattr__"))  # an attribute the state lacks is an error, not an Any
 
     def test_the_engine_reads_and_writes_every_field_through_the_state(self):
         h = Host()

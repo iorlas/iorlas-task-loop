@@ -10,8 +10,9 @@ import support.paths  # noqa: F401
 from taskloop.app.run.decide import Decision
 from taskloop.app.run.resume import Resume
 from taskloop.contracts.checkpoint import Checkpoint, RunState
+from taskloop.contracts.plancheck import PlanData
 
-PLAN = {"summary": "two stages", "stages": [{"goal": "a", "checks": []}, {"goal": "b", "checks": []}]}
+PLAN: PlanData = {"summary": "two stages", "stages": [{"goal": "a", "files": [], "checks": []}, {"goal": "b", "files": [], "checks": []}]}
 
 
 class Host:

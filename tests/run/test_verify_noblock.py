@@ -11,7 +11,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as T
-from support.builders import make_engine
+from support.builders import make_engine, plan_of
 from support.engine_case import BEAD, CLEAN, PLAN, WRITE, engine, verdict
 
 from taskloop.contracts import answers
@@ -171,7 +171,7 @@ class NoBlock(T.LandReviewBase):
         claim = "the follow-up beads cover all nine objects correctly"
         self.assertFalse(e.routing.engine_does(claim))
         self.assertFalse(e.routing.engine_does(YXBB_7["what"]))  # the plan has no leftovers: nothing is filed
-        e.plan_data = PLAN_LEFT
+        e.plan_data = plan_of(PLAN_LEFT)
         self.assertFalse(e.routing.engine_does(claim))  # a claim about the result, not about the filing
         self.assertTrue(e.routing.engine_does(YXBB_7["what"]))
         self.assertTrue(e.routing.engine_does(FLD_25_16["what"]))
@@ -180,7 +180,7 @@ class NoBlock(T.LandReviewBase):
         self.assertFalse(e.routing.engine_does("screenshots are copied into the repo"))  # no visual paths set
         with mock.patch.object(e, "ai", return_value=(open_as("engine_step"), None)) as ai, \
                 mock.patch.object(e.fixer, "fix", return_value="accept") as fix:
-            e.plan_data = PLAN
+            e.plan_data = plan_of(PLAN)
             e.verifier.run([{"what": claim, "kind": "engine_step"}])
         ai.assert_called_once()  # sent to the verifier, not settled blindly
         fix.assert_called_once()  # and, unproven, treated as checkable

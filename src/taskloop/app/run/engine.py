@@ -19,6 +19,8 @@ from taskloop.app.land.checkout import Checkout
 from taskloop.app.land.fixer import Fixer
 from taskloop.app.land.lander import Lander, lander_over
 from taskloop.app.land.rebase import Rebase
+from taskloop.app.land.restart import Restart
+from taskloop.app.land.salvage import Salvage
 from taskloop.app.land.tree import Tree
 from taskloop.app.look.judge import Judge
 from taskloop.app.look.owner_look import OwnerLook
@@ -63,6 +65,7 @@ from taskloop.app.write.newfiles import NewFiles
 from taskloop.app.write.stage_loop import StageLoop
 from taskloop.contracts import fence, plancheck
 from taskloop.contracts.argv import text_of
+from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.enums import Result
 from taskloop.contracts.env import Env
 from taskloop.contracts.ids import BeadId
@@ -70,10 +73,12 @@ from taskloop.contracts.kinds import Kind
 from taskloop.contracts.landed import Landed, LandedStore
 from taskloop.contracts.log import Assumed, Said
 from taskloop.contracts.paths import PLAN_FILE, ConfigDir, RunFiles
+from taskloop.contracts.ports import Clock, Spawner
 from taskloop.contracts.run import RunReport
 from taskloop.domain import outcome as oc
 from taskloop.domain.lanes.matchers import read_only_command
 from taskloop.domain.lanes.says import stop_say, stop_why
+from taskloop.stores.bundle import Stores
 from taskloop.stores.real import real_stores
 
 __all__ = ["Blocked", "Engine", "FixFailed", "tool_on_path"]
@@ -83,14 +88,11 @@ def tool_on_path(name: str) -> str | None:
     return shutil.which(name)
 
 
-def land_with_engine(engine: Any) -> Lander:
-    """The Lander over this engine. (The engine's run state is reached through __getattr__, so the type checker cannot prove it is a
-    LanderHost; the proof is the narrow fakes in tests/support/narrow_hosts.py, one per step.)"""
+def land_with_engine(engine: Engine) -> Lander:
     return lander_over(engine)
 
 
-def close_with_engine(engine: Any) -> Closer:
-    """The Closer over this engine (see land_with_engine)."""
+def close_with_engine(engine: Engine) -> Closer:
     return closer_over(engine)
 
 
@@ -108,17 +110,16 @@ class Engine(RunFields):
     stop_deferred = staticmethod(halting.stop_deferred)
     done: list[str]  # RunState fields the tests assign (the type checker saw them assigned in the moved methods before)
     writer_said: str
-    plan_data: Any
     accepted: list[int]
     stage_tree: str
 
-    def __init__(self, bead: BeadId, wt: str, cfg: Any, dry_run: bool = False, verbose: bool = True, store: Any = None,
-                 route: Any = None, clock: Any = None, git: Any = None, stores: Any = None, fresh: bool = False,
-                 claim: fence.Claim | None = None, spawner: Any = None, *, env: Env) -> None:
+    def __init__(self, bead: BeadId, wt: str, cfg: EngineConfig, dry_run: bool = False, verbose: bool = True, store: Any = None,
+                 route: Any = None, clock: Clock | None = None, stores: Stores | None = None, fresh: bool = False,
+                 claim: fence.Claim | None = None, spawner: Spawner | None = None, *, env: Env) -> None:
         route = route or seams.DelegateRoute()
         self.env = env  # the process environment, taken once at the edge (tl.py); every child is built from it
         self.spawner = spawner or wire_real.spawner(self.env)
-        super().__init__(bead, wt, cfg, dry_run, verbose, store, route, git, fresh, claim)
+        super().__init__(bead, wt, cfg, dry_run, verbose, store, route, fresh, claim)
         self.clock = clock or SystemClock()
         self.reexec: dict[str, Any] = reexec.take_reexec_env()  # this run-task came from an exec into a newer install, or a fallback
         if self.reexec.get("bead") != bead:
@@ -143,10 +144,9 @@ class Engine(RunFields):
         self.ctx = RunContext.open(bead, cfg, Path(wt), stem, self.run_dir, self.stores, store, route, self.clock, self.sessions,
                                    self.stats, opencode.opencode_id, context_size.context_tokens, say, verbose, dry_run,
                                    self.now, self.step_guard, self.on_step)
-        c: Any = self.ctx
+        c = self.ctx
         self.log, self.steps, self.budget, self.calls, self.checklog = c.log, c.steps, c.budget, c.calls, c.checklog
-        host: Any = self
-        self.checker = Checker(host, lambda secs: self.halt_point(wait=secs))
+        self.checker = Checker(self, lambda secs: self.halt_point(wait=secs))
         self.delegation.route(quiet=True)
         if self.reexec:
             self.reload.restore_run(RunFiles(self.run_dir).reexec())
@@ -162,6 +162,12 @@ class Engine(RunFields):
     tree = cached_property(Tree)
     bead_env = cached_property(bead_env)  # the slot's environment: every command of the bead gets it (Shell.stream, the worker call)
     rebase = cached_property(Rebase)
+    restart = cached_property(Restart)
+
+    @cached_property
+    def salvage(self) -> Salvage:
+        return Salvage(self, self.rebase)
+
     fixer = cached_property(Fixer)
     lander = cached_property(land_with_engine)
     closer = cached_property(close_with_engine)
@@ -302,7 +308,7 @@ class Engine(RunFields):
 
     def record_land(self, sha: str) -> None:
         LandedStore(ident.config_dir()).put(Landed(bead=self.bead, sha=sha, base=self.cfg.base, t=self.now()))
-        verbs.land(self.bead, sha, self.wt, self.store, base=self.cfg.base, claim=self.claim)
+        verbs.land(self.bead, sha, str(self.wt), self.store, base=self.cfg.base, claim=self.claim)
 
     def land_lock_path(self) -> Path:
         return landlock.land_lock_path(self.git("remote", "get-url", "origin") or str(self.wt))

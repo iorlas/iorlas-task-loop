@@ -323,7 +323,9 @@
     "summary": "s",
     "stages": [
      {
-      "goal": "g"
+      "goal": "g",
+      "files": [],
+      "checks": []
      }
     ]
    },

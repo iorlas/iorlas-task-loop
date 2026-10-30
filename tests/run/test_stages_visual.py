@@ -15,7 +15,7 @@ from support import (
     fake_route,
     procsim,
 )
-from support.builders import cfg_with, make_engine
+from support.builders import cfg_with, make_engine, plan_of
 from support.checkpoints import read_ck
 from support.engine_case import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, engine, lint  # noqa: F401
 from support.fakes import (
@@ -451,7 +451,7 @@ class ResumeCount(StagesTest):
         te.sh("git", "push", "-q", "origin", "HEAD:main", cwd=base)
         e = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store, env=snapshot())
         e.tree.reset(must_bead(BEAD))
-        e.plan_data = dict(PLAN)
+        e.plan_data = plan_of(PLAN)
         e.checkpoints.save(stage=0, rounds=0, n=1, feedback="", step="write")
         te.sh("git", "checkout", "-q", "--detach", "origin/main", cwd=self.wt)
 
@@ -535,11 +535,11 @@ class ResumeCount(StagesTest):
         patch = mock.patch.object(e, "sh", new=lambda cmd, **kw: (1, "refused") if cmd[:3] == ["git", "branch", "-m"] else real(cmd, **kw))
         patch.start()
         self.addCleanup(patch.stop)
-        self.assertFalse(e.rebase.start_again("x"))
+        self.assertFalse(e.restart.again("x"))
         self.assertEqual(e.git("rev-parse", "HEAD"), before)  # the work is where it was
         e.sh = real
         e.git("checkout", "-q", "--detach")
-        self.assertFalse(e.rebase.start_again("x"))  # detached: nothing renamed or reset
+        self.assertFalse(e.restart.again("x"))  # detached: nothing renamed or reset
 
     def test_a_fresh_start_clears_what_the_old_attempt_left(self):
         self.behind_branch(conflict=True)
@@ -558,7 +558,7 @@ class ResumeCount(StagesTest):
         )
         e.git("checkout", "-q", "task/t-1")
         e.handoff["rounds"] = [{"r": 1}]
-        self.assertTrue(e.rebase.start_again("x"))
+        self.assertTrue(e.restart.again("x"))
         self.assertEqual((e.unverified, e.look_paths, e.handoff["rounds"], e.fixes, e.replans, e.rendered_names), ([], [], [], 0, 0, []))
         self.assertEqual(e.verify_answer, "Use the old format")  # the owner's word still goes to the planner
 

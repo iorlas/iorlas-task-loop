@@ -6,6 +6,7 @@ from typing import Final
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.paths import TASK_EXCLUDE
+from taskloop.contracts.plancheck import PlanData
 from taskloop.domain.checks import lint
 
 STOP_WORDS = frozenset({"that", "this", "with", "from", "into", "have", "been", "were", "which", "their", "there", "than", "then", "when",
@@ -69,7 +70,7 @@ class AcceptanceText:
         return "\n".join(x for x in (bead.acceptance_criteria.strip(), desc[m.start():] if m else "") if x)
 
 
-def gate_only_criteria(plan: dict, cfg: EngineConfig) -> list[str]:
+def gate_only_criteria(plan: PlanData, cfg: EngineConfig) -> list[str]:
     """The plan's cases (its acceptance) whose text is only a gate command, e.g. "`just check` passes". The engine runs the gate at
     land; a case for it proves nothing the land does not."""
     def clean(t: str) -> str:

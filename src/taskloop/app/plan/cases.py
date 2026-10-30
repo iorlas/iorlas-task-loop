@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from taskloop.contracts import plancheck
-from taskloop.contracts.plancheck import PlanCheck
+from taskloop.contracts.plancheck import PlanCheck, PlanData
 from taskloop.domain.checks import planref
 from taskloop.domain.plan.matchers import evidence_files, word_set
 from taskloop.domain.plan.stored import role_view
@@ -130,7 +130,7 @@ class Cases:
         plan = e.plan_data or {}
         return json.dumps(plancheck.to_wire(plan if stage is None else role_view(plan, stage)), indent=1)
 
-    def promised_missing(self, plan: Any, upto: int) -> int | None:
+    def promised_missing(self, plan: PlanData, upto: int) -> int | None:
         """tl-bxk.13.16.2: the index of the earliest accepted stage (before `upto`) that mentions an evidence file which is gone
         now while a check still to run names it, or None."""
         e = self.e

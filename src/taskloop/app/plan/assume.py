@@ -3,19 +3,20 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from taskloop.contracts.plancheck import PlanData
 from taskloop.domain.plan.matchers import word_set
 
 Assumer = Callable[[str], None]  # Engine.assumed: the run's Assumed record
 
 
-def assume(data: dict[str, Any], text: str, said: Assumer) -> None:
+def assume(data: PlanData, text: str, said: Assumer) -> None:
     """Record an Assumption on the plan (typed: step, text, reversible) and in the run's log (an Assumed record), and keep going."""
     text = " ".join(text.split())[:600]
     data.setdefault("assumptions", []).append({"step": "plan", "text": text, "reversible": True})
     said(text)
 
 
-def assume_question(data: dict[str, Any], said: Assumer, soft: Any = None) -> dict[str, Any]:
+def assume_question(data: PlanData, said: Assumer, soft: Any = None) -> PlanData:
     """A plan question about a step that can be undone becomes an Assumption; the plan goes on without the ask. `soft(question,
     options, cause, default)` files it as a non-blocking ask, so the owner can still answer it and the ledger shows it."""
     q = " ".join(data["question"].split())
@@ -27,7 +28,7 @@ def assume_question(data: dict[str, Any], said: Assumer, soft: Any = None) -> di
     return data
 
 
-def check_unresolved(data: dict[str, Any], wt: Path, log: Any, said: Assumer) -> None:
+def check_unresolved(data: PlanData, wt: Path, log: Any, said: Assumer) -> None:
     """tl-bxk.13.16.3, tl-ntp: inputs the planner could not find. A file that is there after all drops out; one a case defers
     (proved_by leftover) is a follow-up; the rest is an Assumption in the plan: missing reference material is not a reason to
     ask the owner (tl-7y6.6.15 stopped on study files no worktree can read)."""

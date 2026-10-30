@@ -1,13 +1,9 @@
-"""A resumed branch is rebased onto the latest base before it is planned; a conflict is fixed in place when few files are in it, else the
-task starts again on the base (the branch kept under another name)."""
-import time
+"""A resumed branch is rebased onto the latest base before it is planned. A conflict in few files is fixed in place (land/salvage.py),
+else the task starts again on the base (land/restart.py)."""
 from collections.abc import Callable
-from pathlib import Path
 from typing import Protocol
 
-from taskloop.app.land.parts import MoveSteps
-from taskloop.contracts.checkpoint import Checkpoint, RunState
-from taskloop.contracts.plancheck import PlanData
+from taskloop.contracts.checkpoint import Checkpoint
 from taskloop.contracts.ports import Sh
 from taskloop.stores.runlog import RunLog
 
@@ -29,39 +25,20 @@ class RebaseCheckpoints(Protocol):
     def drop(self) -> None: ...
 
 
-class RebaseFixer(Protocol):
-    def fix(self, kind: str, tail: str, resume: bool = ...) -> str: ...
-
-
 class RebaseHost(Protocol):
-    """What the resume rebase reads of the engine: git and its shell, the base, the checkout's dirt, the checkpoint it follows, the one fix
-    round it may ask for, and the run's plan bookkeeping that a restart on the base clears."""
+    """What the resume rebase reads of the engine: git and its shell, the base, the checkout's dirt, the checkpoint it follows, and the
+    plan count a move to a new base starts again."""
 
     left_dirty: bool
     rebase_orig: str  # the branch's head before the rebase, for start_again
     rebase_pre: list[str]  # the heads the checkpoint may name before the rebase
     salvage_tail: str  # the conflict's words for the fix round
-    salvaged: bool
-    fixes: int
     planned: int
     rebase_resets: int
-    old_plan: PlanData | None
-    amend_why: str
-    amend_text: str
-    replan_first: bool
-    plan_summary: str
-    last_summary: str
-    amended: bool
-    state: RunState
-    unverified: list[dict[str, str]]
-    unchecked: list[dict[str, str]]
     plan_log: list[dict[str, object]]
-    FixFailed: type[Exception]
 
     @property
     def bead(self) -> str: ...
-    @property
-    def branch(self) -> str: ...
     @property
     def dry(self) -> bool: ...
     @property
@@ -71,16 +48,11 @@ class RebaseHost(Protocol):
     @property
     def log(self) -> RunLog: ...
     @property
-    def steps(self) -> MoveSteps: ...
-    @property
     def checkout(self) -> RebaseCheckout: ...
     @property
     def checkpoints(self) -> RebaseCheckpoints: ...
-    @property
-    def fixer(self) -> RebaseFixer: ...
     def git(self, *args: str) -> str: ...
     def warn(self, text: str) -> None: ...
-    def comment(self, text: str) -> None: ...
 
 
 class Rebase:
@@ -155,32 +127,6 @@ class Rebase:
 
         e.checkpoints.amend(move)
 
-    def salvage(self) -> str:
-        """tl-7y6.2.19: the resume rebase stopped on a few files: one fix(conflict) round (markers and build only) instead of throwing the
-        branch away. -> "rebased" (the run record shows salvaged: true), or "conflict": the fix did not work, the branch is back as it
-        was and the caller starts again."""
-        e = self.e
-        fixes, ok = e.fixes, False
-        try:
-            d = e.fixer.fix("conflict", e.salvage_tail, resume=True)
-            ok = not e.git("diff", "--name-only", "--diff-filter=U")  # (a fix the review sent back still continued the rebase)
-            if d != "accept":
-                e.warn("resume: the conflict fix did not pass its checks and review; the stage goes on from it")
-        except e.FixFailed as err:
-            e.warn(f"the resume conflict fix failed: {str(err).splitlines()[0][:200]}")
-        finally:
-            e.fixes = fixes  # the land's two fix rounds are its own
-        gd = Path(e.git("rev-parse", "--absolute-git-dir") or ".")
-        if (gd / "rebase-merge").exists() or (gd / "rebase-apply").exists():
-            e.sh(["git", "rebase", "--abort"], pin=True)
-        if not ok:
-            e.sh(["git", "reset", "-q", "--hard", e.rebase_orig], pin=True)  # the work as it was, for start_again
-            return "conflict"
-        e.salvaged = True
-        self.follow_checkpoint()
-        e.log.note("resume conflict fixed in place instead of starting again (salvaged)")
-        return self.plan_count()
-
     def plan_count(self) -> str:
         e = self.e
         if self.between:
@@ -192,38 +138,3 @@ class Rebase:
                                "why": f"the branch moved to a new base; {e.planned} plan(s) before it do not count"})
             e.planned, e.rebase_resets = 0, e.rebase_resets + 1
         return "rebased"
-
-    def start_again(self, why: str) -> bool:
-        """tl-19i: the branch's earlier work conflicts with main, so it cannot go on. It is kept under another name; the task starts again
-        on the base with a fresh plan (the owner's answer is in the bead's comments), and nothing so far counts toward the re-plan limit."""
-        e = self.e
-        branch = e.git("symbolic-ref", "--short", "-q", "HEAD")
-        if not branch or branch != (e.branch or branch):
-            e.warn(f"resume conflict, but HEAD is not the task branch ({branch or 'detached'}): the branch stays as it was")
-            return False
-        stale = f"{branch}-stale-{time.strftime('%Y%m%d-%H%M%S')}"
-        if e.git("rev-parse", "--verify", "-q", "refs/heads/" + stale):
-            stale += "-2"
-        rc, tail = e.sh(["git", "branch", "-m", branch, stale], pin=True)
-        if rc:  # never reset a branch whose work could not be kept
-            e.warn(f"resume conflict, but the branch could not be kept aside ({tail.strip()[-160:]}): it stays as it was")
-            return False
-        e.sh(["git", "checkout", "-q", "-B", branch, e.cfg.base], pin=True, check=True)
-        e.checkpoints.drop()
-        self.forget()
-        e.steps.move("plan", "resume_conflict",
-                     f"the branch's earlier work conflicts with {e.cfg.base}: kept as {stale}, planning fresh. {why[:160]}")
-        e.log.note(f"resume conflict: {branch} kept as {stale}; the task starts again on {e.cfg.base}")
-        e.comment(f"Resume (engine): the earlier work on {branch} conflicts with {e.cfg.base}. It is kept as the branch {stale}; "
-                  f"the task starts again on {e.cfg.base} with a fresh plan.")
-        return True
-
-    def forget(self) -> None:
-        """What the old attempt left in the run: the plan, the accepted stages, the writer, the look state (verify_answer stays: the owner's
-        word still goes to the planner)."""
-        e = self.e
-        e.old_plan, e.amend_why, e.amend_text, e.replan_first = None, "", "", False
-        e.plan_summary, e.last_summary, e.amended = "", "", False
-        e.state = e.state.start_again()
-        e.unverified = list[dict[str, str]]()
-        e.unchecked = list[dict[str, str]]()

@@ -6,6 +6,7 @@ from typing import Protocol
 from taskloop.app.checks.checklog import CheckLog
 from taskloop.contracts.checks import CheckFaultKind
 from taskloop.contracts.config import EngineConfig
+from taskloop.contracts.enums import WaitWhat
 from taskloop.contracts.env import Env
 from taskloop.contracts.ids import TreeSha
 from taskloop.contracts.ports import Spawner
@@ -35,10 +36,10 @@ class CheckStuck(Exception):
 class CheckSteps(Protocol):
     """The run's step book, as the checks use it."""
 
-    id: str
-
-    def begin(self, kind: str, title: str, **meta: object) -> object: ...
-    def outcome(self, word: str, text: str) -> object: ...
+    @property
+    def id(self) -> str: ...
+    def begin(self, step: str, text: str, **meta: object) -> object: ...
+    def outcome(self, outcome: str, detail: str = ...) -> object: ...
 
 
 class CheckoutView(Protocol):
@@ -58,26 +59,37 @@ class TreeWriter(Protocol):
 
 class WaitsView(Protocol):
     def note_slot_waits(self, text: str, wall: float) -> None: ...
-    def start(self, what: str) -> str: ...
-    def add(self, secs: float, what: str, wid: str | None = ...) -> None: ...
+    def start(self, what: WaitWhat, holder: str = ..., until: float | None = ...) -> str: ...
+    def add(self, secs: float, what: WaitWhat, wid: str | None = ...) -> None: ...
 
 
 class CheckHost(Protocol):
     """The Engine, as the checks see it."""
 
-    bead: str
-    wt: str | Path
-    run_dir: Path
-    cfg: EngineConfig
-    log: RunLog
-    steps: CheckSteps
-    checklog: CheckLog
-    stores: Stores
-    spawner: Spawner  # how a check's helper processes (docker) are started
-    env: Env  # the process environment, taken once at the edge: what the children are built from
+    @property
+    def bead(self) -> str: ...
+    @property
+    def wt(self) -> str | Path: ...
+    @property
+    def run_dir(self) -> Path: ...
+    @property
+    def cfg(self) -> EngineConfig: ...
+    @property
+    def log(self) -> RunLog: ...
+    @property
+    def steps(self) -> CheckSteps: ...
+    @property
+    def checklog(self) -> CheckLog: ...
+    @property
+    def stores(self) -> Stores: ...
+    @property
+    def spawner(self) -> Spawner: ...  # how a check's helper processes (docker) are started
+    @property
+    def env(self) -> Env: ...  # the process environment, taken once at the edge: what the children are built from
     killed: bool  # the last sh() was stopped by the engine
     wall_hit: bool  # the last sh() was stopped at its wall limit
-    bead_env: Mapping[str, str]  # the slot's environment (sh() gives it to every command)
+    @property
+    def bead_env(self) -> Mapping[str, str]: ...  # the slot's environment (sh() gives it to every command)
 
     def sh(self, cmd: Sequence[str], timeout: float = ..., check: bool = ..., save: Path | None = ..., env: Mapping[str, str] | None = ...,
            pin: bool = ..., what: str = ..., cwd: Path | None = ...) -> tuple[int, str]:

@@ -16,6 +16,7 @@ from taskloop.contracts.enums import AskClass
 from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.kinds import Kind
 from taskloop.contracts.log import Beat
+from taskloop.contracts.plancheck import PlanData, RoundState
 from taskloop.domain import outcome as oc
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.plan.matchers import AcceptanceText
@@ -128,7 +129,7 @@ class RunOnce:
         e.scope = AcceptanceText.text(bead) or written
         return bead
 
-    def prepare(self, bead: Any) -> tuple[Any, int, Any]:
+    def prepare(self, bead: Any) -> tuple[PlanData, int, RoundState | None]:
         """(plan, stage, state) to go on with: the checkpoint's, rebased onto the base, or a new plan."""
         e = self.e
         plan, i, state = e.resume.point()
@@ -139,8 +140,8 @@ class RunOnce:
         moved = "" if at_land else e.rebase.onto_base(salvage=plan is not None)  # (no plan: nothing accepted to salvage)
         if moved == "conflict-fixable":
             e.plan_data = e.plan_data or plan
-            moved = e.rebase.salvage()
-        if moved == "conflict" and e.rebase.start_again(self.its_work()):
+            moved = e.salvage.salvage()
+        if moved == "conflict" and e.restart.again(self.its_work()):
             plan, i, state = None, 0, None
         elif moved == "rebased" and plan is not None:
             e.stage_tree = ""  # the stage's diff starts at the base now: the rebase moved what it was measured from
@@ -154,7 +155,7 @@ class RunOnce:
         log = (e.git("log", "--oneline", "-n", "3", f"{e.cfg.base}..HEAD") or "").replace("\n", "; ")
         return f"Its work: {log}"
 
-    def stages(self, plan: Any, i: int, state: Any) -> None:
+    def stages(self, plan: PlanData, i: int, state: RoundState | None) -> None:
         e = self.e
         while i < len(plan["stages"]):
             d = e.stage_loop.run(plan, i, state)
@@ -184,7 +185,7 @@ class RunOnce:
             return
         moved = e.rebase.onto_base(salvage=True, between=True)
         if moved == "conflict-fixable":
-            moved = e.rebase.salvage()
+            moved = e.salvage.salvage()
         if moved == "conflict":
             raise e.blocked_for(f"failed: the task branch no longer fits {e.cfg.base} (it moved during the run); the branch is kept at "
                                 "its last accepted stage, fix the conflict by hand, then rerun", "FAULT_LAND")

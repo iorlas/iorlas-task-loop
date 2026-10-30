@@ -21,11 +21,6 @@ matches = "src/taskloop/app/plan/briefs.py"
 [sub-config.errors]
 implicit-any-type-argument = "ignore"
 
-[[sub-config]]
-matches = "src/taskloop/domain/plan/matchers.py"
-[sub-config.errors]
-implicit-any-type-argument = "ignore"
-
 # New code is strict from its first commit (88 D10); A sub-config cannot take
 # `preset`, so the kinds the strict preset adds are spelled out.
 [[sub-config]]

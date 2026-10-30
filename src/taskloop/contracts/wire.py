@@ -9,6 +9,8 @@ from typing import Any, ClassVar, dataclass_transform, final, get_args
 
 import msgspec
 
+type Open = dict[str, Any]  # a record still kept as an open dict (the planner's and the writer's own, until their records land)
+
 
 class StaleRecord(ValueError):
     """The data carries another `v` than the class: the record is treated as absent, never migrated."""
@@ -42,7 +44,7 @@ class Rec(msgspec.Struct, metaclass=_RecordMeta):
 
     def to_dict(self) -> dict[str, Any]:
         """The fields as a JSON-able dict (no `v`): nested records, enums and sets in their wire form."""
-        return msgspec.to_builtins(self, enc_hook=_enc)
+        return builtins(self)
 
 
 class Tagged(Rec, tag_field="kind"):
@@ -60,6 +62,11 @@ def names(cls: type[Rec]) -> tuple[str, ...]:
 
 def _enc(obj: Any) -> Any:
     return obj.to_wire()  # RunId
+
+
+def builtins(obj: Any) -> Open:
+    """A value as JSON-able builtins: records, enums and sets in their wire form, whatever holds them (a record, a typed dict)."""
+    return msgspec.to_builtins(obj, enc_hook=_enc)
 
 
 def _dec(tp: type, obj: Any) -> Any:

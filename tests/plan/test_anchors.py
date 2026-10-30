@@ -8,6 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
 from taskloop.contracts import answers
+from taskloop.contracts.plancheck import PlanData, adhoc
 from taskloop.domain.plan.stored import role_view, stored
 from taskloop.domain.prompts.anchors import anchors_text, unanchored
 
@@ -64,9 +65,9 @@ class Contract(unittest.TestCase):
 
 class Stored(unittest.TestCase):
     def test_the_stored_plan_drops_what_only_the_accept_step_reads(self):
-        plan = {"summary": "s", "question": "", "options": [], "decided": "d", "unresolved": [], "risks": [],
-                "stages": [{"goal": "g", "files": ["a"], "checks": [["true"]], "hard": True}]}
-        self.assertEqual(stored(plan), {"summary": "s", "risks": [], "stages": [{"goal": "g", "files": ["a"], "checks": [["true"]]}]})
+        plan: PlanData = {"summary": "s", "question": "", "options": [], "decided": "d", "unresolved": [], "risks": [],
+                          "stages": [{"goal": "g", "files": ["a"], "checks": [adhoc("true")], "hard": True}]}
+        self.assertEqual(stored(plan), {"summary": "s", "risks": [], "stages": [{"goal": "g", "files": ["a"], "checks": [adhoc("true")]}]})
 
     def test_a_writer_sees_its_own_stage_whole_and_the_others_by_goal(self):
         plan = {"summary": "s", "assumptions": [{"text": "x"}], "risks": [{"what": "r"}], "cases": [{"criterion": "c"}], "leftovers": [],

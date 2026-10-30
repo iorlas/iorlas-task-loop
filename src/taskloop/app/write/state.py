@@ -2,19 +2,21 @@
 step answers "" (go on to the next step) or what the round came to: AGAIN, ACCEPT or REPLAN."""
 from typing import Any
 
+from taskloop.contracts.plancheck import PlanData, RoundState
+
 AGAIN = "again"  # a round's answer: go round once more
 ACCEPT = "accept"  # the stage is done
 REPLAN = "replan"  # the stage cannot be done as planned
 
 
 class StageState:
-    def __init__(self, plan: dict[str, Any], i: int, state: dict[str, Any] | None) -> None:
-        self.i, self.state = i, state or {}
+    def __init__(self, plan: PlanData, i: int, state: RoundState | None) -> None:
+        self.i, self.state = i, state or RoundState()
         self.stages = len(plan["stages"])
-        self.st: dict[str, Any] = plan["stages"][i]
+        self.st = plan["stages"][i]
         self.last = i == self.stages - 1
         self.fix = self.state.get("fix")
-        self.sk = 1000 + int(self.state.get("fix_n") or 0) if self.fix else i  # the stage's place in a call's key (CallState)
+        self.sk = 1000 + (self.state.get("fix_n") or 0) if self.fix else i  # the stage's place in a call's key (CallState)
         self.name = self.state.get("name") or f"stage {i + 1}/{self.stages}"
         self.feedback: str = self.state.get("feedback", "")
         self.rounds: int = self.state.get("rounds", 0)

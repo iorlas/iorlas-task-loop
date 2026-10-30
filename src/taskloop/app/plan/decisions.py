@@ -4,6 +4,7 @@ import time
 from typing import Any
 
 from taskloop.contracts.adrs import AdrStore
+from taskloop.contracts.plancheck import PlanData
 
 SHOWN = 20  # the newest ADRs a plan prompt carries
 TEXT_CAP = 600
@@ -25,11 +26,11 @@ class Decisions:
         return ("Decisions in force for this repo: rulings the owner made on earlier questions. Follow them, never ask what they settle, "
                 "and name the id of each one your plan relied on in `cited`:\n<decisions>\n" + rows + "</decisions>")
 
-    def cited(self, data: dict[str, Any]) -> list[str]:
+    def cited(self, data: PlanData) -> list[str]:
         """Count the plan's citations: one use per ADR it names that exists (an id the store does not know is dropped and said).
         -> the ids counted. Nothing is written on a dry run."""
         e = self.e
-        ids = list(dict.fromkeys(str(i).strip() for i in data.get("cited") or []))
+        ids = list(dict.fromkeys(i.strip() for i in data.get("cited") or []))
         if not ids or e.dry:
             return []
         adrs = self.store()

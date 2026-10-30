@@ -1,13 +1,13 @@
 """A check of the plan is one of two things, parsed once from the planner's answer: `Ref`, a registered repo check (engine.checks) named by
 its id, or `Adhoc`, an argv of the plan's own with the registered checks it reads declared in `reads` (the engine runs it after them and
 exports their logs). A check has no other identity: a wrapper of a registered check is unwritable (domain/checks/planref.py refuses it)."""
-import copy
 import shlex
-from typing import Any, NotRequired, TypedDict, assert_never, final
+from collections.abc import Sequence
+from typing import NotRequired, TypedDict, assert_never, final
 
 from taskloop.contracts.argv import FORM
 from taskloop.contracts.ids import CheckId
-from taskloop.contracts.wire import Tagged, load
+from taskloop.contracts.wire import Open, Tagged, builtins, load
 
 
 @final
@@ -44,13 +44,29 @@ class StageData(TypedDict):
     checks: list[PlanCheck]
     goal: NotRequired[str]
     hard: NotRequired[bool]
+    anchors: NotRequired[list[Open]]
+    read_first: NotRequired[list[str]]
+    patterns: NotRequired[list[str]]
+    constraints: NotRequired[str | None]
 
 
 class PlanData(TypedDict, total=False):
-    """The plan as the land reads it: its summary and its stages. (The rest of the planner's answer rides in the same dict.)"""
+    """The plan as the run keeps it (answers.PlanAnswer in its working form, with the engine's `assumptions`). Every key the planner
+    writes is named here: a key not named is dropped when a checkpoint is read."""
 
     summary: str
     stages: list[StageData]
+    risks: list[Open]
+    question: str
+    options: list[Open]
+    decided: str
+    cases: list[Open]
+    leftovers: list[Open]
+    irreversible: str
+    unresolved: list[Open]
+    owner_cause: str
+    cited: list[str]
+    assumptions: list[Open]
 
 
 def stages_of(plan: PlanData | None) -> list[StageData]:
@@ -99,23 +115,26 @@ def of(raw: object) -> PlanCheck:
     return raw if isinstance(raw, (Ref, Adhoc)) else load(PlanCheck, raw)
 
 
-def parse(plan: dict[str, Any]) -> None:
-    """A planner's or writer's answer, or a stored plan, with every check a PlanCheck: a stage's checks, a risk's, a case's and a new
-    case's. A missing check is None. In place; a PlanCheck stays as it is."""
+def _parse_checks(items: Sequence[Open]) -> None:
+    for x in items:
+        x["check"] = of(x["check"]) if x.get("check") else None
+
+
+def parse(plan: Open) -> None:
+    """A planner's or writer's answer (a dict of the wire form) with every check a PlanCheck: a stage's checks, a risk's, a case's and a
+    new case's. A missing check is None. In place; a PlanCheck stays as it is."""
     for st in plan.get("stages") or []:
         st["checks"] = [of(c) for c in st["checks"]]
     for k in ("risks", "cases", "new_cases"):
-        for x in plan.get(k) or []:
-            x["check"] = of(x["check"]) if x.get("check") else None
+        _parse_checks(plan.get(k) or [])
 
 
-def to_wire(plan: dict[str, Any]) -> dict[str, Any]:
+def parse_stored(plan: PlanData) -> None:
+    """A plan read back from a checkpoint (its stages come back typed): the checks of its risks and cases are parsed again."""
+    _parse_checks(plan.get("risks") or [])
+    _parse_checks(plan.get("cases") or [])
+
+
+def to_wire(plan: PlanData | Open) -> Open:
     """A copy of the plan with every check in its wire form (a dict), as the planner is shown it and writes it."""
-    out = copy.deepcopy(plan)
-    for st in out.get("stages") or []:
-        st["checks"] = [c.to_dict() if isinstance(c, (Ref, Adhoc)) else c for c in st.get("checks") or []]
-    for k in ("risks", "cases"):
-        for x in out.get(k) or []:
-            if isinstance(x.get("check"), (Ref, Adhoc)):
-                x["check"] = x["check"].to_dict()
-    return out
+    return builtins(plan)

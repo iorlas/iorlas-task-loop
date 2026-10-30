@@ -8,6 +8,7 @@ from taskloop.app.write.check_round import CheckRound
 from taskloop.app.write.review_round import ReviewRound
 from taskloop.app.write.state import AGAIN, StageState
 from taskloop.app.write.write_round import WriteRound
+from taskloop.contracts.plancheck import PlanData, RoundState
 
 
 class StageLoop:
@@ -17,7 +18,7 @@ class StageLoop:
         self.checking = CheckRound(host)
         self.reviewing = ReviewRound(host)
 
-    def run(self, plan: dict[str, Any], i: int, state: dict[str, Any] | None = None) -> str:
+    def run(self, plan: PlanData, i: int, state: RoundState | None = None) -> str:
         """-> "accept" or "replan" (or a Blocked stop). `state`: a resumed stage's counters, or a fix round's."""
         s = self.begin(plan, i, state)
         while True:
@@ -25,7 +26,7 @@ class StageLoop:
             if flow != AGAIN:
                 return flow
 
-    def begin(self, plan: dict[str, Any], i: int, state: dict[str, Any] | None) -> StageState:
+    def begin(self, plan: PlanData, i: int, state: RoundState | None) -> StageState:
         e = self.e
         s = StageState(plan, i, state)
         e.at_stage = s.sk

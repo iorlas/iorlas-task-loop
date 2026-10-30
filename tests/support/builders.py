@@ -1,8 +1,10 @@
 """`make_engine(**overrides)`: an Engine on fakes, the one way a test builds one.
 
-Every seam has a default that is a fake (store, router, clock); `git=` and `cfg=` pass through. Nothing here touches bd, delegate or
+Every seam has a default that is a fake (store, router, clock); `cfg=` passes through. Nothing here touches bd, delegate or
 the wall clock; the engine still writes its own files under the test's XDG_CONFIG_HOME."""
 import shlex
+from collections.abc import Mapping
+from typing import Any
 
 from support.fakes import FakeBeadStore, FakeClock, FakeRouter
 from taskloop.app.run import engine
@@ -11,11 +13,11 @@ from taskloop.contracts import wire
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.env import snapshot
 from taskloop.contracts.ids import BeadId
+from taskloop.contracts.plancheck import PlanData
 
 
 def make_engine(wt, bead="t-1", cfg=None, script=None, attrs=None, **seams):
     """An engine on `wt`. `cfg` is merged over the checkout's loaded config. Seams not given are fakes: `store`, `route`, `clock`;
-    `git` is the engine's own (the real repo) unless given. The fakes are on the engine as `.store`, `.router`, `.clock`.
     `attrs` sets engine state a test starts from (`{"plan_data": ..., "stage_tree": "old"}`) in place of `e.x = ...` lines."""
     c = wslots.load_cfg(str(wt))
     c = cfg_with(c, **(cfg or {}))
@@ -61,3 +63,8 @@ def cfg_with(base=None, **changes):
     d["base_red"] = False  # an always-red command in a test would otherwise be asked again on the base; the tests of that ask turn it on
     d.update(changes)
     return wire.load(EngineConfig, d)
+
+
+def plan_of(raw: Mapping[str, Any]) -> PlanData:
+    """A plan a test writes as a plain dict, as the engine keeps it (a stage may name just its goal and checks here)."""
+    return PlanData(**raw)

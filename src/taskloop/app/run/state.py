@@ -9,12 +9,14 @@ import contextlib
 import copy
 import time
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from taskloop.app.run.review_glue import review_of
 from taskloop.contracts import fence, wire
 from taskloop.contracts.checkpoint import Checkpoint, EndRec, Notes, RunState
+from taskloop.contracts.plancheck import PlanData
 from taskloop.contracts.review import Unfiled
+from taskloop.contracts.wire import Open
 from taskloop.domain.checks import trim
 from taskloop.stores.api import Doc
 
@@ -35,11 +37,39 @@ class StateField:
 
 
 class StateAttrs:
-    """Base of a class decorated with `carries_state`: tells the type checker the RunState fields are attributes."""
+    """Base of a class decorated with `carries_state`: declares the RunState fields as typed attributes (tests/run/test_state.py holds
+    these equal to RunState's)."""
 
-    if TYPE_CHECKING:
-
-        def __getattr__(self, name: str) -> Any: ...
+    plan_data: PlanData | None
+    brief_hash: str
+    snap: Open
+    planner_ref: str
+    planned: int
+    replans: int
+    fixes: int
+    extra: int
+    rebase_resets: int
+    plan_log: list[Open]
+    done: list[str]
+    accepted: list[int]
+    accepted_new: list[str]
+    denials: list[str]
+    writer: Open
+    writer_family: str | None
+    writer_fallback: bool
+    fallback_lane: str
+    writer_said: str
+    look_paths: list[str]
+    look_notes: list[str]
+    look_unjudged: dict[str, str]
+    look_done: int
+    look_prev: list[Open]
+    rendered_names: list[str]
+    last_reqs: list[Open]
+    render_stale: bool
+    handoff: Open
+    stage_tree: str
+    pending_land_validation: str
 
 
 def state_names() -> tuple[str, ...]:

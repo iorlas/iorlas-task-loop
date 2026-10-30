@@ -14,7 +14,7 @@ from support import engine_case as te
 from support import (
     procsim,
 )
-from support.builders import make_engine
+from support.builders import make_engine, plan_of
 from support.checkpoints import put_ck, read_ck
 from support.checks import ck, res, typed
 from support.engine_case import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, engine, lint
@@ -32,7 +32,7 @@ from taskloop.contracts.argv import argv_of
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.env import snapshot
 from taskloop.contracts.ids import BeadId, CheckId
-from taskloop.contracts.plancheck import adhoc
+from taskloop.contracts.plancheck import PlanData, adhoc
 from taskloop.domain.checks import planref
 from taskloop.domain.plan.matchers import AcceptanceText
 
@@ -511,8 +511,8 @@ class Executable(StagesTest):
         (cwd / self.PATH1).write_text("ok")
         return 0, ""
 
-    def two_stage(self):
-        return dict(
+    def two_stage(self) -> PlanData:
+        return plan_of(dict(
             PLAN,
             stages=[
                 dict(
@@ -522,7 +522,7 @@ class Executable(StagesTest):
                 ),
                 dict(PLAN["stages"][0], goal="stage two", checks=ck([f"test -s {self.PATH1}"])),
             ],
-        )
+        ))
 
     def test_a_file_an_accepted_stage_promised_and_a_later_check_reads(self):
         e = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store, env=snapshot())

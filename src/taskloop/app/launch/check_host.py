@@ -16,6 +16,7 @@ from taskloop.app.run.shell import Shell
 from taskloop.app.wire import real
 from taskloop.contracts import paths
 from taskloop.contracts.config import EngineConfig
+from taskloop.contracts.enums import WaitWhat
 from taskloop.contracts.env import Env
 from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.ids import TreeSha
@@ -28,10 +29,10 @@ from taskloop.stores.runlog import RunLog
 
 class _Waits:
     def note_slot_waits(self, text: str, wall: float) -> None: ...
-    def start(self, what: str) -> str:
+    def start(self, what: WaitWhat, holder: str = "", until: float | None = None) -> str:
         return ""
 
-    def add(self, secs: float, what: str, wid: str | None = None) -> None: ...
+    def add(self, secs: float, what: WaitWhat, wid: str | None = None) -> None: ...
 
 
 class _NewFiles:
