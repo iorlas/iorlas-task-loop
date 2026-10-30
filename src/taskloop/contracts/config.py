@@ -1,11 +1,12 @@
 """RepoProfile: the repo's .task-loop.json as typed records . An unknown key is an error, not a silent no-op."""
+from graphlib import CycleError, TopologicalSorter
 from typing import Any, Final, Literal, TextIO, final
 
 import msgspec
 
 from taskloop.contracts import wire
 from taskloop.contracts.argv import FORM, shape_problem, text_of
-from taskloop.contracts.ids import CheckId
+from taskloop.contracts.ids import CheckId, mangle
 from taskloop.contracts.wire import Rec
 
 FRESH_ABOVE_K: Final = {"claude": 150.0, "codex": 100.0, "xai": 100.0}
@@ -67,6 +68,7 @@ class CheckSpec(Rec):
     tail_log: str = ""  # a log of the tree whose first compile errors join this check's red output when it shows none
     where: Literal["host", "container"] = msgspec.field(default="host", name="in")  # container: needs engine.container
     why: str = ""  # run gate: why no plan check may run this command (it is told to the planner)
+    reads: list[CheckId] = msgspec.field(default_factory=list)  # checks whose log and exit code it reads: it runs after them
     # argv run in the worktree before the checks (a formatter); what it changes is checked
     fix: list[str] = msgspec.field(default_factory=list)
 
@@ -262,6 +264,28 @@ def _without_retired(data: Any) -> Any:
     return {**data, ENG: eng}
 
 
+def graph_problem(checks: list[CheckSpec]) -> str:
+    """Why the registry's checks are not a graph the engine can order ('' when they are): an id twice, two ids that become one
+    environment name ($TL_CHECK_LOG_<ID>), a read of a check that is not there, or a cycle of reads. Judged once, at load."""
+    names: dict[str, CheckId] = {}
+    for k in checks:
+        if k.id in names.values():
+            return f"check id {k.id} is used twice in engine.checks"
+        other = names.setdefault(mangle(k.id), k.id)
+        if other != k.id:
+            return f"check ids {other} and {k.id} both become $TL_CHECK_LOG_{mangle(k.id)}: rename one"
+    known = {k.id for k in checks}
+    for k in checks:
+        gone = [r for r in k.reads if r not in known]
+        if gone:
+            return f"check {k.id} reads {gone[0]}, which engine.checks does not have"
+    try:
+        TopologicalSorter({k.id: k.reads for k in checks}).prepare()
+    except CycleError as e:
+        return "checks read each other in a cycle: " + " -> ".join(e.args[1])
+    return ""
+
+
 def load(data: Any, say_to: TextIO | None = None) -> RepoProfile:
     """The repo's .task-loop.json (parsed) as a RepoProfile; ConfigError names the offending key. With `say_to`, a retired key
     is said there once per process."""
@@ -288,6 +312,9 @@ def load(data: Any, say_to: TextIO | None = None) -> RepoProfile:
     boxed = [k.id for k in profile.engine.checks if k.where == "container"]
     if boxed and not box:
         raise ConfigError(f"the repo profile: check {boxed[0]} says \"in\": \"container\" but engine.container is not set")
+    bad_graph = graph_problem(profile.engine.checks)
+    if bad_graph:
+        raise ConfigError(f"the repo profile: {bad_graph}")
     fill_slot_env(profile.engine.slot_env, **dict.fromkeys(SLOT_PLACEHOLDERS, ""))
     cmds = [k.argv for k in profile.engine.checks] + [profile.engine.land]
     cmds += [k.fix for k in profile.engine.checks if k.fix]

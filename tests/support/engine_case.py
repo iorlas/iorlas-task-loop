@@ -55,6 +55,7 @@ from taskloop.contracts import wire
 from taskloop.contracts.ask import AskAnswer
 from taskloop.contracts.checks import CheckRun
 from taskloop.contracts.paths import ConfigDir
+from taskloop.contracts.plancheck import adhoc
 from taskloop.contracts.stores import AskStore
 from taskloop.domain import outcome as oc
 from taskloop.domain.checks import (
@@ -143,7 +144,7 @@ PLAN: dict[str, Any] = {
         {
             "goal": "add f",
             "files": ["f.txt"],
-            "checks": [HAS_F],
+            "checks": [adhoc(HAS_F)],
             "hard": False,
             "anchors": [{"path": "f.txt", "lines": "1", "symbol": "", "why": "the file"}],
         }
@@ -489,8 +490,8 @@ class EngineTest(unittest.TestCase):
     TWO: ClassVar[Any] = {
         "summary": "two",
         "stages": [
-            {"goal": "stage one", "files": ["f.txt"], "checks": [HAS_F], "hard": False, "anchors": ANCHORS},
-            {"goal": "stage two", "files": ["f.txt"], "checks": [HAS_F], "hard": False, "anchors": ANCHORS},
+            {"goal": "stage one", "files": ["f.txt"], "checks": [adhoc(HAS_F)], "hard": False, "anchors": ANCHORS},
+            {"goal": "stage two", "files": ["f.txt"], "checks": [adhoc(HAS_F)], "hard": False, "anchors": ANCHORS},
         ],
         "risks": [],
         "question": "",

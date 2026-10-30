@@ -1,12 +1,8 @@
 """Command patterns of the plan-check lint over argv lists: what a check runs, reads, sets as a limit. `import re` is allowed here only."""
-import contextlib
 import re
-import shlex
 from collections.abc import Sequence
 from types import MappingProxyType
 from typing import Final
-
-from taskloop.contracts.argv import OPERATORS, SHELL_FLAGS, SHELLS
 
 # a check that runs bd or reads the beads files proves the tracker, not the code: no writer can satisfy it (writers cannot run bd)
 BEADS_DIR: Final = re.compile(r"(?<![\w-])\.beads\b")
@@ -46,31 +42,6 @@ def runs_command(argv: Sequence[str], whole: Sequence[str]) -> bool:
     return bool(whole) and h[:len(whole)] == list(whole)
 
 
-def contains_argv(outer: Sequence[str], inner: Sequence[str]) -> bool:
-    """True when `inner` appears in `outer` as a run of whole words."""
-    n = len(inner)
-    return n > 0 and any(list(outer[i:i + n]) == list(inner) for i in range(len(outer) - n + 1))
-
-
-def commands(argv: Sequence[str]) -> list[list[str]]:
-    """The simple commands an argv chains: split at `&&`, `;`, `|`, a redirect or a subshell paren, and the string a shell runs
-    with `-c` read the same way. A word inside quotes (an echo's text) is no command."""
-    out: list[list[str]] = [[]]
-    for w in argv:
-        if w in OPERATORS:
-            out.append([])
-        else:
-            out[-1].append(w)
-    for c in list(out):
-        h = head(c)
-        if len(h) > 2 and h[0].rsplit("/", maxsplit=1)[-1] in SHELLS and h[1] in SHELL_FLAGS:
-            lex = shlex.shlex(h[2], posix=True, punctuation_chars=True)
-            lex.whitespace_split = True
-            with contextlib.suppress(ValueError):  # an unbalanced quote: the shell would not run it either
-                out += commands(list(lex))
-    return [c for c in out if c]
-
-
 def just_target(argv: Sequence[str], plain_flags: frozenset[str]) -> str:
     """The recipe a `just ... <recipe> [args]` command runs, whatever its arguments, else ''."""
     h = head(argv)
@@ -80,11 +51,11 @@ def just_target(argv: Sequence[str], plain_flags: frozenset[str]) -> str:
     return rest[0] if rest and RECIPE.fullmatch(rest[0]) else ""
 
 
-def runs_again(argv: Sequence[str], inner: Sequence[str], plain_flags: frozenset[str]) -> bool:
-    """True when some command the argv chains runs the argv `inner`, or, when `inner` is a bare `just <recipe>`, that recipe with any
-    arguments."""
+def wraps(argv: Sequence[str], inner: Sequence[str], plain_flags: frozenset[str]) -> bool:
+    """True when the argv starts (wrappers aside) with the argv `inner`, or, when `inner` is a bare `just <recipe>`, runs that recipe
+    with any arguments or plain flags."""
     recipe = just_target(inner, plain_flags) if len(inner) == 2 else ""
-    return any(runs_command(c, inner) or (recipe and just_target(c, plain_flags) == recipe) for c in commands(argv))
+    return runs_command(argv, inner) or bool(recipe and just_target(argv, plain_flags) == recipe)
 
 
 def isolated_module(argv: Sequence[str]) -> str:

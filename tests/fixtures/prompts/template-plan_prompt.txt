@@ -9,18 +9,19 @@ each stage has its files and its checks. Budget: about 12 tool calls. Then plan.
 
 - Split the work into stages, each one coherent piece that its checks can judge (often one stage is enough).
 - For each stage: goal, the files it changes, the exact commands that prove it (tests, linters), and hard=true only
-  when it is risky or subtle. Every check is an argv list: the program and its arguments as separate strings, for example
-  ["python3", "-m", "unittest", "tests.test_x"] or ["just", "check"]. The engine execs it as given, with no shell: no `&&`,
-  `;`, pipe, redirect, `$(...)`, `$VAR`, glob or quote means anything in it, and a string where the list belongs is sent back. It
+  when it is risky or subtle. A check is {{"kind": "ref", "check": "<id>"}} (a repo check from the list below) or
+  {{"kind": "adhoc", "argv": [...], "reads": [...]}}: the program and its arguments as separate strings, e.g.
+  ["python3", "-m", "unittest", "tests.test_x"] or ["just", "check"]; `reads`: ids of repo checks whose log it reads. The engine execs the argv as given, with no shell: no `&&`,
+  `;`, pipe, redirect, `$(...)`, `$VAR`, glob or quote means anything in it, and a string is sent back. It
   exits 0 when it proves the goal and non-zero when it does not: the engine reads only the exit code. Exit 86 means it could not
   run its proof (a tool or host it needs is missing): recorded unverified, never passed, and the land refuses on it; never
   exit 0 with a "skipped" line. A proof that needs a
   pipeline, a redirect, a loop or a count ("expect empty", `grep ... | wc -l`) goes into a recipe the repo has or you add (a just
   target or a script, listed in the stage's files), and the check calls it: ["just", "name"].
-- A check never runs a repo check's command again (alone, with arguments, or inside a chain): the plan is sent back. To assert on what a
-  repo check printed, read its saved log: the engine runs your check after that repo check and exports the log as the environment
-  variable `TL_CHECK_LOG_<ID>` (id upper-cased, other characters `_`; exit code `TL_CHECK_RC_<ID>`). A script reads it; pass the
-  variable's name as an argument: ["python3", "tools/assert_log.py", "TL_CHECK_LOG_UNITY_TESTS", "Passed: 12"].
+- An adhoc argv never starts with a repo check's command: use a ref. To assert on a repo check's output, list its id
+  in `reads`: your check runs after it (skipped if it failed) with its log in `TL_CHECK_LOG_<ID>` (id upper-cased, other
+  characters `_`; exit `TL_CHECK_RC_<ID>`). A script reads it; pass the name: {{"kind": "adhoc", "argv": ["python3", "tools/assert_log.py", "TL_CHECK_LOG_UNITY_TESTS", "Passed: 12"],
+  "reads": ["unity-tests"]}}.
 - The engine sets every time limit and runs checks one at a time; never write timeouts, "run alone" or similar notes
   into a check.
 - cases: the acceptance cases. At least one per acceptance criterion of the task, each with the criterion it proves

@@ -61,8 +61,8 @@ from taskloop.app.write.briefing import Briefing
 from taskloop.app.write.handoff import Handoff
 from taskloop.app.write.newfiles import NewFiles
 from taskloop.app.write.stage_loop import StageLoop
-from taskloop.contracts import fence
-from taskloop.contracts.argv import checks_to_text, checks_to_wire, text_of
+from taskloop.contracts import fence, plancheck
+from taskloop.contracts.argv import text_of
 from taskloop.contracts.landed import Landed, LandedStore
 from taskloop.contracts.log import Assumed, Said
 from taskloop.contracts.paths import PLAN_FILE, ConfigDir
@@ -237,7 +237,7 @@ class Engine(RunFields):
                 kw["delta"] += notes
         out = self.worker.run(node, title, prompt, *a, **kw)
         self.assert_tree(kw.get("step") or node, "after")
-        checks_to_text(out[0])
+        plancheck.parse(out[0])
         return out
 
     def step_guard(self, step: str) -> None:
@@ -275,7 +275,7 @@ class Engine(RunFields):
 
     def publish_plan(self) -> None:
         if self.plan_data:
-            (self.run_dir / PLAN_FILE).write_text(json.dumps(checks_to_wire(self.plan_data), indent=1))
+            (self.run_dir / PLAN_FILE).write_text(json.dumps(plancheck.to_wire(self.plan_data), indent=1))
 
     def record_land(self, sha: str) -> None:
         LandedStore(ident.config_dir()).put(Landed(bead=self.bead, sha=sha, base=self.cfg.base, t=self.now()))

@@ -529,7 +529,25 @@
   "writer_max_s": 90.0,
   "tail_log": "client/Logs/unity-project-files.log",
   "fix": "",
-  "container": false
+  "container": false,
+  "reads": [
+   "unity-build"
+  ]
+ },
+ "plancheck.Ref": {
+  "kind": "ref",
+  "check": "unity-tests"
+ },
+ "plancheck.Adhoc": {
+  "kind": "adhoc",
+  "argv": [
+   "python3",
+   "tools/assert_log.py",
+   "TL_CHECK_LOG_UNITY_TESTS"
+  ],
+  "reads": [
+   "unity-tests"
+  ]
  },
  "CheckCacheEntry": {
   "v": 1,
@@ -973,6 +991,7 @@
      "tail_log": "",
      "in": "container",
      "why": "",
+     "reads": [],
      "fix": []
     },
     {
@@ -996,6 +1015,7 @@
      "tail_log": "",
      "in": "host",
      "why": "",
+     "reads": [],
      "fix": []
     }
    ],

@@ -1,36 +1,31 @@
 """Plan-check lint: the plan's checks, and which of them can run. Pure; what the tree and the machine say comes in as a TreeProbe."""
 import os
+import shlex
 from collections.abc import Sequence
-from typing import Any, Final
+from typing import Final
 
-from taskloop.contracts.argv import FORM, argv_of, argv_problems
+from taskloop.contracts.argv import FORM, argv_problems
 from taskloop.contracts.config import EngineConfig
+from taskloop.contracts.plancheck import Adhoc
 from taskloop.contracts.ports import TreeProbe
-from taskloop.domain.checks import matchers
 from taskloop.domain.checks.cmd import matchers as sh
-from taskloop.domain.checks.matchers import glob_re
-from taskloop.domain.checks.names import log_var, mangle, norm, rc_var
+from taskloop.domain.checks.names import norm
+from taskloop.domain.checks.planref import JUST_PLAIN_FLAGS, Plan, adhocs, plan_checks
 from taskloop.domain.matchers import clip
 
-Plan = Any  # the plan's JSON until E6 types it
-JUST_PLAIN_FLAGS: Final = frozenset({"--unstable", "-q", "--quiet", "-v", "--verbose", "--dry-run", "-n", "--no-deps", "--highlight",
-                              "--no-highlight"})
 GATE_ONLY_TEXT: Final = ("\n\nYour plan was sent back: these checks run a command that runs only in the gate at land (the engine "
                   "runs it once, on the rebased tree), never on a stage's uncommitted tree:\n%s\nRewrite them without "
                   "it: the land gate proves what it proves.")
 
 
-def plan_checks(plan: Plan) -> list[str]:
-    """The plan's checks: stages, risks, cases."""
-    return list(dict.fromkeys([c for s in plan.get("stages") or [] for c in s["checks"]] + [
-        x["check"] for k in ("risks", "cases") for x in plan.get(k) or []
-        if x.get("check", "").strip() and x.get("class", "test") == "test"
-        and x.get("proved_by", "check") in ("check", "stage")]))  # a look, taste, leftover or engine-step case has no command
+def own_checks(plan: Plan) -> list[Adhoc]:
+    """The plan's own commands (the refs are registered checks, linted where they are registered)."""
+    return adhocs(plan_checks(plan))
 
 
 def tracker_checks(plan: Plan) -> list[str]:
     """The plan's checks that read the issue tracker instead of the code (no writer can run bd)."""
-    return [c for c in plan_checks(plan) if sh.reads_tracker(argv_of(c))]
+    return [c.text for c in own_checks(plan) if sh.reads_tracker(c.argv)]
 
 
 GATE_WHY: Final = "the engine runs the gate once, on the rebased tree"
@@ -42,29 +37,14 @@ def gate_only(cfg: EngineConfig) -> list[tuple[str, str]]:
     return [(norm(c), why) for c, why in out if c.strip()]
 
 
-def rerun_problems(plan: Plan, cfg: EngineConfig) -> list[str]:
-    """[why] for a plan check whose command line runs a registered check again, anywhere in an `&&`/`;`/`|` chain or a shell string
-    (lifesim: `mkdir -p x && just unity-tests > x/out && grep -q passed x/out` ran the suite 117 extra times). The round already ran
-    the registered check; its log is there to read."""
-    out = []
-    for c in plan_checks(plan):
-        hit = next((k for k in cfg.stage_checks if sh.runs_again(argv_of(c), k.argv, JUST_PLAIN_FLAGS)), None)
-        if hit:
-            out.append(f"`{clip(c, 120)}`: runs the registered check `{hit.id}` (`{hit.cmd}`) again; the engine already runs it this round "
-                       f"on this tree: assert on its saved log instead, with a script that reads ${log_var(hit.id)} (its exit code is "
-                       f"${rc_var(hit.id)}) and the variable's name in the argv, e.g. "
-                       f'["python3", "tools/assert_log.py", "{log_var(hit.id)}", "passed"]; never run it from a check')
-    return out
-
-
 def gate_only_checks(plan: Plan, cfg: EngineConfig) -> list[tuple[str, str]]:
     """[(check, reason)]: the plan's checks that run a gate-only command."""
     rules = [(c, "{} runs only in the gate at land{}".format(c, ": " + why if why else "")) for c, why in gate_only(cfg)]
     out = []
-    for c in plan_checks(plan):
-        hit = next((why for cmd, why in rules if sh.runs_command(argv_of(c), argv_of(cmd))), None)
+    for c in own_checks(plan):
+        hit = next((why for cmd, why in rules if sh.runs_command(c.argv, shlex.split(cmd))), None)
         if hit:
-            out.append((c, hit))
+            out.append((c.text, hit))
     return out
 
 
@@ -72,10 +52,10 @@ def own_timeout_problems(plan: Plan, cap_min: float) -> list[str]:
     """[why] for a plan check that sets a time limit above the engine's check limit: the engine kills it at the cap, every round
     (lifesim-yxbb.3: a play test with timeout_ms 2400000 under a 30-minute cap timed out five rounds, 2.5 hours)."""
     out: list[str] = []
-    for c in plan_checks(plan):
-        for minutes, text in sh.own_timeouts(c):
+    for c in own_checks(plan):
+        for minutes, text in sh.own_timeouts(c.text):
             if minutes > float(cap_min):
-                out.append(f"`{clip(c, 120)}`: sets its own limit `{text.strip()}` = {round(minutes, 1):g} min, above the engine's "
+                out.append(f"`{clip(c.text, 120)}`: sets its own limit `{text.strip()}` = {round(minutes, 1):g} min, above the engine's "
                            f"check limit of {float(cap_min):g} min, so the engine kills it at the limit every round: lower the limit, or "
                            "split the work into checks that each finish inside it")
                 break
@@ -87,25 +67,7 @@ def ledger_problems(plan: Plan) -> list[str]:
     return ["case `{}` has no check: give a command, or say in proved_by how it is proved (stage, leftover, "
             "engine_step), or a class of look-objective or taste".format(c["criterion"][:120])
             for c in plan.get("cases") or []
-            if c.get("class", "test") == "test" and c.get("proved_by", "check") == "check" and not c.get("check", "").strip()]
-
-
-def producer_problems(plan: Plan, cfg: EngineConfig) -> list[str]:
-    """[why] for a plan check that reads $TL_CHECK_LOG_/RC_<ID> of a repo check whose `when` matches no file any stage lists (it
-    never runs, so the variable is never set), or of a check the repo does not have: nothing produces what it reads."""
-    files = [f for st in plan.get("stages") or [] for f in st["files"]]
-    by_name = {mangle(k.id): k for k in cfg.stage_checks}
-    out = []
-    for c in plan_checks(plan):
-        for name in matchers.env_refs(c):
-            k = by_name.get(name)
-            if k is None:
-                out.append(f"`{clip(c, 120)}`: reads $TL_CHECK_*_{name}, but the repo has no check with that id: nothing produces it")
-            elif k.when and not any(glob_re(g).match(f.strip().lstrip("./")) for g in k.when for f in files):
-                out.append(f"`{clip(c, 120)}`: reads the output of the repo check `{k.id}`, which runs only for changes under "
-                           f"{', '.join(k.when)} and no stage lists a file there, so it will not run: drop the read, or list the files it "
-                           "needs in a stage")
-    return out
+            if c.get("class", "test") == "test" and c.get("proved_by", "check") == "check" and not c.get("check")]
 
 
 def evidence_problems(plan: Plan, evidence: str) -> list[str]:
@@ -116,10 +78,10 @@ def evidence_problems(plan: Plan, evidence: str) -> list[str]:
     prefix = evidence.rstrip("/") + "/"
     made = [f.strip() for st in plan.get("stages") or [] for f in st["files"]]
     out = []
-    for c in plan_checks(plan):
-        for f in dict.fromkeys(t for t in argv_of(c) if t.startswith(prefix)):
+    for c in own_checks(plan):
+        for f in dict.fromkeys(t for t in c.argv if t.startswith(prefix)):
             if f not in made:
-                out.append(f"`{clip(c, 120)}`: reads `{f}` from the evidence folder, and no stage lists it: nothing produces it")
+                out.append(f"`{clip(c.text, 120)}`: reads `{f}` from the evidence folder, and no stage lists it: nothing produces it")
     return out
 
 
@@ -158,8 +120,8 @@ def dry_check(plan: Plan, probe: TreeProbe) -> list[str]:
     reads that is neither in the tree nor a file some stage names."""
     errs: list[str] = []
     made = [os.path.normpath(f) for st in plan.get("stages") or [] for f in st["files"]]
-    for c in plan_checks(plan):
-        argv = argv_of(c)
+    for a in own_checks(plan):
+        argv, c = list(a.argv), a.text
         if not argv:
             errs.append(f"an empty check: {FORM}")
             continue

@@ -29,6 +29,28 @@ class RepoProfileKeys(unittest.TestCase):
         with self.assertRaisesRegex(ConfigError, r"engine\.gate_only is gone.*\"run\": \"gate\""):
             load({"engine": {"gate_only": [{"argv": ["just", "unity-check"]}]}})
 
+    def test_two_ids_that_become_one_environment_name_are_refused_at_load(self):
+        checks = [{"id": "unity-test", "argv": ["a"]}, {"id": "unity_test", "argv": ["b"]}]
+        with self.assertRaisesRegex(ConfigError, r"unity-test and unity_test both become \$TL_CHECK_LOG_UNITY_TEST"):
+            load({"engine": {"checks": checks}})
+
+    def test_an_id_used_twice_is_refused_at_load(self):
+        with self.assertRaisesRegex(ConfigError, "check id a is used twice"):
+            load({"engine": {"checks": [{"id": "a", "argv": ["a"]}, {"id": "a", "argv": ["b"]}]}})
+
+    def test_checks_that_read_each_other_in_a_cycle_are_refused_at_load(self):
+        checks = [{"id": "a", "argv": ["a"], "reads": ["b"]}, {"id": "b", "argv": ["b"], "reads": ["a"]}]
+        with self.assertRaisesRegex(ConfigError, "in a cycle"):
+            load({"engine": {"checks": checks}})
+
+    def test_a_read_of_a_check_that_is_not_there_is_refused_at_load(self):
+        with self.assertRaisesRegex(ConfigError, "check a reads zzz"):
+            load({"engine": {"checks": [{"id": "a", "argv": ["a"], "reads": ["zzz"]}]}})
+
+    def test_reads_that_form_a_graph_load(self):
+        cfg = load({"engine": {"checks": [{"id": "a", "argv": ["a"]}, {"id": "b", "argv": ["b"], "reads": ["a"]}]}})
+        self.assertEqual(cfg.engine.checks[1].reads, ["a"])
+
     def test_run_says_where_a_check_runs(self):
         cfg = load({"engine": {"checks": [{"id": "a", "argv": ["a"]}, {"id": "b", "argv": ["b"], "run": "gate"},
                                          {"id": "c", "argv": ["c"], "run": "both"}]}}).engine

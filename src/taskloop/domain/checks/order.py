@@ -14,7 +14,7 @@ class CheckOrder:
     """By the median of earlier runs of the same command (unknown = cheap), so a red verdict comes before the slow Unity runs;
     `acceptance_first` puts acceptance before tests at equal cost (a round that failed only in acceptance: lifesim-fdyo reran 11
     minutes of unity tests before a 3-second verdict check failed). A check reading $TL_CHECK_LOG_X goes after X, and `late` (the
-    Unity group) after every other check whose dependencies allow it. A cycle of dependencies is broken by declaration order."""
+    Unity group) after every other check whose dependencies allow it. The reads are a graph validated at load (graphlib)."""
 
     def __init__(self, history: Durations, acceptance_first: bool = False) -> None:
         self.history = history
@@ -28,7 +28,7 @@ class CheckOrder:
         out: list[int] = []
         left = list(keyed)
         while left:
-            pick = next((i for i in left if all(d in placed or d == i for d in deps.get(i, ()))), left[0])
+            pick = next(i for i in left if all(d in placed or d == i for d in deps.get(i, ())))
             left.remove(pick)
             placed.add(pick)
             out.append(pick)

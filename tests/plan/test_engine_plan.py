@@ -4,6 +4,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
+from support.checks import typed
 from support.engine_case import BEAD, CAP_PARKS, CLEAN, FALSE, HAS_F, PLAN, WRITE, EngineTest, review, sh, stop
 
 # isort: split
@@ -18,12 +19,11 @@ from support.logs import records
 from taskloop.adapters import ident
 from taskloop.app.plan.planner import Planner
 from taskloop.app.run import engine
-from taskloop.contracts import answers
-from taskloop.contracts.argv import checks_to_wire
+from taskloop.contracts import answers, plancheck
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.ids import CheckId
 from taskloop.domain import outcome as oc
-from taskloop.domain.checks import lint
+from taskloop.domain.checks import planref
 from taskloop.domain.checks.names import log_var
 from taskloop.domain.prompts import plan as pp
 from taskloop.domain.prompts import review as rp
@@ -51,9 +51,9 @@ class EnginePlanTest(EngineTest):
 
     def test_a_plan_check_that_re_runs_a_configured_check_is_found(self):
         cfg = cfg_with(checks=[{"id": "unity-tests", "cmd": "just unity-tests", "group": "tests"}])
-        plan = dict(PLAN, risks=[{"what": "x", "check": "env CI=1 just unity-tests"},
-                                 {"what": "y", "check": "just unity-tests-extra"}])
-        got = lint.rerun_problems(plan, cfg)
+        plan = typed(dict(PLAN, risks=[{"what": "x", "check": "env CI=1 just unity-tests"},
+                                       {"what": "y", "check": "just unity-tests-extra"}]))
+        got = planref.refusals(planref.plan_checks(plan), cfg)
         self.assertEqual(len(got), 1)
         self.assertIn("`unity-tests`", got[0])
         self.assertEqual(log_var(CheckId("unity-tests")), "TL_CHECK_LOG_UNITY_TESTS")
@@ -268,10 +268,10 @@ class EnginePlanTest(EngineTest):
             self.assertIn("options: with a question, 2-4 answers", {"plan": pp.PLAN_PROMPT, "write": wp.WRITE_PROMPT,
                                                                      "review": rp.REVIEW_PROMPT}[node])
         ok = {"label": "A", "cost": "c", "answer": "a", "recommended": True}
-        self.assertEqual(answers.check("plan", False, checks_to_wire(dict(PLAN, options=[ok]))), [])
-        bare = {k: v for k, v in checks_to_wire(PLAN).items() if k != "options"}
+        self.assertEqual(answers.check("plan", False, plancheck.to_wire(dict(PLAN, options=[ok]))), [])
+        bare = {k: v for k, v in plancheck.to_wire(PLAN).items() if k != "options"}
         self.assertEqual(answers.check("plan", False, bare), ["PlanAnswer.options: missing"])
-        self.assertEqual(answers.check("plan", False, checks_to_wire(dict(PLAN, options=[{"label": "A"}]))),
+        self.assertEqual(answers.check("plan", False, plancheck.to_wire(dict(PLAN, options=[{"label": "A"}]))),
                          ["PlanAnswer.options[0].cost: missing"])  # msgspec reports the first violation only
 
     def test_a_verify_answer_with_a_yes_and_a_change_plans_it(self):

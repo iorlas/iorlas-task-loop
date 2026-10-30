@@ -1,6 +1,7 @@
 """What a node's answer says in a few lines: the facts behind the step (verbose mode) and the one line the trace keeps."""
 from typing import Any
 
+from taskloop.contracts import plancheck
 from taskloop.contracts.answers import VERDICTS
 
 
@@ -11,9 +12,9 @@ def asked(d: Any) -> list[str]:
 
 def details(node: str, d: Any) -> list[str]:
     if node == "plan":
-        stages = [f"{n + 1}. {s['goal']}{' (hard)' if s['hard'] else ''} → checks: {'; '.join(s['checks'])}"
+        stages = [f"{n + 1}. {s['goal']}{' (hard)' if s['hard'] else ''} → checks: {'; '.join(map(plancheck.text_of, s['checks']))}"
                   for n, s in enumerate(d["stages"])]
-        return stages + [f"risk: {r['what']} → {r['check']}" for r in d["risks"]]
+        return stages + [f"risk: {r['what']} → {plancheck.shown(r['check'])}" for r in d["risks"]]
     if node == "write":
         return [f"ran `{c['cmd']}` exit {c['exit']}" for c in d["checks_run"]] + asked(d)
     if node == "review":

@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from taskloop.app.plan.decisions import Decisions
-from taskloop.contracts.argv import checks_to_wire
+from taskloop.contracts import plancheck
 from taskloop.domain.checks import lint
 from taskloop.domain.prompts.plan import PLAN_PROMPT, VISUAL_PLAN, VISUAL_STAGES
 
@@ -35,7 +35,7 @@ class PlanPrompt:
             return ("\n\nAn earlier plan exists for this task. Return the plan with the smallest change that covers what "
                     "follows; keep accepted stages and their checks unless the change touches them; do not re-explore code "
                     "the old plan already names. Same output schema as a plan.\n<old_plan>\n"
-                    f"{json.dumps(checks_to_wire(old), indent=1)}\n</old_plan>\n"
+                    f"{json.dumps(plancheck.to_wire(old), indent=1)}\n</old_plan>\n"
                     f"What changed:\n<change>\n{(e.amend_text or why).strip()}\n</change>")
         if again:
             return f"\n\nThe previous plan did not work. What failed:\n<failed>\n{why}\n</failed>\nPlan again."
@@ -81,6 +81,10 @@ class PlanPrompt:
             rules.append(VISUAL_STAGES % (", ".join(e.pictures.visual_cfg().include)[:300], e.pictures.shot_table()))
         rules.append("Proof files that a check reads or a reviewer looks at (screenshots, logs, probe output) go under "
                      f"{e.evidence_dir}: it is kept across runs, and nothing else under {e.task_dir} is.")
+        repo = e.cfg.stage_checks
+        if repo:
+            rules.append("The repo's own checks (id: command), run every round by the engine; never write their command as a check:\n"
+                         + "\n".join(f"- {k.id}: `{k.cmd}`" for k in repo))
         gate, has = e.cfg.gate_text, bool(e.cfg.gate_checks)
         rules.append("Checks run on the uncommitted working tree after each write. The engine runs the gate{} once, on "
                      "the rebased tree at land: never put {} in a stage's checks, and a criterion that names it is proven "

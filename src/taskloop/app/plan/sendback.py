@@ -5,8 +5,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from taskloop.contracts.argv import checks_to_wire
-from taskloop.domain.checks import lint
+from taskloop.contracts import plancheck
+from taskloop.domain.checks import lint, planref
 from taskloop.domain.plan.matchers import gate_only_criteria
 from taskloop.domain.prompts.anchors import MAX_ANCHORS, unanchored
 from taskloop.domain.prompts.plan import (
@@ -14,6 +14,7 @@ from taskloop.domain.prompts.plan import (
     EMPTY_PLAN_TEXT,
     GATE_ONLY_ACCEPTANCE,
     GATE_ONLY_ACCEPTANCE_TEXT,
+    REFUSED_CHECKS_TEXT,
     TRACKER_TEXT,
     UNANCHORED_TEXT,
 )
@@ -27,14 +28,16 @@ class Problems:
     gated: list[tuple[str, str]] = field(default_factory=list)
     dry: list[str] = field(default_factory=list)
     loose: list[str] = field(default_factory=list)  # "stage N: file" for an existing file with no anchor
+    refused: list[str] = field(default_factory=list)  # a ref or a read of a check the repo lacks, a wrapper of a registered check
 
     def any(self) -> bool:
-        return bool(self.empty or self.only or self.bad or self.gated or self.dry or self.loose)
+        return bool(self.empty or self.only or self.bad or self.gated or self.dry or self.loose or self.refused)
 
     def moved(self) -> str:
         parts = (["has no stages"] if self.empty else []) + (["checks read the issue tracker"] if self.bad else [])
         parts += [f"acceptance is only the gate ({GATE_ONLY_ACCEPTANCE})"] if self.only else []
         parts += (["checks run gate-only commands"] if self.gated else []) + (["existing files have no anchor"] if self.loose else [])
+        parts += ["checks name or wrap registered checks wrongly"] if self.refused else []
         return "plan " + "; ".join(parts + (["checks cannot run"] if self.dry else []))
 
 
@@ -46,14 +49,14 @@ class SendBack:
         """The problems of a first answer."""
         e = self.e
         dry = lint.dry_check(data, e.shell_probe())
-        dry += (lint.ledger_problems(data) + lint.own_timeout_problems(data, e.cfg.check_wall_min) + lint.rerun_problems(data, e.cfg)
-                + lint.producer_problems(data, e.cfg) + lint.evidence_problems(data, str(e.evidence_dir)))
+        dry += (lint.ledger_problems(data) + lint.own_timeout_problems(data, e.cfg.check_wall_min)
+                + lint.evidence_problems(data, str(e.evidence_dir)))
         # tl-wjj: no stages, no question and nothing to file breaks the plan contract: back once. With leftovers it is the
         # finished-work plan (tl-bxk.13.2); with the owner's verify answer it may be empty.
         empty = (not data["stages"] and not data["question"].strip() and not data.get("leftovers") and not e.leftovers
                  and not e.verify_answer)
         return Problems(empty, gate_only_criteria(data, e.cfg), lint.tracker_checks(data),
-                        lint.gate_only_checks(data, e.cfg), dry, self.loose(data))
+                        lint.gate_only_checks(data, e.cfg), dry, self.loose(data), planref.refusals(planref.plan_checks(data), e.cfg))
 
     def loose(self, data: dict[str, Any]) -> list[str]:
         """Stages that change an existing file no anchor names; a stage with more than 8 anchors keeps the first 8."""
@@ -82,6 +85,9 @@ class SendBack:
         if p.gated:
             e.warn("the plan's checks run gate-only commands, sent back: " + "; ".join(f"{c} ({w})" for c, w in p.gated)[:300])
             why += lint.GATE_ONLY_TEXT % "\n".join(f"- `{c}`: {w}" for c, w in p.gated)
+        if p.refused:
+            e.warn("the plan's checks name or wrap registered checks wrongly, sent back: " + "; ".join(p.refused)[:300])
+            why += REFUSED_CHECKS_TEXT % "\n".join("- " + r for r in p.refused)
         if p.dry:
             e.warn("the plan's checks cannot run, sent back: " + "; ".join(p.dry)[:300])
             why += DRY_CHECK_TEXT % "\n".join("- " + d for d in p.dry)
@@ -91,7 +97,7 @@ class SendBack:
         """Ask once more, on the same planner thread when there is one."""
         e = self.e
         ref = e.planner_ref
-        wire = json.dumps(checks_to_wire(data), indent=1)
+        wire = json.dumps(plancheck.to_wire(data), indent=1)
         back = (why.lstrip() + "\n\nYour plan, to correct (same output schema):\n" + wire) if ref else prompt + why
         again, _ = e.ai("plan", "rewrite checks", back, step=step, mode="checks_back", resume_ref=ref or None, at=(e.planned, 1, 0))
         return again
@@ -109,6 +115,10 @@ class SendBack:
         if gated:
             raise e.blocked_for("failed: the plan's checks still run gate-only commands after one rewrite: "
                                 + "; ".join(f"{c} ({w})" for c, w in gated)[:400], "FAULT_PLAN")
-        dry = lint.dry_check(data, e.shell_probe()) + lint.rerun_problems(data, e.cfg)
+        refused = planref.refusals(planref.plan_checks(data), e.cfg)
+        if refused:
+            raise e.blocked_for("failed: the plan's checks still name or wrap registered checks wrongly after one rewrite: "
+                                + "; ".join(refused)[:400], "FAULT_PLAN")
+        dry = lint.dry_check(data, e.shell_probe())
         if dry:
             e.warn("the plan's checks may still not run after one rewrite: " + "; ".join(dry)[:300])

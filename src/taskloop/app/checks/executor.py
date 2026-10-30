@@ -95,7 +95,7 @@ class CheckExecutor:
         if gone:
             return CheckResult.skipped(c, f"producer {gone} did not run", producer=gone)
         if st.red and (c.group != st.red or expected_secs(c.cmd, self.history) >= CHEAP_S or step.unity
-                       or any(d in st.red_skipped for d in step.after)):
+                       or any(d in st.red_skipped for d in step.env)):
             # a red group skips the groups after it, and any red skips every expensive check (the cheap ones of its own group run to
             # the end, so the writer sees all the cheap failures at once; the Unity group never runs after a red)
             return CheckResult.skipped(c, st.red + FAILED_FIRST)
@@ -107,8 +107,8 @@ class CheckExecutor:
 
     @staticmethod
     def _producer_gone(step: Step, st: Round) -> str:
-        """The id of a check this one reads the log or exit code of that did not run, or ran red, or the repo does not have: it has
-        nothing to read, and no write can change that. Such a check is skipped, never failed."""
+        """The id of a check this one reads (Check.reads) that did not run, or ran red, or is not in this round: it has nothing to read,
+        and no write can change that. Such a check is skipped, never failed: the graph skips its readers."""
         if step.absent:
             return step.absent[0]
         for p in step.env:

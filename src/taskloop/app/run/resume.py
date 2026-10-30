@@ -7,6 +7,7 @@ from typing import Any
 from taskloop.app.run.decide import CONFIRMED, OUTSIDE, Decision, World, resume_decision, stage_count
 from taskloop.app.run.review_glue import apply_review
 from taskloop.app.run.state import state_names
+from taskloop.contracts import plancheck
 from taskloop.contracts.checkpoint import Checkpoint
 from taskloop.contracts.enums import AskClass
 from taskloop.domain.plan import brief
@@ -98,6 +99,7 @@ class Resume:
     def missing(self, ck: Checkpoint) -> int | None:
         n = stage_count(ck)
         plan = ck.state.plan_data or {}
+        plancheck.parse(plan)  # a saved plan comes back as dicts: its checks are parsed again
         return self.e.cases.promised_missing(plan, n if (ck.step == "land" or ck.stage >= n) else ck.stage) if plan else None
 
     def restore(self, ck: Checkpoint, late: bool) -> None:
@@ -114,6 +116,8 @@ class Resume:
     def apply(self, ck: Checkpoint, d: Decision) -> tuple[Any, int, Any]:
         e = self.e
         plan = ck.state.plan_data
+        if plan:
+            plancheck.parse(plan)  # a saved plan comes back as dicts: its checks are parsed again
         if d.kind in ("amend", "replan"):
             return self.amend(ck, d)
         e.plan_data, e.plan_summary, e.accepted = plan, (plan or {})["summary"], list(ck.state.accepted)

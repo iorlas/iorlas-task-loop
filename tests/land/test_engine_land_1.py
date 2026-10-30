@@ -6,6 +6,7 @@ from typing import Any, ClassVar, cast
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
+from support.checks import typed
 from support.engine_case import (
     CLEAN,
     ENGINE_BASH,
@@ -241,9 +242,9 @@ class EngineLand1Test(EngineTest):
         cfg = cfg_with(gate="just check", gate_only=["just unity-check", self.UNITY])
         bad = ["just check", "env CI=1 just unity-check --fast", "nice just check"]
         ok = [HAS_F, "just check-fmt", "just unity-checks", "grep 'just check' AGENTS.md", "just fmt"]
-        got = lint.gate_only_checks(dict(PLAN, risks=[{"what": "x", "check": c} for c in bad + ok]), cfg)
+        got = lint.gate_only_checks(typed(dict(PLAN, risks=[{"what": "x", "check": c} for c in bad + ok])), cfg)
         self.assertEqual([c for c, _ in got], bad)
-        self.assertEqual(lint.gate_only_checks(dict(PLAN, risks=[{"what": "x", "check": "just check"}]),
+        self.assertEqual(lint.gate_only_checks(typed(dict(PLAN, risks=[{"what": "x", "check": "just check"}])),
                                                  cfg_with()), [])
 
     def test_the_planner_gets_the_repo_rules_and_is_told_the_engine_owns_the_gate(self):

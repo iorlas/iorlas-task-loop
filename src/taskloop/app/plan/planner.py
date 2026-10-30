@@ -11,6 +11,7 @@ from taskloop.app.plan.cap import ReplanCap
 from taskloop.app.plan.decisions import Decisions
 from taskloop.app.plan.prompt import PlanPrompt
 from taskloop.app.plan.sendback import SendBack
+from taskloop.contracts import plancheck
 from taskloop.contracts.answers import ASSUMPTION, IRREVERSIBLE
 from taskloop.contracts.enums import AskClass
 from taskloop.domain.asks import specs as askspecs
@@ -192,7 +193,8 @@ class Planner:
         lines = ["Plan (engine): " + data["summary"]]
         for n, s in enumerate(data["stages"]):
             hard = " (hard)" if s.get("hard") else ""
-            lines.append(f"{n + 1}. {s['goal']}{hard} [files: {', '.join(s['files'])}] [checks: {'; '.join(s['checks'])}]")
-        lines += [f"Risk: {r['what']} → {r['check']}" for r in data["risks"]]
+            checks = "; ".join(map(plancheck.text_of, s["checks"]))
+            lines.append(f"{n + 1}. {s['goal']}{hard} [files: {', '.join(s['files'])}] [checks: {checks}]")
+        lines += [f"Risk: {r['what']} → {plancheck.shown(r['check'])}" for r in data["risks"]]
         lines += [ASSUMPTION + a["text"] for a in data.get("assumptions") or []]
         return "\n".join(lines)

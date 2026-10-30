@@ -70,11 +70,57 @@
     "additionalProperties": false,
     "properties": {
      "check": {
-      "description": "argv: a check is an argv list of strings, e.g. [\"python3\", \"-m\", \"unittest\"]; a pipeline, redirect or loop goes into a repo recipe (a just target or a script) that the argv calls, e.g. [\"just\", \"name\"]",
-      "items": {
-       "type": "string"
-      },
-      "type": "array"
+      "anyOf": [
+       {
+        "additionalProperties": false,
+        "properties": {
+         "check": {
+          "type": "string"
+         },
+         "kind": {
+          "enum": [
+           "ref"
+          ],
+          "type": "string"
+         }
+        },
+        "required": [
+         "kind",
+         "check"
+        ],
+        "type": "object"
+       },
+       {
+        "additionalProperties": false,
+        "properties": {
+         "argv": {
+          "items": {
+           "type": "string"
+          },
+          "type": "array"
+         },
+         "kind": {
+          "enum": [
+           "adhoc"
+          ],
+          "type": "string"
+         },
+         "reads": {
+          "items": {
+           "type": "string"
+          },
+          "type": "array"
+         }
+        },
+        "required": [
+         "kind",
+         "argv",
+         "reads"
+        ],
+        "type": "object"
+       }
+      ],
+      "description": "a check is {kind: ref, check: <id of a repo check>} (the repo's own check, named) or {kind: adhoc, argv, reads} (your own command; reads lists the ids of the repo checks whose saved log it reads). a check is an argv list of strings, e.g. [\"python3\", \"-m\", \"unittest\"]; a pipeline, redirect or loop goes into a repo recipe (a just target or a script) that the argv calls, e.g. [\"just\", \"name\"]"
      },
      "criterion": {
       "type": "string"

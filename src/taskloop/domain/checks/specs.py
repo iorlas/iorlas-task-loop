@@ -2,11 +2,13 @@
 from collections.abc import Sequence
 from typing import Final
 
-from taskloop.contracts.argv import argv_of, text_of
+from taskloop.contracts.argv import text_of
 from taskloop.contracts.checks import Check
 from taskloop.contracts.config import CheckSpec, EngineConfig
 from taskloop.contracts.ids import CheckId
+from taskloop.contracts.plancheck import Adhoc, PlanCheck
 from taskloop.domain.checks.matchers import glob_re
+from taskloop.domain.checks.planref import adhocs
 
 DIFF_CHECK: Final = CheckId("diff-check")  # the engine's own check: `git diff --check <base>`, always first in every round and the gate
 
@@ -17,14 +19,6 @@ def diff_check(base: str, tree: str) -> Check:
     return Check(id=DIFF_CHECK, cmd=f"git diff --check {base} {tree}", group="static", wall_min=2.0)
 
 
-def spelled(cmd: str) -> str:
-    """The command in its one spelling (the argv joined), so two spellings of one argv are one check."""
-    try:
-        return text_of(argv_of(cmd))
-    except ValueError:
-        return cmd
-
-
 def repo_check(k: CheckSpec, cfg: EngineConfig, gate: bool = False) -> Check:
     """A configured check, with the engine's limits where it names none (in the gate: engine.gate_timeout_min)."""
     inputs = [k.inputs] if isinstance(k.inputs, str) else list(k.inputs)
@@ -32,14 +26,19 @@ def repo_check(k: CheckSpec, cfg: EngineConfig, gate: bool = False) -> Check:
                  wall_min=float(k.wall_min or (cfg.gate_timeout_min if gate else cfg.check_wall_min)), cache=k.cache is not False,
                  inputs=inputs, inputs_only=k.inputs_only, exclude=list(k.exclude), env=dict(k.env), repo=True, writer=k.writer,
                  writer_max_s=k.writer_check_max_s, tail_log=k.tail_log,
-                 fix=text_of(k.fix) if k.fix else "", container=k.where == "container")
+                 fix=text_of(k.fix) if k.fix else "", container=k.where == "container", reads=list(k.reads))
 
 
-def items_of(cfg: EngineConfig, stage_checks: Sequence[str]) -> list[Check]:
-    """The repo's checks, then the plan's: a plan's check is its command, always run (it can read what git cannot see)."""
-    plan = [Check(id=CheckId(c), cmd=c, group="acceptance", wall_min=float(cfg.check_wall_min), cache=False)
-            for c in map(spelled, stage_checks)]
-    return [repo_check(k, cfg) for k in cfg.stage_checks] + plan
+def adhoc_check(a: Adhoc, cfg: EngineConfig) -> Check:
+    """A command of the plan's own as a check: always run (it can read what git cannot see), after the checks it reads. An adhoc
+    has no registry id; its one-line text is its id."""
+    return Check(id=CheckId(a.text), cmd=a.text, group="acceptance", wall_min=float(cfg.check_wall_min), cache=False,
+                 reads=list(a.reads))
+
+
+def items_of(cfg: EngineConfig, stage_checks: Sequence[PlanCheck]) -> list[Check]:
+    """The repo's checks, then the plan's own: a ref names a registered check the round runs anyway."""
+    return [repo_check(k, cfg) for k in cfg.stage_checks] + [adhoc_check(a, cfg) for a in adhocs(stage_checks)]
 
 
 def gate_items(cfg: EngineConfig) -> list[Check]:

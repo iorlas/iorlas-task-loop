@@ -7,6 +7,7 @@ from typing import Any, ClassVar
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import procsim
+from support.checks import ck
 from support.engine_case import (
     BEAD,
     CAP_PARKS,
@@ -106,9 +107,9 @@ class EngineRunTest(EngineTest):
     def test_a_command_repeated_in_one_block_runs_once(self):
         cmd, n = self.counting_check("ok", ok_after=1)
         eng = self.checks_engine(checks=[{"id": "unit", "cmd": cmd, "group": "tests"}])
-        res = eng.run_checks({"checks": [cmd, "  " + cmd + "  "], "files": []}, "s")
-        self.assertEqual([c.exit for c in res], [0, 0, 0])
-        self.assertEqual([bool(c.reused) for c in res], [False, True, True])
+        res = eng.run_checks({"checks": ck([cmd, "  " + cmd + "  "]), "files": []}, "s")
+        self.assertEqual([c.exit for c in res], [0, 0])  # the two spellings are one adhoc check; it takes the repo check's result
+        self.assertEqual([bool(c.reused) for c in res], [False, True])
         self.assertEqual(n.read_text(), "1")
 
     def test_a_wait_is_not_counted_in_the_budget(self):

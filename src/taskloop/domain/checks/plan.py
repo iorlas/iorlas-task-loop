@@ -4,8 +4,7 @@ from dataclasses import dataclass
 
 from taskloop.contracts.checks import Check, CheckResult, Durations
 from taskloop.contracts.ids import CheckId
-from taskloop.domain.checks.matchers import env_refs, is_build, is_unity
-from taskloop.domain.checks.names import mangle, norm
+from taskloop.domain.checks.matchers import is_build, is_unity
 from taskloop.domain.checks.order import CheckOrder
 from taskloop.domain.checks.specs import DIFF_CHECK
 
@@ -15,9 +14,8 @@ class Step:
     """One check of the round. The numbers are positions in the plan."""
 
     check: Check
-    env: tuple[int, ...]  # repo checks whose $TL_CHECK_LOG_/RC_ it reads
-    after: tuple[int, ...]  # everything it waits for: env and the repo check it copies
-    absent: tuple[str, ...]  # $TL_CHECK_* names of checks the repo does not have
+    env: tuple[int, ...]  # the checks whose $TL_CHECK_LOG_/RC_ it reads (Check.reads): the graph's edges into it
+    absent: tuple[CheckId, ...]  # what it reads that is not in this round (a group left out, a conflict fix)
     unity: bool = False  # in the Unity group: after every cheaper check, skipped by any red
 
 
@@ -38,18 +36,13 @@ class CheckPlan:
             chosen, skipped = _conflict_split(chosen, conflict_fix, markers)
         if groups:
             chosen = [c for c in chosen if c.group in groups]
+        where = {c.id: i for i, c in enumerate(chosen)}
+        env = {i: [where[r] for r in c.reads if r in where] for i, c in enumerate(chosen)}
         repo = [i for i, c in enumerate(chosen) if c.group != "acceptance"]
-        mine = {mangle(chosen[i].id): i for i in repo}
-        env = {i: [mine[m] for m in env_refs(c.cmd) if m in mine] for i, c in enumerate(chosen)}
-        after = {i: list(env[i]) for i in env}
-        for w, c in enumerate(chosen):
-            if c.group == "acceptance":
-                after[w] += [r for r in repo if norm(chosen[r].cmd) == norm(c.cmd) and r not in after[w]]
         unity = frozenset(i for i in repo if is_unity(chosen[i].id + " " + chosen[i].cmd))
-        order = CheckOrder(history, acceptance_first).sort(chosen, after, unity)
+        order = CheckOrder(history, acceptance_first).sort(chosen, env, unity)
         pos = {o: n for n, o in enumerate(order)}
-        steps = tuple(Step(chosen[o], tuple(pos[e] for e in env[o]), tuple(pos[a] for a in after[o]),
-                           tuple(m for m in env_refs(chosen[o].cmd) if m not in mine), o in unity)
+        steps = tuple(Step(chosen[o], tuple(pos[e] for e in env[o]), tuple(r for r in chosen[o].reads if r not in where), o in unity)
                       for o in order)
         return cls(steps, tuple(skipped))
 

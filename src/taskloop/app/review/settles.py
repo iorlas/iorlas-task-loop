@@ -5,6 +5,7 @@ import shlex
 from typing import Any, Final, NewType
 
 from taskloop.adapters.gitenv import run_git
+from taskloop.domain.checks import planref
 from taskloop.domain.plan.matchers import without_runner
 from taskloop.domain.review.matchers import KNOWN_TOOLS, GateProof, Tools, word_in
 
@@ -60,7 +61,7 @@ class Settles:
         its id, its command, and the command without its runner (`just unity-tests` -> unity-tests)."""
         e = self.e
         stages = (e.plan_data or {}).get("stages") or []
-        cmds = [c.cmd for c in e.cfg.checks] + [c for st in stages for c in st["checks"]] + e.cases.case_checks()
+        cmds = [c.cmd for c in e.cfg.checks] + planref.commands([c for st in stages for c in st["checks"]] + e.cases.case_checks(), e.cfg)
         names = [c.id for c in e.cfg.checks]
         for cmd in cmds:
             c = " ".join(cmd.split())

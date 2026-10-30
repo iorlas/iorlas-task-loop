@@ -4,7 +4,9 @@ import json
 from pathlib import Path
 from typing import Any
 
-from taskloop.contracts.argv import checks_to_wire
+from taskloop.contracts import plancheck
+from taskloop.contracts.plancheck import PlanCheck
+from taskloop.domain.checks import planref
 from taskloop.domain.plan.matchers import evidence_files, word_set
 from taskloop.domain.plan.stored import role_view
 from taskloop.domain.prompts.common import RULES_MAX
@@ -18,11 +20,14 @@ class Cases:
         """A writer may add the cases it discovers; it can never remove one (the plan is the engine's)."""
         e = self.e
         cases = e.plan_data.setdefault("cases", [])
-        have = {c["check"].strip() for c in cases}
+        have = {c["check"] for c in cases if c.get("check")}
         for c in new:
-            if c["check"].strip() and c["check"].strip() not in have:
+            why = planref.refusal(c["check"], e.cfg)
+            if why:
+                e.warn(f"the writer's case is not added: {why}")
+            elif c["check"] not in have:
                 cases.append(dict(c, by="writer"))
-                have.add(c["check"].strip())
+                have.add(c["check"])
                 e.log.note("the writer added a case: {}".format(c["criterion"][:200]))
 
     def engine_unproven(self, unchecked: Any, checks: Any):
@@ -34,7 +39,7 @@ class Cases:
         e = self.e
         ran = [c.cmd for c in checks if c.exit == 0]
         names = [" ".join(x.split()).lower() for x in [e.cfg.gate_text, *ran] if x.strip()]
-        cases = self.case_checks()
+        cases = planref.commands(self.case_checks(), e.cfg)
         cases_ran = bool(cases) and all(c in ran for c in cases)
         out = []
         for u in unchecked:
@@ -76,10 +81,10 @@ class Cases:
                                    "done-when, so it was not verified before the land: " + u["what"][:600]})
         return keep
 
-    def case_checks(self):
+    def case_checks(self) -> list[PlanCheck]:
         e = self.e
         return [c["check"] for c in (e.plan_data or {}).get("cases") or []
-                if c.get("check", "").strip() and c.get("class", "test") == "test" and c.get("proved_by", "check") in ("check", "stage")]
+                if c.get("check") and c.get("class", "test") == "test" and c.get("proved_by", "check") in ("check", "stage")]
 
     def cases_of(self, cls: Any):
         """The criteria of the plan's cases of one class (look-objective, taste)."""
@@ -96,7 +101,7 @@ class Cases:
             for c in run:
                 by = (f" (added by the writer: {c.get('why', '')}; check it does not replace a stronger case)"
                       if c.get("by") == "writer" else "")
-                text += f"- {c['criterion']}: `{c['check']}`{by}\n"
+                text += f"- {c['criterion']}: `{plancheck.shown(c['check'])}`{by}\n"
         if looked:
             text += ("\nCases judged from rendered pictures, not by a command (the engine's look judge sees them; taste goes to the "
                      "owner):\n")
@@ -123,15 +128,16 @@ class Cases:
         """The plan as JSON; with `stage` (0-based) the role-sized view a writer or reviewer of that stage reads."""
         e = self.e
         plan = e.plan_data or {}
-        return json.dumps(checks_to_wire(plan if stage is None else role_view(plan, stage)), indent=1)
+        return json.dumps(plancheck.to_wire(plan if stage is None else role_view(plan, stage)), indent=1)
 
     def promised_missing(self, plan: Any, upto: int) -> int | None:
         """tl-bxk.13.16.2: the index of the earliest accepted stage (before `upto`) that mentions an evidence file which is gone
         now while a check still to run names it, or None."""
         e = self.e
         stages = plan.get("stages") or []
-        pending = [c for st in stages[upto:] for c in st["checks"]] + [
-            x["check"] for x in plan.get("cases") or [] if x.get("check", "").strip() and x.get("class", "test") == "test"]
+        pending = [plancheck.text_of(c) for st in stages[upto:] for c in st["checks"]] + [
+            plancheck.text_of(x["check"]) for x in plan.get("cases") or [] if x.get("check") and x.get("class", "test") == "test"]
         need = {p for c in pending for p in evidence_files(e.bead, c) if not Path(e.wt, p).exists()}
-        early = [k for k, st in enumerate(stages[:upto]) if any(p in c for c in st["checks"] for p in need)]
+        early = [k for k, st in enumerate(stages[:upto])
+                 if any(p in plancheck.text_of(c) for c in st["checks"] for p in need)]
         return min(early) if early else None

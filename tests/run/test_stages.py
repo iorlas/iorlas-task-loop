@@ -16,7 +16,7 @@ from support import (
 )
 from support.builders import make_engine
 from support.checkpoints import put_ck, read_ck
-from support.checks import res
+from support.checks import ck, res, typed
 from support.engine_case import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, engine, lint
 from support.fakes import as_bead, must_bead
 from support.narrow import must
@@ -31,6 +31,9 @@ from taskloop.app.write.handoff import HANDOFF_CAP
 from taskloop.contracts.answers import IRREVERSIBLE
 from taskloop.contracts.argv import argv_of
 from taskloop.contracts.config import EngineConfig
+from taskloop.contracts.ids import CheckId
+from taskloop.contracts.plancheck import adhoc
+from taskloop.domain.checks import planref
 from taskloop.domain.plan.matchers import AcceptanceText
 
 
@@ -400,18 +403,18 @@ class Fdyo(StagesTest):
         te.sh("git", "commit", "-qm", "tools", cwd=self.wt)
         te.sh("git", "push", "-q", "origin", "HEAD:main", cwd=self.wt)
         bad = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=["python3 -I -m unittest tools.tests.test_x"])])
-        self.assertEqual(len(lint.dry_check(bad, self.probe())), 1)
-        self.assertIn("python -I removes the working directory", lint.dry_check(bad, self.probe())[0])
+        self.assertEqual(len(lint.dry_check(typed(bad), self.probe())), 1)
+        self.assertIn("python -I removes the working directory", lint.dry_check(typed(bad), self.probe())[0])
         for ok in ("python3 -I -m unittest discover -s tools/tests -p 'test_x.py'", "python3 -m unittest tools.tests.test_x",
                    "python3 -I -m json.tool f.json", "python3 -I -c 'import tools.x'"):
-            self.assertEqual(lint.dry_check(dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[ok])]), self.probe()), [], ok)
+            self.assertEqual(lint.dry_check(typed(dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[ok])])), self.probe()), [], ok)
         _rc, s = self.run_engine({"plan": [bad, PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual([c[0] for c in s.calls], ["planner", "planner", "worker", "reviewer"])
         self.assertIn("python -I removes the working directory", s.prompts[1])
 
     def test_after_a_round_red_only_in_acceptance_the_fast_group_runs_before_the_slow_tests(self):
         eng = self.checks_engine(checks=[{"id": "slow", "cmd": self.PASS, "group": "tests"}])
-        st = {"checks": [FALSE], "files": []}
+        st = {"checks": ck([FALSE]), "files": []}
         first = eng.run_checks(st, "s")
         self.assertEqual([(c.group, c.status) for c in first], [("tests", "passed"), ("acceptance", "failed")])
         again = eng.run_checks(st, "s", acceptance_first=True)
@@ -420,7 +423,8 @@ class Fdyo(StagesTest):
 
     def test_the_reorder_is_off_when_an_acceptance_check_reads_a_repo_checks_log(self):
         eng = self.checks_engine(checks=[{"id": "slow", "cmd": self.PASS, "group": "tests"}])
-        st = {"checks": [procsim.fake('grep -q . "$TL_CHECK_LOG_SLOW" || true', procsim.exits(0))], "files": []}
+        read = adhoc(procsim.fake('grep -q . "$TL_CHECK_LOG_SLOW" || true', procsim.exits(0)), (CheckId("slow"),))
+        st = {"checks": ck([read]), "files": []}
         res = eng.run_checks(st, "s", acceptance_first=True)
         self.assertEqual([c.group for c in res], ["tests", "acceptance"])
 
@@ -467,7 +471,7 @@ class Executable(StagesTest):
 
     def test_a_sentence_is_not_a_command(self):
         plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=["After building the current player: python3 tools/x.py", HAS_F])])
-        errs = lint.dry_check(plan, self.probe())
+        errs = lint.dry_check(typed(plan), self.probe())
         self.assertEqual(len(errs), 1)
         self.assertIn("`After` is not an executable here", errs[0])
 
@@ -489,9 +493,9 @@ class Executable(StagesTest):
 
     def test_a_missing_script_is_found_unless_a_stage_makes_it(self):
         check = "./tools/probe.sh --all"
-        plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[check])])
+        plan = typed(dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[check])]))
         self.assertIn("is not a file of this tree", lint.dry_check(plan, self.probe())[0])
-        plan = dict(PLAN, stages=[dict(PLAN["stages"][0], files=["tools/probe.sh"], checks=[check])])
+        plan = typed(dict(PLAN, stages=[dict(PLAN["stages"][0], files=["tools/probe.sh"], checks=[check])]))
         self.assertEqual([e for e in lint.dry_check(plan, self.probe()) if "not a file" in e], [])
 
     def test_the_plan_with_a_sentence_goes_back_once(self):
@@ -514,9 +518,9 @@ class Executable(StagesTest):
                 dict(
                     PLAN["stages"][0],
                     goal="stage one",
-                    checks=[procsim.fake(f"writes {self.PATH1}", self.writes_path1), HAS_F],
+                    checks=ck([procsim.fake(f"writes {self.PATH1}", self.writes_path1), HAS_F]),
                 ),
-                dict(PLAN["stages"][0], goal="stage two", checks=[f"test -s {self.PATH1}"]),
+                dict(PLAN["stages"][0], goal="stage two", checks=ck([f"test -s {self.PATH1}"])),
             ],
         )
 
@@ -570,8 +574,8 @@ class Ledger(StagesTest):
              "proved_by": "leftover", "via": "Import the chosen prefabs and add object rows"}
 
     def plan(self, **kw):
-        return dict(PLAN, cases=[self.FILE, self.DEFER, {"criterion": "f exists", "check": HAS_F, "proved_by": "check"}],
-                    leftovers=self.LEFT, **kw)
+        return typed(dict(PLAN, cases=[self.FILE, self.DEFER, {"criterion": "f exists", "check": HAS_F, "proved_by": "check"}],
+                          leftovers=self.LEFT, **kw))
 
     def test_the_review_is_told_what_the_engine_does_and_what_is_deferred(self):
         _rc, s = self.run_engine({"plan": [self.plan()], "write": [WRITE], "review": [CLEAN]})
@@ -646,8 +650,9 @@ class Ledger(StagesTest):
 
     def test_ledgered_cases_run_no_command(self):
         e = make_engine(self.wt, store=self.store, attrs={"plan_data": self.plan()})
-        self.assertEqual(e.cases.case_checks(), [HAS_F])
-        self.assertEqual(lint.plan_checks(self.plan()), [HAS_F] + [c for st in PLAN["stages"] for c in st["checks"] if c != HAS_F])
+        self.assertEqual(e.cases.case_checks(), [adhoc(HAS_F)])
+        self.assertEqual(planref.plan_checks(self.plan()),
+                         [adhoc(HAS_F)] + [c for st in PLAN["stages"] for c in st["checks"] if c != adhoc(HAS_F)])
 
 
 def review_with(unmet):

@@ -103,7 +103,7 @@ class EngineLand2Test(EngineTest):
         self.assertIn("unchecked item dropped", self.eng.log_path.read_text())
         self.assertIn("one at a time", s.prompts[2])
         self.assertIn("a case is never an unchecked item", s.prompts[2])
-        self.assertIn("Every check is an argv list", s.prompts[0])
+        self.assertIn('"kind": "adhoc"', s.prompts[0])
 
     def test_a_case_item_with_no_case_in_the_plan_still_stops_the_land(self):
         r = dict(CLEAN, unchecked=[{"what": "the filter that selects nothing", "kind": "case"}])

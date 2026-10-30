@@ -13,6 +13,7 @@ from taskloop.app.checks.fixer import Fixer
 from taskloop.app.checks.host import CheckHost, CheckStuck
 from taskloop.contracts.checks import Check, CheckResult, CheckRun, Durations
 from taskloop.contracts.ids import TreeSha
+from taskloop.contracts.plancheck import PlanCheck
 from taskloop.domain.checks.durations import merged, seconds
 from taskloop.domain.checks.plan import CheckPlan
 from taskloop.domain.checks.specs import DIFF_CHECK, diff_check, due, gate_items, items_of
@@ -29,7 +30,7 @@ class Checker:
         self.latest: CheckRun | None = None
         self.streak: list[str] = []  # the signatures of the rounds in a row that ended red
 
-    def run(self, stage_checks: Sequence[str], name: str, markers: str = "", acceptance_first: bool = False,
+    def run(self, stage_checks: Sequence[PlanCheck], name: str, markers: str = "", acceptance_first: bool = False,
             groups: Sequence[str] | None = None,
             conflict_fix: Sequence[str] | None = None, **meta: Any) -> CheckRun:
         """One engine step, no AI: the repo's checks (engine.checks) and the stage's acceptance checks, grouped static, tests,

@@ -17,7 +17,7 @@ from unittest import mock
 
 from support.briefs import brief_digest, linked_text
 from support.builders import cfg_with
-from support.checks import res
+from support.checks import ck, res, typed
 from support.fakes import as_bead, must_bead
 from support.narrow import must
 
@@ -29,10 +29,11 @@ from taskloop.app.run import (
     entry,
 )
 from taskloop.app.wire import slots as wslots
-from taskloop.contracts import answers
-from taskloop.contracts.argv import checks_to_wire
+from taskloop.contracts import answers, plancheck
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.enums import WaitWhat
+from taskloop.contracts.ids import CheckId
+from taskloop.contracts.plancheck import Adhoc, adhoc
 from taskloop.domain.checks import lint
 from taskloop.domain.checks import matchers as check_matchers
 from taskloop.domain.checks.writer_split import WriterSplit
@@ -60,13 +61,13 @@ class EngineChecksTest(EngineTest):
         eng = engine.Engine("t-1", str(self.wt), c, store=self.store)
         with mock.patch.dict(os.environ, {"CLAUDE_CODE_ENTRYPOINT": "cli"}):
             session_env = procsim.fake("session-env", lambda cwd, env: (1 if env.get("CLAUDE_CODE_ENTRYPOINT") else 0, ""))
-            res = eng.run_checks({"checks": [session_env], "files": []}, "s")
+            res = eng.run_checks({"checks": ck([session_env]), "files": []}, "s")
         self.assertEqual(res[0].exit, 0)
 
     def test_checks_run_in_groups_fastest_first_and_stop_at_a_red_group(self):
         eng = self.checks_engine(checks=[{"id": "unit", "cmd": "true", "group": "tests"},
                                          {"id": "lint", "cmd": FALSE, "group": "static"}])
-        res = eng.run_checks({"checks": ["true"], "files": []}, "s")
+        res = eng.run_checks({"checks": ck(["true"]), "files": []}, "s")
         self.assertEqual([(c.group, c.status) for c in res],
                          [("static", "failed"), ("tests", "skipped"), ("acceptance", "skipped")])
         self.assertIn("static failed", res[1].why)
@@ -128,7 +129,7 @@ class EngineChecksTest(EngineTest):
             ok = "Passed: 12" in Path(env["TL_CHECK_LOG_UNITY_TESTS"]).read_text() and env["TL_CHECK_RC_UNITY_TESTS"] == "0"
             return (0 if ok else 1), ""
         read = procsim.fake("reads-the-log TL_CHECK_LOG_UNITY_TESTS TL_CHECK_RC_UNITY_TESTS", reads)
-        res = eng.run_checks({"checks": [read], "files": []}, "s")
+        res = eng.run_checks({"checks": ck([adhoc(read, (CheckId("unity-tests"),))]), "files": []}, "s")
         self.assertEqual([c.exit for c in res], [0, 0])  # the plan check ran after the repo check and read its log
         self.assertEqual(n.read_text(), "1")
 
@@ -187,7 +188,7 @@ class EngineChecksTest(EngineTest):
         state = Path(self.tmp.name) / "editor-open"  # a running editor, a log, a bead comment: git cannot see them
         eng = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
         gone = procsim.fake(f"editor-closed {state}", lambda cwd, env: (1 if state.exists() else 0, ""))
-        st = {"checks": [gone], "files": []}
+        st = {"checks": ck([gone]), "files": []}
         self.assertEqual(eng.run_checks(st, "s")[0].exit, 0)
         state.write_text("x")
         again = eng.run_checks(st, "s")
@@ -206,7 +207,7 @@ class EngineChecksTest(EngineTest):
         count = Path(self.tmp.name) / "count"
         fails = procsim.fake("fails", procsim.appends(count, code=1))
         eng = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
-        st = {"checks": [fails], "files": []}
+        st = {"checks": ck([fails]), "files": []}
         eng.run_checks(st, "s")
         again = eng.run_checks(st, "s")
         self.assertEqual(count.read_text(), "11")
@@ -214,17 +215,18 @@ class EngineChecksTest(EngineTest):
 
     def test_checks_run_without_a_shell(self):
         eng = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
-        res = eng.run_checks({"checks": [shlex.join(["echo", "$HOME", "&&", "x;", "(y)"])], "files": []}, "s")
+        res = eng.run_checks({"checks": [Adhoc(argv=("echo", "$HOME", "&&", "x;", "(y)"), reads=())], "files": []}, "s")
         self.assertEqual(res[0].exit, 0, res[0].tail)
         self.assertIn("$HOME && x; (y)", res[0].tail)  # no expansion, no operator: every word reached the program as written
 
     def test_a_check_that_is_not_an_argv_list_is_refused_with_the_allowed_form(self):
-        bad = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=["test -f f.txt && echo ok"])])
+        wire = plancheck.to_wire(PLAN)
+        bad = dict(wire, stages=[dict(wire["stages"][0], checks=["test -f f.txt && echo ok"])])
         errs = answers.check("plan", False, bad)
         self.assertEqual(len(errs), 1)
-        self.assertIn("stages[0].checks[0]: Expected `array`", errs[0])
+        self.assertIn("stages[0].checks[0]: Expected `object`", errs[0])
         self.assertIn('["just", "name"]', errs[0])
-        self.assertEqual(answers.check("plan", False, checks_to_wire(PLAN)), [])
+        self.assertEqual(answers.check("plan", False, plancheck.to_wire(PLAN)), [])
 
 
     def test_a_unity_play_mode_test_counts(self):  # lifesim-d5f.59: a [UnityTest] read as tests_added=0
@@ -234,18 +236,18 @@ class EngineChecksTest(EngineTest):
 
     @no_repo
     def test_tracker_checks_are_told_apart_from_code_that_mentions_bd(self):
-        self.assertEqual(lint.tracker_checks(dict(PLAN, risks=[{"what": "x", "check": "env X=1 bd show t-1"}])),
+        self.assertEqual(lint.tracker_checks(typed(dict(PLAN, risks=[{"what": "x", "check": "env X=1 bd show t-1"}]))),
                          ["env X=1 bd show t-1"])
         for ok in (HAS_F, "grep -rn 'bd list' src", "pytest tests/test_bd.py", "test -f abd"):
-            self.assertEqual(lint.tracker_checks(dict(PLAN, risks=[{"what": "x", "check": ok}])), [], ok)
+            self.assertEqual(lint.tracker_checks(typed(dict(PLAN, risks=[{"what": "x", "check": ok}]))), [], ok)
 
     def test_a_write_prompt_names_each_check_command_once_in_its_may_run_lists(self):
         # tl-7y6.6.12: the stage's checks and the where() text both listed "You may run these"
         cmd = procsim.fake("print-1", procsim.exits(0, "1"))
         plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[cmd, HAS_F])])
-        with mock.patch.object(lint, "rerun_problems", return_value=[]):  # the prompt's lists are the point, not the plan lint
-            rc, s = self.run_engine({"plan": [plan], "write": [WRITE], "review": [CLEAN]},
-                                    raw={"checks": [{"id": "x", "cmd": cmd, "group": "static"}, {"id": "y", "cmd": "echo only-repo"}]})
+        rc, s = self.run_engine({"plan": [plan], "write": [WRITE], "review": [CLEAN]},
+                                raw={"checks": [{"id": "x", "cmd": procsim.fake("print-2", procsim.exits(0, "2")), "group": "static"},
+                                                {"id": "y", "cmd": "echo only-repo"}]})
         self.assertEqual(rc, 0, self.blocked)
         w = next(p for (c, p) in zip(s.calls, s.prompts, strict=False) if c[0] == "worker")
         may = w[w.index("The stage's checks"):w.index("A check that mentions")]
@@ -255,7 +257,7 @@ class EngineChecksTest(EngineTest):
 
     def test_a_sleeping_check_is_cut_at_check_wall_min_not_node_timeout_min(self):
         eng = self.checks_engine(check_wall_min=0.01, node_timeout_min=45)
-        res = eng.run_checks({"checks": [procsim.fake("sleep-30", procsim.takes(30))], "files": []}, "s")
+        res = eng.run_checks({"checks": ck([procsim.fake("sleep-30", procsim.takes(30))]), "files": []}, "s")
         self.assertEqual((res[0].exit, res[0].status), (124, "failed"))
         self.assertIn("timed out after 0.01 min", res[0].tail)
 
@@ -330,7 +332,7 @@ class EngineChecksTest(EngineTest):
 
     def test_dry_check_reads_the_argv_not_a_shell_string(self):
         def plan(*checks, files=("new.txt",)):
-            return dict(PLAN, stages=[dict(PLAN["stages"][0], checks=list(checks), files=list(files))])
+            return typed(dict(PLAN, stages=[dict(PLAN["stages"][0], checks=list(checks), files=list(files))]))
         wt = PathProbe(self.wt, sproc.current_env())
         self.assertEqual(lint.dry_check(plan("test -f a.txt", "test -f new.txt", "grep -q '<(' a.txt", HAS_F), wt), [])
         self.assertEqual(lint.dry_check(plan("test -f $HOME/x", "cat dir/*.txt"), wt), [])  # no shell: a plain word, not judged as a path

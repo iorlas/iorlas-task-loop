@@ -1,6 +1,7 @@
 """Identifiers: one parser each, no regex."""
 import datetime
 import hashlib
+from itertools import groupby
 from pathlib import Path
 from typing import Final, NewType, final
 
@@ -90,3 +91,12 @@ def repo_key(common_dir: str) -> str:
 def loop_key(repo: object) -> str:
     """The key of a repo checkout in the loop's and the slots' files: its folder name and 8 hex of sha1 of its path."""
     return f"{Path(str(repo)).name}-{hashlib.sha1(str(repo).encode()).hexdigest()[:8]}"
+
+
+def mangle(check_id: CheckId) -> str:
+    """The id as an environment name: each run of non-word characters becomes one `_`, upper case. Not injective: the profile load
+    refuses two ids that mangle alike (`unity-test`, `unity_test`)."""
+    out = []
+    for word, run in groupby(check_id, key=lambda ch: ch.isalnum() or ch == "_"):
+        out.append("".join(run) if word else "_")
+    return "".join(out).upper()

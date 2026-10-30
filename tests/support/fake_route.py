@@ -60,18 +60,27 @@ def stop_of(c, reason, ref="", resumable=None, partial=False, at=None, fix=None,
     return stop
 
 
+def as_check(c):
+    """One scripted check in the wire form: a string is an adhoc command that reads nothing (shlex, no shell), a list its argv, a
+    dict (a ref or an adhoc with reads) stays; an empty one is none."""
+    if isinstance(c, str):
+        return {"kind": "adhoc", "argv": shlex.split(c), "reads": []} if c.strip() else None
+    if isinstance(c, list):
+        return {"kind": "adhoc", "argv": c, "reads": []} if c else None
+    return c
+
+
 def as_argv(data):
-    """A scripted planner or writer answers each check the way the schema asks, as an argv list. A test script writes the command as
-    one string; this splits it (shlex, no shell) in a copy, so a plan reads like the command it runs. A list stays as it is."""
+    """A scripted planner or writer answers each check the way the schema asks. A test script writes a command as one string; this
+    puts it in the wire form in a copy, so a plan reads like the command it runs."""
     if not isinstance(data, dict) or not ({"stages", "cases", "risks", "new_cases"} & set(data)):
         return data
-    out = json.loads(json.dumps(data))
+    out = json.loads(json.dumps(data, default=lambda o: o.to_dict()))
     for st in out.get("stages") or []:
-        st["checks"] = [shlex.split(c) if isinstance(c, str) else c for c in st.get("checks") or []]
+        st["checks"] = [as_check(c) for c in st.get("checks") or []]
     for k in ("risks", "cases", "new_cases"):
         for x in out.get(k) or []:
-            if isinstance(x.get("check"), str):
-                x["check"] = shlex.split(x["check"])
+            x["check"] = as_check(x.get("check"))
     return out
 
 

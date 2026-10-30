@@ -3,9 +3,10 @@ found), under the stage loop's checks and review, without undoing what the accep
 from typing import Any
 
 from taskloop.app.checks import evidence as check_evidence
+from taskloop.contracts import plancheck
 from taskloop.contracts.checks import CheckResult
 from taskloop.domain.asks import specs as askspecs
-from taskloop.domain.checks import trim
+from taskloop.domain.checks import planref, trim
 from taskloop.domain.prompts.land import FIX_GOAL as GOAL
 from taskloop.domain.prompts.land import FIX_TEXT as TEXT
 from taskloop.domain.prompts.land import FIX_WHAT as WHAT
@@ -50,7 +51,7 @@ class Fixer:
         e = self.e
         checks = list(dict.fromkeys(c for s in (e.plan_data or {}).get("stages") or [] for c in s["checks"]))
         if kind == "conflict":
-            checks = [e.MARKERS]
+            checks = [plancheck.adhoc(e.MARKERS)]
         return {"goal": "Fix: " + GOAL[kind], "files": [], "checks": checks, "hard": False}
 
     def round_state(self, kind: str, tail: str, limit: int) -> dict[str, Any]:
@@ -58,7 +59,7 @@ class Fixer:
         skip = None
         if kind == "conflict":
             checks = [c for s in (e.plan_data or {}).get("stages") or [] for c in s["checks"]]
-            skip = list(dict.fromkeys(checks + e.cases.case_checks()))
+            skip = planref.commands(checks + e.cases.case_checks(), e.cfg)
         return {"fix": True, "conflict_fix": skip, "name": f"fix {e.fixes}/{limit}", "fix_n": e.fixes, "fix_of": limit,
                 "failed": [e.cfg.gate_text or "rebase"] if kind == "gate" else None, "feedback": self.feedback(kind, tail),
                 "scope": f"the fix only: it must {GOAL[kind]} without breaking what the accepted stages built"}

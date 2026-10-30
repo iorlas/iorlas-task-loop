@@ -22,6 +22,7 @@ from taskloop.contracts import answers
 from taskloop.contracts import log as rec
 from taskloop.contracts.delegate import REASON_OVERRUN, DelegateResult, RunRequest, StopFacts
 from taskloop.contracts.schema import unstrict
+from taskloop.domain.checks import planref
 from taskloop.domain.lanes import policy as lp
 from taskloop.domain.lanes.denials import command_of, secret_false_positive
 from taskloop.domain.lanes.notes import FRESH_WRITER_TEXT, RESUME_AFTER_STOP
@@ -30,11 +31,6 @@ from taskloop.domain.lanes.roles import READ_ONLY_NODES, ROLES
 from taskloop.stores import call_state as callstate
 
 READ_TOOLS = ("Bash", "shell", "bash")
-
-
-def stage_checks(plan: Any) -> list[str]:
-    """Every check of the plan's stages (the plan is None before the first plan is accepted)."""
-    return [c for st in (plan or {}).get("stages") or [] for c in st.get("checks") or []]
 
 
 @dataclass
@@ -258,7 +254,7 @@ class WorkerCall:
             timeout_s=timeout_s,
             idle_s=idle_s,
             live_file=live,
-            engine_only=e.checker.split().engine_recipes(stage_checks(e.plan_data)) if c.node == "write" else [],
+            engine_only=e.checker.split().engine_recipes(planref.stage_commands(e.plan_data, e.cfg)) if c.node == "write" else [],
         )
         cid = e.calls.start(c.step or c.node, c.node, c.role, bool(c.resume), e.live_n)
         c.state = callstate.begin(

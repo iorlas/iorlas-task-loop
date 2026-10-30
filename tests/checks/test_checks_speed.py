@@ -13,6 +13,7 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as te
 from support import procsim
 from support.builders import cfg_with
+from support.checks import ck, typed
 from support.engine_case import PY, engine, pyc, real_git  # noqa: F401
 
 from taskloop.adapters import (
@@ -23,7 +24,8 @@ from taskloop.app.wire import doctor
 from taskloop.contracts.argv import text_of
 from taskloop.contracts.checks import Check, Durations
 from taskloop.contracts.ids import CheckId
-from taskloop.domain.checks import durations, inputs, lint
+from taskloop.contracts.plancheck import adhoc
+from taskloop.domain.checks import durations, inputs, lint, planref
 from taskloop.domain.checks.names import norm
 from taskloop.domain.checks.order import CheckOrder
 
@@ -271,7 +273,7 @@ class CheapFirst(SpeedTest):
     def test_a_check_reading_another_checks_log_stays_after_it(self):
         reader = procsim.fake("reader TL_CHECK_LOG_SLOW", lambda cwd, env: (0 if env.get("TL_CHECK_LOG_SLOW") else 1, ""))
         eng = self.checks_engine(checks=[{"id": "slow", "cmd": "true", "group": "tests"},
-                                         {"id": "reader", "cmd": reader, "group": "tests"}])
+                                         {"id": "reader", "cmd": reader, "group": "tests", "reads": ["slow"]}])
         self.seed(eng, "true", 300)
         res = eng.run_checks({"checks": [], "files": []}, "s")
         self.assertEqual([(c.id, c.status) for c in res], [("slow", "passed"), ("reader", "passed")])
@@ -283,19 +285,19 @@ class CheapFirst(SpeedTest):
 
 
 class Duplicates(SpeedTest):
-    def test_a_plan_check_that_is_the_repo_checks_argv_takes_its_result(self):
+    def test_a_command_the_engine_already_ran_is_not_launched_again(self):
+        """Not reachable from a plan (a wrapper of a registered check is refused at parse); the executor still never launches one
+        command twice in a block."""
         cmd, n = self.sh_counter()
         eng = self.checks_engine(checks=[{"id": "unity-tests", "cmd": cmd, "group": "tests"}])
-        res = eng.run_checks({"checks": [cmd], "files": []}, "s")
-        self.assertEqual(n.read_text(), "1")
-        self.assertEqual(
-            [(c.id == "unity-tests", c.status, bool(c.reused)) for c in res], [(True, "passed", False), (False, "passed", True)]
-        )
+        res = eng.run_checks({"checks": ck([cmd]), "files": []}, "s")
+        self.assertEqual((n.read_text(), sorted(bool(c.reused) for c in res), [c.status for c in res]),
+                         ("1", [False, True], ["passed"] * 2))
 
     def test_another_argv_around_the_same_recipe_runs_as_written(self):
         cmd, n = self.sh_counter()
         eng = self.checks_engine(checks=[{"id": "unity-tests", "cmd": cmd, "group": "tests", "cache": False}])
-        res = eng.run_checks({"checks": ["env FOO=1 " + cmd], "files": []}, "s")
+        res = eng.run_checks({"checks": ck(["env FOO=1 " + cmd]), "files": []}, "s")
         self.assertEqual(
             (n.read_text(), [c.status for c in res]), ("11", ["passed", "passed"])
         )  # the repo check, then the wrapper's own run
@@ -303,13 +305,13 @@ class Duplicates(SpeedTest):
     def test_a_red_recipe_ends_the_round_before_its_copy(self):
         red, n = self.sh_counter(1)
         eng = self.checks_engine(checks=[{"id": "unity-tests", "cmd": red, "group": "tests"}])
-        res = eng.run_checks({"checks": [red], "files": []}, "s")
+        res = eng.run_checks({"checks": ck([red]), "files": []}, "s")
         self.assertEqual(([c.status for c in res], n.read_text()), (["failed", "skipped"], "1"))
 
     def test_equal_argv_lists_are_one_command_whatever_the_spelling(self):
         cmd, n = self.sh_counter()
         eng = self.checks_engine(checks=[{"id": "unity-tests", "cmd": cmd, "group": "tests"}])
-        res = eng.run_checks({"checks": [cmd.replace(" ", "   ")], "files": []}, "s")
+        res = eng.run_checks({"checks": ck([cmd.replace(" ", "   ")]), "files": []}, "s")
         self.assertEqual((n.read_text(), [bool(c.reused) for c in res]), ("1", [False, True]))
 
 
@@ -324,8 +326,8 @@ class Schedule(SpeedTest):
         {"id": "unity-tests", "cmd": "just unity-tests", "group": "tests", "wall_min": 30},
         {"id": "unity-play-tests", "cmd": "just unity-play-tests", "group": "tests", "wall_min": 30},
     ]
-    GREP = shlex.join(["python3", "tools/assert_log.py", "TL_CHECK_RC_UNITY_PLAY_TESTS", "TL_CHECK_LOG_UNITY_PLAY_TESTS",
-                       "total=[1-9][0-9]* passed=[1-9][0-9]* failed=0 skipped=0"])
+    GREP = adhoc(shlex.join(["python3", "tools/assert_log.py", "TL_CHECK_RC_UNITY_PLAY_TESTS", "TL_CHECK_LOG_UNITY_PLAY_TESTS",
+                             "total=[1-9][0-9]* passed=[1-9][0-9]* failed=0 skipped=0"]), (CheckId("unity-play-tests"),))
     R1: ClassVar[Any] = {
         "just fmt-check-changed": 2,
         "just text": 0,
@@ -337,13 +339,12 @@ class Schedule(SpeedTest):
         "just unity-analyzers": 104,
         "just unity-tests": 190,
         "just unity-play-tests": 571,
-        GREP: 0,
+        GREP.text: 0,
     }
     ACCEPTANCE_R1: ClassVar[Any] = ["just worker-plan", "python3 tools/select_tests.py --phase coordinator",
                      "env PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tools.tests.test_select_tests",
                      "dotnet csharpier check ./client/Assets/Tests/PlayMode/ShareableLoopTests.cs", "just text theme-check client-layers",
-                     "just unity-analyzers", "just unity-tests", "just unity-play-tests", GREP,
-                     "just unity-play-tests", "just unity-play-tests", "just unity-play-tests"]
+                     GREP]
 
     def replay(self, repo, accept, secs, red=(), **cfg):
         """Run one check round with a fake shell: no process starts; each launch costs secs[cmd] simulated seconds.
@@ -362,13 +363,13 @@ class Schedule(SpeedTest):
             return (1 if cmd in red else 0), "passed"
         real = eng.sh
         cast(Any, eng).sh = fake
-        res = eng.run_checks({"checks": accept, "files": []}, "s")
+        res = eng.run_checks({"checks": ck(accept), "files": []}, "s")
         return res, launched, {i: secs.get(c.cmd, 0) if c.log else 0 for i, c in enumerate(res)}
 
     def test_a_plan_copy_with_a_longer_limit_than_the_repo_check_is_one_launch(self):
         cmd, n = self.sh_counter()
         eng = self.checks_engine(checks=[{"id": "unity-tests", "cmd": cmd, "group": "tests", "wall_min": 30, "cache": False}])
-        res = eng.run_checks({"checks": [cmd], "files": []}, "s")  # the plan's copy gets check_wall_min, 60
+        res = eng.run_checks({"checks": ck([cmd]), "files": []}, "s")  # the plan's copy gets check_wall_min, 60
         self.assertEqual(eng.cfg.check_wall_min, 60)
         self.assertEqual((n.read_text(), [bool(c.reused) for c in res]), ("1", [False, True]))
 
@@ -384,25 +385,24 @@ class Schedule(SpeedTest):
         res, launched, _secs = self.replay(self.REPO, self.ACCEPTANCE_R1, self.R1)
         for c in ("just unity-analyzers", "just unity-tests", "just unity-play-tests"):
             self.assertEqual(launched.count(c), 1, c)  # r1 launched unity-tests and unity-play-tests twice
-        copies = [r for r in res if r.group == "acceptance" and r.cmd.startswith("just unity-")]
-        self.assertEqual(len(copies), 6)  # the analyzers, unity-tests and four play-test copies, as in r1
-        self.assertTrue(all(r.reused for r in copies))
-        # r1 as recorded spent 869 s on the repo checks plus 208 s (unity-tests) and 536 s (unity-play-tests) on acceptance copies
-        self.assertEqual(sum(self.R1[c] for c in launched), 869)
+        # the plan can no longer carry a copy of a registered check: r1's six copies are gone, only the reader of the log is left
+        self.assertEqual([r.cmd for r in res if r.group == "acceptance" and r.cmd.startswith("just unity-")], [])
+        self.assertEqual(sum(self.R1[c] for c in launched), 869)  # r1 as recorded spent 869 s on the repo checks
 
     def test_acceptance_that_reads_no_check_log_is_judged_before_the_unity_group(self):
         repo = [{"id": "unity-tests", "cmd": "just unity-tests", "group": "tests"}, {"id": "fmt", "cmd": "just fmt", "group": "static"}]
-        _res, launched, _ = self.replay(repo, ["just cheap-accept", "test -r TL_CHECK_LOG_UNITY_TESTS"], {})
+        reader = adhoc("test -r TL_CHECK_LOG_UNITY_TESTS", (CheckId("unity-tests"),))
+        _res, launched, _ = self.replay(repo, ["just cheap-accept", reader], {})
         self.assertEqual(launched, ["just fmt", "just cheap-accept", "just unity-tests", "test -r TL_CHECK_LOG_UNITY_TESTS"])
 
     def test_a_red_acceptance_check_stops_the_round_before_unity_with_the_reason(self):
         repo = [{"id": "unity-tests", "cmd": "just unity-tests", "group": "tests"},
                 {"id": "unity-analyzers", "cmd": "just unity-analyzers", "group": "static"}]
-        accept = ["just cheap-accept", "test -r TL_CHECK_LOG_UNITY_TESTS", "just unity-tests"]
+        accept = ["just cheap-accept", adhoc("test -r TL_CHECK_LOG_UNITY_TESTS", (CheckId("unity-tests"),))]
         res, launched, _ = self.replay(repo, accept, {}, red={"just cheap-accept"})
         self.assertEqual(launched, ["just cheap-accept"])
         skipped = [(c.id, c.why) for c in res if c.status == "skipped"]
-        self.assertEqual(len(skipped), 4)
+        self.assertEqual(len(skipped), 3)
         self.assertTrue(all("failed first" in w or "did not run" in w for _, w in skipped))
         self.assertIn("producer unity-tests did not run", dict(skipped)["test -r TL_CHECK_LOG_UNITY_TESTS"])
 
@@ -415,13 +415,12 @@ class Schedule(SpeedTest):
 
     def test_the_plan_validator_rejects_a_registered_recipe_in_acceptance_and_a_limit_above_the_cap(self):
         cfg = cfg_with(checks=self.REPO)
-        plan = dict(te.PLAN, stages=[dict(te.PLAN["stages"][0], checks=[
-            "just unity-tests", "env CI=1 just unity-play-tests", "echo 'just unity-tests'", "just unity-foo", "just fmt"])])
-        got = lint.rerun_problems(plan, cfg)
-        self.assertEqual(len(got), 2)
-        self.assertIn("TL_CHECK_LOG_UNITY_TESTS", got[0])
-        self.assertIn("TL_CHECK_LOG_UNITY_PLAY_TESTS", got[1])
-        over = dict(te.PLAN, stages=[dict(te.PLAN["stages"][0], checks=["just play --timeout_ms 7200000"])])
+        checks = ck(["just unity-tests", "env CI=1 just unity-play-tests", "echo 'just unity-tests'", "just unity-foo", "just fmt"])
+        got = planref.refusals(checks, cfg)
+        self.assertEqual(len(got), 2)  # an echo, an unknown recipe and `just fmt` (the repo's fmt is `just fmt-check-changed`) wrap nothing
+        self.assertIn("`unity-tests`", got[0])
+        self.assertIn("`unity-play-tests`", got[1])
+        over = typed(dict(te.PLAN, stages=[dict(te.PLAN["stages"][0], checks=["just play --timeout_ms 7200000"])]))
         self.assertEqual(len(lint.own_timeout_problems(over, 60)), 1)
 
 

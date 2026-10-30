@@ -76,7 +76,8 @@ class AnswerSchemas(unittest.TestCase):
                 "unchecked": []}
         got = wire.load(answers.WriteAnswer, base)
         self.assertEqual((got.shots, got.flakes), ([], []))
-        self.assertEqual(wire.load(answers.Case, {"criterion": "c", "check": ["k"], "class": "taste"}).class_, "taste")
+        self.assertEqual(wire.load(answers.Case, {"criterion": "c", "check": {"kind": "adhoc", "argv": ["k"], "reads": []},
+                                                   "class": "taste"}).class_, "taste")
 
 
 class Generator(unittest.TestCase):

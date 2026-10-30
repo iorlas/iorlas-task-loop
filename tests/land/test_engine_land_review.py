@@ -8,7 +8,7 @@ from typing import cast
 from unittest import mock
 
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
-from support.checks import res
+from support.checks import ck, res
 from support.engine_case import CLEAN, PLAN, WRITE, LandReviewBase, StrayWriteScript, verdict
 
 from taskloop.app.run import engine
@@ -150,7 +150,7 @@ class LandReview(LandReviewBase):
 
     def test_a_stage_check_of_the_plan_settles_an_item_naming_it(self):
         e = self.verifier()
-        e.plan_data["stages"][0]["checks"] = ["python3 tools/check_design.py"]
+        e.plan_data["stages"][0]["checks"] = ck(["python3 tools/check_design.py"])
         items = [{"what": "python3 tools/check_design.py passes", "kind": "tooling"},
                  {"what": "the menu reads well", "kind": "requirement"}]
         with mock.patch.object(e, "ai", return_value=({"items": [verdict(1, "open", why="taste")]}, None)) as ai:

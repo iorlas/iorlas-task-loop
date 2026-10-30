@@ -19,6 +19,7 @@ from support import (
     tlbd,
 )
 from support.checkpoints import put_ck, read_ck
+from support.checks import typed
 from support.engine_case import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, engine, lint, real_git, real_proc  # noqa: F401
 from support.fakes import as_bead
 from support.pushsim import pusher
@@ -467,13 +468,13 @@ class PlanTimeout(StagesTest):
 
     @te.no_repo
     def test_yxbb3s_play_test_of_40_minutes_under_a_30_minute_cap_is_found(self):
-        plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=["just unity-play-tests --timeout_ms 2400000", HAS_F])])
+        plan = typed(dict(PLAN, stages=[dict(PLAN["stages"][0], checks=["just unity-play-tests --timeout_ms 2400000", HAS_F])]))
         got = lint.own_timeout_problems(plan, 30)
         self.assertEqual(len(got), 1)
         self.assertIn("= 40 min, above the engine's check limit of 30 min", got[0])
         self.assertEqual(lint.own_timeout_problems(plan, 40), [])  # equal is fine
         self.assertEqual(lint.own_timeout_problems(plan, 60), [])
-        cases = dict(PLAN, cases=[{"criterion": "c", "check": "x --timeout 5400", "class": "test"}])
+        cases = typed(dict(PLAN, cases=[{"criterion": "c", "check": "x --timeout 5400", "class": "test"}]))
         self.assertEqual(len(lint.own_timeout_problems(cases, 60)), 1)  # cases are checks too
 
     def test_the_plan_goes_back_to_the_planner_once_with_the_reason(self):

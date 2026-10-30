@@ -33,7 +33,7 @@ class Rendering(unittest.TestCase):
 class Contract(unittest.TestCase):
     PLAN: ClassVar[Any] = {
         "summary": "s",
-        "stages": [dict(STAGE, checks=[["true"]], hard=False)],
+        "stages": [dict(STAGE, checks=[{"kind": "adhoc", "argv": ["true"], "reads": []}], hard=False)],
         "risks": [],
         "question": "",
         "options": [],

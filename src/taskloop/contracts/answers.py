@@ -6,7 +6,7 @@ from typing import Annotated, Any, Final, Literal, final, get_args
 import msgspec
 
 from taskloop.contracts import schema
-from taskloop.contracts.argv import FORM
+from taskloop.contracts.plancheck import CHECK_DOC, PlanCheck
 from taskloop.contracts.wire import Rec, load
 
 Kind = Literal["engine_step", "checkable", "external_fact", "taste", "owner_decision", "requirement", "number", "deletion", "link",
@@ -22,7 +22,7 @@ Verdict = Literal["settled", "wrong", "open"]
 Axis = Literal["spec", "standards"]
 Status = Literal["met", "unmet", "engine"]
 
-ARGV_DOC: Final = "argv: " + FORM  # a check: the program and its arguments, never a shell string
+ARGV_DOC: Final = CHECK_DOC  # shown with a check that is not one of the two forms
 KINDS: Final = get_args(Kind)
 ROUTED_KINDS: Final = ("engine_step", "checkable", "external_fact", "taste", "owner_decision")
 LEGACY_KINDS: Final = ("requirement", "number", "deletion", "link", "case", "tooling")
@@ -73,7 +73,7 @@ class Anchor(Rec):
 class Stage(Rec):
     goal: str
     files: list[str]
-    checks: Annotated[list[list[str]], msgspec.Meta(description=ARGV_DOC)]
+    checks: Annotated[list[PlanCheck], msgspec.Meta(description=ARGV_DOC)]
     hard: bool
     anchors: Annotated[
         list[Anchor], msgspec.Meta(description="at most 8: where in the code the stage's work starts")
@@ -88,7 +88,7 @@ class Stage(Rec):
 @final
 class Risk(Rec):
     what: str
-    check: Annotated[list[str], msgspec.Meta(description=ARGV_DOC)]
+    check: Annotated[PlanCheck | None, msgspec.Meta(description=ARGV_DOC)]
 
 
 @final
@@ -100,7 +100,7 @@ class Unresolved(Rec):
 
 class Case(Rec):
     criterion: str
-    check: Annotated[list[str], msgspec.Meta(description=ARGV_DOC)]
+    check: Annotated[PlanCheck | None, msgspec.Meta(description=ARGV_DOC)]
     class_: CaseClass = msgspec.field(default="test", name="class")
     proved_by: ProvedBy = "check"
     via: str = ""
@@ -144,7 +144,7 @@ class Flake(Rec):
 @final
 class NewCase(Rec):
     criterion: str
-    check: Annotated[list[str], msgspec.Meta(description=ARGV_DOC)]
+    check: Annotated[PlanCheck, msgspec.Meta(description=ARGV_DOC)]
     why: str
 
 
@@ -312,5 +312,5 @@ def _reason(rec: type[Rec], error: str) -> str:
     where = where.rstrip("`")
     if what.startswith("Object missing required field `"):
         where, what = f"{where}.{what.split('`')[1]}", "missing"
-    form = f" ({ARGV_DOC})" if what.startswith("Expected `array`") and ".check" in where else ""
+    form = f" ({ARGV_DOC})" if ".check" in where else ""
     return f"{rec.__name__}{where}: {what}{form}"

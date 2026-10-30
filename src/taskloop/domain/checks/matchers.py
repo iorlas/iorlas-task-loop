@@ -46,7 +46,6 @@ def literal_prefix(g: str) -> str:
 
 # -- command text -------------------------------------------------------------------------------------------------------
 UNITY: Final = re.compile(r"(?i)unity")  # the Unity group: repo checks that name Unity in their id or command (slot queue, minutes each)
-ENV_REF: Final = re.compile(r"TL_CHECK_(?:LOG|RC)_(\w+)")
 CONFLICT_BUILD: Final = re.compile(r"(?i)(?<![a-z])(build|compile)(?![a-z])")  # a repo check a conflict fix still runs
 SLOW_CMD: Final = re.compile(r"(?i)(?<![a-z])(unity|play|test[-_]all|check|build|dotnet)")
 
@@ -62,11 +61,6 @@ def is_build(text: str) -> bool:
 def looks_slow(cmd: str) -> bool:
     """A command nobody has timed that is named like a Unity, play, full test, check or build run."""
     return bool(SLOW_CMD.search(cmd))
-
-
-def env_refs(cmd: str) -> list[str]:
-    """The mangled ids of the checks whose log or exit code the command reads, once each."""
-    return list(dict.fromkeys(ENV_REF.findall(cmd)))
 
 
 # -- a check's output ---------------------------------------------------------------------------------------------------
