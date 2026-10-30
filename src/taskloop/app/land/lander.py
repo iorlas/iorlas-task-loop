@@ -96,7 +96,9 @@ class Lander:
         e = self.e
         if e.pending_land_validation:
             raise e.blocked_for("land retry validation still needs accepted checks and review; branch kept", "FAULT_LAND")
-        verified.refuse(verified.latest(e.last_run, lambda: e.stores.check_run(e.run_dir.name, None).get()), e)
+        skipped = verified.refuse(verified.latest(e.last_run, lambda: e.stores.check_run(e.run_dir.name, None).get()), e)
+        if skipped:
+            e.log.note(f"landing with deferred checks (no such resource here, inputs unchanged): {', '.join(skipped)}")
         found = self.landed.already()  # the last run's push may have gone through before the network cut its answer
         if found:
             return self.synced(self.landed.found(found))

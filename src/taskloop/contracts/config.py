@@ -50,6 +50,21 @@ class ContainerConfig(Rec):
 
 
 @final
+class ResourceSpec(Rec):
+    """One scarce tool a check can need (engine.resources): at most `limit` checks hold it at once on a machine, across slots."""
+
+    limit: int = 1
+
+
+@final
+class HostResources(Rec):
+    """~/.config/task-loop/host.json, written by a person per machine: the resources this host has. The file absent means the host has
+    every resource the repo declares; `{"resources": []}` is a host with none (checks that need one are deferred)."""
+
+    resources: list[str] = msgspec.field(default_factory=list)
+
+
+@final
 class CheckSpec(Rec):
     id: CheckId
     argv: list[str]
@@ -69,6 +84,7 @@ class CheckSpec(Rec):
     where: Literal["host", "container"] = msgspec.field(default="host", name="in")  # container: needs engine.container
     why: str = ""  # run gate: why no plan check may run this command (it is told to the planner)
     reads: list[CheckId] = msgspec.field(default_factory=list)  # checks whose log and exit code it reads: it runs after them
+    needs: list[str] = msgspec.field(default_factory=list)  # engine.resources it holds a machine-wide lease on while it runs
     # argv run in the worktree before the checks (a formatter); what it changes is checked
     fix: list[str] = msgspec.field(default_factory=list)
 
@@ -170,6 +186,7 @@ class EngineConfig(Rec):
     look_rounds: int = 2
     look_max_px: int = 1280
     brief_kb: float = 5
+    resources: dict[str, ResourceSpec] = msgspec.field(default_factory=dict)  # scarce tools: name -> limit per machine
     evidence_cap_mb: float = 200  # the new bytes of evidence one run keeps (twins are links); the rest is dropped and counted in the log
 
     @property
@@ -286,6 +303,18 @@ def graph_problem(checks: list[CheckSpec]) -> str:
     return ""
 
 
+def resource_problem(eng: EngineConfig) -> str:
+    """Why engine.resources and the checks' `needs` do not fit ('' when they do): a limit under 1, or a need nobody declared."""
+    for name, r in eng.resources.items():
+        if r.limit < 1:
+            return f"engine.resources.{name}.limit must be at least 1"
+    for k in eng.checks:
+        lost = [n for n in k.needs if n not in eng.resources]
+        if lost:
+            return f"check {k.id} needs {lost[0]}, which engine.resources does not declare"
+    return ""
+
+
 def load(data: Any, say_to: TextIO | None = None) -> RepoProfile:
     """The repo's .task-loop.json (parsed) as a RepoProfile; ConfigError names the offending key. With `say_to`, a retired key
     is said there once per process."""
@@ -312,6 +341,9 @@ def load(data: Any, say_to: TextIO | None = None) -> RepoProfile:
     boxed = [k.id for k in profile.engine.checks if k.where == "container"]
     if boxed and not box:
         raise ConfigError(f"the repo profile: check {boxed[0]} says \"in\": \"container\" but engine.container is not set")
+    bad_needs = resource_problem(profile.engine)
+    if bad_needs:
+        raise ConfigError(f"the repo profile: {bad_needs}")
     bad_graph = graph_problem(profile.engine.checks)
     if bad_graph:
         raise ConfigError(f"the repo profile: {bad_graph}")

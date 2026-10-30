@@ -18,6 +18,7 @@ class Kind(enum.Enum):
     PAUSE_LANE = "pause_lane"
     PAUSE_NETWORK = "pause_network"
     PAUSE_KILLED = "pause_killed"
+    PAUSE_RESOURCE = "pause_resource"  # a check needs a resource this host lacks and its inputs changed: a host that has it runs the bead
     OWNER_PARK = "owner_park"  # the owner parked it (a park request): the branch and checkpoint stay, the hold keeps the loop off
     FAULT_INFRA = "fault_infra"
     FAULT_SLOT = "fault_slot"

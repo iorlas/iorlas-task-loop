@@ -517,6 +517,9 @@
     "base_red": true,
     "producer": "",
     "tags": [],
+    "waited": 0.0,
+    "deferred": [],
+    "inputs_changed": false,
     "sig": "boom"
    },
    {
@@ -538,6 +541,9 @@
     "base_red": false,
     "producer": "",
     "tags": [],
+    "waited": 0.0,
+    "deferred": [],
+    "inputs_changed": false,
     "sig": ""
    }
   ],
@@ -573,7 +579,8 @@
   "reads": [
    "unity-build"
   ],
-  "tags": []
+  "tags": [],
+  "needs": []
  },
  "plancheck.Ref": {
   "kind": "ref",
@@ -628,6 +635,9 @@
       "base_red": false,
       "producer": "",
       "tags": [],
+      "waited": 0.0,
+      "deferred": [],
+      "inputs_changed": false,
       "sig": ""
      },
      "round": 1,
@@ -1125,6 +1135,11 @@
   "cmd_hash": "ab12",
   "t": 1793050200.5
  },
+ "HostResources": {
+  "resources": [
+   "unity"
+  ]
+ },
  "RepoProfile": {
   "engine": {
    "land": [
@@ -1173,6 +1188,7 @@
      "in": "container",
      "why": "",
      "reads": [],
+     "needs": [],
      "fix": []
     },
     {
@@ -1197,6 +1213,9 @@
      "in": "host",
      "why": "",
      "reads": [],
+     "needs": [
+      "unity"
+     ],
      "fix": []
     }
    ],
@@ -1239,6 +1258,11 @@
    "look_rounds": 2,
    "look_max_px": 1280,
    "brief_kb": 5,
+   "resources": {
+    "unity": {
+     "limit": 2
+    }
+   },
    "evidence_cap_mb": 200
   },
   "slots": {

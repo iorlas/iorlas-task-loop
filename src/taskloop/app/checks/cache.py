@@ -97,7 +97,7 @@ class RunMemo:
     def cached(self, c: Check, hit: CacheHit) -> CheckResult:
         """The remembered result as this round's: cached, with the round it ran in said."""
         note = "inputs unchanged since round %s" % (hit.round or "?") if c.inputs else ""
-        return hit.result.replace(id=c.id, cmd=c.cmd, group=c.group, cached=True, log="", note=note)
+        return hit.result.replace(id=c.id, cmd=c.cmd, group=c.group, cached=True, log="", note=note, waited=0.0)
 
     def remember(self, key: RunKey, res: CheckResult, rnd: int, log_abs: str) -> None:
         """Only a pass is a fact; one entry per check, the latest."""

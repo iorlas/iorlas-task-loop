@@ -18,6 +18,7 @@ from taskloop.contracts.adrs import AdrStore
 from taskloop.contracts.ask import Ask
 from taskloop.contracts.checkpoint import Checkpoint
 from taskloop.contracts.checks import CheckCacheEntry, CheckRun, Durations
+from taskloop.contracts.config import HostResources
 from taskloop.contracts.enums import LockWhat
 from taskloop.contracts.ledger import Adr, AdrUse, LedgerEntry
 from taskloop.contracts.locks import LockRecord, LockTimeout, Ticket, pid_alive
@@ -213,4 +214,4 @@ def fake_stores(pid: int | None = None) -> Stores:
         loop_rest=lambda key: rests.setdefault(key, MemDoc(Rest)),
         check_cache=MemDocSet(CheckCacheEntry), durations=MemDocSet(Durations),
         check_run=lambda run, rnd: check_runs.setdefault((run, rnd), MemDoc(CheckRun)),
-        locks=MemLockTable(pid), tickets=MemTickets())
+        host=MemDoc(HostResources), locks=MemLockTable(pid), tickets=MemTickets())

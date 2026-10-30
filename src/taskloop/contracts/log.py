@@ -110,6 +110,7 @@ class CheckEnd(LogRec, tag="check_end"):
     tries: int = 1
     secs: float = 0.0
     wall_hit: bool = False  # the engine stopped it at its wall limit (start: the CheckStart of the same id; end: this record's t)
+    waited: float = 0.0  # seconds it queued for a machine-wide resource lease before it began
 
 
 @final
@@ -124,6 +125,7 @@ class GateEnd(LogRec, tag="gate_end"):
     exit: int | None
     secs: float = 0.0
     skipped: bool = False
+    deferred: list[str] = msgspec.field(default_factory=list)  # checks passed over: the host lacks their resource, inputs unchanged
 
 
 @final

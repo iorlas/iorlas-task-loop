@@ -126,13 +126,16 @@ class Gate:
         why = verified.refusal(run)
         if why:
             e.log.emit(rec.GateEnd(exit=1, secs=round(time.time() - started)))
-            raise e.blocked_for(why, "FAULT_LAND")
+            raise e.blocked_for(why, verified.kind_of(run))
         e.halt_point()  # a stop ended a step, which then reports itself red: the run stops here, not in a fix round
-        reds = [c for c in run.results if c.red]
+        reds = [c for c in run.results if c.red and not verified.deferred(c)]
         skipped = not reds and all(c.cached or c.exit is None for c in run.results)
         if skipped:
             e.log.note(f"gate skipped: every step already passed on tree {tree[:12]}")
-        e.log.emit(rec.GateEnd(exit=1 if reds else 0, secs=round(time.time() - started), skipped=skipped))
+        passed = verified.passed_over(run)
+        if passed:
+            e.log.note(f"gate passed past deferred checks (no such resource here, inputs unchanged): {', '.join(passed)}")
+        e.log.emit(rec.GateEnd(exit=1 if reds else 0, secs=round(time.time() - started), skipped=skipped, deferred=passed))
         if not reds:
             return self.issue()
         e.gate_log = e.run_dir / reds[0].log if reds[0].log else None

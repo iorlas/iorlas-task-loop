@@ -74,6 +74,7 @@ class Check(Rec):
     container: bool = False  # run in a container on a copy of the worktree when docker is reachable (the host otherwise)
     reads: list[CheckId] = msgspec.field(default_factory=list)  # registered checks whose log and exit code it reads: it runs after them
     tags: list[Tag] = msgspec.field(default_factory=list)
+    needs: list[str] = msgspec.field(default_factory=list)  # resources it holds a machine-wide lease on while it runs
 
 
 @final
@@ -96,6 +97,9 @@ class CheckResult(Rec):
     base_red: bool = False  # red on the untouched base too: not the writer's
     producer: str = ""  # a skip because the check it reads did not run: that check's id
     tags: list[Tag] = msgspec.field(default_factory=list)
+    waited: float = 0.0  # seconds it queued for the leases of its `needs` before it ran (not part of secs)
+    deferred: list[str] = msgspec.field(default_factory=list)  # the resources this host lacks: it did not run (exit UNVERIFIED_EXIT)
+    inputs_changed: bool = False  # deferred: the diff touches what it reads, so the land may not go on past it
     sig: str = ""  # what a red's output says, timings aside: two reds with one sig failed the same way
 
     @classmethod

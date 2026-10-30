@@ -4,6 +4,7 @@ from collections.abc import Callable
 
 from taskloop.contracts.adrs import AdrStore
 from taskloop.contracts.checks import CheckCacheEntry, CheckRun, Durations
+from taskloop.contracts.config import HostResources
 from taskloop.contracts.events import Event
 from taskloop.contracts.log import EngineLog
 from taskloop.contracts.loop import LoopCommand, LoopState, Rest
@@ -27,5 +28,6 @@ class Stores:
     check_cache: DocSet[CheckCacheEntry]  # one per bead
     durations: DocSet[Durations]  # one per repo
     check_run: Callable[[str, int | None], Doc[CheckRun]]  # a run's round (None: its latest)
+    host: Doc[HostResources]  # this machine's own file (resources it has); a person writes it
     locks: LockTable
     tickets: Tickets

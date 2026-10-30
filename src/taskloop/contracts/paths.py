@@ -143,6 +143,10 @@ class ConfigDir:
     def slot_setup_mark(self, key: str) -> Path:
         return self.root / "slots" / (f"{key}.setup")
 
+    def host(self) -> Path:
+        """host.json: what this machine has (the resources checks may need). A person writes it; absent: the host has every resource."""
+        return self.root / "host.json"
+
     def lock_record(self, what: str, ident: str) -> Path:
         return self.root / "locks" / (f"{what}-{ident}.lock")
 

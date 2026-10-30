@@ -94,7 +94,8 @@ CMD = {"pick_label": "auto",
        "visual_paths": config.VisualConfig(include=["a/**"]), "write_fresh_above_k": 150.0, "max_rounds": 4,
        "checks": [config.CheckSpec(id=CheckId("fmt"), argv=["just", "fmt"], group="static", when=["x/**"], inputs="a/**",
                                   where="container"),
-                  config.CheckSpec(id=CheckId("unity"), argv=["just", "check-unity"], run="gate")],
+                  config.CheckSpec(id=CheckId("unity"), argv=["just", "check-unity"], run="gate", needs=["unity"])],
+       "resources": {"unity": config.ResourceSpec(limit=2)},
        "container": config.ContainerConfig(image="img:1")}
 
 
@@ -180,9 +181,9 @@ LOG = {
         log="checks/01.log",
         timeout_s=1200.0,
     ),
-    "check_end": _log(log.CheckEnd, id="k5.1", exit=1, status="failed", tries=2, secs=43.4, wall_hit=True),
+    "check_end": _log(log.CheckEnd, id="k5.1", exit=1, status="failed", tries=2, secs=43.4, wall_hit=True, waited=12.5),
     "gate_start": _log(log.GateStart, cmd="just check", log="g.log", tree="deadbeef"),
-    "gate_end": _log(log.GateEnd, exit=0, secs=2101.0, skipped=False),
+    "gate_end": _log(log.GateEnd, exit=0, secs=2101.0, skipped=False, deferred=["unity"]),
     "land_try": _log(log.LandTry, n=2, base_before="1a2b3c4d5e6f", base_after="6f5e4d3c2b1a", rebase_moved=True, failing="gate",
                     gate="outside"),
     "wait_start": _log(log.WaitStart, id="w1", what=WaitWhat.LANE, holder="", until=T + 60),
@@ -429,6 +430,7 @@ OTHERS = {
         pid=9, port=7878, bind="127.0.0.1", token="tok", version="0.23.56", started=T, pid_start=T, idle_until=None
     ),
     "SlotSetupMarker": snapshots.SlotSetupMarker(cmd_hash="ab12", t=T),
+    "HostResources": config.HostResources(resources=["unity"]),
     "RepoProfile": config.RepoProfile(engine=config.EngineConfig(**CMD), slots=config.SlotsConfig(count=2, setup=["just", "setup"])),
     "RunRequest": delegate.RunRequest(
         role="worker",

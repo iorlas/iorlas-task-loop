@@ -9,9 +9,11 @@ from taskloop.app.checks.attempts import Attempts, Outcome
 from taskloop.app.checks.cache import RunMemo
 from taskloop.app.checks.checklog import CheckLog
 from taskloop.app.checks.host import CheckFault, CheckHost
-from taskloop.contracts.checks import Check, CheckFaultKind, CheckResult, Durations, verdict_of
+from taskloop.app.checks.resources import Resources
+from taskloop.contracts.checks import UNVERIFIED_EXIT, Check, CheckFaultKind, CheckResult, Durations, verdict_of
 from taskloop.contracts.runkey import RunKey
 from taskloop.domain.checks.durations import CHEAP_S, expected_secs
+from taskloop.domain.checks.inputs import touched
 from taskloop.domain.checks.matchers import cs_error_lines, diff_check_text, output_signature, safe_name, stale_tree
 from taskloop.domain.checks.names import log_var, rc_var
 from taskloop.domain.checks.plan import CheckPlan, Step
@@ -43,6 +45,7 @@ class CheckExecutor:
         self.everything = everything  # `when` is ignored: every check is due (tl check --all)
         self.fix_red = fix_red or {}  # id -> the red of a check whose fix command failed: it does not run
         self.logs = host.run_dir / "checks"
+        self.resources = Resources(host)
 
     def run_group(self, plan: CheckPlan, rnd: int) -> Round:
         """Run every step of the plan, in order, as one block (the cheap checks first, the Unity group last)."""
@@ -79,6 +82,8 @@ class CheckExecutor:
             res, where = self.memo.cached(c, hit), hit.log_abs
             if res.note:
                 self.host.log.note(f"cached: {c.id}, {res.note}")
+        elif self.resources.lacking(c):
+            return self._deferred(c, st), None
         else:
             cid = self.checklog.start(c, st.n, "checks/" + name)
             res, where = self._launch(step, st, name, key), str(self.logs / name)
@@ -87,6 +92,18 @@ class CheckExecutor:
         if res.exit != 0 and not res.base_red:
             st.red = c.group
         return res, cid
+
+    def _deferred(self, c: Check, st: Round) -> CheckResult:
+        """The check needs a resource this host lacks: it is not run, and not a failure (unverified). Whether the land may go on past it
+        is the diff's: if nothing it reads changed, a host that has the resource has nothing new to verify."""
+        lack = self.resources.lacking(c)
+        st.changed = self.host.checkout.changed_paths() if st.changed is None else st.changed
+        changed = touched(c, st.changed)
+        said = "its inputs changed: it waits for a host that has it" if changed else "its inputs are unchanged: the land may go on"
+        why = f"deferred: needs {', '.join(lack)}, which this host does not have; {said}"
+        self.host.log.note(f"`{c.id}` {why}")
+        return CheckResult(id=c.id, cmd=c.cmd, group=c.group, exit=UNVERIFIED_EXIT, status="unverified", why=why, deferred=lack,
+                           inputs_changed=changed, tags=list(c.tags))
 
     @staticmethod
     def _log_name(n: int, c: Check, rnd: int) -> str:
@@ -127,7 +144,7 @@ class CheckExecutor:
         if before is None or (before[0].exit == 124 and before[1] < c.wall_min):
             return None
         self.host.log.note(f"`{c.cmd[:120]}` already ran in this block: its result is reused")
-        return before[0].replace(id=c.id, cmd=c.cmd, group=c.group, cached=False, reused=True, log="")
+        return before[0].replace(id=c.id, cmd=c.cmd, group=c.group, cached=False, reused=True, log="", waited=0.0)
 
     def _key(self, c: Check) -> RunKey | None:
         """The memo key of this run, None when it may not be cached. A glob that selects nothing would cache a green over changed
@@ -144,10 +161,12 @@ class CheckExecutor:
 
     def _launch(self, step: Step, st: Round, name: str, key: RunKey | None) -> CheckResult:
         c = step.check
-        t0 = time.time()
-        out = self.attempts.run(c, self.logs / name, st.env)
+        with self.resources.hold(c) as lease:
+            t0 = time.time()  # the wait for a lease is not the check's time
+            out = self.attempts.run(c, self.logs / name, st.env)
+            took = round(time.time() - t0)
         self._fault(c, out, st)
-        res = self._result(c, out, name, round(time.time() - t0))
+        res = self._result(c, out, name, took).replace(waited=round(lease.waited, 1))
         if out.rc == 0:  # only a green run says what the check costs: a red one stops early
             st.timings.append((c.cmd, time.time() - t0))
             if key is not None:

@@ -73,6 +73,7 @@ POLICY: Final = {
     Kind.PAUSE_LANE: Rule("open", Result.PAUSED, "paused", False, "lane", wake="lane"),
     Kind.PAUSE_NETWORK: Rule("open", Result.PAUSED, "paused", False, "network", wake="net"),  # counts toward no cap
     Kind.PAUSE_KILLED: Rule("open", Result.PAUSED, "paused", False, "none"),
+    Kind.PAUSE_RESOURCE: Rule("open", Result.PAUSED, "paused", False, "host", wake="cooldown"),
     Kind.OWNER_PARK: Rule("open", Result.PARKED, "parked", False, "owner"),
     Kind.FAULT_INFRA: _fault(),
     Kind.FAULT_SLOT: _fault(),

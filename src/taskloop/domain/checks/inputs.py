@@ -73,3 +73,13 @@ def reads_digest(check: Check, files: Mapping[str, str], ignored: Mapping[str, s
     if not check.inputs_only:
         h.update(inputs_hash(files, ["*/" + g for g in ROOT_FILES] + list(ROOT_FILES)).encode())
     return h.hexdigest()
+
+
+def touched(check: Check, changed: Iterable[str]) -> bool:
+    """True when the diff (`changed`: paths) changes what the check reads: any path for a check with no `inputs` (it reads the whole
+    tree), else a path under its inputs, or (unless `inputs_only`) one of the root files its cache key also reads."""
+    paths = [p for p in changed if p]
+    if not check.inputs:
+        return bool(paths)
+    own = bool(matching(paths, check.inputs, check.exclude))
+    return own or (not check.inputs_only and bool(matching(paths, ["*/" + g for g in ROOT_FILES] + list(ROOT_FILES))))

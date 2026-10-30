@@ -4,6 +4,7 @@ from taskloop.contracts import paths, stores
 from taskloop.contracts.adrs import AdrStore
 from taskloop.contracts.checkpoint import Checkpoint
 from taskloop.contracts.checks import CheckCacheEntry, CheckRun, Durations
+from taskloop.contracts.config import HostResources
 from taskloop.contracts.stores import AskStore, JsonStore
 from taskloop.stores.books import CheckpointBook
 from taskloop.stores.bundle import Stores
@@ -20,4 +21,4 @@ def real_stores(cfg: paths.ConfigDir) -> Stores:
         loop_rest=lambda key: stores.RestStore(cfg, key),
         check_cache=FileDocSet(cfg.check_cache, CheckCacheEntry), durations=FileDocSet(cfg.check_durations, Durations),
         check_run=lambda run, rnd: JsonStore(cfg.check_run(run, rnd), CheckRun),
-        locks=ProcessLockTable(cfg), tickets=FileTickets(cfg))
+        host=JsonStore(cfg.host(), HostResources), locks=ProcessLockTable(cfg), tickets=FileTickets(cfg))

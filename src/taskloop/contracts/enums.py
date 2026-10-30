@@ -51,6 +51,7 @@ class WhyCode(StrEnum):
     NETWORK = "network"
     HUNG = "hung"
     SCHEMA_INVALID = "schema_invalid"
+    RESOURCE = "resource"
 
 
 class Cause(StrEnum):
@@ -111,6 +112,7 @@ class WaitWhat(StrEnum):
     LANE = "lane"
     NETWORK = "network"
     UNITY_SLOT = "unity_slot"
+    RESOURCE = "resource"
     EDITOR_LOCK = "editor_lock"
     DELEGATE_CRASH = "delegate_crash"
     LAND_LOCK = "land_lock"
@@ -127,6 +129,7 @@ class LockWhat(StrEnum):
     WORKTREE = "worktree"
     RELEASE = "release"
     LOOP = "loop_run"
+    RESOURCE = "resource"
 
 
 class Family(StrEnum):
