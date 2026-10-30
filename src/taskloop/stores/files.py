@@ -49,7 +49,7 @@ class FileTickets:
         counter = self.cfg.ticket_counter(repo_key)
         seq = max([self._last(counter), *(self._seq(p) for p in folder.iterdir())]) + 1
         while True:
-            ticket = Ticket(pid=pid, why=why, since=now, prio=prio, seq=seq, pid_start=pid_start, bead=bead)  # pyrefly: ignore[unexpected-keyword]
+            ticket = Ticket(pid=pid, why=why, since=now, prio=prio, seq=seq, pid_start=pid_start, bead=bead)
             tmp = folder / (f".{pid}.{threading.get_ident()}.{int(seq)}.tmp")  # threads of one process may race for a number
             tmp.write_text(json.dumps(wire.dump(ticket)), encoding="utf-8")
             try:

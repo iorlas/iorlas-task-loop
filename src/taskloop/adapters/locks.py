@@ -40,7 +40,7 @@ def read_holder(path: Path, pid: int | None = None) -> LockRecord | None:
     try:
         return wire.load(LockRecord, json.loads(holder_file(path).read_text(encoding="utf-8")))
     except (OSError, ValueError):
-        return None if pid is None else LockRecord(what=LockWhat.LAND, holder=f"pid {pid}", pid=pid, t=0.0)  # pyrefly: ignore[unexpected-keyword]
+        return None if pid is None else LockRecord(what=LockWhat.LAND, holder=f"pid {pid}", pid=pid, t=0.0)
 
 
 @contextlib.contextmanager
@@ -77,7 +77,7 @@ def hold_path(path: Path | str, holder: str, *, what: LockWhat = LockWhat.LAND, 
             check()
         time.sleep(delay)
         delay = min(delay * 2, POLL_MAX)
-    rec = LockRecord(what=what, holder=holder, pid=os.getpid(), t=time.time())  # pyrefly: ignore[unexpected-keyword]
+    rec = LockRecord(what=what, holder=holder, pid=os.getpid(), t=time.time())
     try:
         with contextlib.suppress(OSError):
             atomic_write_json(holder_file(key), wire.dump(rec), fsync=False)

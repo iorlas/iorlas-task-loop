@@ -77,7 +77,7 @@ class LoopFiles:
         """What the repo's command says to the loop (`pid`, `started`): a loop the command does not name (one started later, even on
         the same pid) ignores it."""
         cmd = self.command().read()
-        if cmd is None or LoopTarget(pid=pid, started=started) not in cmd.targets:  # pyrefly: ignore[unexpected-keyword]
+        if cmd is None or LoopTarget(pid=pid, started=started) not in cmd.targets:
             return ""
         return "now" if cmd.action == "stop_now" else "after" if cmd.action == "stop_after_current" else ""
 
@@ -87,13 +87,13 @@ class LoopFiles:
             loops = self.live()
             if loops:
                 self.command().write(LoopCommand(action="stop_now" if now_flag else "stop_after_current", by=by, t=self.now(),
-                                                 targets=[LoopTarget(pid=st.pid, started=st.started) for st in loops]))  # pyrefly: ignore[unexpected-keyword]
+                                                 targets=[LoopTarget(pid=st.pid, started=st.started) for st in loops]))
         return loops
 
     def clean_command(self) -> None:
         """Caller holds the lock. The command goes when no live loop it names is left."""
         cmd = self.command().read()
-        if cmd is not None and not any(LoopTarget(pid=st.pid, started=st.started) in cmd.targets for st in self.live()):  # pyrefly: ignore[unexpected-keyword]
+        if cmd is not None and not any(LoopTarget(pid=st.pid, started=st.started) in cmd.targets for st in self.live()):
             self.command().delete()
 
     @staticmethod

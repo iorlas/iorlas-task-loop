@@ -131,7 +131,7 @@ class MemLockTable:
                 if left is not None and left <= 0:
                     raise LockTimeout("{}-{}".format(*key), cur)
                 self.cond.wait(0.05 if left is None else min(left, 0.05))
-            rec = LockRecord(what=what, holder=holder, pid=self.pid, t=time.time())  # pyrefly: ignore[unexpected-keyword]
+            rec = LockRecord(what=what, holder=holder, pid=self.pid, t=time.time())
             self.held[key] = rec
         try:
             yield rec
@@ -163,7 +163,7 @@ class MemTickets:
             rows = self.rows.setdefault(repo_key, {})
             seq = max([self.last.get(repo_key, 0), *rows]) + 1
             self.last[repo_key] = seq
-            rows[seq] = Ticket(pid=pid, why=why, since=now, prio=prio, seq=seq, pid_start=pid_start, bead=bead)  # pyrefly: ignore[unexpected-keyword]
+            rows[seq] = Ticket(pid=pid, why=why, since=now, prio=prio, seq=seq, pid_start=pid_start, bead=bead)
             return rows[seq]
 
     def line(self, repo_key: str) -> list[Ticket]:
