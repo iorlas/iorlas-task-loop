@@ -21,7 +21,7 @@ from taskloop.app.wire import slots as wslots
 from taskloop.contracts.bead import Bead
 
 # an argv list, as the plan schema wants
-CHECK: Final = [sys.executable, "-c", "import os,sys; sys.exit(0 if os.path.exists('f.txt') else 1)"]
+CHECK: Final = ["test", "-f", "f.txt"]
 PLAN: Final[dict[str, Any]] = {"summary": "do it", "stages": [{"goal": "add f", "files": ["f.txt"], "checks": [CHECK], "hard": False}],
         "risks": [], "question": "", "options": [], "decided": "", "cases": [], "leftovers": []}
 WRITE: Final[dict[str, Any]] = {"summary": "wrote f", "checks_run": [{"cmd": shlex.join(CHECK), "exit": 0}], "question": "", "options": [],
