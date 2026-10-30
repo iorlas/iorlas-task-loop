@@ -13,8 +13,10 @@ from dataclasses import dataclass
 from typing import Any
 
 from taskloop.contracts.bead import BdError, Bead, Comment, Dep
-from taskloop.contracts.ports import BdFailure, BeadPatch, BeadQuery, NewBead
+from taskloop.contracts.ports import BdFailure, BeadPatch, BeadQuery, DoltPush, NewBead
 
+# bd 1.3.1 exits 0 on a push the remote rejected; its words are git's
+PUSH_REJECTED = re.compile(r"Updates were rejected|failed to push some refs|tip of your current branch is behind", re.I)
 LINT_MISSING = re.compile(r"missing required sections?[^:\n]*:\s*(.+)", re.I)
 
 
@@ -177,13 +179,22 @@ class BdStore:
         return r
 
     def passthrough(self, args: list[str]) -> BdRun:
-        """`tl bd ...`: whatever the person typed, with the actor and JSON like every call."""
-        return self._call(*args)
+        """`tl bd ...`: whatever the person typed, with the actor and JSON like every call. A `dolt push` bd answered with a
+        rejection but exit 0 exits 1 here."""
+        r = self._call(*args)
+        if r.code == 0 and args[:2] == ["dolt", "push"] and PUSH_REJECTED.search(r.err + r.out):
+            return BdRun(1, r.out, r.err)
+        return r
 
-    def dolt_push(self) -> tuple[int, str]:
-        """`bd dolt push`: bd's Dolt data to its remote. -> (exit code, bd's words)."""
-        r = self._call("dolt", "push")
-        return r.code, (r.err or r.out).strip()
+    def dolt_push(self) -> DoltPush:
+        """`bd sync`: pull, merge-conflict check, push with retries. It is the land's push because its exit codes are positive
+        (0 synced, 1 error, 2 conflict, 3 retries exhausted, 4 stuck) where `bd dolt push` exits 0 on a rejection; a rejection
+        text under exit 0 still counts as a failure."""
+        r = self._call("sync")
+        text = (r.err or r.out).strip()
+        if r.code == 0 and PUSH_REJECTED.search(r.err + r.out):
+            return DoltPush(1, text)
+        return DoltPush(r.code, text)
 
     def show(self, bead: str) -> Bead | None:
         r = self._call("show", bead)

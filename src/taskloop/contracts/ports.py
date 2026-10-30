@@ -3,7 +3,7 @@
 A port is a Protocol plus the typed requests and results that cross it. Adapters implement it against the real thing
 (`route.py`, `bd`, an exec); fakes implement it in memory, so a test needs no process, no files and no bash."""
 from collections.abc import Callable
-from typing import Any, Protocol
+from typing import Any, NamedTuple, Protocol
 
 import msgspec
 
@@ -74,6 +74,12 @@ class BdFailure(Exception):
         self.error = error
 
 
+class DoltPush(NamedTuple):
+    """The outcome of a Dolt sync: code 0 synced; 1 error or a rejected push; 2 merge conflict; 3 retries exhausted; 4 stuck."""
+    code: int
+    text: str
+
+
 class Beads(Protocol):
     """bd as the code uses it. Reads of an unknown bead answer None or []; `show` of a bead when bd itself fails (down, locked)
     raises BdFailure, so "no such bead" is never confused with "could not ask". A refused write raises BdFailure,
@@ -98,8 +104,8 @@ class Beads(Protocol):
         """Free the claims whose lease ran out (of these assignees, else of all)."""
         ...
     def provenance(self, bead: str, kind: str, source: str, ref: str = "", ref_kind: str = "", at: str = "", payload: str = "") -> None: ...
-    def dolt_push(self) -> tuple[int, str]:
-        """Push bd's Dolt data to its remote. -> (exit code, bd's words); never raises for bd's refusal."""
+    def dolt_push(self) -> DoltPush:
+        """Sync bd's Dolt data with its remote (pull, then push). -> DoltPush; never raises for bd's refusal."""
         ...
     def at(self, cwd: str) -> Beads:
         """The same store asked about the tracker in `cwd`."""

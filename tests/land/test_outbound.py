@@ -113,10 +113,10 @@ class Land(EngineTest):
                 held.clear()
 
         def bd(*argv):
-            seen.append((argv[:2], bool(held)))
-            return mock.Mock(returncode=1 if argv[:2] == ("dolt", "push") else 0, stdout="", stderr="dolt: boom")
+            seen.append((argv[:1], bool(held)))
+            return mock.Mock(returncode=1 if argv[:1] == ("sync",) else 0, stdout="", stderr="dolt: boom")
         with mock.patch.object(Lander, "lock", lock), self.store.stub(bd_fn=bd):
             rc, _ = self.run_engine(RUN)
         self.assertEqual(rc, 0, self.blocked)
-        self.assertEqual([h for a, h in seen if a == ("dolt", "push")], [False])  # once, outside the lock, and its failure did not stop
-        self.assertTrue(any("dolt push" in r["text"] for r in records(self.eng, "warn")))
+        self.assertEqual([h for a, h in seen if a == ("sync",)], [False])  # once, outside the lock, and its failure did not stop
+        self.assertTrue(any("bd sync" in r["text"] for r in records(self.eng, "warn")))

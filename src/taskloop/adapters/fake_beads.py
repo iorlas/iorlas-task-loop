@@ -3,7 +3,7 @@ sorted and unique, metadata values are strings, a write to an unknown bead is re
 from typing import Any
 
 from taskloop.contracts.bead import BdError, Bead, Comment, Dep
-from taskloop.contracts.ports import BdFailure, BeadPatch, BeadQuery, NewBead
+from taskloop.contracts.ports import BdFailure, BeadPatch, BeadQuery, DoltPush, NewBead
 
 
 class FakeBeads:
@@ -97,8 +97,8 @@ class FakeBeads:
     def provenance(self, bead: str, kind: str, source: str, ref: str = "", ref_kind: str = "", at: str = "", payload: str = "") -> None:
         self._get(bead)
 
-    def dolt_push(self) -> tuple[int, str]:
-        return 0, ""
+    def dolt_push(self) -> DoltPush:
+        return DoltPush(0, "")
 
     def at(self, cwd: str) -> FakeBeads:
         return self

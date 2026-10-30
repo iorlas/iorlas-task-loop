@@ -15,7 +15,7 @@ from taskloop.adapters import delegate as dl
 from taskloop.adapters.fake_clock import FakeClock  # noqa: F401  (re-exported: one place for a test to import its fakes from)
 from taskloop.app.release.seams import FixedRoute
 from taskloop.contracts.bead import Bead, Comment
-from taskloop.contracts.ports import BdFailure, BeadQuery
+from taskloop.contracts.ports import BdFailure, BeadQuery, DoltPush
 
 _NO = object()
 
@@ -164,7 +164,7 @@ class FakeBeadStore:
         self.run(["provenance", "record", "--issue", bead, "--kind", kind, "--source", source])
 
     def dolt_push(self):
-        return self.run(["dolt", "push"], failing=True)
+        return DoltPush(*self.run(["sync"], failing=True))
 
     def said(self, *head):
         """The writes that start with `head`, e.g. said("comments", "add")."""

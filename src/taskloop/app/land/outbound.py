@@ -82,17 +82,19 @@ class Outbound:
                                 f"failed after stage {stage}; the branch is kept, the next run continues it\n{tail.strip()[-400:]}", kind)
 
     def bd_sync(self, sha: str) -> None:
-        """After the land, outside the lock: the Dolt push bd's own hook makes. No remote is a quiet no-op; a failure blocks the bead
-        (tl-7y6.21: a warning let a box that cannot reach the remote keep every bead to itself). The rerun finds the land, pushes again."""
+        """After the land, outside the lock: `bd sync` (pull, then push; bd's own `dolt push` exits 0 on a rejection). No remote is a
+        quiet
+        no-op; a failure blocks the bead (tl-7y6.21: a warning let a box that cannot reach the remote keep every bead to itself).
+        The rerun finds the land, pushes again."""
         e = self.e
         t0 = e.clock.monotonic()
         try:
-            rc, text = e.store.dolt_push()
+            rc, text = e.store.dolt_push()  # (code, bd's words)
         except Exception as err:  # bd itself failed: the same block, the land stands
             rc, text = 1, str(err)
-        if rc != 0 and no_dolt_remote(text):
+        if rc == 1 and no_dolt_remote(text):  # an error only: a conflict (2), retries exhausted (3), stuck (4) are never "no remote"
             return
-        e.log.note(f"bd dolt push: {'ok' if rc == 0 else 'failed'} in {e.clock.monotonic() - t0:.1f}s")
+        e.log.note(f"bd sync: {'ok' if rc == 0 else 'failed'} in {e.clock.monotonic() - t0:.1f}s")
         if rc != 0:
-            raise e.blocked_for(f"failed: landed {sha[:12]}, but bd dolt push after the land failed (fix bd's Dolt remote, then rerun: "
-                                f"the rerun finds the land and pushes again)\n{text.strip()[-400:]}", "FAULT_LAND")
+            raise e.blocked_for(f"failed: landed {sha[:12]}, but bd sync after the land failed (exit {rc}; fix bd's Dolt remote, then "
+                                f"rerun: the rerun finds the land and pushes again)\n{text.strip()[-400:]}", "FAULT_LAND")

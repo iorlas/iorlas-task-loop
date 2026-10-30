@@ -18,7 +18,7 @@ from taskloop.adapters import bd
 from taskloop.adapters.bd import BdRun, BdStore, create_argv, update_argv
 from taskloop.adapters.fake_beads import FakeBeads
 from taskloop.contracts.bead import BdError
-from taskloop.contracts.ports import BdFailure, BeadPatch, BeadQuery, NewBead
+from taskloop.contracts.ports import BdFailure, BeadPatch, BeadQuery, DoltPush, NewBead
 
 GOLD = Path(__file__).parent / "golden" / "bd_1_3_1"
 
@@ -160,6 +160,25 @@ class GoldenBd(unittest.TestCase):
         store.provenance("b-1", "k", "tl", at="2026-01-01T00:00:00Z")
         self.assertEqual(store.calls[0][3:], ["reclaim", "--older-than", "15m", "--assignee", "a", "--assignee", "b", "--json"])  # type: ignore[attr-defined]
         self.assertEqual(store.calls[1][3:7], ["provenance", "record", "--issue", "b-1"])  # type: ignore[attr-defined]
+
+    REJECTED = ("error: failed to push some refs to 'git+https://x/y.git'\nhint: Updates were rejected because the tip of your "
+                "current branch is behind")
+
+    def test_a_dolt_push_bd_rejects_with_exit_0_fails(self) -> None:
+        store = self.beads(sync=BdRun(0, "", self.REJECTED), dolt=BdRun(0, "", self.REJECTED))
+        self.assertEqual(store.dolt_push().code, 1)
+        self.assertIn("Updates were rejected", store.dolt_push().text)
+        self.assertEqual(store.passthrough(["dolt", "push"]).code, 1)
+
+    def test_a_sync_conflict_keeps_bds_words_and_code(self) -> None:
+        words = "merge conflict in tables: child_counters, issues"
+        self.assertEqual(self.beads(sync=BdRun(2, "", words)).dolt_push(), DoltPush(2, words))
+
+    def test_a_synced_push_is_ok_and_runs_bd_sync(self) -> None:
+        store = self.beads(sync=BdRun(0, "", "Pushing to Dolt remote..."), dolt=BdRun(0, "", "Pushing to Dolt remote..."))
+        self.assertEqual(store.dolt_push().code, 0)
+        self.assertEqual(store.calls[0][3:], ["sync", "--json"])  # type: ignore[attr-defined]
+        self.assertEqual(store.passthrough(["dolt", "push"]).code, 0)
 
     def test_every_golden_file_is_json_or_text(self) -> None:
         for f in GOLD.glob("*.json"):
