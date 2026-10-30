@@ -18,6 +18,7 @@ from taskloop.app.land import verified
 from taskloop.app.land.lander import Lander
 from taskloop.contracts.checks import UNVERIFIED_EXIT, CacheHit, Check, CheckCacheEntry, CheckResult, CheckRun, verdict_of
 from taskloop.contracts.enums import CheckStatus
+from taskloop.contracts.ids import CheckId
 from taskloop.stores.memory import MemDoc
 
 
@@ -28,7 +29,7 @@ class Stop(Exception):
 
 
 def unverified(id="render") -> CheckResult:
-    return CheckResult(id=id, cmd=id, group="tests", exit=UNVERIFIED_EXIT, status="unverified")
+    return CheckResult(id=CheckId(id), cmd=id, group="tests", exit=UNVERIFIED_EXIT, status="unverified")
 
 
 class Recorded(EngineTest):
@@ -66,7 +67,7 @@ class Cache(unittest.TestCase):
         return CheckCache(doc, "k")
 
     def test_a_cached_unverified_result_is_never_reused_as_a_pass(self):
-        c = Check(id="render", cmd="render")
+        c = Check(id=CheckId("render"), cmd="render")
         seeded = self.cache(whole={"render": CacheHit(result=unverified(), round=1)})
         self.assertIsNone(seeded.hit(c, ""))
         fresh = self.cache()
