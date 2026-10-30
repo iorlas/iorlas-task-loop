@@ -34,7 +34,9 @@ from taskloop.adapters import ident
 from taskloop.app.loop.queue import QueueRule
 from taskloop.app.slots.pool import Slot, SlotPool
 from taskloop.app.wire import slots as wslots
+from taskloop.contracts import fence
 from taskloop.contracts.bead import BdError
+from taskloop.contracts.fence import SLOT_GEN
 from taskloop.contracts.ports import BdFailure
 
 LIVE_PID = "a live pid that is not this process: a real sleep child (an engine lock, a second loop, a waiter)"
@@ -278,7 +280,28 @@ class ReviewFixes(AreasBase):
         self.assertIn("left alone", err.getvalue())
         with mock.patch.dict(os.environ, {"TASK_LOOP_ACTOR": "tl-new00000"}):  # the right bead of the right actor
             wslots.release_slot(repo, "s1", bead="x-2", mine=True)
-        self.assertEqual((bd.slots["sl-1"]["status"], bd.slots["sl-1"].get("metadata")), ("open", {}))
+        self.assertEqual((bd.slots["sl-1"]["status"], bd.slots["sl-1"].get("metadata")), ("open", {"held_gen": "1"}))  # kept
+
+    def test_a_same_actor_retake_keeps_the_new_holders_slot_when_the_old_run_ends(self):
+        """The old run's release compared the actor only: the same actor retaking the slot (a second hand run of one session, a loop
+        restarted under its name) lost it to the run that came first. The slot's generation tells the takes apart."""
+        bd = self.beads({}, slots=1)
+        repo = str(self.repo)
+        with mock.patch.dict(os.environ, {"TASK_LOOP_ACTOR": "tl-same0000"}):
+            self.assertTrue(sl.take_slot(repo, wslots.profile_slots(repo), "run x-1", bead="x-1"))
+            old = fence.gen_of(wslots.slot_bead(repo, "s1"), SLOT_GEN)
+            wslots.release_slot(repo, "s1", bead="x-1", mine=True, gen=old)  # the old run's slot lapsed and was freed
+            self.assertTrue(sl.take_slot(repo, wslots.profile_slots(repo), "run x-1 again", bead="x-1"))  # same actor, same bead
+            new = fence.gen_of(wslots.slot_bead(repo, "s1"), SLOT_GEN)
+            self.assertGreater(new, old)
+            before = json.loads(json.dumps(bd.slots["sl-1"]))
+            err = io.StringIO()
+            with mock.patch.object(sys, "stderr", err):
+                self.assertTrue(wslots.release_slot(repo, "s1", bead="x-1", mine=True, gen=old))  # the old run ends late
+            self.assertEqual(bd.slots["sl-1"], before)
+            self.assertIn("left alone", err.getvalue())
+            wslots.release_slot(repo, "s1", bead="x-1", mine=True, gen=new)
+        self.assertEqual(bd.slots["sl-1"]["status"], "open")
 
 
     def test_a_ticket_without_seq_does_not_break_the_line_and_stale_tmp_files_are_swept(self):

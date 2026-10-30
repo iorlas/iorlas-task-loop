@@ -10,6 +10,7 @@ from taskloop.app.checks import evidence as check_evidence
 from taskloop.app.land import verified
 from taskloop.app.land.gate import Gate, Problem
 from taskloop.app.land.outbound import Outbound, land_argv, pin_head
+from taskloop.contracts import fence
 from taskloop.contracts import log as rec
 from taskloop.contracts.checks import CheckRun
 from taskloop.domain.land.matchers import Push
@@ -246,6 +247,7 @@ class Lander:
     def push(self, st: Land) -> tuple[str, bool]:
         """-> (sha, _) landed; ("", True) rejected, try again; ("", False) a network error, rest first. Anything else raises."""
         e = self.e
+        fence.check(e.store, e.claim)  # a run whose bead or slot was taken again pushes nothing (Fenced; RunOnce closes nothing)
         with e.stop_deferred() as stop:  # a push half done is no state to stop in: finish it, then stop
             lrc, ltail = self.out.lfs_push()  # the pushed ref's LFS objects first: the push must not point at objects origin lacks
             sha = e.git("rev-parse", "HEAD")  # the commit pushed, named in the refspec

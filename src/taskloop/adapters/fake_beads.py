@@ -74,8 +74,11 @@ class FakeBeads:
     def heartbeat(self, bead: str) -> None:
         self._get(bead)
 
-    def close(self, bead: str, reason: str) -> None:
-        self._put(self._get(bead), status="closed")
+    def close(self, bead: str, reason: str, if_assignee: str = "") -> None:
+        b = self._get(bead)
+        if if_assignee and b.assignee != if_assignee:
+            raise BdFailure(BdError(kind="other", text="assignee changed"))
+        self._put(b, status="closed")
 
     def add_comment(self, bead: str, text: str) -> None:
         self._get(bead)

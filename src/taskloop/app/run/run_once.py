@@ -10,6 +10,7 @@ from taskloop.app.release import reexec
 from taskloop.app.run import outcomes, requests
 from taskloop.app.run.reload import Exec
 from taskloop.app.slots.lease import Lease
+from taskloop.contracts import fence
 from taskloop.contracts.enums import AskClass
 from taskloop.contracts.log import Beat
 from taskloop.domain import outcome as oc
@@ -46,6 +47,9 @@ class RunOnce:
             end.why, end.spec = b.why, b.spec
             if end.kind == oc.Kind.PAUSE_KILLED and e.requests.stopped:  # the stop flag was the owner's request, not a SIGTERM
                 end.why = requests.STOPPED_WHY
+        except fence.Fenced as f:  # the bead or the slot was taken again: this run writes nothing more
+            e.fenced = end.why = f.why
+            end.outcome, end.kind = "failed", oc.Kind.FAULT_ENGINE
         except Exec:
             pass  # the process image is gone; nothing below runs in a real exec
         except Exception as err:  # the close-out must run whatever broke
@@ -197,6 +201,10 @@ class RunOnce:
                 e.warn(f"{end.why or end.outcome} after the land went through; closing it landed")
                 end.outcome, end.why, end.sha, end.spec, end.kind = "landed", "", e.landed_sha, None, oc.Kind.LANDED
             hb.stop()
+            e.fenced = e.fenced or fence.stale(e.store, e.claim)
+            if e.fenced:  # a run that lost its lease closes nothing: the bead, its checkpoint and its trace are the new holder's
+                e.warn(f"fenced out: {e.fenced}; the bead, its checkpoint and the slot are left to the run that holds them")
+                return
             e.stuck.tick()  # the last tick: a run that stops on its third same red says it before its Close
             e.requests.drop()  # what the run did not take is for a run that ended
             reexec.drop_reexec(e.bead)  # a run that ended is no crash after an exec

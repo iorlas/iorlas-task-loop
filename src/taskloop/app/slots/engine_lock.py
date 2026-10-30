@@ -42,6 +42,12 @@ def drop_engine_lock(wt: str | Path, pid: int | None = None) -> None:
         engine_lock_path(wt).unlink()
 
 
+def lock_pid(wt: str | Path) -> int | None:
+    """The pid the worktree's engine lock names (0: a worker outlived its engine), None when there is none."""
+    pid = read_engine_lock(wt).get("pid")
+    return pid if isinstance(pid, int) else None
+
+
 def loop_lock(wt: str | Path, slot: str, slot_bead: str, bead: str = "") -> None:
     """The loop's lock from its slot take to its run-task's own: no hand run gets in during the slot reset. `bead`, once claimed: the
     area check sees it there."""

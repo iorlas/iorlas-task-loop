@@ -8,9 +8,10 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
+from taskloop.adapters.fake_beads import FakeBeads
 from taskloop.app.run.resume import KEEP_FOR_ACTIVE, LATE, Resume
 from taskloop.app.run.state import Checkpoints, StateAttrs, carries_state, state_names
-from taskloop.contracts import wire
+from taskloop.contracts import fence, wire
 from taskloop.contracts.checkpoint import Checkpoint, RunState
 from taskloop.contracts.review import (
     ReviewState,
@@ -59,6 +60,7 @@ class Host(StateAttrs):
     def __init__(self) -> None:
         self.state = RunState()
         self.bead, self.stores = "t-1", fake_stores()
+        self.store, self.claim = FakeBeads(), fence.offline("t-1")
         self.checkpoints = Checkpoints(self)
         self.log_path = Path("t-1-20260101-000000.jsonl")
         self.unchecked = [{"what": "u", "kind": "", "source": "", "why": "", "proof_round": False}]

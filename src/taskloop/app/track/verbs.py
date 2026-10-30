@@ -11,6 +11,7 @@ from taskloop.adapters.gitrepo import git, repo_root
 from taskloop.adapters.ident import actor, config_dir, session_id
 from taskloop.adapters.opencode import transcript_of
 from taskloop.app.track.trail import event, provenance, prune_events, register_repo
+from taskloop.contracts import fence
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdFailure, BeadPatch, Beads
@@ -35,9 +36,15 @@ def claim(bead: str, worktree: str | None = None, slot: str | None = None, store
     return 0
 
 
-def land(bead: str, sha: str, worktree: str | None = None, store: Beads | None = None, base: str | None = None) -> int:
+def land(bead: str, sha: str, worktree: str | None = None, store: Beads | None = None, base: str | None = None,
+         claim: fence.Claim | None = None) -> int:
     """Record a land. With `base`, provenance gets the sha only once it is an ancestor of that base: a sha that never reached it
-    is no land (the event stays, as what was claimed)."""
+    is no land (the event stays, as what was claimed). An engine run passes its claim and a stale one is refused; `tl land` by hand
+    passes none."""
+    st = store or bd_store()
+    if claim is not None and (why := fence.stale(st, claim)):
+        sys.stderr.write(f"fenced: land of {bead} not recorded: {why}\n")
+        return 1
     full = git("rev-parse", "--verify", "-q", sha + "^{commit}", cwd=worktree) or sha
     event("land", bead, sha=full)
     if base and run_git(worktree or ".", "merge-base", "--is-ancestor", full, base, capture_output=True).returncode != 0:
@@ -48,8 +55,21 @@ def land(bead: str, sha: str, worktree: str | None = None, store: Beads | None =
 
 
 def close(bead: str, reason: str | None = None, store: Beads | None = None) -> int:
+    """`tl close`: a person's close, under the claim they hold on the bead now."""
+    st = store or bd_store()
+    return close_as(fence.hand(st, bead, actor()), reason, st)
+
+
+def close_as(claim: fence.Claim, reason: str | None, store: Beads) -> int:
+    """Close the bead the claim is for; a stale claim (its bead or slot was taken again) is refused, and so is a bead whose assignee is
+    no longer the claim's actor (bd checks that atomically)."""
+    bead = claim.bead
     try:
-        (store or bd_store()).close(bead, reason or "done")
+        fence.check(store, claim)
+        store.close(bead, reason or "done", fence.guard(claim))
+    except fence.Fenced as f:
+        sys.stderr.write(f"fenced: {bead} not closed: {f.why}\n")
+        return 1
     except BdFailure as e:
         sys.stderr.write(e.error.text + "\n")
         return 1
@@ -59,13 +79,24 @@ def close(bead: str, reason: str | None = None, store: Beads | None = None) -> i
 
 
 def block(bead: str, why: str, store: Beads | None = None, say: Callable[[str], None] | None = None) -> int:
-    """The bead blocked on the owner; `say` posts its comment (an engine run passes its own poster, Engine.comment)."""
+    """`tl block`: a person's block, under the claim they hold on the bead now."""
+    st = store or bd_store()
+    return block_as(fence.hand(st, bead, actor()), why, st, say)
+
+
+def block_as(claim: fence.Claim, why: str, st: Beads, say: Callable[[str], None] | None = None) -> int:
+    """The bead blocked on the owner; `say` posts its comment (an engine run passes its own poster, Engine.comment). A stale claim is
+    refused."""
     # tl-159: a parked bead lets go of its claim; the actor that held it stays live (a loop holds other beads), and a claim nobody works on
     # refused --fresh as 'taken: live claim'. A claim by an engine's actor ends with the run; a person's own claim stays theirs.
-    st = store or bd_store()
+    bead = claim.bead
     held = (peek(st, bead) or Bead(id=bead, title="", status="")).assignee
     try:
-        st.update(bead, BeadPatch(status="blocked", assignee="" if held.startswith("tl-") else None))
+        fence.check(st, claim)
+        st.update(bead, BeadPatch(status="blocked", if_assignee=fence.guard(claim), assignee="" if held.startswith("tl-") else None))
+    except fence.Fenced as f:
+        sys.stderr.write(f"fenced: {bead} not blocked: {f.why}\n")
+        return 1
     except BdFailure as e:
         sys.stderr.write(e.error.text + "\n")
         return 1

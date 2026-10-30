@@ -3,9 +3,10 @@ and `release` fail with a SlotFail (slot_broken, bead_pinned or busy); the pool 
 from pathlib import Path
 
 from taskloop.app.slots.env import SlotEnv, peek, stamp
-from taskloop.app.slots.marks import clear_marks, held_by, hold_of, hold_until, mark_held
+from taskloop.app.slots.marks import clear_marks, held_by, hold_of, hold_until, mark_held, next_gen
 from taskloop.app.slots.reset import ready_for
 from taskloop.contracts.bead import Bead
+from taskloop.contracts.fence import SLOT_GEN, gen_of
 from taskloop.contracts.ports import BdFailure, BeadQuery
 from taskloop.contracts.slots import Hold, SlotFail
 
@@ -42,7 +43,7 @@ class Slot:
             raise SlotFail("busy", f"slot {self.name} {why_not}")
         if not self.claimed():
             raise SlotFail("busy", f"slot {self.name} held by {held_by(peek(self.env.store, self.bead.id) or self.bead)}")
-        mark_held(self.env, self.bead.id, why, bead=bead)
+        mark_held(self.env, self.bead.id, why, bead=bead, gen=next_gen(self.bead))
         self.env.event("slot-take", "", slot=self.name, slot_bead=self.bead.id, worktree=self.dir, repo=self.env.repo,
                        **({"ticket": ticket} if ticket is not None else {}))
         return self.bead.id
@@ -61,26 +62,29 @@ class Slot:
         """A clean tree on the bead's branch, leftover work committed (never wiped); see reset.py."""
         ready_for(self, bead, force=force)
 
-    def release(self, bead: str | None = None, *, mine: bool = False, force: bool = False) -> bool:
+    def release(self, bead: str | None = None, *, mine: bool = False, force: bool = False, gen: int | None = None) -> bool:
         """Free the slot; fails busy while an engine runs in it (force drops the engine's lock and frees it). mine=True (a run
         ending): only while the slot's marks still name this actor (and `bead`, when it is marked): a slot reclaimed and
-        retaken is the new holder's, left alone. False when the slot bead is gone."""
+        retaken is the new holder's, left alone; so is a slot whose generation is no longer `gen` (the lease this run took: the same
+        actor retaking it is another take). False when the slot bead is gone."""
         if not mine:  # a person or the loop ending a slot by name: never under a live engine, unless forced (which drops its lock)
+            holder = self.env.lock_pid(self.dir)  # read before the busy look: the lock dropped below is the one judged busy
             busy = self.env.busy(self.dir)
             if busy and not force:
                 raise SlotFail("busy", f"slot {self.name}: {busy}; it frees itself when that run ends (--force: release and drop the lock)")
             if busy:
-                self.env.drop_engine_lock(self.dir)
+                self.env.drop_engine_lock(self.dir, holder)
         with self.env.take_lock():
-            return self.release_locked(bead, mine, force)
+            return self.release_locked(bead, mine, force, gen)
 
-    def release_locked(self, bead: str | None, mine: bool, force: bool) -> bool:
+    def release_locked(self, bead: str | None, mine: bool, force: bool, gen: int | None = None) -> bool:
         b = self.pool.bead(self.name)
         if b is None:
             return False
         if mine:
             m = b.metadata
-            if m.get("held_by") != self.env.actor or (bead is not None and m.get("held_bead") not in (None, "", bead)):
+            retaken = gen is not None and gen_of(b, SLOT_GEN) != gen
+            if retaken or m.get("held_by") != self.env.actor or (bead is not None and m.get("held_bead") not in (None, "", bead)):
                 self.env.warn("tl: slot {} is no longer held by {}{} (now {}): left alone".format(
                     self.name, self.env.actor, " for " + bead if bead else "", held_by(b) if b.status != "open" else "free"))
                 return True

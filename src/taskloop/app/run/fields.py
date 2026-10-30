@@ -4,13 +4,16 @@ from typing import Any
 
 from taskloop.adapters import beadtools, ident
 from taskloop.app.run.state import Checkpoints, StateAttrs
+from taskloop.contracts import fence
 from taskloop.contracts.checkpoint import RunState
 
 
 class RunFields(StateAttrs):
     def __init__(self, bead: str, wt: str, cfg: Any, dry_run: bool, verbose: bool, store: Any, route: Any, git: Any,
-                 fresh: bool) -> None:
+                 fresh: bool, claim: fence.Claim | None = None) -> None:
         self.bead, self.cfg, self.dry, self.verbose = bead, cfg, dry_run, verbose
+        self.claim = claim or fence.offline(bead)  # the run's right to act on its bead (app/track/fence.py); offline: nothing to check
+        self.fenced = ""  # why this run was fenced out (its bead or slot taken again), once it was
         self.wt: Any = wt
         self.store, self.router, self.repo = store or beadtools.bd_store(), route, git
         self.stats: dict[str, int] = {"writes": 0, "rounds": 0, "reviews": 0, "replans": 0, "nodes": 0, "tests_added": 0,

@@ -234,8 +234,12 @@ class BdStore:
     def heartbeat(self, bead: str) -> None:
         self._must("heartbeat", bead)
 
-    def close(self, bead: str, reason: str) -> None:
-        self._must("close", bead, "--reason", reason)
+    def close(self, bead: str, reason: str, if_assignee: str = "") -> None:
+        if not if_assignee:
+            self._must("close", bead, "--reason", reason)
+            return
+        self._must(*update_argv(bead, BeadPatch(status="closed", if_assignee=if_assignee)))
+        self._must("comments", "add", bead, "Closed: " + reason)
 
     def add_comment(self, bead: str, text: str) -> None:
         self._must("comments", "add", bead, text)

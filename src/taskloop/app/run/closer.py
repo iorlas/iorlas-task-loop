@@ -15,6 +15,7 @@ from taskloop.app.run import outcomes
 from taskloop.app.run import trace as runtrace
 from taskloop.app.run.console import say
 from taskloop.app.track import verbs as track
+from taskloop.contracts import fence
 from taskloop.contracts import log as rec
 from taskloop.contracts.answers import VERDICTS
 from taskloop.contracts.enums import Outcome
@@ -183,13 +184,13 @@ class Closer:
         summary = e.plan_summary[:300]
         if outcome == "landed":
             base = e.cfg.base.split("/")[-1]
-            rc = track.close(e.bead, f"merged {sha[:12]} to {base}: {summary or 'the task stages passed'}; {stats}", e.store)
+            rc = track.close_as(e.claim, f"merged {sha[:12]} to {base}: {summary or 'the task stages passed'}; {stats}", e.store)
         elif outcome == "done":
-            rc = track.close(e.bead, "done with nothing to land: " + (summary or stats), e.store)
+            rc = track.close_as(e.claim, "done with nothing to land: " + (summary or stats), e.store)
         elif kind and oc.POLICY[kind].bd == "open":  # a machine fault or pause: the bead stays open, unassigned
             rc = self.leave_open(kind, why)
         else:
-            rc = track.block(e.bead, why + (("\n\nQuestion: " + spec.decision) if spec else ""), e.store, e.comment)
+            rc = track.block_as(e.claim, why + (("\n\nQuestion: " + spec.decision) if spec else ""), e.store, e.comment)
         if rc:  # a repo's bd rules can refuse (e.g. a minimum reason length): say so, never report a clean close
             e.warn(f"bd refused to {'block' if outcome not in DONE else 'close'} {e.bead} (exit {rc}): close it by hand")
 
@@ -198,7 +199,11 @@ class Closer:
         fault = kind.name.startswith("FAULT_")
         if not fault:
             e.warn(why)
-        rc = 0 if beadtools.attempt(e.store.update, e.bead, BeadPatch(status="open", assignee="")) else 1  # (tl-kwo: it lets go)
+        if why_not := fence.stale(e.store, e.claim):  # a run whose bead or slot was taken again lets go of nothing
+            e.warn(f"fenced: {e.bead} left as it is: {why_not}")
+            return 1
+        patch = BeadPatch(status="open", assignee="", if_assignee=fence.guard(e.claim))  # (tl-kwo: it lets go; only its own claim)
+        rc = 0 if beadtools.attempt(e.store.update, e.bead, patch) else 1
         if oc.POLICY[kind].label:
             beadtools.attempt(e.store.add_label, e.bead, oc.POLICY[kind].label)
         if e.disp.comment:  # a comment, never Notes (tl-7y6.6.2); one per (bead, kind, fingerprint) per hour

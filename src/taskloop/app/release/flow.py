@@ -14,7 +14,7 @@ from taskloop.app.release import clone, manifest, publish, selfupdate, suite, ti
 from taskloop.app.release.push import push_main, release_lock_path
 from taskloop.app.release.shell import Abort, git, say
 from taskloop.contracts.ids import MARKETPLACE
-from taskloop.contracts.ports import BdFailure, Beads
+from taskloop.contracts.ports import BdFailure, BeadQuery, Beads
 
 
 @dataclass(frozen=True)
@@ -56,6 +56,19 @@ def bump_and_commit(tool_root: Path, where: Path, req: Request) -> str:
     return version
 
 
+def refuse_open_children(req: Request, repo: Path, store: Beads | None) -> None:
+    """--bead names the work this release finishes: a bead with an open child is only half done (tl-t7i.5 was closed with its other half
+    open). Refused before anything is pushed. A bd that cannot be asked does not stop the release (the close itself reports that)."""
+    if not req.bead:
+        return
+    try:
+        kids = [b.id for b in (store or beadtools.bd_store(repo)).find(BeadQuery()) if b.parent == req.bead]
+    except (BdFailure, SystemExit):
+        return
+    if kids:
+        raise Abort(f"--bead {req.bead} has open children ({', '.join(sorted(kids))}): finish or close them, or release without --bead")
+
+
 def close_bead(req: Request, repo: Path, store: Beads | None) -> None:
     if not req.bead:
         return
@@ -68,6 +81,7 @@ def close_bead(req: Request, repo: Path, store: Beads | None) -> None:
 def release(req: Request, repo: Path, market: Path, tool_root: Path, store: Beads | None = None) -> str:
     """Release `repo` from the clone: its main checkout may be dirty or on any branch and is left as it was. The marketplace
     checkout must be clean on main (it is pushed from)."""
+    refuse_open_children(req, repo, store)
     require_clean_main(market, "marketplace")
     url = git(repo, "remote", "get-url", "origin")
     where = clone.ready(config_dir(), url)

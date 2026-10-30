@@ -11,10 +11,11 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from taskloop.app.run.review_glue import review_of
-from taskloop.contracts import wire
+from taskloop.contracts import fence, wire
 from taskloop.contracts.checkpoint import Checkpoint, RunState
 from taskloop.contracts.review import Unfiled
 from taskloop.domain.checks import trim
+from taskloop.stores.api import Doc
 
 NOT_ATTRS = ("review",)  # the one field of another lane's type: reached as `engine.state.review` only
 
@@ -61,6 +62,11 @@ class Checkpoints:
     def doc(self) -> Any:
         return self.e.stores.checkpoints.of(self.e.bead)
 
+    def writer(self) -> Doc[Checkpoint]:
+        """The record's document for a write: only a run that still holds its bead and slot may write it (Fenced otherwise)."""
+        fence.check(self.e.store, self.e.claim)
+        return self.doc
+
     def read(self) -> Checkpoint | None:
         return self.doc.read()
 
@@ -73,7 +79,7 @@ class Checkpoints:
             step, feedback = "land-verify-red", e.pending_land_validation
         state = copy.deepcopy(e.state)
         state.review = review_of(e)
-        self.doc.write(
+        self.writer().write(
             Checkpoint(
                 bead=e.bead,
                 run=e.log_path.stem,
@@ -101,7 +107,7 @@ class Checkpoints:
         done = ck.replace(head=self.e.git("rev-parse", "HEAD"), closed=True, state=state)
         if red:
             done = done.replace(step="gate-red", gate_tail=trim.trim_log(why, log=str(self.e.gate_log or "")))
-        self.doc.write(done)
+        self.writer().write(done)
 
     def keep_filed(self, lost: list[dict[str, str]] | None = None) -> None:
         """The follow-ups filed so far and the ones bd refused (`lost`: kept, none lost): written at once, a kill loses no title."""
@@ -109,7 +115,7 @@ class Checkpoints:
         ck = self.read()
         if ck is not None:
             kept = ck.state.replace(review=review_of(self.e))
-            self.doc.write(ck.replace(state=kept))
+            self.writer().write(ck.replace(state=kept))
 
     def keep_look(self) -> None:
         """What the owner-look bead needs goes into the record, so a crash after the land still files it."""
@@ -119,15 +125,15 @@ class Checkpoints:
                 look_notes=list(e.look_notes),
                 look_unjudged=dict(e.look_unjudged),
                 review=review_of(e))
-            self.doc.write(ck.replace(state=kept))
+            self.writer().write(ck.replace(state=kept))
 
     def amend(self, fn: Callable[[Checkpoint], Checkpoint]) -> bool:
         """Rewrite the stored record with `fn` (a rebase moves its head, a cap grant adds an amend). False when there is none."""
         ck = self.read()
         if ck is None:
             return False
-        self.doc.write(fn(ck))
+        self.writer().write(fn(ck))
         return True
 
     def drop(self) -> None:
-        self.doc.delete()
+        self.writer().delete()

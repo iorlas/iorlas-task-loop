@@ -50,7 +50,7 @@ class Rig(unittest.TestCase):
         self.env = SlotEnv(
             repo="/r", repo_key="r-1", cfg=SlotsConfig(count=2, keep=["ignored"]), store=self.bd, git=self.git, tickets=self.tickets,
             cfgdir=paths.ConfigDir(Path(tmp.name)), actor=ME, host="h", take_lock=contextlib.nullcontext,
-            busy=lambda d: self.busy_at.get(d, ""), drop_engine_lock=lambda d: self.busy_at.pop(d, None),
+            busy=lambda d: self.busy_at.get(d, ""), drop_engine_lock=lambda d, pid=None: self.busy_at.pop(d, None),
             event=lambda kind, bead="", **kw: self.events.append((kind, kw.get("slot"))), run_setup=lambda cmd, d: 0,
             exclude_local=lambda r: None, say=self.out.append, warn=self.err.append, pid=1, now=lambda: self.t[0],
             sleep=self.sleeps.append)
@@ -181,6 +181,16 @@ class Taking(Rig):
         self.assertEqual(self.bd.beads["sl-s1"].status, "in_progress")
         self.assertTrue(self.slot().release(force=True))
         self.assertEqual((self.bd.beads["sl-s1"].status, self.busy_at), ("open", {}))  # freed, and the engine's lock dropped
+
+    def test_a_forced_release_drops_only_the_lock_it_judged_busy(self):
+        """drop_engine_lock without the pid would unlink a lock another engine wrote after the busy look."""
+        dropped = []
+        self.env.lock_pid = lambda d: 7
+        self.env.drop_engine_lock = lambda d, pid=None: dropped.append((d, pid))
+        self.slot().take("a")
+        self.busy_at[self.d1] = "engine pid 7 runs x-0"
+        self.assertTrue(self.slot().release(force=True))
+        self.assertEqual(dropped, [(self.d1, 7)])
 
     def test_an_expired_hold_frees_the_slot(self):
         verbs = SimpleNamespace(op="hold", name="s1", why="screens", for_min=1, n=None, bead=None, force=False)

@@ -31,12 +31,13 @@ class SlotEnv:
     host: str
     take_lock: Callable[[], AbstractContextManager[Any]]  # every claim of this repo's slots, one at a time
     busy: Callable[[str], str]  # what runs in a worktree ("" when nothing does)
-    drop_engine_lock: Callable[[str], None]
+    drop_engine_lock: Callable[[str, int | None], None]  # (worktree, the pid of the lock that was judged busy): only that lock goes
     event: Callable[..., Any]
     run_setup: Callable[[list[str], str], int]  # (argv, worktree) -> exit code
     exclude_local: Callable[[str], None]
     say: Callable[[str], None] = print
     warn: Callable[[str], None] = print
+    lock_pid: Callable[[str], int | None] = lambda wt: None  # the pid the worktree's engine lock names now
     pid: int = 0
     now: Callable[[], float] = time.time
     sleep: Callable[[float], None] = time.sleep

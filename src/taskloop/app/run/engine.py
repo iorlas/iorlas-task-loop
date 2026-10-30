@@ -61,6 +61,7 @@ from taskloop.app.write.briefing import Briefing
 from taskloop.app.write.handoff import Handoff
 from taskloop.app.write.newfiles import NewFiles
 from taskloop.app.write.stage_loop import StageLoop
+from taskloop.contracts import fence
 from taskloop.contracts.argv import checks_to_text, checks_to_wire, text_of
 from taskloop.contracts.landed import Landed, LandedStore
 from taskloop.contracts.log import Assumed, Said
@@ -96,9 +97,10 @@ class Engine(RunFields):
     stage_tree: str
 
     def __init__(self, bead: str, wt: str, cfg: Any, dry_run: bool = False, verbose: bool = True, store: Any = None,
-                 route: Any = None, clock: Any = None, git: Any = None, stores: Any = None, fresh: bool = False) -> None:
+                 route: Any = None, clock: Any = None, git: Any = None, stores: Any = None, fresh: bool = False,
+                 claim: fence.Claim | None = None) -> None:
         route = route or seams.DelegateRoute()
-        super().__init__(bead, wt, cfg, dry_run, verbose, store, route, git, fresh)
+        super().__init__(bead, wt, cfg, dry_run, verbose, store, route, git, fresh, claim)
         self.clock = clock or SystemClock()
         self.reexec: dict[str, Any] = reexec.take_reexec_env()  # this run-task came from an exec into a newer install, or a fallback
         if self.reexec.get("bead") != bead:
@@ -277,7 +279,7 @@ class Engine(RunFields):
 
     def record_land(self, sha: str) -> None:
         LandedStore(ident.config_dir()).put(Landed(bead=self.bead, sha=sha, base=self.cfg.base, t=self.now()))
-        verbs.land(self.bead, sha, self.wt, self.store, base=self.cfg.base)
+        verbs.land(self.bead, sha, self.wt, self.store, base=self.cfg.base, claim=self.claim)
 
     def land_lock_path(self) -> Path:
         return landlock.land_lock_path(self.git("remote", "get-url", "origin") or str(self.wt))

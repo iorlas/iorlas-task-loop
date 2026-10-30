@@ -5,7 +5,7 @@ from typing import Any, Final
 
 from taskloop.app.slots.env import SlotEnv, stamp
 from taskloop.app.slots.line import order, wait_slot, waiting_line
-from taskloop.app.slots.marks import held_by, mark_held
+from taskloop.app.slots.marks import held_by, mark_held, next_gen
 from taskloop.app.slots.pool import Slot, SlotPool
 from taskloop.app.slots.reset import setup
 from taskloop.contracts.ports import NewBead
@@ -61,7 +61,7 @@ def hold(env: SlotEnv, a: Any) -> int:
             env.say(f"BUSY: slot {a.name} {busy}")
             return 1
         until = env.now() + float(a.for_min if a.for_min is not None else 60) * 60
-        mark_held(env, b.id, a.why, until)
+        mark_held(env, b.id, a.why, until, gen=next_gen(b))
     env.event("slot-hold", "", slot=a.name, slot_bead=b.id, why=a.why, until=until, repo=env.repo)
     env.say(f"HELD {a.name} until {stamp(until)}: {a.why}")
     return 0

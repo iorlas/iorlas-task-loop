@@ -23,8 +23,10 @@ from taskloop.app.run.engine import Blocked, Engine
 from taskloop.app.slots import engine_lock
 from taskloop.app.track import verbs
 from taskloop.app.wire import slots as wslots
+from taskloop.contracts import fence
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.enums import AskStatus
+from taskloop.contracts.fence import SLOT_GEN
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdFailure, BeadPatch
 from taskloop.contracts.stores import AskStore
@@ -210,6 +212,7 @@ def run_any_slot(a: Any, repo: Any, cfg: Any, store: Any = None) -> Any:
         print(f"TAKEN: {why}")
         return {"v": 1, "outcome": "taken", "bead": a.id, "why": why}
     a.slot, a.worktree, sb = got
+    a.slot_gen = fence.gen_of(beadtools.peek(store or beadtools.bd_store(repo), sb), SLOT_GEN)  # the lease this run took
     os.environ["TASK_LOOP_SLOT_BEAD"] = sb  # run_in sees the slot as taken; the engine heartbeats it
     halting.RUN_SLOT["owned"] = a.slot  # a re-exec hands the slot on (TL_REEXEC) and its next run-task gives it back
     try:
@@ -217,7 +220,7 @@ def run_any_slot(a: Any, repo: Any, cfg: Any, store: Any = None) -> Any:
     finally:
         with _sigterm_ignored():
             os.environ.pop("TASK_LOOP_SLOT_BEAD", None)
-            wslots.release_slot(repo, a.slot, bead=a.id, mine=True, store=store)
+            wslots.release_slot(repo, a.slot, bead=a.id, mine=True, store=store, gen=a.slot_gen)
 
 
 def take_area(a: Any, repo: Any, cfg: Any, lock: Any, sb: Any = "", store: Any = None) -> Any:
@@ -316,6 +319,8 @@ def run_in(a: Any, repo: Any, cfg: Any, store: Any = None) -> Any:
         took, taken = _slot_taken(a, repo, wt, slot, sb, store)
         if taken:
             return taken
+        if took:
+            a.slot_gen = fence.gen_of(beadtools.peek(store or beadtools.bd_store(repo), took), SLOT_GEN)
         lock = engine_lock.EngineLock(wt, a.id, slot)
         busy = take_area(a, repo, cfg, lock, took or sb if slot else "", store)
         if busy:
@@ -331,7 +336,7 @@ def run_in(a: Any, repo: Any, cfg: Any, store: Any = None) -> Any:
                 engine_lock.LOCK = None
             if took:
                 os.environ.pop("TASK_LOOP_SLOT_BEAD", None)
-                wslots.release_slot(repo, slot, bead=a.id, mine=True, store=store)
+                wslots.release_slot(repo, slot, bead=a.id, mine=True, store=store, gen=getattr(a, "slot_gen", None))
 
 
 defer_stop = halting.stop_deferred  # no state: also before an Engine exists
@@ -350,8 +355,10 @@ def run_bead(a: Any, repo: Any, cfg: Any, wt: Any, store: Any = None) -> Any:
         if not a.dry_run and verbs.claim(a.id, wt, a.slot, store=store) != 0:
             # bd lets this session re-claim its own bead (a reopened one); another session's claim stops here
             return {"v": 1, "outcome": "taken", "bead": a.id, "why": "claimed by another session"}
+        claim = None if a.dry_run else fence.take(store or beadtools.bd_store(), a.id, ident.actor(),
+                                                  os.environ.get("TASK_LOOP_SLOT_BEAD", ""), getattr(a, "slot_gen", None))
         eng = Engine(a.id, wt, cfg, dry_run=a.dry_run, verbose=not getattr(a, "quiet", False),
-                     fresh=bool(getattr(a, "fresh", False)), store=store)
+                     fresh=bool(getattr(a, "fresh", False)), store=store, claim=claim)
         eng.stop_pending = bool(stop)
         say(f"engine log: {eng.log_path}")
     rc = eng.run()

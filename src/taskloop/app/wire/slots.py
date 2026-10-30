@@ -17,7 +17,7 @@ from taskloop.adapters.ident import actor, config_dir, hostname
 from taskloop.adapters.landlock import os_lock
 from taskloop.adapters.slot_git import RealSlotGit
 from taskloop.app.slots import line as slots_line
-from taskloop.app.slots.engine_lock import drop_engine_lock, engine_busy
+from taskloop.app.slots.engine_lock import drop_engine_lock, engine_busy, lock_pid
 from taskloop.app.slots.env import DEFAULT_PRIO, SlotEnv
 from taskloop.app.slots.pool import SlotPool
 from taskloop.app.track import trail
@@ -110,7 +110,8 @@ def slot_env(repo: str, store: Beads | None = None, cfg: SlotsConfig | None = No
         repo=repo, repo_key=repo_key(repo), cfg=cfg or profile_slots(repo), store=store or bd_store(repo), git=RealSlotGit(),
         tickets=FileTickets(cdir), cfgdir=cdir, actor=actor(), host=hostname(),
         take_lock=lambda: os_lock(config_dir() / "locks" / f"slot-take-{repo_key(repo)}.lock", f"pid {os.getpid()}"),
-        busy=engine_busy, drop_engine_lock=drop_engine_lock, event=event, say=print,
+        busy=engine_busy, lock_pid=lock_pid,
+        drop_engine_lock=lambda wt, pid: drop_engine_lock(wt, pid) if pid is not None else None, event=event, say=print,
         warn=lambda m: print(m, file=sys.stderr), pid=os.getpid(),
         run_setup=lambda argv, d: subprocess.run(argv, cwd=d, check=False).returncode,
         exclude_local=lambda r: exclude_local(r, ".slots/", TASK_EXCLUDE), now=now or trail.now)
@@ -151,10 +152,10 @@ def take_named_slot(repo: str, name: str, cfg: SlotsConfig, why: str, bead: str 
 
 
 def release_slot(repo: str, name: str, bead: str | None = None, mine: bool = False, force: bool = False,
-                 store: Beads | None = None) -> bool:
+                 store: Beads | None = None, gen: int | None = None) -> bool:
     """Frees slot `name` (see Slot.release); False when there is no such slot."""
     try:
-        return SlotPool(slot_env(repo, store)).slot(name).release(bead, mine=mine, force=force)
+        return SlotPool(slot_env(repo, store)).slot(name).release(bead, mine=mine, force=force, gen=gen)
     except SlotFail:
         return False
 

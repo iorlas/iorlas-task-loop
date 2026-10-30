@@ -41,9 +41,9 @@ class FakeBd(FakeBeads):
         self._try("update-meta" if patch.metadata is not None and bead == "tl-look" else "update", bead)
         super().update(bead, patch)
 
-    def close(self, bead, reason):
+    def close(self, bead, reason, if_assignee=""):
         self._try("close", bead)
-        super().close(bead, reason)
+        super().close(bead, reason, if_assignee)
 
     def create(self, new):
         self._try("create", "")

@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
 from taskloop.app.land.lander import Lander
+from taskloop.contracts import fence
 from taskloop.contracts.checks import CacheHit, CheckCacheEntry, CheckResult, CheckRun
 from taskloop.contracts.config import CheckSpec, EngineConfig
 from taskloop.contracts.ids import CheckId
@@ -64,6 +65,7 @@ class World:
             cfg=EngineConfig(base="origin/main", checks=[CheckSpec(id=CheckId("gate"), argv=["gate"], run="gate")], land=["git", "push"],
                              land_optimistic_tries=tries, max_fix_rounds=2, gate_timeout_min=1),
             wt=Path("/nonexistent"),
+            store=None, claim=fence.offline("t-1"),
             bead="t-1", dry=False, landed_sha="", pending_land_validation="", fixes=0, gate_log=None, run_dir=Path("run"), killed=False,
             steps=SimpleNamespace(begin=lambda *a, **k: None, outcome=lambda *a: None, move=lambda *a: None),
             newfiles=SimpleNamespace(quarantine_strays=lambda: None), checkout=SimpleNamespace(fetch=self.fetch),

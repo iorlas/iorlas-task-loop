@@ -36,6 +36,7 @@ def retrying[T](env: SlotEnv, what: str, call: Callable[[], T]) -> T:
 
 def ready_for(slot: Slot, bead: str, *, force: bool = False) -> None:
     env, d = slot.env, slot.dir
+    holder = env.lock_pid(d)  # the lock judged busy below is the one dropped
     busy = env.busy(d)  # never commit or switch branches under a running engine (2026-10-21, lifesim-5ar.7)
     hold = slot.hold()
     if not busy and hold:
@@ -43,7 +44,7 @@ def ready_for(slot: Slot, bead: str, *, force: bool = False) -> None:
     if busy and not force:
         raise SlotFail("busy", f"slot {slot.name}: {busy}; not reset (--force: reset anyway and drop the lock)")
     if busy:
-        env.drop_engine_lock(d)
+        env.drop_engine_lock(d, holder)
         env.say(f"FORCED: slot {slot.name} reset over: {busy}")
     keep_work(slot)
     try:

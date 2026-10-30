@@ -15,7 +15,7 @@ from taskloop.adapters import delegate as dl
 from taskloop.adapters.fake_clock import FakeClock  # noqa: F401  (re-exported: one place for a test to import its fakes from)
 from taskloop.app.release.seams import FixedRoute
 from taskloop.contracts.bead import Bead, Comment
-from taskloop.contracts.ports import BdFailure, BeadQuery, DoltPush
+from taskloop.contracts.ports import BdFailure, BeadPatch, BeadQuery, DoltPush
 
 _NO = object()
 
@@ -145,8 +145,12 @@ class FakeBeadStore:
     def heartbeat(self, bead):
         self.run(["heartbeat", bead])
 
-    def close(self, bead, reason):
-        self.run(["close", bead, "--reason", reason])
+    def close(self, bead, reason, if_assignee=""):
+        if if_assignee:
+            self.update(bead, BeadPatch(status="closed", if_assignee=if_assignee))
+            self.add_comment(bead, "Closed: " + reason)
+        else:
+            self.run(["close", bead, "--reason", reason])
 
     def add_comment(self, bead, text):
         self.run(["comments", "add", bead, text])

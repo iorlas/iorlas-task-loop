@@ -527,6 +527,23 @@ class Release(unittest.TestCase):
         self.assertEqual(self.release("fix").returncode, 0)
         self.assertTrue(self.last()["ok"])
 
+    def test_a_bead_with_an_open_child_is_refused_before_anything_is_pushed(self):
+        """tl-t7i.5 was closed by a release while its other half was open: --bead names finished work."""
+        self.world.store.put({"id": "tl-kid", "title": "other half", "status": "open", "parent": "tl-half"})
+        before = self.git("rev-parse", "origin/main", cwd=self.repo)
+        r = self.release("fix", "--bead", "tl-half", "--reason", "done")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("tl-half has open children (tl-kid)", r.stderr)
+        self.assertEqual(self.git("rev-parse", "origin/main", cwd=self.repo), before)
+        self.assertEqual(self.world.store.said("close"), [])
+        self.assertEqual(self.tags(self.origin), [])
+
+    def test_a_bead_whose_children_are_closed_is_released_and_closed(self):
+        self.world.store.put({"id": "tl-kid", "title": "other half", "status": "closed", "parent": "tl-half"})
+        r = self.release("fix", "--bead", "tl-half", "--reason", "done")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(len(self.world.store.said("close", "tl-half")), 1)
+
 
 if __name__ == "__main__":
     unittest.main()
