@@ -41,9 +41,28 @@ def remove_tree(repo: str | Path, path: Path, sh: Shell = REAL) -> str:
     return "" if r.returncode == 0 else (r.stderr.strip().splitlines() or ["git worktree remove failed"])[-1]
 
 
-def drop_branch(repo: str | Path, branch: str, sh: Shell = REAL) -> list[str]:
-    """After a release: the worktrees on `branch` (never the main checkout) and then the local branch. -> one line per thing that
-    was kept, with why (empty: all gone). Nothing is forced, so a tree with changes keeps the branch too."""
+def tip_of(repo: str | Path, branch: str, sh: Shell = REAL) -> str:
+    """The oid a local branch is at now, "" when there is none."""
+    return sh.run(["git", "rev-parse", "--verify", "-q", "refs/heads/" + branch], repo, check=False).stdout.strip()
+
+
+def delete_branch_at(repo: str | Path, branch: str, oid: str, sh: Shell = REAL) -> str:
+    """Delete a local branch only while it is still at `oid`, the commit that was checked (compare and delete: a commit added since
+    keeps the branch). "" when it is gone, else why git kept it."""
+    r = sh.run(["git", "update-ref", "-d", "refs/heads/" + branch, oid], repo, check=False)
+    return "" if r.returncode == 0 else (r.stderr.strip().splitlines() or ["git update-ref -d failed"])[-1].removeprefix("error: ")
+
+
+def delete_remote_at(repo: str | Path, ref: str, oid: str, sh: Shell = REAL) -> str:
+    """Delete origin's `ref` (refs/heads/...) only while it is at `oid`; the push is refused when the ref moved. "" or why it stayed."""
+    r = sh.run(["git", "push", f"--force-with-lease={ref}:{oid}", "origin", ":" + ref], repo, check=False)
+    return "" if r.returncode == 0 else (r.stderr.strip().splitlines() or ["git push failed"])[-1]
+
+
+def drop_branch(repo: str | Path, branch: str, tip: str, sh: Shell = REAL) -> list[str]:
+    """After a release: the worktrees on `branch` (never the main checkout) and then the local branch, but only while it is still at
+    `tip`, the commit on_base was checked on. -> one line per thing that was kept, with why (empty: all gone). Nothing is forced, so a
+    tree with changes keeps the branch too."""
     if branch in ("main", "master"):
         return []
     main = trees(repo, sh)[:1]
@@ -55,7 +74,7 @@ def drop_branch(repo: str | Path, branch: str, sh: Shell = REAL) -> list[str]:
                 kept.append(f"worktree {t.path} kept: {why}")
     if kept:
         return [*kept, f"branch {branch} kept: a worktree still has it"]
-    if sh.run(["git", "rev-parse", "--verify", "-q", "refs/heads/" + branch], repo, check=False).returncode:
+    if not tip_of(repo, branch, sh):
         return []  # no local branch (a remote one was replayed)
-    r = sh.run(["git", "branch", "-D", branch], repo, check=False)  # -D: a replayed branch is no ancestor, and on_base was checked
-    return [] if r.returncode == 0 else [f"branch {branch} kept: " + (r.stderr.strip().splitlines() or ["git branch -D failed"])[-1]]
+    why = delete_branch_at(repo, branch, tip, sh)  # a replayed branch is no ancestor; on_base was checked at `tip`, so only `tip` goes
+    return [f"branch {branch} kept: {why}"] if why else []

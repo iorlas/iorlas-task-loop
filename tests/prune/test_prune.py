@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
 from taskloop.app.prune import branches, runs, trees, verb
+from taskloop.app.run import layout
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.config import LoopConfig
 from taskloop.contracts.paths import ConfigDir
@@ -97,6 +98,20 @@ class RunData(unittest.TestCase):
         self.assertEqual(len(self.left()), 3)
         self.assertTrue(self.cfg.engine_log("x-1-20260101-000000").exists())
         self.assertTrue(any("would remove" in ln and "x-1-20260101-000000" in ln for ln in out))
+
+    def test_the_real_run_deletes_exactly_the_planned_list_from_one_scan(self):
+        scans = []
+        real_scan = layout.prune_run_dirs
+
+        def scan(runs, days, exempt=(), dry_run=False):
+            scans.append(dry_run)
+            gone = real_scan(runs, days, exempt, dry_run)
+            self.run_of("x-4", 30)  # an old run appears after the scan: it is not in the plan, so it stays
+            return gone
+        with mock.patch.object(layout, "prune_run_dirs", scan):
+            self.prune(Store())
+        self.assertEqual(scans, [True])
+        self.assertEqual(self.left(), ["x-3-20260101-000000", "x-4-20260101-000000"])
 
     def test_old_saved_suite_logs_go_and_last_json_stays(self):
         rel = self.cfg.root / "releases"

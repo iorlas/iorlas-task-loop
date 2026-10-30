@@ -71,13 +71,18 @@ def prune_run_logs(cfg: ConfigDir, now: float, retain: float = RETAIN, exempt: C
             gone.append(log)
             if dry_run:
                 continue
-            shutil.rmtree(cfg.live_dir(log.stem), ignore_errors=True)
-            log.with_suffix(".stderr").unlink(missing_ok=True)
-            cfg.run_request(log.stem).unlink(missing_ok=True)  # an owner's request no run took (the run's close drops it too)
-            cfg.run_request_lock(log.stem).unlink(missing_ok=True)
-            locks.holder_file(cfg.run_request_lock(log.stem)).unlink(missing_ok=True)
-            log.unlink()
+            drop_run_log(cfg, log)
     return gone
+
+
+def drop_run_log(cfg: ConfigDir, log: Path) -> None:
+    """One engine log with its .live/ folder, .stderr and an owner's request no run took (the run's close drops it too)."""
+    shutil.rmtree(cfg.live_dir(log.stem), ignore_errors=True)
+    log.with_suffix(".stderr").unlink(missing_ok=True)
+    cfg.run_request(log.stem).unlink(missing_ok=True)
+    cfg.run_request_lock(log.stem).unlink(missing_ok=True)
+    locks.holder_file(cfg.run_request_lock(log.stem)).unlink(missing_ok=True)
+    log.unlink()
 
 
 def fresh_stem(bead: str, logs: Path) -> str:

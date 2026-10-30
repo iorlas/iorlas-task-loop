@@ -7,6 +7,7 @@ import tempfile
 import time
 import unittest
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 from typing import cast
 
@@ -14,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401
 
 from taskloop.app.prune import branches, trees, verb
+from taskloop.app.release.shell import REAL, Shell
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.config import LoopConfig
 from taskloop.contracts.paths import ConfigDir
@@ -27,6 +29,18 @@ def git(cwd, *args):
     r = subprocess.run(["git", *args], cwd=str(cwd), capture_output=True, text=True, env={**os.environ, **GIT_ENV}, check=False)
     assert r.returncode == 0, (args, r.stderr)
     return r.stdout.strip()
+
+
+def racing(verb: str, hook: Callable[[], None]) -> Shell:
+    """The real shell, except that just before the first git command with `verb` (the delete) `hook` runs: a commit lands in between."""
+    fired: list[int] = []
+
+    def run(cmd, cwd, check=True):
+        if verb in cmd and not fired:
+            fired.append(1)
+            hook()
+        return REAL.run(cmd, cwd, check)
+    return replace(REAL, run=run)
 
 
 class Store:
@@ -132,6 +146,21 @@ class Trees(unittest.TestCase):
         self.assertEqual(git(self.repo, "for-each-ref", "--format=%(refname:short)", "refs/heads/release/").split(), ["release/open"])
         self.assertTrue(d.exists())
 
+    def test_a_commit_added_to_a_release_branch_after_the_check_survives_the_prune(self):
+        self.tree("rel", branch="release/merged")
+        git(self.repo, "worktree", "remove", str(self.build / "rel"))
+        keep = []
+
+        def land_one_more():
+            git(self.repo, "checkout", "-q", "release/merged")
+            self.commit(self.repo, "late.txt")
+            keep.append(git(self.repo, "rev-parse", "HEAD"))
+            git(self.repo, "checkout", "-q", "main")
+        removed, kept = trees.prune_trees(self.build, [str(self.repo)], 14, self.later, False, racing("update-ref", land_one_more))
+        self.assertEqual(removed, [])
+        self.assertTrue(any("release/merged" in k for k in kept))
+        self.assertEqual(git(self.repo, "rev-parse", "release/merged"), keep[0])
+
     def test_a_branch_whose_patches_were_replayed_onto_main_goes(self):
         git(self.repo, "checkout", "-q", "-b", "release/replayed")
         self.commit(self.repo, "feature.txt", "f")
@@ -170,6 +199,7 @@ class Landed(unittest.TestCase):
     """Closed beads' local task/* branches: `git branch -d`; origin's task/<bead> of a landed one: `git push origin --delete`."""
 
     commit = cast(Callable[..., None], Trees.commit)
+    root: Path
     origin: Path
     repo: Path
     build: Path
@@ -201,7 +231,7 @@ class Landed(unittest.TestCase):
         self.assertEqual(sorted(r.split()[1] for r in removed), ["task/a-1", "task/custom"])
         self.assertEqual(sorted(self.heads()), ["claude/a-1", "main", "task/a-2", "task/a-3", "task/a-4", "task/a-9", "worker/a-1"])
         why = {k.split()[1].rstrip(":"): k for k in kept}
-        self.assertIn("not fully merged", why["task/a-3"])
+        self.assertIn("not merged", why["task/a-3"])
         self.assertIn("checked out in a worktree", why["task/a-4"])
         self.assertIn("not closed", why["task/a-2"])
         self.assertIn("not closed", why["task/a-9"])
@@ -239,6 +269,34 @@ class Landed(unittest.TestCase):
         removed, _ = self.prune(dry_run=True)
         self.assertIn("refs/heads/task/a-1", git(self.origin, "for-each-ref", "--format=%(refname)"))
         self.assertTrue(any(r.startswith("would remove remote branch task/a-1") for r in removed))
+
+    def test_a_commit_added_to_a_task_branch_after_the_check_survives_the_prune(self):
+        def late():
+            git(self.repo, "checkout", "-q", "task/a-1")
+            self.commit(self.repo, "late.txt")
+            git(self.repo, "checkout", "-q", "main")
+        sh = racing("update-ref", late)
+        removed, kept = branches.prune_branches([str(self.repo)], lambda r: cast(Beads, self.store()), False, sh)
+        self.assertEqual(removed, [])
+        self.assertIn("task/a-1", self.heads())
+        self.assertTrue(any(k.startswith("branch task/a-1") for k in kept))
+
+    def test_a_commit_pushed_to_the_remote_task_branch_after_the_check_survives_the_prune(self):
+        git(self.repo, "push", "-q", "origin", "task/a-1")
+        git(self.repo, "checkout", "-q", "main")
+        self.land_commit("a-1")
+        other = self.root / "other"
+        git(self.root, "clone", "-q", str(self.origin), str(other))
+
+        def late():
+            git(other, "checkout", "-q", "task/a-1")
+            self.commit(other, "late.txt")
+            git(other, "push", "-q", "origin", "task/a-1")
+        sh = racing("push", late)
+        removed, kept = branches.prune_branches([str(self.repo)], lambda r: cast(Beads, self.store()), False, sh)
+        self.assertEqual([r for r in removed if r.startswith("remote")], [])
+        self.assertIn("refs/heads/task/a-1", git(self.origin, "for-each-ref", "--format=%(refname)"))
+        self.assertTrue(any(k.startswith("remote branch task/a-1") for k in kept))
 
     def test_the_code_never_forces_a_branch_delete(self):
         src = Path(branches.__file__).read_text(encoding="utf-8")

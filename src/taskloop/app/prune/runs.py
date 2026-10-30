@@ -2,6 +2,7 @@
 event log trimmed to it, and nothing of a bead that is still open or parked."""
 import contextlib
 import os
+import shutil
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -41,7 +42,7 @@ def open_beads(repos: list[str], store_of: Callable[[str], Beads]) -> tuple[set[
 
 def prune_runs(cfg: ConfigDir, days: float, exempt: set[str], now: float, dry_run: bool) -> list[Gone]:
     """Run folders, check-round logs and engine logs older than `days` (a bead in `exempt` keeps all of them), then the event log.
-    -> what went, or with `dry_run` what would."""
+    One scan makes the plan; the dry run prints it and the real run deletes exactly it. -> what went, or with `dry_run` what would."""
     runs = cfg.root / "runs"
     dirs = layout.prune_run_dirs(runs, days, exempt, True)
     rounds = [f for f in layout.prune_check_rounds(runs, days, exempt, True) if not any(d in f.parents for d in dirs)]
@@ -49,10 +50,14 @@ def prune_runs(cfg: ConfigDir, days: float, exempt: set[str], now: float, dry_ru
     suites = [f for f in cfg.suite_logs() if f.stat().st_mtime < now - days * 86400]
     found = [Gone(p, size_of(p)) for p in [*dirs, *rounds, *logs, *suites] if p.exists()]
     if not dry_run:
+        for d in dirs:
+            shutil.rmtree(d, ignore_errors=True)
+        for f in rounds:
+            f.unlink(missing_ok=True)
+        for log in logs:
+            with contextlib.suppress(OSError):
+                layout.drop_run_log(cfg, log)
         for f in suites:
             f.unlink(missing_ok=True)
-        layout.prune_run_dirs(runs, days, exempt)
-        layout.prune_check_rounds(runs, days, exempt)
-        layout.prune_run_logs(cfg, now, days * 86400, exempt)
         trail.prune_events(days)
     return found

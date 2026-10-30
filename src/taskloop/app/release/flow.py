@@ -98,7 +98,7 @@ def drop_landed_branch(req: Request, repo: Path, where: Path, tip: str) -> None:
     patch for patch. Whatever git keeps (changes, a lock) stays and is said; this never fails a release."""
     if not (req.from_branch and tip and tidy.on_base(where, tip)):
         return
-    kept = tidy.drop_branch(repo, req.from_branch)
+    kept = tidy.drop_branch(repo, req.from_branch, tip)
     for line in kept:
         say(line)
     if not kept:

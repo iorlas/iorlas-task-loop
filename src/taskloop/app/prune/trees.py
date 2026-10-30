@@ -70,17 +70,19 @@ def prune_trees(build: Path, repos: list[str], days: float, now: float, dry_run:
 
 
 def branches(repo: Path, days: float, now: float, dry_run: bool, sh: Shell, removed: list[str], kept: list[str]) -> None:
+    """One plan (each release/* branch with the oid it was checked at and why it stays), then the plan: the dry run prints it, the real
+    run deletes exactly the branches without a reason, each only while still at its oid."""
     held = {t.branch for t in tidy.trees(repo, sh)}
-    out = sh.run(["git", "for-each-ref", "--format=%(refname:short)", "refs/heads/release/"], repo, check=False).stdout
-    for b in out.split():
-        ts = sh.run(["git", "log", "-1", "--format=%ct", b], repo, check=False).stdout.strip()
-        why = ("checked out in a worktree" if b in held else "" if tidy.on_base(repo, b, sh) else "not merged into origin/main")
+    out = sh.run(["git", "for-each-ref", "--format=%(refname:short) %(objectname)", "refs/heads/release/"], repo, check=False).stdout
+    plan: list[tuple[str, str, str]] = []
+    for row in out.splitlines():
+        b, _, oid = row.partition(" ")
+        ts = sh.run(["git", "log", "-1", "--format=%ct", oid], repo, check=False).stdout.strip()
+        why = ("checked out in a worktree" if b in held else "" if tidy.on_base(repo, oid, sh) else "not merged into origin/main")
         if not why and (not ts.isdigit() or now - int(ts) < days * 86400):
             why = f"its last commit is under {days:g} days old"
-        if not why and not dry_run:
-            r = sh.run(["git", "branch", "-D", b], repo, check=False)  # -D: a replayed branch is no ancestor; on_base said it is on main
-            why = "" if r.returncode == 0 else (r.stderr.strip().splitlines() or ["git branch -D failed"])[-1]
+        plan.append((b, oid, why))
+    for b, oid, reason in plan:
+        why = reason or ("" if dry_run else tidy.delete_branch_at(repo, b, oid, sh))  # a commit added since on_base keeps the branch
         line = f"{'would remove ' if dry_run and not why else ''}branch {b} ({repo.name})"
         (kept if why else removed).append(line + (f": {why}" if why else ""))
-
-
