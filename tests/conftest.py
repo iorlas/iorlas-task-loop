@@ -34,7 +34,7 @@ WORKER_MB = int(os.environ.get("TL_WORKER_MB") or 2048)
 # Seconds a test's call may take, by kind, set from measured runs under 8 xdist workers (2026-10-30): logic max 1.4 s (the gitsim engine
 # tests; 311 of 2261 pass 0.2 s, the target the limit comes down to as they speed up), real max 4.4 s, e2e max 2.5 s.
 # TL_TIME_SCALE multiplies them.
-LIMITS_S = {"logic": 2.0, "real": 15.0, "e2e": 30.0}
+LIMITS_S = {"logic": 2.0, "real": 15.0, "e2e": 30.0, "live": 3600.0}
 RULES_LIMIT_S = 15.0
 TESTS_DIR = Path(__file__).resolve().parent
 
@@ -45,8 +45,8 @@ def kind_of(item) -> str:
     if TESTS_DIR not in here.parents:  # this file loaded as a plugin (-p conftest) into a tree that is not ours
         return "logic"
     parts = here.relative_to(TESTS_DIR).parts
-    if parts[0] == "e2e":
-        return "e2e"
+    if parts[0] in ("e2e", "live"):  # live (tests/live, explicit-only) runs the real pieces: no guard, no limit
+        return parts[0]
     func = getattr(item, "obj", None)
     if "real" in parts[:-1] or item.get_closest_marker("real_proc") or getattr(func, "real_git", None):
         return "real"
@@ -59,7 +59,7 @@ def pytest_collection_modifyitems(items):
             item.add_marker(pytest.mark.serial)
         kind = kind_of(item)
         item.stash[KIND] = kind
-        if kind != "logic":
+        if kind not in ("logic", "live"):  # live tests carry their own marker
             item.add_marker(getattr(pytest.mark, kind))
 
 
