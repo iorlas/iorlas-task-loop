@@ -40,9 +40,8 @@ MIN = 60.0
 ROUTE = textwrap.dedent('''
     import json, os, subprocess, sys, time
     d, mode = sys.argv[sys.argv.index("--cwd") + 1], os.environ.get("FAKE_MODE", "")
-    body = "import os, signal, time\\n" + ("signal.signal(signal.SIGTERM, signal.SIG_IGN)\\n" if mode == "stubborn" else "") + \\
-           "while not os.path.exists(%r): time.sleep(0.02)\\n" % os.path.join(d, "done")
-    w = subprocess.Popen([sys.executable, "-c", body], start_new_session=True)
+    body = ("trap '' TERM\\n" if mode == "stubborn" else "") + "while [ ! -e '%s' ]; do sleep 0.02; done\\n" % os.path.join(d, "done")
+    w = subprocess.Popen(["sh", "-c", body], start_new_session=True)  # a shell worker: the interpreter start is not what is tested
     open(os.path.join(d, "w.pid"), "w").write(str(w.pid))
     live = os.environ.get("DELEGATE_LIVE_FILE")
     if live:
@@ -61,9 +60,6 @@ ROUTE = textwrap.dedent('''
 ''')
 
 
-pytestmark = real_proc("starts real worker process groups and measures how long a writer stays idle")
-
-
 class NoEngineSideSilence(unittest.TestCase):
     def test_the_engine_has_no_warn_stop_cap_timer_of_its_own(self):
         self.assertFalse(hasattr(runner, "Silence") or hasattr(runner, "WATCH_S"))
@@ -78,6 +74,7 @@ class NoEngineSideSilence(unittest.TestCase):
                 load({"engine": {key: 15}})
 
 
+@real_proc("a real route.py with a worker in its own session: the live file read while it runs, the wall-limit kill of its group")
 @unittest.skipUnless(POSIX, "process groups")
 class StreamRunnerCall(unittest.TestCase):
     def setUp(self):
@@ -104,17 +101,13 @@ class StreamRunnerCall(unittest.TestCase):
     def worker_pid(self):
         return int((self.d / "w.pid").read_text())
 
-    def test_the_worker_is_read_from_the_live_files_first_line(self):
+    def test_the_worker_is_read_from_the_live_files_first_line_and_a_quiet_one_is_not_stopped(self):
+        """Silence is delegate's: the engine's runner stops a call only at the wall limit or a stop of the run."""
         seen = []
-        r, go = self.run_route("chatty", on_worker=seen.append, CHAT_UNTIL=str(time.time() + 0.3))
-        go()
+        r, go = self.run_route("chatty", on_worker=seen.append, CHAT_UNTIL=str(time.time() + 0.4))
+        done = go()
         self.assertEqual((must(r.worker).pid, must(r.worker).run_id), (self.worker_pid(), "run1"))
         self.assertEqual(seen, [r.worker])
-
-    def test_a_quiet_worker_is_not_stopped_by_the_engine_before_its_wall_limit(self):
-        """Silence is delegate's: the engine's runner stops a call only at the wall limit or a stop of the run."""
-        r, go = self.run_route("chatty", CHAT_UNTIL=str(time.time() + 0.4))
-        done = go()
         self.assertEqual(done.returncode, 0)
         self.assertEqual(r.stop, {})
 
