@@ -424,10 +424,14 @@ class ReposStore(JsonStore[ReposIndex]):
 
     def index(self) -> ReposIndex:
         """The index (empty when the file is missing). A file in another version is an error (ValueError), never read as empty."""
-        idx = self.read()
-        if idx is None and self.path.exists():
-            raise ValueError(f"{self.path} is not a repos index of this version: delete it; every tl process registers its repo again")
-        return idx or ReposIndex()
+        try:
+            text = self.path.read_text(encoding="utf-8")
+        except FileNotFoundError:  # one read decides: a check after it races the writer that creates the file
+            return ReposIndex()
+        try:
+            return wire.load(ReposIndex, json.loads(text))
+        except ValueError:
+            raise ValueError(f"{self.path} is not a repos index of this version: delete it; every tl process registers its repo again") from None
 
     def known(self) -> list[str]:
         """The repo paths, oldest first."""
