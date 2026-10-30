@@ -39,6 +39,7 @@ from taskloop.app.wire import slots as wslots
 from taskloop.contracts import paths
 from taskloop.contracts.config import RepoProfile
 from taskloop.contracts.enums import LockWhat
+from taskloop.contracts.landed import LandedStore
 from taskloop.contracts.loop import LoopState
 from taskloop.contracts.ports import Beads
 from taskloop.domain import outcome as oc
@@ -111,10 +112,14 @@ def storm(repo: str, now: Callable[[], float] = trail.now) -> Storm | None:
 
 
 def landed_on_base(repo: str, store: Beads, wt: str, bead_id: str) -> bool:
-    """True when the bead's land commit (titled `... (<id>)`) is the tip of its branch and already on the base."""
+    """True when the bead's landed record names a sha that is on the base. LEGACY, only for a bead with no record (landed before
+    0.23.179): its land commit (titled `... (<id>)`) is the tip of its branch and already on the base; this can go with them."""
     if not os.path.isdir(wt):
         return False
     base = wslots.load_cfg(repo).base
+    rec = LandedStore(paths.ConfigDir(ident.config_dir())).get(bead_id)
+    if rec is not None:
+        return run_git(wt, "merge-base", "--is-ancestor", rec.sha, base, capture_output=True).returncode == 0
     branch = getattr(beadtools.peek(store, bead_id), "metadata", {}).get("branch") or "task/" + bead_id
     gitrepo.fetch(wt)
     tip = gitrepo.git("rev-parse", "--verify", "-q", "refs/heads/" + branch, cwd=wt)

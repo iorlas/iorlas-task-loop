@@ -9,6 +9,8 @@ from pathlib import Path
 from taskloop.app.prune.trees import main_repo
 from taskloop.app.release import tidy
 from taskloop.app.release.shell import REAL, Shell
+from taskloop.contracts.landed import LandedStore
+from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdFailure, BeadQuery, Beads
 from taskloop.domain.report.matchers import land_bead
 
@@ -39,7 +41,8 @@ class Step:
         return f"{'remote ' if self.remote else ''}branch {self.ref.removeprefix('refs/heads/')} ({self.repo.name})"
 
 
-def plan_branches(repos: list[str], store_of: Callable[[str], Beads], sh: Shell, kept: list[str]) -> list[Step]:
+def plan_branches(repos: list[str], store_of: Callable[[str], Beads], sh: Shell, kept: list[str],
+                  cfg: ConfigDir | None = None) -> list[Step]:
     """The plan for the task/* refs of the main checkouts of `repos`: computed once; the dry run prints it, the real run executes it."""
     steps: list[Step] = []
     for repo in sorted({r for p in repos if (r := main_repo(Path(p)))}):
@@ -50,7 +53,7 @@ def plan_branches(repos: list[str], store_of: Callable[[str], Beads], sh: Shell,
         except (BdFailure, SystemExit, OSError) as e:
             kept.append(f"task branches of {repo.name}: bd did not answer ({str(getattr(e, 'error', e))[:80]})")
             continue
-        steps += remote_steps(repo, sorted(set(closed.values())), sh)
+        steps += remote_steps(repo, sorted(set(closed.values())), sh, cfg)
         held = {t.branch for t in tidy.trees(repo, sh)}
         merged = set(sh.run(["git", "branch", "--merged", "HEAD", "--format=%(refname:short) %(objectname)"], repo, check=False)
                      .stdout.splitlines())
@@ -65,12 +68,13 @@ def plan_branches(repos: list[str], store_of: Callable[[str], Beads], sh: Shell,
     return steps
 
 
-def prune_branches(repos: list[str], store_of: Callable[[str], Beads], dry_run: bool, sh: Shell = REAL) -> tuple[list[str], list[str]]:
+def prune_branches(repos: list[str], store_of: Callable[[str], Beads], dry_run: bool, sh: Shell = REAL,
+                   cfg: ConfigDir | None = None) -> tuple[list[str], list[str]]:
     """(removed lines, kept lines with the reason) for the task/* branches of the main checkouts of `repos`. Each ref goes only while
     it is still at the oid the plan checked."""
     removed: list[str] = []
     kept: list[str] = []
-    for st in plan_branches(repos, store_of, sh, kept):
+    for st in plan_branches(repos, store_of, sh, kept, cfg):
         why = st.why
         if not why and not dry_run:
             gone = tidy.delete_remote_at if st.remote else tidy.delete_branch_at
@@ -80,13 +84,17 @@ def prune_branches(repos: list[str], store_of: Callable[[str], Beads], dry_run: 
     return removed, kept
 
 
-def landed(repo: Path, bead: str, sh: Shell) -> bool:
-    """The bead's land commit (subject ends `(<bead>)`) is on the checkout's HEAD."""
+def landed(repo: Path, bead: str, sh: Shell, cfg: ConfigDir | None = None) -> bool:
+    """The bead's landed record names a sha that is on the checkout's HEAD. LEGACY, only for a bead with no record (landed before
+    0.23.179): its land commit (subject ends `(<bead>)`, not a revert) is on HEAD; this can go when no such bead is left."""
+    rec = LandedStore(cfg or ConfigDir()).get(bead)
+    if rec is not None:
+        return sh.run(["git", "merge-base", "--is-ancestor", rec.sha, "HEAD"], repo, check=False).returncode == 0
     subject = sh.run(["git", "log", "-1", "--format=%s", "--fixed-strings", f"--grep=({bead})", "HEAD"], repo, check=False).stdout.strip()
     return land_bead(subject) == bead
 
 
-def remote_steps(repo: Path, beads: list[str], sh: Shell) -> list[Step]:
+def remote_steps(repo: Path, beads: list[str], sh: Shell, cfg: ConfigDir | None = None) -> list[Step]:
     """origin's task/<bead> of each closed, landed bead, at the oid ls-remote showed (one ls-remote for the lot; an origin that does
     not answer plans nothing). The oid is known here: a ref that holds commits HEAD lacks (when git has them) stays."""
     ls = sh.run(["git", "ls-remote", "--heads", "origin", f"refs/heads/{PREFIX}*"], repo, check=False)
@@ -94,7 +102,7 @@ def remote_steps(repo: Path, beads: list[str], sh: Shell) -> list[Step]:
     steps: list[Step] = []
     for bead in beads:
         ref = f"refs/heads/{PREFIX}{bead}"
-        if ref not in there or not landed(repo, bead, sh):
+        if ref not in there or not landed(repo, bead, sh, cfg):
             continue
         oid = there[ref]
         known = sh.run(["git", "cat-file", "-e", oid + "^{commit}"], repo, check=False).returncode == 0

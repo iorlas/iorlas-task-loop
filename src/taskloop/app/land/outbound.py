@@ -18,6 +18,14 @@ def land_argv(land: list[str]) -> list[str]:
     return [*land[:2], "--no-verify", *land[2:]] if is_push(land) and "--no-verify" not in land else list(land)
 
 
+def pin_head(land: list[str], sha: str) -> list[str]:
+    """A `git push` refspec that names HEAD (`HEAD`, `HEAD:main`, `+HEAD:main`) names `sha` instead: what is pushed is the commit
+    resolved before the push, whatever HEAD does meanwhile. Any other command is left as it is."""
+    if not is_push(land):
+        return list(land)
+    return [*land[:2], *(a.replace("HEAD", sha, 1) if a.lstrip("+").partition(":")[0] == "HEAD" else a for a in land[2:])]
+
+
 def target(land: list[str]) -> tuple[str, list[str]] | None:
     """(remote, the refs pushed) from a `git push` argv; HEAD:main pushes HEAD. None for a custom command."""
     if not is_push(land):

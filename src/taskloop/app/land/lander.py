@@ -8,7 +8,7 @@ from typing import Any
 
 from taskloop.app.checks import evidence as check_evidence
 from taskloop.app.land.gate import Gate, Problem
-from taskloop.app.land.outbound import Outbound, land_argv
+from taskloop.app.land.outbound import Outbound, land_argv, pin_head
 from taskloop.contracts import log as rec
 from taskloop.domain.land.matchers import Push
 from taskloop.domain.lanes import policy as lp
@@ -238,10 +238,12 @@ class Lander:
         e = self.e
         with e.stop_deferred() as stop:  # a push half done is no state to stop in: finish it, then stop
             lrc, ltail = self.out.lfs_push()  # the pushed ref's LFS objects first: the push must not point at objects origin lacks
-            rc, tail = e.sh(land_argv(e.cfg.land), pin=True) if lrc == 0 else (lrc, ltail)  # no repo hook runs: --no-verify
-            sha = ""
-            if rc == 0:
-                e.landed_sha = sha = e.git("rev-parse", "HEAD")
+            sha = e.git("rev-parse", "HEAD")  # the commit pushed, named in the refspec
+            rc, tail = e.sh(land_argv(pin_head(e.cfg.land, sha)), pin=True) if lrc == 0 else (lrc, ltail)  # no repo hook runs: --no-verify
+            if rc != 0:
+                sha = ""
+            else:
+                e.landed_sha = sha
                 e.record_land(sha)
         if rc == 0:
             e.steps.outcome("landed", sha[:12])

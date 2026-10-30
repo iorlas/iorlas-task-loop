@@ -2,13 +2,18 @@
 from collections.abc import Callable
 from typing import Any
 
+from taskloop.adapters import ident
 from taskloop.adapters.gitenv import run_git
 from taskloop.app.report.inputs import bases_of, bead_status, git, repo_traces
+from taskloop.contracts.landed import LandedStore
+from taskloop.contracts.paths import ConfigDir
 from taskloop.domain.report import matchers
 
 
-def _lands(repo: str, bases: list[str], traces: list[dict[str, Any]]) -> dict[str, list[int]]:
-    """bead -> times its land reached the base."""
+def _legacy_lands(repo: str, bases: list[str], traces: list[dict[str, Any]]) -> dict[str, list[int]]:
+    """LEGACY (a bead landed before landed/<bead>.json, 0.23.179): bead -> times its land reached the base, by the subject
+    '... (<bead>)' (committer time, which a rebase rewrites) and the sha a trace recorded. Used only for a bead with no record;
+    it can go when no such bead is left."""
     lands: dict[str, list[int]] = {}
     for ln in git(repo, "log", "--format=%ct %s", *bases).splitlines():
         t, _, subj = ln.partition(" ")
@@ -21,6 +26,17 @@ def _lands(repo: str, bases: list[str], traces: list[dict[str, Any]]) -> dict[st
                            capture_output=True).returncode == 0 for b in bases):
             lands.setdefault(str(r.get("bead")), []).append(r.get("ended") or 0)
     return lands
+
+
+def _lands(repo: str, bases: list[str], store: LandedStore, legacy: dict[str, list[int]]) -> Callable[[str], list[float]]:
+    """bead -> times its land reached the base: the landed record when it has one and its sha is on a base; else the legacy table."""
+    def of(bead: str) -> list[float]:
+        rec = store.get(bead)
+        if rec is None:
+            return list(legacy.get(bead, []))
+        reached = any(run_git(repo, "merge-base", "--is-ancestor", rec.sha, b, capture_output=True).returncode == 0 for b in bases)
+        return [rec.t] if reached else []
+    return of
 
 
 def _pending_class(bead: str, st: str | None, ct: int, traces: list[dict[str, Any]]) -> dict[str, str]:
@@ -38,10 +54,10 @@ def _pending_class(bead: str, st: str | None, ct: int, traces: list[dict[str, An
 
 
 def lost_work(repo: str, base: str, since: float | None = None, status_of: Callable[[str], str | None] | None = None,
-              traces: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
+              traces: list[dict[str, Any]] | None = None, cfg: ConfigDir | None = None) -> list[dict[str, Any]]:
     """Every commit on a task/<bead> or wip/* branch that is not on the base, classed:
-    landed     its patch is on the base (git cherry), or a land of its bead came after it: a base commit titled
-               '... (<bead>)' or the land sha a trace recorded, on the base (squash lands are no ancestors);
+    landed     its patch is on the base (git cherry), or a land of its bead came after it: the bead's landed record (its sha on
+               the base; legacy beads without one: a base commit titled '... (<bead>)' or a trace's land sha);
     reclaimed  a later run of the bead started after it (the engine continues the branch);
     superseded it is on a task/<bead>-stale-<time> branch --fresh set aside: the bead started again on the base;
     pending    its bead is still open, blocked or in progress: the next run continues the branch;
@@ -50,7 +66,7 @@ def lost_work(repo: str, base: str, since: float | None = None, status_of: Calla
     bases = bases_of(repo, base) or [base]
     status_of = status_of or (lambda b: bead_status(b, repo))
     traces = repo_traces(repo) if traces is None else traces
-    lands = _lands(repo, bases, traces)
+    lands = _lands(repo, bases, LandedStore(cfg or ConfigDir(ident.config_dir())), _legacy_lands(repo, bases, traces))
     rows: list[dict[str, Any]] = []
     statuses: dict[str, str | None] = {}
     refs = git(repo, "for-each-ref", "--format=%(refname:short)", "refs/heads/task/", "refs/heads/wip/").splitlines()
@@ -68,7 +84,7 @@ def lost_work(repo: str, base: str, since: float | None = None, status_of: Calla
             row = {"branch": ref, "bead": bead, "sha": sha, "time": ct, "subject": subj}
             if sha in upstream:
                 row.update({"class": "landed", "why": f"its patch is on {bases[0]}"})
-            elif bead and any(t >= ct for t in lands.get(bead, [])):
+            elif bead and any(t >= ct for t in lands(bead)):
                 row.update({"class": "landed", "why": f"{bead} landed on {bases[0]} after it"})
             elif aside:
                 row.update({"class": "superseded", "why": f"--fresh set {ref} aside: {bead} started again on {bases[0]}"})

@@ -178,7 +178,11 @@ def unstale(name: str) -> tuple[str, bool]:
 
 
 def land_bead(subject: str) -> str:
-    """The bead a land commit's subject names: '... (<bead>)', else ''."""
+    """The bead a land commit's subject names: '... (<bead>)', else ''. A revert (`Revert "..."`) names the bead of what it undoes and
+    is no land. LEGACY: only for beads landed before landed/<bead>.json existed (contracts/landed.py); every reader checks the
+    record first. This can go once no closed bead older than the record (0.23.179) is left to prune or report."""
+    if subject.startswith("Revert "):
+        return ""
     m = LAND_TAIL.search(subject)
     return m.group(1) if m else ""
 

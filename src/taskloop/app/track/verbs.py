@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from taskloop.adapters.beadtools import attempt, bd_store, peek
+from taskloop.adapters.gitenv import run_git
 from taskloop.adapters.gitrepo import git, repo_root
 from taskloop.adapters.ident import actor, config_dir, session_id
 from taskloop.adapters.opencode import transcript_of
@@ -34,9 +35,14 @@ def claim(bead: str, worktree: str | None = None, slot: str | None = None, store
     return 0
 
 
-def land(bead: str, sha: str, worktree: str | None = None, store: Beads | None = None) -> int:
+def land(bead: str, sha: str, worktree: str | None = None, store: Beads | None = None, base: str | None = None) -> int:
+    """Record a land. With `base`, provenance gets the sha only once it is an ancestor of that base: a sha that never reached it
+    is no land (the event stays, as what was claimed)."""
     full = git("rev-parse", "--verify", "-q", sha + "^{commit}", cwd=worktree) or sha
     event("land", bead, sha=full)
+    if base and run_git(worktree or ".", "merge-base", "--is-ancestor", full, base, capture_output=True).returncode != 0:
+        sys.stderr.write(f"{bead}: {full[:12]} is not on {base}: no land recorded in provenance\n")
+        return 1
     provenance(bead, "land", full, "git-sha", store=store)
     return 0
 

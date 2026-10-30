@@ -67,6 +67,10 @@ class ConfigDir:
     def adr_uses(self, repo_key: str) -> Path:
         return self.adr_dir(repo_key) / "uses.jsonl"
 
+    def landed(self, bead: BeadId | str) -> Path:
+        """The record that a bead's work reached its base (contracts/landed.py)."""
+        return self.root / "landed" / (f"{bead}.json")
+
     def checkpoint(self, bead: BeadId | str) -> Path:
         return self.root / "checkpoints" / (f"{bead}.json")
 

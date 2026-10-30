@@ -49,6 +49,7 @@ from taskloop.adapters import (
 )
 from taskloop.app.run import engine
 from taskloop.contracts.config import EngineConfig
+from taskloop.contracts.landed import LandedStore
 from taskloop.domain import outcome as oc
 from taskloop.domain.checks import lint
 from taskloop.domain.plan.matchers import gate_only_criteria
@@ -61,6 +62,10 @@ class EngineLand1Test(EngineTest):
         self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "reviewer"])
         self.assertTrue(self.closed and self.closed[0].startswith("merged "))
         self.assertEqual(gitrepo.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
+        landed = LandedStore(ident.config_dir()).get("t-1")  # the one landed record: the sha pushed, which origin/main now is
+        assert landed is not None
+        remote = gitrepo.git("rev-parse", "origin/main", cwd=str(self.wt))
+        self.assertEqual((landed.sha, landed.base), (remote, "origin/main"))
         self.assertTrue(any(c[:2] == ("comments", "add") and "Reflect (engine)" in c[3] for c in self.bd_calls))
         # the facets of this one run, each of which used to be a run of its own
         self.assertIn(("reviewer", None, "openai"), s.calls)  # every green stage gets a cross-family review

@@ -17,6 +17,7 @@ from taskloop.contracts import (
     delegate,
     events,
     ids,
+    landed,
     ledger,
     locks,
     log,
@@ -389,6 +390,7 @@ OTHERS = {
     "StatusSnapshot": snapshots.StatusSnapshot(
         at=T, lanes=[snapshots.LaneStatus(id="A", state="ready")], needs_input=[snapshots.NeedInput(what="w")]
     ),
+    "Landed": landed.Landed(bead="t-1", sha="a" * 40, base="origin/main", t=T),
     "SessionIndex": snapshots.SessionIndex(session="s", transcript="/t.jsonl", cwd="/w", t=T),
     "ReposIndex": snapshots.ReposIndex(repos={"/r": snapshots.RepoEntry(added=T)}),
     "SharedNotes": snapshots.SharedNotes(flakes={"test_x": T}, notes=["n"]),

@@ -62,6 +62,7 @@ from taskloop.app.write.handoff import Handoff
 from taskloop.app.write.newfiles import NewFiles
 from taskloop.app.write.stage_loop import StageLoop
 from taskloop.contracts.argv import checks_to_text, checks_to_wire, text_of
+from taskloop.contracts.landed import Landed, LandedStore
 from taskloop.contracts.log import Assumed, Said
 from taskloop.contracts.paths import PLAN_FILE, ConfigDir
 from taskloop.domain import outcome as oc
@@ -275,7 +276,8 @@ class Engine(RunFields):
             (self.run_dir / PLAN_FILE).write_text(json.dumps(checks_to_wire(self.plan_data), indent=1))
 
     def record_land(self, sha: str) -> None:
-        verbs.land(self.bead, sha, self.wt, self.store)
+        LandedStore(ident.config_dir()).put(Landed(bead=self.bead, sha=sha, base=self.cfg.base, t=self.now()))
+        verbs.land(self.bead, sha, self.wt, self.store, base=self.cfg.base)
 
     def land_lock_path(self) -> Path:
         return landlock.land_lock_path(self.git("remote", "get-url", "origin") or str(self.wt))

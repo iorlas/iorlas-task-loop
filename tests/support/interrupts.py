@@ -8,7 +8,7 @@ from support import fake_route
 from support.push_race import seam
 from taskloop.app.checks import evidence as check_evidence
 from taskloop.app.land.fixer import Fixer
-from taskloop.app.land.outbound import land_argv
+from taskloop.app.land.outbound import land_argv, pin_head
 from taskloop.app.run import engine
 from taskloop.app.run.state import Checkpoints
 from taskloop.app.run.steps import Steps
@@ -104,7 +104,8 @@ class Recovery:
         return result
 
     def command(self, this, cmd, *a, **kw):
-        if cmd == land_argv(this.cfg.land):
+        pushed = cmd[-1].partition(":")[0].lstrip("+") if isinstance(cmd, list) else ""  # the land pins HEAD to its sha
+        if isinstance(cmd, list) and cmd == land_argv(pin_head(this.cfg.land, pushed)):
             self.pushes.append(cmd)
             self.case.assertFalse(this.pending_land_validation)
             self.case.assertFalse(self.case.checkpoint()["pending_land_validation"])

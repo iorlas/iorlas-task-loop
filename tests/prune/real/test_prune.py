@@ -18,6 +18,8 @@ from taskloop.app.prune import branches, trees, verb
 from taskloop.app.release.shell import REAL, Shell
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.config import LoopConfig
+from taskloop.contracts.landed import Landed as LandedRec
+from taskloop.contracts.landed import LandedStore
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdError, BdFailure, Beads
 
@@ -307,6 +309,16 @@ class Landed(unittest.TestCase):
         removed, kept = branches.prune_branches([str(self.repo)], lambda r: cast(Beads, Store(fail=True)), False)
         self.assertEqual(removed, [])
         self.assertIn("bd did not answer", kept[0])
+
+    def test_the_landed_record_decides_a_title_does_not(self):
+        cfg = ConfigDir(self.root / "cfg")
+        self.land_commit("a-1")  # titled (a-1) but a revert-like title is not what counts
+        git(self.repo, "commit", "-q", "--amend", "-m", 'Revert "work (a-1)"')
+        self.assertFalse(branches.landed(self.repo, "a-1", REAL, cfg))  # no record, a revert subject: not landed
+        LandedStore(cfg).put(LandedRec(bead="a-1", sha=git(self.repo, "rev-parse", "HEAD"), base="origin/main", t=1.0))
+        self.assertTrue(branches.landed(self.repo, "a-1", REAL, cfg))  # the record's sha is on HEAD
+        LandedStore(cfg).put(LandedRec(bead="a-1", sha=git(self.repo, "rev-parse", "task/a-3"), base="origin/main", t=1.0))
+        self.assertFalse(branches.landed(self.repo, "a-1", REAL, cfg))  # a sha that never reached HEAD
 
 
 if __name__ == "__main__":

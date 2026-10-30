@@ -88,9 +88,18 @@ class Tries(unittest.TestCase):
         self.assertEqual((got.base_before, got.base_after, got.rebase_moved), ("aaa", "aaa", False))
 
 
+class PushedSha(unittest.TestCase):
+    def test_the_push_names_the_sha_resolved_before_it_and_the_record_holds_that_sha_not_a_later_head(self):
+        g = repo(["a", "a"], ["h", "h", "pushed", "moved-after"], [PUSHED])
+        lander, host = land_with(g)
+        self.assertEqual(lander.tries(Land()), ("pushed", None))
+        self.assertIn("record pushed", host.events)
+        self.assertTrue(g.ran("push", "--no-verify", "-q", "origin", "pushed:main"))
+
+
 class Pushing(unittest.TestCase):
     def test_a_network_error_on_the_push_rests_the_land_instead_of_failing_it(self):
-        g = repo(["a", "a"], ["h", "h"], [(128, "fatal: unable to access 'x': Could not resolve host")])
+        g = repo(["a", "a"], ["h", "h", "h"], [(128, "fatal: unable to access 'x': Could not resolve host")])
         lander, host = land_with(g)
         host.worker = SimpleNamespace(acts=SimpleNamespace(net_up=lambda: False))
         st = Land()
@@ -98,14 +107,14 @@ class Pushing(unittest.TestCase):
         self.assertTrue(st.net_failed)
 
     def test_a_push_the_network_did_not_kill_is_a_fault_not_a_retry(self):
-        g = repo(["a", "a"], ["h", "h"], [(1, "pre-push hook: 3 tests failed")])
+        g = repo(["a", "a"], ["h", "h", "h"], [(1, "pre-push hook: 3 tests failed")])
         lander, _ = land_with(g)
         with self.assertRaises(Stop) as cm:
             lander.tries(Land())
         self.assertEqual(cm.exception.kind, "FAULT_LAND")
 
     def test_a_network_error_while_the_network_looks_up_three_times_pauses_the_task(self):
-        g = repo(["a", "a"], ["h", "h"], [(128, "fatal: unable to access 'x': Could not resolve host")])
+        g = repo(["a", "a"], ["h", "h", "h"], [(128, "fatal: unable to access 'x': Could not resolve host")])
         lander, host = land_with(g)
         host.worker = SimpleNamespace(acts=SimpleNamespace(net_up=lambda: True))
         with self.assertRaises(Stop) as cm:
@@ -115,7 +124,7 @@ class Pushing(unittest.TestCase):
 
 class Lock(unittest.TestCase):
     def test_a_push_rejected_twice_is_tried_again_in_one_lock_and_lands(self):
-        g = repo(["a"] * 6, ["h"] * 6 + ["landed"], [REJECTED, REJECTED, PUSHED])
+        g = repo(["a"] * 6, ["h"] * 8 + ["landed"], [REJECTED, REJECTED, PUSHED])
         lander, host = land_with(g)
         self.assertEqual(lander.land(), "landed")
         self.assertEqual(host.events, ["enter", "checks", "checks", "record landed", "exit"])
@@ -123,7 +132,7 @@ class Lock(unittest.TestCase):
         self.assertEqual(sum(1 for c in g.calls if c[0] == "push"), 3)
 
     def test_a_push_rejected_three_times_stops_in_one_lock(self):
-        g = repo(["a"] * 6, ["h"] * 6, [REJECTED] * 3)
+        g = repo(["a"] * 6, ["h"] * 9, [REJECTED] * 3)
         lander, host = land_with(g)
         with self.assertRaises(Stop) as cm:
             lander.land()

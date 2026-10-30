@@ -35,6 +35,7 @@ from taskloop.adapters import (  # noqa: E402
 )
 from taskloop.app.launch import repos  # noqa: E402
 from taskloop.app.report import card, inputs, lost  # noqa: E402
+from taskloop.contracts.landed import Landed, LandedStore  # noqa: E402
 
 T0 = datetime(2026, 10, 21, 6, 0).timestamp()  # the window's start in the fixtures: local 06:00
 MIN = 60.0
@@ -129,6 +130,30 @@ class LostWork(Base):
         land = git(self.repo, "rev-parse", "HEAD")
         trace = {"bead": "t-1", "outcome": "landed", "sha": land, "started": T0, "ended": T0 + 31 * MIN}
         self.assertEqual(set(self.by_class(self.lost({"t-1": "closed"}, [trace]))), {"landed"})
+
+    def squash_land(self, subject):
+        (self.repo / "f.txt").write_text("one, edited at land\n")
+        git(self.repo, "add", "-A")
+        git(self.repo, "commit", "-qm", subject, t=T0 + 30 * MIN)
+        return git(self.repo, "rev-parse", "HEAD")
+
+    def test_the_landed_record_covers_the_branch_whatever_the_land_title_says(self):
+        self.branch("task/t-1", [("f.txt", "one\n", "wip (t-1): blocked")], T0)
+        land = self.squash_land("a title the bead lost")
+        LandedStore(ident.config_dir()).put(Landed(bead="t-1", sha=land, base="main", t=T0 + 31 * MIN))
+        self.assertEqual(set(self.by_class(self.lost({"t-1": "closed"}))), {"landed"})
+
+    def test_a_record_whose_sha_is_not_on_the_base_is_no_land(self):
+        self.branch("task/t-1", [("f.txt", "one\n", "wip (t-1): blocked")], T0)
+        off = self.branch("task/other", [("g.txt", "x\n", "other")], T0)[0]
+        LandedStore(ident.config_dir()).put(Landed(bead="t-1", sha=off, base="main", t=T0 + 31 * MIN))
+        self.assertIn("lost", self.by_class(self.lost({"t-1": "closed"})))
+
+    def test_a_revert_that_names_the_bead_is_no_land(self):
+        self.branch("task/t-1", [("f.txt", "one\n", "wip (t-1): blocked")], T0)
+        self.squash_land('Revert "Do the thing (t-1)"')
+        rows = self.lost({"t-1": "closed"})
+        self.assertEqual(set(self.by_class(rows)), {"lost"})
 
     def test_a_cherry_picked_commit_is_landed_by_its_patch(self):
         sha, = self.branch("task/t-1", [("f.txt", "work\n", "work")], T0)
