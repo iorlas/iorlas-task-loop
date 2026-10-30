@@ -6,8 +6,9 @@ from pathlib import Path
 
 from taskloop.adapters import applog, procs
 from taskloop.app.release.shell import git, say
+from taskloop.contracts import env as penv
+from taskloop.contracts.envvars import EnvVar
 
-MARKER = "TL_RELEASE_REEXEC"  # set in the exec'd release: it never execs again
 CODE = ("src", "dev/release.py")  # what a release runs: the engine package and the entry script
 
 
@@ -21,7 +22,7 @@ def newer_release(tool_root: Path, where: Path) -> Path | None:
     same, the clone has no such script, or this process is already the exec'd one. The marker is taken out of the environment here,
     so nothing the release starts (the suite, its release tests) inherits it."""
     script = where / "dev" / "release.py"
-    if os.environ.pop(MARKER, None) or not script.is_file() or code_ids(tool_root) == code_ids(where):
+    if penv.take(EnvVar.TL_RELEASE_REEXEC) or not script.is_file() or code_ids(tool_root) == code_ids(where):
         return None
     return script
 
@@ -31,7 +32,7 @@ def exec_release(script: Path, argv: Sequence[str], repo: Path) -> None:
     holds no lock: the exec'd release takes it."""
     args = list(argv) + ([] if any(a == "--repo" or a.startswith("--repo=") for a in argv) else ["--repo", str(repo)])
     say(f"this checkout's release code is not origin/main's; running {script}")
-    os.environ[MARKER] = "1"
+    penv.export(EnvVar.TL_RELEASE_REEXEC, "1")
     applog.close_all()
     cmd = [*procs.script_argv(script), *args]
     os.execv(cmd[0], cmd)

@@ -10,7 +10,6 @@ import threading
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from os import environ
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +17,9 @@ import child_env
 import stream_proc
 from stream_proc import TermHold, alive, popen_held, proc_start, stop_tree
 from stream_proc.proctable import has_table
+
+from taskloop.adapters.childenv import without_venv
+from taskloop.contracts import env as penv
 
 GIT_PIN_VARS = ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE")  # the engine's own git is pinned; no child inherits a pin
 KEEP = ("CLAUDE_CONFIG_DIR",)  # a worker on a custom Claude login must find it
@@ -31,7 +33,8 @@ def child_env_of(env: Mapping[str, str], extra: Mapping[str, str] | None = None)
     TASK_LOOP_* and the git pins, but with CLAUDE_CONFIG_DIR. Credentials stay: delegate scrubs its workers itself (its own
     app-only scrub does the same for route.py); a worker never delegates further (DELEGATE_DEPTH=1)."""
     gone = (*child_env.APP_PREFIXES, "TASK_LOOP_")
-    out = {k: v for k, v in env.items() if k in KEEP or not (k.startswith(gone) or k in child_env.APP_NAMES or k in GIT_PIN_VARS)}
+    drop = (*child_env.APP_NAMES, *GIT_PIN_VARS)
+    out = {k: v for k, v in without_venv(env).items() if k in KEEP or not (k.startswith(gone) or k in drop)}
     out.update({"TASK_LOOP_WORKER": "1", "DELEGATE_DEPTH": "1"})
     out.update(extra or {})
     return out
@@ -40,11 +43,11 @@ def child_env_of(env: Mapping[str, str], extra: Mapping[str, str] | None = None)
 def script_argv(script: str | Path) -> list[str]:
     """The argv that runs a script with a PEP 723 header (tl.py, dev/release.py): `uv run --script` installs its dependencies into
     a cached environment. `UV` is the uv that started this process, when one did."""
-    return [environ.get("UV") or shutil.which("uv") or "uv", "run", "--quiet", "--script", str(script)]
+    return [penv.ambient("UV") or shutil.which("uv") or "uv", "run", "--quiet", "--script", str(script)]
 
 
 def current_env(extra: Mapping[str, str] | None = None) -> dict[str, str]:
-    return child_env_of(environ, extra)
+    return child_env_of(penv.snapshot().vars, extra)
 
 
 @dataclass(frozen=True)

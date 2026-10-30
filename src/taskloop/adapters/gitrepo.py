@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from taskloop.adapters.gitenv import git_env, pinned_env
+from taskloop.contracts import env as penv
 
 Sig = tuple[int, ...] | None
 Dirs = tuple[Path, Path, Path]  # git dir, common dir, the `.git` entry of the checkout
@@ -65,12 +66,12 @@ def config_key(path: str | Path) -> tuple[Any, ...] | None:
     if not dirs:
         return None
     gd, common, dot_git = dirs
-    home = Path(os.environ.get("HOME") or os.path.expanduser("~"))
-    xdg = Path(os.environ.get("XDG_CONFIG_HOME") or (home / ".config"))
+    home = Path(penv.ambient("HOME") or os.path.expanduser("~"))
+    xdg = Path(penv.ambient("XDG_CONFIG_HOME") or (home / ".config"))
     files = [gd / "config.worktree", common / "config", common / "config.worktree", home / ".gitconfig", xdg / "git" / "config",
              Path("/etc/gitconfig"), Path("/opt/homebrew/etc/gitconfig"), Path("/usr/local/etc/gitconfig")]
     skip = ("GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR")
-    env = (*sorted((k, v) for k, v in os.environ.items() if k.startswith("GIT_") and k not in skip), ("HOME", str(home)))
+    env = (*sorted((k, v) for k, v in penv.snapshot().vars.items() if k.startswith("GIT_") and k not in skip), ("HOME", str(home)))
     return (str(path), is_dir_sig(dot_git), tuple(sig(f) for f in files), env)
 
 
@@ -109,7 +110,7 @@ def ref_files(args: tuple[str, ...], dirs: Dirs) -> list[Path] | None:
 
 def memo_key(args: tuple[str, ...], cwd: str | None) -> tuple[Any, tuple[Sig, ...] | None, str | None]:
     """(key, sigs, a remembered answer): the memo entry a question maps to, if it is one the file system can vouch for."""
-    if cwd is None and args == COMMON_ARGS and not any(k in os.environ for k in ("GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR")):
+    if cwd is None and args == COMMON_ARGS and not any(penv.ambient_set(k) for k in ("GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR")):
         try:
             here: str | None = os.getcwd()  # the process's own checkout: nothing is pinned, so only plain checkouts count
         except OSError:  # its folder is gone: git answers "" below

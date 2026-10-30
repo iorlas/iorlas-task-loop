@@ -15,10 +15,13 @@ from types import FrameType
 import stream_proc
 
 from taskloop.adapters import landlock, procs
+from taskloop.adapters.childenv import tool_env
 from taskloop.adapters.ident import config_dir
 from taskloop.adapters.suiteout import Part, failing_tests, failure_report, merge_outputs, ran_line
 from taskloop.app.release.cache import SuiteCache
 from taskloop.app.release.shell import Abort, git, run, say
+from taskloop.contracts import env as penv
+from taskloop.contracts.envvars import EnvVar
 
 LONG = 3 * 3600.0  # a hang guard for a whole gate run
 STALE_TMP_S = 2 * LONG  # a tl-suite-* dir this old belongs to a suite that was killed without unwinding (SIGKILL): no live one runs so long
@@ -90,7 +93,7 @@ def host_workers(cpus: int | None = None, mem_mb: int | None = None) -> int:
 
 def workers() -> int:
     """How many shards the suite runs in at once: TASK_LOOP_SUITE_WORKERS, else host_workers()."""
-    n = os.environ.get("TASK_LOOP_SUITE_WORKERS")
+    n = penv.ambient(EnvVar.TASK_LOOP_SUITE_WORKERS)
     return max(1, int(n)) if n and n.isdigit() else host_workers()
 
 
@@ -104,8 +107,8 @@ def isolated_env(home: Path) -> dict[str, str]:
     real = Path.home() / ".gitconfig"
     if real.is_file():
         (home / ".gitconfig").write_bytes(real.read_bytes())
-    env = dict(os.environ, HOME=str(home), XDG_CONFIG_HOME=str(home / ".config"), TMPDIR=str(home / "tmp"))
-    env["TL_WORKER_MB"] = str(WORKER_BUDGET_MB)  # the address-space cap of each xdist worker (tests/conftest.py)
+    env = tool_env(penv.snapshot().vars, {"HOME": str(home), "XDG_CONFIG_HOME": str(home / ".config"), "TMPDIR": str(home / "tmp")})
+    env[EnvVar.TL_WORKER_MB.value] = str(WORKER_BUDGET_MB)  # the address-space cap of each xdist worker (tests/conftest.py)
     for k in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "PYTHONPATH"):  # the tree under test sets its own PYTHONPATH
         env.pop(k, None)
     return env
@@ -200,7 +203,7 @@ def _host_suite(tool_root: Path, repo: Path) -> None:
 def container_suite(tool_root: Path, repo: Path) -> None:
     """The suite through dev/suite-docker.py (a Linux container's own disk; the host suite when docker is not reachable).
     TASK_LOOP_SUITE_HOST=1 runs it on the host. A fake repo (the tests') has no runner of its own: it takes the host runner."""
-    if os.environ.get("TASK_LOOP_SUITE_HOST") or not (repo / "dev" / "suite.py").is_file():
+    if penv.ambient(EnvVar.TASK_LOOP_SUITE_HOST) or not (repo / "dev" / "suite.py").is_file():
         return host_suite(tool_root, repo)
     say("running the full suite in a container (dev/suite-docker.py)")
     ran = procs.capture([sys.executable, str(tool_root / "dev" / "suite-docker.py"), "--repo", str(repo)], None, None, LONG)
@@ -221,7 +224,7 @@ def gate(repo: Path) -> None:
         return
     cmd = gate_command()
     home = os.path.expanduser("~")
-    env = dict(os.environ, MISE_TRUSTED_CONFIG_PATHS=os.pathsep.join([home + "/.config/mise", home + "/Workspaces"]))
+    env = tool_env(penv.snapshot().vars, {"MISE_TRUSTED_CONFIG_PATHS": os.pathsep.join([home + "/.config/mise", home + "/Workspaces"])})
     say("running the gate: " + " ".join(cmd))
     ran = procs.capture(cmd, str(repo), env, LONG)
     if ran.exit:
@@ -238,7 +241,7 @@ def verify(tool_root: Path, repo: Path, checks: Callable[[Path, Path], None] = r
     """The gate and the suite on the tree at `repo`'s HEAD (nothing uncommitted). The same tree under the same command passed before:
     both are skipped, and the log says so (True). Only a green run is remembered; a red one raises and remembers nothing."""
     tree = git(repo, "rev-parse", "HEAD^{tree}")
-    command = " ".join(gate_command()) + " + " + ("host" if os.environ.get("TASK_LOOP_SUITE_HOST") else "container") + " suite"
+    command = " ".join(gate_command()) + " + " + ("host" if penv.ambient(EnvVar.TASK_LOOP_SUITE_HOST) else "container") + " suite"
     cache = SuiteCache(config_dir() / "releases" / "suite-green.json")
     if cache.hit(tree, command):
         say(f"suite cache hit: tree {tree[:12]} already passed `{command}`")

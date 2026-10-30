@@ -18,6 +18,7 @@ from taskloop.adapters.runner import Seam
 from taskloop.app.release import seams
 from taskloop.app.run.engine import Engine
 from taskloop.app.wire import slots as wslots
+from taskloop.contracts import env as penv
 from taskloop.contracts.bead import Bead
 
 # an argv list, as the plan schema wants
@@ -112,7 +113,7 @@ def selftest():
         env = {"XDG_CONFIG_HOME": str(home / "cfg"), "APPDATA": str(home / "cfg"), "HOME": str(home), "USERPROFILE": str(home),
                "CLAUDE_CODE_SESSION_ID": "selftest-0", "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
                "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t", "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": os.devnull}
-        with mock.patch.dict(os.environ, env):
+        with penv.patched(env):
             why = git_repo(home, home / "wt")
             if why:
                 return why

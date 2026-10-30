@@ -11,6 +11,8 @@ from typing import Any
 
 from taskloop.adapters.pidcheck import proc_alive, proc_start
 from taskloop.app.slots.env import stamp
+from taskloop.contracts import env as penv
+from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.paths import RepoDirs
 
 
@@ -63,9 +65,9 @@ def engine_busy(wt: str | Path, handoff: bool = False) -> str:
     if not lock:
         return ""
     mine = {os.getpid()}
-    if handoff and lock.get("by") == "loop" and lock.get("slot_bead", "") == os.environ.get("TASK_LOOP_SLOT_BEAD", ""):
+    if handoff and lock.get("by") == "loop" and lock.get("slot_bead", "") == penv.ambient(EnvVar.TASK_LOOP_SLOT_BEAD):
         with contextlib.suppress(ValueError):
-            mine.add(int(os.environ.get("TASK_LOOP_LOOP_PID") or ""))
+            mine.add(int(penv.ambient(EnvVar.TASK_LOOP_LOOP_PID)))
     where = f"; lock {engine_lock_path(wt)}"
     pid = lock.get("pid")
     if pid and int(pid) not in mine and proc_alive(pid, lock.get("start") or ""):
@@ -89,7 +91,7 @@ class EngineLock:
         self.wt = wt
         self.path = engine_lock_path(wt)
         self.data: dict[str, Any] = {"pid": os.getpid(), "start": proc_start(os.getpid()), "bead": bead, "slot": slot or "",
-                                     "slot_bead": os.environ.get("TASK_LOOP_SLOT_BEAD", ""), "by": "run-task", "started": time.time(),
+                                     "slot_bead": penv.ambient(EnvVar.TASK_LOOP_SLOT_BEAD), "by": "run-task", "started": time.time(),
                                      "route": None, "workers": []}
 
     def take(self) -> str:

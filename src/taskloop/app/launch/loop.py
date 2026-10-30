@@ -17,6 +17,7 @@ from taskloop.adapters import applog, beadtools, gitrepo, ident, pidcheck
 from taskloop.adapters import delegate as dg
 from taskloop.adapters import procs as sproc
 from taskloop.adapters import storm as storm_file
+from taskloop.adapters.childenv import tool_env
 from taskloop.adapters.gitenv import run_git
 from taskloop.adapters.locks import hold_path
 from taskloop.app.asks import sweeps as ask_sweeps
@@ -36,9 +37,11 @@ from taskloop.app.track import trail, verbs
 from taskloop.app.wire import asks as wasks
 from taskloop.app.wire import lanes as wlanes
 from taskloop.app.wire import slots as wslots
+from taskloop.contracts import env as penv
 from taskloop.contracts import paths
 from taskloop.contracts.config import RepoProfile
 from taskloop.contracts.enums import LockWhat
+from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.landed import LandedStore
 from taskloop.contracts.loop import LoopState
 from taskloop.contracts.ports import Beads
@@ -163,7 +166,7 @@ def spawn(cmd: list[str], log: Any, extra: Mapping[str, str]) -> tuple[Any, Any]
     """run-task as a child in its own process group: Ctrl-C to the loop reaches it only as the loop's SIGTERM.
     -> (the child, the TermHold of its spawn): the caller replays the hold first inside the try that stops the child."""
     return sproc.popen_held(cmd, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT, start_new_session=True,
-                            env={**os.environ, **extra})
+                            env=tool_env(penv.snapshot().vars, extra))
 
 
 def stop_now(child: Any) -> None:
@@ -175,7 +178,7 @@ def stop_tree(child: Any) -> None:
 
 
 def exec_into(repo: str, d: Path, argv: list[str], handover: str, start_cwd: str = "") -> None:
-    os.environ["TL_LOOP_STATE"] = handover
+    penv.export(EnvVar.TL_LOOP_STATE, handover)
     if start_cwd:
         os.chdir(start_cwd)  # cmd_loop chdir'd into the repo; a relative --repo in argv means the start directory
     sys.stdout.flush()
@@ -185,7 +188,7 @@ def exec_into(repo: str, d: Path, argv: list[str], handover: str, start_cwd: str
         cmd = [*sproc.script_argv(d / "skills" / "task-loop" / "tl.py"), *argv]
         os.execv(cmd[0], cmd)
     except OSError:
-        os.environ.pop("TL_LOOP_STATE", None)
+        penv.take(EnvVar.TL_LOOP_STATE)
         with contextlib.suppress(OSError):
             os.chdir(repo)
         raise
@@ -244,7 +247,7 @@ def build(repo: str, store: Beads | None = None, session_actor: str = "", here: 
         session_actor=session_actor,
         actor=ident.actor,
         exec_into=lambda d, argv, handover: exec_into(repo, d, argv, handover, start_cwd),
-        take_handover=lambda: os.environ.pop("TL_LOOP_STATE", ""),
+        take_handover=lambda: penv.take(EnvVar.TL_LOOP_STATE),
         say=console.say,
         now=now,
         pid=os.getpid(),
@@ -276,15 +279,15 @@ def begin_loop(repo: str) -> tuple[str, str]:
     start_cwd = os.getcwd()
     os.chdir(repo)  # every tl helper and bd call works on the current directory's repo
     inherited, _ = parse_handover(
-        os.environ.get("TL_LOOP_STATE", "")
+        penv.ambient(EnvVar.TL_LOOP_STATE)
     )  # set when this process is the same loop, exec'd into a newer install
     if not ident.session_id():  # without a Claude session the actor would be per folder: two loops would share it
-        os.environ["TASK_LOOP_SESSION"] = "loop-" + uuid.uuid4().hex[:12]
+        penv.export(EnvVar.TASK_LOOP_SESSION, "loop-" + uuid.uuid4().hex[:12])
     # an actor of its own, never the session's: bd lets an actor re-claim its own bead, so two loops (or a loop and a hand run)
     # started from one session would both win one claim. run-task re-claims as this actor (one for both).
-    os.environ.pop("TASK_LOOP_ACTOR", None)
+    penv.take(EnvVar.TASK_LOOP_ACTOR)
     session = ident.actor()
-    os.environ["TASK_LOOP_ACTOR"] = (inherited.actor if inherited else "") or f"{session}-{uuid.uuid4().hex[:6]}"
+    penv.export(EnvVar.TASK_LOOP_ACTOR, (inherited.actor if inherited else "") or f"{session}-{uuid.uuid4().hex[:6]}")
     return start_cwd, session
 
 

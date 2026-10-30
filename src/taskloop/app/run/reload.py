@@ -2,7 +2,6 @@
 step boundary."""
 import contextlib
 import json
-import os
 import sys
 import time
 from pathlib import Path
@@ -14,7 +13,9 @@ from taskloop.app.loop.versions import Installs
 from taskloop.app.release import catalog, pins, reexec
 from taskloop.app.slots import engine_lock
 from taskloop.app.track import trail
+from taskloop.contracts import env as penv
 from taskloop.contracts import log as rec
+from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.paths import ConfigDir
 
 
@@ -114,7 +115,7 @@ class Reload:
         trail.event("reload", e.bead, who="engine", old=here, new=ver, step=step, run=run, code_dir=str(d))
         e.log.note(f"moving to task-loop {ver} (was {here}) at {step}; run {run} goes on from its checkpoint")
         e.log.emit(rec.Reload(old=here, new=ver, step=step))
-        os.environ["TL_REEXEC"] = json.dumps({"run": run, "bead": e.bead, "from": here, "owned": RUN_SLOT["owned"]})
+        penv.export(EnvVar.TL_REEXEC, json.dumps({"run": run, "bead": e.bead, "from": here, "owned": RUN_SLOT["owned"]}))
         for f in (sys.stdout, sys.stderr):
             with contextlib.suppress(Exception):
                 f.flush()
@@ -123,6 +124,6 @@ class Reload:
             e.moved = True
             raise Exec()  # reached only when the exec function is a test's
         except OSError as exc:  # exec itself failed: this version goes on where it is
-            os.environ.pop("TL_REEXEC", None)
+            penv.take(EnvVar.TL_REEXEC)
             reexec.drop_reexec(e.bead)
             e.warn(f"could not move to task-loop {ver}: {exc}")

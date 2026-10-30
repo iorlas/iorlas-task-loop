@@ -7,13 +7,15 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
+from taskloop.contracts import env as penv
+
 
 def opencode_db() -> str:
     """OpenCode's session store (macOS/Linux); OPENCODE_DB overrides it (tests)."""
-    env = os.environ.get("OPENCODE_DB")
+    env = penv.ambient("OPENCODE_DB")
     if env:
         return env
-    base = os.environ.get("XDG_DATA_HOME") or str(Path.home() / ".local" / "share")
+    base = penv.ambient("XDG_DATA_HOME") or str(Path.home() / ".local" / "share")
     return str(Path(base) / "opencode" / "opencode.db")
 
 

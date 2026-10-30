@@ -1,7 +1,6 @@
 """`Delegate` over `route.py run`: temp files for the brief and schema, the live file tailed while the child runs."""
 import contextlib
 import json
-import os
 import sys
 import tempfile
 from collections.abc import Mapping
@@ -11,8 +10,10 @@ from typing import Any
 from jsonl_log import Jsonl
 
 from taskloop.adapters import delegate_wire
+from taskloop.adapters.childenv import tool_env
 from taskloop.adapters.procs import capture as run_group
 from taskloop.adapters.runner import live_event
+from taskloop.contracts import env as penv
 from taskloop.contracts.delegate import DelegateResult, RunRequest
 from taskloop.contracts.ports import EventSink
 
@@ -41,7 +42,7 @@ class RouteDelegate:
         self.route, self.python, self.env, self.timeout_s, self.backstop_s = route, python, dict(env or {}), timeout_s, backstop_s
 
     def _env(self, extra: Mapping[str, str]) -> dict[str, str]:
-        return dict(os.environ, **self.env, **extra)
+        return tool_env(penv.snapshot().vars, {**self.env, **extra})
 
     def speaks(self) -> int:
         ran = run_group([self.python, self.route, "contract", "--json"], None, self._env({}), 60.0)

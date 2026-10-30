@@ -1,14 +1,14 @@
 """Every file location, once. Nothing else in the package names a file or a folder of ours."""
-import os
 from pathlib import Path
 from typing import Final, final
 
+from taskloop.contracts import env as penv
 from taskloop.contracts.ids import BeadId, RunId
 
 
 def default_root() -> Path:
     """~/.config/task-loop, or $XDG_CONFIG_HOME/task-loop. Not created here."""
-    base = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
+    base = penv.ambient("XDG_CONFIG_HOME") or str(Path.home() / ".config")
     return Path(base) / "task-loop"
 
 

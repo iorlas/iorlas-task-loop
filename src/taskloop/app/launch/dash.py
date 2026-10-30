@@ -14,13 +14,15 @@ from typing import Any, Final
 
 from taskloop.adapters import procs
 from taskloop.adapters.ident import PLUGIN_ROOT, config_dir
+from taskloop.contracts import env as penv
+from taskloop.contracts.envvars import EnvVar
 from taskloop_dash import bind as dash_bind
 from taskloop_dash.cli import dash as dash_cli
 
 SRC: Final = PLUGIN_ROOT / "src"  # where `--ports taskloop.app.launch.dash_ports:ports` is found
 VENDOR: Final = PLUGIN_ROOT / "skills" / "task-loop" / "_vendor"
 DASH: Final = SRC / "taskloop_dash" / "__main__.py"  # the script a running `python3 -m taskloop_dash` reports
-PORT: Final = int(os.environ.get("TASK_LOOP_DASH_PORT", "7878"))
+PORT: Final = int(penv.ambient(EnvVar.TASK_LOOP_DASH_PORT, "7878"))
 
 
 def code_version() -> str:
@@ -54,7 +56,7 @@ def tailscale_ip() -> str | None:
 
 def default_binds() -> list[str]:
     """What the installed server binds: TASK_LOOP_DASH_BIND, else loopback and the Tailscale address."""
-    given = [x.strip() for x in os.environ.get("TASK_LOOP_DASH_BIND", "").split(",") if x.strip()]
+    given = [x.strip() for x in penv.ambient(EnvVar.TASK_LOOP_DASH_BIND).split(",") if x.strip()]
     if given:
         return given
     ts = tailscale_ip()
@@ -133,7 +135,7 @@ def log_tail(n: int = 5) -> str:
 def start_server(port: int, bind: str | None = None) -> tuple[dict[str, Any] | None, str]:
     """Start detached; wait until it answers. Returns (version dict or None, failure text)."""
     log = open(config_dir() / "dash.log", "ab")  # noqa: SIM115  the detached child keeps it
-    env = {k: val for k, val in os.environ.items() if not k.startswith(("CLAUDE_CODE_SESSION", "DELEGATE_", "CODEX_COMPANION"))}
+    env = {k: val for k, val in penv.snapshot().vars.items() if not k.startswith(("CLAUDE_CODE_SESSION", "DELEGATE_", "CODEX_COMPANION"))}
     more = [env["PYTHONPATH"]] if env.get("PYTHONPATH") else []
     env["PYTHONPATH"] = os.pathsep.join([str(SRC), str(VENDOR), *more])
     bind = bind or ",".join(default_binds())
@@ -203,7 +205,7 @@ def url() -> int:
 
 
 def run(op: str) -> int:
-    dev = is_dev_checkout() and "TASK_LOOP_DASH_PORT" not in os.environ
+    dev = is_dev_checkout() and not penv.ambient_set(EnvVar.TASK_LOOP_DASH_PORT)
     if dev and op == "ensure":
         return ensure_dev()
     if op == "stop":

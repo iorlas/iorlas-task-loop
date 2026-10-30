@@ -1,6 +1,5 @@
 """One run of the engine: claim checks, the stages, the land, and the close-out that always runs."""
 import contextlib
-import os
 from dataclasses import dataclass
 from typing import Any, cast
 
@@ -10,8 +9,10 @@ from taskloop.app.release import reexec
 from taskloop.app.run import outcomes, requests
 from taskloop.app.run.reload import Exec
 from taskloop.app.slots.lease import Lease
+from taskloop.contracts import env as penv
 from taskloop.contracts import fence
 from taskloop.contracts.enums import AskClass
+from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.log import Beat
 from taskloop.domain import outcome as oc
 from taskloop.domain.asks import specs as askspecs
@@ -36,7 +37,7 @@ class RunOnce:
     def go(self) -> int:
         e = self.e
         end = Ended()
-        hb = Lease(e.store, e.bead, os.environ.get("TASK_LOOP_SLOT_BEAD", ""), on_beat=self.beat)
+        hb = Lease(e.store, e.bead, penv.ambient(EnvVar.TASK_LOOP_SLOT_BEAD), on_beat=self.beat)
         ck = e.checkpoints.read()
         e.prev_ck = ck.run if ck else ""
         try:

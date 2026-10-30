@@ -26,6 +26,7 @@ from support.release_world import IDENTITY, MARKET, PLUGIN, World, git
 from taskloop.adapters import landlock
 from taskloop.adapters.ident import config_dir
 from taskloop.app.release import clone, manifest, selfupdate
+from taskloop.contracts.envvars import EnvVar
 
 ROOT = Path(__file__).resolve().parents[2]
 RELEASE = ROOT / "dev" / "release.py"
@@ -124,13 +125,13 @@ class Release(unittest.TestCase):
         self.assertEqual(self.version(self.origin)["version"], "0.1.0")  # the fake child released nothing; this run did not either
         where = clone.clone_dir(config_dir(), str(self.origin))
         self.assertIsNotNone(selfupdate.newer_release(ROOT, where))
-        with unittest.mock.patch.dict(os.environ, {selfupdate.MARKER: "1"}):
+        with unittest.mock.patch.dict(os.environ, {EnvVar.TL_RELEASE_REEXEC.value: "1"}):
             self.assertIsNone(selfupdate.newer_release(ROOT, where))  # an exec'd release never execs again, whatever the clone holds
 
     def test_the_exec_marker_is_taken_out_so_what_the_release_starts_does_not_inherit_it(self):
-        with unittest.mock.patch.dict(os.environ, {selfupdate.MARKER: "1"}):
+        with unittest.mock.patch.dict(os.environ, {EnvVar.TL_RELEASE_REEXEC.value: "1"}):
             self.assertIsNone(selfupdate.newer_release(self.repo, self.repo))
-            self.assertNotIn(selfupdate.MARKER, os.environ)
+            self.assertNotIn(EnvVar.TL_RELEASE_REEXEC.value, os.environ)
 
     def test_a_dirty_main_checkout_on_another_branch_is_released_from_and_left_byte_identical(self):
         self.git("checkout", "-q", "-b", "task/wip", cwd=self.repo)

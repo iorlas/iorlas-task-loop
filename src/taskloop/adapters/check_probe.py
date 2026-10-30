@@ -1,11 +1,12 @@
 """PathProbe: the questions the plan-check lint asks of a tree, answered by PATH, just and the file system (a TreeProbe)."""
 import json
-import os
 import shutil
 import subprocess
 import time
 from collections.abc import Callable, Mapping
 from pathlib import Path
+
+from taskloop.contracts import env as penv
 
 WORD_TTL_S = 120.0  # a tool installed since is found within two minutes
 JUSTFILES = ("justfile", "Justfile", ".justfile")
@@ -14,7 +15,7 @@ JUSTFILES = ("justfile", "Justfile", ".justfile")
 class PathProbe:
     def __init__(self, wt: str | Path, env: Mapping[str, str] | None = None, clock: Callable[[], float] = time.time) -> None:
         self.wt = Path(wt)
-        self.env = dict(os.environ if env is None else env)
+        self.env = dict(penv.snapshot().vars if env is None else env)
         self.clock = clock
         self.words: dict[str, tuple[bool, float]] = {}
         self.justfile: tuple[int, set[str] | None] | None = None

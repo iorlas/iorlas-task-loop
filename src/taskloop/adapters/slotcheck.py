@@ -1,17 +1,18 @@
 """Is git at a slot the slot's own checkout? A core.worktree or core.bare in the shared .git/config points every slot's git at
 another folder (lifesim-1mm); read as ambient config has it, unpinned, as a worker's or check's git would see it."""
-import os
 import subprocess
 from pathlib import Path
 from typing import Any
 
 from taskloop.adapters import gitrepo
+from taskloop.adapters.childenv import without
+from taskloop.contracts import env as penv
 
 _MEMO: dict[tuple[Any, ...], tuple[str, str] | None] = {}  # (slot, what the config files and environment are now) -> tree_problem's answer
 
 
 def _git(wt: str | Path, *args: str) -> str:
-    clean = {k: v for k, v in os.environ.items() if k not in ("GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR")}
+    clean = without(penv.snapshot().vars, "GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR")
     r = subprocess.run(["git", "-C", str(wt), *args], env=clean, capture_output=True, text=True, encoding="utf-8", errors="replace",
                        check=False)
     return r.stdout.strip() if r.returncode == 0 else ""

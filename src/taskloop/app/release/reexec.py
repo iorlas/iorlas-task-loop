@@ -9,6 +9,8 @@ from pathlib import Path
 from typing import Any
 
 from taskloop.adapters import applog, ident
+from taskloop.contracts import env as penv
+from taskloop.contracts.envvars import EnvVar
 from taskloop.domain.lanes import policy as lp
 
 RELOAD_FALLBACK_S = 120  # a run-task that dies this soon after an exec is put back on the version it came from (by the loop)
@@ -54,7 +56,7 @@ def take_net_pause(bead: str) -> dict[str, Any]:
 
 def take_reexec_env() -> dict[str, Any]:
     """The hand-over an exec'd (or fallback) run-task finds in TL_REEXEC: {run, bead, from, owned}; {} on a normal start."""
-    raw = os.environ.pop("TL_REEXEC", "")
+    raw = penv.take(EnvVar.TL_REEXEC)
     try:
         note = json.loads(raw) if raw else {}
     except ValueError:

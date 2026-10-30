@@ -1,9 +1,11 @@
 """git on a checkout: the environment that pins git to that checkout, and the one helper that runs it there."""
-import os
 import re
 import subprocess
 from pathlib import Path
 from typing import Any
+
+from taskloop.adapters.childenv import tool_env
+from taskloop.contracts import env as penv
 
 
 def pinned_env(path: str | Path) -> dict[str, str]:
@@ -27,7 +29,7 @@ def pinned_env(path: str | Path) -> dict[str, str]:
 
 def git_env(path: str | Path) -> dict[str, str]:
     """The environment for a git command on the checkout at `path`: the process's, pinned to that checkout."""
-    return dict(os.environ, **pinned_env(path))
+    return tool_env(penv.snapshot().vars, pinned_env(path))
 
 
 def run_git(path: str | Path, *args: str, **kw: Any) -> subprocess.CompletedProcess[Any]:
