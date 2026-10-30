@@ -61,8 +61,8 @@ from taskloop.app.wire import slots as wslots
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.enums import Result, WaitWhat
 from taskloop.contracts.ids import BeadId
+from taskloop.contracts.kinds import Kind
 from taskloop.contracts.run import RunReport
-from taskloop.domain import outcome as oc
 from taskloop.domain.checks import matchers as check_matchers
 from taskloop.domain.checks import retry
 from taskloop.domain.lanes.matchers import read_only_command
@@ -196,7 +196,7 @@ class EngineRunTest(EngineTest):
         with mock.patch.object(Planner, "plan", side_effect=lambda *a, **k: os.kill(os.getpid(), sig.SIGTERM)):
             old = sig.getsignal(sig.SIGTERM)
             sig.signal(
-                sig.SIGTERM, lambda *_: (_ for _ in ()).throw(engine.Blocked("failed: stopped (SIGTERM)", kind=oc.Kind.PAUSE_KILLED))
+                sig.SIGTERM, lambda *_: (_ for _ in ()).throw(engine.Blocked("failed: stopped (SIGTERM)", kind=Kind.PAUSE_KILLED))
             )
             try:
                 rc, _ = self.run_engine({})

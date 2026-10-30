@@ -55,10 +55,10 @@ from taskloop.contracts import wire
 from taskloop.contracts.ask import AskAnswer
 from taskloop.contracts.checks import CheckRun
 from taskloop.contracts.ids import BeadId
+from taskloop.contracts.kinds import Kind
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.plancheck import adhoc
 from taskloop.contracts.stores import AskStore
-from taskloop.domain import outcome as oc
 from taskloop.domain.checks import (
     lint,  # noqa: F401
 )
@@ -510,7 +510,7 @@ class EngineTest(unittest.TestCase):
             if r == role:
                 seen["n"] += 1
                 if seen["n"] == nth:
-                    raise engine.Blocked("failed: stopped (SIGTERM)", kind=oc.Kind.PAUSE_KILLED)
+                    raise engine.Blocked("failed: stopped (SIGTERM)", kind=Kind.PAUSE_KILLED)
             return real(this, r, *a, **kw)
         return mock.patch.object(fake_route.Script, "reply", call)
 

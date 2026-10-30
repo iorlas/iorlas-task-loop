@@ -5,7 +5,7 @@ from taskloop.app.checks import evidence as check_evidence
 from taskloop.app.checks.host import CheckFault, CheckStuck
 from taskloop.app.run.blocked import Blocked
 from taskloop.contracts.checks import CheckFaultKind
-from taskloop.domain import outcome as oc
+from taskloop.contracts.kinds import Kind
 from taskloop.domain.asks import specs as askspecs
 
 
@@ -15,7 +15,7 @@ class StageChecks:
 
     @staticmethod
     def fault_kind(kind: CheckFaultKind) -> Any:
-        return {CheckFaultKind.STALE_BASE: oc.Kind.FAULT_STALE_BASE, CheckFaultKind.KILLED: oc.Kind.PAUSE_KILLED}[kind]
+        return {CheckFaultKind.STALE_BASE: Kind.FAULT_STALE_BASE, CheckFaultKind.KILLED: Kind.PAUSE_KILLED}[kind]
 
     def stoppable(self, *a: Any, **kw: Any) -> Any:
         """run, then a stop (it ended a check, which reports itself failed) ends the run here."""
@@ -36,6 +36,6 @@ class StageChecks:
             brief = check_evidence.failure_brief(e.checker.reds(), e.run_dir)
             raise Blocked(f"the same checks failed with the same output in {stuck.rounds} rounds in a row: more writes will not fix them; "
                           f"it needs the owner's hint\nsignature: {stuck.signature[:400]}\n{brief}",
-                          askspecs.no_progress("the same red checks", stuck.rounds, stuck.signature), kind=oc.Kind.ASK_STUCK) from stuck
+                          askspecs.no_progress("the same red checks", stuck.rounds, stuck.signature), kind=Kind.ASK_STUCK) from stuck
         e.assert_tree("checks", "after")
         return run

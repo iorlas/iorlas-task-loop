@@ -14,7 +14,7 @@ from support import fake_route
 from taskloop.app.run import engine
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts.ids import BeadId
-from taskloop.domain import outcome as oc
+from taskloop.contracts.kinds import Kind, Task, fault_of
 from taskloop.domain.lanes import caps
 from taskloop.domain.lanes.roles import ROLES
 
@@ -35,7 +35,7 @@ class Table(unittest.TestCase):
         self.assertIsNotNone(caps.check("worker", "é" * (caps.CAPS["worker"] // 2 + 1)))
 
     def test_an_over_cap_brief_is_a_task_fault(self):
-        self.assertIsInstance(oc.fault_of(oc.Kind.ASK_TICKET), oc.Task)
+        self.assertIsInstance(fault_of(Kind.ASK_TICKET), Task)
 
     def test_the_caps_clear_the_real_prompts(self):
         biggest = max(p.stat().st_size for p in (Path(__file__).resolve().parents[1] / "fixtures" / "prompts").glob("*.txt"))
@@ -55,8 +55,8 @@ class Refusal(te.EngineTest):
         rc = self.go(role, script)
         self.assertNotEqual(rc, 0)
         self.assertNotIn(role, [r for r, _, _ in script.calls])  # nothing spawned for the refused role
-        self.assertEqual(self.eng.kind, oc.Kind.ASK_TICKET)
-        self.assertIsInstance(oc.fault_of(self.eng.kind), oc.Task)
+        self.assertEqual(self.eng.kind, Kind.ASK_TICKET)
+        self.assertIsInstance(fault_of(self.eng.kind), Task)
         self.assertIn(f"over the 0 KB cap of the {role} role", self.eng.why)
         return script
 

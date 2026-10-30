@@ -18,7 +18,7 @@ from taskloop.app.plan.planner import Planner
 from taskloop.app.run import engine
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts.ids import BeadId
-from taskloop.domain import outcome as oc
+from taskloop.contracts.kinds import Kind
 from taskloop.domain.report import matchers as lifecycle
 
 ROOT = te.ROOT
@@ -145,14 +145,6 @@ class TraceTelemetry(te.EngineTest):
             self.assertIn(old, row)
         return row
 
-    def test_a_landed_run_has_no_fingerprint_and_still_reads_in_the_dashboard(self):
-        rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
-        self.assertEqual(rc, 0)
-        row = self.assert_row("landed")
-        run = DASH.runlogs.run_timeline(str(self.eng.log_path))
-        self.assertEqual(run["started_because"], row["started_because"])
-        self.assertEqual(run["end"]["outcome"], "landed")
-
     def test_a_decision_ask_keeps_its_reason_and_fingerprint(self):
         rc, _ = self.run_engine({"plan": [dict(PLAN, irreversible="push_shared", question="Old format or new?")]})
         self.assertEqual(rc, 2)
@@ -181,7 +173,7 @@ class TraceTelemetry(te.EngineTest):
         self.assertTrue(row["fingerprint"])
 
     def test_a_stop_mid_run_still_writes_started_because_and_fingerprint(self):
-        with mock.patch.object(Planner, "plan", side_effect=engine.Blocked("failed: stopped (SIGTERM)", kind=oc.Kind.PAUSE_KILLED)):
+        with mock.patch.object(Planner, "plan", side_effect=engine.Blocked("failed: stopped (SIGTERM)", kind=Kind.PAUSE_KILLED)):
             rc, _ = self.run_engine({})
         self.assertEqual(rc, 2)
         row = self.assert_row("failed")

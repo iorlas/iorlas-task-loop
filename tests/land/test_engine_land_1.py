@@ -51,8 +51,8 @@ from taskloop.adapters import (
 from taskloop.app.run import engine
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.ids import BeadId
+from taskloop.contracts.kinds import Kind
 from taskloop.contracts.landed import LandedStore
-from taskloop.domain import outcome as oc
 from taskloop.domain.checks import lint
 from taskloop.domain.plan.matchers import gate_only_criteria
 
@@ -274,7 +274,7 @@ class EngineLand1Test(EngineTest):
         eng = self.checks_engine()
         with self.stoppable(), mock.patch.object(subprocess, "Popen", SignalledPopen), self.assertRaises(engine.Blocked) as cm:
             eng.sh(shlex.split(self.spawn(pidfile)))
-        self.assertEqual(cm.exception.kind, oc.Kind.PAUSE_KILLED)
+        self.assertEqual(cm.exception.kind, Kind.PAUSE_KILLED)
         self.assertDead(self.child_of(pidfile))
 
     @real_proc("a SIGTERM during the gate must leave no child alive: a real sleeping child is killed")

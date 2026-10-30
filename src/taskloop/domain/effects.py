@@ -9,6 +9,7 @@ unapplied one and repeats none. Stdlib only; imports outcome, never app.
 from dataclasses import dataclass
 from typing import Final, assert_never, final
 
+from taskloop.contracts.kinds import ASKS, Infra, Kind, Owner, Task
 from taskloop.domain import outcome as oc
 
 
@@ -132,10 +133,10 @@ def settling(done: oc.RunOutcome) -> CloseBead | BlockBead | LeaveBead:
     """What happens to the bead: one effect per Fault variant (None: a finish)."""
     match done.fault:
         case None:
-            return CloseBead(landed=done.kind is oc.Kind.LANDED)
-        case oc.Infra() | oc.Owner():
+            return CloseBead(landed=done.kind is Kind.LANDED)
+        case Infra() | Owner():
             return LeaveBead()
-        case oc.Task():
+        case Task():
             return BlockBead()
         case fault:
             assert_never(fault)
@@ -153,7 +154,7 @@ def plan_close(done: oc.RunOutcome, *, dry: bool, branch: str, slot_gen: int) ->
     if dry:
         return [*head, NoteDry(), *tail]
     release = ReleaseSlot(branch, slot_gen)
-    if done.kind is oc.Kind.WAIT_ASK:
+    if done.kind is Kind.WAIT_ASK:
         return [*head, NoteWait(), release]
-    ask: list[CloseEffect] = [RaiseAsk()] if done.kind in oc.ASKS and done.spec is not None else []
+    ask: list[CloseEffect] = [RaiseAsk()] if done.kind in ASKS and done.spec is not None else []
     return [*head, *ask, FileNotes(), Reflect(), settling(done), release, *tail]

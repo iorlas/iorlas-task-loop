@@ -12,8 +12,8 @@ from taskloop.contracts import log as rec
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.enums import WaitWhat
 from taskloop.contracts.ids import BeadId
+from taskloop.contracts.kinds import Kind
 from taskloop.contracts.ports import Clock
-from taskloop.domain import outcome as oc
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.checks.matchers import slot_wait_secs
 from taskloop.stores.bundle import Stores
@@ -132,7 +132,7 @@ class Waits:
             runs = self.earlier[1] + (1 if now else 0)
             raise Blocked(f"bead used {askspecs.million(used)} tokens over {runs} run{'' if runs == 1 else 's'} "
                           f"(cap {askspecs.million(cap)}): raise engine.bead_token_cap or split the bead",
-                          askspecs.token_cap(used, runs, cap), kind=oc.Kind.ASK_BUDGET)
+                          askspecs.token_cap(used, runs, cap), kind=Kind.ASK_BUDGET)
 
     def budget_check(self) -> None:
         e = self.e
@@ -143,4 +143,4 @@ class Waits:
             went = ", ".join("{} {} min ({} round{})".format(b.step, b.minutes, b.rounds, "" if b.rounds == 1 else "s") for b in steps)
             waited = f" ({int(e.waited // 60)} min waiting for shared resources not counted)" if e.waited >= 60 else ""
             raise Blocked("over budget: {}{}{}".format(", ".join(over), (". Where it went: " + went) if went else "", waited),
-                          askspecs.over_budget(over, steps, int(e.waited // 60)), kind=oc.Kind.ASK_BUDGET)
+                          askspecs.over_budget(over, steps, int(e.waited // 60)), kind=Kind.ASK_BUDGET)

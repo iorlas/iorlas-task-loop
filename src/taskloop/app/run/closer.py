@@ -23,6 +23,7 @@ from taskloop.contracts import log as rec
 from taskloop.contracts.answers import VERDICTS
 from taskloop.contracts.checkpoint import Checkpoint, Notes
 from taskloop.contracts.enums import Outcome
+from taskloop.contracts.kinds import ASKS, Infra, Kind, Owner, Task
 from taskloop.contracts.ports import BeadPatch
 from taskloop.domain import effects, storm
 from taskloop.domain import outcome as oc
@@ -59,7 +60,7 @@ class Closer:
     def repo_id(self) -> str:
         return self.e.git("remote", "get-url", "origin") or str(self.e.wt)
 
-    def decide(self, o: oc.RunOutcome) -> oc.Kind:
+    def decide(self, o: oc.RunOutcome) -> Kind:
         """The close's Kind after POLICY: a fault seen too often on one bead becomes one ask; the trace fields, the fingerprint and
         the storm check (never for a pause or an ask) are set here."""
         e = self.e
@@ -77,7 +78,7 @@ class Closer:
         self.storm(history, kind, o, why)
         return e.kind
 
-    def storm(self, history: Sequence[Mapping[str, object]], kind: oc.Kind, o: oc.RunOutcome, why: str) -> None:
+    def storm(self, history: Sequence[Mapping[str, object]], kind: Kind, o: oc.RunOutcome, why: str) -> None:
         e = self.e
         trip = storm.storm_trip(history, e.bead, kind, o.fingerprint, e.clock.now())
         if trip and not e.dry:
@@ -94,12 +95,12 @@ class Closer:
         if bad:  # an ask that is no ask an owner can answer is the engine's own fault; no prose question takes its place
             first = why.splitlines()[0][:200] if why else ""
             why = f"failed: ask_lint: {'; '.join(bad)[:300]} ({first})"
-            ended = oc.make(oc.Kind.FAULT_ENGINE, why)
+            ended = oc.make(Kind.FAULT_ENGINE, why)
         kind = self.decide(oc.make(ended.kind, why, spec=ended.spec))
         spec = ended.spec
         if e.disp and e.disp.escalated and spec is None:
             spec = askspecs.repeated_fault(oc.KNOBS["fault_retries"], why.splitlines()[0][:200])
-        done = oc.make(kind, why, sha=ended.sha, spec=spec if kind in oc.ASKS else None)  # the final outcome: its word is the trace's
+        done = oc.make(kind, why, sha=ended.sha, spec=spec if kind in ASKS else None)  # the final outcome: its word is the trace's
         if not e.dry:
             # before the first effect: a restart rebuilds the plan from it
             e.checkpoints.keep_end(stored_end.stored(e.log_path.stem, done, e.disp, e.fp, e.leftovers))
@@ -239,14 +240,14 @@ class Closer:
         e = self.e
         summary = e.plan_summary[:300]
         match done.fault:
-            case None if done.kind is oc.Kind.LANDED:
+            case None if done.kind is Kind.LANDED:
                 base = e.cfg.base.split("/")[-1]
                 rc = track.close_as(e.claim, f"merged {done.sha[:12]} to {base}: {summary or 'the task stages passed'}; {stats}", e.store)
             case None:
                 rc = track.close_as(e.claim, "done with nothing to land: " + (summary or stats), e.store)
-            case oc.Infra() | oc.Owner():  # a machine fault, a pause or the owner's hold: the bead stays open, unassigned
+            case Infra() | Owner():  # a machine fault, a pause or the owner's hold: the bead stays open, unassigned
                 rc = self.leave_open(done.kind, done.detail)
-            case oc.Task():
+            case Task():
                 q = ("\n\nQuestion: " + done.spec.decision) if done.spec else ""
                 rc = track.block_as(e.claim, done.detail + q, e.store, e.comment)
             case fault:
@@ -254,7 +255,7 @@ class Closer:
         if rc:  # a repo's bd rules can refuse (e.g. a minimum reason length): say so, never report a clean close
             e.warn(f"bd refused to {'close' if done.finished else 'block'} {e.bead} (exit {rc}): close it by hand")
 
-    def leave_open(self, kind: oc.Kind, why: str) -> int:
+    def leave_open(self, kind: Kind, why: str) -> int:
         e = self.e
         fault = kind.name.startswith("FAULT_")
         if not fault:

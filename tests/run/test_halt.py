@@ -14,7 +14,7 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as te
 from support.engine_case import engine
 
-from taskloop.domain import outcome as oc
+from taskloop.contracts.kinds import Kind
 
 
 class Halt(te.EngineTest):
@@ -30,7 +30,7 @@ class Halt(te.EngineTest):
         with self.assertRaises(engine.Blocked) as cm:
             eng.halt_point(wait=30)
         self.assertLess(time.time() - t, 10)
-        self.assertEqual(cm.exception.kind, oc.Kind.PAUSE_KILLED)
+        self.assertEqual(cm.exception.kind, Kind.PAUSE_KILLED)
 
 
 if __name__ == "__main__":

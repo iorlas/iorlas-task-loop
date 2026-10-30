@@ -15,6 +15,7 @@ from taskloop.app.run import ended, engine
 from taskloop.app.run.closer import Closer
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts.ids import BeadId
+from taskloop.contracts.kinds import Kind
 from taskloop.domain import effects as fx
 from taskloop.domain import outcome as oc
 from taskloop.domain.asks import specs as askspecs
@@ -37,7 +38,7 @@ class Base(T.EngineTest):
 
 class CloseResume(Base):
     def test_a_kill_before_each_effect_then_a_restart_applies_the_rest_once(self):
-        n = len(fx.plan_close(oc.make(oc.Kind.DONE), dry=False, branch="", slot_gen=0))
+        n = len(fx.plan_close(oc.make(Kind.DONE), dry=False, branch="", slot_gen=0))
         for kill_at in range(n):
             with self.subTest(kill_at=kill_at):
                 self.bd_calls.clear()
@@ -55,11 +56,11 @@ class CloseResume(Base):
 
                 with mock.patch.object(Closer, "apply", dying):
                     with self.assertRaises(Killed):
-                        eng.closer.close(oc.make(oc.Kind.DONE))
+                        eng.closer.close(oc.make(Kind.DONE))
                     keys = read_ck(eng).applied
                     self.assertEqual(len(keys), kill_at)
                     again = Closer(eng)  # a new process: the ledger is the checkpoint
-                    again.close(oc.make(oc.Kind.DONE))
+                    again.close(oc.make(Kind.DONE))
                 self.assertEqual(len(seen), n, "every effect ran, none twice")
                 self.assertEqual(self.closes(), 1)
 
@@ -79,7 +80,7 @@ class ColdRestart(Base):
             real(this, eff, *a)
 
         with mock.patch.object(Closer, "apply", dying), self.assertRaises(Killed):
-            eng.closer.close(outcome or oc.make(oc.Kind.DONE))
+            eng.closer.close(outcome or oc.make(Kind.DONE))
         return eng
 
     def cold(self):
@@ -94,7 +95,7 @@ class ColdRestart(Base):
 
     def test_a_closed_run_leaves_nothing_to_finish(self):
         eng = self.engine()
-        eng.closer.close(oc.make(oc.Kind.FAULT_INFRA, "failed: infrastructure x"))  # not finished: the checkpoint stays, whole
+        eng.closer.close(oc.make(Kind.FAULT_INFRA, "failed: infrastructure x"))  # not finished: the checkpoint stays, whole
         self.assertIsNone(self.cold().dead)
 
     def test_the_restarted_process_applies_the_remaining_effects_and_closes_the_bead_once(self):
@@ -131,7 +132,7 @@ class ColdRestart(Base):
 
     def test_an_ask_outcome_keeps_its_spec_through_the_checkpoint_and_the_bead_is_blocked_once(self):
         spec = askspecs.external_fact(["x"])
-        ask = oc.make(oc.Kind.ASK_DECISION, "needs a fact", spec=spec)
+        ask = oc.make(Kind.ASK_DECISION, "needs a fact", spec=spec)
         self.assertEqual(ended.loaded(ended.stored("r", ask, None, "", []))[0], ask)
         self.killed_at(fx.BlockBead, outcome=ask)
         self.cold().run()

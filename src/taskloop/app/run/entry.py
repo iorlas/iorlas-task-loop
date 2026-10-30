@@ -32,11 +32,11 @@ from taskloop.contracts.enums import AskStatus, Result
 from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.fence import SLOT_GEN
 from taskloop.contracts.ids import BeadId
+from taskloop.contracts.kinds import Kind
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdFailure, BeadPatch
 from taskloop.contracts.run import RunReport
 from taskloop.contracts.stores import AskStore
-from taskloop.domain import outcome as oc
 
 say = console.say
 engine_written = intake.engine_written  # what the engine (or a receipt of ours) wrote into a bead is never the owner's (tl-7y6.6.2)
@@ -209,7 +209,7 @@ def run_any_slot(a: Any, repo: Any, cfg: Any, store: Any = None) -> Any:
     got = wslots.wait_slot(repo, wslots.profile_slots(repo), "run-task " + a.id, stop=lambda: not wait or halt.is_set(), sleep=halt.wait,
                            on_wait=waiting, prio=wslots.bead_priority(repo, a.id, store), store=store)
     if not got and halt.is_set():
-        raise Blocked("failed: stopped (SIGTERM)", kind=oc.Kind.PAUSE_KILLED)  # run_bead's caller reports it; no slot was taken
+        raise Blocked("failed: stopped (SIGTERM)", kind=Kind.PAUSE_KILLED)  # run_bead's caller reports it; no slot was taken
     if not got:
         why = "no free slot (tl slot list); --wait waits in line for one"
         print(f"TAKEN: {why}")

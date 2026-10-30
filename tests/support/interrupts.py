@@ -13,7 +13,7 @@ from taskloop.app.run import engine
 from taskloop.app.run.state import Checkpoints
 from taskloop.app.run.steps import Steps
 from taskloop.app.write.stage_loop import StageLoop
-from taskloop.domain import outcome as oc
+from taskloop.contracts.kinds import Kind
 
 
 class Interrupter:
@@ -77,7 +77,7 @@ class Interrupter:
                 signal.raise_signal(signal.SIGTERM)
             paused = self.interruption == "pause"
             raise engine.Blocked("paused: validation writer unavailable" if paused else "needs a human: validation command denied",
-                                 kind=oc.Kind.PAUSE_LANE if paused else oc.Kind.FAULT_DENIED)
+                                 kind=Kind.PAUSE_LANE if paused else Kind.FAULT_DENIED)
         return self.real["delegate"](this, current_role, *a, **kw)
 
     def patched(self):

@@ -14,7 +14,7 @@ from taskloop.app.run import trace as runtrace
 from taskloop.app.run.blocked import Blocked
 from taskloop.app.run.waits import Waits
 from taskloop.contracts.enums import WaitWhat
-from taskloop.domain import outcome as oc
+from taskloop.contracts.kinds import Kind
 
 
 class TokenCap(unittest.TestCase):
@@ -35,7 +35,7 @@ class TokenCap(unittest.TestCase):
         with self.assertRaises(Blocked) as b:
             waits.budget_check()
         self.assertIn("bead used 18.2M tokens over 2 runs (cap 15M): raise engine.bead_token_cap or split the bead", str(b.exception))
-        self.assertEqual(b.exception.kind, oc.Kind.ASK_BUDGET)
+        self.assertEqual(b.exception.kind, Kind.ASK_BUDGET)
 
     def test_under_the_cap_runs_as_before(self):
         self.waits_with([(5_000_000, 1_000_000)], 15_000_000)[1].budget_check()

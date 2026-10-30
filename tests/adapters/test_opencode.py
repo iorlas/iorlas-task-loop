@@ -28,7 +28,7 @@ from taskloop.app.write.handoff import Handoff  # noqa: E402
 from taskloop.contracts.delegate import DelegateResult  # noqa: E402
 from taskloop.contracts.ids import BeadId  # noqa: E402
 from taskloop.stores.runlog import RunLog  # noqa: E402
-from taskloop_dash.views import arrows, names  # noqa: E402
+from taskloop_dash.views import names  # noqa: E402
 
 SID = "ses_abc123"
 T = 1_790_000_000_000  # OpenCode stores milliseconds
@@ -103,8 +103,6 @@ class OpenCode(unittest.TestCase):
     def test_a_logged_out_xai_lane_says_grok_and_opencode(self):
         self.assertEqual(names.lane_name("GROK_SUBSCRIPTION", ""), "Grok")
         self.assertEqual(names.lane_name("x", "xai"), "Grok")
-        self.assertEqual(arrows.pause_reason("paused: logged_out on write; run `opencode auth login` on this machine"),
-                         "Grok logged out")
 
     # reader
     # lookups

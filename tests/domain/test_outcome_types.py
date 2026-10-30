@@ -13,9 +13,9 @@ from support.narrow import must
 from taskloop.app.loop import verdict as vd
 from taskloop.contracts.checks import RoundVerdict, round_verdict_of
 from taskloop.contracts.enums import Outcome, Result
+from taskloop.contracts.kinds import ASKS, FAULTS, FINISH, PAUSES, Action, Infra, Kind, Owner, Task, fault_of
 from taskloop.domain import outcome as oc
 from taskloop.domain.asks import specs as askspecs
-from taskloop.domain.outcome import Action, Infra, Kind, Owner, Task
 
 EXPECT = {Infra: Action.RETRY, Task: Action.ASK, Owner: Action.HOLD}
 
@@ -26,24 +26,24 @@ class FaultTable(unittest.TestCase):
 
     def test_every_kind_maps_to_one_variant_and_finishes_to_none(self):
         for k in Kind:
-            f = oc.fault_of(k)
-            if k in oc.FINISH:
+            f = fault_of(k)
+            if k in FINISH:
                 self.assertIsNone(f, k)
             else:
                 self.assertIsInstance(f, (Infra, Task, Owner), k)
                 self.assertEqual(must(f).kind, k)
 
     def test_variant_by_family(self):
-        for k in oc.ASKS:
-            self.assertIsInstance(oc.fault_of(k), Task, k)
-        for k in (*oc.PAUSES, *oc.FAULTS, Kind.CUT):
-            self.assertIsInstance(oc.fault_of(k), Infra, k)
+        for k in ASKS:
+            self.assertIsInstance(fault_of(k), Task, k)
+        for k in (*PAUSES, *FAULTS, Kind.CUT):
+            self.assertIsInstance(fault_of(k), Infra, k)
         for k in (Kind.OWNER_PARK, Kind.WAIT_ASK):
-            self.assertIsInstance(oc.fault_of(k), Owner, k)
+            self.assertIsInstance(fault_of(k), Owner, k)
 
     def test_action_agrees_with_the_policy_row(self):
         for k in Kind:
-            f = oc.fault_of(k)
+            f = fault_of(k)
             if f is not None:
                 self.assertEqual(f.action is Action.ASK, oc.POLICY[k].makes_ask, k)
                 self.assertEqual(f.action is Action.ASK, oc.POLICY[k].bd == "block", k)
@@ -58,7 +58,7 @@ class RunOutcomeRecord(unittest.TestCase):
         self.assertEqual(oc.load("pause_lane").kind, Kind.PAUSE_LANE)
 
     def test_an_ask_without_a_spec_cannot_be_built(self):
-        for k in oc.ASKS:
+        for k in ASKS:
             with self.assertRaises(ValueError):
                 oc.make(k, "why")
             self.assertIs(must(oc.make(k, "why", spec=askspecs.missing_criteria()).spec).ask_class, askspecs.missing_criteria().ask_class)

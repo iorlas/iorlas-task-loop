@@ -11,6 +11,7 @@ from taskloop.contracts.checkpoint import Checkpoint, EndRec, Notes
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.enums import Outcome
 from taskloop.contracts.ids import BeadId
+from taskloop.contracts.kinds import Kind
 from taskloop.contracts.ports import Beads, Clock
 from taskloop.domain import outcome as oc
 from taskloop.domain.asks.spec import AskSpec
@@ -59,7 +60,7 @@ class CloseReflector(Protocol):
 
 
 class CloseAskFlow(Protocol):
-    def raise_ask(self, spec: AskSpec, why: str, kind: oc.Kind) -> object: ...
+    def raise_ask(self, spec: AskSpec, why: str, kind: Kind) -> object: ...
 
 
 class CloseOwnerLook(Protocol):
@@ -79,7 +80,7 @@ class CloserHost(Protocol):
     """The engine, as the close reads it. It also satisfies FollowUpHost (app/land/followups.py), which the close hands it to."""
 
     disp: oc.Disposition | None
-    kind: oc.Kind
+    kind: Kind
     fp: str
     storm: str
     asked: bool

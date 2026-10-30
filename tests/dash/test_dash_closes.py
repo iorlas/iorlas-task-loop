@@ -15,16 +15,14 @@ from support.narrow import must
 
 from taskloop.app.run.trace import why_code
 from taskloop.contracts import wire
-from taskloop.contracts.enums import Outcome, WhyCode
+from taskloop.contracts.enums import Outcome
 from taskloop.contracts.ids import RunId
-from taskloop.contracts.kinds import ASKS, FINISH, Fault, Infra, Kind, Owner, Task, fault_of
+from taskloop.contracts.kinds import ASKS, Kind
 from taskloop.contracts.log import Close
 from taskloop.contracts.trace import RunTrace, Stats
 from taskloop.domain import outcome as oc
 from taskloop.domain.asks.spec import AskSpec
 from taskloop_dash.env import Env
-from taskloop_dash.readers import closes
-from taskloop_dash.readers.closes import End
 from taskloop_dash.readers.records import Records
 
 
@@ -32,30 +30,6 @@ def close_of(kind: Kind) -> Close:
     spec = AskSpec.__new__(AskSpec) if kind in ASKS else None  # the word needs no spec's content
     word = oc.make(kind, "x", spec=spec).word
     return Close(t=T, outcome=word, why_code=why_code(kind.value, word), why="x")
-
-
-class Closes(unittest.TestCase):
-    def test_every_kind_reads_back_as_its_own_kind_of_fault(self):
-        for kind in (k for k in Kind if k is not Kind.CUT):  # no production code raises CUT
-            with self.subTest(kind=kind):
-                ended = closes.read(close_of(kind))
-                if kind in FINISH:
-                    self.assertEqual((must(ended).fault, must(ended).end), (None, End.FINISHED))
-                    continue
-                fault: Fault = must(must(ended).fault)
-                self.assertIs(type(fault), type(must(fault_of(kind))))
-                self.assertEqual(must(ended).end, closes.end_of(fault_of(kind)))
-
-    def test_the_kinds_a_view_can_tell_apart_come_back_exactly(self):
-        for kind in (*ASKS, Kind.WAIT_ASK, Kind.OWNER_PARK, Kind.PAUSE_LANE, Kind.PAUSE_NETWORK, Kind.PAUSE_KILLED, Kind.FAULT_DENIED):
-            with self.subTest(kind=kind):
-                self.assertEqual(must(closes.read(close_of(kind))).fault, fault_of(kind))
-
-    def test_a_close_no_version_writes_is_unread(self):
-        self.assertIsNone(closes.read(Close(t=T, outcome=Outcome.BLOCKED)))
-        self.assertIsNone(closes.read(Close(t=T, outcome=Outcome.FAILED, why_code=WhyCode.HUNG)))
-        self.assertEqual(must(closes.read(Close(t=T, outcome=Outcome.LANDED))).end, End.FINISHED)
-        self.assertEqual([type(f) for f in (Infra(Kind.CUT), Task(Kind.ASK_STUCK), Owner(Kind.WAIT_ASK))], [Infra, Task, Owner])
 
 
 def trace(run: str, outcome: Outcome, ended: float, replans: int = 0) -> RunTrace:

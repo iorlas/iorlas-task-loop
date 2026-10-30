@@ -41,8 +41,8 @@ from taskloop.app.slots import (
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts.config import SlotsConfig
 from taskloop.contracts.enums import Result
+from taskloop.contracts.kinds import Kind
 from taskloop.contracts.run import RunReport
-from taskloop.domain import outcome as oc
 
 LIVE_PID = "a live pid that is not this process: a real sleep child (an engine lock, a second loop, a waiter)"
 
@@ -184,7 +184,7 @@ class RunTaskTakesItsSlot(Slots):
         bd = self.beads({"x-1": []})
 
         def stopped(*a, **kw):
-            raise engine.Blocked("failed: stopped (SIGTERM)", kind=oc.Kind.PAUSE_KILLED)
+            raise engine.Blocked("failed: stopped (SIGTERM)", kind=Kind.PAUSE_KILLED)
         with mock.patch.object(entry, "reclaim", side_effect=stopped):
             f = Path(self.home, "o.json")
             a = entry.Args(id="x-1", worktree=None, slot="s1", dry_run=False, fresh=False, quiet=True,

@@ -7,23 +7,23 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 
 # isort: split
+from taskloop.contracts.kinds import ASKS, FINISH, PAUSES, Kind
 from taskloop.domain import effects as fx
 from taskloop.domain import outcome as oc
 from taskloop.domain.asks import specs as askspecs
 
-Kind = oc.Kind
 REL = fx.ReleaseSlot("task/t-1", 3)
 HEAD = [fx.SaveBranch(), fx.RecordRun()]
 TAIL = [fx.FileNotes(), fx.Reflect()]
 DROP = fx.DropCheckpoint()  # a finished run only: its checkpoint holds the outcome and the keys until the close is whole
 
 
-def done(kind: oc.Kind) -> oc.RunOutcome:
+def done(kind: Kind) -> oc.RunOutcome:
     return oc.make(kind, "why", sha="abc" if kind is Kind.LANDED else "",
-                   spec=askspecs.external_fact(["x"]) if kind in oc.ASKS else None)
+                   spec=askspecs.external_fact(["x"]) if kind in ASKS else None)
 
 
-def plan(kind: oc.Kind, dry: bool = False) -> list[fx.CloseEffect]:
+def plan(kind: Kind, dry: bool = False) -> list[fx.CloseEffect]:
     return fx.plan_close(done(kind), dry=dry, branch="task/t-1", slot_gen=3)
 
 
@@ -39,12 +39,12 @@ class PlanTable(unittest.TestCase):
             self.assertEqual(plan(k), [*HEAD, *TAIL, fx.LeaveBead(), REL], k)
 
     def test_paused_leaves_the_bead_open(self):
-        for k in oc.PAUSES:
+        for k in PAUSES:
             self.assertEqual(plan(k), [*HEAD, *TAIL, fx.LeaveBead(), REL], k)
         self.assertEqual(plan(Kind.OWNER_PARK), [*HEAD, *TAIL, fx.LeaveBead(), REL])
 
     def test_ask_raises_then_blocks(self):
-        for k in oc.ASKS:
+        for k in ASKS:
             self.assertEqual(plan(k), [*HEAD, fx.RaiseAsk(), *TAIL, fx.BlockBead(), REL], k)
 
     def test_an_open_ask_says_why_and_frees_the_slot(self):
@@ -52,14 +52,14 @@ class PlanTable(unittest.TestCase):
 
     def test_dry_run_touches_no_bead_and_no_slot(self):
         for k in Kind:
-            self.assertEqual(plan(k, dry=True), [*HEAD, fx.NoteDry(), *([DROP] if k in oc.FINISH else [])], k)
+            self.assertEqual(plan(k, dry=True), [*HEAD, fx.NoteDry(), *([DROP] if k in FINISH else [])], k)
 
     def test_every_kind_plans_one_bead_effect_at_most_and_no_repeat(self):
         for k in Kind:
             p = plan(k)
             self.assertEqual(len(p), len(set(p)), k)
             self.assertLessEqual(sum(isinstance(x, fx.CloseBead | fx.BlockBead | fx.LeaveBead) for x in p), 1, k)
-            self.assertIsInstance(p[-1], fx.DropCheckpoint if k in oc.FINISH else fx.ReleaseSlot)
+            self.assertIsInstance(p[-1], fx.DropCheckpoint if k in FINISH else fx.ReleaseSlot)
 
 
 class Keys(unittest.TestCase):

@@ -22,7 +22,7 @@ from taskloop.app.run import engine
 from taskloop.contracts import answers, plancheck
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.ids import CheckId
-from taskloop.domain import outcome as oc
+from taskloop.contracts.kinds import Kind
 from taskloop.domain.checks import planref
 from taskloop.domain.checks.names import log_var
 from taskloop.domain.prompts import plan as pp
@@ -473,7 +473,7 @@ class EnginePlanTest(EngineTest):
     def test_the_plan_is_in_the_checkpoint_the_moment_the_planner_answers(self):
         # d5f.38: a SIGTERM after the planner answered lost a finished plan before the checkpoint
         with mock.patch.object(
-            Planner, "add_leftovers", side_effect=engine.Blocked("failed: stopped (SIGTERM)", kind=oc.Kind.PAUSE_KILLED)
+            Planner, "add_leftovers", side_effect=engine.Blocked("failed: stopped (SIGTERM)", kind=Kind.PAUSE_KILLED)
         ):
             rc, _ = self.run_engine({"plan": [PLAN]})
         self.assertEqual(rc, 2)

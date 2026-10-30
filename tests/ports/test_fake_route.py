@@ -28,6 +28,7 @@ from support.narrow import must, only  # noqa: E402
 from taskloop.adapters import delegate as dl  # noqa: E402
 from taskloop.adapters import delegate_wire  # noqa: E402
 from taskloop.app.loop.net import NetState  # noqa: E402
+from taskloop.contracts.kinds import Kind  # noqa: E402
 from taskloop.domain import outcome as oc  # noqa: E402
 from taskloop.domain.lanes import netgate  # noqa: E402
 from taskloop.domain.lanes import policy as lp  # noqa: E402
@@ -115,7 +116,7 @@ class Fake(unittest.TestCase):
             self.assertEqual(must(r.stop).reason, exp, fx.name)
             self.assertEqual((must(r.stop).scope, must(r.stop).permanence, must(r.stop).retry_kind), lp_facts(exp), fx.name)
             a = lp.decide(must(r.stop), lp.Ctx(now=1000.0))
-            self.assertFalse(isinstance(a, (lp.Yield, lp.Fail)) and oc.make(oc.Kind[a.kind]).rule.makes_ask, fx.name)
+            self.assertFalse(isinstance(a, (lp.Yield, lp.Fail)) and oc.make(Kind[a.kind]).rule.makes_ask, fx.name)
         self.assertGreaterEqual(replayed, 5)
 
     # --- the contract and the table agree ---------------------------------------------------------------------------

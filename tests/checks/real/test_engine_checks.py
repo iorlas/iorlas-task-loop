@@ -21,7 +21,7 @@ from taskloop.app.run import (
 )
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts.ids import BeadId
-from taskloop.domain import outcome as oc
+from taskloop.contracts.kinds import Kind
 
 
 class EngineChecksTest(EngineTest):
@@ -38,7 +38,7 @@ class EngineChecksTest(EngineTest):
 
         def stopped(*_):  # what the run's SIGTERM handler does, from the same thread, once the check has started its child
             until(lambda: pidfile.exists() and pidfile.read_text().strip(), 5)
-            raise engine.Blocked("failed: stopped (SIGTERM)", kind=oc.Kind.PAUSE_KILLED)
+            raise engine.Blocked("failed: stopped (SIGTERM)", kind=Kind.PAUSE_KILLED)
         old = signal.signal(signal.SIGALRM, stopped)
         self.addCleanup(signal.signal, signal.SIGALRM, old)
         signal.setitimer(signal.ITIMER_REAL, 0.5)

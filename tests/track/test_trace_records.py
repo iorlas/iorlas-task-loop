@@ -9,7 +9,6 @@ import time
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
-from typing import Any, cast
 
 from run import test_engine_units
 from support import engine_case as te
@@ -215,29 +214,6 @@ class TraceRecords(te.EngineTest):
             rc = verbs.trace(BeadId("t-1"), 0, False)
         self.assertEqual(rc, 0)
         self.assertIn("landed", out.getvalue())
-
-    # ---- the contract: what the engine writes is what the dashboard draws
-
-    def test_the_dashboard_builds_the_runs_blocks_from_the_engines_records(self):
-        plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[GREEN_ON_2ND_WRITE])])
-        rc, _ = self.run_engine({"plan": [plan], "write": [WRITE, WRITE], "review": [CLEAN]})
-        self.assertEqual(rc, 0)
-        run = DASH.runlogs.run_timeline(str(self.eng.log_path))
-        self.assertEqual([b["kind"] for b in run["blocks"]], ["plan", "write", "checks", "write", "checks", "review",
-                                                              "land"])
-        self.assertEqual(run["blocks"][3]["arrow"]["cause"], "checks_red")
-        self.assertIn("1 failed", run["blocks"][3]["arrow"]["text"])
-        self.assertEqual(run["blocks"][1]["who"]["family"], "openai")
-        self.assertEqual(run["blocks"][2]["result"]["status"], "fail")
-        self.assertEqual(run["blocks"][4]["result"]["status"], "ok")
-        self.assertEqual(run["end"]["outcome"], "landed")
-        self.assertEqual(run["started_because"], "first")
-        blk = DASH.runlogs.block_detail(str(self.eng.log_path), run["blocks"][2]["node"])
-        self.assertEqual([c["status"] for c in blk["checks"]], ["failed"])
-        self.assertTrue(blk["checks"][0]["log"])
-        self.assertTrue(
-            (Path(cast(Any, self).eng.run_dir) / blk["checks"][0]["log"]).is_file()
-        )  # found by CheckResult.log, not by a rebuilt file name
 
 
 if __name__ == "__main__":

@@ -5,7 +5,7 @@ from typing import Any
 
 from taskloop.app.asks import raiser
 from taskloop.app.run.blocked import Blocked
-from taskloop.domain import outcome as oc
+from taskloop.contracts.kinds import Kind
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.asks import text as asktext
 
@@ -20,7 +20,7 @@ class AskFlow:
         e = self.e
         state, a = raiser.check(e.stores.asks, e.bead, e.brief_hash, e.fresh, time.time())
         if state == "wait" and a:
-            raise Blocked(raiser.waiting_line(a), kind=oc.Kind.WAIT_ASK)
+            raise Blocked(raiser.waiting_line(a), kind=Kind.WAIT_ASK)
         if state == "answer" and a:
             e.answered = a
             e.briefs.export()  # the brief the workers read now carries the owner's answer
@@ -64,4 +64,4 @@ class AskFlow:
             n = e.stats["reviews"]
             raise Blocked(f"{n} reviews in this run (the limit is {cap}, replans included): it needs the owner's hint\n{hint}",
                           askspecs.open_question(f"{n} reviews ran in this run (the limit is {cap}, replans included). {hint}", None),
-                          kind=oc.Kind.ASK_STUCK)
+                          kind=Kind.ASK_STUCK)

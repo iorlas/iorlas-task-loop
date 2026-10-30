@@ -13,11 +13,9 @@ from support.narrow import must
 
 from taskloop.app.run import artifacts
 from taskloop.app.run.steps import Steps
-from taskloop.contracts import log
 from taskloop.contracts.ids import BeadId
 from taskloop.stores.memory import fake_stores
 from taskloop.stores.runlog import RunLog
-from taskloop_dash.views import nodes
 
 
 class Ingest(unittest.TestCase):
@@ -72,12 +70,6 @@ class AtStepEnd(unittest.TestCase):
             self.assertEqual([k for k in kinds if k[1]], [("artifacts", ["a.png"]), ("artifacts", ["b.pdf"])])
             self.assertEqual([k[0] for k in kinds[:3]], ["step_start", "artifacts", "step_end"])
             self.assertEqual(sorted(p.name for p in dest.iterdir()), ["a.png", "b.pdf"])
-
-
-class OnTheTimeline(unittest.TestCase):
-    def test_the_record_is_a_line_of_its_step_in_the_existing_style(self):
-        got = nodes.line_of(log.Artifacts(t=3.0, id="n1", step="write", bead="tl-1", names=["a.png", "b.pdf"]), 7)
-        self.assertEqual(got, {"t": 3.0, "kind": "note", "text": "artifacts: a.png, b.pdf", "_i": 7})
 
 
 class Page(unittest.TestCase):

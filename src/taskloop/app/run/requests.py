@@ -16,11 +16,11 @@ from taskloop.app.asks.intake import Intake, receipt
 from taskloop.contracts import log as rec
 from taskloop.contracts import wire
 from taskloop.contracts.ids import BeadId
+from taskloop.contracts.kinds import Kind
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.requests import OwnerNote, OwnerRequest
 from taskloop.contracts.runlife import Liveness, liveness
 from taskloop.contracts.stores import JsonlStore
-from taskloop.domain import outcome as oc
 
 PARKED_WHY = "parked: by the owner (the branch and the checkpoint are kept; release the hold to go on)"
 STOPPED_WHY = "failed: stopped by the owner"
@@ -115,7 +115,7 @@ class OwnerRequests:
             self.e.halt_point()
         if got.park:
             self.e.steps.move("pause", "owner_park", f"the owner parked it before {step}")
-            raise self.e.Blocked(PARKED_WHY, kind=oc.Kind.OWNER_PARK)
+            raise self.e.Blocked(PARKED_WHY, kind=Kind.OWNER_PARK)
 
     def prompt_tail(self) -> str:
         """The notes taken since the last worker call, as the prompt's last section; then they are given."""

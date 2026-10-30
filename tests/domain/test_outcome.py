@@ -14,9 +14,10 @@ from support.narrow import must
 
 from taskloop.adapters import storm as storm_file
 from taskloop.app.loop.health import loop_health
+from taskloop.contracts.kinds import FAULTS, Kind
 from taskloop.domain import outcome as oc
 from taskloop.domain import storm as lh
-from taskloop.domain.outcome import POLICY, Kind
+from taskloop.domain.outcome import POLICY
 
 
 class Table(unittest.TestCase):
@@ -49,7 +50,7 @@ class Table(unittest.TestCase):
         self.assertNotEqual(POLICY[Kind.PAUSE_NETWORK].trace, POLICY[Kind.ASK_STUCK].trace)  # paused vs parked
 
     def test_a_fault_has_no_ask_cell_and_escalates_only_to_stuck(self):
-        for k in oc.FAULTS:
+        for k in FAULTS:
             self.assertIn(POLICY[k].escalate_to, (None, Kind.ASK_STUCK))
 
     def test_fingerprint_strips_ids_numbers_and_paths(self):

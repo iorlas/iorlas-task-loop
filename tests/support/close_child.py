@@ -19,6 +19,7 @@ from taskloop.app.run import engine
 from taskloop.app.run.closer import Closer
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts.ids import BeadId
+from taskloop.contracts.kinds import Kind
 from taskloop.domain import outcome as oc
 
 
@@ -57,7 +58,7 @@ def main(argv: list[str]) -> None:
     if mode == "die":
         eng.checkpoints.save(step="close")  # the record the run's close keeps its outcome and keys in
         eng.leftovers = [{"title": "Leftover one", "why": "later"}]
-        eng.closer.close(oc.make(oc.Kind.DONE))
+        eng.closer.close(oc.make(Kind.DONE))
     else:
         write(journal, {"dead": eng.dead is not None, "run": eng.log_path.stem})
         eng.run()

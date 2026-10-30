@@ -10,7 +10,7 @@ from taskloop.adapters.gitenv import pinned_env
 from taskloop.app.run.blocked import Blocked
 from taskloop.contracts import log as rec
 from taskloop.contracts.argv import text_of
-from taskloop.domain import outcome as oc
+from taskloop.contracts.kinds import Kind
 
 
 class Shell:
@@ -46,7 +46,7 @@ class Shell:
         e.log.emit(rec.CmdEnd(id=cid, exit=rc, secs=round(time.time() - started, 1), out=tail[-600:] if rc else ""))
         e.halt_point(what != "check")  # a stop, not the command's verdict (a stopped check reports itself first)
         if check and rc:
-            raise Blocked(f"failed: `{text_of(cmd)}` exit {rc}\n{tail}", kind=oc.Kind.FAULT_INFRA)
+            raise Blocked(f"failed: `{text_of(cmd)}` exit {rc}\n{tail}", kind=Kind.FAULT_INFRA)
         return rc, tail
 
     def stream(self, cmd: Any, cwd: Any, env: Any, pin: bool, chunks: list[str], timeout: float, cid: str, what: str,

@@ -7,7 +7,7 @@ from taskloop.app.run.state import Checkpoints, StateAttrs
 from taskloop.contracts import fence
 from taskloop.contracts.checkpoint import Checkpoint, RunState
 from taskloop.contracts.ids import BeadId
-from taskloop.domain import outcome as oc
+from taskloop.contracts.kinds import Kind
 
 
 class RunFields(StateAttrs):
@@ -73,7 +73,7 @@ class RunFields(StateAttrs):
         self.scope = ""  # the bead's acceptance text: an unchecked item outside it is a follow-up, not a gap (tl-bxk.13.5)
         self.sessions: list[Any] = []  # every AI call of this run: the trace a later reflection reads (traces.jsonl)
         self.why, self.asked = "", False  # what result() tells the loop
-        self.kind = oc.Kind.FAULT_ENGINE  # the run's outcome.Kind, after the close's escalation
+        self.kind = Kind.FAULT_ENGINE  # the run's outcome.Kind, after the close's escalation
         self.fp, self.storm = "", ""  # its fingerprint, a storm banner
         self.disp: Any = None
         self.retry_after = 0.0  # a pause for a lane: when delegate says it is back (epoch; 0 = unknown)

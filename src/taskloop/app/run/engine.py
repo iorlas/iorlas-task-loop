@@ -65,6 +65,7 @@ from taskloop.contracts import fence, plancheck
 from taskloop.contracts.argv import text_of
 from taskloop.contracts.enums import Result
 from taskloop.contracts.ids import BeadId
+from taskloop.contracts.kinds import Kind
 from taskloop.contracts.landed import Landed, LandedStore
 from taskloop.contracts.log import Assumed, Said
 from taskloop.contracts.paths import PLAN_FILE, ConfigDir, RunFiles
@@ -191,7 +192,7 @@ class Engine(RunFields):
 
     def halt_point(self, when: bool = True, wait: float = 0) -> None:  # a safe point (and a wait of `wait` s that a stop ends)
         if when and halting.nap(self.halt, wait):
-            raise Blocked("failed: stopped (SIGTERM)", kind=oc.Kind.PAUSE_KILLED)
+            raise Blocked("failed: stopped (SIGTERM)", kind=Kind.PAUSE_KILLED)
 
     def sh(self, cmd: Any, timeout: float = 3600, check: bool = False, save: Any = None, env: Any = None, pin: bool = False,
            what: str = "command", cwd: Any = None) -> tuple[int, str]:
@@ -261,7 +262,7 @@ class Engine(RunFields):
         bad = slotcheck.tree_problem(self.wt)
         if bad:
             self.steps.move("fault", "wrong_tree", bad[0])
-            raise Blocked(f"failed: tree: {bad[0]} ({when} {step}). {bad[1]}", kind=oc.Kind.FAULT_SLOT)
+            raise Blocked(f"failed: tree: {bad[0]} ({when} {step}). {bad[1]}", kind=Kind.FAULT_SLOT)
 
     def on_path(self, name: str) -> str | None:
         return tool_on_path(name)

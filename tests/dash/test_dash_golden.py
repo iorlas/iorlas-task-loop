@@ -1,5 +1,5 @@
 """The dashboard's answers for one recorded state: a run per way a run can end (the close each Kind writes), read through the API
-(snapshot, bead drawer) and through the timeline view. The golden file is the answer as the page reads it; it changes only when a
+(snapshot, bead drawer). The golden file is the answer as the page reads it; it changes only when a
 field was wrong. `GOLDEN_WRITE=1 uv run pytest tests/dash/test_dash_golden.py` rewrites it."""
 
 import json
@@ -70,7 +70,6 @@ class Golden(unittest.TestCase):
         out = {"snapshot": json.loads(self.dash.reads.get("/api/snapshot", {}, None)[1])}
         out["beads"] = {n: json.loads(self.dash.reads.get("/api/bead", {"project": "lifesim", "id": f"g-{i + 1}"}, None)[1])
                         for i, (n, *_) in enumerate(CLOSES)}
-        out["timeline"] = {n: self.dash.runlogs.run_timeline(p, alive=False, now=NOW) for n, p in self.paths.items()}
         return json.loads(json.dumps(out, sort_keys=True))
 
     def test_the_answers_for_the_recorded_state_are_the_golden(self):

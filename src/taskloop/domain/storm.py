@@ -8,6 +8,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
+from taskloop.contracts.kinds import Kind
 from taskloop.domain import outcome as oc
 
 
@@ -18,7 +19,7 @@ class StormTrip:
     t: float
 
 
-def storm_trip(history: Sequence[Mapping[str, Any]], bead: str, kind: oc.Kind, fingerprint: str, now: float,
+def storm_trip(history: Sequence[Mapping[str, Any]], bead: str, kind: Kind, fingerprint: str, now: float,
                knobs: Mapping[str, float] = oc.KNOBS) -> StormTrip | None:
     """The trip this close causes, or None. history: earlier closes {bead, kind, fingerprint, t}; (bead, kind, fingerprint)
     is the close being made. Only FAULT_* count: an ask repeats legitimately, a lane or network pause is gated by its wake."""
@@ -30,7 +31,7 @@ def storm_trip(history: Sequence[Mapping[str, Any]], bead: str, kind: oc.Kind, f
         if h.get("fingerprint") != fingerprint or float(h.get("t") or 0) < cut:
             continue
         try:
-            if oc.POLICY[oc.Kind(h.get("kind"))].storm:
+            if oc.POLICY[Kind(h.get("kind"))].storm:
                 beads.add(str(h.get("bead")))
         except ValueError:
             continue

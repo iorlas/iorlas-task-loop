@@ -27,6 +27,7 @@ from taskloop.app.wire import slots as wslots  # noqa: E402
 from taskloop.contracts import answers  # noqa: E402
 from taskloop.contracts.enums import Result  # noqa: E402
 from taskloop.contracts.ids import BeadId  # noqa: E402
+from taskloop.contracts.kinds import Kind  # noqa: E402
 from taskloop.contracts.run import RunReport  # noqa: E402
 from taskloop.contracts.schema import unstrict  # noqa: E402
 from taskloop.domain import outcome as oc  # noqa: E402
@@ -520,7 +521,7 @@ class DelegateLauncher(T.EngineTest):
     def test_close_with_an_empty_reason_still_closes(self):
         c = wslots.load_cfg(str(self.wt))
         eng = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store)
-        eng.closer.close(oc.make(oc.Kind.FAULT_ENGINE))
+        eng.closer.close(oc.make(Kind.FAULT_ENGINE))
         self.assertIn("stopped before a reason was recorded", self.said())  # a fault: the bead stays open, the comment says why
 
     def test_no_lane_pauses_the_bead_open(self):

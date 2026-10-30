@@ -27,7 +27,7 @@ from taskloop.adapters import ident
 from taskloop.app.loop.gate import GateRole
 from taskloop.app.release import reexec
 from taskloop.contracts.config import LoopConfig
-from taskloop.domain import outcome as oc
+from taskloop.contracts.kinds import Kind
 from taskloop.domain.lanes import netgate
 from taskloop.stores import call_state as callstate
 
@@ -139,7 +139,7 @@ class EveryStepResumes(NetBase):
         rc, _s = self.run_engine(answers, probe=netgate.FakeProbe([True]))
         self.assertEqual(rc, 2)
         r = self.eng.result()
-        self.assertEqual((r.outcome, r.kind), ("paused", oc.Kind.PAUSE_NETWORK.value))
+        self.assertEqual((r.outcome, r.kind), ("paused", Kind.PAUSE_NETWORK.value))
         self.assertEqual((self.blocked, self.ask()), ([], None))
         self.assertFalse([c for c in self.bd_calls if c[:2] == ("label", "add")])
 
@@ -154,7 +154,7 @@ class Checks(NetBase):
         answers = {"plan": [PLAN], "write": [WRITE], "review": [drop("net-review")] * 40}
         rc, s = self.run_engine(answers, probe=netgate.FakeProbe([False]), **cfg)  # the network stays down: the run pauses
         self.assertEqual(rc, 2)
-        self.assertEqual(self.eng.result().kind, oc.Kind.PAUSE_NETWORK.value)
+        self.assertEqual(self.eng.result().kind, Kind.PAUSE_NETWORK.value)
         self.assertEqual(count.read_text(), "1")
         rc, s = self.run_engine({"review": [CLEAN]}, probe=Cycling(0), **cfg)
         self.assertEqual(rc, 0, self.blocked)
@@ -177,7 +177,7 @@ class Pause(NetBase):
         self.pause_in_review()
         first = self.eng
         r = first.result()
-        self.assertEqual((r.outcome, r.kind), ("paused", oc.Kind.PAUSE_NETWORK.value))
+        self.assertEqual((r.outcome, r.kind), ("paused", Kind.PAUSE_NETWORK.value))
         self.assertEqual((r.retry_after, r.role), (0, "reviewer"))
         self.assertEqual((self.blocked, self.ask()), ([], None))
         self.assertFalse([c for c in self.bd_calls if c[:2] == ("label", "add")])  # no auto label, no engine-fault label
