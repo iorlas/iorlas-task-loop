@@ -4,19 +4,23 @@ this tree and base is skipped and logged as cached, each step has its own start 
 gate is nothing but its steps' green results in the per-check cache: the same tree is not gated twice (a push rejected and tried again, a
 re-land after the network came back)."""
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import Enum, StrEnum
+from pathlib import Path
 from types import MappingProxyType
-from typing import Any, final
+from typing import Protocol, final
 
 from taskloop.app.checks import evidence
 from taskloop.app.checks.host import CheckFault
 from taskloop.app.land import verified
 from taskloop.contracts import log as rec
-from taskloop.contracts.checks import CheckFaultKind
+from taskloop.contracts.checks import Check, CheckFaultKind, CheckRun
+from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.ids import TreeSha
 from taskloop.contracts.runkey import BaseSha
 from taskloop.domain.checks.specs import gate_items
+from taskloop.stores.runlog import RunLog
 
 FAULTS = MappingProxyType({CheckFaultKind.STALE_BASE: "FAULT_STALE_BASE", CheckFaultKind.KILLED: "PAUSE_KILLED"})
 
@@ -59,13 +63,42 @@ class Problem:
     named: str = ""
 
 
+class GateChecker(Protocol):
+    def run_items(self, items: Sequence[Check], everything: bool = ..., learn: bool = ..., show_clean: bool = ...) -> CheckRun: ...
+    def gate_green(self) -> bool: ...
+
+
+class GateSteps(Protocol):
+    def outcome(self, outcome: str, detail: str = ...) -> None: ...
+
+
+class GateHost(Protocol):
+    """What the gate reads of the engine: the repo's gate steps and the checker that runs them, git, the log and the stop point."""
+
+    gate_log: Path | None  # the log of the first red step, for the fix round
+
+    @property
+    def cfg(self) -> EngineConfig: ...
+    @property
+    def run_dir(self) -> Path: ...
+    @property
+    def log(self) -> RunLog: ...
+    @property
+    def steps(self) -> GateSteps: ...
+    @property
+    def checker(self) -> GateChecker: ...
+    def git(self, *args: str) -> str: ...
+    def halt_point(self, when: bool = ..., wait: float = ...) -> None: ...
+    def blocked_for(self, why: str, kind: str) -> Exception: ...
+
+
 class Gate:
-    def __init__(self, host: Any) -> None:
+    def __init__(self, host: GateHost) -> None:
         self.e = host
 
     def green(self) -> bool:
         """The gate already passed on exactly this tree (and base): every step is green in the cache or not due."""
-        return bool(self.e.checker.gate_green())
+        return self.e.checker.gate_green()
 
     def passed(self) -> GatePass | None:
         """A pass for the tree and base in the worktree now: the gate is green in the memo, or the repo has no gate. Else None."""

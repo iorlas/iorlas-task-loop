@@ -2,7 +2,8 @@
 
 A port is a Protocol plus the typed requests and results that cross it. Adapters implement it against the real thing
 (`route.py`, `bd`, an exec); fakes implement it in memory, so a test needs no process, no files and no bash."""
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
+from pathlib import Path
 from typing import IO, Any, Literal, NamedTuple, Protocol, final
 
 import msgspec
@@ -16,6 +17,21 @@ from taskloop.contracts.slots import Checkout
 from taskloop.contracts.wire import Rec
 
 EventSink = Callable[[LiveEvent], None]
+
+
+class Clock(Protocol):
+    """Time, as a capability: SystemClock (adapters/clock.py) in production, FakeClock in tests."""
+
+    def now(self) -> float: ...
+    def monotonic(self) -> float: ...
+
+
+class Sh(Protocol):
+    """The engine's one way to run a command (an argv, no shell): (exit code, the last lines of its output).
+    The whole output goes to `save`."""
+
+    def __call__(self, cmd: Sequence[str], timeout: float = ..., check: bool = ..., save: Path | None = ...,
+                 env: Mapping[str, str] | None = ..., pin: bool = ..., what: str = ..., cwd: Path | None = ...) -> tuple[int, str]: ...
 
 
 class AnswerAsk(Protocol):

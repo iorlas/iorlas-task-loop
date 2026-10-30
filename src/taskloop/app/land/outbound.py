@@ -3,9 +3,13 @@ before the push, and bd's Dolt data after it. The repo's hooks are not the land'
 import os
 import shutil
 from pathlib import Path
-from typing import Any
+from typing import Protocol
 
+from taskloop.contracts.config import EngineConfig
+from taskloop.contracts.ids import BeadId
+from taskloop.contracts.ports import Clock, DoltPush, Sh
 from taskloop.domain.land.matchers import Push, lfs_in, no_dolt_remote
+from taskloop.stores.runlog import RunLog
 
 
 def is_push(argv: list[str]) -> bool:
@@ -35,15 +39,54 @@ def target(land: list[str]) -> tuple[str, list[str]] | None:
     return (pos[0] if pos else "origin"), (refs or ["HEAD"])
 
 
-def uses_lfs(wt: Any) -> bool:
+def uses_lfs(wt: str | Path) -> bool:
     try:
         return lfs_in((Path(wt) / ".gitattributes").read_text(encoding="utf-8", errors="replace"))
     except OSError:
         return False
 
 
+class OutboundBd(Protocol):
+    def dolt_push(self) -> DoltPush: ...
+
+
+class OutboundCheckout(Protocol):
+    def stage_all(self, check: bool = ..., everything: bool = ...) -> int: ...
+
+
+class OutboundTree(Protocol):
+    def wip(self, why: str, everything: bool = ...) -> bool: ...
+
+
+class OutboundHost(Protocol):
+    """What the pushes read of the engine: the land command, the clock, git and its shell, bd's dolt push, the log."""
+
+
+    @property
+    def bead(self) -> BeadId: ...
+    @property
+    def cfg(self) -> EngineConfig: ...
+    @property
+    def wt(self) -> str | Path: ...
+    @property
+    def dry(self) -> bool: ...
+    @property
+    def log(self) -> RunLog: ...
+    @property
+    def clock(self) -> Clock: ...
+    @property
+    def store(self) -> OutboundBd: ...
+    @property
+    def checkout(self) -> OutboundCheckout: ...
+    @property
+    def tree(self) -> OutboundTree: ...
+    @property
+    def sh(self) -> Sh: ...
+    def blocked_for(self, why: str, kind: str) -> Exception: ...
+
+
 class Outbound:
-    def __init__(self, host: Any) -> None:
+    def __init__(self, host: OutboundHost) -> None:
         self.e = host
 
     def lfs_push(self) -> tuple[int, str]:

@@ -5,14 +5,16 @@ times); a network error rests until the network is back. The pushed tree is alwa
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any
+from pathlib import Path
 
 from taskloop.app.checks import evidence as check_evidence
 from taskloop.app.land import verified
 from taskloop.app.land.gate import Gate, GatePass, Problem, ProblemKind
+from taskloop.app.land.lander_host import LanderHost
 from taskloop.app.land.outbound import Outbound, land_argv, pin_head
 from taskloop.contracts import fence
 from taskloop.contracts import log as rec
+from taskloop.contracts.bead import Bead
 from taskloop.contracts.checks import CheckRun
 from taskloop.domain.land.matchers import Push
 from taskloop.domain.lanes import policy as lp
@@ -56,12 +58,12 @@ class Land:
 
 
 class Lander:
-    def __init__(self, host: Any) -> None:
+    def __init__(self, host: LanderHost) -> None:
         self.e = host
         self.gate = Gate(host)
         self.out = Outbound(host)
 
-    def finish(self, bead: Any) -> str:
+    def finish(self, bead: Bead) -> str:
         """The task's one commit, then the land. -> the landed sha, or "" (nothing changed, or a dry run)."""
         e = self.e
         if e.pending_land_validation:
@@ -94,7 +96,7 @@ class Lander:
             self.out.bd_sync(sha)
         return sha
 
-    def commit(self, bead: Any) -> bool:
+    def commit(self, bead: Bead) -> bool:
         """One commit per task, titled after the bead: earlier runs' wip commits are folded in. -> False: they add up to nothing."""
         e = self.e
         base = e.git("merge-base", "HEAD", e.cfg.base)
@@ -129,7 +131,7 @@ class Lander:
         e.warn(f"the push had already gone through ({sha[:12]} is on {e.cfg.base}): not pushed again")
         return sha
 
-    def lock(self) -> AbstractContextManager[Any]:
+    def lock(self) -> AbstractContextManager[Path | str]:
         """One land at a time per repo, across slots and sessions: an flock the OS drops when the process dies."""
         return self.e.waits.locked("land_lock", self.e.land_lock_path())
 
@@ -160,7 +162,7 @@ class Lander:
     def optimistic(self, st: Land) -> bool:
         """The gate runs before the lock: there is a gate, tries are allowed, and no push may have gone through unseen."""
         e = self.e
-        tries = int(e.cfg.land_optimistic_tries)
+        tries = e.cfg.land_optimistic_tries
         return bool(e.cfg.gate_checks) and tries > 0 and st.moved <= tries and st.phase is not Phase.NET_DOWN
 
     def outside(self, st: Land) -> Problem | None:
@@ -193,7 +195,7 @@ class Lander:
             return Placing.NO_GATE
         if self.gate.green():
             return Placing.CACHED
-        if st.moved < int(e.cfg.land_optimistic_tries):
+        if st.moved < e.cfg.land_optimistic_tries:
             st.moved += 1
             return Placing.STALE
         return Placing.INSIDE
@@ -272,7 +274,7 @@ class Lander:
         because they can depend on state outside the tracked tree."""
         e = self.e
         stages = (e.plan_data or {}).get("stages") or []
-        checks = list(dict.fromkeys([c for s in stages for c in s["checks"]] + e.cases.case_checks()))
+        checks = list(dict.fromkeys([*(c for s in stages for c in s["checks"]), *e.cases.case_checks()]))
         # A stop during checks or just after they return must resume through acceptance: save that barrier first
         self.park("land retry checks require successful checks and review before landing", "land-verify-red")
         results = e.stage_checks.stoppable({"checks": checks, "files": []}, "land retry")
@@ -345,7 +347,7 @@ class Lander:
     def fix_outside_lock(self, problem: Problem) -> None:
         """A red check/gate or a conflict is fixed outside the land lock, then the land tries again."""
         e = self.e
-        if e.fixes < int(e.cfg.max_fix_rounds):
+        if e.fixes < e.cfg.max_fix_rounds:
             cause = {ProblemKind.GATE: "gate_red", ProblemKind.VERIFY: "checks_red", ProblemKind.CONFLICT: "conflict"}[problem.kind]
             first = problem.text.strip().splitlines() or [""]
             red = f"gate red on the rebased tree: {(problem.named or first[-1])[:200]}"

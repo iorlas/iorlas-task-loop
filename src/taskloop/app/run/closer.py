@@ -6,7 +6,7 @@ import threading
 import time
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, assert_never
+from typing import assert_never
 
 from taskloop.adapters import beadtools, ident
 from taskloop.adapters import storm as storm_file
@@ -14,6 +14,7 @@ from taskloop.app.asks import raiser
 from taskloop.app.land.followups import file_follow_ups
 from taskloop.app.run import outcomes
 from taskloop.app.run import trace as runtrace
+from taskloop.app.run.closer_host import CloserHost
 from taskloop.app.run.console import say
 from taskloop.app.run.interpret import interpret
 from taskloop.app.run.state import CheckpointLedger
@@ -35,7 +36,7 @@ DONE = (Outcome.LANDED, Outcome.DONE)
 class Closer:
     """The close of a run: the outcome's policy, the log and trace, the bead's last state."""
 
-    def __init__(self, host: Any) -> None:
+    def __init__(self, host: CloserHost) -> None:
         self.e = host
 
     def close(self, ended: oc.RunOutcome) -> None:
@@ -61,11 +62,9 @@ class Closer:
         kind, why = o.kind, o.detail
         now = e.clock.now()
         e.fp = o.fingerprint
-        history: list[Any]
-        try:
+        history: Sequence[Mapping[str, object]] = ()
+        with contextlib.suppress(OSError):
             history = storm_file.recent_closes(ident.config_dir() / "traces.jsonl", self.repo_id(), now)
-        except OSError:
-            history = []
         e.disp = oc.apply(o, e.bead, history, now)
         e.kind = e.disp.kind
         if e.disp.escalated:
@@ -73,7 +72,7 @@ class Closer:
         self.storm(history, kind, o, why)
         return e.kind
 
-    def storm(self, history: Any, kind: Any, o: Any, why: str) -> None:
+    def storm(self, history: Sequence[Mapping[str, object]], kind: oc.Kind, o: oc.RunOutcome, why: str) -> None:
         e = self.e
         trip = storm.storm_trip(history, e.bead, kind, o.fingerprint, e.clock.now())
         if trip and not e.dry:
@@ -227,7 +226,7 @@ class Closer:
         if rc:  # a repo's bd rules can refuse (e.g. a minimum reason length): say so, never report a clean close
             e.warn(f"bd refused to {'close' if done.finished else 'block'} {e.bead} (exit {rc}): close it by hand")
 
-    def leave_open(self, kind: Any, why: str) -> int:
+    def leave_open(self, kind: oc.Kind, why: str) -> int:
         e = self.e
         fault = kind.name.startswith("FAULT_")
         if not fault:
@@ -239,6 +238,6 @@ class Closer:
         rc = 0 if beadtools.attempt(e.store.update, e.bead, patch) else 1
         if oc.POLICY[kind].label:
             beadtools.attempt(e.store.add_label, e.bead, oc.POLICY[kind].label)
-        if e.disp.comment:  # a comment, never Notes (tl-7y6.6.2); one per (bead, kind, fingerprint) per hour
+        if e.disp and e.disp.comment:  # a comment, never Notes (tl-7y6.6.2); one per (bead, kind, fingerprint) per hour
             e.comment("Engine {}: {}".format("failed" if fault else "paused", without_prefix(why)[:400]))
         return rc

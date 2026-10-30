@@ -20,7 +20,7 @@ def with_sections(body: str, headings: list[str], bead: str) -> str:
     return (body or "").rstrip() + ("\n\n" + "\n\n".join(add) if add else "")
 
 
-def create_checked(store: Beads, new: NewBead, bead: str, note: Callable[[str], None]) -> tuple[str, str]:
+def create_checked(store: Beads, new: NewBead, bead: str, note: Callable[[str], object]) -> tuple[str, str]:
     """-> (the new id, "") or ("", why not): nothing was created then (tl-7y6.7.9: 98 follow-ups were called filed and none existed).
     When bd refuses the body for missing sections, they are added and it is tried once more."""
     try:

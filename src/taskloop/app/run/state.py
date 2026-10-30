@@ -9,7 +9,7 @@ import contextlib
 import copy
 import time
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol
 
 from taskloop.app.run.review_glue import review_of
 from taskloop.contracts import fence, wire
@@ -150,10 +150,17 @@ class Checkpoints:
         self.writer().delete()
 
 
+class AppliedKeys(Protocol):
+    """The checkpoint, as the close ledger uses it."""
+
+    def applied(self) -> frozenset[str]: ...
+    def mark_applied(self, key: str) -> None: ...
+
+
 class CheckpointLedger:
     """The applied close effects (app/run/interpret.py): kept in the process and in the checkpoint, so a restart finds them."""
 
-    def __init__(self, checkpoints: Checkpoints) -> None:
+    def __init__(self, checkpoints: AppliedKeys) -> None:
         self.checkpoints = checkpoints
         self.keys: set[str] = set()
 

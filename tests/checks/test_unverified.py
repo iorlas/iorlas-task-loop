@@ -17,9 +17,10 @@ from taskloop.app.checks import evidence
 from taskloop.app.checks.cache import InputKeys, RunMemo
 from taskloop.app.land import verified
 from taskloop.app.land.lander import Lander
+from taskloop.contracts.bead import Bead
 from taskloop.contracts.checks import UNVERIFIED_EXIT, CacheHit, Check, CheckCacheEntry, CheckResult, CheckRun, RunEntry, verdict_of
 from taskloop.contracts.enums import CheckStatus
-from taskloop.contracts.ids import CheckId, TreeSha
+from taskloop.contracts.ids import BeadId, CheckId, TreeSha
 from taskloop.contracts.runkey import BaseSha
 from taskloop.stores.memory import MemDoc
 
@@ -92,7 +93,8 @@ class Land(unittest.TestCase):
 
     def test_the_land_refuses_on_an_unverified_check_and_names_it(self):
         with self.assertRaises(Stop) as cm:
-            self.lander(CheckRun(round=1, results=[res("ok", 0), unverified("render-evidence")])).finish(None)
+            self.lander(CheckRun(round=1, results=[res("ok", 0), unverified("render-evidence")])).finish(
+                Bead(id=BeadId("t-1"), title="t", status="open"))
         self.assertIn("`render-evidence` is unverified", cm.exception.why)
         self.assertEqual(cm.exception.kind, "FAULT_LAND")
 
