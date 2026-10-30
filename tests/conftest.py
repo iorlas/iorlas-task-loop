@@ -15,9 +15,18 @@ from pathlib import Path
 
 import pytest
 
+# Bytecode is cached even when the caller says not to (Claude Code exports PYTHONDONTWRITEBYTECODE=1): without it every xdist worker and
+# every Python a test starts compiles every module again (about 2 s of each worker's collection). The cache sits outside the tree, under
+# the temp dir (mirrored absolute paths, so worktrees never share a file); set before any of ours is imported, and for the children too.
+PYCACHE = Path(tempfile.gettempdir()) / f"tl-pycache-{os.getuid()}"
+sys.dont_write_bytecode = False
+sys.pycache_prefix = str(PYCACHE)
+os.environ.pop("PYTHONDONTWRITEBYTECODE", None)
+os.environ["PYTHONPYCACHEPREFIX"] = str(PYCACHE)
+
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import support.paths  # noqa: F401  (ROOT/src on sys.path)
-from support import procsim
+import support.paths  # noqa: E402, F401  (ROOT/src on sys.path; after the bytecode setup above)
+from support import procsim  # noqa: E402
 
 KIND = pytest.StashKey[str]()
 SKIPPED = pytest.StashKey[bool]()
