@@ -7,6 +7,8 @@ Pure functions.
 """
 
 import re
+import shlex
+from dataclasses import dataclass
 from typing import Final
 
 from taskloop.contracts.bead import Bead
@@ -92,3 +94,57 @@ def has_output(text: str) -> bool:
 
 def has_ac_heading(text: str) -> bool:
     return bool(_AC_HEADING.search(text))
+
+
+# -- the commands an acceptance names (tl-9un.1): read from the text, never run from it
+_SPAN: Final = re.compile(r"`([^`\n]+)`")
+_DOLLAR: Final = re.compile(r"^\s*(?:[-*]\s*)?\$ (.+)$", re.M)
+_WORD: Final = re.compile(r"^[A-Za-z][\w+-]*$")
+_ENV: Final = re.compile(r"^\w+=\S+ \S")
+_PROSE: Final = frozenset({"def", "class", "async", "await", "import", "from", "return", "raise", "if", "else", "elif", "for", "while",
+                           "with", "assert", "not", "and", "or", "in", "is", "lambda", "yield", "try", "except", "pass", "del",
+                           "global", "the", "a", "an", "no", "new", "type", "var", "let", "const", "fn", "pub", "struct", "enum"})
+
+
+@dataclass(frozen=True)
+class Named:
+    text: str  # the span as written
+    argv: list[str]
+
+
+def _argv(span: str, ids: set[str]) -> list[str] | None:
+    if any(ch in span for ch in "(){}=<>") and not _ENV.match(span):
+        return None  # code, not a command (an `env K=v cmd` prefix is the one `=` that is)
+    try:
+        argv = shlex.split(span)
+    except ValueError:
+        return None
+    if not argv:
+        return None
+    head = argv[0]
+    if len(argv) == 1:
+        return argv if head in ids or head.startswith("./") else None
+    if head in _PROSE:
+        return None
+    return argv if _WORD.match(head) or head.startswith("./") else None
+
+
+def commands(ac: str, ids: set[str] | frozenset[str] = frozenset()) -> list[Named]:
+    """The commands `ac` names, in the order of the text, each once. `ids`: the profile's check ids, which name a check as one word."""
+    spans = [(m.start(1), m.group(1).strip()) for rx in (_DOLLAR, _SPAN) for m in rx.finditer(ac)]
+    seen: set[str] = set()
+    out: list[Named] = []
+    for _, span in sorted(spans):
+        argv = _argv(span, set(ids))
+        if argv is not None and span not in seen:
+            seen.add(span)
+            out.append(Named(span, argv))
+    return out
+
+
+def registered(c: Named, checks: list[tuple[str, list[str]]]) -> str | None:
+    """The id of the registered check `c` names: by its id, or by its exact argv. None: not a registered check."""
+    for cid, argv in checks:
+        if c.argv in ([cid], argv):
+            return cid
+    return None

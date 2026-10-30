@@ -6,6 +6,7 @@ from typing import Any
 
 from taskloop.adapters.git import REAL
 from taskloop.app.plan.decisions import Decisions
+from taskloop.app.plan.probe import AcProbe
 from taskloop.contracts import plancheck
 from taskloop.contracts.ports import Git
 from taskloop.domain.checks import lint
@@ -19,6 +20,7 @@ class PlanPrompt:
         self.e = host
         self.git = git
         self.decisions = Decisions(host)
+        self.probe = AcProbe(host)
 
     def notes(self) -> str:
         """engine.planner_notes: text, or "@path" of a repo file (read from the worktree), at most 2000 characters."""
@@ -115,6 +117,8 @@ class PlanPrompt:
         extra = self.change(old, again, why)
         e.old_plan, e.amend_text, e.amend_why = None, "", ""
         extra += self.history(old, again)
+        if not old and not again:
+            extra += self.probe.text()  # tl-9un.1: what the acceptance names that cannot work, before the first plan
         rules = self.rules()
         extra += self.tail()
         where = e.briefing.where("plan")
