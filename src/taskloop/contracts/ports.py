@@ -13,7 +13,7 @@ from taskloop.contracts.argv import text_of
 from taskloop.contracts.ask import Ask, AskAction
 from taskloop.contracts.bead import BdError, Bead, Comment
 from taskloop.contracts.delegate import DelegateResult, LiveEvent, RunRequest
-from taskloop.contracts.gitfacts import ConfigEntry, GitOutcome, GrepHit, LogRow, Pick, Ref, StatusRow, TreeEntry
+from taskloop.contracts.gitfacts import ConfigEntry, DiffEntry, GitOutcome, GrepHit, LogRow, Pick, Ref, StatusRow, TreeEntry
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.slots import Checkout
 from taskloop.contracts.wire import Rec
@@ -293,6 +293,11 @@ class Git(SlotGit, Protocol):
 
     def changed_paths(self, d: str, a: str, b: str) -> list[str]:
         """The paths that differ between the trees a and b, empty when git cannot say."""
+        ...
+
+    def diff_entries(self, d: str, a: str, b: str, ignore_space: bool = False) -> list[DiffEntry]:
+        """The paths that differ between the trees a and b with their status, an exact (100%) rename as one R entry; with `ignore_space`
+        only those with a change that is not whitespace. Empty when git cannot say."""
         ...
 
     def staged(self, d: str) -> bool:

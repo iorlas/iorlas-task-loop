@@ -42,6 +42,18 @@ class VisualConfig(Rec):
 
 
 @final
+class ReviewSkipConfig(Rec):
+    """Globs of the paths a stage may change and still skip its review (engine.skip_review). A stage skips only when EVERY changed
+    path is a 100% rename, a formatter-only change, or matches one of these; docs and the profile itself never do. An unknown key
+    is an error."""
+
+    config: list[str] = msgspec.field(default_factory=list)
+    generated: list[str] = msgspec.field(default_factory=list)
+    tools: list[str] = msgspec.field(default_factory=list)
+    tests: list[str] = msgspec.field(default_factory=list)
+
+
+@final
 class ContainerConfig(Rec):
     """Where a check that says `"in": "container"` runs: an image, or a Dockerfile of the repo (built once, tagged by its hash)."""
 
@@ -179,6 +191,7 @@ class EngineConfig(Rec):
     writer_check_max_s: float = 60
     base_red: bool = True  # a check's first red is run once on the untouched base: red there too, it is not the writer's
     max_same_red: int = 3  # rounds in a row that end red with the same checks and output: then stop and ask (0: never)
+    skip_review: ReviewSkipConfig = msgspec.field(default_factory=ReviewSkipConfig)
     max_total_reviews: int = 12  # reviews in all of a run, replans included: then stop and ask (0: never)
     check_wall_min: float = 60  # a check is stopped only when it runs this long; a quiet or idle one is never stopped before
     gate_timeout_min: float = 90

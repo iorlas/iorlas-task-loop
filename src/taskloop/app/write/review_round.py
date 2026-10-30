@@ -5,6 +5,7 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from taskloop.app.checks.evidence import compact
+from taskloop.app.write import review_skip
 from taskloop.app.write.state import ACCEPT, AGAIN, REPLAN, StageState
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.prompts.common import LATER_CASES, UNCHECKED_TEXT
@@ -24,6 +25,8 @@ class ReviewRound:
     def run(self, s: StageState) -> str:
         """-> ACCEPT, AGAIN (sent back) or REPLAN."""
         e = self.e
+        if self.skipped(s):
+            return ACCEPT
         e.stats["reviews"] += 1
         e.ask_flow.review_cap()
         kinds = e.newfiles.new_by_kind()
@@ -33,6 +36,23 @@ class ReviewRound:
         review = self.triage(s, review, kinds)
         self.settle(s, review)
         return self.verdict(s, review)
+
+    def skipped(self, s: StageState) -> bool:
+        """True when the stage needs no review: every changed path is mechanical (domain/review/skip.py). A fix round, an item nobody
+        has checked or a diff git cannot read is reviewed.
+        The skip is the review step's own end: outcome `skipped`, the reasons its detail."""
+        e = self.e
+        if s.fix or s.wrote_unchecked or e.unchecked:
+            return False
+        why = review_skip.why(e.git, str(e.wt), e.stage_tree or e.checkout.base_sha(), e.checkout.tree_hash(), e.cfg)
+        if not why:
+            return False
+        said = ", ".join(why)
+        e.steps.begin("review", f"{s.name}: review skipped ({said})")
+        e.steps.outcome("skipped", said)
+        e.log.note(f"{s.name}: review skipped, every changed path is mechanical ({said})")
+        e.steps.move("next", "review_skipped", f"{s.name} accepted without review: {said}")
+        return True
 
     def prompt(self, s: StageState, kinds: dict[str, Any]) -> str:
         """The review prompt, then what the review needs of the run (the cases, the unchecked items, what earlier rounds noted)."""

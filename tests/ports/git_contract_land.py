@@ -69,6 +69,23 @@ class LandContract(_Base):
         self.assertEqual(sorted(self.git.changed_paths(d, base, tree)), ["a.txt", "n.txt"])
         self.assertEqual(self.git.changed_paths(d, base, "nope"), [])
 
+    def test_diff_entries_find_exact_renames_and_can_ignore_whitespace(self) -> None:
+        d = str(self.slot)
+        (self.slot / "w.txt").write_text("a  b\n")
+        (self.slot / "r.txt").write_text("rename me\n")
+        sh(self.slot, "add", "-A")
+        sh(self.slot, "commit", "-qm", "w")
+        base = self.git.rev_parse(d, "HEAD")
+        (self.slot / "w.txt").write_text("a b\n")
+        (self.slot / "r.txt").rename(self.slot / "r2.txt")
+        (self.slot / "n.txt").write_text("n\n")
+        tree = self.git.tree_of(d)
+        got = {(e.status, e.path, e.old) for e in self.git.diff_entries(d, base, tree)}
+        self.assertEqual(got, {("M", "w.txt", ""), ("R", "r2.txt", "r.txt"), ("A", "n.txt", "")})
+        loud = {(e.status, e.path) for e in self.git.diff_entries(d, base, tree, ignore_space=True)}
+        self.assertEqual(loud, {("R", "r2.txt"), ("A", "n.txt")})
+        self.assertEqual(self.git.diff_entries(d, base, "nope"), [])
+
     def test_staged_is_true_only_while_the_index_holds_uncommitted_work(self) -> None:
         r = str(self.repo)
         self.assertFalse(self.git.staged(r))

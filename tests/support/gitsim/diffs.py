@@ -80,6 +80,28 @@ def known_revs(c: Ctx, names: list[str]) -> list[str | None]:
     return shas
 
 
+def name_status(a: Snap, b: Snap, paths: list[str], fl: list[str]) -> list[str]:
+    """`git diff --name-status -z [-M100%] [-w]`: NUL-separated words; an exact rename is R100 old new."""
+    if "-w" in fl:
+        paths = [p for p in paths if a.get(p) is None or b.get(p) is None or squeezed(a[p]) != squeezed(b[p])]
+    gone = {p for p in paths if b.get(p) is None}
+    out, renamed = [], set()
+    for p in paths:
+        old = next((g for g in sorted(gone - renamed) if a.get(p) is None and a[g] == b[p]), "") if "-M100%" in fl else ""
+        if old:
+            renamed.add(old)
+            out += ["R100", old, p]
+    for p in paths:
+        if p in renamed or any(p == x[-1] for x in [out[i:i + 3] for i in range(0, len(out), 3)]):
+            continue
+        out += ["D" if b.get(p) is None else "A" if a.get(p) is None else "M", p]
+    return out
+
+
+def squeezed(data: bytes) -> list[bytes]:
+    return [b"".join(ln.split()) for ln in data.splitlines() if ln.strip()]
+
+
 def cmd_diff(c: Ctx) -> int:
     fl, rest = flags(c.args)
     rest, spec = (rest[: rest.index("--")], rest[rest.index("--") + 1:]) if "--" in rest else (rest, [])
@@ -95,7 +117,9 @@ def cmd_diff(c: Ctx) -> int:
     paths = changed(a, b, spec)
     if "--check" in fl:
         return say_check(c, [x for p in paths for x in check_lines(p, a.get(p), b.get(p))])
-    if "--name-only" in fl:
+    if "--name-status" in fl:
+        c.raw(b"".join(w.encode() + b"\0" for w in name_status(a, b, paths, fl)))
+    elif "--name-only" in fl:
         for p in paths:
             c.say(p)
     elif "--stat" in fl:

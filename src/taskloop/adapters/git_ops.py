@@ -4,7 +4,7 @@ words (commit, push, rebase --continue), and the rest of the staged-work and bra
 from typing import Self
 
 from taskloop.adapters.git_base import GitBase, classify
-from taskloop.contracts.gitfacts import GitOutcome
+from taskloop.contracts.gitfacts import DiffEntry, GitOutcome
 
 PUSH_WALL_S = 3600.0  # a push (or an LFS upload) that has not ended after this long is a failure with these words
 
@@ -24,6 +24,23 @@ class LandGit(GitBase):
     def changed_paths(self, d: str, a: str, b: str) -> list[str]:
         r = self._run(d, "diff", "--name-only", a, b)
         return [p for p in r.stdout.splitlines() if p] if r.returncode == 0 else []
+
+    def diff_entries(self, d: str, a: str, b: str, ignore_space: bool = False) -> list[DiffEntry]:
+        space = ["-w", "--ignore-blank-lines"] if ignore_space else []
+        r = self._run(d, "diff", "--no-ext-diff", "--name-status", "-z", "-M100%", *space, a, b)
+        if r.returncode != 0:
+            return []
+        out: list[DiffEntry] = []
+        words = iter(r.stdout.split("\0"))
+        for status in words:
+            if not status:
+                continue
+            if status[0] == "R":
+                old, new = next(words, ""), next(words, "")
+                out.append(DiffEntry(status="R", path=new, old=old))
+            else:
+                out.append(DiffEntry(status=status[0], path=next(words, "")))
+        return out
 
     def staged(self, d: str) -> bool:
         return self._run(d, "diff", "--cached", "--quiet").returncode != 0

@@ -881,6 +881,11 @@
   "ok": false,
   "output": "conflict"
  },
+ "DiffEntry": {
+  "status": "R",
+  "path": "b.txt",
+  "old": "a.txt"
+ },
  "Checkout": {
   "path": "/r/.slots/s1",
   "branch": "task/x-1",
@@ -1251,6 +1256,14 @@
    "writer_check_max_s": 60,
    "base_red": true,
    "max_same_red": 3,
+   "skip_review": {
+    "config": [],
+    "generated": [],
+    "tools": [],
+    "tests": [
+     "t/**"
+    ]
+   },
    "max_total_reviews": 12,
    "check_wall_min": 60,
    "gate_timeout_min": 90,

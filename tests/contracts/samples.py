@@ -90,7 +90,7 @@ OUTCOME = run.RunReport(outcome=Result.PARKED, bead=BeadId("tl-1"), run=str(RUN)
                          rounds=2, tests_added=4, asked=True, retry_after=None, cost=0.25)
 LOCK = locks.EngineLock(pid=1789, bead="tl-1", started=T, by="tl-abc", start="99", slot="s1", slot_bead="slot-1",
                         route=(10, "5"), workers=[(11, "6"), (12, "7")])
-CMD = {"pick_label": "auto",
+CMD = {"pick_label": "auto", "skip_review": config.ReviewSkipConfig(tests=["t/**"]),
        "visual_paths": config.VisualConfig(include=["a/**"]), "write_fresh_above_k": 150.0, "max_rounds": 4,
        "checks": [config.CheckSpec(id=CheckId("fmt"), argv=["just", "fmt"], group="static", when=["x/**"], inputs="a/**",
                                   where="container"),
@@ -389,6 +389,7 @@ OTHERS = {
     "GrepHit": gitfacts.GrepHit(path="a.txt", line=2, text="t"),
     "ConfigEntry": gitfacts.ConfigEntry(where="file:/r/.git/config", key="core.bare", value="true"),
     "GitOutcome": gitfacts.GitOutcome(ok=False, output="conflict"),
+    "DiffEntry": gitfacts.DiffEntry(status="R", path="b.txt", old="a.txt"),
     "Checkout": slots.Checkout(path="/r/.slots/s1", branch="task/x-1", main=False),
     "WindowStatus": snapshots.WindowStatus(name="weekly", used_pct=9.0, resets_at=T + 600),
     "LaneStatus": snapshots.LaneStatus(

@@ -80,3 +80,12 @@ class ConfigEntry(Rec):
     where: str
     key: str
     value: str
+
+
+@final
+class DiffEntry(Rec):
+    """One path of a tree-to-tree diff with exact renames found (`-M100%`): status A, D, M, T or R; `old` is the source of a rename."""
+
+    status: str
+    path: str
+    old: str = ""
