@@ -1,13 +1,11 @@
-"""The child env is an allowlist (adapters/childenv.py): the repos' own registered checks still run through it.
+"""The child env is an allowlist (adapters/childenv.py): a check run through `tl check` sees only the allowlist and its declared env.
 
-task-loop's own gate (`just check`: ruff, pyrefly, import-linter, the rule tests) and lifesim's registered static checks (text,
-blueprint: its `.task-loop.json` at origin/main, minus the gate keys this engine no longer reads) run through `tl check`, which builds
-every check's environment from the process's with `tool_env`. A variable a real tool needs and the list lacks shows here as a red check;
-the fix is a line in ALLOWED with the reason. Skipped where the repo or the tool is not on this machine."""
+The probe check dumps its environment; nothing outside ALLOWED and the declared env may reach it. That is the guard. That a real gate
+(task-loop's own `just check`, lifesim's checks) still passes under the list is too heavy for the real-test limit:
+tests/live/test_allowlist_gates.py."""
 import json
 import os
 import pwd
-import shutil
 import subprocess
 import tempfile
 import unittest
@@ -18,8 +16,6 @@ from support.tlmain import tl_main
 from taskloop.adapters.childenv import allowed
 
 ROOT = Path(__file__).resolve().parents[3]
-LIFESIM = Path.home() / "Workspaces" / "lifesim"
-LIFESIM_IDS = ("text", "blueprint")
 IDENT = ["-c", "user.email=t@t", "-c", "user.name=t"]
 
 
@@ -27,7 +23,7 @@ def git(cwd: Path, *a: str) -> str:
     return subprocess.run(["git", *IDENT, *a], cwd=cwd, check=True, capture_output=True, text=True).stdout
 
 
-class RealRepoChecks(unittest.TestCase):
+class ProbeChecks(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
@@ -38,41 +34,6 @@ class RealRepoChecks(unittest.TestCase):
         home = pwd.getpwuid(os.getuid()).pw_dir
         r = tl_main("check", "--repo", str(repo), "--all", *ids, cwd=repo, env={"XDG_CONFIG_HOME": self.cfg, "HOME": home})
         return r.returncode, r.stdout + r.stderr
-
-    def test_task_loops_own_gate_runs_through_the_allowlist(self):
-        if not shutil.which("just"):
-            self.skipTest("just is not installed")
-        repo = Path(self.tmp.name, "task-loop")
-        git(ROOT, "rev-parse", "HEAD")
-        subprocess.run(["git", "clone", "-q", "--no-hardlinks", str(ROOT), str(repo)], check=True, capture_output=True)
-        (repo / ".task-loop.json").write_text(json.dumps({"engine": {"base": "main", "checks": [
-            {"id": "static", "argv": ["just", "check"], "group": "static", "run": "gate"}]}}))
-        rc, out = self.check(repo, "static")
-        self.assertEqual(rc, 0, out)
-        self.assertRegex(out, r"static\s+ok")
-
-    def test_lifesims_registered_static_checks_run_through_the_allowlist(self):
-        if not shutil.which("just") or not (LIFESIM / ".git").exists():
-            self.skipTest("just or ~/Workspaces/lifesim is not here")
-        shown = subprocess.run(["git", "-C", str(LIFESIM), "show", "origin/main:.task-loop.json"], capture_output=True, text=True,
-                               check=False)
-        if shown.returncode:
-            self.skipTest("lifesim has no origin/main profile")
-        profile = json.loads(shown.stdout)
-        for gone in ("gate", "gate_only"):
-            profile["engine"].pop(gone, None)
-        repo = Path(self.tmp.name, "lifesim")
-        repo.mkdir()
-        archive = subprocess.run(["git", "-C", str(LIFESIM), "archive", "origin/main"], capture_output=True, check=True)
-        subprocess.run(["tar", "-x", "-C", str(repo)], input=archive.stdout, check=True)
-        (repo / ".task-loop.json").write_text(json.dumps(profile))
-        git(repo, "init", "-q", "-b", "main")
-        git(repo, "add", "-A")
-        git(repo, "commit", "-qm", "lifesim at origin/main")
-        rc, out = self.check(repo, *LIFESIM_IDS)
-        self.assertEqual(rc, 0, out)
-        for check_id in LIFESIM_IDS:
-            self.assertRegex(out, rf"{check_id}\s+ok")
 
     def test_the_child_sees_the_allowlist_and_nothing_else(self):
         repo = Path(self.tmp.name, "probe")
