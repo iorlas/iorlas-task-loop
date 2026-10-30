@@ -114,3 +114,12 @@ class RealGit:
 
     def add_worktree(self, repo: str, path: str, ref: str) -> None:
         self._must(repo, "worktree", "add", "--detach", path, ref)
+
+    def init_bare(self, d: str, branch: str) -> None:
+        self._must(os.path.dirname(d) or ".", "init", "-q", "--bare", "-b", branch, d)
+
+    def clone(self, src: str, dst: str) -> None:
+        self._must(os.path.dirname(dst) or ".", "clone", "-q", src, dst)
+
+    def push(self, d: str, remote: str, refspec: str) -> None:
+        self._must(d, "push", "-q", remote, refspec)

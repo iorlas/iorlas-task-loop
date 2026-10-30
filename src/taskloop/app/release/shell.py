@@ -1,10 +1,14 @@
 """What every step of a release shares: its refusal, the git and process calls, and its one-line voice."""
-import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Protocol
 
 from taskloop.adapters import gitrepo
+from taskloop.adapters.spawner import RealSpawner
+from taskloop.contracts.ports import Spawner
+
+SPAWNER: Spawner = RealSpawner()  # what `run` starts processes through (under procsim in a logic test)
 
 
 class Abort(Exception):
@@ -16,11 +20,28 @@ class Abort(Exception):
         self.log, self.tests, self.version = str(log or ""), list(tests), version
 
 
-def run(cmd: list[str], cwd: str | Path, check: bool = True) -> subprocess.CompletedProcess[str]:
-    r = subprocess.run(cmd, cwd=str(cwd), capture_output=True, text=True, encoding="utf-8", errors="replace", check=False)
-    if check and r.returncode:
-        raise Abort("{} failed in {}:\n{}".format(" ".join(cmd), cwd, (r.stdout + r.stderr).strip()[-2000:]))
-    return r
+class Finished(Protocol):
+    @property
+    def returncode(self) -> int: ...
+    @property
+    def stdout(self) -> str: ...
+    @property
+    def stderr(self) -> str: ...
+
+
+@dataclass(frozen=True)
+class Done:
+    """What a finished command printed and how it ended (the words of subprocess.CompletedProcess, which a test's fake may return)."""
+    returncode: int
+    stdout: str
+    stderr: str
+
+
+def run(cmd: list[str], cwd: str | Path, check: bool = True) -> Done:
+    r = SPAWNER.run(cmd, cwd=str(cwd))
+    if check and r.exit:
+        raise Abort("{} failed in {}:\n{}".format(" ".join(cmd), cwd, (r.out + r.err).strip()[-2000:]))
+    return Done(r.exit, r.out, r.err)
 
 
 def git(cwd: str | Path, *a: str, check: bool = True) -> str:
@@ -43,7 +64,7 @@ class Shell:
     """The four calls a release step makes to the outside; a test hands a step its own."""
     git: Callable[..., str] = git
     fetch: Callable[[str | Path], None] = fetch
-    run: Callable[..., subprocess.CompletedProcess[str]] = run
+    run: Callable[..., Finished] = run
     say: Callable[[str], None] = say
 
 

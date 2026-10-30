@@ -24,6 +24,7 @@ from taskloop.adapters import beadtools, procs
 from taskloop.adapters.ident import claude_dir
 from taskloop.app.release import flow, shell, suite
 from taskloop.app.release.shell import say
+from taskloop.contracts.ports import Ran
 
 PLUGIN = ".claude-plugin/plugin.json"
 MARKET = ".claude-plugin/marketplace.json"
@@ -73,6 +74,11 @@ class World:
         self.on_suite = None  # called with the tree under test inside every suite run
         self.trees: list[dict[str, bytes]] = []  # the tracked files of every tree the suite ran on
         self.stdout, self.stderr = Out(), Out()
+
+    def spawn(self, argv, *, cwd=None, **_: Any) -> Ran:
+        """Spawner.run for the release's calls: the real or the faked process, as the port's record."""
+        r = self.run(argv, cwd=cwd, capture_output=True, text=True, encoding="utf-8", errors="replace")
+        return Ran(exit=r.returncode, out=r.stdout or "", err=r.stderr or "")
 
     def claude(self, cmd: list[str]) -> subprocess.CompletedProcess[str]:
         self.claude_log.append(cmd[1:])
@@ -133,8 +139,7 @@ class World:
             st.enter_context(mock.patch.dict(os.environ, env))
             for k in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "TL_RELEASE_REEXEC"):
                 os.environ.pop(k, None)
-            fake = SimpleNamespace(run=self.run, CompletedProcess=subprocess.CompletedProcess)
-            st.enter_context(mock.patch.object(shell, "subprocess", fake))
+            st.enter_context(mock.patch.object(shell, "SPAWNER", SimpleNamespace(run=self.spawn)))
             st.enter_context(mock.patch.object(procs, "capture", self.capture))
             st.enter_context(mock.patch.object(flow.suite, "verify", self.verify))
             st.enter_context(mock.patch.object(beadtools, "bd_store", lambda cwd=None: self.store))

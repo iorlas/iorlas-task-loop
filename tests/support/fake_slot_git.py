@@ -92,6 +92,15 @@ class FakeSlotGit:
         self.elsewhere = {b: c for b, c in self.elsewhere.items() if c.path != path}
         return True
 
+    def init_bare(self, d: str, branch: str) -> None:
+        self._go("init_bare", d, branch)
+
+    def clone(self, src: str, dst: str) -> None:
+        self._go("clone", src, dst)
+
+    def push(self, d: str, remote: str, refspec: str) -> None:
+        self._go("push", d, remote, refspec)
+
     def add_worktree(self, repo: str, path: str, ref: str) -> None:
         self._go("add_worktree", repo, path, ref)
         self.added.append((path, ref))

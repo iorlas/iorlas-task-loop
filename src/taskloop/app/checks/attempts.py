@@ -28,7 +28,7 @@ class Outcome:
 class Attempts:
     def __init__(self, host: CheckHost, base: BaseCheck, sleep: Callable[[float], None] = time.sleep) -> None:
         self.host, self.base, self.sleep = host, base, sleep
-        self.box = Box(host)
+        self.box = Box(host, host.spawner)
 
     def run(self, c: Check, log: Path, env: Mapping[str, str]) -> Outcome:
         """Run the check; a red one again when that can change the answer: only when the first two failures differ, never for a hang,

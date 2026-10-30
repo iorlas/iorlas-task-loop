@@ -7,6 +7,7 @@ from taskloop.app.checks.checklog import CheckLog
 from taskloop.contracts.checks import CheckFaultKind
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.ids import TreeSha
+from taskloop.contracts.ports import Spawner
 from taskloop.stores.bundle import Stores
 from taskloop.stores.runlog import RunLog
 
@@ -65,6 +66,7 @@ class CheckHost(Protocol):
     steps: CheckSteps
     checklog: CheckLog
     stores: Stores
+    spawner: Spawner  # how a check's helper processes (docker) are started
     killed: bool  # the last sh() was stopped by the engine
     wall_hit: bool  # the last sh() was stopped at its wall limit
     bead_env: Mapping[str, str]  # the slot's environment (sh() gives it to every command)

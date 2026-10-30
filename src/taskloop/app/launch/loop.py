@@ -5,7 +5,6 @@ anything."""
 import contextlib
 import os
 import shutil
-import subprocess
 import sys
 import uuid
 from collections.abc import Callable, Mapping
@@ -16,7 +15,6 @@ from taskloop.adapters import applog, beadtools, gitrepo, ident, pidcheck
 from taskloop.adapters import delegate as dg
 from taskloop.adapters import procs as sproc
 from taskloop.adapters import storm as storm_file
-from taskloop.adapters.childenv import tool_env
 from taskloop.adapters.gitenv import run_git
 from taskloop.adapters.locks import hold_path
 from taskloop.app.asks import sweeps as ask_sweeps
@@ -35,6 +33,7 @@ from taskloop.app.slots import engine_lock
 from taskloop.app.track import trail, verbs
 from taskloop.app.wire import asks as wasks
 from taskloop.app.wire import lanes as wlanes
+from taskloop.app.wire import real
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts import env as penv
 from taskloop.contracts import paths
@@ -44,7 +43,7 @@ from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.landed import LandedStore
 from taskloop.contracts.loop import LoopState
-from taskloop.contracts.ports import Beads
+from taskloop.contracts.ports import Beads, Child, Hold, Spawner
 from taskloop.contracts.stores import ReposStore
 from taskloop.domain import outcome as oc
 from taskloop.domain.beads import rules as beadlint
@@ -144,11 +143,11 @@ def fetch(repo: str) -> None:
     gitrepo.fetch(repo)
 
 
-def chores(repo: str) -> None:
+def chores(repo: str, spawner: Spawner) -> None:
     wlanes.chore(console.say)  # delegate's lane status filed again when the snapshot is 20 min old (the dash reads the file)
     wasks.sweep_asks(console.say, wslots.load_cfg(repo))  # asks of closed beads closed, unanswered ones parked, answers no run used flagged
     try:
-        reflect.maybe_run()  # the run reflections into beads, once a day (tl-bl5)
+        reflect.maybe_run(spawner)  # the run reflections into beads, once a day (tl-bl5)
     except Exception as e:
         console.say(f"loop: reflect digest: {e}")
 
@@ -162,19 +161,18 @@ def claim(repo: str, store: Beads, bead: BeadId, wt: str, slot: str, now: Callab
     return verbs.claim(bead, wt, slot, store=store) == 0, "claimed by another session"
 
 
-def spawn(cmd: list[str], log: Any, extra: Mapping[str, str]) -> tuple[Any, Any]:
+def spawn(spawner: Spawner, cmd: list[str], log: Any, extra: Mapping[str, str]) -> tuple[Child, Hold]:
     """run-task as a child in its own process group: Ctrl-C to the loop reaches it only as the loop's SIGTERM.
-    -> (the child, the TermHold of its spawn): the caller replays the hold first inside the try that stops the child."""
-    return sproc.popen_held(cmd, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT, start_new_session=True,
-                            env=tool_env(penv.snapshot().vars, extra))
+    -> (the child, the hold of its spawn): the caller replays the hold first inside the try that stops the child."""
+    return spawner.start_held(cmd, out=log, extra=extra)
 
 
-def stop_now(child: Any) -> None:
-    sproc.stop_in_thread(child, STOP_GRACE_S)
+def stop_now(child: Child) -> None:
+    child.stop_async(STOP_GRACE_S)
 
 
-def stop_tree(child: Any) -> None:
-    sproc.stop_tree(child, grace=STOP_GRACE_S)
+def stop_tree(child: Child) -> None:
+    child.stop(STOP_GRACE_S)
 
 
 def exec_into(repo: str, d: Path, argv: list[str], handover: str, start_cwd: str = "") -> None:
@@ -200,8 +198,9 @@ def loop_lock(wt: str, slot: str, slot_bead: str | None, bead: str) -> None:
 
 
 def build(repo: str, store: Beads | None = None, session_actor: str = "", here: Path = HERE, now: Callable[[], float] = trail.now,
-          start_cwd: str = "") -> LoopEnv:
+          start_cwd: str = "", spawner: Spawner | None = None) -> LoopEnv:
     """The LoopEnv of `repo` on this install."""
+    spawner = spawner or real.spawner()
     store = store or beadtools.bd_store(repo)
     cfg = cfgdir()
 
@@ -224,7 +223,7 @@ def build(repo: str, store: Beads | None = None, session_actor: str = "", here: 
         claim=lambda b, wt, slot: claim(repo, store, b, wt, slot, now),
         loop_lock=loop_lock,
         drop_engine_lock=lambda d: engine_lock.drop_engine_lock(d, os.getpid()),
-        spawn=spawn,
+        spawn=lambda cmd, log, extra: spawn(spawner, cmd, log, extra),
         stop_now=stop_now,
         stop_tree=stop_tree,
         run_task_argv=lambda bead, wt, slot, out, code: (
@@ -233,7 +232,7 @@ def build(repo: str, store: Beads | None = None, session_actor: str = "", here: 
         ),
         landed_on_base=lambda wt, bead: landed_on_base(repo, store, wt, bead),
         reload_note=reload_note,
-        chores=lambda: chores(repo),
+        chores=lambda: chores(repo, spawner),
         ask_lines=lambda: ask_sweeps.orphan_lines(wasks.store()),
         storm=lambda: storm(repo, now),
         probe=lambda: make_probe(repo),

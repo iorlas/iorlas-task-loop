@@ -38,6 +38,7 @@ from taskloop.app.loop.take import Taker  # noqa: E402
 from taskloop.app.track import trail  # noqa: E402
 from taskloop.contracts import wire  # noqa: E402
 from taskloop.contracts.loop import Carry, LoopState  # noqa: E402
+from taskloop.contracts.ports import WaitTimeout  # noqa: E402
 
 
 def bead(id, priority=2, parent=None, labels=(), type="task"):
@@ -216,7 +217,8 @@ class FakeChild:
         if self.polls and not self.terminated:
             self.polls -= 1
             self.test.clock.t += timeout or 0
-            raise subprocess.TimeoutExpired(self.cmd, must(timeout))
+            must(timeout)
+            raise WaitTimeout(str(timeout))
         r = rec("failed", why="failed: stopped (SIGTERM)") if self.terminated else self.test.script[self.bead].pop(0)
         after = r.pop("after", None) if r is not None else None
         if r is not None:
@@ -233,6 +235,12 @@ class FakeChild:
     def terminate(self):
         self.terminated, self.returncode = True, -15
 
+    def stop(self, grace):
+        self.terminate()
+
+    def stop_async(self, grace):
+        self.terminate()
+
 
 class LoopBase(Base):
     """The loop with run-task faked (FakeChild) and slot setup skipped; no tests of its own."""
@@ -247,8 +255,8 @@ class LoopBase(Base):
         for p in (mock.patch.object(Core, "nap", self.clock.nap),
                   mock.patch.object(wloop, "delegate_route", return_value="/fake/route.py"),
                   mock.patch.object(wloop.dg, "role_status", side_effect=lambda route: self.roles()),
-                  mock.patch.object(wloop, "spawn", side_effect=lambda cmd, log, extra: (FakeChild(self, cmd, extra), mock.Mock())),
-                  mock.patch.object(wloop.sproc, "stop_tree", side_effect=lambda p, **kw: p.terminate() or ()),
+                  mock.patch.object(wloop.real, "spawner", return_value=mock.Mock(
+                      start_held=lambda cmd, out=None, extra=None, **kw: (FakeChild(self, cmd, extra), mock.Mock()))),
                   mock.patch.object(Taker, "prepare", return_value=None)):
             p.start()
             self.addCleanup(p.stop)

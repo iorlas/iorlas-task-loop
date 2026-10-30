@@ -2,8 +2,8 @@
 
 A port is a Protocol plus the typed requests and results that cross it. Adapters implement it against the real thing
 (`route.py`, `bd`, an exec); fakes implement it in memory, so a test needs no process, no files and no bash."""
-from collections.abc import Callable
-from typing import Any, NamedTuple, Protocol, final
+from collections.abc import Callable, Mapping
+from typing import IO, Any, Literal, NamedTuple, Protocol, final
 
 import msgspec
 
@@ -145,6 +145,12 @@ class Git(Protocol):
     def checkouts(self, d: str) -> list[Checkout]: ...
     def remove_worktree(self, repo: str, path: str) -> bool: ...
     def add_worktree(self, repo: str, path: str, ref: str) -> None: ...
+    def init_bare(self, d: str, branch: str) -> None:
+        """A bare repository at the path `d` whose default branch is `branch`."""
+        ...
+
+    def clone(self, src: str, dst: str) -> None: ...
+    def push(self, d: str, remote: str, refspec: str) -> None: ...
 
 
 @final
@@ -189,4 +195,72 @@ class TreeProbe(Protocol):
 class Checks(Protocol):
     def run(self, spec: CheckSpec) -> CheckResult:
         """Run one command (an argv, no shell). Exit 124 and `timed_out` when the time ran out."""
+        ...
+
+
+class WaitTimeout(Exception):
+    """`Child.wait(timeout)` ran out; the child lives on."""
+
+
+class Child(Protocol):
+    """A process the engine started and does not wait for in `Spawner.run`: pid, an optional stdin pipe, a wait, and its stop."""
+
+    pid: int
+    stdin: IO[bytes] | None
+
+    def poll(self) -> int | None: ...
+    def wait(self, timeout: float | None = None) -> int:
+        """-> the exit code; raises WaitTimeout when `timeout` seconds pass first."""
+        ...
+    def stop(self, grace: float) -> None:
+        """Stop the child's whole tree (SIGTERM, `grace` seconds, SIGKILL) and wait until it is gone."""
+        ...
+    def stop_async(self, grace: float) -> None:
+        """The same on a thread of its own, so the caller's loop goes on while the tree ends."""
+        ...
+
+
+class Hold(Protocol):
+    """The signals that arrived while a child was being spawned: replayed first inside the try that stops the child."""
+
+    def replay(self) -> None: ...
+
+
+@final
+class Ran(Rec):
+    """What a child printed and how it ended, when `Spawner.run` waited for it. Exit 124 and `timed_out` when `timeout_s` ran out."""
+    exit: int
+    out: str = ""
+    err: str = ""
+    timed_out: bool = False
+
+
+@final
+class RanBytes(Rec):
+    exit: int
+    out: bytes = b""
+    err: bytes = b""
+
+
+class Spawner(Protocol):
+    """Starting a process, as a capability: the only way app/ and cli/ run a child (RealSpawner in adapters/spawner.py; the logic tests
+    run the same adapter over tests/support/procsim). The child's environment is built by adapters/childenv.py: `env` is the base (the
+    process's own when None), `extra` goes over it. A program that is not there raises OSError."""
+
+    def run(self, argv: list[str], *, cwd: str | None = None, env: Mapping[str, str] | None = None, extra: Mapping[str, str] | None = None,
+            timeout_s: float | None = None, capture: bool = True) -> Ran:
+        """Run to the end. `capture` False: the child shares our stdout and stderr (out and err stay empty)."""
+        ...
+
+    def run_bytes(self, argv: list[str], *, cwd: str | None = None, extra: Mapping[str, str] | None = None) -> RanBytes: ...
+
+    def start(self, argv: list[str], *, cwd: str | None = None, env: Mapping[str, str] | None = None,
+              extra: Mapping[str, str] | None = None, stdin: Literal["null", "pipe"] = "null",
+              out: IO[bytes] | Literal["null", "inherit"] = "null") -> Child:
+        """A child that outlives this call, in a session of its own. `out`: a log both its streams go to, or nothing, or ours."""
+        ...
+
+    def start_held(self, argv: list[str], *, cwd: str | None = None, env: Mapping[str, str] | None = None,
+                   extra: Mapping[str, str] | None = None, out: IO[bytes]) -> tuple[Child, Hold]:
+        """`start` with stdin null and the log `out`, but the SIGTERM that arrived during the spawn is not replayed: the caller does it."""
         ...

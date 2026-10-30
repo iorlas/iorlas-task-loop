@@ -5,7 +5,6 @@ import json
 import os
 import shutil
 import socket
-import subprocess
 import sys
 import time
 import urllib.request
@@ -14,8 +13,10 @@ from typing import Any, Final
 
 from taskloop.adapters import procs
 from taskloop.adapters.ident import PLUGIN_ROOT, config_dir
+from taskloop.app.wire import real
 from taskloop.contracts import env as penv
 from taskloop.contracts.envvars import EnvVar
+from taskloop.contracts.ports import Spawner
 from taskloop_dash import bind as dash_bind
 from taskloop_dash.cli import dash as dash_cli
 
@@ -132,7 +133,7 @@ def log_tail(n: int = 5) -> str:
         return ""
 
 
-def start_server(port: int, bind: str | None = None) -> tuple[dict[str, Any] | None, str]:
+def start_server(port: int, bind: str | None = None, spawner: Spawner | None = None) -> tuple[dict[str, Any] | None, str]:
     """Start detached; wait until it answers. Returns (version dict or None, failure text)."""
     log = open(config_dir() / "dash.log", "ab")  # noqa: SIM115  the detached child keeps it
     env = {k: val for k, val in penv.snapshot().vars.items() if not k.startswith(("CLAUDE_CODE_SESSION", "DELEGATE_", "CODEX_COMPANION"))}
@@ -141,8 +142,7 @@ def start_server(port: int, bind: str | None = None) -> tuple[dict[str, Any] | N
     bind = bind or ",".join(default_binds())
     # sys.executable, not uv: the server imports taskloop.contracts (msgspec), and tl.py, which starts it, runs under `uv run --script`
     cmd = [sys.executable, "-m", "taskloop_dash", "--ports", "taskloop.app.launch.dash_ports:ports", "--port", str(port), "--bind", bind]
-    proc = procs.spawn(cmd, stdin=subprocess.DEVNULL, stdout=log, stderr=log, env=env, cwd=str(config_dir()), close_fds=True,
-                       start_new_session=True)
+    proc = (spawner or real.spawner()).start(cmd, env=env, cwd=str(config_dir()), out=log)
     for _ in range(40):
         if proc.poll() not in (None, 0):
             return None, f"dashboard exited {proc.poll()}: {log_tail() or 'see ' + str(config_dir() / 'dash.log')}"

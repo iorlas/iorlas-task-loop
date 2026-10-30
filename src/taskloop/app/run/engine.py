@@ -57,6 +57,7 @@ from taskloop.app.run.waits import Waits
 from taskloop.app.run.worker_call import Ops, WorkerCall
 from taskloop.app.slots import engine_lock
 from taskloop.app.track import trail, verbs
+from taskloop.app.wire import real as wire_real
 from taskloop.app.write.briefing import Briefing
 from taskloop.app.write.handoff import Handoff
 from taskloop.app.write.newfiles import NewFiles
@@ -86,7 +87,7 @@ class Engine(RunFields):
     live_n = 0  # the number of delegate calls with a live file so far
     live_now = ""  # the live file of the newest delegate call (the stuck tick reads when it was last written)
     _probe: PathProbe | None = None
-    MARKERS_ARGV: ClassVar[list[str]] = ["python3", str(ident.PLUGIN_ROOT / "src" / "taskloop" / "cli" / "markers.py")]
+    MARKERS_ARGV: ClassVar[list[str]] = ["python3", str(ident.PLUGIN_ROOT / "src" / "taskloop" / "adapters" / "markers.py")]
     MARKERS = text_of(MARKERS_ARGV)
     Blocked = Blocked  # the stop a step raises: components catch it through the host
     FixFailed = FixFailed
@@ -99,8 +100,9 @@ class Engine(RunFields):
 
     def __init__(self, bead: BeadId, wt: str, cfg: Any, dry_run: bool = False, verbose: bool = True, store: Any = None,
                  route: Any = None, clock: Any = None, git: Any = None, stores: Any = None, fresh: bool = False,
-                 claim: fence.Claim | None = None) -> None:
+                 claim: fence.Claim | None = None, spawner: Any = None) -> None:
         route = route or seams.DelegateRoute()
+        self.spawner = spawner or wire_real.spawner()
         super().__init__(bead, wt, cfg, dry_run, verbose, store, route, git, fresh, claim)
         self.clock = clock or SystemClock()
         self.reexec: dict[str, Any] = reexec.take_reexec_env()  # this run-task came from an exec into a newer install, or a fallback

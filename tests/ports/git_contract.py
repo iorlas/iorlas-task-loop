@@ -43,12 +43,11 @@ class GitContract(_Base):
         self.start()
         self.git = self.make()
         self.origin, self.repo, self.slot = self.home / "o.git", self.home / "repo", self.home / "repo" / ".slots" / "s1"
-        sh(self.home, "init", "-q", "--bare", "-b", "main", str(self.origin))
-        sh(self.home, "clone", "-q", str(self.origin), str(self.repo))
+        self.git.init_bare(str(self.origin), "main")
+        self.git.clone(str(self.origin), str(self.repo))
         (self.repo / "a.txt").write_text("a\n")
-        sh(self.repo, "add", "-A")
-        sh(self.repo, "commit", "-qm", "init")
-        sh(self.repo, "push", "-q", "origin", "HEAD:main")
+        self.git.commit_all(str(self.repo), "main", "init")
+        self.git.push(str(self.repo), "origin", "HEAD:main")
         self.git.add_worktree(str(self.repo), str(self.slot), "origin/main")
 
     def s(self) -> str:
@@ -132,3 +131,4 @@ class GitContract(_Base):
     def test_adding_a_worktree_on_a_missing_ref_is_a_git_error(self) -> None:
         with self.assertRaises(SlotGitError):
             self.git.add_worktree(str(self.repo), str(self.home / "w2"), "origin/nope")
+

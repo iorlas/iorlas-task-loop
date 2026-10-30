@@ -10,7 +10,8 @@ from pathlib import Path
 from unittest import mock
 
 from support import procsim
-from taskloop.app.checks import container, container_run
+from taskloop.adapters import container_run
+from taskloop.app.checks import container
 
 
 class _Stdin(io.BytesIO):
@@ -73,11 +74,11 @@ class FakeDocker:
     def down(self) -> None:
         self.up = False
 
-    def docker_ok(self) -> bool:
+    def docker_ok(self, spawner=None) -> bool:
         self.calls.append(["info"])
         return self.up
 
-    def docker_rc(self, *args: str) -> int:
+    def docker_rc(self, spawner, *args: str) -> int:
         self.calls.append(list(args))
         return 0
 

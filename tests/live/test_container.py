@@ -6,6 +6,7 @@ import sys
 
 import pytest
 
+from taskloop.adapters.spawner import RealSpawner
 from taskloop.app.checks import container
 
 IMAGE = os.environ.get("TL_LIVE_IMAGE", "alpine:3")
@@ -13,7 +14,7 @@ IMAGE = os.environ.get("TL_LIVE_IMAGE", "alpine:3")
 
 @pytest.fixture
 def docker_image():
-    if not container.docker_ok():
+    if not container.docker_ok(RealSpawner()):
         pytest.skip("no docker daemon answers `docker info` (this host has none)")
     if subprocess.run(["docker", "image", "inspect", IMAGE], capture_output=True, check=False).returncode:
         pytest.skip(f"image {IMAGE} is not on this docker; pull it or set TL_LIVE_IMAGE")

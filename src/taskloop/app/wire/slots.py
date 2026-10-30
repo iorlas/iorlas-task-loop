@@ -2,7 +2,6 @@
 loop's own worktree when slots are off. The composition root for `tl slot ...`, the loop and the engine."""
 import json
 import os
-import subprocess
 import sys
 import time
 from collections.abc import Callable
@@ -22,13 +21,14 @@ from taskloop.app.slots.env import DEFAULT_PRIO, SlotEnv
 from taskloop.app.slots.pool import SlotPool
 from taskloop.app.track import trail
 from taskloop.app.track.trail import event
+from taskloop.app.wire import real
 from taskloop.contracts import config
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.config import EngineConfig, RepoProfile, SlotsConfig
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ids import loop_key as repo_key
 from taskloop.contracts.paths import TASK_EXCLUDE, ConfigDir
-from taskloop.contracts.ports import BdFailure, BeadQuery, Beads
+from taskloop.contracts.ports import BdFailure, BeadQuery, Beads, Spawner
 from taskloop.contracts.slots import SlotFail
 from taskloop.stores.files import FileTickets
 
@@ -104,9 +104,11 @@ def exclude_local(repo: str, *patterns: str) -> None:
             fh.write(("\n" if have and not have.endswith("\n") else "") + "\n".join(add) + "\n")
 
 
-def slot_env(repo: str, store: Beads | None = None, cfg: SlotsConfig | None = None, now: Callable[[], float] | None = None) -> SlotEnv:
+def slot_env(repo: str, store: Beads | None = None, cfg: SlotsConfig | None = None, now: Callable[[], float] | None = None,
+             spawner: Spawner | None = None) -> SlotEnv:
     """The slot code's world (app/slots): this repo's bd, git, ticket line and take lock, and the effects it may cause."""
     cdir = ConfigDir(config_dir())
+    spawn = spawner or real.spawner()
     return SlotEnv(
         repo=repo, repo_key=repo_key(repo), cfg=cfg or profile_slots(repo), store=store or bd_store(repo), git=RealGit(),
         tickets=FileTickets(cdir), cfgdir=cdir, actor=actor(), host=hostname(),
@@ -114,7 +116,7 @@ def slot_env(repo: str, store: Beads | None = None, cfg: SlotsConfig | None = No
         busy=engine_busy, lock_pid=lock_pid,
         drop_engine_lock=lambda wt, pid: drop_engine_lock(wt, pid) if pid is not None else None, event=event, say=print,
         warn=lambda m: print(m, file=sys.stderr), pid=os.getpid(),
-        run_setup=lambda argv, d: subprocess.run(argv, cwd=d, check=False).returncode,
+        run_setup=lambda argv, d: spawn.run(argv, cwd=d, capture=False).exit,
         exclude_local=lambda r: exclude_local(r, ".slots/", TASK_EXCLUDE), now=now or trail.now)
 
 

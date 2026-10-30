@@ -13,8 +13,10 @@ from taskloop.adapters.gitenv import git_env
 from taskloop.app.checks.checklog import CheckLog
 from taskloop.app.land.checkout import Checkout
 from taskloop.app.run.shell import Shell
+from taskloop.app.wire import real
 from taskloop.contracts import paths
 from taskloop.contracts.config import EngineConfig
+from taskloop.contracts.ports import Spawner
 from taskloop.stores.bundle import Stores
 from taskloop.stores.memory import fake_stores
 from taskloop.stores.real import real_stores
@@ -30,7 +32,9 @@ class _Waits:
 
 
 class CliHost:
-    def __init__(self, wt: str | Path, cfg: EngineConfig, stores: Stores | None = None, root: Path | None = None) -> None:
+    def __init__(self, wt: str | Path, cfg: EngineConfig, stores: Stores | None = None, root: Path | None = None,
+                 spawner: Spawner | None = None) -> None:
+        self.spawner = spawner or real.spawner()
         self.wt: str | Path = Path(wt)
         self.cfg = cfg
         self.stores = stores or real_stores(paths.ConfigDir(root))

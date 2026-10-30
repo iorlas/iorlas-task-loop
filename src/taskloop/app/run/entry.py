@@ -5,7 +5,6 @@ import json
 import os
 import signal
 import stat
-import subprocess
 import sys
 import threading
 import time
@@ -24,6 +23,7 @@ from taskloop.app.run import console, running
 from taskloop.app.run.engine import Blocked, Engine
 from taskloop.app.slots import engine_lock
 from taskloop.app.track import verbs
+from taskloop.app.wire import real
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts import env as penv
 from taskloop.contracts import fence
@@ -263,12 +263,11 @@ def _worktree_of(a: Any, repo: Any) -> tuple[str, Any]:
     if not wt and a.slot:  # the slot is the worktree
         wt = wslots.slot_dir(repo, a.slot, wslots.profile_slots(repo))
     if not wt:
-        r = subprocess.run([*procs.script_argv(TL_PY), "worktree", "start"],
-                           capture_output=True, text=True, encoding="utf-8", errors="replace", check=False)
-        wt = r.stdout.strip().splitlines()[-1] if r.returncode == 0 and r.stdout.strip() else ""
+        r = real.spawner().run([*procs.script_argv(TL_PY), "worktree", "start"])
+        wt = r.out.strip().splitlines()[-1] if r.exit == 0 and r.out.strip() else ""
         if not wt:
-            print("tl: no worktree: " + r.stderr, file=sys.stderr)
-            return "", {"v": 1, "outcome": "failed", "bead": a.id, "why": "failed: no worktree: " + r.stderr[-300:]}
+            print("tl: no worktree: " + r.err, file=sys.stderr)
+            return "", {"v": 1, "outcome": "failed", "bead": a.id, "why": "failed: no worktree: " + r.err[-300:]}
     wt = str(Path(wt).resolve())
     if (Path(wt) / ".git").is_dir():  # the main checkout holds the bead database and the config: never a worker's cwd
         print(f"tl: {wt} is the main checkout; run a task in a slot or a worktree (tl slot / tl worktree start)",

@@ -2,7 +2,6 @@
 import contextlib
 import json
 import os
-import subprocess
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -16,7 +15,7 @@ from taskloop.app.loop.versions import Installs
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.config import LoopConfig
 from taskloop.contracts.ids import BeadId
-from taskloop.contracts.ports import BdFailure, BeadPatch
+from taskloop.contracts.ports import BdFailure, BeadPatch, WaitTimeout
 
 
 @dataclass
@@ -44,7 +43,7 @@ class BeadRun:
             while True:
                 try:
                     return child.wait(timeout=self.tune().poll), stopped
-                except subprocess.TimeoutExpired:
+                except WaitTimeout:
                     pass
                 self.beat()
                 if not stopped and self.stop_mode() == "now":

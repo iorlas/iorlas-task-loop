@@ -1,0 +1,7 @@
+# The root config plus: starting a process is a capability (a Spawner, contracts/ports.py), so this layer never imports subprocess.
+extend = "../../../ruff.toml"
+src = ["../.."]  # src/: taskloop and taskloop_dash sort as first party, as under the root config
+
+[lint.flake8-tidy-imports.banned-api]
+"delegate".msg = "task-loop and delegate share only the worker-run contract; never import the other plugin"
+"subprocess".msg = "app and cli start a process through the Spawner handed down from the edge (contracts/ports.py), never subprocess"

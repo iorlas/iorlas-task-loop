@@ -16,7 +16,7 @@ import tarfile
 from pathlib import Path
 from typing import IO, Any
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # src/: a script run by path finds taskloop (which adds _vendor)
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # src/: a script run by path finds taskloop (which adds _vendor)
 from taskloop.adapters import procs
 
 INSIDE = ('t=${TMPDIR:-/tmp}; rm -rf "$t/tl-w" "$t/tl-art"; mkdir -p "$t/tl-w" "$t/tl-art" && tar -x -C "$t/tl-w"'

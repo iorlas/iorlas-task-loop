@@ -3,7 +3,6 @@ dir, on this install's code. A newer install must pass it before a loop moves to
 import json
 import os
 import shlex
-import subprocess
 import sys
 import tempfile
 import time
@@ -13,14 +12,17 @@ from typing import Any, Final
 from unittest import mock
 
 from taskloop.adapters import delegate as dg
-from taskloop.adapters.runner import Seam
+from taskloop.adapters.runner import Completed, Seam, completed
 from taskloop.app.launch.selftest_beads import MemoryBeads
 from taskloop.app.release import seams
 from taskloop.app.run.engine import Engine
+from taskloop.app.wire import real
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts import env as penv
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.ids import parse_bead_id
+from taskloop.contracts.ports import Git
+from taskloop.contracts.slots import SlotGitError
 
 # an argv list; the plan schema wraps it as an adhoc check
 CHECK: Final = ["test", "-f", "f.txt"]
@@ -43,7 +45,7 @@ REVIEW: Final[dict[str, Any]] = {
 }
 
 
-def lane(cmd: list[str], **kw: Any) -> subprocess.CompletedProcess[str]:
+def lane(cmd: list[str], **kw: Any) -> Completed:
     """Fake route.py run: one contract 3 answer on stdout."""
     schema = json.loads(Path(cmd[cmd.index("--schema") + 1]).read_text(encoding="utf-8"))
     props, cwd = schema.get("properties", {}), cmd[cmd.index("--cwd") + 1]
@@ -63,30 +65,28 @@ def lane(cmd: list[str], **kw: Any) -> subprocess.CompletedProcess[str]:
          "tokens": tokens, "cost": 0.0, "secs": 1, "run_id": "selftest", "call_id": "selftest", "denied": [], "git_violation": [],
          "warnings": [], "usage": {"tokens": tokens, "cost": 0.0, "secs": 1, "turns": 1, "ref": "ref-" + node}, "stop": None,
          "resumed": False}
-    return subprocess.CompletedProcess(cmd, 0, json.dumps(j), "")
+    return completed(cmd, 0, json.dumps(j))
 
 
 class Runner(Seam):
     """The engine's process seam for the fake lane."""
 
-    def __call__(self, cmd: list[str], **kw: Any) -> subprocess.CompletedProcess[str]:
+    def __call__(self, cmd: list[str], **kw: Any) -> Completed:
         self.stop = {}
         self.obs = {}
         return lane(cmd, **kw)
 
 
-def git_repo(home: Path, wt: Path) -> str | None:
+def git_repo(home: Path, wt: Path, git: Git) -> str | None:
     """A bare origin and a clone of it with one commit on main; None, or what git said."""
-    steps = [(home, ["init", "-q", "--bare", "-b", "main", str(home / "o.git")]), (home, ["clone", "-q", str(home / "o.git"), str(wt)])]
-    for cwd, cmd in steps:
-        r = subprocess.run(["git", *cmd], cwd=cwd, capture_output=True, text=True, check=False)
-        if r.returncode:
-            return f"git {cmd[0]}: {r.stderr.strip()[-200:]}"
-    (wt / "a.txt").write_text("a\n", encoding="utf-8")
-    for cmd in (["add", "-A"], ["commit", "-qm", "init"], ["push", "-q", "origin", "HEAD:main"]):
-        r = subprocess.run(["git", *cmd], cwd=wt, capture_output=True, text=True, check=False)
-        if r.returncode:
-            return f"git {cmd[0]}: {r.stderr.strip()[-200:]}"
+    try:
+        git.init_bare(str(home / "o.git"), "main")
+        git.clone(str(home / "o.git"), str(wt))
+        (wt / "a.txt").write_text("a\n", encoding="utf-8")
+        git.commit_all(str(wt), "main", "init")
+        git.push(str(wt), "origin", "HEAD:main")
+    except SlotGitError as e:
+        return f"git: {e}"
     return None
 
 
@@ -117,7 +117,7 @@ def selftest():
                "CLAUDE_CODE_SESSION_ID": "selftest-0", "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
                "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t", "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": os.devnull}
         with penv.patched(env):
-            why = git_repo(home, home / "wt")
+            why = git_repo(home, home / "wt", real.git())
             if why:
                 return why
             rc, bead = run_engine(home, home / "wt")

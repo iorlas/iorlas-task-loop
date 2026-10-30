@@ -63,7 +63,7 @@ class EverySpawnPath(te.EngineTest):
     def test_a_container_check_is_given_the_slot_name_only(self):
         e = make_engine(self.wt, store=self.store)
         host = mock.Mock(bead_env=e.bead_env, run_dir=Path("r"), cfg=mock.Mock(container=None))
-        box = Box(host)
+        box = Box(host, mock.Mock())
         box._why, box._image = "", "img"
         check = mock.Mock(container=True, id="c")
         argv, _ = box.plan(check, ["just", "x"], {})

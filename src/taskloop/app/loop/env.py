@@ -13,21 +13,7 @@ from taskloop.contracts import paths
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.config import RepoProfile
 from taskloop.contracts.ids import BeadId
-from taskloop.contracts.ports import Beads
-
-
-class Child(Protocol):
-    """A run-task process the loop started."""
-
-    pid: int
-
-    def wait(self, timeout: float | None = None) -> int: ...
-
-
-class Hold(Protocol):
-    """The signals that arrived while the child was being spawned: replayed first inside the try that stops the child."""
-
-    def replay(self) -> None: ...
+from taskloop.contracts.ports import Beads, Child, Hold
 
 
 class Probe(Protocol):

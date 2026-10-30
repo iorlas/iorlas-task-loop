@@ -1,7 +1,6 @@
 """Box: where a check that says `"in": "container"` runs. Docker reachable: in a container on a copy of the worktree on the container's
 own disk (container_run.py); not reachable, or the image missing: on the host, with one warning for the round."""
 import hashlib
-import subprocess
 import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -9,16 +8,17 @@ from pathlib import Path
 from taskloop.adapters import procs as sproc
 from taskloop.app.checks.host import CheckHost
 from taskloop.contracts.checks import Check
+from taskloop.contracts.ports import Spawner
 
-RUNNER = Path(__file__).with_name("container_run.py")
+RUNNER = Path(__file__).parents[2] / "adapters" / "container_run.py"
 DOCKER_WAIT_S = 15
 NO_DOCKER = "on host (docker not reachable)"
 NO_IMAGE = "on host (container image not available)"
 
 
 class Box:
-    def __init__(self, host: CheckHost) -> None:
-        self.host = host
+    def __init__(self, host: CheckHost, spawner: Spawner) -> None:
+        self.host, self.spawner = host, spawner
         self._why: str | None = None  # '' once the box is usable, else why not; asked once per round
         self._image = ""
 
@@ -45,7 +45,7 @@ class Box:
         return self._why
 
     def _probe(self) -> str:
-        if not docker_ok():
+        if not docker_ok(self.spawner):
             return NO_DOCKER
         spec = self.host.cfg.container
         image = spec.image if spec and spec.image else self._build(spec.dockerfile) if spec else ""
@@ -58,21 +58,21 @@ class Box:
             tag = "task-loop-check:" + hashlib.sha1(path.read_bytes()).hexdigest()[:10]  # a new Dockerfile is a new image
         except OSError:
             return ""
-        if _docker("image", "inspect", tag) == 0:
+        if _docker(self.spawner, "image", "inspect", tag) == 0:
             return tag
         self.host.log.note(f"building the check image {tag}")
-        return tag if _docker("build", "-q", "-f", str(path), "-t", tag, str(path.parent)) == 0 else ""
+        return tag if _docker(self.spawner, "build", "-q", "-f", str(path), "-t", tag, str(path.parent)) == 0 else ""
 
 
-def _docker(*args: str) -> int:
+def _docker(spawner: Spawner, *args: str) -> int:
     try:
-        return subprocess.run(["docker", *args], capture_output=True, check=False).returncode
+        return spawner.run(["docker", *args]).exit
     except OSError:
         return 1
 
 
-def docker_ok() -> bool:
+def docker_ok(spawner: Spawner) -> bool:
     try:
-        return subprocess.run(["docker", "info"], capture_output=True, timeout=DOCKER_WAIT_S, check=False).returncode == 0
-    except (OSError, subprocess.SubprocessError):
+        return spawner.run(["docker", "info"], timeout_s=DOCKER_WAIT_S).exit == 0
+    except OSError:
         return False

@@ -78,6 +78,13 @@ def mtime(path: str | Path) -> float | None:
         return None
 
 
+Completed = subprocess.CompletedProcess[str]  # what a seam call answers
+
+
+def completed(cmd: Sequence[str], code: int, out: str, err: str = "") -> Completed:
+    return subprocess.CompletedProcess(cmd, code, out, err)
+
+
 class Seam:
     """What the engine reads off a process seam after a call (stop, obs, secs, worker, live_start): a fake lane's defaults."""
 

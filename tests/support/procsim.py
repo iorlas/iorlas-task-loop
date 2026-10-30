@@ -41,7 +41,7 @@ def f_txt(cwd: Path) -> str:
 
 
 def markers(cwd: Path, env: Mapping[str, str]) -> tuple[int, str]:
-    """The engine's conflict-marker check (cli/markers.py, `git grep` for <<<<<<< and >>>>>>>) over the files of the tree."""
+    """The engine's conflict-marker check (adapters/markers.py, `git grep` for <<<<<<< and >>>>>>>) over the files of the tree."""
     hits = []
     for f in sorted(cwd.rglob("*")):
         if f.is_file() and ".git" not in f.relative_to(cwd).parts:

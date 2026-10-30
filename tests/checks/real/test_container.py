@@ -15,7 +15,7 @@ from unittest import mock
 from support import procsim
 from support.fakedocker import FakeDocker
 
-from taskloop.app.checks import container_run
+from taskloop.adapters import container_run
 from taskloop.contracts.paths import RepoDirs
 
 

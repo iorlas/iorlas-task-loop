@@ -251,11 +251,12 @@ class Reload(te.EngineTest):
             if len(spawned) == 2:
                 spawned_env.append(json.loads(extra["TL_REEXEC"]))
             return Child(cmd), mock.Mock()
+        holder = mock.Mock(start_held=lambda cmd, out=None, extra=None, **kw: spawn(cmd, out, extra))
         (old / "tl.py").write_text("")
         self.install("0.2.0")
         repo = str(self.wt)
         said = []
-        with mock.patch.object(wloop, "spawn", side_effect=spawn), mock.patch.dict(os.environ, {}):
+        with mock.patch.object(wloop.real, "spawner", return_value=holder), mock.patch.dict(os.environ, {}):
             env = wloop.build(repo, store=FakeBeads(), here=self.here)
             run = BeadRun(env, looptest.files(repo), wloop.installs(env.cfgdir, here=self.here), lambda: env.profile().loop, lambda: "",
                           lambda running: None, lambda: None, said.append)
