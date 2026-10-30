@@ -72,7 +72,7 @@ class World:
             stores=SimpleNamespace(check_cache=SimpleNamespace(of=lambda _bead: self.doc)),
             checker=SimpleNamespace(gate_green=self.gate_green, run_items=self.run_items),
             plan_data=None, cases=SimpleNamespace(case_checks=lambda: []), checkpoints=SimpleNamespace(save=lambda **kw: None),
-            stage_checks=SimpleNamespace(stoppable=lambda *a: self.events.append("checks") or SimpleNamespace(failed=[])),
+            stage_checks=SimpleNamespace(stoppable=lambda *a: self.events.append("checks") or SimpleNamespace(failed=[], unverified=[])),
             blocked_for=lambda why, kind, **kw: Stop(why, kind), fixer=SimpleNamespace(fix=self.fix))
         self.lander = Lander(self.host)
 

@@ -89,7 +89,7 @@ class Land(unittest.TestCase):
         self.assertEqual(cm.exception.kind, "FAULT_LAND")
 
     def test_nothing_unverified_is_no_refusal(self):
-        self.assertEqual(verified.refusal([res("ok", 0)]), "")
+        self.assertEqual(verified.refusal(CheckRun(round=1, results=[res("ok", 0)])), "")
         self.assertFalse(verified.deferred(unverified()))
 
 

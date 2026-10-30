@@ -333,7 +333,8 @@
   "checks": {
    "passed": 41,
    "failed": 1,
-   "total": 42
+   "total": 42,
+   "unverified": 0
   },
   "why": "same test failed 3×, then 22m with no tool calls",
   "silent_secs": 1320,

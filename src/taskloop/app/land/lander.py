@@ -57,7 +57,7 @@ class Lander:
 
     def refuse_unverified(self, run: Any) -> None:
         """A required check that could not verify is no pass: nothing is committed or pushed (verified.deferred is tl-7k8.5's hook)."""
-        why = verified.refusal(run.results) if run else ""
+        why = verified.refusal(run) if run else ""
         if why:
             raise self.e.blocked_for(why, "FAULT_LAND")
 

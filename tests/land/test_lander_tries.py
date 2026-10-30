@@ -55,7 +55,8 @@ class Host(SimpleNamespace):
             record_land=lambda sha: self.events.append("record " + sha), warn=self.warnings.append,
             plan_data=None, cases=SimpleNamespace(case_checks=lambda: []), run_dir="run",
             checkpoints=SimpleNamespace(save=lambda **kw: None),
-            stage_checks=SimpleNamespace(stoppable=lambda *a: self.events.append("checks") or SimpleNamespace(failed=[])),
+            last_run=None, stores=SimpleNamespace(check_run=lambda *a: SimpleNamespace(read=lambda: None)),
+            stage_checks=SimpleNamespace(stoppable=lambda *a: self.events.append("checks") or SimpleNamespace(failed=[], unverified=[])),
             blocked_for=lambda why, kind, **kw: Stop(why, kind))
 
 

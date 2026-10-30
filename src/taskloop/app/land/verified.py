@@ -1,5 +1,4 @@
 """The land and a check that could not verify (exit UNVERIFIED_EXIT): such a check is not a pass, so the land refuses to land on it."""
-from collections.abc import Iterable
 from typing import Any
 
 from taskloop.contracts.checks import UNVERIFIED_EXIT, CheckResult, CheckRun
@@ -11,9 +10,9 @@ def deferred(c: CheckResult) -> bool:
     return False
 
 
-def refusal(results: Iterable[CheckResult]) -> str:
+def refusal(run: CheckRun) -> str:
     """'' when the land may go on; else the message naming every unverified check that is not deferred."""
-    held = [c for c in results if c.status == "unverified" and not deferred(c)]
+    held = [c for c in run.unverified if not deferred(c)]
     if not held:
         return ""
     names = ", ".join(f"`{c.id[:80]}`" for c in held)

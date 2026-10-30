@@ -47,7 +47,7 @@ class Gate:
         except CheckFault as fault:
             e.log.emit(rec.GateEnd(exit=fault.rc, secs=round(time.time() - started)))
             raise e.blocked_for(fault.text, FAULTS[fault.kind]) from fault
-        why = verified.refusal(run.results)
+        why = verified.refusal(run)
         if why:
             e.log.emit(rec.GateEnd(exit=1, secs=round(time.time() - started)))
             raise e.blocked_for(why, "FAULT_LAND")
