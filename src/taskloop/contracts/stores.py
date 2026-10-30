@@ -2,8 +2,9 @@
 import contextlib
 import dataclasses
 import json
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Final, Protocol
+from typing import Any, Final, Protocol, override
 
 from atomic_io import atomic_write_bytes, atomic_write_json
 from jsonl_log import Entry, Jsonl
@@ -12,6 +13,7 @@ from taskloop.contracts import events, log, paths, wire
 from taskloop.contracts.ask import Ask, AskAnswer, ThreadEntry
 from taskloop.contracts.dash import OwnerCause, Stick
 from taskloop.contracts.enums import AskStatus
+from taskloop.contracts.guard import guard
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ledger import LedgerEntry, LedgerEvent
 from taskloop.contracts.loop import BadVersions, LoopCommand, LoopState, Rest
@@ -112,6 +114,14 @@ class UsageHistory(JsonlStore[UsageRow]):
     def __init__(self, cfg: paths.ConfigDir) -> None:
         super().__init__(cfg.usage_history(), _one(UsageRow))
 
+    def lock_path(self) -> Path:
+        return self.file.path.with_name(self.file.path.name + ".lock")
+
+    @override
+    def append(self, rec: UsageRow) -> int:
+        with guard(self.lock_path()):  # prune rewrites the file under this lock: a line appended meanwhile is not lost
+            return super().append(rec)
+
     def record(self, snap: StatusSnapshot) -> None:
         for row in rows_of(snap):
             self.append(row)
@@ -121,16 +131,17 @@ class UsageHistory(JsonlStore[UsageRow]):
 
     def prune(self, now: float) -> int:
         """Drop rows older than USAGE_KEEP_S (and lines that are no row); -> how many lines went. Rewrites only when one goes."""
-        try:
-            data = self.file.path.read_bytes()
-        except OSError:
-            return 0
-        page = self.read_from(0)
-        keep = [data[i.start:i.end] for i in page.items if i.rec.at >= now - USAGE_KEEP_S]
-        gone = len(page.items) + page.skipped - len(keep)
-        if gone:
-            atomic_write_bytes(self.file.path, b"".join(keep), fsync=False)
-        return gone
+        with guard(self.lock_path()):
+            try:
+                data = self.file.path.read_bytes()
+            except OSError:
+                return 0
+            page = self.read_from(0)
+            keep = [data[i.start:i.end] for i in page.items if i.rec.at >= now - USAGE_KEEP_S]
+            gone = len(page.items) + page.skipped - len(keep)
+            if gone:
+                atomic_write_bytes(self.file.path, b"".join(keep), fsync=False)
+            return gone
 
 
 class LedgerStore(JsonlStore[LedgerEntry]):
@@ -160,15 +171,23 @@ class AskFiles:
 
 class AskStore:
     """The one reader and the one writer of asks/<bead>.json: the engine raises and consumes, `tl` sweeps and answers, the dashboard
-    answers. One record per bead; a newer ask replaces the older. Every write re-reads first, so a stale copy never undoes a newer one."""
+    answers. One record per bead; a newer ask replaces the older. Every write holds the bead's lock (`held`) across its read and its
+    put, so a stale copy never undoes a newer one. A lock rather than a revision compare-and-swap: a CAS still needs the read-check-
+    write to be atomic, which on a plain file is a lock anyway, and a lock leaves the document's wire format alone. `held` is None
+    for the in-memory fake (one thread)."""
 
-    def __init__(self, docs: AskDocs, ledger: JsonlStore[LedgerEntry] | None = None) -> None:
+    def __init__(self, docs: AskDocs, ledger: JsonlStore[LedgerEntry] | None = None,
+                 held: Callable[[str], contextlib.AbstractContextManager[None]] | None = None) -> None:
         self.docs = docs
         self.ledger = ledger
+        self.held = held
 
     @classmethod
     def at(cls, cfg: paths.ConfigDir) -> AskStore:
-        return cls(AskFiles(cfg), LedgerStore(cfg))
+        return cls(AskFiles(cfg), LedgerStore(cfg), lambda bead: guard(cfg.lock_record("ask", str(bead))))
+
+    def _lock(self, bead: BeadId | str) -> contextlib.AbstractContextManager[None]:
+        return self.held(str(bead)) if self.held is not None else contextlib.nullcontext()
 
     def log(self, a: Ask, event: LedgerEvent, t: float, why: str = "") -> None:
         """One ledger row of this transition, carrying the ask's answer, cause and outcome as they are now."""
@@ -188,7 +207,8 @@ class AskStore:
 
     def file(self, ask: Ask) -> None:
         """A new ask: the document, and the ledger's raise row."""
-        self.put(ask)
+        with self._lock(ask.bead):
+            self.put(ask)
         self.log(ask, "raise", ask.t)
 
     def of(self, bead: BeadId | str) -> Any:
@@ -244,62 +264,72 @@ class AskStore:
 
     def answer(self, bead: BeadId | str, ask_id: str, answer: AskAnswer) -> tuple[Ask | None, str]:
         """File the owner's answer on a live, unanswered ask (the first one wins). -> (the ask, "" or why not)."""
-        a, why = self.state(bead, ask_id)
-        if a is None or why:
-            return a, why
-        done = a.replace(status=AskStatus.ANSWERED, answer=answer, answered=answer.t)
-        self.put(done)
+        with self._lock(bead):
+            a, why = self.state(bead, ask_id)
+            if a is None or why:
+                return a, why
+            done = a.replace(status=AskStatus.ANSWERED, answer=answer, answered=answer.t)
+            self.put(done)
         self.log(done, "answer", answer.t)
         return done, ""
 
     def amend(self, bead: BeadId | str, ask_id: str, answer: AskAnswer) -> tuple[Ask | None, str]:
         """Replace an answer no run has used yet."""
-        a, why = self.state(bead, ask_id)
-        if a is None or why not in ("", "answered"):
-            return a, why
-        done = a.replace(status=AskStatus.ANSWERED, answer=answer, answered=answer.t)
-        self.put(done)
+        with self._lock(bead):
+            a, why = self.state(bead, ask_id)
+            if a is None or why not in ("", "answered"):
+                return a, why
+            done = a.replace(status=AskStatus.ANSWERED, answer=answer, answered=answer.t)
+            self.put(done)
         self.log(done, "answer", answer.t)
         return done, ""
 
-    def consume(self, bead: BeadId | str, now: float) -> Ask | None:
-        """A run starts from this ask (answered, or its bead changed): it will not be asked again. None when nothing is live."""
-        a = self.get(bead)
-        if a is None or a.status not in (*LIVE, AskStatus.ANSWERED) or a.consumed is not None:
-            return None
-        done = a.replace(status=AskStatus.ANSWERED, answered=a.answered or now, consumed=now)
-        self.put(done)
+    def consume(self, bead: BeadId | str, now: float, *, unanswered: bool = False) -> Ask | None:
+        """A run starts from this ask: it will not be asked again. None when nothing is live, or when the ask has no answer
+        (open or parked) and `unanswered` is not said: only a run that goes on because its bead changed (or --fresh) passes it.
+        The answer is judged on the copy read under the lock, so one filed meanwhile is kept, never overwritten with none."""
+        with self._lock(bead):
+            a = self.get(bead)
+            if a is None or a.status not in (*LIVE, AskStatus.ANSWERED) or a.consumed is not None:
+                return None
+            if a.answer is None and not unanswered:
+                return None
+            done = a.replace(status=AskStatus.ANSWERED, answered=a.answered or now, consumed=now)
+            self.put(done)
         self.log(done, "consume", now)
         return done
 
     def withdraw(self, bead: BeadId | str, ask_id: str, why: str, now: float) -> tuple[Ask | None, str]:
         """The owner dismisses an ask no run has used. An answer given and not used goes with it."""
-        a, problem = self.state(bead, ask_id)
-        if a is None or problem in ("gone", "superseded", "closed", "consumed"):
-            return a, problem
-        if problem == "withdrawn":
-            return a, ""
-        done = a.replace(status=AskStatus.WITHDRAWN, closed_why=why, answered=now if a.answer else None)
-        self.put(done)
+        with self._lock(bead):
+            a, problem = self.state(bead, ask_id)
+            if a is None or problem in ("gone", "superseded", "closed", "consumed"):
+                return a, problem
+            if problem == "withdrawn":
+                return a, ""
+            done = a.replace(status=AskStatus.WITHDRAWN, closed_why=why, answered=now if a.answer else None)
+            self.put(done)
         self.log(done, "withdraw", now, why=why)
         return done, ""
 
     def close(self, bead: BeadId | str, ask_id: str, why: str, now: float = 0.0) -> bool:
         """The bead is closed or gone, or the run landed: close only the ask that is still the one read (a newer one stays)."""
-        a = self.get(bead)
-        if a is None or a.id != ask_id or a.status not in (*LIVE, AskStatus.ANSWERED) or a.consumed is not None:
-            return False
-        done = a.replace(status=AskStatus.CLOSED, closed_why=why)
-        self.put(done)
+        with self._lock(bead):
+            a = self.get(bead)
+            if a is None or a.id != ask_id or a.status not in (*LIVE, AskStatus.ANSWERED) or a.consumed is not None:
+                return False
+            done = a.replace(status=AskStatus.CLOSED, closed_why=why)
+            self.put(done)
         self.log(done, "close", now, why=why)
         return True
 
     def park(self, bead: BeadId | str, ask_id: str) -> bool:
-        a = self.get(bead)
-        if a is None or a.id != ask_id or a.status != AskStatus.OPEN or a.answer is not None:
-            return False
-        self.put(a.replace(status=AskStatus.PARKED))
-        return True
+        with self._lock(bead):
+            a = self.get(bead)
+            if a is None or a.id != ask_id or a.status != AskStatus.OPEN or a.answer is not None:
+                return False
+            self.put(a.replace(status=AskStatus.PARKED))
+            return True
 
     def follow(self, ask_id: str, event: LedgerEvent, now: float, **changes: Any) -> bool:
         """A row after the newest one of the ask, with `changes` (cause, outcome...). Works for a past ask too: its document may
@@ -312,27 +342,30 @@ class AskStore:
 
     def correct_cause(self, bead: BeadId | str, ask_id: str, cause: OwnerCause, now: float) -> bool:
         """The owner names the cause of an ask: on the document while it is still the bead's ask, and a ledger row."""
-        a = self.get(bead)
-        if a is not None and a.id == ask_id:
-            self.put(a.replace(owner_cause=cause, cause_by="owner"))
+        with self._lock(bead):
+            a = self.get(bead)
+            if a is not None and a.id == ask_id:
+                self.put(a.replace(owner_cause=cause, cause_by="owner"))
         return self.follow(ask_id, "cause", now, cause=cause, cause_by="owner")
 
     def stuck(self, bead: BeadId | str, ask_id: str, outcome: Stick, ref: str, now: float) -> bool:
         """What the owner made of the answer (adr, ref, factory, fix, demote, once): on the document while it is still the bead's ask,
         and a ledger row (`demote` for a demotion, `stick` for the rest)."""
-        a = self.get(bead)
-        if a is not None and a.id == ask_id:
-            self.put(a.replace(outcome=outcome, outcome_ref=ref))
+        with self._lock(bead):
+            a = self.get(bead)
+            if a is not None and a.id == ask_id:
+                self.put(a.replace(outcome=outcome, outcome_ref=ref))
         return self.follow(ask_id, "demote" if outcome is Stick.DEMOTE else "stick", now, outcome=outcome, outcome_ref=ref)
 
     def say(self, bead: BeadId | str, ask_id: str, entry: ThreadEntry) -> tuple[Ask | None, str]:
         """An ask-back entry on a live ask (the ask stays open). -> (the ask, "" or why not)."""
-        a, why = self.state(bead, ask_id)
-        if a is None or why not in ("", "answered"):
-            return a, why
-        done = a.replace(thread=[*a.thread, entry])
-        self.put(done)
-        return done, ""
+        with self._lock(bead):
+            a, why = self.state(bead, ask_id)
+            if a is None or why not in ("", "answered"):
+                return a, why
+            done = a.replace(thread=[*a.thread, entry])
+            self.put(done)
+            return done, ""
 
 
 class LoopStateStore(JsonStore[LoopState]):

@@ -98,7 +98,7 @@ class AskContract(Base):
         self.assertEqual((why, done.status, done.closed_why), ("", AskStatus.WITHDRAWN, "no longer"))
         self.assertEqual(self.s.asks.withdraw("b1", "b1-1", "again", S.T + 2)[1], "")  # already withdrawn: fine
         self.raise_ask("b2")
-        self.s.asks.consume("b2", S.T + 1)
+        self.s.asks.consume("b2", S.T + 1, unanswered=True)
         self.assertEqual(self.s.asks.withdraw("b2", "b2-1", "x", S.T + 2)[1], "consumed")
 
     def test_close_and_park_touch_only_the_ask_they_read(self) -> None:

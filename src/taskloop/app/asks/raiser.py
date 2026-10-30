@@ -64,7 +64,7 @@ def check(asks: AskStore, bead: str, brief_hash: str, fresh: bool, now: float) -
         return "none", None
     if ask.answer is None and ask.brief_hash == brief_hash and not fresh:
         return "wait", ask
-    return "answer", asks.consume(bead, now)
+    return "answer", asks.consume(bead, now, unanswered=True)  # the bead changed or --fresh; a filed answer is kept by consume
 
 
 def leave_queue(store: Beads, bead: str, pick: str, info: str) -> str:

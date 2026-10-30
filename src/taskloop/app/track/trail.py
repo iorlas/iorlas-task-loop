@@ -5,6 +5,7 @@ import os
 import socket
 import sys
 import time
+from pathlib import Path
 from typing import Any, Final
 
 from taskloop.adapters import applog
@@ -12,6 +13,7 @@ from taskloop.adapters.beadtools import bd_store
 from taskloop.adapters.gitrepo import repo_root
 from taskloop.adapters.ident import actor, config_dir, session_id
 from taskloop.adapters.landlock import os_lock
+from taskloop.contracts.guard import guard
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdFailure, Beads
 
@@ -28,7 +30,8 @@ def event(kind: str, bead: str = "", **fields: Any) -> dict[str, Any]:
     rec: dict[str, Any] = {"t": now(), "kind": kind, "bead": bead, "session": session_id(), "actor": actor(),
                            "repo": fields.pop("repo", None) or repo_root(), "host": socket.gethostname()}
     rec.update({k: v for k, v in fields.items() if v is not None})
-    applog.append(ConfigDir(config_dir()).events(), json.dumps(rec, ensure_ascii=False) + "\n")  # tl-64i: one held handle per process
+    with guard(events_lock(ConfigDir(config_dir()))):  # prune_events rewrites the file under this lock
+        applog.append(ConfigDir(config_dir()).events(), json.dumps(rec, ensure_ascii=False) + "\n")  # tl-64i: one held handle per process
     register_repo(rec["repo"])
     return rec
 
@@ -64,18 +67,23 @@ def register_repo(path: str | None) -> None:
             os.replace(tmp, f)
 
 
+def events_lock(cfg: ConfigDir) -> Path:
+    return cfg.lock_record("log", "events")
+
+
 def prune_events(days: float = RETAIN_DAYS) -> None:
     f = ConfigDir(config_dir()).events()
     if not f.exists() or f.stat().st_size < 2_000_000:
         return
     cut = now() - days * 86400
-    keep: list[str] = []
-    for ln in f.read_text(encoding="utf-8", errors="replace").splitlines():
-        try:
-            if json.loads(ln).get("t", 0) >= cut:
-                keep.append(ln)
-        except ValueError:
-            pass
-    tmp = f.with_name(f"events.{os.getpid()}.tmp")
-    tmp.write_text("\n".join(keep) + ("\n" if keep else ""), encoding="utf-8")
-    os.replace(tmp, f)
+    with guard(events_lock(ConfigDir(config_dir()))):  # read, filter, replace as one step: a line appended meanwhile waits
+        keep: list[str] = []
+        for ln in f.read_text(encoding="utf-8", errors="replace").splitlines():
+            try:
+                if json.loads(ln).get("t", 0) >= cut:
+                    keep.append(ln)
+            except ValueError:
+                pass
+        tmp = f.with_name(f"events.{os.getpid()}.tmp")
+        tmp.write_text("\n".join(keep) + ("\n" if keep else ""), encoding="utf-8")
+        os.replace(tmp, f)
