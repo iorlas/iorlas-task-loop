@@ -1,9 +1,10 @@
 """No pytest worker outlives the launcher that started it: a wall limit, an interrupt and a dead launcher each end every process."""
+import _thread
 import os
+import signal
 import subprocess
 import sys
 import tempfile
-import textwrap
 import threading
 import unittest
 from pathlib import Path
@@ -26,26 +27,6 @@ class S(unittest.TestCase):
         open(os.environ["PIDFILE"], "w").write(str(os.getpid()))
         time.sleep(300)
 """
-LAUNCH = textwrap.dedent("""\
-    import os, sys, signal, threading, time, _thread
-    signal.signal(signal.SIGINT, signal.default_int_handler)  # a background shell starts us with SIGINT ignored
-    sys.path[:0] = [{src!r}, {vendor!r}]
-    from taskloop.app.release import suite
-    suite.RUN_WALL_S = {wall}
-    if {interrupt}:
-        def interrupt():  # once the worker is inside its test
-            while not os.path.exists(os.environ["PIDFILE"]):
-                time.sleep(0.02)
-            _thread.interrupt_main()
-        threading.Thread(target=interrupt, daemon=True).start()
-    try:
-        part = suite.run_pytest({argv!r}, {root!r}, dict(os.environ), "parallel")
-        print("exit", part.code, part.out.strip().splitlines()[-1], flush=True)
-    except KeyboardInterrupt:
-        print("interrupted", flush=True)
-""")
-
-
 class Orphans(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -72,35 +53,39 @@ class Orphans(unittest.TestCase):
         self.pids.append(pid)
         return pid
 
-    def launcher(self, wall, interrupt, argv=None):
-        code = LAUNCH.format(src=str(ROOT / "src"), vendor=str(ROOT / "skills" / "task-loop" / "_vendor"), wall=wall,
-                             root=str(self.root), argv=argv or self.argv, interrupt=interrupt)
-        p = subprocess.Popen([sys.executable, "-c", code], env=self.env, stdout=subprocess.PIPE, text=True)
-        self.pids.append(p.pid)
-        return p
+    def run_in_thread(self, wall, argv):
+        """suite.run_pytest as the launcher runs it, here in this process (no launcher interpreter) -> (the part, or the exception)."""
+        with mock.patch.object(suite, "RUN_WALL_S", wall):
+            return suite.run_pytest(argv, str(self.root), dict(self.env), "parallel")
 
     def test_a_run_past_its_wall_limit_is_stopped_and_red(self):
-        sleeper = "import os, time; open(os.environ['PIDFILE'], 'w').write(str(os.getpid())); time.sleep(300)"
-        p = self.launcher(wall=1.5, interrupt=False, argv=[sys.executable, "-c", sleeper])  # room to start under load
-        out, _ = p.communicate(timeout=90)
+        sleeper = ["sh", "-c", 'echo $$ > "$PIDFILE"; sleep 300']  # the stand-in for a hung worker: a shell, not an interpreter
+        part = self.run_in_thread(1.5, sleeper)  # room to start under load
         pid = self.worker_pid()
-        self.assertIn("exit 124", out)
-        self.assertIn("its process tree was killed", out)
+        self.assertEqual(part.code, 124)
+        self.assertIn("its process tree was killed", part.out)
         self.assertFalse(stream_proc.alive(pid))
 
     def test_an_interrupted_launcher_stops_its_workers_before_it_exits(self):
-        p = self.launcher(wall=600, interrupt=True)
+        old = signal.signal(signal.SIGINT, signal.default_int_handler)  # a background shell starts a launcher with SIGINT ignored
+        self.addCleanup(signal.signal, signal.SIGINT, old)
+
+        def interrupt():  # once the worker is inside its test
+            until(self.pidfile.exists, 60)
+            _thread.interrupt_main()
+        threading.Thread(target=interrupt, daemon=True).start()
+        with self.assertRaises(KeyboardInterrupt):
+            self.run_in_thread(600, self.argv)
         pid = self.worker_pid()
-        out, _ = p.communicate(timeout=60)
-        self.assertIn("interrupted", out)
-        self.assertFalse(stream_proc.alive(pid))
+        self.assertTrue(until(lambda: not stream_proc.alive(pid), 15), "the worker outlived the interrupted launcher")
 
     def test_a_worker_whose_controller_died_without_a_word_exits_on_its_own(self):
-        starter = ("import os, subprocess, sys, time\n"
-                   "p = subprocess.Popen(sys.argv[1:], start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)\n"
-                   "while not os.path.exists(os.environ['PIDFILE']): time.sleep(0.05)\n"  # the worker is inside its test
-                   "os.kill(p.pid, 9)\n")  # the controller dies at once, no handler: the way a SIGKILLed pytest ends
-        subprocess.run([sys.executable, "-c", starter, *self.argv], env=self.env, cwd=self.root, timeout=90, check=True)
+        out = subprocess.DEVNULL
+        controller = subprocess.Popen(self.argv, env=self.env, cwd=self.root, start_new_session=True, stdout=out, stderr=out)
+        self.pids.append(controller.pid)
+        self.assertTrue(until(self.pidfile.exists, 90), "the worker never started its test")  # the worker is inside its test
+        controller.kill()  # the controller dies at once, no handler: the way a SIGKILLed pytest ends
+        controller.wait()
         pid = self.worker_pid()
         self.assertTrue(until(lambda: not stream_proc.alive(pid), 15), "the orphaned worker is still running")
 
