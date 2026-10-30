@@ -2,6 +2,7 @@
 import contextlib
 import hashlib
 import os
+import re
 import signal
 import sys
 from collections.abc import Callable, Generator
@@ -31,9 +32,28 @@ def os_lock(path: Path | str, holder: str, waiting: Callable[[str], None] | None
         raise TimeoutError(e.holder.holder if e.holder else "?") from None
 
 
+def canonical_remote(url: str) -> str:
+    """One name for one remote, however it is spelled: `git@github.com:o/r.git`, `ssh://git@github.com/o/r`, `https://github.com/o/r.git/`
+    and `HTTPS://user@GitHub.com/o/r` all become `github.com/o/r`. A local path (no host) stays as it is."""
+    scp = re.fullmatch(r"(?:[^@/:\s]+@)?([^/:\s]+):(?!//)(.+)", url)
+    if scp and "/" not in scp.group(1):
+        host, path = scp.group(1), scp.group(2)
+    else:
+        m = re.fullmatch(r"[a-zA-Z][a-zA-Z0-9+.-]*://(?:[^@/]*@)?([^/:]+)(?::\d+)?/(.*)", url)
+        if not m:
+            return url
+        host, path = m.group(1), m.group(2)
+    path = path.strip("/").removesuffix(".git").strip("/")
+    return f"{host.lower()}/{path}"
+
+
+def lock_key(url: str) -> str:
+    return hashlib.sha1(canonical_remote(url).encode()).hexdigest()[:12]
+
+
 def land_lock_path(url: str) -> Path:
-    """The repo's land lock (one per origin URL): every land, and a release's push, take it (os_lock)."""
-    return config_dir() / "locks" / (f"land-{hashlib.sha1(url.encode()).hexdigest()[:12]}.lock")
+    """The repo's land lock (one per origin, however its URL is spelled): every land, and a release's push, take it (os_lock)."""
+    return config_dir() / "locks" / f"land-{lock_key(url)}.lock"
 
 
 def run_locked(cmd: list[str], repo: str, wait_min: float | None) -> int:

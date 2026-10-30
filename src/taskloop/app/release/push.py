@@ -1,5 +1,4 @@
 """The push of a release: under the land lock, rebased onto an origin/main that moved, the version taken again."""
-import hashlib
 from collections.abc import Callable
 from pathlib import Path
 
@@ -8,7 +7,7 @@ from taskloop.app.release.shell import REAL, Abort, Shell
 
 
 def release_lock_path(config: Path, url: str) -> Path:
-    return config / "locks" / (f"release-{hashlib.sha1(url.encode()).hexdigest()[:12]}.lock")
+    return config / "locks" / f"release-{landlock.lock_key(url)}.lock"
 
 
 def push_main(repo: Path, message: str, version: str, base: str, bump: Callable[[], str], sh: Shell = REAL) -> str:
