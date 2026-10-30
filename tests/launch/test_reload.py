@@ -107,7 +107,7 @@ class Reload(te.EngineTest):
         eng.argv = ["run-task", "t-1", "--worktree", str(self.wt), "--fresh", "--outcome-file", "/x/out.json"]
 
         def fake_exec(argv):
-            marker = reexec.read_reexec("t-1")
+            marker = reexec.read_reexec(BeadId("t-1"))
             self.execs.append({"argv": argv, "env": json.loads(os.environ["TL_REEXEC"]), "marker": marker.to_dict() if marker else None})
         eng.exec_fn = fake_exec
         eng.newer_fn = lambda: wloop.newer(self.here)  # pyrefly: ignore[bad-assignment]
@@ -171,7 +171,7 @@ class Reload(te.EngineTest):
         self.assertEqual(rc, 0)
         self.assertTrue(self.closed and self.closed[0].startswith("merged "))
         self.assertEqual(gitrepo.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")  # pyrefly: ignore[missing-attribute]
-        self.assertFalse(reexec.cfg().reexec_note("t-1").exists())  # a run that ended is no crash after an exec
+        self.assertFalse(reexec.cfg().reexec_note(BeadId("t-1")).exists())  # a run that ended is no crash after an exec
         logs = [json.loads(x) for x in eng.log_path.read_text().splitlines()]
         self.assertEqual(len([x for x in logs if x["kind"] == "run_start"]), 1)  # one run record for the one run
         self.assertTrue(
@@ -226,8 +226,8 @@ class Reload(te.EngineTest):
                 if len(spawned) == 2:  # the fallback run gives its outcome
                     Path(self.cmd[self.cmd.index("--outcome-file") + 1]).write_text(json.dumps({"outcome": "landed"}))
                     return 0
-                reexec.cfg().reexec_note("t-1").parent.mkdir(parents=True, exist_ok=True)
-                reexec.cfg().reexec_note("t-1").write_text(
+                reexec.cfg().reexec_note(BeadId("t-1")).parent.mkdir(parents=True, exist_ok=True)
+                reexec.cfg().reexec_note(BeadId("t-1")).write_text(
                     json.dumps(
                         {
                             "v": 1,
@@ -274,7 +274,7 @@ class Reload(te.EngineTest):
         self.assertEqual([(e["old"], e["new"]) for e in fb], [("0.2.0", "0.1.0")])
         self.assertIn("0.2.0", [e["version"] for e in json.loads((ident.config_dir() / "bad-versions.json").read_text())["entries"]])
         self.assertTrue(any("RED" in c for c in said))
-        self.assertFalse(reexec.cfg().reexec_note("t-1").exists())
+        self.assertFalse(reexec.cfg().reexec_note(BeadId("t-1")).exists())
 
     # -- point 2: delegate is resolved per call, never held
     def test_delegate_route_is_resolved_again_each_call(self):

@@ -41,7 +41,7 @@ class RaiserTest(unittest.TestCase):
     def test_an_invalid_ask_writes_nothing(self) -> None:
         bad = dataclasses.replace(specs.missing_criteria(), decision="not a question")
         a, problems = raiser.raise_ask(self.asks, bad, asking())
-        self.assertEqual((a, self.asks.get("t-1")), (None, None))
+        self.assertEqual((a, self.asks.get(BeadId("t-1"))), (None, None))
         self.assertIn("decision: does not end in '?'", problems)
 
     def test_the_next_run_waits_while_nothing_changed_and_goes_on_when_answered_or_changed(self) -> None:
@@ -93,9 +93,9 @@ class SweepTest(unittest.TestCase):
             self.raise_for(b)
         got = sweeps.close_stale(self.asks, lambda r: self.store, self.marker, T)
         self.assertEqual(sorted(got), ["fk-2", "fk-9"])
-        self.assertEqual(must(self.asks.get("fk-2")).closed_why, "the bead is closed")
-        self.assertEqual(must(self.asks.get("fk-9")).closed_why, "the bead does not exist")
-        self.assertEqual(must(self.asks.get("fk-1")).status, AskStatus.OPEN)
+        self.assertEqual(must(self.asks.get(BeadId("fk-2"))).closed_why, "the bead is closed")
+        self.assertEqual(must(self.asks.get(BeadId("fk-9"))).closed_why, "the bead does not exist")
+        self.assertEqual(must(self.asks.get(BeadId("fk-1"))).status, AskStatus.OPEN)
         self.assertEqual(sweeps.close_stale(self.asks, lambda r: self.store, self.marker, T + 1), [])  # throttled
 
     def test_an_ask_with_no_known_tracker_stays(self) -> None:
@@ -108,7 +108,7 @@ class SweepTest(unittest.TestCase):
         marker = self.repo / ".mark2"
         late = T + raiser.PARK_AFTER_S + 1
         self.assertEqual(sweeps.park_stale(self.asks, lambda r: self.store, marker, late), ["fk-1"])
-        self.assertEqual(must(self.asks.get("fk-1")).status, AskStatus.PARKED)
+        self.assertEqual(must(self.asks.get(BeadId("fk-1"))).status, AskStatus.PARKED)
         self.assertIn("Parked (engine)", self.store.comments(BeadId("fk-1"))[0].text)
 
     def test_an_answer_no_run_used_for_30_minutes_is_a_fault(self) -> None:
@@ -118,7 +118,7 @@ class SweepTest(unittest.TestCase):
         late = sweeps.unused_answers(self.asks, T + 10 + sweeps.UNUSED_ANSWER_S + 1)
         self.assertEqual([a.bead for a in late], ["fk-1"])
         self.assertIn("answered 30 min ago", sweeps.fault_line(late[0], T + 10 + 1800))
-        self.asks.consume("fk-1", T + 3000)
+        self.asks.consume(BeadId("fk-1"), T + 3000)
         self.assertEqual(sweeps.unused_answers(self.asks, T + 5000), [])
 
 

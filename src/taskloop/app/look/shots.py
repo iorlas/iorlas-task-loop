@@ -7,6 +7,7 @@ from typing import Any
 
 from taskloop.adapters import ident, looks
 from taskloop.app.look.keep import Keeper, place
+from taskloop.contracts.ids import BeadId
 from taskloop.contracts.log import Artifacts
 from taskloop.contracts.paths import ConfigDir
 from taskloop.domain.checks.matchers import glob_re
@@ -95,7 +96,7 @@ class Pictures:
     def look_ready(self, st: Any):
         return bool(self.shot_methods()) and self.stage_visual(st)
 
-    def artifacts_dir(self, bead: str | None = None) -> Path:
+    def artifacts_dir(self, bead: BeadId | None = None) -> Path:
         """Where this bead's pictures are kept (the dashboard serves them): outside the repo and every worktree."""
         return ConfigDir(ident.config_dir()).artifacts(bead or self.e.bead)
 

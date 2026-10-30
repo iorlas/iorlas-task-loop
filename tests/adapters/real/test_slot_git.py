@@ -99,7 +99,7 @@ class SlotGitTest(unittest.TestCase):
         self.assertEqual(script.calls, [])  # no worker, reviewer or planner ever ran
         self.assertEqual(closed, [])  # the bead is blocked, not closed
         self.assertEqual(blocked, [])  # an engine fault: the bead stays open, nobody is asked
-        self.assertIsNone(eng.stores.asks.get("t-1"))  # a wrong tree is the slot's fault, not a question for the owner
+        self.assertIsNone(eng.stores.asks.get(BeadId("t-1")))  # a wrong tree is the slot's fault, not a question for the owner
         self.assertIn("git config --unset core.worktree", eng.why)
         self.assertIn(str(self.repo), eng.why)
         self.assertIn("config", eng.why)  # names the setting and the file it came from

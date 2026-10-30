@@ -12,6 +12,7 @@ from taskloop.app.run.budget import Budget
 from taskloop.app.run.calls import Calls
 from taskloop.app.run.steps import Steps
 from taskloop.contracts.config import EngineConfig
+from taskloop.contracts.ids import BeadId
 from taskloop.contracts.paths import ConfigDir, RepoDirs
 from taskloop.stores.bundle import Stores
 from taskloop.stores.runlog import RunLog
@@ -19,7 +20,7 @@ from taskloop.stores.runlog import RunLog
 
 @dataclasses.dataclass
 class RunContext:
-    bead: str
+    bead: BeadId
     cfg: EngineConfig
     wt: Path
     run: str  # <bead>-<YYYYMMDD-HHMMSS>: the stem of the run's files
@@ -38,7 +39,7 @@ class RunContext:
     @classmethod
     def open(
         cls,
-        bead: str,
+        bead: BeadId,
         cfg: EngineConfig,
         wt: Path,
         run: str,

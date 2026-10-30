@@ -141,13 +141,13 @@ class LostWork(Base):
     def test_the_landed_record_covers_the_branch_whatever_the_land_title_says(self):
         self.branch("task/t-1", [("f.txt", "one\n", "wip (t-1): blocked")], T0)
         land = self.squash_land("a title the bead lost")
-        LandedStore(ident.config_dir()).put(Landed(bead="t-1", sha=land, base="main", t=T0 + 31 * MIN))
+        LandedStore(ident.config_dir()).put(Landed(bead=BeadId("t-1"), sha=land, base="main", t=T0 + 31 * MIN))
         self.assertEqual(set(self.by_class(self.lost({"t-1": "closed"}))), {"landed"})
 
     def test_a_record_whose_sha_is_not_on_the_base_is_no_land(self):
         self.branch("task/t-1", [("f.txt", "one\n", "wip (t-1): blocked")], T0)
         off = self.branch("task/other", [("g.txt", "x\n", "other")], T0)[0]
-        LandedStore(ident.config_dir()).put(Landed(bead="t-1", sha=off, base="main", t=T0 + 31 * MIN))
+        LandedStore(ident.config_dir()).put(Landed(bead=BeadId("t-1"), sha=off, base="main", t=T0 + 31 * MIN))
         self.assertIn("lost", self.by_class(self.lost({"t-1": "closed"})))
 
     def test_a_revert_that_names_the_bead_is_no_land(self):

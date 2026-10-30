@@ -74,7 +74,7 @@ class EngineDecisions(EngineTest):
         q = dict(PLAN, question="Which file do I follow?", options=OPTS, owner_cause="requirement")
         rc, _s = self.run_engine({"plan": [q], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
-        ask = must(self.asks().get("t-1"))
+        ask = must(self.asks().get(BeadId("t-1")))
         # the run landed on it, so the ask is closed
         self.assertEqual((ask.blocking, ask.status, ask.owner_cause, ask.cause_by),
                          (False, AskStatus.CLOSED, OwnerCause.REQUIREMENT, "agent"))
@@ -85,19 +85,19 @@ class EngineDecisions(EngineTest):
     def test_an_irreversible_question_is_a_blocking_ask_with_the_cause_the_agent_declared(self):
         rc, _s = self.run_engine({"plan": [dict(IRREVERSIBLE, owner_cause="decision")]})
         self.assertEqual(rc, 2)
-        ask = must(self.asks().get("t-1"))
+        ask = must(self.asks().get(BeadId("t-1")))
         self.assertEqual((ask.blocking, ask.default, ask.owner_cause, ask.status), (True, "", OwnerCause.DECISION, AskStatus.OPEN))
 
     def test_a_cause_outside_the_list_is_unknown_and_none_is_unknown(self):
         self.run_engine({"plan": [dict(IRREVERSIBLE, owner_cause="unknown")]})
-        self.assertEqual(must(self.asks().get("t-1")).owner_cause, OwnerCause.UNKNOWN)
+        self.assertEqual(must(self.asks().get(BeadId("t-1"))).owner_cause, OwnerCause.UNKNOWN)
 
     def test_a_repeat_ask_names_the_decision_and_the_past_answer_it_matches(self):
         key = similar.key_of(specs.open_question(PUSH, None).ask_class, PUSH)
         adr = self.decide("History is never pushed to main.", key)
         rc, _s = self.run_engine({"plan": [IRREVERSIBLE]})
         self.assertEqual(rc, 2)
-        first = must(self.asks().get("t-1"))
+        first = must(self.asks().get(BeadId("t-1")))
         self.assertEqual((first.key, first.similar), (key, [SimilarRef(kind="adr", id=adr.id)]))
         intake.Intake(self.asks(), self.store, lambda: 5.0, "denis").answer(BeadId("t-1"), "text", "hold")
         self.assertEqual(json.loads((ident.config_dir() / "ask-ledger.jsonl").read_text().splitlines()[0])["event"], "raise")

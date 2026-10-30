@@ -161,7 +161,7 @@ def main(argv: list[str] | None, tool_root: Path, doc: str = "") -> int:
         print("release: " + str(e), file=sys.stderr)
         first = str(e).strip().splitlines()[0] if str(e).strip() else "failed"
         summary = (f"{e.version} was pushed but " if e.version else "nothing released: ") + first
-        record(ReleaseResult(ok=False, version=e.version, summary=summary, tests=[str(t) for t in e.tests], log=e.log, at=time.time(),
+        record(ReleaseResult(ok=False, version=e.version, summary=summary, tests=list(e.tests), log=e.log, at=time.time(),
                              branch=req.from_branch or "main", message=req.message), req, repo)
         print("release FAILED: " + summary + ((f" (log {e.log})") if e.log else ""), file=sys.stderr)
         return 1

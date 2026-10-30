@@ -76,9 +76,9 @@ def age(asks: AskStore, now: float, out: Out) -> int:
     return 1 if faults else 0
 
 
-def show(asks: AskStore, key: str, out: Out) -> int:
+def show(asks: AskStore, key: BeadId | None, out: Out) -> int:
     """One ask by its id (or its bead's id), the Ask v3 fields; reads only."""
-    ask = asks.get(key) or next((x for x in asks.all() if x.id == key), None)
+    ask = (asks.get(key) or next((x for x in asks.all() if x.id == key), None)) if key else None
     if ask is None:
         out(f"tl: no ask {key or '(none given)'}")
         return 1
@@ -105,7 +105,7 @@ def run(a: Namespace, asks: AskStore, store_at: Callable[[str], Beads], now: Cal
         return age(asks, now(), out)
     bead: BeadId | None = getattr(a, "bead", None)
     if op == "show":
-        return show(asks, bead or "", out)
+        return show(asks, bead, out)
     if not bead:
         out(f"tl: {op} needs a bead id")
         return 2

@@ -132,7 +132,7 @@ class LookTest(T.EngineTest):
         self.assertEqual(rc, 0, self.blocked)
         tree = gitrepo.git("ls-tree", "-r", "--name-only", "origin/main", cwd=str(self.wt))
         self.assertNotIn("home-screen.png", tree)  # pyrefly: ignore[unsupported-operation]
-        kept = ConfigDir(ident.config_dir()).artifacts("t-1")
+        kept = ConfigDir(ident.config_dir()).artifacts(BeadId("t-1"))
         self.assertEqual((kept / "home-screen.png").read_bytes(), b"PNG fake")
         recs = [i.rec for i in self.eng.stores.run_log(self.eng.run_dir.name).read_from().items if i.rec.kind == "artifacts"]
         self.assertIn(["home-screen.png"], [getattr(x, "names", None) for x in recs])
@@ -153,18 +153,18 @@ class LookTest(T.EngineTest):
         (self.eng.run_dir / "brief.md").write_text("no pictures named")
         root = ConfigDir(ident.config_dir())
         for bead, data in (("t-0", b"old"), ("t-1", b"mine"), ("zz-9", b"other repo")):
-            root.artifacts(bead).mkdir(parents=True)
-            (root.artifacts(bead) / "home.png").write_bytes(data)
-        os.utime(root.artifacts("t-0") / "home.png", (1, 1))
-        root.artifacts("t-5").mkdir(parents=True)
-        (root.artifacts("t-5") / "home.png").write_bytes(b"newer")
-        self.assertEqual(self.eng.pictures.before_shot("home.png"), root.artifacts("t-5") / "home.png")
+            root.artifacts(BeadId(bead)).mkdir(parents=True)
+            (root.artifacts(BeadId(bead)) / "home.png").write_bytes(data)
+        os.utime(root.artifacts(BeadId("t-0")) / "home.png", (1, 1))
+        root.artifacts(BeadId("t-5")).mkdir(parents=True)
+        (root.artifacts(BeadId("t-5")) / "home.png").write_bytes(b"newer")
+        self.assertEqual(self.eng.pictures.before_shot("home.png"), root.artifacts(BeadId("t-5")) / "home.png")
         self.assertIsNone(self.eng.pictures.before_shot("nothing.png"))
         text = self.eng.pictures.references_text()
-        self.assertIn(str(root.artifacts("t-0") / "home.png"), text)
-        self.assertIn(str(root.artifacts("t-5") / "home.png"), text)
+        self.assertIn(str(root.artifacts(BeadId("t-0")) / "home.png"), text)
+        self.assertIn(str(root.artifacts(BeadId("t-5")) / "home.png"), text)
         self.assertNotIn("zz-9", text)
-        self.assertNotIn(str(root.artifacts("t-1")), text)
+        self.assertNotIn(str(root.artifacts(BeadId("t-1"))), text)
 
     def test_a_profile_that_still_sets_evidence_dir_is_refused(self):
         with self.assertRaises(Exception) as cm:

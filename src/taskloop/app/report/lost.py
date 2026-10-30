@@ -32,7 +32,7 @@ def _legacy_lands(repo: str, bases: list[str], traces: list[dict[str, Any]]) -> 
 def _lands(repo: str, bases: list[str], store: LandedStore, legacy: dict[str, list[int]]) -> Callable[[str], list[float]]:
     """bead -> times its land reached the base: the landed record when it has one and its sha is on a base; else the legacy table."""
     def of(bead: str) -> list[float]:
-        rec = store.get(bead)
+        rec = store.get(bead) if is_bead_id(bead) else None
         if rec is None:
             return list(legacy.get(bead, []))
         reached = any(run_git(repo, "merge-base", "--is-ancestor", rec.sha, b, capture_output=True).returncode == 0 for b in bases)

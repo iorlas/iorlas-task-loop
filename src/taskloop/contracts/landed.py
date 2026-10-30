@@ -6,13 +6,14 @@ from pathlib import Path
 from typing import ClassVar
 
 from taskloop.contracts import paths
+from taskloop.contracts.ids import BeadId
 from taskloop.contracts.stores import JsonStore
 from taskloop.contracts.wire import Rec
 
 
 class Landed(Rec):
     V: ClassVar[int] = 1
-    bead: str
+    bead: BeadId
     sha: str  # the base ref's tip as `git ls-remote` showed it right after the push
     base: str  # the base ref the land pushed to (origin/main)
     t: float  # wall clock of the push; a rebase never rewrites it
@@ -24,7 +25,7 @@ class LandedStore:
     def __init__(self, cfg: paths.ConfigDir | Path | str) -> None:
         self.cfg = cfg if isinstance(cfg, paths.ConfigDir) else paths.ConfigDir(cfg)
 
-    def get(self, bead: str) -> Landed | None:
+    def get(self, bead: BeadId) -> Landed | None:
         return JsonStore(self.cfg.landed(bead), Landed).read()
 
     def put(self, rec: Landed) -> None:

@@ -9,6 +9,7 @@ from typing import Any
 from taskloop.adapters import applog, ident
 from taskloop.contracts import env as penv
 from taskloop.contracts.envvars import EnvVar
+from taskloop.contracts.ids import BeadId
 from taskloop.contracts.paths import ConfigDir, RunFiles
 from taskloop.contracts.run import NetPause, ReexecNote
 from taskloop.contracts.stores import JsonStore
@@ -22,24 +23,24 @@ def cfg() -> ConfigDir:
     return ConfigDir(ident.config_dir())
 
 
-def reexec_store(bead: str) -> JsonStore[ReexecNote]:
+def reexec_store(bead: BeadId) -> JsonStore[ReexecNote]:
     return JsonStore(cfg().reexec_note(bead), ReexecNote)
 
 
-def net_pause_store(bead: str) -> JsonStore[NetPause]:
+def net_pause_store(bead: BeadId) -> JsonStore[NetPause]:
     return JsonStore(cfg().net_pause(bead), NetPause)
 
 
-def read_reexec(bead: str) -> ReexecNote | None:
+def read_reexec(bead: BeadId) -> ReexecNote | None:
     """The note an engine leaves just before it execs into a newer install; None when none (or not of this version)."""
     return reexec_store(bead).read()
 
 
-def drop_reexec(bead: str) -> None:
+def drop_reexec(bead: BeadId) -> None:
     reexec_store(bead).delete()
 
 
-def take_net_pause(bead: str) -> NetPause | None:
+def take_net_pause(bead: BeadId) -> NetPause | None:
     """The note a run leaves when it pauses for the network, taken once; None when there is none, it is older than
     NET_PAUSE_ADOPT_S, or the run it names is gone."""
     store = net_pause_store(bead)

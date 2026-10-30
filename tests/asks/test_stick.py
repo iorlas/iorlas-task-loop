@@ -48,7 +48,7 @@ class Stick_(unittest.TestCase):
                          ("ADR-1", "Saves stay v1 until a bead says otherwise.", self.ask.decision, "keep v1", self.ask.id, "t-1", "denis",
                           self.ask.key))
         self.assertEqual((self.last().event, self.last().outcome, self.last().outcome_ref), ("stick", Stick.ADR, "ADR-1"))
-        got = must(self.asks.get("t-1"))
+        got = must(self.asks.get(BeadId("t-1")))
         self.assertEqual((got.outcome, got.outcome_ref), (Stick.ADR, "ADR-1"))
         self.assertTrue(any(c.text.startswith("Owner (tl) stick") for c in self.beads.comments(BeadId("t-1"))))
 
@@ -79,7 +79,7 @@ class Stick_(unittest.TestCase):
     def test_factory_with_no_task_loop_repo_changes_nothing(self) -> None:
         verbs = intake.Intake(self.asks, self.beads, lambda: T + 5, "denis", self.stores.adrs, lambda: None)
         self.assertIn("no task-loop repo", verbs.stick(self.ask.id, Stick.FACTORY, "x"))
-        self.assertEqual((self.last().event, must(self.asks.get("t-1")).outcome), ("answer", None))
+        self.assertEqual((self.last().event, must(self.asks.get(BeadId("t-1"))).outcome), ("answer", None))
 
     def test_fix_appends_the_owners_words_to_the_bead_text(self) -> None:
         self.assertIn("say what", self.verbs.stick(self.ask.id, Stick.FIX))
@@ -123,9 +123,9 @@ class Stick_(unittest.TestCase):
         self.assertEqual(self.stores.adrs(REPO).all(), [])
 
     def test_it_holds_for_an_ask_a_newer_ask_replaced(self) -> None:
-        self.asks.consume("t-1", T + 6)
+        self.asks.consume(BeadId("t-1"), T + 6)
         must(raiser.raise_ask(self.asks, specs.open_question(Q, OPTS), raiser.Asking(
             bead=BeadId("t-1"), run="r2", brief_hash="h2", repo=REPO, title="Saves", now=T + 40))[0])
         self.assertEqual(self.verbs.stick(self.ask.id, Stick.ADR, "still v1"), "")
-        self.assertEqual(must(self.asks.get("t-1")).outcome, None)  # the newer ask is untouched
+        self.assertEqual(must(self.asks.get(BeadId("t-1"))).outcome, None)  # the newer ask is untouched
         self.assertEqual(self.stores.adrs(REPO).all()[0].ask, self.ask.id)

@@ -9,7 +9,7 @@ from typing import Any, Final
 from taskloop.contracts import wire
 from taskloop.contracts.ask import Ask, AskAction
 from taskloop.contracts.dash import WRITES, AckReq, AnswerReq, BeadReq, CauseReq, LookReq, NoteReq, PruneReq, Result, StickReq
-from taskloop.contracts.ids import BeadId
+from taskloop.contracts.ids import BeadId, is_bead_id
 from taskloop.contracts.stores import AskStore
 from taskloop_dash.api.looks import Looks
 from taskloop_dash.env import Env
@@ -67,7 +67,7 @@ class Writes:
     def find(self, ask_id: str) -> tuple[Ask | None, str]:
         """(the ask, "") when `ask_id` is the bead's current ask, else (the bead's ask or None, why not)."""
         bead = ask_id.rsplit("-", 1)[0]
-        if not bead or "/" in bead or ".." in bead:
+        if not is_bead_id(bead):
             return None, "gone"
         return self.store.state(bead, ask_id)
 

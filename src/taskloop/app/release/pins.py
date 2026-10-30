@@ -31,7 +31,7 @@ def pinned_dir(key: str) -> Path | None:
     v = pin_version(read_pin(), key)
     if not v:
         return None
-    return cache_dirs(key).get(str(v)) or claude_dir() / "plugins" / "cache" / "-" / PLUGINS[key][0] / str(v)
+    return cache_dirs(key).get(v) or claude_dir() / "plugins" / "cache" / "-" / PLUGINS[key][0] / v
 
 
 def clear_pin() -> bool:

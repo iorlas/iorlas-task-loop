@@ -133,12 +133,12 @@ class Ledger(Case):
         done = self.raise_("b-1", NOW - 6 * DAY, cause="requirement")
         self.verbs.answer(BeadId("b-1"), "text", "rent weekly")
         self.verbs.cause(BeadId("b-1"), done.id, "decision")
-        self.asks.consume("b-1", NOW - 5 * DAY)
-        self.asks.stuck("b-1", done.id, Stick.ONCE, "", NOW - 5 * DAY)
+        self.asks.consume(BeadId("b-1"), NOW - 5 * DAY)
+        self.asks.stuck(BeadId("b-1"), done.id, Stick.ONCE, "", NOW - 5 * DAY)
         hard = self.raise_("b-2", NOW - 2 * DAY)
         soft = self.raise_("b-3", NOW - DAY, default="weekly")
         gone = self.raise_("b-4", NOW - 3 * DAY)
-        self.asks.withdraw("b-4", gone.id, "n/a", NOW)
+        self.asks.withdraw(BeadId("b-4"), gone.id, "n/a", NOW)
         rows = self.snap([bead(b, b) for b in ("b-2", "b-3", "b-4")]).ledger
         self.assertEqual([(r.ask, r.status) for r in rows], [(soft.id, "open_soft"), (hard.id, "open"), (done.id, "answered")])
         old = rows[2]

@@ -598,8 +598,8 @@ class EngineTest(unittest.TestCase):
 
     def file_answer(self, action, text="", bead="t-1"):
         """The owner answers the bead's ask the way the dashboard and `tl answer` do: an AskAnswer record, never a comment."""
-        a = must(self.asks().get(bead))
-        return self.asks().answer(bead, a.id, AskAnswer(action=action, text=text, t=time.time(), by="denis"))
+        a = must(self.asks().get(BeadId(bead)))
+        return self.asks().answer(BeadId(bead), a.id, AskAnswer(action=action, text=text, t=time.time(), by="denis"))
 
     CHOICES: ClassVar[Any] = [{"label": "Build it", "cost": "about 4 stages", "answer": "A: build the slice now", "recommended": False},
                {"label": "Keep parked", "cost": "none", "answer": "B: keep it parked", "recommended": True},

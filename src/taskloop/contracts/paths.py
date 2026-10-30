@@ -69,7 +69,7 @@ class ConfigDir:
     def adr_uses(self, repo_key: str) -> Path:
         return self.adr_dir(repo_key) / "uses.jsonl"
 
-    def landed(self, bead: BeadId | str) -> Path:
+    def landed(self, bead: BeadId) -> Path:
         """The record that a bead's work reached its base (contracts/landed.py)."""
         return self.root / "landed" / (f"{bead}.json")
 
@@ -86,11 +86,11 @@ class ConfigDir:
     def run_request_lock(self, run: RunId | str) -> Path:
         return self.run_dir(run) / "owner-request.lock"
 
-    def reexec_note(self, bead: BeadId | str) -> Path:
+    def reexec_note(self, bead: BeadId) -> Path:
         """What an engine leaves just before it execs into a newer install (contracts/run.py ReloadNote)."""
         return self.root / "reexec" / (f"{bead}.json")
 
-    def net_pause(self, bead: BeadId | str) -> Path:
+    def net_pause(self, bead: BeadId) -> Path:
         """What a run leaves when it pauses for the network (contracts/run.py NetPause); taken once by the bead's next run."""
         return self.root / "pauses" / (f"{bead}.json")
 
@@ -101,7 +101,7 @@ class ConfigDir:
     def check_logs(self, run: RunId | str) -> Path:
         return self.run_dir(run) / "checks"
 
-    def artifacts(self, bead: BeadId | str) -> Path:
+    def artifacts(self, bead: BeadId) -> Path:
         """The plain files a bead's runs left (screenshots, PDFs): one flat directory per bead, outside every worktree."""
         return self.root / "artifacts" / str(bead)
 

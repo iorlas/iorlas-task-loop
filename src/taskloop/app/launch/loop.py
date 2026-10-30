@@ -132,7 +132,7 @@ def landed_on_base(repo: str, store: Beads, wt: str, bead_id: BeadId) -> bool:
     return run_git(wt, "merge-base", "--is-ancestor", tip, base, capture_output=True).returncode == 0
 
 
-def reload_note(bead: str) -> ReloadNote | None:
+def reload_note(bead: BeadId) -> ReloadNote | None:
     rec = reexec.read_reexec(bead)
     reexec.drop_reexec(bead)
     if not rec:

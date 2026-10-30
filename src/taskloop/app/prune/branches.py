@@ -9,6 +9,7 @@ from pathlib import Path
 from taskloop.app.prune.trees import main_repo
 from taskloop.app.release import tidy
 from taskloop.app.release.shell import REAL, Shell
+from taskloop.contracts.ids import BeadId, is_bead_id
 from taskloop.contracts.landed import LandedStore
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdFailure, BeadQuery, Beads
@@ -84,7 +85,7 @@ def prune_branches(repos: list[str], store_of: Callable[[str], Beads], dry_run: 
     return removed, kept
 
 
-def landed(repo: Path, bead: str, sh: Shell, cfg: ConfigDir | None = None) -> bool:
+def landed(repo: Path, bead: BeadId, sh: Shell, cfg: ConfigDir | None = None) -> bool:
     """The bead's landed record names a sha that is on the checkout's HEAD. LEGACY, only for a bead with no record (landed before
     0.23.179): its land commit (subject ends `(<bead>)`, not a revert) is on HEAD; this can go when no such bead is left."""
     rec = LandedStore(cfg or ConfigDir()).get(bead)
@@ -102,7 +103,7 @@ def remote_steps(repo: Path, beads: list[str], sh: Shell, cfg: ConfigDir | None 
     steps: list[Step] = []
     for bead in beads:
         ref = f"refs/heads/{PREFIX}{bead}"
-        if ref not in there or not landed(repo, bead, sh, cfg):
+        if ref not in there or not is_bead_id(bead) or not landed(repo, bead, sh, cfg):
             continue
         oid = there[ref]
         known = sh.run(["git", "cat-file", "-e", oid + "^{commit}"], repo, check=False).returncode == 0

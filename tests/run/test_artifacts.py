@@ -14,6 +14,7 @@ from support.narrow import must
 from taskloop.app.run import artifacts
 from taskloop.app.run.steps import Steps
 from taskloop.contracts import log
+from taskloop.contracts.ids import BeadId
 from taskloop.stores.memory import fake_stores
 from taskloop.stores.runlog import RunLog
 from taskloop_dash.views import nodes
@@ -83,7 +84,7 @@ class Page(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.dash = make_dash(config=self.tmp.name)
-        self.dir = self.dash.env.config.artifacts("tl-1")
+        self.dir = self.dash.env.config.artifacts(BeadId("tl-1"))
         self.dir.mkdir(parents=True)
         (self.dir / "shot.png").write_bytes(b"png")
         (self.dir / "r.pdf").write_bytes(b"%PDF")

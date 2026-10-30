@@ -315,11 +315,11 @@ class Landed(unittest.TestCase):
         cfg = ConfigDir(self.root / "cfg")
         self.land_commit("a-1")  # titled (a-1) but a revert-like title is not what counts
         git(self.repo, "commit", "-q", "--amend", "-m", 'Revert "work (a-1)"')
-        self.assertFalse(branches.landed(self.repo, "a-1", REAL, cfg))  # no record, a revert subject: not landed
-        LandedStore(cfg).put(LandedRec(bead="a-1", sha=git(self.repo, "rev-parse", "HEAD"), base="origin/main", t=1.0))
-        self.assertTrue(branches.landed(self.repo, "a-1", REAL, cfg))  # the record's sha is on HEAD
-        LandedStore(cfg).put(LandedRec(bead="a-1", sha=git(self.repo, "rev-parse", "task/a-3"), base="origin/main", t=1.0))
-        self.assertFalse(branches.landed(self.repo, "a-1", REAL, cfg))  # a sha that never reached HEAD
+        self.assertFalse(branches.landed(self.repo, BeadId("a-1"), REAL, cfg))  # no record, a revert subject: not landed
+        LandedStore(cfg).put(LandedRec(bead=BeadId("a-1"), sha=git(self.repo, "rev-parse", "HEAD"), base="origin/main", t=1.0))
+        self.assertTrue(branches.landed(self.repo, BeadId("a-1"), REAL, cfg))  # the record's sha is on HEAD
+        LandedStore(cfg).put(LandedRec(bead=BeadId("a-1"), sha=git(self.repo, "rev-parse", "task/a-3"), base="origin/main", t=1.0))
+        self.assertFalse(branches.landed(self.repo, BeadId("a-1"), REAL, cfg))  # a sha that never reached HEAD
 
 
 if __name__ == "__main__":

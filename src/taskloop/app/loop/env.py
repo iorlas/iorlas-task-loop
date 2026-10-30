@@ -77,7 +77,7 @@ class LoopEnv:
     stop_tree: Callable[[Child], None]  # the same, waiting for it
     run_task_argv: Callable[[BeadId, str, str, str, Path | None], list[str]]  # (bead, worktree, slot, outcome file, code dir)
     landed_on_base: Callable[[str, BeadId], bool]
-    reload_note: Callable[[str], ReloadNote | None]  # taken once: read and dropped
+    reload_note: Callable[[BeadId], ReloadNote | None]  # taken once: read and dropped
     chores: Callable[[], None]  # stale asks, the daily reflection
     ask_lines: Callable[[], list[str]]  # `tl status`: the beads parked on a dropped ask
     storm: Callable[[], Storm | None]

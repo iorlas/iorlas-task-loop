@@ -55,7 +55,7 @@ def build(repo: str, plugin_root: Path, now: float, with_slots: bool = True) -> 
         loops=tuple(LoopLine(st.pid, st.started, st.bead or "", st.slot or "", st.version) for st in loops),
         last_beat=last_beat, last_exit=str(last.get("reason") or ""), asks=asks,
         slots=slot_lines(repo, now) if with_slots else (), recent=recent,
-        version=running_version(plugin_root), installed=catalog.installed_version("task-loop"), pinned=str(pin or ""))
+        version=running_version(plugin_root), installed=catalog.installed_version("task-loop"), pinned=(pin or ""))
 
 
 def handoff_file(repo: str) -> Path:

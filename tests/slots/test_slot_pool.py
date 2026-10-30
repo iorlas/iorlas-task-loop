@@ -69,6 +69,21 @@ class Rig(unittest.TestCase):
         return cm.exception.code
 
 
+class BeadlessNamedSlot(Rig):
+    def test_a_slot_with_no_bead_resets_and_is_never_taken_and_no_bead_id_reaches_the_beads_port(self):
+        self.bd.beads.clear()  # bd has no slot bead
+        calls = []
+        for name in ("show", "update", "claim", "heartbeat", "close", "add_comment", "add_label", "remove_label", "provenance"):
+            setattr(self.bd, name, lambda *a, _n=name, **k: calls.append((_n, a)))
+        slot = self.pool.named("s1")
+        self.assertIsNone(slot.bead)
+        self.assertIsNone(slot.hold())
+        slot.ready_for("x-1")  # the worktree work needs no slot bead
+        self.assertEqual(self.git.tree(self.d1).branch, "task/x-1")
+        self.assertEqual(self.code(lambda: slot.take_locked("why")), "slot_broken")
+        self.assertEqual(calls, [])
+
+
 class Classify(unittest.TestCase):
     def test_git_words_become_typed_errors(self):
         self.assertIsInstance(classify("fatal: Unable to create '/r/.git/worktrees/s1/index.lock': File exists."), IndexLocked)

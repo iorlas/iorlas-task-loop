@@ -44,7 +44,7 @@ class SameIntake(unittest.TestCase):
             self.assertEqual([c.text for c in dash_store.comments(BeadId("b-1"))], [c.text for c in tl_store.comments(BeadId("b-1"))])
             self.assertIn("Owner (tl) answer", dash_store.comments(BeadId("b-1"))[0].text)
             self.assertEqual(dash_store.beads[BeadId("b-1")].status, tl_store.beads[BeadId("b-1")].status)
-            mine, theirs = dash_asks.get("b-1"), tl_asks.get("b-1")
+            mine, theirs = dash_asks.get(BeadId("b-1")), tl_asks.get(BeadId("b-1"))
             self.assertEqual(must(must(mine).answer).replace(t=0), must(must(theirs).answer).replace(t=0))
 
 

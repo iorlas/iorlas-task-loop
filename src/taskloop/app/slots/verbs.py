@@ -24,7 +24,7 @@ def listing(env: SlotEnv, a: Any) -> int:
     with env.take_lock():
         pool.free_expired()
     for s in pool.slots():
-        b, hold = s.bead, s.hold()
+        b, hold = s.slot_bead(), s.hold()
         held = b.status == "in_progress" or hold
         m = b.metadata
         holder = (m.get("held_by") or b.assignee or "?") if held else "-"

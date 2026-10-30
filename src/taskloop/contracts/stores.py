@@ -198,7 +198,7 @@ class AskStore:
     def at(cls, cfg: paths.ConfigDir) -> AskStore:
         return cls(AskFiles(cfg), LedgerStore(cfg), lambda bead: guard(cfg.lock_record("ask", bead)))
 
-    def _lock(self, bead: BeadId | str) -> contextlib.AbstractContextManager[None]:
+    def _lock(self, bead: BeadId) -> contextlib.AbstractContextManager[None]:
         return self.held(str(bead)) if self.held is not None else contextlib.nullcontext()
 
     def log(self, a: Ask, event: LedgerEvent, t: float, why: str = "") -> None:
@@ -223,10 +223,10 @@ class AskStore:
             self.put(ask)
         self.log(ask, "raise", ask.t)
 
-    def of(self, bead: BeadId | str) -> Any:
+    def of(self, bead: BeadId) -> Any:
         return self.docs.of(str(bead))
 
-    def get(self, bead: BeadId | str) -> Ask | None:
+    def get(self, bead: BeadId) -> Ask | None:
         return self.docs.of(str(bead)).read()
 
     def all(self) -> list[Ask]:
@@ -239,7 +239,7 @@ class AskStore:
         names = self.docs.keys()
         return [k for k in names if self.docs.of(k).read() is None]
 
-    def drop(self, bead: BeadId | str) -> None:
+    def drop(self, bead: BeadId) -> None:
         """Delete the bead's ask file, whatever it holds (an unreadable one is the only caller's case)."""
         self.docs.of(str(bead)).delete()
 
@@ -254,11 +254,11 @@ class AskStore:
     def put(self, ask: Ask) -> None:
         self.docs.of(ask.bead).write(ask)
 
-    def next_n(self, bead: BeadId | str) -> int:
+    def next_n(self, bead: BeadId) -> int:
         a = self.get(bead)
         return a.n + 1 if a else 1
 
-    def state(self, bead: BeadId | str, ask_id: str) -> tuple[Ask | None, str]:
+    def state(self, bead: BeadId, ask_id: str) -> tuple[Ask | None, str]:
         """(the ask, why it cannot be answered): "" when it can; gone, superseded (a newer ask of the bead), withdrawn, closed,
         answered (first answer wins), consumed (a run already used the answer)."""
         a = self.get(bead)
@@ -274,7 +274,7 @@ class AskStore:
             return a, "consumed"
         return a, "answered" if a.answer is not None else ""
 
-    def answer(self, bead: BeadId | str, ask_id: str, answer: AskAnswer) -> tuple[Ask | None, str]:
+    def answer(self, bead: BeadId, ask_id: str, answer: AskAnswer) -> tuple[Ask | None, str]:
         """File the owner's answer on a live, unanswered ask (the first one wins). -> (the ask, "" or why not)."""
         with self._lock(bead):
             a, why = self.state(bead, ask_id)
@@ -285,7 +285,7 @@ class AskStore:
         self.log(done, "answer", answer.t)
         return done, ""
 
-    def amend(self, bead: BeadId | str, ask_id: str, answer: AskAnswer) -> tuple[Ask | None, str]:
+    def amend(self, bead: BeadId, ask_id: str, answer: AskAnswer) -> tuple[Ask | None, str]:
         """Replace an answer no run has used yet."""
         with self._lock(bead):
             a, why = self.state(bead, ask_id)
@@ -296,7 +296,7 @@ class AskStore:
         self.log(done, "answer", answer.t)
         return done, ""
 
-    def consume(self, bead: BeadId | str, now: float, *, unanswered: bool = False) -> Ask | None:
+    def consume(self, bead: BeadId, now: float, *, unanswered: bool = False) -> Ask | None:
         """A run starts from this ask: it will not be asked again. None when nothing is live, or when the ask has no answer
         (open or parked) and `unanswered` is not said: only a run that goes on because its bead changed (or --fresh) passes it.
         The answer is judged on the copy read under the lock, so one filed meanwhile is kept, never overwritten with none."""
@@ -311,7 +311,7 @@ class AskStore:
         self.log(done, "consume", now)
         return done
 
-    def withdraw(self, bead: BeadId | str, ask_id: str, why: str, now: float) -> tuple[Ask | None, str]:
+    def withdraw(self, bead: BeadId, ask_id: str, why: str, now: float) -> tuple[Ask | None, str]:
         """The owner dismisses an ask no run has used. An answer given and not used goes with it."""
         with self._lock(bead):
             a, problem = self.state(bead, ask_id)
@@ -324,7 +324,7 @@ class AskStore:
         self.log(done, "withdraw", now, why=why)
         return done, ""
 
-    def close(self, bead: BeadId | str, ask_id: str, why: str, now: float = 0.0) -> bool:
+    def close(self, bead: BeadId, ask_id: str, why: str, now: float = 0.0) -> bool:
         """The bead is closed or gone, or the run landed: close only the ask that is still the one read (a newer one stays)."""
         with self._lock(bead):
             a = self.get(bead)
@@ -335,7 +335,7 @@ class AskStore:
         self.log(done, "close", now, why=why)
         return True
 
-    def park(self, bead: BeadId | str, ask_id: str) -> bool:
+    def park(self, bead: BeadId, ask_id: str) -> bool:
         with self._lock(bead):
             a = self.get(bead)
             if a is None or a.id != ask_id or a.status != AskStatus.OPEN or a.answer is not None:
@@ -352,7 +352,7 @@ class AskStore:
         self.ledger.append(rows[-1].replace(**{"t": now, "event": event, "similar": [], "why": "", **changes}))
         return True
 
-    def correct_cause(self, bead: BeadId | str, ask_id: str, cause: OwnerCause, now: float) -> bool:
+    def correct_cause(self, bead: BeadId, ask_id: str, cause: OwnerCause, now: float) -> bool:
         """The owner names the cause of an ask: on the document while it is still the bead's ask, and a ledger row."""
         with self._lock(bead):
             a = self.get(bead)
@@ -360,7 +360,7 @@ class AskStore:
                 self.put(a.replace(owner_cause=cause, cause_by="owner"))
         return self.follow(ask_id, "cause", now, cause=cause, cause_by="owner")
 
-    def stuck(self, bead: BeadId | str, ask_id: str, outcome: Stick, ref: str, now: float) -> bool:
+    def stuck(self, bead: BeadId, ask_id: str, outcome: Stick, ref: str, now: float) -> bool:
         """What the owner made of the answer (adr, ref, factory, fix, demote, once): on the document while it is still the bead's ask,
         and a ledger row (`demote` for a demotion, `stick` for the rest)."""
         with self._lock(bead):
@@ -369,7 +369,7 @@ class AskStore:
                 self.put(a.replace(outcome=outcome, outcome_ref=ref))
         return self.follow(ask_id, "demote" if outcome is Stick.DEMOTE else "stick", now, outcome=outcome, outcome_ref=ref)
 
-    def say(self, bead: BeadId | str, ask_id: str, entry: ThreadEntry) -> tuple[Ask | None, str]:
+    def say(self, bead: BeadId, ask_id: str, entry: ThreadEntry) -> tuple[Ask | None, str]:
         """An ask-back entry on a live ask (the ask stays open). -> (the ask, "" or why not)."""
         with self._lock(bead):
             a, why = self.state(bead, ask_id)

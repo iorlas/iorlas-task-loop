@@ -40,7 +40,7 @@ class Writes(unittest.TestCase):
         repo.mkdir()
         write_repos(self.dash.env.config.repos(), repo)
         self.asks = AskStore.at(self.dash.env.config)
-        path = self.dash.env.config.ask("b-1")
+        path = self.dash.env.config.ask(BeadId("b-1"))
         path.parent.mkdir(parents=True)
         path.write_text(json.dumps(wire.dump(ASK)))
         log = self.dash.env.config.engine_log(RUN)
@@ -64,7 +64,7 @@ class Writes(unittest.TestCase):
     def test_an_option_by_index_lands_as_the_asks_own_typed_answer(self):
         res = self.post("answer", {"project": "demo", "ask": "b-1-1", "kind": "answer", "option": 2})
         self.assertEqual(res, Result(ok=True))
-        got = must(self.asks.get("b-1"))
+        got = must(self.asks.get(BeadId("b-1")))
         given = must(got.answer)
         self.assertEqual((got.status, given.text, given.by), (AskStatus.ANSWERED, "Split the bead", "dash"))
         self.assertEqual(self.fake.beads[BeadId("b-1")].status, "open")  # the bead is opened for the loop
@@ -73,21 +73,21 @@ class Writes(unittest.TestCase):
     def test_words_answer_and_an_answered_ask_is_amended_until_a_run_uses_it(self):
         self.assertTrue(self.post("answer", {"project": "demo", "ask": "b-1-1", "kind": "answer", "text": "go with A"}).ok)
         self.assertTrue(self.post("answer", {"project": "demo", "ask": "b-1-1", "kind": "answer", "text": "better"}).ok)
-        self.assertEqual(must(must(self.asks.get("b-1")).answer).text, "better")
-        self.asks.consume("b-1", NOW)
+        self.assertEqual(must(must(self.asks.get(BeadId("b-1"))).answer).text, "better")
+        self.asks.consume(BeadId("b-1"), NOW)
         res = self.post("answer", {"project": "demo", "ask": "b-1-1", "kind": "answer", "text": "too late"})
-        self.assertEqual((res.ok, must(must(self.asks.get("b-1")).answer).text), (False, "better"))
+        self.assertEqual((res.ok, must(must(self.asks.get(BeadId("b-1"))).answer).text), (False, "better"))
         self.assertIn("already used", res.message)
 
     def test_refused_answers_change_nothing(self):
-        before = (self.dash.env.config.ask("b-1")).read_text()
+        before = (self.dash.env.config.ask(BeadId("b-1"))).read_text()
         for body, why in (({"ask": "b-1-1", "option": 9}, "not one of this ask"), ({"ask": "b-1-1", "option": -1}, "not one of this ask"),
                           ({"ask": "b-1-1", "text": "  "}, "Write an answer"), ({"ask": "nope-1", "text": "x"}, "no longer exists"),
                           ({"ask": "b-1-7", "text": "x"}, "asked again")):
             res = self.post("answer", {"project": "demo", "kind": "answer", **body})
             self.assertFalse(res.ok, body)
             self.assertIn(why, res.message, body)
-        self.assertEqual(self.dash.env.config.ask("b-1").read_text(), before)
+        self.assertEqual(self.dash.env.config.ask(BeadId("b-1")).read_text(), before)
 
     # park, stop, note (backend item 7): the newest run's request file, the hold and the receipt through Intake
 
@@ -123,13 +123,13 @@ class Writes(unittest.TestCase):
     def test_an_ask_back_joins_the_thread_and_leaves_the_ask_open(self):
         res = self.post("answer", {"project": "demo", "ask": "b-1-1", "kind": "ask_back", "text": " why two? "})
         self.assertEqual(res, Result(ok=True))
-        got = must(self.asks.get("b-1"))
+        got = must(self.asks.get(BeadId("b-1")))
         self.assertEqual((got.status, got.answer), (AskStatus.OPEN, None))
         self.assertEqual([(m.by, m.md, m.t) for m in got.thread], [("owner", "why two?", NOW)])
         for body, why in (({"ask": "b-1-1", "text": " "}, "write the question"), ({"ask": "b-1-7", "text": "x"}, "asked again")):
             res = self.post("answer", {"project": "demo", "kind": "ask_back", **body})
             self.assertEqual((res.ok, why in res.message), (False, True), body)
-        self.assertEqual(len(must(self.asks.get("b-1")).thread), 1)
+        self.assertEqual(len(must(self.asks.get(BeadId("b-1"))).thread), 1)
 
     # look
 

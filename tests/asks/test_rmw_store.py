@@ -18,6 +18,7 @@ from support.narrow import must
 from taskloop.app.track import trail
 from taskloop.contracts.ask import AskAnswer
 from taskloop.contracts.enums import AskStatus
+from taskloop.contracts.ids import BeadId
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.snapshots import LaneStatus, StatusSnapshot, WindowStatus
 from taskloop.contracts.stores import AskStore, UsageHistory
@@ -76,26 +77,27 @@ class Asks(unittest.TestCase):
 
     def test_two_answers_to_one_ask_keep_exactly_the_first(self):
         a, b = self.store(), self.store()
-        got: list = self.race(lambda: a.answer("tl-1", "tl-1-1", answer("A")), lambda: b.answer("tl-1", "tl-1-1", answer("B")))
+        t1 = BeadId("tl-1")
+        got: list = self.race(lambda: a.answer(t1, "tl-1-1", answer("A")), lambda: b.answer(t1, "tl-1-1", answer("B")))
         self.assertEqual(sorted(why for _, why in got), ["", "answered"])
         winner = next(done for done, why in got if not why)
-        self.assertEqual(must(AskStore.at(self.cfg).get("tl-1")).answer, must(winner).answer)
+        self.assertEqual(must(AskStore.at(self.cfg).get(BeadId("tl-1"))).answer, must(winner).answer)
 
     def test_a_run_that_goes_on_never_overwrites_an_answer_filed_meanwhile(self):
         a, b = self.store(), self.store()
-        self.race(lambda: a.answer("tl-1", "tl-1-1", answer("A")), lambda: b.consume("tl-1", T + 5, unanswered=True))
-        got = must(AskStore.at(self.cfg).get("tl-1"))
+        self.race(lambda: a.answer(BeadId("tl-1"), "tl-1-1", answer("A")), lambda: b.consume(BeadId("tl-1"), T + 5, unanswered=True))
+        got = must(AskStore.at(self.cfg).get(BeadId("tl-1")))
         if got.consumed is not None and got.answer is None:  # the run went first: the answer must have been refused
-            self.assertEqual(AskStore.at(self.cfg).answer("tl-1", "tl-1-1", answer("A"))[1], "consumed")
+            self.assertEqual(AskStore.at(self.cfg).answer(BeadId("tl-1"), "tl-1-1", answer("A"))[1], "consumed")
         else:
             self.assertEqual(must(got.answer).text, "A")
 
     def test_consume_of_an_ask_nobody_answered_is_refused(self):
         st = AskStore.at(self.cfg)
-        self.assertIsNone(st.consume("tl-1", T + 5))
-        self.assertEqual(must(st.get("tl-1")).status, AskStatus.OPEN)
-        self.assertIsNone(must(st.get("tl-1")).consumed)
-        self.assertEqual(must(st.consume("tl-1", T + 6, unanswered=True)).consumed, T + 6)
+        self.assertIsNone(st.consume(BeadId("tl-1"), T + 5))
+        self.assertEqual(must(st.get(BeadId("tl-1"))).status, AskStatus.OPEN)
+        self.assertIsNone(must(st.get(BeadId("tl-1"))).consumed)
+        self.assertEqual(must(st.consume(BeadId("tl-1"), T + 6, unanswered=True)).consumed, T + 6)
 
 
 def snap(at):

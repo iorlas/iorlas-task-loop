@@ -18,8 +18,8 @@ from typing import Any
 from taskloop.adapters import beadtools, ident, landlock
 from taskloop.adapters import procs as sproc
 from taskloop.contracts import wire
-from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ids import BeadId, is_bead_id
+from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdFailure, BeadQuery, NewBead
 from taskloop.contracts.snapshots import ReflectState
 from taskloop.contracts.stores import ReflectStateStore, ReposStore

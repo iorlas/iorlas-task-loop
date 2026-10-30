@@ -28,14 +28,14 @@ class OrphanTest(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.cfg = ConfigDir(Path(self.tmp.name))
-        self.cfg.ask("tl-7").parent.mkdir(parents=True)
-        self.cfg.ask("tl-7").write_text(json.dumps({"v": 1, "id": "tl-7-2", "bead": "tl-7", "status": "open", "kind": "verify"}))
+        self.cfg.ask(BeadId("tl-7")).parent.mkdir(parents=True)
+        self.cfg.ask(BeadId("tl-7")).write_text(json.dumps({"v": 1, "id": "tl-7-2", "bead": "tl-7", "status": "open", "kind": "verify"}))
         self.asks = AskStore.at(self.cfg)
         self.store = FakeBeads()
         self.store.beads[BeadId("tl-7")] = Bead(id=BeadId("tl-7"), title="t", status="blocked", labels=["needs-info"])
 
     def test_it_is_listed_with_the_one_typed_line(self) -> None:
-        self.assertEqual((self.asks.get("tl-7"), self.asks.orphans()), (None, ["tl-7"]))
+        self.assertEqual((self.asks.get(BeadId("tl-7")), self.asks.orphans()), (None, ["tl-7"]))
         out: list[str] = []
         self.assertEqual(cli.age(self.asks, T, out.append), 0)
         self.assertEqual(out, [sweeps.orphan_lines(self.asks)[0]])

@@ -12,6 +12,7 @@ from support.dashes import make_dash  # noqa: E402
 from support.logs import typed, write_log  # noqa: E402
 from support.narrow import must  # noqa: E402
 
+from taskloop.contracts.ids import BeadId  # noqa: E402
 from taskloop_dash import http  # noqa: E402
 
 BEAD = "tl-9"
@@ -47,7 +48,7 @@ class Gallery(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_html_is_only_ever_a_download_and_a_pdf_opens_as_a_pdf(self):
-        art = self.dash.env.config.artifacts(BEAD)
+        art = self.dash.env.config.artifacts(BeadId(BEAD))
         (art / "page.html").write_text("<script>alert(1)</script>")
         served = {n: http.route(self.dash, STATIC, "/api/artifact", {"bead": BEAD, "name": n})
                   for n in ("page.html", "report.pdf", "a.png")}

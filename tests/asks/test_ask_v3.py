@@ -65,9 +65,9 @@ class AskV3(unittest.TestCase):
             cfg = ConfigDir(tmp)
             asks = AskStore.at(cfg)
             old = wire.dump(must(raiser.raise_ask(fake_stores().asks, question(), asking())[0])) | {"v": 2}
-            cfg.ask("t-1").parent.mkdir(parents=True)
-            cfg.ask("t-1").write_text(json.dumps(old))
-            self.assertEqual((asks.get("t-1"), asks.orphans(), asks.live()), (None, ["t-1"], []))
+            cfg.ask(BeadId("t-1")).parent.mkdir(parents=True)
+            cfg.ask(BeadId("t-1")).write_text(json.dumps(old))
+            self.assertEqual((asks.get(BeadId("t-1")), asks.orphans(), asks.live()), (None, ["t-1"], []))
 
 
 @domain
@@ -89,20 +89,20 @@ class Ledger(unittest.TestCase):
         self.beads.beads[BeadId("t-1")] = Bead(id=BeadId("t-1"), title="x", status="blocked")
         self.verbs.answer(BeadId("t-1"), "text", "keep v1")
         self.assertEqual(self.verbs.cause(BeadId("t-1"), "t-1-1", "requirement"), "")
-        self.asks.consume("t-1", T + 9)
-        self.assertTrue(self.asks.stuck("t-1", "t-1-1", Stick.DEMOTE, "", T + 9))
+        self.asks.consume(BeadId("t-1"), T + 9)
+        self.assertTrue(self.asks.stuck(BeadId("t-1"), "t-1-1", Stick.DEMOTE, "", T + 9))
         self.assertEqual([r[0] for r in self.rows()], ["raise", "answer", "cause", "consume", "demote"])
         last = self.asks.history("t-1-1")[-1]
         self.assertEqual((last.cause, last.cause_by, last.answer, last.outcome), (OwnerCause.REQUIREMENT, "owner", "keep v1", Stick.DEMOTE))
 
     def test_withdraw_close_and_amend_leave_rows(self) -> None:
         raiser.raise_ask(self.asks, question(), asking())
-        self.asks.withdraw("t-1", "t-1-1", "no longer applies", T + 1)
+        self.asks.withdraw(BeadId("t-1"), "t-1-1", "no longer applies", T + 1)
         raiser.raise_ask(self.asks, question(), asking("t-2"))
-        self.assertTrue(self.asks.close("t-2", "t-2-1", "the bead is closed", T + 2))
+        self.assertTrue(self.asks.close(BeadId("t-2"), "t-2-1", "the bead is closed", T + 2))
         raiser.raise_ask(self.asks, question(), asking("t-3"))
-        self.asks.answer("t-3", "t-3-1", AskAnswer(action="text", text="a", t=T + 3, by="x"))
-        self.asks.amend("t-3", "t-3-1", AskAnswer(action="text", text="b", t=T + 3, by="x"))
+        self.asks.answer(BeadId("t-3"), "t-3-1", AskAnswer(action="text", text="a", t=T + 3, by="x"))
+        self.asks.amend(BeadId("t-3"), "t-3-1", AskAnswer(action="text", text="b", t=T + 3, by="x"))
         self.assertEqual([r[0] for r in self.rows("t-1-1")], ["raise", "withdraw"])
         self.assertEqual([r[0] for r in self.rows("t-2-1")], ["raise", "close"])
         self.assertEqual([r[:2] for r in self.rows("t-3-1")], [("raise", ""), ("answer", "a"), ("answer", "b")])
@@ -110,7 +110,7 @@ class Ledger(unittest.TestCase):
     def test_the_ledger_outlives_the_ask_a_newer_ask_replaces(self) -> None:
         raiser.raise_ask(self.asks, question(), asking())
         raiser.raise_ask(self.asks, question(), asking())
-        self.assertEqual(must(self.asks.get("t-1")).id, "t-1-2")
+        self.assertEqual(must(self.asks.get(BeadId("t-1"))).id, "t-1-2")
         self.assertEqual(len(self.asks.history("t-1-1")), 1)
         self.assertEqual(len(self.asks.rows()), 2)
 
@@ -169,7 +169,7 @@ class SoftAsks(unittest.TestCase):
         self.assertEqual((a.blocking, a.default, a.status), (False, "keep v1", AskStatus.OPEN))
         self.assertEqual(raiser.check(self.asks, BeadId("t-1"), "h", False, T + 1), ("none", None))
         self.assertEqual(raiser.check(self.asks, BeadId("t-1"), "changed", True, T + 2), ("none", None))  # a changed bead: not consumed
-        self.assertEqual(must(self.asks.get("t-1")).consumed, None)
+        self.assertEqual(must(self.asks.get(BeadId("t-1"))).consumed, None)
 
     def test_a_soft_ask_is_not_parked_and_a_later_answer_is_used(self) -> None:
         raiser.raise_ask(self.asks, question("decision", "keep v1"), asking(repo="/nowhere"))

@@ -49,9 +49,9 @@ class VerbSurface(unittest.TestCase):
 
     def test_verdict_maps_to_a_typed_action(self) -> None:
         self.assertEqual(self.say("answer", "fk-1", "--verdict", "work"), 0)
-        self.assertEqual(must(must(self.asks.get("fk-1")).answer).action, "rerun")
+        self.assertEqual(must(must(self.asks.get(BeadId("fk-1"))).answer).action, "rerun")
         self.assertEqual(self.say("answer", "fk-1", "--verdict", "decline", "--amend"), 0)
-        given = must(must(self.asks.get("fk-1")).answer)
+        given = must(must(self.asks.get(BeadId("fk-1"))).answer)
         self.assertEqual((given.action, "declined" in given.text), ("text", True))
 
     def test_hold_until_is_a_key_that_ends_by_itself(self) -> None:

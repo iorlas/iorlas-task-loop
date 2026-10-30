@@ -16,6 +16,7 @@ from jsonl_log import Jsonl, cursor
 from contracts import samples as S
 from taskloop.contracts import paths, stores, wire
 from taskloop.contracts.ask import Ask
+from taskloop.contracts.ids import BeadId
 from taskloop.contracts.loop import LoopState
 from taskloop.contracts.snapshots import Pin
 
@@ -190,9 +191,9 @@ class StoresTest(unittest.TestCase):
 
     def test_each_family_lives_where_paths_says(self):
         self.assertEqual(stores.TraceStore(self.cfg).file.path.name, "traces.jsonl")
-        self.assertEqual(stores.AskStore.at(self.cfg).of("tl-1").path, self.cfg.root / "asks" / "tl-1.json")
-        stores.AskStore.at(self.cfg).of("tl-1").write(S.other(Ask))
-        self.assertEqual(stores.AskStore.at(self.cfg).of("tl-1").read(), S.other(Ask))
+        self.assertEqual(stores.AskStore.at(self.cfg).of(BeadId("tl-1")).path, self.cfg.root / "asks" / "tl-1.json")
+        stores.AskStore.at(self.cfg).of(BeadId("tl-1")).write(S.other(Ask))
+        self.assertEqual(stores.AskStore.at(self.cfg).of(BeadId("tl-1")).read(), S.other(Ask))
         el = stores.EventLog(self.cfg)
         el.append(S.EVENTS["claim"])
         self.assertEqual(el.read_from(0).items[0].rec, S.EVENTS["claim"])
