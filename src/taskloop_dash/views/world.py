@@ -8,6 +8,7 @@ from taskloop.contracts.ask import Ask
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.ledger import Adr, LedgerEntry
 from taskloop.contracts.loop import LoopState
+from taskloop.contracts.reconcile import Stray
 from taskloop.contracts.snapshots import StatusSnapshot
 from taskloop_dash.views.runfacts import Run
 
@@ -47,6 +48,7 @@ class ProjectIn:
     loops: Sequence[LoopState] = ()  # every loop state file of the repo
     looks: Sequence[LookItem] = ()
     adrs: Sequence[AdrIn] = ()  # the repo's decisions in force, oldest first
+    strays: Sequence[Stray] = ()  # claims nothing runs under (readers/observed.py: the reconcile sweep's rule)
 
 
 @dataclass(frozen=True)

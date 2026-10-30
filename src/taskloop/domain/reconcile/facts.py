@@ -1,6 +1,8 @@
 """What `observe` sees, as plain facts (no IO, no git, no bd), and what `diff` answers with: the actions."""
 from dataclasses import dataclass
 
+from taskloop.contracts.ids import BeadId
+from taskloop.contracts.reconcile import Lease, LoopFact, SlotFact
 from taskloop.domain.reconcile.lost import BranchCommit
 
 
@@ -11,15 +13,6 @@ class BeadFact:
     status: str
     assignee: str
     branch: str
-
-
-@dataclass(frozen=True)
-class Lease:
-    """Who holds a bead and at which FENCE generation (the bead's `fence_gen`); `expires`: bd's lease end, "" when none."""
-    bead: str
-    holder: str
-    gen: int
-    expires: str
 
 
 @dataclass(frozen=True)
@@ -75,6 +68,12 @@ class RepoView:
     task_branches: tuple[LocalBranch, ...] = ()
     remotes: tuple[RemoteBranch, ...] = ()
     release_branches: tuple[LocalBranch, ...] = ()
+    leases: tuple[Lease, ...] = ()  # the beads held in progress; empty when bd did not answer
+    slots: tuple[SlotFact, ...] = ()
+    loops: tuple[LoopFact, ...] = ()  # the live loops of the repo (the loop registry)
+    ready: int = 0  # beads ready to take
+    last_beat: float = 0.0  # the latest beat of any loop of the repo, live or dead
+    absent: float = 600.0  # seconds without a beat after which no loop is "absent"
 
 
 @dataclass(frozen=True)
@@ -84,7 +83,6 @@ class Observed:
     keep_days: float
     repos: tuple[RepoView, ...] = ()
     trees: tuple[Worktree, ...] = ()
-    leases: tuple[Lease, ...] = ()
     commits: tuple[BranchCommit, ...] = ()  # the bead-branch commits off the base (observe_commits), classed by diff.findings
 
 
@@ -134,4 +132,45 @@ class Keep:
     why: str
 
 
-Action = DeleteBranch | DeleteRemote | RemoveTree | Keep
+@dataclass(frozen=True)
+class ReleaseClaim:
+    """Give a bead back whose lease ended and whose run is dead: only while it is still held by `holder` at generation `gen`."""
+    repo: str
+    repo_name: str
+    bead: BeadId
+    holder: str
+    gen: int
+
+    @property
+    def line(self) -> str:
+        return f"claim of {self.bead} by {self.holder} ({self.repo_name})"
+
+
+@dataclass(frozen=True)
+class FreeSlot:
+    """Give a slot back that a dead run holds past its lease: only while its bead is still `holder`'s at `held_gen` `gen`."""
+    repo: str
+    repo_name: str
+    bead: BeadId
+    name: str
+    holder: str
+    gen: int
+
+    @property
+    def line(self) -> str:
+        return f"slot {self.name} held by {self.holder or '?'} ({self.repo_name})"
+
+
+@dataclass(frozen=True)
+class NoLoop:
+    """Ready beads and no loop alive: a finding for the owner, nothing to apply."""
+    repo_name: str
+    ready: int
+    last_beat: float
+
+    @property
+    def line(self) -> str:
+        return f"{self.repo_name} has {self.ready} ready bead(s) and no loop alive"
+
+
+Action = DeleteBranch | DeleteRemote | RemoveTree | Keep | ReleaseClaim | FreeSlot | NoLoop

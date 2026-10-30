@@ -8,6 +8,7 @@ from typing import Literal, final
 
 from taskloop.contracts.wire import Rec
 
+HELD_KEYS = ("held_by", "held_since", "held_why", "hold_until", "held_bead")  # the marks on a slot bead while it is held
 SlotFailCode = Literal["slot_broken", "bead_pinned", "busy"]
 
 

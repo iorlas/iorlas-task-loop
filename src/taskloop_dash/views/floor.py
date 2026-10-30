@@ -34,8 +34,8 @@ def on_slot(name: str, bead_ids: set[str], runs: Mapping[str, Sequence[Run]]) ->
 
 
 def slot_of(p: ProjectIn, b: Bead, runs: Mapping[str, Sequence[Run]], now: float) -> Slot:
-    """One slot bead: held by a person, running a bead now, claimed with no live run, or free. `lane` is that of the slot's current or
-    last call. A slot's `next` stays unset (no source until the queue names the slot)."""
+    """One slot bead: held by a person, running a bead now, claimed with no live run (a stray), or free. `lane` is that of the
+    slot's current or last call. A slot's `next` stays unset (no source until the queue names the slot)."""
     name = slot_name(b)
     seen = on_slot(name, {x.id for x in p.beads}, runs)
     lane = next((r.lane for _, r in reversed(seen) if r.lane), "")
@@ -50,5 +50,7 @@ def slot_of(p: ProjectIn, b: Bead, runs: Mapping[str, Sequence[Run]], now: float
         state = "look" if cur and cur.phase == Phase.LOOK else "running"
         return Slot(id=name, name=name, lane=r.lane or lane, state=state, project=p.id, bead=bead, t=r.t0)
     if b.status != "open":
-        return Slot(id=name, name=name, lane=lane, state="idle", project=p.id, idle_why=f"claimed by {b.assignee or '?'}, no live run")
+        stray = next((x for x in p.strays if x.kind == "slot" and x.ref == b.id), None)
+        return Slot(id=name, name=name, lane=lane, state="idle", project=p.id,
+                    idle_why=stray.why if stray else f"claimed by {b.assignee or '?'}, no live run")
     return Slot(id=name, name=name, lane=lane, state="free", project=p.id)

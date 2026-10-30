@@ -7,10 +7,10 @@ from typing import Any
 
 from taskloop.app.loop.env import LoopEnv
 from taskloop.app.loop.files import LoopFiles
-from taskloop.app.loop.health import loop_health
 from taskloop.app.loop.loop import Loop, LoopArgs
 from taskloop.app.loop.queue import rank_ready
 from taskloop.app.loop.versions import Installs
+from taskloop.app.reconcile.loopwatch import absent_loop
 from taskloop.contracts.loop import LoopState
 
 
@@ -55,15 +55,15 @@ def health_lines(env: LoopEnv, files: LoopFiles, loops: list[LoopState]) -> list
         beats = [st.t or st.started for st in files.died()]
         beats.append(float(str(last.get("t") or 0)))
     q, _ = rank_ready(env, env.profile().engine)
-    h = loop_health(len(loops), len(q.ranked), max(beats) if beats else 0.0, env.now(), env.profile().loop.absent)
-    out = [f"last beat {ago(env.now(), h.last_beat)}"] if h.last_beat else []
+    last_beat = max(beats) if beats else 0.0
+    out = [f"last beat {ago(env.now(), last_beat)}"] if last_beat else []
     if last:
         detail = f": {last['detail']}" if last.get("detail") else ""
         out.append(f"last exit: {last.get('reason')}{detail} ({ago(env.now(), float(str(last.get('t') or 0)))})")
-    if h.verdict == "absent":
-        when = ago(env.now(), h.last_beat) if h.last_beat else "never"
-        out.append(f"RED: {env.repo} has {h.ready} ready bead(s) and no loop alive (last beat {when}): "
-                   f"start one with `tl loop --repo {env.repo}`")
+    gone = absent_loop(env.repo, loops, len(q.ranked), last_beat, env.now(), env.profile().loop.absent)
+    if gone:
+        when = ago(env.now(), gone.last_beat) if gone.last_beat else "never"
+        out.append(f"RED: {gone.line} (last beat {when}): start one with `tl loop --repo {env.repo}`")
     return out
 
 

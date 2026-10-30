@@ -7,6 +7,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
+from taskloop.contracts.ids import BeadId
+from taskloop.contracts.reconcile import Lease, LoopFact, SlotFact
 from taskloop.domain.reconcile.diff import DAY, diff
 from taskloop.domain.reconcile.facts import (
     Action,
@@ -14,9 +16,12 @@ from taskloop.domain.reconcile.facts import (
     Checkout,
     DeleteBranch,
     DeleteRemote,
+    FreeSlot,
     Keep,
     LocalBranch,
+    NoLoop,
     Observed,
+    ReleaseClaim,
     RemoteBranch,
     RemoveTree,
     RepoView,
@@ -24,6 +29,7 @@ from taskloop.domain.reconcile.facts import (
 )
 
 NOW = 100 * DAY
+A1, SB1 = BeadId("a-1"), BeadId("sb-1")
 R = "/r"
 
 
@@ -50,6 +56,18 @@ def rel(name: str, oid: str = "o1", on_base: bool = True, age_days: float = 30) 
 def tree(path: str = "/b/t", **kw) -> Worktree:
     base = Worktree(path, path, R, False, False, "", True, NOW - 30 * DAY)
     return replace(base, **kw)
+
+
+def lease(bead_id: BeadId = A1, holder: str = "tl-x", gen: int = 2, ends: float = NOW - 60, live: bool = False) -> Lease:
+    return Lease(bead_id, holder, gen, ends, live)
+
+
+def slot(**kw) -> SlotFact:
+    return replace(SlotFact(SB1, "s1", True, "tl-x", 2, NOW - 60), **kw)
+
+
+def loop(beat: float = NOW - 30) -> LoopFact:
+    return LoopFact(10, NOW - 1000, beat)
 
 
 ROWS: list[tuple[str, Observed, list[Action]]] = [
@@ -112,6 +130,45 @@ ROWS: list[tuple[str, Observed, list[Action]]] = [
      world(repo(release_branches=(rel("release/x"),), checkouts=(Checkout("/b/t", "release/x"),)),
            trees=(tree(dirty="uncommitted or untracked files"),)),
      [Keep("worktree /b/t", "uncommitted or untracked files"), Keep("branch release/x (r)", "checked out in a worktree")]),
+    # leases: each rule is a row
+    ("a claim whose lease ended and whose run is dead goes back, at the generation seen",
+     world(repo(leases=(lease(),))), [ReleaseClaim(R, "r", A1, "tl-x", 2)]),
+    ("a claim whose lease runs on is left (the dashboard shows it)",
+     world(repo(leases=(lease(ends=NOW + 60),))), []),
+    ("a claim with no lease end is left",
+     world(repo(leases=(lease(ends=0),))), []),
+    ("a claim with a live run is left even when its lease ended",
+     world(repo(leases=(lease(live=True),))), []),
+    ("a person's hand claim is never swept",
+     world(repo(leases=(lease(holder="denis"),))), []),
+    ("a slot claimed past its lease with no live run is freed, at its generation",
+     world(repo(slots=(slot(),))), [FreeSlot(R, "r", SB1, "s1", "tl-x", 2)]),
+    ("a slot with a live run is left",
+     world(repo(slots=(slot(live=True),))), []),
+    ("a slot inside its lease is left",
+     world(repo(slots=(slot(expires=NOW + 60),))), []),
+    ("a slot a person holds (hold_until ahead) is left",
+     world(repo(slots=(slot(hold_until=NOW + 60),))), []),
+    ("a hold that ran out frees the slot like any dead claim",
+     world(repo(slots=(slot(hold_until=NOW - 5),))), [FreeSlot(R, "r", SB1, "s1", "tl-x", 2)]),
+    ("a free slot is left",
+     world(repo(slots=(slot(claimed=False, holder=""),))), []),
+    ("a claimed bead and a claimed slot go in that order, after the branch rules",
+     world(repo(leases=(lease(),), slots=(slot(),), beads=(bead("b-2"),), task_branches=(task("task/b-2"),))),
+     [DeleteBranch(R, "r", "task/b-2", "o1"), ReleaseClaim(R, "r", A1, "tl-x", 2), FreeSlot(R, "r", SB1, "s1", "tl-x", 2)]),
+    # loops: ready beads, no loop alive
+    ("ready beads and no loop alive, never beaten: a finding",
+     world(repo(ready=2)), [NoLoop("r", 2, 0.0)]),
+    ("ready beads, no loop, last beat older than the limit: a finding",
+     world(repo(ready=1, last_beat=NOW - 700)), [NoLoop("r", 1, NOW - 700)]),
+    ("ready beads, no loop, but a beat inside the limit: none",
+     world(repo(ready=1, last_beat=NOW - 500)), []),
+    ("no ready bead: none",
+     world(repo(ready=0)), []),
+    ("a live loop: none",
+     world(repo(ready=3, loops=(loop(),), last_beat=NOW - 30)), []),
+    ("the limit is the repo's own",
+     world(repo(ready=1, last_beat=NOW - 700, absent=900)), []),
 ]
 
 

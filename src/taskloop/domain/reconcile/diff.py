@@ -1,12 +1,16 @@
 """`diff`: the observed state to the actions that tidy it. Pure: no git, no bd, no process, so a table of states tests it."""
+from taskloop.contracts.reconcile import loop_absent, strays
 from taskloop.domain.reconcile.facts import (
     Action,
     BeadFact,
     DeleteBranch,
     DeleteRemote,
+    FreeSlot,
     Keep,
     LocalBranch,
+    NoLoop,
     Observed,
+    ReleaseClaim,
     RemoveTree,
     RepoView,
     Worktree,
@@ -69,9 +73,25 @@ def task_actions(r: RepoView, going: set[str]) -> list[Action]:
     return acts
 
 
+def lease_actions(r: RepoView, now: float) -> list[Action]:
+    """A stray whose lease ended goes back, at the generation seen; one still inside its lease is left (the dashboard shows it)."""
+    acts: list[Action] = []
+    for s in strays(r.leases, r.slots, now):
+        if s.expired and s.kind == "bead":
+            acts.append(ReleaseClaim(r.path, r.name, s.ref, s.holder, s.gen))
+        elif s.expired:
+            acts.append(FreeSlot(r.path, r.name, s.ref, s.name, s.holder, s.gen))
+    return acts
+
+
+def loop_actions(r: RepoView, now: float) -> list[Action]:
+    return [NoLoop(r.name, r.ready, r.last_beat)] if loop_absent(r.loops, r.ready, r.last_beat, now, r.absent) else []
+
+
 def diff(o: Observed) -> list[Action]:
     """Trees first, then each repo's release/* branches, then each repo's task branches (remote before local). Every ref carries the
-    oid it was seen at; a branch held only by trees the plan removes goes after them."""
+    oid it was seen at; a branch held only by trees the plan removes goes after them. Then each repo's strays whose lease ended
+    and its absent-loop finding."""
     acts: list[Action] = []
     going: set[str] = set()
     for t in o.trees:
@@ -85,6 +105,8 @@ def diff(o: Observed) -> list[Action]:
         acts += release_actions(r, o.keep_days, o.now, going)
     for r in o.repos:
         acts += task_actions(r, going)
+    for r in o.repos:
+        acts += lease_actions(r, o.now) + loop_actions(r, o.now)
     return acts
 
 

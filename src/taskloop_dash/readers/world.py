@@ -5,6 +5,7 @@ keep to their TTLs."""
 
 import socket
 from collections.abc import Sequence
+from dataclasses import replace
 from typing import Any
 
 from taskloop.contracts import wire
@@ -22,6 +23,7 @@ from taskloop_dash.api.looks import Looks
 from taskloop_dash.env import Env
 from taskloop_dash.readers.beads import Beads, basename
 from taskloop_dash.readers.loops import loop_key
+from taskloop_dash.readers.observed import strays_of
 from taskloop_dash.readers.records import Records
 from taskloop_dash.readers.runlogs import RunLogs
 from taskloop_dash.views import names
@@ -102,8 +104,10 @@ class Worlds:
 
     def world(self, full: BeadId | None = None) -> World:
         env = self.env
-        return World(now=env.clock(), host=socket.gethostname(), version=env.version,
-                     projects=[self.project(i, p) for i, p in self.repos().items()], runs=self.runs(full), asks=self.asks(),
+        now, runs = env.clock(), self.runs(full)
+        projects = [self.project(i, p) for i, p in self.repos().items()]
+        projects = [replace(p, strays=strays_of(p.beads, p.slots, runs, now)) for p in projects]
+        return World(now=now, host=socket.gethostname(), version=env.version, projects=projects, runs=runs, asks=self.asks(),
                      status=StatusStore(env.config).read(), ledger=self.ledger(), landings=self.landings(),
                      skipped_traces=self.records.traces().skipped)
 

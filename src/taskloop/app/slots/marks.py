@@ -3,9 +3,7 @@ from taskloop.app.slots.env import SlotEnv, attempt, stamp
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.fence import SLOT_GEN, gen_of
 from taskloop.contracts.ports import BeadPatch
-from taskloop.contracts.slots import Hold
-
-HELD_KEYS = ("held_by", "held_since", "held_why", "hold_until", "held_bead")
+from taskloop.contracts.slots import HELD_KEYS, Hold
 
 
 def hold_until(b: Bead | None) -> float:

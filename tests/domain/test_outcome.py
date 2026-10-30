@@ -1,4 +1,4 @@
-"""R16: Kind/POLICY exhaustiveness, apply, the storm detector and loop_health (tl-7y6.2.1/2/3)."""
+"""R16: Kind/POLICY exhaustiveness, apply and the storm detector (tl-7y6.2.1/2/3)."""
 import json
 import sys
 import tempfile
@@ -13,7 +13,6 @@ from support.fake_clock import FakeClock
 from support.narrow import must
 
 from taskloop.adapters import storm as storm_file
-from taskloop.app.loop.health import loop_health
 from taskloop.contracts.kinds import FAULTS, Kind
 from taskloop.domain import outcome as oc
 from taskloop.domain import storm as lh
@@ -129,14 +128,6 @@ class Storm(unittest.TestCase):
         self.assertIsNone(storm_file.read_storm(p, 100.0 + 1800, win))
         storm_file.clear_storm(p)
         self.assertTrue(storm_file.write_storm(p, "fp", ("a", "b"), 100.0, 150.0, win))
-
-
-class Health(unittest.TestCase):
-    def test_four_rows(self):
-        self.assertEqual(loop_health(1, 5, 0, 1000).verdict, "ok")
-        self.assertEqual(loop_health(0, 0, 0, 1000).verdict, "idle_ok")
-        self.assertEqual(loop_health(0, 3, 900, 1000).verdict, "idle_ok")
-        self.assertEqual(loop_health(0, 3, 100, 1000).verdict, "absent")
 
 
 FIX = Path(__file__).resolve().parents[1] / "fixtures" / "replay"
