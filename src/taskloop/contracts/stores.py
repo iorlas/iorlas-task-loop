@@ -39,18 +39,80 @@ HAD_PICK: Final = "had_pick_label"  # bead metadata: the pick label the park too
 ORPHAN: Final = "parked; its ask was dropped at upgrade; `tl answer --rerun` or reopen to re-ask"
 
 
+@dataclasses.dataclass(frozen=True)
+class Present[T]:
+    rec: T
+
+
+@dataclasses.dataclass(frozen=True)
+class Absent:
+    """No file (nothing was ever written, or it was deleted)."""
+
+
+@dataclasses.dataclass(frozen=True)
+class Torn:
+    """A file that is there and is not a record of the class: half written, bad JSON, a wrong shape, or unreadable."""
+
+    path: Path
+    why: str
+
+
+@dataclasses.dataclass(frozen=True)
+class ForeignVersion:
+    """A record of another `v` (an older or newer install wrote it): never migrated, never read as empty."""
+
+    path: Path
+    found: object
+    want: int
+
+
+type Read[T] = Present[T] | Absent | Torn | ForeignVersion
+
+
+class Refused(ValueError):
+    """A state file that must not be read as empty is torn or of another version; the message names the file."""
+
+
+def refusal(r: Torn | ForeignVersion) -> str:
+    if isinstance(r, Torn):
+        return f"{r.path} is torn or not a record of this version ({r.why}): fix or delete it; it is not read as empty"
+    return f"{r.path} is v{r.found!r}, this install reads v{r.want}: delete it or run the install that wrote it"
+
+
 class JsonStore[T]:
-    """One JSON document (indent 1), replaced atomically: a reader sees the old file or the new one, never half."""
+    """One JSON document (indent 1), replaced atomically: a reader sees the old file or the new one, never half.
+
+    `read` says which of four it found; the caller decides. `get` is the lossy view (Torn and ForeignVersion read as None) for files
+    that are caches or can be derived again; `need` is the strict one (it refuses a file that is there and cannot be read)."""
 
     def __init__(self, path: Path, cls: type[T]) -> None:
         self.path = Path(path)
         self.cls = cls
 
-    def read(self) -> T | None:
+    def read(self) -> Read[T]:
         try:
-            return wire.load(self.cls, json.loads(self.path.read_text(encoding="utf-8")))
-        except (OSError, ValueError):  # msgspec.ValidationError and StaleRecord are ValueErrors
-            return None
+            text = self.path.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            return Absent()
+        except OSError as err:
+            return Torn(self.path, str(err))
+        try:
+            return Present(wire.load(self.cls, json.loads(text)))
+        except wire.StaleRecord as err:
+            return ForeignVersion(self.path, err.found, err.want)
+        except ValueError as err:  # msgspec.ValidationError, bad JSON
+            return Torn(self.path, str(err))
+
+    def get(self) -> T | None:
+        r = self.read()
+        return r.rec if isinstance(r, Present) else None
+
+    def need(self) -> T | None:
+        """The record, None when there is no file; Refused (naming the file) when one is there and cannot be read."""
+        r = self.read()
+        if isinstance(r, (Torn, ForeignVersion)):
+            raise Refused(refusal(r))
+        return r.rec if isinstance(r, Present) else None
 
     def write(self, rec: T) -> None:
         atomic_write_json(self.path, wire.dump(rec), indent=1, fsync=False)
@@ -226,8 +288,9 @@ class AskStore:
         return [e for e in self.rows() if e.ask == ask_id]
 
     def file(self, ask: Ask) -> None:
-        """A new ask: the document, and the ledger's raise row."""
+        """A new ask: the document, and the ledger's raise row. Refused when the bead's file is torn."""
         with self._lock(ask.bead):
+            self.get(ask.bead)
             self.put(ask)
         self.log(ask, "raise", ask.t)
 
@@ -235,17 +298,25 @@ class AskStore:
         return self.docs.of(str(bead))
 
     def get(self, bead: BeadId) -> Ask | None:
-        return self.docs.of(str(bead)).read()
+        """The bead's ask; None when it has none or it is of another version (an orphan). A torn file is Refused, never read as no ask:
+        the next write would overwrite what the owner may still need."""
+        r = self.docs.of(str(bead)).read()
+        if isinstance(r, Torn):
+            raise Refused(refusal(r))
+        return r.rec if isinstance(r, Present) else None
 
     def all(self) -> list[Ask]:
+        """Every readable ask (a torn or foreign file is not one: `orphans` and `torn` name them)."""
         names = self.docs.keys()
-        return [a for a in (self.docs.of(k).read() for k in names) if a is not None]
+        return [r.rec for r in (self.docs.of(k).read() for k in names) if isinstance(r, Present)]
 
     def orphans(self) -> list[str]:
-        """Beads whose ask file exists but cannot be read (an old or unknown version, or torn): their ask was dropped, and the bead may
-        still be parked on it."""
-        names = self.docs.keys()
-        return [k for k in names if self.docs.of(k).read() is None]
+        """Beads whose ask file is of another version: their ask was dropped at upgrade, and the bead may still be parked on it."""
+        return [k for k in self.docs.keys() if isinstance(self.docs.of(k).read(), ForeignVersion)]
+
+    def torn(self) -> list[str]:
+        """Beads whose ask file is torn: left as it is, listed by what is wrong; the owner fixes or deletes it."""
+        return [f"{k}: {refusal(r)}" for k in self.docs.keys() if isinstance(r := self.docs.of(k).read(), Torn)]
 
     def drop(self, bead: BeadId) -> None:
         """Delete the bead's ask file, whatever it holds (an unreadable one is the only caller's case)."""

@@ -26,7 +26,7 @@ class LandedStore:
         self.cfg = cfg if isinstance(cfg, paths.ConfigDir) else paths.ConfigDir(cfg)
 
     def get(self, bead: BeadId) -> Landed | None:
-        return JsonStore(self.cfg.landed(bead), Landed).read()
+        return JsonStore(self.cfg.landed(bead), Landed).get()
 
     def put(self, rec: Landed) -> None:
         JsonStore(self.cfg.landed(rec.bead), Landed).write(rec)

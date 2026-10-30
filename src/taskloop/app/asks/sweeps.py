@@ -88,7 +88,7 @@ def park_stale(asks: AskStore, store_at: StoreAt, marker: Path, now: float, ever
 
 def orphan_lines(asks: AskStore) -> list[str]:
     """One line per bead whose ask file cannot be read any more: such a bead would otherwise be parked and invisible."""
-    return [f"{bead:<22} {ORPHAN}" for bead in asks.orphans()]
+    return [*(f"{bead:<22} {ORPHAN}" for bead in asks.orphans()), *asks.torn()]
 
 
 def reopen(asks: AskStore, store: Beads, bead: BeadId, pick: str = "", info: str = "") -> bool:

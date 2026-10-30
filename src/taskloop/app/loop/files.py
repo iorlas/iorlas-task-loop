@@ -36,7 +36,7 @@ class LoopFiles:
         self.state_file(st.pid).write(st)
 
     def read(self, pid: int) -> LoopState | None:
-        return self.state_file(pid).read()
+        return self.state_file(pid).get()
 
     def remove(self, pid: int) -> None:
         self.state_file(pid).delete()
@@ -53,7 +53,7 @@ class LoopFiles:
         for f in sorted(d.glob(self.key + ".*.json")):
             if f.name.endswith(".command.json"):
                 continue
-            st = JsonStore(f, LoopState).read()
+            st = JsonStore(f, LoopState).get()
             if st is None:
                 continue
             if not self.pid_alive(st.pid):
@@ -64,7 +64,7 @@ class LoopFiles:
         return sorted(out, key=lambda st: st.started)
 
     def died(self) -> list[LoopState]:
-        found = (JsonStore(f, LoopState).read() for f in self.runs().glob("died-*.json"))
+        found = (JsonStore(f, LoopState).get() for f in self.runs().glob("died-*.json"))
         return [st for st in found if st is not None]
 
     # ---- the stop command ------------------------------------------------------------------------------------------
@@ -77,7 +77,7 @@ class LoopFiles:
     def stop_for(self, pid: int, started: float) -> StopMode:
         """What the repo's command says to the loop (`pid`, `started`): a loop the command does not name (one started later, even on
         the same pid) ignores it."""
-        cmd = self.command().read()
+        cmd = self.command().get()
         if cmd is None or LoopTarget(pid=pid, started=started) not in cmd.targets:
             return ""
         return "now" if cmd.action == "stop_now" else "after" if cmd.action == "stop_after_current" else ""
@@ -93,7 +93,7 @@ class LoopFiles:
 
     def clean_command(self) -> None:
         """Caller holds the lock. The command goes when no live loop it names is left."""
-        cmd = self.command().read()
+        cmd = self.command().get()
         if cmd is not None and not any(LoopTarget(pid=st.pid, started=st.started) in cmd.targets for st in self.live()):
             self.command().delete()
 
@@ -104,7 +104,7 @@ class LoopFiles:
     # ---- rests, the pass log, exits ------------------------------------------------------------------------------
     def rests(self) -> dict[str, float]:
         """{bead: when it may run again}, shared by every loop on the repo."""
-        doc = JsonStore(self.cfg.loop_rest(self.key), Rest).read()
+        doc = JsonStore(self.cfg.loop_rest(self.key), Rest).get()
         return {b: t for b, t in (doc.beads if doc else {}).items() if t > self.now()}
 
     def rest_bead(self, bead: str, until: float) -> None:

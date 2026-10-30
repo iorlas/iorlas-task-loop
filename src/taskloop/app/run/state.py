@@ -99,7 +99,7 @@ class Checkpoints:
         return self.doc
 
     def read(self) -> Checkpoint | None:
-        return self.doc.read()
+        return self.doc.get()
 
     def save(self, *, step: str = "", stage: int = 0, rounds: int = 0, n: int = 0, feedback: str = "") -> None:
         """Where the run stands. Mid-rebase (a conflict fix) HEAD is detached: the record names the task branch the close goes

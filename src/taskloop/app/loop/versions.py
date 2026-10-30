@@ -57,12 +57,12 @@ class Installs:
     def refused(self) -> dict[str, str]:
         """{version: why} of the installs bad-versions.json refuses: an entry holds while the install's key is the recorded
         one (an entry without a key holds for good)."""
-        doc = self.bad.read()
+        doc = self.bad.get()
         return {e.version: e.why for e in (doc.entries if doc else [])
                 if not e.key or e.key == install_key(self.root.parent / e.version)}
 
     def record_bad(self, version: str, why: str) -> None:
-        doc = self.bad.read()
+        doc = self.bad.get()
         keep = [e for e in (doc.entries if doc else []) if e.version != version]
         key = install_key(self.root.parent / version)
         keep.append(BadVersion(version=version, why=why[:400], t=self.now(), seen_by=self.mine, key=key))

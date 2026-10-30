@@ -54,7 +54,7 @@ class OneCheckRun(Base):
     def test_the_round_file_and_the_log_row_are_one_check_run(self):
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0)
-        stored = self.eng.stores.check_run(self.eng.run_dir.name, 1).read()
+        stored = self.eng.stores.check_run(self.eng.run_dir.name, 1).get()
         rows = [json.loads(x) for x in self.eng.log_path.read_text().splitlines() if '"kind": "checks"' in x]
         self.assertEqual(wire.load(CheckRun, dict(rows[0]["run"], v=CheckRun.V)), stored)
         self.assertTrue(stored.results and all(c.log for c in stored.results))

@@ -17,7 +17,7 @@ def _store(run_dir: Path) -> JsonStore[DoneMemo]:
 
 def recall(run_dir: Path, key: tuple[Any, ...], sha: str) -> dict[str, Any] | None:
     """The raw answer this run already took for the call at `key` (same place, same prompt `sha`), or None."""
-    memo = _store(run_dir).read()
+    memo = _store(run_dir).get()
     entry = memo.done.get(json.dumps(list(key))) if memo else None
     if entry is None or entry.sha != sha:
         return None
@@ -35,7 +35,7 @@ def keep(run_dir: Path, key: tuple[Any, ...], sha: str, answer_file: str) -> Non
     store = _store(run_dir)
     try:
         with guard(store.path.with_name(store.path.name + ".lock")):  # read, add, write as one step
-            memo = store.read() or DoneMemo()
+            memo = store.get() or DoneMemo()
             store.write(memo.replace(done={**memo.done, json.dumps(list(key)): DoneEntry(sha=sha, file=answer_file)}))
     except OSError:
         pass

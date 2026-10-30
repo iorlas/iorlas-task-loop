@@ -8,7 +8,7 @@ from taskloop.stores.real import real_stores
 
 def read_ck(e, bead=None):
     """The stored Checkpoint of the engine's bead (or `bead`), or None."""
-    return e.stores.checkpoints.of(bead or e.bead).read()
+    return e.stores.checkpoints.of(bead or e.bead).get()
 
 
 def put_ck(e, bead=None, head="", step="", run="r-0", **state):
@@ -37,4 +37,4 @@ def flat_ck(ck):
 
 def stored_ck(bead="t-1"):
     """The stored Checkpoint of `bead` in the test's config dir, read through the real stores."""
-    return real_stores(ConfigDir(ident.config_dir())).checkpoints.of(bead).read()
+    return real_stores(ConfigDir(ident.config_dir())).checkpoints.of(bead).get()

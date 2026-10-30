@@ -33,29 +33,29 @@ class Base(unittest.TestCase):
 class DocContract(Base):
     def test_a_missing_document_reads_as_none_and_a_write_reads_back_equal(self) -> None:
         doc = self.s.loop_state("k")
-        self.assertIsNone(doc.read())
+        self.assertIsNone(doc.get())
         doc.write(S.other(LoopState))
-        self.assertEqual(doc.read(), S.other(LoopState))
-        self.assertEqual(self.s.loop_state("k").read(), S.other(LoopState))  # a new handle sees it
-        self.assertIsNone(self.s.loop_state("other").read())
+        self.assertEqual(doc.get(), S.other(LoopState))
+        self.assertEqual(self.s.loop_state("k").get(), S.other(LoopState))  # a new handle sees it
+        self.assertIsNone(self.s.loop_state("other").get())
 
     def test_a_write_replaces_whole_and_delete_removes(self) -> None:
         doc = self.s.loop_rest("k")
         doc.write(S.other(Rest))
         doc.write(S.other(Rest).replace(beads={"b-2": 7.0}))
-        self.assertEqual(doc.read().beads, {"b-2": 7.0})
+        self.assertEqual(doc.get().beads, {"b-2": 7.0})
         doc.delete()
-        self.assertIsNone(doc.read())
+        self.assertIsNone(doc.get())
         doc.delete()  # deleting nothing is fine
 
     def test_a_document_of_another_version_or_shape_reads_as_absent(self) -> None:
         doc = self.s.loop_command("k")
         self.rig.poison(doc, {"v": 99, "action": "resume", "by": "x", "t": 1.0})
-        self.assertIsNone(doc.read())
+        self.assertIsNone(doc.get())
         self.rig.poison(doc, {"v": 1, "action": "dance", "by": "x", "t": 1.0})
-        self.assertIsNone(doc.read())
+        self.assertIsNone(doc.get())
         doc.write(S.other(LoopCommand))
-        self.assertEqual(doc.read(), S.other(LoopCommand))
+        self.assertEqual(doc.get(), S.other(LoopCommand))
 
 
 class AskContract(Base):
@@ -76,7 +76,7 @@ class AskContract(Base):
         ans = AskAnswer(action="rerun", text="go", t=S.T + 9, by="denis")  # pyrefly: ignore[unexpected-keyword]
         done, why = self.s.asks.answer("b1", "b1-1", ans)
         self.assertEqual((why, done.status, done.answer, done.answered), ("", AskStatus.ANSWERED, ans, S.T + 9))
-        self.assertEqual(self.s.asks.of("b1").read(), done)
+        self.assertEqual(self.s.asks.of("b1").get(), done)
         self.assertEqual(self.s.asks.answer("b1", "b1-1", ans)[1], "answered")  # the first answer wins
         self.assertEqual(self.s.asks.answer("nope", "nope-1", ans), (None, "gone"))
         self.assertEqual(self.s.asks.answer("b1", "b1-0", ans)[1], "superseded")
@@ -113,7 +113,7 @@ class AskContract(Base):
 class CheckpointContract(Base):
     def test_a_full_checkpoint_round_trips(self) -> None:
         self.s.checkpoints.of("tl-1").write(CK)
-        self.assertEqual(self.s.checkpoints.of("tl-1").read(), CK)
+        self.assertEqual(self.s.checkpoints.of("tl-1").get(), CK)
 
     def test_open_beads_leaves_out_a_closed_one(self) -> None:
         self.s.checkpoints.of("tl-1").write(CK)

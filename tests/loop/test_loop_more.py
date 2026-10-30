@@ -61,7 +61,7 @@ class StopRequests(LoopBase):
     def stop(self, now=False):
         with redirect_stdout(io.StringIO()):
             self.assertEqual(self.main(["stop", "--repo", self.repo_s] + (["--now"] if now else [])), 0)
-        return self.files.command().read()
+        return self.files.command().get()
 
 
     def test_a_command_that_is_not_a_command_is_ignored(self):

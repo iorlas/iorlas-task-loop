@@ -83,7 +83,7 @@ class Settles:
         stands in for the brief; its tree is unknown, so it settles nothing."""
         run = self.e.last_run
         if run is None:
-            saved = self.e.stores.check_run(self.e.run_dir.name, None).read()
+            saved = self.e.stores.check_run(self.e.run_dir.name, None).get()
             return (saved.results if saved else []), False
         return run.results, bool(run.tree) and run.tree == self.e.checkout.tree_hash()
 

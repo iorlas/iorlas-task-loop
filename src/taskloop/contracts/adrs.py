@@ -42,7 +42,7 @@ class AdrStore:
 
     def all(self) -> list[Adr]:
         names = self.docs.keys()
-        found = (self.docs.of(k).read() for k in names)
+        found = (self.docs.of(k).get() for k in names)
         return sorted((a for a in found if a is not None), key=lambda a: a.n)
 
     def in_force(self) -> list[Adr]:
@@ -59,7 +59,7 @@ class AdrStore:
         return ""
 
     def get(self, adr: str) -> Adr | None:
-        return self.docs.of(adr).read() if is_adr_id(adr) else None
+        return self.docs.of(adr).get() if is_adr_id(adr) else None
 
     def add(self, adr: Adr) -> Adr:
         """File the ADR under the next free number; `adr.id` and `adr.n` are replaced."""

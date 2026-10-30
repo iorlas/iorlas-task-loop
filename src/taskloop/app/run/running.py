@@ -27,7 +27,7 @@ def running(repo: str, store: Beads | None = None) -> dict[BeadId, str]:
         if is_bead_id(bid) and b.status == "in_progress" and not (b.lease_expires_at and b.lease_expires_at < stamp):
             out[bid] = b.title.split()[-1]
     for wt in wslots.worktrees(repo, slots):
-        lock = engine_lock.read_engine_lock(wt)
+        lock = engine_lock.peek_engine_lock(wt)
         if lock is not None and is_bead_id(lock.bead) and engine_lock.live(lock):
             out.setdefault(lock.bead, lock.slot or Path(wt).name)
     return out

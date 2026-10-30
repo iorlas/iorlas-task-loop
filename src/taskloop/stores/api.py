@@ -9,13 +9,16 @@ from typing import Protocol
 
 from taskloop.contracts.enums import LockWhat
 from taskloop.contracts.locks import LockRecord, Ticket
-from taskloop.contracts.stores import Page
+from taskloop.contracts.stores import Page, Read
 
 
 class Doc[T](Protocol):
-    """One record, replaced whole. A missing, torn or stale (foreign `v`) record reads as None."""
+    """One record, replaced whole. `read` says present, absent, torn or foreign version; `get` is the lossy view (all but present
+    read as None) for a file that is a cache or can be derived again; `need` refuses a file that is there and cannot be read."""
 
-    def read(self) -> T | None: ...
+    def read(self) -> Read[T]: ...
+    def get(self) -> T | None: ...
+    def need(self) -> T | None: ...
     def write(self, rec: T) -> None: ...
     def delete(self) -> None: ...
 

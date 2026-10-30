@@ -55,8 +55,8 @@ def refresh(spawner: Spawner) -> int:
 
 def due(cfg: paths.ConfigDir, now: float, every: float = EVERY_S) -> bool:
     """Neither a filed snapshot nor an attempt (a failed one leaves a marker) is newer than `every` seconds."""
-    snap = StatusStore(cfg).read()
-    mark = StatusTriedStore(cfg).read()
+    snap = StatusStore(cfg).get()
+    mark = StatusTriedStore(cfg).get()
     tried = mark.t if mark else 0.0
     return now - max(snap.at if snap else 0.0, tried) >= every
 

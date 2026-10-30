@@ -90,7 +90,7 @@ class Checker:
     def _history(self) -> tuple[Doc[Durations], Durations]:
         host = self.host
         doc = host.stores.durations.of(check_files.repo_key(str(host.wt), host.checkout.git_env()))
-        return doc, doc.read() or Durations()
+        return doc, doc.get() or Durations()
 
     def _memo(self, tree: TreeSha, base: str) -> RunMemo:
         """The run memo of this tree and base: the one place a round, `tl check` and the gate's question get theirs. The env it keys
@@ -143,7 +143,7 @@ class Checker:
         return seconds(self.history())
 
     def history(self) -> Durations:
-        return self.host.stores.durations.of(check_files.repo_key(str(self.host.wt), self.host.checkout.git_env())).read() or Durations()
+        return self.host.stores.durations.of(check_files.repo_key(str(self.host.wt), self.host.checkout.git_env())).get() or Durations()
 
     def split(self) -> WriterSplit:
         return WriterSplit(self.host.cfg, self.seconds())

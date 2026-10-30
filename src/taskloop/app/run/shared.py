@@ -66,10 +66,10 @@ class Shared:
             wt = line[len("worktree "):]
             if same_dir(wt, e.wt):
                 continue
-            lock = engine_lock.read_engine_lock(wt)
+            lock = engine_lock.peek_engine_lock(wt)
             if lock is None or not lock.bead or lock.bead == e.bead or not engine_lock.live(lock):
                 continue
-            ck = e.stores.checkpoints.of(lock.bead).read()
+            ck = e.stores.checkpoints.of(lock.bead).get()
             plan = (ck.state.plan_data if ck else None) or {}
             files = list(dict.fromkeys(f for st in plan.get("stages") or [] for f in st.get("files") or []))
             out.append((lock.bead, one_line(plan.get("summary"), 100), files[:6]))

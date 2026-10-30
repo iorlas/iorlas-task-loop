@@ -13,7 +13,7 @@ class SuiteCache:
         self.docs = SuiteGreenStore(cfg)
 
     def _all(self) -> list[GreenRun]:
-        found = self.docs.read()
+        found = self.docs.get()
         return found.greens if found else []
 
     def hit(self, tree: str, command: str) -> bool:

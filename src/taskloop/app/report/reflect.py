@@ -44,8 +44,9 @@ def state_store() -> ReflectStateStore:
 
 
 def read_state() -> dict[str, Any]:
-    """The digest's state as a plain dict the digest edits ({} fields at their defaults when there is no file)."""
-    return (state_store().read() or ReflectState()).to_dict()
+    """The digest's state as a plain dict the digest edits (fields at their defaults when there is no file; Refused when the file is torn or
+    of another version: the memory of what was filed is never read as empty, or every cluster would be filed again)."""
+    return (state_store().need() or ReflectState()).to_dict()
 
 
 def write_state(st: dict[str, Any]) -> None:

@@ -123,11 +123,11 @@ class OldFormat(unittest.TestCase):
             path = cfg.check_cache("b-1")
             path.parent.mkdir(parents=True)
             path.write_text('{"v": 1, "key": "t b", "whole": {}, "inputs": {}, "base_red": {}}')
-            self.assertIsNone(doc.read())
+            self.assertIsNone(doc.get())
             m = RunMemo(doc, InputKeys("/nonexistent", TreeSha("t"), {}), BaseSha("b"), {})
             self.assertFalse(m.has(Check(id=CheckId("e"), cmd="e")))
             m.save()
-            self.assertEqual(doc.read(), CheckCacheEntry())
+            self.assertEqual(doc.get(), CheckCacheEntry())
 
 
 if __name__ == "__main__":

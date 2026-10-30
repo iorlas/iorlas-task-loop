@@ -18,7 +18,7 @@ def pin_store() -> PinStore:
 
 def read_pin() -> Pin:
     """The pin (an empty one when there is none, or the file is not a Pin of this version)."""
-    return pin_store().read() or Pin()
+    return pin_store().get() or Pin()
 
 
 def pin_version(pin: Pin, key: str) -> str:
@@ -36,7 +36,7 @@ def pinned_dir(key: str) -> Path | None:
 
 def clear_pin() -> bool:
     """Remove the pin; True when there was one."""
-    had = pin_store().read() is not None
+    had = pin_store().get() is not None
     pin_store().delete()
     return had
 
@@ -77,7 +77,7 @@ def run_pin(version: str | None, delegate: str | None, clear: bool) -> int:
         print("PIN CLEARED" if clear_pin() else "no pin was set")
         return 0
     if not (version or delegate):
-        pin = pin_store().read()
+        pin = pin_store().get()
         print(json.dumps(pin.to_dict()) if pin else "no pin")
         return 0
     pin, why = set_pin(version or "", delegate or "")

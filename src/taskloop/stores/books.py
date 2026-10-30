@@ -15,4 +15,4 @@ class CheckpointBook:
     def open_beads(self) -> list[str]:
         """Beads whose checkpoint is not closed: the runs that can resume."""
         keys = self.docs.keys()  # a DocSet is not iterable: it has keys()
-        return sorted(k for k in keys if (c := self.docs.of(k).read()) is not None and not c.closed)
+        return sorted(k for k in keys if (c := self.docs.of(k).get()) is not None and not c.closed)

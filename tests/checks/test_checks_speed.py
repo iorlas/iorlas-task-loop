@@ -233,7 +233,7 @@ class CheapFirst(SpeedTest):
 
     def seed(self, eng, cmd, secs):
         doc = eng.stores.durations.of(check_files.repo_key(str(self.wt), eng.checkout.git_env()))
-        doc.write(durations.merged(doc.read() or Durations(), [(cmd, secs)] * 3))
+        doc.write(durations.merged(doc.get() or Durations(), [(cmd, secs)] * 3))
 
     def test_the_cheaper_check_runs_first_and_a_red_stops_the_round(self):
         mark, slow, _ = self.slow_then_fast()
@@ -255,7 +255,7 @@ class CheapFirst(SpeedTest):
         self.seed(eng, slow, 400)
         res = eng.run_checks({"checks": [], "files": []}, "s")
         self.assertEqual([(c.id, c.status) for c in res], [("a", "failed"), ("b", "passed"), ("c", "skipped")])
-        hist = (eng.stores.durations.of(check_files.repo_key(str(self.wt), eng.checkout.git_env())).read() or Durations()).runs
+        hist = (eng.stores.durations.of(check_files.repo_key(str(self.wt), eng.checkout.git_env())).get() or Durations()).runs
         self.assertNotIn(norm(red), hist)
         self.assertIn(norm(quick), hist)
 
@@ -266,7 +266,7 @@ class CheapFirst(SpeedTest):
         self.seed(eng, slow, 90)
         res = eng.run_checks({"checks": [], "files": []}, "s")
         self.assertEqual([c.id for c in res], ["new", "known"])
-        hist = (eng.stores.durations.of(check_files.repo_key(str(self.wt), eng.checkout.git_env())).read() or Durations()).runs
+        hist = (eng.stores.durations.of(check_files.repo_key(str(self.wt), eng.checkout.git_env())).get() or Durations()).runs
         self.assertEqual(len(hist[norm(quick)]), 1)
         self.assertEqual(len(hist[norm(slow)]), 4)
 

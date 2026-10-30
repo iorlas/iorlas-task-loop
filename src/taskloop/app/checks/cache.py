@@ -53,7 +53,7 @@ class RunMemo:
 
     def __init__(self, doc: Doc[CheckCacheEntry], keys: InputKeys, base: BaseSha, engine_env: Mapping[str, str]) -> None:
         self.doc, self.keys, self.base, self.engine_env = doc, keys, base, engine_env
-        was = doc.read() or CheckCacheEntry()
+        was = doc.get() or CheckCacheEntry()
         self.runs = {e.key: e.hit for e in was.runs}
         self.base_red = {e.key: e.red for e in was.base}
         self.ran: dict[RunKey, tuple[CheckResult, float]] = {}  # this block's runs by command -> result, wall limit

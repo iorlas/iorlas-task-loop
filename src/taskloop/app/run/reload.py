@@ -45,7 +45,7 @@ class Reload:
         """The counters of the run that exec'd (RunFiles.reexec) or paused for the network (RunFiles.pause), so the run's cost,
         time and trace go on across the move; the time between is neither spent nor waited."""
         e = self.e
-        c = JsonStore(file, RunCounters).read()
+        c = JsonStore(file, RunCounters).get()
         if c is None:
             return
         e.t0 = time.time() - c.elapsed

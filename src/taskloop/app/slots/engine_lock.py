@@ -16,7 +16,7 @@ from taskloop.contracts.enums import LockWhat
 from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.locks import EngineLock as Lock
 from taskloop.contracts.paths import RepoDirs
-from taskloop.contracts.stores import JsonStore
+from taskloop.contracts.stores import JsonStore, Refused
 
 
 def engine_lock_path(wt: str | Path) -> Path:
@@ -28,8 +28,14 @@ def _store(wt: str | Path) -> JsonStore[Lock]:
 
 
 def read_engine_lock(wt: str | Path) -> Lock | None:
-    """The lock record; None when there is none (or the file is not a lock of this version)."""
-    return _store(wt).read()
+    """The lock record; None when there is none. A lock file that is torn or of another version is Refused (naming it): it is never
+    read as no lock, which would let a second engine into the worktree."""
+    return _store(wt).need()
+
+
+def peek_engine_lock(wt: str | Path) -> Lock | None:
+    """The lock record for a display or a sweep: a file that cannot be read shows as none (engine_busy still refuses on it)."""
+    return _store(wt).get()
 
 
 def write_engine_lock(wt: str | Path, rec: Lock) -> None:
@@ -39,7 +45,7 @@ def write_engine_lock(wt: str | Path, rec: Lock) -> None:
 def drop_engine_lock(wt: str | Path, pid: int | None = None) -> None:
     """Remove the lock; with `pid`, only when that process wrote it."""
     if pid is not None:
-        held = read_engine_lock(wt)
+        held = peek_engine_lock(wt)
         if held is None or held.pid != pid:
             return
     with contextlib.suppress(OSError):
@@ -48,7 +54,7 @@ def drop_engine_lock(wt: str | Path, pid: int | None = None) -> None:
 
 def lock_pid(wt: str | Path) -> int | None:
     """The pid the worktree's engine lock names (0: a worker outlived its engine), None when there is none."""
-    held = read_engine_lock(wt)
+    held = peek_engine_lock(wt)
     return held.pid if held else None
 
 
@@ -69,7 +75,10 @@ def engine_busy(wt: str | Path, handoff: bool = False) -> str:
     """What runs in this worktree, with the lock's path ("engine pid N runs BEAD since T; lock P"), or "". handoff: a run-task the loop
     started takes over its loop's lock for the same slot bead. The loop names itself in TASK_LOOP_LOOP_PID: run-task's parent is
     `uv run --script`, not the loop, so the parent pid would never match."""
-    lock = read_engine_lock(wt)
+    try:
+        lock = read_engine_lock(wt)
+    except Refused as err:
+        return f"{err}"  # fail closed: a lock nobody can read still holds the worktree
     if lock is None:
         return ""
     mine = {os.getpid()}

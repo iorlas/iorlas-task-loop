@@ -105,7 +105,7 @@ class RealRaces(unittest.TestCase):
         w = threading.Thread(target=write)
         w.start()
         for _ in range(1500):
-            if self.rig.stores.loop_rest("k").read() is None:
+            if self.rig.stores.loop_rest("k").get() is None:
                 bad.append("absent")
         stop.set()
         w.join()

@@ -64,7 +64,7 @@ class Worlds:
         env = self.env
         rows = env.ttl.get("v2beads:" + path, LIST_TTL, lambda: typed_beads(self.beads.beads_of(path)))
         slots = typed_beads(env.ports.slot_beads(path))
-        states = [s for s in (JsonStore(f, LoopState).read() for f in sorted(env.config.loop_state(loop_key(path)).parent.glob(
+        states = [s for s in (JsonStore(f, LoopState).get() for f in sorted(env.config.loop_state(loop_key(path)).parent.glob(
             loop_key(path) + ".*.json"))) if s is not None]
         _, items = self.looks.look_items(path)
         looks = [LookItem(bead=i["bead"], title=i["title"], shots=tuple(
@@ -108,7 +108,7 @@ class Worlds:
         projects = [self.project(i, p) for i, p in self.repos().items()]
         projects = [replace(p, strays=strays_of(p.beads, p.slots, runs, now)) for p in projects]
         return World(now=now, host=socket.gethostname(), version=env.version, projects=projects, runs=runs, asks=self.asks(),
-                     status=StatusStore(env.config).read(), ledger=self.ledger(), landings=self.landings(),
+                     status=StatusStore(env.config).get(), ledger=self.ledger(), landings=self.landings(),
                      skipped_traces=self.records.traces().skipped)
 
     def comments(self, path: str, bead: BeadId) -> list[Comment]:

@@ -55,7 +55,7 @@ def adrs_of(repo: str) -> AdrStore:
 
 def factory_store() -> Beads | None:
     """The tracker of the task-loop repo: the registered repo named `iorlas-task-loop`; None when none is registered."""
-    index = ReposStore(ConfigDir(config_dir())).read()
+    index = ReposStore(ConfigDir(config_dir())).get()
     path = next((p for p in (index.repos if index else {}) if os.path.basename(p.rstrip("/")) == FACTORY_REPO and os.path.isdir(p)), "")
     return store(path) if path else None
 

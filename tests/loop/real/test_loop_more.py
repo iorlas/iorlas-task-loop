@@ -242,7 +242,7 @@ class StopRequests(LoopBase):
     def stop(self, now=False):
         with redirect_stdout(io.StringIO()):
             self.assertEqual(self.main(["stop", "--repo", self.repo_s] + (["--now"] if now else [])), 0)
-        return self.files.command().read()
+        return self.files.command().get()
 
     def test_the_command_names_the_running_loops(self):
         self.old_loop()
@@ -324,7 +324,7 @@ class StopRequests(LoopBase):
                 looptest.write_state(self.repo_s, pid=os.getpid(), started=self.clock.t)
             thread.join(2)
         self.assertEqual(errors, [])
-        cmd = self.files.command().read()
+        cmd = self.files.command().get()
         assert cmd is not None
         self.assertEqual({t.pid for t in cmd.targets}, {self.old_pid, os.getpid()})
 

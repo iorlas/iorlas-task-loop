@@ -166,34 +166,34 @@ class StoresTest(unittest.TestCase):
 
     def test_a_json_document_is_replaced_whole(self):
         st = stores.LoopStateStore(self.cfg, "abc123abc123")
-        self.assertIsNone(st.read())
+        self.assertIsNone(st.get())
         st.write(S.other(LoopState))
-        self.assertEqual(st.read(), S.other(LoopState))
+        self.assertEqual(st.get(), S.other(LoopState))
         self.assertEqual(list(st.path.parent.glob("*.tmp")), [])
         self.assertEqual(json.loads(st.path.read_text())["v"], 2)
         st.delete()
-        self.assertIsNone(st.read())
+        self.assertIsNone(st.get())
 
     def test_torn_stale_and_alien_files_read_as_absent(self):
         st = stores.LoopCommandStore(self.cfg, "k")
         st.path.parent.mkdir(parents=True)
         for text in ('{"v": 1, "action": "stop', '{"v": 9, "action": "stop_now", "by": "d", "t": 1}', '[]', '{"v": 1, "action": "x"}'):
             st.path.write_text(text)
-            self.assertIsNone(st.read(), text)
+            self.assertIsNone(st.get(), text)
 
     def test_a_failed_write_leaves_no_temp_file_and_keeps_the_old_one(self):
         st = stores.PinStore(self.cfg)
         st.write(S.other(Pin))
         with mock.patch.object(Path, "replace", side_effect=OSError("disk")), self.assertRaises(OSError):
             st.write(S.other(Pin))
-        self.assertEqual(st.read(), S.other(Pin))
+        self.assertEqual(st.get(), S.other(Pin))
         self.assertEqual(list(st.path.parent.glob("*.tmp")), [])
 
     def test_each_family_lives_where_paths_says(self):
         self.assertEqual(stores.TraceStore(self.cfg).file.path.name, "traces.jsonl")
         self.assertEqual(stores.AskStore.at(self.cfg).of(BeadId("tl-1")).path, self.cfg.root / "asks" / "tl-1.json")
         stores.AskStore.at(self.cfg).of(BeadId("tl-1")).write(S.other(Ask))
-        self.assertEqual(stores.AskStore.at(self.cfg).of(BeadId("tl-1")).read(), S.other(Ask))
+        self.assertEqual(stores.AskStore.at(self.cfg).of(BeadId("tl-1")).get(), S.other(Ask))
         el = stores.EventLog(self.cfg)
         el.append(S.EVENTS["claim"])
         self.assertEqual(el.read_from(0).items[0].rec, S.EVENTS["claim"])
