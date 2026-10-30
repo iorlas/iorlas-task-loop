@@ -480,8 +480,6 @@ def cost_page() -> DC.CostPage:
         t=NOW, window="7d", runs=4,
         stages=[row("write", 5400, 700_000, 6.1, 6, 1), row("plan", 1500, 190_000, 0.9, 3), row("test", 900, 0, 0.0, 0),
                 row("review", 600, 70_000, 0.0, 2, 2), row("land", 80, 0, 0.0, 0)],
-        roles=[row("writer", 5400, 700_000, 6.1, 6, 1), row("planner", 1500, 190_000, 0.9, 3), row("reviewer", 600, 70_000, 0.0, 2, 2)],
-        lanes=[row("OC Go", 6200, 800_000, 7.0, 8, 0), row("CLAUDE", 1300, 160_000, 0.0, 3, 3), row("host", 40, 0, 0.0, 0)],
         beads=[row("lifesim-d5f.58", 6300, 760_000, 5.5, 8, 2), row("lifesim-d5f.56", 2180, 200_000, 1.5, 3, 1)],
         drill=[row("write", 4000, 500_000, 4.5, 4, 1, "lifesim-d5f.58"), row("plan", 900, 120_000, 0.5, 2, 0, "lifesim-d5f.58"),
                row("review", 600, 70_000, 0.0, 2, 2, "lifesim-d5f.58")],

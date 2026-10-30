@@ -50,64 +50,6 @@
    "bead": ""
   }
  ],
- "roles": [
-  {
-   "key": "writer",
-   "secs": 5400,
-   "tokens": 700000,
-   "cost": 6.1,
-   "calls": 6,
-   "unknown": 1,
-   "bead": ""
-  },
-  {
-   "key": "planner",
-   "secs": 1500,
-   "tokens": 190000,
-   "cost": 0.9,
-   "calls": 3,
-   "unknown": 0,
-   "bead": ""
-  },
-  {
-   "key": "reviewer",
-   "secs": 600,
-   "tokens": 70000,
-   "cost": 0.0,
-   "calls": 2,
-   "unknown": 2,
-   "bead": ""
-  }
- ],
- "lanes": [
-  {
-   "key": "OC Go",
-   "secs": 6200,
-   "tokens": 800000,
-   "cost": 7.0,
-   "calls": 8,
-   "unknown": 0,
-   "bead": ""
-  },
-  {
-   "key": "CLAUDE",
-   "secs": 1300,
-   "tokens": 160000,
-   "cost": 0.0,
-   "calls": 3,
-   "unknown": 3,
-   "bead": ""
-  },
-  {
-   "key": "host",
-   "secs": 40,
-   "tokens": 0,
-   "cost": 0.0,
-   "calls": 0,
-   "unknown": 0,
-   "bead": ""
-  }
- ],
  "beads": [
   {
    "key": "lifesim-d5f.58",

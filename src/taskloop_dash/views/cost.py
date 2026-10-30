@@ -1,8 +1,7 @@
-"""Time, tokens and cost per stage, role, lane and bead (GET /api/cost): sums over the engine logs the dashboard already reads.
+"""Time, tokens and cost per stage and bead (GET /api/cost): sums over the engine logs the dashboard already reads.
 
-Nothing here is estimated or recounted: a step's time is its StepEnd.secs, a call's tokens, time and cost are its CallEnd's, a check's
-time its result's, a wait's its WaitEnd's. A cost the worker's answer did not give (`cost_source` unknown) is counted in `unknown`
-and left out of `cost`. A run is in the window when its newest record is."""
+Nothing here is estimated or recounted: a step's time is its StepEnd.secs, a call's tokens and cost are its CallEnd's, a wait's its WaitEnd's.
+A cost the worker's answer did not give (`cost_source` unknown) is counted in `unknown` and left out of `cost`. A run is in the window when its newest record is."""
 
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
@@ -14,7 +13,6 @@ from taskloop_dash.views.runfacts import Call, Run
 from taskloop_dash.views.world import World
 
 WINDOWS: Final = {"24h": 86400.0, "7d": 7 * 86400.0}
-NO_LANE = "host"  # a check that ran in no lane (on this host)
 
 
 @dataclass
@@ -25,15 +23,13 @@ class Sum:
     calls: int = 0
     unknown: int = 0
 
-    def call(self, c: Call, secs: bool = False) -> None:
+    def call(self, c: Call) -> None:
         self.tokens += c.tokens
         self.calls += 1
         if c.cost_known:
             self.cost += c.cost
         else:
             self.unknown += 1
-        if secs:
-            self.secs += c.secs
 
 
 Buckets = dict[str, Sum]
@@ -65,7 +61,7 @@ def span_secs(r: Run) -> Iterable[tuple[str, float]]:
 
 
 def build(w: World, window: str = "24h", last: int = 0, project: str = "") -> CostPage:
-    stages, roles, lanes, beads, waits = Buckets(), Buckets(), Buckets(), Buckets(), Buckets()
+    stages, beads, waits = Buckets(), Buckets(), Buckets()
     drill: dict[str, Buckets] = {}
     picked = in_scope(w, window, last, project)
     for bead, r in picked:
@@ -76,14 +72,11 @@ def build(w: World, window: str = "24h", last: int = 0, project: str = "") -> Co
             beads.setdefault(bead, Sum()).secs += secs
         for c in r.calls:
             stage = stage_of(c.step)
-            for into, key, timed in ((stages, stage, False), (mine, stage, False), (roles, c.role or "?", True),
-                                     (lanes, c.lane or "?", True), (beads, bead, False)):
-                into.setdefault(key, Sum()).call(c, timed)
-        for ct in r.check_times:
-            lanes.setdefault(ct.lane or NO_LANE, Sum()).secs += ct.secs
+            for into, key in ((stages, stage), (mine, stage), (beads, bead)):
+                into.setdefault(key, Sum()).call(c)
         for x in r.waits:
             waits.setdefault(x.what, Sum()).secs += x.secs
-    out = CostPage(t=w.now, window="last" if last > 0 else window, runs=len(picked), stages=rows(stages), roles=rows(roles),
-                   lanes=rows(lanes), beads=rows(beads), waits=rows(waits))
+    out = CostPage(t=w.now, window="last" if last > 0 else window, runs=len(picked), stages=rows(stages),
+                   beads=rows(beads), waits=rows(waits))
     return out.replace(drill=[x for bead in sorted(drill) for x in rows(drill[bead], bead)])
 

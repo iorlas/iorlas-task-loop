@@ -40,18 +40,8 @@ class Call:
     step: str
     lane: str
     tokens: int
-    role: str = ""
-    secs: float = 0.0
     cost: float = 0.0
     cost_known: bool = False  # the cost the worker's answer gave is a fact (harness or free), not a missing number shown as 0
-
-
-@dataclass(frozen=True)
-class CheckTime:
-    """One check result's time: the lane it ran in and the seconds it ran (cached and reused results ran no time)."""
-
-    lane: str
-    secs: float
 
 
 @dataclass(frozen=True)
@@ -79,7 +69,6 @@ class Run:
     said: tuple[rec.Said, ...] = ()  # the engine's comments (and the owner's notes it passed on), oldest first
     assumed: int = 0  # Assumed records: what the planner planned around
     stuck: rec.Stuck | None = None  # the stuck episode still open at the run's newest record (stuck_of)
-    check_times: tuple[CheckTime, ...] = ()  # every round's results, not only the newest
     waits: tuple[Wait, ...] = ()  # the ended waits (a lane, the network, a resource, a lock ...)
 
     @property
@@ -112,18 +101,13 @@ def spans_of(records: Sequence[rec.EngineLog]) -> tuple[Span, ...]:
 
 def calls_of(records: Sequence[rec.EngineLog]) -> tuple[Call, ...]:
     starts = {r.id: r for r in records if isinstance(r, rec.CallStart)}
-    return tuple(Call(starts[r.id].t, starts[r.id].step, r.lane, fresh(r.tokens), starts[r.id].role, r.secs, r.cost, cost_known(r))
+    return tuple(Call(starts[r.id].t, starts[r.id].step, r.lane, fresh(r.tokens), r.cost, cost_known(r))
                  for r in records if isinstance(r, rec.CallEnd) and r.id in starts)
 
 
 def cost_known(r: rec.CallEnd) -> bool:
     """Harness and free are facts; 'unknown' is not. A log from before the source was recorded counts a positive cost only."""
     return r.cost_source in ("harness", "free") or (not r.cost_source and r.cost > 0)
-
-
-def check_times_of(records: Sequence[rec.EngineLog]) -> tuple[CheckTime, ...]:
-    return tuple(CheckTime(c.lane, c.secs) for r in records if isinstance(r, rec.Checks) for c in r.run.results
-                 if not (c.cached or c.reused or c.cancelled))
 
 
 def waits_of(records: Sequence[rec.EngineLog]) -> tuple[Wait, ...]:
@@ -168,4 +152,4 @@ def run_of(name: str, records: Sequence[rec.EngineLog], now: float) -> Run:
                tuple(r for r in body if isinstance(r, rec.Transition)), tuple(r for r in body if isinstance(r, rec.Artifacts)),
                checks, open_wait(body) if life is Liveness.LIVE else None, lane, code,
                said=tuple(r for r in body if isinstance(r, rec.Said)), assumed=sum(1 for r in body if isinstance(r, rec.Assumed)),
-               stuck=stuck_of(body), check_times=check_times_of(body), waits=waits_of(body))
+               stuck=stuck_of(body), waits=waits_of(body))

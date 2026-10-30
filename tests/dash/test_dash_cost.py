@@ -1,4 +1,4 @@
-"""Time, tokens and cost per stage, role, lane and bead (views/cost.py) over recorded typed logs: a fixture of 7 calls in 3 runs.
+"""Time, tokens and cost per stage and bead (views/cost.py) over recorded typed logs: a fixture of 7 calls in 3 runs.
 Each grouping is one exact snapshot; an unknown cost is counted apart, never summed as 0."""
 
 import sys
@@ -9,22 +9,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support.dashlogs import RunScript, T, bead
 
-from taskloop.contracts import wire
-from taskloop.contracts.checks import CheckResult, CheckRun
 from taskloop.contracts.dashcost import CostRow
-from taskloop.contracts.ids import CheckId
 from taskloop_dash.views import cost
 from taskloop_dash.views.world import ProjectIn, World
 
 NOW = T + 20_000
-
-
-def check(lane, secs, **kw):
-    return CheckResult(id=CheckId("unit"), cmd="just t", group="t", exit=0, status="passed", secs=secs, lane=lane, **kw)
-
-
-def bare(rec):
-    return {k: v for k, v in wire.dump(rec).items() if k != "v"}
 
 
 def world(project="p", extra=()):
@@ -32,8 +21,7 @@ def world(project="p", extra=()):
            .step("plan", 100, 1000, "OC", role="planner", cost=0.5, source="harness")
            .step("write", 400, 5000, "OC", cost=2.0, source="harness")
            .step("write", 200, 2000, "CL", cost=0.0, source="unknown")
-           .step("checks", 60, 0).add("checks", node_id="n4", run=bare(CheckRun(round=1, results=[
-               check("local", 30.0), check("", 10.0), check("local", 99.0, cached=True)])))
+           .step("checks", 60, 0)
            .add("wait_start", id="w1", what="resource").wait(15).add("wait_end", id="w1", secs=15.0)
            .step("review", 50, 700, "CL", role="reviewer", cost=0.0, source="free").close("landed"))
     two = RunScript("b-1", "20261015-150000", at=4000).step("write", 300, 3000, "OC", cost=1.0, source="harness").close("parked")
@@ -55,16 +43,6 @@ class Cost(unittest.TestCase):
     def test_by_stage(self):
         self.assertEqual(view(self.page.stages), [
             ("write", 900, 10000, 3.0, 3, 1), ("plan", 180, 1400, 0.5, 2, 1), ("test", 60, 0, 0.0, 0, 0), ("review", 50, 700, 0.0, 1, 0)])
-
-    def test_by_role(self):
-        self.assertEqual(view(self.page.roles), [("writer", 900, 10000, 3.0, 3, 1), ("planner", 180, 1400, 0.5, 2, 1),
-                                                 ("reviewer", 50, 700, 0.0, 1, 0)])
-
-    def test_by_lane_adds_the_checks_that_ran_in_it(self):
-        d = {r.key: r for r in self.page.lanes}
-        self.assertEqual((d["OC"].secs, d["OC"].tokens, d["OC"].cost, d["OC"].unknown), (800, 9000, 3.5, 0))
-        self.assertEqual((d["CL"].secs, d["CL"].tokens, d["CL"].cost, d["CL"].unknown), (330, 3100, 0.0, 2))
-        self.assertEqual((d["local"].secs, d["host"].secs), (30, 10))
 
     def test_by_bead_and_the_drill_down(self):
         self.assertEqual(view(self.page.beads), [("b-1", 1110, 11700, 3.5, 5, 1), ("b-2", 80, 400, 0.0, 1, 1)])

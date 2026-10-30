@@ -1,4 +1,4 @@
-// Cost (bead tl-7y6.4.9): where the time and the tokens went, summed per stage, role, lane and bead over 24 h, 7 d or the last
+// Cost (bead tl-7y6.4.9): where the time and the tokens went, summed per stage and bead over 24 h, 7 d or the last
 // runs. Two stacked bars per grouping (time, tokens) over a table with the cost. A cost the worker never gave is counted in its own
 // column ("n unknown"), never added as $0. Read-only: GET /api/cost.
 import { html, useEffect, useState } from '../../vendor/ui-runtime.js';
@@ -7,7 +7,7 @@ import { ui } from '../state.js';
 import { EmptyState } from '../ui/kit.js';
 
 const WINDOWS = [['24h', '24 h', ''], ['7d', '7 d', ''], ['last', 'Last 10 runs', 10]];
-const GROUPS = [['stages', 'Stage'], ['roles', 'Role'], ['lanes', 'Lane'], ['beads', 'Bead']];
+const GROUPS = [['stages', 'Stage'], ['beads', 'Bead']];
 
 export const money = (n) => `$${n.toFixed(n < 10 ? 2 : 0)}`;
 export const costText = (r) => (r.unknown ? `${r.cost ? money(r.cost) + ' + ' : ''}${r.unknown} unknown` : money(r.cost));

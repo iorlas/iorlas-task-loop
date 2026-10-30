@@ -14,7 +14,7 @@ Neither side changes a field alone: a change is a commit to `dash.py` plus regen
 |---|---|---|
 | GET `/api/snapshot` | `since=<version>` optional | `Snapshot` with `ETag: "<version>"`; 304 when `since` or `If-None-Match` equals the current `version` |
 | GET `/api/bead` | `project`, `id` | `BeadDetail`; 404 for an unknown bead |
-| GET `/api/cost` | `window=24h\|7d`, `last=<runs>`, `project` optional | `CostPage`: time, fresh tokens and cost summed per stage, role, lane and bead (and per stage of each bead) over the kept engine logs; a run is in the window when its newest record is, `last` takes that many newest runs instead; a cost the worker did not give is `unknown` calls, never 0; 400 for another window |
+| GET `/api/cost` | `window=24h\|7d`, `last=<runs>`, `project` optional | `CostPage`: time, fresh tokens and cost summed per stage and bead (and per stage of each bead) over the kept engine logs; a run is in the window when its newest record is, `last` takes that many newest runs instead; a cost the worker did not give is `unknown` calls, never 0; 400 for another window |
 | GET `/api/live` | `project`, `id`, `since=<cursor>`, `wait=<s>` | `LivePage` with lines after the cursor; long-poll over `api/live.py` and `runlife` |
 | POST `/api/<verb>` | the `WRITES[verb]` record as JSON | `Result` |
 | GET `/api/artifact` | `bead`, `name` | a file the run kept (`ConfigDir.artifacts`); HTML only as a download |

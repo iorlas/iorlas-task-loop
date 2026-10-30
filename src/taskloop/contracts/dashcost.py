@@ -23,8 +23,8 @@ class CostRow(Rec):
 
 @final
 class CostPage(Rec):
-    """The sums of the engine logs still kept, per stage, role, lane and bead, and per stage of each bead (`drill`). Stage time is the
-    steps' time; role and lane time is the calls' (a lane adds its checks' run time). `waits` is the engine's own waits by what it
+    """The sums of the engine logs still kept, per stage and bead, and per stage of each bead (`drill`). Stage time is the
+    steps' time. `waits` is the engine's own waits by what it
     waited for (a lane, a resource, a lock ...). A run is in the window when its newest record is; `last` > 0 takes that many newest
     runs instead."""
 
@@ -33,8 +33,6 @@ class CostPage(Rec):
     window: str
     runs: int = 0
     stages: list[CostRow] = msgspec.field(default_factory=list)
-    roles: list[CostRow] = msgspec.field(default_factory=list)
-    lanes: list[CostRow] = msgspec.field(default_factory=list)
     beads: list[CostRow] = msgspec.field(default_factory=list)
     drill: list[CostRow] = msgspec.field(default_factory=list)
     waits: list[CostRow] = msgspec.field(default_factory=list)
