@@ -2,6 +2,10 @@
 test *args:
     uv run pytest {{args}}
 
+# just test-live [pytest args]: the explicit-only scenarios of tests/live (real git remote, real processes, real tl and dashboard, docker when it answers); no default run collects them
+test-live *args:
+    uv run pytest -m live -s tests/live {{args}}
+
 # Install the exact tool versions recorded in mise.lock.
 tools:
     MISE_IGNORED_CONFIG_PATHS=$HOME/.config/mise mise install --locked

@@ -29,6 +29,15 @@ def pytest_collection_modifyitems(items):
             item.add_marker(pytest.mark.serial)
 
 
+def pytest_ignore_collect(collection_path, config):
+    """tests/live (the explicit-only kind) is collected only by a run that selects `-m live` (just test-live): never by the default run,
+    just test-fast or the release suite, whose `-m` is something else."""
+    if "live" in collection_path.relative_to(Path(__file__).parent).parts[:1]:
+        expr = (config.getoption("markexpr", "") or "").split()
+        return not ("live" in expr and "not" not in expr)
+    return None
+
+
 @pytest.fixture(autouse=True)
 def procs(request):
     """The process sim of this test (tests/support/procsim.py): fakes answer the checks, a real spawn fails the test unless it is marked

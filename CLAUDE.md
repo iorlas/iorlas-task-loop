@@ -65,6 +65,7 @@ uv run pytest tests/land -q    # one folder or module (also tests/test_x.py::Cla
 just test -n auto  # the whole suite in parallel workers (`just test` alone: one process); the `serial` group needs dev/suite.py
 uv run --script dev/suite.py  # what a release runs: xdist workers, then the serial group alone; takes the host-wide suite lock
 just check                     # ruff + pyrefly + import-linter + tests/gate_rules.py (tools pinned in mise.toml; `mise install`)
+just test-live                 # tests/live: scenarios that run the real pieces (git remote, processes, dashboard, docker); explicit only, no other run collects them
 ```
 
 Dev and test tools (pytest, pytest-xdist) are the `dev` group of pyproject.toml, locked in uv.lock; `uv run` syncs them.

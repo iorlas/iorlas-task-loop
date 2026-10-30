@@ -20,5 +20,6 @@ python_files = ["test_*.py"]
 addopts = "-p no:cacheprovider --maxschedchunk=4"
 markers = [
     "serial: runs alone, after the parallel workers (tests/conftest.py SERIAL)",
+    "live: a scenario that runs the real pieces (docker, git remote, processes); only `just test-live` / `pytest -m live` collects tests/live",
     "real_proc(reason): starts real processes; the process sim guard is off (tests/support/procsim.py)",
 ]
