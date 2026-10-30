@@ -18,12 +18,12 @@ from taskloop.adapters import procs  # noqa: E402
 SHIM = r"""
 import os, subprocess, sys, time
 out = sys.argv[1]
-kid = (
-    "import os,signal,sys,time\nif os.environ.get('IGNORE_TERM'): signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
-    "open(sys.argv[1],'w').write(str(os.getpid()))\ntime.sleep(300)\n"
-)
-subprocess.Popen([sys.executable, "-c", kid, out + ".same"])                           # same group as the shim
-subprocess.Popen([sys.executable, "-c", kid, out + ".setsid"], start_new_session=True)  # the native child, own session
+kid = ["sh", "-c", ("trap '' TERM; " if os.environ.get("IGNORE_TERM") else "") + "exec sleep 300"]  # a plain sleeper: no second interpreter
+same = subprocess.Popen(kid)                                  # same group as the shim
+setsid = subprocess.Popen(kid, start_new_session=True)        # the native child, own session
+time.sleep(0.3)  # the shells have set their trap and exec'd the sleep
+open(out + ".same", "w").write(str(same.pid))
+open(out + ".setsid", "w").write(str(setsid.pid))
 open(out + ".shim", "w").write(str(os.getpid()))
 time.sleep(300)
 """
