@@ -64,7 +64,9 @@ each stage has its files and its checks. Budget: about 12 tool calls. Then plan.
   when it is risky or subtle. Every check is an argv list: the program and its arguments as separate strings, for example
   ["python3", "-m", "unittest", "tests.test_x"] or ["just", "check"]. The engine execs it as given, with no shell: no `&&`,
   `;`, pipe, redirect, `$(...)`, `$VAR`, glob or quote means anything in it, and a string where the list belongs is sent back. It
-  exits 0 when it proves the goal and non-zero when it does not: the engine reads only the exit code. A proof that needs a
+  exits 0 when it proves the goal and non-zero when it does not: the engine reads only the exit code. Exit 86 is for a check that
+  could not run its proof at all (a tool, host or resource it needs is missing): it is recorded as unverified, never as passed,
+  and the land refuses on it; use it instead of exiting 0 with a "skipped" or "cannot verify" line. A proof that needs a
   pipeline, a redirect, a loop or a count ("expect empty", `grep ... | wc -l`) goes into a recipe the repo has or you add (a just
   target or a script, listed in the stage's files), and the check calls it: ["just", "name"].
 - A check never runs a repo check's command again (alone, with arguments, or inside a chain): the plan is sent back. To assert on what a

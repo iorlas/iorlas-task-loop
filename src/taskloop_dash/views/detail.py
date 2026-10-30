@@ -1,5 +1,6 @@
 """One block of a run in full: its worker call, the checks of its round with their outputs, the engine lines of its step."""
 
+from taskloop.contracts.checks import verdict_of
 from taskloop_dash.cache import FileCache
 from taskloop_dash.views import timeline
 from taskloop_dash.views.nodes import nodes_of
@@ -49,7 +50,7 @@ def checks_of(n: dict) -> list[dict]:
                 "id": cmd,
                 "cmd": cmd,
                 "exit": ex,
-                "status": "passed" if ex == 0 else "failed" if ex else "?",
+                "status": "?" if ex is None else verdict_of(ex),
                 "secs": round(secs) if isinstance(secs, (int, float)) else None,
                 "tries": 1,
                 "tail": tail,

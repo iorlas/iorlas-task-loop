@@ -55,9 +55,8 @@ class CheckCache:
 
     def hit(self, c: Check, ikey: str) -> CacheHit | None:
         """The remembered green result for this check, by its inputs' key when it has one, else by the whole tree and base."""
-        if c.inputs:
-            return self.inputs.get(ikey) if ikey else None
-        return self.whole.get(c.cmd)
+        found = (self.inputs.get(ikey) if ikey else None) if c.inputs else self.whole.get(c.cmd)
+        return found if found is not None and found.result.status == "passed" else None  # only a pass is ever reused
 
     def cached(self, c: Check, hit: CacheHit, ikey: str) -> CheckResult:
         """The remembered result as this round's: cached, with the round it ran in said."""
@@ -66,6 +65,8 @@ class CheckCache:
 
     def remember(self, c: Check, res: CheckResult, rnd: int, log_abs: str, ikey: str) -> None:
         """Only a pass is a fact about the tree."""
+        if res.status != "passed":
+            return
         hit = CacheHit(result=res, round=rnd, log_abs=log_abs)
         if ikey:  # one entry per check
             self.inputs = {k: v for k, v in self.inputs.items() if v.result.cmd != c.cmd}

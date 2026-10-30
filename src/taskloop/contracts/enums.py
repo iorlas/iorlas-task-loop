@@ -94,6 +94,7 @@ class CheckStatus(StrEnum):
     SKIPPED = "skipped"
     TIMEOUT = "timeout"
     CACHED = "cached"
+    UNVERIFIED = "unverified"
 
 
 class WaitWhat(StrEnum):

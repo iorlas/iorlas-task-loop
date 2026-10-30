@@ -60,6 +60,13 @@ class LivePageApi(unittest.TestCase):
                          ("ok", "err", "dim", ""))
         self.assertEqual([(t.name, t.arg) for t in page.tools], [("Read src/x.py", "")])  # delegate types the tool's text only
 
+    def test_an_unverified_check_reads_apart_from_passed_and_failed(self):
+        put(self.log, [typed("check_end", T + 5.5, id="c1", exit=0, status="passed"),
+                       typed("check_end", T + 5.6, id="c2", exit=86, status="unverified"),
+                       typed("check_end", T + 5.7, id="c3", exit=1, status="failed")])
+        tones = {ln.text: ln.tone for ln in self.get().lines if ln.text.startswith("check ")}
+        self.assertEqual(tones, {"check passed": "ok", "check unverified": "warn", "check failed": "err"})
+
     def test_the_cursor_round_trips_and_a_beat_is_no_line(self):
         first = self.get()
         self.assertEqual(live.decode(first.cursor), self.dash.live.live_run(str(self.log)).offsets())

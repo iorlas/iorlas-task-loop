@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from taskloop.app.checks import evidence as check_evidence
+from taskloop.app.land import verified
 from taskloop.app.land.gate import Gate, Problem
 from taskloop.app.land.outbound import Outbound, land_argv, pin_head
 from taskloop.contracts import log as rec
@@ -38,6 +39,7 @@ class Lander:
         e = self.e
         if e.pending_land_validation:
             raise e.blocked_for("land retry validation still needs accepted checks and review; branch kept", "FAULT_LAND")
+        self.refuse_unverified(verified.latest(e))
         found = self.already()  # the last run's push may have gone through before the network cut its answer
         if found:
             return self.synced(self.found(found))
@@ -52,6 +54,12 @@ class Lander:
             return ""
         e.task_branch = e.git("symbolic-ref", "--short", "-q", "HEAD")
         return self.synced(self.land())
+
+    def refuse_unverified(self, run: Any) -> None:
+        """A required check that could not verify is no pass: nothing is committed or pushed (verified.deferred is tl-7k8.5's hook)."""
+        why = verified.refusal(run.results) if run else ""
+        if why:
+            raise self.e.blocked_for(why, "FAULT_LAND")
 
     def synced(self, sha: str) -> str:
         """The land is done and the lock is let go: bd's data follows it (a failure there blocks the bead)."""
@@ -218,6 +226,7 @@ class Lander:
         # A stop during checks or just after they return must resume through acceptance: save that barrier first
         self.park("land retry checks require successful checks and review before landing", "land-verify-red")
         results = e.stage_checks.stoppable({"checks": checks, "files": []}, "land retry")
+        self.refuse_unverified(results)
         bad = results.failed
         problem = Problem("verify", check_evidence.failure_brief(bad, e.run_dir)) if bad else None
         self.park(problem.text if problem else "", "land-verify-red" if bad else "land")

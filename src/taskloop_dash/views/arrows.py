@@ -90,7 +90,9 @@ def mv(to: str, cause: str, detail: str = "") -> dict:
 def after_checks(a: dict, b: dict) -> dict | None:
     if a["outcome"] == "red":
         return mv(b["step"], "checks_red" if b["step"] == "write" else "rounds_used", a["detail"])
-    return mv(b["step"], "checks_green", a["detail"]) if b["step"] == "review" else None
+    if b["step"] != "review":
+        return None
+    return mv("review", "checks_unverified" if a["outcome"] == "unverified" else "checks_green", a["detail"])
 
 
 def after_review(a: dict, b: dict) -> dict | None:
@@ -151,6 +153,7 @@ ASKS: Final = {
 }
 FIXED: Final = {
     "checks_green": "checks green",
+    "checks_unverified": "checks unverified: review goes on, the land refuses",
     "accepted": "accepted",
     "bad_checks": "writer: the checks are wrong → re-plan",
     "rounds_used": "rounds used up → re-plan",

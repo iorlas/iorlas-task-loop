@@ -2,7 +2,7 @@
 `Checks` row of the run log are the same record), the cache of green results and the history of how long a command takes."""
 from collections.abc import Iterator
 from enum import StrEnum
-from typing import ClassVar, Literal, final, override
+from typing import ClassVar, Literal, assert_never, final, override
 
 import msgspec
 
@@ -11,7 +11,13 @@ from taskloop.contracts.ids import CheckId, TreeSha
 from taskloop.contracts.wire import Rec
 
 Group = Literal["static", "tests", "acceptance"]
-Verdict = Literal["passed", "failed", "skipped"]
+Verdict = Literal["passed", "failed", "skipped", "unverified"]
+UNVERIFIED_EXIT = 86  # exit code of a check that could not verify (a missing tool, host or resource): never a pass
+
+
+def verdict_of(rc: int) -> Verdict:
+    """The verdict of a check that ran and exited with rc (a skipped check never ran)."""
+    return "passed" if rc == 0 else "unverified" if rc == UNVERIFIED_EXIT else "failed"
 
 
 class CheckFaultKind(StrEnum):
@@ -75,12 +81,22 @@ class CheckResult(Rec):
 
     @property
     def word(self) -> CheckStatus:
-        """The one word the log shows: cached, timeout, passed, failed or skipped."""
+        """The one word the log shows: cached, timeout, passed, failed, skipped or unverified."""
         if self.cached:
             return CheckStatus.CACHED
         if self.exit == 124:
             return CheckStatus.TIMEOUT
-        return CheckStatus(self.status)
+        match self.status:
+            case "passed":
+                return CheckStatus.PASSED
+            case "failed":
+                return CheckStatus.FAILED
+            case "skipped":
+                return CheckStatus.SKIPPED
+            case "unverified":
+                return CheckStatus.UNVERIFIED
+            case never:
+                assert_never(never)
 
     @property
     def red(self) -> bool:
@@ -110,6 +126,11 @@ class CheckRun(Rec):
     @property
     def passed(self) -> list[CheckResult]:
         return [c for c in self.results if c.status == "passed"]
+
+    @property
+    def unverified(self) -> list[CheckResult]:
+        """The checks that could not verify: not passed, and nothing for the writer to fix."""
+        return [c for c in self.results if c.status == "unverified"]
 
     @override
     def __iter__(self) -> Iterator[CheckResult]:  # pyrefly: ignore[bad-override]  a run iterates its results

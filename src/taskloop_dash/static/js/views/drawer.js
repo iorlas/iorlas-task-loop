@@ -23,7 +23,7 @@ function useDetail(card, version) {
 }
 
 const TERM_LINES = 6, EXIT_LINES = 20;
-const TONE = { err: 'e', ok: 'o', dim: 'd' };
+const TONE = { err: 'e', ok: 'o', dim: 'd', warn: 'w' };
 
 // the terminal tail: lines appended to the DOM as they come, new ones fade in; Preact never re-renders its content
 function Terminal({ card, keep = TERM_LINES, onTools }) {
@@ -60,7 +60,7 @@ function RunBox({ d, now }) {
   return html`<div class="box run"><div class="bh">▶ ${lv.phase} · pass ${passNum(lv.pass_n)}<span class="t">${dur(now - lv.t)}</span></div>
     <div class="nm2">${lv.cmd && html`<span class="lb">running</span><span><code>${lv.cmd}</code></span>`}
       <span class="lb">tokens</span><span>${tokens(lv.tokens)} this stage</span>
-      ${lv.checks && html`<span class="lb">tests</span><span>${lv.checks.passed}/${lv.checks.total} passed${lv.checks.failed ? html` · <b class="bad">${lv.checks.failed} failed</b>` : ''}</span>`}
+      ${lv.checks && html`<span class="lb">tests</span><span>${lv.checks.passed}/${lv.checks.total} passed${lv.checks.failed ? html` · <b class="bad">${lv.checks.failed} failed</b>` : ''}${lv.checks.unverified ? html` · <b class="unv">${lv.checks.unverified} unverified</b>` : ''}</span>`}
       <span class="lb">calls</span><span><${ToolCalls} tools=${tools} />${!tools.length && '—'}</span></div>
     <${Terminal} card=${d.card} onTools=${setTools} />
     ${lv.subtasks.length > 0 && html`<ul class="subs">${lv.subtasks.map((s, i) => html`<li key=${i} class=${s.done ? 'done' : ''}>${s.done ? '☑' : '☐'} ${s.text}</li>`)}</ul>`}
@@ -74,7 +74,7 @@ function TroubleBox({ d, now, children }) {
       <span class="t">${age(lv.t, now)} ago</span></div>
     <div class="nm2">${lv.cmd && html`<span class="lb">last</span><span><code>${lv.cmd}</code></span>`}
       ${lv.silent_secs != null && html`<span class="lb">watcher</span><span>no commits, no tool calls for ${dur(lv.silent_secs)}</span>`}
-      ${lv.checks && html`<span class="lb">tests</span><span>${lv.checks.passed}/${lv.checks.total} passed · ${lv.checks.failed} failed</span>`}</div>
+      ${lv.checks && html`<span class="lb">tests</span><span>${lv.checks.passed}/${lv.checks.total} passed · ${lv.checks.failed} failed${lv.checks.unverified ? html` · <b class="unv">${lv.checks.unverified} unverified</b>` : ''}</span>`}</div>
     <${Terminal} card=${d.card} keep=${exited ? EXIT_LINES : TERM_LINES} />${children}</div>`;
 }
 

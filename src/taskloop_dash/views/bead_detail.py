@@ -60,7 +60,7 @@ def live_box(run: Run, ps: Sequence[passes.PassView], events: Sequence[LiveEvent
     checks = None
     if cur.phase == Phase.TEST and run.checks:
         r = run.checks.run
-        checks = CheckCount(passed=len(r.passed), failed=len(r.failed), total=len(r))
+        checks = CheckCount(passed=len(r.passed), failed=len(r.failed), unverified=len(r.unverified), total=len(r))
     tokens = max(0, toks[-1].in_ - toks[-1].cached) + toks[-1].out if toks else 0
     return LiveBox(kind="run", phase=cur.phase, pass_n=n, t=cur.t0, cmd=cmd, tokens=tokens, checks=checks)
 

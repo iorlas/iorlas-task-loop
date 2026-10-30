@@ -10,6 +10,7 @@ from typing import Any
 
 from taskloop.app.checks import evidence
 from taskloop.app.checks.host import CheckFault
+from taskloop.app.land import verified
 from taskloop.contracts import log as rec
 from taskloop.contracts.checks import CheckFaultKind
 from taskloop.domain.checks.specs import gate_items
@@ -46,6 +47,10 @@ class Gate:
         except CheckFault as fault:
             e.log.emit(rec.GateEnd(exit=fault.rc, secs=round(time.time() - started)))
             raise e.blocked_for(fault.text, FAULTS[fault.kind]) from fault
+        why = verified.refusal(run.results)
+        if why:
+            e.log.emit(rec.GateEnd(exit=1, secs=round(time.time() - started)))
+            raise e.blocked_for(why, "FAULT_LAND")
         e.halt_point()  # a stop ended a step, which then reports itself red: the run stops here, not in a fix round
         reds = [c for c in run.results if c.red]
         skipped = not reds and all(c.cached or c.exit is None for c in run.results)

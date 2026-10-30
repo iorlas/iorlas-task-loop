@@ -28,6 +28,8 @@ def step_line(c: CheckResult) -> str:
     """One step: its id, what happened (ok, FAILED, cached, skipped and why), the seconds."""
     if c.status == "skipped":
         state = f"skipped ({c.why})"
+    elif c.status == "unverified":
+        state = "UNVERIFIED"
     elif c.cached:
         state = "cached"
     else:

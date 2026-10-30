@@ -10,7 +10,7 @@ from taskloop.contracts.dash import LivePage, TermLine, ToolCall
 from taskloop.contracts.runlife import Liveness
 from taskloop_dash.views.live_events import ENGINE
 
-TermTone = Literal["", "err", "ok", "dim"]
+TermTone = Literal["", "err", "ok", "dim", "warn"]
 STATE: Final[dict[Liveness, Literal["live", "ended", "crashed"]]] = {
     Liveness.LIVE: "live", Liveness.ENDED: "ended", Liveness.CRASHED: "crashed"}
 OUT_LINES = 12  # lines of a command's output shown after its exit
@@ -50,7 +50,7 @@ ENGINE_LINES: Final[dict[type, Callable[[Any], list[TermLine]]]] = {
     log.CmdStart: lambda r: line(r, f"$ {r.text}"),
     log.CmdEnd: lambda r: exited(r.t, r.exit, r.secs, r.out),
     log.CheckStart: lambda r: line(r, f"check {r.check}: {r.cmd}"),
-    log.CheckEnd: lambda r: line(r, f"check {r.status}", exit_tone(r.exit)),
+    log.CheckEnd: lambda r: line(r, f"check {r.status}", "warn" if r.status == "unverified" else exit_tone(r.exit)),
     log.GateStart: lambda r: line(r, f"gate: {r.cmd}"),
     log.GateEnd: lambda r: line(r, "gate done", exit_tone(r.exit)),
     log.CallStart: lambda r: line(r, f"call {r.n}: {r.role} ({r.step})", "dim"),

@@ -8,7 +8,7 @@ from taskloop.app.checks.base import BaseCheck
 from taskloop.app.checks.container import Box
 from taskloop.app.checks.host import CheckHost
 from taskloop.contracts.argv import argv_of
-from taskloop.contracts.checks import Check
+from taskloop.contracts.checks import UNVERIFIED_EXIT, Check
 from taskloop.contracts.enums import WaitWhat
 from taskloop.contracts.paths import RepoDirs
 from taskloop.domain.checks import matchers, retry
@@ -38,7 +38,7 @@ class Attempts:
             tries += 1
             rc, tail, seen, took = self._once(c, log, env)
             out = Outcome(rc, tail, seen, tries, took, wall_hit=self.host.wall_hit)
-            if rc in {0, 124}:
+            if rc in {0, 124, UNVERIFIED_EXIT}:  # a rerun cannot make a check verify what the host lacks
                 self._say_stop(c, out)
                 return out
             sig = matchers.output_signature(seen)

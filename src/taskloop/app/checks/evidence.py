@@ -2,17 +2,32 @@
 results as evidence a reader may cite."""
 from collections.abc import Sequence
 from pathlib import Path
-from types import MappingProxyType
+from typing import assert_never
 
-from taskloop.contracts.checks import CheckResult, CheckRun
+from taskloop.contracts.checks import UNVERIFIED_EXIT, CheckResult, CheckRun
 from taskloop.domain.checks import matchers, trim
 from taskloop.domain.checks.names import norm
 from taskloop.domain.checks.specs import DIFF_CHECK
 
-MARKS = MappingProxyType({"passed": "✓", "failed": "✗", "skipped": "\u2013"})
+
+def mark_of(c: CheckResult) -> str:
+    """The sign before a check's line, one per verdict."""
+    match c.status:
+        case "passed":
+            return "✓"
+        case "failed":
+            return "✗"
+        case "skipped":
+            return "\u2013"
+        case "unverified":
+            return "?"
+        case never:
+            assert_never(never)
 
 
 def _because(c: CheckResult) -> str:
+    if c.status == "unverified":
+        return f" (unverified: exit {UNVERIFIED_EXIT} means the check could not verify; it is not a pass)"
     if c.why:
         return f" ({c.why})"
     if c.cached:
@@ -26,7 +41,7 @@ def round_lines(results: Sequence[CheckResult]) -> list[str]:
     """The round, one line per check, and a failed one's last lines under it."""
     out: list[str] = []
     for c in results:
-        mark = MARKS[c.status]
+        mark = mark_of(c)
         out.append("{} [{}] `{}` {}{}".format(mark, c.group, c.id, c.status if c.exit is None else f"exit {c.exit}", _because(c)))
         if c.status == "failed":
             out += c.tail.splitlines()[-3:]
@@ -37,7 +52,8 @@ def round_outcome(run: CheckRun) -> str:
     """The step's outcome text: what failed, or how many passed."""
     bad = run.failed
     if not bad:
-        return f"{len(run.passed)} passed"
+        left = run.unverified
+        return f"{len(run.passed)} passed" + (f", {len(left)} unverified: " + ", ".join(c.id[:60] for c in left) if left else "")
     return f"{len(bad)} failed: " + ", ".join(c.id[:60] for c in bad)
 
 

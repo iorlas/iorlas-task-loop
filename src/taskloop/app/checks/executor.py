@@ -9,7 +9,7 @@ from taskloop.app.checks.attempts import Attempts, Outcome
 from taskloop.app.checks.cache import CheckCache, InputKeys
 from taskloop.app.checks.checklog import CheckLog
 from taskloop.app.checks.host import CheckFault, CheckHost
-from taskloop.contracts.checks import Check, CheckFaultKind, CheckResult, Durations
+from taskloop.contracts.checks import Check, CheckFaultKind, CheckResult, Durations, verdict_of
 from taskloop.domain.checks.durations import CHEAP_S, expected_secs
 from taskloop.domain.checks.matchers import cs_error_lines, diff_check_text, output_signature, safe_name, stale_tree
 from taskloop.domain.checks.names import log_var, norm, rc_var
@@ -167,7 +167,7 @@ class CheckExecutor:
         tail = diff_check_text(out.seen) if c.id == DIFF_CHECK and out.rc else out.tail[-1500:]  # the writer's text; the log keeps all
         if out.rc and not out.base_red:
             tail += self._project_log(c, out.seen, self.logs / name)
-        return CheckResult(id=c.id, cmd=c.cmd, group=c.group, exit=out.rc, status="passed" if out.rc == 0 else "failed", tries=out.tries,
+        return CheckResult(id=c.id, cmd=c.cmd, group=c.group, exit=out.rc, status=verdict_of(out.rc), tries=out.tries,
                            tail=tail, secs=secs, log="checks/" + name, base_red=out.base_red, wall_hit=out.wall_hit, wall_min=c.wall_min,
                            sig=output_signature(out.seen) if out.rc else "")
 

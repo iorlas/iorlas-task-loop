@@ -10,13 +10,15 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
+from support.checks import res
 from support.dashlogs import RunScript, T, bead
 from support.narrow import must
 
 from taskloop.contracts import wire
 from taskloop.contracts.ask import Ask, AskOption
 from taskloop.contracts.bead import Comment, Dep
-from taskloop.contracts.dash import BeadDetail, Column, Marker, Snapshot
+from taskloop.contracts.checks import CheckRun
+from taskloop.contracts.dash import BeadDetail, CheckCount, Column, Marker, Snapshot
 from taskloop.contracts.delegate import LiveCmdEnd, LiveCmdStart, LiveTokens
 from taskloop.contracts.enums import AskClass, AskKind, AskStatus
 from taskloop.contracts.loop import LoopState, QueueRow, Skip
@@ -306,6 +308,17 @@ class Detail(Case):
             (box.kind, box.phase.value, box.pass_n, box.cmd, box.tokens, box.t), ("run", "write", 1, "pytest -q", 45_000, T + 3300)
         )
         self.assertIsNone(box.checks)
+
+    def test_the_live_box_counts_unverified_checks_apart_from_passed_and_failed(self):
+        run = CheckRun(round=1, results=[res("a", 0), res("b", 1), res("c", 86, status="unverified")])
+        script = (RunScript("b-run", slot="a", at=3000).step("checks", 50, 1, end=False)
+                  .wait(500)
+                  .add("checks", node_id="n1", run={k: v for k, v in wire.dump(run).items() if k != "v"}).beat())
+        w = self.world()
+        d = bead_detail.build(Board(dataclasses.replace(w, runs={**w.runs, "b-run": [script.run(NOW)]})), w.projects[0],
+                              next(x for x in w.projects[0].beads if x.id == "b-run"), (), ())
+        box = must(d.live)
+        self.assertEqual(must(box.checks), CheckCount(passed=1, failed=1, unverified=1, total=3))
 
     def test_an_ended_run_has_no_live_box_and_a_crashed_one_reads_exited(self):
         self.assertIsNone(self.detail("b-done").live)

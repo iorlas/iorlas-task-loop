@@ -397,6 +397,7 @@ class CheckCount(Rec):
     passed: int
     failed: int
     total: int
+    unverified: int = 0  # could not verify: neither passed nor failed
 
 
 @final
@@ -437,7 +438,7 @@ class BeadDetail(Rec):
 class TermLine(Rec):
     t: float
     text: str
-    tone: Literal["", "err", "ok", "dim"] = ""
+    tone: Literal["", "err", "ok", "dim", "warn"] = ""
 
 
 @final
