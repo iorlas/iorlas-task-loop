@@ -13,7 +13,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
 # isort: split
-from taskloop.adapters.fake_beads import FakeBeads
+from support.fake_beads import FakeBeads
+
 from taskloop.app.run.run_once import Ended, RunOnce
 from taskloop.app.run.state import Checkpoints
 from taskloop.app.track import verbs
