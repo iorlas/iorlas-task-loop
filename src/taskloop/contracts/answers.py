@@ -1,6 +1,8 @@
 """The six worker answers (plan, write, review, reflect, look, verify) as records. The JSON Schema a node sends is generated from
 its record (`schema.of`), the strict form from that (`schema.strict`), and an answer is validated by decoding it into the record
 (`check`): one definition, no hand-written schema. A visual stage's write and review also require their look field."""
+import copy
+import functools
 from typing import Annotated, Any, Final, Literal, final, get_args
 
 import msgspec
@@ -280,14 +282,24 @@ def record_for(node: str, visual: bool = False) -> type:
     return VISUAL[node] if visual and node in VISUAL else NODES[node]
 
 
-def schema_for(node: str, visual: bool = False) -> dict[str, Any]:
-    """The node's contract schema (a fresh copy)."""
+@functools.cache
+def _schema_of(node: str, visual: bool):
     return schema.of(record_for(node, visual))
 
 
+@functools.cache
+def _sent_of(node: str, visual: bool):
+    return schema.strict(_schema_of(node, visual))
+
+
+def schema_for(node: str, visual: bool = False) -> dict[str, Any]:
+    """The node's contract schema (a fresh copy; building it from the record class costs 3 ms, so it is built once)."""
+    return copy.deepcopy(_schema_of(node, visual))
+
+
 def sent_schema(node: str, visual: bool = False) -> dict[str, Any]:
-    """The node's schema as the worker's strict structured output takes it."""
-    return schema.strict(schema_for(node, visual))
+    """The node's schema as the worker's strict structured output takes it (a fresh copy)."""
+    return copy.deepcopy(_sent_of(node, visual))
 
 
 HANDOFF_MAX: Final = 1024

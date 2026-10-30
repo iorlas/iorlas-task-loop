@@ -3,6 +3,7 @@ checkout, whether two paths are one folder."""
 
 import os
 import re
+import stat
 from pathlib import Path
 
 Sig = tuple[int, ...] | None
@@ -17,9 +18,13 @@ def pinned_env(path: str | Path) -> dict[str, str]:
     p = Path(path).resolve()
     for d in (p, *p.parents):
         g = d / ".git"
-        if g.is_dir():
+        try:
+            kind = os.stat(g).st_mode  # one syscall for is_dir and is_file both: this runs for every git question
+        except OSError:
+            continue
+        if stat.S_ISDIR(kind):
             return {"GIT_DIR": str(g), "GIT_WORK_TREE": str(d)}
-        if g.is_file():
+        if stat.S_ISREG(kind):
             try:
                 m = re.match(r"gitdir:\s*(.+)", g.read_text(encoding="utf-8", errors="replace").strip())
             except OSError:
@@ -47,9 +52,10 @@ def is_dir_sig(p: str | Path) -> Sig:
     return (st.st_ino, st.st_dev) if os.path.isdir(p) else (st.st_ino, st.st_dev, st.st_mtime_ns, st.st_size)
 
 
-def common_of(cwd: str | Path) -> Path | None:
-    """The git dir the checkout at `cwd` shares with its worktrees, read from its `.git`; None when `cwd` is no checkout."""
-    gd = pinned_env(cwd).get("GIT_DIR")
+def common_of(cwd: str | Path, pin: dict[str, str] | None = None) -> Path | None:
+    """The git dir the checkout at `cwd` shares with its worktrees, read from its `.git`; None when `cwd` is no checkout. `pin`: the
+    `pinned_env(cwd)` the caller already has."""
+    gd = (pin if pin is not None else pinned_env(cwd)).get("GIT_DIR")
     if not gd:
         return None
     gd_path = Path(gd)
@@ -61,10 +67,10 @@ def common_of(cwd: str | Path) -> Path | None:
 
 def git_dirs(cwd: str | Path) -> Dirs | None:
     """The dirs of a plain checkout read from the file system, or None when `cwd` is none or uses a ref backend this reads nothing of."""
-    common = common_of(cwd)
+    pin = pinned_env(cwd)
+    common = common_of(cwd, pin)
     if common is None or (common / "reftable").exists():
         return None
-    pin = pinned_env(cwd)
     return Path(pin["GIT_DIR"]), common, Path(pin["GIT_WORK_TREE"]) / ".git"
 
 

@@ -12,8 +12,10 @@ from taskloop.contracts.paths import default_root
 
 def config_dir() -> Path:
     """~/.config/task-loop (XDG_CONFIG_HOME moves it), made on first ask."""
-    d = default_root(penv.snapshot())
-    d.mkdir(parents=True, exist_ok=True)
+    # the one variable default_root reads, not a copy of all of them: this is asked about 40 times in a run
+    d = default_root(penv.Env({"XDG_CONFIG_HOME": penv.ambient("XDG_CONFIG_HOME")}))
+    if not d.is_dir():
+        d.mkdir(parents=True, exist_ok=True)
     return d
 
 

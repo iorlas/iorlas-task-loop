@@ -5,6 +5,7 @@ other with StaleRecord and never migrates. A union of records is tagged on `kind
 renamed on the wire (`in` is a keyword) says so with `msgspec.field(name="in")`. `load` is strict: no coercion (a string is not a
 number, a bool is not an int); a violation raises msgspec.ValidationError, a ValueError like StaleRecord.
 """
+import functools
 from typing import Any, ClassVar, dataclass_transform, final, get_args
 
 import msgspec
@@ -77,6 +78,7 @@ def _dec(tp: type, obj: Any) -> Any:
     return tp.from_wire(obj)
 
 
+@functools.cache  # a union of 30 records was walked on every decode of every log line
 def _version(tp: Any) -> int | None:
     """The `V` of a record class, or the one `V` of every member of a union."""
     seen = {m.V for m in (get_args(tp) or (tp,)) if isinstance(m, type) and issubclass(m, Rec)}

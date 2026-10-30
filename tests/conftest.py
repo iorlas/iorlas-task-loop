@@ -6,7 +6,9 @@ folder (tests/<slice>/real/) is `real` (real git, processes or sockets), anythin
 spawns, forks or runs real git fails; a `real` test that never spawns fails. A test over its kind's time limit fails (LIMITS_S)."""
 import contextlib
 import ctypes
+import importlib
 import os
+import pkgutil
 import resource
 import shutil
 import sys
@@ -28,6 +30,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402, F401  (ROOT/src on sys.path; after the bytecode setup above)
 from support import procsim  # noqa: E402
 
+
+def preload_src():
+    """Import every module of the package now, at collection, not inside the first test a worker runs: the engine imports about 200 of them
+    lazily, and on a loaded host that cold import alone (1.5 s to 3 s) put the first engine test of each worker over its logic limit."""
+    package = importlib.import_module("taskloop")
+    for found in pkgutil.walk_packages(package.__path__, "taskloop."):
+        importlib.import_module(found.name)
+
+
+preload_src()
 KIND = pytest.StashKey[str]()
 SKIPPED = pytest.StashKey[bool]()
 
