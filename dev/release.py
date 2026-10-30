@@ -32,6 +32,12 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "src"))  # importing taskloop puts the vendored shelf packages on sys.path
 
+import taskloop  # noqa: E402, F401  (turns lazy imports on for our modules)
+
+# A release rebases and bumps the very clone it runs from, so a module imported lazily mid-run comes from the new tree (0.23.178:
+# the old flow called the new tidy.drop_branch and failed). Load the whole release now, from the tree it started on.
+if hasattr(sys, "set_lazy_imports"):
+    sys.set_lazy_imports("normal")  # only explicit `lazy import` statements stay lazy; we write none
 from taskloop.app.release import flow  # noqa: E402
 
 if __name__ == "__main__":
