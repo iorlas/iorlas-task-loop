@@ -23,6 +23,7 @@ from taskloop.contracts import (
     locks,
     log,
     loop,
+    parks,
     plancheck,
     requests,
     review,
@@ -407,6 +408,7 @@ OTHERS = {
         at=T, lanes=[snapshots.LaneStatus(id="A", state="ready")], needs_input=[snapshots.NeedInput(what="w")]
     ),
     "Landed": landed.Landed(bead=BeadId("t-1"), sha="a" * 40, base="origin/main", t=T),
+    "Park": parks.Park(bead=BeadId("t-1"), hash="b" * 40, runs=1, run="t-1-20261030-120000", t=T),
     "SessionIndex": snapshots.SessionIndex(session="s", transcript="/t.jsonl", cwd="/w", source="startup", t=T),
     "ReposIndex": snapshots.ReposIndex(repos={"/r": snapshots.RepoEntry(added=T)}),
     "SharedNotes": snapshots.SharedNotes(flakes={"test_x": T}, notes=["n"]),

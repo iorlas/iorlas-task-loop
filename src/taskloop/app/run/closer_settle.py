@@ -1,11 +1,15 @@
 """The bead's last state: closed (landed or done), left open (a machine fault, a pause, the owner's hold) or blocked on the owner."""
+import time
+from pathlib import Path
 from typing import Protocol, assert_never
 
-from taskloop.adapters import beadtools
+from taskloop.adapters import beadtools, ident
+from taskloop.app.asks import parks
 from taskloop.app.track import verbs as track
 from taskloop.contracts import fence
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.kinds import Infra, Kind, Owner, Task
+from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BeadPatch, Beads
 from taskloop.domain import outcome as oc
 from taskloop.domain.land.matchers import without_prefix
@@ -27,6 +31,8 @@ class SettleHost(Protocol):
     def store(self) -> Beads: ...
     @property
     def cfg(self) -> SettleConfig: ...
+    @property
+    def log_path(self) -> Path: ...
     @property
     def plan_summary(self) -> str: ...
     @property
@@ -55,6 +61,8 @@ class Settle:
                 rc = track.block_as(e.claim, done.detail + q, e.store, e.comment)
             case fault:
                 assert_never(fault)
+        if bead := beadtools.peek(e.store, e.bead):  # the text this run ended on: the next run of it is judged against it (tl-7y6.7.3)
+            parks.ended(ConfigDir(ident.config_dir()), bead, done.kind, e.log_path.stem, time.time())
         if rc:  # a repo's bd rules can refuse (e.g. a minimum reason length): say so, never report a clean close
             e.warn(f"bd refused to {'close' if done.finished else 'block'} {e.bead} (exit {rc}): close it by hand")
 

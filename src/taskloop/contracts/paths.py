@@ -72,6 +72,10 @@ class ConfigDir:
         """The record that a bead's work reached its base (contracts/landed.py)."""
         return self.root / "landed" / (f"{bead}.json")
 
+    def park(self, bead: BeadId) -> Path:
+        """What the runs that ended on a question say of a bead (contracts/parks.py)."""
+        return self.root / "parks" / (f"{bead}.json")
+
     def checkpoint(self, bead: BeadId | str) -> Path:
         return self.root / "checkpoints" / (f"{bead}.json")
 

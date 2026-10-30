@@ -552,6 +552,7 @@ class FakeSettleHost(Said):
         self.store = FakeBeads()
         self.cfg = EngineConfig(base="origin/main")
         self.plan_summary = ""
+        self.log_path = Path("t-1-20261030-120000.jsonl")
         self.disp = disp
 
 

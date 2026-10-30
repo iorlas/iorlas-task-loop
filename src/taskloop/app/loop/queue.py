@@ -6,7 +6,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
-from taskloop.app.asks import intake
+from taskloop.app.asks import intake, parks
 from taskloop.app.loop.env import LoopEnv
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.config import EngineConfig
@@ -59,8 +59,10 @@ def area_skip(area: str, holder: str, where: str) -> Skip:
 
 class QueueRule:
     def __init__(self, store: Beads, cfg: EngineConfig, running: dict[BeadId, str], lint: Callable[[Bead], str],
-                 say: Callable[[str], None] = print, now: Callable[[], float] = time.time) -> None:
+                 say: Callable[[str], None] = print, now: Callable[[], float] = time.time,
+                 parked: Callable[[Bead], Skip | None] = lambda b: None) -> None:
         self.store, self.cfg, self.running, self.lint, self.say, self.now = store, cfg, running, lint, say, now
+        self.parked = parked  # a bead whose last run ended on a question and whose text is the same (tl-7y6.7.3)
         self.parents: dict[BeadId, BeadId | None] = {}
 
     def parent_of(self, bead_id: BeadId) -> BeadId | None:
@@ -138,7 +140,7 @@ class QueueRule:
         if who:
             until = float(b.metadata.get(intake.HOLD_UNTIL) or 0)
             return Skip(why=f"held by {who}", kind="hold", until=until or None)
-        return None
+        return self.parked(b)
 
     def rank(self, ready: list[Bead], repo: str) -> Queue:
         order = list(self.cfg.epic_order)
@@ -202,5 +204,5 @@ def rank_ready(env: LoopEnv, cfg: EngineConfig, say: Callable[[str], None] = pri
         ready = env.store.ready(cfg.pick_label)
     except BdFailure:
         ready: list[Bead] = []
-    rule = QueueRule(env.store, cfg, env.running(), env.lint, say, env.now)
+    rule = QueueRule(env.store, cfg, env.running(), env.lint, say, env.now, lambda b: parks.skip_of(env.cfgdir, b))
     return rule.rank(ready, env.repo), rule

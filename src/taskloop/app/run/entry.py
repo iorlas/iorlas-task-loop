@@ -17,7 +17,7 @@ from atomic_io import atomic_write_text
 
 from taskloop.adapters import beadtools, childenv, gitrepo, ident
 from taskloop.adapters import halt as halting
-from taskloop.app.asks import intake
+from taskloop.app.asks import intake, parks
 from taskloop.app.loop.queue import has_areas
 from taskloop.app.reconcile import leases
 from taskloop.app.run import console, running
@@ -35,7 +35,7 @@ from taskloop.contracts.fence import SLOT_GEN
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.kinds import Kind
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import BdFailure, BeadPatch, Spawner
+from taskloop.contracts.ports import BdFailure, BeadPatch, Beads, Spawner
 from taskloop.contracts.run import Reexec, RunReport
 from taskloop.contracts.stores import AskStore
 
@@ -56,13 +56,14 @@ def release_dead(repo: Any, store: Any = None) -> None:
         say(line)
 
 
-def _foreign_claim(b: Any, repo: Any, store: Any) -> str:
+def _foreign_claim(b: Any, repo: Any, store: Any, fresh: bool = False) -> str:
     """Why another actor's claim on the bead stops a run-task, "" when it does not: the sweep already gave back every dead one, so a claim
-    that is left is live (a lease running, or a run on it). A blocked bead is the actor's still: it goes only when its engine is gone."""
+    that is left is live (a lease running, or a run on it). A blocked bead is the actor's still: it goes only when its engine is gone;
+    so does any claim the owner's --fresh asks for (tl-159): the check is per bead (is an engine on THIS bead), never per actor."""
     bead_id, who = b.id, b.assignee
     if not who.startswith("tl-"):
         return f"claimed by {who}"
-    if b.status == "blocked" and bead_id not in running.running(repo, store):
+    if (b.status == "blocked" or fresh) and bead_id not in running.running(repo, store):
         return ""
     logs = sorted((ident.config_dir() / "engine").glob(f"{bead_id}-*.jsonl"))
     return f"another run of {bead_id} is still running as {who} (a live claim)" + (f"; its engine log: {logs[-1]}" if logs else "")
@@ -90,23 +91,25 @@ def _blocked_by_engine(b: Any, store: Any) -> str:
     return ""
 
 
-def admit(bead_id: Any, repo: Any, store: Any = None, at: Any = None) -> Any:
+def admit(bead_id: Any, repo: Any, store: Any = None, at: Any = None, fresh: bool = False) -> Any:
     """(ok, why): whether run-task may take the bead, never taking what a person holds. A bead the engine blocked is reopened for a
     plain retry, or when a comment after the block answers the open ask; it stays blocked when a person commented after the block with
     no ask open (they may have parked it), while an ask waits unanswered, or while another bead blocks it. A claim by another actor
-    that is still live stops it (dead ones are given back by `release_dead`, the reconcile lease rules, which runs first)."""
+    that is still live stops it (dead ones are given back by `release_dead`, the reconcile lease rules, which runs first); `fresh` (the
+    owner's rerun) also takes a claim whose lease still runs when no engine is on the bead."""
     store = store or beadtools.bd_store(repo)
     b = beadtools.peek(store, bead_id) or Bead(id=bead_id, title="", status="")
     who, me = b.assignee, ident.actor()
     if intake.held(b.metadata, at or time.time()):
         return False, f"held by the owner ({b.metadata[intake.HOLD]}): `tl hold {bead_id} --release` lets it go"
     if who and who != me:
-        why = _foreign_claim(b, repo, store)
+        why = _foreign_claim(b, repo, store, fresh)
         if why:
             return False, why
-    if b.status != "blocked":
+    takeover = bool(fresh and who and who != me)  # _foreign_claim let it through: no engine runs the bead
+    if b.status != "blocked" and not takeover:
         return True, ""
-    why = _blocked_by_engine(b, store)
+    why = _blocked_by_engine(b, store) if b.status == "blocked" else ""
     if why:
         return False, why
     # tl-kwo: only if the claim is still the one just read (bd applies --if-assignee atomically): two loops looking at one freed bead
@@ -118,6 +121,17 @@ def admit(bead_id: Any, repo: Any, store: Any = None, at: Any = None) -> Any:
         if guard:
             return False, f"the claim of {bead_id} changed hands just now ({who} no longer holds it): not taken"
     return True, "reopened"
+
+
+def parked(bead_id: BeadId, fresh: bool, repo: str, store: Beads | None = None) -> str:
+    """Why run-task will not take a bead whose run ended on a question ("" when it may): its text is unchanged (--fresh or an answer
+    lets it run), or this would be the third run on that text (nothing does). An answered ask starts the count again (tl-7y6.7.3)."""
+    b = beadtools.peek(store or beadtools.bd_store(repo), bead_id)
+    cfg = ConfigDir(ident.config_dir())
+    verdict = parks.gate(cfg, b, fresh=fresh) if b else None
+    if b and verdict is None:
+        parks.entering(cfg, b)
+    return verdict.why if verdict else ""
 
 
 def append_output(stream: Any) -> Any:
@@ -333,7 +347,10 @@ def run_bead(a: Any, repo: Any, cfg: Any, wt: Any, store: Any = None, *, env: En
     with defer_stop(None) as stop:
         if not a.dry_run:
             release_dead(repo, store)
-            ok, why = admit(a.id, repo, store)
+            if why := parked(a.id, bool(getattr(a, "fresh", False)), repo, store):
+                print(f"TAKEN: {why}")
+                return RunReport(outcome=Result.TAKEN, bead=a.id, why=why)
+            ok, why = admit(a.id, repo, store, fresh=bool(getattr(a, "fresh", False)))
             if not ok:
                 print(f"TAKEN: {why}")
                 return RunReport(outcome=Result.TAKEN, bead=a.id, why=why)
