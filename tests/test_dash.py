@@ -2,7 +2,6 @@
 import json
 import os
 import socket
-import subprocess
 import sys
 import tempfile
 import time
@@ -16,12 +15,12 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402, F401
 from asks.samples import MOCKS  # noqa: E402
-from support.dashes import make_dash  # noqa: E402
+from support import tlbd  # noqa: E402
+from support.dashes import make_dash, serving  # noqa: E402
 
+from taskloop.app.launch import dash_ports  # noqa: E402
 from taskloop.contracts import wire  # noqa: E402
 from taskloop_dash import bind as bind_mod  # noqa: E402
-
-SH_FAKE = unittest.skipIf(os.name == "nt", "the bd fake is a #!/bin/sh script, which Windows cannot execute")
 
 
 def line(**kw):
@@ -69,27 +68,11 @@ class Live(unittest.TestCase):
     """The real server process, against an empty config: every endpoint answers."""
 
     def test_endpoints(self):
-        with tempfile.TemporaryDirectory() as d:
-            port = free_port()
-            env = dict(os.environ, XDG_CONFIG_HOME=d, APPDATA=d, TASK_LOOP_DASH_BIND="127.0.0.1", HOME=d,
-                       USERPROFILE=d)
-            p = subprocess.Popen([sys.executable, "-m", "taskloop_dash",
-                                  "--port", str(port)], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            try:
-                base = f"http://127.0.0.1:{port}"
-                for _ in range(50):
-                    try:
-                        v = json.loads(urllib.request.urlopen(base + "/api/version", timeout=1).read())
-                        break
-                    except OSError:
-                        time.sleep(0.1)
-                else:
-                    self.fail("server did not start")
-                self.assertTrue(v["version"])
-                self.assertIn(b"task-loop", urllib.request.urlopen(base + "/").read())
-            finally:
-                p.terminate()
-                p.wait(5)
+        with tempfile.TemporaryDirectory() as d, mock.patch.dict(os.environ, {
+                "XDG_CONFIG_HOME": d, "APPDATA": d, "TASK_LOOP_DASH_BIND": "127.0.0.1", "HOME": d, "USERPROFILE": d}), serving() as base:
+            v = json.loads(urllib.request.urlopen(base + "/api/version", timeout=10).read())
+            self.assertTrue(v["version"])
+            self.assertIn(b"task-loop", urllib.request.urlopen(base + "/").read())
 
 
 class PostAuth(unittest.TestCase):
@@ -129,35 +112,16 @@ class Asks(unittest.TestCase):
     """The owner answers an ask from the phone through the real server: no token from loopback, the answer is a typed record on the
     ask and the bead is opened."""
 
-    @SH_FAKE
     def test_answer_needs_the_token_and_reaches_the_ask_once(self):
         with tempfile.TemporaryDirectory() as tmp:
-            port = free_port()
             d = Path(tmp)
-            bin_ = d / "bin"
-            bin_.mkdir()
-            (bin_ / "bd").write_text("#!/bin/sh\necho \"$*\" >> {}\n".format(d / "bd.log"))
-            (bin_ / "bd").chmod(0o755)
             asks = d / "task-loop" / "asks"
             asks.mkdir(parents=True)
             rec = wire.dump(MOCKS["lifesim-22b3"].replace(bead="x-1", id="x-1-1", repo=str(d), t=time.time() - 3600,
                                                     parks_at=time.time() + 86400))
             (asks / "x-1.json").write_text(json.dumps(rec))
-            env = dict(os.environ, XDG_CONFIG_HOME=str(d), APPDATA=str(d), TASK_LOOP_DASH_BIND="127.0.0.1", HOME=str(d),
-                       USERPROFILE=str(d), PATH=str(bin_) + os.pathsep + os.environ["PATH"],
-                       PYTHONPATH=os.environ["PYTHONPATH"])
-            p = subprocess.Popen([sys.executable, "-m", "taskloop_dash", "--ports",
-                                  "taskloop.app.launch.dash_ports:ports",  # the launcher's bd, the fake one
-                                  "--port", str(port)], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            try:
-                base = f"http://127.0.0.1:{port}"
-                for _ in range(50):
-                    try:
-                        urllib.request.urlopen(base + "/api/version", timeout=1)
-                        break
-                    except OSError:
-                        time.sleep(0.1)
-
+            env = {"XDG_CONFIG_HOME": str(d), "APPDATA": str(d), "TASK_LOOP_DASH_BIND": "127.0.0.1", "HOME": str(d), "USERPROFILE": str(d)}
+            with mock.patch.dict(os.environ, env), tlbd.bd_boundary() as bd_calls, serving(dash_ports.ports()) as base:
                 def post(tok, text):
                     req = urllib.request.Request(base + "/api/answer", method="POST",
                                                  data=json.dumps({"project": "x", "ask": "x-1-1", "kind": "answer", "text": text}).encode(),
@@ -171,7 +135,4 @@ class Asks(unittest.TestCase):
                 self.assertEqual(post("", "new"), (200, {"ok": True, "message": ""}))  # loopback: no token
                 got = json.loads((asks / "x-1.json").read_text())
                 self.assertEqual((got["status"], got["answer"]["text"], got["answer"]["by"]), ("answered", "new", "dash"))
-                self.assertIn("update x-1 --status open", (d / "bd.log").read_text())
-            finally:
-                p.terminate()
-                p.wait(5)
+                self.assertIn(("update", "x-1", "--status", "open"), bd_calls.calls)

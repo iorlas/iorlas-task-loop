@@ -1,19 +1,20 @@
 """tl-bxk.12.5: only the installed plugin copy may serve :7878 or a non-loopback address."""
+import contextlib
+import io
 import os
-import shutil
-import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402, F401
 from support.narrow import must  # noqa: E402
-from support.paths import VENDOR  # noqa: E402
 
 from taskloop_dash import bind  # noqa: E402
+from taskloop_dash.cli import dash as dash_cli  # noqa: E402
 
 TS = "100.64.1.2"  # tailscale-like (CGNAT) address
 
@@ -26,7 +27,7 @@ class Env(unittest.TestCase):
         self.state.mkdir(parents=True)
         self.dev = Path(self.tmp.name).resolve() / "dev" / "src"
         self.cache = self.home / ".claude" / "plugins" / "cache" / "mkt" / "task-loop" / "1.0" / "src"
-        for d in (self.dev, self.cache):  # the rules look at where the code lives; run_server fills in the package tree
+        for d in (self.dev, self.cache):  # the rules look at where the code lives
             d.mkdir(parents=True)
 
     def tearDown(self):
@@ -36,20 +37,17 @@ class Env(unittest.TestCase):
         (self.state / "repos.json").write_text("{}")
 
     def run_server(self, where, *args, public=False):
-        if not any(where.iterdir()):  # a copy of the package tree, only for a test that starts the server
-            shutil.copytree(ROOT / "src", where, dirs_exist_ok=True)  # with __pycache__: the child imports warm
+        """`python3 -m taskloop_dash ARGS` for the code in `where`, in this process: a refusal or a failed bind exits, which is all these
+        tests start it for -> (exit code, stderr). The env is the child's: no TASK_LOOP_*, its own HOME."""
         env = {k: v for k, v in os.environ.items() if not k.startswith("TASK_LOOP_")}
-        env.update(
-            HOME=str(self.home),
-            USERPROFILE=str(self.home),
-            XDG_CONFIG_HOME=str(self.home / ".config"),
-            APPDATA=str(self.home / ".config"),
-            PYTHONPATH=os.pathsep.join([str(where), VENDOR]),
-        )  # the copy has no skills/ beside it
+        env.update(HOME=str(self.home), USERPROFILE=str(self.home), XDG_CONFIG_HOME=str(self.home / ".config"),
+                   APPDATA=str(self.home / ".config"))
         if public:
             env["TASK_LOOP_DASH_DEV_PUBLIC"] = "1"
-        return subprocess.run([sys.executable, "-m", "taskloop_dash", *args], env=env,
-                              capture_output=True, text=True, timeout=20, check=False)
+        err = io.StringIO()
+        with mock.patch.dict(os.environ, env, clear=True), contextlib.redirect_stderr(err), self.assertRaises(SystemExit) as stop:
+            dash_cli.main(list(args), here=where)
+        return stop.exception.code, err.getvalue()
 
     def guard(self, addrs, port, where=None, **kw):
         os.environ.pop("TASK_LOOP_DASH_DEV_PUBLIC", None)
@@ -59,10 +57,10 @@ class Env(unittest.TestCase):
 class DevCopyRefused(Env):
     def test_port_7878_refused_exit_2(self):
         self.with_repos()
-        r = self.run_server(self.dev, "--port", "7878", "--bind", "127.0.0.1")
-        self.assertEqual(r.returncode, 2)
-        self.assertIn("7878", r.stderr)
-        self.assertIn("TASK_LOOP_DASH_DEV_PUBLIC", r.stderr)
+        code, err = self.run_server(self.dev, "--port", "7878", "--bind", "127.0.0.1")
+        self.assertEqual(code, 2)
+        self.assertIn("7878", err)
+        self.assertIn("TASK_LOOP_DASH_DEV_PUBLIC", err)
 
     def test_wildcard_and_hostnames_are_not_loopback(self):
         for a in ("0.0.0.0", "::", "myhost.local"):
@@ -85,11 +83,11 @@ class Override(Env):
         finally:
             os.environ.pop("TASK_LOOP_DASH_DEV_PUBLIC")
 
-    def test_subprocess_override_gets_past_the_rule(self):
+    def test_the_server_override_gets_past_the_rule(self):
         # TEST-NET-1 address cannot be bound: the bind itself fails, proving the rule let it through
-        r = self.run_server(self.dev, "--bind", "192.0.2.1", "--port", "0", public=True)
-        self.assertEqual(r.returncode, 2)
-        self.assertIn("bind 192.0.2.1", r.stderr)
+        code, err = self.run_server(self.dev, "--bind", "192.0.2.1", "--port", "0", public=True)
+        self.assertEqual(code, 2)
+        self.assertIn("bind 192.0.2.1", err)
 
     def test_only_value_1_counts(self):
         os.environ["TASK_LOOP_DASH_DEV_PUBLIC"] = "0"

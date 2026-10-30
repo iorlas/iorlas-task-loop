@@ -7,6 +7,7 @@ import sys
 import threading
 import time
 from collections.abc import Sequence
+from http.server import ThreadingHTTPServer
 from pathlib import Path
 
 from taskloop_dash import bind
@@ -30,8 +31,10 @@ def idle_watch(dash: Dash, hours: float) -> None:
             os._exit(0)
 
 
-def main(env: Env, here: Path, argv: Sequence[str] | None = None) -> None:
-    """`here` is the folder of the code that was started (the installed-copy and dev-checkout rules look at it)."""
+def start(env: Env, here: Path, argv: Sequence[str] | None = None) -> tuple[list[ThreadingHTTPServer], list[str], int, Dash]:
+    """Parse the command line, refuse a bind that must not happen (exit 2), bind every address or none (exit 2), and set the handler.
+    -> (the bound servers, their addresses, the port, the Dash). `here` is the folder of the code that was started (the installed-copy and
+    dev-checkout rules look at it). Nothing is served yet."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--port", type=int, default=None)
     ap.add_argument("--bind", default=None, help="comma-separated addresses (default: loopback + Tailscale; dev checkout: loopback)")
@@ -54,9 +57,14 @@ def main(env: Env, here: Path, argv: Sequence[str] | None = None) -> None:
                            lambda: bind.token(env.config.root), str(Path(sys.argv[0]).resolve()))
     for s in servers:
         s.RequestHandlerClass = handler
-    if not dev:  # a dev server must not claim the shared pid file
+    if not bind.is_dev_checkout(here):  # a dev server must not claim the shared pid file
         env.config.root.mkdir(parents=True, exist_ok=True)
         (env.config.root / "dash.pid").write_text(str(os.getpid()))
+    return servers, addrs, port, dash
+
+
+def main(env: Env, here: Path, argv: Sequence[str] | None = None) -> None:
+    servers, addrs, port, dash = start(env, here, argv)
     for s in servers[1:]:
         threading.Thread(target=s.serve_forever, daemon=True).start()
     threading.Thread(target=idle_watch, args=(dash, float(os.environ.get("TASK_LOOP_DASH_IDLE_H", "6"))), daemon=True).start()
