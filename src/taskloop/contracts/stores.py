@@ -422,20 +422,23 @@ class ReposStore(JsonStore[ReposIndex]):
         super().__init__(cfg.repos(), ReposIndex)
         self.lock = cfg.lock_record("repos", "index")
 
-    def known(self) -> list[str]:
-        """The repo paths, oldest first ([] when the file is missing or not an index of this version)."""
+    def index(self) -> ReposIndex:
+        """The index (empty when the file is missing). A file in another version is an error (ValueError), never read as empty."""
         idx = self.read()
-        return list(idx.repos) if idx else []
+        if idx is None and self.path.exists():
+            raise ValueError(f"{self.path} is not a repos index of this version: delete it; every tl process registers its repo again")
+        return idx or ReposIndex()
+
+    def known(self) -> list[str]:
+        """The repo paths, oldest first."""
+        return list(self.index().repos)
 
     def add(self, path: str, now: float) -> bool:
         """Register `path`; False when it was known. A file in another version is an error (ValueError), never overwritten."""
         if path in self.known():
             return False
         with guard(self.lock):
-            idx = self.read()
-            if idx is None and self.path.exists():
-                raise ValueError(f"{self.path} is not a repos index of this version: delete it and `tl register` the repos again")
-            idx = idx or ReposIndex()
+            idx = self.index()
             if path in idx.repos:
                 return False
             self.write(idx.replace(repos={**idx.repos, path: RepoEntry(added=now)}))
