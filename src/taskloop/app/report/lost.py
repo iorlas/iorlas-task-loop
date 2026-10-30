@@ -1,17 +1,19 @@
 """`tl lost`: the bead-branch commits no run will bring home, classed. Reads only."""
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import Any
 
 from taskloop.adapters import ident
 from taskloop.adapters.gitenv import run_git
 from taskloop.app.report.inputs import bases_of, bead_status, git, repo_traces
+from taskloop.contracts.enums import Outcome
 from taskloop.contracts.ids import BeadId, is_bead_id
 from taskloop.contracts.landed import LandedStore
 from taskloop.contracts.paths import ConfigDir
+from taskloop.contracts.trace import RunTrace
 from taskloop.domain.report import matchers
 
 
-def _legacy_lands(repo: str, bases: list[str], traces: list[dict[str, Any]]) -> dict[str, list[int]]:
+def _legacy_lands(repo: str, bases: list[str], traces: Sequence[RunTrace]) -> dict[str, list[int]]:
     """LEGACY (a bead landed before landed/<bead>.json, 0.23.179): bead -> times its land reached the base, by the subject
     '... (<bead>)' (committer time, which a rebase rewrites) and the sha a trace recorded. Used only for a bead with no record;
     it can go when no such bead is left."""
@@ -22,10 +24,9 @@ def _legacy_lands(repo: str, bases: list[str], traces: list[dict[str, Any]]) -> 
         if bead and t.isdigit():
             lands.setdefault(bead, []).append(int(t))
     for r in traces:
-        if r.get("outcome") == "landed" and r.get("sha") and any(
-                run_git(repo, "merge-base", "--is-ancestor", r["sha"], b,
-                           capture_output=True).returncode == 0 for b in bases):
-            lands.setdefault(str(r.get("bead")), []).append(r.get("ended") or 0)
+        if r.outcome is Outcome.LANDED and r.sha and any(
+                run_git(repo, "merge-base", "--is-ancestor", r.sha, b, capture_output=True).returncode == 0 for b in bases):
+            lands.setdefault(r.bead, []).append(int(r.ended))
     return lands
 
 
@@ -40,9 +41,9 @@ def _lands(repo: str, bases: list[str], store: LandedStore, legacy: dict[str, li
     return of
 
 
-def _pending_class(bead: str, st: str | None, ct: int, traces: list[dict[str, Any]]) -> dict[str, str]:
+def _pending_class(bead: str, st: str | None, ct: int, traces: Sequence[RunTrace]) -> dict[str, str]:
     """The class and why of a commit whose bead is not landed: from the bead's state `st` ('?' unknown, '' absent)."""
-    later = [r for r in traces if r.get("bead") == bead and (r.get("started") or 0) >= ct]
+    later = [r for r in traces if r.bead == bead and r.started >= ct]
     if st == "?":
         return {"class": "unknown", "why": f"bd could not show {bead}: the tracker is unreachable"}
     if st == "closed":
@@ -50,12 +51,12 @@ def _pending_class(bead: str, st: str | None, ct: int, traces: list[dict[str, An
     if not st:
         return {"class": "lost", "why": f"no bead {bead} in the tracker"}
     if later:
-        return {"class": "reclaimed", "why": "run {} took it up".format(later[0].get("run"))}
+        return {"class": "reclaimed", "why": f"run {later[0].run} took it up"}
     return {"class": "pending", "why": f"{bead} is {st}: its next run continues the branch"}
 
 
 def lost_work(repo: str, base: str, since: float | None = None, status_of: Callable[[BeadId], str | None] | None = None,
-              traces: list[dict[str, Any]] | None = None, cfg: ConfigDir | None = None) -> list[dict[str, Any]]:
+              traces: Sequence[RunTrace] | None = None, cfg: ConfigDir | None = None) -> list[dict[str, Any]]:
     """Every commit on a task/<bead> or wip/* branch that is not on the base, classed:
     landed     its patch is on the base (git cherry), or a land of its bead came after it: the bead's landed record (its sha on
                the base; legacy beads without one: a base commit titled '... (<bead>)' or a trace's land sha);
@@ -66,7 +67,7 @@ def lost_work(repo: str, base: str, since: float | None = None, status_of: Calla
     lost       its bead is closed (or unknown) with no land after it, or it is on a wip/* branch of a dead session."""
     bases = bases_of(repo, base) or [base]
     status_of = status_of or (lambda b: bead_status(b, repo))
-    traces = repo_traces(repo) if traces is None else traces
+    traces = repo_traces(repo).runs if traces is None else traces
     lands = _lands(repo, bases, LandedStore(cfg or ConfigDir(ident.config_dir())), _legacy_lands(repo, bases, traces))
     rows: list[dict[str, Any]] = []
     statuses: dict[str, str | None] = {}

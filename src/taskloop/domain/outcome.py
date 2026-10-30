@@ -15,12 +15,30 @@ from dataclasses import dataclass
 from typing import Any, Final
 
 from taskloop.contracts.enums import Outcome, Result
-from taskloop.contracts.kinds import ASK_NAME, ASKS, FAULTS, FINISH, PAUSES, Action, Fault, Infra, Kind, Owner, Task, action_of, fault_of
+from taskloop.contracts.kinds import (
+    ASK_NAME,
+    ASKS,
+    FAULTS,
+    FINISH,
+    PAUSES,
+    Action,
+    Fault,
+    Infra,
+    Kind,
+    Owner,
+    Task,
+    action_of,
+    fault_of,
+    kind_named,
+)
 from taskloop.domain.asks.spec import AskSpec
 from taskloop.domain.report import matchers as lifecycle
 
 # the sealed set lives in contracts.kinds; callers reach it here
-__all__ = ["ASK_NAME", "ASKS", "FAULTS", "FINISH", "PAUSES", "Action", "Fault", "Infra", "Kind", "Owner", "Task", "action_of", "fault_of"]
+__all__ = [
+    "ASKS", "ASK_NAME", "FAULTS", "FINISH", "PAUSES", "Action", "Fault", "Infra", "Kind", "Owner", "Task", "action_of", "fault_of",
+    "kind_named",
+]
 
 # The tunables, in one place. Cells are values: a predicate goes to code.
 KNOBS: Final = {

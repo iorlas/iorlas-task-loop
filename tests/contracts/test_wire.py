@@ -19,7 +19,6 @@ from contracts import samples as S
 from taskloop.contracts import delegate, enums, events, ids, log, trace, wire
 from taskloop.contracts.ask import Ask
 from taskloop.contracts.loop import LoopCommand
-from taskloop.contracts.run import LoopLogLine
 from taskloop.contracts.wire import Rec, StaleRecord
 
 GOLDEN = Path(__file__).resolve().parent / "golden"
@@ -190,9 +189,9 @@ class Wire(unittest.TestCase):
         self.assertIsNone(wire.dump(a.replace(answer=None))["answer"])
 
     def test_nested_records_carry_no_version(self):
-        d = wire.dump(S.other(LoopLogLine))
-        self.assertEqual(d["v"], 2)
-        self.assertNotIn("v", d["outcome"])
+        d = wire.dump(S.other(Ask))
+        self.assertEqual(d["v"], Ask.V)
+        self.assertNotIn("v", d["answer"])
 
     def test_a_record_is_frozen(self):
         with self.assertRaises(AttributeError):

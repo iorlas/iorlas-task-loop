@@ -5,8 +5,8 @@ from typing import Final, assert_never
 
 from taskloop.contracts.checks import RoundVerdict, round_verdict_of
 from taskloop.contracts.kinds import ASK_NAME, Task
-from taskloop_dash.readers.closes import End, Ended
 from taskloop_dash.jsonrec import Json
+from taskloop_dash.readers.closes import End, Ended
 from taskloop_dash.views.names import hhmm, lane_name
 
 
@@ -63,22 +63,23 @@ def close_move(end: Ended) -> tuple[str, str]:
     fault = end.fault
     match end.end:
         case End.FINISHED:
-            return "close", end.outcome.value
+            move = ("close", end.outcome.value)
         case End.PAUSED:
-            return "pause", "paused"
+            move = ("pause", "paused")
         case End.PARKED:
-            return "pause", "parked"
+            move = ("pause", "parked")
         case End.WAITING:
-            return "ask", "waiting"
+            move = ("ask", "waiting")
         case End.ASKED:
             assert isinstance(fault, Task)
-            return "ask", ask_cause(fault)
+            move = ("ask", ask_cause(fault))
         case End.STOPPED:
-            return "close", "stopped"
+            move = ("close", "stopped")
         case End.FAILED:
-            return "close", "failed"
+            move = ("close", "failed")
         case _:
             assert_never(end.end)
+    return move
 
 
 def same_round(a: Json, b: Json) -> bool:

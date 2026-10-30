@@ -24,12 +24,13 @@ from taskloop.domain import outcome as oc
 from taskloop.domain.asks.spec import AskSpec
 from taskloop_dash.env import Env
 from taskloop_dash.readers import closes
-from taskloop_dash.readers.records import Records
 from taskloop_dash.readers.closes import End
+from taskloop_dash.readers.records import Records
 
 
 def close_of(kind: Kind) -> Close:
-    word = oc.make(kind, "x", spec=AskSpec.__new__(AskSpec) if kind in ASKS else None).word  # the word needs no spec's content
+    spec = AskSpec.__new__(AskSpec) if kind in ASKS else None  # the word needs no spec's content
+    word = oc.make(kind, "x", spec=spec).word
     return Close(t=T, outcome=word, why_code=why_code(kind.value, word), why="x")
 
 
@@ -58,15 +59,16 @@ class Closes(unittest.TestCase):
 
 
 def trace(run: str, outcome: Outcome, ended: float, replans: int = 0) -> RunTrace:
-    return RunTrace(run=must(RunId.of(run)), bead="g-1", repo_url="u", worktree="/w", branch="b", coordinator_session="s", started=ended - 60,
-                    ended=ended, outcome=outcome, why="", sha="", stats=Stats(replans=replans))
+    return RunTrace(run=must(RunId.of(run)), bead="g-1", repo_url="u", worktree="/w", branch="b", coordinator_session="s",
+                    started=ended - 60, ended=ended, outcome=outcome, why="", sha="", stats=Stats(replans=replans))
 
 
 class Traces(unittest.TestCase):
     def test_traces_of_another_version_are_skipped_and_counted(self):
         with tempfile.TemporaryDirectory() as d:
             cfg = Path(d)
-            rows = [wire.dump(trace("g-1-20261015-100000", Outcome.LANDED, T + 100, replans=2)), wire.dump(trace("g-1-20261015-110000", Outcome.FAILED, T + 200)),
+            rows = [wire.dump(trace("g-1-20261015-100000", Outcome.LANDED, T + 100, replans=2)),
+                    wire.dump(trace("g-1-20261015-110000", Outcome.FAILED, T + 200)),
                     dict(wire.dump(trace("g-1-20261015-120000", Outcome.LANDED, T + 300)), v=1), {"outcome": "landed", "run": "r-4"}]
             (cfg / "traces.jsonl").write_text("\n".join(json.dumps(r) for r in rows) + "\nnot json\n", encoding="utf-8")
             env = Env(config=cfg, home=cfg, clock=lambda: T, version="v")

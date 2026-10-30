@@ -89,18 +89,20 @@ def cmd_status(env: LoopEnv, files: LoopFiles, installs: Installs, a: Any) -> in
         print(line)
     for v, why in sorted(installs.refused().items()):  # a refused install still in the cache: red until a fixed release replaces it
         print(f"RED: task-loop {v} refused: {why[:160]}")
-    rows = files.log_rows(a.last)
+    page = files.log_rows(a.last)
+    rows = [i.rec for i in page.items]
+    skipped_line(page.skipped)
     if rows:
         print(table(["when", "bead", "slot", "outcome", "min", "rounds", "tests", "ask", "trace / why"]))
     for r in rows:
-        print(table([str(r.get("ts") or "").replace("T", " ")[:16], str(r.get("bead")), str(r.get("slot") or "-"), str(r.get("outcome")),
-                     str(r.get("minutes")), dash(r.get("rounds")), dash(r.get("tests_added")), "yes" if r.get("asked") else "no",
-                     str(r.get("trace") or str(r.get("why") or "")[:60])]))
+        print(table([r.ts.replace("T", " ")[:16], r.bead, r.slot or "-", r.outcome.value, str(r.minutes), str(r.rounds),
+                     str(r.tests_added), "yes" if r.asked else "no", r.trace or r.why[:60]]))
     return 0
 
 
-def dash(v: object) -> str:
-    return "-" if v is None else str(v)
+def skipped_line(n: int) -> None:
+    if n:
+        print(f"{n} log line(s) of an older version skipped")
 
 
 def table(cols: list[str]) -> str:

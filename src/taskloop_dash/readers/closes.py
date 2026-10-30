@@ -44,21 +44,22 @@ class End(enum.Enum):
 def end_of(fault: Fault | None) -> End:
     match fault:
         case None:
-            return End.FINISHED
+            end = End.FINISHED
         case Task():
-            return End.ASKED
+            end = End.ASKED
         case Owner(kind=Kind.WAIT_ASK):
-            return End.WAITING
+            end = End.WAITING
         case Owner():
-            return End.PARKED
+            end = End.PARKED
         case Infra(kind=Kind.PAUSE_KILLED):
-            return End.STOPPED
+            end = End.STOPPED
         case Infra(kind=Kind.PAUSE_LANE | Kind.PAUSE_NETWORK | Kind.CUT):
-            return End.PAUSED
+            end = End.PAUSED
         case Infra():
-            return End.FAILED
+            end = End.FAILED
         case _:
             assert_never(fault)
+    return end
 
 
 def fault_of_code(close: Close) -> Fault | None:

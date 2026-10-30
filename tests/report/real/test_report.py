@@ -35,8 +35,10 @@ from taskloop.adapters import (  # noqa: E402
 )
 from taskloop.app.launch import repos  # noqa: E402
 from taskloop.app.report import card, inputs, lost  # noqa: E402
+from taskloop.contracts import wire  # noqa: E402
 from taskloop.contracts.ids import BeadId  # noqa: E402
 from taskloop.contracts.landed import Landed, LandedStore  # noqa: E402
+from taskloop.contracts.trace import RunTrace  # noqa: E402
 
 T0 = datetime(2026, 10, 21, 6, 0).timestamp()  # the window's start in the fixtures: local 06:00
 MIN = 60.0
@@ -129,8 +131,8 @@ class LostWork(Base):
         git(self.repo, "add", "-A")
         git(self.repo, "commit", "-qm", "a title the bead lost", t=T0 + 30 * MIN)
         land = git(self.repo, "rev-parse", "HEAD")
-        trace = {"bead": "t-1", "outcome": "landed", "sha": land, "started": T0, "ended": T0 + 31 * MIN}
-        self.assertEqual(set(self.by_class(self.lost({"t-1": "closed"}, [trace]))), {"landed"})
+        landing = wire.load(RunTrace, trace("t-1", "landed", 0, 31, sha=land))
+        self.assertEqual(set(self.by_class(self.lost({"t-1": "closed"}, [landing]))), {"landed"})
 
     def squash_land(self, subject):
         (self.repo / "f.txt").write_text("one, edited at land\n")
@@ -175,8 +177,7 @@ class LostWork(Base):
 
     def test_a_later_run_reclaims_the_wip(self):
         self.branch("task/t-1", [("f.txt", "work\n", "wip (t-1): blocked")], T0)
-        later = {"bead": "t-1", "outcome": "blocked", "why": "paused: x", "sha": "", "started": T0 + 10 * MIN,
-                 "ended": T0 + 20 * MIN}
+        later = wire.load(RunTrace, trace("t-1", "blocked", 10, 20, why="paused: x", kind="pause_lane"))
         self.assertEqual(set(self.by_class(self.lost({"t-1": "in_progress"}, [later]))), {"reclaimed"})
 
     def test_a_tracker_outage_is_unknown_never_lost(self):
@@ -215,17 +216,18 @@ class LostWork(Base):
 # ---- 10.1: the scorecard ----------------------------------------------------------------------------------------------
 
 def trace(bead, outcome, start_min, end_min, why="", sha="", rounds=0, replans=0, sessions=(), worktree=None, run=None,
-          stderr=None, kind=""):
+          stderr="", kind=""):
     started, ended = T0 + start_min * MIN, T0 + end_min * MIN
     stem = run or "{}-{}".format(bead, time.strftime("%Y%m%d-%H%M%S", time.localtime(started)))
-    return {"v": 1, "run": stem, "bead": bead, "repo": "https://example.invalid/r.git", "worktree": worktree,
-            "started": started, "ended": ended, "outcome": outcome, "why": why, "sha": sha,
+    return {"v": 2, "run": stem, "bead": bead, "repo_url": "https://example.invalid/r.git", "worktree": worktree or "", "branch": "",
+            "coordinator_session": "", "started": started, "ended": ended, "outcome": outcome, "why": why, "sha": sha,
             "stats": {"rounds": rounds, "replans": replans}, "log": str(ident.config_dir() / "engine" / (stem + ".jsonl")),
-            "sessions": list(sessions), "stderr": stderr, "kind": kind}
+            "sessions": list(sessions), "stderr": stderr, "kind": kind or outcome if outcome in ("landed", "done") else kind}
 
 
 def session(role, family, tin, cached, out):
-    return {"role": role, "family": family, "tokens": {"in": tin, "cached": cached, "out": out}}
+    return {"node": "n", "family": family, "ref": "r", "status": "done", "role": role, "t": T0,
+            "tokens": {"in": tin, "cached": cached, "out": out}}
 
 
 class Scorecard(Base):
@@ -243,11 +245,11 @@ class Scorecard(Base):
             trace("t-3", "blocked", -10, 5, why="owner decision needed", worktree=w, kind="ask_decision"),  # overlaps 06:00: in the window
             trace("t-3", "landed", 30, 45, sha="a3", worktree=w),
             trace("t-4", "blocked", 60, 90, why="stage 1 stuck after 3 rounds and 1 re-plan(s)", replans=1, worktree=w, kind="ask_stuck"),
-            trace("t-5", "blocked", 60, 61, why="paused: logged_out on plan", worktree=w),
-            trace("t-6", "failed", 60, 70, why="failed: plan node produced no valid output", worktree=w),
+            trace("t-5", "blocked", 60, 61, why="paused: logged_out on plan", worktree=w, kind="pause_lane"),
+            trace("t-6", "failed", 60, 70, why="failed: plan node produced no valid output", worktree=w, kind="fault_plan"),
             trace("t-7", "landed", 80, 100, sha="a7", worktree=w),
-            trace("t-11", "failed", 100, 110, why="failed: stopped (SIGTERM)", worktree=w),  # tl stop --now: no crash
-            trace("t-12", "failed", 110, 112, why="failed: engine error KeyError: 'x'", worktree=w),  # a caught crash
+            trace("t-11", "failed", 100, 110, why="failed: stopped (SIGTERM)", worktree=w, kind="pause_killed"),  # tl stop --now: no crash
+            trace("t-12", "failed", 110, 112, why="failed: engine error KeyError: 'x'", worktree=w, kind="fault_engine"),  # a caught crash
             trace("o-1", "landed", 10, 20, sha="z", worktree="/elsewhere/repo"),  # another repo
         ]
         with open(ident.config_dir() / "traces.jsonl", "w") as f:
@@ -267,8 +269,8 @@ class Scorecard(Base):
         # the loop's own record of a run-task that died before its engine wrote anything
         looptest.log(gitrepo.repo_root(str(self.repo))).parent.mkdir(parents=True, exist_ok=True)
         with open(looptest.log(gitrepo.repo_root(str(self.repo))), "w") as f:  # the loop keys it so
-            f.write(json.dumps({"ts": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(T0 + 95 * MIN)), "bead": "t-10",
-                                "slot": "s1", "outcome": "failed", "minutes": 0.1, "trace": None,
+            f.write(json.dumps({"v": 3, "ts": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(T0 + 95 * MIN)), "bead": "t-10",
+                                "slot": "s1", "outcome": "failed", "minutes": 0.1, "trace": "",
                                 "why": "failed: no outcome from run-task (exit 1); see x.log"}) + "\n")
         # an orphan commit on a closed bead's branch
         git(self.repo, "checkout", "-q", "-b", "task/t-6")
@@ -293,6 +295,14 @@ class Scorecard(Base):
         return card.scorecard(str(self.repo), T0, until or T0 + 200 * MIN, base="main",
                                 comments_of=lambda b: [as_comment(c) for c in self.comments.get(b, [])], status_of=self.status.get,
                                 now=T0 + 200 * MIN)
+
+    def test_a_trace_line_of_another_version_is_skipped_and_counted(self):
+        before = self.card()["skipped_traces"]
+        with open(ident.config_dir() / "traces.jsonl", "a") as f:
+            f.write(json.dumps(dict(trace("t-1", "landed", 10, 40, sha="a1", worktree=self.wt), v=1)) + "\n")
+            f.write(json.dumps({"run": "t-1-old", "outcome": "landed"}) + "\n")
+        c = self.card()
+        self.assertEqual((c["skipped_traces"], c["beads"]), (before + 2, 11))  # nothing is read from them
 
     def test_the_six_counts(self):
         c = self.card()

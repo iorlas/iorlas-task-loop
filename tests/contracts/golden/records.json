@@ -659,29 +659,19 @@
   "lane": ""
  },
  "LoopLogLine": {
-  "v": 2,
-  "outcome": {
-   "outcome": "parked",
-   "bead": "tl-1",
-   "run": "tl-7y6.3.1-20261027-002239",
-   "why_code": "stuck",
-   "why": "stuck",
-   "log": "/l",
-   "minutes": 3.5,
-   "rounds": 2,
-   "tests_added": 4,
-   "asked": true,
-   "retry_after": null,
-   "cost": 0.25,
-   "kind": "",
-   "fingerprint": "",
-   "storm": "",
-   "role": "",
-   "lane": ""
-  },
-  "t": 1793050200.5,
+  "v": 3,
+  "ts": "2026-10-15T10:00:00",
+  "bead": "tl-1",
   "slot": "s1",
-  "run_log": "/rl"
+  "outcome": "landed",
+  "minutes": 0.0,
+  "rounds": 0,
+  "tests_added": 0,
+  "asked": false,
+  "trace": "",
+  "engine_log": "",
+  "run_log": "/rl",
+  "why": ""
  },
  "Reexec": {
   "v": 1,

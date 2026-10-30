@@ -1,12 +1,16 @@
 """What `tl report` reads: traces.jsonl, the engine logs, the repo's git refs (never fetched), bd. Reads only."""
 import json
 import os
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from taskloop.adapters import beadtools, gitrepo, ident
 from taskloop.contracts.ids import BeadId
+from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdFailure, Beads
+from taskloop.contracts.stores import TraceStore
+from taskloop.contracts.trace import RunTrace
 
 
 def git(repo: str, *args: str) -> str:
@@ -39,17 +43,25 @@ def read_jsonl(path: str | Path) -> list[dict[str, Any]]:
     return out
 
 
-def repo_traces(repo: str) -> list[dict[str, Any]]:
+@dataclass(frozen=True)
+class Traces:
+    """The traces of one repo, and how many lines of traces.jsonl were not a RunTrace of this version (skipped, never guessed at)."""
+    runs: list[RunTrace]
+    skipped: int
+
+
+def repo_traces(repo: str) -> Traces:
     """Every engine run of this repo: its worktree is inside the repo, or its origin is the repo's origin."""
     root = str(Path(repo).resolve())
     url = git(repo, "remote", "get-url", "origin")
-    out: list[dict[str, Any]] = []
-    for r in read_jsonl(ident.config_dir() / "traces.jsonl"):
-        wt = r.get("worktree") or ""
-        inside = bool(wt) and (str(Path(wt).resolve()) + os.sep).startswith(root + os.sep)
-        if inside or (url and r.get("repo") == url):
-            out.append(r)
-    return out
+    page = TraceStore(ConfigDir(ident.config_dir())).read_from(0)
+    out: list[RunTrace] = []
+    for item in page.items:
+        t = item.rec
+        inside = bool(t.worktree) and (str(Path(t.worktree).resolve()) + os.sep).startswith(root + os.sep)
+        if inside or (url and t.repo_url == url):
+            out.append(t)
+    return Traces(out, page.skipped)
 
 
 def prefix(bead: str | None) -> str:

@@ -67,7 +67,7 @@ def new_node(r: rec.StepStart) -> Json:
     meta = {x: getattr(r, x) for x in META if getattr(r, x) is not None}
     if try_of(r.text):
         meta["try"] = try_of(r.text)
-    return {
+    node: Json = {
         "id": num(r.id),
         "step": r.step,
         "text": r.text,
@@ -79,11 +79,12 @@ def new_node(r: rec.StepStart) -> Json:
         "files": [],
         "moves": [],
         "checks": None,
-        "outcome": "",
         "detail": "",
         "close": None,
         "open": True,
     }
+    node["outcome"] = ""  # the step's own result, set when it ends
+    return node
 
 
 class NodeBuilder:

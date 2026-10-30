@@ -93,3 +93,11 @@ def action_of(fault: Fault) -> Action:
             return fault.action
         case _:
             assert_never(fault)
+
+
+def kind_named(value: str) -> Kind | None:
+    """The Kind a stored kind word names; None for "" or a word this version has no Kind for (never a guess)."""
+    try:
+        return Kind(value)
+    except ValueError:
+        return None

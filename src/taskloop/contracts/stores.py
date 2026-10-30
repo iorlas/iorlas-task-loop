@@ -17,6 +17,7 @@ from taskloop.contracts.guard import guard
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ledger import LedgerEntry, LedgerEvent
 from taskloop.contracts.loop import BadVersions, LoopCommand, LoopState, Rest
+from taskloop.contracts.run import LoopLogLine
 from taskloop.contracts.snapshots import (
     DashState,
     Pin,
@@ -118,6 +119,13 @@ class EventLog(JsonlStore[events.Event]):
 class TraceStore(JsonlStore[RunTrace]):
     def __init__(self, cfg: paths.ConfigDir) -> None:
         super().__init__(cfg.traces(), _one(RunTrace))
+
+
+class LoopLog(JsonlStore[LoopLogLine]):
+    """loop/<key>.jsonl: a line per bead the loop ran."""
+
+    def __init__(self, cfg: paths.ConfigDir, key: str) -> None:
+        super().__init__(cfg.loop_log(key), _one(LoopLogLine))
 
 
 class UsageHistory(JsonlStore[UsageRow]):

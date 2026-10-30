@@ -35,13 +35,21 @@ class RunReport(Rec):
 
 @final
 class LoopLogLine(Rec):
-    """A line of loop/<key>.jsonl: the outcome plus where it ran."""
+    """A line of loop/<key>.jsonl: one bead's run as the loop saw it. A line without this `v` (the earlier bare dicts) is not read."""
 
-    V: ClassVar[int] = 2
-    outcome: RunReport
-    t: float
-    slot: str | None = None
+    V: ClassVar[int] = 3
+    ts: str
+    bead: BeadId
+    slot: str
+    outcome: Result
+    minutes: float = 0.0
+    rounds: int = 0
+    tests_added: int = 0
+    asked: bool = False
+    trace: str = ""
+    engine_log: str = ""
     run_log: str = ""
+    why: str = ""
 
 
 @final

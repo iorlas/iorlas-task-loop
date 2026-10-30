@@ -48,7 +48,7 @@ def build(repo: str, plugin_root: Path, now: float, with_slots: bool = True) -> 
     beats = [st.t or st.started for st in loops] or [st.t or st.started for st in files.died()]
     last_beat = max([*beats, float(str(last.get("t") or 0))])
     asks = tuple(AskLine(a.bead, a.kind, a.decision, a.t) for a in wire_asks.store().live() if not a.repo or a.repo == repo)
-    recent = tuple(f"{r.get('bead')} {r.get('outcome')} ({r.get('minutes')} min)" for r in files.log_rows(RECENT))
+    recent = tuple(f"{i.rec.bead} {i.rec.outcome.value} ({i.rec.minutes} min)" for i in files.log_rows(RECENT).items)
     pin = pins.read_pin().task_loop
     return Brief(
         repo=repo, now=now,

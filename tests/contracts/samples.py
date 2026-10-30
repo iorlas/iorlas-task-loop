@@ -341,7 +341,7 @@ OTHERS = {
     ),
     "Durations": checks.Durations(runs={"just fmt": [3.1, 2.9]}),
     "RunReport": OUTCOME,
-    "LoopLogLine": run.LoopLogLine(outcome=OUTCOME, t=T, slot="s1", run_log="/rl"),
+    "LoopLogLine": run.LoopLogLine(ts="2026-10-15T10:00:00", bead=BeadId("tl-1"), slot="s1", outcome=Result.LANDED, run_log="/rl"),
     "Reexec": run.Reexec(
         run=str(RUN),
         bead="tl-1",

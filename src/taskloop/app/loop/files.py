@@ -11,7 +11,8 @@ from taskloop.adapters.locks import hold_path
 from taskloop.contracts import paths
 from taskloop.contracts.enums import LockWhat
 from taskloop.contracts.loop import LoopCommand, LoopState, LoopTarget, Rest, StopRequest
-from taskloop.contracts.stores import JsonStore
+from taskloop.contracts.run import LoopLogLine
+from taskloop.contracts.stores import JsonStore, LoopLog, Page
 
 StopMode = Literal["now", "after", ""]
 EXIT_REASONS = ("drained", "until", "max_beads", "stop_request", "signal", "storm", "crash")
@@ -112,21 +113,15 @@ class LoopFiles:
             rests[bead] = until
             JsonStore(self.cfg.loop_rest(self.key), Rest).write(Rest(beads=rests))
 
-    def log_line(self, row: dict[str, object]) -> None:
-        append_line(self.cfg.loop_log(self.key), json.dumps(row, ensure_ascii=False))
+    def log(self) -> LoopLog:
+        return LoopLog(self.cfg, self.key)
 
-    def log_rows(self, last: int) -> list[dict[str, object]]:
-        try:
-            lines = self.cfg.loop_log(self.key).read_text(encoding="utf-8").splitlines()[-last:]
-        except OSError:
-            return []
-        rows: list[dict[str, object]] = []
-        for ln in lines:
-            with contextlib.suppress(ValueError):
-                row = json.loads(ln)
-                if isinstance(row, dict):
-                    rows.append(row)
-        return rows
+    def log_line(self, row: LoopLogLine) -> None:
+        self.log().append(row)
+
+    def log_rows(self, last: int) -> Page[LoopLogLine]:
+        """The last `last` lines of the loop's log; a line that is not this version's is skipped and counted (Page.skipped)."""
+        return self.log().tail(last)
 
     def write_exit(self, rec: dict[str, object]) -> None:
         append_line(self.runs() / "exits.jsonl", json.dumps(rec))

@@ -24,6 +24,7 @@ from taskloop.contracts.bead import Bead
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.loop import LoopState, QueueRow
 from taskloop.contracts.ports import BdFailure, BeadQuery
+from taskloop.contracts.run import LoopLogLine
 from taskloop.contracts.slots import SlotFail
 
 SKIPPED_KEPT = 100
@@ -328,10 +329,10 @@ class Loop(Core):
 
     def record(self, bead: str, slot: str, v: vd.Verdict) -> None:
         env = self.env
-        self.files.log_line({"ts": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(env.now())), "bead": bead, "slot": slot,
-                             "outcome": v.outcome.value, "minutes": v.minutes if v.minutes is not None else 0, "rounds": v.rounds,
-                             "tests_added": v.tests_added, "asked": v.asked, "trace": v.run, "engine_log": v.log,
-                             "run_log": v.run_log, "why": v.why[:300]})
+        self.files.log_line(LoopLogLine(
+            ts=time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(env.now())), bead=BeadId(bead), slot=slot, outcome=v.outcome,
+            minutes=v.minutes or 0.0, rounds=v.rounds or 0, tests_added=v.tests_added or 0, asked=v.asked, trace=v.run or "",
+            engine_log=v.log or "", run_log=v.run_log, why=v.why[:300]))
         self.say(f"{bead} {v.outcome}{': ' + v.why[:160] if v.why else ''}")
 
     def maybe_move(self) -> None:

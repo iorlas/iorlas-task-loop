@@ -15,15 +15,17 @@ import support.paths  # noqa: E402, F401
 from jsonl_log import JsonlLog  # noqa: E402
 from support.dashes import make_dash  # noqa: E402
 from support.logs import typed  # noqa: E402
+from support.narrow import must  # noqa: E402
 
 from taskloop.app.report import card  # noqa: E402
 from taskloop.app.run import layout  # noqa: E402
 from taskloop.app.slots.lease import Lease  # noqa: E402
 from taskloop.contracts import log as rec  # noqa: E402
 from taskloop.contracts.enums import Outcome  # noqa: E402
-from taskloop.contracts.ids import BeadId  # noqa: E402
+from taskloop.contracts.ids import BeadId, RunId  # noqa: E402
 from taskloop.contracts.paths import ConfigDir  # noqa: E402
 from taskloop.contracts.runlife import BEAT_EVERY, CRASHED_AFTER, RETAIN, Liveness, liveness  # noqa: E402
+from taskloop.contracts.trace import RunTrace  # noqa: E402
 from taskloop.domain.report import matchers  # noqa: E402
 from taskloop_dash import jsonl  # noqa: E402
 from taskloop_dash.api import live as live_api  # noqa: E402
@@ -95,7 +97,9 @@ class Crash(unittest.TestCase):
         return self.dash.live.page(BEAD)[1]["state"]
 
     def report_crashes(self) -> list[str]:
-        trace = [{"bead": BEAD, "run": "other", "worktree": "", "repo": ""}]  # makes the bead's prefix one the report knows
+        run = must(RunId.of(f"{BEAD}-20200101-000000"))
+        trace = [RunTrace(run=run, bead=BEAD, repo_url="", worktree="", branch="", coordinator_session="",
+                          started=0.0, ended=0.0, outcome=Outcome.FAILED, why="", sha="")]  # makes the bead's prefix one the report knows
         at = matchers.stem_time(STAMP)  # a run belongs to the window its name's stamp is in
         found = card.crashes("/no/repo", at - 3600, at + 3600, trace, now=self.now)
         return [c["run"] for c in found]

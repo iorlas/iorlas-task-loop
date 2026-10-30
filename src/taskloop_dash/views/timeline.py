@@ -214,16 +214,23 @@ def exit_move(n: Json, nxt: Json | None) -> Json | None:
     }
 
 
+def end_word(word: str, status: str, t: object, text: str) -> Json:
+    """A run's end that has no close to read (still going, gone without one, or one this version cannot read)."""
+    end: Json = {"status": status, "cause": word, "t": t, "text": text}
+    end["outcome"] = word
+    return end
+
+
 def run_end(nodes: list[Json], pending: Json | None, alive: bool) -> Json:
     close = next((n for n in reversed(nodes) if n["step"] == "close"), None)
     if not close:
         t = nodes[-1]["t1"] if nodes else None
         if alive:
-            return {"outcome": "running", "status": "run", "cause": "running", "text": "running", "t": t}
-        return {"outcome": "stopped", "status": "fail", "cause": "stopped", "t": t, "text": "stopped: the run ended without a close record"}
+            return end_word("running", "run", t, "running")
+        return end_word("stopped", "fail", t, "stopped: the run ended without a close record")
     ended: Ended | None = close["close"]
     if ended is None:
-        return {"outcome": "unreadable", "status": "fail", "cause": "unreadable", "t": close["t0"], "text": "the close record is not one this version reads"}
+        return end_word("unreadable", "fail", close["t0"], "the close record is not one this version reads")
     why = ended.why
     mv = pending or {}
     cause = arrows.close_move(ended)[1]
