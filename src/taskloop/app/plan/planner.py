@@ -43,11 +43,10 @@ class Planner:
         if p.any():  # asked once to rewrite them, like an invalid answer; not a counted re-plan
             why = self.sendback.text(p)
             e.steps.outcome("sent back", "it has no stages" if p.empty else
-                            "its checks read the tracker, run gate-only commands or cannot run, or it leaves existing files unanchored")
+                            "checks read the tracker, rerun a registered check, run gate-only commands or cannot run; files lack anchors")
             e.steps.move(step, "plan_sent_back", p.moved())
             data = self.sendback.rewrite(data, prompt, step, why)
             self.sendback.after_rewrite(data)
-        self.sendback.warn_reruns(data)
         return data
 
     def fits(self, data: dict[str, Any]) -> bool:

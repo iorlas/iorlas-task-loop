@@ -46,7 +46,7 @@ class SendBack:
         """The problems of a first answer."""
         e = self.e
         dry = lint.dry_check(data, e.shell_probe())
-        dry += (lint.ledger_problems(data) + lint.own_timeout_problems(data, e.cfg.check_wall_min) + lint.unity_problems(data, e.cfg)
+        dry += (lint.ledger_problems(data) + lint.own_timeout_problems(data, e.cfg.check_wall_min) + lint.rerun_problems(data, e.cfg)
                 + lint.producer_problems(data, e.cfg) + lint.evidence_problems(data, str(e.evidence_dir)))
         # tl-wjj: no stages, no question and nothing to file breaks the plan contract: back once. With leftovers it is the
         # finished-work plan (tl-bxk.13.2); with the owner's verify answer it may be empty.
@@ -109,10 +109,6 @@ class SendBack:
         if gated:
             raise e.blocked_for("failed: the plan's checks still run gate-only commands after one rewrite: "
                                 + "; ".join(f"{c} ({w})" for c, w in gated)[:400], "FAULT_PLAN")
-        dry = lint.dry_check(data, e.shell_probe())
+        dry = lint.dry_check(data, e.shell_probe()) + lint.rerun_problems(data, e.cfg)
         if dry:
             e.warn("the plan's checks may still not run after one rewrite: " + "; ".join(dry)[:300])
-
-    def warn_reruns(self, data: dict[str, Any]) -> None:
-        for c, i in lint.rerun_checks(data, self.e.cfg):  # still runs as written: a send-back costs a re-plan
-            self.e.warn(f"`{c[:100]}` re-runs {i}; the engine reuses the result of the same command, a different one runs again")

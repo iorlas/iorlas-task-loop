@@ -52,16 +52,18 @@ class EnginePlanTest(EngineTest):
         cfg = cfg_with(checks=[{"id": "unity-tests", "cmd": "just unity-tests", "group": "tests"}])
         plan = dict(PLAN, risks=[{"what": "x", "check": "env CI=1 just unity-tests"},
                                  {"what": "y", "check": "just unity-tests-extra"}])
-        self.assertEqual([i for _, i in lint.rerun_checks(plan, cfg)], ["unity-tests"])
+        got = lint.rerun_problems(plan, cfg)
+        self.assertEqual(len(got), 1)
+        self.assertIn("`unity-tests`", got[0])
         self.assertEqual(log_var("unity-tests"), "TL_CHECK_LOG_UNITY_TESTS")
 
     def test_a_plan_with_just_unity_in_acceptance_is_sent_back_once(self):
         bad = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=["just unity-tests"])])
-        procsim.fake("pass-check", procsim.exits(0))
+        procsim.fake("just unity-tests", procsim.exits(0))
         _rc, s = self.run_engine({"plan": [bad, PLAN], "write": [WRITE], "review": [CLEAN]},
-                                checks=[{"id": "unity-tests", "cmd": "pass-check", "group": "tests"}])
+                                checks=[{"id": "unity-tests", "cmd": "just unity-tests", "group": "tests"}])
         self.assertEqual([c[0] for c in s.calls], ["planner", "planner", "worker", "reviewer"])
-        self.assertIn("runs `just unity-tests`", s.prompts[1])
+        self.assertIn("runs the registered check `unity-tests`", s.prompts[1])
 
     def test_a_worker_edit_to_the_plan_file_is_undone_before_the_next_step(self):
         real = fake_route.Script.reply

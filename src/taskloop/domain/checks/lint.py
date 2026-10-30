@@ -42,14 +42,18 @@ def gate_only(cfg: EngineConfig) -> list[tuple[str, str]]:
     return [(norm(c), why) for c, why in out if c.strip()]
 
 
-def rerun_checks(plan: Plan, cfg: EngineConfig) -> list[tuple[str, str]]:
-    """[(check, id)]: the plan's checks that contain a configured check's command as a run of whole words."""
-    out: list[tuple[str, str]] = []
+def rerun_problems(plan: Plan, cfg: EngineConfig) -> list[str]:
+    """[why] for a plan check whose command line runs a registered check again, anywhere in an `&&`/`;`/`|` chain or a shell string
+    (lifesim: `mkdir -p x && just unity-tests > x/out && grep -q passed x/out` ran the suite 117 extra times). The round already ran
+    the registered check; its log is there to read."""
+    out = []
     for c in plan_checks(plan):
-        for k in cfg.stage_checks:
-            if sh.contains_argv(argv_of(c), k.argv):
-                out.append((c, k.id))
-                break
+        hit = next((k for k in cfg.stage_checks if sh.runs_again(argv_of(c), k.argv, JUST_PLAIN_FLAGS)), None)
+        if hit:
+            out.append(f"`{clip(c, 120)}`: runs the registered check `{hit.id}` (`{hit.cmd}`) again; the engine already runs it this round "
+                       f"on this tree: assert on its saved log instead, with a script that reads ${log_var(hit.id)} (its exit code is "
+                       f"${rc_var(hit.id)}) and the variable's name in the argv, e.g. "
+                       f'["python3", "tools/assert_log.py", "{log_var(hit.id)}", "passed"]; never run it from a check')
     return out
 
 
@@ -75,27 +79,6 @@ def own_timeout_problems(plan: Plan, cap_min: float) -> list[str]:
                            f"check limit of {float(cap_min):g} min, so the engine kills it at the limit every round: lower the limit, or "
                            "split the work into checks that each finish inside it")
                 break
-    return out
-
-
-def repo_check_of(cmd: str, cfg: EngineConfig) -> str | None:
-    """The id of the configured check a plan check is, or None."""
-    want = norm(cmd)
-    return next((k.id for k in cfg.stage_checks if norm(k.cmd) == want), None)
-
-
-def unity_problems(plan: Plan, cfg: EngineConfig) -> list[str]:
-    """[why] for a plan check that runs a `just unity-*` recipe. The repo's checks run it once per round; an acceptance copy launches
-    Unity again (lifesim-22b3 r4, yxbb.3: 200 to 540 s each) or, as a wrapper, reads the repo check's log at best."""
-    out = []
-    for c in plan_checks(plan):
-        recipe = sh.just_recipe(argv_of(c), JUST_PLAIN_FLAGS)
-        if not recipe.startswith("unity-"):
-            continue
-        rid = repo_check_of(c, cfg) or next((k.id for k in cfg.stage_checks if k.cmd.split()[-1:] == [recipe]), None)
-        use = (f"the repo check `{rid}` already runs it: read ${log_var(rid)} and ${rc_var(rid)}"
-               if rid else "it is a Unity run the repo's checks own: do not launch it from acceptance")
-        out.append(f"`{clip(c, 120)}`: runs `just {recipe}`; {use}")
     return out
 
 

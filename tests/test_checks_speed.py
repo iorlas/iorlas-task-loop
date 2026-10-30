@@ -414,19 +414,16 @@ class Schedule(SpeedTest):
             self.assertFalse([c for c in launched if "unity" in c], bad)
             self.assertEqual([c.id for c in res if c.status == "failed"], [bad])
 
-    def test_the_plan_validator_rejects_unity_recipes_in_acceptance_and_a_limit_above_the_cap(self):
+    def test_the_plan_validator_rejects_a_registered_recipe_in_acceptance_and_a_limit_above_the_cap(self):
         cfg = cfg_with(checks=self.REPO)
         plan = dict(te.PLAN, stages=[dict(te.PLAN["stages"][0], checks=[
             "just unity-tests", "env CI=1 just unity-play-tests", "echo 'just unity-tests'", "just unity-foo", "just fmt"])])
-        got = lint.unity_problems(plan, cfg)
-        self.assertEqual(len(got), 3)
+        got = lint.rerun_problems(plan, cfg)
+        self.assertEqual(len(got), 2)
         self.assertIn("TL_CHECK_LOG_UNITY_TESTS", got[0])
         self.assertIn("TL_CHECK_LOG_UNITY_PLAY_TESTS", got[1])
-        self.assertIn("do not launch it from acceptance", got[2])
         over = dict(te.PLAN, stages=[dict(te.PLAN["stages"][0], checks=["just play --timeout_ms 7200000"])])
         self.assertEqual(len(lint.own_timeout_problems(over, 60)), 1)
-        self.assertEqual(lint.repo_check_of("just unity-tests", cfg), "unity-tests")
-        self.assertIsNone(lint.repo_check_of("just unity-tests foo", cfg))
 
 
 class WallLimit(SpeedTest):

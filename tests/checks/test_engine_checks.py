@@ -267,8 +267,9 @@ class EngineChecksTest(EngineTest):
         # tl-7y6.6.12: the stage's checks and the where() text both listed "You may run these"
         cmd = procsim.fake("print-1", procsim.exits(0, "1"))
         plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[cmd, HAS_F])])
-        rc, s = self.run_engine({"plan": [plan], "write": [WRITE], "review": [CLEAN]},
-                                raw={"checks": [{"id": "x", "cmd": cmd, "group": "static"}, {"id": "y", "cmd": "echo only-repo"}]})
+        with mock.patch.object(lint, "rerun_problems", return_value=[]):  # the prompt's lists are the point, not the plan lint
+            rc, s = self.run_engine({"plan": [plan], "write": [WRITE], "review": [CLEAN]},
+                                    raw={"checks": [{"id": "x", "cmd": cmd, "group": "static"}, {"id": "y", "cmd": "echo only-repo"}]})
         self.assertEqual(rc, 0, self.blocked)
         w = next(p for (c, p) in zip(s.calls, s.prompts, strict=False) if c[0] == "worker")
         may = w[w.index("The stage's checks"):w.index("A check that mentions")]
