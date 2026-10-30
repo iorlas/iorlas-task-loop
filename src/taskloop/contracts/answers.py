@@ -318,6 +318,13 @@ def check(node: str, visual: bool, data: Any) -> list[str]:
     return []
 
 
+def sent_errors(node: str, visual: bool, data: object, said: str = "") -> list[str]:
+    """`check` on the data of an answer as the node's sent (strict) schema returned it; None data is no answer."""
+    if data is None:
+        return [f"no structured output: {said[:300]}"]
+    return check(node, visual, schema.unstrict(data, schema_for(node, visual)))
+
+
 def _reason(rec: type[Rec], error: str) -> str:
     """One validation error as `Record.path: what is wrong`; a command that is not an argv array also gets the form."""
     what, _, where = error.partition(" - at `$")

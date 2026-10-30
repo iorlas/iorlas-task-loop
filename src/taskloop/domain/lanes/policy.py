@@ -82,6 +82,16 @@ def stop_of(res: DelegateResult) -> Stop | None:
     )
 
 
+NETWORK: Final = ("machine", "transient", "poll")
+
+
+def net_data(res: DelegateResult) -> bool:
+    """A network stop that saw work and carries data: the worker may have finished before the connection broke. Data that passes the
+    node's schema is the answer (done), data that does not is kept for `attach`."""
+    st = res.stop
+    return st is not None and st.partial and res.data is not None and (st.scope, st.permanence, st.retry.kind) == NETWORK
+
+
 @dataclass(frozen=True)
 class Ctx:
     """What the executor has counted for this step. now: the Clock's wall time."""
@@ -97,6 +107,7 @@ class Ctx:
     denied_retried: bool = False
     secret_fp: bool = False  # the denial was `secrets` on a heredoc body that names .env (denials.secret_false_positive)
     node: str = ""
+    resume_refused: int = 0  # resumed calls the vendor refused, each answered with one new thread
 
 
 @dataclass(frozen=True)
@@ -207,6 +218,14 @@ def _machine_owner(stop: Stop, ctx: Ctx, cfg: Knobs, plan: RetryPlan) -> Action:
     return _yield("PAUSE_LANE", stop)
 
 
+def _caller_owner(stop: Stop, ctx: Ctx, cfg: Knobs, plan: RetryPlan) -> Action:
+    """bad_request, caller (an unknown ref): the call itself is wrong. When it resumed a thread, the vendor may have refused that ref:
+    once on a new thread with the whole prompt, then the fault."""
+    if ctx.resumed and plan.left("resume_refused", ctx.resume_refused):
+        return NewThread("", "resume_refused", "resume_refused")
+    return _caller(stop, ctx, cfg, plan)
+
+
 def _caller(stop: Stop, ctx: Ctx, cfg: Knobs, plan: RetryPlan) -> Action:
     return _fail("FAULT_BAD_REQUEST", stop)
 
@@ -280,7 +299,7 @@ TABLE: Final[dict[tuple[str, str, str], Callable[[Stop, Ctx, Knobs, RetryPlan], 
     ("machine", "transient", "predicted"): _machine_predicted,
     ("machine", "transient", "none"): _machine_none,
     ("machine", "needs_owner", "none"): _machine_owner,
-    ("caller", "needs_owner", "none"): _caller,
+    ("caller", "needs_owner", "none"): _caller_owner,
     ("caller", "transient", "none"): _caller,  # no doc row: a caller's request does not heal by waiting
     ("caller", "transient", "predicted"): _caller,  # no doc row
     ("caller", "transient", "poll"): _caller,  # no doc row

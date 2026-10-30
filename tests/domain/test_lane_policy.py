@@ -155,6 +155,13 @@ class Incidents(unittest.TestCase):
         self.assertEqual((type(a), kind_of(a), out(a).rule.makes_ask), (lp.Fail, Kind.FAULT_BAD_REQUEST, False))
         self.assertTrue(out(a).fingerprint.startswith("FAULT_BAD_REQUEST"))
 
+    def test_a_refused_resume_is_one_new_thread_and_a_second_refusal_is_the_fault(self):
+        for reason in ("bad_request", "caller"):
+            s = stop("caller", "needs_owner", "none", reason=reason)
+            self.assertEqual(lp.decide(s, ctx(resumed=True)), lp.NewThread("", "resume_refused", "resume_refused"))
+            self.assertEqual(kind_of(lp.decide(s, ctx(resumed=True, resume_refused=1))), Kind.FAULT_BAD_REQUEST)
+            self.assertEqual(kind_of(lp.decide(s, ctx())), Kind.FAULT_BAD_REQUEST)  # a call that resumed nothing has nothing to drop
+
     def test_hung_reroutes_away_from_the_model_then_pauses(self):
         s = stop("model", "transient", "none", model="grok-4", lane="GROK")
         self.assertEqual(lp.decide(s, ctx()), lp.Reroute("grok-4"))

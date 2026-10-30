@@ -144,6 +144,62 @@ class EveryStepResumes(NetBase):
         self.assertFalse([c for c in self.bd_calls if c[:2] == ("label", "add")])
 
 
+class TwoDrops(NetBase):
+    def test_two_drops_then_success_is_one_step_in_one_thread_and_charges_nothing(self):
+        answers = {"plan": [PLAN], "write": [drop("net-write"), drop("net-write"), WRITE], "review": [CLEAN]}
+        rc, s = self.run_engine(answers, probe=Flapping())
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual(self.thread_of(s, "write"), [None, "net-write", "net-write"])  # the ref the first drop named, on both resumes
+        ends = [r for r in self.log() if r.get("kind") == "step_end" and r.get("step") == "write"]
+        self.assertEqual(len(ends), 1)
+        self.assertEqual(self.causes().count("network_wait"), 2)
+        self.assert_no_charge()
+
+
+class FinishedOutput(NetBase):
+    """tl-7y6.2.13: the transport failed after the worker had finished. Its answer is the answer: not discarded, not asked again."""
+
+    def test_a_drop_that_carries_finished_data_is_the_answer_and_the_step_is_not_redone(self):
+        def cut_after_writing(script, node, cwd, resume):
+            Path(cwd, "f.txt").write_text("d\n")  # the worker finished its file, then the connection broke
+            return drop("net-write", data=WRITE)
+
+        answers = {"plan": [PLAN], "write": [cut_after_writing], "review": [CLEAN]}
+        rc, s = self.run_engine(answers, probe=Cycling(2))
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual(Counter(s.nodes), Counter({"plan": 1, "write": 1, "review": 1}))  # the write is not a redo
+        self.assertTrue(list(self.eng.run_dir.glob("write-*.json")))
+        self.assertEqual(self.eng.result().outcome, "landed")
+        self.assert_no_charge()
+
+    def test_a_drop_with_no_valid_data_is_still_resumed(self):
+        answers = {"plan": [PLAN], "write": [drop("net-write", data={"bogus": 1}), WRITE], "review": [CLEAN]}
+        rc, s = self.run_engine(answers, probe=Cycling(2))
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual(self.thread_of(s, "write"), [None, "net-write"])
+        self.assert_no_charge()
+
+
+class ResumeRefused(NetBase):
+    """The vendor rejects the ref a call resumes: one new thread with the whole prompt, once."""
+
+    def test_a_refused_resume_becomes_one_new_thread(self):
+        answers = {"plan": [PLAN], "write": [drop("net-write"), stop("bad_request"), WRITE], "review": [CLEAN]}
+        rc, s = self.run_engine(answers, probe=Cycling(2))
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual(self.thread_of(s, "write"), [None, "net-write", None])
+        first, _, third = (s.prompts[i] for i, n in enumerate(s.nodes) if n == "write")
+        self.assertTrue(third.startswith(first))  # the whole brief again, no transcript seeding
+        self.assertEqual(self.eng.result().outcome, "landed")
+
+    def test_a_second_refusal_is_the_fault_not_a_loop(self):
+        answers = {"plan": [PLAN], "write": [drop("net-write"), stop("bad_request"), stop("bad_request"), WRITE], "review": [CLEAN]}
+        rc, s = self.run_engine(answers, probe=Cycling(2))
+        self.assertEqual(rc, 2)
+        self.assertEqual(self.thread_of(s, "write"), [None, "net-write", None])
+        self.assertEqual(self.eng.result().kind, Kind.FAULT_BAD_REQUEST.value)
+
+
 class Checks(NetBase):
     """The checks that already passed are not run again by the run that goes on after a network pause."""
 

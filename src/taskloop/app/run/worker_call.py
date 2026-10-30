@@ -21,7 +21,6 @@ from taskloop.app.run.lane_acts import LaneActs
 from taskloop.contracts import answers
 from taskloop.contracts import log as rec
 from taskloop.contracts.delegate import REASON_OVERRUN, DelegateResult, RunRequest, StopFacts
-from taskloop.contracts.schema import unstrict
 from taskloop.domain.checks import planref
 from taskloop.domain.lanes import policy as lp
 from taskloop.domain.lanes.denials import command_of, secret_false_positive
@@ -72,6 +71,7 @@ class Call:
             "attempt": 0,
             "polls": 0,
             "crashes": 0,
+            "resume_refused": 0,
             "waited_lane_s": 0.0,
             "waited_net_s": 0.0,
         }  # Ctx's counters
@@ -118,7 +118,7 @@ class WorkerCall:
             ans = c.finished or self.call_once(c)
             c.finished = None
             res = ans.res
-            stop = lp.stop_of(res)
+            stop = None if lp.net_data(res) and not answers.sent_errors(c.node, c.visual, res.data, res.say) else lp.stop_of(res)
             c.secret_fp = secret_false_positive(res.denied)
             if stop is not None:
                 if (
@@ -337,7 +337,7 @@ class WorkerCall:
             else:
                 c.state.ref = ""
                 c.state.save()
-        else:
+        if res.stop is None or lp.net_data(res):  # a network stop with data: finished output is never thrown away
             c.state.returned(ans.raw, e.run_dir / f"{c.node}-{e.stats['nodes']}.raw.json", e.clock.now())
 
     def log_kill(self, c: Call, runner: Any, exc: BaseException | None = None, survivors: list[int] | None = None) -> None:
@@ -368,8 +368,7 @@ class WorkerCall:
             e.writer.delegate = c.resume = res.ref
             e.writer.ctx = (e.sessions[-1] if e.sessions else {}).get("context_k")  # k tokens, None = unknown
             e.writer.seen = e.hand.seen_now()  # the brief and plan this session now holds
-        data = unstrict(res.data, answers.schema_for(c.node, c.visual)) if res.data is not None else None
-        return answers.check(c.node, c.visual, data) if data is not None else [f"no structured output: {(res.say or res.text)[:300]}"]
+        return answers.sent_errors(c.node, c.visual, res.data, res.say or res.text)
 
     def refused(self, c: Call, res: DelegateResult, denied: list[Any], errs: Any = True) -> bool:
         """The guard refused commands during this step. -> True when the step goes again on a fresh thread (it refused only reads)."""

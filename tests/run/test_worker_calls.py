@@ -1,4 +1,4 @@
-"""tl-ixc: the engine's worker call under the RetryPlan: its six rows, a reviewer's wall-time budget (Overrun), busy answers that cost
+"""tl-ixc: the engine's worker call under the RetryPlan: its seven rows, a reviewer's wall-time budget (Overrun), busy answers that cost
 at most three sleeps, a write that timed out or ended by SIGTERM (a RetryDecision with the timeout and the exit), and the `exit` in
 CallEnd. The policy's own tables are in test_lane_policy; the live file and the stop are in test_write_idle and test_procs."""
 
@@ -30,7 +30,7 @@ def napper(nap):
 
 
 class RetryRows(unittest.TestCase):
-    def test_six_kinds_and_every_limit_is_one_row(self):
+    def test_seven_kinds_and_every_limit_is_one_row(self):
         got = {r.kind: (r.limit, r.then) for r in retry.ROWS}
         self.assertEqual(
             got,
@@ -39,6 +39,7 @@ class RetryRows(unittest.TestCase):
                 "denied_read": (1, "fault"),
                 "denied_secret": (1, "fault"),
                 "lane_poll": (3, "reroute"),
+                "resume_refused": (1, "fault"),
                 "crash": (2, "fault"),
                 "worker_failed": (1, "ask"),
             },

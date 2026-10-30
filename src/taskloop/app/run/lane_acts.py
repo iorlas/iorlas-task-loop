@@ -75,6 +75,7 @@ class LaneActs:
             c.denied_retried,
             c.secret_fp,
             c.node,
+            resume_refused=int(k["resume_refused"]),
         )
 
     # -- the decision
