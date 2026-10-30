@@ -174,6 +174,13 @@ class GateOutsideLock(unittest.TestCase):
         self.assertTrue(all(p[3] and p[0] == p[1] for p in w.pushed))
         self.assertEqual(len(w.pushed), 2)
 
+    def test_tl_dnw_tl_pg0_a_rejected_push_with_main_unmoved_retries_in_the_same_lock_without_gating_again(self):
+        w = World(["b0", "b0", "b0", "b0"], [REJECTED, PUSHED])
+        w.land()
+        self.assertEqual(w.gated, ["b0"])  # the same tree and base: the memo answers, the gate is not run again
+        self.assertEqual((w.events.count("enter"), w.events.count("exit")), (1, 1))
+        self.assertEqual(len(w.pushed), 2)
+
     def test_a_red_gate_outside_goes_to_a_fix_round_without_ever_taking_the_lock(self):
         w = World(["b0", "b0", "b0"], [PUSHED], reds=1)
         w.land()

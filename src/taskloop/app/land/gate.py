@@ -4,25 +4,57 @@ this tree and base is skipped and logged as cached, each step has its own start 
 gate is nothing but its steps' green results in the per-check cache: the same tree is not gated twice (a push rejected and tried again, a
 re-land after the network came back)."""
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from enum import Enum, StrEnum
 from types import MappingProxyType
-from typing import Any
+from typing import Any, final
 
 from taskloop.app.checks import evidence
 from taskloop.app.checks.host import CheckFault
 from taskloop.app.land import verified
 from taskloop.contracts import log as rec
 from taskloop.contracts.checks import CheckFaultKind
+from taskloop.contracts.ids import TreeSha
+from taskloop.contracts.runkey import BaseSha
 from taskloop.domain.checks.specs import gate_items
 
 FAULTS = MappingProxyType({CheckFaultKind.STALE_BASE: "FAULT_STALE_BASE", CheckFaultKind.KILLED: "PAUSE_KILLED"})
 
 
+class ProblemKind(StrEnum):
+    GATE = "gate"
+    CONFLICT = "conflict"
+    VERIFY = "verify"
+    STALE = "stale"  # main (or the tree) moved under the gate: no fix round, the lock is let go and the gate runs again
+
+
+class _Seal(Enum):
+    """The key to GatePass's constructor: only `mint` (below, in this module) holds it, so pyrefly refuses a GatePass built anywhere else
+    (and tests/rules/test_gatepass_rule.py refuses the seal named anywhere else)."""
+
+    ISSUED = 1
+
+
+@final
+@dataclass(frozen=True)
+class GatePass:
+    """The gate's word that `tree` passed on `base`: the push takes one and pushes only that tree on that base. Only the gate makes one."""
+
+    tree: TreeSha
+    base: BaseSha
+    seal: _Seal = field(kw_only=True, repr=False, compare=False)
+
+
+def mint(tree: TreeSha, base: BaseSha) -> GatePass:
+    """The one factory of GatePass. Called by Gate (after its steps are green in the memo, or when the repo has no gate) and by tests."""
+    return GatePass(tree, base, seal=_Seal.ISSUED)
+
+
 @dataclass(frozen=True)
 class Problem:
-    """Why a try of the land did not push: `kind` is gate, conflict or verify; `text` goes to the fix round; `named`: a gate's red steps."""
+    """Why a try of the land did not push: `kind`; `text` goes to the fix round; `named`: a gate's red steps."""
 
-    kind: str
+    kind: ProblemKind
     text: str
     named: str = ""
 
@@ -35,8 +67,19 @@ class Gate:
         """The gate already passed on exactly this tree (and base): every step is green in the cache or not due."""
         return bool(self.e.checker.gate_green())
 
-    def run(self) -> Problem | None:
-        """-> None when the gate passed (or already had on this tree), else the problem for a fix round."""
+    def passed(self) -> GatePass | None:
+        """A pass for the tree and base in the worktree now: the gate is green in the memo, or the repo has no gate. Else None."""
+        e = self.e
+        if e.cfg.gate_checks and not self.green():
+            return None
+        return self.issue()
+
+    def issue(self) -> GatePass:
+        e = self.e
+        return mint(TreeSha(e.git("rev-parse", "HEAD^{tree}")), BaseSha(e.git("rev-parse", e.cfg.base)))
+
+    def run(self) -> GatePass | Problem:
+        """-> the pass when the gate passed (or already had on this tree), else the problem for a fix round."""
         e = self.e
         e.gate_log = None
         tree = e.git("rev-parse", "HEAD^{tree}")
@@ -58,8 +101,8 @@ class Gate:
             e.log.note(f"gate skipped: every step already passed on tree {tree[:12]}")
         e.log.emit(rec.GateEnd(exit=1 if reds else 0, secs=round(time.time() - started), skipped=skipped))
         if not reds:
-            return None
+            return self.issue()
         e.gate_log = e.run_dir / reds[0].log if reds[0].log else None
         names = ", ".join(c.id for c in reds)
         e.steps.outcome("gate red", names)
-        return Problem("gate", f"gate steps red: {names}\n" + evidence.failure_brief(reds, e.run_dir), names)
+        return Problem(ProblemKind.GATE, f"gate steps red: {names}\n" + evidence.failure_brief(reds, e.run_dir), names)

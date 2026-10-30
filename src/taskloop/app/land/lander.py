@@ -4,11 +4,12 @@ tries are used up, and the push. A red gate, a conflict or red checks are fixed 
 times); a network error rests until the network is back. The pushed tree is always one the gate passed on the same base."""
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
+from enum import Enum
 from typing import Any
 
 from taskloop.app.checks import evidence as check_evidence
 from taskloop.app.land import verified
-from taskloop.app.land.gate import Gate, Problem
+from taskloop.app.land.gate import Gate, GatePass, Problem, ProblemKind
 from taskloop.app.land.outbound import Outbound, land_argv, pin_head
 from taskloop.contracts import fence
 from taskloop.contracts import log as rec
@@ -19,15 +20,39 @@ from taskloop.domain.lanes import policy as lp
 PUSH_UP_FAILS = 3  # network errors on the push while the probe says the network is up: not the network's to cure (a proxy, DNS)
 PUSH_TRIES = 3  # a push rejected because main moved is tried again this often
 
+class Phase(Enum):
+    """Where the land stands between its tries (one state, not two flags)."""
+
+    FRESH = "fresh"
+    STEP_OPEN = "step open"  # the outside gate's land step is still open: the lock's first try goes on in it
+    NET_DOWN = "net down"  # the last push died of the network: look again before pushing
+
+
+class Placing(Enum):
+    """Where the gate runs for the push in the lock."""
+
+    NO_GATE = ""
+    CACHED = "cached"  # it passed on this tree and base
+    STALE = "stale"  # main moved under the outside gate: let the lock go, gate outside again
+    INSIDE = "inside"  # the tries are used up: gate here, as a busy main must not starve a bead
+    OUTSIDE = "outside"
+
+
+class Next(Enum):
+    """What a push that did not land asks of the land."""
+
+    AGAIN = "again"  # rejected: main moved, try again in this lock
+    REST = "rest"  # a network error: rest first
+
+
 @dataclass
 class Land:
     """What survives from one try of the land to the next."""
 
     pushes: int = 0  # rejected pushes so far
     flaky: int = 0  # network errors on the push while the network looked up
-    net_failed: bool = False  # the last push died of the network: look again before pushing
+    phase: Phase = Phase.FRESH
     moved: int = 0  # times the lock was let go because main moved under the gate: the gate runs outside again (land_optimistic_tries)
-    open_step: bool = False  # the outside gate's land step is still open: the lock's first try goes on in it
 
 
 class Lander:
@@ -129,14 +154,14 @@ class Lander:
                 return sha
             if problem is None:
                 resting = True
-            elif problem.kind != "stale":  # stale: main moved under the gate, the lock is let go and the gate runs outside again
+            elif problem.kind is not ProblemKind.STALE:  # stale: main moved under the gate: the lock is let go, the gate runs outside
                 self.fix_outside_lock(problem)
 
     def optimistic(self, st: Land) -> bool:
         """The gate runs before the lock: there is a gate, tries are allowed, and no push may have gone through unseen."""
         e = self.e
         tries = int(e.cfg.land_optimistic_tries)
-        return bool(e.cfg.gate_checks) and tries > 0 and st.moved <= tries and not st.net_failed
+        return bool(e.cfg.gate_checks) and tries > 0 and st.moved <= tries and st.phase is not Phase.NET_DOWN
 
     def outside(self, st: Land) -> Problem | None:
         """Without the lock: fetch, rebase, gate. -> the problem for a fix round, or None (the gate is cached for tree + base)."""
@@ -146,64 +171,87 @@ class Lander:
         before, head = e.git("rev-parse", e.cfg.base), e.git("rev-parse", "HEAD")
         rc, tail = e.checkout.fetch()
         problem = self.rebase(rc, tail)
-        where = ""
+        where = Placing.NO_GATE
         if problem is None:
-            where = "cached" if self.gate.green() else "outside"
-            problem = self.gate.run()
+            where = Placing.CACHED if self.gate.green() else Placing.OUTSIDE
+            got = self.gate.run()
+            problem = got if isinstance(got, Problem) else None
         self.emit(st, before, head, problem, where)
-        st.open_step = problem is None
+        st.phase = Phase.STEP_OPEN if problem is None else Phase.FRESH
         return problem
 
-    def emit(self, st: Land, before: str, head: str, problem: Problem | None, where: str) -> None:
+    def emit(self, st: Land, before: str, head: str, problem: Problem | None, where: Placing) -> None:
         e = self.e
         e.log.emit(rec.LandTry(n=st.pushes + 1, base_before=before[:12], base_after=e.git("rev-parse", e.cfg.base)[:12],
-                               rebase_moved=e.git("rev-parse", "HEAD") != head, failing=problem.kind if problem else "", gate=where))
+                               rebase_moved=e.git("rev-parse", "HEAD") != head, failing=problem.kind.value if problem else "",
+                               gate=where.value))
 
-    def placing(self, st: Land) -> str:
-        """Where the gate runs in the lock: "" no gate, "cached" it passed on this tree and base, "stale" main moved under the outside gate
-        (let the lock go, gate outside again), "inside" the tries are used up: gate here, as a busy main must not starve a bead."""
+    def placing(self, st: Land) -> Placing:
+        """Where the gate runs in the lock (see Placing)."""
         e = self.e
         if not e.cfg.gate_checks:
-            return ""
+            return Placing.NO_GATE
         if self.gate.green():
-            return "cached"
+            return Placing.CACHED
         if st.moved < int(e.cfg.land_optimistic_tries):
             st.moved += 1
-            return "stale"
-        return "inside"
+            return Placing.STALE
+        return Placing.INSIDE
 
     def tries(self, st: Land) -> tuple[str, Problem | None]:
         """Inside the lock: an initial push plus at most two main-moved retries. -> (sha, None) landed; ("", problem) to fix outside the
         lock; ("", None) a network error: rest first."""
         e = self.e
         while True:
-            if not st.open_step:
+            if st.phase is not Phase.STEP_OPEN:
                 e.steps.begin("land", f"land (try {st.pushes + 1})", **{"try": st.pushes + 1})
-            st.open_step = False
+            if st.phase is Phase.STEP_OPEN:
+                st.phase = Phase.FRESH
             e.newfiles.quarantine_strays()
             before, head = e.git("rev-parse", e.cfg.base), e.git("rev-parse", "HEAD")
             rc, tail = e.checkout.fetch()
-            if rc == 0 and (st.pushes or st.net_failed):
+            if rc == 0 and (st.pushes or st.phase is Phase.NET_DOWN):
                 found = self.already(fetch=False)  # an earlier push of this land may have gone through
                 if found:
                     return self.found(found), None
-                st.net_failed = False  # looked: not landed
+                st.phase = Phase.FRESH  # looked: not landed
             problem = self.rebase(rc, tail)
-            where = self.placing(st) if problem is None else ""
-            if where == "stale":
-                problem = Problem("stale", "")
+            where = self.placing(st) if problem is None else Placing.NO_GATE
+            if where is Placing.STALE:
+                problem = Problem(ProblemKind.STALE, "")
             if problem is None and st.pushes:
                 problem = self.recheck(st)
-            if problem is None and where == "cached":
-                e.log.note(f"gate passed outside the lock on this tree and base ({e.git('rev-parse', 'HEAD^{tree}')[:12]}): pushing")
-            elif problem is None and where:
-                problem = self.gate.run()
-            self.emit(st, before, head, problem, "" if where == "stale" else where)
-            if problem is not None:
+            gate_pass: GatePass | None = None
+            if problem is None:
+                gate_pass, problem = self.pass_for(where)
+            self.emit(st, before, head, problem, Placing.NO_GATE if where is Placing.STALE else where)
+            if gate_pass is None:
                 return "", problem
-            sha, again = self.push(st)
-            if sha or not again:
-                return sha, None
+            got = self.push(st, gate_pass)
+            if got is not Next.AGAIN:
+                return self.settled(st, got)
+
+    @staticmethod
+    def settled(st: Land, got: str | Problem | Next) -> tuple[str, Problem | None]:
+        """A push that did not ask for another try, as the tries' answer."""
+        if isinstance(got, Problem):  # the pass went stale before the push: nothing pushed, the lock is let go
+            st.moved += 1
+            return "", got
+        return ("", None) if isinstance(got, Next) else (got, None)
+
+    def pass_for(self, where: Placing) -> tuple[GatePass | None, Problem | None]:
+        """The pass the push will carry: the gate's own (cached or run inside the lock), or a vacuous one (no gate).
+        -> (pass, None) or (None, problem)."""
+        e = self.e
+        if where is Placing.INSIDE:
+            got = self.gate.run()
+            return (None, got) if isinstance(got, Problem) else (got, None)
+        gate_pass = self.gate.passed()
+        if gate_pass is None:  # it was green a moment ago and is not now: main or the tree moved
+            return None, Problem(ProblemKind.STALE, "")
+        if where is Placing.CACHED:
+            e.log.note(f"gate passed outside the lock on this tree and base ({gate_pass.tree[:12]}): pushing")
+        return gate_pass, None
 
     def rebase(self, fetched: int, tail: str) -> Problem | None:
         e = self.e
@@ -217,7 +265,7 @@ class Lander:
             e.sh(["git", "rebase", "--abort"], pin=True)
             raise e.blocked_for(f"failed: fetch or rebase onto {e.cfg.base} failed; branch kept\n{tail}", "FAULT_LAND")
         e.steps.outcome("conflict", ", ".join(unmerged.split()))
-        return Problem("conflict", "Conflicted files: {}\n{}".format(", ".join(unmerged.split()), tail))
+        return Problem(ProblemKind.CONFLICT, "Conflicted files: {}\n{}".format(", ".join(unmerged.split()), tail))
 
     def recheck(self, st: Land) -> Problem | None:
         """After a lost push race: revalidate the rebased inputs. Repo checks reuse their input cache; stage/case checks stay conservative
@@ -230,7 +278,7 @@ class Lander:
         results = e.stage_checks.stoppable({"checks": checks, "files": []}, "land retry")
         self.refuse_unverified(results)
         bad = results.failed
-        problem = Problem("verify", check_evidence.failure_brief(bad, e.run_dir)) if bad else None
+        problem = Problem(ProblemKind.VERIFY, check_evidence.failure_brief(bad, e.run_dir)) if bad else None
         self.park(problem.text if problem else "", "land-verify-red" if bad else "land")
         e.steps.begin("land", f"land (try {st.pushes + 1})", **{"try": st.pushes + 1})
         return problem
@@ -244,9 +292,14 @@ class Lander:
         if stop:
             raise e.blocked_for("failed: stopped (SIGTERM)", "PAUSE_KILLED")
 
-    def push(self, st: Land) -> tuple[str, bool]:
-        """-> (sha, _) landed; ("", True) rejected, try again; ("", False) a network error, rest first. Anything else raises."""
+    def push(self, st: Land, gate_pass: GatePass) -> str | Problem | Next:
+        """-> the sha landed; Next.AGAIN rejected, try again; Next.REST a network error, rest first; a stale Problem when the tree or the
+        base is no longer the one the pass is for (nothing is pushed). Anything else raises."""
         e = self.e
+        tree, base = e.git("rev-parse", "HEAD^{tree}"), e.git("rev-parse", e.cfg.base)
+        if (tree, base) != (gate_pass.tree, gate_pass.base):
+            now = f"{tree[:12]} on {base[:12]}"
+            return Problem(ProblemKind.STALE, f"the gate passed tree {gate_pass.tree[:12]} on {gate_pass.base[:12]}; now {now}")
         fence.check(e.store, e.claim)  # a run whose bead or slot was taken again pushes nothing (Fenced; RunOnce closes nothing)
         with e.stop_deferred() as stop:  # a push half done is no state to stop in: finish it, then stop
             lrc, ltail = self.out.lfs_push()  # the pushed ref's LFS objects first: the push must not point at objects origin lacks
@@ -261,21 +314,22 @@ class Lander:
             e.steps.outcome("landed", sha[:12])
             if stop:
                 e.warn("a stop came during the land: landed first, closing now")
-            return sha, False
+            return sha
         if stop:
             raise e.blocked_for("failed: stopped (SIGTERM)", "PAUSE_KILLED")
         if lrc or not Push.rejected(tail):
-            return "", self.not_rejected(st, tail, "git lfs push failed" if lrc else "land failed")
+            self.not_rejected(st, tail, "git lfs push failed" if lrc else "land failed")
+            return Next.REST
         st.pushes += 1
         e.steps.outcome("rejected", "main moved")
         if st.pushes >= PUSH_TRIES:
             raise e.blocked_for("land rejected 3 times: main moves too fast", "FAULT_LAND")
         e.warn(f"push rejected (main moved), try {st.pushes + 1} of {PUSH_TRIES}")
         e.steps.move("land", "push_race", f"push rejected (main moved): try {st.pushes + 1} of {PUSH_TRIES}")
-        return "", True
+        return Next.AGAIN
 
-    def not_rejected(self, st: Land, tail: str, what: str = "land failed") -> bool:
-        """A push that failed for another reason: a network error rests (-> False), anything else is a fault."""
+    def not_rejected(self, st: Land, tail: str, what: str = "land failed") -> None:
+        """A push that failed for another reason: a network error rests, anything else is a fault."""
         e = self.e
         if not Push.transient(tail):
             raise e.blocked_for(what + "\n" + tail, "FAULT_LAND")
@@ -284,26 +338,25 @@ class Lander:
         if st.flaky >= PUSH_UP_FAILS:
             raise e.blocked_for(f"paused: the land push failed {st.flaky} times with a network error while the network looks up; "
                                 f"the branch is kept and the next run lands it again: {tail.strip()[-200:]}", "PAUSE_NETWORK")
-        st.net_failed = True
+        st.phase = Phase.NET_DOWN
         e.warn(f"the push failed with a network error, trying again when the network is back: {tail.strip()[-160:]}")
         e.steps.move("land", "push_network", "network error on the push; the land looks again after the network is back")
-        return False
 
     def fix_outside_lock(self, problem: Problem) -> None:
         """A red check/gate or a conflict is fixed outside the land lock, then the land tries again."""
         e = self.e
         if e.fixes < int(e.cfg.max_fix_rounds):
-            cause = {"gate": "gate_red", "verify": "checks_red", "conflict": "conflict"}[problem.kind]
+            cause = {ProblemKind.GATE: "gate_red", ProblemKind.VERIFY: "checks_red", ProblemKind.CONFLICT: "conflict"}[problem.kind]
             first = problem.text.strip().splitlines() or [""]
             red = f"gate red on the rebased tree: {(problem.named or first[-1])[:200]}"
-            e.steps.move("fix", cause, red if problem.kind == "gate" else problem.text.splitlines()[0])
+            e.steps.move("fix", cause, red if problem.kind is ProblemKind.GATE else problem.text.splitlines()[0])
         fixed = e.fixer.fix(problem.kind, problem.text)
         stages = len((e.plan_data or {}).get("stages") or [])
-        if problem.kind == "verify" and fixed != "accept":
+        if problem.kind is ProblemKind.VERIFY and fixed != "accept":
             e.pending_land_validation += "\n" + e.stuck_why
             e.checkpoints.save(stage=stages, step="land-verify-red")
             raise e.blocked_for("land retry validation fix did not pass its checks and review; branch kept", "FAULT_LAND")
-        if problem.kind == "verify":
+        if problem.kind is ProblemKind.VERIFY:
             e.pending_land_validation = ""
             e.checkpoints.save(stage=stages, step="land")
             if e.git("status", "--porcelain"):  # unlike verification before finish(), a retry check's fix follows the task commit
