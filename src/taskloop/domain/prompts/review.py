@@ -1,7 +1,7 @@
 """The reviewer's prompt."""
 from typing import Final
 
-from taskloop.domain.prompts.common import DECIDED_RULE, OPTIONS_RULE
+from taskloop.domain.prompts.common import DECIDED_RULE, OPTIONS_RULE, READ_RULE
 
 REVIEW_PROMPT: Final = """You review one stage of a task, from another model family than the writer. Do not edit files.
 <task>
@@ -34,7 +34,8 @@ there is met. The engine counted tests in the task's diff: {added} added, {remov
   by the evidence is met; never list a remark that something is fine.
 - question: empty, unless only the owner can decide something about the task itself (then explain it for a phone:
   what you found, the options, your recommendation).
-- leftovers: real follow-up work you noticed outside this task, else empty.""" + "\n" + OPTIONS_RULE + "\n" + DECIDED_RULE
+- leftovers: real follow-up work you noticed outside this task, else empty.""" + "\n" + OPTIONS_RULE + "\n" + DECIDED_RULE \
+    + "\n" + READ_RULE
 
 HOST_RULE = ("The host is macOS, and the engine runs the gate there. Only the coordinator can run bd: the engine files follow-up beads\n"
              "itself, so never ask for a bead to be filed, closed or commented, nor for a check on another operating system; put\n"

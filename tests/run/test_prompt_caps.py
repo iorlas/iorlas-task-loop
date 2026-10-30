@@ -19,6 +19,7 @@ from taskloop.contracts.ids import BeadId
 from taskloop.contracts.kinds import Kind, Task, fault_of
 from taskloop.domain.lanes import caps
 from taskloop.domain.lanes.roles import ROLES
+from taskloop.domain.prompts import common, review, write
 
 
 class Table(unittest.TestCase):
@@ -42,6 +43,26 @@ class Table(unittest.TestCase):
     def test_the_caps_clear_the_real_prompts(self):
         biggest = max(p.stat().st_size for p in (Path(__file__).resolve().parents[1] / "fixtures" / "prompts").glob("*.txt"))
         self.assertLess(biggest * 2, min(caps.CAPS.values()))
+
+
+class Feedback(unittest.TestCase):
+    """READCAP: what the engine sends back to a worker (review findings) is cut to FEEDBACK_MAX with a pointer."""
+
+    def test_a_fitting_text_is_unchanged(self):
+        self.assertEqual(caps.cut("abc\n", 10), "abc\n")
+
+    def test_a_long_text_is_cut_at_a_line_and_says_what_was_left(self):
+        text = "".join(f"- finding {i}\n" for i in range(1000))
+        out = caps.cut(text, 200)
+        self.assertLessEqual(len(out.encode("utf-8")), 200 + 120)
+        self.assertTrue(out.startswith("- finding 0\n"))
+        self.assertRegex(out, r"\(\d+ more lines left out")
+
+    def test_the_prompts_tell_the_worker_to_read_by_range(self):
+        for text in (write.WRITE_PROMPT, review.REVIEW_PROMPT):
+            self.assertIn(common.READ_RULE, text)
+        self.assertIn(str(common.READ_LINES), common.READ_RULE)
+        self.assertIn(str(caps.RESULT_LINES), common.READ_RULE)
 
 
 class Refusal(te.EngineTest):

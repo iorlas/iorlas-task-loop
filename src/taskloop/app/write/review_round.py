@@ -8,6 +8,7 @@ from taskloop.app.checks.evidence import compact
 from taskloop.app.write import review_skip
 from taskloop.app.write.state import ACCEPT, AGAIN, REPLAN, StageState
 from taskloop.domain.asks import specs as askspecs
+from taskloop.domain.lanes import caps
 from taskloop.domain.prompts.common import LATER_CASES, UNCHECKED_TEXT
 from taskloop.domain.prompts.review import acceptance_text, review_prompt
 from taskloop.domain.review import findings as fnd
@@ -160,7 +161,8 @@ class ReviewRound:
             return REPLAN
         s.failed_cmds = None
         e.steps.move("write", "review_sendback", f"{said}: round {s.rounds + 1}")
-        s.feedback = ("\nThe reviewer sent the stage back. Fix exactly this:\n{}{}\n".format(
-            "".join(f"- unmet: {u}\n" for u in review["unmet"]),
-            "".join(f"- {f['file']}:{f['line']} [{f['severity']}] {f['fix']} (scenario: {f['scenario']})\n" for f in blocking)))
+        s.feedback = ("\nThe reviewer sent the stage back. Fix exactly this:\n{}\n".format(caps.cut(
+            "".join(f"- unmet: {u}\n" for u in review["unmet"])
+            + "".join(f"- {f['file']}:{f['line']} [{f['severity']}] {f['fix']} (scenario: {f['scenario']})\n" for f in blocking),
+            caps.FEEDBACK_MAX)))
         return AGAIN

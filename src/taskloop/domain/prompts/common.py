@@ -1,6 +1,8 @@
 """The text every node's prompt shares: the engine preamble, the question rules, the unchecked-items table."""
 from typing import Final
 
+from taskloop.domain.lanes.caps import RESULT_LINES
+
 COMMON: Final = ("You are one step of an unattended task engine. Nobody is watching; do not ask for confirmation. "
           "Work only in {wt}. Never commit, push, branch, or change git state. Never add suppressions or weaken, skip "
           "or delete tests; a test that contradicts an accepted requirement is fixed to match the requirement, never "
@@ -40,3 +42,9 @@ DECIDED_TEXT: Final = ("\nYou asked: %s\nAn accepted requirement already decides
                 "work, never the requirement.\n")
 
 RULES_MAX: Final = 3 * 1024  # a worker_rules file is inlined once, in the planner's and the writer's first prompts: this many bytes at most
+
+READ_LINES: Final = 300  # a file longer than this is read by range
+READ_RULE: Final = (
+    f"Reading: never read a whole file over {READ_LINES} lines. Find the place first (grep -n, a symbol or a heading), then read a range "
+    f"of it (sed -n 'A,Bp', or the read tool's offset and limit). Pipe a command's output through head or tail so you see at most "
+    f"{RESULT_LINES} lines of it; the log you need is on disk, name it in your answer instead of pasting it.")

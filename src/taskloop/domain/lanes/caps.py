@@ -36,3 +36,20 @@ def check(role: str, text: str) -> Over | None:
     """None when the input fits its role's cap (at the cap is fine); an Over when it does not. A role with no cap is a KeyError."""
     size, cap = len(text.encode("utf-8")), CAPS[role]
     return Over(role, size, cap) if size > cap else None
+
+
+FEEDBACK_MAX: Final = 6 * KB  # bytes of review findings sent back to a worker in one round (READCAP)
+RESULT_LINES: Final = 200  # the lines of any command's output the worker is told to keep (the prompts name it)
+
+
+def cut(text: str, limit: int) -> str:
+    """text unchanged when it fits `limit` bytes; else its first whole lines that fit, and a last line saying how many were left out."""
+    if len(text.encode("utf-8")) <= limit:
+        return text
+    lines, kept, used = text.splitlines(keepends=True), list[str](), 0
+    for ln in lines:
+        used += len(ln.encode("utf-8"))
+        if used > limit:
+            break
+        kept.append(ln)
+    return "".join(kept) + f"({len(lines) - len(kept)} more lines left out; ask for them by name or read the files)\n"
