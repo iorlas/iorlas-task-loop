@@ -1,7 +1,7 @@
 """One run of the engine: claim checks, the stages, the land, and the close-out that always runs."""
 import contextlib
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import Any
 
 from taskloop.adapters import beadtools, ident
 from taskloop.adapters import delegate as dg
@@ -37,7 +37,7 @@ class RunOnce:
     def go(self) -> int:
         e = self.e
         end = Ended()
-        hb = Lease(e.store, e.bead, penv.ambient(EnvVar.TASK_LOOP_SLOT_BEAD), on_beat=self.beat)
+        hb = Lease(e.store, e.bead, penv.ambient_bead(EnvVar.TASK_LOOP_SLOT_BEAD), on_beat=self.beat)
         ck = e.checkpoints.read()
         e.prev_ck = ck.run if ck else ""
         try:
@@ -189,7 +189,7 @@ class RunOnce:
         e.stats["replans"] = replans = e.replans
         if replans > int(e.cfg.max_replans) + e.extra:
             raise e.planner.cap.blocked(f"stage {i + 1} stuck after {e.cfg.max_rounds} rounds. What failed: {e.stuck_why[:600]}")
-        e.accepted = cast(list[int], [])
+        e.accepted = list[int]()
         return e.planner.plan(again=True)
 
     def close_out(self, hb: Any, end: Ended) -> None:

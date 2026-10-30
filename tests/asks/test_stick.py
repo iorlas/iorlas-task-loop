@@ -13,6 +13,7 @@ from taskloop.app.asks import intake, raiser
 from taskloop.contracts.ask import SimilarRef
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.dash import Stick
+from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ledger import Adr
 from taskloop.domain.asks import similar, specs
 from taskloop.stores.memory import fake_stores
@@ -30,12 +31,12 @@ class Stick_(unittest.TestCase):
         self.stores = fake_stores()
         self.asks = self.stores.asks
         self.beads = FakeBeads()
-        self.beads.beads["t-1"] = Bead(id="t-1", title="Saves", status="blocked", description="Keep saves working.")
+        self.beads.beads[BeadId("t-1")] = Bead(id=BeadId("t-1"), title="Saves", status="blocked", description="Keep saves working.")
         self.factory = FakeBeads(prefix="tl")
         self.verbs = intake.Intake(self.asks, self.beads, lambda: T + 5, "denis", self.stores.adrs, lambda: self.factory)
         self.ask = must(raiser.raise_ask(self.asks, specs.open_question(Q, OPTS), raiser.Asking(
-            bead="t-1", run="r", brief_hash="h", repo=REPO, title="Saves", now=T))[0])
-        self.verbs.answer("t-1", "text", "keep v1")
+            bead=BeadId("t-1"), run="r", brief_hash="h", repo=REPO, title="Saves", now=T))[0])
+        self.verbs.answer(BeadId("t-1"), "text", "keep v1")
 
     def last(self):
         return self.asks.history(self.ask.id)[-1]
@@ -49,7 +50,7 @@ class Stick_(unittest.TestCase):
         self.assertEqual((self.last().event, self.last().outcome, self.last().outcome_ref), ("stick", Stick.ADR, "ADR-1"))
         got = must(self.asks.get("t-1"))
         self.assertEqual((got.outcome, got.outcome_ref), (Stick.ADR, "ADR-1"))
-        self.assertTrue(any(c.text.startswith("Owner (tl) stick") for c in self.beads.comments("t-1")))
+        self.assertTrue(any(c.text.startswith("Owner (tl) stick") for c in self.beads.comments(BeadId("t-1"))))
 
     def test_adr_without_words_drafts_one_from_the_question_and_the_answer_and_is_filed_once(self) -> None:
         self.verbs.stick(self.ask.id, Stick.ADR)
@@ -61,8 +62,8 @@ class Stick_(unittest.TestCase):
     def test_an_adr_of_a_later_ask_is_numbered_on(self) -> None:
         self.verbs.stick(self.ask.id, Stick.ADR, "one")
         again = must(raiser.raise_ask(self.asks, specs.open_question(Q, OPTS), raiser.Asking(
-            bead="t-1", run="r", brief_hash="h", repo=REPO, title="Saves", now=T + 20))[0])
-        self.verbs.answer("t-1", "text", "migrate")
+            bead=BeadId("t-1"), run="r", brief_hash="h", repo=REPO, title="Saves", now=T + 20))[0])
+        self.verbs.answer(BeadId("t-1"), "text", "migrate")
         self.verbs.stick(again.id, Stick.ADR, "two")
         self.assertEqual([(a.id, a.text) for a in self.stores.adrs(REPO).all()], [("ADR-1", "one"), ("ADR-2", "two")])
 
@@ -72,8 +73,8 @@ class Stick_(unittest.TestCase):
         self.assertEqual((made.title, made.labels), ("bead template: say which save format", ["factory"]))
         self.assertIn(self.ask.id, made.description)
         self.assertEqual(self.last().outcome_ref, made.id)
-        self.assertEqual(self.beads.beads["t-1"].status, "open")  # the answer opened it; the factory bead is no blocker
-        self.assertEqual(self.beads.beads["t-1"].dependencies, [])
+        self.assertEqual(self.beads.beads[BeadId("t-1")].status, "open")  # the answer opened it; the factory bead is no blocker
+        self.assertEqual(self.beads.beads[BeadId("t-1")].dependencies, [])
 
     def test_factory_with_no_task_loop_repo_changes_nothing(self) -> None:
         verbs = intake.Intake(self.asks, self.beads, lambda: T + 5, "denis", self.stores.adrs, lambda: None)
@@ -83,7 +84,7 @@ class Stick_(unittest.TestCase):
     def test_fix_appends_the_owners_words_to_the_bead_text(self) -> None:
         self.assertIn("say what", self.verbs.stick(self.ask.id, Stick.FIX))
         self.assertEqual(self.verbs.stick(self.ask.id, Stick.FIX, "Saves stay in format v1."), "")
-        text = self.beads.beads["t-1"].description
+        text = self.beads.beads[BeadId("t-1")].description
         self.assertTrue(text.startswith("Keep saves working.\n\nClarified by the owner"))
         self.assertTrue(text.endswith("Saves stay in format v1."))
         self.assertEqual((self.last().outcome, self.last().outcome_ref), (Stick.FIX, "t-1"))
@@ -101,10 +102,10 @@ class Stick_(unittest.TestCase):
         key = similar.key_of(self.ask.ask_class, self.ask.decision)
         made = adrs.add(Adr(id="", n=0, repo=REPO, text="v1", question=Q, answer="v1", ask="x-1", bead="x", key=key, t=T))
         second = must(raiser.raise_ask(self.asks, specs.open_question(Q, OPTS), raiser.Asking(
-            bead="t-2", run="r", brief_hash="h", repo=REPO, title="x", now=T + 30), adrs)[0])
+            bead=BeadId("t-2"), run="r", brief_hash="h", repo=REPO, title="x", now=T + 30), adrs)[0])
         self.assertEqual(second.similar, [SimilarRef(kind="adr", id=made.id), SimilarRef(kind="ask", id=self.ask.id)])  # the decision first
-        self.beads.beads["t-2"] = Bead(id="t-2", title="x", status="blocked")
-        self.verbs.answer("t-2", "text", "v1")
+        self.beads.beads[BeadId("t-2")] = Bead(id=BeadId("t-2"), title="x", status="blocked")
+        self.verbs.answer(BeadId("t-2"), "text", "v1")
         self.assertEqual(self.verbs.stick(second.id, Stick.REF), "")
         self.assertEqual(must(adrs.get(made.id)).refs, [second.id])
 
@@ -116,7 +117,7 @@ class Stick_(unittest.TestCase):
 
     def test_an_unanswered_or_unknown_ask_is_refused(self) -> None:
         other = must(raiser.raise_ask(self.asks, specs.missing_criteria(), raiser.Asking(
-            bead="t-2", run="r", brief_hash="h", repo=REPO, title="x", now=T))[0])
+            bead=BeadId("t-2"), run="r", brief_hash="h", repo=REPO, title="x", now=T))[0])
         self.assertEqual(self.verbs.stick(other.id, Stick.ADR), "answer the ask first")
         self.assertEqual(self.verbs.stick("nope-1", Stick.ADR), "this ask is not in the ledger")
         self.assertEqual(self.stores.adrs(REPO).all(), [])
@@ -124,7 +125,7 @@ class Stick_(unittest.TestCase):
     def test_it_holds_for_an_ask_a_newer_ask_replaced(self) -> None:
         self.asks.consume("t-1", T + 6)
         must(raiser.raise_ask(self.asks, specs.open_question(Q, OPTS), raiser.Asking(
-            bead="t-1", run="r2", brief_hash="h2", repo=REPO, title="Saves", now=T + 40))[0])
+            bead=BeadId("t-1"), run="r2", brief_hash="h2", repo=REPO, title="Saves", now=T + 40))[0])
         self.assertEqual(self.verbs.stick(self.ask.id, Stick.ADR, "still v1"), "")
         self.assertEqual(must(self.asks.get("t-1")).outcome, None)  # the newer ask is untouched
         self.assertEqual(self.stores.adrs(REPO).all()[0].ask, self.ask.id)

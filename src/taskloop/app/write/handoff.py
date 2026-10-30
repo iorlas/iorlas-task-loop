@@ -97,8 +97,8 @@ class Handoff:
         return ("\n".join(reversed(out)) + "\n") if out else ""
 
     def note_round(self, name: str, rnd: int, kind: str, writer: str = "", open_items: Sequence[str] = ()) -> None:
-        self.e.handoff["rounds"].append({"stage": name, "round": rnd, "kind": kind, "writer": " ".join(str(writer).split())[:300],
-                                       "open": [" ".join(str(x).split())[:200] for x in list(open_items)[:6]]})
+        self.e.handoff["rounds"].append({"stage": name, "round": rnd, "kind": kind, "writer": " ".join(writer.split())[:300],
+                                       "open": [" ".join(x.split())[:200] for x in list(open_items)[:6]]})
         self.e.handoff["rounds"] = self.e.handoff["rounds"][-12:]
         self.save()
 

@@ -16,6 +16,7 @@ from taskloop.contracts import log
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.runlife import Liveness, liveness
 from taskloop_dash import jsonl
+from taskloop_dash.jsonrec import Json
 from taskloop_dash.views import live_events as ev
 
 PAGE = 300  # events on a first load
@@ -44,7 +45,7 @@ class Source:
     def __init__(self, tag: str, path: str, worker: bool) -> None:
         self.tag, self.path, self.worker = tag, path, worker
         self.offset = 0
-        self.items: list[tuple[int, dict]] = []
+        self.items: list[tuple[int, Json]] = []
         self.records: list[log.EngineLog] = []  # the engine source's typed records (the worker's are not EngineLog)
 
     def refresh(self) -> None:
@@ -54,7 +55,7 @@ class Source:
             self.records = []
         decode_one = ev.decode_worker if self.worker else log.decode
         rows, self.offset = jsonl.read_from(self.path, self.offset, decode_one)
-        def build(r: Any, off: int) -> dict:
+        def build(r: Any, off: int) -> Json:
             return ev.worker_event(r, self.tag, off) if self.worker else ev.engine_event(r, off)
 
         self.items += [(off, build(r, off)) for off, r in rows if not isinstance(r, log.Beat)]  # a Beat is no event: only liveness reads it
@@ -92,13 +93,13 @@ class LiveRun:
     def offsets(self) -> dict[str, int]:
         return {t: s.offset for t, s in self.sources.items()}
 
-    def select(self, keep: Callable[[str, int], bool]) -> list[tuple[str, int, dict]]:
+    def select(self, keep: Callable[[str, int], bool]) -> list[tuple[str, int, Json]]:
         """(tag, offset, event) of the chosen events, merged by time (ties: the engine first, then file order)."""
         with self.lock:
             lists = [[(t, off, e) for off, e in s.items if keep(t, off)] for t, s in self.sources.items()]
         return list(heapq.merge(*lists, key=lambda x: (x[2]["t"], ev.rank(x[2]))))
 
-    def events(self) -> list[dict]:
+    def events(self) -> list[Json]:
         return [e for _, _, e in self.select(lambda t, off: True)]
 
     def liveness(self, now: float) -> Liveness:
@@ -107,10 +108,10 @@ class LiveRun:
             return liveness(self.sources[ev.ENGINE].records, now)
 
 
-def page(run: LiveRun, since: dict[str, int] | None = None, limit: int = PAGE) -> dict:
+def page(run: LiveRun, since: dict[str, int] | None = None, limit: int = PAGE) -> Json:
     """{events, cursor}: what is new after `since`, else the newest `limit` events."""
     got = run.select(lambda t, off: since is None or off >= since.get(t, 0))
-    return {"events": [e for _, _, e in got[-(MAX_PAGE if since is not None else max(1, min(int(limit), MAX_PAGE))):]],
+    return {"events": [e for _, _, e in got[-(MAX_PAGE if since is not None else max(1, min(limit, MAX_PAGE))):]],
             "cursor": encode(run.offsets())}
 
 
@@ -120,7 +121,7 @@ def poll(
     wait: float = 0,
     sleep: Callable[[float], None] = time.sleep,
     clock: Callable[[], float] = time.monotonic,
-) -> dict:
+) -> Json:
     """The page after `since`, held up to `wait` seconds until a file grows (long-poll); a first load never waits."""
     run.refresh()
     deadline = clock() + max(0.0, min(float(wait), 20.0))

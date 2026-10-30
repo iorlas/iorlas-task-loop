@@ -5,6 +5,7 @@ from typing import Any
 from taskloop.adapters import ident
 from taskloop.adapters.gitenv import run_git
 from taskloop.app.report.inputs import bases_of, bead_status, git, repo_traces
+from taskloop.contracts.ids import BeadId, is_bead_id
 from taskloop.contracts.landed import LandedStore
 from taskloop.contracts.paths import ConfigDir
 from taskloop.domain.report import matchers
@@ -53,7 +54,7 @@ def _pending_class(bead: str, st: str | None, ct: int, traces: list[dict[str, An
     return {"class": "pending", "why": f"{bead} is {st}: its next run continues the branch"}
 
 
-def lost_work(repo: str, base: str, since: float | None = None, status_of: Callable[[str], str | None] | None = None,
+def lost_work(repo: str, base: str, since: float | None = None, status_of: Callable[[BeadId], str | None] | None = None,
               traces: list[dict[str, Any]] | None = None, cfg: ConfigDir | None = None) -> list[dict[str, Any]]:
     """Every commit on a task/<bead> or wip/* branch that is not on the base, classed:
     landed     its patch is on the base (git cherry), or a land of its bead came after it: the bead's landed record (its sha on
@@ -92,7 +93,7 @@ def lost_work(repo: str, base: str, since: float | None = None, status_of: Calla
                 row.update({"class": "lost", "why": f"a dead session's work on {ref}: no bead, no run takes it"})
             else:
                 if bead not in statuses:
-                    statuses[bead] = status_of(bead)
+                    statuses[bead] = status_of(bead) if is_bead_id(bead) else None
                 row.update(_pending_class(bead, statuses[bead], ct, traces))
             rows.append(row)
     return rows

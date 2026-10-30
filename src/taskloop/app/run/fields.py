@@ -6,10 +6,11 @@ from taskloop.adapters import beadtools, ident
 from taskloop.app.run.state import Checkpoints, StateAttrs
 from taskloop.contracts import fence
 from taskloop.contracts.checkpoint import RunState
+from taskloop.contracts.ids import BeadId
 
 
 class RunFields(StateAttrs):
-    def __init__(self, bead: str, wt: str, cfg: Any, dry_run: bool, verbose: bool, store: Any, route: Any, git: Any,
+    def __init__(self, bead: BeadId, wt: str, cfg: Any, dry_run: bool, verbose: bool, store: Any, route: Any, git: Any,
                  fresh: bool, claim: fence.Claim | None = None) -> None:
         self.bead, self.cfg, self.dry, self.verbose = bead, cfg, dry_run, verbose
         self.claim = claim or fence.offline(bead)  # the run's right to act on its bead (app/track/fence.py); offline: nothing to check

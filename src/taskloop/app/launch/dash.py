@@ -69,7 +69,7 @@ def expected_binds() -> list[str]:
 
 
 def is_dev_checkout() -> bool:
-    return bool(dash_bind.is_dev_checkout(PLUGIN_ROOT))
+    return dash_bind.is_dev_checkout(PLUGIN_ROOT)
 
 
 def free_port() -> int:

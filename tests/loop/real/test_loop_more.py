@@ -35,6 +35,7 @@ from taskloop.app.loop.core import Core  # noqa: E402
 from taskloop.cli import loop_cmd  # noqa: E402
 from taskloop.contracts import wire  # noqa: E402
 from taskloop.contracts.config import LoopConfig  # noqa: E402
+from taskloop.contracts.ids import BeadId  # noqa: E402
 from taskloop.contracts.loop import LoopCommand, LoopState, LoopTarget  # noqa: E402
 from taskloop.domain.lanes import netgate  # noqa: E402
 
@@ -536,12 +537,12 @@ class LandedOnBase(Base):
         sh("git", "checkout", "-q", "-b", "task/x-2", "origin/main")
         sh("git", "commit", "-q", "--allow-empty", "-m", "wip (x-2): failed")
         sh("git", "checkout", "-q", "-b", "task/x-3", "origin/main")
-        self.assertTrue(wloop.landed_on_base(str(self.repo), beadtools.bd_store(str(self.repo)), str(wt), "x-1"))
-        self.assertFalse(wloop.landed_on_base(str(self.repo), beadtools.bd_store(str(self.repo)), str(wt), "x-2"))  # work not on main
+        self.assertTrue(wloop.landed_on_base(str(self.repo), beadtools.bd_store(str(self.repo)), str(wt), BeadId("x-1")))
+        self.assertFalse(wloop.landed_on_base(str(self.repo), beadtools.bd_store(str(self.repo)), str(wt), BeadId("x-2")))  # not on main
         self.assertFalse(
-            wloop.landed_on_base(str(self.repo), beadtools.bd_store(str(self.repo)), str(wt), "x-3")
+            wloop.landed_on_base(str(self.repo), beadtools.bd_store(str(self.repo)), str(wt), BeadId("x-3"))
         )  # no work: the tip is someone else's
-        self.assertFalse(wloop.landed_on_base(str(self.repo), beadtools.bd_store(str(self.repo)), str(wt), "x-9"))  # no branch
+        self.assertFalse(wloop.landed_on_base(str(self.repo), beadtools.bd_store(str(self.repo)), str(wt), BeadId("x-9")))  # no branch
 
 
 if __name__ == "__main__":

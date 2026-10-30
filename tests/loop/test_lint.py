@@ -13,8 +13,10 @@ from support.fakes import FakeBeadStore, as_bead
 from support.narrow import must
 
 from taskloop.app.loop import lintrun
+from taskloop.contracts.ids import BeadId
 from taskloop.domain.beads import rules
 
+T1 = BeadId("t-1")
 GOOD = {"id": "t-1", "title": "t", "status": "open", "issue_type": "task", "description": "do it", "acceptance_criteria": "- it works"}
 
 
@@ -63,7 +65,7 @@ class Verb(unittest.TestCase):
     def run_lint(self, store, **kw):
         out = io.StringIO()
         with redirect_stdout(out):
-            rc = lintrun.lint_ready(store, "/repo", kw.get("fix", False)) if kw.get("ready") else lintrun.lint_one(store, "/repo", "t-1")
+            rc = lintrun.lint_ready(store, "/repo", kw.get("fix", False)) if kw.get("ready") else lintrun.lint_one(store, "/repo", T1)
         return rc, out.getvalue()
 
     def test_one_bead_prints_pass_or_a_line_per_failed_rule(self):

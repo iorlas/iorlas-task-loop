@@ -10,6 +10,7 @@ from taskloop.app.asks import intake
 from taskloop.app.loop.env import LoopEnv
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.config import EngineConfig
+from taskloop.contracts.ids import BeadId, is_bead_id
 from taskloop.contracts.loop import Skip
 from taskloop.contracts.ports import BdFailure, Beads
 
@@ -17,7 +18,7 @@ Key = tuple[int, int, list[tuple[int, int | str]], Bead]  # (priority, epic rank
 ANY_AREA = "*"  # busy_areas key for a running bead that could not be read: every area waits
 
 
-def natural(bead_id: str) -> list[tuple[int, int | str]]:
+def natural(bead_id: BeadId) -> list[tuple[int, int | str]]:
     """fld.26.9 before fld.26.10: digit runs compare as numbers."""
     return [(0, int(g)) if d else (1, g) for d, g in ((k, "".join(v)) for k, v in itertools.groupby(bead_id, str.isdigit))]
 
@@ -38,7 +39,7 @@ class Ranked:
 
 @dataclass(frozen=True)
 class Skipped:
-    bead: str
+    bead: BeadId
     skip: Skip
     of: Bead | None = None  # the bead itself, when the skip is a lint refusal (the loop labels it)
 
@@ -57,24 +58,24 @@ def area_skip(area: str, holder: str, where: str) -> Skip:
 
 
 class QueueRule:
-    def __init__(self, store: Beads, cfg: EngineConfig, running: dict[str, str], lint: Callable[[Bead], str],
+    def __init__(self, store: Beads, cfg: EngineConfig, running: dict[BeadId, str], lint: Callable[[Bead], str],
                  say: Callable[[str], None] = print, now: Callable[[], float] = time.time) -> None:
         self.store, self.cfg, self.running, self.lint, self.say, self.now = store, cfg, running, lint, say, now
-        self.parents: dict[str, str | None] = {}
+        self.parents: dict[BeadId, BeadId | None] = {}
 
-    def parent_of(self, bead_id: str) -> str | None:
+    def parent_of(self, bead_id: BeadId) -> BeadId | None:
         if bead_id not in self.parents:
             try:
                 found = self.store.show(bead_id)
             except BdFailure:
                 found = None
-            self.parents[bead_id] = found.parent if found else None
+            self.parents[bead_id] = found.parent if found and is_bead_id(found.parent) else None
         return self.parents[bead_id]
 
-    def epics_of(self, b: Bead) -> list[str]:
+    def epics_of(self, b: Bead) -> list[BeadId]:
         """Every ancestor of a bead, nearest first; `parent` in bd's JSON is the direct one only."""
-        out: list[str] = []
-        pid = b.parent
+        out: list[BeadId] = []
+        pid = b.parent if is_bead_id(b.parent) else None
         while pid and pid not in out:
             out.append(pid)
             pid = self.parent_of(pid)
@@ -100,7 +101,7 @@ class QueueRule:
         """{area: (bead, where)} of the areas a running bead (other than `but`) works in."""
         out: dict[str, tuple[str, str]] = {}
         for bid, where in sorted(self.running.items()):
-            if bid == but:
+            if bid == but or not is_bead_id(bid):
                 continue
             try:
                 held = self.store.show(bid)

@@ -51,7 +51,7 @@ def repo_key(wt: str, env: Mapping[str, str]) -> str:
     """One name per repo, shared by its slots and worktrees: the origin url, else the common git dir."""
     common = subprocess.run(["git", "rev-parse", "--path-format=absolute", "--git-common-dir"], cwd=wt, env=dict(env),
                             capture_output=True, check=False, text=True)
-    ident = origin_url(wt, env) or (common.stdout.strip() if common.returncode == 0 else "") or str(wt)
+    ident = origin_url(wt, env) or (common.stdout.strip() if common.returncode == 0 else "") or wt
     return "{}-{}".format(re.sub(r"[^\w.-]+", "_", Path(ident.rstrip("/")).name)[:40] or "repo",
                       hashlib.sha1(ident.encode("utf-8", "surrogateescape")).hexdigest()[:10])
 

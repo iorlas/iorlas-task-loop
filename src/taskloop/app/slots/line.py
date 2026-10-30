@@ -6,6 +6,7 @@ from collections.abc import Callable
 
 from taskloop.app.slots.env import DEFAULT_PRIO, TICKET_POLL, SlotEnv
 from taskloop.app.slots.pool import SlotPool
+from taskloop.contracts.ids import BeadId
 from taskloop.contracts.locks import Ticket
 
 
@@ -21,7 +22,7 @@ def waiting_line(env: SlotEnv) -> list[Ticket]:
 
 def wait_slot(env: SlotEnv, why: str, bead: str = "", stop: Callable[[], bool] | None = None,
               sleep: Callable[[float], object] | None = None, poll: tuple[float, float] | None = None,
-              on_wait: Callable[[int], None] | None = None, prio: int = DEFAULT_PRIO) -> tuple[str, str, str] | None:
+              on_wait: Callable[[int], None] | None = None, prio: int = DEFAULT_PRIO) -> tuple[str, str, BeadId] | None:
     """(name, dir, slot bead) once this waiter is first in line and a slot is free; None when stop() says so after a look
     (stop=lambda: True: one look, no wait). on_wait(ahead) is called before each sleep. Never takes a slot while a live
     ticket is ahead of it: a lower `prio` number (read when the waiter joins), or the same and earlier."""

@@ -12,6 +12,7 @@ from taskloop.contracts.adrs import AdrStore
 from taskloop.contracts.ask import Ask
 from taskloop.contracts.bead import Bead, Comment
 from taskloop.contracts.delegate import LiveEvent
+from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ledger import LedgerEntry
 from taskloop.contracts.loop import LoopState
 from taskloop.contracts.stores import AskStore, JsonStore, LedgerStore, StatusStore
@@ -68,7 +69,7 @@ class Worlds:
             for i in items if i["status"] == "open" and i["bead"]]
         return ProjectIn(id=id, name=id, beads=rows, slots=slots, loops=states, looks=looks, adrs=self.adrs(path))
 
-    def runs(self, full: str = "") -> dict[str, list[Run]]:
+    def runs(self, full: BeadId | None = None) -> dict[str, list[Run]]:
         """bead -> its runs, oldest first: the retained logs, and all of `full`'s."""
         now = self.env.clock()
         out: dict[str, list[Run]] = {}
@@ -103,13 +104,13 @@ class Worlds:
             return out
         return self.env.ttl.get("v2landings", LEDGER_TTL, load)
 
-    def world(self, full: str = "") -> World:
+    def world(self, full: BeadId | None = None) -> World:
         env = self.env
         return World(now=env.clock(), host=socket.gethostname(), version=env.version,
                      projects=[self.project(i, p) for i, p in self.repos().items()], runs=self.runs(full), asks=self.asks(),
                      status=StatusStore(env.config).read(), ledger=self.ledger(), landings=self.landings())
 
-    def comments(self, path: str, bead: str) -> list[Comment]:
+    def comments(self, path: str, bead: BeadId) -> list[Comment]:
         def load() -> list[Comment]:
             return [Comment(author=str(c.get("author") or ""), text=str(c.get("text") or ""), created_at=str(c.get("created_at") or ""))
                     for c in self.beads.comments(path, bead)]

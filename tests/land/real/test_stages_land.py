@@ -13,6 +13,7 @@ from support.engine_case import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, engine, 
 from support.pushsim import pusher
 
 from taskloop.app.wire import slots as wslots
+from taskloop.contracts.ids import BeadId
 
 
 class SlotHygiene(StagesTest):
@@ -41,7 +42,7 @@ class SlotHygiene(StagesTest):
         (self.wt / "notes.swp").write_text("editor\n")
         (self.wt / "client").mkdir()
         (self.wt / "client" / "log.txt").write_text("unity\n")
-        e = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
+        e = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
         self.assertEqual(e.checkout.dirty_status(), "")
 
 

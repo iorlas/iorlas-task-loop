@@ -38,7 +38,7 @@ class RunLog:
     def next_id(self, prefix: str) -> str:
         """A pair id for the file: the prefix and the next number."""
         self.ids += 1
-        return f"{prefix}{int(self.ids)}"
+        return f"{prefix}{self.ids}"
 
     @staticmethod
     def plain(rec: EngineLog) -> str:

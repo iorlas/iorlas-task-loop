@@ -37,6 +37,7 @@ from taskloop.app.wire import slots as wslots
 from taskloop.contracts import fence
 from taskloop.contracts.bead import BdError
 from taskloop.contracts.fence import SLOT_GEN
+from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ports import BdFailure
 
 LIVE_PID = "a live pid that is not this process: a real sleep child (an engine lock, a second loop, a waiter)"
@@ -206,9 +207,9 @@ class Line(Slots):
             def unreadable(bead, cwd=None, _boom=boom):
                 raise _boom
             with store.stub(show_fn=unreadable):
-                self.assertEqual(wslots.bead_priority(str(self.repo), "x-1", store), 2)
+                self.assertEqual(wslots.bead_priority(str(self.repo), BeadId("x-1"), store), 2)
         with store.stub(show={"priority": 0}):
-            self.assertEqual(wslots.bead_priority(str(self.repo), "x-1", store), 0)
+            self.assertEqual(wslots.bead_priority(str(self.repo), BeadId("x-1"), store), 0)
 
     def test_equal_priorities_keep_arrival_order_and_an_unreadable_priority_is_p2(self):
         repo = str(self.repo)

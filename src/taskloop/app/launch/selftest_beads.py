@@ -4,17 +4,18 @@ sorted and unique, metadata values are strings, a write to an unknown bead is re
 from typing import Any
 
 from taskloop.contracts.bead import BdError, Bead, Comment, Dep
+from taskloop.contracts.ids import BeadId, parse_bead_id
 from taskloop.contracts.ports import BdFailure, BeadPatch, BeadQuery, DoltPush, NewBead
 
 
 class MemoryBeads:
     def __init__(self, actor: str = "fake", prefix: str = "fk") -> None:
         self.actor, self.prefix = actor, prefix
-        self.beads: dict[str, Bead] = {}
+        self.beads: dict[BeadId, Bead] = {}
         self.notes: dict[str, list[Comment]] = {}
         self.refuse_create: list[BdError] = []  # the next creates fail with these, in order
 
-    def _get(self, bead: str) -> Bead:
+    def _get(self, bead: BeadId) -> Bead:
         if bead not in self.beads:
             raise BdFailure(BdError(kind="not_found", text=f"Issue {bead} not found"))
         return self.beads[bead]
@@ -22,10 +23,10 @@ class MemoryBeads:
     def _put(self, b: Bead, **changes: Any) -> None:
         self.beads[b.id] = b.replace(**changes)
 
-    def show(self, bead: str) -> Bead | None:
+    def show(self, bead: BeadId) -> Bead | None:
         return self.beads.get(bead)
 
-    def comments(self, bead: str) -> list[Comment]:
+    def comments(self, bead: BeadId) -> list[Comment]:
         return list(self.notes.get(bead, []))
 
     def find(self, query: BeadQuery) -> list[Bead]:
@@ -38,16 +39,16 @@ class MemoryBeads:
             return any(d.id in self.beads and self.beads[d.id].status != "closed" for d in b.dependencies if d.type in ("", "blocks"))
         return [b for b in self.beads.values() if b.status == "open" and not open_dep(b) and (not label or label in b.labels)]
 
-    def create(self, new: NewBead) -> str:
+    def create(self, new: NewBead) -> BeadId:
         if self.refuse_create:
             raise BdFailure(self.refuse_create.pop(0))
-        bead = f"{self.prefix}-{len(self.beads) + 1}"
+        bead = parse_bead_id(f"{self.prefix}-{len(self.beads) + 1}")
         self.beads[bead] = Bead(id=bead, title=new.title, status="open", issue_type=new.issue_type, priority=new.priority,
                                 labels=sorted(set(new.labels)), parent=new.parent, description=new.description,
                                 acceptance_criteria=new.acceptance_criteria, dependencies=[Dep(id=d) for d in new.deps])
         return bead
 
-    def update(self, bead: str, patch: BeadPatch) -> None:
+    def update(self, bead: BeadId, patch: BeadPatch) -> None:
         b = self._get(bead)
         if patch.if_assignee and b.assignee != patch.if_assignee:
             raise BdFailure(BdError(kind="other", text="assignee changed"))
@@ -58,38 +59,38 @@ class MemoryBeads:
                   description=b.description if patch.description is None else patch.description,
                   notes=b.notes if patch.notes is None else patch.notes, metadata=meta)
 
-    def claim(self, bead: str) -> bool:
+    def claim(self, bead: BeadId) -> bool:
         b = self.beads.get(bead)
         if b is None or b.status != "open":
             return False
         self._put(b, status="in_progress", assignee=self.actor)
         return True
 
-    def unclaim(self, bead: str, force: bool = False) -> bool:
+    def unclaim(self, bead: BeadId, force: bool = False) -> bool:
         b = self.beads.get(bead)
         if b is None or b.status != "in_progress" or (b.assignee != self.actor and not force):
             return False
         self._put(b, status="open", assignee="")
         return True
 
-    def heartbeat(self, bead: str) -> None:
+    def heartbeat(self, bead: BeadId) -> None:
         self._get(bead)
 
-    def close(self, bead: str, reason: str, if_assignee: str = "") -> None:
+    def close(self, bead: BeadId, reason: str, if_assignee: str = "") -> None:
         b = self._get(bead)
         if if_assignee and b.assignee != if_assignee:
             raise BdFailure(BdError(kind="other", text="assignee changed"))
         self._put(b, status="closed", close_reason=reason)
 
-    def add_comment(self, bead: str, text: str) -> None:
+    def add_comment(self, bead: BeadId, text: str) -> None:
         self._get(bead)
         self.notes.setdefault(bead, []).append(Comment(author=self.actor, text=text))
 
-    def add_label(self, bead: str, label: str) -> None:
+    def add_label(self, bead: BeadId, label: str) -> None:
         b = self._get(bead)
         self._put(b, labels=sorted({*b.labels, label}))
 
-    def remove_label(self, bead: str, label: str) -> None:
+    def remove_label(self, bead: BeadId, label: str) -> None:
         b = self._get(bead)
         self._put(b, labels=[x for x in b.labels if x != label])
 
@@ -98,7 +99,7 @@ class MemoryBeads:
             if b.status == "in_progress" and (not assignees or b.assignee in assignees) and b.lease_expires_at:
                 self._put(b, status="open", assignee="", lease_expires_at="")
 
-    def provenance(self, bead: str, kind: str, source: str, ref: str = "", ref_kind: str = "", at: str = "", payload: str = "") -> None:
+    def provenance(self, bead: BeadId, kind: str, source: str, ref: str = "", ref_kind: str = "", at: str = "", payload: str = "") -> None:
         self._get(bead)
 
     def dolt_push(self) -> DoltPush:

@@ -6,6 +6,7 @@ import json
 import os
 from typing import Any
 
+from taskloop.contracts.ids import BeadId
 from taskloop.contracts.runlife import RETAIN
 from taskloop.contracts.stores import ReposStore
 from taskloop_dash.env import Env
@@ -56,10 +57,10 @@ class Records:
             return out
         return self.env.files.get(str(self.env.config.traces()), load, {})
 
-    def engine_logs(self, retain: bool = True) -> dict[str, list[str]]:
+    def engine_logs(self, retain: bool = True) -> dict[BeadId, list[str]]:
         """bead -> its engine logs, oldest first."""
         cut = self.env.clock() - RETAIN if retain else 0
-        out: dict[str, list[str]] = {}
+        out: dict[BeadId, list[str]] = {}
         for p in glob.glob(str(self.env.config.engine_log("*"))):
             bead = names.bead_of(names.run_name(p))
             if not bead:

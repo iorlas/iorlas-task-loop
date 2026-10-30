@@ -12,6 +12,7 @@ from taskloop.app.asks import looks, stick, sweeps
 from taskloop.contracts.adrs import AdrStore
 from taskloop.contracts.ask import Ask, AskAction, AskAnswer, ThreadEntry
 from taskloop.contracts.dash import OwnerCause, Stick
+from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ports import BdFailure, BeadPatch, Beads
 from taskloop.contracts.stores import AskStore
 from taskloop.domain import timespec
@@ -44,7 +45,7 @@ def parse_until(text: str, now: float) -> float:
 
 def held(meta: Mapping[str, str], now: float) -> str:
     """Who holds the bead ("" when nobody): a hold with an `until` ends when that time passes, one without lasts until released."""
-    who = str(meta.get(HOLD) or "")
+    who = (meta.get(HOLD) or "")
     until = float(meta.get(HOLD_UNTIL) or 0)
     return who if who and (not until or until > now) else ""
 
@@ -87,11 +88,11 @@ class Intake:
         self.asks, self.store, self.now, self.by = asks, store, now, by
         self.adrs, self.factory = adrs, factory
 
-    def note(self, bead: str, text: str) -> None:
+    def note(self, bead: BeadId, text: str) -> None:
         with contextlib.suppress(BdFailure):  # the receipt is for people: the typed record is already written
             self.store.add_comment(bead, text)
 
-    def answer(self, bead: str, action: AskAction, text: str = "", amend: bool = False) -> tuple[Ask | None, str]:
+    def answer(self, bead: BeadId, action: AskAction, text: str = "", amend: bool = False) -> tuple[Ask | None, str]:
         """File the answer on the bead's ask, open the bead for the loop. -> (the ask, "" or why it cannot be answered)."""
         ask = self.asks.get(bead)
         if ask is None:
@@ -108,17 +109,17 @@ class Intake:
         self.note(bead, receipt("answer", given.text, ask=ask.id, action=action))
         return done, ""
 
-    def withdraw(self, bead: str, why: str) -> tuple[Ask | None, str]:
+    def withdraw(self, bead: BeadId, why: str) -> tuple[Ask | None, str]:
         ask = self.asks.get(bead)
         if ask is None:
             return None, "gone"
         return self.asks.withdraw(bead, ask.id, why, self.now())
 
-    def hint(self, bead: str, text: str) -> None:
+    def hint(self, bead: BeadId, text: str) -> None:
         self.store.update(bead, BeadPatch(set_metadata={HINT: text.strip()}))
         self.note(bead, receipt("hint", text.strip()))
 
-    def hold(self, bead: str, on: bool = True, until: float = 0.0) -> None:
+    def hold(self, bead: BeadId, on: bool = True, until: float = 0.0) -> None:
         """Keep the loop off a bead (until `until`, or until released); the loop reads the keys, the receipt is for people."""
         if on:
             patch = BeadPatch(set_metadata={HOLD: self.by, **({HOLD_UNTIL: f"{until:.0f}"} if until else {})},
@@ -128,7 +129,7 @@ class Intake:
         self.store.update(bead, patch)
         self.note(bead, receipt("hold", "" if on else "released", on="1" if on else "0", **({"until": f"{until:.0f}"} if until else {})))
 
-    def waive(self, bead: str, kind: str, criterion: str, approval: str) -> None:
+    def waive(self, bead: BeadId, kind: str, criterion: str, approval: str) -> None:
         """Waive, defer or drop one acceptance criterion. The owner's own words must come with it: an empty quote is refused, because a
         relayed 'he said it is fine' is how a criterion was lost on 10-21."""
         if kind not in WAIVER_KINDS:
@@ -141,7 +142,7 @@ class Intake:
         self.store.update(bead, BeadPatch(set_metadata={WAIVERS: json.dumps(have)}))
         self.note(bead, receipt("override", f"{kind} {criterion.strip()} - approved: {approval.strip()}", what=kind))
 
-    def override(self, bead: str, what: str) -> None:
+    def override(self, bead: BeadId, what: str) -> None:
         if what not in OVERRIDES:
             raise ValueError("override what? one of: {}".format(", ".join(OVERRIDES)))
         self.store.update(bead, BeadPatch(set_metadata={OVERRIDE: what}))
@@ -151,7 +152,7 @@ class Intake:
         """Answer one look item (good, redo with a note, or undo). -> (the item's status after, "" or why nothing changed)."""
         return looks.answer(self.store, item, verdict, note, self.now(), look_bead)
 
-    def cause(self, bead: str, scope: str, cause: str) -> str:
+    def cause(self, bead: BeadId, scope: str, cause: str) -> str:
         """Record why a run stopped or an ask was asked, for `scope` (a run id or an ask id). -> "" or why it was refused."""
         if cause not in {c.value for c in OwnerCause}:
             return f"unknown cause {cause!r}"
@@ -188,14 +189,14 @@ class Intake:
             return "there is no decision store here"
         return self.adrs(repo).retire(adr, self.by, self.now())
 
-    def ask_back(self, bead: str, ask_id: str, text: str) -> str:
+    def ask_back(self, bead: BeadId, ask_id: str, text: str) -> str:
         """The owner asks back instead of answering: the entry joins the ask's thread and the ask stays open. -> "" or why not."""
         if not text.strip():
             return "write the question first"
         _done, why = self.asks.say(bead, ask_id, ThreadEntry(by="owner", t=self.now(), md=text.strip()))
         return ASK_WHY.get(why, why)
 
-    def ack(self, bead: str, scope: str, on: bool = True) -> str:
+    def ack(self, bead: BeadId, scope: str, on: bool = True) -> str:
         """The owner has seen that run `scope` is stuck (or takes that back). -> "" or why it was refused."""
         if on and not scope:
             return "no run to acknowledge"

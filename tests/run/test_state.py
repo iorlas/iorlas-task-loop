@@ -13,6 +13,7 @@ from taskloop.app.run.resume import KEEP_FOR_ACTIVE, LATE, Resume
 from taskloop.app.run.state import Checkpoints, StateAttrs, carries_state, state_names
 from taskloop.contracts import fence, wire
 from taskloop.contracts.checkpoint import Checkpoint, RunState
+from taskloop.contracts.ids import BeadId
 from taskloop.contracts.review import (
     ReviewState,
     Unfiled,
@@ -60,7 +61,7 @@ class Host(StateAttrs):
     def __init__(self) -> None:
         self.state = RunState()
         self.bead, self.stores = "t-1", fake_stores()
-        self.store, self.claim = FakeBeads(), fence.offline("t-1")
+        self.store, self.claim = FakeBeads(), fence.offline(BeadId("t-1"))
         self.checkpoints = Checkpoints(self)
         self.log_path = Path("t-1-20260101-000000.jsonl")
         self.unchecked = [{"what": "u", "kind": "", "source": "", "why": "", "proof_round": False}]

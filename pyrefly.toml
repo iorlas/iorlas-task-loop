@@ -15,6 +15,17 @@ matches = "tests/cockpit_scenario.py"
 [sub-config.errors]
 missing-import = false
 
+# Two plan-area signatures keep a bare `dict`/`list` until PLANREF types them (TYPED2 left that area alone); delete this block then.
+[[sub-config]]
+matches = "src/taskloop/app/plan/briefs.py"
+[sub-config.errors]
+implicit-any-type-argument = "ignore"
+
+[[sub-config]]
+matches = "src/taskloop/domain/plan/matchers.py"
+[sub-config.errors]
+implicit-any-type-argument = "ignore"
+
 # New code is strict from its first commit (88 D10); A sub-config cannot take
 # `preset`, so the kinds the strict preset adds are spelled out.
 [[sub-config]]
@@ -27,3 +38,6 @@ implicit-any-attribute = "error"
 missing-override-decorator = "error"
 method-assign = "error"
 non-exhaustive-match = "error"
+unnecessary-type-conversion = "error"
+deprecated = "error"
+implicit-any-type-argument = "error"

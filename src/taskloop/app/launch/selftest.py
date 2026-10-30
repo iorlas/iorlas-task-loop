@@ -20,6 +20,7 @@ from taskloop.app.run.engine import Engine
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts import env as penv
 from taskloop.contracts.bead import Bead
+from taskloop.contracts.ids import parse_bead_id
 
 # an argv list; the plan schema wraps it as an adhoc check
 CHECK: Final = ["test", "-f", "f.txt"]
@@ -96,15 +97,16 @@ def run_engine(home: Path, wt: Path) -> tuple[int, Bead]:
     contract = res.contract if isinstance(res, dg.Resolved) else {"contract": dg.CONTRACT, "reasons": {}, "run_args": []}
     resolved = dg.Resolved(Path("/selftest"), "/selftest/route.py", contract, "explicit")
     store = MemoryBeads()
-    store.beads["t-1"] = Bead(id="t-1", title="Add f", status="open", acceptance_criteria="f.txt exists")
+    t1 = parse_bead_id("t-1")
+    store.beads[t1] = Bead(id=t1, title="Add f", status="open", acceptance_criteria="f.txt exists")
     cfg = cfg.replace(reflect=False)
     os.chdir(wt)  # the engine reads cwd
     try:
         with mock.patch.object(time, "sleep"):
-            rc = Engine("t-1", str(wt), cfg, route=seams.FixedRoute(resolved, Runner()), store=store).run()
+            rc = Engine(t1, str(wt), cfg, route=seams.FixedRoute(resolved, Runner()), store=store).run()
     finally:
         os.chdir(home.parent)  # out of the directory that is removed next
-    return rc, store.beads["t-1"]
+    return rc, store.beads[t1]
 
 
 def selftest():

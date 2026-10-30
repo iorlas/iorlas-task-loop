@@ -14,6 +14,7 @@ from support.fakegit import FakeGit
 from taskloop.app.land.lander import Land, Lander
 from taskloop.contracts import fence
 from taskloop.contracts import log as rec
+from taskloop.contracts.ids import BeadId
 
 REJECTED = (1, " ! [rejected]        HEAD -> main (fetch first)")
 PUSHED = (0, "")
@@ -47,7 +48,7 @@ class Host(SimpleNamespace):
         super().__init__(
             git=git.git, sh=git.sh, cfg=SimpleNamespace(base="origin/main", gate_checks=[], land_optimistic_tries=2,
                                                          land=["git", "push", "-q", "origin", "HEAD:main"]),
-            wt=Path("/nonexistent"), store=None, claim=fence.offline("t-1"),
+            wt=Path("/nonexistent"), store=None, claim=fence.offline(BeadId("t-1")),
             bead="t-1", dry=False, dry_run=False, landed_sha="", pending_land_validation="", fixes=0,
             steps=SimpleNamespace(begin=lambda *a, **k: None, outcome=lambda *a: None, move=lambda *a: None),
             newfiles=SimpleNamespace(quarantine_strays=lambda: None),

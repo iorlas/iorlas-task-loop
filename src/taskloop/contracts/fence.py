@@ -5,13 +5,14 @@ no longer the current one: `check` refuses it with the reason, and close, block,
 from typing import final
 
 from taskloop.contracts.bead import Bead
+from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ports import BdFailure, BeadPatch, Beads
 
 BEAD_GEN = "fence_gen"
 SLOT_GEN = "held_gen"  # never cleared with the slot's holder marks: a retake after a release must still be a higher number
 
 
-def peek(store: Beads, bead_id: str) -> Bead | None:
+def peek(store: Beads, bead_id: BeadId) -> Bead | None:
     """The bead, None when it is not there or bd could not be asked."""
     try:
         return store.show(bead_id)
@@ -41,7 +42,7 @@ class Claim:
 
     __slots__ = ("actor", "bead", "gen", "slot_bead", "slot_gen")
 
-    def __init__(self, key: _Key, bead: str, actor: str, gen: int, slot_bead: str, slot_gen: int) -> None:
+    def __init__(self, key: _Key, bead: BeadId, actor: str, gen: int, slot_bead: BeadId | None, slot_gen: int) -> None:
         if key is not _KEY:
             raise TypeError("a Claim is made by fence.take, fence.hand or fence.offline")
         self.bead, self.actor, self.gen, self.slot_bead, self.slot_gen = bead, actor, gen, slot_bead, slot_gen
@@ -62,12 +63,12 @@ def gen_of(b: Bead | None, key: str = BEAD_GEN) -> int:
         return 0
 
 
-def offline(bead: str) -> Claim:
+def offline(bead: BeadId) -> Claim:
     """A dry run, or a test's engine: nothing in bd to check, so nothing is refused."""
-    return Claim(_KEY, bead, "", -1, "", -1)
+    return Claim(_KEY, bead, "", -1, None, -1)
 
 
-def take(store: Beads, bead: str, actor: str, slot_bead: str = "", slot_gen: int | None = None) -> Claim:
+def take(store: Beads, bead: BeadId, actor: str, slot_bead: BeadId | None = None, slot_gen: int | None = None) -> Claim:
     """The run's claim, made right after bd gave it the bead: the bead's generation is bumped. `slot_gen`: the slot's generation the
     run noted when it took the slot (None: read now)."""
     gen = gen_of(peek(store, bead)) + 1
@@ -77,10 +78,10 @@ def take(store: Beads, bead: str, actor: str, slot_bead: str = "", slot_gen: int
     return Claim(_KEY, bead, actor, gen, slot_bead, slot_gen)
 
 
-def hand(store: Beads, bead: str, actor: str) -> Claim:
+def hand(store: Beads, bead: BeadId, actor: str) -> Claim:
     """A person's `tl close` / `tl block`: the bead as it stands (no bump). The assignee guard applies only to a bead this actor holds."""
     b = peek(store, bead)
-    return Claim(_KEY, bead, actor if b is not None and b.assignee == actor else "", gen_of(b), "", 0)
+    return Claim(_KEY, bead, actor if b is not None and b.assignee == actor else "", gen_of(b), None, 0)
 
 
 def stale(store: Beads, c: Claim) -> str:

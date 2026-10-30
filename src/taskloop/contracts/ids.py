@@ -3,20 +3,30 @@ import datetime
 import hashlib
 from itertools import groupby
 from pathlib import Path
-from typing import Final, NewType, final
+from typing import Annotated, Final, NewType, TypeIs, final
+
+import msgspec
 
 BeadId = NewType("BeadId", str)
 CheckId = NewType("CheckId", str)  # a check's id in the registry or the plan: never a bead id
 TreeSha = NewType("TreeSha", str)  # the hash of a worktree's files (adapters/treehash.py): never a commit sha
+# A bead id as a request body field: msgspec checks the shape when it decodes (a 400 for anything else), so a handler holds a BeadId.
+WireBead = Annotated[BeadId, msgspec.Meta(pattern="^[A-Za-z0-9][A-Za-z0-9_.-]*$")]
 STAMP: Final = "%Y%m%d-%H%M%S"
 _BEAD_CHARS: Final = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.-")
 
 
+def is_bead_id(text: object) -> TypeIs[BeadId]:
+    """A bead id: starts with a letter or digit, then letters, digits, `_`, `.`, `-`: never something bd would read as an option.
+    A guard: past `if is_bead_id(x)` the value is a BeadId and is not checked again."""
+    return isinstance(text, str) and bool(text) and text[0].isascii() and text[0].isalnum() and set(text) <= _BEAD_CHARS
+
+
 def parse_bead_id(text: str) -> BeadId:
-    """A bead id: starts with a letter or digit, then letters, digits, `_`, `.`, `-`."""
-    if not text or not text[0].isascii() or not text[0].isalnum() or not set(text) <= _BEAD_CHARS:
+    """`text` as a BeadId, else ValueError."""
+    if not is_bead_id(text):
         raise ValueError(f"not a bead id: {text!r}")
-    return BeadId(text)
+    return text
 
 
 @final
@@ -39,6 +49,14 @@ class RunId:
         except ValueError:
             raise ValueError(f"not a run id: {text!r}") from None
         return cls(parse_bead_id(parts[0]), started)
+
+    @classmethod
+    def of(cls, text: str) -> RunId | None:
+        """`parse`, None for a name that is not a run id: the one reader of a run name past the edge (log stems, run folders)."""
+        try:
+            return cls.parse(text)
+        except ValueError:
+            return None
 
     from_wire = parse
 

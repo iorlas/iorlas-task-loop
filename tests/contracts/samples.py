@@ -32,7 +32,7 @@ from taskloop.contracts import (
     usage,
 )
 from taskloop.contracts.enums import AskClass, AskKind, AskStatus, LockWhat, Outcome, WaitWhat, WhyCode
-from taskloop.contracts.ids import CheckId, TreeSha
+from taskloop.contracts.ids import BeadId, CheckId, TreeSha
 from taskloop.contracts.runkey import BaseSha, Digest, RunKey
 
 T = 1793050200.5
@@ -254,7 +254,8 @@ LIVE = {
     "end": delegate.LiveEnd(t=T, status="done", secs=227.3, cost_usd=0.0),
     "raw": delegate.LiveRaw(t=T, type="x"),
 }
-ASK = ask.Ask(id="tl-1-1", n=1, bead="tl-1", kind=AskKind.DECISION, ask_class=AskClass.OPEN_QUESTION, decision="Which?", run=str(RUN), t=T,
+ASK = ask.Ask(id="tl-1-1", n=1, bead=BeadId("tl-1"), kind=AskKind.DECISION, ask_class=AskClass.OPEN_QUESTION, decision="Which?",
+              run=str(RUN), t=T,
                    status=AskStatus.ANSWERED, tried=["a"],
                    detail=ask.AskDetail(budget=[ask.BudgetLine(step="write", minutes=12.0, rounds=3, usd=1.0)],
                                         replans=[ask.ReplanLine(n=1, why="scope")], text="d"),
@@ -274,7 +275,7 @@ OTHERS = {
     "RunTrace": TRACE,
     "Ask": ASK,
     "LedgerEntry": ledger.LedgerEntry(
-        t=T, event="stick", ask="tl-1-1", bead="tl-1", repo="/r", question="Which?", key="open_question:which", blocking=False,
+        t=T, event="stick", ask="tl-1-1", bead=BeadId("tl-1"), repo="/r", question="Which?", key="open_question:which", blocking=False,
         cause=dash.OwnerCause.DECISION, cause_by="owner", answer="ok", outcome=dash.Stick.ADR, outcome_ref="ADR-3",
         similar=[ask.SimilarRef(kind="ask", id="tl-0-1")], why="w"),
     "Adr": ledger.Adr(id="ADR-3", n=3, repo="/r", text="Saves stay v1.", question="Which?", answer="ok", ask="tl-1-1", bead="tl-1",
@@ -502,7 +503,7 @@ OTHERS = {
     ),
     "WorkerStarted": delegate.WorkerStarted(pid=1, pgid=1, run_id="r1"),
     "Bead": bead.Bead(
-        id="tl-1",
+        id=BeadId("tl-1"),
         title="T",
         status="open",
         issue_type="feature",

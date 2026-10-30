@@ -84,4 +84,4 @@ class Fixer:
             raise e.blocked_for("failed: the rebase did not continue after the conflict fix\n" + out, "FAULT_LAND", fix=True)
         if done != "accept":
             e.warn("land: the fix round did not pass its checks and review; landing tries the gate again")
-        return str(done)
+        return done

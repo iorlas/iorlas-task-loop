@@ -2,6 +2,7 @@
 
 from taskloop.contracts.checks import verdict_of
 from taskloop_dash.cache import FileCache
+from taskloop_dash.jsonrec import Json, Pair
 from taskloop_dash.views import timeline
 from taskloop_dash.views.nodes import nodes_of
 
@@ -27,10 +28,10 @@ CALL_KEYS = (
 SESSION_KEYS = ("ref", "family", "model", "effort", "lane", "status", "reason", "transcript", "tokens", "secs", "resume", "flag", "attempt")
 
 
-def check_pairs(lines: list[dict]) -> list[list]:
+def check_pairs(lines: list[Json]) -> list[Pair]:
     """[[cmd, exit, tail, secs]] from a step's command lines and the exit note after each."""
-    out: list[list] = []
-    last: list | None = None
+    out: list[Pair] = []
+    last: Pair | None = None
     for ln in lines:
         if ln["kind"] == "cmd":
             last = [ln["text"], None, "", None]
@@ -41,7 +42,7 @@ def check_pairs(lines: list[dict]) -> list[list]:
     return out
 
 
-def checks_of(n: dict) -> list[dict]:
+def checks_of(n: Json) -> list[Json]:
     pairs = check_pairs(n["lines"])
     rec = n.get("checks")
     if not rec:
@@ -58,7 +59,7 @@ def checks_of(n: dict) -> list[dict]:
             }
             for cmd, ex, tail, secs in pairs
         ]
-    out: list[dict] = []
+    out: list[Json] = []
     used: set[int] = set()
     for it in rec.run.results:
         tail = ""
@@ -86,7 +87,7 @@ def checks_of(n: dict) -> list[dict]:
     return out
 
 
-def judging_checks(nodes: list[dict], idx: int) -> dict | None:
+def judging_checks(nodes: list[Json], idx: int) -> Json | None:
     """The checks node that judges node idx: itself, or for a write the checks that follow it."""
     n = nodes[idx]
     if n["step"] == "checks":
@@ -101,7 +102,7 @@ def judging_checks(nodes: list[dict], idx: int) -> dict | None:
     return None
 
 
-def block_detail(path: str, node_id: str | int, k: str | int = 0, cache: FileCache | None = None) -> dict:
+def block_detail(path: str, node_id: str | int, k: str | int = 0, cache: FileCache | None = None) -> Json:
     recs = timeline.read(path, cache)
     nodes, _ = nodes_of(recs)
     blocks, _ = timeline.blocks_of(nodes, timeline.plan_titles(path, cache))

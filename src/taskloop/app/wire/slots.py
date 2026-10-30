@@ -25,6 +25,7 @@ from taskloop.app.track.trail import event
 from taskloop.contracts import config
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.config import EngineConfig, RepoProfile, SlotsConfig
+from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ids import loop_key as repo_key
 from taskloop.contracts.paths import TASK_EXCLUDE, ConfigDir
 from taskloop.contracts.ports import BdFailure, BeadQuery, Beads
@@ -138,12 +139,13 @@ def waiting_line(repo: str) -> list[Any]:
 def wait_slot(repo: str, cfg: SlotsConfig, why: str, bead: str = "", stop: Callable[[], bool] | None = None,
               sleep: Callable[[float], object] = time.sleep, poll: tuple[float, float] | None = None,
               on_wait: Callable[[int], None] | None = None, prio: int = DEFAULT_PRIO,
-              store: Beads | None = None) -> tuple[str, str, str] | None:
+              store: Beads | None = None) -> tuple[str, str, BeadId] | None:
     """(name, dir, slot bead) once this waiter is first in line and a slot is free; None when stop() says so (see app/slots/line.py)."""
     return slots_line.wait_slot(slot_env(repo, store, cfg), why, bead, stop, sleep, poll, on_wait, prio)
 
 
-def take_named_slot(repo: str, name: str, cfg: SlotsConfig, why: str, bead: str = "", store: Beads | None = None) -> tuple[Any, str]:
+def take_named_slot(repo: str, name: str, cfg: SlotsConfig, why: str, bead: str = "",
+                    store: Beads | None = None) -> tuple[BeadId | None, str]:
     """(slot bead, "") when this session now holds slot `name`, or (None, why not)."""
     try:
         return SlotPool(slot_env(repo, store, cfg)).slot(name).take(why, bead), ""
@@ -165,7 +167,7 @@ def prio_of(bead: Bead | None) -> int:
     return bead.priority if bead and bead.priority is not None else DEFAULT_PRIO
 
 
-def bead_priority(repo: str, bead_id: str, store: Beads | None = None) -> int:
+def bead_priority(repo: str, bead_id: BeadId, store: Beads | None = None) -> int:
     """The priority (0 = P0) of a bead, DEFAULT_PRIO when it cannot be read."""
     try:
         return prio_of(peek(store or bd_store(repo), bead_id))

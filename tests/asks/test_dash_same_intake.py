@@ -15,6 +15,7 @@ from asks.dash_ports import answering
 from asks.samples import MOCKS
 from taskloop.cli import asks as cli_asks
 from taskloop.contracts.bead import Bead
+from taskloop.contracts.ids import BeadId
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.stores import AskStore
 
@@ -23,7 +24,7 @@ ASK = MOCKS["lifesim-22b3"].replace(bead="b-1", id="b-1-1")
 
 def world(root: str):
     store = FakeBeads()
-    store.beads["b-1"] = Bead(id="b-1", title="", status="blocked")
+    store.beads[BeadId("b-1")] = Bead(id=BeadId("b-1"), title="", status="blocked")
     asks = AskStore.at(ConfigDir(root))
     asks.put(ASK)
     return store, asks
@@ -40,9 +41,9 @@ class SameIntake(unittest.TestCase):
             dash = make_dash(answering(lambda repo: dash_store, b), config=b)
             req = {"project": "b", "ask": "b-1-1", "kind": "answer", "text": "go with A"}
             self.assertEqual(dash.writes.post("answer", req), (200, {"ok": True, "message": ""}))
-            self.assertEqual([c.text for c in dash_store.comments("b-1")], [c.text for c in tl_store.comments("b-1")])
-            self.assertIn("Owner (tl) answer", dash_store.comments("b-1")[0].text)
-            self.assertEqual(dash_store.beads["b-1"].status, tl_store.beads["b-1"].status)
+            self.assertEqual([c.text for c in dash_store.comments(BeadId("b-1"))], [c.text for c in tl_store.comments(BeadId("b-1"))])
+            self.assertIn("Owner (tl) answer", dash_store.comments(BeadId("b-1"))[0].text)
+            self.assertEqual(dash_store.beads[BeadId("b-1")].status, tl_store.beads[BeadId("b-1")].status)
             mine, theirs = dash_asks.get("b-1"), tl_asks.get("b-1")
             self.assertEqual(must(must(mine).answer).replace(t=0), must(must(theirs).answer).replace(t=0))
 

@@ -33,6 +33,7 @@ from taskloop.app.run import (
 from taskloop.app.run import running as wrunning
 from taskloop.app.track import verbs
 from taskloop.app.wire import slots as wslots
+from taskloop.contracts.ids import BeadId
 from taskloop.domain.prompts.plan import REPLAN_CAP
 
 
@@ -216,11 +217,11 @@ class VisualWork(StagesTest):
 
     def test_the_table_is_read_from_the_base_branch_not_the_working_copy(self):
         (self.wt / "shots.json").write_text(json.dumps({"v": 1, "methods": [{"method": "Evil", "argv": ["touch", "pwned"]}]}))
-        e = engine.Engine("t-1", str(self.wt), cfg_with(wslots.load_cfg(str(self.wt)), shot_table="shots.json"), store=self.store)
+        e = engine.Engine(BeadId("t-1"), str(self.wt), cfg_with(wslots.load_cfg(str(self.wt)), shot_table="shots.json"), store=self.store)
         self.assertEqual(list(e.pictures.shot_methods()), ["ScreenShots"])
 
     def test_a_missing_table_is_warned_once_and_the_old_way_stands(self):
-        e = engine.Engine("t-1", str(self.wt), cfg_with(wslots.load_cfg(str(self.wt)), shot_table="nowhere.json"), store=self.store)
+        e = engine.Engine(BeadId("t-1"), str(self.wt), cfg_with(wslots.load_cfg(str(self.wt)), shot_table="nowhere.json"), store=self.store)
         self.assertEqual(e.pictures.shot_methods(), {})
         self.assertEqual(e.pictures.shot_methods(), {})
 
@@ -308,7 +309,7 @@ class VisualWork(StagesTest):
         e.checkpoints.save(stage=0, rounds=0, n=1, feedback="", step="write")
         ck = read_ck(e).state
         self.assertEqual((ck.look_done, sorted(ck.rendered_names), ck.render_stale), (1, ["a.png"], True))
-        again = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
+        again = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
         again.tree.reset(as_bead(BEAD))
         again.resume.point()
         self.assertEqual((again.look_done, again.rendered_names, again.render_stale), (1, ["a.png"], True))
@@ -329,7 +330,7 @@ class VisualWork(StagesTest):
             {"id": "t-1#1", "bead": "t-1", "title": "it reads well", "shots": [], "status": "good"}], "keep": "me"}}
         with self.store.stub(show=old), \
                 self.store.stub(bd_fn=lambda *a, **k: sent.append(a) or mock.Mock(returncode=0, stdout="", stderr="")):
-            e.owner_look.write_looks("lk-1")
+            e.owner_look.write_looks(BeadId("lk-1"))
         (call,) = sent
         self.assertEqual(call[:3], ("update", "lk-1", "--metadata"))
         meta = json.loads(call[3])
@@ -341,7 +342,7 @@ class VisualWork(StagesTest):
         sent.clear()
         with self.store.stub(show=old), \
                 self.store.stub(bd_fn=lambda *a, **k: sent.append(a) or mock.Mock(returncode=0, stdout="", stderr="")):
-            e.owner_look.write_looks("lk-1")
+            e.owner_look.write_looks(BeadId("lk-1"))
         entry = json.loads(sent[0][3])["looks"][-1]
         self.assertEqual((entry["id"], entry["bead"], entry["title"], entry["status"]), ("t-1#1", "t-1", "it reads well", "open"))
         self.assertEqual(entry["note"], "the main screen shows")
@@ -445,7 +446,7 @@ class ResumeCount(StagesTest):
         te.sh("git", "add", "-A", cwd=base)
         te.sh("git", "commit", "-qm", "main moves", cwd=base)
         te.sh("git", "push", "-q", "origin", "HEAD:main", cwd=base)
-        e = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
+        e = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
         e.tree.reset(as_bead(BEAD))
         e.plan_data = dict(PLAN)
         e.checkpoints.save(stage=0, rounds=0, n=1, feedback="", step="write")
@@ -598,7 +599,7 @@ class Claims(StagesTest):
         for holder, expect in (("tl-2be89f88", ("update", "t-1", "--status", "blocked", "--assignee", "")),
                                ("denis", ("update", "t-1", "--status", "blocked")), ("", ("update", "t-1", "--status", "blocked"))):
             store = FakeBeadStore().put({"id": "t-1", "assignee": holder})
-            self.assertEqual(verbs.block("t-1", "stuck", store), 0)
+            self.assertEqual(verbs.block(BeadId("t-1"), "stuck", store), 0)
             self.assertEqual(store.said("update")[0], expect, holder)  # a person's own claim stays theirs
 
     def test_a_plan_with_no_stages_goes_back_to_the_planner_once(self):

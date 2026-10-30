@@ -13,7 +13,7 @@ from taskloop.adapters.versionfile import NoVersion, set_version
 from taskloop.app.release import clone, manifest, publish, selfupdate, suite, tidy
 from taskloop.app.release.push import push_main, release_lock_path
 from taskloop.app.release.shell import Abort, git, say
-from taskloop.contracts.ids import MARKETPLACE
+from taskloop.contracts.ids import MARKETPLACE, BeadId, parse_bead_id
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdFailure, BeadQuery, Beads
 from taskloop.contracts.snapshots import ReleaseResult
@@ -23,7 +23,7 @@ from taskloop.contracts.stores import ReleaseResultStore
 @dataclass(frozen=True)
 class Request:
     message: str
-    bead: str = ""
+    bead: BeadId | None = None
     reason: str = ""
     from_branch: str = ""
     minor: bool = False
@@ -136,7 +136,7 @@ def record(result: ReleaseResult, req: Request, repo: Path, store: Beads | None 
 def main(argv: list[str] | None, tool_root: Path, doc: str = "") -> int:
     ap = argparse.ArgumentParser(prog="release.py", description=doc)
     ap.add_argument("message")
-    ap.add_argument("--bead", default="", help="close this bead after the push")
+    ap.add_argument("--bead", type=parse_bead_id, default=None, help="close this bead after the push")
     ap.add_argument("--reason", default="", help="the close reason (default: the message)")
     ap.add_argument("--from-branch", default="", help="replay this branch's commits on origin/main in the release clone")
     ap.add_argument("--minor", action="store_true", help="bump the minor version, not the patch")

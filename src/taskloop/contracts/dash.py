@@ -11,6 +11,7 @@ from typing import Annotated, ClassVar, Literal, final
 
 import msgspec
 
+from taskloop.contracts.ids import WireBead
 from taskloop.contracts.wire import Rec
 
 
@@ -496,7 +497,7 @@ class StickReq(Rec):
 @final
 class CauseReq(Rec):
     project: str
-    bead: str
+    bead: WireBead
     cause: OwnerCause
     ask: str | None = None
 
@@ -504,7 +505,7 @@ class CauseReq(Rec):
 @final
 class AckReq(Rec):
     project: str
-    bead: str
+    bead: WireBead
     ack: bool
 
 
@@ -521,13 +522,13 @@ class BeadReq(Rec):
     """Body of park and stop."""
 
     project: str
-    bead: str
+    bead: WireBead
 
 
 @final
 class NoteReq(Rec):
     project: str
-    bead: str
+    bead: WireBead
     text: str
 
 

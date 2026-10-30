@@ -7,6 +7,7 @@ import msgspec
 
 from taskloop.contracts.ask import CauseBy, SimilarRef
 from taskloop.contracts.dash import OwnerCause, Stick
+from taskloop.contracts.ids import BeadId
 from taskloop.contracts.wire import Rec
 
 LedgerEvent = Literal["raise", "answer", "consume", "close", "withdraw", "cause", "stick", "demote"]
@@ -22,7 +23,7 @@ class LedgerEntry(Rec):
     t: float
     event: LedgerEvent
     ask: str
-    bead: str
+    bead: BeadId
     repo: str = ""
     question: str = ""
     key: str = ""

@@ -33,6 +33,7 @@ from taskloop.app.run import entry
 from taskloop.app.run import running as wrunning
 from taskloop.app.wire import asks as wasks
 from taskloop.app.wire import slots as wslots
+from taskloop.contracts.ids import BeadId
 from taskloop.domain.checks import matchers
 from taskloop.domain.checks.cmd import matchers as sh_matchers
 from taskloop.domain.land.matchers import _TRANSIENT as TRANSIENT_PUSH
@@ -103,7 +104,7 @@ class StaleTree(StagesTest):
 
     def test_a_tracked_change_in_the_slot_still_stops_the_rebase(self):
         te.sh("git", "checkout", "-q", "-b", "task/t-1", cwd=self.wt)
-        e = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
+        e = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
         self.junk_and_moving_main()
         (self.wt / "a.txt").write_text("edited and not committed\n")
         self.assertEqual(e.rebase.onto_base(), "")
@@ -139,7 +140,7 @@ class StaleTree(StagesTest):
         (self.wt / "g.txt").write_text("work\n")
         te.sh("git", "add", "-A", cwd=self.wt)
         te.sh("git", "commit", "-qm", "work", cwd=self.wt)
-        e = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
+        e = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
         before = e.git("rev-parse", "HEAD")
         (self.wt / "g.txt").write_text("more work\n")
         te.sh("git", "commit", "-qam", "wip (t-1): blocked", cwd=self.wt)  # what reset() does with a dirty tree
@@ -188,7 +189,7 @@ class SlotHygiene(StagesTest):
         for f in ("client/log.txt", "client/Logs.log", "client/deep/x.log"):
             Path(self.wt, f).parent.mkdir(parents=True, exist_ok=True)
             Path(self.wt, f).write_text("noise\n")
-        e = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
+        e = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
         self.assertEqual(e.checkout.dirty_status(), "")
         self.assertIn("?? client/", e.git("status", "--porcelain"))  # git alone calls it dirty: the old tree has no such rule
         Path(self.wt, "client/keep.log").write_text("real\n")  # negated by the base: real work

@@ -51,7 +51,7 @@ def bead_lint_warnings(repo: str, store: Beads | None = None) -> list[str]:
     for b in beads:
         if b.issue_type == "epic" or "slot" in b.labels:
             continue
-        r = beadlint.refs(b, str(repo))
+        r = beadlint.refs(b, repo)
         if r:
             cites = "; ".join(f"{k} {t[:60]}" for k, t in r[:3])
             out.append(f"bead {b.id}: {beadlint.REASON}: {cites}; inline the facts, or label it {beadlint.ESCAPE_LABEL} "

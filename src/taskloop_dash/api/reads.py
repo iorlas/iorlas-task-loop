@@ -6,9 +6,10 @@ from typing import Any
 
 from taskloop.contracts import wire
 from taskloop.contracts.dash import BeadDetail, Snapshot
+from taskloop.contracts.ids import is_bead_id
 from taskloop_dash.env import Env
 from taskloop_dash.readers.world import Worlds
-from taskloop_dash.views import bead_detail, names, snapshot
+from taskloop_dash.views import bead_detail, snapshot
 from taskloop_dash.views.board import Board
 from taskloop_dash.views.runfacts import Run
 
@@ -36,7 +37,7 @@ class Reads:
         """The drawer of one bead; None for a bead no project of the machine lists."""
         self.env.touch()
         path = self.worlds.repos().get(project)
-        if path is None or not names.is_bead_id(bead):
+        if path is None or not is_bead_id(bead):
             return None
         w = self.worlds.world(full=bead)
         p = next((x for x in w.projects if x.id == project), None)

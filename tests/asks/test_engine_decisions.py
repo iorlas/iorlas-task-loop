@@ -16,6 +16,7 @@ from taskloop.contracts.adrs import AdrStore
 from taskloop.contracts.ask import SimilarRef
 from taskloop.contracts.dash import OwnerCause
 from taskloop.contracts.enums import AskStatus
+from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ledger import Adr
 from taskloop.contracts.paths import ConfigDir
 from taskloop.domain.asks import similar, specs
@@ -98,5 +99,5 @@ class EngineDecisions(EngineTest):
         self.assertEqual(rc, 2)
         first = must(self.asks().get("t-1"))
         self.assertEqual((first.key, first.similar), (key, [SimilarRef(kind="adr", id=adr.id)]))
-        intake.Intake(self.asks(), self.store, lambda: 5.0, "denis").answer("t-1", "text", "hold")
+        intake.Intake(self.asks(), self.store, lambda: 5.0, "denis").answer(BeadId("t-1"), "text", "hold")
         self.assertEqual(json.loads((ident.config_dir() / "ask-ledger.jsonl").read_text().splitlines()[0])["event"], "raise")

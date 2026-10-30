@@ -12,21 +12,23 @@ from taskloop.app.slots import engine_lock
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts import paths
 from taskloop.contracts.enums import LockWhat
+from taskloop.contracts.ids import BeadId, is_bead_id
+from taskloop.contracts.ports import Beads
 
 
-def running(repo: Any, store: Any = None) -> dict[str, str]:
+def running(repo: str, store: Beads | None = None) -> dict[BeadId, str]:
     """{bead: where} of the beads running now: a slot bead held for one (held_bead), or a live engine lock naming one, in a slot
     or any worktree of the repo."""
-    out: dict[str, str] = {}
+    out: dict[BeadId, str] = {}
     slots = wslots.slot_beads(repo, store)
     stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     for b in slots:
         bid = b.metadata.get("held_bead")
-        if bid and b.status == "in_progress" and not (b.lease_expires_at and b.lease_expires_at < stamp):
+        if is_bead_id(bid) and b.status == "in_progress" and not (b.lease_expires_at and b.lease_expires_at < stamp):
             out[bid] = b.title.split()[-1]
     for wt in wslots.worktrees(repo, slots):
         lock = engine_lock.read_engine_lock(wt)
-        if lock is not None and lock.bead and engine_lock.live(lock):
+        if lock is not None and is_bead_id(lock.bead) and engine_lock.live(lock):
             out.setdefault(lock.bead, lock.slot or Path(wt).name)
     return out
 

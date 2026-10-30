@@ -21,6 +21,7 @@ from taskloop.app.run import layout  # noqa: E402
 from taskloop.app.slots.lease import Lease  # noqa: E402
 from taskloop.contracts import log as rec  # noqa: E402
 from taskloop.contracts.enums import Outcome  # noqa: E402
+from taskloop.contracts.ids import BeadId  # noqa: E402
 from taskloop.contracts.paths import ConfigDir  # noqa: E402
 from taskloop.contracts.runlife import BEAT_EVERY, CRASHED_AFTER, RETAIN, Liveness, liveness  # noqa: E402
 from taskloop.domain.report import matchers  # noqa: E402
@@ -61,7 +62,7 @@ class Beats(unittest.TestCase):
                 pass
 
         seen: list[str] = []
-        lease = Lease(mock.Mock(wraps=Store()), "t-1", on_beat=lambda: seen.append("beat"))
+        lease = Lease(mock.Mock(wraps=Store()), BeadId("t-1"), on_beat=lambda: seen.append("beat"))
         lease.beat()
         lease.beat()
         self.assertEqual(seen, ["beat", "beat"])

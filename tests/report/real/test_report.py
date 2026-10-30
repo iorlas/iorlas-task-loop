@@ -35,6 +35,7 @@ from taskloop.adapters import (  # noqa: E402
 )
 from taskloop.app.launch import repos  # noqa: E402
 from taskloop.app.report import card, inputs, lost  # noqa: E402
+from taskloop.contracts.ids import BeadId  # noqa: E402
 from taskloop.contracts.landed import Landed, LandedStore  # noqa: E402
 
 T0 = datetime(2026, 10, 21, 6, 0).timestamp()  # the window's start in the fixtures: local 06:00
@@ -184,9 +185,9 @@ class LostWork(Base):
 
     def test_bd_failing_reads_as_unknown(self):
         with tlbd.bd_boundary(result=tlbd.done(returncode=1, stderr="dolt: connection refused")):
-            self.assertEqual(inputs.bead_status("t-1", str(self.repo)), "?")
+            self.assertEqual(inputs.bead_status(BeadId("t-1"), str(self.repo)), "?")
         with tlbd.bd_boundary(result=tlbd.done(returncode=1, stderr="Error: issue t-1 not found")):
-            self.assertIsNone(inputs.bead_status("t-1", str(self.repo)))
+            self.assertIsNone(inputs.bead_status(BeadId("t-1"), str(self.repo)))
 
     def test_a_slot_resets_wip_branch_is_lost(self):
         self.branch("wip/s1/1792540800", [("f.txt", "dead session\n", "wip: left in slot s1")], T0)

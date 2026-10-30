@@ -2,12 +2,13 @@
 could prove."""
 import contextlib
 import hashlib
-from collections.abc import Iterator
+from collections.abc import Generator
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
 from taskloop.adapters import bdcreate, beadtools, ident
+from taskloop.contracts.ids import BeadId, is_bead_id
 from taskloop.contracts.ports import BdFailure, BeadPatch, BeadQuery, NewBead
 from taskloop.domain.look.matchers import sections
 
@@ -21,13 +22,13 @@ class OwnerLook:
     def look_epic(self) -> str:
         """The bead's epic: parents walked up to the first epic, else the direct parent."""
         e = self.e
-        cur, seen = e.bead_parent, set[str]()
+        cur, seen = e.bead_parent if is_bead_id(e.bead_parent) else None, set[BeadId]()
         while cur and cur not in seen and len(seen) < 10:
             seen.add(cur)
             d = beadtools.peek(e.store, cur)
             if d and d.issue_type == "epic":
                 return str(cur)
-            cur = d.parent if d else ""
+            cur = d.parent if d and is_bead_id(d.parent) else None
         return str(e.bead_parent)
 
     def existing_owner_look(self) -> tuple[str, str]:
@@ -80,7 +81,7 @@ class OwnerLook:
             self.file_review(section)
 
     @contextlib.contextmanager
-    def review_lock(self) -> Iterator[None]:
+    def review_lock(self) -> Generator[None]:
         """One filer at a time per (repo, epic), across slots and sessions."""
         e = self.e
         key = f"{e.git('remote', 'get-url', 'origin') or str(e.wt)}|{self.look_epic() or e.bead}"
@@ -106,12 +107,12 @@ class OwnerLook:
             return
         e.look_filed = True
         if e.cases.cases_of("taste"):
-            if made:
+            if made and is_bead_id(made):
                 self.write_looks(made)
             else:
                 e.warn("owner-look bead filed, but its id was not in bd's answer: no looks metadata")
 
-    def write_looks(self, bead_id: str) -> None:
+    def write_looks(self, bead_id: BeadId) -> None:
         """tl-bxk.13.15: the gallery's data on the owner-look bead, as metadata `looks` (one entry per taste item: id, bead,
         title, note, shots[{path, role before|after, label}], status). A re-land of this bead replaces its own entries and
         keeps one the owner already answered (good or redo)."""

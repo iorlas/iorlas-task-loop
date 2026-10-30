@@ -9,6 +9,7 @@ from taskloop.app.run import engine
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts import wire
 from taskloop.contracts.config import EngineConfig
+from taskloop.contracts.ids import BeadId
 
 
 def make_engine(wt, bead="t-1", cfg=None, script=None, attrs=None, **seams):
@@ -20,7 +21,7 @@ def make_engine(wt, bead="t-1", cfg=None, script=None, attrs=None, **seams):
     seams.setdefault("store", FakeBeadStore())
     seams.setdefault("route", FakeRouter(script))
     seams.setdefault("clock", FakeClock())
-    e = engine.Engine(bead, str(wt), c, **seams)
+    e = engine.Engine(BeadId(bead), str(wt), c, **seams)
     for k, v in (attrs or {}).items():
         setattr(e, k, v)
     return e

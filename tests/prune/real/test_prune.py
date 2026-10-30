@@ -18,6 +18,7 @@ from taskloop.app.prune import branches, trees, verb
 from taskloop.app.release.shell import REAL, Shell
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.config import LoopConfig
+from taskloop.contracts.ids import BeadId
 from taskloop.contracts.landed import Landed as LandedRec
 from taskloop.contracts.landed import LandedStore
 from taskloop.contracts.paths import ConfigDir
@@ -208,7 +209,7 @@ class Landed(unittest.TestCase):
 
     def store(self, **meta):
         states = (("a-1", "closed"), ("a-2", "open"), ("a-3", "closed"), ("a-4", "closed"), ("a-5", "closed"))
-        beads = [Bead(id=i, title="", status=s, metadata=meta.get(i, {})) for i, s in states]
+        beads = [Bead(id=BeadId(i), title="", status=s, metadata=meta.get(i, {})) for i, s in states]
         return type("S", (), {"find": lambda self, q: beads})()
 
     def prune(self, dry_run=False, **meta):

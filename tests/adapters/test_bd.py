@@ -18,6 +18,7 @@ from support.tags import contract, domain
 from taskloop.adapters import bd
 from taskloop.adapters.bd import BdRun, BdStore, create_argv, update_argv
 from taskloop.contracts.bead import BdError
+from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ports import BdFailure, BeadPatch, BeadQuery, DoltPush, NewBead
 
 GOLD = Path(__file__).parent / "golden" / "bd_1_3_1"
@@ -85,28 +86,28 @@ class GoldenBd(unittest.TestCase):
         return b
 
     def test_show_of_a_claimed_bead_with_metadata(self) -> None:
-        b = self.beads(show=BdRun(0, gold("show_in_progress.json"), "")).show("t-gold")
+        b = self.beads(show=BdRun(0, gold("show_in_progress.json"), "")).show(BeadId("t-gold"))
         assert b is not None
         self.assertEqual((b.status, b.assignee, b.metadata), ("in_progress", "x", {"slot": "s1", "held_bead": "t-dhc"}))
         self.assertTrue(b.lease_expires_at)
 
     def test_a_fenced_close_guards_with_a_same_value_update_then_closes_with_the_reason(self) -> None:
         b = self.beads(update=BdRun(0, "", ""), close=BdRun(0, "", ""))
-        b.close("t-1", "landed", if_assignee="loop")
+        b.close(BeadId("t-1"), "landed", if_assignee="loop")
         self.assertEqual([c[3:] for c in b.calls], [  # type: ignore[attr-defined]
             ["update", "t-1", "--if-assignee", "loop", "--assignee", "loop", "--json"], ["close", "t-1", "--reason", "landed", "--json"]])
 
     def test_a_fenced_close_on_a_moved_bead_never_closes(self) -> None:
         b = self.beads(update=BdRun(13, "", "assignee mismatch"))
         with self.assertRaises(BdFailure):
-            b.close("t-1", "landed", if_assignee="loop")
+            b.close(BeadId("t-1"), "landed", if_assignee="loop")
         self.assertEqual([c[3] for c in b.calls], ["update"])  # type: ignore[attr-defined]
 
     def test_show_missing_is_none(self) -> None:
-        self.assertIsNone(self.beads(show=BdRun(1, gold("show_missing.out"), gold("show_missing.err"))).show("nope"))
+        self.assertIsNone(self.beads(show=BdRun(1, gold("show_missing.out"), gold("show_missing.err"))).show(BeadId("nope")))
 
     def test_comments(self) -> None:
-        got = self.beads(comments=BdRun(0, gold("comments.json"), "")).comments("t-eis")
+        got = self.beads(comments=BdRun(0, gold("comments.json"), "")).comments(BeadId("t-eis"))
         self.assertEqual([(c.author, c.text) for c in got], [("x", "hi there")])
 
     def test_list_and_ready(self) -> None:
@@ -122,7 +123,7 @@ class GoldenBd(unittest.TestCase):
         self.assertEqual(self.beads(create=BdRun(0, gold("create.json"), "")).create(NewBead(title="gold")), "t-gold")
 
     def test_a_closed_bead_claim_is_refused_with_no_exception(self) -> None:
-        self.assertFalse(self.beads(update=BdRun(1, gold("claim_closed.out"), gold("claim_closed.err"))).claim("t-eis"))
+        self.assertFalse(self.beads(update=BdRun(1, gold("claim_closed.out"), gold("claim_closed.err"))).claim(BeadId("t-eis")))
 
     def test_error_kinds(self) -> None:
         self.assertEqual(bd.error_of(gold("claim_closed.err"), "").kind, "not_claimable")
@@ -140,11 +141,11 @@ class GoldenBd(unittest.TestCase):
         self.assertEqual(create_argv(NewBead(title="T", labels=["a", "b"], priority=1, parent="p-1", no_inherit_labels=True)),
                          ["create", "T", "--type", "task", "--parent", "p-1", "--priority", "1", "--labels", "a,b",
                           "--no-inherit-labels"])
-        self.assertEqual(update_argv("b-1", BeadPatch(status="open", assignee="", set_metadata={"k": "v"}, unset_metadata=["z"])),
+        self.assertEqual(update_argv(BeadId("b-1"), BeadPatch(status="open", assignee="", set_metadata={"k": "v"}, unset_metadata=["z"])),
                          ["update", "b-1", "--status", "open", "--assignee", "", "--set-metadata", "k=v", "--unset-metadata", "z"])
 
     def test_dependencies_read_the_same_from_show_and_list(self) -> None:
-        shown = self.beads(show=BdRun(0, gold("show_blocked_by.json"), "")).show("zz-kgz")
+        shown = self.beads(show=BdRun(0, gold("show_blocked_by.json"), "")).show(BeadId("zz-kgz"))
         listed = self.beads(list=BdRun(0, gold("list_with_parent_dep.json"), "")).find(BeadQuery(label="a"))[0]
         assert shown is not None
         self.assertEqual([(d.id, d.type, d.title, d.status) for d in shown.dependencies], [("zz-6to.1", "blocks", "Child", "in_progress")])
@@ -153,10 +154,10 @@ class GoldenBd(unittest.TestCase):
 
     def test_every_call_carries_the_actor_and_json(self) -> None:
         store = self.beads(show=BdRun(0, gold("show_open.json"), ""), comments=BdRun(0, "[]", ""), update=BdRun(0, "[]", ""))
-        store.show("x")
-        store.comments("x")
-        store.claim("x")
-        store.update("x", BeadPatch(status="open"))
+        store.show(BeadId("x"))
+        store.comments(BeadId("x"))
+        store.claim(BeadId("x"))
+        store.update(BeadId("x"), BeadPatch(status="open"))
         for argv in store.calls:  # type: ignore[attr-defined]
             self.assertEqual((argv[1], argv[2], argv[-1]), ("--actor", "x", "--json"), argv)
 
@@ -169,7 +170,7 @@ class GoldenBd(unittest.TestCase):
     def test_reclaim_and_provenance_argv(self) -> None:
         store = self.beads(reclaim=BdRun(0, gold("reclaim.json"), ""), provenance=BdRun(0, "{}", ""))
         store.reclaim("15m", ["a", "b"])
-        store.provenance("b-1", "k", "tl", at="2026-01-01T00:00:00Z")
+        store.provenance(BeadId("b-1"), "k", "tl", at="2026-01-01T00:00:00Z")
         self.assertEqual(store.calls[0][3:], ["reclaim", "--older-than", "15m", "--assignee", "a", "--assignee", "b", "--json"])  # type: ignore[attr-defined]
         self.assertEqual(store.calls[1][3:7], ["provenance", "record", "--issue", "b-1"])  # type: ignore[attr-defined]
 

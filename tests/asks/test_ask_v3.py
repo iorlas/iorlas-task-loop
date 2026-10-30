@@ -18,6 +18,7 @@ from taskloop.contracts.ask import Ask, AskAnswer, SimilarRef, ThreadEntry
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.dash import OwnerCause, Stick
 from taskloop.contracts.enums import AskStatus
+from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ledger import Adr
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.stores import AskStore
@@ -31,7 +32,7 @@ OPTS = [{"label": "Keep v1", "cost": "none", "answer": "keep v1", "recommended":
 
 
 def asking(bead: str = "t-1", now: float = T, repo: str = "/r/demo") -> raiser.Asking:
-    return raiser.Asking(bead=bead, run="r", brief_hash="h", repo=repo, title="T", now=now)
+    return raiser.Asking(bead=BeadId(bead), run="r", brief_hash="h", repo=repo, title="T", now=now)
 
 
 def question(cause: str = "decision", default: str = "") -> specs.AskSpec:
@@ -85,9 +86,9 @@ class Ledger(unittest.TestCase):
         first = self.asks.history("t-1-1")[0]
         self.assertEqual((first.question, first.cause, first.cause_by, first.t, first.repo),
                          (a.decision, OwnerCause.PROCESS, "agent", T, "/r/demo"))
-        self.beads.beads["t-1"] = Bead(id="t-1", title="x", status="blocked")
-        self.verbs.answer("t-1", "text", "keep v1")
-        self.assertEqual(self.verbs.cause("t-1", "t-1-1", "requirement"), "")
+        self.beads.beads[BeadId("t-1")] = Bead(id=BeadId("t-1"), title="x", status="blocked")
+        self.verbs.answer(BeadId("t-1"), "text", "keep v1")
+        self.assertEqual(self.verbs.cause(BeadId("t-1"), "t-1-1", "requirement"), "")
         self.asks.consume("t-1", T + 9)
         self.assertTrue(self.asks.stuck("t-1", "t-1-1", Stick.DEMOTE, "", T + 9))
         self.assertEqual([r[0] for r in self.rows()], ["raise", "answer", "cause", "consume", "demote"])
@@ -141,7 +142,7 @@ class Repeats(unittest.TestCase):
         self.assertEqual(first.similar, [])
         again = must(raiser.raise_ask(self.asks, question(), asking("t-2", T + 50), self.adrs)[0])
         self.assertEqual(again.similar, [])  # the first was never answered: it teaches nothing
-        intake.Intake(self.asks, FakeBeads(), lambda: T + 60, "denis").answer("t-2", "text", "keep v1")
+        intake.Intake(self.asks, FakeBeads(), lambda: T + 60, "denis").answer(BeadId("t-2"), "text", "keep v1")
         third = must(raiser.raise_ask(self.asks, question(), asking("t-3", T + 70), self.adrs)[0])
         self.assertEqual(third.similar, [SimilarRef(kind="ask", id="t-2-1")])
         self.assertEqual(self.asks.history("t-3-1")[0].similar, third.similar)  # the ledger keeps what matched
@@ -166,18 +167,18 @@ class SoftAsks(unittest.TestCase):
     def test_a_soft_ask_never_makes_the_run_wait_and_stays_open(self) -> None:
         a = must(raiser.raise_ask(self.asks, question("decision", "keep v1"), asking())[0])
         self.assertEqual((a.blocking, a.default, a.status), (False, "keep v1", AskStatus.OPEN))
-        self.assertEqual(raiser.check(self.asks, "t-1", "h", False, T + 1), ("none", None))
-        self.assertEqual(raiser.check(self.asks, "t-1", "changed", True, T + 2), ("none", None))  # not even a changed bead consumes it
+        self.assertEqual(raiser.check(self.asks, BeadId("t-1"), "h", False, T + 1), ("none", None))
+        self.assertEqual(raiser.check(self.asks, BeadId("t-1"), "changed", True, T + 2), ("none", None))  # a changed bead: not consumed
         self.assertEqual(must(self.asks.get("t-1")).consumed, None)
 
     def test_a_soft_ask_is_not_parked_and_a_later_answer_is_used(self) -> None:
         raiser.raise_ask(self.asks, question("decision", "keep v1"), asking(repo="/nowhere"))
         marker = Path(tempfile.gettempdir()) / "no-marker-x"
         self.assertEqual(sweeps.park_stale(self.asks, lambda _r: FakeBeads(), marker, T + 10 ** 7, 0), [])
-        intake.Intake(self.asks, FakeBeads(), lambda: T + 9, "denis").answer("t-1", "text", "migrate")
-        state, got = raiser.check(self.asks, "t-1", "h", False, T + 10)
+        intake.Intake(self.asks, FakeBeads(), lambda: T + 9, "denis").answer(BeadId("t-1"), "text", "migrate")
+        state, got = raiser.check(self.asks, BeadId("t-1"), "h", False, T + 10)
         self.assertEqual((state, must(must(got).answer).text), ("answer", "migrate"))
 
     def test_a_blocking_ask_still_waits(self) -> None:
         raiser.raise_ask(self.asks, question(), asking())
-        self.assertEqual(raiser.check(self.asks, "t-1", "h", False, T + 1)[0], "wait")
+        self.assertEqual(raiser.check(self.asks, BeadId("t-1"), "h", False, T + 1)[0], "wait")

@@ -10,6 +10,7 @@ from typing import Any
 from taskloop.contracts import paths
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.config import SlotsConfig
+from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ports import BdFailure, Beads, Git
 from taskloop.stores.api import Tickets
 
@@ -51,7 +52,7 @@ def stamp(t: float) -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(t))
 
 
-def peek(store: Beads, bead_id: str) -> Bead | None:
+def peek(store: Beads, bead_id: BeadId) -> Bead | None:
     """The bead, None when it is not there or bd could not be asked."""
     try:
         return store.show(bead_id)

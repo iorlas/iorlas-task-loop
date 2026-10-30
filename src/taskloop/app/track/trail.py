@@ -14,6 +14,7 @@ from taskloop.adapters.beadtools import bd_store
 from taskloop.adapters.gitrepo import repo_root
 from taskloop.adapters.ident import actor, config_dir, session_id
 from taskloop.contracts.guard import guard
+from taskloop.contracts.ids import BeadId
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdFailure, Beads
 from taskloop.contracts.stores import ReposStore
@@ -37,7 +38,7 @@ def event(kind: str, bead: str = "", **fields: Any) -> dict[str, Any]:
     return rec
 
 
-def provenance(bead: str, kind: str, ref: str, ref_kind: str, payload: dict[str, Any] | None = None, cwd: str | None = None,
+def provenance(bead: BeadId, kind: str, ref: str, ref_kind: str, payload: dict[str, Any] | None = None, cwd: str | None = None,
                store: Beads | None = None) -> None:
     """The shared record in bd (append-only, idempotent); a bd without provenance is not fatal."""
     try:

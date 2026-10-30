@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from taskloop.adapters import delegate_wire, procs
-from taskloop.contracts.delegate import REASON_TIMEOUT, DelegateResult, RunRequest
+from taskloop.contracts.delegate import REASON_TIMEOUT, DelegateResult, Permanence, RunRequest, Scope
 from taskloop.contracts.ids import MARKETPLACE
 
 CONTRACT = delegate_wire.CONTRACT  # the contract number this engine speaks
@@ -165,10 +165,14 @@ class RouteProbe:
         return bool(j["up"]) if isinstance(j, dict) and "up" in j else None
 
 
-def synth_for(contract: Mapping[str, Any], reason: str, default: tuple[str, str], text: str, ref: str = "") -> DelegateResult:
+def synth_for(contract: Mapping[str, Any], reason: str, default: tuple[Scope, Permanence], text: str, ref: str = "") -> DelegateResult:
     """A stop with no answer to read: the facts are the contract's row for `reason`, else `default` (scope, permanence)."""
     row = (contract.get("reasons") or {}).get(reason)
-    scope, perm = (row["scope"], row["permanence"]) if isinstance(row, dict) and "scope" in row else default
+    if isinstance(row, dict) and "scope" in row:
+        scope = delegate_wire.pick(row["scope"], delegate_wire.SCOPES, default[0])
+        perm = delegate_wire.pick(row.get("permanence"), delegate_wire.PERMANENCE, default[1])
+    else:
+        scope, perm = default
     return delegate_wire.synth(reason, scope, perm, text, ref)
 
 

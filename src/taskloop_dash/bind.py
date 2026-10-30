@@ -127,11 +127,11 @@ def open_servers(addrs: list[str], port: int, handler: Any) -> list[ThreadingHTT
             p = servers[0].server_address[1] if servers else port
             for s in servers:
                 s.server_close()
-            raise BindError(f"bind {addr}:{int(p)} failed: {e}") from e
+            raise BindError(f"bind {addr}:{p} failed: {e}") from e
     return servers
 
 
 def urls(addrs: list[str], port: int) -> list[str]:
-    return ["http://{}:{:d}".format(socket.gethostname() if a == "0.0.0.0" else a, int(port)) for a in addrs]
+    return ["http://{}:{:d}".format(socket.gethostname() if a == "0.0.0.0" else a, port) for a in addrs]
 
 

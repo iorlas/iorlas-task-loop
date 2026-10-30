@@ -96,7 +96,7 @@ class ConfigDir:
 
     def check_run(self, run: RunId | str, rnd: int | None = None) -> Path:
         """The CheckRun of a round of the run; no round: the latest."""
-        return self.run_dir(run) / ("engine-checks.json" if rnd is None else f"engine-checks.r{int(rnd)}.json")
+        return self.run_dir(run) / ("engine-checks.json" if rnd is None else f"engine-checks.r{rnd}.json")
 
     def check_logs(self, run: RunId | str) -> Path:
         return self.run_dir(run) / "checks"
@@ -128,7 +128,7 @@ class ConfigDir:
         return self.root / "loop" / (f"{repo_key}-rest.json")
 
     def ticket(self, repo_key: str, seq: int) -> Path:
-        return self.root / "slots" / repo_key / (f"{int(seq):06d}.json")
+        return self.root / "slots" / repo_key / (f"{seq:06d}.json")
 
     def ticket_counter(self, repo_key: str) -> Path:
         return self.root / "slots" / repo_key / "seq"

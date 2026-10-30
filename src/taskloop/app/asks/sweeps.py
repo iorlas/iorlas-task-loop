@@ -6,6 +6,7 @@ from pathlib import Path
 
 from taskloop.contracts.ask import Ask
 from taskloop.contracts.enums import AskStatus
+from taskloop.contracts.ids import BeadId, is_bead_id
 from taskloop.contracts.ports import BdFailure, BeadPatch, BeadQuery, Beads
 from taskloop.contracts.stores import HAD_PICK, ORPHAN, AskStore
 
@@ -35,7 +36,7 @@ def by_repo(live: list[Ask]) -> dict[str, list[Ask]]:
     return out
 
 
-def closed_reason(store: Beads, status: dict[str, str], ask: Ask) -> str:
+def closed_reason(store: Beads, status: dict[BeadId, str], ask: Ask) -> str:
     if ask.bead not in status:  # the list hides gates, ephemeral and infra beads: ask about this one before saying so
         return "the bead does not exist" if store.show(ask.bead) is None else ""
     return "the bead is closed" if status[ask.bead] == "closed" else ""
@@ -90,7 +91,7 @@ def orphan_lines(asks: AskStore) -> list[str]:
     return [f"{bead:<22} {ORPHAN}" for bead in asks.orphans()]
 
 
-def reopen(asks: AskStore, store: Beads, bead: str, pick: str = "", info: str = "") -> bool:
+def reopen(asks: AskStore, store: Beads, bead: BeadId, pick: str = "", info: str = "") -> bool:
     """Make a bead parked on a dropped ask re-askable: open again (back in the pick queue only if the park took its pick label), so the
     next run goes on from its checkpoint and raises a fresh ask. The dead file stays until that ask replaces it. -> whether reopened."""
     try:
@@ -114,11 +115,11 @@ def reopen(asks: AskStore, store: Beads, bead: str, pick: str = "", info: str = 
 
 
 def reask_orphans(asks: AskStore, store: Beads, marker: Path, now: float, pick: str = "", info: str = "",
-                  say: Callable[[str], None] = print, every: float = EVERY_S) -> list[str]:
+                  say: Callable[[str], None] = print, every: float = EVERY_S) -> list[BeadId]:
     """The sweep over dropped asks: every blocked bead of this tracker that was parked on one is reopened. -> the beads reopened."""
     if not due(marker, every, now):
         return []
-    done = [b for b in asks.orphans() if reopen(asks, store, b, pick, info)]
+    done = [b for b in asks.orphans() if is_bead_id(b) and reopen(asks, store, b, pick, info)]
     for b in done:
         say(f"{b}: parked on an ask that was dropped at upgrade; reopened to ask again")
     touch(marker)

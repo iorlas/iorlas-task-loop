@@ -10,9 +10,9 @@ import sys
 import threading
 import time
 import uuid
-from collections.abc import Iterator
+from collections.abc import Generator
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 from atomic_io import atomic_write_text
 
@@ -31,6 +31,7 @@ from taskloop.contracts.bead import Bead
 from taskloop.contracts.enums import AskStatus
 from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.fence import SLOT_GEN
+from taskloop.contracts.ids import BeadId
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdFailure, BeadPatch
 from taskloop.contracts.stores import AskStore
@@ -90,7 +91,7 @@ def _blocked_by_engine(b: Any, store: Any) -> str:
     ask = AskStore.at(ConfigDir(ident.config_dir())).get(bead_id)
     asking = ask is not None and ask.consumed is None and ask.status in (AskStatus.OPEN, AskStatus.PARKED, AskStatus.ANSWERED)
     if ask is not None and asking and ask.answer is not None:  # tl-gy4: an answer filed on the ask (dashboard, tl ask answer) is an answer
-        after, asking = cast(list[Any], []), False  # whether or not a comment followed the block; the run's check_ask consumes it
+        after, asking = after[:0], False  # whether or not a comment followed the block; the run's check_ask consumes it
     if ask is not None and asking and not after:
         return f"waiting for the answer to ask {ask.id} ({ask.kind.value})"
     if after and not asking:
@@ -276,9 +277,9 @@ def _worktree_of(a: Any, repo: Any) -> tuple[str, Any]:
     return wt, None
 
 
-def _slot_taken(a: Any, repo: Any, wt: str, slot: str, sb: str, store: Any) -> tuple[str, Any]:
+def _slot_taken(a: Any, repo: Any, wt: str, slot: str, sb: BeadId | None, store: Any) -> tuple[BeadId | None, Any]:
     """(slot bead taken here, taken outcome): a hand run takes its slot's bead as the loop does; one the loop started has it already."""
-    named = penv.ambient(EnvVar.TASK_LOOP_SLOT_BEAD) == sb
+    named = sb is not None and penv.ambient_bead(EnvVar.TASK_LOOP_SLOT_BEAD) == sb
     if slot and sb and named and _handed_slot(slot):
         halting.RUN_SLOT["owned"] = slot
         return sb, None  # exec'd by the run-task that took this slot: it is still ours, and this process gives it back
@@ -286,15 +287,15 @@ def _slot_taken(a: Any, repo: Any, wt: str, slot: str, sb: str, store: Any) -> t
         took, why = wslots.take_named_slot(repo, slot, wslots.profile_slots(repo), "run-task " + a.id, store=store)
         if not took:
             print(f"TAKEN: {why}")
-            return "", {"v": 1, "outcome": "taken", "bead": a.id, "why": why}
+            return None, {"v": 1, "outcome": "taken", "bead": a.id, "why": why}
         penv.export(EnvVar.TASK_LOOP_SLOT_BEAD, took)  # the engine's heartbeat keeps it
         halting.RUN_SLOT["owned"] = slot
         return took, None
-    return "", None
+    return None, None
 
 
 @contextlib.contextmanager
-def _sigterm_ignored() -> Iterator[None]:
+def _sigterm_ignored() -> Generator[None]:
     """A give-back in a finally block is not cut short by a SIGTERM (only the main thread can set the handler)."""
     old = signal.signal(signal.SIGTERM, signal.SIG_IGN) if hasattr(signal, "SIGTERM") and \
         threading.current_thread() is threading.main_thread() else None
@@ -316,7 +317,8 @@ def run_in(a: Any, repo: Any, cfg: Any, store: Any = None) -> Any:
         # a hand run takes its slot's bead as the loop does (a --worktree that is a slot too); one the loop started has
         # it already: TASK_LOOP_SLOT_BEAD names that very slot's bead
         slot = a.slot or wslots.slot_of(repo, wt, store)
-        sb = getattr(wslots.slot_bead(repo, slot, store), "id", "") if slot else ""
+        sb_row = wslots.slot_bead(repo, slot, store) if slot else None
+        sb = sb_row.id if sb_row else None
         took, taken = _slot_taken(a, repo, wt, slot, sb, store)
         if taken:
             return taken
@@ -357,7 +359,7 @@ def run_bead(a: Any, repo: Any, cfg: Any, wt: Any, store: Any = None) -> Any:
             # bd lets this session re-claim its own bead (a reopened one); another session's claim stops here
             return {"v": 1, "outcome": "taken", "bead": a.id, "why": "claimed by another session"}
         claim = None if a.dry_run else fence.take(store or beadtools.bd_store(), a.id, ident.actor(),
-                                                  penv.ambient(EnvVar.TASK_LOOP_SLOT_BEAD), getattr(a, "slot_gen", None))
+                                                  penv.ambient_bead(EnvVar.TASK_LOOP_SLOT_BEAD), getattr(a, "slot_gen", None))
         eng = Engine(a.id, wt, cfg, dry_run=a.dry_run, verbose=not getattr(a, "quiet", False),
                      fresh=bool(getattr(a, "fresh", False)), store=store, claim=claim)
         eng.stop_pending = bool(stop)

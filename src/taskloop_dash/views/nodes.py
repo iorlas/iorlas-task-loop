@@ -1,6 +1,7 @@
 """The records of one engine run folded into nodes: a node is one step with its worker calls, lines and moves."""
 
 from taskloop.contracts import log as rec
+from taskloop_dash.jsonrec import Json
 from taskloop_dash.views import names
 from taskloop_dash.views.names import num
 
@@ -14,7 +15,7 @@ def try_of(text: str) -> int | None:
     return int(n) if sep and head is not None and n.isdigit() else None
 
 
-def session_of(end: rec.CallEnd, start: rec.CallStart | None, index: int) -> dict:
+def session_of(end: rec.CallEnd, start: rec.CallStart | None, index: int) -> Json:
     tk = end.tokens
     return {
         "t": end.t,
@@ -40,7 +41,7 @@ def session_of(end: rec.CallEnd, start: rec.CallStart | None, index: int) -> dic
     }
 
 
-def line_of(r: rec.EngineLog, index: int) -> dict | None:
+def line_of(r: rec.EngineLog, index: int) -> Json | None:
     """A command, note or warning as the one line the block's detail shows."""
     if isinstance(r, rec.CmdStart):
         return {"t": r.t, "kind": "cmd", "text": r.text, "_i": index}
@@ -61,7 +62,7 @@ def line_of(r: rec.EngineLog, index: int) -> dict | None:
     return None
 
 
-def new_node(r: rec.StepStart) -> dict:
+def new_node(r: rec.StepStart) -> Json:
     meta = {x: getattr(r, x) for x in META if getattr(r, x) is not None}
     if try_of(r.text):
         meta["try"] = try_of(r.text)
@@ -88,18 +89,18 @@ class NodeBuilder:
     """Folds the records of a run, in order, into its nodes."""
 
     def __init__(self) -> None:
-        self.nodes: list[dict] = []
-        self.by_id: dict[int, dict] = {}
-        self.cur: dict | None = None
-        self.run: dict | None = None
+        self.nodes: list[Json] = []
+        self.by_id: dict[int, Json] = {}
+        self.cur: Json | None = None
+        self.run: Json | None = None
         self.ends: dict[int, rec.StepEnd] = {}
         self.calls: dict[str, rec.CallStart] = {}
 
-    def current(self) -> dict:
+    def current(self) -> Json:
         assert self.cur is not None, "a record before any step"
         return self.cur
 
-    def node_for(self, ident: object) -> dict:
+    def node_for(self, ident: object) -> Json:
         node = self.by_id.get(num(ident)) or self.cur
         assert node is not None, "a record before any step"
         return node
@@ -142,7 +143,7 @@ class NodeBuilder:
             if isinstance(r, rec.Artifacts):  # the step's files, for the thumbs under its block
                 self.node_for(r.id)["files"] += [{"name": n, "kind": names.kind_of(n)} for n in r.names]
 
-    def done(self, recs: list) -> list[dict]:
+    def done(self, recs: list[rec.EngineLog]) -> list[Json]:
         if self.nodes and self.nodes[-1]["t1"] is None:
             self.nodes[-1]["t1"] = recs[-1].t if recs else None
         for n in self.nodes:
@@ -152,7 +153,7 @@ class NodeBuilder:
         return self.nodes
 
 
-def nodes_of(recs: list) -> tuple[list[dict], dict | None]:
+def nodes_of(recs: list[rec.EngineLog]) -> tuple[list[Json], Json | None]:
     """(nodes, the run's start). A node: one engine step with its worker calls, lines and moves."""
     b = NodeBuilder()
     for i, r in enumerate(recs):

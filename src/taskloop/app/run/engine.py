@@ -63,6 +63,7 @@ from taskloop.app.write.newfiles import NewFiles
 from taskloop.app.write.stage_loop import StageLoop
 from taskloop.contracts import fence, plancheck
 from taskloop.contracts.argv import text_of
+from taskloop.contracts.ids import BeadId
 from taskloop.contracts.landed import Landed, LandedStore
 from taskloop.contracts.log import Assumed, Said
 from taskloop.contracts.paths import PLAN_FILE, ConfigDir, RunFiles
@@ -96,7 +97,7 @@ class Engine(RunFields):
     accepted: list[int]
     stage_tree: str
 
-    def __init__(self, bead: str, wt: str, cfg: Any, dry_run: bool = False, verbose: bool = True, store: Any = None,
+    def __init__(self, bead: BeadId, wt: str, cfg: Any, dry_run: bool = False, verbose: bool = True, store: Any = None,
                  route: Any = None, clock: Any = None, git: Any = None, stores: Any = None, fresh: bool = False,
                  claim: fence.Claim | None = None) -> None:
         route = route or seams.DelegateRoute()
@@ -303,8 +304,8 @@ class Engine(RunFields):
             os.makedirs(os.path.dirname(path), exist_ok=True)
         except OSError:
             return ""
-        self.live_now = str(path)
-        return str(path)
+        self.live_now = path
+        return path
 
     def diff_text(self) -> str:
         tree = self.checkout.tree_hash()

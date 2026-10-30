@@ -11,6 +11,7 @@ from typing import Any
 
 from taskloop.contracts.ask import Ask, AskAction
 from taskloop.contracts.dash import Result
+from taskloop.contracts.ids import BeadId
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import AnswerAsk, Beads
 from taskloop_dash.cache import FileCache, TtlCache
@@ -28,7 +29,7 @@ def _no_store(repo: str) -> Beads:
     raise OSError(2, "bd is not installed")
 
 
-def _no_answer(repo: str, bead: str, action: AskAction, text: str, amend: bool) -> tuple[Ask | None, str]:
+def _no_answer(repo: str, bead: BeadId, action: AskAction, text: str, amend: bool) -> tuple[Ask | None, str]:
     raise OSError(2, "bd is not installed")
 
 
@@ -36,19 +37,19 @@ def _no_look(repo: str, item: str, verdict: str, note: str, look_bead: str) -> R
     return Result(ok=False, message="bd is not installed")
 
 
-def _no_cause(repo: str, bead: str, scope: str, cause: str) -> Result:
+def _no_cause(repo: str, bead: BeadId, scope: str, cause: str) -> Result:
     return Result(ok=False, message="bd is not installed")
 
 
-def _no_ack(repo: str, bead: str, scope: str, on: bool) -> Result:
+def _no_ack(repo: str, bead: BeadId, scope: str, on: bool) -> Result:
     return Result(ok=False, message="bd is not installed")
 
 
-def _no_run_verb(repo: str, bead: str, run: str) -> Result:
+def _no_run_verb(repo: str, bead: BeadId, run: str) -> Result:
     return Result(ok=False, message="bd is not installed")
 
 
-def _no_note(repo: str, bead: str, run: str, text: str) -> Result:
+def _no_note(repo: str, bead: BeadId, run: str, text: str) -> Result:
     return Result(ok=False, message="bd is not installed")
 
 
@@ -60,7 +61,7 @@ def _no_prune(repo: str, adr: str) -> Result:
     return Result(ok=False, message="bd is not installed")
 
 
-def _no_ask_back(repo: str, bead: str, ask: str, text: str) -> Result:
+def _no_ask_back(repo: str, bead: BeadId, ask: str, text: str) -> Result:
     return Result(ok=False, message="bd is not installed")
 
 
@@ -72,14 +73,14 @@ class Ports:
     store: Callable[[str], Beads] = _no_store  # the typed bd port for a repo (the engine's BdStore); the only way the dash reaches bd
     answer: AnswerAsk = _no_answer  # file the owner's answer to an ask: the intake `tl answer` uses, receipt comment included
     look: Callable[[str, str, str, str, str], Result] = _no_look  # (repo, look item id, good|redo|undo, note, look bead or ""): Intake.look
-    cause: Callable[[str, str, str, str], Result] = _no_cause  # (repo, bead, run or ask id, cause): Intake.cause
-    ack: Callable[[str, str, str, bool], Result] = _no_ack  # (repo, bead, run id, seen): Intake.ack
-    park: Callable[[str, str, str], Result] = _no_run_verb  # (repo, bead, newest run id): app/run/requests.OwnerVerbs.park
-    stop: Callable[[str, str, str], Result] = _no_run_verb  # (repo, bead, newest run id): OwnerVerbs.stop
-    note: Callable[[str, str, str, str], Result] = _no_note  # (repo, bead, newest run id, text): OwnerVerbs.note
+    cause: Callable[[str, BeadId, str, str], Result] = _no_cause  # (repo, bead, run or ask id, cause): Intake.cause
+    ack: Callable[[str, BeadId, str, bool], Result] = _no_ack  # (repo, bead, run id, seen): Intake.ack
+    park: Callable[[str, BeadId, str], Result] = _no_run_verb  # (repo, bead, newest run id): app/run/requests.OwnerVerbs.park
+    stop: Callable[[str, BeadId, str], Result] = _no_run_verb  # (repo, bead, newest run id): OwnerVerbs.stop
+    note: Callable[[str, BeadId, str, str], Result] = _no_note  # (repo, bead, newest run id, text): OwnerVerbs.note
     stick: Callable[[str, str, str, str], Result] = _no_stick  # (repo, ask id, outcome, text): Intake.stick
     prune: Callable[[str, str], Result] = _no_prune  # (repo, ADR id): Intake.prune
-    ask_back: Callable[[str, str, str, str], Result] = _no_ask_back  # (repo, bead, ask id, text): Intake.ask_back
+    ask_back: Callable[[str, BeadId, str, str], Result] = _no_ask_back  # (repo, bead, ask id, text): Intake.ask_back
 
 
 class Env:

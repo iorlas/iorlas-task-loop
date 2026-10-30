@@ -35,7 +35,7 @@ class Calls:
         """The call is about to be made: its id, which the end record carries."""
         cid = self.log.next_id("c")
         nid = self.node_id()
-        self.log.emit(CallStart(id=cid, n=n, step=step, node=f"n{int(nid)}" if nid else "", role=role, resume=resume))
+        self.log.emit(CallStart(id=cid, n=n, step=step, node=f"n{nid}" if nid else "", role=role, resume=resume))
         return cid
 
     def end(

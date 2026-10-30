@@ -21,6 +21,7 @@ from taskloop.app.slots.lease import Lease
 from taskloop.app.slots.pool import SlotPool
 from taskloop.contracts import wire
 from taskloop.contracts.bead import Bead
+from taskloop.contracts.ids import BeadId
 from taskloop.contracts.loop import LoopState, QueueRow
 from taskloop.contracts.ports import BdFailure, BeadQuery
 from taskloop.contracts.slots import SlotFail
@@ -285,7 +286,7 @@ class Loop(Core):
             self.say(f"waiting {(t - self.area_wait[0]) // 60:.0f} min on area {area} held by {holder} in {where}")
         self.nap(tune.area_poll, self.until)
 
-    def acquire(self, prio: int) -> tuple[str, str, str] | None:
+    def acquire(self, prio: int) -> tuple[str, str, BeadId] | None:
         """(name, dir, slot bead) of a free slot, waiting in the repo's slot line (lowest priority number first, then first come)
         with backoff while none is; None on a stop or the end time."""
         env, wait = self.env, self.args.wait_slot_min
@@ -303,14 +304,14 @@ class Loop(Core):
 
     def work(self, cands: list[Bead], rule: QueueRule) -> int | None:
         env, slots = self.env, self.prof.slots.count > 0
-        got = self.acquire(min(prio_of(b) for b in cands)) if slots else ("", self.wt, "")
+        got = self.acquire(min(prio_of(b) for b in cands)) if slots else ("", self.wt, None)
         if got is None:
             return None
         name, d, slot_bead = got
         lease = Lease(env.store, slot_bead, every=self.tune().heartbeat).start()
         try:
             env.loop_lock(d, name, slot_bead, "")  # from the take to run-task's own lock: no hand run gets in, the slot reset included
-            taken = self.taker.attempt_all(cands, Where(name, d, slot_bead or None, self.started), slots, self.prof.engine, rule, lease)
+            taken = self.taker.attempt_all(cands, Where(name, d, slot_bead, self.started), slots, self.prof.engine, rule, lease)
         finally:
             lease.stop()
             env.drop_engine_lock(d)

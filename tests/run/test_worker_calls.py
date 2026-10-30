@@ -18,6 +18,7 @@ from support.logs import records
 from taskloop.adapters.delegate import Stopped
 from taskloop.app.run import engine
 from taskloop.app.wire import slots as wslots
+from taskloop.contracts.ids import BeadId
 from taskloop.domain.lanes import retry
 
 
@@ -52,7 +53,7 @@ class Calls(te.EngineTest):
         c = wslots.load_cfg(str(self.wt))
         nap = mock.Mock()
         with te.delegate_stack(script), mock.patch("taskloop.app.run.lane_acts.time", napper(nap)):
-            self.eng = engine.Engine("t-1", str(self.wt), c, store=self.store)
+            self.eng = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store)
             rc = self.eng.run()
         return rc, nap
 

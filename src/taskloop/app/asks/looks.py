@@ -6,7 +6,8 @@ import threading
 from typing import Any
 
 from taskloop.contracts import gallery
-from taskloop.contracts.bead import Bead, is_bead_id
+from taskloop.contracts.bead import Bead
+from taskloop.contracts.ids import BeadId, is_bead_id
 from taskloop.contracts.ports import BdFailure, BeadPatch, BeadQuery, Beads, NewBead
 
 NOTE_MAX = 2000
@@ -27,7 +28,7 @@ def find(store: Beads, item: str, look_bead: str) -> tuple[Bead | None, str, str
     otherwise every owner-look bead is searched, and the item may also be named by its source bead when that source has exactly one
     item that still waits."""
     if look_bead:
-        found = store.show(look_bead)
+        found = store.show(look_bead) if is_bead_id(look_bead) else None
         if found is None or gallery.LABEL not in found.labels:
             return None, "", f"The look bead {look_bead} no longer exists."
         return found, item, ""
@@ -114,7 +115,7 @@ def drop(store: Beads, bead: str, why: str = "the answer could not be saved") ->
             store.close(bead, why)
 
 
-def file_redo(store: Beads, look_bead: str, e: dict[str, Any], note: str) -> str:
+def file_redo(store: Beads, look_bead: str, e: dict[str, Any], note: str) -> BeadId:
     """The follow-up bead of a redo: the owner's note and the pictures, related to the bead the look came from. -> its id."""
     pics = "\n".join("- {} ({})".format(s["path"], s.get("role") or "after") for s in e.get("shots") or [])
     desc = 'The owner looked at "{}" ({}) and asked for a change.\n\nWhat to change:\n{}\n\nPictures:\n{}\n'.format(

@@ -1,11 +1,12 @@
 """The process environment, owned here: the one module of the package (with the edge modules named in tests/rules/test_env_edge.py)
 that touches os.environ. Reads go through `ambient`/`snapshot`, the engine's own handovers through `export`/`take`/`handover`."""
 import os
-from collections.abc import Iterator, Mapping
+from collections.abc import Generator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 
 from taskloop.contracts.envvars import EnvVar
+from taskloop.contracts.ids import BeadId, parse_bead_id
 
 
 @dataclass(frozen=True)
@@ -15,7 +16,7 @@ class Env:
     vars: Mapping[str, str] = field(default_factory=dict)
 
     def get(self, name: str, default: str = "") -> str:
-        return self.vars.get(str(name), default)
+        return self.vars.get(name, default)
 
     def __contains__(self, name: object) -> bool:
         return str(name) in self.vars
@@ -27,11 +28,17 @@ def snapshot() -> Env:
 
 def ambient(name: str, default: str = "") -> str:
     """One variable of the process environment ('' or `default` when unset or empty)."""
-    return os.environ.get(str(name)) or default
+    return os.environ.get(name) or default
+
+
+def ambient_bead(name: str) -> BeadId | None:
+    """A bead id held in the process environment, None when unset or empty; a value that is not a bead id is an error."""
+    value = ambient(name)
+    return parse_bead_id(value) if value else None
 
 
 def ambient_set(name: str) -> bool:
-    return str(name) in os.environ
+    return name in os.environ
 
 
 def export(var: EnvVar, value: str) -> None:
@@ -44,7 +51,7 @@ def take(var: EnvVar) -> str:
 
 
 @contextmanager
-def handover(var: EnvVar, value: str) -> Iterator[None]:
+def handover(var: EnvVar, value: str) -> Generator[None]:
     """`var` is `value` inside the block and what it was before (or unset) after, on any error."""
     before = os.environ.get(var.value)
     os.environ[var.value] = value
@@ -58,7 +65,7 @@ def handover(var: EnvVar, value: str) -> Iterator[None]:
 
 
 @contextmanager
-def patched(values: Mapping[str, str]) -> Iterator[None]:
+def patched(values: Mapping[str, str]) -> Generator[None]:
     """The process environment with `values` over it inside the block, restored whole after."""
     saved = dict(os.environ)
     os.environ.update(values)

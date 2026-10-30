@@ -1,14 +1,15 @@
 """`tl lint` over a store: one bead, or the repo's ready beads (with --fix: drop `auto` and add `needs-ac` where they fail)."""
+from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ports import BdFailure, BeadQuery, Beads
 from taskloop.domain.beads import rules
 
 
-def has_children(store: Beads, bead: str) -> bool:
+def has_children(store: Beads, bead: BeadId) -> bool:
     """Does any open bead name this one as its parent."""
     return any(x.parent == bead for x in store.find(BeadQuery()))
 
 
-def lint_one(store: Beads, root: str, bead_id: str) -> int:
+def lint_one(store: Beads, root: str, bead_id: BeadId) -> int:
     bead = store.show(bead_id)
     if bead is None:
         print(f"no bead {bead_id}")
@@ -33,7 +34,7 @@ def lint_ready(store: Beads, root: str, fix: bool) -> int:
     return 0 if fix or not bad else 1
 
 
-def fix_bead(store: Beads, bead_id: str, labels: list[str]) -> None:
+def fix_bead(store: Beads, bead_id: BeadId, labels: list[str]) -> None:
     try:
         if rules.AUTO in labels:
             store.remove_label(bead_id, rules.AUTO)

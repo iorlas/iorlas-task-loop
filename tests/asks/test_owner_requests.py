@@ -27,6 +27,7 @@ from taskloop.app.run.layout import prune_run_logs
 from taskloop.cli import asks as cli
 from taskloop.contracts import log as rec
 from taskloop.contracts.enums import WhyCode
+from taskloop.contracts.ids import BeadId
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import NewBead
 from taskloop.stores.memory import fake_stores
@@ -124,12 +125,12 @@ class Cli(unittest.TestCase):
         self.assertEqual(self.say("park", "fk-1"), 0)
         got = must(requests.peek(self.cfg, run))
         self.assertEqual((got.park, [n.text for n in got.notes]), (True, ["use blue"]))
-        self.assertEqual(self.store.beads["fk-1"].metadata[intake.HOLD], "denis")
+        self.assertEqual(self.store.beads[BeadId("fk-1")].metadata[intake.HOLD], "denis")
 
     def test_with_no_run_park_holds_and_note_is_the_hint(self):
         self.assertEqual(self.say("park", "fk-1"), 0)
         self.assertEqual(self.say("note", "fk-1", "later"), 0)
-        meta = self.store.beads["fk-1"].metadata
+        meta = self.store.beads[BeadId("fk-1")].metadata
         self.assertEqual((meta[intake.HOLD], meta[intake.HINT]), ("denis", "later"))
         self.assertIn("hint", self.out[-1])
 

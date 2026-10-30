@@ -25,6 +25,7 @@ from taskloop.adapters import ident  # noqa: E402
 from taskloop.app.track import verbs  # noqa: E402
 from taskloop.app.wire import slots as wslots  # noqa: E402
 from taskloop.contracts import log as rec  # noqa: E402
+from taskloop.contracts.ids import BeadId  # noqa: E402
 from taskloop_dash import jsonl  # noqa: E402
 
 engine = te.engine
@@ -202,7 +203,7 @@ class TraceRecords(te.EngineTest):
         new = ident.config_dir() / "runs" / "t-0-20261020-000000" / "checks"
         new.mkdir(parents=True)
         (new / "00-a.r1.log").write_text("x")
-        engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
+        engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
         self.assertFalse((old / "00-a.r1.log").exists())
         self.assertTrue((old / "00-a.log").exists())  # an old run's single log is its only one: kept
         self.assertTrue((new / "00-a.r1.log").exists())
@@ -211,7 +212,7 @@ class TraceRecords(te.EngineTest):
         self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         out = io.StringIO()
         with redirect_stdout(out):
-            rc = verbs.trace("t-1", 0, False)
+            rc = verbs.trace(BeadId("t-1"), 0, False)
         self.assertEqual(rc, 0)
         self.assertIn("landed", out.getvalue())
 

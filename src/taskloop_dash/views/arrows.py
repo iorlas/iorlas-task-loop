@@ -3,6 +3,7 @@
 import itertools
 from typing import Final
 
+from taskloop_dash.jsonrec import Json
 from taskloop_dash.views.names import hhmm, lane_name
 
 
@@ -77,17 +78,17 @@ def close_move(outcome: str, why: str) -> tuple[str, str]:
     return "close", "stopped" if why.startswith("failed: stopped") else "failed"
 
 
-def same_round(a: dict, b: dict) -> bool:
+def same_round(a: Json, b: Json) -> bool:
     """b writes again for the stage (or fix) a judged: a send-back, not the next stage."""
     ka, kb = (a["meta"].get("stage"), a["meta"].get("fix")), (b["meta"].get("stage"), b["meta"].get("fix"))
     return ka == kb and (b["meta"].get("write") or 1) > 1
 
 
-def mv(to: str, cause: str, detail: str = "") -> dict:
+def mv(to: str, cause: str, detail: str = "") -> Json:
     return {"to": to, "cause": cause, "detail": detail}
 
 
-def after_checks(a: dict, b: dict) -> dict | None:
+def after_checks(a: Json, b: Json) -> Json | None:
     if a["outcome"] == "red":
         return mv(b["step"], "checks_red" if b["step"] == "write" else "rounds_used", a["detail"])
     if b["step"] != "review":
@@ -95,7 +96,7 @@ def after_checks(a: dict, b: dict) -> dict | None:
     return mv("review", "checks_unverified" if a["outcome"] == "unverified" else "checks_green", a["detail"])
 
 
-def after_review(a: dict, b: dict) -> dict | None:
+def after_review(a: Json, b: Json) -> Json | None:
     sb = b["step"]
     if sb == "write" and same_round(a, b):
         return mv("write", "review_sendback", a["detail"])
@@ -104,11 +105,11 @@ def after_review(a: dict, b: dict) -> dict | None:
     return mv(sb, "rounds_used", a["detail"]) if sb in ("plan", "replan") else None
 
 
-def after_land(a: dict, b: dict) -> dict | None:
+def after_land(a: Json, b: Json) -> Json | None:
     return {"land": mv("land", "push_race"), "write": mv("fix", "gate_red")}.get(b["step"])
 
 
-def infer_move(a: dict, b: dict) -> dict | None:
+def infer_move(a: Json, b: Json) -> Json | None:
     """The move from node a to node b when no transition record says it."""
     sa, sb = a["step"], b["step"]
     if sb == "close":
@@ -184,17 +185,17 @@ def sendback_text(detail: str) -> str:
     return f"review sent back{(': ' + n) if n else ''} → round {r or 'again'}"
 
 
-def lane_out_text(ctx: dict) -> str:
+def lane_out_text(ctx: Json) -> str:
     return f"{ctx.get('from_name') or 'the lane'} out → new thread{(' on ' + ctx['to_model']) if ctx.get('to_model') else ''}"
 
 
-def paused_text(detail: str, ctx: dict) -> str:
+def paused_text(detail: str, ctx: Json) -> str:
     what = f"{ctx['lane']} out" if ctx.get("lane") else pause_reason(detail)
     until = ctx.get("until") or until_of(detail)
     return f"{what} → paused{(' until ' + until) if until else ''}"
 
 
-def arrow_text(cause: str, detail: str | None = "", ctx: dict | None = None) -> str:
+def arrow_text(cause: str, detail: str | None = "", ctx: Json | None = None) -> str:
     """What the arrow into a block (or the run's end) says."""
     ctx = ctx or {}
     detail = (detail or "").strip()
@@ -228,6 +229,6 @@ def stage_title(goal: object, cap: int = 80) -> str:
     return t
 
 
-def exit_ctx(mv: dict) -> dict:
+def exit_ctx(mv: Json) -> Json:
     until = mv.get("until")
     return {"lane": lane_name(mv.get("lane") or "") or None, "until": hhmm(until) if isinstance(until, (int, float)) and until else None}

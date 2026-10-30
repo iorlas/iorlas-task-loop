@@ -18,6 +18,7 @@ from taskloop.app.asks import intake, raiser
 from taskloop.app.loop.queue import QueueRule
 from taskloop.cli import asks as cli
 from taskloop.contracts.config import EngineConfig
+from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ports import NewBead
 from taskloop.domain import timespec
 from taskloop.domain.asks import specs
@@ -39,7 +40,7 @@ class VerbSurface(unittest.TestCase):
         self.store = FakeBeads()
         self.store.create(NewBead(title="x"))
         raiser.raise_ask(
-            self.asks, specs.missing_criteria(), raiser.Asking(bead="fk-1", run="r", brief_hash="h", repo="", title="T", now=T)
+            self.asks, specs.missing_criteria(), raiser.Asking(bead=BeadId("fk-1"), run="r", brief_hash="h", repo="", title="T", now=T)
         )
         self.out: list[str] = []
 
@@ -55,17 +56,17 @@ class VerbSurface(unittest.TestCase):
 
     def test_hold_until_is_a_key_that_ends_by_itself(self) -> None:
         self.assertEqual(self.say("hold", "fk-1", "--until", "+2h"), 0)
-        meta = self.store.beads["fk-1"].metadata
+        meta = self.store.beads[BeadId("fk-1")].metadata
         until = float(meta[intake.HOLD_UNTIL])
         self.assertEqual(intake.held(meta, until - 1), "denis")
         self.assertEqual(intake.held(meta, until + 1), "")
         self.assertEqual(self.say("hold", "fk-1", "--release"), 0)
-        self.assertEqual(intake.held(self.store.beads["fk-1"].metadata, 0), "")
+        self.assertEqual(intake.held(self.store.beads[BeadId("fk-1")].metadata, 0), "")
 
     def test_the_loop_claims_nothing_while_held(self) -> None:
         self.say("hold", "fk-1", "--until", "+2h")
-        until = float(self.store.beads["fk-1"].metadata[intake.HOLD_UNTIL])
-        b = self.store.beads["fk-1"]
+        until = float(self.store.beads[BeadId("fk-1")].metadata[intake.HOLD_UNTIL])
+        b = self.store.beads[BeadId("fk-1")]
         for now, skipped in ((until - 60, True), (until + 60, False)):
             rule = QueueRule(mock.Mock(), EngineConfig(), {}, lambda _b: "", now=lambda n=now: n)
             q = rule.rank([b], "")
@@ -74,9 +75,9 @@ class VerbSurface(unittest.TestCase):
     def test_override_needs_the_owners_quoted_words(self) -> None:
         self.assertEqual(self.say("override", "fk-1", "--waive", "tests pass", "--approval", ""), 1)
         self.assertEqual(self.say("override", "fk-1", "--defer", "docs"), 1)
-        self.assertNotIn(intake.WAIVERS, self.store.beads["fk-1"].metadata)
+        self.assertNotIn(intake.WAIVERS, self.store.beads[BeadId("fk-1")].metadata)
         self.assertEqual(self.say("override", "fk-1", "--drop", "docs", "--approval", "Denis 10-28: skip the docs"), 0)
-        self.assertIn("Denis 10-28: skip the docs", self.store.beads["fk-1"].metadata[intake.WAIVERS])
+        self.assertIn("Denis 10-28: skip the docs", self.store.beads[BeadId("fk-1")].metadata[intake.WAIVERS])
         self.assertEqual(self.say("override", "fk-1", "replan-cap"), 0)
 
     def test_times(self) -> None:

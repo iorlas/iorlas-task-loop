@@ -8,10 +8,11 @@ import support.paths  # noqa: F401
 
 from taskloop.contracts.ask import Ask, AskOption
 from taskloop.contracts.enums import AskClass, AskKind, AskStatus
+from taskloop.contracts.ids import BeadId
 
 
 def ask(bead: str, kind: AskKind, cls: AskClass, decision: str, options: list[AskOption], tried: list[str] | None = None) -> Ask:
-    return Ask(id=bead + "-1", n=1, bead=bead, kind=kind, ask_class=cls, decision=decision, run=bead + "-20261026-101010", t=1.0,
+    return Ask(id=bead + "-1", n=1, bead=BeadId(bead), kind=kind, ask_class=cls, decision=decision, run=bead + "-20261026-101010", t=1.0,
                status=AskStatus.OPEN, tried=tried or [], options=options)
 
 

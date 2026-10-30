@@ -25,6 +25,7 @@ from taskloop.adapters import procs as sproc  # noqa: E402
 from taskloop.app.plan.planner import Planner  # noqa: E402
 from taskloop.app.wire import slots as wslots  # noqa: E402
 from taskloop.contracts import answers  # noqa: E402
+from taskloop.contracts.ids import BeadId  # noqa: E402
 from taskloop.contracts.schema import unstrict  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -515,7 +516,7 @@ class DelegateLauncher(T.EngineTest):
 
     def test_close_with_an_empty_reason_still_closes(self):
         c = wslots.load_cfg(str(self.wt))
-        eng = engine.Engine("t-1", str(self.wt), c, store=self.store)
+        eng = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store)
         eng.closer.close("failed", "", "", "")
         self.assertTrue(self.blocked)
 
@@ -567,7 +568,7 @@ class DelegateLauncher(T.EngineTest):
     def test_no_delegate_blocks_with_the_install_command(self):
         c = wslots.load_cfg(str(self.wt))
         with mock.patch.object(dl, "resolve", return_value=dl.Refusal("not_installed")):
-            rc = engine.Engine("t-1", str(self.wt), c, store=self.store).run()
+            rc = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store).run()
         self.assertEqual(rc, 2)
         self.assertIn("claude plugin update iorlas-delegate", self.said())
 

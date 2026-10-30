@@ -104,7 +104,7 @@ def cs_error_lines(text: str, n: int = 20) -> list[str]:
 
 def output_signature(text: str, lines: int = 8) -> str:
     """What a red check's output says, whatever time it took: its last lines with the durations cut out."""
-    rows = [ln.strip() for ln in str(text).splitlines() if ln.strip()][-lines:]
+    rows = [ln.strip() for ln in text.splitlines() if ln.strip()][-lines:]
     return "\n".join(TIMING.sub("", r) for r in rows)
 
 

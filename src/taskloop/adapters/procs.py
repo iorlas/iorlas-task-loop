@@ -73,11 +73,11 @@ def capture(
     err: list[str] = []
     done = threading.Event()
 
-    def ticker() -> None:
+    def ticker(beat: Callable[[], None]) -> None:
         while not done.wait(poll_s):
-            tick()  # type: ignore[misc]
+            beat()
 
-    helper = threading.Thread(target=ticker, daemon=True) if tick else None
+    helper = threading.Thread(target=ticker, args=(tick,), daemon=True) if tick else None
     if helper:
         helper.start()
     try:

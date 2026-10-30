@@ -17,6 +17,7 @@ from taskloop.app.wire import slots as wslots
 from taskloop.contracts.adrs import AdrStore
 from taskloop.contracts.ask import Ask, AskAction
 from taskloop.contracts.dash import Result, Stick
+from taskloop.contracts.ids import BeadId
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdFailure, Beads
 from taskloop.contracts.stores import AskStore, ReposStore
@@ -40,7 +41,7 @@ def store(repo: str) -> BdStore:
     return BdStore("tl-dash", repo or None, timeout=30)
 
 
-def answer(repo: str, bead: str, action: AskAction, text: str, amend: bool) -> tuple[Ask | None, str]:
+def answer(repo: str, bead: BeadId, action: AskAction, text: str, amend: bool) -> tuple[Ask | None, str]:
     """The dashboard's answer is `tl answer`'s: the same Intake (record, bead opened, receipt comment), only `by` is "dash"."""
     return owner_intake(wire_asks.store(), store, now)(repo).answer(bead, action, text, amend)
 
@@ -80,7 +81,7 @@ def ask_writes(intake: Callable[[str], Intake]) -> dict[str, Any]:
     def prune(repo: str, adr: str) -> Result:
         return guarded(lambda: intake(repo).prune(repo, adr))
 
-    def ask_back(repo: str, bead: str, ask_id: str, text: str) -> Result:
+    def ask_back(repo: str, bead: BeadId, ask_id: str, text: str) -> Result:
         return guarded(lambda: intake(repo).ask_back(bead, ask_id, text))
     return {"stick": stick, "prune": prune, "ask_back": ask_back}
 
@@ -92,10 +93,10 @@ def owner_writes(intake: Callable[[str], Intake], cfg: ConfigDir | None = None) 
     def look(repo: str, item: str, verdict: str, note: str, look_bead: str) -> Result:
         return guarded(lambda: intake(repo).look(item, verdict, note, look_bead)[1])
 
-    def cause(repo: str, bead: str, scope: str, why: str) -> Result:
+    def cause(repo: str, bead: BeadId, scope: str, why: str) -> Result:
         return guarded(lambda: intake(repo).cause(bead, scope, why))
 
-    def ack(repo: str, bead: str, scope: str, on: bool) -> Result:
+    def ack(repo: str, bead: BeadId, scope: str, on: bool) -> Result:
         return guarded(lambda: intake(repo).ack(bead, scope, on))
 
     def run_verb(repo: str, do: Callable[[OwnerVerbs], tuple[str, str]]) -> Result:
@@ -110,13 +111,13 @@ def owner_writes(intake: Callable[[str], Intake], cfg: ConfigDir | None = None) 
         out = guarded(act)
         return Result(ok=True, message=said[-1]) if out.ok and said else out
 
-    def park(repo: str, bead: str, run: str) -> Result:
+    def park(repo: str, bead: BeadId, run: str) -> Result:
         return run_verb(repo, lambda v: v.park(bead, run))
 
-    def stop(repo: str, bead: str, run: str) -> Result:
+    def stop(repo: str, bead: BeadId, run: str) -> Result:
         return run_verb(repo, lambda v: v.stop(bead, run))
 
-    def note(repo: str, bead: str, run: str, text: str) -> Result:
+    def note(repo: str, bead: BeadId, run: str, text: str) -> Result:
         return run_verb(repo, lambda v: v.note(bead, run, text))
     return {"look": look, "cause": cause, "ack": ack, "park": park, "stop": stop, "note": note, **ask_writes(intake)}
 

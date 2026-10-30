@@ -22,6 +22,7 @@ from taskloop.contracts import wire
 from taskloop.contracts.ask import Ask, AskOption
 from taskloop.contracts.dash import BeadDetail, Snapshot
 from taskloop.contracts.enums import AskClass, AskKind, AskStatus
+from taskloop.contracts.ids import BeadId
 from taskloop.contracts.stores import AskStore
 from taskloop_dash.app import Dash
 from taskloop_dash.env import Env, Ports
@@ -47,7 +48,7 @@ class Api(unittest.TestCase):
             Ask(
                 id="b-2-1",
                 n=1,
-                bead="b-2",
+                bead=BeadId("b-2"),
                 kind=AskKind.DECISION,
                 ask_class=AskClass.OPEN_QUESTION,
                 decision="Weekly or monthly?",

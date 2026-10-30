@@ -8,6 +8,7 @@ from taskloop.contracts.ask import Ask
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.dash import BeadCard, Column, Marker, Phase, Totals
 from taskloop.contracts.enums import AskStatus
+from taskloop.contracts.ids import BeadId, is_bead_id
 from taskloop_dash.tails import parse_ts
 from taskloop_dash.views import columns, names, passes, phases
 from taskloop_dash.views.runfacts import Run
@@ -33,11 +34,11 @@ def when(iso: str) -> float | None:
     return parse_ts(iso) if iso else None
 
 
-def blockers(b: Bead, by_id: dict[str, Bead]) -> list[str]:
+def blockers(b: Bead, by_id: dict[BeadId, Bead]) -> list[str]:
     """The ids of the open beads this one waits for (a `blocks` dependency), in bd's order."""
     out: list[str] = []
     for d in b.dependencies:
-        dep = by_id.get(d.id)
+        dep = by_id.get(d.id) if is_bead_id(d.id) else None
         if d.type == "blocks" and dep is not None and dep.status != "closed":
             out.append(d.id)
     return out

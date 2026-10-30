@@ -5,7 +5,7 @@ stop flag, park and the notes at its next step boundary."""
 
 import contextlib
 import json
-from collections.abc import Iterator
+from collections.abc import Generator
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +15,7 @@ from taskloop.adapters import locks
 from taskloop.app.asks.intake import Intake, receipt
 from taskloop.contracts import log as rec
 from taskloop.contracts import wire
+from taskloop.contracts.ids import BeadId
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.requests import OwnerNote, OwnerRequest
 from taskloop.contracts.runlife import Liveness, liveness
@@ -27,7 +28,7 @@ NOTE_HEAD = "\n\n## The owner's note for this stage\n"
 
 
 @contextlib.contextmanager
-def locked(cfg: ConfigDir, run: str) -> Iterator[Path]:
+def locked(cfg: ConfigDir, run: str) -> Generator[Path]:
     """The run's request file, under its lock (the one lock primitive, adapters/locks.py)."""
     lock = cfg.run_request_lock(run)
     lock.parent.mkdir(parents=True, exist_ok=True)
@@ -150,14 +151,14 @@ class OwnerVerbs:
     def __init__(self, intake: Intake, cfg: ConfigDir, now: float) -> None:
         self.intake, self.cfg, self.now = intake, cfg, now
 
-    def park(self, bead: str, run: str) -> tuple[str, str]:
+    def park(self, bead: BeadId, run: str) -> tuple[str, str]:
         """The loop keeps off the bead (a hold until released); a live run ends at its next step boundary, branch kept."""
         self.intake.hold(bead)
         if post(self.cfg, run, self.intake.by, self.now, park=True):
             return "", "Parked: no run is going, and the loop will not take it until the hold is released."
         return "", "Parks at the next step; the branch is kept."
 
-    def stop(self, bead: str, run: str) -> tuple[str, str]:
+    def stop(self, bead: BeadId, run: str) -> tuple[str, str]:
         """The live run ends now (its stop flag); the branch is kept and the hold keeps the loop from starting it again."""
         why = post(self.cfg, run, self.intake.by, self.now, stop=True)
         if why:
@@ -165,7 +166,7 @@ class OwnerVerbs:
         self.intake.hold(bead)
         return "", "Stopping; the branch is kept."
 
-    def note(self, bead: str, run: str, text: str) -> tuple[str, str]:
+    def note(self, bead: BeadId, run: str, text: str) -> tuple[str, str]:
         """For the next stage's worker of the live run; with no run going, a hint the next run reads. A receipt comment either way."""
         if not text.strip():
             return "write a note first", ""

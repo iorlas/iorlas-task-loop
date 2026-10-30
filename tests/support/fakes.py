@@ -15,7 +15,8 @@ from taskloop.adapters import bd
 from taskloop.adapters import delegate as dl
 from taskloop.app.release.seams import FixedRoute
 from taskloop.contracts.bead import Bead, Comment
-from taskloop.contracts.ports import BdFailure, BeadPatch, BeadQuery, DoltPush
+from taskloop.contracts.ids import BeadId
+from taskloop.contracts.ports import BdFailure, BeadPatch, BeadQuery, DoltPush, NewBead
 
 _NO = object()
 
@@ -29,7 +30,7 @@ BEAD = {"id": "t-1", "title": "Add f", "metadata": {}, "acceptance_criteria": "f
 
 def must_bead(x, default_id="t-1") -> Bead:
     """as_bead for a test that needs a Bead (an empty one for nothing)."""
-    return as_bead(x, default_id) or Bead(id=default_id, title="", status="")
+    return as_bead(x, default_id) or Bead(id=BeadId(default_id), title="", status="")
 
 
 def as_bead(x, default_id="t-1"):
@@ -87,12 +88,12 @@ class FakeBeadStore:
     def at(self, cwd):
         return self
 
-    def show(self, bead):
+    def show(self, bead: BeadId):
         if "show" in self.fns:
             return as_bead(self.fns["show"](bead), bead)
         return self.beads.get(bead, self.default)
 
-    def comments(self, bead):
+    def comments(self, bead: BeadId):
         if "comments" in self.fns:
             return [as_comment(c) for c in self.fns["comments"](bead)]
         return list(self.notes.get(bead, []))
@@ -128,41 +129,41 @@ class FakeBeadStore:
             raise BdFailure(bd.error_of(err, out))
         return rc, out
 
-    def create(self, new):
+    def create(self, new: NewBead) -> BeadId:
         _rc, out = self.run(bd.create_argv(new))
         made = bd._loads(out) if out else None
-        return str(made.get("id")) if isinstance(made, dict) and made.get("id") else self.made
+        return BeadId(str(made.get("id"))) if isinstance(made, dict) and made.get("id") else BeadId(self.made)
 
-    def update(self, bead, patch):
+    def update(self, bead: BeadId, patch: BeadPatch) -> None:
         self.run(bd.update_argv(bead, patch))
 
-    def claim(self, bead):
+    def claim(self, bead: BeadId):
         return self.run(["update", bead, "--claim"], failing=True)[0] == 0
 
-    def unclaim(self, bead, force=False):
+    def unclaim(self, bead: BeadId, force=False):
         return self.run(["unclaim", bead] + (["--force"] if force else []), failing=True)[0] == 0
 
-    def heartbeat(self, bead):
+    def heartbeat(self, bead: BeadId):
         self.run(["heartbeat", bead])
 
-    def close(self, bead, reason, if_assignee=""):
+    def close(self, bead: BeadId, reason, if_assignee=""):
         if if_assignee:
             self.update(bead, BeadPatch(assignee=if_assignee, if_assignee=if_assignee))
         self.run(["close", bead, "--reason", reason])
 
-    def add_comment(self, bead, text):
+    def add_comment(self, bead: BeadId, text):
         self.run(["comments", "add", bead, text])
 
-    def add_label(self, bead, label):
+    def add_label(self, bead: BeadId, label):
         self.run(["label", "add", bead, label])
 
-    def remove_label(self, bead, label):
+    def remove_label(self, bead: BeadId, label):
         self.run(["label", "remove", bead, label])
 
     def reclaim(self, older_than, assignees):
         self.run(["reclaim", "--older-than", older_than] + [x for w in assignees for x in ("--assignee", w)])
 
-    def provenance(self, bead, kind, source, ref="", ref_kind="", at="", payload=""):
+    def provenance(self, bead: BeadId, kind, source, ref="", ref_kind="", at="", payload=""):
         self.run(["provenance", "record", "--issue", bead, "--kind", kind, "--source", source])
 
     def dolt_push(self):

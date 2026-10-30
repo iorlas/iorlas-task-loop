@@ -6,7 +6,7 @@ import os
 import time
 from typing import Final
 
-from taskloop.contracts.bead import is_bead_id as valid_bead_id
+from taskloop.contracts.ids import BeadId, RunId
 
 FAMILY: Final = {"openai": "Codex", "claude": "Claude", "xai": "Grok"}
 
@@ -16,12 +16,10 @@ def run_name(path: str) -> str:
     return base[: -len(".jsonl")] if base.endswith(".jsonl") else base
 
 
-def bead_of(run: str) -> str:
-    """'tl-1-20261021-072411' -> 'tl-1'; '' when the name does not end in a date and a time."""
-    head, _, rest = run.rpartition("-")
-    bead, _, day = head.rpartition("-")
-    ok = len(day) == 8 and day.isdigit() and len(rest) == 6 and rest.isdigit()
-    return bead if ok and bead else ""
+def bead_of(run: str) -> BeadId | None:
+    """'tl-1-20261021-072411' -> 'tl-1'; None when the name does not end in a date and a time."""
+    rid = RunId.of(run)
+    return rid.bead if rid else None
 
 
 IMAGES: Final = ("image/png", "image/jpeg", "image/gif", "image/webp")
@@ -33,14 +31,8 @@ def kind_of(name: str) -> str:
     return "image" if ctype in IMAGES else "pdf" if ctype == "application/pdf" else "file"
 
 
-def is_bead_id(text: object) -> bool:
-    """A letter or digit first, then letters, digits, '_', '.' and '-': never something bd would read as an option."""
-    return valid_bead_id(text)
-
-
 def is_run_name(text: object) -> bool:
-    s = text if isinstance(text, str) else ""
-    return is_bead_id(s) and s[0] != "-" and bool(bead_of(s))
+    return isinstance(text, str) and RunId.of(text) is not None
 
 
 def num(ident: object) -> int:

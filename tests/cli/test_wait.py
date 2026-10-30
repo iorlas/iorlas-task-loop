@@ -15,6 +15,7 @@ from taskloop.cli import wait
 from taskloop.contracts.ask import Ask, SimilarRef, ThreadEntry
 from taskloop.contracts.dash import OwnerCause
 from taskloop.contracts.enums import AskClass, AskKind, AskStatus
+from taskloop.contracts.ids import BeadId
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.stores import AskStore
 
@@ -58,7 +59,8 @@ class WaitCase(unittest.TestCase):
         return rc, c
 
     def ask(self, t=T + 1):
-        a = Ask(id="t-1-1", n=1, bead=BEAD, kind=AskKind.DECISION, ask_class=AskClass.OPEN_QUESTION, decision="Keep v1?", run=RUN, t=t,
+        a = Ask(id="t-1-1", n=1, bead=BeadId(BEAD), kind=AskKind.DECISION, ask_class=AskClass.OPEN_QUESTION, decision="Keep v1?",
+                run=RUN, t=t,
                 status=AskStatus.OPEN)
         self.asks.put(a)
         return a

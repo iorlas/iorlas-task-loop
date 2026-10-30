@@ -6,6 +6,7 @@ import msgspec
 
 from taskloop.contracts.dash import OwnerCause, Stick
 from taskloop.contracts.enums import AskClass, AskKind, AskStatus, WhyCode
+from taskloop.contracts.ids import BeadId
 from taskloop.contracts.wire import Rec
 
 AskAction = Literal["rerun", "confirm", "split", "text"]
@@ -84,7 +85,7 @@ class Ask(Rec):
     V: ClassVar[int] = 3
     id: str
     n: int
-    bead: str
+    bead: BeadId
     kind: AskKind
     ask_class: AskClass = msgspec.field(name="class")
     decision: str

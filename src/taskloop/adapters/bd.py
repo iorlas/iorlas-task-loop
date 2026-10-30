@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from taskloop.contracts.bead import BdError, Bead, Comment, Dep
+from taskloop.contracts.ids import BeadId, parse_bead_id
 from taskloop.contracts.ports import BdFailure, BeadPatch, BeadQuery, DoltPush, NewBead
 
 # bd 1.3.1 exits 0 on a push the remote rejected; its words are git's
@@ -57,7 +58,7 @@ def dep_of(d: dict[str, Any]) -> Dep:
 def bead_of(d: dict[str, Any]) -> Bead:
     prio, labels, deps, meta = d.get("priority"), d.get("labels"), d.get("dependencies"), d.get("metadata")
     return Bead(
-        id=str(d["id"]),
+        id=parse_bead_id(str(d["id"])),
         title=_str(d, "title"),
         status=_str(d, "status"),
         issue_type=_str(d, "issue_type"),
@@ -81,7 +82,15 @@ def bead_of(d: dict[str, Any]) -> Bead:
 
 def beads_of(data: Any) -> list[Bead]:
     rows = data if isinstance(data, list) else [data] if isinstance(data, dict) and "id" in data else []
-    return [bead_of(r) for r in rows if isinstance(r, dict) and "id" in r]
+    return [b for b in (_bead_or_none(r) for r in rows if isinstance(r, dict) and "id" in r) if b is not None]
+
+
+def _bead_or_none(d: dict[str, Any]) -> Bead | None:
+    """A row whose id is not a bead id is not a bead task-loop can name: it is left out of the list, never passed on as a bare str."""
+    try:
+        return bead_of(d)
+    except ValueError:
+        return None
 
 
 def comments_of(data: Any) -> list[Comment]:
@@ -128,7 +137,7 @@ def create_argv(new: NewBead) -> list[str]:
     return a + (["--no-inherit-labels"] if new.no_inherit_labels else [])
 
 
-def update_argv(bead: str, patch: BeadPatch) -> list[str]:
+def update_argv(bead: BeadId, patch: BeadPatch) -> list[str]:
     a = ["update", bead]
     if patch.status:
         a += ["--status", patch.status]
@@ -196,7 +205,7 @@ class BdStore:
             return DoltPush(1, text)
         return DoltPush(r.code, text)
 
-    def show(self, bead: str) -> Bead | None:
+    def show(self, bead: BeadId) -> Bead | None:
         r = self._call("show", bead)
         if r.code != 0:
             err = error_of(r.err, r.out)
@@ -206,7 +215,7 @@ class BdStore:
         found = beads_of(_loads(r.out))
         return found[0] if found else None
 
-    def comments(self, bead: str) -> list[Comment]:
+    def comments(self, bead: BeadId) -> list[Comment]:
         r = self._call("comments", bead)
         return comments_of(_loads(r.out)) if r.code == 0 else []
 
@@ -216,25 +225,28 @@ class BdStore:
     def ready(self, label: str = "") -> list[Bead]:
         return beads_of(_loads(self._must("ready", "-n", "0", *(["--label", label] if label else [])).out))
 
-    def create(self, new: NewBead) -> str:
+    def create(self, new: NewBead) -> BeadId:
         made = _loads(self._must(*create_argv(new)).out)
         if not isinstance(made, dict) or not made.get("id"):
             raise BdFailure(error_of("bd create answered without an id", ""))
-        return str(made["id"])
+        try:
+            return parse_bead_id(str(made["id"]))
+        except ValueError:
+            raise BdFailure(error_of(f"bd create answered with a bad id {made['id']!r}", "")) from None
 
-    def update(self, bead: str, patch: BeadPatch) -> None:
+    def update(self, bead: BeadId, patch: BeadPatch) -> None:
         self._must(*update_argv(bead, patch))
 
-    def claim(self, bead: str) -> bool:
+    def claim(self, bead: BeadId) -> bool:
         return self._call("update", bead, "--claim").code == 0
 
-    def unclaim(self, bead: str, force: bool = False) -> bool:
+    def unclaim(self, bead: BeadId, force: bool = False) -> bool:
         return self._call("unclaim", bead, *(["--force"] if force else [])).code == 0
 
-    def heartbeat(self, bead: str) -> None:
+    def heartbeat(self, bead: BeadId) -> None:
         self._must("heartbeat", bead)
 
-    def close(self, bead: str, reason: str, if_assignee: str = "") -> None:
+    def close(self, bead: BeadId, reason: str, if_assignee: str = "") -> None:
         if not if_assignee:
             self._must("close", bead, "--reason", reason)
             return
@@ -242,19 +254,19 @@ class BdStore:
         self._must(*update_argv(bead, BeadPatch(assignee=if_assignee, if_assignee=if_assignee)))
         self._must("close", bead, "--reason", reason)
 
-    def add_comment(self, bead: str, text: str) -> None:
+    def add_comment(self, bead: BeadId, text: str) -> None:
         self._must("comments", "add", bead, text)
 
-    def add_label(self, bead: str, label: str) -> None:
+    def add_label(self, bead: BeadId, label: str) -> None:
         self._must("label", "add", bead, label)
 
-    def remove_label(self, bead: str, label: str) -> None:
+    def remove_label(self, bead: BeadId, label: str) -> None:
         self._must("label", "remove", bead, label)
 
     def reclaim(self, older_than: str, assignees: list[str]) -> None:
         self._must("reclaim", "--older-than", older_than, *[x for w in assignees for x in ("--assignee", w)])
 
-    def provenance(self, bead: str, kind: str, source: str, ref: str = "", ref_kind: str = "", at: str = "", payload: str = "") -> None:
+    def provenance(self, bead: BeadId, kind: str, source: str, ref: str = "", ref_kind: str = "", at: str = "", payload: str = "") -> None:
         a = ["provenance", "record", "--issue", bead, "--kind", kind, "--source", source]
         a += ["--ref", ref, "--ref-kind", ref_kind] if ref else ["--at", at]
         self._must(*a, *(["--payload", payload] if payload else []))

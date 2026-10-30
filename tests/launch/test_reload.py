@@ -47,6 +47,7 @@ from taskloop.app.run import (  # noqa: E402
     entry,
 )
 from taskloop.app.wire import slots as wslots  # noqa: E402
+from taskloop.contracts.ids import BeadId  # noqa: E402
 
 PLAN_DEF = "    def plan(self, again: bool = False) -> dict[str, Any]:\n"
 BREAK_PLAN = (PLAN_DEF, PLAN_DEF + "        raise RuntimeError('planted: cannot plan')\n", "src/taskloop/app/plan/planner.py")
@@ -102,7 +103,7 @@ class Reload(te.EngineTest):
     def engine_for(self, script, **cfg):
         c = wslots.load_cfg(str(self.wt))
         c = cfg_with(c, **{"reflect": False, **cfg})
-        eng = engine.Engine("t-1", str(self.wt), c, store=self.store)
+        eng = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store)
         eng.argv = ["run-task", "t-1", "--worktree", str(self.wt), "--fresh", "--outcome-file", "/x/out.json"]
 
         def fake_exec(argv):
@@ -261,7 +262,7 @@ class Reload(te.EngineTest):
             # the first child is the one that exec'd: its note appears while it runs
             t1 = as_bead({"id": "t-1"})
             assert t1 is not None
-            r = run.run(t1, Where("s1", str(self.wt), "sb-1", 0.0))
+            r = run.run(t1, Where("s1", str(self.wt), BeadId("sb-1"), 0.0))
             leaked = os.environ.get("TL_REEXEC")
         self.assertEqual(r.outcome, "landed")
         self.assertEqual(len(spawned), 2)
@@ -281,7 +282,7 @@ class Reload(te.EngineTest):
         with mock.patch.object(
             dl, "resolve", side_effect=[self.res("/a/route.py"), self.res("/b/route.py"), self.res("/b/route.py")]
         ) as fr:
-            eng = engine.Engine("t-1", str(self.wt), c, store=self.store)
+            eng = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store)
             self.assertEqual(eng.delegation.route(), "/b/route.py")
             self.assertEqual(eng.delegation.route(), "/b/route.py")
             self.assertEqual(fr.call_count, 3)

@@ -7,13 +7,13 @@ import contextlib
 import signal
 import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Generator
 
 RUN_HALT: dict[str, threading.Event | None] = {"ev": None}  # the flag of the run in this process (None: none running)
 
 
 @contextlib.contextmanager
-def halt_on_sigterm() -> Iterator[None]:
+def halt_on_sigterm() -> Generator[None]:
     """The SIGTERM handler lives only as long as the run: an engine called in a process that goes on (a test runner, a host) must
     not leave it behind. Off the main thread nothing is installed (signal handlers live there only)."""
     old = None
@@ -29,7 +29,7 @@ def halt_on_sigterm() -> Iterator[None]:
 
 
 @contextlib.contextmanager
-def stop_deferred(*_: object) -> Iterator[list[bool]]:
+def stop_deferred(*_: object) -> Generator[list[bool]]:
     """SIGTERM inside this block is only noted (the yielded list gets an item); the caller stops after it."""
     got: list[bool] = []
     if threading.current_thread() is not threading.main_thread():

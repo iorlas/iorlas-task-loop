@@ -4,6 +4,7 @@ import mimetypes
 from pathlib import Path
 from typing import Final
 
+from taskloop.contracts.ids import is_bead_id
 from taskloop_dash.env import Env
 from taskloop_dash.views import names
 
@@ -18,7 +19,7 @@ class Artifacts:
 
     def file(self, bead: str, name: str) -> tuple[bytes, str] | None:
         """One artifact's bytes and type; None for a bad name, a symlink, a missing file."""
-        if not names.is_bead_id(bead) or not name or "/" in name or "\\" in name or name.startswith("."):
+        if not is_bead_id(bead) or not name or "/" in name or "\\" in name or name.startswith("."):
             return None
         p = Path(self.env.config.artifacts(bead), name)
         try:

@@ -4,7 +4,7 @@ import hashlib
 import os
 import signal
 import sys
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Generator
 from pathlib import Path
 from subprocess import Popen
 from types import FrameType
@@ -17,7 +17,7 @@ from taskloop.contracts.locks import LockRecord, LockTimeout
 
 @contextlib.contextmanager
 def os_lock(path: Path | str, holder: str, waiting: Callable[[str], None] | None = None,
-            timeout: float | None = None, check: Callable[[], None] | None = None) -> Iterator[Path | str]:
+            timeout: float | None = None, check: Callable[[], None] | None = None) -> Generator[Path | str]:
     """One holder at a time, across processes (the vendored ProcessLock; the OS drops it when the process dies); a second taker waits.
     `waiting(text)` is called with the holder's name once, before blocking. With `timeout` (seconds) a wait that long raises TimeoutError
     (the holder's name in it). `check()` runs every round of the wait and raises to end it."""

@@ -20,6 +20,7 @@ from taskloop.contracts import wire
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.dash import Result
 from taskloop.contracts.enums import AskStatus
+from taskloop.contracts.ids import BeadId
 from taskloop.contracts.stores import AskStore
 
 NOW = 1_800_000_000.0
@@ -32,8 +33,8 @@ class Writes(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.fake = world("open")
-        self.fake.beads["b-1"] = Bead(id="b-1", title="", status="blocked")
-        self.fake.beads["tl-5"] = Bead(id="tl-5", title="stuck one", status="open")
+        self.fake.beads[BeadId("b-1")] = Bead(id=BeadId("b-1"), title="", status="blocked")
+        self.fake.beads[BeadId("tl-5")] = Bead(id=BeadId("tl-5"), title="stuck one", status="open")
         self.dash = make_dash(answering(lambda repo: self.fake, self.tmp.name, clock=lambda: NOW), config=self.tmp.name, clock=lambda: NOW)
         repo = Path(self.tmp.name) / "demo"
         repo.mkdir()
@@ -66,7 +67,7 @@ class Writes(unittest.TestCase):
         got = must(self.asks.get("b-1"))
         given = must(got.answer)
         self.assertEqual((got.status, given.text, given.by), (AskStatus.ANSWERED, "Split the bead", "dash"))
-        self.assertEqual(self.fake.beads["b-1"].status, "open")  # the bead is opened for the loop
+        self.assertEqual(self.fake.beads[BeadId("b-1")].status, "open")  # the bead is opened for the loop
         self.assertTrue(any(c.startswith("Owner (tl) answer") for c in self.comments("b-1")))  # and the receipt is left
 
     def test_words_answer_and_an_answered_ask_is_amended_until_a_run_uses_it(self):
@@ -98,7 +99,7 @@ class Writes(unittest.TestCase):
         self.assertEqual(res, Result(ok=True, message="Parks at the next step; the branch is kept."))
         got = must(self.request())
         self.assertEqual((got.park, got.stop, got.by, got.t), (True, False, "dash", NOW))
-        self.assertEqual(self.fake.beads["tl-5"].metadata.get("owner_hold"), "dash")
+        self.assertEqual(self.fake.beads[BeadId("tl-5")].metadata.get("owner_hold"), "dash")
 
     def test_stop_and_note_reach_the_same_request_file(self):
         self.assertTrue(self.post("note", {"project": "demo", "bead": "tl-5", "text": "use the blue one"}).ok)
@@ -106,17 +107,17 @@ class Writes(unittest.TestCase):
         got = must(self.request())
         self.assertEqual((got.stop, [n.text for n in got.notes]), (True, ["use the blue one"]))
         self.assertTrue(any(c.startswith("Owner (tl) note: use the blue one") for c in self.comments("tl-5")))
-        self.assertEqual(self.fake.beads["tl-5"].metadata.get("owner_hold"), "dash")
+        self.assertEqual(self.fake.beads[BeadId("tl-5")].metadata.get("owner_hold"), "dash")
 
     def test_with_no_live_run_stop_is_refused_park_holds_and_a_note_is_a_hint(self):
         self.dash.env.clock = lambda: NOW + 3600
         self.dash.env.ports = answering(lambda repo: self.fake, self.tmp.name, clock=lambda: NOW + 3600)  # the run went silent: crashed
         self.assertEqual(self.post("stop", {"project": "demo", "bead": "tl-5"}), Result(ok=False, message="no run of this bead is going"))
-        self.assertIsNone(self.fake.beads["tl-5"].metadata.get("owner_hold"))
+        self.assertIsNone(self.fake.beads[BeadId("tl-5")].metadata.get("owner_hold"))
         self.assertTrue(self.post("park", {"project": "demo", "bead": "tl-5"}).ok)
-        self.assertEqual(self.fake.beads["tl-5"].metadata.get("owner_hold"), "dash")
+        self.assertEqual(self.fake.beads[BeadId("tl-5")].metadata.get("owner_hold"), "dash")
         self.assertIn("hint", self.post("note", {"project": "demo", "bead": "tl-5", "text": "later"}).message)
-        self.assertEqual(self.fake.beads["tl-5"].metadata.get("owner_hint"), "later")
+        self.assertEqual(self.fake.beads[BeadId("tl-5")].metadata.get("owner_hint"), "later")
         self.assertIsNone(self.request())
 
     def test_an_ask_back_joins_the_thread_and_leaves_the_ask_open(self):
@@ -135,7 +136,7 @@ class Writes(unittest.TestCase):
     def test_a_look_is_recorded_on_its_item(self):
         res = self.post("look", {"project": "demo", "bead": "tl-1#1", "verdict": "good"})
         self.assertEqual(res, Result(ok=True))
-        self.assertEqual(self.fake.beads["tl-look"].metadata["looks"][0]["status"], "good")
+        self.assertEqual(self.fake.beads[BeadId("tl-look")].metadata["looks"][0]["status"], "good")
         res = self.post("look", {"project": "demo", "bead": "tl-1#1", "verdict": "redo", "note": "x"})
         self.assertFalse(res.ok)
         self.assertIn("Already answered", res.message)
@@ -143,9 +144,9 @@ class Writes(unittest.TestCase):
     def test_a_redo_needs_its_note_and_files_the_follow_up_with_it(self):
         res = self.post("look", {"project": "demo", "bead": "tl-1#1", "verdict": "redo", "note": " "})
         self.assertEqual(res, Result(ok=False, message="Write what to change first."))
-        self.assertEqual(self.fake.beads["tl-look"].metadata["looks"][0]["status"], "open")
+        self.assertEqual(self.fake.beads[BeadId("tl-look")].metadata["looks"][0]["status"], "open")
         self.assertTrue(self.post("look", {"project": "demo", "bead": "tl-1#1", "verdict": "redo", "note": "cut off"}).ok)
-        made = self.fake.beads[self.fake.beads["tl-look"].metadata["looks"][0]["redo_bead"]]
+        made = self.fake.beads[self.fake.beads[BeadId("tl-look")].metadata["looks"][0]["redo_bead"]]
         self.assertIn("cut off", made.description)
 
     def test_a_look_that_bd_refuses_is_a_result_not_a_crash(self):
@@ -169,7 +170,7 @@ class Writes(unittest.TestCase):
         self.assertEqual(code, 400)
         res = self.post("cause", {"project": "demo", "bead": "tl-9", "cause": "process"})
         self.assertFalse(res.ok)
-        self.assertIsNone(self.fake.beads["tl-5"].metadata.get("owner_cause"))
+        self.assertIsNone(self.fake.beads[BeadId("tl-5")].metadata.get("owner_cause"))
 
     def test_ack_sets_and_takes_back_the_seen_key(self):
         self.assertEqual(self.post("ack", {"project": "demo", "bead": "tl-5", "ack": True}), Result(ok=True))

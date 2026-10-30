@@ -25,6 +25,7 @@ from taskloop.adapters import procs, runner
 from taskloop.adapters.delegate import Stopped
 from taskloop.app.run import engine
 from taskloop.app.wire import slots as wslots
+from taskloop.contracts.ids import BeadId
 
 POSIX = os.name != "nt"
 MIN = 60.0
@@ -111,7 +112,7 @@ class SurvivorBlocksTheRetry(te.EngineTest):
         script = Script({"plan": [te.PLAN], "write": [te.WRITE], "review": [te.CLEAN]})
         c = wslots.load_cfg(str(self.wt))
         with te.delegate_stack(script):
-            self.eng = engine.Engine("t-1", str(self.wt), c, store=self.store)
+            self.eng = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store)
             rc = self.eng.run()
         return rc, script
 

@@ -17,6 +17,7 @@ from taskloop.adapters import (
 from taskloop.app.release import reexec
 from taskloop.app.run import engine
 from taskloop.app.track import trail
+from taskloop.contracts.ids import BeadId
 
 warnings.filterwarnings("ignore", message=".*multi-threaded.*fork", category=DeprecationWarning)
 
@@ -88,7 +89,7 @@ class WiringTest(unittest.TestCase):
         self.addCleanup(env.stop)
 
     def test_engine_log_is_one_typed_line_per_record_readable_at_once(self):
-        eng = engine.Engine("t-1", self.tmp.name, cfg_with())
+        eng = engine.Engine(BeadId("t-1"), self.tmp.name, cfg_with())
         with mock.patch.object(engine, "say"):
             for i in range(1000):
                 eng.log.note(f"line {i}")

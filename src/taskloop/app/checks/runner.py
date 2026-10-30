@@ -133,7 +133,7 @@ class Checker:
 
     def _stuck(self, run: CheckRun) -> None:
         """The same reds with the same output `engine.max_same_red` rounds in a row: more writes will not fix them."""
-        k = int(self.host.cfg.max_same_red)
+        k = self.host.cfg.max_same_red
         self.streak = [*self.streak, run.signature()][-max(k, 1):] if run.failed else []
         if k and len(self.streak) >= k and len(set(self.streak)) == 1:
             raise CheckStuck(self.streak[-1], k)

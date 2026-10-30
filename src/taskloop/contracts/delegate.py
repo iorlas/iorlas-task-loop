@@ -9,6 +9,15 @@ import msgspec
 from taskloop.contracts.trace import Tokens
 from taskloop.contracts.wire import Rec, Tagged
 
+Scope = Literal["bead", "caller", "machine", "lane", "model"]
+Permanence = Literal["transient", "needs_owner"]
+RetryKind = Literal["none", "predicted", "poll"]
+TtlSource = Literal["vendor_default", "observed", "unknown"]
+CostSource = Literal["harness", "unknown", "free"]
+Accounting = Literal["exact", "estimated", "unknown"]
+DenialKind = Literal["policy", "sandbox_limit", "secret"]
+TranscriptKind = Literal["codex", "claude", "opencode_export"]
+WorkerEndKind = Literal["ok", "error", "timeout", "worker_survived"]
 REASON_TIMEOUT: Final = "timeout"  # the wire id of a worker that did not finish within --timeout
 REASON_OVERRUN: Final = "overrun"  # made by the engine: a reviewer call used its budget
 
@@ -53,15 +62,15 @@ class RunRequest(Rec):
 
 @final
 class Retry(Rec):
-    kind: Literal["none", "predicted", "poll"]
+    kind: RetryKind
     at: float | None = None
 
 
 @final
 class StopFacts(Rec):
     reason: str
-    scope: Literal["bead", "caller", "machine", "lane", "model"]
-    permanence: Literal["transient", "needs_owner"]
+    scope: Scope
+    permanence: Permanence
     retry: Retry
     ref: str = ""
     fix: str = ""
@@ -92,17 +101,17 @@ class Usage(Rec):
     last_activity_at: str | None = None
     warm_until: str | None = None
     ttl_s: int | None = None
-    ttl_source: Literal["vendor_default", "observed", "unknown"] = "unknown"
+    ttl_source: TtlSource = "unknown"
     cost_usd: float | None = None
-    cost_source: Literal["harness", "unknown", "free"] = "unknown"
-    accounting: Literal["exact", "estimated", "unknown"] = "unknown"
+    cost_source: CostSource = "unknown"
+    accounting: Accounting = "unknown"
 
 
 @final
 class Denial(Rec):
     """One refusal in the answer; `sandbox_limit` ones are noise."""
 
-    kind: Literal["policy", "sandbox_limit", "secret"]
+    kind: DenialKind
     tool: str | None = None
     path: str | None = None
     input: dict[str, Any] = msgspec.field(default_factory=dict)
@@ -113,7 +122,7 @@ class TranscriptInfo(Rec):
     """The transcript file and the byte window this call wrote."""
 
     path: str
-    kind: Literal["codex", "claude", "opencode_export"]
+    kind: TranscriptKind
     from_: int = msgspec.field(name="from")
     to: int
     bytes: int
@@ -130,7 +139,7 @@ class WorkerEnd(Rec):
     """How the worker's life ended (worker-run v1 `worker`): the delegate stopped its whole tree before it answered. `worker_survived`
     names pids that outlived SIGTERM and SIGKILL; pid, pgid and start name the process it launched."""
 
-    end: Literal["ok", "error", "timeout", "worker_survived"] = "ok"
+    end: WorkerEndKind = "ok"
     stopped: bool = False
     term_sent: bool = False
     kill_sent: bool = False

@@ -11,6 +11,7 @@ from taskloop.contracts import log as rec
 from taskloop.contracts.paths import ConfigDir
 from taskloop_dash import jsonl
 from taskloop_dash.cache import FileCache
+from taskloop_dash.jsonrec import Json
 from taskloop_dash.views import arrows
 from taskloop_dash.views.names import FAMILY, bead_of, lane_name, nice_model, run_name, when
 from taskloop_dash.views.nodes import nodes_of
@@ -40,12 +41,12 @@ RESULT: Final = {  # a step's outcome -> status colour
 }
 
 
-def read(path: str, cache: FileCache | None = None) -> list:
+def read(path: str, cache: FileCache | None = None) -> list[rec.EngineLog]:
     """The log's records, re-read only when the file changed."""
     return cache.get(path, jsonl.records, []) if cache else jsonl.records(path)
 
 
-def label_of(n: dict, k: int = 0) -> str:
+def label_of(n: Json, k: int = 0) -> str:
     step, m = n["step"], n["meta"]
     if step == "write":
         return f"Fix {m['fix']} · write {m.get('write') or 1}" if m.get("fix") else f"Write {m.get('write') or 1}"
@@ -54,7 +55,7 @@ def label_of(n: dict, k: int = 0) -> str:
     return {"plan": "Plan", "replan": "Re-plan", "checks": "Checks", "review": "Review", "verify": "Verify"}.get(step, step.capitalize())
 
 
-def who_of(n: dict, s: dict | None) -> dict:
+def who_of(n: Json, s: Json | None) -> Json:
     if n["step"] in ("checks", "land", "reset", "close"):
         return {"family": "engine", "name": "Engine", "model": "", "effort": "", "lane": "", "resumed": False, "fallback": "", "flag": ""}
     s = s or {}
@@ -74,7 +75,7 @@ def who_of(n: dict, s: dict | None) -> dict:
     }
 
 
-def session_result(s: dict | None) -> dict | None:
+def session_result(s: Json | None) -> Json | None:
     st = (s or {}).get("status") or ""
     if not s or st == "done":
         return None
@@ -106,21 +107,21 @@ def plan_titles(path: str, cache: FileCache | None = None) -> list[str]:
     return []
 
 
-def arrow_inside(n: dict, sessions: list, k: int, s: dict | None) -> dict:
+def arrow_inside(n: Json, sessions: list[Json | None], k: int, s: Json | None) -> Json:
     """The arrow into the k-th call of a step (k > 0): the move logged between the two calls, else a plain retry."""
-    prev_i = sessions[k - 1].get("_i", -1) if sessions[k - 1] else -1
+    prev = sessions[k - 1] or {}
+    prev_i = prev.get("_i", -1)
     inside = [
         m
         for m in n["moves"]
         if prev_i < m["_i"] < (s or {}).get("_i", 1 << 60) and m.get("to") in (n["step"], "") and m.get("cause") != "paused"
     ]
     mv = inside[-1] if inside else {"cause": "retry", "detail": "another try"}
-    prev = sessions[k - 1] or {}
     ctx = {"from_name": lane_name(prev.get("lane"), prev.get("family")), "to_model": nice_model((s or {}).get("model"))}
     return {"cause": mv["cause"], "detail": mv.get("detail") or "", "text": arrows.arrow_text(mv["cause"], mv.get("detail"), ctx)}
 
 
-def block_result(n: dict, s: dict | None, last: bool) -> dict:
+def block_result(n: Json, s: Json | None, last: bool) -> Json:
     res = session_result(s) if not last else None
     if res is not None:
         return res
@@ -131,11 +132,11 @@ def block_result(n: dict, s: dict | None, last: bool) -> dict:
     return {"status": RESULT.get(out, "ok" if out else "info"), "text": out if n["step"] in ("plan", "replan") else text}
 
 
-def blocks_of(nodes: list[dict], titles_in: list | tuple = ()) -> tuple[list[dict], dict | None]:
+def blocks_of(nodes: list[Json], titles_in: list[str] | tuple[str, ...] = ()) -> tuple[list[Json], Json | None]:
     """Blocks in order, each with the arrow into it, and the move out of the last one. A write, checks or review block names
     its stage (index, count, title); a review or verify block by the family that wrote the last write is marked same_family."""
-    blocks: list[dict] = []
-    pending: dict | None = None
+    blocks: list[Json] = []
+    pending: Json | None = None
     titles = list(titles_in or [])
     writer = ""
     for idx, n in enumerate(nodes):
@@ -197,7 +198,7 @@ def blocks_of(nodes: list[dict], titles_in: list | tuple = ()) -> tuple[list[dic
     return blocks, pending
 
 
-def exit_move(n: dict, nxt: dict | None) -> dict | None:
+def exit_move(n: Json, nxt: Json | None) -> Json | None:
     """The arrow out of node n: the last transition logged after its last call, else what the next node shows."""
     last_s = max([s.get("_i", -1) for s in n["sessions"]] or [-1])
     out = [m for m in n["moves"] if m["_i"] > last_s]
@@ -212,7 +213,7 @@ def exit_move(n: dict, nxt: dict | None) -> dict | None:
     }
 
 
-def run_end(nodes: list[dict], pending: dict | None, alive: bool) -> dict:
+def run_end(nodes: list[Json], pending: Json | None, alive: bool) -> Json:
     close = next((n for n in reversed(nodes) if n["step"] == "close"), None)
     if not close:
         t = nodes[-1]["t1"] if nodes else None
@@ -248,10 +249,10 @@ def run_end(nodes: list[dict], pending: dict | None, alive: bool) -> dict:
     return end
 
 
-def waits_of(recs: list, until: float = 0) -> list[dict]:
+def waits_of(recs: list[rec.EngineLog], until: float = 0) -> list[Json]:
     """The engine's waits: [{what, label, t0, secs, holder, in_budget}], oldest first. A wait_start with no wait_end after it is a
     wait still going (or cut off when the process died): it lasts until `until`."""
-    out: list[dict] = []
+    out: list[Json] = []
     starts = {r.id: r for r in recs if isinstance(r, rec.WaitStart)}
     ended: set[str] = set()
     for r in recs:
@@ -285,7 +286,7 @@ def waits_of(recs: list, until: float = 0) -> list[dict]:
     return sorted(out, key=lambda w: w["t0"])
 
 
-def run_timeline(path: str, alive: bool = False, now: float | None = None, cache: FileCache | None = None) -> dict:
+def run_timeline(path: str, alive: bool = False, now: float | None = None, cache: FileCache | None = None) -> Json:
     """One run of a bead: why it started, its blocks with the arrows between them, how it ended. A run that is alive has its open
     step and its end at `now` (the last record only says when something last happened, not how long it has been going)."""
     recs = read(path, cache)
@@ -310,7 +311,7 @@ def run_timeline(path: str, alive: bool = False, now: float | None = None, cache
     return dict(
         origin,
         run=name,
-        bead=bead_of(name),
+        bead=bead_of(name) or "",
         started=t0,
         ended=t1,
         secs=round(t1 - t0) if t0 and t1 else None,
@@ -320,11 +321,11 @@ def run_timeline(path: str, alive: bool = False, now: float | None = None, cache
         slot=(run or {}).get("slot") or "",
         worktree=(run or {}).get("worktree") or "",
         waits=waits_of(recs, now if alive else (t1 or 0)),
-        alive=bool(alive),
+        alive=alive,
     )
 
 
-def last_node(path: str, cache: FileCache | None = None) -> dict | None:
+def last_node(path: str, cache: FileCache | None = None) -> Json | None:
     nodes, _ = nodes_of(read(path, cache))
     return nodes[-1] if nodes else None
 

@@ -6,7 +6,7 @@ import json
 import os
 import threading
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Generator
 from pathlib import Path
 from typing import Any, override
 
@@ -118,7 +118,7 @@ class MemLockTable:
 
     @contextlib.contextmanager
     def hold(self, what: LockWhat, ident: str, holder: str, *, timeout: float | None = None,
-             waiting: Callable[[LockRecord | None], None] | None = None) -> Iterator[LockRecord]:
+             waiting: Callable[[LockRecord | None], None] | None = None) -> Generator[LockRecord]:
         key = (what.value, ident)
         end = None if timeout is None else time.monotonic() + timeout
         told = False

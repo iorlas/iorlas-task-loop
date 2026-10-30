@@ -3,13 +3,8 @@ from typing import Any, final
 
 import msgspec
 
+from taskloop.contracts.ids import BeadId
 from taskloop.contracts.wire import Rec
-
-
-def is_bead_id(text: object) -> bool:
-    """A letter or digit first, then letters, digits, '_', '.' and '-': never something bd would read as an option."""
-    s = text if isinstance(text, str) else ""
-    return bool(s) and s[0].isalnum() and s.isascii() and all(c.isalnum() or c in "_.-" for c in s)
 
 
 @final
@@ -32,7 +27,7 @@ class Dep(Rec):
 
 @final
 class Bead(Rec):
-    id: str
+    id: BeadId
     title: str
     status: str
     issue_type: str = ""

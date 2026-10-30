@@ -19,6 +19,7 @@ from taskloop.adapters import beadtools, ident, landlock
 from taskloop.adapters import procs as sproc
 from taskloop.contracts import wire
 from taskloop.contracts.paths import ConfigDir
+from taskloop.contracts.ids import BeadId, is_bead_id
 from taskloop.contracts.ports import BdFailure, BeadQuery, NewBead
 from taskloop.contracts.snapshots import ReflectState
 from taskloop.contracts.stores import ReflectStateStore, ReposStore
@@ -103,7 +104,7 @@ def owner_repo(c: dict[str, Any], repos: Sequence[str] | None = None) -> str:
     for r_, n in c["repos"].items():
         hit = resolve_repo(r_, repos)
         if hit:
-            mine[str(hit)] += n
+            mine[hit] += n
     return mine.most_common(1)[0][0] if mine else ""
 
 
@@ -125,7 +126,7 @@ def known_bead(c: dict[str, Any], repo: str, state: dict[str, Any]) -> tuple[str
     return "", ""
 
 
-def is_closed(bead: str, repo: str) -> bool:
+def is_closed(bead: BeadId, repo: str) -> bool:
     row = beadtools.peek(beadtools.bd_store(repo), bead)
     return row is not None and row.status == "closed"
 
@@ -162,7 +163,7 @@ def file_cluster(c: dict[str, Any], state: dict[str, Any], dry: bool = False, re
         return res
     bead, why = known_bead(c, repo, state)
     old = ""
-    if bead and why == "filed" and is_closed(bead, repo):
+    if is_bead_id(bead) and why == "filed" and is_closed(bead, repo):
         for e in state.get("filed", []):
             if e.get("bead") == bead and e.get("repo") == repo:
                 e["closed"] = True  # its successor takes the cause from here

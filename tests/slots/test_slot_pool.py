@@ -22,6 +22,7 @@ from taskloop.cli import slots as cli
 from taskloop.contracts import paths
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.config import SlotsConfig
+from taskloop.contracts.ids import BeadId
 from taskloop.contracts.slots import BranchPinned, Checkout, DirtyTree, IndexLocked, RefRace, SlotFail, SlotGitError
 from taskloop.stores.memory import MemTickets
 
@@ -56,7 +57,7 @@ class Rig(unittest.TestCase):
             sleep=self.sleeps.append)
         self.pool = SlotPool(self.env)
         for n in ("s1", "s2"):
-            self.bd.beads["sl-" + n] = Bead(id="sl-" + n, title="slot h " + n, status="open", labels=["slot"])
+            self.bd.beads[BeadId("sl-" + n)] = Bead(id=BeadId("sl-" + n), title="slot h " + n, status="open", labels=["slot"])
         self.d1 = self.env.dir_of("s1")
 
     def slot(self, name="s1"):
@@ -178,9 +179,9 @@ class Taking(Rig):
         self.slot().take("a")
         self.busy_at[self.d1] = "engine pid 7 runs x-0"
         self.assertEqual(self.code(lambda: self.slot().release()), "busy")
-        self.assertEqual(self.bd.beads["sl-s1"].status, "in_progress")
+        self.assertEqual(self.bd.beads[BeadId("sl-s1")].status, "in_progress")
         self.assertTrue(self.slot().release(force=True))
-        self.assertEqual((self.bd.beads["sl-s1"].status, self.busy_at), ("open", {}))  # freed, and the engine's lock dropped
+        self.assertEqual((self.bd.beads[BeadId("sl-s1")].status, self.busy_at), ("open", {}))  # freed, and the engine's lock dropped
 
     def test_a_forced_release_drops_only_the_lock_it_judged_busy(self):
         """drop_engine_lock without the pid would unlink a lock another engine wrote after the busy look."""
@@ -252,17 +253,17 @@ class Line(Rig):
 class OneLease(Rig):
     def test_a_lease_beats_every_bead_it_holds_and_the_beat_never_raises(self):
         for b in ("x-1", "x-2"):
-            self.bd.beads[b] = Bead(id=b, title=b, status="open")
-        lease = Lease(self.bd, "x-1", None, "sl-s1")
-        lease.add("x-2")
+            self.bd.beads[BeadId(b)] = Bead(id=BeadId(b), title=b, status="open")
+        lease = Lease(self.bd, BeadId("x-1"), None, BeadId("sl-s1"))
+        lease.add(BeadId("x-2"))
         lease.beat()
-        lease.drop("x-1")
+        lease.drop(BeadId("x-1"))
         lease.beat()
         self.assertEqual(self.bd.beats, ["x-1", "sl-s1", "x-2", "sl-s1", "x-2"])
-        Lease(FakeBeads(), "nope").beat()  # bd refuses: nothing changes
+        Lease(FakeBeads(), BeadId("nope")).beat()  # bd refuses: nothing changes
 
     def test_the_thread_beats_until_stopped(self):
-        with Lease(self.bd, "sl-s1", every=0.01):
+        with Lease(self.bd, BeadId("sl-s1"), every=0.01):
             deadline = time.monotonic() + 5
             while len(self.bd.beats) < 2 and time.monotonic() < deadline:
                 time.sleep(0.005)

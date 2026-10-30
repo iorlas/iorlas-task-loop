@@ -7,6 +7,7 @@ from typing import Any, TypeVar
 from taskloop.adapters.bd import BdStore
 from taskloop.adapters.ident import actor
 from taskloop.contracts.bead import Bead
+from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ports import BdFailure, Beads
 
 T = TypeVar("T")
@@ -19,7 +20,7 @@ def bd_store(cwd: object = None) -> BdStore:
     return BdStore(actor(), str(cwd) if cwd else None)
 
 
-def peek(store: Beads, bead_id: str) -> Bead | None:
+def peek(store: Beads, bead_id: BeadId) -> Bead | None:
     """The bead, None when it is not there or bd could not be asked (a caller that must tell the two apart calls store.show)."""
     try:
         return store.show(bead_id)

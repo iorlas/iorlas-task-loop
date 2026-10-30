@@ -17,7 +17,7 @@ class Open:
 
     @property
     def id(self) -> str:
-        return f"n{int(self.n)}"
+        return f"n{self.n}"
 
 
 class Steps:

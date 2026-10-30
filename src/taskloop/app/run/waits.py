@@ -1,6 +1,6 @@
 """Time spent waiting for a shared resource (a lock, a slot): recorded as its own segment, never counted in budget_min."""
 import contextlib
-from collections.abc import Iterator
+from collections.abc import Generator
 from typing import Any
 
 from taskloop.app.run import outcomes
@@ -34,7 +34,7 @@ class Waits:
             e.log.emit(rec.WaitEnd(id=wid, secs=round(secs), in_budget=False))
 
     @contextlib.contextmanager
-    def locked(self, what: str, path: Any, holder: Any = None) -> Iterator[Any]:
+    def locked(self, what: str, path: Any, holder: Any = None) -> Generator[Any]:
         """landlock.os_lock with a wait recorded as its own segment (tl-9h2): the open step ends before the wait starts (it was
         booked to the step before), and the wait's records name the lock, who held it and how long it took. The lock is a record
         of its own while held. tl-y35: the wait is a wait for a shared resource like any other: it is added to `waited`, so

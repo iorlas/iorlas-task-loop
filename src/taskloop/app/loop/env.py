@@ -12,6 +12,7 @@ from taskloop.app.slots.env import SlotEnv
 from taskloop.contracts import paths
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.config import RepoProfile
+from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ports import Beads
 
 
@@ -64,18 +65,18 @@ class LoopEnv:
     profile: Callable[[], RepoProfile]  # read from the base branch's commit (working tree when it does not resolve), every call
     fetch: Callable[[], None]
     lint: Callable[[Bead], str]  # why a bead is not self-contained, "" when it is
-    running: Callable[[], dict[str, str]]  # {bead: where} of the runs going now
+    running: Callable[[], dict[BeadId, str]]  # {bead: where} of the runs going now
     area_lock: Callable[[], AbstractContextManager[Any]]
     wt_lock: Callable[[str], AbstractContextManager[Any]]
     start_worktree: Callable[[str], str]
-    claim: Callable[[str, str, str], tuple[bool, str]]  # (bead, worktree, slot) -> (won, why not)
+    claim: Callable[[BeadId, str, str], tuple[bool, str]]  # (bead, worktree, slot) -> (won, why not)
     loop_lock: Callable[[str, str, str | None, str], None]  # (worktree, slot, slot bead, bead)
     drop_engine_lock: Callable[[str], None]
     spawn: Callable[[list[str], Any, dict[str, str]], tuple[Child, Hold]]  # (argv, log file, extra env) -> the child (own process group)
     stop_now: Callable[[Child], None]  # ends the child and its tree without waiting (its close step still runs)
     stop_tree: Callable[[Child], None]  # the same, waiting for it
-    run_task_argv: Callable[[str, str, str, str, Path | None], list[str]]  # (bead, worktree, slot, outcome file, code dir)
-    landed_on_base: Callable[[str, str], bool]
+    run_task_argv: Callable[[BeadId, str, str, str, Path | None], list[str]]  # (bead, worktree, slot, outcome file, code dir)
+    landed_on_base: Callable[[str, BeadId], bool]
     reload_note: Callable[[str], ReloadNote | None]  # taken once: read and dropped
     chores: Callable[[], None]  # stale asks, the daily reflection
     ask_lines: Callable[[], list[str]]  # `tl status`: the beads parked on a dropped ask

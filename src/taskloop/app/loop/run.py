@@ -15,6 +15,7 @@ from taskloop.app.loop.files import LoopFiles, StopMode
 from taskloop.app.loop.versions import Installs
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.config import LoopConfig
+from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ports import BdFailure, BeadPatch
 
 
@@ -24,7 +25,7 @@ class Where:
 
     slot: str
     wt: str
-    slot_bead: str | None
+    slot_bead: BeadId | None
     started: float
 
 
@@ -35,7 +36,7 @@ class BeadRun:
         self.env, self.files, self.installs, self.tune = env, files, installs, tune
         self.stop_mode, self.publish, self.beat, self.say = stop_mode, publish, beat, say
 
-    def wait(self, child: Child, hold: Hold, bead: str) -> tuple[int | None, bool]:
+    def wait(self, child: Child, hold: Hold, bead: BeadId) -> tuple[int | None, bool]:
         """(exit code, whether a stop-now ended it). The loop breaking ends the run too: its close step runs before the slot is freed."""
         stopped = False
         try:
@@ -88,6 +89,6 @@ class BeadRun:
                 self.reopen(b.id)
         return v.with_(minutes=v.minutes if v.minutes is not None else round((env.now() - t0) / 60, 1), run_log=str(log_path))
 
-    def reopen(self, bead: str) -> None:
+    def reopen(self, bead: BeadId) -> None:
         with contextlib.suppress(BdFailure):  # bd refused: the bead stays where it is, reclaim gets it
             self.env.store.update(bead, BeadPatch(status="open", assignee=""))

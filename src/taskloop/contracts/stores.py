@@ -196,7 +196,7 @@ class AskStore:
 
     @classmethod
     def at(cls, cfg: paths.ConfigDir) -> AskStore:
-        return cls(AskFiles(cfg), LedgerStore(cfg), lambda bead: guard(cfg.lock_record("ask", str(bead))))
+        return cls(AskFiles(cfg), LedgerStore(cfg), lambda bead: guard(cfg.lock_record("ask", bead)))
 
     def _lock(self, bead: BeadId | str) -> contextlib.AbstractContextManager[None]:
         return self.held(str(bead)) if self.held is not None else contextlib.nullcontext()

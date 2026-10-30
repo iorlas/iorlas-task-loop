@@ -4,10 +4,11 @@ import threading
 from typing import Any
 
 from taskloop.contracts import wire
+from taskloop.contracts.ids import is_bead_id
 from taskloop_dash.api import live as live_api
 from taskloop_dash.env import Env
 from taskloop_dash.readers.records import Records
-from taskloop_dash.views import live_lines, names
+from taskloop_dash.views import live_lines
 
 LIVE_MAX = 24  # runs kept open
 
@@ -30,7 +31,7 @@ class Live:
         """The bead's newest run as a typed LivePage. Without `since` the newest events, with it only what is new, held up to `wait`
         seconds until a file grows. 404 for a bead with no run."""
         self.env.touch()
-        logs = self.records.engine_logs(retain=False).get(bead, []) if names.is_bead_id(bead) else []
+        logs = self.records.engine_logs(retain=False).get(bead, []) if is_bead_id(bead) else []
         if not logs:
             return 404, {"error": "no engine run for this bead"}
         lr = self.live_run(logs[-1])

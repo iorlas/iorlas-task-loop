@@ -14,6 +14,7 @@ from plan.brief_cases import CASES, beads
 from taskloop.app.asks import intake
 from taskloop.app.plan.briefs import ENGINE_LABELS, Briefs
 from taskloop.contracts.bead import Bead, Comment
+from taskloop.contracts.ids import BeadId
 from taskloop.domain.plan import brief as bf
 from taskloop.domain.prompts.plan import PLAN_BRIEF_KB, PLAN_PROMPT
 
@@ -88,7 +89,7 @@ class FitsTheLimit(unittest.TestCase):
         return Briefs(host).fit(bead, comments, "", 0)
 
     def test_a_brief_that_grows_over_five_reruns_stays_under_the_limit_oldest_comments_first(self):
-        bead = Bead(id="t-1", title="Add f", status="open", description="Add the file f.", acceptance_criteria="f exists")
+        bead = Bead(id=BeadId("t-1"), title="Add f", status="open", description="Add the file f.", acceptance_criteria="f exists")
         comments: list[Comment] = []
         for rerun in range(1, 6):
             comments.append(Comment(author="denis", text=f"decision {rerun}: " + "x" * 2000))
@@ -104,18 +105,19 @@ class FitsTheLimit(unittest.TestCase):
         self.assertLess(out.text.index("(+3"), out.text.index("decision 4:"))
 
     def test_the_newest_comment_stays_even_when_it_alone_is_over_the_limit(self):
-        out = self.brief(Bead(id="t-1", title="T", status="open"), [Comment(author="a", text="old"), Comment(author="a", text="n" * 9000)])
+        bead = Bead(id=BeadId("t-1"), title="T", status="open")
+        out = self.brief(bead, [Comment(author="a", text="old"), Comment(author="a", text="n" * 9000)])
         self.assertIn("n" * 9000, out.text)
         self.assertNotIn("- a: old", out.text)
 
     def test_a_bead_text_over_the_limit_is_never_cut_and_the_comments_all_go_but_the_newest(self):
-        bead = Bead(id="t-1", title="T", status="open", description="d" * 7000)
+        bead = Bead(id=BeadId("t-1"), title="T", status="open", description="d" * 7000)
         out = self.brief(bead, [Comment(author="a", text="one"), Comment(author="a", text="two")])
         self.assertIn("d" * 7000, out.text)
         self.assertEqual(out.dropped, 1)
 
     def test_export_warns_naming_the_bead_text_size_when_the_text_alone_is_over_the_limit(self):
-        bead = Bead(id="t-1", title="T", status="open", description="d" * 7000)
+        bead = Bead(id=BeadId("t-1"), title="T", status="open", description="d" * 7000)
         warns, notes = [], []
         with tempfile.TemporaryDirectory() as d:
             store = SimpleNamespace(comments=lambda i: [Comment(author="a", text="one"), Comment(author="a", text="two")],

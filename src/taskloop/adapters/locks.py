@@ -10,7 +10,7 @@ import json
 import os
 import threading
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Generator
 from pathlib import Path
 
 from atomic_io import atomic_write_json
@@ -46,7 +46,7 @@ def read_holder(path: Path, pid: int | None = None) -> LockRecord | None:
 @contextlib.contextmanager
 def hold_path(path: Path | str, holder: str, *, what: LockWhat = LockWhat.LAND, timeout: float | None = None,
               waiting: Callable[[LockRecord | None], None] | None = None,
-              check: Callable[[], None] | None = None) -> Iterator[LockRecord]:
+              check: Callable[[], None] | None = None) -> Generator[LockRecord]:
     """Wait for the lock on `path` (forever, or `timeout` seconds, then LockTimeout), hold it for the `with` block.
     `waiting` is called once, before the first wait, with the current holder (None when unknown).
     `check` runs every round of the wait: it raises to end the wait (a stop)."""

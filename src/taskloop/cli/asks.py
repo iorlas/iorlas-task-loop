@@ -11,11 +11,13 @@ from taskloop.app.asks import intake, sweeps
 from taskloop.app.run import requests
 from taskloop.contracts import wire
 from taskloop.contracts.ask import Ask, AskAction
+from taskloop.contracts.ids import BeadId, parse_bead_id
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdFailure, Beads
 from taskloop.contracts.stores import AskStore
 
 Out = Callable[[str], None]
+FLAG_ACTIONS: Final[tuple[AskAction, ...]] = ("rerun", "confirm", "split")  # `tl answer --rerun|--confirm|--split`
 SAYS: Final = {"gone": "there is no ask for this bead", "superseded": "the engine asked again; the new ask replaces this one",
         "withdrawn": "the ask was withdrawn", "closed": "the ask is closed", "consumed": "a run already used the answer",
         "answered": "this ask is already answered (replace the answer with --amend)"}
@@ -35,9 +37,9 @@ def action_of(a: Namespace, ask: Ask | None) -> tuple[AskAction, str]:
         if verdict == "decline":
             return "text", decline
         return ("confirm" if verdict == "confirm" else "rerun"), words
-    for flag, action in (("rerun", "rerun"), ("confirm", "confirm"), ("split", "split")):
+    for flag in FLAG_ACTIONS:
         if getattr(a, flag, False):
-            return action, words  # type: ignore[return-value]
+            return flag, words
     return "text", words
 
 
@@ -101,7 +103,7 @@ def run(a: Namespace, asks: AskStore, store_at: Callable[[str], Beads], now: Cal
         return 0
     if op == "age":
         return age(asks, now(), out)
-    bead = getattr(a, "bead", "")
+    bead: BeadId | None = getattr(a, "bead", None)
     if op == "show":
         return show(asks, bead or "", out)
     if not bead:
@@ -112,11 +114,11 @@ def run(a: Namespace, asks: AskStore, store_at: Callable[[str], Beads], now: Cal
     try:
         return verb(a, op, bead, ask, verbs, out, now)
     except (BdFailure, ValueError) as e:
-        out("tl: %s" % ((getattr(e, "error", None) and e.error.text) or e))  # type: ignore[attr-defined]
+        out("tl: %s" % ((e.error.text if isinstance(e, BdFailure) else "") or e))
         return 1
 
 
-def waive(a: Namespace, verbs: intake.Intake, bead: str, words: str) -> None:
+def waive(a: Namespace, verbs: intake.Intake, bead: BeadId, words: str) -> None:
     for kind in intake.WAIVER_KINDS:
         if getattr(a, kind, None):
             verbs.waive(bead, kind, getattr(a, kind), getattr(a, "approval", None) or "")
@@ -124,7 +126,7 @@ def waive(a: Namespace, verbs: intake.Intake, bead: str, words: str) -> None:
     verbs.override(bead, words)
 
 
-def verb(a: Namespace, op: str, bead: str, ask: Ask | None, verbs: intake.Intake, out: Out, now: Callable[[], float] = time.time) -> int:
+def verb(a: Namespace, op: str, bead: BeadId, ask: Ask | None, verbs: intake.Intake, out: Out, now: Callable[[], float] = time.time) -> int:
     words = " ".join(getattr(a, "text", None) or [])
     if op == "answer":
         action, said = action_of(a, ask)
@@ -161,7 +163,7 @@ def add_parsers(sp: Any) -> None:
     p = sp.add_parser("ask", help="the owner's inbox: list the open asks, show one, answer one, withdraw one that no longer applies, "
                     "or their age")
     p.add_argument("op", choices=["list", "show", "answer", "withdraw", "age"])
-    p.add_argument("bead", nargs="?")
+    p.add_argument("bead", nargs="?", type=parse_bead_id)
     p.add_argument("text", nargs="*", help="answer: the answer; withdraw: why")
     p.add_argument("--json", action="store_true")
     answer_flags(p)
@@ -171,7 +173,7 @@ def add_parsers(sp: Any) -> None:
                        ("note", "a note the live run's next stage reads (no run going: a hint the next run reads)")):
         p = sp.add_parser(verb, help=what)
         p.set_defaults(op=verb)
-        p.add_argument("bead")
+        p.add_argument("bead", type=parse_bead_id)
         p.add_argument("text", nargs="*")
         if verb == "answer":
             answer_flags(p)

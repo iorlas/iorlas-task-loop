@@ -14,7 +14,7 @@ class StaleRecord(ValueError):
     """The data carries another `v` than the class: the record is treated as absent, never migrated."""
 
     def __init__(self, name: str, found: object, want: int) -> None:
-        super().__init__(f"{name}: v={found!r}, this code reads v={int(want)}")
+        super().__init__(f"{name}: v={found!r}, this code reads v={want}")
         self.found = found
         self.want = want
 

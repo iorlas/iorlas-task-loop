@@ -7,6 +7,7 @@ from taskloop.app.slots.marks import clear_marks, held_by, hold_of, hold_until, 
 from taskloop.app.slots.reset import ready_for
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.fence import SLOT_GEN, gen_of
+from taskloop.contracts.ids import BeadId, parse_bead_id
 from taskloop.contracts.ports import BdFailure, BeadQuery
 from taskloop.contracts.slots import Hold, SlotFail
 
@@ -36,7 +37,7 @@ class Slot:
         return st.claim(self.bead.id) and ((peek(st, self.bead.id) or Bead(id=self.bead.id, title="", status="")).assignee
                                            or self.env.actor) == self.env.actor
 
-    def take_locked(self, why: str, bead: str = "", ticket: int | None = None) -> str:
+    def take_locked(self, why: str, bead: str = "", ticket: int | None = None) -> BeadId:
         """The slot bead's id once this session holds the slot; the caller holds the repo's take lock. Fails busy."""
         why_not = self.free_reason()
         if why_not:
@@ -48,7 +49,7 @@ class Slot:
                        **({"ticket": ticket} if ticket is not None else {}))
         return self.bead.id
 
-    def take(self, why: str, bead: str = "") -> str:
+    def take(self, why: str, bead: str = "") -> BeadId:
         """Take this slot by name. A held slot bead is refused even when this session's actor holds it (two hand runs of
         one session share its actor, and bd lets an actor re-claim its own bead); a hold too, its holder's own included."""
         with self.env.take_lock():
@@ -121,9 +122,9 @@ class SlotPool:
         return Slot(self, name, b)
 
     def named(self, name: str) -> Slot:
-        """The slot `name` for a reset or a setup, which need only its worktree: no bead (id "") when bd has none."""
+        """The slot `name` for a reset or a setup, which need only its worktree: a stand-in bead (`slot-<name>`) when bd has none."""
         b = self.bead(name)
-        return Slot(self, name, b or Bead(id="", title=f"slot {self.env.host} {name}", status=""))
+        return Slot(self, name, b or Bead(id=parse_bead_id(f"slot-{name}"), title=f"slot {self.env.host} {name}", status=""))
 
     def name_of(self, wt: str) -> str:
         """The slot whose worktree `wt` is, or ""."""
@@ -136,7 +137,7 @@ class SlotPool:
         if not self.env.store.unclaim(b.id) and force:
             self.env.store.unclaim(b.id, force=True)
 
-    def take_any(self, why: str, bead: str = "", ticket: int | None = None) -> tuple[str, str, str] | None:
+    def take_any(self, why: str, bead: str = "", ticket: int | None = None) -> tuple[str, str, BeadId] | None:
         """(name, dir, slot bead) of the first free slot this session could claim, or None. A waiter goes through
         TicketQueue.wait, which takes its turn in the line first; `ticket` is its number, kept on the take's event."""
         with self.env.take_lock():

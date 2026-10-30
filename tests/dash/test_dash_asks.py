@@ -22,6 +22,7 @@ from taskloop.contracts import wire
 from taskloop.contracts.ask import SimilarRef, ThreadEntry
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.dash import Column, Marker, OwnerCause, Result, Stick
+from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ledger import Adr
 from taskloop.contracts.stores import AskStore
 from taskloop.domain.asks import specs
@@ -52,7 +53,7 @@ class Case(unittest.TestCase):
         self.asks = self.stores.asks
         self.beads = FakeBeads()
         for k in range(5):
-            self.beads.beads[f"b-{k}"] = Bead(id=f"b-{k}", title="x", status="blocked")
+            self.beads.beads[BeadId(f"b-{k}")] = Bead(id=BeadId(f"b-{k}"), title="x", status="blocked")
         self.verbs = intake.Intake(self.asks, self.beads, lambda: NOW - 3 * DAY, "denis", self.stores.adrs)
 
     def restore_tz(self):
@@ -96,7 +97,7 @@ class Cards(Case):
 
     def test_a_card_matches_a_past_answered_ask_when_no_decision_is_in_force(self):
         first = self.raise_("b-0", NOW - 9 * DAY)
-        self.verbs.answer("b-0", "text", "rent weekly")
+        self.verbs.answer(BeadId("b-0"), "text", "rent weekly")
         a = self.raise_("b-1", NOW - DAY)
         self.assertEqual(a.similar, [SimilarRef(kind="ask", id=first.id)])
         card = self.snap([bead("b-1", "Bills")]).asks[0]
@@ -104,7 +105,7 @@ class Cards(Case):
 
     def test_the_owner_corrects_the_cause_and_the_card_shows_it(self):
         a = self.raise_("b-1", NOW - DAY, cause="process")
-        self.assertEqual(self.verbs.cause("b-1", a.id, "environment"), "")
+        self.assertEqual(self.verbs.cause(BeadId("b-1"), a.id, "environment"), "")
         card = self.snap([bead("b-1", "Bills")]).asks[0]
         self.assertEqual((card.owner_cause, card.cause_by), (OwnerCause.ENVIRONMENT, "owner"))
 
@@ -130,8 +131,8 @@ class Cards(Case):
 class Ledger(Case):
     def test_rows_hold_open_soft_and_answered_asks_newest_first_with_cause_and_outcome(self):
         done = self.raise_("b-1", NOW - 6 * DAY, cause="requirement")
-        self.verbs.answer("b-1", "text", "rent weekly")
-        self.verbs.cause("b-1", done.id, "decision")
+        self.verbs.answer(BeadId("b-1"), "text", "rent weekly")
+        self.verbs.cause(BeadId("b-1"), done.id, "decision")
         self.asks.consume("b-1", NOW - 5 * DAY)
         self.asks.stuck("b-1", done.id, Stick.ONCE, "", NOW - 5 * DAY)
         hard = self.raise_("b-2", NOW - 2 * DAY)
@@ -147,7 +148,7 @@ class Ledger(Case):
 
     def test_an_open_row_of_a_bead_the_snapshot_does_not_show_is_left_out_but_an_answered_one_stays(self):
         self.raise_("b-1", NOW - 6 * DAY)
-        self.verbs.answer("b-1", "text", "x")
+        self.verbs.answer(BeadId("b-1"), "text", "x")
         self.raise_("b-2", NOW - DAY)
         self.assertEqual([r.status for r in self.snap([bead("b-1", "x", "closed", closed_at=iso(NOW - 4 * DAY))]).ledger], ["answered"])
 
@@ -156,7 +157,7 @@ class Ledger(Case):
         beads = [bead("b-1", "Bills", "blocked")]
         before = self.snap(beads).version
         self.assertEqual(self.snap(beads).version, before)
-        self.verbs.cause("b-1", "b-1-1", "environment")
+        self.verbs.cause(BeadId("b-1"), "b-1-1", "environment")
         self.assertNotEqual(self.snap(beads).version, before)
 
 
@@ -182,7 +183,7 @@ class Learning(Case):
     def test_weekly_series_from_the_ledger_and_the_landed_runs(self):
         self.raise_("b-0", NOW - 20 * DAY)  # never answered: counts as raised, not as durable
         last = self.raise_("b-1", NOW - 10 * DAY, cause="requirement")
-        self.verbs.answer("b-1", "text", "x")
+        self.verbs.answer(BeadId("b-1"), "text", "x")
         self.verbs.stick(last.id, Stick.FIX, "clarified")
         self.raise_("b-2", NOW - 3600, cause="requirement")
         landings = [Landing(NOW - 10 * DAY + 60, 2), Landing(NOW - 10 * DAY + 90, 0), Landing(NOW - 3600, 1)]
@@ -201,7 +202,7 @@ class Learning(Case):
 
     def test_a_repeat_counts_in_its_week(self):
         first = self.raise_("b-0", NOW - 9 * DAY)
-        self.verbs.answer("b-0", "text", "x")
+        self.verbs.answer(BeadId("b-0"), "text", "x")
         again = self.raise_("b-1", NOW - 3600)
         self.assertEqual(again.similar, [SimilarRef(kind="ask", id=first.id)])
         got = self.snap([bead("b-1", "x")]).learning
@@ -216,7 +217,7 @@ class Stick_(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.fake = FakeBeads()
-        self.fake.beads["b-1"] = Bead(id="b-1", title="Bills", status="blocked", description="Pay the bills.")
+        self.fake.beads[BeadId("b-1")] = Bead(id=BeadId("b-1"), title="Bills", status="blocked", description="Pay the bills.")
         self.factory = FakeBeads(prefix="tl")
         self.dash = make_dash(answering(lambda repo: self.fake, self.tmp.name, clock=lambda: NOW, factory=lambda: self.factory),
                               config=self.tmp.name, clock=lambda: NOW)
@@ -225,7 +226,7 @@ class Stick_(unittest.TestCase):
         write_repos(self.dash.env.config.repos(), repo)
         self.asks = AskStore.at(self.dash.env.config)
         self.ask = must(raiser.raise_ask(self.asks, specs.open_question(Q, OPTS), raiser.Asking(
-            bead="b-1", run="r", brief_hash="h", repo=str(repo), title="Bills", now=NOW - 60))[0])
+            bead=BeadId("b-1"), run="r", brief_hash="h", repo=str(repo), title="Bills", now=NOW - 60))[0])
         self.post("answer", {"project": "demo", "ask": self.ask.id, "kind": "answer", "option": 0})
 
     def post(self, verb, body):
@@ -248,7 +249,7 @@ class Stick_(unittest.TestCase):
         self.assertEqual(self.stick("factory", "prompt: ask which bills"), Result(ok=True))
         self.assertEqual([b.title for b in self.factory.beads.values()], ["prompt: ask which bills"])
         self.assertEqual(self.stick("fix", "Rent is weekly."), Result(ok=True))
-        self.assertIn("Rent is weekly.", self.fake.beads["b-1"].description)
+        self.assertIn("Rent is weekly.", self.fake.beads[BeadId("b-1")].description)
         self.assertEqual(self.stick("demote"), Result(ok=True))
         self.assertEqual(self.asks.history(self.ask.id)[-1].event, "demote")
         self.assertEqual(self.stick("once"), Result(ok=True))
@@ -276,7 +277,7 @@ class Stick_(unittest.TestCase):
 
     def test_an_unanswered_ask_cannot_stick(self):
         other = must(raiser.raise_ask(self.asks, specs.missing_criteria(), raiser.Asking(
-            bead="b-2", run="r", brief_hash="h", repo=self.tmp.name, title="x", now=NOW))[0])
+            bead=BeadId("b-2"), run="r", brief_hash="h", repo=self.tmp.name, title="x", now=NOW))[0])
         res = self.post("stick", {"project": "demo", "ask": other.id, "outcome": "adr"})
         self.assertEqual((res.ok, res.message), (False, "answer the ask first"))
         self.assertEqual(self.dash.writes.post("stick", {"project": "demo", "ask": "x", "outcome": "maybe"})[0], 400)

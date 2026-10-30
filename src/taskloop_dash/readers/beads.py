@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from taskloop.contracts.bead import Bead as TypedBead
+from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ports import BdFailure, BeadQuery
 from taskloop_dash.env import Bead, Env
 from taskloop_dash.readers.records import Records
@@ -77,7 +78,7 @@ class Beads:
         except OSError:
             pass
 
-    def show(self, repo: str, bead: str) -> dict[str, Any] | None:
+    def show(self, repo: str, bead: BeadId) -> dict[str, Any] | None:
         """One bead as a row, None when bd does not know it or cannot answer."""
         try:
             found = self.env.ports.store(repo).show(bead) if repo else None
@@ -85,7 +86,7 @@ class Beads:
             return None
         return row_of(found) if found else None
 
-    def comments(self, repo: str, bead: str) -> list[dict[str, Any]]:
+    def comments(self, repo: str, bead: BeadId) -> list[dict[str, Any]]:
         try:
             return [c.to_dict() for c in self.env.ports.store(repo).comments(bead)] if repo else []
         except (BdFailure, ValueError, OSError):

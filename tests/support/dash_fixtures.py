@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from taskloop.contracts import dash as D
 from taskloop.contracts import wire
+from taskloop.contracts.ids import BeadId
 
 ROOT = Path(__file__).resolve().parents[2]
 DIR = ROOT / "tests" / "fixtures" / "dash"
@@ -438,12 +439,12 @@ def build() -> dict[str, Any]:
         "answer": D.AnswerReq(project="lifesim", ask=L("fld.27") + "-1", kind="answer", option=0),
         "look": D.LookReq(project="lifesim", bead=L("d5f.48"), verdict="redo", note="the confirm button is cut off"),
         "stick": D.StickReq(project="lifesim", ask=L("fld.27") + "-1", outcome=D.Stick.ADR),
-        "cause": D.CauseReq(project="lifesim", bead=L("5ban.3"), cause=D.OwnerCause.FLAKY_TEST),
-        "ack": D.AckReq(project="lifesim", bead=L("5ban.3"), ack=True),
+        "cause": D.CauseReq(project="lifesim", bead=BeadId(L("5ban.3")), cause=D.OwnerCause.FLAKY_TEST),
+        "ack": D.AckReq(project="lifesim", bead=BeadId(L("5ban.3")), ack=True),
         "prune": D.PruneReq(project="lifesim", adr="ADR-007"),
-        "park": D.BeadReq(project="lifesim", bead=L("6dq0")),
-        "stop": D.BeadReq(project="lifesim", bead=L("6dq0")),
-        "note": D.NoteReq(project="lifesim", bead=L("6dq0"), text="keep the old save format readable"),
+        "park": D.BeadReq(project="lifesim", bead=BeadId(L("6dq0"))),
+        "stop": D.BeadReq(project="lifesim", bead=BeadId(L("6dq0"))),
+        "note": D.NoteReq(project="lifesim", bead=BeadId(L("6dq0")), text="keep the old save format readable"),
     }
     out["result.json"] = D.Result(ok=True, message="Sent. lifesim-fld.27 resumes in its slot.")
     return out

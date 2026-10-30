@@ -41,6 +41,7 @@ from taskloop.contracts import paths
 from taskloop.contracts.config import RepoProfile
 from taskloop.contracts.enums import LockWhat
 from taskloop.contracts.envvars import EnvVar
+from taskloop.contracts.ids import BeadId
 from taskloop.contracts.landed import LandedStore
 from taskloop.contracts.loop import LoopState
 from taskloop.contracts.ports import Beads
@@ -102,7 +103,7 @@ def make_probe(repo: str | Path) -> dg.RouteProbe | None:
 
 
 def storm(repo: str, now: Callable[[], float] = trail.now) -> Storm | None:
-    rid = gitrepo.git("remote", "get-url", "origin", cwd=repo) or str(repo)
+    rid = gitrepo.git("remote", "get-url", "origin", cwd=repo) or repo
     path = storm_file.storm_path(ident.config_dir(), rid)
     rec = storm_file.read_storm(path, now(), oc.KNOBS["storm_window_s"])
     if not rec:
@@ -110,11 +111,11 @@ def storm(repo: str, now: Callable[[], float] = trail.now) -> Storm | None:
     banner = (
         "STOPPED: storm {} on {}; the beads stay open (look at their logs). Record {} expires {:d} min after it was written; "
         "delete it to start sooner"
-    ).format(rec.get("fingerprint"), ",".join(rec.get("beads") or []), path, int(oc.KNOBS["storm_window_s"] // 60))
+    ).format(rec.get("fingerprint"), ",".join(rec.get("beads") or []), path, (oc.KNOBS["storm_window_s"] // 60))
     return Storm(rec.get("fingerprint") or "", banner)
 
 
-def landed_on_base(repo: str, store: Beads, wt: str, bead_id: str) -> bool:
+def landed_on_base(repo: str, store: Beads, wt: str, bead_id: BeadId) -> bool:
     """True when the bead's landed record names a sha that is on the base. LEGACY, only for a bead with no record (landed before
     0.23.179): its land commit (titled `... (<id>)`) is the tip of its branch and already on the base; this can go with them."""
     if not os.path.isdir(wt):
@@ -152,7 +153,7 @@ def chores(repo: str) -> None:
         console.say(f"loop: reflect digest: {e}")
 
 
-def claim(repo: str, store: Beads, bead: str, wt: str, slot: str, now: Callable[[], float] = trail.now) -> tuple[bool, str]:
+def claim(repo: str, store: Beads, bead: BeadId, wt: str, slot: str, now: Callable[[], float] = trail.now) -> tuple[bool, str]:
     ok, why = entry.reclaim(
         bead, repo, store, now()
     )  # a paused run leaves its bead open and still assigned: released here when that run is gone
@@ -215,7 +216,7 @@ def build(repo: str, store: Beads | None = None, session_actor: str = "", here: 
         slot_env=lambda: wslots.slot_env(repo, store, profile().slots, now),
         profile=profile,
         fetch=lambda: fetch(repo),
-        lint=lambda b: beadlint.why(b, str(repo), lambda: lintrun.has_children(store, b.id)),
+        lint=lambda b: beadlint.why(b, repo, lambda: lintrun.has_children(store, b.id)),
         running=lambda: running(repo, store),
         area_lock=lambda: area_lock(repo),
         wt_lock=lambda key: hold_path(cfg.lock_record(LockWhat.WORKTREE.value, key), f"pid {os.getpid()}", what=LockWhat.WORKTREE),

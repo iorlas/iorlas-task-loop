@@ -1,33 +1,46 @@
 """delegate's contract-3 answer (one JSON object) as a `DelegateResult`. Reads are tolerant of keys we do not model; an answer
 that breaks the shape becomes a synthesized stop, never an exception. A status word and a next step are derived from `stop`
 here and nowhere else (`answer_status`, `answer_next`): contract 3 removed them from the wire and from `DelegateResult`."""
-from typing import Any
+from typing import Any, get_args
 
 from taskloop.contracts.delegate import (
     REASON_TIMEOUT,
+    Accounting,
+    CostSource,
     DelegateResult,
     Denial,
+    Permanence,
     Retry,
+    RetryKind,
+    Scope,
     StopFacts,
     Survivor,
     TranscriptInfo,
+    TranscriptKind,
+    TtlSource,
     Usage,
     UsageTokens,
     WorkerEnd,
+    WorkerEndKind,
 )
 from taskloop.contracts.trace import Tokens
 
 CONTRACT = 3
-SCOPES = ("bead", "caller", "machine", "lane", "model")
-PERMANENCE = ("transient", "needs_owner")
-RETRY = ("none", "predicted", "poll")
+SCOPES: tuple[Scope, ...] = get_args(Scope)
+PERMANENCE: tuple[Permanence, ...] = get_args(Permanence)
+RETRY: tuple[RetryKind, ...] = get_args(RetryKind)
+TTL_SOURCES: tuple[TtlSource, ...] = get_args(TtlSource)
+COST_SOURCES: tuple[CostSource, ...] = get_args(CostSource)
+ACCOUNTING: tuple[Accounting, ...] = get_args(Accounting)
+TRANSCRIPTS: tuple[TranscriptKind, ...] = get_args(TranscriptKind)
+ENDS: tuple[WorkerEndKind, ...] = get_args(WorkerEndKind)
 _FAILED = ("worker_failed", "schema_invalid", "secrets")
 _ERROR = ("bad_request", "caller", "setup", "crash", "contract_violation")
 
 
-def synth(reason: str, scope: str, permanence: str, text: str, ref: str = "") -> DelegateResult:
+def synth(reason: str, scope: Scope, permanence: Permanence, text: str, ref: str = "") -> DelegateResult:
     """A result delegate did not write: the engine's own account of a call that gave no usable answer."""
-    stop = StopFacts(reason=reason, scope=scope, permanence=permanence, retry=Retry(kind="none"), ref=ref)  # type: ignore[arg-type]
+    stop = StopFacts(reason=reason, scope=scope, permanence=permanence, retry=Retry(kind="none"), ref=ref)
     return DelegateResult(text=text[-2000:], say=text[:300], ref=ref or None, stop=stop)
 
 
@@ -65,19 +78,21 @@ def _num(v: Any, default: float = 0.0) -> float:
 
 
 def _int(v: Any) -> int:
-    return int(v) if isinstance(v, int) and not isinstance(v, bool) else 0
+    return v if isinstance(v, int) and not isinstance(v, bool) else 0
 
 
 def stop_of(raw: Any) -> StopFacts | None:
     if raw is None:
         return None
     r = raw.get("retry") if isinstance(raw, dict) else None
-    if not (isinstance(raw, dict) and isinstance(r, dict) and raw.get("scope") in SCOPES
-            and raw.get("permanence") in PERMANENCE and r.get("kind") in RETRY and isinstance(raw.get("reason"), str)):
+    if not (isinstance(raw, dict) and isinstance(r, dict) and isinstance(raw.get("reason"), str)):
+        raise ValueError("stop is not {reason, scope, permanence, retry{kind}}")
+    scope, permanence, kind = _choice(raw.get("scope"), SCOPES), _choice(raw.get("permanence"), PERMANENCE), _choice(r.get("kind"), RETRY)
+    if scope is None or permanence is None or kind is None:
         raise ValueError("stop is not {reason, scope, permanence, retry{kind}}")
     at = r.get("at")
-    return StopFacts(reason=raw["reason"], scope=raw["scope"], permanence=raw["permanence"],
-                     retry=Retry(kind=r["kind"], at=float(at) if isinstance(at, (int, float)) else None),
+    return StopFacts(reason=raw["reason"], scope=scope, permanence=permanence,
+                     retry=Retry(kind=kind, at=float(at) if isinstance(at, (int, float)) else None),
                      ref=str(raw.get("ref") or ""), fix=str(raw.get("fix") or ""),
                      resumable=bool(raw.get("resumable")), partial=bool(raw.get("partial")))
 
@@ -89,11 +104,16 @@ def tokens_of(raw: Any) -> Tokens | None:
 
 
 def _oint(v: Any) -> int | None:
-    return int(v) if isinstance(v, int) and not isinstance(v, bool) else None
+    return v if isinstance(v, int) and not isinstance(v, bool) else None
 
 
-def _pick(v: Any, allowed: tuple[str, ...], default: str) -> str:
-    return v if v in allowed else default
+def _choice[L: str](v: object, allowed: tuple[L, ...]) -> L | None:
+    """The member of `allowed` that `v` names, typed as that member; None for anything else."""
+    return next((a for a in allowed if a == v), None)
+
+
+def pick[L: str](v: object, allowed: tuple[L, ...], default: L) -> L:
+    return _choice(v, allowed) or default
 
 
 def usage_tokens_of(raw: Any) -> UsageTokens | None:
@@ -114,24 +134,25 @@ def usage_of(raw: Any) -> Usage | None:
                  turns=turns if isinstance(turns, int) else None, context_k=_num(ctx) if isinstance(ctx, (int, float)) else None,
                  answer_bytes=_int(raw.get("answer_bytes")), ref=_opt(raw, "ref"), last_activity_at=_opt(raw, "last_activity_at"),
                  warm_until=_opt(raw, "warm_until"), ttl_s=_oint(raw.get("ttl_s")),
-                 ttl_source=_pick(raw.get("ttl_source"), ("vendor_default", "observed", "unknown"), "unknown"),  # type: ignore[arg-type]
+                 ttl_source=pick(raw.get("ttl_source"), TTL_SOURCES, "unknown"),
                  cost_usd=_num(cost) if isinstance(cost, (int, float)) and not isinstance(cost, bool) else None,
-                 cost_source=_pick(raw.get("cost_source"), ("harness", "unknown", "free"), "unknown"),  # type: ignore[arg-type]
-                 accounting=_pick(raw.get("accounting"), ("exact", "estimated", "unknown"), "unknown"))  # type: ignore[arg-type]
+                 cost_source=pick(raw.get("cost_source"), COST_SOURCES, "unknown"),
+                 accounting=pick(raw.get("accounting"), ACCOUNTING, "unknown"))
 
 
 def denied_of(raw: Any) -> list[Denial]:
     """`sandbox_limit` is noise, never a failure: it is not carried."""
     rows = raw if isinstance(raw, list) else []
-    return [Denial(kind=d.get("kind") if d.get("kind") in ("policy", "secret") else "policy",  # type: ignore[arg-type]
+    return [Denial(kind=pick(d.get("kind"), ("policy", "secret"), "policy"),
                    tool=_opt(d, "tool"), path=_opt(d, "path"), input=d["input"] if isinstance(d.get("input"), dict) else {})
             for d in rows if isinstance(d, dict) and d.get("kind") != "sandbox_limit"]
 
 
 def transcript_info_of(raw: Any) -> TranscriptInfo | None:
-    if not (isinstance(raw, dict) and isinstance(raw.get("path"), str) and raw.get("kind") in ("codex", "claude", "opencode_export")):
+    kind = _choice(raw.get("kind"), TRANSCRIPTS) if isinstance(raw, dict) else None
+    if not (isinstance(raw, dict) and isinstance(raw.get("path"), str) and kind is not None):
         return None
-    return TranscriptInfo(path=raw["path"], kind=raw["kind"], from_=_int(raw.get("from")), to=_int(raw.get("to")),
+    return TranscriptInfo(path=raw["path"], kind=kind, from_=_int(raw.get("from")), to=_int(raw.get("to")),
                           bytes=_int(raw.get("bytes")))
 
 
@@ -144,8 +165,7 @@ def worker_of(raw: Any) -> WorkerEnd | None:
     """`worker` of the answer: how delegate ended the worker's life. A survivor is a pid that outlived SIGTERM and SIGKILL."""
     if not isinstance(raw, dict):
         return None
-    ends = ("ok", "error", "timeout", "worker_survived")
-    return WorkerEnd(end=_pick(raw.get("end"), ends, "ok"), stopped=bool(raw.get("stopped")),  # type: ignore[arg-type]
+    return WorkerEnd(end=pick(raw.get("end"), ENDS, "ok"), stopped=bool(raw.get("stopped")),
                      term_sent=bool(raw.get("term_sent")), kill_sent=bool(raw.get("kill_sent")), waited_s=_num(raw.get("waited_s")),
                      survivors=[Survivor(pid=s["pid"], start=_opt(s, "start")) for s in raw.get("survivors") or []
                                 if isinstance(s, dict) and isinstance(s.get("pid"), int)],

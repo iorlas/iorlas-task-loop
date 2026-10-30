@@ -20,6 +20,7 @@ from taskloop.app.run import (
     engine,
 )
 from taskloop.app.wire import slots as wslots
+from taskloop.contracts.ids import BeadId
 from taskloop.domain import outcome as oc
 
 
@@ -32,7 +33,7 @@ class EngineChecksTest(EngineTest):
     def test_a_stop_during_a_check_stops_the_check_and_everything_it_started(self):
         if os.name == "nt":
             self.skipTest("POSIX process groups")
-        eng = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
+        eng = engine.Engine(BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
         pidfile = Path(self.wt, "child.pid")
 
         def stopped(*_):  # what the run's SIGTERM handler does, from the same thread, once the check has started its child

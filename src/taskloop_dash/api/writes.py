@@ -9,6 +9,7 @@ from typing import Any, Final
 from taskloop.contracts import wire
 from taskloop.contracts.ask import Ask, AskAction
 from taskloop.contracts.dash import WRITES, AckReq, AnswerReq, BeadReq, CauseReq, LookReq, NoteReq, PruneReq, Result, StickReq
+from taskloop.contracts.ids import BeadId
 from taskloop.contracts.stores import AskStore
 from taskloop_dash.api.looks import Looks
 from taskloop_dash.env import Env
@@ -73,9 +74,9 @@ class Writes:
     def repo_of(self, project: str) -> str:
         return self.beads.resolve_repo(project, "")
 
-    def run_of(self, bead: str) -> str:
+    def run_of(self, bead: BeadId) -> str:
         """The newest run of the bead: what a cause or an ack is about when no ask is named."""
-        logs = self.records.engine_logs(retain=False).get(bead, []) if names.is_bead_id(bead) else []
+        logs = self.records.engine_logs(retain=False).get(bead, [])
         return names.run_name(logs[-1]) if logs else ""
 
     def answer(self, req: AnswerReq) -> Result:

@@ -13,11 +13,12 @@ from taskloop.adapters.opencode import transcript_of
 from taskloop.app.track.trail import event, provenance, prune_events, register_repo
 from taskloop.contracts import fence
 from taskloop.contracts.bead import Bead
+from taskloop.contracts.ids import BeadId
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdFailure, BeadPatch, Beads
 
 
-def claim(bead: str, worktree: str | None = None, slot: str | None = None, store: Beads | None = None) -> int:
+def claim(bead: BeadId, worktree: str | None = None, slot: str | None = None, store: Beads | None = None) -> int:
     st = store or bd_store()
     if not st.claim(bead):
         print("TAKEN")
@@ -36,7 +37,7 @@ def claim(bead: str, worktree: str | None = None, slot: str | None = None, store
     return 0
 
 
-def land(bead: str, sha: str, worktree: str | None = None, store: Beads | None = None, base: str | None = None,
+def land(bead: BeadId, sha: str, worktree: str | None = None, store: Beads | None = None, base: str | None = None,
          claim: fence.Claim | None = None) -> int:
     """Record a land. With `base`, provenance gets the sha only once it is an ancestor of that base: a sha that never reached it
     is no land (the event stays, as what was claimed). An engine run passes its claim and a stale one is refused; `tl land` by hand
@@ -54,7 +55,7 @@ def land(bead: str, sha: str, worktree: str | None = None, store: Beads | None =
     return 0
 
 
-def close(bead: str, reason: str | None = None, store: Beads | None = None) -> int:
+def close(bead: BeadId, reason: str | None = None, store: Beads | None = None) -> int:
     """`tl close`: a person's close, under the claim they hold on the bead now."""
     st = store or bd_store()
     return close_as(fence.hand(st, bead, actor()), reason, st)
@@ -78,7 +79,7 @@ def close_as(claim: fence.Claim, reason: str | None, store: Beads) -> int:
     return 0
 
 
-def block(bead: str, why: str, store: Beads | None = None, say: Callable[[str], None] | None = None) -> int:
+def block(bead: BeadId, why: str, store: Beads | None = None, say: Callable[[str], None] | None = None) -> int:
     """`tl block`: a person's block, under the claim they hold on the bead now."""
     st = store or bd_store()
     return block_as(fence.hand(st, bead, actor()), why, st, say)
@@ -114,7 +115,7 @@ def passthrough(rest: list[str]) -> int:
     r = bd_store().passthrough(rest)
     sys.stdout.write(r.out)
     sys.stderr.write(r.err)
-    return int(r.code)
+    return r.code
 
 
 def register(directory: str) -> int:
@@ -142,7 +143,7 @@ def trace_line(r: dict[str, Any]) -> str:
     return f"{head}{tok}  coordinator={r.get('coordinator_session') or '-'}"
 
 
-def trace(bead: str, last: int, as_json: bool) -> int:
+def trace(bead: BeadId, last: int, as_json: bool) -> int:
     """`tl trace [ID] [--last N] [--json]`: engine runs and every worker session of each, with where its transcript lives."""
     path = ConfigDir(config_dir()).traces()
     runs: list[dict[str, Any]] = []

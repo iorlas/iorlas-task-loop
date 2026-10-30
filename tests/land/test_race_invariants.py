@@ -70,6 +70,7 @@ from taskloop.app.track import (
     verbs,
 )
 from taskloop.app.wire import slots as wslots
+from taskloop.contracts.ids import BeadId
 
 try:
     import fcntl
@@ -218,12 +219,12 @@ class Invariants(test_loop.Base):
         """Four sessions claim one bead at once: one wins and the rest are told TAKEN; a later claim by anyone is refused too.
         Red when: tl.py cmd_claim, `print("TAKEN")` of the refused claim is followed by `return 0` instead of `return 1`."""
         bd = self.tracker([test_loop.bead("w-1")])
-        res = self.together({n: (lambda: verbs.claim("w-1", self.repo_s, None)) for n in "ABCD"})
+        res = self.together({n: (lambda: verbs.claim(BeadId("w-1"), self.repo_s, None)) for n in "ABCD"})
         self.assertEqual(sorted(res.values()), [0, 1, 1, 1], res)
         (who,) = [a for b, a in bd.won if b == "w-1"]
         self.assertEqual(bd.beads["w-1"]["assignee"], who)
         self.assertEqual(self.out.getvalue().count("CLAIMED w-1"), 1)
-        late = verbs.claim("w-1", self.repo_s, None)  # the main thread, a fifth session
+        late = verbs.claim(BeadId("w-1"), self.repo_s, None)  # the main thread, a fifth session
         self.assertEqual((late, [a for b, a in bd.won if b == "w-1"]), (1, [who]))
         self.assertEqual(beadtools.bd_store().ready(), [])  # nothing is left for a loop to pick and run again
 

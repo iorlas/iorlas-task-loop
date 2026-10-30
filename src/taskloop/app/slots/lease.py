@@ -7,6 +7,7 @@ from collections.abc import Callable
 from types import TracebackType
 from typing import Self
 
+from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ports import BdFailure, Beads
 from taskloop.contracts.runlife import BEAT_EVERY
 
@@ -14,9 +15,9 @@ EVERY = BEAT_EVERY  # seconds between beats; bd leases last 5 minutes
 
 
 class Lease:
-    def __init__(self, store: Beads, *ids: str | None, every: float = EVERY, on_beat: Callable[[], None] | None = None) -> None:
+    def __init__(self, store: Beads, *ids: BeadId | None, every: float = EVERY, on_beat: Callable[[], None] | None = None) -> None:
         self.store, self.every, self.on_beat = store, every, on_beat
-        self.ids: list[str] = [i for i in ids if i]
+        self.ids: list[BeadId] = [i for i in ids if i]
         self.stopped = threading.Event()
         self.thread = threading.Thread(target=self.run, daemon=True)
 
@@ -24,10 +25,10 @@ class Lease:
         self.thread.start()
         return self
 
-    def add(self, bead_id: str) -> None:
+    def add(self, bead_id: BeadId) -> None:
         self.ids.append(bead_id)
 
-    def drop(self, bead_id: str) -> None:
+    def drop(self, bead_id: BeadId) -> None:
         if bead_id in self.ids:
             self.ids.remove(bead_id)
 

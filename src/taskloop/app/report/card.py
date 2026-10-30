@@ -13,7 +13,7 @@ from taskloop.app.report.lost import lost_work
 from taskloop.app.report.planner import input_tokens
 from taskloop.contracts import paths
 from taskloop.contracts.bead import Comment
-from taskloop.contracts.ids import loop_key
+from taskloop.contracts.ids import BeadId, is_bead_id, loop_key
 from taskloop.contracts.log import Beat, EngineLog, decode
 from taskloop.contracts.runlife import Liveness, liveness
 from taskloop.domain.report import matchers
@@ -101,11 +101,11 @@ def pctl(xs: Sequence[float], p: int) -> float:
     if not xs:
         return 0
     k = max(0, -(-len(xs) * p // 100) - 1)
-    return xs[int(k)]
+    return xs[k]
 
 
 def _bead_rows(beads: dict[str, dict[str, list[dict[str, Any]]]],
-               comments_of: Callable[[str], Sequence[Comment]]) -> tuple[list[dict[str, Any]], dict[str, int]]:
+               comments_of: Callable[[BeadId], Sequence[Comment]]) -> tuple[list[dict[str, Any]], dict[str, int]]:
     """(per-bead rows sorted by bead, the ask counts) of {bead: {runs, crashes}}."""
     rows: list[dict[str, Any]] = []
     asks = {"count": 0, "beads": 0, "supervisor": 0, "owner": 0, "open": 0, "unknown": 0}
@@ -126,7 +126,7 @@ def _bead_rows(beads: dict[str, dict[str, list[dict[str, Any]]]],
             state = "paused"
         else:
             state = "failed"
-        answers = who_answered(comments_of(bead), n_ask) if n_ask else []
+        answers = who_answered(comments_of(bead), n_ask) if n_ask and is_bead_id(bead) else []
         if n_ask:
             asks["count"] += n_ask
             asks["beads"] += 1
@@ -159,8 +159,8 @@ def _tokens(runs: list[dict[str, Any]]) -> dict[str, dict[str, dict[str, int]]]:
     return tokens
 
 
-def scorecard(repo: str, since: float, until: float, base: str, comments_of: Callable[[str], Sequence[Comment]] | None = None,
-              status_of: Callable[[str], str | None] | None = None, now: float | None = None) -> dict[str, Any]:
+def scorecard(repo: str, since: float, until: float, base: str, comments_of: Callable[[BeadId], Sequence[Comment]] | None = None,
+              status_of: Callable[[BeadId], str | None] | None = None, now: float | None = None) -> dict[str, Any]:
     repo = gitrepo.repo_root(repo)  # the loop keys its log by this path
     comments_of = comments_of or beadtools.bd_store(repo).comments
     traces = repo_traces(repo)
@@ -187,8 +187,8 @@ def scorecard(repo: str, since: float, until: float, base: str, comments_of: Cal
          "minutes": {"median": round(statistics.median(mins), 1) if mins else 0, "p90": pctl(mins, 90)},
          "rounds": sum(x["rounds"] for x in rows), "replans": sum(x["replans"] for x in rows),
          "tokens": tokens, "runs": len(runs), "per_bead": rows}
-    checks = {"beads": {"value": c["beads"], "want": ">={:d}".format(int(M2["beads"])), "ok": c["beads"] >= M2["beads"]},
-              "landed_no_ask": {"value": c["landed_no_ask"], "want": ">={:d}".format(int(M2["landed_no_ask"])),
+    checks = {"beads": {"value": c["beads"], "want": ">={:d}".format(M2["beads"]), "ok": c["beads"] >= M2["beads"]},
+              "landed_no_ask": {"value": c["landed_no_ask"], "want": ">={:d}".format(M2["landed_no_ask"]),
                                 "ok": c["landed_no_ask"] >= M2["landed_no_ask"]},
               "lost": {"value": c["lost"], "want": "0", "ok": c["lost"] == 0},
               "crashes": {"value": c["crashes"], "want": "0", "ok": c["crashes"] == 0}}

@@ -26,6 +26,7 @@ from taskloop.app.run.calls import Calls  # noqa: E402
 from taskloop.app.track import verbs  # noqa: E402
 from taskloop.app.write.handoff import Handoff  # noqa: E402
 from taskloop.contracts.delegate import DelegateResult  # noqa: E402
+from taskloop.contracts.ids import BeadId  # noqa: E402
 from taskloop.stores.runlog import RunLog  # noqa: E402
 from taskloop_dash.views import arrows, names  # noqa: E402
 
@@ -147,7 +148,7 @@ class OpenCode(unittest.TestCase):
         Path(self.cfg, "task-loop", "traces.jsonl").write_text(json.dumps(rec) + "\n")
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
-            rc = verbs.trace("b-1", 0, True)
+            rc = verbs.trace(BeadId("b-1"), 0, True)
         self.assertEqual(rc, 0)
         self.assertEqual(json.loads(buf.getvalue())[0]["sessions"][0]["transcript"], "")
         sessions = []
