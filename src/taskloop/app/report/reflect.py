@@ -17,6 +17,7 @@ from typing import Any
 from taskloop.adapters import beadtools, childenv, ident, landlock
 from taskloop.contracts import wire
 from taskloop.contracts.env import Env
+from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId, is_bead_id
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdFailure, BeadQuery, NewBead, Spawner
@@ -108,7 +109,7 @@ def owner_repo(c: dict[str, Any], repos: Sequence[str] | None = None) -> str:
     return mine.most_common(1)[0][0] if mine else ""
 
 
-def known_bead(c: dict[str, Any], repo: str, state: dict[str, Any]) -> tuple[str, str]:
+def known_bead(who: Identity, c: dict[str, Any], repo: str, state: dict[str, Any]) -> tuple[str, str]:
     """-> (bead id, why) of the bead that already carries this cause: the state file's, else an open bead of the repo with a like
     title; ('', '') when none."""
     for e in reversed(state.get("filed", [])):  # the newest first: a closed one's successor wins
@@ -116,7 +117,7 @@ def known_bead(c: dict[str, Any], repo: str, state: dict[str, Any]) -> tuple[str
             return e["bead"], "filed"
     rows: list[Any]
     try:
-        rows = beadtools.bd_store(repo).find(BeadQuery())  # the default filter leaves out closed beads only
+        rows = beadtools.bd_store(who.actor, repo).find(BeadQuery())  # the default filter leaves out closed beads only
     except BdFailure:
         rows = []
     ct = tokens(c["title"])
@@ -126,12 +127,13 @@ def known_bead(c: dict[str, Any], repo: str, state: dict[str, Any]) -> tuple[str
     return "", ""
 
 
-def is_closed(bead: BeadId, repo: str) -> bool:
-    row = beadtools.peek(beadtools.bd_store(repo), bead)
+def is_closed(who: Identity, bead: BeadId, repo: str) -> bool:
+    row = beadtools.peek(beadtools.bd_store(who.actor, repo), bead)
     return row is not None and row.status == "closed"
 
 
-def _update_known(c: dict[str, Any], repo: str, bead: str, state: dict[str, Any], dry: bool, res: dict[str, Any]) -> dict[str, Any]:
+def _update_known(who: Identity, c: dict[str, Any], repo: str, bead: str, state: dict[str, Any], dry: bool, res: dict[str,
+    Any]) -> dict[str, Any]:
     """The cause already has a bead: comment on it the runs it has not been told of."""
     entry: dict[str, Any] | None = next((e for e in state.get("filed", []) if e.get("bead") == bead and e.get("repo") == repo), None)
     if entry is None:  # an open bead found by title: remember it, so its runs are commented once
@@ -145,7 +147,7 @@ def _update_known(c: dict[str, Any], repo: str, bead: str, state: dict[str, Any]
         res["action"] = "commented"
         if not dry:
             beadtools.attempt(
-                beadtools.bd_store(repo).add_comment,
+                beadtools.bd_store(who.actor, repo).add_comment,
                 bead,
                 "Reflect digest: the cause recurred in {:d} more run(s): {}\n{}".format(
                     len(new), ", ".join(new), "\n".join(evidence_lines(dict(c, items=[i for i in c["items"] if i["run"] in new])))
@@ -155,27 +157,29 @@ def _update_known(c: dict[str, Any], repo: str, bead: str, state: dict[str, Any]
     return res
 
 
-def file_cluster(c: dict[str, Any], state: dict[str, Any], dry: bool = False, repos: Sequence[str] | None = None) -> dict[str, Any]:
+def file_cluster(who: Identity, c: dict[str, Any], state: dict[str, Any], dry: bool = False,
+    repos: Sequence[str] | None = None) -> dict[str, Any]:
     """File or update the bead for one recurring cause. -> {action: filed|commented|skipped|none, bead, repo, cause, runs}."""
     repo = owner_repo(c, repos)
     res = {"cause": c["cause"], "title": c["title"], "repo": repo, "runs": c["runs"], "bead": "", "action": "none"}
     if not repo:
         return res
-    bead, why = known_bead(c, repo, state)
+    bead, why = known_bead(who, c, repo, state)
     old = ""
-    if is_bead_id(bead) and why == "filed" and is_closed(bead, repo):
+    if is_bead_id(bead) and why == "filed" and is_closed(who, bead, repo):
         for e in state.get("filed", []):
             if e.get("bead") == bead and e.get("repo") == repo:
                 e["closed"] = True  # its successor takes the cause from here
         old, bead = bead, ""
     if bead:
-        return _update_known(c, repo, bead, state, dry, res)
+        return _update_known(who, c, repo, bead, state, dry, res)
     title = "Reflect: {}: {}".format(c["cause"], c["title"])
     res["action"] = "filed"
     if dry:
         return res
     try:
-        new_id = beadtools.bd_store(repo).create(NewBead(title=title, priority=3, labels=["reflect", "cause-{}".format(c["cause"])],
+        new_id = beadtools.bd_store(who.actor, repo).create(NewBead(title=title, priority=3, labels=["reflect",
+            "cause-{}".format(c["cause"])],
                                                   description=description(c, old), acceptance_criteria=acceptance(c)))
     except BdFailure:
         new_id = ""
@@ -188,20 +192,21 @@ def file_cluster(c: dict[str, Any], state: dict[str, Any], dry: bool = False, re
     return res
 
 
-def digest(since: float, until: float, dry: bool = False, traces: str | Path | None = None,
+def digest(who: Identity, since: float, until: float, dry: bool = False, traces: str | Path | None = None,
            repos: Sequence[str] | None = None) -> dict[str, Any]:
     """-> {window, clusters: [...], actions: [...]}. Files and updates beads unless dry; one digest at a time (a manual run and
     the daily one never both file the cause), the state saved after every bead so a crash loses none."""
     if dry:
-        return _digest(since, until, True, traces, repos)
+        return _digest(who, since, until, True, traces, repos)
     try:
         with landlock.os_lock(ident.config_dir() / "locks" / "reflect-digest-run.lock", f"pid {os.getpid()}", timeout=120):
-            return _digest(since, until, False, traces, repos)
+            return _digest(who, since, until, False, traces, repos)
     except TimeoutError:
         return {"since": since, "until": until, "items": 0, "clusters": [], "actions": [], "busy": True}
 
 
-def _digest(since: float, until: float, dry: bool, traces: str | Path | None, repos: Sequence[str] | None) -> dict[str, Any]:
+def _digest(who: Identity, since: float, until: float, dry: bool, traces: str | Path | None,
+    repos: Sequence[str] | None) -> dict[str, Any]:
     cs = cluster(items(since, until, traces))
     out: dict[str, Any] = {"since": since, "until": until, "items": sum(len(c["items"]) for c in cs), "clusters": [], "actions": []}
     state = read_state()
@@ -210,7 +215,7 @@ def _digest(since: float, until: float, dry: bool, traces: str | Path | None, re
                "files": c["files"], "recurring": is_recurring(c)}
         out["clusters"].append(row)
         if row["recurring"]:
-            a = file_cluster(c, state, dry, repos)
+            a = file_cluster(who, c, state, dry, repos)
             out["actions"].append(a)
             row["bead"], row["repo"] = a["bead"], a["repo"]
             if not dry and a["action"] in ("filed", "commented"):

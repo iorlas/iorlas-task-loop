@@ -10,12 +10,12 @@ from typing import Any, Final
 from atomic_io import atomic_write_text
 
 from taskloop.adapters import applog
-from taskloop.adapters.beadtools import bd_store
 from taskloop.adapters.gitrepo import repo_root
-from taskloop.adapters.ident import actor, config_dir, session_id
+from taskloop.adapters.ident import config_dir
 from taskloop.contracts import events, wire
 from taskloop.contracts.events import Event, EventRec
 from taskloop.contracts.guard import guard
+from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdFailure, Beads
@@ -29,10 +29,10 @@ def now() -> float:
     return time.time()
 
 
-def event(kind: str, bead: str = "", **fields: Any) -> Event:
+def event(by: Identity, kind: str, bead: str = "", **fields: Any) -> Event:
     """The one writer of events.jsonl (the dashboard's fast local index): a line is the typed Event record of `kind` (a name of
     contracts/events.py) with its fields, `v` first. A kind or field the contract does not name is refused here, never written."""
-    head = {"t": now(), "kind": kind, "bead": bead, "session": session_id(), "actor": actor(),
+    head = {"t": now(), "kind": kind, "bead": bead, "session": by.session, "actor": by.actor,
             "repo": fields.pop("repo", None) or repo_root(), "host": socket.gethostname()}
     rec = events.decode({"v": EventRec.V, **head, **{k: v for k, v in fields.items() if v is not None}})
     cfg = ConfigDir(config_dir())
@@ -42,11 +42,10 @@ def event(kind: str, bead: str = "", **fields: Any) -> Event:
     return rec
 
 
-def provenance(bead: BeadId, kind: str, ref: str, ref_kind: str, payload: dict[str, Any] | None = None, cwd: str | None = None,
-               store: Beads | None = None) -> None:
+def provenance(store: Beads, bead: BeadId, kind: str, ref: str, ref_kind: str, payload: dict[str, Any] | None = None) -> None:
     """The shared record in bd (append-only, idempotent); a bd without provenance is not fatal."""
     try:
-        (store or bd_store(cwd)).provenance(bead, kind, SOURCE, ref, ref_kind, time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        store.provenance(bead, kind, SOURCE, ref, ref_kind, time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                                             json.dumps(payload) if payload else "")
     except BdFailure as e:
         sys.stderr.write("tl: provenance not recorded: " + (e.error.text.strip().splitlines() or ["?"])[-1] + "\n")

@@ -11,6 +11,7 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as T
 from support.checkpoints import read_ck
 from support.spawn import port_git, real_spawner
+from support.who import who
 
 from taskloop.app.run import ended, engine
 from taskloop.app.run.closer import Closer, closer_over
@@ -29,8 +30,9 @@ class Killed(BaseException):
 
 class Base(T.EngineTest):
     def engine(self) -> engine.Engine:
-        c = wslots.load_cfg(str(self.wt))
-        eng = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(), git=port_git())
+        c = wslots.load_cfg(str(self.wt), port_git())
+        eng = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(),
+            git=port_git(), who=who())
         eng.checkpoints.save(step="close")  # the record the keys go into
         return eng
 
@@ -86,8 +88,9 @@ class ColdRestart(Base):
         return eng
 
     def cold(self):
-        c = wslots.load_cfg(str(self.wt))
-        return engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(), git=port_git())
+        c = wslots.load_cfg(str(self.wt), port_git())
+        return engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(),
+            git=port_git(), who=who())
 
     def test_a_new_process_takes_the_dead_runs_id_from_its_checkpoint(self):
         dead = self.killed_at(fx.CloseBead)

@@ -78,8 +78,9 @@ from taskloop.cli import slots as slots_cli
 from taskloop.cli import status
 from taskloop.cli import wait as cli_wait
 from taskloop.contracts.env import Env, snapshot
+from taskloop.contracts.identity import Identity
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import Spawner
+from taskloop.contracts.ports import Git, Spawner
 
 HERE = Path(__file__).resolve().parent
 
@@ -92,22 +93,24 @@ class Ctx:
     argv: list[str]
     env: Env  # the process environment, taken once here; everything below is handed this copy
     spawner: Spawner  # the one way a verb starts a process, built on `env`
+    git: Git  # the one way a verb runs git, built on `env`
+    who: Identity  # the session and bd actor this process acts as, built once from `env`
 
 
 Handler = Callable[[Any, Ctx], int]
 
 
 def v_slot(a: Any, c: Ctx) -> int:
-    return slots_cli.run(wslots.slot_env(gitrepo.repo_root(), now=c.now, spawner=c.spawner), a)
+    return slots_cli.run(wslots.slot_env(gitrepo.repo_root(), now=c.now, spawner=c.spawner, git=c.git, who=c.who), a)
 
 
 def v_ask(a: Any, c: Ctx) -> int:
     """The owner's inbox and typed verbs (answer, hint, hold, override, park, note) from the terminal: src/taskloop/cli/asks.py over the
     AskStore. A bead's ask names its repo, and the bd of that repo takes the bead's state."""
     if a.op == "list":
-        for b in wire_asks.sweep("close"):  # throttled: the loop sweeps too
+        for b in wire_asks.sweep("close", c.who):  # throttled: the loop sweeps too
             print(f"closed the ask of {b}: its bead is closed or gone")
-    return cli_asks.run(a, wire_asks.store(), lambda repo: beadtools.bd_store(repo or None), c.now, ident.actor(),
+    return cli_asks.run(a, wire_asks.store(), lambda repo: beadtools.bd_store(c.who.actor, repo or None), c.now, c.who.actor,
                        ConfigDir(ident.config_dir()))
 
 
@@ -272,16 +275,9 @@ def lazy(module: str, name: str) -> Handler:
 
 
 def lazy_env(module: str, name: str) -> Handler:
-    """A lazy verb that takes the environment too: `name(a, env=...)`."""
+    """A lazy verb that takes the environment too: `name(a, env=..., git=..., who=...)`."""
     def call(a: Any, c: Ctx) -> int:
-        return int(getattr(importlib.import_module(module), name)(a, env=c.env))
-    return call
-
-
-def lazy_spawn(module: str, name: str) -> Handler:
-    """A lazy verb that starts processes: `name(a, env=..., spawner=...)`."""
-    def call(a: Any, c: Ctx) -> int:
-        return int(getattr(importlib.import_module(module), name)(a, env=c.env, spawner=c.spawner))
+        return int(getattr(importlib.import_module(module), name)(a, env=c.env, git=c.git, who=c.who))
     return call
 
 
@@ -292,83 +288,108 @@ def of_args(fn: Callable[..., int], *names: str) -> Handler:
     return call
 
 
+def v_bd(a: Any, c: Ctx) -> int:
+    return verbs.passthrough(beadtools.bd_store(c.who.actor), a.rest)
+
+
+def v_register(a: Any, c: Ctx) -> int:
+    return verbs.register(c.git, a.directory)
+
+
+def v_claim(a: Any, c: Ctx) -> int:
+    return verbs.claim(c.who, a.id, beadtools.bd_store(c.who.actor), c.git, a.worktree, a.slot)
+
+
+def v_land(a: Any, c: Ctx) -> int:
+    return verbs.land(c.who, a.id, a.sha, beadtools.bd_store(c.who.actor), c.git, a.worktree)
+
+
+def v_close(a: Any, c: Ctx) -> int:
+    return verbs.close(c.who, a.id, beadtools.bd_store(c.who.actor), a.reason)
+
+
+def v_block(a: Any, c: Ctx) -> int:
+    return verbs.block(c.who, a.id, a.why, beadtools.bd_store(c.who.actor))
+
+
 def v_actor(a: Any, c: Ctx) -> int:
-    print(ident.actor())
+    print(c.who.actor)
     return 0
 
 
 def v_loop(a: Any, c: Ctx) -> int:
     a.argv = list(c.argv)  # the loop re-execs itself with these
-    return importlib.import_module("taskloop.cli.loop_cmd").cmd_loop(a, c.env, c.spawner, c.here, c.now)
+    return importlib.import_module("taskloop.cli.loop_cmd").cmd_loop(a, c.env, c.spawner, c.git, c.who, c.here, c.now)
 
 
 def v_next(a: Any, c: Ctx) -> int:
-    return importlib.import_module("taskloop.cli.loop_cmd").cmd_next(a, c.env, c.spawner, c.here, c.now)
+    return importlib.import_module("taskloop.cli.loop_cmd").cmd_next(a, c.env, c.spawner, c.git, c.who, c.here, c.now)
 
 
 def v_prune(a: Any, c: Ctx) -> int:
-    return importlib.import_module("taskloop.cli.prune").cmd_prune(a, c.env, c.now)
+    return importlib.import_module("taskloop.cli.prune").cmd_prune(a, c.env, c.git, c.who, c.now)
 
 
 def v_lint(a: Any, c: Ctx) -> int:
-    return importlib.import_module("taskloop.cli.lint").cmd_lint(a)
+    return importlib.import_module("taskloop.cli.lint").cmd_lint(a, c.who)
 
 
 def v_stop(a: Any, c: Ctx) -> int:
-    return importlib.import_module("taskloop.cli.loop_cmd").cmd_stop(a, c.env, c.spawner, c.here, c.now)
+    return importlib.import_module("taskloop.cli.loop_cmd").cmd_stop(a, c.env, c.spawner, c.git, c.who, c.here, c.now)
 
 
-def repo_of(a: Any) -> str:
-    return a.repo or hook_wire.main_checkout(str(Path.cwd()))
+def repo_of(a: Any, c: Ctx) -> str:
+    return a.repo or hook_wire.main_checkout(c.git, str(Path.cwd()))
 
 
 def v_doctor(a: Any, c: Ctx) -> int:
-    return doctor.run(c.here.parents[1])
+    return doctor.run(c.here.parents[1], c.git, c.who)
 
 
 def v_status(a: Any, c: Ctx) -> int:
-    return status.run_status(repo_of(a), c.here.parents[1], c.now(), a.json)
+    return status.run_status(repo_of(a, c), c.here.parents[1], c.now(), a.json, c.who, c.git)
 
 
 def v_wait(a: Any, c: Ctx) -> int:
-    repo = repo_of(a)
-    return cli_wait.wait(a, ConfigDir(ident.config_dir()), wire_asks.store(), repo, hook_wire.main_checkout, now=c.now)
+    repo = repo_of(a, c)
+    return cli_wait.wait(a, ConfigDir(ident.config_dir()), wire_asks.store(), repo, lambda cwd: hook_wire.main_checkout(c.git, cwd),
+        now=c.now)
 
 
 def v_handoff(a: Any, c: Ctx) -> int:
-    return status.run_handoff(a.op, repo_of(a), c.here.parents[1], c.now())
+    return status.run_handoff(a.op, repo_of(a, c), c.here.parents[1], c.now(), c.who)
 
 
 VERBS: Final[dict[str, Handler]] = {
     "actor": v_actor,
-    "bd": of_args(verbs.passthrough, "rest"),
-    "register": of_args(verbs.register, "directory"),
-    "claim": of_args(verbs.claim, "id", "worktree", "slot"),
-    "land": of_args(verbs.land, "id", "sha", "worktree"),
-    "close": of_args(verbs.close, "id", "reason"),
-    "block": of_args(verbs.block, "id", "why"),
+    "bd": v_bd,
+    "register": v_register,
+    "claim": v_claim,
+    "land": v_land,
+    "close": v_close,
+    "block": v_block,
     "trace": lambda a, c: verbs.trace(a.id, a.last, a.json, c.env),
     "usage": lambda a, c: wire_usage.feed(a.windows, c.spawner),
     "lanes": lambda a, c: wire_lanes.refresh(c.spawner),
-    "worktree": of_args(wslots.worktree, "op", "self_too"),
+    "worktree": lambda a, c: wslots.worktree(c.git, c.who, a.op, a.self_too),
     "dash": lambda a, c: wire_dash.run(a.op, c.env, c.spawner),
     "pin": of_args(pins.run_pin, "version", "delegate", "clear"),
     "rollback": of_args(pins.run_rollback),
     "doctor": v_doctor,
     "slot": v_slot,
     "ask": v_ask, "answer": v_ask, "hint": v_ask, "hold": v_ask, "override": v_ask, "park": v_ask, "note": v_ask,
-    "reflect": lazy("taskloop.cli.report", "cmd_reflect"),
+    "reflect": lazy_env("taskloop.cli.report", "cmd_reflect"),
     "land-lock": v_land_lock,
     "status": v_status,
     "handoff": v_handoff,
     "wait": v_wait,
-    "run-task": lazy_spawn("taskloop.app.run.entry", "main"),
-    "selftest": lazy_env("taskloop.app.launch.selftest", "cmd_selftest"),
-    "cutover": lazy("taskloop.cli.loop_cmd", "cmd_cutover"),
+    "run-task": lambda a, c: importlib.import_module("taskloop.app.run.entry").main(a, env=c.env, spawner=c.spawner, git=c.git, who=c.who),
+    "selftest": lambda a, c: importlib.import_module("taskloop.app.launch.selftest").cmd_selftest(a, env=c.env),
+    "cutover": lambda a, c: importlib.import_module("taskloop.cli.loop_cmd").cmd_cutover(a, c.git, c.who),
     "next": v_next, "loop": v_loop, "stop": v_stop,
     "prune": v_prune,
     "lint": v_lint,
-    "check": lazy_spawn("taskloop.app.launch.check", "cmd_check"),
+    "check": lambda a, c: importlib.import_module("taskloop.app.launch.check").cmd_check(a, env=c.env, spawner=c.spawner, git=c.git),
     "report": lazy_env("taskloop.cli.report", "cmd_report"),
     "lost": lazy_env("taskloop.cli.report", "cmd_lost"),
 }
@@ -378,7 +399,8 @@ def main(argv: list[str] | None = None, here: Path = HERE, now: Callable[[], flo
     """`here`: the install this run executes from, `now`: the clock (a test runs the loop as another version, at another time)."""
     a = build_parser().parse_args(argv)
     env = snapshot()
-    return VERBS[a.cmd](a, Ctx(here, now, list(argv) if argv is not None else sys.argv[1:], env, real.spawner(env)))
+    ctx = Ctx(here, now, list(argv) if argv is not None else sys.argv[1:], env, real.spawner(env), real.git(env), ident.identity(env))
+    return VERBS[a.cmd](a, ctx)
 
 
 if __name__ == "__main__":

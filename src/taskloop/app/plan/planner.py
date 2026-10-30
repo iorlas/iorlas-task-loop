@@ -32,7 +32,7 @@ class Planner:
     def __init__(self, host: Any) -> None:
         self.e = host
         self.cap = ReplanCap(host)
-        self.prompts = PlanPrompt(host)
+        self.prompts = PlanPrompt(host, host.git)
         self.decisions = Decisions(host)
         self.sendback = SendBack(host)
 

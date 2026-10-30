@@ -11,6 +11,7 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as te
 from support import fake_route
 from support.spawn import port_git, real_spawner
+from support.who import who
 
 from taskloop.app.run import engine
 from taskloop.app.wire import slots as wslots
@@ -67,10 +68,10 @@ class Feedback(unittest.TestCase):
 
 class Refusal(te.EngineTest):
     def go(self, role, script):
-        c = wslots.load_cfg(str(self.wt))
+        c = wslots.load_cfg(str(self.wt), port_git())
         with te.delegate_stack(script), mock.patch.dict(caps.CAPS, {role: 1}):
             self.eng = engine.Engine(
-                BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(), git=port_git()
+                BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(), git=port_git(), who=who()
             )
             rc = self.eng.run()
         return rc

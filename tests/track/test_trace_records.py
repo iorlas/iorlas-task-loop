@@ -20,6 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: E402, F401
 from support.dashes import make_dash  # noqa: E402
 from support.spawn import port_git, real_spawner  # noqa: E402
+from support.who import who  # noqa: E402
 
 from taskloop.adapters import ident  # noqa: E402
 from taskloop.app.track import verbs  # noqa: E402
@@ -207,12 +208,11 @@ class TraceRecords(te.EngineTest):
         engine.Engine(
             BeadId("t-1"),
             str(self.wt),
-            wslots.load_cfg(str(self.wt)),
+            wslots.load_cfg(str(self.wt), port_git()),
             store=self.store,
             env=snapshot(),
             spawner=real_spawner(),
-            git=port_git(),
-        )
+            git=port_git(), who=who())
         self.assertFalse((old / "00-a.r1.log").exists())
         self.assertTrue((old / "00-a.log").exists())  # an old run's single log is its only one: kept
         self.assertTrue((new / "00-a.r1.log").exists())

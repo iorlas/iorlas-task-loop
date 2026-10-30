@@ -42,6 +42,7 @@ from support.checkpoints import stored_ck
 from support.fakes import as_bead, as_comment, must_bead
 from support.logs import records
 from support.spawn import port_git, real_spawner
+from support.who import who
 
 from taskloop.adapters import (
     context_size,
@@ -247,7 +248,8 @@ class EngineRunTest(EngineTest):
         with self.stoppable(), mock.patch.object(entry, "Engine", made), \
                 mock.patch.object(entry, "admit", return_value=(True, "")), \
                 self.store.stub(bd_fn=claim), mock.patch.object(entry, "say", side_effect=say):
-            rc = entry.run_bead(a, str(self.wt), {}, str(self.wt), self.store, env=snapshot(), spawner=real_spawner())
+            rc = entry.run_bead(a, str(self.wt), {}, str(self.wt), self.store, env=snapshot(), spawner=real_spawner(),
+                git=port_git(), who=who())
         return rc, made, said
 
     def test_a_stop_during_the_claim_waits_and_the_engine_closes_it(self):
@@ -693,7 +695,7 @@ class EngineRunTest(EngineTest):
         self.assertEqual(trace["lanes"], {})
 
     def test_a_delegate_of_another_contract_blocks_before_any_step(self):
-        c = wslots.load_cfg(str(self.wt))
+        c = wslots.load_cfg(str(self.wt), port_git())
         refusal = dl.Refusal("skew_delegate_older", "delegate speaks contract 2")
         script = fake_route.Script({})
         with (
@@ -701,7 +703,7 @@ class EngineRunTest(EngineTest):
             mock.patch.object(seams.DelegateRoute, "runner", lambda self, *a, **k: script),
         ):
             rc = engine.Engine(
-                BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(), git=port_git()
+                BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(), git=port_git(), who=who()
             ).run()
         self.assertEqual(rc, 2)
         self.assertEqual(script.calls, [])
@@ -730,7 +732,7 @@ class EngineRunTest(EngineTest):
         calls = []
         with self.store.stub(show=blocked), self.store.stub(comments=cs), \
                 self.store.stub(bd_fn=lambda *a, **k: calls.append(a) or mock.Mock(returncode=0)):
-            ok, why = entry.admit("t-1", str(self.wt), store=self.store)
+            ok, why = entry.admit("t-1", str(self.wt), port_git(), who(), store=self.store)
         self.assertTrue(ok, why)
 
     def test_a_pause_is_a_comment_never_a_line_of_notes(self):

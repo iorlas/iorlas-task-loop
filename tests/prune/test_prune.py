@@ -14,6 +14,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support.shells import quiet_shell
+from support.who import who
 
 from taskloop.adapters.git import RealGit
 from taskloop.app.prune import runs, verb
@@ -78,7 +79,7 @@ class RunData(unittest.TestCase):
     def prune(self, store, dry_run=False, days=14):
         out = []
         loop = LoopConfig(keep_days=days, build_dir=str(self.root / "nowhere"))
-        verb.run(self.cfg, loop, [str(self.root)], lambda r: cast(Beads, store), self.now, dry_run, quiet_shell(), out.append)
+        verb.run(self.cfg, loop, [str(self.root)], lambda r: cast(Beads, store), self.now, dry_run, quiet_shell(), out.append, who=who())
         return out
 
     def left(self):

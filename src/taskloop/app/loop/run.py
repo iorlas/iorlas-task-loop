@@ -14,6 +14,7 @@ from taskloop.app.loop.versions import Installs
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.config import LoopConfig
 from taskloop.contracts.enums import Result
+from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ports import BdFailure, BeadPatch, WaitTimeout
 from taskloop.contracts.run import Reexec
@@ -65,7 +66,7 @@ class BeadRun:
         cmd = env.run_task_argv(b.id, at.wt, at.slot, str(out), code)
         t0 = env.now()
         extra = {"TASK_LOOP_SLOT_BEAD": at.slot_bead or "", "TASK_LOOP_LOOP_PID": str(os.getpid()),  # run-task's parent is uv, not us
-                 **({"TL_REEXEC": handover.text()} if handover else {})}
+                 **({EnvVar.TL_REEXEC.value: handover.text()} if handover else {})}
         with open(log_path, "ab") as log:  # append: a rerun of the same stem never cuts a log another reader follows
             child, hold = env.spawn(cmd, log, extra)
             self.publish(Running(b.id, at.slot, t0, child.pid, str(log_path), "" if at.slot else at.wt))

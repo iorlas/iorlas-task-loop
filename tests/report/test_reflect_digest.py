@@ -9,6 +9,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
+from support.who import who
 
 # isort: split
 from support import tlbd
@@ -138,7 +139,7 @@ class Filing(Base):
 
     def test_a_recurring_cause_files_one_bead_with_runs_and_acceptance(self):
         self.two()
-        d = rd.digest(NOW - 86400, NOW)
+        d = rd.digest(who(), NOW - 86400, NOW)
         (c,) = self.creates()
         args = c[0]
         self.assertEqual(c[1], self.repos["iorlas-task-loop"])
@@ -151,69 +152,69 @@ class Filing(Base):
 
     def test_a_cause_seen_once_files_nothing(self):
         self.trace("r1", [("writer reran the whole test suite", "prompt", "e")])
-        d = rd.digest(NOW - 86400, NOW)
+        d = rd.digest(who(), NOW - 86400, NOW)
         self.assertEqual((self.creates(), d["actions"]), ([], []))
 
     def test_the_same_cause_tomorrow_is_never_filed_twice_and_only_new_runs_are_commented(self):
         self.two()
-        rd.digest(NOW - 86400, NOW)
-        d = rd.digest(NOW - 86400, NOW)  # nothing new
+        rd.digest(who(), NOW - 86400, NOW)
+        d = rd.digest(who(), NOW - 86400, NOW)  # nothing new
         self.assertEqual(len(self.creates()), 1)
         self.assertEqual((d["actions"][0]["action"], self.comments()), ("skipped", []))
         self.trace("r3", [("writer reran the whole test suite after every edit", "prompt", "5 reruns")], bead="b3")
-        d = rd.digest(NOW - 86400, NOW)
+        d = rd.digest(who(), NOW - 86400, NOW)
         self.assertEqual(len(self.creates()), 1)
         (c,) = self.comments()
         self.assertIn("r3", c[0][3])
         self.assertNotIn("r1", c[0][3].split("\n")[0])
-        rd.digest(NOW - 86400, NOW)
+        rd.digest(who(), NOW - 86400, NOW)
         self.assertEqual(len(self.comments()), 1)  # r3 is counted now
 
     def test_a_like_open_bead_of_the_repo_gets_the_comment_not_a_duplicate(self):
         self.two()
         self.open_rows = [{"id": "tl-77", "title": "Writer reruns the whole test suite after every edit"}]
-        d = rd.digest(NOW - 86400, NOW)
+        d = rd.digest(who(), NOW - 86400, NOW)
         self.assertEqual(self.creates(), [])
         self.assertEqual(d["actions"][0]["bead"], "tl-77")
 
     def test_a_closed_bead_whose_cause_comes_back_gets_a_new_bead_that_names_it(self):
         self.two()
-        rd.digest(NOW - 86400, NOW)
+        rd.digest(who(), NOW - 86400, NOW)
         self.status["tl-new1"] = "closed"
         self.trace("r3", [("writer reran the whole test suite after every edit", "prompt", "5")], bead="b3")
         self.trace("r4", [("writer reran the whole test suite after every edit", "prompt", "4")], bead="b4")
-        rd.digest(NOW - 86400, NOW)
+        rd.digest(who(), NOW - 86400, NOW)
         self.assertEqual(len(self.creates()), 2)
         args = self.creates()[1][0]
         self.assertIn("tl-new1", args[args.index("--description") + 1])
 
     def test_a_cause_that_keeps_coming_back_after_closes_files_one_new_bead_each_time_not_one_per_digest(self):
         self.two()
-        rd.digest(NOW - 86400, NOW)
+        rd.digest(who(), NOW - 86400, NOW)
         self.status["tl-new1"] = "closed"
         self.trace("r3", [("writer reran the whole test suite after every edit", "prompt", "5")], bead="b3")
-        rd.digest(NOW - 86400, NOW)  # B2 now
-        rd.digest(NOW - 86400, NOW)  # B2 is open: no third bead
-        rd.digest(NOW - 86400, NOW)
+        rd.digest(who(), NOW - 86400, NOW)  # B2 now
+        rd.digest(who(), NOW - 86400, NOW)  # B2 is open: no third bead
+        rd.digest(who(), NOW - 86400, NOW)
         self.assertEqual(len(self.creates()), 2)
 
     def test_an_open_bead_found_by_title_is_commented_once(self):
         self.two()
         self.open_rows = [{"id": "tl-77", "title": "Writer reruns the whole test suite after every edit"}]
-        rd.digest(NOW - 86400, NOW)
-        rd.digest(NOW - 86400, NOW)
+        rd.digest(who(), NOW - 86400, NOW)
+        rd.digest(who(), NOW - 86400, NOW)
         self.assertEqual(len(self.comments()), 1)
 
     def test_dry_run_files_and_writes_nothing(self):
         self.two()
-        d = rd.digest(NOW - 86400, NOW, dry=True)
+        d = rd.digest(who(), NOW - 86400, NOW, dry=True)
         self.assertEqual(d["actions"][0]["action"], "filed")
         self.assertEqual((self.creates(), rd.read_state()["filed"]), ([], []))
 
     def test_a_failed_create_records_nothing_so_the_next_day_tries_again(self):
         self.two()
         self.fail_create = True
-        d = rd.digest(NOW - 86400, NOW)
+        d = rd.digest(who(), NOW - 86400, NOW)
         self.assertEqual((d["actions"][0]["action"], rd.read_state()["filed"]), ("failed", []))
 
 class Daily(Base):

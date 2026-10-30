@@ -25,6 +25,7 @@ from taskloop.domain.report import matchers as lifecycle
 ROOT = te.ROOT
 from support.dashes import make_dash  # noqa: E402
 from support.spawn import port_git, real_spawner  # noqa: E402
+from support.who import who  # noqa: E402
 
 DASH = make_dash()
 
@@ -235,13 +236,12 @@ class TraceTelemetry(te.EngineTest):
         eng = engine.Engine(
             BeadId("t-1"),
             str(self.wt),
-            wslots.load_cfg(str(self.wt)),
+            wslots.load_cfg(str(self.wt), port_git()),
             verbose=False,
             store=self.store,
             env=snapshot(),
             spawner=real_spawner(),
-            git=port_git(),
-        )
+            git=port_git(), who=who())
         procsim.fake("sleep 5", procsim.takes(5))
         rc, _ = eng.sh(["sleep", "5"], timeout=0.05)
         self.assertEqual(rc, 124)
@@ -257,13 +257,12 @@ class TraceTelemetry(te.EngineTest):
         eng = engine.Engine(
             BeadId("t-1"),
             str(self.wt),
-            wslots.load_cfg(str(self.wt)),
+            wslots.load_cfg(str(self.wt), port_git()),
             verbose=False,
             store=self.store,
             env=snapshot(),
             spawner=real_spawner(),
-            git=port_git(),
-        )
+            git=port_git(), who=who())
         rc, _ = eng.sh([procsim.fake("exits-124", procsim.exits(124))], timeout=10)
         self.assertEqual(rc, 124)
         kills = [json.loads(line) for line in eng.log_path.read_text().splitlines()
@@ -275,13 +274,12 @@ class TraceTelemetry(te.EngineTest):
         eng = engine.Engine(
             BeadId("t-1"),
             str(self.wt),
-            wslots.load_cfg(str(self.wt)),
+            wslots.load_cfg(str(self.wt), port_git()),
             verbose=False,
             store=self.store,
             env=snapshot(),
             spawner=real_spawner(),
-            git=port_git(),
-        )
+            git=port_git(), who=who())
 
         class Survivor(fake_route.Script):  # the engine ended the call, and the worker outlived every signal
             def reply(this, *a, **kw):
@@ -306,13 +304,12 @@ class TraceTelemetry(te.EngineTest):
         eng = engine.Engine(
             BeadId("t-1"),
             str(self.wt),
-            wslots.load_cfg(str(self.wt)),
+            wslots.load_cfg(str(self.wt), port_git()),
             verbose=False,
             store=self.store,
             env=snapshot(),
             spawner=real_spawner(),
-            git=port_git(),
-        )
+            git=port_git(), who=who())
         with te.delegate_stack(Interrupted({})), self.assertRaises(KeyboardInterrupt):
             eng.ai("plan", "title", "prompt")
         kills = [json.loads(line) for line in eng.log_path.read_text().splitlines()

@@ -14,15 +14,20 @@ from taskloop.app.doctor import profiles
 from taskloop.app.run.requests import OwnerVerbs
 from taskloop.app.track.trail import now
 from taskloop.app.wire import asks as wire_asks
+from taskloop.app.wire import real
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts.adrs import AdrStore
 from taskloop.contracts.ask import Ask, AskAction
 from taskloop.contracts.dash import Result, Stick
+from taskloop.contracts.env import Env
+from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdFailure, Beads
 from taskloop.contracts.stores import AskStore, ReposStore
 from taskloop_dash.env import Ports
+
+DASH = Identity(actor="tl-dash")  # the dashboard's bd actor
 
 
 def quiet(fn: Callable[..., Any], default: Any) -> Callable[..., Any]:
@@ -39,7 +44,7 @@ def store(repo: str) -> BdStore:
     """The dashboard's bd: the engine's typed adapter (--actor, --json), the one process site."""
     if not shutil.which("bd"):
         raise OSError(2, "bd is not installed")
-    return BdStore("tl-dash", repo or None, timeout=30)
+    return BdStore(DASH.actor, repo or None, timeout=30)
 
 
 def answer(repo: str, bead: BeadId, action: AskAction, text: str, amend: bool) -> tuple[Ask | None, str]:
@@ -130,11 +135,16 @@ def owner_intake(asks: AskStore, store_of: Callable[[str], Any], clock: Callable
 
 
 def slot_beads(repo: str) -> list[dict[str, Any]]:
-    return [b.to_dict() for b in wslots.slot_beads(repo)]
+    return [b.to_dict() for b in wslots.slot_beads(repo, DASH)]
 
 
-def ports() -> Ports:
+def ports(env: Env) -> Ports:
     """`python3 -m taskloop_dash --ports taskloop.app.launch.dash_ports:ports`: the dashboard builds its ports from the engine's code."""
+    git = real.git(env)
+
+    def red_row(repo: str) -> str:
+        return profiles.red_row(git, repo)
+
     return Ports(store=store, answer=answer,
                  **owner_writes(owner_intake(wire_asks.store(), store, now, adrs=adrs_of, factory=factory_store)),
-                 slot_beads=quiet(slot_beads, []), profile_error=quiet(profiles.red_row, ""))
+                 slot_beads=quiet(slot_beads, []), profile_error=quiet(red_row, ""))

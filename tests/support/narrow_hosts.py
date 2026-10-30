@@ -11,6 +11,7 @@ import support.paths  # noqa: F401
 from support.fake_beads import FakeBeads
 from support.fake_clock import FakeClock
 from support.fakegit import FakeGit, ScriptedGit
+from support.who import who
 from taskloop.app.land.commit import Commit
 from taskloop.app.land.fix_outside import FixOutside
 from taskloop.app.land.gate import Gate, GateChecker
@@ -585,6 +586,7 @@ class FakeSettleHost(Said):
         super().__init__()
         self.bead = BeadId("t-1")
         self.claim = fence.offline(BeadId("t-1"))
+        self.who = who()
         self.store = FakeBeads()
         self.cfg = EngineConfig(base="origin/main")
         self.plan_summary = ""

@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: E402, F401
 from support.builders import cfg_with  # noqa: E402
 from support.dashes import make_dash  # noqa: E402
+from support.spawn import port_git  # noqa: E402
 
 from taskloop.adapters import (  # noqa: E402
     context_size,
@@ -120,11 +121,11 @@ class OpenCode(unittest.TestCase):
     # fresh-writer limit
     def test_xai_has_its_own_fresh_writer_limit(self):
         eng = types.SimpleNamespace(cfg=cfg_with())
-        self.assertEqual(Handoff(eng).fresh_above_k("xai"), 100.0)
+        self.assertEqual(Handoff(eng, port_git()).fresh_above_k("xai"), 100.0)
         eng.cfg = cfg_with(write_fresh_above_k={"xai": 40})
-        self.assertEqual(Handoff(eng).fresh_above_k("xai"), 40.0)
+        self.assertEqual(Handoff(eng, port_git()).fresh_above_k("xai"), 40.0)
         eng.cfg = cfg_with(write_fresh_above_k={"claude": 1})
-        self.assertEqual(Handoff(eng).fresh_above_k("xai"), 100.0)
+        self.assertEqual(Handoff(eng, port_git()).fresh_above_k("xai"), 100.0)
 
 
     # review fixes (7e5b07d)

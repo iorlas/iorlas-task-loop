@@ -3,7 +3,6 @@ goes to the writer for a test, an item no check can prove lands unverified for t
 plan (what it defers, what it leaves to the engine) is read before the item's kind."""
 from typing import Any
 
-from taskloop.adapters.git import REAL
 from taskloop.contracts.plancheck import PlanData
 from taskloop.contracts.ports import Git
 from taskloop.domain.asks import specs as askspecs
@@ -17,7 +16,7 @@ AT_LAND = "the engine does this at land"
 
 
 class Routing:
-    def __init__(self, host: Any, git: Git = REAL) -> None:
+    def __init__(self, host: Any, git: Git) -> None:
         self.e = host
         self.git = git
 

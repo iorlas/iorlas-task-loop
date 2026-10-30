@@ -6,7 +6,9 @@ from pathlib import Path
 
 from taskloop.adapters.gitrepo import pinned_env
 from taskloop.contracts import env as penv
+from taskloop.contracts.env import Env
 from taskloop.contracts.envvars import EnvVar
+from taskloop.contracts.identity import Identity
 from taskloop.contracts.paths import default_root
 
 
@@ -27,23 +29,18 @@ def hostname() -> str:
     return socket.gethostname().split(".")[0].lower()
 
 
-def session_id() -> str:
-    """The session this process acts for: a Claude session, or the engine's own id when nobody drives it."""
-    return (penv.ambient(EnvVar.TASK_LOOP_SESSION) or penv.ambient("CLAUDE_CODE_SESSION_ID")
-            or penv.ambient("CLAUDE_SESSION_ID") or "")
-
-
-def actor() -> str:
-    """One name per session: two sessions with one actor both 'win' a claim (bd lets the same actor re-claim)."""
-    if penv.ambient(EnvVar.TASK_LOOP_ACTOR):
-        return penv.ambient(EnvVar.TASK_LOOP_ACTOR)
-    sid = session_id()
-    if sid:
-        return "tl-" + sid[:8]
-    if penv.ambient("CLAUDE_PID"):  # older Claude Code: one name per session process, never per folder
-        return f"tl-{hostname()}-{penv.ambient('CLAUDE_PID')}"
+def identity(env: Env) -> Identity:
+    """The session this process acts for (a Claude session, or the engine's own id when nobody drives it) and its bd actor: one name per
+    session, since two sessions with one actor both 'win' a claim (bd lets the same actor re-claim)."""
+    session = env.get(EnvVar.TASK_LOOP_SESSION) or env.get("CLAUDE_CODE_SESSION_ID") or env.get("CLAUDE_SESSION_ID")
+    if env.get(EnvVar.TASK_LOOP_ACTOR):
+        return Identity(actor=env.get(EnvVar.TASK_LOOP_ACTOR), session=session)
+    if session:
+        return Identity(actor="tl-" + session[:8], session=session)
+    if env.get("CLAUDE_PID"):  # older Claude Code: one name per session process, never per folder
+        return Identity(actor=f"tl-{hostname()}-{env.get('CLAUDE_PID')}", session="")
     top = pinned_env(os.getcwd()).get("GIT_WORK_TREE", "")  # the checkout this process runs in
-    return "tl-" + (Path(top).name if top else socket.gethostname())
+    return Identity(actor="tl-" + (Path(top).name if top else socket.gethostname()), session="")
 
 
 PLUGIN_ROOT = Path(__file__).resolve().parents[3]  # the install this code runs from (src/taskloop/adapters/ident.py)

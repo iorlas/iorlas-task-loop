@@ -11,8 +11,7 @@ def main(argv: list[str], stdin_text: str, plugin_root: Path) -> int:
         if event == "pretool":
             out = importlib.import_module("taskloop.hook.pretool").main(stdin_text)
         elif event in ("session-start", "precompact"):
-            mod = importlib.import_module("taskloop.hook.session")
-            out = (mod.start if event == "session-start" else mod.precompact)(stdin_text, plugin_root)
+            out = importlib.import_module("taskloop.hook.session").entry(event, stdin_text, plugin_root)
         else:
             print(f"hook.py: unknown event {event!r}", file=sys.stderr)
             return 2

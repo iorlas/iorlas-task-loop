@@ -56,7 +56,9 @@ from taskloop.app.slots import (  # noqa: E402
     engine_lock,
     marks,
 )
+from taskloop.app.wire import real  # noqa: E402
 from taskloop.app.wire import slots as wslots  # noqa: E402
+from taskloop.contracts.env import snapshot  # noqa: E402
 
 PY = sys.executable
 BEADS = [f"w-{i}" for i in range(1, 7)]
@@ -145,7 +147,7 @@ class Race(unittest.TestCase):
         sh("git", "push", "-q", "origin", "HEAD:main", cwd=r, env=env)
         sh("git", "branch", "-q", "--set-upstream-to", "origin/main", cwd=r, env=env)
         sh("git", "config", "core.hooksPath", str(h / "hooks"), cwd=r, env=env)
-        wslots.exclude_local(str(r), ".slots/", ".task/")
+        wslots.exclude_local(real.git(snapshot()), str(r), ".slots/", ".task/")
         for s in SLOTS:
             sh("git", "worktree", "add", "-q", "--detach", str(r / ".slots" / s), "origin/main", cwd=r, env=env)
         beads = {b: {"id": b, "title": "bead " + b, "status": "open", "priority": 2, "issue_type": "task",

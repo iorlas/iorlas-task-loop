@@ -24,19 +24,18 @@ from taskloop.app.run import console, running
 from taskloop.app.run.engine import Blocked, Engine
 from taskloop.app.slots import engine_lock
 from taskloop.app.track import verbs
-from taskloop.app.wire import real
 from taskloop.app.wire import slots as wslots
-from taskloop.contracts import env as penv
 from taskloop.contracts import fence, wire
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.enums import AskStatus, Result
 from taskloop.contracts.env import Env
 from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.fence import SLOT_GEN
+from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.kinds import Kind
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import BdFailure, BeadPatch, Beads, Spawner
+from taskloop.contracts.ports import BdFailure, BeadPatch, Beads, Git, Spawner
 from taskloop.contracts.run import Reexec, RunReport
 from taskloop.contracts.stores import AskStore
 
@@ -50,21 +49,22 @@ class Args:
         self.__dict__.update(kw)
 
 
-def release_dead(repo: Any, store: Any = None) -> None:
+def release_dead(repo: Any, git: Git, who: Identity, store: Any = None) -> None:
     """The reconcile sweep's lease rules, before a run takes its bead: a dead run's claim (a crashed or paused one, a restarted session's
     old actor) is given back by the same rule `tl prune` and the loop's step use."""
-    for line in leases.release_dead(repo, store or beadtools.bd_store(repo), running.running(repo, store), ident.hostname(), time.time()):
+    for line in leases.release_dead(repo, store or beadtools.bd_store(who.actor, repo), running.running(repo, git, who, store),
+        ident.hostname(), time.time()):
         say(line)
 
 
-def _foreign_claim(b: Any, repo: Any, store: Any, fresh: bool = False) -> str:
+def _foreign_claim(b: Any, repo: Any, git: Git, who: Identity, store: Any, fresh: bool = False) -> str:
     """Why another actor's claim on the bead stops a run-task, "" when it does not: the sweep already gave back every dead one, so a claim
     that is left is live (a lease running, or a run on it). A blocked bead is the actor's still: it goes only when its engine is gone;
     so does any claim the owner's --fresh asks for (tl-159): the check is per bead (is an engine on THIS bead), never per actor."""
     bead_id, who = b.id, b.assignee
     if not who.startswith("tl-"):
         return f"claimed by {who}"
-    if (b.status == "blocked" or fresh) and bead_id not in running.running(repo, store):
+    if (b.status == "blocked" or fresh) and bead_id not in running.running(repo, git, who, store):
         return ""
     logs = sorted((ident.config_dir() / "engine").glob(f"{bead_id}-*.jsonl"))
     return f"another run of {bead_id} is still running as {who} (a live claim)" + (f"; its engine log: {logs[-1]}" if logs else "")
@@ -92,22 +92,22 @@ def _blocked_by_engine(b: Any, store: Any) -> str:
     return ""
 
 
-def admit(bead_id: Any, repo: Any, store: Any = None, at: Any = None, fresh: bool = False) -> Any:
+def admit(bead_id: Any, repo: Any, git: Git, who: Identity, store: Any = None, at: Any = None, fresh: bool = False) -> Any:
     """(ok, why): whether run-task may take the bead, never taking what a person holds. A bead the engine blocked is reopened for a
     plain retry, or when a comment after the block answers the open ask; it stays blocked when a person commented after the block with
     no ask open (they may have parked it), while an ask waits unanswered, or while another bead blocks it. A claim by another actor
     that is still live stops it (dead ones are given back by `release_dead`, the reconcile lease rules, which runs first); `fresh` (the
     owner's rerun) also takes a claim whose lease still runs when no engine is on the bead."""
-    store = store or beadtools.bd_store(repo)
+    store = store or beadtools.bd_store(who.actor, repo)
     b = beadtools.peek(store, bead_id) or Bead(id=bead_id, title="", status="")
-    who, me = b.assignee, ident.actor()
+    holder, me = b.assignee, who.actor
     if intake.held(b.metadata, at or time.time()):
         return False, f"held by the owner ({b.metadata[intake.HOLD]}): `tl hold {bead_id} --release` lets it go"
-    if who and who != me:
-        why = _foreign_claim(b, repo, store, fresh)
+    if holder and holder != me:
+        why = _foreign_claim(b, repo, git, who, store, fresh)
         if why:
             return False, why
-    takeover = bool(fresh and who and who != me)  # _foreign_claim let it through: no engine runs the bead
+    takeover = bool(fresh and holder and holder != me)  # _foreign_claim let it through: no engine runs the bead
     if b.status != "blocked" and not takeover:
         return True, ""
     why = _blocked_by_engine(b, store) if b.status == "blocked" else ""
@@ -115,19 +115,19 @@ def admit(bead_id: Any, repo: Any, store: Any = None, at: Any = None, fresh: boo
         return False, why
     # tl-kwo: only if the claim is still the one just read (bd applies --if-assignee atomically): two loops looking at one freed bead
     # must not both reopen and then both claim
-    guard = bool(who and who != me)
+    guard = bool(holder and holder != me)
     try:
-        store.update(bead_id, BeadPatch(status="open", if_assignee=who if guard else "", assignee=""))
+        store.update(bead_id, BeadPatch(status="open", if_assignee=holder if guard else "", assignee=""))
     except BdFailure:
         if guard:
-            return False, f"the claim of {bead_id} changed hands just now ({who} no longer holds it): not taken"
+            return False, f"the claim of {bead_id} changed hands just now ({holder} no longer holds it): not taken"
     return True, "reopened"
 
 
-def parked(bead_id: BeadId, fresh: bool, repo: str, store: Beads | None = None) -> str:
+def parked(bead_id: BeadId, fresh: bool, repo: str, who: Identity, store: Beads | None = None) -> str:
     """Why run-task will not take a bead whose run ended on a question ("" when it may): its text is unchanged (--fresh or an answer
     lets it run), or this would be the third run on that text (nothing does). An answered ask starts the count again (tl-7y6.7.3)."""
-    b = beadtools.peek(store or beadtools.bd_store(repo), bead_id)
+    b = beadtools.peek(store or beadtools.bd_store(who.actor, repo), bead_id)
     cfg = ConfigDir(ident.config_dir())
     verdict = parks.gate(cfg, b, fresh=fresh) if b else None
     if b and verdict is None:
@@ -167,9 +167,9 @@ def report(a: Any, rec: RunReport) -> Any:
     say(line)
 
 
-def main(a: Any, store: Any = None, *, env: Env, spawner: Spawner) -> Any:
+def main(a: Any, store: Any = None, *, env: Env, spawner: Spawner, git: Git, who: Identity) -> Any:
     try:
-        rc = run_main(a, store, env=env, spawner=spawner)
+        rc = run_main(a, store, env=env, spawner=spawner, git=git, who=who)
     except Blocked as b:  # a stop (SIGTERM) before the engine ran: the slot and the lock are already given back
         rc = RunReport(outcome=Result.FAILED, bead=a.id, why=b.why, kind=b.kind.value)
     if isinstance(rc, RunReport):  # stopped before the engine ran: nothing in the bead changed
@@ -178,24 +178,25 @@ def main(a: Any, store: Any = None, *, env: Env, spawner: Spawner) -> Any:
     return rc
 
 
-def run_main(a: Any, store: Any = None, *, env: Env, spawner: Spawner) -> Any:
+def run_main(a: Any, store: Any = None, *, env: Env, spawner: Spawner, git: Git, who: Identity) -> Any:
     with halting.halt_on_sigterm():
-        return run_main_stoppable(a, store, env=env, spawner=spawner)
+        return run_main_stoppable(a, store, env=env, spawner=spawner, git=git, who=who)
 
 
-def run_main_stoppable(a: Any, store: Any = None, *, env: Env, spawner: Spawner) -> Any:
+def run_main_stoppable(a: Any, store: Any = None, *, env: Env, spawner: Spawner, git: Git, who: Identity) -> Any:
     for f in (sys.stdout, sys.stderr):
         append_output(f)
-    if not env.get(EnvVar.TASK_LOOP_SESSION) and not ident.session_id():
-        penv.export(EnvVar.TASK_LOOP_SESSION, "engine-" + uuid.uuid4().hex[:12])
+    if not who.session:  # nobody drives this run: it acts under a session id of its own
+        env = env.with_(EnvVar.TASK_LOOP_SESSION, "engine-" + uuid.uuid4().hex[:12])
+        who = ident.identity(env)
     repo = gitrepo.repo_root()
-    cfg = wslots.load_cfg(repo)
+    cfg = wslots.load_cfg(repo, git)
     if a.slot == "any":
-        return run_any_slot(a, repo, cfg, store, env=env, spawner=spawner)
-    return run_in(a, repo, cfg, store, env=env, spawner=spawner)
+        return run_any_slot(a, repo, cfg, store, env=env, spawner=spawner, git=git, who=who)
+    return run_in(a, repo, cfg, store, env=env, spawner=spawner, git=git, who=who)
 
 
-def run_any_slot(a: Any, repo: Any, cfg: Any, store: Any = None, *, env: Env, spawner: Spawner) -> Any:
+def run_any_slot(a: Any, repo: Any, cfg: Any, store: Any = None, *, env: Env, spawner: Spawner, git: Git, who: Identity) -> Any:
     """--slot any: the next free slot, taken in the repo's slot line (first come, first served; --wait: wait in it),
     run there as `--slot NAME`, given back at the end."""
     if a.dry_run:
@@ -209,7 +210,8 @@ def run_any_slot(a: Any, repo: Any, cfg: Any, store: Any = None, *, env: Env, sp
             told.append(1)
     halt = halting.RUN_HALT["ev"] or threading.Event()
     got = wslots.wait_slot(repo, wslots.profile_slots(repo), "run-task " + a.id, stop=lambda: not wait or halt.is_set(), sleep=halt.wait,
-                           on_wait=waiting, prio=wslots.bead_priority(repo, a.id, store), store=store, spawner=spawner)
+                           on_wait=waiting, prio=wslots.bead_priority(repo, a.id, who,
+                               store), store=store, spawner=spawner, git=git, who=who)
     if not got and halt.is_set():
         raise Blocked("failed: stopped (SIGTERM)", kind=Kind.PAUSE_KILLED)  # run_bead's caller reports it; no slot was taken
     if not got:
@@ -217,29 +219,29 @@ def run_any_slot(a: Any, repo: Any, cfg: Any, store: Any = None, *, env: Env, sp
         print(f"TAKEN: {why}")
         return RunReport(outcome=Result.TAKEN, bead=a.id, why=why)
     a.slot, a.worktree, sb = got
-    a.slot_gen = fence.gen_of(beadtools.peek(store or beadtools.bd_store(repo), sb), SLOT_GEN)  # the lease this run took
+    a.slot_gen = fence.gen_of(beadtools.peek(store or beadtools.bd_store(who.actor, repo), sb), SLOT_GEN)  # the lease this run took
     halting.RUN_SLOT["owned"] = a.slot  # a re-exec hands the slot on (TL_REEXEC) and its next run-task gives it back
     try:  # run_in sees the slot as taken (its Env names the slot's bead); the engine heartbeats it
-        return run_in(a, repo, cfg, store, env=env.with_(EnvVar.TASK_LOOP_SLOT_BEAD, sb), spawner=spawner)
+        return run_in(a, repo, cfg, store, env=env.with_(EnvVar.TASK_LOOP_SLOT_BEAD, sb), spawner=spawner, git=git, who=who)
     finally:
         with _sigterm_ignored():
-            wslots.release_slot(repo, a.slot, bead=a.id, mine=True, store=store, gen=a.slot_gen, spawner=spawner)
+            wslots.release_slot(repo, a.slot, bead=a.id, mine=True, store=store, gen=a.slot_gen, spawner=spawner, git=git, who=who)
 
 
-def take_area(a: Any, repo: Any, cfg: Any, lock: Any, sb: Any = "", store: Any = None) -> Any:
+def take_area(a: Any, repo: Any, cfg: Any, lock: Any, git: Git, who: Identity, sb: Any = "", store: Any = None) -> Any:
     """The engine lock, with the area check before it under the area lock (running.area_lock): "" when this run holds the
     worktree, else why not. A bead whose area runs elsewhere: a warning, or refused with --exclusive-area."""
     def mark() -> None:  # the slot says which bead runs in it (held_bead makes its area busy): only once the area is decided
         if sb:
-            beadtools.attempt((store or beadtools.bd_store(repo)).update, sb, BeadPatch(set_metadata={"held_bead": a.id}))
+            beadtools.attempt((store or beadtools.bd_store(who.actor, repo)).update, sb, BeadPatch(set_metadata={"held_bead": a.id}))
     if not has_areas(cfg):
         why = lock.take()
         if not why:
             mark()
         return why
     with running.area_lock(repo):
-        bead = beadtools.peek(store or beadtools.bd_store(repo), a.id) or Bead(id=a.id, title="", status="")
-        _area, busy = running.area_busy(repo, cfg, bead)
+        bead = beadtools.peek(store or beadtools.bd_store(who.actor, repo), a.id) or Bead(id=a.id, title="", status="")
+        _area, busy = running.area_busy(repo, cfg, bead, git, who)
         if busy and getattr(a, "exclusive_area", False):
             return busy + " (--exclusive-area)"
         if busy:
@@ -256,13 +258,13 @@ def _handed_slot(slot: Any, env: Env) -> Any:
     return handed is not None and handed.owned == slot
 
 
-def _worktree_of(a: Any, repo: Any, spawner: Spawner, env: Env) -> tuple[str, Any]:
+def _worktree_of(a: Any, repo: Any, spawner: Spawner, env: Env, who: Identity) -> tuple[str, Any]:
     """(worktree, failure): the directory the run works in (the slot's, the named one, or a new one), or the outcome that says why none."""
     wt = a.worktree
     if not wt and a.slot:  # the slot is the worktree
         wt = wslots.slot_dir(repo, a.slot, wslots.profile_slots(repo))
     if not wt:
-        r = spawner.run([*childenv.script_argv(TL_PY, env), "worktree", "start"])
+        r = spawner.run([*childenv.script_argv(TL_PY, env), "worktree", "start"], extra=childenv.identity_env(who))
         wt = r.out.strip().splitlines()[-1] if r.exit == 0 and r.out.strip() else ""
         if not wt:
             print("tl: no worktree: " + r.err, file=sys.stderr)
@@ -276,14 +278,15 @@ def _worktree_of(a: Any, repo: Any, spawner: Spawner, env: Env) -> tuple[str, An
 
 
 def _slot_taken(a: Any, repo: Any, wt: str, slot: str, sb: BeadId | None, store: Any, env: Env,
-                spawner: Spawner) -> tuple[BeadId | None, Any]:
+                spawner: Spawner, git: Git, who: Identity) -> tuple[BeadId | None, Any]:
     """(slot bead taken here, taken outcome): a hand run takes its slot's bead as the loop does; one the loop started has it already."""
     named = sb is not None and env.bead(EnvVar.TASK_LOOP_SLOT_BEAD) == sb
     if slot and sb and named and _handed_slot(slot, env):
         halting.RUN_SLOT["owned"] = slot
         return sb, None  # exec'd by the run-task that took this slot: it is still ours, and this process gives it back
     if slot and not (sb and named):
-        took, why = wslots.take_named_slot(repo, slot, wslots.profile_slots(repo), "run-task " + a.id, store=store, spawner=spawner)
+        took, why = wslots.take_named_slot(repo, slot, wslots.profile_slots(repo), "run-task " + a.id, store=store, spawner=spawner,
+            git=git, who=who)
         if not took:
             print(f"TAKEN: {why}")
             return None, RunReport(outcome=Result.TAKEN, bead=a.id, why=why)
@@ -304,69 +307,70 @@ def _sigterm_ignored() -> Generator[None]:
             signal.signal(signal.SIGTERM, old)
 
 
-def run_in(a: Any, repo: Any, cfg: Any, store: Any = None, *, env: Env, spawner: Spawner) -> Any:
-    wt, failed = _worktree_of(a, repo, spawner, env)
+def run_in(a: Any, repo: Any, cfg: Any, store: Any = None, *, env: Env, spawner: Spawner, git: Git, who: Identity) -> Any:
+    wt, failed = _worktree_of(a, repo, spawner, env, who)
     if failed:
         return failed
     if a.dry_run:
-        return run_bead(a, repo, cfg, wt, store, env=env, spawner=spawner)
+        return run_bead(a, repo, cfg, wt, store, env=env, spawner=spawner, git=git, who=who)
     took, slot = "", ""
     try:
         # a hand run takes its slot's bead as the loop does (a --worktree that is a slot too); one the loop started has
         # it already: TASK_LOOP_SLOT_BEAD names that very slot's bead
-        slot = a.slot or wslots.slot_of(repo, wt, store)
-        sb_row = wslots.slot_bead(repo, slot, store) if slot else None
+        slot = a.slot or wslots.slot_of(repo, wt, who, store)
+        sb_row = wslots.slot_bead(repo, slot, who, store) if slot else None
         sb = sb_row.id if sb_row else None
-        took, taken = _slot_taken(a, repo, wt, slot, sb, store, env, spawner)
+        took, taken = _slot_taken(a, repo, wt, slot, sb, store, env, spawner, git, who)
         if taken:
             return taken
         if took:
-            a.slot_gen = fence.gen_of(beadtools.peek(store or beadtools.bd_store(repo), took), SLOT_GEN)
+            a.slot_gen = fence.gen_of(beadtools.peek(store or beadtools.bd_store(who.actor, repo), took), SLOT_GEN)
         env = env.with_(EnvVar.TASK_LOOP_SLOT_BEAD, took) if took else env  # the engine's heartbeat keeps it
         lock = engine_lock.EngineLock(wt, a.id, slot, env)
-        busy = take_area(a, repo, cfg, lock, took or sb if slot else "", store)
+        busy = take_area(a, repo, cfg, lock, git, who, took or sb if slot else "", store)
         if busy:
             why = busy if busy.startswith("area ") else f"worktree {wt}: {busy}"
             print(f"TAKEN: {why}")
             return RunReport(outcome=Result.TAKEN, bead=a.id, why=why)
         engine_lock.LOCK = lock
-        return run_bead(a, repo, cfg, wt, store, env=env, spawner=spawner)
+        return run_bead(a, repo, cfg, wt, store, env=env, spawner=spawner, git=git, who=who)
     finally:
         with _sigterm_ignored():
             if engine_lock.LOCK:
                 engine_lock.LOCK.release()
                 engine_lock.LOCK = None
             if took:
-                wslots.release_slot(repo, slot, bead=a.id, mine=True, store=store, gen=getattr(a, "slot_gen", None), spawner=spawner)
+                wslots.release_slot(repo, slot, bead=a.id, mine=True, store=store, gen=getattr(a, "slot_gen", None), spawner=spawner,
+                    git=git, who=who)
 
 
 defer_stop = halting.stop_deferred  # no state: also before an Engine exists
 
 
-def run_bead(a: Any, repo: Any, cfg: Any, wt: Any, store: Any = None, *, env: Env, spawner: Spawner) -> Any:
+def run_bead(a: Any, repo: Any, cfg: Any, wt: Any, store: Any = None, *, env: Env, spawner: Spawner, git: Git, who: Identity) -> Any:
     # a stop during the sweep, admit and claim waits for them, then the engine closes the run as stopped (trace, bead)
     with defer_stop(None) as stop:
         if not a.dry_run:
-            release_dead(repo, store)
-            if why := parked(a.id, bool(getattr(a, "fresh", False)), repo, store):
+            release_dead(repo, git, who, store)
+            if why := parked(a.id, bool(getattr(a, "fresh", False)), repo, who, store):
                 print(f"TAKEN: {why}")
                 return RunReport(outcome=Result.TAKEN, bead=a.id, why=why)
-            ok, why = admit(a.id, repo, store, fresh=bool(getattr(a, "fresh", False)))
+            ok, why = admit(a.id, repo, git, who, store, fresh=bool(getattr(a, "fresh", False)))
             if not ok:
                 print(f"TAKEN: {why}")
                 return RunReport(outcome=Result.TAKEN, bead=a.id, why=why)
             if why:
                 say(f"{a.id}: {why}")
-        if not a.dry_run and verbs.claim(a.id, wt, a.slot, store=store) != 0:
+        if not a.dry_run and verbs.claim(who, a.id, store or beadtools.bd_store(who.actor, repo), git, wt, a.slot) != 0:
             # bd lets this session re-claim its own bead (a reopened one); another session's claim stops here
             return RunReport(outcome=Result.TAKEN, bead=a.id, why="claimed by another session")
         claim = (
             None
             if a.dry_run
             else fence.take(
-                store or beadtools.bd_store(),
+                store or beadtools.bd_store(who.actor),
                 a.id,
-                ident.actor(),
+                who.actor,
                 env.bead(EnvVar.TASK_LOOP_SLOT_BEAD),
                 getattr(a, "slot_gen", None),
             )
@@ -382,7 +386,8 @@ def run_bead(a: Any, repo: Any, cfg: Any, wt: Any, store: Any = None, *, env: En
             claim=claim,
             env=env,
             spawner=spawner,
-            git=real.git(env),
+            git=git,
+            who=who,
         )
         eng.stop_pending = bool(stop)
         say(f"engine log: {eng.log_path}")

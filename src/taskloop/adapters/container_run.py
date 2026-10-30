@@ -18,7 +18,8 @@ from typing import IO, Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # src/: a script run by path finds taskloop (which adds _vendor)
 from taskloop.adapters import procs
-from taskloop.adapters.git import REAL
+from taskloop.adapters.git import RealGit
+from taskloop.contracts.env import snapshot
 
 INSIDE = ('t=${TMPDIR:-/tmp}; rm -rf "$t/tl-w" "$t/tl-art"; mkdir -p "$t/tl-w" "$t/tl-art" && tar -x -C "$t/tl-w"'
           ' && cd "$t/tl-w/$TL_BOX_CWD" && export TL_ARTIFACTS="$t/tl-art" && exec "$@"')  # the image must not set TMPDIR
@@ -29,14 +30,14 @@ def docker(*args: str, **kw: Any) -> subprocess.CompletedProcess[bytes]:
     return subprocess.run(["docker", *args], capture_output=True, check=False, **kw)
 
 
-def files(root: str) -> list[str]:
+def files(git: RealGit, root: str) -> list[str]:
     """The tracked and the untracked non-ignored files of the worktree that still exist."""
-    return [p for p in REAL.ls_files(root, "unignored") if os.path.lexists(os.path.join(root, p))]
+    return [p for p in git.ls_files(root, "unignored") if os.path.lexists(os.path.join(root, p))]
 
 
-def send(stream: IO[bytes], root: str) -> None:
+def send(git: RealGit, stream: IO[bytes], root: str) -> None:
     with tarfile.open(fileobj=stream, mode="w|") as tar:
-        for rel in files(root):
+        for rel in files(git, root):
             tar.add(os.path.join(root, rel), arcname=rel, recursive=False)
 
 
@@ -73,7 +74,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         try:
             if p.stdin:
-                send(p.stdin, os.getcwd())
+                send(RealGit(snapshot()), p.stdin, os.getcwd())
             if p.stdin:
                 p.stdin.close()
         except BrokenPipeError:

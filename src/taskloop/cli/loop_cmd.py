@@ -11,37 +11,41 @@ from taskloop.app.launch import repos
 from taskloop.app.track import trail
 from taskloop.cli import loop as cli
 from taskloop.contracts.env import Env
-from taskloop.contracts.ports import Spawner
+from taskloop.contracts.identity import Identity
+from taskloop.contracts.ports import Git, Spawner
 
 
-def cmd_next(a: Any, env: Env, spawner: Spawner, here: Path = wloop.HERE, now: Callable[[], float] = trail.now) -> int:
+def cmd_next(a: Any, env: Env, spawner: Spawner, git: Git, who: Identity, here: Path = wloop.HERE, now: Callable[[],
+    float] = trail.now) -> int:
     repo = repos.repo_root(a.repo)
-    return cli.cmd_next(wloop.build(repo, here=here, now=now, env=env, spawner=spawner), a)
+    return cli.cmd_next(wloop.build(repo, here=here, now=now, env=env, spawner=spawner, git=git, who=who), a)
 
 
-def cmd_stop(a: Any, env: Env, spawner: Spawner, here: Path = wloop.HERE, now: Callable[[], float] = trail.now) -> int:
+def cmd_stop(a: Any, env: Env, spawner: Spawner, git: Git, who: Identity, here: Path = wloop.HERE, now: Callable[[],
+    float] = trail.now) -> int:
     repo = repos.repo_root(a.repo)
-    return cli.cmd_stop(wloop.build(repo, here=here, now=now, env=env, spawner=spawner), wloop.files_of(repo, now), a)
+    return cli.cmd_stop(wloop.build(repo, here=here, now=now, env=env, spawner=spawner, git=git, who=who), wloop.files_of(repo, now), a)
 
 
-def cmd_loop(a: Any, env: Env, spawner: Spawner, here: Path = wloop.HERE, now: Callable[[], float] = trail.now) -> int:
+def cmd_loop(a: Any, env: Env, spawner: Spawner, git: Git, who: Identity, here: Path = wloop.HERE, now: Callable[[],
+    float] = trail.now) -> int:
     repo = repos.repo_root(a.repo)
-    if profiles.red_row(repo):
-        print(profiles.red_row(repo))
+    if profiles.red_row(git, repo):
+        print(profiles.red_row(git, repo))
         return 1
-    loop_env = wloop.build(repo, here=here, now=now, env=env, spawner=spawner)
+    loop_env = wloop.build(repo, here=here, now=now, env=env, spawner=spawner, git=git, who=who)
     files = wloop.files_of(repo, now)
     if a.op == "status":
-        for row in wloop.other_red_rows(repo):
+        for row in wloop.other_red_rows(git, repo):
             print(row)  # another repo's bad profile: its red row here, nothing else changes
         return cli.cmd_status(loop_env, files, wloop.installs(loop_env.cfgdir, here, now), a)
-    start_cwd, session = wloop.begin_loop(repo, env)
-    loop_env = wloop.build(repo, session_actor=session, here=here, now=now, start_cwd=start_cwd, env=env, spawner=spawner)
+    start_cwd, session, who = wloop.begin_loop(repo, env)
+    loop_env = wloop.build(repo, session_actor=session, here=here, now=now, start_cwd=start_cwd, env=env, spawner=spawner, git=git, who=who)
     return cli.cmd_loop(loop_env, files, wloop.installs(loop_env.cfgdir, here, now), a)
 
 
-def cmd_cutover(a: Any) -> int:
-    live = wloop.live_work()
+def cmd_cutover(a: Any, git: Git, who: Identity) -> int:
+    live = wloop.live_work(git, who)
     if a.json:
         print(json.dumps({"live": [{"kind": k, "what": w} for k, w in live]}))
     elif live:

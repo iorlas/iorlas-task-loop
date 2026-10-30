@@ -10,7 +10,8 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import slots as sl
 from support import tlbd
 from support.fakes import as_bead
-from support.spawn import real_spawner
+from support.spawn import port_git, real_spawner
+from support.who import who
 
 from slots.real.test_slots import NO_FCNTL, Slots
 from taskloop.app.slots import (
@@ -78,7 +79,7 @@ class HoldRacesLogic(Slots):
                 racer.append(th)
             return r
         with tlbd.bd_boundary(racing):
-            wslots.release_slot(str(self.repo), "s1", spawner=real_spawner())
+            wslots.release_slot(str(self.repo), "s1", spawner=real_spawner(), git=port_git(), who=who())
         racer[0].join(10)
         self.assertEqual(holds, [0])
         self.assertEqual(bd.slots["sl-1"]["assignee"], "tl-denis000")

@@ -10,6 +10,7 @@ from taskloop.app.reconcile.sweep import sweep
 from taskloop.app.release.shell import Shell
 from taskloop.app.run import running
 from taskloop.contracts.config import LoopConfig
+from taskloop.contracts.identity import Identity
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import Beads
 
@@ -19,7 +20,7 @@ def mb(n: int) -> str:
 
 
 def run(cfg: ConfigDir, loop: LoopConfig, repos: list[str], store_of: Callable[[str], Beads], now: float, dry_run: bool,
-        sh: Shell, say: Callable[[str], None] = print) -> int:
+        sh: Shell, say: Callable[[str], None] = print, *, who: Identity) -> int:
     """Prune once. -> how many things went (would, with `dry_run`)."""
     would = "would remove " if dry_run else "removed "
     exempt, why = runs.open_beads(repos, store_of)
@@ -37,7 +38,7 @@ def run(cfg: ConfigDir, loop: LoopConfig, repos: list[str], store_of: Callable[[
         say(f"prune: run data: {would}{len(gone)} item(s), {mb(sum(g.bytes for g in gone))}; kept every run folder newer than "
             f"{loop.keep_days:g} days and {held} of beads still open or parked")
     gone, stays = sweep(repos, store_of, Path(loop.build_dir).expanduser(), loop.keep_days, now, dry_run, sh.port, None,
-                        lambda repo: running.running(repo, store_of(repo)), hostname())
+                        lambda repo: running.running(repo, sh.port, who, store_of(repo)), hostname())
     for line in gone:
         say(f"prune: {line if dry_run else 'removed ' + line}")
     for line in stays:

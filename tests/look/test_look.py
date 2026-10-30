@@ -16,6 +16,7 @@ from support.checkpoints import read_ck
 from support.engine_case import BEAD, CLEAN, PLAN, WRITE, engine, verdict
 from support.fakes import must_bead
 from support.spawn import port_git, real_spawner
+from support.who import who
 
 from taskloop.adapters import ident
 from taskloop.app.look import shots
@@ -153,12 +154,11 @@ class LookTest(T.EngineTest):
         self.eng = engine.Engine(
             BeadId("t-1"),
             str(self.wt),
-            wslots.load_cfg(str(self.wt)),
+            wslots.load_cfg(str(self.wt), port_git()),
             store=self.store,
             env=snapshot(),
             spawner=real_spawner(),
-            git=port_git(),
-        )
+            git=port_git(), who=who())
         self.eng.run_dir.mkdir(parents=True, exist_ok=True)
         (self.eng.run_dir / "brief.md").write_text("no pictures named")
         root = ConfigDir(ident.config_dir())
@@ -240,7 +240,7 @@ class LookTest(T.EngineTest):
         saved = read_ck(self.eng).state
         self.assertEqual(saved.look_paths, ["home-screen.png"])
         eng2 = engine.Engine(
-            BeadId("t-1"), str(self.wt), self.eng.cfg, store=self.store, env=snapshot(), spawner=real_spawner(), git=port_git()
+            BeadId("t-1"), str(self.wt), self.eng.cfg, store=self.store, env=snapshot(), spawner=real_spawner(), git=port_git(), who=who()
         )
         eng2.tree.reset(must_bead(BEAD))
         eng2.bead_title = "Add f"
@@ -264,12 +264,11 @@ class LookTest(T.EngineTest):
         self.eng = engine.Engine(
             BeadId("t-1"),
             str(self.wt),
-            wslots.load_cfg(str(self.wt)),
+            wslots.load_cfg(str(self.wt), port_git()),
             store=self.store,
             env=snapshot(),
             spawner=real_spawner(),
-            git=port_git(),
-        )
+            git=port_git(), who=who())
         d = self.eng.evidence_dir
         d.mkdir(parents=True, exist_ok=True)
         (d / "a.png").write_bytes(b"x")

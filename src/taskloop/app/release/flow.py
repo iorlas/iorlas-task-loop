@@ -7,13 +7,14 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from taskloop.adapters import beadtools, gitrepo, landlock
+from taskloop.adapters import beadtools, gitrepo, ident, landlock
 from taskloop.adapters.ident import config_dir
 from taskloop.adapters.versionfile import NoVersion, set_version
 from taskloop.app.release import clone, manifest, publish, selfupdate, shell, suite, tidy
 from taskloop.app.release.push import push_main, release_lock_path
 from taskloop.app.release.shell import Abort, Shell, say
 from taskloop.contracts.env import Env
+from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import MARKETPLACE, BeadId, parse_bead_id
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdFailure, BeadQuery, Beads, Git, Spawner
@@ -60,32 +61,32 @@ def bump_and_commit(tool_root: Path, where: Path, req: Request, sh: Shell) -> st
     return version
 
 
-def refuse_open_children(req: Request, repo: Path, store: Beads | None) -> None:
+def refuse_open_children(req: Request, repo: Path, who: Identity, store: Beads | None) -> None:
     """--bead names the work this release finishes: a bead with an open child is only half done (tl-t7i.5 was closed with its other half
     open). Refused before anything is pushed. A bd that cannot be asked does not stop the release (the close itself reports that)."""
     if not req.bead:
         return
     try:
-        kids = [b.id for b in (store or beadtools.bd_store(repo)).find(BeadQuery()) if b.parent == req.bead]
+        kids = [b.id for b in (store or beadtools.bd_store(who.actor, repo)).find(BeadQuery()) if b.parent == req.bead]
     except (BdFailure, SystemExit):
         return
     if kids:
         raise Abort(f"--bead {req.bead} has open children ({', '.join(sorted(kids))}): finish or close them, or release without --bead")
 
 
-def close_bead(req: Request, repo: Path, store: Beads | None) -> None:
+def close_bead(req: Request, repo: Path, who: Identity, store: Beads | None) -> None:
     if not req.bead:
         return
     try:
-        (store or beadtools.bd_store(repo)).close(req.bead, req.reason or req.message)
+        (store or beadtools.bd_store(who.actor, repo)).close(req.bead, req.reason or req.message)
     except (BdFailure, SystemExit) as e:
         say("warning: bd close {} failed: {}".format(req.bead, str(getattr(e, "error", e))[-300:]))
 
 
-def release(req: Request, repo: Path, market: Path, tool_root: Path, sh: Shell, store: Beads | None = None) -> str:
+def release(req: Request, repo: Path, market: Path, tool_root: Path, sh: Shell, who: Identity, store: Beads | None = None) -> str:
     """Release `repo` from the clone: its main checkout may be dirty or on any branch and is left as it was. The marketplace
     checkout must be clean on main (it is pushed from)."""
-    refuse_open_children(req, repo, store)
+    refuse_open_children(req, repo, who, store)
     require_clean_main(market, "marketplace", sh)
     url = sh.port.remote_url(str(repo), "origin")
     if not url:
@@ -100,7 +101,7 @@ def release(req: Request, repo: Path, market: Path, tool_root: Path, sh: Shell, 
     version = push_main(where, req.message, again(), base, again, sh)
     say(f"pushed {version}: {req.message}")
     publish.tag(where, "v" + version, "the plugin repo", sh)
-    close_bead(req, repo, store)
+    close_bead(req, repo, who, store)
     try:
         publish.bump_marketplace(market, version, sh)
     except Abort as e:
@@ -125,13 +126,13 @@ def drop_landed_branch(req: Request, repo: Path, where: Path, tip: str, sh: Shel
         say(f"removed branch {req.from_branch} and its worktrees")
 
 
-def record(result: ReleaseResult, req: Request, repo: Path, store: Beads | None = None) -> None:
+def record(result: ReleaseResult, req: Request, repo: Path, who: Identity, store: Beads | None = None) -> None:
     """releases/last.json: the latest release's result (a later success replaces a failure); and, when it failed, a comment on --bead."""
     ReleaseResultStore(ConfigDir(config_dir())).write(result)
     if not result.ok and req.bead:
         text = "release FAILED: {}{}".format(result.summary, ("; log " + result.log) if result.log else "")
         try:
-            (store or beadtools.bd_store(repo)).add_comment(req.bead, text)
+            (store or beadtools.bd_store(who.actor, repo)).add_comment(req.bead, text)
         except (BdFailure, SystemExit) as e:
             say("warning: bd comment {} failed: {}".format(req.bead, str(getattr(e, "error", e))[-300:]))
 
@@ -139,6 +140,7 @@ def record(result: ReleaseResult, req: Request, repo: Path, store: Beads | None 
 def main(argv: list[str] | None, tool_root: Path, spawner: Spawner, port: Git, env: Env, doc: str = "") -> int:
     """One release from the command line; every process it starts goes through `spawner` (the edge makes it)."""
     sh = shell.of(spawner, port, env)
+    who = ident.identity(env)
     ap = argparse.ArgumentParser(prog="release.py", description=doc)
     ap.add_argument("message")
     ap.add_argument("--bead", type=parse_bead_id, default=None, help="close this bead after the push")
@@ -155,19 +157,19 @@ def main(argv: list[str] | None, tool_root: Path, spawner: Spawner, port: Git, e
     try:
         path = release_lock_path(config_dir(), url)
         newer = None
-        with landlock.os_lock(path, holder, lambda who: say(f"waiting for the release lock (held by {who})")):
-            newer = selfupdate.newer_release(tool_root, clone.ready(config_dir(), url, sh), sh)
-            version = "" if newer else release(req, repo, market, tool_root, sh)
+        with landlock.os_lock(path, holder, lambda by: say(f"waiting for the release lock (held by {by})")):
+            newer = selfupdate.newer_release(tool_root, clone.ready(config_dir(), url, sh), sh, env)
+            version = "" if newer else release(req, repo, market, tool_root, sh, who)
         if newer:  # the lock is released above: the exec'd release takes it
             selfupdate.exec_release(newer, sys.argv[1:] if argv is None else argv, repo, env)
         record(ReleaseResult(ok=True, version=version, summary="released " + version, at=time.time(), branch=req.from_branch or "main",
-                             message=req.message), req, repo)
+                             message=req.message), req, repo, who)
     except Abort as e:
         print("release: " + str(e), file=sys.stderr)
         first = str(e).strip().splitlines()[0] if str(e).strip() else "failed"
         summary = (f"{e.version} was pushed but " if e.version else "nothing released: ") + first
         record(ReleaseResult(ok=False, version=e.version, summary=summary, tests=list(e.tests), log=e.log, at=time.time(),
-                             branch=req.from_branch or "main", message=req.message), req, repo)
+                             branch=req.from_branch or "main", message=req.message), req, repo, who)
         print("release FAILED: " + summary + ((f" (log {e.log})") if e.log else ""), file=sys.stderr)
         return 1
     return 0

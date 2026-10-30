@@ -8,7 +8,6 @@ from typing import Any
 from urllib.parse import quote
 
 from taskloop.adapters import bdcreate, beadtools, ident
-from taskloop.adapters.git import REAL
 from taskloop.contracts.ids import BeadId, is_bead_id
 from taskloop.contracts.ports import BdFailure, BeadPatch, BeadQuery, Git, NewBead
 from taskloop.domain.look.matchers import sections
@@ -17,7 +16,7 @@ LOOK_LABEL = "owner-look"
 
 
 class OwnerLook:
-    def __init__(self, host: Any, git: Git = REAL) -> None:
+    def __init__(self, host: Any, git: Git) -> None:
         self.e = host
         self.git = git
 

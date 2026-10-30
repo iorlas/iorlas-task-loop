@@ -15,6 +15,7 @@ from taskloop.app.report.planner import input_tokens
 from taskloop.contracts import paths
 from taskloop.contracts.bead import Comment
 from taskloop.contracts.enums import Outcome, Result
+from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId, is_bead_id, loop_key
 from taskloop.contracts.kinds import ASKS, PAUSES, Kind, kind_named
 from taskloop.contracts.log import Beat, EngineLog, decode
@@ -174,9 +175,10 @@ def _tokens(runs: Sequence[RunTrace]) -> dict[str, dict[str, dict[str, int]]]:
 
 
 def scorecard(repo: str, since: float, until: float, base: str, comments_of: Callable[[BeadId], Sequence[Comment]] | None = None,
-              status_of: Callable[[BeadId], str | None] | None = None, now: float | None = None, *, git: Git) -> dict[str, Any]:
+              status_of: Callable[[BeadId],
+                  str | None] | None = None, now: float | None = None, *, git: Git, who: Identity) -> dict[str, Any]:
     repo = gitrepo.repo_root(repo)  # the loop keys its log by this path
-    comments_of = comments_of or beadtools.bd_store(repo).comments
+    comments_of = comments_of or beadtools.bd_store(who.actor, repo).comments
     book = repo_traces(repo, git)
     traces = book.runs
     runs = sorted([r for r in traces if overlaps(r, since, until)], key=lambda r: r.started)
@@ -188,7 +190,7 @@ def scorecard(repo: str, since: float, until: float, base: str, comments_of: Cal
         beads.setdefault(c["bead"], {"runs": [], "crashes": []})["crashes"].append(c)
     rows, asks = _bead_rows(beads, comments_of)
     tokens = _tokens(runs)
-    lost = [x for x in lost_work(repo, base, status_of or (lambda b: bead_status(b, repo)), traces, git, since=since)
+    lost = [x for x in lost_work(repo, base, status_of or (lambda b: bead_status(b, repo, who)), traces, git, since=since)
             if x["class"] in ("lost", "pending", "unknown")]
     mins = [x["minutes"] for x in rows if x["runs"]]
     c: dict[str, Any] = {"repo": repo, "since": since, "until": until, "beads": len(rows),

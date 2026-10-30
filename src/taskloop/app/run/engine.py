@@ -67,6 +67,7 @@ from taskloop.contracts.argv import text_of
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.enums import Result
 from taskloop.contracts.env import Env
+from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.kinds import Kind
 from taskloop.contracts.landed import Landed, LandedStore
@@ -130,14 +131,16 @@ class Engine(RunFields):
         env: Env,
         spawner: Spawner,
         git: Git,
+        who: Identity,
     ) -> None:
         route = route or seams.DelegateRoute()
         self.env = env  # the process environment, taken once at the edge (tl.py); every child is built from it
         self.spawner = spawner
+        self.who = who  # the session and bd actor this run acts as, built at the edge
         self.git = git  # the port every git call of the run goes through, pinned to the slot, built at the edge with the same env
-        super().__init__(bead, wt, cfg, dry_run, verbose, store, route, fresh, claim)
+        super().__init__(bead, wt, cfg, dry_run, verbose, store, route, fresh, claim, who)
         self.clock = clock or SystemClock()
-        self.reexec: Reexec | None = reexec.take_reexec()  # this run-task came from an exec into a newer install, or a fallback
+        self.reexec: Reexec | None = reexec.take_reexec(env)  # this run-task came from an exec into a newer install, or a fallback
         if self.reexec and self.reexec.bead != bead:
             self.reexec = None
         # a run paused for the network: its run id and counters go on
@@ -200,21 +203,39 @@ class Engine(RunFields):
     shared = cached_property(Shared)
     briefing = cached_property(Briefing)
     checkout = cached_property(Checkout)
-    newfiles = cached_property(NewFiles)
-    pictures = cached_property(Pictures)
     judge = cached_property(Judge)
-    owner_look = cached_property(OwnerLook)
     link_check = cached_property(LinkCheck)
     resume = cached_property(Resume)
     stage_loop = cached_property(StageLoop)
-    hand = cached_property(Handoff)
     planner = cached_property(Planner)
     briefs = cached_property(Briefs)
-    routing = cached_property(Routing)
-    settles = cached_property(Settles)
     verifier = cached_property(Verifier)
     stuck = cached_property(StuckTick)
     requests = cached_property(OwnerRequests)
+
+    @cached_property
+    def newfiles(self) -> NewFiles:
+        return NewFiles(self, self.git)
+
+    @cached_property
+    def pictures(self) -> Pictures:
+        return Pictures(self, self.git)
+
+    @cached_property
+    def owner_look(self) -> OwnerLook:
+        return OwnerLook(self, self.git)
+
+    @cached_property
+    def hand(self) -> Handoff:
+        return Handoff(self, self.git)
+
+    @cached_property
+    def routing(self) -> Routing:
+        return Routing(self, self.git)
+
+    @cached_property
+    def settles(self) -> Settles:
+        return Settles(self, self.git)
 
     @cached_property
     def worker(self) -> WorkerCall:
@@ -316,7 +337,7 @@ class Engine(RunFields):
         return time.time()  # looked up at each call: a test sets the wall clock
 
     def on_step(self, text: str) -> None:
-        trail.event("stage", self.bead, text=text)
+        trail.event(self.who, "stage", self.bead, text=text)
 
     def call_dir(self) -> Path:
         return ident.config_dir() / "checkpoints"
@@ -327,7 +348,7 @@ class Engine(RunFields):
 
     def record_land(self, sha: str) -> None:
         LandedStore(ident.config_dir()).put(Landed(bead=self.bead, sha=sha, base=self.cfg.base, t=self.now()))
-        verbs.land(self.bead, sha, self.wt, self.store, base=self.cfg.base, claim=self.claim)
+        verbs.land(self.who, self.bead, sha, self.store, self.git, self.wt, base=self.cfg.base, claim=self.claim)
 
     def land_lock_path(self) -> Path:
         return landlock.land_lock_path(self.git.remote_url(self.wt, "origin") or self.wt)

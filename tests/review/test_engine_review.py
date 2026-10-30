@@ -31,6 +31,7 @@ from support.engine_case import (
 # isort: split
 from support.builders import cfg_with
 from support.narrow import must
+from support.spawn import port_git
 
 from taskloop.app.land.checkout import Checkout
 from taskloop.app.review.settles import Settles
@@ -155,7 +156,7 @@ class EngineReviewTest(EngineTest):
         return None if name == "ruff" else "/usr/bin/" + name
 
     def unused(self, what, cfg, on_path=lambda name: None):
-        return Settles(types.SimpleNamespace(wt=str(self.wt), cfg=cfg, on_path=on_path)).unused_tool(what)
+        return Settles(types.SimpleNamespace(wt=str(self.wt), cfg=cfg, on_path=on_path), port_git()).unused_tool(what)
 
     @contextmanager
     def ruff_cannot_start(self):
@@ -208,7 +209,7 @@ class EngineReviewTest(EngineTest):
         self.assertIn("ruff", self.card())
 
     def test_prose_that_happens_to_name_a_tool_still_goes_to_the_verifier(self):
-        cfg = wslots.load_cfg(str(self.wt))
+        cfg = wslots.load_cfg(str(self.wt), port_git())
         with mock.patch.object(engine, "tool_on_path", return_value=None):
             for what in ("the biome transition fades in", "no black screen between lots"):
                 self.assertEqual(self.unused(what, cfg), "", what)
@@ -220,10 +221,10 @@ class EngineReviewTest(EngineTest):
         sh("git", "add", "-A", cwd=self.wt)
         sh("git", "commit", "-qm", "tools", cwd=self.wt)
         with mock.patch.object(engine, "tool_on_path", return_value=None):
-            self.assertEqual(self.unused("nobody ran csharpier on src/", wslots.load_cfg(str(self.wt))), "")
+            self.assertEqual(self.unused("nobody ran csharpier on src/", wslots.load_cfg(str(self.wt), port_git())), "")
 
     def test_only_the_unused_tool_item_is_dropped_the_rest_go_to_the_verifier(self):
-        cfg = wslots.load_cfg(str(self.wt))
+        cfg = wslots.load_cfg(str(self.wt), port_git())
         with mock.patch.object(engine, "tool_on_path", side_effect=self.no_ruff):
             self.assertIn("not a check here", self.unused(self.RUFF["what"], cfg, self.no_ruff))
             self.assertEqual(self.unused(self.GAPS[1]["what"], cfg, self.no_ruff), "")

@@ -57,6 +57,7 @@ from support.fakes import as_bead, as_comment  # noqa: E402
 from support.logs import records  # noqa: E402
 from support.narrow import must  # noqa: E402
 from support.spawn import port_git, real_spawner  # noqa: E402
+from support.who import who  # noqa: E402
 
 from taskloop.adapters import delegate as lroute  # noqa: E402
 from taskloop.adapters import (  # noqa: E402
@@ -192,7 +193,7 @@ class Outcome(T.EngineTest):
         Path(a.worktree).mkdir(exist_ok=True)
         out = io.StringIO()
         with contextlib.chdir(self.wt), redirect_stdout(out), mock.patch.object(signal, "signal"):  # pyrefly: ignore[missing-attribute]
-            rc = entry.main(a, self.store, env=snapshot(), spawner=real_spawner())  # pyrefly: ignore[missing-attribute]
+            rc = entry.main(a, self.store, env=snapshot(), spawner=real_spawner(), git=port_git(), who=who())  # pyrefly: ignore[missing-attribute]
         last = json.loads(out.getvalue().strip().splitlines()[-1])
         return rc, json.loads(Path(outcome_file).read_text()), last
 
@@ -217,7 +218,7 @@ class Outcome(T.EngineTest):
         out = io.StringIO()
         with mock.patch.object(entry, "admit", return_value=(True, "")), mock.patch.object(entry, "Engine", made), \
                 contextlib.chdir(self.wt), redirect_stdout(out), mock.patch.object(signal, "signal"):  # pyrefly: ignore[missing-attribute]
-            entry.main(a, self.store, env=snapshot(), spawner=real_spawner())  # pyrefly: ignore[missing-attribute]
+            entry.main(a, self.store, env=snapshot(), spawner=real_spawner(), git=port_git(), who=who())  # pyrefly: ignore[missing-attribute]
         lines = out.getvalue().strip().splitlines()
         self.assertEqual(json.loads(lines[-1])["retry_after"], due)  # the loop reads the last line: still the outcome
         self.assertTrue(
@@ -521,8 +522,9 @@ class DelegateLauncher(T.EngineTest):
         self.assertAlmostEqual(self.eng.retry_after, due, delta=1)
 
     def test_close_with_an_empty_reason_still_closes(self):
-        c = wslots.load_cfg(str(self.wt))
-        eng = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(), git=port_git())
+        c = wslots.load_cfg(str(self.wt), port_git())
+        eng = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(),
+            git=port_git(), who=who())
         eng.closer.close(oc.make(Kind.FAULT_ENGINE))
         self.assertIn("stopped before a reason was recorded", self.said())  # a fault: the bead stays open, the comment says why
 
@@ -572,10 +574,10 @@ class DelegateLauncher(T.EngineTest):
         self.assertIn("contract_violation", self.said())
 
     def test_no_delegate_blocks_with_the_install_command(self):
-        c = wslots.load_cfg(str(self.wt))
+        c = wslots.load_cfg(str(self.wt), port_git())
         with mock.patch.object(dl, "resolve", return_value=dl.Refusal("not_installed")):
             rc = engine.Engine(
-                BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(), git=port_git()
+                BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(), git=port_git(), who=who()
             ).run()
         self.assertEqual(rc, 2)
         self.assertIn("claude plugin update iorlas-delegate", self.said())

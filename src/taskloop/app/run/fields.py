@@ -3,7 +3,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from taskloop.adapters import beadtools, ident
+from taskloop.adapters import beadtools
 from taskloop.adapters import delegate as dg
 from taskloop.adapters.threadflag import ThreadFlag
 from taskloop.app.run.state import Checkpoints, StateAttrs
@@ -11,6 +11,7 @@ from taskloop.contracts import fence
 from taskloop.contracts.checkpoint import Checkpoint, RunState
 from taskloop.contracts.checks import CheckRun
 from taskloop.contracts.config import EngineConfig
+from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.kinds import Kind
 from taskloop.contracts.review import Unfiled
@@ -23,16 +24,16 @@ class RunFields(StateAttrs):
     wall_hit = ThreadFlag()  # ...at its wall limit
 
     def __init__(self, bead: BeadId, wt: str, cfg: EngineConfig, dry_run: bool, verbose: bool, store: Any, route: Any,
-                 fresh: bool, claim: fence.Claim | None = None) -> None:
+                 fresh: bool, claim: fence.Claim | None, who: Identity) -> None:
         self.bead, self.cfg, self.dry, self.verbose = bead, cfg, dry_run, verbose
         self.claim = claim or fence.offline(bead)  # the run's right to act on its bead (app/track/fence.py); offline: nothing to check
         self.dead: Checkpoint | None = None  # a run died inside its close: its checkpoint, to finish that close (app/run/ended.py)
         self.fenced = ""  # why this run was fenced out (its bead or slot taken again), once it was
         self.wt: str = wt
-        self.store, self.router = store or beadtools.bd_store(), route
+        self.store, self.router = store or beadtools.bd_store(who.actor), route
         self.stats: dict[str, int] = {"writes": 0, "rounds": 0, "reviews": 0, "replans": 0, "nodes": 0, "tests_added": 0,
                                       "tests_removed": 0, "tokens_in": 0, "tokens_cached": 0, "tokens_out": 0}
-        self.session, self.fresh = ident.session_id(), fresh
+        self.session, self.fresh = who.session, fresh
         self.leftovers: list[dict[str, str]] = []
         self.bead_parent = ""  # tl-bxk.10.23
         self.look_filed = False

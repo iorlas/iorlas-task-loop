@@ -12,7 +12,6 @@ from taskloop.app.loop.versions import Installs
 from taskloop.app.release import catalog, pins, reexec
 from taskloop.app.slots import engine_lock
 from taskloop.app.track import trail
-from taskloop.contracts import env as penv
 from taskloop.contracts import log as rec
 from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.paths import ConfigDir, RunFiles
@@ -106,18 +105,17 @@ class Reload:
         if err:
             e.warn(f"not moving to task-loop {ver}: could not write the hand-over: {err}")
             return
-        trail.event("reload", e.bead, who="engine", old=here, new=ver, step=step, run=run, code_dir=str(d))
+        trail.event(e.who, "reload", e.bead, who="engine", old=here, new=ver, step=step, run=run, code_dir=str(d))
         e.log.note(f"moving to task-loop {ver} (was {here}) at {step}; run {run} goes on from its checkpoint")
         e.log.emit(rec.Reload(old=here, new=ver, step=step))
-        penv.export(EnvVar.TL_REEXEC, Reexec(run=run, bead=e.bead, frm=here, owned=RUN_SLOT["owned"]).text())
+        handed = childenv.exec_env(e.env, {EnvVar.TL_REEXEC: Reexec(run=run, bead=e.bead, frm=here, owned=RUN_SLOT["owned"]).text()})
         for f in (sys.stdout, sys.stderr):
             with contextlib.suppress(Exception):
                 f.flush()
         try:
-            (e.exec_fn or reexec.exec_in_place)([*childenv.script_argv(d / "skills" / "task-loop" / "tl.py", e.env), *argv])
+            (e.exec_fn or reexec.exec_in_place)([*childenv.script_argv(d / "skills" / "task-loop" / "tl.py", e.env), *argv], handed)
             e.moved = True
             raise Exec()  # reached only when the exec function is a test's
         except OSError as exc:  # exec itself failed: this version goes on where it is
-            penv.take(EnvVar.TL_REEXEC)
             reexec.drop_reexec(e.bead)
             e.warn(f"could not move to task-loop {ver}: {exc}")

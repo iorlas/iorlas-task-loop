@@ -17,6 +17,7 @@ from taskloop.contracts import (
     delegate,
     events,
     gitfacts,
+    identity,
     ids,
     landed,
     ledger,
@@ -354,6 +355,7 @@ OTHERS = {
     "Durations": checks.Durations(runs={"just fmt": [3.1, 2.9]}),
     "RunReport": OUTCOME,
     "LoopLogLine": run.LoopLogLine(ts="2026-10-15T10:00:00", bead=BeadId("tl-1"), slot="s1", outcome=Result.LANDED, run_log="/rl"),
+    "Identity": identity.Identity(actor="tl-abcdef12", session="abcdef12-0000"),
     "Reexec": run.Reexec(run=str(RUN), bead="tl-1", frm="0.23.56", owned="s1", fallback=True),
     "LoopState": loop.LoopState(
         pid=1789,

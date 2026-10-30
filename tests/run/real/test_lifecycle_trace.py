@@ -21,6 +21,7 @@ from taskloop.domain.report import matchers as lifecycle
 ROOT = te.ROOT
 from support.dashes import make_dash  # noqa: E402
 from support.spawn import port_git, real_spawner  # noqa: E402
+from support.who import who  # noqa: E402
 
 DASH = make_dash()
 
@@ -57,13 +58,12 @@ class TraceTelemetry(te.EngineTest):
         eng = engine.Engine(
             BeadId("t-1"),
             str(self.wt),
-            wslots.load_cfg(str(self.wt)),
+            wslots.load_cfg(str(self.wt), port_git()),
             verbose=False,
             store=self.store,
             env=snapshot(),
             spawner=real_spawner(),
-            git=port_git(),
-        )
+            git=port_git(), who=who())
         started = self.wt / "child-started"
         stop_waiting, delivered = threading.Event(), threading.Event()
 

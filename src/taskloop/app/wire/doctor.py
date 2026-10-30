@@ -4,12 +4,12 @@ from pathlib import Path
 
 from taskloop import contracts
 from taskloop.adapters.beadtools import bd_store
-from taskloop.adapters.git import REAL
 from taskloop.adapters.ident import config_dir
 from taskloop.app.doctor import profiles
 from taskloop.app.release import catalog, manifest
 from taskloop.app.wire.slots import cfg_source
 from taskloop.contracts.config import RepoProfile
+from taskloop.contracts.identity import Identity
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdFailure, BeadQuery, Beads, Git
 from taskloop.contracts.slots import SlotGitError
@@ -20,7 +20,7 @@ from taskloop.domain.checks.inputs import dead_globs
 Source = tuple[RepoProfile, str, str]
 
 
-def git_warnings(repo: str, source: Source | None = None, git: Git = REAL) -> list[str]:
+def git_warnings(repo: str, source: Source | None, git: Git) -> list[str]:
     """What is off in the repo's git setup for slots (tl-bxk.10.12) and in the globs of its checks."""
     out: list[str] = []
     if git.config_get(repo, "extensions.worktreeConfig").lower() != "true":
@@ -44,10 +44,10 @@ def git_warnings(repo: str, source: Source | None = None, git: Git = REAL) -> li
     return out
 
 
-def bead_lint_warnings(repo: str, store: Beads | None = None) -> list[str]:
+def bead_lint_warnings(repo: str, who: Identity, store: Beads | None = None) -> list[str]:
     """tl-f52: one line per open bead whose text cites material outside the repo (beadlint). [] when bd cannot be read."""
     try:
-        beads = (store or bd_store(repo)).find(BeadQuery(status="open"))
+        beads = (store or bd_store(who.actor, repo)).find(BeadQuery(status="open"))
     except (SystemExit, OSError, BdFailure):
         return []
     out: list[str] = []
@@ -82,15 +82,15 @@ def install_problems(plugin_root: Path) -> list[str]:
     return out
 
 
-def run(plugin_root: Path) -> int:
-    repo = REAL.toplevel(".") or os.getcwd()
-    if profiles.report(repo, ReposStore(ConfigDir(config_dir()))):  # a bad profile is a red row of its repo, not a traceback
+def run(plugin_root: Path, git: Git, who: Identity) -> int:
+    repo = git.toplevel(".") or os.getcwd()
+    if profiles.report(git, repo, ReposStore(ConfigDir(config_dir()))):  # a bad profile is a red row of its repo, not a traceback
         return 1
-    source = cfg_source(repo)
+    source = cfg_source(repo, git)
     _, base, commit = source
     print(f"config: .task-loop.json from base {base} at commit {commit}" if commit else
           f"config: .task-loop.json from working tree {repo} (base {base} unresolved; no commit read)")
-    warns = git_warnings(repo, source) + bead_lint_warnings(repo)
+    warns = git_warnings(repo, source, git) + bead_lint_warnings(repo, who)
     print(f"contracts: {Path(contracts.__file__).resolve().parent}")
     for w in warns:
         print("WARN " + w)

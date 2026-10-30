@@ -9,9 +9,9 @@ import subprocess
 from contextlib import contextmanager
 from unittest import mock
 
+from support.who import acting, who
 from taskloop.adapters import bd
 from taskloop.adapters.bd import BdRun, BdStore
-from taskloop.adapters.ident import actor
 
 
 def done(stdout="", returncode=0, stderr=""):
@@ -19,12 +19,13 @@ def done(stdout="", returncode=0, stderr=""):
 
 
 def argv_store(fn, cwd=None):
-    """A BdStore (the actor ident.actor() names) whose bd process is `fn(*args, cwd=...)`: `args` without the actor and the final --json."""
+    """A BdStore (the actor who().actor names) whose bd process is `fn(*args, cwd=...)`: `args` without the actor and the final --json."""
     def run(argv, where):
         args = tuple(argv[3:-1] if argv[-1] == "--json" else argv[3:])
-        r = fn(*args, cwd=where)
+        with acting(argv[2]):
+            r = fn(*args, cwd=where)
         return BdRun(r.returncode, r.stdout or "", r.stderr or "")
-    return BdStore(actor(), cwd, run=run)
+    return BdStore(who().actor, cwd, run=run)
 
 
 @contextmanager
@@ -37,7 +38,8 @@ def bd_boundary(fn=None, result=None):
     def run(argv, cwd, timeout=None):
         args = tuple(argv[3:-1] if argv[-1] == "--json" else argv[3:])
         calls.append(args)
-        r = fn(*args, cwd=cwd)
+        with acting(argv[2]):
+            r = fn(*args, cwd=cwd)
         return BdRun(r.returncode, r.stdout or "", r.stderr or "")
     with mock.patch.object(bd, "subprocess_runner", side_effect=run) as m:
         m.calls = calls

@@ -5,7 +5,6 @@ import shutil
 from pathlib import Path
 from typing import Any
 
-from taskloop.adapters.git import REAL
 from taskloop.contracts.paths import TASK_EXCLUDE
 from taskloop.contracts.ports import Git
 from taskloop.domain.look.matchers import writer_names
@@ -13,7 +12,7 @@ from taskloop.domain.prompts.review import NEW_FILES_TEXT
 
 
 class NewFiles:
-    def __init__(self, host: Any, git: Git = REAL) -> None:
+    def __init__(self, host: Any, git: Git) -> None:
         self.e = host
         self.git = git
 

@@ -9,6 +9,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
+from support.spawn import port_git
 
 from taskloop.app.look import keep, shots
 
@@ -120,15 +121,15 @@ class PicturesKeepOnce(unittest.TestCase):
         for run in ("x-1-1", "x-1-2"):
             host = Host(self.root, run)
             host.evidence_dir.parent.joinpath("evidence").mkdir(parents=True, exist_ok=True)
-            shots.Pictures(host).keep_picture(src, [], self.root / "base")
+            shots.Pictures(host, port_git()).keep_picture(src, [], self.root / "base")
             (host.run_dir / "evidence").mkdir(parents=True, exist_ok=True)
-            self.assertEqual(len(shots.Pictures(host).keep_evidence()), 1)
+            self.assertEqual(len(shots.Pictures(host, port_git()).keep_evidence()), 1)
         first, second = (self.root / "runs" / r / "evidence" / "a.png" for r in ("x-1-1", "x-1-2"))
         self.assertEqual(os.stat(first).st_ino, os.stat(second).st_ino)
 
     def test_over_the_cap_the_picture_is_dropped_and_the_log_counts_it(self):
         host = Host(self.root, "x-1-1", cap_mb=0)
-        pics = shots.Pictures(host)
+        pics = shots.Pictures(host, port_git())
         pics.keep_picture(png(self.root / "raw" / "a.png", b"P" * 10), [], self.root / "base")
         self.assertFalse((host.evidence_dir / "a.png").exists())
         self.assertEqual(len(host.notes), 1)

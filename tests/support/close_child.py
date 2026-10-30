@@ -16,6 +16,7 @@ import support.paths  # noqa: F401
 # isort: split
 from support.fakes import FakeBeadStore
 from support.spawn import port_git, real_spawner
+from support.who import who
 from taskloop.app.run import engine
 from taskloop.app.run.closer import Closer
 from taskloop.app.wire import slots as wslots
@@ -49,12 +50,11 @@ def main(argv: list[str]) -> None:
     eng = engine.Engine(
         BeadId("t-1"),
         os.environ["CLOSE_WT"],
-        wslots.load_cfg(os.environ["CLOSE_WT"]),
+        wslots.load_cfg(os.environ["CLOSE_WT"], port_git()),
         store=store,
         env=snapshot(),
         spawner=real_spawner(),
-        git=port_git(),
-    )
+        git=port_git(), who=who())
     real = Closer.apply
 
     def apply(self, eff, *a):

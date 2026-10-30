@@ -9,7 +9,8 @@ import support.paths  # noqa: F401
 from support import (
     looptest,
 )
-from support.spawn import real_spawner
+from support.spawn import port_git, real_spawner
+from support.who import who
 
 from loop.test_loop import LoopBase
 from taskloop.cli import loop_cmd
@@ -78,7 +79,7 @@ class StopRequestsLogic(LoopBase):
         def stop():
             attempted.set()
             try:
-                loop_cmd.cmd_stop(mock.Mock(repo=self.repo_s, now=True), snapshot(), spawner=real_spawner())
+                loop_cmd.cmd_stop(mock.Mock(repo=self.repo_s, now=True), snapshot(), spawner=real_spawner(), git=port_git(), who=who())
             except Exception as e:
                 errors.append(e)
             finally:

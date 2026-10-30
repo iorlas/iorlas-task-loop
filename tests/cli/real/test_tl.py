@@ -28,6 +28,7 @@ from support import (  # noqa: E402
     tlbd,
 )
 from support.engine_locks import put_lock  # noqa: E402
+from support.spawn import port_git  # noqa: E402
 from support.tlmain import tl_main  # noqa: E402
 
 from taskloop.adapters import (  # noqa: E402
@@ -229,8 +230,8 @@ class SlotReset(Base):
         self.assertEqual((self.slot / "work.txt").read_text(), "reviewed work\n")
 
     def test_loop_folders_are_excluded_from_git_add(self):
-        wslots.exclude_local(str(self.repo), ".slots/", ".task/")
-        wslots.exclude_local(str(self.repo), ".slots/")
+        wslots.exclude_local(port_git(),str(self.repo), ".slots/", ".task/")
+        wslots.exclude_local(port_git(),str(self.repo), ".slots/")
         exclude = (self.repo / ".git" / "info" / "exclude").read_text()
         self.assertEqual(exclude.split().count(".slots/"), 1)
         self.assertNotIn(".slots", gitq.git("status", "--porcelain", "--untracked-files=all", cwd=str(self.repo)))

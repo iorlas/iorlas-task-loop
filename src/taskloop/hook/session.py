@@ -4,35 +4,43 @@ import json
 import time
 from pathlib import Path
 
-from taskloop.app.wire import handoff
+from taskloop.app.wire import handoff, real
 from taskloop.app.wire import hook as index
+from taskloop.contracts.env import snapshot
+from taskloop.contracts.ports import Git
 
 
 def context_out(text: str) -> str:
     return json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": text}}) if text else ""
 
 
-def start(stdin_text: str, plugin_root: Path) -> str:
+def start(stdin_text: str, plugin_root: Path, git: Git) -> str:
     """Never fails the session. After a compaction (source "compact") the stdout carries the handoff as added context."""
     index.session_start(stdin_text)
     index.write_shim(plugin_root)
     try:
         data = json.loads(stdin_text or "{}")
         if data.get("source") == "compact":
-            repo = index.repo_of(data)
+            repo = index.repo_of(git, data)
             return context_out(handoff.read(repo) if repo else "")
     except (ValueError, AttributeError, OSError):
         pass
     return ""
 
 
-def precompact(stdin_text: str, plugin_root: Path) -> str:
+def precompact(stdin_text: str, plugin_root: Path, git: Git) -> str:
     """Write the repo's handoff. Slots are left out of this one (a bd call): the status shows them."""
     try:
-        repo = index.repo_of(json.loads(stdin_text or "{}"))
+        repo = index.repo_of(git, json.loads(stdin_text or "{}"))
         if repo:
-            handoff.write(repo, plugin_root, time.time(), with_slots=False)
+            handoff.write(repo, plugin_root, time.time(), who=None)
     except (ValueError, AttributeError, OSError, SystemExit):
         pass
     return ""
 
+
+
+def entry(event: str, stdin_text: str, plugin_root: Path) -> str:
+    """The session hooks' edge: the real Git port on this process's environment, handed down."""
+    git = real.git(snapshot())
+    return (start if event == "session-start" else precompact)(stdin_text, plugin_root, git)

@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Any
 
 from taskloop.adapters import ident, looks
-from taskloop.adapters.git import REAL
 from taskloop.app.look.keep import Keeper, place
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.log import Artifacts
@@ -28,7 +27,7 @@ def visual_hit(vp: Any, paths: Any) -> bool:
 
 
 class Pictures:
-    def __init__(self, host: Any, git: Git = REAL) -> None:
+    def __init__(self, host: Any, git: Git) -> None:
         self.e = host
         self.git = git
         self.kept: Keeper | None = None

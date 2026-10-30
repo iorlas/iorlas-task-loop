@@ -5,7 +5,7 @@ import time
 from collections.abc import Sequence
 
 from taskloop.adapters import applog, ident
-from taskloop.contracts import env as penv
+from taskloop.contracts.env import Env
 from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.paths import ConfigDir, RunFiles
@@ -49,9 +49,10 @@ def take_net_pause(bead: BeadId) -> NetPause | None:
     return note if RunFiles(cfg().run_dir(note.run)).pause().is_file() else None
 
 
-def take_reexec() -> Reexec | None:
-    """The hand-over an exec'd (or fallback) run-task finds in TL_REEXEC, taken once; None on a normal start."""
-    return Reexec.parse(penv.take(EnvVar.TL_REEXEC))
+def take_reexec(env: Env) -> Reexec | None:
+    """The hand-over an exec'd (or fallback) run-task finds in TL_REEXEC of `env`; None on a normal start. No child is handed it
+    (childenv.tool_env)."""
+    return Reexec.parse(env.get(EnvVar.TL_REEXEC))
 
 
 def reexec_args(argv: Sequence[str], slot: str, wt: object) -> list[str] | None:
@@ -73,6 +74,7 @@ def reexec_args(argv: Sequence[str], slot: str, wt: object) -> list[str] | None:
     return out + (["--slot", slot] if slot else []) + ["--worktree", str(wt)]
 
 
-def exec_in_place(argv: list[str]) -> None:
+def exec_in_place(argv: list[str], environ: dict[str, str]) -> None:
+    """Replace this process with `argv` under `environ` (childenv.exec_env: the whole environment plus the hand-over)."""
     applog.close_all()
-    os.execv(argv[0], argv)
+    os.execve(argv[0], argv, environ)

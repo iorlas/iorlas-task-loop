@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: E402, F401
 from support import tlbd  # noqa: E402
+from support.who import who  # noqa: E402
 
 from taskloop.app.wire import doctor  # noqa: E402
 
@@ -33,6 +34,6 @@ class DoctorBeads(unittest.TestCase):
                  {"id": "x-4", "acceptance_criteria": "matches 79-test-impact-and-land-gate.md"},
                  {"id": "x-5", "issue_type": "epic", "description": "study 49"}]
         with mock.patch.dict(os.environ, {"TASK_LOOP_ACTOR": "tl-test"}), tlbd.bd_boundary(result=tlbd.done(json.dumps(beads))):
-            out = doctor.bead_lint_warnings("/work/repo")
+            out = doctor.bead_lint_warnings("/work/repo", who())
         self.assertEqual([w.split(":")[0] for w in out], ["bead x-1", "bead x-4"])
         self.assertTrue(all("needs inlined facts" in w for w in out))

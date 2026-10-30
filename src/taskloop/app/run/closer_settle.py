@@ -7,6 +7,7 @@ from taskloop.adapters import beadtools, ident
 from taskloop.app.asks import parks
 from taskloop.app.track import verbs as track
 from taskloop.contracts import fence
+from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.kinds import Infra, Kind, Owner, Task
 from taskloop.contracts.paths import ConfigDir
@@ -30,6 +31,8 @@ class SettleHost(Protocol):
     @property
     def store(self) -> Beads: ...
     @property
+    def who(self) -> Identity: ...
+    @property
     def cfg(self) -> SettleConfig: ...
     @property
     def log_path(self) -> Path: ...
@@ -51,14 +54,15 @@ class Settle:
         match done.fault:
             case None if done.kind is Kind.LANDED:
                 base = e.cfg.base.split("/")[-1]
-                rc = track.close_as(e.claim, f"merged {done.sha[:12]} to {base}: {summary or 'the task stages passed'}; {stats}", e.store)
+                rc = track.close_as(e.who, e.claim, f"merged {done.sha[:12]} to {base}: {summary or 'the task stages passed'}; {stats}",
+                    e.store)
             case None:
-                rc = track.close_as(e.claim, "done with nothing to land: " + (summary or stats), e.store)
+                rc = track.close_as(e.who, e.claim, "done with nothing to land: " + (summary or stats), e.store)
             case Infra() | Owner():  # a machine fault, a pause or the owner's hold: the bead stays open, unassigned
                 rc = self.leave_open(done.kind, done.detail)
             case Task():
                 q = ("\n\nQuestion: " + done.spec.decision) if done.spec else ""
-                rc = track.block_as(e.claim, done.detail + q, e.store, e.comment)
+                rc = track.block_as(e.who, e.claim, done.detail + q, e.store, e.comment)
             case fault:
                 assert_never(fault)
         if bead := beadtools.peek(e.store, e.bead):  # the text this run ended on: the next run of it is judged against it (tl-7y6.7.3)

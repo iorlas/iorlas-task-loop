@@ -25,6 +25,7 @@ from support import engine_case as te  # noqa: E402
 from support.builders import make_engine  # noqa: E402
 from support.fakes import FakeBeadStore  # noqa: E402
 from support.spawn import port_git, real_spawner  # noqa: E402
+from support.who import who  # noqa: E402
 
 from taskloop.adapters import delegate as dl  # noqa: E402
 from taskloop.adapters import (  # noqa: E402
@@ -114,7 +115,8 @@ class SlotGitTest(unittest.TestCase):
     def test_core_bare_true_stops_the_run_too(self):
         sh("git", "config", "core.bare", "true", cwd=self.repo)
         eng = engine.Engine(
-            BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), env=snapshot(), spawner=real_spawner(), git=port_git()
+            BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt), port_git()), env=snapshot(), spawner=real_spawner(),
+                git=port_git(), who=who()
         )
         with self.assertRaises(engine.Blocked) as cm:
             eng.assert_tree("write")
@@ -122,14 +124,16 @@ class SlotGitTest(unittest.TestCase):
 
     def test_a_clean_slot_passes_the_tree_assert(self):
         eng = engine.Engine(
-            BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), env=snapshot(), spawner=real_spawner(), git=port_git()
+            BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt), port_git()), env=snapshot(), spawner=real_spawner(),
+                git=port_git(), who=who()
         )
         eng.assert_tree("plan")
 
     def test_pinned_git_stays_in_the_slot_whatever_the_shared_config_says(self):
         self.plant_decoy()
         eng = engine.Engine(
-            BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), env=snapshot(), spawner=real_spawner(), git=port_git()
+            BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt), port_git()), env=snapshot(), spawner=real_spawner(),
+                git=port_git(), who=who()
         )
         self.assertEqual(os.path.realpath(eng.git.toplevel(str(self.wt))), str(self.wt))
         (self.wt / "f.txt").write_text("f\n")
@@ -141,7 +145,8 @@ class SlotGitTest(unittest.TestCase):
 
     def test_stage_all_takes_only_the_slots_status_paths_deletions_and_untracked_included(self):
         eng = engine.Engine(
-            BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), env=snapshot(), spawner=real_spawner(), git=port_git()
+            BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt), port_git()), env=snapshot(), spawner=real_spawner(),
+                git=port_git(), who=who()
         )
         (self.wt / "a.txt").unlink()
         (self.wt / "new file.txt").write_text("n\n")
@@ -171,7 +176,8 @@ class SlotGitTest(unittest.TestCase):
                 timeout_s=30,
             )
             eng = engine.Engine(
-                BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), env=snapshot(), spawner=real_spawner(), git=port_git()
+                BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt), port_git()), env=snapshot(), spawner=real_spawner(),
+                    git=port_git(), who=who()
             )
             rc, tail = eng.sh([show])
             self.assertEqual(r.data["env"], [])
@@ -191,7 +197,8 @@ class SlotGitTest(unittest.TestCase):
         sh("git", "commit", "-qm", "o", cwd=other)
         sha = sh("git", "rev-parse", "HEAD", cwd=other)
         eng = engine.Engine(
-            BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt)), env=snapshot(), spawner=real_spawner(), git=port_git()
+            BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt), port_git()), env=snapshot(), spawner=real_spawner(),
+                git=port_git(), who=who()
         )
         rc, tail = eng.sh(["git", "-C", str(other), "rev-parse", "HEAD"])
         self.assertEqual((rc, tail), (0, sha))
@@ -233,9 +240,9 @@ class SlotGitTest(unittest.TestCase):
         self.assertTrue(gitrepo.same_dir(link / "nope", self.wt / "nope"))
 
     def test_doctor_warns_when_worktree_config_is_off(self):
-        self.assertTrue(any("extensions.worktreeConfig" in w for w in doctor.git_warnings(str(self.repo))))
+        self.assertTrue(any("extensions.worktreeConfig" in w for w in doctor.git_warnings(str(self.repo), None, port_git())))
         sh("git", "config", "extensions.worktreeConfig", "true", cwd=self.repo)
-        self.assertEqual(doctor.git_warnings(str(self.repo)), [])
+        self.assertEqual(doctor.git_warnings(str(self.repo), None, port_git()), [])
 
 
 if __name__ == "__main__":

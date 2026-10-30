@@ -10,6 +10,7 @@ from unittest import mock
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support.builders import cfg_with
 from support.spawn import port_git, real_spawner
+from support.who import who
 
 from taskloop.adapters import (
     applog,
@@ -92,7 +93,7 @@ class WiringTest(unittest.TestCase):
         self.addCleanup(env.stop)
 
     def test_engine_log_is_one_typed_line_per_record_readable_at_once(self):
-        eng = engine.Engine(BeadId("t-1"), self.tmp.name, cfg_with(), env=snapshot(), spawner=real_spawner(), git=port_git())
+        eng = engine.Engine(BeadId("t-1"), self.tmp.name, cfg_with(), env=snapshot(), spawner=real_spawner(), git=port_git(), who=who())
         with mock.patch.object(engine, "say"):
             for i in range(1000):
                 eng.log.note(f"line {i}")
@@ -103,17 +104,17 @@ class WiringTest(unittest.TestCase):
 
     def test_exec_in_place_closes_every_handle_first(self):
         applog.append(Path(self.tmp.name) / "x.log", "x\n")
-        with mock.patch.object(os, "execv", side_effect=lambda *a: self.assertEqual(applog.open_count(), 0)):
-            reexec.exec_in_place(["x"])
+        with mock.patch.object(os, "execve", side_effect=lambda *a: self.assertEqual(applog.open_count(), 0)):
+            reexec.exec_in_place(["x"], {})
 
     def test_tl_event_keeps_one_handle_for_events_jsonl_and_flushes_each_line(self):
         path = ident.config_dir() / "events.jsonl"
         path.parent.mkdir(parents=True, exist_ok=True)
-        trail.event("stage", "b-1", repo=self.tmp.name)  # a given repo: no git to ask (its answer is memoized by earlier tests)
+        trail.event(who(), "stage", "b-1", repo=self.tmp.name)  # a given repo: no git to ask (its answer is memoized by earlier tests)
         with open(path, encoding="utf-8") as reader:
             self.assertEqual(json.loads(reader.readline())["kind"], "stage")
             for i in range(100):
-                trail.event("stage", "b-1", repo=self.tmp.name, text=str(i))
+                trail.event(who(), "stage", "b-1", repo=self.tmp.name, text=str(i))
                 self.assertEqual(json.loads(reader.readline())["text"], str(i))
         lines = path.read_text(encoding="utf-8").splitlines()
         self.assertEqual(len(lines), 101)

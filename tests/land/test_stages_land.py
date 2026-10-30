@@ -24,6 +24,7 @@ from support.checks import typed
 from support.engine_case import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, engine, lint, real_git, real_proc  # noqa: F401
 from support.pushsim import pusher
 from support.spawn import port_git, real_spawner
+from support.who import who
 
 from taskloop.adapters import (
     bd,
@@ -112,12 +113,11 @@ class StaleTree(StagesTest):
         e = engine.Engine(
             BeadId("t-1"),
             str(self.wt),
-            wslots.load_cfg(str(self.wt)),
+            wslots.load_cfg(str(self.wt), port_git()),
             store=self.store,
             env=snapshot(),
             spawner=real_spawner(),
-            git=port_git(),
-        )
+            git=port_git(), who=who())
         self.junk_and_moving_main()
         (self.wt / "a.txt").write_text("edited and not committed\n")
         self.assertEqual(e.rebase.onto_base(), "")
@@ -156,12 +156,11 @@ class StaleTree(StagesTest):
         e = engine.Engine(
             BeadId("t-1"),
             str(self.wt),
-            wslots.load_cfg(str(self.wt)),
+            wslots.load_cfg(str(self.wt), port_git()),
             store=self.store,
             env=snapshot(),
             spawner=real_spawner(),
-            git=port_git(),
-        )
+            git=port_git(), who=who())
         before = gitq.git("rev-parse", "HEAD", cwd=e.wt)
         (self.wt / "g.txt").write_text("more work\n")
         te.sh("git", "commit", "-qam", "wip (t-1): blocked", cwd=self.wt)  # what reset() does with a dirty tree
@@ -213,12 +212,11 @@ class SlotHygiene(StagesTest):
         e = engine.Engine(
             BeadId("t-1"),
             str(self.wt),
-            wslots.load_cfg(str(self.wt)),
+            wslots.load_cfg(str(self.wt), port_git()),
             store=self.store,
             env=snapshot(),
             spawner=real_spawner(),
-            git=port_git(),
-        )
+            git=port_git(), who=who())
         self.assertEqual(e.checkout.dirty_status(), "")
         self.assertIn("?? client/", gitq.git("status", "--porcelain", cwd=e.wt))  # git alone calls it dirty: the old tree has no such rule
         Path(self.wt, "client/keep.log").write_text("real\n")  # negated by the base: real work
@@ -460,9 +458,9 @@ class Contracts(StagesTest):
             )
 
         with tlbd.bd_boundary(fake_bd):
-            closed = wasks.sweep("close", every=0)
+            closed = wasks.sweep("close", who(), every=0)
             self.assertEqual(sorted(closed), ["b-closed", "b-gone"])
-            self.assertEqual(wasks.sweep("close"), [])  # throttled
+            self.assertEqual(wasks.sweep("close", who()), [])  # throttled
         self.assertEqual(
             [c[0][0] for c in calls].count("list"), 2
         )  # one list per repo, not one read per ask (a show only for an absent id)
@@ -527,7 +525,7 @@ class ClaimPerBead(StagesTest):
 
     def admit_when(self, bead, running):
         with self.store.stub(show=bead), mock.patch.object(wrunning, "running", return_value=running), self.store.stub(comments=[]):
-            return entry.admit("o67g", str(self.wt), store=self.store)
+            return entry.admit("o67g", str(self.wt), port_git(), who(), store=self.store)
 
     BEAD: ClassVar[Any] = {
         "id": "o67g",
@@ -552,7 +550,7 @@ class ClaimPerBead(StagesTest):
         cs = [{"author": "tl-x", "text": "Blocked: stuck", "created_at": "2026-10-25T10:00:00Z"}]
         with self.store.stub(show=blocked), mock.patch.object(wrunning, "running", return_value={}), self.store.stub(comments=cs), \
                 self.store.stub(bd_fn=lambda *a, **k: mock.Mock(returncode=1)):
-            ok, why = entry.admit("o67g", str(self.wt), store=self.store)
+            ok, why = entry.admit("o67g", str(self.wt), port_git(), who(), store=self.store)
         self.assertFalse(ok)
         self.assertIn("changed hands", why)
 

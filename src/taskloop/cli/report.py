@@ -12,8 +12,9 @@ from taskloop.app.report import card as cards
 from taskloop.app.report import planner, reflect
 from taskloop.app.report.inputs import bead_status, prefix, repo_traces
 from taskloop.app.report.window import digest_time, since_of, window
-from taskloop.app.wire import real
 from taskloop.contracts.env import Env
+from taskloop.contracts.identity import Identity
+from taskloop.contracts.ports import Git
 
 
 def stamp(t: float) -> str:
@@ -75,7 +76,7 @@ def print_card(c: dict[str, Any]) -> None:
     print("M2 {}{}".format("PASS" if c["m2"]["pass"] else "FAIL", ": " + "; ".join(bad) if bad else ""))
 
 
-def cmd_report(a: Any, env: Env) -> int:
+def cmd_report(a: Any, env: Env, git: Git, who: Identity) -> int:
     since, until = window(getattr(a, "since", None), getattr(a, "until", None), time.time())
     if getattr(a, "planner", False):
         pre = {x.strip() for x in (getattr(a, "prefix", "") or "").split(",") if x.strip()}
@@ -86,7 +87,7 @@ def cmd_report(a: Any, env: Env) -> int:
             print_planner(p)
         return 0
     repo = repos.repo_root(a.repo)
-    c = cards.scorecard(repo, since, until, base=repos.default_base(repo), git=real.git(env))
+    c = cards.scorecard(repo, since, until, base=repos.default_base(repo, git), git=git, who=who)
     c["planner"] = planner.planner_stats(since, until, {prefix(x["bead"]) for x in c["per_bead"]})
     if a.json:
         print(json.dumps(c, indent=1, ensure_ascii=False))
@@ -95,11 +96,11 @@ def cmd_report(a: Any, env: Env) -> int:
     return 0 if c["m2"]["pass"] else 1
 
 
-def cmd_lost(a: Any, env: Env) -> int:
+def cmd_lost(a: Any, env: Env, git: Git, who: Identity) -> int:
     repo = repos.repo_root(a.repo)
     since = since_of(a.since, time.time())
-    git = real.git(env)
-    rows = lostwork.lost_work(repo, repos.default_base(repo), lambda b: bead_status(b, repo), repo_traces(repo, git).runs, git, since=since)
+    rows = lostwork.lost_work(repo, repos.default_base(repo, git), lambda b: bead_status(b, repo, who), repo_traces(repo, git).runs, git,
+        since=since)
     if a.json:
         print(json.dumps(rows, indent=1, ensure_ascii=False))
     else:
@@ -156,7 +157,7 @@ def print_planner(p: dict[str, Any]) -> None:
 
 
 
-def cmd_reflect(a: Any) -> int:
+def cmd_reflect(a: Any, env: Env, git: Git, who: Identity) -> int:
     now = time.time()
 
     def at(text: str | None, default: float) -> float:
@@ -165,7 +166,7 @@ def cmd_reflect(a: Any) -> int:
     st = reflect.read_state()
     last = float(st.get("until") or 0) or now - reflect.DAY  # the last digest's end, 3 days back at most
     since = at(a.since, max(now - 3 * reflect.DAY, last))
-    d = reflect.digest(since, at(a.until, now), dry=a.dry_run)
+    d = reflect.digest(who, since, at(a.until, now), dry=a.dry_run)
     if not a.dry_run and not a.since and not d.get("busy"):
         st = reflect.read_state()
         st["until"] = now

@@ -5,65 +5,65 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from taskloop.adapters.beadtools import attempt, bd_store, peek
-from taskloop.adapters.git import REAL
+from taskloop.adapters.bd import BdStore
+from taskloop.adapters.beadtools import attempt, peek
 from taskloop.adapters.gitrepo import repo_root
-from taskloop.adapters.ident import actor, config_dir, session_id
+from taskloop.adapters.ident import config_dir
 from taskloop.adapters.opencode import transcript_of
 from taskloop.app.track.trail import event, provenance, prune_events, register_repo
 from taskloop.contracts import fence
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.env import Env
+from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdFailure, BeadPatch, Beads, Git
 
 
-def claim(bead: BeadId, worktree: str | None = None, slot: str | None = None, store: Beads | None = None, git: Git = REAL) -> int:
-    st = store or bd_store()
+def claim(who: Identity, bead: BeadId, store: Beads, git: Git, worktree: str | None = None, slot: str | None = None) -> int:
+    st = store
     if not st.claim(bead):
         print("TAKEN")
         return 1
     b = peek(st, bead) or Bead(id=bead, title="", status="")
-    if b.assignee not in ("", actor()):
+    if b.assignee not in ("", who.actor):
         print("TAKEN by " + b.assignee)
         return 1
     wt = str(Path(worktree).resolve()) if worktree else git.toplevel(".")
     branch = b.metadata.get("branch") or "task/" + bead
     attempt(st.update, bead, BeadPatch(set_metadata=dict({"branch": branch}, **({"slot": slot} if slot else {}))))
-    event("claim", bead, worktree=wt, branch=branch, title=b.title, slot=slot)
-    provenance(bead, "claim", session_id() or actor(), "transcript" if session_id() else "work-id",
-               {"worktree": wt, "actor": actor(), "slot": slot}, store=st)
+    event(who, "claim", bead, worktree=wt, branch=branch, title=b.title, slot=slot)
+    provenance(st, bead, "claim", who.session or who.actor, "transcript" if who.session else "work-id",
+               {"worktree": wt, "actor": who.actor, "slot": slot})
     print("CLAIMED " + bead + " branch=" + branch)
     return 0
 
 
-def land(bead: BeadId, sha: str, worktree: str | None = None, store: Beads | None = None, base: str | None = None,
-         claim: fence.Claim | None = None, git: Git = REAL) -> int:
+def land(who: Identity, bead: BeadId, sha: str, store: Beads, git: Git, worktree: str | None = None, base: str | None = None,
+         claim: fence.Claim | None = None) -> int:
     """Record a land. With `base`, provenance gets the sha only once it is an ancestor of that base: a sha that never reached it
     is no land (the event stays, as what was claimed). An engine run passes its claim and a stale one is refused; `tl land` by hand
     passes none."""
-    st = store or bd_store()
+    st = store
     if claim is not None and (why := fence.stale(st, claim)):
         sys.stderr.write(f"fenced: land of {bead} not recorded: {why}\n")
         return 1
     where = worktree or "."
     full = git.rev_parse(where, sha + "^{commit}") or sha
-    event("land", bead, sha=full)
+    event(who, "land", bead, sha=full)
     if base and not git.is_ancestor(where, full, base):
         sys.stderr.write(f"{bead}: {full[:12]} is not on {base}: no land recorded in provenance\n")
         return 1
-    provenance(bead, "land", full, "git-sha", store=store)
+    provenance(st, bead, "land", full, "git-sha")
     return 0
 
 
-def close(bead: BeadId, reason: str | None = None, store: Beads | None = None) -> int:
+def close(who: Identity, bead: BeadId, store: Beads, reason: str | None = None) -> int:
     """`tl close`: a person's close, under the claim they hold on the bead now."""
-    st = store or bd_store()
-    return close_as(fence.hand(st, bead, actor()), reason, st)
+    return close_as(who, fence.hand(store, bead, who.actor), reason, store)
 
 
-def close_as(claim: fence.Claim, reason: str | None, store: Beads) -> int:
+def close_as(who: Identity, claim: fence.Claim, reason: str | None, store: Beads) -> int:
     """Close the bead the claim is for; a stale claim (its bead or slot was taken again) is refused, and so is a bead whose assignee is
     no longer the claim's actor (bd checks that atomically)."""
     bead = claim.bead
@@ -76,18 +76,17 @@ def close_as(claim: fence.Claim, reason: str | None, store: Beads) -> int:
     except BdFailure as e:
         sys.stderr.write(e.error.text + "\n")
         return 1
-    event("close", bead, reason=reason)
+    event(who, "close", bead, reason=reason)
     prune_events()
     return 0
 
 
-def block(bead: BeadId, why: str, store: Beads | None = None, say: Callable[[str], None] | None = None) -> int:
+def block(who: Identity, bead: BeadId, why: str, store: Beads, say: Callable[[str], None] | None = None) -> int:
     """`tl block`: a person's block, under the claim they hold on the bead now."""
-    st = store or bd_store()
-    return block_as(fence.hand(st, bead, actor()), why, st, say)
+    return block_as(who, fence.hand(store, bead, who.actor), why, store, say)
 
 
-def block_as(claim: fence.Claim, why: str, st: Beads, say: Callable[[str], None] | None = None) -> int:
+def block_as(who: Identity, claim: fence.Claim, why: str, st: Beads, say: Callable[[str], None] | None = None) -> int:
     """The bead blocked on the owner; `say` posts its comment (an engine run passes its own poster, Engine.comment). A stale claim is
     refused."""
     # tl-159: a parked bead lets go of its claim; the actor that held it stays live (a loop holds other beads), and a claim nobody works on
@@ -107,20 +106,20 @@ def block_as(claim: fence.Claim, why: str, st: Beads, say: Callable[[str], None]
         say("Blocked: " + why)
     else:
         attempt(st.add_comment, bead, "Blocked: " + why)
-    event("block", bead, why=why)
-    provenance(bead, "suspend", session_id() or actor(), "transcript", {"why": why}, store=st)
+    event(who, "block", bead, why=why)
+    provenance(st, bead, "suspend", who.session or who.actor, "transcript", {"why": why})
     return 0
 
 
-def passthrough(rest: list[str]) -> int:
+def passthrough(store: BdStore, rest: list[str]) -> int:
     """`tl bd ...`: bd with this session's actor and --json, through the adapter."""
-    r = bd_store().passthrough(rest)
+    r = store.passthrough(rest)
     sys.stdout.write(r.out)
     sys.stderr.write(r.err)
     return r.code
 
 
-def register(directory: str, git: Git = REAL) -> int:
+def register(git: Git, directory: str) -> int:
     """`tl register [DIR]`: add the repo of a working directory to the dashboard."""
     try:
         path = repo_root(directory) if git.toplevel(directory) else None

@@ -24,6 +24,7 @@ from support.fakes import (
     must_bead,
 )
 from support.spawn import port_git, real_spawner
+from support.who import who
 
 from run.test_stages import StagesTest
 from taskloop.adapters import ident
@@ -223,13 +224,15 @@ class VisualWork(StagesTest):
 
     def test_the_table_is_read_from_the_base_branch_not_the_working_copy(self):
         (self.wt / "shots.json").write_text(json.dumps({"v": 1, "methods": [{"method": "Evil", "argv": ["touch", "pwned"]}]}))
-        cfg = cfg_with(wslots.load_cfg(str(self.wt)), shot_table="shots.json")
-        e = engine.Engine(BeadId("t-1"), str(self.wt), cfg, store=self.store, env=snapshot(), spawner=real_spawner(), git=port_git())
+        cfg = cfg_with(wslots.load_cfg(str(self.wt), port_git()), shot_table="shots.json")
+        e = engine.Engine(BeadId("t-1"), str(self.wt), cfg, store=self.store, env=snapshot(), spawner=real_spawner(),
+            git=port_git(), who=who())
         self.assertEqual(list(e.pictures.shot_methods()), ["ScreenShots"])
 
     def test_a_missing_table_is_warned_once_and_the_old_way_stands(self):
-        cfg = cfg_with(wslots.load_cfg(str(self.wt)), shot_table="nowhere.json")
-        e = engine.Engine(BeadId("t-1"), str(self.wt), cfg, store=self.store, env=snapshot(), spawner=real_spawner(), git=port_git())
+        cfg = cfg_with(wslots.load_cfg(str(self.wt), port_git()), shot_table="nowhere.json")
+        e = engine.Engine(BeadId("t-1"), str(self.wt), cfg, store=self.store, env=snapshot(), spawner=real_spawner(),
+            git=port_git(), who=who())
         self.assertEqual(e.pictures.shot_methods(), {})
         self.assertEqual(e.pictures.shot_methods(), {})
 
@@ -324,12 +327,11 @@ class VisualWork(StagesTest):
         again = engine.Engine(
             BeadId("t-1"),
             str(self.wt),
-            wslots.load_cfg(str(self.wt)),
+            wslots.load_cfg(str(self.wt), port_git()),
             store=self.store,
             env=snapshot(),
             spawner=real_spawner(),
-            git=port_git(),
-        )
+            git=port_git(), who=who())
         again.tree.reset(must_bead(BEAD))
         again.resume.point()
         self.assertEqual((again.look_done, again.rendered_names, again.render_stale), (1, ["a.png"], True))
@@ -469,12 +471,11 @@ class ResumeCount(StagesTest):
         e = engine.Engine(
             BeadId("t-1"),
             str(self.wt),
-            wslots.load_cfg(str(self.wt)),
+            wslots.load_cfg(str(self.wt), port_git()),
             store=self.store,
             env=snapshot(),
             spawner=real_spawner(),
-            git=port_git(),
-        )
+            git=port_git(), who=who())
         e.tree.reset(must_bead(BEAD))
         e.plan_data = plan_of(PLAN)
         e.checkpoints.save(stage=0, rounds=0, n=1, feedback="", step="write")
@@ -601,7 +602,7 @@ class Claims(StagesTest):
         comments = [{"text": "Blocked: stuck: re-planned 3 times", "created_at": "1", "author": "engine"}]
         with self.store.stub(show=parked), \
                 self.store.stub(comments=comments), mock.patch.object(wrunning, "running", return_value={}):
-            ok, why = entry.admit("t-1", str(self.wt), store=self.store)
+            ok, why = entry.admit("t-1", str(self.wt), port_git(), who(), store=self.store)
         self.assertTrue(ok, why)
         self.assertEqual(why, "reopened")
         self.assertEqual(self.store.calls[0], ("update", "t-1", "--status", "open", "--if-assignee", "tl-2be89f88", "--assignee", ""))
@@ -610,14 +611,14 @@ class Claims(StagesTest):
         parked = {"id": "t-1", "status": "blocked", "assignee": "tl-2be89f88", "lease_expires_at": "", "dependencies": []}
         with self.store.stub(show=parked), \
                 mock.patch.object(wrunning, "running", return_value={"t-1": "s2"}):
-            ok, why = entry.admit("t-1", str(self.wt), store=self.store)
+            ok, why = entry.admit("t-1", str(self.wt), port_git(), who(), store=self.store)
         self.assertFalse(ok)
         self.assertIn("a live claim", why)
 
     def test_a_working_bead_that_is_still_claimed_after_the_sweep_is_a_live_claim(self):
         busy = {"id": "t-1", "status": "in_progress", "assignee": "tl-2be89f88", "lease_expires_at": "", "dependencies": []}
         with self.store.stub(show=busy):
-            ok, why = entry.admit("t-1", str(self.wt), store=self.store)
+            ok, why = entry.admit("t-1", str(self.wt), port_git(), who(), store=self.store)
         self.assertFalse(ok)
         self.assertIn("a live claim", why)
 
@@ -626,7 +627,7 @@ class Claims(StagesTest):
         for holder, expect in (("tl-2be89f88", ("update", "t-1", "--status", "blocked", "--assignee", "")),
                                ("denis", ("update", "t-1", "--status", "blocked")), ("", ("update", "t-1", "--status", "blocked"))):
             store = FakeBeadStore().put({"id": "t-1", "assignee": holder})
-            self.assertEqual(verbs.block(BeadId("t-1"), "stuck", store), 0)
+            self.assertEqual(verbs.block(who(), BeadId("t-1"), "stuck", store), 0)
             self.assertEqual(store.said("update")[0], expect, holder)  # a person's own claim stays theirs
 
     def test_a_plan_with_no_stages_goes_back_to_the_planner_once(self):

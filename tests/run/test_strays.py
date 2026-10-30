@@ -10,6 +10,7 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as te
 from support import fake_route, gitq
 from support.spawn import port_git, real_spawner
+from support.who import who
 
 from taskloop.app.run import engine
 from taskloop.app.wire import slots as wslots
@@ -45,12 +46,11 @@ class Strays(te.EngineTest):
             eng = engine.Engine(
                 BeadId("t-1"),
                 str(self.wt),
-                wslots.load_cfg(str(self.wt)),
+                wslots.load_cfg(str(self.wt), port_git()),
                 store=self.store,
                 env=snapshot(),
                 spawner=real_spawner(),
-                git=port_git(),
-            )
+                git=port_git(), who=who())
             return eng.run(), eng
 
     def test_a_worker_that_stays_passes(self):

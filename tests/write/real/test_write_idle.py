@@ -21,6 +21,7 @@ from support import engine_case as te
 from support import fake_route
 from support.narrow import must
 from support.spawn import port_git, real_spawner
+from support.who import who
 
 from taskloop.adapters import procs, runner
 from taskloop.adapters.delegate import Stopped
@@ -112,10 +113,10 @@ class SurvivorBlocksTheRetry(te.EngineTest):
                 return fake_route.answer(self.c, "worker_failed", "r1", worker=worker, exit_code=-15)
 
         script = Script({"plan": [te.PLAN], "write": [te.WRITE], "review": [te.CLEAN]})
-        c = wslots.load_cfg(str(self.wt))
+        c = wslots.load_cfg(str(self.wt), port_git())
         with te.delegate_stack(script):
             self.eng = engine.Engine(
-                BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(), git=port_git()
+                BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(), git=port_git(), who=who()
             )
             rc = self.eng.run()
         return rc, script

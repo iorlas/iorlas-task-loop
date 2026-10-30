@@ -12,6 +12,7 @@ from typing import Any, Final
 from unittest import mock
 
 from taskloop.adapters import delegate as dg
+from taskloop.adapters import ident
 from taskloop.adapters.runner import Completed, Seam, completed
 from taskloop.app.launch.selftest_beads import MemoryBeads
 from taskloop.app.release import seams
@@ -93,7 +94,7 @@ def git_repo(home: Path, wt: Path, git: Git) -> str | None:
 
 def run_engine(home: Path, wt: Path, env: Env) -> tuple[int, Bead]:
     """(exit code, the bead as the fake bd holds it) after one bead ran through the engine on the scripted lane."""
-    cfg = wslots.load_cfg(str(wt))
+    cfg = wslots.load_cfg(str(wt), real.git(env))
     res = seams.resolve_delegate(cfg.delegate)  # the configured delegate's own contract when there is one; else a bare one
     contract = res.contract if isinstance(res, dg.Resolved) else {"contract": dg.CONTRACT, "reasons": {}, "run_args": []}
     resolved = dg.Resolved(Path("/selftest"), "/selftest/route.py", contract, "explicit")
@@ -113,6 +114,7 @@ def run_engine(home: Path, wt: Path, env: Env) -> tuple[int, Bead]:
                 env=env,
                 spawner=real.spawner(env),
                 git=real.git(env),
+                who=ident.identity(env),
             ).run()
     finally:
         os.chdir(home.parent)  # out of the directory that is removed next

@@ -1,5 +1,5 @@
 """The process environment, owned here: the one module of the package (with the edge modules named in tests/rules/test_env_edge.py)
-that touches os.environ. Reads go through `ambient`/`snapshot`, the engine's own handovers through `export`/`take`/`handover`."""
+that touches os.environ. Reads go through `ambient`/`snapshot`; a hand-over to a new process is written by adapters/childenv.py only."""
 import os
 from collections.abc import Generator, Mapping
 from contextlib import contextmanager
@@ -48,29 +48,6 @@ def ambient_bead(name: str) -> BeadId | None:
 
 def ambient_set(name: str) -> bool:
     return name in os.environ
-
-
-def export(var: EnvVar, value: str) -> None:
-    os.environ[var.value] = value
-
-
-def take(var: EnvVar) -> str:
-    """Remove `var` and return what it held ('' when unset): a handover is read once."""
-    return os.environ.pop(var.value, "")
-
-
-@contextmanager
-def handover(var: EnvVar, value: str) -> Generator[None]:
-    """`var` is `value` inside the block and what it was before (or unset) after, on any error."""
-    before = os.environ.get(var.value)
-    os.environ[var.value] = value
-    try:
-        yield
-    finally:
-        if before is None:
-            os.environ.pop(var.value, None)
-        else:
-            os.environ[var.value] = before
 
 
 @contextmanager

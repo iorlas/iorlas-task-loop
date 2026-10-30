@@ -10,6 +10,7 @@ import child_env
 
 from taskloop.contracts.env import Env
 from taskloop.contracts.envvars import PREFIXES, EnvVar, registered
+from taskloop.contracts.identity import Identity
 
 VENV_VARS = ("VIRTUAL_ENV", "VIRTUAL_ENV_PROMPT", "PYTHONHOME", "__PYVENV_LAUNCHER__", "PYTHONEXECUTABLE")
 
@@ -47,9 +48,14 @@ def allowed(name: str) -> bool:
     return name in ALLOWED or name.startswith(ALLOWED_PREFIXES) or (name.startswith(ENGINE_PREFIXES) and registered(name))
 
 
+# The exec hand-overs: a process that replaces itself with a newer install passes these on (exec_env, the one writer); no child gets them.
+HANDOVERS = frozenset({EnvVar.TL_REEXEC.value, EnvVar.TL_LOOP_STATE.value, EnvVar.TL_RELEASE_REEXEC.value})
+
+
 def tool_env(base: Mapping[str, str], extra: Mapping[str, str] | None = None) -> dict[str, str]:
-    """For a tool, a check or git: only the allowlisted names of `base` (PATH without the virtualenv), then `extra` over it."""
-    env = {k: v for k, v in without_venv(base).items() if allowed(k)}
+    """For a tool, a check or git: only the allowlisted names of `base` (PATH without the virtualenv, no exec hand-over), then `extra`
+    over it."""
+    env = {k: v for k, v in without_venv(base).items() if allowed(k) and k not in HANDOVERS}
     env.update(extra or {})
     return env
 
@@ -84,7 +90,7 @@ def child_env_of(env: Mapping[str, str], extra: Mapping[str, str] | None = None)
     app-only scrub does the same for route.py); a worker never delegates further (DELEGATE_DEPTH=1)."""
     gone = (*child_env.APP_PREFIXES, "TASK_LOOP_")
     drop = (*child_env.APP_NAMES, *GIT_PIN_VARS)
-    out = {k: v for k, v in without_venv(env).items() if k in KEEP or not (k.startswith(gone) or k in drop)}
+    out = {k: v for k, v in without_venv(env).items() if k in KEEP or not (k.startswith(gone) or k in drop or k in HANDOVERS)}
     out.update(WORKER_MARK)
     out.update(extra or {})
     return out
@@ -99,3 +105,17 @@ def script_argv(script: str | Path, env: Env) -> list[str]:
 def current_env(env: Env, extra: Mapping[str, str] | None = None) -> dict[str, str]:
     """The environment of a worker started from `env` (child_env_of over the taken copy of the process's)."""
     return child_env_of(env.vars, extra)
+
+
+def identity_env(who: Identity) -> dict[str, str]:
+    """What a child needs to act as `who`: its actor and, when it has one, its session (read back by the child's `ident.identity`)."""
+    out = {EnvVar.TASK_LOOP_ACTOR.value: who.actor}
+    if who.session:
+        out[EnvVar.TASK_LOOP_SESSION.value] = who.session
+    return out
+
+
+def exec_env(env: Env, handover: Mapping[EnvVar, str]) -> dict[str, str]:
+    """The whole environment of `env` plus the exec hand-over (TL_REEXEC, TL_LOOP_STATE, TL_RELEASE_REEXEC): what a process that
+    replaces itself with a newer install passes on. The one place those names are written."""
+    return {**env.vars, **{var.value: value for var, value in handover.items()}}

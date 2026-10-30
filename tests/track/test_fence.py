@@ -11,6 +11,8 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
+from support.spawn import port_git
+from support.who import who
 
 # isort: split
 from support.fake_beads import FakeBeads
@@ -83,22 +85,22 @@ class Refused(unittest.TestCase):
         return rc, buf.getvalue()
 
     def test_close_by_the_stale_run_is_refused_and_says_why(self):
-        rc, err = self.err(lambda: verbs.close_as(self.old, "merged", self.bd))
+        rc, err = self.err(lambda: verbs.close_as(who(), self.old, "merged", self.bd))
         self.assertEqual(rc, 1)
         self.assertIn("fenced: x-1 not closed", err)
         self.assertIn("generation 2, this run holds 1", err)
         self.assertEqual(self.bd.beads[BeadId("x-1")].status, "in_progress")
-        self.assertEqual(verbs.close_as(self.new, "merged", self.bd), 0)
+        self.assertEqual(verbs.close_as(who(), self.new, "merged", self.bd), 0)
         self.assertEqual(self.bd.beads[BeadId("x-1")].status, "closed")
 
     def test_block_by_the_stale_run_is_refused(self):
-        rc, err = self.err(lambda: verbs.block_as(self.old, "stuck", self.bd))
+        rc, err = self.err(lambda: verbs.block_as(who(), self.old, "stuck", self.bd))
         self.assertEqual(rc, 1)
         self.assertIn("fenced: x-1 not blocked", err)
         self.assertEqual(self.bd.beads[BeadId("x-1")].status, "in_progress")
 
     def test_land_by_the_stale_run_records_nothing(self):
-        rc, err = self.err(lambda: verbs.land(BeadId("x-1"), "abc123", store=self.bd, claim=self.old))
+        rc, err = self.err(lambda: verbs.land(who(), BeadId("x-1"), "abc123", self.bd, port_git(), claim=self.old))
         self.assertEqual(rc, 1)
         self.assertIn("fenced: land of x-1 not recorded", err)
 
@@ -114,7 +116,7 @@ class Refused(unittest.TestCase):
 
     def test_a_close_sends_the_assignee_guard_and_a_changed_assignee_refuses_it(self):
         self.bd.beads[BeadId("x-1")] = self.bd.beads[BeadId("x-1")].replace(assignee="tl-other")  # the claim changed hands
-        rc, err = self.err(lambda: verbs.close_as(self.new, "merged", self.bd))
+        rc, err = self.err(lambda: verbs.close_as(who(), self.new, "merged", self.bd))
         self.assertEqual((rc, self.bd.beads[BeadId("x-1")].status), (1, "in_progress"))
         self.assertIn("assignee changed", err)
 

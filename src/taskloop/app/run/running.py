@@ -12,21 +12,22 @@ from taskloop.app.slots import engine_lock
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts import paths
 from taskloop.contracts.enums import LockWhat
+from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId, is_bead_id
-from taskloop.contracts.ports import Beads
+from taskloop.contracts.ports import Beads, Git
 
 
-def running(repo: str, store: Beads | None = None) -> dict[BeadId, str]:
+def running(repo: str, git: Git, who: Identity, store: Beads | None = None) -> dict[BeadId, str]:
     """{bead: where} of the beads running now: a slot bead held for one (held_bead), or a live engine lock naming one, in a slot
     or any worktree of the repo."""
     out: dict[BeadId, str] = {}
-    slots = wslots.slot_beads(repo, store)
+    slots = wslots.slot_beads(repo, who, store)
     stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     for b in slots:
         bid = b.metadata.get("held_bead")
         if is_bead_id(bid) and b.status == "in_progress" and not (b.lease_expires_at and b.lease_expires_at < stamp):
             out[bid] = b.title.split()[-1]
-    for wt in wslots.worktrees(repo, slots):
+    for wt in wslots.worktrees(repo, git, who, slots):
         lock = engine_lock.peek_engine_lock(wt)
         if lock is not None and is_bead_id(lock.bead) and engine_lock.live(lock):
             out.setdefault(lock.bead, lock.slot or Path(wt).name)
@@ -38,8 +39,8 @@ def area_lock(repo: Any) -> Any:
     return hold_path(record, f"pid {os.getpid()}", what=LockWhat.AREA)
 
 
-def area_busy(repo: Any, cfg: Any, bead: Any, store: Any = None) -> tuple[str, str]:
+def area_busy(repo: Any, cfg: Any, bead: Any, git: Git, who: Identity, store: Any = None) -> tuple[str, str]:
     """(area, "area A busy: B in S") for a bead whose area runs elsewhere, (area, "") when it is free, ("", "") for none (run-task's
     check before it takes the engine lock)."""
-    store = store or beadtools.bd_store(repo)
-    return area_busy_text(QueueRule(store, cfg, running(repo, store), lambda b: "", console.say), bead)
+    store = store or beadtools.bd_store(who.actor, repo)
+    return area_busy_text(QueueRule(store, cfg, running(repo, git, who, store), lambda b: "", console.say), bead)

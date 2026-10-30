@@ -15,6 +15,7 @@ from pathlib import Path
 
 from support.spawn import port_git, real_spawner
 from support.waits import until
+from support.who import who
 
 from taskloop.app.run import (
     engine,
@@ -37,12 +38,11 @@ class EngineChecksTest(EngineTest):
         eng = engine.Engine(
             BeadId("t-1"),
             str(self.wt),
-            wslots.load_cfg(str(self.wt)),
+            wslots.load_cfg(str(self.wt), port_git()),
             store=self.store,
             env=snapshot(),
             spawner=real_spawner(),
-            git=port_git(),
-        )
+            git=port_git(), who=who())
         pidfile = Path(self.wt, "child.pid")
 
         def stopped(*_):  # what the run's SIGTERM handler does, from the same thread, once the check has started its child

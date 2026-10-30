@@ -23,10 +23,10 @@ from support.narrow import must
 from support.procsim import real_proc
 from support.release_world import IDENTITY, MARKET, PLUGIN, World, git
 
-from taskloop.adapters import landlock
+from taskloop.adapters import childenv, landlock
 from taskloop.adapters.ident import config_dir
 from taskloop.app.release import clone, manifest, selfupdate, shell
-from taskloop.contracts.env import snapshot
+from taskloop.contracts.env import Env, snapshot
 from taskloop.contracts.envvars import EnvVar
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -126,14 +126,15 @@ class Release(unittest.TestCase):
         self.assertIn("LOCK TAKEN", r.stdout)
         self.assertEqual(self.version(self.origin)["version"], "0.1.0")  # the fake child released nothing; this run did not either
         where = clone.clone_dir(config_dir(), str(self.origin))
-        self.assertIsNotNone(selfupdate.newer_release(ROOT, where, self.sh))
-        with unittest.mock.patch.dict(os.environ, {EnvVar.TL_RELEASE_REEXEC.value: "1"}):
-            self.assertIsNone(selfupdate.newer_release(ROOT, where, self.sh))  # an exec'd release never execs again
+        self.assertIsNotNone(selfupdate.newer_release(ROOT, where, self.sh, Env({})))
+        handed = Env({EnvVar.TL_RELEASE_REEXEC.value: "1"})
+        self.assertIsNone(selfupdate.newer_release(ROOT, where, self.sh, handed))  # an exec'd release never execs again
 
-    def test_the_exec_marker_is_taken_out_so_what_the_release_starts_does_not_inherit_it(self):
-        with unittest.mock.patch.dict(os.environ, {EnvVar.TL_RELEASE_REEXEC.value: "1"}):
-            self.assertIsNone(selfupdate.newer_release(self.repo, self.repo, self.sh))
-            self.assertNotIn(EnvVar.TL_RELEASE_REEXEC.value, os.environ)
+    def test_the_exec_marker_reaches_no_child_the_release_starts(self):
+        handed = Env({EnvVar.TL_RELEASE_REEXEC.value: "1", "PATH": "/bin"})
+        self.assertIsNone(selfupdate.newer_release(self.repo, self.repo, self.sh, handed))
+        self.assertNotIn(EnvVar.TL_RELEASE_REEXEC.value, childenv.tool_env(handed.vars))
+        self.assertEqual(childenv.exec_env(handed, {EnvVar.TL_RELEASE_REEXEC: "1"})[EnvVar.TL_RELEASE_REEXEC.value], "1")
 
     def test_a_dirty_main_checkout_on_another_branch_is_released_from_and_left_byte_identical(self):
         self.git("checkout", "-q", "-b", "task/wip", cwd=self.repo)

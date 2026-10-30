@@ -27,6 +27,7 @@ from support import (  # noqa: E402
     tlbd,
 )
 from support.narrow import must  # noqa: E402
+from support.who import who  # noqa: E402
 
 from taskloop.adapters import (  # noqa: E402
     ident,
@@ -36,6 +37,7 @@ from taskloop.app.loop.core import Core  # noqa: E402
 from taskloop.app.loop.loop import parse_handover  # noqa: E402
 from taskloop.app.loop.take import Taker  # noqa: E402
 from taskloop.app.track import trail  # noqa: E402
+from taskloop.app.wire import real  # noqa: E402
 from taskloop.contracts import wire  # noqa: E402
 from taskloop.contracts.loop import Carry, LoopState  # noqa: E402
 from taskloop.contracts.ports import WaitTimeout  # noqa: E402
@@ -106,14 +108,14 @@ class FakeBd:
 
     def _claim(self, a):
         b = self.beads.get(a[1]) or self.slots.get(a[1])
-        if a[1] in self.taken_by_other or must(b).get("status") != "open" or must(b).get("assignee") not in (None, "", ident.actor()):
+        if a[1] in self.taken_by_other or must(b).get("status") != "open" or must(b).get("assignee") not in (None, "", who().actor):
             return 1  # bd 1.3: an open bead still assigned to another actor (a paused run's) refuses the claim
-        must(b).update(status="in_progress", assignee=ident.actor())
+        must(b).update(status="in_progress", assignee=who().actor)
         return 0
 
     def _unclaim(self, a):
         b = self.beads.get(a[1]) or self.slots.get(a[1])
-        if "--force" in a or must(b).get("assignee") in (None, "", ident.actor()):
+        if "--force" in a or must(b).get("assignee") in (None, "", who().actor):
             must(b).update(status="open", assignee="")
             return 0
         return 1
@@ -255,7 +257,7 @@ class LoopBase(Base):
         for p in (mock.patch.object(Core, "nap", self.clock.nap),
                   mock.patch.object(wloop, "delegate_route", return_value="/fake/route.py"),
                   mock.patch.object(wloop.dg, "role_status", side_effect=lambda route, env: self.roles()),
-                  mock.patch.object(wloop.real, "spawner", return_value=mock.Mock(
+                  mock.patch.object(real, "spawner", return_value=mock.Mock(
                       start_held=lambda cmd, out=None, extra=None, **kw: (FakeChild(self, cmd, extra), mock.Mock()))),
                   mock.patch.object(Taker, "prepare", return_value=None)):
             p.start()

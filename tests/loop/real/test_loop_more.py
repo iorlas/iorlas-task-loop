@@ -14,6 +14,8 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: E402, F401
+from support.spawn import port_git  # noqa: E402
+from support.who import who  # noqa: E402
 
 # isort: split
 import itertools  # noqa: E402
@@ -279,7 +281,7 @@ class StopRequests(LoopBase):
 
 
 class Moved(Exception):
-    """What the mocked os.execv raises: the real one never returns."""
+    """What the mocked os.execve raises: the real one never returns."""
 
 
 class LoopSelfUpdate(LoopBase):
@@ -291,10 +293,10 @@ class LoopSelfUpdate(LoopBase):
         self.addCleanup(shutil.rmtree, self.cache, True)
         self.execs = []
 
-        def execv(exe, argv):
-            self.execs.append((exe, argv, os.environ.get("TL_LOOP_STATE"), os.getcwd()))
+        def execv(exe, argv, env):
+            self.execs.append((exe, argv, env.get("TL_LOOP_STATE"), os.getcwd(), env.get("TASK_LOOP_ACTOR")))
             raise Moved()
-        for p in (mock.patch.object(os, "execv", side_effect=execv),
+        for p in (mock.patch.object(os, "execve", side_effect=execv),
                   mock.patch.dict(os.environ, {})):
             p.start()
             self.addCleanup(p.stop)
@@ -311,7 +313,7 @@ class LoopSelfUpdate(LoopBase):
             self.run_loop("--max-beads", "5")
         self.assertEqual([b for b, _ in self.started], ["x-1"])  # never mid-bead: x-1 ran to its end on 0.1.0
         self.assertEqual([ln["outcome"] for ln in self.lines()], ["landed"])
-        exe, argv, state, _ = self.execs[0]
+        exe, argv, state, _, _ = self.execs[0]
         self.assertEqual(exe, argv[0])
         self.assertEqual(argv[:5], childenv.script_argv(self.cache / "0.2.0" / "skills" / "task-loop" / "tl.py", snapshot()))
         self.assertEqual(argv[5:], ["loop", "--repo", str(self.repo), "--max-beads", "5"])
@@ -404,7 +406,6 @@ class LoopSelfUpdate(LoopBase):
         self.assertIn("handover state dropped", reloads[0]["why"])
         self.assertIn("a clean pass starts", self.out)
         self.assertEqual([b for b, _ in self.started], ["x-1", "x-2"])  # no step twice, none skipped
-        self.assertNotIn("TL_LOOP_STATE", os.environ)
 
     def test_a_state_of_another_version_is_dropped_the_same_way(self):
         self.beads({"x-1": [rec("landed")]})
@@ -419,7 +420,7 @@ class LoopSelfUpdate(LoopBase):
         self.during.append(lambda: self.install("0.2.0"))
         with self.assertRaises(Moved):
             self.run_loop()
-        actor = os.environ["TASK_LOOP_ACTOR"]
+        actor = self.execs[0][4]  # the exec handed the loop's actor on
         state = json.loads(self.execs[0][2])
         self.assertEqual(state["carry"]["fails"], ["x-1"])
         # the new process: same pid, the state in the environment, the new install as the running code
@@ -428,8 +429,7 @@ class LoopSelfUpdate(LoopBase):
             self.assertEqual(self.run_loop(), 2)  # one more failure is the second in a row
         self.assertIn("STOPPED: 2 failures in a row (x-1, x-2)", self.out)
         self.assertEqual([b for b, _ in self.started], ["x-1", "x-2"])
-        self.assertEqual(os.environ["TASK_LOOP_ACTOR"], actor)
-        self.assertNotIn("TL_LOOP_STATE", os.environ)  # not handed on to children
+        self.assertEqual(self.execs[0][4], actor)
 
     def test_max_beads_counts_the_beads_run_before_the_move(self):
         self.beads({"x-1": [rec("landed")], "x-2": [rec("landed")], "x-3": [rec("landed")]})
@@ -479,12 +479,17 @@ class LandedOnBase(Base):
         sh("git", "checkout", "-q", "-b", "task/x-2", "origin/main")
         sh("git", "commit", "-q", "--allow-empty", "-m", "wip (x-2): failed")
         sh("git", "checkout", "-q", "-b", "task/x-3", "origin/main")
-        self.assertTrue(wloop.landed_on_base(str(self.repo), beadtools.bd_store(str(self.repo)), str(wt), BeadId("x-1")))
-        self.assertFalse(wloop.landed_on_base(str(self.repo), beadtools.bd_store(str(self.repo)), str(wt), BeadId("x-2")))  # not on main
+        self.assertTrue(wloop.landed_on_base(str(self.repo), beadtools.bd_store(who().actor, str(self.repo)), str(wt), BeadId("x-1"),
+            port_git()))
+        # not on main
+        self.assertFalse(wloop.landed_on_base(str(self.repo), beadtools.bd_store(who().actor, str(self.repo)), str(wt), BeadId("x-2"),
+            port_git()))
         self.assertFalse(
-            wloop.landed_on_base(str(self.repo), beadtools.bd_store(str(self.repo)), str(wt), BeadId("x-3"))
+            wloop.landed_on_base(str(self.repo), beadtools.bd_store(who().actor, str(self.repo)), str(wt), BeadId("x-3"), port_git())
         )  # no work: the tip is someone else's
-        self.assertFalse(wloop.landed_on_base(str(self.repo), beadtools.bd_store(str(self.repo)), str(wt), BeadId("x-9")))  # no branch
+        # no branch
+        self.assertFalse(wloop.landed_on_base(str(self.repo), beadtools.bd_store(who().actor, str(self.repo)), str(wt), BeadId("x-9"),
+            port_git()))
 
 
 if __name__ == "__main__":

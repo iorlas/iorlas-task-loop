@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: E402, F401
+from support.spawn import port_git  # noqa: E402
 
 # isort: split
 import contextlib  # noqa: E402
@@ -31,6 +32,7 @@ from support import (  # noqa: E402
 from support.narrow import must  # noqa: E402
 from support.spawn import real_spawner  # noqa: E402
 from support.tlmain import tl_main  # noqa: E402
+from support.who import who  # noqa: E402
 
 from taskloop.adapters import delegate as lroute  # noqa: E402
 from taskloop.adapters import (  # noqa: E402
@@ -43,7 +45,7 @@ from taskloop.app.wire import asks as wasks  # noqa: E402
 from taskloop.contracts import wire  # noqa: E402
 from taskloop.contracts.env import Env  # noqa: E402
 
-CTX = tl.Ctx(tl.HERE, trail.now, [], Env({}), spawner=real_spawner())
+CTX = tl.Ctx(tl.HERE, trail.now, [], Env({}), spawner=real_spawner(), git=port_git(), who=who())
 
 
 def sh(*args, cwd):
@@ -74,16 +76,16 @@ class Base(unittest.TestCase):
 
 class Identity(Base):
     def test_actor_is_per_session(self):
-        self.assertEqual(ident.actor(), "tl-abcdef12")
+        self.assertEqual(who().actor, "tl-abcdef12")
 
     def test_actor_without_session_id_is_still_per_process(self):
         os.environ.pop("CLAUDE_CODE_SESSION_ID")
         os.environ["CLAUDE_PID"] = "4242"
-        self.assertTrue(ident.actor().endswith("-4242"))
+        self.assertTrue(who().actor.endswith("-4242"))
 
     def test_actor_override(self):
         os.environ["TASK_LOOP_ACTOR"] = "me"
-        self.assertEqual(ident.actor(), "me")
+        self.assertEqual(who().actor, "me")
 
     def test_config_dir_is_created(self):
         self.assertTrue(ident.config_dir().is_dir())
@@ -91,8 +93,8 @@ class Identity(Base):
 
 class Records(Base):
     def test_event_appends_and_registers_repo(self):
-        trail.event("claim", "x-1", repo=str(self.home), worktree="/w")
-        trail.event("close", "x-1", repo=str(self.home))
+        trail.event(who(),"claim", "x-1", repo=str(self.home), worktree="/w")
+        trail.event(who(),"close", "x-1", repo=str(self.home))
         lines = (ident.config_dir() / "events.jsonl").read_text().splitlines()
         self.assertEqual([json.loads(ln)["kind"] for ln in lines], ["claim", "close"])
         self.assertEqual(json.loads(lines[0])["session"], "abcdef12-3456")
@@ -353,8 +355,8 @@ class ParkStaleAsks(unittest.TestCase):
                 ask_file(asks, bead, parks_at=parks, repo=str(d), **extra)
             env = {"XDG_CONFIG_HOME": str(d), "APPDATA": str(d), "HOME": str(d), "USERPROFILE": str(d)}
             with mock.patch.dict(os.environ, env), tlbd.bd_boundary() as bd_calls:
-                self.assertEqual(wasks.sweep("park", every=0), ["late"])
-                self.assertEqual(wasks.sweep("park", every=600), [])  # throttled
+                self.assertEqual(wasks.sweep("park", who(), every=0), ["late"])
+                self.assertEqual(wasks.sweep("park", who(), every=600), [])  # throttled
             def status(b):
                 return json.loads((asks / (f"{b}.json")).read_text())["status"]
             self.assertEqual([status(b) for b in ("late", "fresh", "done", "closed")], ["parked", "open", "answered", "closed"])

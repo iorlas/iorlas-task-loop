@@ -6,7 +6,6 @@ import hashlib
 from collections.abc import Sequence
 from typing import Any
 
-from taskloop.adapters.git import REAL
 from taskloop.contracts.config import FRESH_ABOVE_K
 from taskloop.contracts.paths import RunFiles
 from taskloop.contracts.ports import Git
@@ -19,7 +18,7 @@ HANDOFF_CAP = 1500  # characters of round history one prompt carries (tl-bxk.13.
 
 
 class Handoff:
-    def __init__(self, host: Any, git: Git = REAL) -> None:
+    def __init__(self, host: Any, git: Git) -> None:
         self.e = host
         self.git = git
 

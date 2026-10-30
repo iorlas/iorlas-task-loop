@@ -712,6 +712,10 @@
   "run_log": "/rl",
   "why": ""
  },
+ "Identity": {
+  "actor": "tl-abcdef12",
+  "session": "abcdef12-0000"
+ },
  "Reexec": {
   "v": 1,
   "run": "tl-7y6.3.1-20261027-002239",

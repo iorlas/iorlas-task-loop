@@ -4,12 +4,13 @@ from pathlib import Path
 from atomic_io import atomic_write_text
 
 from taskloop.app.wire import brief
+from taskloop.contracts.identity import Identity
 from taskloop.domain.brief import handoff_text
 
 
-def write(repo: str, plugin_root: Path, now: float, with_slots: bool = True) -> Path:
+def write(repo: str, plugin_root: Path, now: float, who: Identity | None = None) -> Path:
     f = brief.handoff_file(repo)
-    atomic_write_text(f, handoff_text(brief.build(repo, plugin_root, now, with_slots)), fsync=False)
+    atomic_write_text(f, handoff_text(brief.build(repo, plugin_root, now, who)), fsync=False)
     return f
 
 

@@ -1,4 +1,3 @@
 {
-  "src/taskloop/adapters/git.py": 1,
-  "src/taskloop/adapters/ident.py": 9
+  "src/taskloop/adapters/ident.py": 2
 }

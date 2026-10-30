@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from contracts import samples as S
 from support.narrow import must
+from support.who import who
 
 from taskloop.app.track import trail
 from taskloop.contracts.ask import AskAnswer
@@ -141,7 +142,7 @@ class Logs(unittest.TestCase):
             f = ConfigDir(Path(tmp.name) / "task-loop").events()
             f.parent.mkdir(parents=True)
             f.write_text((json.dumps({"t": 0, "kind": "old"}) + "\n") * 120000)
-            wrapped, started = during(os.replace, lambda: trail.event("stage", "tl-1", repo="/r/x"))
+            wrapped, started = during(os.replace, lambda: trail.event(who(), "stage", "tl-1", repo="/r/x"))
             with mock.patch("os.replace", wrapped):
                 trail.prune_events()
             for t in started:

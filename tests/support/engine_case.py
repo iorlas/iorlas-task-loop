@@ -36,6 +36,7 @@ from support.procsim import real_proc  # noqa: F401
 from support.push_race import PushRace
 from support.spawn import port_git, real_spawner
 from support.waits import until
+from support.who import who
 from taskloop.adapters import (
     applog,
     ident,
@@ -418,12 +419,13 @@ class EngineTest(unittest.TestCase):
         """`raw` puts keys in the loaded config without committing them. probe: the network probe (netgate.FakeProbe). prep: called
         with the engine before it runs."""
         script = fake_route.Script(answers, j_extra)
-        c = wslots.load_cfg(str(self.wt))
+        c = wslots.load_cfg(str(self.wt), port_git())
         fresh = cfg.pop("fresh", False)
         c = cfg_with(c, **{"reflect": False, **cfg, **(raw or {})})  # the reflection is one more call; its own tests switch it on
         with delegate_stack(script, route):
             self.eng = engine.Engine(
-                BeadId(bead), str(self.wt), c, store=self.store, fresh=fresh, env=snapshot(), spawner=real_spawner(), git=port_git()
+                BeadId(bead), str(self.wt), c, store=self.store, fresh=fresh, env=snapshot(), spawner=real_spawner(),
+                    git=port_git(), who=who()
             )
             if probe is not None:
                 self.eng.probe = probe
@@ -531,7 +533,7 @@ class EngineTest(unittest.TestCase):
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_text(json.dumps(ask))
         with self.store.stub(show=dict(BEAD, **bead), comments=list(comments)):
-            ok, why = entry.admit("t-1", str(self.wt), store=self.store)
+            ok, why = entry.admit("t-1", str(self.wt), port_git(), who(), store=self.store)
         updates = [c for c in self.bd_calls if c[:1] == ("update",)]
         return ok, why, updates
 
@@ -718,12 +720,11 @@ class LandReviewBase(EngineTest):
             self.eng = engine.Engine(
                 BeadId("t-1"),
                 str(self.wt),
-                wslots.load_cfg(str(self.wt)),
+                wslots.load_cfg(str(self.wt), port_git()),
                 store=self.store,
                 env=snapshot(),
                 spawner=real_spawner(),
-                git=port_git(),
-            )
+                git=port_git(), who=who())
             return self.eng.run()
 
     def landed(self):

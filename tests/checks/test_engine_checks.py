@@ -21,6 +21,7 @@ from support.checks import ck, res, typed
 from support.fakes import as_bead, must_bead
 from support.narrow import must
 from support.spawn import port_git, real_spawner
+from support.who import who
 
 from taskloop.adapters import childenv
 from taskloop.adapters.check_probe import PathProbe
@@ -59,8 +60,9 @@ class EngineChecksTest(EngineTest):
         self.assertEqual(first[0].exit, 0)
 
     def test_checks_run_without_the_launchers_claude_session(self):
-        c = wslots.load_cfg(str(self.wt))
-        eng = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(), git=port_git())
+        c = wslots.load_cfg(str(self.wt), port_git())
+        eng = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(),
+            git=port_git(), who=who())
         with mock.patch.dict(os.environ, {"CLAUDE_CODE_ENTRYPOINT": "cli"}):
             session_env = procsim.fake("session-env", lambda cwd, env: (1 if env.get("CLAUDE_CODE_ENTRYPOINT") else 0, ""))
             res = eng.run_checks({"checks": ck([session_env]), "files": []}, "s")
@@ -191,12 +193,11 @@ class EngineChecksTest(EngineTest):
         eng = engine.Engine(
             BeadId("t-1"),
             str(self.wt),
-            wslots.load_cfg(str(self.wt)),
+            wslots.load_cfg(str(self.wt), port_git()),
             store=self.store,
             env=snapshot(),
             spawner=real_spawner(),
-            git=port_git(),
-        )
+            git=port_git(), who=who())
         gone = procsim.fake(f"editor-closed {state}", lambda cwd, env: (1 if state.exists() else 0, ""))
         st = {"checks": ck([gone]), "files": []}
         self.assertEqual(eng.run_checks(st, "s")[0].exit, 0)
@@ -219,12 +220,11 @@ class EngineChecksTest(EngineTest):
         eng = engine.Engine(
             BeadId("t-1"),
             str(self.wt),
-            wslots.load_cfg(str(self.wt)),
+            wslots.load_cfg(str(self.wt), port_git()),
             store=self.store,
             env=snapshot(),
             spawner=real_spawner(),
-            git=port_git(),
-        )
+            git=port_git(), who=who())
         st = {"checks": ck([fails]), "files": []}
         eng.run_checks(st, "s")
         again = eng.run_checks(st, "s")
@@ -235,12 +235,11 @@ class EngineChecksTest(EngineTest):
         eng = engine.Engine(
             BeadId("t-1"),
             str(self.wt),
-            wslots.load_cfg(str(self.wt)),
+            wslots.load_cfg(str(self.wt), port_git()),
             store=self.store,
             env=snapshot(),
             spawner=real_spawner(),
-            git=port_git(),
-        )
+            git=port_git(), who=who())
         res = eng.run_checks({"checks": [Adhoc(argv=("echo", "$HOME", "&&", "x;", "(y)"), reads=())], "files": []}, "s")
         self.assertEqual(res[0].exit, 0, res[0].tail)
         self.assertIn("$HOME && x; (y)", res[0].tail)  # no expansion, no operator: every word reached the program as written
@@ -352,7 +351,7 @@ class EngineChecksTest(EngineTest):
     def test_run_task_refuses_the_main_checkout(self):
         a = mock.Mock(id="t-1", worktree=str(self.wt), slot=None, dry_run=True, fresh=False, quiet=True, outcome_file=None)
         with mock.patch.object(entry, "Engine") as made, contextlib.chdir(self.wt):
-            rc = entry.main(a, self.store, env=snapshot(), spawner=real_spawner())
+            rc = entry.main(a, self.store, env=snapshot(), spawner=real_spawner(), git=port_git(), who=who())
         self.assertEqual(rc, 1)
         made.assert_not_called()
 

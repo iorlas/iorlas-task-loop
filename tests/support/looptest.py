@@ -4,7 +4,8 @@ import os
 from pathlib import Path
 
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
-from support.spawn import real_spawner
+from support.spawn import port_git, real_spawner
+from support.who import who
 from taskloop.app.launch import loop as wloop
 from taskloop.app.loop.queue import rank_ready
 from taskloop.app.wire import slots as wslots
@@ -28,7 +29,7 @@ def files(repo):
 
 def queue(repo, store=None, say=lambda _: None):
     """([(bead, reason)] in the order the loop takes them, [(id, why skipped)]): `tl next`'s own look."""
-    env = wloop.build(repo, store, env=snapshot(), spawner=real_spawner())
+    env = wloop.build(repo, store, env=snapshot(), spawner=real_spawner(), git=port_git(), who=who())
     env.fetch()
     q, _ = rank_ready(env, env.profile().engine, say)
     return [(r.bead, r.reason) for r in q.ranked], [(s.bead, s.skip.why) for s in q.skipped]

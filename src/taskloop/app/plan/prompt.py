@@ -4,7 +4,6 @@ import json
 from pathlib import Path
 from typing import Any
 
-from taskloop.adapters.git import REAL
 from taskloop.app.plan.decisions import Decisions
 from taskloop.app.plan.probe import AcProbe
 from taskloop.contracts import plancheck
@@ -16,7 +15,7 @@ REPLAN_CALLS = 6  # the calls a replan may spend looking (study 63: the median r
 
 
 class PlanPrompt:
-    def __init__(self, host: Any, git: Git = REAL) -> None:
+    def __init__(self, host: Any, git: Git) -> None:
         self.e = host
         self.git = git
         self.decisions = Decisions(host)

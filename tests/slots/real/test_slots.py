@@ -22,9 +22,10 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 # isort: split
 from loop.test_loop import LoopBase, rec
 from support.engine_locks import put_lock
-from support.spawn import real_spawner
+from support.spawn import port_git, real_spawner
+from support.who import who
 
-from taskloop.adapters import ident, pidcheck
+from taskloop.adapters import pidcheck
 from taskloop.app.launch import loop as wloop
 from taskloop.app.loop.take import Taker
 from taskloop.app.run import (
@@ -106,7 +107,7 @@ class Slots(LoopBase):
         with mock.patch.dict(os.environ, env), mock.patch.object(entry, "admit", return_value=(True, "")), \
                 mock.patch.object(entry, "Engine", made), \
                 mock.patch.object(signal, "signal"), redirect_stdout(out):
-            rc = entry.main(a, env=snapshot(), spawner=real_spawner())
+            rc = entry.main(a, env=snapshot(), spawner=real_spawner(), git=port_git(), who=who())
         self.made = made
         return rc, json.loads(f.read_text()), out.getvalue()
 
@@ -117,7 +118,7 @@ class RunTaskTakesItsSlot(Slots):
         seen: dict[str, Any] = {}
 
         def during():  # the loop starts while the hand run is mid-bead (2026-10-21 18:17)
-            bd.beads["x-1"].update(status="in_progress", assignee=ident.actor())  # run-task's claim (stubbed here)
+            bd.beads["x-1"].update(status="in_progress", assignee=who().actor)  # run-task's claim (stubbed here)
             seen["slot"] = dict(bd.slots["sl-1"])
             seen["lock"] = engine_lock.engine_lock_path(self.slot("s1")).exists()
             lock = engine_lock.read_engine_lock(self.slot("s1"))
@@ -128,7 +129,7 @@ class RunTaskTakesItsSlot(Slots):
             return 0
         rc, _r, _ = self.run_task("x-1", slot="s1", worktree=self.slot("s1"), engine_run=during)
         self.assertEqual(rc, 0)
-        self.assertEqual((seen["slot"]["status"], seen["slot"]["assignee"]), ("in_progress", ident.actor()))
+        self.assertEqual((seen["slot"]["status"], seen["slot"]["assignee"]), ("in_progress", who().actor))
         self.assertTrue(seen["lock"])
         self.assertEqual(seen["env"], "sl-1")  # the engine heartbeats it
         self.assertIn("run-task x-1", seen["list"])
@@ -172,7 +173,7 @@ class RunTaskTakesItsSlot(Slots):
             a = entry.Args(id="x-1", worktree=None, slot="s1", dry_run=False, fresh=False, quiet=True,
                             outcome_file=str(f))
             with mock.patch.object(signal, "signal"), redirect_stdout(io.StringIO()):
-                rc = entry.main(a, env=snapshot(), spawner=real_spawner())
+                rc = entry.main(a, env=snapshot(), spawner=real_spawner(), git=port_git(), who=who())
         self.assertNotEqual(rc, 0)
         self.assertEqual(json.loads(f.read_text())["outcome"], "failed")
         self.assertEqual(bd.slots["sl-1"]["status"], "open")
@@ -180,7 +181,7 @@ class RunTaskTakesItsSlot(Slots):
 
     def test_a_run_the_loop_started_does_not_take_or_release_the_slot_again(self):
         bd = self.beads({"x-1": []})
-        bd.slots["sl-1"].update(status="in_progress", assignee=ident.actor())
+        bd.slots["sl-1"].update(status="in_progress", assignee=who().actor)
         self.run_task("x-1", slot="s1", TASK_LOOP_SLOT_BEAD="sl-1")
         self.assertEqual(bd.slots["sl-1"]["status"], "in_progress")
         self.assertNotIn(("unclaim", "sl-1"), bd.calls)
@@ -225,8 +226,10 @@ class LiveEngineBackstop(Slots):
         rc, out = self.cli("slot", "reset", "s1", "--bead", "x-1")
         self.assertEqual(rc, 4)
         self.assertIn("BUSY", out)
-        senv = dataclasses.replace(wloop.build(str(self.repo), env=snapshot(), spawner=real_spawner()).slot_env(), git=ExplodingGit())  # pyrefly: ignore[bad-argument-type]  # any git in the live slot fails the test
-        env = dataclasses.replace(wloop.build(str(self.repo), env=snapshot(), spawner=real_spawner()), slot_env=lambda: senv)
+        senv = dataclasses.replace(wloop.build(str(self.repo), env=snapshot(), spawner=real_spawner(), git=port_git(),
+            who=who()).slot_env(), git=ExplodingGit())  # pyrefly: ignore[bad-argument-type]  # any git in the live slot fails the test
+        env = dataclasses.replace(wloop.build(str(self.repo), env=snapshot(), spawner=real_spawner(),
+            git=port_git(), who=who()), slot_env=lambda: senv)
         with redirect_stdout(io.StringIO()):
             self.assertIsNotNone(REAL_PREPARE(Taker(env, mock.Mock(), mock.Mock(), mock.Mock(), mock.Mock(), {}), "s1", "x-1"))
     def test_slot_list_shows_the_live_engine(self):
@@ -247,7 +250,7 @@ class Hold(Slots):
         bd.slots["sl-1"].update(status="open", assignee="")  # a lapsed lease does not end a hold
         listing = self.cli("slot", "list")[1]
         self.assertIn("screenshots for the owner", listing)
-        self.assertIn(ident.actor(), next(ln for ln in listing.splitlines() if ln.startswith("s1")))
+        self.assertIn(who().actor, next(ln for ln in listing.splitlines() if ln.startswith("s1")))
         self.run_loop("--max-beads", "1")
         self.assertEqual(self.started, [("x-1", "s2")])
         self.clock.t += 31 * 60  # expired
@@ -329,12 +332,12 @@ class SameActor(Slots):
 
     def test_a_held_slot_bead_is_refused_to_its_own_actor_unless_it_is_the_runs_own_slot_bead(self):
         bd = self.beads({"x-1": []})
-        bd.slots["sl-1"].update(status="in_progress", assignee=ident.actor(),
-                                metadata={"held_by": ident.actor(), "held_since": "2026-10-21T18:17:00",
+        bd.slots["sl-1"].update(status="in_progress", assignee=who().actor,
+                                metadata={"held_by": who().actor, "held_since": "2026-10-21T18:17:00",
                                           "held_why": "tl loop"})
         rc, r, _ = self.run_task("x-1", slot="s1")
         self.assertEqual(r["outcome"], "taken")
-        self.assertIn(f"slot s1 held by {ident.actor()} since 2026-10-21T18:17:00 (tl loop)", r["why"])
+        self.assertIn(f"slot s1 held by {who().actor} since 2026-10-21T18:17:00 (tl loop)", r["why"])
         rc, r, _ = self.run_task("x-1", slot="s1", TASK_LOOP_SLOT_BEAD="sl-2")  # another slot's bead: no pass
         self.assertEqual(r["outcome"], "taken")
         rc, r, _ = self.run_task("x-1", slot="s1", TASK_LOOP_SLOT_BEAD="sl-1")
@@ -363,7 +366,7 @@ class SameActor(Slots):
             with mock.patch.dict(os.environ, {"TASK_LOOP_SLOT_BEAD": ""}), mock.patch.object(os, "getpid", return_value=hand):
                 bd.slots["sl-1"]["status"] = "open"  # even were its bead open
                 _rc, r, _ = self.run_task("x-2", worktree=self.slot(slot))
-                bd.slots["sl-1"].update(status="in_progress", assignee=ident.actor())
+                bd.slots["sl-1"].update(status="in_progress", assignee=who().actor)
             seen["hand"] = r
         with mock.patch.object(Taker, "prepare", reset):
             self.run_loop("--max-beads", "1")

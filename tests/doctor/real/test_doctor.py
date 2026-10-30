@@ -13,7 +13,9 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: E402, F401
+from support.spawn import port_git  # noqa: E402
 from support.tlmain import tl_main  # noqa: E402
+from support.who import who  # noqa: E402
 
 from taskloop.adapters.git import RealGit  # noqa: E402
 from taskloop.app.wire import doctor  # noqa: E402
@@ -82,7 +84,7 @@ class DoctorSource(unittest.TestCase):
         os.chdir(cwd or self.wt)
         try:
             with contextlib.redirect_stdout(out):
-                self.assertEqual(doctor.run(ROOT), 0)
+                self.assertEqual(doctor.run(ROOT, port_git(), who()), 0)
         finally:
             os.chdir(here)
         return out.getvalue()
@@ -98,7 +100,7 @@ class DoctorSource(unittest.TestCase):
         self.assertIn("base origin/main at commit " + commit, out)
         self.assertIn("stale", (self.repo / ".task-loop.json").read_text())
         self.assertNotEqual(self.git("rev-parse", "HEAD"), commit)
-        self.assertEqual(wslots.load_cfg(str(self.wt)).checks[0].id, "new-base")
+        self.assertEqual(wslots.load_cfg(str(self.wt), port_git()).checks[0].id, "new-base")
         self.assertIn("check new-base:", self.doctor(self.repo))
 
     def test_worktree_and_nested_directory_use_base(self):
@@ -118,7 +120,7 @@ class DoctorSource(unittest.TestCase):
         self.assertIn("base release at commit " + commit, out)
         self.assertIn("check custom:", out)
         self.assertNotIn("check stale:", out)
-        self.assertEqual(wslots.load_cfg(str(self.wt)).checks[0].id, "custom")
+        self.assertEqual(wslots.load_cfg(str(self.wt), port_git()).checks[0].id, "custom")
 
     def test_reports_exact_commit_with_warnings(self):
         commit = self.advance_base(self.config("bad-glob"))
@@ -177,7 +179,7 @@ class DoctorSource(unittest.TestCase):
         self.assertIn("working tree " + shown(self.wt), out)
         self.assertIn("base missing-base unresolved; no commit read", out)
         self.assertIn("ok:", out)
-        self.assertEqual(wslots.load_cfg(str(self.wt)).checks[0].id, "fallback")
+        self.assertEqual(wslots.load_cfg(str(self.wt), port_git()).checks[0].id, "fallback")
 
     def test_default_unresolved_base_falls_back(self):
         self.git("update-ref", "-d", "refs/remotes/origin/main")
@@ -202,7 +204,7 @@ class DoctorSource(unittest.TestCase):
                 self.assertIn("base origin/main at commit " + commit, out)
                 self.assertIn("ok:", out)
                 self.assertNotIn("WARN", out)
-                self.assertEqual(wslots.load_cfg(str(self.wt)).checks, [])
+                self.assertEqual(wslots.load_cfg(str(self.wt), port_git()).checks, [])
 
     def test_config_and_paths_use_one_resolved_commit(self):
         commit = self.advance_base(self.config("good", "old.txt"))

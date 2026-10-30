@@ -20,6 +20,7 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as te
 from support import fake_route
 from support.spawn import port_git, real_spawner
+from support.who import who
 
 from taskloop.adapters import runner
 from taskloop.adapters.delegate import Stopped
@@ -86,10 +87,10 @@ class SurvivorBlocksTheRetry(te.EngineTest):
                 return fake_route.answer(self.c, "worker_failed", "r1", worker=worker, exit_code=-15)
 
         script = Script({"plan": [te.PLAN], "write": [te.WRITE], "review": [te.CLEAN]})
-        c = wslots.load_cfg(str(self.wt))
+        c = wslots.load_cfg(str(self.wt), port_git())
         with te.delegate_stack(script):
             self.eng = engine.Engine(
-                BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(), git=port_git()
+                BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(), git=port_git(), who=who()
             )
             rc = self.eng.run()
         return rc, script
@@ -112,7 +113,7 @@ class SurvivorBlocksTheRetry(te.EngineTest):
 
     def test_the_write_call_carries_delegates_idle_limit_and_one_wall_cap_in_its_argv(self):
         script = fake_route.Script({"plan": [te.PLAN], "write": [te.WRITE], "review": [te.CLEAN]})
-        c = wslots.load_cfg(str(self.wt))
+        c = wslots.load_cfg(str(self.wt), port_git())
         argvs = []
         real = RunRequest.to_argv
 
@@ -121,7 +122,8 @@ class SurvivorBlocksTheRetry(te.EngineTest):
             return argvs[-1]
 
         with te.delegate_stack(script), mock.patch.object(RunRequest, "to_argv", spy):
-            engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(), git=port_git()).run()
+            engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(),
+                git=port_git(), who=who()).run()
         by_role = {a[a.index("run") + 1]: a for a in argvs}
         w = by_role["worker"]
         want = (str(int(c.write_idle_min * 60)), str(int(c.write_cap_min * 60)))
@@ -134,12 +136,11 @@ class SurvivorBlocksTheRetry(te.EngineTest):
         eng = engine.Engine(
             BeadId("t-1"),
             str(self.wt),
-            wslots.load_cfg(str(self.wt)),
+            wslots.load_cfg(str(self.wt), port_git()),
             store=self.store,
             env=snapshot(),
             spawner=real_spawner(),
-            git=port_git(),
-        )
+            git=port_git(), who=who())
         r = DelegateResult(data=te.CLEAN, secs=40 * 60)
         eng.records.anomalies("write", r, 1)
         eng.records.anomalies("review", r, 1)

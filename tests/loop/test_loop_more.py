@@ -73,7 +73,7 @@ class StopRequests(LoopBase):
 
 
 class Moved(Exception):
-    """What the mocked os.execv raises: the real one never returns."""
+    """What the mocked os.execve raises: the real one never returns."""
 
 
 class LoopSelfUpdate(LoopBase):
@@ -85,10 +85,10 @@ class LoopSelfUpdate(LoopBase):
         self.addCleanup(shutil.rmtree, self.cache, True)
         self.execs = []
 
-        def execv(exe, argv):
-            self.execs.append((exe, argv, os.environ.get("TL_LOOP_STATE"), os.getcwd()))
+        def execv(exe, argv, env):
+            self.execs.append((exe, argv, env.get("TL_LOOP_STATE"), os.getcwd(), env.get("TASK_LOOP_ACTOR")))
             raise Moved()
-        for p in (mock.patch.object(os, "execv", side_effect=execv),
+        for p in (mock.patch.object(os, "execve", side_effect=execv),
                   mock.patch.dict(os.environ, {})):
             p.start()
             self.addCleanup(p.stop)

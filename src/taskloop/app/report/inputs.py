@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from taskloop.adapters import beadtools, ident
+from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdFailure, Beads, Git
@@ -54,10 +55,10 @@ def prefix(bead: str | None) -> str:
     return (bead or "").split("-")[0]
 
 
-def bead_status(bead: BeadId, repo: str, store: Beads | None = None) -> str | None:
+def bead_status(bead: BeadId, repo: str, who: Identity, store: Beads | None = None) -> str | None:
     """The bead's status, None when the tracker has no such bead, "?" when bd itself failed (no false lost work)."""
     try:
-        found = (store or beadtools.bd_store(repo)).show(bead)
+        found = (store or beadtools.bd_store(who.actor, repo)).show(bead)
     except BdFailure:
         return "?"
     return found.status if found else None

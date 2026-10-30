@@ -6,7 +6,6 @@ from pathlib import Path
 
 from taskloop.adapters import applog, childenv
 from taskloop.app.release.shell import Shell, say
-from taskloop.contracts import env as penv
 from taskloop.contracts.env import Env
 from taskloop.contracts.envvars import EnvVar
 
@@ -18,12 +17,12 @@ def code_ids(root: Path, sh: Shell) -> list[str]:
     return [sh.port.rev_parse(str(root), f"HEAD:{p}") for p in CODE]
 
 
-def newer_release(tool_root: Path, where: Path, sh: Shell) -> Path | None:
+def newer_release(tool_root: Path, where: Path, sh: Shell, env: Env) -> Path | None:
     """The clone's dev/release.py when `where` (on origin/main) holds release code other than `tool_root`'s; None when they are the
-    same, the clone has no such script, or this process is already the exec'd one. The marker is taken out of the environment here,
-    so nothing the release starts (the suite, its release tests) inherits it."""
+    same, the clone has no such script, or this process is already the exec'd one (its marker is in `env`; childenv.tool_env hands
+    it to no child)."""
     script = where / "dev" / "release.py"
-    if penv.take(EnvVar.TL_RELEASE_REEXEC) or not script.is_file() or code_ids(tool_root, sh) == code_ids(where, sh):
+    if env.get(EnvVar.TL_RELEASE_REEXEC) or not script.is_file() or code_ids(tool_root, sh) == code_ids(where, sh):
         return None
     return script
 
@@ -33,7 +32,6 @@ def exec_release(script: Path, argv: Sequence[str], repo: Path, env: Env) -> Non
     holds no lock: the exec'd release takes it."""
     args = list(argv) + ([] if any(a == "--repo" or a.startswith("--repo=") for a in argv) else ["--repo", str(repo)])
     say(f"this checkout's release code is not origin/main's; running {script}")
-    penv.export(EnvVar.TL_RELEASE_REEXEC, "1")
     applog.close_all()
     cmd = [*childenv.script_argv(script, env), *args]
-    os.execv(cmd[0], cmd)
+    os.execve(cmd[0], cmd, childenv.exec_env(env, {EnvVar.TL_RELEASE_REEXEC: "1"}))

@@ -3,11 +3,10 @@ a failure becomes one of the typed SlotGitErrors (BranchPinned, DirtyTree, RefRa
 import os
 import subprocess
 import tempfile
-from typing import Final, Literal
+from typing import Literal
 
 from taskloop.adapters.git_base import classify
 from taskloop.adapters.git_ops import LandGit
-from taskloop.contracts import env as penv
 from taskloop.contracts.gitfacts import ConfigEntry, GitOutcome, GrepHit, LogRow, Pick, Ref, StatusRow, TreeEntry
 from taskloop.contracts.slots import Checkout, RefRace, SlotGitError
 
@@ -294,5 +293,3 @@ class RealGit(LandGit):
     def prune_worktrees(self, repo: str) -> None:
         self._run(repo, "worktree", "prune")
 
-
-REAL: Final = RealGit(penv.snapshot())  # the default of a function that takes the port as an argument (a test passes its own)

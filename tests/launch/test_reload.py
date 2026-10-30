@@ -30,6 +30,7 @@ from support.fake_beads import FakeBeads  # noqa: E402
 from support.fakes import as_bead  # noqa: E402
 from support.narrow import must  # noqa: E402
 from support.spawn import port_git, real_spawner  # noqa: E402
+from support.who import who  # noqa: E402
 
 from taskloop.adapters import (  # noqa: E402
     childenv,
@@ -105,15 +106,16 @@ class Reload(te.EngineTest):
         f = ident.config_dir() / "events.jsonl"
         return [json.loads(x) for x in f.read_text().splitlines()] if f.exists() else []
 
-    def engine_for(self, script, **cfg):
-        c = wslots.load_cfg(str(self.wt))
+    def engine_for(self, script, env=None, **cfg):
+        c = wslots.load_cfg(str(self.wt), port_git())
         c = cfg_with(c, **{"reflect": False, **cfg})
-        eng = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(), git=port_git())
+        eng = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=env or snapshot(), spawner=real_spawner(),
+            git=port_git(), who=who())
         eng.argv = ["run-task", "t-1", "--worktree", str(self.wt), "--fresh", "--outcome-file", "/x/out.json"]
 
-        def fake_exec(argv):
+        def fake_exec(argv, environ):
             marker = reexec.read_reexec(BeadId("t-1"))
-            self.execs.append({"argv": argv, "env": json.loads(os.environ["TL_REEXEC"]), "marker": marker.to_dict() if marker else None})
+            self.execs.append({"argv": argv, "env": json.loads(environ["TL_REEXEC"]), "marker": marker.to_dict() if marker else None})
         eng.exec_fn = fake_exec
         eng.newer_fn = lambda: wloop.newer(self.here)  # pyrefly: ignore[bad-assignment]
         return eng
@@ -164,14 +166,11 @@ class Reload(te.EngineTest):
         self.assertEqual([c[0] for c in script.calls], ["planner", "worker", "reviewer"])  # land and close have not run yet
         self.assertEqual(self.closed, [])
         # the new image: same environment, the TL_REEXEC hand-over, the same checkpoint and log
-        with (
-            mock.patch.dict(os.environ, {"TL_REEXEC": json.dumps(ex["env"])}),
-            mock.patch.object(ident, "plugin_version", return_value="0.2.0"),
-        ):
-            eng2 = self.engine_for(script)
+        with mock.patch.object(ident, "plugin_version", return_value="0.2.0"):
+            eng2 = self.engine_for(script, env=Env({**snapshot().vars, "TL_REEXEC": json.dumps(ex["env"])}))
             self.assertEqual(eng2.log_path, eng.log_path)  # same run id, same log and run dir
             self.assertEqual(eng2.run_dir, eng.run_dir)
-            self.assertNotIn("TL_REEXEC", os.environ)  # taken: no child inherits it
+            self.assertNotIn("TL_REEXEC", childenv.tool_env(eng2.env.vars))  # no child inherits it
             rc = self.run_with(eng2, script)
         self.assertEqual(rc, 0)
         self.assertTrue(self.closed and self.closed[0].startswith("merged "))
@@ -260,7 +259,7 @@ class Reload(te.EngineTest):
         repo = str(self.wt)
         said = []
         with mock.patch.dict(os.environ, {}):
-            env = wloop.build(repo, store=FakeBeads(), here=self.here, env=snapshot(), spawner=holder)
+            env = wloop.build(repo, store=FakeBeads(), here=self.here, env=snapshot(), spawner=holder, git=port_git(), who=who())
             run = BeadRun(env, looptest.files(repo), wloop.installs(env.cfgdir, here=self.here), lambda: env.profile().loop, lambda: "",
                           lambda running: None, lambda: None, said.append)
             # the first child is the one that exec'd: its note appears while it runs
@@ -282,11 +281,12 @@ class Reload(te.EngineTest):
 
     # -- point 2: delegate is resolved per call, never held
     def test_delegate_route_is_resolved_again_each_call(self):
-        c = wslots.load_cfg(str(self.wt))
+        c = wslots.load_cfg(str(self.wt), port_git())
         with mock.patch.object(
             dl, "resolve", side_effect=[self.res("/a/route.py"), self.res("/b/route.py"), self.res("/b/route.py")]
         ) as fr:
-            eng = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(), git=port_git())
+            eng = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(),
+                git=port_git(), who=who())
             self.assertEqual(eng.delegation.route(), "/b/route.py")
             self.assertEqual(eng.delegation.route(), "/b/route.py")
             self.assertEqual(fr.call_count, 3)
@@ -294,7 +294,7 @@ class Reload(te.EngineTest):
     # -- point 4: loop state and dashboard lane
     def test_loop_state_names_the_running_version_and_code_dir(self):
         repo = str(self.wt)
-        env = wloop.build(repo, store=FakeBeads(), here=self.here, env=snapshot(), spawner=real_spawner())
+        env = wloop.build(repo, store=FakeBeads(), here=self.here, env=snapshot(), spawner=real_spawner(), git=port_git(), who=who())
         self.assertEqual((env.version, env.code_dir), ("0.1.0", str(self.here)))
 
     def test_releases_behind_counts_installed_versions_above_it(self):

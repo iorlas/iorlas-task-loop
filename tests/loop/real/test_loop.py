@@ -29,7 +29,9 @@ from support import (  # noqa: E402
     tlbd,
 )
 from support.narrow import must  # noqa: E402
+from support.spawn import port_git  # noqa: E402
 from support.waits import until  # noqa: E402
+from support.who import who  # noqa: E402
 
 from taskloop.adapters import (  # noqa: E402
     ident,
@@ -40,6 +42,7 @@ from taskloop.app.loop.core import Core  # noqa: E402
 from taskloop.app.loop.take import Taker  # noqa: E402
 from taskloop.app.slots import verbs  # noqa: E402
 from taskloop.app.track import trail  # noqa: E402
+from taskloop.app.wire import real  # noqa: E402
 from taskloop.app.wire import slots as wslots  # noqa: E402
 from taskloop.contracts.config import LoopConfig  # noqa: E402
 from taskloop.contracts.ports import WaitTimeout  # noqa: E402
@@ -113,14 +116,14 @@ class FakeBd:
 
     def _claim(self, a):
         b = self.beads.get(a[1]) or self.slots.get(a[1])
-        if a[1] in self.taken_by_other or must(b).get("status") != "open" or must(b).get("assignee") not in (None, "", ident.actor()):
+        if a[1] in self.taken_by_other or must(b).get("status") != "open" or must(b).get("assignee") not in (None, "", who().actor):
             return 1  # bd 1.3: an open bead still assigned to another actor (a paused run's) refuses the claim
-        must(b).update(status="in_progress", assignee=ident.actor(), lease_expires_at="2999-01-01T00:00:00Z")  # bd's claim carries a lease
+        must(b).update(status="in_progress", assignee=who().actor, lease_expires_at="2999-01-01T00:00:00Z")  # bd's claim carries a lease
         return 0
 
     def _unclaim(self, a):
         b = self.beads.get(a[1]) or self.slots.get(a[1])
-        if "--force" in a or must(b).get("assignee") in (None, "", ident.actor()):
+        if "--force" in a or must(b).get("assignee") in (None, "", who().actor):
             must(b).update(status="open", assignee="")
             return 0
         return 1
@@ -322,7 +325,7 @@ class QueueRuleFromBase(Base):
         self.push_rule({"engine": {"brief_kb": 7}})
         self.sh("git", "fetch", "-q", "origin", cwd=self.repo)
         (self.repo / ".task-loop.json").write_text(json.dumps({"engine": {"brief_kb": 99}}))
-        self.assertEqual(wloop.wslots.load_cfg(str(self.repo)).brief_kb, 7)
+        self.assertEqual(wloop.wslots.load_cfg(str(self.repo), port_git()).brief_kb, 7)
 
     def test_no_remote_falls_back_to_the_working_tree(self):
         self.sh("git", "remote", "remove", "origin", cwd=self.repo)
@@ -360,6 +363,7 @@ class FakeChild:
         self.bead = cmd[cmd.index("run-task") + 1]
         self.out = cmd[cmd.index("--outcome-file") + 1]
         self.pid, self.terminated = 4242, False
+        test.children.append(self)
         self.returncode: int | None = None
         self.polls = test.hold.pop(self.bead, 0)
         test.started.append((self.bead, cmd[cmd.index("--slot") + 1] if "--slot" in cmd else None))
@@ -404,11 +408,11 @@ class LoopBase(Base):
         self.roles: Callable[[], dict[str, dict[str, Any]]] = lambda: {
             "worker": {"usable": True}
         }  # delegate's `status --json` roles{}: a test makes it a function of the clock
-        self.script, self.hold, self.started, self.during = {}, {}, [], []
+        self.script, self.hold, self.started, self.during, self.children = {}, {}, [], [], []
         for p in (mock.patch.object(Core, "nap", self.clock.nap),
                   mock.patch.object(wloop, "delegate_route", return_value="/fake/route.py"),
                   mock.patch.object(wloop.dg, "role_status", side_effect=lambda route, env: self.roles()),
-                  mock.patch.object(wloop.real, "spawner", return_value=mock.Mock(
+                  mock.patch.object(real, "spawner", return_value=mock.Mock(
                       start_held=lambda cmd, out=None, extra=None, **kw: (FakeChild(self, cmd, extra), mock.Mock()))),
                   mock.patch.object(Taker, "prepare", return_value=None)):
             p.start()
@@ -447,7 +451,7 @@ class Loop(LoopBase):
         bd = self.beads({"x-1": [rec("landed")]})
         self.run_loop()
         self.assertIn(("update", "x-1", "--claim"), bd.calls)
-        self.assertTrue(os.environ.get("TASK_LOOP_ACTOR"))
+        self.assertTrue(self.children[0].extra.get("TASK_LOOP_ACTOR"))  # the child acts as the loop
 
     def test_a_log_line_per_bead_has_the_fields_the_owner_reviews(self):
         self.beads({"x-1": [rec("parked", run="tr-9", log="/eng/x-1.jsonl")]})
@@ -833,13 +837,13 @@ class Loop(LoopBase):
 
             def spy(*a, _bd=bd, _claims=claims, **kw):
                 if a[:1] == ("update",) and "--claim" in a and a[1] == "x-1":
-                    _claims.append(ident.actor())
+                    _claims.append(who().actor)
                 return _bd(*a, **kw)
             with tlbd.bd_boundary(spy):
                 self.run_loop()
             seen.append(claims[0])
             os.environ.pop("TASK_LOOP_ACTOR", None)
-        session_actor = ident.actor()
+        session_actor = who().actor
         self.assertNotEqual(seen[0], seen[1])
         self.assertNotIn(session_actor, seen)  # a hand run from the session claims as the session
         self.assertTrue(all(a.startswith(session_actor + "-") for a in seen), seen)  # still names its session
@@ -847,7 +851,7 @@ class Loop(LoopBase):
     def test_without_slots_each_loop_start_reuses_its_sessions_worktree(self):
         (self.repo / ".task-loop.json").write_text(json.dumps({"engine": {}}))
         names = []
-        with mock.patch.object(wslots, "start_worktree", side_effect=lambda repo, name=None: names.append(name) or
+        with mock.patch.object(wslots, "start_worktree", side_effect=lambda repo, git, who, name=None: names.append(name) or
                                str(self.home / "wt")):
             for _ in range(2):
                 self.beads({"x-1": [rec("landed")]}, slots=0)
@@ -861,7 +865,7 @@ class Loop(LoopBase):
         k = self.other_loop()
         looptest.write_state(str(self.repo), pid=k.pid, started=self.clock.t, worktree=str(self.repo / ".worktrees" / "loop-abcdef12"))
         names = []
-        with mock.patch.object(wslots, "start_worktree", side_effect=lambda repo, name=None: names.append(name) or
+        with mock.patch.object(wslots, "start_worktree", side_effect=lambda repo, git, who, name=None: names.append(name) or
                                str(self.home / "wt")):
             self.run_loop()
         self.assertNotEqual(names[0], "abcdef12")

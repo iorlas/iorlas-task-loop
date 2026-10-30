@@ -27,6 +27,7 @@ from support import (  # noqa: E402
 )
 from support.fakes import FakeBeadStore, as_comment  # noqa: E402
 from support.logs import typed  # noqa: E402
+from support.who import who  # noqa: E402
 
 from taskloop.adapters import (  # noqa: E402
     beadtools,
@@ -188,9 +189,9 @@ class LostWork(Base):
 
     def test_bd_failing_reads_as_unknown(self):
         with tlbd.bd_boundary(result=tlbd.done(returncode=1, stderr="dolt: connection refused")):
-            self.assertEqual(inputs.bead_status(BeadId("t-1"), str(self.repo)), "?")
+            self.assertEqual(inputs.bead_status(BeadId("t-1"), str(self.repo), who()), "?")
         with tlbd.bd_boundary(result=tlbd.done(returncode=1, stderr="Error: issue t-1 not found")):
-            self.assertIsNone(inputs.bead_status(BeadId("t-1"), str(self.repo)))
+            self.assertIsNone(inputs.bead_status(BeadId("t-1"), str(self.repo), who()))
 
     def test_a_slot_resets_wip_branch_is_lost(self):
         self.branch("wip/s1/1792540800", [("f.txt", "dead session\n", "wip: left in slot s1")], T0)
@@ -303,6 +304,7 @@ class Scorecard(Base):
             status_of=self.status.get,
             now=T0 + 200 * MIN,
             git=RealGit(snapshot()),
+            who=who(),
         )
 
     def test_a_trace_line_of_another_version_is_skipped_and_counted(self):
@@ -352,7 +354,7 @@ class Scorecard(Base):
         store = FakeBeadStore()
         store.notes = {b: [as_comment(x) for x in c] for b, c in self.comments.items()}
         with mock.patch.object(repos, "default_base", return_value="main"), mock.patch.object(beadtools, "bd_store", return_value=store), \
-                mock.patch.object(card, "bead_status", lambda b, repo: self.status.get(b)), \
+                mock.patch.object(card, "bead_status", lambda b, repo, who: self.status.get(b)), \
                 mock.patch.object(card, "time", mock.Mock(wraps=time, time=lambda: T0 + 200 * MIN)):  # the CLI reads the clock itself
             out = io.StringIO()
             with redirect_stdout(out):

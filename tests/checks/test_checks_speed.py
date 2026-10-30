@@ -201,7 +201,7 @@ class InputCache(SpeedTest):
         te.sh("git", "add", ".task-loop.json", cwd=self.wt)
         te.sh("git", "commit", "-qm", "doctor config", cwd=self.wt)
         te.sh("git", "update-ref", "refs/remotes/origin/main", "HEAD", cwd=self.wt)
-        warns = doctor.git_warnings(str(self.wt))
+        warns = doctor.git_warnings(str(self.wt), None, port_git())
         self.assertEqual(len([w for w in warns if "matches no tracked file" in w]), 1)
         self.assertIn("client/{A,B}/**", " ".join(warns))
 

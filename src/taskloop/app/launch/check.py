@@ -9,13 +9,12 @@ from typing import Any
 
 from taskloop.app.checks.runner import Checker
 from taskloop.app.launch.check_host import CliHost
-from taskloop.app.wire import real
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts.argv import text_of
 from taskloop.contracts.checks import CheckResult, Phase
 from taskloop.contracts.config import CheckSpec, EngineConfig
 from taskloop.contracts.env import Env
-from taskloop.contracts.ports import Spawner
+from taskloop.contracts.ports import Git, Spawner
 from taskloop.domain.checks.specs import gate_items, repo_check
 
 TAIL_LINES = 15
@@ -58,8 +57,7 @@ def profile_of(repo: str) -> EngineConfig:
     return wslots.load_profile(data).engine
 
 
-def cmd_check(a: Any, host: CliHost | None = None, *, env: Env, spawner: Spawner) -> int:
-    git = real.git(env)
+def cmd_check(a: Any, host: CliHost | None = None, *, env: Env, spawner: Spawner, git: Git) -> int:
     repo = git.toplevel(a.repo) or str(Path(a.repo).resolve())
     cfg = profile_of(repo)
     if a.list:

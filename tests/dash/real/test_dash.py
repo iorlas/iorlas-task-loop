@@ -20,6 +20,7 @@ from support.dashes import serving  # noqa: E402
 
 from taskloop.app.launch import dash_ports  # noqa: E402
 from taskloop.contracts import wire  # noqa: E402
+from taskloop.contracts.env import snapshot  # noqa: E402
 
 
 def line(**kw):
@@ -58,7 +59,7 @@ class Asks(unittest.TestCase):
                                                     parks_at=time.time() + 86400))
             (asks / "x-1.json").write_text(json.dumps(rec))
             env = {"XDG_CONFIG_HOME": str(d), "APPDATA": str(d), "TASK_LOOP_DASH_BIND": "127.0.0.1", "HOME": str(d), "USERPROFILE": str(d)}
-            with mock.patch.dict(os.environ, env), tlbd.bd_boundary() as bd_calls, serving(dash_ports.ports()) as base:
+            with mock.patch.dict(os.environ, env), tlbd.bd_boundary() as bd_calls, serving(dash_ports.ports(snapshot())) as base:
                 def post(tok, text):
                     req = urllib.request.Request(base + "/api/answer", method="POST",
                                                  data=json.dumps({"project": "x", "ask": "x-1-1", "kind": "answer", "text": text}).encode(),

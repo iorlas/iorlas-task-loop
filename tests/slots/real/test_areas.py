@@ -27,7 +27,8 @@ from support import (
 )
 from support import slots as sl
 from support.narrow import must
-from support.spawn import real_spawner
+from support.spawn import port_git, real_spawner
+from support.who import who
 
 from slots.test_slots import Slots
 from taskloop.adapters import ident
@@ -107,7 +108,7 @@ class Areas(AreasBase):
         seen: dict[str, Any] = {}
 
         def during():  # a second loop starts while x-1 runs in s1 by hand
-            bd.beads["x-1"].update(status="in_progress", assignee=ident.actor())  # run-task's claim (stubbed here)
+            bd.beads["x-1"].update(status="in_progress", assignee=who().actor)  # run-task's claim (stubbed here)
             seen["queue"] = self.order()
             with mock.patch.dict(os.environ, {"TASK_LOOP_ACTOR": "tl-loop0000"}):
                 self.run_loop("--max-beads", "1")
@@ -197,11 +198,11 @@ class Areas(AreasBase):
         bd.beads["x-1"]["status"] = "closed"
         bd.slots["sl-1"]["metadata"] = {"held_bead": "x-1"}  # open, as reclaim left it
         self.assertEqual(self.cli("slot", "hold", "s1", "--why", "screenshots")[0], 0)
-        self.assertEqual(wloop.running(str(self.repo)), {})
+        self.assertEqual(wloop.running(str(self.repo), port_git(), who()), {})
         self.assertEqual(self.order(), (["x-2"], {}))
         bd.slots["sl-2"]["metadata"] = {"held_bead": "x-1"}
         self.assertEqual(must(sl.take_slot(str(self.repo), self.cfg_slots()))[0], "s2")
-        self.assertEqual(wloop.running(str(self.repo)), {})
+        self.assertEqual(wloop.running(str(self.repo), port_git(), who()), {})
 
     def cfg_slots(self):
         return wslots.profile_slots(str(self.repo))
@@ -246,10 +247,10 @@ class Line(Slots):
 
     def waiter(self, label, served):
         def go():
-            got = wslots.wait_slot(str(self.repo), self.cfg, label, poll=(0.01, 0.02), spawner=real_spawner())
+            got = wslots.wait_slot(str(self.repo), self.cfg, label, poll=(0.01, 0.02), spawner=real_spawner(), git=port_git(), who=who())
             served.append((label, got[0] if got else None))
             assert got
-            wslots.release_slot(str(self.repo), got[0], spawner=real_spawner())
+            wslots.release_slot(str(self.repo), got[0], spawner=real_spawner(), git=port_git(), who=who())
         th = threading.Thread(target=go, daemon=True)
         th.start()
         return th
@@ -266,12 +267,13 @@ class Line(Slots):
         FileTickets(paths.ConfigDir(ident.config_dir())).take(loop_key(str(self.repo)), "first", 2, pid=k.pid, now=time.time())
         tries = []
         got = wslots.wait_slot(str(self.repo), self.cfg, "second", poll=(0.01, 0.01),
-                           stop=lambda: tries.append(1) or len(tries) >= 5, spawner=real_spawner())
+                           stop=lambda: tries.append(1) or len(tries) >= 5, spawner=real_spawner(), git=port_git(), who=who())
         self.assertIsNone(got)  # the slot is free, but the first in line is alive
         self.assertEqual(len(self.tickets()), 1)  # its own ticket gone, the first one's kept
         k.kill()
         k.wait()
-        got = wslots.wait_slot(str(self.repo), self.cfg, "second", poll=(0.01, 0.01), stop=lambda: True, spawner=real_spawner())
+        got = wslots.wait_slot(str(self.repo), self.cfg, "second", poll=(0.01, 0.01), stop=lambda: True, spawner=real_spawner(),
+            git=port_git(), who=who())
         self.assertEqual(must(got)[0], "s1")
         self.assertEqual(self.tickets(), [])  # the dead waiter's ticket was dropped
 
@@ -377,7 +379,7 @@ class ReviewFixes(AreasBase):
             f = Path(self.home, f"out-{b}.json")
             a = entry.Args(id=b, worktree=None, slot=slot, dry_run=False, fresh=False, quiet=True,
                             outcome_file=str(f), exclusive_area=True)
-            entry.main(a, env=snapshot(), spawner=real_spawner())
+            entry.main(a, env=snapshot(), spawner=real_spawner(), git=port_git(), who=who())
             outs[b] = json.loads(f.read_text())["outcome"]
         made = mock.Mock()
         made.return_value.run.return_value = 0
