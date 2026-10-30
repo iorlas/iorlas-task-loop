@@ -18,6 +18,7 @@ from taskloop.app.plan.planner import Planner
 from taskloop.app.run import engine
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts.ids import BeadId
+from taskloop.domain import outcome as oc
 from taskloop.domain.report import matchers as lifecycle
 
 ROOT = te.ROOT
@@ -180,7 +181,7 @@ class TraceTelemetry(te.EngineTest):
         self.assertTrue(row["fingerprint"])
 
     def test_a_stop_mid_run_still_writes_started_because_and_fingerprint(self):
-        with mock.patch.object(Planner, "plan", side_effect=engine.Blocked("failed: stopped (SIGTERM)")):
+        with mock.patch.object(Planner, "plan", side_effect=engine.Blocked("failed: stopped (SIGTERM)", kind=oc.Kind.PAUSE_KILLED)):
             rc, _ = self.run_engine({})
         self.assertEqual(rc, 2)
         row = self.assert_row("failed")

@@ -14,6 +14,23 @@ from taskloop.contracts.wire import Rec
 Group = Literal["static", "tests", "acceptance"]
 Tag = Literal["diff", "unity", "build"]  # diff: the engine's own; unity: queues for a slot; build: a conflict fix keeps it
 Verdict = Literal["passed", "failed", "skipped", "unverified"]
+
+
+class RoundVerdict(StrEnum):
+    """How a check round came out: the one union every reader matches (assert_never), never a word compared by hand."""
+    RED = "red"
+    UNVERIFIED = "unverified"
+    GREEN = "green"
+
+
+def round_verdict_of(word: str) -> RoundVerdict | None:
+    """The verdict a check node stored, or None when the node did not end as a round (a stop, a pause)."""
+    try:
+        return RoundVerdict(word)
+    except ValueError:
+        return None
+
+
 UNVERIFIED_EXIT = 86  # exit code of a check that could not verify (a missing tool, host or resource): never a pass
 
 
@@ -144,6 +161,11 @@ class CheckRun(Rec):
     def unverified(self) -> list[CheckResult]:
         """The checks that could not verify: not passed, and nothing for the writer to fix."""
         return [c for c in self.results if c.status == "unverified"]
+
+    @property
+    def verdict(self) -> RoundVerdict:
+        """The round's one outcome: red (a check failed), else unverified (one could not verify), else green."""
+        return RoundVerdict.RED if self.failed else RoundVerdict.UNVERIFIED if self.unverified else RoundVerdict.GREEN
 
     @override
     def __iter__(self) -> Iterator[CheckResult]:  # pyrefly: ignore[bad-override]  a run iterates its results

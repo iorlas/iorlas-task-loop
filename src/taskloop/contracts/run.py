@@ -3,18 +3,20 @@ from typing import Any, ClassVar, final
 
 import msgspec
 
-from taskloop.contracts.enums import Outcome, WhyCode
+from taskloop.contracts.enums import Result, WhyCode
+from taskloop.contracts.ids import BeadId
 from taskloop.contracts.wire import Rec
 
 
 @final
-class RunOutcome(Rec):
-    """The last line run-task prints and loop/<key>/<bead>-<stamp>.outcome.json."""
+class RunReport(Rec):
+    """The last line run-task prints and loop/<key>/<bead>-<stamp>.outcome.json. `kind` is the outcome.Kind value ("" for a stop
+    before the engine ran); a file of another `v` or with an unknown outcome is a parse error, never a default."""
 
     V: ClassVar[int] = 2
-    outcome: Outcome
-    bead: str
-    run: str
+    outcome: Result
+    bead: BeadId
+    run: str = ""
     why_code: WhyCode | None = None
     why: str = ""
     log: str = ""
@@ -24,6 +26,11 @@ class RunOutcome(Rec):
     asked: bool = False
     retry_after: float | None = None
     cost: float = 0.0
+    kind: str = ""
+    fingerprint: str = ""
+    storm: str = ""
+    role: str = ""
+    lane: str = ""
 
 
 @final
@@ -31,7 +38,7 @@ class LoopLogLine(Rec):
     """A line of loop/<key>.jsonl: the outcome plus where it ran."""
 
     V: ClassVar[int] = 2
-    outcome: RunOutcome
+    outcome: RunReport
     t: float
     slot: str | None = None
     run_log: str = ""

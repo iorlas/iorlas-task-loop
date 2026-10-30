@@ -320,13 +320,13 @@ class EnginePlanTest(EngineTest):
     def test_the_same_fault_on_a_second_bead_trips_the_storm_once(self):
         self.run_engine({"plan": [PLAN], "write": [self.bad_request()]})
         first = self.eng.result()
-        self.assertEqual((first["outcome"], first["kind"], first["storm"]), ("failed", "fault_bad_request", ""))
+        self.assertEqual((first.outcome, first.kind, first.storm), ("failed", "fault_bad_request", ""))
         self.run_engine({"plan": [PLAN], "write": [self.bad_request()]}, bead="t-2")
         second = self.eng.result()
-        self.assertTrue(second["storm"].startswith("STOPPED: storm FAULT_BAD_REQUEST"), second["storm"])
-        self.assertIn("t-1,t-2", second["storm"])
+        self.assertTrue(second.storm.startswith("STOPPED: storm FAULT_BAD_REQUEST"), second.storm)
+        self.assertIn("t-1,t-2", second.storm)
         self.run_engine({"plan": [PLAN], "write": [self.bad_request()]}, bead="t-3")
-        self.assertEqual(self.eng.result()["storm"], "")  # the record is live: no second banner
+        self.assertEqual(self.eng.result().storm, "")  # the record is live: no second banner
         self.assertEqual((self.blocked, self.ask()), ([], None))
         self.assertEqual(len(list((ident.config_dir() / "storm").glob("*.json"))), 1)
 

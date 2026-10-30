@@ -35,11 +35,11 @@ WHY_CODE: Mapping[str, WhyCode] = MappingProxyType(
 )
 
 
-def why_code(kind: str, outcome: str) -> WhyCode | None:
+def why_code(kind: str, outcome: Outcome) -> WhyCode | None:
     """The coarse reason a run ended otherwise than landed or done; the verify-gaps ask has no kind."""
-    if outcome in ("landed", "done"):
+    if outcome in (Outcome.LANDED, Outcome.DONE):
         return None
-    return WHY_CODE.get(kind) or (WhyCode.VERIFY if outcome == "blocked" else WhyCode.FAILED)
+    return WHY_CODE.get(kind) or (WhyCode.VERIFY if outcome is Outcome.BLOCKED else WhyCode.FAILED)
 
 
 def _known(cls: type[Rec], row: Mapping[str, Any]) -> dict[str, Any]:

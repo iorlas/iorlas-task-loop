@@ -306,4 +306,4 @@ class EngineReviewTest(EngineTest):
         r = dict(CLEAN, unchecked=[{"what": "the cited spec link did not open", "kind": "link"}])
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [r], "verify": [self.bad_request()]})
         self.assertEqual((rc, self.ask(), self.blocked), (2, None, []))
-        self.assertTrue(self.eng.result()["why"].startswith("failed: infrastructure: bad_request"))
+        self.assertTrue(self.eng.result().why.startswith("failed: infrastructure: bad_request"))

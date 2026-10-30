@@ -59,8 +59,9 @@ from taskloop.app.run import (
 from taskloop.app.slots.lease import Lease
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts.config import EngineConfig
-from taskloop.contracts.enums import WaitWhat
+from taskloop.contracts.enums import Result, WaitWhat
 from taskloop.contracts.ids import BeadId
+from taskloop.contracts.run import RunReport
 from taskloop.domain import outcome as oc
 from taskloop.domain.checks import matchers as check_matchers
 from taskloop.domain.checks import retry
@@ -240,7 +241,7 @@ class EngineRunTest(EngineTest):
         a = mock.Mock(id="t-1", slot=None, dry_run=False, fresh=False, quiet=True, outcome_file=None)
         made = mock.Mock()
         made.return_value.run.return_value = 2
-        made.return_value.result.return_value = {"v": 1, "outcome": "failed", "why": "failed: stopped (SIGTERM)"}
+        made.return_value.result.return_value = RunReport(outcome=Result.FAILED, bead=BeadId("t-1"), why="failed: stopped (SIGTERM)")
         made.return_value.stop_pending = False
         with self.stoppable(), mock.patch.object(entry, "Engine", made), \
                 mock.patch.object(entry, "reclaim", return_value=(True, "")), \
@@ -684,7 +685,7 @@ class EngineRunTest(EngineTest):
         with self.stop_at("worker", 1):
             self.run_engine({"plan": [PLAN], "write": [WRITE]})
         r = self.eng.result()
-        self.assertEqual((r["outcome"], r["kind"]), ("paused", "pause_killed"))
+        self.assertEqual((r.outcome, r.kind), ("paused", "pause_killed"))
         self.assertEqual((self.blocked, self.ask()), ([], None))
         self.assertFalse(any(c[:3] == ("label", "add", "t-1") for c in self.bd_calls))
         self.assertTrue(any(c[:1] == ("update",) and "open" in c for c in self.bd_calls))

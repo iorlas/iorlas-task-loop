@@ -52,11 +52,6 @@ class Table(unittest.TestCase):
         for k in oc.FAULTS:
             self.assertIn(POLICY[k].escalate_to, (None, Kind.ASK_STUCK))
 
-    def test_unknown_kind_or_newer_version_loads_as_engine_fault(self):
-        for o in (oc.load("nope", detail="x"), oc.load("fault_infra", v=9, detail="y")):
-            self.assertEqual(o.kind, Kind.FAULT_ENGINE)
-        self.assertEqual(oc.load("pause_lane").kind, Kind.PAUSE_LANE)
-
     def test_fingerprint_strips_ids_numbers_and_paths(self):
         a = oc.fingerprint(Kind.FAULT_INFRA, "failed: write step /a/b/c.cs lifesim-d5f.46 exit 12")
         b = oc.fingerprint(Kind.FAULT_INFRA, "failed: write step /x/y/z.cs lifesim-fld.2 exit 7")

@@ -25,8 +25,11 @@ from taskloop.adapters import procs as sproc  # noqa: E402
 from taskloop.app.plan.planner import Planner  # noqa: E402
 from taskloop.app.wire import slots as wslots  # noqa: E402
 from taskloop.contracts import answers  # noqa: E402
+from taskloop.contracts.enums import Result  # noqa: E402
 from taskloop.contracts.ids import BeadId  # noqa: E402
+from taskloop.contracts.run import RunReport  # noqa: E402
 from taskloop.contracts.schema import unstrict  # noqa: E402
+from taskloop.domain import outcome as oc  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from support import engine_case as T  # noqa: E402
@@ -158,27 +161,27 @@ class Outcome(T.EngineTest):
     def test_an_owner_ask_is_parked(self):
         self.run_engine({"plan": [dict(PLAN, irreversible="push_shared", question="Old format or new?")]})
         r = self.eng.result()
-        self.assertEqual((r["outcome"], r["asked"]), ("parked", True))
+        self.assertEqual((r.outcome, r.asked), ("parked", True))
 
     def test_a_lane_out_for_long_is_paused_with_the_time_the_lane_is_back(self):
         due = time.time() + 3 * 3600
         self.run_engine({"plan": [PLAN], "write": [stop("rate_limited", at=due, say="out")]})
         r = self.eng.result()
-        self.assertEqual(r["outcome"], "paused")
-        self.assertAlmostEqual(r["retry_after"], due, delta=1)
+        self.assertEqual(r.outcome, "paused")
+        self.assertAlmostEqual(r.retry_after or 0.0, due, delta=1)
 
     def test_a_logged_out_worker_is_paused_with_no_time(self):
         out = stop("logged_out", family="claude", say="Failed to authenticate")
         self.run_engine({"plan": [out]})
         r = self.eng.result()
-        self.assertEqual((r["outcome"], r["retry_after"], r["asked"]), ("paused", 0, False))
+        self.assertEqual((r.outcome, r.retry_after, r.asked), ("paused", 0, False))
 
     def test_an_engine_error_is_failed(self):
         with mock.patch.object(Planner, "plan", side_effect=RuntimeError("boom")):
             self.run_engine({})
         r = self.eng.result()
-        self.assertEqual(r["outcome"], "failed")
-        self.assertIn("boom", r["why"])
+        self.assertEqual(r.outcome, "failed")
+        self.assertIn("boom", r.why)
 
     def main(self, outcome_file, **kw):
         a = mock.Mock(id="t-1", worktree=str(Path(self.tmp.name, "slot")), slot=None, dry_run=False, fresh=False,
@@ -194,7 +197,7 @@ class Outcome(T.EngineTest):
         f = Path(self.tmp.name, "out.json")
         made = mock.Mock()
         made.return_value.run.return_value = 0
-        made.return_value.result.return_value = {"outcome": "landed", "bead": "t-1"}
+        made.return_value.result.return_value = RunReport(outcome=Result.LANDED, bead=BeadId("t-1"))
         with mock.patch.object(entry, "reclaim", return_value=(True, "")), mock.patch.object(entry, "Engine", made):
             rc, rec, last = self.main(f)
         self.assertEqual((rc, rec["outcome"], last["outcome"]), (0, "landed", "landed"))
@@ -203,8 +206,8 @@ class Outcome(T.EngineTest):
         due = time.time() + 1800
         made = mock.Mock()
         made.return_value.run.return_value = 2
-        made.return_value.result.return_value = {"outcome": "paused", "bead": "t-1", "retry_after": due,
-                                                 "why": "paused: no lane for write until 09:36"}
+        made.return_value.result.return_value = RunReport(outcome=Result.PAUSED, bead=BeadId("t-1"), retry_after=due,
+                                                                  why="paused: no lane for write until 09:36")
         a = mock.Mock(id="t-1", worktree=str(Path(self.tmp.name, "slot")), slot=None, dry_run=False, fresh=False,
                       quiet=True, outcome_file=None)
         Path(a.worktree).mkdir(exist_ok=True)
@@ -226,8 +229,8 @@ class Outcome(T.EngineTest):
         )
 
     def test_a_pause_with_no_time_says_so(self):
-        self.assertIn("no time", entry.pause_line({"outcome": "paused", "bead": "t-1", "retry_after": 0}))
-        self.assertEqual(entry.pause_line({"outcome": "landed", "bead": "t-1"}), "")
+        self.assertIn("no time", entry.pause_line(RunReport(outcome=Result.PAUSED, bead=BeadId("t-1"), retry_after=0)))
+        self.assertEqual(entry.pause_line(RunReport(outcome=Result.LANDED, bead=BeadId("t-1"))), "")
 
     def test_a_refused_claim_is_taken_and_keeps_exit_1(self):
         f = Path(self.tmp.name, "out.json")
@@ -517,8 +520,8 @@ class DelegateLauncher(T.EngineTest):
     def test_close_with_an_empty_reason_still_closes(self):
         c = wslots.load_cfg(str(self.wt))
         eng = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store)
-        eng.closer.close("failed", "", "", "")
-        self.assertTrue(self.blocked)
+        eng.closer.close(oc.make(oc.Kind.FAULT_ENGINE))
+        self.assertIn("stopped before a reason was recorded", self.said())  # a fault: the bead stays open, the comment says why
 
     def test_no_lane_pauses_the_bead_open(self):
         none = stop("no_lane", say="no adequate model")

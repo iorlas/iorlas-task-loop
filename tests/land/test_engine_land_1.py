@@ -87,11 +87,9 @@ class EngineLand1Test(EngineTest):
         self.assertEqual((r["stats"]["tokens_in"], r["stats"]["tokens_cached"], r["stats"]["tokens_out"]), (3000, 2400, 150))
         self.assertEqual([(w["write"], w["resumed"], w["input_tokens"]) for w in r["write_rounds"]], [(1, "no", 1000)])
         res = self.eng.result()  # the landed run's stats, trace and log
-        self.assertEqual(res["outcome"], "landed")
-        self.assertEqual((res["bead"], res["run"], res["log"]), ("t-1", self.eng.log_path.stem, str(self.eng.log_path)))
-        self.assertFalse(res["asked"])
-        for k in ("minutes", "rounds", "tests_added", "retry_after"):
-            self.assertIn(k, res)
+        self.assertEqual(res.outcome, "landed")
+        self.assertEqual((res.bead, res.run, res.log), ("t-1", self.eng.log_path.stem, str(self.eng.log_path)))
+        self.assertFalse(res.asked)
         self.assertTrue(self.eng.git("symbolic-ref", "--short", "-q", "HEAD"))  # a landed bead leaves the slot on a branch
         want = json.loads((ident.PLUGIN_ROOT / ".claude-plugin" / "plugin.json").read_text())["version"]
         self.assertEqual(ident.plugin_version(), want)  # the log and trace record the plugin version
@@ -302,7 +300,7 @@ class EngineLand1Test(EngineTest):
                 land=self.script("land-push.sh", "kill -TERM $PPID\nsleep 0.3\ngit push -q origin HEAD:main\n"),
             )
         self.assertEqual(rc, 0)
-        self.assertEqual(self.eng.result()["outcome"], "landed")
+        self.assertEqual(self.eng.result().outcome, "landed")
         self.assertEqual(gitrepo.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
         self.assertTrue(self.closed and self.closed[0].startswith("merged "))
         self.assertEqual(self.blocked, [])
@@ -314,7 +312,7 @@ class EngineLand1Test(EngineTest):
             return mock.Mock(returncode=0, stdout="", stderr="")
         with self.stoppable(), self.store.stub(bd_fn=stop_at_the_land_record):
             rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
-        self.assertEqual((rc, self.eng.result()["outcome"]), (0, "landed"))
+        self.assertEqual((rc, self.eng.result().outcome), (0, "landed"))
         self.assertEqual(self.blocked, [])
 
     @real_proc("the land command is a real child that signals its parent, the engine, mid-command")
@@ -547,7 +545,7 @@ class EngineLand1Test(EngineTest):
         self.assertEqual(events, ["enter", "fetch", "rebase", "gate", "push",
                                   "fetch", "rebase", "checks", "gate", "push", "exit"])
         self.assertEqual(state["pushes"], 2)
-        self.assertEqual(self.eng.result()["outcome"], "landed")
+        self.assertEqual(self.eng.result().outcome, "landed")
         self.assertTrue(self.closed[0].startswith("merged "))
         self.assertEqual(gitrepo.git("show", "origin/main:a.txt", cwd=str(self.wt)), "concurrent 1")
         self.assertEqual(gitrepo.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
@@ -591,7 +589,7 @@ class EngineLand1Test(EngineTest):
         self.assertEqual(events.count("exit"), 2)
         self.assertEqual(events[events.index("fix:verify") - 1], "exit")
         self.assertEqual(gitrepo.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d4")
-        self.assertEqual(self.eng.result()["outcome"], "landed")
+        self.assertEqual(self.eng.result().outcome, "landed")
 
     def push_race_exhausted_cell(self, failure):
         rc, events, state = self.run_push_race(failure=failure, resume_failed_fix=True,
@@ -616,7 +614,7 @@ class EngineLand1Test(EngineTest):
         self.assertEqual(events.count("exit"), 1)
         self.assertEqual(events[-2:], ["exit", "fix:verify"])
         self.assertFalse(self.eng.landed_sha)
-        self.assertNotEqual(self.eng.result()["outcome"], "landed")
+        self.assertNotEqual(self.eng.result().outcome, "landed")
         self.assertFalse(self.closed)
         self.assertEqual(self.lands, [])
         self.assertEqual(gitrepo.git("show", "main:a.txt", cwd=str(self.race_origin)), "concurrent 1")
@@ -690,7 +688,7 @@ class EngineLand1Test(EngineTest):
         self.assertEqual(len(recovery.pushes), 1)
         self.assertFalse(self.eng.pending_land_validation)
         self.assertNoCheckpoint()
-        self.assertEqual(self.eng.result()["outcome"], "landed")
+        self.assertEqual(self.eng.result().outcome, "landed")
         self.assertEqual(len(self.closed), closed_before + 1)
         self.assertEqual(len(self.lands), 1)
 

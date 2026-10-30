@@ -12,6 +12,7 @@ from taskloop.app.slots.lease import Lease
 from taskloop.app.slots.pool import SlotPool
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.config import EngineConfig, LoopConfig
+from taskloop.contracts.enums import Result
 from taskloop.contracts.ports import BeadPatch
 from taskloop.contracts.slots import SlotFail
 
@@ -57,7 +58,7 @@ class Taker:
             area, busy = rule.area_busy(b) if has_areas(ecfg) else ("", None)
             if busy:  # another run took the area since the queue was read
                 self.say(f"{b.id}: {busy.why}; the next bead")
-                return vd.Verdict("skipped")
+                return vd.Verdict(Result.SKIPPED)
             won, why = env.claim(b.id, at.wt, at.slot)
             if not won:
                 return vd.taken(why)
@@ -75,7 +76,7 @@ class Taker:
             bid = b.id
             held = self.claimed(b, at, ecfg, rule)
             if held is not None:
-                if held.outcome == "skipped":
+                if held.outcome is Result.SKIPPED:
                     continue
                 self.record(bid, at.slot, held)
                 self.later[bid] = env.now() + self.tune().pause_retry
@@ -83,7 +84,7 @@ class Taker:
             lease.add(bid)
             v = (self.prepare(at.slot, b.id) if slots else None) or self.run.run(b, at)
             self.record(b.id, at.slot, v)
-            if v.outcome != "taken":
+            if v.outcome is not Result.TAKEN:
                 break
             self.later[bid] = env.now() + self.tune().pause_retry
             lease.drop(bid)

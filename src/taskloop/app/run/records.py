@@ -8,6 +8,7 @@ from taskloop.app.run import trace as runtrace
 from taskloop.app.slots import engine_lock
 from taskloop.contracts import log as rec
 from taskloop.contracts import plancheck
+from taskloop.contracts.enums import Outcome
 from taskloop.domain.report import matchers as lifecycle
 
 
@@ -47,10 +48,10 @@ class Records:
                                 prev_run=why["prev_run"], started_because=why["started_because"], ask=why["ask"],
                                 branch=e.git("symbolic-ref", "--short", "-q", "HEAD") or ""))
 
-    def file_trace(self, outcome: str, why: str, sha: str) -> None:
+    def file_trace(self, outcome: Outcome, why: str, sha: str) -> None:
         """One line per engine run in traces.jsonl, never pruned: bead, repo, branch, every session, the outcome."""
         e = self.e
-        kind = e.kind.value if e.kind else ""
+        kind = e.kind.value
         try:
             e.stores.traces.append(runtrace.run_trace(e.log_path.stem, dict(
                 self.origin(), bead=e.bead, repo_url=e.git("remote", "get-url", "origin") or str(e.wt), worktree=str(e.wt),

@@ -26,14 +26,15 @@ from taskloop.app.track import verbs
 from taskloop.app.wire import real
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts import env as penv
-from taskloop.contracts import fence
+from taskloop.contracts import fence, wire
 from taskloop.contracts.bead import Bead
-from taskloop.contracts.enums import AskStatus
+from taskloop.contracts.enums import AskStatus, Result
 from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.fence import SLOT_GEN
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdFailure, BeadPatch
+from taskloop.contracts.run import RunReport
 from taskloop.contracts.stores import AskStore
 from taskloop.domain import outcome as oc
 
@@ -145,21 +146,20 @@ def append_output(stream: Any) -> Any:
         fcntl.fcntl(fd, fcntl.F_SETFL, fcntl.fcntl(fd, fcntl.F_GETFL) | os.O_APPEND)
 
 
-def pause_line(rec: Any) -> Any:
+def pause_line(rec: RunReport) -> Any:
     """A paused run's one line for whoever reran it by hand: the exact time the lane is back (tl-bxk.10.6)."""
-    if rec.get("outcome") != "paused":
+    if rec.outcome is not Result.PAUSED:
         return ""
-    due = float(rec.get("retry_after") or 0)
+    due = rec.retry_after or 0.0
     if not due:
-        return "PAUSED {}: no time the lane frees (login, network or setup); rerun when fixed: tl run-task {}".format(
-            rec.get("bead"), rec.get("bead"))
+        return f"PAUSED {rec.bead}: no time the lane frees (login, network or setup); rerun when fixed: tl run-task {rec.bead}"
     return "PAUSED {}: the lane is back at {}; rerun then: tl run-task {}".format(
-        rec.get("bead"), time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(due)), rec.get("bead"))
+        rec.bead, time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(due)), rec.bead)
 
 
-def report(a: Any, rec: Any) -> Any:
+def report(a: Any, rec: RunReport) -> Any:
     """The outcome as the run's last stdout line, and in --outcome-file when the loop names one."""
-    line = json.dumps(rec, ensure_ascii=False)
+    line = json.dumps(wire.dump(rec), ensure_ascii=False)
     if getattr(a, "outcome_file", None):
         atomic_write_text(Path(a.outcome_file), line + "\n", fsync=False)
     say(line)
@@ -169,8 +169,8 @@ def main(a: Any, store: Any = None) -> Any:
     try:
         rc = run_main(a, store)
     except Blocked as b:  # a stop (SIGTERM) before the engine ran: the slot and the lock are already given back
-        rc = {"v": 1, "outcome": "failed", "bead": a.id, "why": b.why, "kind": b.kind.value if b.kind else ""}
-    if isinstance(rc, dict):  # stopped before the engine ran: nothing in the bead changed
+        rc = RunReport(outcome=Result.FAILED, bead=a.id, why=b.why, kind=b.kind.value)
+    if isinstance(rc, RunReport):  # stopped before the engine ran: nothing in the bead changed
         report(a, rc)
         return 1
     return rc
@@ -197,7 +197,7 @@ def run_any_slot(a: Any, repo: Any, cfg: Any, store: Any = None) -> Any:
     """--slot any: the next free slot, taken in the repo's slot line (first come, first served; --wait: wait in it),
     run there as `--slot NAME`, given back at the end."""
     if a.dry_run:
-        return {"v": 1, "outcome": "failed", "bead": a.id, "why": "failed: --slot any takes a slot; name one for --dry-run"}
+        return RunReport(outcome=Result.FAILED, bead=a.id, why="failed: --slot any takes a slot; name one for --dry-run")
     wait = bool(getattr(a, "wait", False))
     told: list[int] = []
 
@@ -213,7 +213,7 @@ def run_any_slot(a: Any, repo: Any, cfg: Any, store: Any = None) -> Any:
     if not got:
         why = "no free slot (tl slot list); --wait waits in line for one"
         print(f"TAKEN: {why}")
-        return {"v": 1, "outcome": "taken", "bead": a.id, "why": why}
+        return RunReport(outcome=Result.TAKEN, bead=a.id, why=why)
     a.slot, a.worktree, sb = got
     a.slot_gen = fence.gen_of(beadtools.peek(store or beadtools.bd_store(repo), sb), SLOT_GEN)  # the lease this run took
     halting.RUN_SLOT["owned"] = a.slot  # a re-exec hands the slot on (TL_REEXEC) and its next run-task gives it back
@@ -267,12 +267,12 @@ def _worktree_of(a: Any, repo: Any) -> tuple[str, Any]:
         wt = r.out.strip().splitlines()[-1] if r.exit == 0 and r.out.strip() else ""
         if not wt:
             print("tl: no worktree: " + r.err, file=sys.stderr)
-            return "", {"v": 1, "outcome": "failed", "bead": a.id, "why": "failed: no worktree: " + r.err[-300:]}
+            return "", RunReport(outcome=Result.FAILED, bead=a.id, why="failed: no worktree: " + r.err[-300:])
     wt = str(Path(wt).resolve())
     if (Path(wt) / ".git").is_dir():  # the main checkout holds the bead database and the config: never a worker's cwd
         print(f"tl: {wt} is the main checkout; run a task in a slot or a worktree (tl slot / tl worktree start)",
               file=sys.stderr)
-        return "", {"v": 1, "outcome": "failed", "bead": a.id, "why": f"failed: {wt} is the main checkout"}
+        return "", RunReport(outcome=Result.FAILED, bead=a.id, why=f"failed: {wt} is the main checkout")
     return wt, None
 
 
@@ -286,7 +286,7 @@ def _slot_taken(a: Any, repo: Any, wt: str, slot: str, sb: BeadId | None, store:
         took, why = wslots.take_named_slot(repo, slot, wslots.profile_slots(repo), "run-task " + a.id, store=store)
         if not took:
             print(f"TAKEN: {why}")
-            return None, {"v": 1, "outcome": "taken", "bead": a.id, "why": why}
+            return None, RunReport(outcome=Result.TAKEN, bead=a.id, why=why)
         penv.export(EnvVar.TASK_LOOP_SLOT_BEAD, took)  # the engine's heartbeat keeps it
         halting.RUN_SLOT["owned"] = slot
         return took, None
@@ -328,7 +328,7 @@ def run_in(a: Any, repo: Any, cfg: Any, store: Any = None) -> Any:
         if busy:
             why = busy if busy.startswith("area ") else f"worktree {wt}: {busy}"
             print(f"TAKEN: {why}")
-            return {"v": 1, "outcome": "taken", "bead": a.id, "why": why}
+            return RunReport(outcome=Result.TAKEN, bead=a.id, why=why)
         engine_lock.LOCK = lock
         return run_bead(a, repo, cfg, wt, store)
     finally:
@@ -351,12 +351,12 @@ def run_bead(a: Any, repo: Any, cfg: Any, wt: Any, store: Any = None) -> Any:
             ok, why = reclaim(a.id, repo, store)
             if not ok:
                 print(f"TAKEN: {why}")
-                return {"v": 1, "outcome": "taken", "bead": a.id, "why": why}
+                return RunReport(outcome=Result.TAKEN, bead=a.id, why=why)
             if why:
                 say(f"{a.id}: {why}")
         if not a.dry_run and verbs.claim(a.id, wt, a.slot, store=store) != 0:
             # bd lets this session re-claim its own bead (a reopened one); another session's claim stops here
-            return {"v": 1, "outcome": "taken", "bead": a.id, "why": "claimed by another session"}
+            return RunReport(outcome=Result.TAKEN, bead=a.id, why="claimed by another session")
         claim = None if a.dry_run else fence.take(store or beadtools.bd_store(), a.id, ident.actor(),
                                                   penv.ambient_bead(EnvVar.TASK_LOOP_SLOT_BEAD), getattr(a, "slot_gen", None))
         eng = Engine(a.id, wt, cfg, dry_run=a.dry_run, verbose=not getattr(a, "quiet", False),

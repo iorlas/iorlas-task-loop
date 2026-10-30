@@ -104,7 +104,7 @@ class EveryStepResumes(NetBase):
         once = Counter(n for n in s.nodes if n != node)
         self.assertTrue(once and set(once.values()) == {1}, once)  # nothing finished was asked again
         self.assertGreaterEqual(probe.calls, 2)
-        self.assertEqual(self.eng.result()["outcome"], "landed")
+        self.assertEqual(self.eng.result().outcome, "landed")
         self.assertIn("network_wait", self.causes())
         self.assert_no_charge()
         return s
@@ -139,7 +139,7 @@ class EveryStepResumes(NetBase):
         rc, _s = self.run_engine(answers, probe=netgate.FakeProbe([True]))
         self.assertEqual(rc, 2)
         r = self.eng.result()
-        self.assertEqual((r["outcome"], r["kind"]), ("paused", oc.Kind.PAUSE_NETWORK.value))
+        self.assertEqual((r.outcome, r.kind), ("paused", oc.Kind.PAUSE_NETWORK.value))
         self.assertEqual((self.blocked, self.ask()), ([], None))
         self.assertFalse([c for c in self.bd_calls if c[:2] == ("label", "add")])
 
@@ -154,14 +154,14 @@ class Checks(NetBase):
         answers = {"plan": [PLAN], "write": [WRITE], "review": [drop("net-review")] * 40}
         rc, s = self.run_engine(answers, probe=netgate.FakeProbe([False]), **cfg)  # the network stays down: the run pauses
         self.assertEqual(rc, 2)
-        self.assertEqual(self.eng.result()["kind"], oc.Kind.PAUSE_NETWORK.value)
+        self.assertEqual(self.eng.result().kind, oc.Kind.PAUSE_NETWORK.value)
         self.assertEqual(count.read_text(), "1")
         rc, s = self.run_engine({"review": [CLEAN]}, probe=Cycling(0), **cfg)
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual(s.nodes, ["review"])  # the plan and the write were not asked again
         self.assertEqual(s.calls[0][1], "net-review")
         self.assertEqual(count.read_text(), "1")  # the tree did not change: the green result was kept
-        self.assertEqual(self.eng.result()["outcome"], "landed")
+        self.assertEqual(self.eng.result().outcome, "landed")
 
 
 class Pause(NetBase):
@@ -177,8 +177,8 @@ class Pause(NetBase):
         self.pause_in_review()
         first = self.eng
         r = first.result()
-        self.assertEqual((r["outcome"], r["kind"]), ("paused", oc.Kind.PAUSE_NETWORK.value))
-        self.assertEqual((r["retry_after"], r["role"]), (0, "reviewer"))
+        self.assertEqual((r.outcome, r.kind), ("paused", oc.Kind.PAUSE_NETWORK.value))
+        self.assertEqual((r.retry_after, r.role), (0, "reviewer"))
         self.assertEqual((self.blocked, self.ask()), ([], None))
         self.assertFalse([c for c in self.bd_calls if c[:2] == ("label", "add")])  # no auto label, no engine-fault label
         self.assertTrue(any(c[:1] == ("update",) and "open" in c for c in self.bd_calls))
@@ -216,7 +216,7 @@ class Pause(NetBase):
         out = stop("rate_limited", at=time.time() + 3 * 3600, lane="OPENAI_SUBSCRIPTION")
         self.run_engine({"plan": [PLAN], "write": [out]})
         r = self.eng.result()
-        self.assertEqual((r["outcome"], r["kind"], r["role"], r["lane"]), ("paused", "pause_lane", "worker", "OPENAI_SUBSCRIPTION"))
+        self.assertEqual((r.outcome, r.kind, r.role, r.lane), ("paused", "pause_lane", "worker", "OPENAI_SUBSCRIPTION"))
 
 
 class Replay5ban16(NetBase):

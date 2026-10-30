@@ -12,6 +12,7 @@ from taskloop.app.loop.gate import GateRole
 from taskloop.app.loop.net import NetState
 from taskloop.app.slots import verbs
 from taskloop.contracts.config import LoopConfig
+from taskloop.contracts.enums import Result
 
 
 @dataclass
@@ -119,10 +120,10 @@ class Settle:
             print(v.storm)
             self.left("storm", v.storm[:200])
             return 2
-        if v.outcome == "landed":
+        if v.outcome is Result.LANDED:
             c.fails = []
-        elif v.outcome == "failed":
+        elif v.outcome is Result.FAILED:
             return self.failed(v, bid, name, slots)
-        elif v.outcome == "paused":
+        elif v.outcome is Result.PAUSED:
             self.paused(v, bid)
         return None

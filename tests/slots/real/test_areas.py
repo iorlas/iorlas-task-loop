@@ -46,7 +46,9 @@ from taskloop.app.track import verbs
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts import paths
 from taskloop.contracts.config import LoopConfig
-from taskloop.contracts.ids import loop_key
+from taskloop.contracts.enums import Result
+from taskloop.contracts.ids import BeadId, loop_key
+from taskloop.contracts.run import RunReport
 from taskloop.stores.files import FileTickets
 
 LIVE_PID = "a live pid that is not this process: a real sleep child (an engine lock, a second loop, a waiter)"
@@ -377,7 +379,7 @@ class ReviewFixes(AreasBase):
             outs[b] = json.loads(f.read_text())["outcome"]
         made = mock.Mock()
         made.return_value.run.return_value = 0
-        made.return_value.result.side_effect = lambda: {"outcome": "landed"}
+        made.return_value.result.side_effect = lambda: RunReport(outcome=Result.LANDED, bead=BeadId("t"))
         made.return_value.log_path = Path(self.home, "e.jsonl")
         with mock.patch.object(entry, "reclaim", return_value=(True, "")), mock.patch.object(verbs, "claim", return_value=0), \
                 mock.patch.object(entry, "Engine", made), mock.patch.object(signal, "signal"), \

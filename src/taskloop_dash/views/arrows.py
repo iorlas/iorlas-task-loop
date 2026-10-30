@@ -1,8 +1,9 @@
 """Why a run moved from one step to the next, in words: the arrow into a block and the line a run ends with."""
 
 import itertools
-from typing import Final
+from typing import Final, assert_never
 
+from taskloop.contracts.checks import RoundVerdict, round_verdict_of
 from taskloop_dash.jsonrec import Json
 from taskloop_dash.views.names import hhmm, lane_name
 
@@ -89,11 +90,18 @@ def mv(to: str, cause: str, detail: str = "") -> Json:
 
 
 def after_checks(a: Json, b: Json) -> Json | None:
-    if a["outcome"] == "red":
-        return mv(b["step"], "checks_red" if b["step"] == "write" else "rounds_used", a["detail"])
-    if b["step"] != "review":
+    verdict = round_verdict_of(a["outcome"])
+    if verdict is None:
         return None
-    return mv("review", "checks_unverified" if a["outcome"] == "unverified" else "checks_green", a["detail"])
+    match verdict:
+        case RoundVerdict.RED:
+            return mv(b["step"], "checks_red" if b["step"] == "write" else "rounds_used", a["detail"])
+        case RoundVerdict.UNVERIFIED | RoundVerdict.GREEN:
+            if b["step"] != "review":
+                return None
+            return mv("review", "checks_unverified" if verdict is RoundVerdict.UNVERIFIED else "checks_green", a["detail"])
+        case _:
+            assert_never(verdict)
 
 
 def after_review(a: Json, b: Json) -> Json | None:

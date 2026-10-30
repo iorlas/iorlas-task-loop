@@ -25,6 +25,16 @@ class Outcome(StrEnum):
     DONE = "done"
 
 
+class Result(StrEnum):
+    """What a run gives its loop: the words of the loop's table, one per Rule.loop (and taken: another session has the bead)."""
+    LANDED = "landed"
+    FAILED = "failed"
+    PAUSED = "paused"
+    PARKED = "parked"
+    TAKEN = "taken"
+    SKIPPED = "skipped"  # the loop's own: the bead's area is busy
+
+
 class WhyCode(StrEnum):
     NEEDS_HUMAN = "needs_human"
     PAUSED = "paused"

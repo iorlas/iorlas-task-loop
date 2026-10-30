@@ -6,58 +6,36 @@ from typing import Any
 
 from taskloop.contracts import log as rec
 from taskloop.contracts.ask import BudgetLine
+from taskloop.contracts.enums import Outcome
 from taskloop.contracts.stores import JsonlStore
 from taskloop.domain import outcome as oc
 from taskloop.domain.matchers import clip
 
 
-def outcome_for(kind: Any, why: str) -> str:
-    """The trace's `outcome` word: landed, done, failed (a fault) or blocked (an ask, a pause, a wait). kind None: the
-    verify-gaps ask, read from its prefix."""
-    if kind in oc.FINISH:
-        return str(kind.value)
-    if kind:  # a stop keeps the word `failed` in the trace (the reports count it); its `loop` field says paused
-        return "failed" if oc.POLICY[kind].loop == "failed" or kind == oc.Kind.PAUSE_KILLED else "blocked"
-    return "failed" if why.startswith("failed:") else "blocked"
-
-
-def node_outcome(outcome: str, why: str, kind: Any = None) -> str:
+def node_outcome(outcome: Outcome, kind: oc.Kind) -> str:
     """What a node still open at the close came to: the run's own end."""
-    if outcome in ("landed", "done"):
-        return outcome
-    if kind:
-        return ("stopped" if kind == oc.Kind.PAUSE_KILLED else "paused" if kind.name.startswith("PAUSE_") or kind == oc.Kind.OWNER_PARK
-                else "waiting" if kind == oc.Kind.WAIT_ASK else "failed" if outcome == "failed" else "asks")
-    if why.startswith("paused:"):
-        return "paused"
-    if why.startswith("waiting:"):
-        return "waiting"
-    if why.startswith("failed: stopped"):
+    if outcome in (Outcome.LANDED, Outcome.DONE):
+        return outcome.value
+    if kind is oc.Kind.PAUSE_KILLED:
         return "stopped"
-    return "failed" if outcome == "failed" else "blocked"
+    if kind.name.startswith("PAUSE_") or kind is oc.Kind.OWNER_PARK:
+        return "paused"
+    if kind is oc.Kind.WAIT_ASK:
+        return "waiting"
+    return "failed" if outcome is Outcome.FAILED else "asks"
 
 
-def kind_move(kind: Any) -> tuple[str, str]:
-    if kind == oc.Kind.PAUSE_KILLED:
+def close_move(kind: oc.Kind) -> tuple[str, str]:
+    """(to, cause) of the last move, when no decision point logged one: landed, an ask, a pause, a wait, a failure."""
+    if kind in oc.FINISH:
+        return "close", kind.value
+    if kind is oc.Kind.PAUSE_KILLED:
         return "pause", "stopped"
-    if kind.name.startswith("PAUSE_") or kind == oc.Kind.OWNER_PARK:
+    if kind.name.startswith("PAUSE_") or kind is oc.Kind.OWNER_PARK:
         return "pause", "paused"
-    if kind == oc.Kind.WAIT_ASK:
+    if kind is oc.Kind.WAIT_ASK:
         return "ask", "waiting"
     return ("ask", oc.ASK_NAME[kind]) if kind in oc.ASKS else ("close", "failed")
-
-
-def close_move(outcome: str, why: str, kind: Any = None) -> tuple[str, str]:
-    """(to, cause) of the last move, when no decision point logged one: landed, an ask, a pause, a wait, a failure."""
-    if outcome in ("landed", "done"):
-        return "close", outcome
-    if kind:
-        return kind_move(kind)
-    if why.startswith("paused:"):
-        return "pause", "paused"
-    if why.startswith("waiting:"):
-        return "ask", "waiting"
-    return "close", "stopped" if why.startswith("failed: stopped") else "failed"
 
 
 def run_breakdown(log_path: str | Path, open_node: Any = None, top: int = 4) -> list[BudgetLine]:

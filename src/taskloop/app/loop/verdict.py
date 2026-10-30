@@ -1,9 +1,11 @@
 """What a run of one bead gave the loop: run-task's outcome file (read at this one place) plus what the loop itself saw."""
-import json
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
+from taskloop.contracts import wire
+from taskloop.contracts.enums import Result
+from taskloop.contracts.run import RunReport
 from taskloop.contracts.slots import SlotFailCode
 
 NETWORK = "pause_network"
@@ -12,7 +14,7 @@ FAULT_SLOT = "fault_slot"
 
 @dataclass(frozen=True)
 class Verdict:
-    outcome: str  # landed | failed | paused | taken | parked | ...
+    outcome: Result
     why: str = ""
     kind: str = ""
     minutes: float | None = None
@@ -30,7 +32,7 @@ class Verdict:
 
     @property
     def paused_for_network(self) -> bool:
-        return self.outcome == "paused" and self.kind == NETWORK
+        return self.outcome is Result.PAUSED and self.kind == NETWORK
 
     @property
     def fault(self) -> bool:
@@ -38,7 +40,7 @@ class Verdict:
 
     def quick_slot_failure(self, quick_min: float) -> bool:
         """An instant failure that is the slot's: the failures count toward setting the slot aside, not toward the stop."""
-        return (self.outcome == "failed" and self.slot_fault == "slot_broken"
+        return (self.outcome is Result.FAILED and self.slot_fault == "slot_broken"
                 and (self.pre_engine or (self.minutes is not None and self.minutes < quick_min)))
 
     def with_(self, **fields: Any) -> Verdict:
@@ -46,30 +48,25 @@ class Verdict:
 
 
 def pre_engine(why: str, slot_fault: SlotFailCode | None = None) -> Verdict:
-    return Verdict("failed", f"failed before the engine: {why}", pre_engine=True, slot_fault=slot_fault)
+    return Verdict(Result.FAILED, f"failed before the engine: {why}", pre_engine=True, slot_fault=slot_fault)
 
 
 def taken(why: str) -> Verdict:
-    return Verdict("taken", why)
-
-
-def num(v: Any) -> float | None:
-    return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else None
+    return Verdict(Result.TAKEN, why)
 
 
 def read(path: Path, rc: int | None, log_path: Path) -> tuple[Verdict, bool]:
-    """(the verdict, whether run-task gave one). No file: failed, with the exit code and where its log is."""
+    """(the verdict, whether run-task gave one). No file: failed, with the exit code and where its log is. A file that is not a
+    RunReport of this version (another shape, an unknown outcome) is failed too, and the verdict names the file and the fault."""
     try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-        if not isinstance(raw, dict):
-            raise ValueError("not an object")
-    except (OSError, ValueError):
-        return Verdict("failed", f"failed: no outcome from run-task (exit {rc}); see {log_path}"), False
-    rounds, tests = num(raw.get("rounds")), num(raw.get("tests_added"))
-    kind = str(raw.get("kind") or "")
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return Verdict(Result.FAILED, f"failed: no outcome from run-task (exit {rc}); see {log_path}"), False
+    try:
+        raw: RunReport = wire.load(RunReport, text)
+    except ValueError as err:  # msgspec.ValidationError, StaleRecord, bad JSON
+        return Verdict(Result.FAILED, f"failed: outcome file {path} is not a RunReport v{RunReport.V}: {err}; see {log_path}"), False
     return Verdict(
-        outcome=str(raw.get("outcome") or "failed"), why=str(raw.get("why") or ""), kind=kind, minutes=num(raw.get("minutes")),
-        rounds=None if rounds is None else int(rounds), tests_added=None if tests is None else int(tests),
-        asked=bool(raw.get("asked")), run=raw.get("run"), log=raw.get("log"), retry_after=num(raw.get("retry_after")) or 0.0,
-        role=str(raw.get("role") or ""), storm=str(raw.get("storm") or ""),
-        slot_fault="slot_broken" if kind == FAULT_SLOT else None), True
+        outcome=raw.outcome, why=raw.why, kind=raw.kind, minutes=raw.minutes, rounds=raw.rounds, tests_added=raw.tests_added,
+        asked=raw.asked, run=raw.run, log=raw.log, retry_after=raw.retry_after or 0.0, role=raw.role, storm=raw.storm,
+        slot_fault="slot_broken" if raw.kind == FAULT_SLOT else None), True

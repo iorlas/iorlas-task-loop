@@ -1,12 +1,12 @@
 """One run of the engine: claim checks, the stages, the land, and the close-out that always runs."""
 import contextlib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from taskloop.adapters import beadtools, ident
 from taskloop.adapters import delegate as dg
 from taskloop.app.release import reexec
-from taskloop.app.run import outcomes, requests
+from taskloop.app.run import requests
 from taskloop.app.run.reload import Exec
 from taskloop.app.slots.lease import Lease
 from taskloop.contracts import env as penv
@@ -22,12 +22,8 @@ from taskloop.domain.review.kinds import UNCHECKED_KINDS
 
 @dataclass
 class Ended:
-    """How the run ended, as the close step needs it."""
-    outcome: str = "failed"
-    why: str = ""
-    sha: str = ""
-    spec: Any = None
-    kind: Any = oc.Kind.FAULT_ENGINE
+    """How the run ended, as the close step needs it: the one RunOutcome (its kind, text, land commit and ask)."""
+    outcome: oc.RunOutcome = field(default_factory=lambda: oc.make(oc.Kind.FAULT_ENGINE))
 
 
 class RunOnce:
@@ -43,21 +39,19 @@ class RunOnce:
         try:
             self.run(hb, end)
         except e.Blocked as b:
-            end.kind = b.kind
-            end.outcome = outcomes.outcome_for(end.kind, b.why)
-            end.why, end.spec = b.why, b.spec
-            if end.kind == oc.Kind.PAUSE_KILLED and e.requests.stopped:  # the stop flag was the owner's request, not a SIGTERM
-                end.why = requests.STOPPED_WHY
+            end.outcome = b.outcome
+            if b.kind is oc.Kind.PAUSE_KILLED and e.requests.stopped:  # the stop flag was the owner's request, not a SIGTERM
+                end.outcome = oc.make(b.kind, requests.STOPPED_WHY)
         except fence.Fenced as f:  # the bead or the slot was taken again: this run writes nothing more
-            e.fenced = end.why = f.why
-            end.outcome, end.kind = "failed", oc.Kind.FAULT_ENGINE
+            e.fenced = f.why
+            end.outcome = oc.make(oc.Kind.FAULT_ENGINE, f.why)
         except Exec:
             pass  # the process image is gone; nothing below runs in a real exec
         except Exception as err:  # the close-out must run whatever broke
-            end.outcome, end.why, end.kind = "failed", f"failed: engine error {type(err).__name__}: {err}", oc.Kind.FAULT_ENGINE
+            end.outcome = oc.make(oc.Kind.FAULT_ENGINE, f"failed: engine error {type(err).__name__}: {err}")
         finally:
             self.close_out(hb, end)
-        return 0 if e.moved or end.outcome in ("landed", "done") else 2
+        return 0 if e.moved or end.outcome.finished else 2
 
     def beat(self) -> None:
         """The run's proof of life in its log (runlife.liveness reads it), then the stuck tick and the owner's stop; a log that cannot
@@ -81,10 +75,9 @@ class RunOnce:
             what = "; ".join("{} ({}{})".format(u["what"], u["kind"], ("; " + u["why"]) if u.get("why") else "") for u in gaps)
             raise e.Blocked("verify: before land, the workers could not check: " + what,
                             askspecs.external_fact([u["what"] for u in gaps]), kind=oc.Kind.ASK_DECISION)
-        end.sha = e.lander.finish(bead)
-        end.outcome = "landed" if end.sha else "done"
-        end.kind = oc.Kind.LANDED if end.sha else oc.Kind.DONE
-        if end.sha:
+        sha = e.lander.finish(bead)
+        end.outcome = oc.make(oc.Kind.LANDED, sha=sha) if sha else oc.make(oc.Kind.DONE)
+        if sha:
             e.owner_look.file_owner_look()  # before the checkpoint goes: a crash from here on still files it on resume
         e.checkpoints.drop()
 
@@ -198,9 +191,9 @@ class RunOnce:
             hb.stop()
             return
         with e.stop_deferred():  # a stop here would skip the close: no trace, no bead update
-            if e.landed_sha and end.outcome != "landed":  # stopped after the push: on the base, close it as landed
-                e.warn(f"{end.why or end.outcome} after the land went through; closing it landed")
-                end.outcome, end.why, end.sha, end.spec, end.kind = "landed", "", e.landed_sha, None, oc.Kind.LANDED
+            if e.landed_sha and end.outcome.kind is not oc.Kind.LANDED:  # stopped after the push: on the base, close it as landed
+                e.warn(f"{end.outcome.detail or end.outcome.word} after the land went through; closing it landed")
+                end.outcome = oc.make(oc.Kind.LANDED, sha=e.landed_sha)
             hb.stop()
             e.fenced = e.fenced or fence.stale(e.store, e.claim)
             if e.fenced:  # a run that lost its lease closes nothing: the bead, its checkpoint and its trace are the new holder's
@@ -209,7 +202,7 @@ class RunOnce:
             e.stuck.tick()  # the last tick: a run that stops on its third same red says it before its Close
             e.requests.drop()  # what the run did not take is for a run that ended
             reexec.drop_reexec(e.bead)  # a run that ended is no crash after an exec
-            if end.kind == oc.Kind.PAUSE_NETWORK and not e.dry:
+            if end.outcome.kind is oc.Kind.PAUSE_NETWORK and not e.dry:
                 e.reload.save_net_pause()
-            e.outcome, e.why = end.outcome, end.why
-            e.closer.close(end.outcome, end.why, end.sha, end.spec, end.kind)
+            e.why = end.outcome.detail
+            e.closer.close(end.outcome)

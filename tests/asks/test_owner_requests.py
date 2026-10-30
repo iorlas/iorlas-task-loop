@@ -163,7 +163,7 @@ class EngineRequests(te.EngineTest):
         self.assertTrue(close.why.startswith("parked: by the owner"))
         self.assertIsNotNone(self.eng.checkpoints.read())
         te.sh("git", "rev-parse", "--verify", "-q", "task/t-1", cwd=self.wt)  # the branch is kept
-        self.assertEqual(self.eng.result()["outcome"], "parked")
+        self.assertEqual(self.eng.result().outcome, "parked")
         self.assertFalse(Path(self.eng.run_dir, ConfigDir().run_request("x").name).exists())
 
     def test_stop_ends_the_run_through_the_halt_path(self):

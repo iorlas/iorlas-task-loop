@@ -460,8 +460,8 @@ class Fdyo(StagesTest):
         self.assertNotEqual(rc, 0)
         eng = cast(Any, self).eng
         res = eng.result()
-        self.assertEqual(res["outcome"], "parked")
-        self.assertIn("check slow timed out after 0.01 min (wall_min=0.01)", res["why"])
+        self.assertEqual(res.outcome, "parked")
+        self.assertIn("check slow timed out after 0.01 min (wall_min=0.01)", res.why)
         ends = [json.loads(x) for x in eng.log_path.read_text().splitlines() if '"kind": "check_end"' in x]
         self.assertEqual([(e["exit"], e["wall_hit"], e["tries"]) for e in ends if e["exit"] not in (None, 0)], [(124, True, 1)])
 

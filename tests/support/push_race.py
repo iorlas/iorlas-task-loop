@@ -17,6 +17,7 @@ from taskloop.app.run import engine
 from taskloop.app.run.waits import Waits
 from taskloop.contracts.checks import CheckRun
 from taskloop.contracts.enums import WaitWhat
+from taskloop.domain import outcome as oc
 
 RETRY_RED = ("checks", "checks_fixed", "checks_exhausted", "review_exhausted")
 
@@ -129,14 +130,14 @@ class PushRace:
         if self.failure in ("checks_fixed", "checks_exhausted", "review_exhausted"):
             self.state["fix_result"] = self.real["fix"](this, kind, tail, resume)
             return self.state["fix_result"]
-        raise engine.Blocked("test stops at fix: " + kind)
+        raise engine.Blocked("test stops at fix: " + kind, kind=oc.Kind.FAULT_ENGINE)
 
     def wait(self, this, secs, what, wid=None):
         if what != WaitWhat.NETWORK:
             return self.real["wait"](this, secs, what, wid)
         self.case.assertFalse(self.held)
         self.events.append("wait")
-        raise engine.Blocked("test stops at network wait")
+        raise engine.Blocked("test stops at network wait", kind=oc.Kind.FAULT_ENGINE)
 
     # -- the run ---------------------------------------------------------------------------------------------------------------
 

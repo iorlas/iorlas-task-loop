@@ -64,10 +64,12 @@ from taskloop.app.write.newfiles import NewFiles
 from taskloop.app.write.stage_loop import StageLoop
 from taskloop.contracts import fence, plancheck
 from taskloop.contracts.argv import text_of
+from taskloop.contracts.enums import Result
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.landed import Landed, LandedStore
 from taskloop.contracts.log import Assumed, Said
 from taskloop.contracts.paths import PLAN_FILE, ConfigDir, RunFiles
+from taskloop.contracts.run import RunReport
 from taskloop.domain import outcome as oc
 from taskloop.domain.lanes.matchers import read_only_command
 from taskloop.domain.lanes.says import stop_say, stop_why
@@ -321,15 +323,13 @@ class Engine(RunFields):
     def run(self) -> int:
         return RunOnce(self).go()
 
-    def result(self) -> dict[str, Any]:
+    def result(self) -> RunReport:
         """The run's outcome for the loop: landed (closed, done too), parked (blocked for the owner: an ask, or one
         still open), paused (the machine's trouble: lanes, login, network; the bead stays open), failed."""
-        out = ("landed" if self.outcome in ("landed", "done") else oc.POLICY[self.kind].loop if self.kind
-               else "failed" if self.outcome == "failed" else "parked")
-        paused = out == "paused"
-        return {"v": 1, "outcome": out, "bead": self.bead, "why": self.why[:500], "run": self.log_path.stem,
-                "log": str(self.log_path), "minutes": round((time.time() - self.t0) / 60, 1),
-                "rounds": self.stats["rounds"], "tests_added": self.stats["tests_added"], "asked": self.asked,
-                "retry_after": self.retry_after if paused else 0.0, "cost": round(self.cost, 2),
-                "kind": self.kind.value if self.kind else "", "fingerprint": self.fp, "storm": self.storm,
-                "role": self.pause_role if paused else "", "lane": self.pause_lane if paused else ""}
+        out = oc.POLICY[self.kind].loop
+        paused = out is Result.PAUSED
+        return RunReport(outcome=out, bead=self.bead, why=self.why[:500], run=self.log_path.stem, log=str(self.log_path),
+                         minutes=round((time.time() - self.t0) / 60, 1), rounds=self.stats["rounds"],
+                         tests_added=self.stats["tests_added"], asked=self.asked, retry_after=self.retry_after if paused else 0.0,
+                         cost=round(self.cost, 2), kind=self.kind.value, fingerprint=self.fp, storm=self.storm,
+                         role=self.pause_role if paused else "", lane=self.pause_lane if paused else "")

@@ -31,7 +31,7 @@ from taskloop.contracts import (
     trace,
     usage,
 )
-from taskloop.contracts.enums import AskClass, AskKind, AskStatus, LockWhat, Outcome, WaitWhat, WhyCode
+from taskloop.contracts.enums import AskClass, AskKind, AskStatus, LockWhat, Outcome, Result, WaitWhat, WhyCode
 from taskloop.contracts.ids import BeadId, CheckId, TreeSha
 from taskloop.contracts.runkey import BaseSha, Digest, RunKey
 
@@ -83,7 +83,8 @@ TRACE = trace.RunTrace(
     faults=[trace.Fault(step="write", lane="L", exit=1, reason="hung", t=T)],
 )
 
-OUTCOME = run.RunOutcome(outcome=Outcome.BLOCKED, bead="tl-1", run=str(RUN), why_code=WhyCode.STUCK, why="stuck", log="/l", minutes=3.5,
+OUTCOME = run.RunReport(outcome=Result.PARKED, bead=BeadId("tl-1"), run=str(RUN), why_code=WhyCode.STUCK, why="stuck",
+                         log="/l", minutes=3.5,
                          rounds=2, tests_added=4, asked=True, retry_after=None, cost=0.25)
 LOCK = locks.EngineLock(pid=1789, bead="tl-1", started=T, by="tl-abc", start="99", slot="s1", slot_bead="slot-1",
                         route=(10, "5"), workers=[(11, "6"), (12, "7")])
@@ -335,7 +336,7 @@ OTHERS = {
         base=[checks.BaseEntry(key=RUNKEY.replace(tree=TreeSha("")), red=True)],
     ),
     "Durations": checks.Durations(runs={"just fmt": [3.1, 2.9]}),
-    "RunOutcome": OUTCOME,
+    "RunReport": OUTCOME,
     "LoopLogLine": run.LoopLogLine(outcome=OUTCOME, t=T, slot="s1", run_log="/rl"),
     "Reexec": run.Reexec(
         run=str(RUN),

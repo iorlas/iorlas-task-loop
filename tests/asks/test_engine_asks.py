@@ -313,18 +313,18 @@ class EngineAsksTest(EngineTest):
         self.assertFalse(any(c[:1] == ("update",) and "blocked" in c for c in self.bd_calls))
         self.assertTrue(any(c[:1] == ("update",) and "open" in c and "--assignee" in c for c in self.bd_calls))
         r = self.eng.result()
-        self.assertEqual(r["outcome"], "failed")
-        self.assertTrue(r["why"].startswith("failed: infrastructure: bad_request: codex rejected the request"), r["why"])
-        self.assertLessEqual(len(r["why"].split("bad_request: ", 1)[1]), 200)
+        self.assertEqual(r.outcome, "failed")
+        self.assertTrue(r.why.startswith("failed: infrastructure: bad_request: codex rejected the request"), r.why)
+        self.assertLessEqual(len(r.why.split("bad_request: ", 1)[1]), 200)
         self.assertIn("infrastructure", self.eng.log_path.read_text())
 
     def test_the_third_identical_fault_on_one_bead_raises_exactly_one_ask(self):
         for n in range(2):
             self.run_engine({"plan": [PLAN], "write": [self.bad_request()]})
-            self.assertEqual((self.eng.result()["outcome"], self.blocked, self.ask()), ("failed", [], None), n)
+            self.assertEqual((self.eng.result().outcome, self.blocked, self.ask()), ("failed", [], None), n)
         self.run_engine({"plan": [PLAN], "write": [self.bad_request()]})
         r = self.eng.result()
-        self.assertEqual((r["outcome"], r["kind"], r["asked"]), ("parked", "ask_stuck", True))
+        self.assertEqual((r.outcome, r.kind, r.asked), ("parked", "ask_stuck", True))
         self.assertEqual(self.ask()["kind"], "stuck")
         self.assertEqual(len(self.blocked), 1)
 
