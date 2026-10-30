@@ -25,7 +25,8 @@ def _returning(value):
     return lambda *a, **k: value
 
 
-BEAD = {"id": "t-1", "title": "Add f", "metadata": {}, "acceptance_criteria": "f.txt exists"}  # a bead as bd prints it
+# a bead as bd prints it; labelled visual so verify runs
+BEAD = {"id": "t-1", "title": "Add f", "metadata": {}, "acceptance_criteria": "f.txt exists", "labels": ["visual"]}
 
 
 def must_bead(x, default_id="t-1") -> Bead:

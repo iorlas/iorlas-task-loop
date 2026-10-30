@@ -204,3 +204,20 @@ class AcceptanceItems:
             elif line.strip():
                 items.append(line.strip())
         return [(f"A{n}", " ".join(t.split())) for n, t in enumerate(items, 1)]
+
+
+class VisualWords:
+    """Words that say a bead's result is something to look at: a picture, a layout, a colour, an animation, a screen."""
+
+    LOOK = re.compile(r"\b(?:screenshots?|pictures?|images?|visual\w*|layouts?|render\w*|pixels?|animat\w+|ui|ux|gui|css|themes?|"
+                      r"fonts?|colou?rs?|icons?|sprites?|textures?|shaders?|scenes?|screens?|looks?|appearance|styles?|"
+                      r"dashboard|page|widgets?|hud|cosmetic\w*|evidence)\b", re.I)
+    LABEL = re.compile(r"(?:^|[-_:/])(?:visual|ui|ux|gui|frontend|front-end|css|art|look|design|graphics?|screenshot)(?:$|[-_:/])", re.I)
+
+    @classmethod
+    def in_text(cls, text: str) -> bool:
+        return cls.LOOK.search(text) is not None
+
+    @classmethod
+    def in_label(cls, label: str) -> bool:
+        return cls.LABEL.search(label) is not None

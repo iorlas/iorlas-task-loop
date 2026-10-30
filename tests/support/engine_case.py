@@ -189,7 +189,7 @@ CLEAN = {
 }
 
 
-BEAD = {"id": "t-1", "title": "Add f", "metadata": {}, "acceptance_criteria": "f.txt exists"}
+BEAD = {"id": "t-1", "title": "Add f", "metadata": {}, "acceptance_criteria": "f.txt exists", "labels": ["visual"]}  # visual: verify runs
 
 
 def review(unmet=(), findings=(), question="", decided=""):

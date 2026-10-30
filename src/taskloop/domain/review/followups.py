@@ -28,6 +28,27 @@ def label(bead: str, round_no: int) -> str:
     return f"from:{bead}-r{round_no}"
 
 
+UNCHECKED: Final = "unchecked"  # the category of the one follow-up that carries what a non-visual bead landed without verifying
+TAG: Final = "follow-up"
+
+
+def unchecked(bead: str, items: Sequence[Mapping[str, str]]) -> dict[str, str]:
+    """The leftover for a non-visual bead's unchecked items: one per bead (its key is (bead, UNCHECKED, "verify")), so a rerun that
+    adds it again files nothing new."""
+    rows = "\n".join(f"- {u['what']} ({u['kind']})" + (f": {u['why']}" if u.get("why") else "") for u in items)
+    return {"title": f"{title_prefix(bead)} {len(items)} item(s) nobody verified", "category": UNCHECKED, "file": "verify",
+            "why": f"{bead} is not a visual bead, so verify did not run; it landed with these unchecked items:\n{rows}"}
+
+
+def title_prefix(bead: str) -> str:
+    return f"Check after landing {bead}:"
+
+
+def labels(bead: str, round_no: int, lo: Mapping[str, str]) -> list[str]:
+    """The labels of a follow-up: where it came from, and the tag the unchecked-items follow-up carries."""
+    return [label(bead, round_no), *([TAG] if lo.get("category") == UNCHECKED else [])]
+
+
 @dataclass(frozen=True)
 class Batch:
     file: list[Mapping[str, str]]
@@ -42,6 +63,7 @@ def batch(bead: str, leftovers: Sequence[Mapping[str, str]], filed: Sequence[str
         key = str(FollowKey.of(bead, lo))
         if key not in filed:
             todo.setdefault(key, lo)
-    room = max(FOLLOW_UP_CAP - len(filed), 0)
-    rows = list(todo.values())
-    return Batch(rows[:room], rows[room:])
+    room = max(FOLLOW_UP_CAP - sum(f.split("|")[1:2] != [UNCHECKED] for f in filed), 0)  # the unchecked follow-up is outside the cap
+    own = [lo for lo in todo.values() if lo.get("category") == UNCHECKED]
+    rows = [lo for lo in todo.values() if lo.get("category") != UNCHECKED]
+    return Batch([*own, *rows[:room]], rows[room:])

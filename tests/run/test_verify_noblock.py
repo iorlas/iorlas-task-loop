@@ -61,7 +61,9 @@ class NoBlock(T.LandReviewBase):
 
     def unit(self):
         """An engine at land with the verifier's plumbing stubbed (no model, no tree)."""
-        return self.verifier({"changed_paths": lambda: [], "diff_text": lambda: ""})
+        e = self.verifier({"changed_paths": lambda: [], "diff_text": lambda: ""})
+        e.budget.labels = ["visual"]  # verify runs only on a visual bead
+        return e
 
     def comments(self):
         return [c[3] for c in self.bd_calls if c[:2] == ("comments", "add")]

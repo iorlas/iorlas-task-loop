@@ -31,7 +31,8 @@ KIND_LINES: Final = (
 )
 
 UNCHECKED_TEXT: Final = ("\nunchecked: what you could not check yourself, each with its kind: " + "; ".join(KIND_LINES) +
-                  "; or other. Empty when you checked everything.")
+                  "; or other. Empty when you checked everything. "
+                  "Only a visual bead is verified after you: for any other bead an unchecked item lands as a follow-up bead.")
 
 LATER_CASES: Final = ("\nAn acceptance case this stage cannot run is not unchecked: it is checked when the last stage runs it.")
 

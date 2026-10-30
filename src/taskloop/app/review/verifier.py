@@ -6,7 +6,9 @@ from typing import Any
 
 from taskloop.contracts.answers import VERDICTS
 from taskloop.domain.prompts.verify import VERIFY_PROMPT
+from taskloop.domain.review import followups, visual
 from taskloop.domain.review.kinds import UNCHECKED_KINDS
+from taskloop.domain.review.visual import VisualWhy
 
 Item = dict[str, Any]
 RAISE_KINDS = ("FAULT_BAD_REQUEST", "PAUSE_NETWORK", "PAUSE_KILLED")
@@ -30,11 +32,43 @@ class Verifier:
             return []
         gaps, failed = e.settles.settle(gaps)  # tl-bxk.10.19: what the engine proves itself is never asked
         gaps = e.routing.engine_steps(gaps)
+        if gaps and not self.visual(gaps):
+            asked = self.defer(gaps)
+            if failed:  # what the engine itself found wrong still goes back to the writer
+                return self.settle_wrong(asked, failed)
+            return self.after_clean(asked, self.counts()) if asked else []
         d = self.ask(gaps)
         if d is None:  # no verifier now is no reason to land unchecked: the owner checks them, as before
             return gaps + failed
         still, wrong = self.judge(gaps, d, failed)
         return self.settle_wrong(still, wrong) if wrong else self.after_clean(still, self.counts())
+
+    def visual(self, gaps: list[Item]) -> tuple[VisualWhy, ...]:
+        """Why this bead is visual (verify runs), () when it is not: the plan's stages, the bead's labels and acceptance, the files
+        touched, the profile's visual paths (domain/review/visual.py)."""
+        e = self.e
+        vp = e.cfg.visual_paths
+        stages = list((e.plan_data or {}).get("stages") or [])
+        paths = [p for st in stages for p in st.get("files") or []] + list(e.checkout.changed_paths())
+        return visual.why(visual.VisualFacts(
+            paths=paths, labels=list(e.budget.labels), acceptance=e.scope or "", goals=[str(st.get("goal") or "") for st in stages],
+            include=vp.include if vp else (), exclude=vp.exclude if vp else (), look_item=any(e.judge.is_look(u) for u in gaps)))
+
+    def defer(self, gaps: list[Item]) -> list[Item]:
+        """The items to ask. A bead that is not visual does not run verify: an item about one of its acceptance lines
+        is asked, the others land with the bead and go in one follow-up bead tagged `follow-up` (filed at the close)."""
+        e = self.e
+        asked = [dict(u, why=u.get("why") or "it names an acceptance criterion")
+                 for u in gaps if visual.names_criterion(u["what"], e.scope or "")]
+        rest = [u for u in gaps if u not in asked]
+        if rest:
+            lo = followups.unchecked(e.bead, rest)
+            if lo["title"] not in {x["title"] for x in e.leftovers}:
+                e.leftovers.append(lo)
+            e.comment("Verify (engine): not a visual bead, landed with these unchecked, filed as a follow-up: "
+                      + "; ".join(u["what"] for u in rest))
+            e.steps.move("land", "not_visual", f"{len(rest)} item{plural(len(rest))} unchecked, one follow-up bead")
+        return asked
 
     def counts(self) -> str:
         return ", ".join(f"{sum(x['verdict'] == k for x in self.e.verified)} {k}" for k in VERDICTS)

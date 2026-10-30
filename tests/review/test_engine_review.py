@@ -117,7 +117,7 @@ class EngineReviewTest(EngineTest):
 
     def test_a_verify_ask_is_a_decision_and_takes_the_bead_out_of_the_pick_queue(self):
         r = dict(CLEAN, unchecked=[{"what": "the cited spec link did not open", "kind": "link"}])
-        with self.store.stub(show=dict(BEAD, labels=["auto"])):
+        with self.store.stub(show=dict(BEAD, labels=["auto", "visual"])):
             _rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [r], "verify": [STILL_OPEN]},
                                     pick_label="auto")
         self.assertEqual((self.ask()["kind"], self.ask()["class"]), ("decision", "external_fact"))
