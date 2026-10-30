@@ -549,64 +549,62 @@
    "unity-tests"
   ]
  },
+ "RunKey": {
+  "check": "lint",
+  "tree": "deadbeef",
+  "base": "b4se",
+  "inputs": "a1",
+  "env": "e1"
+ },
  "CheckCacheEntry": {
-  "v": 1,
-  "key": "tree base",
-  "whole": {
-   "just fmt": {
-    "result": {
-     "id": "lint",
-     "cmd": "ruff check",
-     "group": "static",
-     "exit": 0,
-     "status": "passed",
-     "tries": 1,
-     "tail": "",
-     "secs": 0.0,
-     "log": "",
-     "wall_hit": false,
-     "wall_min": 0.0,
-     "cached": true,
-     "reused": false,
-     "why": "",
-     "note": "inputs unchanged",
-     "base_red": false,
-     "producer": "",
-     "sig": ""
+  "v": 2,
+  "runs": [
+   {
+    "key": {
+     "check": "lint",
+     "tree": "deadbeef",
+     "base": "b4se",
+     "inputs": "a1",
+     "env": "e1"
     },
-    "round": 1,
-    "log_abs": "/r/checks/00.log"
+    "hit": {
+     "result": {
+      "id": "lint",
+      "cmd": "ruff check",
+      "group": "static",
+      "exit": 0,
+      "status": "passed",
+      "tries": 1,
+      "tail": "",
+      "secs": 0.0,
+      "log": "",
+      "wall_hit": false,
+      "wall_min": 0.0,
+      "cached": true,
+      "reused": false,
+      "why": "",
+      "note": "inputs unchanged",
+      "base_red": false,
+      "producer": "",
+      "sig": ""
+     },
+     "round": 1,
+     "log_abs": "/r/checks/00.log"
+    }
    }
-  },
-  "inputs": {
-   "abc": {
-    "result": {
-     "id": "lint",
-     "cmd": "ruff check",
-     "group": "static",
-     "exit": 0,
-     "status": "passed",
-     "tries": 1,
-     "tail": "",
-     "secs": 0.0,
-     "log": "",
-     "wall_hit": false,
-     "wall_min": 0.0,
-     "cached": true,
-     "reused": false,
-     "why": "",
-     "note": "inputs unchanged",
-     "base_red": false,
-     "producer": "",
-     "sig": ""
+  ],
+  "base": [
+   {
+    "key": {
+     "check": "lint",
+     "tree": "",
+     "base": "b4se",
+     "inputs": "a1",
+     "env": "e1"
     },
-    "round": 2,
-    "log_abs": ""
+    "red": true
    }
-  },
-  "base_red": {
-   "base just fmt": true
-  }
+  ]
  },
  "Durations": {
   "v": 1,

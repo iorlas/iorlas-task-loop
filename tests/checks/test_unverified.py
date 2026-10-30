@@ -10,15 +10,17 @@ from support import procsim
 from support.checks import res
 from support.engine_case import EngineTest
 from support.fakegit import FakeGit
+from support.narrow import must
 
 # isort: split
 from taskloop.app.checks import evidence
-from taskloop.app.checks.cache import CheckCache
+from taskloop.app.checks.cache import InputKeys, RunMemo
 from taskloop.app.land import verified
 from taskloop.app.land.lander import Lander
-from taskloop.contracts.checks import UNVERIFIED_EXIT, CacheHit, Check, CheckCacheEntry, CheckResult, CheckRun, verdict_of
+from taskloop.contracts.checks import UNVERIFIED_EXIT, CacheHit, Check, CheckCacheEntry, CheckResult, CheckRun, RunEntry, verdict_of
 from taskloop.contracts.enums import CheckStatus
-from taskloop.contracts.ids import CheckId
+from taskloop.contracts.ids import CheckId, TreeSha
+from taskloop.contracts.runkey import BaseSha
 from taskloop.stores.memory import MemDoc
 
 
@@ -61,20 +63,25 @@ class Recorded(EngineTest):
 
 
 class Cache(unittest.TestCase):
-    def cache(self, **entry):
+    def memo(self, seed=None):
         doc = MemDoc(CheckCacheEntry)
-        doc.write(CheckCacheEntry(key="k", **entry))
-        return CheckCache(doc, "k")
+        keys = InputKeys("/nonexistent", TreeSha("t"), {})
+        if seed:
+            doc.write(CheckCacheEntry(runs=[RunEntry(key=must(RunMemo(MemDoc(CheckCacheEntry), keys, BaseSha("b"), {}).key(seed[0])),
+                                                      hit=CacheHit(result=seed[1], round=1))]))
+        return RunMemo(doc, keys, BaseSha("b"), {})
 
     def test_a_cached_unverified_result_is_never_reused_as_a_pass(self):
         c = Check(id=CheckId("render"), cmd="render")
-        seeded = self.cache(whole={"render": CacheHit(result=unverified(), round=1)})
-        self.assertIsNone(seeded.hit(c, ""))
-        fresh = self.cache()
-        fresh.remember(c, unverified(), 1, "/log", "")
-        self.assertIsNone(fresh.hit(c, ""))
-        fresh.remember(c, res("render", 0), 1, "/log", "")
-        self.assertIsNotNone(fresh.hit(c, ""))
+        seeded = self.memo((c, unverified()))
+        self.assertIsNone(seeded.hit(seeded.key(c)))
+        fresh = self.memo()
+        key = must(fresh.key(c))
+        fresh.remember(key, unverified(), 1, "/log")
+        self.assertIsNone(fresh.hit(key))
+        fresh.remember(key, res("render", 0), 1, "/log")
+        self.assertIsNotNone(fresh.hit(key))
+        self.assertTrue(fresh.has(c))
 
 
 class Land(unittest.TestCase):

@@ -1,12 +1,11 @@
 """What a check's green result is a fact about (its `inputs`), as a cache key. Pure: the file lists and digests come from outside.
 
-Cache policy (tl-7y6.7.7): a green result is remembered per check as a fact about the files in its `inputs`. Widen `inputs`,
+Cache policy (tl-7y6.7.7): a green result is remembered per check as a fact about the files in its `inputs` (RunKey.inputs). Widen `inputs`,
 never narrow: a glob that is too wide only costs a rerun, one that is too narrow serves a green over code the check never saw,
 and a wrong cache hit is worse than a miss. A check with no `inputs` is keyed on the whole tree and base; a glob that matches no
 tracked file switches the cache off for that round. Only a pass is stored, and a plan's own (acceptance) check is never cached:
 it can read what git cannot see."""
 import hashlib
-import json
 from collections.abc import Iterable, Mapping
 from typing import Final
 
@@ -55,23 +54,22 @@ def matching(paths: Iterable[str], globs: Iterable[str], exclude: Iterable[str] 
     return [p for p in paths if p and any(x.match(p) for x in res) and not any(x.match(p) for x in ex)]
 
 
-def input_key(check: Check, files: Mapping[str, str], ignored: Mapping[str, str], base: str) -> str:
-    """The cache key of one check on one tree: its command and env, the hash of the tree files matching its `inputs`, of the
-    gitignored files matching them (`ignored`: path -> content digest; tree_hash never sees them), and unless the check sets
-    `inputs_only` also of the justfile, lockfiles and .task-loop.json anywhere in the tree, and the base sha. '' = no key."""
+def reads_digest(check: Check, files: Mapping[str, str], ignored: Mapping[str, str]) -> str:
+    """What one check reads, as a digest: its command, and with `inputs` the hash of the tree files matching them, of the gitignored
+    files matching them (`ignored`: path -> content digest; tree_hash never sees them), and unless `inputs_only` also of the
+    justfile, lockfiles and .task-loop.json anywhere in the tree. A check without `inputs` reads the whole tree (the key's `tree`
+    says which). '' = it reads nothing that is there: no fact to remember."""
+    h = hashlib.sha1(norm(check.cmd).encode("utf-8", "surrogateescape"))
     globs = list(check.inputs)
     if not globs:
-        return ""
+        return h.hexdigest()
     excl = list(check.exclude)
     ih = inputs_hash(files, globs, excl)
     if not ih and not ignored:
         return ""
-    h = hashlib.sha1()
     for p in sorted(ignored):
         h.update((f"I\t{p}\t{ignored[p]}\0").encode("utf-8", "surrogateescape"))
-    env = json.dumps(check.env, sort_keys=True)
-    h.update(f"{norm(check.cmd)}\0{ih}\0{env}\0{chr(0).join(excl)}".encode("utf-8", "surrogateescape"))
+    h.update(f"\0{ih}\0{chr(0).join(excl)}".encode("utf-8", "surrogateescape"))
     if not check.inputs_only:
         h.update(inputs_hash(files, ["*/" + g for g in ROOT_FILES] + list(ROOT_FILES)).encode())
-        h.update(("\0" + base).encode())
     return h.hexdigest()

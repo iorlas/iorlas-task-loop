@@ -4,7 +4,7 @@ Never a copy of the whole process environment: a Python virtualenv of ours must 
 import os
 from collections.abc import Mapping
 
-from taskloop.contracts.envvars import registered
+from taskloop.contracts.envvars import PREFIXES, EnvVar, registered
 
 VENV_VARS = ("VIRTUAL_ENV", "VIRTUAL_ENV_PROMPT", "PYTHONHOME", "__PYVENV_LAUNCHER__", "PYTHONEXECUTABLE")
 ENGINE_PREFIXES = ("TL_", "TASK_LOOP_")
@@ -25,6 +25,19 @@ def tool_env(base: Mapping[str, str], extra: Mapping[str, str] | None = None) ->
     env = {k: v for k, v in without_venv(base).items() if not k.startswith(ENGINE_PREFIXES) or registered(k)}
     env.update(extra or {})
     return env
+
+
+# Registered names that differ run to run without changing what a check does (paths of this run, ids of this process): not part of a
+# result's identity. Every other registered name that reaches the child is.
+PER_RUN = frozenset({EnvVar.TL_ARTIFACTS, EnvVar.TL_ARTIFACT_STEP, EnvVar.TL_BOX_CWD, EnvVar.TL_REEXEC, EnvVar.TL_LOOP_STATE,
+                     EnvVar.TL_RELEASE_REEXEC, EnvVar.TASK_LOOP_SLOT_BEAD, EnvVar.TASK_LOOP_ACTOR, EnvVar.TASK_LOOP_SESSION,
+                     EnvVar.TASK_LOOP_LOOP_PID, EnvVar.TASK_LOOP_WORKER})
+
+
+def reaching(env: Mapping[str, str]) -> dict[str, str]:
+    """The registered engine names of `env` that reach a child (tool_env's filter) and are stable across runs: what a result may
+    depend on, apart from the ambient system environment."""
+    return {k: v for k, v in tool_env(env).items() if registered(k) and k not in PER_RUN and not k.startswith(PREFIXES)}
 
 
 def without(env: Mapping[str, str], *names: str) -> dict[str, str]:

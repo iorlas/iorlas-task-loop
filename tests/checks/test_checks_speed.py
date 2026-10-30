@@ -166,14 +166,14 @@ class InputCache(SpeedTest):
         c = Check(id=CheckId("x"), cmd="x", inputs=["client/**"], inputs_only=True, exclude=["client/Gen/**"])
 
         def key():
-            return InputKeys(self.wt, self.tree(), "b", os.environ).key(c)
+            return InputKeys(self.wt, self.tree(), os.environ).key(c)
         k = key()
         (self.wt / "client" / "Gen" / "i.gen").write_text("2\n")  # an excluded ignored file
         (self.wt / "client" / "Gen" / "t.cs").write_text("2\n")  # an excluded tracked (here: untracked-new) file
         self.assertEqual(key(), k)
         (self.wt / "client" / "a.cs").write_text("2\n")
         self.assertNotEqual(key(), k)
-        self.assertNotEqual(InputKeys(self.wt, self.tree(), "b", os.environ).key(c.replace(exclude=[])), key())
+        self.assertNotEqual(InputKeys(self.wt, self.tree(), os.environ).key(c.replace(exclude=[])), key())
 
     def tree(self):
         return self.eng_tree.checkout.tree_hash()

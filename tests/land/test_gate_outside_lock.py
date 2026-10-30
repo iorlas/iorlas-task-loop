@@ -14,9 +14,10 @@ import support.paths  # noqa: F401
 
 from taskloop.app.land.lander import Lander
 from taskloop.contracts import fence
-from taskloop.contracts.checks import CacheHit, CheckCacheEntry, CheckResult, CheckRun
+from taskloop.contracts.checks import CacheHit, CheckCacheEntry, CheckResult, CheckRun, RunEntry
 from taskloop.contracts.config import CheckSpec, EngineConfig
-from taskloop.contracts.ids import CheckId
+from taskloop.contracts.ids import CheckId, TreeSha
+from taskloop.contracts.runkey import BaseSha, Digest, RunKey
 
 REJECTED = (1, " ! [rejected]        HEAD -> main (fetch first)")
 PUSHED = (0, "")
@@ -120,12 +121,14 @@ class World:
         rc, tail = self.sh(["gate"])
         res = CheckResult(id=CheckId("gate"), cmd="gate", group="tests", exit=rc, status="failed" if rc else "passed", tail=tail)
         if not rc:
-            self.doc.rec = CheckCacheEntry(key=f"tree@{self.sat_on} {self.base}", whole={"gate": CacheHit(result=res)})
+            tree, base = TreeSha(f"tree@{self.sat_on}"), BaseSha(self.base)
+            key = RunKey(check=CheckId("gate"), tree=tree, base=base, inputs=Digest(""), env=Digest(""))
+            self.doc.rec = CheckCacheEntry(runs=[RunEntry(key=key, hit=CacheHit(result=res))])
         return CheckRun(round=1, results=[res])
 
     def gate_passed(self) -> list[str]:
         rec = self.doc.rec
-        return [rec.key.split()[0]] if rec and rec.whole and rec.key.split()[1] == self.base else []
+        return [e.key.tree for e in rec.runs if e.key.base == self.base] if rec else []
 
     def fix(self, kind: str, text: str) -> str:
         self.events.append("fix:" + kind)

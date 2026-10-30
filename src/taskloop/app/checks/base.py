@@ -4,7 +4,7 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 
 from taskloop.adapters.base_tree import base_tree
-from taskloop.app.checks.cache import CheckCache
+from taskloop.app.checks.cache import RunMemo
 from taskloop.app.checks.host import CheckHost
 from taskloop.contracts.argv import argv_of
 from taskloop.contracts.checks import Check
@@ -12,22 +12,23 @@ from taskloop.domain.checks.names import norm
 
 
 class BaseCheck:
-    def __init__(self, host: CheckHost, cache: CheckCache, base_sha: str, env: Callable[[], Mapping[str, str]]) -> None:
-        self.host, self.cache, self.sha, self.env = host, cache, base_sha, env
+    def __init__(self, host: CheckHost, memo: RunMemo, env: Callable[[], Mapping[str, str]], enabled: bool) -> None:
+        self.host, self.memo, self.env = host, memo, env
+        self.sha = str(memo.base) if enabled else ""  # no sha, no base run (the gate's tree is the rebased one: a red is red)
 
     def red(self, c: Check) -> bool:
         """Run the check once on a clean checkout of the base commit; red there too: the task did not break it, so it is not the
         writer's. The run is bounded by the check's wall limit; the answer is remembered by base sha. Off with engine.base_red: false."""
         if not self.host.cfg.base_red or not self.sha:
             return False
-        known = self.cache.base_was_red(self.sha, c.cmd)
+        known = self.memo.base_was_red(c)
         if known is not None:
             return known
         dest = self.host.run_dir / "base" / self.sha[:12]
         dest.parent.mkdir(parents=True, exist_ok=True)
         with base_tree(self.host.wt, self.sha, dest, self.env()) as tree:
             red = tree is not None and self._rc(tree, c) not in (0, None)
-        self.cache.set_base_red(self.sha, c.cmd, red)
+        self.memo.set_base_red(c, red)
         if red:
             self.host.warn(f"`{c.id}` is red on the untouched base too: not the writer's, the round does not count it")
         return red

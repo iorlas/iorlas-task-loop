@@ -6,13 +6,14 @@ from pathlib import Path
 
 from taskloop.adapters import check_files
 from taskloop.app.checks.attempts import Attempts, Outcome
-from taskloop.app.checks.cache import CheckCache, InputKeys
+from taskloop.app.checks.cache import RunMemo
 from taskloop.app.checks.checklog import CheckLog
 from taskloop.app.checks.host import CheckFault, CheckHost
 from taskloop.contracts.checks import Check, CheckFaultKind, CheckResult, Durations, verdict_of
+from taskloop.contracts.runkey import RunKey
 from taskloop.domain.checks.durations import CHEAP_S, expected_secs
 from taskloop.domain.checks.matchers import cs_error_lines, diff_check_text, output_signature, safe_name, stale_tree
-from taskloop.domain.checks.names import log_var, norm, rc_var
+from taskloop.domain.checks.names import log_var, rc_var
 from taskloop.domain.checks.plan import CheckPlan, Step
 from taskloop.domain.checks.specs import DIFF_CHECK, due
 
@@ -30,16 +31,15 @@ class Round:
     by_step: dict[int, CheckResult] = field(default_factory=dict)
     red: str = ""  # the group of the first red: later groups, and every expensive check, are skipped
     red_skipped: set[int] = field(default_factory=set)  # steps left out because of a red
-    ran: dict[tuple[str, str], tuple[CheckResult, float]] = field(default_factory=dict)  # (command, directory) -> result, limit
     env: dict[str, str] = field(default_factory=dict)  # $TL_CHECK_LOG_/RC_<ID> of what ran, for the checks after it
     timings: list[tuple[str, float]] = field(default_factory=list)  # (command, secs) of what passed, for the duration history
     changed: list[str] | None = None
 
 
 class CheckExecutor:
-    def __init__(self, host: CheckHost, cache: CheckCache, keys: InputKeys, attempts: Attempts, checklog: CheckLog,
+    def __init__(self, host: CheckHost, memo: RunMemo, attempts: Attempts, checklog: CheckLog,
                  history: Durations, fix_red: dict[str, CheckResult] | None = None, everything: bool = False) -> None:
-        self.host, self.cache, self.keys, self.attempts, self.checklog, self.history = host, cache, keys, attempts, checklog, history
+        self.host, self.memo, self.attempts, self.checklog, self.history = host, memo, attempts, checklog, history
         self.everything = everything  # `when` is ignored: every check is due (tl check --all)
         self.fix_red = fix_red or {}  # id -> the red of a check whose fix command failed: it does not run
         self.logs = host.run_dir / "checks"
@@ -68,18 +68,21 @@ class CheckExecutor:
         again = self._reused(c, st)
         if again:
             st.red = c.group if again.exit != 0 else st.red
+            key = self._key(c) if c.cache else None
+            if key is not None:  # the same command on the same tree: this check's run is as much a fact as the first one's
+                self.memo.remember(key, again, st.n, "")
             return again, None
-        ikey, nocache = self._key(c)
-        hit = self.cache.hit(c, ikey) if c.cache else None
+        key = self._key(c)
+        hit = self.memo.hit(key)
         cid, name = None, self._log_name(n, c, st.n)
         if hit is not None:
-            res, where = self.cache.cached(c, hit, ikey), hit.log_abs
+            res, where = self.memo.cached(c, hit), hit.log_abs
             if res.note:
                 self.host.log.note(f"cached: {c.id}, {res.note}")
         else:
             cid = self.checklog.start(c, st.n, "checks/" + name)
-            res, where = self._launch(step, st, name, ikey, nocache), str(self.logs / name)
-        st.ran[(norm(c.cmd), str(self.host.wt))] = (res, c.wall_min)
+            res, where = self._launch(step, st, name, key), str(self.logs / name)
+        self.memo.ran[self.memo.command_key(c)] = (res, c.wall_min)
         self._publish(c, res, where, st)
         if res.exit != 0 and not res.base_red:
             st.red = c.group
@@ -120,28 +123,26 @@ class CheckExecutor:
     def _reused(self, c: Check, st: Round) -> CheckResult | None:
         """Each distinct command runs once per block, whatever limit its copy carries; the limit matters only when the first run
         timed out under a shorter one."""
-        before = st.ran.get((norm(c.cmd), str(self.host.wt)))
+        before = self.memo.ran.get(self.memo.command_key(c))
         if before is None or (before[0].exit == 124 and before[1] < c.wall_min):
             return None
         self.host.log.note(f"`{c.cmd[:120]}` already ran in this block: its result is reused")
         return before[0].replace(id=c.id, cmd=c.cmd, group=c.group, cached=False, reused=True, log="")
 
-    def _key(self, c: Check) -> tuple[str, bool]:
-        """(the cache key of the check's inputs, whether this round may not cache it). A glob that selects nothing would cache a
-        green over changed code."""
-        if not (c.cache and c.inputs):
-            return "", False
-        dead = self.keys.dead(c)
-        for g in dead:
-            self.host.warn(f"inputs glob {g} matches no tracked file; not cached")
-        return ("", True) if dead else (self.keys.key(c), False)
+    def _key(self, c: Check) -> RunKey | None:
+        """The memo key of this run, None when it may not be cached. A glob that selects nothing would cache a green over changed
+        code: said, and no key."""
+        if c.cache and c.inputs:
+            for g in self.memo.keys.dead(c):
+                self.host.warn(f"inputs glob {g} matches no tracked file; not cached")
+        return self.memo.key(c)
 
     def _publish(self, c: Check, res: CheckResult, log_abs: str, st: Round) -> None:
         """Later checks read this one's log and exit code: $TL_CHECK_LOG_<ID>, $TL_CHECK_RC_<ID>."""
         if c.group != "acceptance" and res.exit is not None and Path(log_abs).is_file():
             st.env[log_var(c.id)], st.env[rc_var(c.id)] = log_abs, str(res.exit)
 
-    def _launch(self, step: Step, st: Round, name: str, ikey: str, nocache: bool) -> CheckResult:
+    def _launch(self, step: Step, st: Round, name: str, key: RunKey | None) -> CheckResult:
         c = step.check
         t0 = time.time()
         out = self.attempts.run(c, self.logs / name, st.env)
@@ -149,8 +150,8 @@ class CheckExecutor:
         res = self._result(c, out, name, round(time.time() - t0))
         if out.rc == 0:  # only a green run says what the check costs: a red one stops early
             st.timings.append((c.cmd, time.time() - t0))
-            if c.cache and not nocache:
-                self.cache.remember(c, res, st.n, str(self.logs / name), ikey)
+            if key is not None:
+                self.memo.remember(key, res, st.n, str(self.logs / name))
         return res
 
     def _fault(self, c: Check, out: Outcome, st: Round) -> None:

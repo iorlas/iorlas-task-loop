@@ -33,6 +33,7 @@ from taskloop.contracts import (
 )
 from taskloop.contracts.enums import AskClass, AskKind, AskStatus, LockWhat, Outcome, WaitWhat, WhyCode
 from taskloop.contracts.ids import CheckId, TreeSha
+from taskloop.contracts.runkey import BaseSha, Digest, RunKey
 
 T = 1793050200.5
 RUN = ids.RunId(ids.BeadId("tl-7y6.3.1"), datetime.datetime(2026, 10, 27, 0, 22, 39))
@@ -94,6 +95,7 @@ CMD = {"pick_label": "auto",
        "container": config.ContainerConfig(image="img:1")}
 
 
+RUNKEY = RunKey(check=CheckId("lint"), tree=TreeSha("deadbeef"), base=BaseSha("b4se"), inputs=Digest("a1"), env=Digest("e1"))
 CHECK_RUN = checks.CheckRun(
     round=1,
     tree=TreeSha("deadbeef"),
@@ -326,11 +328,10 @@ OTHERS = {
     "plancheck.Ref": plancheck.Ref(check=CheckId("unity-tests")),
     "plancheck.Adhoc": plancheck.Adhoc(argv=("python3", "tools/assert_log.py", "TL_CHECK_LOG_UNITY_TESTS"),
                                        reads=(CheckId("unity-tests"),)),
+    "RunKey": RUNKEY,
     "CheckCacheEntry": checks.CheckCacheEntry(
-        key="tree base",
-        whole={"just fmt": checks.CacheHit(result=CHECK_RUN.results[1], round=1, log_abs="/r/checks/00.log")},
-        inputs={"abc": checks.CacheHit(result=CHECK_RUN.results[1], round=2)},
-        base_red={"base just fmt": True},
+        runs=[checks.RunEntry(key=RUNKEY, hit=checks.CacheHit(result=CHECK_RUN.results[1], round=1, log_abs="/r/checks/00.log"))],
+        base=[checks.BaseEntry(key=RUNKEY.replace(tree=TreeSha("")), red=True)],
     ),
     "Durations": checks.Durations(runs={"just fmt": [3.1, 2.9]}),
     "RunOutcome": OUTCOME,

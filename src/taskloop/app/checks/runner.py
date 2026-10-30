@@ -3,21 +3,23 @@ import time
 from collections.abc import Callable, Sequence
 from typing import Any
 
-from taskloop.adapters import check_files
+from taskloop.adapters import check_files, childenv, procs
 from taskloop.app.checks import evidence
 from taskloop.app.checks.attempts import Attempts
 from taskloop.app.checks.base import BaseCheck
-from taskloop.app.checks.cache import CheckCache, InputKeys
+from taskloop.app.checks.cache import InputKeys, RunMemo
 from taskloop.app.checks.executor import CheckExecutor, Round
 from taskloop.app.checks.fixer import Fixer
 from taskloop.app.checks.host import CheckHost, CheckStuck
 from taskloop.contracts.checks import Check, CheckResult, CheckRun, Durations
 from taskloop.contracts.ids import TreeSha
 from taskloop.contracts.plancheck import PlanCheck
+from taskloop.contracts.runkey import BaseSha
 from taskloop.domain.checks.durations import merged, seconds
 from taskloop.domain.checks.plan import CheckPlan
 from taskloop.domain.checks.specs import DIFF_CHECK, diff_check, due, gate_items, items_of
 from taskloop.domain.checks.writer_split import WriterSplit
+from taskloop.stores.api import Doc
 
 
 class Checker:
@@ -40,19 +42,15 @@ class Checker:
         host = self.host
         host.steps.begin("checks", f"checks: {name}", **meta)
         self.round += 1
-        env = host.checkout.git_env()
-        history_doc = host.stores.durations.of(check_files.repo_key(str(host.wt), env))
-        history = history_doc.read() or Durations()
+        history_doc, history = self._history()
         items = items_of(host.cfg, stage_checks)
         fix_red = Fixer(host).run(CheckPlan.build(items, history, groups, acceptance_first, conflict_fix, markers), self.round)
         tree, base = host.checkout.tree_hash(), host.git("rev-parse", host.cfg.base)  # after the fixes: the checks see the fixed files
         plan = CheckPlan.build([*self._diff_check(tree), *items], history, groups, acceptance_first, conflict_fix, markers)
-        cache = CheckCache(host.stores.check_cache.of(host.bead), f"{tree} {base}")
-        keys = InputKeys(host.wt, tree, base, env)
-        attempts = Attempts(host, BaseCheck(host, cache, base, host.checkout.git_env), self.sleep)
-        st = CheckExecutor(host, cache, keys, attempts, host.checklog, history, fix_red).run_group(plan, self.round)
+        memo = self._memo(tree, base)
+        st = self._executor(memo, history, base_run=True, fix_red=fix_red).run_group(plan, self.round)
         run = self._finish(st, tree, history, history_doc)
-        cache.save(base)
+        memo.save()
         host.checklog.round(host.steps.id, run)
         self._stuck(run)
         return run
@@ -65,35 +63,48 @@ class Checker:
         remembered. The rows are the check log's (start and end per step); no step book, no streak."""
         host = self.host
         self.round += 1
-        env = host.checkout.git_env()
-        history_doc = host.stores.durations.of(check_files.repo_key(str(host.wt), env))
-        history = history_doc.read() or Durations()
+        history_doc, history = self._history()
         tree, base = host.checkout.tree_hash(), host.git("rev-parse", host.cfg.base)
         plan = CheckPlan.build([*self._diff_check(tree), *items], history)
-        cache = CheckCache(host.stores.check_cache.of(host.bead), f"{tree} {base}")
-        keys = InputKeys(host.wt, tree, base, env)
-        attempts = Attempts(host, BaseCheck(host, cache, "", host.checkout.git_env), self.sleep)  # no sha: no base run
-        st = CheckExecutor(host, cache, keys, attempts, host.checklog, history, everything=everything).run_group(plan, self.round)
+        memo = self._memo(tree, base)
+        st = self._executor(memo, history, base_run=False, everything=everything).run_group(plan, self.round)  # no base run
         if learn and st.timings:
             history_doc.write(merged(history, st.timings))
-        cache.save(base)
+        memo.save()
         results = st.results if show_clean else self._quiet(st.results)
         host.detail(evidence.round_lines(results))
         hits = sum(1 for c in results if c.cached)
         return CheckRun(round=st.n, tree=tree, results=results, hits=hits, misses=len(results) - hits)
 
     def gate_green(self) -> bool:
-        """Every gate step is green on this tree and base already (by its inputs, else by tree and base), or not due (`when`)."""
+        """Every gate step's run is in the memo already (the key it would have: tree or inputs, base, env), or the step is not due."""
         host = self.host
         steps, tree = gate_items(host.cfg), host.checkout.tree_hash()
         if not tree or not steps:
             return False
         items = [*self._diff_check(tree), *steps]
-        base = host.git("rev-parse", host.cfg.base)
-        cache = CheckCache(host.stores.check_cache.of(host.bead), f"{tree} {base}")
-        green = cache.green_ids(items, InputKeys(host.wt, tree, base, host.checkout.git_env()))
+        memo = self._memo(tree, host.git("rev-parse", host.cfg.base))
         changed = host.checkout.changed_paths() if any(c.when for c in items) else []
-        return all(c.id in green or not due(c, changed) for c in items)
+        return all(memo.has(c) or not due(c, changed) for c in items)
+
+    def _history(self) -> tuple[Doc[Durations], Durations]:
+        host = self.host
+        doc = host.stores.durations.of(check_files.repo_key(str(host.wt), host.checkout.git_env()))
+        return doc, doc.read() or Durations()
+
+    def _memo(self, tree: TreeSha, base: str) -> RunMemo:
+        """The run memo of this tree and base: the one place a round, `tl check` and the gate's question get theirs. The env it keys
+        on is what the engine hands every child: the slot's, and the registered names that reach it."""
+        host = self.host
+        keys = InputKeys(host.wt, tree, host.checkout.git_env())
+        engine_env = {**childenv.reaching(procs.current_env()), **host.bead_env}
+        return RunMemo(host.stores.check_cache.of(host.bead), keys, BaseSha(base), engine_env)
+
+    def _executor(self, memo: RunMemo, history: Durations, base_run: bool, fix_red: dict[str, CheckResult] | None = None,
+                  everything: bool = False) -> CheckExecutor:
+        host = self.host
+        attempts = Attempts(host, BaseCheck(host, memo, host.checkout.git_env, base_run), self.sleep)
+        return CheckExecutor(host, memo, attempts, host.checklog, history, fix_red, everything)
 
     def _diff_check(self, tree: str) -> list[Check]:
         """The built-in `git diff --check` over the diff from the merge-base with the base to the tree (untracked files included; none
@@ -107,7 +118,7 @@ class Checker:
         """A clean diff check is not a result anyone reads: it stays in the check log's rows only."""
         return [c for c in results if not (c.id == DIFF_CHECK and c.exit == 0)]
 
-    def _finish(self, st: Round, tree: TreeSha, history: Durations, history_doc: Any) -> CheckRun:
+    def _finish(self, st: Round, tree: TreeSha, history: Durations, history_doc: Doc[Durations]) -> CheckRun:
         host = self.host
         results = self._quiet(st.results)
         host.detail(evidence.round_lines(results))

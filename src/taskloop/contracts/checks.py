@@ -8,6 +8,7 @@ import msgspec
 
 from taskloop.contracts.enums import CheckStatus
 from taskloop.contracts.ids import CheckId, TreeSha
+from taskloop.contracts.runkey import RunKey
 from taskloop.contracts.wire import Rec
 
 Group = Literal["static", "tests", "acceptance"]
@@ -156,14 +157,28 @@ class CacheHit(Rec):
 
 
 @final
-class CheckCacheEntry(Rec):
-    """check-cache/<bead>.json: green results of the latest tree (by command) and of every check's inputs (by their hash)."""
+class RunEntry(Rec):
+    """One remembered green result and the key of the run it came from."""
 
-    V: ClassVar[int] = 1
-    key: str = ""  # "<tree> <base sha>" the `whole` entries are facts about
-    whole: dict[str, CacheHit] = msgspec.field(default_factory=dict)
-    inputs: dict[str, CacheHit] = msgspec.field(default_factory=dict)
-    base_red: dict[str, bool] = msgspec.field(default_factory=dict)  # "<base sha> <command>" -> red on that base
+    key: RunKey
+    hit: CacheHit
+
+
+@final
+class BaseEntry(Rec):
+    """Whether a check was red on the untouched base (`key.base`): its key has no tree."""
+
+    key: RunKey
+    red: bool
+
+
+@final
+class CheckCacheEntry(Rec):
+    """check-cache/<bead>.json: the run memo. v1 (whole/inputs maps keyed by command) is another version: read as absent, a miss."""
+
+    V: ClassVar[int] = 2
+    runs: list[RunEntry] = msgspec.field(default_factory=list)
+    base: list[BaseEntry] = msgspec.field(default_factory=list)
 
 
 @final
