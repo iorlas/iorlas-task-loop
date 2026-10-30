@@ -372,6 +372,21 @@ class Release(unittest.TestCase):
         self.assertEqual(self.git("show", "main:feature.txt", cwd=self.origin), "survives the push race")
         self.assertEqual(self.market_versions()["iorlas-task-loop"], "0.1.2")
 
+    def test_a_clone_reset_under_the_release_pushes_nothing_and_tags_nothing(self):
+        # 0.23.198: a second release (an older caller under another lock key) reset the shared clone to origin/main during the
+        # suite; the push of HEAD:main was then a no-op that exited 0, and the tag went on the previous release's commit
+        before = self.git("rev-parse", "main", cwd=self.origin)
+
+        def reset_clone(tree):
+            where = clone.clone_dir(config_dir(), str(self.origin))
+            self.git("reset", "-q", "--hard", "origin/main", cwd=where)
+        self.world.on_suite = reset_clone
+        r = self.release("fix")
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn("HEAD is not the 0.1.1 commit", r.stderr)
+        self.assertEqual(self.git("rev-parse", "main", cwd=self.origin), before)
+        self.assertEqual(self.tags(self.origin), [])
+
     def branch_in_worktree(self, name="task/y", dirty=False):
         """Branch `name` with one commit, checked out in its own worktree next to the main checkout; -> the worktree."""
         wt = self.home / "wt" / name.split("/")[1]

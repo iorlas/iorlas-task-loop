@@ -3,11 +3,14 @@ from collections.abc import Callable
 from pathlib import Path
 
 from taskloop.adapters import landlock
+from taskloop.app.release import clone
 from taskloop.app.release.shell import REAL, Abort, Shell
 
 
 def release_lock_path(config: Path, url: str) -> Path:
-    return config / "locks" / f"release-{landlock.lock_key(url)}.lock"
+    """The lock of the release clone: named from the clone's own directory, so every version that touches that clone takes the same
+    lock (a key that changed between versions let an old caller reset the clone under a newer release mid-run, 0.23.198)."""
+    return config / "locks" / f"release-{clone.clone_dir(config, url).name}.lock"
 
 
 def push_main(repo: Path, message: str, version: str, base: str, bump: Callable[[], str], sh: Shell = REAL) -> str:
@@ -29,6 +32,8 @@ def push_main(repo: Path, message: str, version: str, base: str, bump: Callable[
                     raise Abort("the rebase onto origin/main after the push race failed")
                 base = head
                 version = bump()
+            if not sh.git(repo, "log", "-1", "--format=%s", "HEAD").startswith(version + ":"):
+                raise Abort(f"HEAD is not the {version} commit (something reset the release clone); nothing pushed")
             r = sh.run(["git", "push", "-q", "origin", "HEAD:main"], repo, check=False)
             if not r.returncode:
                 return version
