@@ -15,8 +15,6 @@ import stream_proc
 from stream_proc import TermHold, alive, popen_held, proc_start, stop_tree
 from stream_proc.proctable import has_table
 
-from taskloop.adapters.childenv import child_env_of, current_env, script_argv  # noqa: F401  (still spoken as procs.X by the tests)
-
 STOP_GRACE_S = 5.0
 
 __all__ = ["TermHold", "alive", "popen_held", "proc_start", "stop_tree"]

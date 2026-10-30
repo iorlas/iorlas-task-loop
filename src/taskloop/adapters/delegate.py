@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from taskloop.adapters import delegate_wire, procs
+from taskloop.adapters import childenv, delegate_wire, procs
 from taskloop.contracts.delegate import REASON_TIMEOUT, DelegateResult, Permanence, RunRequest, Scope
 from taskloop.contracts.ids import MARKETPLACE
 
@@ -134,7 +134,7 @@ def _last_json(text: str) -> Any:
 
 
 def _status(route: str) -> dict[str, Any]:
-    ran = procs.capture([sys.executable, route, "status", "--json"], None, procs.current_env(), STATUS_TIMEOUT_S)
+    ran = procs.capture([sys.executable, route, "status", "--json"], None, childenv.current_env(), STATUS_TIMEOUT_S)
     j = _last_json(ran.out) if ran.exit == 0 else None
     return j if isinstance(j, dict) else {}
 
@@ -189,7 +189,7 @@ def call(
             Path(sf).write_text(json.dumps(schema), encoding="utf-8")
             argv = req.replace(brief_path=bf, schema_path=sf).to_argv(sys.executable, resolved.route)
             wall = (req.timeout_s + BACKSTOP_S) if req.timeout_s else None
-            p = runner(argv, cwd=req.cwd or None, env=dict(procs.current_env() if env is None else env, **req.env()), timeout=wall)
+            p = runner(argv, cwd=req.cwd or None, env=dict(childenv.current_env() if env is None else env, **req.env()), timeout=wall)
     except (Stopped, subprocess.TimeoutExpired) as e:
         why = e.why if isinstance(e, Stopped) else "its wall limit ran out"
         return Answer(

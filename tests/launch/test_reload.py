@@ -29,12 +29,12 @@ from support.fake_beads import FakeBeads  # noqa: E402
 from support.fakes import as_bead  # noqa: E402
 from support.narrow import must  # noqa: E402
 
-from taskloop.adapters import delegate as dl  # noqa: E402
 from taskloop.adapters import (  # noqa: E402
+    childenv,
     gitrepo,
     ident,
-    procs,
 )
+from taskloop.adapters import delegate as dl  # noqa: E402
 from taskloop.app.launch import loop as wloop  # noqa: E402
 from taskloop.app.loop.run import BeadRun, Where  # noqa: E402
 from taskloop.app.release import (  # noqa: E402
@@ -147,7 +147,7 @@ class Reload(te.EngineTest):
         run = eng.log_path.stem
         self.assertEqual(len(self.execs), 1)
         ex = self.execs[0]
-        self.assertEqual(ex["argv"][:5], procs.script_argv(self.cache / "0.2.0" / "skills" / "task-loop" / "tl.py"))
+        self.assertEqual(ex["argv"][:5], childenv.script_argv(self.cache / "0.2.0" / "skills" / "task-loop" / "tl.py"))
         self.assertEqual(ex["argv"][5:], ["run-task", "t-1", "--outcome-file", "/x/out.json", "--worktree", str(self.wt)])  # no --fresh
         self.assertEqual(ex["env"]["run"], run)
         self.assertEqual((ex["marker"]["from"], ex["marker"]["to"], ex["marker"]["step"]), ("0.1.0", "0.2.0", "land"))
@@ -267,7 +267,7 @@ class Reload(te.EngineTest):
             leaked = os.environ.get("TL_REEXEC")
         self.assertEqual(r.outcome, "landed")
         self.assertEqual(len(spawned), 2)
-        self.assertEqual(spawned[1][:5], procs.script_argv(old / "tl.py"))
+        self.assertEqual(spawned[1][:5], childenv.script_argv(old / "tl.py"))
         self.assertIsNone(leaked)  # the loop's own environment keeps no hand-over for its later run-tasks
         self.assertEqual(spawned_env[0]["run"], "t-1-20261026-120000")  # the fallback child got it
         self.assertEqual(pids, [str(os.getpid())] * 2)  # run-task's parent is uv: the loop names itself for the lock handoff

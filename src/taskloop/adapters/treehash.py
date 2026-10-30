@@ -9,7 +9,7 @@ import tempfile
 from collections.abc import Iterable
 from pathlib import Path
 
-from taskloop.adapters import procs as sproc
+from taskloop.adapters import childenv
 from taskloop.adapters.gitenv import git_env
 from taskloop.contracts.ids import TreeSha
 
@@ -105,7 +105,7 @@ def ignored_by(wt: str | Path, rules: list[str], paths: Iterable[str]) -> set[st
     try:
         r = subprocess.run(["git", "-C", str(wt), "-c", "core.excludesFile=" + ex, "check-ignore", "--no-index", "--stdin", "-z"],
                            input="\0".join(paths) + "\0", capture_output=True, text=True, encoding="utf-8", errors="replace",
-                           env=sproc.current_env(), check=False)
+                           env=childenv.current_env(), check=False)
         return set(r.stdout.split("\0")) if r.returncode in (0, 1) else set()
     finally:
         with contextlib.suppress(OSError):

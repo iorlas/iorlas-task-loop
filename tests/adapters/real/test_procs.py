@@ -12,7 +12,7 @@ from unittest import mock
 
 import support.paths  # noqa: F401
 
-from taskloop.adapters import procs
+from taskloop.adapters import childenv, procs
 
 POSIX = os.name != "nt"
 
@@ -28,7 +28,7 @@ class ChildEnv(unittest.TestCase):
             ran = procs.capture(
                 ["sh", "-c", 'echo "${CLAUDE_CONFIG_DIR:-None} ${CLAUDE_CODE_SESSION_ID:-None}"'],
                 None,
-                procs.current_env(),
+                childenv.current_env(),
                 30,
             )
         self.assertEqual(ran.out.split(), ["/home/u/.claude-alt", "None"])

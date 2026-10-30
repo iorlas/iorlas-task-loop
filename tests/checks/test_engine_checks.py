@@ -21,7 +21,7 @@ from support.checks import ck, res, typed
 from support.fakes import as_bead, must_bead
 from support.narrow import must
 
-from taskloop.adapters import procs as sproc
+from taskloop.adapters import childenv
 from taskloop.adapters.check_probe import PathProbe
 from taskloop.app.checks import evidence as check_evidence
 from taskloop.app.run import (
@@ -333,7 +333,7 @@ class EngineChecksTest(EngineTest):
     def test_dry_check_reads_the_argv_not_a_shell_string(self):
         def plan(*checks, files=("new.txt",)):
             return typed(dict(PLAN, stages=[dict(PLAN["stages"][0], checks=list(checks), files=list(files))]))
-        wt = PathProbe(self.wt, sproc.current_env())
+        wt = PathProbe(self.wt, childenv.current_env())
         self.assertEqual(lint.dry_check(plan("test -f a.txt", "test -f new.txt", "grep -q '<(' a.txt", HAS_F), wt), [])
         self.assertEqual(lint.dry_check(plan("test -f $HOME/x", "cat dir/*.txt"), wt), [])  # no shell: a plain word, not judged as a path
         self.assertEqual(lint.dry_check(plan("python3 -m pytest -q tests", "python3 -c pass"), wt), [])

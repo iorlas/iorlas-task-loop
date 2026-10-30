@@ -15,14 +15,14 @@ from support import (
 from support.builders import make_engine
 from support.engine_case import CLEAN, HAS_F, PLAN, WRITE, lint
 
-from taskloop.adapters import procs as sproc
+from taskloop.adapters import childenv
 from taskloop.adapters.check_probe import PathProbe
 from taskloop.contracts.argv import argv_of
 
 
 class StagesTest(te.EngineTest):
     def probe(self):
-        return PathProbe(cast(Any, self).wt, sproc.current_env())
+        return PathProbe(cast(Any, self).wt, childenv.current_env())
 
     wt: Path
 
