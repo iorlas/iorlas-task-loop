@@ -15,7 +15,7 @@ from taskloop.app.release.push import push_main, release_lock_path
 from taskloop.app.release.shell import Abort, Shell, say
 from taskloop.contracts.ids import MARKETPLACE, BeadId, parse_bead_id
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import BdFailure, BeadQuery, Beads, Spawner
+from taskloop.contracts.ports import BdFailure, BeadQuery, Beads, Git, Spawner
 from taskloop.contracts.snapshots import ReleaseResult
 from taskloop.contracts.stores import ReleaseResultStore
 
@@ -133,9 +133,9 @@ def record(result: ReleaseResult, req: Request, repo: Path, store: Beads | None 
             say("warning: bd comment {} failed: {}".format(req.bead, str(getattr(e, "error", e))[-300:]))
 
 
-def main(argv: list[str] | None, tool_root: Path, spawner: Spawner, doc: str = "") -> int:
+def main(argv: list[str] | None, tool_root: Path, spawner: Spawner, port: Git, doc: str = "") -> int:
     """One release from the command line; every process it starts goes through `spawner` (the edge makes it)."""
-    sh = shell.of(spawner)
+    sh = shell.of(spawner, port)
     ap = argparse.ArgumentParser(prog="release.py", description=doc)
     ap.add_argument("message")
     ap.add_argument("--bead", type=parse_bead_id, default=None, help="close this bead after the push")

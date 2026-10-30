@@ -33,8 +33,8 @@ from taskloop.adapters import (  # noqa: E402
     gitrepo,
     ident,
 )
-from taskloop.app.launch import repos  # noqa: E402
 from taskloop.adapters.git import RealGit  # noqa: E402
+from taskloop.app.launch import repos  # noqa: E402
 from taskloop.app.reconcile import lost  # noqa: E402
 from taskloop.app.report import card, inputs  # noqa: E402
 from taskloop.contracts import wire  # noqa: E402
@@ -344,7 +344,7 @@ class Scorecard(Base):
         store = FakeBeadStore()
         store.notes = {b: [as_comment(x) for x in c] for b, c in self.comments.items()}
         with mock.patch.object(repos, "default_base", return_value="main"), mock.patch.object(beadtools, "bd_store", return_value=store), \
-                mock.patch.object(lost, "bead_status", lambda b, repo: self.status.get(b)), \
+                mock.patch.object(card, "bead_status", lambda b, repo: self.status.get(b)), \
                 mock.patch.object(card, "time", mock.Mock(wraps=time, time=lambda: T0 + 200 * MIN)):  # the CLI reads the clock itself
             out = io.StringIO()
             with redirect_stdout(out):

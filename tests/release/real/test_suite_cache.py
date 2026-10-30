@@ -10,13 +10,14 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 
+from taskloop.adapters.git import RealGit
 from taskloop.adapters.spawner import RealSpawner
 from taskloop.app.release import shell, suite
 from taskloop.app.release.cache import SuiteCache
 from taskloop.app.release.shell import Abort, Shell
 from taskloop.contracts.paths import ConfigDir
 
-SH = shell.of(RealSpawner())
+SH = shell.of(RealSpawner(), RealGit())
 
 
 class Verify(unittest.TestCase):

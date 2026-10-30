@@ -38,7 +38,7 @@ def git(cwd, *args):
 
 
 GIT: Git = RealGit()
-SH = of(RealSpawner())
+SH = of(RealSpawner(), GIT)
 
 
 def racing(verb: str, hook: Callable[[], None]) -> Git:

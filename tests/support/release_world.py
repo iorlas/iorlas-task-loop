@@ -21,6 +21,7 @@ import support.paths  # noqa: F401
 # isort: split
 from support.fakes import FakeBeadStore
 from taskloop.adapters import beadtools
+from taskloop.adapters.git import RealGit
 from taskloop.adapters.ident import claude_dir
 from taskloop.app.release import flow, shell, suite
 from taskloop.app.release.shell import say
@@ -132,7 +133,7 @@ class World:
         self.stderr.start(args[0])
         try:
             code = flow.main([*args, "--repo", str(self.repo), "--marketplace", str(self.market)], Path(__file__).resolve().parents[2],
-                             self.spawner)
+                             self.spawner, RealGit())
         except SystemExit as e:
             code = e.code
         return Result(returncode=code, stdout=self.stdout.text(), stderr=self.stderr.text())

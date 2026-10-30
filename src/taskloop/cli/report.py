@@ -6,13 +6,13 @@ import time
 from pathlib import Path
 from typing import Any
 
-from taskloop.adapters.git import RealGit
 from taskloop.app.launch import repos
 from taskloop.app.reconcile import lost as lostwork
 from taskloop.app.report import card as cards
 from taskloop.app.report import planner, reflect
 from taskloop.app.report.inputs import bead_status, prefix, repo_traces
 from taskloop.app.report.window import digest_time, since_of, window
+from taskloop.app.wire import real
 
 
 def stamp(t: float) -> str:
@@ -85,7 +85,7 @@ def cmd_report(a: Any) -> int:
             print_planner(p)
         return 0
     repo = repos.repo_root(a.repo)
-    c = cards.scorecard(repo, since, until, base=repos.default_base(repo), git=RealGit())
+    c = cards.scorecard(repo, since, until, base=repos.default_base(repo), git=real.git())
     c["planner"] = planner.planner_stats(since, until, {prefix(x["bead"]) for x in c["per_bead"]})
     if a.json:
         print(json.dumps(c, indent=1, ensure_ascii=False))
@@ -97,7 +97,7 @@ def cmd_report(a: Any) -> int:
 def cmd_lost(a: Any) -> int:
     repo = repos.repo_root(a.repo)
     since = since_of(a.since, time.time())
-    git = RealGit()
+    git = real.git()
     rows = lostwork.lost_work(repo, repos.default_base(repo), lambda b: bead_status(b, repo), repo_traces(repo, git).runs, git, since=since)
     if a.json:
         print(json.dumps(rows, indent=1, ensure_ascii=False))

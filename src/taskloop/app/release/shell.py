@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
-from taskloop.adapters.git import RealGit
 from taskloop.contracts.ports import Git, Spawner
 from taskloop.contracts.slots import SlotGitError
 
@@ -59,10 +58,8 @@ class Shell:
     port: Git
 
 
-def of(spawner: Spawner, port: Git | None = None) -> Shell:
-    """The shell whose every process is started through `spawner`, and whose git port is `port` (the real git by default)."""
-    git_port = port or RealGit()
-
+def of(spawner: Spawner, port: Git) -> Shell:
+    """The shell whose every process is started through `spawner`, and whose git port is `port`."""
     def run(cmd: list[str], cwd: str | Path | None, check: bool = True, *, extra: Mapping[str, str] | None = None,
             timeout_s: float | None = None) -> Done:
         r = spawner.run(cmd, cwd=None if cwd is None else str(cwd), extra=extra, timeout_s=timeout_s)
@@ -73,4 +70,4 @@ def of(spawner: Spawner, port: Git | None = None) -> Shell:
     def git(cwd: str | Path, *a: str, check: bool = True) -> str:
         return run(["git", *a], cwd, check).stdout.strip()
 
-    return Shell(git=git, fetch=lambda cwd: fetch_or_abort(git_port, cwd), run=run, say=say, port=git_port)
+    return Shell(git=git, fetch=lambda cwd: fetch_or_abort(port, cwd), run=run, say=say, port=port)

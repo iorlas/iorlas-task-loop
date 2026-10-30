@@ -42,4 +42,4 @@ from taskloop.app.release import flow  # noqa: E402
 from taskloop.app.wire import real  # noqa: E402
 
 if __name__ == "__main__":
-    sys.exit(flow.main(None, HERE.parent, real.spawner(), __doc__.split("\n\n")[0]))
+    sys.exit(flow.main(None, HERE.parent, real.spawner(), real.git(), __doc__.split("\n\n")[0]))

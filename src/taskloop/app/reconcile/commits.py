@@ -72,7 +72,7 @@ def observe_commits(git: Git, repo: str, base: str, since: float | None, status_
                 statuses[bead] = status_of(bead) if is_bead_id(bead) else None
             if bead:
                 state = statuses[bead]
-            runs = tuple((r.started, r.run) for r in traces if bead and r.bead == bead)
+            runs = tuple((r.started, str(r.run)) for r in traces if bead and r.bead == bead)
             found.append(BranchCommit(ref, bead, row.oid, row.time, row.subject, bases[0], aside, row.oid in upstream,
                                       tuple(lands(bead)) if bead else (), state, runs))
     return tuple(found)

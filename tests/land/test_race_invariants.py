@@ -28,11 +28,13 @@ import sys
 import threading
 import types
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, cast
 from unittest import mock
 
 import support.paths  # noqa: F401
+from support.shells import quiet_shell
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # python3 -m unittest tests.test_race_invariants, from the repo root
 from loop import test_loop
@@ -59,7 +61,6 @@ from taskloop.adapters import (
 )
 from taskloop.app.land.lander import Lander
 from taskloop.app.release import push as release_push
-from taskloop.app.release.shell import Shell
 from taskloop.app.run import (
     entry,
     running,
@@ -487,11 +488,10 @@ class Invariants(test_loop.Base):
             if len(calls) == 2:
                 arrived.set()
             return self.real_os_lock(*a, **kw)
-        sh = Shell(say=lambda msg: None)
-        port = cast(Git, self.OriginGit(o, arrived))
+        sh = replace(quiet_shell(), port=cast(Git, self.OriginGit(o, arrived)))
         with self.watching(watch):
             got = self.together(
-                {n: (lambda n=n: release_push.push_main(Path(n), "race release", "0.1.1", "h0", lambda: o.bump(n), sh, port)) for n in "AB"}
+                {n: (lambda n=n: release_push.push_main(Path(n), "race release", "0.1.1", "h0", lambda: o.bump(n), sh)) for n in "AB"}
             )
         o.got = got
         return o
