@@ -21,7 +21,7 @@ class _Stdin(io.BytesIO):
 class _Run:
     """The `docker run` client as the runner sees it: stdin takes the tar; `wait` is the check running in the sandbox."""
 
-    def __init__(self, dock: "FakeDocker", cmd: list[str]) -> None:
+    def __init__(self, dock: FakeDocker, cmd: list[str]) -> None:
         self.dock, self.cmd = dock, cmd
         self.stdin = _Stdin()
         self.returncode: int | None = None
