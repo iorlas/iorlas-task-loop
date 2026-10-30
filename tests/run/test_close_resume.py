@@ -2,6 +2,7 @@
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
@@ -42,23 +43,20 @@ class CloseResume(T.EngineTest):
                 armed = [True]
                 real = Closer.apply
 
-                def dying(c, eff, *a, _seen=seen, _at=kill_at, _real=real, armed=armed):
+                def dying(self, eff, *a, _seen=seen, _at=kill_at, _real=real, armed=armed):
                     if armed[0] and len(_seen) == _at:
                         armed[0] = False
                         raise Killed
                     _seen.append(eff)
-                    _real(c, eff, *a)
+                    _real(self, eff, *a)
 
-                Closer.apply = dying
-                try:
+                with mock.patch.object(Closer, "apply", dying):
                     with self.assertRaises(Killed):
                         eng.closer.close(oc.make(oc.Kind.DONE))
                     keys = read_ck(eng).applied
                     self.assertEqual(len(keys), kill_at)
                     again = Closer(eng)  # a new process: the ledger is the checkpoint
                     again.close(oc.make(oc.Kind.DONE))
-                finally:
-                    Closer.apply = real
                 self.assertEqual(len(seen), n, "every effect ran, none twice")
                 self.assertEqual(self.closes(), 1)
 
