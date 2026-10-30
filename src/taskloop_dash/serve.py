@@ -62,7 +62,9 @@ def start(env: Env, here: Path, process: ProcessEnv,
         s.RequestHandlerClass = handler
     if not bind.is_dev_checkout(here):  # a dev server must not claim the shared pid file
         env.config.root.mkdir(parents=True, exist_ok=True)
-        (env.config.root / "dash.pid").write_text(str(os.getpid()))
+        tmp = env.config.root / "dash.pid.tmp"
+        tmp.write_text(str(os.getpid()))
+        os.replace(tmp, env.config.root / "dash.pid")  # a reader never sees the file empty
     return servers, addrs, port, dash
 
 

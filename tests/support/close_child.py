@@ -59,7 +59,8 @@ def main(argv: list[str]) -> None:
 
     def apply(self, eff, *a):
         if mode == "die" and type(eff).__name__ == argv[1]:
-            Path(argv[3]).write_text(str(os.getpid()))
+            Path(argv[3] + ".tmp").write_text(str(os.getpid()))
+            os.replace(argv[3] + ".tmp", argv[3])  # the parent waits for the marker to exist: it must never see it empty
             time.sleep(120)  # the parent kills this process by its pid
         write(journal, {"effect": type(eff).__name__})
         real(self, eff, *a)
