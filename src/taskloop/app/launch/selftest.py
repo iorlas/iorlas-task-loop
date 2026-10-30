@@ -21,9 +21,10 @@ from taskloop.app.wire import slots as wslots
 from taskloop.contracts import env as penv
 from taskloop.contracts.bead import Bead
 
-# an argv list, as the plan schema wants
+# an argv list; the plan schema wraps it as an adhoc check
 CHECK: Final = ["test", "-f", "f.txt"]
-PLAN: Final[dict[str, Any]] = {"summary": "do it", "stages": [{"goal": "add f", "files": ["f.txt"], "checks": [CHECK], "hard": False}],
+PLAN: Final[dict[str, Any]] = {"summary": "do it",
+        "stages": [{"goal": "add f", "files": ["f.txt"], "checks": [{"kind": "adhoc", "argv": CHECK, "reads": []}], "hard": False}],
         "risks": [], "question": "", "options": [], "decided": "", "cases": [], "leftovers": []}
 WRITE: Final[dict[str, Any]] = {"summary": "wrote f", "checks_run": [{"cmd": shlex.join(CHECK), "exit": 0}], "question": "", "options": [],
          "decided": "",

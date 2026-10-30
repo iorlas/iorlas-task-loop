@@ -41,7 +41,7 @@ def main(a):
     name = "f-%s.txt" % bead
     if "stages" in props:
         node, data = "plan", {"summary": "add " + name, "stages": [{"goal": "add " + name, "files": [name],
-                                                                   "checks": [["test", "-f", name]], "hard": False}],
+                                                                   "checks": [{"kind": "adhoc", "argv": ["test", "-f", name], "reads": []}], "hard": False}],
                               "risks": [], "question": "", "options": [], "decided": "", "cases": [], "leftovers": []}
     elif "checks_run" in props:
         node = "write"

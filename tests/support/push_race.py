@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 from unittest import mock
 
-from support.checks import res
+from support.checks import ck, res
 from taskloop.app.land.checkout import Checkout
 from taskloop.app.land.fixer import Fixer
 from taskloop.app.land.lander import Lander
@@ -79,7 +79,7 @@ class PushRace:
             if self.failure == "checks_stop":
                 state["pidfile"] = self.home / f"retry-child-{self.n}.pid"
                 state["next_check"] = self.home / f"retry-next-{self.n}"
-                st = dict(st, checks=[self.case.spawn(state["pidfile"], term=True), f"touch {state['next_check']}"])
+                st = dict(st, checks=ck([self.case.spawn(state["pidfile"], term=True), f"touch {state['next_check']}"]))
             if self.failure in RETRY_RED and not state.get("check_failed"):
                 state["check_failed"] = True
                 return CheckRun(round=0, results=[res("retry check", 1, tail="red")])
