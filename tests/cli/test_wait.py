@@ -115,7 +115,7 @@ class Show(WaitCase):
     def show(self, key):
         ap = argparse.ArgumentParser()
         cli_asks.add_parsers(ap.add_subparsers(dest="cmd"))
-        rc = cli_asks.run(ap.parse_args(["ask", "show", key]), self.asks, lambda _r: FakeBeads(), lambda: T, "x", self.out.append)
+        rc = cli_asks.run(ap.parse_args(["ask", "show", key]), self.asks, lambda _r: FakeBeads(), lambda: T, "x", self.cfg, self.out.append)
         return rc
 
     def test_prints_the_v3_fields(self):

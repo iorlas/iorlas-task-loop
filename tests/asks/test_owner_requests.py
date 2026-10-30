@@ -105,7 +105,7 @@ class Cli(unittest.TestCase):
         env = mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": self.tmp.name})
         env.start()
         self.addCleanup(env.stop)
-        self.cfg = ConfigDir()
+        self.cfg = ConfigDir(ident.config_dir())
         self.store = FakeBeads()
         self.store.create(NewBead(title="x"))
         self.out: list[str] = []
@@ -114,7 +114,7 @@ class Cli(unittest.TestCase):
         ap = argparse.ArgumentParser()
         cli.add_parsers(ap.add_subparsers(dest="cmd"))
         when = now or time.time()
-        return cli.run(ap.parse_args(argv), fake_stores().asks, lambda _r: self.store, lambda: when, "denis", self.out.append)
+        return cli.run(ap.parse_args(argv), fake_stores().asks, lambda _r: self.store, lambda: when, "denis", self.cfg, self.out.append)
 
     def test_park_and_note_reach_the_live_run(self):
         run = "fk-1-20261026-100000"
@@ -164,7 +164,7 @@ class EngineRequests(te.EngineTest):
         self.assertIsNotNone(self.eng.checkpoints.read())
         te.sh("git", "rev-parse", "--verify", "-q", "task/t-1", cwd=self.wt)  # the branch is kept
         self.assertEqual(self.eng.result().outcome, "parked")
-        self.assertFalse(Path(self.eng.run_dir, ConfigDir().run_request("x").name).exists())
+        self.assertFalse(Path(self.eng.run_dir, ConfigDir(ident.config_dir()).run_request("x").name).exists())
 
     def test_stop_ends_the_run_through_the_halt_path(self):
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [te.review()]}, prep=self.after_plan(stop=True))

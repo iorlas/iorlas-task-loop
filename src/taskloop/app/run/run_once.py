@@ -10,7 +10,6 @@ from taskloop.app.run import ended as stored_end
 from taskloop.app.run import requests
 from taskloop.app.run.reload import Exec
 from taskloop.app.slots.lease import Lease
-from taskloop.contracts import env as penv
 from taskloop.contracts import fence
 from taskloop.contracts.enums import AskClass
 from taskloop.contracts.envvars import EnvVar
@@ -36,7 +35,7 @@ class RunOnce:
     def go(self) -> int:
         e = self.e
         end = Ended()
-        hb = Lease(e.store, e.bead, penv.ambient_bead(EnvVar.TASK_LOOP_SLOT_BEAD), on_beat=self.beat)
+        hb = Lease(e.store, e.bead, e.env.bead(EnvVar.TASK_LOOP_SLOT_BEAD), on_beat=self.beat)
         ck = e.checkpoints.read()
         e.prev_ck = ck.run if ck else ""
         try:

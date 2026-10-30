@@ -110,10 +110,10 @@ class SameActor(Slots):
                                                "slot_bead": "sl-1"})
         loop = {"TASK_LOOP_SLOT_BEAD": "sl-1", "TASK_LOOP_LOOP_PID": str(os.getppid())}
         with mock.patch.dict(os.environ, loop):
-            self.assertEqual(engine_lock.engine_busy(self.slot("s1"), handoff=True), "")
+            self.assertEqual(engine_lock.engine_busy(self.slot("s1"), handoff=snapshot()), "")
             self.assertTrue(engine_lock.engine_busy(self.slot("s1")))
         with mock.patch.dict(os.environ, {**loop, "TASK_LOOP_SLOT_BEAD": "sl-2"}):
-            self.assertTrue(engine_lock.engine_busy(self.slot("s1"), handoff=True))
+            self.assertTrue(engine_lock.engine_busy(self.slot("s1"), handoff=snapshot()))
 
     def test_the_parent_pid_alone_is_not_the_loop(self):
         """run-task runs under `uv run --script`, so its parent is uv: only the pid the loop exported counts (0.23.169-0.23.173 refused
@@ -122,7 +122,7 @@ class SameActor(Slots):
                                                "slot_bead": "sl-1"})
         with mock.patch.dict(os.environ, {"TASK_LOOP_SLOT_BEAD": "sl-1"}):
             os.environ.pop("TASK_LOOP_LOOP_PID", None)
-            self.assertTrue(engine_lock.engine_busy(self.slot("s1"), handoff=True))
+            self.assertTrue(engine_lock.engine_busy(self.slot("s1"), handoff=snapshot()))
 
 
 class HoldRaces(Slots):

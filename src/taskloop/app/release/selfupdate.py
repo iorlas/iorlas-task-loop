@@ -7,6 +7,7 @@ from pathlib import Path
 from taskloop.adapters import applog, childenv
 from taskloop.app.release.shell import Shell, say
 from taskloop.contracts import env as penv
+from taskloop.contracts.env import Env
 from taskloop.contracts.envvars import EnvVar
 
 CODE = ("src", "dev/release.py")  # what a release runs: the engine package and the entry script
@@ -27,12 +28,12 @@ def newer_release(tool_root: Path, where: Path, sh: Shell) -> Path | None:
     return script
 
 
-def exec_release(script: Path, argv: Sequence[str], repo: Path) -> None:
+def exec_release(script: Path, argv: Sequence[str], repo: Path, env: Env) -> None:
     """Replace this process with origin/main's release, same arguments, --repo made explicit (the default would be the clone). The caller
     holds no lock: the exec'd release takes it."""
     args = list(argv) + ([] if any(a == "--repo" or a.startswith("--repo=") for a in argv) else ["--repo", str(repo)])
     say(f"this checkout's release code is not origin/main's; running {script}")
     penv.export(EnvVar.TL_RELEASE_REEXEC, "1")
     applog.close_all()
-    cmd = [*childenv.script_argv(script), *args]
+    cmd = [*childenv.script_argv(script, env), *args]
     os.execv(cmd[0], cmd)

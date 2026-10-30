@@ -6,12 +6,12 @@ from pathlib import Path
 from taskloop.adapters.gitrepo import git
 from taskloop.contracts import env as penv
 from taskloop.contracts.envvars import EnvVar
+from taskloop.contracts.paths import default_root
 
 
 def config_dir() -> Path:
     """~/.config/task-loop (XDG_CONFIG_HOME moves it), made on first ask."""
-    base = Path(penv.ambient("XDG_CONFIG_HOME") or Path.home() / ".config")
-    d = base / "task-loop"
+    d = default_root(penv.snapshot())
     d.mkdir(parents=True, exist_ok=True)
     return d
 

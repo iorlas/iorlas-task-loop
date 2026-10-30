@@ -16,6 +16,7 @@ from support.repos import write_repos
 
 from taskloop.adapters import ident
 from taskloop.app.report import reflect as rd
+from taskloop.contracts.env import snapshot
 from taskloop.domain.report import reflect as rules
 
 NOW = 1_800_000_000.0
@@ -218,15 +219,15 @@ class Filing(Base):
 class Daily(Base):
     def test_nothing_to_read_means_no_process(self):
         sp = mock.Mock()
-        self.assertEqual(rd.maybe_run(sp, NOW), "")
+        self.assertEqual(rd.maybe_run(sp, snapshot(), NOW), "")
         sp.start.assert_not_called()
 
     def test_once_a_day(self):
         self.traces.write_text("")
         sp = mock.Mock()
-        self.assertEqual(rd.maybe_run(sp, NOW), "started")
-        self.assertEqual(rd.maybe_run(sp, NOW + 60), "")
-        self.assertEqual(rd.maybe_run(sp, NOW + 86400 + 1), "started")
+        self.assertEqual(rd.maybe_run(sp, snapshot(), NOW), "started")
+        self.assertEqual(rd.maybe_run(sp, snapshot(), NOW + 60), "")
+        self.assertEqual(rd.maybe_run(sp, snapshot(), NOW + 86400 + 1), "started")
         self.assertEqual(sp.start.call_count, 2)
         self.assertEqual(sp.start.call_args[0][0][-2:], ["reflect", "digest"])
 

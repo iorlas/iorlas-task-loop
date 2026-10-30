@@ -2,22 +2,21 @@
 from pathlib import Path
 from typing import Final, final
 
-from taskloop.contracts import env as penv
+from taskloop.contracts.env import Env
 from taskloop.contracts.ids import BeadId, RunId
 
 
-def default_root() -> Path:
-    """~/.config/task-loop, or $XDG_CONFIG_HOME/task-loop. Not created here."""
-    base = penv.ambient("XDG_CONFIG_HOME") or str(Path.home() / ".config")
-    return Path(base) / "task-loop"
+def default_root(env: Env) -> Path:
+    """~/.config/task-loop, or $XDG_CONFIG_HOME/task-loop, of `env`. Not created here."""
+    return Path(env.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "task-loop"
 
 
 @final
 class ConfigDir:
     """The per-user state folder."""
 
-    def __init__(self, root: Path | str | None = None) -> None:
-        self.root = Path(root) if root is not None else default_root()
+    def __init__(self, root: Path | str) -> None:
+        self.root = Path(root)
 
     def engine_log(self, run: RunId | str) -> Path:
         return self.root / "engine" / (f"{run}.jsonl")

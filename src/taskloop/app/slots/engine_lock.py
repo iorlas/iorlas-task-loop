@@ -11,8 +11,8 @@ from pathlib import Path
 from taskloop.adapters.locks import hold_path
 from taskloop.adapters.pidcheck import proc_alive, proc_start
 from taskloop.app.slots.env import stamp
-from taskloop.contracts import env as penv
 from taskloop.contracts.enums import LockWhat
+from taskloop.contracts.env import Env
 from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.locks import EngineLock as Lock
 from taskloop.contracts.paths import RepoDirs
@@ -72,10 +72,10 @@ def live(lock: Lock | None) -> bool:
     return lock is not None and bool(lock.pid) and proc_alive(lock.pid, lock.start)
 
 
-def engine_busy(wt: str | Path, handoff: bool = False) -> str:
-    """What runs in this worktree, with the lock's path ("engine pid N runs BEAD since T; lock P"), or "". handoff: a run-task the loop
-    started takes over its loop's lock for the same slot bead. The loop names itself in TASK_LOOP_LOOP_PID: run-task's parent is
-    `uv run --script`, not the loop, so the parent pid would never match."""
+def engine_busy(wt: str | Path, handoff: Env | None = None) -> str:
+    """What runs in this worktree, with the lock's path ("engine pid N runs BEAD since T; lock P"), or "".
+    handoff: the Env of a run-task the loop started takes over its loop's lock for the same slot bead.
+    The loop names itself in TASK_LOOP_LOOP_PID: run-task's parent is `uv run --script`, not the loop: the parent pid never matches."""
     try:
         lock = read_engine_lock(wt)
     except Refused as err:
@@ -83,9 +83,9 @@ def engine_busy(wt: str | Path, handoff: bool = False) -> str:
     if lock is None:
         return ""
     mine = {os.getpid()}
-    if handoff and lock.by == "loop" and lock.slot_bead == penv.ambient(EnvVar.TASK_LOOP_SLOT_BEAD):
+    if handoff is not None and lock.by == "loop" and lock.slot_bead == handoff.get(EnvVar.TASK_LOOP_SLOT_BEAD):
         with contextlib.suppress(ValueError):
-            mine.add(int(penv.ambient(EnvVar.TASK_LOOP_LOOP_PID)))
+            mine.add(int(handoff.get(EnvVar.TASK_LOOP_LOOP_PID)))
     where = f"; lock {engine_lock_path(wt)}"
     if lock.pid and lock.pid not in mine and proc_alive(lock.pid, lock.start):
         who = "loop" if lock.by == "loop" else "engine"
@@ -100,16 +100,17 @@ class EngineLock:
     """<worktree>/.task/engine.lock while run-task runs there (see engine_busy). A worker that outlived its stop keeps the lock (pid 0)
     until it is gone."""
 
-    def __init__(self, wt: str | Path, bead: str, slot: str = "") -> None:
+    def __init__(self, wt: str | Path, bead: str, slot: str = "", env: Env | None = None) -> None:
+        self.env = env or Env()
         self.wt = wt
         self.path = engine_lock_path(wt)
         self.rec = Lock(pid=os.getpid(), start=proc_start(os.getpid()), bead=bead, slot=slot or "",
-                        slot_bead=penv.ambient(EnvVar.TASK_LOOP_SLOT_BEAD) or "", by="run-task", started=time.time())
+                        slot_bead=self.env.get(EnvVar.TASK_LOOP_SLOT_BEAD), by="run-task", started=time.time())
 
     def take(self) -> str:
         """"" when this run holds the worktree now, else what holds it. A run the loop started takes over the loop's lock for its slot."""
         with hold_path(RepoDirs(self.wt).engine_take(), f"pid {os.getpid()}", what=LockWhat.WORKTREE):
-            busy = engine_busy(self.wt, handoff=True)  # a run-task takes over only its parent loop's lock for the same slot bead
+            busy = engine_busy(self.wt, handoff=self.env)  # a run-task takes over only its parent loop's lock for the same slot bead
             if busy:
                 return busy
             self.write()  # a dead run's lock, or the parent loop's (engine_busy said so), is replaced

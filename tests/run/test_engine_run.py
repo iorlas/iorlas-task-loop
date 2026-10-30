@@ -361,7 +361,7 @@ class EngineRunTest(EngineTest):
             self.assertIsNone(self.eng.write_rounds[0]["context_k"])
         empty = Path(self.tmp.name, "empty.jsonl")
         empty.write_text("")
-        self.assertIsNone(context_size.context_tokens(str(empty)))
+        self.assertIsNone(context_size.context_tokens(str(empty), snapshot()))
 
     def test_round_three_after_a_fresh_start_resumes_the_fresh_session(self):
         big, small = Path(self.tmp.name, "big.jsonl"), Path(self.tmp.name, "small.jsonl")

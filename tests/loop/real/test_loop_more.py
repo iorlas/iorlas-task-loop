@@ -373,7 +373,7 @@ class LoopSelfUpdate(LoopBase):
         self.assertEqual([ln["outcome"] for ln in self.lines()], ["landed"])
         exe, argv, state, _ = self.execs[0]
         self.assertEqual(exe, argv[0])
-        self.assertEqual(argv[:5], childenv.script_argv(self.cache / "0.2.0" / "skills" / "task-loop" / "tl.py"))
+        self.assertEqual(argv[:5], childenv.script_argv(self.cache / "0.2.0" / "skills" / "task-loop" / "tl.py", snapshot()))
         self.assertEqual(argv[5:], ["loop", "--repo", str(self.repo), "--max-beads", "5"])
         self.assertEqual(json.loads(state)["carry"]["ran"], 1)
 
@@ -398,7 +398,7 @@ class LoopSelfUpdate(LoopBase):
         self.pin(**{"task-loop": "0.2.0"})
         with self.assertRaises(Moved):
             self.run_loop()
-        self.assertEqual(self.execs[0][1][:5], childenv.script_argv(self.cache / "0.2.0" / "skills" / "task-loop" / "tl.py"))
+        self.assertEqual(self.execs[0][1][:5], childenv.script_argv(self.cache / "0.2.0" / "skills" / "task-loop" / "tl.py", snapshot()))
 
     def test_a_pin_to_an_older_install_moves_the_loop_back(self):
         self.beads({"x-1": [rec("landed")]})

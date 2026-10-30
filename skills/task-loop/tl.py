@@ -107,7 +107,8 @@ def v_ask(a: Any, c: Ctx) -> int:
     if a.op == "list":
         for b in wire_asks.sweep("close"):  # throttled: the loop sweeps too
             print(f"closed the ask of {b}: its bead is closed or gone")
-    return cli_asks.run(a, wire_asks.store(), lambda repo: beadtools.bd_store(repo or None), c.now, ident.actor())
+    return cli_asks.run(a, wire_asks.store(), lambda repo: beadtools.bd_store(repo or None), c.now, ident.actor(),
+                       ConfigDir(ident.config_dir()))
 
 
 def v_land_lock(a: Any, c: Ctx) -> int:
@@ -345,7 +346,7 @@ VERBS: Final[dict[str, Handler]] = {
     "land": of_args(verbs.land, "id", "sha", "worktree"),
     "close": of_args(verbs.close, "id", "reason"),
     "block": of_args(verbs.block, "id", "why"),
-    "trace": of_args(verbs.trace, "id", "last", "json"),
+    "trace": lambda a, c: verbs.trace(a.id, a.last, a.json, c.env),
     "usage": lambda a, c: wire_usage.feed(a.windows, c.spawner),
     "lanes": lambda a, c: wire_lanes.refresh(c.spawner),
     "worktree": of_args(wslots.worktree, "op", "self_too"),

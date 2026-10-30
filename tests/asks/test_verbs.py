@@ -3,6 +3,7 @@ with a quoted approval."""
 
 import argparse
 import sys
+import tempfile
 import unittest
 from datetime import datetime
 from pathlib import Path
@@ -19,6 +20,7 @@ from taskloop.app.loop.queue import QueueRule
 from taskloop.cli import asks as cli
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.ids import BeadId
+from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import NewBead
 from taskloop.domain import timespec
 from taskloop.domain.asks import specs
@@ -37,6 +39,9 @@ def parse(*argv: str) -> argparse.Namespace:
 class VerbSurface(unittest.TestCase):
     def setUp(self) -> None:
         self.asks = fake_stores().asks
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.cfg = ConfigDir(self.tmp.name)
         self.store = FakeBeads()
         self.store.create(NewBead(title="x"))
         raiser.raise_ask(
@@ -45,7 +50,7 @@ class VerbSurface(unittest.TestCase):
         self.out: list[str] = []
 
     def say(self, *argv: str) -> int:
-        return cli.run(parse(*argv), self.asks, lambda _r: self.store, lambda: T + 5, "denis", self.out.append)
+        return cli.run(parse(*argv), self.asks, lambda _r: self.store, lambda: T + 5, "denis", self.cfg, self.out.append)
 
     def test_verdict_maps_to_a_typed_action(self) -> None:
         self.assertEqual(self.say("answer", "fk-1", "--verdict", "work"), 0)

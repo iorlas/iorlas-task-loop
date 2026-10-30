@@ -41,7 +41,7 @@ class OrphanTest(unittest.TestCase):
         self.assertEqual(out, [sweeps.orphan_lines(self.asks)[0]])
         self.assertIn(ORPHAN, out[0])
         listed: list[str] = []
-        cli.run(Namespace(op="list"), self.asks, lambda repo: self.store, lambda: T, "denis", listed.append)
+        cli.run(Namespace(op="list"), self.asks, lambda repo: self.store, lambda: T, "denis", self.cfg, listed.append)
         self.assertIn(ORPHAN, listed[0])
 
     def test_the_loop_reopens_it_into_the_pick_queue_once(self) -> None:
@@ -62,7 +62,8 @@ class OrphanTest(unittest.TestCase):
     def test_answer_rerun_reopens_it_and_a_closed_bead_drops_the_dead_file(self) -> None:
         out: list[str] = []
         code = cli.run(
-            Namespace(op="answer", bead="tl-7", text=[], rerun=True), self.asks, lambda repo: self.store, lambda: T, "denis", out.append
+            Namespace(op="answer", bead="tl-7", text=[], rerun=True), self.asks, lambda repo: self.store, lambda: T, "denis",
+            self.cfg, out.append
         )
         self.assertEqual((code, self.store.beads[BeadId("tl-7")].status), (0, "open"))
         self.store.beads[BeadId("tl-7")] = Bead(id=BeadId("tl-7"), title="t", status="closed")

@@ -142,8 +142,8 @@ class Engine(RunFields):
         self.os_lock = landlock.os_lock
         stem = self.log_path.stem
         self.ctx = RunContext.open(bead, cfg, Path(wt), stem, self.run_dir, self.stores, store, route, self.clock, self.sessions,
-                                   self.stats, opencode.opencode_id, context_size.context_tokens, say, verbose, dry_run,
-                                   self.now, self.step_guard, self.on_step)
+                                   self.stats, opencode.opencode_id, lambda p: context_size.context_tokens(p, self.env), say,
+                                   verbose, dry_run, self.now, self.step_guard, self.on_step)
         c = self.ctx
         self.log, self.steps, self.budget, self.calls, self.checklog = c.log, c.steps, c.budget, c.calls, c.checklog
         self.checker = Checker(self, lambda secs: self.halt_point(wait=secs))

@@ -141,7 +141,8 @@ class RunTaskTakesItsSlot(Slots):
             bd.beads["x-1"].update(status="in_progress", assignee=ident.actor())  # run-task's claim (stubbed here)
             seen["slot"] = dict(bd.slots["sl-1"])
             seen["lock"] = engine_lock.engine_lock_path(self.slot("s1")).exists()
-            seen["env"] = os.environ.get("TASK_LOOP_SLOT_BEAD")
+            lock = engine_lock.read_engine_lock(self.slot("s1"))
+            seen["env"] = lock.slot_bead if lock else None  # the run's Env names the slot bead; its lock records it
             seen["list"] = self.cli("slot", "list")[1]
             with mock.patch.dict(os.environ, {"TASK_LOOP_ACTOR": "tl-loop0000"}):
                 self.run_loop("--max-beads", "1")

@@ -3,6 +3,7 @@ import json
 from typing import Any
 
 from taskloop.adapters import opencode
+from taskloop.contracts.env import Env
 
 
 def last_turn_tokens(line: str) -> int | None:
@@ -19,13 +20,13 @@ def last_turn_tokens(line: str) -> int | None:
     return None
 
 
-def context_tokens(path: Any, tail: int = 1 << 20) -> int | None:
+def context_tokens(path: Any, env: Env, tail: int = 1 << 20) -> int | None:
     """-> the input tokens (cache included) of the last turn in a worker's transcript, or None: Claude's last assistant message
     usage, Codex's last token_count, OpenCode's last assistant message tokens (`opencode:ses_...`, read from its DB). The
     answer's own `tokens` add up every turn of the call, so they say nothing of the size."""
     session = opencode.opencode_id(path)
     if session:
-        return opencode.opencode_context(session)
+        return opencode.opencode_context(env, session)
     try:
         with open(path, "rb") as f:
             f.seek(0, 2)

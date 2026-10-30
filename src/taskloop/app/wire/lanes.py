@@ -6,7 +6,7 @@ import time
 from collections.abc import Callable
 
 from taskloop.adapters import delegate as sdelegate
-from taskloop.adapters.ident import claude_dir
+from taskloop.adapters.ident import claude_dir, config_dir
 from taskloop.app.release.pins import pinned_dir
 from taskloop.contracts import paths
 from taskloop.contracts.delegate_status import snapshot_of
@@ -25,7 +25,7 @@ def file_answer(text: str) -> str | None:
     """Parse one `status --json` answer and file it. None when filed, else why not."""
     try:
         snap = snapshot_of(json.loads(text[text.index("{"):]))
-        cfg = paths.ConfigDir()
+        cfg = paths.ConfigDir(config_dir())
         StatusStore(cfg).write(snap)
         history = UsageHistory(cfg)  # the usage history grows with each filed snapshot and is pruned by age here, its one owner
         history.record(snap)
@@ -63,7 +63,7 @@ def due(cfg: paths.ConfigDir, now: float, every: float = EVERY_S) -> bool:
 
 def chore(say: Callable[[str], None], spawner: Spawner, cfg: paths.ConfigDir | None = None, now: float | None = None) -> bool:
     """The loop's `chores` step: file delegate's status again when the snapshot is `EVERY_S` old. -> whether it asked."""
-    cfg = cfg or paths.ConfigDir()
+    cfg = cfg or paths.ConfigDir(config_dir())
     when = time.time() if now is None else now
     if not due(cfg, when):
         return False

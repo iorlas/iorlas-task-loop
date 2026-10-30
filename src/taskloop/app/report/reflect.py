@@ -16,6 +16,7 @@ from typing import Any
 
 from taskloop.adapters import beadtools, childenv, ident, landlock
 from taskloop.contracts import wire
+from taskloop.contracts.env import Env
 from taskloop.contracts.ids import BeadId, is_bead_id
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdFailure, BeadQuery, NewBead, Spawner
@@ -221,7 +222,7 @@ def due(now: float | None = None) -> bool:
     return (now or time.time()) - float(read_state().get("tried") or 0) >= DAY
 
 
-def maybe_run(spawner: Spawner, now: float | None = None) -> str:
+def maybe_run(spawner: Spawner, env: Env, now: float | None = None) -> str:
     """The loop's call: once a day a detached `tl reflect digest` (it asks bd about every open bead of the target repos: a loop
     pass never waits for it). -> 'started' or ''."""
     if not due(now) or not (ident.config_dir() / "traces.jsonl").is_file() or not registered():
@@ -231,7 +232,7 @@ def maybe_run(spawner: Spawner, now: float | None = None) -> str:
             if not due(now):
                 return ""
             pass
-        spawner.start([*childenv.script_argv(ident.PLUGIN_ROOT / "skills" / "task-loop" / "tl.py"), "reflect", "digest"])
+        spawner.start([*childenv.script_argv(ident.PLUGIN_ROOT / "skills" / "task-loop" / "tl.py", env), "reflect", "digest"])
         st = read_state()
         st["tried"] = now or time.time()
         write_state(st)

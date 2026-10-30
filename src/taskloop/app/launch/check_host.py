@@ -48,7 +48,7 @@ class CliHost:
         self.spawner = spawner
         self.wt: str | Path = Path(wt)
         self.cfg = cfg
-        self.stores = stores or real_stores(paths.ConfigDir(root))
+        self.stores = stores or real_stores(paths.ConfigDir(root or paths.default_root(env)))
         self.bead = "tl-check-" + check_files.repo_key(str(wt), git_env(wt))
         self.log = RunLog(fake_stores().run_log("check"))
         self.checklog = CheckLog(self.log)

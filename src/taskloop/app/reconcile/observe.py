@@ -4,6 +4,7 @@ from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
 
+from taskloop.adapters.ident import config_dir
 from taskloop.app.release import tidy
 from taskloop.contracts import fence
 from taskloop.contracts.bead import Bead
@@ -81,7 +82,7 @@ def slot_facts(beads: list[Bead], host: str, live: dict[BeadId, str]) -> tuple[S
 def landed(repo: Path, bead: BeadId, git: Git, cfg: ConfigDir | None = None) -> bool:
     """The bead's landed record names a sha that is on the checkout's HEAD. LEGACY, only for a bead with no record (landed before
     0.23.179): its land commit (subject ends `(<bead>)`, not a revert) is on HEAD; this can go when no such bead is left."""
-    rec = LandedStore(cfg or ConfigDir()).get(bead)
+    rec = LandedStore(cfg or ConfigDir(config_dir())).get(bead)
     if rec is not None:
         return git.is_ancestor(str(repo), rec.sha, "HEAD")
     try:

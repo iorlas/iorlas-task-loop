@@ -213,7 +213,7 @@ class TraceRecords(te.EngineTest):
         self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         out = io.StringIO()
         with redirect_stdout(out):
-            rc = verbs.trace(BeadId("t-1"), 0, False)
+            rc = verbs.trace(BeadId("t-1"), 0, False, snapshot())
         self.assertEqual(rc, 0)
         self.assertIn("landed", out.getvalue())
 

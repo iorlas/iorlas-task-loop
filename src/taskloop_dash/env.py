@@ -84,7 +84,7 @@ class Ports:
 
 
 class Env:
-    def __init__(self, config: Path | str | None = None, home: Path | str | None = None, ports: Ports | None = None,
+    def __init__(self, config: Path | str, home: Path | str | None = None, ports: Ports | None = None,
                  clock: Callable[[], float] = time.time, version: str = "", tails: Tails | None = None) -> None:
         self.config = ConfigDir(config)
         self.home = Path(home) if home else Path.home()

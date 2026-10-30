@@ -21,6 +21,15 @@ class Env:
     def __contains__(self, name: object) -> bool:
         return str(name) in self.vars
 
+    def bead(self, var: EnvVar) -> BeadId | None:
+        """A bead id held in `var`, None when unset or empty; a value that is not a bead id is an error."""
+        value = self.get(var)
+        return parse_bead_id(value) if value else None
+
+    def with_(self, var: EnvVar, value: str) -> Env:
+        """This environment with `var` set: a hand-over inside the engine is a value passed down, not an export."""
+        return Env({**self.vars, var.value: value})
+
 
 def snapshot() -> Env:
     return Env(dict(os.environ))

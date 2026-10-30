@@ -74,7 +74,7 @@ class DevCheckout(unittest.TestCase):
     def test_dev_server_listens_on_random_loopback_port(self):
         cfg = tempfile.mkdtemp()
         with mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": cfg, "APPDATA": cfg, "TASK_LOOP_DASH_BIND": ""}):
-            servers, addrs, port, _dash = serve.start(Env(ports=Ports()), dash_cli.PACKAGE, snapshot(), [])
+            servers, addrs, port, _dash = serve.start(Env(config=cfg, ports=Ports()), dash_cli.PACKAGE, snapshot(), [])
         try:
             first = ", ".join(bind.urls(addrs, port))  # what the server prints on its first line
             self.assertIn("127.0.0.1:", first)

@@ -8,7 +8,6 @@ from pathlib import Path
 
 import child_env
 
-from taskloop.contracts import env as penv
 from taskloop.contracts.env import Env
 from taskloop.contracts.envvars import PREFIXES, EnvVar, registered
 
@@ -91,10 +90,10 @@ def child_env_of(env: Mapping[str, str], extra: Mapping[str, str] | None = None)
     return out
 
 
-def script_argv(script: str | Path) -> list[str]:
+def script_argv(script: str | Path, env: Env) -> list[str]:
     """The argv that runs a script with a PEP 723 header (tl.py, dev/release.py): `uv run --script` installs its dependencies into
-    a cached environment. `UV` is the uv that started this process, when one did."""
-    return [penv.ambient("UV") or shutil.which("uv") or "uv", "run", "--quiet", "--script", str(script)]
+    a cached environment. `UV` of `env` is the uv that started this process, when one did."""
+    return [env.get("UV") or shutil.which("uv") or "uv", "run", "--quiet", "--script", str(script)]
 
 
 def current_env(env: Env, extra: Mapping[str, str] | None = None) -> dict[str, str]:

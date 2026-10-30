@@ -95,7 +95,8 @@ def show(asks: AskStore, key: BeadId | None, out: Out) -> int:
     return 0
 
 
-def run(a: Namespace, asks: AskStore, store_at: Callable[[str], Beads], now: Callable[[], float], by: str, out: Out = print) -> int:
+def run(a: Namespace, asks: AskStore, store_at: Callable[[str], Beads], now: Callable[[], float], by: str, cfg: ConfigDir,
+        out: Out = print) -> int:
     """One verb. `store_at(repo)` is the tracker of the ask's repo ('' = here)."""
     op = a.op
     if op == "list":
@@ -112,7 +113,7 @@ def run(a: Namespace, asks: AskStore, store_at: Callable[[str], Beads], now: Cal
     ask = asks.get(bead)
     verbs = intake.Intake(asks, store_at(ask.repo if ask else ""), now, by)
     try:
-        return verb(a, op, bead, ask, verbs, out, now)
+        return verb(a, op, bead, ask, verbs, out, cfg, now)
     except (BdFailure, ValueError) as e:
         out("tl: %s" % ((e.error.text if isinstance(e, BdFailure) else "") or e))
         return 1
@@ -126,7 +127,8 @@ def waive(a: Namespace, verbs: intake.Intake, bead: BeadId, words: str) -> None:
     verbs.override(bead, words)
 
 
-def verb(a: Namespace, op: str, bead: BeadId, ask: Ask | None, verbs: intake.Intake, out: Out, now: Callable[[], float] = time.time) -> int:
+def verb(a: Namespace, op: str, bead: BeadId, ask: Ask | None, verbs: intake.Intake, out: Out, cfg: ConfigDir,
+         now: Callable[[], float] = time.time) -> int:
     words = " ".join(getattr(a, "text", None) or [])
     if op == "answer":
         action, said = action_of(a, ask)
@@ -138,7 +140,6 @@ def verb(a: Namespace, op: str, bead: BeadId, ask: Ask | None, verbs: intake.Int
         out("done" if not why else "tl: " + SAYS.get(why, why))
         return 0 if not why else 1
     if op in ("park", "note"):
-        cfg = ConfigDir()
         owner = requests.OwnerVerbs(verbs, cfg, now())
         run = requests.newest_run(cfg, bead)
         why, said = owner.park(bead, run) if op == "park" else owner.note(bead, run, words)

@@ -114,7 +114,7 @@ class Reload:
             with contextlib.suppress(Exception):
                 f.flush()
         try:
-            (e.exec_fn or reexec.exec_in_place)([*childenv.script_argv(d / "skills" / "task-loop" / "tl.py"), *argv])
+            (e.exec_fn or reexec.exec_in_place)([*childenv.script_argv(d / "skills" / "task-loop" / "tl.py", e.env), *argv])
             e.moved = True
             raise Exec()  # reached only when the exec function is a test's
         except OSError as exc:  # exec itself failed: this version goes on where it is

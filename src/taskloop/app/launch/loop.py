@@ -152,11 +152,11 @@ def release_dead(repo: str, store: Beads, now: float) -> list[str]:
     return leases.release_dead(repo, store, running(repo, store), ident.hostname(), now)
 
 
-def chores(repo: str, spawner: Spawner) -> None:
+def chores(repo: str, spawner: Spawner, env: Env) -> None:
     wlanes.chore(console.say, spawner)  # delegate's lane status filed again when the snapshot is 20 min old (the dash reads the file)
     wasks.sweep_asks(console.say, wslots.load_cfg(repo))  # asks of closed beads closed, unanswered ones parked, answers no run used flagged
     try:
-        reflect.maybe_run(spawner)  # the run reflections into beads, once a day (tl-bl5)
+        reflect.maybe_run(spawner, env)  # the run reflections into beads, once a day (tl-bl5)
     except Exception as e:
         console.say(f"loop: reflect digest: {e}")
 
@@ -182,7 +182,7 @@ def stop_tree(child: Child) -> None:
     child.stop(STOP_GRACE_S)
 
 
-def exec_into(repo: str, d: Path, argv: list[str], handover: str, start_cwd: str = "") -> None:
+def exec_into(repo: str, d: Path, argv: list[str], handover: str, env: Env, start_cwd: str = "") -> None:
     penv.export(EnvVar.TL_LOOP_STATE, handover)
     if start_cwd:
         os.chdir(start_cwd)  # cmd_loop chdir'd into the repo; a relative --repo in argv means the start directory
@@ -190,7 +190,7 @@ def exec_into(repo: str, d: Path, argv: list[str], handover: str, start_cwd: str
     sys.stderr.flush()
     applog.close_all()
     try:
-        cmd = [*childenv.script_argv(d / "skills" / "task-loop" / "tl.py"), *argv]
+        cmd = [*childenv.script_argv(d / "skills" / "task-loop" / "tl.py", env), *argv]
         os.execv(cmd[0], cmd)
     except OSError:
         penv.take(EnvVar.TL_LOOP_STATE)
@@ -233,12 +233,12 @@ def build(repo: str, store: Beads | None = None, session_actor: str = "", here: 
         stop_now=stop_now,
         stop_tree=stop_tree,
         run_task_argv=lambda bead, wt, slot, out, code: (
-            [*childenv.script_argv((code or here) / "tl.py"), "run-task", bead, "--worktree", wt, "--outcome-file", out]
+            [*childenv.script_argv((code or here) / "tl.py", env), "run-task", bead, "--worktree", wt, "--outcome-file", out]
             + (["--slot", slot] if slot else [])
         ),
         landed_on_base=lambda wt, bead: landed_on_base(repo, store, wt, bead),
         reload_note=reload_note,
-        chores=lambda: chores(repo, spawner),
+        chores=lambda: chores(repo, spawner, env),
         release_dead=lambda: release_dead(repo, store, now()),
         ask_lines=lambda: ask_sweeps.orphan_lines(wasks.store()),
         storm=lambda: storm(repo, now),
@@ -252,7 +252,7 @@ def build(repo: str, store: Beads | None = None, session_actor: str = "", here: 
         code_dir=str(here),
         session_actor=session_actor,
         actor=ident.actor,
-        exec_into=lambda d, argv, handover: exec_into(repo, d, argv, handover, start_cwd),
+        exec_into=lambda d, argv, handover: exec_into(repo, d, argv, handover, env, start_cwd),
         take_handover=lambda: penv.take(EnvVar.TL_LOOP_STATE),
         say=console.say,
         now=now,

@@ -26,6 +26,7 @@ from taskloop.app.run.calls import Calls  # noqa: E402
 from taskloop.app.track import verbs  # noqa: E402
 from taskloop.app.write.handoff import Handoff  # noqa: E402
 from taskloop.contracts.delegate import DelegateResult  # noqa: E402
+from taskloop.contracts.env import snapshot  # noqa: E402
 from taskloop.contracts.ids import BeadId  # noqa: E402
 from taskloop.stores.runlog import RunLog  # noqa: E402
 from taskloop_dash.views import names  # noqa: E402
@@ -107,14 +108,14 @@ class OpenCode(unittest.TestCase):
     # reader
     # lookups
     def test_transcript_of_xai_is_the_session_reference(self):
-        self.assertEqual(opencode.transcript_of("xai", SID), "opencode:" + SID)
-        self.assertEqual(opencode.transcript_of("xai", "ses_zzz"), "")
-        self.assertEqual(opencode.transcript_of("xai", ""), "")
+        self.assertEqual(opencode.transcript_of(snapshot(), "xai", SID), "opencode:" + SID)
+        self.assertEqual(opencode.transcript_of(snapshot(), "xai", "ses_zzz"), "")
+        self.assertEqual(opencode.transcript_of(snapshot(), "xai", ""), "")
 
     def test_context_is_the_last_assistant_message_with_tokens(self):
-        self.assertEqual(context_size.context_tokens("opencode:" + SID), 9000 + 4000 + 700)
-        self.assertEqual(context_size.context_tokens(SID), 13700)
-        self.assertIsNone(context_size.context_tokens("opencode:ses_nope"))
+        self.assertEqual(context_size.context_tokens("opencode:" + SID, snapshot()), 9000 + 4000 + 700)
+        self.assertEqual(context_size.context_tokens(SID, snapshot()), 13700)
+        self.assertIsNone(context_size.context_tokens("opencode:ses_nope", snapshot()))
 
     # fresh-writer limit
     def test_xai_has_its_own_fresh_writer_limit(self):
@@ -132,7 +133,7 @@ class OpenCode(unittest.TestCase):
         con.execute("INSERT INTO part VALUES ('p9','m3',?,?,?,'{}')", (SID, T + 9000, T + 99000))
         con.commit()
         con.close()
-        self.assertAlmostEqual(opencode.opencode_updated(SID) or 0.0, 1_790_000_099.0)  # a part newer than every message
+        self.assertAlmostEqual(opencode.opencode_updated(snapshot(), SID) or 0.0, 1_790_000_099.0)  # a part newer than every message
 
     def test_a_lane_named_openai_xai_is_grok_by_family_or_name(self):
         self.assertEqual(names.lane_name("OPENAI_XAI"), "Grok")
@@ -146,7 +147,7 @@ class OpenCode(unittest.TestCase):
         Path(self.cfg, "task-loop", "traces.jsonl").write_text(json.dumps(rec) + "\n")
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
-            rc = verbs.trace(BeadId("b-1"), 0, True)
+            rc = verbs.trace(BeadId("b-1"), 0, True, snapshot())
         self.assertEqual(rc, 0)
         self.assertEqual(json.loads(buf.getvalue())[0]["sessions"][0]["transcript"], "")
         sessions = []

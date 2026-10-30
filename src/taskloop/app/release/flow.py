@@ -159,7 +159,7 @@ def main(argv: list[str] | None, tool_root: Path, spawner: Spawner, port: Git, e
             newer = selfupdate.newer_release(tool_root, clone.ready(config_dir(), url, sh), sh)
             version = "" if newer else release(req, repo, market, tool_root, sh)
         if newer:  # the lock is released above: the exec'd release takes it
-            selfupdate.exec_release(newer, sys.argv[1:] if argv is None else argv, repo)
+            selfupdate.exec_release(newer, sys.argv[1:] if argv is None else argv, repo, env)
         record(ReleaseResult(ok=True, version=version, summary="released " + version, at=time.time(), branch=req.from_branch or "main",
                              message=req.message), req, repo)
     except Abort as e:

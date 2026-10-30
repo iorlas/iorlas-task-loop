@@ -37,7 +37,7 @@ class SameIntake(unittest.TestCase):
             dash_store, dash_asks = world(b)
             args = Namespace(op="answer", bead="b-1", text=["go", "with", "A"], amend=False, option=None, rerun=False, confirm=False,
                              split=False, verdict=None)
-            cli_asks.run(args, tl_asks, lambda repo: tl_store, lambda: 1000.0, "dash", lambda _line: None)
+            cli_asks.run(args, tl_asks, lambda repo: tl_store, lambda: 1000.0, "dash", ConfigDir(a), lambda _line: None)
             dash = make_dash(answering(lambda repo: dash_store, b), config=b)
             req = {"project": "b", "ask": "b-1-1", "kind": "answer", "text": "go with A"}
             self.assertEqual(dash.writes.post("answer", req), (200, {"ok": True, "message": ""}))
