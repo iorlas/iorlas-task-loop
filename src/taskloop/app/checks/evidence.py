@@ -5,7 +5,8 @@ from pathlib import Path
 from typing import assert_never
 
 from taskloop.contracts.checks import UNVERIFIED_EXIT, CheckResult, CheckRun
-from taskloop.domain.checks import matchers, trim
+from taskloop.domain.checks import diagnostics, matchers, trim
+from taskloop.domain.checks.diagnostics import CheckDiagnostics
 from taskloop.domain.checks.names import norm
 
 
@@ -74,33 +75,28 @@ def compact(checks: Sequence[CheckResult]) -> str:
     return "\n".join(out) or "- (no checks)"
 
 
-def failure_brief(checks: Sequence[CheckResult], run_dir: Path, each: int = trim.CAP, total: int = 3 * trim.CAP,
-                  lines: int = trim.TAIL) -> str:
-    """The failing checks for a prompt: command (cut at 300 chars), log path ("none" when no log), then the saved log trimmed by
-    trim_log (failure lines with their context, plus its last `lines` lines), then a timeout note. Each check is at most `each`
-    bytes in all, `total` for all checks; the full log stays on disk at the path given."""
-    out: list[str] = []
-    left = total
+def diagnostics_of(checks: Sequence[CheckResult], run_dir: Path) -> list[CheckDiagnostics]:
+    """What each failing check says, as records: its diagnostics read out of the saved log (the whole log, not the tail the result
+    kept), else its words for the trimmer."""
+    out: list[CheckDiagnostics] = []
     for c in checks:
         log = Path(run_dir, c.log) if c.log else None
         try:
             text = log.read_text(encoding="utf-8", errors="replace") if log and "diff" not in c.tags else c.tail
         except OSError:
             text, log = c.tail, None
-        end = ""
-        if isinstance(c.exit, int) and (c.exit == 124 or c.exit < 0):
-            end = f"timed out after {int(c.secs)} s"
-        cmd = c.cmd if len(c.cmd) <= 300 else c.cmd[:300] + "..."
-        head = "- `{}` exit {}\n  log: {}".format(cmd, c.exit, log or "none")
-        room = min(each, left)
-        if room <= len(head) + 80:
-            out.append(head + "\n  (output left out: see the log)")
-            continue
-        body = trim.trim_log(text, cap=room - len(head.encode("utf-8")) - len(end) - 2, tail_lines=lines)
-        text = "\n".join(x for x in (body, end) if x)
-        left -= len(head.encode("utf-8")) + len(text.encode("utf-8")) + 1
-        out.append(head + ("\n" + text if text else ""))
-    return "\n".join(out) or "- (no checks)"
+        end = f"timed out after {int(c.secs)} s" if isinstance(c.exit, int) and (c.exit == 124 or c.exit < 0) else ""
+        out.append(diagnostics.of_check(c.cmd, c.exit, text, str(log) if log else "none", end))
+    return out
+
+
+def failure_brief(checks: Sequence[CheckResult], run_dir: Path, each: int = trim.CAP, total: int = 3 * trim.CAP,
+                  lines: int = trim.TAIL) -> str:
+    """The failing checks for a prompt: command (cut at 300 chars), log path ("none" when no log), then each diagnostic the output
+    holds (file:line:col, severity, rule, message; diagnostics.py), else the saved log trimmed by trim_log (failure lines with their
+    context, plus its last `lines` lines), then a timeout note. Each check is at most `each` bytes in all, `total` for all checks;
+    the full log stays on disk at the path given."""
+    return diagnostics.render_all(diagnostics_of(checks, run_dir), each, total, lines)
 
 
 def flagged_why(check: CheckResult, bad_checks: Sequence[dict[str, str]]) -> str:
