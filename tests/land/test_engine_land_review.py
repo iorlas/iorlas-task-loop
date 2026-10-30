@@ -166,7 +166,7 @@ class LandReview(LandReviewBase):
         with mock.patch.object(engine, "tool_on_path", return_value="/bin/ruff"), \
                 mock.patch.object(e, "sh", return_value=(0, "")) as sh_, mock.patch.object(e, "ai") as ai:
             self.assertEqual(e.verifier.run([item]), [])
-        self.assertEqual(sh_.call_args[0][0], ["ruff", "check", "tools"])
+        self.assertEqual(sh_.call_args[0][0], ["ruff", "check", "--no-fix", "."])
         ai.assert_not_called()
         self.assertEqual(e.verified[0]["verdict"], "settled")
         self.assertIn("exit 0", e.verified[0]["evidence"])
@@ -180,7 +180,7 @@ class LandReview(LandReviewBase):
                     mock.patch.object(e, "sh", return_value=(rc, "E501 line too long")) as sh_, \
                     mock.patch.object(e, "ai", return_value=({"items": [verdict(1, "open", why="x")]}, None)) as ai:
                 left = e.verifier.run([item])
-            self.assertEqual(sh_.call_args[0][0], ["ruff", "check", "."])
+            self.assertEqual(sh_.call_args[0][0], ["ruff", "check", "--no-fix", "."])
             self.assertEqual(len(left), 1)
             if rc == 1:
                 ai.assert_not_called()
@@ -189,12 +189,24 @@ class LandReview(LandReviewBase):
             else:
                 self.assertEqual(ai.call_count, 1)
 
+    def test_an_item_naming_a_write_flag_never_runs_it(self):
+        (self.wt / "justfile").write_text("lint:\n    ruff check tools\n    prettier --check .\n")
+        for what, argv in (("nobody ran `ruff check --fix .`", ["ruff", "check", "--no-fix", "."]),
+                           ("nobody ran `prettier --write .`", ["prettier", "--check", "."])):
+            e = self.verifier(max_fix_rounds=0)
+            with mock.patch.object(engine, "tool_on_path", return_value="/bin/x"), \
+                    mock.patch.object(e, "sh", return_value=(0, "")) as sh_, mock.patch.object(e, "ai"):
+                e.verifier.run([{"what": what, "kind": "tooling"}])
+            self.assertEqual([c[0][0] for c in sh_.call_args_list], [argv])
+
     def test_shell_syntax_in_a_backticked_command_is_never_run(self):
         e = self.engine_at_land()
         (self.wt / "justfile").write_text("lint:\n    ruff check tools\n")
         with mock.patch.object(engine, "tool_on_path", return_value="/bin/ruff"):
-            self.assertEqual(e.settles.lint_command("`ruff check . ; rm -rf ~` was not run"), "ruff check .")
-            self.assertEqual(e.settles.lint_command("`ruff check tools` was not run"), "ruff check tools")
+            self.assertEqual(e.settles.lint_command("`ruff check . ; rm -rf ~` was not run"), ("ruff", "check", "--no-fix", "."))
+            self.assertEqual(e.settles.lint_command("`ruff check --fix .` was not run"), ("ruff", "check", "--no-fix", "."))
+            self.assertEqual(e.settles.lint_command("`prettier --write .` was not run"), ("prettier", "--check", "."))
+            self.assertIsNone(e.settles.lint_command("`tsc --build` was not run"))
 
     def test_the_yxbb6_item_is_not_settled_by_a_suite_name_but_the_brief_carries_the_evidence_and_the_skip_rule(self):
         e = self.evidenced(attrs={"run_dir": Path("/runs/x")})

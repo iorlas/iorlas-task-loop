@@ -23,10 +23,6 @@ class ToolsTable(Table):
             ("ran `ruff check tools`", ["ruff"]), ("`mypy` passes", ["mypy"]), ("checked with eslint", ["eslint"]),
             ("the biome transition", []), ("ran ruff and `flake8 .`", ["flake8", "ruff"]), ("lint the files", [])])
 
-    def test_plain_command(self):
-        self.assertEqual(Tools.plain_command("ran `ruff check .` clean", "ruff"), "ruff check .")
-        self.assertEqual(Tools.plain_command("ran `ruff check . | tee x`", "ruff"), "")
-
 
 class CodeNamesTable(Table):
     def test_code_files_and_symbols(self):

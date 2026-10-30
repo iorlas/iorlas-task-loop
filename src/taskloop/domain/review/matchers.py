@@ -13,7 +13,6 @@ _RUN_VERB = r"(?:run|runs|ran|running|lint|lints|linted|linting|format|formats|f
 _BACKTICKED = re.compile(r"`([^`]+)`")
 _PLAIN_WORD = re.compile(r"[a-z][a-z0-9+-]*")
 _TOOL_AFTER_VERB = re.compile(rf"\b{_RUN_VERB}\s+(?:(?:with|by|using|the)\s+)?([a-z][a-z0-9+-]*)")
-_SAFE_CMD = re.compile(r"[\w./=:,@+*~ -]+")
 _CODE_EXT = re.compile(r"\.(?:py|cs|js|jsx|ts|tsx|go|rs|java|kt|rb|sh|c|h|cpp|hpp|json|ya?ml|toml|md|txt|csv|sql|css|html|gd|"
                        r"lua|swift|asmdef|unity|prefab)$", re.I)
 _SYMBOL = re.compile(r"\b(?:[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]*)+|[a-z][a-z0-9]*(?:_[a-z0-9]+)+)\b")
@@ -41,14 +40,6 @@ class Tools:
                 found.append(words[0].lower())
         found += [w for w in _TOOL_AFTER_VERB.findall(what.lower()) if w in KNOWN_TOOLS]
         return list(dict.fromkeys(found))
-
-    @staticmethod
-    def plain_command(what: str, tool: str) -> str:
-        """The backticked command of `tool` in the item when it is plain words (no shell syntax), else ''."""
-        for c in _BACKTICKED.findall(what):
-            if c.split()[:1] == [tool] and _SAFE_CMD.fullmatch(c):
-                return c.strip()
-        return ""
 
 
 class CodeNames:

@@ -162,13 +162,13 @@ class EngineReviewTest(EngineTest):
         real_sh = engine.Engine.sh
 
         def run(eng, cmd, *args, **kwargs):
-            if cmd == ["ruff", "check", "."]:
+            if cmd == ["ruff", "check", "--no-fix", "."]:
                 return 127, "ruff: command not found"
             return real_sh(eng, cmd, *args, **kwargs)
 
         with mock.patch.object(engine.Engine, "sh", autospec=True, side_effect=run) as run_:
             yield
-        run_.assert_any_call(self.eng, ["ruff", "check", "."], timeout=600)
+        run_.assert_any_call(self.eng, ["ruff", "check", "--no-fix", "."], timeout=600)
 
     def test_an_unchecked_item_for_a_tool_the_repo_does_not_use_is_dropped_with_the_evidence(self):
         with mock.patch.object(engine, "tool_on_path", side_effect=self.no_ruff):

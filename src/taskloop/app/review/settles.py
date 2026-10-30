@@ -1,15 +1,26 @@
 """Settles: what the engine proves itself before the verifier is asked (tl-bxk.10.9, .10.19, .10.25). An item that names a tool the repo
 does not use is no check here; one that names a gate or stage check the engine runs is settled by that check; one that only doubts
 whether the engine ran a check is settled by the engine's own results; one that names a linter the repo has is run here."""
-from typing import Any, Final
+import shlex
+from typing import Any, Final, NewType
 
 from taskloop.adapters.gitenv import run_git
-from taskloop.contracts.argv import argv_of
 from taskloop.domain.plan.matchers import without_runner
 from taskloop.domain.review.matchers import KNOWN_TOOLS, GateProof, Tools, word_in
 
 Item = dict[str, Any]
-LINT_DEFAULT: Final = {"ruff": "ruff check .", "flake8": "flake8", "shellcheck": None}
+LintArgv = NewType("LintArgv", tuple[str, ...])
+# The only argvs the verify step runs for a linter an item names: fixed here, read-only (no --fix, no --write), never built from item text.
+_LINT_TABLE: Final = {
+    "ruff": ("ruff", "check", "--no-fix", "."), "flake8": ("flake8",), "black": ("black", "--check", "."),
+    "isort": ("isort", "--check-only", "."), "prettier": ("prettier", "--check", "."), "eslint": ("eslint", "."),
+}
+
+
+def lint_argv(tool: str) -> LintArgv | None:
+    """The fixed read-only argv for a known linter name, else None: the one way to make a LintArgv."""
+    row = _LINT_TABLE.get(tool)
+    return LintArgv(row) if row else None
 
 
 class Settles:
@@ -35,16 +46,13 @@ class Settles:
             said.append(f"git grep -w -I {t}: no match in the tracked tree nor the engine's gate and checks; which {t}: not found")
         return "not a check here: the repo does not use it ({})".format("; ".join(said))
 
-    def lint_command(self, what: str) -> str:
-        """The command the engine runs for an item naming a linter this repo uses: the backticked command if it is plain words (no shell
-        syntax), else the linter's default; "" when it names none, or the repo does not use it."""
+    def lint_command(self, what: str) -> LintArgv | None:
+        """The fixed argv for an item naming a linter this repo uses; the item's own words choose only the tool, never the argv."""
         for tool in Tools.named(what):
-            if tool not in KNOWN_TOOLS or self.unused_tool(f"`{tool}`"):
-                continue
-            plain = Tools.plain_command(what, tool)
-            if plain or LINT_DEFAULT.get(tool):
-                return plain or LINT_DEFAULT[tool] or ""
-        return ""
+            argv = lint_argv(tool) if tool in KNOWN_TOOLS else None
+            if argv and not self.unused_tool(f"`{tool}`"):
+                return argv
+        return None
 
     # -- the checks the engine runs
     def gate_names(self) -> list[str]:
@@ -151,12 +159,12 @@ class Settles:
             self.settled(u, proof, "the engine's own check results settle it")
         return bool(proof)
 
-    def run_lint(self, u: Item, cmd: str) -> Item | None:
+    def run_lint(self, u: Item, cmd: LintArgv) -> Item | None:
         """None: the tool cannot start here (the verifier and the owner still judge it); {} settled; else the wrong item."""
-        rc, tail = self.e.sh(argv_of(cmd), timeout=600)
+        rc, tail = self.e.sh(list(cmd), timeout=600)
         if rc in (126, 127):
             return None
-        out = f"ran `{cmd}`: exit {rc}" + ((" " + tail[-300:]) if rc else "")
+        out = f"ran `{shlex.join(cmd)}`: exit {rc}" + ((" " + tail[-300:]) if rc else "")
         self.settled(u, out, out, "settled" if rc == 0 else "wrong")
         return dict(u, why=out) if rc else {}
 
