@@ -5,7 +5,7 @@ import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
-from taskloop.adapters import procs as sproc
+from taskloop.adapters import childenv
 from taskloop.app.checks.host import CheckHost
 from taskloop.contracts.checks import Check
 from taskloop.contracts.ports import Spawner
@@ -29,7 +29,7 @@ class Box:
         why = self._ready()
         if why:
             return list(argv), why
-        tl = {k: v for k, v in sproc.current_env().items() if k.startswith("TL_")}
+        tl = {k: v for k, v in childenv.current_env().items() if k.startswith("TL_")}
         forward = {**tl, "TL_SLOT": self.host.bead_env["TL_SLOT"], **env}  # the slot's name only: its host paths mean nothing inside
         art = forward.pop("TL_ARTIFACTS", "")
         name = "tl-check-" + "".join(ch if ch.isalnum() or ch in "_.-" else "-" for ch in f"{self.host.run_dir.name}-{c.id}")

@@ -14,12 +14,12 @@ from types import FrameType
 
 import stream_proc
 
-from taskloop.adapters import landlock, procs
+from taskloop.adapters import landlock
 from taskloop.adapters.childenv import tool_env
 from taskloop.adapters.ident import config_dir
 from taskloop.adapters.suiteout import Part, failing_tests, failure_report, merge_outputs, ran_line
 from taskloop.app.release.cache import SuiteCache
-from taskloop.app.release.shell import Abort, git, run, say
+from taskloop.app.release.shell import Abort, Shell, say
 from taskloop.contracts import env as penv
 from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.paths import ConfigDir
@@ -166,14 +166,14 @@ def sweep_stale_tmp(now: float | None = None) -> None:
                 shutil.rmtree(d, ignore_errors=True)
 
 
-def host_suite(tool_root: Path, repo: Path) -> None:
+def host_suite(tool_root: Path, repo: Path, sh: Shell) -> None:
     """The suite as N parallel pytest-xdist workers (each its own HOME), then the tests marked `serial` (tests/conftest.py SERIAL) in one
     process. Holds the host-wide suite lock: a second full suite waits and says who holds it. `tool_root` holds the pyproject (pytest and
     xdist) that runs them; `repo` is the tree under test."""
     holder = f"pid {os.getpid()} since {time.strftime('%H:%M:%S')}: suite of {repo}"
     with landlock.os_lock(suite_lock_path(), holder, lambda who: say(f"waiting for the suite lock (held by {who})")):
         sweep_stale_tmp()
-        _host_suite(tool_root, repo)
+        _host_suite(tool_root, repo, sh)
 
 
 def refuse_if_short(n: int, mem_mb: int | None) -> None:
@@ -184,11 +184,11 @@ def refuse_if_short(n: int, mem_mb: int | None) -> None:
                     f"({n} workers x {WORKER_BUDGET_MB} MB); nothing run")
 
 
-def _host_suite(tool_root: Path, repo: Path) -> None:
+def _host_suite(tool_root: Path, repo: Path, sh: Shell) -> None:
     n = workers()
     refuse_if_short(n, available_mb())
     say(f"running the full suite in {n} workers, then the serial group")
-    run(["uv", "sync", "--frozen", "--quiet", "--project", str(tool_root)], tool_root)  # the dev group exactly as uv.lock records it
+    sh.run(["uv", "sync", "--frozen", "--quiet", "--project", str(tool_root)], tool_root)  # the dev group exactly as uv.lock records it
     work = Path(tempfile.mkdtemp(prefix="tl-suite-"))
     try:
         parts = run_parts(tool_root, repo, work, n)
@@ -201,16 +201,16 @@ def _host_suite(tool_root: Path, repo: Path) -> None:
     say("suite green")
 
 
-def container_suite(tool_root: Path, repo: Path) -> None:
+def container_suite(tool_root: Path, repo: Path, sh: Shell) -> None:
     """The suite through dev/suite-docker.py (a Linux container's own disk; the host suite when docker is not reachable).
     TASK_LOOP_SUITE_HOST=1 runs it on the host. A fake repo (the tests') has no runner of its own: it takes the host runner."""
     if penv.ambient(EnvVar.TASK_LOOP_SUITE_HOST) or not (repo / "dev" / "suite.py").is_file():
-        return host_suite(tool_root, repo)
+        return host_suite(tool_root, repo, sh)
     say("running the full suite in a container (dev/suite-docker.py)")
-    ran = procs.capture([sys.executable, str(tool_root / "dev" / "suite-docker.py"), "--repo", str(repo)], None, None, LONG)
-    out = ran.out + ran.err
+    ran = sh.run([sys.executable, str(tool_root / "dev" / "suite-docker.py"), "--repo", str(repo)], None, check=False, timeout_s=LONG)
+    out = ran.stdout + ran.stderr
     sys.stdout.write(out)
-    if ran.exit:
+    if ran.returncode:
         raise red(out, out.splitlines())
 
 
@@ -218,35 +218,35 @@ def gate_command() -> list[str]:
     return ["just", "check"] if shutil.which("just") else ["mise", "exec", "--", "just", "check"]
 
 
-def gate(repo: Path) -> None:
+def gate(repo: Path, sh: Shell) -> None:
     """The repo's own gate before the suite: `just check` (ruff, pyrefly, the structural rules test), whenever the repo has a justfile.
     `just` comes from PATH, else through mise; the config paths mise must trust are exported."""
     if not (repo / "justfile").is_file():  # a bare repo (the tests' fakes) has no gate of its own
         return
     cmd = gate_command()
     home = os.path.expanduser("~")
-    env = tool_env(penv.snapshot().vars, {"MISE_TRUSTED_CONFIG_PATHS": os.pathsep.join([home + "/.config/mise", home + "/Workspaces"])})
+    trusted = {"MISE_TRUSTED_CONFIG_PATHS": os.pathsep.join([home + "/.config/mise", home + "/Workspaces"])}
     say("running the gate: " + " ".join(cmd))
-    ran = procs.capture(cmd, str(repo), env, LONG)
-    if ran.exit:
-        raise Abort(f"the gate is red; nothing released (`just check` exit {ran.exit}):\n{(ran.out + ran.err).strip()[-3000:]}")
+    ran = sh.run(cmd, repo, check=False, extra=trusted, timeout_s=LONG)
+    if ran.returncode:
+        raise Abort(f"the gate is red; nothing released (`just check` exit {ran.returncode}):\n{(ran.stdout + ran.stderr).strip()[-3000:]}")
     say("gate green")
 
 
-def run_checks(tool_root: Path, repo: Path) -> None:
-    gate(repo)
-    container_suite(tool_root, repo)
+def run_checks(tool_root: Path, repo: Path, sh: Shell) -> None:
+    gate(repo, sh)
+    container_suite(tool_root, repo, sh)
 
 
-def verify(tool_root: Path, repo: Path, checks: Callable[[Path, Path], None] = run_checks) -> bool:
+def verify(tool_root: Path, repo: Path, sh: Shell, checks: Callable[[Path, Path, Shell], None] = run_checks) -> bool:
     """The gate and the suite on the tree at `repo`'s HEAD (nothing uncommitted). The same tree under the same command passed before:
     both are skipped, and the log says so (True). Only a green run is remembered; a red one raises and remembers nothing."""
-    tree = git(repo, "rev-parse", "HEAD^{tree}")
+    tree = sh.git(repo, "rev-parse", "HEAD^{tree}")
     command = " ".join(gate_command()) + " + " + ("host" if penv.ambient(EnvVar.TASK_LOOP_SUITE_HOST) else "container") + " suite"
     cache = SuiteCache(ConfigDir(config_dir()))
     if cache.hit(tree, command):
         say(f"suite cache hit: tree {tree[:12]} already passed `{command}`")
         return True
-    checks(tool_root, repo)
+    checks(tool_root, repo, sh)
     cache.record(tree, command, time.time())
     return False

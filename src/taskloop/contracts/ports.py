@@ -280,3 +280,8 @@ class Spawner(Protocol):
                    extra: Mapping[str, str] | None = None, out: IO[bytes]) -> tuple[Child, Hold]:
         """`start` with stdin null and the log `out`, but the SIGTERM that arrived during the spawn is not replayed: the caller does it."""
         ...
+
+    def stop_pid(self, pid: int, start: str | None = None, grace: float = 5.0) -> tuple[int, ...]:
+        """Stop a process this program did not start (the dashboard server) and its tree: SIGTERM, `grace` seconds, SIGKILL. `start` is its
+        start token (a pid that is another process now reads as gone). -> the pids still alive afterwards."""
+        ...

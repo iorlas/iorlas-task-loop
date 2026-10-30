@@ -151,9 +151,9 @@ class NeverSignalOneself(unittest.TestCase):
 
     def test_stop_server_never_stops_the_calling_process(self):
         v = {"version": "1", "pid": os.getpid(), "urls": [], "started": 0}
-        with mock.patch.object(dash_server.procs, "stop_pid") as stop:
-            dash_server.stop_server(v)
-        stop.assert_not_called()
+        spawner = mock.Mock()
+        dash_server.stop_server(v, spawner=spawner)
+        spawner.stop_pid.assert_not_called()
 
     def test_run_main_leaves_no_sigterm_handler_behind(self):
         before = signal.getsignal(signal.SIGTERM)

@@ -9,6 +9,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
+from support.shells import quiet_shell
 
 from taskloop.app.release import suite
 from taskloop.app.release.shell import Abort
@@ -20,8 +21,7 @@ class SuiteTmp(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.tmpdir = Path(self.tmp.name)
         for p in (mock.patch.object(tempfile, "tempdir", str(self.tmpdir)), mock.patch.object(suite, "say"),
-                  mock.patch.object(suite, "workers", return_value=1), mock.patch.object(suite, "available_mb", return_value=None),
-                  mock.patch.object(suite, "run")):
+                  mock.patch.object(suite, "workers", return_value=1), mock.patch.object(suite, "available_mb", return_value=None)):
             p.start()
             self.addCleanup(p.stop)
 
@@ -37,7 +37,7 @@ class SuiteTmp(unittest.TestCase):
         with mock.patch.object(suite, "run_parts", side_effect=fake_parts), \
                 mock.patch.object(suite, "merge_outputs", return_value=("out\n", green)):
             try:
-                suite._host_suite(Path("/tool"), Path("/repo"))
+                suite._host_suite(Path("/tool"), Path("/repo"), quiet_shell())
             finally:
                 self.seen = seen
 

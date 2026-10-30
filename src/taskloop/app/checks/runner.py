@@ -3,7 +3,7 @@ import time
 from collections.abc import Callable, Sequence
 from typing import Any
 
-from taskloop.adapters import check_files, childenv, procs
+from taskloop.adapters import check_files, childenv
 from taskloop.app.checks import evidence
 from taskloop.app.checks.attempts import Attempts
 from taskloop.app.checks.base import BaseCheck
@@ -97,7 +97,7 @@ class Checker:
         on is what the engine hands every child: the slot's, and the registered names that reach it."""
         host = self.host
         keys = InputKeys(host.wt, tree, host.checkout.git_env())
-        engine_env = {**childenv.reaching(procs.current_env()), **host.bead_env}
+        engine_env = {**childenv.reaching(childenv.current_env()), **host.bead_env}
         return RunMemo(host.stores.check_cache.of(host.bead), keys, BaseSha(base), engine_env)
 
     def _executor(self, memo: RunMemo, history: Durations, base_run: bool, fix_red: dict[str, CheckResult] | None = None,

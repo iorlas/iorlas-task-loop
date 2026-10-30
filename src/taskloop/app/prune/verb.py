@@ -6,7 +6,7 @@ from pathlib import Path
 
 from taskloop.app.prune import runs
 from taskloop.app.reconcile.sweep import sweep
-from taskloop.app.release.shell import REAL, Shell
+from taskloop.app.release.shell import Shell
 from taskloop.contracts.config import LoopConfig
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import Beads
@@ -17,7 +17,7 @@ def mb(n: int) -> str:
 
 
 def run(cfg: ConfigDir, loop: LoopConfig, repos: list[str], store_of: Callable[[str], Beads], now: float, dry_run: bool,
-        say: Callable[[str], None] = print, sh: Shell = REAL) -> int:
+        sh: Shell, say: Callable[[str], None] = print) -> int:
     """Prune once. -> how many things went (would, with `dry_run`)."""
     would = "would remove " if dry_run else "removed "
     exempt, why = runs.open_beads(repos, store_of)

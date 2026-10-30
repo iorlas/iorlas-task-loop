@@ -1,14 +1,11 @@
-"""What every step of a release shares: its refusal, the git and process calls, and its one-line voice."""
-from collections.abc import Callable
+"""What every step of a release shares: its refusal, the git and process calls (through its edge's Spawner), and its voice."""
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
 from taskloop.adapters import gitrepo
-from taskloop.adapters.spawner import RealSpawner
 from taskloop.contracts.ports import Spawner
-
-SPAWNER: Spawner = RealSpawner()  # what `run` starts processes through (under procsim in a logic test)
 
 
 class Abort(Exception):
@@ -37,17 +34,6 @@ class Done:
     stderr: str
 
 
-def run(cmd: list[str], cwd: str | Path, check: bool = True) -> Done:
-    r = SPAWNER.run(cmd, cwd=str(cwd))
-    if check and r.exit:
-        raise Abort("{} failed in {}:\n{}".format(" ".join(cmd), cwd, (r.out + r.err).strip()[-2000:]))
-    return Done(r.exit, r.out, r.err)
-
-
-def git(cwd: str | Path, *a: str, check: bool = True) -> str:
-    return run(["git", *a], cwd, check).stdout.strip()
-
-
 def fetch(cwd: str | Path) -> None:
     """A fetch into the repo, again while it loses a ref lock to a loop's fetch at the same moment (gitrepo.fetch)."""
     r = gitrepo.fetch(str(cwd))
@@ -61,11 +47,24 @@ def say(msg: str) -> None:
 
 @dataclass(frozen=True)
 class Shell:
-    """The four calls a release step makes to the outside; a test hands a step its own."""
-    git: Callable[..., str] = git
-    fetch: Callable[[str | Path], None] = fetch
-    run: Callable[..., Finished] = run
-    say: Callable[[str], None] = say
+    """The four calls a release step makes to the outside; `of(spawner)` builds the real ones, a test hands a step its own.
+    `run(cmd, cwd, check)`: `extra` goes over the child's environment, `timeout_s` ends it (exit 124)."""
+    git: Callable[..., str]
+    fetch: Callable[[str | Path], None]
+    run: Callable[..., Finished]
+    say: Callable[[str], None]
 
 
-REAL = Shell()
+def of(spawner: Spawner) -> Shell:
+    """The shell whose every process is started through `spawner`."""
+    def run(cmd: list[str], cwd: str | Path | None, check: bool = True, *, extra: Mapping[str, str] | None = None,
+            timeout_s: float | None = None) -> Done:
+        r = spawner.run(cmd, cwd=None if cwd is None else str(cwd), extra=extra, timeout_s=timeout_s)
+        if check and r.exit:
+            raise Abort("{} failed in {}:\n{}".format(" ".join(cmd), cwd, (r.out + r.err).strip()[-2000:]))
+        return Done(r.exit, r.out, r.err)
+
+    def git(cwd: str | Path, *a: str, check: bool = True) -> str:
+        return run(["git", *a], cwd, check).stdout.strip()
+
+    return Shell(git=git, fetch=fetch, run=run, say=say)

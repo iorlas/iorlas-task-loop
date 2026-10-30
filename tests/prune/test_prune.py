@@ -13,9 +13,12 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
+from support.shells import quiet_shell
 
+from taskloop.adapters.spawner import RealSpawner
 from taskloop.app.prune import runs, verb
 from taskloop.app.reconcile.sweep import sweep
+from taskloop.app.release.shell import of
 from taskloop.app.run import layout
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.config import LoopConfig
@@ -31,6 +34,8 @@ def git(cwd, *args):
     r = subprocess.run(["git", *args], cwd=str(cwd), capture_output=True, text=True, env={**os.environ, **GIT_ENV}, check=False)
     assert r.returncode == 0, (args, r.stderr)
     return r.stdout.strip()
+
+REAL = of(RealSpawner())  # the helper classes below drive real git; their tests are in real/
 
 
 class Store:
@@ -72,7 +77,7 @@ class RunData(unittest.TestCase):
     def prune(self, store, dry_run=False, days=14):
         out = []
         loop = LoopConfig(keep_days=days, build_dir=str(self.root / "nowhere"))
-        verb.run(self.cfg, loop, [str(self.root)], lambda r: cast(Beads, store), self.now, dry_run, out.append)
+        verb.run(self.cfg, loop, [str(self.root)], lambda r: cast(Beads, store), self.now, dry_run, quiet_shell(), out.append)
         return out
 
     def left(self):
@@ -165,7 +170,7 @@ class Trees(unittest.TestCase):
         return d
 
     def prune(self, dry_run=False, now=None, repos=None, days=14):
-        return sweep(repos or [str(self.repo)], None, self.build, days, now or self.later, dry_run)
+        return sweep(repos or [str(self.repo)], None, self.build, days, now or self.later, dry_run, REAL)
 
 
 class Landed(unittest.TestCase):
@@ -182,7 +187,7 @@ class Landed(unittest.TestCase):
         return type("S", (), {"find": lambda self, q: beads})()
 
     def prune(self, dry_run=False, **meta):
-        return sweep([str(self.repo)], lambda r: cast(Beads, self.store(**meta)), None, 14, 0, dry_run)
+        return sweep([str(self.repo)], lambda r: cast(Beads, self.store(**meta)), None, 14, 0, dry_run, REAL)
 
     def heads(self):
         return git(self.repo, "for-each-ref", "--format=%(refname:short)", "refs/heads/").split()

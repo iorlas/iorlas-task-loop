@@ -74,3 +74,6 @@ class RealSpawner:
                    extra: Mapping[str, str] | None = None, out: IO[bytes]) -> tuple[Started, Hold]:
         p, hold = procs.popen_held(argv, cwd=cwd, env=_env(env, extra), start_new_session=True, **_stdio("null", out))
         return Started(p), hold
+
+    def stop_pid(self, pid: int, start: str | None = None, grace: float = GRACE_S) -> tuple[int, ...]:
+        return procs.stop_pid(pid, start, grace)

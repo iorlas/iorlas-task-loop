@@ -2,8 +2,13 @@
 Never a copy of the whole process environment: a Python virtualenv of ours must not leak into a repo's gate (VIRTUAL_ENV,
 2026-10-30), and a TL_* or TASK_LOOP_* name that is not in the registry (contracts/envvars.py) is not handed on."""
 import os
+import shutil
 from collections.abc import Mapping
+from pathlib import Path
 
+import child_env
+
+from taskloop.contracts import env as penv
 from taskloop.contracts.envvars import PREFIXES, EnvVar, registered
 
 VENV_VARS = ("VIRTUAL_ENV", "VIRTUAL_ENV_PROMPT", "PYTHONHOME", "__PYVENV_LAUNCHER__", "PYTHONEXECUTABLE")
@@ -42,3 +47,29 @@ def reaching(env: Mapping[str, str]) -> dict[str, str]:
 
 def without(env: Mapping[str, str], *names: str) -> dict[str, str]:
     return {k: v for k, v in env.items() if k not in names}
+
+
+GIT_PIN_VARS = ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE")  # the engine's own git is pinned; no child inherits a pin
+KEEP = ("CLAUDE_CONFIG_DIR",)  # a worker on a custom Claude login must find it
+
+
+def child_env_of(env: Mapping[str, str], extra: Mapping[str, str] | None = None) -> dict[str, str]:
+    """`env` without what an agent session exports (CLAUDE_*, ANTHROPIC_*, DELEGATE_*, MCP_*, OTEL_*, CODEX_COMPANION*) and without
+    TASK_LOOP_* and the git pins, but with CLAUDE_CONFIG_DIR. Credentials stay: delegate scrubs its workers itself (its own
+    app-only scrub does the same for route.py); a worker never delegates further (DELEGATE_DEPTH=1)."""
+    gone = (*child_env.APP_PREFIXES, "TASK_LOOP_")
+    drop = (*child_env.APP_NAMES, *GIT_PIN_VARS)
+    out = {k: v for k, v in without_venv(env).items() if k in KEEP or not (k.startswith(gone) or k in drop)}
+    out.update({"TASK_LOOP_WORKER": "1", "DELEGATE_DEPTH": "1"})
+    out.update(extra or {})
+    return out
+
+
+def script_argv(script: str | Path) -> list[str]:
+    """The argv that runs a script with a PEP 723 header (tl.py, dev/release.py): `uv run --script` installs its dependencies into
+    a cached environment. `UV` is the uv that started this process, when one did."""
+    return [penv.ambient("UV") or shutil.which("uv") or "uv", "run", "--quiet", "--script", str(script)]
+
+
+def current_env(extra: Mapping[str, str] | None = None) -> dict[str, str]:
+    return child_env_of(penv.snapshot().vars, extra)

@@ -25,7 +25,7 @@ from support.release_world import IDENTITY, MARKET, PLUGIN, World, git
 
 from taskloop.adapters import landlock
 from taskloop.adapters.ident import config_dir
-from taskloop.app.release import clone, manifest, selfupdate
+from taskloop.app.release import clone, manifest, selfupdate, shell
 from taskloop.contracts.envvars import EnvVar
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -43,6 +43,7 @@ class Release(unittest.TestCase):
         self.origin, self.seed, self.repo = h / "o.git", h / "seed", h / "repo"
         self.morigin, self.market = h / "m.git", h / "market"
         self.world = World(h, self.repo, self.market)
+        self.sh = shell.of(self.world.spawner)
         env = dict(IDENTITY, TASK_LOOP_SUITE_HOST="1", TASK_LOOP_SUITE_WORKERS="1", XDG_CONFIG_HOME=str(h / "cfg"),
                    CLAUDE_CONFIG_DIR=str(h / "claude"))
         self.enterContext(self.world.active(env))
@@ -124,13 +125,13 @@ class Release(unittest.TestCase):
         self.assertIn("LOCK TAKEN", r.stdout)
         self.assertEqual(self.version(self.origin)["version"], "0.1.0")  # the fake child released nothing; this run did not either
         where = clone.clone_dir(config_dir(), str(self.origin))
-        self.assertIsNotNone(selfupdate.newer_release(ROOT, where))
+        self.assertIsNotNone(selfupdate.newer_release(ROOT, where, self.sh))
         with unittest.mock.patch.dict(os.environ, {EnvVar.TL_RELEASE_REEXEC.value: "1"}):
-            self.assertIsNone(selfupdate.newer_release(ROOT, where))  # an exec'd release never execs again, whatever the clone holds
+            self.assertIsNone(selfupdate.newer_release(ROOT, where, self.sh))  # an exec'd release never execs again
 
     def test_the_exec_marker_is_taken_out_so_what_the_release_starts_does_not_inherit_it(self):
         with unittest.mock.patch.dict(os.environ, {EnvVar.TL_RELEASE_REEXEC.value: "1"}):
-            self.assertIsNone(selfupdate.newer_release(self.repo, self.repo))
+            self.assertIsNone(selfupdate.newer_release(self.repo, self.repo, self.sh))
             self.assertNotIn(EnvVar.TL_RELEASE_REEXEC.value, os.environ)
 
     def test_a_dirty_main_checkout_on_another_branch_is_released_from_and_left_byte_identical(self):

@@ -15,7 +15,7 @@ from typing import Any
 
 from atomic_io import atomic_write_text
 
-from taskloop.adapters import beadtools, gitrepo, ident, procs
+from taskloop.adapters import beadtools, childenv, gitrepo, ident
 from taskloop.adapters import halt as halting
 from taskloop.app.asks import intake
 from taskloop.app.loop.queue import has_areas
@@ -263,7 +263,7 @@ def _worktree_of(a: Any, repo: Any) -> tuple[str, Any]:
     if not wt and a.slot:  # the slot is the worktree
         wt = wslots.slot_dir(repo, a.slot, wslots.profile_slots(repo))
     if not wt:
-        r = real.spawner().run([*procs.script_argv(TL_PY), "worktree", "start"])
+        r = real.spawner().run([*childenv.script_argv(TL_PY), "worktree", "start"])
         wt = r.out.strip().splitlines()[-1] if r.exit == 0 and r.out.strip() else ""
         if not wt:
             print("tl: no worktree: " + r.err, file=sys.stderr)

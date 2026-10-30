@@ -16,8 +16,9 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "src"))  # importing taskloop puts the vendored shelf packages on sys.path
 
-from taskloop.app.release import suite  # noqa: E402
+from taskloop.app.release import shell, suite  # noqa: E402
 from taskloop.app.release.shell import Abort  # noqa: E402
+from taskloop.app.wire import real  # noqa: E402
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -25,7 +26,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--repo", default=str(HERE.parent), help="the checkout whose tests run (default: this one)")
     args = ap.parse_args(argv)
     try:
-        suite.host_suite(HERE.parent, Path(args.repo))
+        suite.host_suite(HERE.parent, Path(args.repo), shell.of(real.spawner()))
     except Abort as e:
         print(str(e), file=sys.stderr)
         return 1

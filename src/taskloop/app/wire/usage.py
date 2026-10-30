@@ -3,18 +3,18 @@ import json
 import sys
 
 from taskloop.adapters import delegate as sdelegate
-from taskloop.adapters import procs
 from taskloop.adapters.ident import claude_dir
 from taskloop.app.release.pins import pinned_dir
-from taskloop.app.wire import lanes
+from taskloop.app.wire import lanes, real
+from taskloop.contracts.ports import Spawner
 
 
-def feed(windows: str) -> int:
+def feed(windows: str, spawner: Spawner | None = None) -> int:
     route = sdelegate.find_route("", pinned_dir("delegate"), claude_dir() / "plugins" / "cache", sdelegate.installed_dir(claude_dir()))
     if not route:
         print("no delegate installed: nothing to feed")
         return 0
-    r = procs.capture([sys.executable, route, "status", "--claude-usage", windows, "--json"], None, None, 60.0)
+    r = (spawner or real.spawner()).run([sys.executable, route, "status", "--claude-usage", windows, "--json"], timeout_s=60.0)
     lanes.file_answer(r.out)  # the dashboard's lane cards read this
     try:
         lane = json.loads(r.out)["lanes"]["CLAUDE_SUBSCRIPTION"]

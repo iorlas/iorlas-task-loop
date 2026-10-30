@@ -12,9 +12,8 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
+from taskloop.adapters import childenv, delegate_wire
 from taskloop.adapters import delegate as dg
-from taskloop.adapters import delegate_wire
-from taskloop.adapters import procs as sproc
 from taskloop.app.run import done_memo, strays
 from taskloop.app.run.blocked import refuse_over_cap
 from taskloop.app.run.calls import timing
@@ -264,7 +263,7 @@ class WorkerCall:
         )
         t0, trees = time.time(), strays.worktrees(e)  # the worktrees the repo holds before the worker runs
         try:
-            ans = dg.call(e.resolved, req, c.text, c.schema, runner, env=sproc.current_env(e.bead_env))
+            ans = dg.call(e.resolved, req, c.text, c.schema, runner, env=childenv.current_env(e.bead_env))
         except BaseException as exc:  # an interruption stopped the delegate inside the process seam: record that stop here
             if runner.obs.get("kill_t") or runner.stop.get("alive"):
                 self.log_kill(c, runner, exc)

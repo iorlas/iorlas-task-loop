@@ -11,7 +11,6 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Final
 
-from taskloop.adapters import procs
 from taskloop.adapters.ident import PLUGIN_ROOT, config_dir
 from taskloop.app.wire import real
 from taskloop.contracts import env as penv
@@ -37,17 +36,18 @@ def inet_addrs(listing: str) -> list[str]:
     return [ip for ip in ips if ip.count(".") == 3 and all(p.isdigit() for p in ip.split("."))]
 
 
-def tailscale_ip() -> str | None:
+def tailscale_ip(spawner: Spawner | None = None) -> str | None:
     """This machine's Tailscale IPv4 (the launcher asks; the dashboard server runs no process)."""
     app = "/Applications/Tailscale.app/Contents/MacOS/Tailscale"
+    spawn = spawner or real.spawner()
     exe = shutil.which("tailscale") or (app if os.path.exists(app) else None)
     try:
         if exe:
-            r = procs.capture([exe, "ip", "-4"], None, None, 3.0)
+            r = spawn.run([exe, "ip", "-4"], timeout_s=3.0)
             if r.exit == 0 and r.out.strip():
                 return r.out.strip().splitlines()[0]
         for cmd in (["ip", "-4", "-o", "addr"], ["ifconfig"]):
-            for ip in inet_addrs(procs.capture(cmd, None, None, 3.0).out):
+            for ip in inet_addrs(spawn.run(cmd, timeout_s=3.0).out):
                 if ipaddress.ip_address(ip) in dash_bind.CGNAT:
                     return ip
     except OSError:
@@ -108,7 +108,7 @@ def stale_reason(v: dict[str, Any], version: str, want: list[str]) -> str | None
     return None
 
 
-def stop_server(v: dict[str, Any] | None = None, port: int | None = None) -> None:
+def stop_server(v: dict[str, Any] | None = None, port: int | None = None, spawner: Spawner | None = None) -> None:
     """Stop the task-loop server that answers on the port (its own pid, never a stale pidfile's)."""
     v = v or ping(port)
     if not v or not is_dash_server(v) or not v.get("pid"):
@@ -119,7 +119,7 @@ def stop_server(v: dict[str, Any] | None = None, port: int | None = None) -> Non
         return
     if pid in (os.getpid(), os.getppid()) or pid <= 1:  # a server that names this very process is a test's, not ours to stop
         return
-    procs.stop_pid(pid)
+    (spawner or real.spawner()).stop_pid(pid)
     for _ in range(20):
         if not ping(port):
             return

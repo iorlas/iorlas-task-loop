@@ -14,10 +14,11 @@ from typing import cast
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401
 
+from taskloop.adapters.spawner import RealSpawner
 from taskloop.app.prune import verb
 from taskloop.app.reconcile import apply, observe
 from taskloop.app.reconcile.sweep import sweep
-from taskloop.app.release.shell import REAL, Shell
+from taskloop.app.release.shell import Shell, of
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.config import LoopConfig
 from taskloop.contracts.ids import BeadId
@@ -34,6 +35,9 @@ def git(cwd, *args):
     r = subprocess.run(["git", *args], cwd=str(cwd), capture_output=True, text=True, env={**os.environ, **GIT_ENV}, check=False)
     assert r.returncode == 0, (args, r.stderr)
     return r.stdout.strip()
+
+
+REAL = of(RealSpawner())
 
 
 def racing(verb: str, hook: Callable[[], None]) -> Shell:
@@ -89,7 +93,7 @@ class Trees(unittest.TestCase):
         return d
 
     def prune(self, dry_run=False, now=None, repos=None, days=14):
-        return sweep(repos or [str(self.repo)], None, self.build, days, now or self.later, dry_run)
+        return sweep(repos or [str(self.repo)], None, self.build, days, now or self.later, dry_run, REAL)
 
     def test_a_merged_clean_tree_is_removed_with_plain_git_and_the_main_checkout_stays(self):
         d = self.tree("done")
@@ -194,7 +198,7 @@ class Trees(unittest.TestCase):
         for _ in range(2):
             out.append([])
             verb.run(cfg, LoopConfig(build_dir=str(self.build)), [str(self.repo)], lambda r: cast(Beads, Store()), self.later, False,
-                     out[-1].append)
+                     REAL, out[-1].append)
         self.assertFalse(d.exists())
         self.assertTrue(any(ln.startswith("prune: removed worktree") for ln in out[0]))
         self.assertFalse(any("removed worktree" in ln for ln in out[1]))
@@ -215,7 +219,7 @@ class Landed(unittest.TestCase):
         return type("S", (), {"find": lambda self, q: beads})()
 
     def prune(self, dry_run=False, **meta):
-        return sweep([str(self.repo)], lambda r: cast(Beads, self.store(**meta)), None, 14, 0, dry_run)
+        return sweep([str(self.repo)], lambda r: cast(Beads, self.store(**meta)), None, 14, 0, dry_run, REAL)
 
     def heads(self):
         return git(self.repo, "for-each-ref", "--format=%(refname:short)", "refs/heads/").split()
@@ -309,7 +313,7 @@ class Landed(unittest.TestCase):
         self.assertNotIn("--force", src)
 
     def test_bd_not_answering_keeps_every_branch(self):
-        removed, kept = sweep([str(self.repo)], lambda r: cast(Beads, Store(fail=True)), None, 14, 0, False)
+        removed, kept = sweep([str(self.repo)], lambda r: cast(Beads, Store(fail=True)), None, 14, 0, False, REAL)
         self.assertEqual(removed, [])
         self.assertIn("bd did not answer", kept[0])
 

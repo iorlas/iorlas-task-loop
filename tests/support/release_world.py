@@ -13,18 +13,18 @@ import threading
 from contextlib import ExitStack, contextmanager
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 from unittest import mock
 
 import support.paths  # noqa: F401
 
 # isort: split
 from support.fakes import FakeBeadStore
-from taskloop.adapters import beadtools, procs
+from taskloop.adapters import beadtools
 from taskloop.adapters.ident import claude_dir
 from taskloop.app.release import flow, shell, suite
 from taskloop.app.release.shell import say
-from taskloop.contracts.ports import Ran
+from taskloop.contracts.ports import Ran, Spawner
 
 PLUGIN = ".claude-plugin/plugin.json"
 MARKET = ".claude-plugin/marketplace.json"
@@ -76,7 +76,10 @@ class World:
         self.stdout, self.stderr = Out(), Out()
 
     def spawn(self, argv, *, cwd=None, **_: Any) -> Ran:
-        """Spawner.run for the release's calls: the real or the faked process, as the port's record."""
+        """Spawner.run for the release's calls: the real or the faked process, as the port's record. `just` / `mise` are the gate."""
+        if argv[0] in ("just", "mise"):
+            self.just_log.append(list(argv))
+            return Ran(exit=self.just_exit, out="ruff: E501 somewhere\n")
         r = self.run(argv, cwd=cwd, capture_output=True, text=True, encoding="utf-8", errors="replace")
         return Ran(exit=r.returncode, out=r.stdout or "", err=r.stderr or "")
 
@@ -103,12 +106,13 @@ class World:
         kw.pop("check", None)  # the release asks for check=False, always
         return subprocess.run(cmd, check=False, **kw)
 
-    def capture(self, argv, cwd, env, timeout_s, **_):
-        self.just_log.append(argv)
-        return procs.Ran(self.just_exit, "ruff: E501 somewhere\n", "", 0.0, False)
+    @property
+    def spawner(self) -> Spawner:
+        """What the release is handed at its edge: the world's processes (git real, claude and the gate faked)."""
+        return cast(Spawner, SimpleNamespace(run=self.spawn))
 
-    def suite(self, tool_root: Path, repo: Path) -> None:
-        suite.gate(repo)
+    def suite(self, tool_root: Path, repo: Path, sh: shell.Shell) -> None:
+        suite.gate(repo, sh)
         say("running the full suite in 1 workers, then the serial group")
         tree = {p: (repo / p).read_bytes() for p in git("ls-files", cwd=repo).splitlines()}
         self.trees.append(tree)
@@ -119,15 +123,16 @@ class World:
             raise suite.red(out, out.splitlines())
         say("suite green")
 
-    def verify(self, tool_root: Path, repo: Path) -> bool:
-        return REAL_VERIFY(tool_root, repo, self.suite)
+    def verify(self, tool_root: Path, repo: Path, sh: shell.Shell) -> bool:
+        return REAL_VERIFY(tool_root, repo, sh, self.suite)
 
     def release(self, *args: str) -> Result:
         """flow.main on `args` in this thread; its stdout and stderr, and its exit code."""
         self.stdout.start(args[0])
         self.stderr.start(args[0])
         try:
-            code = flow.main([*args, "--repo", str(self.repo), "--marketplace", str(self.market)], Path(__file__).resolve().parents[2])
+            code = flow.main([*args, "--repo", str(self.repo), "--marketplace", str(self.market)], Path(__file__).resolve().parents[2],
+                             self.spawner)
         except SystemExit as e:
             code = e.code
         return Result(returncode=code, stdout=self.stdout.text(), stderr=self.stderr.text())
@@ -139,8 +144,6 @@ class World:
             st.enter_context(mock.patch.dict(os.environ, env))
             for k in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "TL_RELEASE_REEXEC"):
                 os.environ.pop(k, None)
-            st.enter_context(mock.patch.object(shell, "SPAWNER", SimpleNamespace(run=self.spawn)))
-            st.enter_context(mock.patch.object(procs, "capture", self.capture))
             st.enter_context(mock.patch.object(flow.suite, "verify", self.verify))
             st.enter_context(mock.patch.object(beadtools, "bd_store", lambda cwd=None: self.store))
             st.enter_context(mock.patch("sys.stdout", self.stdout))

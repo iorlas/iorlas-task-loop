@@ -4,7 +4,7 @@ from pathlib import Path
 
 from taskloop.adapters import landlock
 from taskloop.app.release import clone
-from taskloop.app.release.shell import REAL, Abort, Shell
+from taskloop.app.release.shell import Abort, Shell
 
 
 def release_lock_path(config: Path, url: str) -> Path:
@@ -13,7 +13,7 @@ def release_lock_path(config: Path, url: str) -> Path:
     return config / "locks" / f"release-{clone.clone_dir(config, url).name}.lock"
 
 
-def push_main(repo: Path, message: str, version: str, base: str, bump: Callable[[], str], sh: Shell = REAL) -> str:
+def push_main(repo: Path, message: str, version: str, base: str, bump: Callable[[], str], sh: Shell) -> str:
     """Push, under the land lock (an engine lands only while it holds it): an origin/main that moved since the bump (a land during the
     suite) is rebased onto, the version taken again (`bump` verifies, bumps and commits) and the suite run again, then pushed while no
     land can get in. A push refused all the same (one that skipped the lock) gets one more round. `base` is the origin/main the bump

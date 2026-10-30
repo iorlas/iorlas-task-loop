@@ -2,11 +2,11 @@
 from pathlib import Path
 
 from taskloop.app.release import tidy
-from taskloop.app.release.shell import REAL, Shell
+from taskloop.app.release.shell import Shell
 from taskloop.domain.reconcile.facts import Action, DeleteBranch, DeleteRemote, Keep, RemoveTree
 
 
-def apply(actions: list[Action], dry_run: bool, sh: Shell = REAL) -> tuple[list[str], list[str]]:
+def apply(actions: list[Action], dry_run: bool, sh: Shell) -> tuple[list[str], list[str]]:
     """(removed lines, kept lines with the reason). The plan is the list: nothing is looked at again except by the compare-and-delete
     itself. A branch held by a tree of the plan goes only if that tree went."""
     removed: list[str] = []

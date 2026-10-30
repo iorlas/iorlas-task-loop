@@ -3,14 +3,14 @@ any branch, is never touched."""
 import hashlib
 from pathlib import Path
 
-from taskloop.app.release.shell import REAL, Abort, Shell
+from taskloop.app.release.shell import Abort, Shell
 
 
 def clone_dir(config: Path, url: str) -> Path:
     return config / "release" / hashlib.sha1(url.encode()).hexdigest()[:12]
 
 
-def ready(config: Path, url: str, sh: Shell = REAL) -> Path:
+def ready(config: Path, url: str, sh: Shell) -> Path:
     """The clone, made on first use, then fetched and put on origin/main with nothing left over from an earlier release."""
     where = clone_dir(config, url)
     if not (where / ".git").exists():
@@ -23,7 +23,7 @@ def ready(config: Path, url: str, sh: Shell = REAL) -> Path:
     return where
 
 
-def replay_branch(where: Path, repo: Path, branch: str, sh: Shell = REAL) -> None:
+def replay_branch(where: Path, repo: Path, branch: str, sh: Shell) -> None:
     """The commits of `branch` (a branch of the main checkout, else its origin/ one) replayed on origin/main in the clone. The branch
     itself and its worktrees stay as they are."""
     for ref in (branch, "refs/remotes/origin/" + branch):

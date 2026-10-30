@@ -5,7 +5,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from taskloop.app.release import tidy
-from taskloop.app.release.shell import REAL, Shell
+from taskloop.app.release.shell import Shell
 from taskloop.contracts import fence
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.ids import BeadId, is_bead_id
@@ -136,7 +136,7 @@ def repo_view(repo: Path, store_of: Callable[[str], Beads] | None, release: bool
 
 
 def observe(repos: list[str], store_of: Callable[[str], Beads] | None, build: Path | None, keep_days: float, now: float,
-            sh: Shell = REAL, cfg: ConfigDir | None = None) -> Observed:
+            sh: Shell, cfg: ConfigDir | None = None) -> Observed:
     """The world once. `store_of` None: bd and the task branches are not looked at; `build` None: no build trees and no release/*
     branches."""
     known = sorted({r for p in repos if (r := main_repo(Path(p)))})

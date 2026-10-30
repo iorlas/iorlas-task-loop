@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest import mock
 
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
+from support.shells import quiet_shell
 from support.waits import until
 
 from taskloop.adapters import landlock
@@ -24,7 +25,7 @@ class OneSuitePerHost(unittest.TestCase):
             with mock.patch.object(suite, "suite_lock_path", return_value=lock), mock.patch.object(suite, "say", said.append), \
                     mock.patch.object(suite, "_host_suite", side_effect=lambda *a: ran.set()):
                 with landlock.os_lock(lock, "pid 1 since 10:00:00: the first suite"):
-                    t = threading.Thread(target=suite.host_suite, args=(ROOT, ROOT))
+                    t = threading.Thread(target=suite.host_suite, args=(ROOT, ROOT, quiet_shell()))
                     t.start()
                     self.assertTrue(until(lambda: any("held by pid 1 since 10:00:00: the first suite" in m for m in said), 15))
                     self.assertFalse(ran.is_set())
@@ -57,7 +58,7 @@ class MemoryLimits(unittest.TestCase):
                     mock.patch.object(suite, "suite_lock_path", return_value=Path(d) / "l.lock"), \
                     mock.patch.object(suite, "run_parts") as ran, mock.patch.dict(os.environ, {"TASK_LOOP_SUITE_WORKERS": "2"}), \
                     self.assertRaises(Abort):
-                suite.host_suite(ROOT, ROOT)
+                suite.host_suite(ROOT, ROOT, quiet_shell())
             ran.assert_not_called()
 
 

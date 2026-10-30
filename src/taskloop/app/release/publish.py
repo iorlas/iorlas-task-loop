@@ -4,7 +4,7 @@ from pathlib import Path
 
 from taskloop.adapters.ident import claude_dir
 from taskloop.adapters.versionfile import NoVersion, entry_offset, set_version
-from taskloop.app.release.shell import REAL, Abort, Shell
+from taskloop.app.release.shell import Abort, Shell
 from taskloop.contracts.ids import MARKETPLACE
 
 PLUGIN = ".claude-plugin/plugin.json"
@@ -13,7 +13,7 @@ NAME = "iorlas-task-loop"
 TRAILER = "\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 
-def bump_marketplace(market: Path, version: str, sh: Shell = REAL) -> None:
+def bump_marketplace(market: Path, version: str, sh: Shell) -> None:
     sh.fetch(market)
     sh.git(market, "merge", "-q", "--ff-only", "origin/main")
     f = market / MARKET
@@ -35,7 +35,7 @@ def bump_marketplace(market: Path, version: str, sh: Shell = REAL) -> None:
         sh.git(market, "push", "-q", "origin", "HEAD:main")
 
 
-def tag(cwd: Path, name: str, what: str, sh: Shell = REAL) -> None:
+def tag(cwd: Path, name: str, what: str, sh: Shell) -> None:
     """Tag HEAD of `cwd` as `name` and push the tag. Called only after the branch push succeeded. A tag that cannot be made or
     pushed is a warning: the release is out and must not be reported as failed for it."""
     if sh.git(cwd, "rev-parse", "-q", "--verify", "refs/tags/" + name, check=False):
@@ -54,7 +54,7 @@ def installed_manifest(version: str) -> Path:
     return claude_dir() / "plugins" / "cache" / MARKETPLACE / NAME / version / ".claude-plugin" / "plugin.json"
 
 
-def install(cwd: Path, version: str, sh: Shell = REAL) -> None:
+def install(cwd: Path, version: str, sh: Shell) -> None:
     """Update the marketplace and the plugin, then check the new version's cache dir exists. A silent failure (0.23.0: a git
     fetch-pack error with exit 0) leaves the old version installed: run both commands once more, then fail loudly."""
     cache = installed_manifest(version)

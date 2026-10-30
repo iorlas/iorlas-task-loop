@@ -14,8 +14,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
-from taskloop.adapters import beadtools, ident, landlock
-from taskloop.adapters import procs as sproc
+from taskloop.adapters import beadtools, childenv, ident, landlock
 from taskloop.contracts import wire
 from taskloop.contracts.ids import BeadId, is_bead_id
 from taskloop.contracts.paths import ConfigDir
@@ -231,7 +230,7 @@ def maybe_run(spawner: Spawner, now: float | None = None) -> str:
             if not due(now):
                 return ""
             pass
-        spawner.start([*sproc.script_argv(ident.PLUGIN_ROOT / "skills" / "task-loop" / "tl.py"), "reflect", "digest"])
+        spawner.start([*childenv.script_argv(ident.PLUGIN_ROOT / "skills" / "task-loop" / "tl.py"), "reflect", "digest"])
         st = read_state()
         st["tried"] = now or time.time()
         write_state(st)

@@ -11,9 +11,8 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
-from taskloop.adapters import applog, beadtools, gitrepo, ident, pidcheck
+from taskloop.adapters import applog, beadtools, childenv, gitrepo, ident, pidcheck
 from taskloop.adapters import delegate as dg
-from taskloop.adapters import procs as sproc
 from taskloop.adapters import storm as storm_file
 from taskloop.adapters.gitenv import run_git
 from taskloop.adapters.locks import hold_path
@@ -25,7 +24,7 @@ from taskloop.app.loop.files import LoopFiles
 from taskloop.app.loop.loop import parse_handover
 from taskloop.app.loop.versions import Installs
 from taskloop.app.prune import verb as prune_verb
-from taskloop.app.release import catalog, pins, reexec, seams
+from taskloop.app.release import catalog, pins, reexec, seams, shell
 from taskloop.app.report import reflect
 from taskloop.app.run import console, entry
 from taskloop.app.run.running import area_lock, running
@@ -183,7 +182,7 @@ def exec_into(repo: str, d: Path, argv: list[str], handover: str, start_cwd: str
     sys.stderr.flush()
     applog.close_all()
     try:
-        cmd = [*sproc.script_argv(d / "skills" / "task-loop" / "tl.py"), *argv]
+        cmd = [*childenv.script_argv(d / "skills" / "task-loop" / "tl.py"), *argv]
         os.execv(cmd[0], cmd)
     except OSError:
         penv.take(EnvVar.TL_LOOP_STATE)
@@ -227,7 +226,7 @@ def build(repo: str, store: Beads | None = None, session_actor: str = "", here: 
         stop_now=stop_now,
         stop_tree=stop_tree,
         run_task_argv=lambda bead, wt, slot, out, code: (
-            [*sproc.script_argv((code or here) / "tl.py"), "run-task", bead, "--worktree", wt, "--outcome-file", out]
+            [*childenv.script_argv((code or here) / "tl.py"), "run-task", bead, "--worktree", wt, "--outcome-file", out]
             + (["--slot", slot] if slot else [])
         ),
         landed_on_base=lambda wt, bead: landed_on_base(repo, store, wt, bead),
@@ -251,7 +250,7 @@ def build(repo: str, store: Beads | None = None, session_actor: str = "", here: 
         now=now,
         pid=os.getpid(),
         prune=lambda say: prune_verb.run(cfg, profile().loop, prune_repos(repo), lambda r: store if r == repo else bd_of(r),
-                                         now(), False, say),
+                                         now(), False, shell.of(spawner), say),
         free_bytes=free_bytes,
     )
 

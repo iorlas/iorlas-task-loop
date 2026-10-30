@@ -15,6 +15,7 @@ import support.paths  # noqa: E402, F401
 # isort: split
 from support.narrow import must  # noqa: E402
 
+from taskloop.adapters import procs  # noqa: E402
 from taskloop.app.launch import dash as dash_server  # noqa: E402
 from taskloop_dash import bind  # noqa: E402
 
@@ -99,7 +100,7 @@ class EnsureFlow(unittest.TestCase):
         proc.poll.return_value = None
         with mock.patch.object(dash_server, "ping", side_effect=pings), \
                 mock.patch.object(dash_server, "stop_server", side_effect=lambda v=None: stops.append(v)), \
-                mock.patch.object(dash_server.procs, "spawn", side_effect=lambda *a, **k: popens.append(a) or proc), \
+                mock.patch.object(procs, "spawn", side_effect=lambda *a, **k: popens.append(a) or proc), \
                 mock.patch.object(dash_server.time, "sleep"):
             rc = dash_server.run("ensure")
         return rc, stops, popens
@@ -132,7 +133,7 @@ class EnsureFlow(unittest.TestCase):
         proc.poll.return_value = 2
         (Path(self.tmp.name) / "task-loop").mkdir(exist_ok=True)
         with mock.patch.object(dash_server, "ping", return_value=None), \
-                mock.patch.object(dash_server.procs, "spawn", return_value=proc), \
+                mock.patch.object(procs, "spawn", return_value=proc), \
                 mock.patch.object(dash_server, "log_tail", return_value="bind 100.1.2.3:7878 failed (held by pid 99)"), \
                 mock.patch.object(dash_server.time, "sleep"), \
                 mock.patch("builtins.print") as pr:
@@ -151,7 +152,7 @@ class EnsureFlow(unittest.TestCase):
             proc = mock.Mock()
             proc.poll.return_value = None
             with mock.patch.object(dash_server, "ping", ping), mock.patch.object(dash_server, "stop_server", stop), \
-                    mock.patch.object(dash_server.procs, "spawn", return_value=proc) as popen, \
+                    mock.patch.object(procs, "spawn", return_value=proc) as popen, \
                     mock.patch.object(dash_server.time, "sleep"):
                 rc = dash_server.run("ensure")
         self.assertEqual(rc, 0)

@@ -9,9 +9,8 @@ from functools import cached_property
 from pathlib import Path
 from typing import Any, ClassVar
 
-from taskloop.adapters import beadtools, context_size, gitrepo, ident, landlock, opencode, slotcheck
+from taskloop.adapters import beadtools, childenv, context_size, gitrepo, ident, landlock, opencode, pidcheck, slotcheck
 from taskloop.adapters import halt as halting
-from taskloop.adapters import procs as sproc
 from taskloop.adapters.check_probe import PathProbe
 from taskloop.adapters.clock import SystemClock
 from taskloop.adapters.runner import live_path
@@ -266,7 +265,7 @@ class Engine(RunFields):
     def shell_probe(self) -> PathProbe:
         """What the plan lint may ask of this tree: PATH, just, the files (one per engine, so its answers are remembered)."""
         if self._probe is None:
-            self._probe = PathProbe(self.wt, sproc.current_env())
+            self._probe = PathProbe(self.wt, childenv.current_env())
         return self._probe
 
     @staticmethod
@@ -298,12 +297,12 @@ class Engine(RunFields):
     def lock_worker(self, started: Any) -> None:
         """The worker delegate launched (the live file's first line) goes into the engine lock, so a SIGKILLed engine leaves it findable."""
         if engine_lock.LOCK:
-            engine_lock.LOCK.note(workers=[(started.pid, sproc.proc_start(started.pid) or "")])
+            engine_lock.LOCK.note(workers=[(started.pid, pidcheck.proc_start(started.pid) or "")])
 
     def lock_workers(self, survivors: Any, started: Any) -> None:
         """After a call: the pids that outlived its stop keep the slot busy; none: free."""
         if engine_lock.LOCK:
-            engine_lock.LOCK.note(workers=[(pid, sproc.proc_start(pid) or "") for pid in survivors])
+            engine_lock.LOCK.note(workers=[(pid, pidcheck.proc_start(pid) or "") for pid in survivors])
 
     def live(self, step: str) -> str:
         """The live file for the next delegate call (delegate appends worker events there; the dashboard's Live view reads them)."""
