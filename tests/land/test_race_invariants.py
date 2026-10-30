@@ -420,6 +420,8 @@ class Invariants(test_loop.Base):
                 if a[:1] == ("reset",):
                     self.log.append((repo, "reset"))
                     return ""
+                if a == ("log", "-1", "--format=%s", "HEAD"):  # the release commit's subject: "<version>: <message>"
+                    return f"{self.local[repo]['version']}: race release"
             raise AssertionError(f"git {a}")
 
         def bump(self, repo):  # flow.next_version reads origin/main's version
