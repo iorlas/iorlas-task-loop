@@ -9,10 +9,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 
 # isort: split
+from support.fake_clock import FakeClock
 from support.narrow import must
 
 from taskloop.adapters import storm as storm_file
-from taskloop.adapters.fake_clock import FakeClock
 from taskloop.app.loop.health import loop_health
 from taskloop.domain import outcome as oc
 from taskloop.domain import storm as lh

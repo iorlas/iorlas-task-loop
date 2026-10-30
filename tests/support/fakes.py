@@ -9,10 +9,10 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from support import fake_route
+from support.fake_clock import FakeClock  # noqa: F401  (re-exported: one place for a test to import its fakes from)
 from support.narrow import must
 from taskloop.adapters import bd
 from taskloop.adapters import delegate as dl
-from taskloop.adapters.fake_clock import FakeClock  # noqa: F401  (re-exported: one place for a test to import its fakes from)
 from taskloop.app.release.seams import FixedRoute
 from taskloop.contracts.bead import Bead, Comment
 from taskloop.contracts.ports import BdFailure, BeadPatch, BeadQuery, DoltPush

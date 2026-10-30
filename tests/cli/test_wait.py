@@ -7,9 +7,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
+from support.fake_beads import FakeBeads
 from support.logs import typed, write_log
 
-from taskloop.adapters.fake_beads import FakeBeads
 from taskloop.cli import asks as cli_asks
 from taskloop.cli import wait
 from taskloop.contracts.ask import Ask, SimilarRef, ThreadEntry

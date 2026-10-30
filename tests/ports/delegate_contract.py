@@ -2,8 +2,9 @@
 steps (fake_delegate.Step) and `calls() -> [(argv-free request facts)]`, and gets every test below."""
 from typing import Any
 
+from support.fake_delegate import done, stopped
+
 from taskloop.adapters.delegate_wire import answer_next, answer_status
-from taskloop.adapters.fake_delegate import done, stopped
 from taskloop.contracts.delegate import LiveCmdStart, LiveEnd, LiveMsg, RunRequest
 from taskloop.contracts.ports import Delegate
 

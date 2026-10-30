@@ -12,11 +12,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from ports.beads_contract import BeadsContract
+from support.fake_beads import FakeBeads
 from support.tags import contract, domain
 
 from taskloop.adapters import bd
 from taskloop.adapters.bd import BdRun, BdStore, create_argv, update_argv
-from taskloop.adapters.fake_beads import FakeBeads
 from taskloop.contracts.bead import BdError
 from taskloop.contracts.ports import BdFailure, BeadPatch, BeadQuery, DoltPush, NewBead
 

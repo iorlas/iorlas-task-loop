@@ -13,9 +13,9 @@ import support.paths  # noqa: F401
 from asks.dash_ports import answering
 from support.dashes import make_dash
 from support.dashlogs import T, bead
+from support.fake_beads import FakeBeads
 from support.narrow import must
 
-from taskloop.adapters.fake_beads import FakeBeads
 from taskloop.app.asks import intake, raiser
 from taskloop.contracts import wire
 from taskloop.contracts.ask import SimilarRef, ThreadEntry

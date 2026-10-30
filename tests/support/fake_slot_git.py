@@ -1,4 +1,4 @@
-"""FakeSlotGit: a slot's git in memory, with faults to inject. `fail(op, error, times=1)` makes the next `times` calls of `op`
+"""FakeSlotGit: the Git port's git in memory, with faults to inject. `fail(op, error, times=1)` makes the next `times` calls of `op`
 raise `error` before they change anything, so a test walks every typed failure of a slot reset in microseconds."""
 from dataclasses import dataclass, field
 

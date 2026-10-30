@@ -5,10 +5,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
+from support.fake_beads import FakeBeads
 from support.narrow import must
 from support.tiers import domain
 
-from taskloop.adapters.fake_beads import FakeBeads
 from taskloop.app.asks import intake, raiser
 from taskloop.contracts.ask import SimilarRef
 from taskloop.contracts.bead import Bead

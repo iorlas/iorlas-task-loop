@@ -1,5 +1,5 @@
 """An owner-look bead in memory: items in metadata `looks`, bd faked with the writes it receives recorded."""
-from taskloop.adapters.fake_beads import FakeBeads
+from support.fake_beads import FakeBeads
 from taskloop.contracts import gallery
 from taskloop.contracts.bead import BdError, Bead
 from taskloop.contracts.ports import BdFailure

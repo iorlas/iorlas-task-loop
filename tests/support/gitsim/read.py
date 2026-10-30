@@ -183,6 +183,11 @@ def cmd_merge_base(c: Ctx) -> int:
 
 
 def cmd_remote(c: Ctx) -> int:
+    if c.args[0] == "set-url":
+        if f"remote.{c.args[1]}.url" not in c.r.config():
+            raise Fail(f"error: No such remote '{c.args[1]}'", 2)
+        c.r.set_config(f"remote.{c.args[1]}.url", c.args[2])
+        return 0
     url = c.r.config().get(f"remote.{c.args[-1]}.url")
     if c.args[0] != "get-url" or not url:
         raise Fail(f"error: No such remote '{c.args[-1]}'", 2)

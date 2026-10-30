@@ -8,11 +8,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support.dashes import make_dash
+from support.fake_beads import FakeBeads
 from support.narrow import must
 
 from asks.dash_ports import answering
 from asks.samples import MOCKS
-from taskloop.adapters.fake_beads import FakeBeads
 from taskloop.cli import asks as cli_asks
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.paths import ConfigDir

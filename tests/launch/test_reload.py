@@ -25,6 +25,7 @@ from support import (  # noqa: E402
     looptest,
 )
 from support.builders import cfg_with  # noqa: E402
+from support.fake_beads import FakeBeads  # noqa: E402
 from support.fakes import as_bead  # noqa: E402
 from support.narrow import must  # noqa: E402
 
@@ -34,7 +35,6 @@ from taskloop.adapters import (  # noqa: E402
     ident,
     procs,
 )
-from taskloop.adapters.fake_beads import FakeBeads  # noqa: E402
 from taskloop.app.launch import loop as wloop  # noqa: E402
 from taskloop.app.loop.run import BeadRun, Where  # noqa: E402
 from taskloop.app.release import (  # noqa: E402

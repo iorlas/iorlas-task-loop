@@ -24,7 +24,7 @@ from .model import Fail, W, locate
 HANDLERS: dict[str, Callable[[Ctx], int]] = {
     "add": write.cmd_add,
     "branch": write.cmd_branch, "update-ref": write.cmd_update_ref,
-    "check-ignore": read.cmd_check_ignore, "checkout": write.cmd_checkout, "clone": remote.cmd_clone,
+    "check-ignore": read.cmd_check_ignore, "clean": write.cmd_clean, "checkout": write.cmd_checkout, "clone": remote.cmd_clone,
     "commit": write.cmd_commit, "config": read.cmd_config, "diff": diffs.cmd_diff,
     "fetch": remote.cmd_fetch, "grep": read.cmd_grep, "init": remote.cmd_init, "log": read.cmd_log, "ls-files": read.cmd_ls_files,
     "ls-tree": read.cmd_ls_tree, "merge-base": read.cmd_merge_base, "pull": remote.cmd_pull, "push": remote.cmd_push,

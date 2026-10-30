@@ -42,6 +42,7 @@ import tl
 from support import slots as sl
 from support import tlbd
 from support.builders import cfg_with
+from support.fake_clock import FakeClock
 from support.narrow import must
 from support.rebind import rebind
 
@@ -51,9 +52,10 @@ from taskloop.adapters import (
     ident,
     landlock,
     pidcheck,
-    slot_git,
 )
-from taskloop.adapters.fake_clock import FakeClock
+from taskloop.adapters import (
+    git as git_adapter,
+)
 from taskloop.app.land.lander import Lander
 from taskloop.app.release import push as release_push
 from taskloop.app.release.shell import Shell
@@ -379,14 +381,14 @@ class Invariants(test_loop.Base):
         self.assertIn("busy", wslots.take_named_slot(self.repo_s, "s1", self.cfg, "hand")[1])
         self.assertEqual(self.hold("s1"), 1)
         self.assertIn("BUSY", self.out.getvalue())
-        with mock.patch.object(slot_git, "run_git", side_effect=AssertionError("git ran in a live slot")):
+        with mock.patch.object(git_adapter, "run_git", side_effect=AssertionError("git ran in a live slot")):
             self.assertEqual(self.main(["slot", "reset", "s1", "--bead", "w-1"]), 4)  # the reset stops before any git
             self.assertEqual(self.main(["slot", "release", "s1"]), 1)
         listing = "task/w-9"
         listed = subprocess.CompletedProcess(
             [], 0, f"worktree {s1}\nHEAD abc\nbranch refs/heads/{listing}\n\nworktree {s2}\nHEAD abc\n", ""
         )
-        with mock.patch.object(slot_git, "run_git", return_value=listed):  # any other git call would find the same text
+        with mock.patch.object(git_adapter, "run_git", return_value=listed):  # any other git call would find the same text
             self.assertIn(
                 "runs w-9", reset.free_branch(sl.pool(self.repo_s, cfg=self.cfg).named("s2"), listing)
             )  # its branch is not taken from it

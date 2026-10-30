@@ -13,8 +13,8 @@ from typing import Any, Final
 from unittest import mock
 
 from taskloop.adapters import delegate as dg
-from taskloop.adapters.fake_beads import FakeBeads
 from taskloop.adapters.runner import Seam
+from taskloop.app.launch.selftest_beads import MemoryBeads
 from taskloop.app.release import seams
 from taskloop.app.run.engine import Engine
 from taskloop.app.wire import slots as wslots
@@ -94,7 +94,7 @@ def run_engine(home: Path, wt: Path) -> tuple[int, Bead]:
     res = seams.resolve_delegate(cfg.delegate)  # the configured delegate's own contract when there is one; else a bare one
     contract = res.contract if isinstance(res, dg.Resolved) else {"contract": dg.CONTRACT, "reasons": {}, "run_args": []}
     resolved = dg.Resolved(Path("/selftest"), "/selftest/route.py", contract, "explicit")
-    store = FakeBeads()
+    store = MemoryBeads()
     store.beads["t-1"] = Bead(id="t-1", title="Add f", status="open", acceptance_criteria="f.txt exists")
     cfg = cfg.replace(reflect=False)
     os.chdir(wt)  # the engine reads cwd

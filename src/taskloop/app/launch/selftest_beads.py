@@ -1,4 +1,5 @@
-"""`FakeBeads`: bd in memory, with the behaviour the code relies on (claim only an open bead, closed beads leave `find`, labels
+"""`MemoryBeads`: the bd `tl selftest` runs on (none installed, none touched), in memory, with the behaviour the code relies on
+(claim only an open bead, closed beads leave `find`, labels
 sorted and unique, metadata values are strings, a write to an unknown bead is refused)."""
 from typing import Any
 
@@ -6,7 +7,7 @@ from taskloop.contracts.bead import BdError, Bead, Comment, Dep
 from taskloop.contracts.ports import BdFailure, BeadPatch, BeadQuery, DoltPush, NewBead
 
 
-class FakeBeads:
+class MemoryBeads:
     def __init__(self, actor: str = "fake", prefix: str = "fk") -> None:
         self.actor, self.prefix = actor, prefix
         self.beads: dict[str, Bead] = {}
@@ -103,5 +104,5 @@ class FakeBeads:
     def dolt_push(self) -> DoltPush:
         return DoltPush(0, "")
 
-    def at(self, cwd: str) -> FakeBeads:
+    def at(self, cwd: str) -> MemoryBeads:
         return self

@@ -11,11 +11,11 @@ from typing import Any
 
 from taskloop.adapters import gitrepo
 from taskloop.adapters.beadtools import bd_store, peek
+from taskloop.adapters.git import RealGit
 from taskloop.adapters.gitenv import run_git
 from taskloop.adapters.gitrepo import fetch, git, repo_root
 from taskloop.adapters.ident import actor, config_dir, hostname
 from taskloop.adapters.landlock import os_lock
-from taskloop.adapters.slot_git import RealSlotGit
 from taskloop.app.slots import line as slots_line
 from taskloop.app.slots.engine_lock import drop_engine_lock, engine_busy, lock_pid
 from taskloop.app.slots.env import DEFAULT_PRIO, SlotEnv
@@ -107,7 +107,7 @@ def slot_env(repo: str, store: Beads | None = None, cfg: SlotsConfig | None = No
     """The slot code's world (app/slots): this repo's bd, git, ticket line and take lock, and the effects it may cause."""
     cdir = ConfigDir(config_dir())
     return SlotEnv(
-        repo=repo, repo_key=repo_key(repo), cfg=cfg or profile_slots(repo), store=store or bd_store(repo), git=RealSlotGit(),
+        repo=repo, repo_key=repo_key(repo), cfg=cfg or profile_slots(repo), store=store or bd_store(repo), git=RealGit(),
         tickets=FileTickets(cdir), cfgdir=cdir, actor=actor(), host=hostname(),
         take_lock=lambda: os_lock(config_dir() / "locks" / f"slot-take-{repo_key(repo)}.lock", f"pid {os.getpid()}"),
         busy=engine_busy, lock_pid=lock_pid,

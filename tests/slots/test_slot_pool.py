@@ -10,10 +10,10 @@ from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
+from support.fake_beads import FakeBeads
+from support.fake_slot_git import FakeSlotGit
 
-from taskloop.adapters.fake_beads import FakeBeads
-from taskloop.adapters.fake_slot_git import FakeSlotGit
-from taskloop.adapters.slot_git import classify
+from taskloop.adapters.git import classify
 from taskloop.app.slots.env import SlotEnv
 from taskloop.app.slots.lease import Lease
 from taskloop.app.slots.line import wait_slot, waiting_line

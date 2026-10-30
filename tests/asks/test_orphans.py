@@ -9,9 +9,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
+from support.fake_beads import FakeBeads
 from support.tiers import domain
 
-from taskloop.adapters.fake_beads import FakeBeads
 from taskloop.app.asks import sweeps
 from taskloop.cli import asks as cli
 from taskloop.contracts.bead import Bead

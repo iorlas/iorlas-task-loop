@@ -4,6 +4,7 @@ import fnmatch
 from . import ignore
 from .ctx import Ctx, flags
 from .model import HEX40, Fail, W, atomic_write, put_commit, put_tree, snap_of
+from .status import rows
 from .trees import pin
 
 
@@ -192,4 +193,16 @@ def cmd_read_tree(c: Ctx) -> int:
 
 def cmd_write_tree(c: Ctx) -> int:
     c.say(put_tree(c.index()))
+    return 0
+
+
+def cmd_clean(c: Ctx) -> int:
+    """clean -f[d][q] [-e pattern]...: delete the untracked files (ignored ones stay, as without -x) except what a -e pattern keeps."""
+    fl, keep = flags(c.args)
+    if "-f" not in fl:
+        raise Fail("fatal: clean.requireForce defaults to true and neither -i, -n, nor -f given; refusing to clean", 128)
+    kept = ignore.rules_of("", "\n".join(keep))
+    for p, x, _ in rows(c):
+        if x == "?" and not ignore.ignored(p, kept) and c.r.work is not None:
+            (c.r.work / p).unlink(missing_ok=True)
     return 0

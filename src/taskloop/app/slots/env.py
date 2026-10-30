@@ -10,8 +10,7 @@ from typing import Any
 from taskloop.contracts import paths
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.config import SlotsConfig
-from taskloop.contracts.ports import BdFailure, Beads
-from taskloop.contracts.slots import SlotGit
+from taskloop.contracts.ports import BdFailure, Beads, Git
 from taskloop.stores.api import Tickets
 
 DEFAULT_PRIO = 2
@@ -24,7 +23,7 @@ class SlotEnv:
     repo_key: str
     cfg: SlotsConfig
     store: Beads
-    git: SlotGit
+    git: Git
     tickets: Tickets
     cfgdir: paths.ConfigDir
     actor: str

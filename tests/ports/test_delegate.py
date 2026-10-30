@@ -14,6 +14,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
+from support.fake_delegate import FakeDelegate, Step, done, stopped
 from support.procsim import real_proc
 from support.tags import contract, domain
 
@@ -22,7 +23,6 @@ from ports.delegate_contract import SCHEMA, DelegateContract, req
 from taskloop.adapters import delegate_route, delegate_wire
 from taskloop.adapters.delegate_route import RouteDelegate
 from taskloop.adapters.delegate_wire import answer_status
-from taskloop.adapters.fake_delegate import FakeDelegate, Step, done, stopped
 from taskloop.adapters.procs import Ran
 from taskloop.contracts import wire
 from taskloop.contracts.delegate import LiveCmdStart, LiveEnd, LiveMsg

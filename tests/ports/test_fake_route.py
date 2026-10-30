@@ -22,11 +22,11 @@ import support.paths  # noqa: E402, F401
 
 # isort: split
 from support import dlcall, fake_route, procsim  # noqa: E402
+from support.fake_clock import FakeClock  # noqa: E402
 from support.narrow import must, only  # noqa: E402
 
 from taskloop.adapters import delegate as dl  # noqa: E402
 from taskloop.adapters import delegate_wire  # noqa: E402
-from taskloop.adapters.fake_clock import FakeClock  # noqa: E402
 from taskloop.app.loop.net import NetState  # noqa: E402
 from taskloop.domain import outcome as oc  # noqa: E402
 from taskloop.domain.lanes import netgate  # noqa: E402

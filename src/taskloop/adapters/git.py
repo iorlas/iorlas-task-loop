@@ -1,5 +1,5 @@
-"""SlotGit on the real git binary, pinned to the slot's checkout. git's words are read here and nowhere else: a failure
-becomes one of the typed SlotGitErrors (BranchPinned, DirtyTree, RefRace, IndexLocked) or the plain SlotGitError."""
+"""Git (the port in contracts/ports.py) on the real git binary, pinned to the checkout. git's words are read here and nowhere else:
+a failure becomes one of the typed SlotGitErrors (BranchPinned, DirtyTree, RefRace, IndexLocked) or the plain SlotGitError."""
 import os
 import re
 import subprocess
@@ -35,7 +35,7 @@ def classify(stderr: str) -> SlotGitError:
     return SlotGitError(tail)
 
 
-class RealSlotGit:
+class RealGit:
     def __init__(self, sleep: Callable[[float], None] = time.sleep) -> None:
         self.sleep = sleep
 

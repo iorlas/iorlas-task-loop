@@ -1,5 +1,5 @@
 """Make a slot ready for a bead: a clean tree on the bead's branch, a dead session's work committed where it was (never
-wiped), ignored setup output kept. All of git goes through the SlotGit port; its typed errors become a SlotFail."""
+wiped), ignored setup output kept. All of git goes through the Git port; its typed errors become a SlotFail."""
 import hashlib
 import os
 from collections.abc import Callable
