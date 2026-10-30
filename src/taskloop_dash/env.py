@@ -65,11 +65,16 @@ def _no_ask_back(repo: str, bead: BeadId, ask: str, text: str) -> Result:
     return Result(ok=False, message="bd is not installed")
 
 
+def _no_error(repo: str) -> str:
+    return ""
+
+
 @dataclass
 class Ports:
     """Read-only facts the launcher injects. The defaults say nothing, so a dash with no launcher still serves its own files."""
 
     slot_beads: Callable[[str], list[Bead]] = _no_beads  # this machine's slot beads of a repo
+    profile_error: Callable[[str], str] = _no_error  # the repo's red row when its .task-loop.json does not load, else ""
     store: Callable[[str], Beads] = _no_store  # the typed bd port for a repo (the engine's BdStore); the only way the dash reaches bd
     answer: AnswerAsk = _no_answer  # file the owner's answer to an ask: the intake `tl answer` uses, receipt comment included
     look: Callable[[str, str, str, str, str], Result] = _no_look  # (repo, look item id, good|redo|undo, note, look bead or ""): Intake.look

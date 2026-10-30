@@ -2790,7 +2790,8 @@
   "projects": [
    {
     "id": "lifesim",
-    "name": "lifesim"
+    "name": "lifesim",
+    "profile_error": ""
    }
   ],
   "server": {
@@ -2807,6 +2808,6 @@
   "slots": [],
   "t": 1800036000.0,
   "v": 1,
-  "version": "74212a1a2d8c1d41"
+  "version": "f2b56792d2cec837"
  }
 }

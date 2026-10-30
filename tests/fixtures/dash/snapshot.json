@@ -21,11 +21,13 @@
  "projects": [
   {
    "id": "lifesim",
-   "name": "lifesim"
+   "name": "lifesim",
+   "profile_error": ""
   },
   {
    "id": "task-loop",
-   "name": "task-loop"
+   "name": "task-loop",
+   "profile_error": ""
   }
  ],
  "epics": [

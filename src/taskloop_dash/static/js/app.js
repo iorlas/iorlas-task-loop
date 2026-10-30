@@ -98,7 +98,8 @@ function App() {
     return html`<${EmptyState} title="No beads yet" body=${snap.projects.length ? 'Create beads with bd, then start the loop.' : 'Register a repo, then start its loop.'}
       cmd=${snap.projects.length ? 'tl run' : 'tl register <repo>  ·  tl run'} />`;
   }
-  return html`<div class=${api.net.error ? 'greyed' : ''}>${PHONE.matches ? html`<${Phone} snap=${snap} now=${now} />` : html`<${Desktop} snap=${snap} now=${now} />`}
+  const red = snap.projects.filter((p) => p.profile_error).map((p) => html`<div class="ban bad">${p.profile_error}</div>`);
+  return html`<div class=${api.net.error ? 'greyed' : ''}>${red}${PHONE.matches ? html`<${Phone} snap=${snap} now=${now} />` : html`<${Desktop} snap=${snap} now=${now} />`}
     <${Toast} toast=${ui.toast} /></div>`;
 }
 

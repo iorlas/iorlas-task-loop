@@ -10,6 +10,7 @@ from taskloop.adapters import ident
 from taskloop.adapters.bd import BdStore
 from taskloop.adapters.ident import config_dir
 from taskloop.app.asks.intake import Intake
+from taskloop.app.doctor import profiles
 from taskloop.app.run.requests import OwnerVerbs
 from taskloop.app.track.trail import now
 from taskloop.app.wire import asks as wire_asks
@@ -136,4 +137,4 @@ def ports() -> Ports:
     """`python3 -m taskloop_dash --ports taskloop.app.launch.dash_ports:ports`: the dashboard builds its ports from the engine's code."""
     return Ports(store=store, answer=answer,
                  **owner_writes(owner_intake(wire_asks.store(), store, now, adrs=adrs_of, factory=factory_store)),
-                 slot_beads=quiet(slot_beads, []))
+                 slot_beads=quiet(slot_beads, []), profile_error=quiet(profiles.red_row, ""))

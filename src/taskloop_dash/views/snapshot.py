@@ -97,7 +97,8 @@ def build(w: World) -> Snapshot:
     cards = [c.replace(needs=[n for n in c.needs if (c.project, n) in ids]) for c in cards]
     snap = Snapshot(
         version="", t=0.0, server=ServerInfo(version=w.version, host=w.host, loops=[loop_info(p, w.now) for p in w.projects]),
-        projects=[Project(id=p.id, name=p.name) for p in w.projects], epics=[e for p in w.projects for e in epics_of(p)],
+        projects=[Project(id=p.id, name=p.name, profile_error=p.profile_error) for p in w.projects],
+        epics=[e for p in w.projects for e in epics_of(p)],
         slots=slots_of(w), beads=cards, backlog_more=more, pieces=pieces_of(w, board, ids), asks=asks_of(w, cards),
         lanes=lane_cards(w.status, w.now), ledger=ledger.ledger_rows(w, ids), adrs=ledger.adr_rows(w), learning=learning.build(w))
     return snap.replace(version=version_of(snap), t=w.now)

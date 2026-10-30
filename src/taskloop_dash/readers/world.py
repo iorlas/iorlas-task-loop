@@ -70,7 +70,8 @@ class Worlds:
         looks = [LookItem(bead=i["bead"], title=i["title"], shots=tuple(
             self.looks.shot_url(basename(path), s["path"]) for s in i["shots"] if s["role"] == "after"))
             for i in items if i["status"] == "open" and i["bead"]]
-        return ProjectIn(id=id, name=id, beads=rows, slots=slots, loops=states, looks=looks, adrs=self.adrs(path))
+        return ProjectIn(id=id, name=id, beads=rows, slots=slots, loops=states, looks=looks, adrs=self.adrs(path),
+                         profile_error=env.ports.profile_error(path))
 
     def runs(self, full: BeadId | None = None) -> dict[str, list[Run]]:
         """bead -> its runs, oldest first: the retained logs, and all of `full`'s."""

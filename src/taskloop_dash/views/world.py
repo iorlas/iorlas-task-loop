@@ -48,6 +48,7 @@ class ProjectIn:
     loops: Sequence[LoopState] = ()  # every loop state file of the repo
     looks: Sequence[LookItem] = ()
     adrs: Sequence[AdrIn] = ()  # the repo's decisions in force, oldest first
+    profile_error: str = ""  # the red row of a repo whose .task-loop.json does not load: shown for that repo only
     strays: Sequence[Stray] = ()  # claims nothing runs under (readers/observed.py: the reconcile sweep's rule)
 
 

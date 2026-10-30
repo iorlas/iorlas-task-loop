@@ -97,6 +97,18 @@ class Api(unittest.TestCase):
         self.assertEqual([(s.id, s.state, s.bead) for s in snap.slots], [("a", "running", "b-1")])
         self.assertEqual((snap.server.version, [p.id for p in snap.projects]), ("v-test", ["lifesim"]))
 
+    def test_a_repo_with_a_bad_profile_is_a_red_project_and_the_good_one_still_serves(self):
+        bad = self.repo.parent / "broken"
+        bad.mkdir()
+        write_repos(self.cfg / "repos.json", self.repo, bad)
+        row = f"RED {bad}: {bad}/.task-loop.json: engine.checks"
+        self.dash.env.ports.profile_error = lambda repo: row if repo == str(bad) else ""
+        code, body, _ = self.get("/api/snapshot")
+        self.assertEqual(code, 200)
+        snap = wire.load(Snapshot, json.loads(body))
+        self.assertEqual({p.id: p.profile_error for p in snap.projects}, {"lifesim": "", "broken": row})
+        self.assertIn("b-1", {c.id for c in snap.beads})
+
     def test_an_unchanged_snapshot_answers_304_by_since_and_by_etag(self):
         _, body, headers = self.get("/api/snapshot")
         version = json.loads(body)["version"]

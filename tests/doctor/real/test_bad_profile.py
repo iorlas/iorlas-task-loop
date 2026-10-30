@@ -16,7 +16,9 @@ from support.repos import write_repos
 
 from taskloop.adapters import ident
 from taskloop.app.doctor import profiles
-from taskloop.app.wire import doctor
+from taskloop.app.launch import dash_ports
+from taskloop.app.launch import loop as wloop
+from taskloop.app.wire import brief, doctor
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.stores import ReposStore
 
@@ -137,3 +139,24 @@ class SourceIsTheBaseCommit(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class OtherViews(BadProfile):
+    """`tl status` and the dashboard's ports show the bad repo as a red row; the good repo's own view works."""
+
+    def test_status_in_the_good_repo_shows_the_bad_repos_red_row(self) -> None:
+        with mock.patch.object(brief.wslots, "slot_beads", return_value=[]):
+            text = brief.status_text(str(self.good), ROOT, 0.0, False)
+            data = json.loads(brief.status_text(str(self.good), ROOT, 0.0, True))
+        self.assertIn(f"RED {self.bad}", text)
+        self.assertIn(str(self.bad / ".task-loop.json"), text)
+        self.assertEqual([r.split(":")[0] for r in data["red"]], [f"RED {self.bad}"])
+        self.assertNotIn("Traceback", text)
+
+    def test_the_dash_ports_name_the_bad_repo_only(self) -> None:
+        ports = dash_ports.ports()
+        self.assertEqual(ports.profile_error(str(self.good)), "")
+        self.assertIn(str(self.bad / ".task-loop.json"), ports.profile_error(str(self.bad)))
+
+    def test_cutover_over_a_bad_repo_is_not_a_traceback(self) -> None:
+        self.assertEqual(wloop.live_work(), [])

@@ -108,6 +108,7 @@ class ServerInfo(Rec):
 class Project(Rec):
     id: str
     name: str
+    profile_error: str = ""
 
 
 @final

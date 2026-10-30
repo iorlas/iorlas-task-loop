@@ -5,6 +5,7 @@ from pathlib import Path
 
 from taskloop.adapters import pidcheck
 from taskloop.adapters.ident import config_dir
+from taskloop.app.doctor import profiles
 from taskloop.app.loop.files import LoopFiles
 from taskloop.app.release import catalog, pins
 from taskloop.app.slots import marks
@@ -13,6 +14,7 @@ from taskloop.app.wire import slots as wslots
 from taskloop.contracts.ids import loop_key
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdFailure
+from taskloop.contracts.stores import ReposStore
 from taskloop.domain.brief import AskLine, Brief, LoopLine, status_json, status_lines
 
 RECENT = 5
@@ -64,4 +66,7 @@ def handoff_file(repo: str) -> Path:
 
 def status_text(repo: str, plugin_root: Path, now: float, as_json: bool) -> str:
     b = build(repo, plugin_root, now)
-    return json.dumps(status_json(b), ensure_ascii=False) if as_json else "\n".join(status_lines(b))
+    red = profiles.red_rows(sorted({repo, *profiles.registered(ReposStore(ConfigDir(config_dir())))}))  # a bad profile is its repo's row
+    if as_json:
+        return json.dumps({**status_json(b), "red": red}, ensure_ascii=False)
+    return "\n".join([*red, *status_lines(b)])

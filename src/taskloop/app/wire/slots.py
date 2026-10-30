@@ -178,8 +178,10 @@ def worktrees(repo: str, slots: list[Bead] | None = None) -> list[str]:
     """Every worktree of the repo (git worktree list) and every slot folder (`slots`: the slot beads, when the caller has them): where an
     engine lock may be."""
     found = [c.path for c in REAL.checkouts(repo)]
-    cfg = profile_slots(repo)
-    found += [slot_dir(repo, b.title.split()[-1], cfg) for b in (slot_beads(repo) if slots is None else slots)]
+    beads = slot_beads(repo) if slots is None else slots
+    if beads:  # no slot beads, no profile read: a repo whose profile is bad still lists its worktrees
+        cfg = profile_slots(repo)
+        found += [slot_dir(repo, b.title.split()[-1], cfg) for b in beads]
     seen: set[str] = set()
     keep: list[str] = []
     for d in found:
