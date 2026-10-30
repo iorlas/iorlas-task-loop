@@ -18,12 +18,15 @@ from taskloop.adapters import procs  # noqa: E402
 SHIM = r"""
 import os, subprocess, sys, time
 out = sys.argv[1]
-kid = ["sh", "-c", ("trap '' TERM; " if os.environ.get("IGNORE_TERM") else "") + "exec sleep 300"]  # a plain sleeper: no second interpreter
-same = subprocess.Popen(kid)                                  # same group as the shim
-setsid = subprocess.Popen(kid, start_new_session=True)        # the native child, own session
+plain = ["sh", "-c", "exec sleep 300"]                      # sleepers, not interpreters
+stubborn = ["sh", "-c", "trap '' TERM; exec sleep 300"]    # a child that ignores SIGTERM
+kids = {"same": subprocess.Popen(plain),                    # same group as the shim
+        "setsid": subprocess.Popen(plain, start_new_session=True),  # the native child, own session
+        "same_stubborn": subprocess.Popen(stubborn),
+        "setsid_stubborn": subprocess.Popen(stubborn, start_new_session=True)}
 time.sleep(0.3)  # the shells have set their trap and exec'd the sleep
-open(out + ".same", "w").write(str(same.pid))
-open(out + ".setsid", "w").write(str(setsid.pid))
+for name, kid in kids.items():
+    open(out + "." + name, "w").write(str(kid.pid))
 open(out + ".shim", "w").write(str(os.getpid()))
 time.sleep(300)
 """
@@ -64,33 +67,23 @@ class KillTree(unittest.TestCase):
         out = os.path.join(self.tmp, "pid")
         p = subprocess.Popen([sys.executable, "-c", SHIM, out], start_new_session=True)
         self.started.append(p.pid)
-        pids = {k: read_pid(f"{out}.{k}") for k in ("shim", "same", "setsid")}
+        pids = {k: read_pid(f"{out}.{k}") for k in ("shim", "same", "setsid", "same_stubborn", "setsid_stubborn")}
         self.started += list(pids.values())
         return p, pids
 
-    def test_kills_same_group_and_setsid_child(self):
+    def test_kills_same_group_and_setsid_children_and_those_that_ignore_sigterm(self):
         p, pids = self.run_shim()
-        self.assertEqual(os.getpgid(pids["same"]), p.pid)
-        self.assertNotEqual(os.getpgid(pids["setsid"]), p.pid)
-        self.assertEqual(procs.stop_tree(p, grace=2.0), ())
-        deadline = time.time() + 60
-        while time.time() < deadline and (alive(pids["same"]) or alive(pids["setsid"])):
-            time.sleep(0.1)
-        self.assertFalse(alive(pids["same"]), "same-group child survived")
-        self.assertFalse(alive(pids["setsid"]), "setsid'd child survived")
-
-    def test_kills_children_that_ignore_sigterm(self):
-        os.environ["IGNORE_TERM"] = "1"
-        try:
-            p, pids = self.run_shim()
-        finally:
-            del os.environ["IGNORE_TERM"]
+        for name in ("same", "same_stubborn"):
+            self.assertEqual(os.getpgid(pids[name]), p.pid)
+        for name in ("setsid", "setsid_stubborn"):
+            self.assertNotEqual(os.getpgid(pids[name]), p.pid)
         self.assertEqual(procs.stop_tree(p, grace=0.3), ())
+        kids = [pids[k] for k in ("same", "setsid", "same_stubborn", "setsid_stubborn")]
         deadline = time.time() + 60
-        while time.time() < deadline and (alive(pids["same"]) or alive(pids["setsid"])):
+        while time.time() < deadline and any(alive(pid) for pid in kids):
             time.sleep(0.1)
-        self.assertFalse(alive(pids["same"]), "same-group child survived")
-        self.assertFalse(alive(pids["setsid"]), "setsid'd child survived")
+        for name in ("same", "setsid", "same_stubborn", "setsid_stubborn"):
+            self.assertFalse(alive(pids[name]), f"{name} child survived")
 
 
 if __name__ == "__main__":

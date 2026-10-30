@@ -185,7 +185,6 @@ class Speed(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertIn("deny", r.stdout)
 
-
     def test_an_unknown_event_is_an_error_not_a_silent_pass(self):
         with mock.patch.object(sys, "argv", [str(HOOK), "nonsense"]), mock.patch.object(sys, "stdin", io.StringIO("{}")), \
                 mock.patch.dict(os.environ, self.env), contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as stop:

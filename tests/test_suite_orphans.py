@@ -10,6 +10,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+import conftest
 import stream_proc
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support.procsim import real_proc
@@ -75,7 +76,7 @@ class Orphans(unittest.TestCase):
             _thread.interrupt_main()
         threading.Thread(target=interrupt, daemon=True).start()
         with self.assertRaises(KeyboardInterrupt):
-            self.run_in_thread(600, self.argv)
+            self.run_in_thread(600, ["sh", "-c", 'echo $$ > "$PIDFILE"; sleep 300'])  # the worker: a shell
         pid = self.worker_pid()
         self.assertTrue(until(lambda: not stream_proc.alive(pid), 15), "the worker outlived the interrupted launcher")
 
@@ -109,15 +110,19 @@ class OneSuitePerHost(unittest.TestCase):
 
 class MemoryLimits(unittest.TestCase):
     def test_a_worker_past_its_address_space_cap_is_red_with_a_memory_error(self):
-        with tempfile.TemporaryDirectory() as d:
-            hog = "import unittest\nclass H(unittest.TestCase):\n    def test_1(self): bytearray(900 << 20)\n"
-            (Path(d) / "test_hog.py").write_text(hog)
-            path = os.pathsep.join([str(ROOT / "tests"), os.environ.get("PYTHONPATH", "")])
-            env = dict(os.environ, TL_WORKER_MB="600", PYTHONPATH=path)
-            argv = [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "-p", "conftest", "-n", "1", "test_hog.py"]
-            part = suite.run_pytest(argv, d, env, "parallel")
-        self.assertEqual(part.code, 1, part.out)
-        self.assertIn("MemoryError", part.out)
+        """conftest.cap_memory in a forked child (a worker, as xdist starts it, without the interpreter start): past the cap an allocation
+        is a MemoryError, not the host's RAM."""
+        pid = os.fork()
+        if pid == 0:
+            code = 3
+            try:
+                conftest.cap_memory(600)
+                bytearray(900 << 20)
+            except MemoryError:
+                code = 0
+            finally:
+                os._exit(code)
+        self.assertEqual(os.waitstatus_to_exitcode(os.waitpid(pid, 0)[1]), 0, "the allocation past the cap was not a MemoryError")
 
     def test_a_host_with_less_free_memory_than_the_budgets_is_refused_in_one_line(self):
         with tempfile.TemporaryDirectory() as d:

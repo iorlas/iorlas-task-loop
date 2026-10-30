@@ -3,7 +3,6 @@ their own descriptors for the races (atomic replace, concurrent append, lock exc
 this is what two processes see), a real killed holder for the lock the OS drops."""
 import json
 import os
-import signal
 import sys
 import threading
 import unittest
@@ -129,8 +128,7 @@ class RealRaces(unittest.TestCase):
         holder = self.rig.procs[-1]
         with self.assertRaises(TimeoutError), self.rig.stores.locks.hold(LockWhat.AREA, "a", "me", timeout=0.2):
             self.fail("took a held lock")
-        os.kill(holder.pid, signal.SIGKILL)  # a pid this test started
-        holder.wait()
+        holder.kill()  # a process this test forked
         with self.rig.stores.locks.hold(LockWhat.AREA, "a", "me", timeout=2) as rec:
             self.assertEqual(rec.holder, "me")
 

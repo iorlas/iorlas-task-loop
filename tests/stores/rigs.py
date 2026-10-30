@@ -1,7 +1,10 @@
 """A rig builds one kind of Stores (file-backed or in-memory) and the few things only a test may do to it: tear a log's tail,
 plant a lock held by another process, write a foreign document."""
+import contextlib
+import fcntl
 import json
-import subprocess
+import os
+import signal
 import sys
 import tempfile
 import time
@@ -20,17 +23,38 @@ from taskloop.stores.bundle import Stores
 from taskloop.stores.memory import MemDoc, MemLockTable, MemLog, fake_stores
 from taskloop.stores.real import real_stores
 
-HOLDER = """
-import json, sys, time
-from pathlib import Path
-import fcntl
-path, record, secs = sys.argv[1], sys.argv[2], float(sys.argv[3])
-f = open(path, "a+")
-fcntl.flock(f, fcntl.LOCK_EX)
-Path(path + ".holder").write_text(record)
-print("held", flush=True)
-time.sleep(secs)
-"""
+
+class Holder:
+    """A process that holds a lock: forked, so it is another process with its own file descriptions and no second interpreter."""
+
+    def __init__(self, path: Path, record: str, secs: float) -> None:
+        ready_r, ready_w = os.pipe()
+        self.pid = os.fork()
+        if self.pid == 0:
+            try:
+                os.close(ready_r)
+                f = open(path, "a+")  # noqa: SIM115 (held open until the process ends)
+                fcntl.flock(f, fcntl.LOCK_EX)
+                Path(str(path) + ".holder").write_text(record)
+                os.write(ready_w, b"held\n")
+                time.sleep(secs)
+            finally:
+                os._exit(0)
+        os.close(ready_w)
+        with os.fdopen(ready_r) as r:
+            assert r.readline().strip() == "held"
+        self.alive = True
+
+    def wait(self) -> None:
+        if self.alive:
+            os.waitpid(self.pid, 0)
+            self.alive = False
+
+    def kill(self) -> None:
+        if self.alive:
+            with contextlib.suppress(ProcessLookupError):
+                os.kill(self.pid, signal.SIGKILL)
+            self.wait()
 
 
 def dead_pid() -> int:
@@ -42,14 +66,11 @@ class RealRig:
         self.tmp = tempfile.TemporaryDirectory()
         self.cfg = paths.ConfigDir(Path(self.tmp.name) / "task-loop")
         self.stores: Stores = real_stores(self.cfg)
-        self.procs: list[subprocess.Popen[str]] = []
+        self.procs: list[Holder] = []
 
     def close(self) -> None:
         for p in self.procs:
             p.kill()
-            p.wait()
-            if p.stdout:
-                p.stdout.close()
         self.tmp.cleanup()
 
     def tear(self, log: Any, raw: bytes) -> None:
@@ -67,9 +88,7 @@ class RealRig:
         path = self.cfg.lock_record(what.value, ident)
         path.parent.mkdir(parents=True, exist_ok=True)
         rec = json.dumps(wire.dump(LockRecord(what=what, holder=holder, pid=pid, t=time.time())))  # pyrefly: ignore[unexpected-keyword]
-        p = subprocess.Popen([sys.executable, "-c", HOLDER, str(path), rec, str(secs)], stdout=subprocess.PIPE, text=True)
-        self.procs.append(p)
-        assert p.stdout is not None and p.stdout.readline().strip() == "held"
+        self.procs.append(Holder(path, rec, secs))
 
 
 class FakeRig:

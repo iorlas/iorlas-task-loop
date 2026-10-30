@@ -67,12 +67,12 @@ class Halt(te.EngineTest):
         pidfile = d / "pid"
         r = runner.StreamRunner(d / "err.log", 60.0, "", None, grace=0.5)
         r.outer = threading.Event()
-        # the flag goes when the call's process has written its pid (a fixed delay can beat a loaded runner's python start)
+        # the flag goes when the call's process has written its pid (a fixed delay can beat a loaded runner's start)
         threading.Thread(target=lambda: (te.until(pidfile.exists, WAIT), te.until(lambda: pidfile.read_text().strip(), WAIT),
                                          r.outer.set()), daemon=True).start()
         t = time.time()
         with self.assertRaises(delegate.Stopped):
-            r(["python3", "-c", f"import os,time; open({str(pidfile)!r},'w').write(str(os.getpid())); time.sleep(30)"])
+            r(["sh", "-c", 'echo $$ > "$0"; sleep 30', str(pidfile)])
         self.assertLess(time.time() - t, 20)
         self.assertEqual(r.obs["why"], "interrupted")
         te.until(lambda: te.pid_gone(int(pidfile.read_text())), 3)
