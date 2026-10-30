@@ -86,6 +86,14 @@ class ConfigDir:
     def run_request_lock(self, run: RunId | str) -> Path:
         return self.run_dir(run) / "owner-request.lock"
 
+    def reexec_note(self, bead: BeadId | str) -> Path:
+        """What an engine leaves just before it execs into a newer install (contracts/run.py ReloadNote)."""
+        return self.root / "reexec" / (f"{bead}.json")
+
+    def net_pause(self, bead: BeadId | str) -> Path:
+        """What a run leaves when it pauses for the network (contracts/run.py NetPause); taken once by the bead's next run."""
+        return self.root / "pauses" / (f"{bead}.json")
+
     def check_run(self, run: RunId | str, rnd: int | None = None) -> Path:
         """The CheckRun of a round of the run; no round: the latest."""
         return self.run_dir(run) / ("engine-checks.json" if rnd is None else f"engine-checks.r{int(rnd)}.json")
@@ -156,9 +164,15 @@ class ConfigDir:
     def release_result(self) -> Path:
         return self.root / "releases" / "last.json"
 
+    def suite_green(self) -> Path:
+        return self.root / "releases" / "suite-green.json"
+
     def suite_logs(self) -> list[Path]:
         """The saved full output of every red release suite (releases/suite-*.log); nothing sweeps them but `tl prune`."""
         return sorted((self.root / "releases").glob("suite-*.log"))
+
+    def reflect_state(self) -> Path:
+        return self.root / "reflect-digest.json"
 
     def reflect_view(self) -> Path:
         return self.root / "reflect-view.json"
@@ -174,6 +188,27 @@ class ConfigDir:
 
 
 PLAN_FILE: Final = "plan.json"  # the run directory's copy of the plan the dashboard reads
+
+
+@final
+class RunFiles:
+    """The state files inside one run directory (runs/<run>/)."""
+
+    def __init__(self, run_dir: Path | str) -> None:
+        self.dir = Path(run_dir)
+
+    def pause(self) -> Path:
+        return self.dir / "pause.json"
+
+    def reexec(self) -> Path:
+        return self.dir / "reexec.json"
+
+    def done_memo(self) -> Path:
+        return self.dir / "done.json"
+
+    def handoff(self) -> Path:
+        return self.dir / "handoff.json"
+
 TASK_EXCLUDE: Final = ".task/"  # the line a repo's info/exclude carries so the scratch folder is never committed
 
 
@@ -187,6 +222,10 @@ class RepoDirs:
 
     def engine_lock(self) -> Path:
         return self.task / "engine.lock"
+
+    def engine_take(self) -> Path:
+        """Held (locks.hold_path) while a run checks the engine lock and writes its own: two runs starting at once cannot both win."""
+        return self.task / "engine.take"
 
     def artifacts(self, bead: str) -> Path:
         """Where a run drops screenshots, PDFs: `StepArtifacts` copies the files from here when a step ends."""

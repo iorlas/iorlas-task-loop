@@ -84,8 +84,8 @@ TRACE = trace.RunTrace(
 
 OUTCOME = run.RunOutcome(outcome=Outcome.BLOCKED, bead="tl-1", run=str(RUN), why_code=WhyCode.STUCK, why="stuck", log="/l", minutes=3.5,
                          rounds=2, tests_added=4, asked=True, retry_after=None, cost=0.25)
-LOCK = locks.EngineLock(pid=1789, bead="tl-1", started=T, by="tl-abc", pid_start=T - 5, slot="s1", slot_bead="slot-1",
-                        route=(10, T), workers=[(11, T), (12, T + 1)])
+LOCK = locks.EngineLock(pid=1789, bead="tl-1", started=T, by="tl-abc", start="99", slot="s1", slot_bead="slot-1",
+                        route=(10, "5"), workers=[(11, "6"), (12, "7")])
 CMD = {"pick_label": "auto",
        "visual_paths": config.VisualConfig(include=["a/**"]), "write_fresh_above_k": 150.0, "max_rounds": 4,
        "checks": [config.CheckSpec(id=CheckId("fmt"), argv=["just", "fmt"], group="static", when=["x/**"], inputs="a/**",
@@ -399,11 +399,21 @@ OTHERS = {
         at=T, lanes=[snapshots.LaneStatus(id="A", state="ready")], needs_input=[snapshots.NeedInput(what="w")]
     ),
     "Landed": landed.Landed(bead="t-1", sha="a" * 40, base="origin/main", t=T),
-    "SessionIndex": snapshots.SessionIndex(session="s", transcript="/t.jsonl", cwd="/w", t=T),
+    "SessionIndex": snapshots.SessionIndex(session="s", transcript="/t.jsonl", cwd="/w", source="startup", t=T),
     "ReposIndex": snapshots.ReposIndex(repos={"/r": snapshots.RepoEntry(added=T)}),
     "SharedNotes": snapshots.SharedNotes(flakes={"test_x": T}, notes=["n"]),
-    "Pin": snapshots.Pin(task_loop="0.23.38", delegate=None),
-    "ReleaseResult": snapshots.ReleaseResult(version="0.23.57", ok=True, t=T, why="", sha="abc"),
+    "Pin": snapshots.Pin(task_loop="0.23.38", delegate=None, pinned_at=T),
+    "ReleaseResult": snapshots.ReleaseResult(
+        ok=False, version="0.23.57", summary="s", at=T, branch="b", message="m", tests=["t"], log="/l"),
+    "SuiteGreens": snapshots.SuiteGreens(greens=[snapshots.GreenRun(tree="t" * 40, command="just check", at=T)]),
+    "ReflectState": snapshots.ReflectState(until=T, tried=T, filed=[{"cause": "c", "bead": "b-1"}]),
+    "StatusTried": snapshots.StatusTried(t=T),
+    "RunCounters": run.RunCounters(elapsed=1.5, waited=0.5, cost=0.25, stats={"writes": 1}, sessions=[{"node": "write"}],
+                                   write_rounds=[[1, 2]], node_n=3),
+    "ReexecNote": run.ReexecNote(run=str(RUN), bead="tl-1", frm="0.1.0", to="0.2.0", step="write", from_dir="/d", t=T),
+    "NetPause": run.NetPause(run=str(RUN), bead="tl-1", t=T),
+    "DoneMemo": run.DoneMemo(done={"[1]": run.DoneEntry(sha="s", file="/f")}),
+    "HandoffMirror": run.HandoffMirror(rounds=[{"stage": "s"}], seen_lows=["x"], deferred=[{"what": "w", "why": "y"}], filed=["f"]),
     "DashState": snapshots.DashState(
         pid=9, port=7878, bind="127.0.0.1", token="tok", version="0.23.56", started=T, pid_start=T, idle_until=None
     ),

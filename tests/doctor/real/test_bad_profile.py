@@ -12,10 +12,13 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401
+from support.repos import write_repos
 
 from taskloop.adapters import ident
 from taskloop.app.doctor import profiles
 from taskloop.app.wire import doctor
+from taskloop.contracts.paths import ConfigDir
+from taskloop.contracts.stores import ReposStore
 
 ROOT = Path(__file__).resolve().parents[3]
 GIT_ENV = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.invalid", "GIT_COMMITTER_NAME": "t",
@@ -38,7 +41,7 @@ class BadProfile(unittest.TestCase):
             subprocess.run(["git", "-C", str(repo), "commit", "-qm", "x"], check=True, env=os.environ)
         cfg = root / "cfg" / "task-loop"
         cfg.mkdir(parents=True)
-        (cfg / "repos.json").write_text(json.dumps({str(self.good): {}, str(self.bad): {}}))
+        write_repos(cfg / "repos.json", self.good, self.bad)
 
     def doctor(self, repo: Path, plugin_root: Path = ROOT) -> tuple[int, str]:
         out = io.StringIO()
@@ -78,7 +81,7 @@ class BadProfile(unittest.TestCase):
         self.assertEqual(sum(1 for ln in text.splitlines() if ln.startswith("RED ")), 1)
 
     def test_walking_the_registered_repos_skips_the_one_asked_from(self) -> None:
-        rows = profiles.red_rows(profiles.registered(ident.config_dir() / "repos.json"), but=str(self.good))
+        rows = profiles.red_rows(profiles.registered(ReposStore(ConfigDir(ident.config_dir()))), but=str(self.good))
         self.assertEqual(len(rows), 1)
         self.assertEqual(profiles.red_rows([str(self.bad)], but=str(self.bad)), [])
 
@@ -115,7 +118,7 @@ class SourceIsTheBaseCommit(unittest.TestCase):
         (self.repo / ".task-loop.json").write_text(json.dumps(STALE))
         self.assertEqual(profiles.red_row(self.repo), "")
         says: list[str] = []
-        self.assertFalse(profiles.report(str(self.repo), self.repo / "none.json", says.append))
+        self.assertFalse(profiles.report(str(self.repo), ReposStore(ConfigDir(self.repo / "none")), says.append))
         self.assertEqual(says, [f"profile: {self.repo} read from base {self.sha7()}"])
 
     def test_a_bad_base_commit_is_a_row_naming_the_source(self) -> None:

@@ -1,57 +1,53 @@
 """Moving to a newer install between steps (tl-7y6.9): by exec only, no module is ever reloaded in place. The notes a run leaves for
 the process that takes it over: the exec hand-over, the network pause, and the argv that goes on from the checkpoint."""
-import contextlib
 import json
 import os
 import time
 from collections.abc import Sequence
-from pathlib import Path
 from typing import Any
 
 from taskloop.adapters import applog, ident
 from taskloop.contracts import env as penv
 from taskloop.contracts.envvars import EnvVar
+from taskloop.contracts.paths import ConfigDir, RunFiles
+from taskloop.contracts.run import NetPause, ReexecNote
+from taskloop.contracts.stores import JsonStore
 from taskloop.domain.lanes import policy as lp
 
 RELOAD_FALLBACK_S = 120  # a run-task that dies this soon after an exec is put back on the version it came from (by the loop)
 NET_PAUSE_ADOPT_S = lp.KNOBS["net_pause_max_s"]  # a run paused for the network is taken up again by the next run-task within this long
 
 
-def reexec_path(bead: str) -> Path:
-    return ident.config_dir() / "reexec" / f"{bead}.json"
+def cfg() -> ConfigDir:
+    return ConfigDir(ident.config_dir())
 
 
-def read_reexec(bead: str) -> dict[str, Any]:
-    """The note an engine leaves just before it execs into a newer install: {run, from, to, from_dir, t}; {} when none."""
-    try:
-        note = json.loads(reexec_path(bead).read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return {}
-    return note if isinstance(note, dict) else {}
+def reexec_store(bead: str) -> JsonStore[ReexecNote]:
+    return JsonStore(cfg().reexec_note(bead), ReexecNote)
+
+
+def net_pause_store(bead: str) -> JsonStore[NetPause]:
+    return JsonStore(cfg().net_pause(bead), NetPause)
+
+
+def read_reexec(bead: str) -> ReexecNote | None:
+    """The note an engine leaves just before it execs into a newer install; None when none (or not of this version)."""
+    return reexec_store(bead).read()
 
 
 def drop_reexec(bead: str) -> None:
-    with contextlib.suppress(OSError):
-        reexec_path(bead).unlink()
+    reexec_store(bead).delete()
 
 
-def net_pause_path(bead: str) -> Path:
-    return ident.config_dir() / "pauses" / f"{bead}.json"
-
-
-def take_net_pause(bead: str) -> dict[str, Any]:
-    """The note a run leaves when it pauses for the network ({run, bead, t}), taken once; {} when there is none, it is older
-    than NET_PAUSE_ADOPT_S, or the run it names is gone."""
-    p = net_pause_path(bead)
-    try:
-        note = json.loads(p.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return {}
-    with contextlib.suppress(OSError):
-        p.unlink()
-    if not isinstance(note, dict) or not isinstance(note.get("run"), str) or time.time() - float(note.get("t") or 0) > NET_PAUSE_ADOPT_S:
-        return {}
-    return note if (ident.config_dir() / "runs" / note["run"] / "pause.json").is_file() else {}
+def take_net_pause(bead: str) -> NetPause | None:
+    """The note a run leaves when it pauses for the network, taken once; None when there is none, it is older than
+    NET_PAUSE_ADOPT_S, or the run it names is gone."""
+    store = net_pause_store(bead)
+    note = store.read()
+    store.delete()
+    if note is None or time.time() - note.t > NET_PAUSE_ADOPT_S:
+        return None
+    return note if RunFiles(cfg().run_dir(note.run)).pause().is_file() else None
 
 
 def take_reexec_env() -> dict[str, Any]:

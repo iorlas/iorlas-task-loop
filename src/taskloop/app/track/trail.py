@@ -1,21 +1,22 @@
 """What `tl` records about a bead's life: one line per event in events.jsonl (the dashboard's fast local index), the repos it has seen
 (repos.json), and the provenance record in bd."""
 import json
-import os
 import socket
 import sys
 import time
 from pathlib import Path
 from typing import Any, Final
 
+from atomic_io import atomic_write_text
+
 from taskloop.adapters import applog
 from taskloop.adapters.beadtools import bd_store
 from taskloop.adapters.gitrepo import repo_root
 from taskloop.adapters.ident import actor, config_dir, session_id
-from taskloop.adapters.landlock import os_lock
 from taskloop.contracts.guard import guard
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdFailure, Beads
+from taskloop.contracts.stores import ReposStore
 
 SOURCE: Final = "task-loop"
 RETAIN_DAYS: Final = 7
@@ -47,24 +48,14 @@ def provenance(bead: str, kind: str, ref: str, ref_kind: str, payload: dict[str,
 
 
 def register_repo(path: str | None) -> None:
-    """Add a repo to repos.json. Every process registers (each event does): the read and write go under a lock, each through its own tmp
-    file, so two at once neither crash nor drop a repo."""
-    f = ConfigDir(config_dir()).repos()
-
-    def read() -> dict[str, Any]:
-        try:
-            return json.loads(f.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            return {}
-    if not path or path in read():
+    """Add a repo to repos.json. Every process registers (each event does); the store reads and writes under its lock, so two at once
+    neither crash nor drop a repo. A repos.json of another version is said once per call and left alone."""
+    if not path:
         return
-    with os_lock(config_dir() / "locks" / "repos.lock", f"pid {os.getpid()}"):
-        repos = read()
-        if path not in repos:
-            repos[path] = {"added": now()}
-            tmp = f.with_name(f"repos.{os.getpid()}.tmp")
-            tmp.write_text(json.dumps(repos, indent=1), encoding="utf-8")
-            os.replace(tmp, f)
+    try:
+        ReposStore(ConfigDir(config_dir())).add(path, now())
+    except ValueError as e:
+        sys.stderr.write(f"tl: repo not registered: {e}\n")
 
 
 def events_lock(cfg: ConfigDir) -> Path:
@@ -84,6 +75,4 @@ def prune_events(days: float = RETAIN_DAYS) -> None:
                     keep.append(ln)
             except ValueError:
                 pass
-        tmp = f.with_name(f"events.{os.getpid()}.tmp")
-        tmp.write_text("\n".join(keep) + ("\n" if keep else ""), encoding="utf-8")
-        os.replace(tmp, f)
+        atomic_write_text(f, "\n".join(keep) + ("\n" if keep else ""), fsync=False)

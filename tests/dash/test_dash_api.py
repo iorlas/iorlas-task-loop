@@ -16,6 +16,7 @@ import support.paths  # noqa: F401
 from support.dashlogs import RunScript, T, bead
 from support.fakes import FakeBeadStore
 from support.narrow import must
+from support.repos import write_repos
 
 from taskloop.contracts import wire
 from taskloop.contracts.ask import Ask, AskOption
@@ -37,7 +38,7 @@ class Api(unittest.TestCase):
         self.repo.mkdir()
         self.cfg = root / "cfg"
         self.cfg.mkdir()
-        (self.cfg / "repos.json").write_text(json.dumps({str(self.repo): {}}))
+        write_repos(self.cfg / "repos.json", self.repo)
         RunScript("b-1", slot="a", at=3000).step("plan", 300, 20_000, "OC Go").step(
             "write", 200, 30_000, text="write 1", end=False
         ).beat().write(self.cfg)

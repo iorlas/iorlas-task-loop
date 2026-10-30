@@ -3,11 +3,13 @@
 extends it and renders it into the writer's and the reviewer's prompts."""
 import contextlib
 import hashlib
-import json
 from collections.abc import Sequence
 from typing import Any
 
 from taskloop.contracts.config import FRESH_ABOVE_K
+from taskloop.contracts.paths import RunFiles
+from taskloop.contracts.run import HandoffMirror
+from taskloop.contracts.stores import JsonStore
 from taskloop.domain.prompts.write import DONE_SO_FAR, STAGES_DONE, WRITE_RESUME_PROMPT
 from taskloop.domain.review.findings import blocks
 
@@ -111,6 +113,7 @@ class Handoff:
 
     def save(self) -> None:
         with contextlib.suppress(OSError):
-            (self.e.run_dir / "handoff.json").write_text(json.dumps(dict(
-                self.e.handoff, deferred=[{"what": t, "why": w} for t, w in self.e.routing.ledger().deferred()],
-                filed=self.e.filed), indent=1))
+            h = self.e.handoff
+            JsonStore(RunFiles(self.e.run_dir).handoff(), HandoffMirror).write(HandoffMirror(
+                rounds=list(h["rounds"]), seen_lows=list(h["seen_lows"]),
+                deferred=[{"what": t, "why": w} for t, w in self.e.routing.ledger().deferred()], filed=list(self.e.filed)))

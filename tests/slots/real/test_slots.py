@@ -378,7 +378,7 @@ class SameActor(Slots):
 
     def test_the_loop_locks_the_slot_from_its_take_through_the_reset(self):
         bd = self.beads({"x-1": [rec("landed")], "x-2": []})
-        seen = {}
+        seen: dict[str, Any] = {}
 
         def reset(taker, slot, bead_id):
             seen["lock"] = engine_lock.read_engine_lock(self.slot(slot))
@@ -390,7 +390,7 @@ class SameActor(Slots):
             seen["hand"] = r
         with mock.patch.object(Taker, "prepare", reset):
             self.run_loop("--max-beads", "1")
-        self.assertEqual((seen["lock"]["by"], seen["lock"]["pid"], seen["lock"]["slot_bead"]),
+        self.assertEqual((seen["lock"].by, seen["lock"].pid, seen["lock"].slot_bead),
                          ("loop", os.getpid(), "sl-1"))
         self.assertEqual(seen["hand"]["outcome"], "taken")
         self.assertIn(f"loop pid {os.getpid()}", seen["hand"]["why"])

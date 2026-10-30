@@ -4,7 +4,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from taskloop.adapters import beadtools, ident, pidcheck
+from taskloop.adapters import beadtools, ident
 from taskloop.adapters.locks import hold_path
 from taskloop.app.loop.queue import QueueRule, area_busy_text
 from taskloop.app.run import console
@@ -26,8 +26,8 @@ def running(repo: Any, store: Any = None) -> dict[str, str]:
             out[bid] = b.title.split()[-1]
     for wt in wslots.worktrees(repo, slots):
         lock = engine_lock.read_engine_lock(wt)
-        if lock.get("bead") and lock.get("pid") and pidcheck.proc_alive(lock["pid"], lock.get("start") or ""):
-            out.setdefault(lock["bead"], lock.get("slot") or Path(wt).name)
+        if lock is not None and lock.bead and engine_lock.live(lock):
+            out.setdefault(lock.bead, lock.slot or Path(wt).name)
     return out
 
 

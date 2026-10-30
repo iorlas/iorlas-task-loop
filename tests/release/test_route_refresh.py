@@ -69,7 +69,7 @@ class RouteRefresh(unittest.TestCase):
         self.install("0.40.12")
         pin = Path(self.home.name, "cfg", "task-loop", "pinned.json")
         pin.parent.mkdir(parents=True)
-        pin.write_text(json.dumps({"delegate": "0.40.10"}))
+        pin.write_text(json.dumps({"v": 1, "delegate": "0.40.10"}))
         eng = Stub({}, old)
         self.assertEqual(self.call(eng), old)
         self.assertIsNone(eng.refusal)

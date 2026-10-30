@@ -1,60 +1,68 @@
-"""The engine lock: a running engine in a worktree. run-task writes <worktree>/.task/engine.lock {pid, start, bead, slot, slot_bead, by,
-route: [pid, start], workers: [[pid, start]]}; the loop writes one (by "loop") from its slot take until its run-task replaces it. The loop,
+"""The engine lock: a running engine in a worktree. run-task writes <worktree>/.task/engine.lock (contracts/locks.py EngineLock: pid, start,
+bead, slot, slot_bead, by, route, workers); the loop writes one (by "loop") from its slot take until its run-task replaces it. The loop,
 `tl slot reset|release` and another run-task keep off a worktree whose lock names a live process, whatever the slot bead says. A process is
-the one in the lock only while its start time matches (pid reuse) and it is no zombie."""
+the one in the lock only while its start time matches (pid reuse) and it is no zombie. The file is a record on a JsonStore; the check and
+the write of a take happen under `hold_path` on RepoDirs.engine_take, so two runs starting at once cannot both win."""
 import contextlib
-import json
 import os
 import time
 from pathlib import Path
-from typing import Any
 
+from taskloop.adapters.locks import hold_path
 from taskloop.adapters.pidcheck import proc_alive, proc_start
 from taskloop.app.slots.env import stamp
 from taskloop.contracts import env as penv
+from taskloop.contracts.enums import LockWhat
 from taskloop.contracts.envvars import EnvVar
+from taskloop.contracts.locks import EngineLock as Lock
 from taskloop.contracts.paths import RepoDirs
+from taskloop.contracts.stores import JsonStore
 
 
 def engine_lock_path(wt: str | Path) -> Path:
     return RepoDirs(wt).engine_lock()
 
 
-def read_engine_lock(wt: str | Path) -> dict[str, Any]:
-    try:
-        lock = json.loads(engine_lock_path(wt).read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return {}
-    return lock if isinstance(lock, dict) else {}
+def _store(wt: str | Path) -> JsonStore[Lock]:
+    return JsonStore(engine_lock_path(wt), Lock)
 
 
-def write_engine_lock(wt: str | Path, data: dict[str, Any]) -> None:
-    f = engine_lock_path(wt)
-    f.parent.mkdir(parents=True, exist_ok=True)
-    tmp = f.with_name(f.name + f".{os.getpid()}.tmp")
-    tmp.write_text(json.dumps(data), encoding="utf-8")
-    os.replace(tmp, f)
+def read_engine_lock(wt: str | Path) -> Lock | None:
+    """The lock record; None when there is none (or the file is not a lock of this version)."""
+    return _store(wt).read()
+
+
+def write_engine_lock(wt: str | Path, rec: Lock) -> None:
+    _store(wt).write(rec)
 
 
 def drop_engine_lock(wt: str | Path, pid: int | None = None) -> None:
     """Remove the lock; with `pid`, only when that process wrote it."""
-    if pid is not None and read_engine_lock(wt).get("pid") != pid:
-        return
+    if pid is not None:
+        held = read_engine_lock(wt)
+        if held is None or held.pid != pid:
+            return
     with contextlib.suppress(OSError):
         engine_lock_path(wt).unlink()
 
 
 def lock_pid(wt: str | Path) -> int | None:
     """The pid the worktree's engine lock names (0: a worker outlived its engine), None when there is none."""
-    pid = read_engine_lock(wt).get("pid")
-    return pid if isinstance(pid, int) else None
+    held = read_engine_lock(wt)
+    return held.pid if held else None
 
 
 def loop_lock(wt: str | Path, slot: str, slot_bead: str, bead: str = "") -> None:
     """The loop's lock from its slot take to its run-task's own: no hand run gets in during the slot reset. `bead`, once claimed: the
     area check sees it there."""
-    write_engine_lock(wt, {"pid": os.getpid(), "start": proc_start(os.getpid()), "bead": bead, "slot": slot or "",
-                           "slot_bead": slot_bead or "", "by": "loop", "started": time.time()})
+    with hold_path(RepoDirs(wt).engine_take(), "loop", what=LockWhat.WORKTREE):
+        write_engine_lock(wt, Lock(pid=os.getpid(), start=proc_start(os.getpid()), bead=bead, slot=slot or "", slot_bead=slot_bead or "",
+                                   by="loop", started=time.time()))
+
+
+def live(lock: Lock | None) -> bool:
+    """The lock names a process that runs now (the engine or loop itself, not its leftovers)."""
+    return lock is not None and bool(lock.pid) and proc_alive(lock.pid, lock.start)
 
 
 def engine_busy(wt: str | Path, handoff: bool = False) -> str:
@@ -62,24 +70,19 @@ def engine_busy(wt: str | Path, handoff: bool = False) -> str:
     started takes over its loop's lock for the same slot bead. The loop names itself in TASK_LOOP_LOOP_PID: run-task's parent is
     `uv run --script`, not the loop, so the parent pid would never match."""
     lock = read_engine_lock(wt)
-    if not lock:
+    if lock is None:
         return ""
     mine = {os.getpid()}
-    if handoff and lock.get("by") == "loop" and lock.get("slot_bead", "") == penv.ambient(EnvVar.TASK_LOOP_SLOT_BEAD):
+    if handoff and lock.by == "loop" and lock.slot_bead == penv.ambient(EnvVar.TASK_LOOP_SLOT_BEAD):
         with contextlib.suppress(ValueError):
             mine.add(int(penv.ambient(EnvVar.TASK_LOOP_LOOP_PID)))
     where = f"; lock {engine_lock_path(wt)}"
-    pid = lock.get("pid")
-    if pid and int(pid) not in mine and proc_alive(pid, lock.get("start") or ""):
-        who = "loop" if lock.get("by") == "loop" else "engine"
-        return f"{who} pid {pid} runs {lock.get('bead') or 'a slot reset'} since {stamp(float(lock.get('started') or 0))}{where}"
-    left: list[str] = []
-    for w in [lock.get("route"), *(lock.get("workers") or [])]:
-        p, st = (w[0], w[1]) if isinstance(w, (list, tuple)) else (w, "")
-        if p and int(p) not in mine and proc_alive(p, st):
-            left.append(str(p))
+    if lock.pid and lock.pid not in mine and proc_alive(lock.pid, lock.start):
+        who = "loop" if lock.by == "loop" else "engine"
+        return f"{who} pid {lock.pid} runs {lock.bead or 'a slot reset'} since {stamp(lock.started)}{where}"
+    left = [str(p) for p, st in [*([lock.route] if lock.route else []), *lock.workers] if p and p not in mine and proc_alive(p, st)]
     if left:
-        return f"worker pid {','.join(left)} of {lock.get('bead') or '?'} outlived its engine{where}"
+        return f"worker pid {','.join(left)} of {lock.bead or '?'} outlived its engine{where}"
     return ""
 
 
@@ -90,42 +93,31 @@ class EngineLock:
     def __init__(self, wt: str | Path, bead: str, slot: str = "") -> None:
         self.wt = wt
         self.path = engine_lock_path(wt)
-        self.data: dict[str, Any] = {"pid": os.getpid(), "start": proc_start(os.getpid()), "bead": bead, "slot": slot or "",
-                                     "slot_bead": penv.ambient(EnvVar.TASK_LOOP_SLOT_BEAD), "by": "run-task", "started": time.time(),
-                                     "route": None, "workers": []}
+        self.rec = Lock(pid=os.getpid(), start=proc_start(os.getpid()), bead=bead, slot=slot or "",
+                        slot_bead=penv.ambient(EnvVar.TASK_LOOP_SLOT_BEAD) or "", by="run-task", started=time.time())
 
     def take(self) -> str:
         """"" when this run holds the worktree now, else what holds it. A run the loop started takes over the loop's lock for its slot."""
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        for _ in range(3):
+        with hold_path(RepoDirs(self.wt).engine_take(), f"pid {os.getpid()}", what=LockWhat.WORKTREE):
             busy = engine_busy(self.wt, handoff=True)  # a run-task takes over only its parent loop's lock for the same slot bead
             if busy:
                 return busy
-            try:  # created only if absent: two runs starting at once cannot both win
-                os.close(os.open(str(self.path), os.O_CREAT | os.O_EXCL | os.O_WRONLY))
-            except FileExistsError:
-                with contextlib.suppress(OSError):  # a dead run's lock or the parent loop's (engine_busy said so)
-                    if not engine_busy(self.wt, handoff=True):
-                        self.path.unlink()
-                continue
-            self.write()
+            self.write()  # a dead run's lock, or the parent loop's (engine_busy said so), is replaced
             return ""
-        return "another run took the engine lock at the same time"
 
     def write(self) -> None:
-        write_engine_lock(self.wt, self.data)
+        write_engine_lock(self.wt, self.rec)
 
-    def note(self, **kw: Any) -> None:
-        self.data.update(kw)
+    def note(self, **kw: object) -> None:
+        self.rec = self.rec.replace(**kw)
         with contextlib.suppress(OSError):
             self.write()
 
     def release(self) -> None:
-        left = [w for w in self.data.get("workers") or [] if proc_alive(w[0], w[1])]
+        left = [(p, st) for p, st in self.rec.workers if proc_alive(p, st)]
         with contextlib.suppress(OSError):
             if left:
-                self.data.update(pid=0, route=None, workers=left)
-                self.write()
+                self.note(pid=0, route=None, workers=left)
             else:
                 self.path.unlink()
 

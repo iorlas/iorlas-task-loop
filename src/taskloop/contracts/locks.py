@@ -23,21 +23,19 @@ class LockTimeout(TimeoutError):
 
 @final
 class EngineLock(Rec):
-    """<worktree>/.task/engine.lock: the run-task process that owns the worktree, with the processes it started."""
+    """<worktree>/.task/engine.lock: the run-task (or the loop, `by`) that owns the worktree, with the processes it started. A process
+    is named by pid and start token (pidcheck.proc_start): a reused pid is not the same process. pid 0: a worker outlived its engine."""
 
-    V: ClassVar[int] = 2
+    V: ClassVar[int] = 3
     pid: int
-    bead: str
     started: float
-    by: str = ""
-    pid_start: float | None = None
-    slot: str | None = None
-    slot_bead: str | None = None
-    route: tuple[int, float] | None = None
-    workers: list[tuple[int, float]] = msgspec.field(default_factory=list)
-
-    def alive(self) -> bool:
-        return pid_alive(self.pid)
+    start: str = ""
+    bead: str = ""
+    slot: str = ""
+    slot_bead: str = ""
+    by: str = "run-task"
+    route: tuple[int, str] | None = None
+    workers: list[tuple[int, str]] = msgspec.field(default_factory=list)
 
 
 @final

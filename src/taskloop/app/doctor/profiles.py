@@ -6,6 +6,7 @@ from pathlib import Path
 
 from taskloop.adapters.gitenv import run_git
 from taskloop.contracts import config
+from taskloop.contracts.stores import ReposStore
 
 FILE = ".task-loop.json"
 
@@ -54,13 +55,9 @@ def red_row(repo: str | Path) -> str:
     return ""
 
 
-def registered(repos_file: Path) -> list[str]:
+def registered(repos: ReposStore) -> list[str]:
     """The repos `tl register` knows that still exist."""
-    try:
-        listed = json.loads(repos_file.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return []
-    return [r for r in listed if isinstance(r, str) and Path(r).is_dir()] if isinstance(listed, dict) else []
+    return [r for r in repos.known() if Path(r).is_dir()]
 
 
 def red_rows(repos: list[str], but: str = "") -> list[str]:
@@ -68,7 +65,7 @@ def red_rows(repos: list[str], but: str = "") -> list[str]:
     return [row for r in repos if r != but and (row := red_row(r))]
 
 
-def report(repo: str, repos_file: Path, say: Callable[[str], None] = print) -> bool:
+def report(repo: str, repos_file: ReposStore, say: Callable[[str], None] = print) -> bool:
     """Say this repo's red row (if any) and the other registered repos'; True when THIS repo's profile is bad."""
     mine = red_row(repo)
     say(f"profile: {repo} read from {source(repo)[1]}")

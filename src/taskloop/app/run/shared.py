@@ -8,7 +8,7 @@ from typing import Any
 
 from atomic_io import atomic_write_json
 
-from taskloop.adapters import ident, pidcheck
+from taskloop.adapters import ident
 from taskloop.adapters.gitrepo import same_dir
 from taskloop.app.slots import engine_lock
 
@@ -67,12 +67,12 @@ class Shared:
             if same_dir(wt, e.wt):
                 continue
             lock = engine_lock.read_engine_lock(wt)
-            if not lock.get("bead") or lock["bead"] == e.bead or not pidcheck.proc_alive(lock.get("pid"), lock.get("start") or ""):
+            if lock is None or not lock.bead or lock.bead == e.bead or not engine_lock.live(lock):
                 continue
-            ck = e.stores.checkpoints.of(lock["bead"]).read()
+            ck = e.stores.checkpoints.of(lock.bead).read()
             plan = (ck.state.plan_data if ck else None) or {}
             files = list(dict.fromkeys(f for st in plan.get("stages") or [] for f in st.get("files") or []))
-            out.append((lock["bead"], one_line(plan.get("summary"), 100), files[:6]))
+            out.append((lock.bead, one_line(plan.get("summary"), 100), files[:6]))
         return out[:5]
 
     def landed_since(self) -> list[str]:

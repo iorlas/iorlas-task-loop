@@ -13,6 +13,7 @@ from taskloop.app.wire.slots import Git, cfg_source
 from taskloop.contracts.config import RepoProfile
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdFailure, BeadQuery, Beads
+from taskloop.contracts.stores import ReposStore
 from taskloop.domain.beads import matchers as beadlint
 from taskloop.domain.checks.inputs import dead_globs
 
@@ -80,7 +81,7 @@ def install_problems(plugin_root: Path) -> list[str]:
 
 def run(plugin_root: Path) -> int:
     repo = real_git("rev-parse", "--show-toplevel") or os.getcwd()
-    if profiles.report(repo, ConfigDir(config_dir()).repos()):  # a bad profile is a red row of its repo, not a traceback
+    if profiles.report(repo, ReposStore(ConfigDir(config_dir()))):  # a bad profile is a red row of its repo, not a traceback
         return 1
     source = cfg_source(repo)
     _, base, commit = source

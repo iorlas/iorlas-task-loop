@@ -94,7 +94,7 @@ class Records(Base):
         lines = (ident.config_dir() / "events.jsonl").read_text().splitlines()
         self.assertEqual([json.loads(ln)["kind"] for ln in lines], ["claim", "close"])
         self.assertEqual(json.loads(lines[0])["session"], "abcdef12-3456")
-        self.assertIn(str(self.home), json.loads((ident.config_dir() / "repos.json").read_text()))
+        self.assertIn(str(self.home), json.loads((ident.config_dir() / "repos.json").read_text())["repos"])
 
     @unittest.skipIf(os.name == "nt", "the registry lock is fcntl")
     def test_writers_registering_at_once_neither_crash_nor_lose_a_repo(self):
@@ -114,7 +114,7 @@ class Records(Base):
         for p in ps:
             p.join(60)
         self.assertEqual(errs, [])
-        repos = json.loads((ident.config_dir() / "repos.json").read_text())
+        repos = json.loads((ident.config_dir() / "repos.json").read_text())["repos"]
         self.assertEqual(len(repos), 50)
 
     def test_prune_keeps_recent(self):

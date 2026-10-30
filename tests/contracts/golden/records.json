@@ -754,26 +754,26 @@
   ]
  },
  "EngineLock": {
-  "v": 2,
+  "v": 3,
   "pid": 1789,
-  "bead": "tl-1",
   "started": 1793050200.5,
-  "by": "tl-abc",
-  "pid_start": 1793050195.5,
+  "start": "99",
+  "bead": "tl-1",
   "slot": "s1",
   "slot_bead": "slot-1",
+  "by": "tl-abc",
   "route": [
    10,
-   1793050200.5
+   "5"
   ],
   "workers": [
    [
     11,
-    1793050200.5
+    "6"
    ],
    [
     12,
-    1793050201.5
+    "7"
    ]
   ]
  },
@@ -896,6 +896,7 @@
   "session": "s",
   "transcript": "/t.jsonl",
   "cwd": "/w",
+  "source": "startup",
   "t": 1793050200.5
  },
  "ReposIndex": {
@@ -918,15 +919,112 @@
  "Pin": {
   "v": 1,
   "task-loop": "0.23.38",
-  "delegate": null
+  "delegate": null,
+  "pinned_at": 1793050200.5
  },
  "ReleaseResult": {
   "v": 1,
+  "ok": false,
   "version": "0.23.57",
-  "ok": true,
-  "t": 1793050200.5,
-  "why": "",
-  "sha": "abc"
+  "summary": "s",
+  "at": 1793050200.5,
+  "branch": "b",
+  "message": "m",
+  "tests": [
+   "t"
+  ],
+  "log": "/l"
+ },
+ "SuiteGreens": {
+  "v": 1,
+  "greens": [
+   {
+    "tree": "tttttttttttttttttttttttttttttttttttttttt",
+    "command": "just check",
+    "at": 1793050200.5
+   }
+  ]
+ },
+ "ReflectState": {
+  "v": 1,
+  "until": 1793050200.5,
+  "tried": 1793050200.5,
+  "filed": [
+   {
+    "cause": "c",
+    "bead": "b-1"
+   }
+  ]
+ },
+ "StatusTried": {
+  "v": 1,
+  "t": 1793050200.5
+ },
+ "RunCounters": {
+  "v": 1,
+  "elapsed": 1.5,
+  "waited": 0.5,
+  "cost": 0.25,
+  "stats": {
+   "writes": 1
+  },
+  "sessions": [
+   {
+    "node": "write"
+   }
+  ],
+  "write_rounds": [
+   [
+    1,
+    2
+   ]
+  ],
+  "node_n": 3
+ },
+ "ReexecNote": {
+  "v": 1,
+  "run": "tl-7y6.3.1-20261027-002239",
+  "bead": "tl-1",
+  "from": "0.1.0",
+  "to": "0.2.0",
+  "step": "write",
+  "from_dir": "/d",
+  "t": 1793050200.5
+ },
+ "NetPause": {
+  "v": 1,
+  "run": "tl-7y6.3.1-20261027-002239",
+  "bead": "tl-1",
+  "t": 1793050200.5
+ },
+ "DoneMemo": {
+  "v": 1,
+  "done": {
+   "[1]": {
+    "sha": "s",
+    "file": "/f"
+   }
+  }
+ },
+ "HandoffMirror": {
+  "v": 1,
+  "rounds": [
+   {
+    "stage": "s"
+   }
+  ],
+  "seen_lows": [
+   "x"
+  ],
+  "deferred": [
+   {
+    "what": "w",
+    "why": "y"
+   }
+  ],
+  "filed": [
+   "f"
+  ]
  },
  "DashState": {
   "v": 1,

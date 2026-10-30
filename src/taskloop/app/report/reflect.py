@@ -17,7 +17,11 @@ from typing import Any
 
 from taskloop.adapters import beadtools, ident, landlock
 from taskloop.adapters import procs as sproc
+from taskloop.contracts import wire
+from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdFailure, BeadQuery, NewBead
+from taskloop.contracts.snapshots import ReflectState
+from taskloop.contracts.stores import ReflectStateStore, ReposStore
 from taskloop.domain.report import matchers
 from taskloop.domain.report.reflect import (
     OWNERS,
@@ -36,25 +40,17 @@ from taskloop.domain.report.reflect import (
 DAY = 86400
 
 
-def state_path() -> Path:
-    return ident.config_dir() / "reflect-digest.json"
+def state_store() -> ReflectStateStore:
+    return ReflectStateStore(ConfigDir(ident.config_dir()))
 
 
 def read_state() -> dict[str, Any]:
-    try:
-        d = json.loads(state_path().read_text(encoding="utf-8"))
-        return d if isinstance(d, dict) else {}
-    except (OSError, ValueError):
-        return {}
+    """The digest's state as a plain dict the digest edits ({} fields at their defaults when there is no file)."""
+    return (state_store().read() or ReflectState()).to_dict()
 
 
 def write_state(st: dict[str, Any]) -> None:
-    p = state_path()
-    p.parent.mkdir(parents=True, exist_ok=True)
-    tmp = p.with_suffix(".tmp")
-    tmp.write_text(json.dumps(st, indent=1), encoding="utf-8")
-    os.replace(str(tmp), str(p))
-
+    state_store().write(wire.load(ReflectState, {"v": ReflectState.V, **st}))
 
 
 def items(since: float, until: float, traces: str | Path | None = None) -> list[dict[str, Any]]:
@@ -74,11 +70,7 @@ def items(since: float, until: float, traces: str | Path | None = None) -> list[
 
 
 def registered() -> list[str]:
-    try:
-        d = json.loads((ident.config_dir() / "repos.json").read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return []
-    return [p for p in (d if isinstance(d, list) else list(d)) if isinstance(p, str) and (Path(p) / ".beads").is_dir()]
+    return [p for p in ReposStore(ConfigDir(ident.config_dir())).known() if (Path(p) / ".beads").is_dir()]
 
 
 def resolve_repo(value: object, repos: Sequence[str]) -> str:

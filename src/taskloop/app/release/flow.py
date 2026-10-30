@@ -14,7 +14,10 @@ from taskloop.app.release import clone, manifest, publish, selfupdate, suite, ti
 from taskloop.app.release.push import push_main, release_lock_path
 from taskloop.app.release.shell import Abort, git, say
 from taskloop.contracts.ids import MARKETPLACE
+from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdFailure, BeadQuery, Beads
+from taskloop.contracts.snapshots import ReleaseResult
+from taskloop.contracts.stores import ReleaseResultStore
 
 
 @dataclass(frozen=True)
@@ -119,17 +122,11 @@ def drop_landed_branch(req: Request, repo: Path, where: Path, tip: str) -> None:
         say(f"removed branch {req.from_branch} and its worktrees")
 
 
-def record(result: dict[str, object], req: Request, repo: Path, store: Beads | None = None) -> None:
+def record(result: ReleaseResult, req: Request, repo: Path, store: Beads | None = None) -> None:
     """releases/last.json: the latest release's result (a later success replaces a failure); and, when it failed, a comment on --bead."""
-    d = config_dir() / "releases"
-    d.mkdir(parents=True, exist_ok=True)
-    result.update(branch=req.from_branch or "main", message=req.message, at=time.time())
-    f = d / "last.json"
-    tmp = f.with_name(f"last.{os.getpid()}.tmp")
-    tmp.write_text(json.dumps(result, indent=1), encoding="utf-8")
-    os.replace(tmp, f)
-    if not result["ok"] and req.bead:
-        text = "release FAILED: {}{}".format(result["summary"], ("; log " + str(result["log"])) if result.get("log") else "")
+    ReleaseResultStore(ConfigDir(config_dir())).write(result)
+    if not result.ok and req.bead:
+        text = "release FAILED: {}{}".format(result.summary, ("; log " + result.log) if result.log else "")
         try:
             (store or beadtools.bd_store(repo)).add_comment(req.bead, text)
         except (BdFailure, SystemExit) as e:
@@ -158,12 +155,14 @@ def main(argv: list[str] | None, tool_root: Path, doc: str = "") -> int:
             version = "" if newer else release(req, repo, market, tool_root)
         if newer:  # the lock is released above: the exec'd release takes it
             selfupdate.exec_release(newer, sys.argv[1:] if argv is None else argv, repo)
-        record({"ok": True, "version": version, "summary": "released " + version}, req, repo)
+        record(ReleaseResult(ok=True, version=version, summary="released " + version, at=time.time(), branch=req.from_branch or "main",
+                             message=req.message), req, repo)
     except Abort as e:
         print("release: " + str(e), file=sys.stderr)
         first = str(e).strip().splitlines()[0] if str(e).strip() else "failed"
         summary = (f"{e.version} was pushed but " if e.version else "nothing released: ") + first
-        record({"ok": False, "version": e.version, "summary": summary, "tests": e.tests, "log": e.log}, req, repo)
+        record(ReleaseResult(ok=False, version=e.version, summary=summary, tests=[str(t) for t in e.tests], log=e.log, at=time.time(),
+                             branch=req.from_branch or "main", message=req.message), req, repo)
         print("release FAILED: " + summary + ((f" (log {e.log})") if e.log else ""), file=sys.stderr)
         return 1
     return 0

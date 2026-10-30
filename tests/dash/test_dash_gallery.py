@@ -1,7 +1,6 @@
 """The owner-look gallery: items from metadata `looks` (or an old description), pictures served only when an item names
 them, the page's answer through POST /api/look and the `look` port. The verb itself: tests/asks/test_look_verb.py."""
 
-import json
 import os
 import sys
 import tempfile
@@ -16,6 +15,7 @@ from asks.dash_ports import answering  # noqa: E402
 from support.dashes import make_dash  # noqa: E402
 from support.look_world import looks, world  # noqa: E402
 from support.narrow import must  # noqa: E402
+from support.repos import write_repos  # noqa: E402
 
 from taskloop.contracts import gallery  # noqa: E402
 
@@ -109,7 +109,7 @@ class Api(unittest.TestCase):
             (repo / "docs/evidence/tl-1/m1.png").write_bytes(PNG)
             cfg = Path(home) / "cfg" / "task-loop"
             cfg.mkdir(parents=True)
-            (cfg / "repos.json").write_text(json.dumps({str(repo): {}}))
+            write_repos(cfg / "repos.json", repo)
             env = {"HOME": home, "XDG_CONFIG_HOME": str(cfg.parent), "APPDATA": str(cfg.parent)}
             with mock.patch.dict(os.environ, env):
                 dash = make_dash(home=home)

@@ -3,7 +3,6 @@
 anything."""
 
 import contextlib
-import json
 import os
 import shutil
 import subprocess
@@ -45,6 +44,7 @@ from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.landed import LandedStore
 from taskloop.contracts.loop import LoopState
 from taskloop.contracts.ports import Beads
+from taskloop.contracts.stores import ReposStore
 from taskloop.domain import outcome as oc
 from taskloop.domain.beads import rules as beadlint
 
@@ -63,7 +63,7 @@ def profile_of(repo: str) -> RepoProfile:
 
 def prune_repos(repo: str) -> list[str]:
     """The repos `tl prune` looks after: this one and every registered one."""
-    known = profiles.registered(ident.config_dir() / "repos.json")
+    known = profiles.registered(ReposStore(cfgdir()))
     return [repo, *(r for r in known if Path(r).resolve() != Path(repo).resolve())]
 
 
@@ -136,8 +136,7 @@ def reload_note(bead: str) -> ReloadNote | None:
     reexec.drop_reexec(bead)
     if not rec:
         return None
-    return ReloadNote(run=str(rec.get("run") or ""), to=str(rec.get("to") or ""), frm=str(rec.get("from") or ""),
-                      from_dir=str(rec.get("from_dir") or ""), t=float(rec.get("t") or 0))
+    return ReloadNote(run=rec.run, to=rec.to, frm=rec.frm, from_dir=rec.from_dir, t=rec.t)
 
 
 def fetch(repo: str) -> None:
@@ -259,7 +258,7 @@ def build(repo: str, store: Beads | None = None, session_actor: str = "", here: 
 
 def installs(cfg: paths.ConfigDir, here: Path = HERE, now: Callable[[], float] = trail.now) -> Installs:
     """The installs of task-loop on this machine."""
-    return Installs(cfg, here.parents[1], lambda: catalog.installed_version("task-loop"), lambda: pins.read_pin().get("task-loop") or "",
+    return Installs(cfg, here.parents[1], lambda: catalog.installed_version("task-loop"), lambda: pins.read_pin().task_loop or "",
                     now=now)
 
 
@@ -271,7 +270,7 @@ def newer(here: Path = HERE) -> tuple[str, Path] | None:
 
 def other_red_rows(repo: str) -> list[str]:
     """The red rows of the other registered repos' bad profiles (`tl loop status` shows them; nothing else changes)."""
-    return profiles.red_rows(profiles.registered(ident.config_dir() / "repos.json"), but=repo)
+    return profiles.red_rows(profiles.registered(ReposStore(cfgdir())), but=repo)
 
 
 def begin_loop(repo: str) -> tuple[str, str]:
@@ -293,11 +292,7 @@ def begin_loop(repo: str) -> tuple[str, str]:
 
 def live_work() -> list[tuple[str, str]]:
     """What runs on this machine: ("loop"|"run", text) for every live loop and every busy engine lock of the registered repos."""
-    repos: list[str]
-    try:
-        repos = [r for r in json.loads(paths.ConfigDir(ident.config_dir()).repos().read_text(encoding="utf-8")) if os.path.isdir(r)]
-    except (OSError, ValueError):
-        repos = []
+    repos = [r for r in ReposStore(cfgdir()).known() if os.path.isdir(r)]
     out: list[tuple[str, str]] = []
     for r in repos:
         for st in live_loops(r):

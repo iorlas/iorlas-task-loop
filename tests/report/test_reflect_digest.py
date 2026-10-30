@@ -12,6 +12,7 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 
 # isort: split
 from support import tlbd
+from support.repos import write_repos
 
 from taskloop.adapters import ident
 from taskloop.app.report import reflect as rd
@@ -38,7 +39,7 @@ class Base(unittest.TestCase):
             d = self.root / n
             (d / ".beads").mkdir(parents=True)
             self.repos[n] = str(d)
-        (ident.config_dir() / "repos.json").write_text(json.dumps(list(self.repos.values())))
+        write_repos(ident.config_dir() / "repos.json", *self.repos.values())
         self.traces = ident.config_dir() / "traces.jsonl"
         self.calls, self.open_rows, self.status, self.fail_create = [], [], {}, False
         self.n = 0
@@ -206,13 +207,13 @@ class Filing(Base):
         self.two()
         d = rd.digest(NOW - 86400, NOW, dry=True)
         self.assertEqual(d["actions"][0]["action"], "filed")
-        self.assertEqual((self.creates(), rd.read_state()), ([], {}))
+        self.assertEqual((self.creates(), rd.read_state()["filed"]), ([], []))
 
     def test_a_failed_create_records_nothing_so_the_next_day_tries_again(self):
         self.two()
         self.fail_create = True
         d = rd.digest(NOW - 86400, NOW)
-        self.assertEqual((d["actions"][0]["action"], rd.read_state().get("filed")), ("failed", None))
+        self.assertEqual((d["actions"][0]["action"], rd.read_state()["filed"]), ("failed", []))
 
 class Daily(Base):
     def test_nothing_to_read_means_no_process(self):

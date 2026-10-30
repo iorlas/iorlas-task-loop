@@ -15,6 +15,7 @@ from support.dashes import make_dash
 from support.dashlogs import T, bead
 from support.fake_beads import FakeBeads
 from support.narrow import must
+from support.repos import write_repos
 
 from taskloop.app.asks import intake, raiser
 from taskloop.contracts import wire
@@ -221,7 +222,7 @@ class Stick_(unittest.TestCase):
                               config=self.tmp.name, clock=lambda: NOW)
         repo = Path(self.tmp.name) / "demo"
         repo.mkdir()
-        self.dash.env.config.repos().write_text(json.dumps({str(repo): {}}))
+        write_repos(self.dash.env.config.repos(), repo)
         self.asks = AskStore.at(self.dash.env.config)
         self.ask = must(raiser.raise_ask(self.asks, specs.open_question(Q, OPTS), raiser.Asking(
             bead="b-1", run="r", brief_hash="h", repo=str(repo), title="Bills", now=NOW - 60))[0])

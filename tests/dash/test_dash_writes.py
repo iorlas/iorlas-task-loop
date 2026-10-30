@@ -13,6 +13,7 @@ from support.dashes import make_dash
 from support.logs import typed
 from support.look_world import world
 from support.narrow import must
+from support.repos import write_repos
 
 from taskloop.app.run import requests
 from taskloop.contracts import wire
@@ -36,7 +37,7 @@ class Writes(unittest.TestCase):
         self.dash = make_dash(answering(lambda repo: self.fake, self.tmp.name, clock=lambda: NOW), config=self.tmp.name, clock=lambda: NOW)
         repo = Path(self.tmp.name) / "demo"
         repo.mkdir()
-        self.dash.env.config.repos().write_text(json.dumps({str(repo): {}}))
+        write_repos(self.dash.env.config.repos(), repo)
         self.asks = AskStore.at(self.dash.env.config)
         path = self.dash.env.config.ask("b-1")
         path.parent.mkdir(parents=True)

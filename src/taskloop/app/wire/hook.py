@@ -7,6 +7,8 @@ from taskloop.adapters import gitrepo
 from taskloop.adapters.ident import config_dir
 from taskloop.app.track.trail import now
 from taskloop.contracts.paths import ConfigDir
+from taskloop.contracts.snapshots import SessionIndex
+from taskloop.contracts.stores import SessionStore
 
 
 def session_start(stdin_text: str) -> None:
@@ -14,10 +16,8 @@ def session_start(stdin_text: str) -> None:
         d = json.loads(stdin_text or "{}")
         sid = d.get("session_id")
         if sid:
-            f = ConfigDir(config_dir()).session(sid)
-            f.parent.mkdir(parents=True, exist_ok=True)
-            f.write_text(json.dumps({"session": sid, "transcript": d.get("transcript_path"), "cwd": d.get("cwd"),
-                                     "source": d.get("source"), "t": now()}), encoding="utf-8")
+            SessionStore(ConfigDir(config_dir()), sid).write(SessionIndex(
+                session=sid, transcript=d.get("transcript_path") or "", cwd=d.get("cwd") or "", source=d.get("source") or "", t=now()))
     except Exception:
         pass
 

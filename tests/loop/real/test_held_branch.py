@@ -21,6 +21,7 @@ from support import (  # noqa: E402
     looptest,
     tlbd,
 )
+from support.engine_locks import put_lock  # noqa: E402
 from support.procsim import real_proc  # noqa: E402
 
 import loop.test_loop as tlp  # noqa: E402
@@ -30,7 +31,6 @@ from taskloop.app.loop.take import Taker  # noqa: E402
 from taskloop.app.run import (  # noqa: E402
     entry,
 )
-from taskloop.app.slots import engine_lock  # noqa: E402
 
 LIVE_PID = "a live pid that is not this process: a real sleep child (an engine lock, a second loop, a waiter)"
 
@@ -106,7 +106,7 @@ class HeldBranch(unittest.TestCase):
         k = tlp.subprocess.Popen(["sleep", "60"])
         self.addCleanup(k.wait)
         self.addCleanup(k.kill)
-        engine_lock.write_engine_lock(str(self.old), {"pid": k.pid, "start": pidcheck.proc_start(k.pid), "bead": "x-1", "started": 1})
+        put_lock(str(self.old), {"pid": k.pid, "start": pidcheck.proc_start(k.pid), "bead": "x-1", "started": 1})
         rc, out, why = self.reset()
         self.assertEqual(rc, 5, out)
         self.assertIn("TAKEN", out)
@@ -114,7 +114,7 @@ class HeldBranch(unittest.TestCase):
         self.assertEqual(sh("git", "symbolic-ref", "--short", "HEAD", cwd=self.old), "task/x-1")
 
     def test_a_dead_lock_does_not_hold_the_branch(self):
-        engine_lock.write_engine_lock(str(self.old), {"pid": 2 ** 22 + 7, "bead": "x-1", "started": 1})
+        put_lock(str(self.old), {"pid": 2 ** 22 + 7, "bead": "x-1", "started": 1})
         self.assertEqual(self.reset()[0], 0)
 
 

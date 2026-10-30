@@ -26,13 +26,13 @@ from support import (  # noqa: E402
     procsim,
     tlbd,
 )
+from support.engine_locks import put_lock  # noqa: E402
 from support.tlmain import tl_main  # noqa: E402
 
 from taskloop.adapters import (  # noqa: E402
     gitrepo,
     pidcheck,
 )
-from taskloop.app.slots import engine_lock  # noqa: E402
 from taskloop.app.track import trail  # noqa: E402
 from taskloop.app.wire import slots as wslots  # noqa: E402
 
@@ -292,7 +292,7 @@ class CutoverCheck(Base):
         self.addCleanup(child.wait)  # cleanups run last-in first-out: kill, then wait
         self.addCleanup(child.kill)
         looptest.write_state(str(self.repo), pid=child.pid, started=time.time(), t=time.time(), bead="x-9")
-        engine_lock.write_engine_lock(str(self.repo), {"pid": child.pid, "start": pidcheck.proc_start(child.pid), "bead": "x-7",
+        put_lock(str(self.repo), {"pid": child.pid, "start": pidcheck.proc_start(child.pid), "bead": "x-7",
                                               "by": "engine", "started": time.time()})
         rc, out = self.check()
         self.assertEqual(rc, 1, out)

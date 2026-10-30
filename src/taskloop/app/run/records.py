@@ -43,7 +43,7 @@ class Records:
             return
         lock = engine_lock.LOCK
         why = self.origin()
-        e.log.emit(rec.RunStart(run=e.log_path.stem, bead=e.bead, worktree=str(e.wt), slot=(lock.data.get("slot") if lock else "") or None,
+        e.log.emit(rec.RunStart(run=e.log_path.stem, bead=e.bead, worktree=str(e.wt), slot=(lock.rec.slot if lock else "") or None,
                                 prev_run=why["prev_run"], started_because=why["started_because"], ask=why["ask"],
                                 branch=e.git("symbolic-ref", "--short", "-q", "HEAD") or ""))
 

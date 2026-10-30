@@ -65,7 +65,7 @@ from taskloop.contracts import fence, plancheck
 from taskloop.contracts.argv import text_of
 from taskloop.contracts.landed import Landed, LandedStore
 from taskloop.contracts.log import Assumed, Said
-from taskloop.contracts.paths import PLAN_FILE, ConfigDir
+from taskloop.contracts.paths import PLAN_FILE, ConfigDir, RunFiles
 from taskloop.domain import outcome as oc
 from taskloop.domain.lanes.matchers import read_only_command
 from taskloop.domain.lanes.says import stop_say, stop_why
@@ -106,8 +106,9 @@ class Engine(RunFields):
         if self.reexec.get("bead") != bead:
             self.reexec = {}
         # a run paused for the network: its run id and counters go on
-        pause: dict[str, Any] = {} if self.reexec else reexec.take_net_pause(bead)
-        layout = RunLayout.open(bead, wt, self.reexec.get("run") or pause.get("run"))  # the same run id: log, run dir and trace go on
+        pause = None if self.reexec else reexec.take_net_pause(bead)
+        # the same run id: log, run dir and trace go on
+        layout = RunLayout.open(bead, wt, self.reexec.get("run") or (pause.run if pause else None))
         self.log_path, self.err_path, self.run_dir = layout.log_path, layout.err_path, layout.run_dir
         self.task_dir, self.brief_file, self.evidence_dir = layout.task_dir, layout.brief_file, layout.evidence_dir
         self.exec_fn: Any = None  # a test's exec, newer-install lookup, run-task argv, the cross-process lock
@@ -126,9 +127,9 @@ class Engine(RunFields):
         self.checker = Checker(host, lambda secs: self.halt_point(wait=secs))
         self.delegation.route(quiet=True)
         if self.reexec:
-            self.reload.restore_run()
+            self.reload.restore_run(RunFiles(self.run_dir).reexec())
         elif pause:
-            self.reload.restore_run("pause.json")
+            self.reload.restore_run(RunFiles(self.run_dir).pause())
             self.log.note(f"back from a network pause: run {stem} goes on")
 
     # the budget's numbers, read and set as the engine's own (waited: seconds spent waiting for a shared resource, not budget_min's)
@@ -287,12 +288,12 @@ class Engine(RunFields):
     def lock_worker(self, started: Any) -> None:
         """The worker delegate launched (the live file's first line) goes into the engine lock, so a SIGKILLed engine leaves it findable."""
         if engine_lock.LOCK:
-            engine_lock.LOCK.note(workers=[[started.pid, sproc.proc_start(started.pid) or ""]])
+            engine_lock.LOCK.note(workers=[(started.pid, sproc.proc_start(started.pid) or "")])
 
     def lock_workers(self, survivors: Any, started: Any) -> None:
         """After a call: the pids that outlived its stop keep the slot busy; none: free."""
         if engine_lock.LOCK:
-            engine_lock.LOCK.note(workers=[[pid, sproc.proc_start(pid) or ""] for pid in survivors])
+            engine_lock.LOCK.note(workers=[(pid, sproc.proc_start(pid) or "") for pid in survivors])
 
     def live(self, step: str) -> str:
         """The live file for the next delegate call (delegate appends worker events there; the dashboard's Live view reads them)."""

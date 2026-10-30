@@ -13,6 +13,7 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from taskloop.app.release import suite
 from taskloop.app.release.cache import SuiteCache
 from taskloop.app.release.shell import Abort
+from taskloop.contracts.paths import ConfigDir
 
 
 class Verify(unittest.TestCase):
@@ -75,8 +76,9 @@ class Verify(unittest.TestCase):
         f = Path(self.tmp.name) / "cfg" / "task-loop" / "releases" / "suite-green.json"
         f.write_text("{torn")
         self.assertFalse(suite.verify(self.repo, self.repo, self.checks))
-        self.assertEqual(len(json.loads(f.read_text())), 1)
-        self.assertTrue(SuiteCache(f).hit(json.loads(f.read_text())[0]["tree"], json.loads(f.read_text())[0]["command"]))
+        greens = json.loads(f.read_text())["greens"]
+        self.assertEqual(len(greens), 1)
+        self.assertTrue(SuiteCache(ConfigDir(f.parents[1])).hit(greens[0]["tree"], greens[0]["command"]))
 
 
 if __name__ == "__main__":

@@ -42,6 +42,7 @@ import tl
 from support import slots as sl
 from support import tlbd
 from support.builders import cfg_with
+from support.engine_locks import put_lock
 from support.fake_clock import FakeClock
 from support.narrow import must
 from support.rebind import rebind
@@ -372,7 +373,7 @@ class Invariants(test_loop.Base):
         bd = self.tracker(slots=2)
         self.live.add(OTHER_ENGINE)
         s1, s2 = (wslots.slot_dir(self.repo_s, n, self.cfg) for n in ("s1", "s2"))
-        engine_lock.write_engine_lock(
+        put_lock(
             s1, {"pid": OTHER_ENGINE, "start": f"T{int(OTHER_ENGINE)}", "bead": "w-9", "started": self.clock.now()}
         )
         self.assertIn(f"pid {int(OTHER_ENGINE)} runs w-9", engine_lock.engine_busy(s1))
@@ -392,7 +393,7 @@ class Invariants(test_loop.Base):
             self.assertIn(
                 "runs w-9", reset.free_branch(sl.pool(self.repo_s, cfg=self.cfg).named("s2"), listing)
             )  # its branch is not taken from it
-        self.assertEqual(engine_lock.read_engine_lock(s1)["pid"], OTHER_ENGINE)  # and its lock is still there
+        self.assertEqual(getattr(engine_lock.read_engine_lock(s1), "pid", None), OTHER_ENGINE)  # and its lock is still there
         self.live.discard(OTHER_ENGINE)  # the engine died: its lock is no obstacle
         self.assertEqual(engine_lock.engine_busy(s1), "")
         self.assertEqual(wslots.take_named_slot(self.repo_s, "s1", self.cfg, "hand")[1], "")
@@ -585,7 +586,7 @@ class Invariants(test_loop.Base):
         self.hold("s1", minutes=1)
         self.clock.advance(61)  # the hold has run out
         d2 = wslots.slot_dir(repo, "s2", cfg)
-        engine_lock.write_engine_lock(d2, {"pid": 5252, "start": "T5252", "bead": "w-3", "started": 1})  # not in the process table
+        put_lock(d2, {"pid": 5252, "start": "T5252", "bead": "w-3", "started": 1})  # not in the process table
         (sl.ticket_dir(repo) / "000077.json").write_text(
             json.dumps({"v": 1, "seq": 77, "prio": 0, "pid": sl.dead_pid(), "why": "dead", "since": 1})
         )

@@ -140,7 +140,7 @@ class Logs(unittest.TestCase):
             f.parent.mkdir(parents=True)
             f.write_text((json.dumps({"t": 0, "kind": "old"}) + "\n") * 120000)
             wrapped, started = during(os.replace, lambda: trail.event("late", "tl-1", repo="/r/x"))
-            with mock.patch.object(trail.os, "replace", wrapped):
+            with mock.patch("os.replace", wrapped):
                 trail.prune_events()
             for t in started:
                 t.join(30)

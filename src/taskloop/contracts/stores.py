@@ -17,7 +17,19 @@ from taskloop.contracts.guard import guard
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ledger import LedgerEntry, LedgerEvent
 from taskloop.contracts.loop import BadVersions, LoopCommand, LoopState, Rest
-from taskloop.contracts.snapshots import DashState, Pin, ReleaseResult, ReposIndex, SessionIndex, SharedNotes, StatusSnapshot
+from taskloop.contracts.snapshots import (
+    DashState,
+    Pin,
+    ReflectState,
+    ReleaseResult,
+    RepoEntry,
+    ReposIndex,
+    SessionIndex,
+    SharedNotes,
+    StatusSnapshot,
+    StatusTried,
+    SuiteGreens,
+)
 from taskloop.contracts.trace import RunTrace
 from taskloop.contracts.usage import USAGE_KEEP_S, UsageRow, rows_of
 
@@ -388,6 +400,11 @@ class StatusStore(JsonStore[StatusSnapshot]):
         super().__init__(cfg.snapshot("delegate", "status"), StatusSnapshot)
 
 
+class StatusTriedStore(JsonStore[StatusTried]):
+    def __init__(self, cfg: paths.ConfigDir) -> None:
+        super().__init__(cfg.snapshot("delegate", "tried"), StatusTried)
+
+
 class SharedNotesStore(JsonStore[SharedNotes]):
     def __init__(self, cfg: paths.ConfigDir, repo_key: str) -> None:
         super().__init__(cfg.shared(repo_key), SharedNotes)
@@ -399,8 +416,30 @@ class SessionStore(JsonStore[SessionIndex]):
 
 
 class ReposStore(JsonStore[ReposIndex]):
+    """repos.json: every repo `tl` has seen. Adding one reads and writes under a lock, so two processes never drop a repo."""
+
     def __init__(self, cfg: paths.ConfigDir) -> None:
         super().__init__(cfg.repos(), ReposIndex)
+        self.lock = cfg.lock_record("repos", "index")
+
+    def known(self) -> list[str]:
+        """The repo paths, oldest first ([] when the file is missing or not an index of this version)."""
+        idx = self.read()
+        return list(idx.repos) if idx else []
+
+    def add(self, path: str, now: float) -> bool:
+        """Register `path`; False when it was known. A file in another version is an error (ValueError), never overwritten."""
+        if path in self.known():
+            return False
+        with guard(self.lock):
+            idx = self.read()
+            if idx is None and self.path.exists():
+                raise ValueError(f"{self.path} is not a repos index of this version: delete it and `tl register` the repos again")
+            idx = idx or ReposIndex()
+            if path in idx.repos:
+                return False
+            self.write(idx.replace(repos={**idx.repos, path: RepoEntry(added=now)}))
+            return True
 
 
 class PinStore(JsonStore[Pin]):
@@ -421,3 +460,13 @@ class DashStateStore(JsonStore[DashState]):
 class BadVersionStore(JsonStore[BadVersions]):
     def __init__(self, cfg: paths.ConfigDir) -> None:
         super().__init__(cfg.bad_versions(), BadVersions)
+
+
+class SuiteGreenStore(JsonStore[SuiteGreens]):
+    def __init__(self, cfg: paths.ConfigDir) -> None:
+        super().__init__(cfg.suite_green(), SuiteGreens)
+
+
+class ReflectStateStore(JsonStore[ReflectState]):
+    def __init__(self, cfg: paths.ConfigDir) -> None:
+        super().__init__(cfg.reflect_state(), ReflectState)

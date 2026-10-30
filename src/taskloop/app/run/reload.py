@@ -16,7 +16,9 @@ from taskloop.app.track import trail
 from taskloop.contracts import env as penv
 from taskloop.contracts import log as rec
 from taskloop.contracts.envvars import EnvVar
-from taskloop.contracts.paths import ConfigDir
+from taskloop.contracts.paths import ConfigDir, RunFiles
+from taskloop.contracts.run import NetPause, ReexecNote, RunCounters
+from taskloop.contracts.stores import JsonStore
 
 
 class Exec(BaseException):
@@ -26,7 +28,7 @@ class Exec(BaseException):
 def newer(root: Path = ident.PLUGIN_ROOT) -> tuple[str, Path] | None:
     """(version, dir) of the install the loop would move to, or None: the engine's step-boundary look."""
     found = Installs(ConfigDir(ident.config_dir()), root, lambda: catalog.installed_version("task-loop"),
-                     lambda: pins.read_pin().get("task-loop") or "", now=trail.now).move_to()
+                     lambda: pins.read_pin().task_loop or "", now=trail.now).move_to()
     return (found.version, found.dir) if found else None
 
 
@@ -34,38 +36,32 @@ class Reload:
     def __init__(self, host: Any) -> None:
         self.e = host
 
-    def counters(self) -> dict[str, Any]:
+    def counters(self) -> RunCounters:
         e = self.e
-        return {"elapsed": time.time() - e.t0, "waited": e.waited, "cost": e.cost, "stats": e.stats, "sessions": e.sessions,
-                "write_rounds": e.write_rounds, "node_n": e.steps.n}
+        return RunCounters(elapsed=time.time() - e.t0, waited=e.waited, cost=e.cost, stats=dict(e.stats), sessions=list(e.sessions),
+                           write_rounds=list(e.write_rounds), node_n=e.steps.n)
 
-    def restore_run(self, name: str = "reexec.json") -> None:
-        """The counters of the run that exec'd (run_dir/reexec.json) or paused for the network (pause.json), so the run's cost,
+    def restore_run(self, file: Path) -> None:
+        """The counters of the run that exec'd (RunFiles.reexec) or paused for the network (RunFiles.pause), so the run's cost,
         time and trace go on across the move; the time between is neither spent nor waited."""
         e = self.e
-        try:
-            c = json.loads((e.run_dir / name).read_text(encoding="utf-8"))
-        except (OSError, ValueError):
+        c = JsonStore(file, RunCounters).read()
+        if c is None:
             return
-        if not isinstance(c, dict):
-            return
-        e.t0 = time.time() - float(c.get("elapsed") or 0)
-        e.waited, e.cost = float(c.get("waited") or 0), float(c.get("cost") or 0)
-        if isinstance(c.get("stats"), dict):
-            e.stats.update(c["stats"])
-        e.sessions[:] = c.get("sessions") or []
-        e.write_rounds = list(c.get("write_rounds") or [])
-        e.steps.n = int(c.get("node_n") or 0)
+        e.t0 = time.time() - c.elapsed
+        e.waited, e.cost = c.waited, c.cost
+        e.stats.update(c.stats)
+        e.sessions[:] = c.sessions
+        e.write_rounds = list(c.write_rounds)
+        e.steps.n = c.node_n
 
     def save_net_pause(self) -> None:
         """The run paused for the network: its counters and a pointer for the next run-task of this bead, which takes the same
         run id, cost and time budget up again (the pause itself is neither spent nor waited)."""
         e = self.e
         try:
-            (e.run_dir / "pause.json").write_text(json.dumps(self.counters()), encoding="utf-8")
-            note = reexec.net_pause_path(e.bead)
-            note.parent.mkdir(parents=True, exist_ok=True)
-            note.write_text(json.dumps({"run": e.log_path.stem, "bead": e.bead, "t": time.time()}), encoding="utf-8")
+            JsonStore(RunFiles(e.run_dir).pause(), RunCounters).write(self.counters())
+            reexec.net_pause_store(e.bead).write(NetPause(run=e.log_path.stem, bead=e.bead, t=time.time()))
         except OSError as err:
             e.warn(f"could not keep the network pause for the next run: {err}")
 
@@ -76,7 +72,7 @@ class Reload:
         e = self.e
         if e.dry:
             return
-        slot = (engine_lock.LOCK.data.get("slot") if engine_lock.LOCK else "") or ""
+        slot = engine_lock.LOCK.rec.slot if engine_lock.LOCK else ""
         argv = reexec.reexec_args(e.argv if e.argv is not None else sys.argv[1:], slot, e.wt)
         if argv is None:
             return
@@ -95,11 +91,10 @@ class Reload:
         """The note the next process reads; "" when it was written, else why not."""
         e = self.e
         try:
-            (e.run_dir / "reexec.json").write_text(json.dumps(self.counters()), encoding="utf-8")
-            note = reexec.reexec_path(e.bead)
-            note.parent.mkdir(parents=True, exist_ok=True)
-            note.write_text(json.dumps({"run": e.log_path.stem, "bead": e.bead, "from": here, "to": ver, "step": step,
-                                        "from_dir": str(ident.PLUGIN_ROOT / "skills" / "task-loop"), "t": time.time()}), encoding="utf-8")
+            JsonStore(RunFiles(e.run_dir).reexec(), RunCounters).write(self.counters())
+            reexec.reexec_store(e.bead).write(ReexecNote(
+                run=e.log_path.stem, bead=e.bead, frm=here, to=ver, step=step, from_dir=str(ident.PLUGIN_ROOT / "skills" / "task-loop"),
+                t=time.time()))
         except OSError as err:
             return str(err)
         return ""

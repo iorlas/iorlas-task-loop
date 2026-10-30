@@ -14,6 +14,8 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, cast
 
+from atomic_io import atomic_write_text
+
 from taskloop.adapters import beadtools, gitrepo, ident, procs
 from taskloop.adapters import halt as halting
 from taskloop.app.asks import intake
@@ -158,9 +160,7 @@ def report(a: Any, rec: Any) -> Any:
     """The outcome as the run's last stdout line, and in --outcome-file when the loop names one."""
     line = json.dumps(rec, ensure_ascii=False)
     if getattr(a, "outcome_file", None):
-        tmp = Path(a.outcome_file + ".tmp")
-        tmp.write_text(line + "\n", encoding="utf-8")
-        os.replace(tmp, a.outcome_file)
+        atomic_write_text(Path(a.outcome_file), line + "\n", fsync=False)
     say(line)
 
 

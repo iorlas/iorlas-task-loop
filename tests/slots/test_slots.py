@@ -20,6 +20,7 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 # isort: split
 from loop.test_loop import LoopBase
 from support import slots as sl
+from support.engine_locks import put_lock
 
 from taskloop.adapters import pidcheck
 from taskloop.app.launch import dash as dash_server
@@ -101,7 +102,7 @@ class SameActor(Slots):
 
 
     def test_the_loops_child_takes_over_its_lock_and_nobody_else_does(self):
-        engine_lock.write_engine_lock(self.slot("s1"), {"pid": os.getppid(), "start": pidcheck.proc_start(os.getppid()), "by": "loop",
+        put_lock(self.slot("s1"), {"pid": os.getppid(), "start": pidcheck.proc_start(os.getppid()), "by": "loop",
                                                "slot_bead": "sl-1"})
         loop = {"TASK_LOOP_SLOT_BEAD": "sl-1", "TASK_LOOP_LOOP_PID": str(os.getppid())}
         with mock.patch.dict(os.environ, loop):
@@ -113,7 +114,7 @@ class SameActor(Slots):
     def test_the_parent_pid_alone_is_not_the_loop(self):
         """run-task runs under `uv run --script`, so its parent is uv: only the pid the loop exported counts (0.23.169-0.23.173 refused
         every bead the loop started, "taken: loop pid N runs ...")."""
-        engine_lock.write_engine_lock(self.slot("s1"), {"pid": os.getppid(), "start": pidcheck.proc_start(os.getppid()), "by": "loop",
+        put_lock(self.slot("s1"), {"pid": os.getppid(), "start": pidcheck.proc_start(os.getppid()), "by": "loop",
                                                "slot_bead": "sl-1"})
         with mock.patch.dict(os.environ, {"TASK_LOOP_SLOT_BEAD": "sl-1"}):
             os.environ.pop("TASK_LOOP_LOOP_PID", None)

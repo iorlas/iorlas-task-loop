@@ -7,8 +7,8 @@ import os
 from typing import Any
 
 from taskloop.contracts.runlife import RETAIN
+from taskloop.contracts.stores import ReposStore
 from taskloop_dash.env import Env
-from taskloop_dash.tails import read_dict
 from taskloop_dash.views import names
 
 Span = dict[str, Any]
@@ -39,7 +39,7 @@ class Records:
         return self.env.files.get(str(self.env.config.events()), load, [])
 
     def repos(self) -> list[str]:
-        known = read_dict(self.env.config.repos())
+        known = ReposStore(self.env.config).known()
         return [p for p in known if os.path.isdir(p)]
 
     def traces(self) -> dict[str, dict[str, Any]]:

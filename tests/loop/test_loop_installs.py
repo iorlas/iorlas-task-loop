@@ -69,7 +69,7 @@ class Entry(Moving):
         self.install("0.2.0")
         self.install("0.3.0")
         self.installed("0.3.0")
-        (ident.config_dir() / "pinned.json").write_text(json.dumps({"task-loop": "0.2.0"}))
+        (ident.config_dir() / "pinned.json").write_text(json.dumps({"v": 1, "task-loop": "0.2.0"}))
         self.assertEqual(self.target(), ("0.2.0", self.cache / "0.2.0"))
 
 

@@ -11,7 +11,8 @@ from taskloop.adapters.ident import claude_dir
 from taskloop.app.release.pins import pinned_dir
 from taskloop.contracts import paths
 from taskloop.contracts.delegate_status import snapshot_of
-from taskloop.contracts.stores import StatusStore, UsageHistory
+from taskloop.contracts.snapshots import StatusTried
+from taskloop.contracts.stores import StatusStore, StatusTriedStore, UsageHistory
 
 EVERY_S = 20 * 60  # the loop files delegate's status again when the snapshot is this old
 
@@ -55,10 +56,8 @@ def refresh() -> int:
 def due(cfg: paths.ConfigDir, now: float, every: float = EVERY_S) -> bool:
     """Neither a filed snapshot nor an attempt (a failed one leaves a marker) is newer than `every` seconds."""
     snap = StatusStore(cfg).read()
-    try:
-        tried = float(json.loads(cfg.snapshot("delegate", "tried").read_text(encoding="utf-8"))["t"])
-    except (OSError, ValueError, KeyError, TypeError):
-        tried = 0.0
+    mark = StatusTriedStore(cfg).read()
+    tried = mark.t if mark else 0.0
     return now - max(snap.at if snap else 0.0, tried) >= every
 
 
@@ -68,8 +67,7 @@ def chore(say: Callable[[str], None], cfg: paths.ConfigDir | None = None, now: f
     when = time.time() if now is None else now
     if not due(cfg, when):
         return False
-    cfg.snapshot("delegate", "tried").parent.mkdir(parents=True, exist_ok=True)
-    cfg.snapshot("delegate", "tried").write_text(json.dumps({"t": when}), encoding="utf-8")
+    StatusTriedStore(cfg).write(StatusTried(t=when))
     why = file_status()
     if why:
         say(f"loop: {why}")

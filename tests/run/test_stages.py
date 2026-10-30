@@ -18,6 +18,7 @@ from support.builders import make_engine
 from support.checkpoints import put_ck, read_ck
 from support.checks import ck, res, typed
 from support.engine_case import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, engine, lint
+from support.engine_locks import put_lock
 from support.fakes import as_bead, must_bead
 from support.narrow import must
 
@@ -25,7 +26,6 @@ from taskloop.adapters import ident, pidcheck
 from taskloop.adapters import procs as sproc
 from taskloop.adapters.check_probe import PathProbe
 from taskloop.app.checks import evidence as check_evidence
-from taskloop.app.slots import engine_lock
 from taskloop.app.wire import slots as wslots
 from taskloop.app.write.handoff import HANDOFF_CAP
 from taskloop.contracts.answers import IRREVERSIBLE
@@ -339,13 +339,13 @@ class SharedNotes(StagesTest):
     def test_a_task_running_in_another_worktree_is_listed_with_its_files(self):
         other = Path(self.tmp.name, "wt2")
         te.sh("git", "worktree", "add", "-q", "--detach", str(other), cwd=self.wt)
-        engine_lock.write_engine_lock(str(other), {"pid": os.getpid(), "start": pidcheck.proc_start(os.getpid()), "bead": "t-2"})
+        put_lock(str(other), {"pid": os.getpid(), "start": pidcheck.proc_start(os.getpid()), "bead": "t-2"})
         put_ck(self.eng_(), "t-2", plan_data={"summary": "tune the soak", "stages": [
             {"goal": "g", "files": ["SoakTests.cs", "justfile"], "checks": [], "hard": False}]})
         got = self.eng_().shared.siblings()
         self.assertEqual(got, [("t-2", "tune the soak", ["SoakTests.cs", "justfile"])])
         self.assertIn("t-2: tune the soak [files: SoakTests.cs, justfile]", self.eng_().shared.shared_text())
-        engine_lock.write_engine_lock(str(other), {"pid": 99999999, "start": "", "bead": "t-2"})  # dead
+        put_lock(str(other), {"pid": 99999999, "start": "", "bead": "t-2"})  # dead
         self.assertEqual(self.eng_().shared.siblings(), [])
 
     def test_a_branch_behind_the_base_is_rebased_before_it_is_planned(self):

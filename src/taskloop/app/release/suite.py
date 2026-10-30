@@ -22,6 +22,7 @@ from taskloop.app.release.cache import SuiteCache
 from taskloop.app.release.shell import Abort, git, run, say
 from taskloop.contracts import env as penv
 from taskloop.contracts.envvars import EnvVar
+from taskloop.contracts.paths import ConfigDir
 
 LONG = 3 * 3600.0  # a hang guard for a whole gate run
 STALE_TMP_S = 2 * LONG  # a tl-suite-* dir this old belongs to a suite that was killed without unwinding (SIGKILL): no live one runs so long
@@ -242,7 +243,7 @@ def verify(tool_root: Path, repo: Path, checks: Callable[[Path, Path], None] = r
     both are skipped, and the log says so (True). Only a green run is remembered; a red one raises and remembers nothing."""
     tree = git(repo, "rev-parse", "HEAD^{tree}")
     command = " ".join(gate_command()) + " + " + ("host" if penv.ambient(EnvVar.TASK_LOOP_SUITE_HOST) else "container") + " suite"
-    cache = SuiteCache(config_dir() / "releases" / "suite-green.json")
+    cache = SuiteCache(ConfigDir(config_dir()))
     if cache.hit(tree, command):
         say(f"suite cache hit: tree {tree[:12]} already passed `{command}`")
         return True
