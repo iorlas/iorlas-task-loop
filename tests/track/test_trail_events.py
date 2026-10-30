@@ -12,6 +12,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support import eventlog
+from support.who import who
 
 from taskloop.app.track import trail
 from taskloop.contracts import events, wire
@@ -55,7 +56,7 @@ class EveryKindDecodes(unittest.TestCase):
     def test_each_row_written_decodes_strictly_with_its_fields(self):
         for kind, fields in CALLS.items():
             with self.subTest(kind), isolated_home():
-                trail.event(kind, "x-1", repo="/r", **fields)
+                trail.event(who(), kind, "x-1", repo="/r", **fields)
                 (row,) = eventlog.read()
                 self.assertEqual(row["v"], EventRec.V)
                 got = events.decode(row)
@@ -66,7 +67,7 @@ class EveryKindDecodes(unittest.TestCase):
         for kind, fields in (("slot-hold", {}), ("land", {"slotty": 1})):
             with self.subTest(kind), isolated_home():
                 with self.assertRaises(ValueError):
-                    trail.event(kind, "x-1", repo="/r", **fields)
+                    trail.event(who(), kind, "x-1", repo="/r", **fields)
                 self.assertEqual(eventlog.read(), [])
 
 
