@@ -75,6 +75,21 @@ class World:
         self.on_suite = None  # called with the tree under test inside every suite run
         self.trees: list[dict[str, bytes]] = []  # the tracked files of every tree the suite ran on
         self.stdout, self.stderr = Out(), Out()
+        self.port = self.RacingGit(self)
+
+    class RacingGit(RealGit):
+        """The real git port, except that a push of main from the release clone first calls the world's `before_push`."""
+
+        def __init__(self, world: World) -> None:
+            super().__init__()
+            self.world = world
+
+        def push(self, d: str, remote: str, refspec: str) -> None:
+            w = self.world
+            if refspec == "HEAD:main" and w.before_push and Path(d) != w.market:
+                hook, w.before_push = w.before_push, None
+                hook()
+            super().push(d, remote, refspec)
 
     def spawn(self, argv, *, cwd=None, **_: Any) -> Ran:
         """Spawner.run for the release's calls: the real or the faked process, as the port's record. `just` / `mise` are the gate."""
@@ -133,7 +148,7 @@ class World:
         self.stderr.start(args[0])
         try:
             code = flow.main([*args, "--repo", str(self.repo), "--marketplace", str(self.market)], Path(__file__).resolve().parents[2],
-                             self.spawner, RealGit())
+                             self.spawner, self.port)
         except SystemExit as e:
             code = e.code
         return Result(returncode=code, stdout=self.stdout.text(), stderr=self.stderr.text())
