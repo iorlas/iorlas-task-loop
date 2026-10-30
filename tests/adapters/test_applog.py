@@ -12,9 +12,11 @@ from support.builders import cfg_with
 
 from taskloop.adapters import (
     applog,
+    ident,
 )
 from taskloop.app.release import reexec
 from taskloop.app.run import engine
+from taskloop.app.track import trail
 
 warnings.filterwarnings("ignore", message=".*multi-threaded.*fork", category=DeprecationWarning)
 
@@ -85,7 +87,6 @@ class WiringTest(unittest.TestCase):
         env.start()
         self.addCleanup(env.stop)
 
-
     def test_engine_log_is_one_typed_line_per_record_readable_at_once(self):
         eng = engine.Engine("t-1", self.tmp.name, cfg_with())
         with mock.patch.object(engine, "say"):
@@ -100,6 +101,19 @@ class WiringTest(unittest.TestCase):
         applog.append(Path(self.tmp.name) / "x.log", "x\n")
         with mock.patch.object(os, "execv", side_effect=lambda *a: self.assertEqual(applog.open_count(), 0)):
             reexec.exec_in_place(["x"])
+
+    def test_tl_event_keeps_one_handle_for_events_jsonl_and_flushes_each_line(self):
+        path = ident.config_dir() / "events.jsonl"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        trail.event("a", "b-1", repo=self.tmp.name)  # a given repo: no git to ask (its answer is memoized by earlier tests)
+        with open(path, encoding="utf-8") as reader:
+            self.assertEqual(json.loads(reader.readline())["kind"], "a")
+            for i in range(100):
+                trail.event("n", "b-1", repo=self.tmp.name, i=i)
+                self.assertEqual(json.loads(reader.readline())["i"], i)
+        lines = path.read_text(encoding="utf-8").splitlines()
+        self.assertEqual(len(lines), 101)
+        self.assertEqual(applog.open_count(path), 1)
 
 
 if __name__ == "__main__":
