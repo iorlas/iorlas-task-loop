@@ -10,7 +10,7 @@ from typing import Literal
 from taskloop.adapters.locks import hold_path
 from taskloop.contracts import paths
 from taskloop.contracts.enums import LockWhat
-from taskloop.contracts.loop import LoopCommand, LoopState, Rest, StopRequest
+from taskloop.contracts.loop import LoopCommand, LoopState, LoopTarget, Rest, StopRequest
 from taskloop.contracts.stores import JsonStore
 
 StopMode = Literal["now", "after", ""]
@@ -73,10 +73,11 @@ class LoopFiles:
     def command(self) -> JsonStore[LoopCommand]:
         return JsonStore(self.cfg.loop_command(self.key), LoopCommand)
 
-    def stop_for(self, pid: int) -> StopMode:
-        """What the repo's command says to loop `pid`: a loop the command does not name (one started later) ignores it."""
+    def stop_for(self, pid: int, started: float) -> StopMode:
+        """What the repo's command says to the loop (`pid`, `started`): a loop the command does not name (one started later, even on
+        the same pid) ignores it."""
         cmd = self.command().read()
-        if cmd is None or pid not in cmd.targets:
+        if cmd is None or LoopTarget(pid=pid, started=started) not in cmd.targets:  # pyrefly: ignore[unexpected-keyword]
             return ""
         return "now" if cmd.action == "stop_now" else "after" if cmd.action == "stop_after_current" else ""
 
@@ -86,13 +87,13 @@ class LoopFiles:
             loops = self.live()
             if loops:
                 self.command().write(LoopCommand(action="stop_now" if now_flag else "stop_after_current", by=by, t=self.now(),
-                                                 targets=[st.pid for st in loops]))
+                                                 targets=[LoopTarget(pid=st.pid, started=st.started) for st in loops]))  # pyrefly: ignore[unexpected-keyword]
         return loops
 
     def clean_command(self) -> None:
         """Caller holds the lock. The command goes when no live loop it names is left."""
         cmd = self.command().read()
-        if cmd is not None and not any(st.pid in cmd.targets for st in self.live()):
+        if cmd is not None and not any(LoopTarget(pid=st.pid, started=st.started) in cmd.targets for st in self.live()):  # pyrefly: ignore[unexpected-keyword]
             self.command().delete()
 
     @staticmethod

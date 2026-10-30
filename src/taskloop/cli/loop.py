@@ -78,7 +78,7 @@ def cmd_status(env: LoopEnv, files: LoopFiles, installs: Installs, a: Any) -> in
             print(f"  running task-loop {st.version} from {st.code_dir or '?'}{f'; lags {lag} release(s)' if lag else ''}")
         if st.bead:
             print(f"  now: {st.bead} in {st.slot or 'its worktree'} since {t(st.since or 0)}; log {st.run_log}")
-        mode = files.stop_for(st.pid)
+        mode = files.stop_for(st.pid, st.started)
         if mode:
             print(f"  stop requested: {mode}")
         if st.log:

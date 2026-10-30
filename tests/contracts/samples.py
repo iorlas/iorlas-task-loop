@@ -355,6 +355,7 @@ OTHERS = {
         queue=[loop.QueueRow(bead="tl-2", prio=1, since=T, ahead=0, skip=loop.Skip(why="area busy", until=T + 60))],
         lanes_seen=["L"],
     ),
+    "LoopTarget": loop.LoopTarget(pid=4242, started=T),
     "LoopCommand": loop.LoopCommand(action="stop_now", by="denis", t=T),
     "Rest": loop.Rest(beads={"b-1": T + 600}),
     "BadVersions": loop.BadVersions(entries=[loop.BadVersion(version="0.2.0", why="selftest failed", t=T)]),

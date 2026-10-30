@@ -69,7 +69,7 @@ class StopRequests(LoopBase):
         f.parent.mkdir(parents=True, exist_ok=True)
         for text in ("", "after", json.dumps({"mode": "after", "time": 1}), json.dumps({"v": 2, "action": "stop_now"})):
             f.write_text(text)
-            self.assertEqual(self.files.stop_for(self.old_pid), "", text)
+            self.assertEqual(self.files.stop_for(self.old_pid, self.clock.t), "", text)
 
 
 class Moved(Exception):

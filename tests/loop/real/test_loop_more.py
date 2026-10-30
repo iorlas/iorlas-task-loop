@@ -35,7 +35,7 @@ from taskloop.app.loop.core import Core  # noqa: E402
 from taskloop.cli import loop_cmd  # noqa: E402
 from taskloop.contracts import wire  # noqa: E402
 from taskloop.contracts.config import LoopConfig  # noqa: E402
-from taskloop.contracts.loop import LoopCommand, LoopState  # noqa: E402
+from taskloop.contracts.loop import LoopCommand, LoopState, LoopTarget  # noqa: E402
 from taskloop.domain.lanes import netgate  # noqa: E402
 
 
@@ -248,26 +248,36 @@ class StopRequests(LoopBase):
             with self.subTest(now=now):
                 cmd = self.stop(now)
                 assert cmd is not None
-                self.assertEqual(set(cmd.targets), {self.old_pid, os.getpid()})
+                self.assertEqual({t.pid for t in cmd.targets}, {self.old_pid, os.getpid()})
                 self.assertEqual(cmd.action, "stop_now" if now else "stop_after_current")
                 self.assertEqual(cmd.t, self.clock.t)
+
+    def test_a_stop_for_a_pid_and_start_is_ignored_by_a_loop_with_the_same_pid_and_another_start(self):
+        self.old_loop()  # pid P, started clock.t
+        self.stop(now=True)
+        self.assertEqual(self.files.stop_for(self.old_pid, self.clock.t), "now")
+        self.assertEqual(self.files.stop_for(self.old_pid, self.clock.t + 50), "")  # the pid recycled by a loop started later
+        looptest.write_state(self.repo_s, pid=self.old_pid, started=self.clock.t + 50)  # that loop's state replaces the old one
+        with self.files.lock():
+            self.files.clean_command()
+        self.assertFalse(looptest.command(self.repo_s).exists())  # and it does not keep the old loop's command alive
 
     def test_a_stop_applies_to_the_loops_it_names_only(self):
         self.old_loop()
         for now in (False, True):
             self.stop(now)
-            self.assertEqual(self.files.stop_for(self.old_pid), "now" if now else "after")
-            self.assertEqual(self.files.stop_for(os.getpid()), "")
+            self.assertEqual(self.files.stop_for(self.old_pid, self.clock.t), "now" if now else "after")
+            self.assertEqual(self.files.stop_for(os.getpid(), self.clock.t), "")
 
 
     def test_a_stop_does_not_stop_a_loop_started_after_it(self):
         self.old_loop()
         self.stop()
         self.beads({"x-1": [rec("landed")], "x-2": [rec("landed")]})
-        self.during.append(lambda: self.assertEqual(self.files.stop_for(os.getpid()), ""))
+        self.during.append(lambda: self.assertEqual(self.files.stop_for(os.getpid(), self.clock.t), ""))
         self.assertEqual(self.run_loop(), 0)
         self.assertEqual([b for b, _ in self.started], ["x-1", "x-2"])
-        self.assertEqual(self.files.stop_for(self.old_pid), "after")
+        self.assertEqual(self.files.stop_for(self.old_pid, self.clock.t), "after")
 
     def test_start_clears_a_command_that_names_no_running_loop(self):
         for other in (False, True):
@@ -275,7 +285,8 @@ class StopRequests(LoopBase):
                 self.beads({"x-1": [rec("landed")]})
                 if other:
                     self.old_loop()
-                self.files.command().write(LoopCommand(action="stop_after_current", by="t", t=self.clock.t - 10, targets=[12345]))
+                self.files.command().write(LoopCommand(action="stop_after_current", by="t", t=self.clock.t - 10,
+                                                  targets=[LoopTarget(pid=12345, started=1.0)]))
                 self.during.append(lambda: self.assertFalse(looptest.command(self.repo_s).exists()))
                 self.assertEqual(self.run_loop(), 0)
 
@@ -312,7 +323,7 @@ class StopRequests(LoopBase):
         self.assertEqual(errors, [])
         cmd = self.files.command().read()
         assert cmd is not None
-        self.assertEqual(set(cmd.targets), {self.old_pid, os.getpid()})
+        self.assertEqual({t.pid for t in cmd.targets}, {self.old_pid, os.getpid()})
 
     def test_a_loop_that_moved_keeps_the_command_that_names_it(self):
         self.beads({"x-1": [rec("landed")]})

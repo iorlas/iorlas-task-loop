@@ -77,15 +77,23 @@ class LoopState(Rec):
     carry: Carry = msgspec.field(default_factory=Carry)
 
 
+class LoopTarget(Rec):
+    """One loop a command names: its pid and `started` (kept across the loop's own re-exec), so a loop started later on a recycled
+    pid is not the one meant."""
+
+    pid: int
+    started: float
+
+
 class LoopCommand(Rec):
     """loop/<repo_key>.command.json: `tl stop` writes it. The loops it names (the repo's live loops when it was written) obey
-    it; a loop started later ignores it; the last named loop to end deletes it."""
+    it; a loop started later, or on a recycled pid, ignores it; the last named loop to end deletes it."""
 
-    V: ClassVar[int] = 1
+    V: ClassVar[int] = 2
     action: Literal["stop_now", "stop_after_current", "resume"]
     by: str
     t: float
-    targets: list[int] = msgspec.field(default_factory=list)
+    targets: list[LoopTarget] = msgspec.field(default_factory=list)
 
 
 class Rest(Rec):

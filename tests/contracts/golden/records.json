@@ -706,8 +706,12 @@
    "fallback": false
   }
  },
+ "LoopTarget": {
+  "pid": 4242,
+  "started": 1793050200.5
+ },
  "LoopCommand": {
-  "v": 1,
+  "v": 2,
   "action": "stop_now",
   "by": "denis",
   "t": 1793050200.5,

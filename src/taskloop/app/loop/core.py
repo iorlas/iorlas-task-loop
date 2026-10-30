@@ -102,7 +102,7 @@ class Core:
     # ---- stop and sleep -------------------------------------------------------------------------------------
     def stop_mode(self) -> StopMode:
         """'now', 'after' (stop after the current bead) or '' (go on)."""
-        return "now" if self.sigterm.is_set() else self.files.stop_for(self.env.pid)
+        return "now" if self.sigterm.is_set() else self.files.stop_for(self.env.pid, self.started)
 
     def nap(self, secs: float, until: float = 0) -> None:
         """Sleep, waking early for a stop or the end time."""
