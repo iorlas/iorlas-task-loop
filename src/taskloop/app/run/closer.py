@@ -4,6 +4,7 @@ import contextlib
 import signal
 import threading
 import time
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any, assert_never
 
@@ -14,14 +15,16 @@ from taskloop.app.land.followups import file_follow_ups
 from taskloop.app.run import outcomes
 from taskloop.app.run import trace as runtrace
 from taskloop.app.run.console import say
+from taskloop.app.run.interpret import interpret
+from taskloop.app.run.state import CheckpointLedger
 from taskloop.app.track import verbs as track
 from taskloop.contracts import fence
 from taskloop.contracts import log as rec
 from taskloop.contracts.answers import VERDICTS
 from taskloop.contracts.enums import Outcome
 from taskloop.contracts.ports import BeadPatch
+from taskloop.domain import effects, storm
 from taskloop.domain import outcome as oc
-from taskloop.domain import storm
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.land.matchers import without_prefix
 from taskloop.domain.review import followups as fu
@@ -41,12 +44,8 @@ class Closer:
         old = None
         if hasattr(signal, "SIGTERM") and threading.current_thread() is threading.main_thread():
             old = signal.signal(signal.SIGTERM, signal.SIG_IGN)  # a second stop must not break the close-out
-        branch = e.git("symbolic-ref", "--short", "-q", "HEAD")
         try:
             self.run(ended)
-            if not e.dry:
-                with contextlib.suppress(Exception):  # last: the trace and the comments above read the branch
-                    e.tree.leave_slot(ended.word, branch)
         finally:  # what the process starts after this (a notify command, the next test) must stay stoppable
             if old is not None:
                 signal.signal(signal.SIGTERM, old)
@@ -96,24 +95,51 @@ class Closer:
         spec = ended.spec
         if e.disp and e.disp.escalated and spec is None:
             spec = askspecs.repeated_fault(oc.KNOBS["fault_retries"], why.splitlines()[0][:200])
-        sha = ended.sha
-        done = oc.make(kind, why, sha=sha, spec=spec if kind in oc.ASKS else None)  # the final outcome: its word is the trace's
-        outcome = done.word
-        new = fu.batch(e.bead, e.leftovers, e.filed).file  # one per typed key, at most the cap
-        self.save_branch(outcome, why)
+        done = oc.make(kind, why, sha=ended.sha, spec=spec if kind in oc.ASKS else None)  # the final outcome: its word is the trace's
         counts = "; ".join(f"{k}={v}" for k, v in e.stats.items())
         stats = f"cost=${e.cost:.2f}; minutes={int((time.time() - e.t0) / 60)}; {counts}"
-        self.record(done, stats)
-        if e.dry:
-            e.log.note(f"dry run: bead left as it was. {stats}")
-            return
-        if kind is oc.Kind.WAIT_ASK:  # asked already: the bead stays as the ask left it
-            e.log.note(why)
-            return
-        e.asked = bool(done.spec and kind in oc.ASKS and outcome not in DONE and e.ask_flow.raise_ask(done.spec, why, kind))
-        lost = self.follow_ups(outcome)
-        self.reflect_comment(outcome, why, new, lost, stats)
-        self.settle(done, stats)
+        branch = e.git("symbolic-ref", "--short", "-q", "HEAD")
+        slot_gen = e.claim.slot_gen
+        plan = effects.plan_close(done, dry=e.dry, branch=branch, slot_gen=slot_gen)
+        new = fu.batch(e.bead, e.leftovers, e.filed).file  # one per typed key, at most the cap
+        lost: list[dict[str, str]] = []
+        interpret(e.bead, e.log_path.stem, plan, CheckpointLedger(e.checkpoints),
+                  lambda eff: self.apply(eff, done, stats, new, lost))
+
+    def apply(self, eff: effects.Effect, done: oc.RunOutcome, stats: str, new: Sequence[Mapping[str, str]],
+              lost: list[dict[str, str]]) -> None:
+        """One effect of the close plan, done. The match is closed: a new effect is one more case here."""
+        e = self.e
+        outcome, why = done.word, done.detail
+        match eff:
+            case effects.SaveBranch():
+                self.save_branch(outcome, why)
+            case effects.RecordRun():
+                self.record(done, stats)
+            case effects.NoteDry():
+                e.log.note(f"dry run: bead left as it was. {stats}")
+            case effects.NoteWait():  # asked already: the bead stays as the ask left it
+                e.log.note(why)
+            case effects.RaiseAsk():
+                e.asked = bool(done.spec and outcome not in DONE and e.ask_flow.raise_ask(done.spec, why, done.kind))
+            case effects.FileNotes():
+                lost[:] = self.follow_ups(outcome)
+            case effects.Reflect():
+                self.reflect_comment(outcome, why, new, lost, stats)
+            case effects.CloseBead() | effects.BlockBead() | effects.LeaveBead():
+                self.settle(done, stats)
+            case effects.ReleaseSlot():
+                self.release_slot(eff, outcome)
+            case _:
+                assert_never(eff)
+
+    def release_slot(self, eff: effects.ReleaseSlot, outcome: Outcome) -> None:
+        """Last: the trace and the comments read the branch. A slot whose lease moved on (another generation) is not this run's to touch."""
+        e = self.e
+        with contextlib.suppress(Exception):
+            if e.claim.slot_bead and fence.stale(e.store, e.claim):
+                return
+            e.tree.leave_slot(outcome, eff.branch)
 
     def save_branch(self, outcome: Outcome, why: str) -> None:
         """A run stopped mid-conflict-fix goes back to its branch; an unfinished branch keeps its work as a wip commit and a
@@ -171,7 +197,7 @@ class Closer:
             e.owner_look.file_owner_look()
         return lost
 
-    def reflect_comment(self, outcome: Outcome, why: str, new: list[Any], lost: list[Any], stats: str) -> None:
+    def reflect_comment(self, outcome: Outcome, why: str, new: Sequence[Mapping[str, str]], lost: Sequence[object], stats: str) -> None:
         e = self.e
         verified = ""
         if e.verified:

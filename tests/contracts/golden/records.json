@@ -299,6 +299,7 @@
   "n": 4,
   "feedback": "f",
   "gate_tail": "",
+  "applied": [],
   "state": {
    "plan_data": {
     "summary": "s",

@@ -5,6 +5,7 @@ is one edit, in contracts/checkpoint.py). `Checkpoints` is the only code that wr
 node, close at the end, keep the follow-ups, follow a rebase, drop.
 """
 
+import contextlib
 import copy
 import time
 from collections.abc import Callable
@@ -109,6 +110,16 @@ class Checkpoints:
             done = done.replace(step="gate-red", gate_tail=trim.trim_log(why, log=str(self.e.gate_log or "")))
         self.writer().write(done)
 
+    def applied(self) -> frozenset[str]:
+        ck = self.read()
+        return frozenset(ck.applied if ck else ())
+
+    def mark_applied(self, key: str) -> None:
+        """A close effect ran: its key goes into the record, so a kill after it resumes at the next effect. No record, no key kept."""
+        ck = self.read()
+        if ck is not None and key not in ck.applied:
+            self.writer().write(ck.replace(applied=[*ck.applied, key]))
+
     def keep_filed(self, lost: list[dict[str, str]] | None = None) -> None:
         """The follow-ups filed so far and the ones bd refused (`lost`: kept, none lost): written at once, a kill loses no title."""
         self.e.unfiled += [Unfiled(title=lo["title"], why=lo["why"]) for lo in lost or []]
@@ -137,3 +148,19 @@ class Checkpoints:
 
     def drop(self) -> None:
         self.writer().delete()
+
+
+class CheckpointLedger:
+    """The applied close effects (app/run/interpret.py): kept in the process and in the checkpoint, so a restart finds them."""
+
+    def __init__(self, checkpoints: Checkpoints) -> None:
+        self.checkpoints = checkpoints
+        self.keys: set[str] = set()
+
+    def applied(self) -> frozenset[str]:
+        return frozenset(self.keys) | self.checkpoints.applied()
+
+    def mark(self, key: str) -> None:
+        self.keys.add(key)
+        with contextlib.suppress(fence.Fenced):  # a run whose lease moved on keeps its keys in memory only
+            self.checkpoints.mark_applied(key)

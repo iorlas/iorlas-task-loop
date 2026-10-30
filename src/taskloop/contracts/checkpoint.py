@@ -89,4 +89,5 @@ class Checkpoint(Rec):
     n: int = 0
     feedback: str = ""
     gate_tail: str = ""
+    applied: list[str] = msgspec.field(default_factory=list)  # keys of the close effects already applied (domain/effects.key_of)
     state: RunState = msgspec.field(default_factory=RunState)
