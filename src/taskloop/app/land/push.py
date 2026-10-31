@@ -3,9 +3,10 @@ asks of the land. Nothing is pushed twice, and a stop waits for a push that is h
 from contextlib import AbstractContextManager
 from typing import Protocol
 
+from taskloop.app.land import cleanup
 from taskloop.app.land.gate import GatePass, Problem, ProblemKind
 from taskloop.app.land.landed import LandedConfig
-from taskloop.app.land.outbound import LAND_ENV, pin_head
+from taskloop.app.land.outbound import LAND_ENV, pin_head, target
 from taskloop.app.land.parts import NetWorker, OutcomeMoveSteps
 from taskloop.app.land.state import PUSH_TRIES, PUSH_UP_FAILS, Land, Next, Phase
 from taskloop.contracts import fence
@@ -27,6 +28,8 @@ class PushHost(Protocol):
     the steps and warnings; the landed sha it sets; the network probe."""
 
     landed_sha: str  # set the moment the push goes through
+    land_remote_oid: str  # the task ref checked before the push; cleanup retains this lease
+    task_branch: str
 
     @property
     def cfg(self) -> PushConfig: ...
@@ -63,6 +66,8 @@ class Pusher:
             now = f"{tree[:12]} on {base[:12]}"
             return Problem(ProblemKind.STALE, f"the gate passed tree {gate_pass.tree[:12]} on {gate_pass.base[:12]}; now {now}")
         fence.check(e.store, e.claim)  # a run whose bead or slot was taken again pushes nothing (Fenced; RunOnce closes nothing)
+        want = target(e.cfg.land)
+        e.land_remote_oid = cleanup.remote_oid(e.git, e.wt, want[0], e.task_branch) if want and e.task_branch else ""
         with e.stop_deferred() as stop:  # a push half done is no state to stop in: finish it, then stop
             lrc, ltail = self.out.lfs_push()  # the pushed ref's LFS objects first: the push must not point at objects origin lacks
             sha = e.git.rev_parse(e.wt, "HEAD")  # the commit pushed, named in the refspec

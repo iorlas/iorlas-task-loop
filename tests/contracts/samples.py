@@ -240,6 +240,9 @@ LOG = {
     "stuck": _log(log.Stuck, why="same_red", step="checks", since=T - 600, limit_s=0.0, sig="unittest:1:boom"),
     "beat": _log(log.Beat),
     "close": _log(log.Close, outcome=Outcome.LANDED, why_code=None, sha="abc", why="landed abc"),
+    "land_receipt": _log(log.LandReceipt, repo="/repo", branch="task/a", head="abc", sha="def"),
+    "land_cleanup": _log(log.LandCleanup, repo="/repo", branch="task/a", head="abc", sha="def", remote="origin", remote_oid="123",
+                         remote_outcome="pending"),
 }
 EVENTS = {
     "claim": _ev(events.Claim, branch="task/tl-1", slot="s1", title="T", worktree="/w"),

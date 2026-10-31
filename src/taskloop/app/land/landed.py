@@ -1,6 +1,8 @@
 """A push that went through before the network cut its answer: the task branch's tip is the land commit and it is on the base."""
 from typing import Protocol
 
+from taskloop.app.land import cleanup
+from taskloop.app.land.outbound import target
 from taskloop.app.land.parts import FetchCheckout, OutcomeSteps
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ports import Git
@@ -9,12 +11,15 @@ from taskloop.contracts.ports import Git
 class LandedConfig(Protocol):
     @property
     def base(self) -> str: ...
+    @property
+    def land(self) -> list[str]: ...
 
 
 class LandedHost(Protocol):
     """What the look for an earlier push reads of the engine: the bead, the base, git, the fetch, and the landed sha it sets."""
 
     landed_sha: str  # set the moment the push goes through
+    land_remote_oid: str
 
     @property
     def bead(self) -> BeadId: ...
@@ -47,6 +52,9 @@ class Landed:
         if not last or not last[0].subject.endswith(f"({e.bead})"):
             return ""
         tip = last[0].oid
+        want = target(e.cfg.land)
+        branch = e.git.branch(e.wt) if want else ""
+        e.land_remote_oid = cleanup.remote_oid(e.git, e.wt, want[0], branch) if want and branch else ""
         return tip if e.git.is_ancestor(e.wt, tip, e.cfg.base) else ""
 
     def found(self, sha: str) -> str:

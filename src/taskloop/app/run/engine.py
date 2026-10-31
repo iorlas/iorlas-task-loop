@@ -16,9 +16,11 @@ from taskloop.adapters.clock import SystemClock
 from taskloop.adapters.repourl import repo_url
 from taskloop.adapters.runner import live_path
 from taskloop.app.checks.runner import Checker
+from taskloop.app.land import cleanup
 from taskloop.app.land.checkout import Checkout
 from taskloop.app.land.fixer import Fixer
 from taskloop.app.land.lander import Lander, lander_over
+from taskloop.app.land.outbound import target
 from taskloop.app.land.rebase import Rebase
 from taskloop.app.land.restart import Restart
 from taskloop.app.land.salvage import Salvage
@@ -350,8 +352,15 @@ class Engine(RunFields):
             (self.run_dir / PLAN_FILE).write_text(json.dumps(plancheck.to_wire(self.plan_data), indent=1))
 
     def record_land(self, sha: str) -> None:
+        if verbs.land(self.who, self.bead, sha, self.store, self.git, self.wt, base=self.cfg.base, claim=self.claim):
+            raise self.blocked_for("land receipt refused; branch kept", "FAULT_LAND")
         LandedStore(self.home).put(Landed(bead=self.bead, sha=sha, base=self.cfg.base, t=self.now()))
-        verbs.land(self.who, self.bead, sha, self.store, self.git, self.wt, base=self.cfg.base, claim=self.claim)
+        branch = self.task_branch or self.git.branch(self.wt)
+        repo = next((co.path for co in self.git.checkouts(self.wt) if co.main), self.wt)
+        want = target(self.cfg.land)
+        if branch:
+            prior = cleanup.previous(self.home, self.bead, repo, branch, sha)
+            cleanup.record(self.log, repo, branch, sha, sha, want[0] if want else "", self.land_remote_oid, prior)
 
     def land_lock_path(self) -> Path:
         return landlock.land_lock_path(self.home, repo_url(self.git, self.wt))

@@ -142,6 +142,31 @@ class LandTry(LogRec, tag="land_try"):
 
 
 @final
+class LandReceipt(LogRec, tag="land_receipt"):
+    """A verified, recorded land, independently of whether its branches could be cleaned up."""
+
+    repo: str
+    branch: str
+    head: str
+    sha: str
+
+
+@final
+class LandCleanup(LogRec, tag="land_cleanup"):
+    """Retry inputs and outcome. Pending rows retain the original compare-oid leases."""
+
+    repo: str
+    branch: str
+    head: str
+    sha: str
+    remote: str = ""
+    remote_oid: str = ""
+    local_outcome: Literal["pending", "gone"] = "pending"
+    remote_outcome: Literal["pending", "gone", "skipped"] = "skipped"
+    detail: str = ""
+
+
+@final
 class WaitStart(LogRec, tag="wait_start"):
     id: str
     what: WaitWhat
@@ -324,7 +349,7 @@ class Close(LogRec, tag="close"):
 EngineLog = (
     RunStart | StepStart | StepEnd | CallStart | CallEnd | CmdStart | CmdEnd | CheckStart | CheckEnd | GateStart | GateEnd | LandTry
     | WaitStart | WaitEnd | Lock | Unlock | VendorError | Kill | Overrun | RetryDecision | Transition | Reload | Checks | Artifacts
-    | Evidence | Warn | Note | Said | Assumed | Stuck | Beat | Close
+    | Evidence | Warn | Note | Said | Assumed | Stuck | Beat | Close | LandReceipt | LandCleanup
 )
 
 

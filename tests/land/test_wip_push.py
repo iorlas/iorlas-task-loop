@@ -42,7 +42,7 @@ class WipPush(EngineTest):
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual(seen, [WIP] * len(seen))
         self.assertTrue(seen)
-        self.assertTrue(self.origin_ref("refs/heads/task/t-1"))
+        self.assertFalse(self.origin_ref("refs/heads/task/t-1"))  # the land then deleted the pushed task branch (LANDBRANCH)
         self.assertEqual(self.config(), before)
 
     def test_a_failed_push_blocks_the_bead_with_gits_words(self):

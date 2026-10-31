@@ -305,8 +305,9 @@ class FakeLandedHost:
 
     def __init__(self, git: Git, sh: ShFn, dry: bool = False, fetch: Fetches | None = None) -> None:
         self.landed_sha = ""
+        self.land_remote_oid = ""
         self.bead = BeadId("t-1")
-        self.cfg = EngineConfig(base="origin/main")
+        self.cfg = EngineConfig(base="origin/main", land=[])
         self.dry = dry
         self.git, self.sh = git, sh
         self.wt = "/wt"
@@ -336,6 +337,7 @@ class FakePushHost:
 
     def __init__(self, git: Git, sh: ShFn, up: bool | None = True, cfg: EngineConfig | None = None) -> None:
         self.landed_sha = ""
+        self.land_remote_oid, self.task_branch = "", ""
         self.cfg = cfg or EngineConfig(base="origin/main", land=["git", "push", "-q", "origin", "HEAD:main"])
         self.git, self.sh = git, sh
         self.wt = "/wt"
@@ -617,6 +619,8 @@ class FakeReleaseSlotHost:
         self.claim = fence.offline(BeadId("t-1"))
         self.store = FakeBeads()
         self.tree = Leaves()
+        self.git: Git = ScriptedGit()
+        self.log = RunLog(fake_stores().run_log("run"))
 
 
 class Asks:

@@ -84,6 +84,7 @@ from taskloop.cli import asks as cli_asks
 from taskloop.cli import closing as cli_closing
 from taskloop.cli import green as cli_green
 from taskloop.cli import hooks as cli_hooks
+from taskloop.cli import land as cli_land
 from taskloop.cli import land_stack as cli_land_stack
 from taskloop.cli import queue as cli_queue
 from taskloop.cli import slots as slots_cli
@@ -325,7 +326,7 @@ def v_claim(a: Any, c: Ctx) -> int:
 
 
 def v_land(a: Any, c: Ctx) -> int:
-    return cli_closing.cmd_land(a.id, a.sha, a.worktree, c.who, c.git, beadtools.bd_store(c.who.actor))
+    return cli_land.cmd_land(c.who, a.id, a.sha, beadtools.bd_store(c.who.actor), c.git, a.worktree)
 
 
 def v_close(a: Any, c: Ctx) -> int:

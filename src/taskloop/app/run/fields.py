@@ -90,6 +90,7 @@ class RunFields(StateAttrs):
         self.disp: oc.Disposition | None = None
         self.retry_after = 0.0  # a pause for a lane: when delegate says it is back (epoch; 0 = unknown)
         self.landed_sha = ""  # set the moment the push goes through: whatever stops the run after it, the bead landed
+        self.land_remote_oid = ""  # task ref checked before land; remote cleanup uses this exact lease
         self.last_run: CheckRun | None = None  # the CheckRun of the last stage round: the engine's evidence for the verifier (tl-bxk.10.25)
         self.prev_ck, self.ck_run, self.resumed, self.run_logged = "", "", False, False
         self.killed = False

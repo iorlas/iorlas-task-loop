@@ -369,7 +369,7 @@ class Git(SlotGit, Protocol):
         ...
 
     def delete_remote_at(self, d: str, remote: str, ref: str, oid: str) -> None:
-        """Delete the remote's `ref` only while it is at `oid` (force-with-lease)."""
+        """Delete the remote's `ref` only while it is at `oid` (force-with-lease); already absent is success."""
         ...
 
 

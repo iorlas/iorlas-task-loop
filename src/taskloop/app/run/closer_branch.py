@@ -2,9 +2,11 @@
 import contextlib
 from typing import Protocol
 
+from taskloop.app.land import cleanup
 from taskloop.contracts import fence
 from taskloop.contracts.enums import Outcome
 from taskloop.contracts.ports import Beads, Git
+from taskloop.stores.runlog import RunLog
 
 DONE = (Outcome.LANDED, Outcome.DONE)
 
@@ -62,6 +64,10 @@ class ReleaseSlotHost(Protocol):
     def store(self) -> Beads: ...
     @property
     def tree(self) -> LeaveTree: ...
+    @property
+    def git(self) -> Git: ...
+    @property
+    def log(self) -> RunLog: ...
 
 
 class ReleaseSlot:
@@ -75,3 +81,5 @@ class ReleaseSlot:
             if e.claim.slot_bead and fence.stale(e.store, e.claim):
                 return
             e.tree.leave_slot(outcome, branch)
+            if outcome is Outcome.LANDED:
+                cleanup.retry_logged(e.git, e.log)

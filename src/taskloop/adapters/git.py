@@ -188,7 +188,13 @@ class RealGit(LandGit):
         self._must(d, "update-ref", "-d", "refs/heads/" + branch, oid)
 
     def delete_remote_at(self, d: str, remote: str, ref: str, oid: str) -> None:
-        self._must(d, "push", "-q", f"--force-with-lease={ref}:{oid}", remote, ":" + ref, extra=LAND_ENV)
+        try:
+            self._must(d, "push", "-q", f"--force-with-lease={ref}:{oid}", remote, ":" + ref, extra=LAND_ENV)
+        except SlotGitError:
+            # A replay (or the forge's delete-on-merge) may have removed it already. ls-remote raises on a failed query;
+            # only an authoritative empty answer counts as success. A ref recreated meanwhile is never deleted here.
+            if self.ls_remote(d, remote, ref):
+                raise
 
     def checkout_force(self, d: str, branch: str, start: str) -> None:
         self._must(d, "checkout", "-q", "-f", "-B", branch, start)

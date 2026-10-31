@@ -10,6 +10,7 @@ from collections.abc import Callable, Generator
 from pathlib import Path
 
 from taskloop.adapters import landlock
+from taskloop.app.land import cleanup
 from taskloop.app.land.cmds import Cmds, Stop
 from taskloop.app.land.forge import Forge
 from taskloop.app.land.stackgate import StackGate
@@ -167,39 +168,20 @@ class Stack:
             raise Stop(LOCK_BUSY, f"gave up waiting for the land lock (held by {e})") from None
 
     def after(self, item: StackItem, pr: Pr, branch: str, head: str, sha: str) -> None:
-        """Landed and recorded: the replaced PR is closed, then the local branch and worktree go (only while at the oid that landed)."""
+        """Landed and recorded: persist cleanup before closing a replaced PR, which can fail independently."""
+        self.tidy(branch, head, sha)
         if item.supersedes:
             old = self.forge.view(item.supersedes)
             if old.state == OPEN:
                 self.forge.close(old.number, f"Superseded by #{pr.number}, merged as {sha[:12]}.")
             else:
                 self.log.note(f"PR #{old.number} is {old.state}: left as it is")
-        self.tidy(branch, head)
 
-    def tidy(self, branch: str, head: str) -> None:
+    def tidy(self, branch: str, head: str, sha: str) -> None:
         """Delete the local task branch and its worktree after a verified land, the compare-oid way: a branch that moved since is kept.
         The remote branch is the forge's (delete on merge); gone or not, it is not a failure."""
-        local = self.git.rev_parse(self.repo, f"refs/heads/{branch}")
-        if not local:
-            return
-        if local != head:
-            self.log.note(f"local {branch} is at {local[:12]}, not the {head[:12]} that landed: kept")
-            return
-        for co in self.git.checkouts(self.repo):
-            if co.branch != branch:
-                continue
-            if co.main:
-                self.log.note(f"{branch} is checked out in the main checkout: kept")
-                return
-            if self.cmds.row(f"git worktree remove {co.path}", lambda p=co.path: self.drop_worktree(p)):
-                self.log.note(f"worktree {co.path} stays (not clean?): {branch} kept")
-                return
-        self.cmds.row(f"git update-ref -d refs/heads/{branch} {head[:12]}", lambda: self.git.delete_branch_at(self.repo, branch, head))
-
-    def drop_worktree(self, path: str) -> None:
-        why = self.git.remove_worktree_why(self.repo, path)
-        if why:
-            raise RuntimeError(why)
+        row = cleanup.record(self.log, self.repo, branch, head, sha)
+        cleanup.retry(self.git, self.log, row)
 
     def sync_bd(self) -> None:
         """`bd sync --no-adopt` (pull, then push) through the store; a remote bd does not have is a quiet no-op."""
