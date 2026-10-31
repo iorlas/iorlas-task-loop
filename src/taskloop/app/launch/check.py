@@ -69,10 +69,15 @@ def cmd_check(a: Any, host: CliHost | None = None, *, env: Env, spawner: Spawner
     box = host or CliHost(repo, cfg, env=env, spawner=spawner, git=git)
     try:
         run = Checker(box).run_items(items, everything=a.all or bool(a.ids), learn=False, show_clean=True)
-    finally:
-        box.close()
+    except BaseException:
+        print(f"tl check: evidence kept in {box.run_dir}")
+        raise
     print("\n".join(step_line(c) for c in run.results))
     reds = [c for c in run.results if c.red]
+    if reds:
+        print(f"evidence kept in {box.run_dir}")
+    else:
+        box.close()
     for c in reds:
         print(f"\n{c.id} (exit {c.exit}) `{c.cmd}`:")
         print("\n".join(c.tail.strip().splitlines()[-TAIL_LINES:]))

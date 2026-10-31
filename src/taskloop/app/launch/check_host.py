@@ -1,6 +1,7 @@
 """CliHost: the CheckHost of `tl check`, a person's run of the registry in any worktree. The same Checker runs the same steps through the
-same cache; the host has no bead, no step book and no budget: its log is in memory, its step logs are in a folder that is removed after,
-and the only files it writes under the config folder are the check cache and the duration history the engine's checks already use."""
+same cache; the host has no bead, no step book and no budget: its log is in memory, its step logs are in a folder that is removed after a
+green run and kept (its path printed) after a red one, and the only files it writes under the config folder are the check cache and the
+duration history the engine's checks already use."""
 import shutil
 import tempfile
 import threading
@@ -91,4 +92,5 @@ class CliHost:
     def halt_point(self, when: bool = True, wait: float = 0) -> None: ...
 
     def close(self) -> None:
+        """Remove the evidence folder; the caller does this only after a green run."""
         shutil.rmtree(self.run_dir, ignore_errors=True)

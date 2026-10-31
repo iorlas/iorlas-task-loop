@@ -1,5 +1,6 @@
 """`tl check`: the repo's registry of checks run by a person, in a real worktree, through the engine's own runner."""
 import json
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -37,6 +38,9 @@ class TlCheck(unittest.TestCase):
 
     def tl(self, *args):
         r = tl_main("check", *args, cwd=self.repo, env={"XDG_CONFIG_HOME": str(Path(self.tmp.name, "cfg"))})
+        for line in r.stdout.splitlines():
+            if line.startswith("evidence kept in "):
+                self.addCleanup(shutil.rmtree, line.removeprefix("evidence kept in "), True)
         return r.returncode, r.stdout
 
     def test_it_runs_the_gate_steps_and_exits_1_on_a_red_one(self):
@@ -47,6 +51,16 @@ class TlCheck(unittest.TestCase):
         self.assertIn("unit saw a failure", out)  # the tail of the red step
         self.assertNotIn("docs", out)  # run stage: not in the gate
         self.assertRegex(out, r"ui\s+skipped \(no change under ui/\*\*\)")
+
+    def test_a_red_run_keeps_its_evidence_and_prints_the_path_a_green_run_removes_it(self):
+        _rc, out = self.tl()
+        line = next(x for x in out.splitlines() if x.startswith("evidence kept in "))
+        kept = Path(line.removeprefix("evidence kept in "))
+        self.assertTrue(kept.is_dir())
+        self.profile(CHECKS[:1])
+        rc, out = self.tl()
+        self.assertEqual(rc, 0)
+        self.assertNotIn("evidence kept", out)
 
     def test_all_ignores_when(self):
         _rc, out = self.tl("--all")
