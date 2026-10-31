@@ -2,6 +2,7 @@
 command a row of one run, and the first failure ends it with its own exit code and touches nothing later."""
 import contextlib
 import io
+import json
 import sys
 import tempfile
 import unittest
@@ -18,7 +19,7 @@ from support.logs import records
 
 # isort: split
 from taskloop.adapters import check_files, landlock, locks
-from taskloop.app.checks.cache import InputKeys, RunMemo
+from taskloop.app.checks.cache import InputKeys, RunMemo, plan_digest
 from taskloop.app.land.cmds import Cmds
 from taskloop.app.land.forge import Forge
 from taskloop.app.land.stack import MODE, Stack
@@ -324,6 +325,13 @@ class StoredGate(StackCase):
         self.assertEqual(gate.red([CheckId("never-ran")], tree, base), ["never-ran"])
         memo.remember(memo.planned_key(check), skip.replace(planned=False, why="static failed first"), 2, "")
         self.assertEqual(gate.red([check.id], tree, base), [])  # an invalid skip cannot overwrite a satisfied decision
+        cmd = ["repo-plan", "steps", "--json"]
+        memo.remember(memo.planned_key(check, plan_digest(cmd)), skip, 3, "")
+        profile = self.repo / ".task-loop.json"
+        for argv, red in ((cmd, []), (["repo-plan", "changed"], [check.id]), (cmd, [])):
+            with self.subTest(argv=argv):
+                profile.write_text(json.dumps({"engine": {"plan_cmd": argv}}))
+                self.assertEqual(gate.red([check.id], tree, base), red)
 
 
 class GateCase(StackCase):

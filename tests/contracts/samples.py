@@ -104,7 +104,8 @@ CMD = {"pick_label": "auto", "skip_review": config.ReviewSkipConfig(tests=["t/**
 
 
 RUNKEY = RunKey(check=CheckId("lint"), cmd=Digest("c1"), config=Digest("g1"), toolchain=Digest("t1"), tree=TreeSha("deadbeef"),
-                base=BaseSha("b4se"), inputs=Digest("a1"), selected=Digest(""), env=Digest("e1"))
+                base=BaseSha("b4se"), inputs=Digest("a1"), selected=Digest(""), env=Digest("e1"), plan=Digest("p1"),
+                plan_output=Digest("pout1"))
 CHECK_RUN = checks.CheckRun(
     round=1,
     tree=TreeSha("deadbeef"),

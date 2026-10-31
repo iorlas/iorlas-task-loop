@@ -1,9 +1,11 @@
 """`tl green`: a pass or planned skip for exactly that tree and base, with its reason; reads the result store and writes nothing."""
+import json
 import sys
 import tempfile
 import unittest
 from argparse import Namespace
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -11,7 +13,7 @@ from support.fakegit import ScriptedGit
 
 # isort: split
 from taskloop.adapters import check_files
-from taskloop.app.checks.cache import key_digest
+from taskloop.app.checks.cache import key_digest, plan_digest
 from taskloop.cli import green
 from taskloop.contracts.checks import CheckResult, PassRecord, Verdict
 from taskloop.contracts.ids import CheckId, TreeSha
@@ -74,6 +76,22 @@ class GreenCase(unittest.TestCase):
         rec = run(status="skipped")
         self.store(rec.replace(result=rec.result.replace(exit=None, why="static failed first")))
         self.assertEqual(self.ask(), 1)
+
+    def test_repo_config_selects_the_plan_digest_for_skips_and_leaves_passes_green(self):
+        cmd = ["repo-plan", "steps", "--json"]
+        rec = run(status="skipped")
+        self.store(rec.replace(key=rec.key.replace(plan=plan_digest(cmd)),
+                               result=rec.result.replace(exit=None, planned=True, why="no relevant paths")))
+        profile = Path(self.tmp.name) / ".task-loop.json"
+        with mock.patch.object(self.git, "config_get", return_value=self.git.url):
+            for argv, expected in ((cmd, 0), (["repo-plan", "other"], 1), (None, 1), (cmd, 0)):
+                with self.subTest(argv=argv):
+                    profile.write_text(json.dumps({"engine": {"plan_cmd": argv}}))
+                    self.assertEqual(self.ask(repo=self.tmp.name), expected)
+            profile.write_text("invalid json")
+            self.assertEqual(self.ask(repo=self.tmp.name), 1)
+            self.store(run())
+            self.assertEqual(self.ask(repo=self.tmp.name), 0)
 
     def test_a_pass_served_for_another_tree_and_base_is_green_for_them(self):
         self.store(run().replace(tree=TreeSha("T2"), base=BaseSha("B2")))  # the record of a reuse: true for T2 on B2 now

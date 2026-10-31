@@ -685,7 +685,9 @@
   "base": "b4se",
   "inputs": "a1",
   "selected": "",
-  "env": "e1"
+  "env": "e1",
+  "plan": "p1",
+  "plan_output": "pout1"
  },
  "PassRecord": {
   "v": 1,
@@ -698,7 +700,9 @@
    "base": "b4se",
    "inputs": "a1",
    "selected": "",
-   "env": "e1"
+   "env": "e1",
+   "plan": "p1",
+   "plan_output": "pout1"
   },
   "result": {
    "id": "lint",
@@ -748,7 +752,9 @@
    "base": "b4se",
    "inputs": "a1",
    "selected": "",
-   "env": "e1"
+   "env": "e1",
+   "plan": "p1",
+   "plan_output": "pout1"
   },
   "red": true,
   "run_id": "run-1",

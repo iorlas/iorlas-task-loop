@@ -7,6 +7,7 @@ from taskloop.adapters import check_files
 from taskloop.app.checks.attempts import Attempts, Outcome
 from taskloop.app.checks.cache import RunMemo
 from taskloop.app.checks.checklog import CheckLog
+from taskloop.app.checks.gateplan import PlanDecision
 from taskloop.app.checks.host import CheckFault, CheckHost
 from taskloop.app.checks.lanes import Lanes
 from taskloop.app.checks.resources import LeaseCancelled, Resources
@@ -28,7 +29,7 @@ FAILED_FIRST = " failed first"
 class CheckExecutor:
     def __init__(self, host: CheckHost, memo: RunMemo, attempts: Attempts, checklog: CheckLog,
                  history: Durations, fix_red: dict[str, CheckResult] | None = None, everything: bool = False,
-                 planned: dict[str, str] | None = None) -> None:
+                 planned: PlanDecision | None = None) -> None:
         self.host, self.memo, self.attempts, self.checklog, self.history = host, memo, attempts, checklog, history
         self.everything = everything  # `when` is ignored: every check is due (tl check --all)
         self.planned = planned
@@ -49,10 +50,14 @@ class CheckExecutor:
         else:
             for n, step in enumerate(plan.steps):
                 self.step(step, n, st)
-        if not any(r.red or r.cancelled for r in st.results):
+        if (self.planned is None or self.planned.output) and not any(r.red or r.cancelled for r in st.results):
             for n, res in st.by_step.items():
                 if res.status == "skipped" and res.planned:
-                    self.memo.remember(self.memo.planned_key(plan.steps[n].check), res, st.n, "")
+                    check = plan.steps[n].check
+                    decision = self.planned if check.id in self.gates else None
+                    key = (self.memo.planned_key(check, decision.command, decision.output) if decision is not None
+                           else self.memo.planned_key(check))
+                    self.memo.remember(key, res, st.n, "")
         return st
 
     def step(self, step: Step, n: int, st: Round) -> None:
@@ -134,7 +139,8 @@ class CheckExecutor:
             # the end, so the writer sees all the cheap failures at once; the Unity group never runs after a red)
             return CheckResult.skipped(c, st.red + FAILED_FIRST)
         if not self.everything and c.id not in self.fix_red:
-            planned = self.planned if c.id in self.gates else None
+            decision = self.planned
+            planned = decision.skips if decision is not None and (c.id in self.gates or not decision.output) else None
             if planned is None and c.when and st.changed is None:
                 st.changed = self.host.checkout.changed_paths()
             if not due(c, st.changed or [], planned):

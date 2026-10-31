@@ -1,10 +1,24 @@
 """The one reader of a repo's neutral gate plan; a failed producer makes every check due."""
+import hashlib
+from dataclasses import dataclass
+
+from taskloop.app.checks.cache import NO_DIGEST, plan_digest
 from taskloop.app.checks.host import CheckHost
 from taskloop.contracts import wire
 from taskloop.contracts.gateplan import GatePlan
+from taskloop.contracts.runkey import Digest
 from taskloop.contracts.slots import SlotGitError
 
 PLAN_TIMEOUT_S = 30.0
+
+
+@dataclass(frozen=True)
+class PlanDecision:
+    """A producer's decisions and evidence; empty output means the plan failed closed."""
+
+    skips: dict[str, str]
+    command: Digest = NO_DIGEST
+    output: Digest = NO_DIGEST
 
 
 def parse(text: str) -> GatePlan:
@@ -22,7 +36,7 @@ def parse(text: str) -> GatePlan:
     return plan
 
 
-def skipped(host: CheckHost, tree: str, base: str) -> dict[str, str] | None:
+def skipped(host: CheckHost, tree: str, base: str) -> PlanDecision | None:
     """None preserves the legacy `when` decision; a configured but unusable plan skips nothing."""
     cmd = host.cfg.plan_cmd
     if cmd is None:
@@ -31,8 +45,11 @@ def skipped(host: CheckHost, tree: str, base: str) -> dict[str, str] | None:
         if not base or not tree:
             raise ValueError("the tree or resolved base is missing")
         wt = str(host.wt)
-        # tree_hash includes uncommitted paths. Diff its tree against the merge-base:
-        # for a clean checkout this is exactly base...HEAD, without losing dirty paths.
+        if host.git.dirty(wt):
+            raise ValueError("checkout is dirty")
+        if host.git.rev_parse(wt, "HEAD^{tree}") != tree:
+            raise ValueError("HEAD tree differs from the judged tree")
+        # The producer can read the checkout as well as the supplied paths.
         start = host.git.merge_base(wt, base, "HEAD")
         if not start:
             raise ValueError("cannot resolve the diff's merge-base")
@@ -47,8 +64,9 @@ def skipped(host: CheckHost, tree: str, base: str) -> dict[str, str] | None:
         if ran.exit:
             raise ValueError(f"command exited {ran.exit}")
         plan = parse(ran.out)
-        return {(s.name if s.name is not None else s.id) or "":
-                (s.reason if s.reason is not None else s.why) or "" for s in plan.steps if not s.run}
+        skips = {(s.name if s.name is not None else s.id) or "":
+                 (s.reason if s.reason is not None else s.why) or "" for s in plan.steps if not s.run}
+        return PlanDecision(skips, plan_digest(cmd), Digest(hashlib.sha1(ran.out.encode("utf-8")).hexdigest()))
     except (OSError, ValueError, SlotGitError) as err:
         host.warn("plan not used; every step required: " + " ".join(str(err).splitlines()))
-        return {}
+        return PlanDecision({})

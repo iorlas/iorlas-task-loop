@@ -15,7 +15,7 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from taskloop.adapters import check_files
-from taskloop.contracts import wire
+from taskloop.contracts import config, wire
 from taskloop.contracts.checks import BaseRedRecord, Check, CheckResult, PassRecord
 from taskloop.contracts.ids import CheckId, TreeSha
 from taskloop.contracts.ports import Git
@@ -23,6 +23,8 @@ from taskloop.contracts.runkey import BaseSha, Digest, RunKey
 from taskloop.domain.checks import inputs
 from taskloop.domain.checks.names import norm
 from taskloop.stores.bundle import Stores
+
+NO_DIGEST = Digest("")
 
 
 class InputKeys:
@@ -64,7 +66,31 @@ KEEP = 8  # passes kept per check: the newest by time (a whole-tree check leaves
 
 def key_digest(key: RunKey) -> str:
     """The name of a key's file: sha1 of the key's fields."""
-    return hashlib.sha1(json.dumps(wire.dump(key), sort_keys=True).encode()).hexdigest()
+    fields = wire.dump(key)
+    if not key.plan:
+        del fields["plan"]  # preserve existing pass keys
+    if not key.plan_output:
+        del fields["plan_output"]
+    return hashlib.sha1(json.dumps(fields, sort_keys=True).encode()).hexdigest()
+
+
+def plan_digest(cmd: list[str] | None) -> Digest:
+    """Exact argv identity; None preserves legacy `when` skips."""
+    return Digest(hashlib.sha1(json.dumps(cmd).encode()).hexdigest() if cmd is not None else "")
+
+
+def repo_plan_digest(wt: str) -> Digest | None:
+    """Read the current producer from the repo profile; an unreadable profile cannot authorize skips."""
+    try:
+        text = (Path(wt) / ".task-loop.json").read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return plan_digest(None)
+    except (OSError, ValueError):
+        return None
+    try:
+        return plan_digest(config.load(json.loads(text)).engine.plan_cmd)
+    except (ValueError, config.ConfigError):
+        return None
 
 
 class RunMemo:
@@ -104,11 +130,12 @@ class RunMemo:
         return RunKey(check=CheckId(norm(c.cmd)), cmd=Digest(inputs.cmd_digest(c)), config=Digest(""), toolchain=Digest(""),
                       tree=self.keys.tree, base=self.base, inputs=Digest(""), selected=Digest(""), env=self.env_of(c))
 
-    def planned_key(self, c: Check) -> RunKey:
+    def planned_key(self, c: Check, plan: Digest = NO_DIGEST, plan_output: Digest = NO_DIGEST) -> RunKey:
         """A plan decision is about this exact diff, even for inputs_only or cache:false checks; never reuse it as a pass."""
         return RunKey(check=c.id, cmd=Digest(inputs.cmd_digest(c)), config=Digest(inputs.config_digest(c)),
                       toolchain=Digest(self.keys.toolchain(self.system)), tree=self.keys.tree, base=self.base,
-                      inputs=Digest(inputs.WHOLE_TREE), selected=Digest(inputs.selected_digest(c)), env=self.env_of(c))
+                      inputs=Digest(inputs.WHOLE_TREE), selected=Digest(inputs.selected_digest(c)), env=self.env_of(c),
+                      plan=plan, plan_output=plan_output)
 
     def base_key(self, c: Check) -> RunKey:
         """The run of the command on the untouched base: it reads that commit's tree, so no tree and no inputs."""
@@ -170,17 +197,17 @@ class RunMemo:
 
 def repo_green(stores: Stores, git: Git, wt: str, step: CheckId, tree: TreeSha, base: BaseSha) -> bool:
     """is_green for the repo of the worktree `wt`."""
-    return is_green(stores, check_files.repo_key(git, wt), step, tree, base)
+    return is_green(stores, check_files.repo_key(git, wt), step, tree, base, repo_plan_digest(wt))
 
 
 def repo_green_result(stores: Stores, git: Git, wt: str, step: CheckId, tree: TreeSha, base: BaseSha) -> CheckResult | None:
     """green_result for the repo of the worktree `wt`."""
-    return green_result(stores, check_files.repo_key(git, wt), step, tree, base)
+    return green_result(stores, check_files.repo_key(git, wt), step, tree, base, repo_plan_digest(wt))
 
 
-def is_green(stores: Stores, repo: str, step: CheckId, tree: TreeSha, base: BaseSha) -> bool:
+def is_green(stores: Stores, repo: str, step: CheckId, tree: TreeSha, base: BaseSha, plan: Digest | None = NO_DIGEST) -> bool:
     """Read-only: a pass or planned skip is recorded for exactly this tree and base."""
-    return green_result(stores, repo, step, tree, base) is not None
+    return green_result(stores, repo, step, tree, base, plan) is not None
 
 
 def satisfied(res: CheckResult) -> bool:
@@ -188,11 +215,13 @@ def satisfied(res: CheckResult) -> bool:
     return not res.cancelled and (res.status == "passed" or (res.status == "skipped" and res.planned))
 
 
-def green_result(stores: Stores, repo: str, step: CheckId, tree: TreeSha, base: BaseSha) -> CheckResult | None:
+def green_result(stores: Stores, repo: str, step: CheckId, tree: TreeSha, base: BaseSha,
+                 plan: Digest | None = NO_DIGEST) -> CheckResult | None:
     """The same green decision as is_green, with its evidence for the CLI."""
     docs = stores.results(repo, step)
     names = docs.keys()  # a DocSet is not iterable: it has keys()
     for r in (docs.of(n).get() for n in names):
-        if r is not None and r.key.check == step and r.tree == tree and r.base == base and satisfied(r.result):
+        if (r is not None and r.key.check == step and r.tree == tree and r.base == base and satisfied(r.result)
+                and (r.result.status == "passed" or (plan is not None and r.key.plan == plan))):
             return r.result
     return None

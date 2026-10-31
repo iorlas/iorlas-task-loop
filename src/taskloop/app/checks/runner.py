@@ -89,7 +89,7 @@ class Checker:
         memo = self._memo(tree, base)
         planned = gateplan.skipped(host, tree, base)
         changed = host.checkout.changed_paths() if planned is None and any(c.when for c in items) else []
-        return all(memo.has(c) or not due(c, changed, planned) for c in items)
+        return all(memo.has(c) or not due(c, changed, planned.skips if planned is not None else None) for c in items)
 
     def _history(self) -> tuple[Doc[Durations], Durations]:
         host = self.host
@@ -106,7 +106,7 @@ class Checker:
         return RunMemo(host.stores, repo, keys, BaseSha(base), engine_env, host.run_id)
 
     def _executor(self, memo: RunMemo, history: Durations, base_run: bool, fix_red: dict[str, CheckResult] | None = None,
-                  everything: bool = False, planned: dict[str, str] | None = None) -> CheckExecutor:
+                  everything: bool = False, planned: gateplan.PlanDecision | None = None) -> CheckExecutor:
         host = self.host
         attempts = Attempts(host, BaseCheck(host, memo, base_run), self.sleep)
         return CheckExecutor(host, memo, attempts, host.checklog, history, fix_red, everything, planned)

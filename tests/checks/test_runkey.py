@@ -1,6 +1,8 @@
 """RunKey (tl-3u6.3): the repo's result store, keyed by (check, command, settings, toolchain, tree, base, inputs, selected tests, env).
 The land gate asks it, a changed env misses it, and what git cannot see is never served from it (tl-bxk.8.19, tl-7y6.7.11). A moved base
 does not invalidate a check that says `inputs_only` (tl-9un.34); two runners writing at once lose nothing (tl-9un.33)."""
+import hashlib
+import json
 import sys
 import tempfile
 import threading
@@ -19,11 +21,11 @@ from support.narrow import must
 # isort: split
 from support.spawn import port_git
 
-from taskloop.app.checks.cache import KEEP, InputKeys, RunMemo, is_green
-from taskloop.contracts import paths
+from taskloop.app.checks.cache import KEEP, InputKeys, RunMemo, green_result, is_green, key_digest, plan_digest
+from taskloop.contracts import paths, wire
 from taskloop.contracts.checks import Check, CheckResult, PassRecord
 from taskloop.contracts.ids import CheckId, TreeSha
-from taskloop.contracts.runkey import BaseSha
+from taskloop.contracts.runkey import BaseSha, Digest, RunKey
 from taskloop.stores.memory import fake_stores
 from taskloop.stores.real import real_stores
 
@@ -175,6 +177,29 @@ class InputsOnly(unittest.TestCase):
 
 
 class Store(unittest.TestCase):
+    def test_old_keys_default_to_no_plan_output_and_keep_their_digest(self):
+        key = must(memo().key(Check(id=CheckId("c"), cmd="c")))
+        old = wire.dump(key)
+        del old["plan"]
+        del old["plan_output"]
+        restored = wire.load(RunKey, old)
+        self.assertEqual(restored.plan_output, "")
+        self.assertEqual(key_digest(restored), hashlib.sha1(json.dumps(old, sort_keys=True).encode()).hexdigest())
+        self.assertNotEqual(key_digest(key), key_digest(key.replace(plan_output=Digest("document"))))
+
+    def test_plans_with_different_argv_keep_separate_skip_records(self):
+        m = memo()
+        check = Check(id=CheckId("c"), cmd="c")
+        first, second = plan_digest(["plan", "a b", "c"]), plan_digest(["plan", "a", "b c"])
+        skip = CheckResult.skipped(check, "first policy").replace(planned=True)
+        m.remember(m.planned_key(check, first), skip, 1, "")
+        self.assertFalse(is_green(m.stores, "repo", check.id, m.keys.tree, m.base, second))
+        m.remember(m.planned_key(check, second), skip.replace(why="second policy"), 2, "")
+        for digest, why in ((first, "first policy"), (second, "second policy")):
+            with self.subTest(digest=digest):
+                result = must(green_result(m.stores, "repo", check.id, m.keys.tree, m.base, digest))
+                self.assertEqual(result.why, why)
+
     def test_other_skip_kinds_and_unverified_results_are_never_green_even_if_stored(self):
         check = Check(id=CheckId("c"), cmd="c")
         m = memo()
