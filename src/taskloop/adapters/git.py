@@ -7,10 +7,14 @@ from typing import Literal
 
 from taskloop.adapters.git_base import classify
 from taskloop.adapters.git_ops import LandGit
+from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.gitfacts import ConfigEntry, GitOutcome, GrepHit, LogRow, Pick, Ref, StatusRow, TreeEntry
 from taskloop.contracts.slots import Checkout, RefRace, SlotGitError
 
 FETCH_TRIES = 5
+
+
+LAND_ENV = {EnvVar.TL_LAND.value: "1"}
 
 
 class RealGit(LandGit):
@@ -87,7 +91,7 @@ class RealGit(LandGit):
         self._must(os.path.dirname(dst) or ".", "clone", "-q", src, dst)
 
     def push(self, d: str, remote: str, refspec: str) -> None:
-        self._must(d, "push", "-q", remote, refspec)
+        self._must(d, "push", "-q", remote, refspec, extra=LAND_ENV)  # our own deterministic push: TL_LAND lets tl's pre-push hook pass
 
     # -- reads that return rows ------------------------------------------------------------------------------------------------
 
@@ -184,7 +188,7 @@ class RealGit(LandGit):
         self._must(d, "update-ref", "-d", "refs/heads/" + branch, oid)
 
     def delete_remote_at(self, d: str, remote: str, ref: str, oid: str) -> None:
-        self._must(d, "push", "-q", f"--force-with-lease={ref}:{oid}", remote, ":" + ref)
+        self._must(d, "push", "-q", f"--force-with-lease={ref}:{oid}", remote, ":" + ref, extra=LAND_ENV)
 
     def checkout_force(self, d: str, branch: str, start: str) -> None:
         self._must(d, "checkout", "-q", "-f", "-B", branch, start)

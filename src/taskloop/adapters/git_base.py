@@ -69,8 +69,8 @@ class GitBase:
             timeout=timeout,
         )
 
-    def _must(self, d: str, *args: str) -> str:
-        r = self._run(d, *args)
+    def _must(self, d: str, *args: str, extra: dict[str, str] | None = None) -> str:
+        r = self._run(d, *args, extra=extra)
         if r.returncode != 0:
             raise classify(r.stderr or r.stdout)
         return r.stdout.strip()
