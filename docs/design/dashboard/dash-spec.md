@@ -398,7 +398,7 @@ The dashboard backend needs were sent to the refactor session as a heads-up on 2
 | tokens, time, artifacts | `AiCall.tokens`, fresh formula in roadmap briefs, `/api/artifact`, `/api/look-shot` | tokens per stage per pass in the bead endpoint; usual per model lane with n |
 | live tail, tool calls | `/api/live` (paged events, `tool_start`/`tool_end`, long-poll `wait=`), byte-offset tails | a tool-call list shaped for the drawer (kind, name, ok/failed) |
 | learning | `tl report` card, `reflect` cause digest (`/api/reflections`), `traces.jsonl` fingerprint | weekly series for the four stats; send-backs per bead stored; durable share from ask outcomes |
-| auth | GETs open; a POST needs no token from loopback or Tailscale, else a Bearer token (`bind.post_allowed`) | keep as is |
+| auth | none: GETs and POSTs open; the bind is loopback and Tailscale only (`bind.allowed_addr`) | Denis 2026-10-31 |
 | data path | per-request reads with a TTL cache; live runs tail by offset (`tails.py`) | data path A for the snapshot (§11.2); measure before adding a persisted cache |
 
 ### 11.2 Snapshot and live updates

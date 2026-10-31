@@ -132,9 +132,8 @@ for commands red by design on the uncommitted tree a writer leaves (lifesim-fld.
 
 Dashboard Asks tab: open asks, most urgent first, each answerable in place. An answer is a typed record (`answer` on the ask file:
 `{action, text, t, by}`, action one of `rerun`, `confirm`, `split`, `text`) and the bead is opened for the loop; first answer wins.
-Answering needs no token from loopback or Tailscale (100.64.0.0/10), judged by the socket's peer address, never a header; a POST
-from any other address (a container bound to 0.0.0.0, the LAN) needs the token in `~/.config/task-loop/dash.token`: `tl dash url`
-prints `ANSWER LINK`s with it. The page never asks for a token up front; on a 401 it shows one inline hint. A red banner shows when
+The dashboard has no auth: any GET or POST is answered, and the server listens only on loopback and the Tailscale address
+(100.64.0.0/10; it refuses 0.0.0.0 and any LAN address), so the page and the JSON API are open to any local agent's curl. A red banner shows when
 delegate says a subscription lane is out.
 
 An ask is one record, `~/.config/task-loop/asks/<bead>.json` (`taskloop.contracts.ask.Ask`, `v` 2; an older or unknown `v` reads as

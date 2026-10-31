@@ -22,7 +22,7 @@ Neither side changes a field alone: a change is a commit to `dash.py` plus regen
 | GET `/api/version` | | `{version, pid, urls, started, script, binds, port}`: what `tl dash ensure` checks |
 
 Verbs: `answer`, `look`, `stick`, `prune`, `cause`, `ack`, `park`, `stop`, `note`. The dashboard runs no process: a write is an
-in-process Port call (as `Ports.answer` is today), never a raw bd argv. Auth stays `bind.post_allowed`. A refused write is
+in-process Port call (as `Ports.answer` is today), never a raw bd argv. There is no auth (the bind is loopback and Tailscale only). A refused write is
 `Result(ok=false, message=...)` with status 200, so the page shows `message`; a malformed body is 400.
 
 - **Built (backend items 3, 4, 6, 7 and 8):** `live`, `answer`, `look`, `cause`, `ack`, `stick`, `prune`, `park`, `stop`, `note`, and

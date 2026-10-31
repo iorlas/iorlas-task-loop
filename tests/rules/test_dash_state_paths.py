@@ -67,7 +67,7 @@ def problems() -> list[str]:
 class DashReadsThroughTheLocator(unittest.TestCase):
     def test_the_state_names_are_the_ones_configdir_joins(self):
         names = state_names()
-        self.assertTrue({"engine", "runs", "dash.pid", "repos.json", "dash.token"} <= names, names)
+        self.assertTrue({"engine", "runs", "dash.pid", "repos.json"} <= names, names)
 
     def test_no_dashboard_module_hardcodes_a_state_path(self):
         self.assertEqual(problems(), [])

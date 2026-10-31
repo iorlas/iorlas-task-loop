@@ -33,9 +33,6 @@ class ConfigDir:
         """githooks/: the git hooks `tl hooks install` writes; every subprocess tl starts gets it as core.hooksPath (adapters/childenv)."""
         return self.root / "githooks"
 
-    def dash_token(self) -> Path:
-        return self.root / "dash.token"
-
     def dash_pid(self) -> Path:
         return self.root / "dash.pid"
 

@@ -3,7 +3,7 @@ version), and POST /api/<verb>, the only writes. A broken transcript or log answ
 
 import json
 import os
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from typing import Any, override
@@ -11,7 +11,7 @@ from urllib.parse import parse_qs, urlparse
 
 from taskloop_dash.app import Dash
 from taskloop_dash.assets import static_file
-from taskloop_dash.bind import post_allowed, urls
+from taskloop_dash.bind import urls
 
 Query = dict[str, str]
 MAX_BODY = 65536
@@ -45,7 +45,7 @@ def route(dash: Dash, static: Path, path: str, q: Query, held: str | None = None
 
 
 def make_handler(
-    dash: Dash, port: int, addrs: list[str], static: Path, secret: Callable[[], str], script: str
+    dash: Dash, port: int, addrs: list[str], static: Path, script: str
 ) -> type[BaseHTTPRequestHandler]:
     class H(BaseHTTPRequestHandler):
         @override
@@ -76,8 +76,6 @@ def make_handler(
 
         def do_POST(self) -> None:
             u = urlparse(self.path)
-            if not post_allowed(self.client_address[0], self.headers.get("Authorization"), secret):
-                return self.send(401, b'{"error": "token"}', "application/json")
             try:
                 body = json.loads(self.rfile.read(min(int(self.headers.get("Content-Length") or 0), MAX_BODY)) or b"{}")
             except ValueError:

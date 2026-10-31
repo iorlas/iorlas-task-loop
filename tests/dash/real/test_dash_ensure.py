@@ -60,9 +60,9 @@ class LoudBind(unittest.TestCase):
         err = io.StringIO()
         with mock.patch.dict(os.environ, {"TASK_LOOP_DASH_DEV_PUBLIC": "1", "XDG_CONFIG_HOME": cfg, "APPDATA": cfg}), \
                 contextlib.redirect_stderr(err), self.assertRaises(SystemExit) as stop:
-            dash_cli.main(["--port", str(port), "--bind", "127.0.0.1,203.0.113.9"])
+            dash_cli.main(["--port", str(port), "--bind", "127.0.0.1,100.64.0.199"])  # a Tailscale address this host does not have
         self.assertNotEqual(stop.exception.code, 0)
-        self.assertIn(f"203.0.113.9:{port}", err.getvalue())
+        self.assertIn(f"100.64.0.199:{port}", err.getvalue())
         s = socket.socket()
         self.assertNotEqual(s.connect_ex(("127.0.0.1", port)), 0)
         s.close()

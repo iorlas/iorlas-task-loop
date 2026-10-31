@@ -1,12 +1,7 @@
-"""Where the dash may listen and who may write: loopback and the Tailscale range, the dev-checkout rules, and the bind itself."""
+"""Where the dash may listen: loopback and the Tailscale range only (there is no auth: the bind is the whole access rule), the
+dev-checkout rules, and the bind itself."""
 
-import contextlib
-import hmac
 import ipaddress
-import os
-import secrets
-import socket
-from collections.abc import Callable
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -23,41 +18,15 @@ class BindError(Exception):
     pass
 
 
-def trusted_source(addr: object) -> bool:
-    """True for loopback and the Tailscale CGNAT range: the owner's own machines, which answer asks with no token. addr is the
-    socket's peer (client_address), never a header: a proxy header is the client's to forge."""
+def allowed_addr(addr: str) -> bool:
+    """True for `localhost`, loopback and the Tailscale CGNAT range: the only addresses the dash may listen on."""
+    if addr == "localhost":
+        return True
     try:
-        ip = ipaddress.ip_address(str(addr).split("%")[0])
+        ip = ipaddress.ip_address(addr.split("%", maxsplit=1)[0])
     except ValueError:
         return False
-    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped:
-        ip = ip.ipv4_mapped
     return ip.is_loopback or ip in CGNAT
-
-
-def token(state_dir: Path) -> str:
-    """A secret for answer POSTs from outside loopback and Tailscale, made once (0600)."""
-    f = ConfigDir(state_dir).dash_token()
-    try:
-        t = f.read_text().strip()
-        if t:
-            return t
-    except OSError:
-        pass
-    f.parent.mkdir(parents=True, exist_ok=True)
-    t = secrets.token_urlsafe(24)
-    f.write_text(t)
-    with contextlib.suppress(OSError):
-        os.chmod(f, 0o600)
-    return t
-
-
-def post_allowed(addr: object, authorization: str | None, secret: Callable[[], str]) -> bool:
-    """A POST needs no token from a trusted source; any other source (a container bound to 0.0.0.0, the LAN) needs it."""
-    if trusted_source(addr):
-        return True
-    got = (authorization or "").replace("Bearer ", "", 1).strip()
-    return bool(got) and hmac.compare_digest(got, secret())
 
 
 def bind_addrs(process: ProcessEnv) -> list[str]:
@@ -107,7 +76,11 @@ def is_loopback(addr: str) -> bool:
 
 def bind_refusal(addrs: list[str], port: int, here: Path | str, home: Path | str, state: Path | str, process: ProcessEnv) -> str | None:
     """Why this server must not bind, else None: a dev copy once took :7878 on the Tailscale address with an empty state dir and
-    blanked the phone dashboard. Only TASK_LOOP_DASH_DEV_PUBLIC=1 overrides."""
+    blanked the phone dashboard. Only TASK_LOOP_DASH_DEV_PUBLIC=1 overrides that; nothing overrides an address outside loopback and
+    Tailscale (0.0.0.0, the LAN): the dash has no auth."""
+    if outside := [a for a in addrs if not allowed_addr(a)]:
+        return "refusing to bind {}: the dashboard has no auth, so it listens only on loopback and Tailscale (100.64.0.0/10)".format(
+            ", ".join(outside))
     if not is_installed_copy(here, home) and process.get(EnvVar.TASK_LOOP_DASH_DEV_PUBLIC) != "1":
         bad = [a for a in addrs if not is_loopback(a)]
         if bad or port == DEFAULT_PORT:
@@ -136,6 +109,6 @@ def open_servers(addrs: list[str], port: int, handler: Any) -> list[ThreadingHTT
 
 
 def urls(addrs: list[str], port: int) -> list[str]:
-    return ["http://{}:{:d}".format(socket.gethostname() if a == "0.0.0.0" else a, port) for a in addrs]
+    return [f"http://{a}:{port:d}" for a in addrs]
 
 

@@ -24,7 +24,8 @@ One read-only server per machine (`python3 -m taskloop_dash` on the interpreter 
 ## Server
 
 - Bind: 127.0.0.1 plus the Tailscale address when present (`TASK_LOOP_DASH_BIND` overrides, `TASK_LOOP_DASH_PORT` the port).
-  A POST from loopback or Tailscale needs no token; any other source needs `dash.token` (`bind.post_allowed`).
+  No auth: the server refuses any address outside loopback and Tailscale (`bind.allowed_addr`), never 0.0.0.0; `tl dash ensure`
+  deletes the old `dash.token`.
 - `/api/version` names the code that runs; `tl dash ensure` restarts a server whose code is older.
 - It exits after hours with no task-loop event and no page request (`TASK_LOOP_DASH_IDLE_H`, default 6).
 - A broken record answers that request with a 500 and the error; it never takes the page down.

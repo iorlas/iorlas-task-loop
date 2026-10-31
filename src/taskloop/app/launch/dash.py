@@ -174,6 +174,7 @@ def ensure_dev(env: Env, spawner: Spawner) -> int:
 
 def ensure(env: Env, spawner: Spawner) -> int:
     """Running and current, else replace it (a stale one: files deleted, old version, or missing an address)."""
+    (config_dir(env) / "dash.token").unlink(missing_ok=True)  # the dash had a token once; it has no auth now
     port = port_of(env)
     v = ping(port)
     if v and not is_dash_server(v):
@@ -201,12 +202,6 @@ def url(env: Env) -> int:
     port = port_of(env)
     v = ping(port)
     print_urls(v, port)
-    try:  # the links that may answer asks: open one on the phone once, the page keeps the token
-        t = (config_dir(env) / "dash.token").read_text().strip()
-    except OSError:
-        t = ""
-    for u in (v or {}).get("urls", []) if t else []:
-        print(f"ANSWER LINK {u}/?token={t}")
     return 0
 
 

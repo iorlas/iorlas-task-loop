@@ -113,6 +113,13 @@ class EnsureFlow(unittest.TestCase):
         rc, stops, popens = self.run_ensure([v])
         self.assertEqual((rc, stops, popens), (0, [], []))
 
+    def test_an_old_token_file_is_deleted(self):
+        tok = Path(self.tmp.name) / "task-loop" / "dash.token"
+        tok.parent.mkdir(parents=True, exist_ok=True)
+        tok.write_text("old")
+        self.run_ensure([live(self.script, binds=("127.0.0.1", "100.1.2.3"))])
+        self.assertFalse(tok.exists())
+
     def test_server_missing_tailscale_bind_is_replaced(self):
         old = live(self.script)
         new = live(self.script, binds=("127.0.0.1", "100.1.2.3"))

@@ -51,14 +51,5 @@ class Env(unittest.TestCase):
         return bind.bind_refusal(addrs, port, here=where or self.dev, home=self.home, state=self.state, process=ProcessEnv(), **kw)
 
 
-class Override(Env):
-
-    def test_the_server_override_gets_past_the_rule(self):
-        # TEST-NET-1 address cannot be bound: the bind itself fails, proving the rule let it through
-        code, err = self.run_server(self.dev, "--bind", "192.0.2.1", "--port", "0", public=True)
-        self.assertEqual(code, 2)
-        self.assertIn("bind 192.0.2.1", err)
-
-
 if __name__ == "__main__":
     unittest.main()

@@ -47,10 +47,10 @@ class Live(unittest.TestCase):
 
 
 class Asks(unittest.TestCase):
-    """The owner answers an ask from the phone through the real server: no token from loopback, the answer is a typed record on the
-    ask and the bead is opened."""
+    """The owner answers an ask from the phone through the real server with no credentials (the dash has no auth): the answer is a
+    typed record on the ask and the bead is opened; the page and the read API answer a plain GET."""
 
-    def test_answer_needs_the_token_and_reaches_the_ask_once(self):
+    def test_no_credentials_needed_to_read_or_answer(self):
         with tempfile.TemporaryDirectory() as tmp:
             d = Path(tmp)
             asks = d / "task-loop" / "asks"
@@ -60,17 +60,20 @@ class Asks(unittest.TestCase):
             (asks / "x-1.json").write_text(json.dumps(rec))
             env = {"XDG_CONFIG_HOME": str(d), "APPDATA": str(d), "TASK_LOOP_DASH_BIND": "127.0.0.1", "HOME": str(d), "USERPROFILE": str(d)}
             with mock.patch.dict(os.environ, env), tlbd.bd_boundary() as bd_calls, serving(dash_ports.ports(snapshot())) as base:
-                def post(tok, text):
+                for path in ("/", "/api/snapshot", "/api/cost", "/api/version"):
+                    with urllib.request.urlopen(base + path) as r:
+                        self.assertEqual(r.status, 200, path)
+
+                def post(text):
                     req = urllib.request.Request(base + "/api/answer", method="POST",
                                                  data=json.dumps({"project": "x", "ask": "x-1-1", "kind": "answer", "text": text}).encode(),
-                                                 headers={"Content-Type": "application/json",
-                                                          **({"Authorization": "Bearer " + tok} if tok else {})})
+                                                 headers={"Content-Type": "application/json"})
                     try:
                         with urllib.request.urlopen(req) as r:
                             return r.status, json.loads(r.read())
                     except urllib.error.HTTPError as e:
                         return e.code, None
-                self.assertEqual(post("", "new"), (200, {"ok": True, "message": ""}))  # loopback: no token
+                self.assertEqual(post("new"), (200, {"ok": True, "message": ""}))
                 got = json.loads((asks / "x-1.json").read_text())
                 self.assertEqual((got["status"], got["answer"]["text"], got["answer"]["by"]), ("answered", "new", "dash"))
                 self.assertIn(("update", "x-1", "--status", "open"), bd_calls.calls)

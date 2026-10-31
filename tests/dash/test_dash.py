@@ -1,6 +1,5 @@
 """The dashboard server: pages, API and live state."""
 import json
-import os
 import socket
 import sys
 import tempfile
@@ -13,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: E402, F401
 from support.dashes import make_dash  # noqa: E402
 
+from taskloop.contracts.env import Env as ProcessEnv  # noqa: E402
 from taskloop_dash import bind as bind_mod  # noqa: E402
 
 
@@ -57,36 +57,25 @@ def free_port():
     return p
 
 
-class PostAuth(unittest.TestCase):
-    """Denis 2026-10-22: the queue is local, so no token from loopback or Tailscale (100.64.0.0/10); any other source needs it."""
+class NoAuth(unittest.TestCase):
+    """Denis 2026-10-31: "we should not have any auth strategy". The bind is the whole access rule: loopback and Tailscale only."""
 
-    def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.env = mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": self.tmp.name, "APPDATA": self.tmp.name,
-                                                "HOME": self.tmp.name, "USERPROFILE": self.tmp.name})
-        self.env.start()
-        self.state = Path(self.tmp.name) / "task-loop"
-        self.tok = bind_mod.token(self.state)
+    def test_loopback_and_tailscale_may_be_bound(self):
+        for addr in ("127.0.0.1", "127.5.5.5", "::1", "localhost", "100.64.0.1", "100.101.102.103", "100.127.255.254"):
+            self.assertTrue(bind_mod.allowed_addr(addr), addr)
 
-    def tearDown(self):
-        self.env.stop()
-        self.tmp.cleanup()
+    def test_any_other_address_is_refused_even_for_the_installed_copy(self):
+        here = Path.home() / ".claude" / "plugins" / "cache" / "m" / "p" / "1"
+        for addr in ("0.0.0.0", "::", "192.168.1.20", "10.0.0.5", "172.17.0.2", "100.63.255.255", "100.128.0.1", "myhost.local", ""):
+            self.assertFalse(bind_mod.allowed_addr(addr), addr)
+            public = ProcessEnv({"TASK_LOOP_DASH_DEV_PUBLIC": "1"})
+            why = bind_mod.bind_refusal(["127.0.0.1", addr], 0, here, Path.home(), "/nonexistent", public)
+            self.assertIn("no auth", why or "", addr)
 
-    def test_loopback_and_tailscale_need_no_token(self):
-        for addr in ("127.0.0.1", "127.5.5.5", "::1", "::ffff:127.0.0.1", "100.64.0.1", "100.101.102.103", "100.127.255.254"):
-            self.assertTrue(bind_mod.post_allowed(addr, None, lambda: self.tok), addr)
-            self.assertTrue(bind_mod.post_allowed(addr, "Bearer wrong", lambda: self.tok), addr)
-
-    def test_any_other_source_needs_the_token(self):
-        for addr in ("192.168.1.20", "10.0.0.5", "172.17.0.2", "100.63.255.255", "100.128.0.1", "8.8.8.8", "fe80::1", "junk", ""):
-            self.assertFalse(bind_mod.post_allowed(addr, None, lambda: self.tok), addr)
-            self.assertFalse(bind_mod.post_allowed(addr, "Bearer wrong", lambda: self.tok), addr)
-            self.assertFalse(bind_mod.post_allowed(addr, "Bearer ", lambda: self.tok), addr)
-            self.assertTrue(bind_mod.post_allowed(addr, "Bearer " + self.tok, lambda: self.tok), addr)
-
-    def test_the_address_comes_from_the_socket_not_a_header(self):
-        src = (ROOT / "src" / "taskloop_dash" / "http.py").read_text(encoding="utf-8")
-        self.assertIn("post_allowed(self.client_address[0]", src)
-        self.assertNotIn("X-Forwarded-For", src)
+    def test_there_is_no_token(self):
+        for name in ("http.py", "bind.py", "serve.py"):
+            src = (ROOT / "src" / "taskloop_dash" / name).read_text(encoding="utf-8")
+            self.assertNotIn("Authorization", src, name)
+            self.assertNotIn("dash.token", src, name)
 
 

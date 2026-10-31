@@ -48,7 +48,6 @@ def start(env: Env, here: Path, process: ProcessEnv,
     if why:
         print(why, file=sys.stderr, flush=True)
         sys.exit(2)
-    bind.token(env.config.root)
     try:
         servers = bind.open_servers(addrs, port, None)  # the handler is set below: it needs the real port
     except bind.BindError as e:
@@ -56,8 +55,7 @@ def start(env: Env, here: Path, process: ProcessEnv,
         sys.exit(2)
     port = servers[0].server_address[1]
     dash = Dash(env)
-    handler = make_handler(dash, port, addrs, STATIC,
-                           lambda: bind.token(env.config.root), str(Path(sys.argv[0]).resolve()))
+    handler = make_handler(dash, port, addrs, STATIC, str(Path(sys.argv[0]).resolve()))
     for s in servers:
         s.RequestHandlerClass = handler
     if not bind.is_dev_checkout(here):  # a dev server must not claim the shared pid file
