@@ -20,6 +20,7 @@
   tl.py slot list|take|release|reset|setup ...  slots (see SKILL.md, Slots)
   tl.py slot hold S --why TEXT [--for MIN]      keep the loop and run-task off a slot (a person, screenshots)
   tl.py worktree start|sunset ...               one worktree per loop session when slots are off
+  tl.py worktrees [clean]                       list the repo's worktrees (owned, foreign, orphaned); clean removes owned merged clean ones
   tl.py usage '<plan.windows JSON>'             feed get_usage to delegate (every 20 min while an engine runs)
   tl.py lanes                                   file delegate's lane status for the dashboard (the dashboard runs no delegate)
   tl.py reflect digest [--since 24h] [--dry-run]  the last day's run reflections into one bead per recurring cause
@@ -159,6 +160,8 @@ def owner_parsers(sp):
     p = sp.add_parser("worktree")
     p.add_argument("op", choices=["start", "sunset"])
     p.add_argument("--self-too", action="store_true")
+    p = sp.add_parser("worktrees", help="list worktrees (owned, foreign, orphaned); clean: remove owned merged clean ones")
+    p.add_argument("op", nargs="?", choices=["clean"], default="list")
     cli_asks.add_parsers(sp)
     p = sp.add_parser("dash")
     p.add_argument("op", choices=["ensure", "stop", "status", "url"])
@@ -371,6 +374,7 @@ VERBS: Final[dict[str, Handler]] = {
     "usage": lambda a, c: wire_usage.feed(a.windows, c.spawner, c.env),
     "lanes": lambda a, c: wire_lanes.refresh(c.spawner, c.env),
     "worktree": lambda a, c: wslots.worktree(c.git, c.who, a.op, a.self_too),
+    "worktrees": lambda a, c: wslots.owned_worktrees(c.git, c.who, a.op),
     "dash": lambda a, c: wire_dash.run(a.op, c.env, c.spawner),
     "pin": lambda a, c: pins.run_pin(c.env, a.version, a.delegate, a.clear),
     "rollback": lambda a, c: pins.run_rollback(c.env),

@@ -1,8 +1,8 @@
 """The slot verbs of `tl slot`: each takes the env and the parsed arguments, prints what the old verb printed, and returns the
 exit code. A SlotFail becomes a code by `fail_code`: busy 4, bead_pinned 5, slot_broken 3 (0 is done, 1 a refusal, 2 a misuse)."""
-import os
 from typing import Any, Final
 
+from taskloop.app.slots import owned
 from taskloop.app.slots.env import SlotEnv, stamp
 from taskloop.app.slots.line import order, wait_slot, waiting_line
 from taskloop.app.slots.marks import held_by, mark_held, next_gen
@@ -81,14 +81,12 @@ def init(env: SlotEnv, a: Any) -> int:
             env.store.create(NewBead(title=f"slot {env.host} {name}", issue_type="chore", labels=["slot"], priority=4,
                                      description="Slot worktree " + name + " for task-loop. Claimed while a session uses it; never work."))
         d = env.dir_of(name)
-        env.exclude_local(env.repo)
-        if not os.path.isdir(d):
-            try:
-                env.git.fetch(env.repo)
-                env.git.add_worktree(env.repo, d, env.cfg.base)
-            except SlotGitError as e:
-                env.warn(e.tail)
-                return 1
+        try:
+            owned.create(env.git, env.cfgdir, env.repo_key, env.repo, d, env.cfg.base, kind="slot", run=env.actor, bead="",
+                         host=env.host, now=env.now(), exclude=lambda: env.exclude_local(env.repo))
+        except SlotGitError as e:
+            env.warn(e.tail)
+            return 1
         env.say(name + "\t" + d)
     return 0
 

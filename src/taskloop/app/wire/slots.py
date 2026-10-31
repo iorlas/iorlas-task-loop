@@ -1,6 +1,5 @@
 """The slot code's world, built from this machine: the repo's profile, its bd, git and ticket line, the worktrees of the repo and the
 loop's own worktree when slots are off. The composition root for `tl slot ...`, the loop and the engine."""
-import contextlib
 import functools
 import json
 import os
@@ -15,8 +14,9 @@ from taskloop.adapters.gitrepo import repo_root
 from taskloop.adapters.ident import hostname
 from taskloop.adapters.landlock import os_lock
 from taskloop.app.slots import line as slots_line
+from taskloop.app.slots import owned
 from taskloop.app.slots.engine_lock import drop_engine_lock, engine_busy, lock_pid
-from taskloop.app.slots.env import DEFAULT_PRIO, SlotEnv
+from taskloop.app.slots.env import DEFAULT_PRIO, SlotEnv, stamp
 from taskloop.app.slots.pool import SlotPool, machine_slots
 from taskloop.app.track import trail
 from taskloop.app.track.trail import event
@@ -87,6 +87,12 @@ def slot_dir(repo: str, name: str, cfg: SlotsConfig) -> str:
     return str(Path(root if os.path.isabs(root) else os.path.join(repo, root)) / name)
 
 
+def slot_excludes(repo: str, cfg: SlotsConfig) -> tuple[str, ...]:
+    """The exclude lines for the slot folder (a path under the repo; one outside it needs none) and the scratch folder."""
+    d = Path(slot_dir(repo, "x", cfg)).parent
+    return (str(d.relative_to(repo)) + "/", TASK_EXCLUDE) if d.is_relative_to(repo) else (TASK_EXCLUDE,)
+
+
 def exclude_local(git: Git, repo: str, *patterns: str) -> None:
     """Keep the loop's own folders out of `git add -A` in every repo, without touching its tracked .gitignore."""
     common = git.common_dir(repo)
@@ -120,7 +126,7 @@ def slot_env(repo: str, store: Beads | None = None, cfg: SlotsConfig | None = No
             who), say=print,
         warn=lambda m: print(m, file=sys.stderr), pid=os.getpid(),
         run_setup=lambda argv, d: spawner.run(argv, cwd=d, capture=False).exit,
-        exclude_local=lambda r: exclude_local(git, r, ".slots/", TASK_EXCLUDE), now=now or trail.now)
+        exclude_local=lambda r: exclude_local(git, r, *slot_excludes(r, cfg or profile_slots(r))), now=now or trail.now)
 
 
 def slot_beads(repo: str, who: Identity, store: Beads | None = None) -> list[Bead]:
@@ -203,17 +209,14 @@ def worktrees(repo: str, git: Git, who: Identity, slots: list[Bead] | None = Non
 
 def start_worktree(repo: str, git: Git, who: Identity, name: str | None = None) -> str:
     """This session's loop worktree (`name`: the loop's pick, default this actor's), made once and reused."""
-    exclude_local(git, repo, ".worktrees/", TASK_EXCLUDE)
-    d = Path(repo) / ".worktrees" / ("loop-" + (name or who.actor[3:]))
-    if not d.exists():
-        with contextlib.suppress(SlotGitError):
-            git.fetch(repo)
-        try:
-            git.add_worktree(repo, str(d), "origin/main")
-        except SlotGitError as e:
-            sys.exit(e.tail)
-    event(who, "worktree_start", "", worktree=str(d), repo=repo)
-    return str(d)
+    d = owned.loop_path(repo, name or who.actor[3:])
+    try:
+        owned.create(git, who.config, repo_key(repo), repo, d, "origin/main", kind="loop", run=who.session or who.actor, bead="",
+                     host=hostname(), now=trail.now(), exclude=lambda: exclude_local(git, repo, ".worktrees/", TASK_EXCLUDE))
+    except SlotGitError as e:
+        sys.exit(e.tail)
+    event(who, "worktree_start", "", worktree=d, repo=repo)
+    return d
 
 
 def live_actors(repo: str, who: Identity, store: Beads | None = None) -> set[str]:
@@ -235,18 +238,32 @@ def worktree(git: Git, who: Identity, op: str, self_too: bool = False) -> int:
         return 0
     if op != "sunset":
         return 2
-    live = live_actors(repo, who)
+    live, docs = live_actors(repo, who), owned.docs(who.config, repo_key(repo))
     for d in sorted((Path(repo) / ".worktrees").glob("loop-*")):
         owner = "tl-" + d.name[5:]
         if owner == who.actor and not self_too:
             continue
         if owner != who.actor and any(w == owner or w.startswith(owner + "-") for w in live if w):
             continue  # a loop of that session claims as <owner>-<suffix>
-        if git.dirty(str(d)):
-            print("KEEP dirty " + str(d))
+        if lost := owned.losses(git, str(d), profile_slots(repo).base):
+            print("KEEP " + str(d) + ": removing it would lose\n" + "\n".join("  " + x for x in lost[: owned.SHOWN]))
             continue
         git.remove_worktree(repo, str(d))
+        docs.of(owned.key_of(str(d))).delete()
         event(who, "worktree_sunset", "", worktree=str(d), repo=repo)
         print("REMOVED " + str(d))
     git.prune_worktrees(repo)
+    return 0
+
+
+def owned_worktrees(git: Git, who: Identity, op: str) -> int:
+    """`tl worktrees [clean]`: list every worktree of this repo (owned, foreign, orphaned), or remove the owned ones that are merged
+    and clean."""
+    repo = repo_root()
+    cfg = profile_slots(repo)
+    slots_dir = str(Path(slot_dir(repo, "x", cfg)).parent)
+    if op == "clean":
+        return owned.clean(git, who.config, repo_key(repo), repo, slots_dir, cfg.base, cfg.count, engine_busy)
+    for r in owned.survey(git, who.config, repo_key(repo), repo, slots_dir):
+        print("\t".join([r.state, r.path, r.branch or "-", r.note + (f" since {stamp(r.rec.created)}" if r.rec else "")]))
     return 0

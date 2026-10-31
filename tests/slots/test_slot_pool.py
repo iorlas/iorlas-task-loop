@@ -287,3 +287,13 @@ class OneLease(Rig):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class StaleDirs(Rig):
+    def test_a_stray_slot_folder_does_not_change_the_slot_count(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.env.repo = tmp.name
+        Path(self.env.dir_of("s5")).mkdir(parents=True)
+        self.assertEqual([s.name for s in self.pool.slots()], ["s1", "s2"])
+        self.assertFalse(self.pool.configured("s5"))

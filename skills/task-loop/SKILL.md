@@ -276,7 +276,7 @@ bead's provenance.
    - **Slots on:** `tl slot init` once per machine (creates the slot beads `slot <host> s1..sN` and their worktrees);
      then `tl slot take` → prints `NAME DIR SLOT-BEAD`, or `NONE` (all held: stop with that one line). Keep the
      slot bead for the heartbeat. The slot's setup runs in step 1.5, only when its inputs changed.
-   - **Slots off:** `tl worktree sunset` (removes clean loop worktrees of sessions that hold no lease), then
+   - **Slots off:** `tl worktree sunset` (removes merged, clean loop worktrees of sessions that hold no lease), then
      `tl worktree start` → prints this session's worktree, made once and reused for every task.
 4. Your work directory (`WT` below) is that slot or worktree. A session cannot move its own folder: work there with
    absolute paths and `git -C "$WT"`; the shell's cwd resets between calls.
@@ -546,8 +546,11 @@ local to one machine, hence the host in the title.
   folder.
 
 Slots off: one worktree per loop session (`.worktrees/loop-<session>`), made at start and reused for every task;
-never one worktree per task. `tl worktree sunset` removes loop worktrees whose session holds no lease, never a dirty
-one, and never a worktree the loop did not make.
+never one worktree per task. `tl worktree sunset` removes loop worktrees whose session holds no lease, never one with
+commits not on the base or with changed or untracked files, and never a worktree the loop did not make. Every worktree tl makes
+(slot or loop) gets an ownership record under the config dir. `tl worktrees` lists the repo's worktrees as owned, foreign (Claude
+Code's, other tools': never touched) or orphaned; `tl worktrees clean` removes only owned ones that are merged and clean, and for a
+refusal prints what it would lose.
 
 ## Dashboard
 

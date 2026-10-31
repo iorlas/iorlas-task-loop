@@ -34,7 +34,7 @@ class SlotEnv:
     drop_engine_lock: Callable[[str, int | None], None]  # (worktree, the pid of the lock that was judged busy): only that lock goes
     event: Callable[..., Any]
     run_setup: Callable[[list[str], str], int]  # (argv, worktree) -> exit code
-    exclude_local: Callable[[str], None]
+    exclude_local: Callable[[str], None]  # (repo): keeps the folder slot worktrees are made in out of `git add -A`
     say: Callable[[str], None] = print
     warn: Callable[[str], None] = print
     lock_pid: Callable[[str], int | None] = lambda wt: None  # the pid the worktree's engine lock names now

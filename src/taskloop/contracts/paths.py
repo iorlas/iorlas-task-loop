@@ -143,6 +143,10 @@ class ConfigDir:
     def slot_setup_mark(self, key: str) -> Path:
         return self.root / "slots" / (f"{key}.setup")
 
+    def worktree_record(self, repo_key: str, key: str) -> Path:
+        """The Owned record of one worktree tl made (contracts/worktrees.py)."""
+        return self.root / "worktrees" / repo_key / (f"{key}.json")
+
     def host(self) -> Path:
         """host.json: what this machine has (the resources checks may need). A person writes it; absent: the host has every resource."""
         return self.root / "host.json"

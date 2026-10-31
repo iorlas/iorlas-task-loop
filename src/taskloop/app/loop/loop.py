@@ -17,6 +17,7 @@ from taskloop.app.loop.settle import Settle
 from taskloop.app.loop.take import Taker
 from taskloop.app.loop.versions import Installs
 from taskloop.app.slots import line as slots_line
+from taskloop.app.slots import owned
 from taskloop.app.slots.lease import Lease
 from taskloop.app.slots.pool import SlotPool
 from taskloop.contracts import wire
@@ -215,7 +216,7 @@ class Loop(Core):
         env = self.env
         name = env.session_actor[3:]
         taken = {st.worktree for st in self.files.live(but=env.pid)}
-        return env.actor()[3:] if str(Path(env.repo) / ".worktrees" / ("loop-" + name)) in taken else name
+        return env.actor()[3:] if owned.loop_path(env.repo, name) in taken else name
 
     def queue(self) -> tuple[Queue, QueueRule]:
         q, rule = rank_ready(self.env, self.prof.engine, self.say)
