@@ -8,6 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401
 from support import gitq
 from support.engine_case import real_git
+from support.fake_beads import FakeBeads
 from support.forgesim import ForgeSim
 
 # isort: split
@@ -77,7 +78,7 @@ class RealPush(unittest.TestCase):
         gate = StackGate(self.cmds, self.git, stores, str(other), "origin/main", ["tl"])
         stack = Stack(forge, self.cmds, self.log, self.git, str(other), Path(self.tmp.name) / "lock",
                       lambda b, s: 0, lambda: DoltPush(0, ""),
-                      "me", "s", gate)
+                      "me", "s", gate, FakeBeads(actor="me"))
         branch, got, _ = stack.resolve(StackItem(branch="task/remote-only"))
         self.assertEqual((branch, got), ("task/remote-only", oid))
         self.assertEqual(self.git.rev_parse(str(other), oid), oid)

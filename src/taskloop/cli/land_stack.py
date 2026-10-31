@@ -60,12 +60,15 @@ def cmd_land_stack(a: argparse.Namespace, who: Identity, git: Git, spawner: Runs
         return closeguard.record_land(who, store, git, repo, f"origin/{a.base}", BeadId(bead), sha, f"{MODE}: merged as {sha[:12]}")
 
     stack = Stack(forge, cmds, log, git, repo, lock, landed, store.dolt_push, who.actor, who.session,
-                  StackGate(cmds, git, stores, repo, f"origin/{a.base}", tl), a.wait_min, lambda bead: locator.add_bead(run, bead))
+                  StackGate(cmds, git, stores, repo, f"origin/{a.base}", tl), store, a.wait_min, lambda bead: locator.add_bead(run, bead))
     rc = 1
     try:
         rc = stack.run(items)
     finally:  # every exit leaves a terminal state: done, or failed (a raise included)
-        locator.end(run, time.time(), RunState.DONE if rc == 0 else RunState.FAILED, "" if rc == 0 else f"exit {rc}")
+        locator.end(run, time.time(), RunState.DONE if rc == 0 else RunState.FAILED,
+                    "" if rc == 0 else stack.failure_reason or f"exit {rc}")
+    if stack.failure_reason:
+        print(f"land-stack: {stack.failure_reason}")
     print(f"land-stack {'landed ' + str(len(items)) if rc == 0 else 'stopped, exit ' + str(rc)} (run {run})")
     return rc
 

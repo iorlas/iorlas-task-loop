@@ -17,8 +17,9 @@ from taskloop.app.land.stackgate import StackGate
 from taskloop.contracts import log as rec
 from taskloop.contracts.enums import Outcome, WhyCode
 from taskloop.contracts.forge import CLOSED, MERGED, OPEN, Pr, StackItem
+from taskloop.contracts.ids import BeadId
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import DoltPush, Git
+from taskloop.contracts.ports import Beads, DoltPush, Git
 from taskloop.domain.land.matchers import no_dolt_remote
 from taskloop.stores.runlog import RunLog
 
@@ -34,11 +35,12 @@ def lock_path(home: ConfigDir, git: Git, repo: str) -> Path:
 
 class Stack:
     def __init__(self, forge: Forge, cmds: Cmds, log: RunLog, git: Git, repo: str, lock: Path, record: Callable[[str, str], int],
-                 sync: Callable[[], DoltPush], owner: str, session: str, gate: StackGate, wait_min: float | None = None,
+                 sync: Callable[[], DoltPush], owner: str, session: str, gate: StackGate, beads: Beads, wait_min: float | None = None,
                  named: Callable[[str], None] = lambda _bead: None) -> None:
         self.forge, self.cmds, self.log, self.git, self.repo, self.lock = forge, cmds, log, git, repo, lock
         self.record, self.sync, self.owner, self.session, self.wait_min = record, sync, owner, session, wait_min
         self.gate, self.named = gate, named  # named(bead): the run's manifest learns each bead
+        self.beads, self.failure_reason = beads, ""
         self.recorded = 0
         self.synced = False  # bd sync was tried
         self.last = ""  # the merge commit of the last item delivered
@@ -49,11 +51,13 @@ class Stack:
                                    started_because="first"))
         rc, why = 0, f"{len(items)} delivered"
         try:
+            self.validate_beads(items)
             for item in items:
                 self.item(item)
             self.sync_bd()
         except Stop as stop:
             rc, why = stop.rc, stop.why
+            self.failure_reason = why
             self.log.warn(why)
             if self.recorded and not self.synced:  # what landed keeps its records safe on the remote; the original exit code stays
                 with contextlib.suppress(Stop):
@@ -61,6 +65,16 @@ class Stack:
         self.log.emit(rec.Close(outcome=Outcome.LANDED if rc == 0 else Outcome.FAILED, why_code=None if rc == 0 else WhyCode.FAILED,
                                 sha=self.last, why=why))
         return rc
+
+    def validate_beads(self, items: list[StackItem]) -> None:
+        """Every explicitly named bead must exist before any item can push or merge."""
+        for bead in dict.fromkeys(item.bead for item in items if item.bead):
+            try:
+                found = self.beads.show(BeadId(bead))
+            except Exception as e:
+                raise Stop(1, f"cannot verify bead {bead}: {e}") from None
+            if found is None:
+                raise Stop(1, f"unknown bead {bead}: no issue found")
 
     def item(self, item: StackItem) -> None:
         branch, oid, pr = self.resolve(item)
@@ -73,8 +87,7 @@ class Stack:
         self.log.emit(rec.StepStart(id=sid, step=name, text=f"land {branch}"))
         try:
             if pr is None or pr.state == OPEN:  # a PR already merged or closed is prepare's to judge
-                if self.gate.steps():
-                    self.forge.fetch()  # the base and the head as origin has them now
+                self.forge.fetch()  # the judged commit's profile, and the base as origin has it now
                 self.gate.require(branch, oid)
             pr = self.prepare(item, branch, oid, pr)
             head = pr.head_oid
