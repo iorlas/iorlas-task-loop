@@ -385,6 +385,16 @@ filed, beads blocked with their question, the dashboard address. Nothing else.
 
 ## Loop (no session per bead)
 
+`tl factory start [--repo DIR]` starts the whole factory from any terminal: a detached loop plus `tl dash ensure`.
+The repo defaults to the current directory's repo. Claude Code Desktop and the starting terminal may close afterwards.
+It keeps polling an empty queue; repeating start prints `already running`. Start and `tl factory status [--repo DIR]`
+print PID, version, repo, log path and dashboard addresses; status includes current beads when known and exits 1 when not running.
+`tl factory stop [--repo DIR] [--now]` uses the same graceful stop as `tl stop`, targeting each live loop's recorded PID and start time.
+`tl factory logs [--repo DIR] [-n N] [-f]` prints the last 50 lines by default and optionally follows the console log.
+The console log and PID file live beside existing loop logs under `<config>/loop/<repo-key>/` as `factory.log` and `loop.pid`.
+On macOS an available `caffeinate -i -w <pid>` prevents idle sleep while the loop lives. No OS service is installed;
+start again after a reboot. Stopping a repo's factory leaves the shared dashboard available for other repos.
+
 `tl loop` runs the queue by itself, one bead at a time, in the foreground of any shell (a background job, tmux, a
 container); the session that starts it only watches it.
 

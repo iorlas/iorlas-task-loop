@@ -45,6 +45,7 @@ Or let the loop run the queue by itself, one bead after another, each in any fre
 
 ```sh
 uv run --script skills/task-loop/tl.py loop [--max-beads N] [--until HH:MM]   # tl loop status to watch, tl stop [--now] to end
+uv run --script skills/task-loop/tl.py factory start [--repo DIR]          # detached loop + dashboard; terminal may close
 ```
 
 Everything is recorded in the bead (plan, review findings, reflect stats, provenance of who claimed and landed it).
@@ -64,6 +65,12 @@ Without slots, each loop session makes one worktree at start and reuses it.
 ## Dashboard
 
 One read-only server per machine, started by the loop (`tl.py dash ensure`), default port 7878.
+`tl factory start` starts a detached loop for the current directory's repo and ensures the dashboard; it needs no Claude Code
+Desktop session or open terminal. It keeps polling when the queue drains. Repeating it reports `already running`.
+Use `tl factory status`, `tl factory stop` (finish the current bead), `tl factory stop --now`, and
+`tl factory logs [-n 50] [-f]`; each accepts `--repo DIR`. Start and status print the repo, version, PID, log and dashboard URL.
+The loop's PID and console log are in `<config>/loop/<repo-key>/loop.pid` and `factory.log`, alongside its existing run logs.
+On macOS, installed `caffeinate` prevents idle sleep while the loop lives. This installs no OS service and does not restart after reboot.
 
 - **Board:** every bead of every registered repo by stage (backlog, working, asking, AI review, your look, landing, done),
   and the goal tree.

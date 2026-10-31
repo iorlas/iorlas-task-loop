@@ -36,6 +36,7 @@
   tl.py loop [--repo DIR] [--max-beads N] [--until HH:MM] [--wait-slot-min M] [--wait-drained] [--pin] [--only ID...]
                                                 run ready beads one after another, each in any free slot
   tl.py loop status [--repo DIR] [--last N]     the running loop and its last beads
+  tl.py factory start|status|stop|logs [--repo DIR]  detached loop and dashboard; stop --now; logs [-n 50] [-f]
   tl.py stop [--repo DIR] [--now]               stop the loop after its current bead, or now (SIGTERM)
   tl.py check [--repo DIR] [--all] [--list] [ID ...]
                                                 run the repo's registry of checks (engine.checks): the gate's steps, or the named checks
@@ -83,6 +84,7 @@ from taskloop.app.wire import slots as wslots
 from taskloop.app.wire import usage as wire_usage
 from taskloop.cli import asks as cli_asks
 from taskloop.cli import closing as cli_closing
+from taskloop.cli import factory as cli_factory
 from taskloop.cli import green as cli_green
 from taskloop.cli import hooks as cli_hooks
 from taskloop.cli import land as cli_land
@@ -289,6 +291,7 @@ def build_parser():
     sp = ap.add_subparsers(dest="cmd", required=True)
     owner_parsers(sp)
     engine_parsers(sp)
+    cli_factory.add_parser(sp)
     loop_parsers(sp)
     cli_queue.add_parsers(sp)
     check_parser(sp)
@@ -405,6 +408,7 @@ VERBS: Final[dict[str, Handler]] = {
     "worktree": lambda a, c: wslots.worktree(c.git, c.who, a.op, a.self_too),
     "worktrees": lambda a, c: wslots.owned_worktrees(c.git, c.who, a.op),
     "dash": lambda a, c: wire_dash.run(a.op, c.env, c.spawner),
+    "factory": lambda a, c: cli_factory.run(a, c.env, c.spawner, c.who, c.here),
     "pin": lambda a, c: pins.run_pin(c.env, a.version, a.delegate, a.clear),
     "rollback": lambda a, c: pins.run_rollback(c.env),
     "doctor": v_doctor,
