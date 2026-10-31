@@ -75,7 +75,7 @@ class Host(StateAttrs):
         self.bead, self.stores = "t-1", fake_stores()
         self.store, self.claim = FakeBeads(), fence.offline(BeadId("t-1"))
         self.checkpoints = Checkpoints(self)
-        self.log_path = Path("t-1-20260101-000000.jsonl")
+        self.run_id = "t-1-20260101-000000"
         self.unchecked = [{"what": "u", "kind": "", "source": "", "why": "", "proof_round": False}]
         self.unverified, self.filed, self.unfiled = [{"what": "v", "kind": "", "why": "", "source": ""}], [], []
         self.look_paths, self.look_notes, self.look_unjudged = [], [], {}

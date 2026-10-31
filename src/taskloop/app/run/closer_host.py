@@ -4,7 +4,6 @@ reflection, the settling of the bead) has its own host Protocol next to it, with
 the Closer hands each step the host typed as that step's Protocol and never a wider one."""
 import threading
 from collections.abc import Mapping, Sequence
-from pathlib import Path
 from typing import Protocol
 
 from taskloop.app.run.closer_branch import BranchCheckpoints, BranchTree, LeaveTree, ReleaseSlotHost, SaveBranchHost
@@ -55,7 +54,7 @@ class CloseHost(Protocol):
     @property
     def claim(self) -> fence.Claim: ...
     @property
-    def log_path(self) -> Path: ...
+    def run_id(self) -> str: ...
     @property
     def checkpoints(self) -> CloseCheckpoints: ...
     @property

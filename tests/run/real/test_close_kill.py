@@ -15,6 +15,9 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as te
 from support.waits import until
 
+from taskloop.contracts.locator import RunLocator
+from taskloop.contracts.paths import ConfigDir
+
 CHILD = Path(te.ROOT, "tests", "support", "close_child.py")
 WAIT = 120
 
@@ -76,8 +79,9 @@ class CloseKill(te.EngineTest):
     def test_the_restart_reuses_the_dead_runs_id(self):
         _, second = self.killed_before("Reflect")
         run = next(r for r in second if "run" in r)["run"]
-        self.assertTrue(run.startswith("t-1-"))
-        self.assertEqual(len(list(Path(os.environ["XDG_CONFIG_HOME"], "task-loop", "engine").glob("t-1-*.jsonl"))), 1)
+        runs = RunLocator(ConfigDir(Path(os.environ["XDG_CONFIG_HOME"], "task-loop"))).of_bead("t-1")
+        self.assertEqual([b.run for b in runs], [run])  # one run, taken up by the second process: two attempts
+        self.assertEqual(runs[0].manifest.attempts, 2)
 
 
 if __name__ == "__main__":

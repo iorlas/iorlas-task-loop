@@ -1,7 +1,6 @@
 """What follows the push: a plan of effects (the landed fact, then bd's data; a failure of the second blocks the bead), applied once each
 by key under this run's id."""
 from functools import cached_property
-from pathlib import Path
 from typing import Protocol, assert_never
 
 from taskloop.contracts.ids import BeadId
@@ -27,7 +26,7 @@ class SyncHost(Protocol):
     @property
     def dry(self) -> bool: ...
     @property
-    def log_path(self) -> Path: ...
+    def run_id(self) -> str: ...
     @property
     def checkpoints(self) -> SyncCheckpoints: ...
     def record_land(self, sha: str) -> None: ...
@@ -46,7 +45,7 @@ class Sync:
         """The land is done and the lock is let go. -> sha."""
         e = self.e
         if sha and not e.dry:
-            interpret(e.bead, e.log_path.stem, effects.plan_land(sha), self.ledger, self.apply)
+            interpret(e.bead, e.run_id, effects.plan_land(sha), self.ledger, self.apply)
         return sha
 
     def apply(self, eff: effects.LandEffect) -> None:

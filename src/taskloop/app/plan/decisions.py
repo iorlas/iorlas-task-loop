@@ -37,7 +37,7 @@ class Decisions:
         live = {a.id for a in adrs.in_force()}
         known = [i for i in ids if i in live]
         for i in known:
-            adrs.use(i, e.bead, e.log_path.stem, time.time())
+            adrs.use(i, e.bead, e.run_id, time.time())
         if len(known) < len(ids):
             e.log.note("the plan cites decisions that do not exist: " + ", ".join(i for i in ids if i not in known))
         return known

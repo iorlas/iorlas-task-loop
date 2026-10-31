@@ -34,6 +34,7 @@ from taskloop.contracts.fence import SLOT_GEN
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.kinds import Kind
+from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdFailure, BeadPatch, Beads, Git, Spawner
 from taskloop.contracts.run import Reexec, RunReport
@@ -66,7 +67,7 @@ def _foreign_claim(b: Any, repo: Any, git: Git, who: Identity, store: Any, fresh
         return f"claimed by {holder}"
     if (b.status == "blocked" or fresh) and bead_id not in running.running(repo, git, who, store):
         return ""
-    logs = sorted((who.config.root / "engine").glob(f"{bead_id}-*.jsonl"))
+    logs = [b.log for b in RunLocator(who.config).of_bead(bead_id) if b.log.exists()]
     return f"another run of {bead_id} is still running as {holder} (a live claim)" + (f"; its engine log: {logs[-1]}" if logs else "")
 
 

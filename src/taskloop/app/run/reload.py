@@ -60,7 +60,7 @@ class Reload:
         e = self.e
         try:
             JsonStore(RunFiles(e.run_dir).pause(), RunCounters).write(self.counters())
-            reexec.net_pause_store(e.home, e.bead).write(NetPause(run=e.log_path.stem, bead=e.bead, t=time.time()))
+            reexec.net_pause_store(e.home, e.bead).write(NetPause(run=e.run_id, bead=e.bead, t=time.time()))
         except OSError as err:
             e.warn(f"could not keep the network pause for the next run: {err}")
 
@@ -92,7 +92,7 @@ class Reload:
         try:
             JsonStore(RunFiles(e.run_dir).reexec(), RunCounters).write(self.counters())
             reexec.reexec_store(e.home, e.bead).write(ReexecNote(
-                run=e.log_path.stem, bead=e.bead, frm=here, to=ver, step=step, from_dir=str(ident.PLUGIN_ROOT / "skills" / "task-loop"),
+                run=e.run_id, bead=e.bead, frm=here, to=ver, step=step, from_dir=str(ident.PLUGIN_ROOT / "skills" / "task-loop"),
                 t=time.time()))
         except OSError as err:
             return str(err)
@@ -100,7 +100,7 @@ class Reload:
 
     def switch(self, step: str, ver: str, d: Path, here: str, argv: list[str]) -> None:
         e = self.e
-        run = e.log_path.stem
+        run = e.run_id
         e.steps.end("moved")
         err = self.hand_over(step, ver, here)
         if err:

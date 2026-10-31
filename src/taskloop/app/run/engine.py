@@ -43,7 +43,7 @@ from taskloop.app.run.console import say
 from taskloop.app.run.context import RunContext
 from taskloop.app.run.delegation import Delegation
 from taskloop.app.run.fields import RunFields
-from taskloop.app.run.layout import RunLayout
+from taskloop.app.run.layout import RunLayout, repo_of
 from taskloop.app.run.records import Records
 from taskloop.app.run.reflect import Reflector
 from taskloop.app.run.reload import Reload
@@ -154,16 +154,16 @@ class Engine(RunFields):
         # the same run id: log, run dir and trace go on
         dead_run = self.dead.ended.run if self.dead and self.dead.ended else None
         taken = (self.reexec.run if self.reexec else None) or (pause.run if pause else None) or dead_run
-        layout = RunLayout.open(bead, wt, taken, self.home)
-        self.log_path, self.err_path, self.run_dir = layout.log_path, layout.err_path, layout.run_dir
-        self.run_id = layout.log_path.stem  # the run's id: TL_RUN_ID in its checks, run_id in its rows
+        layout = RunLayout.open(bead, wt, taken, self.home, repo_of(self.git, wt), self.clock.now())
+        self.log_path, self.err_path, self.run_dir, self.live_dir = layout.log_path, layout.err_path, layout.run_dir, layout.live_dir
+        self.run_id = layout.run  # the run's id: TL_RUN_ID in its checks, run_id in its rows
         self.task_dir, self.brief_file, self.evidence_dir = layout.task_dir, layout.brief_file, layout.evidence_dir
         self.exec_fn: Any = None  # a test's exec, newer-install lookup, run-task argv, the cross-process lock
         self.newer_fn: Any = None
         self.argv: Any = None
         self.moved = False
         self.os_lock = landlock.os_lock
-        stem = self.log_path.stem
+        stem = self.run_id
         self.ctx = RunContext.open(bead, cfg, Path(wt), stem, self.run_dir, self.home, self.stores, store, route, self.clock, self.sessions,
                                    self.stats, opencode.opencode_id, lambda p: context_size.context_tokens(p, self.env), say,
                                    verbose, dry_run, self.now, self.step_guard, self.on_step)
@@ -374,7 +374,7 @@ class Engine(RunFields):
     def live(self, step: str) -> str:
         """The live file for the next delegate call (delegate appends worker events there; the dashboard's Live view reads them)."""
         self.live_n += 1
-        path = live_path(self.log_path, self.live_n, step)
+        path = live_path(self.live_dir, self.live_n, step)
         try:
             os.makedirs(os.path.dirname(path), exist_ok=True)
         except OSError:
@@ -394,7 +394,7 @@ class Engine(RunFields):
         still open), paused (the machine's trouble: lanes, login, network; the bead stays open), failed."""
         out = oc.POLICY[self.kind].loop
         paused = out is Result.PAUSED
-        return RunReport(outcome=out, bead=self.bead, why=self.why[:500], run=self.log_path.stem, log=str(self.log_path),
+        return RunReport(outcome=out, bead=self.bead, why=self.why[:500], run=self.run_id, log=str(self.log_path),
                          minutes=round((time.time() - self.t0) / 60, 1), rounds=self.stats["rounds"],
                          tests_added=self.stats["tests_added"], asked=self.asked, retry_after=self.retry_after if paused else 0.0,
                          cost=round(self.cost, 2), kind=self.kind.value, fingerprint=self.fp, storm=self.storm,

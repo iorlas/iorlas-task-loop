@@ -1,6 +1,5 @@
 """bd, read only: a repo's beads (listed once, kept until bd's marker moves), one bead with its comments, and the repo a link means."""
 
-import hashlib
 import json
 import os
 import threading
@@ -47,7 +46,7 @@ class Beads:
         if hit and clock() - hit[0] < SETTLE:
             return hit[1][1]
         beads: list[Bead] = hit[1][1] if hit else []
-        disk = env.config.root / "cache" / ("beads-{}.json".format(hashlib.sha1(repo.encode("utf-8")).hexdigest()[:12]))
+        disk = env.config.beads_cache(repo)
         if not hit:  # a fresh process (tl ask list): what another process listed lately is good enough
             try:
                 c = json.loads(disk.read_text(encoding="utf-8"))

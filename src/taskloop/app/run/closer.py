@@ -109,7 +109,7 @@ class Closer:
         done = oc.make(kind, why, sha=ended.sha, spec=spec if kind in ASKS else None)  # the final outcome: its word is the trace's
         if not e.dry:
             # before the first effect: a restart rebuilds the plan from it
-            e.checkpoints.keep_end(stored_end.stored(e.log_path.stem, done, e.disp, e.fp, e.leftovers))
+            e.checkpoints.keep_end(stored_end.stored(e.run_id, done, e.disp, e.fp, e.leftovers))
         self.finish(done)
 
     def resume(self, ck: Checkpoint) -> None:
@@ -128,7 +128,7 @@ class Closer:
         stats = f"cost=${e.cost:.2f}; minutes={int((time.time() - e.t0) / 60)}; {counts}"
         branch = e.git.branch(e.wt)
         plan = effects.plan_close(done, dry=e.dry, branch=branch, slot_gen=e.claim.slot_gen)
-        interpret(e.bead, e.log_path.stem, plan, CheckpointLedger(e.checkpoints), lambda eff: self.apply(eff, done, stats))
+        interpret(e.bead, e.run_id, plan, CheckpointLedger(e.checkpoints), lambda eff: self.apply(eff, done, stats))
 
     def apply(self, eff: effects.CloseEffect, done: oc.RunOutcome, stats: str) -> None:
         """One effect of the close plan, done. The match is closed: a new effect is one more case here."""

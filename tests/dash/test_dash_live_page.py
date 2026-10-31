@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support.dashes import make_dash
 from support.logs import typed
+from support.runs import manifest
 
 from taskloop.contracts import wire
 from taskloop.contracts.dash import LivePage
@@ -33,7 +34,8 @@ class LivePageApi(unittest.TestCase):
         self.now = T + 30
         self.dash = make_dash(config=self.tmp.name, clock=lambda: self.now)
         cfg = self.dash.env.config
-        self.log, self.lf = cfg.engine_log(RUN), cfg.live_dir(RUN) / "01-write.jsonl"
+        self.bundle = manifest(cfg, RUN, BEAD, T)
+        self.log, self.lf = self.bundle.log, cfg.live_dir(RUN) / "01-write.jsonl"
         put(self.log, [typed("run_start", T, run_id=RUN, bead=BEAD, worktree=""), typed("beat", T + 1),
                        typed("step_start", T + 2, id="n1", step="write", text="write: x"), typed("beat", T + 3),
                        typed("cmd_start", T + 4, id="m1", text="git fetch -q origin"), typed("cmd_end", T + 5, id="m1", exit=0)])
@@ -69,7 +71,7 @@ class LivePageApi(unittest.TestCase):
 
     def test_the_cursor_round_trips_and_a_beat_is_no_line(self):
         first = self.get()
-        self.assertEqual(live.decode(first.cursor), self.dash.live.live_run(str(self.log)).offsets())
+        self.assertEqual(live.decode(first.cursor), self.dash.live.live_run(self.bundle).offsets())
         self.assertEqual(self.get(first.cursor).lines, [])
         put(self.log, [typed("beat", T + 20)])
         quiet = self.get(first.cursor)

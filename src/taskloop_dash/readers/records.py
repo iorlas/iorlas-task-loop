@@ -1,7 +1,6 @@
 """The task-loop records the dash reads and never writes: the event index, registered repos, traces, engine logs, and the spans a
 bead's claims make. Each is one file or folder under the config dir (taskloop.contracts.paths names them)."""
 
-import glob
 import json
 import os
 from dataclasses import dataclass
@@ -10,13 +9,13 @@ from typing import Any
 from taskloop.contracts import events, wire
 from taskloop.contracts.events import Event
 from taskloop.contracts.ids import BeadId
+from taskloop.contracts.locator import RunBundle, RunLocator
 from taskloop.contracts.parks import Park
 from taskloop.contracts.run import NetPause
 from taskloop.contracts.runlife import RETAIN
 from taskloop.contracts.stores import JsonStore, ReposStore
 from taskloop.contracts.trace import RunTrace
 from taskloop_dash.env import Env
-from taskloop_dash.views import names
 
 Span = dict[str, Any]
 
@@ -31,6 +30,7 @@ class TraceBook:
 class Records:
     def __init__(self, env: Env) -> None:
         self.env = env
+        self.locator = RunLocator(env.config)
 
     def events(self) -> list[Event]:
         """The events of the last week, re-read when the file changes. A row that is not an Event of this version (an older `v`, an
@@ -85,21 +85,15 @@ class Records:
             return TraceBook(runs, skipped)
         return self.env.files.get(str(self.env.config.traces()), load, TraceBook({}, 0))
 
-    def engine_logs(self, retain: bool = True) -> dict[BeadId, list[str]]:
-        """bead -> its engine logs, oldest first."""
+    def engine_logs(self, retain: bool = True) -> dict[BeadId, list[RunBundle]]:
+        """bead -> its runs that have an engine log, oldest first (the locator's order); `retain`: only the logs written lately."""
         cut = self.env.clock() - RETAIN if retain else 0
-        out: dict[BeadId, list[str]] = {}
-        for p in glob.glob(str(self.env.config.engine_log("*"))):
-            bead = names.bead_of(names.run_name(p))
-            if not bead:
-                continue
+        out: dict[BeadId, list[RunBundle]] = {}
+        for b in self.locator.runs():
             try:
-                if os.path.getmtime(p) < cut:
+                if os.path.getmtime(b.log) < cut:
                     continue
             except OSError:
                 continue
-            out.setdefault(bead, []).append(p)
-        for v in out.values():
-            v.sort()
+            out.setdefault(BeadId(b.bead), []).append(b)
         return out
-

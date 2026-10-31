@@ -59,6 +59,8 @@ from taskloop.app.slots import (  # noqa: E402
 from taskloop.app.wire import real  # noqa: E402
 from taskloop.app.wire import slots as wslots  # noqa: E402
 from taskloop.contracts.env import snapshot  # noqa: E402
+from taskloop.contracts.locator import RunLocator  # noqa: E402
+from taskloop.contracts.paths import ConfigDir  # noqa: E402
 
 PY = sys.executable
 BEADS = [f"w-{i}" for i in range(1, 7)]
@@ -257,9 +259,8 @@ class Race(unittest.TestCase):
                 parts.append("== {} exit {}, stderr\n{}".format(name, p.returncode, err.read_text(errors="replace")))
         for f in sorted(self.h.glob("*.log")):
             parts.append("== {}\n{}".format(f.name, "\n".join(f.read_text(errors="replace").splitlines()[-25:])))
-        for f in sorted(
-            (self.h / "cfg" / "task-loop" / "engine").glob("*.jsonl")
-        ):  # a run that did not land: why, from its own log (tl-bjd)
+        for f in (b.log for b in RunLocator(ConfigDir(self.h / "cfg" / "task-loop")).runs() if b.log.exists()):
+            # a run that did not land: why, from its own log (tl-bjd)
             lines = f.read_text(errors="replace").splitlines()
             if lines and "landed" not in lines[-1]:
                 parts.append("== engine log {} (did not land), last records\n{}".format(f.name, "\n".join(ln[:600] for ln in lines[-8:])))

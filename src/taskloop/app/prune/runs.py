@@ -9,6 +9,7 @@ from pathlib import Path
 
 from taskloop.app.run import layout
 from taskloop.app.track import trail
+from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdFailure, BeadQuery, Beads
 from taskloop.contracts.runlife import KEEP_DAYS
@@ -51,9 +52,9 @@ def prune_runs(cfg: ConfigDir, days: float, exempt: set[str], now: float, dry_ru
     `kept_days(days)`, none of a bead in `exempt` (not closed), then the event log. One scan makes the plan; the dry run prints it and
     the real run deletes exactly it. -> what went, or with `dry_run` what would."""
     days = kept_days(days)
-    runs = cfg.root / "runs"
-    dirs = layout.prune_run_dirs(runs, days, exempt, True)
-    rounds = [f for f in layout.prune_check_rounds(runs, days, exempt, True) if not any(d in f.parents for d in dirs)]
+    bundles = RunLocator(cfg).runs()  # before any folder goes: a bundle is found by its manifest
+    dirs = layout.prune_run_dirs(cfg, days, exempt, True)
+    rounds = [f for f in layout.prune_check_rounds(cfg, days, exempt, True) if not any(d in f.parents for d in dirs)]
     logs = layout.prune_run_logs(cfg, now, days * 86400, exempt, True)
     suites = [f for f in cfg.suite_logs() if f.stat().st_mtime < now - days * 86400]
     found = [Gone(p, size_of(p)) for p in [*dirs, *rounds, *logs, *suites] if p.exists()]
@@ -62,9 +63,10 @@ def prune_runs(cfg: ConfigDir, days: float, exempt: set[str], now: float, dry_ru
             shutil.rmtree(d, ignore_errors=True)
         for f in rounds:
             f.unlink(missing_ok=True)
-        for log in logs:
-            with contextlib.suppress(OSError):
-                layout.drop_run_log(cfg, log)
+        for b in bundles:
+            if b.log in logs:
+                with contextlib.suppress(OSError):
+                    layout.drop_run_log(cfg, b)
         for f in suites:
             f.unlink(missing_ok=True)
         trail.prune_events(cfg, days)

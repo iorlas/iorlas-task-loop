@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support.fake_beads import FakeBeads
 from support.logs import typed, write_log
+from support.runs import manifest
 
 from taskloop.cli import asks as cli_asks
 from taskloop.cli import wait
@@ -41,12 +42,13 @@ class WaitCase(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.cfg = ConfigDir(self.tmp.name)
-        (self.cfg.root / "engine").mkdir()
         self.asks = AskStore.at(self.cfg)
         self.out: list[str] = []
 
     def log(self, run=RUN, close=None, beat=T):
-        rows = [typed("run_start", beat - 10, run_id=run, bead=run.rsplit("-", 2)[0], worktree="/w/x"), typed("beat", beat)]
+        bead = run.rsplit("-", 2)[0]  # the test names its runs <bead>-<stamp>; the manifest is what says so
+        manifest(self.cfg, run, bead, beat - 10)
+        rows = [typed("run_start", beat - 10, run_id=run, bead=bead, worktree="/w/x"), typed("beat", beat)]
         if close:
             rows.append(typed("close", beat + 1, outcome=close, why="because"))
         write_log(self.cfg.engine_log(run), rows)
@@ -55,7 +57,7 @@ class WaitCase(unittest.TestCase):
         ap = argparse.ArgumentParser()
         wait.add_parser(ap.add_subparsers(dest="cmd"))
         c = clock or Clock()
-        rc = wait.wait(ap.parse_args(["wait", *argv]), self.cfg, self.asks, "/repo", lambda _w: "/repo", self.out.append, c.now, c.sleep)
+        rc = wait.wait(ap.parse_args(["wait", *argv]), self.cfg, self.asks, "/repo", self.out.append, c.now, c.sleep)
         return rc, c
 
     def ask(self, t=T + 1):

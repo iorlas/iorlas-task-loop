@@ -6,10 +6,12 @@ from taskloop.adapters import ident
 from taskloop.adapters.repourl import repo_url
 from taskloop.app.run import summaries
 from taskloop.app.run import trace as runtrace
+from taskloop.app.run.layout import repo_of
 from taskloop.app.slots import engine_lock
 from taskloop.contracts import log as rec
 from taskloop.contracts import plancheck
 from taskloop.contracts.enums import Outcome
+from taskloop.contracts.locator import RunLocator
 from taskloop.domain.report import matchers as lifecycle
 
 
@@ -24,9 +26,9 @@ class Records:
         e = self.e
         prev = e.ck_run or e.prev_ck
         if not prev:
-            mine = e.log_path.name
-            older = sorted(p.stem for p in e.log_path.parent.glob(f"{e.bead}-*.jsonl")
-                           if p.name < mine and lifecycle.is_run_stamp(p.stem[len(e.bead) + 1:]))
+            mine = RunLocator(e.home).get(e.run_id)
+            older = [b.run for b in RunLocator(e.home).of_bead(e.bead, repo_of(e.git, e.wt))
+                     if b.run != e.run_id and (mine is None or b.started <= mine.started) and b.log.exists()]
             prev = older[-1] if older else ""
         why = ("reexec" if e.reexec else "fresh" if e.fresh else "answer" if e.answered else "resume" if e.resumed
                else "retry" if prev else "first")
@@ -41,7 +43,7 @@ class Records:
         e.run_logged = True
         if e.reexec:  # the run record is in the log already (the exec kept the log): a note says what happened
             fallback = " (fallback after a crash)" if e.reexec.fallback else ""
-            e.log.note(f"task-loop {ident.plugin_version() or '?'} took over run {e.log_path.stem} from {e.reexec.frm}{fallback}")
+            e.log.note(f"task-loop {ident.plugin_version() or '?'} took over run {e.run_id} from {e.reexec.frm}{fallback}")
             return
         lock = engine_lock.LOCK
         why = self.origin()
@@ -61,9 +63,10 @@ class Records:
         e = self.e
         kind = e.kind.value
         try:
+            RunLocator(e.home).finish(e.run_id, time.time())  # the manifest says when the run ended
             e.stores.traces.append(
                 runtrace.run_trace(
-                    e.log_path.stem,
+                    e.run_id,
                     dict(
                         self.origin(),
                         bead=e.bead,

@@ -55,6 +55,7 @@ class FakeWaitsHost:
         self.steps = Steps(self.log, self.clock.now)
         self.stats = {"tokens_in": 0, "tokens_out": 0}
         self.log_path = Path("run.jsonl")
+        self.run_id = "run"
         self.waited = 0.0
         self.halted: list[str] = []
 
@@ -414,6 +415,8 @@ class FakeSyncHost:
         self.bead = BeadId("t-1")
         self.dry = dry
         self.log_path = Path("/runs/t-1-r1.jsonl")
+        self.log_path = Path("/runs/t-1-r1.jsonl")
+        self.run_id = "t-1-r1"
         self.checkpoints = Keys()
         self.events = events
 
@@ -593,6 +596,7 @@ class FakeSettleHost(Said):
         self.cfg = EngineConfig(base="origin/main")
         self.plan_summary = ""
         self.log_path = Path("t-1-20261030-120000.jsonl")
+        self.run_id = "t-1-20261030-120000"
         self.disp = disp
 
 
@@ -637,7 +641,7 @@ class FakeCloseHost(Said):
         self.leftovers: list[Mapping[str, str]] = []
         self.dry = dry
         self.claim = fence.offline(BeadId("t-1"))
-        self.log_path = Path("/runs/t-1-r1.jsonl")
+        self.run_id = "t-1-r1"
         self.checkpoints = CloseKeys()
         self.ask_flow = Asks()
         self.cost = 0.0

@@ -14,6 +14,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support import homes
+from support.runs import manifest
 from support.shells import quiet_shell
 from support.who import who
 
@@ -69,13 +70,12 @@ class RunData(unittest.TestCase):
 
     def run_of(self, bead, age_days):
         stem = f"{bead}-20260101-000000"
-        d = self.cfg.run_dir(stem)
+        d = manifest(self.cfg, stem, bead, self.now - age_days * DAY).dir
         (d / "evidence").mkdir(parents=True)
         (d / "evidence" / "a.png").write_bytes(b"P" * 2048)
         log = self.cfg.engine_log(stem)
-        log.parent.mkdir(parents=True, exist_ok=True)
         log.write_text("{}\n")
-        for p in (d / "evidence" / "a.png", d / "evidence", d, log):
+        for p in (d / "evidence" / "a.png", d / "evidence", d / "manifest.json", d, log):
             os.utime(p, (self.now - age_days * DAY,) * 2)
 
     def prune(self, store, dry_run=False, days=14):
@@ -114,9 +114,9 @@ class RunData(unittest.TestCase):
         scans = []
         real_scan = layout.prune_run_dirs
 
-        def scan(runs, days, exempt=(), dry_run=False):
+        def scan(cfg, days, exempt=(), dry_run=False):
             scans.append(dry_run)
-            gone = real_scan(runs, days, exempt, dry_run)
+            gone = real_scan(cfg, days, exempt, dry_run)
             self.run_of("x-4", 45)  # an old run appears after the scan: it is not in the plan, so it stays
             return gone
         with mock.patch.object(layout, "prune_run_dirs", scan):
@@ -152,7 +152,7 @@ class RunData(unittest.TestCase):
         logs.mkdir()
         (logs / "00-c.r1.log").write_text("log")
         os.utime(logs / "00-c.r1.log", (self.now - 400 * DAY,) * 2)
-        RunLayout.open("x-8", self.root / "wt", None, self.cfg)  # a run starting sweeps nothing
+        RunLayout.open("x-8", self.root / "wt", None, self.cfg, "/repo", self.now)  # a run starting sweeps nothing
         self.prune(Store(("x-7", "open")), days=7)
         self.assertTrue((logs / "00-c.r1.log").exists())
         self.assertTrue(self.cfg.engine_log("x-7-20260101-000000").exists())
@@ -177,7 +177,7 @@ class RunData(unittest.TestCase):
         self.prune(Store(), days=60)
         self.assertEqual(len(self.left()), 3)
         self.assertEqual(LoopConfig().keep_days, 14)
-        self.assertEqual(runs.size_of(self.cfg.run_dir("x-3-20260101-000000")), 2048)
+        self.assertEqual(runs.size_of(self.cfg.run_dir("x-3-20260101-000000") / "evidence"), 2048)
 
 
 class Trees(unittest.TestCase):

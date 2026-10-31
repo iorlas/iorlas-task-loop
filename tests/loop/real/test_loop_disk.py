@@ -14,6 +14,7 @@ import support.paths  # noqa: F401
 
 # isort: split
 from support import looptest
+from support.runs import manifest
 
 from loop.test_loop import Base, LoopBase, rec
 from taskloop.app.launch import loop as wloop
@@ -72,11 +73,11 @@ class PruneVerb(Base):
         subprocess.run(["git", "init", "-q", str(self.repo)], check=True)
         self.fake()
         stem = "x-1-20200101-000000"
-        run = Path(os.environ["XDG_CONFIG_HOME"]) / "task-loop" / "runs" / stem
+        run = manifest(Path(os.environ["XDG_CONFIG_HOME"]) / "task-loop", stem, "x-1", 0.0).dir
         (run / "evidence").mkdir(parents=True)
         (run / "evidence" / "a.png").write_bytes(b"P" * 100)
         old = time.time() - 40 * 86400
-        for p in (run / "evidence" / "a.png", run / "evidence", run):
+        for p in (run / "evidence" / "a.png", run / "evidence", run / "manifest.json", run):
             os.utime(p, (old, old))
         outs = []
         for argv in (["--dry-run"], [], []):

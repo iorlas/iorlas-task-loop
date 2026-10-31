@@ -10,7 +10,7 @@ from typing import Any, Final
 from taskloop.adapters import beadtools, gitrepo
 from taskloop.app.asks import intake
 from taskloop.app.reconcile.lost import lost_work
-from taskloop.app.report.inputs import bead_status, prefix, read_jsonl, repo_traces
+from taskloop.app.report.inputs import bead_status, read_jsonl, repo_traces
 from taskloop.app.report.planner import input_tokens
 from taskloop.contracts import paths
 from taskloop.contracts.bead import Comment
@@ -18,6 +18,7 @@ from taskloop.contracts.enums import Outcome, Result
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId, is_bead_id, loop_key
 from taskloop.contracts.kinds import ASKS, PAUSES, Kind, kind_named
+from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.log import Beat, EngineLog, decode
 from taskloop.contracts.ports import Git
 from taskloop.contracts.runlife import Liveness, liveness
@@ -48,21 +49,16 @@ def crashes(repo: str, since: float, until: float, traces: Sequence[RunTrace], c
         t = r.t
         if since <= t < until and r.outcome is Result.FAILED and not r.run_id and r.why.startswith("failed: no outcome from run-task"):
             out[f"loop:{r.bead}:{r.t}"] = {"bead": r.bead, "t": t, "run": None, "why": r.why[:200]}
-    traced = {str(r.run) for r in traces} | {Path(r.log).stem for r in traces if r.log}
-    prefixes = {prefix(r.bead) for r in traces} | {prefix(r.bead) for r in loop_lines}
-    for f in sorted((cfg.root / "engine").glob("*.jsonl")):
-        parts = matchers.split_stem(f.stem)
-        if not parts or f.stem in traced or prefix(parts[0]) not in prefixes:
+    traced = {str(r.run) for r in traces}
+    for b in RunLocator(cfg).of_repo(repo):
+        if b.run in traced or not since <= b.started < until or not b.log.exists():
             continue
-        bead = parts[0]
-        t = matchers.stem_time(parts[1])
-        if not since <= t < until:
-            continue
+        bead, t, f = b.bead, b.started, b.log
         recs = typed_log(f)
         if liveness(recs, now) is not Liveness.CRASHED:
             continue
         last = getattr(next((r for r in reversed(recs) if not isinstance(r, Beat)), None), "text", "")
-        out[f.stem] = {"bead": bead, "t": t, "run": f.stem, "why": f"the engine log ends with no close: {last[:120]}"}
+        out[b.run] = {"bead": bead, "t": t, "run": b.run, "why": f"the engine log ends with no close: {last[:120]}"}
     for r in traces:  # the engine caught it and closed (run_once): an engine bug all the same
         if overlaps(r, since, until) and kind_named(r.kind) is Kind.FAULT_ENGINE:
             out[str(r.run)] = {"bead": r.bead, "t": r.started, "run": str(r.run), "why": r.why[:200]}

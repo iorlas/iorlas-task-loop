@@ -1,7 +1,7 @@
 {
  "RunTrace": {
   "v": 2,
-  "run": "tl-7y6.3.1-20261027-002239",
+  "run": "01KBN6Z0M4R5E8YQ2T7C9W3XHD",
   "bead": "tl-7y6.3.1",
   "repo_url": "https://github.com/x/y.git",
   "worktree": "/w/.slots/s1",
@@ -157,7 +157,7 @@
   "kind": "decision",
   "class": "open_question",
   "decision": "Which?",
-  "run": "tl-7y6.3.1-20261027-002239",
+  "run": "01KBN6Z0M4R5E8YQ2T7C9W3XHD",
   "t": 1793050200.5,
   "status": "answered",
   "tried": [
@@ -282,13 +282,13 @@
   "v": 1,
   "adr": "ADR-3",
   "bead": "tl-2",
-  "run": "tl-7y6.3.1-20261027-002239",
+  "run": "01KBN6Z0M4R5E8YQ2T7C9W3XHD",
   "t": 1793050200.5
  },
  "Checkpoint": {
   "v": 3,
   "bead": "tl-1",
-  "run": "tl-7y6.3.1-20261027-002239",
+  "run": "01KBN6Z0M4R5E8YQ2T7C9W3XHD",
   "t": 1793050200.5,
   "branch": "task/tl-1",
   "head": "abc",
@@ -695,7 +695,7 @@
    {
     "kind": "duration",
     "t": 1793050200.5,
-    "run_id": "tl-7y6.3.1-20261027-002239",
+    "run_id": "01KBN6Z0M4R5E8YQ2T7C9W3XHD",
     "parent_id": "",
     "call_id": "fmt",
     "bead": "tl-1",
@@ -713,7 +713,7 @@
    {
     "kind": "duration",
     "t": 1793050200.5,
-    "run_id": "tl-7y6.3.1-20261027-002239",
+    "run_id": "01KBN6Z0M4R5E8YQ2T7C9W3XHD",
     "parent_id": "",
     "call_id": "",
     "bead": "tl-1",
@@ -734,7 +734,7 @@
   "v": 2,
   "outcome": "parked",
   "bead": "tl-1",
-  "run": "tl-7y6.3.1-20261027-002239",
+  "run": "01KBN6Z0M4R5E8YQ2T7C9W3XHD",
   "why_code": "stuck",
   "why": "stuck",
   "log": "/l",
@@ -754,7 +754,7 @@
   "v": 4,
   "kind": "loop",
   "t": 1793050200.5,
-  "run_id": "tl-7y6.3.1-20261027-002239",
+  "run_id": "01KBN6Z0M4R5E8YQ2T7C9W3XHD",
   "parent_id": "",
   "call_id": "",
   "bead": "tl-1",
@@ -784,7 +784,7 @@
  },
  "Reexec": {
   "v": 1,
-  "run": "tl-7y6.3.1-20261027-002239",
+  "run": "01KBN6Z0M4R5E8YQ2T7C9W3XHD",
   "bead": "tl-1",
   "from": "0.23.56",
   "owned": "s1",
@@ -1166,7 +1166,7 @@
  },
  "ReexecNote": {
   "v": 1,
-  "run": "tl-7y6.3.1-20261027-002239",
+  "run": "01KBN6Z0M4R5E8YQ2T7C9W3XHD",
   "bead": "tl-1",
   "from": "0.1.0",
   "to": "0.2.0",
@@ -1176,9 +1176,19 @@
  },
  "NetPause": {
   "v": 1,
-  "run": "tl-7y6.3.1-20261027-002239",
+  "run": "01KBN6Z0M4R5E8YQ2T7C9W3XHD",
   "bead": "tl-1",
   "t": 1793050200.5
+ },
+ "RunManifest": {
+  "v": 1,
+  "run": "01KBN6Z0M4R5E8YQ2T7C9W3XHD",
+  "repo": "/r/x",
+  "bead": "tl-7y6.3.1",
+  "started": 1793050200.5,
+  "ended": 1793050260.5,
+  "loop": "L1",
+  "attempts": 2
  },
  "DoneMemo": {
   "v": 1,

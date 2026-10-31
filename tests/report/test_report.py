@@ -19,6 +19,7 @@ sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: E402, F401
 from support import homes  # noqa: E402
+from support.runs import manifest  # noqa: E402
 
 # isort: split
 import tl  # noqa: E402
@@ -128,7 +129,6 @@ class PlannerReport(unittest.TestCase):
         self.env.start()
         self.hist = home / "history.jsonl"
         self.eng = homes.config_dir() / "engine"
-        self.eng.mkdir(parents=True)
         t = T0
         rows = [("planner", "x-1", 1000, 9000), ("planner", "x-1", 500, 4500), ("planner", "x-1", 200, 800),
                 ("planner", "x-1", 100, 100), ("worker", "x-1", 9999, 9999), ("planner", "x-2", 300, 700),
@@ -136,10 +136,10 @@ class PlannerReport(unittest.TestCase):
         self.hist.write_text("".join(json.dumps({"ts": t + k, "role": r, "task": b, "tokens": {"in": i, "cached": c, "out": 5}})
                                      + "\n" for k, (r, b, i, c) in enumerate(rows)))
         nodes = [("plan: plan", {}), ("plan: re-plan", {}), ("plan: rewrite checks", {}), ("plan: amend", {})]
-        (self.eng / "x-1-20261021-060000.jsonl").write_text("".join(
+        manifest(homes.config_dir(), "x-1-20261021-060000", "x-1", t).log.write_text("".join(
             json.dumps(dict({"v": 3, "t": t + k, "kind": "step_start", "id": "n1", "text": txt, "step": "plan"}, **kw)) + "\n"
             for k, (txt, kw) in enumerate(nodes)))
-        (self.eng / "x-2-20261021-060000.jsonl").write_text(json.dumps(
+        manifest(homes.config_dir(), "x-2-20261021-060000", "x-2", t).log.write_text(json.dumps(
             {"v": 2, "t": t, "kind": "step_start", "id": "n1", "text": "plan: plan", "step": "plan"}) + "\n")
 
     def tearDown(self):

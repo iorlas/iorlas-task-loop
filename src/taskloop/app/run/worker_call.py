@@ -259,7 +259,7 @@ class WorkerCall:
         )
         cid = e.calls.start(c.step or c.node, c.node, c.role, bool(c.resume), e.live_n)
         c.state = callstate.begin(
-            e.call_dir(), e.log_path.stem, e.bead, c.key, c.role, resume_of=c.resume or "", prompt_sha=c.sha, now=e.clock.now()
+            e.call_dir(), e.run_id, e.bead, c.key, c.role, resume_of=c.resume or "", prompt_sha=c.sha, now=e.clock.now()
         )
         t0, trees = time.time(), strays.worktrees(e)  # the worktrees the repo holds before the worker runs
         try:

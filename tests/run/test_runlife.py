@@ -17,6 +17,7 @@ from support import homes  # noqa: E402
 from support.dashes import make_dash  # noqa: E402
 from support.logs import typed  # noqa: E402
 from support.narrow import must  # noqa: E402
+from support.runs import manifest  # noqa: E402
 
 from taskloop.app.report import card  # noqa: E402
 from taskloop.app.run import layout  # noqa: E402
@@ -27,7 +28,6 @@ from taskloop.contracts.ids import BeadId, RunId  # noqa: E402
 from taskloop.contracts.paths import ConfigDir  # noqa: E402
 from taskloop.contracts.runlife import BEAT_EVERY, CRASHED_AFTER, KEEP_DAYS, Liveness, liveness  # noqa: E402
 from taskloop.contracts.trace import RunTrace  # noqa: E402
-from taskloop.domain.report import matchers  # noqa: E402
 from taskloop_dash import jsonl  # noqa: E402
 from taskloop_dash.api import live as live_api  # noqa: E402
 
@@ -84,7 +84,7 @@ class Crash(unittest.TestCase):
         env = mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": str(home), "APPDATA": str(home)})
         env.start()
         self.addCleanup(env.stop)
-        self.log = self.cfg / "engine" / f"{RUN}.jsonl"
+        self.log = manifest(self.cfg, RUN, BEAD, self.t0, repo="/no/repo").log
         put(self.log, [*started(self.t0), typed("beat", self.t0 + 5)])
         os.utime(self.log, (self.t0 + 5, self.t0 + 5))
         self.now = self.t0 + 5
@@ -98,10 +98,10 @@ class Crash(unittest.TestCase):
         return self.dash.live.page(BEAD)[1]["state"]
 
     def report_crashes(self) -> list[str]:
-        run = must(RunId.of(f"{BEAD}-20200101-000000"))
+        run = must(RunId.of("01KBN6Z0M4R5E8YQ2T7C9W3XA1"))
         trace = [RunTrace(run=run, bead=BEAD, repo_url="", worktree="", branch="", coordinator_session="",
                           started=0.0, ended=0.0, outcome=Outcome.FAILED, why="", sha="")]  # makes the bead's prefix one the report knows
-        at = matchers.stem_time(STAMP)  # a run belongs to the window its name's stamp is in
+        at = self.t0  # a run belongs to the window its manifest's start is in
         found = card.crashes("/no/repo", at - 3600, at + 3600, trace, homes.cfg(), now=self.now)
         return [c["run"] for c in found]
 
@@ -131,6 +131,7 @@ class Sweep(unittest.TestCase):
             now = 1_800_000_000.0
 
             def make(run: str, written: float) -> None:
+                manifest(cfg, run, run.rsplit("-", 2)[0], written)
                 put(cfg.engine_log(run), [typed("beat", written)])
                 cfg.engine_log(run).with_suffix(".stderr").write_text("x")
                 (cfg.live_dir(run)).mkdir()
@@ -154,7 +155,8 @@ class BeatsAreNoEvents(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.cfg = Path(self.tmp.name) / "task-loop"
         self.t0 = 1_800_000_000.0
-        self.log = self.cfg / "engine" / f"{RUN}.jsonl"
+        self.bundle = manifest(self.cfg, RUN, BEAD, self.t0)
+        self.log = self.bundle.log
 
     def test_100_beats_between_two_events_are_no_events(self):
         put(self.log, started(self.t0))
@@ -162,14 +164,13 @@ class BeatsAreNoEvents(unittest.TestCase):
         put(self.log, [typed("warn", self.t0 + 200, text="slow")])
         os.utime(self.log, (self.t0 + 200, self.t0 + 200))
         dash = make_dash(config=self.cfg, clock=lambda: self.t0 + 201)
-        run = dash.live.live_run(str(self.log))
+        run = dash.live.live_run(self.bundle)
         run.refresh()
         self.assertEqual([e["k"] for e in live_api.page(run)["events"]], ["run_start", "step_start", "warn"])
         self.assertEqual(dash.live.page(BEAD)[1]["state"], "live")
         self.assertEqual(jsonl.records(str(self.log))[-1].kind, "warn")
 
     def test_liveness_reads_the_newest_records_after_the_log_rotates(self):
-        self.log.parent.mkdir(parents=True)
         with JsonlLog.open(self.log, rotate_bytes=400, keep=3) as lg:
             for i in range(30):
                 lg.append((json.dumps(typed("beat", self.t0 + i)) + "\n").encode())

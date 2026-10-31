@@ -52,6 +52,9 @@ class FakeGit(ScriptedGit):
         out = self.answer(argv[1], *argv[2:])
         return out if isinstance(out, tuple) else (0, str(out))
 
+    def common_dir(self, d: str) -> str:
+        return str(self.answer("common_dir", default=""))
+
     # -- the reads the land asks ----------------------------------------------------------------------------------------------
     def rev_parse(self, d: str, rev: str) -> str:
         return str(self.answer("rev_parse", rev))

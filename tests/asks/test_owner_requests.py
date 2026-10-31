@@ -20,6 +20,7 @@ from support.engine_case import PLAN, WRITE
 from support.fake_beads import FakeBeads
 from support.logs import typed
 from support.narrow import must
+from support.runs import manifest
 
 from taskloop.app.asks import intake
 from taskloop.app.run import requests
@@ -41,8 +42,7 @@ class RequestFile(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.cfg = ConfigDir(self.tmp.name)
         self.now = time.time()
-        log = self.cfg.engine_log(RUN)
-        log.parent.mkdir(parents=True)
+        log = manifest(self.cfg, RUN, "tl-5", self.now - 5).log
         log.write_text(json.dumps(typed("run_start", self.now - 5, run_id=RUN, bead="tl-5", worktree="")) + "\n")
 
     def test_requests_merge_and_are_taken_once(self):
@@ -77,15 +77,15 @@ class RequestFile(unittest.TestCase):
         self.assertEqual(taken, [f"n{i}" for i in range(60)])
 
     def test_the_newest_run_of_a_bead_and_the_sweep(self):
-        for stem in ("tl-5-20261026-090000", "tl-5.1-20261027-090000", "tl-5-x"):
-            self.cfg.engine_log(stem).write_text("")
+        for stem, bead, at in (("tl-5-20261026-090000", "tl-5", 100), ("tl-5.1-20261027-090000", "tl-5.1", 50), ("tl-5-x", "tl-5.2", 1)):
+            manifest(self.cfg, stem, bead, self.now - at).log.write_text("")
         self.assertEqual(requests.newest_run(self.cfg, "tl-5"), RUN)
         requests.post(self.cfg, RUN, "dash", self.now, park=True)
         prune_run_logs(self.cfg, self.now + 30 * 86400, 7 * 86400)
         self.assertFalse(self.cfg.run_request(RUN).exists())
 
     def test_a_stop_is_acted_on_at_the_beat_through_the_stop_flag(self):
-        host = types.SimpleNamespace(run_dir=self.cfg.run_dir(RUN), halt=threading.Event())
+        host = types.SimpleNamespace(home=self.cfg, run_id=RUN, halt=threading.Event())
         side = requests.OwnerRequests(host)
         side.at_beat()
         self.assertFalse(host.halt.is_set())
@@ -118,8 +118,7 @@ class Cli(unittest.TestCase):
 
     def test_park_and_note_reach_the_live_run(self):
         run = "fk-1-20261026-100000"
-        log = self.cfg.engine_log(run)
-        log.parent.mkdir(parents=True)
+        log = manifest(self.cfg, run, "fk-1", time.time()).log
         log.write_text(json.dumps(typed("run_start", time.time(), run_id=run, bead="fk-1", worktree="")) + "\n")
         self.assertEqual(self.say("note", "fk-1", "use", "blue"), 0)
         self.assertEqual(self.say("park", "fk-1"), 0)

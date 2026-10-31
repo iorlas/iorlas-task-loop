@@ -1,5 +1,4 @@
 """One filled instance of every record in taskloop.contracts, for the round-trip, golden and completeness tests."""
-import datetime
 import sys
 from pathlib import Path
 from typing import cast
@@ -40,7 +39,7 @@ from taskloop.contracts.ids import BeadId, CheckId, TreeSha
 from taskloop.contracts.runkey import BaseSha, Digest, RunKey
 
 T = 1793050200.5
-RUN = ids.RunId(ids.BeadId("tl-7y6.3.1"), datetime.datetime(2026, 10, 27, 0, 22, 39))
+RUN = ids.RunId.parse("01KBN6Z0M4R5E8YQ2T7C9W3XHD")
 TOK = trace.Tokens(in_=412000, cached=380000, out=5100)
 
 CALL = trace.AiCall(node="write", family="zai", ref="ses_e85d", status="done", role="worker", t=T, transcript="/t/x.jsonl",
@@ -448,6 +447,7 @@ OTHERS = {
                                    write_rounds=[[1, 2]], node_n=3),
     "ReexecNote": run.ReexecNote(run=str(RUN), bead="tl-1", frm="0.1.0", to="0.2.0", step="write", from_dir="/d", t=T),
     "NetPause": run.NetPause(run=str(RUN), bead="tl-1", t=T),
+    "RunManifest": run.RunManifest(run=str(RUN), repo="/r/x", bead="tl-7y6.3.1", started=T, ended=T + 60, loop="L1", attempts=2),
     "DoneMemo": run.DoneMemo(done={"[1]": run.DoneEntry(sha="s", file="/f")}),
     "HandoffMirror": run.HandoffMirror(
         rounds=[run.Round(stage="s", round=1, kind="k")], seen_lows=["x"], deferred=[{"what": "w", "why": "y"}], filed=["f"]),

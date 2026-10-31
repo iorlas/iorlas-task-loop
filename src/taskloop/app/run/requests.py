@@ -17,6 +17,7 @@ from taskloop.contracts import log as rec
 from taskloop.contracts import wire
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.kinds import Kind
+from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.requests import OwnerNote, OwnerRequest
 from taskloop.contracts.runlife import Liveness, liveness
@@ -88,11 +89,11 @@ class OwnerRequests:
 
     @property
     def cfg(self) -> ConfigDir:
-        return ConfigDir(self.e.run_dir.parent.parent)
+        return self.e.home
 
     @property
     def run(self) -> str:
-        return self.e.run_dir.name
+        return self.e.run_id
 
     def at_beat(self) -> None:
         """A stop is acted on now: the run's stop flag, as a SIGTERM sets it. The file stays for the step boundary to take."""
@@ -133,15 +134,8 @@ class OwnerRequests:
 
 
 def newest_run(cfg: ConfigDir, bead: str) -> str:
-    """The stem of the bead's newest engine log ("" when it has none): <bead>-<YYYYMMDD-HHMMSS> sorts by time."""
-    pattern = cfg.engine_log(f"{bead}-*")
-    stamps = [p.stem for p in pattern.parent.glob(pattern.name) if is_stamp(p.stem[len(bead) + 1:])]
-    return max(stamps, default="")
-
-
-def is_stamp(text: str) -> bool:
-    day, _, clock = text.partition("-")
-    return len(day) == 8 and len(clock) == 6 and day.isdigit() and clock.isdigit()
+    """The id of the bead's newest run that has an engine log ("" when it has none)."""
+    return next((b.run for b in reversed(RunLocator(cfg).of_bead(bead)) if b.log.exists()), "")
 
 
 class OwnerVerbs:

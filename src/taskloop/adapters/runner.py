@@ -63,12 +63,10 @@ def worker_start(path: str | Path) -> LiveStart | None:
     return None
 
 
-def live_path(log_path: str | Path, n: int, step: str) -> str:
-    """Where delegate appends the worker's live events for call n of a run: <engine log without .jsonl>.live/<NN>-<step>.jsonl."""
-    base = str(log_path)
-    base = base[: -len(".jsonl")] if base.endswith(".jsonl") else base
+def live_path(live_dir: str | Path, n: int, step: str) -> str:
+    """Where delegate appends the worker's live events for call n of a run: <the run's live folder>/<NN>-<step>.jsonl."""
     slug = re.sub(r"[^A-Za-z0-9_-]+", "-", step or "call").strip("-") or "call"
-    return f"{base}.live/{n:02d}-{slug}.jsonl"
+    return f"{live_dir}/{n:02d}-{slug}.jsonl"
 
 
 def mtime(path: str | Path) -> float | None:

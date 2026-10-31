@@ -1,25 +1,11 @@
-"""Names and times the task view prints: run names, lanes by family, models, clock times. No regex: the engine's own text is
+"""Names and times the task view prints: lanes by family, models, clock times. No regex: the engine's own text is
 split with str methods."""
 
 import mimetypes
-import os
 import time
 from typing import Final
 
-from taskloop.contracts.ids import BeadId, RunId
-
 FAMILY: Final = {"openai": "Codex", "claude": "Claude", "xai": "Grok"}
-
-
-def run_name(path: str) -> str:
-    base = os.path.basename(path)
-    return base[: -len(".jsonl")] if base.endswith(".jsonl") else base
-
-
-def bead_of(run: str) -> BeadId | None:
-    """'tl-1-20261021-072411' -> 'tl-1'; None when the name does not end in a date and a time."""
-    rid = RunId.of(run)
-    return rid.bead if rid else None
 
 
 IMAGES: Final = ("image/png", "image/jpeg", "image/gif", "image/webp")
@@ -29,10 +15,6 @@ def kind_of(name: str) -> str:
     """'image' (shown inline), 'pdf' (opens in a tab) or 'file' (download only: HTML is never run as a page)."""
     ctype = mimetypes.guess_type(name)[0] or ""
     return "image" if ctype in IMAGES else "pdf" if ctype == "application/pdf" else "file"
-
-
-def is_run_name(text: object) -> bool:
-    return isinstance(text, str) and RunId.of(text) is not None
 
 
 def num(ident: object) -> int:

@@ -1,4 +1,5 @@
-"""Where a run's files live: its engine log and stderr, its run folder outside the worktree (brief, plan, node answers, check results,
+"""Where a run's files live (contracts/locator.py finds them, its manifest is the authority): its engine log and stderr,
+its run folder outside the worktree (brief, plan, node answers, check results,
 where no worker can write them; in lifesim-vbo a writer's sandbox runs kept in .task/ were read as engine results by four planners), and
 the writer's scratch folder in the worktree."""
 import contextlib
@@ -10,12 +11,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from taskloop.adapters import locks
+from taskloop.contracts.locator import RunBundle, RunLocator
 from taskloop.contracts.paths import TASK_EXCLUDE, ConfigDir
-
-
-def bead_of(stem: str) -> str:
-    """The bead of a run id (<bead>-YYYYMMDD-HHMMSS)."""
-    return stem.rsplit("-", 2)[0]
+from taskloop.contracts.ports import Git
 
 
 def newest_write(path: Path) -> float:
@@ -28,29 +26,32 @@ def newest_write(path: Path) -> float:
     return latest
 
 
-def prune_check_rounds(runs: Path, days: float, exempt: Collection[str] = (), dry_run: bool = False) -> list[Path]:
+def prune_check_rounds(cfg: ConfigDir, days: float, exempt: Collection[str] = (), dry_run: bool = False) -> list[Path]:
     """Every round's check log (NN-id.rK.log) of a run older than `days` goes; plans, briefs and evidence stay. A bead in `exempt`
     keeps its logs. -> what went (what would, with `dry_run`)."""
     cut = time.time() - days * 86400
     gone: list[Path] = []
-    for f in runs.glob("*/checks/*.r*.log"):
-        stem, _, ext = f.name.rpartition(".")
-        _, _, round_ = stem.rpartition(".r")
-        try:
-            if ext == "log" and round_.isdigit() and f.stat().st_mtime < cut and bead_of(f.parent.parent.name) not in exempt:
-                gone.append(f)
-                if not dry_run:
-                    f.unlink()
-        except OSError:
-            pass
+    for b in RunLocator(cfg).runs():
+        if b.bead in exempt:
+            continue
+        for f in b.dir.glob("checks/*.r*.log"):
+            stem, _, ext = f.name.rpartition(".")
+            _, _, round_ = stem.rpartition(".r")
+            try:
+                if ext == "log" and round_.isdigit() and f.stat().st_mtime < cut:
+                    gone.append(f)
+                    if not dry_run:
+                        f.unlink()
+            except OSError:
+                pass
     return gone
 
 
-def prune_run_dirs(runs: Path, days: float, exempt: Collection[str] = (), dry_run: bool = False) -> list[Path]:
+def prune_run_dirs(cfg: ConfigDir, days: float, exempt: Collection[str] = (), dry_run: bool = False) -> list[Path]:
     """A run folder (brief, plan, answers, check results, evidence, looks) nothing wrote to for `days` goes whole, unless its bead
-    is in `exempt`. -> what went (what would, with `dry_run`)."""
+    is in `exempt`. A folder with no manifest is no run: it stays. -> what went (what would, with `dry_run`)."""
     cut = time.time() - days * 86400
-    gone = [d for d in sorted(runs.glob("*")) if d.is_dir() and bead_of(d.name) not in exempt and newest_write(d) < cut]
+    gone = [b.dir for b in RunLocator(cfg).runs() if b.bead not in exempt and newest_write(b.dir) < cut]
     for d in gone if not dry_run else []:
         shutil.rmtree(d, ignore_errors=True)
     return gone
@@ -62,56 +63,53 @@ def prune_run_logs(cfg: ConfigDir, now: float, retain: float, exempt: Collection
     at its start) is the one place that deletes them. A live run beats every minute and is never old.
     -> the logs that went (would, with `dry_run`)."""
     gone: list[Path] = []
-    for log in cfg.engine_log("*").parent.glob("*.jsonl"):
+    for b in RunLocator(cfg).runs():
         with contextlib.suppress(OSError):
-            if log.stat().st_mtime >= now - retain or bead_of(log.stem) in exempt:
+            if not b.log.exists() or b.log.stat().st_mtime >= now - retain or b.bead in exempt:
                 continue
-            gone.append(log)
+            gone.append(b.log)
             if dry_run:
                 continue
-            drop_run_log(cfg, log)
+            drop_run_log(cfg, b)
     return gone
 
 
-def drop_run_log(cfg: ConfigDir, log: Path) -> None:
+def drop_run_log(cfg: ConfigDir, b: RunBundle) -> None:
     """One engine log with its .live/ folder, .stderr and an owner's request no run took (the run's close drops it too)."""
-    shutil.rmtree(cfg.live_dir(log.stem), ignore_errors=True)
-    log.with_suffix(".stderr").unlink(missing_ok=True)
-    cfg.run_request(log.stem).unlink(missing_ok=True)
-    cfg.run_request_lock(log.stem).unlink(missing_ok=True)
-    locks.holder_file(cfg.run_request_lock(log.stem)).unlink(missing_ok=True)
-    log.unlink()
+    shutil.rmtree(b.live, ignore_errors=True)
+    b.err.unlink(missing_ok=True)
+    cfg.run_request(b.run).unlink(missing_ok=True)
+    cfg.run_request_lock(b.run).unlink(missing_ok=True)
+    locks.holder_file(cfg.run_request_lock(b.run)).unlink(missing_ok=True)
+    b.log.unlink()
 
 
-def fresh_stem(bead: str, logs: Path, home: ConfigDir) -> str:
-    """A fresh run has its own id, also when the last run of this bead began in the same second: the stamp moves on."""
-    t0, n = time.time(), 0
-    while True:
-        stem = f"{bead}-{time.strftime('%Y%m%d-%H%M%S', time.localtime(t0 + n))}"
-        if not ((logs / f"{stem}.jsonl").exists() or (home.root / "runs" / stem).exists()):
-            return stem
-        n += 1
+def repo_of(git: Git, wt: str | Path) -> str:
+    """The repo's path as asks and decisions name it: the parent of the git common dir (the worktree when git cannot say)."""
+    common = git.common_dir(str(wt))
+    return str(Path(common).parent) if common else str(wt)
 
 
 @dataclass(frozen=True)
 class RunLayout:
+    run: str  # the run id
     log_path: Path
     err_path: Path
+    live_dir: Path  # the worker's per-call files
     run_dir: Path
     task_dir: Path  # the writer's: only evidence/ lives here
     brief_file: Path  # the brief as the writer can re-read it: the engine's copy stays in run_dir
     evidence_dir: Path  # the writer's proof of what the engine cannot rerun
 
     @classmethod
-    def open(cls, bead: str, wt: str | Path, taken: str | None, home: ConfigDir) -> RunLayout:
-        """The layout of the run `taken` (a run that goes on after an exec or a pause), else of a new one; its folders are made."""
-        logs = home.root / "engine"
-        logs.mkdir(parents=True, exist_ok=True)
-        stem = taken or fresh_stem(bead, logs, home)
-        run_dir = home.root / "runs" / stem
-        run_dir.mkdir(parents=True, exist_ok=True)
+    def open(cls, bead: str, wt: str | Path, taken: str | None, home: ConfigDir, repo: str, now: float,
+             loop: str | None = None) -> RunLayout:
+        """The layout of the run `taken` (a run that goes on after an exec or a pause), else of a new one; its folders are made and its
+        manifest is written (a new run) or counts one more attempt (a run taken up)."""
+        where = RunLocator(home)
+        b = where.take_up(taken, repo, bead, now) if taken else where.create(repo, bead, now, loop)
         task_dir = Path(wt) / TASK_EXCLUDE.rstrip("/") / bead
         task_dir.mkdir(parents=True, exist_ok=True)
         evidence = task_dir / "evidence"
         evidence.mkdir(exist_ok=True)
-        return cls(logs / f"{stem}.jsonl", logs / f"{stem}.stderr", run_dir, task_dir, task_dir / "brief.md", evidence)
+        return cls(b.run, b.log, b.err, b.live, b.dir, task_dir, task_dir / "brief.md", evidence)

@@ -10,7 +10,8 @@ from unittest import mock
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import homes
 from support.builders import cfg_with
-from support.spawn import port_git, real_spawner
+from support.fakegit import FakeGit
+from support.spawn import real_spawner
 from support.who import who
 
 from taskloop.adapters import (
@@ -93,7 +94,7 @@ class WiringTest(unittest.TestCase):
         self.addCleanup(env.stop)
 
     def test_engine_log_is_one_typed_line_per_record_readable_at_once(self):
-        eng = engine.Engine(BeadId("t-1"), self.tmp.name, cfg_with(), env=snapshot(), spawner=real_spawner(), git=port_git(), who=who())
+        eng = engine.Engine(BeadId("t-1"), self.tmp.name, cfg_with(), env=snapshot(), spawner=real_spawner(), git=FakeGit(), who=who())
         with mock.patch.object(engine, "say"):
             for i in range(1000):
                 eng.log.note(f"line {i}")

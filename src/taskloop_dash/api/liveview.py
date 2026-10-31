@@ -5,6 +5,7 @@ from typing import Any
 
 from taskloop.contracts import wire
 from taskloop.contracts.ids import is_bead_id
+from taskloop.contracts.locator import RunBundle
 from taskloop_dash.api import live as live_api
 from taskloop_dash.env import Env
 from taskloop_dash.readers.records import Records
@@ -19,12 +20,13 @@ class Live:
         self.runs: dict[str, live_api.LiveRun] = {}
         self.lock = threading.Lock()
 
-    def live_run(self, path: str) -> live_api.LiveRun:
+    def live_run(self, b: RunBundle) -> live_api.LiveRun:
+        path = b.run
         with self.lock:
             if path not in self.runs:
                 while len(self.runs) >= LIVE_MAX:
                     self.runs.pop(next(iter(self.runs)))
-                self.runs[path] = live_api.LiveRun(path)
+                self.runs[path] = live_api.LiveRun(b)
             return self.runs[path]
 
     def page(self, bead: str, since: str = "", wait: str | float = "0") -> tuple[int, dict[str, Any]]:

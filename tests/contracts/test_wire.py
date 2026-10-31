@@ -199,14 +199,16 @@ class Wire(unittest.TestCase):
 
 
 class Ids(unittest.TestCase):
-    def test_run_id_round_trips_its_string(self):
-        r = ids.RunId.parse("lifesim-vbo-20261018-215800")
-        self.assertEqual((str(r.bead), r.started.hour, str(r)), ("lifesim-vbo", 21, "lifesim-vbo-20261018-215800"))
-        self.assertEqual(ids.RunId.parse("tl-7y6.3.1-20261027-002239").bead, "tl-7y6.3.1")
-        self.assertEqual(ids.RunId.parse(str(r)), r)
+    def test_a_run_id_is_opaque_and_sorts_by_time(self):
+        a, b = ids.RunId.new(1793050200.0), ids.RunId.new(1793050200.5)
+        later = ids.RunId.new(1793050300.0, entropy=bytes(10))
+        self.assertEqual(ids.RunId.parse(str(a)), a)
+        self.assertEqual((len(str(a)), a == b), (26, False))  # same second, different ids
+        self.assertLess(str(b), str(later))
+        self.assertFalse(hasattr(a, "bead"))
 
     def test_a_bad_run_id_or_bead_id(self):
-        for text in ("nodate", "x-2026-10", "-20261018-215800", "a-20261318-215800", "a b-20261018-215800"):
+        for text in ("nodate", "tl-7y6.3.1-20261027-002239", "", "01KBN6Z0M4R5E8YQ2T7C9W3XH", "01KBN6Z0M4R5E8YQ2T7C9W3XHU", "Z" * 26):
             with self.subTest(text), self.assertRaises(ValueError):
                 ids.RunId.parse(text)
         for text in ("", "-a", ".a", "a b", "é"):

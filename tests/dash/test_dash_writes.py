@@ -14,6 +14,7 @@ from support.logs import typed
 from support.look_world import world
 from support.narrow import must
 from support.repos import write_repos
+from support.runs import manifest
 
 from taskloop.app.run import requests
 from taskloop.contracts import wire
@@ -43,7 +44,7 @@ class Writes(unittest.TestCase):
         path = self.dash.env.config.ask(BeadId("b-1"))
         path.parent.mkdir(parents=True)
         path.write_text(json.dumps(wire.dump(ASK)))
-        log = self.dash.env.config.engine_log(RUN)
+        log = manifest(self.dash.env.config, RUN, "tl-5", NOW - 5).log
         log.parent.mkdir(parents=True, exist_ok=True)
         log.write_text(json.dumps(typed("run_start", NOW - 5, run_id=RUN, bead="tl-5", worktree="")) + "\n")
 

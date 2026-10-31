@@ -89,7 +89,7 @@ class EngineLand1Test(EngineTest):
         self.assertEqual([(w["write"], w["resumed"], w["input_tokens"]) for w in r["write_rounds"]], [(1, "no", 1000)])
         res = self.eng.result()  # the landed run's stats, trace and log
         self.assertEqual(res.outcome, "landed")
-        self.assertEqual((res.bead, res.run, res.log), ("t-1", self.eng.log_path.stem, str(self.eng.log_path)))
+        self.assertEqual((res.bead, res.run, res.log), ("t-1", self.eng.run_id, str(self.eng.log_path)))
         self.assertFalse(res.asked)
         self.assertTrue(gitq.git("symbolic-ref", "--short", "-q", "HEAD", cwd=self.eng.wt))  # a landed bead leaves the slot on a branch
         want = json.loads((ident.PLUGIN_ROOT / ".claude-plugin" / "plugin.json").read_text())["version"]

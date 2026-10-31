@@ -18,6 +18,8 @@ from support.waits import until
 from taskloop.adapters import (
     landlock,
 )
+from taskloop.contracts.locator import RunLocator
+from taskloop.contracts.paths import ConfigDir
 
 
 class EngineLand2Test(EngineTest):
@@ -215,7 +217,7 @@ class EngineLand2Test(EngineTest):
             _rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertIn("to main: do it", self.closed[0])
         self.assertGreater(len(self.closed[0]), 40)
-        log = Path(sorted((Path(os.environ["XDG_CONFIG_HOME"]) / "task-loop" / "engine").glob("t-1-*.jsonl"))[-1])
+        log = RunLocator(ConfigDir(Path(os.environ["XDG_CONFIG_HOME"]) / "task-loop")).of_bead("t-1")[-1].log
         self.assertIn("bd refused to close", log.read_text())
 
     def test_a_done_answer_whose_text_says_unknown_argument_lands_normally(self):

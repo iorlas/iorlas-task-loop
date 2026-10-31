@@ -357,8 +357,7 @@ def v_status(a: Any, c: Ctx) -> int:
 
 def v_wait(a: Any, c: Ctx) -> int:
     repo = repo_of(a, c)
-    return cli_wait.wait(a, c.who.config, wire_asks.store(c.who.config), repo, lambda cwd: hook_wire.main_checkout(c.git, cwd),
-        now=c.now)
+    return cli_wait.wait(a, c.who.config, wire_asks.store(c.who.config), repo, now=c.now)
 
 
 def v_handoff(a: Any, c: Ctx) -> int:

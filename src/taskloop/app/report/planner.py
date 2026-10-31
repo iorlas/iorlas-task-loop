@@ -6,8 +6,8 @@ from pathlib import Path
 from typing import Any
 
 from taskloop.app.report.inputs import prefix, read_jsonl
+from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.paths import ConfigDir
-from taskloop.domain.report import matchers
 
 HISTORY = "~/.claude/plugins/data/iorlas-delegate-iorlas-marketplace/history.jsonl"
 
@@ -33,7 +33,7 @@ def planner_stats(cfg: ConfigDir, since: float, until: float, prefixes: Collecti
     logs' plan nodes:
     first plan, full plans again (a new thread from scratch), amends, check send-backs. Reads only."""
     history = Path(history or os.path.expanduser(HISTORY))
-    engine_dir = cfg.root / "engine"
+    locator = RunLocator(cfg)
     calls = {}
     for r in read_jsonl(history):
         t = r.get("ts") or 0
@@ -47,9 +47,7 @@ def planner_stats(cfg: ConfigDir, since: float, until: float, prefixes: Collecti
     rows = []
     for bead, ins in sorted(calls.items()):
         kinds = {"full": 0, "amend": 0, "back": 0}
-        for log in engine_dir.glob(f"{bead}-*.jsonl"):
-            if not (stem := matchers.split_stem(log.stem)) or stem[0] != bead:
-                continue
+        for log in (b.log for b in locator.of_bead(bead) if b.log.exists()):
             for rec in read_jsonl(log):
                 if rec.get("kind") == "step_start" and rec.get("step") == "plan" and since <= (rec.get("t") or 0) <= until:
                     kinds[plan_class(rec)] += 1

@@ -1,6 +1,6 @@
 """Identifiers: one parser each, no regex."""
-import datetime
 import hashlib
+import os
 from itertools import groupby
 from pathlib import Path
 from typing import Annotated, Final, NewType, TypeIs, final
@@ -12,7 +12,6 @@ CheckId = NewType("CheckId", str)  # a check's id in the registry or the plan: n
 TreeSha = NewType("TreeSha", str)  # the hash of a worktree's files (adapters/treehash.py): never a commit sha
 # A bead id as a request body field: msgspec checks the shape when it decodes (a 400 for anything else), so a handler holds a BeadId.
 WireBead = Annotated[BeadId, msgspec.Meta(pattern="^[A-Za-z0-9][A-Za-z0-9_.-]*$")]
-STAMP: Final = "%Y%m%d-%H%M%S"
 _BEAD_CHARS: Final = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.-")
 
 
@@ -29,30 +28,36 @@ def parse_bead_id(text: str) -> BeadId:
     return text
 
 
+_CROCKFORD: Final = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
+_RUN_ID_LEN: Final = 26  # 10 characters of milliseconds since the epoch, 16 of randomness (ULID's layout)
+
+
 @final
 class RunId:
-    """`<bead>-YYYYMMDD-HHMMSS`: the run's name and the stem of its files. The stamp is the engine's wall clock."""
+    """An opaque run id: 26 Crockford base32 characters, the first ten the creation time in milliseconds (ULID), so ids sort by time.
+    It names a run's folder and its files and says nothing else: the bead, the repo and the times are the run's manifest."""
 
-    __slots__ = ("bead", "started")
+    __slots__ = ("text",)
 
-    def __init__(self, bead: BeadId, started: datetime.datetime) -> None:
-        self.bead = bead
-        self.started = started
+    def __init__(self, text: str) -> None:
+        self.text = text
+
+    @classmethod
+    def new(cls, now: float, entropy: bytes | None = None) -> RunId:
+        """A fresh id for a run created at `now` (seconds). `entropy` (10 bytes) is for tests; else the OS's random bytes."""
+        rnd = int.from_bytes(entropy if entropy is not None else os.urandom(10), "big")
+        n = (int(now * 1000) << 80) | rnd
+        return cls("".join(_CROCKFORD[(n >> (5 * i)) & 31] for i in reversed(range(_RUN_ID_LEN))))
 
     @classmethod
     def parse(cls, text: str) -> RunId:
-        parts = text.rsplit("-", 2)
-        if len(parts) != 3:
+        if len(text) != _RUN_ID_LEN or not set(text) <= set(_CROCKFORD) or text[0] > "7":
             raise ValueError(f"not a run id: {text!r}")
-        try:
-            started = datetime.datetime.strptime(f"{parts[1]}-{parts[2]}", STAMP)
-        except ValueError:
-            raise ValueError(f"not a run id: {text!r}") from None
-        return cls(parse_bead_id(parts[0]), started)
+        return cls(text)
 
     @classmethod
     def of(cls, text: str) -> RunId | None:
-        """`parse`, None for a name that is not a run id: the one reader of a run name past the edge (log stems, run folders)."""
+        """`parse`, None for a name that is not a run id."""
         try:
             return cls.parse(text)
         except ValueError:
@@ -61,19 +66,22 @@ class RunId:
     from_wire = parse
 
     def to_wire(self) -> str:
-        return str(self)
+        return self.text
 
     def __str__(self) -> str:
-        return f"{self.bead}-{self.started.strftime(STAMP)}"
+        return self.text
 
     def __repr__(self) -> str:
-        return f"RunId({self})"
+        return f"RunId({self.text})"
 
     def __eq__(self, other: object) -> bool:
-        return isinstance(other, RunId) and (self.bead, self.started) == (other.bead, other.started)
+        return isinstance(other, RunId) and self.text == other.text
 
     def __hash__(self) -> int:
-        return hash((self.bead, self.started))
+        return hash(self.text)
+
+    def __lt__(self, other: RunId) -> bool:
+        return self.text < other.text
 
 
 @final

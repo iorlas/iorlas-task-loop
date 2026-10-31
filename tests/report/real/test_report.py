@@ -1,4 +1,5 @@
 """tl report: the owner's comments against the engine's."""
+import hashlib
 import io
 import json
 import os
@@ -28,6 +29,7 @@ from support import (  # noqa: E402
 )
 from support.fakes import FakeBeadStore, as_comment  # noqa: E402
 from support.logs import typed  # noqa: E402
+from support.runs import manifest  # noqa: E402
 from support.who import who  # noqa: E402
 
 from taskloop.adapters import (  # noqa: E402
@@ -40,7 +42,7 @@ from taskloop.app.reconcile import lost  # noqa: E402
 from taskloop.app.report import card, inputs  # noqa: E402
 from taskloop.contracts import wire  # noqa: E402
 from taskloop.contracts.env import snapshot  # noqa: E402
-from taskloop.contracts.ids import BeadId  # noqa: E402
+from taskloop.contracts.ids import BeadId, RunId  # noqa: E402
 from taskloop.contracts.landed import Landed, LandedStore  # noqa: E402
 from taskloop.contracts.trace import RunTrace  # noqa: E402
 
@@ -221,7 +223,7 @@ class LostWork(Base):
 def trace(bead, outcome, start_min, end_min, why="", sha="", rounds=0, replans=0, sessions=(), worktree=None, run=None,
           stderr="", kind=""):
     started, ended = T0 + start_min * MIN, T0 + end_min * MIN
-    stem = run or "{}-{}".format(bead, time.strftime("%Y%m%d-%H%M%S", time.localtime(started)))
+    stem = run or str(RunId.new(started, hashlib.sha1(f"{bead}{started}".encode()).digest()[:10]))
     return {"v": 2, "run": stem, "bead": bead, "repo_url": "https://example.invalid/r.git", "worktree": worktree or "", "branch": "",
             "coordinator_session": "", "started": started, "ended": ended, "outcome": outcome, "why": why, "sha": sha,
             "stats": {"rounds": rounds, "replans": replans}, "log": str(homes.config_dir() / "engine" / (stem + ".jsonl")),
@@ -237,7 +239,6 @@ class Scorecard(Base):
     def setUp(self):
         super().setUp()
         self.wt = str(self.repo / ".slots" / "s1")
-        (homes.config_dir() / "engine").mkdir(parents=True, exist_ok=True)
         w = self.wt
         runs = [
             trace("t-0", "landed", -200, -150, sha="x", worktree=w),  # before the window: not counted
@@ -261,13 +262,15 @@ class Scorecard(Base):
         # route.py's stderr carries a worker's test traceback: no engine crash
         (self.home / "t-1.stderr").write_text("Traceback (most recent call last):\n  File x\nAssertionError\n")
         # t-7's landing run resumed after an answer given before the window: it landed with an ask
-        (homes.config_dir() / "engine" / (str(runs[-4]["run"]) + ".jsonl")).write_text(json.dumps(
+        manifest(homes.config_dir(), str(runs[-4]["run"]), "t-7", T0 + 80 * MIN, repo=str(self.repo)).log.write_text(json.dumps(
             {"t": T0, "kind": "note", "text": "ask t-7-1 (verify) is answered: the bead changed since it was asked"}) + "\n")
         # a crash: an engine log with no close and no trace, long quiet
-        dead = homes.config_dir() / "engine" / ("t-8-{}.jsonl".format(time.strftime("%Y%m%d-%H%M%S", time.localtime(T0 + 5 * MIN))))
+        dead = manifest(homes.config_dir(), "t-8-{}".format(time.strftime("%Y%m%d-%H%M%S", time.localtime(T0 + 5 * MIN))), "t-8",
+                        T0 + 5 * MIN, repo=str(self.repo)).log
         dead.write_text(json.dumps(typed("note", T0 + 5 * MIN, text="git commit -q -m wip (t-8): failed")) + "\n")
         # a run that is still going: no trace yet, but alive
-        live = homes.config_dir() / "engine" / ("t-9-{}.jsonl".format(time.strftime("%Y%m%d-%H%M%S", time.localtime(T0 + 100 * MIN))))
+        live = manifest(homes.config_dir(), "t-9-{}".format(time.strftime("%Y%m%d-%H%M%S", time.localtime(T0 + 100 * MIN))), "t-9",
+                        T0 + 100 * MIN, repo=str(self.repo)).log
         live.write_text(json.dumps(typed("beat", T0 + 200 * MIN - 30)) + "\n")  # its last beat, 30 s before the report's now
         # the loop's own record of a run-task that died before its engine wrote anything
         looptest.log(gitrepo.repo_root(str(self.repo))).parent.mkdir(parents=True, exist_ok=True)

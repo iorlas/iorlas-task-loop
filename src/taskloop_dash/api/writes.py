@@ -27,7 +27,6 @@ from taskloop_dash.api.looks import Looks
 from taskloop_dash.env import Env
 from taskloop_dash.readers.beads import Beads
 from taskloop_dash.readers.records import Records
-from taskloop_dash.views import names
 
 Reply = tuple[int, dict[str, Any]]
 NO_PROJECT: Final = Result(ok=False, message="That project is not registered.")
@@ -109,7 +108,7 @@ class Writes:
     def run_of(self, bead: BeadId) -> str:
         """The newest run of the bead: what a cause or an ack is about when no ask is named."""
         logs = self.records.engine_logs(retain=False).get(bead, [])
-        return names.run_name(logs[-1]) if logs else ""
+        return logs[-1].run if logs else ""
 
     def answer(self, req: AnswerReq) -> Result:
         """File the answer on the ask: an option by its 0-based index, or the owner's words. An answered ask no run has used is amended.

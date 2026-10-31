@@ -16,6 +16,7 @@ import support.paths  # noqa: E402, F401
 from support import dlcall, fake_route  # noqa: E402
 from support.logs import typed  # noqa: E402
 from support.narrow import must  # noqa: E402
+from support.runs import manifest  # noqa: E402
 
 from taskloop.adapters import delegate as dl  # noqa: E402
 from taskloop.adapters import runner as live_runner  # noqa: E402
@@ -36,7 +37,8 @@ def put(path, rows, mode="a"):
 def make_run(root):
     """An engine log with a command and a write step, and the live file of its write call."""
     eng = os.path.join(root, "task-loop", "engine")
-    log = os.path.join(eng, f"{BEAD}-{STAMP}.jsonl")
+    b = manifest(os.path.join(root, "task-loop"), f"{BEAD}-{STAMP}", BEAD, T)
+    log = str(b.log)
     put(log, [typed("run_start", T, run_id=f"{BEAD}-{STAMP}", bead=BEAD, worktree=""),
               typed("cmd_start", T + 1, id="m1", text="git fetch -q origin"),
               typed("cmd_end", T + 3, id="m1", exit=0),
@@ -51,13 +53,13 @@ def make_run(root):
             {"t": T + 7, "k": "cmd_start", "id": "1", "text": "pytest -q", "cwd": "/w"},
         ],
     )
-    return log, lf
+    return b, lf
 
 
 class Feed(unittest.TestCase):
     def run_of(self, d):
-        log, lf = make_run(d)
-        return log, lf, live.LiveRun(log)
+        b, lf = make_run(d)
+        return str(b.log), lf, live.LiveRun(b)
 
     def test_merge_by_time_seq_keys_and_the_cursor(self):
         with tempfile.TemporaryDirectory() as d:
@@ -140,9 +142,9 @@ class Feed(unittest.TestCase):
 
 class CallSite(unittest.TestCase):
     def test_file_name(self):
-        p = live_runner.live_path("/e/tl-1-20261026-100000.jsonl", 3, "write")
-        self.assertEqual(p, "/e/tl-1-20261026-100000.live/03-write.jsonl")
-        self.assertTrue(live_runner.live_path("/e/x.jsonl", 12, "re view/2").endswith(".live/12-re-view-2.jsonl"))
+        p = live_runner.live_path("/e/r1.live", 3, "write")
+        self.assertEqual(p, "/e/r1.live/03-write.jsonl")
+        self.assertTrue(live_runner.live_path("/e/x.live", 12, "re view/2").endswith(".live/12-re-view-2.jsonl"))
 
     def test_the_call_sets_the_env(self):
 
@@ -160,7 +162,7 @@ class CallSite(unittest.TestCase):
     def test_engine_numbers_its_calls(self):
         with tempfile.TemporaryDirectory() as d:
             e = object.__new__(engine.Engine)
-            e.log_path, e.live_n = Path(d) / (f"{BEAD}-{STAMP}.jsonl"), 0
+            e.live_dir, e.live_n = Path(d) / (f"{BEAD}-{STAMP}.live"), 0
             p1, p2 = e.live("plan"), e.live("write")
             self.assertTrue(p1.endswith(".live/01-plan.jsonl") and p2.endswith(".live/02-write.jsonl"))
             self.assertTrue(os.path.isdir(os.path.dirname(p1)))

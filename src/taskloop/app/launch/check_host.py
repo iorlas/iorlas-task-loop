@@ -20,7 +20,7 @@ from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.enums import WaitWhat
 from taskloop.contracts.env import Env
 from taskloop.contracts.envvars import EnvVar
-from taskloop.contracts.ids import TreeSha
+from taskloop.contracts.ids import RunId, TreeSha
 from taskloop.contracts.ports import Git, Spawner
 from taskloop.stores.bundle import Stores
 from taskloop.stores.memory import fake_stores
@@ -65,7 +65,7 @@ class CliHost:
         self.cfg = cfg
         self.stores = stores or real_stores(paths.ConfigDir(root or paths.default_root(env)))
         self.bead = "tl-check-" + check_files.repo_key(git, str(wt))
-        self.run_id = self.bead + "-" + time.strftime("%Y%m%d-%H%M%S", time.gmtime())
+        self.run_id = str(RunId.new(time.time()))
         self.log = RunLog(fake_stores().run_log("check"), run_id=self.run_id, bead=self.bead)
         self.checklog = CheckLog(self.log)
         self.run_dir = Path(tempfile.mkdtemp(prefix="tl-check-"))

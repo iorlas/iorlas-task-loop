@@ -11,6 +11,7 @@ from taskloop.app.release.shell import Shell
 from taskloop.app.run import running
 from taskloop.contracts.config import LoopConfig
 from taskloop.contracts.identity import Identity
+from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import Beads
 
@@ -28,13 +29,12 @@ def run(cfg: ConfigDir, loop: LoopConfig, repos: list[str], store_of: Callable[[
     if why:
         say(f"prune: run data kept: {why}")
     else:
-        old = Path(cfg.root / "runs")
-        folders = [d for d in old.glob("*") if d.is_dir()] if old.is_dir() else []
+        folders = RunLocator(cfg).runs()
         gone = runs.prune_runs(cfg, loop.keep_days, exempt, now, dry_run)
         for g in gone:
             say(f"prune: {would}{g.path} ({mb(g.bytes)})")
         count += len(gone)
-        held = sum(1 for d in folders if d.name.rsplit("-", 2)[0] in exempt)
+        held = sum(1 for d in folders if d.bead in exempt)
         say(f"prune: run data: {would}{len(gone)} item(s), {mb(sum(g.bytes for g in gone))}; kept every run folder newer than "
             f"{runs.kept_days(loop.keep_days):g} days and {held} of beads still open or parked")
     gone, stays = sweep(repos, store_of, Path(loop.build_dir).expanduser(), loop.keep_days, now, dry_run, sh.port, cfg,

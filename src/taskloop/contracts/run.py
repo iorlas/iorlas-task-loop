@@ -38,7 +38,7 @@ class RunReport(Rec):
 
 @final
 class LoopLogLine(Row, tag="loop"):
-    """A line of loop/<key>.jsonl: one bead's run as the loop saw it (`run_id` is the run's id: the trace and engine log are named by it).
+    """A line of loop/<key>.jsonl: one bead's run as the loop saw it (`run_id` is the run's id).
     A line without this `v` is not read."""
 
     V: ClassVar[int] = 4
@@ -154,3 +154,19 @@ class HandoffMirror(Rec):
     seen_lows: list[str] = msgspec.field(default_factory=list)
     deferred: list[dict[str, str]] = msgspec.field(default_factory=list)
     filed: list[Any] = msgspec.field(default_factory=list)
+
+
+@final
+class RunManifest(Rec):
+    """runs/<run>/manifest.json: the authority on one run. The id is opaque; the bead, the repo, the times and the loop live here and
+    nowhere in a file name. `ended` is None while the run goes; `attempts` counts the engine processes that worked on it (an exec into a
+    newer install or a network pause takes the same run up again)."""
+
+    V: ClassVar[int] = 1
+    run: str
+    repo: str
+    bead: str
+    started: float
+    ended: float | None = None
+    loop: str | None = None
+    attempts: int = 1

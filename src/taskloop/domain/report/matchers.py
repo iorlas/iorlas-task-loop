@@ -11,7 +11,6 @@ Pure; the regexes live here because nothing else in domain may import `re`.
 import hashlib
 import os
 import re
-import time
 from datetime import datetime, timedelta
 from typing import Final
 
@@ -35,14 +34,6 @@ BRACES: Final = re.compile(r"\{[^{}]*\}")
 NUMBER: Final = re.compile(r"\b\d+(?:\.\d+)?\b")
 SPACE: Final = re.compile(r"\s+")
 EDGE: Final = " :;,.-|/"
-
-
-RUN_STAMP: Final = re.compile(r"^\d{8}-\d{6}$")
-
-
-def is_run_stamp(text: str) -> bool:
-    """<YYYYMMDD-HHMMSS>: the tail of an engine log of a bead, not of a child bead."""
-    return bool(RUN_STAMP.match(text))
 
 
 def normalize_started_because(value: object, prev_run: object = "") -> str:
@@ -106,7 +97,6 @@ def run_fingerprint(outcome: object, why: object) -> str:
 # how the supervising session marks its own answers ("relayed by Claude" carries the owner's words: the owner's)
 SUPERVISOR: Final = re.compile(r"\(Claude, supervising|checked by Claude|delegated the call to Claude")
 ANSWERED: Final = re.compile(r"\bask (\S+) \(\w+\) is answered|\banswered verify ask (\S+)")
-STEM: Final = re.compile(r"^(.+)-(\d{8}-\d{6})$")
 LAND_TAIL: Final = re.compile(r"\(([^()\s]+)\)\s*$")
 BACK: Final = re.compile(r"^(\d+(?:\.\d+)?)\s*([mhd])$")
 CLOCK: Final = re.compile(r"^(\d{1,2}):(\d{2})$")
@@ -148,11 +138,6 @@ def window_time(text: str, now: float) -> float:
     return float(s) if EPOCH.match(s) else parse_time(text, now)
 
 
-def stem_time(stamp: str) -> float:
-    """Epoch seconds of the YYYYMMDD-HHMMSS tail of an engine log's name (local time)."""
-    return time.mktime(time.strptime(stamp, "%Y%m%d-%H%M%S"))
-
-
 def supervised(text: str) -> bool:
     return bool(SUPERVISOR.search(text))
 
@@ -161,12 +146,6 @@ def answered_ask(text: str) -> str:
     """The ask id a log note says is answered, else ''."""
     m = ANSWERED.search(text)
     return (m.group(1) or m.group(2)) if m else ""
-
-
-def split_stem(stem: str) -> tuple[str, str] | None:
-    """(bead, YYYYMMDD-HHMMSS) of an engine log's stem, None when it is not one."""
-    m = STEM.match(stem)
-    return (m.group(1), m.group(2)) if m else None
 
 
 STALE_TAIL: Final = re.compile(r"-stale-\d{8}-\d{6}$")

@@ -36,10 +36,9 @@ class BeadIdEdges(unittest.TestCase):
         self.assertEqual([b.id for b in bd.beads_of(rows)], ["tl-1"])
 
     def test_a_run_name_is_read_once(self):
-        rid = RunId.of("tl-3u6.21-20261030-101500")
-        self.assertIsNotNone(rid)
-        self.assertEqual(rid.bead if rid else None, "tl-3u6.21")
-        for bad in ("tl-1", "tl-1-2026-10", "-x-20261030-101500", ""):
+        rid = RunId.of("01KBN6Z0M4R5E8YQ2T7C9W3XHD")
+        self.assertEqual(str(rid), "01KBN6Z0M4R5E8YQ2T7C9W3XHD")
+        for bad in ("tl-1", "tl-3u6.21-20261030-101500", ""):
             self.assertIsNone(RunId.of(bad), bad)
 
 

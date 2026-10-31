@@ -41,13 +41,13 @@ class Traces(unittest.TestCase):
     def test_traces_of_another_version_are_skipped_and_counted(self):
         with tempfile.TemporaryDirectory() as d:
             cfg = Path(d)
-            rows = [wire.dump(trace("g-1-20261015-100000", Outcome.LANDED, T + 100, replans=2)),
-                    wire.dump(trace("g-1-20261015-110000", Outcome.FAILED, T + 200)),
-                    dict(wire.dump(trace("g-1-20261015-120000", Outcome.LANDED, T + 300)), v=1), {"outcome": "landed", "run": "r-4"}]
+            rows = [wire.dump(trace("01KBN6Z0M4R5E8YQ2T7C9W3XA1", Outcome.LANDED, T + 100, replans=2)),
+                    wire.dump(trace("01KBN6Z0M4R5E8YQ2T7C9W3XA2", Outcome.FAILED, T + 200)),
+                    dict(wire.dump(trace("01KBN6Z0M4R5E8YQ2T7C9W3XA3", Outcome.LANDED, T + 300)), v=1), {"outcome": "landed", "run": "r-4"}]
             (cfg / "traces.jsonl").write_text("\n".join(json.dumps(r) for r in rows) + "\nnot json\n", encoding="utf-8")
             env = Env(config=cfg, home=cfg, clock=lambda: T, version="v")
             book = Records(env).traces()
-            self.assertEqual((sorted(book.runs), book.skipped), (["g-1-20261015-100000", "g-1-20261015-110000"], 3))
+            self.assertEqual((sorted(book.runs), book.skipped), (["01KBN6Z0M4R5E8YQ2T7C9W3XA1", "01KBN6Z0M4R5E8YQ2T7C9W3XA2"], 3))
 
 
 if __name__ == "__main__":

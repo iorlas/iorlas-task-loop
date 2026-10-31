@@ -8,6 +8,7 @@ from pathlib import Path
 
 import support.paths  # noqa: F401
 from support.logs import typed
+from support.runs import manifest
 from taskloop.contracts import log
 from taskloop.contracts.bead import Bead
 from taskloop_dash.views.runfacts import run_of
@@ -22,6 +23,7 @@ def bead(id, title="", status="open", **kw):
 class RunScript:
     def __init__(self, bead_id, stamp="20261015-100000", slot="a", at=0.0, prev_run="", worktree="/w/a"):
         self.bead, self.name, self.t, self.n = bead_id, f"{bead_id}-{stamp}", T + at, 0
+        self.t0 = self.t
         self.rows = [typed("run_start", self.t, run_id=self.name, bead=bead_id, worktree=worktree, slot=slot, parent_id=prev_run)]
 
     def add(self, kind, **fields):
@@ -67,8 +69,8 @@ class RunScript:
         return run_of(self.name, self.records(), now)
 
     def write(self, config):
+        manifest(config, self.name, self.bead, self.t0)
         d = Path(config) / "engine"
-        d.mkdir(parents=True, exist_ok=True)
         f = d / f"{self.name}.jsonl"
         f.write_text("\n".join(json.dumps(r) for r in self.rows) + "\n", encoding="utf-8")
         os.utime(f, (self.t, self.t))  # the file is as old as its last record: the dashboard's retention reads the mtime

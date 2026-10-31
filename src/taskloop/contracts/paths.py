@@ -19,11 +19,31 @@ class ConfigDir:
     def __init__(self, root: Path | str) -> None:
         self.root = Path(root)
 
+    def engine_dir(self) -> Path:
+        return self.root / "engine"
+
+    def runs_dir(self) -> Path:
+        return self.root / "runs"
+
+    def run_manifest(self, run: RunId | str) -> Path:
+        """runs/<run>/manifest.json: the one authority on a run (contracts/run.py RunManifest); only the locator reads it."""
+        return self.run_dir(run) / "manifest.json"
+
+    def dash_token(self) -> Path:
+        return self.root / "dash.token"
+
+    def dash_pid(self) -> Path:
+        return self.root / "dash.pid"
+
+    def beads_cache(self, repo: str) -> Path:
+        """The dashboard's last read of a repo's beads (readers/beads.py), named by a hash of the repo path."""
+        return self.root / "cache" / f"beads-{hashlib.sha1(repo.encode('utf-8')).hexdigest()[:12]}.json"
+
     def engine_log(self, run: RunId | str) -> Path:
-        return self.root / "engine" / (f"{run}.jsonl")
+        return self.engine_dir() / (f"{run}.jsonl")
 
     def live_dir(self, run: RunId | str) -> Path:
-        return self.root / "engine" / (f"{run}.live")
+        return self.engine_dir() / (f"{run}.live")
 
     def events(self) -> Path:
         return self.root / "events.jsonl"
@@ -81,7 +101,7 @@ class ConfigDir:
         return self.root / "checkpoints" / (f"{bead}.json")
 
     def run_dir(self, run: RunId | str) -> Path:
-        return self.root / "runs" / str(run)
+        return self.runs_dir() / str(run)
 
     def run_request(self, run: RunId | str) -> Path:
         """The owner's requests to the live run (park, stop, notes): contracts/requests.py; the run takes it at a step boundary."""

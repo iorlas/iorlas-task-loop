@@ -24,7 +24,7 @@ class RunContext:
     bead: BeadId
     cfg: EngineConfig
     wt: Path
-    run: str  # <bead>-<YYYYMMDD-HHMMSS>: the stem of the run's files
+    run: str  # the run id (opaque, contracts/ids.py RunId): the stem of the run's files
     run_dir: Path
     log: RunLog
     steps: Steps

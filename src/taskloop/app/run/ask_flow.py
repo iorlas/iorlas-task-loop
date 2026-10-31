@@ -1,10 +1,10 @@
 """The ask a run waits on or files: an open ask is never asked again; a stop that carries one files it; the review cap."""
 import time
-from pathlib import Path
 from typing import Any
 
 from taskloop.app.asks import raiser
 from taskloop.app.run.blocked import Blocked
+from taskloop.app.run.layout import repo_of
 from taskloop.contracts.kinds import Kind
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.asks import text as asktext
@@ -29,15 +29,13 @@ class AskFlow:
 
     def repo(self) -> str:
         """The repo's path as asks and decisions name it: the parent of the git common dir (the worktree when git cannot say)."""
-        e = self.e
-        common = e.git.common_dir(e.wt)
-        return str(Path(common).parent) if common else str(e.wt)
+        return repo_of(self.e.git, self.e.wt)
 
     def raise_ask(self, spec: Any, why: str, kind: Any) -> Any:
         """File the ask the stop carries. Lint decides whether it is one an owner can answer: if not, nothing is filed and the stop is
         the engine's own fault, never a prose question. -> the Ask, or None."""
         e = self.e
-        at = raiser.Asking(bead=e.bead, run=e.log_path.stem, brief_hash=e.brief_hash, now=time.time(), why=why, repo=self.repo(),
+        at = raiser.Asking(bead=e.bead, run=e.run_id, brief_hash=e.brief_hash, now=time.time(), why=why, repo=self.repo(),
                            title=e.bead_title)
         a, problems = raiser.raise_ask(e.stores.asks, spec, at, e.stores.adrs(at.repo))
         if a is None:

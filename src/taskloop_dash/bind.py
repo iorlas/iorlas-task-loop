@@ -13,6 +13,7 @@ from typing import Any
 
 from taskloop.contracts.env import Env as ProcessEnv
 from taskloop.contracts.envvars import EnvVar
+from taskloop.contracts.paths import ConfigDir
 
 CGNAT = ipaddress.ip_network("100.64.0.0/10")  # Tailscale's range
 DEFAULT_PORT = 7878
@@ -36,14 +37,14 @@ def trusted_source(addr: object) -> bool:
 
 def token(state_dir: Path) -> str:
     """A secret for answer POSTs from outside loopback and Tailscale, made once (0600)."""
-    f = state_dir / "dash.token"
+    f = ConfigDir(state_dir).dash_token()
     try:
         t = f.read_text().strip()
         if t:
             return t
     except OSError:
         pass
-    state_dir.mkdir(parents=True, exist_ok=True)
+    f.parent.mkdir(parents=True, exist_ok=True)
     t = secrets.token_urlsafe(24)
     f.write_text(t)
     with contextlib.suppress(OSError):
@@ -114,7 +115,7 @@ def bind_refusal(addrs: list[str], port: int, here: Path | str, home: Path | str
                 "refusing to bind {}: only the installed plugin copy (under ~/.claude/plugins/cache/) may serve "
                 "a non-loopback address or port 7878; set TASK_LOOP_DASH_DEV_PUBLIC=1 to override"
             ).format(", ".join(bad) if bad else "port 7878")
-    if port == DEFAULT_PORT and not (Path(state) / "repos.json").is_file():
+    if port == DEFAULT_PORT and not ConfigDir(state).repos().is_file():
         return "refusing to start on port 7878: no repos.json in the state dir (run `tl register` first)"
     return None
 

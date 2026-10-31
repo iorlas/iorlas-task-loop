@@ -9,6 +9,7 @@ from typing import Any, Final, assert_never
 from taskloop.app.run import requests
 from taskloop.contracts import log as rec
 from taskloop.contracts.enums import Outcome
+from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.runlife import Liveness, liveness
 from taskloop.contracts.stores import AskStore, JsonlStore
@@ -31,19 +32,9 @@ def records(cfg: ConfigDir, run: str) -> list[rec.EngineLog]:
     return [i.rec for i in JsonlStore(path, rec.decode).read_from().items] if path.exists() else []
 
 
-def bead_of(run: str) -> str:
-    return run.rsplit("-", 2)[0]
-
-
-def repo_runs(cfg: ConfigDir, repo: str, now: float, main_checkout: Callable[[str], str]) -> list[str]:
-    """The runs of this repo that are live now: a run belongs to the repo its worktree is a checkout of."""
-    out: list[str] = []
-    for p in sorted((cfg.root / "engine").glob("*.jsonl")):
-        recs = records(cfg, p.stem)
-        start = next((r for r in recs if isinstance(r, rec.RunStart)), None)
-        if start and liveness(recs, now) is Liveness.LIVE and main_checkout(start.worktree) == repo:
-            out.append(p.stem)
-    return out
+def repo_runs(cfg: ConfigDir, repo: str, now: float) -> list[str]:
+    """The runs of this repo that are live now: a run belongs to the repo its manifest names."""
+    return [b.run for b in RunLocator(cfg).of_repo(repo) if liveness(records(cfg, b.run), now) is Liveness.LIVE]
 
 
 def verdict(cfg: ConfigDir, run: str, now: float) -> tuple[int, str] | None:
@@ -68,11 +59,11 @@ def asked(asks: AskStore, beads: set[str] | None, repo: str, since: float) -> tu
     return None
 
 
-def wait(a: Namespace, cfg: ConfigDir, asks: AskStore, repo: str, main_checkout: Callable[[str], str], out: Out = print,
+def wait(a: Namespace, cfg: ConfigDir, asks: AskStore, repo: str, out: Out = print,
          now: Callable[[], float] = time.time, sleep: Callable[[float], None] = time.sleep) -> int:
     start = now()
     bead = getattr(a, "bead", None)
-    runs = [requests.newest_run(cfg, bead)] if bead else repo_runs(cfg, repo, start, main_checkout)
+    runs = [requests.newest_run(cfg, bead)] if bead else repo_runs(cfg, repo, start)
     runs = [r for r in runs if r]
     if not runs:
         out(f"no run: {bead} has no run" if bead else f"no run: nothing is live for {repo}")

@@ -14,6 +14,7 @@ from taskloop.app.run import trace as runtrace
 from taskloop.app.run.blocked import Blocked
 from taskloop.app.run.waits import Waits
 from taskloop.contracts.enums import WaitWhat
+from taskloop.contracts.ids import RunId
 from taskloop.contracts.kinds import Kind
 
 
@@ -23,7 +24,7 @@ class TokenCap(unittest.TestCase):
         host = FakeWaitsHost(bead_token_cap=cap)
         rows = [("t-1", t) for t in earlier] + [("t-9", (50_000_000, 0))]
         for n, (bead, (i, o)) in enumerate(rows):
-            host.stores.traces.append(runtrace.run_trace(f"{bead}-20261029-10000{n}", {
+            host.stores.traces.append(runtrace.run_trace(str(RunId.new(1.8e9 + n, bytes(10))), {
                 "bead": bead, "outcome": "blocked", "stats": {"tokens_in": i, "tokens_out": o}, **self.TRACE_FIELDS}))
         return host, Waits(host)
 

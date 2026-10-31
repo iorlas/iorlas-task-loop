@@ -11,6 +11,7 @@ from unittest import mock
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import gitq, homes
 from support.engine_case import BEAD, CAT_ENV, CLEAN, PLAN, WRITE, EngineTest, ask_rec, review, stop, verdict
+from support.runs import manifest
 
 from taskloop.adapters import (
     links,
@@ -94,13 +95,12 @@ class EngineAsksTest(EngineTest):
 
     def test_a_live_claim_says_another_run_of_the_bead_holds_it_and_where_its_log_is(self):
         # lifesim-gfr.31.1: a restarted session relaunched the bead; TAKEN read like a stale claim of its own session
-        logs = homes.config_dir() / "engine"
-        logs.mkdir(parents=True, exist_ok=True)
-        (logs / "t-1-20261021-063408.jsonl").write_text("")
+        log = manifest(homes.config_dir(), "t-1-20261021-063408", "t-1").log
+        log.write_text("")
         ok, why, _ = self.admit({"status": "in_progress", "assignee": "tl-61ba34e7"})
         self.assertFalse(ok)
         self.assertIn("another run of t-1 is still running as tl-61ba34e7", why)
-        self.assertIn(str(logs / "t-1-20261021-063408.jsonl"), why)
+        self.assertIn(str(log), why)
 
     def test_admit_reopens_when_a_comment_answers_the_open_ask(self):
         ask = self.ask_rec(id="t-1-1")

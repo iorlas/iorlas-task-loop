@@ -26,7 +26,6 @@ from taskloop_dash.readers.loops import loop_key
 from taskloop_dash.readers.observed import strays_of
 from taskloop_dash.readers.records import Records
 from taskloop_dash.readers.runlogs import RunLogs
-from taskloop_dash.views import names
 from taskloop_dash.views.runfacts import Run
 from taskloop_dash.views.world import AdrIn, Landing, LookItem, ProjectIn, World
 
@@ -77,10 +76,10 @@ class Worlds:
         """bead -> its runs, oldest first: the retained logs, and all of `full`'s."""
         now = self.env.clock()
         out: dict[str, list[Run]] = {}
-        for bead, paths in self.records.engine_logs().items():
-            out[bead] = [self.runlogs.typed_run(p, now) for p in paths]
+        for bead, bundles in self.records.engine_logs().items():
+            out[bead] = [self.runlogs.typed_run(b, now) for b in bundles]
         if full:
-            out[full] = [self.runlogs.typed_run(p, now) for p in self.records.engine_logs(retain=False).get(full, [])]
+            out[full] = [self.runlogs.typed_run(b, now) for b in self.records.engine_logs(retain=False).get(full, [])]
         return {b: r for b, r in out.items() if r}
 
     def asks(self) -> dict[str, Ask]:
@@ -123,11 +122,11 @@ class Worlds:
 
     def live_events(self, run: Run | None) -> list[LiveEvent]:
         """The typed events of the newest call file of a run that still writes (delegate's per-call live files)."""
-        if run is None or not names.is_run_name(run.name):
+        b = self.records.locator.get(run.name) if run else None
+        if b is None:
             return []
-        folder = self.env.config.live_dir(run.name)
         try:
-            files = sorted(folder.glob("*.jsonl"), key=lambda f: f.stat().st_mtime)
+            files = sorted(b.live.glob("*.jsonl"), key=lambda f: f.stat().st_mtime)
         except OSError:
             return []
         return jsonl.records(str(files[-1]), decode=live_event) if files else []

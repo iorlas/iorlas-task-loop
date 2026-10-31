@@ -162,7 +162,7 @@ class StoresTest(unittest.TestCase):
         self.assertEqual((page.items[0].start, page.items[1].start, page.skipped), (offs[0], offs[1], 2))
         self.assertEqual(page.cursor, rl.file.size())
         self.assertEqual([type(i.rec).__name__ for i in rl.tail(2).items], ["Close"])  # the two before it are skipped lines
-        self.assertEqual(rl.file.path, self.cfg.root / "engine" / "tl-1-20261027-000000.jsonl")
+        self.assertEqual(rl.file.path, self.cfg.engine_log("tl-1-20261027-000000"))
 
     def test_a_json_document_is_replaced_whole(self):
         st = stores.LoopStateStore(self.cfg, "abc123abc123")

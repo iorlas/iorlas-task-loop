@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from taskloop.contracts import log
-from taskloop.contracts.paths import ConfigDir
+from taskloop.contracts.locator import RunBundle
 from taskloop.contracts.runlife import Liveness, liveness
 from taskloop_dash import jsonl
 from taskloop_dash.jsonrec import Json
@@ -66,14 +66,15 @@ class Source:
 class LiveRun:
     """A run's sources. Keep one per run between polls: each call reads only what the files gained."""
 
-    def __init__(self, log_path: str) -> None:
+    def __init__(self, bundle: RunBundle) -> None:
+        self.bundle = bundle
+        log_path = str(bundle.log)
         self.log_path = log_path
         self.lock = threading.RLock()  # the server is threaded: one reader at a time advances the offsets and reads the items
         self.sources = {ev.ENGINE: Source(ev.ENGINE, log_path, False)}
 
     def live_dir(self) -> Path:
-        run = Path(self.log_path).stem
-        return ConfigDir(Path(self.log_path).parent.parent).live_dir(run)
+        return self.bundle.live
 
     def refresh(self) -> None:
         with self.lock:

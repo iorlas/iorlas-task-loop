@@ -113,7 +113,7 @@ class Checkpoints:
         self.writer().write(
             Checkpoint(
                 bead=e.bead,
-                run=e.log_path.stem,
+                run=e.run_id,
                 t=time.time(),
                 branch=e.checkout.branch_now() or e.task_branch,
                 head=e.git.rev_parse(e.wt, "HEAD"),

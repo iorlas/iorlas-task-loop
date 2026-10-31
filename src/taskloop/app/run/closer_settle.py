@@ -1,6 +1,5 @@
 """The bead's last state: closed (landed or done), left open (a machine fault, a pause, the owner's hold) or blocked on the owner."""
 import time
-from pathlib import Path
 from typing import Protocol, assert_never
 
 from taskloop.adapters import beadtools
@@ -37,7 +36,7 @@ class SettleHost(Protocol):
     @property
     def cfg(self) -> SettleConfig: ...
     @property
-    def log_path(self) -> Path: ...
+    def run_id(self) -> str: ...
     @property
     def plan_summary(self) -> str: ...
     @property
@@ -68,7 +67,7 @@ class Settle:
             case fault:
                 assert_never(fault)
         if bead := beadtools.peek(e.store, e.bead):  # the text this run ended on: the next run of it is judged against it (tl-7y6.7.3)
-            parks.ended(e.home, bead, done.kind, e.log_path.stem, time.time())
+            parks.ended(e.home, bead, done.kind, e.run_id, time.time())
         if rc:  # a repo's bd rules can refuse (e.g. a minimum reason length): say so, never report a clean close
             e.warn(f"bd refused to {'close' if done.finished else 'block'} {e.bead} (exit {rc}): close it by hand")
 
