@@ -47,7 +47,7 @@ class DirectCleanup(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.who = Identity(actor="tester", home=self.tmp.name)
         self.git = DirectGit()
-        self.record = self.enterContext(mock.patch("taskloop.cli.land.verbs.land", return_value=0))
+        self.record = self.enterContext(mock.patch("taskloop.cli.land.closeguard.record_land", return_value=0))
         self.retry = self.enterContext(mock.patch("taskloop.cli.land.cleanup.retry"))
 
     def land(self):
@@ -56,7 +56,7 @@ class DirectCleanup(unittest.TestCase):
     def test_verified_direct_land_records_receipt_and_queues_both_refs(self):
         self.record.side_effect = lambda *args, **kw: self.assertTrue(self.git.ran("snapshot")) or 0
         self.assertEqual(self.land(), 0)
-        self.assertEqual(self.record.call_args.kwargs["base"], "origin/main")
+        self.assertEqual(self.record.call_args.args[4], "origin/main")
         row = self.retry.call_args.args[2]
         self.assertEqual((row.head, row.remote_oid, row.remote_outcome), ("head", "wip", "pending"))
         landed = LandedStore(self.who.config).get(BeadId("a"))
