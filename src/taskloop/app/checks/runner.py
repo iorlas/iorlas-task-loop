@@ -1,6 +1,6 @@
 """Checker: one round of checks, from the plan to the CheckRun every reader shares."""
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 from taskloop.adapters import check_files, childenv
@@ -13,14 +13,34 @@ from taskloop.app.checks.fixer import Fixer
 from taskloop.app.checks.host import CheckHost, CheckStuck
 from taskloop.app.checks.round import Round
 from taskloop.contracts.checks import Check, CheckResult, CheckRun, Durations
+from taskloop.contracts.config import EngineConfig
+from taskloop.contracts.env import Env
 from taskloop.contracts.ids import TreeSha
 from taskloop.contracts.plancheck import PlanCheck
+from taskloop.contracts.ports import Git
 from taskloop.contracts.runkey import BaseSha
 from taskloop.domain.checks.durations import merged, seconds
 from taskloop.domain.checks.plan import CheckPlan
 from taskloop.domain.checks.specs import diff_check, due, gate_items, items_of
 from taskloop.domain.checks.writer_split import WriterSplit
 from taskloop.stores.api import Doc
+from taskloop.stores.bundle import Stores
+
+
+def cached_gate(cfg: EngineConfig, git: Git, wt: str, stores: Stores, env: Env, bead_env: Mapping[str, str],
+                tree: TreeSha, planned: gateplan.PlanDecision | None) -> bool:
+    """Read gate evidence without running checks or a plan producer."""
+    steps = gate_items(cfg)
+    if not tree or not steps:
+        return False
+    base = git.rev_parse(wt, cfg.base)
+    start = git.merge_base(wt, "HEAD", cfg.base) or base
+    items = [*([diff_check(start, tree)] if start else []), *steps]
+    keys = InputKeys(git, wt, tree)
+    engine_env = {**childenv.reaching(childenv.current_env(env)), **bead_env}
+    memo = RunMemo(stores, check_files.repo_key(git, wt), keys, BaseSha(base), engine_env)
+    changed = git.changed_paths(wt, start, tree) if planned is None and any(c.when for c in items) else []
+    return all(memo.has(c) or not due(c, changed, planned.skips if planned is not None else None) for c in items)
 
 
 class Checker:
@@ -84,12 +104,9 @@ class Checker:
         steps, tree = gate_items(host.cfg), host.checkout.tree_hash()
         if not tree or not steps:
             return False
-        items = [*self._diff_check(tree), *steps]
         base = host.git.rev_parse(str(host.wt), host.cfg.base)
-        memo = self._memo(tree, base)
         planned = gateplan.skipped(host, tree, base)
-        changed = host.checkout.changed_paths() if planned is None and any(c.when for c in items) else []
-        return all(memo.has(c) or not due(c, changed, planned.skips if planned is not None else None) for c in items)
+        return cached_gate(host.cfg, host.git, str(host.wt), host.stores, host.env, host.bead_env, tree, planned)
 
     def _history(self) -> tuple[Doc[Durations], Durations]:
         host = self.host

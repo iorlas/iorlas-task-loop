@@ -28,6 +28,14 @@ A Claude Code session (attended mode) picks ready beads and runs the **engine** 
 uv run --script skills/task-loop/tl.py run-task <bead id> --worktree <dir>
 ```
 
+`run-task ID [--stage STEP] [--fresh] [--force] [--dry-run]` runs the recorded next
+stage unless a step is named. `--dry-run` prints the stage, worktree, slot/lease,
+branch and any refusal without running a step or writing run files. A hand run
+with uncommitted work lists the paths and refuses unless `--force` allows WIP
+commits. `--fresh` still discards the checkpoint; it does not imply `--force`.
+Land previews require a clean tree and cached gate evidence; they never execute
+the repository's plan producer and conservatively require every gate step.
+
 The engine claims the bead and runs reset → plan → per stage (write → checks run by the engine → review by the other
 model family) → gate → land → close, each AI step a headless worker (Codex or `claude -p`) with a schema-checked
 answer. Code routes and accepts by rule (checks green, nothing blocking in the review); close always runs. Its output is verbose with

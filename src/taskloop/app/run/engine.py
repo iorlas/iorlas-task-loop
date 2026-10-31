@@ -136,6 +136,7 @@ class Engine(RunFields):
         spawner: Spawner,
         git: Git,
         who: Identity,
+        mode: str = "task",
     ) -> None:
         route = route or seams.DelegateRoute(env)
         self.env = env  # the process environment, taken once at the edge (tl.py); every child is built from it
@@ -157,7 +158,8 @@ class Engine(RunFields):
         # the same run id: log, run dir and trace go on
         dead_run = self.dead.ended.run if self.dead and self.dead.ended else None
         taken = (self.reexec.run if self.reexec else None) or (pause.run if pause else None) or dead_run
-        layout = RunLayout.open(bead, wt, taken, self.home, repo_of(self.git, wt), self.clock.now())
+        layout = RunLayout.open(bead, wt, taken, self.home, repo_of(self.git, wt), self.clock.now(),
+                                mode=mode, owner=who.actor, session=who.session)
         self.log_path, self.err_path, self.run_dir, self.live_dir = layout.log_path, layout.err_path, layout.run_dir, layout.live_dir
         self.run_id = layout.run  # the run's id: TL_RUN_ID in its checks, run_id in its rows
         self.task_dir, self.brief_file, self.evidence_dir = layout.task_dir, layout.brief_file, layout.evidence_dir

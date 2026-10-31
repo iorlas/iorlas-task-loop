@@ -87,6 +87,16 @@ after a failed or stopped run resumes without a plan. An ask raised in a land fi
 edit that is not the engine's starts over. `tl run-task ID --fresh` drops the checkpoint. A replan keeps the stages
 already accepted.
 
+`tl run-task ID [--stage STEP] [--fresh] [--force] [--dry-run]` runs one recorded
+next step by default. `--dry-run` prints the plan (stage, worktree, slot/lease,
+branch and refusals) without running steps or writing a manifest or commit.
+Uncommitted work in a hand run is listed with its worktree and file count;
+`--force` is required to let the engine commit it as WIP. `--fresh` drops the
+checkpoint as before and does not authorize a WIP commit. The loop authorizes
+its own WIP commits implicitly.
+Land previews require a clean tree and cached passes; they never execute the
+repository's plan producer and conservatively require every gate step.
+
 Before claiming, run-task takes back what the engine itself left: a `tl-` claim whose lease ran out (a restarted
 Claude session has a new actor name) is released, and a bead the engine blocked is reopened for a plain retry, or when
 an answer filed on the open ask (or no ask open) lets it go. It stays blocked (`TAKEN: <why>`) while a person holds it, while an

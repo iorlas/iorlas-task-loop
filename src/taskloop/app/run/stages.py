@@ -57,10 +57,7 @@ def run_stages(e: Engine, requested: str | None, *, continuous: bool) -> int:
 
 def previous_run(e: Engine, locator: RunLocator) -> RunBundle | None:
     previous = [b for b in locator.of_bead(e.bead, repo_of(e.git, e.wt)) if b.run != e.run_id]
-    last = previous[-1] if previous else None
-    if last and last.manifest.state.live:
-        raise ValueError(f"previous run {last.run} is still {last.manifest.state}")
-    return last
+    return previous[-1] if previous else None
 
 
 def manifest_next(last: RunBundle | None, ck: Checkpoint | None) -> Step | None:
@@ -74,9 +71,16 @@ def manifest_next(last: RunBundle | None, ck: Checkpoint | None) -> Step | None:
 def next_step(e: Engine, locator: RunLocator, ck: Checkpoint | None, requested: str | None = None) -> Step:
     """The checkpoint is the cursor; the previous manifest also records life and completion."""
     last = previous_run(e, locator)
+    return select_step(last, ck, e.fresh, requested)
+
+
+def select_step(last: RunBundle | None, ck: Checkpoint | None, fresh: bool, requested: str | None) -> Step:
+    """Select the cursor without opening or changing a run."""
+    if last and last.manifest.state.live:
+        raise ValueError(f"previous run {last.run} is still {last.manifest.state}")
     if requested:
         return parse_step(requested)
-    if e.fresh:
+    if fresh:
         return Step.RESET
     recorded = manifest_next(last, ck)
     if recorded is not None:

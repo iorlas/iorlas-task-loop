@@ -9,6 +9,7 @@ import support.paths  # noqa: F401
 from support.fakes import FakeBeadStore
 from support.repos import write_repos
 
+from taskloop.app.run.layout import RunLayout
 from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.run import RunState
@@ -72,3 +73,10 @@ class RunHeaders(unittest.TestCase):
         header = (STATIC / "views" / "runs.js").read_text()
         for field in ("mode", "owner", "session", "state"):
             self.assertIn("${r." + field, header)
+
+    def test_engine_layout_manifest_supplies_run_header_identity(self):
+        layout = RunLayout.open("t-1", self.repo, None, self.cfg, str(self.repo), self.now,
+                                mode="stage:gate", owner="mac-owner", session="mac-session")
+        head, = self.dash.reads.snapshot().runs
+        self.assertEqual((head.run, head.mode, head.owner, head.session),
+                         (layout.run, "stage:gate", "mac-owner", "mac-session"))

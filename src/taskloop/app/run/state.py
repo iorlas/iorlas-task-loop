@@ -30,8 +30,14 @@ from taskloop.contracts.review import Unfiled
 from taskloop.contracts.wire import Open
 from taskloop.domain.checks import trim
 from taskloop.stores.api import Doc
+from taskloop.stores.bundle import Stores
 
 NOT_ATTRS = ("review",)  # the one field of another lane's type: reached as `engine.state.review` only
+
+
+def read_checkpoint(stores: Stores, bead: str) -> Checkpoint | None:
+    """Read the stage cursor before an engine exists, without exposing a checkpoint writer."""
+    return stores.checkpoints.of(bead).get()
 
 
 class StateField:

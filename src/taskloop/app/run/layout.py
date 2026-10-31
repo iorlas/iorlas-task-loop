@@ -103,11 +103,14 @@ class RunLayout:
 
     @classmethod
     def open(cls, bead: str, wt: str | Path, taken: str | None, home: ConfigDir, repo: str, now: float,
-             loop: str | None = None) -> RunLayout:
+             loop: str | None = None, *, mode: str = "task", owner: str = "", session: str = "") -> RunLayout:
         """The layout of the run `taken` (a run that goes on after an exec or a pause), else of a new one; its folders are made and its
         manifest is written (a new run) or counts one more attempt (a run taken up)."""
         where = RunLocator(home)
-        b = where.take_up(taken, repo, bead, now) if taken else where.create(repo, bead, now, loop)
+        b = (where.take_up(taken, repo, bead, now) if taken else
+             where.create(repo, bead, now, loop, mode=mode, owner=owner, session=session))
+        if taken:
+            where.identify(b.run, mode, owner, session)
         task_dir = Path(wt) / TASK_EXCLUDE.rstrip("/") / bead
         task_dir.mkdir(parents=True, exist_ok=True)
         evidence = task_dir / "evidence"

@@ -142,7 +142,8 @@ class RealGit(LandGit):
         return found
 
     def status(self, d: str, all_untracked: bool = False) -> list[StatusRow]:
-        r = self._run(d, "status", "--porcelain", "-z", *(["--untracked-files=all"] if all_untracked else []))
+        r = self._run(d, "status", "--porcelain", "-z", *(["--untracked-files=all"] if all_untracked else []),
+                      extra={"GIT_OPTIONAL_LOCKS": "0"})
         if r.returncode:
             raise classify(r.stderr or r.stdout)
         fields = r.stdout.split("\0")

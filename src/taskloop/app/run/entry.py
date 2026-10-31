@@ -9,6 +9,7 @@ import sys
 import threading
 import time
 import uuid
+from argparse import Namespace
 from collections.abc import Generator
 from pathlib import Path
 from typing import Any
@@ -20,13 +21,14 @@ from taskloop.adapters import halt as halting
 from taskloop.app.asks import intake, parks
 from taskloop.app.loop.queue import has_areas
 from taskloop.app.reconcile import leases
-from taskloop.app.run import console, running
+from taskloop.app.run import console, preflight, running
 from taskloop.app.run.engine import Blocked, Engine
 from taskloop.app.slots import engine_lock
 from taskloop.app.track import verbs
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts import fence, wire
 from taskloop.contracts.bead import Bead
+from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.enums import AskStatus, Result
 from taskloop.contracts.env import Env
 from taskloop.contracts.envvars import EnvVar
@@ -201,7 +203,7 @@ def run_any_slot(a: Any, repo: Any, cfg: Any, store: Any = None, *, env: Env, sp
     """--slot any: the next free slot, taken in the repo's slot line (first come, first served; --wait: wait in it),
     run there as `--slot NAME`, given back at the end."""
     if a.dry_run:
-        return RunReport(outcome=Result.FAILED, bead=a.id, why="failed: --slot any takes a slot; name one for --dry-run")
+        return preview(a, repo, cfg, "", store=store, env=env, git=git, who=who)
     wait = bool(getattr(a, "wait", False))
     told: list[int] = []
 
@@ -309,11 +311,12 @@ def _sigterm_ignored() -> Generator[None]:
 
 
 def run_in(a: Any, repo: Any, cfg: Any, store: Any = None, *, env: Env, spawner: Spawner, git: Git, who: Identity) -> Any:
+    if a.dry_run:
+        wt = a.worktree or (wslots.slot_dir(repo, a.slot, wslots.profile_slots(repo)) if a.slot else "")
+        return preview(a, repo, cfg, str(Path(wt).resolve()) if wt else "", store=store, env=env, git=git, who=who)
     wt, failed = _worktree_of(a, repo, spawner, env, who)
     if failed:
         return failed
-    if a.dry_run:
-        return run_bead(a, repo, cfg, wt, store, env=env, spawner=spawner, git=git, who=who)
     took, slot = "", ""
     try:
         # a hand run takes its slot's bead as the loop does (a --worktree that is a slot too); one the loop started has
@@ -348,33 +351,48 @@ def run_in(a: Any, repo: Any, cfg: Any, store: Any = None, *, env: Env, spawner:
 defer_stop = halting.stop_deferred  # no state: also before an Engine exists
 
 
+def preview(a: Namespace, repo: str, cfg: EngineConfig, wt: str, *, store: Beads | None = None,
+            env: Env, git: Git, who: Identity) -> int:
+    slot = a.slot or (wslots.slot_of(repo, wt, who, store) if wt else "")
+    why = preflight.inspect(a.id, wt, repo, cfg, git=git, who=who, env=env, requested=getattr(a, "stage", None),
+                            fresh=bool(getattr(a, "fresh", False)), force=bool(getattr(a, "force", False)),
+                            continuous=bool(getattr(a, "loop", False)), dry=True, slot=slot)
+    if why:
+        say(f"refused: {why}")
+    return 1 if why else 0
+
+
 def run_bead(a: Any, repo: Any, cfg: Any, wt: Any, store: Any = None, *, env: Env, spawner: Spawner, git: Git, who: Identity) -> Any:
+    if a.dry_run:
+        return preview(a, repo, cfg, wt, store=store, env=env, git=git, who=who)
+    if getattr(a, "stage", None) and not getattr(a, "loop", False):
+        why = preflight.inspect(a.id, wt, repo, cfg, git=git, who=who, env=env, requested=getattr(a, "stage", None),
+                                fresh=bool(getattr(a, "fresh", False)), force=bool(getattr(a, "force", False)),
+                                continuous=False, dry=False, slot=a.slot or "")
+        if why:
+            say(f"refused: {why}")
+            return RunReport(outcome=Result.FAILED, bead=a.id, why=why)
     # a stop during the sweep, admit and claim waits for them, then the engine closes the run as stopped (trace, bead)
     with defer_stop(None) as stop:
-        if not a.dry_run:
-            release_dead(repo, git, who, store)
-            if why := parked(a.id, bool(getattr(a, "fresh", False)), repo, who, store):
-                print(f"TAKEN: {why}")
-                return RunReport(outcome=Result.TAKEN, bead=a.id, why=why)
-            ok, why = admit(a.id, repo, git, who, store, fresh=bool(getattr(a, "fresh", False)))
-            if not ok:
-                print(f"TAKEN: {why}")
-                return RunReport(outcome=Result.TAKEN, bead=a.id, why=why)
-            if why:
-                say(f"{a.id}: {why}")
-        if not a.dry_run and verbs.claim(who, a.id, store or beadtools.bd_store(who.actor, repo), git, wt, a.slot) != 0:
+        release_dead(repo, git, who, store)
+        if why := parked(a.id, bool(getattr(a, "fresh", False)), repo, who, store):
+            print(f"TAKEN: {why}")
+            return RunReport(outcome=Result.TAKEN, bead=a.id, why=why)
+        ok, why = admit(a.id, repo, git, who, store, fresh=bool(getattr(a, "fresh", False)))
+        if not ok:
+            print(f"TAKEN: {why}")
+            return RunReport(outcome=Result.TAKEN, bead=a.id, why=why)
+        if why:
+            say(f"{a.id}: {why}")
+        if verbs.claim(who, a.id, store or beadtools.bd_store(who.actor, repo), git, wt, a.slot) != 0:
             # bd lets this session re-claim its own bead (a reopened one); another session's claim stops here
             return RunReport(outcome=Result.TAKEN, bead=a.id, why="claimed by another session")
-        claim = (
-            None
-            if a.dry_run
-            else fence.take(
-                store or beadtools.bd_store(who.actor),
-                a.id,
-                who.actor,
-                env.bead(EnvVar.TASK_LOOP_SLOT_BEAD),
-                getattr(a, "slot_gen", None),
-            )
+        claim = fence.take(
+            store or beadtools.bd_store(who.actor),
+            a.id,
+            who.actor,
+            env.bead(EnvVar.TASK_LOOP_SLOT_BEAD),
+            getattr(a, "slot_gen", None),
         )
         eng = Engine(
             a.id,
@@ -389,6 +407,7 @@ def run_bead(a: Any, repo: Any, cfg: Any, wt: Any, store: Any = None, *, env: En
             spawner=spawner,
             git=git,
             who=who,
+            mode="loop" if getattr(a, "loop", False) else f"stage:{a.stage}" if getattr(a, "stage", None) else "auto-next",
         )
         eng.stop_pending = bool(stop)
         say(f"engine log: {eng.log_path}")
