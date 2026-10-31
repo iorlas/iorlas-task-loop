@@ -1,18 +1,19 @@
 """`tl wait [--bead ID | --any] [--timeout S]`: block until a run ends or an ask opens, print one line, exit with the outcome's code.
-Reads only: the typed run logs (runlife.liveness decides live, ended or crashed) and the AskStore; it polls with a sleep, no daemon."""
+Reads a run's recorded state (its manifest: live, done, failed, parked, stopped or lost) and the AskStore; it polls with a sleep, no daemon.
+Each poll runs the one reconciler first, so a killed engine reads lost here and not never."""
 import argparse
 import time
 from argparse import Namespace
 from collections.abc import Callable
-from typing import Any, Final, assert_never
+from typing import Any, Final
 
 from taskloop.app.run import requests
-from taskloop.contracts import log as rec
-from taskloop.contracts.enums import Outcome
+from taskloop.contracts import runlife
 from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.paths import ConfigDir
+from taskloop.contracts.run import RunState
 from taskloop.contracts.runlife import Liveness, liveness
-from taskloop.contracts.stores import AskStore, JsonlStore
+from taskloop.contracts.stores import AskStore
 
 Out = Callable[[str], None]
 POLL: Final = 2.0  # seconds between two looks at the files
@@ -21,35 +22,31 @@ CODES: Final = f"""exit codes:
   {ENDED_OK}  the run ended landed or done
   {ASK}  an ask opened (bead and ask id on the line; tl ask show ID)
   {ENDED_NOT_OK}  the run ended parked, blocked or failed
-  {CRASHED}  the run died without closing (crashed by the liveness rule)
+  {CRASHED}  the run is lost: its process died and recorded no end
   {NO_RUN}  no run to wait on (--bead: the bead has no run; --any: nothing is live for this repo)
   {TIMEOUT}  --timeout seconds passed, nothing happened
   2  bad arguments"""
 
 
-def records(cfg: ConfigDir, run: str) -> list[rec.EngineLog]:
-    path = cfg.engine_log(run)
-    return [i.rec for i in JsonlStore(path, rec.decode).read_from().items] if path.exists() else []
-
-
 def repo_runs(cfg: ConfigDir, repo: str, now: float) -> list[str]:
     """The runs of this repo that are live now: a run belongs to the repo its manifest names."""
-    return [b.run for b in RunLocator(cfg).of_repo(repo) if liveness(records(cfg, b.run), now) is Liveness.LIVE]
+    runlife.reconcile(cfg, now)
+    return [b.run for b in RunLocator(cfg).of_repo(repo) if liveness(b.manifest) is Liveness.LIVE]
 
 
 def verdict(cfg: ConfigDir, run: str, now: float) -> tuple[int, str] | None:
-    """How the run stands: None while it lives, else (exit code, the line)."""
-    recs = records(cfg, run)
-    state = liveness(recs, now)
-    if state is Liveness.LIVE:
+    """How the run stands, from its recorded state: None while it lives, else (exit code, the line)."""
+    runlife.reconcile(cfg, now)
+    b = RunLocator(cfg).get(run)
+    if b is None:
+        return NO_RUN, f"no run: {run} has no manifest"
+    m = b.manifest
+    why = f": {m.reason}" if m.reason else ""
+    if m.state.live:
         return None
-    if state is Liveness.CRASHED:
-        return CRASHED, f"crashed: {run} stopped writing without closing"
-    if state is not Liveness.ENDED:
-        assert_never(state)
-    close = next(r for r in recs if isinstance(r, rec.Close))
-    why = f": {close.why}" if close.why else ""
-    return (ENDED_OK if close.outcome in (Outcome.LANDED, Outcome.DONE) else ENDED_NOT_OK), f"ended {close.outcome}: {run}{why}"
+    if m.state is RunState.LOST:
+        return CRASHED, f"lost: {run}{why}"
+    return (ENDED_OK if m.state is RunState.DONE else ENDED_NOT_OK), f"ended {m.state}: {run}{why}"
 
 
 def asked(asks: AskStore, beads: set[str] | None, repo: str, since: float) -> tuple[int, str] | None:

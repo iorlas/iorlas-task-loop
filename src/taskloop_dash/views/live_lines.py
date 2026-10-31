@@ -11,8 +11,8 @@ from taskloop.contracts.runlife import Liveness
 from taskloop_dash.views.live_events import ENGINE
 
 TermTone = Literal["", "err", "ok", "dim", "warn"]
-STATE: Final[dict[Liveness, Literal["live", "ended", "crashed"]]] = {
-    Liveness.LIVE: "live", Liveness.ENDED: "ended", Liveness.CRASHED: "crashed"}
+STATE: Final[dict[Liveness, Literal["live", "ended", "lost"]]] = {
+    Liveness.LIVE: "live", Liveness.ENDED: "ended", Liveness.LOST: "lost"}
 OUT_LINES = 12  # lines of a command's output shown after its exit
 
 

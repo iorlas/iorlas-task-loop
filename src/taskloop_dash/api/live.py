@@ -14,7 +14,6 @@ from typing import Any
 
 from taskloop.contracts import log
 from taskloop.contracts.locator import RunBundle
-from taskloop.contracts.runlife import Liveness, liveness
 from taskloop_dash import jsonl
 from taskloop_dash.jsonrec import Json
 from taskloop_dash.views import live_events as ev
@@ -46,21 +45,17 @@ class Source:
         self.tag, self.path, self.worker = tag, path, worker
         self.offset = 0
         self.items: list[tuple[int, Json]] = []
-        self.records: list[log.EngineLog] = []  # the engine source's typed records (the worker's are not EngineLog)
 
     def refresh(self) -> None:
         if jsonl.size_of(self.path) < self.offset:  # the file was replaced
             self.offset = 0
             self.items = []
-            self.records = []
         decode_one = ev.decode_worker if self.worker else log.decode
         rows, self.offset = jsonl.read_from(self.path, self.offset, decode_one)
         def build(r: Any, off: int) -> Json:
             return ev.worker_event(r, self.tag, off) if self.worker else ev.engine_event(r, off)
 
-        self.items += [(off, build(r, off)) for off, r in rows if not isinstance(r, log.Beat)]  # a Beat is no event: only liveness reads it
-        if not self.worker:
-            self.records += [r for _, r in rows]
+        self.items += [(off, build(r, off)) for off, r in rows if not isinstance(r, log.Beat)]  # a Beat is no event
 
 
 class LiveRun:
@@ -102,11 +97,6 @@ class LiveRun:
 
     def events(self) -> list[Json]:
         return [e for _, _, e in self.select(lambda t, off: True)]
-
-    def liveness(self, now: float) -> Liveness:
-        """The run's state from its engine records alone (taskloop.contracts.runlife); the worker's files do not count."""
-        with self.lock:
-            return liveness(self.sources[ev.ENGINE].records, now)
 
 
 def page(run: LiveRun, since: dict[str, int] | None = None, limit: int = PAGE) -> Json:

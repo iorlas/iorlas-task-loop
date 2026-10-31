@@ -28,7 +28,7 @@ PHASE_COLUMN: Final = {
     Phase.LAND: Column.LANDING,
 }
 # A Close whose run was stuck (WhyCode.STUCK), hung or failed names no PassEnd here: passes.last_end makes it "stuck" when the run's
-# Stuck episode is open at its end; "exited" is a run with no Close (runlife: crashed).
+# Stuck episode is open at its end; "exited" is a run recorded lost (runlife).
 CODE_END: Final[dict[WhyCode, PassEnd]] = {
     WhyCode.NEEDS_HUMAN: "asked",
     WhyCode.OWNER_DECISION: "asked",

@@ -449,7 +449,8 @@ OTHERS = {
                                    write_rounds=[[1, 2]], node_n=3),
     "ReexecNote": run.ReexecNote(run=str(RUN), bead="tl-1", frm="0.1.0", to="0.2.0", step="write", from_dir="/d", t=T),
     "NetPause": run.NetPause(run=str(RUN), bead="tl-1", t=T),
-    "RunManifest": run.RunManifest(run=str(RUN), repo="/r/x", bead="tl-7y6.3.1", started=T, ended=T + 60, loop="L1", attempts=2),
+    "RunManifest": run.RunManifest(run=str(RUN), repo="/r/x", bead="tl-7y6.3.1", started=T, ended=T + 60, loop="L1", attempts=2,
+                                    state=run.RunState.DONE, heartbeat=T + 59, pid=4242, host="box", reason="landed"),
     "DoneMemo": run.DoneMemo(done={"[1]": run.DoneEntry(sha="s", file="/f")}),
     "HandoffMirror": run.HandoffMirror(
         rounds=[run.Round(stage="s", round=1, kind="k")], seen_lows=["x"], deferred=[{"what": "w", "why": "y"}], filed=["f"]),

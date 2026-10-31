@@ -123,8 +123,9 @@ class Refused(unittest.TestCase):
     def test_a_fenced_run_closes_nothing_and_says_it_was_fenced_out(self):
         warned, closed = [], []
         host = SimpleNamespace(moved=False, stop_deferred=contextlib.nullcontext, landed_sha="", fenced="", store=self.bd, claim=self.old,
-                               warn=warned.append, closer=SimpleNamespace(close=lambda *a: closed.append(a)))
-        hb = SimpleNamespace(stop=lambda: None)
+                               warn=warned.append, closer=SimpleNamespace(close=lambda *a: closed.append(a)),
+                               records=SimpleNamespace(settle=lambda *a: None))
+        hb = mock.Mock()
         RunOnce(host).close_out(hb, Ended())
         self.assertEqual(closed, [])
         self.assertIn("fenced out", warned[0])

@@ -103,7 +103,7 @@ in-process Port call (as `Ports.answer` is today), never a raw bd argv. Auth sta
   types the outcome. Absent means unknown.
 - `LiveBox` is null when nothing runs; `kind=stuck` carries `why` and `silent_secs`. Stuck is decided by the engine at the
   Beat tick, never by the dashboard.
-- `LivePage.state` is `runlife.liveness`: live, ended, crashed.
+- `LivePage.state` is `runlife.liveness`: live, ended, lost (the run's recorded state).
 - Strict decode: an unknown key is an error on both sides. A new field is added with a default first.
 
 ## Who builds what

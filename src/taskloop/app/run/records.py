@@ -1,4 +1,5 @@
 """What a run records about itself: why it started, its run record in the engine log, its line in traces.jsonl."""
+import contextlib
 import time
 from typing import Any
 
@@ -10,10 +11,25 @@ from taskloop.app.run.layout import repo_of
 from taskloop.app.slots import engine_lock
 from taskloop.contracts import log as rec
 from taskloop.contracts import plancheck
-from taskloop.contracts.enums import Outcome
+from taskloop.contracts.enums import Outcome, Result
 from taskloop.contracts.locator import RunLocator
+from taskloop.contracts.run import RunState
+from taskloop.domain import outcome as oc
 from taskloop.domain.report import matchers as lifecycle
 from taskloop.domain.review import switch
+
+
+def terminal_state(outcome: oc.RunOutcome) -> RunState:
+    """The state a run ends in: its policy row's result (landed or done -> done, a fault -> failed, an ask or park -> parked, a pause
+    or a signal -> stopped)."""
+    result = outcome.rule.loop
+    if result is Result.LANDED:
+        return RunState.DONE
+    if result is Result.PARKED:
+        return RunState.PARKED
+    if result is Result.PAUSED:
+        return RunState.STOPPED
+    return RunState.FAILED
 
 
 class Records:
@@ -60,12 +76,22 @@ class Records:
             )
         )
 
+    def heartbeat(self) -> None:
+        """The run's tick in its manifest: running, alive as of now. Never raises: a manifest that cannot be written must not kill the
+        beat thread."""
+        with contextlib.suppress(OSError):
+            RunLocator(self.e.home).beat(self.e.run_id, time.time())
+
+    def settle(self, state: RunState, reason: str) -> None:
+        """The run's one terminal state, on every exit path (the close-out calls it last, whatever happened before)."""
+        with contextlib.suppress(OSError):
+            RunLocator(self.e.home).end(self.e.run_id, time.time(), state, reason)
+
     def file_trace(self, outcome: Outcome, why: str, sha: str) -> None:
         """One line per engine run in traces.jsonl, never pruned: bead, repo, branch, every session, the outcome."""
         e = self.e
         kind = e.kind.value
         try:
-            RunLocator(e.home).finish(e.run_id, time.time())  # the manifest says when the run ended
             e.stores.traces.append(
                 runtrace.run_trace(
                     e.run_id,

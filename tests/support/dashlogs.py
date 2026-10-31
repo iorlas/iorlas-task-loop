@@ -2,6 +2,7 @@
 `typed`), `.records()` decodes them strictly, `.run(now)` makes the dashboard's Run of them, `.write(config)` puts them where the
 dashboard reads them. Times are seconds after T; every method moves the script's clock."""
 
+import dataclasses
 import json
 import os
 from pathlib import Path
@@ -11,6 +12,8 @@ from support.logs import typed
 from support.runs import manifest
 from taskloop.contracts import log
 from taskloop.contracts.bead import Bead
+from taskloop.contracts.run import RunManifest, RunState
+from taskloop.contracts.runlife import liveness
 from taskloop_dash.views.runfacts import run_of
 
 T = 1_800_000_000.0
@@ -65,11 +68,21 @@ class RunScript:
     def records(self):
         return [log.decode(r) for r in self.rows]
 
-    def run(self, now):
-        return run_of(self.name, self.records(), now)
+    def closed(self):
+        return any(r["kind"] == "close" for r in self.rows)
 
-    def write(self, config):
-        manifest(config, self.name, self.bead, self.t0)
+    def state(self, lost=False):
+        """The state the engine would have recorded: its terminal one after a close, running before, lost when `lost`."""
+        return RunState.LOST if lost else RunState.DONE if self.closed() else RunState.RUNNING
+
+    def run(self, now, lost=False):
+        return dataclasses.replace(run_of(self.name, self.records(), now), life=liveness(self.manifest(lost)))
+
+    def manifest(self, lost=False):
+        return RunManifest(run=self.name, repo="/repo", bead=self.bead, started=self.t0, state=self.state(lost))
+
+    def write(self, config, lost=False):
+        manifest(config, self.name, self.bead, self.t0, state=self.state(lost))
         d = Path(config) / "engine"
         f = d / f"{self.name}.jsonl"
         f.write_text("\n".join(json.dumps(r) for r in self.rows) + "\n", encoding="utf-8")

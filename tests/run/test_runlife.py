@@ -1,6 +1,7 @@
-"""One liveness rule and one retention (taskloop.contracts.runlife): a run is live, ended or crashed from its typed log alone, the dash
-API and `tl report` read it the same way, the run-start sweep removes old logs with their .live/ folders, and the live API pages a long log.
-A fake clock throughout: no process runs and none is probed."""
+"""One liveness rule and one retention (taskloop.contracts.runlife): a run is live, ended or lost from its manifest's recorded state alone,
+the dash API and `tl report` read it the same way, the one reconciler marks a run whose heartbeat is stale and whose pid is gone lost, the
+run-start sweep removes old logs with their .live/ folders, and the live API pages a long log. A fake clock throughout; the pids are
+numbers (one that is nobody's, and this test process's own)."""
 import json
 import os
 import sys
@@ -12,7 +13,6 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: E402, F401
-from jsonl_log import JsonlLog  # noqa: E402
 from support import homes  # noqa: E402
 from support.dashes import make_dash  # noqa: E402
 from support.logs import typed  # noqa: E402
@@ -22,18 +22,21 @@ from support.runs import manifest  # noqa: E402
 from taskloop.app.report import card  # noqa: E402
 from taskloop.app.run import layout  # noqa: E402
 from taskloop.app.slots.lease import Lease  # noqa: E402
-from taskloop.contracts import log as rec  # noqa: E402
+from taskloop.contracts import runlife  # noqa: E402
 from taskloop.contracts.enums import Outcome  # noqa: E402
 from taskloop.contracts.ids import BeadId, RunId  # noqa: E402
+from taskloop.contracts.locator import RunLocator, host_name  # noqa: E402
 from taskloop.contracts.paths import ConfigDir  # noqa: E402
-from taskloop.contracts.runlife import BEAT_EVERY, CRASHED_AFTER, KEEP_DAYS, Liveness, liveness  # noqa: E402
+from taskloop.contracts.run import RunManifest, RunState  # noqa: E402
+from taskloop.contracts.runlife import BEAT_EVERY, KEEP_DAYS, STALE_AFTER, Liveness, liveness  # noqa: E402
 from taskloop.contracts.trace import RunTrace  # noqa: E402
 from taskloop_dash import jsonl  # noqa: E402
 from taskloop_dash.api import live as live_api  # noqa: E402
 
 BEAD, STAMP = "t-1", "20261026-100000"
 RUN = f"{BEAD}-{STAMP}"
-N = CRASHED_AFTER
+N = STALE_AFTER
+NOBODY = 4_194_303  # a pid no process has
 
 
 def put(path: Path, rows: list[dict]) -> None:
@@ -47,12 +50,14 @@ def started(t: float) -> list[dict]:
 
 
 class Rule(unittest.TestCase):
-    def test_the_three_states_and_the_limit(self):
-        beat = rec.Beat(t=1000.0)
-        self.assertIs(liveness([beat], 1000 + N - 1), Liveness.LIVE)
-        self.assertIs(liveness([beat], 1000 + N), Liveness.CRASHED)
-        self.assertIs(liveness([beat, rec.Close(t=1010.0, outcome=Outcome.LANDED)], 1000 + 99 * N), Liveness.ENDED)
-        self.assertIs(liveness([], 1000.0), Liveness.CRASHED)
+    def test_each_recorded_state_reads_one_way(self):
+        want = {RunState.CREATED: Liveness.LIVE, RunState.RUNNING: Liveness.LIVE, RunState.DONE: Liveness.ENDED,
+                RunState.FAILED: Liveness.ENDED, RunState.PARKED: Liveness.ENDED, RunState.STOPPED: Liveness.ENDED,
+                RunState.LOST: Liveness.LOST}
+        self.assertEqual(set(want), set(RunState))
+        for state, life in want.items():
+            m = RunManifest(run=RUN, repo="/r", bead=BEAD, started=0.0, state=state)
+            self.assertIs(liveness(m), life, state)
 
     def test_the_limit_leaves_room_for_missed_beats(self):
         self.assertGreaterEqual(N, 2 * BEAT_EVERY)  # a run is silent at most one beat; N/2 is that and a margin
@@ -73,8 +78,8 @@ class Beats(unittest.TestCase):
 
 
 class Crash(unittest.TestCase):
-    """A kill -9: the log has no close and its newest record ages. The dashboard's live view and the report both say crashed within
-    2N seconds, live before it, ended with a close."""
+    """A kill -9: the manifest says running and its heartbeat ages. Once the heartbeat is stale and the pid gone the reconciler marks the
+    run lost, and the dashboard's live view and the report both read that; a live pid, another host or an ended run is never marked."""
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
@@ -84,7 +89,8 @@ class Crash(unittest.TestCase):
         env = mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": str(home), "APPDATA": str(home)})
         env.start()
         self.addCleanup(env.stop)
-        self.log = manifest(self.cfg, RUN, BEAD, self.t0, repo="/no/repo").log
+        self.bundle = self.record(pid=NOBODY)
+        self.log = self.bundle.log
         put(self.log, [*started(self.t0), typed("beat", self.t0 + 5)])
         os.utime(self.log, (self.t0 + 5, self.t0 + 5))
         self.now = self.t0 + 5
@@ -92,6 +98,10 @@ class Crash(unittest.TestCase):
 
     def tearDown(self):
         self.tmp.cleanup()
+
+    def record(self, **fields: object):
+        base = {"state": RunState.RUNNING, "heartbeat": self.t0 + 5, "host": host_name()}
+        return manifest(self.cfg, RUN, BEAD, self.t0, repo="/no/repo", **{**base, **fields})
 
     def dash_says(self) -> str:
         self.dash.env.files.items.clear()
@@ -105,20 +115,36 @@ class Crash(unittest.TestCase):
         found = card.crashes("/no/repo", at - 3600, at + 3600, trace, homes.cfg(), now=self.now)
         return [c["run"] for c in found]
 
-    def test_a_recent_record_reads_live_in_both(self):
+    def test_a_fresh_heartbeat_reads_live_in_both(self):
         self.now = self.t0 + 5 + N - 1
         self.assertEqual(self.dash_says(), "live")
         self.assertEqual(self.report_crashes(), [])
 
-    def test_a_run_killed_without_an_end_record_reads_crashed_within_2n_seconds(self):
+    def test_a_killed_run_reads_lost_once_its_heartbeat_is_stale(self):
         for age in (N, 2 * N):
+            self.record(pid=NOBODY)  # running again, as the engine left it
             self.now = self.t0 + 5 + age
-            self.assertEqual(self.dash_says(), "crashed", age)
+            self.assertEqual(self.dash_says(), "lost", age)
             self.assertEqual(self.report_crashes(), [RUN], age)
+            self.assertIn("is gone", must(RunLocator(ConfigDir(self.cfg)).get(RUN)).manifest.reason)
 
-    def test_a_run_with_an_end_record_reads_ended_in_both(self):
-        put(self.log, [typed("close", self.t0 + 9, outcome="landed", why="")])
-        os.utime(self.log, (self.t0 + 9, self.t0 + 9))
+    def test_a_stale_run_whose_process_lives_or_is_elsewhere_is_not_lost(self):
+        self.now = self.t0 + 5 + 9 * N
+        self.record(pid=os.getpid())
+        self.assertEqual(self.dash_says(), "live")
+        self.record(pid=NOBODY, host="another-machine")
+        self.assertEqual(self.dash_says(), "live")
+
+    def test_lost_is_set_once(self):
+        self.now = self.t0 + 5 + 2 * N
+        where = RunLocator(ConfigDir(self.cfg))
+        self.assertEqual(runlife.reconcile(ConfigDir(self.cfg), self.now), [RUN])
+        again = where.get(RUN)
+        self.assertEqual(runlife.reconcile(ConfigDir(self.cfg), self.now + 99), [])
+        self.assertEqual(where.get(RUN), again)
+
+    def test_an_ended_run_reads_ended_in_both(self):
+        self.record(state=RunState.DONE, pid=NOBODY)
         self.now = self.t0 + 9 + 50 * N
         self.assertEqual(self.dash_says(), "ended")
         self.assertEqual(self.report_crashes(), [])
@@ -155,7 +181,7 @@ class BeatsAreNoEvents(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.cfg = Path(self.tmp.name) / "task-loop"
         self.t0 = 1_800_000_000.0
-        self.bundle = manifest(self.cfg, RUN, BEAD, self.t0)
+        self.bundle = manifest(self.cfg, RUN, BEAD, self.t0, state=RunState.RUNNING)
         self.log = self.bundle.log
 
     def test_100_beats_between_two_events_are_no_events(self):
@@ -169,17 +195,6 @@ class BeatsAreNoEvents(unittest.TestCase):
         self.assertEqual([e["k"] for e in live_api.page(run)["events"]], ["run_start", "step_start", "warn"])
         self.assertEqual(dash.live.page(BEAD)[1]["state"], "live")
         self.assertEqual(jsonl.records(str(self.log))[-1].kind, "warn")
-
-    def test_liveness_reads_the_newest_records_after_the_log_rotates(self):
-        with JsonlLog.open(self.log, rotate_bytes=400, keep=3) as lg:
-            for i in range(30):
-                lg.append((json.dumps(typed("beat", self.t0 + i)) + "\n").encode())
-        self.assertTrue(self.log.with_name(self.log.name + ".1").exists())  # it did rotate
-        recs = jsonl.records(str(self.log), beats=True)
-        self.assertTrue(0 < len(recs) < 30)
-        self.assertEqual(recs[-1].t, self.t0 + 29)
-        self.assertIs(liveness(recs, self.t0 + 29 + 1), Liveness.LIVE)
-        self.assertIs(liveness(recs, self.t0 + 29 + N), Liveness.CRASHED)
 
 
 if __name__ == "__main__":

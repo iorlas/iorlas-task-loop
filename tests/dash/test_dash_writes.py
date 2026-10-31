@@ -22,6 +22,7 @@ from taskloop.contracts.bead import Bead
 from taskloop.contracts.dash import Result
 from taskloop.contracts.enums import AskStatus
 from taskloop.contracts.ids import BeadId
+from taskloop.contracts.run import RunState
 from taskloop.contracts.stores import AskStore
 
 NOW = 1_800_000_000.0
@@ -112,7 +113,8 @@ class Writes(unittest.TestCase):
 
     def test_with_no_live_run_stop_is_refused_park_holds_and_a_note_is_a_hint(self):
         self.dash.env.clock = lambda: NOW + 3600
-        self.dash.env.ports = answering(lambda repo: self.fake, self.tmp.name, clock=lambda: NOW + 3600)  # the run went silent: crashed
+        self.dash.env.ports = answering(lambda repo: self.fake, self.tmp.name, clock=lambda: NOW + 3600)
+        manifest(self.dash.env.config, RUN, "tl-5", NOW - 5, state=RunState.LOST)  # the run's process is gone: recorded lost
         self.assertEqual(self.post("stop", {"project": "demo", "bead": "tl-5"}), Result(ok=False, message="no run of this bead is going"))
         self.assertIsNone(self.fake.beads[BeadId("tl-5")].metadata.get("owner_hold"))
         self.assertTrue(self.post("park", {"project": "demo", "bead": "tl-5"}).ok)

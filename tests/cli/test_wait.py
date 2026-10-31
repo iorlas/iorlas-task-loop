@@ -4,6 +4,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from typing import ClassVar
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -17,7 +18,9 @@ from taskloop.contracts.ask import Ask, SimilarRef, ThreadEntry
 from taskloop.contracts.dash import OwnerCause
 from taskloop.contracts.enums import AskClass, AskKind, AskStatus
 from taskloop.contracts.ids import BeadId
+from taskloop.contracts.locator import host_name
 from taskloop.contracts.paths import ConfigDir
+from taskloop.contracts.run import RunState
 from taskloop.contracts.stores import AskStore
 
 BEAD, RUN, T = "t-1", "t-1-20261026-100000", 5000.0
@@ -45,9 +48,14 @@ class WaitCase(unittest.TestCase):
         self.asks = AskStore.at(self.cfg)
         self.out: list[str] = []
 
-    def log(self, run=RUN, close=None, beat=T):
+    STATES: ClassVar[dict[str, RunState]] = {
+        "landed": RunState.DONE, "done": RunState.DONE, "parked": RunState.PARKED, "blocked": RunState.PARKED,
+        "failed": RunState.FAILED}
+
+    def log(self, run=RUN, close=None, beat=T, state=None, **fields):
         bead = run.rsplit("-", 2)[0]  # the test names its runs <bead>-<stamp>; the manifest is what says so
-        manifest(self.cfg, run, bead, beat - 10)
+        manifest(self.cfg, run, bead, beat - 10, state=state or self.STATES.get(close or "", RunState.RUNNING), heartbeat=beat,
+                 reason="because" if close else "", **fields)
         rows = [typed("run_start", beat - 10, run_id=run, bead=bead, worktree="/w/x"), typed("beat", beat)]
         if close:
             rows.append(typed("close", beat + 1, outcome=close, why="because"))
@@ -71,11 +79,20 @@ class WaitCase(unittest.TestCase):
         for outcome, code in (("landed", 0), ("done", 0), ("parked", 11), ("failed", 11), ("blocked", 11)):
             self.log(close=outcome)
             self.assertEqual(self.go("--bead", BEAD)[0], code, outcome)
-        self.assertTrue(self.out[0].startswith("ended landed: " + RUN))
+        self.assertTrue(self.out[0].startswith("ended done: " + RUN))
 
-    def test_a_crashed_run_has_its_own_code(self):
-        self.log(beat=T - 400)
+    def test_a_lost_run_has_its_own_code(self):
+        self.log(state=RunState.LOST)
         self.assertEqual(self.go("--bead", BEAD)[0], wait.CRASHED)
+
+    def test_a_killed_engine_is_reconciled_to_lost_by_the_wait_itself(self):
+        self.log(beat=T - 400, host=host_name(), pid=4_194_303)  # running, stale, and nobody's pid
+        rc, _ = self.go("--bead", BEAD)
+        self.assertEqual((rc, self.out[0].startswith("lost: " + RUN)), (wait.CRASHED, True))
+
+    def test_a_silent_log_is_no_sign_of_death(self):
+        self.log(beat=T - 99_999)  # no record for a day, and no host to probe: the recorded state is running
+        self.assertEqual(self.go("--bead", BEAD, "--timeout", "3")[0], wait.TIMEOUT)
 
     def test_no_run_has_its_own_code(self):
         self.assertEqual(self.go("--bead", BEAD)[0], wait.NO_RUN)

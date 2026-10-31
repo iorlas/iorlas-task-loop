@@ -1,5 +1,6 @@
-"""One engine run as typed facts: its steps with their phase and time, its calls with their fresh tokens, its Close, and what the
-runlife rule says of it. Built from the run's EngineLog records only (Beat included, for liveness): no process is probed, no text read.
+"""One engine run as typed facts: its steps with their phase and time, its calls with their fresh tokens, its Close, and what its
+recorded state says of it. Built from the run's EngineLog records only (a Beat is no event): no process is probed, no text read.
+Its liveness is the manifest's recorded state, which the reader sets.
 
 Times that depend on the clock stay out: an open step ends at the run's last record, not at `now`, so a snapshot of an unchanged run
 is byte-for-byte the same one (its version holds) until the run writes or its liveness flips."""
@@ -10,7 +11,7 @@ from pathlib import Path
 
 from taskloop.contracts import log as rec
 from taskloop.contracts.dash import Phase
-from taskloop.contracts.runlife import Liveness, liveness
+from taskloop.contracts.runlife import Liveness
 from taskloop.contracts.trace import Tokens
 from taskloop_dash.views import phases
 
@@ -147,7 +148,7 @@ def run_of(name: str, records: Sequence[rec.EngineLog], now: float) -> Run:
     lane = next((r.lane for r in reversed(body) if isinstance(r, rec.CallEnd) and r.lane), "")
     checks = next((r for r in reversed(body) if isinstance(r, rec.Checks)), None)
     code = next((r.exit for r in reversed(body) if isinstance(r, rec.CallEnd) and r.exit is not None), None)
-    life = liveness(records, now)
+    life = Liveness.LIVE  # the reader replaces it with the manifest's recorded state (readers/runlogs.py)
     return Run(name, life, start, start.t if start else (body[0].t if body else 0.0), last_t, spans_of(body), calls_of(body), close,
                tuple(r for r in body if isinstance(r, rec.Transition)), tuple(r for r in body if isinstance(r, rec.Artifacts)),
                checks, open_wait(body) if life is Liveness.LIVE else None, lane, code,

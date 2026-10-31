@@ -13,7 +13,7 @@ from support.runs import manifest
 
 from taskloop.contracts import wire
 from taskloop.contracts.dash import LivePage
-from taskloop.contracts.runlife import CRASHED_AFTER
+from taskloop.contracts.run import RunState
 from taskloop_dash.api import live
 
 BEAD, RUN = "tl-live.1", "tl-live.1-20261026-100000"
@@ -88,15 +88,12 @@ class LivePageApi(unittest.TestCase):
         first = self.get()
         self.assertEqual(self.get(first.cursor, wait="0").lines, [])
 
-    def test_state_is_the_run_liveness_rule_on_the_clock(self):
+    def test_state_is_the_runs_recorded_state_whatever_the_clock_says(self):
+        self.now = T + 99_999  # no record for a day: the log's silence says nothing
         self.assertEqual(self.get().state, "live")
-        self.now = T + 5 + CRASHED_AFTER - 1  # the newest engine record is at T + 5
-        self.assertEqual(self.get().state, "live")
-        self.now = T + 5 + CRASHED_AFTER + 1
-        self.assertEqual(self.get().state, "crashed")  # a stale log whose run never closed
-        put(self.log, [typed("beat", self.now)])
-        self.assertEqual(self.get().state, "live")
-        put(self.log, [typed("close", self.now, outcome="done")])
+        self.bundle = manifest(self.dash.env.config, RUN, BEAD, T, state=RunState.LOST)
+        self.assertEqual(self.get().state, "lost")
+        self.bundle = manifest(self.dash.env.config, RUN, BEAD, T, state=RunState.DONE)
         self.assertEqual(self.get().state, "ended")
 
     def test_no_run_is_404_and_an_odd_id_is_never_read(self):

@@ -9,6 +9,7 @@ from taskloop.app.land.gitcall import oneline
 from taskloop.app.release import reexec
 from taskloop.app.run import ended as stored_end
 from taskloop.app.run import requests
+from taskloop.app.run.records import terminal_state
 from taskloop.app.run.reload import Exec
 from taskloop.app.slots.lease import Lease
 from taskloop.contracts import fence
@@ -17,6 +18,7 @@ from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.kinds import Kind
 from taskloop.contracts.log import Beat
 from taskloop.contracts.plancheck import PlanData, RoundState
+from taskloop.contracts.run import RunState
 from taskloop.domain import outcome as oc
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.plan.matchers import AcceptanceText
@@ -73,8 +75,9 @@ class RunOnce:
         e.branch = ck.branch
 
     def beat(self) -> None:
-        """The run's proof of life in its log (runlife.liveness reads it), then the stuck tick and the owner's stop; a log that cannot
-        be written must not kill the beat thread."""
+        """The run's heartbeat in its manifest (its state is running, alive as of now) and a Beat in its log (the stuck rule's tick), then
+        the stuck tick and the owner's stop; a file that cannot be written must not kill the beat thread."""
+        self.e.records.heartbeat()
         with contextlib.suppress(OSError):
             self.e.log.emit(Beat())
         self.e.stuck.tick()
@@ -204,7 +207,23 @@ class RunOnce:
         e.accepted = list[int]()
         return e.planner.plan(again=True)
 
-    def close_out(self, hb: Any, end: Ended) -> None:
+    def close_out(self, hb: Lease, end: Ended) -> None:
+        """The close, then the run's one terminal state, whatever the close did (a close that raises still leaves a state)."""
+        try:
+            self.close(hb, end)
+        finally:
+            self.settle(end)
+
+    def settle(self, end: Ended) -> None:
+        e = self.e
+        if e.moved:  # exec'd into a newer install: the same run goes on, the next process takes it up
+            return
+        if e.fenced:
+            e.records.settle(RunState.STOPPED, f"fenced out: {e.fenced}")
+        else:
+            e.records.settle(terminal_state(end.outcome), end.outcome.detail or end.outcome.kind.name)
+
+    def close(self, hb: Lease, end: Ended) -> None:
         e = self.e
         if e.moved:
             hb.stop()

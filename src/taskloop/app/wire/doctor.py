@@ -1,5 +1,6 @@
 """`tl doctor`: what is off in the repo's setup for the loop, one line each, and the repo-profile report."""
 import os
+import time
 from pathlib import Path
 
 from taskloop import contracts
@@ -8,6 +9,7 @@ from taskloop.adapters.ident import claude_dir, config_dir
 from taskloop.app.doctor import profiles
 from taskloop.app.release import catalog, manifest
 from taskloop.app.wire.slots import cfg_source
+from taskloop.contracts import runlife
 from taskloop.contracts.config import RepoProfile
 from taskloop.contracts.env import Env
 from taskloop.contracts.identity import Identity
@@ -96,6 +98,7 @@ def run(plugin_root: Path, env: Env, git: Git, who: Identity) -> int:
     print(f"config: .task-loop.json from base {base} at commit {commit}" if commit else
           f"config: .task-loop.json from working tree {repo} (base {base} unresolved; no commit read)")
     warns = git_warnings(repo, source, git) + bead_lint_warnings(repo, who)
+    warns += [f"run {r} is lost: its process is gone and it recorded no end" for r in runlife.reconcile(who.config, time.time())]
     print(f"contracts: {Path(contracts.__file__).resolve().parent}")
     for w in warns:
         print("WARN " + w)

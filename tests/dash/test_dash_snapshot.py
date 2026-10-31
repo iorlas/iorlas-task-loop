@@ -75,14 +75,14 @@ class Case(unittest.TestCase):
             os.environ["TZ"] = self.tz
         time.tzset()
 
-    def world(self, now=NOW):
+    def world(self, now=NOW, lost=False):
         runs = {
             "b-run": [
                 RunScript("b-run", slot="a", at=3000)
                 .step("plan", 300, 20_000, "OC Go")
                 .step("write", 200, 30_000, text="write 1: clamp mood", end=False)
                 .beat()
-                .run(now)
+                .run(now, lost=lost)
             ],
             "b-ask": [RunScript("b-ask", slot="b", at=100).step("plan", 100, 1).close("parked", "needs_human").run(now)],
             "b-parked": [
@@ -201,9 +201,10 @@ class Cards(Case):
         self.assertEqual(s.server.loops[0].last_activity, NOW - 10_000)
 
     def test_a_crashed_run_reads_exited(self):
-        s = snapshot.build(self.world(now=NOW + 10_000))  # the live run has been silent for hours
+        s = snapshot.build(self.world(now=NOW + 10_000, lost=True))  # the live run's process is gone: the reconciler marked it lost
         c = self.card(s, "b-run")
-        self.assertEqual((c.marker, c.tone, c.status), (Marker.EXITED, "bad", "the run stopped writing records"))
+        self.assertEqual((c.marker, c.tone), (Marker.EXITED, "bad"))
+        self.assertEqual(c.status, "the run is lost: its process is gone and it recorded no end")
 
     def test_backlog_is_ordered_by_priority_and_capped(self):
         w = self.world()
@@ -328,10 +329,10 @@ class Detail(Case):
 
     def test_an_ended_run_has_no_live_box_and_a_crashed_one_reads_exited(self):
         self.assertIsNone(self.detail("b-done").live)
-        w = dataclasses.replace(self.world(now=NOW + 10_000))
+        w = dataclasses.replace(self.world(now=NOW + 10_000, lost=True))
         p = w.projects[0]
         d = bead_detail.build(Board(w), p, next(x for x in p.beads if x.id == "b-run"), [], [])
-        self.assertEqual((must(d.live).kind, must(d.live).why), ("exited", "the run stopped writing records"))
+        self.assertEqual((must(d.live).kind, must(d.live).why), ("exited", "the run is lost: its process is gone and it recorded no end"))
 
     def test_ask_and_look_ride_with_the_bead(self):
         self.assertEqual(must(self.detail("b-ask").ask).question, "Which bills are weekly?")

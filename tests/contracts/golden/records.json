@@ -1189,14 +1189,19 @@
   "t": 1793050200.5
  },
  "RunManifest": {
-  "v": 1,
+  "v": 2,
   "run": "01KBN6Z0M4R5E8YQ2T7C9W3XHD",
   "repo": "/r/x",
   "bead": "tl-7y6.3.1",
   "started": 1793050200.5,
   "ended": 1793050260.5,
   "loop": "L1",
-  "attempts": 2
+  "attempts": 2,
+  "state": "done",
+  "heartbeat": 1793050259.5,
+  "pid": 4242,
+  "host": "box",
+  "reason": "landed"
  },
  "DoneMemo": {
   "v": 1,

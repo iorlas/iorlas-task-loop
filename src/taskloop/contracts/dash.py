@@ -463,11 +463,11 @@ class ToolCall(Rec):
 
 @final
 class LivePage(Rec):
-    """Long-poll page of the running worker. `state` is the run-liveness rule (live, ended, crashed)."""
+    """Long-poll page of the running worker. `state` is the run-liveness rule (live, ended, lost)."""
 
     V: ClassVar[int] = 1
     cursor: str
-    state: Literal["live", "ended", "crashed"]
+    state: Literal["live", "ended", "lost"]
     lines: list[TermLine] = msgspec.field(default_factory=list)
     tools: list[ToolCall] = msgspec.field(default_factory=list)
 

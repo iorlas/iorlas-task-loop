@@ -114,9 +114,9 @@ class OpenRuns(unittest.TestCase):
         (piece,) = passes.pieces_of("p", "tl-9", [run], [p])
         self.assertEqual(piece.segs[-1].kind, "live")
 
-    def test_a_run_that_died_ends_no_pass_by_guess(self):
+    def test_a_lost_run_ends_no_pass_by_guess(self):
         s = RunScript("tl-9").step("write", 400, 5_000, end=False)
-        run = s.run(s.t + 1000)  # silent for longer than the runlife limit
+        run = s.run(s.t + 1000, lost=True)  # the reconciler marked it lost
         (p,) = passes.passes_of([run])
         self.assertEqual((p.end, p.live), ("", False))  # exited stays unset until the Stuck fact
 

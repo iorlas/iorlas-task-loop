@@ -1,4 +1,5 @@
 """The run locator: the three queries answered from manifests alone, an opaque unique time-ordered id per run."""
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -6,8 +7,9 @@ from pathlib import Path
 import support.paths  # noqa: F401
 
 from taskloop.contracts.ids import RunId
-from taskloop.contracts.locator import RunLocator
+from taskloop.contracts.locator import RunLocator, host_name
 from taskloop.contracts.paths import ConfigDir
+from taskloop.contracts.run import RunState
 
 T0 = 1793050200.0
 
@@ -59,14 +61,45 @@ class Locator(unittest.TestCase):
         a = self.where.create("/r/x", "tl-1", T0)
         again = self.where.take_up(a.run, "/r/x", "tl-1", T0 + 9)
         self.assertEqual((again.manifest.attempts, again.started), (2, T0))
-        self.where.finish(a.run, T0 + 60)
-        self.where.finish(a.run, T0 + 99)
+        self.where.end(a.run, T0 + 60, RunState.DONE)
+        self.where.end(a.run, T0 + 99, RunState.FAILED, "later")
         self.assertEqual(RunLocator(self.cfg).get(a.run).manifest.ended, T0 + 60)  # type: ignore[union-attr]
+
+    def test_the_state_goes_created_running_terminal_and_a_terminal_one_stays(self):
+        a = self.where.create("/r/x", "tl-1", T0)
+        self.assertEqual((a.manifest.state, a.manifest.pid, a.manifest.host), (RunState.CREATED, os.getpid(), host_name()))
+        self.where.beat(a.run, T0 + 5)
+        got = self.where.get(a.run).manifest  # type: ignore[union-attr]
+        self.assertEqual((got.state, got.heartbeat), (RunState.RUNNING, T0 + 5))
+        self.where.end(a.run, T0 + 9, RunState.PARKED, "an ask")
+        self.where.beat(a.run, T0 + 20)  # a late tick does not bring it back
+        got = self.where.get(a.run).manifest  # type: ignore[union-attr]
+        self.assertEqual((got.state, got.reason, got.ended), (RunState.PARKED, "an ask", T0 + 9))
+        with self.assertRaises(ValueError):
+            self.where.end(a.run, T0 + 9, RunState.RUNNING)
+
+    def test_taking_a_run_up_makes_it_live_again(self):
+        a = self.where.create("/r/x", "tl-1", T0)
+        self.where.end(a.run, T0 + 9, RunState.STOPPED)
+        again = self.where.take_up(a.run, "/r/x", "tl-1", T0 + 10).manifest
+        self.assertEqual((again.state, again.ended, again.reason), (RunState.CREATED, None, ""))
+
+    def test_reconcile_marks_only_a_stale_run_of_this_host_with_a_dead_pid(self):
+        a = self.where.create("/r/x", "tl-1", T0)
+        dead = lambda pid: False  # noqa: E731
+        self.assertEqual(self.where.reconcile(T0 + 10, dead, 300), [])  # a fresh heartbeat
+        self.assertEqual(self.where.reconcile(T0 + 999, lambda pid: True, 300), [])  # its process lives
+        self.assertEqual(self.where.reconcile(T0 + 999, dead, 300, host="elsewhere"), [])  # another machine's pid says nothing
+        self.assertEqual(self.where.reconcile(T0 + 999, dead, 300), [a.run])
+        got = self.where.get(a.run).manifest  # type: ignore[union-attr]
+        self.assertEqual((got.state, got.ended), (RunState.LOST, T0))
+        self.assertIn("is gone", got.reason)
+        self.assertEqual(self.where.reconcile(T0 + 9999, dead, 300), [])  # once
 
     def test_a_scan_sees_a_manifest_that_changed(self):
         a = self.where.create("/r/x", "tl-1", T0)
         self.assertIsNone(self.where.runs()[0].manifest.ended)
-        self.where.finish(a.run, T0 + 60)
+        self.where.end(a.run, T0 + 60, RunState.DONE)
         self.assertEqual(self.where.runs()[0].manifest.ended, T0 + 60)
 
     def test_a_bundle_names_every_file_of_the_run_from_its_id(self):

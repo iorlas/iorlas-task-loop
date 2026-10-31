@@ -21,7 +21,7 @@ from taskloop.app.slots import line as slots_line
 from taskloop.app.slots import owned
 from taskloop.app.slots.lease import Lease
 from taskloop.app.slots.pool import SlotPool
-from taskloop.contracts import wire
+from taskloop.contracts import runlife, wire
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.loop import LoopState, QueueRow
@@ -132,6 +132,8 @@ class Loop(Core):
 
     # ---- passes ------------------------------------------------------------------------------------------------
     def run(self) -> int:
+        for run in runlife.reconcile(self.env.cfgdir, self.env.now()):  # a run whose process is gone is lost once; nobody guesses later
+            self.say(f"run {run} is lost: its process is gone and it recorded no end")
         while True:
             code = self.step()
             if code is not None:

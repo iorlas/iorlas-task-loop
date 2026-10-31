@@ -44,6 +44,7 @@ from taskloop.contracts import wire  # noqa: E402
 from taskloop.contracts.env import snapshot  # noqa: E402
 from taskloop.contracts.ids import BeadId, RunId  # noqa: E402
 from taskloop.contracts.landed import Landed, LandedStore  # noqa: E402
+from taskloop.contracts.run import RunState  # noqa: E402
 from taskloop.contracts.trace import RunTrace  # noqa: E402
 
 T0 = datetime(2026, 10, 21, 6, 0).timestamp()  # the window's start in the fixtures: local 06:00
@@ -266,7 +267,7 @@ class Scorecard(Base):
             {"t": T0, "kind": "note", "text": "ask t-7-1 (verify) is answered: the bead changed since it was asked"}) + "\n")
         # a crash: an engine log with no close and no trace, long quiet
         dead = manifest(homes.config_dir(), "t-8-{}".format(time.strftime("%Y%m%d-%H%M%S", time.localtime(T0 + 5 * MIN))), "t-8",
-                        T0 + 5 * MIN, repo=str(self.repo)).log
+                        T0 + 5 * MIN, repo=str(self.repo), state=RunState.LOST, reason="pid 1 is gone").log
         dead.write_text(json.dumps(typed("note", T0 + 5 * MIN, text="git commit -q -m wip (t-8): failed")) + "\n")
         # a run that is still going: no trace yet, but alive
         live = manifest(homes.config_dir(), "t-9-{}".format(time.strftime("%Y%m%d-%H%M%S", time.localtime(T0 + 100 * MIN))), "t-9",

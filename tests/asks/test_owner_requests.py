@@ -31,6 +31,7 @@ from taskloop.contracts.enums import WhyCode
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import NewBead
+from taskloop.contracts.run import RunState
 from taskloop.stores.memory import fake_stores
 
 RUN = "tl-5-20261026-100000"
@@ -53,6 +54,7 @@ class RequestFile(unittest.TestCase):
         self.assertIsNone(requests.take(self.cfg, RUN))
 
     def test_a_run_that_is_not_live_is_refused(self):
+        manifest(self.cfg, RUN, "tl-5", self.now - 5, state=RunState.LOST)  # its process is gone, recorded lost
         self.assertEqual(requests.post(self.cfg, RUN, "dash", self.now + 3600, stop=True), "no run of this bead is going")
         self.assertEqual(requests.post(self.cfg, "tl-5-20261026-110000", "dash", self.now, stop=True), "no run of this bead is going")
         self.assertIsNone(requests.peek(self.cfg, RUN))

@@ -12,14 +12,14 @@ from taskloop.app.asks import intake
 from taskloop.app.reconcile.lost import lost_work
 from taskloop.app.report.inputs import bead_status, read_jsonl, repo_traces
 from taskloop.app.report.planner import input_tokens
-from taskloop.contracts import paths
+from taskloop.contracts import paths, runlife
 from taskloop.contracts.bead import Comment
 from taskloop.contracts.enums import Outcome, Result
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId, is_bead_id, loop_key
 from taskloop.contracts.kinds import ASKS, PAUSES, Kind, kind_named
 from taskloop.contracts.locator import RunLocator
-from taskloop.contracts.log import Beat, EngineLog, decode
+from taskloop.contracts.log import EngineLog, decode
 from taskloop.contracts.ports import Git
 from taskloop.contracts.runlife import Liveness, liveness
 from taskloop.contracts.stores import LoopLog
@@ -39,8 +39,8 @@ def typed_log(path: Path) -> list[EngineLog]:
 
 def crashes(repo: str, since: float, until: float, traces: Sequence[RunTrace], cfg: paths.ConfigDir,
             now: float | None = None) -> list[dict[str, Any]]:
-    """Engine crashes: the loop saw run-task exit with no outcome; an engine log in the window with no trace that reads `crashed`
-    (runlife.liveness: no close, and no record for CRASHED_AFTER); or a trace closed as an engine fault (an exception the engine
+    """Engine crashes: the loop saw run-task exit with no outcome; a run in the window with no trace whose manifest says `lost`
+    (the reconciler: its heartbeat went stale and its process is gone); or a trace closed as an engine fault (an exception the engine
     caught). A run's .stderr is route.py's, where a worker's test tracebacks land too: never read."""
     now = time.time() if now is None else now
     out: dict[Any, dict[str, Any]] = {}
@@ -50,15 +50,14 @@ def crashes(repo: str, since: float, until: float, traces: Sequence[RunTrace], c
         if since <= t < until and r.outcome is Result.FAILED and not r.run_id and r.why.startswith("failed: no outcome from run-task"):
             out[f"loop:{r.bead}:{r.t}"] = {"bead": r.bead, "t": t, "run": None, "why": r.why[:200]}
     traced = {str(r.run) for r in traces}
+    runlife.reconcile(cfg, now)
     for b in RunLocator(cfg).of_repo(repo):
         if b.run in traced or not since <= b.started < until or not b.log.exists():
             continue
-        bead, t, f = b.bead, b.started, b.log
-        recs = typed_log(f)
-        if liveness(recs, now) is not Liveness.CRASHED:
+        bead, t = b.bead, b.started
+        if liveness(b.manifest) is not Liveness.LOST:
             continue
-        last = getattr(next((r for r in reversed(recs) if not isinstance(r, Beat)), None), "text", "")
-        out[b.run] = {"bead": bead, "t": t, "run": b.run, "why": f"the engine log ends with no close: {last[:120]}"}
+        out[b.run] = {"bead": bead, "t": t, "run": b.run, "why": f"the run is lost: {b.manifest.reason[:120]}"}
     for r in traces:  # the engine caught it and closed (run_once): an engine bug all the same
         if overlaps(r, since, until) and kind_named(r.kind) is Kind.FAULT_ENGINE:
             out[str(r.run)] = {"bead": r.bead, "t": r.started, "run": str(r.run), "why": r.why[:200]}

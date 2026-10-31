@@ -14,14 +14,13 @@ from atomic_io import atomic_write_json
 from taskloop.adapters import locks
 from taskloop.app.asks.intake import Intake, receipt
 from taskloop.contracts import log as rec
-from taskloop.contracts import wire
+from taskloop.contracts import runlife, wire
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.kinds import Kind
 from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.requests import OwnerNote, OwnerRequest
 from taskloop.contracts.runlife import Liveness, liveness
-from taskloop.contracts.stores import JsonlStore
 
 PARKED_WHY = "parked: by the owner (the branch and the checkpoint are kept; release the hold to go on)"
 STOPPED_WHY = "failed: stopped by the owner"
@@ -45,11 +44,10 @@ def read(path: Path) -> OwnerRequest | None:
 
 
 def live(cfg: ConfigDir, run: str, now: float) -> bool:
-    """Whether the run still writes (runlife.liveness over its typed log)."""
-    path = cfg.engine_log(run)
-    if not run or not path.exists():
-        return False
-    return liveness([i.rec for i in JsonlStore(path, rec.decode).read_from().items], now) is Liveness.LIVE
+    """Whether the run is live: its manifest's recorded state (the reconciler first, so a dead engine does not read live)."""
+    runlife.reconcile(cfg, now)
+    b = RunLocator(cfg).get(run) if run else None
+    return b is not None and liveness(b.manifest) is Liveness.LIVE
 
 
 def post(cfg: ConfigDir, run: str, by: str, now: float, *, park: bool = False, stop: bool = False, note: str = "") -> str:

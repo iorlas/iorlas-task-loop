@@ -14,7 +14,7 @@ from taskloop.contracts.runlife import Liveness
 from taskloop_dash.views import columns
 from taskloop_dash.views.columns import Facts
 
-LIVE, CRASHED, ENDED = Liveness.LIVE, Liveness.CRASHED, Liveness.ENDED
+LIVE, CRASHED, ENDED = Liveness.LIVE, Liveness.LOST, Liveness.ENDED
 PARKED = log.Close(t=1.0, outcome=Outcome.PARKED, why_code=WhyCode.LANE_OUT, why="codex ran out\nuntil 14:00")
 FAILED = log.Close(t=1.0, outcome=Outcome.FAILED, why_code=WhyCode.FAILED)
 LANDED = log.Close(t=1.0, outcome=Outcome.LANDED)
@@ -70,7 +70,7 @@ class Status(unittest.TestCase):
             (Facts(life=LIVE, claimed=True, phase=Phase.TEST), "test"),
             (Facts(life=LIVE, claimed=True), "running"),
             (Facts(life=LIVE, claimed=True, wait=wait), "waiting for land lock"),
-            (Facts(life=CRASHED, claimed=True), "the run stopped writing records"),
+            (Facts(life=CRASHED, claimed=True), "the run is lost: its process is gone and it recorded no end"),
             (Facts(claimed=True, assignee="tl-a"), "claimed by tl-a"),
             (Facts(life=ENDED, close=PARKED), "codex ran out"),
             (Facts(blocked=True, blocker="b-1"), "waits for b-1"),

@@ -26,7 +26,7 @@ USUAL, USUAL_N = 600_000, 12
 
 SlotState = Literal["free", "held", "idle", "look", "running", "stuck"]
 TermTone = Literal["", "dim", "err", "ok"]
-LiveState = Literal["crashed", "ended", "live"]
+LiveState = Literal["lost", "ended", "live"]
 AskStatus = Literal["answered", "open", "open_soft"]
 LaneState = Literal["locked", "ok", "stale", "watch"]
 

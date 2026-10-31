@@ -1,5 +1,6 @@
 """Run records: what a run-task process reports to its loop, and the hand-over between two engine versions."""
 import json
+from enum import StrEnum
 from typing import Any, ClassVar, final
 
 import msgspec
@@ -156,13 +157,33 @@ class HandoffMirror(Rec):
     filed: list[Any] = msgspec.field(default_factory=list)
 
 
+class RunState(StrEnum):
+    """Where a run is, as its writer recorded it. CREATED and RUNNING are live; the rest are terminal: DONE (landed or done), FAILED (a
+    fault), PARKED (it ended on a question or a park), STOPPED (paused, killed by a signal, cut, fenced out) and LOST (the process is
+    gone and wrote no terminal state: only the reconciler sets it)."""
+
+    CREATED = "created"
+    RUNNING = "running"
+    DONE = "done"
+    FAILED = "failed"
+    PARKED = "parked"
+    STOPPED = "stopped"
+    LOST = "lost"
+
+    @property
+    def live(self) -> bool:
+        return self in (RunState.CREATED, RunState.RUNNING)
+
+
 @final
 class RunManifest(Rec):
-    """runs/<run>/manifest.json: the authority on one run. The id is opaque; the bead, the repo, the times and the loop live here and
-    nowhere in a file name. `ended` is None while the run goes; `attempts` counts the engine processes that worked on it (an exec into a
-    newer install or a network pause takes the same run up again)."""
+    """runs/<run>/manifest.json: the authority on one run. The id is opaque; the bead, the repo, the times, the loop and the run's state
+    live here and nowhere in a file name or a log gap. `state` is written by the engine (created, running on each heartbeat, one terminal
+    state on every exit) or by the reconciler (lost); `heartbeat` is the time of the engine's last tick, `pid` and `host` the process that
+    owns it, `reason` why it ended. `ended` is None while the run goes; `attempts` counts the engine processes that worked on it (an exec
+    into a newer install or a network pause takes the same run up again)."""
 
-    V: ClassVar[int] = 1
+    V: ClassVar[int] = 2
     run: str
     repo: str
     bead: str
@@ -170,3 +191,8 @@ class RunManifest(Rec):
     ended: float | None = None
     loop: str | None = None
     attempts: int = 1
+    state: RunState = RunState.CREATED
+    heartbeat: float = 0.0
+    pid: int = 0
+    host: str = ""
+    reason: str = ""

@@ -18,7 +18,7 @@ from taskloop_dash.views.runfacts import Run
 from taskloop_dash.views.world import ProjectIn
 
 COMMENT_ICON = "💬"
-EXITED_WHY = "the run stopped writing records"
+EXITED_WHY = "the run is lost: its process is gone and it recorded no end"
 
 
 def comment_msg(c: Comment) -> Msg:
@@ -46,7 +46,7 @@ def live_box(run: Run, ps: Sequence[passes.PassView], events: Sequence[LiveEvent
     if run.life is Liveness.ENDED or not mine or cur is None or cur.phase is None:
         return None
     n = mine[-1].n
-    if run.life is Liveness.CRASHED:
+    if run.life is Liveness.LOST:
         return LiveBox(kind="exited", phase=cur.phase, pass_n=n, t=run.last_t, why=EXITED_WHY, exit_code=run.exit_code)
     if run.stuck is not None:
         st = run.stuck

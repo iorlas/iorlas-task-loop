@@ -1,20 +1,18 @@
-"""How long a run lives, from its typed log alone: the one liveness rule the dashboard and `tl report` share. No process is probed: a run
-is its records. How long its files are kept is KEEP_DAYS, swept by `tl prune` alone.
-
-A run is `ended` once its log has a Close record. Without one it is `live` while its newest record is younger than CRASHED_AFTER,
-and `crashed` after that (the process died without closing: kill -9, power loss). The engine guarantees the margin: while a run-task
-lives, its Lease thread appends a Beat record every BEAT_EVERY seconds (taskloop.app.run.run_once), whatever the engine is doing, so a
-live run is never silent for CRASHED_AFTER / 2 = 150 s; a dead one reads `crashed` within CRASHED_AFTER + one read of the log, which
-is inside 2 * CRASHED_AFTER."""
-from collections.abc import Sequence
+"""How long a run lives, from its manifest alone: the one liveness rule every reader shares. A run's state is RECORDED by its writer
+(contracts/run.py RunState, runs/<run>/manifest.json), never inferred from a log gap: the engine marks it running on every heartbeat and
+terminal on every exit; `reconcile` is the one place that marks a run whose process is gone `lost`. How long its files are kept is
+KEEP_DAYS, swept by `tl prune` alone."""
 from enum import StrEnum
 from typing import Final
 
 from taskloop.contracts.enums import Step
-from taskloop.contracts.log import Close, EngineLog
+from taskloop.contracts.locator import RunLocator
+from taskloop.contracts.locks import pid_alive
+from taskloop.contracts.paths import ConfigDir
+from taskloop.contracts.run import RunManifest, RunState
 
-BEAT_EVERY: Final = 60.0  # seconds between the Beat records of a live run
-CRASHED_AFTER: Final = 300.0  # N: an open run whose newest record is older than this has died (5 beats missed)
+BEAT_EVERY: Final = 60.0  # seconds between the heartbeats of a live run (the manifest's `heartbeat`)
+STALE_AFTER: Final = 300.0  # a heartbeat older than this (5 missed) lets the reconciler look at the run's pid
 RETAIN: Final = 7 * 86400  # seconds the dashboard and `tl report` look back; it deletes nothing (the sweep is KEEP_DAYS)
 KEEP_DAYS: Final = 30  # days run data of a closed bead is kept at least (logs, check rounds, evidence); a bead not closed keeps all of it
 
@@ -39,13 +37,15 @@ def silent_limit(step: str) -> float:
 class Liveness(StrEnum):
     LIVE = "live"
     ENDED = "ended"
-    CRASHED = "crashed"
+    LOST = "lost"
 
 
-def liveness(records: Sequence[EngineLog], now: float) -> Liveness:
-    """The state of the run whose engine-log records these are. A log with no record at all reads crashed: the engine's first Beat
-    lands within seconds of the start, so an empty file is a run that died before it wrote."""
-    if any(isinstance(r, Close) for r in records):
-        return Liveness.ENDED
-    newest = max((r.t for r in records), default=0.0)
-    return Liveness.LIVE if now - newest < CRASHED_AFTER else Liveness.CRASHED
+def liveness(m: RunManifest) -> Liveness:
+    """The recorded state of a run, in the readers' three words."""
+    return Liveness.LIVE if m.state.live else Liveness.LOST if m.state is RunState.LOST else Liveness.ENDED
+
+
+def reconcile(cfg: ConfigDir, now: float) -> list[str]:
+    """Mark the runs of this host whose heartbeat is stale and whose process is dead `lost`, once. Called at loop start, by `tl doctor`
+    and by the dashboard's read of the runs. -> the run ids marked."""
+    return RunLocator(cfg).reconcile(now, pid_alive, STALE_AFTER)

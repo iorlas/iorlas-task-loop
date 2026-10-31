@@ -6,7 +6,7 @@ import os
 from dataclasses import dataclass
 from typing import Any
 
-from taskloop.contracts import events, wire
+from taskloop.contracts import events, runlife, wire
 from taskloop.contracts.events import Event
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.locator import RunBundle, RunLocator
@@ -87,7 +87,9 @@ class Records:
 
     def engine_logs(self, retain: bool = True) -> dict[BeadId, list[RunBundle]]:
         """bead -> its runs that have an engine log, oldest first (the locator's order); `retain`: only the logs written lately."""
-        cut = self.env.clock() - RETAIN if retain else 0
+        now = self.env.clock()
+        runlife.reconcile(self.env.config, now)  # a run whose process is gone is marked lost here, once; the readers only read the state
+        cut = now - RETAIN if retain else 0
         out: dict[BeadId, list[RunBundle]] = {}
         for b in self.locator.runs():
             try:

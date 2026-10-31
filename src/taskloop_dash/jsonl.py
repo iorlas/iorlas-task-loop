@@ -19,14 +19,14 @@ def parse(raw: bytes | str, decode: Callable[[object], Any] = log.decode) -> Any
         return None
 
 
-def records(path: str, decode: Callable[[object], Any] = log.decode, beats: bool = False) -> list[Any]:
-    """Every record of the file, oldest first. A Beat is proof of life, not an event: only `beats=True` (the liveness read) keeps it."""
+def records(path: str, decode: Callable[[object], Any] = log.decode) -> list[Any]:
+    """Every record of the file, oldest first, a Beat (the stuck rule's tick, no event) left out."""
     try:
         with open(path, "rb") as f:
             lines = f.read().splitlines()
     except OSError:
         return []
-    return [r for r in (parse(ln, decode) for ln in lines) if r is not None and (beats or not isinstance(r, log.Beat))]
+    return [r for r in (parse(ln, decode) for ln in lines) if r is not None and not isinstance(r, log.Beat)]
 
 
 def read_from(path: str, offset: int, decode: Callable[[object], Any] = log.decode) -> tuple[list[tuple[int, Any]], int]:
