@@ -32,12 +32,16 @@ UNCHECKED: Final = "unchecked"  # the category of the one follow-up that carries
 TAG: Final = "follow-up"
 
 
-def unchecked(bead: str, items: Sequence[Mapping[str, str]]) -> dict[str, str]:
+NOT_VISUAL: Final = "is not a visual bead, so verify did not run"
+REVIEW_OFF: Final = "is a visual bead but engine.review is off, so verify and look were skipped (no reviewer-role call)"
+
+
+def unchecked(bead: str, items: Sequence[Mapping[str, str]], cause: str = NOT_VISUAL) -> dict[str, str]:
     """The leftover for a non-visual bead's unchecked items: one per bead (its key is (bead, UNCHECKED, "verify")), so a rerun that
     adds it again files nothing new."""
     rows = "\n".join(f"- {u['what']} ({u['kind']})" + (f": {u['why']}" if u.get("why") else "") for u in items)
     return {"title": f"{title_prefix(bead)} {len(items)} item(s) nobody verified", "category": UNCHECKED, "file": "verify",
-            "why": f"{bead} is not a visual bead, so verify did not run; it landed with these unchecked items:\n{rows}"}
+            "why": f"{bead} {cause}; it landed with these unchecked items:\n{rows}"}
 
 
 def title_prefix(bead: str) -> str:

@@ -55,6 +55,8 @@ class ReviewRound:
                 e.log.note(f"{s.name}: review is {m} but no plan case names acceptance {', '.join(loose)}: reviewing this stage")
                 return False
         said = SkipKind.REVIEW_OFF if m == "off" else SkipKind.REVIEW_SAMPLED
+        if not s.fix:  # nobody judges the writer's unchecked items now: they stay open for verify at land, never dropped
+            e.unchecked = list({u["what"]: u for u in e.unchecked + s.wrote_unchecked}.values())
         e.steps.begin("review", f"{s.name}: review skipped ({said})")
         e.steps.outcome("skipped", said)
         e.log.note(f"{s.name}: review skipped, engine.review is {m}")

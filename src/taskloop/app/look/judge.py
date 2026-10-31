@@ -8,7 +8,9 @@ from taskloop.adapters import looks
 from taskloop.contracts.checkpoint import Defect
 from taskloop.domain.look.matchers import image_names
 from taskloop.domain.prompts.write import LOOK_FEEDBACK, LOOK_WRITE_TABLE
+from taskloop.domain.review import switch
 from taskloop.domain.review.matchers import Wording
+from taskloop.domain.review.skip import SkipKind
 
 NOT_VISUAL = "\nlook: empty when nothing here is visual.\n"
 
@@ -25,6 +27,11 @@ class Judge:
         """The look judge's findings: a fresh call from another family, in a folder with only the shrunk pictures, the
         references and the 'before' pictures. -> (defects [{item, where, why}], its summary)."""
         e = self.e
+        if switch.mode(e.cfg.review, e.budget.labels) == "off":  # no reviewer-role call: the owner sees the skip on the bead
+            e.steps.begin("look", f"round {rnd}: look judge skipped ({SkipKind.REVIEW_OFF})")
+            e.steps.outcome("skipped", SkipKind.REVIEW_OFF)
+            e.comment("Look (engine): the look judge was skipped because review is off; the pictures are not judged")
+            return [], "(look judge skipped: review is off)"
         base = e.run_dir / "looks" / f"r{rnd}"
         shown: list[str] = []
         for r in [r for r in image_names(e.briefs.text()) if (Path(e.wt) / r).is_file()]:

@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support import engine_case as T
 from support import fake_route
-from support.engine_case import BEAD, CLEAN, HAS_F, PLAN, WRITE, adhoc
+from support.engine_case import BEAD, CLEAN, HAS_F, PLAN, WRITE, adhoc, verdict
 
 CASE = {"criterion": "the file f.txt exists", "check": adhoc(HAS_F), "class": "test"}
 COVERED = dict(PLAN, cases=[CASE])
@@ -68,6 +68,31 @@ class WriterFamily(unittest.TestCase):
         self.assertNotIn("review", s.nodes)
         self.assertNotIn("verify", s.nodes)
         self.assertFalse(any("opus" in " ".join(a).lower() for a in s.argvs))
+
+    def visual_run(self, **cfg):
+        gap = {"what": "f.txt exists on a clean checkout", "kind": "checkable"}
+        bead = dict(BEAD, labels=["ui"])
+        return self.go({"plan": [COVERED], "write": [dict(WRITE, unchecked=[gap])], "review": [dict(CLEAN, unchecked=[gap])],
+                        "verify": [{"items": [verdict(1, "settled", evidence="\"x\"")]}]},
+                       bead=bead, writer_family=["openai"], **cfg)
+
+    def test_a_visual_bead_with_the_review_off_skips_verify_and_look_and_the_close_names_it(self):
+        rc, s = self.visual_run(review="off")
+        self.assertEqual(rc, 0)
+        self.assertEqual(s.nodes, ["plan", "write"])
+        self.assertFalse(any("claude" in " ".join(flag(a, "--only-family") + flag(a, "--authored-by")) for a in s.argvs))
+        said = [c[3] for c in self.store.said("comments", "add") if "verify and look did not run because review is off" in c[3]]
+        self.assertEqual(len(said), 1)
+        self.assertIn("f.txt exists on a clean checkout", said[0])
+        made = [c for c in self.store.calls if c[0] == "create"]
+        self.assertEqual(len(made), 1)
+        self.assertIn("follow-up", made[0][made[0].index("--labels") + 1].split(","))
+        self.assertIn("verify and look were skipped", " ".join(made[0]))
+
+    def test_a_visual_bead_with_the_review_on_still_runs_verify(self):
+        rc, s = self.visual_run(review="on")
+        self.assertEqual(rc, 0)
+        self.assertEqual(s.nodes, ["plan", "write", "review", "verify"])
 
     def test_a_pin_delegate_cannot_place_pauses_the_bead_and_says_the_reason(self):
         none = fake_route.stop_answer("no_lane", say="openai logged out")
