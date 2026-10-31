@@ -1559,8 +1559,13 @@
   "timeout_s": 2820,
   "idle_s": 900,
   "live_file": "/l.live",
-  "engine_only": [],
-  "only_family": []
+  "engine_only": [
+   "check"
+  ],
+  "engine_only_advisory": true,
+  "only_family": [
+   "openai"
+  ]
  },
  "DelegateResult": {
   "contract": 3,

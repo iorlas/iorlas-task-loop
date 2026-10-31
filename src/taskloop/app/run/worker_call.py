@@ -15,15 +15,13 @@ from typing import Any
 from taskloop.adapters import childenv, delegate_wire
 from taskloop.adapters import delegate as dg
 from taskloop.app.checks.step_env import step_env
-from taskloop.app.run import done_memo, strays
+from taskloop.app.run import done_memo, strays, worker_request
 from taskloop.app.run.blocked import refuse_over_cap
 from taskloop.app.run.calls import timing
 from taskloop.app.run.lane_acts import LaneActs
 from taskloop.contracts import answers
 from taskloop.contracts import log as rec
 from taskloop.contracts.delegate import REASON_OVERRUN, DelegateResult, RunRequest, StopFacts
-from taskloop.domain.checks import planref
-from taskloop.domain.lanes import pin
 from taskloop.domain.lanes import policy as lp
 from taskloop.domain.lanes.denials import command_of, secret_false_positive
 from taskloop.domain.lanes.notes import FRESH_WRITER_TEXT, RESUME_AFTER_STOP
@@ -228,32 +226,22 @@ class WorkerCall:
             return int(float(cfg.review_budget_min) * 60), 0
         return int(float(cfg.node_timeout_min) * 60), 0
 
+    def request(self, c: Call, live: str, timeout_s: int, idle_s: int) -> RunRequest:
+        """Only a pinned write may ask delegate to treat the engine-only guard as advisory."""
+        return worker_request.request(self.e, c, live, timeout_s, idle_s)
+
     def call_once(self, c: Call) -> dg.Answer:
         """One `route.py run`: through the process seam, then the records a call leaves."""
         e = self.e
-        refuse_over_cap(c.node, c.role, c.text)  # before anything spawns
+        refuse_over_cap(c.node, c.role, c.text)
         timeout_s, idle_s = self.limits(c)
         c.limit_s = float(timeout_s)
         e.delegation.route()
         live = e.live(c.step or c.node)
+        req = self.request(c, live, timeout_s, idle_s)
+        brief = worker_request.brief(c, req)
         runner = e.router.runner(e.err_path, None, live, e.lock_worker)
         runner.outer = e.halt  # a stop of the run ends the call
-        req = RunRequest(
-            role=c.role,
-            brief_path="",
-            cwd=str(c.cwd),
-            schema_path="",
-            parent=e.session,
-            task=e.bead,
-            title=f"{e.bead} · {c.node}: {c.title}",
-            resume=c.resume or "",
-            authored_by=c.writer or "",
-            timeout_s=timeout_s,
-            idle_s=idle_s,
-            live_file=live,
-            only_family=pin.for_role(c.role, pin.families(e.cfg.writer_family, e.budget.labels)),
-            engine_only=e.checker.split().engine_recipes(planref.stage_commands(e.plan_data, e.cfg)) if c.node == "write" else [],
-        )
         cid = e.calls.start(c.step or c.node, c.node, c.role, bool(c.resume), e.live_n)
         c.state = callstate.begin(
             e.call_dir(), e.run_id, e.bead, c.key, c.role, resume_of=c.resume or "", prompt_sha=c.sha, now=e.clock.now()
@@ -261,7 +249,7 @@ class WorkerCall:
         t0, trees = time.time(), strays.worktrees(e)  # the worktrees the repo holds before the worker runs
         try:
             wenv = {**e.bead_env, **step_env(e, c.step or c.node)}
-            ans = dg.call(e.resolved, req, c.text, c.schema, runner, env=childenv.current_env(e.env, wenv))
+            ans = dg.call(e.resolved, req, brief, c.schema, runner, env=childenv.current_env(e.env, wenv))
         except BaseException as exc:  # an interruption stopped the delegate inside the process seam: record that stop here
             if runner.obs.get("kill_t") or runner.stop.get("alive"):
                 self.log_kill(c, runner, exc)
@@ -272,7 +260,7 @@ class WorkerCall:
         e.cost += res.cost
         stopped = runner.stop.get("why") or ""
         survivors = self.survivors(runner, res)
-        e.calls.end(cid, c.node, c.role, c.tries, res, stopped, bool(c.resume), len(c.text), runner.worker, runner.live_start())
+        e.calls.end(cid, c.node, c.role, c.tries, res, stopped, bool(c.resume), len(brief), runner.worker, runner.live_start())
         if stopped or survivors:  # the actual stop path, including a worker that outlived every signal
             self.log_kill(c, runner, survivors=survivors)
         e.lock_workers(survivors, runner.worker)
@@ -312,13 +300,14 @@ class WorkerCall:
             reason=REASON_OVERRUN, scope="lane", permanence="transient", retry=delegate_wire.Retry(kind="none"), ref=res.ref or ""
         )
         said = f"the {c.node} call used its {int(c.limit_s // 60)} min budget"
-        return dg.Answer(res.replace(stop=stop, lane=lane or None, say=said), ans.raw)
+        return dg.Answer(res.replace(stop=stop, lane=lane or None, say=said), ans.raw, ans.argv, ans.trace)
 
     def note_result(self, c: Call, ans: dg.Answer, runner: Any) -> None:
         """The records a returned call leaves: the vendor error of a stop, the CallState."""
         e, res = self.e, ans.res
         if res.stop is not None:
             s = res.stop
+            worker_request.note_write_stop(e, c, ans)
             e.log.emit(
                 rec.VendorError(
                     node=e.steps.id,

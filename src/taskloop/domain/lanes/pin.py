@@ -7,11 +7,11 @@ stops (`only_family_unready`, or `no_lane`), and the engine says so in words ins
 from collections.abc import Collection, Sequence
 from typing import Final
 
-from taskloop.contracts.delegate import REASON_NO_LANE, REASON_ONLY_FAMILY
+from taskloop.contracts.delegate import REASON_ENGINE_ONLY_UNENFORCED, REASON_NO_LANE, REASON_ONLY_FAMILY
 
 LABEL_PREFIX: Final = "writer-family:"
 PINNED_ROLE: Final = "worker"
-STOP_REASONS: Final = (REASON_ONLY_FAMILY, REASON_NO_LANE)
+STOP_REASONS: Final = (REASON_ONLY_FAMILY, REASON_NO_LANE, REASON_ENGINE_ONLY_UNENFORCED)
 
 
 def families(configured: Sequence[str], labels: Collection[str]) -> list[str]:
@@ -34,8 +34,17 @@ def describe(pinned: Sequence[str]) -> str:
             "a bead label writer-family:<f> overrides)")
 
 
-def stop_why(node: str, pinned: Sequence[str], reason: str, said: str) -> str:
+def unenforced_why(node: str, said: str, fix: str = "") -> str:
+    """An enforcement stop needs a harness or an explicit advisory call, not a wait for capacity."""
+    return (f"paused: the writer's harness cannot deny the engine-only recipes: {said}"
+            f"{(' [' + fix + ']') if fix else ''} ({REASON_ENGINE_ONLY_UNENFORCED}, {node}); "
+            "use a harness that can deny them or enable --engine-only-advisory for the pinned writer")
+
+
+def stop_why(node: str, pinned: Sequence[str], reason: str, said: str, fix: str = "") -> str:
     """The `why` of a pinned write that delegate could not place: the pin and the reason in words."""
+    if reason == REASON_ENGINE_ONLY_UNENFORCED:
+        return unenforced_why(node, said, fix)
     fams = ", ".join(pinned)
     return (f"paused: no ready lane of the pinned writer family ({fams}) for {node} ({reason}): {said[:200]}; "
             "no other family is used. It runs when that family is ready, or unpin it (engine.writer_family, label writer-family:<f>)")

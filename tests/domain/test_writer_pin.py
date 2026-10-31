@@ -7,7 +7,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
 from taskloop.contracts import delegate
-from taskloop.domain.lanes import pin
+from taskloop.domain.lanes import pin, says
+from taskloop.domain.lanes import policy as lp
 
 
 class Pin(unittest.TestCase):
@@ -34,6 +35,20 @@ class Pin(unittest.TestCase):
         self.assertIn("no other family is used", why)
         self.assertIn("openai", pin.describe(["openai"]))
         self.assertIn("none", pin.describe([]))
+
+    def test_unenforced_stop_names_the_harness_recipes_and_fix_even_without_a_pin(self):
+        reason = delegate.REASON_ENGINE_ONLY_UNENFORCED
+        self.assertIn(reason, pin.STOP_REASONS)
+        stop = lp.Stop("machine", "needs_owner", reason=reason, fix="use advisory or another harness")
+        action = lp.decide(stop, lp.Ctx(now=1, node="write"))
+        self.assertIsInstance(action, lp.Yield)
+        assert isinstance(action, lp.Yield)
+        for why in (pin.stop_why("write", ["openai"], reason, "CODEX: just check", stop.fix),
+                    says.stop_why("write", action.kind, stop, "CODEX: just check")):
+            self.assertIn("paused: the writer's harness cannot deny the engine-only recipes:", why)
+            self.assertIn("CODEX: just check", why)
+            self.assertIn(stop.fix, why)
+            self.assertIn(reason, why)
 
 
 if __name__ == "__main__":

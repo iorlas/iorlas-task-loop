@@ -492,6 +492,9 @@ OTHERS = {
         timeout_s=2820,
         idle_s=900,
         live_file="/l.live",
+        engine_only=["check"],
+        engine_only_advisory=True,
+        only_family=["openai"],
     ),
     "DelegateResult": delegate.DelegateResult(
         data={"summary": "s"},

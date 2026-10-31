@@ -3,6 +3,9 @@ from typing import Final
 
 from taskloop.domain.prompts.common import DECIDED_RULE, OPTIONS_RULE, READ_RULE
 
+ENGINE_ONLY_ADVISORY: Final = ("\nDo not run the engine-only recipes ({recipes}); the writer's harness may not deny them, "
+                               "and the engine runs them after you.\n")
+
 REPEAT_RED: Final = ("\nThese checks failed in the last round too:\n%s\nIf one measures a threshold the task does not ask for (the task "
               "says the owner judges it, or the number is the plan's own), do not keep tuning the work to it: list it in "
               "bad_checks, with why, and the plan is changed instead.\n")

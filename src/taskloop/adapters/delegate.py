@@ -47,10 +47,12 @@ class Refusal:
 
 @dataclass(frozen=True)
 class Answer:
-    """A parsed answer and the wire object it came from ({} for a stop the engine made up), which a checkpoint keeps."""
+    """A parsed answer, its checkpoint wire object ({} for a synthesized stop), and the exact call argv and output for diagnostics."""
 
     res: DelegateResult
     raw: dict[str, Any]
+    argv: tuple[str, ...] = ()
+    trace: str = ""
 
 
 class Stopped(Exception):
@@ -183,6 +185,7 @@ def call(
     """One delegate call. Never raises (but an interruption: BaseException goes on). `runner(argv, cwd=, env=, timeout=)` -> an object
     with `.returncode`, `.stdout`, `.stderr`; it raises Stopped when the engine had to end the call."""
     c = resolved.contract
+    argv: list[str] = []
     try:
         with tempfile.TemporaryDirectory() as d:
             bf, sf = os.path.join(d, "brief.md"), os.path.join(d, "schema.json")
@@ -196,10 +199,13 @@ def call(
         return Answer(
             synth_for(c, REASON_TIMEOUT, ("bead", "transient"), "the engine ended the call: %s" % (why or "its time ran out"), req.resume),
             {},
+            tuple(argv), str(e),
         )
     except (OSError, ValueError) as e:
-        return Answer(synth_for(c, "no_answer", ("machine", "transient"), f"route.py could not run: {e}", req.resume), {})
+        return Answer(synth_for(c, "no_answer", ("machine", "transient"), f"route.py could not run: {e}", req.resume), {},
+                      tuple(argv), str(e))
     out = (p.stdout or "").strip()
+    trace = "\n".join(x for x in (p.stdout, p.stderr) if x)
     j = _last_json(out)
     if not isinstance(j, dict):
         return Answer(
@@ -211,5 +217,6 @@ def call(
                 req.resume,
             ),
             {},
+            tuple(argv), trace,
         )
-    return Answer(delegate_wire.result_of(j), j)
+    return Answer(delegate_wire.result_of(j), j, tuple(argv), trace)

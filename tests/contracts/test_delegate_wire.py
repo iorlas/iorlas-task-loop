@@ -59,6 +59,13 @@ class Contract3(unittest.TestCase):
         self.assertEqual([argv[i + 1] for i, x in enumerate(argv) if x == "--engine-only"], ["check", "unity-tests"])
         self.assertNotIn("--engine-only", delegate.RunRequest(**base).to_argv("py", "r"))
 
+    def test_engine_only_advisory_is_explicit_and_absent_by_default(self):
+        req = delegate.RunRequest(role="worker", brief_path="b", cwd="/w", schema_path="s", engine_only=["check"])
+        self.assertNotIn("--engine-only-advisory", req.to_argv("py", "r"))
+        argv = req.replace(engine_only_advisory=True).to_argv("py", "r")
+        self.assertEqual(argv.count("--engine-only-advisory"), 1)
+        self.assertEqual(argv[argv.index("--engine-only") + 1], "check")
+
 
 if __name__ == "__main__":
     unittest.main()

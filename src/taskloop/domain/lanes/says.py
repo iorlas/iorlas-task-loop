@@ -5,7 +5,8 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Final
 
-from taskloop.contracts.delegate import Denial
+from taskloop.contracts.delegate import REASON_ENGINE_ONLY_UNENFORCED, Denial
+from taskloop.domain.lanes import pin
 from taskloop.domain.lanes.denials import command_of
 from taskloop.domain.lanes.policy import Stop
 
@@ -28,6 +29,8 @@ class Said:
 
 
 def _paused(w: Said, what: str) -> str:
+    if w.stop.reason == REASON_ENGINE_ONLY_UNENFORCED:
+        return pin.unenforced_why(w.node, w.said, w.stop.fix)
     return f"paused: no {what} for {w.node}{w.at} ({w.stop.reason}: {w.said}){w.fix}"
 
 

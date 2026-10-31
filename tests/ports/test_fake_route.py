@@ -103,6 +103,23 @@ class Fake(unittest.TestCase):
         r = self.call()
         self.assertEqual((r.done, r.stop, r.data, r.ref, r.source), (True, None, {"a": 1}, "fake-1", "delegate"))
 
+    def test_answer_keeps_the_actual_argv_and_unabridged_stdout_and_stderr(self):
+        seen = []
+        body = fake_route.stop_answer("no_lane", say="no ready lane")
+        stdout = "routing trace " + "x" * 500 + "\n" + json.dumps(body)
+        stderr = "harness trace " + "y" * 500
+
+        def runner(argv, **kw):
+            seen.append(list(argv))
+            return subprocess.CompletedProcess(argv, 0, stdout, stderr)
+
+        answer = dl.call(self.resolved, self.req(), "do it", {}, runner, {})
+        self.assertEqual(list(answer.argv), seen[0])
+        self.assertTrue(seen[0][seen[0].index("--brief") + 1].endswith("brief.md"))
+        self.assertTrue(seen[0][seen[0].index("--schema") + 1].endswith("schema.json"))
+        self.assertEqual(answer.raw, body)
+        self.assertEqual(answer.trace, stdout + "\n" + stderr)
+
     def test_every_fixture_replays_to_its_expected_reason_and_a_policy_action(self):
         replayed = 0
         for fx in FIXTURES:
