@@ -1,4 +1,4 @@
-"""What leaves the machine at a land: --no-verify on the push, the LFS objects before it, bd's Dolt data after the lock is let go."""
+"""What leaves the machine at a land: TL_LAND on the push, the LFS objects before it, bd's Dolt data after the lock is let go."""
 import os
 import shutil
 import stat
@@ -23,13 +23,10 @@ RUN = ({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
 
 
 class Argv(EngineTest):
-    def test_a_git_push_gets_no_verify_after_push(self):
-        self.assertEqual(outbound.land_argv(["git", "push", "origin", "HEAD:main"]), ["git", "push", "--no-verify", "origin", "HEAD:main"])
-        again = ["git", "push", "--no-verify", "o", "HEAD:main"]
-        self.assertEqual(outbound.land_argv(again), again)
+    def test_the_engine_marks_its_push_with_tl_land_not_no_verify(self):
+        self.assertEqual(outbound.LAND_ENV, {"TL_LAND": "1"})
 
-    def test_a_custom_land_command_is_left_alone(self):
-        self.assertEqual(outbound.land_argv(["just", "land"]), ["just", "land"])
+    def test_a_custom_land_command_is_no_push(self):
         self.assertIsNone(outbound.target(["just", "land"]))
 
     def test_the_remote_and_the_pushed_ref_come_from_the_push_argv(self):

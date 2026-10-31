@@ -29,6 +29,10 @@ class ConfigDir:
         """runs/<run>/manifest.json: the one authority on a run (contracts/run.py RunManifest); only the locator reads it."""
         return self.run_dir(run) / "manifest.json"
 
+    def hooks_dir(self) -> Path:
+        """githooks/: the git hooks `tl hooks install` writes; every subprocess tl starts gets it as core.hooksPath (adapters/childenv)."""
+        return self.root / "githooks"
+
     def dash_token(self) -> Path:
         return self.root / "dash.token"
 

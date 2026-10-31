@@ -5,7 +5,7 @@ from typing import Protocol
 
 from taskloop.app.land.gate import GatePass, Problem, ProblemKind
 from taskloop.app.land.landed import LandedConfig
-from taskloop.app.land.outbound import land_argv, pin_head
+from taskloop.app.land.outbound import LAND_ENV, pin_head
 from taskloop.app.land.parts import NetWorker, OutcomeMoveSteps
 from taskloop.app.land.state import PUSH_TRIES, PUSH_UP_FAILS, Land, Next, Phase
 from taskloop.contracts import fence
@@ -66,7 +66,7 @@ class Pusher:
         with e.stop_deferred() as stop:  # a push half done is no state to stop in: finish it, then stop
             lrc, ltail = self.out.lfs_push()  # the pushed ref's LFS objects first: the push must not point at objects origin lacks
             sha = e.git.rev_parse(e.wt, "HEAD")  # the commit pushed, named in the refspec
-            rc, tail = e.sh(land_argv(pin_head(e.cfg.land, sha)), pin=True) if lrc == 0 else (lrc, ltail)  # no repo hook runs: --no-verify
+            rc, tail = e.sh(pin_head(e.cfg.land, sha), pin=True, env=LAND_ENV) if lrc == 0 else (lrc, ltail)  # TL_LAND: the hook lets it by
             if rc != 0:
                 sha = ""
             else:

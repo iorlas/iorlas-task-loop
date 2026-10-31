@@ -45,6 +45,30 @@ def write_shim(plugin_root: Path, env: Env) -> None:
         pass
 
 
+PRE_PUSH = (
+    "#!/bin/sh\n"
+    "# written by `tl hooks install`; plain python3, no uv: it asks `tl green` per pushed tip (hook/prepush.py)\n"
+    "exec python3 {hook} prepush {tl} \"$@\"\n"
+)
+
+
+def write_hooks(plugin_root: Path, env: Env) -> list[Path]:
+    """<config>/githooks/: the git hooks tl owns (pre-push). Every subprocess tl starts gets this folder as core.hooksPath
+    (adapters/childenv.hooks_vars). Idempotent; a failure to write is silent (a session must start)."""
+    root = config_dir(env)
+    hook, tl = shlex.quote(str(plugin_root / "hooks" / "hook.py")), shlex.quote(str(root / "bin" / "tl"))
+    text = PRE_PUSH.replace("{hook}", hook).replace("{tl}", tl)
+    f = ConfigDir(root).hooks_dir() / "pre-push"
+    try:
+        if not (f.is_file() and f.read_text(encoding="utf-8") == text):
+            f.parent.mkdir(parents=True, exist_ok=True)
+            f.write_text(text, encoding="utf-8")
+            f.chmod(0o755)
+    except OSError:
+        return []
+    return [f]
+
+
 def main_checkout(git: Git, cwd: str) -> str:
     """The repo the loop's files are keyed by: the main checkout of the work tree at `cwd` (a worktree or slot of it too), else cwd."""
     common = Path(git.common_dir(cwd) or ".")

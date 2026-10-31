@@ -3,9 +3,11 @@ before the push, and bd's Dolt data after it. The repo's hooks are not the land'
 import os
 import shutil
 from pathlib import Path
-from typing import Protocol
+from types import MappingProxyType
+from typing import Final, Protocol
 
 from taskloop.contracts.config import EngineConfig
+from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ports import Clock, DoltPush, Git
 from taskloop.domain.land.matchers import Push, lfs_in, no_dolt_remote
@@ -16,10 +18,10 @@ def is_push(argv: list[str]) -> bool:
     return len(argv) > 1 and os.path.basename(argv[0]) == "git" and argv[1] == "push"
 
 
-def land_argv(land: list[str]) -> list[str]:
-    """The land command as run: a `git push` gets --no-verify (the repo's pre-push hook is not the land's); any other command is the
-    repo's own and owns its hooks."""
-    return [*land[:2], "--no-verify", *land[2:]] if is_push(land) and "--no-verify" not in land else list(land)
+
+# The engine's own push is marked with TL_LAND, not --no-verify: the pre-push hook (which asks tl whether the tip is green) lets it
+# through, and git-lfs's and the repo's other hooks are not skipped by a flag.
+LAND_ENV: Final = MappingProxyType({EnvVar.TL_LAND.value: "1"})
 
 
 def pin_head(land: list[str], sha: str) -> list[str]:
@@ -120,13 +122,13 @@ class Outbound:
         if e.git.staged(e.wt):  # staged work: a wip commit of what the stages meant
             e.tree.wip(f"stage {stage} accepted", everything=False)
         ref = f"refs/heads/task/{e.bead}"
-        rc, tail = self.lfs_push()  # --no-verify skips git-lfs's own hook: the branch would reach the remote without its LFS files
+        rc, tail = self.lfs_push()  # git-lfs's hook is not on the hooks path: else the branch lacks its LFS files
         if not rc:
             t0 = e.clock.monotonic()
             done = e.git.push_lease(e.wt, want[0], f"HEAD:{ref}")
             rc, tail = (0 if done.ok else 1), done.output
             e.log.note(
-                f"git push --no-verify --force-with-lease {want[0]} HEAD:{ref}: {'ok' if rc == 0 else 'failed'} in "
+                f"git push --force-with-lease {want[0]} HEAD:{ref}: {'ok' if rc == 0 else 'failed'} in "
                 f"{e.clock.monotonic() - t0:.1f}s"
             )
         if rc and "stale info" in tail:  # the remote branch was pushed from another machine and this clone has no copy of it

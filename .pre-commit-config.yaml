@@ -1,9 +1,10 @@
+# Repo-neutral lint only. The push gate is not here: tl's pre-push hook (tl hooks install) asks tl whether the pushed tip is green.
 repos:
   - repo: local
     hooks:
-      - id: just-check
-        name: just check
-        entry: just check
+      - id: just-lint
+        name: just lint
+        entry: just lint
         language: system
         pass_filenames: false
         always_run: true

@@ -98,7 +98,8 @@ class World:
             self.base = self.tips.pop(0)
 
     def sh(self, argv: list[str], **kw: Any) -> tuple[int, str]:
-        if argv == ["git", "push", "--no-verify"]:
+        if argv == ["git", "push"]:
+            assert kw.get("env") == {"TL_LAND": "1"}
             self.events.append("push")
             self.pushed.append((self.sat_on, self.base, self.held, f"tree@{self.sat_on}" in self.gate_passed()))
             return self.pushes.pop(0)

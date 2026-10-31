@@ -11,6 +11,7 @@ import child_env
 from taskloop.contracts.env import Env
 from taskloop.contracts.envvars import PREFIXES, EnvVar, registered
 from taskloop.contracts.identity import Identity
+from taskloop.contracts.paths import ConfigDir, default_root
 
 VENV_VARS = ("VIRTUAL_ENV", "VIRTUAL_ENV_PROMPT", "PYTHONHOME", "__PYVENV_LAUNCHER__", "PYTHONEXECUTABLE")
 
@@ -52,10 +53,22 @@ def allowed(name: str) -> bool:
 HANDOVERS = frozenset({EnvVar.TL_REEXEC.value, EnvVar.TL_LOOP_STATE.value, EnvVar.TL_RELEASE_REEXEC.value})
 
 
+def hooks_vars(env: Mapping[str, str], source: Mapping[str, str]) -> dict[str, str]:
+    """core.hooksPath = tl's hooks dir, through git's own env config (GIT_CONFIG_COUNT/KEY_n/VALUE_n): a default for every child, not
+    a lock (`git -c core.hooksPath=...` and --no-verify still beat it). A count the caller already set is extended, never replaced."""
+    try:
+        n = max(int(env.get("GIT_CONFIG_COUNT") or 0), 0)
+    except ValueError:
+        n = 0
+    hooks = ConfigDir(default_root(Env(dict(source)))).hooks_dir()
+    return {"GIT_CONFIG_COUNT": str(n + 1), f"GIT_CONFIG_KEY_{n}": "core.hooksPath", f"GIT_CONFIG_VALUE_{n}": str(hooks)}
+
+
 def tool_env(base: Mapping[str, str], extra: Mapping[str, str] | None = None) -> dict[str, str]:
     """For a tool, a check or git: only the allowlisted names of `base` (PATH without the virtualenv, no exec hand-over), then `extra`
     over it."""
     env = {k: v for k, v in without_venv(base).items() if allowed(k) and k not in HANDOVERS}
+    env.update(hooks_vars(env, base))
     env.update(extra or {})
     return env
 
@@ -65,7 +78,7 @@ def tool_env(base: Mapping[str, str], extra: Mapping[str, str] | None = None) ->
 PER_RUN = frozenset({EnvVar.TL_ARTIFACT_DIR, EnvVar.TL_ARTIFACT_STEP, EnvVar.TL_RUN_ID, EnvVar.TL_RUN_DIR, EnvVar.TL_ATTEMPT,
                      EnvVar.TL_WORKTREE, EnvVar.TL_BRANCH,
                      EnvVar.TL_BOX_CWD, EnvVar.TL_REEXEC, EnvVar.TL_LOOP_STATE,
-                     EnvVar.TL_RELEASE_REEXEC, EnvVar.TASK_LOOP_SLOT_BEAD, EnvVar.TASK_LOOP_ACTOR, EnvVar.TASK_LOOP_SESSION,
+                     EnvVar.TL_RELEASE_REEXEC, EnvVar.TL_LAND, EnvVar.TASK_LOOP_SLOT_BEAD, EnvVar.TASK_LOOP_ACTOR, EnvVar.TASK_LOOP_SESSION,
                      EnvVar.TASK_LOOP_LOOP_PID, EnvVar.TASK_LOOP_WORKER})
 
 
@@ -101,6 +114,7 @@ def child_env_of(env: Mapping[str, str], extra: Mapping[str, str] | None = None)
     drop = (*child_env.APP_NAMES, *GIT_PIN_VARS)
     out = {k: v for k, v in without_venv(env).items() if k in KEEP or not (k.startswith(gone) or k in drop or k in HANDOVERS)}
     out.update(WORKER_MARK)
+    out.update(hooks_vars(out, env))
     out.update(extra or {})
     return out
 

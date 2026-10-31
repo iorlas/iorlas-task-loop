@@ -1,4 +1,4 @@
-"""What leaves the machine at a land: --no-verify on the push, the LFS objects before it, bd's Dolt data after the lock is let go."""
+"""What leaves the machine at a land: TL_LAND on the push, the LFS objects before it, bd's Dolt data after the lock is let go."""
 import os
 import stat
 import sys

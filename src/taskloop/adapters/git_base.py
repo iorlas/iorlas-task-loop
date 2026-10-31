@@ -55,10 +55,11 @@ class GitBase:
             return without(self.env.vars, "GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR")
         return tool_env(self.env.vars, pinned_env(d))
 
-    def _run(self, d: str, *args: str, stdin: str | None = None, timeout: float | None = None) -> subprocess.CompletedProcess[str]:
+    def _run(self, d: str, *args: str, stdin: str | None = None, timeout: float | None = None,
+             extra: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             ["git", "-C", d, *args],
-            env=self.git_env(d),
+            env={**self.git_env(d), **(extra or {})},
             check=False,
             capture_output=True,
             text=True,
@@ -85,10 +86,11 @@ class GitBase:
         gitmemo.remember(key, sigs, args, out)
         return out
 
-    def _try(self, d: str, *args: str, stdin: str | None = None, timeout: float | None = None) -> GitOutcome:
+    def _try(self, d: str, *args: str, stdin: str | None = None, timeout: float | None = None,
+             extra: dict[str, str] | None = None) -> GitOutcome:
         """The command's end and its words: for the callers that read what git said, not only whether it worked."""
         try:
-            r = self._run(d, *args, stdin=stdin, timeout=timeout)
+            r = self._run(d, *args, stdin=stdin, timeout=timeout, extra=extra)
         except subprocess.TimeoutExpired:
             return GitOutcome(ok=False, output=f"git {args[0]} timed out after {round((timeout or 0) / 60)} min")
         return GitOutcome(ok=r.returncode == 0, output=(r.stdout + r.stderr).strip())

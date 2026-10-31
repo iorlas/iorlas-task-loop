@@ -326,7 +326,8 @@ class Git(SlotGit, Protocol):
         ...
 
     def push_lease(self, d: str, remote: str, refspec: str) -> GitOutcome:
-        """Push without hooks, force-with-lease: the refspec's ref is replaced only if the remote still has what was last fetched."""
+        """Push as the engine (TL_LAND=1: the pre-push hook lets it through), force-with-lease:
+        the refspec's ref is replaced only if the remote still has what was last fetched."""
         ...
 
     def lfs_push(self, d: str, remote: str, refs: list[str]) -> GitOutcome:

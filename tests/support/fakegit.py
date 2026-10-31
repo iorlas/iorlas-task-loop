@@ -21,7 +21,7 @@ class ScriptedGit(RealGit):
         super().__init__(Env())
         self.calls: list[tuple[str, ...]] = []
 
-    def _run(self, d: str, *args: str, stdin: str | None = None, timeout: float | None = None) -> Any:
+    def _run(self, d: str, *args: str, stdin: str | None = None, timeout: float | None = None, extra: dict[str, str] | None = None) -> Any:
         raise AssertionError(f"a git process ran: git {' '.join(args)}")
 
     def seen(self, *call: str) -> None:

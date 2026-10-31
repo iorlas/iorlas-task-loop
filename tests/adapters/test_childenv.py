@@ -2,6 +2,7 @@
 import sys
 import unittest
 from pathlib import Path
+from typing import ClassVar
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -40,8 +41,32 @@ class Allowlist(unittest.TestCase):
                 "SHELL": "/bin/sh", "TL_SLOT": "s", "AWS_SECRET_ACCESS_KEY": "no", "ANTHROPIC_API_KEY": "no", "GITHUB_TOKEN": "no",
                 "SSH_AUTH_SOCK": "/s", "EDITOR": "vi", "PYTHONPATH": "/p"}
         out = childenv.tool_env(base, {"DECLARED": "1"})
-        self.assertEqual(sorted(out), ["DECLARED", "HOME", "LANG", "LC_ALL", "LC_TIME", "PATH", "SHELL", "SSH_AUTH_SOCK", "TERM", "TL_SLOT",
+        self.assertEqual(sorted(out), ["DECLARED", "GIT_CONFIG_COUNT", "GIT_CONFIG_KEY_0", "GIT_CONFIG_VALUE_0", "HOME",
+                                       "LANG", "LC_ALL", "LC_TIME", "PATH", "SHELL", "SSH_AUTH_SOCK", "TERM", "TL_SLOT",
                                        "TMPDIR", "USER"])
 
-    def test_an_empty_environment_stays_empty(self):
-        self.assertEqual(childenv.tool_env({}), {})
+    def test_an_empty_environment_gets_only_the_hooks_path(self):
+        self.assertEqual(sorted(childenv.tool_env({})), ["GIT_CONFIG_COUNT", "GIT_CONFIG_KEY_0", "GIT_CONFIG_VALUE_0"])
+
+
+class HooksPath(unittest.TestCase):
+    """WORKERGIT: every child of tl has git's core.hooksPath set to tl's hooks dir (a default: `git -c` and --no-verify still beat it)."""
+    CFG: ClassVar = {"XDG_CONFIG_HOME": "/xdg", "PATH": "/usr/bin"}
+    WANT: ClassVar = {"GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "core.hooksPath", "GIT_CONFIG_VALUE_0": "/xdg/task-loop/githooks"}
+
+    def test_a_tool_gets_the_three_vars(self):
+        out = childenv.tool_env(self.CFG)
+        self.assertEqual({k: out[k] for k in self.WANT}, self.WANT)
+
+    def test_a_worker_gets_them_too(self):
+        out = childenv.child_env_of(self.CFG)
+        self.assertEqual({k: out[k] for k in self.WANT}, self.WANT)
+
+    def test_a_count_already_set_is_extended_not_replaced(self):
+        out = childenv.tool_env({**self.CFG, "GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "a.b", "GIT_CONFIG_VALUE_0": "c"})
+        self.assertEqual((out["GIT_CONFIG_COUNT"], out["GIT_CONFIG_KEY_0"], out["GIT_CONFIG_KEY_1"], out["GIT_CONFIG_VALUE_1"]),
+                         ("2", "a.b", "core.hooksPath", "/xdg/task-loop/githooks"))
+
+    def test_tl_land_reaches_a_child_but_is_not_part_of_a_result_key(self):
+        self.assertEqual(childenv.tool_env({**self.CFG, "TL_LAND": "1"})["TL_LAND"], "1")
+        self.assertNotIn("TL_LAND", childenv.reaching({**self.CFG, "TL_LAND": "1"}))

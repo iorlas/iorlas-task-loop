@@ -18,6 +18,7 @@ def start(stdin_text: str, plugin_root: Path, env: Env, git: Git) -> str:
     """Never fails the session. After a compaction (source "compact") the stdout carries the handoff as added context."""
     index.session_start(stdin_text, env)
     index.write_shim(plugin_root, env)
+    index.write_hooks(plugin_root, env)
     try:
         data = json.loads(stdin_text or "{}")
         if data.get("source") == "compact":

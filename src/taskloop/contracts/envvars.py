@@ -16,6 +16,7 @@ class EnvVar(StrEnum):
     TL_BRANCH = "TL_BRANCH"                      # the branch checked out in it
     TL_BOX_CWD = "TL_BOX_CWD"                    # the cwd of a check inside its container
     TL_WORKER_MB = "TL_WORKER_MB"                # address-space cap of each xdist worker (release suite)
+    TL_LAND = "TL_LAND"                          # set by the engine's own push (and only by it): the pre-push hook lets it through
     # handovers between two processes of the engine (one typed record each, see contracts/env.py)
     TL_REEXEC = "TL_REEXEC"                      # the run that re-execs itself after a code update
     TL_LOOP_STATE = "TL_LOOP_STATE"              # the loop's state across its exec

@@ -47,12 +47,13 @@ forbidden_modules =
 allow_indirect_imports = True
 
 [importlinter:contract:hot-hook-path-is-light]
-name = the PreToolUse hook (every Bash call) imports no msgspec and no record model
+name = the PreToolUse and git pre-push hooks import no msgspec and no record model
 type = forbidden
 source_modules =
     taskloop.hook.main
     taskloop.hook.pretool
     taskloop.hook.rules
+    taskloop.hook.prepush
 forbidden_modules =
     msgspec
     taskloop.contracts

@@ -72,7 +72,7 @@ class PushedSha(unittest.TestCase):
         self.assertEqual(lander.tries(Land()), ("pushed", None))
         self.assertEqual(host.pushing.landed_sha, "pushed")
         self.assertNotIn("record pushed", host.events)  # the push is not an effect: what follows it is a plan, applied by synced
-        self.assertTrue(g.ran("push", "--no-verify", "-q", "origin", "pushed:main"))
+        self.assertTrue(g.ran("push", "-q", "origin", "pushed:main"))
         lander.synced("pushed")
         self.assertEqual(host.events, ["record pushed", "sync"])
 
