@@ -2,6 +2,7 @@
 from dataclasses import dataclass
 from pathlib import Path
 
+from taskloop.app.checks import gateplan
 from taskloop.app.checks.runner import cached_gate
 from taskloop.app.run.bead_env import bead_env
 from taskloop.app.run.console import say
@@ -68,7 +69,7 @@ def inspect(bead: BeadId, wt: str, repo: str, cfg: EngineConfig, *, git: Git, wh
                 tree = TreeSha(git.rev_parse(wt, "HEAD^{tree}")) if checkout and not paths else TreeSha("")
                 view = Preview(git, wt, who.config, cfg)
                 # A preview never executes plan_cmd. Without its answer every gate step is required.
-                planned: dict[str, str] | None = {} if cfg.plan_cmd is not None else None
+                planned = gateplan.PlanDecision({}) if cfg.plan_cmd is not None else None
                 if planned is not None:
                     say("gate plan: producer deferred; requiring cached passes for every gate step")
                 if not cached_gate(cfg, git, wt, stores, env, bead_env(view, create=False), tree, planned):
