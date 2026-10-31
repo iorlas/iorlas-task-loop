@@ -13,7 +13,18 @@ from typing import Any
 
 from taskloop.app.run.review_glue import review_of
 from taskloop.contracts import fence, wire
-from taskloop.contracts.checkpoint import BriefSnap, Checkpoint, Defect, EndRec, Handoff, Notes, PlanStep, RunState, WriterSession
+from taskloop.contracts.checkpoint import (
+    BriefSnap,
+    Checkpoint,
+    Defect,
+    EndRec,
+    Handoff,
+    Notes,
+    PlanStep,
+    RunState,
+    StageProgress,
+    WriterSession,
+)
 from taskloop.contracts.plancheck import PlanData
 from taskloop.contracts.review import Unfiled
 from taskloop.contracts.wire import Open
@@ -101,7 +112,8 @@ class Checkpoints:
     def read(self) -> Checkpoint | None:
         return self.doc.get()
 
-    def save(self, *, step: str = "", stage: int = 0, rounds: int = 0, n: int = 0, feedback: str = "") -> None:
+    def save(self, *, step: str = "", stage: int = 0, rounds: int = 0, n: int = 0, feedback: str = "",
+             progress: StageProgress | None = None) -> None:
         """Where the run stands. Mid-rebase (a conflict fix) HEAD is detached: the record names the task branch the close goes
         back to. A pending land validation always parks at land-verify-red: a fix, a re-plan or an interrupted recovery must never
         turn it into a direct-to-land checkpoint."""
@@ -123,6 +135,7 @@ class Checkpoints:
                 n=n,
                 feedback=feedback,
                 state=state,
+                progress=progress,
             )
         )
 

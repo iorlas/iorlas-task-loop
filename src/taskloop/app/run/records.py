@@ -63,6 +63,7 @@ class Records:
             e.log.note(f"task-loop {ident.plugin_version() or '?'} took over run {e.run_id} from {e.reexec.frm}{fallback}")
             return
         lock = engine_lock.LOCK
+        bundle = RunLocator(e.home).get(e.run_id)
         why = self.origin()
         e.log.emit(
             rec.RunStart(
@@ -73,6 +74,9 @@ class Records:
                 ask=why["ask"],
                 branch=e.git.branch(e.wt),
                 review=switch.mode(e.cfg.review, e.budget.labels),
+                mode=bundle.manifest.mode if bundle else "",
+                owner=e.who.actor,
+                session=e.who.session,
             )
         )
 

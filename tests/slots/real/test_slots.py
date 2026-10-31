@@ -100,7 +100,7 @@ class Slots(LoopBase):
         a = entry.Args(id=bead_id, worktree=worktree, slot=slot, dry_run=False, fresh=False, quiet=True,
                         outcome_file=str(f), **(flags or {}))
         made = mock.Mock()
-        made.return_value.run.side_effect = engine_run or (lambda: 0)
+        made.return_value.run.side_effect = lambda **_: (engine_run or (lambda: 0))()
         made.return_value.result.return_value = RunReport(outcome=Result.LANDED, bead=bead_id)
         made.return_value.log_path = Path(self.home, "e.jsonl")
         out = io.StringIO()

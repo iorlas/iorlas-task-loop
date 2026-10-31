@@ -28,7 +28,7 @@
   tl.py lanes                                   file delegate's lane status for the dashboard (the dashboard runs no delegate)
   tl.py reflect digest [--since 24h] [--dry-run]  the last day's run reflections into one bead per recurring cause
   tl.py trace [ID] [--last N] [--json]          engine runs and every worker session of each (for reflection)
-  tl.py run-task ID [--worktree DIR] [--slot S|any [--wait]] [--exclusive-area] [--dry-run] [--fresh]
+  tl.py run-task ID [--stage STEP] [--worktree DIR] [--slot S|any [--wait]] [--exclusive-area] [--dry-run] [--fresh]
                                                 one bead through the engine (engine.py), no judgement here
   tl.py next [--repo DIR] [--json] [--only ID...]  the bead the loop would take next and why (claims nothing)
   tl.py queue [add|remove ID...]                the owner's queue (label `queue`): while set, the loop takes only these, in order
@@ -91,6 +91,7 @@ from taskloop.cli import queue as cli_queue
 from taskloop.cli import slots as slots_cli
 from taskloop.cli import status
 from taskloop.cli import wait as cli_wait
+from taskloop.contracts.enums import Step
 from taskloop.contracts.env import Env, snapshot
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.ports import Git, Spawner
@@ -189,6 +190,9 @@ def owner_parsers(sp):
 def engine_parsers(sp):
     p = sp.add_parser("run-task")
     p.add_argument("id")
+    mode = p.add_mutually_exclusive_group()
+    mode.add_argument("--stage", choices=list(Step), help="run exactly one engine step; default: the recorded next step")
+    mode.add_argument("--loop", action="store_true", help=argparse.SUPPRESS)
     p.add_argument("--worktree")
     p.add_argument("--slot", help="a slot name, or `any`: the next free slot in line (see --wait)")
     p.add_argument("--wait", action="store_true", help="--slot any: wait in line for a free slot instead of refusing")

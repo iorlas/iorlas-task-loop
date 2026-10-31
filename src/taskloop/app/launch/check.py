@@ -9,7 +9,7 @@ from typing import Any
 
 from taskloop.app.checks.runner import Checker
 from taskloop.app.launch.check_host import CliHost
-from taskloop.app.launch.stage_run import StageRun, stage_run
+from taskloop.app.run.stage_run import StageRun, stage_run
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts.argv import text_of
 from taskloop.contracts.checks import CheckResult, Phase

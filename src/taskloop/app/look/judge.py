@@ -67,7 +67,7 @@ class Judge:
         e.look_unjudged[f"look judge, round {rnd}"] = "no lane: " + b.why[:160]
         return [], "(not judged: no lane for the look judge)"
 
-    def look_step(self, st: Any, w: Any, name: str, last: bool = True) -> str:
+    def look_step(self, st: Any, w: Any, name: str, last: bool = True, *, checks: bool = True) -> str:
         """After a visual write: the cheap checks, the shots the writer asked for, the look judge. -> the feedback that sends the
         writer back with the defects (text and picture paths), or "" to go on to the full checks. At most engine.look_rounds
         render rounds per stage; a defect that comes back is a leftover with the pictures, not another write."""
@@ -77,7 +77,7 @@ class Judge:
         reqs = [r for r in w.get("shots") or [] if isinstance(r, dict)]
         if not reqs:
             return ""
-        if e.stage_checks.stoppable(dict(st, checks=[]), name, groups=("static",)).failed:
+        if checks and e.stage_checks.stoppable(dict(st, checks=[]), name, groups=("static",)).failed:
             return ""  # the full checks show it to the writer; no render over a red static check
         e.look_done += 1
         rnd = e.look_done

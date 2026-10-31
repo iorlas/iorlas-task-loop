@@ -20,7 +20,7 @@ class WriteRound:
     def __init__(self, host: Any) -> None:
         self.e = host
 
-    def run(self, s: StageState) -> str:
+    def run(self, s: StageState, *, look: bool = True) -> str:
         """The round's write. -> "" when the checks go on, else AGAIN or REPLAN."""
         e = self.e
         boundary = s.n == 1 and s.i > 0 and not s.state  # the first write of a later stage
@@ -37,7 +37,7 @@ class WriteRound:
         e.cases.add_cases(s.w.get("new_cases") or [])
         if e.pictures.shot_methods() and e.pictures.stage_visual(s.st):
             e.render_stale = True  # a write after the last render: its pictures show an older tree
-        back = e.judge.look_step(s.st, s.w, s.name, s.last)
+        back = e.judge.look_step(s.st, s.w, s.name, s.last) if look else ""
         if back:  # the look judge found defects: the writer fixes them before the full checks run once
             s.feedback = back
             return AGAIN

@@ -306,6 +306,19 @@
   "run": "01KBN6Z0M4R5E8YQ2T7C9W3XHD",
   "t": 1793050200.5
  },
+ "StageProgress": {
+  "write": null,
+  "red": 1,
+  "red_now": [
+   "a"
+  ],
+  "failed": [
+   "b"
+  ],
+  "acceptance_only": true,
+  "acceptance_first": false,
+  "shots_fixed": true
+ },
  "Checkpoint": {
   "v": 3,
   "bead": "tl-1",
@@ -472,7 +485,8 @@
      }
     ]
    }
-  }
+  },
+  "progress": null
  },
  "ReviewState": {
   "v": 1,
@@ -1259,7 +1273,8 @@
   "session": "s1",
   "beads": [
    "tl-7y7"
-  ]
+  ],
+  "next_step": null
  },
  "DoneMemo": {
   "v": 1,

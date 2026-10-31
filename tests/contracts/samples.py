@@ -315,6 +315,7 @@ OTHERS = {
     "TermLine": dashruns.TermLine(t=T, text="ok", tone="ok"),
     "ToolCall": dashruns.ToolCall(t=T, name="Bash", arg="ls"),
     "AdrUse": ledger.AdrUse(adr="ADR-3", bead="tl-2", run=str(RUN), t=T),
+    "StageProgress": checkpoint.StageProgress(red=1, red_now=["a"], failed=["b"], acceptance_only=True, shots_fixed=True),
     "Checkpoint": checkpoint.Checkpoint(
         bead="tl-1",
         run=str(RUN),

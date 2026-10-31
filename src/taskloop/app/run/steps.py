@@ -35,6 +35,7 @@ class Steps:
         self.last: Open | None = None
         self.moved_from: int | None = None
         self.moved_to: str | None = None
+        self.only: str | None = None
 
     @property
     def id(self) -> str:
@@ -43,6 +44,8 @@ class Steps:
 
     def begin(self, step: str, text: str, **meta: Any) -> int:
         """A step begins (the open one ends first), after `guard` has looked at the tree."""
+        if self.only is not None and step != self.only:
+            raise ValueError(f"{self.only} stopped before {step}: run --stage {step} separately")
         if self.guard and step != "close":
             self.guard(step)
         self.end()

@@ -7,6 +7,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from taskloop.contracts.enums import Step
 from taskloop.contracts.ids import RunId
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.run import RunManifest, RunState
@@ -100,6 +101,16 @@ class RunLocator:
         return hit[1]
 
     # the writer: the engine of the run, and the one reconciler
+    def identify(self, run: str, mode: str, owner: str, session: str) -> None:
+        old = self.get(run)
+        if old is not None:
+            self._put(old.manifest.replace(mode=mode, owner=owner, session=session))
+
+    def advance(self, run: str, step: Step | None) -> None:
+        old = self.get(run)
+        if old is not None:
+            self._put(old.manifest.replace(next_step=step))
+
     def _put(self, m: RunManifest) -> None:
         JsonStore(self.cfg.run_manifest(m.run), RunManifest).write(m)
 

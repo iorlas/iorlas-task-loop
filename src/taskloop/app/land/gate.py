@@ -119,6 +119,10 @@ class Gate:
     def run(self) -> GatePass | Problem:
         """-> the pass when the gate passed (or already had on this tree), else the problem for a fix round."""
         e = self.e
+        if getattr(e.steps, "only", None) == "land":
+            if not self.green():
+                raise ValueError("land refused: gate is no longer green for this tree and base; run --stage gate")
+            return self.issue()
         e.gate_log = None
         tree = e.git.rev_parse(e.wt, "HEAD^{tree}")
         started = time.time()

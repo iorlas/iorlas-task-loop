@@ -1,4 +1,4 @@
-"""The lifecycle of a standalone stage verb, using the engine's manifests and logs."""
+"""The shared lifecycle of engine runs and standalone stage verbs."""
 import threading
 import time
 from collections.abc import Generator
@@ -22,19 +22,27 @@ class StageRun:
     log: RunLog
     stores: Stores
     rc: int = 1
+    continued: bool = False
+    reason: str = ""
+    terminal: RunState | None = None
 
 
 @contextmanager
-def stage_run(who: Identity, repo: str, mode: str) -> Generator[StageRun]:
+def stage_run(who: Identity, repo: str, mode: str, *, bundle: RunBundle | None = None,
+              events: bool = True, stores: Stores | None = None, log: RunLog | None = None) -> Generator[StageRun]:
     """Open before doing work; keep evidence and record a terminal state on every exit, including exceptions."""
     locator = RunLocator(who.config)
-    bundle = locator.create(repo, "", time.time(), mode=mode, owner=who.actor, session=who.session)
+    if bundle is None:
+        bundle = locator.create(repo, "", time.time(), mode=mode, owner=who.actor, session=who.session)
+    else:
+        locator.identify(bundle.run, mode, who.actor, who.session)
     stopped = threading.Event()
     helper: threading.Thread | None = None
     rc, reason = 1, "stage interrupted"
+    stage: StageRun | None = None
     try:
-        stores = real_stores(who.config)
-        log = RunLog(stores.run_log(bundle.run), run_id=bundle.run, host=host_name())
+        stores = stores or real_stores(who.config)
+        log = log or RunLog(stores.run_log(bundle.run), run_id=bundle.run, host=host_name())
         stage = StageRun(bundle, log, stores)
         locator.beat(bundle.run, time.time())
 
@@ -44,7 +52,8 @@ def stage_run(who: Identity, repo: str, mode: str) -> Generator[StageRun]:
 
         helper = threading.Thread(target=heartbeat, daemon=True)
         helper.start()
-        log.emit(rec.RunStart(worktree=repo, mode=mode, owner=who.actor, session=who.session))
+        if events:
+            log.emit(rec.RunStart(worktree=repo, mode=mode, owner=who.actor, session=who.session))
         try:
             yield stage
         except BaseException as exc:
@@ -52,9 +61,10 @@ def stage_run(who: Identity, repo: str, mode: str) -> Generator[StageRun]:
             log.warn(reason)
             raise
         else:
-            rc, reason = stage.rc, "" if stage.rc == 0 else f"exit {stage.rc}"
+            rc, reason = stage.rc, stage.reason or ("" if stage.rc == 0 else f"exit {stage.rc}")
         finally:
-            log.emit(rec.Close(outcome=Outcome.DONE if rc == 0 else Outcome.FAILED, why=reason))
+            if events:
+                log.emit(rec.Close(outcome=Outcome.DONE if rc == 0 else Outcome.FAILED, why=reason))
     except BaseException:
         rc = 1
         raise
@@ -62,4 +72,6 @@ def stage_run(who: Identity, repo: str, mode: str) -> Generator[StageRun]:
         stopped.set()
         if helper is not None and helper.ident is not None:
             helper.join()
-        locator.end(bundle.run, time.time(), RunState.DONE if rc == 0 else RunState.FAILED, reason)
+        if stage is None or not stage.continued:
+            terminal = stage.terminal if stage is not None else None
+            locator.end(bundle.run, time.time(), terminal or (RunState.DONE if rc == 0 else RunState.FAILED), reason)

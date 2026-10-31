@@ -12,6 +12,7 @@ from typing import Any, ClassVar, final
 import msgspec
 
 from taskloop.contracts import wire
+from taskloop.contracts.answers import WriteAnswerLook
 from taskloop.contracts.plancheck import PlanData
 from taskloop.contracts.review import ReviewState
 from taskloop.contracts.run import Round
@@ -143,6 +144,19 @@ class Notes(Rec):
 
 
 @final
+class StageProgress(Rec):
+    """A separated write/check/review round, carried by the existing checkpoint."""
+
+    write: WriteAnswerLook | None = None
+    red: int = 0
+    red_now: list[str] = msgspec.field(default_factory=list)
+    failed: list[str] | None = None
+    acceptance_only: bool = False
+    acceptance_first: bool = False
+    shots_fixed: bool = False
+
+
+@final
 class Checkpoint(Rec):
     V: ClassVar[int] = 3
     bead: str
@@ -161,3 +175,4 @@ class Checkpoint(Rec):
     ended: EndRec | None = None  # the close's outcome, stored before its first effect: a restart finishes the close from it
     notes: Notes | None = None  # the FileNotes result
     state: RunState = msgspec.field(default_factory=RunState)
+    progress: StageProgress | None = None

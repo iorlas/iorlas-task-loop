@@ -51,10 +51,10 @@ from taskloop.app.run.reflect import Reflector
 from taskloop.app.run.reload import Reload
 from taskloop.app.run.requests import OwnerRequests
 from taskloop.app.run.resume import Resume
-from taskloop.app.run.run_once import RunOnce
 from taskloop.app.run.shared import Shared
 from taskloop.app.run.shell import Shell
 from taskloop.app.run.stage_checks import StageChecks
+from taskloop.app.run.stages import run_stages
 from taskloop.app.run.state import carries_state
 from taskloop.app.run.stuck import StuckTick
 from taskloop.app.run.waits import Waits
@@ -116,6 +116,7 @@ class Engine(RunFields):
     writer_said: str
     accepted: list[int]
     stage_tree: str
+    replan_first: bool
 
     def __init__(
         self,
@@ -395,8 +396,8 @@ class Engine(RunFields):
         tree = self.checkout.tree_hash()
         return self.git.diff(self.wt, self.checkout.base_sha(), tree) if tree else ""
 
-    def run(self) -> int:
-        return RunOnce(self).go()
+    def run(self, *, stage: str | None = None, continuous: bool = True) -> int:
+        return run_stages(self, stage, continuous=continuous and stage is None)
 
     def result(self) -> RunReport:
         """The run's outcome for the loop: landed (closed, done too), parked (blocked for the owner: an ask, or one

@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support.tlmain import tl_main
 
-from taskloop.app.launch.stage_run import stage_run
+from taskloop.app.run.stage_run import stage_run
 from taskloop.contracts.checks import CheckResult, CheckRun
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import CheckId
@@ -103,9 +103,9 @@ class StageRuns(unittest.TestCase):
         stopped, thread = mock.Mock(), mock.Mock()
         stopped.wait.side_effect = [False, True]
         ticks = itertools.count(1000)
-        with mock.patch("taskloop.app.launch.stage_run.threading.Event", return_value=stopped), \
-             mock.patch("taskloop.app.launch.stage_run.threading.Thread", return_value=thread) as make_thread, \
-             mock.patch("taskloop.app.launch.stage_run.time.time", side_effect=lambda: float(next(ticks))), \
+        with mock.patch("taskloop.app.run.stage_run.threading.Event", return_value=stopped), \
+             mock.patch("taskloop.app.run.stage_run.threading.Thread", return_value=thread) as make_thread, \
+             mock.patch("taskloop.app.run.stage_run.time.time", side_effect=lambda: float(next(ticks))), \
              stage_run(self.who, str(self.repo), "stage:check") as stage:
             before = self.locator.runs()[-1].manifest.heartbeat
             make_thread.call_args.kwargs["target"]()

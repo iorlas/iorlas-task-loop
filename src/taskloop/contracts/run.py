@@ -6,7 +6,7 @@ from typing import Any, ClassVar, final
 import msgspec
 
 from taskloop.contracts import wire
-from taskloop.contracts.enums import Result, WhyCode
+from taskloop.contracts.enums import Result, Step, WhyCode
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.row import Row
 from taskloop.contracts.wire import Rec, Refused
@@ -200,3 +200,4 @@ class RunManifest(Rec):
     owner: str = ""
     session: str = ""
     beads: tuple[str, ...] = ()  # a run of several beads (a land-stack): the first is `bead`, the others follow here
+    next_step: Step | None = None

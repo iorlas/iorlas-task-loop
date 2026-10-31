@@ -228,7 +228,7 @@ def build(repo: str, store: Beads | None = None, session_actor: str = "", here: 
         stop_now=stop_now,
         stop_tree=stop_tree,
         run_task_argv=lambda bead, wt, slot, out, code: (
-            [*childenv.script_argv((code or here) / "tl.py", env), "run-task", bead, "--worktree", wt, "--outcome-file", out]
+            [*childenv.script_argv((code or here) / "tl.py", env), "run-task", bead, "--loop", "--worktree", wt, "--outcome-file", out]
             + (["--slot", slot] if slot else [])
         ),
         landed_on_base=lambda wt, bead: landed_on_base(repo, cfg, store, wt, bead, git),
