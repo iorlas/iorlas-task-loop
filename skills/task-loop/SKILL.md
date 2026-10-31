@@ -240,6 +240,11 @@ review: `off`, or the label `review-off` on a bead, lands a stage write, checks,
 `skipped`, reason `review-off`); `sampled` reviews every Nth stage and the last. The last stage maps the acceptance: with review off a
 deterministic check stands in (each acceptance item must be named by a plan case, which the engine runs); an item no case names gets the
 review after all. The drawer header shows `review: on|off|sampled`.
+**Writer family.** `engine.writer_family` (a list, e.g. `["openai"]`) pins the write node: every `worker` call carries `--only-family F`
+(delegate 0.54+), so the writer is never another family; the planner and the reviewer (and the reflect call) are not filtered, the reviewer
+stays the other family through `--authored-by`. The label `writer-family:<f>` on a bead overrides the list. When delegate cannot place the
+write (`only_family_unready`, or `no_lane` while pinned) the run pauses with the pin and the reason in words. With `["openai"]` and review
+off, no call reaches the claude family but the planner and reflect (tests/review/test_writer_family.py); `tl doctor` prints the setting.
 **Who runs a check.** A repo check is the writer's to run when its longest green run took at most `engine.writer_check_max_s`, or says
 `"writer": true` (`false`: never) or its own `"writer_check_max_s"`; a `run: gate` check always is the engine's. `"tail_log"` names a log of the tree
 whose first 20 `error CS` lines join a red's output when it shows none (the analyzers default to `client/Logs/unity-project-files.log`).

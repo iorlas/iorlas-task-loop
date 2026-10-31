@@ -1274,6 +1274,7 @@
    "epic_order": [],
    "epic_only": false,
    "reflect": true,
+   "writer_family": [],
    "planner_notes": "",
    "shot_table": "",
    "write_fresh_stage_k": 100,
@@ -1448,7 +1449,8 @@
   "timeout_s": 2820,
   "idle_s": 900,
   "live_file": "/l.live",
-  "engine_only": []
+  "engine_only": [],
+  "only_family": []
  },
  "DelegateResult": {
   "contract": 3,

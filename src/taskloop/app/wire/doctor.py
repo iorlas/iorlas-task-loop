@@ -19,6 +19,7 @@ from taskloop.contracts.slots import SlotGitError
 from taskloop.contracts.stores import ReposStore
 from taskloop.domain.beads import matchers as beadlint
 from taskloop.domain.checks.inputs import dead_globs
+from taskloop.domain.lanes import pin
 
 Source = tuple[RepoProfile, str, str]
 
@@ -100,6 +101,7 @@ def run(plugin_root: Path, env: Env, git: Git, who: Identity) -> int:
     warns = git_warnings(repo, source, git) + bead_lint_warnings(repo, who)
     warns += [f"run {r} is lost: its process is gone and it recorded no end" for r in runlife.reconcile(who.config, time.time())]
     print(f"contracts: {Path(contracts.__file__).resolve().parent}")
+    print(f"engine: {pin.describe(pin.families(source[0].engine.writer_family, []))}")
     for w in warns:
         print("WARN " + w)
     fails = install_problems(plugin_root, env)

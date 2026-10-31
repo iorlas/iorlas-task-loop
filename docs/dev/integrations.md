@@ -37,7 +37,9 @@ delegate directly). The two touch in three places only:
    feeds usage with `route.py status --claude-usage` (`tl usage`). Code: `engine.find_route`, `engine.call_delegate`,
    `Engine.ai_delegate`, `tl.py` `usage`. The write step passes `--engine-only RECIPE` once per bare `just` recipe of
    a configured check (or the gate) its writer must not run (delegate 0.50+; `RunRequest.engine_only`, built only by `to_argv`); read-only
-   steps pass none. Only route.py from delegate 0.14.0 or later is used; none installed, or an
+   steps pass none. A worker call also passes `--only-family F` once per family of `engine.writer_family` (or the bead's `writer-family:<f>`
+   labels; delegate PINFAMILY; `RunRequest.only_family`, `domain/lanes/pin.py`); the planner, reviewer and reflect calls pass none. A `stop`
+   with reason `only_family_unready` (or `no_lane` while pinned) pauses the run with the pin in words (`lane_acts.end`). Only route.py from delegate 0.14.0 or later is used; none installed, or an
    answer with another `v`, blocks the task with what to do. Delegate keeps its state in its plugin data dir, so always call the
    installed route.py, never a checkout's (a checkout reads `~/.config/delegate`, another store).
 

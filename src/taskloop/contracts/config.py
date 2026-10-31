@@ -161,6 +161,7 @@ class EngineConfig(Rec):
     epic_order: list[str] = msgspec.field(default_factory=list)
     epic_only: bool = False
     reflect: bool = True
+    writer_family: list[str] = msgspec.field(default_factory=list)  # e.g. ["openai"]: --only-family on every worker call
     planner_notes: str = ""
     shot_table: str = ""
     write_fresh_stage_k: float = 100

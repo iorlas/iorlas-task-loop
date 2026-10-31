@@ -131,6 +131,12 @@ class DoctorSource(unittest.TestCase):
         self.assertIn("WARN extensions.worktreeConfig", out)
         self.assertNotIn("ok:", out)
 
+    def test_prints_the_effective_writer_family(self):
+        self.advance_base(self.config("good", "old.txt", writer_family=["openai"]))
+        self.assertIn("engine: writer_family: openai (every worker call carries --only-family", self.doctor())
+        self.advance_base(self.config("good", "old.txt"))
+        self.assertIn("engine: writer_family: none", self.doctor())
+
     def test_reports_exact_commit_when_ok(self):
         commit = self.advance_base(self.config("good", "old.txt"))
         out = self.doctor(cli=True)  # the one run through tl.main

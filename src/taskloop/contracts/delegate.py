@@ -19,6 +19,8 @@ DenialKind = Literal["policy", "sandbox_limit", "secret"]
 TranscriptKind = Literal["codex", "claude", "opencode_export"]
 WorkerEndKind = Literal["ok", "error", "timeout", "worker_survived"]
 REASON_TIMEOUT: Final = "timeout"  # the wire id of a worker that did not finish within --timeout
+REASON_ONLY_FAMILY: Final = "only_family_unready"  # a worker call pinned by --only-family found no ready step of those families
+REASON_NO_LANE: Final = "no_lane"
 REASON_OVERRUN: Final = "overrun"  # made by the engine: a reviewer call used its budget
 
 
@@ -42,6 +44,8 @@ class RunRequest(Rec):
     live_file: str = ""  # DELEGATE_LIVE_FILE: where delegate appends the worker's live events
     # bare `just` recipe names a write step must not run: --engine-only once each
     engine_only: list[str] = msgspec.field(default_factory=list)
+    # families the call may use (--only-family once each): set on a worker call only (domain/lanes/pin.py)
+    only_family: list[str] = msgspec.field(default_factory=list)
 
     def to_argv(self, python: str, route: str) -> list[str]:
         out = [python, route, "run", self.role, "--brief", self.brief_path, "--cwd", self.cwd, "--schema", self.schema_path]
@@ -54,6 +58,8 @@ class RunRequest(Rec):
                 out += [flag, str(value)]
         for recipe in self.engine_only:
             out += ["--engine-only", recipe]
+        for fam in self.only_family:
+            out += ["--only-family", fam]
         return out
 
     def env(self) -> dict[str, str]:

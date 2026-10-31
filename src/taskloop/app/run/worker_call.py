@@ -23,6 +23,7 @@ from taskloop.contracts import answers
 from taskloop.contracts import log as rec
 from taskloop.contracts.delegate import REASON_OVERRUN, DelegateResult, RunRequest, StopFacts
 from taskloop.domain.checks import planref
+from taskloop.domain.lanes import pin
 from taskloop.domain.lanes import policy as lp
 from taskloop.domain.lanes.denials import command_of, secret_false_positive
 from taskloop.domain.lanes.notes import FRESH_WRITER_TEXT, RESUME_AFTER_STOP
@@ -68,14 +69,8 @@ class Call:
         self.writer, self.resume, self.key, self.resume_key, self.writer_family = writer, resume or None, key, resume_key, writer_family
         self.step, self.title, self.visual = step, title, False
         self.tries = 1  # calls that came back with no valid answer, from 1: two at most (RetryPlan invalid_output)
-        self.counts: dict[str, float] = {
-            "attempt": 0,
-            "polls": 0,
-            "crashes": 0,
-            "resume_refused": 0,
-            "waited_lane_s": 0.0,
-            "waited_net_s": 0.0,
-        }  # Ctx's counters
+        self.counts: dict[str, float] = {"attempt": 0, "polls": 0, "crashes": 0, "resume_refused": 0,
+                                         "waited_lane_s": 0.0, "waited_net_s": 0.0}  # Ctx's counters
         self.denied_retried = False
         self.secret_fp = False  # the last denial was a `secrets` stop on a heredoc body that merely names .env
         self.was_resumed = bool(resume)
@@ -256,6 +251,7 @@ class WorkerCall:
             timeout_s=timeout_s,
             idle_s=idle_s,
             live_file=live,
+            only_family=pin.for_role(c.role, pin.families(e.cfg.writer_family, e.budget.labels)),
             engine_only=e.checker.split().engine_recipes(planref.stage_commands(e.plan_data, e.cfg)) if c.node == "write" else [],
         )
         cid = e.calls.start(c.step or c.node, c.node, c.role, bool(c.resume), e.live_n)

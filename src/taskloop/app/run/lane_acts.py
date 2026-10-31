@@ -8,6 +8,7 @@ from typing import Any, Final
 from taskloop.contracts import log as rec
 from taskloop.contracts.delegate import DelegateResult
 from taskloop.contracts.enums import WaitWhat
+from taskloop.domain.lanes import pin
 from taskloop.domain.lanes import policy as lp
 from taskloop.domain.lanes.notes import NET_BACKOFF, NOTES
 from taskloop.domain.lanes.roles import READ_ONLY_NODES
@@ -171,6 +172,9 @@ class LaneActs:
                     (" until " + time.strftime("%H:%M:%S", time.localtime(retry_after))) if retry_after else "",
                 ),
             )
+        pinned = pin.for_role(c.role, pin.families(e.cfg.writer_family, e.budget.labels))
+        if isinstance(a, lp.Yield) and pinned and stop.reason in pin.STOP_REASONS:  # the pin found no ready lane: say it
+            raise ops.blocked(pin.stop_why(c.node, pinned, stop.reason, res.say or stop.fix), a.kind, stop)
         why = ops.stop_why(c.node, a.kind, stop, res.say, retry_after, c.counts["crashes"] + 1, res.denied)
         raise ops.blocked(why, a.kind, stop)
 
