@@ -1,5 +1,6 @@
 """tl-7y6.18: every command a bead runs in a slot gets that slot's environment (temp, dotnet, NuGet, compiler-server id, TL_SLOT)."""
 import json
+import os
 import subprocess
 import sys
 import unittest
@@ -63,7 +64,10 @@ class EverySpawnPath(te.EngineTest):
 
     def test_a_container_check_is_given_the_slot_name_only(self):
         e = make_engine(self.wt, store=self.store)
-        host = mock.Mock(env=snapshot(), bead_env=e.bead_env, run_dir=Path("r"), cfg=mock.Mock(container=None))
+        clean = {k: v for k, v in os.environ.items() if not k.startswith("TL_CHECK_")}  # `tl check` exports its logs to later checks
+        with mock.patch.dict(os.environ, clean, clear=True):
+            env = snapshot()
+        host = mock.Mock(env=env, bead_env=e.bead_env, run_dir=Path("r"), cfg=mock.Mock(container=None))
         box = Box(host, mock.Mock())
         box._why, box._image = "", "img"
         check = mock.Mock(container=True, id="c")
