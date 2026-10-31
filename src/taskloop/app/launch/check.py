@@ -1,19 +1,21 @@
 """The verb `tl check [--repo DIR] [--all] [--list] [ID ...]`: the repo's registry of checks (engine.checks of .task-loop.json), run by a
 person in the current worktree through the engine's own runner. No ID: the gate's steps (run gate or both), the steps `when` makes due; the
 IDs: just those checks, whatever their `run`, always. The engine's own `diff-check` (git diff --check from the merge-base) runs first
-in every case. It claims no bead and writes no bd; of the config folder it writes only the check
-cache the engine's checks use."""
+in every case. It claims no bead and writes no bd; its manifest and evidence use the engine's run machinery."""
+import argparse
 import json
 from pathlib import Path
 from typing import Any
 
 from taskloop.app.checks.runner import Checker
 from taskloop.app.launch.check_host import CliHost
+from taskloop.app.launch.stage_run import StageRun, stage_run
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts.argv import text_of
 from taskloop.contracts.checks import CheckResult, Phase
 from taskloop.contracts.config import CheckSpec, EngineConfig
 from taskloop.contracts.env import Env
+from taskloop.contracts.identity import Identity
 from taskloop.contracts.ports import Git, Spawner
 from taskloop.domain.checks.specs import gate_items, repo_check
 
@@ -57,8 +59,15 @@ def profile_of(repo: str) -> EngineConfig:
     return wslots.load_profile(data).engine
 
 
-def cmd_check(a: Any, host: CliHost | None = None, *, env: Env, spawner: Spawner, git: Git) -> int:
+def cmd_check(a: Any, *, who: Identity, env: Env, spawner: Spawner, git: Git) -> int:
     repo = git.toplevel(a.repo) or str(Path(a.repo).resolve())
+    with stage_run(who, repo, f"stage:{a.cmd}") as stage:
+        stage.rc = run_check(a, stage, env=env, spawner=spawner, git=git)
+        return stage.rc
+
+
+def run_check(a: argparse.Namespace, stage: StageRun, *, env: Env, spawner: Spawner, git: Git) -> int:
+    repo = stage.bundle.repo
     cfg = profile_of(repo)
     if a.list:
         print("\n".join(listing(cfg)) or "(no checks in engine.checks)")
@@ -66,18 +75,19 @@ def cmd_check(a: Any, host: CliHost | None = None, *, env: Env, spawner: Spawner
     items = [repo_check(k, cfg, Phase.STAGE if k.run == "stage" else Phase.GATE) for k in chosen(cfg, a.ids)] if a.ids else gate_items(cfg)
     if not items:
         print("no gate steps: no engine.checks entry says run gate or both")  # the built-in diff-check still runs
-    box = host or CliHost(repo, cfg, env=env, spawner=spawner, git=git)
+    box = CliHost(repo, cfg, stores=stage.stores, bundle=stage.bundle, log=stage.log,
+                  env=env, spawner=spawner, git=git)
     try:
         run = Checker(box).run_items(items, everything=a.all or bool(a.ids), learn=False, show_clean=True)
     except BaseException:
         print(f"tl check: evidence kept in {box.run_dir}")
         raise
+    stage.stores.check_run(stage.bundle.run, run.round).write(run)
+    box.checklog.round("", run)
     print("\n".join(step_line(c) for c in run.results))
     reds = [c for c in run.results if c.red]
     if reds:
         print(f"evidence kept in {box.run_dir}")
-    else:
-        box.close()
     for c in reds:
         print(f"\n{c.id} (exit {c.exit}) `{c.cmd}`:")
         print("\n".join(c.tail.strip().splitlines()[-TAIL_LINES:]))

@@ -15,6 +15,7 @@ import { Floor } from './views/floor.js';
 import { Goals } from './views/goals.js';
 import { Lanes } from './views/lanes.js';
 import { Cost } from './views/cost.js';
+import { RunHeaders } from './views/runs.js';
 import { Banners, closeBead, filterGroups, laneValue, openBead, STALE_S, TABS } from './views/shell.js';
 
 const PHONE = matchMedia('(max-width:600px)');
@@ -98,11 +99,11 @@ function App() {
   const c = counts(snap);
   document.title = c.asks + c.stuck ? `(${c.asks + c.stuck}) task-loop` : 'task-loop';
   if (!snap.beads.length) {
-    return html`<${EmptyState} title="No beads yet" body=${snap.projects.length ? 'Create beads with bd, then start the loop.' : 'Register a repo, then start its loop.'}
-      cmd=${snap.projects.length ? 'tl run' : 'tl register <repo>  ·  tl run'} />`;
+    return html`<${RunHeaders} snap=${snap} /><${EmptyState} title="No beads yet" body=${snap.projects.length ? 'Create beads with bd, then start the loop.' : 'Register a repo, then start its loop.'}
+      cmd=${snap.projects.length ? 'tl loop' : 'tl register <repo>  ·  tl loop'} />`;
   }
   const red = snap.projects.filter((p) => p.profile_error).map((p) => html`<div class="ban bad">${p.profile_error}</div>`);
-  return html`<div class=${api.net.error ? 'greyed' : ''}>${red}${PHONE.matches ? html`<${Phone} snap=${snap} now=${now} />` : html`<${Desktop} snap=${snap} now=${now} />`}
+  return html`<div class=${api.net.error ? 'greyed' : ''}>${red}<${RunHeaders} snap=${snap} />${PHONE.matches ? html`<${Phone} snap=${snap} now=${now} />` : html`<${Desktop} snap=${snap} now=${now} />`}
     <${Toast} toast=${ui.toast} /></div>`;
 }
 

@@ -39,6 +39,7 @@
   tl.py stop [--repo DIR] [--now]               stop the loop after its current bead, or now (SIGTERM)
   tl.py check [--repo DIR] [--all] [--list] [ID ...]
                                                 run the repo's registry of checks (engine.checks): the gate's steps, or the named checks
+  tl.py gate [--repo DIR] [--all] [--list] [ID ...]  the same runner, recorded as a stage:gate run
   tl.py report [--repo DIR] [--since T] [--until T] [--json]
                                                  the M2 scorecard of a window (see SKILL.md, Report)
   tl.py lost [--repo DIR] [--since T] [--json]  bead-branch commits that are not landed, reclaimed or pending
@@ -270,7 +271,8 @@ def loop_parsers(sp):
 
 
 def check_parser(sp):
-    p = sp.add_parser("check", help="run the repo's registry of checks in this worktree: the gate's steps, or the named checks")
+    p = sp.add_parser("check", aliases=["gate"],
+                      help="run the repo's registry of checks in this worktree: the gate's steps, or the named checks")
     p.add_argument("ids", nargs="*", metavar="ID", help="check ids to run (any check, whatever its run); none: the gate's steps")
     p.add_argument("--repo", default=".", metavar="DIR", help="the worktree (default: the current directory)")
     p.add_argument("--all", action="store_true", help="ignore `when`: every gate step runs")
@@ -418,7 +420,10 @@ VERBS: Final[dict[str, Handler]] = {
     "next": v_next, "loop": v_loop, "stop": v_stop,
     "prune": v_prune,
     "lint": v_lint,
-    "check": lambda a, c: importlib.import_module("taskloop.app.launch.check").cmd_check(a, env=c.env, spawner=c.spawner, git=c.git),
+    "check": lambda a, c: importlib.import_module("taskloop.app.launch.check").cmd_check(
+        a, who=c.who, env=c.env, spawner=c.spawner, git=c.git),
+    "gate": lambda a, c: importlib.import_module("taskloop.app.launch.check").cmd_check(
+        a, who=c.who, env=c.env, spawner=c.spawner, git=c.git),
     "report": lazy_env("taskloop.cli.report", "cmd_report"),
     "lost": lazy_env("taskloop.cli.report", "cmd_lost"),
 }

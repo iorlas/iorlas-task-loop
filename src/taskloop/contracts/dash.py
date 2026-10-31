@@ -11,6 +11,7 @@ from typing import Annotated, ClassVar, Literal, final
 
 import msgspec
 
+from taskloop.contracts.dashruns import RunHeader, TermLine, ToolCall
 from taskloop.contracts.ids import WireBead
 from taskloop.contracts.needs import NeedRow
 from taskloop.contracts.pickset import QueueItem
@@ -332,6 +333,7 @@ class Snapshot(Rec):
     version: str
     t: float
     server: ServerInfo
+    runs: list[RunHeader] = msgspec.field(default_factory=list)
     projects: list[Project] = msgspec.field(default_factory=list)
     epics: list[Epic] = msgspec.field(default_factory=list)
     slots: list[Slot] = msgspec.field(default_factory=list)
@@ -443,22 +445,6 @@ class BeadDetail(Rec):
 
 
 # ---- live tail: GET /api/live?project=&id=&since=<cursor>&wait=<secs>
-
-
-@final
-class TermLine(Rec):
-    t: float
-    text: str
-    tone: Literal["", "err", "ok", "dim", "warn"] = ""
-
-
-@final
-class ToolCall(Rec):
-    """Name and argument only until delegate types the outcome of a tool call."""
-
-    t: float
-    name: str
-    arg: str = ""
 
 
 @final

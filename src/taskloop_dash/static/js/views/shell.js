@@ -18,7 +18,7 @@ export function Banners({ snap, now }) {
     out.push(html`<div key="stale" class="ban watch">No refresh for ${age(now - api.dataAge(), now)} · <button class="lnk" onClick=${api.retry}>Refresh</button></div>`);
   }
   for (const l of snap.server.loops.filter((x) => !x.running)) {
-    out.push(html`<div key=${`loop-${l.project}`} class="ban watch">Loop not running on ${l.project}${l.last_activity ? ` · last activity ${age(l.last_activity, now)} ago` : ''} · start it: <code>tl run</code></div>`);
+    out.push(html`<div key=${`loop-${l.project}`} class="ban watch">Loop not running on ${l.project}${l.last_activity ? ` · last activity ${age(l.last_activity, now)} ago` : ''} · start it: <code>tl loop</code> · one task: <code>tl run-task ID</code></div>`);
   }
   return out;
 }

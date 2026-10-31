@@ -278,6 +278,27 @@
   "retired_by": "denis",
   "retired_t": 1793050209.5
  },
+ "RunHeader": {
+  "run": "01KBN6Z0M4R5E8YQ2T7C9W3XHD",
+  "project": "lifesim",
+  "mode": "stage:gate",
+  "owner": "tester",
+  "session": "s1",
+  "state": "done",
+  "started": 1793050200.5,
+  "ended": 1793050201.5,
+  "reason": "w"
+ },
+ "TermLine": {
+  "t": 1793050200.5,
+  "text": "ok",
+  "tone": "ok"
+ },
+ "ToolCall": {
+  "t": 1793050200.5,
+  "name": "Bash",
+  "arg": "ls"
+ },
  "AdrUse": {
   "v": 1,
   "adr": "ADR-3",

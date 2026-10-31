@@ -52,7 +52,7 @@ class TlCheck(unittest.TestCase):
         self.assertNotIn("docs", out)  # run stage: not in the gate
         self.assertRegex(out, r"ui\s+skipped \(no change under ui/\*\*\)")
 
-    def test_a_red_run_keeps_its_evidence_and_prints_the_path_a_green_run_removes_it(self):
+    def test_a_red_run_keeps_its_evidence_and_prints_the_path(self):
         _rc, out = self.tl()
         line = next(x for x in out.splitlines() if x.startswith("evidence kept in "))
         kept = Path(line.removeprefix("evidence kept in "))
@@ -100,10 +100,11 @@ class TlCheck(unittest.TestCase):
         self.assertTrue(lines[3].startswith("ui  run=gate  group=tests  when=ui/**  "))
         self.assertIn("run=stage", lines[2])
 
-    def test_it_claims_nothing_and_writes_only_the_result_store(self):
+    def test_it_claims_nothing_and_writes_results_and_run_evidence(self):
         self.tl()
         written = {p.relative_to(Path(self.tmp.name, "cfg")).parts[1] for p in Path(self.tmp.name, "cfg").rglob("*") if p.is_file()}
-        self.assertLessEqual(written, {"results", "locks"})
+        self.assertLessEqual(written, {"results", "locks", "runs", "engine"})
+        self.assertTrue({"runs", "engine"} <= written)
 
 
 if __name__ == "__main__":

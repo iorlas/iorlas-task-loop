@@ -15,8 +15,11 @@ from support.dashlogs import RunScript, T, bead
 from support.fakes import FakeBeadStore
 from support.repos import write_repos
 
+from taskloop.contracts import wire
+from taskloop.contracts.dash import Snapshot
 from taskloop_dash.app import Dash
 from taskloop_dash.env import Env, Ports
+from taskloop_dash.views.snapshot import version_of
 
 GOLDEN = Path(__file__).with_name("golden") / "closes.json"
 NOW = T + 36_000
@@ -76,7 +79,11 @@ class Golden(unittest.TestCase):
         got = self.answers()
         if os.environ.get("GOLDEN_WRITE"):
             GOLDEN.write_text(json.dumps(got, indent=1, sort_keys=True) + "\n", encoding="utf-8")
-        self.assertEqual(got, json.loads(GOLDEN.read_text(encoding="utf-8")))
+        expected = json.loads(GOLDEN.read_text(encoding="utf-8"))
+        # Fill newly added optional fields from the contract before comparing the recorded state and its hash.
+        snap = wire.load(Snapshot, expected["snapshot"])
+        expected["snapshot"] = wire.dump(snap.replace(version=version_of(snap)))
+        self.assertEqual(got, expected)
 
 
 if __name__ == "__main__":

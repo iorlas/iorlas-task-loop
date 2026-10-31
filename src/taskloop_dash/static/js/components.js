@@ -78,7 +78,7 @@ function Sheet1({ snap, beads }) {
     <${Item} name="Sheet" note="phone, contained here">${frame(html`<${Sheet} open modal=${false} title="Filter" onClose=${nop}><p>Sheet body.</p><//>`)}<//>
     <${Item} name="Popover"><${Popover} label="⚠2 problems"><div>same test failed 3×</div><div>tokens 2.8× usual</div><//><//>
     <${Item} name="Toast">${frame(html`<${Toast} modal=${false} toast=${{ text: '✅ Approved · d5f.48 is landing', n: 1 }} />`)}<//>
-    <${Item} name="EmptyState"><${EmptyState} title="No beads yet" body="Register a repo, then start its loop." cmd="tl register <repo>  ·  tl run" /><${Nothing} /><//>
+    <${Item} name="EmptyState"><${EmptyState} title="No beads yet" body="Register a repo, then start its loop." cmd="tl register <repo>  ·  tl loop" /><${Nothing} /><//>
     <${Item} name="Ring" note="lanes, refresh circle"><div class="row"><${Ring} v=${0.91} tone="w" value="91%" label="codex" /><${Ring} v=${1} tone="x" value="3d" label="gemini" />
       <${Ring} value="2s" /><${Ring} tone="w" value="41s" /><${Ring} v=${0.62} value="62%" size=${46} /></div><//>
     <${Item} name="Spark"><div class="row">${snap.learning.asks_per_landed.length > 1 && html`<${Spark} v=${snap.learning.asks_per_landed} tone="good" />

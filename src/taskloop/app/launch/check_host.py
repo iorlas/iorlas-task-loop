@@ -1,11 +1,5 @@
-"""CliHost: the CheckHost of `tl check`, a person's run of the registry in any worktree. The same Checker runs the same steps through the
-same cache; the host has no bead, no step book and no budget: its log is in memory, its step logs are in a folder that is removed after a
-green run and kept (its path printed) after a red one, and the only files it writes under the config folder are the check cache and the
-duration history the engine's checks already use."""
-import shutil
-import tempfile
+"""CliHost: standalone checks through the engine's runner, cache and persistent run evidence."""
 import threading
-import time
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
@@ -15,16 +9,14 @@ from taskloop.adapters.threadflag import ThreadFlag
 from taskloop.app.checks.checklog import CheckLog
 from taskloop.app.land.checkout import Checkout
 from taskloop.app.run.shell import Shell
-from taskloop.contracts import paths
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.enums import WaitWhat
 from taskloop.contracts.env import Env
 from taskloop.contracts.envvars import EnvVar
-from taskloop.contracts.ids import RunId, TreeSha
+from taskloop.contracts.ids import TreeSha
+from taskloop.contracts.locator import RunBundle
 from taskloop.contracts.ports import Git, Spawner
 from taskloop.stores.bundle import Stores
-from taskloop.stores.memory import fake_stores
-from taskloop.stores.real import real_stores
 from taskloop.stores.runlog import RunLog
 
 
@@ -51,9 +43,10 @@ class CliHost:
         self,
         wt: str | Path,
         cfg: EngineConfig,
-        stores: Stores | None = None,
-        root: Path | None = None,
+        stores: Stores,
         *,
+        bundle: RunBundle,
+        log: RunLog,
         env: Env,
         spawner: Spawner,
         git: Git,
@@ -63,12 +56,12 @@ class CliHost:
         self.git = git
         self.wt = str(wt)
         self.cfg = cfg
-        self.stores = stores or real_stores(paths.ConfigDir(root or paths.default_root(env)))
+        self.stores = stores
         self.bead = "tl-check-" + check_files.repo_key(git, str(wt))
-        self.run_id = str(RunId.new(time.time()))
-        self.log = RunLog(fake_stores().run_log("check"), run_id=self.run_id, bead=self.bead)
+        self.run_id = bundle.run
+        self.log = log
         self.checklog = CheckLog(self.log)
-        self.run_dir = Path(tempfile.mkdtemp(prefix="tl-check-"))
+        self.run_dir = bundle.dir
         self.bead_env: Mapping[str, str] = {EnvVar.TL_SLOT.value: "check"}
         self.killed = self.wall_hit = False
         self.halt = threading.Event()
@@ -92,7 +85,3 @@ class CliHost:
     def detail(self, lines: list[str]) -> None: ...
 
     def halt_point(self, when: bool = True, wait: float = 0) -> None: ...
-
-    def close(self) -> None:
-        """Remove the evidence folder; the caller does this only after a green run."""
-        shutil.rmtree(self.run_dir, ignore_errors=True)

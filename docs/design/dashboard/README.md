@@ -11,6 +11,11 @@ One read-only server per machine (`python3 -m taskloop_dash` on the interpreter 
 
 ## Code
 
+Standalone `tl check` and `tl gate` runs use the engine's run manifests, with modes `stage:check` and `stage:gate`.
+The snapshot includes retained stage run headers (and every live stage run), even without a bead or log. Both page layouts
+show mode, owner, session and recorded state, including on the empty board. These headers only read manifests; the verb owns
+heartbeats and terminal states. Check evidence is retained under the run directory after success and failure.
+
 | where | what |
 |---|---|
 | `src/taskloop_dash/static/` | the page: `index.html`, ES modules under `js/`, CSS under `css/`, Preact + HTM vendored in `vendor/` (pinned by hash). No build, no CDN, 100 KB gzip budget (`tests/dash/test_dash_static.py`) |

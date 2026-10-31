@@ -92,7 +92,8 @@ def build(w: World) -> Snapshot:
     cards = [c.replace(needs=[n for n in c.needs if (c.project, n) in ids]) for c in cards]
     loops = [needs.health(w, p) for p in w.projects]
     snap = Snapshot(
-        version="", t=0.0, server=ServerInfo(version=w.version, host=w.host, loops=loops), needs=needs.needs_of(w, loops),
+        version="", t=0.0, server=ServerInfo(version=w.version, host=w.host, loops=loops),
+        needs=needs.needs_of(w, loops), runs=list(w.run_headers),
         queue=[x for p in w.projects for x in queue.items_of(w, p)],
         projects=[Project(id=p.id, name=p.name, profile_error=p.profile_error) for p in w.projects],
         epics=[e for p in w.projects for e in epics_of(p)],

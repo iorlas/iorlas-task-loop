@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 
 from taskloop.contracts.ask import Ask
 from taskloop.contracts.bead import Bead
+from taskloop.contracts.dashruns import RunHeader
 from taskloop.contracts.events import Event
 from taskloop.contracts.ledger import Adr, LedgerEntry
 from taskloop.contracts.loop import LoopState
@@ -64,6 +65,7 @@ class World:
     projects: Sequence[ProjectIn]
     runs: Mapping[str, Sequence[Run]]  # bead id -> its runs in the retained logs, oldest first
     asks: Mapping[str, Ask]  # bead id -> its open or parked ask
+    run_headers: Sequence[RunHeader] = ()
     status: StatusSnapshot | None = None  # delegate's status as `tl lanes` last filed it
     ledger: Sequence[LedgerEntry] = ()  # the ask ledger, oldest row first
     landings: Sequence[Landing] = ()  # runs that landed, from the traces (the learning series' denominator)

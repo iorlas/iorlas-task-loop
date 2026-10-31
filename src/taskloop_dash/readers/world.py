@@ -12,11 +12,14 @@ from taskloop.contracts import wire
 from taskloop.contracts.adrs import AdrStore
 from taskloop.contracts.ask import Ask
 from taskloop.contracts.bead import Bead, Comment
+from taskloop.contracts.dashruns import RunHeader
 from taskloop.contracts.delegate import LiveEvent
 from taskloop.contracts.enums import Outcome
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ledger import LedgerEntry
 from taskloop.contracts.loop import LoopState
+from taskloop.contracts.run import RunState
+from taskloop.contracts.runlife import RETAIN, Liveness, shown
 from taskloop.contracts.stores import AskStore, JsonStore, LedgerStore, StatusStore
 from taskloop_dash import jsonl
 from taskloop_dash.api.looks import Looks
@@ -85,6 +88,19 @@ class Worlds:
     def asks(self) -> dict[str, Ask]:
         return {a.bead: a for a in AskStore.at(self.env.config).live()}
 
+    def run_headers(self, now: float) -> list[RunHeader]:
+        """Stage runs need no bead or log to be visible. Read manifests only; never reconcile from the dashboard."""
+        projects = {path: project for project, path in self.repos().items()}
+        out: list[RunHeader] = []
+        for bundle in reversed(self.records.locator.runs()):
+            m = bundle.manifest
+            if not m.mode or m.repo not in projects or (not m.state.live and (m.ended or m.started) < now - RETAIN):
+                continue
+            state = RunState.LOST if shown(m, now) is Liveness.LOST else m.state
+            out.append(RunHeader(run=m.run, project=projects[m.repo], mode=m.mode, owner=m.owner, session=m.session,
+                                 state=state, started=m.started, ended=m.ended, reason=m.reason))
+        return out
+
     def adrs(self, path: str) -> list[AdrIn]:
         """The repo's decisions in force, each with its reuse count (plans that cited it) and when last."""
         def load() -> list[AdrIn]:
@@ -111,6 +127,7 @@ class Worlds:
         projects = [replace(p, strays=strays_of(p.beads, p.slots, runs, now),
                             events=[e for e in events if e.repo and (e.repo == paths[p.id] or basename(e.repo) == p.id)]) for p in projects]
         return World(now=now, host=socket.gethostname(), version=env.version, projects=projects, runs=runs, asks=self.asks(),
+                     run_headers=self.run_headers(now),
                      status=StatusStore(env.config).get(), ledger=self.ledger(), landings=self.landings(),
                      parks=self.records.parks(), net_pauses=self.records.net_pauses(), skipped_traces=self.records.traces().skipped)
 

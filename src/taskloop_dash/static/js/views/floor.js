@@ -78,7 +78,7 @@ export function Floor({ snap, now, filters }) {
   const beadOf = (p) => beads.get(key(p.project, p.bead));
   const gs = groups(snap);
   useEffect(() => { if (ref.current && w) ref.current.scrollLeft = x(now + 3600) - w; }, [zoom, !!w]);
-  if (!snap.slots.length) return html`<${EmptyState} title="No slots yet." body="Slots appear once the loop runs a worker." cmd="tl run" />`;
+  if (!snap.slots.length) return html`<${EmptyState} title="No slots yet." body="Slots appear once the loop runs a worker." cmd="tl loop" />`;
   const rows = {};
   let H = AXIS;
   const labs = [], trks = [];
