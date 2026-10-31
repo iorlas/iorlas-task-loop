@@ -110,6 +110,9 @@ open its PR if it has none, merge under the land lock with `--match-head-commit`
 sha (merge and record are one lock hold); a superseded PR is closed only after its replacement merged; the local branch and worktree go
 only at the oid that landed; then `bd sync`. The first failure ends the run with that command's exit code and leaves later items alone.
 It is one run, labelled `stage:land-stack`, with every command a row. No command is ever taken from a PR body or bead text.
+A task, feature or bug bead with an engine run or a `task/<bead>` branch is closed (`tl close`, `tl bd close`, a release's `--bead`) only
+with a land on record, or a typed reason: `duplicate`, `wontfix`, `superseded`, `epic`, or `manual-landed-with-sha:<sha>` (the sha must be an
+ancestor of the base; it is recorded as the land). `tl land ID --sha SHA` records one by hand (same ancestor check). The refusal names the fix.
 
 Acceptance cases: the plan has at least one per acceptance criterion of the bead (the criterion quoted, a check). They
 run on the last stage and again in every fix round at land. A writer may add cases it finds (the review sees them as

@@ -17,7 +17,8 @@
                                                 run CMD under the repo's land lock (the engine's); exits with CMD's code, 75 on timeout
   tl.py land-stack ITEM... [--repo DIR] [--base B] [--bead ITEM=BEAD] [--supersede ITEM=PR]
                                                 deliver PRs or branches, lowest first: push, PR, merge, record
-  tl.py close ID [--reason R]                   close the bead, record it
+  tl.py close ID [--reason R]                   close the bead, record it (refused with a run or task branch and no land, unless the
+                                                reason starts duplicate|wontfix|superseded|epic|manual-landed-with-sha:SHA)
   tl.py block ID --why TEXT                     block the bead with a question, record it
   tl.py slot list|take|release|reset|setup ...  slots (see SKILL.md, Slots)
   tl.py slot hold S --why TEXT [--for MIN]      keep the loop and run-task off a slot (a person, screenshots)
@@ -80,6 +81,7 @@ from taskloop.app.wire import lanes as wire_lanes
 from taskloop.app.wire import slots as wslots
 from taskloop.app.wire import usage as wire_usage
 from taskloop.cli import asks as cli_asks
+from taskloop.cli import closing as cli_closing
 from taskloop.cli import green as cli_green
 from taskloop.cli import hooks as cli_hooks
 from taskloop.cli import land_stack as cli_land_stack
@@ -312,7 +314,8 @@ def of_args(fn: Callable[..., int], *names: str) -> Handler:
 
 
 def v_bd(a: Any, c: Ctx) -> int:
-    return verbs.passthrough(beadtools.bd_store(c.who.actor), a.rest)
+    store = beadtools.bd_store(c.who.actor)
+    return verbs.passthrough(store, a.rest, cli_closing.guard(c.who, c.git, store))
 
 
 def v_register(a: Any, c: Ctx) -> int:
@@ -324,11 +327,11 @@ def v_claim(a: Any, c: Ctx) -> int:
 
 
 def v_land(a: Any, c: Ctx) -> int:
-    return verbs.land(c.who, a.id, a.sha, beadtools.bd_store(c.who.actor), c.git, a.worktree)
+    return cli_closing.cmd_land(a.id, a.sha, a.worktree, c.who, c.git, beadtools.bd_store(c.who.actor))
 
 
 def v_close(a: Any, c: Ctx) -> int:
-    return verbs.close(c.who, a.id, beadtools.bd_store(c.who.actor), a.reason)
+    return cli_closing.cmd_close(a.id, a.reason, c.who, c.git, beadtools.bd_store(c.who.actor))
 
 
 def v_block(a: Any, c: Ctx) -> int:

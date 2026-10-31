@@ -5,6 +5,7 @@ from typing import Protocol, assert_never
 from taskloop.adapters import beadtools
 from taskloop.app.asks import parks
 from taskloop.app.track import verbs as track
+from taskloop.app.wire import closeguard
 from taskloop.contracts import fence
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId
@@ -56,9 +57,9 @@ class Settle:
             case None if done.kind is Kind.LANDED:
                 base = e.cfg.base.split("/")[-1]
                 rc = track.close_as(e.who, e.claim, f"merged {done.sha[:12]} to {base}: {summary or 'the task stages passed'}; {stats}",
-                    e.store)
+                    e.store, closeguard.ENGINE)
             case None:
-                rc = track.close_as(e.who, e.claim, "done with nothing to land: " + (summary or stats), e.store)
+                rc = track.close_as(e.who, e.claim, "done with nothing to land: " + (summary or stats), e.store, closeguard.ENGINE)
             case Infra() | Owner():  # a machine fault, a pause or the owner's hold: the bead stays open, unassigned
                 rc = self.leave_open(done.kind, done.detail)
             case Task():

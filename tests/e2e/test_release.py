@@ -227,7 +227,9 @@ class Release(unittest.TestCase):
         self.assertEqual(self.git("log", "--format=%s", "-2", "main", cwd=self.origin).splitlines(),
                          ["0.1.6: feature", "Add feature (tl-1)"])
         self.assertIn("Co-Authored-By: Claude", self.git("log", "-1", "--format=%B", "main", cwd=self.origin))
-        self.assertEqual(self.world.store.calls, [("close", "tl-1", "--reason", "landed")])  # bd's own argv: tests/adapters
+        calls = self.world.store.calls  # bd's own argv: tests/adapters; the release is the bead's land, then the close
+        self.assertEqual([c[:2] for c in calls], [("provenance", "record"), ("close", "tl-1")])
+        self.assertEqual(calls[-1], ("close", "tl-1", "--reason", "landed"))
         self.assertEqual(self.market_versions()["iorlas-task-loop"], "0.1.6")
         self.assertEqual(json.loads((self.repo / PLUGIN).read_text())["author"], {"name": "t"})  # the rest kept
 

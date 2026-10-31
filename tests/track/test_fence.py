@@ -20,6 +20,7 @@ from support.fake_beads import FakeBeads
 from taskloop.app.run.run_once import Ended, RunOnce
 from taskloop.app.run.state import Checkpoints
 from taskloop.app.track import verbs
+from taskloop.app.wire import closeguard
 from taskloop.contracts import fence
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.ids import BeadId
@@ -85,12 +86,12 @@ class Refused(unittest.TestCase):
         return rc, buf.getvalue()
 
     def test_close_by_the_stale_run_is_refused_and_says_why(self):
-        rc, err = self.err(lambda: verbs.close_as(who(), self.old, "merged", self.bd))
+        rc, err = self.err(lambda: verbs.close_as(who(), self.old, "merged", self.bd, closeguard.ENGINE))
         self.assertEqual(rc, 1)
         self.assertIn("fenced: x-1 not closed", err)
         self.assertIn("generation 2, this run holds 1", err)
         self.assertEqual(self.bd.beads[BeadId("x-1")].status, "in_progress")
-        self.assertEqual(verbs.close_as(who(), self.new, "merged", self.bd), 0)
+        self.assertEqual(verbs.close_as(who(), self.new, "merged", self.bd, closeguard.ENGINE), 0)
         self.assertEqual(self.bd.beads[BeadId("x-1")].status, "closed")
 
     def test_block_by_the_stale_run_is_refused(self):
@@ -116,7 +117,7 @@ class Refused(unittest.TestCase):
 
     def test_a_close_sends_the_assignee_guard_and_a_changed_assignee_refuses_it(self):
         self.bd.beads[BeadId("x-1")] = self.bd.beads[BeadId("x-1")].replace(assignee="tl-other")  # the claim changed hands
-        rc, err = self.err(lambda: verbs.close_as(who(), self.new, "merged", self.bd))
+        rc, err = self.err(lambda: verbs.close_as(who(), self.new, "merged", self.bd, closeguard.ENGINE))
         self.assertEqual((rc, self.bd.beads[BeadId("x-1")].status), (1, "in_progress"))
         self.assertIn("assignee changed", err)
 

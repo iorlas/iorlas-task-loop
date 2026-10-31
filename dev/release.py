@@ -39,9 +39,10 @@ import taskloop  # noqa: E402, F401  (turns lazy imports on for our modules)
 if hasattr(sys, "set_lazy_imports"):
     sys.set_lazy_imports("normal")  # only explicit `lazy import` statements stay lazy; we write none
 from taskloop.app.release import flow  # noqa: E402
-from taskloop.app.wire import real  # noqa: E402
+from taskloop.app.wire import closeguard, real  # noqa: E402
 from taskloop.contracts.env import snapshot  # noqa: E402
 
 if __name__ == "__main__":
     process = snapshot()  # the one place this script takes the process environment
-    sys.exit(flow.main(None, HERE.parent, real.spawner(process), real.git(process), process, __doc__.split("\n\n")[0]))
+    doc = __doc__.split("\n\n")[0]
+    sys.exit(flow.main(None, HERE.parent, real.spawner(process), real.git(process), process, closeguard.close_released, doc))

@@ -4,6 +4,7 @@ import json
 import os
 import sys
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -74,16 +75,25 @@ def refuse_open_children(req: Request, repo: Path, who: Identity, store: Beads |
         raise Abort(f"--bead {req.bead} has open children ({', '.join(sorted(kids))}): finish or close them, or release without --bead")
 
 
-def close_bead(req: Request, repo: Path, who: Identity, store: Beads | None) -> None:
+Closer = Callable[[Identity, Beads, Git, str, BeadId, str, str], str]  # (who, bd, git, clone, bead, reason, version) -> "" or why not
+
+
+def close_bead(req: Request, repo: Path, who: Identity, store: Beads | None, where: Path, sh: Shell, version: str,
+               closer: Closer) -> None:
+    """The release is the bead's land: `closer` records the pushed commit as the land, then closes the bead through the close guard
+    (app/wire/closeguard.py close_released; the edge hands it in)."""
     if not req.bead:
         return
     try:
-        (store or beadtools.bd_store(who.actor, repo)).close(req.bead, req.reason or req.message)
+        why = closer(who, store or beadtools.bd_store(who.actor, repo), sh.port, str(where), req.bead, req.reason or req.message, version)
     except (BdFailure, SystemExit) as e:
-        say("warning: bd close {} failed: {}".format(req.bead, str(getattr(e, "error", e))[-300:]))
+        why = str(getattr(e, "error", e))[-300:]
+    if why:
+        say(f"warning: bd close {req.bead} failed: {why}")
 
 
-def release(req: Request, repo: Path, market: Path, tool_root: Path, sh: Shell, who: Identity, store: Beads | None = None) -> str:
+def release(req: Request, repo: Path, market: Path, tool_root: Path, sh: Shell, who: Identity, closer: Closer,
+            store: Beads | None = None) -> str:
     """Release `repo` from the clone: its main checkout may be dirty or on any branch and is left as it was. The marketplace
     checkout must be clean on main (it is pushed from)."""
     refuse_open_children(req, repo, who, store)
@@ -101,7 +111,7 @@ def release(req: Request, repo: Path, market: Path, tool_root: Path, sh: Shell, 
     version = push_main(where, req.message, again(), base, again, sh)
     say(f"pushed {version}: {req.message}")
     publish.tag(where, "v" + version, "the plugin repo", sh)
-    close_bead(req, repo, who, store)
+    close_bead(req, repo, who, store, where, sh, version, closer)
     try:
         publish.bump_marketplace(market, version, sh)
     except Abort as e:
@@ -137,7 +147,7 @@ def record(result: ReleaseResult, req: Request, repo: Path, who: Identity, home:
             say("warning: bd comment {} failed: {}".format(req.bead, str(getattr(e, "error", e))[-300:]))
 
 
-def main(argv: list[str] | None, tool_root: Path, spawner: Spawner, port: Git, env: Env, doc: str = "") -> int:
+def main(argv: list[str] | None, tool_root: Path, spawner: Spawner, port: Git, env: Env, closer: Closer, doc: str = "") -> int:
     """One release from the command line; every process it starts goes through `spawner` (the edge makes it)."""
     sh = shell.of(spawner, port, env)
     who = ident.identity(env)
@@ -160,7 +170,7 @@ def main(argv: list[str] | None, tool_root: Path, spawner: Spawner, port: Git, e
         newer = None
         with landlock.os_lock(path, holder, lambda by: say(f"waiting for the release lock (held by {by})")):
             newer = selfupdate.newer_release(tool_root, clone.ready(home.root, url, sh), sh, env)
-            version = "" if newer else release(req, repo, market, tool_root, sh, who)
+            version = "" if newer else release(req, repo, market, tool_root, sh, who, closer)
         if newer:  # the lock is released above: the exec'd release takes it
             selfupdate.exec_release(newer, sys.argv[1:] if argv is None else argv, repo, env)
         record(ReleaseResult(ok=True, version=version, summary="released " + version, at=time.time(), branch=req.from_branch or "main",

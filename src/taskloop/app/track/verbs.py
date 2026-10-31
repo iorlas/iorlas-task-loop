@@ -19,6 +19,8 @@ from taskloop.contracts.ids import BeadId
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdFailure, BeadPatch, Beads, Git
 
+Guard = Callable[[BeadId, str], str]  # (bead, close reason) -> "" when the close goes on, else why it is refused (closeguard.py)
+
 
 def claim(who: Identity, bead: BeadId, store: Beads, git: Git, worktree: str | None = None, slot: str | None = None) -> int:
     st = store
@@ -58,17 +60,21 @@ def land(who: Identity, bead: BeadId, sha: str, store: Beads, git: Git, worktree
     return 0
 
 
-def close(who: Identity, bead: BeadId, store: Beads, reason: str | None = None) -> int:
+def close(who: Identity, bead: BeadId, store: Beads, guard: Guard, reason: str | None = None) -> int:
     """`tl close`: a person's close, under the claim they hold on the bead now."""
-    return close_as(who, fence.hand(store, bead, who.actor), reason, store)
+    return close_as(who, fence.hand(store, bead, who.actor), reason, store, guard)
 
 
-def close_as(who: Identity, claim: fence.Claim, reason: str | None, store: Beads) -> int:
+def close_as(who: Identity, claim: fence.Claim, reason: str | None, store: Beads, guard: Guard) -> int:
     """Close the bead the claim is for; a stale claim (its bead or slot was taken again) is refused, and so is a bead whose assignee is
-    no longer the claim's actor (bd checks that atomically)."""
+    no longer the claim's actor (bd checks that atomically). `guard` refuses a close with no land on record (the engine's own close passes
+    closeguard.ENGINE)."""
     bead = claim.bead
     try:
         fence.check(store, claim)
+        if why := guard(bead, reason or "done"):
+            sys.stderr.write(why + "\n")
+            return 1
         store.close(bead, reason or "done", fence.guard(claim))
     except fence.Fenced as f:
         sys.stderr.write(f"fenced: {bead} not closed: {f.why}\n")
@@ -111,8 +117,31 @@ def block_as(who: Identity, claim: fence.Claim, why: str, st: Beads, say: Callab
     return 0
 
 
-def passthrough(store: BdStore, rest: list[str]) -> int:
-    """`tl bd ...`: bd with this session's actor and --json, through the adapter."""
+def bd_close_args(rest: list[str]) -> tuple[list[str], str]:
+    """The ids and the reason of a `bd close ...` argv."""
+    ids: list[str] = []
+    reason = ""
+    it = iter(rest[1:])
+    for a in it:
+        if a in ("--reason", "-r"):
+            reason = next(it, "")
+        elif a.startswith("--reason="):
+            reason = a.partition("=")[2]
+        elif a in ("--reason-file", "--session"):
+            next(it, "")
+        elif not a.startswith("-"):
+            ids.append(a)
+    return ids, reason
+
+
+def passthrough(store: BdStore, rest: list[str], guard: Guard) -> int:
+    """`tl bd ...`: bd with this session's actor and --json, through the adapter. A `close` goes through the close guard first."""
+    if rest[:1] in (["close"], ["done"]):
+        ids, reason = bd_close_args(rest)
+        for bead in ids:
+            if why := guard(BeadId(bead), reason):
+                sys.stderr.write(why + "\n")
+                return 1
     r = store.passthrough(rest)
     sys.stdout.write(r.out)
     sys.stderr.write(r.err)
