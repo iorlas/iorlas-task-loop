@@ -128,7 +128,7 @@ function Body({ d, card, snap, now, phone }) {
 
 function Header({ card, d, snap, phone }) {
   const epic = card.epic ? snap.epics.find((e) => e.id === card.epic) : null;
-  const meta = [card.project, epic && epic.title, card.id, card.slot, card.lane].filter(Boolean).join(' · ');
+  const meta = [card.project, epic && epic.title, card.id, card.slot, card.lane, card.review && `review: ${card.review}`].filter(Boolean).join(' · ');
   const tot = html`<${Totals} totals=${card.totals} assumptions=${card.assumptions} />`;
   if (phone) return html`<h2>${card.title}</h2><div class="mt">${meta}</div><div class="mt">${tot}${card.loops > 0 && ` · ↻${card.loops}`}</div>`;
   return html`<div class="l1"><span>${meta}</span>${tot}</div><h3>${card.title}</h3>`;

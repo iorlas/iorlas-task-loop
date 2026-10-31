@@ -22,6 +22,8 @@ class SkipKind(StrEnum):
     GENERATED = "generated"
     TOOLS = "tools"
     TESTS = "tests"
+    REVIEW_OFF = "review-off"  # engine.review off (or the bead's label): not a path class, the whole review is switched off
+    REVIEW_SAMPLED = "review-sampled"  # engine.review sampled: this stage is not the Nth
 
 
 def _hit(path: str, globs: Collection[str]) -> bool:

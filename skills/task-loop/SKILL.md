@@ -235,7 +235,11 @@ off). A failed check is run again (`retry`) only when its first two failures dif
 slow check is bounded only by its wall limit. A project lock that stays after 5 min of waiting ends the check with that message, no
 process is probed for the holder. The same red checks with the same output
 `engine.max_same_red` (3) rounds in a row stop the run with one ask that names them. `engine.max_total_reviews` (12) counts reviews
-over the whole run, replans included.
+over the whole run, replans included. `engine.review` (`on` default | `off` | `sampled`, with `engine.review_every` 3) switches the
+review: `off`, or the label `review-off` on a bead, lands a stage write, checks, verify, gate without a reviewer call (the review step ends
+`skipped`, reason `review-off`); `sampled` reviews every Nth stage and the last. The last stage maps the acceptance: with review off a
+deterministic check stands in (each acceptance item must be named by a plan case, which the engine runs); an item no case names gets the
+review after all. The drawer header shows `review: on|off|sampled`.
 **Who runs a check.** A repo check is the writer's to run when its longest green run took at most `engine.writer_check_max_s`, or says
 `"writer": true` (`false`: never) or its own `"writer_check_max_s"`; a `run: gate` check always is the engine's. `"tail_log"` names a log of the tree
 whose first 20 `error CS` lines join a red's output when it shows none (the analyzers default to `client/Logs/unity-project-files.log`).

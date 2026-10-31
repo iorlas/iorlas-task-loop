@@ -194,6 +194,8 @@ class EngineConfig(Rec):
     base_red: bool = True  # a check's first red is run once on the untouched base: red there too, it is not the writer's
     max_same_red: int = 3  # rounds in a row that end red with the same checks and output: then stop and ask (0: never)
     skip_review: ReviewSkipConfig = msgspec.field(default_factory=ReviewSkipConfig)
+    review: Literal["on", "off", "sampled"] = "on"  # off: no review call (label review-off: per bead); sampled: review_every
+    review_every: int = 3  # sampled: every Nth stage is reviewed, and the last one always
     max_total_reviews: int = 12  # reviews in all of a run, replans included: then stop and ask (0: never)
     check_wall_min: float = 60  # a check is stopped only when it runs this long; a quiet or idle one is never stopped before
     gate_timeout_min: float = 90

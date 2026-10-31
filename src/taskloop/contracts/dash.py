@@ -161,11 +161,10 @@ class BeadCard(Rec):
     epic: str | None = None
     slot: str | None = None
     lane: str | None = None
+    review: Literal["on", "off", "sampled"] | None = None  # RunStart.review of the newest run
     loops: int = 0
     dots: list[PhaseDot] = msgspec.field(default_factory=list)
-    needs: Annotated[list[str], msgspec.Meta(description="open blockers only; a landed one is dropped, so every id is in the snapshot")] = (
-        msgspec.field(default_factory=list)
-    )
+    needs: Annotated[list[str], msgspec.Meta(description="open blockers only")] = msgspec.field(default_factory=list)
     goal: bool = False
     waits_why: Annotated[str, msgspec.Meta(description="a ready bead no slot took: why it waits; only while a loop runs")] = ""
     cause: OwnerCause | None = None

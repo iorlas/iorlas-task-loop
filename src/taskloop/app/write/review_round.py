@@ -12,8 +12,10 @@ from taskloop.domain.lanes import caps
 from taskloop.domain.prompts.common import LATER_CASES, UNCHECKED_TEXT
 from taskloop.domain.prompts.review import acceptance_text, review_prompt
 from taskloop.domain.review import findings as fnd
+from taskloop.domain.review import switch
 from taskloop.domain.review.followups import FollowKey
 from taskloop.domain.review.matchers import AcceptanceItems
+from taskloop.domain.review.skip import SkipKind
 
 CASES_RAN = ("The engine ran every case above with the checks, so a case is never an unchecked item; a case whose "
              "check does not prove its criterion is a finding.\n")
@@ -26,7 +28,7 @@ class ReviewRound:
     def run(self, s: StageState) -> str:
         """-> ACCEPT, AGAIN (sent back) or REPLAN."""
         e = self.e
-        if self.skipped(s):
+        if self.switched_off(s) or self.skipped(s):
             return ACCEPT
         e.stats["reviews"] += 1
         e.ask_flow.review_cap()
@@ -37,6 +39,27 @@ class ReviewRound:
         review = self.triage(s, review, kinds)
         self.settle(s, review)
         return self.verdict(s, review)
+
+    def switched_off(self, s: StageState) -> bool:
+        """True when the review is switched off for this stage (engine.review, label review-off, domain/review/switch.py): no reviewer
+        call, the review step ends `skipped` with the typed reason. The last stage maps the acceptance: a deterministic check stands in
+        for the reviewer (each acceptance item named by a plan case); an item no case names means the stage is reviewed after all."""
+        e = self.e
+        m = switch.mode(e.cfg.review, e.budget.labels)
+        if switch.reviews(m, stage=s.i, last=s.last, every=int(e.cfg.review_every)):
+            return False
+        if s.last and not s.fix:
+            cases = [str(c["criterion"]) for c in (e.plan_data or {}).get("cases") or []]
+            loose = switch.covered(self.items(s), cases)
+            if loose:
+                e.log.note(f"{s.name}: review is {m} but no plan case names acceptance {', '.join(loose)}: reviewing this stage")
+                return False
+        said = SkipKind.REVIEW_OFF if m == "off" else SkipKind.REVIEW_SAMPLED
+        e.steps.begin("review", f"{s.name}: review skipped ({said})")
+        e.steps.outcome("skipped", said)
+        e.log.note(f"{s.name}: review skipped, engine.review is {m}")
+        e.steps.move("next", "review_skipped", f"{s.name} accepted without review: {said}")
+        return True
 
     def skipped(self, s: StageState) -> bool:
         """True when the stage needs no review: every changed path is mechanical (domain/review/skip.py). A fix round, an item nobody

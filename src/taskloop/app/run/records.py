@@ -13,6 +13,7 @@ from taskloop.contracts import plancheck
 from taskloop.contracts.enums import Outcome
 from taskloop.contracts.locator import RunLocator
 from taskloop.domain.report import matchers as lifecycle
+from taskloop.domain.review import switch
 
 
 class Records:
@@ -55,6 +56,7 @@ class Records:
                 started_because=why["started_because"],
                 ask=why["ask"],
                 branch=e.git.branch(e.wt),
+                review=switch.mode(e.cfg.review, e.budget.labels),
             )
         )
 

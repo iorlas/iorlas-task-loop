@@ -143,6 +143,7 @@
    "epic": "lifesim-d5f",
    "slot": "mac·1",
    "lane": "claude",
+   "review": null,
    "loops": 2,
    "dots": [
     {
@@ -197,6 +198,7 @@
    "epic": "lifesim-wld",
    "slot": "mac·2",
    "lane": "codex",
+   "review": null,
    "loops": 1,
    "dots": [
     {
@@ -251,6 +253,7 @@
    "epic": "lifesim-eco",
    "slot": "devbox·1",
    "lane": "claude",
+   "review": null,
    "loops": 0,
    "dots": [
     {
@@ -305,6 +308,7 @@
    "epic": "lifesim-wld",
    "slot": "devbox·1",
    "lane": "claude",
+   "review": null,
    "loops": 1,
    "dots": [
     {
@@ -359,6 +363,7 @@
    "epic": "lifesim-d5f",
    "slot": "devbox·2",
    "lane": "OC Go",
+   "review": null,
    "loops": 0,
    "dots": [
     {
@@ -413,6 +418,7 @@
    "epic": "lifesim-wld",
    "slot": "devbox·2",
    "lane": "OC Go",
+   "review": null,
    "loops": 3,
    "dots": [
     {
@@ -467,6 +473,7 @@
    "epic": "lifesim-d5f",
    "slot": "mac·1",
    "lane": "claude",
+   "review": null,
    "loops": 0,
    "dots": [
     {
@@ -521,6 +528,7 @@
    "epic": "lifesim-eco",
    "slot": "mac·3",
    "lane": "claude 2",
+   "review": null,
    "loops": 0,
    "dots": [
     {
@@ -575,6 +583,7 @@
    "epic": "lifesim-eco",
    "slot": "mac·3",
    "lane": "claude 2",
+   "review": null,
    "loops": 0,
    "dots": [
     {
@@ -629,6 +638,7 @@
    "epic": "lifesim-wld",
    "slot": null,
    "lane": "codex",
+   "review": null,
    "loops": 0,
    "dots": [],
    "needs": [],
@@ -658,6 +668,7 @@
    "epic": "lifesim-eco",
    "slot": null,
    "lane": null,
+   "review": null,
    "loops": 0,
    "dots": [],
    "needs": [
@@ -689,6 +700,7 @@
    "epic": "lifesim-wld",
    "slot": null,
    "lane": null,
+   "review": null,
    "loops": 0,
    "dots": [],
    "needs": [
@@ -720,6 +732,7 @@
    "epic": "lifesim-d5f",
    "slot": null,
    "lane": null,
+   "review": null,
    "loops": 0,
    "dots": [],
    "needs": [
@@ -751,6 +764,7 @@
    "epic": "lifesim-wld",
    "slot": null,
    "lane": null,
+   "review": null,
    "loops": 0,
    "dots": [],
    "needs": [
@@ -782,6 +796,7 @@
    "epic": "lifesim-eco",
    "slot": null,
    "lane": null,
+   "review": null,
    "loops": 0,
    "dots": [],
    "needs": [
@@ -814,6 +829,7 @@
    "epic": "lifesim-wld",
    "slot": null,
    "lane": null,
+   "review": null,
    "loops": 0,
    "dots": [],
    "needs": [
@@ -847,6 +863,7 @@
    "epic": "lifesim-eco",
    "slot": null,
    "lane": null,
+   "review": null,
    "loops": 0,
    "dots": [],
    "needs": [
@@ -880,6 +897,7 @@
    "epic": "lifesim-wld",
    "slot": null,
    "lane": null,
+   "review": null,
    "loops": 0,
    "dots": [],
    "needs": [],
@@ -909,6 +927,7 @@
    "epic": "tl-bcd",
    "slot": null,
    "lane": null,
+   "review": null,
    "loops": 0,
    "dots": [],
    "needs": [],
@@ -938,6 +957,7 @@
    "epic": "tl-bcd",
    "slot": null,
    "lane": null,
+   "review": null,
    "loops": 0,
    "dots": [],
    "needs": [
@@ -969,6 +989,7 @@
    "epic": "tl-7y6",
    "slot": "devbox·1",
    "lane": "claude",
+   "review": null,
    "loops": 0,
    "dots": [],
    "needs": [],

@@ -21,9 +21,10 @@ from taskloop.contracts.checks import CheckRun
 from taskloop.contracts.dash import BeadDetail, CheckCount, Column, Marker, Snapshot
 from taskloop.contracts.delegate import LiveCmdEnd, LiveCmdStart, LiveTokens
 from taskloop.contracts.enums import AskClass, AskKind, AskStatus
+from taskloop.contracts.log import RunStart
 from taskloop.contracts.loop import LoopState, QueueRow, Skip
 from taskloop_dash.views import bead_detail, snapshot
-from taskloop_dash.views.board import Board
+from taskloop_dash.views.board import Board, review_of
 from taskloop_dash.views.world import LookItem, ProjectIn, World
 
 NOW = T + 3600
@@ -140,6 +141,11 @@ class Case(unittest.TestCase):
 
 
 class Cards(Case):
+    def test_the_card_carries_the_review_mode_of_the_newest_run(self):
+        run = RunScript("b-run", slot="a", at=T).step("write", 100, 1, "Codex").run(T + 1)
+        run = dataclasses.replace(run, start=RunStart(worktree="/w", review="off"))
+        self.assertEqual((review_of(run), review_of(None)), ("off", None))
+
     def test_strict_decode_round_trips(self):
         s = self.snap()
         self.assertEqual(wire.load(Snapshot, wire.dump(s)), s)

@@ -48,6 +48,12 @@ def lane_of(runs: Sequence[Run]) -> str:
     return next((r.lane for r in reversed(runs) if r.lane), "")
 
 
+def review_of(run: Run | None) -> Literal["on", "off", "sampled"] | None:
+    """The review mode the newest run recorded at its start (None: no run, or a run that did not say)."""
+    m = run.start.review if run and run.start else None
+    return "off" if m == "off" else "sampled" if m == "sampled" else "on" if m == "on" else None
+
+
 def tone_of_totals(tokens: int, usual: int | None, n: int) -> TotalsTone:
     if usual is None or usual <= 0:
         return ""
@@ -114,7 +120,7 @@ class Board:
         return BeadCard(
             id=b.id, project=p.id, title=b.title, column=col, marker=mark, status=columns.status_line(f), tone=columns.tone_of(mark),
             t=self.entered(f, b, newest), epic=b.parent if b.parent in self.by_id[p.id] else None,
-            slot=(newest.slot or None) if newest and col is not Column.BACKLOG else None, lane=lane or None,
+            slot=(newest.slot or None) if newest and col is not Column.BACKLOG else None, lane=lane or None, review=review_of(newest),
             loops=sum(1 for x in ps if x.end in phases.LOOPED), dots=columns.dots_of(visited, current, mark, f.closed),
             needs=blocking,  # the snapshot drops the ids it trimmed away
             waits_why=waits.get(b.id, "") if col is Column.BACKLOG else "", totals=self.totals(ps, lane),
