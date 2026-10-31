@@ -25,7 +25,7 @@ from taskloop.contracts import log as rec  # noqa: E402
 from taskloop.contracts.enums import Outcome  # noqa: E402
 from taskloop.contracts.ids import BeadId, RunId  # noqa: E402
 from taskloop.contracts.paths import ConfigDir  # noqa: E402
-from taskloop.contracts.runlife import BEAT_EVERY, CRASHED_AFTER, RETAIN, Liveness, liveness  # noqa: E402
+from taskloop.contracts.runlife import BEAT_EVERY, CRASHED_AFTER, KEEP_DAYS, Liveness, liveness  # noqa: E402
 from taskloop.contracts.trace import RunTrace  # noqa: E402
 from taskloop.domain.report import matchers  # noqa: E402
 from taskloop_dash import jsonl  # noqa: E402
@@ -138,10 +138,10 @@ class Sweep(unittest.TestCase):
                 for p in (cfg.engine_log(run), cfg.engine_log(run).with_suffix(".stderr")):
                     os.utime(p, (written, written))
 
-            make("t-1-20261001-100000", now - RETAIN - 10)  # old
-            make("t-2-20261020-100000", now - RETAIN + 3600)  # recent
+            make("t-1-20261001-100000", now - KEEP_DAYS * 86400 - 10)  # old
+            make("t-2-20261020-100000", now - KEEP_DAYS * 86400 + 3600)  # recent
             make("t-3-20261029-100000", now - 20)  # a live run
-            layout.prune_run_logs(cfg, now)
+            layout.prune_run_logs(cfg, now, KEEP_DAYS * 86400)
             left = sorted(p.name for p in (cfg.root / "engine").iterdir())
             self.assertEqual(left, sorted(f"{r}.{e}" for r in ("t-2-20261020-100000", "t-3-20261029-100000")
                                           for e in ("jsonl", "stderr", "live")))

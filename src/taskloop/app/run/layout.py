@@ -11,9 +11,6 @@ from pathlib import Path
 
 from taskloop.adapters import locks
 from taskloop.contracts.paths import TASK_EXCLUDE, ConfigDir
-from taskloop.contracts.runlife import RETAIN
-
-CHECK_ROUNDS_DAYS = 14
 
 
 def bead_of(stem: str) -> str:
@@ -31,7 +28,7 @@ def newest_write(path: Path) -> float:
     return latest
 
 
-def prune_check_rounds(runs: Path, days: float = CHECK_ROUNDS_DAYS, exempt: Collection[str] = (), dry_run: bool = False) -> list[Path]:
+def prune_check_rounds(runs: Path, days: float, exempt: Collection[str] = (), dry_run: bool = False) -> list[Path]:
     """Every round's check log (NN-id.rK.log) of a run older than `days` goes; plans, briefs and evidence stay. A bead in `exempt`
     keeps its logs. -> what went (what would, with `dry_run`)."""
     cut = time.time() - days * 86400
@@ -59,10 +56,11 @@ def prune_run_dirs(runs: Path, days: float, exempt: Collection[str] = (), dry_ru
     return gone
 
 
-def prune_run_logs(cfg: ConfigDir, now: float, retain: float = RETAIN, exempt: Collection[str] = (), dry_run: bool = False) -> list[Path]:
+def prune_run_logs(cfg: ConfigDir, now: float, retain: float, exempt: Collection[str] = (), dry_run: bool = False) -> list[Path]:
     """An engine log not written for `retain` seconds goes with its .live/ folder (the worker's per-call files), its .stderr and an
-    owner's request left in its run folder; the log of a bead in `exempt` stays. The dashboard only reads: this, at each run's start,
-    is the one place that deletes them. A live run beats every minute and is never old. -> the logs that went (would, with `dry_run`)."""
+    owner's request left in its run folder; the log of a bead in `exempt` stays. The dashboard only reads: `tl prune` (the loop runs it
+    at its start) is the one place that deletes them. A live run beats every minute and is never old.
+    -> the logs that went (would, with `dry_run`)."""
     gone: list[Path] = []
     for log in cfg.engine_log("*").parent.glob("*.jsonl"):
         with contextlib.suppress(OSError):
@@ -112,8 +110,6 @@ class RunLayout:
         stem = taken or fresh_stem(bead, logs, home)
         run_dir = home.root / "runs" / stem
         run_dir.mkdir(parents=True, exist_ok=True)
-        prune_check_rounds(home.root / "runs")
-        prune_run_logs(home, time.time())
         task_dir = Path(wt) / TASK_EXCLUDE.rstrip("/") / bead
         task_dir.mkdir(parents=True, exist_ok=True)
         evidence = task_dir / "evidence"

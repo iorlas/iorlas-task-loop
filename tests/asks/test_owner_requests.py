@@ -81,7 +81,7 @@ class RequestFile(unittest.TestCase):
             self.cfg.engine_log(stem).write_text("")
         self.assertEqual(requests.newest_run(self.cfg, "tl-5"), RUN)
         requests.post(self.cfg, RUN, "dash", self.now, park=True)
-        prune_run_logs(self.cfg, self.now + 30 * 86400)
+        prune_run_logs(self.cfg, self.now + 30 * 86400, 7 * 86400)
         self.assertFalse(self.cfg.run_request(RUN).exists())
 
     def test_a_stop_is_acted_on_at_the_beat_through_the_stop_flag(self):

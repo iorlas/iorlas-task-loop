@@ -11,6 +11,7 @@ from taskloop.app.run import layout
 from taskloop.app.track import trail
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdFailure, BeadQuery, Beads
+from taskloop.contracts.runlife import KEEP_DAYS
 
 
 @dataclass(frozen=True)
@@ -40,9 +41,16 @@ def open_beads(repos: list[str], store_of: Callable[[str], Beads]) -> tuple[set[
     return found, ""
 
 
+def kept_days(configured: float) -> float:
+    """The age past which run data of a closed bead goes: the configured one, never under KEEP_DAYS."""
+    return max(configured, KEEP_DAYS)
+
+
 def prune_runs(cfg: ConfigDir, days: float, exempt: set[str], now: float, dry_run: bool) -> list[Gone]:
-    """Run folders, check-round logs and engine logs older than `days` (a bead in `exempt` keeps all of them), then the event log.
-    One scan makes the plan; the dry run prints it and the real run deletes exactly it. -> what went, or with `dry_run` what would."""
+    """The one rule for run data (the only sweep of it): run folders (evidence included), check-round logs and engine logs older than
+    `kept_days(days)`, none of a bead in `exempt` (not closed), then the event log. One scan makes the plan; the dry run prints it and
+    the real run deletes exactly it. -> what went, or with `dry_run` what would."""
+    days = kept_days(days)
     runs = cfg.root / "runs"
     dirs = layout.prune_run_dirs(runs, days, exempt, True)
     rounds = [f for f in layout.prune_check_rounds(runs, days, exempt, True) if not any(d in f.parents for d in dirs)]

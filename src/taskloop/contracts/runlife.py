@@ -1,5 +1,5 @@
-"""How long a run lives, from its typed log alone: the one liveness rule the dashboard and `tl report` share, and the one retention
-the sweep and the dashboard's window share. No process is probed: a run is its records.
+"""How long a run lives, from its typed log alone: the one liveness rule the dashboard and `tl report` share. No process is probed: a run
+is its records. How long its files are kept is KEEP_DAYS, swept by `tl prune` alone.
 
 A run is `ended` once its log has a Close record. Without one it is `live` while its newest record is younger than CRASHED_AFTER,
 and `crashed` after that (the process died without closing: kill -9, power loss). The engine guarantees the margin: while a run-task
@@ -15,7 +15,8 @@ from taskloop.contracts.log import Close, EngineLog
 
 BEAT_EVERY: Final = 60.0  # seconds between the Beat records of a live run
 CRASHED_AFTER: Final = 300.0  # N: an open run whose newest record is older than this has died (5 beats missed)
-RETAIN: Final = 7 * 86400  # seconds a run's log, and its .live/ folder, are kept after the last write
+RETAIN: Final = 7 * 86400  # seconds the dashboard and `tl report` look back; it deletes nothing (the sweep is KEEP_DAYS)
+KEEP_DAYS: Final = 30  # days run data of a closed bead is kept at least (logs, check rounds, evidence); a bead not closed keeps all of it
 
 # The stuck rule (dash-spec 2.4, 2.6), in one place: a step silent this long (no record but Beats, no worker output) is stuck, and so are
 # SAME_RED rounds in a row with the same red checks. The limits sit above the engine's own stops of a silent worker (write_idle_min 25).

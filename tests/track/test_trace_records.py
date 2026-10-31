@@ -195,12 +195,12 @@ class TraceRecords(te.EngineTest):
         run = records(self.eng, rec.RunStart)[-1]
         self.assertEqual((run.started_because, run.parent_id), ("retry", first))
 
-    def test_check_logs_of_runs_older_than_two_weeks_are_pruned_at_start(self):
+    def test_starting_a_run_sweeps_no_check_log_however_old_only_tl_prune_does(self):
         old = homes.config_dir() / "runs" / "t-0-20261001-000000" / "checks"
         old.mkdir(parents=True)
         for name in ("00-a.r1.log", "00-a.log"):
             (old / name).write_text("x")
-            os.utime(str(old / name), (time.time() - 15 * 86400,) * 2)
+            os.utime(str(old / name), (time.time() - 45 * 86400,) * 2)
         new = homes.config_dir() / "runs" / "t-0-20261020-000000" / "checks"
         new.mkdir(parents=True)
         (new / "00-a.r1.log").write_text("x")
@@ -212,8 +212,8 @@ class TraceRecords(te.EngineTest):
             env=snapshot(),
             spawner=real_spawner(),
             git=port_git(), who=who())
-        self.assertFalse((old / "00-a.r1.log").exists())
-        self.assertTrue((old / "00-a.log").exists())  # an old run's single log is its only one: kept
+        self.assertTrue((old / "00-a.r1.log").exists())  # SWEEPKEEP: the bead may still be open; tl prune knows, a start does not
+        self.assertTrue((old / "00-a.log").exists())
         self.assertTrue((new / "00-a.r1.log").exists())
 
     def test_tl_trace_still_reads_the_new_trace(self):

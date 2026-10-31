@@ -21,6 +21,7 @@ from taskloop.adapters.git import RealGit
 from taskloop.app.prune import runs, verb
 from taskloop.app.reconcile.sweep import sweep
 from taskloop.app.run import layout
+from taskloop.app.run.layout import RunLayout
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.config import LoopConfig
 from taskloop.contracts.env import snapshot
@@ -63,7 +64,7 @@ class RunData(unittest.TestCase):
         env.start()
         self.addCleanup(env.stop)
         self.now = time.time()
-        for bead, age in (("x-1", 30), ("x-2", 30), ("x-3", 1)):
+        for bead, age in (("x-1", 45), ("x-2", 45), ("x-3", 1)):
             self.run_of(bead, age)
 
     def run_of(self, bead, age_days):
@@ -116,7 +117,7 @@ class RunData(unittest.TestCase):
         def scan(runs, days, exempt=(), dry_run=False):
             scans.append(dry_run)
             gone = real_scan(runs, days, exempt, dry_run)
-            self.run_of("x-4", 30)  # an old run appears after the scan: it is not in the plan, so it stays
+            self.run_of("x-4", 45)  # an old run appears after the scan: it is not in the plan, so it stays
             return gone
         with mock.patch.object(layout, "prune_run_dirs", scan):
             self.prune(Store())
@@ -126,7 +127,7 @@ class RunData(unittest.TestCase):
     def test_old_saved_suite_logs_go_and_last_json_stays(self):
         rel = self.cfg.root / "releases"
         rel.mkdir(parents=True)
-        for name, age in (("suite-1.log", 30), ("suite-2.log", 1), ("last.json", 30)):
+        for name, age in (("suite-1.log", 45), ("suite-2.log", 1), ("last.json", 45)):
             (rel / name).write_text("x" * 10)
             os.utime(rel / name, (self.now - age * DAY,) * 2)
         self.prune(Store())
@@ -136,6 +137,41 @@ class RunData(unittest.TestCase):
         self.prune(Store())
         again = self.prune(Store())
         self.assertIn("removed 0 item(s)", " ".join(again))
+
+    def test_a_closed_bead_keeps_its_run_data_30_days_whatever_the_config_says(self):
+        for bead, age in (("x-5", 29), ("x-6", 31)):
+            self.run_of(bead, age)
+        self.prune(Store(), days=7)
+        self.assertEqual(self.left(), ["x-3-20260101-000000", "x-5-20260101-000000"])
+        self.assertTrue(self.cfg.engine_log("x-5-20260101-000000").exists())
+        self.assertFalse(self.cfg.engine_log("x-6-20260101-000000").exists())
+
+    def test_a_bead_that_is_not_closed_loses_nothing_at_any_age_by_prune_or_by_a_run_starting(self):
+        self.run_of("x-7", 400)
+        logs = self.cfg.run_dir("x-7-20260101-000000") / "checks"
+        logs.mkdir()
+        (logs / "00-c.r1.log").write_text("log")
+        os.utime(logs / "00-c.r1.log", (self.now - 400 * DAY,) * 2)
+        RunLayout.open("x-8", self.root / "wt", None, self.cfg)  # a run starting sweeps nothing
+        self.prune(Store(("x-7", "open")), days=7)
+        self.assertTrue((logs / "00-c.r1.log").exists())
+        self.assertTrue(self.cfg.engine_log("x-7-20260101-000000").exists())
+        self.assertFalse(self.cfg.engine_log("x-1-20260101-000000").exists())  # a closed one's, 45 days old, went with prune
+
+    def test_the_evidence_of_a_closed_bead_goes_with_its_run_folder_after_30_days_not_before(self):
+        for bead, age in (("x-5", 29), ("x-6", 31)):
+            self.run_of(bead, age)
+            art = self.cfg.run_dir(f"{bead}-20260101-000000") / "artifacts" / "u" / "attempt-1"
+            art.mkdir(parents=True)
+            (art / "check.log").write_text("log")
+            os.utime(art / "check.log", (self.now - age * DAY,) * 2)
+            os.utime(art, (self.now - age * DAY,) * 2)
+            os.utime(art.parent, (self.now - age * DAY,) * 2)
+            os.utime(art.parent.parent, (self.now - age * DAY,) * 2)
+            os.utime(self.cfg.run_dir(f"{bead}-20260101-000000"), (self.now - age * DAY,) * 2)
+        self.prune(Store())
+        self.assertTrue((self.cfg.run_dir("x-5-20260101-000000") / "artifacts/u/attempt-1/check.log").exists())
+        self.assertFalse(self.cfg.run_dir("x-6-20260101-000000").exists())
 
     def test_the_one_age_number_is_the_config_key(self):
         self.prune(Store(), days=60)

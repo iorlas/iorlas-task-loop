@@ -142,7 +142,7 @@ class LoopConfig(Rec):
     fault_cooldown: float = 1800
     absent: float = 600  # ready beads, no live loop and no beat for this long: the loop is absent
     reload_fallback: float = 120  # a run-task that dies this soon after a re-exec is put back on the version it came from
-    keep_days: float = 14  # `tl prune`: run data older than this goes (open or parked beads exempt), and a merged build tree idle this long
+    keep_days: float = 14  # `tl prune`: run data past this goes (30 days at least; not a bead not closed), a merged tree idle this long
     min_free_gb: float = 5  # the loop claims nothing, and exits 0, while the config dir's disk has less free than this
     build_dir: str = "~/Workspaces/wt"  # `tl prune` removes merged, clean worktrees under here (never a loop slot)
 
