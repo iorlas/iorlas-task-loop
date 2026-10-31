@@ -33,6 +33,7 @@ from taskloop.contracts import (
     snapshots,
     trace,
     usage,
+    worktrees,
 )
 from taskloop.contracts.enums import AskClass, AskKind, AskStatus, LockWhat, Outcome, Result, WaitWhat, WhyCode
 from taskloop.contracts.ids import BeadId, CheckId, TreeSha
@@ -393,6 +394,7 @@ OTHERS = {
     "ConfigEntry": gitfacts.ConfigEntry(where="file:/r/.git/config", key="core.bare", value="true"),
     "GitOutcome": gitfacts.GitOutcome(ok=False, output="conflict"),
     "DiffEntry": gitfacts.DiffEntry(status="R", path="b.txt", old="a.txt"),
+    "Owned": worktrees.Owned(path="/r/.worktrees/loop-1", repo="/r", kind="loop", run="tl-1", host="h", created=T, bead="x-1"),
     "Checkout": slots.Checkout(path="/r/.slots/s1", branch="task/x-1", main=False),
     "WindowStatus": snapshots.WindowStatus(name="weekly", used_pct=9.0, resets_at=T + 600),
     "LaneStatus": snapshots.LaneStatus(

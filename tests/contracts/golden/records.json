@@ -901,6 +901,15 @@
   "path": "b.txt",
   "old": "a.txt"
  },
+ "Owned": {
+  "path": "/r/.worktrees/loop-1",
+  "repo": "/r",
+  "kind": "loop",
+  "run": "tl-1",
+  "host": "h",
+  "created": 1793050200.5,
+  "bead": "x-1"
+ },
  "Checkout": {
   "path": "/r/.slots/s1",
   "branch": "task/x-1",
