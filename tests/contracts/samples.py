@@ -143,6 +143,8 @@ LOG = {
     "step_start": _log(log.StepStart, id="n4", step="write", text="write: stage 2/2", stage=2, stages=2, round=1, write=1, fix=0),
     "step_end": _log(log.StepEnd, id="n4", step="write", outcome="done", detail="", exec_seconds=231.0),
     "artifacts": _log(log.Artifacts, id="n4", step="write", names=["menu.png", "report.pdf"]),
+    "evidence": _log(log.Evidence, call_id="unity-tests", attempt=2, bytes=48213, artifact="artifacts/unity-tests/attempt-2/check.log",
+                     artifact_hash="9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"),
     "call_start": _log(log.CallStart, id="c3", n=3, step="write", node="n4", role="worker", resume=True),
     "call_end": _log(
         log.CallEnd,
@@ -348,6 +350,7 @@ OTHERS = {
         writer=False,
         writer_max_s=90.0,
         tail_log="client/Logs/unity-project-files.log",
+        keep=["client/Logs/*.log", "client/TestResults/*.xml"],
         reads=[CheckId("unity-build")],
     ),
     "plancheck.Ref": plancheck.Ref(check=CheckId("unity-tests")),

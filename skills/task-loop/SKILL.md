@@ -230,6 +230,9 @@ over the whole run, replans included.
 **Who runs a check.** A repo check is the writer's to run when its longest green run took at most `engine.writer_check_max_s`, or says
 `"writer": true` (`false`: never) or its own `"writer_check_max_s"`; a `run: gate` check always is the engine's. `"tail_log"` names a log of the tree
 whose first 20 `error CS` lines join a red's output when it shows none (the analyzers default to `client/Logs/unity-project-files.log`).
+**Evidence.** After every attempt of a check its log, and the files of the tree its `"keep"` globs name (a Unity log, a result XML), are
+copied (never linked) into `<config>/runs/<run id>/artifacts/<check>/attempt-N/`, read-only, one directory per attempt, so a retry, the
+next run in the slot or the slot's reset cannot overwrite them; each file is one `evidence` row (`artifact`, `artifact_hash` sha256, `bytes`).
 **Duplicates.** A plan check cannot be a copy of a repo check (a ref names it). Two identical adhoc commands in one block run once. 
 
 **The gate (a registry of checks).** `engine.checks` is the one registry of the repo's checks, each named once. A check says where it runs

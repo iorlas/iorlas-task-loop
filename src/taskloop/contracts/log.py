@@ -253,6 +253,15 @@ class Artifacts(LogRec, tag="artifacts"):
 
 
 @final
+class Evidence(LogRec, tag="evidence"):
+    """One file a check attempt left (its log, the files its `keep` names), copied under the run folder before its slot can be reset:
+    `artifact` is its path relative to the run folder (artifacts/<check>/attempt-N/<name>), `artifact_hash` the sha256 of the copy."""
+
+    attempt: int
+    bytes: int
+
+
+@final
 class Warn(LogRec, tag="warn"):
     text: str
 
@@ -311,7 +320,7 @@ class Close(LogRec, tag="close"):
 EngineLog = (
     RunStart | StepStart | StepEnd | CallStart | CallEnd | CmdStart | CmdEnd | CheckStart | CheckEnd | GateStart | GateEnd | LandTry
     | WaitStart | WaitEnd | Lock | Unlock | VendorError | Kill | Overrun | RetryDecision | Transition | Reload | Checks | Artifacts
-    | Warn | Note | Said | Assumed | Stuck | Beat | Close
+    | Evidence | Warn | Note | Said | Assumed | Stuck | Beat | Close
 )
 
 

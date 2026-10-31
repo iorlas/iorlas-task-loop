@@ -8,6 +8,7 @@ from pathlib import Path
 from taskloop.app.checks.base import BaseCheck
 from taskloop.app.checks.container import Box
 from taskloop.app.checks.host import CheckHost
+from taskloop.app.checks.keep import keep
 from taskloop.contracts.argv import argv_of
 from taskloop.contracts.checks import UNVERIFIED_EXIT, Check
 from taskloop.contracts.enums import WaitWhat
@@ -75,6 +76,7 @@ class Attempts:
         rc, tail = self.host.sh(argv, timeout=c.wall_min * 60, save=log, what="check", env=env, stop=stop)
         if where:
             log.write_text(where + "\n" + self._read(log, ""), encoding="utf-8")
+        keep(self.host, c, log)  # before a retry, the next check or the slot's reset overwrites what this attempt left
         return rc, tail
 
     @staticmethod

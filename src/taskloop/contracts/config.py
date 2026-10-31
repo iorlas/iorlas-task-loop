@@ -93,6 +93,7 @@ class CheckSpec(Rec):
     writer: bool | None = None  # true: the writer may run it whatever it costs; false: never; absent: by how long it takes
     writer_check_max_s: float | None = None  # this check's own cut for "too slow for the writer" (else engine.writer_check_max_s)
     tail_log: str = ""  # a log of the tree whose first compile errors join this check's red output when it shows none
+    keep: list[str] = msgspec.field(default_factory=list)  # tree globs (a Unity log, a result XML) copied after each attempt
     where: Literal["host", "container"] = msgspec.field(default="host", name="in")  # container: needs engine.container
     why: str = ""  # run gate: why no plan check may run this command (it is told to the planner)
     reads: list[CheckId] = msgspec.field(default_factory=list)  # checks whose log and exit code it reads: it runs after them

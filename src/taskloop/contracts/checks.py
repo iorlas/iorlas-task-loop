@@ -71,6 +71,7 @@ class Check(Rec):
     writer: bool | None = None  # True: the writer may run it, whatever it cost; False: never; None: by its duration
     writer_max_s: float | None = None  # its own cut for "too slow for the writer", else the engine's
     tail_log: str = ""  # a log of the tree whose compile errors join a red check's output when it shows none (project files not made)
+    keep: list[str] = msgspec.field(default_factory=list)  # globs in the tree of files copied into the run folder after each attempt
     fix: str = ""  # a command (text) run before the round on the worktree: it rewrites what the check would only complain of
     container: bool = False  # run in a container on a copy of the worktree when docker is reachable (the host otherwise)
     reads: list[CheckId] = msgspec.field(default_factory=list)  # registered checks whose log and exit code it reads: it runs after them

@@ -580,6 +580,10 @@
   "writer": false,
   "writer_max_s": 90.0,
   "tail_log": "client/Logs/unity-project-files.log",
+  "keep": [
+   "client/Logs/*.log",
+   "client/TestResults/*.xml"
+  ],
   "fix": "",
   "container": false,
   "reads": [
@@ -1258,6 +1262,7 @@
      "writer": null,
      "writer_check_max_s": null,
      "tail_log": "",
+     "keep": [],
      "in": "container",
      "why": "",
      "reads": [],
@@ -1284,6 +1289,7 @@
      "writer": null,
      "writer_check_max_s": null,
      "tail_log": "",
+     "keep": [],
      "in": "host",
      "why": "",
      "reads": [],
