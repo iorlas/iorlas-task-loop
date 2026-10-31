@@ -103,8 +103,10 @@ class RunLocator:
     def _put(self, m: RunManifest) -> None:
         JsonStore(self.cfg.run_manifest(m.run), RunManifest).write(m)
 
-    def create(self, repo: str, bead: str, now: float, loop: str | None = None) -> RunBundle:
-        """A new run: a fresh opaque id, its folder and its manifest (state created, owned by this process)."""
+    def create(self, repo: str, bead: str, now: float, loop: str | None = None, *, mode: str = "", owner: str = "",
+               session: str = "") -> RunBundle:
+        """A new run: a fresh opaque id, its folder and its manifest (state created, owned by this process). `mode`, `owner` and
+        `session` say what kind of run it is and whose."""
         while True:
             run = str(RunId.new(now))
             try:
@@ -112,7 +114,8 @@ class RunLocator:
             except FileExistsError:
                 continue
             break
-        m = RunManifest(run=run, repo=repo, bead=bead, started=now, loop=loop, heartbeat=now, pid=os.getpid(), host=host_name())
+        m = RunManifest(run=run, repo=repo, bead=bead, started=now, loop=loop, heartbeat=now, pid=os.getpid(), host=host_name(),
+                        mode=mode, owner=owner, session=session)
         self._put(m)
         self.cfg.engine_dir().mkdir(parents=True, exist_ok=True)
         return self.bundle(m)
@@ -128,6 +131,14 @@ class RunLocator:
              else RunManifest(run=run, repo=repo, bead=bead, started=now, **own))
         self._put(m)
         return self.bundle(m)
+
+    def add_bead(self, run: str, bead: str) -> None:
+        """A run learns a bead it works on: the first fills `bead`, the others join `beads` (once each)."""
+        old = self.get(run)
+        if old is None or not bead or bead == old.manifest.bead or bead in old.manifest.beads:
+            return
+        m = old.manifest
+        self._put(m.replace(bead=bead) if not m.bead else m.replace(beads=(*m.beads, bead)))
 
     def beat(self, run: str, now: float) -> None:
         """The engine's tick: the run is running and alive as of `now`. A run that already has a terminal state keeps it."""

@@ -196,3 +196,7 @@ class RunManifest(Rec):
     pid: int = 0
     host: str = ""
     reason: str = ""
+    mode: str = ""  # what kind of run (stage:land-stack, ...): the board labels the run from here, not from the log
+    owner: str = ""
+    session: str = ""
+    beads: tuple[str, ...] = ()  # a run of several beads (a land-stack): the first is `bead`, the others follow here

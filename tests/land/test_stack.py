@@ -8,6 +8,7 @@ import unittest
 from argparse import Namespace
 from pathlib import Path
 from types import SimpleNamespace
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -20,6 +21,7 @@ from taskloop.adapters import landlock, locks
 from taskloop.app.land.cmds import Cmds
 from taskloop.app.land.forge import Forge
 from taskloop.app.land.stack import MODE, Stack
+from taskloop.app.land.stackgate import StackGate
 from taskloop.cli.land_stack import cmd_land_stack
 from taskloop.contracts.forge import StackItem
 from taskloop.contracts.gitfacts import LogRow, Ref
@@ -41,6 +43,7 @@ class RepoGit(ScriptedGit):
     def __init__(self, local: dict[str, str], sim: ForgeSim) -> None:
         super().__init__()
         self.local, self.worktrees, self.deleted, self.sim = dict(local), {}, [], sim
+        self.fetched, self.heads, self.dirty_at = set(), {}, set()  # oids fetched in, HEAD of a path, dirty paths
 
     def ask(self, *argv):
         """The remote's answer to a git command, as the sim gives it; git's refusal is a SlotGitError."""
@@ -57,9 +60,25 @@ class RepoGit(ScriptedGit):
 
     def fetch(self, d):
         self.ask("fetch", "origin")
+        self.fetched |= set(self.sim.remote.values())
 
     def rev_parse(self, d, rev):
+        if rev.endswith("^{tree}"):
+            return "tree-" + rev[:6]
+        if rev in self.fetched or rev == "origin/main":
+            return rev
+        if rev == "HEAD":
+            return self.heads.get(d, "")
         return self.local.get(rev.removeprefix("refs/heads/"), "")
+
+    def config_get(self, d, key):
+        return "git@example.com:o/r.git"
+
+    def common_dir(self, d):
+        return "/repo/.git"
+
+    def dirty(self, d):
+        return d in self.dirty_at
 
     def log(self, d, include, exclude=None, limit=0, grep=""):
         return [LogRow(oid=include[0], time=0, subject="subject of " + include[0][:4])]
@@ -87,11 +106,14 @@ class StackCase(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.cfg = ConfigDir(self.tmp.name)
+        self.repo = Path(self.tmp.name) / "repo"
+        self.repo.mkdir()
         self.sim = ForgeSim()
         self.git = RepoGit(OID, self.sim)
         self.recorded: list[tuple[str, str, bool]] = []
         self.rc_of_record = 0
         self.synced = DoltPush(0, "")
+        self.beads: list[str] = []
 
     def locked_now(self) -> bool:
         path = landlock.land_lock_path(self.cfg, "git@example.com:o/r.git")
@@ -108,10 +130,12 @@ class StackCase(unittest.TestCase):
     def deliver(self, *items, **kw):
         run = "land-stack-20261031-100000"
         log = RunLog(real_stores(self.cfg).run_log(run), run_id=run, host="h")
-        cmds = Cmds(self.sim, log, "/repo")
+        cmds = Cmds(self.sim, log, str(self.repo))
         lock = landlock.land_lock_path(self.cfg, "git@example.com:o/r.git")
-        forge = Forge(cmds, self.git, "/repo", "main")
-        stack = Stack(forge, cmds, log, self.git, "/repo", lock, self.record, lambda: self.synced, "tl-me", "sess-1", **kw)
+        forge = Forge(cmds, self.git, str(self.repo), "main")
+        gate = StackGate(cmds, self.git, real_stores(self.cfg), str(self.repo), "origin/main", ["tl"])
+        stack = Stack(forge, cmds, log, self.git, str(self.repo), lock, self.record, lambda: self.synced, "tl-me", "sess-1", gate,
+                      named=self.beads.append, **kw)
         self.rc = stack.run(list(items))
         self.rows = records(self.cfg.engine_log(run))
         return self.rc
@@ -137,7 +161,7 @@ class Delivery(StackCase):
         starts = self.kinds("cmd_start")
         self.assertGreaterEqual(len(starts), len(self.sim.calls))
         self.assertEqual({r["run_id"] for r in self.rows}, {"land-stack-20261031-100000"})
-        self.assertEqual([r["text"] for r in starts][: len(self.sim.calls)], self.sim.calls)
+        self.assertEqual([r["text"] for r in starts if r["text"] in self.sim.calls], self.sim.calls)
         self.assertEqual(len(starts), len(self.kinds("cmd_end")))
         self.assertEqual(self.kinds("close")[0]["outcome"], "landed")
         self.assertEqual(self.kinds("lock")[0]["what"], "land")
@@ -246,20 +270,105 @@ class Delivery(StackCase):
         self.assertEqual(self.deliver(StackItem(branch="task/a")), 127)
 
 
+class RemoteOnly(StackCase):
+    def test_a_branch_only_origin_has_is_fetched_and_delivered(self):
+        del self.git.local["task/b"]
+        self.sim.remote["task/b"] = OID["task/b"]
+        self.assertEqual(self.deliver(StackItem(branch="task/b")), 0)
+        self.assertEqual(self.sim.ran("git ls-remote origin refs/heads/task/b")[:1], ["git ls-remote origin refs/heads/task/b"])
+        self.assertTrue(self.sim.ran("git fetch origin"))
+        self.assertEqual([b for b, _, _ in self.recorded], ["b"])
+
+    def test_a_name_that_exists_nowhere_is_refused_naming_the_commands(self):
+        self.assertEqual(self.deliver(StackItem(branch="task/zzz")), 1)
+        why = self.kinds("warn")[0]["text"]
+        self.assertIn("git ls-remote origin refs/heads/task/zzz", why)
+        self.assertIn("git rev-parse --verify refs/heads/task/zzz", why)
+        self.assertEqual(self.sim.ran("gh pr create"), [])
+
+    def test_a_failing_fetch_names_the_command(self):
+        del self.git.local["task/b"]
+        self.sim.remote["task/b"] = OID["task/b"]
+        self.sim.fail["git fetch"] = 4
+        self.assertEqual(self.deliver(StackItem(branch="task/b")), 1)
+        self.assertIn("git fetch origin", self.kinds("warn")[0]["text"])
+
+
+class GateCase(StackCase):
+    def setUp(self):
+        super().setUp()
+        (self.repo / ".task-loop.json").write_text('{"engine": {"checks": [{"id": "lint", "argv": ["true"], "run": "gate"}]}}')
+        self.green: set[str] = set()  # trees the store holds a pass for
+        patch = mock.patch("taskloop.app.land.stackgate.repo_green", lambda st, git, wt, step, tree, base: tree in self.green)
+        patch.start()
+        self.addCleanup(patch.stop)
+
+
+class Gated(GateCase):
+    def test_a_green_tree_is_delivered_without_a_run(self):
+        self.green.add("tree-" + OID["task/a"][:6])
+        self.assertEqual(self.deliver(StackItem(branch="task/a")), 0)
+        self.assertEqual(self.sim.ran("tl check"), [])
+
+    def test_a_red_tree_with_no_worktree_is_refused_with_the_command_and_nothing_pushed(self):
+        self.assertEqual(self.deliver(StackItem(branch="task/a"), StackItem(branch="task/b")), 1)
+        self.assertIn("tl check --repo", self.kinds("warn")[0]["text"])
+        self.assertEqual(self.sim.ran("git push"), [])
+        self.assertEqual(self.sim.ran("gh pr"), self.sim.ran("gh pr list"))
+
+    def test_a_red_tree_in_a_clean_worktree_is_gated_then_delivered(self):
+        self.git.worktrees["task/a"] = "/wt/a"
+        self.git.heads["/wt/a"] = OID["task/a"]
+        real_run = self.sim.run
+
+        def run(argv, **kw):
+            if argv[:2] == ["tl", "check"]:
+                self.green.add("tree-" + OID["task/a"][:6])
+            return real_run(argv, **kw)
+
+        self.sim.run = run
+        self.assertEqual(self.deliver(StackItem(branch="task/a")), 0)
+        self.assertEqual(self.sim.ran("tl check --repo /wt/a"), ["tl check --repo /wt/a"])
+
+    def test_a_gate_that_stays_red_stops_with_its_exit_code_and_later_items_untouched(self):
+        self.git.worktrees["task/a"] = "/wt/a"
+        self.git.heads["/wt/a"] = OID["task/a"]
+        self.sim.fail["tl check"] = 6
+        self.assertEqual(self.deliver(StackItem(branch="task/a"), StackItem(branch="task/b")), 6)
+        self.assertEqual(self.sim.ran("git push"), [])
+        self.assertIn("tl check --repo /wt/a", self.kinds("warn")[0]["text"])
+
+    def test_a_dirty_worktree_is_not_gated(self):
+        self.git.worktrees["task/a"] = "/wt/a"
+        self.git.heads["/wt/a"] = OID["task/a"]
+        self.git.dirty_at.add("/wt/a")
+        self.assertEqual(self.deliver(StackItem(branch="task/a")), 1)
+        self.assertEqual(self.sim.ran("tl check"), [])
+
+    def test_a_repo_without_a_gate_step_passes(self):
+        (self.repo / ".task-loop.json").write_text('{"engine": {"checks": [{"id": "x", "argv": ["true"], "run": "stage"}]}}')
+        self.assertEqual(self.deliver(StackItem(branch="task/a")), 0)
+
+
 class Verb(StackCase):
     def test_the_verb_makes_a_run_the_board_finds_through_its_manifest(self):
-        a = Namespace(items=["task/a", "task/b"], repo="/repo", base="main", method="squash", bead=["task/b=tl-b"], supersede=[],
+        a = Namespace(items=["task/a", "task/b"], repo=str(self.repo), base="main", method="squash", bead=["task/b=tl-b"], supersede=[],
                       wait_min=None)
         store = SimpleNamespace(dolt_push=lambda: DoltPush(0, ""))
         who = Identity(actor="tl-me", home=self.tmp.name, session="sess-1")
         with contextlib.redirect_stdout(io.StringIO()):
-            rc = cmd_land_stack(a, who, self.git, self.sim, store, self.record)
+            rc = cmd_land_stack(a, who, self.git, self.sim, store, self.record, ["tl"])
         self.assertEqual(rc, 0)
         (bundle,) = RunLocator(self.cfg).runs()
         self.assertIsNotNone(bundle.manifest.ended)
         rows = records(bundle.log)
         self.assertEqual(rows[0]["mode"], MODE)
         self.assertEqual([b for b, _, _ in self.recorded], ["a", "tl-b"])
+        m = bundle.manifest
+        self.assertEqual((m.mode, m.owner, m.session, m.bead, m.beads), (MODE, "tl-me", "sess-1", "a", ("tl-b",)))
+        self.assertEqual(m.state.value, "done")
+        self.assertTrue(any(r["kind"] == "cmd_start" and r["text"].startswith("git push") for r in rows))
+        self.assertTrue(any(r["kind"] == "cmd_start" and r["text"].startswith("gh pr merge") for r in rows))
 
 
 if __name__ == "__main__":

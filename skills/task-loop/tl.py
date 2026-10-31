@@ -140,7 +140,7 @@ def v_land_stack(a: Any, c: Ctx) -> int:
     repo = str(Path(a.repo).resolve())
     store = beadtools.bd_store(c.who.actor, repo)
     return cli_land_stack.cmd_land_stack(a, c.who, c.git, c.spawner, store, lambda bead, sha: verbs.land(
-        c.who, BeadId(bead), sha, store, c.git, repo, f"origin/{a.base}"))
+        c.who, BeadId(bead), sha, store, c.git, repo, f"origin/{a.base}"), ["uv", "run", "--script", str(Path(__file__).resolve())])
 
 
 def owner_parsers(sp):

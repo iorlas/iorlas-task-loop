@@ -7,7 +7,8 @@ from pathlib import Path
 
 from taskloop.app.land.cmds import Cmds, Runs
 from taskloop.app.land.forge import Forge
-from taskloop.app.land.stack import Stack, lock_path
+from taskloop.app.land.stack import MODE, Stack, lock_path
+from taskloop.app.land.stackgate import StackGate
 from taskloop.contracts.forge import StackItem
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.locator import RunLocator
@@ -36,18 +37,21 @@ def pairs(values: list[str], flag: str) -> dict[str, str]:
 
 
 def cmd_land_stack(a: argparse.Namespace, who: Identity, git: Git, spawner: Runs, store: Beads,
-                   record: Callable[[str, str], int]) -> int:
-    """`record(bead, sha)` writes `tl land` (the caller owns that verb); `store` is bd for the Dolt sync."""
+                   record: Callable[[str, str], int], tl: list[str]) -> int:
+    """`record(bead, sha)` writes `tl land` (the caller owns that verb); `store` is bd for the Dolt sync; `tl` is the argv that runs
+    tl itself (the gate runs `tl check` through it)."""
     repo = str(Path(a.repo).resolve())
     beads, old = pairs(a.bead, "--bead"), pairs(a.supersede, "--supersede")
     items = [item_of(t, beads, old) for t in a.items]
     locator = RunLocator(who.config)
-    run = locator.create(repo, "", time.time()).run  # the run's manifest: the board finds a run through it
-    log = RunLog(real_stores(who.config).run_log(run), echo=None, run_id=run, host=socket.gethostname())
+    run = locator.create(repo, "", time.time(), mode=MODE, owner=who.actor, session=who.session).run  # the board finds a run through it
+    stores = real_stores(who.config)
+    log = RunLog(stores.run_log(run), echo=None, run_id=run, host=socket.gethostname())
     cmds = Cmds(spawner, log, repo)
     lock = lock_path(who.config, git, repo)
     forge = Forge(cmds, git, repo, a.base, a.method)
-    stack = Stack(forge, cmds, log, git, repo, lock, record, store.dolt_push, who.actor, who.session, a.wait_min)
+    stack = Stack(forge, cmds, log, git, repo, lock, record, store.dolt_push, who.actor, who.session,
+                  StackGate(cmds, git, stores, repo, f"origin/{a.base}", tl), a.wait_min, lambda bead: locator.add_bead(run, bead))
     rc = 1
     try:
         rc = stack.run(items)

@@ -12,6 +12,7 @@ from pathlib import Path
 from taskloop.adapters import landlock
 from taskloop.app.land.cmds import Cmds, Stop
 from taskloop.app.land.forge import Forge
+from taskloop.app.land.stackgate import StackGate
 from taskloop.contracts import log as rec
 from taskloop.contracts.enums import Outcome, WhyCode
 from taskloop.contracts.forge import CLOSED, MERGED, OPEN, Pr, StackItem
@@ -32,9 +33,11 @@ def lock_path(home: ConfigDir, git: Git, repo: str) -> Path:
 
 class Stack:
     def __init__(self, forge: Forge, cmds: Cmds, log: RunLog, git: Git, repo: str, lock: Path, record: Callable[[str, str], int],
-                 sync: Callable[[], DoltPush], owner: str, session: str, wait_min: float | None = None) -> None:
+                 sync: Callable[[], DoltPush], owner: str, session: str, gate: StackGate, wait_min: float | None = None,
+                 named: Callable[[str], None] = lambda _bead: None) -> None:
         self.forge, self.cmds, self.log, self.git, self.repo, self.lock = forge, cmds, log, git, repo, lock
         self.record, self.sync, self.owner, self.session, self.wait_min = record, sync, owner, session, wait_min
+        self.gate, self.named = gate, named  # named(bead): the run's manifest learns each bead
         self.recorded = 0
         self.synced = False  # bd sync was tried
         self.last = ""  # the merge commit of the last item delivered
@@ -63,10 +66,15 @@ class Stack:
         if not item.bead and branch.startswith(TASK):  # a task branch names its bead
             item = item.replace(bead=branch.removeprefix(TASK))
         self.log.stamp["bead"] = item.bead
+        self.named(item.bead)
         sid = self.log.next_id("s")
         name = f"land:{branch}"
         self.log.emit(rec.StepStart(id=sid, step=name, text=f"land {branch}"))
         try:
+            if pr is None or pr.state == OPEN:  # a PR already merged or closed is prepare's to judge
+                if self.gate.steps():
+                    self.forge.fetch()  # the base and the head as origin has them now
+                self.gate.require(branch, oid)
             pr = self.prepare(item, branch, oid, pr)
             head = pr.head_oid
             sha = self.merged(item, pr, head)
@@ -82,10 +90,20 @@ class Stack:
         if item.pr:
             pr = self.forge.view(item.pr)
             return pr.head_ref, pr.head_oid, pr
-        oid = self.git.rev_parse(self.repo, f"refs/heads/{item.branch}")
-        if not oid:
-            raise Stop(1, f"no local branch {item.branch} in {self.repo}")
+        oid = self.cmds.port(f"git rev-parse --verify refs/heads/{item.branch}",
+                             lambda: self.git.rev_parse(self.repo, f"refs/heads/{item.branch}")) or self.from_remote(item.branch)
         return item.branch, oid, self.forge.find(item.branch, oid)
+
+    def from_remote(self, branch: str) -> str:
+        """A branch with no local twin: the oid origin shows for it, fetched so the clone has it."""
+        oid = self.forge.remote_oid(branch)
+        if not oid:
+            raise Stop(1, f"no branch {branch}: not local (git rev-parse --verify refs/heads/{branch}) and not on {self.forge.remote} "
+                          f"(git ls-remote {self.forge.remote} refs/heads/{branch})")
+        self.forge.fetch()
+        if not self.cmds.port(f"git rev-parse --verify {oid[:12]}", lambda: self.git.rev_parse(self.repo, oid)):
+            raise Stop(1, f"{branch} is at {oid[:12]} on {self.forge.remote} but git fetch {self.forge.remote} did not bring it")
+        return oid
 
     def prepare(self, item: StackItem, branch: str, oid: str, pr: Pr | None) -> Pr:
         """The branch pushed and verified, the PR open and aimed at the base."""

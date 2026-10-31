@@ -1201,7 +1201,13 @@
   "heartbeat": 1793050259.5,
   "pid": 4242,
   "host": "box",
-  "reason": "landed"
+  "reason": "landed",
+  "mode": "stage:land-stack",
+  "owner": "tl-me",
+  "session": "s1",
+  "beads": [
+   "tl-7y7"
+  ]
  },
  "DoneMemo": {
   "v": 1,
