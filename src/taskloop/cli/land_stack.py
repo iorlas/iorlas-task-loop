@@ -5,12 +5,13 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
-from taskloop.app.land.cmds import Cmds
+from taskloop.app.land.cmds import Cmds, Runs
 from taskloop.app.land.forge import Forge
 from taskloop.app.land.stack import Stack, lock_path
 from taskloop.contracts.forge import StackItem
 from taskloop.contracts.identity import Identity
-from taskloop.contracts.ports import Beads, Git, Spawner
+from taskloop.contracts.locator import RunLocator
+from taskloop.contracts.ports import Beads, Git
 from taskloop.stores.real import real_stores
 from taskloop.stores.runlog import RunLog
 
@@ -33,19 +34,21 @@ def pairs(values: list[str], flag: str) -> dict[str, str]:
     return out
 
 
-def cmd_land_stack(a: argparse.Namespace, who: Identity, git: Git, spawner: Spawner, store: Beads,
+def cmd_land_stack(a: argparse.Namespace, who: Identity, git: Git, spawner: Runs, store: Beads,
                    record: Callable[[str, str], int]) -> int:
     """`record(bead, sha)` writes `tl land` (the caller owns that verb); `store` is bd for the Dolt sync."""
     repo = str(Path(a.repo).resolve())
     beads, old = pairs(a.bead, "--bead"), pairs(a.supersede, "--supersede")
     items = [item_of(t, beads, old) for t in a.items]
-    run = time.strftime("land-stack-%Y%m%d-%H%M%S")
+    locator = RunLocator(who.config)
+    run = locator.create(repo, "", time.time()).run  # the run's manifest: the board finds a run through it
     log = RunLog(real_stores(who.config).run_log(run), echo=None, run_id=run, host=socket.gethostname())
     cmds = Cmds(spawner, log, repo)
     lock = lock_path(who.config, git, repo)
     forge = Forge(cmds, git, repo, a.base, a.method)
     stack = Stack(forge, cmds, log, git, repo, lock, record, store.dolt_push, who.actor, who.session, a.wait_min)
     rc = stack.run(items)
+    locator.finish(run, time.time())
     print(f"land-stack {'landed ' + str(len(items)) if rc == 0 else 'stopped, exit ' + str(rc)} (run {run})")
     return rc
 

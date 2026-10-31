@@ -1,9 +1,13 @@
 """`tl land-stack`: a stack of branches or PRs is delivered in order, each PR's own merge commit recorded, under the land lock, every
 command a row of one run, and the first failure ends it with its own exit code and touches nothing later."""
+import contextlib
+import io
 import sys
 import tempfile
 import unittest
+from argparse import Namespace
 from pathlib import Path
+from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -16,8 +20,11 @@ from taskloop.adapters import landlock, locks
 from taskloop.app.land.cmds import Cmds
 from taskloop.app.land.forge import Forge
 from taskloop.app.land.stack import MODE, Stack
+from taskloop.cli.land_stack import cmd_land_stack
 from taskloop.contracts.forge import StackItem
 from taskloop.contracts.gitfacts import LogRow, Ref
+from taskloop.contracts.identity import Identity
+from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.locks import LockTimeout
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import DoltPush
@@ -237,6 +244,22 @@ class Delivery(StackCase):
     def test_a_missing_gh_is_exit_127(self):
         self.sim.missing = True
         self.assertEqual(self.deliver(StackItem(branch="task/a")), 127)
+
+
+class Verb(StackCase):
+    def test_the_verb_makes_a_run_the_board_finds_through_its_manifest(self):
+        a = Namespace(items=["task/a", "task/b"], repo="/repo", base="main", method="squash", bead=["task/b=tl-b"], supersede=[],
+                      wait_min=None)
+        store = SimpleNamespace(dolt_push=lambda: DoltPush(0, ""))
+        who = Identity(actor="tl-me", home=self.tmp.name, session="sess-1")
+        with contextlib.redirect_stdout(io.StringIO()):
+            rc = cmd_land_stack(a, who, self.git, self.sim, store, self.record)
+        self.assertEqual(rc, 0)
+        (bundle,) = RunLocator(self.cfg).runs()
+        self.assertIsNotNone(bundle.manifest.ended)
+        rows = records(bundle.log)
+        self.assertEqual(rows[0]["mode"], MODE)
+        self.assertEqual([b for b, _, _ in self.recorded], ["a", "tl-b"])
 
 
 if __name__ == "__main__":
