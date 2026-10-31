@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, Final, Protocol, override
 
 from atomic_io import atomic_write_bytes, atomic_write_json
-from jsonl_log import Entry, Jsonl
+from jsonl_log import KEEP, ROTATE_BYTES, Entry
 
 from taskloop.contracts import events, log, paths, wire
 from taskloop.contracts.ask import Ask, AskAnswer, ThreadEntry
@@ -17,6 +17,7 @@ from taskloop.contracts.guard import guard
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ledger import LedgerEntry, LedgerEvent
 from taskloop.contracts.loop import BadVersions, LoopCommand, LoopState, Rest
+from taskloop.contracts.rotating import RotatingJsonl
 from taskloop.contracts.run import LoopLogLine
 from taskloop.contracts.snapshots import (
     DashState,
@@ -135,8 +136,8 @@ class Page[T]:
 class JsonlStore[T]:
     """An append-only family: one record per line, read back by byte cursor."""
 
-    def __init__(self, path: Path, decode: Any, cls: type[Any] | None = None) -> None:
-        self.file = Jsonl(path)
+    def __init__(self, path: Path, decode: Any, cls: type[Any] | None = None, rotate_bytes: int = ROTATE_BYTES, keep: int = KEEP) -> None:
+        self.file = RotatingJsonl(path, rotate_bytes, keep)
         self._decode = decode
         self._cls = cls
 

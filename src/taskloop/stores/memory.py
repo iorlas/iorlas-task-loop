@@ -10,7 +10,7 @@ from collections.abc import Callable, Generator
 from pathlib import Path
 from typing import Any, override
 
-from jsonl_log import Entry, Jsonl, decode_object
+from jsonl_log import Entry, decode_object
 from jsonl_log.cursor import _parse  # shelf lacks: a public parse of in-memory bytes
 
 from taskloop.contracts import events, log, wire
@@ -23,6 +23,7 @@ from taskloop.contracts.enums import LockWhat
 from taskloop.contracts.ledger import Adr, AdrUse, LedgerEntry
 from taskloop.contracts.locks import LockRecord, LockTimeout, Ticket, pid_alive
 from taskloop.contracts.loop import LoopCommand, LoopState, Rest
+from taskloop.contracts.rotating import RotatingJsonl
 from taskloop.contracts.stores import Absent, AskStore, ForeignVersion, JsonlStore, Present, Read, Torn, refusal
 from taskloop.contracts.trace import RunTrace
 from taskloop.contracts.wire import Refused
@@ -76,7 +77,7 @@ class MemDocSet[T](DocSet[T]):
         return sorted(k for k, d in self.docs.items() if d.data is not None)
 
 
-class MemJsonl(Jsonl):
+class MemJsonl(RotatingJsonl):
     """The Jsonl file API over a bytearray, parsed by the same code."""
 
     def __init__(self) -> None:
