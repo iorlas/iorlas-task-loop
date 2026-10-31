@@ -91,7 +91,6 @@ from taskloop.cli import status
 from taskloop.cli import wait as cli_wait
 from taskloop.contracts.env import Env, snapshot
 from taskloop.contracts.identity import Identity
-from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ports import Git, Spawner
 
 HERE = Path(__file__).resolve().parent
@@ -141,8 +140,7 @@ def v_land_lock(a: Any, c: Ctx) -> int:
 def v_land_stack(a: Any, c: Ctx) -> int:
     repo = str(Path(a.repo).resolve())
     store = beadtools.bd_store(c.who.actor, repo)
-    return cli_land_stack.cmd_land_stack(a, c.who, c.git, c.spawner, store, lambda bead, sha: verbs.land(
-        c.who, BeadId(bead), sha, store, c.git, repo, f"origin/{a.base}"), ["uv", "run", "--script", str(Path(__file__).resolve())])
+    return cli_land_stack.cmd_land_stack(a, c.who, c.git, c.spawner, store, ["uv", "run", "--script", str(Path(__file__).resolve())])
 
 
 def owner_parsers(sp):

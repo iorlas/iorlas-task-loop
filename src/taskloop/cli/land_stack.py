@@ -2,21 +2,19 @@
 import argparse
 import socket
 import time
-from collections.abc import Callable
 from pathlib import Path
 
 from taskloop.app.land.cmds import Cmds, Runs
 from taskloop.app.land.forge import Forge
 from taskloop.app.land.stack import MODE, Stack, lock_path
 from taskloop.app.land.stackgate import StackGate
-from taskloop.contracts.enums import Outcome
+from taskloop.app.wire import closeguard
 from taskloop.contracts.forge import StackItem
 from taskloop.contracts.identity import Identity
-from taskloop.contracts.ids import RunId
+from taskloop.contracts.ids import BeadId
 from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.ports import Beads, Git
 from taskloop.contracts.run import RunState
-from taskloop.contracts.trace import RunTrace
 from taskloop.stores.real import real_stores
 from taskloop.stores.runlog import RunLog
 
@@ -40,9 +38,8 @@ def pairs(values: list[str], flag: str) -> dict[str, str]:
 
 
 def cmd_land_stack(a: argparse.Namespace, who: Identity, git: Git, spawner: Runs, store: Beads,
-                   record: Callable[[str, str], int], tl: list[str]) -> int:
-    """`record(bead, sha)` writes `tl land` (the caller owns that verb); `store` is bd for the Dolt sync; `tl` is the argv that runs
-    tl itself (the gate runs `tl check` through it)."""
+                   tl: list[str]) -> int:
+    """`store` is bd (the land record and the Dolt sync); `tl` is the argv that runs tl itself (the gate runs `tl check` through it)."""
     repo = str(Path(a.repo).resolve())
     beads, old = pairs(a.bead, "--bead"), pairs(a.supersede, "--supersede")
     for flag, given in (("--bead", beads), ("--supersede", old)):
@@ -51,23 +48,16 @@ def cmd_land_stack(a: argparse.Namespace, who: Identity, git: Git, spawner: Runs
                 raise SystemExit(f"land-stack: {flag} {key}=... matches no item; the items given are: {', '.join(a.items)}")
     items = [item_of(t, beads, old) for t in a.items]
     locator = RunLocator(who.config)
-    started = time.time()
     run = locator.create(repo, "", time.time(), mode=MODE, owner=who.actor, session=who.session).run  # the board finds a run through it
     stores = real_stores(who.config)
     log = RunLog(stores.run_log(run), echo=None, run_id=run, host=socket.gethostname())
     cmds = Cmds(spawner, log, repo)
     lock = lock_path(who.config, git, repo)
     forge = Forge(cmds, git, repo, a.base, a.method)
-    traces = stores.traces
 
     def landed(bead: str, sha: str) -> int:
-        """`tl land`, then the landing as a run trace (what `tl trace BEAD` and the board's landings read)."""
-        rc = record(bead, sha)
-        if rc == 0:
-            traces.append(RunTrace(run=RunId(run), bead=bead, repo_url=git.remote_url(repo, "origin") or repo, worktree=repo, branch="",
-                                   coordinator_session=who.session, started=started, ended=time.time(), outcome=Outcome.LANDED,
-                                   why=f"{MODE}: merged as {sha[:12]}", sha=sha, repo_path=repo))
-        return rc
+        """`tl land` and its LANDED row (what `tl trace BEAD`, the board's landings and the close guard read): the one writer."""
+        return closeguard.record_land(who, store, git, repo, f"origin/{a.base}", BeadId(bead), sha, f"{MODE}: merged as {sha[:12]}")
 
     stack = Stack(forge, cmds, log, git, repo, lock, landed, store.dolt_push, who.actor, who.session,
                   StackGate(cmds, git, stores, repo, f"origin/{a.base}", tl), a.wait_min, lambda bead: locator.add_bead(run, bead))

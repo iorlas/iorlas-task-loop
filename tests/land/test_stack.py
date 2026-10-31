@@ -7,11 +7,11 @@ import tempfile
 import unittest
 from argparse import Namespace
 from pathlib import Path
-from types import SimpleNamespace
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
+from support.fake_beads import FakeBeads
 from support.fakegit import ScriptedGit
 from support.forgesim import ForgeSim
 from support.logs import records
@@ -23,7 +23,9 @@ from taskloop.app.land.forge import Forge
 from taskloop.app.land.stack import MODE, Stack
 from taskloop.app.land.stackgate import StackGate
 from taskloop.app.track.verbs import trace
+from taskloop.app.wire import closeguard
 from taskloop.cli.land_stack import cmd_land_stack
+from taskloop.contracts.bead import Bead
 from taskloop.contracts.env import Env
 from taskloop.contracts.forge import StackItem
 from taskloop.contracts.gitfacts import LogRow, Ref
@@ -88,6 +90,9 @@ class RepoGit(ScriptedGit):
 
     def remote_url(self, d, remote):
         return "git@example.com:o/r.git"
+
+    def is_ancestor(self, d, a, b):
+        return True
 
     def checkouts(self, d):
         return [Checkout(path="/repo", branch="main", main=True),
@@ -357,27 +362,33 @@ class Verb(StackCase):
     def test_the_verb_makes_a_run_the_board_finds_through_its_manifest(self):
         a = Namespace(items=["task/a", "task/b"], repo=str(self.repo), base="main", method="squash", bead=["task/b=tl-b"], supersede=[],
                       wait_min=None)
-        store = SimpleNamespace(dolt_push=lambda: DoltPush(0, ""))
+        store = self.bd("a", "tl-b")
         who = Identity(actor="tl-me", home=self.tmp.name, session="sess-1")
         with contextlib.redirect_stdout(io.StringIO()):
-            rc = cmd_land_stack(a, who, self.git, self.sim, store, self.record, ["tl"])
+            rc = cmd_land_stack(a, who, self.git, self.sim, store, ["tl"])
         self.assertEqual(rc, 0)
         (bundle,) = RunLocator(self.cfg).runs()
         self.assertIsNotNone(bundle.manifest.ended)
         rows = records(bundle.log)
         self.assertEqual(rows[0]["mode"], MODE)
-        self.assertEqual([b for b, _, _ in self.recorded], ["a", "tl-b"])
+        self.assertTrue(all(closeguard.has_land(who, BeadId(b)) for b in ("a", "tl-b")))
         m = bundle.manifest
         self.assertEqual((m.mode, m.owner, m.session, m.bead, m.beads), (MODE, "tl-me", "sess-1", "a", ("tl-b",)))
         self.assertEqual(m.state.value, "done")
         self.assertTrue(any(r["kind"] == "cmd_start" and r["text"].startswith("git push") for r in rows))
         self.assertTrue(any(r["kind"] == "cmd_start" and r["text"].startswith("gh pr merge") for r in rows))
 
-    def verb(self, items, bead, who):
+    def bd(self, *beads):
+        store = FakeBeads(actor="tl-me")
+        store.dolt_push = lambda: DoltPush(0, "")  # type: ignore[method-assign]
+        for b in beads:
+            store.beads[BeadId(b)] = Bead(id=BeadId(b), title="t", status="open", issue_type="task")
+        return store
+
+    def verb(self, items, bead, who, store=None):
         a = Namespace(items=items, repo=str(self.repo), base="main", method="squash", bead=bead, supersede=[], wait_min=None)
-        store = SimpleNamespace(dolt_push=lambda: DoltPush(0, ""))
         with contextlib.redirect_stdout(io.StringIO()):
-            return cmd_land_stack(a, who, self.git, self.sim, store, self.record, ["tl"])
+            return cmd_land_stack(a, who, self.git, self.sim, store or self.bd("lifesim-fvit"), ["tl"])
 
     def test_a_pr_number_with_a_bead_shows_its_landing_in_tl_trace_and_the_manifest(self):
         root = Path(self.tmp.name) / "xdg"
@@ -388,9 +399,19 @@ class Verb(StackCase):
         with contextlib.redirect_stdout(out):
             trace(BeadId("lifesim-fvit"), 0, False, Env(vars={"XDG_CONFIG_HOME": str(root)}))
         self.assertIn("lifesim-fvit  landed", out.getvalue())
-        self.assertIn("landed " + self.recorded[0][1][:12], out.getvalue())
+        self.assertIn("landed " + "merge293"[:12], out.getvalue())
         (bundle,) = RunLocator(who.config).runs()
         self.assertEqual(bundle.manifest.bead, "lifesim-fvit")
+
+    def test_after_a_pr_number_land_the_bead_closes_with_no_extra_step(self):
+        who = Identity(actor="tl-me", home=str(Path(self.tmp.name) / "xdg2"), session="sess-1")
+        store = self.bd("lifesim-fvit")
+        self.sim.pr(294, "task/a", OID["task/a"])
+        RunLocator(who.config).create(str(self.repo), "lifesim-fvit", 1.0)  # the bead has an engine run, and no land yet
+        guard = closeguard.guard_for(who, store, self.git, str(self.repo))
+        self.assertIn("no land on record", guard(BeadId("lifesim-fvit"), "done"))
+        self.assertEqual(self.verb(["294"], ["294=lifesim-fvit"], who, store), 0)
+        self.assertEqual(guard(BeadId("lifesim-fvit"), "done"), "")
 
     def test_a_bead_for_an_item_that_is_not_given_is_refused_naming_both(self):
         who = Identity(actor="tl-me", home=self.tmp.name, session="s")
