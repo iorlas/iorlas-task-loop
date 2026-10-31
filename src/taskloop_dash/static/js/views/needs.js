@@ -24,8 +24,17 @@ function Row({ snap, n, now }) {
   return b ? html`<button class="nr" onClick=${() => openBead(b)}>${body}</button>` : html`<div class="nr">${body}</div>`;
 }
 
+const QSTATE = { next: '▶️', then: '⏭️', running: '🏃', skipped: '⏸️' };
+
+export function QueueStrip({ snap }) {
+  const q = snap.queue || [];
+  if (!q.length) return null;
+  return html`<div class="nh">Queue · ${q.length}</div><div class="nl">${q.map((x) => html`<div class="nr" key=${x.project + x.bead}>
+    <i class="ni">${QSTATE[x.state]}</i><span class="nt"><b>${x.pos}. ${bid(x.bead, x.project, snap.projects.length > 1)} ${x.title}</b><span>${x.state}${x.why ? ` · ${x.why}` : ''}</span></span></div>`)}</div>`;
+}
+
 export function Needs({ snap, now }) {
-  return html`<section class="needs"><${LoopStrip} snap=${snap} now=${now} />
+  return html`<section class="needs"><${LoopStrip} snap=${snap} now=${now} /><${QueueStrip} snap=${snap} />
     ${snap.needs.length > 0 && html`<div class="nh">Needs you · ${snap.needs.length}</div>
     <div class="nl">${snap.needs.map((n, i) => html`<${Row} key=${i} snap=${snap} n=${n} now=${now} />`)}</div>`}</section>`;
 }

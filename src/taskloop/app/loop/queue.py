@@ -3,17 +3,18 @@ and beads whose area runs elsewhere; then priority, epic order, lowest id. Every
 Skip; nothing is parsed back out of text."""
 import itertools
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 
 from taskloop.app.asks import intake, parks
 from taskloop.app.loop import hosts
 from taskloop.app.loop.env import LoopEnv
+from taskloop.contracts import pickset
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.ids import BeadId, is_bead_id
 from taskloop.contracts.loop import Skip
-from taskloop.contracts.ports import BdFailure, Beads
+from taskloop.contracts.ports import BdFailure, BeadQuery, Beads
 
 Key = tuple[int, int, list[tuple[int, int | str]], Bead]  # (priority, epic rank, natural id, bead)
 ANY_AREA = "*"  # busy_areas key for a running bead that could not be read: every area waits
@@ -67,6 +68,8 @@ class QueueRule:
         self.parked = parked  # a bead whose last run ended on a question and whose text is the same (tl-7y6.7.3)
         self.hosted = hosted  # a bead whose needs label names a resource this host lacks (tl-7k8.8)
         self.parents: dict[BeadId, BeadId | None] = {}
+        self.chosen: list[BeadId] = []  # the pick set (contracts/pickset.py); [] = every ready bead
+        self.only = False
 
     def parent_of(self, bead_id: BeadId) -> BeadId | None:
         if bead_id not in self.parents:
@@ -150,7 +153,7 @@ class QueueRule:
         keep: list[Key] = []
         q = Queue()
         for b in ready:
-            skip = self.why_not(b)
+            skip = pickset.outside(b.id, self.chosen, self.only) or self.why_not(b)
             rank = len(order)
             if skip is None and order:
                 ups = self.epics_of(b)
@@ -164,11 +167,24 @@ class QueueRule:
                 q.skipped.append(Skipped(b.id, skip, b if skip.kind == "lint" else None))
             else:
                 keep.append((b.priority if b.priority is not None else 2, rank, natural(b.id), b))
-        keep.sort(key=lambda k: k[:3])
+        keep.sort(key=lambda k: (self.chosen.index(k[3].id), *k[:3]) if self.chosen else k[:3])
         if has_areas(self.cfg) and keep:
             keep = self.drop_busy(keep, q)
-        q.ranked = [Ranked(k[3], self.reason(keep, i, order)) for i, k in enumerate(keep)]
+        q.ranked = [Ranked(k[3], f"{ordinal(self.chosen.index(k[3].id) + 1)} of {len(self.chosen)} chosen" if self.chosen
+                           else self.reason(keep, i, order)) for i, k in enumerate(keep)]
+        self.unready(q, ready)
         return q
+
+    def unready(self, q: Queue, ready: list[Bead]) -> None:
+        """A chosen bead bd does not list as ready is named with the reason, so `tl next` explains it."""
+        seen = {b.id for b in ready}
+        for bid in self.chosen:
+            if bid not in seen:
+                try:
+                    held = self.store.show(BeadId(bid))
+                except BdFailure:
+                    held = None
+                q.skipped.append(Skipped(BeadId(bid), pickset.unready(held, bid)))
 
     def drop_busy(self, keep: list[Key], q: Queue) -> list[Key]:
         busy = self.busy_areas()
@@ -201,12 +217,17 @@ def area_busy_text(rule: QueueRule, bead: Bead) -> tuple[str, str]:
     return area, skip.why if skip else ""
 
 
-def rank_ready(env: LoopEnv, cfg: EngineConfig, say: Callable[[str], None] = print) -> tuple[Queue, QueueRule]:
-    """The queue as the loop would take it now."""
+def rank_ready(env: LoopEnv, cfg: EngineConfig, say: Callable[[str], None] = print,
+               only: Sequence[str] = ()) -> tuple[Queue, QueueRule]:
+    """The queue as the loop would take it now: only the chosen beads (`only`, else the beads labelled `queue`) when any are chosen."""
+    ready: list[Bead] = []
+    chosen: list[BeadId] = []
     try:
         ready = env.store.ready(cfg.pick_label)
-    except BdFailure:
-        ready: list[Bead] = []
+        chosen = pickset.members(env.store.find(BeadQuery(label=pickset.LABEL)) if not only else [], only)
+    except BdFailure:  # a queue that cannot be read must not become "take anything"
+        ready = []
     rule = QueueRule(env.store, cfg, env.running(), env.lint, say, env.now, lambda b: parks.skip_of(env.cfgdir, b),
                     lambda b: hosts.skip_of(cfg, env.host(), b))
+    rule.chosen, rule.only = chosen, bool(only)
     return rule.rank(ready, env.repo), rule

@@ -12,7 +12,7 @@ import time
 from taskloop.contracts import wire
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.dash import AskCard, BeadCard, Column, Epic, Piece, Project, ServerInfo, Slot, Snapshot
-from taskloop_dash.views import floor, learning, ledger, needs, passes
+from taskloop_dash.views import floor, learning, ledger, needs, passes, queue
 from taskloop_dash.views.askcards import ask_card, look_card, stale_of
 from taskloop_dash.views.board import Board, is_infra, is_work, when
 from taskloop_dash.views.lanecards import lane_cards
@@ -93,6 +93,7 @@ def build(w: World) -> Snapshot:
     loops = [needs.health(w, p) for p in w.projects]
     snap = Snapshot(
         version="", t=0.0, server=ServerInfo(version=w.version, host=w.host, loops=loops), needs=needs.needs_of(w, loops),
+        queue=[x for p in w.projects for x in queue.items_of(w, p)],
         projects=[Project(id=p.id, name=p.name, profile_error=p.profile_error) for p in w.projects],
         epics=[e for p in w.projects for e in epics_of(p)],
         slots=slots_of(w), beads=cards, backlog_more=more, pieces=pieces_of(w, board, ids), asks=asks_of(w, cards),

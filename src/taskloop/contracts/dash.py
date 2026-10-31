@@ -13,6 +13,7 @@ import msgspec
 
 from taskloop.contracts.ids import WireBead
 from taskloop.contracts.needs import NeedRow
+from taskloop.contracts.pickset import QueueItem
 from taskloop.contracts.wire import Rec
 
 
@@ -343,6 +344,7 @@ class Snapshot(Rec):
     adrs: list[AdrRow] = msgspec.field(default_factory=list)
     learning: Learning = msgspec.field(default_factory=Learning)
     lanes: list[LaneCard] = msgspec.field(default_factory=list)
+    queue: list[QueueItem] = msgspec.field(default_factory=list)  # the owner's queue strip, in pick order
     needs: list[NeedRow] = msgspec.field(default_factory=list)  # everything that waits on the owner without an ask; first on the phone
 
 

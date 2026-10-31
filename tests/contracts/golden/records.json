@@ -1074,6 +1074,14 @@
   "run": "t-1-20261030-120000",
   "t": 1793050200.5
  },
+ "QueueItem": {
+  "project": "p",
+  "bead": "t-1",
+  "title": "queued",
+  "pos": 1,
+  "state": "next",
+  "why": "1st of 2 chosen"
+ },
  "SessionIndex": {
   "v": 1,
   "session": "s",

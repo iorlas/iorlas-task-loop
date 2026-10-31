@@ -392,6 +392,7 @@ container); the session that starts it only watches it.
   queue is that file. The log is `<config dir>/loop/<repo>-<hash>.jsonl`
   (fields `ts bead slot outcome minutes rounds tests_added asked trace engine_log run_log why`); each run's own output
   is beside it, one file per run. `tl next` prints what the loop would take next and why, claiming nothing.
+  `tl queue add ID...` labels beads `queue` (`remove` clears, `tl queue` lists): while any open bead carries it the loop and `tl next` take only queued beads in the order added and `tl next` says why each other bead is skipped; `tl loop --only ID...` (and `tl next --only`) is the same set for one run, no labels; no queued bead: the ordinary rules. The dashboard queue strip reads the same loop rows.
 - **Reflections into fixes:** `tl reflect digest [--since 24h] [--dry-run]` (the loop starts it once a day) clusters the last day's
   run reflections by cause and files or updates one bead per recurring cause in the repo that owns it, with run ids as
   evidence.

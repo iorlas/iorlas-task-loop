@@ -27,9 +27,10 @@
   tl.py trace [ID] [--last N] [--json]          engine runs and every worker session of each (for reflection)
   tl.py run-task ID [--worktree DIR] [--slot S|any [--wait]] [--exclusive-area] [--dry-run] [--fresh]
                                                 one bead through the engine (engine.py), no judgement here
-  tl.py next [--repo DIR] [--json]              the bead the loop would take next and why (claims nothing)
+  tl.py next [--repo DIR] [--json] [--only ID...]  the bead the loop would take next and why (claims nothing)
+  tl.py queue [add|remove ID...]                the owner's queue (label `queue`): while set, the loop takes only these, in order
   tl.py lint [BEAD | --ready [--fix]]           the bead rules (goal, acceptance, Touches, epic, type) over one bead or the ready ones
-  tl.py loop [--repo DIR] [--max-beads N] [--until HH:MM] [--wait-slot-min M] [--wait-drained] [--pin]
+  tl.py loop [--repo DIR] [--max-beads N] [--until HH:MM] [--wait-slot-min M] [--wait-drained] [--pin] [--only ID...]
                                                 run ready beads one after another, each in any free slot
   tl.py loop status [--repo DIR] [--last N]     the running loop and its last beads
   tl.py stop [--repo DIR] [--now]               stop the loop after its current bead, or now (SIGTERM)
@@ -77,6 +78,7 @@ from taskloop.app.wire import slots as wslots
 from taskloop.app.wire import usage as wire_usage
 from taskloop.cli import asks as cli_asks
 from taskloop.cli import green as cli_green
+from taskloop.cli import queue as cli_queue
 from taskloop.cli import slots as slots_cli
 from taskloop.cli import status
 from taskloop.cli import wait as cli_wait
@@ -267,6 +269,7 @@ def build_parser():
     owner_parsers(sp)
     engine_parsers(sp)
     loop_parsers(sp)
+    cli_queue.add_parsers(sp)
     check_parser(sp)
     cli_green.add_parser(sp)
     return ap
@@ -392,6 +395,7 @@ VERBS: Final[dict[str, Handler]] = {
     "run-task": lambda a, c: importlib.import_module("taskloop.app.run.entry").main(a, env=c.env, spawner=c.spawner, git=c.git, who=c.who),
     "selftest": lambda a, c: importlib.import_module("taskloop.app.launch.selftest").cmd_selftest(a, env=c.env),
     "cutover": lambda a, c: importlib.import_module("taskloop.cli.loop_cmd").cmd_cutover(a, c.git, c.who),
+    "queue": lambda a, c: cli_queue.cmd_queue(a.op, a.ids, beadtools.bd_store(c.who.actor), c.now),
     "next": v_next, "loop": v_loop, "stop": v_stop,
     "prune": v_prune,
     "lint": v_lint,

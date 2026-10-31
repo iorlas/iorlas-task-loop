@@ -38,6 +38,7 @@ class LoopArgs:
     wait_slot_min: float = 30
     wait_drained: bool = False
     pin: bool = False
+    only: tuple[str, ...] = ()  # tl loop --only: take just these beads, in this order
     argv: list[str] = field(default_factory=list)  # the loop re-execs itself with these
 
 
@@ -220,7 +221,7 @@ class Loop(Core):
         return env.actor()[3:] if owned.loop_path(env.repo, name) in taken else name
 
     def queue(self) -> tuple[Queue, QueueRule]:
-        q, rule = rank_ready(self.env, self.prof.engine, self.say)
+        q, rule = rank_ready(self.env, self.prof.engine, self.say, self.args.only)
         for s in q.skipped:
             if s.of is not None:
                 self.refuser.refuse(s.of, s.skip.why)

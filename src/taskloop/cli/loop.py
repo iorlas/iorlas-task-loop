@@ -16,7 +16,7 @@ from taskloop.contracts.loop import LoopState
 
 def cmd_next(env: LoopEnv, a: Any) -> int:
     env.fetch()
-    q, _ = rank_ready(env, env.profile().engine)
+    q, rule = rank_ready(env, env.profile().engine, only=a.only)
     ranked, skipped = q.ranked, q.skipped
     if a.json:
         print(json.dumps({"pick": ranked[0].bead.to_dict() if ranked else None, "reason": ranked[0].reason if ranked else "",
@@ -27,6 +27,8 @@ def cmd_next(env: LoopEnv, a: Any) -> int:
         print("NONE: no ready bead in the queue")
     for n, r in enumerate(ranked[:6]):
         print(f"{'NEXT' if n == 0 else 'then'} {r.bead.id}  P{r.bead.priority}  {r.bead.title[:70]}  ({r.reason})")
+    if rule.chosen:
+        print(f"{'ONLY' if rule.only else 'QUEUE'}: {', '.join(rule.chosen)}")
     for s in skipped:
         print(f"skip {s.bead}: {s.skip.why}")
     return 0 if ranked else 1
@@ -112,7 +114,7 @@ def table(cols: list[str]) -> str:
 
 def cmd_loop(env: LoopEnv, files: LoopFiles, installs: Installs, a: Any) -> int:
     args = LoopArgs(max_beads=a.max_beads, until=a.until or "", wait_slot_min=a.wait_slot_min, wait_drained=a.wait_drained,
-                    pin=a.pin, argv=list(a.argv))
+                    pin=a.pin, only=tuple(a.only), argv=list(a.argv))
     loop = Loop(env, files, installs, args, env.take_handover())
     main = threading.current_thread() is threading.main_thread()
     old = {sig: signal.signal(sig, lambda *_: loop.sigterm.set()) for sig in (signal.SIGTERM, signal.SIGINT)} if main else {}
