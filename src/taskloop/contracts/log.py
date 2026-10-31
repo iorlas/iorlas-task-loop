@@ -22,6 +22,9 @@ class RunStart(LogRec, tag="run_start"):
     started_because: str = ""
     ask: str = ""
     branch: str = ""  # the task branch the run works on ("" when HEAD is detached)
+    mode: str = ""  # what kind of run this is, as the board labels it: "stage:land-stack"; "" for a bead's engine run
+    owner: str = ""  # who started it: the bd actor of the process that ran the verb
+    session: str = ""  # the coordinator session that ran the verb
 
 
 @final

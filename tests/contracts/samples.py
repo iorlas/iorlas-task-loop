@@ -140,7 +140,7 @@ def _ev(cls, **kw):
 
 LOG = {
     "run_start": _log(log.RunStart, worktree="/w", slot="s1", parent_id="p", started_because="retry", ask="a",
-                      branch="task/tl-1"),
+                      branch="task/tl-1", mode="stage:land-stack", owner="tl-abc", session="s"),
     "step_start": _log(log.StepStart, id="n4", step="write", text="write: stage 2/2", stage=2, stages=2, round=1, write=1, fix=0),
     "step_end": _log(log.StepEnd, id="n4", step="write", outcome="done", detail="", exec_seconds=231.0),
     "artifacts": _log(log.Artifacts, id="n4", step="write", names=["menu.png", "report.pdf"]),

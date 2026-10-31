@@ -104,6 +104,12 @@ the bead is blocked and its next run re-plans with the gate's output. Limits per
 a changed bead never counts), `max_fix_rounds` (2); per stage: `max_rounds` (3), `max_check_tries` (3) red checks in a
 row per round.
 Push to main by hand only via `tl land-lock [--repo DIR] [--wait-min N] -- CMD...` (same lock; exits with CMD's code, 75 on timeout).
+Deliver existing work with `tl land-stack ITEM... [--repo DIR] [--base B] [--bead ITEM=BEAD] [--supersede ITEM=PR]`: an ITEM is a PR
+number or url or a branch, lowest of the stack first (a `task/<bead>` branch names its bead). Per item: push and see it on the remote,
+open its PR if it has none, merge under the land lock with `--match-head-commit`, check MERGED, record `tl land` with that PR's own merge
+sha (merge and record are one lock hold); a superseded PR is closed only after its replacement merged; the local branch and worktree go
+only at the oid that landed; then `bd sync`. The first failure ends the run with that command's exit code and leaves later items alone.
+It is one run, labelled `stage:land-stack`, with every command a row. No command is ever taken from a PR body or bead text.
 
 Acceptance cases: the plan has at least one per acceptance criterion of the bead (the criterion quoted, a check). They
 run on the last stage and again in every fix round at land. A writer may add cases it finds (the review sees them as

@@ -15,6 +15,8 @@
   tl.py land ID --sha SHA [--worktree DIR]      record the landing (before close)
   tl.py land-lock [--repo DIR] [--wait-min N] -- CMD...
                                                 run CMD under the repo's land lock (the engine's); exits with CMD's code, 75 on timeout
+  tl.py land-stack ITEM... [--repo DIR] [--base B] [--bead ITEM=BEAD] [--supersede ITEM=PR]
+                                                deliver PRs or branches, lowest first: push, PR, merge, record
   tl.py close ID [--reason R]                   close the bead, record it
   tl.py block ID --why TEXT                     block the bead with a question, record it
   tl.py slot list|take|release|reset|setup ...  slots (see SKILL.md, Slots)
@@ -78,12 +80,14 @@ from taskloop.app.wire import slots as wslots
 from taskloop.app.wire import usage as wire_usage
 from taskloop.cli import asks as cli_asks
 from taskloop.cli import green as cli_green
+from taskloop.cli import land_stack as cli_land_stack
 from taskloop.cli import queue as cli_queue
 from taskloop.cli import slots as slots_cli
 from taskloop.cli import status
 from taskloop.cli import wait as cli_wait
 from taskloop.contracts.env import Env, snapshot
 from taskloop.contracts.identity import Identity
+from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ports import Git, Spawner
 
 HERE = Path(__file__).resolve().parent
@@ -128,6 +132,13 @@ def v_land_lock(a: Any, c: Ctx) -> int:
         return 2
     repo = str(Path(a.repo).resolve())
     return landlock.run_locked(cmd, repo, a.wait_min, real.git(c.env).remote_url(repo, "origin"), c.who.config)
+
+
+def v_land_stack(a: Any, c: Ctx) -> int:
+    repo = str(Path(a.repo).resolve())
+    store = beadtools.bd_store(c.who.actor, repo)
+    return cli_land_stack.cmd_land_stack(a, c.who, c.git, c.spawner, store, lambda bead, sha: verbs.land(
+        c.who, BeadId(bead), sha, store, c.git, repo, f"origin/{a.base}"))
 
 
 def owner_parsers(sp):
@@ -272,6 +283,7 @@ def build_parser():
     cli_queue.add_parsers(sp)
     check_parser(sp)
     cli_green.add_parser(sp)
+    cli_land_stack.add_parser(sp)
     return ap
 
 
@@ -388,6 +400,7 @@ VERBS: Final[dict[str, Handler]] = {
     "ask": v_ask, "answer": v_ask, "hint": v_ask, "hold": v_ask, "override": v_ask, "park": v_ask, "note": v_ask,
     "reflect": lazy_env("taskloop.cli.report", "cmd_reflect"),
     "land-lock": v_land_lock,
+    "land-stack": v_land_stack,
     "status": v_status,
     "handoff": v_handoff,
     "wait": v_wait,
