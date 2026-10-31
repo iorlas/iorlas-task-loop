@@ -4,7 +4,7 @@ import argparse
 from collections.abc import Callable
 from pathlib import Path
 
-from taskloop.app.checks.cache import repo_green
+from taskloop.app.checks.cache import repo_green_result
 from taskloop.contracts.ids import CheckId, TreeSha
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import Git
@@ -15,8 +15,10 @@ GREEN, NOT_GREEN = 0, 1
 
 
 def cmd_green(a: argparse.Namespace, cfg: ConfigDir, git: Git, out: Callable[[str], None] = print) -> int:
-    ok = repo_green(real_stores(cfg), git, str(Path(a.repo).resolve()), CheckId(a.step), TreeSha(a.tree), BaseSha(a.base))
-    out(f"{'green' if ok else 'not green'}: {a.step} tree {a.tree} base {a.base}")
+    res = repo_green_result(real_stores(cfg), git, str(Path(a.repo).resolve()), CheckId(a.step), TreeSha(a.tree), BaseSha(a.base))
+    ok = res is not None
+    why = f" (skipped-by-plan: {res.why})" if res is not None and res.planned else " (passed)" if ok else ""
+    out(f"{'green' if ok else 'not green'}: {a.step} tree {a.tree} base {a.base}{why}")
     return GREEN if ok else NOT_GREEN
 
 

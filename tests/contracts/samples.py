@@ -108,7 +108,7 @@ CHECK_RUN = checks.CheckRun(
     round=1,
     tree=TreeSha("deadbeef"),
     hits=1,
-    misses=1,
+    misses=2,
     results=[
         checks.CheckResult(
             id=CheckId("unittest"),
@@ -124,6 +124,8 @@ CHECK_RUN = checks.CheckRun(
         ),
         checks.CheckResult(id=CheckId("lint"), cmd="ruff check", group="static", exit=0, status="passed", cached=True,
                             note="inputs unchanged"),
+        checks.CheckResult(id=CheckId("coverage"), cmd="coverage", group="tests", exit=None, status="skipped", planned=True,
+                           why="no change under src/**"),
     ],
 )
 

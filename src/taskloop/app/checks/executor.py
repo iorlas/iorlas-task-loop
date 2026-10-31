@@ -42,9 +42,14 @@ class CheckExecutor:
         self.began = time.time()
         lanes = plan.lanes()
         if len(lanes) > 1:  # lanes run at the same time; the first red cancels the rest
-            return Lanes(self.host, self.step, self.drop).run(plan, lanes, st)
-        for n, step in enumerate(plan.steps):
-            self.step(step, n, st)
+            st = Lanes(self.host, self.step, self.drop).run(plan, lanes, st)
+        else:
+            for n, step in enumerate(plan.steps):
+                self.step(step, n, st)
+        if not any(r.red or r.cancelled for r in st.results):
+            for n, res in st.by_step.items():
+                if res.status == "skipped" and res.planned:
+                    self.memo.remember(self.memo.planned_key(plan.steps[n].check), res, st.n, "")
         return st
 
     def step(self, step: Step, n: int, st: Round) -> None:
@@ -125,10 +130,10 @@ class CheckExecutor:
             # a red group skips the groups after it, and any red skips every expensive check (the cheap ones of its own group run to
             # the end, so the writer sees all the cheap failures at once; the Unity group never runs after a red)
             return CheckResult.skipped(c, st.red + FAILED_FIRST)
-        if c.when and not self.everything:
+        if c.when and not self.everything and c.id not in self.fix_red:
             st.changed = self.host.checkout.changed_paths() if st.changed is None else st.changed
             if not due(c, st.changed):
-                return CheckResult.skipped(c, "no change under {}".format(", ".join(c.when)))
+                return CheckResult.skipped(c, "no change under {}".format(", ".join(c.when))).replace(planned=True)
         return None
 
     @staticmethod

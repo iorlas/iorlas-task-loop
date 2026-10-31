@@ -97,6 +97,7 @@ class CheckResult(Rec):
     cached: bool = False
     reused: bool = False
     why: str = ""  # a skip's reason
+    planned: bool = False  # skipped only because the diff did not touch `when`; satisfied after a clean round
     note: str = ""  # why a cached result stands
     base_red: bool = False  # red on the untouched base too: not the writer's
     producer: str = ""  # a skip because the check it reads did not run: that check's id
@@ -200,7 +201,7 @@ class CheckRun(Rec):
 
 @final
 class PassRecord(Rec):
-    """results/<repo>/<check>/<key digest>.json: one remembered pass of a check and the key it holds for. `tree` and `base` are the
+    """results/<repo>/<check>/<key digest>.json: one remembered pass or planned skip and the key it holds for. `tree` and `base` are the
     tree and base it was last true for (a key without them is true for any). run_id, host, ts: who made it; `origin`: the run that
     first made the result when this record is a reuse on a newer tree or base. log_abs: the saved output (may be gone: it expires)."""
 

@@ -17,7 +17,8 @@ from support.forgesim import ForgeSim
 from support.logs import records
 
 # isort: split
-from taskloop.adapters import landlock, locks
+from taskloop.adapters import check_files, landlock, locks
+from taskloop.app.checks.cache import InputKeys, RunMemo
 from taskloop.app.land.cmds import Cmds
 from taskloop.app.land.forge import Forge
 from taskloop.app.land.stack import MODE, Stack
@@ -26,16 +27,19 @@ from taskloop.app.track.verbs import trace
 from taskloop.app.wire import closeguard
 from taskloop.cli.land_stack import cmd_land_stack
 from taskloop.contracts.bead import Bead
+from taskloop.contracts.checks import Check, CheckResult
 from taskloop.contracts.env import Env
 from taskloop.contracts.forge import StackItem
 from taskloop.contracts.gitfacts import LogRow, Ref
 from taskloop.contracts.identity import Identity
-from taskloop.contracts.ids import BeadId
+from taskloop.contracts.ids import BeadId, CheckId, TreeSha
 from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.locks import LockTimeout
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import DoltPush
+from taskloop.contracts.runkey import BaseSha
 from taskloop.contracts.slots import Checkout, SlotGitError
+from taskloop.stores.memory import fake_stores
 from taskloop.stores.real import real_stores
 from taskloop.stores.runlog import RunLog
 
@@ -300,6 +304,26 @@ class RemoteOnly(StackCase):
         self.sim.fail["git fetch"] = 4
         self.assertEqual(self.deliver(StackItem(branch="task/b")), 1)
         self.assertIn("git fetch origin", self.kinds("warn")[0]["text"])
+
+
+class StoredGate(StackCase):
+    def test_a_stored_planned_skip_satisfies_stackgate_only_for_its_tree_and_base(self):
+        stores = fake_stores()
+        tree, base = TreeSha("tree-a"), BaseSha("base-a")
+        keys = InputKeys(self.git, str(self.repo), tree)
+        keys.files = {}
+        memo = RunMemo(stores, check_files.repo_key(self.git, str(self.repo)), keys, base, {})
+        check = Check(id=CheckId("coverage"), cmd="coverage", when=["src/**"])
+        skip = CheckResult.skipped(check, "no change under src/**").replace(planned=True)
+        memo.remember(memo.planned_key(check), skip, 1, "")
+        log = RunLog(stores.run_log("gate-test"), run_id="gate-test", host="h")
+        gate = StackGate(Cmds(self.sim, log, str(self.repo)), self.git, stores, str(self.repo), "origin/main", ["tl"])
+        self.assertEqual(gate.red([check.id], tree, base), [])
+        self.assertEqual(gate.red([check.id], "other-tree", base), [check.id])
+        self.assertEqual(gate.red([check.id], tree, "other-base"), [check.id])
+        self.assertEqual(gate.red([CheckId("never-ran")], tree, base), ["never-ran"])
+        memo.remember(memo.planned_key(check), skip.replace(planned=False, why="static failed first"), 2, "")
+        self.assertEqual(gate.red([check.id], tree, base), [])  # an invalid skip cannot overwrite a satisfied decision
 
 
 class GateCase(StackCase):

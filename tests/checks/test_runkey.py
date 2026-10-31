@@ -21,7 +21,7 @@ from support.spawn import port_git
 
 from taskloop.app.checks.cache import KEEP, InputKeys, RunMemo, is_green
 from taskloop.contracts import paths
-from taskloop.contracts.checks import Check
+from taskloop.contracts.checks import Check, CheckResult, PassRecord
 from taskloop.contracts.ids import CheckId, TreeSha
 from taskloop.contracts.runkey import BaseSha
 from taskloop.stores.memory import fake_stores
@@ -175,6 +175,34 @@ class InputsOnly(unittest.TestCase):
 
 
 class Store(unittest.TestCase):
+    def test_other_skip_kinds_and_unverified_results_are_never_green_even_if_stored(self):
+        check = Check(id=CheckId("c"), cmd="c")
+        m = memo()
+        key = m.planned_key(check)
+        for res in (
+            CheckResult.skipped(check, "static failed first"),
+            CheckResult.skipped(check, "producer p did not run", producer="p"),
+            CheckResult.skipped(check, "conflict_fix"),
+            CheckResult.cancelled_by(check, "p"),
+            CheckResult(id=check.id, cmd=check.cmd, group=check.group, exit=86, status="unverified"),
+        ):
+            with self.subTest(result=res):
+                m._put(PassRecord(key=key, result=res, tree=m.keys.tree, base=m.base))
+                self.assertFalse(is_green(m.stores, "repo", check.id, m.keys.tree, m.base))
+
+    def test_planned_skips_are_exact_diff_facts_even_with_inputs_only_or_cache_disabled(self):
+        for check in (ONLY, ONLY.replace(cache=False), ONLY.replace(inputs=["missing/**"])):
+            with self.subTest(check=check):
+                m = memo(files=FILES)
+                res = CheckResult.skipped(check, "no change under ui/**").replace(planned=True)
+                m.remember(m.planned_key(check), res, 2, "")
+                self.assertTrue(is_green(m.stores, "repo", check.id, m.keys.tree, m.base))
+                self.assertFalse(is_green(m.stores, "repo", check.id, TreeSha("t2"), m.base))
+                self.assertFalse(is_green(m.stores, "repo", check.id, m.keys.tree, BaseSha("b2")))
+                self.assertIsNone(m.hit(m.key(check)))
+                newer = memo(stores=m.stores, files=FILES, tree="t2", base="b2")
+                self.assertIsNone(newer.hit(newer.key(check)))
+
     def test_a_pass_keeps_who_made_it_and_where_the_log_is(self):
         m = memo(run_id="run-7")
         c = Check(id=CheckId("e"), cmd="e")

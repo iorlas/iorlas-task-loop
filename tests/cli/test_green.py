@@ -1,5 +1,4 @@
-"""`tl green`: green only for a pass of that step that is true for exactly that tree and base, read from the repo's result store; it
-writes nothing."""
+"""`tl green`: a pass or planned skip for exactly that tree and base, with its reason; reads the result store and writes nothing."""
 import sys
 import tempfile
 import unittest
@@ -61,7 +60,20 @@ class GreenCase(unittest.TestCase):
     def test_pass_for_that_tree_and_base_is_green(self):
         self.store(run())
         self.assertEqual(self.ask(), 0)
-        self.assertEqual(self.out, ["green: unit tree T1 base B1"])
+        self.assertEqual(self.out, ["green: unit tree T1 base B1 (passed)"])
+
+    def test_a_planned_skip_is_green_and_prints_its_reason(self):
+        rec = run(status="skipped")
+        self.store(rec.replace(result=rec.result.replace(exit=None, planned=True, why="no change under ui/**")))
+        self.assertEqual(self.ask(), 0)
+        self.assertEqual(self.out, ["green: unit tree T1 base B1 (skipped-by-plan: no change under ui/**)"])
+        self.assertEqual(self.ask(tree="T2"), 1)
+        self.assertEqual(self.ask(base="B2"), 1)
+
+    def test_a_failed_first_skip_is_never_green(self):
+        rec = run(status="skipped")
+        self.store(rec.replace(result=rec.result.replace(exit=None, why="static failed first")))
+        self.assertEqual(self.ask(), 1)
 
     def test_a_pass_served_for_another_tree_and_base_is_green_for_them(self):
         self.store(run().replace(tree=TreeSha("T2"), base=BaseSha("B2")))  # the record of a reuse: true for T2 on B2 now

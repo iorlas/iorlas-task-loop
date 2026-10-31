@@ -3,8 +3,8 @@ fact about a RunKey (the check and its command and settings, the tree or its `in
 selected tests, the toolchain and the env it ran in) and is kept with who made it (run, host, time) and where its output is. Each key
 is a file of its own, written whole: runners writing at once never lose each other's pass. A failure can come from outside git
 (stale build output, a held editor, a flake) and always reruns. A check that may not be cached (`cache: false`, a plan's own command)
-has no key, so nothing is ever remembered about it. The land gate asks the same store (`has`) the round does (`hit`): there is no
-second copy of the decision."""
+has no pass key. The land gate asks the same store as the round: there is no second copy of the decision. A planned `when` skip is
+recorded only after a clean round, for its exact tree and base; it is never reused as a pass."""
 import hashlib
 import json
 import os
@@ -104,6 +104,12 @@ class RunMemo:
         return RunKey(check=CheckId(norm(c.cmd)), cmd=Digest(inputs.cmd_digest(c)), config=Digest(""), toolchain=Digest(""),
                       tree=self.keys.tree, base=self.base, inputs=Digest(""), selected=Digest(""), env=self.env_of(c))
 
+    def planned_key(self, c: Check) -> RunKey:
+        """A plan decision is about this exact diff, even for inputs_only or cache:false checks; never reuse it as a pass."""
+        return RunKey(check=c.id, cmd=Digest(inputs.cmd_digest(c)), config=Digest(inputs.config_digest(c)),
+                      toolchain=Digest(self.keys.toolchain(self.system)), tree=self.keys.tree, base=self.base,
+                      inputs=Digest(inputs.WHOLE_TREE), selected=Digest(inputs.selected_digest(c)), env=self.env_of(c))
+
     def base_key(self, c: Check) -> RunKey:
         """The run of the command on the untouched base: it reads that commit's tree, so no tree and no inputs."""
         return self.command_key(c).replace(tree=TreeSha(""))
@@ -135,8 +141,8 @@ class RunMemo:
                               origin=hit.origin or hit.run_id))
 
     def remember(self, key: RunKey, res: CheckResult, rnd: int, log_abs: str) -> None:
-        """Only a pass is a fact. One file per key; the oldest passes of the check beyond KEEP are dropped."""
-        if res.status != "passed":
+        """A pass, or a planned skip committed by a clean round, is a fact. Keep at most KEEP per check."""
+        if not satisfied(res):
             return
         self._put(PassRecord(key=key, result=res, tree=self.keys.tree, base=self.base, run_id=self.run_id, host=self.host,
                              ts=time.time(), round=rnd, log_abs=log_abs))
@@ -167,10 +173,26 @@ def repo_green(stores: Stores, git: Git, wt: str, step: CheckId, tree: TreeSha, 
     return is_green(stores, check_files.repo_key(git, wt), step, tree, base)
 
 
+def repo_green_result(stores: Stores, git: Git, wt: str, step: CheckId, tree: TreeSha, base: BaseSha) -> CheckResult | None:
+    """green_result for the repo of the worktree `wt`."""
+    return green_result(stores, check_files.repo_key(git, wt), step, tree, base)
+
+
 def is_green(stores: Stores, repo: str, step: CheckId, tree: TreeSha, base: BaseSha) -> bool:
-    """Read-only: the store holds a pass of this step that is true for exactly this tree and base (a whole-tree key made for them,
-    or a key without them that was served for them)."""
+    """Read-only: a pass or planned skip is recorded for exactly this tree and base."""
+    return green_result(stores, repo, step, tree, base) is not None
+
+
+def satisfied(res: CheckResult) -> bool:
+    """Other skips, cancellations and unverified results never satisfy a gate."""
+    return not res.cancelled and (res.status == "passed" or (res.status == "skipped" and res.planned))
+
+
+def green_result(stores: Stores, repo: str, step: CheckId, tree: TreeSha, base: BaseSha) -> CheckResult | None:
+    """The same green decision as is_green, with its evidence for the CLI."""
     docs = stores.results(repo, step)
     names = docs.keys()  # a DocSet is not iterable: it has keys()
-    return any(r is not None and r.key.check == step and r.tree == tree and r.base == base and r.result.status == "passed"
-               for r in (docs.of(n).get() for n in names))
+    for r in (docs.of(n).get() for n in names):
+        if r is not None and r.key.check == step and r.tree == tree and r.base == base and satisfied(r.result):
+            return r.result
+    return None
