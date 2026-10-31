@@ -37,7 +37,7 @@ def make_run(root):
     """An engine log with a command and a write step, and the live file of its write call."""
     eng = os.path.join(root, "task-loop", "engine")
     log = os.path.join(eng, f"{BEAD}-{STAMP}.jsonl")
-    put(log, [typed("run_start", T, run=f"{BEAD}-{STAMP}", bead=BEAD, worktree=""),
+    put(log, [typed("run_start", T, run_id=f"{BEAD}-{STAMP}", bead=BEAD, worktree=""),
               typed("cmd_start", T + 1, id="m1", text="git fetch -q origin"),
               typed("cmd_end", T + 3, id="m1", exit=0),
               typed("step_start", T + 4, id="n1", text="write: x", step="write"),
@@ -93,7 +93,7 @@ class Feed(unittest.TestCase):
                 log,
                 [
                     typed("wait_start", T + 12, id="w1", what="lane", holder="DEEPSEEK_FREE"),
-                    typed("wait_end", T + 13, id="w1", secs=60),
+                    typed("wait_end", T + 13, id="w1", wait_seconds=60),
                     typed("vendor_error", T + 14, node="write", reason="hung"),
                     typed("kill", T + 15, what="call", why="silent"),
                     typed("lock", T + 16, what="land_lock", holder="tl-2"),
@@ -104,7 +104,7 @@ class Feed(unittest.TestCase):
             got = {e["k"]: e for e in live.page(run)["events"]}
             for k in ("wait_start", "wait_end", "vendor_error", "kill", "lock", "unlock"):
                 self.assertIn(k, got)
-            self.assertEqual((got["wait_end"]["secs"], got["vendor_error"]["reason"]), (60, "hung"))
+            self.assertEqual((got["wait_end"]["wait_seconds"], got["vendor_error"]["reason"]), (60, "hung"))
 
     def test_a_run_without_worker_files(self):
         with tempfile.TemporaryDirectory() as d:

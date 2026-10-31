@@ -91,7 +91,7 @@ class LoopNetwork(LoopBase):
         self.assertNotIn(LoopConfig().pause_retry, self.clock.naps)
         self.assertIn(60, self.clock.naps)
         self.assertEqual([ln["outcome"] for ln in self.lines()], ["paused", "landed", "landed"])
-        self.assertEqual(self.lines()[1]["trace"], "run-1")
+        self.assertEqual(self.lines()[1]["run_id"], "run-1")
 
     def test_a_network_pause_keeps_the_label_the_budget_and_every_counter(self):
         self.probe(netgate.FakeProbe([True]))

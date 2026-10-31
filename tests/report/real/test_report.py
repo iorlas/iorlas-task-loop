@@ -272,8 +272,8 @@ class Scorecard(Base):
         # the loop's own record of a run-task that died before its engine wrote anything
         looptest.log(gitrepo.repo_root(str(self.repo))).parent.mkdir(parents=True, exist_ok=True)
         with open(looptest.log(gitrepo.repo_root(str(self.repo))), "w") as f:  # the loop keys it so
-            f.write(json.dumps({"v": 3, "ts": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(T0 + 95 * MIN)), "bead": "t-10",
-                                "slot": "s1", "outcome": "failed", "minutes": 0.1, "trace": "",
+            f.write(json.dumps({"v": 4, "kind": "loop", "t": T0 + 95 * MIN, "bead": "t-10",
+                                "slot": "s1", "outcome": "failed", "minutes": 0.1, "run_id": "",
                                 "why": "failed: no outcome from run-task (exit 1); see x.log"}) + "\n")
         # an orphan commit on a closed bead's branch
         git(self.repo, "checkout", "-q", "-b", "task/t-6")

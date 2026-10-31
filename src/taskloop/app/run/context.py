@@ -1,6 +1,7 @@
 """RunContext: the identity of one engine run and the objects it writes through. Built once at the start of the run."""
 
 import dataclasses
+import socket
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -63,7 +64,8 @@ class RunContext:
         """The context of run `run`: its log (appending to the file it may already have: ids go on), steps, budget, calls and checks."""
         now = now or clock.now
         seen = stores.run_log(run).read_from()
-        log = RunLog(stores.run_log(run), echo, console.QUIET, console.line(verbose), now, len(seen.items) + seen.skipped)
+        log = RunLog(stores.run_log(run), echo, console.QUIET, console.line(verbose), now, len(seen.items) + seen.skipped,
+                     run_id=run, bead=str(bead), host=socket.gethostname())
         art = StepArtifacts(bead, RepoDirs(wt).artifacts(bead), home.artifacts(bead), log)
         steps = Steps(log, now, guard, on_step, art)
         return cls(

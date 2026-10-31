@@ -45,7 +45,7 @@ class Writes(unittest.TestCase):
         path.write_text(json.dumps(wire.dump(ASK)))
         log = self.dash.env.config.engine_log(RUN)
         log.parent.mkdir(parents=True, exist_ok=True)
-        log.write_text(json.dumps(typed("run_start", NOW - 5, run=RUN, bead="tl-5", worktree="")) + "\n")
+        log.write_text(json.dumps(typed("run_start", NOW - 5, run_id=RUN, bead="tl-5", worktree="")) + "\n")
 
     def post(self, verb, body):
         code, out = self.dash.writes.post(verb, body)

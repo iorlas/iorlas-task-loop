@@ -65,7 +65,7 @@ from taskloop.app.run import (  # noqa: E402
     engine,
     entry,
 )
-from taskloop.contracts.checks import Durations  # noqa: E402
+from taskloop.contracts.checks import Duration, Durations  # noqa: E402
 from taskloop.domain.checks import (  # noqa: E402
     durations,
     lint,  # noqa: F401
@@ -124,7 +124,7 @@ class FailureBriefAndDurations(unittest.TestCase):
     def _history(self, *runs):
         h = Durations()
         for cmd, secs in runs:
-            h = durations.merged(h, [(cmd, secs)])
+            h = durations.merged(h, [Duration(step=cmd, exec_seconds=secs)])
         return durations.seconds(h)
 
     def test_durations_keep_the_longest_pass_and_whitespace_does_not_split_a_command(self):

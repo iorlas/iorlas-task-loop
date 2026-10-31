@@ -22,7 +22,7 @@ def world(project="p", extra=()):
            .step("write", 400, 5000, "OC", cost=2.0, source="harness")
            .step("write", 200, 2000, "CL", cost=0.0, source="unknown")
            .step("checks", 60, 0)
-           .add("wait_start", id="w1", what="resource").wait(15).add("wait_end", id="w1", secs=15.0)
+           .add("wait_start", id="w1", what="resource").wait(15).add("wait_end", id="w1", wait_seconds=15.0)
            .step("review", 50, 700, "CL", role="reviewer", cost=0.0, source="free").close("landed"))
     two = RunScript("b-1", "20261015-150000", at=4000).step("write", 300, 3000, "OC", cost=1.0, source="harness").close("parked")
     three = (RunScript("b-2", "20261015-160000", at=5000).step("plan", 80, 400, "CL", role="planner").close("parked"))

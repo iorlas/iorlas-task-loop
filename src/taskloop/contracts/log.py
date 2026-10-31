@@ -6,22 +6,19 @@ import msgspec
 
 from taskloop.contracts.checks import CheckRun
 from taskloop.contracts.enums import Outcome, WaitWhat, WhyCode
+from taskloop.contracts.row import Row
 from taskloop.contracts.trace import Tokens
-from taskloop.contracts.wire import Tagged, load
+from taskloop.contracts.wire import load
 
 
-class LogRec(Tagged, kw_only=True):
-    V: ClassVar[int] = 2
-    t: float = 0.0  # unset (0): RunLog.emit stamps the time of the append
+class LogRec(Row):
+    V: ClassVar[int] = 3
 
 
 @final
 class RunStart(LogRec, tag="run_start"):
-    run: str
-    bead: str
     worktree: str
     slot: str | None = None
-    prev_run: str = ""
     started_because: str = ""
     ask: str = ""
     branch: str = ""  # the task branch the run works on ("" when HEAD is detached)
@@ -45,7 +42,6 @@ class StepEnd(LogRec, tag="step_end"):
     step: str
     outcome: str
     detail: str = ""
-    secs: float = 0.0
 
 
 @final
@@ -88,7 +84,6 @@ class CmdStart(LogRec, tag="cmd_start"):
 class CmdEnd(LogRec, tag="cmd_end"):
     id: str
     exit: int
-    secs: float = 0.0
     out: str = ""
 
 
@@ -110,9 +105,7 @@ class CheckEnd(LogRec, tag="check_end"):
     exit: int | None
     status: str
     tries: int = 1
-    secs: float = 0.0
     wall_hit: bool = False  # the engine stopped it at its wall limit (start: the CheckStart of the same id; end: this record's t)
-    waited: float = 0.0  # seconds it queued for a machine-wide resource lease before it began
     lane: str = ""
     at: float = 0.0  # seconds after its block began that it started
     cancelled: bool = False  # another lane's red stopped it
@@ -128,7 +121,6 @@ class GateStart(LogRec, tag="gate_start"):
 @final
 class GateEnd(LogRec, tag="gate_end"):
     exit: int | None
-    secs: float = 0.0
     skipped: bool = False
     deferred: list[str] = msgspec.field(default_factory=list)  # checks passed over: the host lacks their resource, inputs unchanged
 
@@ -156,7 +148,6 @@ class WaitStart(LogRec, tag="wait_start"):
 @final
 class WaitEnd(LogRec, tag="wait_end"):
     id: str
-    secs: float
     in_budget: bool = False
 
 

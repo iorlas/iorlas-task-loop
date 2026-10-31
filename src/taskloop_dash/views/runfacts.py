@@ -95,7 +95,7 @@ def spans_of(records: Sequence[rec.EngineLog]) -> tuple[Span, ...]:
         if isinstance(r, rec.StepStart):
             e = ends.get(r.id)
             out.append(Span(r.id, r.step, phases.phase_of(r.step), r.t, e.t if e else None, e.outcome if e else "", r.text,
-                            e.secs if e else 0.0))
+                            (e.exec_seconds or 0.0) if e else 0.0))
     return tuple(out)
 
 
@@ -112,7 +112,7 @@ def cost_known(r: rec.CallEnd) -> bool:
 
 def waits_of(records: Sequence[rec.EngineLog]) -> tuple[Wait, ...]:
     starts = {r.id: r for r in records if isinstance(r, rec.WaitStart)}
-    return tuple(Wait(starts[r.id].what.value, r.secs) for r in records if isinstance(r, rec.WaitEnd) and r.id in starts)
+    return tuple(Wait(starts[r.id].what.value, r.wait_seconds or 0.0) for r in records if isinstance(r, rec.WaitEnd) and r.id in starts)
 
 
 def open_wait(records: Sequence[rec.EngineLog]) -> rec.WaitStart | None:

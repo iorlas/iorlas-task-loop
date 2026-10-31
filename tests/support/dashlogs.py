@@ -22,7 +22,7 @@ def bead(id, title="", status="open", **kw):
 class RunScript:
     def __init__(self, bead_id, stamp="20261015-100000", slot="a", at=0.0, prev_run="", worktree="/w/a"):
         self.bead, self.name, self.t, self.n = bead_id, f"{bead_id}-{stamp}", T + at, 0
-        self.rows = [typed("run_start", self.t, run=self.name, bead=bead_id, worktree=worktree, slot=slot, prev_run=prev_run)]
+        self.rows = [typed("run_start", self.t, run_id=self.name, bead=bead_id, worktree=worktree, slot=slot, parent_id=prev_run)]
 
     def add(self, kind, **fields):
         self.rows.append(typed(kind, self.t, **fields))
@@ -44,7 +44,7 @@ class RunScript:
             self.add("call_end", id=f"c{self.n}", status="ok", lane=lane, secs=secs, tokens={"in": 0, "cached": 0, "out": tokens},
                      cost=cost, cost_source=source)
         if end:
-            self.add("step_end", id=sid, step=step, outcome=outcome, secs=secs)
+            self.add("step_end", id=sid, step=step, outcome=outcome, exec_seconds=secs)
         return self
 
     def move(self, to, cause):

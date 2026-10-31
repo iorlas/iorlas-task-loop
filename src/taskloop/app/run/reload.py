@@ -106,7 +106,7 @@ class Reload:
         if err:
             e.warn(f"not moving to task-loop {ver}: could not write the hand-over: {err}")
             return
-        trail.event(e.who, "reload", e.bead, who="engine", old=here, new=ver, step=step, run=run, code_dir=str(d))
+        trail.event(e.who, "reload", e.bead, who="engine", old=here, new=ver, step=step, run_id=run, code_dir=str(d))
         e.log.note(f"moving to task-loop {ver} (was {here}) at {step}; run {run} goes on from its checkpoint")
         e.log.emit(rec.Reload(old=here, new=ver, step=step))
         handed = childenv.exec_env(e.env, {EnvVar.TL_REEXEC: Reexec(run=run, bead=e.bead, frm=here, owned=RUN_SLOT["owned"]).text()})

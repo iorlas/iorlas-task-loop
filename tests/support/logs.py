@@ -1,4 +1,4 @@
-"""Read an engine run's typed log (EngineLog v2) in a test: the records as dicts, optionally of some kinds only."""
+"""Read an engine run's typed log (EngineLog v3) in a test: the records as dicts, optionally of some kinds only."""
 import json
 from pathlib import Path
 
@@ -27,7 +27,7 @@ def pairs(recs):
 
 def typed(kind, t, **fields):
     """One EngineLog v2 line as a dict."""
-    return dict(v=2, kind=kind, t=t, **fields)
+    return dict(v=3, kind=kind, t=t, **fields)
 
 
 def write_log(path, recs):

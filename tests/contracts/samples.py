@@ -126,20 +126,23 @@ CHECK_RUN = checks.CheckRun(
 )
 
 
+HEAD = {"t": T, "run_id": str(RUN), "bead": "tl-1", "host": "h"}  # the head every row carries (contracts/row.py)
+
+
 def _log(cls, **kw):
-    return cls(t=T, **kw)
+    return cls(**{**HEAD, **kw})
 
 
 def _ev(cls, **kw):
-    return cls(t=T, bead="tl-1", session="s", actor="tl-abc", repo="/r", host="h", **kw)
+    return cls(**{**HEAD, "session": "s", "actor": "tl-abc", "repo": "/r", **kw})
 
 
 LOG = {
-    "run_start": _log(log.RunStart, run=str(RUN), bead="tl-1", worktree="/w", slot="s1", prev_run="p", started_because="retry", ask="a",
+    "run_start": _log(log.RunStart, worktree="/w", slot="s1", parent_id="p", started_because="retry", ask="a",
                       branch="task/tl-1"),
     "step_start": _log(log.StepStart, id="n4", step="write", text="write: stage 2/2", stage=2, stages=2, round=1, write=1, fix=0),
-    "step_end": _log(log.StepEnd, id="n4", step="write", outcome="done", detail="", secs=231.0),
-    "artifacts": _log(log.Artifacts, id="n4", step="write", bead="tl-1", names=["menu.png", "report.pdf"]),
+    "step_end": _log(log.StepEnd, id="n4", step="write", outcome="done", detail="", exec_seconds=231.0),
+    "artifacts": _log(log.Artifacts, id="n4", step="write", names=["menu.png", "report.pdf"]),
     "call_start": _log(log.CallStart, id="c3", n=3, step="write", node="n4", role="worker", resume=True),
     "call_end": _log(
         log.CallEnd,
@@ -173,7 +176,7 @@ LOG = {
         evidence="timeout after 47 min, exit -15",
     ),
     "cmd_start": _log(log.CmdStart, id="k1", text="git status", cwd="/w"),
-    "cmd_end": _log(log.CmdEnd, id="k1", exit=0, secs=0.4, out="clean"),
+    "cmd_end": _log(log.CmdEnd, id="k1", exit=0, exec_seconds=0.4, out="clean"),
     "check_start": _log(
         log.CheckStart,
         id="k5.1",
@@ -184,13 +187,15 @@ LOG = {
         log="checks/01.log",
         timeout_s=1200.0,
     ),
-    "check_end": _log(log.CheckEnd, id="k5.1", exit=1, status="failed", tries=2, secs=43.4, wall_hit=True, waited=12.5),
+    "check_end": _log(log.CheckEnd, id="k5.1", exit=1, status="failed", tries=2, exec_seconds=43.4, wall_hit=True, wait_seconds=12.5,
+                      call_id="k5.1"),
     "gate_start": _log(log.GateStart, cmd="just check", log="g.log", tree="deadbeef"),
-    "gate_end": _log(log.GateEnd, exit=0, secs=2101.0, skipped=False, deferred=["unity"]),
+    "gate_end": _log(log.GateEnd, exit=0, exec_seconds=2101.0, tree="deadbeef", base="1a2b3c4d5e6f", skipped=False,
+                     deferred=["unity"]),
     "land_try": _log(log.LandTry, n=2, base_before="1a2b3c4d5e6f", base_after="6f5e4d3c2b1a", rebase_moved=True, failing="gate",
                     gate="outside"),
     "wait_start": _log(log.WaitStart, id="w1", what=WaitWhat.LANE, holder="", until=T + 60),
-    "wait_end": _log(log.WaitEnd, id="w1", secs=60.0, in_budget=True),
+    "wait_end": _log(log.WaitEnd, id="w1", wait_seconds=60.0, in_budget=True),
     "lock": _log(log.Lock, what="land", holder="tl-7y6.1.2"),
     "unlock": _log(log.Unlock, what="land", secs=240.0),
     "vendor_error": _log(
@@ -238,14 +243,14 @@ EVENTS = {
     "stage": _ev(events.Stage, step="write", text="writing"),
     "slot_take": _ev(events.SlotTake, slot="s1", slot_bead="slot-1", ticket=3, worktree="/w"),
     "slot_release": _ev(events.SlotRelease, slot="s1", slot_bead="slot-1"),
-    "slot_setup": _ev(events.SlotSetup, slot="s1", worktree="/w", exit=0, secs=12.5),
+    "slot_setup": _ev(events.SlotSetup, slot="s1", worktree="/w", exit=0, exec_seconds=12.5),
     "slot_hold": _ev(events.SlotHold, slot="s1", slot_bead="slot-1", until=T + 3600, why="screenshots"),
     "slot_aside": _ev(events.SlotAside, slot="s1", held=True, why="busy"),
     "block": _ev(events.Block, why_code=WhyCode.NEEDS_HUMAN, why="needs a human"),
     "close": _ev(events.BeadClosed, reason="done"),
     "land": _ev(events.Land, sha="abc"),
-    "reload": _ev(events.CodeReloaded, code_dir="/c", new="2", old="1", who="tl-abc", step="n3", run="r1"),
-    "reload_fallback": _ev(events.ReloadFallback, who="loop", old="2", new="1", why="crashed", run="r1"),
+    "reload": _ev(events.CodeReloaded, code_dir="/c", new="2", old="1", who="tl-abc", step="n3"),
+    "reload_fallback": _ev(events.ReloadFallback, who="loop", old="2", new="1", why="crashed"),
     "slot_hold_expired": _ev(events.SlotHoldExpired, slot="s1", slot_bead="slot-1"),
     "worktree_start": _ev(events.WorktreeStart, worktree="/w"),
     "worktree_sunset": _ev(events.WorktreeSunset, worktree="/w"),
@@ -353,9 +358,12 @@ OTHERS = {
         runs=[checks.RunEntry(key=RUNKEY, hit=checks.CacheHit(result=CHECK_RUN.results[1], round=1, log_abs="/r/checks/00.log"))],
         base=[checks.BaseEntry(key=RUNKEY.replace(tree=TreeSha("")), red=True)],
     ),
-    "Durations": checks.Durations(runs={"just fmt": [3.1, 2.9]}),
+    "Durations": checks.Durations(rows=[
+        checks.Duration(**HEAD, call_id="fmt", step="just fmt", exec_seconds=3.1, wait_seconds=0.0, tree="deadbeef", base="1a2b3c4d5e6f",
+                        artifact="/r/checks/00.log", artifact_hash="9f2c"),
+        checks.Duration(**HEAD, step="just fmt", exec_seconds=2.9)]),
     "RunReport": OUTCOME,
-    "LoopLogLine": run.LoopLogLine(ts="2026-10-15T10:00:00", bead=BeadId("tl-1"), slot="s1", outcome=Result.LANDED, run_log="/rl"),
+    "LoopLogLine": run.LoopLogLine(**HEAD, slot="s1", outcome=Result.LANDED, run_log="/rl"),
     "Identity": identity.Identity(actor="tl-abcdef12", home="/home/u/.config/task-loop", session="abcdef12-0000"),
     "Reexec": run.Reexec(run=str(RUN), bead="tl-1", frm="0.23.56", owned="s1", fallback=True),
     "LoopState": loop.LoopState(

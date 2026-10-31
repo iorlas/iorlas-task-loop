@@ -174,8 +174,8 @@ class TraceRecords(te.EngineTest):
         self.assertEqual([(t["started_because"], t["prev_run"], t["ask"]) for t in traces],
                          [("first", "", ""), ("answer", first, "t-1-1")])
         run = records(self.eng, rec.RunStart)[-1]
-        self.assertEqual((run.started_because, run.prev_run, run.ask), ("answer", first, "t-1-1"))
-        self.assertEqual(run.run, self.eng.log_path.stem)
+        self.assertEqual((run.started_because, run.parent_id, run.ask), ("answer", first, "t-1-1"))
+        self.assertEqual(run.run_id, self.eng.log_path.stem)
 
     def test_a_run_after_a_stop_resumes_from_the_checkpoint(self):
         two = te.EngineTest.TWO
@@ -185,7 +185,7 @@ class TraceRecords(te.EngineTest):
         rc, _ = self.run_engine({"write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0)
         run = records(self.eng, rec.RunStart)[-1]
-        self.assertEqual((run.started_because, run.prev_run), ("resume", first))
+        self.assertEqual((run.started_because, run.parent_id), ("resume", first))
 
     def test_a_rerun_without_a_checkpoint_is_a_retry(self):
         self.run_engine({"plan": [stop("worker_failed", say="boom")] * 2})
@@ -193,7 +193,7 @@ class TraceRecords(te.EngineTest):
         self.assertFalse((homes.config_dir() / "checkpoints" / "t-1.json").exists())
         self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         run = records(self.eng, rec.RunStart)[-1]
-        self.assertEqual((run.started_because, run.prev_run), ("retry", first))
+        self.assertEqual((run.started_because, run.parent_id), ("retry", first))
 
     def test_check_logs_of_runs_older_than_two_weeks_are_pruned_at_start(self):
         old = homes.config_dir() / "runs" / "t-0-20261001-000000" / "checks"

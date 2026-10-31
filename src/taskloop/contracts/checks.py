@@ -8,6 +8,7 @@ import msgspec
 
 from taskloop.contracts.enums import CheckStatus
 from taskloop.contracts.ids import CheckId, TreeSha
+from taskloop.contracts.row import Row
 from taskloop.contracts.runkey import RunKey
 from taskloop.contracts.wire import Rec
 
@@ -228,8 +229,16 @@ class CheckCacheEntry(Rec):
 
 
 @final
-class Durations(Rec):
-    """check-durations/<repo>.json: the seconds of the last runs of each command, newest last."""
+class Duration(Row, tag="duration"):
+    """One passed run of a command, as a row: `step` is the normalised command, `exec_seconds` what it took, and the head says which
+    run, bead, tree and base it was."""
 
-    V: ClassVar[int] = 1
-    runs: dict[str, list[float]] = msgspec.field(default_factory=dict)
+    outcome: str = "passed"
+
+
+@final
+class Durations(Rec):
+    """check-durations/<repo>.json: the rows of the last runs of each command (step), newest last."""
+
+    V: ClassVar[int] = 2
+    rows: list[Duration] = msgspec.field(default_factory=list)

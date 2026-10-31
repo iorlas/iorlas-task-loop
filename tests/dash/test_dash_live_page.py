@@ -34,7 +34,7 @@ class LivePageApi(unittest.TestCase):
         self.dash = make_dash(config=self.tmp.name, clock=lambda: self.now)
         cfg = self.dash.env.config
         self.log, self.lf = cfg.engine_log(RUN), cfg.live_dir(RUN) / "01-write.jsonl"
-        put(self.log, [typed("run_start", T, run=RUN, bead=BEAD, worktree=""), typed("beat", T + 1),
+        put(self.log, [typed("run_start", T, run_id=RUN, bead=BEAD, worktree=""), typed("beat", T + 1),
                        typed("step_start", T + 2, id="n1", step="write", text="write: x"), typed("beat", T + 3),
                        typed("cmd_start", T + 4, id="m1", text="git fetch -q origin"), typed("cmd_end", T + 5, id="m1", exit=0)])
         put(self.lf, [{"t": T + 6, "k": "start", "harness": "codex", "lane": "CODEX", "model": "gpt-x", "pid": 1},

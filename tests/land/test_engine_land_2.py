@@ -50,7 +50,7 @@ class EngineLand2Test(EngineTest):
         self.assertLess(kinds.index("step_end"), kinds.index("wait_start"))  # the open step ended before the wait began
         self.assertLess(kinds.index("wait_end"), kinds.index("lock"))
         self.assertLess(kinds.index("lock"), kinds.index("unlock"))
-        self.assertGreaterEqual(w["secs"], 0)
+        self.assertGreaterEqual(w["wait_seconds"], 0)
 
     def test_a_free_land_lock_logs_no_wait(self):
         eng = self.checks_engine()

@@ -9,6 +9,7 @@ class EnvVar(StrEnum):
     TL_SLOT = "TL_SLOT"                          # the slot's name (domain/slot_env)
     TL_ARTIFACTS = "TL_ARTIFACTS"                # the folder a check leaves artifacts in
     TL_ARTIFACT_STEP = "TL_ARTIFACT_STEP"        # the id of the check that is running
+    TL_RUN_ID = "TL_RUN_ID"                      # the id of the run a check belongs to (the run_id of its rows)
     TL_BOX_CWD = "TL_BOX_CWD"                    # the cwd of a check inside its container
     TL_WORKER_MB = "TL_WORKER_MB"                # address-space cap of each xdist worker (release suite)
     # handovers between two processes of the engine (one typed record each, see contracts/env.py)

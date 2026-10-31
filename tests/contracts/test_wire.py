@@ -68,7 +68,7 @@ class RoundTrip(unittest.TestCase):
             for rec in coll.values():
                 reachable(rec, found)
 
-        bases = {"LogRec", "EventRec", "LiveRec"}
+        bases = {"Row", "LogRec", "EventRec", "LiveRec"}
         missing = []
         for m in pkgutil.iter_modules(pkg.__path__):
             if (

@@ -47,11 +47,9 @@ class Records:
         why = self.origin()
         e.log.emit(
             rec.RunStart(
-                run=e.log_path.stem,
-                bead=e.bead,
                 worktree=str(e.wt),
                 slot=(lock.rec.slot if lock else "") or None,
-                prev_run=why["prev_run"],
+                parent_id=why["prev_run"],
                 started_because=why["started_because"],
                 ask=why["ask"],
                 branch=e.git.branch(e.wt),

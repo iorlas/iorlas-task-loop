@@ -2,6 +2,7 @@
 import contextlib
 import datetime
 import json
+import socket
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -320,8 +321,8 @@ class Loop(Core):
     def record(self, bead: str, slot: str, v: vd.Verdict) -> None:
         env = self.env
         self.files.log_line(LoopLogLine(
-            ts=time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(env.now())), bead=BeadId(bead), slot=slot, outcome=v.outcome,
-            minutes=v.minutes or 0.0, rounds=v.rounds or 0, tests_added=v.tests_added or 0, asked=v.asked, trace=v.run or "",
+            t=env.now(), bead=bead, host=socket.gethostname(), slot=slot, outcome=v.outcome,
+            minutes=v.minutes or 0.0, rounds=v.rounds or 0, tests_added=v.tests_added or 0, asked=v.asked, run_id=v.run or "",
             engine_log=v.log or "", run_log=v.run_log, why=v.why[:300]))
         self.say(f"{bead} {v.outcome}{': ' + v.why[:160] if v.why else ''}")
 

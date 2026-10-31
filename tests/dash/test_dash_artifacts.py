@@ -25,7 +25,7 @@ def fake_run(cfg: str, dash) -> None:
     """A run of three steps that left 3 PNGs and 1 PDF, one Artifacts record per step, and the files as ingest copies them."""
     art = dash.env.config.artifacts(BEAD)
     art.mkdir(parents=True)
-    recs, t = [typed("run_start", 1.0, run=RUN, bead=BEAD, worktree="/w", slot="s1", started_because="first")], 2.0
+    recs, t = [typed("run_start", 1.0, run_id=RUN, bead=BEAD, worktree="/w", slot="s1", started_because="first")], 2.0
     for n, (sid, step, names) in enumerate(STEPS):
         recs.append(typed("step_start", t, id=sid, step=step, text=step))
         for name in names:

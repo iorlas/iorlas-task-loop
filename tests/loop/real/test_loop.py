@@ -458,10 +458,10 @@ class Loop(LoopBase):
         self.beads({"x-1": [rec("parked", run="tr-9", log="/eng/x-1.jsonl")]})
         self.run_loop()
         ln = self.lines()[0]
-        for k in ("ts", "bead", "slot", "outcome", "minutes", "rounds", "tests_added", "asked", "trace", "engine_log",
+        for k in ("t", "run_id", "bead", "host", "slot", "outcome", "minutes", "rounds", "tests_added", "asked", "engine_log",
                   "run_log", "why"):
             self.assertIn(k, ln)
-        self.assertEqual((ln["bead"], ln["slot"], ln["trace"], ln["engine_log"], ln["asked"]),
+        self.assertEqual((ln["bead"], ln["slot"], ln["run_id"], ln["engine_log"], ln["asked"]),
                          ("x-1", "s1", "tr-9", "/eng/x-1.jsonl", True))
 
     def test_a_bead_another_session_takes_is_skipped_for_the_next(self):

@@ -72,7 +72,7 @@ class Silent(unittest.TestCase):
         self.assertEqual(ended.tick(T + 10 * WRITE_LIMIT), [])
         waiting = watch(self.START, rec.WaitStart(t=T + 1, id="w1", what=WaitWhat.LANE))
         self.assertEqual(waiting.tick(T + 10 * WRITE_LIMIT), [])
-        waiting.feed(rec.WaitEnd(t=T + 2, id="w1", secs=1.0))
+        waiting.feed(rec.WaitEnd(t=T + 2, id="w1", wait_seconds=1.0))
         self.assertEqual(len(waiting.tick(T + 10 * WRITE_LIMIT)), 1)
 
     def test_a_said_episode_carries_over_a_move_to_a_newer_install(self):

@@ -61,7 +61,8 @@ class Attempts:
         t0 = time.time()
         art = RepoDirs(self.host.wt).artifacts(self.host.bead)
         art.mkdir(parents=True, exist_ok=True)  # where a check may drop pictures: ingest copies them at step end
-        rc, tail = self._exec(c, log, {**env, EnvVar.TL_ARTIFACTS.value: str(art), EnvVar.TL_ARTIFACT_STEP.value: c.id}, stop)
+        ids = {EnvVar.TL_ARTIFACTS.value: str(art), EnvVar.TL_ARTIFACT_STEP.value: c.id, EnvVar.TL_RUN_ID.value: self.host.run_id}
+        rc, tail = self._exec(c, log, {**env, **ids}, stop)
         seen = self._read(log, tail)
         took = time.time() - t0
         self.host.waits.note_slot_waits(seen, took)

@@ -156,6 +156,7 @@ class Engine(RunFields):
         taken = (self.reexec.run if self.reexec else None) or (pause.run if pause else None) or dead_run
         layout = RunLayout.open(bead, wt, taken, self.home)
         self.log_path, self.err_path, self.run_dir = layout.log_path, layout.err_path, layout.run_dir
+        self.run_id = layout.log_path.stem  # the run's id: TL_RUN_ID in its checks, run_id in its rows
         self.task_dir, self.brief_file, self.evidence_dir = layout.task_dir, layout.brief_file, layout.evidence_dir
         self.exec_fn: Any = None  # a test's exec, newer-install lookup, run-task argv, the cross-process lock
         self.newer_fn: Any = None
@@ -339,7 +340,7 @@ class Engine(RunFields):
         return time.time()  # looked up at each call: a test sets the wall clock
 
     def on_step(self, text: str) -> None:
-        trail.event(self.who, "stage", self.bead, text=text)
+        trail.event(self.who, "stage", self.bead, text=text, run_id=self.run_id)
 
     def call_dir(self) -> Path:
         return self.home.root / "checkpoints"

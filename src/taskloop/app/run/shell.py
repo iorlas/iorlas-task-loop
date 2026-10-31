@@ -45,7 +45,7 @@ class Shell:
         if save:
             Path(save).write_text(text, encoding="utf-8")
         tail = "\n".join(text.strip().splitlines()[-15:])
-        e.log.emit(rec.CmdEnd(id=cid, exit=rc, secs=round(time.time() - started, 1), out=tail[-600:] if rc else ""))
+        e.log.emit(rec.CmdEnd(id=cid, exit=rc, exec_seconds=round(time.time() - started, 1), out=tail[-600:] if rc else ""))
         e.halt_point(what != "check")  # a stop, not the command's verdict (a stopped check reports itself first)
         if check and rc:
             raise Blocked(f"failed: `{text_of(cmd)}` exit {rc}\n{tail}", kind=Kind.FAULT_INFRA)
@@ -62,7 +62,7 @@ class Shell:
             now = time.time()
             e.killed = True
             e.log.emit(rec.Kill(what=what, why="interrupted", secs=round(now - started), started_t=started, kill_t=now, observed_t=now))
-            e.log.emit(rec.CmdEnd(id=cid, exit=-1, secs=round(now - started, 1)))
+            e.log.emit(rec.CmdEnd(id=cid, exit=-1, exec_seconds=round(now - started, 1)))
             raise
 
     def killed(self, res: Any, rc: int, what: str, timeout: float, started: float) -> str:

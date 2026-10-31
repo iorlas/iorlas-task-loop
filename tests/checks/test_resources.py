@@ -192,7 +192,7 @@ class Engine(EngineTest):
         with mock.patch.object(resources, "POLL_S", 0.02), mock.patch.object(Resources, "__init__", init):
             rc, _ = self.run_engine(ANSWERS, prep=hold_it, resources=UNITY, checks=self.checks(["f.txt"]))
         self.assertEqual(rc, 0, self.blocked)
-        waits = sorted(r["waited"] for r in records(self.eng, "check_end"))
+        waits = sorted(r["wait_seconds"] for r in records(self.eng, "check_end"))
         self.assertGreaterEqual(waits[-1], 0.2, waits)  # the unity check queued behind the other slot's lease
         self.assertEqual(waits[:-1], [0.0] * (len(waits) - 1))  # and no other check waited
 

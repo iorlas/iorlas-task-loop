@@ -46,7 +46,7 @@ class WaitCase(unittest.TestCase):
         self.out: list[str] = []
 
     def log(self, run=RUN, close=None, beat=T):
-        rows = [typed("run_start", beat - 10, run=run, bead=run.rsplit("-", 2)[0], worktree="/w/x"), typed("beat", beat)]
+        rows = [typed("run_start", beat - 10, run_id=run, bead=run.rsplit("-", 2)[0], worktree="/w/x"), typed("beat", beat)]
         if close:
             rows.append(typed("close", beat + 1, outcome=close, why="because"))
         write_log(self.cfg.engine_log(run), rows)

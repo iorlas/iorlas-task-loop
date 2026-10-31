@@ -43,7 +43,7 @@ class RequestFile(unittest.TestCase):
         self.now = time.time()
         log = self.cfg.engine_log(RUN)
         log.parent.mkdir(parents=True)
-        log.write_text(json.dumps(typed("run_start", self.now - 5, run=RUN, bead="tl-5", worktree="")) + "\n")
+        log.write_text(json.dumps(typed("run_start", self.now - 5, run_id=RUN, bead="tl-5", worktree="")) + "\n")
 
     def test_requests_merge_and_are_taken_once(self):
         self.assertEqual(requests.post(self.cfg, RUN, "dash", self.now, note="one"), "")
@@ -120,7 +120,7 @@ class Cli(unittest.TestCase):
         run = "fk-1-20261026-100000"
         log = self.cfg.engine_log(run)
         log.parent.mkdir(parents=True)
-        log.write_text(json.dumps(typed("run_start", time.time(), run=run, bead="fk-1", worktree="")) + "\n")
+        log.write_text(json.dumps(typed("run_start", time.time(), run_id=run, bead="fk-1", worktree="")) + "\n")
         self.assertEqual(self.say("note", "fk-1", "use", "blue"), 0)
         self.assertEqual(self.say("park", "fk-1"), 0)
         got = must(requests.peek(self.cfg, run))

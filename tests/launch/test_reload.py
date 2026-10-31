@@ -160,7 +160,7 @@ class Reload(te.EngineTest):
         ck = read_ck(eng)
         self.assertEqual((ck.step, ck.run), ("land", run))
         ev = [e for e in self.events() if e["kind"] == "reload"]
-        self.assertEqual([(e["old"], e["new"], e["who"], e["run"]) for e in ev], [("0.1.0", "0.2.0", "engine", run)])
+        self.assertEqual([(e["old"], e["new"], e["who"], e["run_id"]) for e in ev], [("0.1.0", "0.2.0", "engine", run)])
         self.assertEqual([c[0] for c in script.calls], ["planner", "worker", "reviewer"])  # land and close have not run yet
         self.assertEqual(self.closed, [])
         # the new image: same environment, the TL_REEXEC hand-over, the same checkpoint and log

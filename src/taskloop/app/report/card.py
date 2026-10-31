@@ -45,12 +45,9 @@ def crashes(repo: str, since: float, until: float, traces: Sequence[RunTrace], c
     out: dict[Any, dict[str, Any]] = {}
     loop_lines = [i.rec for i in LoopLog(cfg, loop_key(repo)).read_from(0).items]
     for r in loop_lines:
-        try:
-            t = time.mktime(time.strptime(r.ts, "%Y-%m-%dT%H:%M:%S"))
-        except ValueError:
-            continue
-        if since <= t < until and r.outcome is Result.FAILED and not r.trace and r.why.startswith("failed: no outcome from run-task"):
-            out[f"loop:{r.bead}:{r.ts}"] = {"bead": r.bead, "t": t, "run": None, "why": r.why[:200]}
+        t = r.t
+        if since <= t < until and r.outcome is Result.FAILED and not r.run_id and r.why.startswith("failed: no outcome from run-task"):
+            out[f"loop:{r.bead}:{r.t}"] = {"bead": r.bead, "t": t, "run": None, "why": r.why[:200]}
     traced = {str(r.run) for r in traces} | {Path(r.log).stem for r in traces if r.log}
     prefixes = {prefix(r.bead) for r in traces} | {prefix(r.bead) for r in loop_lines}
     for f in sorted((cfg.root / "engine").glob("*.jsonl")):

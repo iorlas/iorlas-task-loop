@@ -43,7 +43,7 @@ def put(path: Path, rows: list[dict]) -> None:
 
 
 def started(t: float) -> list[dict]:
-    return [typed("run_start", t, run=RUN, bead=BEAD, worktree="/w"), typed("step_start", t + 1, id="n1", step="write", text="write")]
+    return [typed("run_start", t, run_id=RUN, bead=BEAD, worktree="/w"), typed("step_start", t + 1, id="n1", step="write", text="write")]
 
 
 class Rule(unittest.TestCase):

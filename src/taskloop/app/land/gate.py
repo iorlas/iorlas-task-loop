@@ -126,10 +126,10 @@ class Gate:
         try:
             run = e.checker.run_items(gate_items(e.cfg))
         except CheckFault as fault:
-            e.log.emit(rec.GateEnd(exit=fault.rc, secs=round(time.time() - started)))
+            e.log.emit(rec.GateEnd(exit=fault.rc, exec_seconds=round(time.time() - started)))
             raise e.blocked_for(fault.text, FAULTS[fault.kind]) from fault
         if verified.refusal(run):
-            e.log.emit(rec.GateEnd(exit=1, secs=round(time.time() - started)))
+            e.log.emit(rec.GateEnd(exit=1, exec_seconds=round(time.time() - started)))
             raise verified.stop(run, e)
         e.halt_point()  # a stop ended a step, which then reports itself red: the run stops here, not in a fix round
         reds = [c for c in run.results if c.red and not verified.deferred(c)]
@@ -139,7 +139,7 @@ class Gate:
         passed = verified.passed_over(run)
         if passed:
             e.log.note(f"gate passed past deferred checks (no such resource here, inputs unchanged): {', '.join(passed)}")
-        e.log.emit(rec.GateEnd(exit=1 if reds else 0, secs=round(time.time() - started), skipped=skipped, deferred=passed))
+        e.log.emit(rec.GateEnd(exit=1 if reds else 0, exec_seconds=round(time.time() - started), skipped=skipped, deferred=passed))
         if not reds:
             return self.issue()
         e.gate_log = e.run_dir / reds[0].log if reds[0].log else None

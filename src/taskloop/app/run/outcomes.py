@@ -45,7 +45,7 @@ def run_breakdown(log_path: str | Path, open_node: Any = None, top: int = 4) -> 
     for it in JsonlStore(Path(log_path), rec.decode).read_from().items:
         if isinstance(it.rec, rec.StepEnd):
             t = tot.setdefault(it.rec.step, [0.0, 0])
-            t[0] += it.rec.secs
+            t[0] += it.rec.exec_seconds or 0.0
             t[1] += 1
     if open_node:
         t = tot.setdefault(open_node.step, [0.0, 0])

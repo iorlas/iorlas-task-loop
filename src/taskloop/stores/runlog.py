@@ -11,8 +11,9 @@ from taskloop.stores.api import Log
 class RunLog:
     def __init__(self, log: Log[EngineLog], echo: Callable[[str], None] | None = None, quiet: frozenset[str] = frozenset(),
                  render: Callable[[EngineLog], str | None] | None = None, clock: Callable[[], float] = time.time,
-                 first_id: int = 0) -> None:
+                 first_id: int = 0, run_id: str = "", bead: str = "", host: str = "") -> None:
         self.log = log
+        self.stamp = {"run_id": run_id, "bead": bead, "host": host}  # the head every row of this run carries
         self.echo = echo
         self.quiet = quiet
         self.render = render  # the console line of a record (None: not shown); default: kind and fields
@@ -21,9 +22,10 @@ class RunLog:
         self.ids = first_id  # one counter for every prefix, so an id is unique in the file whatever its prefix
 
     def emit(self, rec: EngineLog) -> int:
-        """Append the record (stamped with the time when it has none); echo a line of it unless its kind is quiet. Returns its offset."""
-        if not rec.t:
-            rec = rec.replace(t=self.clock())
+        """Append the record (stamped with the time, run id, bead and host where it has none); echo a line of it unless its kind is quiet.
+        Returns its offset."""
+        head = {"t": self.clock(), **self.stamp}
+        rec = rec.replace(**{k: v for k, v in head.items() if v and not getattr(rec, k)})
         with self.lock:
             at = self.log.append(rec)
             if self.echo is not None and rec.kind not in self.quiet:

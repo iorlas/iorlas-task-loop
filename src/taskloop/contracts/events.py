@@ -2,17 +2,15 @@
 from typing import ClassVar, final
 
 from taskloop.contracts.enums import WhyCode
-from taskloop.contracts.wire import Tagged, load
+from taskloop.contracts.row import Row
+from taskloop.contracts.wire import load
 
 
-class EventRec(Tagged):
-    V: ClassVar[int] = 2
-    t: float
-    bead: str
+class EventRec(Row):
+    V: ClassVar[int] = 3
     session: str = ""
     actor: str = ""
     repo: str = ""
-    host: str = ""
 
 
 @final
@@ -25,7 +23,6 @@ class Claim(EventRec, tag="claim"):
 
 @final
 class Stage(EventRec, tag="stage"):
-    step: str = ""
     text: str = ""
 
 
@@ -48,7 +45,6 @@ class SlotSetup(EventRec, tag="slot_setup"):
     slot: str = ""
     worktree: str = ""
     exit: int = 0
-    secs: float = 0.0
 
 
 @final
@@ -85,7 +81,7 @@ class BeadClosed(EventRec, tag="close"):
 
 @final
 class Land(EventRec, tag="land"):
-    sha: str = ""
+    """The head's sha and tree say what landed."""
 
 
 @final
@@ -95,8 +91,6 @@ class CodeReloaded(EventRec, tag="reload"):
     old: str = ""
     who: str = ""
     why: str = ""
-    step: str = ""
-    run: str = ""
 
 
 @final
@@ -105,7 +99,6 @@ class ReloadFallback(EventRec, tag="reload_fallback"):
     old: str = ""
     new: str = ""
     why: str = ""
-    run: str = ""
 
 
 @final

@@ -64,7 +64,8 @@ class Steps:
             if self.on_end:
                 self.on_end(c.id, c.step)  # before the end record, so what it writes belongs to this step
             self.log.emit(
-                StepEnd(id=c.id, step=c.step, outcome=c.outcome or outcome or "done", detail=c.detail, secs=round(self.clock() - c.t))
+                StepEnd(id=c.id, step=c.step, outcome=c.outcome or outcome or "done", detail=c.detail,
+                        exec_seconds=round(self.clock() - c.t))
             )
 
     def move(self, to: str, cause: str, detail: str = "") -> None:

@@ -95,8 +95,9 @@ def cmd_status(env: LoopEnv, files: LoopFiles, installs: Installs, a: Any) -> in
     if rows:
         print(table(["when", "bead", "slot", "outcome", "min", "rounds", "tests", "ask", "trace / why"]))
     for r in rows:
-        print(table([r.ts.replace("T", " ")[:16], r.bead, r.slot or "-", r.outcome.value, str(r.minutes), str(r.rounds),
-                     str(r.tests_added), "yes" if r.asked else "no", r.trace or r.why[:60]]))
+        when = time.strftime("%Y-%m-%d %H:%M", time.localtime(r.t))
+        print(table([when, r.bead, r.slot or "-", r.outcome.value, str(r.minutes), str(r.rounds),
+                     str(r.tests_added), "yes" if r.asked else "no", r.run_id or r.why[:60]]))
     return 0
 
 

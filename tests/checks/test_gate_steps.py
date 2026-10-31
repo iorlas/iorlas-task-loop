@@ -40,7 +40,7 @@ class GateSteps(EngineTest):
         for step in ("one", "two"):
             done = ends(self.eng, step)[step]
             self.assertEqual((done["exit"], done["status"]), (0, "passed"))
-            self.assertIn("secs", done)
+            self.assertIn("exec_seconds", done)
         self.assertEqual(len(records(self.eng, "gate_start")), 1)
 
     def test_a_red_gate_names_the_step_and_hands_its_output_to_the_fix_round(self):

@@ -669,13 +669,45 @@
   ]
  },
  "Durations": {
-  "v": 1,
-  "runs": {
-   "just fmt": [
-    3.1,
-    2.9
-   ]
-  }
+  "v": 2,
+  "rows": [
+   {
+    "kind": "duration",
+    "t": 1793050200.5,
+    "run_id": "tl-7y6.3.1-20261027-002239",
+    "parent_id": "",
+    "call_id": "fmt",
+    "bead": "tl-1",
+    "host": "h",
+    "tree": "deadbeef",
+    "base": "1a2b3c4d5e6f",
+    "sha": "",
+    "step": "just fmt",
+    "exec_seconds": 3.1,
+    "wait_seconds": 0.0,
+    "artifact": "/r/checks/00.log",
+    "artifact_hash": "9f2c",
+    "outcome": "passed"
+   },
+   {
+    "kind": "duration",
+    "t": 1793050200.5,
+    "run_id": "tl-7y6.3.1-20261027-002239",
+    "parent_id": "",
+    "call_id": "",
+    "bead": "tl-1",
+    "host": "h",
+    "tree": "",
+    "base": "",
+    "sha": "",
+    "step": "just fmt",
+    "exec_seconds": 2.9,
+    "wait_seconds": null,
+    "artifact": "",
+    "artifact_hash": "",
+    "outcome": "passed"
+   }
+  ]
  },
  "RunReport": {
   "v": 2,
@@ -698,16 +730,28 @@
   "lane": ""
  },
  "LoopLogLine": {
-  "v": 3,
-  "ts": "2026-10-15T10:00:00",
+  "v": 4,
+  "kind": "loop",
+  "t": 1793050200.5,
+  "run_id": "tl-7y6.3.1-20261027-002239",
+  "parent_id": "",
+  "call_id": "",
   "bead": "tl-1",
+  "host": "h",
+  "tree": "",
+  "base": "",
+  "sha": "",
+  "step": "",
+  "exec_seconds": null,
+  "wait_seconds": null,
+  "artifact": "",
+  "artifact_hash": "",
   "slot": "s1",
   "outcome": "landed",
   "minutes": 0.0,
   "rounds": 0,
   "tests_added": 0,
   "asked": false,
-  "trace": "",
   "engine_log": "",
   "run_log": "/rl",
   "why": ""

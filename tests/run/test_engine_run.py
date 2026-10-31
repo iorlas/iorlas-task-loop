@@ -400,7 +400,7 @@ class EngineRunTest(EngineTest):
         eng.t0 -= 600
         eng.waits.add(120, WaitWhat.LANE)
         (start,), (w,) = records(eng, "wait_start"), self.wait_records(eng)
-        self.assertEqual((start["what"], start["id"] == w["id"], w["secs"], w["in_budget"]), ("lane", True, 120, False))
+        self.assertEqual((start["what"], start["id"] == w["id"], w["wait_seconds"], w["in_budget"]), ("lane", True, 120, False))
 
     def test_screenshots_in_evidence_are_kept_outside_the_worktree_and_named_on_the_bead(self):
         real = fake_route.Script.reply
@@ -438,7 +438,7 @@ class EngineRunTest(EngineTest):
         log = Path(tempfile.mkdtemp()) / "run.jsonl"
         log.write_text(
             "\n".join(
-                json.dumps({"v": 2, "kind": "step_end", "t": 1.0, "id": "n1", "step": st, "outcome": "done", "secs": sec}) + "\n"
+                json.dumps({"v": 3, "kind": "step_end", "t": 1.0, "id": "n1", "step": st, "outcome": "done", "exec_seconds": sec}) + "\n"
                 for st, sec in (("checks", 6000), ("checks", 3800), ("write", 900), ("plan", 20))
             )
         )

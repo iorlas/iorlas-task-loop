@@ -137,7 +137,7 @@ class PlannerReport(unittest.TestCase):
                                      + "\n" for k, (r, b, i, c) in enumerate(rows)))
         nodes = [("plan: plan", {}), ("plan: re-plan", {}), ("plan: rewrite checks", {}), ("plan: amend", {})]
         (self.eng / "x-1-20261021-060000.jsonl").write_text("".join(
-            json.dumps(dict({"v": 2, "t": t + k, "kind": "step_start", "id": "n1", "text": txt, "step": "plan"}, **kw)) + "\n"
+            json.dumps(dict({"v": 3, "t": t + k, "kind": "step_start", "id": "n1", "text": txt, "step": "plan"}, **kw)) + "\n"
             for k, (txt, kw) in enumerate(nodes)))
         (self.eng / "x-2-20261021-060000.jsonl").write_text(json.dumps(
             {"v": 2, "t": t, "kind": "step_start", "id": "n1", "text": "plan: plan", "step": "plan"}) + "\n")

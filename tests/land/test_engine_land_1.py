@@ -151,7 +151,8 @@ class EngineLand1Test(EngineTest):
         self.assertAlmostEqual(before - eng.budget.spent_min(), 2251 / 60, delta=0.5)  # real time moved by ms; no real sleep
         (start,), (end,) = records(eng, "wait_start"), records(eng, "wait_end")
         self.assertEqual(
-            (start["holder"], start["id"], end["id"], end["secs"], end["in_budget"]), ("tl-266", end["id"], start["id"], 2251, False)
+            (start["holder"], start["id"], end["id"], end["wait_seconds"], end["in_budget"]),
+            ("tl-266", end["id"], start["id"], 2251, False),
         )
 
     def test_the_gate_runs_once_at_land(self):

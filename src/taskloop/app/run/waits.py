@@ -81,7 +81,7 @@ class Waits:
             wid = wid or self.start(what)
             if secs > 0:
                 e.log.note("waited {} min for {}: not counted in budget_min".format(int(secs // 60), what.value.replace("_", " ")))
-            e.log.emit(rec.WaitEnd(id=wid, secs=round(secs), in_budget=False))
+            e.log.emit(rec.WaitEnd(id=wid, wait_seconds=round(secs), in_budget=False))
 
     @contextlib.contextmanager
     def locked(self, what: str, path: Path | str, holder: str | None = None) -> Generator[Path | str]:
@@ -104,7 +104,7 @@ class Waits:
             if who:
                 secs = max(0.0, e.clock.now() - t_req[0])
                 e.waited += secs
-                e.log.emit(rec.WaitEnd(id=wid[0], secs=round(secs), in_budget=False))
+                e.log.emit(rec.WaitEnd(id=wid[0], wait_seconds=round(secs), in_budget=False))
             held = e.clock.now()
             e.log.emit(rec.Lock(what=what.removesuffix("_lock"), holder=holder or e.bead))
             try:

@@ -57,7 +57,7 @@ class Golden(unittest.TestCase):
             self.store.put(bead(bid, name))
             run = RunScript(bid, slot="a", at=i * 100).step("plan", 30, 1000, "OC Go").step("write", 40, 2000, text="write 1")
             run.step("close", 1, text=f"close: {outcome}", end=False).close(outcome, code, why)
-            run.add("step_end", id=f"n{run.n}", step="close", outcome="done", secs=1)
+            run.add("step_end", id=f"n{run.n}", step="close", outcome="done", exec_seconds=1)
             run.write(self.cfg)
             self.paths[name] = str(self.cfg / "engine" / f"{run.name}.jsonl")
         ports = Ports(store=lambda r: self.store, slot_beads=lambda r: [])

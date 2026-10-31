@@ -69,7 +69,7 @@ def loop_end(run: Run, last: Span, nxt: Span) -> PassEnd:
 
 def resumed_of(run: Run, prev: Run | None) -> Resumed | None:
     """A run that comes back after an earlier one: where, and how long it waited for a slot (an owner's answer is not that wait)."""
-    if prev is None or not run.start or not run.start.prev_run:
+    if prev is None or not run.start or not run.start.parent_id:
         return None
     if prev.close and phases.end_of_close(prev.close) == "asked":
         return None

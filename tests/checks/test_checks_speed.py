@@ -23,7 +23,7 @@ from taskloop.adapters import (
 from taskloop.app.checks.cache import InputKeys
 from taskloop.app.wire import doctor
 from taskloop.contracts.argv import text_of
-from taskloop.contracts.checks import Check, Durations
+from taskloop.contracts.checks import Check, Duration, Durations
 from taskloop.contracts.ids import CheckId
 from taskloop.contracts.plancheck import adhoc
 from taskloop.domain.checks import durations, inputs, lint, planref
@@ -226,6 +226,10 @@ class InputCache(SpeedTest):
         self.assertEqual(inputs.inputs_hash(a, ["z/**"]), "")
 
 
+def rows_by_step(history):
+    return {step: [r for r in history.rows if r.step == step] for step in {r.step for r in history.rows}}
+
+
 class CheapFirst(SpeedTest):
     def slow_then_fast(self):
         mark = Path(self.tmp.name) / "order"
@@ -235,7 +239,7 @@ class CheapFirst(SpeedTest):
 
     def seed(self, eng, cmd, secs):
         doc = eng.stores.durations.of(check_files.repo_key(eng.git, str(self.wt)))
-        doc.write(durations.merged(doc.get() or Durations(), [(cmd, secs)] * 3))
+        doc.write(durations.merged(doc.get() or Durations(), [Duration(step=cmd, exec_seconds=secs)] * 3))
 
     def test_the_cheaper_check_runs_first_and_a_red_stops_the_round(self):
         mark, slow, _ = self.slow_then_fast()
@@ -257,7 +261,7 @@ class CheapFirst(SpeedTest):
         self.seed(eng, slow, 400)
         res = eng.run_checks({"checks": [], "files": []}, "s")
         self.assertEqual([(c.id, c.status) for c in res], [("a", "failed"), ("b", "passed"), ("c", "skipped")])
-        hist = (eng.stores.durations.of(check_files.repo_key(eng.git, str(self.wt))).get() or Durations()).runs
+        hist = rows_by_step(eng.stores.durations.of(check_files.repo_key(eng.git, str(self.wt))).get() or Durations())
         self.assertNotIn(norm(red), hist)
         self.assertIn(norm(quick), hist)
 
@@ -268,7 +272,7 @@ class CheapFirst(SpeedTest):
         self.seed(eng, slow, 90)
         res = eng.run_checks({"checks": [], "files": []}, "s")
         self.assertEqual([c.id for c in res], ["new", "known"])
-        hist = (eng.stores.durations.of(check_files.repo_key(eng.git, str(self.wt))).get() or Durations()).runs
+        hist = rows_by_step(eng.stores.durations.of(check_files.repo_key(eng.git, str(self.wt))).get() or Durations())
         self.assertEqual(len(hist[norm(quick)]), 1)
         self.assertEqual(len(hist[norm(slow)]), 4)
 
@@ -282,7 +286,7 @@ class CheapFirst(SpeedTest):
 
     def test_order_ignores_sub_five_second_noise(self):
         items = [Check(id=CheckId("a"), cmd="a"), Check(id=CheckId("b"), cmd="b")]
-        order = CheckOrder(Durations(runs={"a": [3.0], "b": [0.1]}))
+        order = CheckOrder(Durations(rows=[Duration(step="a", exec_seconds=3.0), Duration(step="b", exec_seconds=0.1)]))
         self.assertEqual(order.sort(items, {}), [0, 1])
 
 

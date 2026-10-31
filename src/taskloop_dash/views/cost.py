@@ -1,6 +1,6 @@
 """Time, tokens and cost per stage and bead (GET /api/cost): sums over the engine logs the dashboard already reads.
 
-Nothing here is estimated or recounted: a step's time is its StepEnd.secs, a call's tokens and cost are its CallEnd's, a wait's its
+Nothing here is estimated or recounted: a step's time is its StepEnd.exec_seconds, a call's tokens and cost are its CallEnd's, a wait's its
 WaitEnd's. A cost the worker's answer did not give (`cost_source` unknown) is counted in `unknown` and left out of `cost`. A run is in
 the window when its newest record is."""
 

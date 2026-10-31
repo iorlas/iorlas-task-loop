@@ -48,7 +48,7 @@ ENGINE_LINES: Final[dict[type, Callable[[Any], list[TermLine]]]] = {
     log.StepStart: lambda r: line(r, f"> {r.text or r.step}"),
     log.StepEnd: lambda r: line(r, f"{r.step}: {r.outcome}" + (f" ({r.detail})" if r.detail else ""), "dim"),
     log.CmdStart: lambda r: line(r, f"$ {r.text}"),
-    log.CmdEnd: lambda r: exited(r.t, r.exit, r.secs, r.out),
+    log.CmdEnd: lambda r: exited(r.t, r.exit, r.exec_seconds or 0.0, r.out),
     log.CheckStart: lambda r: line(r, f"check {r.check}: {r.cmd}"),
     log.CheckEnd: lambda r: line(r, f"check {r.status}", "warn" if r.status == "unverified" else exit_tone(r.exit)),
     log.GateStart: lambda r: line(r, f"gate: {r.cmd}"),

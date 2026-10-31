@@ -5,6 +5,7 @@ duration history the engine's checks already use."""
 import shutil
 import tempfile
 import threading
+import time
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
@@ -64,7 +65,8 @@ class CliHost:
         self.cfg = cfg
         self.stores = stores or real_stores(paths.ConfigDir(root or paths.default_root(env)))
         self.bead = "tl-check-" + check_files.repo_key(git, str(wt))
-        self.log = RunLog(fake_stores().run_log("check"))
+        self.run_id = self.bead + "-" + time.strftime("%Y%m%d-%H%M%S", time.gmtime())
+        self.log = RunLog(fake_stores().run_log("check"), run_id=self.run_id, bead=self.bead)
         self.checklog = CheckLog(self.log)
         self.run_dir = Path(tempfile.mkdtemp(prefix="tl-check-"))
         self.bead_env: Mapping[str, str] = {EnvVar.TL_SLOT.value: "check"}

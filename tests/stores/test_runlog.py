@@ -31,7 +31,7 @@ class RunLog(te.EngineTest):
         recs = records(self.eng)
         self.assertEqual(pairs(recs), ([], []))
         for r in recs:
-            self.assertEqual(r["v"], 2)
+            self.assertEqual((r["v"], r["run_id"], r["bead"]), (3, self.eng.log_path.stem, self.eng.bead))
             rec.decode(r)
         self.assertIn("run_start", [r["kind"] for r in recs])
         ends = [r for r in recs if r["kind"] != "said"]  # a comment the close-out posts (Said) may follow the Close

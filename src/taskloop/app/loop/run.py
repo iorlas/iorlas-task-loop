@@ -80,7 +80,7 @@ class BeadRun:
             if (back / "tl.py").is_file():  # died soon after the exec: that version is refused, once more on the old one
                 why = f"run-task died (exit {rc}) {env.now() - moved.t:.0f} s after the exec into it"
                 self.installs.record_bad(moved.to, why)
-                env.event("reload_fallback", b.id, who="loop", old=moved.to, new=moved.frm, why=why, run=moved.run)
+                env.event("reload_fallback", b.id, who="loop", old=moved.to, new=moved.frm, why=why, run_id=moved.run)
                 self.say(f"RED: {b.id} died after the move to task-loop {moved.to}; {b.id} goes on from its checkpoint on {moved.frm}")
                 return self.run(b, at, back, Reexec(run=moved.run, bead=b.id, frm=moved.to, fallback=True))
         if stopped and v.outcome is Result.FAILED:  # a stop is no verdict on the bead: back to the queue, unclaimed,

@@ -222,7 +222,7 @@ class TraceTelemetry(te.EngineTest):
         self.assertEqual(rc, 0)
         (start,), (end,) = self.records("gate_start"), self.records("gate_end")
         self.assertEqual(end["exit"], 0)
-        self.assertIn("secs", end)
+        self.assertIn("exec_seconds", end)
         self.assertFalse(end["skipped"])
         self.assertTrue(start["cmd"] and start["tree"])
         cache = self.records("checks")
