@@ -6,7 +6,7 @@ from typing import Any
 from taskloop.contracts import wire
 from taskloop.contracts.ids import is_bead_id
 from taskloop.contracts.locator import RunBundle
-from taskloop.contracts.runlife import liveness
+from taskloop.contracts.runlife import shown
 from taskloop_dash.api import live as live_api
 from taskloop_dash.env import Env
 from taskloop_dash.readers.records import Records
@@ -45,4 +45,4 @@ class Live:
         lr.refresh()
         cursor = live_api.decode(since or None)
         got = live_api.poll(lr, cursor, hold)
-        return 200, wire.dump(live_lines.page(got["events"], got["cursor"], liveness(logs[-1].manifest)))
+        return 200, wire.dump(live_lines.page(got["events"], got["cursor"], shown(logs[-1].manifest, self.env.clock())))

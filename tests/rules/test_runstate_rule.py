@@ -76,6 +76,32 @@ def scan() -> list[str]:
     return bad
 
 
+DASH = SRC / "taskloop_dash"
+WRITERS = {"reconcile", "mark_lost", "take_up"}  # names the dashboard must not import or call
+WRITER_CALLS = {"create", "end", "beat"}  # on a locator
+
+
+def dash_writer_uses(tree: ast.AST) -> list[tuple[int, str]]:
+    out: list[tuple[int, str]] = []
+    for n in ast.walk(tree):
+        if isinstance(n, ast.ImportFrom):
+            out += [(n.lineno, a.name) for a in n.names if a.name in WRITERS]
+        elif isinstance(n, ast.Attribute) and (n.attr in WRITERS or (n.attr in WRITER_CALLS and "locator" in ast.unparse(n.value).lower())):
+            out.append((n.lineno, n.attr))
+    return out
+
+
+class DashWritesNothing(unittest.TestCase):
+    def test_nothing_under_the_dashboard_names_a_run_state_writer(self):
+        bad = [f"{f.relative_to(ROOT)}:{line}: {name}" for f in sorted(DASH.rglob("*.py"))
+               for line, name in dash_writer_uses(ast.parse(f.read_text(encoding="utf-8")))]
+        self.assertEqual(bad, [], "the dashboard only reads: it displays runlife.shown, only tl processes call reconcile")
+
+    def test_the_scan_sees_planted_writers(self):
+        tree = ast.parse("from taskloop.contracts.runlife import reconcile\nself.locator.end(r)\nrunlife.reconcile(c, 1)\nx.shown()\n")
+        self.assertEqual([n for _, n in dash_writer_uses(tree)], ["reconcile", "end", "reconcile"])
+
+
 class LivenessIsRecorded(unittest.TestCase):
     def test_no_reader_derives_liveness_from_a_log_gap(self):
         self.assertEqual(scan(), [])

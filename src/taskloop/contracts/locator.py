@@ -4,7 +4,6 @@ run id -> its bundle; (repo, bead) -> its runs; a repo -> its runs; every run, b
 index: a manifest is decoded again only when its file changed. A run folder without a manifest is not a run here. The manifest also
 holds the run's state (RunState): the engine writes it, `reconcile` marks a dead run lost, and every reader reads only that state."""
 import os
-from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -144,17 +143,9 @@ class RunLocator:
         if old is not None and old.manifest.state.live:
             self._put(old.manifest.replace(state=state, ended=now, heartbeat=now, reason=reason[:300]))
 
-    def reconcile(self, now: float, alive: Callable[[int], bool], stale_after: float, host: str | None = None) -> list[str]:
-        """The one place a dead run is found: a live-state run of THIS host whose heartbeat is older than `stale_after` and whose pid is
-        gone becomes `lost`, once, with its reason. A run of another host, or whose process still lives, is left alone. -> the run ids
-        marked."""
-        host = host_name() if host is None else host
-        marked: list[str] = []
-        for b in self.runs():
-            m = b.manifest
-            if not m.state.live or m.host != host or now - m.heartbeat < stale_after or (m.pid > 0 and alive(m.pid)):
-                continue
-            self._put(m.replace(state=RunState.LOST, ended=m.heartbeat, reason=f"pid {m.pid} on {m.host} is gone; last heartbeat "
-                                                                              f"{now - m.heartbeat:.0f} s ago while {m.state}"))
-            marked.append(m.run)
-        return marked
+    def mark_lost(self, run: str, reason: str) -> None:
+        """The reconciler's one write: a run still in a live state becomes `lost`, once, with its reason (`runlife.reconcile` decides)."""
+        old = self.get(run)
+        if old is not None and old.manifest.state.live:
+            m = old.manifest
+            self._put(m.replace(state=RunState.LOST, ended=m.heartbeat, reason=reason[:300]))

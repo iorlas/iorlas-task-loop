@@ -63,6 +63,37 @@ class Rule(unittest.TestCase):
         self.assertGreaterEqual(N, 2 * BEAT_EVERY)  # a run is silent at most one beat; N/2 is that and a margin
 
 
+class Decision(unittest.TestCase):
+    """is_lost is the one decision: the writer applies it and the read-only dashboard displays it, so they cannot differ."""
+
+    def m(self, **kw):
+        base = {"state": RunState.RUNNING, "heartbeat": 1000.0, "host": "h", "pid": 7}
+        return RunManifest(run=RUN, repo="/r", bead=BEAD, started=0.0, **{**base, **kw})
+
+    def test_only_a_stale_live_run_of_this_host_with_a_dead_pid_is_lost(self):
+        dead, alive = (lambda p: False), (lambda p: True)
+        late = 1000.0 + N
+        self.assertTrue(runlife.is_lost(self.m(), "h", late, dead))
+        self.assertFalse(runlife.is_lost(self.m(), "h", late - 1, dead))  # fresh heartbeat
+        self.assertFalse(runlife.is_lost(self.m(), "h", late, alive))  # its process lives
+        self.assertFalse(runlife.is_lost(self.m(), "other", late, dead))  # another machine's pid says nothing
+        self.assertFalse(runlife.is_lost(self.m(state=RunState.DONE), "h", late, dead))  # terminal stays
+        self.assertTrue(runlife.is_lost(self.m(pid=0), "h", late, alive))  # no pid recorded
+
+    def test_what_the_dashboard_shows_is_what_reconcile_writes(self):
+        with tempfile.TemporaryDirectory() as d:
+            cfg = ConfigDir(Path(d))
+            now = 1_800_000_000.0
+            for run, pid in (("r-dead", NOBODY), ("r-live", os.getpid())):
+                manifest(cfg, run, BEAD, now - 9999, state=RunState.RUNNING, heartbeat=now - 9999, host=host_name(), pid=pid)
+            before = {b.run: runlife.shown(b.manifest, now) for b in RunLocator(cfg).runs()}
+            self.assertEqual(before, {"r-dead": Liveness.LOST, "r-live": Liveness.LIVE})
+            self.assertEqual(RunLocator(cfg).get("r-dead").manifest.state, RunState.RUNNING)  # showing wrote nothing  # type: ignore[union-attr]
+            self.assertEqual(runlife.reconcile(cfg, now), ["r-dead"])
+            after = {b.run: liveness(b.manifest) for b in RunLocator(cfg).runs()}
+            self.assertEqual(after, before)
+
+
 class Beats(unittest.TestCase):
     def test_every_beat_of_the_lease_also_writes_a_beat_record(self):
         class Store:

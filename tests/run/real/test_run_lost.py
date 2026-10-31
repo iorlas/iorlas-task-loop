@@ -49,6 +49,9 @@ class KilledEngine(te.EngineTest):
         finally:
             child.wait(WAIT)
         self.assertEqual(runlife.reconcile(cfg, m.heartbeat + 1), [], "a dead process with a fresh heartbeat may be a restart")
+        shown = make_dash(config=cfg.root, clock=lambda: later).live.page("t-1")[1]["state"]
+        self.assertEqual(shown, "lost", "the dashboard displays lost before anything wrote it")
+        self.assertEqual(where.get(run).manifest.state, RunState.RUNNING)  # type: ignore[union-attr]
         self.assertEqual(runlife.reconcile(cfg, later), [run])
         got = where.get(run).manifest  # type: ignore[union-attr]
         self.assertEqual(got.state, RunState.LOST)

@@ -1,12 +1,13 @@
 """How long a run lives, from its manifest alone: the one liveness rule every reader shares. A run's state is RECORDED by its writer
-(contracts/run.py RunState, runs/<run>/manifest.json), never inferred from a log gap: the engine marks it running on every heartbeat and
-terminal on every exit; `reconcile` is the one place that marks a run whose process is gone `lost`. How long its files are kept is
-KEEP_DAYS, swept by `tl prune` alone."""
+(contracts/run.py RunState, runs/<run>/manifest.json), never inferred from a log gap: the engine marks it running on every
+heartbeat and terminal on every exit; `reconcile` (tl processes only) is the one writer of `lost`, `is_lost` the one decision it and the
+read-only dashboard share. How long its files are kept is KEEP_DAYS, swept by `tl prune` alone."""
+from collections.abc import Callable
 from enum import StrEnum
 from typing import Final
 
 from taskloop.contracts.enums import Step
-from taskloop.contracts.locator import RunLocator
+from taskloop.contracts.locator import RunLocator, host_name
 from taskloop.contracts.locks import pid_alive
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.run import RunManifest, RunState
@@ -45,7 +46,28 @@ def liveness(m: RunManifest) -> Liveness:
     return Liveness.LIVE if m.state.live else Liveness.LOST if m.state is RunState.LOST else Liveness.ENDED
 
 
+def is_lost(m: RunManifest, host: str, now: float, alive: Callable[[int], bool]) -> bool:
+    """The one decision: a run in a live state, of THIS host, whose heartbeat is older than STALE_AFTER and whose pid is gone, is lost.
+    Pure: the writer (`reconcile`) and the dashboard's display both ask it, so what is shown is what would be written."""
+    return m.state.live and m.host == host and now - m.heartbeat >= STALE_AFTER and not (m.pid > 0 and alive(m.pid))
+
+
+def lost_reason(m: RunManifest, now: float) -> str:
+    return f"pid {m.pid} on {m.host} is gone; last heartbeat {now - m.heartbeat:.0f} s ago while {m.state}"
+
+
+def shown(m: RunManifest, now: float) -> Liveness:
+    """What a reader that must not write displays: the recorded state, or LOST when the reconciler would mark it so now."""
+    return Liveness.LOST if is_lost(m, host_name(), now, pid_alive) else liveness(m)
+
+
 def reconcile(cfg: ConfigDir, now: float) -> list[str]:
-    """Mark the runs of this host whose heartbeat is stale and whose process is dead `lost`, once. Called at loop start, by `tl doctor`
-    and by the dashboard's read of the runs. -> the run ids marked."""
-    return RunLocator(cfg).reconcile(now, pid_alive, STALE_AFTER)
+    """WRITE `lost` for every run `is_lost` finds, once. Called only by tl processes: loop start, `tl doctor`, `tl wait`, `tl report` and
+    the owner-request gate. The dashboard never calls it (it only reads: `shown`). -> the run ids marked."""
+    where, host = RunLocator(cfg), host_name()
+    marked: list[str] = []
+    for b in where.runs():
+        if is_lost(b.manifest, host, now, pid_alive):
+            where.mark_lost(b.run, lost_reason(b.manifest, now))
+            marked.append(b.run)
+    return marked

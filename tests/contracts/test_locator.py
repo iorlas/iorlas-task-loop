@@ -84,17 +84,13 @@ class Locator(unittest.TestCase):
         again = self.where.take_up(a.run, "/r/x", "tl-1", T0 + 10).manifest
         self.assertEqual((again.state, again.ended, again.reason), (RunState.CREATED, None, ""))
 
-    def test_reconcile_marks_only_a_stale_run_of_this_host_with_a_dead_pid(self):
+    def test_mark_lost_changes_a_live_run_once(self):
         a = self.where.create("/r/x", "tl-1", T0)
-        dead = lambda pid: False  # noqa: E731
-        self.assertEqual(self.where.reconcile(T0 + 10, dead, 300), [])  # a fresh heartbeat
-        self.assertEqual(self.where.reconcile(T0 + 999, lambda pid: True, 300), [])  # its process lives
-        self.assertEqual(self.where.reconcile(T0 + 999, dead, 300, host="elsewhere"), [])  # another machine's pid says nothing
-        self.assertEqual(self.where.reconcile(T0 + 999, dead, 300), [a.run])
+        self.where.mark_lost(a.run, "gone")
         got = self.where.get(a.run).manifest  # type: ignore[union-attr]
-        self.assertEqual((got.state, got.ended), (RunState.LOST, T0))
-        self.assertIn("is gone", got.reason)
-        self.assertEqual(self.where.reconcile(T0 + 9999, dead, 300), [])  # once
+        self.assertEqual((got.state, got.ended, got.reason), (RunState.LOST, T0, "gone"))
+        self.where.mark_lost(a.run, "again")
+        self.assertEqual(self.where.get(a.run).manifest.reason, "gone")  # type: ignore[union-attr]
 
     def test_a_scan_sees_a_manifest_that_changed(self):
         a = self.where.create("/r/x", "tl-1", T0)
