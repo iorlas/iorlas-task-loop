@@ -22,7 +22,7 @@ def listing(cwd, env):
 
 
 def write(cwd, env):
-    (Path(env["TL_ARTIFACTS"]) / "p.txt").write_text(env["TL_ARTIFACT_STEP"])
+    (Path(env["TL_ARTIFACT_DIR"]) / "p.txt").write_text(env["TL_ARTIFACT_STEP"])
     (cwd / "made").write_text("")
     return 0, "ok"
 

@@ -117,7 +117,7 @@ class FakeDocker:
             self.on_wait(name)
         if name in self.killed:
             return 137
-        env.update(TMPDIR=str(box), TL_ARTIFACTS=str(art))
+        env.update(TMPDIR=str(box), TL_ARTIFACT_DIR=str(art), TL_WORKTREE=str(work))
         done = subprocess.run(cmd[i + 5:], cwd=work / env["TL_BOX_CWD"], env=env, capture_output=True, text=True, check=False)
         self.output += done.stdout
         return done.returncode

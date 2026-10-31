@@ -16,7 +16,6 @@ from support import procsim
 from support.fakedocker import FakeDocker
 
 from taskloop.adapters import container_run
-from taskloop.contracts.paths import RepoDirs
 
 
 def listing(cwd, env):
@@ -24,7 +23,7 @@ def listing(cwd, env):
 
 
 def write(cwd, env):
-    (Path(env["TL_ARTIFACTS"]) / "p.txt").write_text(env["TL_ARTIFACT_STEP"])
+    (Path(env["TL_ARTIFACT_DIR"]) / "p.txt").write_text(env["TL_ARTIFACT_STEP"])
     (cwd / "made").write_text("")
     return 0, "ok"
 
@@ -41,7 +40,7 @@ class ContainerChecksTest(EngineTest):
         self.docker.install(self)
 
     def run_one(self, cmd, boxed=True, **cfg):
-        check = {"id": "c", "cmd": cmd, **({"in": "container"} if boxed else {})}
+        check = {"id": "c", "cmd": cmd, **({"in": "container"} if boxed else {"cache": False})}  # not the box run's memo
         self.eng = self.checks_engine(checks=[check], container=BOX, **cfg)
         self.warn = mock.Mock()
         self.eng.warn = self.warn
@@ -55,7 +54,7 @@ class ContainerChecksTest(EngineTest):
         self.assertTrue(log.startswith("in container img:1\n"))
         self.assertIn("run", self.docker.verbs())
         self.assertFalse((self.wt / "made").exists())  # what the check writes inside stays inside
-        self.assertEqual((RepoDirs(self.wt).artifacts("t-1") / "p.txt").read_text(), "c")  # $TL_ARTIFACTS comes back
+        self.assertEqual((self.eng.run_dir / "artifacts" / "c" / "attempt-1" / "p.txt").read_text(), "c")  # $TL_ARTIFACT_DIR comes back
         host, _ = self.run_one(WRITE, boxed=False)
         self.assertEqual(res.replace(secs=0, log="", wall_hit=False), host.replace(secs=0, log=""))
 

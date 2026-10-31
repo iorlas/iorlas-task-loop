@@ -66,7 +66,7 @@ A check that times out or fails only where you run it is not yours to retry; not
 Proof the engine cannot rerun (a test seen failing after a planted fault, then passing once restored; a manual
 measurement): save the exact commands and their output as files in <WT>/.task/t-1/evidence/ and name those files in the summary.
 Only that proof goes there, never your own runs of the checks.
-Screenshots, PDFs or other files the owner should see: save them in .task/t-1/artifacts/ ($TL_ARTIFACTS in checks and tools); the engine keeps them.
+Screenshots, PDFs or other files the owner should see: save them in .task/t-1/artifacts/ (in checks: $TL_ARTIFACT_DIR); the engine keeps them.
 Rules: no suppressions; do not weaken, skip or delete tests; stay inside the
 stage. question: empty unless only the owner can decide something about the task itself (then explain it for a
 phone); never a question about tools or access.

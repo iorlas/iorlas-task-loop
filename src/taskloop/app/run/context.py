@@ -66,7 +66,7 @@ class RunContext:
         seen = stores.run_log(run).read_from()
         log = RunLog(stores.run_log(run), echo, console.QUIET, console.line(verbose), now, len(seen.items) + seen.skipped,
                      run_id=run, bead=str(bead), host=socket.gethostname())
-        art = StepArtifacts(bead, RepoDirs(wt).artifacts(bead), home.artifacts(bead), log)
+        art = StepArtifacts(bead, RepoDirs(wt).artifacts(bead), home.artifacts(bead), log, run_dir)
         steps = Steps(log, now, guard, on_step, art)
         return cls(
             bead,

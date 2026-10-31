@@ -18,7 +18,7 @@ from support.spawn import port_git, real_spawner
 from support.who import who
 
 from taskloop.adapters.delegate import Stopped
-from taskloop.app.run import engine
+from taskloop.app.run import engine, worker_call
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts.env import snapshot
 from taskloop.contracts.ids import BeadId
@@ -121,6 +121,30 @@ class Calls(te.EngineTest):
         answered = [r for r in ends if r["status"] != "stopped"]  # an interrupted call has no answer, so no source
         self.assertTrue(answered)
         self.assertEqual({r["cost_source"] for r in answered} - {"harness", "free", "unknown"}, set())
+
+    def test_every_worker_call_is_told_its_run_through_the_six_names(self):
+        seen = []
+        real = worker_call.dg.call
+
+        def spy(*a, **kw):
+            seen.append(kw["env"])
+            return real(*a, **kw)
+
+        script = fake_route.Script({"plan": [te.PLAN], "write": [te.WRITE], "review": [te.CLEAN]})
+        with mock.patch.object(worker_call.dg, "call", spy):
+            self.go(script)
+        e = self.eng
+        self.assertTrue(seen)
+        for env in seen:
+            self.assertEqual(env["TL_RUN_ID"], e.run_id)
+            self.assertEqual(env["TL_RUN_DIR"], str(e.run_dir))
+            self.assertEqual(env["TL_WORKTREE"], str(e.wt))
+            self.assertEqual(env["TL_ATTEMPT"], "1")
+            self.assertTrue(env["TL_BRANCH"])
+            art = Path(env["TL_ARTIFACT_DIR"])
+            self.assertEqual(art.parent.parent, e.run_dir / "artifacts")
+            self.assertEqual(art.name, "attempt-1")
+            self.assertTrue(art.is_dir())
 
 
 for _name in dir(te.EngineTest):  # the engine fixture only

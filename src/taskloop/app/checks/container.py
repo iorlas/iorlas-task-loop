@@ -33,7 +33,9 @@ class Box:
         tl = {k: v for k, v in childenv.current_env(self.host.env).items() if k.startswith(TL_PREFIX)}
         # the slot's name only: its host paths mean nothing inside
         forward = {**tl, EnvVar.TL_SLOT.value: self.host.bead_env[EnvVar.TL_SLOT], **env}
-        art = forward.pop(EnvVar.TL_ARTIFACTS, "")
+        art = forward.pop(EnvVar.TL_ARTIFACT_DIR, "")
+        for host_path in (EnvVar.TL_RUN_DIR, EnvVar.TL_WORKTREE):  # host paths: they mean nothing inside
+            forward.pop(host_path, None)
         name = "tl-check-" + "".join(ch if ch.isalnum() or ch in "_.-" else "-" for ch in f"{self.host.run_dir.name}-{c.id}")
         cmd = [sys.executable, str(RUNNER), "--image", self._image, "--name", name, "--art", art]
         cmd += [x for k, v in forward.items() for x in ("--env", f"{k}={v}")]

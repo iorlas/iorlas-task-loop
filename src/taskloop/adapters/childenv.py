@@ -62,7 +62,8 @@ def tool_env(base: Mapping[str, str], extra: Mapping[str, str] | None = None) ->
 
 # Registered names that differ run to run without changing what a check does (paths of this run, ids of this process): not part of a
 # result's identity. Every other registered name that reaches the child is.
-PER_RUN = frozenset({EnvVar.TL_ARTIFACTS, EnvVar.TL_ARTIFACT_STEP, EnvVar.TL_RUN_ID,
+PER_RUN = frozenset({EnvVar.TL_ARTIFACT_DIR, EnvVar.TL_ARTIFACT_STEP, EnvVar.TL_RUN_ID, EnvVar.TL_RUN_DIR, EnvVar.TL_ATTEMPT,
+                     EnvVar.TL_WORKTREE, EnvVar.TL_BRANCH,
                      EnvVar.TL_BOX_CWD, EnvVar.TL_REEXEC, EnvVar.TL_LOOP_STATE,
                      EnvVar.TL_RELEASE_REEXEC, EnvVar.TASK_LOOP_SLOT_BEAD, EnvVar.TASK_LOOP_ACTOR, EnvVar.TASK_LOOP_SESSION,
                      EnvVar.TASK_LOOP_LOOP_PID, EnvVar.TASK_LOOP_WORKER})
@@ -72,6 +73,13 @@ def reaching(env: Mapping[str, str]) -> dict[str, str]:
     """The registered engine names of `env` that reach a child (tool_env's filter) and are stable across runs: what a result may
     depend on, apart from the ambient system environment."""
     return {k: v for k, v in tool_env(env).items() if registered(k) and k not in PER_RUN and not k.startswith(PREFIXES)}
+
+
+def run_env(*, run_id: str, run_dir: str | Path, attempt: int, artifact_dir: str | Path, worktree: str | Path,
+            branch: str) -> dict[str, str]:
+    """The six names every worker, check and gate command is told about its run (the cache key leaves them out: PER_RUN)."""
+    return {EnvVar.TL_RUN_ID.value: run_id, EnvVar.TL_RUN_DIR.value: str(run_dir), EnvVar.TL_ATTEMPT.value: str(attempt),
+            EnvVar.TL_ARTIFACT_DIR.value: str(artifact_dir), EnvVar.TL_WORKTREE.value: str(worktree), EnvVar.TL_BRANCH.value: branch}
 
 
 def without(env: Mapping[str, str], *names: str) -> dict[str, str]:

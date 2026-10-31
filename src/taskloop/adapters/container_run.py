@@ -5,7 +5,7 @@
 
 The worktree's tracked and untracked non-ignored files go in as a tar on stdin of `docker run -i` and are unpacked on the
 container's own disk (never a bind mount); the check runs there; only its output, its exit code and the files it wrote under
-$TL_ARTIFACTS come back (`docker cp`, unpacked into --art). A stop kills the container by its name. Standard library only."""
+$TL_ARTIFACT_DIR come back (`docker cp`, unpacked into --art). A stop kills the container by its name. Standard library only."""
 import argparse
 import io
 import os
@@ -22,7 +22,8 @@ from taskloop.adapters.git import RealGit
 from taskloop.contracts.env import snapshot
 
 INSIDE = ('t=${TMPDIR:-/tmp}; rm -rf "$t/tl-w" "$t/tl-art"; mkdir -p "$t/tl-w" "$t/tl-art" && tar -x -C "$t/tl-w"'
-          ' && cd "$t/tl-w/$TL_BOX_CWD" && export TL_ARTIFACTS="$t/tl-art" && exec "$@"')  # the image must not set TMPDIR
+          ' && cd "$t/tl-w/$TL_BOX_CWD" && export TL_ARTIFACT_DIR="$t/tl-art" TL_WORKTREE="$t/tl-w"'
+          ' && exec "$@"')  # the image must not set TMPDIR
 ART_IN_BOX = "/tmp/tl-art"
 
 
@@ -42,7 +43,7 @@ def send(git: RealGit, stream: IO[bytes], root: str) -> None:
 
 
 def fetch(name: str, art: str) -> None:
-    """$TL_ARTIFACTS of the container, unpacked into the host's artifacts folder (nothing, when it has none)."""
+    """$TL_ARTIFACT_DIR of the container, unpacked into the host's artifacts folder (nothing, when it has none)."""
     got = docker("cp", f"{name}:{ART_IN_BOX}/.", "-")
     try:
         with tarfile.open(fileobj=io.BytesIO(got.stdout), mode="r") as tar:

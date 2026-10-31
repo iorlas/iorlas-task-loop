@@ -9,6 +9,7 @@ from taskloop.app.checks.base import BaseCheck
 from taskloop.app.checks.container import Box
 from taskloop.app.checks.host import CheckHost
 from taskloop.app.checks.keep import keep
+from taskloop.app.checks.step_env import step_env
 from taskloop.contracts.argv import argv_of
 from taskloop.contracts.checks import UNVERIFIED_EXIT, Check
 from taskloop.contracts.enums import WaitWhat
@@ -60,10 +61,8 @@ class Attempts:
 
     def _once(self, c: Check, log: Path, env: Mapping[str, str], stop: threading.Event | None) -> tuple[int, str, str, float]:
         t0 = time.time()
-        art = RepoDirs(self.host.wt).artifacts(self.host.bead)
-        art.mkdir(parents=True, exist_ok=True)  # where a check may drop pictures: ingest copies them at step end
-        ids = {EnvVar.TL_ARTIFACTS.value: str(art), EnvVar.TL_ARTIFACT_STEP.value: c.id, EnvVar.TL_RUN_ID.value: self.host.run_id}
-        rc, tail = self._exec(c, log, {**env, **ids}, stop)
+        RepoDirs(self.host.wt).artifacts(self.host.bead).mkdir(parents=True, exist_ok=True)  # the writer's folder for pictures
+        rc, tail = self._exec(c, log, env, stop)
         seen = self._read(log, tail)
         took = time.time() - t0
         self.host.waits.note_slot_waits(seen, took)
@@ -71,12 +70,15 @@ class Attempts:
 
     def _exec(self, c: Check, log: Path, env: Mapping[str, str], stop: threading.Event | None) -> tuple[int, str]:
         """The check's argv, on the host or (when it says `in: container` and docker is up) in a container; the log says where."""
-        env = {**c.env, **env}  # what the repo's check declares in its `env` (it is part of the cache key: it must reach the child too)
+        ids = {**step_env(self.host, c.id), EnvVar.TL_ARTIFACT_STEP.value: c.id}  # a new attempt directory for every run, a lock rerun too
+        # what the repo's check declares in its `env` (it is part of the cache key: it must reach the child too)
+        env = {**c.env, **env, **ids}
         argv, where = self.box.plan(c, argv_of(c.cmd), env)
         rc, tail = self.host.sh(argv, timeout=c.wall_min * 60, save=log, what="check", env=env, stop=stop)
         if where:
             log.write_text(where + "\n" + self._read(log, ""), encoding="utf-8")
-        keep(self.host, c, log)  # before a retry, the next check or the slot's reset overwrites what this attempt left
+        # before a retry, the next check or the slot's reset overwrites what this attempt left
+        keep(self.host, c, log, Path(ids[EnvVar.TL_ARTIFACT_DIR.value]))
         return rc, tail
 
     @staticmethod

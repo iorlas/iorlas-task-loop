@@ -1,5 +1,6 @@
 """Fixer: the fix command of a check (a formatter) runs before the round, so the tree the checks see is already formatted."""
 from taskloop.app.checks.host import CheckHost
+from taskloop.app.checks.step_env import step_env
 from taskloop.contracts.argv import argv_of
 from taskloop.contracts.checks import Check, CheckResult
 from taskloop.domain.checks.matchers import output_signature, safe_name
@@ -41,7 +42,8 @@ class Fixer:
         return not c.when or due(c, self.host.checkout.changed_paths())
 
     def _once(self, c: Check, name: str) -> tuple[int, str]:
-        return self.host.sh(argv_of(c.fix), timeout=c.wall_min * 60, save=self.host.run_dir / "checks" / name, what="check fix")
+        return self.host.sh(argv_of(c.fix), timeout=c.wall_min * 60, save=self.host.run_dir / "checks" / name, what="check fix",
+                            env=step_env(self.host, c.id + ".fix"))
 
     @staticmethod
     def _red(c: Check, rc: int, tail: str, log: str) -> CheckResult:

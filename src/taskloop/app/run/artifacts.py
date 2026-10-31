@@ -19,7 +19,7 @@ def skipped(p: Path) -> bool:
     return p.is_symlink() or not p.is_file() or hidden or any(fnmatch.fnmatch(name, pat) for pat in SECRET_NAMES)
 
 
-def ingest(src: Path, dest: Path, seen: dict[str, tuple[int, int]] | None = None) -> list[str]:
+def ingest(src: Path, dest: Path, seen: dict[str, tuple[int, int]] | None = None, skip: frozenset[str] = frozenset()) -> list[str]:
     """Copy each regular file directly under `src` into `dest`; the names copied. A name already there is replaced. With `seen`
     (name -> (mtime, size) of what an earlier call copied) a file that has not changed since is not copied again."""
     got: list[str] = []
@@ -30,7 +30,8 @@ def ingest(src: Path, dest: Path, seen: dict[str, tuple[int, int]] | None = None
     for f in files:
         try:
             st = f.stat()
-            if skipped(f) or st.st_size > MAX_BYTES or (seen is not None and seen.get(f.name) == (st.st_mtime_ns, st.st_size)):
+            unchanged = seen is not None and seen.get(f.name) == (st.st_mtime_ns, st.st_size)
+            if skipped(f) or f.name in skip or st.st_size > MAX_BYTES or unchanged:
                 continue
             dest.mkdir(parents=True, exist_ok=True)
             atomic_write_bytes(dest / f.name, f.read_bytes(), fsync=False)
@@ -43,16 +44,20 @@ def ingest(src: Path, dest: Path, seen: dict[str, tuple[int, int]] | None = None
 
 
 class StepArtifacts:
-    """Called as a step ends: copies what the run left in `src` (<worktree>/.task/<bead>/artifacts) and, when something new was
-    copied, writes one Artifacts record under that step. Never raises into the engine; calls no model."""
+    """Called as a step ends: copies what the run left in `src` (<worktree>/.task/<bead>/artifacts) and in its attempt folders
+    (TL_ARTIFACT_DIR) and, when something new was copied, writes one Artifacts record under that step. Never raises into the engine;
+    calls no model."""
 
-    def __init__(self, bead: str, src: Path, dest: Path, log: RunLog) -> None:
-        self.bead, self.src, self.dest, self.log = bead, src, dest, log
+    def __init__(self, bead: str, src: Path, dest: Path, log: RunLog, run_dir: Path | None = None) -> None:
+        self.bead, self.src, self.dest, self.log, self.run_dir = bead, src, dest, log, run_dir
         self.seen: dict[str, tuple[int, int]] = {}
 
     def __call__(self, step_id: str, step: str) -> None:
         try:
             names = ingest(self.src, self.dest, self.seen)
+            if self.run_dir is not None:  # what a command wrote into its TL_ARTIFACT_DIR (the engine's own check.log stays evidence)
+                for d in sorted((self.run_dir / "artifacts").glob("*/attempt-*")):
+                    names += ingest(d, self.dest, self.seen, frozenset({"check.log"}))
             if names:
                 self.log.emit(Artifacts(id=step_id, step=step, bead=self.bead, names=names))
         except Exception as e:  # pictures are never worth a run

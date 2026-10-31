@@ -40,6 +40,11 @@ class Ingest(unittest.TestCase):
         self.assertEqual(got, ["shot.png"])
         self.assertEqual(sorted(p.name for p in self.dest.iterdir()), ["shot.png"])  # %PDF is 4 bytes: over the patched cap
 
+    def test_a_name_in_skip_stays_out(self):
+        (self.src / "check.log").write_text("x")
+        (self.src / "a.png").write_bytes(b"1")
+        self.assertEqual(artifacts.ingest(self.src, self.dest, skip=frozenset({"check.log"})), ["a.png"])
+
     def test_ingest_is_idempotent_and_never_raises(self):
         (self.src / "a.png").write_bytes(b"1")
         self.assertEqual(artifacts.ingest(self.src, self.dest), ["a.png"])

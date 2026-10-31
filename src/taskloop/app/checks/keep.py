@@ -1,6 +1,7 @@
 """Keep: after each attempt of a check, its log and the files its `keep` globs name (a Unity log, a result XML) are copied, never
-linked, into <run folder>/artifacts/<check>/attempt-N/. The next attempt, the next run in the slot and the slot's reset all overwrite
-the originals; the copy is a new directory per attempt, written once (read-only), with one Evidence row per file (sha256 and bytes).
+linked, into <run folder>/artifacts/<check>/attempt-N/, the directory the check already wrote to (TL_ARTIFACT_DIR). The next attempt,
+the next run in the slot and the slot's reset all overwrite the originals; the directory is one per attempt, read-only after, with one
+Evidence row per file (sha256 and bytes).
 Nothing here raises into the engine: evidence is never worth a run."""
 import hashlib
 from pathlib import Path
@@ -8,7 +9,6 @@ from pathlib import Path
 from taskloop.app.checks.host import CheckHost
 from taskloop.contracts.checks import Check
 from taskloop.contracts.log import Evidence
-from taskloop.domain.checks.matchers import safe_name
 
 LOG_NAME = "check.log"
 MAX_BYTES = 512 * 1024 * 1024
@@ -51,18 +51,17 @@ def copy_once(src: Path, dst: Path) -> tuple[str, int]:
     return h.hexdigest(), n
 
 
-def keep(host: CheckHost, c: Check, log: Path) -> None:
-    """Copy the evidence of the attempt that just ended and say so, one row per file."""
+def keep(host: CheckHost, c: Check, log: Path, d: Path) -> None:
+    """Copy the log and the `keep` files of the attempt that just ended into its directory `d` (TL_ARTIFACT_DIR: the tool may have
+    written there already), then say so: one row per file there, made read-only."""
     try:
-        files = files_of(c, Path(host.wt), log)
-        if not files:
-            return
-        base = host.run_dir / "artifacts" / safe_name(c.id)
-        d = attempt_dir(base)
         n = int(d.name.removeprefix("attempt-"))
-        for src, name in files:
-            digest, size = copy_once(src, d / name)
-            host.log.emit(Evidence(call_id=c.id, attempt=n, bytes=size, artifact=(d / name).relative_to(host.run_dir).as_posix(),
+        for src, name in files_of(c, Path(host.wt), log):
+            copy_once(src, d / name)
+        for f in sorted(p for p in d.rglob("*") if p.is_file() and not p.is_symlink()):
+            f.chmod(0o444)
+            digest = hashlib.sha256(f.read_bytes()).hexdigest()
+            host.log.emit(Evidence(call_id=c.id, attempt=n, bytes=f.stat().st_size, artifact=f.relative_to(host.run_dir).as_posix(),
                                    artifact_hash=digest))
     except (OSError, ValueError, NotImplementedError) as e:
         host.warn(f"evidence of `{c.id}` not kept: {type(e).__name__}: {e}")
