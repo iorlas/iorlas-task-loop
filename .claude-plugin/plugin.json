@@ -1,7 +1,7 @@
 {
   "name": "iorlas-task-loop",
   "description": "Autonomous task loop over a bd (beads) backlog: several sessions in parallel worktrees or slots claim, plan, delegate, verify, land and close beads, with a live dashboard of every task, session and worker.",
-  "version": "0.23.263",
+  "version": "0.23.264",
   "author": {
     "name": "iorlas"
   },
