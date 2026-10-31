@@ -5,6 +5,7 @@ from collections.abc import Mapping, Sequence
 from typing import Protocol
 
 from taskloop.adapters import storm as storm_file
+from taskloop.adapters.repourl import repo_url
 from taskloop.app.run.console import say
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.kinds import Kind
@@ -43,7 +44,7 @@ class Decide:
         self.e = host
 
     def repo_id(self) -> str:
-        return self.e.git.remote_url(self.e.wt, "origin") or self.e.wt
+        return repo_url(self.e.git, self.e.wt)
 
     def run(self, o: oc.RunOutcome) -> Kind:
         """The close's Kind after POLICY. The trace fields, the fingerprint and the storm check are set here."""
@@ -68,6 +69,6 @@ class Decide:
         if trip and not e.dry:
             path = storm_file.storm_path(e.home.root, self.repo_id())
             if storm_file.write_storm(path, trip.fingerprint, trip.beads, trip.t, e.clock.now(), oc.KNOBS["storm_window_s"], why):
-                e.storm = storm.banner(trip)
+                e.storm = storm.banner(trip, str(path))
                 e.warn(e.storm)
                 say(e.storm)

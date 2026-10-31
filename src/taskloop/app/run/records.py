@@ -3,6 +3,7 @@ import time
 from typing import Any
 
 from taskloop.adapters import ident
+from taskloop.adapters.repourl import repo_url
 from taskloop.app.run import summaries
 from taskloop.app.run import trace as runtrace
 from taskloop.app.slots import engine_lock
@@ -68,7 +69,7 @@ class Records:
                     dict(
                         self.origin(),
                         bead=e.bead,
-                        repo_url=e.git.remote_url(e.wt, "origin") or str(e.wt),
+                        repo_url=repo_url(e.git, str(e.wt)),
                         worktree=str(e.wt),
                         branch=e.git.branch(e.wt),
                         coordinator_session=e.session,

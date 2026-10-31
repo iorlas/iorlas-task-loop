@@ -108,7 +108,7 @@ class Storm(unittest.TestCase):
         c.advance(60)
         trip = lh.storm_trip(h, "b", Kind.FAULT_BAD_REQUEST, fp, c.now())
         self.assertEqual(must(trip).beads, ("a", "b"))
-        self.assertIn("STOPPED: storm", lh.banner(must(trip)))
+        self.assertIn("then delete /cfg/storm/r.json", lh.banner(must(trip), "/cfg/storm/r.json"))
         self.assertIsNone(lh.storm_trip(h, "a", Kind.FAULT_BAD_REQUEST, fp, c.now()))  # one bead repeating is no storm
         c.advance(1800)
         self.assertIsNone(lh.storm_trip(h, "b", Kind.FAULT_BAD_REQUEST, fp, c.now()))  # outside the window
@@ -151,7 +151,7 @@ def replay(name, stop_on_trip=True, squeeze=None):
         trip = lh.storm_trip(history, r["bead"], kind, o.fingerprint, clk.now())
         history.append({"bead": r["bead"], "kind": kind.value, "fingerprint": o.fingerprint, "t": clk.now()})
         if trip and storm_file.write_storm(path, trip.fingerprint, trip.beads, trip.t, clk.now(), oc.KNOBS["storm_window_s"], r["text"]):
-            banners.append(lh.banner(trip))
+            banners.append(lh.banner(trip, str(path)))
             if stop_on_trip:
                 break
     return calls, banners, disps

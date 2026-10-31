@@ -13,6 +13,7 @@ from taskloop.adapters import beadtools, childenv, context_size, ident, landlock
 from taskloop.adapters import halt as halting
 from taskloop.adapters.check_probe import PathProbe
 from taskloop.adapters.clock import SystemClock
+from taskloop.adapters.repourl import repo_url
 from taskloop.adapters.runner import live_path
 from taskloop.app.checks.runner import Checker
 from taskloop.app.land.checkout import Checkout
@@ -352,7 +353,7 @@ class Engine(RunFields):
         verbs.land(self.who, self.bead, sha, self.store, self.git, self.wt, base=self.cfg.base, claim=self.claim)
 
     def land_lock_path(self) -> Path:
-        return landlock.land_lock_path(self.home, self.git.remote_url(self.wt, "origin") or self.wt)
+        return landlock.land_lock_path(self.home, repo_url(self.git, self.wt))
 
     @property
     def tree_writer(self) -> Checkout:

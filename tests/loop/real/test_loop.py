@@ -25,7 +25,6 @@ from support import homes  # noqa: E402
 # isort: split
 import tl  # noqa: E402
 from support import (  # noqa: E402
-    gitq,
     looptest,
     tlbd,
 )
@@ -37,6 +36,7 @@ from support.who import who  # noqa: E402
 from taskloop.adapters import (  # noqa: E402
     ident,
 )
+from taskloop.adapters.repourl import repo_url  # noqa: E402
 from taskloop.adapters.storm import storm_path, write_storm  # noqa: E402
 from taskloop.app.launch import loop as wloop  # noqa: E402
 from taskloop.app.loop.core import Core  # noqa: E402
@@ -605,7 +605,7 @@ class Loop(LoopBase):
 
     def test_a_live_storm_record_stops_a_loop_before_any_claim_with_one_line(self):
         self.beads({"x-1": [rec("landed")]})
-        path = storm_path(homes.config_dir(), (gitq.git("remote", "get-url", "origin", cwd=str(self.repo)) or str(self.repo)))
+        path = storm_path(homes.config_dir(), repo_url(port_git(), str(self.repo)))
         write_storm(path, "FAULT_INFRA y", ("x-8", "x-9"), self.clock.t, self.clock.t, oc.KNOBS["storm_window_s"])
         self.assertEqual(self.run_loop(), 2)
         self.assertEqual(self.started, [])

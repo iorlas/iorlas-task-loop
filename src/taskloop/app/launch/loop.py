@@ -16,6 +16,7 @@ from taskloop.adapters import applog, beadtools, childenv, ident, pidcheck
 from taskloop.adapters import delegate as dg
 from taskloop.adapters import storm as storm_file
 from taskloop.adapters.locks import hold_path
+from taskloop.adapters.repourl import repo_url
 from taskloop.app.asks import sweeps as ask_sweeps
 from taskloop.app.doctor import profiles
 from taskloop.app.loop import lintrun
@@ -98,8 +99,7 @@ def make_probe(repo: str | Path, env: Env, git: Git) -> dg.RouteProbe | None:
 
 
 def storm(repo: str, cfg: paths.ConfigDir, now: Callable[[], float] = trail.now, *, git: Git) -> Storm | None:
-    rid = git.remote_url(repo, "origin") or repo
-    path = storm_file.storm_path(cfg.root, rid)
+    path = storm_file.storm_path(cfg.root, repo_url(git, repo))
     rec = storm_file.read_storm(path, now(), oc.KNOBS["storm_window_s"])
     if not rec:
         return None
