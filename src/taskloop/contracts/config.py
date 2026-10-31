@@ -169,6 +169,7 @@ class EngineConfig(Rec):
     delegate: str = ""
     untracked_ignore: list[str] = msgspec.field(default_factory=list)
     checks: list[CheckSpec] = msgspec.field(default_factory=list)
+    plan_cmd: list[str] | None = None  # full argv of the repo's neutral gate-plan producer
     # added to (over) the slot's environment; {slot} {slot_dir} {repo} filled in
     slot_env: dict[str, str] = msgspec.field(default_factory=dict)
     container: ContainerConfig | None = None
@@ -372,6 +373,8 @@ def load(data: Any, say_to: TextIO | None = None) -> RepoProfile:
         raise ConfigError(f"the repo profile: {bad_graph}")
     fill_slot_env(profile.engine.slot_env, **dict.fromkeys(SLOT_PLACEHOLDERS, ""))
     cmds = [k.argv for k in profile.engine.checks] + [profile.engine.land]
+    if profile.engine.plan_cmd is not None:
+        cmds.append(profile.engine.plan_cmd)
     cmds += [k.fix for k in profile.engine.checks if k.fix]
     cmds += [c for c in (profile.slots.setup,) if c]
     bad = [shape_problem(c) for c in cmds]

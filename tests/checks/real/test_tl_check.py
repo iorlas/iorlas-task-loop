@@ -2,6 +2,7 @@
 import json
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -18,6 +19,27 @@ CHECKS = [
 
 
 class TlCheck(unittest.TestCase):
+    def test_clean_repo_check_records_the_repo_plans_skip_for_green(self):
+        producer = Path(self.tmp.name, "plan.py")
+        body = {"version": 1, "base": None, "empty": True, "full": False, "full_reasons": [], "steps": [
+            {"name": "selected", "lane": "tests", "run": False, "argv": ["false"], "pre": [],
+             "recipe": None, "reason": "no relevant paths"}]}
+        producer.write_text(f"print({json.dumps(body)!r})\n")
+        profile = {"engine": {"base": "main", "plan_cmd": [sys.executable, str(producer), "steps", "--json"],
+                               "checks": [{"id": "selected", "argv": ["false"], "run": "gate"}]}}
+        (self.repo / ".task-loop.json").write_text(json.dumps(profile))
+        self.git("add", "-A")
+        self.git("commit", "-qm", "repo plan")
+        rc, out = self.tl("--repo", str(self.repo))
+        self.assertEqual(rc, 0, out)
+        self.assertIn("skipped (no relevant paths)", out)
+        base = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=self.repo, text=True).strip()
+        tree = subprocess.check_output(["git", "rev-parse", "HEAD^{tree}"], cwd=self.repo, text=True).strip()
+        green = tl_main("green", "selected", "--repo", str(self.repo), "--tree", tree, "--base", base,
+                        cwd=self.repo, env={"XDG_CONFIG_HOME": str(Path(self.tmp.name, "cfg"))})
+        self.assertEqual(green.returncode, 0, green.stdout)
+        self.assertIn("skipped-by-plan: no relevant paths", green.stdout)
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)

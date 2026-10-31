@@ -55,10 +55,10 @@ class RealSpawner:
         return tool_env(self.env.vars if env is None else env, extra)
 
     def run(self, argv: list[str], *, cwd: str | None = None, env: Mapping[str, str] | None = None, extra: Mapping[str, str] | None = None,
-            timeout_s: float | None = None, capture: bool = True) -> Ran:
+            timeout_s: float | None = None, capture: bool = True, input: str | None = None) -> Ran:
         try:
             r = subprocess.run(argv, cwd=cwd, env=self._env(env, extra), capture_output=capture, text=True, encoding="utf-8",
-                               errors="replace", timeout=timeout_s, check=False)
+                               errors="replace", timeout=timeout_s, check=False, input=input)
         except subprocess.TimeoutExpired as e:
             out = e.stdout.decode("utf-8", "replace") if isinstance(e.stdout, bytes) else (e.stdout or "")
             return Ran(exit=124, out=out, timed_out=True)

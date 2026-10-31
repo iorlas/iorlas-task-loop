@@ -16,6 +16,7 @@ from taskloop.contracts import (
     dashruns,
     delegate,
     events,
+    gateplan,
     gitfacts,
     identity,
     ids,
@@ -471,6 +472,8 @@ OTHERS = {
     ),
     "SlotSetupMarker": snapshots.SlotSetupMarker(cmd_hash="ab12", t=T),
     "HostResources": config.HostResources(resources=["unity"]),
+    "GatePlan": gateplan.GatePlan(version=1, base="abc", empty=False, full=False, full_reasons=[], steps=[
+        gateplan.GatePlanStep(name="lint", lane="static", run=False, argv=["lint"], pre=[], recipe=None, reason="unchanged")]),
     "RepoProfile": config.RepoProfile(engine=config.EngineConfig(**CMD), slots=config.SlotsConfig(count=2, setup=["just", "setup"])),
     "RunRequest": delegate.RunRequest(
         role="worker",

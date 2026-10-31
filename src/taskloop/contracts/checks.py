@@ -97,7 +97,7 @@ class CheckResult(Rec):
     cached: bool = False
     reused: bool = False
     why: str = ""  # a skip's reason
-    planned: bool = False  # skipped only because the diff did not touch `when`; satisfied after a clean round
+    planned: bool = False  # the diff's plan (or legacy `when`) skipped it; satisfied after a clean round
     note: str = ""  # why a cached result stands
     base_red: bool = False  # red on the untouched base too: not the writer's
     producer: str = ""  # a skip because the check it reads did not run: that check's id

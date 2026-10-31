@@ -479,8 +479,8 @@ class Spawner(Protocol):
     process's own when None), `extra` goes over it. A program that is not there raises OSError."""
 
     def run(self, argv: list[str], *, cwd: str | None = None, env: Mapping[str, str] | None = None, extra: Mapping[str, str] | None = None,
-            timeout_s: float | None = None, capture: bool = True) -> Ran:
-        """Run to the end. `capture` False: the child shares our stdout and stderr (out and err stay empty)."""
+            timeout_s: float | None = None, capture: bool = True, input: str | None = None) -> Ran:
+        """Run to the end. `input` is the child's stdin; None inherits it. `capture` False shares stdout and stderr."""
         ...
 
     def run_bytes(self, argv: list[str], *, cwd: str | None = None, extra: Mapping[str, str] | None = None) -> RanBytes: ...

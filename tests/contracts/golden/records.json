@@ -1315,6 +1315,28 @@
    "unity"
   ]
  },
+ "GatePlan": {
+  "version": 1,
+  "base": "abc",
+  "empty": false,
+  "full": false,
+  "full_reasons": [],
+  "steps": [
+   {
+    "lane": "static",
+    "run": false,
+    "argv": [
+     "lint"
+    ],
+    "pre": [],
+    "recipe": null,
+    "name": "lint",
+    "reason": "unchanged",
+    "id": null,
+    "why": null
+   }
+  ]
+ },
  "RepoProfile": {
   "engine": {
    "land": [
@@ -1399,6 +1421,7 @@
      "fix": []
     }
    ],
+   "plan_cmd": null,
    "slot_env": {},
    "container": {
     "image": "img:1",

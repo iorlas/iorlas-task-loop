@@ -27,9 +27,12 @@ FAILED_FIRST = " failed first"
 
 class CheckExecutor:
     def __init__(self, host: CheckHost, memo: RunMemo, attempts: Attempts, checklog: CheckLog,
-                 history: Durations, fix_red: dict[str, CheckResult] | None = None, everything: bool = False) -> None:
+                 history: Durations, fix_red: dict[str, CheckResult] | None = None, everything: bool = False,
+                 planned: dict[str, str] | None = None) -> None:
         self.host, self.memo, self.attempts, self.checklog, self.history = host, memo, attempts, checklog, history
         self.everything = everything  # `when` is ignored: every check is due (tl check --all)
+        self.planned = planned
+        self.gates = {k.id for k in host.cfg.gate_checks}
         self.fix_red = fix_red or {}  # id -> the red of a check whose fix command failed: it does not run
         self.logs = host.run_dir / "checks"
         self.resources = Resources(host)
@@ -130,10 +133,13 @@ class CheckExecutor:
             # a red group skips the groups after it, and any red skips every expensive check (the cheap ones of its own group run to
             # the end, so the writer sees all the cheap failures at once; the Unity group never runs after a red)
             return CheckResult.skipped(c, st.red + FAILED_FIRST)
-        if c.when and not self.everything and c.id not in self.fix_red:
-            st.changed = self.host.checkout.changed_paths() if st.changed is None else st.changed
-            if not due(c, st.changed):
-                return CheckResult.skipped(c, "no change under {}".format(", ".join(c.when))).replace(planned=True)
+        if not self.everything and c.id not in self.fix_red:
+            planned = self.planned if c.id in self.gates else None
+            if planned is None and c.when and st.changed is None:
+                st.changed = self.host.checkout.changed_paths()
+            if not due(c, st.changed or [], planned):
+                why = planned[c.id] if planned is not None else "no change under " + ", ".join(c.when)
+                return CheckResult.skipped(c, why).replace(planned=True)
         return None
 
     @staticmethod

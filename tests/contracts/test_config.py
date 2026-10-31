@@ -9,6 +9,14 @@ from taskloop.contracts.config import ConfigError, RepoProfile, load
 
 
 class RepoProfileKeys(unittest.TestCase):
+    def test_plan_command_is_optional_and_requires_an_argv(self):
+        self.assertIsNone(load({}).engine.plan_cmd)
+        argv = ["python", "tools/gate_plan.py", "steps", "--json"]
+        self.assertEqual(load({"engine": {"plan_cmd": argv}}).engine.plan_cmd, argv)
+        for bad in ([], "plan --json", [1]):
+            with self.subTest(bad=bad), self.assertRaises(ConfigError):
+                load({"engine": {"plan_cmd": bad}})
+
     def test_empty_profile_is_the_defaults(self):
         self.assertEqual(load(None), RepoProfile())
         self.assertEqual(load({}), RepoProfile())

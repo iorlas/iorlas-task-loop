@@ -23,6 +23,19 @@ load and the plan lint say so in one line). A pipeline, redirect or loop belongs
 Inside the engine the canonical text of a check is `shlex.join(argv)` (check identity, logs, the dashboard); `shlex.split`
 turns it back. Nothing in task-loop parses shell syntax.
 
+`engine.plan_cmd` optionally names the full argv of a repo's gate-plan producer, for example
+`["python", "tools/gate_plan.py", "steps", "--json"]`. Task-loop appends only `--base <resolved sha>` and
+`--paths-stdin`, runs in the checkout being judged, and feeds NUL-separated changed paths from the merge-base
+to the judged tree (equivalent to `git diff --name-only -z <base>...HEAD` in a clean checkout).
+The command has 30 seconds to print one JSON document with `version: 1`, `base`, `empty`, `full`,
+`full_reasons`, and `steps`. Each step carries `name`, `lane`, `run`, `argv`, `pre`, `recipe`, and `reason`;
+`id` and `why` are aliases for `name` and `reason`. Unknown fields are ignored. Only a registry step explicitly
+listed with `run: false` is skipped, with that reason. Other registry steps remain required, regardless of `when`.
+The repo supplies the decision; task-loop owns execution, results, and scheduling. A failed, timed-out or malformed
+plan prints one warning and makes every step required. Without `plan_cmd`, the existing `when` rules apply.
+`tl check --all` and explicitly named checks bypass the plan. Planned skips are recorded only after a clean round,
+for the exact tree and base; `tl green` and the land gate read those records through the existing result store.
+
 ## Delegate
 
 task-loop requires delegate for the engine (decided 2026-10-18: everyone installs both; power users never call

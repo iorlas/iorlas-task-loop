@@ -1,5 +1,5 @@
 """The checks of a round as Check records: the repo's (engine.checks) and the plan's (a stage's commands and cases)."""
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Final, assert_never
 
 from taskloop.contracts.argv import text_of
@@ -69,7 +69,9 @@ def gate_items(cfg: EngineConfig) -> list[Check]:
     return [repo_check(k, cfg, Phase.GATE) for k in cfg.gate_checks]
 
 
-def due(c: Check, changed: Sequence[str]) -> bool:
-    """A check with `when` is due only when a changed path matches one of its globs (the one glob dialect: ** crosses
-    folders, * stays in one)."""
+def due(c: Check, changed: Sequence[str], planned: Mapping[str, str] | None = None) -> bool:
+    """A configured repo plan skips only explicit entries. Otherwise `when` uses the shared glob dialect:
+    ** crosses folders, * stays in one."""
+    if planned is not None and c.repo:
+        return c.id not in planned
     return not c.when or any(glob_re(g).match(p) for p in changed for g in c.when)

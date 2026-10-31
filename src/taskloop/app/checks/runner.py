@@ -4,7 +4,7 @@ from collections.abc import Callable, Sequence
 from typing import Any
 
 from taskloop.adapters import check_files, childenv
-from taskloop.app.checks import evidence
+from taskloop.app.checks import evidence, gateplan
 from taskloop.app.checks.attempts import Attempts
 from taskloop.app.checks.base import BaseCheck
 from taskloop.app.checks.cache import InputKeys, RunMemo
@@ -50,7 +50,8 @@ class Checker:
         tree, base = host.checkout.tree_hash(), host.git.rev_parse(str(host.wt), host.cfg.base)
         plan = CheckPlan.build([*self._diff_check(tree), *items], history, groups, acceptance_first, conflict_fix, markers)
         memo = self._memo(tree, base)
-        st = self._executor(memo, history, base_run=True, fix_red=fix_red).run_group(plan, self.round)
+        planned = gateplan.skipped(host, tree, base)
+        st = self._executor(memo, history, base_run=True, fix_red=fix_red, planned=planned).run_group(plan, self.round)
         run = self._finish(st, tree, history, history_doc)
         host.checklog.round(host.steps.id, run)
         self._stuck(run)
@@ -68,7 +69,8 @@ class Checker:
         tree, base = host.checkout.tree_hash(), host.git.rev_parse(str(host.wt), host.cfg.base)
         plan = CheckPlan.build([*self._diff_check(tree), *items], history)
         memo = self._memo(tree, base)
-        st = self._executor(memo, history, base_run=False, everything=everything).run_group(plan, self.round)  # no base run
+        planned = gateplan.skipped(host, tree, base) if not everything else None
+        st = self._executor(memo, history, base_run=False, everything=everything, planned=planned).run_group(plan, self.round)
         if learn and st.timings:
             history_doc.write(merged(history, st.timings))
         results = st.results if show_clean else self._quiet(st.results)
@@ -83,9 +85,11 @@ class Checker:
         if not tree or not steps:
             return False
         items = [*self._diff_check(tree), *steps]
-        memo = self._memo(tree, host.git.rev_parse(str(host.wt), host.cfg.base))
-        changed = host.checkout.changed_paths() if any(c.when for c in items) else []
-        return all(memo.has(c) or not due(c, changed) for c in items)
+        base = host.git.rev_parse(str(host.wt), host.cfg.base)
+        memo = self._memo(tree, base)
+        planned = gateplan.skipped(host, tree, base)
+        changed = host.checkout.changed_paths() if planned is None and any(c.when for c in items) else []
+        return all(memo.has(c) or not due(c, changed, planned) for c in items)
 
     def _history(self) -> tuple[Doc[Durations], Durations]:
         host = self.host
@@ -102,10 +106,10 @@ class Checker:
         return RunMemo(host.stores, repo, keys, BaseSha(base), engine_env, host.run_id)
 
     def _executor(self, memo: RunMemo, history: Durations, base_run: bool, fix_red: dict[str, CheckResult] | None = None,
-                  everything: bool = False) -> CheckExecutor:
+                  everything: bool = False, planned: dict[str, str] | None = None) -> CheckExecutor:
         host = self.host
         attempts = Attempts(host, BaseCheck(host, memo, base_run), self.sleep)
-        return CheckExecutor(host, memo, attempts, host.checklog, history, fix_red, everything)
+        return CheckExecutor(host, memo, attempts, host.checklog, history, fix_red, everything, planned)
 
     def _diff_check(self, tree: str) -> list[Check]:
         """The built-in `git diff --check` over the diff from the merge-base with the base to the tree (untracked files included; none
