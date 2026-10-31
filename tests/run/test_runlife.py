@@ -67,8 +67,8 @@ class Decision(unittest.TestCase):
     """is_lost is the one decision: the writer applies it and the read-only dashboard displays it, so they cannot differ."""
 
     def m(self, **kw):
-        base = {"state": RunState.RUNNING, "heartbeat": 1000.0, "host": "h", "pid": 7}
-        return RunManifest(run=RUN, repo="/r", bead=BEAD, started=0.0, **{**base, **kw})
+        base = RunManifest(run=RUN, repo="/r", bead=BEAD, started=0.0, state=RunState.RUNNING, heartbeat=1000.0, host="h", pid=7)
+        return base.replace(**kw)
 
     def test_only_a_stale_live_run_of_this_host_with_a_dead_pid_is_lost(self):
         dead, alive = (lambda p: False), (lambda p: True)
