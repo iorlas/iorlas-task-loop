@@ -44,6 +44,7 @@
   tl.py cutover check [--json]                  live runs and loops on this machine; exit 1 if any (docs/cutover.md)
   tl.py status [--brief] [--json] [--repo DIR]  loop RUNNING or NOT RUNNING, asks, slots, versions, recent beads (<= 40 lines, 8 KB)
   tl.py wait --bead ID|--any [--timeout S]      block until the run ends or an ask opens; one line, the exit code says which (--help)
+  tl.py green STEP --bead ID --tree T --base B  is the check step green for the tree and base, from the memo (exit 0 yes, 1 no)
   tl.py ask show ID                             one ask: question, owner cause, blocking, default, similar, thread, outcome (read-only)
   tl.py handoff write|show [--repo DIR]         the <= 4 KB handoff a compaction hands to the next session (hooks/hook.py writes it)
 
@@ -75,6 +76,7 @@ from taskloop.app.wire import lanes as wire_lanes
 from taskloop.app.wire import slots as wslots
 from taskloop.app.wire import usage as wire_usage
 from taskloop.cli import asks as cli_asks
+from taskloop.cli import green as cli_green
 from taskloop.cli import slots as slots_cli
 from taskloop.cli import status
 from taskloop.cli import wait as cli_wait
@@ -266,6 +268,7 @@ def build_parser():
     engine_parsers(sp)
     loop_parsers(sp)
     check_parser(sp)
+    cli_green.add_parser(sp)
     return ap
 
 
@@ -386,6 +389,7 @@ VERBS: Final[dict[str, Handler]] = {
     "status": v_status,
     "handoff": v_handoff,
     "wait": v_wait,
+    "green": lambda a, c: cli_green.cmd_green(a, c.who.config),
     "run-task": lambda a, c: importlib.import_module("taskloop.app.run.entry").main(a, env=c.env, spawner=c.spawner, git=c.git, who=c.who),
     "selftest": lambda a, c: importlib.import_module("taskloop.app.launch.selftest").cmd_selftest(a, env=c.env),
     "cutover": lambda a, c: importlib.import_module("taskloop.cli.loop_cmd").cmd_cutover(a, c.git, c.who),

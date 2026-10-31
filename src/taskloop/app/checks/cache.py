@@ -123,3 +123,10 @@ class RunMemo:
         self.doc.write(CheckCacheEntry(
             runs=[RunEntry(key=k, hit=v) for k, v in self.runs.items() if not k.tree or (k.tree == tree and k.base == self.base)],
             base=[BaseEntry(key=k, red=v) for k, v in self.base_red.items() if k.base == self.base]))
+
+
+def is_green(entry: CheckCacheEntry | None, step: CheckId, tree: TreeSha, base: BaseSha) -> bool:
+    """Read-only: the memo holds a pass of this step for exactly this tree and base. Only a whole-tree key can be answered from the
+    file alone; a key that reads `inputs` (no tree) needs the worktree's files to say it still holds, so it answers no."""
+    return entry is not None and any(
+        e.key.check == step and e.key.tree == tree and e.key.base == base and e.hit.result.status == "passed" for e in entry.runs)
