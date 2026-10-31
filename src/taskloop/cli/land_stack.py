@@ -12,6 +12,7 @@ from taskloop.contracts.forge import StackItem
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.ports import Beads, Git
+from taskloop.contracts.run import RunState
 from taskloop.stores.real import real_stores
 from taskloop.stores.runlog import RunLog
 
@@ -47,8 +48,11 @@ def cmd_land_stack(a: argparse.Namespace, who: Identity, git: Git, spawner: Runs
     lock = lock_path(who.config, git, repo)
     forge = Forge(cmds, git, repo, a.base, a.method)
     stack = Stack(forge, cmds, log, git, repo, lock, record, store.dolt_push, who.actor, who.session, a.wait_min)
-    rc = stack.run(items)
-    locator.finish(run, time.time())
+    rc = 1
+    try:
+        rc = stack.run(items)
+    finally:  # every exit leaves a terminal state: done, or failed (a raise included)
+        locator.end(run, time.time(), RunState.DONE if rc == 0 else RunState.FAILED, "" if rc == 0 else f"exit {rc}")
     print(f"land-stack {'landed ' + str(len(items)) if rc == 0 else 'stopped, exit ' + str(rc)} (run {run})")
     return rc
 
