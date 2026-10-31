@@ -22,10 +22,13 @@ from taskloop.app.land.cmds import Cmds
 from taskloop.app.land.forge import Forge
 from taskloop.app.land.stack import MODE, Stack
 from taskloop.app.land.stackgate import StackGate
+from taskloop.app.track.verbs import trace
 from taskloop.cli.land_stack import cmd_land_stack
+from taskloop.contracts.env import Env
 from taskloop.contracts.forge import StackItem
 from taskloop.contracts.gitfacts import LogRow, Ref
 from taskloop.contracts.identity import Identity
+from taskloop.contracts.ids import BeadId
 from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.locks import LockTimeout
 from taskloop.contracts.paths import ConfigDir
@@ -369,6 +372,33 @@ class Verb(StackCase):
         self.assertEqual(m.state.value, "done")
         self.assertTrue(any(r["kind"] == "cmd_start" and r["text"].startswith("git push") for r in rows))
         self.assertTrue(any(r["kind"] == "cmd_start" and r["text"].startswith("gh pr merge") for r in rows))
+
+    def verb(self, items, bead, who):
+        a = Namespace(items=items, repo=str(self.repo), base="main", method="squash", bead=bead, supersede=[], wait_min=None)
+        store = SimpleNamespace(dolt_push=lambda: DoltPush(0, ""))
+        with contextlib.redirect_stdout(io.StringIO()):
+            return cmd_land_stack(a, who, self.git, self.sim, store, self.record, ["tl"])
+
+    def test_a_pr_number_with_a_bead_shows_its_landing_in_tl_trace_and_the_manifest(self):
+        root = Path(self.tmp.name) / "xdg"
+        who = Identity(actor="tl-me", home=str(root / "task-loop"), session="sess-1")
+        self.sim.pr(293, "task/a", OID["task/a"])
+        self.assertEqual(self.verb(["293"], ["293=lifesim-fvit"], who), 0)
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            trace(BeadId("lifesim-fvit"), 0, False, Env(vars={"XDG_CONFIG_HOME": str(root)}))
+        self.assertIn("lifesim-fvit  landed", out.getvalue())
+        self.assertIn("landed " + self.recorded[0][1][:12], out.getvalue())
+        (bundle,) = RunLocator(who.config).runs()
+        self.assertEqual(bundle.manifest.bead, "lifesim-fvit")
+
+    def test_a_bead_for_an_item_that_is_not_given_is_refused_naming_both(self):
+        who = Identity(actor="tl-me", home=self.tmp.name, session="s")
+        with self.assertRaises(SystemExit) as e:
+            self.verb(["293"], ["task/x=lifesim-okrs"], who)
+        self.assertIn("task/x", str(e.exception))
+        self.assertIn("293", str(e.exception))
+        self.assertEqual(self.sim.calls, [])
 
 
 if __name__ == "__main__":

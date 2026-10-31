@@ -141,7 +141,8 @@ def trace_line(r: dict[str, Any]) -> str:
     cost = r.get("cost")
     usd = (cost or {}).get("usd", 0) if isinstance(cost, dict) else (cost or 0)
     head = f"{r.get('run')}  {r.get('bead')}  {r.get('outcome')}  {int(mins)} min  ${usd:.2f}"
-    return f"{head}{tok}  coordinator={r.get('coordinator_session') or '-'}"
+    landed = f"  landed {str(r['sha'])[:12]}" if r.get("outcome") == "landed" and r.get("sha") else ""
+    return f"{head}{landed}{tok}  coordinator={r.get('coordinator_session') or '-'}"
 
 
 def trace(bead: BeadId, last: int, as_json: bool, env: Env) -> int:
