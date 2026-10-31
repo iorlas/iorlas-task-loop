@@ -1,7 +1,9 @@
-"""RunKey (tl-3u6.3): one memo of check runs, keyed by (check, tree, base, inputs, env). The land gate asks it, a changed env misses it,
-and what git cannot see is never served from it (tl-bxk.8.19, tl-7y6.7.11)."""
+"""RunKey (tl-3u6.3): the repo's result store, keyed by (check, command, settings, toolchain, tree, base, inputs, selected tests, env).
+The land gate asks it, a changed env misses it, and what git cannot see is never served from it (tl-bxk.8.19, tl-7y6.7.11). A moved base
+does not invalidate a check that says `inputs_only` (tl-9un.34); two runners writing at once lose nothing (tl-9un.33)."""
 import sys
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 
@@ -17,20 +19,30 @@ from support.narrow import must
 # isort: split
 from support.spawn import port_git
 
-from taskloop.app.checks.cache import InputKeys, RunMemo
+from taskloop.app.checks.cache import KEEP, InputKeys, RunMemo, is_green
 from taskloop.contracts import paths
-from taskloop.contracts.checks import Check, CheckCacheEntry
+from taskloop.contracts.checks import Check
 from taskloop.contracts.ids import CheckId, TreeSha
 from taskloop.contracts.runkey import BaseSha
-from taskloop.stores.memory import MemDoc
+from taskloop.stores.memory import fake_stores
 from taskloop.stores.real import real_stores
 
 ANSWERS = {"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}
 ST = {"checks": [], "files": []}
 
 
-def memo(env=None, doc=None, tree="t", base="b"):
-    return RunMemo(doc or MemDoc(CheckCacheEntry), InputKeys(port_git(), "/nonexistent", TreeSha(tree)), BaseSha(base), env or {})
+class TreeKeys(InputKeys):
+    """The file list of the tree is given and no file is gitignored (so no git runs)."""
+
+    def ignored_of(self, c):
+        return {}
+
+
+def memo(env=None, stores=None, tree="t", base="b", files=None, run_id="r1"):
+    """A store over `stores` (the repo "repo"), as the runner of `run_id` sees this tree and base; `files` is the tree's file list."""
+    keys = TreeKeys(port_git(), "/nonexistent", TreeSha(tree))
+    keys.files = files or {}
+    return RunMemo(stores or fake_stores(), "repo", keys, BaseSha(base), env or {}, run_id)
 
 
 class Gate(te.EngineTest):
@@ -117,19 +129,105 @@ class MachineState(te.EngineTest):
         self.assertEqual(m.command_key(c).check, "e")  # a command is its own identity inside a block
 
 
-class OldFormat(unittest.TestCase):
-    def test_a_cache_file_of_the_old_format_is_a_miss_not_a_crash(self):
+FILES = {"client/a.cs": "100644 blob a1", "justfile": "100644 blob j1", "mise.toml": "100644 blob m1"}
+ONLY = Check(id=CheckId("u"), cmd="u", inputs=["client/**"], inputs_only=True)
+
+
+class InputsOnly(unittest.TestCase):
+    """tl-9un.34: a moved base does not invalidate a check whose declared inputs are complete."""
+
+    def test_a_moved_base_keeps_an_inputs_only_check_but_not_a_whole_tree_one(self):
+        self.assertEqual(memo(files=FILES).key(ONLY), memo(files=FILES, base="b2", tree="t2").key(ONLY))
+        c = ONLY.replace(inputs_only=False)
+        self.assertNotEqual(memo(files=FILES).key(c), memo(files=FILES, base="b2").key(c))
+        whole = Check(id=CheckId("w"), cmd="w")
+        self.assertNotEqual(memo(files=FILES).key(whole), memo(files=FILES, base="b2").key(whole))
+
+    def test_a_changed_input_env_setting_toolchain_or_selected_set_misses(self):
+        k = memo(files=FILES).key(ONLY)
+        for what, other in {
+            "input": memo(files={**FILES, "client/a.cs": "100644 blob a2"}).key(ONLY),
+            "env": memo(files=FILES, env={"A": "1"}).key(ONLY),
+            "exclude": memo(files=FILES).key(ONLY.replace(exclude=["client/gen/**"])),
+            "inputs_only": memo(files=FILES).key(ONLY.replace(inputs_only=False)),
+            "toolchain pin": memo(files={**FILES, "mise.toml": "100644 blob m2"}).key(ONLY),
+            "command": memo(files=FILES).key(ONLY.replace(cmd="u2")),
+            "selected": memo(files=FILES).key(ONLY.replace(selected=["t::a"])),
+        }.items():
+            with self.subTest(what):
+                self.assertNotEqual(k, other)
+        self.assertEqual(k, memo(files={**FILES, "justfile": "100644 blob j2", "other": "x"}).key(ONLY))  # not an input
+        self.assertEqual(memo(files=FILES).key(ONLY.replace(selected=["b", "a"])), memo(files=FILES).key(ONLY.replace(selected=["a", "b"])))
+
+    def test_serving_a_pass_for_a_new_base_writes_a_new_record_for_the_current_tree(self):
+        stores = fake_stores()
+        old = memo(stores=stores, files=FILES, tree="t1", base="b1", run_id="run-old")
+        old.remember(must(old.key(ONLY)), te.res("u", 0), 1, "/l")
+        new = memo(stores=stores, files=FILES, tree="t2", base="b2", run_id="run-new")
+        hit = must(new.hit(new.key(ONLY)))
+        self.assertEqual((hit.tree, hit.base, hit.run_id), ("t1", "b1", "run-old"))  # asking changes nothing
+        self.assertFalse(is_green(stores, "repo", CheckId("u"), TreeSha("t2"), BaseSha("b2")))
+        new.reuse(hit)
+        again = must(new.hit(new.key(ONLY)))
+        self.assertEqual((again.tree, again.base, again.run_id, again.origin), ("t2", "b2", "run-new", "run-old"))
+        self.assertTrue(is_green(stores, "repo", CheckId("u"), TreeSha("t2"), BaseSha("b2")))
+        self.assertFalse(is_green(stores, "repo", CheckId("u"), TreeSha("t1"), BaseSha("b1")))
+
+
+class Store(unittest.TestCase):
+    def test_a_pass_keeps_who_made_it_and_where_the_log_is(self):
+        m = memo(run_id="run-7")
+        c = Check(id=CheckId("e"), cmd="e")
+        m.remember(must(m.key(c)), te.res("e", 0), 3, "/r/checks/00.log")
+        rec = must(m.hit(m.key(c)))
+        self.assertEqual((rec.run_id, rec.round, rec.log_abs), ("run-7", 3, "/r/checks/00.log"))
+        self.assertTrue(rec.host and rec.ts > 0)
+        self.assertIn("log has expired", m.cached(c, rec).note)  # /r/... is not there
+
+    def test_base_red_is_remembered_for_the_repo_by_any_runner(self):
+        stores = fake_stores()
+        c = Check(id=CheckId("e"), cmd="e")
+        self.assertIsNone(memo(stores=stores).base_was_red(c))
+        memo(stores=stores, run_id="a").set_base_red(c, True)
+        self.assertTrue(memo(stores=stores, tree="other", run_id="b").base_was_red(c))
+        self.assertIsNone(memo(stores=stores, base="b2").base_was_red(c))
+
+    def test_only_the_newest_passes_of_a_check_are_kept(self):
+        stores = fake_stores()
+        c = Check(id=CheckId("e"), cmd="e")
+        for i in range(KEEP + 3):
+            m = memo(stores=stores, tree=f"t{i}")
+            m.remember(must(m.key(c)), te.res("e", 0), 1, "")
+        self.assertEqual(len(stores.results("repo", CheckId("e")).keys()), KEEP)
+        last = memo(stores=stores, tree=f"t{KEEP + 2}")
+        self.assertTrue(last.has(c))
+        self.assertFalse(memo(stores=stores, tree="t0").has(c))
+
+
+class Concurrent(unittest.TestCase):
+    def test_runners_writing_at_once_lose_no_pass_and_no_base_answer(self):
         with tempfile.TemporaryDirectory() as d:
-            cfg = paths.ConfigDir(Path(d))
-            doc = real_stores(cfg).check_cache.of("b-1")
-            path = cfg.check_cache("b-1")
-            path.parent.mkdir(parents=True)
-            path.write_text('{"v": 1, "key": "t b", "whole": {}, "inputs": {}, "base_red": {}}')
-            self.assertIsNone(doc.get())
-            m = RunMemo(doc, InputKeys(port_git(), "/nonexistent", TreeSha("t")), BaseSha("b"), {})
-            self.assertFalse(m.has(Check(id=CheckId("e"), cmd="e")))
-            m.save()
-            self.assertEqual(doc.get(), CheckCacheEntry())
+            stores = real_stores(paths.ConfigDir(Path(d)))
+            checks = [Check(id=CheckId(f"c{i % 4}"), cmd=f"cmd{i}") for i in range(12)]
+            go = threading.Barrier(len(checks))
+            same = Check(id=CheckId("same"), cmd="same")
+
+            def runner(i: int) -> None:
+                m = memo(stores=stores, run_id=f"run-{i}")
+                go.wait()
+                m.remember(must(m.key(checks[i])), te.res(checks[i].id, 0), 1, "")
+                m.remember(must(m.key(same)), te.res("same", 0), 1, "")  # all twelve write the one key
+                m.set_base_red(checks[i], bool(i % 2))
+
+            threads = [threading.Thread(target=runner, args=(i,)) for i in range(len(checks))]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
+            m = memo(stores=stores)
+            self.assertTrue(all(m.has(c) for c in checks))
+            self.assertTrue(m.has(same))
+            self.assertEqual([m.base_was_red(c) for c in checks], [bool(i % 2) for i in range(12)])
 
 
 if __name__ == "__main__":

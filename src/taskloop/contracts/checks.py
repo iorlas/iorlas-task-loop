@@ -9,7 +9,7 @@ import msgspec
 from taskloop.contracts.enums import CheckStatus
 from taskloop.contracts.ids import CheckId, TreeSha
 from taskloop.contracts.row import Row
-from taskloop.contracts.runkey import RunKey
+from taskloop.contracts.runkey import BaseSha, RunKey
 from taskloop.contracts.wire import Rec
 
 Group = Literal["static", "tests", "acceptance"]
@@ -66,6 +66,7 @@ class Check(Rec):
     inputs: list[str] = msgspec.field(default_factory=list)
     inputs_only: bool = False
     exclude: list[str] = msgspec.field(default_factory=list)
+    selected: list[str] = msgspec.field(default_factory=list)  # the tests the command resolved to run (empty: all); part of the result key
     env: dict[str, str] = msgspec.field(default_factory=dict)
     repo: bool = False
     writer: bool | None = None  # True: the writer may run it, whatever it cost; False: never; None: by its duration
@@ -198,35 +199,34 @@ class CheckRun(Rec):
 
 
 @final
-class CacheHit(Rec):
-    result: CheckResult
-    round: int = 0
-    log_abs: str = ""  # the saved output of the run the result came from
+class PassRecord(Rec):
+    """results/<repo>/<check>/<key digest>.json: one remembered pass of a check and the key it holds for. `tree` and `base` are the
+    tree and base it was last true for (a key without them is true for any). run_id, host, ts: who made it; `origin`: the run that
+    first made the result when this record is a reuse on a newer tree or base. log_abs: the saved output (may be gone: it expires)."""
 
-
-@final
-class RunEntry(Rec):
-    """One remembered green result and the key of the run it came from."""
-
+    V: ClassVar[int] = 1
     key: RunKey
-    hit: CacheHit
+    result: CheckResult
+    tree: TreeSha
+    base: BaseSha
+    run_id: str = ""
+    host: str = ""
+    ts: float = 0.0
+    origin: str = ""
+    round: int = 0
+    log_abs: str = ""
 
 
 @final
-class BaseEntry(Rec):
-    """Whether a check was red on the untouched base (`key.base`): its key has no tree."""
+class BaseRedRecord(Rec):
+    """results/<repo>/base-red/<key digest>.json: whether a check was red on the untouched base (`key.base`)."""
 
+    V: ClassVar[int] = 1
     key: RunKey
     red: bool
-
-
-@final
-class CheckCacheEntry(Rec):
-    """check-cache/<bead>.json: the run memo. v1 (whole/inputs maps keyed by command) is another version: read as absent, a miss."""
-
-    V: ClassVar[int] = 2
-    runs: list[RunEntry] = msgspec.field(default_factory=list)
-    base: list[BaseEntry] = msgspec.field(default_factory=list)
+    run_id: str = ""
+    host: str = ""
+    ts: float = 0.0
 
 
 @final

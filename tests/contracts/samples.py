@@ -101,7 +101,8 @@ CMD = {"pick_label": "auto", "skip_review": config.ReviewSkipConfig(tests=["t/**
        "container": config.ContainerConfig(image="img:1")}
 
 
-RUNKEY = RunKey(check=CheckId("lint"), tree=TreeSha("deadbeef"), base=BaseSha("b4se"), inputs=Digest("a1"), env=Digest("e1"))
+RUNKEY = RunKey(check=CheckId("lint"), cmd=Digest("c1"), config=Digest("g1"), toolchain=Digest("t1"), tree=TreeSha("deadbeef"),
+                base=BaseSha("b4se"), inputs=Digest("a1"), selected=Digest(""), env=Digest("e1"))
 CHECK_RUN = checks.CheckRun(
     round=1,
     tree=TreeSha("deadbeef"),
@@ -345,6 +346,7 @@ OTHERS = {
         inputs=["client/**"],
         inputs_only=True,
         exclude=["client/Gen/**"],
+        selected=["tests/test_a.py::T::a"],
         env={"A": "1"},
         repo=True,
         writer=False,
@@ -357,10 +359,9 @@ OTHERS = {
     "plancheck.Adhoc": plancheck.Adhoc(argv=("python3", "tools/assert_log.py", "TL_CHECK_LOG_UNITY_TESTS"),
                                        reads=(CheckId("unity-tests"),)),
     "RunKey": RUNKEY,
-    "CheckCacheEntry": checks.CheckCacheEntry(
-        runs=[checks.RunEntry(key=RUNKEY, hit=checks.CacheHit(result=CHECK_RUN.results[1], round=1, log_abs="/r/checks/00.log"))],
-        base=[checks.BaseEntry(key=RUNKEY.replace(tree=TreeSha("")), red=True)],
-    ),
+    "PassRecord": checks.PassRecord(key=RUNKEY, result=CHECK_RUN.results[1], tree=TreeSha("deadbeef"), base=BaseSha("b4se"),
+                                    run_id="run-1", host="box", ts=1700000000.0, origin="run-0", round=1, log_abs="/r/checks/00.log"),
+    "BaseRedRecord": checks.BaseRedRecord(key=RUNKEY.replace(tree=TreeSha("")), red=True, run_id="run-1", host="box", ts=1700000000.0),
     "Durations": checks.Durations(rows=[
         checks.Duration(**HEAD, call_id="fmt", step="just fmt", exec_seconds=3.1, wait_seconds=0.0, tree="deadbeef", base="1a2b3c4d5e6f",
                         artifact="/r/checks/00.log", artifact_hash="9f2c"),

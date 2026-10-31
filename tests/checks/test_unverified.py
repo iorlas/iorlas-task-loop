@@ -16,14 +16,14 @@ from support.narrow_hosts import Stopped, table_kit
 from support.spawn import port_git
 
 from taskloop.app.checks import evidence
-from taskloop.app.checks.cache import InputKeys, RunMemo
+from taskloop.app.checks.cache import InputKeys, RunMemo, key_digest
 from taskloop.app.land import verified
 from taskloop.contracts.bead import Bead
-from taskloop.contracts.checks import UNVERIFIED_EXIT, CacheHit, Check, CheckCacheEntry, CheckResult, CheckRun, RunEntry, verdict_of
+from taskloop.contracts.checks import UNVERIFIED_EXIT, Check, CheckResult, CheckRun, PassRecord, verdict_of
 from taskloop.contracts.enums import CheckStatus
 from taskloop.contracts.ids import BeadId, CheckId, TreeSha
 from taskloop.contracts.runkey import BaseSha
-from taskloop.stores.memory import MemDoc
+from taskloop.stores.memory import fake_stores
 
 
 def unverified(id="render") -> CheckResult:
@@ -60,12 +60,14 @@ class Recorded(EngineTest):
 
 class Cache(unittest.TestCase):
     def memo(self, seed=None):
-        doc = MemDoc(CheckCacheEntry)
-        keys = InputKeys(port_git(), "/nonexistent", TreeSha("t"))
+        stores, keys = fake_stores(), InputKeys(port_git(), "/nonexistent", TreeSha("t"))
+        keys.files = {}  # the tree has no pin files (and git is not asked)
+        memo = RunMemo(stores, "repo", keys, BaseSha("b"), {})
         if seed:
-            doc.write(CheckCacheEntry(runs=[RunEntry(key=must(RunMemo(MemDoc(CheckCacheEntry), keys, BaseSha("b"), {}).key(seed[0])),
-                                                      hit=CacheHit(result=seed[1], round=1))]))
-        return RunMemo(doc, keys, BaseSha("b"), {})
+            key = must(memo.key(seed[0]))  # written by hand: remember() refuses what is not a pass
+            stores.results("repo", key.check).of(key_digest(key)).write(
+                PassRecord(key=key, result=seed[1], tree=TreeSha("t"), base=BaseSha("b"), round=1))
+        return memo
 
     def test_a_cached_unverified_result_is_never_reused_as_a_pass(self):
         c = Check(id=CheckId("render"), cmd="render")

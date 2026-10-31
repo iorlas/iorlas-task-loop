@@ -15,7 +15,7 @@ from support.narrow_hosts import Fetches, LandKit, Locks
 
 # isort: split
 from taskloop.contracts import log as rec
-from taskloop.contracts.checks import CacheHit, Check, CheckCacheEntry, CheckResult, CheckRun, RunEntry
+from taskloop.contracts.checks import Check, CheckResult, CheckRun, PassRecord
 from taskloop.contracts.config import CheckSpec, EngineConfig
 from taskloop.contracts.gitfacts import GitOutcome, LogRow
 from taskloop.contracts.ids import CheckId, TreeSha
@@ -27,13 +27,7 @@ PUSHED = (0, "")
 
 class Doc:
     def __init__(self) -> None:
-        self.rec: CheckCacheEntry | None = None
-
-    def read(self) -> CheckCacheEntry | None:
-        return self.rec
-
-    def write(self, rec: CheckCacheEntry) -> None:
-        self.rec = rec
+        self.rec: list[PassRecord] = []
 
 
 class WorldGit(ScriptedGit):
@@ -125,13 +119,13 @@ class World:
         res = CheckResult(id=CheckId("gate"), cmd="gate", group="tests", exit=rc, status="failed" if rc else "passed", tail=tail)
         if not rc:
             tree, base = TreeSha(f"tree@{self.sat_on}"), BaseSha(self.base)
-            key = RunKey(check=CheckId("gate"), tree=tree, base=base, inputs=Digest(""), env=Digest(""))
-            self.doc.rec = CheckCacheEntry(runs=[RunEntry(key=key, hit=CacheHit(result=res))])
+            key = RunKey(check=CheckId("gate"), cmd=Digest(""), config=Digest(""), toolchain=Digest(""), tree=tree, base=base,
+                         inputs=Digest(""), selected=Digest(""), env=Digest(""))
+            self.doc.rec = [PassRecord(key=key, result=res, tree=tree, base=base)]
         return CheckRun(round=1, results=[res])
 
     def gate_passed(self) -> list[str]:
-        rec = self.doc.rec
-        return [e.key.tree for e in rec.runs if e.key.base == self.base] if rec else []
+        return [e.key.tree for e in self.doc.rec if e.key.base == self.base]
 
     def land(self) -> str:
         return self.lander.land()

@@ -52,7 +52,6 @@ class Checker:
         memo = self._memo(tree, base)
         st = self._executor(memo, history, base_run=True, fix_red=fix_red).run_group(plan, self.round)
         run = self._finish(st, tree, history, history_doc)
-        memo.save()
         host.checklog.round(host.steps.id, run)
         self._stuck(run)
         return run
@@ -72,7 +71,6 @@ class Checker:
         st = self._executor(memo, history, base_run=False, everything=everything).run_group(plan, self.round)  # no base run
         if learn and st.timings:
             history_doc.write(merged(history, st.timings))
-        memo.save()
         results = st.results if show_clean else self._quiet(st.results)
         host.detail(evidence.round_lines(results))
         hits = sum(1 for c in results if c.cached)
@@ -95,12 +93,13 @@ class Checker:
         return doc, doc.get() or Durations()
 
     def _memo(self, tree: TreeSha, base: str) -> RunMemo:
-        """The run memo of this tree and base: the one place a round, `tl check` and the gate's question get theirs. The env it keys
-        on is what the engine hands every child: the slot's, and the registered names that reach it."""
+        """The result store of this repo for this tree and base: the one place a round, `tl check` and the gate's question get theirs.
+        The env it keys on is what the engine hands every child: the slot's, and the registered names that reach it."""
         host = self.host
         keys = InputKeys(host.git, host.wt, tree)
         engine_env = {**childenv.reaching(childenv.current_env(host.env)), **host.bead_env}
-        return RunMemo(host.stores.check_cache.of(host.bead), keys, BaseSha(base), engine_env)
+        repo = check_files.repo_key(host.git, str(host.wt))
+        return RunMemo(host.stores, repo, keys, BaseSha(base), engine_env, host.run_id)
 
     def _executor(self, memo: RunMemo, history: Durations, base_run: bool, fix_red: dict[str, CheckResult] | None = None,
                   everything: bool = False) -> CheckExecutor:

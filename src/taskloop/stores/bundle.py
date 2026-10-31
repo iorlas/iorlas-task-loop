@@ -3,7 +3,7 @@ import dataclasses
 from collections.abc import Callable
 
 from taskloop.contracts.adrs import AdrStore
-from taskloop.contracts.checks import CheckCacheEntry, CheckRun, Durations
+from taskloop.contracts.checks import BaseRedRecord, CheckRun, Durations, PassRecord
 from taskloop.contracts.config import HostResources
 from taskloop.contracts.events import Event
 from taskloop.contracts.log import EngineLog
@@ -25,7 +25,8 @@ class Stores:
     loop_state: Callable[[str], Doc[LoopState]]
     loop_command: Callable[[str], Doc[LoopCommand]]
     loop_rest: Callable[[str], Doc[Rest]]
-    check_cache: DocSet[CheckCacheEntry]  # one per bead
+    results: Callable[[str, str], DocSet[PassRecord]]  # the passes of a check of a repo (repo key, check id), one per run key
+    base_red: Callable[[str], DocSet[BaseRedRecord]]  # whether a check was red on its base, one per run key (repo key)
     durations: DocSet[Durations]  # one per repo
     check_run: Callable[[str, int | None], Doc[CheckRun]]  # a run's round (None: its latest)
     host: Doc[HostResources]  # this machine's own file (resources it has); a person writes it

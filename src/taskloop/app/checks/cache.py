@@ -1,22 +1,28 @@
-"""RunMemo: the one memo of check runs. A pass is a fact about a RunKey (the check, the tree or its `inputs`, the base, the env it
-ran in); a failure can come from outside git (stale build output, a held editor, a flake) and always reruns. A check that may not
-be cached (`cache: false`, a plan's own command) has no key, so nothing is ever remembered about it. The land gate asks the same
-memo (`has`) the round does (`hit`): there is no second copy of the decision."""
+"""RunMemo: the repo's one result store, written by every runner (a stage's round, the land gate, a standalone `tl check`). A pass is a
+fact about a RunKey (the check and its command and settings, the tree or its `inputs` (and the base unless `inputs_only`), the
+selected tests, the toolchain and the env it ran in) and is kept with who made it (run, host, time) and where its output is. Each key
+is a file of its own, written whole: runners writing at once never lose each other's pass. A failure can come from outside git
+(stale build output, a held editor, a flake) and always reruns. A check that may not be cached (`cache: false`, a plan's own command)
+has no key, so nothing is ever remembered about it. The land gate asks the same store (`has`) the round does (`hit`): there is no
+second copy of the decision."""
 import hashlib
 import json
 import os
+import platform
 import threading
+import time
 from collections.abc import Mapping
 from pathlib import Path
 
 from taskloop.adapters import check_files
-from taskloop.contracts.checks import BaseEntry, CacheHit, Check, CheckCacheEntry, CheckResult, RunEntry
+from taskloop.contracts import wire
+from taskloop.contracts.checks import BaseRedRecord, Check, CheckResult, PassRecord
 from taskloop.contracts.ids import CheckId, TreeSha
 from taskloop.contracts.ports import Git
 from taskloop.contracts.runkey import BaseSha, Digest, RunKey
 from taskloop.domain.checks import inputs
 from taskloop.domain.checks.names import norm
-from taskloop.stores.api import Doc
+from taskloop.stores.bundle import Stores
 
 
 class InputKeys:
@@ -40,6 +46,10 @@ class InputKeys:
         """The digest of what the check reads ('' when its globs select nothing)."""
         return inputs.reads_digest(c, self.tracked() if c.inputs else {}, self.ignored_of(c) if c.inputs else {})
 
+    def toolchain(self, host: str) -> str:
+        """The toolchain pins of the tree and the host: what every key of this tree shares."""
+        return inputs.toolchain_digest(self.tracked(), host)
+
     def ignored_of(self, c: Check) -> dict[str, str]:
         """{path: content digest} of the gitignored files under the check's globs (tree_hash never sees them)."""
         at = (tuple(c.inputs), tuple(c.exclude))
@@ -49,15 +59,22 @@ class InputKeys:
         return self.ignored[at]
 
 
-class RunMemo:
-    """check-cache/<bead>.json for one tree and base: the green runs (one per check, the latest), whether a check was red on the
-    base, and what this block has run (so a command is never launched twice in it)."""
+KEEP = 8  # passes kept per check: the newest by time (a whole-tree check leaves one per tree it passed)
 
-    def __init__(self, doc: Doc[CheckCacheEntry], keys: InputKeys, base: BaseSha, engine_env: Mapping[str, str]) -> None:
-        self.doc, self.keys, self.base, self.engine_env = doc, keys, base, engine_env
-        was = doc.get() or CheckCacheEntry()
-        self.runs = {e.key: e.hit for e in was.runs}
-        self.base_red = {e.key: e.red for e in was.base}
+
+def key_digest(key: RunKey) -> str:
+    """The name of a key's file: sha1 of the key's fields."""
+    return hashlib.sha1(json.dumps(wire.dump(key), sort_keys=True).encode()).hexdigest()
+
+
+class RunMemo:
+    """The result store of one repo, asked and written for one tree and base. `run_id` and `host` are who writes (the provenance of a
+    pass). What this block has run is kept in memory (so a command is never launched twice in it)."""
+
+    def __init__(self, stores: Stores, repo: str, keys: InputKeys, base: BaseSha, engine_env: Mapping[str, str], run_id: str = "") -> None:
+        self.stores, self.repo, self.keys, self.base, self.engine_env = stores, repo, keys, base, engine_env
+        self.run_id, self.host = run_id, platform.node()
+        self.system = f"{platform.system()}-{platform.machine()}"
         self.lock = threading.Lock()  # lanes remember at the same time
         self.ran: dict[RunKey, tuple[CheckResult, float]] = {}  # this block's runs by command -> result, wall limit
 
@@ -68,7 +85,8 @@ class RunMemo:
 
     def key(self, c: Check) -> RunKey | None:
         """The key of a run of this check on this tree; None when it may not be cached, or its `inputs` select nothing (a green over
-        changed code would be a wrong hit)."""
+        changed code would be a wrong hit). A check with `inputs_only` has neither tree nor base in its key: it is true for any base
+        and any tree that reads the same inputs."""
         if not c.cache:
             return None
         reads = "" if c.inputs and self.keys.dead(c) else self.keys.key(c)
@@ -77,56 +95,82 @@ class RunMemo:
         whole = not c.inputs
         tree = self.keys.tree if whole else TreeSha("")
         base = self.base if whole or not c.inputs_only else BaseSha("")
-        return RunKey(check=c.id, tree=tree, base=base, inputs=Digest(reads), env=self.env_of(c))
+        return RunKey(check=c.id, cmd=Digest(inputs.cmd_digest(c)), config=Digest(inputs.config_digest(c)),
+                      toolchain=Digest(self.keys.toolchain(self.system)), tree=tree, base=base, inputs=Digest(reads),
+                      selected=Digest(inputs.selected_digest(c)), env=self.env_of(c))
 
     def command_key(self, c: Check) -> RunKey:
         """A command is its own identity within a block, whatever id it carries (a plan's copy of a registered command is that run)."""
-        return RunKey(check=CheckId(norm(c.cmd)), tree=self.keys.tree, base=self.base,
-                      inputs=Digest(hashlib.sha1(norm(c.cmd).encode("utf-8", "surrogateescape")).hexdigest()), env=self.env_of(c))
+        return RunKey(check=CheckId(norm(c.cmd)), cmd=Digest(inputs.cmd_digest(c)), config=Digest(""), toolchain=Digest(""),
+                      tree=self.keys.tree, base=self.base, inputs=Digest(""), selected=Digest(""), env=self.env_of(c))
 
     def base_key(self, c: Check) -> RunKey:
         """The run of the command on the untouched base: it reads that commit's tree, so no tree and no inputs."""
         return self.command_key(c).replace(tree=TreeSha(""))
 
-    def hit(self, key: RunKey | None) -> CacheHit | None:
+    def hit(self, key: RunKey | None) -> PassRecord | None:
         """The remembered green result of this run. Only a pass is ever reused."""
-        found = self.runs.get(key) if key else None
-        return found if found is not None and found.result.status == "passed" else None
+        if key is None:
+            return None
+        found = self.stores.results(self.repo, key.check).of(key_digest(key)).get()
+        return found if found is not None and found.key == key and found.result.status == "passed" else None
 
     def has(self, c: Check) -> bool:
         """The run this check would make is already a fact (the land gate's whole question)."""
         return self.hit(self.key(c)) is not None
 
-    def cached(self, c: Check, hit: CacheHit) -> CheckResult:
-        """The remembered result as this round's: cached, with the round it ran in said."""
+    def cached(self, c: Check, hit: PassRecord) -> CheckResult:
+        """The remembered result as this round's: cached, with the round it ran in said (and that its log is gone when it is)."""
         note = "inputs unchanged since round %s" % (hit.round or "?") if c.inputs else ""
+        if hit.log_abs and not os.path.exists(hit.log_abs):
+            note += ("; " if note else "") + "its log has expired"
         return hit.result.replace(id=c.id, cmd=c.cmd, group=c.group, cached=True, log="", note=note, waited=0.0)
 
+    def reuse(self, hit: PassRecord) -> None:
+        """A pass served for a tree or base other than the one it was made for (a key without them): never the old record as it was,
+        a new one for the current tree and base, from this run, that names the run that made the result."""
+        if hit.tree == self.keys.tree and hit.base == self.base:
+            return
+        self._put(hit.replace(tree=self.keys.tree, base=self.base, run_id=self.run_id, host=self.host, ts=time.time(),
+                              origin=hit.origin or hit.run_id))
+
     def remember(self, key: RunKey, res: CheckResult, rnd: int, log_abs: str) -> None:
-        """Only a pass is a fact; one entry per check, the latest."""
+        """Only a pass is a fact. One file per key; the oldest passes of the check beyond KEEP are dropped."""
         if res.status != "passed":
             return
+        self._put(PassRecord(key=key, result=res, tree=self.keys.tree, base=self.base, run_id=self.run_id, host=self.host,
+                             ts=time.time(), round=rnd, log_abs=log_abs))
+
+    def _put(self, rec: PassRecord) -> None:
+        docs = self.stores.results(self.repo, rec.key.check)
+        docs.of(key_digest(rec.key)).write(rec)
         with self.lock:
-            self.runs = {k: v for k, v in self.runs.items() if k.check != key.check}
-            self.runs[key] = CacheHit(result=res, round=rnd, log_abs=log_abs)
+            names = docs.keys()
+            if len(names) > KEEP:
+                have = [(r.ts, n) for n in names if (r := docs.of(n).get()) is not None]
+                for _, n in sorted(have, reverse=True)[KEEP:]:
+                    docs.of(n).delete()
 
     def base_was_red(self, c: Check) -> bool | None:
-        """True or False when the command has run on this base; None when it has not."""
-        return self.base_red.get(self.base_key(c))
+        """True or False when the command has run on this base (by any runner of the repo); None when it has not."""
+        rec = self.stores.base_red(self.repo).of(key_digest(self.base_key(c))).get()
+        return rec.red if rec is not None else None
 
     def set_base_red(self, c: Check, red: bool) -> None:
-        self.base_red[self.base_key(c)] = red
-
-    def save(self) -> None:
-        """Written back with only this tree's and base's entries (a key that reads its `inputs` has no tree to go stale)."""
-        tree = self.keys.tree
-        self.doc.write(CheckCacheEntry(
-            runs=[RunEntry(key=k, hit=v) for k, v in self.runs.items() if not k.tree or (k.tree == tree and k.base == self.base)],
-            base=[BaseEntry(key=k, red=v) for k, v in self.base_red.items() if k.base == self.base]))
+        key = self.base_key(c)
+        self.stores.base_red(self.repo).of(key_digest(key)).write(
+            BaseRedRecord(key=key, red=red, run_id=self.run_id, host=self.host, ts=time.time()))
 
 
-def is_green(entry: CheckCacheEntry | None, step: CheckId, tree: TreeSha, base: BaseSha) -> bool:
-    """Read-only: the memo holds a pass of this step for exactly this tree and base. Only a whole-tree key can be answered from the
-    file alone; a key that reads `inputs` (no tree) needs the worktree's files to say it still holds, so it answers no."""
-    return entry is not None and any(
-        e.key.check == step and e.key.tree == tree and e.key.base == base and e.hit.result.status == "passed" for e in entry.runs)
+def repo_green(stores: Stores, git: Git, wt: str, step: CheckId, tree: TreeSha, base: BaseSha) -> bool:
+    """is_green for the repo of the worktree `wt`."""
+    return is_green(stores, check_files.repo_key(git, wt), step, tree, base)
+
+
+def is_green(stores: Stores, repo: str, step: CheckId, tree: TreeSha, base: BaseSha) -> bool:
+    """Read-only: the store holds a pass of this step that is true for exactly this tree and base (a whole-tree key made for them,
+    or a key without them that was served for them)."""
+    docs = stores.results(repo, step)
+    names = docs.keys()  # a DocSet is not iterable: it has keys()
+    return any(r is not None and r.key.check == step and r.tree == tree and r.base == base and r.result.status == "passed"
+               for r in (docs.of(n).get() for n in names))

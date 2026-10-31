@@ -17,7 +17,7 @@ from taskloop.contracts import events, log, wire
 from taskloop.contracts.adrs import AdrStore
 from taskloop.contracts.ask import Ask
 from taskloop.contracts.checkpoint import Checkpoint
-from taskloop.contracts.checks import CheckCacheEntry, CheckRun, Durations
+from taskloop.contracts.checks import BaseRedRecord, CheckRun, Durations, PassRecord
 from taskloop.contracts.config import HostResources
 from taskloop.contracts.enums import LockWhat
 from taskloop.contracts.ledger import Adr, AdrUse, LedgerEntry
@@ -204,6 +204,8 @@ def fake_stores(pid: int | None = None) -> Stores:
     rests: dict[str, MemDoc[Rest]] = {}
     check_runs: dict[tuple[str, int | None], MemDoc[CheckRun]] = {}
     adrs: dict[str, AdrStore] = {}
+    passes: dict[tuple[str, str], MemDocSet[PassRecord]] = {}
+    reds: dict[str, MemDocSet[BaseRedRecord]] = {}
     return Stores(
         run_log=lambda run: runs.setdefault(run, MemLog(log.decode)),
         events=MemLog(events.decode), traces=MemLog(_decode(RunTrace)),
@@ -213,6 +215,8 @@ def fake_stores(pid: int | None = None) -> Stores:
         loop_state=lambda key: state.setdefault(key, MemDoc(LoopState)),
         loop_command=lambda key: cmds.setdefault(key, MemDoc(LoopCommand)),
         loop_rest=lambda key: rests.setdefault(key, MemDoc(Rest)),
-        check_cache=MemDocSet(CheckCacheEntry), durations=MemDocSet(Durations),
+        results=lambda repo, check: passes.setdefault((repo, check), MemDocSet(PassRecord)),
+        base_red=lambda repo: reds.setdefault(repo, MemDocSet(BaseRedRecord)),
+        durations=MemDocSet(Durations),
         check_run=lambda run, rnd: check_runs.setdefault((run, rnd), MemDoc(CheckRun)),
         host=MemDoc(HostResources), locks=MemLockTable(pid), tickets=MemTickets())

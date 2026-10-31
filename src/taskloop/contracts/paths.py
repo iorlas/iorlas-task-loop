@@ -1,4 +1,5 @@
 """Every file location, once. Nothing else in the package names a file or a folder of ours."""
+import hashlib
 from pathlib import Path
 from typing import Final, final
 
@@ -108,8 +109,14 @@ class ConfigDir:
         """The plain files a bead's runs left (screenshots, PDFs): one flat directory per bead, outside every worktree."""
         return self.root / "artifacts" / str(bead)
 
-    def check_cache(self, bead: BeadId | str) -> Path:
-        return self.root / "check-cache" / (f"{bead}.json")
+    def result(self, repo_key: str, check: str, digest: str) -> Path:
+        """The result store: one file per key, in the folder of the repo and the check (the folder is the check id's sha1, so any id is
+        a safe name). A later bead moves the repo's folder under repos/<repo-key>/."""
+        return self.root / "results" / repo_key / hashlib.sha1(check.encode("utf-8", "surrogateescape")).hexdigest()[:12] / f"{digest}.json"
+
+    def base_red(self, repo_key: str, digest: str) -> Path:
+        """Whether a check was red on an untouched base: one file per key, beside the passes."""
+        return self.root / "results" / repo_key / "base-red" / f"{digest}.json"
 
     def check_durations(self, repo_key: str) -> Path:
         return self.root / "check-durations" / (f"{repo_key}.json")

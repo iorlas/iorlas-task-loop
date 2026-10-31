@@ -1,4 +1,5 @@
-"""`tl green`: green only for a pass of that step on exactly that tree and base, read from the check memo; it writes nothing."""
+"""`tl green`: green only for a pass of that step that is true for exactly that tree and base, read from the repo's result store; it
+writes nothing."""
 import sys
 import tempfile
 import unittest
@@ -7,19 +8,33 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
+from support.fakegit import ScriptedGit
 
+# isort: split
+from taskloop.adapters import check_files
+from taskloop.app.checks.cache import key_digest
 from taskloop.cli import green
-from taskloop.contracts.checks import CacheHit, CheckCacheEntry, CheckResult, RunEntry, Verdict
+from taskloop.contracts.checks import CheckResult, PassRecord, Verdict
 from taskloop.contracts.ids import CheckId, TreeSha
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.runkey import BaseSha, Digest, RunKey
-from taskloop.stores.files import FileDocSet
+from taskloop.stores.real import real_stores
+
+
+class RepoGit(ScriptedGit):
+    """Every path is a worktree of the repo whose origin is `url`."""
+
+    url = "git@example.com:o/repo.git"
+
+    def config_get(self, d: str, key: str) -> str:
+        return self.url if d.startswith("/repo") else "git@example.com:o/other.git"
 
 
 def run(step="unit", tree="T1", base="B1", status: Verdict = "passed"):
-    key = RunKey(check=CheckId(step), tree=TreeSha(tree), base=BaseSha(base), inputs=Digest("i"), env=Digest("e"))
+    key = RunKey(check=CheckId(step), cmd=Digest("c"), config=Digest("g"), toolchain=Digest("t"), tree=TreeSha(tree), base=BaseSha(base),
+                 inputs=Digest("i"), selected=Digest(""), env=Digest("e"))
     res = CheckResult(id=CheckId(step), cmd="x", group="g", exit=0 if status == "passed" else 1, status=status)
-    return RunEntry(key=key, hit=CacheHit(result=res))
+    return PassRecord(key=key, result=res, tree=TreeSha(tree), base=BaseSha(base))
 
 
 class GreenCase(unittest.TestCase):
@@ -27,42 +42,49 @@ class GreenCase(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.cfg = ConfigDir(self.tmp.name)
+        self.git = RepoGit()
         self.out: list[str] = []
 
-    def ask(self, step="unit", tree="T1", base="B1", bead="t-1"):
-        a = Namespace(step=step, bead=bead, tree=tree, base=base)
-        return green.cmd_green(a, self.cfg, self.out.append)
+    def ask(self, step="unit", tree="T1", base="B1", repo="/repo"):
+        a = Namespace(step=step, repo=repo, tree=tree, base=base)
+        return green.cmd_green(a, self.cfg, self.git, self.out.append)
 
-    def memo(self, *runs):
-        FileDocSet(self.cfg.check_cache, CheckCacheEntry).of("t-1").write(CheckCacheEntry(runs=list(runs)))
+    def store(self, *recs):
+        repo = check_files.repo_key(self.git, "/repo")
+        for r in recs:
+            real_stores(self.cfg).results(repo, r.key.check).of(key_digest(r.key)).write(r)
 
-    def test_no_memo_is_not_green(self):
+    def test_no_store_is_not_green(self):
         self.assertEqual(self.ask(), 1)
         self.assertEqual(self.out, ["not green: unit tree T1 base B1"])
 
     def test_pass_for_that_tree_and_base_is_green(self):
-        self.memo(run())
+        self.store(run())
         self.assertEqual(self.ask(), 0)
         self.assertEqual(self.out, ["green: unit tree T1 base B1"])
 
-    def test_other_step_tree_base_or_bead_is_not_green(self):
-        self.memo(run())
+    def test_a_pass_served_for_another_tree_and_base_is_green_for_them(self):
+        self.store(run().replace(tree=TreeSha("T2"), base=BaseSha("B2")))  # the record of a reuse: true for T2 on B2 now
+        self.assertEqual(self.ask(tree="T2", base="B2"), 0)
+        self.assertEqual(self.ask(), 1)
+
+    def test_other_step_tree_base_or_repo_is_not_green(self):
+        self.store(run())
         self.assertEqual(self.ask(step="lint"), 1)
         self.assertEqual(self.ask(tree="T2"), 1)
         self.assertEqual(self.ask(base="B2"), 1)
-        self.assertEqual(self.ask(bead="t-2"), 1)
+        self.assertEqual(self.ask(repo="/elsewhere"), 1)
 
     def test_a_remembered_non_pass_is_not_green(self):
-        self.memo(run(status="failed"))
+        self.store(run(status="failed"))
         self.assertEqual(self.ask(), 1)
 
     def test_asking_writes_nothing(self):
-        self.memo(run())
-        before = self.cfg.check_cache("t-1").read_bytes()
+        self.store(run())
+        before = sorted(p for p in Path(self.tmp.name).rglob("*"))
         self.ask()
-        self.assertEqual(self.cfg.check_cache("t-1").read_bytes(), before)
-        self.assertEqual(self.ask(bead="t-9"), 1)
-        self.assertFalse(self.cfg.check_cache("t-9").exists())
+        self.ask(repo="/elsewhere")
+        self.assertEqual(sorted(Path(self.tmp.name).rglob("*")), before)
 
 
 if __name__ == "__main__":

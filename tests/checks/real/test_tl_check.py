@@ -100,10 +100,10 @@ class TlCheck(unittest.TestCase):
         self.assertTrue(lines[3].startswith("ui  run=gate  group=tests  when=ui/**  "))
         self.assertIn("run=stage", lines[2])
 
-    def test_it_claims_nothing_and_writes_only_the_check_cache(self):
+    def test_it_claims_nothing_and_writes_only_the_result_store(self):
         self.tl()
         written = {p.relative_to(Path(self.tmp.name, "cfg")).parts[1] for p in Path(self.tmp.name, "cfg").rglob("*") if p.is_file()}
-        self.assertLessEqual(written, {"check-cache", "locks"})
+        self.assertLessEqual(written, {"results", "locks"})
 
 
 if __name__ == "__main__":

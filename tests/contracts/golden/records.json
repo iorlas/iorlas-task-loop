@@ -573,6 +573,9 @@
   "exclude": [
    "client/Gen/**"
   ],
+  "selected": [
+   "tests/test_a.py::T::a"
+  ],
   "env": {
    "A": "1"
   },
@@ -610,67 +613,81 @@
  },
  "RunKey": {
   "check": "lint",
+  "cmd": "c1",
+  "config": "g1",
+  "toolchain": "t1",
   "tree": "deadbeef",
   "base": "b4se",
   "inputs": "a1",
+  "selected": "",
   "env": "e1"
  },
- "CheckCacheEntry": {
-  "v": 2,
-  "runs": [
-   {
-    "key": {
-     "check": "lint",
-     "tree": "deadbeef",
-     "base": "b4se",
-     "inputs": "a1",
-     "env": "e1"
-    },
-    "hit": {
-     "result": {
-      "id": "lint",
-      "cmd": "ruff check",
-      "group": "static",
-      "exit": 0,
-      "status": "passed",
-      "tries": 1,
-      "tail": "",
-      "secs": 0.0,
-      "log": "",
-      "wall_hit": false,
-      "wall_min": 0.0,
-      "cached": true,
-      "reused": false,
-      "why": "",
-      "note": "inputs unchanged",
-      "base_red": false,
-      "producer": "",
-      "tags": [],
-      "waited": 0.0,
-      "deferred": [],
-      "inputs_changed": false,
-      "lane": "",
-      "at": 0.0,
-      "cancelled": false,
-      "sig": ""
-     },
-     "round": 1,
-     "log_abs": "/r/checks/00.log"
-    }
-   }
-  ],
-  "base": [
-   {
-    "key": {
-     "check": "lint",
-     "tree": "",
-     "base": "b4se",
-     "inputs": "a1",
-     "env": "e1"
-    },
-    "red": true
-   }
-  ]
+ "PassRecord": {
+  "v": 1,
+  "key": {
+   "check": "lint",
+   "cmd": "c1",
+   "config": "g1",
+   "toolchain": "t1",
+   "tree": "deadbeef",
+   "base": "b4se",
+   "inputs": "a1",
+   "selected": "",
+   "env": "e1"
+  },
+  "result": {
+   "id": "lint",
+   "cmd": "ruff check",
+   "group": "static",
+   "exit": 0,
+   "status": "passed",
+   "tries": 1,
+   "tail": "",
+   "secs": 0.0,
+   "log": "",
+   "wall_hit": false,
+   "wall_min": 0.0,
+   "cached": true,
+   "reused": false,
+   "why": "",
+   "note": "inputs unchanged",
+   "base_red": false,
+   "producer": "",
+   "tags": [],
+   "waited": 0.0,
+   "deferred": [],
+   "inputs_changed": false,
+   "lane": "",
+   "at": 0.0,
+   "cancelled": false,
+   "sig": ""
+  },
+  "tree": "deadbeef",
+  "base": "b4se",
+  "run_id": "run-1",
+  "host": "box",
+  "ts": 1700000000.0,
+  "origin": "run-0",
+  "round": 1,
+  "log_abs": "/r/checks/00.log"
+ },
+ "BaseRedRecord": {
+  "v": 1,
+  "key": {
+   "check": "lint",
+   "cmd": "c1",
+   "config": "g1",
+   "toolchain": "t1",
+   "tree": "",
+   "base": "b4se",
+   "inputs": "a1",
+   "selected": "",
+   "env": "e1"
+  },
+  "red": true,
+  "run_id": "run-1",
+  "host": "box",
+  "ts": 1700000000.0
  },
  "Durations": {
   "v": 2,

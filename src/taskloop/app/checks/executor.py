@@ -82,6 +82,7 @@ class CheckExecutor:
         hit = self.memo.hit(key)
         cid, name = None, self._log_name(n, c, st.n)
         if hit is not None:
+            self.memo.reuse(hit)
             res, where = self.memo.cached(c, hit).replace(lane=c.lane), hit.log_abs
             if res.note:
                 self.host.log.note(f"cached: {c.id}, {res.note}")

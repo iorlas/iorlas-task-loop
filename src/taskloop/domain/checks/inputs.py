@@ -6,6 +6,7 @@ and a wrong cache hit is worse than a miss. A check with no `inputs` is keyed on
 tracked file switches the cache off for that round. Only a pass is stored, and a plan's own (acceptance) check is never cached:
 it can read what git cannot see."""
 import hashlib
+import json
 from collections.abc import Iterable, Mapping
 from typing import Final
 
@@ -54,15 +55,20 @@ def matching(paths: Iterable[str], globs: Iterable[str], exclude: Iterable[str] 
     return [p for p in paths if p and any(x.match(p) for x in res) and not any(x.match(p) for x in ex)]
 
 
+WHOLE_TREE: Final = "-"  # reads_digest of a check without `inputs`: the key's `tree` says which files
+TOOLCHAIN_FILES: Final = ("mise.toml", ".mise.toml", ".tool-versions", ".python-version", ".node-version", ".nvmrc", "rust-toolchain",
+                          "rust-toolchain.toml", "global.json")
+
+
 def reads_digest(check: Check, files: Mapping[str, str], ignored: Mapping[str, str]) -> str:
-    """What one check reads, as a digest: its command, and with `inputs` the hash of the tree files matching them, of the gitignored
-    files matching them (`ignored`: path -> content digest; tree_hash never sees them), and unless `inputs_only` also of the
-    justfile, lockfiles and .task-loop.json anywhere in the tree. A check without `inputs` reads the whole tree (the key's `tree`
-    says which). '' = it reads nothing that is there: no fact to remember."""
-    h = hashlib.sha1(norm(check.cmd).encode("utf-8", "surrogateescape"))
+    """What one check reads, as a digest: with `inputs` the hash of the tree files matching them, of the gitignored files matching
+    them (`ignored`: path -> content digest; tree_hash never sees them), and unless `inputs_only` also of the justfile, lockfiles and
+    .task-loop.json anywhere in the tree. WHOLE_TREE for a check without `inputs` (the key's `tree` says which). '' = it reads
+    nothing that is there: no fact to remember. The command is the key's `cmd`, not here."""
     globs = list(check.inputs)
     if not globs:
-        return h.hexdigest()
+        return WHOLE_TREE
+    h = hashlib.sha1()
     excl = list(check.exclude)
     ih = inputs_hash(files, globs, excl)
     if not ih and not ignored:
@@ -73,6 +79,29 @@ def reads_digest(check: Check, files: Mapping[str, str], ignored: Mapping[str, s
     if not check.inputs_only:
         h.update(inputs_hash(files, ["*/" + g for g in ROOT_FILES] + list(ROOT_FILES)).encode())
     return h.hexdigest()
+
+
+def cmd_digest(check: Check) -> str:
+    return hashlib.sha1(norm(check.cmd).encode("utf-8", "surrogateescape")).hexdigest()
+
+
+def config_digest(check: Check) -> str:
+    """The declared settings of a check that change what it reads or where it runs: a changed glob, exclude, inputs_only, container or
+    fix command is another check, whatever its id."""
+    text = json.dumps([list(check.inputs), list(check.exclude), check.inputs_only, check.container, check.fix], separators=(",", ":"))
+    return hashlib.sha1(text.encode("utf-8", "surrogateescape")).hexdigest()
+
+
+def selected_digest(check: Check) -> str:
+    """The tests the command resolved to ('' when it runs all of them): another set is another run."""
+    return hashlib.sha1("\0".join(sorted(check.selected)).encode("utf-8", "surrogateescape")).hexdigest() if check.selected else ""
+
+
+def toolchain_digest(files: Mapping[str, str], host: str) -> str:
+    """The toolchain a check ran under: the host (system and machine) and the pin files of the tree (mise, python, node, rust, dotnet),
+    at any depth. A bumped pin reruns even a check whose `inputs_only` leaves the rest of the tree out."""
+    pins = ["*/" + g for g in TOOLCHAIN_FILES] + list(TOOLCHAIN_FILES)
+    return hashlib.sha1(f"{host}\0{inputs_hash(files, pins)}".encode("utf-8", "surrogateescape")).hexdigest()
 
 
 def touched(check: Check, changed: Iterable[str]) -> bool:
