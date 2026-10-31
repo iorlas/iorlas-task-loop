@@ -29,9 +29,15 @@ export const epicProject = (snap) => (ui.project !== 'all' ? ui.project : snap.p
 
 export function filterGroups(snap) {
   const p = epicProject(snap), epics = p ? epicsOf(snap, p) : [];
+  const epicItems = epics.map((e) => ({ k: e.id, n: e.title, meter: e.total ? e.done / e.total : 0 }));
+  const hasClosed = !!p && snap.epics.some((e) => e.project === p && !e.open);
+  if (hasClosed) {
+    epicItems.push({ k: 'show-closed', n: ui.showClosed ? 'Hide closed' : 'Show closed' });
+  }
   return [
     { key: 'project', label: 'projects', items: snap.projects.map((p) => ({ k: p.id, n: p.name })), pick: (k) => set({ project: k, epic: 'all' }) },
-    { key: 'epic', label: 'epics', items: epics.map((e) => ({ k: e.id, n: e.title, meter: e.total ? e.done / e.total : 0 })), pick: (k) => set({ epic: k }) },
+    { key: 'epic', label: 'epics', items: epicItems, keep: hasClosed,
+      pick: (k) => set(k === 'show-closed' ? { showClosed: !ui.showClosed } : { epic: k }) },
     { key: 'machine', label: 'machines', items: machines(snap).map((m) => ({ k: m, n: `${MACHINE_ICON(m)} ${m}` })), pick: (k) => set({ machine: k }) },
   ];
 }

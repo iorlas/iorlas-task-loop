@@ -7,7 +7,7 @@ import { askOf, counts, filterLabel, shown, troubled, bead as findBead } from '.
 import { bid, pct } from '../format.js';
 import { back, set, ui, setTab } from '../state.js';
 import { STICKS } from '../ui/ask.js';
-import { FilterChips, Sheet } from '../ui/kit.js';
+import { EmptyState, FilterChips, Sheet } from '../ui/kit.js';
 import { PhoneFlow } from './board.js';
 import { NoteSheet, StopSheet } from './controls.js';
 import { Decisions } from './decisions.js';
@@ -31,8 +31,8 @@ function FilterSheet({ snap }) {
   const n = shown(snap).length;
   return html`${groups.map((g) => (g.key === 'epic' && !epicProject(snap)
     ? html`<div key="epic" class="k">Epic</div><p>Pick a project first; epics belong to one project.</p>`
-    : g.items.length > 1 && html`<div key=${g.key} class="k">${g.label[0].toUpperCase() + g.label.slice(1, -1)}</div>
-      <div class="chips"><${FilterChips} items=${g.items} value=${ui[g.key]} onPick=${g.pick} /></div>`))}
+    : (g.items.length > 1 || g.keep) && html`<div key=${g.key} class="k">${g.label[0].toUpperCase() + g.label.slice(1, -1)}</div>
+      <div class="chips"><${FilterChips} items=${g.items} value=${ui[g.key]} onPick=${g.pick} keep=${g.keep} /></div>`))}
     <div class="row2"><button onClick=${() => set({ project: 'all', epic: 'all', machine: 'all' })}>Clear</button>
       <button class="pri" onClick=${back}>Show ${n} bead${n === 1 ? '' : 's'}</button></div>`;
 }
@@ -118,6 +118,9 @@ export function Phone({ snap, now }) {
   else if (ui.tab === 'floor') body = html`<${PhoneFloor} snap=${snap} now=${now} />`;
   else if (ui.tab === 'cost') body = html`<${Cost} snap=${snap} />`;
   else body = html`<${PhoneLanes} snap=${snap} now=${now} />`;
+  if (!snap.beads.length && ui.tab === 'board') body = html`<${EmptyState} title="No beads yet"
+    body=${snap.projects.length ? 'Create beads with bd, then start the loop.' : 'Register a repo, then start its loop.'}
+    cmd=${snap.projects.length ? 'tl loop' : 'tl register <repo>  ·  tl loop'} />`;
   return html`<div id="ph">
     <header class="ph-h"><h1>${TABS.find((t) => t[0] === ui.tab)[2]}</h1><${LanePill} snap=${snap} /></header>
     <${Banners} snap=${snap} now=${now} />

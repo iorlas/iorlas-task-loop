@@ -33,7 +33,9 @@ def epics_of(p: ProjectIn) -> list[Epic]:
     for e in p.beads:
         kids = [b for b in work if b.parent == e.id]
         if kids and not is_infra(e):
-            out.append(Epic(id=e.id, project=p.id, title=e.title, done=sum(1 for b in kids if b.status == "closed"), total=len(kids)))
+            out.append(Epic(id=e.id, project=p.id, title=e.title,
+                            open=e.status != "closed" and any(b.status != "closed" for b in kids),
+                            done=sum(1 for b in kids if b.status == "closed"), total=len(kids)))
     return out
 
 
@@ -93,7 +95,7 @@ def build(w: World) -> Snapshot:
     loops = [needs.health(w, p) for p in w.projects]
     snap = Snapshot(
         version="", t=0.0, server=ServerInfo(version=w.version, host=w.host, loops=loops),
-        needs=needs.needs_of(w, loops), runs=list(w.run_headers),
+        needs=needs.needs_of(w, loops), runs=sorted(w.run_headers, key=lambda r: r.started, reverse=True)[:10],
         queue=[x for p in w.projects for x in queue.items_of(w, p)],
         projects=[Project(id=p.id, name=p.name, profile_error=p.profile_error) for p in w.projects],
         epics=[e for p in w.projects for e in epics_of(p)],

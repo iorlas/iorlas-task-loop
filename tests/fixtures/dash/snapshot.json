@@ -24,7 +24,129 @@
    }
   ]
  },
- "runs": [],
+ "runs": [
+  {
+   "run": "fixture-0",
+   "project": "lifesim",
+   "mode": "stage:check",
+   "owner": "fixture-owner",
+   "session": "fixture-session",
+   "state": "done",
+   "started": 1793050200.0,
+   "ended": null,
+   "reason": "Run 0: A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason "
+  },
+  {
+   "run": "fixture-1",
+   "project": "lifesim",
+   "mode": "stage:check",
+   "owner": "fixture-owner",
+   "session": "fixture-session",
+   "state": "done",
+   "started": 1793050140.0,
+   "ended": null,
+   "reason": "Run 1: A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason "
+  },
+  {
+   "run": "fixture-2",
+   "project": "lifesim",
+   "mode": "stage:check",
+   "owner": "fixture-owner",
+   "session": "fixture-session",
+   "state": "done",
+   "started": 1793050080.0,
+   "ended": null,
+   "reason": "Run 2: A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason "
+  },
+  {
+   "run": "fixture-3",
+   "project": "lifesim",
+   "mode": "stage:check",
+   "owner": "fixture-owner",
+   "session": "fixture-session",
+   "state": "done",
+   "started": 1793050020.0,
+   "ended": null,
+   "reason": "Run 3: A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason "
+  },
+  {
+   "run": "fixture-4",
+   "project": "lifesim",
+   "mode": "stage:check",
+   "owner": "fixture-owner",
+   "session": "fixture-session",
+   "state": "done",
+   "started": 1793049960.0,
+   "ended": null,
+   "reason": "Run 4: A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason "
+  },
+  {
+   "run": "fixture-5",
+   "project": "lifesim",
+   "mode": "stage:check",
+   "owner": "fixture-owner",
+   "session": "fixture-session",
+   "state": "done",
+   "started": 1793049900.0,
+   "ended": null,
+   "reason": "Run 5: A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason "
+  },
+  {
+   "run": "fixture-6",
+   "project": "lifesim",
+   "mode": "stage:check",
+   "owner": "fixture-owner",
+   "session": "fixture-session",
+   "state": "done",
+   "started": 1793049840.0,
+   "ended": null,
+   "reason": "Run 6: A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason "
+  },
+  {
+   "run": "fixture-7",
+   "project": "lifesim",
+   "mode": "stage:check",
+   "owner": "fixture-owner",
+   "session": "fixture-session",
+   "state": "done",
+   "started": 1793049780.0,
+   "ended": null,
+   "reason": "Run 7: A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason "
+  },
+  {
+   "run": "fixture-8",
+   "project": "lifesim",
+   "mode": "stage:check",
+   "owner": "fixture-owner",
+   "session": "fixture-session",
+   "state": "done",
+   "started": 1793049720.0,
+   "ended": null,
+   "reason": "Run 8: A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason "
+  },
+  {
+   "run": "fixture-9",
+   "project": "lifesim",
+   "mode": "stage:check",
+   "owner": "fixture-owner",
+   "session": "fixture-session",
+   "state": "done",
+   "started": 1793049660.0,
+   "ended": null,
+   "reason": "Run 9: A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason "
+  },
+  {
+   "run": "fixture-10",
+   "project": "lifesim",
+   "mode": "stage:check",
+   "owner": "fixture-owner",
+   "session": "fixture-session",
+   "state": "done",
+   "started": 1793049600.0,
+   "ended": null,
+   "reason": "Run 10: A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason "
+  }
+ ],
  "projects": [
   {
    "id": "lifesim",
@@ -42,6 +164,7 @@
    "id": "lifesim-d5f",
    "project": "lifesim",
    "title": "Save system",
+   "open": true,
    "done": 2,
    "total": 4
   },
@@ -49,6 +172,7 @@
    "id": "lifesim-wld",
    "project": "lifesim",
    "title": "World",
+   "open": true,
    "done": 1,
    "total": 8
   },
@@ -56,6 +180,7 @@
    "id": "lifesim-eco",
    "project": "lifesim",
    "title": "Economy",
+   "open": true,
    "done": 0,
    "total": 6
   },
@@ -63,6 +188,7 @@
    "id": "tl-bcd",
    "project": "task-loop",
    "title": "Dashboard v2",
+   "open": true,
    "done": 0,
    "total": 2
   },
@@ -70,6 +196,7 @@
    "id": "tl-7y6",
    "project": "task-loop",
    "title": "Substrate",
+   "open": true,
    "done": 0,
    "total": 1
   }

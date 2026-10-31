@@ -302,6 +302,7 @@ REVIEW_STATE = review.ReviewState(
     verified=[trace.Verified(what="w", kind="checkable", verdict="settled", evidence="e", why="y")], filed=["f"],
     unfiled=[review.Unfiled(title="t", why="lint")])
 OTHERS = {
+    "Epic": dash.Epic(id="t-epic", project="task-loop", title="Active epic", open=True, done=1, total=2),
     "RunTrace": TRACE,
     "Ask": ASK,
     "LedgerEntry": ledger.LedgerEntry(

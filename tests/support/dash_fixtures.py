@@ -15,8 +15,10 @@ import support.paths  # noqa: F401
 from taskloop.contracts import dash as D
 from taskloop.contracts import dashcost as DC
 from taskloop.contracts import wire
+from taskloop.contracts.dashruns import RunHeader
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.needs import NeedRow
+from taskloop.contracts.run import RunState
 
 ROOT = Path(__file__).resolve().parents[2]
 DIR = ROOT / "tests" / "fixtures" / "dash"
@@ -438,7 +440,11 @@ def build() -> dict[str, Any]:
             D.LoopInfo(project="task-loop", running=False, last_activity=NOW - 7200, ready=3, health="absent"),
         ]), needs=needs(cards),
         projects=[D.Project(id="lifesim", name="lifesim"), D.Project(id="task-loop", name="task-loop")],
-        epics=[D.Epic(id=k, project=v["project"], title=v["title"], done=v["done"], total=v["total"]) for k, v in epics.items()],
+        epics=[D.Epic(id=k, project=v["project"], title=v["title"], open=v["done"] < v["total"], done=v["done"], total=v["total"])
+               for k, v in epics.items()],
+        runs=[RunHeader(run=f"fixture-{i}", project="lifesim", mode="stage:check", owner="fixture-owner", session="fixture-session",
+                        state=RunState.DONE, started=NOW - i * 60, reason=f"Run {i}: " + "A long recorded reason " * 12)
+              for i in range(11)],
         slots=slots(data, all_pieces), beads=cards, pieces=all_pieces,
         asks=[ask_card(b) for b in beads if b["col"] in ("ask", "look")],
         ledger=ledger(data), adrs=adrs(data), learning=learning(), lanes=lanes(data))

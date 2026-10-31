@@ -12,8 +12,9 @@ One read-only server per machine (`python3 -m taskloop_dash` on the interpreter 
 ## Code
 
 Standalone `tl check` and `tl gate` runs use the engine's run manifests, with modes `stage:check` and `stage:gate`.
-The snapshot includes retained stage run headers (and every live stage run), even without a bead or log. Both page layouts
-show mode, owner, session and recorded state, including on the empty board. These headers only read manifests; the verb owns
+The snapshot includes the ten newest retained stage run headers by start time, even without a bead or log. Both Floor layouts
+show them in the Runs panel: mode, project, state, age and a clipped reason, with owner, session and the full reason on hover
+or click. Runs remain accessible when the board is empty. These headers only read manifests; the verb owns
 heartbeats and terminal states. Check evidence is retained under the run directory after success and failure.
 
 | where | what |

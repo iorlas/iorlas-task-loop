@@ -68,7 +68,7 @@ export function shown(snap) {
     && asks.has(key(b.project, b.id)) && answered(asks.get(key(b.project, b.id)))));
 }
 
-export const epicsOf = (snap, project) => snap.epics.filter((e) => e.project === project);
+export const epicsOf = (snap, project) => snap.epics.filter((e) => e.project === project && (e.open || ui.showClosed || e.id === ui.epic));
 
 export const troubleOf = (b) => b.marker === 'stuck' || b.marker === 'exited';
 // the stop's cause: the server's, or the one picked here before the snapshot has it
@@ -92,6 +92,13 @@ export const lanesSorted = (snap) => [...snap.lanes].sort((a, b) => LANE_ORDER[a
 export const troubled = (snap) => lanesSorted(snap).filter((l) => l.state === 'watch' || l.state === 'locked');
 
 export const piecesOf = (snap, b) => idx(snap).pieces.get(key(b.project, b.id)) || [];
+
+// Only the current piece of a bead with a LIVE run can pulse; forecasts never do.
+export function liveSegment(snap, piece) {
+  const b = idx(snap).beads.get(key(piece.project, piece.bead));
+  if (b?.marker !== 'run' || piecesOf(snap, b).some((p) => p.n > piece.n)) return null;
+  return piece.segs.filter((s) => s.kind !== 'projected').at(-1) || null;
+}
 
 export function filterLabel(snap) {
   const p = [];

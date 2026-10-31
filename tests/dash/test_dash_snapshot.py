@@ -224,6 +224,14 @@ class Cards(Case):
 
 
 class Parts(Case):
+    def test_only_an_open_epic_with_an_open_child_is_open(self):
+        p = ProjectIn(id="p", name="p", beads=[
+            bead("closed", status="closed", issue_type="epic"),
+            bead("empty", issue_type="epic"), bead("active", issue_type="epic"),
+            bead("a", parent="closed"), bead("b", parent="empty", status="closed"), bead("c", parent="active"),
+        ])
+        self.assertEqual({e.id: e.open for e in snapshot.epics_of(p)}, {"closed": False, "empty": False, "active": True})
+
     def test_epics_roll_up_their_children(self):
         (e,) = self.snap().epics
         self.assertEqual(

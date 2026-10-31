@@ -1,4 +1,12 @@
 {
+ "Epic": {
+  "id": "t-epic",
+  "project": "task-loop",
+  "title": "Active epic",
+  "open": true,
+  "done": 1,
+  "total": 2
+ },
  "RunTrace": {
   "v": 2,
   "run": "01KBN6Z0M4R5E8YQ2T7C9W3XHD",

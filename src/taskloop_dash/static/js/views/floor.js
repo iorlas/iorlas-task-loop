@@ -2,12 +2,13 @@
 // is a second piece joined to the first by a dashed curve. Hours back, "now", the hatched future; zoom 2/4/8 h opens on now.
 // The phone (§9) shows one card per slot with a 2 h strip instead.
 import { html, useEffect } from '../../vendor/ui-runtime.js';
-import { causeOf, idx, key, MACHINE_ICON, machineOf, muted, visible } from '../data.js';
+import { causeOf, idx, key, liveSegment, MACHINE_ICON, machineOf, muted, visible } from '../data.js';
 import { bid, clock, dur } from '../format.js';
 import { set, ui } from '../state.js';
 import { EmptyState } from '../ui/kit.js';
 import { BeadLine, Strip, useWidth } from '../ui/line.js';
 import { openBead } from './shell.js';
+import { Runs } from './runs.js';
 
 const BACK_H = 8, AHEAD_H = 2, AXIS = 22, ROW = 46, GRP = 24, LINE_Y = 18;
 export const ZOOMS = ['2', '4', '8'];
@@ -39,7 +40,7 @@ function Track({ snap, slot, x, now, beadOf }) {
     const b = beadOf(p), t0 = p.segs[0].t0, t1 = p.segs[p.segs.length - 1].t1;
     return html`<div key=${p.bead + p.n} class="nm" style=${`left:${x(t0)}px;width:${Math.max(2, x(t1) - x(t0))}px`} onClick=${() => openBead(b)}>
         <span>${p.from_slot ? '↪ ' : ''}${bid(p.bead, p.project, ui.project === 'all')} · ${b.title}${b.loops > 0 && html` <small>↻${b.loops}</small>`}${p.from_slot && html` <small>from ${p.from_slot}</small>`}</span></div>
-      <${BeadLine} key=${`l${p.bead}${p.n}`} segs=${p.segs} x=${x} ack=${muted(b)} cause=${causeOf(b)} sel=${ui.bead === b.id}
+      <${BeadLine} key=${`l${p.bead}${p.n}`} segs=${p.segs} pulse=${liveSegment(snap, p)} x=${x} ack=${muted(b)} cause=${causeOf(b)} sel=${ui.bead === b.id}
         cl=${!!p.from_slot} cr=${!!p.to_slot} capR=${p.to_slot ? `→ ${p.to_slot}` : ''} end=${p.landed ? '✅' : ''} onOpen=${() => openBead(b)} />`;
   })}
     ${idle && html`<div class="idl" style=${`top:${LINE_Y}px;left:${x(now) + 6}px`}>${slot.idle_why || `idle · no ${slot.lane} work ready`}</div>`}
@@ -78,7 +79,7 @@ export function Floor({ snap, now, filters }) {
   const beadOf = (p) => beads.get(key(p.project, p.bead));
   const gs = groups(snap);
   useEffect(() => { if (ref.current && w) ref.current.scrollLeft = x(now + 3600) - w; }, [zoom, !!w]);
-  if (!snap.slots.length) return html`<${EmptyState} title="No slots yet." body="Slots appear once the loop runs a worker." cmd="tl loop" />`;
+  if (!snap.slots.length) return html`<${EmptyState} title="No slots yet." body="Slots appear once the loop runs a worker." cmd="tl loop" /><${Runs} snap=${snap} now=${now} />`;
   const rows = {};
   let H = AXIS;
   const labs = [], trks = [];
@@ -104,7 +105,7 @@ export function Floor({ snap, now, filters }) {
         <div class="fut" style=${`left:${x(now)}px;width:${W - x(now)}px`}></div>
         <div class="now" style=${`left:${x(now)}px`}></div>
         <svg class="jmp" width=${W} height=${H}>${jumps(snap, rows, x)}</svg>
-        ${walls(snap, rows, x, now)}${trks}</div>`}</div></div>`;
+        ${walls(snap, rows, x, now)}${trks}</div>`}</div></div><${Runs} snap=${snap} now=${now} />`;
 }
 
 // ---- phone: counts, then one card per slot
@@ -137,15 +138,15 @@ function SlotCard({ snap, slot, now }) {
   const m = machineOf(slot);
   return html`<article class=${`slc ${busy ? '' : 'idle'}`} role=${b ? 'button' : undefined} onClick=${b ? () => openBead(b) : undefined}>
     <div class="h"><b>${MACHINE_ICON(m)} ${slot.name}</b><span>${slot.lane}</span><span class=${`pill ${PILL[st]}`}>${pill}</span></div>
-    ${body}<${Strip} pieces=${pieces} now=${now} /></article>`;
+    ${body}<${Strip} pieces=${pieces} pulses=${pieces.map((p) => liveSegment(snap, p))} now=${now} /></article>`;
 }
 
 export function PhoneFloor({ snap, now }) {
   const slots = groups(snap).flatMap((g) => g.slots);
-  if (!slots.length) return html`<${EmptyState} title="No slots yet." body="Slots appear once the loop runs a worker." />`;
+  if (!slots.length) return html`<${EmptyState} title="No slots yet." body="Slots appear once the loop runs a worker." /><${Runs} snap=${snap} now=${now} />`;
   const n = (...k) => slots.filter((s) => k.includes(s.state)).length;
   const stat = [['run', n('running'), 'running'], ['x', n('stuck'), 'stuck'], ['you', n('look'), 'your look'], ['mut', n('free', 'idle', 'held'), 'free']];
   return html`<div class="stat">${stat.map(([c, v, l]) => (v > 0 || c === 'run' || c === 'mut') && html`<span key=${l}><i class=${`dt ${c}`}></i>${v} ${l}</span>`)}</div>
     ${slots.map((s) => html`<${SlotCard} key=${s.id} snap=${snap} slot=${s} now=${now} />`)}
-    <p class="hint3">Last 2 hours per slot. The full timeline is on the laptop.</p>`;
+    <p class="hint3">Last 2 hours per slot. The full timeline is on the laptop.</p><${Runs} snap=${snap} now=${now} />`;
 }

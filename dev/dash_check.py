@@ -58,6 +58,13 @@ CASES = [
     ("desktop-down", {"scn": "down", "w": DESKTOP[0], "h": DESKTOP[1], "state": "down"}),
 ]
 
+CASES += [(f"{dev}-{scn}", {"scn": scn, "w": size[0], "h": size[1]})
+          for dev, size in (("desktop", DESKTOP), ("phone", PHONE)) for scn in ("headers", "runs", "pulse")]
+CASES += [(f"{dev}-pulse-motion", {"scn": "pulse", "w": size[0], "h": size[1], "motion": "normal"})
+          for dev, size in (("desktop", DESKTOP), ("phone", PHONE))]
+CASES += [(f"{dev}-runs-empty", {"scn": "runs", "w": size[0], "h": size[1], "state": "empty"})
+          for dev, size in (("desktop", DESKTOP), ("phone", PHONE))]
+
 # against a live server (--base): read-only, writes refused in the page; part 0 is every view, parts 1.. are slices of beads
 LIVE_CASES = [(f"{dev}-survey-{part}", {"scn": "survey", "part": part, "ro": 1, "w": size[0], "h": size[1]})
               for dev, size in (("desktop", DESKTOP), ("phone", PHONE)) for part in range(6)]
@@ -96,10 +103,10 @@ def serve(state: str) -> tuple[ThreadingHTTPServer, int]:
     return srv, srv.server_address[1]
 
 
-def run(exe: str, profile: str, url: str, size: tuple[int, int], extra: list[str]) -> tuple[str, list[str]]:
+def run(exe: str, profile: str, url: str, size: tuple[int, int], extra: list[str], reduced: bool = True) -> tuple[str, list[str]]:
     """(stdout, page errors): Chrome logs the page console to stderr with --enable-logging=stderr."""
     argv = [exe, "--headless=new", "--enable-logging=stderr", "--v=0", "--no-sandbox", "--disable-gpu", "--hide-scrollbars",
-            "--force-prefers-reduced-motion", f"--user-data-dir={profile}",
+            *(["--force-prefers-reduced-motion"] if reduced else []), f"--user-data-dir={profile}",
             f"--window-size={max(500, size[0])},{size[1]}", "--virtual-time-budget=20000", *extra, url]
     try:
         r = subprocess.run(argv, capture_output=True, text=True, timeout=60, check=False)  # run kills Chrome on the timeout
@@ -113,7 +120,8 @@ def run(exe: str, profile: str, url: str, size: tuple[int, int], extra: list[str
 def check(exe: str, base: str, query: dict) -> dict:
     """{ok, fails} of one harness case."""
     with tempfile.TemporaryDirectory() as prof:
-        dom, errs = run(exe, prof, f"{base}/check.html?{urlencode(query)}", (int(query["w"]), int(query["h"])), ["--dump-dom"])
+        dom, errs = run(exe, prof, f"{base}/check.html?{urlencode(query)}", (int(query["w"]), int(query["h"])),
+                        ["--dump-dom"], reduced=query.get("motion") != "normal")
     m = re.search(r'<pre id="out"[^>]*>(.*?)</pre>', dom, re.S)
     res: dict = json.loads(html.unescape(m.group(1))) if m and m.group(1).strip() else {"ok": False, "fails": ["harness gave no result"]}
     fails: list[str] = [f"page error: {e}" for e in errs] + list(res["fails"])

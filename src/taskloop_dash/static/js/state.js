@@ -20,6 +20,7 @@ export const ui = {
   ...fromHash(location.hash),
   project: saved.project || 'all',
   epic: saved.epic || 'all',
+  showClosed: !!saved.showClosed,
   machine: saved.machine || 'all',
   folds: saved.folds || { backlog: true, done: true },
   drafts: saved.drafts || {},
@@ -47,7 +48,7 @@ export function hash() {
 
 function persist() {
   try {
-    localStorage.setItem(KEY, JSON.stringify({ project: ui.project, epic: ui.epic, machine: ui.machine, folds: ui.folds,
+    localStorage.setItem(KEY, JSON.stringify({ project: ui.project, epic: ui.epic, showClosed: ui.showClosed, machine: ui.machine, folds: ui.folds,
       drafts: ui.drafts, ledger: ui.ledger, wide: ui.wide, opts: { ...ui.opts, [ui.tab]: ui.opt } }));
   } catch { /* private mode: state lives for this page only */ }
 }

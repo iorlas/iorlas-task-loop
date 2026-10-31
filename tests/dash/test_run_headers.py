@@ -17,8 +17,6 @@ from taskloop.contracts.runlife import RETAIN
 from taskloop_dash.app import Dash
 from taskloop_dash.env import Env, Ports
 
-STATIC = Path(__file__).resolve().parents[2] / "src" / "taskloop_dash" / "static" / "js"
-
 
 class RunHeaders(unittest.TestCase):
     def setUp(self):
@@ -67,12 +65,13 @@ class RunHeaders(unittest.TestCase):
         headers = self.dash.reads.snapshot().runs
         self.assertEqual([h.run for h in headers], [done.run, live.run])
 
-    def test_both_layouts_and_the_empty_board_render_mode_owner_and_session(self):
-        page = (STATIC / "app.js").read_text()
-        self.assertEqual(page.count("<${RunHeaders} snap=${snap} />"), 2)
-        header = (STATIC / "views" / "runs.js").read_text()
-        for field in ("mode", "owner", "session", "state"):
-            self.assertIn("${r." + field, header)
+    def test_snapshot_caps_run_headers_at_ten_newest_first(self):
+        # Deliberately create manifests out of start order; locator order is no guarantee.
+        created = [self.create(started=self.now - i * 60) for i in (4, 0, 8, 2, 11, 1, 10, 3, 9, 5, 7, 6)]
+        headers = self.dash.reads.snapshot().runs
+        self.assertEqual(len(headers), 10)
+        self.assertEqual([h.started for h in headers], [self.now - i * 60 for i in range(10)])
+        self.assertEqual(headers[0].run, created[1].run)
 
     def test_engine_layout_manifest_supplies_run_header_identity(self):
         layout = RunLayout.open("t-1", self.repo, None, self.cfg, str(self.repo), self.now,

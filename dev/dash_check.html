@@ -99,6 +99,56 @@ function type(sel, text) {
   el.dispatchEvent(new (win().Event)('input', { bubbles: true }));
 }
 const SCENARIOS = {
+  async headers() {
+    localStorage.clear();
+    await load('/#board'); await settle(1500);
+    const header = $(W <= 600 ? '#ph > .ph-h' : '.app > .top');
+    if (!must(header, 'shell header exists')) return;
+    must(header.parentElement.firstElementChild === header, 'first rendered shell child is its header');
+    if (W > 600) must($('.app').firstElementChild.matches('.top'), '.app starts with .top');
+    const range = doc().createRange();
+    range.setStart(doc().body, 0); range.setEndBefore(header);
+    must(!/owner:/.test(range.toString()), 'no run identity appears before the nav');
+    must(!$('.runs') && !/owner:/.test(doc().body.textContent), 'run rows only appear on Floor');
+  },
+  async runs() {
+    localStorage.clear();
+    await load('/#floor'); await settle(1500);
+    const snap = await (await win().fetch('/api/snapshot')).json();
+    must(snap.runs.length >= 11, 'fixture exercises run cap');
+    const rows = $$('.runs .run-row');
+    must(rows.length === 10, `ten newest run rows (${rows.length})`);
+    for (const row of rows) {
+      const cs = win().getComputedStyle(row);
+      must(cs.whiteSpace === 'nowrap' && cs.textOverflow === 'ellipsis', 'run row clips to one line');
+      must(row.getBoundingClientRect().height <= parseFloat(cs.lineHeight) + 1, 'run row is one line high');
+      must(row.title.includes('owner: fixture-owner') && row.title.includes('session: fixture-session'), 'full identity in title');
+    }
+    const expected = [...snap.runs].sort((a, b) => b.started - a.started).slice(0, 10);
+    must(rows.every((r, i) => r.title.endsWith(expected[i].reason)), 'full reasons in newest-first order');
+    if (rows.length) {
+      rows[0].click(); await settle();
+      must(rows[0].textContent === rows[0].title && rows[0].getAttribute('aria-expanded') === 'true', 'click expands full row');
+      rows[0].click(); await settle();
+    }
+    rules()('runs');
+  },
+  async pulse() {
+    localStorage.clear();
+    await load('/#floor'); await settle(1500);
+    const snap = await (await win().fetch('/api/snapshot')).json();
+    const b = snap.beads.find((b) => b.id === 'lifesim-6dq0');
+    must(b?.marker === 'run', 'fixture bead has a LIVE run');
+    const phone = W <= 600;
+    const line = phone ? $$('.slc').find((c) => c.textContent.includes(b.title))
+      : $$('.trk .nm').find((n) => n.textContent.includes('6dq0'))?.nextElementSibling;
+    if (!must(line, 'live bead has a Floor track')) return;
+    const pulses = [...line.querySelectorAll('.pulse')];
+    must(pulses.length === 1, 'live bead has exactly one pulsing segment');
+    const reduced = win().matchMedia('(prefers-reduced-motion: reduce)').matches;
+    must(reduced === (q.get('motion') !== 'normal'), 'browser motion setting matches requested mode');
+    must(pulses.every((s) => (win().getComputedStyle(s).animationName === 'none') === reduced), 'pulse respects reduced motion');
+  },
   // a live server (ro=1): every tab and view option under the layout rules, then a slice of real beads' pages
   async survey() {
     localStorage.clear();

@@ -15,7 +15,6 @@ import { Floor } from './views/floor.js';
 import { Goals } from './views/goals.js';
 import { Lanes } from './views/lanes.js';
 import { Cost } from './views/cost.js';
-import { RunHeaders } from './views/runs.js';
 import { Banners, closeBead, filterGroups, laneValue, openBead, STALE_S, TABS } from './views/shell.js';
 
 const PHONE = matchMedia('(max-width:600px)');
@@ -33,7 +32,7 @@ function useRender() {
 }
 
 function Filters({ snap }) {
-  return filterGroups(snap).map((g) => html`<${FilterChips} key=${g.key} label=${g.label} items=${g.items} value=${ui[g.key]} onPick=${g.pick} />`);
+  return filterGroups(snap).map((g) => html`<${FilterChips} key=${g.key} label=${g.label} items=${g.items} value=${ui[g.key]} onPick=${g.pick} keep=${g.keep} />`);
 }
 
 function TopRight({ snap, now }) {
@@ -64,6 +63,9 @@ function Desktop({ snap, now }) {
   } else {
     body = html`<${Lanes} snap=${snap} now=${now} />`;
   }
+  if (!snap.beads.length && ui.tab === 'board') body = html`<${EmptyState} title="No beads yet"
+    body=${snap.projects.length ? 'Create beads with bd, then start the loop.' : 'Register a repo, then start its loop.'}
+    cmd=${snap.projects.length ? 'tl loop' : 'tl register <repo>  ·  tl loop'} />`;
   return html`<div class="app">
     <div class="top"><span class="brand">task-loop</span><${Tabs} cls="nav" items=${tabs} value=${ui.tab} onPick=${setTab} />
       <${TopRight} snap=${snap} now=${now} /></div>
@@ -98,12 +100,8 @@ function App() {
   setManyProjects(snap.projects.length > 1);
   const c = counts(snap);
   document.title = c.asks + c.stuck ? `(${c.asks + c.stuck}) task-loop` : 'task-loop';
-  if (!snap.beads.length) {
-    return html`<${RunHeaders} snap=${snap} /><${EmptyState} title="No beads yet" body=${snap.projects.length ? 'Create beads with bd, then start the loop.' : 'Register a repo, then start its loop.'}
-      cmd=${snap.projects.length ? 'tl loop' : 'tl register <repo>  ·  tl loop'} />`;
-  }
   const red = snap.projects.filter((p) => p.profile_error).map((p) => html`<div class="ban bad">${p.profile_error}</div>`);
-  return html`<div class=${api.net.error ? 'greyed' : ''}>${red}<${RunHeaders} snap=${snap} />${PHONE.matches ? html`<${Phone} snap=${snap} now=${now} />` : html`<${Desktop} snap=${snap} now=${now} />`}
+  return html`<div class=${api.net.error ? 'greyed' : ''}>${red}${PHONE.matches ? html`<${Phone} snap=${snap} now=${now} />` : html`<${Desktop} snap=${snap} now=${now} />`}
     <${Toast} toast=${ui.toast} /></div>`;
 }
 

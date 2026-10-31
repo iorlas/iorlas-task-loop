@@ -125,6 +125,7 @@ class Epic(Rec):
     id: str
     project: str
     title: str
+    open: bool = False
     done: int = 0
     total: int = 0
 
