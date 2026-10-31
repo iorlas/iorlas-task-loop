@@ -7,10 +7,9 @@ asked again. A lower tip of a stack (an ancestor of another pushed tip) is accep
 The engine's own push carries TL_LAND and passes at once. A repo without a gate step has nothing to ask. Any failure of the hook
 itself lets the push go (a broken hook must not hold work back)."""
 import json
-import os
 import subprocess
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
 
 GATE_RUNS = ("gate", "both")
@@ -77,10 +76,9 @@ class PrePush:
         return refused
 
 
-def entry(argv: list[str], stdin_text: str, environ: dict[str, str] | None = None) -> int:
+def entry(argv: list[str], stdin_text: str, environ: Mapping[str, str]) -> int:
     """argv: the tl command, then git's own (remote name, url). Exit 0 lets the push go."""
-    env = os.environ if environ is None else environ
-    if env.get("TL_LAND") or not argv:
+    if environ.get("TL_LAND") or not argv:
         return 0
     try:
         top = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True, check=False).stdout.strip()

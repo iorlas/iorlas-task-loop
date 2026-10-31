@@ -1,10 +1,11 @@
 """The entry of hooks/hook.py: the event name picks the module, so a PreToolUse call never imports the stores."""
 import importlib
 import sys
+from collections.abc import Mapping
 from pathlib import Path
 
 
-def main(argv: list[str], stdin_text: str, plugin_root: Path) -> int:
+def main(argv: list[str], stdin_text: str, plugin_root: Path, environ: Mapping[str, str] | None = None) -> int:
     """`hook.py pretool | session-start | precompact | prepush TL REMOTE URL`. The hook's stdout goes to Claude Code;
     a failure is silent (exit 0)."""
     event = argv[0] if argv else ""
@@ -12,7 +13,7 @@ def main(argv: list[str], stdin_text: str, plugin_root: Path) -> int:
         if event == "pretool":
             out = importlib.import_module("taskloop.hook.pretool").main(stdin_text)
         elif event == "prepush":  # git's pre-push hook (argv: the tl command, git's remote and url): the exit code is the verdict
-            return importlib.import_module("taskloop.hook.prepush").entry(argv[1:], stdin_text)
+            return importlib.import_module("taskloop.hook.prepush").entry(argv[1:], stdin_text, environ or {})
         elif event in ("session-start", "precompact"):
             out = importlib.import_module("taskloop.hook.session").entry(event, stdin_text, plugin_root)
         else:

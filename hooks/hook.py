@@ -7,6 +7,7 @@
 PreToolUse runs before every Bash call, under plain `python3`, and imports only the rules: no msgspec, no record model (the
 .importlinter contract and tests/test_hook.py hold it). SessionStart and PreCompact read and write records (the handoff, the `tl` shim),
 so hooks.json runs them with `uv run --script` and the dependencies this header declares."""
+import os
 import sys
 from pathlib import Path
 
@@ -16,4 +17,4 @@ sys.path.insert(0, str(ROOT / "src"))  # importing taskloop puts the vendored sh
 from taskloop.hook.main import main  # noqa: E402
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:], sys.stdin.read(), ROOT))
+    sys.exit(main(sys.argv[1:], sys.stdin.read(), ROOT, dict(os.environ)))
