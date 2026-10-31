@@ -39,6 +39,9 @@ def git_warnings(repo: str, source: Source | None, git: Git) -> list[str]:
         files = []
     for c in profile.engine.checks:  # inputs globs that match no tracked file would cache a green over changed code
         ins = [c.inputs] if isinstance(c.inputs, str) else list(c.inputs)
+        if not ins:
+            out.append(f"check {c.id}: declares no inputs, so its result is keyed on the whole tree and base and is rerun whenever "
+                       "anything moves; list the globs it reads (`inputs`, with `inputs_only` when they are complete).")
         for g in dead_globs(files, ins):
             out.append(f"check {c.id}: inputs glob {g} matches no tracked file, so the check is never cached; braces are "
                        "{a,b}, `*` stays in one folder, `**` crosses.")

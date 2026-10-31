@@ -197,13 +197,15 @@ class InputCache(SpeedTest):
         te.sh("git", "add", "-A", cwd=self.wt)
         te.sh("git", "commit", "-qm", "a", cwd=self.wt)
         (self.wt / ".task-loop.json").write_text(json.dumps({"engine": {"checks": [
-            {"id": "u", "argv": ["x"], "inputs": ["*.cs"]}, {"id": "v", "argv": ["y"], "inputs": ["client/{A,B}/**"]}]}}))
+            {"id": "u", "argv": ["x"], "inputs": ["*.cs"]}, {"id": "v", "argv": ["y"], "inputs": ["client/{A,B}/**"]},
+            {"id": "w", "argv": ["z"]}]}}))
         te.sh("git", "add", ".task-loop.json", cwd=self.wt)
         te.sh("git", "commit", "-qm", "doctor config", cwd=self.wt)
         te.sh("git", "update-ref", "refs/remotes/origin/main", "HEAD", cwd=self.wt)
         warns = doctor.git_warnings(str(self.wt), None, port_git())
         self.assertEqual(len([w for w in warns if "matches no tracked file" in w]), 1)
         self.assertIn("client/{A,B}/**", " ".join(warns))
+        self.assertEqual([w.split(":")[0] for w in warns if "declares no inputs" in w], ["check w"])  # the one without inputs
 
     def test_without_inputs_any_untracked_file_still_throws_the_result_away(self):
         cmd, n = self.bump()
