@@ -42,7 +42,9 @@ class Facts:
 
     @property
     def open_run(self) -> bool:
-        return self.life in (Liveness.LIVE, Liveness.CRASHED)
+        """Only a live run places the bead by its phase: a crashed one reads crashed for all of RETAIN, so its bead follows bd and
+        keeps the exited marker."""
+        return self.life is Liveness.LIVE
 
 
 def column(f: Facts) -> Column:

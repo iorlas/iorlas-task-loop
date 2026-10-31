@@ -139,7 +139,7 @@ Asks are a smell. Each one costs the owner time and may point to a missing decis
 | column | engine state |
 |---|---|
 | Backlog | open bead, not claimed by a slot. Ready (▷) or blocked (⏳ waits for an open bead). |
-| Working | claimed; current step reset / plan / replan / write / checks / fix round; also 🛑 stuck and 💀 exited |
+| Working | claimed; current step reset / plan / replan / write / checks / fix round; also 🛑 stuck, and 💀 exited while still claimed (an exited run that is not claimed shows 💀 in Backlog) |
 | Has questions | open ask on the bead (blocking or not). A blocking ask has parked the bead and freed the slot. |
 | AI review | current step review or verify |
 | Your look | owner look pending (screens ready) |
