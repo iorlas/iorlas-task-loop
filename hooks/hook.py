@@ -17,4 +17,6 @@ sys.path.insert(0, str(ROOT / "src"))  # importing taskloop puts the vendored sh
 from taskloop.hook.main import main  # noqa: E402
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:], sys.stdin.read(), ROOT, dict(os.environ)))
+    args = sys.argv[1:]
+    quiet = args[:1] == ["githook"] and args[1:2] not in (["pre-push"], ["post-rewrite"])  # only these two are fed on stdin
+    sys.exit(main(args, "" if quiet else sys.stdin.read(), ROOT, dict(os.environ)))

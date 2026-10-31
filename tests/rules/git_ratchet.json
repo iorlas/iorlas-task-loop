@@ -1,5 +1,5 @@
 {
- "src/taskloop/hook/prepush.py": 7,
+ "src/taskloop/hook/prepush.py": 11,
  "src/taskloop/adapters/markers.py": 1,
  "src/taskloop/contracts/config.py": 1
 }

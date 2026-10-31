@@ -6,14 +6,14 @@ from pathlib import Path
 
 
 def main(argv: list[str], stdin_text: str, plugin_root: Path, environ: Mapping[str, str] | None = None) -> int:
-    """`hook.py pretool | session-start | precompact | prepush TL REMOTE URL`. The hook's stdout goes to Claude Code;
+    """`hook.py pretool | session-start | precompact | githook NAME TL ARGS`. The hook's stdout goes to Claude Code;
     a failure is silent (exit 0)."""
     event = argv[0] if argv else ""
     try:
         if event == "pretool":
             out = importlib.import_module("taskloop.hook.pretool").main(stdin_text)
-        elif event == "prepush":  # git's pre-push hook (argv: the tl command, git's remote and url): the exit code is the verdict
-            return importlib.import_module("taskloop.hook.prepush").entry(argv[1:], stdin_text, environ or {})
+        elif event == "githook":  # a hook of tl's hooks dir (argv: name, tl, git's arguments): the exit code is the verdict
+            return importlib.import_module("taskloop.hook.prepush").githook(argv[1], argv[2:], stdin_text, environ or {})
         elif event in ("session-start", "precompact"):
             out = importlib.import_module("taskloop.hook.session").entry(event, stdin_text, plugin_root)
         else:

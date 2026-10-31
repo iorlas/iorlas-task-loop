@@ -45,28 +45,36 @@ def write_shim(plugin_root: Path, env: Env) -> None:
         pass
 
 
-PRE_PUSH = (
+# The client hooks tl's dir answers (git reads core.hooksPath for all of them); the dispatcher of each also runs the repo's own hook.
+HOOK_NAMES = ("applypatch-msg", "pre-applypatch", "post-applypatch", "pre-commit", "pre-merge-commit", "prepare-commit-msg", "commit-msg",
+              "post-commit", "pre-rebase", "post-checkout", "post-merge", "pre-push", "post-rewrite", "pre-auto-gc")
+GIT_HOOK = (
     "#!/bin/sh\n"
-    "# written by `tl hooks install`; plain python3, no uv: it asks `tl green` per pushed tip (hook/prepush.py)\n"
-    "exec python3 {hook} prepush {tl} \"$@\"\n"
+    "# written by `tl hooks install`; plain python3, no uv. pre-push asks `tl green` per pushed tip; then the repo's own hook of this\n"
+    "# name runs with the same arguments and stdin (hook/prepush.py), so git-lfs's and the repo's hooks are not skipped\n"
+    "exec python3 {hook} githook {name} {tl} \"$@\"\n"
 )
 
 
 def write_hooks(plugin_root: Path, env: Env) -> list[Path]:
-    """<config>/githooks/: the git hooks tl owns (pre-push). Every subprocess tl starts gets this folder as core.hooksPath
-    (adapters/childenv.hooks_vars). Idempotent; a failure to write is silent (a session must start)."""
+    """<config>/githooks/: one dispatcher per client hook name. It runs tl's logic (pre-push), then the repo's own hook of that name,
+    found at run time, so a repo's changed hooks are followed without a rewrite. Every subprocess tl starts gets this folder as
+    core.hooksPath (adapters/childenv.hooks_vars). Idempotent; a failure to write is silent (a session must start)."""
     root = config_dir(env)
     hook, tl = shlex.quote(str(plugin_root / "hooks" / "hook.py")), shlex.quote(str(root / "bin" / "tl"))
-    text = PRE_PUSH.replace("{hook}", hook).replace("{tl}", tl)
-    f = ConfigDir(root).hooks_dir() / "pre-push"
-    try:
-        if not (f.is_file() and f.read_text(encoding="utf-8") == text):
-            f.parent.mkdir(parents=True, exist_ok=True)
-            f.write_text(text, encoding="utf-8")
-            f.chmod(0o755)
-    except OSError:
-        return []
-    return [f]
+    out = []
+    for name in HOOK_NAMES:
+        text = GIT_HOOK.replace("{hook}", hook).replace("{tl}", tl).replace("{name}", name)
+        f = ConfigDir(root).hooks_dir() / name
+        try:
+            if not (f.is_file() and f.read_text(encoding="utf-8") == text):
+                f.parent.mkdir(parents=True, exist_ok=True)
+                f.write_text(text, encoding="utf-8")
+                f.chmod(0o755)
+        except OSError:
+            return []
+        out.append(f)
+    return out
 
 
 def main_checkout(git: Git, cwd: str) -> str:
