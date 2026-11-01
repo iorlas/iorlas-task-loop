@@ -95,6 +95,7 @@ OUTCOME = run.RunReport(outcome=Result.PARKED, bead=BeadId("tl-1"), run=str(RUN)
 LOCK = locks.EngineLock(pid=1789, bead="tl-1", started=T, by="tl-abc", start="99", slot="s1", slot_bead="slot-1",
                         route=(10, "5"), workers=[(11, "6"), (12, "7")])
 CMD = {"pick_label": "auto", "skip_review": config.ReviewSkipConfig(tests=["t/**"]),
+       "prepare": config.PrepareConfig(cmd=["dotnet", "restore"], inputs=["**/*.csproj"]),
        "visual_paths": config.VisualConfig(include=["a/**"]), "write_fresh_above_k": 150.0, "max_rounds": 4,
        "checks": [config.CheckSpec(id=CheckId("fmt"), argv=["just", "fmt"], group="static", when=["x/**"], inputs="a/**",
                                   where="container"),
@@ -475,6 +476,7 @@ OTHERS = {
     ),
     "SlotSetupMarker": snapshots.SlotSetupMarker(cmd_hash="ab12", t=T),
     "HostResources": config.HostResources(resources=["unity"]),
+    "PrepareConfig": config.PrepareConfig(cmd=["dotnet", "restore"], inputs=["**/*.csproj"], timeout_min=20),
     "GatePlan": gateplan.GatePlan(version=1, base="abc", empty=False, full=False, full_reasons=[], steps=[
         gateplan.GatePlanStep(name="lint", lane="static", run=False, argv=["lint"], pre=[], recipe=None, reason="unchanged")]),
     "RepoProfile": config.RepoProfile(engine=config.EngineConfig(**CMD), slots=config.SlotsConfig(count=2, setup=["just", "setup"])),

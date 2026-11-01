@@ -61,7 +61,8 @@ class RealSpawner:
                                errors="replace", timeout=timeout_s, check=False, input=input)
         except subprocess.TimeoutExpired as e:
             out = e.stdout.decode("utf-8", "replace") if isinstance(e.stdout, bytes) else (e.stdout or "")
-            return Ran(exit=124, out=out, timed_out=True)
+            err = e.stderr.decode("utf-8", "replace") if isinstance(e.stderr, bytes) else (e.stderr or "")
+            return Ran(exit=124, out=out, err=err, timed_out=True)
         return Ran(exit=r.returncode, out=r.stdout or "", err=r.stderr or "")
 
     def run_bytes(self, argv: list[str], *, cwd: str | None = None, extra: Mapping[str, str] | None = None) -> RanBytes:

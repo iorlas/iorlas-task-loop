@@ -12,6 +12,7 @@ from taskloop.app.run.stage_run import stage_run
 from taskloop.app.slots.lease import Lease
 from taskloop.app.track import verbs
 from taskloop.app.wire.closeguard import guard_for, has_land
+from taskloop.app.write.prepare import PREPARED, Prepare
 from taskloop.app.write.state import ACCEPT, REPLAN, StageState
 from taskloop.contracts import fence, wire
 from taskloop.contracts import log as rec
@@ -291,9 +292,10 @@ def round_state(e: Engine, step: Step, ck: Checkpoint | None) -> StageState:
 
 def run_round_step(e: Engine, step: Step, s: StageState) -> tuple[Step, bool]:
     if step is Step.WRITE:
+        Prepare(e).run()
         s.n += 1
         e.stats["writes"] += 1
-        flow = e.stage_loop.writing.run(s, look=False)
+        flow = prepared_write(e, s)
         following = Step.REPLAN if flow == REPLAN else Step.WRITE if flow else Step.LOOK
     elif step is Step.LOOK:
         e.steps.begin(step, s.name)
@@ -301,6 +303,9 @@ def run_round_step(e: Engine, step: Step, s: StageState) -> tuple[Step, bool]:
         following = Step.WRITE if s.feedback else Step.CHECKS
     elif step is Step.CHECKS:
         flow = e.stage_loop.checking.run(s)
+        if flow == PREPARED:
+            flow = prepared_write(e, s)
+            return (Step.REPLAN if flow == REPLAN else Step.WRITE if flow else Step.LOOK), False
         following = Step.REPLAN if flow == REPLAN else Step.WRITE if flow else Step.REVIEW
     else:
         if s.run is None:
@@ -309,6 +314,14 @@ def run_round_step(e: Engine, step: Step, s: StageState) -> tuple[Step, bool]:
         following = Step.REPLAN if flow == REPLAN else Step.WRITE
         return following, flow == ACCEPT
     return following, False
+
+
+def prepared_write(e: Engine, s: StageState) -> str:
+    """A prerequisite repair repeats the standalone write at the same attempt number."""
+    while True:
+        flow = e.stage_loop.writing.run(s, look=False)
+        if flow != PREPARED:
+            return flow
 
 
 def remember_round(e: Engine, s: StageState, following: Step, i: int) -> None:

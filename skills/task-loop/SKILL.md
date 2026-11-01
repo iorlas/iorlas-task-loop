@@ -31,6 +31,7 @@ writer reads first). The profile gives:
 | key | what |
 |---|---|
 | setup | the argv list a fresh worktree runs once (no shell) |
+| engine.prepare | coordinator prerequisites: `{cmd: [argv], inputs: [globs], timeout_min: 30}` before writes; unchanged inputs skip; restore/assets reports force one retry without spending a write attempt or replan (`triggers` overrides the substrings) |
 | pick | the `bd ready` filter: labels, lanes, what to exclude |
 | gate | the checks that say `"run": "gate"` (or `"both"`) in `engine.checks`: the steps that must be green at land |
 | land | the branch to land on and any rule about how (default: `git push origin HEAD:main`) |

@@ -1,6 +1,7 @@
 """adapters/spawner.py on procsim: Spawner.run answers a fake command in process (no patch of subprocess here), builds the child env through
 childenv, and the app and cli layers import no subprocess at all (the ruff TID251 ban, no allowlist)."""
 import os
+import subprocess
 import tomllib
 import unittest
 from pathlib import Path
@@ -27,6 +28,13 @@ class SpawnerOnProcsim(unittest.TestCase):
         procsim.fake("slow", procsim.hangs("partial"))
         r = RealSpawner(snapshot()).run(["slow"], timeout_s=5)
         self.assertEqual((r.exit, r.timed_out), (124, True))
+
+    def test_timeout_preserves_stdout_and_stderr_for_prepare_diagnostics(self):
+        def slow(cwd, env):
+            raise subprocess.TimeoutExpired(["slow-restore"], 5, output=b"restoring", stderr=b"feed unavailable")
+        procsim.fake("slow-restore", slow)
+        r = RealSpawner(snapshot()).run(["slow-restore"], timeout_s=5)
+        self.assertEqual((r.exit, r.out, r.err, r.timed_out), (124, "restoring", "feed unavailable", True))
 
     def test_stream_hands_each_output_chunk_over_and_reports_how_it_ended(self):
         procsim.fake("say-hi", procsim.exits(3, "hi"))

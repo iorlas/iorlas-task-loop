@@ -22,6 +22,7 @@ class StageState:
         self.rounds: int = self.state.get("rounds", 0)
         self.n: int = self.state.get("n", 0)
         self.red = 0
+        self.prepare_retried = False
         self.failed_cmds: list[str] | None = self.state.get("failed")  # the commands the last engine run found red (None: none ran red yet)
         self.shots_fixed = False  # a visual write without shots or a reason is sent back once, at no cost to the rounds (tl-tno)
         self.red_now: set[str] = set()  # the commands the last round found red

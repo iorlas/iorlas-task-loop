@@ -1,6 +1,7 @@
 """Repo plans select due registry checks; clean planned skips become green facts."""
 import hashlib
 import json
+import sys
 from unittest import mock
 
 from support import engine_case as te
@@ -8,6 +9,7 @@ from support.narrow import must
 
 from taskloop.app.checks.cache import is_green, plan_digest
 from taskloop.app.checks.gateplan import PlanDecision, parse, skipped
+from taskloop.contracts.config import ConfigError
 from taskloop.contracts.ids import CheckId, TreeSha
 from taskloop.contracts.ports import Ran
 from taskloop.contracts.runkey import BaseSha
@@ -27,6 +29,9 @@ class GatePlans(te.EngineTest):
     def setup_plan(self, answer=None, checks=None):
         self.eng = self.checks_engine(plan_cmd=["repo-plan", "steps", "--json"], checks=checks or [
             {"id": "coverage", "cmd": "true", "run": "gate", "when": ["never/**"]}])
+        which = mock.patch("taskloop.app.checks.gateplan.shutil.which", side_effect=lambda word, **kw: word)
+        which.start()
+        self.addCleanup(which.stop)
         self.answer = answer if answer is not None else Ran(exit=0, out=json.dumps(document()))
         self.calls = []
 
@@ -219,6 +224,44 @@ class GatePlans(te.EngineTest):
         run = self.eng.checker.run_items(gate_items(self.eng.cfg), everything=True)
         self.assertEqual(run[0].status, "passed")
         self.assertEqual(self.calls, [])
+
+    def test_python_uses_python3_when_only_python3_resolves(self):
+        self.setup_plan()
+        self.eng.cfg = self.eng.cfg.replace(plan_cmd=["python", "tools/gate_plan.py", "steps", "--json"])
+        with mock.patch("taskloop.app.checks.gateplan.shutil.which", side_effect=lambda word, **kw:
+                        "/bin/python3" if word == "python3" else None):
+            self.run_gate()
+        self.assertEqual(self.calls[0][0][:4], ["python3", "tools/gate_plan.py", "steps", "--json"])
+
+    def test_python_uses_coordinator_interpreter_when_neither_spelling_exists(self):
+        self.setup_plan()
+        self.eng.cfg = self.eng.cfg.replace(plan_cmd=["python", "plan.py"])
+        with mock.patch("taskloop.app.checks.gateplan.shutil.which", side_effect=lambda word, **kw:
+                        word if word not in ("python", "python3") else None):
+            self.run_gate()
+        self.assertEqual(self.calls[0][0][0], sys.executable)
+
+    def test_missing_executable_is_one_config_note_without_spawning(self):
+        self.setup_plan()
+        with mock.patch("taskloop.app.checks.gateplan.shutil.which", return_value=None), \
+                mock.patch.object(self.eng.log, "note") as note:
+            for _ in range(3):
+                with self.assertRaisesRegex(ConfigError, "engine.plan_cmd.*repo-plan"):
+                    self.run_gate()
+        note.assert_called_once()
+        self.assertEqual(self.calls, [])
+
+    def test_warning_is_once_per_run_per_reason_across_rounds(self):
+        self.setup_plan()
+        tree = self.eng.checkout.tree_hash()
+        base = self.eng.git.rev_parse(str(self.eng.wt), self.eng.cfg.base)
+        with mock.patch.object(self.eng, "warn") as warn:
+            for _ in range(3):
+                self.answer = Ran(exit=7)
+                skipped(self.eng, tree, base)
+                self.answer = Ran(exit=8)
+                skipped(self.eng, tree, base)
+        self.assertEqual(warn.call_count, 2)
 
     def test_aliases_and_unknown_fields_are_accepted_but_missing_or_wrong_types_fail(self):
         aliased = step(optional="future", resources=["tool"])

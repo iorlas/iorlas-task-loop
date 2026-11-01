@@ -17,11 +17,22 @@ returns an error for that request; parsers skip lines they cannot read).
 
 ## Commands the repo profile and the plan carry
 
-Every command task-loop runs for a repo (`land`, `slots.setup`, a profile check (`engine.checks`, which holds the gate's steps: `run` gate or both), a plan check, a shot-table
+Every command task-loop runs for a repo (`land`, `slots.setup`, `engine.prepare.cmd`, a profile check (`engine.checks`, which holds the gate's steps: `run` gate or both), a plan check, a shot-table
 method) is an argv list: a program and its arguments, run by `subprocess` with no shell. A string there is refused (the profile
 load and the plan lint say so in one line). A pipeline, redirect or loop belongs in a repo recipe, called `["just", "name"]`.
 Inside the engine the canonical text of a check is `shlex.join(argv)` (check identity, logs, the dashboard); `shlex.split`
 turns it back. Nothing in task-loop parses shell syntax.
+
+`engine.prepare` optionally declares coordinator prerequisites, for example
+`{"cmd": ["dotnet", "restore"], "inputs": ["**/*.csproj", "Directory.Packages.props", "**/packages.lock.json"], "timeout_min": 30}`.
+The coordinator runs the argv through Spawner in the bead's worktree, with its own network access, before the first write.
+A successful `prepare.stamp` under the run directory records the input fingerprint. Subsequent writes skip prepare while
+matching file contents are unchanged and their mtimes are no newer than the stamp; tracked deletions invalidate it too.
+This complements `slots.setup`, which belongs to slot setup rather than write rounds. `timeout_min` defaults to 30 minutes.
+`triggers` defaults to `["restore", "project.assets.json", "NU1"]`: a case-insensitive match in writer bad-check/problem text
+or failed check diagnostics forces prepare and retries the same write once, without spending a write attempt or replan.
+A second such report follows the normal failure path. Stdout and stderr tails are kept in the run log; a nonzero exit,
+timeout or spawn error ends the run as `FAULT_INFRA`, with the output tail in the reason and no successful stamp.
 
 `engine.plan_cmd` optionally names the full argv of a repo's gate-plan producer, for example
 `["python", "tools/gate_plan.py", "steps", "--json"]`. Task-loop appends only `--base <resolved sha>` and
@@ -32,7 +43,9 @@ The command has 30 seconds to print one JSON document with `version: 1`, `base`,
 `id` and `why` are aliases for `name` and `reason`. Unknown fields are ignored. Only a registry step explicitly
 listed with `run: false` is skipped, with that reason. Other registry steps remain required, regardless of `when`.
 The repo supplies the decision; task-loop owns execution, results, and scheduling. A failed, timed-out or malformed
-plan prints one warning and makes every step required. Without `plan_cmd`, the existing `when` rules apply.
+plan makes every step required and prints its warning once per run per distinct reason. When `python` is absent from PATH,
+the producer uses `python3`, or the coordinator's interpreter if neither spelling exists. An unresolved executable ends
+the run with a clear config error and one Note row. Without `plan_cmd`, the existing `when` rules apply.
 `tl check --all` and explicitly named checks bypass the plan. Planned skips are recorded only after a clean round,
 for the exact tree and base; `tl green` and the land gate read those records through the existing result store.
 

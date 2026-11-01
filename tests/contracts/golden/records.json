@@ -1344,6 +1344,21 @@
    "unity"
   ]
  },
+ "PrepareConfig": {
+  "cmd": [
+   "dotnet",
+   "restore"
+  ],
+  "inputs": [
+   "**/*.csproj"
+  ],
+  "triggers": [
+   "restore",
+   "project.assets.json",
+   "NU1"
+  ],
+  "timeout_min": 20
+ },
  "GatePlan": {
   "version": 1,
   "base": "abc",
@@ -1451,6 +1466,21 @@
     }
    ],
    "plan_cmd": null,
+   "prepare": {
+    "cmd": [
+     "dotnet",
+     "restore"
+    ],
+    "inputs": [
+     "**/*.csproj"
+    ],
+    "triggers": [
+     "restore",
+     "project.assets.json",
+     "NU1"
+    ],
+    "timeout_min": 30
+   },
    "slot_env": {},
    "container": {
     "image": "img:1",

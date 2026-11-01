@@ -4,6 +4,7 @@ at once (ASK_STUCK): it is not the code, so the writer is not asked and nothing 
 from typing import Any
 
 from taskloop.app.checks import evidence as check_evidence
+from taskloop.app.write.prepare import PREPARED, Prepare
 from taskloop.app.write.state import AGAIN, REPLAN, StageState
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.prompts.write import REPEAT_RED
@@ -27,6 +28,8 @@ class CheckRound:
         if e.stats["tests_removed"]:
             e.warn(f"the task's diff removes {e.stats['tests_removed']} tests")
         failed = run.failed
+        if failed and Prepare(e).retry(s, check_evidence.failure_brief(failed, e.run_dir)):
+            return PREPARED
         prev_red, s.red_now = s.red_now, {c.cmd for c in failed}  # the commands red last round (tl-bxk.13.11)
         s.acc_only = bool(failed) and all(c.group == "acceptance" for c in failed)
         slow = check_evidence.timed_out(failed)

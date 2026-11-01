@@ -37,6 +37,7 @@ class SelectedStage(unittest.TestCase):
         who = Identity(actor="owner", session="stage-session", home=str(Path(tmp.name) / "config"))
         self.locator = RunLocator(who.config)
         self.e = e = mock.Mock()
+        e.cfg.prepare = None
         e.who, e.home, e.bead, e.wt = who, who.config, BeadId("t-1"), str(self.repo)
         e.stores = fake_stores()
         e.git.common_dir.return_value = ""

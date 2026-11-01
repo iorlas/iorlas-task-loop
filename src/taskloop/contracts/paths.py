@@ -248,6 +248,12 @@ class RunFiles:
     def handoff(self) -> Path:
         return self.dir / "handoff.json"
 
+    def prepare_stamp(self) -> Path:
+        return self.dir / "prepare.stamp"
+
+    def plan_note(self, reason: str) -> Path:
+        return self.dir / f"plan-note-{hashlib.sha256(reason.encode()).hexdigest()}"
+
 TASK_EXCLUDE: Final = ".task/"  # the line a repo's info/exclude carries so the scratch folder is never committed
 
 

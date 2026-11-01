@@ -1,11 +1,16 @@
-"""The one reader of a repo's neutral gate plan; a failed producer makes every check due."""
+"""The repo's neutral gate plan: bad output makes every check due; a missing executable is a config error."""
 import hashlib
+import shutil
+import sys
 from dataclasses import dataclass
+from pathlib import Path
 
 from taskloop.app.checks.cache import NO_DIGEST, plan_digest
 from taskloop.app.checks.host import CheckHost
 from taskloop.contracts import wire
+from taskloop.contracts.config import ConfigError
 from taskloop.contracts.gateplan import GatePlan
+from taskloop.contracts.paths import RunFiles
 from taskloop.contracts.runkey import Digest
 from taskloop.contracts.slots import SlotGitError
 
@@ -36,11 +41,38 @@ def parse(text: str) -> GatePlan:
     return plan
 
 
+def once(host: CheckHost, reason: str) -> bool:
+    """Persist the diagnostic key in the run directory, including across engine reloads."""
+    path = RunFiles(host.run_dir).plan_note(reason)
+    try:
+        with path.open("x"):
+            pass
+    except FileExistsError:
+        return False
+    return True
+
+
+def command(host: CheckHost, cmd: list[str]) -> list[str]:
+    """Resolve the producer in its execution environment, with Python's portable spelling."""
+    path = host.bead_env.get("PATH", host.env.get("PATH"))
+    word = cmd[0] if cmd else ""
+    if word == "python" and not shutil.which(word, path=path):
+        word = "python3" if shutil.which("python3", path=path) else sys.executable
+    candidate = str(Path(host.wt) / word) if "/" in word and not Path(word).is_absolute() else word
+    if not word or not shutil.which(candidate, path=path):
+        reason = f"engine.plan_cmd: executable {word!r} does not resolve on PATH in {host.wt}"
+        if once(host, reason):
+            host.log.note("config error: " + reason)
+        raise ConfigError(reason)
+    return [word, *cmd[1:]]
+
+
 def skipped(host: CheckHost, tree: str, base: str) -> PlanDecision | None:
     """None preserves the legacy `when` decision; a configured but unusable plan skips nothing."""
     cmd = host.cfg.plan_cmd
     if cmd is None:
         return None
+    argv = command(host, cmd)
     try:
         if not base or not tree:
             raise ValueError("the tree or resolved base is missing")
@@ -56,7 +88,7 @@ def skipped(host: CheckHost, tree: str, base: str) -> PlanDecision | None:
         paths = host.git.changed_paths(wt, start, tree)
         if not paths and host.git.rev_parse(wt, f"{start}^{{tree}}") != tree:
             raise ValueError("cannot read the changed paths")  # the port answers [] on a git failure: an empty diff must be a real one
-        ran = host.spawner.run([*cmd, "--base", base, "--paths-stdin"], cwd=wt,
+        ran = host.spawner.run([*argv, "--base", base, "--paths-stdin"], cwd=wt,
                                extra=host.bead_env, timeout_s=PLAN_TIMEOUT_S,
                                input="".join(p + "\0" for p in paths))
         if ran.timed_out:
@@ -68,5 +100,7 @@ def skipped(host: CheckHost, tree: str, base: str) -> PlanDecision | None:
                  (s.reason if s.reason is not None else s.why) or "" for s in plan.steps if not s.run}
         return PlanDecision(skips, plan_digest(cmd), Digest(hashlib.sha1(ran.out.encode("utf-8")).hexdigest()))
     except (OSError, ValueError, SlotGitError) as err:
-        host.warn("plan not used; every step required: " + " ".join(str(err).splitlines()))
+        reason = " ".join(str(err).splitlines())
+        if once(host, reason):
+            host.warn("plan not used; every step required: " + reason)
         return PlanDecision({})

@@ -9,6 +9,16 @@ from taskloop.contracts.config import ConfigError, RepoProfile, load
 
 
 class RepoProfileKeys(unittest.TestCase):
+    def test_prepare_accepts_typed_argv_inputs_timeout_and_default_triggers(self):
+        cfg = load({"engine": {"prepare": {"cmd": ["dotnet", "restore"], "inputs": ["**/*.csproj"]}}}).engine.prepare
+        assert cfg is not None
+        self.assertEqual(cfg.cmd, ["dotnet", "restore"])
+        self.assertEqual(cfg.triggers, ["restore", "project.assets.json", "NU1"])
+        for bad in ({"cmd": []}, {"cmd": "dotnet restore"}, {"cmd": ["x"], "timeout_min": 0},
+                    {"cmd": ["x"], "unknown": True}):
+            with self.subTest(bad=bad), self.assertRaises(ConfigError):
+                load({"engine": {"prepare": bad}})
+
     def test_plan_command_is_optional_and_requires_an_argv(self):
         self.assertIsNone(load({}).engine.plan_cmd)
         argv = ["python", "tools/gate_plan.py", "steps", "--json"]

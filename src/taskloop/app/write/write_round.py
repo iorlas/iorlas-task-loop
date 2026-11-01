@@ -2,6 +2,7 @@
 means (a question, an accepted requirement that decides it, shots a visual stage owes) and the cases it adds."""
 from typing import Any
 
+from taskloop.app.write.prepare import PREPARED, Prepare
 from taskloop.app.write.state import AGAIN, REPLAN, StageState
 from taskloop.contracts.paths import RepoDirs
 from taskloop.domain.asks import specs as askspecs
@@ -27,8 +28,11 @@ class WriteRound:
         fresh = e.hand.drop_big(boundary)
         prompt, delta = self.prompts(s, boundary, fresh)
         s.w, s.wfam = e.ai("write", f"{s.name} write {s.n}", prompt, delta=delta, resume_key="writer", write=s.n,
-                           visual=e.pictures.stage_visual(s.st), round=s.rounds + 1, at=(s.sk, s.rounds, s.n), **s.meta)
+                           visual=e.pictures.stage_visual(s.st), round=s.rounds + 1,
+                           at=(s.sk, s.rounds, s.n + (10000 if s.prepare_retried else 0)), **s.meta)
         self.record(s, fresh)
+        if Prepare(e).retry(s, str(s.w.get("bad_checks", [])) + str(s.w.get("problem", ""))):
+            return PREPARED
         s.wrote_unchecked = s.w.get("unchecked") or []  # the review decides what is still unproven after the checks
         flow = self.question(s)
         if flow:

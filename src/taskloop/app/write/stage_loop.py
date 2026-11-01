@@ -5,6 +5,7 @@ ReviewRound; the host (the engine) lends the run's state."""
 from typing import Any
 
 from taskloop.app.write.check_round import CheckRound
+from taskloop.app.write.prepare import PREPARED, Prepare
 from taskloop.app.write.review_round import ReviewRound
 from taskloop.app.write.state import AGAIN, StageState
 from taskloop.app.write.write_round import WriteRound
@@ -42,8 +43,13 @@ class StageLoop:
         if not s.fix:  # a fix runs at land: its checkpoint stays at land, and a resume lands again
             e.checkpoints.save(stage=s.i, rounds=s.rounds, n=s.n, feedback=s.feedback, step="write")
             e.reload.safe_point("write")  # the round's write, checks and review run on the code that is installed now
+        Prepare(e).run()
         s.n += 1
         e.stats["writes"] += 1
         if s.n >= 2:
             e.warn(f"{s.name}: write {s.n} (round {s.rounds + 1})")
-        return self.writing.run(s) or self.checking.run(s) or self.reviewing.run(s)
+        s.prepare_retried = False
+        while True:
+            flow = self.writing.run(s) or self.checking.run(s)
+            if flow != PREPARED:
+                return flow or self.reviewing.run(s)

@@ -148,6 +148,16 @@ class LoopConfig(Rec):
 
 
 @final
+class PrepareConfig(Rec):
+    """Coordinator prerequisites, refreshed when their inputs change or a worker reports stale assets."""
+
+    cmd: list[str]
+    inputs: list[str] = msgspec.field(default_factory=list)
+    triggers: list[str] = msgspec.field(default_factory=lambda: ["restore", "project.assets.json", "NU1"])
+    timeout_min: float = 30
+
+
+@final
 class EngineConfig(Rec):
     """The `engine` block; every key has the default the engine uses today."""
 
@@ -170,6 +180,7 @@ class EngineConfig(Rec):
     untracked_ignore: list[str] = msgspec.field(default_factory=list)
     checks: list[CheckSpec] = msgspec.field(default_factory=list)
     plan_cmd: list[str] | None = None  # full argv of the repo's neutral gate-plan producer
+    prepare: PrepareConfig | None = None
     # added to (over) the slot's environment; {slot} {slot_dir} {repo} filled in
     slot_env: dict[str, str] = msgspec.field(default_factory=dict)
     container: ContainerConfig | None = None
@@ -339,6 +350,14 @@ def resource_problem(eng: EngineConfig) -> str:
     return ""
 
 
+def _prepare_commands(prepare: PrepareConfig | None) -> list[list[str]]:
+    if prepare is None:
+        return []
+    if prepare.timeout_min <= 0:
+        raise ConfigError("the repo profile: engine.prepare.timeout_min must be positive")
+    return [prepare.cmd]
+
+
 def load(data: Any, say_to: TextIO | None = None) -> RepoProfile:
     """The repo's .task-loop.json (parsed) as a RepoProfile; ConfigError names the offending key. With `say_to`, a retired key
     is said there once per process."""
@@ -373,6 +392,7 @@ def load(data: Any, say_to: TextIO | None = None) -> RepoProfile:
         raise ConfigError(f"the repo profile: {bad_graph}")
     fill_slot_env(profile.engine.slot_env, **dict.fromkeys(SLOT_PLACEHOLDERS, ""))
     cmds = [k.argv for k in profile.engine.checks] + [profile.engine.land]
+    cmds += _prepare_commands(profile.engine.prepare)
     if profile.engine.plan_cmd is not None:
         cmds.append(profile.engine.plan_cmd)
     cmds += [k.fix for k in profile.engine.checks if k.fix]
