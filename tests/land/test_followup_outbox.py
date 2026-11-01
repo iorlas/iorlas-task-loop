@@ -12,6 +12,7 @@ from support.fake_beads import FakeBeads
 from support.fakegit import FakeGit
 from support.narrow import must
 
+from taskloop.adapters.bd import BdRun, BdStore
 from taskloop.app.land.followups import file_follow_ups
 from taskloop.app.run.closer_notes import FileNotes
 from taskloop.app.run.state import Checkpoints, StateAttrs, carries_state
@@ -105,6 +106,24 @@ class FollowupOutbox(unittest.TestCase):
             self.assertEqual(len(file_follow_ups(h)), 1)
         self.assertEqual(h.store.beads, {})
         self.assertEqual(len(must(h.stores.followups.of(h.bead).need()).pending), 1)
+
+    def test_malformed_successful_lookup_keeps_pending_work_without_creating(self):
+        for output in ("truncated", '{"issues": []}', '[{"id": "t-2"}, {}]'):
+            with self.subTest(output=output):
+                h = self.host()
+                calls: list[list[str]] = []
+
+                def run(argv: list[str], cwd: str | None, output: str = output, calls: list[list[str]] = calls) -> BdRun:
+                    calls.append(argv[3:-1])
+                    return BdRun(0, output, "")
+
+                with mock.patch.object(h, "store", BdStore("x", exe="bd", run=run)):
+                    self.assertEqual(file_follow_ups(h), h.leftovers)
+                self.assertEqual(len(calls), 1)
+                self.assertEqual(calls[0][:4], ["list", "-n", "0", "--all"])
+                self.assertIn("--label", calls[0])
+                self.assertEqual((h.filed, h.followup_ids), ([], {}))
+                self.assertEqual(len(must(h.stores.followups.of(h.bead).need()).pending), 1)
 
     def test_file_notes_reports_and_warns_about_required_work_in_the_outbox(self):
         h = self.host()

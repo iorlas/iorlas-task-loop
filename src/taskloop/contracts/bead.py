@@ -50,6 +50,6 @@ class Bead(Rec):
 
 @final
 class BdError(Rec):
-    kind: str  # lint, not_found, not_claimable, other
+    kind: str  # lint, not_found, not_claimable, malformed, other
     missing_sections: list[str] = msgspec.field(default_factory=list)
     text: str = ""

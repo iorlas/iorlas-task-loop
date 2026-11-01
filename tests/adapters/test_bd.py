@@ -106,6 +106,62 @@ class GoldenBd(unittest.TestCase):
     def test_show_missing_is_none(self) -> None:
         self.assertIsNone(self.beads(show=BdRun(1, gold("show_missing.out"), gold("show_missing.err"))).show(BeadId("nope")))
 
+    def test_malformed_successful_bead_reads_raise_with_raw_evidence(self) -> None:
+        outputs = ("not JSON", '[{"id":', "null", "false", "42", '"text"', "{}", '{"issues": []}',
+                   '[{"id": "t-1"}, null]', '[{"id": "t-1"}, {}]', '[{"id": "t-1"}, "row"]',
+                   '[{"id": "t-1"}, {"id": "-bad"}]', '{"id": null}', '{"id": 12}', '{"id": ""}')
+        for output in outputs:
+            for command in ("show", "list", "ready"):
+                with self.subTest(output=output, command=command):
+                    raw = " \n" + output + " \n"
+                    store = self.beads(**{command: BdRun(0, raw, "")})
+                    with self.assertRaises(BdFailure) as cm:
+                        if command == "show":
+                            store.show(BeadId("t-1"))
+                        elif command == "list":
+                            store.find(BeadQuery())
+                        else:
+                            store.ready()
+                    self.assertEqual(cm.exception.error.kind, "malformed")
+                    self.assertEqual(cm.exception.error.text, raw.strip()[:500])
+
+    def test_empty_reads_are_missing_and_sparse_rows_still_decode(self) -> None:
+        store = self.beads(show=BdRun(0, "[]", ""), list=BdRun(0, "[]", ""), ready=BdRun(0, "[]", ""))
+        self.assertIsNone(store.show(BeadId("t-1")))
+        self.assertEqual(store.find(BeadQuery()), [])
+        self.assertEqual(store.ready(), [])
+        for output in ('{"id": "t-1"}', '[{"id": "t-1"}]'):
+            with self.subTest(output=output):
+                shown = self.beads(show=BdRun(0, output, "")).show(BeadId("t-1"))
+                assert shown is not None
+                self.assertEqual((shown.id, shown.title, shown.status, shown.labels), ("t-1", "", "", []))
+
+    def test_blank_collection_reads_are_empty_but_blank_show_is_malformed(self) -> None:
+        for output in ("", " \n\t"):
+            with self.subTest(output=output):
+                store = self.beads(**{cmd: BdRun(0, output, "") for cmd in ("show", "list", "ready")})
+                self.assertEqual(store.find(BeadQuery()), [])
+                self.assertEqual(store.ready(), [])
+                with self.assertRaises(BdFailure) as cm:
+                    store.show(BeadId("t-1"))
+                self.assertEqual(cm.exception.error.kind, "malformed")
+
+    def test_successful_writes_accept_plain_words_without_read_validation(self) -> None:
+        store = self.beads(update=BdRun(0, "Updated issue", ""), unclaim=BdRun(0, "Unclaimed issue", ""),
+                           heartbeat=BdRun(0, "Lease renewed", ""), close=BdRun(0, "Closed issue", ""))
+        bead = BeadId("t-1")
+        store.update(bead, BeadPatch(status="open"))
+        self.assertTrue(store.claim(bead))
+        self.assertTrue(store.unclaim(bead))
+        store.heartbeat(bead)
+        store.close(bead, "done")
+
+    def test_malformed_evidence_is_clipped_after_trimming(self) -> None:
+        raw = " \n" + "broken" * 100 + " \n"
+        with self.assertRaises(BdFailure) as cm:
+            self.beads(show=BdRun(0, raw, "")).show(BeadId("t-1"))
+        self.assertEqual(cm.exception.error.text, raw.strip()[:500])
+
     def test_comments(self) -> None:
         got = self.beads(comments=BdRun(0, gold("comments.json"), "")).comments(BeadId("t-eis"))
         self.assertEqual([(c.author, c.text) for c in got], [("x", "hi there")])

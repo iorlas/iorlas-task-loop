@@ -11,6 +11,7 @@ from support.fake_beads import FakeBeads
 from support.narrow import must
 from support.tiers import domain
 
+from taskloop.adapters.bd import BdRun, BdStore
 from taskloop.app.asks import intake, raiser, sweeps
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.enums import AskStatus
@@ -101,6 +102,23 @@ class SweepTest(unittest.TestCase):
     def test_an_ask_with_no_known_tracker_stays(self) -> None:
         raiser.raise_ask(self.asks, specs.missing_criteria(), asking("fk-2", "/nowhere"))
         self.assertEqual(sweeps.close_stale(self.asks, lambda r: self.store, self.marker, T), [])
+
+    def test_malformed_show_after_nonempty_list_preserves_the_omitted_ask(self) -> None:
+        self.raise_for("fk-9")
+        before = self.asks.get(BeadId("fk-9"))
+        for n, output in enumerate(("truncated", '{"issues": []}', '[{"id": "fk-9"}, {}]')):
+            with self.subTest(output=output):
+                calls: list[str] = []
+
+                def run(argv: list[str], cwd: str | None, output: str = output, calls: list[str] = calls) -> BdRun:
+                    calls.append(argv[3])
+                    return BdRun(0, '[{"id": "fk-1", "status": "open"}]' if argv[3] == "list" else output, "")
+
+                store = BdStore("x", exe="bd", run=run)
+                marker = self.repo / f".malformed-{n}"
+                self.assertEqual(sweeps.close_stale(self.asks, lambda r, store=store: store, marker, T), [])
+                self.assertEqual(calls, ["list", "show"])
+                self.assertEqual(self.asks.get(BeadId("fk-9")), before)
 
     def test_late_unanswered_asks_are_parked_with_a_comment(self) -> None:
         self.raise_for("fk-1", T)

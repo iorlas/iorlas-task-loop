@@ -2,8 +2,8 @@
 
 Every call is `bd --actor <who> <args> --json`. The key names bd prints differently in different commands are normalised
 here, once: a dependency is `depends_on_id`/`type` in `list` and `id`/`dependency_type` in `show`, an error is the `error`
-key of bd's JSON on stdout or plain words on stderr. Reads are tolerant (bd adds keys; a key we do not model is dropped);
-a refused write raises BdFailure carrying a BdError."""
+key of bd's JSON on stdout or plain words on stderr. Reads tolerate omitted fields and extra keys, but malformed replies raise
+BdFailure carrying a BdError; only a valid empty read or explicit not-found means absence. Refused writes also raise BdFailure."""
 import json
 import re
 import shutil
@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from taskloop.contracts.bead import BdError, Bead, Comment, Dep
-from taskloop.contracts.ids import BeadId, parse_bead_id
+from taskloop.contracts.ids import BeadId, is_bead_id, parse_bead_id
 from taskloop.contracts.ports import BdFailure, BeadPatch, BeadQuery, DoltPush, NewBead
 
 # bd 1.3.1 exits 0 on a push the remote rejected; its words are git's
@@ -80,17 +80,22 @@ def bead_of(d: dict[str, Any]) -> Bead:
     )
 
 
-def beads_of(data: Any) -> list[Bead]:
-    rows = data if isinstance(data, list) else [data] if isinstance(data, dict) and "id" in data else []
-    return [b for b in (_bead_or_none(r) for r in rows if isinstance(r, dict) and "id" in r) if b is not None]
+def beads_of(data: object, raw: str = "") -> list[Bead]:
+    """A complete bead read: one malformed row faults the whole response."""
+    if not isinstance(data, list) and not (isinstance(data, dict) and "id" in data):
+        raise BdFailure(BdError(kind="malformed", text=raw.strip()[:500]))
+    rows = data if isinstance(data, list) else [data]
+    if any(not isinstance(row, dict) or not is_bead_id(row.get("id")) for row in rows):
+        raise BdFailure(BdError(kind="malformed", text=raw.strip()[:500]))
+    return [bead_of(row) for row in rows]
 
 
-def _bead_or_none(d: dict[str, Any]) -> Bead | None:
-    """A row whose id is not a bead id is not a bead task-loop can name: it is left out of the list, never passed on as a bare str."""
-    try:
-        return bead_of(d)
-    except ValueError:
-        return None
+def _read_beads(text: str, *, empty_list: bool = False) -> list[Bead]:
+    # list/ready can print nothing when there are no rows. A blank show still proves nothing about the requested bead.
+    if empty_list and not text.strip():
+        return []
+    # _loads maps invalid JSON to None for legacy error/write readers. For a bead read that is a fault, never absence.
+    return beads_of(_loads(text), text)
 
 
 def comments_of(data: Any) -> list[Comment]:
@@ -212,7 +217,7 @@ class BdStore:
             if err.kind == "not_found":
                 return None
             raise BdFailure(err)
-        found = beads_of(_loads(r.out))
+        found = _read_beads(r.out)
         return found[0] if found else None
 
     def comments(self, bead: BeadId) -> list[Comment]:
@@ -220,10 +225,10 @@ class BdStore:
         return comments_of(_loads(r.out)) if r.code == 0 else []
 
     def find(self, query: BeadQuery) -> list[Bead]:
-        return beads_of(_loads(self._must(*find_argv(query)).out))
+        return _read_beads(self._must(*find_argv(query)).out, empty_list=True)
 
     def ready(self, label: str = "") -> list[Bead]:
-        return beads_of(_loads(self._must("ready", "-n", "0", *(["--label", label] if label else [])).out))
+        return _read_beads(self._must("ready", "-n", "0", *(["--label", label] if label else [])).out, empty_list=True)
 
     def create(self, new: NewBead) -> BeadId:
         made = _loads(self._must(*create_argv(new)).out)

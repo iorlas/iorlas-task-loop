@@ -11,6 +11,7 @@ import support.paths  # noqa: F401
 from taskloop.adapters import bd, delegate_wire
 from taskloop.contracts.dash import ParkReq
 from taskloop.contracts.ids import RunId, is_bead_id, parse_bead_id
+from taskloop.contracts.ports import BdFailure
 
 
 class BeadIdEdges(unittest.TestCase):
@@ -31,9 +32,11 @@ class BeadIdEdges(unittest.TestCase):
             with self.assertRaises(msgspec.ValidationError, msg=bad):
                 msgspec.json.decode(msgspec.json.encode({"project": "p", "bead": bad}), type=ParkReq)
 
-    def test_bd_rows_with_an_id_that_is_no_bead_id_are_left_out(self):
+    def test_bd_rows_with_an_id_that_is_no_bead_id_fault_the_whole_read(self):
         rows = [{"id": "tl-1", "title": "a", "status": "open"}, {"id": "-x", "title": "b", "status": "open"}]
-        self.assertEqual([b.id for b in bd.beads_of(rows)], ["tl-1"])
+        with self.assertRaises(BdFailure) as cm:
+            bd.beads_of(rows)
+        self.assertEqual(cm.exception.error.kind, "malformed")
 
     def test_a_run_name_is_read_once(self):
         rid = RunId.of("01KBN6Z0M4R5E8YQ2T7C9W3XHD")
