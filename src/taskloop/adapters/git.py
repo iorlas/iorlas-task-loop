@@ -271,10 +271,10 @@ class RealGit(LandGit):
     def tree_of(self, d: str) -> str:
         """HEAD's tree plus every change and untracked file, written from a throwaway index in a temp folder."""
         with tempfile.TemporaryDirectory() as tmp:
-            env = dict(self.git_env(d), GIT_INDEX_FILE=os.path.join(tmp, "index"))
+            extra = {"GIT_INDEX_FILE": os.path.join(tmp, "index")}
             out = ""
             for args in (["read-tree", "HEAD"], ["add", "-A"], ["write-tree"]):
-                r = subprocess.run(["git", *args], cwd=d, env=env, capture_output=True, text=True, check=False)
+                r = self._run(d, *args, extra=extra)
                 if r.returncode != 0:
                     raise SlotGitError(f"git {args[0]} failed ({r.returncode}): {(r.stderr or '').strip()[:300]}")
                 out = r.stdout.strip()

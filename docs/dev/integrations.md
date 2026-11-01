@@ -60,8 +60,12 @@ delegate directly). The two touch in three places only:
    delegate renames roles or changes how it is asked, update that table.
 
 3. **worker-run v3** (`docs/contracts/worker-run-v3.md`): the engine runs each AI step with `route.py run ROLE` and
-   feeds usage with `route.py status --claude-usage` (`tl usage`). Code: `engine.find_route`, `engine.call_delegate`,
-   `Engine.ai_delegate`, `tl.py` `usage`. The write step passes `--engine-only RECIPE` once per bare `just` recipe of
+   feeds usage with `route.py status --claude-usage` (`tl usage`). Code: `WorkerCall` in `app/run/worker_call.py`,
+   `worker_request.request`, `RunRequest.to_argv`, `tl.py` `usage`. Before recovery, WorkerCall prepares the effective request
+   and identifies the worktree, cwd, HEAD, tree contents, policy, schema and answer producer contract. Completed writer
+   effects are bound to their resulting tree; interrupted threads resume only with a matching identity. Log destinations
+   are excluded. Legacy prompt-only records require execution again; their raw output is retained for inspection.
+   The write step passes `--engine-only RECIPE` once per bare `just` recipe of
    a configured check (or the gate) its writer must not run (delegate 0.50+; `RunRequest.engine_only`, built only by `to_argv`); read-only
    steps pass none. A worker call also passes `--only-family F` once per family of `engine.writer_family` (or the bead's `writer-family:<f>`
    labels; delegate PINFAMILY; `RunRequest.only_family`, `domain/lanes/pin.py`); the planner, reviewer and reflect calls pass none. A `stop`

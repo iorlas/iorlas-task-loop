@@ -123,14 +123,28 @@ class NetPause(Rec):
 
 
 @final
+class CallIdentity(Rec):
+    """The request semantics and execution inputs admitted before a worker call."""
+
+    semantics: str
+    worktree: str
+    cwd: str
+    tree: str
+    cwd_tree: str
+    head: str
+    cwd_head: str
+
+
+@final
 class DoneEntry(Rec):
     sha: str
     file: str
+    identity: CallIdentity | None = None
 
 
 @final
 class DoneMemo(Rec):
-    """runs/<run>/done.json: the answers a run already took, by call key (a JSON list) -> the prompt's sha and the raw copy's file."""
+    """runs/<run>/done.json: answers by call key -> execution digest (legacy: prompt sha) and raw copy's file."""
 
     V: ClassVar[int] = 1
     done: dict[str, DoneEntry] = msgspec.field(default_factory=dict)

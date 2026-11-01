@@ -36,6 +36,7 @@ class CallState:
     answer_file: str = ""  # set once `returned`
     v: int = V
     dir: str = field(default="", repr=False, compare=False)
+    execution_id: str = ""  # absent in legacy records: never inferred from prompt_sha
 
     @property
     def path(self) -> Path:
@@ -94,9 +95,12 @@ def begin(
     resume_of: str = "",
     prompt_sha: str = "",
     now: float = 0.0,
+    execution_id: str = "",
 ) -> CallState:
     """phase=calling, on disk before the vendor is called."""
-    return CallState(run, bead, tuple(key), "calling", lane, role, resume_of, resume_of, prompt_sha, now, 0.0, "", V, str(dir_)).save()
+    return CallState(
+        run, bead, tuple(key), "calling", lane, role, resume_of, resume_of, prompt_sha, now, 0.0, "", V, str(dir_), execution_id,
+    ).save()
 
 
 def load_for(dir_: str | Path, bead: str, key: Sequence[object]) -> CallState | None:

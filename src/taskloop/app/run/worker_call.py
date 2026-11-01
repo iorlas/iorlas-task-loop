@@ -6,7 +6,6 @@ one is asked for again (the `invalid_output` row of the RetryPlan). The call is 
 run, a sleeping laptop or a dropped network goes on in the same thread. The worker's life is delegate's: the engine reads the live
 file's first line (`WorkerStarted`) and the answer's `worker`, and stops a call only through the process seam (stream-proc)."""
 
-import hashlib
 import json
 import time
 from dataclasses import dataclass
@@ -15,7 +14,7 @@ from typing import Any
 from taskloop.adapters import childenv, delegate_wire
 from taskloop.adapters import delegate as dg
 from taskloop.app.checks.step_env import step_env
-from taskloop.app.run import done_memo, strays, worker_request
+from taskloop.app.run import done_memo, strays, worker_identity, worker_recovery, worker_request
 from taskloop.app.run.blocked import refuse_over_cap
 from taskloop.app.run.calls import timing
 from taskloop.app.run.lane_acts import LaneActs
@@ -75,7 +74,8 @@ class Call:
         self.out_on = ""  # the lane that went out under this step (the writer's fallback lane)
         self.up_now: bool | None = None  # the network probe at the last network stop
         self.finished: dg.Answer | None = None  # an answer the last run left on disk
-        self.state: Any = None  # CallState
+        self.state: callstate.CallState | None = None
+        self.prepared: worker_identity.PreparedCall | None = None
         self.sha = ""
         self.limit_s: float | None = None  # the --timeout the last call was given
 
@@ -84,6 +84,7 @@ class WorkerCall:
     def __init__(self, host: Any, ops: Ops) -> None:
         self.e, self.ops = host, ops
         self.acts = LaneActs(host, self)
+        self.active: Call | None = None
 
     # -- the step
     def run(
@@ -195,25 +196,38 @@ class WorkerCall:
 
     # -- the checkpoint of a call in flight
     def attach(self, c: Call) -> None:
-        """What the last run left of this call on disk (CallState): a finished answer is used as it stands (output is never discarded),
-        a call that had a thread goes on in that thread with a short note; else the call is made as usual."""
+        """Recover only work proved compatible with the current effective request and tree."""
         e = self.e
-        c.sha = hashlib.sha1(c.full.encode("utf-8")).hexdigest()[:16]
-        done = done_memo.recall(self.e.run_dir, c.key, c.sha)
-        if done is not None:  # this run (before a network pause or a move) already had this answer for this very prompt
-            e.log.note(f"{c.node}: the answer of this run's earlier pass is on disk: used, not asked again")
-            c.finished = dg.Answer(delegate_wire.result_of(done), done)
-            return
-        st = callstate.load_for(e.call_dir(), e.bead, c.key)
-        what = callstate.reattach(st) if st is not None and st.prompt_sha == c.sha else None
-        if what and what[0] == "answer":
-            e.log.note(f"{c.node}: the answer of the last run is on disk: used, not asked again")
-            c.finished = dg.Answer(delegate_wire.result_of(what[1]), what[1])
-            c.state = st
-        elif what:
-            e.log.note(f"{c.node}: the last run left thread {what[1]}: going on in it")
-            c.resume, c.text = what[1], what[2]
+        self.active = c
+        c.prepared = self.prepare(c)
+        c.sha = c.prepared.execution_id
+        journal = worker_recovery.CallJournal(e.run_dir, e.call_dir(), e.bead, c.key)
+        decision = worker_recovery.recover(c.prepared, journal)
+        if isinstance(decision, worker_recovery.Returned):
+            e.log.note(f"{c.node}: compatible completed execution on disk: using answer")
+            c.finished = dg.Answer(delegate_wire.result_of(decision.raw), decision.raw)
+            c.state = decision.state
+        elif isinstance(decision, worker_recovery.Resuming):
+            e.log.note(f"{c.node}: compatible interrupted thread {decision.ref}: resuming")
+            c.resume, c.text = decision.ref, decision.text
             c.was_resumed = True
+        elif decision.reason:
+            e.log.note(f"{c.node}: {decision.reason}")
+
+    def prepare(self, c: Call) -> worker_identity.PreparedCall:
+        req = self.request(c, "", *self.limits(c))
+        return worker_recovery.prepare_call(
+            worker_identity.NodeInput(c.node, c.full, c.schema, req),
+            worker_identity.context(self.e.git, str(self.e.wt), str(c.cwd)),
+        )
+
+    def saved(self) -> None:
+        """Rebind an interrupted thread to the close's saved WIP tree and commit."""
+        c = self.active
+        if c is not None and c.prepared is not None and c.state is not None and c.state.phase == "calling" and c.state.ref:
+            current = worker_identity.context(self.e.git, str(self.e.wt), str(c.cwd))
+            c.prepared = worker_recovery.saved(c.prepared, c.state, current)
+            c.sha = c.prepared.execution_id
 
     # -- one call
     def limits(self, c: Call) -> tuple[int, int]:
@@ -234,17 +248,18 @@ class WorkerCall:
         """One `route.py run`: through the process seam, then the records a call leaves."""
         e = self.e
         refuse_over_cap(c.node, c.role, c.text)
-        timeout_s, idle_s = self.limits(c)
-        c.limit_s = float(timeout_s)
         e.delegation.route()
         live = e.live(c.step or c.node)
-        req = self.request(c, live, timeout_s, idle_s)
+        c.prepared = self.prepare(c)
+        c.sha = c.prepared.execution_id
+        req = c.prepared.request.replace(live_file=live)
+        c.limit_s = float(req.timeout_s)
         brief = worker_request.brief(c, req)
         runner = e.router.runner(e.err_path, None, live, e.lock_worker)
         runner.outer = e.halt  # a stop of the run ends the call
         cid = e.calls.start(c.step or c.node, c.node, c.role, bool(c.resume), e.live_n)
         c.state = callstate.begin(
-            e.call_dir(), e.run_id, e.bead, c.key, c.role, resume_of=c.resume or "", prompt_sha=c.sha, now=e.clock.now()
+            e.call_dir(), e.run_id, e.bead, c.key, c.role, resume_of=c.resume or "", execution_id=c.sha, now=e.clock.now()
         )
         t0, trees = time.time(), strays.worktrees(e)  # the worktrees the repo holds before the worker runs
         try:
@@ -305,6 +320,7 @@ class WorkerCall:
     def note_result(self, c: Call, ans: dg.Answer, runner: Any) -> None:
         """The records a returned call leaves: the vendor error of a stop, the CallState."""
         e, res = self.e, ans.res
+        assert c.state is not None
         if res.stop is not None:
             s = res.stop
             worker_request.note_write_stop(e, c, ans)
@@ -325,7 +341,10 @@ class WorkerCall:
                 c.state.ref = ""
                 c.state.save()
         if res.stop is None or lp.net_data(res):  # a network stop with data: finished output is never thrown away
-            c.state.returned(ans.raw, e.run_dir / f"{c.node}-{e.stats['nodes']}.raw.json", e.clock.now())
+            assert c.prepared is not None
+            worker_recovery.record_returned(
+                c.prepared, c.state, e.git, ans.raw, e.run_dir / f"{c.node}-{e.stats['nodes']}.raw.json", e.clock.now()
+            )
 
     def log_kill(self, c: Call, runner: Any, exc: BaseException | None = None, survivors: list[int] | None = None) -> None:
         o, st = runner.obs, runner.stop
@@ -415,9 +434,9 @@ class WorkerCall:
 
     def end_call(self, c: Call, ans: dg.Answer) -> None:
         e, res = self.e, ans.res
-        if c.state is not None:
+        if c.state is not None and c.prepared is not None:
             c.state.consumed()
-            done_memo.keep(e.run_dir, c.key, c.sha, c.state.answer_file if c.state else "")
+            done_memo.keep(e.run_dir, c.key, c.sha, c.state.answer_file, c.prepared.snapshot)
         if c.node == "plan" and res.ref:
             e.planner_ref = res.ref
         e.last_flag = res.flag  # same_family | degraded | ...: delegate could not give the usual lane

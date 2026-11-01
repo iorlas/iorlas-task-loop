@@ -4,6 +4,7 @@ a step of its own with its own small host (closer_*.py); the Closer is the order
 import signal
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol, assert_never
 
@@ -177,7 +178,7 @@ class Closer:
                 assert_never(eff)
 
 
-def closer_over(host: CloserHost) -> Closer:
+def closer_over(host: CloserHost, after_save: Callable[[], None] | None = None) -> Closer:
     """The Closer over the engine: each step gets the host typed as that step's own Protocol."""
-    return Closer(host, CloseParts(decide=Decide(host), branch=SaveBranch(host), slot=ReleaseSlot(host), record=RecordRun(host),
+    return Closer(host, CloseParts(decide=Decide(host), branch=SaveBranch(host, after_save), slot=ReleaseSlot(host), record=RecordRun(host),
                                    notes=FileNotes(host), reflect=Reflect(host), settle=Settle(host)))

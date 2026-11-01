@@ -890,6 +890,15 @@
   "home": "/home/u/.config/task-loop",
   "session": "abcdef12-0000"
  },
+ "CallIdentity": {
+  "semantics": "s",
+  "worktree": "/wt",
+  "cwd": "/wt",
+  "tree": "t",
+  "cwd_tree": "t",
+  "head": "h",
+  "cwd_head": "h"
+ },
  "Reexec": {
   "v": 1,
   "run": "01KBN6Z0M4R5E8YQ2T7C9W3XHD",
@@ -1331,7 +1340,8 @@
   "done": {
    "[1]": {
     "sha": "s",
-    "file": "/f"
+    "file": "/f",
+    "identity": null
    }
   }
  },

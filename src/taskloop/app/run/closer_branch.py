@@ -1,5 +1,6 @@
 """The close's work on the slot: the branch saved (a wip commit, the checkpoint marked closed), the slot left."""
 import contextlib
+from collections.abc import Callable
 from typing import Protocol
 
 from taskloop.app.land import cleanup
@@ -37,8 +38,9 @@ class SaveBranchHost(Protocol):
 
 
 class SaveBranch:
-    def __init__(self, host: SaveBranchHost) -> None:
+    def __init__(self, host: SaveBranchHost, after_save: Callable[[], None] | None = None) -> None:
         self.e = host
+        self.after_save = after_save
 
     def run(self, outcome: Outcome, why: str) -> None:
         """A run stopped mid-conflict-fix goes back to its branch; an unfinished branch keeps its work as a wip commit and a
@@ -48,8 +50,8 @@ class SaveBranch:
             e.git.rebase_abort(e.wt)
         branch = e.git.branch(e.wt)
         if outcome not in DONE and branch and branch == (e.branch or None):
-            if e.git.dirty(e.wt):
-                e.tree.wip(outcome)  # the next run continues this branch
+            if e.git.dirty(e.wt) and e.tree.wip(outcome) and self.after_save is not None:  # the next run continues this branch
+                self.after_save()
             e.checkpoints.close(why)
 
 

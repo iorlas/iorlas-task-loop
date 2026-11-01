@@ -97,7 +97,7 @@ def land_with_engine(engine: Engine) -> Lander:
 
 
 def close_with_engine(engine: Engine) -> Closer:
-    return closer_over(engine)
+    return closer_over(engine, engine.worker.saved)
 
 
 @carries_state
