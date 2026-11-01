@@ -1,5 +1,6 @@
 """A red check or gate, or a conflict, is fixed outside the land lock, then the land tries again."""
-from typing import Protocol
+from types import MappingProxyType
+from typing import Final, Protocol
 
 from taskloop.app.land.gate import Problem, ProblemKind
 from taskloop.app.land.gitcall import must
@@ -49,6 +50,10 @@ class FixOutsideHost(Protocol):
     def blocked_for(self, why: str, kind: str) -> Exception: ...
 
 
+# STALE has no fix round
+CAUSE: Final = MappingProxyType({ProblemKind.GATE: "gate_red", ProblemKind.VERIFY: "checks_red", ProblemKind.CONFLICT: "conflict"})
+
+
 class FixOutside:
     def __init__(self, host: FixOutsideHost) -> None:
         self.e = host
@@ -56,7 +61,7 @@ class FixOutside:
     def run(self, problem: Problem) -> None:
         e = self.e
         if e.fixes < e.cfg.max_fix_rounds:
-            cause = {ProblemKind.GATE: "gate_red", ProblemKind.VERIFY: "checks_red", ProblemKind.CONFLICT: "conflict"}[problem.kind]
+            cause = CAUSE[problem.kind]
             first = problem.text.strip().splitlines() or [""]
             red = f"gate red on the rebased tree: {(problem.named or first[-1])[:200]}"
             e.steps.move("fix", cause, red if problem.kind is ProblemKind.GATE else problem.text.splitlines()[0])

@@ -135,7 +135,10 @@ class Lander:
             if self.optimistic(st):
                 problem = self.outside(st)  # fetch, rebase and the gate without the lock
                 if problem is not None:
-                    self.fixing.run(problem)
+                    if problem.kind is ProblemKind.STALE:  # main or the tree moved under the gate: no fix round, run it again
+                        st.moved += 1
+                    else:
+                        self.fixing.run(problem)
                     continue
             with self.lock():
                 sha, problem = self.tries(st)
