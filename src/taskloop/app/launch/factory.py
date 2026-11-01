@@ -9,7 +9,7 @@ from taskloop.adapters import factory as platform_factory
 from taskloop.adapters.ident import plugin_version
 from taskloop.app.loop.files import LoopFiles
 from taskloop.contracts.loop import LoopState
-from taskloop.contracts.ports import Spawner
+from taskloop.contracts.ports import Child, Spawner
 
 
 def version() -> str:
@@ -24,37 +24,100 @@ def recorded_pid(files: LoopFiles) -> int:
 
 
 def log_path(files: LoopFiles, state: LoopState | None = None) -> Path:
-    if state and state.pid != recorded_pid(files) and state.log:
+    if state and state.log:
         return Path(state.log)
+    if state and (path := files.runs() / f"factory-{state.pid}.log").exists():
+        return path
     return files.runs() / "factory.log"
 
 
+def lane_states(files: LoopFiles, states: list[LoopState]) -> dict[int, LoopState]:
+    """The launcher keeps numbered links even when the child publishes its own log."""
+    numbered: dict[int, LoopState] = {}
+    by_pid = {st.pid: st for st in states}
+    for state in states:
+        stem = Path(state.log).stem
+        if stem.startswith("factory-lane-") and (suffix := stem.removeprefix("factory-lane-")).isdigit():
+            lane = int(suffix)
+            if lane > 0:
+                numbered[lane] = by_pid.pop(state.pid)
+    for path in sorted(files.runs().glob("factory-lane-*.log")):
+        try:
+            lane = int(path.stem.removeprefix("factory-lane-"))
+            pid = int(path.readlink().stem.removeprefix("factory-"))
+        except (OSError, ValueError):
+            continue
+        if lane > 0 and pid in by_pid:
+            numbered[lane] = by_pid.pop(pid)
+    for state in by_pid.values():
+        lane = next(k for k in range(1, len(states) + 1) if k not in numbered)
+        numbered[lane] = state
+    return dict(sorted(numbered.items()))
+
+
+def _spawn(files: LoopFiles, repo: str, version: str, argv: list[str], spawner: Spawner, lane: int) -> tuple[Child, Path]:
+    path = files.runs() / f"factory-lane-{lane}.log"
+    path.unlink(missing_ok=True)
+    with path.open("ab") as out:
+        # Spawner.start detaches the session and disconnects its terminal input.
+        child = spawner.start(argv, cwd=repo, stdin="null", out=out, extra={"PYTHONUNBUFFERED": "1"})
+    log = files.runs() / f"factory-{child.pid}.log"
+    path.replace(log)
+    path.symlink_to(log.name)
+    state = files.read(child.pid)
+    if state is None or not state.actor:
+        files.write(LoopState(pid=child.pid, started=files.now(), t=files.now(), repo=repo, version=version,
+                              code_dir="", actor="", log=str(log)))
+    return child, log
+
+
+def _wait(files: LoopFiles, children: list[tuple[Child, Path]], sleep: Callable[[float], None]) -> list[LoopState]:
+    ready: dict[int, LoopState] = {}
+    for _ in range(100):
+        for child, path in children:
+            code = child.poll()
+            if code is not None:
+                raise RuntimeError(f"loop exited {code}; see {path}")
+            if child.pid in ready:
+                continue
+            with files.lock():
+                state = files.read(child.pid)
+                if state and state.actor:
+                    if not state.log:
+                        state = state.replace(log=str(path))
+                        files.write(state)
+                    ready[child.pid] = state
+        if len(ready) == len(children):
+            return list(ready.values())
+        sleep(0.1)
+    child, path = next((child, path) for child, path in children if child.pid not in ready)
+    raise RuntimeError(f"loop pid {child.pid} has not published state; see {path}")
+
+
 def start(files: LoopFiles, repo: str, version: str, argv: list[str], spawner: Spawner,
-          sleep: Callable[[float], None] = time.sleep) -> tuple[list[LoopState], bool]:
-    """Serialize launch and record startup under the loop's lock before the child publishes its own state."""
+          sleep: Callable[[float], None] = time.sleep, *, lanes: int = 1) -> tuple[list[LoopState], int]:
+    """Top up under the loop lock; return all lanes and the number newly launched."""
+    if lanes < 1:
+        raise ValueError("lanes must be at least 1")
+    children: list[tuple[Child, Path]] = []
     with files.lock():
         states = files.live()
-        if states:
-            return states, True
-        with open(log_path(files), "ab") as out:
-            # Spawner.start uses start_new_session=True (setsid) and DEVNULL stdin:
-            # closing the launcher's terminal cannot hang up this session.
-            child = spawner.start(argv, cwd=repo, stdin="null", out=out, extra={"PYTHONUNBUFFERED": "1"})
-        (files.runs() / "loop.pid").write_text(str(child.pid) + "\n")
-        files.write(LoopState(pid=child.pid, started=files.now(), t=files.now(), repo=repo, version=version, code_dir="", actor=""))
-    # The child takes this same lock when publishing its first state, so wait outside it.
-    for _ in range(100):
-        if child.poll() is not None:
-            raise RuntimeError(f"loop exited {child.poll()}; see {log_path(files)}")
-        state = files.read(child.pid)
-        if state and state.actor:
-            keep_awake = platform_factory.caffeinate_argv(child.pid)
-            if keep_awake:
-                with contextlib.suppress(FileNotFoundError):
-                    spawner.start(keep_awake, stdin="null", out="null")
-            return [state], False
-        sleep(0.1)
-    raise RuntimeError(f"loop pid {child.pid} has not published state; see {log_path(files)}")
+        numbered = lane_states(files, states)
+        for _ in range(max(0, lanes - len(states))):
+            lane = next(k for k in range(1, lanes + 1) if k not in numbered)
+            child, path = _spawn(files, repo, version, argv, spawner, lane)
+            children.append((child, path))
+            numbered[lane] = LoopState(pid=child.pid, started=0, t=0, repo=repo, version=version, code_dir="", actor="")
+        if numbered:
+            (files.runs() / "loop.pid").write_text(str(numbered[min(numbered)].pid) + "\n")
+    # The child uses the same lock to publish; wait outside the launch lock.
+    if children:
+        states.extend(_wait(files, children, sleep))
+        keep_awake = platform_factory.caffeinate_argv(children[0][0].pid)
+        if keep_awake:
+            with contextlib.suppress(FileNotFoundError):
+                spawner.start(keep_awake, stdin="null", out="null")
+    return list(lane_states(files, states).values()), len(children)
 
 
 def lines(path: Path, n: int, follow: bool = False, sleep: Callable[[float], None] = time.sleep) -> Generator[str]:

@@ -5,10 +5,12 @@ from pathlib import Path
 
 from taskloop.app.launch import dash, factory, loop, repos
 from taskloop.app.loop.files import LoopFiles
+from taskloop.app.wire import real
 from taskloop.contracts.env import Env
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.loop import LoopState
 from taskloop.contracts.ports import Spawner
+from taskloop.contracts.slots import SlotGitError
 
 
 def facts(files: LoopFiles, states: list[LoopState], repo: str, version: str) -> None:
@@ -19,8 +21,23 @@ def facts(files: LoopFiles, states: list[LoopState], repo: str, version: str) ->
         print("LOG " + str(factory.log_path(files)))
     for st in states:
         print(f"PID {st.pid}\nVERSION {st.version}\nLOG {factory.log_path(files, st)}")
-        if st.bead:
-            print("BEAD " + st.bead)
+        print("BEAD " + (st.bead or "-"))
+
+
+def _wanted(repo: str, env: Env) -> int:
+    try:
+        return max(1, loop.profile_of(repo, real.git(env)).slots.count)
+    except SystemExit as error:
+        raise RuntimeError("cannot read repo profile") from error
+    except SlotGitError as error:
+        raise RuntimeError(f"cannot read repo profile: {error}") from error
+
+
+def _positive(value: str) -> int:
+    number = int(value)
+    if number < 1:
+        raise argparse.ArgumentTypeError("must be at least 1")
+    return number
 
 
 def _stop(a: argparse.Namespace, files: LoopFiles, who: Identity) -> int:
@@ -33,26 +50,38 @@ def _stop(a: argparse.Namespace, files: LoopFiles, who: Identity) -> int:
     return 0
 
 
+def _logs(a: argparse.Namespace, files: LoopFiles, states: list[LoopState]) -> int:
+    state = factory.lane_states(files, states).get(a.lane)
+    if state is None:
+        raise RuntimeError(f"no live lane {a.lane}")
+    for line in factory.lines(factory.log_path(files, state), a.n, a.follow):
+        print(line, end="", flush=True)
+    return 0
+
+
 def run(a: argparse.Namespace, env: Env, spawner: Spawner, who: Identity, here: Path) -> int:
     repo = repos.repo_root(a.repo)
     files = loop.files_of(repo, who.config)
     version = factory.version()
     try:
         if a.op == "start":
+            lanes = a.lanes if a.lanes is not None else _wanted(repo, env)
             argv = [sys.executable, str(here / "tl.py"), "loop", "--repo", repo, "--wait-drained"]
-            states, already = factory.start(files, repo, version, argv, spawner)
-            print("already running" if already else "started")
+            states, added = factory.start(files, repo, version, argv, spawner, lanes=lanes)
+            print(f"started {added} more lane(s)" if added else f"already running ({len(states)} lanes)")
             facts(files, states, repo, version)
             return dash.run("ensure", env, spawner)
         if a.op == "stop":
             return _stop(a, files, who)
         states = files.live()
         if a.op == "logs":
-            path = factory.log_path(files, states[0] if states else None)
-            for line in factory.lines(path, a.n, a.follow):
-                print(line, end="", flush=True)
-            return 0
-        facts(files, states, repo, version)
+            return _logs(a, files, states)
+        facts(files, list(factory.lane_states(files, states).values()), repo, version)
+        try:
+            wanted = str(_wanted(repo, env))
+        except RuntimeError:
+            wanted = "?"  # status must answer even when the profile cannot be read
+        print(f"LANES running={len(states)} wanted={wanted}")
         dash.url(env)
         return 0 if states else 1
     except (OSError, RuntimeError, ValueError) as error:
@@ -68,8 +97,11 @@ def add_parser(sp: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     for op in ("start", "status", "stop", "logs"):
         command = operations.add_parser(op)
         command.add_argument("--repo", metavar="DIR")
+        if op == "start":
+            command.add_argument("--lanes", type=_positive, metavar="N")
         if op == "stop":
             command.add_argument("--now", action="store_true")
         if op == "logs":
+            command.add_argument("--lane", type=_positive, default=1, metavar="K")
             command.add_argument("-n", type=int, default=50)
             command.add_argument("-f", dest="follow", action="store_true")
