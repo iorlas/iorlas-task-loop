@@ -16,7 +16,7 @@ from support.fakegit import FakeGit, ScriptedGit
 from support.who import who
 from taskloop.app.land.commit import Commit
 from taskloop.app.land.fix_outside import FixOutside
-from taskloop.app.land.gate import Gate, GateChecker
+from taskloop.app.land.gate import Gate, GateChecker, GateCheckout
 from taskloop.app.land.land_rebase import LandRebase
 from taskloop.app.land.landed import Landed
 from taskloop.app.land.lander import GateStep, Lander, LandParts
@@ -31,7 +31,7 @@ from taskloop.contracts.checkpoint import Checkpoint, EndRec, Notes
 from taskloop.contracts.checks import Check, CheckRun
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.enums import Outcome
-from taskloop.contracts.ids import BeadId
+from taskloop.contracts.ids import BeadId, TreeSha
 from taskloop.contracts.kinds import Kind
 from taskloop.contracts.plancheck import PlanCheck, PlanData, StageData
 from taskloop.contracts.ports import Beads, Clock, DoltPush, Git
@@ -464,6 +464,16 @@ class Gating:
         return False
 
 
+class GateTree:
+    """A clean fake checkout: its worktree tree is HEAD's tree."""
+
+    def __init__(self, git: Git, wt: str) -> None:
+        self.git, self.wt = git, wt
+
+    def tree_hash(self) -> TreeSha:
+        return TreeSha(self.git.rev_parse(self.wt, "HEAD^{tree}"))
+
+
 class FakeGateHost:
     """GateHost: `checker` answers the gate (none by default: the repo has no gate step)."""
 
@@ -471,6 +481,7 @@ class FakeGateHost:
         self.gate_log: Path | None = None
         self.cfg, self.log, self.git = cfg, log, git
         self.wt = "/wt"
+        self.checkout: GateCheckout = GateTree(git, self.wt)
         self.run_dir = Path("run")
         self.steps = Outcomes()
         self.checker: GateChecker = checker or Gating()

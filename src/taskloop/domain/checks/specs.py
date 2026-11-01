@@ -1,4 +1,6 @@
 """The checks of a round as Check records: the repo's (engine.checks) and the plan's (a stage's commands and cases)."""
+import hashlib
+import json
 from collections.abc import Mapping, Sequence
 from typing import Final, assert_never
 
@@ -7,10 +9,16 @@ from taskloop.contracts.checks import Check, Phase, Tag
 from taskloop.contracts.config import CheckSpec, EngineConfig
 from taskloop.contracts.ids import CheckId
 from taskloop.contracts.plancheck import Adhoc, PlanCheck
+from taskloop.contracts.runkey import Digest
 from taskloop.domain.checks.matchers import glob_re, is_build, is_unity
 from taskloop.domain.checks.planref import adhocs
 
 DIFF_CHECK: Final = CheckId("diff-check")  # the engine's own check: `git diff --check <base>`, always first in every round and the gate
+
+
+def engine_digest(cfg: EngineConfig) -> Digest:
+    """The engine configuration observed by a check block, independent of mapping order."""
+    return Digest(hashlib.sha256(json.dumps(cfg.to_dict(), sort_keys=True).encode()).hexdigest())
 
 
 def diff_check(base: str, tree: str) -> Check:

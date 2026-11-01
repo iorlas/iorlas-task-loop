@@ -9,7 +9,7 @@ import msgspec
 from taskloop.contracts.enums import CheckStatus
 from taskloop.contracts.ids import CheckId, TreeSha
 from taskloop.contracts.row import Row
-from taskloop.contracts.runkey import BaseSha, RunKey
+from taskloop.contracts.runkey import BaseSha, Digest, RunKey
 from taskloop.contracts.wire import Rec
 
 Group = Literal["static", "tests", "acceptance"]
@@ -157,6 +157,8 @@ class CheckRun(Rec):
     V: ClassVar[int] = 1
     round: int
     tree: TreeSha = TreeSha("")
+    base: BaseSha = BaseSha("")
+    config: Digest = Digest("")
     results: list[CheckResult] = msgspec.field(default_factory=list)
     hits: int = 0
     misses: int = 0

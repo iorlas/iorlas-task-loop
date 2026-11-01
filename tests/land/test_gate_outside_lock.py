@@ -20,6 +20,7 @@ from taskloop.contracts.config import CheckSpec, EngineConfig
 from taskloop.contracts.gitfacts import GitOutcome, LogRow
 from taskloop.contracts.ids import CheckId, TreeSha
 from taskloop.contracts.runkey import BaseSha, Digest, RunKey
+from taskloop.domain.checks.specs import engine_digest
 
 REJECTED = (1, " ! [rejected]        HEAD -> main (fetch first)")
 PUSHED = (0, "")
@@ -116,14 +117,14 @@ class World:
         return f"tree@{self.sat_on}" in self.gate_passed()
 
     def run_items(self, items: Sequence[Check], everything: bool = False, learn: bool = False, show_clean: bool = False) -> CheckRun:
+        tree, base, config = TreeSha(f"tree@{self.sat_on}"), BaseSha(self.base), engine_digest(self.kit.cfg)
         rc, tail = self.sh(["gate"])
         res = CheckResult(id=CheckId("gate"), cmd="gate", group="tests", exit=rc, status="failed" if rc else "passed", tail=tail)
         if not rc:
-            tree, base = TreeSha(f"tree@{self.sat_on}"), BaseSha(self.base)
             key = RunKey(check=CheckId("gate"), cmd=Digest(""), config=Digest(""), toolchain=Digest(""), tree=tree, base=base,
                          inputs=Digest(""), selected=Digest(""), env=Digest(""))
             self.doc.rec = [PassRecord(key=key, result=res, tree=tree, base=base)]
-        return CheckRun(round=1, results=[res])
+        return CheckRun(round=1, tree=tree, base=base, config=config, results=[res])
 
     def gate_passed(self) -> list[str]:
         return [e.key.tree for e in self.doc.rec if e.key.base == self.base]

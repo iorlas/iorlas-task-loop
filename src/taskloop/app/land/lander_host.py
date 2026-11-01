@@ -7,7 +7,7 @@ from typing import Protocol
 
 from taskloop.app.land.commit import CommitHost
 from taskloop.app.land.fix_outside import FixOutsideHost
-from taskloop.app.land.gate import GateHost, GateSteps
+from taskloop.app.land.gate import GateCheckout, GateHost, GateSteps
 from taskloop.app.land.land_rebase import LandRebaseHost
 from taskloop.app.land.landed import LandedHost
 from taskloop.app.land.outbound import OutboundCheckout, OutboundHost
@@ -71,7 +71,7 @@ class LandSteps(BeginSteps, OutcomeSteps, MoveSteps, GateSteps, Protocol):
     pass
 
 
-class LandCheckout(FetchCheckout, StageCheckout, OutboundCheckout, Protocol):
+class LandCheckout(FetchCheckout, StageCheckout, OutboundCheckout, GateCheckout, Protocol):
     pass
 
 

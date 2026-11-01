@@ -19,8 +19,8 @@ from taskloop.contracts.checks import Check, CheckFaultKind, CheckRun
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.ids import TreeSha
 from taskloop.contracts.ports import Git
-from taskloop.contracts.runkey import BaseSha
-from taskloop.domain.checks.specs import gate_items
+from taskloop.contracts.runkey import BaseSha, Digest
+from taskloop.domain.checks.specs import engine_digest, gate_items
 from taskloop.stores.runlog import RunLog
 
 FAULTS = MappingProxyType({CheckFaultKind.STALE_BASE: "FAULT_STALE_BASE", CheckFaultKind.KILLED: "PAUSE_KILLED"})
@@ -40,6 +40,9 @@ class _Seal(Enum):
     ISSUED = 1
 
 
+NO_DIGEST = Digest("")
+
+
 @final
 @dataclass(frozen=True)
 class GatePass:
@@ -47,12 +50,13 @@ class GatePass:
 
     tree: TreeSha
     base: BaseSha
+    config: Digest = NO_DIGEST
     seal: _Seal = field(kw_only=True, repr=False, compare=False)
 
 
-def mint(tree: TreeSha, base: BaseSha) -> GatePass:
+def mint(tree: TreeSha, base: BaseSha, config: Digest = NO_DIGEST) -> GatePass:
     """The one factory of GatePass. Called by Gate (after its steps are green in the memo, or when the repo has no gate) and by tests."""
-    return GatePass(tree, base, seal=_Seal.ISSUED)
+    return GatePass(tree, base, config, seal=_Seal.ISSUED)
 
 
 @dataclass(frozen=True)
@@ -73,6 +77,10 @@ class GateSteps(Protocol):
     def outcome(self, outcome: str, detail: str = ...) -> None: ...
 
 
+class GateCheckout(Protocol):
+    def tree_hash(self) -> TreeSha: ...
+
+
 class GateHost(Protocol):
     """What the gate reads of the engine: the repo's gate steps and the checker that runs them, git, the log and the stop point."""
 
@@ -88,6 +96,8 @@ class GateHost(Protocol):
     def steps(self) -> GateSteps: ...
     @property
     def checker(self) -> GateChecker: ...
+    @property
+    def checkout(self) -> GateCheckout: ...
     @property
     def git(self) -> Git: ...
     @property
@@ -114,7 +124,7 @@ class Gate:
 
     def issue(self) -> GatePass:
         e = self.e
-        return mint(TreeSha(e.git.rev_parse(e.wt, "HEAD^{tree}")), BaseSha(e.git.rev_parse(e.wt, e.cfg.base)))
+        return mint(TreeSha(e.git.rev_parse(e.wt, "HEAD^{tree}")), BaseSha(e.git.rev_parse(e.wt, e.cfg.base)), engine_digest(e.cfg))
 
     def run(self) -> GatePass | Problem:
         """-> the pass when the gate passed (or already had on this tree), else the problem for a fix round."""
@@ -125,6 +135,8 @@ class Gate:
             return self.issue()
         e.gate_log = None
         tree = e.git.rev_parse(e.wt, "HEAD^{tree}")
+        head = e.git.rev_parse(e.wt, "HEAD")
+        config = engine_digest(e.cfg)
         started = time.time()
         e.log.emit(rec.GateStart(cmd=e.cfg.gate_text, log=str(e.run_dir / "checks"), tree=tree))
         try:
@@ -143,9 +155,22 @@ class Gate:
         passed = verified.passed_over(run)
         if passed:
             e.log.note(f"gate passed past deferred checks (no such resource here, inputs unchanged): {', '.join(passed)}")
-        e.log.emit(rec.GateEnd(exit=1 if reds else 0, exec_seconds=round(time.time() - started), skipped=skipped, deferred=passed))
+        stale = False
         if not reds:
-            return self.issue()
+            current_tree = e.checkout.tree_hash()
+            current_head = e.git.rev_parse(e.wt, "HEAD")
+            current_base = e.git.rev_parse(e.wt, e.cfg.base)
+            head_tree = e.git.rev_parse(e.wt, "HEAD^{tree}")
+            stale = (not run.tree or not run.base or run.tree != current_tree or run.tree != tree or run.tree != head_tree
+                     or head != current_head or run.base != current_base or run.config != config or config != engine_digest(e.cfg))
+        e.log.emit(rec.GateEnd(exit=1 if reds or stale else 0, exec_seconds=round(time.time() - started),
+                               skipped=skipped, deferred=passed))
+        if stale:
+            text = "gate stale: tree, HEAD, base or configuration moved during checks; rerun the gate"
+            e.steps.outcome("gate stale", text)
+            return Problem(ProblemKind.STALE, text)
+        if not reds:
+            return mint(run.tree, run.base, run.config)
         e.gate_log = e.run_dir / reds[0].log if reds[0].log else None
         names = ", ".join(c.id for c in reds)
         e.steps.outcome("gate red", names)

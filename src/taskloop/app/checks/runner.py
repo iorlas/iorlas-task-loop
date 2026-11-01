@@ -21,7 +21,7 @@ from taskloop.contracts.ports import Git
 from taskloop.contracts.runkey import BaseSha
 from taskloop.domain.checks.durations import merged, seconds
 from taskloop.domain.checks.plan import CheckPlan
-from taskloop.domain.checks.specs import diff_check, due, gate_items, items_of
+from taskloop.domain.checks.specs import diff_check, due, engine_digest, gate_items, items_of
 from taskloop.domain.checks.writer_split import WriterSplit
 from taskloop.stores.api import Doc
 from taskloop.stores.bundle import Stores
@@ -87,6 +87,7 @@ class Checker:
         self.round += 1
         history_doc, history = self._history()
         tree, base = host.checkout.tree_hash(), host.git.rev_parse(str(host.wt), host.cfg.base)
+        config = engine_digest(host.cfg)
         plan = CheckPlan.build([*self._diff_check(tree), *items], history)
         memo = self._memo(tree, base)
         planned = gateplan.skipped(host, tree, base) if not everything else None
@@ -96,7 +97,7 @@ class Checker:
         results = st.results if show_clean else self._quiet(st.results)
         host.detail(evidence.round_lines(results))
         hits = sum(1 for c in results if c.cached)
-        return CheckRun(round=st.n, tree=tree, results=results, hits=hits, misses=len(results) - hits)
+        return CheckRun(round=st.n, tree=tree, base=BaseSha(base), config=config, results=results, hits=hits, misses=len(results) - hits)
 
     def gate_green(self) -> bool:
         """Every gate step's run is in the memo already (the key it would have: tree or inputs, base, env), or the step is not due."""

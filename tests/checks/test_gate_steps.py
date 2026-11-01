@@ -13,7 +13,7 @@ from support.logs import records
 
 from taskloop.contracts.checks import Check
 from taskloop.contracts.ids import CheckId
-from taskloop.domain.checks.specs import due, gate_items, items_of
+from taskloop.domain.checks.specs import due, engine_digest, gate_items, items_of
 
 STEP = "true"
 RED_ON_D2 = procsim.default("red-on-d2", lambda cwd, env: (1 if procsim.f_txt(cwd) == "d2" else 0, f"step saw {procsim.f_txt(cwd)}"))
@@ -27,6 +27,20 @@ def ends(eng, name):
 
 
 class GateSteps(EngineTest):
+    def test_check_run_carries_the_identity_from_before_execution(self):
+        def change_files(cwd, env):
+            (Path(cwd) / "f.txt").write_text("changed by gate")
+            return 0, ""
+
+        cmd = procsim.fake("change-files", change_files)
+        eng = self.checks_engine(checks=[{"id": "mutator", "cmd": cmd, "run": "gate"}])
+        tree = eng.checkout.tree_hash()
+        base = eng.git.rev_parse(str(eng.wt), eng.cfg.base)
+        config = engine_digest(eng.cfg)
+        run = eng.checker.run_items(gate_items(eng.cfg))
+        self.assertEqual((run.tree, run.base, run.config), (tree, base, config))
+        self.assertNotEqual(eng.checkout.tree_hash(), tree)
+
     def test_a_check_with_run_stage_is_not_in_the_gate(self):
         eng = self.checks_engine(checks=[{"id": "s", "cmd": STEP}, {"id": "g", "cmd": STEP, "run": "gate"},
                                          {"id": "b", "cmd": STEP, "run": "both"}])
