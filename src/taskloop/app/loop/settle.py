@@ -11,8 +11,11 @@ from taskloop.app.loop.files import LoopFiles
 from taskloop.app.loop.gate import GateRole
 from taskloop.app.loop.net import NetState
 from taskloop.app.slots import verbs
+from taskloop.app.slots.pool import SlotPool
 from taskloop.contracts.config import LoopConfig
 from taskloop.contracts.enums import Result
+from taskloop.contracts.ports import BdFailure
+from taskloop.contracts.slots import SlotFail, SlotGitError
 
 
 @dataclass
@@ -54,6 +57,18 @@ class Settle:
     def count_slot(self, v: vd.Verdict, bid: str, name: str) -> bool:
         """True when the slot was set aside for this failure: the bead's turn is over, nothing else is counted."""
         quick = v.quick_slot_failure(self.tune().quick_fail_min)
+        # The engine found another branch's unsaved work in this slot. That is already
+        # evidence of a slot fault; a reset probe must not erase it (or touch that work).
+        dirty_branch = (v.why.startswith("failed: worktree ")
+                        and v.why.endswith(" has uncommitted work of another branch"))
+        if quick and not v.pre_engine and not dirty_branch:
+            try:
+                SlotPool(self.env.slot_env()).named(name).ready_for("")
+                quick = False
+            except SlotFail as err:
+                quick = err.code == "slot_broken"
+            except (BdFailure, SlotGitError, OSError):
+                quick = False
         self.c.slot_quick[name] = ([*self.c.slot_quick.get(name, []), bid]) if quick else []
         return len(self.c.slot_quick[name]) >= self.tune().slot_fails_to_set_aside and self.aside(name, bid, v)
 
@@ -108,9 +123,8 @@ class Settle:
         if slots and name and self.count_slot(v, bid, name):
             return None
         if v.pre_engine:  # the engine never started: no verdict on the run, so no failure toward the stop
-            self.files.rest_bead(bid, env.now() + t.rest)
-            c.later[bid] = env.now() + t.rest
-            self.say(f"{bid} failed before its engine started: it rests an hour for every loop on the repo, the next bead first")
+            c.later[bid] = env.now() + t.pause_retry
+            self.say(f"{bid} waiting for infrastructure before its engine starts: it will be retried")
             return None
         if v.paused_for_network:
             self.network(v, bid)

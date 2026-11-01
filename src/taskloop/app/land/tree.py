@@ -6,6 +6,7 @@ from typing import Protocol
 
 from taskloop.app.land.gitcall import must
 from taskloop.app.land.parts import BeginSteps, FetchCheckout, StageCheckout
+from taskloop.app.slots.reset import leave_slot
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.paths import TASK_EXCLUDE
@@ -157,9 +158,7 @@ class Tree:
         e = self.e
         if outcome in ("landed", "done") or not branch or branch != (e.branch or None):
             return
-        if e.checkout.dirty_status() or e.git.branch(e.wt) != branch:
-            return  # work that could not be committed, or files stage_all left out, stay where they are for the next run
         try:
-            e.git.checkout_detached(e.wt, e.cfg.base)
+            leave_slot(e.git, e.wt, e.cfg.base, branch, dirty=bool(e.checkout.dirty_status()))
         except SlotGitError as err:
             e.warn(f"the slot could not be left at the base: {str(err).strip()[-160:]}")

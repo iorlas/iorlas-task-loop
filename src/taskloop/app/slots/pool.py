@@ -2,6 +2,7 @@
 and `release` fail with a SlotFail (slot_broken, bead_pinned or busy); the pool takes the first free one."""
 from pathlib import Path
 
+from taskloop.app.slots import owned
 from taskloop.app.slots.env import SlotEnv, peek, stamp
 from taskloop.app.slots.marks import clear_marks, held_by, hold_of, hold_until, mark_held, next_gen
 from taskloop.app.slots.reset import ready_for
@@ -140,6 +141,9 @@ class SlotPool:
     def name_of(self, wt: str) -> str:
         """The slot whose worktree `wt` is, or ""."""
         here = Path(wt).resolve()
+        record = owned.docs(self.env.cfgdir, self.env.repo_key).of(owned.key_of(wt)).get()
+        if record is not None and record.kind == "slot":
+            return here.name
         return next((s.name for s in self.slots() if Path(s.dir).resolve() == here), "")
 
     def unclaim(self, b: Bead, force: bool = False) -> None:

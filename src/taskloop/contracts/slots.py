@@ -1,7 +1,7 @@
 """Slots: why a slot refuses, what git can say about a slot's worktree (the port itself is `Git`, in ports.py).
 
 A slot is one worktree plus the bd bead that is its lease. `Slot.take`, `ready_for` and `release` fail with a `SlotFail`
-whose `code` is one of three closed values; git's own failures are the typed `SlotGitError`s below, classified once by the
+whose `code` is one of four closed values; git's own failures are the typed `SlotGitError`s below, classified once by the
 adapter (the only place that reads git's words), never by the caller.
 """
 from typing import Literal, final
@@ -9,13 +9,14 @@ from typing import Literal, final
 from taskloop.contracts.wire import Rec
 
 HELD_KEYS = ("held_by", "held_since", "held_why", "hold_until", "held_bead")  # the marks on a slot bead while it is held
-SlotFailCode = Literal["slot_broken", "bead_pinned", "busy"]
+SlotFailCode = Literal["slot_broken", "bead_pinned", "busy", "transient"]
 
 
 class SlotFail(Exception):
     """The slot cannot do what was asked. busy: a live engine, a hold or another claim. bead_pinned: the bead's branch is
     checked out by a live run, so this bead is not for this slot now. slot_broken: git or the worktree is in a state the
-    slot cannot clear (a dirty tree it cannot commit, a lock that stays, no such slot)."""
+    slot cannot clear (a dirty tree it cannot commit, a lock that stays, no such slot). transient: infrastructure failed,
+    without evidence that the slot itself is broken."""
 
     def __init__(self, code: SlotFailCode, why: str) -> None:
         super().__init__(why)

@@ -6,7 +6,9 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, TypeVar
 
+from taskloop.app.slots import owned
 from taskloop.app.slots.env import SlotEnv, stamp
+from taskloop.contracts.ports import SlotGit
 from taskloop.contracts.slots import BranchPinned, DirtyTree, IndexLocked, RefRace, SlotFail, SlotGitError
 
 if TYPE_CHECKING:
@@ -30,7 +32,7 @@ def retrying[T](env: SlotEnv, what: str, call: Callable[[], T]) -> T:
         except DirtyTree as e:
             raise SlotFail("slot_broken", f"{what}: {e.tail}") from e
         except SlotGitError as e:
-            raise SlotFail("slot_broken", f"{what}: {e.tail}") from e
+            raise SlotFail("transient", f"{what}: {e.tail}") from e
     raise AssertionError("unreachable")
 
 
@@ -46,6 +48,7 @@ def ready_for(slot: Slot, bead: str, *, force: bool = False) -> None:
     if busy:
         env.drop_engine_lock(d, holder)
         env.say(f"FORCED: slot {slot.name} reset over: {busy}")
+    recreated = retrying(env, f"recreate slot {slot.name}", lambda: ensure_tree(slot))
     keep_work(slot)
     try:
         env.git.fetch(d)
@@ -53,7 +56,7 @@ def ready_for(slot: Slot, bead: str, *, force: bool = False) -> None:
         env.warn(f"tl: fetch in slot {slot.name} failed: {e.tail}")
     check_out(slot, bead)
     retrying(env, f"slot {slot.name}", lambda: env.git.clean(d, env.cfg.keep))
-    setup(slot)
+    setup(slot, force=recreated)
 
 
 def keep_work(slot: Slot) -> None:
@@ -67,7 +70,7 @@ def keep_work(slot: Slot) -> None:
     try:
         retrying(env, f"slot {slot.name}", lambda: env.git.commit_all(d, branch, f"wip: left in slot {slot.name}"))
     except SlotFail as e:
-        raise SlotFail("slot_broken", f"could not commit the leftover work on {branch}: {e.why}") from e
+        raise SlotFail(e.code, f"could not commit the leftover work on {branch}: {e.why}") from e
     env.say("WIP committed on " + branch)
 
 
@@ -98,7 +101,7 @@ def free_branch(slot: Slot, branch: str) -> str:
         if busy or c.main:
             return "branch {} is checked out in {}{}".format(branch, c.path, ": " + busy if busy else " (the repo's own checkout)")
     for c in held:
-        if not env.git.dirty(c.path) and env.git.remove_worktree(env.repo, c.path):
+        if not slot.pool.name_of(c.path) and not env.git.dirty(c.path) and env.git.remove_worktree(env.repo, c.path):
             env.say(f"FREED: branch {branch}: removed the clean worktree {c.path}")
             continue
         try:
@@ -122,6 +125,8 @@ def inputs_hash(d: str, patterns: list[str]) -> str:
 def setup(slot: Slot, force: bool = False) -> None:
     """Run the profile's setup only when its inputs changed since the last setup in this slot."""
     env, d, cfg = slot.env, slot.dir, slot.env.cfg
+    recreated = retrying(env, f"recreate slot {slot.name}", lambda: ensure_tree(slot))
+    force = force or recreated
     if not cfg.setup:
         env.say("READY " + d)
         return
@@ -138,3 +143,22 @@ def setup(slot: Slot, force: bool = False) -> None:
         raise SlotFail("slot_broken", f"setup exited {rc}")
     mark.write_text(digest)
     env.say("READY " + d)
+
+
+def ensure_tree(slot: Slot) -> bool:
+    """The same creation and ownership path as slot init, including stale registration recovery."""
+    env = slot.env
+    if Path(slot.dir).is_dir():
+        return False
+    owned.create(env.git, env.cfgdir, env.repo_key, env.repo, slot.dir, env.cfg.base, kind="slot", run=env.actor, bead="",
+                 host=env.host, now=env.now(), exclude=lambda: env.exclude_local(env.repo))
+    return True
+
+
+def leave_slot(git: SlotGit, directory: str, base: str, branch: str, *, dirty: bool | None = None) -> bool:
+    """Leave a clean slot detached at its base; preserve work that could not be saved."""
+    unsaved = git.dirty(directory) if dirty is None else dirty
+    if unsaved or git.branch(directory) != branch:
+        return False
+    git.checkout_detached(directory, base)
+    return True

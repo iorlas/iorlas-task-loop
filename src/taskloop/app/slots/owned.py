@@ -36,6 +36,7 @@ def create(git: SlotGit, cfg: ConfigDir, repo_key: str, repo: str, path: str, re
     raises SlotGitError when git cannot make it."""
     exclude()
     if not Path(path).is_dir():
+        git.prune_worktrees(repo)
         with contextlib.suppress(SlotGitError):
             git.fetch(repo)
         git.add_worktree(repo, path, ref)

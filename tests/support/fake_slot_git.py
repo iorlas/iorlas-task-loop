@@ -104,3 +104,6 @@ class FakeSlotGit:
     def add_worktree(self, repo: str, path: str, ref: str) -> None:
         self._go("add_worktree", repo, path, ref)
         self.added.append((path, ref))
+
+    def prune_worktrees(self, repo: str) -> None:
+        self._go("prune_worktrees", repo)

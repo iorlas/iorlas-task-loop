@@ -138,10 +138,16 @@ def slot_bead(repo: str, name: str, who: Identity, store: Beads | None = None) -
     return next((b for b in slot_beads(repo, who, store) if b.title.split()[-1] == name), None)
 
 
-def slot_of(repo: str, wt: str, who: Identity, store: Beads | None = None) -> str:
+def slot_of(repo: str, wt: str, who: Identity, store: Beads | None = None, *, strict: bool = False) -> str:
     """The slot whose worktree `wt` is, or ""."""
     here, cfg = Path(wt).resolve(), profile_slots(repo)
-    return next((n for n in (b.title.split()[-1] for b in slot_beads(repo, who, store)) if Path(slot_dir(repo, n,
+    record = owned.docs(who.config, repo_key(repo)).of(owned.key_of(wt)).get()
+    if record is not None and record.kind == "slot":
+        return here.name
+    # Cleanup must fail closed when bd is unavailable, rather than remove a slot whose lease it could not read.
+    beads = ([b for b in (store or bd_store(who.actor, repo)).find(BeadQuery(label="slot", include_closed=True))
+              if b.status != "closed" and b.title.split()[1:2] == [hostname()]] if strict else slot_beads(repo, who, store))
+    return next((n for n in (b.title.split()[-1] for b in beads) if Path(slot_dir(repo, n,
         cfg)).resolve() == here), "")
 
 

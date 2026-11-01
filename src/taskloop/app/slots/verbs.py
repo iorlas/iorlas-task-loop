@@ -11,7 +11,7 @@ from taskloop.app.slots.reset import setup
 from taskloop.contracts.ports import NewBead
 from taskloop.contracts.slots import SlotFail, SlotGitError
 
-CODES: Final = {"busy": 4, "bead_pinned": 5, "slot_broken": 3}
+CODES: Final = {"busy": 4, "bead_pinned": 5, "slot_broken": 3, "transient": 3}
 
 
 def fail_code(e: SlotFail) -> int:
@@ -116,7 +116,7 @@ def reset(env: SlotEnv, a: Any) -> int:
         SlotPool(env).named(a.name).ready_for(a.bead or "", force=a.force)
     except SlotFail as e:
         a.error = e.why
-        if e.code == "slot_broken":
+        if e.code in ("slot_broken", "transient"):
             env.warn("tl: " + e.why)
         else:
             env.say(("BUSY: " if e.code == "busy" else "TAKEN: ") + e.why)

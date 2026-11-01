@@ -9,6 +9,7 @@ from taskloop.app.land.forge import Forge
 from taskloop.app.land.stack import MODE, Stack, lock_path
 from taskloop.app.land.stackgate import StackGate
 from taskloop.app.wire import closeguard
+from taskloop.app.wire.slots import profile_slots, slot_of
 from taskloop.contracts.forge import StackItem
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId
@@ -54,13 +55,15 @@ def cmd_land_stack(a: argparse.Namespace, who: Identity, git: Git, spawner: Runs
     cmds = Cmds(spawner, log, repo)
     lock = lock_path(who.config, git, repo)
     forge = Forge(cmds, git, repo, a.base, a.method)
+    slot_repo = next((co.path for co in git.checkouts(repo) if co.main), repo)
 
     def landed(bead: str, sha: str) -> int:
         """`tl land` and its LANDED row (what `tl trace BEAD`, the board's landings and the close guard read): the one writer."""
         return closeguard.record_land(who, store, git, repo, f"origin/{a.base}", BeadId(bead), sha, f"{MODE}: merged as {sha[:12]}")
 
     stack = Stack(forge, cmds, log, git, repo, lock, landed, store.dolt_push, who.actor, who.session,
-                  StackGate(cmds, git, stores, repo, f"origin/{a.base}", tl), store, a.wait_min, lambda bead: locator.add_bead(run, bead))
+                  StackGate(cmds, git, stores, repo, f"origin/{a.base}", tl), store, a.wait_min, lambda bead: locator.add_bead(run, bead),
+                  lambda path: bool(slot_of(slot_repo, path, who, store, strict=True)), profile_slots(slot_repo).base)
     rc = 1
     try:
         rc = stack.run(items)

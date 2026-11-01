@@ -3,8 +3,10 @@ import contextlib
 from typing import Protocol
 
 from taskloop.app.land import cleanup
+from taskloop.app.wire.slots import profile_slots, slot_of
 from taskloop.contracts import fence
 from taskloop.contracts.enums import Outcome
+from taskloop.contracts.identity import Identity
 from taskloop.contracts.ports import Beads, Git
 from taskloop.stores.runlog import RunLog
 
@@ -68,6 +70,10 @@ class ReleaseSlotHost(Protocol):
     def git(self) -> Git: ...
     @property
     def log(self) -> RunLog: ...
+    @property
+    def who(self) -> Identity: ...
+    @property
+    def wt(self) -> str: ...
 
 
 class ReleaseSlot:
@@ -82,4 +88,6 @@ class ReleaseSlot:
                 return
             e.tree.leave_slot(outcome, branch)
             if outcome is Outcome.LANDED:
-                cleanup.retry_logged(e.git, e.log)
+                repo = next((co.path for co in e.git.checkouts(e.wt) if co.main), e.wt)
+                cleanup.retry_logged(e.git, e.log, lambda path: bool(slot_of(repo, path, e.who, e.store, strict=True)),
+                                     profile_slots(repo).base)

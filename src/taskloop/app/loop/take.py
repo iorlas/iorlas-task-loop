@@ -13,8 +13,8 @@ from taskloop.app.slots.pool import SlotPool
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.config import EngineConfig, LoopConfig
 from taskloop.contracts.enums import Result
-from taskloop.contracts.ports import BeadPatch
-from taskloop.contracts.slots import SlotFail
+from taskloop.contracts.ports import BdFailure, BeadPatch
+from taskloop.contracts.slots import SlotFail, SlotGitError
 
 
 @dataclass
@@ -32,21 +32,27 @@ class Taker:
 
     def prepare(self, slot: str, bead: str) -> vd.Verdict | None:
         """A slot gets a clean tree on the bead's branch (leftover work committed, never wiped). None when it did."""
-        senv = self.env.slot_env()
         try:
-            SlotPool(senv).named(slot).ready_for(bead)
+            senv = self.env.slot_env()
+            target = SlotPool(senv).named(slot)
+            try:
+                target.ready_for(bead)
+            except SlotFail as e:
+                if e.code != "slot_broken":
+                    raise
+                target.ready_for(bead)  # retry preservation/reset/setup before counting a slot fault
             return None
+        except (BdFailure, SlotGitError, OSError) as e:
+            attempt(self.env.store.unclaim, bead)
+            return vd.pre_engine(str(e))
         except SlotFail as e:
-            if e.code == "slot_broken":
-                senv.warn("tl: " + e.why)
-            else:
-                senv.say(("BUSY: " if e.code == "busy" else "TAKEN: ") + e.why)
             attempt(self.env.store.unclaim, bead)
             if e.code == "bead_pinned":  # a live run holds the bead's branch: not this loop's failure
                 return vd.taken(e.why)
             if e.code == "busy":
                 return vd.pre_engine(f"tl slot reset {slot} for {bead} found the slot busy (a live engine or a hold)")
-            return vd.pre_engine(f"tl slot reset {slot} for {bead} did not give a clean tree: {e.why}", "slot_broken")
+            return vd.pre_engine(f"tl slot reset {slot} for {bead} did not give a clean tree: {e.why}", e.code,
+                                 recovery_failed=e.code == "slot_broken")
 
     def claimed(self, b: Bead, at: Where, ecfg: EngineConfig, rule: QueueRule) -> vd.Verdict | None:
         """The area check, the claim and the mark that makes the area busy, as one. A verdict: the bead is not to be run now;
@@ -74,15 +80,25 @@ class Taker:
         v: vd.Verdict | None = None
         for b in cands:
             bid = b.id
-            held = self.claimed(b, at, ecfg, rule)
+            try:
+                held = self.claimed(b, at, ecfg, rule)
+            except (BdFailure, SlotGitError, OSError) as e:
+                attempt(env.store.unclaim, b.id)
+                held = vd.pre_engine(str(e))
             if held is not None:
                 if held.outcome is Result.SKIPPED:
                     continue
                 self.record(bid, at.slot, held)
                 self.later[bid] = env.now() + self.tune().pause_retry
+                if held.pre_engine:
+                    return Taken(held, bid)
                 continue
             lease.add(bid)
-            v = (self.prepare(at.slot, b.id) if slots else None) or self.run.run(b, at)
+            try:
+                v = (self.prepare(at.slot, b.id) if slots else None) or self.run.run(b, at)
+            except (BdFailure, SlotGitError, OSError) as e:
+                attempt(env.store.unclaim, b.id)
+                v = vd.pre_engine(str(e))
             self.record(b.id, at.slot, v)
             if v.outcome is not Result.TAKEN:
                 break

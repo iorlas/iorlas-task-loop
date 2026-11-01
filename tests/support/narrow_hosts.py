@@ -621,6 +621,8 @@ class FakeReleaseSlotHost:
         self.tree = Leaves()
         self.git: Git = ScriptedGit()
         self.log = RunLog(fake_stores().run_log("run"))
+        self.who = who()
+        self.wt = "/wt"
 
 
 class Asks:

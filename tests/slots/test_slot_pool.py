@@ -7,6 +7,7 @@ import time
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -49,7 +50,8 @@ class Rig(unittest.TestCase):
         self.bd = Beating(actor=ME, prefix="sl")
         self.out, self.err, self.events, self.sleeps, self.busy_at, self.t = [], [], [], [], {}, [1000.0]
         self.env = SlotEnv(
-            repo="/r", repo_key="r-1", cfg=SlotsConfig(count=2, keep=["ignored"]), store=self.bd, git=self.git, tickets=self.tickets,
+            repo=str(Path(tmp.name) / "repo"), repo_key="r-1", cfg=SlotsConfig(count=2, keep=["ignored"]),
+            store=self.bd, git=self.git, tickets=self.tickets,
             cfgdir=paths.ConfigDir(Path(tmp.name)), actor=ME, host="h", take_lock=contextlib.nullcontext,
             busy=lambda d: self.busy_at.get(d, ""), drop_engine_lock=lambda d, pid=None: self.busy_at.pop(d, None),
             event=lambda kind, bead="", **kw: self.events.append((kind, kw.get("slot"))), run_setup=lambda cmd, d: 0,
@@ -59,6 +61,8 @@ class Rig(unittest.TestCase):
         for n in ("s1", "s2"):
             self.bd.beads[BeadId("sl-" + n)] = Bead(id=BeadId("sl-" + n), title="slot h " + n, status="open", labels=["slot"])
         self.d1 = self.env.dir_of("s1")
+        for name in ("s1", "s2"):
+            Path(self.env.dir_of(name)).mkdir(parents=True)
 
     def slot(self, name="s1"):
         return self.pool.slot(name)
@@ -96,6 +100,20 @@ class Classify(unittest.TestCase):
 
 
 class Reset(Rig):
+    def test_a_missing_slot_is_recreated_before_fetch_and_checkout(self):
+        Path(self.d1).rmdir()
+        with mock.patch("taskloop.app.slots.reset.setup"):
+            self.slot().ready_for("x-1")
+        self.assertEqual(self.git.added, [(self.d1, "origin/main")])
+        ops = [call[0] for call in self.git.calls]
+        self.assertLess(ops.index("prune_worktrees"), ops.index("add_worktree"))
+        self.assertLess(ops.index("add_worktree"), ops.index("rebasing"))
+        self.assertEqual(self.git.tree(self.d1).branch, "task/x-1")
+
+    def test_a_git_infrastructure_failure_is_transient(self):
+        self.git.fail("checkout_new", SlotGitError("missing object or network unavailable"))
+        self.assertEqual(self.code(lambda: self.slot().ready_for("x-1")), "transient")
+
     def test_a_bead_gets_a_fresh_branch_off_the_base_and_ignored_output_is_kept(self):
         self.slot().ready_for("x-1")
         self.assertEqual((self.git.tree(self.d1).branch, self.git.tree(self.d1).head), ("task/x-1", "origin/main"))

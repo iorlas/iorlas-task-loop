@@ -36,11 +36,14 @@ def lock_path(home: ConfigDir, git: Git, repo: str) -> Path:
 class Stack:
     def __init__(self, forge: Forge, cmds: Cmds, log: RunLog, git: Git, repo: str, lock: Path, record: Callable[[str, str], int],
                  sync: Callable[[], DoltPush], owner: str, session: str, gate: StackGate, beads: Beads, wait_min: float | None = None,
-                 named: Callable[[str], None] = lambda _bead: None) -> None:
+                 named: Callable[[str], None] = lambda _bead: None,
+                 is_slot: Callable[[str], bool] = lambda _path: False, slot_base: str = "") -> None:
         self.forge, self.cmds, self.log, self.git, self.repo, self.lock = forge, cmds, log, git, repo, lock
         self.record, self.sync, self.owner, self.session, self.wait_min = record, sync, owner, session, wait_min
         self.gate, self.named = gate, named  # named(bead): the run's manifest learns each bead
         self.beads, self.failure_reason = beads, ""
+        self.is_slot = is_slot
+        self.slot_base = slot_base or f"origin/{forge.base}"
         self.recorded = 0
         self.synced = False  # bd sync was tried
         self.last = ""  # the merge commit of the last item delivered
@@ -191,10 +194,10 @@ class Stack:
                 self.log.note(f"PR #{old.number} is {old.state}: left as it is")
 
     def tidy(self, branch: str, head: str, sha: str) -> None:
-        """Delete the local task branch and its worktree after a verified land, the compare-oid way: a branch that moved since is kept.
+        """Delete the landed local branch with compare-oid, removing ad-hoc worktrees and leaving slots detached at their base.
         The remote branch is the forge's (delete on merge); gone or not, it is not a failure."""
         row = cleanup.record(self.log, self.repo, branch, head, sha)
-        cleanup.retry(self.git, self.log, row)
+        cleanup.retry(self.git, self.log, row, self.is_slot, self.slot_base)
 
     def sync_bd(self) -> None:
         """`bd sync --no-adopt` (pull, then push) through the store; a remote bd does not have is a quiet no-op."""

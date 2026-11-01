@@ -125,7 +125,7 @@ class HeldBranch(unittest.TestCase):
 
 
 class PreEngineFailure(tlp.LoopBase):
-    def test_a_bead_failing_before_its_engine_rests_for_every_loop_and_stops_none(self):
+    def test_infrastructure_before_the_engine_retries_without_resting_beads(self):
         self.beads({"x-1": [tlp.rec("landed")], "x-2": [tlp.rec("landed")], "x-3": [tlp.rec("landed")]})
         calls = []
 
@@ -143,7 +143,7 @@ class PreEngineFailure(tlp.LoopBase):
         lines = self.lines()
         self.assertIn("did not give a clean tree: fatal: 'task/x-1'", lines[0]["why"])
         self.assertIn("slot reset s1 for x-1", lines[0]["why"])
-        self.assertEqual(sorted(json.loads(looptest.rest_file(str(self.repo)).read_text())["beads"]), ["x-1", "x-2"])
+        self.assertFalse(looptest.rest_file(str(self.repo)).exists())
 
     def test_a_second_loop_leaves_the_bead_the_first_one_rested(self):
         self.beads({"x-1": [tlp.rec("landed")], "x-2": [tlp.rec("landed")]})

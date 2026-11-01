@@ -8,15 +8,31 @@ import support.paths  # noqa: F401
 from support import gitq
 from support.engine_case import CLEAN, PLAN, WRITE, EngineTest, real_git
 from support.logs import records
+from support.spawn import port_git
+from support.who import who
 
 # isort: split
 from taskloop.app.land import cleanup
 from taskloop.app.land.push import Pusher
+from taskloop.app.slots import owned
+from taskloop.contracts.ids import loop_key
 
 RUN = {"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}
 
 
 class EngineCleanup(EngineTest):
+    @real_git("a registered slot survives a real engine land, detached at base with its task branch deleted")
+    def test_engine_land_keeps_registered_slot_and_detaches_at_base(self):
+        main = self.linked()
+        owned.create(port_git(), who().config, loop_key(str(main)), str(main), str(self.wt), "origin/main", kind="slot",
+                     run="test", bead="", host="test", now=0, exclude=lambda: None)
+        rc, _ = self.run_engine(RUN)
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertTrue(self.wt.is_dir())
+        self.assertEqual(gitq.git("branch", "--show-current", cwd=self.wt), "")
+        self.assertEqual(gitq.git("rev-parse", "HEAD", cwd=self.wt), gitq.git("rev-parse", "origin/main", cwd=main))
+        self.assertEqual(gitq.git("branch", "--list", "task/t-1", cwd=main), "")
+
     def linked(self):
         """Run the engine in a linked checkout, so removing it cannot remove the main clone."""
         main = self.wt
@@ -65,10 +81,10 @@ class EngineCleanup(EngineTest):
         main = self.linked()
         retry = cleanup.retry
 
-        def gone(git, log, row):
+        def gone(git, log, row, *args):
             if row.remote_outcome == "pending":
                 gitq.git("push", "-q", "origin", ":refs/heads/task/t-1", cwd=main)
-            return retry(git, log, row)
+            return retry(git, log, row, *args)
 
         with mock.patch.object(cleanup, "retry", gone):
             rc, _ = self.run_engine(RUN)

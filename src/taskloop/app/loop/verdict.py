@@ -29,6 +29,7 @@ class Verdict:
     storm: str = ""
     pre_engine: bool = False  # the engine never started: no verdict on the bead
     slot_fault: SlotFailCode | None = None  # the slot's own git state broke, not the bead
+    recovery_failed: bool = False  # a slot reset was retried before judging the slot broken
 
     @property
     def paused_for_network(self) -> bool:
@@ -41,14 +42,19 @@ class Verdict:
     def quick_slot_failure(self, quick_min: float) -> bool:
         """An instant failure that is the slot's: the failures count toward setting the slot aside, not toward the stop."""
         return (self.outcome is Result.FAILED and self.slot_fault == "slot_broken"
-                and (self.pre_engine or (self.minutes is not None and self.minutes < quick_min)))
+                and ((self.pre_engine and self.recovery_failed)
+                     or (not self.pre_engine and self.minutes is not None and self.minutes < quick_min)))
 
     def with_(self, **fields: Any) -> Verdict:
         return replace(self, **fields)
 
 
-def pre_engine(why: str, slot_fault: SlotFailCode | None = None) -> Verdict:
-    return Verdict(Result.FAILED, f"failed before the engine: {why}", pre_engine=True, slot_fault=slot_fault)
+def pre_engine(why: str, slot_fault: SlotFailCode | None = None, *, recovery_failed: bool = False) -> Verdict:
+    if slot_fault == "slot_broken" and recovery_failed:
+        return Verdict(Result.FAILED, f"failed before the engine: {why}", pre_engine=True,
+                       slot_fault=slot_fault, recovery_failed=True)
+    return Verdict(Result.PAUSED, f"transient before the engine: {why}", kind="transient_infrastructure", pre_engine=True,
+                   slot_fault=slot_fault)
 
 
 def taken(why: str) -> Verdict:

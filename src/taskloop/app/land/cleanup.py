@@ -1,4 +1,7 @@
 """Cleanup after a recorded land: compare the checked oids, log the result, and keep failures retryable."""
+from collections.abc import Callable
+
+from taskloop.app.slots.reset import leave_slot
 from taskloop.contracts import log as rec
 from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.paths import ConfigDir
@@ -13,13 +16,24 @@ def remote_oid(git: Git, repo: str, remote: str, branch: str) -> str:
                  if ref.name == f"refs/heads/{branch}"), "")
 
 
-def tidy_local(git: Git, repo: str, log: RunLog, branch: str, head: str) -> str:
+def tidy_local(git: Git, repo: str, log: RunLog, branch: str, head: str,
+               is_slot: Callable[[str], bool] = lambda _path: False, base: str = "origin/main") -> str:
     """The stack and engine share this local cleanup. An empty result means gone; otherwise it says why it stays."""
     local = git.rev_parse(repo, f"refs/heads/{branch}")
     if not local:
         return ""
     if local != head:
         return f"local {branch} is at {local[:12]}, not the {head[:12]} that landed: kept"
+    why = _tidy_checkouts(git, repo, log, branch, head, is_slot, base)
+    if why:
+        return why
+    git.delete_branch_at(repo, branch, head)
+    return ""
+
+
+def _tidy_checkouts(git: Git, repo: str, log: RunLog, branch: str, head: str,
+                    is_slot: Callable[[str], bool], base: str) -> str:
+    """Release matching checkouts, stopping at the first reason to keep the branch."""
     for co in git.checkouts(repo):
         if co.branch != branch:
             continue
@@ -28,11 +42,15 @@ def tidy_local(git: Git, repo: str, log: RunLog, branch: str, head: str) -> str:
         # A ref can move while the checkout list is being read. Never remove that checkout's newer work.
         if git.rev_parse(repo, f"refs/heads/{branch}") != head:
             return f"local {branch} moved before worktree removal: kept"
+        if is_slot(co.path):
+            if not leave_slot(git, co.path, base, branch):
+                return f"slot {co.path} has unsaved work or changed branch: {branch} kept"
+            log.note(f"left slot {co.path} detached at {base}")
+            continue
         why = git.remove_worktree_why(repo, co.path)
         if why:
             return f"worktree {co.path} stays: {branch} kept: {why}"
         log.note(f"removed worktree {co.path}")
-    git.delete_branch_at(repo, branch, head)
     return ""
 
 
@@ -59,7 +77,8 @@ def record(log: RunLog, repo: str, branch: str, head: str, sha: str, remote: str
     return row
 
 
-def retry(git: Git, log: RunLog, row: rec.LandCleanup) -> rec.LandCleanup:
+def retry(git: Git, log: RunLog, row: rec.LandCleanup, is_slot: Callable[[str], bool] = lambda _path: False,
+          base: str = "origin/main") -> rec.LandCleanup:
     """Retry a logged cleanup with its original oids, never with freshly observed tips. The land remains successful."""
     local, remote = row.local_outcome, row.remote_outcome
     detail: list[str] = []
@@ -71,7 +90,7 @@ def retry(git: Git, log: RunLog, row: rec.LandCleanup) -> rec.LandCleanup:
             detail.append(f"remote: {err}")
     if local == "pending":
         try:
-            why = tidy_local(git, row.repo, log, row.branch, row.head)
+            why = tidy_local(git, row.repo, log, row.branch, row.head, is_slot, base)
             if why:
                 detail.append(why)
             else:
@@ -85,7 +104,7 @@ def retry(git: Git, log: RunLog, row: rec.LandCleanup) -> rec.LandCleanup:
     return done
 
 
-def retry_logged(git: Git, log: RunLog) -> None:
+def retry_logged(git: Git, log: RunLog, is_slot: Callable[[str], bool] = lambda _path: False, base: str = "origin/main") -> None:
     """At the end of an engine run, after the trace's last checkout read, retry its latest cleanup rows."""
     latest: dict[tuple[str, str, str], rec.LandCleanup] = {}
     for item in log.log.read_from(0).items:
@@ -94,4 +113,4 @@ def retry_logged(git: Git, log: RunLog) -> None:
             latest[row.repo, row.branch, row.sha] = row
     for row in latest.values():
         if "pending" in (row.local_outcome, row.remote_outcome):
-            retry(git, log, row)
+            retry(git, log, row, is_slot, base)

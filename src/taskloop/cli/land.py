@@ -3,7 +3,7 @@ import time
 
 from taskloop.app.land import cleanup
 from taskloop.app.wire import closeguard
-from taskloop.app.wire.slots import load_cfg
+from taskloop.app.wire.slots import load_cfg, profile_slots, slot_of
 from taskloop.contracts.enums import Outcome
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId
@@ -39,7 +39,7 @@ def cmd_land(who: Identity, bead: BeadId, sha: str, store: Beads, git: Git, work
     checked_remote = remote_oid if remote_oid and git.is_ancestor(where, remote_oid, full) else ""
     prior = cleanup.previous(who.config, bead, repo, branch, full)
     row = cleanup.record(log, repo, branch, checked_head, full, "origin", checked_remote, prior)
-    cleanup.retry(git, log, row)
+    cleanup.retry(git, log, row, lambda path: bool(slot_of(repo, path, who, store, strict=True)), profile_slots(repo).base)
     log.emit(Close(outcome=Outcome.LANDED, sha=full))
     locator.end(run, time.time(), RunState.DONE)
     return 0

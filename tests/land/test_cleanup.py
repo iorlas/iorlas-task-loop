@@ -36,6 +36,16 @@ class CleanupGit(ScriptedGit):
     def checkouts(self, d):
         return self.worktrees
 
+    def dirty(self, d):
+        return self.dirty_tree
+
+    def branch(self, d):
+        return next(co.branch for co in self.worktrees if co.path == d)
+
+    def checkout_detached(self, d, ref):
+        self.seen("detach", d, ref)
+        self.worktrees = [co.replace(branch="") if co.path == d else co for co in self.worktrees]
+
     def remove_worktree_why(self, repo, path):
         if self.dirty_tree:
             return "untracked files"
@@ -82,6 +92,28 @@ class Cleanup(unittest.TestCase):
         self.assertEqual(self.git.remote, "wip")
         self.assertFalse(self.git.ran("delete_remote"))
 
+    def test_slot_is_detached_at_its_base_and_only_the_branch_is_deleted(self):
+        done = cleanup.retry(self.git, self.log, self.queue(), lambda path: path == "/wt", "origin/trunk")
+        self.assertEqual(done.local_outcome, "gone")
+        self.assertEqual([co.path for co in self.git.worktrees], ["/repo", "/wt"])
+        self.assertTrue(self.git.ran("detach", "/wt", "origin/trunk"))
+        self.assertFalse(self.git.ran("remove"))
+        self.assertEqual(self.git.local, "")
+
+    def test_unsaved_slot_work_keeps_its_branch_and_directory_for_retry(self):
+        self.git.dirty_tree = True
+        done = cleanup.retry(self.git, self.log, self.queue(), lambda path: path == "/wt")
+        self.assertEqual(done.local_outcome, "pending")
+        self.assertFalse(self.git.ran("remove"))
+        self.assertFalse(self.git.ran("detach"))
+
+    def test_unavailable_slot_registry_keeps_the_worktree_and_branch_retryable(self):
+        lookup = mock.Mock(side_effect=RuntimeError("slot registry unavailable"))
+        done = cleanup.retry(self.git, self.log, self.queue(), lookup)
+        self.assertEqual(done.local_outcome, "pending")
+        self.assertFalse(self.git.ran("remove"))
+        self.assertEqual(self.git.local, "head")
+
     def test_moved_local_and_remote_refs_keep_their_new_work(self):
         row = self.queue()
         self.git.local = self.git.remote = "new"
@@ -111,9 +143,11 @@ class Cleanup(unittest.TestCase):
         self.queue()
         self.git.remote = ""
         tree = SimpleNamespace(leave_slot=mock.Mock())
-        host = SimpleNamespace(tree=tree, git=self.git, log=self.log, claim=fence.offline(BeadId("a")))
+        host = SimpleNamespace(tree=tree, git=self.git, log=self.log, claim=fence.offline(BeadId("a")),
+                               wt="/repo", who=mock.Mock(), store=mock.Mock())
         tree.leave_slot.side_effect = lambda *args: self.assertEqual(self.git.local, "head")
-        ReleaseSlot(host).run("task/a", Outcome.LANDED)
+        with mock.patch("taskloop.app.run.closer_branch.slot_of", return_value=""):
+            ReleaseSlot(host).run("task/a", Outcome.LANDED)
         tree.leave_slot.assert_called_once()
         self.assertEqual(self.git.local, "")
         cleanup.retry_logged(self.git, self.log)

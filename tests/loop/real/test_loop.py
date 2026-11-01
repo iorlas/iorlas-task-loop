@@ -42,11 +42,13 @@ from taskloop.app.launch import loop as wloop  # noqa: E402
 from taskloop.app.loop.core import Core  # noqa: E402
 from taskloop.app.loop.take import Taker  # noqa: E402
 from taskloop.app.slots import verbs  # noqa: E402
+from taskloop.app.slots.pool import Slot  # noqa: E402
 from taskloop.app.track import trail  # noqa: E402
 from taskloop.app.wire import real  # noqa: E402
 from taskloop.app.wire import slots as wslots  # noqa: E402
 from taskloop.contracts.config import LoopConfig  # noqa: E402
 from taskloop.contracts.ports import WaitTimeout  # noqa: E402
+from taskloop.contracts.slots import SlotFail  # noqa: E402
 from taskloop.domain import outcome as oc  # noqa: E402
 
 
@@ -631,7 +633,7 @@ class Loop(LoopBase):
         real = verbs.hold
         with mock.patch.object(
             verbs, "hold", side_effect=lambda env, a: holds.append(("hold", a.name, a.why, a.for_min)) or 0 if True else real(env, a)
-        ):
+        ), mock.patch.object(Slot, "ready_for", side_effect=SlotFail("slot_broken", "setup still fails after recovery")):
             self.run_loop()
         self.assertEqual([h[:2] for h in holds], [("hold", "s1")])
         self.assertIn("SET ASIDE", self.out)
