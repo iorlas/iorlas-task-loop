@@ -76,7 +76,7 @@ def inspect(bead: BeadId, wt: str, repo: str, cfg: EngineConfig, *, git: Git, wh
                 planned = gateplan.PlanDecision({}) if cfg.plan_cmd is not None else None
                 if planned is not None:
                     say("gate plan: producer deferred; requiring cached passes for every gate step")
-                if not cached_gate(cfg, git, wt, stores, env, bead_env(view, create=False), tree, planned):
+                if not cached_gate(cfg, git, wt, stores, env, bead_env(view, create=False), tree, planned, clean=True):
                     raise ValueError("land refused: no green gate for the current tree and base; run --stage gate")
         if dry:
             say("refusals: none")

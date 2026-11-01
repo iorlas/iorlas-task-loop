@@ -69,8 +69,9 @@ class Problem:
 
 
 class GateChecker(Protocol):
-    def run_items(self, items: Sequence[Check], everything: bool = ..., learn: bool = ..., show_clean: bool = ...) -> CheckRun: ...
-    def gate_green(self) -> bool: ...
+    def run_items(self, items: Sequence[Check], everything: bool = ..., learn: bool = ..., show_clean: bool = ...,
+                  clean: bool = ...) -> CheckRun: ...
+    def gate_green(self, clean: bool = ...) -> bool: ...
 
 
 class GateSteps(Protocol):
@@ -113,7 +114,7 @@ class Gate:
 
     def green(self) -> bool:
         """The gate already passed on exactly this tree (and base): every step is green in the cache or not due."""
-        return self.e.checker.gate_green()
+        return self.e.checker.gate_green(clean=True)
 
     def passed(self) -> GatePass | None:
         """A pass for the tree and base in the worktree now: the gate is green in the memo, or the repo has no gate. Else None."""
@@ -140,7 +141,7 @@ class Gate:
         started = time.time()
         e.log.emit(rec.GateStart(cmd=e.cfg.gate_text, log=str(e.run_dir / "checks"), tree=tree))
         try:
-            run = e.checker.run_items(gate_items(e.cfg))
+            run = e.checker.run_items(gate_items(e.cfg), clean=True)
         except CheckFault as fault:
             e.log.emit(rec.GateEnd(exit=fault.rc, exec_seconds=round(time.time() - started)))
             raise e.blocked_for(fault.text, FAULTS[fault.kind]) from fault

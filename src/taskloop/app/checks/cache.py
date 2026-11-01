@@ -30,8 +30,9 @@ NO_DIGEST = Digest("")
 class InputKeys:
     """What the checks of one tree read: its file list is read once, the ignored files under each set of globs once."""
 
-    def __init__(self, git: Git, wt: str | Path, tree: TreeSha) -> None:
+    def __init__(self, git: Git, wt: str | Path, tree: TreeSha, clean: bool = False) -> None:
         self.git, self.wt, self.tree = git, str(wt), tree
+        self.clean = clean
         self.files: dict[str, str] | None = None
         self.ignored: dict[tuple[tuple[str, ...], tuple[str, ...]], dict[str, str]] = {}
 
@@ -54,6 +55,8 @@ class InputKeys:
 
     def ignored_of(self, c: Check) -> dict[str, str]:
         """{path: content digest} of the gitignored files under the check's globs (tree_hash never sees them)."""
+        if self.clean:
+            return {}
         at = (tuple(c.inputs), tuple(c.exclude))
         if at not in self.ignored:
             listed = check_files.ignored_files(self.git, self.wt, inputs.pathspec(c.inputs, c.exclude))
@@ -147,7 +150,8 @@ class RunMemo:
         return Digest(hashlib.sha256(json.dumps(records, sort_keys=True).encode()).hexdigest()) if records else NO_DIGEST
 
     def execution(self, c: Check) -> Digest:
-        return self.executions.get(c.id, Digest("")) if c.container else HOST.identity
+        identity = self.executions.get(c.id, Digest("")) if c.container else HOST.identity
+        return Digest("clean-v1:" + identity) if self.keys.clean else identity
 
     def command_key(self, c: Check) -> RunKey:
         """Only the same registry requirement and resolved execution may share a result."""

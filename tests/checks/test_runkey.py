@@ -53,16 +53,16 @@ class Gate(te.EngineTest):
         both = procsim.fake("both", procsim.appends(n))
         rc, _ = self.run_engine(ANSWERS, checks=[{"id": "ut", "cmd": both, "run": "both", **extra}])
         self.assertEqual(rc, 0, self.blocked)
-        self.assertEqual(n.read_text(), "1")  # the stage ran it; the gate on the same key did not
-        self.assertTrue(records(self.eng, "gate_end")[-1]["skipped"])
+        self.assertEqual(n.read_text(), "11")  # the stage's slot pass cannot replace the clean gate's evidence
+        self.assertFalse(records(self.eng, "gate_end")[-1]["skipped"])
 
-    def test_the_land_gate_never_reruns_a_whole_tree_check_a_stage_ran_green(self):
+    def test_the_land_gate_reruns_a_whole_tree_check_a_stage_ran_green(self):
         self.stage_then_gate()
 
-    def test_the_land_gate_never_reruns_a_check_with_inputs_a_stage_ran_green(self):
+    def test_the_land_gate_reruns_a_check_with_inputs_a_stage_ran_green(self):
         self.stage_then_gate(inputs=["f.txt"])
 
-    def test_the_land_gate_never_reruns_a_check_with_an_env_a_stage_ran_green(self):
+    def test_the_land_gate_reruns_a_check_with_an_env_a_stage_ran_green(self):
         self.stage_then_gate(env={"A": "1"})
 
     def test_gate_green_is_every_key_in_the_memo(self):

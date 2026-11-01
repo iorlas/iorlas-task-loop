@@ -115,3 +115,31 @@ class CheckHost(Protocol):
 
     @property
     def waits(self) -> WaitsView: ...
+
+
+class CleanHost:
+    """The run's capabilities with a different checkout and command cwd; process flags still belong to the original host."""
+
+    def __init__(self, host: CheckHost, wt: Path, checkout: CheckoutView) -> None:
+        self.original, self.wt, self.checkout = host, wt, checkout
+        self.bead, self.run_id, self.run_dir = host.bead, host.run_id, host.run_dir
+        self.cfg, self.log, self.steps = host.cfg, host.log, host.steps
+        self.checklog, self.stores = host.checklog, host.stores
+        self.spawner, self.env, self.bead_env = host.spawner, host.env, host.bead_env
+        self.git, self.waits = host.git, host.waits
+        self.tree_writer = host.tree_writer
+        self.warn, self.detail, self.halt_point = host.warn, host.detail, host.halt_point
+
+    @property
+    def killed(self) -> bool:
+        return self.original.killed
+
+    @property
+    def wall_hit(self) -> bool:
+        return self.original.wall_hit
+
+    def sh(self, cmd: Sequence[str], timeout: float = 3600, check: bool = False, save: Path | None = None,
+           env: Mapping[str, str] | None = None, pin: bool = False, what: str = "command", cwd: Path | None = None,
+           stop: threading.Event | None = None) -> tuple[int, str]:
+        return self.original.sh(cmd, timeout=timeout, check=check, save=save, env=env, pin=pin,
+                                what=what, cwd=cwd or self.wt, stop=stop)

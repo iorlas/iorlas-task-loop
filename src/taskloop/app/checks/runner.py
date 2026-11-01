@@ -8,10 +8,11 @@ from taskloop.app.checks import evidence, gateplan
 from taskloop.app.checks.attempts import Attempts
 from taskloop.app.checks.base import BaseCheck
 from taskloop.app.checks.cache import InputKeys, RunMemo
+from taskloop.app.checks.clean import isolated
 from taskloop.app.checks.execution import ReadyExecution, Runs, resolve_container
 from taskloop.app.checks.executor import CheckExecutor
 from taskloop.app.checks.fixer import Fixer
-from taskloop.app.checks.host import CheckHost, CheckStuck
+from taskloop.app.checks.host import CheckFault, CheckHost, CheckStuck
 from taskloop.app.checks.round import Round
 from taskloop.contracts.checks import Check, CheckResult, CheckRun, Durations
 from taskloop.contracts.config import EngineConfig
@@ -29,7 +30,7 @@ from taskloop.stores.bundle import Stores
 
 
 def cached_gate(cfg: EngineConfig, git: Git, wt: str, stores: Stores, env: Env, bead_env: Mapping[str, str],
-                tree: TreeSha, planned: gateplan.PlanDecision | None, spawner: Runs | None = None) -> bool:
+                tree: TreeSha, planned: gateplan.PlanDecision | None, spawner: Runs | None = None, *, clean: bool = False) -> bool:
     """Read gate evidence without running checks or a plan producer."""
     steps = gate_items(cfg)
     if not tree or not steps:
@@ -37,7 +38,7 @@ def cached_gate(cfg: EngineConfig, git: Git, wt: str, stores: Stores, env: Env, 
     base = git.rev_parse(wt, cfg.base)
     start = git.merge_base(wt, "HEAD", cfg.base) or base
     items = [*([diff_check(start, tree)] if start else []), *steps]
-    keys = InputKeys(git, wt, tree)
+    keys = InputKeys(git, wt, tree, clean=clean)
     engine_env = {**childenv.reaching(childenv.current_env(env)), **bead_env}
     memo = RunMemo(stores, check_files.repo_key(git, wt), keys, BaseSha(base), engine_env)
     memo.checks = {c.id: repo_check(c, cfg) for c in cfg.checks}
@@ -54,8 +55,9 @@ class Checker:
     """The round's steps: plan, run, remember (cache, durations), report (log rows, the CheckRun file), and stop a run that keeps
     failing the same way."""
 
-    def __init__(self, host: CheckHost, sleep: Callable[[float], None] = time.sleep) -> None:
+    def __init__(self, host: CheckHost, sleep: Callable[[float], None] = time.sleep, *, clean: bool = False) -> None:
         self.host, self.sleep = host, sleep
+        self.clean = clean
         self.round = 0
         self.latest: CheckRun | None = None
         self.streak: list[str] = []  # the signatures of the rounds in a row that ended red
@@ -84,12 +86,21 @@ class Checker:
         self._stuck(run)
         return run
 
-    def run_items(self, items: Sequence[Check], everything: bool = False, learn: bool = True, show_clean: bool = False) -> CheckRun:
+    def run_items(self, items: Sequence[Check], everything: bool = False, learn: bool = True, show_clean: bool = False,
+                  clean: bool = False) -> CheckRun:
         """The registry's checks (the gate's steps, or the ones `tl check` names) as one block, through the same planner, executor
         and cache as a stage's round: groups in order, a red group skips the groups after it, a step green at its inputs is cached.
         A clean diff check is left out of the result (show_clean keeps it: `tl check` prints a line for it). No fix commands and no
         base run (the tree is the rebased one: a red is red). everything: `when` is ignored. learn: the durations of what passed are
-        remembered. The rows are the check log's (start and end per step); no step book, no streak."""
+        remembered. clean: judge the committed HEAD in a temporary checkout with its own receipt identity.
+        The rows are the check log's (start and end per step); no step book, no streak."""
+        if clean:
+            with isolated(self.host) as clean_host:
+                checker = Checker(clean_host, self.sleep, clean=True)
+                checker.round = self.round
+                run = checker.run_items(items, everything, learn, show_clean)
+                self.round = checker.round
+                return run
         host = self.host
         self.round += 1
         history_doc, history = self._history()
@@ -106,15 +117,22 @@ class Checker:
         hits = sum(1 for c in results if c.cached)
         return CheckRun(round=st.n, tree=tree, base=BaseSha(base), config=config, results=results, hits=hits, misses=len(results) - hits)
 
-    def gate_green(self) -> bool:
+    def gate_green(self, clean: bool = False) -> bool:
         """Every gate step's run is in the memo already (the key it would have: tree or inputs, base, env), or the step is not due."""
+        if clean:
+            try:
+                with isolated(self.host) as clean_host:
+                    return Checker(clean_host, self.sleep, clean=True).gate_green()
+            except CheckFault:
+                return False
         host = self.host
         steps, tree = gate_items(host.cfg), host.checkout.tree_hash()
         if not tree or not steps:
             return False
         base = host.git.rev_parse(str(host.wt), host.cfg.base)
         planned = gateplan.skipped(host, tree, base)
-        return cached_gate(host.cfg, host.git, str(host.wt), host.stores, host.env, host.bead_env, tree, planned, host.spawner)
+        return cached_gate(host.cfg, host.git, str(host.wt), host.stores, host.env, host.bead_env, tree, planned, host.spawner,
+                           clean=self.clean)
 
     def _history(self) -> tuple[Doc[Durations], Durations]:
         host = self.host
@@ -125,7 +143,7 @@ class Checker:
         """The result store of this repo for this tree and base: the one place a round, `tl check` and the gate's question get theirs.
         The env it keys on is what the engine hands every child: the slot's, and the registered names that reach it."""
         host = self.host
-        keys = InputKeys(host.git, host.wt, tree)
+        keys = InputKeys(host.git, host.wt, tree, clean=self.clean)
         engine_env = {**childenv.reaching(childenv.current_env(host.env)), **host.bead_env}
         repo = check_files.repo_key(host.git, str(host.wt))
         return RunMemo(host.stores, repo, keys, BaseSha(base), engine_env, host.run_id)

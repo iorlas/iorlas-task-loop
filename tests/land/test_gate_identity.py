@@ -39,10 +39,11 @@ class Checking:
     def __init__(self, host: FakeGateHost, move: Callable[[], None]) -> None:
         self.host, self.move = host, move
 
-    def gate_green(self) -> bool:
+    def gate_green(self, clean: bool = False) -> bool:
         return False
 
-    def run_items(self, items: Sequence[Check], everything: bool = False, learn: bool = True, show_clean: bool = False) -> CheckRun:
+    def run_items(self, items: Sequence[Check], everything: bool = False, learn: bool = True, show_clean: bool = False,
+                  clean: bool = False) -> CheckRun:
         h = self.host
         run = CheckRun(round=1, tree=h.checkout.tree_hash(), base=BaseSha(h.git.rev_parse(h.wt, h.cfg.base)),
                        config=engine_digest(h.cfg))

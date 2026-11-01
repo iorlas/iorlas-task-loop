@@ -52,6 +52,7 @@ class CheckExecutor:
         else:
             for n, step in enumerate(plan.steps):
                 self.step(step, n, st)
+        self._unchanged()
         if (self.planned is None or self.planned.output) and not any(r.red or r.cancelled for r in st.results):
             for n, res in st.by_step.items():
                 if res.status == "skipped" and res.planned:
@@ -215,12 +216,17 @@ class CheckExecutor:
         self._fault(c, out, st)
         res = self._result(c, out, name, took).replace(waited=round(lease.waited, 1), lane=c.lane, at=round(t0 - self.began, 1))
         if out.rc == 0:  # only a green run says what the check costs: a red one stops early
+            self._unchanged()
             st.timings.append(Duration(t=time.time(), run_id=self.host.run_id, bead=self.host.bead, call_id=c.id, step=c.cmd,
                                        tree=key.tree if key else "", base=key.base if key else "",
                                        exec_seconds=time.time() - t0, wait_seconds=round(lease.waited, 1)))
             if key is not None:
                 self.memo.remember(key, res, st.n, str(self.logs / name))
         return res
+
+    def _unchanged(self) -> None:
+        if self.memo.keys.clean and self.host.checkout.tree_hash() != self.memo.keys.tree:
+            raise CheckFault(CheckFaultKind.STALE_BASE, "gate changed its judged tree; checks must write outputs to TL_ARTIFACT_DIR")
 
     def _fault(self, c: Check, out: Outcome, st: Round) -> None:
         """Two reds that are not the code's: a tree older than the config it runs, and a check killed by a signal."""

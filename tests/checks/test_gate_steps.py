@@ -68,15 +68,15 @@ class GateSteps(EngineTest):
         self.assertNotIn("gate steps red: fmt", fix)
         self.assertEqual(ends(self.eng, "fmt")["fmt"]["status"], "passed")
 
-    def test_a_step_green_at_its_inputs_is_skipped_and_logged_as_cached(self):
+    def test_a_stage_pass_does_not_replace_a_clean_gate_run(self):
         count = Path(self.tmp.name) / "runs"
         both = procsim.fake("both", procsim.appends(count))
         rc, _ = self.run_engine(ANSWERS, checks=[{"id": "ut", "cmd": both, "run": "both", "inputs": ["f.txt"]}])
         self.assertEqual(rc, 0, self.blocked)
-        self.assertEqual(count.read_text(), "1")  # the stage round ran it; the gate on the same inputs did not
-        self.assertEqual(ends(self.eng, "ut")["ut"]["status"], "cached")
+        self.assertEqual(count.read_text(), "11")  # the slot and clean gate have different filesystem inputs
+        self.assertEqual(ends(self.eng, "ut")["ut"]["status"], "passed")
         gate_end = records(self.eng, "gate_end")[-1]
-        self.assertTrue(gate_end["skipped"])
+        self.assertFalse(gate_end["skipped"])
 
     def test_a_gate_with_no_steps_is_no_gate(self):
         rc, _ = self.run_engine(ANSWERS, checks=[{"id": "s", "cmd": STEP}])

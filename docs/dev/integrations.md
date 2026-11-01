@@ -49,6 +49,13 @@ the run with a clear config error and one Note row. Without `plan_cmd`, the exis
 `tl check --all` and explicitly named checks bypass the plan. Planned skips are recorded only after a clean round,
 for the exact tree and base; `tl green` and the land gate read those records through the existing result store.
 
+At land, the gate steps and their plan producer run in a fresh detached worktree of the judged commit, created and
+removed through the Git port. Ignored and untracked slot files are never copied into it, and the slot is never cleaned.
+Checks write declared results through the existing `TL_ARTIFACT_DIR`; `TL_WORKTREE` names the temporary checkout.
+Evidence referenced by committed documents must be tracked: a link into a slot's ignored `.task/` folder cannot pass
+the land gate. Gate receipts use a separate execution identity, so a stage or standalone check's pass from the slot
+cannot authorize delivery. Passes from clean gates remain reusable for the same inputs, base and execution environment.
+
 ## Delegate
 
 task-loop requires delegate for the engine (decided 2026-10-18: everyone installs both; power users never call

@@ -457,10 +457,11 @@ class BdOut:
 class Gating:
     """The gate's checker when the repo has no gate step."""
 
-    def run_items(self, items: Sequence[Check], everything: bool = False, learn: bool = False, show_clean: bool = False) -> CheckRun:
+    def run_items(self, items: Sequence[Check], everything: bool = False, learn: bool = False, show_clean: bool = False,
+                  clean: bool = False) -> CheckRun:
         raise AssertionError("the repo has no gate")
 
-    def gate_green(self) -> bool:
+    def gate_green(self, clean: bool = False) -> bool:
         return False
 
 

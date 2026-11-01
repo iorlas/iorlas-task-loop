@@ -1,10 +1,23 @@
-"""A clean checkout of a commit, for asking whether a check was already red before the task touched anything."""
+"""Temporary detached checkouts for the land gate and checks against the untouched base."""
 import contextlib
+import tempfile
 from collections.abc import Generator
 from pathlib import Path
 
 from taskloop.contracts.ports import Git
 from taskloop.contracts.slots import SlotGitError
+
+
+@contextlib.contextmanager
+def clean_tree(git: Git, wt: str | Path, sha: str) -> Generator[Path]:
+    """A fresh detached checkout, with no slot files copied in; creation failures propagate without a fallback."""
+    with tempfile.TemporaryDirectory(prefix="tl-gate-") as tmp:
+        dest = Path(tmp) / "tree"
+        try:
+            git.add_worktree(str(wt), str(dest), sha)
+            yield dest
+        finally:
+            git.remove_worktree_force(str(wt), str(dest))
 
 
 @contextlib.contextmanager

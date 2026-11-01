@@ -113,10 +113,11 @@ class World:
             return 0, ""
         raise AssertionError(argv)
 
-    def gate_green(self) -> bool:
+    def gate_green(self, clean: bool = False) -> bool:
         return f"tree@{self.sat_on}" in self.gate_passed()
 
-    def run_items(self, items: Sequence[Check], everything: bool = False, learn: bool = False, show_clean: bool = False) -> CheckRun:
+    def run_items(self, items: Sequence[Check], everything: bool = False, learn: bool = False, show_clean: bool = False,
+                  clean: bool = False) -> CheckRun:
         tree, base, config = TreeSha(f"tree@{self.sat_on}"), BaseSha(self.base), engine_digest(self.kit.cfg)
         rc, tail = self.sh(["gate"])
         res = CheckResult(id=CheckId("gate"), cmd="gate", group="tests", exit=rc, status="failed" if rc else "passed", tail=tail)
