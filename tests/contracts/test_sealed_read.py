@@ -44,13 +44,19 @@ class SealedRead(unittest.TestCase):
 
 class Handover(unittest.TestCase):
     def test_the_tl_reexec_text_round_trips_and_a_bad_one_is_refused_by_name(self) -> None:
-        rec = Reexec(run="r", bead="b", frm="0.1.0", owned="s1", fallback=True)
+        rec = Reexec(run="r", bead="b", pid=42, frm="0.1.0", owned="s1", fallback=True)
         self.assertEqual(Reexec.parse(rec.text()), rec)
         self.assertIsNone(Reexec.parse(""))
         for bad in ('{"run": "r", "bead": "b", "from": "x", "owned": "s1"}', "{", '{"v": 1, "run": "r"}'):
             with self.assertRaises(Refused) as ctx:
                 Reexec.parse(bad)
             self.assertIn("TL_REEXEC", str(ctx.exception))
+
+    def test_the_reexec_pid_defaults_to_none_for_an_older_install_and_must_be_an_integer(self) -> None:
+        old = Reexec.parse('{"v": 1, "run": "r", "bead": "b", "from": "0.1.0"}')
+        self.assertEqual(old and old.pid, 0)
+        with self.assertRaisesRegex(Refused, "pid"):
+            Reexec.parse('{"v": 1, "run": "r", "bead": "b", "from": "0.1.0", "pid": "42"}')
 
 
 if __name__ == "__main__":

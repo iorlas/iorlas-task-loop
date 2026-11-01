@@ -58,12 +58,13 @@ class LoopLogLine(Row, tag="loop"):
 class Reexec(Rec):
     """The TL_REEXEC hand-over (an environment variable, JSON of this record): what an engine that moves into a newer install, or the
     loop that puts a crashed move back on the old one, tells the run-task it starts. `owned`: the slot the old process took itself;
-    `fallback`: the loop restarted the run on the install it came from."""
+    `pid`: the process that execs (0 for a loop's fallback); `fallback`: the loop restarted the run on the install it came from."""
 
     V: ClassVar[int] = 1
     run: str
     bead: str
     frm: str = msgspec.field(name="from")
+    pid: int = 0  # an engine of an older install sends none: that hop cannot take over the lock
     owned: str = ""
     fallback: bool = False
 

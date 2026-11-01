@@ -52,6 +52,7 @@ from taskloop.app.run import reload as run_reload  # noqa: E402
 from taskloop.app.wire import slots as wslots  # noqa: E402
 from taskloop.contracts.env import Env, snapshot  # noqa: E402
 from taskloop.contracts.ids import BeadId  # noqa: E402
+from taskloop.contracts.run import Reexec  # noqa: E402
 
 PLAN_DEF = "    def plan(self, again: bool = False) -> PlanData:\n"
 BREAK_PLAN = (PLAN_DEF, PLAN_DEF + "        raise RuntimeError('planted: cannot plan')\n", "src/taskloop/app/plan/planner.py")
@@ -155,6 +156,7 @@ class Reload(te.EngineTest):
         self.assertEqual(ex["argv"][:5], childenv.script_argv(self.cache / "0.2.0" / "skills" / "task-loop" / "tl.py", snapshot()))
         self.assertEqual(ex["argv"][5:], ["run-task", "t-1", "--outcome-file", "/x/out.json", "--worktree", str(self.wt)])  # no --fresh
         self.assertEqual(ex["env"]["run"], run)
+        self.assertEqual(ex["env"]["pid"], os.getpid())
         self.assertEqual((ex["marker"]["from"], ex["marker"]["to"], ex["marker"]["step"]), ("0.1.0", "0.2.0", "land"))
         # the stage was accepted on 0.1.0; the checkpoint says land; the move is one event old -> new
         ck = read_ck(eng)
@@ -187,7 +189,7 @@ class Reload(te.EngineTest):
         self.assertEqual(reexec.reexec_args(["run-task", "t-1", "--slot", "any", "--wait", "--worktree", "/w", "--quiet"], "s2", "/wt"),
                          ["run-task", "t-1", "--quiet", "--slot", "s2", "--worktree", "/wt"])
         self.assertIsNone(reexec.reexec_args(["loop", "--repo", "."], "", "/wt"))
-        handed = Env({"TL_REEXEC": json.dumps({"v": 1, "run": "x", "bead": "t-1", "from": "0.1.0", "owned": "s2"})})
+        handed = Env({"TL_REEXEC": Reexec(run="x", bead="t-1", pid=os.getpid(), frm="0.1.0", owned="s2").text()})
         self.assertTrue(entry._handed_slot("s2", handed))
         self.assertFalse(entry._handed_slot("s3", handed))
         self.assertFalse(entry._handed_slot("s2", Env()))

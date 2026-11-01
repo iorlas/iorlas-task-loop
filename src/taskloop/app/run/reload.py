@@ -1,6 +1,7 @@
 """A run that goes on in another process: the counters kept across a network pause or an exec into a newer install, and the exec at a
 step boundary."""
 import contextlib
+import os
 import sys
 import time
 from pathlib import Path
@@ -109,7 +110,8 @@ class Reload:
         trail.event(e.who, "reload", e.bead, who="engine", old=here, new=ver, step=step, run_id=run, code_dir=str(d))
         e.log.note(f"moving to task-loop {ver} (was {here}) at {step}; run {run} goes on from its checkpoint")
         e.log.emit(rec.Reload(old=here, new=ver, step=step))
-        handed = childenv.exec_env(e.env, {EnvVar.TL_REEXEC: Reexec(run=run, bead=e.bead, frm=here, owned=RUN_SLOT["owned"]).text()})
+        handed = childenv.exec_env(e.env, {EnvVar.TL_REEXEC: Reexec(
+            run=run, bead=e.bead, pid=os.getpid(), frm=here, owned=RUN_SLOT["owned"]).text()})
         for f in (sys.stdout, sys.stderr):
             with contextlib.suppress(Exception):
                 f.flush()

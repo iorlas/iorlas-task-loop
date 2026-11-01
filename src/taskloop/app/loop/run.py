@@ -85,7 +85,7 @@ class BeadRun:
                 self.installs.record_bad(moved.to, why)
                 env.event("reload_fallback", b.id, who="loop", old=moved.to, new=moved.frm, why=why, run_id=moved.run)
                 self.say(f"RED: {b.id} died after the move to task-loop {moved.to}; {b.id} goes on from its checkpoint on {moved.frm}")
-                return self.run(b, at, back, Reexec(run=moved.run, bead=b.id, frm=moved.to, fallback=True))
+                return self.run(b, at, back, Reexec(run=moved.run, bead=b.id, pid=0, frm=moved.to, fallback=True))
         if stopped and v.outcome is Result.FAILED:  # a stop is no verdict on the bead: back to the queue, unclaimed,
             if env.landed_on_base(at.wt, b.id):  # unless the stop came during a land that went through
                 v = v.with_(why=f"{v.why or 'stopped'}; its land commit is on the base: not reopened, close it by hand")

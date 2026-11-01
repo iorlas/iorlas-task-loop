@@ -16,6 +16,7 @@ from taskloop.contracts.env import Env
 from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.locks import EngineLock as Lock
 from taskloop.contracts.paths import RepoDirs
+from taskloop.contracts.run import Reexec
 from taskloop.contracts.stores import JsonStore
 from taskloop.contracts.wire import Refused
 
@@ -74,7 +75,7 @@ def live(lock: Lock | None) -> bool:
 
 def engine_busy(wt: str | Path, handoff: Env | None = None) -> str:
     """What runs in this worktree, with the lock's path ("engine pid N runs BEAD since T; lock P"), or "".
-    handoff: the Env of a run-task the loop started takes over its loop's lock for the same slot bead.
+    handoff: the Env of a run-task takes over its loop's lock for the same slot bead, or its reexec predecessor's for the same bead.
     The loop names itself in TASK_LOOP_LOOP_PID: run-task's parent is `uv run --script`, not the loop: the parent pid never matches."""
     try:
         lock = read_engine_lock(wt)
@@ -86,6 +87,10 @@ def engine_busy(wt: str | Path, handoff: Env | None = None) -> str:
     if handoff is not None and lock.by == "loop" and lock.slot_bead == handoff.get(EnvVar.TASK_LOOP_SLOT_BEAD):
         with contextlib.suppress(ValueError):
             mine.add(int(handoff.get(EnvVar.TASK_LOOP_LOOP_PID)))
+    if handoff is not None:
+        handed = Reexec.parse(handoff.get(EnvVar.TL_REEXEC))
+        if handed is not None and handed.pid == lock.pid and handed.bead == lock.bead:
+            mine.add(handed.pid)  # exec leaves uv at this pid; its new Python child takes the lock next
     where = f"; lock {engine_lock_path(wt)}"
     if lock.pid and lock.pid not in mine and proc_alive(lock.pid, lock.start):
         who = "loop" if lock.by == "loop" else "engine"
@@ -108,12 +113,12 @@ class EngineLock:
                         slot_bead=self.env.get(EnvVar.TASK_LOOP_SLOT_BEAD), by="run-task", started=time.time())
 
     def take(self) -> str:
-        """"" when this run holds the worktree now, else what holds it. A run the loop started takes over the loop's lock for its slot."""
+        """"" when this run holds the worktree now, else what holds it. Loop and reexec handoffs take over their predecessor's lock."""
         with hold_path(RepoDirs(self.wt).engine_take(), f"pid {os.getpid()}", what=LockWhat.WORKTREE):
-            busy = engine_busy(self.wt, handoff=self.env)  # a run-task takes over only its parent loop's lock for the same slot bead
+            busy = engine_busy(self.wt, handoff=self.env)
             if busy:
                 return busy
-            self.write()  # a dead run's lock, or the parent loop's (engine_busy said so), is replaced
+            self.write()  # a dead run's lock, or a handed-over lock (engine_busy said so), is replaced
             return ""
 
     def write(self) -> None:
