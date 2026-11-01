@@ -638,18 +638,18 @@ class Claims(StagesTest):
         self.assertIn("it has no stages, no question and no leftovers", s.prompts[1])
         self.assertIn("has no stages", self.eng.log_path.read_text())
 
-    def test_a_plan_that_stays_empty_after_the_send_back_still_fails(self):
+    def test_a_plan_that_stays_empty_after_the_send_back_parks_noop(self):
         empty = dict(PLAN, stages=[])
         rc, s = self.run_engine({"plan": [empty, empty]})
         self.assertNotEqual(rc, 0)
         self.assertEqual(self.blocked, [])
-        self.assertIn("no stages", te.EngineTest.said(self))
+        self.assertIn("noop: the plan found nothing to implement", te.EngineTest.said(self))
         self.assertEqual([c[0] for c in s.calls], ["planner", "planner"])
 
     def test_an_empty_plan_with_leftovers_or_a_question_is_not_sent_back(self):
         rc, s = self.run_engine({"plan": [dict(PLAN, stages=[], leftovers=[{"title": "File it", "why": "x"}])]})
         self.assertEqual([c[0] for c in s.calls], ["planner"])
-        self.assertEqual(rc, 0)
+        self.assertEqual(rc, 2)
 
     REFLECTION: ClassVar[Any] = {
         "went_well": ["the plan was right at once"],

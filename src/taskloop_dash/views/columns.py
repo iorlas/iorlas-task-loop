@@ -14,7 +14,7 @@ from taskloop.contracts.log import Close, WaitStart
 from taskloop.contracts.runlife import Liveness
 from taskloop_dash.views import names, phases
 
-PARKING = (Outcome.PARKED, Outcome.BLOCKED)
+PARKING = (Outcome.PARKED, Outcome.BLOCKED, Outcome.NOOP)
 CURRENT_DOT: Final[dict[Marker, DotState]] = {
     Marker.RUN: "live", Marker.ASK: "you", Marker.LOOK: "you", Marker.EXITED: "bad", Marker.STUCK: "bad"}
 
@@ -60,6 +60,8 @@ def column(f: Facts) -> Column:
 
 
 def marker(f: Facts) -> Marker:
+    if f.close and f.close.outcome is Outcome.NOOP and not f.closed and not f.open_run:
+        return Marker.NOOP
     parked = f.close is not None and f.close.outcome in PARKING
     rules = ((f.ask, Marker.ASK), (f.look, Marker.LOOK), (f.closed, Marker.DONE), (f.life is Liveness.LIVE and f.stuck, Marker.STUCK),
              (f.soft_ask, Marker.SOFT_ASK), (f.life is Liveness.LIVE, Marker.RUN), (f.life is Liveness.LOST, Marker.EXITED),
@@ -79,6 +81,8 @@ def wait_line(w: WaitStart) -> str:
 
 def status_line(f: Facts) -> str:
     """One line: why the bead is where it is, from the typed facts and the engine's own one-liners."""
+    if f.close and f.close.outcome is Outcome.NOOP and not f.closed and not f.open_run:
+        return first_line(f.close.why) or "noop: the plan found nothing to implement"
     running = wait_line(f.wait) if f.wait else first_line(f.step_text) or (f.phase.value if f.phase else "running")
     parked = f.close is not None and f.close.outcome in PARKING
     why = first_line(f.close.why) or phases.END_TEXT[phases.end_of_close(f.close)] or "parked" if f.close else ""
@@ -92,7 +96,7 @@ def status_line(f: Facts) -> str:
 
 
 def tone_of(m: Marker) -> Tone:
-    if m in (Marker.ASK, Marker.LOOK, Marker.SOFT_ASK):
+    if m in (Marker.ASK, Marker.LOOK, Marker.SOFT_ASK, Marker.NOOP):
         return "you"
     if m in (Marker.STUCK, Marker.EXITED):
         return "bad"

@@ -87,6 +87,15 @@ def external_fact(items: Sequence[str]) -> AskSpec:
                    AskDetail(text="; ".join(items)[:RAW_CAP]))
 
 
+def plan_noop(bead: str, summary: str) -> AskSpec:
+    text = f"The plan finds nothing to implement for {bead}: {summary}. Close it, or give it work."
+    return AskSpec(AskClass.OPEN_QUESTION, "Close this bead, or give it work?", [],
+                   [AskOption(label="Give it work", consequence="The next run implements your instructions.",
+                              action="text", edit=True, recommended=True),
+                    AskOption(label="I closed it", consequence="The bead stays closed; no implementation is needed.",
+                              action="text", text="closed")], AskDetail(text=text))
+
+
 def unproven(items: Sequence[str], fix_rounds: int) -> AskSpec:
     first = clip(items[0], 60) if items else "a claim"
     return AskSpec(AskClass.UNPROVEN, f"How can the engine prove {first}?",

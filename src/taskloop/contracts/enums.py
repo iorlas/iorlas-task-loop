@@ -18,6 +18,7 @@ class Step(StrEnum):
 
 
 class Outcome(StrEnum):
+    NOOP = "noop"
     LANDED = "landed"
     PARKED = "parked"
     BLOCKED = "blocked"

@@ -54,20 +54,21 @@ class StagesTest(te.EngineTest):
 class EmptyPlan(StagesTest):
     """13.2: the planner says the work is done and only follow-up beads are left."""
 
-    def test_an_empty_plan_with_leftovers_files_them_and_closes_done(self):
+    def test_an_empty_plan_with_leftovers_files_them_and_parks_noop(self):
         plan = dict(PLAN, stages=[], leftovers=[{"title": "File the table bead", "why": "the sheet lists a table"}])
         rc, s = self.run_engine({"plan": [plan]})
-        self.assertEqual(rc, 0)
+        self.assertEqual(rc, 2)
         self.assertEqual([c[0] for c in s.calls], ["planner"])
         self.assertEqual(self.created(), ["File the table bead"])
-        self.assertTrue(self.closed and self.closed[0].startswith("done with nothing to land"))
+        self.assertEqual(self.closed, [])
+        self.assertEqual(self.eng.result().kind, "noop")
         self.assertEqual(self.blocked, [])
 
-    def test_an_empty_plan_with_nothing_to_file_still_fails(self):
+    def test_an_empty_plan_with_nothing_to_file_parks_noop(self):
         rc, _s = self.run_engine({"plan": [dict(PLAN, stages=[]), dict(PLAN, stages=[])]})  # sent back once (tl-wjj), still empty
         self.assertNotEqual(rc, 0)
         self.assertEqual(self.blocked, [])
-        self.assertIn("no stages", te.EngineTest.said(self))
+        self.assertIn("noop: the plan found nothing to implement", te.EngineTest.said(self))
 
     def test_an_empty_plan_over_work_no_review_accepted_is_not_done(self):
         te.sh("git", "checkout", "-qb", "task/t-1", cwd=self.wt)

@@ -16,6 +16,8 @@ def node_outcome(outcome: Outcome, kind: Kind) -> str:
     """What a node still open at the close came to: the run's own end."""
     if outcome in (Outcome.LANDED, Outcome.DONE):
         return outcome.value
+    if kind is Kind.NOOP:
+        return "noop"
     if kind is Kind.PAUSE_KILLED:
         return "stopped"
     if kind.name.startswith("PAUSE_") or kind is Kind.OWNER_PARK:
@@ -29,6 +31,8 @@ def close_move(kind: Kind) -> tuple[str, str]:
     """(to, cause) of the last move, when no decision point logged one: landed, an ask, a pause, a wait, a failure."""
     if kind in FINISH:
         return "close", kind.value
+    if kind is Kind.NOOP:
+        return "pause", "noop"
     if kind is Kind.PAUSE_KILLED:
         return "pause", "stopped"
     if kind.name.startswith("PAUSE_") or kind is Kind.OWNER_PARK:

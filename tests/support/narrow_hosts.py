@@ -665,6 +665,7 @@ class FakeCloseHost(Said):
         self.asked = False
         self.dead: Checkpoint | None = None
         self.bead = BeadId("t-1")
+        self.plan_summary = ""
         self.stores: Stores = fake_stores()
         self.log = RunLog(self.stores.run_log("run"))
         self.stats = {"rounds": 0}

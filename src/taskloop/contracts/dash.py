@@ -38,6 +38,7 @@ class Marker(StrEnum):
     LOOK = "look"
     SOFT_ASK = "soft_ask"
     PARKED = "parked"
+    NOOP = "noop"
     READY = "ready"
     BLOCKED = "blocked"
     DONE = "done"
@@ -87,7 +88,7 @@ Tone = Literal["", "you", "bad", "run", "watch"]
 SegKind = Literal["stage", "failed", "live", "ask", "answered", "parked", "look", "stuck", "projected", "wait_slot"]
 CellState = Literal["empty", "visited", "small", "skipped", "live", "failed", "you", "stuck"]
 DotState = Literal["todo", "done", "live", "you", "bad"]
-PassEnd = Literal["", "test_failed", "replan", "asked", "parked", "lane_out", "sent_back", "stuck", "exited", "done"]
+PassEnd = Literal["", "test_failed", "replan", "asked", "parked", "lane_out", "sent_back", "stuck", "exited", "done", "noop"]
 
 
 # ---- snapshot: GET /api/snapshot

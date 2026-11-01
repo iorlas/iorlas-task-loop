@@ -60,6 +60,7 @@ END_TEXT: Final[dict[PassEnd, str]] = {
     "stuck": "stuck",
     "exited": "worker exited",
     "done": "landed",
+    "noop": "noop: the plan found nothing to implement",
 }
 LOOPED: Final = frozenset({"test_failed", "replan", "sent_back"})  # a pass that ended by going back (the card's ↻N)
 
@@ -82,6 +83,8 @@ def end_of_cause(cause: str) -> PassEnd:
 
 def end_of_close(close: Close) -> PassEnd:
     """How a run's Close ended its last pass, from the typed outcome and why_code."""
+    if close.outcome is Outcome.NOOP:
+        return "noop"
     if close.outcome in (Outcome.LANDED, Outcome.DONE):
         return "done"
     if close.why_code is None:

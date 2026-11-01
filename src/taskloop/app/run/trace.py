@@ -21,6 +21,7 @@ WHY_CODE: Mapping[str, WhyCode] = MappingProxyType(
         "pause_killed": WhyCode.STOPPED_BY_COORDINATOR,
         "pause_moved": WhyCode.RESOURCE,
         "owner_park": WhyCode.PAUSED,
+        "noop": WhyCode.PAUSED,
         "fault_denied": WhyCode.NEEDS_HUMAN,
         "fault_base_red": WhyCode.GATE_RED,
         "fault_bad_request": WhyCode.SCHEMA_INVALID,

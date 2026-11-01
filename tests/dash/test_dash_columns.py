@@ -7,20 +7,22 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
-from taskloop.contracts import log
+from taskloop.contracts import log, wire
 from taskloop.contracts.dash import Column, Marker, Phase
 from taskloop.contracts.enums import Outcome, WaitWhat, WhyCode
 from taskloop.contracts.runlife import Liveness
-from taskloop_dash.views import columns
+from taskloop_dash.views import columns, phases
 from taskloop_dash.views.columns import Facts
 
 LIVE, CRASHED, ENDED = Liveness.LIVE, Liveness.LOST, Liveness.ENDED
 PARKED = log.Close(t=1.0, outcome=Outcome.PARKED, why_code=WhyCode.LANE_OUT, why="codex ran out\nuntil 14:00")
 FAILED = log.Close(t=1.0, outcome=Outcome.FAILED, why_code=WhyCode.FAILED)
 LANDED = log.Close(t=1.0, outcome=Outcome.LANDED)
+NOOP = log.Close(t=1.0, outcome=Outcome.NOOP, why="noop: the plan found nothing to implement: umbrella")
 
 # (name, facts, column, marker)
 ROWS = [
+    ("empty plan asks the owner", Facts(life=ENDED, close=NOOP, ask=True), Column.QUESTIONS, Marker.NOOP),
     ("blocked backlog", Facts(blocked=True, blocker="b-1"), Column.BACKLOG, Marker.BLOCKED),
     ("ready backlog", Facts(), Column.BACKLOG, Marker.READY),
     ("ready after a failed run", Facts(life=ENDED, close=FAILED), Column.BACKLOG, Marker.READY),
@@ -58,9 +60,15 @@ class ColumnAndMarker(unittest.TestCase):
 
 
 class Status(unittest.TestCase):
+    def test_noop_close_survives_wire_decode_and_never_ends_as_done(self):
+        close = wire.load(log.Close, wire.dump(NOOP))
+        self.assertEqual(phases.end_of_close(close), "noop")
+        self.assertEqual(columns.status_line(Facts(life=ENDED, close=close, ask=True)), NOOP.why)
+
     def test_lines(self):
         wait = log.WaitStart(t=1.0, id="w1", what=WaitWhat.LAND_LOCK)
         rows = [
+            (Facts(life=ENDED, close=NOOP, ask=True), NOOP.why),
             (Facts(ask=True, ask_line="Which bills are weekly?\nmore"), "Which bills are weekly?"),
             (Facts(ask=True), "waiting for your answer"),
             (Facts(look=True), "waiting for your look"),

@@ -44,9 +44,11 @@ def entering(cfg: ConfigDir, b: Bead) -> None:
 
 def paused(cfg: ConfigDir, b: Bead, kind: Kind, run: str, now: float, *, reason: str = "",
            not_before: float = 0.0, draw: Callable[[], float] = random) -> Park | None:
-    """File a transient pause's wake. Other closes retain their existing ask, park and fault handling."""
+    """File a pause's wake, including an empty plan's explicit owner wake."""
+    if kind is Kind.NOOP:
+        reason = "plan_noop"
     reason = reason or kind.value
-    if kind not in PAUSES or pauses.rule(reason).permanence != "transient":
+    if kind is not Kind.NOOP and (kind not in PAUSES or pauses.rule(reason).permanence != "transient"):
         return None
     store = ParkStore(cfg)
     old = store.get(b.id)

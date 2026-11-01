@@ -8,7 +8,7 @@ import { fold, set, ui } from '../state.js';
 import { BeadRow, EmptyState } from '../ui/kit.js';
 import { openBead } from './shell.js';
 
-const STATE = { stuck: 'stuck', exited: 'stuck', ask: 'ask', look: 'you', soft_ask: 'you', run: 'run', parked: 'run', blocked: 'blocked', ready: 'ready', done: 'done' };
+const STATE = { stuck: 'stuck', exited: 'stuck', ask: 'ask', look: 'you', soft_ask: 'you', run: 'run', parked: 'run', noop: 'you', blocked: 'blocked', ready: 'ready', done: 'done' };
 const ORDER = { stuck: 0, ask: 1, you: 2, run: 3, blocked: 4, ready: 5, done: 6 };
 const rank = (b) => ORDER[STATE[b.marker]] ?? 5;
 const byRank = (a, b) => rank(a) - rank(b);

@@ -34,6 +34,13 @@ class PlanTable(unittest.TestCase):
     def test_done_with_nothing_to_land(self):
         self.assertEqual(plan(Kind.DONE), [*HEAD, *TAIL, fx.CloseBead(landed=False), REL, DROP])
 
+    def test_noop_asks_once_and_leaves_the_bead_open(self):
+        self.assertEqual(plan(Kind.NOOP), [*HEAD, fx.RaiseAsk(), *TAIL, fx.LeaveBead(), REL])
+        end = done(Kind.NOOP)
+        self.assertFalse(end.finished)
+        self.assertEqual((end.word, end.rule.loop, end.rule.bd), ("noop", "parked", "open"))
+        self.assertEqual(oc.load("noop", detail="nothing to implement").kind, Kind.NOOP)
+
     def test_failed_leaves_the_bead_open(self):
         for k in (Kind.FAULT_ENGINE, Kind.FAULT_LAND, Kind.FAULT_CRASHED, Kind.FAULT_PLAN):
             self.assertEqual(plan(k), [*HEAD, *TAIL, fx.LeaveBead(), REL], k)

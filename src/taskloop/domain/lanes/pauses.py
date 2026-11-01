@@ -71,6 +71,7 @@ TABLE: Final[dict[str, PauseRule]] = {
     "ask_ticket": PauseRule("needs_owner"),
     "wait_ask": PauseRule("needs_owner"),
     "owner_park": PauseRule("needs_owner"),
+    "plan_noop": PauseRule("needs_owner"),
     "lost_run": PauseRule("transient", 60, 3600),
     "bd_push_rejected": PauseRule("needs_owner"),
     "dolt_push_rejected": PauseRule("needs_owner"),

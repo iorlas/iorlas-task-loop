@@ -68,6 +68,7 @@ class QueueRule:
         self.parked = parked  # a bead whose last run ended on a question and whose text is the same (tl-7y6.7.3)
         self.hosted = hosted  # a bead whose needs label names a resource this host lacks (tl-7k8.8)
         self.parents: dict[BeadId, BeadId | None] = {}
+        self.umbrellas: set[str] = set()
         self.chosen: list[BeadId] = []  # the pick set (contracts/pickset.py); [] = every ready bead
         self.only = False
 
@@ -138,6 +139,8 @@ class QueueRule:
         hit = next((x for x in skip_labels if x in b.labels), None)
         if b.issue_type == "epic":
             return Skip(why="an epic", kind="epic")
+        if b.id in self.umbrellas:
+            return Skip(why="an umbrella: it has open children", kind="epic")
         if "slot" in b.labels:
             return Skip(why="a slot", kind="slot")
         if hit:
@@ -148,7 +151,8 @@ class QueueRule:
             return Skip(why=f"held by {who}", kind="hold", until=until or None)
         return self.hosted(b) or self.parked(b)
 
-    def rank(self, ready: list[Bead], repo: str) -> Queue:
+    def rank(self, ready: list[Bead], repo: str, open_beads: Sequence[Bead] | None = None) -> Queue:
+        self.umbrellas = {b.parent for b in (ready if open_beads is None else open_beads) if b.parent and b.status != "closed"}
         order = list(self.cfg.epic_order)
         keep: list[Key] = []
         q = Queue()
@@ -222,12 +226,14 @@ def rank_ready(env: LoopEnv, cfg: EngineConfig, say: Callable[[str], None] = pri
     """The queue as the loop would take it now: only the chosen beads (`only`, else the beads labelled `queue`) when any are chosen."""
     ready: list[Bead] = []
     chosen: list[BeadId] = []
+    open_beads: list[Bead] = []
     try:
         ready = env.store.ready(cfg.pick_label)
-        chosen = pickset.members(env.store.find(BeadQuery(label=pickset.LABEL)) if not only else [], only)
+        open_beads = env.store.find(BeadQuery())
+        chosen = pickset.members(open_beads, only)
     except BdFailure:  # a queue that cannot be read must not become "take anything"
         ready = []
     rule = QueueRule(env.store, cfg, env.running(), env.lint, say, env.now, lambda b: parks.skip_of(env.cfgdir, b, now=env.now()),
                     lambda b: hosts.skip_of(cfg, env.host(), b))
     rule.chosen, rule.only = chosen, bool(only)
-    return rule.rank(ready, env.repo), rule
+    return rule.rank(ready, env.repo, open_beads), rule

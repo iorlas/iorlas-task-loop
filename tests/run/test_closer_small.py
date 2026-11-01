@@ -2,12 +2,14 @@
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support.narrow_hosts import CloseKit, FakeReleaseSlotHost, FakeSettleHost
 
 # isort: split
+from taskloop.app.asks import raiser
 from taskloop.app.run.closer_branch import ReleaseSlot
 from taskloop.app.run.closer_settle import Settle
 from taskloop.contracts.bead import Bead
@@ -17,9 +19,22 @@ from taskloop.contracts.kinds import Kind
 from taskloop.contracts.log import Note
 from taskloop.domain import effects as fx
 from taskloop.domain import outcome as oc
+from taskloop.domain.asks import specs as askspecs
 
 
 class Effects(unittest.TestCase):
+    def test_noop_files_the_owner_ask_through_the_close_effect(self):
+        kit = CloseKit()
+        kit.host.plan_summary = "An umbrella with existing children"
+        with mock.patch.object(kit.host.ask_flow, "raise_ask", return_value=object()) as ask:
+            kit.closer.apply(fx.RaiseAsk(), oc.make(Kind.NOOP, "noop"), "")
+        ask.assert_called_once_with(askspecs.plan_noop("t-1", kit.host.plan_summary), "noop", Kind.NOOP)
+        self.assertTrue(kit.host.asked)
+        spec = ask.call_args.args[0]
+        self.assertEqual(raiser.problems(spec), [])
+        self.assertEqual(spec.detail.text, "The plan finds nothing to implement for t-1: An umbrella with existing children. "
+                         "Close it, or give it work.")
+
     def test_a_dry_run_says_so_and_changes_nothing(self):
         kit = CloseKit()
         kit.closer.apply(fx.NoteDry(), oc.make(Kind.DONE), "cost=$0.00")
@@ -39,6 +54,14 @@ class Effects(unittest.TestCase):
 
 
 class Settling(unittest.TestCase):
+    def test_noop_reopens_and_releases_the_bead(self):
+        done = oc.make(Kind.NOOP, "noop: the plan found nothing to implement: umbrella")
+        host = FakeSettleHost(oc.apply(done, "t-1", [], 1000.0))
+        host.store.beads[BeadId("t-1")] = Bead(id=BeadId("t-1"), title="t", status="in_progress", assignee="me")
+        self.assertEqual(Settle(host).leave_open(done.kind, done.detail), 0)
+        held = host.store.beads[BeadId("t-1")]
+        self.assertEqual((held.status, held.assignee), ("open", ""))
+
     def test_a_pause_lets_the_bead_go_open_and_unassigned(self):
         host = FakeSettleHost(oc.apply(oc.make(Kind.PAUSE_LANE, "the lane is out"), "t-1", [], 1000.0))
         host.store.beads[BeadId("t-1")] = Bead(id=BeadId("t-1"), title="t", status="in_progress", assignee="me")

@@ -156,5 +156,5 @@ def plan_close(done: oc.RunOutcome, *, dry: bool, branch: str, slot_gen: int) ->
     release = ReleaseSlot(branch, slot_gen)
     if done.kind is Kind.WAIT_ASK:
         return [*head, NoteWait(), release]
-    ask: list[CloseEffect] = [RaiseAsk()] if done.kind in ASKS and done.spec is not None else []
+    ask: list[CloseEffect] = [RaiseAsk()] if done.kind is Kind.NOOP or (done.kind in ASKS and done.spec is not None) else []
     return [*head, *ask, FileNotes(), Reflect(), settling(done), release, *tail]

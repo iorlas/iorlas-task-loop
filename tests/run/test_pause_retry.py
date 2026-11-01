@@ -14,6 +14,32 @@ from taskloop.contracts.parks import ParkStore
 
 
 class Retry(te.EngineTest):
+    def test_umbrella_plan_files_followups_and_parks_once_instead_of_finishing(self):
+        summary = "Treat this as an umbrella; its children already contain the work"
+        plan = dict(te.PLAN, stages=[], summary=summary, leftovers=[{"title": "Follow up", "why": "later"}])
+        rc, script = self.run_engine({"plan": [plan]})
+        self.assertEqual(rc, 2)
+        self.assertEqual(script.nodes, ["plan"])
+        self.assertEqual(self.eng.result().kind, "noop")
+        self.assertEqual(self.eng.result().outcome, "parked")
+        self.assertEqual(self.closed, [])
+        self.assertEqual(self.lands, [])
+        self.assertEqual(sum(c[:2] == ("create", "Follow up") for c in self.bd_calls), 1)
+        paused = ParkStore(self.eng.home).get(self.eng.bead)
+        assert paused is not None
+        self.assertEqual((paused.reason, paused.permanence, paused.retry_at), ("plan_noop", "needs_owner", 0))
+        bead = self.store.show(self.eng.bead)
+        assert bead is not None
+        self.assertIsNotNone(parks.skip_of(self.eng.home, bead, now=paused.t + 1_000_000))
+        ask = self.asks().get(self.eng.bead)
+        assert ask is not None
+        self.assertEqual(ask.detail.text, f"The plan finds nothing to implement for {self.eng.bead}: {summary}. "
+                         "Close it, or give it work.")
+        self.assertEqual(len([a for a in self.asks().rows() if a.bead == self.eng.bead and a.event == "raise"]), 1)
+        closes = [row.rec for row in self.eng.stores.run_log(self.eng.run_id).read_from(0).items if isinstance(row.rec, Close)]
+        self.assertEqual([row.outcome for row in closes], ["noop"])
+        self.assertEqual(closes[0].why, "noop: the plan found nothing to implement: " + summary)
+
     def test_no_lane_retry_reuses_the_completed_plan_when_inputs_are_unchanged(self):
         rc, first = self.run_engine({"plan": [te.PLAN], "write": [te.stop("no_lane")]}, writer_family=["openai"])
         self.assertEqual(rc, 2)

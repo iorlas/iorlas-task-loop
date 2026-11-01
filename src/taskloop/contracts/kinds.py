@@ -9,6 +9,7 @@ from typing import ClassVar, Final, assert_never, final
 class Kind(enum.Enum):
     LANDED = "landed"
     DONE = "done"
+    NOOP = "noop"  # the plan found no work and this run wrote nothing
     CUT = "cut"  # trial cell cut short; no production code raises it
     ASK_DECISION = "ask_decision"
     ASK_STUCK = "ask_stuck"

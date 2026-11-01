@@ -141,7 +141,8 @@ class Planner:
         if self.fits(data):
             e.plan_data = data  # a SIGTERM from here on resumes with this plan (d5f.38 lost a finished 1.1M plan before its checkpoint)
             e.checkpoints.save(stage=0, rounds=0, n=0, feedback="", step="write")
-        if e.verify_answer and not data["stages"] and not data["question"].strip():
+        if (e.verify_answer and not data["stages"] and not data["question"].strip()
+                and (e.done or e.landed_sha or e.checkout.task_diff().strip())):
             e.log.note("the planner finds the owner's answer asks for nothing more: landing")
             self.add_leftovers(data)
             return data
@@ -164,6 +165,11 @@ class Planner:
         """tl-bxk.13.2: the work is done and only the filing is left: the engine files and closes. Never after a failed stage (a
         re-plan), and never over work no review accepted: that tree is not "done"."""
         e = self.e
+        if not e.done and not e.landed_sha and not e.checkout.task_diff().strip():
+            self.add_leftovers(data)
+            stored(data)
+            e.publish_plan()
+            raise e.blocked_for("noop: the plan found nothing to implement: " + data["summary"][:200], "NOOP")
         if (data["leftovers"] or e.leftovers) and not again and (e.done or not e.checkout.task_diff().strip()):
             e.log.note("the planner finds the work done and leaves only follow-up beads to file: closing")
             self.add_leftovers(data)

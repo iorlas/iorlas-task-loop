@@ -133,7 +133,7 @@ class Closer:
         interpret(e.bead, e.run_id, plan, CheckpointLedger(e.checkpoints), lambda eff: self.apply(eff, done, stats))
 
     def pause(self, done: oc.RunOutcome) -> None:
-        """Persist only transient pause wakes; the close plan remains the authority for asks and owner parks."""
+        """Persist pause wakes; the close plan files an empty plan's owner ask."""
         e = self.e
         if e.dry or done.finished:
             return
@@ -161,7 +161,8 @@ class Closer:
             case effects.NoteWait():  # asked already: the bead stays as the ask left it
                 e.log.note(why)
             case effects.RaiseAsk():
-                e.asked = bool(done.spec and outcome not in DONE and e.ask_flow.raise_ask(done.spec, why, done.kind))
+                spec = askspecs.plan_noop(str(e.bead), e.plan_summary) if done.kind is Kind.NOOP else done.spec
+                e.asked = bool(spec and outcome not in DONE and e.ask_flow.raise_ask(spec, why, done.kind))
             case effects.FileNotes():
                 self.noted = self.notes.run(outcome)
             case effects.Reflect():

@@ -15,6 +15,7 @@ from taskloop.contracts.ids import BeadId
 from taskloop.contracts.kinds import ASKS, FAULTS, Kind
 from taskloop.contracts.parks import Park
 from taskloop.domain import outcome as oc
+from taskloop.domain.beads import park
 from taskloop.domain.beads.park import text_hash
 
 
@@ -66,3 +67,16 @@ class PauseCompatibility(unittest.TestCase):
                 (rec.reason, rec.permanence, rec.retry_at, rec.attempts), ("rate_limited", "transient", 900, {"rate_limited": 1})
             )
             store.return_value.put.assert_called_once_with(rec)
+
+    def test_noop_is_parked_for_the_owner_without_a_timer(self):
+        with mock.patch.object(parks, "ParkStore") as store:
+            store.return_value.get.return_value = None
+            rec = parks.paused(self.cfg, self.bead, Kind.NOOP, "r1", 100, draw=lambda: 0.5)
+            assert rec is not None
+            self.assertEqual((rec.reason, rec.permanence, rec.retry_at), ("plan_noop", "needs_owner", 0))
+            self.assertIsNotNone(park.verdict(rec, self.bead, now=10_000_000))
+            self.assertIsNone(park.verdict(rec, self.bead, answered=True))
+            self.assertIsNone(park.verdict(rec, self.bead.replace(description="Implement this")))
+            store.return_value.put.assert_called_once_with(rec)
+            parks.ended(self.cfg, self.bead, Kind.NOOP, "r1", 100)
+            store.return_value.drop.assert_not_called()
