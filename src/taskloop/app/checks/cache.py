@@ -184,7 +184,7 @@ class RunMemo:
         if hit is not None:
             return hit.result
         docs = self.stores.results(self.repo, c.id)
-        for name in docs:
+        for name in docs.keys():  # noqa: SIM118 (a DocSet is not iterable)
             rec = docs.of(name).get()
             if (rec is not None and rec.tree == self.keys.tree and rec.base == self.base
                     and rec.result.planned and satisfied(rec.result)

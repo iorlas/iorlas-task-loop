@@ -107,13 +107,14 @@ class EngineRunTest(EngineTest):
             self.assertTrue((run / f).exists(), f)
         self.assertIn("Add f", s.prompts[0])  # the brief's text itself: a worker may not read outside its worktree
 
-    def test_a_command_repeated_in_one_block_runs_once(self):
+    def test_a_command_repeated_in_one_block_runs_once_per_requirement(self):
         cmd, n = self.counting_check("ok", ok_after=1)
         eng = self.checks_engine(checks=[{"id": "unit", "cmd": cmd, "group": "tests"}])
         res = eng.run_checks({"checks": ck([cmd, "  " + cmd + "  "]), "files": []}, "s")
-        self.assertEqual([c.exit for c in res], [0, 0])  # the two spellings are one adhoc check; it takes the repo check's result
-        self.assertEqual([bool(c.reused) for c in res], [False, True])
-        self.assertEqual(n.read_text(), "1")
+        self.assertEqual([c.exit for c in res], [0, 0])
+        # the two spellings are one adhoc requirement; a different requirement (the repo check) never takes its pass
+        self.assertEqual([bool(c.reused) for c in res], [False, False])
+        self.assertEqual(n.read_text(), "2")
 
     def test_a_wait_is_not_counted_in_the_budget(self):
         eng = self.checks_engine(budget_min=5)

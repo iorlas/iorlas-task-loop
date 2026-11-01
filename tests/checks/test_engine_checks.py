@@ -142,7 +142,7 @@ class EngineChecksTest(EngineTest):
         eng = self.checks_engine(checks=[{"id": "a", "cmd": cmd, "group": "static", "wall_min": 1, "cache": False},
                                          {"id": "b", "cmd": cmd, "group": "tests", "wall_min": 2, "cache": False}])
         res = eng.run_checks({"checks": [], "files": []}, "s")
-        self.assertEqual((n.read_text(), [bool(c.reused) for c in res]), ("11", [False, False]))
+        self.assertEqual((n.read_text(), [bool(c.reused) for c in res]), ("2", [False, False]))
 
     def test_a_slot_wait_in_a_check_is_read_and_capped_at_its_wall_time(self):
         cmd, _n = self.counting_check("unity-slot: x got slot 0 after 99999999s", ok_after=1)
