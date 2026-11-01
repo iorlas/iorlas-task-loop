@@ -1,5 +1,4 @@
-"""engine.writer_family [openai] with the review off: every worker call carries --only-family openai, no call of the loop reaches the
-claude family except the planner and reflect roles, and a stop of the pin is a paused run with the reason in words."""
+"""Writer family pins apply only to worker calls; final review remains mandatory with review off. A stop of the pin pauses the run."""
 import sys
 import unittest
 from pathlib import Path
@@ -48,24 +47,22 @@ class WriterFamily(unittest.TestCase):
                        writer_family=["openai"])
         self.assertEqual([flag(a, "--only-family") for a, n in zip(s.argvs, s.nodes, strict=True) if n == "write"], [["xai"]])
 
-    def test_pinned_to_openai_with_the_review_off_the_claude_family_is_reached_by_the_planner_and_reflect_only(self):
-        """The call-argv/role table of a whole run. The worker is pinned, so delegate cannot answer it with claude; the reviewer role
-        is not called at all (review off), so the only roles left that delegate may place on claude are planner and reflect, and
-        none of the argvs names a claude family or a model (no --premium, no Opus)."""
-        rc, s = self.go({"plan": [COVERED], "write": [WRITE], "reflect": [{"worth": False, "notes": []}]}, review="off",
+    def test_pinned_writer_with_review_off_still_gets_unpinned_final_review(self):
+        """The worker is pinned; planner, final reviewer and reflect retain their own routing policy."""
+        rc, s = self.go({"plan": [COVERED], "write": [WRITE], "review": [CLEAN], "reflect": [{"worth": False, "notes": []}]}, review="off",
                         writer_family=["openai"], reflect=True)
         table = [(a[3], n, flag(a, "--only-family"), flag(a, "--authored-by"), "--premium" in a)
                  for a, n in zip(s.argvs, s.nodes, strict=True)]
         self.assertEqual(rc, 0)
-        self.assertEqual(s.nodes, ["plan", "write", "reflect"])
+        self.assertEqual(s.nodes, ["plan", "write", "review", "reflect"])
         for role, node, fam, authored, premium in table:
             self.assertNotIn("claude", fam + authored)
             self.assertFalse(premium)
             if role == "worker":
                 self.assertEqual((node, fam), ("write", ["openai"]))
             else:
-                self.assertIn((role, node), {("planner", "plan"), ("reviewer", "reflect")})  # the reviewer role only as the reflect call
-        self.assertNotIn("review", s.nodes)
+                self.assertIn((role, node), {("planner", "plan"), ("reviewer", "review"), ("reviewer", "reflect")})
+                self.assertEqual(fam, [])
         self.assertNotIn("verify", s.nodes)
         self.assertFalse(any("opus" in " ".join(a).lower() for a in s.argvs))
 
@@ -79,7 +76,7 @@ class WriterFamily(unittest.TestCase):
     def test_a_visual_bead_with_the_review_off_skips_verify_and_look_and_the_close_names_it(self):
         rc, s = self.visual_run(review="off")
         self.assertEqual(rc, 0)
-        self.assertEqual(s.nodes, ["plan", "write"])
+        self.assertEqual(s.nodes, ["plan", "write", "review"])
         self.assertFalse(any("claude" in " ".join(flag(a, "--only-family") + flag(a, "--authored-by")) for a in s.argvs))
         said = [c[3] for c in self.store.said("comments", "add") if "verify and look did not run because review is off" in c[3]]
         self.assertEqual(len(said), 1)

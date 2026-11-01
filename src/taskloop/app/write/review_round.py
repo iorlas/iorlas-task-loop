@@ -41,19 +41,12 @@ class ReviewRound:
         return self.verdict(s, review)
 
     def switched_off(self, s: StageState) -> bool:
-        """True when the review is switched off for this stage (engine.review, label review-off, domain/review/switch.py): no reviewer
-        call, the review step ends `skipped` with the typed reason. The last stage maps the acceptance: a deterministic check stands in
-        for the reviewer (each acceptance item named by a plan case); an item no case names means the stage is reviewed after all."""
+        """True when an intermediate stage's review is switched off (engine.review or label review-off): the review step ends
+        `skipped` with the typed reason. The final stage always needs a reviewer, regardless of plan cases or green checks."""
         e = self.e
         m = switch.mode(e.cfg.review, e.budget.labels)
         if switch.reviews(m, stage=s.i, last=s.last, every=int(e.cfg.review_every)):
             return False
-        if s.last and not s.fix:
-            cases = [str(c["criterion"]) for c in (e.plan_data or {}).get("cases") or []]
-            loose = switch.covered(self.items(s), cases)
-            if loose:
-                e.log.note(f"{s.name}: review is {m} but no plan case names acceptance {', '.join(loose)}: reviewing this stage")
-                return False
         said = SkipKind.REVIEW_OFF if m == "off" else SkipKind.REVIEW_SAMPLED
         if not s.fix:  # nobody judges the writer's unchecked items now: they stay open for verify at land, never dropped
             e.unchecked = list({u["what"]: u for u in e.unchecked + s.wrote_unchecked}.values())
