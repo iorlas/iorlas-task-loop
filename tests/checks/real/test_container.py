@@ -56,7 +56,7 @@ class ContainerChecksTest(EngineTest):
         self.assertFalse((self.wt / "made").exists())  # what the check writes inside stays inside
         self.assertEqual((self.eng.run_dir / "artifacts" / "c" / "attempt-1" / "p.txt").read_text(), "c")  # $TL_ARTIFACT_DIR comes back
         host, _ = self.run_one(WRITE, boxed=False)
-        self.assertEqual(res.replace(secs=0, log="", wall_hit=False), host.replace(secs=0, log=""))
+        self.assertEqual(res.replace(secs=0, at=0, log="", wall_hit=False), host.replace(secs=0, at=0, log=""))
 
     @real_git("the runner lists the worktree with a real git")
     def test_untracked_files_go_in_and_ignored_ones_do_not(self):
