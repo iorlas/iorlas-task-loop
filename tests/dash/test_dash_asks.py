@@ -22,7 +22,7 @@ from taskloop.contracts import wire
 from taskloop.contracts.ask import SimilarRef, ThreadEntry
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.dash import Column, Marker, OwnerCause, Result, Stick
-from taskloop.contracts.ids import BeadId
+from taskloop.contracts.ids import BeadId, loop_key
 from taskloop.contracts.ledger import Adr
 from taskloop.contracts.stores import AskStore
 from taskloop.domain.asks import specs
@@ -68,9 +68,10 @@ class Case(unittest.TestCase):
             bead=bead_id, run="r", brief_hash="h", repo=REPO, title=bead_id, now=now), adrs)[0])
 
     def world(self, beads, adrs=(), landings=(), live=None):
-        p = ProjectIn(id="lifesim", name="lifesim", beads=beads, adrs=list(adrs))
+        p = ProjectIn(id=loop_key(REPO), name="lifesim", beads=beads, adrs=list(adrs))
         live = live if live is not None else {a.bead: a for a in self.asks.live()}
-        return World(now=NOW, host="box", version="v1", projects=[p], runs={}, asks=live, ledger=self.asks.rows(), landings=list(landings))
+        return World(now=NOW, host="box", version="v1", projects=[p], runs={}, asks={(p.id, b): a for b, a in live.items()},
+                     ledger=self.asks.rows(), landings=list(landings))
 
     def snap(self, beads, **kw):
         return snapshot.build(self.world(beads, **kw))
@@ -143,7 +144,7 @@ class Ledger(Case):
         self.assertEqual([(r.ask, r.status) for r in rows], [(soft.id, "open_soft"), (hard.id, "open"), (done.id, "answered")])
         old = rows[2]
         self.assertEqual((old.answer, old.outcome, old.cause, old.project, old.question, old.t),
-                         ("rent weekly", Stick.ONCE, OwnerCause.DECISION, "lifesim", Q, NOW - 6 * DAY))
+                         ("rent weekly", Stick.ONCE, OwnerCause.DECISION, loop_key(REPO), Q, NOW - 6 * DAY))
         self.assertEqual((rows[0].outcome, rows[0].cause), (None, OwnerCause.DECISION))
 
     def test_an_open_row_of_a_bead_the_snapshot_does_not_show_is_left_out_but_an_answered_one_stays(self):
@@ -176,7 +177,7 @@ class Decisions(Case):
         rows = {r.id: r for r in self.snap([], adrs=ins).adrs}
         self.assertNotIn(fresh.id, rows)  # retired: no longer in force
         self.assertEqual([(i, rows[i].reuses, rows[i].last_used, rows[i].prune, rows[i].project) for i in (old.id, used.id)],
-                         [(old.id, 0, None, True, "lifesim"), (used.id, 2, NOW - DAY, False, "lifesim")])
+                         [(old.id, 0, None, True, loop_key(REPO)), (used.id, 2, NOW - DAY, False, loop_key(REPO))])
 
 
 class Learning(Case):
@@ -224,10 +225,11 @@ class Stick_(unittest.TestCase):
         repo = Path(self.tmp.name) / "demo"
         repo.mkdir()
         write_repos(self.dash.env.config.repos(), repo)
+        self.repo = repo
         self.asks = AskStore.at(self.dash.env.config)
         self.ask = must(raiser.raise_ask(self.asks, specs.open_question(Q, OPTS), raiser.Asking(
             bead=BeadId("b-1"), run="r", brief_hash="h", repo=str(repo), title="Bills", now=NOW - 60))[0])
-        self.post("answer", {"project": "demo", "ask": self.ask.id, "kind": "answer", "option": 0})
+        self.post("answer", {"project": loop_key(self.repo), "ask": self.ask.id, "kind": "answer", "option": 0})
 
     def post(self, verb, body):
         code, out = self.dash.writes.post(verb, body)
@@ -235,7 +237,7 @@ class Stick_(unittest.TestCase):
         return wire.load(Result, out)
 
     def stick(self, outcome, text=""):
-        return self.post("stick", {"project": "demo", "ask": self.ask.id, "outcome": outcome, "text": text})
+        return self.post("stick", {"project": loop_key(self.repo), "ask": self.ask.id, "outcome": outcome, "text": text})
 
     def test_adr_is_written_under_the_state_dir_and_the_planner_store_reads_it(self):
         self.assertEqual(self.stick("adr", "Rent is weekly."), Result(ok=True))
@@ -264,23 +266,23 @@ class Stick_(unittest.TestCase):
 
     def test_prune_retires_a_decision_and_keeps_it_in_the_store(self):
         self.stick("adr", "Rent is weekly.")
-        res = self.post("prune", {"project": "demo", "adr": "ADR-1"})
+        res = self.post("prune", {"project": loop_key(self.repo), "adr": "ADR-1"})
         self.assertEqual(res, Result(ok=True))
         [path] = Path(self.tmp.name, "decisions").glob("*/ADR-1.json")
         got = json.loads(path.read_text())
         self.assertEqual((got["retired_by"], got["retired_t"], got["text"]), ("dash", NOW, "Rent is weekly."))
-        again = self.post("prune", {"project": "demo", "adr": "ADR-1"})
+        again = self.post("prune", {"project": loop_key(self.repo), "adr": "ADR-1"})
         self.assertEqual((again.ok, "already retired" in again.message), (False, True))
-        self.assertIn("not a decision", self.post("prune", {"project": "demo", "adr": "ADR-9"}).message)
+        self.assertIn("not a decision", self.post("prune", {"project": loop_key(self.repo), "adr": "ADR-9"}).message)
         self.assertFalse(self.post("prune", {"project": "nowhere", "adr": "ADR-1"}).ok)
         self.assertEqual(self.stick("ref", "ADR-1").ok, False)  # a retired decision cannot be linked
 
     def test_an_unanswered_ask_cannot_stick(self):
         other = must(raiser.raise_ask(self.asks, specs.missing_criteria(), raiser.Asking(
             bead=BeadId("b-2"), run="r", brief_hash="h", repo=self.tmp.name, title="x", now=NOW))[0])
-        res = self.post("stick", {"project": "demo", "ask": other.id, "outcome": "adr"})
+        res = self.post("stick", {"project": loop_key(self.repo), "ask": other.id, "outcome": "adr"})
         self.assertEqual((res.ok, res.message), (False, "answer the ask first"))
-        self.assertEqual(self.dash.writes.post("stick", {"project": "demo", "ask": "x", "outcome": "maybe"})[0], 400)
+        self.assertEqual(self.dash.writes.post("stick", {"project": loop_key(self.repo), "ask": "x", "outcome": "maybe"})[0], 400)
 
 
 if __name__ == "__main__":

@@ -21,6 +21,7 @@ from taskloop.app.report import card
 from taskloop.app.run import requests
 from taskloop.cli import wait
 from taskloop.contracts import runlife
+from taskloop.contracts.ids import loop_key
 from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.run import RunState
 from taskloop.contracts.runlife import STALE_AFTER, Liveness
@@ -49,7 +50,7 @@ class KilledEngine(te.EngineTest):
         finally:
             child.wait(WAIT)
         self.assertEqual(runlife.reconcile(cfg, m.heartbeat + 1), [], "a dead process with a fresh heartbeat may be a restart")
-        shown = make_dash(config=cfg.root, clock=lambda: later).live.page("t-1")[1]["state"]
+        shown = make_dash(config=cfg.root, clock=lambda: later).live.page(loop_key(m.repo), "t-1")[1]["state"]
         self.assertEqual(shown, "lost", "the dashboard displays lost before anything wrote it")
         self.assertEqual(where.get(run).manifest.state, RunState.RUNNING)  # type: ignore[union-attr]
         self.assertEqual(runlife.reconcile(cfg, later), [run])
@@ -59,7 +60,7 @@ class KilledEngine(te.EngineTest):
         self.assertEqual(runlife.reconcile(cfg, later + 99), [], "once")
         # every reader reads the recorded state
         dash = make_dash(config=cfg.root, clock=lambda: later)
-        self.assertEqual(dash.live.page("t-1")[1]["state"], "lost")
+        self.assertEqual(dash.live.page(loop_key(m.repo), "t-1")[1]["state"], "lost")
         bundle = where.get(run)
         assert bundle is not None
         self.assertIs(dash.runlogs.typed_run(bundle, later).life, Liveness.LOST)

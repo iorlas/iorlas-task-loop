@@ -103,7 +103,7 @@ export function StopActions({ card }) {
   const c = causeOf(card), seen = muted(card);
   return html`<div class="stopa"><div class="k">Why did it stop?</div>
     <div class="chips">${STOP_CAUSES.map(([k, l]) => html`<button key=${k} class=${`fc ${c === k ? 'on' : ''}`}
-      onClick=${() => act.cause(card.project, card.id, k)}>${l}</button>`)}</div>
-    <div class="acts"><button onClick=${() => act.park(card.project, card.id)}>⏸ Park</button>
-      <button class=${seen ? 'on' : ''} disabled=${seen} onClick=${() => act.ack(card.project, card.id)}>👁 ${seen ? 'Seen' : 'Seen, mute it'}</button></div></div>`;
+      onClick=${() => act.cause(card.project, card.id, card.run, k)}>${l}</button>`)}</div>
+    <div class="acts"><button onClick=${() => act.park(card.project, card.id, card.run)}>⏸ Park</button>
+      <button class=${seen ? 'on' : ''} disabled=${seen} onClick=${() => act.ack(card.project, card.id, card.run)}>👁 ${seen ? 'Seen' : 'Seen, mute it'}</button></div></div>`;
 }

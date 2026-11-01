@@ -2,7 +2,7 @@
 import { html } from '../../vendor/ui-runtime.js';
 import * as api from '../api.js';
 import { epicsOf, machines, MACHINE_ICON } from '../data.js';
-import { age, pct, unit } from '../format.js';
+import { age, pct, projectName, unit } from '../format.js';
 import { set, ui } from '../state.js';
 
 export const STALE_S = 30, STALE_BANNER_S = 300;
@@ -28,7 +28,7 @@ export function Banners({ snap, now }) {
     out.push(html`<${BdBanner} key=${`bd-${p.id}`} source=${p} project=${p.name} now=${now} />`);
   }
   for (const l of snap.server.loops.filter((x) => !x.running)) {
-    out.push(html`<div key=${`loop-${l.project}`} class="ban watch">Loop not running on ${l.project}${l.last_activity ? ` · last activity ${age(l.last_activity, now)} ago` : ''} · start it: <code>tl loop</code> · one task: <code>tl run-task ID</code></div>`);
+    out.push(html`<div key=${`loop-${l.project}`} class="ban watch">Loop not running on ${projectName(l.project)}${l.last_activity ? ` · last activity ${age(l.last_activity, now)} ago` : ''} · start it: <code>tl loop</code> · one task: <code>tl run-task ID</code></div>`);
   }
   return out;
 }
@@ -54,6 +54,6 @@ export function filterGroups(snap) {
 
 export const laneValue = (l, now) => (l.state === 'locked' ? (l.locked_until ? unit(l.locked_until - now) : 'out') : pct(l.window_pct || 0));
 
-export const openBead = (b) => set({ bead: b.id, dtab: '', ...(ui.project === 'all' ? {} : { project: b.project }) }, { push: !ui.bead });
-export const closeBead = () => set({ bead: null, dtab: '' });
+export const openBead = (b) => set({ bead: b.id, beadProject: b.project, dtab: '', ...(ui.project === 'all' ? {} : { project: b.project }) }, { push: !ui.bead });
+export const closeBead = () => set({ bead: null, beadProject: '', dtab: '' });
 

@@ -11,6 +11,7 @@ from support.narrow import must
 from support.repos import write_repos
 
 from taskloop.app.run.layout import RunLayout
+from taskloop.contracts.ids import loop_key
 from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.run import RunState
@@ -48,7 +49,7 @@ class RunHeaders(unittest.TestCase):
         self.assertFalse(bundle.log.exists())
         head, = snap.runs
         self.assertEqual((head.run, head.project, head.mode, head.owner, head.session, head.state),
-                         (bundle.run, "lifesim", "stage:gate", "mac-owner", "mac-session", RunState.RUNNING))
+                         (bundle.run, loop_key(self.repo), "stage:gate", "mac-owner", "mac-session", RunState.RUNNING))
         self.assertEqual(self.cfg.run_manifest(bundle.run).read_bytes(), before)
         self.locator.end(bundle.run, self.now + 1, RunState.FAILED, "exit 1")
         ended = self.cfg.run_manifest(bundle.run).read_bytes()

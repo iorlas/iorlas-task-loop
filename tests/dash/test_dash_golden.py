@@ -17,6 +17,7 @@ from support.repos import write_repos
 
 from taskloop.contracts import wire
 from taskloop.contracts.dash import BeadDetail, Snapshot
+from taskloop.contracts.ids import loop_key
 from taskloop_dash.app import Dash
 from taskloop_dash.env import Env, Ports
 from taskloop_dash.views.snapshot import version_of
@@ -50,6 +51,8 @@ class Golden(unittest.TestCase):
         root = Path(self.tmp.name)
         repo = root / "lifesim"
         repo.mkdir()
+        self.project = loop_key(repo)
+        self.repo = repo
         self.cfg = root / "cfg"
         self.cfg.mkdir()
         write_repos(self.cfg / "repos.json", repo)
@@ -61,7 +64,7 @@ class Golden(unittest.TestCase):
             run = RunScript(bid, slot="a", at=i * 100).step("plan", 30, 1000, "OC Go").step("write", 40, 2000, text="write 1")
             run.step("close", 1, text=f"close: {outcome}", end=False).close(outcome, code, why)
             run.add("step_end", id=f"n{run.n}", step="close", outcome="done", exec_seconds=1)
-            run.write(self.cfg)
+            run.write(self.cfg, repo=str(self.repo))
             self.paths[name] = str(self.cfg / "engine" / f"{run.name}.jsonl")
         ports = Ports(store=lambda r: self.store, slot_beads=lambda r: [])
         self.dash = Dash(Env(config=self.cfg, home=root, ports=ports, clock=lambda: NOW, version="v-test"))
@@ -71,8 +74,20 @@ class Golden(unittest.TestCase):
 
     def answers(self):
         out = {"snapshot": json.loads(self.dash.reads.get("/api/snapshot", {}, None)[1])}
-        out["beads"] = {n: json.loads(self.dash.reads.get("/api/bead", {"project": "lifesim", "id": f"g-{i + 1}"}, None)[1])
+        out["beads"] = {n: json.loads(self.dash.reads.get("/api/bead", {"project": self.project, "id": f"g-{i + 1}"}, None)[1])
                         for i, (n, *_) in enumerate(CLOSES)}
+        # Normalize temporary-directory keys before hashing the golden response.
+        def stable(value):
+            if isinstance(value, dict):
+                return {k: stable(v) for k, v in value.items()}
+            if isinstance(value, list):
+                return [stable(v) for v in value]
+            return loop_key("/repos/lifesim") if value == self.project else value
+        out = stable(out)
+        snap = wire.load(Snapshot, out["snapshot"])
+        out["snapshot"]["version"] = version_of(snap)
+        for body in out["beads"].values():
+            body["version"] = version_of(wire.load(BeadDetail, body))
         return json.loads(json.dumps(out, sort_keys=True))
 
     def test_the_answers_for_the_recorded_state_are_the_golden(self):

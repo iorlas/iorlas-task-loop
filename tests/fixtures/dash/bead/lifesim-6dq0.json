@@ -3,12 +3,13 @@
  "t": 1793050200.0,
  "card": {
   "id": "lifesim-6dq0",
-  "project": "lifesim",
+  "project": "lifesim-56f42031",
   "title": "Rain lowers mood outdoors",
   "column": "working",
   "marker": "run",
   "status": "write · fixing weather_tick after a test failed",
   "tone": "run",
+  "run": "lifesim-6dq0-fixture",
   "t": 1793048340.0,
   "epic": "lifesim-wld",
   "slot": "mac·2",
@@ -57,7 +58,7 @@
   "retry_at": 0.0,
   "shots": 0
  },
- "version": "b0e1d5d384c074d9",
+ "version": "f3b8a8514e20a3b7",
  "bd_ok_at": null,
  "bd_error": "",
  "description": "Rain lowers mood outdoors. Part of World.",

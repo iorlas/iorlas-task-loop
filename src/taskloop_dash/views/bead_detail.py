@@ -67,13 +67,14 @@ def live_box(run: Run, ps: Sequence[passes.PassView], events: Sequence[LiveEvent
 
 def build(board: Board, p: ProjectIn, b: Bead, comments: Sequence[Comment], events: Sequence[LiveEvent]) -> BeadDetail:
     w = board.w
-    runs = list(w.runs.get(b.id, ()))
-    ps = board.passes_of(b.id)
+    runs = list(w.runs.get((p.id, b.id), ()))
+    ps = board.passes_of((p.id, b.id))
     by_id = board.by_id[p.id]
     card = board.card(p, b, board.waits(p))
     ask: AskCard | None = None
-    if w.asks.get(b.id) is not None and (card.column.value == "questions" or card.marker is Marker.SOFT_ASK):
-        ask = ask_card(p.id, w.asks[b.id], ledger.similar_of(w.asks[b.id], p, w), stale_of(w.asks[b.id], p))
+    a = w.asks.get((p.id, b.id))
+    if a is not None and (card.column.value == "questions" or card.marker is Marker.SOFT_ASK):
+        ask = ask_card(p.id, a, ledger.similar_of(a, p, w), stale_of(a, p))
     else:
         ask = next((look_card(p.id, i, card.t or 0.0) for i in p.looks if i.bead == b.id), None)
     return BeadDetail(

@@ -13,6 +13,7 @@ from support.runs import manifest
 
 from taskloop.contracts import wire
 from taskloop.contracts.dash import LivePage
+from taskloop.contracts.ids import loop_key
 from taskloop.contracts.run import RunState
 from taskloop_dash.api import live
 
@@ -46,7 +47,7 @@ class LivePageApi(unittest.TestCase):
                       {"t": T + 10, "k": "cmd_end", "id": "1", "exit": 1, "secs": 2.0, "out": "a\nFAILED test_x\n"}])
 
     def get(self, since="", wait="0"):
-        code, body = self.dash.live.page(BEAD, since, wait)
+        code, body = self.dash.live.page(loop_key("/repo"), BEAD, since, wait)
         self.assertEqual(code, 200)
         return wire.load(LivePage, body)  # strict: an unknown or missing key raises
 
@@ -97,8 +98,8 @@ class LivePageApi(unittest.TestCase):
         self.assertEqual(self.get().state, "ended")
 
     def test_no_run_is_404_and_an_odd_id_is_never_read(self):
-        self.assertEqual(self.dash.live.page("nope-1")[0], 404)
-        self.assertEqual(self.dash.live.page("--x")[0], 404)
+        self.assertEqual(self.dash.live.page(loop_key("/repo"), "nope-1")[0], 404)
+        self.assertEqual(self.dash.live.page(loop_key("/repo"), "--x")[0], 404)
 
 
 if __name__ == "__main__":

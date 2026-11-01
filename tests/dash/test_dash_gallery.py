@@ -18,6 +18,7 @@ from support.narrow import must  # noqa: E402
 from support.repos import write_repos  # noqa: E402
 
 from taskloop.contracts import gallery  # noqa: E402
+from taskloop.contracts.ids import loop_key  # noqa: E402
 
 LOOKS = make_dash().looks
 
@@ -116,13 +117,13 @@ class Api(unittest.TestCase):
             dash.env.ports = answering(lambda repo: fake, home)
             with mock.patch.object(dash.env.ports, "store", lambda repo: fake), \
                     mock.patch.object(dash.beads, "beads_of", lambda r: [{"id": "tl-look", "labels": [gallery.LABEL]}]):
-                path, items = dash.looks.look_items("demo")
+                path, items = dash.looks.look_items(loop_key(repo))
                 self.assertEqual((Path(path).name, [i["status"] for i in items]), ("demo", ["open"]))
-                self.assertEqual(dash.looks.look_shot("demo", "docs/evidence/tl-1/m1.png"), (PNG, "image/png"))
-                self.assertIsNone(dash.looks.look_shot("demo", "docs/evidence/tl-1/nope.png"))
-                good = {"project": "demo", "bead": "tl-1#1", "verdict": "good", "note": ""}
+                self.assertEqual(dash.looks.look_shot(loop_key(repo), "docs/evidence/tl-1/m1.png"), (PNG, "image/png"))
+                self.assertIsNone(dash.looks.look_shot(loop_key(repo), "docs/evidence/tl-1/nope.png"))
+                good = {"project": loop_key(repo), "bead": "tl-1#1", "verdict": "good", "note": ""}
                 self.assertEqual(dash.writes.post("look", good), (200, {"ok": True, "message": ""}))
-                self.assertEqual([i["status"] for i in dash.looks.look_items("demo")[1]], ["good"])
+                self.assertEqual([i["status"] for i in dash.looks.look_items(loop_key(repo))[1]], ["good"])
                 self.assertFalse(dash.writes.post("look", dict(good, project="nowhere"))[1]["ok"])
                 self.assertFalse(dash.writes.post("look", dict(good, verdict="redo"))[1]["ok"])  # redo needs a note
 

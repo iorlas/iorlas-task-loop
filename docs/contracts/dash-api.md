@@ -8,6 +8,14 @@ Design: `docs/design/dashboard/dash-spec.md` §11.
 
 Neither side changes a field alone: a change is a commit to `dash.py` plus regenerated fixtures, and both sides follow it.
 
+`Project.id` and every `project` reference carry the registered checkout key (`contracts.ids.loop_key(repo)`, also used by
+snapshots and locks). `Project.name` is the directory's display name; only colliding names gain a parent-directory suffix. Runs are joined
+by `(project, bead)` using the manifest's repo. Drawer links retain that project key separately from the board's filter.
+`BeadCard.run`, `AskCard.run` and `LedgerRow.run` carry the observed run id. `stop`, `park`, `note`, `cause` and `ack` require
+`project`, `bead` and `run` in their JSON body, plus their verb-specific fields. Missing fields are 400; a run outside that
+repo/bead or no longer live is refused with `ok=false` before any request, hold, hint or metadata write. Commands never select
+a newer run in place of the one the owner saw. A cause naming an ask also verifies the ask's repo, bead and run.
+
 ## Endpoints
 
 | method, path | body / query | answer |
@@ -33,10 +41,10 @@ Tailnet reachability remains an owner access grant; these checks prevent browser
 
 - **Built (backend items 3, 4, 6, 7 and 8):** `live`, `answer`, `look`, `cause`, `ack`, `stick`, `prune`, `park`, `stop`, `note`, and
   `answer` with `kind=ask_back`; every verb of `WRITES` is routed to a Port, none answers "Not available yet.". `live` takes `id` (the bead; its newest
-  run) and ignores `project`; its cursor is `api/live.py`'s byte-offset cursor; 404 for a bead with no run. Each write is one `Ports`
+  run in `project`); its cursor is `api/live.py`'s byte-offset cursor; 404 for a bead with no run in that project. Each write is one `Ports`
   call into an `Intake` verb (`taskloop/app/asks/intake.py`): `answer` re-sent for an answered, unused ask amends it; `look` is keyed by
   the look item id (`<source bead>#<n>`; the source bead also works while it has one waiting item), `redo` needs a note; `cause` and
-  `ack` are bd metadata `owner_cause` (JSON `scope, cause, t, by`) and `owner_ack` (JSON `scope, t, by`), `scope` the bead's newest
+  `ack` are bd metadata `owner_cause` (JSON `scope, cause, t, by`) and `owner_ack` (JSON `scope, t, by`), `scope` the observed
   run id (an ask id when `cause` names an ask); `ack=false` unsets the key. `ToolCall.name` is delegate's one `text` until it types more.
 - **Built (backend item 5):** engine-log records `Said(step, who, text)` (every comment `Engine.comment` posts, `step` the open or last
   step id), `Assumed(step, text, reversible)` (replaces the `Assumption:` Note), `Stuck(why, step, since, limit_s, sig)` and
@@ -78,13 +86,13 @@ Tailnet reachability remains an owner access grant; these checks prevent browser
   `LOOP_STALL_S`, `contracts/reconcile.py`) or `absent` (the reconcile NoLoop rule, `LOOP_ABSENT_S`). Not shown: the storm stop (its file
   is read by an adapter) and a loop's in-memory network wait. events.jsonl rows are the typed `Event` records
   (`trail.event` is the one writer); the dashboard reads them with `events.decode` and skips a row that does not decode.
-- **park, stop, note** (built, backend item 7) are the bead's newest run's request file `runs/<run>/owner-request.json`
+- **park, stop, note** (built, backend item 7) write the observed run's request file `runs/<run>/owner-request.json`
   (`contracts/requests.py` `OwnerRequest {park, stop, notes[], by, t}`, merged under `owner-request.lock`, `app/run/requests.py`).
   The engine takes it at every step boundary (`Steps` guard, and before each worker call): `park` ends the run there as
   `Kind.OWNER_PARK` (Close `why_code=paused`, branch and checkpoint kept), each note is a `Said(who=owner)` and ends the next
   worker's prompt. `stop` is also read at each Beat and sets the run's stop flag (the SIGTERM halt path; Close
   `stopped_by_coordinator`, why "failed: stopped by the owner"). park and stop also set the bead's `owner_hold`, so the loop does not
-  start it again (`tl hold BEAD --release`). With no live run: `stop` is refused, `park` only holds, `note` is the `owner_hint`. A
+  start it again (`tl hold BEAD --release`). Dashboard commands require a live run; CLI park/note with no run retain the hold/hint behavior. A
   request left at the close is dropped; the run-log sweep removes the file. CLI: `tl park BEAD`, `tl note BEAD text` (`tl stop` stays
   the loop's verb).
 

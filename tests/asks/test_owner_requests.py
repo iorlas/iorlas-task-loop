@@ -47,16 +47,37 @@ class RequestFile(unittest.TestCase):
         log.write_text(json.dumps(typed("run_start", self.now - 5, run_id=RUN, bead="tl-5", worktree="")) + "\n")
 
     def test_requests_merge_and_are_taken_once(self):
-        self.assertEqual(requests.post(self.cfg, RUN, "dash", self.now, note="one"), "")
-        self.assertEqual(requests.post(self.cfg, RUN, "denis", self.now, park=True, note="two"), "")
+        self.assertEqual(requests.post(self.cfg, RUN, "dash", self.now, repo="/repo", bead="tl-5", note="one"), "")
+        self.assertEqual(requests.post(self.cfg, RUN, "denis", self.now, repo="/repo", bead="tl-5", park=True, note="two"), "")
         got = must(requests.take(self.cfg, RUN))
         self.assertEqual((got.park, got.stop, [n.text for n in got.notes], got.by), (True, False, ["one", "two"], "denis"))
         self.assertIsNone(requests.take(self.cfg, RUN))
 
     def test_a_run_that_is_not_live_is_refused(self):
         manifest(self.cfg, RUN, "tl-5", self.now - 5, state=RunState.LOST)  # its process is gone, recorded lost
-        self.assertEqual(requests.post(self.cfg, RUN, "dash", self.now + 3600, stop=True), "no run of this bead is going")
-        self.assertEqual(requests.post(self.cfg, "tl-5-20261026-110000", "dash", self.now, stop=True), "no run of this bead is going")
+        for run in (RUN, "tl-5-20261026-110000"):
+            why = requests.post(self.cfg, run, "dash", self.now + 3600, repo="/repo", bead="tl-5", stop=True)
+            self.assertEqual(why, "no run of this bead is going")
+        self.assertIsNone(requests.peek(self.cfg, RUN))
+
+    def test_a_request_for_another_repo_or_bead_writes_nothing(self):
+        before = {p: p.read_bytes() for p in self.cfg.root.rglob("*") if p.is_file()}
+        for repo, bead in (("/other", "tl-5"), ("/repo", "tl-6")):
+            with self.subTest(repo=repo, bead=bead):
+                why = requests.post(self.cfg, RUN, "dash", self.now, repo=repo, bead=bead, stop=True)
+                self.assertIn("repo and bead", why)
+        self.assertEqual({p: p.read_bytes() for p in self.cfg.root.rglob("*") if p.is_file()}, before)
+
+    def test_a_run_that_ends_before_the_lock_is_acquired_is_refused(self):
+        original = requests.locked
+
+        def ends(cfg, run):
+            manifest(cfg, run, "tl-5", self.now - 5, state=RunState.DONE)
+            return original(cfg, run)
+
+        with mock.patch.object(requests, "locked", side_effect=ends):
+            why = requests.post(self.cfg, RUN, "dash", self.now, repo="/repo", bead="tl-5", stop=True)
+        self.assertEqual(why, "no run of this bead is going")
         self.assertIsNone(requests.peek(self.cfg, RUN))
 
     def test_writers_racing_the_taker_lose_nothing_and_double_nothing(self):
@@ -71,7 +92,7 @@ class RequestFile(unittest.TestCase):
         t = threading.Thread(target=taker)
         t.start()
         for i in range(60):
-            requests.post(self.cfg, RUN, "dash", self.now, note=f"n{i}")
+            requests.post(self.cfg, RUN, "dash", self.now, repo="/repo", bead="tl-5", note=f"n{i}")
         stop.set()
         t.join()
         got = requests.take(self.cfg, RUN)
@@ -82,7 +103,7 @@ class RequestFile(unittest.TestCase):
         for stem, bead, at in (("tl-5-20261026-090000", "tl-5", 100), ("tl-5.1-20261027-090000", "tl-5.1", 50), ("tl-5-x", "tl-5.2", 1)):
             manifest(self.cfg, stem, bead, self.now - at).log.write_text("")
         self.assertEqual(requests.newest_run(self.cfg, "tl-5"), RUN)
-        requests.post(self.cfg, RUN, "dash", self.now, park=True)
+        requests.post(self.cfg, RUN, "dash", self.now, repo="/repo", bead="tl-5", park=True)
         prune_run_logs(self.cfg, self.now + 30 * 86400, 7 * 86400)
         self.assertFalse(self.cfg.run_request(RUN).exists())
 
@@ -91,7 +112,7 @@ class RequestFile(unittest.TestCase):
         side = requests.OwnerRequests(host)
         side.at_beat()
         self.assertFalse(host.halt.is_set())
-        requests.post(self.cfg, RUN, "dash", self.now, stop=True)
+        requests.post(self.cfg, RUN, "dash", self.now, repo="/repo", bead="tl-5", stop=True)
         side.at_beat()
         self.assertTrue(host.halt.is_set() and side.stopped)
         side.drop()  # the close: the request no step took is dropped, and nothing is taken after
@@ -120,7 +141,7 @@ class Cli(unittest.TestCase):
 
     def test_park_and_note_reach_the_live_run(self):
         run = "fk-1-20261026-100000"
-        log = manifest(self.cfg, run, "fk-1", time.time()).log
+        log = manifest(self.cfg, run, "fk-1", time.time(), repo=str(Path.cwd())).log
         log.write_text(json.dumps(typed("run_start", time.time(), run_id=run, bead="fk-1", worktree="")) + "\n")
         self.assertEqual(self.say("note", "fk-1", "use", "blue"), 0)
         self.assertEqual(self.say("park", "fk-1"), 0)
@@ -147,7 +168,8 @@ class EngineRequests(te.EngineTest):
 
             def planned(*a, **kw):
                 out = plan(*a, **kw)
-                self.assertEqual(requests.post(homes.cfg(), eng.log_path.stem, "denis", time.time(), **request), "")
+                self.assertEqual(requests.post(homes.cfg(), eng.log_path.stem, "denis", time.time(),
+                                               repo=str(self.wt), bead=str(eng.bead), **request), "")
                 return out
             eng.planner.plan = planned
         return prep

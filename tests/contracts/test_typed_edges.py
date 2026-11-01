@@ -27,10 +27,10 @@ class BeadIdEdges(unittest.TestCase):
         self.assertFalse(is_bead_id(3))
 
     def test_a_request_body_with_a_bad_bead_is_refused_when_it_decodes(self):
-        self.assertEqual(msgspec.json.decode(b'{"project": "p", "bead": "tl-1"}', type=ParkReq).bead, "tl-1")
+        self.assertEqual(msgspec.json.decode(b'{"project": "p", "bead": "tl-1", "run": "r"}', type=ParkReq).bead, "tl-1")
         for bad in ("-rf", "a/b", "", "a b"):
             with self.assertRaises(msgspec.ValidationError, msg=bad):
-                msgspec.json.decode(msgspec.json.encode({"project": "p", "bead": bad}), type=ParkReq)
+                msgspec.json.decode(msgspec.json.encode({"project": "p", "bead": bad, "run": "r"}), type=ParkReq)
 
     def test_bd_rows_with_an_id_that_is_no_bead_id_fault_the_whole_read(self):
         rows = [{"id": "tl-1", "title": "a", "status": "open"}, {"id": "-x", "title": "b", "status": "open"}]

@@ -109,7 +109,7 @@ def owner_writes(intake: Callable[[str], Intake], cfg: ConfigDir) -> dict[str, A
 
         def act() -> str:
             owner = intake(repo)
-            why, ok = do(OwnerVerbs(owner, cfg, owner.now()))
+            why, ok = do(OwnerVerbs(owner, cfg, owner.now(), repo))
             said.append(ok)
             return why
         out = guarded(act)

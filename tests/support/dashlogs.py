@@ -81,8 +81,8 @@ class RunScript:
     def manifest(self, lost=False):
         return RunManifest(run=self.name, repo="/repo", bead=self.bead, started=self.t0, state=self.state(lost))
 
-    def write(self, config, lost=False):
-        manifest(config, self.name, self.bead, self.t0, state=self.state(lost))
+    def write(self, config, lost=False, repo="/repo"):
+        manifest(config, self.name, self.bead, self.t0, repo=repo, state=self.state(lost))
         d = Path(config) / "engine"
         f = d / f"{self.name}.jsonl"
         f.write_text("\n".join(json.dumps(r) for r in self.rows) + "\n", encoding="utf-8")

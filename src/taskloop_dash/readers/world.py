@@ -4,8 +4,10 @@ delegate's lane status. Read only; a poll never runs bd: the bead list and the l
 keep to their TTLs."""
 
 import socket
+from collections import Counter
 from collections.abc import Sequence
 from dataclasses import replace
+from pathlib import Path
 from typing import Any
 
 from taskloop.contracts import wire
@@ -15,7 +17,7 @@ from taskloop.contracts.bead import Bead, Comment
 from taskloop.contracts.dashruns import ResourceLease, RunHeader
 from taskloop.contracts.delegate import LiveEvent
 from taskloop.contracts.enums import Outcome
-from taskloop.contracts.ids import BeadId
+from taskloop.contracts.ids import BeadId, loop_key
 from taskloop.contracts.ledger import LedgerEntry
 from taskloop.contracts.loop import LoopState
 from taskloop.contracts.run import RunState
@@ -25,7 +27,6 @@ from taskloop_dash import jsonl
 from taskloop_dash.api.looks import Looks
 from taskloop_dash.env import Env
 from taskloop_dash.readers.beads import Beads, basename
-from taskloop_dash.readers.loops import loop_key
 from taskloop_dash.readers.observed import strays_of
 from taskloop_dash.readers.records import Records
 from taskloop_dash.readers.runlogs import RunLogs
@@ -57,8 +58,8 @@ class Worlds:
         self.env, self.records, self.beads, self.runlogs, self.looks = env, records, beads, runlogs, looks
 
     def repos(self) -> dict[str, str]:
-        """{project id: repo path}: a project is a registered repo, named by its folder."""
-        return {basename(p): p for p in self.records.repos()}
+        """{immutable project key: registered repo path}."""
+        return {loop_key(p): p for p in self.records.repos()}
 
     def project(self, id: str, path: str) -> ProjectIn:
         env = self.env
@@ -68,27 +69,27 @@ class Worlds:
         slots = typed_beads(env.ports.slot_beads(path))
         states = [s for s in (JsonStore(f, LoopState).get() for f in sorted(env.config.loop_state(loop_key(path)).parent.glob(
             loop_key(path) + ".*.json"))) if s is not None]
-        _, items = self.looks.look_items(path, raw)
+        _, items = self.looks.look_items(id, raw)
         looks = [LookItem(bead=i["bead"], title=i["title"], shots=tuple(
-            self.looks.shot_url(basename(path), s["path"]) for s in i["shots"] if s["role"] == "after"))
+            self.looks.shot_url(id, s["path"]) for s in i["shots"] if s["role"] == "after"))
             for i in items if i["status"] == "open" and i["bead"]]
-        return ProjectIn(id=id, name=id, beads=rows, slots=slots, loops=states, looks=looks, adrs=self.adrs(path),
+        return ProjectIn(id=id, name=basename(path), beads=rows, slots=slots, loops=states, looks=looks, adrs=self.adrs(path),
                          slot_count=env.ports.slot_count(path),
                          bd_ok_at=bd_ok_at, bd_error=bd_error,
                          profile_error=env.ports.profile_error(path))
 
-    def runs(self, full: BeadId | None = None) -> dict[str, list[Run]]:
-        """bead -> its runs, oldest first: the retained logs, and all of `full`'s."""
+    def runs(self, full: tuple[str, str] | None = None) -> dict[tuple[str, str], list[Run]]:
+        """(repo key, bead) -> runs, oldest first: retained logs, and all of `full`'s."""
         now = self.env.clock()
-        out: dict[str, list[Run]] = {}
+        out: dict[tuple[str, str], list[Run]] = {}
         for bead, bundles in self.records.engine_logs().items():
             out[bead] = [self.runlogs.typed_run(b, now) for b in bundles]
         if full:
             out[full] = [self.runlogs.typed_run(b, now) for b in self.records.engine_logs(retain=False).get(full, [])]
         return {b: r for b, r in out.items() if r}
 
-    def asks(self) -> dict[str, Ask]:
-        return {a.bead: a for a in AskStore.at(self.env.config).live()}
+    def asks(self) -> dict[tuple[str, str], Ask]:
+        return {(loop_key(a.repo), a.bead): a for a in AskStore.at(self.env.config).live()}
 
     def run_headers(self, now: float) -> list[RunHeader]:
         """Stage runs need no bead or log to be visible. Read manifests only; never reconcile from the dashboard."""
@@ -135,14 +136,16 @@ class Worlds:
             return [Landing(t.ended, t.stats.replans) for t in self.records.traces().runs.values() if t.outcome is Outcome.LANDED]
         return self.env.ttl.get("v2landings", LEDGER_TTL, load)
 
-    def world(self, full: BeadId | None = None) -> World:
+    def world(self, full: tuple[str, str] | None = None) -> World:
         env = self.env
         now, runs = env.clock(), self.runs(full)
-        projects = [self.project(i, p) for i, p in self.repos().items()]
-        events = self.records.events()
         paths = self.repos()
-        projects = [replace(p, strays=strays_of(p.beads, p.slots, runs, now),
-                            events=[e for e in events if e.repo and (e.repo == paths[p.id] or basename(e.repo) == p.id)]) for p in projects]
+        projects = [self.project(i, p) for i, p in paths.items()]
+        names = Counter(p.name for p in projects)
+        projects = [replace(p, name=f"{p.name} ({Path(paths[p.id]).parent})") if names[p.name] > 1 else p for p in projects]
+        events = self.records.events()
+        projects = [replace(p, strays=strays_of(p.beads, p.slots, {b: r for (key, b), r in runs.items() if key == p.id}, now),
+                            events=[e for e in events if e.repo == paths[p.id]]) for p in projects]
         return World(now=now, host=socket.gethostname(), version=env.version, projects=projects, runs=runs, asks=self.asks(),
                      run_headers=self.run_headers(now), leases=self.leases(now),
                      status=StatusStore(env.config).get(), ledger=self.ledger(), landings=self.landings(),

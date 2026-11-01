@@ -64,7 +64,7 @@ def route(dash: Dash, static: Path, path: str, q: Query, held: str | None = None
         code, body, extra = dash.reads.get(path, q, held)
         return code, body, "application/json", list(extra.items())
     if path == "/api/live":
-        code, page = dash.live.page(q.get("id", ""), q.get("since", ""), q.get("wait", "0"))
+        code, page = dash.live.page(q.get("project", ""), q.get("id", ""), q.get("since", ""), q.get("wait", "0"))
         return code, json.dumps(page).encode(), "application/json", []
     if path == "/api/look-shot":
         got = dash.looks.look_shot(q.get("repo", ""), q.get("path", ""))

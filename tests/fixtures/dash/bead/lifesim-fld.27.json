@@ -3,12 +3,13 @@
  "t": 1793050200.0,
  "card": {
   "id": "lifesim-fld.27",
-  "project": "lifesim",
+  "project": "lifesim-56f42031",
   "title": "Rent and bills every week",
   "column": "questions",
   "marker": "ask",
   "status": "Which bills are monthly, which weekly?",
   "tone": "you",
+  "run": "lifesim-fld.27-fixture",
   "t": 1793049480.0,
   "epic": "lifesim-eco",
   "slot": "devbox·1",
@@ -57,7 +58,7 @@
   "retry_at": 0.0,
   "shots": 0
  },
- "version": "05b74b09913294cb",
+ "version": "59b81243ee15b876",
  "bd_ok_at": null,
  "bd_error": "",
  "description": "Rent and bills every week. Part of Economy.",
@@ -170,10 +171,11 @@
  "ask": {
   "id": "lifesim-fld.27-1",
   "bead": "lifesim-fld.27",
-  "project": "lifesim",
+  "project": "lifesim-56f42031",
   "source": "ask",
   "question": "Which bills are monthly and which are weekly?",
   "t": 1793049480.0,
+  "run": "lifesim-fld.27-fixture",
   "blocking": true,
   "why": "The bead says \"rent and bills every week\", but phone and internet are monthly in real life.",
   "tried": [

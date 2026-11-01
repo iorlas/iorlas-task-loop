@@ -66,8 +66,9 @@ def pieces_of(w: World, board: Board, ids: set[tuple[str, str]]) -> list[Piece]:
     out: list[Piece] = []
     for p in w.projects:
         for b in p.beads:
-            if (p.id, b.id) in ids and b.id in w.runs:
-                out += [x for x in passes.pieces_of(p.id, b.id, w.runs[b.id], board.passes_of(b.id)) if floor.in_window(x, w.now)]
+            key = (p.id, b.id)
+            if key in ids and key in w.runs:
+                out += [x for x in passes.pieces_of(p.id, b.id, w.runs[key], board.passes_of(key)) if floor.in_window(x, w.now)]
     return out
 
 
@@ -77,7 +78,7 @@ def asks_of(w: World, cards: list[BeadCard]) -> list[AskCard]:
     out: list[AskCard] = []
     for p in w.projects:
         for b in p.beads:
-            a = w.asks.get(b.id)
+            a = w.asks.get((p.id, b.id))
             if a is not None and (p.id, b.id) in ids:
                 out.append(ask_card(p.id, a, ledger.similar_of(a, p, w), stale_of(a, p)))
         out += [look_card(p.id, i, ids[(p.id, i.bead)]) for i in p.looks if (p.id, i.bead) in ids]
@@ -85,7 +86,11 @@ def asks_of(w: World, cards: list[BeadCard]) -> list[AskCard]:
 
 
 def slots_of(w: World) -> list[Slot]:
-    return [x for p in w.projects for x in [*floor.slots_of(p, w.runs, w.now), *floor.stray_rows(p)]]
+    out: list[Slot] = []
+    for p in w.projects:
+        runs = {b: rs for (key, b), rs in w.runs.items() if key == p.id}
+        out += [*floor.slots_of(p, runs, w.now), *floor.stray_rows(p)]
+    return out
 
 
 def build(w: World) -> Snapshot:

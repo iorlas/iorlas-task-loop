@@ -41,8 +41,8 @@ def last_event[E: EventRec](p: ProjectIn, kinds: type[E], slot: str = "", bead: 
     return max(hits, key=lambda e: e.t, default=None)
 
 
-def has_ask(w: World, b: Bead) -> bool:
-    return any(ask_facts(w.asks.get(b.id))[:2])
+def has_ask(w: World, p: ProjectIn, b: Bead) -> bool:
+    return any(ask_facts(w.asks.get((p.id, b.id)))[:2])
 
 
 def ready_count(w: World, p: ProjectIn) -> int:
@@ -52,7 +52,7 @@ def ready_count(w: World, p: ProjectIn) -> int:
         return sum(1 for r in max(live, key=lambda s: s.t).queue if r.skip is None)
     by_id = {b.id: b for b in p.beads}
     return sum(1 for b in p.beads if is_work(b) and b.status == "open" and not b.assignee and not WAITS.keys() & set(b.labels)
-               and not blockers(b, by_id) and not has_ask(w, b) and "blocked" not in b.labels)
+               and not blockers(b, by_id) and not has_ask(w, p, b) and "blocked" not in b.labels)
 
 
 def health(w: World, p: ProjectIn) -> LoopInfo:
@@ -81,7 +81,7 @@ def bead_rows(w: World, p: ProjectIn) -> list[NeedRow]:
     live = live_loops(p, w.now)
     skips = {r.bead: (r, r.skip) for r in max(live, key=lambda s: s.t).queue if r.skip is not None} if live else {}
     for b in p.beads:
-        if b.status == "closed" or "slot" in b.labels or b.issue_type == "epic" or has_ask(w, b):
+        if b.status == "closed" or "slot" in b.labels or b.issue_type == "epic" or has_ask(w, p, b):
             continue
         hit = next((x for x in WAITS if x in b.labels), None)
         if not hit and not is_work(b):

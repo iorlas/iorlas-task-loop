@@ -75,10 +75,10 @@ class Board:
     def __init__(self, w: World) -> None:
         self.w = w
         self.by_id = {p.id: {b.id: b for b in p.beads} for p in w.projects}
-        self._passes: dict[str, list[passes.PassView]] = {}
+        self._passes: dict[tuple[str, str], list[passes.PassView]] = {}
         self.usual = self.usual_by_lane()
 
-    def passes_of(self, bead: str) -> list[passes.PassView]:
+    def passes_of(self, bead: tuple[str, str]) -> list[passes.PassView]:
         got = self._passes.get(bead)
         if got is None:
             got = self._passes[bead] = passes.passes_of(self.w.runs.get(bead, ()))
@@ -100,11 +100,11 @@ class Board:
         return {r.bead: r.skip.why for r in newest.queue if r.skip} if newest else {}
 
     def card(self, p: ProjectIn, b: Bead, waits: dict[str, str]) -> BeadCard:
-        runs = list(self.w.runs.get(b.id, ()))
-        ps = self.passes_of(b.id)
+        runs = list(self.w.runs.get((p.id, b.id), ()))
+        ps = self.passes_of((p.id, b.id))
         newest = runs[-1] if runs else None
         cur = newest.current() if newest else None
-        ask_open, soft_ask, ask_line = ask_facts(self.w.asks.get(b.id))
+        ask_open, soft_ask, ask_line = ask_facts(self.w.asks.get((p.id, b.id)))
         blocking = blockers(b, self.by_id[p.id])
         f = columns.Facts(
             closed=b.status == "closed", claimed=b.status == "in_progress", ask=ask_open, soft_ask=soft_ask,
@@ -120,7 +120,8 @@ class Board:
         park = self.w.parks.get(b.id)
         retry_at = park.retry_at if park and park.permanence == "transient" and not f.open_run and not f.closed else 0.0
         return BeadCard(
-            id=b.id, project=p.id, title=b.title, column=col, marker=mark, status=columns.status_line(f), tone=columns.tone_of(mark),
+            id=b.id, project=p.id, run=newest.name if newest else "", title=b.title, column=col, marker=mark,
+            status=columns.status_line(f), tone=columns.tone_of(mark),
             t=self.entered(f, b, newest), epic=b.parent if b.parent in self.by_id[p.id] else None,
             slot=(newest.slot or None) if newest and col is not Column.BACKLOG else None, lane=lane or None, review=review_of(newest),
             loops=sum(1 for x in ps if x.end in phases.LOOPED), dots=columns.dots_of(visited, current, mark, f.closed),

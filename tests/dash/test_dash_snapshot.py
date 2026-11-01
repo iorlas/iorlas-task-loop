@@ -155,7 +155,8 @@ class Case(unittest.TestCase):
                 )
             ],
         )
-        return World(now=now, host="box", version="v1", projects=[p], runs=runs, asks={"b-ask": ask("b-ask")})
+        return World(now=now, host="box", version="v1", projects=[p], runs={(p.id, b): rs for b, rs in runs.items()},
+                     asks={(p.id, "b-ask"): ask("b-ask")})
 
     def snap(self, **kw):
         return snapshot.build(self.world(**kw))
@@ -314,7 +315,7 @@ class Version(Case):
     def test_a_changed_field_changes_it(self):
         w = self.world()
         runs = dict(w.runs)
-        runs["b-run"] = [
+        runs[("lifesim", "b-run")] = [
             RunScript("b-run", slot="a", at=3000)
             .step("plan", 300, 20_000, "OC Go")
             .step("write", 200, 30_000, text="write 1: clamp mood", end=False)
@@ -374,7 +375,7 @@ class Detail(Case):
         )
         w = self.world()
         d = bead_detail.build(
-            Board(dataclasses.replace(w, runs={**w.runs, "b-run": [script.run(NOW)]})),
+            Board(dataclasses.replace(w, runs={**w.runs, ("lifesim", "b-run"): [script.run(NOW)]})),
             w.projects[0],
             next(x for x in w.projects[0].beads if x.id == "b-run"),
             (),
@@ -405,7 +406,7 @@ class Detail(Case):
             .artifacts(2, "look", "shot-1.png", "notes.pdf")
             .close("landed")
         )
-        w = dataclasses.replace(w, runs={**w.runs, "b-look": [s.run(NOW)]})
+        w = dataclasses.replace(w, runs={**w.runs, ("lifesim", "b-look"): [s.run(NOW)]})
         p = w.projects[0]
         d = bead_detail.build(Board(w), p, next(x for x in p.beads if x.id == "b-look"), [], [])
         got = {a.name: (a.kind, a.pass_n, must(a.phase).value, a.url) for a in d.artifacts}
@@ -431,7 +432,7 @@ class EngineFacts(Case):
             .step("write", 200, 30_000, text="write 1: clamp mood", end=False)
         )
         s.add("stuck", why="silent", step="write", since=s.t, limit_s=1800.0).beat()
-        return dataclasses.replace(w, runs=dict(w.runs, **{"b-run": [s.run(NOW)]}))
+        return dataclasses.replace(w, runs={**w.runs, ("lifesim", "b-run"): [s.run(NOW)]})
 
     def test_the_card_counts_assumptions_and_reads_stuck(self):
         c = self.card(snapshot.build(self.stuck_world()), "b-run")

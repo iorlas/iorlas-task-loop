@@ -3,7 +3,7 @@
 // only lays them out. A bead row opens its bead page; a row with no bead (a slot, a lane, a loop) is text.
 import { html } from '../../vendor/ui-runtime.js';
 import { bead as findBead } from '../data.js';
-import { age, bid, clock } from '../format.js';
+import { age, bid, clock, projectName } from '../format.js';
 import { openBead } from './shell.js';
 
 const ICON = { label: '✋', block: '⏳', parked: '⏸️', capped: '🧢', paused: '💤', slot_held: '🔒', slot_aside: '🔒', slot_setup: '🛠️', stray: '👻', stalled: '🐌', absent: '🕳️' };
@@ -12,13 +12,13 @@ const HEALTH = { ok: ['ok', 'running'], stalled: ['w', 'stalled'], absent: ['x',
 export function LoopStrip({ snap, now }) {
   return html`<div class="hs">${snap.server.loops.map((l) => {
     const [tone, word] = l.health === 'ok' && !l.running ? ['', 'idle'] : HEALTH[l.health];
-    return html`<span key=${l.project} class="hsi"><i class=${`dt ${tone}`}></i>${l.project} · ${word}${l.ready ? ` · ${l.ready} ready` : ''}${l.health !== 'ok' && l.quiet_since ? ` · quiet ${age(l.quiet_since, now)}` : ''}</span>`;
+    return html`<span key=${l.project} class="hsi"><i class=${`dt ${tone}`}></i>${projectName(l.project)} · ${word}${l.ready ? ` · ${l.ready} ready` : ''}${l.health !== 'ok' && l.quiet_since ? ` · quiet ${age(l.quiet_since, now)}` : ''}</span>`;
   })}</div>`;
 }
 
 function Row({ snap, n, now }) {
   const b = n.bead && findBead(snap, n.bead, n.project);
-  const who = n.bead ? bid(n.bead, n.project, snap.projects.length > 1) : '';
+  const who = n.bead ? bid(n.bead, n.project, snap.projects.length > 1) : projectName(n.project);
   const body = html`<i class="ni">${ICON[n.kind] || '•'}</i><span class="nt"><b>${who}${b ? ` ${b.title}` : n.title && !who ? n.title : ''}</b>
     <span>${n.why}</span></span><span class="nw">${n.since != null ? `${age(n.since, now)} ago` : ''}${n.until != null ? `${n.since != null ? ' · ' : ''}until ${clock(n.until)}` : ''}</span>`;
   return b ? html`<button class="nr" onClick=${() => openBead(b)}>${body}</button>` : html`<div class="nr">${body}</div>`;

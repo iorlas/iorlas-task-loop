@@ -4,7 +4,7 @@ import { html, useEffect, useRef, useState } from '../../vendor/ui-runtime.js';
 import * as act from '../actions.js';
 import * as api from '../api.js';
 import { allProjects, causeOf, muted, piecesOf } from '../data.js';
-import { age, bid, dur, tokens } from '../format.js';
+import { age, bid, dur, projectName, tokens } from '../format.js';
 import { rememberScroll, scrollOf, set, ui } from '../state.js';
 import { AskCard, Gallery, LookCard, StopActions } from '../ui/ask.js';
 import { BeadRow, EmptyState, Md, MsgLine, Popover, Tabs, Totals } from '../ui/kit.js';
@@ -123,7 +123,7 @@ function Body({ d, card, snap, now, phone }) {
 
 function Header({ card, d, snap, phone }) {
   const epic = card.epic ? snap.epics.find((e) => e.id === card.epic) : null;
-  const meta = [card.project, epic && epic.title, card.id, card.slot, card.lane, card.review && `review: ${card.review}`].filter(Boolean).join(' · ');
+  const meta = [projectName(card.project), epic && epic.title, card.id, card.slot, card.lane, card.review && `review: ${card.review}`].filter(Boolean).join(' · ');
   const tot = html`<${Totals} totals=${card.totals} assumptions=${card.assumptions} />`;
   if (phone) return html`<h2>${card.title}</h2><div class="mt">${meta}</div><div class="mt">${tot}${card.loops > 0 && ` · ↻${card.loops}`}</div>`;
   return html`<div class="l1"><span>${meta}</span>${tot}</div><h3>${card.title}</h3>`;
@@ -151,7 +151,7 @@ export function BeadPage({ snap, card, now, phone }) {
     endMark=${card.column === 'done' ? '✅' : ''} />`;
   const status = html`<div class="data-age">${d && api.resourceAge(resource)}${err && ` · ${err}`}</div>`;
   const body = err && !d ? html`<${EmptyState} title=${`⚠️ ${err}`} body="The bead could not be read; the board keeps working." />`
-    : d ? html`<${BdBanner} source=${d} project=${snap.projects.find((p) => p.id === card.project)?.name || card.project} now=${now} />
+    : d ? html`<${BdBanner} source=${d} project=${projectName(card.project)} now=${now} />
       <${Body} d=${d} card=${card} snap=${snap} now=${now} phone=${phone} />` : html`<p class="loading">Loading…</p>`;
   if (!phone) {
     return html`<div class="dh"><${Header} card=${card} d=${d} snap=${snap} />${status}${trace}</div>

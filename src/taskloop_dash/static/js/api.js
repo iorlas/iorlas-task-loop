@@ -3,6 +3,7 @@
 // backs off up to 30 s.
 
 import { useEffect, useState } from '../vendor/ui-runtime.js';
+import { reconcileProjects } from './state.js';
 
 const POLL_MS = 2500;
 const MAX_BACKOFF_MS = 30000;
@@ -30,6 +31,7 @@ async function refresh(r) {
       r.data = data;
       r.loadedAt = Date.now();
     }
+    if (r === net && r.data) reconcileProjects(r.data);
     r.fetchedAt = Date.now();
     r.error = '';
     r.failures = 0;

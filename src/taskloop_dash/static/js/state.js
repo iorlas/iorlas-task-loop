@@ -1,5 +1,5 @@
 // UI state, kept apart from server data: the snapshot is replaced on every poll, this survives it and a reload.
-// The deep link is #tab~option~bead~drawertab~goalpath (dash-spec §2.1). Filters, folds, drafts and the ledger filter persist
+// The deep link is #tab~option~bead~drawertab~goalpath~repo-key. Filters, folds, drafts and the ledger filter persist
 // per browser (localStorage); scroll positions persist per tab (sessionStorage). Each layer the phone's system back closes
 // (sheet, bead page, goal level) is one history entry (§9).
 
@@ -11,8 +11,9 @@ function load(store, key) {
 }
 
 function fromHash(h) {
-  const [tab, opt, bead, dtab, gp] = decodeURIComponent(h.replace(/^#/, '')).split('~');
-  return { tab: TABS.includes(tab) ? tab : 'board', opt: opt || '', bead: bead || null, dtab: dtab || '', gp: gp ? gp.split('/') : [] };
+  const [tab, opt, bead, dtab, gp, beadProject] = decodeURIComponent(h.replace(/^#/, '')).split('~');
+  return { tab: TABS.includes(tab) ? tab : 'board', opt: opt || '', bead: bead || null,
+    dtab: dtab || '', gp: gp ? gp.split('/') : [], beadProject: beadProject || '' };
 }
 
 const saved = load(localStorage, KEY);
@@ -41,7 +42,7 @@ export const subscribe = (fn) => (subs.add(fn), () => subs.delete(fn));
 const emit = () => subs.forEach((fn) => fn());
 
 export function hash() {
-  const parts = [ui.tab, ui.opt, ui.bead || '', ui.dtab, ui.gp.join('/')];
+  const parts = [ui.tab, ui.opt, ui.bead || '', ui.dtab, ui.gp.join('/'), ui.bead ? ui.beadProject : ''];
   while (parts.length > 1 && !parts[parts.length - 1]) parts.pop();
   return '#' + parts.join('~');
 }
@@ -62,6 +63,18 @@ export function set(patch, opts = {}) {
   if (opts.push) history.pushState({ sheet: ui.sheet }, '', h);
   else if (h !== location.hash) history.replaceState({ sheet: ui.sheet }, '', h);
   emit();
+}
+
+// A removed repo (including a saved folder-name id) must not leave the board filtered to nothing.
+export function reconcileProjects(snap) {
+  const exists = (id) => snap.projects.some((p) => p.id === id);
+  const patch = {};
+  if ((ui.project !== 'all' && !exists(ui.project)) || (ui.beadProject && ui.beadProject !== 'all' && !exists(ui.beadProject))) {
+    Object.assign(patch, { project: 'all', epic: 'all', gp: [] });
+  }
+  if (ui.beadProject && ui.beadProject !== 'all' && !exists(ui.beadProject)) patch.beadProject = '';
+  if (ui.epic !== 'all' && !snap.epics.some((e) => e.id === ui.epic && (ui.project === 'all' || e.project === ui.project))) patch.epic = 'all';
+  if (Object.keys(patch).length) set(patch);
 }
 
 addEventListener('popstate', (e) => {

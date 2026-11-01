@@ -13,6 +13,7 @@ import support.paths  # noqa: E402, F401
 from support.dashes import make_dash  # noqa: E402
 
 from taskloop.contracts.env import Env as ProcessEnv  # noqa: E402
+from taskloop.contracts.ids import loop_key  # noqa: E402
 from taskloop_dash import bind as bind_mod  # noqa: E402
 
 
@@ -38,14 +39,15 @@ class ResolveRepo(unittest.TestCase):
     def setUp(self):
         self.dash = make_dash()
 
-    def test_a_link_may_name_the_repo_by_folder_or_not_at_all(self):
+    def test_links_require_the_registered_repo_key(self):
         known = ["/w/lifesim", "/w/other"]
         beads = {"/w/lifesim": [{"id": "lifesim-vbo"}], "/w/other": [{"id": "o-1"}]}
         with mock.patch.object(self.dash.records, "repos", return_value=known), \
                 mock.patch.object(self.dash.beads, "beads_of", side_effect=lambda r: beads.get(r, [])):
-            self.assertEqual(self.dash.beads.resolve_repo("/w/other"), "/w/other")
-            self.assertEqual(self.dash.beads.resolve_repo("lifesim"), "/w/lifesim")
-            self.assertEqual(self.dash.beads.resolve_repo("", "o-1"), "/w/other")
+            self.assertEqual(self.dash.beads.resolve_repo(loop_key("/w/other")), "/w/other")
+            self.assertEqual(self.dash.beads.resolve_repo(loop_key("/w/lifesim")), "/w/lifesim")
+            self.assertEqual(self.dash.beads.resolve_repo("lifesim"), "")
+            self.assertEqual(self.dash.beads.resolve_repo("", "o-1"), "")
             self.assertEqual(self.dash.beads.resolve_repo("nope", "x-1"), "")
 
 

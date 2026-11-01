@@ -3,12 +3,13 @@
  "t": 1793050200.0,
  "card": {
   "id": "lifesim-5ban.3",
-  "project": "lifesim",
+  "project": "lifesim-56f42031",
   "title": "NPC daily schedule pathing",
   "column": "working",
   "marker": "stuck",
   "status": "test failed 3× · no progress 22m",
   "tone": "bad",
+  "run": "lifesim-5ban.3-fixture",
   "t": 1793048880.0,
   "epic": "lifesim-wld",
   "slot": "devbox·2",
@@ -57,7 +58,7 @@
   "retry_at": 0.0,
   "shots": 0
  },
- "version": "0b4d17652f32778a",
+ "version": "3c505d5bbd12d3af",
  "bd_ok_at": null,
  "bd_error": "",
  "description": "NPC daily schedule pathing. Part of World.",

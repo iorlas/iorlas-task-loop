@@ -48,10 +48,20 @@ def snapshot(state: str) -> dict[str, Any]:
         next(lane for lane in snap["lanes"] if lane["id"] == "claude-2")["status_t"] = snap["t"] - 7200
         next(b for b in snap["beads"] if b["id"] == "lifesim-5ban.3")["marker"] = "exited"  # and its worker exited (bead_detail)
         snap["version"] += "-variants"
+        snap["adrs"].append(dict(snap["adrs"][0], project=snap["projects"][1]["id"], id="ADR-OTHER"))
     if state == "bd-error":
         snap["projects"][0].update(bd_ok_at=snap["t"] - 120, bd_error="database locked\ninternal detail")
         snap["projects"].append({"id": "unreadable", "name": "unreadable", "bd_ok_at": None, "bd_error": "bd unavailable"})
         snap["version"] += "-bd-error"
+    if state == "identity":
+        original = next(b for b in snap["beads"] if b["id"] == "lifesim-6dq0")
+        snap["beads"] = [dict(original, project=p["id"], title=f"Repo {n}: duplicate bead", run=f"observed-{n}")
+                         for n, p in enumerate(snap["projects"])]
+        for n, p in enumerate(snap["projects"]):
+            p["name"] = f"demo (repo {n})"
+        for field in ("pieces", "asks", "epics", "needs", "slots"):
+            snap[field] = []
+        snap["version"] += "-identity"
     return snap
 
 
@@ -118,6 +128,11 @@ class Handler(BaseHTTPRequestHandler):
         if not p.resolve().is_relative_to(FIX) or not p.is_file():
             return self.json({"error": "unknown bead"}, 404)
         d = json.loads(p.read_text(encoding="utf-8"))
+        if self.state == "identity":
+            card = next((b for b in snapshot("identity")["beads"] if b["project"] == q.get("project")), None)
+            if card is None:
+                return self.json({"error": "unknown project"}, 404)
+            d["card"] = card
         if self.state == "variants" and q.get("id") == "lifesim-5ban.3":
             d["card"]["marker"] = "exited"
             d["live"].update(kind="exited", exit_code=137, why="the worker was killed (out of memory)")
@@ -180,7 +195,7 @@ def make_handler(state: str) -> type[BaseHTTPRequestHandler]:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--port", type=int, default=8766)
-    ap.add_argument("--state", choices=("ok", "empty", "down", "variants", "bd-error"), default="ok")
+    ap.add_argument("--state", choices=("ok", "empty", "down", "variants", "bd-error", "identity"), default="ok")
     args = ap.parse_args(argv)
     srv = ThreadingHTTPServer(("127.0.0.1", args.port), make_handler(args.state))
     print(f"http://127.0.0.1:{args.port}/  (state {args.state})", flush=True)

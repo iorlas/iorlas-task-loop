@@ -14,7 +14,7 @@ def stale_of(a: Ask, p: ProjectIn) -> int:
 
 def ask_card(project: str, a: Ask, similar: Similar | None = None, stale: int = 0) -> AskCard:
     return AskCard(
-        id=a.id, bead=a.bead, project=project, source="ask", question=a.decision, t=a.t, blocking=a.blocking, why=a.why,
+        id=a.id, bead=a.bead, project=project, run=a.run, source="ask", question=a.decision, t=a.t, blocking=a.blocking, why=a.why,
         tried=list(a.tried),
         options=[AskOptionCard(label=o.label, consequence=o.consequence, recommended=o.recommended) for o in a.options],
         default=a.default, owner_cause=a.owner_cause, cause_by=a.cause_by,

@@ -48,8 +48,8 @@ def rows(b: Mapping[str, Sum], bead: str = "") -> list[CostRow]:
 
 
 def in_scope(w: World, window: str, last: int, project: str) -> list[tuple[str, Run]]:
-    ids = {b.id for p in w.projects if not project or p.id == project for b in p.beads}
-    every = [(bead, r) for bead, rs in w.runs.items() if bead in ids for r in rs]
+    ids = {(p.id, b.id) for p in w.projects if not project or p.id == project for b in p.beads}
+    every = [(str(key[1]), r) for key, rs in w.runs.items() if key in ids for r in rs]
     if last > 0:
         return sorted(every, key=lambda x: -x[1].last_t)[:last]
     since = w.now - WINDOWS[window]

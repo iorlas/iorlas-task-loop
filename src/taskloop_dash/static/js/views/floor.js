@@ -34,7 +34,7 @@ function groups(snap) {
 }
 
 function Track({ snap, slot, x, now, beadOf }) {
-  const pieces = snap.pieces.filter((p) => p.slot === slot.id && p.segs.length && beadOf(p) && visible(snap, beadOf(p)));
+  const pieces = snap.pieces.filter((p) => p.project === slot.project && p.slot === slot.id && p.segs.length && beadOf(p) && visible(snap, beadOf(p)));
   const busy = pieces.some((p) => p.segs[p.segs.length - 1].t1 >= now - 60 && !['ask', 'answered', 'parked'].includes(p.segs[p.segs.length - 1].kind));
   const idle = (slot.state === 'free' || slot.state === 'idle') && !busy;
   const start = slot.state === 'starting', b = beadOf(slot);
@@ -55,11 +55,11 @@ function Track({ snap, slot, x, now, beadOf }) {
 function jumps(snap, rows, x) {
   const out = [];
   for (const p of snap.pieces) {
-    if (!p.to_slot || rows[p.slot] == null || rows[p.to_slot] == null) continue;
+    if (!p.to_slot || rows[key(p.project, p.slot)] == null || rows[key(p.project, p.to_slot)] == null) continue;
     const q = snap.pieces.find((o) => o.project === p.project && o.bead === p.bead && o.n === p.n + 1);
     if (!q) continue;
-    const x1 = x(p.segs[p.segs.length - 1].t1) + 2, y1 = rows[p.slot] + LINE_Y + 11;
-    const x2 = x(q.segs[0].t0) - 2, y2 = rows[q.slot] + LINE_Y + 11, mx = (x1 + x2) / 2;
+    const x1 = x(p.segs[p.segs.length - 1].t1) + 2, y1 = rows[key(p.project, p.slot)] + LINE_Y + 11;
+    const x2 = x(q.segs[0].t0) - 2, y2 = rows[key(q.project, q.slot)] + LINE_Y + 11, mx = (x1 + x2) / 2;
     out.push(html`<path key=${`j${p.bead}${p.n}`} d=${`M${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}`} /><circle key=${`c${p.bead}${p.n}`} cx=${x2} cy=${y2} r="2.5" />`);
   }
   return out;
@@ -67,8 +67,8 @@ function jumps(snap, rows, x) {
 
 // a locked lane walls off its slots at now, labelled on the axis row (never over names)
 function walls(snap, rows, x, now) {
-  return snap.lanes.filter((l) => l.state === 'locked').flatMap((l) => l.slots.filter((s) => rows[s] != null).map((s, i) => html`
-    <div key=${l.id + s} class="wall" style=${`left:${x(now)}px;top:${rows[s]}px;height:${ROW}px`}></div>
+  return snap.lanes.filter((l) => l.state === 'locked').flatMap((l) => snap.slots.filter((s) => l.slots.includes(s.id) && rows[key(s.project, s.id)] != null).map((s, i) => html`
+    <div key=${l.id + key(s.project, s.id)} class="wall" style=${`left:${x(now)}px;top:${rows[key(s.project, s.id)]}px;height:${ROW}px`}></div>
     ${i === 0 && html`<div key=${`${l.id}h`} class="wall lbl" style=${`left:${x(now)}px;top:0;height:${AXIS}px`}><span>⛔ ${l.name} locked${l.locked_until ? ` until ${clock(l.locked_until)}` : ''}</span></div>`}`));
 }
 
@@ -92,9 +92,9 @@ export function Floor({ snap, now, filters }) {
     trks.push(html`<div key=${`g${g.m}`} class="trk grp"></div>`);
     H += GRP;
     for (const s of g.slots) {
-      rows[s.id] = H;
-      labs.push(html`<div key=${s.id} class=${`lab ${s.state === 'starting' ? 'starting' : ''}`}><b>${s.name}</b><small>${s.lane}</small></div>`);
-      if (pps) trks.push(html`<${Track} key=${s.id} snap=${snap} slot=${s} x=${x} now=${now} beadOf=${beadOf} />`);
+      rows[key(s.project, s.id)] = H;
+      labs.push(html`<div key=${key(s.project, s.id)} class=${`lab ${s.state === 'starting' ? 'starting' : ''}`}><b>${s.name}</b><small>${s.lane}</small></div>`);
+      if (pps) trks.push(html`<${Track} key=${key(s.project, s.id)} snap=${snap} slot=${s} x=${x} now=${now} beadOf=${beadOf} />`);
       H += ROW;
     }
   }
@@ -118,7 +118,7 @@ const PILL = { starting: 'live', running: 'live', stuck: 'stuck', look: 'ask', f
 
 function slotNow(snap, slot) {
   const b = slot.bead ? idx(snap).beads.get(key(slot.project, slot.bead)) : null;
-  const pieces = snap.pieces.filter((p) => p.slot === slot.id);
+  const pieces = snap.pieces.filter((p) => p.project === slot.project && p.slot === slot.id);
   const mine = b ? pieces.filter((p) => p.bead === b.id && p.project === b.project) : [];
   const piece = mine[mine.length - 1];
   const work = piece ? piece.segs.filter((s) => s.kind !== 'projected') : [];
@@ -154,6 +154,6 @@ export function PhoneFloor({ snap, now }) {
   const stat = [['run', n('starting', 'running'), 'running'], ['x', n('stuck'), 'stuck'], ['you', n('look'), 'your look'], ['mut', n('free', 'idle', 'held'), 'free']];
   return html`<div class="stat">${stat.map(([c, v, l]) => (v > 0 || c === 'run' || c === 'mut') && html`<span key=${l}><i class=${`dt ${c}`}></i>${v} ${l}</span>`)}</div>
     <${ActiveWork} snap=${snap} now=${now} />
-    ${slots.map((s) => html`<${SlotCard} key=${s.id} snap=${snap} slot=${s} now=${now} />`)}
+    ${slots.map((s) => html`<${SlotCard} key=${key(s.project, s.id)} snap=${snap} slot=${s} now=${now} />`)}
     <p class="hint3">Last 2 hours per slot. The full timeline is on the laptop.</p><${Runs} snap=${snap} now=${now} />`;
 }

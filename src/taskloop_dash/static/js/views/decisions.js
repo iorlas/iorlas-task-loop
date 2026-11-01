@@ -3,7 +3,7 @@
 import { html, useState } from '../../vendor/ui-runtime.js';
 import * as act from '../actions.js';
 import { answered, bead as findBead } from '../data.js';
-import { age, bid, day, pct } from '../format.js';
+import { age, bid, day, pct, projectName } from '../format.js';
 import { set, ui } from '../state.js';
 import { AskCard, CAUSES, LookCard, STICKS } from '../ui/ask.js';
 import { EmptyState, FilterChips, Spark, Tabs } from '../ui/kit.js';
@@ -79,7 +79,7 @@ function LedgerRow({ r, now }) {
   else if (pick === 'stick') oc = html`<span class="why">${STICKS.map(([k, i, t]) => html`<button key=${k} class="fc" onClick=${() => { setPick(''); act.stickRow(r, k); }}>${i} ${t}</button>`)}</span>`;
   else oc = html`<button class="fc" onClick=${() => setPick('stick')}>make it stick</button>`;
   const cc = pick === 'cause' ? html`<span class="why">${ASK_CAUSES.map((c) => html`<button key=${c} class="fc"
-      onClick=${() => { setPick(''); setCause(c); act.cause(r.project, r.bead, c, r.ask); }}>${CAUSES[c]}</button>`)}</span>`
+      onClick=${() => { setPick(''); setCause(c); act.cause(r.project, r.bead, r.run, c, r.ask); }}>${CAUSES[c]}</button>`)}</span>`
     : cause === 'unknown' ? html`<button class="lnk q" onClick=${() => setPick('cause')}>? name it</button>` : CAUSES[cause];
   return html`<tr><td class="mu">${day(r.t, now)}</td><td class="mu">${bid(r.bead, r.project, ui.project === 'all')}</td>
     <td class="qq"><span>${r.question}</span>${r.answer && html` <span class="a">→ ${r.answer}</span>`}</td><td class="oc">${oc}</td>
@@ -113,7 +113,7 @@ function InForce({ snap, now }) {
   return html`<p class="hint2">Agents read these at plan; tl ask checks them before asking you. A decision nobody reused in 30 days offers prune.</p>
     <div class="adr">${adrs.map(({ a, project }) => {
       const k = `${project}/${a.id}`;
-      return html`<div key=${`i${k}`} class="mu">${many && a.project ? `${a.project} · ` : ''}${a.id}</div><div key=${`t${k}`}>${a.text}</div>
+      return html`<div key=${`i${k}`} class="mu">${many && a.project ? `${projectName(a.project)} · ` : ''}${a.id}</div><div key=${`t${k}`}>${a.text}</div>
       <div key=${`r${k}`} class=${`mu ${a.prune ? 'z' : ''}`}>${a.reuses} reuse${a.reuses === 1 ? '' : 's'}${a.last_used ? ` · last ${day(a.last_used, now)}` : ''}</div>
       <div key=${`a${k}`} class=${`mu ${a.prune ? 'z' : ''}`}>${a.prune ? html`<${Prune} a=${a} project=${project} />` : `${age(a.t, now)} old`}</div>`;
     })}</div>`;

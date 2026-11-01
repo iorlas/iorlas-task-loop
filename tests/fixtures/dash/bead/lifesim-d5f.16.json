@@ -3,12 +3,13 @@
  "t": 1793050200.0,
  "card": {
   "id": "lifesim-d5f.16",
-  "project": "lifesim",
+  "project": "lifesim-56f42031",
   "title": "Autosave every 5 minutes",
   "column": "done",
   "marker": "done",
   "status": "landed",
   "tone": "",
+  "run": "lifesim-d5f.16-fixture",
   "t": 1793035800.0,
   "epic": "lifesim-d5f",
   "slot": "mac·1",
@@ -57,7 +58,7 @@
   "retry_at": 0.0,
   "shots": 0
  },
- "version": "3070df72e321af5c",
+ "version": "6428c7b4a43bb8a9",
  "bd_ok_at": null,
  "bd_error": "",
  "description": "Autosave every 5 minutes. Part of Save system.",

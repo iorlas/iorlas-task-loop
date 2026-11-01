@@ -3,12 +3,13 @@
  "t": 1793050200.0,
  "card": {
   "id": "lifesim-9xq.1",
-  "project": "lifesim",
+  "project": "lifesim-56f42031",
   "title": "Fridge spoils food after 3 days",
   "column": "review",
   "marker": "run",
   "status": "AI review · 2 notes so far",
   "tone": "run",
+  "run": "lifesim-9xq.1-fixture",
   "t": 1793049660.0,
   "epic": "lifesim-eco",
   "slot": "mac·3",
@@ -57,7 +58,7 @@
   "retry_at": 0.0,
   "shots": 0
  },
- "version": "fcaf017497514763",
+ "version": "5f1f814c68aff10e",
  "bd_ok_at": null,
  "bd_error": "",
  "description": "Fridge spoils food after 3 days. Part of Economy.",

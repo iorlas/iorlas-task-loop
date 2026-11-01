@@ -7,6 +7,7 @@ from enum import StrEnum
 from typing import Final
 
 from taskloop.contracts.enums import Step
+from taskloop.contracts.ids import loop_key
 from taskloop.contracts.locator import RunLocator, host_name
 from taskloop.contracts.locks import pid_alive
 from taskloop.contracts.paths import ConfigDir
@@ -59,6 +60,17 @@ def lost_reason(m: RunManifest, now: float) -> str:
 def shown(m: RunManifest, now: float) -> Liveness:
     """What a reader that must not write displays: the recorded state, or LOST when the reconciler would mark it so now."""
     return Liveness.LOST if is_lost(m, host_name(), now, pid_alive) else liveness(m)
+
+
+def command_scope(cfg: ConfigDir, repo: str, bead: str, run: str, now: float) -> str:
+    """Refuse an owner command before any write when its observed identities or liveness disagree."""
+    bundle = RunLocator(cfg).get(run) if run else None
+    if bundle is None:
+        return "no run of this bead is going"
+    m = bundle.manifest
+    if loop_key(m.repo) != loop_key(repo) or m.bead != bead:
+        return "That run does not belong to this repo and bead. Refresh before trying again."
+    return "" if shown(m, now) is Liveness.LIVE else "no run of this bead is going"
 
 
 def reconcile(cfg: ConfigDir, now: float) -> list[str]:

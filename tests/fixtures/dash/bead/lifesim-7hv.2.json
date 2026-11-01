@@ -3,12 +3,13 @@
  "t": 1793050200.0,
  "card": {
   "id": "lifesim-7hv.2",
-  "project": "lifesim",
+  "project": "lifesim-56f42031",
   "title": "Pets need feeding twice a day",
   "column": "done",
   "marker": "done",
   "status": "landed · came back after codex ran out",
   "tone": "",
+  "run": "lifesim-7hv.2-fixture",
   "t": 1793046600.0,
   "epic": "lifesim-wld",
   "slot": "devbox·1",
@@ -57,7 +58,7 @@
   "retry_at": 0.0,
   "shots": 0
  },
- "version": "7eb709d29537b093",
+ "version": "268c2d4e7cbfaba7",
  "bd_ok_at": null,
  "bd_error": "",
  "description": "Pets need feeding twice a day. Part of World.",

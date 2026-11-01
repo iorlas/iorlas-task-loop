@@ -29,7 +29,8 @@ def world(project="p", extra=()):
     old = RunScript("b-3", "20261001-100000", at=-900_000).step("plan", 10, 10, "OC", cost=9.0, source="harness").close("landed")
     runs = {"b-1": [one.run(NOW), two.run(NOW)], "b-2": [three.run(NOW)], "b-3": [old.run(NOW)]}
     projects = [ProjectIn(id="p", name="p", beads=[bead("b-1"), bead("b-2")]), ProjectIn(id="q", name="q", beads=[bead("b-3"), *extra])]
-    return World(now=NOW, host="h", version="v", projects=projects, runs=runs, asks={})
+    return World(now=NOW, host="h", version="v", projects=projects,
+                 runs={("q" if b == "b-3" else "p", b): rs for b, rs in runs.items()}, asks={})
 
 
 def view(rows):

@@ -110,7 +110,7 @@ const SHEETS = { filter: ['Filter', FilterSheet], stick: ['', StickSheet], stop:
 export function Phone({ snap, now }) {
   const pg = useRef(null);
   useEdgeSwipe(pg);
-  const c = counts(snap), card = findBead(snap, ui.bead);
+  const c = counts(snap), card = findBead(snap, ui.bead, ui.beadProject || ui.project);
   const sheet = ui.sheet && SHEETS[ui.sheet.kind];
   let body;
   if (ui.tab === 'board') body = html`<${BoardTab} snap=${snap} now=${now} />`;

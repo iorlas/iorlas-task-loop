@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from taskloop.contracts.bead import Bead as TypedBead
-from taskloop.contracts.ids import BeadId
+from taskloop.contracts.ids import BeadId, loop_key
 from taskloop.contracts.ports import BdFailure, BeadQuery
 from taskloop_dash.env import Bead, Env
 from taskloop_dash.readers.records import Records
@@ -129,12 +129,7 @@ class Beads:
         return self._observe(key, lambda: [c.to_dict() for c in self.env.ports.store(repo).comments(bead)]).rows
 
     def resolve_repo(self, repo: str, bead: str = "") -> str:
-        """A link may name a repo by path or by folder name, or not at all: find the registered repo it means."""
+        """Resolve a registered repository's immutable dashboard key."""
         known = self.records.repos()
-        if repo in known:
-            return repo
-        named = [p for p in known if basename(p) == repo]
-        if named:
-            return named[0]
-        return next((p for p in known if bead and any(x["id"] == bead for x in self.beads_of(p))), "")
+        return next((p for p in known if loop_key(p) == repo), "")
 

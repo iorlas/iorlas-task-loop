@@ -13,6 +13,7 @@ from support.repos import write_repos
 
 from taskloop.adapters.locks import holder_file, resource_holders
 from taskloop.contracts.enums import LockWhat
+from taskloop.contracts.ids import loop_key
 from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.locks import LockRecord
 from taskloop.contracts.paths import ConfigDir
@@ -44,5 +45,5 @@ class Leases(unittest.TestCase):
             with patch("taskloop.contracts.locks.pid_alive", side_effect=lambda pid: pid == os.getpid()):
                 snap = Dash(Env(config=cfg.root, home=root, ports=ports, clock=lambda: 1000)).reads.snapshot()
             self.assertEqual([(r.name, r.holder, r.since, r.run, r.project) for r in snap.leases],
-                             [("unity", "owner:unity-check", 990, run.run, "project")])
+                             [("unity", "owner:unity-check", 990, run.run, loop_key(repo))])
             self.assertEqual({p: p.read_bytes() for p in held.parent.iterdir()}, before)

@@ -93,41 +93,41 @@ export async function stickRow(row, outcome) {
 const seenPatch = (k, v) => { const seen = { ...ui.seen }; if (v) seen[k] = v; else delete seen[k]; return seen; };
 
 // a cause on an ask, or on a stop; a stop's cause also mutes its red outline (§4), shown at once until the snapshot has it
-export async function cause(project, bead, value, askId = null) {
+export async function cause(project, bead, run, value, askId = null) {
   const k = `${project}/${bead}`;
   if (!askId) set({ seen: seenPatch(k, { cause: value }) });
-  const res = await api.write('cause', { project, bead, cause: value, ask: askId });
+  const res = await api.write('cause', { project, bead, run, cause: value, ask: askId });
   if (!res.ok && !askId) set({ seen: seenPatch(k, null) });
   toast(res.ok ? `Cause set: ${value.replace('_', ' ')}` : `⚠️ ${res.message}`);
   return res;
 }
 
 // 👁 Seen: the stuck outline fades and the Floor badge stops counting it until something changes
-export async function ack(project, bead) {
+export async function ack(project, bead, run) {
   const k = `${project}/${bead}`;
   set({ seen: seenPatch(k, { ack: true }) });
-  const res = await api.write('ack', { project, bead, ack: true });
+  const res = await api.write('ack', { project, bead, run, ack: true });
   if (!res.ok) { set({ seen: seenPatch(k, null) }); toast(`⚠️ ${res.message}`); }
   return res;
 }
 
 // ⏹ Stop: the run ends now, the branch is kept (the page confirms first)
-export async function stop(project, bead) {
-  const res = await api.write('stop', { project, bead });
+export async function stop(project, bead, run) {
+  const res = await api.write('stop', { project, bead, run });
   toast(res.ok ? `⏹ ${bead} stopped · branch kept` : `⚠️ ${res.message}`);
   return res;
 }
 
 // ✉️ a note for the worker, or a comment on a done bead: a bead comment every later stage reads
-export async function note(project, bead, text, draftKey) {
-  const res = await api.write('note', { project, bead, text });
+export async function note(project, bead, run, text, draftKey) {
+  const res = await api.write('note', { project, bead, run, text });
   if (res.ok) clearDraft(draftKey);
   toast(res.ok ? `✉️ Saved on ${bead} · its next stage reads it` : `⚠️ ${res.message}`);
   return res;
 }
 
-export async function park(project, bead) {
-  const res = await api.write('park', { project, bead });
+export async function park(project, bead, run) {
+  const res = await api.write('park', { project, bead, run });
   toast(res.ok ? `⏸ Parked · ${bead} frees its slot` : `⚠️ ${res.message}`);
   return res;
 }
@@ -158,7 +158,7 @@ export function hooks(ask) {
     : s ? { held: 0, option: s.option, stick: s.stick } : null;
   return {
     ask: { sent: state, onPick: (i) => answer(ask, i), onAskBack: (t, k) => reply(ask, t, k), onUndo: undo,
-      onStick: (o) => stick(ask.id, o), onCause: (c) => cause(ask.project, ask.bead, c, ask.id) },
+      onStick: (o) => stick(ask.id, o), onCause: (c) => cause(ask.project, ask.bead, ask.run, c, ask.id) },
     look: { busy: !!s, onApprove: () => look(ask, 'good'), onSendBack: (t, k) => look(ask, 'redo', t, k) },
   };
 }

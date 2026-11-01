@@ -17,7 +17,7 @@ function NoteForm({ card, rows, onSent, cancel }) {
   const send = async (e) => {
     e.preventDefault();
     if (!text.trim()) return;
-    const res = await act.note(card.project, card.id, text.trim(), k);
+    const res = await act.note(card.project, card.id, card.run, text.trim(), k);
     if (res.ok) { setText(''); if (onSent) onSent(); }
   };
   const input = { value: text, placeholder: noteHint(card), 'aria-label': noteHint(card), onInput: (e) => { setText(e.target.value); draft(k, e.target.value); } };
@@ -27,18 +27,18 @@ function NoteForm({ card, rows, onSent, cancel }) {
 }
 
 export function Controls({ card }) {
-  const [confirm, setConfirm] = useState(false);
+  const [confirm, setConfirm] = useState(null);
   if (confirm) {
     return html`<div class="ctl cf"><span>Stop ${bid(card.id, card.project)}? The run ends now; branch <code>bd/${card.id}</code> is kept.</span>
-      <button class="stop on" onClick=${() => { setConfirm(false); act.stop(card.project, card.id); }}>⏹ Stop the run</button>
+      <button class="stop on" onClick=${() => { setConfirm(null); act.stop(card.project, card.id, confirm.run); }}>⏹ Stop the run</button>
       <button onClick=${() => setConfirm(false)}>Cancel</button></div>`;
   }
   return html`<div class="ctl">${active(card) && html`<button title="parks at the next safe point; the slot takes other work"
-      onClick=${() => act.park(card.project, card.id)}>⏸ Park</button><button class="stop" onClick=${() => setConfirm(true)}>⏹ Stop</button>`}
+      onClick=${() => act.park(card.project, card.id, card.run)}>⏸ Park</button><button class="stop" onClick=${() => setConfirm({ run: card.run })}>⏹ Stop</button>`}
     <${NoteForm} card=${card} /></div>`;
 }
 
-const sheet = (kind, card) => set({ sheet: { kind, project: card.project, bead: card.id } }, { push: true });
+const sheet = (kind, card) => set({ sheet: { kind, project: card.project, bead: card.id, run: card.run } }, { push: true });
 
 export function PhoneControls({ snap, card }) {
   const ask = askOf(snap, card);
@@ -47,7 +47,7 @@ export function PhoneControls({ snap, card }) {
       <button onClick=${() => sheet('note', card)}>✉️ Note</button></div>`;
   }
   if (!active(card)) return html`<div class="pab"><button onClick=${() => sheet('note', card)}>${card.column === 'done' ? '💬 Comment' : '✉️ Note'}</button></div>`;
-  return html`<div class="pab"><button onClick=${() => act.park(card.project, card.id)}>⏸ Park</button>
+  return html`<div class="pab"><button onClick=${() => act.park(card.project, card.id, card.run)}>⏸ Park</button>
     <button class="stop" onClick=${() => sheet('stop', card)}>⏹ Stop</button><button onClick=${() => sheet('note', card)}>✉️ Note</button></div>`;
 }
 
@@ -57,7 +57,7 @@ export function StopSheet({ snap, arg }) {
   const card = cardOf(snap, arg);
   if (!card) return html`<p>${arg.bead} is gone from the board.</p><button class="wide" onClick=${back}>Close</button>`;
   return html`<h3>Stop ${bid(card.id, card.project)}?</h3><p>The run ends now. Branch <code>bd/${card.id}</code> is kept.</p>
-    <button class="wide danger" onClick=${() => { act.stop(card.project, card.id); back(); }}>⏹ Stop the run</button>
+    <button class="wide danger" onClick=${() => { act.stop(card.project, card.id, arg.run); back(); }}>⏹ Stop the run</button>
     <button class="wide" onClick=${back}>Cancel</button>`;
 }
 

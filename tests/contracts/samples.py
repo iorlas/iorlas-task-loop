@@ -39,7 +39,7 @@ from taskloop.contracts import (
     worktrees,
 )
 from taskloop.contracts.enums import AskClass, AskKind, AskStatus, LockWhat, Outcome, Result, WaitWhat, WhyCode
-from taskloop.contracts.ids import BeadId, CheckId, TreeSha
+from taskloop.contracts.ids import BeadId, CheckId, TreeSha, loop_key
 from taskloop.contracts.runkey import BaseSha, Digest, RunKey
 
 T = 1793050200.5
@@ -304,7 +304,7 @@ REVIEW_STATE = review.ReviewState(
     verified=[trace.Verified(what="w", kind="checkable", verdict="settled", evidence="e", why="y")], filed=["f"],
     unfiled=[review.Unfiled(title="t", why="lint")])
 OTHERS = {
-    "Epic": dash.Epic(id="t-epic", project="task-loop", title="Active epic", open=True, done=1, total=2),
+    "Epic": dash.Epic(id="t-epic", project=loop_key("/repos/task-loop"), title="Active epic", open=True, done=1, total=2),
     "RunTrace": TRACE,
     "Ask": ASK,
     "LedgerEntry": ledger.LedgerEntry(
@@ -313,10 +313,10 @@ OTHERS = {
         similar=[ask.SimilarRef(kind="ask", id="tl-0-1")], why="w"),
     "Adr": ledger.Adr(id="ADR-3", n=3, repo="/r", text="Saves stay v1.", question="Which?", answer="ok", ask="tl-1-1", bead="tl-1",
                       key="open_question:which", t=T, by="denis", refs=["tl-2-1"], retired_by="denis", retired_t=T + 9),
-    "RunHeader": dashruns.RunHeader(run=str(RUN), project="lifesim", mode="stage:gate", owner="tester", session="s1",
+    "RunHeader": dashruns.RunHeader(run=str(RUN), project=loop_key("/repos/lifesim"), mode="stage:gate", owner="tester", session="s1",
                                     state=run.RunState.DONE,
                                     started=T, ended=T + 1, reason="w", branch="feature/check"),
-    "ResourceLease": dashruns.ResourceLease(name="unity", holder="tester:unity", since=T, run=str(RUN), project="lifesim"),
+    "ResourceLease": dashruns.ResourceLease(name="unity", holder="tester:unity", since=T, run=str(RUN), project=loop_key("/repos/lifesim")),
     "TermLine": dashruns.TermLine(t=T, text="ok", tone="ok"),
     "ToolCall": dashruns.ToolCall(t=T, name="Bash", arg="ls"),
     "AdrUse": ledger.AdrUse(adr="ADR-3", bead="tl-2", run=str(RUN), t=T),

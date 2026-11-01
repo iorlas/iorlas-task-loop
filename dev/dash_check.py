@@ -67,6 +67,12 @@ CASES += [(f"{dev}-runs-empty", {"scn": "runs", "w": size[0], "h": size[1], "sta
           for dev, size in (("desktop", DESKTOP), ("phone", PHONE))]
 CASES += [(f"{dev}-bd-health", {"scn": "bdhealth", "w": size[0], "h": size[1], "state": "bd-error"})
           for dev, size in (("desktop", DESKTOP), ("phone", PHONE))]
+CASES += [(f"{dev}-identity", {"scn": "identity", "w": size[0], "h": size[1], "state": "identity"})
+          for dev, size in (("desktop", DESKTOP), ("phone", PHONE))]
+CASES += [(f"{dev}-project-names", {"scn": "projectnames", "w": size[0], "h": size[1], "state": "variants"})
+          for dev, size in (("desktop", DESKTOP), ("phone", PHONE))]
+CASES += [(f"{dev}-stale-project", {"scn": "staleproject", "w": size[0], "h": size[1]})
+          for dev, size in (("desktop", DESKTOP), ("phone", PHONE))]
 
 # against a live server (--base): read-only, writes refused in the page; part 0 is every view, parts 1.. are slices of beads
 LIVE_CASES = [(f"{dev}-survey-{part}", {"scn": "survey", "part": part, "ro": 1, "w": size[0], "h": size[1]})
@@ -143,12 +149,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--out", default=str(ROOT / ".task" / "dash-shots"))
     ap.add_argument("--shots", action="store_true")
     ap.add_argument("--only", default="")
-    ap.add_argument("--state", choices=("ok", "empty", "down", "variants", "bd-error"), default="ok",
+    ap.add_argument("--state", choices=("ok", "empty", "down", "variants", "bd-error", "identity"), default="ok",
                     help="the server state the screenshots use")
     ap.add_argument("--base", default="", help="a running dash (it must serve check.html): read-only survey cases only")
     args = ap.parse_args(argv)
     exe = chrome()
-    servers = {} if args.base else {st: serve(st) for st in ("ok", "empty", "down", "variants", "bd-error")}
+    servers = {} if args.base else {st: serve(st) for st in ("ok", "empty", "down", "variants", "bd-error", "identity")}
     base = args.base.rstrip("/") or f"http://127.0.0.1:{servers[args.state][1]}"
     bad = 0
     for name, case in LIVE_CASES if args.base else CASES:

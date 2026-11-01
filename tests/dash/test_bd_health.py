@@ -11,7 +11,7 @@ from support.narrow import must
 from support.repos import write_repos
 
 from taskloop.contracts.bead import BdError
-from taskloop.contracts.ids import BeadId
+from taskloop.contracts.ids import BeadId, loop_key
 from taskloop.contracts.ports import BdFailure
 from taskloop_dash.app import Dash
 from taskloop_dash.env import Env, Ports
@@ -85,7 +85,7 @@ class BdHealth(unittest.TestCase):
         self.assertNotEqual(recovered.version, failed.version)
 
     def test_detail_publishes_comment_failure_and_keeps_last_comments(self):
-        query = {"project": "project", "id": "b-1"}
+        query = {"project": loop_key(self.repo), "id": "b-1"}
         before = json.loads(self.dash.reads.get("/api/bead", query)[1])
         self.now += 16
         with self.store.stub(comments_fn=unreadable):
@@ -131,7 +131,7 @@ class BdHealth(unittest.TestCase):
         self.assertEqual(snap.beads, [])
         self.assertEqual((snap.projects[0].bd_ok_at, snap.projects[0].bd_error), (None, ERROR))
         with self.store.stub(comments_fn=unreadable):
-            detail = must(self.dash.reads.bead("project", "b-1"))
+            detail = must(self.dash.reads.bead(loop_key(self.repo), "b-1"))
         self.assertEqual((detail.bd_ok_at, detail.bd_error, detail.comments), (None, ERROR, []))
 
     def test_health_is_separate_for_each_repo_and_comment_read(self):

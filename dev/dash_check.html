@@ -99,6 +99,73 @@ function type(sel, text) {
   el.dispatchEvent(new (win().Event)('input', { bubbles: true }));
 }
 const SCENARIOS = {
+  async staleproject() {
+    const snap = await (await fetch('/api/snapshot')).json();
+    const phone = W <= 600;
+    const check = () => {
+      const saved = JSON.parse(localStorage.getItem('tl-dash-ui'));
+      must(saved.project === 'all' && saved.epic === 'all', 'stale project and epic reset to all in storage');
+      const titles = $$(phone ? '.pc .t,.gr.done .t' : '.kc .tt,.dn').filter(shown).map((el) => el.textContent);
+      const expected = snap.beads.filter((b) => ['working', 'review', 'questions', 'look', 'landing'].includes(b.column));
+      must(expected.every((b) => titles.some((t) => t.includes(b.title))), 'board shows beads from all projects');
+    };
+    localStorage.setItem('tl-dash-ui', JSON.stringify({ project: 'lifesim', epic: 'lifesim-d5f' }));
+    await load('/#board'); await settle(1500); check();
+    localStorage.setItem('tl-dash-ui', JSON.stringify({ project: snap.projects[0].id, epic: 'lifesim-d5f' }));
+    await load('/#board~~lifesim-6dq0~~~missing-project'); await settle(1500);
+    must(!win().location.hash.includes('missing-project'), 'unknown deep-link project is removed from the hash');
+    win().location.hash = '#board'; await settle();
+    check();
+  },
+  async projectnames() {
+    await load('/#board'); await settle(1500);
+    const phone = W <= 600;
+    const check = (where) => {
+      const walker = doc().createTreeWalker(doc().body, win().NodeFilter.SHOW_TEXT);
+      const leaks = [];
+      while (walker.nextNode()) {
+        const node = walker.currentNode;
+        if (shown(node.parentElement) && /\b(?:lifesim|task-loop)-[0-9a-f]{8}\b/.test(node.textContent)) leaks.push(node.textContent.trim());
+        if (shown(node.parentElement)) must(!node.textContent.includes('Unknown project'), `${where}: registered project name is missing`);
+      }
+      must(!leaks.length, `${where}: visible repo keys: ${leaks.join('; ')}`);
+    };
+    must($$('.ban').some((el) => shown(el) && el.textContent.includes('Loop not running on task-loop')), 'loop banner uses the project name');
+    check('Board');
+    for (const tab of ['Floor', 'Decisions', 'Lanes', 'Cost', 'Board']) {
+      await click(phone ? '.tb button' : '.nav button', tab); check(tab);
+      if (tab === 'Decisions') {
+        for (const sub of ['Ledger', 'In force']) {
+          await click('.dtabs button', phone ? sub : sub === 'In force' ? 'Decisions in force' : sub); check(sub);
+        }
+      }
+    }
+    await click(phone ? '.pc' : '.kc', 'Fix save corruption'); await settle(800); check('Drawer');
+    await load('/#board~~lifesim-6dq0'); await settle(1500);
+    await click(phone ? '.pab button' : '.ctl button', 'Stop'); check('Stop confirmation');
+    await click(phone ? '.sh.on button' : '.ctl.cf button', 'Cancel');
+    if (phone) { await click('.pab button', 'Note'); check('Note sheet'); }
+    type(phone ? '.sh.on textarea' : '.ctl input', 'Display-name regression note');
+    await click(phone ? '.sh.on button' : '.ctl button', 'Send'); check('Note toast');
+    if (phone) { win().history.back(); await settle(); await click('.flt'); check('Filter sheet'); }
+    else { await click('.drw .x'); await click('.fc', 'lifesim'); check('Selected project filter'); }
+  },
+  async identity() {
+    await load('/#board'); await settle(1500);
+    const snap = await (await fetch('/api/snapshot')).json();
+    const target = snap.beads[1], phone = W <= 600;
+    must(snap.beads[0].id === target.id && snap.beads[0].project !== target.project, 'duplicate bead in two projects');
+    await click(phone ? '.pc' : '.kc', target.title); await settle(800);
+    must(win().location.hash.includes(target.project), 'drawer link keeps the clicked repo key');
+    const panel = $(phone ? '.pg.on' : '.drw.open');
+    must(panel?.textContent.includes(target.title), 'drawer belongs to the second repo');
+    await click(phone ? '.pab button' : '.ctl button', 'Stop');
+    await click(phone ? '.sh button' : '.ctl.cf button', 'Stop the run');
+    await settle(300);
+    const sent = (await writes()).find(([verb]) => verb === 'stop');
+    must(sent && sent[1].project === target.project && sent[1].bead === target.id && sent[1].run === target.run,
+      `stop keeps the observed repo, bead and run: ${JSON.stringify(sent)}`);
+  },
   async bdhealth() {
     localStorage.clear();
     await load('/#board'); await settle(1500);

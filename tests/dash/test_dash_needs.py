@@ -43,7 +43,7 @@ def slot(name, **meta):
 
 def world(beads=(), slots=(), loops=(), events=(), asks=None, **kw):
     p = ProjectIn(id="p", name="p", beads=list(beads), slots=list(slots), loops=list(loops), events=list(events))
-    return World(now=NOW, host="h", version="v", projects=[p], runs={}, asks=asks or {}, **kw)
+    return World(now=NOW, host="h", version="v", projects=[p], runs={}, asks={(p.id, b): a for b, a in (asks or {}).items()}, **kw)
 
 
 def needs(w):

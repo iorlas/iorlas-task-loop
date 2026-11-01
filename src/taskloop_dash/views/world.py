@@ -66,8 +66,8 @@ class World:
     host: str
     version: str  # the server's code version
     projects: Sequence[ProjectIn]
-    runs: Mapping[str, Sequence[Run]]  # bead id -> its runs in the retained logs, oldest first
-    asks: Mapping[str, Ask]  # bead id -> its open or parked ask
+    runs: Mapping[tuple[str, str], Sequence[Run]]  # (repo key, bead id) -> retained runs, oldest first
+    asks: Mapping[tuple[str, str], Ask]  # (repo key, bead id) -> its open or parked ask
     run_headers: Sequence[RunHeader] = ()
     leases: Sequence[ResourceLease] = ()
     status: StatusSnapshot | None = None  # delegate's status as `tl lanes` last filed it

@@ -1,6 +1,7 @@
 // Selectors over one snapshot: lookups, the client-side filters (dash-spec §11.2: filters apply on the client) and counts.
 // Nothing here decides engine meaning; column, marker, status and tone come from the server.
 import { ui } from './state.js';
+import { projectName } from './format.js';
 
 const memo = new WeakMap();
 // per-snapshot indexes, built once per snapshot object
@@ -9,7 +10,7 @@ export function idx(snap) {
   if (!m) {
     m = { beads: new Map(), slots: new Map(), asks: new Map(), pieces: new Map(), lanes: new Map() };
     for (const b of snap.beads) m.beads.set(key(b.project, b.id), b);
-    for (const s of snap.slots) m.slots.set(s.id, s);
+    for (const s of snap.slots) m.slots.set(key(s.project, s.id), s);
     for (const a of snap.asks) m.asks.set(key(a.project, a.bead), a);
     for (const p of snap.pieces) {
       const k = key(p.project, p.bead);
@@ -24,12 +25,13 @@ export function idx(snap) {
 
 export const key = (project, id) => `${project}/${id}`;
 
-// a bead by id, preferring the picked project: ids are unique per project, the deep link carries the id alone
+// A scoped link resolves exactly. A bare link must identify one bead across all projects.
 export function bead(snap, id, project = ui.project) {
   if (!id) return null;
   const m = idx(snap);
-  if (project !== 'all' && m.beads.has(key(project, id))) return m.beads.get(key(project, id));
-  return snap.beads.find((b) => b.id === id) || null;
+  if (project !== 'all') return m.beads.get(key(project, id)) || null;
+  const matches = snap.beads.filter((b) => b.id === id);
+  return matches.length === 1 ? matches[0] : null;
 }
 
 // the machine of a slot: Slot.machine when the server sends it, else the part of the slot name before "·"
@@ -55,7 +57,7 @@ export function visible(snap, b) {
   if (ui.project !== 'all' && b.project !== ui.project) return false;
   if (ui.epic !== 'all' && b.epic !== ui.epic) return false;
   if (ui.machine !== 'all') {
-    const s = b.slot ? idx(snap).slots.get(b.slot) : null;
+    const s = b.slot ? idx(snap).slots.get(key(b.project, b.slot)) : null;
     if (s && machineOf(s) !== ui.machine) return false;
   }
   return true;
@@ -102,7 +104,7 @@ export function liveSegment(snap, piece) {
 
 export function filterLabel(snap) {
   const p = [];
-  if (ui.project !== 'all') p.push(snap.projects.find((x) => x.id === ui.project)?.name || ui.project);
+  if (ui.project !== 'all') p.push(projectName(ui.project));
   if (ui.epic !== 'all') p.push(snap.epics.find((e) => e.id === ui.epic)?.title || ui.epic);
   if (ui.machine !== 'all') p.push(`${MACHINE_ICON(ui.machine)} ${ui.machine}`);
   return p;

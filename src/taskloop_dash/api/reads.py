@@ -49,12 +49,12 @@ class Reads:
         path = self.worlds.repos().get(project)
         if path is None or not is_bead_id(bead):
             return None
-        w = self.worlds.world(full=bead)
+        w = self.worlds.world(full=(project, bead))
         p = next((x for x in w.projects if x.id == project), None)
         b = next((x for x in p.beads if x.id == bead), None) if p else None
         if p is None or b is None:
             return None
-        runs = w.runs.get(bead, [])
+        runs = w.runs.get((project, bead), [])
         newest: Run | None = runs[-1] if runs else None
         comments = self.worlds.comments(path, bead)
         bd_ok_at, bd_error = self.worlds.beads.health(path, bead)

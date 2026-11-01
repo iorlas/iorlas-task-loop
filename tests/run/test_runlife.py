@@ -24,7 +24,7 @@ from taskloop.app.run import layout  # noqa: E402
 from taskloop.app.slots.lease import Lease  # noqa: E402
 from taskloop.contracts import runlife  # noqa: E402
 from taskloop.contracts.enums import Outcome  # noqa: E402
-from taskloop.contracts.ids import BeadId, RunId  # noqa: E402
+from taskloop.contracts.ids import BeadId, RunId, loop_key  # noqa: E402
 from taskloop.contracts.locator import RunLocator, host_name  # noqa: E402
 from taskloop.contracts.paths import ConfigDir  # noqa: E402
 from taskloop.contracts.run import RunManifest, RunState  # noqa: E402
@@ -136,7 +136,7 @@ class Crash(unittest.TestCase):
 
     def dash_says(self) -> str:
         self.dash.env.files.items.clear()
-        return self.dash.live.page(BEAD)[1]["state"]
+        return self.dash.live.page(loop_key(self.bundle.repo), BEAD)[1]["state"]
 
     def report_crashes(self) -> list[str]:
         run = must(RunId.of("01KBN6Z0M4R5E8YQ2T7C9W3XA1"))
@@ -224,7 +224,7 @@ class BeatsAreNoEvents(unittest.TestCase):
         run = dash.live.live_run(self.bundle)
         run.refresh()
         self.assertEqual([e["k"] for e in live_api.page(run)["events"]], ["run_start", "step_start", "warn"])
-        self.assertEqual(dash.live.page(BEAD)[1]["state"], "live")
+        self.assertEqual(dash.live.page(loop_key(self.bundle.repo), BEAD)[1]["state"], "live")
         self.assertEqual(jsonl.records(str(self.log))[-1].kind, "warn")
 
 

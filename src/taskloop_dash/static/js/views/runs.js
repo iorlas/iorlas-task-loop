@@ -1,11 +1,11 @@
 // Standalone stage runs read from manifests, including work with no bead or loop.
 import { html, useState } from '../../vendor/ui-runtime.js';
-import { age, retryTime } from '../format.js';
+import { age, projectName, retryTime } from '../format.js';
 import { ui } from '../state.js';
 
 function RunRow({ r, now }) {
   const [expanded, expand] = useState(false);
-  const summary = `${r.mode} · ${r.project} · ${r.state} · ${age(r.started, now)}${r.retry_at ? ` · ${retryTime(r.retry_at)}` : ''}`;
+  const summary = `${r.mode} · ${projectName(r.project)} · ${r.state} · ${age(r.started, now)}${r.retry_at ? ` · ${retryTime(r.retry_at)}` : ''}`;
   const full = `${summary} · owner: ${r.owner || '—'} · session: ${r.session || '—'}${r.reason ? ` · ${r.reason}` : ''}`;
   return html`<button class=${`run-row ${expanded ? 'expanded' : ''}`} title=${full} aria-expanded=${expanded}
     onClick=${() => expand(!expanded)}>${expanded ? full : `${summary}${r.reason ? ` · ${r.reason}` : ''}`}</button>`;

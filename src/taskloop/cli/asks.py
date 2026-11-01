@@ -5,6 +5,7 @@ import json
 import time
 from argparse import Namespace
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any, Final
 
 from taskloop.app.asks import intake, sweeps
@@ -140,7 +141,7 @@ def verb(a: Namespace, op: str, bead: BeadId, ask: Ask | None, verbs: intake.Int
         out("done" if not why else "tl: " + SAYS.get(why, why))
         return 0 if not why else 1
     if op in ("park", "note"):
-        owner = requests.OwnerVerbs(verbs, cfg, now())
+        owner = requests.OwnerVerbs(verbs, cfg, now(), ask.repo if ask else str(Path.cwd()))
         run = requests.newest_run(cfg, bead)
         why, said = owner.park(bead, run) if op == "park" else owner.note(bead, run, words)
         out(said if not why else "tl: " + why)

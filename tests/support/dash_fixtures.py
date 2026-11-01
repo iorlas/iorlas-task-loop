@@ -16,7 +16,7 @@ from taskloop.contracts import dash as D
 from taskloop.contracts import dashcost as DC
 from taskloop.contracts import wire
 from taskloop.contracts.dashruns import ResourceLease, RunHeader
-from taskloop.contracts.ids import BeadId
+from taskloop.contracts.ids import BeadId, loop_key
 from taskloop.contracts.needs import NeedRow
 from taskloop.contracts.run import RunState
 from taskloop_dash.views.snapshot import version_of
@@ -24,6 +24,7 @@ from taskloop_dash.views.snapshot import version_of
 ROOT = Path(__file__).resolve().parents[2]
 DIR = ROOT / "tests" / "fixtures" / "dash"
 NOW = 1793050200.0
+PROJECTS = {name: loop_key('/repos/' + name) for name in ('lifesim', 'task-loop')}
 TOKENS_PER_MIN = 9500
 USUAL, USUAL_N = 600_000, 12
 
@@ -133,7 +134,7 @@ def card(b: dict, by: dict, waiters: dict) -> D.BeadCard:
     tone = "you" if b["col"] in ("ask", "look") else "bad" if b.get("bad") else "run" if b["col"] in ("working", "review") else ""
     waits = "no slot serves task-loop yet" if b["id"] == "tl-8k4" else ""
     return D.BeadCard(
-        id=b["id"], project=b["proj"], title=b["t"], column=col, marker=marker(b, by),
+        id=b["id"], project=b["proj"], run=f"{b['id']}-fixture" if work(b) else "", title=b["t"], column=col, marker=marker(b, by),
         status=("⏩ " if b.get("soft") else "") + b["line"], tone=tone, t=ago(b["age"]) if b.get("age") else None,
         epic=EPICS.get(b["room"]), slot=b.get("slot") if b["col"] != "backlog" else None, lane=b.get("lane"),
         loops=b.get("loops", 0), dots=dots(b), needs=[n for n in b.get("needs", []) if n in by and by[n]["col"] != "done"],
@@ -210,14 +211,14 @@ def ask_card(b: dict) -> D.AskCard:
                          t=ago(b["age"]), shots=[shot_url(b["id"], i) for i in range(b.get("shots", 4))])
     a = ASKS[b["short"]]
     return D.AskCard(
-        id=f"{b['id']}-1", bead=b["id"], project=b["proj"], source="ask", question=a["question"], t=ago(b["age"]),
+        id=f"{b['id']}-1", bead=b["id"], project=b["proj"], source="ask", run=f"{b['id']}-fixture", question=a["question"], t=ago(b["age"]),
         blocking=a.get("blocking", True), why=a["why"], tried=a.get("tried", []), default=a.get("default", ""), owner_cause=a["cause"],
         options=[D.AskOptionCard(label=o[0], consequence=o[1], recommended=o[2]) for o in a["options"]],
         similar=a.get("similar"), thread=a.get("thread", []), ask_backs=a.get("ask_backs", 0))
 
 
 def shot_url(bead: str, i: int) -> str:
-    return f"/api/artifact?project=lifesim&bead={bead}&name=shot-{i + 1}.png"
+    return f"/api/artifact?project={PROJECTS['lifesim']}&bead={bead}&name=shot-{i + 1}.png"
 
 
 def passes(b: dict) -> list[D.Pass]:
@@ -344,7 +345,8 @@ def ledger(data: dict) -> list[D.LedgerRow]:
         if oc == "once":
             outcome = D.Stick.ONCE
         out.append(D.LedgerRow(t=t, ask=f"{bead}-1", bead=bead,
-                               project="task-loop" if bead.startswith("tl-") else "lifesim", question=q, status=status,
+                               project=PROJECTS["task-loop" if bead.startswith("tl-") else "lifesim"], run=f"{bead}-fixture",
+                               question=q, status=status,
                                answer="" if status != "answered" else ans,
                                outcome=outcome, outcome_ref=ref, cause=CAUSE.get(cause, D.OwnerCause.UNKNOWN)))
     return out
@@ -355,7 +357,7 @@ def adrs(data: dict) -> list[D.AdrRow]:
     for aid, text, reuse, age in data["ADR"]:
         m = re.search(r"reused (\d+)", reuse)
         d = 0 if age == "today" else int(age.split()[0])
-        out.append(D.AdrRow(id=aid, project="lifesim", text=text, t=NOW - d * 86400, reuses=int(m.group(1)) if m else 0,
+        out.append(D.AdrRow(id=aid, project=PROJECTS["lifesim"], text=text, t=NOW - d * 86400, reuses=int(m.group(1)) if m else 0,
                                  last_used=NOW - 86400 if m else None, prune="0 reuses in" in reuse))
     return out
 
@@ -392,6 +394,7 @@ def full_ids(data: dict) -> dict:
         b["short"] = b["id"]
         b["id"] = full(b["proj"], b["id"])
         b["needs"] = [full(proj[n], n) for n in b.get("needs", [])]
+        b["proj"] = PROJECTS[b["proj"]]
     data["TERM"] = {full(proj[k], k): v for k, v in data["TERM"].items()}
     for row in data["LED"]:
         row[1] = full(proj.get(row[1], "lifesim"), row[1])
@@ -405,18 +408,21 @@ def needs(cards: list[Any]) -> list[NeedRow]:
     """One row of each kind of the needs-you list (the beads are the first cards of the fixture)."""
     ids = [c.id for c in cards[:4]]
     return [
-        NeedRow(kind="stalled", project="lifesim", bead=None, why="2 ready bead(s), nothing happened for 40 min", since=NOW - 2400),
-        NeedRow(kind="label", project="lifesim", bead=ids[0], why="needs acceptance criteria", since=NOW - 7200, title="needs-ac"),
-        NeedRow(kind="block", project="lifesim", bead=ids[1], why="needs a human: pick the save format", since=NOW - 5400),
-        NeedRow(kind="parked", project="lifesim", bead=ids[2], why="ended on a question twice with this text", since=NOW - 3600),
-        NeedRow(kind="capped", project="lifesim", bead=ids[3], why="3 runs, the cap", since=NOW - 3000),
-        NeedRow(kind="slot_aside", project="lifesim", bead=None, why="slot a: 3 runs failed within 5 min each", since=NOW - 1200,
+        NeedRow(kind="stalled", project=PROJECTS["lifesim"], bead=None, why="2 ready bead(s), nothing happened for 40 min",
+                since=NOW - 2400),
+        NeedRow(kind="label", project=PROJECTS["lifesim"], bead=ids[0], why="needs acceptance criteria", since=NOW - 7200,
+                title="needs-ac"),
+        NeedRow(kind="block", project=PROJECTS["lifesim"], bead=ids[1], why="needs a human: pick the save format",
+                since=NOW - 5400),
+        NeedRow(kind="parked", project=PROJECTS["lifesim"], bead=ids[2], why="ended on a question twice with this text", since=NOW - 3600),
+        NeedRow(kind="capped", project=PROJECTS["lifesim"], bead=ids[3], why="3 runs, the cap", since=NOW - 3000),
+        NeedRow(kind="slot_aside", project=PROJECTS["lifesim"], bead=None, why="slot a: 3 runs failed within 5 min each", since=NOW - 1200,
                    until=NOW + 9000),
-        NeedRow(kind="slot_held", project="lifesim", bead=None, why="slot b: testing by hand", since=NOW - 900, until=NOW + 1800),
-        NeedRow(kind="slot_setup", project="lifesim", bead=None, why="slot c: setup failed (exit 1)", since=NOW - 600),
-        NeedRow(kind="stray", project="lifesim", bead=ids[0], why="claimed by tl-x, no live run (lease ended)"),
+        NeedRow(kind="slot_held", project=PROJECTS["lifesim"], bead=None, why="slot b: testing by hand", since=NOW - 900, until=NOW + 1800),
+        NeedRow(kind="slot_setup", project=PROJECTS["lifesim"], bead=None, why="slot c: setup failed (exit 1)", since=NOW - 600),
+        NeedRow(kind="stray", project=PROJECTS["lifesim"], bead=ids[0], why="claimed by tl-x, no live run (lease ended)"),
         NeedRow(kind="paused", project="", bead=None, why="lane codex is out", until=NOW + 5400),
-        NeedRow(kind="absent", project="task-loop", bead=None, why="3 ready bead(s) and no loop alive", since=NOW - 7200),
+        NeedRow(kind="absent", project=PROJECTS["task-loop"], bead=None, why="3 ready bead(s) and no loop alive", since=NOW - 7200),
     ]
 
 
@@ -440,24 +446,26 @@ def build() -> dict[str, Any]:
     snap = D.Snapshot(
         version="fx-1", t=NOW,
         server=D.ServerInfo(version="0000fixture", host="mac", loops=[
-            D.LoopInfo(project="lifesim", running=True, last_activity=NOW - 4, ready=2, quiet_since=NOW - 2400, health="stalled"),
-            D.LoopInfo(project="task-loop", running=False, last_activity=NOW - 7200, ready=3, health="absent"),
+            D.LoopInfo(project=PROJECTS["lifesim"], running=True, last_activity=NOW - 4, ready=2, quiet_since=NOW - 2400, health="stalled"),
+            D.LoopInfo(project=PROJECTS["task-loop"], running=False, last_activity=NOW - 7200, ready=3, health="absent"),
         ]), needs=needs(cards),
-        adhoc=[RunHeader(run="fixture-adhoc", project="lifesim", mode="stage:check", owner="fixture-owner", session="fixture-session",
+        adhoc=[RunHeader(run="fixture-adhoc", project=PROJECTS["lifesim"], mode="stage:check", owner="fixture-owner",
+                         session="fixture-session",
                          state=RunState.RUNNING, started=NOW - 90, branch="fixture/check")],
-        leases=[ResourceLease(name="unity", holder="fixture-owner", since=NOW - 60, run="fixture-adhoc", project="lifesim")],
-        projects=[D.Project(id="lifesim", name="lifesim"), D.Project(id="task-loop", name="task-loop")],
+        leases=[ResourceLease(name="unity", holder="fixture-owner", since=NOW - 60, run="fixture-adhoc", project=PROJECTS["lifesim"])],
+        projects=[D.Project(id=PROJECTS["lifesim"], name="lifesim"), D.Project(id=PROJECTS["task-loop"], name="task-loop")],
         epics=[D.Epic(id=k, project=v["project"], title=v["title"], open=v["done"] < v["total"], done=v["done"], total=v["total"])
                for k, v in epics.items()],
-        runs=[RunHeader(run=f"fixture-{i}", project="lifesim", mode="stage:check", owner="fixture-owner", session="fixture-session",
+        runs=[RunHeader(run=f"fixture-{i}", project=PROJECTS["lifesim"], mode="stage:check", owner="fixture-owner",
+                        session="fixture-session",
                         state=RunState.DONE, started=NOW - i * 60, reason=f"Run {i}: " + "A long recorded reason " * 12)
               for i in range(11)],
         slots=slots(data, all_pieces), beads=cards, pieces=all_pieces,
         asks=[ask_card(b) for b in beads if b["col"] in ("ask", "look")],
         ledger=ledger(data), adrs=adrs(data), learning=learning(), lanes=lanes(data))
-    starting = D.BeadCard(id="tl-00q", project="task-loop", title="Show slot start-up on the Floor", column=D.Column.WORKING,
+    starting = D.BeadCard(id="tl-00q", project=PROJECTS["task-loop"], title="Show slot start-up on the Floor", column=D.Column.WORKING,
                           marker=D.Marker.RUN, status="claimed by tl-loop-fixture", tone="run", t=NOW - 60, slot="mac·4")
-    start_slot = D.Slot(id="mac·4", name="mac·4", lane="codex", state="starting", project="task-loop", bead=starting.id,
+    start_slot = D.Slot(id="mac·4", name="mac·4", lane="codex", state="starting", project=PROJECTS["task-loop"], bead=starting.id,
                         t=NOW - 60, idle_why="starting tl-00q", startup="claimed · setup · rebase")
     out: dict[str, Any] = {"snapshot.json": snap.replace(slots=[start_slot, *snap.slots], beads=[starting, *snap.beads]),
                            "bead/tl-00q.json": D.BeadDetail(t=NOW, card=starting, description="The loop is setting up its slot.")}
@@ -475,15 +483,17 @@ def build() -> dict[str, Any]:
     for bid, lines in {**data["TERM"], **TERM}.items():
         out[f"live/{bid}.json"] = live_page(bid, lines, "live")
     out["writes.json"] = {
-        "answer": D.AnswerReq(project="lifesim", ask=L("fld.27") + "-1", kind="answer", option=0),
-        "look": D.LookReq(project="lifesim", bead=L("d5f.48"), verdict="redo", note="the confirm button is cut off"),
-        "stick": D.StickReq(project="lifesim", ask=L("fld.27") + "-1", outcome=D.Stick.ADR),
-        "cause": D.CauseReq(project="lifesim", bead=BeadId(L("5ban.3")), cause=D.OwnerCause.FLAKY_TEST),
-        "ack": D.AckReq(project="lifesim", bead=BeadId(L("5ban.3")), ack=True),
-        "prune": D.PruneReq(project="lifesim", adr="ADR-007"),
-        "park": D.ParkReq(project="lifesim", bead=BeadId(L("6dq0"))),
-        "stop": D.StopReq(project="lifesim", bead=BeadId(L("6dq0"))),
-        "note": D.NoteReq(project="lifesim", bead=BeadId(L("6dq0")), text="keep the old save format readable"),
+        "answer": D.AnswerReq(project=PROJECTS["lifesim"], ask=L("fld.27") + "-1", kind="answer", option=0),
+        "look": D.LookReq(project=PROJECTS["lifesim"], bead=L("d5f.48"), verdict="redo", note="the confirm button is cut off"),
+        "stick": D.StickReq(project=PROJECTS["lifesim"], ask=L("fld.27") + "-1", outcome=D.Stick.ADR),
+        "cause": D.CauseReq(project=PROJECTS["lifesim"], bead=BeadId(L("5ban.3")), run=L("5ban.3") + "-fixture",
+                            cause=D.OwnerCause.FLAKY_TEST),
+        "ack": D.AckReq(project=PROJECTS["lifesim"], bead=BeadId(L("5ban.3")), run=L("5ban.3") + "-fixture", ack=True),
+        "prune": D.PruneReq(project=PROJECTS["lifesim"], adr="ADR-007"),
+        "park": D.ParkReq(project=PROJECTS["lifesim"], bead=BeadId(L("6dq0")), run=L("6dq0") + "-fixture"),
+        "stop": D.StopReq(project=PROJECTS["lifesim"], bead=BeadId(L("6dq0")), run=L("6dq0") + "-fixture"),
+        "note": D.NoteReq(project=PROJECTS["lifesim"], bead=BeadId(L("6dq0")), run=L("6dq0") + "-fixture",
+                          text="keep the old save format readable"),
     }
     out["cost.json"] = cost_page()
     out["result.json"] = D.Result(ok=True, message="Sent. lifesim-fld.27 resumes in its slot.")

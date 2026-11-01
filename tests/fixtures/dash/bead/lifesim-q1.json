@@ -3,12 +3,13 @@
  "t": 1793050200.0,
  "card": {
   "id": "lifesim-q1",
-  "project": "lifesim",
+  "project": "lifesim-56f42031",
   "title": "Inventory sorting by weight",
   "column": "backlog",
   "marker": "ready",
   "status": "next on codex",
   "tone": "",
+  "run": "",
   "t": null,
   "epic": "lifesim-wld",
   "slot": null,
@@ -32,7 +33,7 @@
   "retry_at": 0.0,
   "shots": 0
  },
- "version": "ea856cea77dd56d4",
+ "version": "07306d2363fa6146",
  "bd_ok_at": null,
  "bd_error": "",
  "description": "Inventory sorting by weight. Part of World.",

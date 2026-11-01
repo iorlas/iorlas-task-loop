@@ -3,7 +3,7 @@
 import { html, render, useEffect, useState } from '../vendor/ui-runtime.js';
 import * as act from './actions.js';
 import * as api from './api.js';
-import { setManyProjects } from './format.js';
+import { setProjects } from './format.js';
 import { counts, troubled, bead as findBead } from './data.js';
 import { rememberScroll, scrollOf, set, subscribe, ui, setTab } from './state.js';
 import { CountBadge, Drawer, EmptyState, FilterChips, Ring, Tabs, Toast } from './ui/kit.js';
@@ -48,7 +48,7 @@ function Desktop({ snap, now }) {
   const c = counts(snap), all = ui.project === 'all';
   const tabs = TABS.map(([k, e, n]) => ({ k, label: `${e} ${n}`,
     badge: k === 'floor' ? html`<${CountBadge} n=${c.stuck} tone="bad" />` : k === 'decisions' ? html`<${CountBadge} n=${c.asks} />` : null }));
-  const card = findBead(snap, ui.bead);
+  const card = findBead(snap, ui.bead, ui.beadProject || ui.project);
   let body;
   if (ui.tab === 'board') {
     body = html`<div class="bbar"><span class="seg"><button class=${ui.opt !== 'tree' ? 'on' : ''} onClick=${() => set({ opt: '' })}>Flow</button>
@@ -97,7 +97,7 @@ function App() {
       : html`<p class="loading">Loading…</p>`;
   }
   act.prune();
-  setManyProjects(snap.projects.length > 1);
+  setProjects(snap.projects);
   const c = counts(snap);
   document.title = c.asks + c.stuck ? `(${c.asks + c.stuck}) task-loop` : 'task-loop';
   const red = snap.projects.filter((p) => p.profile_error).map((p) => html`<div class="ban bad">${p.profile_error}</div>`);

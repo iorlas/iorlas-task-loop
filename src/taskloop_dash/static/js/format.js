@@ -38,10 +38,17 @@ export function tokens(n) {
 // a bead id as shown: bd ids carry their project ("lifesim-4buv"), which the page says once, not twice; the project only
 // leads when beads of several projects share the view
 let manyProjects = true;
-export const setManyProjects = (v) => { manyProjects = v; };
+let projectNames = new Map();
+export const setProjects = (projects) => {
+  manyProjects = projects.length > 1;
+  projectNames = new Map(projects.map((p) => [p.id, p.name]));
+};
+export const projectName = (project) => project ? projectNames.get(project) || 'Unknown project' : '';
 export function bid(id, project, all) {
-  const short = id.startsWith(`${project}-`) ? id.slice(project.length + 1) : id;
-  return all && manyProjects ? `${project} · ${short}` : short;
+  const name = projectName(project);
+  const prefix = name.split(' (')[0];
+  const short = id.startsWith(`${prefix}-`) ? id.slice(prefix.length + 1) : id;
+  return all && manyProjects ? `${name} · ${short}` : short;
 }
 
 export const pct = (x) => `${Math.round(x)}%`;

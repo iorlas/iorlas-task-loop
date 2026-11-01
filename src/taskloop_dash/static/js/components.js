@@ -7,6 +7,7 @@ import { BeadCard, BeadRow, Button, CountBadge, Dots, Drawer, EmptyState, Filter
   Popover, Ring, SectionHeader, Sheet, Spark, Status, Tabs, Tag, Toast, Totals } from './ui/kit.js';
 import { BeadLine, Strip, Trace } from './ui/line.js';
 import { StageCard } from './ui/stage.js';
+import { setProjects } from './format.js';
 
 const q = new URLSearchParams(location.search);
 const PHONE = matchMedia('(max-width:600px)').matches;
@@ -49,7 +50,7 @@ function Sheet1({ snap, beads }) {
     <${Item} name="Tokens" note="tokens.css only"><div class="sw">${TOKENS.map((t) => html`<span key=${t}><i style=${`background:var(--${t})`}></i>${t}</span>`)}</div><//>
     <${Item} name="Button"><div class="row"><${Button}>⏸ Park<//><${Button} kind="stop">⏹ Stop<//><${Button} kind="pri">Send<//><${Button} disabled>Disabled<//></div><//>
     <${Item} name="FilterChips" note="All first, text only, no counts"><${FilterChips} label="epics" value=${chip} onPick=${setChip}
-      items=${snap.epics.filter((e) => e.project === 'lifesim').map((e) => ({ k: e.id, n: e.title, meter: e.total ? e.done / e.total : 0 }))} /><//>
+      items=${snap.epics.filter((e) => e.project === snap.projects[0]?.id).map((e) => ({ k: e.id, n: e.title, meter: e.total ? e.done / e.total : 0 }))} /><//>
     <${Item} name="Tag"><div class="row">${['', 'run', 'you', 'bad', 'watch', 'ok'].map((t) => html`<${Tag} key=${t} tone=${t}>${t || 'neutral'}<//>`)}</div><//>
     <${Item} name="CountBadge"><div class="tabs"><button class="tab">🏭 Floor<${CountBadge} n=${1} tone="bad" /></button><button class="tab">🙋 Decisions<${CountBadge} n=${3} /></button></div><//>
     <${Item} name="Totals" note="tone from the server; grey under 5 landed"><div class="col">
@@ -112,6 +113,7 @@ function Solo() {
   }, []);
   if (!st) return html`<p class="loading">Loading…</p>`;
   if (st.err) return html`<${EmptyState} title=${`⚠️ ${st.err}`} />`;
+  setProjects(st.snap.projects);
   return html`<${Sheet1} snap=${st.snap} beads=${st.beads} />`;
 }
 
