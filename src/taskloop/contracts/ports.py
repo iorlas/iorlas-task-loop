@@ -326,7 +326,7 @@ class Git(SlotGit, Protocol):
         ...
 
     def push_lease(self, d: str, remote: str, refspec: str) -> GitOutcome:
-        """Push as the engine (TL_LAND=1: the pre-push hook lets it through), force-with-lease:
+        """Push with ordinary hooks and force-with-lease:
         the refspec's ref is replaced only if the remote still has what was last fetched."""
         ...
 

@@ -50,7 +50,7 @@ HOOK_NAMES = ("applypatch-msg", "pre-applypatch", "post-applypatch", "pre-commit
               "post-commit", "pre-rebase", "post-checkout", "post-merge", "pre-push", "post-rewrite", "pre-auto-gc")
 GIT_HOOK = (
     "#!/bin/sh\n"
-    "# written by `tl hooks install`; plain python3, no uv. pre-push asks `tl green` per pushed tip; then the repo's own hook of this\n"
+    "# written by `tl hooks install`; plain python3, no uv. pre-push forwards stdin to `tl judge-push`; then the repo's own hook of this\n"
     "# name runs with the same arguments and stdin (hook/prepush.py), so git-lfs's and the repo's hooks are not skipped\n"
     "exec python3 {hook} githook {name} {tl} \"$@\"\n"
 )

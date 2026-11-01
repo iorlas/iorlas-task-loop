@@ -1,5 +1,4 @@
-"""The git pre-push hook with real git: tl's hooks dir comes from the ChildEnv builder (core.hooksPath through GIT_CONFIG_*), the hook
-asks `tl green` per pushed tip (a stand-in tl here: green when the tree is listed), and the engine's push (TL_LAND) needs no --no-verify."""
+"""Installed hooks invoke the real application judge and check service before any remote ref mutation."""
 import json
 import os
 import shutil
@@ -14,14 +13,34 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: E402, F401
 
 from taskloop.adapters import childenv  # noqa: E402
+from taskloop.adapters.check_files import repo_key  # noqa: E402
+from taskloop.adapters.git import RealGit  # noqa: E402
+from taskloop.app.checks.cache import key_digest  # noqa: E402
 from taskloop.app.wire.hook import write_hooks  # noqa: E402
+from taskloop.contracts.checks import CheckResult, PassRecord  # noqa: E402
 from taskloop.contracts.env import Env  # noqa: E402
+from taskloop.contracts.ids import CheckId, TreeSha  # noqa: E402
+from taskloop.contracts.paths import ConfigDir  # noqa: E402
+from taskloop.contracts.runkey import BaseSha, Digest, RunKey  # noqa: E402
+from taskloop.stores.real import real_stores  # noqa: E402
 
-FAKE_TL = """#!/bin/sh
-# green STEP --repo D --tree T --base B: green when T is a line of $GREEN; check --repo D: stamps D's HEAD tree (the plan ran)
-echo "$@" >> "$CALLS"
-if [ "$1" = green ]; then grep -qx "$6" "$GREEN"; exit $?; fi
-if [ "$1" = check ]; then git -C "$3" rev-parse 'HEAD^{tree}' >> "$GREEN"; exit 0; fi
+JUDGE_TL = """#!{python}
+import argparse
+import os
+import sys
+from pathlib import Path
+sys.path[:0] = [{src!r}, {vendor!r}]
+from taskloop.adapters.git import RealGit
+from taskloop.adapters.spawner import RealSpawner
+from taskloop.app.launch.push_judge import cmd_judge_push
+from taskloop.contracts.env import Env
+from taskloop.contracts.identity import Identity
+with Path(os.environ['CALLS']).open('a') as log:
+    log.write(' '.join(sys.argv[1:]) + '\\n')
+env = Env(dict(os.environ))
+who = Identity(actor='hook-test', home={config!r})
+args = argparse.Namespace(repo=sys.argv[3])
+raise SystemExit(cmd_judge_push(args, who=who, env=env, spawner=RealSpawner(env), git=RealGit(env)))
 """
 
 
@@ -30,19 +49,19 @@ class Base(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         t = Path(self.tmp.name)
-        self.cfg, self.green, self.calls = t / "cfg", t / "green", t / "calls"
-        self.green.write_text("")
+        self.cfg, self.calls = t / "cfg", t / "calls"
         self.calls.write_text("")
-        base = {"PATH": os.environ["PATH"], "HOME": str(t), "XDG_CONFIG_HOME": str(t), "GREEN": str(self.green), "CALLS": str(self.calls),
+        base = {"PATH": os.environ["PATH"], "HOME": str(t), "XDG_CONFIG_HOME": str(t), "CALLS": str(self.calls),
                 "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
         write_hooks(ROOT, Env(base))
         tl = t / "task-loop" / "bin" / "tl"
         tl.parent.mkdir(parents=True)
-        tl.write_text(FAKE_TL)
+        tl.write_text(JUDGE_TL.format(python=sys.executable, src=str(ROOT / "src"),
+                                     vendor=str(ROOT / "skills/task-loop/_vendor"), config=str(self.cfg)))
         tl.chmod(0o755)
-        # tl's own ChildEnv builder is what hands git the hooks dir: GREEN and CALLS ride through `extra`
+        # tl's own ChildEnv builder hands git the hooks dir; the recorder path rides through `extra`.
         self.plain = base  # no hooks path: what `git lfs install` needs to write into the repo's own hooks
-        self.env = childenv.tool_env(base, {"GREEN": base["GREEN"], "CALLS": base["CALLS"]})
+        self.env = childenv.tool_env(base, {"CALLS": base["CALLS"]})
         self.origin, self.repo = t / "origin.git", t / "repo"
         self.git(t, "init", "-q", "--bare", "-b", "main", str(self.origin))
         self.git(t, "clone", "-q", str(self.origin), str(self.repo))
@@ -64,8 +83,14 @@ class Base(unittest.TestCase):
         return self.git(self.repo, "rev-parse", "HEAD").stdout.strip()
 
     def stamp(self, rev):
-        with self.green.open("a") as f:
-            f.write(self.git(self.repo, "rev-parse", rev + "^{tree}").stdout)
+        tree = TreeSha(self.git(self.repo, "rev-parse", rev + "^{tree}").stdout.strip())
+        base = BaseSha(self.git(self.repo, "rev-parse", "origin/main").stdout.strip())
+        key = RunKey(check=CheckId("suite"), cmd=Digest("c"), config=Digest("g"), toolchain=Digest("t"),
+                     tree=tree, base=base, inputs=Digest("i"), selected=Digest(""), env=Digest("e"))
+        result = CheckResult(id=key.check, cmd="true", group="gate", exit=0, status="passed")
+        repo = repo_key(RealGit(Env(self.env)), str(self.repo))
+        real_stores(ConfigDir(self.cfg)).results(repo, key.check).of(key_digest(key)).write(
+            PassRecord(key=key, result=result, tree=tree, base=base))
 
     def push(self, *refspecs, env=None):
         return self.git(self.repo, "push", "-q", "origin", *refspecs, env=env, check=False)
@@ -92,7 +117,8 @@ class PrePush(Base):
     def test_the_head_that_is_not_green_runs_the_plan_then_passes(self):
         self.commit("b")
         self.assertEqual(self.push("HEAD:refs/heads/x").returncode, 0)
-        self.assertIn("check --repo", self.calls.read_text())
+        self.assertIn("judge-push --repo", self.calls.read_text())
+        self.assertTrue(list(self.cfg.rglob("*.json")), "the application check service must retain evidence")
 
     def test_a_dirty_worktree_does_not_run_the_plan(self):
         self.commit("b")
@@ -109,12 +135,32 @@ class PrePush(Base):
         self.commit("e")  # HEAD is past mid, so the plan cannot run for it
         self.assertNotEqual(self.push(f"{mid}:refs/heads/mid").returncode, 0)
 
-    def test_the_engines_push_carries_tl_land_and_needs_no_no_verify(self):
+    def test_the_old_marker_cannot_authorize_an_ungreen_dirty_push(self):
         self.commit("b")
-        (self.repo / "stray").write_text("x")  # not green, dirty: only TL_LAND lets it through
+        (self.repo / "stray").write_text("x")
         r = self.push("HEAD:refs/heads/x", env={**self.env, "TL_LAND": "1"})
-        self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertEqual(self.calls.read_text(), "")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("judge-push", self.calls.read_text())
+        self.assertEqual(self.git(self.origin, "branch", "--list", "x").stdout, "")
+
+    def test_an_unavailable_judge_refuses_before_remote_mutation(self):
+        self.commit("b")
+        (Path(self.tmp.name) / "task-loop/bin/tl").unlink()
+        self.assertNotEqual(self.push("HEAD:refs/heads/x").returncode, 0)
+        self.assertEqual(self.git(self.origin, "branch", "--list", "x").stdout, "")
+
+    def test_an_erroring_judge_refuses_before_remote_mutation(self):
+        self.commit("b")
+        (Path(self.tmp.name) / "task-loop/bin/tl").write_text("#!/bin/sh\nexit 2\n")
+        self.assertNotEqual(self.push("HEAD:refs/heads/x").returncode, 0)
+        self.assertEqual(self.git(self.origin, "branch", "--list", "x").stdout, "")
+
+    def test_an_undecodable_profile_refuses_before_remote_mutation(self):
+        self.commit("b")
+        self.stamp("HEAD")
+        (self.repo / ".task-loop.json").write_text("{")
+        self.assertNotEqual(self.push("HEAD:refs/heads/x").returncode, 0)
+        self.assertEqual(self.git(self.origin, "branch", "--list", "x").stdout, "")
 
     def test_no_verify_still_beats_the_default(self):
         self.commit("b")
@@ -163,10 +209,12 @@ class Chain(Base):
         self.assertNotEqual(self.push(f"{tip}:refs/heads/x").returncode, 0)
         self.assertFalse(self.rec.exists())
 
-    def test_the_engines_push_runs_no_repo_hook(self):
+    def test_the_old_marker_cannot_skip_the_repos_hook(self):
         self.recorder(rc=3)
         self.commit("b")
-        self.assertEqual(self.push("HEAD:refs/heads/x", env={**self.env, "TL_LAND": "1"}).returncode, 0)
+        self.stamp("HEAD")
+        self.assertNotEqual(self.push("HEAD:refs/heads/x", env={**self.env, "TL_LAND": "1"}).returncode, 0)
+        self.assertTrue(self.rec.exists())
 
     def test_the_original_hooks_path_is_followed(self):
         other = Path(self.tmp.name) / "myhooks"

@@ -100,7 +100,7 @@ class World:
 
     def sh(self, argv: list[str], **kw: Any) -> tuple[int, str]:
         if argv == ["git", "push"]:
-            assert kw.get("env") == {"TL_LAND": "1"}
+            assert "TL_LAND" not in (kw.get("env") or {})
             self.events.append("push")
             self.pushed.append((self.sat_on, self.base, self.held, f"tree@{self.sat_on}" in self.gate_passed()))
             return self.pushes.pop(0)

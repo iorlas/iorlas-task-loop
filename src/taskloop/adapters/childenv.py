@@ -78,7 +78,7 @@ def tool_env(base: Mapping[str, str], extra: Mapping[str, str] | None = None) ->
 PER_RUN = frozenset({EnvVar.TL_ARTIFACT_DIR, EnvVar.TL_ARTIFACT_STEP, EnvVar.TL_RUN_ID, EnvVar.TL_RUN_DIR, EnvVar.TL_ATTEMPT,
                      EnvVar.TL_WORKTREE, EnvVar.TL_BRANCH,
                      EnvVar.TL_BOX_CWD, EnvVar.TL_REEXEC, EnvVar.TL_LOOP_STATE,
-                     EnvVar.TL_RELEASE_REEXEC, EnvVar.TL_LAND, EnvVar.TASK_LOOP_SLOT_BEAD, EnvVar.TASK_LOOP_ACTOR, EnvVar.TASK_LOOP_SESSION,
+                     EnvVar.TL_RELEASE_REEXEC, EnvVar.TASK_LOOP_SLOT_BEAD, EnvVar.TASK_LOOP_ACTOR, EnvVar.TASK_LOOP_SESSION,
                      EnvVar.TASK_LOOP_LOOP_PID, EnvVar.TASK_LOOP_WORKER})
 
 

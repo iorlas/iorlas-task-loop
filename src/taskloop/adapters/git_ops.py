@@ -4,7 +4,6 @@ words (commit, push, rebase --continue), and the rest of the staged-work and bra
 from typing import Self
 
 from taskloop.adapters.git_base import GitBase, classify
-from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.gitfacts import DiffEntry, GitOutcome
 from taskloop.contracts.slots import GitReadFailure, MissingRevision
 
@@ -91,7 +90,7 @@ class LandGit(GitBase):
         return self._try(d, "-c", "core.editor=true", "rebase", "--continue")
 
     def push_lease(self, d: str, remote: str, refspec: str) -> GitOutcome:
-        return self._try(d, "push", "--force-with-lease", remote, refspec, timeout=PUSH_WALL_S, extra={EnvVar.TL_LAND.value: "1"})
+        return self._try(d, "push", "--force-with-lease", remote, refspec, timeout=PUSH_WALL_S)
 
     def lfs_push(self, d: str, remote: str, refs: list[str]) -> GitOutcome:
         return self._try(d, "lfs", "push", remote, *refs, timeout=PUSH_WALL_S)

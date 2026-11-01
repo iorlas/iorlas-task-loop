@@ -1,5 +1,4 @@
-"""The port's own pushes (the release, a remote branch delete) carry TL_LAND, so tl's pre-push hook lets them through; a plain
-`git push` meets the same refusing hook. Real git, a bare remote and a hook that refuses unless TL_LAND is set."""
+"""Ordinary Git transport never injects the retired checked-push marker."""
 
 import os
 import subprocess
@@ -8,15 +7,16 @@ import unittest
 from pathlib import Path
 
 from taskloop.adapters.git import RealGit
-from taskloop.contracts.env import snapshot
+from taskloop.contracts.env import Env, snapshot
+from taskloop.contracts.slots import SlotGitError
 
 
 def sh(*a, cwd, check=True):
-    env = {k: v for k, v in os.environ.items() if k != "TL_LAND"}  # a release run exports it: the plain push must not see it
+    env = {k: v for k, v in os.environ.items() if k != "TL_LAND"}
     return subprocess.run(list(a), cwd=str(cwd), check=check, capture_output=True, text=True, env=env)
 
 
-class PortPushCarriesLandMarker(unittest.TestCase):
+class PortPushHasNoGateAuthority(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         self.addCleanup(self.tmp.cleanup)
@@ -40,17 +40,20 @@ class PortPushCarriesLandMarker(unittest.TestCase):
         hook = hooks / "pre-push"
         hook.write_text('#!/bin/sh\n[ -n "$TL_LAND" ] || { echo refused: not green >&2; exit 1; }\n')
         hook.chmod(0o755)
+        self.port = RealGit(Env({k: v for k, v in snapshot().vars.items() if k != "TL_LAND"}), pinned=False)
 
-    def test_the_port_push_passes_the_hook_and_a_plain_push_does_not(self):
+    def test_the_port_and_plain_push_both_meet_the_refusing_hook(self):
         self.assertNotEqual(sh("git", "push", "-q", "origin", "main", cwd=self.repo, check=False).returncode, 0)
-        RealGit(snapshot()).push(str(self.repo), "origin", "main")
-        self.assertEqual(sh("git", "rev-parse", "main", cwd=self.remote).stdout, sh("git", "rev-parse", "main", cwd=self.repo).stdout)
+        with self.assertRaises(SlotGitError):
+            self.port.push(str(self.repo), "origin", "main")
+        self.assertNotEqual(sh("git", "rev-parse", "--verify", "main", cwd=self.remote, check=False).returncode, 0)
 
-    def test_the_port_remote_delete_passes_the_hook(self):
-        git = RealGit(snapshot())
-        git.push(str(self.repo), "origin", "main")
+    def test_the_port_remote_delete_meets_the_refusing_hook(self):
+        git = self.port
+        sh("git", "push", "--no-verify", "origin", "main", cwd=self.repo)
         sh("git", "branch", "side", cwd=self.repo)
-        git.push(str(self.repo), "origin", "side")
+        sh("git", "push", "--no-verify", "origin", "side", cwd=self.repo)
         oid = sh("git", "rev-parse", "side", cwd=self.repo).stdout.strip()
-        git.delete_remote_at(str(self.repo), "origin", "refs/heads/side", oid)
-        self.assertNotEqual(sh("git", "rev-parse", "--verify", "side", cwd=self.remote, check=False).returncode, 0)
+        with self.assertRaises(SlotGitError):
+            git.delete_remote_at(str(self.repo), "origin", "refs/heads/side", oid)
+        self.assertEqual(sh("git", "rev-parse", "side", cwd=self.remote).stdout.strip(), oid)

@@ -1,13 +1,11 @@
-"""What leaves the machine at a land besides the commit: the push argv (no repo hook runs there), the LFS objects of the pushed ref
-before the push, and bd's Dolt data after it. The repo's hooks are not the land's gate: every check belongs in the profile."""
+"""What leaves the machine at a land besides the commit: the push argv, the LFS objects of the pushed ref before the push,
+and bd's Dolt data after it. Delivery still consults the application judge through the installed hook."""
 import os
 import shutil
 from pathlib import Path
-from types import MappingProxyType
-from typing import Final, Protocol
+from typing import Protocol
 
 from taskloop.contracts.config import EngineConfig
-from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ports import Clock, DoltPush, Git
 from taskloop.domain.land.matchers import Push, lfs_in, no_dolt_remote
@@ -16,12 +14,6 @@ from taskloop.stores.runlog import RunLog
 
 def is_push(argv: list[str]) -> bool:
     return len(argv) > 1 and os.path.basename(argv[0]) == "git" and argv[1] == "push"
-
-
-
-# The engine's own push is marked with TL_LAND, not --no-verify: the pre-push hook (which asks tl whether the tip is green) lets it
-# through, and git-lfs's and the repo's other hooks are not skipped by a flag.
-LAND_ENV: Final = MappingProxyType({EnvVar.TL_LAND.value: "1"})
 
 
 def pin_head(land: list[str], sha: str) -> list[str]:

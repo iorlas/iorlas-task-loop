@@ -1,4 +1,4 @@
-"""What leaves the machine at a land: TL_LAND on the push, the LFS objects before it, bd's Dolt data after the lock is let go."""
+"""What leaves the machine at a land: the checked push, LFS objects before it, bd's Dolt data after the lock is let go."""
 import os
 import shutil
 import stat
@@ -23,9 +23,6 @@ RUN = ({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
 
 
 class Argv(EngineTest):
-    def test_the_engine_marks_its_push_with_tl_land_not_no_verify(self):
-        self.assertEqual(outbound.LAND_ENV, {"TL_LAND": "1"})
-
     def test_a_custom_land_command_is_no_push(self):
         self.assertIsNone(outbound.target(["just", "land"]))
 

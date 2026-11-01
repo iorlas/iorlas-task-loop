@@ -51,7 +51,7 @@
   tl.py status [--brief] [--json] [--repo DIR]  loop RUNNING or NOT RUNNING, asks, slots, versions, recent beads (<= 40 lines, 8 KB)
   tl.py wait --bead ID|--any [--timeout S]      block until the run ends or an ask opens; one line, the exit code says which (--help)
   tl.py green STEP [--repo DIR] --tree T --base B  is the check step green for the tree and base, from the result store (exit 0 yes, 1 no)
-  tl.py hooks install                           write the git hooks (pre-push asks tl green per pushed tip) into <config>/githooks/
+  tl.py hooks install                           write the git hooks (pre-push asks tl judge-push) into <config>/githooks/
   tl.py ask show ID                             one ask: question, owner cause, blocking, default, similar, thread, outcome (read-only)
   tl.py handoff write|show [--repo DIR]         the <= 4 KB handoff a compaction hands to the next session (hooks/hook.py writes it)
 
@@ -301,6 +301,8 @@ def build_parser():
     cli_queue.add_parsers(sp)
     check_parser(sp)
     cli_green.add_parser(sp)
+    p = sp.add_parser("judge-push", help="judge the complete Git pre-push request on stdin; unavailable refuses")
+    p.add_argument("--repo", default=".", metavar="DIR")
     cli_land_stack.add_parser(sp)
     cli_hooks.add_parser(sp)
     return ap
@@ -427,6 +429,8 @@ VERBS: Final[dict[str, Handler]] = {
     "wait": v_wait,
     "hooks": lambda a, c: cli_hooks.cmd_hooks(a, c.env, c.here.parents[1]),
     "green": lambda a, c: cli_green.cmd_green(a, c.who.config, c.git),
+    "judge-push": lambda a, c: importlib.import_module("taskloop.app.launch.push_judge").cmd_judge_push(
+        a, who=c.who, env=c.env, spawner=c.spawner, git=c.git),
     "run-task": lambda a, c: importlib.import_module("taskloop.app.run.entry").main(a, env=c.env, spawner=c.spawner, git=c.git, who=c.who),
     "selftest": lambda a, c: importlib.import_module("taskloop.app.launch.selftest").cmd_selftest(a, env=c.env),
     "cutover": lambda a, c: importlib.import_module("taskloop.cli.loop_cmd").cmd_cutover(a, c.git, c.who),

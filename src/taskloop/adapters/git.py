@@ -7,14 +7,10 @@ from typing import Literal
 
 from taskloop.adapters.git_base import classify
 from taskloop.adapters.git_ops import LandGit
-from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.gitfacts import ConfigEntry, GitOutcome, GrepHit, LogRow, Pick, Ref, StatusRow, TreeEntry
 from taskloop.contracts.slots import Checkout, GitReadFailure, MissingRevision, NotARepo, NotAWorktree, RefRace, SlotGitError
 
 FETCH_TRIES = 5
-
-
-LAND_ENV = {EnvVar.TL_LAND.value: "1"}
 
 
 class RealGit(LandGit):
@@ -94,7 +90,7 @@ class RealGit(LandGit):
         self._must(os.path.dirname(dst) or ".", "clone", "-q", src, dst)
 
     def push(self, d: str, remote: str, refspec: str) -> None:
-        self._must(d, "push", "-q", remote, refspec, extra=LAND_ENV)  # our own deterministic push: TL_LAND lets tl's pre-push hook pass
+        self._must(d, "push", "-q", remote, refspec)
 
     # -- reads that return rows ------------------------------------------------------------------------------------------------
 
@@ -208,7 +204,7 @@ class RealGit(LandGit):
 
     def delete_remote_at(self, d: str, remote: str, ref: str, oid: str) -> None:
         try:
-            self._must(d, "push", "-q", f"--force-with-lease={ref}:{oid}", remote, ":" + ref, extra=LAND_ENV)
+            self._must(d, "push", "-q", f"--force-with-lease={ref}:{oid}", remote, ":" + ref)
         except SlotGitError:
             # A replay (or the forge's delete-on-merge) may have removed it already. ls-remote raises on a failed query;
             # only an authoritative empty answer counts as success. A ref recreated meanwhile is never deleted here.

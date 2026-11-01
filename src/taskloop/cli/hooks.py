@@ -20,5 +20,5 @@ def cmd_hooks(a: argparse.Namespace, env: Env, plugin_root: Path, out: Callable[
 
 
 def add_parser(sp: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
-    p = sp.add_parser("hooks", help="install the git hooks tl owns (pre-push: asks tl green per pushed tip)")
+    p = sp.add_parser("hooks", help="install the git hooks tl owns (pre-push: asks the application delivery judge)")
     p.add_argument("op", choices=["install"])

@@ -67,6 +67,6 @@ class HooksPath(unittest.TestCase):
         self.assertEqual((out["GIT_CONFIG_COUNT"], out["GIT_CONFIG_KEY_0"], out["GIT_CONFIG_KEY_1"], out["GIT_CONFIG_VALUE_1"]),
                          ("2", "a.b", "core.hooksPath", "/xdg/task-loop/githooks"))
 
-    def test_tl_land_reaches_a_child_but_is_not_part_of_a_result_key(self):
-        self.assertEqual(childenv.tool_env({**self.CFG, "TL_LAND": "1"})["TL_LAND"], "1")
+    def test_the_retired_push_marker_reaches_neither_children_nor_result_keys(self):
+        self.assertNotIn("TL_LAND", childenv.tool_env({**self.CFG, "TL_LAND": "1"}))
         self.assertNotIn("TL_LAND", childenv.reaching({**self.CFG, "TL_LAND": "1"}))
