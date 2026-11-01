@@ -4,10 +4,11 @@ version), and POST /api/<verb>, the only writes. A broken transcript or log answ
 import json
 import os
 from collections.abc import Sequence
+from email.message import Message
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from typing import Any, override
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, urlparse, urlsplit
 
 from taskloop_dash.app import Dash
 from taskloop_dash.assets import static_file
@@ -18,6 +19,37 @@ MAX_BODY = 65536
 POST_PREFIX = "/api/"  # POST /api/<verb>: the records of contracts.dash.WRITES
 
 Headers = Sequence[tuple[str, str]]
+
+
+def authority(value: str) -> tuple[str, int] | None:
+    """Parse only an HTTP authority, never credentials or URL components."""
+    if not value or value.endswith(":") or any(c.isspace() or c in "/?#@\\" for c in value):
+        return None
+    try:
+        parsed = urlsplit("http://" + value)
+        host, port = parsed.hostname, parsed.port
+    except ValueError:
+        return None
+    if not host:
+        return None
+    name = f"[{host}]" if ":" in host else host
+    expected = f"{name}:{port}" if port is not None else name
+    return (host, port if port is not None else 80) if value.lower() == expected.lower() else None
+
+
+def write_refusal(headers: Message, hosts: set[tuple[str, int]]) -> int | None:
+    """Browser writes need an allowed Host, same Origin and a non-simple header; CLI clients may omit Origin."""
+    host_fields = headers.get_all("Host", None) or []
+    host = authority(host_fields[0]) if len(host_fields) == 1 else None
+    if host not in hosts or headers.get_all("X-Taskloop-Dash", []) != ["1"]:
+        return 403
+    origins = headers.get_all("Origin", None) or []
+    if origins and (len(origins) != 1 or not origins[0].startswith("http://") or authority(origins[0][7:]) != host):
+        return 403
+    media = headers.get_all("Content-Type", None) or []
+    if len(media) != 1 or media[0].split(";", 1)[0].strip().lower() != "application/json":
+        return 415
+    return None
 
 
 def put_headers(h: BaseHTTPRequestHandler, headers: Headers) -> None:
@@ -47,6 +79,9 @@ def route(dash: Dash, static: Path, path: str, q: Query, held: str | None = None
 def make_handler(
     dash: Dash, port: int, addrs: list[str], static: Path, script: str
 ) -> type[BaseHTTPRequestHandler]:
+    # These are the names we already know; never resolve a request's Host through DNS.
+    hosts = {(addr.lower(), port) for addr in [*addrs, "localhost", "127.0.0.1", "::1"]}
+
     class H(BaseHTTPRequestHandler):
         @override
         def log_message(self, format: str, *args: Any) -> None:
@@ -75,6 +110,8 @@ def make_handler(
             self.send(*(got or (404, b"not found", "text/plain", [])))
 
         def do_POST(self) -> None:
+            if refusal := write_refusal(self.headers, hosts):
+                return self.send(refusal, b'{"error": "write policy"}', "application/json")
             u = urlparse(self.path)
             try:
                 body = json.loads(self.rfile.read(min(int(self.headers.get("Content-Length") or 0), MAX_BODY)) or b"{}")

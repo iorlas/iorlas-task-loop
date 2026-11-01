@@ -83,7 +83,9 @@ export function useResource(url) {
 // POST /api/<verb> with its WRITES record; a refused write is {ok:false, message}, never a throw
 export async function write(verb, body) {
   try {
-    const r = await fetch(`/api/${verb}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const r = await fetch(`/api/${verb}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Taskloop-Dash': '1' }, body: JSON.stringify(body),
+    });
     if (!r.ok) return { ok: false, message: `${verb} failed: HTTP ${r.status}` };
     const res = await r.json();
     if (res.ok) retry();

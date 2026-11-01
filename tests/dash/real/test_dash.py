@@ -67,7 +67,7 @@ class Asks(unittest.TestCase):
                 def post(text):
                     req = urllib.request.Request(base + "/api/answer", method="POST",
                                                  data=json.dumps({"project": "x", "ask": "x-1-1", "kind": "answer", "text": text}).encode(),
-                                                 headers={"Content-Type": "application/json"})
+                                                 headers={"Content-Type": "application/json", "X-Taskloop-Dash": "1"})
                     try:
                         with urllib.request.urlopen(req) as r:
                             return r.status, json.loads(r.read())

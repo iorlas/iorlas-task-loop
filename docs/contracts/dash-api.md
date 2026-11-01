@@ -25,6 +25,12 @@ Verbs: `answer`, `look`, `stick`, `prune`, `cause`, `ack`, `park`, `stop`, `note
 in-process Port call (as `Ports.answer` is today), never a raw bd argv. There is no auth (the bind is loopback and Tailscale only). A refused write is
 `Result(ok=false, message=...)` with status 200, so the page shows `message`; a malformed body is 400.
 
+Every POST requires `X-Taskloop-Dash: 1` and `Content-Type: application/json` (media type parameters are allowed).
+Host must name a bound address or `localhost`, `127.0.0.1`, or `[::1]`, on the dashboard's actual port.
+Origin, when present, must match that Host's HTTP origin; clients without Origin still require the custom header.
+Invalid Host, Origin, or custom headers return 403; unsupported media types return 415, before reading the body or invoking a Port.
+Tailnet reachability remains an owner access grant; these checks prevent browser origin forgery and do not authenticate peers.
+
 - **Built (backend items 3, 4, 6, 7 and 8):** `live`, `answer`, `look`, `cause`, `ack`, `stick`, `prune`, `park`, `stop`, `note`, and
   `answer` with `kind=ask_back`; every verb of `WRITES` is routed to a Port, none answers "Not available yet.". `live` takes `id` (the bead; its newest
   run) and ignores `project`; its cursor is `api/live.py`'s byte-offset cursor; 404 for a bead with no run. Each write is one `Ports`
