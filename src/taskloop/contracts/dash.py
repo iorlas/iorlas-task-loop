@@ -11,6 +11,7 @@ from typing import Annotated, ClassVar, Literal, final
 
 import msgspec
 
+from taskloop.contracts.dashhealth import Project
 from taskloop.contracts.dashruns import ResourceLease, RunHeader, TermLine, ToolCall
 from taskloop.contracts.ids import WireBead
 from taskloop.contracts.needs import NeedRow
@@ -112,13 +113,6 @@ class ServerInfo(Rec):
     version: Annotated[str, msgspec.Meta(description="server code hash; a change means reload the page")]
     host: str
     loops: list[LoopInfo] = msgspec.field(default_factory=list)
-
-
-@final
-class Project(Rec):
-    id: str
-    name: str
-    profile_error: str = ""
 
 
 @final
@@ -441,6 +435,8 @@ class BeadDetail(Rec):
     t: float
     card: BeadCard
     version: str = ""
+    bd_ok_at: float | None = None
+    bd_error: str = ""
     description: str = ""
     acceptance: str = ""
     comments: list[Msg] = msgspec.field(default_factory=list)

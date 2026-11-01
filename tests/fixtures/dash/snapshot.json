@@ -209,12 +209,16 @@
   {
    "id": "lifesim",
    "name": "lifesim",
-   "profile_error": ""
+   "profile_error": "",
+   "bd_ok_at": null,
+   "bd_error": ""
   },
   {
    "id": "task-loop",
    "name": "task-loop",
-   "profile_error": ""
+   "profile_error": "",
+   "bd_ok_at": null,
+   "bd_error": ""
   }
  ],
  "epics": [

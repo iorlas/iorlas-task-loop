@@ -72,9 +72,10 @@ class RoundTrip(unittest.TestCase):
         missing = []
         for m in pkgutil.iter_modules(pkg.__path__):
             if (
-                m.name in ("wire", "jsonl", "stores", "schema", "paths", "ports", "forge", "answers", "dash", "dashcost", "needs")
+                m.name in ("wire", "jsonl", "stores", "schema", "paths", "ports", "forge", "answers",
+                           "dash", "dashcost", "dashhealth", "needs")
             # plumbing, not records (ports, forge: call arguments, never written; answers: the workers' replies, test_schema.py;
-            # dash, dashcost, needs: the dashboard view, sampled by tests/fixtures/dash and tests/contracts/test_dash.py)
+            # dash, dashcost, dashhealth, needs: dashboard views, sampled by tests/fixtures/dash and tests/contracts/test_dash.py)
             ):
                 continue
             mod = importlib.import_module("taskloop.contracts." + m.name)

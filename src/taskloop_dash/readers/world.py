@@ -32,8 +32,6 @@ from taskloop_dash.readers.runlogs import RunLogs
 from taskloop_dash.views.runfacts import Run
 from taskloop_dash.views.world import AdrIn, Landing, LookItem, ProjectIn, World
 
-LIST_TTL = 5  # seconds the typed bead list is kept (readers.beads keeps bd's own answer longer)
-DETAIL_TTL = 15  # seconds one bead's comments are kept
 LEDGER_TTL = 5  # seconds the ask ledger, the decisions and the landed runs are kept
 
 
@@ -64,16 +62,19 @@ class Worlds:
 
     def project(self, id: str, path: str) -> ProjectIn:
         env = self.env
-        rows = env.ttl.get("v2beads:" + path, LIST_TTL, lambda: typed_beads(self.beads.beads_of(path)))
+        raw = self.beads.beads_of(path)
+        rows = typed_beads(raw)
+        bd_ok_at, bd_error = self.beads.health(path)
         slots = typed_beads(env.ports.slot_beads(path))
         states = [s for s in (JsonStore(f, LoopState).get() for f in sorted(env.config.loop_state(loop_key(path)).parent.glob(
             loop_key(path) + ".*.json"))) if s is not None]
-        _, items = self.looks.look_items(path)
+        _, items = self.looks.look_items(path, raw)
         looks = [LookItem(bead=i["bead"], title=i["title"], shots=tuple(
             self.looks.shot_url(basename(path), s["path"]) for s in i["shots"] if s["role"] == "after"))
             for i in items if i["status"] == "open" and i["bead"]]
         return ProjectIn(id=id, name=id, beads=rows, slots=slots, loops=states, looks=looks, adrs=self.adrs(path),
                          slot_count=env.ports.slot_count(path),
+                         bd_ok_at=bd_ok_at, bd_error=bd_error,
                          profile_error=env.ports.profile_error(path))
 
     def runs(self, full: BeadId | None = None) -> dict[str, list[Run]]:
@@ -148,10 +149,8 @@ class Worlds:
                      parks=self.records.parks(), net_pauses=self.records.net_pauses(), skipped_traces=self.records.traces().skipped)
 
     def comments(self, path: str, bead: BeadId) -> list[Comment]:
-        def load() -> list[Comment]:
-            return [Comment(author=str(c.get("author") or ""), text=str(c.get("text") or ""), created_at=str(c.get("created_at") or ""))
-                    for c in self.beads.comments(path, bead)]
-        return self.env.ttl.get(f"v2comments:{path}:{bead}", DETAIL_TTL, load)
+        return [Comment(author=str(c.get("author") or ""), text=str(c.get("text") or ""), created_at=str(c.get("created_at") or ""))
+                for c in self.beads.comments(path, bead)]
 
     def live_events(self, run: Run | None) -> list[LiveEvent]:
         """The typed events of the newest call file of a run that still writes (delegate's per-call live files)."""

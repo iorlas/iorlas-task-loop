@@ -57,7 +57,9 @@
   "retry_at": 0.0,
   "shots": 0
  },
- "version": "6026325978d5944e",
+ "version": "05b74b09913294cb",
+ "bd_ok_at": null,
+ "bd_error": "",
  "description": "Rent and bills every week. Part of Economy.",
  "acceptance": "- works in a new save and an old one\n- tests cover the rule\n- no new warnings in the build",
  "comments": [

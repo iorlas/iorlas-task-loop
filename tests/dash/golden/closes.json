@@ -1,6 +1,8 @@
 {
  "beads": {
   "ask-budget": {
+   "bd_error": "",
+   "bd_ok_at": 1800036000.0,
    "acceptance": "",
    "artifacts": [],
    "ask": null,
@@ -124,6 +126,8 @@
    "waits_for": []
   },
   "ask-decision": {
+   "bd_error": "",
+   "bd_ok_at": 1800036000.0,
    "acceptance": "",
    "artifacts": [],
    "ask": null,
@@ -247,6 +251,8 @@
    "waits_for": []
   },
   "ask-stuck": {
+   "bd_error": "",
+   "bd_ok_at": 1800036000.0,
    "acceptance": "",
    "artifacts": [],
    "ask": null,
@@ -370,6 +376,8 @@
    "waits_for": []
   },
   "ask-ticket": {
+   "bd_error": "",
+   "bd_ok_at": 1800036000.0,
    "acceptance": "",
    "artifacts": [],
    "ask": null,
@@ -493,6 +501,8 @@
    "waits_for": []
   },
   "ask-verify": {
+   "bd_error": "",
+   "bd_ok_at": 1800036000.0,
    "acceptance": "",
    "artifacts": [],
    "ask": null,
@@ -616,6 +626,8 @@
    "waits_for": []
   },
   "done": {
+   "bd_error": "",
+   "bd_ok_at": 1800036000.0,
    "acceptance": "",
    "artifacts": [],
    "ask": null,
@@ -739,6 +751,8 @@
    "waits_for": []
   },
   "fault-denied": {
+   "bd_error": "",
+   "bd_ok_at": 1800036000.0,
    "acceptance": "",
    "artifacts": [],
    "ask": null,
@@ -862,6 +876,8 @@
    "waits_for": []
   },
   "fault-engine": {
+   "bd_error": "",
+   "bd_ok_at": 1800036000.0,
    "acceptance": "",
    "artifacts": [],
    "ask": null,
@@ -985,6 +1001,8 @@
    "waits_for": []
   },
   "fault-infra": {
+   "bd_error": "",
+   "bd_ok_at": 1800036000.0,
    "acceptance": "",
    "artifacts": [],
    "ask": null,
@@ -1108,6 +1126,8 @@
    "waits_for": []
   },
   "fault-land": {
+   "bd_error": "",
+   "bd_ok_at": 1800036000.0,
    "acceptance": "",
    "artifacts": [],
    "ask": null,
@@ -1231,6 +1251,8 @@
    "waits_for": []
   },
   "landed": {
+   "bd_error": "",
+   "bd_ok_at": 1800036000.0,
    "acceptance": "",
    "artifacts": [],
    "ask": null,
@@ -1354,6 +1376,8 @@
    "waits_for": []
   },
   "owner-park": {
+   "bd_error": "",
+   "bd_ok_at": 1800036000.0,
    "acceptance": "",
    "artifacts": [],
    "ask": null,
@@ -1477,6 +1501,8 @@
    "waits_for": []
   },
   "pause-killed": {
+   "bd_error": "",
+   "bd_ok_at": 1800036000.0,
    "acceptance": "",
    "artifacts": [],
    "ask": null,
@@ -1600,6 +1626,8 @@
    "waits_for": []
   },
   "pause-lane": {
+   "bd_error": "",
+   "bd_ok_at": 1800036000.0,
    "acceptance": "",
    "artifacts": [],
    "ask": null,
@@ -1723,6 +1751,8 @@
    "waits_for": []
   },
   "pause-network": {
+   "bd_error": "",
+   "bd_ok_at": 1800036000.0,
    "acceptance": "",
    "artifacts": [],
    "ask": null,
@@ -1846,6 +1876,8 @@
    "waits_for": []
   },
   "wait-ask": {
+   "bd_error": "",
+   "bd_ok_at": 1800036000.0,
    "acceptance": "",
    "artifacts": [],
    "ask": null,
@@ -2898,6 +2930,8 @@
   "pieces": [],
   "projects": [
    {
+    "bd_error": "",
+    "bd_ok_at": 1800036000.0,
     "id": "lifesim",
     "name": "lifesim",
     "profile_error": ""

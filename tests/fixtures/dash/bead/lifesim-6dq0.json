@@ -57,7 +57,9 @@
   "retry_at": 0.0,
   "shots": 0
  },
- "version": "f3ba4ca817860779",
+ "version": "b0e1d5d384c074d9",
+ "bd_ok_at": null,
+ "bd_error": "",
  "description": "Rain lowers mood outdoors. Part of World.",
  "acceptance": "- works in a new save and an old one\n- tests cover the rule\n- no new warnings in the build",
  "comments": [

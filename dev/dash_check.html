@@ -99,6 +99,22 @@ function type(sel, text) {
   el.dispatchEvent(new (win().Event)('input', { bubbles: true }));
 }
 const SCENARIOS = {
+  async bdhealth() {
+    localStorage.clear();
+    await load('/#board'); await settle(1500);
+    const banners = $$('.ban').filter(shown).map((el) => el.textContent);
+    must(banners.some((s) => /bd unreadable for lifesim: database locked · showing data from .* ago/.test(s)), 'project bd failure shows last-success age');
+    must(banners.some((s) => s.includes('bd unreadable for unreadable: bd unavailable · no data yet')), 'cold project bd failure is visible');
+    must(!banners.some((s) => s.includes('internal detail')), 'bd banner uses only the first error line');
+    rules()('bd banners');
+    for (const [id, suffix] of [['lifesim-6dq0', /showing data from .* ago/], ['lifesim-d5f.48', /no data yet/]]) {
+      await load(`/#board~~${id}~bead`); await settle(1500);
+      const banner = $$('.drw .ban,.pg .ban').find((el) => shown(el) && el.textContent.includes('comments locked'));
+      must(banner && banner.textContent.startsWith('bd unreadable for lifesim: comments locked · ') && suffix.test(banner.textContent), 'drawer exposes comments failure and last-success age');
+      must(!banner?.textContent.includes('internal detail'), 'drawer uses only the first error line');
+      rules()('bd drawer');
+    }
+  },
   async resources() {
     localStorage.clear();
     await load('/#board~~lifesim-6dq0~bead'); await settle(1500);

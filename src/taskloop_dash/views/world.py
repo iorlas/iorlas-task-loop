@@ -56,6 +56,8 @@ class ProjectIn:
     profile_error: str = ""  # the red row of a repo whose .task-loop.json does not load: shown for that repo only
     strays: Sequence[Stray] = ()  # claims nothing runs under (readers/observed.py: the reconcile sweep's rule)
     events: Sequence[Event] = ()  # this repo's events of the last week (events.jsonl), oldest first
+    bd_ok_at: float | None = None
+    bd_error: str = ""
 
 
 @dataclass(frozen=True)

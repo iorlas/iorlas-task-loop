@@ -32,7 +32,9 @@
   "retry_at": 0.0,
   "shots": 0
  },
- "version": "d0bc9b97980df022",
+ "version": "ea856cea77dd56d4",
+ "bd_ok_at": null,
+ "bd_error": "",
  "description": "Inventory sorting by weight. Part of World.",
  "acceptance": "- works in a new save and an old one\n- tests cover the rule\n- no new warnings in the build",
  "comments": [],

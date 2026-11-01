@@ -91,6 +91,11 @@ Tailnet reachability remains an owner access grant; these checks prevent browser
 ## Semantics both sides rely on
 
 - Times are unix seconds (float). Durations are `*_secs` ints. Tokens are ints.
+- Each `Project` carries `bd_ok_at` (last successful bd listing, or null before any success) and `bd_error` (empty after a
+  successful read). `BeadDetail` carries the same fields for its comments read. A failure retains the last good rows and
+  success time; it is retried on the next read rather than reused as a successful observation. Shared listings preserve their
+  original success time. Both fields participate in the resource's content hash. The page shows failures with the first
+  error line and last-success age, or “no data yet” before the first success.
 - Snapshot, bead detail and cost each have a content-hash `version`, excluding `t` and the token itself. Every 2.5 s while
   visible, the page revalidates the snapshot and its mounted drawer/cost resources independently, retaining their data during
   requests and backing off on errors. A 304 validates the retained data; the drawer and cost show seconds since validation.

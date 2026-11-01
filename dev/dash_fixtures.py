@@ -48,6 +48,10 @@ def snapshot(state: str) -> dict[str, Any]:
         next(lane for lane in snap["lanes"] if lane["id"] == "claude-2")["status_t"] = snap["t"] - 7200
         next(b for b in snap["beads"] if b["id"] == "lifesim-5ban.3")["marker"] = "exited"  # and its worker exited (bead_detail)
         snap["version"] += "-variants"
+    if state == "bd-error":
+        snap["projects"][0].update(bd_ok_at=snap["t"] - 120, bd_error="database locked\ninternal detail")
+        snap["projects"].append({"id": "unreadable", "name": "unreadable", "bd_ok_at": None, "bd_error": "bd unavailable"})
+        snap["version"] += "-bd-error"
     return snap
 
 
@@ -118,6 +122,8 @@ class Handler(BaseHTTPRequestHandler):
             d["card"]["marker"] = "exited"
             d["live"].update(kind="exited", exit_code=137, why="the worker was killed (out of memory)")
         d["description"] += self.details.get(q.get("id", ""), "")
+        if self.state == "bd-error":
+            d.update(bd_error="comments locked\ninternal detail", bd_ok_at=d["t"] - 120 if q.get("id") == "lifesim-6dq0" else None)
         detail = wire.load(D.BeadDetail, d)
         self.resource(wire.dump(detail.replace(version=version_of(detail))), q)
 
@@ -174,7 +180,7 @@ def make_handler(state: str) -> type[BaseHTTPRequestHandler]:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--port", type=int, default=8766)
-    ap.add_argument("--state", choices=("ok", "empty", "down", "variants"), default="ok")
+    ap.add_argument("--state", choices=("ok", "empty", "down", "variants", "bd-error"), default="ok")
     args = ap.parse_args(argv)
     srv = ThreadingHTTPServer(("127.0.0.1", args.port), make_handler(args.state))
     print(f"http://127.0.0.1:{args.port}/  (state {args.state})", flush=True)

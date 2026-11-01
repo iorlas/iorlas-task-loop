@@ -11,6 +11,7 @@ import { BeadRow, EmptyState, Md, MsgLine, Popover, Tabs, Totals } from '../ui/k
 import { Trace } from '../ui/line.js';
 import { END, passNum, StageCard } from '../ui/stage.js';
 import { Controls, PhoneControls } from './controls.js';
+import { BdBanner } from './shell.js';
 
 const TERM_LINES = 10, EXIT_LINES = 20;
 const TONE = { err: 'e', ok: 'o', dim: 'd', warn: 'w' };
@@ -150,7 +151,8 @@ export function BeadPage({ snap, card, now, phone }) {
     endMark=${card.column === 'done' ? '✅' : ''} />`;
   const status = html`<div class="data-age">${d && api.resourceAge(resource)}${err && ` · ${err}`}</div>`;
   const body = err && !d ? html`<${EmptyState} title=${`⚠️ ${err}`} body="The bead could not be read; the board keeps working." />`
-    : d ? html`<${Body} d=${d} card=${card} snap=${snap} now=${now} phone=${phone} />` : html`<p class="loading">Loading…</p>`;
+    : d ? html`<${BdBanner} source=${d} project=${snap.projects.find((p) => p.id === card.project)?.name || card.project} now=${now} />
+      <${Body} d=${d} card=${card} snap=${snap} now=${now} phone=${phone} />` : html`<p class="loading">Loading…</p>`;
   if (!phone) {
     return html`<div class="dh"><${Header} card=${card} d=${d} snap=${snap} />${status}${trace}</div>
       <div class="db" ref=${scroller}>${body}</div><${Controls} key=${card.project + card.id} card=${card} />`;

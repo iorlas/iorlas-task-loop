@@ -10,7 +10,7 @@ from urllib.parse import quote
 from taskloop.contracts import gallery
 from taskloop.contracts.dash import Result
 from taskloop.contracts.gallery import LABEL, PICTURES
-from taskloop_dash.env import Env
+from taskloop_dash.env import Bead, Env
 from taskloop_dash.readers.beads import Beads
 from taskloop_dash.readers.records import Records
 
@@ -30,12 +30,13 @@ class Looks:
             out += [dict(i, filed=filed) for i in gallery.items_of(b["id"], dict(shown, title=shown.get("title") or b.get("title")))]
         return out
 
-    def look_items(self, repo: str) -> tuple[str, list[gallery.Item]]:
+    def look_items(self, repo: str, rows: list[Bead] | None = None) -> tuple[str, list[gallery.Item]]:
         """Items of the repo's owner-look beads, cached 10 s."""
         path = (self.beads.resolve_repo(repo, "") if repo else (self.records.repos() or [""])[0]) or ""
         if not path:
             return "", []
-        return path, self.env.ttl.get("looks:" + path, 10, lambda: self.collect(path, self.beads.beads_of(path)))
+        return path, self.env.ttl.get("looks:" + path, 10,
+                                      lambda: self.collect(path, rows if rows is not None else self.beads.beads_of(path)))
 
     @staticmethod
     def shot_url(repo: str, path: str) -> str:

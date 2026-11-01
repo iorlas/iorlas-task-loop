@@ -57,7 +57,9 @@
   "retry_at": 0.0,
   "shots": 0
  },
- "version": "ec098783c4271b93",
+ "version": "55b9ad8cb0f0c207",
+ "bd_ok_at": null,
+ "bd_error": "",
  "description": "Prices with a currency sign. Part of Economy.",
  "acceptance": "- works in a new save and an old one\n- tests cover the rule\n- no new warnings in the build",
  "comments": [

@@ -158,7 +158,7 @@ class Api(unittest.TestCase):
                 code, body, headers = self.get(route, query)
                 token = json.loads(body)["version"]
                 self.assertEqual((code, headers["ETag"]), (200, f'"{token}"'))
-                self.now += 16
+                self.now += 1 if route == "/api/bead" else 16  # comment ok time stays unchanged within its reuse window
                 self.assertEqual(self.get(route, {**query, "since": token})[:2], (304, b""))
                 self.assertEqual(self.get(route, query, headers["ETag"])[:2], (304, b""))
                 if route == "/api/bead":

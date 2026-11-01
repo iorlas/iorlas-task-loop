@@ -14,6 +14,7 @@ from support import dash_fixtures as fx
 
 from taskloop.contracts import dash as D
 from taskloop.contracts import dashcost as DC
+from taskloop.contracts import dashhealth as DH
 from taskloop.contracts import schema, wire
 from taskloop.contracts.wire import Rec
 from taskloop_dash.api.writes import Writes
@@ -69,7 +70,7 @@ class DashFixtures(unittest.TestCase):
     def test_every_dash_record_is_in_a_fixture(self) -> None:
         seen: set = set()
         records(self.built, seen)
-        mine = {c for c in vars(D).values() if isinstance(c, type) and issubclass(c, Rec) and c.__module__ == D.__name__}
+        mine = {c for c in vars(D).values() if isinstance(c, type) and issubclass(c, Rec) and c.__module__ in (D.__name__, DH.__name__)}
         self.assertEqual({c.__name__ for c in mine - seen}, set())
 
     def test_every_record_has_a_schema(self) -> None:

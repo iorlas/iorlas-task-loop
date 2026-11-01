@@ -32,7 +32,9 @@
   "retry_at": 0.0,
   "shots": 0
  },
- "version": "719e1f329120cbcc",
+ "version": "17b046275f2bc35e",
+ "bd_ok_at": null,
+ "bd_error": "",
  "description": "The loop is setting up its slot.",
  "acceptance": "",
  "comments": [],

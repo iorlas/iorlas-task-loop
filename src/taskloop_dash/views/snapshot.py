@@ -100,7 +100,8 @@ def build(w: World) -> Snapshot:
         adhoc=sorted((r for r in w.run_headers if not r.bead and r.state.live), key=lambda r: r.started, reverse=True),
         leases=list(w.leases),
         queue=[x for p in w.projects for x in queue.items_of(w, p)],
-        projects=[Project(id=p.id, name=p.name, profile_error=p.profile_error) for p in w.projects],
+        projects=[Project(id=p.id, name=p.name, profile_error=p.profile_error,
+                          bd_ok_at=p.bd_ok_at, bd_error=p.bd_error) for p in w.projects],
         epics=[e for p in w.projects for e in epics_of(p)],
         slots=slots_of(w), beads=cards, backlog_more=more, pieces=pieces_of(w, board, ids), asks=asks_of(w, cards),
         lanes=lane_cards(w.status, w.now), ledger=ledger.ledger_rows(w, ids), adrs=ledger.adr_rows(w), learning=learning.build(w))

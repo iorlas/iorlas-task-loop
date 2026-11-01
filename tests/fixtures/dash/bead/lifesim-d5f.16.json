@@ -57,7 +57,9 @@
   "retry_at": 0.0,
   "shots": 0
  },
- "version": "2762e41eb593b423",
+ "version": "3070df72e321af5c",
+ "bd_ok_at": null,
+ "bd_error": "",
  "description": "Autosave every 5 minutes. Part of Save system.",
  "acceptance": "- works in a new save and an old one\n- tests cover the rule\n- no new warnings in the build",
  "comments": [

@@ -8,6 +8,13 @@ import { set, ui } from '../state.js';
 export const STALE_S = 30, STALE_BANNER_S = 300;
 export const TABS = [['board', '🗂️', 'Board'], ['floor', '🏭', 'Floor'], ['decisions', '🙋', 'Decisions'], ['lanes', '🎛', 'Lanes'], ['cost', '💲', 'Cost']];
 
+export function BdBanner({ source, project, now }) {
+  if (!source.bd_error) return null;
+  const detail = source.bd_error.split(/\r?\n/, 1)[0];
+  const from = source.bd_ok_at == null ? 'no data yet' : `showing data from ${age(source.bd_ok_at, now)} ago`;
+  return html`<div class="ban watch">bd unreadable for ${project}: ${detail} · ${from}</div>`;
+}
+
 // §10: unreachable (red line, retry with backoff, last data greyed), stale > 5 min, loop not running
 export function Banners({ snap, now }) {
   const out = [];
@@ -16,6 +23,9 @@ export function Banners({ snap, now }) {
       <button class="lnk" onClick=${api.retry}>Retry</button></div>`);
   } else if (api.dataAge() > STALE_BANNER_S) {
     out.push(html`<div key="stale" class="ban watch">No refresh for ${age(now - api.dataAge(), now)} · <button class="lnk" onClick=${api.retry}>Refresh</button></div>`);
+  }
+  for (const p of snap.projects.filter((x) => x.bd_error)) {
+    out.push(html`<${BdBanner} key=${`bd-${p.id}`} source=${p} project=${p.name} now=${now} />`);
   }
   for (const l of snap.server.loops.filter((x) => !x.running)) {
     out.push(html`<div key=${`loop-${l.project}`} class="ban watch">Loop not running on ${l.project}${l.last_activity ? ` · last activity ${age(l.last_activity, now)} ago` : ''} · start it: <code>tl loop</code> · one task: <code>tl run-task ID</code></div>`);

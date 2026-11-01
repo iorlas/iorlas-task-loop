@@ -56,7 +56,9 @@ class Reads:
             return None
         runs = w.runs.get(bead, [])
         newest: Run | None = runs[-1] if runs else None
-        return bead_detail.build(Board(w), p, b, self.worlds.comments(path, bead), self.worlds.live_events(newest))
+        comments = self.worlds.comments(path, bead)
+        bd_ok_at, bd_error = self.worlds.beads.health(path, bead)
+        return bead_detail.build(Board(w), p, b, comments, self.worlds.live_events(newest)).replace(bd_ok_at=bd_ok_at, bd_error=bd_error)
 
     def cost(self, window: str, last: int, project: str) -> CostPage:
         self.env.touch()
