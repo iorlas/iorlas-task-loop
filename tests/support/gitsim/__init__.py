@@ -84,7 +84,7 @@ def run_git(argv: list[str], cwd: Any = None, env: Mapping[str, str] | None = No
     try:
         rc = handler(c)
     except Fail as f:
-        rc, c.err = f.rc, [*c.err, f.msg]
+        rc, c.err = f.rc, [*c.err, *([f.msg] if f.msg else [])]
     return rc, bytes(c.out), "\n".join(c.err) + ("\n" if c.err else "")
 
 

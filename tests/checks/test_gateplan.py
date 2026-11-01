@@ -13,6 +13,7 @@ from taskloop.contracts.config import ConfigError
 from taskloop.contracts.ids import CheckId, TreeSha
 from taskloop.contracts.ports import Ran
 from taskloop.contracts.runkey import BaseSha
+from taskloop.contracts.slots import GitReadFailure
 from taskloop.domain.checks.specs import gate_items
 
 
@@ -26,6 +27,24 @@ def document(steps=None, **extra):
 
 
 class GatePlans(te.EngineTest):
+    def test_failed_diff_cannot_authorize_a_legacy_when_skip(self):
+        self.setup_plan()
+        self.eng.cfg = self.eng.cfg.replace(plan_cmd=None)
+        with (mock.patch.object(self.eng.git, "changed_paths", side_effect=GitReadFailure("diff unavailable")),
+              self.assertRaises(GitReadFailure)):
+            self.run_gate()
+        self.assertFalse(self.green("coverage"))
+
+    def test_failed_git_observations_cannot_authorize_planned_skips(self):
+        self.setup_plan()
+        base = self.eng.git.rev_parse(str(self.eng.wt), self.eng.cfg.base)
+        tree = self.eng.checkout.tree_hash()
+        for method in ("dirty", "rev_parse", "merge_base", "changed_paths"):
+            with (self.subTest(method=method),
+                  mock.patch.object(self.eng.git, method, side_effect=GitReadFailure("unreadable"))):
+                self.assertEqual(skipped(self.eng, tree, base), PlanDecision({}))
+                self.assertEqual(self.calls, [])
+
     def setup_plan(self, answer=None, checks=None):
         self.eng = self.checks_engine(plan_cmd=["repo-plan", "steps", "--json"], checks=checks or [
             {"id": "coverage", "cmd": "true", "run": "gate", "when": ["never/**"]}])

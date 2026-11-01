@@ -6,7 +6,7 @@ from taskloop.contracts.enums import Outcome
 from taskloop.contracts.ids import BeadId, is_bead_id
 from taskloop.contracts.landed import LandedStore
 from taskloop.contracts.ports import Git
-from taskloop.contracts.slots import SlotGitError
+from taskloop.contracts.slots import MissingRevision, SlotGitError
 from taskloop.contracts.trace import RunTrace
 from taskloop.domain.reconcile.lost import BranchCommit
 from taskloop.domain.report import matchers
@@ -17,11 +17,25 @@ LANDS = Callable[[str], list[float]]
 def bases_of(git: Git, repo: str, base: str) -> list[str]:
     """The base and its local or remote twin, those that exist: a stale local main must not hide a land on origin."""
     twin = base[len("origin/"):] if base.startswith("origin/") else "origin/" + base
-    return [n for n in (base, twin) if git.rev_parse(repo, n + "^{commit}")]
+    found: list[str] = []
+    for n in (base, twin):
+        try:
+            if git.rev_parse(repo, n + "^{commit}"):
+                found.append(n)
+        except MissingRevision:
+            continue
+    return found
 
 
 def on_a_base(git: Git, repo: str, sha: str, bases: list[str]) -> bool:
-    return any(git.is_ancestor(repo, sha, b) for b in bases)
+    """Report whether a recorded sha reached a base; deleted or unknown revisions supply no match."""
+    for b in bases:
+        try:
+            if git.is_ancestor(repo, sha, b):
+                return True
+        except MissingRevision:
+            continue
+    return False
 
 
 def legacy_lands(git: Git, repo: str, bases: list[str], traces: Sequence[RunTrace]) -> dict[str, list[int]]:

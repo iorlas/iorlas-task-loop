@@ -6,7 +6,7 @@ from pathlib import Path
 
 from taskloop.contracts import config
 from taskloop.contracts.ports import Git
-from taskloop.contracts.slots import SlotGitError
+from taskloop.contracts.slots import NotARepo, SlotGitError
 from taskloop.contracts.stores import ReposStore
 
 FILE = ".task-loop.json"
@@ -25,7 +25,10 @@ def _base_name(repo: str | Path) -> str:
 def source(git: Git, repo: str | Path) -> tuple[str, str]:
     """(the profile text, where it came from): what the loop reads, the profile as committed on the base ref ("base <sha7>"),
     the working tree's copy ("working tree") only when the base does not resolve here. ("", ...) when there is no file."""
-    commit = git.rev_parse(str(repo), _base_name(repo) + "^{commit}")
+    try:
+        commit = git.rev_parse(str(repo), _base_name(repo) + "^{commit}")
+    except NotARepo:
+        commit = ""
     if commit:
         try:
             text = git.show(str(repo), commit, FILE).strip()

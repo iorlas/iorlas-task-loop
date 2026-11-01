@@ -18,6 +18,7 @@ from taskloop.contracts.ids import BeadId, TreeSha
 from taskloop.contracts.locator import RunBundle, RunLocator
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import Git
+from taskloop.contracts.slots import NotARepo
 from taskloop.stores.real import real_stores
 
 
@@ -48,7 +49,10 @@ def inspect(bead: BeadId, wt: str, repo: str, cfg: EngineConfig, *, git: Git, wh
     locator = RunLocator(who.config)
     last = locator.newest(bead, repo_of(git, wt) if wt else repo)
     ck = None if fresh else read_checkpoint(stores, bead)
-    branch = git.branch(wt) if wt else ""
+    try:
+        branch = git.branch(wt) if wt else ""
+    except NotARepo:
+        branch = ""  # a new checkout has no branch to inspect yet
     top = git.toplevel(wt) if branch == f"task/{bead}" else ""
     checkout = bool(top) and Path(top).resolve() == Path(wt).resolve()
     if dry:

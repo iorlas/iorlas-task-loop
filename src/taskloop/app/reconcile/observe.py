@@ -141,7 +141,13 @@ def remote_branches(repo: Path, closed: list[str], git: Git, cfg: ConfigDir) -> 
 
 def last_used(d: Path, git: Git) -> float:
     """When git last moved HEAD or the index of this worktree (its own admin folder), 0 when unknown."""
-    admin = Path(git.git_dir(str(d)))
+    try:
+        directory = git.git_dir(str(d))
+    except SlotGitError:
+        return 0.0
+    if not directory:
+        return 0.0
+    admin = Path(directory)
     stamps = []
     for name in ("HEAD", "index", "logs/HEAD"):
         with contextlib.suppress(OSError):

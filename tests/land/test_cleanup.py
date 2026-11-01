@@ -16,7 +16,7 @@ from taskloop.contracts import fence
 from taskloop.contracts import log as rec
 from taskloop.contracts.enums import Outcome
 from taskloop.contracts.ids import BeadId
-from taskloop.contracts.slots import Checkout, SlotGitError
+from taskloop.contracts.slots import Checkout, GitReadFailure, SlotGitError
 from taskloop.stores.memory import fake_stores
 from taskloop.stores.runlog import RunLog
 
@@ -68,6 +68,17 @@ class CleanupGit(ScriptedGit):
 
 
 class Cleanup(unittest.TestCase):
+    def test_failed_reads_keep_local_cleanup_pending_without_mutating(self):
+        for method in ("rev_parse", "checkouts", "dirty", "branch"):
+            with self.subTest(method=method):
+                self.git.calls.clear()
+                with mock.patch.object(self.git, method, side_effect=GitReadFailure("unreadable")):
+                    done = cleanup.retry(self.git, self.log, self.queue(pr=True), lambda path: True)
+                self.assertEqual(done.local_outcome, "pending")
+                self.assertIn("unreadable", done.detail)
+                self.assertEqual(self.git.calls, [])
+                self.assertEqual(self.git.local, "head")
+
     def setUp(self):
         self.git = CleanupGit()
         self.log = RunLog(fake_stores().run_log("run"))

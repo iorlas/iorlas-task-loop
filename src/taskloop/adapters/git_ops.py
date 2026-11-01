@@ -6,6 +6,7 @@ from typing import Self
 from taskloop.adapters.git_base import GitBase, classify
 from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.gitfacts import DiffEntry, GitOutcome
+from taskloop.contracts.slots import GitReadFailure, MissingRevision
 
 PUSH_WALL_S = 3600.0  # a push (or an LFS upload) that has not ended after this long is a failure with these words
 
@@ -20,31 +21,50 @@ class LandGit(GitBase):
         return int(out) if out.isdigit() else 0
 
     def unmerged(self, d: str) -> list[str]:
-        return [p for p in self._ask(d, "diff", "--name-only", "--diff-filter=U").splitlines() if p]
+        return self._paths(d, "diff", "--name-only", "-z", "--diff-filter=U")
 
-    def changed_paths(self, d: str, a: str, b: str) -> list[str]:
-        r = self._run(d, "diff", "--name-only", a, b)
-        return [p for p in r.stdout.splitlines() if p] if r.returncode == 0 else []
+    def changed_paths(self, d: str, a: str, b: str, *, required: bool = False) -> list[str]:
+        return self._diff_paths(d, a, b, "--name-only", required=required)
 
-    def diff_entries(self, d: str, a: str, b: str, ignore_space: bool = False) -> list[DiffEntry]:
-        space = ["-w", "--ignore-blank-lines"] if ignore_space else []
-        r = self._run(d, "diff", "--no-ext-diff", "--name-status", "-z", "-M100%", *space, a, b)
-        if r.returncode != 0:
+    def _diff_paths(self, d: str, a: str, b: str, *opts: str, required: bool) -> list[str]:
+        try:
+            return self._paths(d, "diff", "--no-ext-diff", *opts, "-z", a, b)
+        except MissingRevision:
+            if required:
+                raise
             return []
+
+    def _paths(self, d: str, *args: str) -> list[str]:
+        out = self._read(d, *args)
+        if out and not out.endswith("\0"):
+            raise GitReadFailure(f"git {args[0]}: incomplete path record")
+        fields = out.split("\0")[:-1]
+        if any(not field for field in fields):
+            raise GitReadFailure(f"git {args[0]}: empty path record")
+        return fields
+
+    def diff_entries(self, d: str, a: str, b: str, ignore_space: bool = False, *, required: bool = False) -> list[DiffEntry]:
+        space = ["-w", "--ignore-blank-lines"] if ignore_space else []
+        fields = self._diff_paths(d, a, b, "--name-status", "-M100%", *space, required=required)
         out: list[DiffEntry] = []
-        words = iter(r.stdout.split("\0"))
+        words = iter(fields)
         for status in words:
-            if not status:
-                continue
+            if status not in ("A", "D", "M", "T", "R100"):
+                raise GitReadFailure("git diff: malformed status record")
             if status[0] == "R":
                 old, new = next(words, ""), next(words, "")
+                if not old or not new:
+                    raise GitReadFailure("git diff: incomplete rename record")
                 out.append(DiffEntry(status="R", path=new, old=old))
             else:
-                out.append(DiffEntry(status=status[0], path=next(words, "")))
+                path = next(words, "")
+                if not path:
+                    raise GitReadFailure("git diff: incomplete path record")
+                out.append(DiffEntry(status=status[0], path=path))
         return out
 
     def staged(self, d: str) -> bool:
-        return self._run(d, "diff", "--cached", "--quiet").returncode != 0
+        return not self._predicate(d, "diff", "--cached", "--quiet")
 
     def stage_literal(self, d: str, paths: list[str]) -> None:
         """Stage exactly these paths (as given, no globbing; a deleted one stages its deletion), however many there are."""

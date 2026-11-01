@@ -14,6 +14,7 @@ from taskloop.adapters import locks
 from taskloop.contracts.locator import RunBundle, RunLocator
 from taskloop.contracts.paths import TASK_EXCLUDE, ConfigDir
 from taskloop.contracts.ports import Git
+from taskloop.contracts.slots import git_probe
 
 
 def newest_write(path: Path) -> float:
@@ -86,7 +87,7 @@ def drop_run_log(cfg: ConfigDir, b: RunBundle) -> None:
 
 def repo_of(git: Git, wt: str | Path) -> str:
     """The repo's path as asks and decisions name it: the parent of the git common dir (the worktree when git cannot say)."""
-    common = git.common_dir(str(wt))
+    common = git_probe(lambda: git.common_dir(str(wt)), "")
     return str(Path(common).parent) if common else str(wt)
 
 

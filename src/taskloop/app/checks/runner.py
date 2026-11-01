@@ -39,7 +39,7 @@ def cached_gate(cfg: EngineConfig, git: Git, wt: str, stores: Stores, env: Env, 
     keys = InputKeys(git, wt, tree)
     engine_env = {**childenv.reaching(childenv.current_env(env)), **bead_env}
     memo = RunMemo(stores, check_files.repo_key(git, wt), keys, BaseSha(base), engine_env)
-    changed = git.changed_paths(wt, start, tree) if planned is None and any(c.when for c in items) else []
+    changed = git.changed_paths(wt, start, tree, required=True) if planned is None and any(c.when for c in items) else []
     return all(memo.has(c) or not due(c, changed, planned.skips if planned is not None else None) for c in items)
 
 

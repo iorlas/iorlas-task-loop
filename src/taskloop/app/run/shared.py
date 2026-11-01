@@ -10,7 +10,7 @@ from atomic_io import atomic_write_json
 
 from taskloop.adapters.gitrepo import same_dir
 from taskloop.app.slots import engine_lock
-from taskloop.contracts.slots import SlotGitError
+from taskloop.contracts.slots import SlotGitError, git_probe
 
 FLAKE_DAYS = 14  # how long a writer-reported flaky test stays in the shared notes
 
@@ -25,7 +25,7 @@ class Shared:
 
     def shared_path(self) -> Path:
         e = self.e
-        common = e.git.common_dir(e.wt) or str(e.wt)
+        common = git_probe(lambda: e.git.common_dir(e.wt), "") or str(e.wt)
         return e.home.root / "shared" / f"{hashlib.sha1(common.encode('utf-8')).hexdigest()[:12]}.json"
 
     def known_flakes(self) -> list[dict[str, Any]]:
@@ -60,7 +60,7 @@ class Shared:
         """[(bead, summary, files)]: tasks running in other worktrees of this repo right now (a live engine lock)."""
         e = self.e
         out: list[tuple[str, str, list[str]]] = []
-        for there in e.git.checkouts(e.wt):
+        for there in git_probe(lambda: e.git.checkouts(e.wt), []):
             wt = there.path
             if same_dir(wt, e.wt):
                 continue

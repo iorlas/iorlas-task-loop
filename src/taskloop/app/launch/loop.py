@@ -45,7 +45,7 @@ from taskloop.contracts.ids import BeadId
 from taskloop.contracts.landed import LandedStore
 from taskloop.contracts.loop import LoopState
 from taskloop.contracts.ports import Beads, Child, Git, Hold, Spawner
-from taskloop.contracts.slots import SlotGitError
+from taskloop.contracts.slots import SlotGitError, git_probe
 from taskloop.contracts.stores import JsonStore, ReposStore
 from taskloop.domain import outcome as oc
 from taskloop.domain.beads import rules as beadlint
@@ -113,6 +113,11 @@ def storm(repo: str, cfg: paths.ConfigDir, now: Callable[[], float] = trail.now,
 def landed_on_base(repo: str, cfg: paths.ConfigDir, store: Beads, wt: str, bead_id: BeadId, git: Git) -> bool:
     """True when the bead's landed record names a sha that is on the base. LEGACY, only for a bead with no record (landed before
     0.23.179): its land commit (titled `... (<id>)`) is the tip of its branch and already on the base; this can go with them."""
+    return git_probe(lambda: _landed_on_base(repo, cfg, store, wt, bead_id, git), False)
+
+
+def _landed_on_base(repo: str, cfg: paths.ConfigDir, store: Beads, wt: str, bead_id: BeadId, git: Git) -> bool:
+    """Only positive evidence lets the loop treat a bead as landed; an unknown probe stays not ready."""
     if not os.path.isdir(wt):
         return False
     base = wslots.load_cfg(repo, git).base

@@ -10,6 +10,7 @@ from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdFailure, Beads, Git
+from taskloop.contracts.slots import git_probe
 from taskloop.contracts.stores import TraceStore
 from taskloop.contracts.trace import RunTrace
 
@@ -40,7 +41,7 @@ class Traces:
 def repo_traces(repo: str, git: Git, cfg: ConfigDir) -> Traces:
     """Every engine run of this repo: its worktree is inside the repo, or its origin is the repo's origin."""
     root = str(Path(repo).resolve())
-    url = git.remote_url(repo, "origin")
+    url = git_probe(lambda: git.remote_url(repo, "origin"), "")
     page = TraceStore(cfg).read_from(0)
     out: list[RunTrace] = []
     for item in page.items:

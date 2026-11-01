@@ -147,4 +147,4 @@ class Checkout:
     def changed_paths(self) -> list[str]:
         """Paths the task changed since it started, untracked files included."""
         tree = self.tree_hash()
-        return self.e.git.changed_paths(self.e.wt, self.base_sha(), tree) if tree else []
+        return self.e.git.changed_paths(self.e.wt, self.base_sha(), tree, required=True) if tree else []

@@ -14,6 +14,7 @@ from taskloop.contracts import plancheck
 from taskloop.contracts.enums import Outcome, Result
 from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.run import RunState
+from taskloop.contracts.slots import git_probe
 from taskloop.domain import outcome as oc
 from taskloop.domain.report import matchers as lifecycle
 from taskloop.domain.review import switch
@@ -72,7 +73,7 @@ class Records:
                 parent_id=why["prev_run"],
                 started_because=why["started_because"],
                 ask=why["ask"],
-                branch=e.git.branch(e.wt),
+                branch=git_probe(lambda: e.git.branch(e.wt), ""),
                 review=switch.mode(e.cfg.review, e.budget.labels),
                 mode=bundle.manifest.mode if bundle else "",
                 owner=e.who.actor,
@@ -102,9 +103,9 @@ class Records:
                     dict(
                         self.origin(),
                         bead=e.bead,
-                        repo_url=repo_url(e.git, str(e.wt)),
+                        repo_url=git_probe(lambda: repo_url(e.git, str(e.wt)), str(e.wt)),
                         worktree=str(e.wt),
-                        branch=e.git.branch(e.wt),
+                        branch=git_probe(lambda: e.git.branch(e.wt), ""),
                         coordinator_session=e.session,
                         version=ident.plugin_version(),
                         started=e.t0,

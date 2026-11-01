@@ -7,6 +7,7 @@ from taskloop.adapters import childenv
 from taskloop.app.checks.host import CheckHost
 from taskloop.app.checks.keep import attempt_dir
 from taskloop.contracts.ids import CheckId
+from taskloop.contracts.slots import git_probe
 from taskloop.domain.checks.matchers import safe_name
 
 
@@ -15,4 +16,4 @@ def step_env(host: CheckHost, step: str) -> dict[str, str]:
     d = attempt_dir(Path(host.run_dir) / "artifacts" / safe_name(CheckId(step)))
     wt = str(host.wt)
     return childenv.run_env(run_id=host.run_id, run_dir=host.run_dir, attempt=int(d.name.removeprefix("attempt-")), artifact_dir=d,
-                            worktree=wt, branch=host.git.branch(wt))
+                            worktree=wt, branch=git_probe(lambda: host.git.branch(wt), ""))

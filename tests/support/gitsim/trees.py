@@ -34,12 +34,13 @@ def pin(r: Repo, branch: str) -> None:
 
 def listing(c: Ctx) -> int:
     r = c.r
+    end = "\0" if "-z" in c.args else "\n"
     for git, work in [(r.common, r.common.parent), *linked(r)]:
         wr = Repo(git, work)
-        c.say(f"worktree {work}")
-        c.say(f"HEAD {wr.head_sha() or '0' * 40}")
-        c.say(f"branch refs/heads/{wr.head_ref()}" if wr.head_ref() else "detached")
-        c.say()
+        c.say(f"worktree {work}", end)
+        c.say(f"HEAD {wr.head_sha() or '0' * 40}", end)
+        c.say(f"branch refs/heads/{wr.head_ref()}" if wr.head_ref() else "detached", end)
+        c.say(end=end)
     return 0
 
 

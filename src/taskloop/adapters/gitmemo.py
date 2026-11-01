@@ -93,8 +93,8 @@ def memo_key(env: Env, args: tuple[str, ...], cwd: str) -> tuple[Any, tuple[Sig,
 
 
 def remember(key: Any, sigs: tuple[Sig, ...] | None, args: tuple[str, ...], out: str) -> None:
-    """Keep the answer of a question `memo_key` mapped (a missing ref is an answer too, until its file appears)."""
+    """Keep a successful observation of a question `memo_key` mapped; failures and absence are never cached."""
     if key is not None and sigs is None and out:
         COMMON_DIR_MEMO[key] = out
-    elif key is not None and sigs is not None and (out or "--verify" in args):
+    elif key is not None and sigs is not None and out:
         REF_MEMO[key] = (sigs, out)

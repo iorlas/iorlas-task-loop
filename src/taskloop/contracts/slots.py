@@ -4,6 +4,7 @@ A slot is one worktree plus the bd bead that is its lease. `Slot.take`, `ready_f
 whose `code` is one of four closed values; git's own failures are the typed `SlotGitError`s below, classified once by the
 adapter (the only place that reads git's words), never by the caller.
 """
+from collections.abc import Callable
 from typing import Literal, final
 
 from taskloop.contracts.wire import Rec
@@ -30,6 +31,34 @@ class SlotGitError(Exception):
     def __init__(self, tail: str) -> None:
         super().__init__(tail)
         self.tail = tail
+
+
+class GitReadFailure(SlotGitError):
+    """Git could not establish an observation; callers must not infer clean, empty or missing."""
+
+
+class NotARepo(GitReadFailure):
+    """Git established that the requested directory is absent or outside a repository."""
+
+
+class MissingRevision(GitReadFailure):
+    """A named revision does not exist; this is not an empty diff."""
+
+
+class MissingRemote(GitReadFailure):
+    """The requested remote is not configured."""
+
+
+class NotAWorktree(GitReadFailure):
+    """The repository has no worktree (for example, a bare repository)."""
+
+
+def git_probe[T](read: Callable[[], T], unknown: T) -> T:
+    """A display or readiness probe's fallback; never use it to authorize writes or skips."""
+    try:
+        return read()
+    except GitReadFailure:
+        return unknown
 
 
 class BranchPinned(SlotGitError):

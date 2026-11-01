@@ -140,7 +140,7 @@ class Beads(Protocol):
 
 class SlotGit(Protocol):
     """What a slot's life asks of git (reset, checkout, commit, worktrees). Every method takes the worktree it acts in and raises a
-    SlotGitError subclass."""
+    SlotGitError subclass. Unknown read observations raise GitReadFailure; they never mean clean, empty or missing."""
 
     def fetch(self, d: str) -> None: ...
     def rebasing(self, d: str) -> bool: ...
@@ -202,7 +202,7 @@ class Git(SlotGit, Protocol):
         ...
 
     def merge_base(self, d: str, a: str, b: str) -> str:
-        """The best common ancestor of a and b, empty when they share none."""
+        """The best common ancestor of a and b, empty when a revision is absent or they share none; unknown reads raise."""
         ...
 
     def is_ancestor(self, d: str, a: str, b: str) -> bool: ...
@@ -224,7 +224,7 @@ class Git(SlotGit, Protocol):
         ...
 
     def git_dir(self, d: str) -> str:
-        """The absolute git dir of the worktree `d` (its own admin folder), empty when `d` is no checkout."""
+        """The absolute git dir of `d`, empty outside a repo; unknown reads raise."""
         ...
 
     def has_commit(self, d: str, oid: str) -> bool: ...
@@ -290,13 +290,14 @@ class Git(SlotGit, Protocol):
         """The paths a stopped rebase or merge left in conflict."""
         ...
 
-    def changed_paths(self, d: str, a: str, b: str) -> list[str]:
-        """The paths that differ between the trees a and b, empty when git cannot say."""
+    def changed_paths(self, d: str, a: str, b: str, *, required: bool = False) -> list[str]:
+        """Paths differing between a and b; a missing revision is empty unless required for a write or skip decision.
+        Other read failures always raise."""
         ...
 
-    def diff_entries(self, d: str, a: str, b: str, ignore_space: bool = False) -> list[DiffEntry]:
+    def diff_entries(self, d: str, a: str, b: str, ignore_space: bool = False, *, required: bool = False) -> list[DiffEntry]:
         """The paths that differ between the trees a and b with their status, an exact (100%) rename as one R entry; with `ignore_space`
-        only those with a change that is not whitespace. Empty when git cannot say."""
+        only those with a change that is not whitespace. Missing revisions are empty unless required; other failures raise."""
         ...
 
     def staged(self, d: str) -> bool:
@@ -346,7 +347,7 @@ class Git(SlotGit, Protocol):
         ...
 
     def remote_url(self, d: str, remote: str) -> str:
-        """The url of the remote, empty when there is none."""
+        """The url of the remote; MissingRemote when unset, other read failures when unknown."""
         ...
 
     def merge_ff(self, d: str, rev: str) -> None:

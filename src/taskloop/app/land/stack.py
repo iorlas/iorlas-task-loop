@@ -20,6 +20,7 @@ from taskloop.contracts.forge import CLOSED, MERGED, OPEN, Pr, StackItem
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import Beads, DoltPush, Git
+from taskloop.contracts.slots import MissingRemote
 from taskloop.domain.land.matchers import no_dolt_remote
 from taskloop.stores.runlog import RunLog
 
@@ -30,7 +31,11 @@ TASK = "task/"
 
 def lock_path(home: ConfigDir, git: Git, repo: str) -> Path:
     """The repo's land lock: the one the engine lands under."""
-    return landlock.land_lock_path(home, git.remote_url(repo, "origin") or repo)
+    try:
+        url = git.remote_url(repo, "origin")
+    except MissingRemote:
+        url = ""
+    return landlock.land_lock_path(home, url or repo)
 
 
 class Stack:

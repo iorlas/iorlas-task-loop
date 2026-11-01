@@ -3,13 +3,14 @@ import hashlib
 from pathlib import Path
 from typing import Any
 
+from taskloop.contracts.slots import git_probe
 from taskloop.domain import slot_env
 
 
 def bead_env(e: Any, *, create: bool = True) -> dict[str, str]:
     """The slot's environment for the engine `e`. The slot is its worktree's name (a plain worktree is its own slot); the repo is the
     origin url's name, and its state folder adds a hash of the url so two repos of one name never meet."""
-    origin = e.git.remote_url(e.wt, "origin") or str(e.wt)
+    origin = git_probe(lambda: e.git.remote_url(e.wt, "origin"), "") or str(e.wt)
     repo, slot = slot_env.repo_id(origin, str(e.wt)), Path(str(e.wt)).name
     key = f"{repo}-{hashlib.sha1(origin.encode('utf-8', 'surrogateescape')).hexdigest()[:10]}"
     state = e.home.slot_state(key, slot)

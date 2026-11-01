@@ -9,7 +9,7 @@ from taskloop.adapters.git_base import classify
 from taskloop.adapters.git_ops import LandGit
 from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.gitfacts import ConfigEntry, GitOutcome, GrepHit, LogRow, Pick, Ref, StatusRow, TreeEntry
-from taskloop.contracts.slots import Checkout, RefRace, SlotGitError
+from taskloop.contracts.slots import Checkout, GitReadFailure, MissingRevision, NotARepo, NotAWorktree, RefRace, SlotGitError
 
 FETCH_TRIES = 5
 
@@ -37,10 +37,10 @@ class RealGit(LandGit):
         self._run(d, "rebase", "--abort")
 
     def dirty(self, d: str) -> bool:
-        return bool(self._ask(d, "status", "--porcelain"))
+        return bool(self.status(d))
 
     def branch(self, d: str) -> str:
-        return self._ask(d, "symbolic-ref", "--short", "-q", "HEAD")
+        return self._ask(d, "symbolic-ref", "--short", "-q", "HEAD", missing=True)
 
     def commit_all(self, d: str, branch: str, message: str) -> None:
         if not self.branch(d):
@@ -49,7 +49,7 @@ class RealGit(LandGit):
         self._must(d, "commit", "-q", "--no-verify", "-m", message)
 
     def has_branch(self, d: str, branch: str) -> bool:
-        return bool(self._ask(d, "rev-parse", "--verify", "-q", "refs/heads/" + branch))
+        return bool(self.rev_parse(d, "refs/heads/" + branch))
 
     def checkout(self, d: str, branch: str) -> None:
         self._must(d, "checkout", branch)
@@ -64,14 +64,17 @@ class RealGit(LandGit):
         self._run(d, "clean", "-fdxq" if ignored else "-fdq", *[x for k in keep for x in ("-e", k)])
 
     def checkouts(self, d: str) -> list[Checkout]:
-        out = self._ask(d, "worktree", "list", "--porcelain")
+        out = self._read(d, "worktree", "list", "--porcelain", "-z")
+        if out and not out.endswith("\0\0"):
+            raise GitReadFailure("git worktree list: incomplete checkout record")
         found = []
-        for i, block in enumerate(out.split("\n\n")):
-            lines = block.splitlines()
+        for i, block in enumerate(out.split("\0\0")[:-1]):
+            lines = block.split("\0")
             path = next((ln[9:] for ln in lines if ln.startswith("worktree ")), "")
             branch = next((ln[18:] for ln in lines if ln.startswith("branch refs/heads/")), "")
-            if path:
-                found.append(Checkout(path=path, branch=branch, main=i == 0))
+            if not path:
+                raise GitReadFailure("git worktree list: missing checkout path")
+            found.append(Checkout(path=path, branch=branch, main=i == 0))
         return found
 
     def remove_worktree(self, repo: str, path: str) -> bool:
@@ -96,11 +99,11 @@ class RealGit(LandGit):
     # -- reads that return rows ------------------------------------------------------------------------------------------------
 
     def for_each_ref(self, d: str, *prefixes: str) -> list[Ref]:
-        out = self._must(d, "for-each-ref", "--format=%(objectname) %(refname)", *prefixes)
+        out = self._read(d, "for-each-ref", "--format=%(objectname) %(refname)", *prefixes)
         return [Ref(name=name, oid=oid) for oid, _, name in (ln.partition(" ") for ln in out.splitlines())]
 
     def ls_remote(self, d: str, remote: str, *patterns: str) -> list[Ref]:
-        out = self._must(d, "ls-remote", remote, *patterns)
+        out = self._read(d, "ls-remote", remote, *patterns)
         return [Ref(name=name, oid=oid) for oid, _, name in (ln.partition("\t") for ln in out.splitlines())]
 
     def cherry(self, d: str, upstream: str, head: str) -> list[Pick]:
@@ -108,18 +111,27 @@ class RealGit(LandGit):
         return [Pick(oid=ln[2:], upstream=ln[0] == "-") for ln in out.splitlines() if ln[:2] in ("+ ", "- ")]
 
     def merged(self, d: str, into: str) -> list[Ref]:
-        out = self._must(d, "branch", "--merged", into, "--format=%(objectname) %(refname:short)")
+        out = self._read(d, "branch", "--merged", into, "--format=%(objectname) %(refname:short)")
         rows = [ln.partition(" ") for ln in out.splitlines()]
         return [Ref(name=name, oid=oid) for oid, _, name in rows if not name.startswith("(")]
 
     def merge_base(self, d: str, a: str, b: str) -> str:
-        return self._ask(d, "merge-base", a, b)
+        try:
+            return self._ask(d, "merge-base", a, b, missing=True)
+        except MissingRevision:
+            return ""
+        except GitReadFailure:
+            # merge-base reports an absent object with exit 128; verify absence
+            # separately so an unreadable object or repository is still a fault.
+            if not self.rev_parse(d, a) or not self.rev_parse(d, b):
+                return ""
+            raise
 
     def is_ancestor(self, d: str, a: str, b: str) -> bool:
-        return self._run(d, "merge-base", "--is-ancestor", a, b).returncode == 0
+        return self._predicate(d, "merge-base", "--is-ancestor", a, b)
 
     def rev_parse(self, d: str, rev: str) -> str:
-        return self._ask(d, "rev-parse", "--verify", "-q", rev)
+        return self._ask(d, "rev-parse", "--verify", "-q", rev, missing=True)
 
     def log(self, d: str, include: list[str], exclude: list[str] | None = None, limit: int = 0, grep: str = "") -> list[LogRow]:
         args = ["log", "--format=%H%x00%ct%x00%s", *include, *(["--not", *exclude] if exclude else [])]
@@ -142,20 +154,23 @@ class RealGit(LandGit):
         return found
 
     def status(self, d: str, all_untracked: bool = False) -> list[StatusRow]:
-        r = self._run(d, "status", "--porcelain", "-z", *(["--untracked-files=all"] if all_untracked else []),
-                      extra={"GIT_OPTIONAL_LOCKS": "0"})
-        if r.returncode:
-            raise classify(r.stderr or r.stdout)
-        fields = r.stdout.split("\0")
+        out = self._read(d, "status", "--porcelain", "-z", *(["--untracked-files=all"] if all_untracked else []),
+                         extra={"GIT_OPTIONAL_LOCKS": "0"})
+        if out and not out.endswith("\0"):
+            raise GitReadFailure("git status: incomplete path record")
+        fields = out.split("\0")[:-1]
         found: list[StatusRow] = []
         i = 0
         while i < len(fields):
             f = fields[i]
             i += 1
-            if len(f) > 3:
-                found.append(StatusRow(path=f[3:], index=f[0], work=f[1]))
-                if f[0] in "RC":
-                    i += 1  # a rename or copy is followed by the path it came from
+            if len(f) <= 3 or f[2] != " " or any(c not in " MADRCUT?!" for c in f[:2]):
+                raise GitReadFailure("git status: malformed path record")
+            found.append(StatusRow(path=f[3:], index=f[0], work=f[1]))
+            if any(c in "RC" for c in f[:2]):
+                if i >= len(fields) or not fields[i]:
+                    raise GitReadFailure("git status: incomplete rename record")
+                i += 1  # a rename or copy is followed by the path it came from
         return found
 
     def check_ignore(self, d: str, paths: list[str], excludes: str = "") -> list[str]:
@@ -168,10 +183,13 @@ class RealGit(LandGit):
         return [p for p in r.stdout.split("\0") if p]
 
     def git_dir(self, d: str) -> str:
-        return self._ask(d, "rev-parse", "--absolute-git-dir")
+        try:
+            return self._ask(d, "rev-parse", "--absolute-git-dir")
+        except NotARepo:
+            return ""
 
     def has_commit(self, d: str, oid: str) -> bool:
-        return bool(self._ask(d, "rev-parse", "--verify", "-q", oid + "^{commit}"))
+        return bool(self.rev_parse(d, oid + "^{commit}"))
 
     # -- writes ----------------------------------------------------------------------------------------------------------------
 
@@ -252,21 +270,27 @@ class RealGit(LandGit):
         return found
 
     def config_get(self, d: str, key: str) -> str:
-        return self._ask(d, "config", "--get", key)
+        return self._ask(d, "config", "--get", key, missing=True)
 
     def config_entries(self, d: str, pattern: str) -> list[ConfigEntry]:
         found = []
-        for ln in self._ask(d, "config", "--show-origin", "--get-regexp", pattern).splitlines():
+        for ln in self._ask(d, "config", "--show-origin", "--get-regexp", pattern, missing=True).splitlines():
             where, _, kv = ln.partition("\t")
             key, _, value = kv.partition(" ")
             found.append(ConfigEntry(where=where, key=key, value=value))
         return found
 
     def common_dir(self, d: str) -> str:
-        return self._ask(d, "rev-parse", "--path-format=absolute", "--git-common-dir")
+        try:
+            return self._ask(d, "rev-parse", "--path-format=absolute", "--git-common-dir")
+        except NotARepo:
+            return ""
 
     def toplevel(self, d: str) -> str:
-        return self._ask(d, "rev-parse", "--show-toplevel")
+        try:
+            return self._ask(d, "rev-parse", "--show-toplevel")
+        except (NotARepo, NotAWorktree):
+            return ""
 
     def tree_of(self, d: str) -> str:
         """HEAD's tree plus every change and untracked file, written from a throwaway index in a temp folder."""
@@ -292,8 +316,7 @@ class RealGit(LandGit):
 
     def diff(self, d: str, a: str, b: str, exclude: list[str] | None = None, stat: bool = False) -> str:
         spec = ["--", ".", *(":(exclude,literal)" + p for p in exclude)] if exclude else []
-        r = self._run(d, "diff", *(["--stat"] if stat else []), a, b, *spec)
-        return r.stdout.strip() if r.returncode == 0 else ""
+        return self._read(d, "diff", *(["--stat"] if stat else []), a, b, *spec).strip()
 
     def add_worktree_force(self, repo: str, path: str, ref: str) -> None:
         self._must(repo, "worktree", "add", "--detach", "--force", path, ref)

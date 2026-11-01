@@ -85,9 +85,7 @@ def skipped(host: CheckHost, tree: str, base: str) -> PlanDecision | None:
         start = host.git.merge_base(wt, base, "HEAD")
         if not start:
             raise ValueError("cannot resolve the diff's merge-base")
-        paths = host.git.changed_paths(wt, start, tree)
-        if not paths and host.git.rev_parse(wt, f"{start}^{{tree}}") != tree:
-            raise ValueError("cannot read the changed paths")  # the port answers [] on a git failure: an empty diff must be a real one
+        paths = host.git.changed_paths(wt, start, tree, required=True)
         ran = host.spawner.run([*argv, "--base", base, "--paths-stdin"], cwd=wt,
                                extra=host.bead_env, timeout_s=PLAN_TIMEOUT_S,
                                input="".join(p + "\0" for p in paths))

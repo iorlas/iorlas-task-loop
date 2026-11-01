@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 from support.tags import contract  # noqa: F401  (re-exported for the subclasses)
 
 from taskloop.contracts.ports import Git
-from taskloop.contracts.slots import BranchPinned, DirtyTree, SlotGitError
+from taskloop.contracts.slots import BranchPinned, DirtyTree, GitReadFailure, SlotGitError
 
 _Base = unittest.TestCase if TYPE_CHECKING else object
 IDENT = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t",
@@ -52,6 +52,28 @@ class GitContract(_Base):
 
     def s(self) -> str:
         return str(self.slot)
+
+    def test_invalid_checkout_reads_raise_instead_of_reporting_clean_or_absent(self) -> None:
+        invalid = self.home / "not-a-checkout"
+        invalid.mkdir()
+        for method, args in (("dirty", ()), ("status", ()), ("branch", ()), ("checkouts", ()),
+                             ("rev_parse", ("HEAD",)), ("has_branch", ("task/x",)),
+                             ("changed_paths", ("HEAD", "HEAD")), ("diff_entries", ("HEAD", "HEAD"))):
+            with self.subTest(method=method), self.assertRaises(GitReadFailure):
+                getattr(self.git, method)(str(invalid), *args)
+
+    def test_changed_paths_and_unmerged_preserve_newline_filenames(self) -> None:
+        base = self.git.rev_parse(self.s(), "HEAD")
+        name = " leading\nname\n"
+        (self.slot / name).write_text("change\n")
+        self.git.commit_all(self.s(), "task/newline", "newline path")
+        self.assertEqual(self.git.changed_paths(self.s(), base, "HEAD"), [name])
+        self.assertEqual(self.git.unmerged(self.s()), [])
+
+    def test_checkout_paths_preserve_newlines(self) -> None:
+        path = self.home / "checkout\nname"
+        self.git.add_worktree(str(self.repo), str(path), "origin/main")
+        self.assertIn(str(path), [co.path for co in self.git.checkouts(str(self.repo))])
 
     def test_a_new_worktree_is_detached_clean_and_listed_after_the_main_one(self) -> None:
         self.assertEqual(self.git.branch(self.s()), "")
@@ -335,9 +357,10 @@ class GitContract(_Base):
         with self.assertRaises(SlotGitError):
             self.git.fetch_ref(str(self.repo), str(other), "task/none")
 
-    def test_remote_url_is_the_remotes_url_or_empty(self) -> None:
+    def test_remote_url_is_the_remotes_url_or_a_read_failure(self) -> None:
         self.assertEqual(os.path.realpath(self.git.remote_url(str(self.repo), "origin")), str(self.origin))
-        self.assertEqual(self.git.remote_url(str(self.repo), "nope"), "")
+        with self.assertRaises(GitReadFailure):
+            self.git.remote_url(str(self.repo), "nope")
 
     def test_merge_ff_moves_forward_and_refuses_a_diverged_branch(self) -> None:
         other = self.home / "other"

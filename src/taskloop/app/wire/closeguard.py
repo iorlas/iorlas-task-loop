@@ -16,6 +16,7 @@ from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId, RunId
 from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.ports import BdFailure, Beads, Git
+from taskloop.contracts.slots import git_probe
 from taskloop.contracts.stores import TraceStore
 from taskloop.contracts.trace import RunTrace
 
@@ -54,7 +55,8 @@ def record_land(who: Identity, store: Beads, git: Git, repo: str, base: str, bea
         full = git.rev_parse(repo, sha + "^{commit}") or sha
         now = time.time()
         TraceStore(who.config).append(RunTrace(
-            run=RunId.new(now), bead=bead, repo_url=git.remote_url(repo, "origin") or repo, worktree=repo, branch="",
+            run=RunId.new(now), bead=bead, repo_url=git_probe(lambda: git.remote_url(repo, "origin"), "") or repo,
+            worktree=repo, branch="",
             coordinator_session=who.session, started=now, ended=now, outcome=Outcome.LANDED, why=why, sha=full, repo_path=repo))
     return rc
 

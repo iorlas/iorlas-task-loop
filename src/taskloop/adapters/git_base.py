@@ -13,12 +13,25 @@ from taskloop.adapters.childenv import tool_env, without
 from taskloop.adapters.gitrepo import pinned_env
 from taskloop.contracts.env import Env
 from taskloop.contracts.gitfacts import GitOutcome
-from taskloop.contracts.slots import BranchPinned, DirtyTree, IndexLocked, RefRace, SlotGitError
+from taskloop.contracts.slots import (
+    BranchPinned,
+    DirtyTree,
+    GitReadFailure,
+    IndexLocked,
+    MissingRemote,
+    MissingRevision,
+    NotARepo,
+    NotAWorktree,
+    RefRace,
+    SlotGitError,
+)
 
 INDEX_LOCK = re.compile(r"index\.lock")
 REF_RACE = re.compile(r"incorrect old value|cannot lock ref|unable to update local ref|Unable to create '[^']*\.lock'")
 PINNED = re.compile(r"already (?:checked out|used by worktree) at '?([^'\n]*)'?")
 DIRTY = re.compile(r"would be overwritten|commit your changes|local changes|unmerged|unresolved|cannot (?:do a )?(?:commit|merge)")
+MISSING_REVISION = re.compile(r"fatal: (?:bad revision '.+'|Not a valid object name .+)")
+AMBIGUOUS_REVISION = re.compile(r"fatal: ambiguous argument '.+': unknown revision or path not in the working tree\.")
 
 
 def error_line(text: str) -> str:
@@ -38,6 +51,23 @@ def classify(stderr: str) -> SlotGitError:
     if DIRTY.search(stderr):
         return DirtyTree(tail)
     return SlotGitError(tail)
+
+
+def read_failure(args: tuple[str, ...], r: subprocess.CompletedProcess[str]) -> GitReadFailure:
+    """Only git's specific absence diagnostics are typed absence; other exit-128 failures stay unknown."""
+    tail = error_line(r.stderr or r.stdout)
+    kind: type[GitReadFailure] = GitReadFailure
+    if args[:2] == ("remote", "get-url") and r.returncode == 2 and re.fullmatch(r"error: No such remote '.+'", tail):
+        kind = MissingRemote
+    if r.returncode == 128:
+        if (tail == "fatal: not a git repository (or any of the parent directories): .git"
+                or re.fullmatch(r"fatal: cannot change to '.+': No such file or directory", tail)):
+            kind = NotARepo
+        elif tail == "fatal: this operation must be run in a work tree":
+            kind = NotAWorktree
+        elif MISSING_REVISION.fullmatch(tail) or AMBIGUOUS_REVISION.fullmatch(tail):
+            kind = MissingRevision
+    return kind(f"git {args[0]} exited {r.returncode}: {tail}")
 
 
 class GitBase:
@@ -75,15 +105,39 @@ class GitBase:
             raise classify(r.stderr or r.stdout)
         return r.stdout.strip()
 
-    def _ask(self, d: str, *args: str) -> str:
+    def _read(self, d: str, *args: str, missing: bool = False, extra: dict[str, str] | None = None) -> str:
+        """Preserve read failures, accepting silent exit 1 only for an operation's documented absence."""
+        try:
+            r = self._run(d, *args, extra=extra)
+        except (OSError, subprocess.TimeoutExpired) as err:
+            raise GitReadFailure(f"git {args[0]}: {err}") from err
+        if r.returncode == 0:
+            return r.stdout
+        if missing and r.returncode == 1 and not r.stdout and not r.stderr:
+            return ""
+        raise read_failure(args, r)
+
+    def _predicate(self, d: str, *args: str) -> bool:
+        """A quiet predicate: exit 0 is true, silent exit 1 is false, everything else is unknown."""
+        try:
+            r = self._run(d, *args)
+        except (OSError, subprocess.TimeoutExpired) as err:
+            raise GitReadFailure(f"git {args[0]}: {err}") from err
+        if r.returncode == 0:
+            return True
+        if r.returncode == 1 and not r.stdout and not r.stderr:
+            return False
+        raise read_failure(args, r)
+
+    def _ask(self, d: str, *args: str, missing: bool = False) -> str:
         key = sigs = None
         if self.pinned and d:
             key, sigs, known = gitmemo.memo_key(self.env, args, d)
             if known is not None:
                 return known
-        r = self._run(d, *args)
-        out = r.stdout.strip() if r.returncode == 0 else ""
-        gitmemo.remember(key, sigs, args, out)
+        out = self._read(d, *args, missing=missing).strip()
+        if out:
+            gitmemo.remember(key, sigs, args, out)
         return out
 
     def _try(self, d: str, *args: str, stdin: str | None = None, timeout: float | None = None,

@@ -97,6 +97,7 @@ from taskloop.contracts.enums import Step
 from taskloop.contracts.env import Env, snapshot
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.ports import Git, Spawner
+from taskloop.contracts.slots import MissingRemote
 
 HERE = Path(__file__).resolve().parent
 
@@ -139,7 +140,11 @@ def v_land_lock(a: Any, c: Ctx) -> int:
         print("land-lock: no command (usage: tl.py land-lock [--repo DIR] -- CMD...)", file=sys.stderr)
         return 2
     repo = str(Path(a.repo).resolve())
-    return landlock.run_locked(cmd, repo, a.wait_min, real.git(c.env).remote_url(repo, "origin"), c.who.config)
+    try:
+        origin = real.git(c.env).remote_url(repo, "origin")
+    except MissingRemote:
+        origin = ""
+    return landlock.run_locked(cmd, repo, a.wait_min, origin, c.who.config)
 
 
 def v_land_stack(a: Any, c: Ctx) -> int:

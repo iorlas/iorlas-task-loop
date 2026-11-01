@@ -1,4 +1,5 @@
 """Reset diagnostics never repair a released slot; branch freeing checks fresh ownership."""
+import subprocess
 import sys
 from pathlib import Path
 from unittest import mock
@@ -7,13 +8,39 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
 from slots.test_slot_pool import Rig
+from taskloop.adapters.git import RealGit
 from taskloop.app.slots import reset
 from taskloop.contracts.bead import Bead
+from taskloop.contracts.env import Env
 from taskloop.contracts.ids import BeadId
-from taskloop.contracts.slots import Checkout
+from taskloop.contracts.slots import Checkout, GitReadFailure
 
 
 class ResetOwnership(Rig):
+    def test_failed_status_in_ready_for_preserves_work_and_refuses_all_mutations(self):
+        work = Path(self.d1) / "untracked.txt"
+        work.write_text("keep me")
+        adapter = RealGit(Env(), pinned=False)
+        failed = subprocess.CompletedProcess([], 128, "", "status unavailable")
+        with (mock.patch.object(adapter, "_run", return_value=failed),
+              mock.patch.object(self.git, "dirty", side_effect=adapter.dirty),
+              mock.patch("taskloop.app.slots.reset.setup") as setup):
+            self.assertEqual(self.code(lambda: self.slot().ready_for("x-1")), "transient")
+        setup.assert_not_called()
+        self.assertEqual(work.read_text(), "keep me")
+        self.assertEqual([call[0] for call in self.git.calls], ["rebasing"])
+
+    def test_faults_in_preservation_and_branch_admission_refuse_checkout_and_clean(self):
+        for operation in ("branch", "has_branch", "checkouts"):
+            with self.subTest(operation=operation):
+                self.git.calls.clear()
+                self.git.tree(self.d1).dirty = operation == "branch"
+                self.git.branches.add("task/x-1")
+                self.git.fail(operation, GitReadFailure("cannot read"))
+                self.assertEqual(self.code(lambda: self.slot().ready_for("x-1")), "transient")
+                self.assertFalse({"checkout", "checkout_new", "checkout_detached", "clean", "commit_all"}
+                                 & {call[0] for call in self.git.calls})
+
     def test_probe_refuses_a_claimed_slot_without_reading_git(self):
         self.slot().take("another loop")
         self.assertEqual(self.code(self.slot().check_ready), "busy")

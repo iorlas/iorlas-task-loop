@@ -18,6 +18,7 @@ from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdFailure, BeadPatch, Beads, Git
+from taskloop.contracts.slots import SlotGitError, git_probe
 
 Guard = Callable[[BeadId, str], str]  # (bead, close reason) -> "" when the close goes on, else why it is refused (closeguard.py)
 
@@ -31,7 +32,7 @@ def claim(who: Identity, bead: BeadId, store: Beads, git: Git, worktree: str | N
     if b.assignee not in ("", who.actor):
         print("TAKEN by " + b.assignee)
         return 1
-    wt = str(Path(worktree).resolve()) if worktree else git.toplevel(".")
+    wt = str(Path(worktree).resolve()) if worktree else git_probe(lambda: git.toplevel("."), "")
     branch = b.metadata.get("branch") or "task/" + bead
     attempt(st.update, bead, BeadPatch(set_metadata=dict({"branch": branch}, **({"slot": slot} if slot else {}))))
     event(who, "claim", bead, worktree=wt, branch=branch, title=b.title, slot=slot)
@@ -152,7 +153,7 @@ def register(git: Git, directory: str, who: Identity) -> int:
     """`tl register [DIR]`: add the repo of a working directory to the dashboard."""
     try:
         path = repo_root(directory) if git.toplevel(directory) else None
-    except (OSError, ValueError):
+    except (OSError, ValueError, SlotGitError):
         path = None
     if path is None:
         print("tl: not a Git working directory: " + repr(directory), file=sys.stderr)

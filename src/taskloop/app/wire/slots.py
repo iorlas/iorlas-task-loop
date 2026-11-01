@@ -28,7 +28,7 @@ from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ids import loop_key as repo_key
 from taskloop.contracts.paths import TASK_EXCLUDE
 from taskloop.contracts.ports import BdFailure, BeadQuery, Beads, Git, Spawner
-from taskloop.contracts.slots import SlotFail, SlotGitError
+from taskloop.contracts.slots import NotARepo, SlotFail, SlotGitError
 from taskloop.stores.files import FileTickets
 
 
@@ -41,7 +41,10 @@ def profile(repo: str, base: str | None, git: Git) -> dict[str, Any]:
 
 def profile_source(repo: str, base: str | None, git: Git) -> tuple[dict[str, Any], str]:
     """The profile and its exact commit, or an empty commit for the working-tree fallback."""
-    commit = git.rev_parse(repo, base + "^{commit}") if base else ""
+    try:
+        commit = git.rev_parse(repo, base + "^{commit}") if base else ""
+    except NotARepo:
+        commit = ""  # a folder not yet initialized has only its local profile
     path = Path(repo) / ".task-loop.json"
     if commit:
         try:
@@ -218,7 +221,10 @@ def bead_priority(repo: str, bead_id: BeadId, who: Identity, store: Beads | None
 def worktrees(repo: str, git: Git, who: Identity, slots: list[Bead] | None = None) -> list[str]:
     """Every worktree of the repo (git worktree list) and every slot folder (`slots`: the slot beads, when the caller has them): where an
     engine lock may be."""
-    found = [c.path for c in git.checkouts(repo)]
+    try:
+        found = [c.path for c in git.checkouts(repo)]
+    except NotARepo:
+        found: list[str] = []  # slot folders may exist before the repository does
     beads = slot_beads(repo, who) if slots is None else slots
     if beads:  # no slot beads, no profile read: a repo whose profile is bad still lists its worktrees
         cfg = profile_slots(repo)

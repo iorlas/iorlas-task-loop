@@ -87,7 +87,7 @@ def keep_work(slot: Slot) -> None:
         env.git.rebase_abort(d)
     if not retrying(env, f"slot {slot.name}", lambda: env.git.dirty(d)):
         return
-    branch = env.git.branch(d) or f"wip/{slot.name}/{int(env.now())}"
+    branch = retrying(env, f"slot {slot.name}", lambda: env.git.branch(d)) or f"wip/{slot.name}/{int(env.now())}"
     try:
         retrying(env, f"slot {slot.name}", lambda: env.git.commit_all(d, branch, f"wip: left in slot {slot.name}"))
     except SlotFail as e:
@@ -98,10 +98,10 @@ def keep_work(slot: Slot) -> None:
 def check_out(slot: Slot, bead: str) -> None:
     env, d, base = slot.env, slot.dir, slot.env.cfg.base
     what = f"slot {slot.name}"
-    if bead and env.git.has_branch(d, "task/" + bead):
+    if bead and retrying(env, what, lambda: env.git.has_branch(d, "task/" + bead)):
         # the bead's branch holds its earlier runs' work: check it out as it is, never reset it to base (a forced reset
         # here wiped lifesim-r32's reviewed work on 2026-10-19; the engine rebases at land)
-        held = free_branch(slot, "task/" + bead)
+        held = retrying(env, what, lambda: free_branch(slot, "task/" + bead))
         if held:  # a live run has it: this bead is not for this slot now (never a failure)
             raise SlotFail("bead_pinned", held)
         retrying(env, what, lambda: env.git.checkout(d, "task/" + bead))

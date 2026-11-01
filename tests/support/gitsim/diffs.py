@@ -102,30 +102,41 @@ def squeezed(data: bytes) -> list[bytes]:
     return [b"".join(ln.split()) for ln in data.splitlines() if ln.strip()]
 
 
+def diff_snapshots(c: Ctx, fl: list[str], rest: list[str]) -> tuple[Snap, Snap]:
+    if "--cached" in fl:
+        return c.r.head_snap(), c.index()
+    shas = known_revs(c, rest)
+    a, b = (snap_of(s) for s in [*shas, None, None][:2]) if len(shas) == 2 else (snap_of(shas[0]), c.r.scan()[0])
+    return a, b
+
+
 def cmd_diff(c: Ctx) -> int:
     fl, rest = flags(c.args)
     rest, spec = (rest[: rest.index("--")], rest[rest.index("--") + 1:]) if "--" in rest else (rest, [])
     if "--diff-filter=U" in fl:
         for p in sorted(W.conflicts.get(c.r.key, set())):
-            c.say(p)
+            c.say(p, "\0" if "-z" in fl else "\n")
         return 0
-    if "--cached" in fl:
-        a, b = c.r.head_snap(), c.index()
-    else:
-        shas = known_revs(c, rest)
-        a, b = (snap_of(s) for s in [*shas, None, None][:2]) if len(shas) == 2 else (snap_of(shas[0]), c.r.scan()[0])
+    a, b = diff_snapshots(c, fl, rest)
     paths = changed(a, b, spec)
+    if "--quiet" in fl:
+        return 1 if paths else 0
     if "--check" in fl:
         return say_check(c, [x for p in paths for x in check_lines(p, a.get(p), b.get(p))])
+    say_diff(c, a, b, paths, fl)
+    return 0
+
+
+def say_diff(c: Ctx, a: Snap, b: Snap, paths: list[str], fl: list[str]) -> None:
+    """Render the selected diff format after the exit-status-only modes have been handled."""
     if "--name-status" in fl:
         c.raw(b"".join(w.encode() + b"\0" for w in name_status(a, b, paths, fl)))
     elif "--name-only" in fl:
         for p in paths:
-            c.say(p)
+            c.say(p, "\0" if "-z" in fl else "\n")
     elif "--stat" in fl:
         for ln in stat_lines(a, b, paths):
             c.say(ln)
     else:
         for p in paths:
             c.raw("".join(file_diff(p, a.get(p), b.get(p))).encode())
-    return 1 if "--quiet" in fl and paths else 0  # --quiet: exit 1 when there is a difference
