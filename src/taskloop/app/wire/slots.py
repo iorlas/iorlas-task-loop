@@ -42,15 +42,27 @@ def profile(repo: str, base: str | None, git: Git) -> dict[str, Any]:
 def profile_source(repo: str, base: str | None, git: Git) -> tuple[dict[str, Any], str]:
     """The profile and its exact commit, or an empty commit for the working-tree fallback."""
     commit = git.rev_parse(repo, base + "^{commit}") if base else ""
+    path = Path(repo) / ".task-loop.json"
     if commit:
         try:
-            return json.loads(git.show(repo, commit, ".task-loop.json").strip() or "{}"), commit
-        except (ValueError, SlotGitError):
-            return {}, commit
+            text = git.show(repo, commit, ".task-loop.json")
+        except SlotGitError as err:
+            try:
+                if not git.ls_tree(repo, commit, ".task-loop.json"):
+                    return {}, commit
+            except SlotGitError:
+                pass  # absence was not established: preserve the original read error
+            raise config.ProfileReadError(str(path), commit, err) from err
+        try:
+            return json.loads(text), commit
+        except ValueError as err:
+            raise config.ProfileReadError(str(path), commit, err) from err
     try:
-        return json.loads((Path(repo) / ".task-loop.json").read_text(encoding="utf-8")), ""
-    except (OSError, ValueError):
+        return json.loads(path.read_text(encoding="utf-8")), ""
+    except FileNotFoundError:
         return {}, ""
+    except (OSError, ValueError) as err:
+        raise config.ProfileReadError(str(path), "", err) from err
 
 
 def load_profile(data: Any) -> RepoProfile:
@@ -59,14 +71,21 @@ def load_profile(data: Any) -> RepoProfile:
         return config.load(data, say_to=sys.stderr)
     except config.ConfigError as e:
         print(f"task-loop: {e}", file=sys.stderr)
-        sys.exit(os.EX_CONFIG)
+        raise SystemExit(os.EX_CONFIG) from e
 
 
 def cfg_source(repo: str, git: Git) -> tuple[RepoProfile, str, str]:
     """(the RepoProfile, the base hint, the pinned commit: empty for a local fallback). A bad .task-loop.json exits loudly."""
-    base = load_profile(profile(repo, None, git)).engine.base
-    data, commit = profile_source(repo, base, git)
-    return load_profile(data), base, commit
+    try:
+        local = profile(repo, None, git)
+        engine = local.get("engine") if isinstance(local, dict) else None
+        hint = engine.get("base") if isinstance(engine, dict) else None
+        base = hint if isinstance(hint, str) else EngineConfig().base
+        data, commit = profile_source(repo, base, git)
+        return load_profile(data), base, commit
+    except config.ConfigError as err:
+        print(f"task-loop: {err}", file=sys.stderr)
+        raise SystemExit(os.EX_CONFIG) from err
 
 
 def load_cfg(repo: str, git: Git) -> EngineConfig:

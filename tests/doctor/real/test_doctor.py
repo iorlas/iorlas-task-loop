@@ -195,7 +195,7 @@ class DoctorSource(unittest.TestCase):
         self.assertIn("check local-fallback:", out)
         self.assertNotIn("check stale:", out)
 
-    def test_missing_or_malformed_base_config_does_not_fall_back(self):
+    def test_a_missing_base_config_means_defaults_and_a_malformed_one_is_refused(self):
         for contents in (None, "{invalid json"):
             with self.subTest(contents=contents):
                 config = self.wt / ".task-loop.json"
@@ -206,11 +206,17 @@ class DoctorSource(unittest.TestCase):
                 commit = self.commit(self.wt)
                 self.git("update-ref", "refs/remotes/origin/main", commit)
                 self.write_cfg(self.wt, self.config("local-only"))
-                out = self.doctor()
-                self.assertIn("base origin/main at commit " + commit, out)
-                self.assertIn("ok:", out)
-                self.assertNotIn("WARN", out)
-                self.assertEqual(wslots.load_cfg(str(self.wt), port_git()).checks, [])
+                if contents is None:
+                    out = self.doctor()
+                    self.assertIn("base origin/main at commit " + commit, out)
+                    self.assertIn("ok:", out)
+                    self.assertNotIn("WARN", out)
+                    self.assertEqual(wslots.load_cfg(str(self.wt), port_git()).checks, [])
+                else:
+                    for refused_call in (self.doctor, lambda: wslots.load_cfg(str(self.wt), port_git())):
+                        with self.assertRaises(SystemExit) as refused:
+                            refused_call()
+                        self.assertEqual(refused.exception.code, 78)
 
     def test_config_and_paths_use_one_resolved_commit(self):
         commit = self.advance_base(self.config("good", "old.txt"))

@@ -100,7 +100,7 @@ class Loop(Core):
         except (ConfigError, SystemExit) as err:
             if isinstance(err, SystemExit) and err.code != EX_CONFIG:
                 raise
-            why = vd.profile_ahead(self.env.version).why
+            why = vd.profile_ahead(self.env.version, err).why
             self.say(why)
             self.left(vd.PROFILE_AHEAD, why)
             return EX_CONFIG

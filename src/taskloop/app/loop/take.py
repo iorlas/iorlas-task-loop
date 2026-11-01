@@ -113,7 +113,7 @@ class Taker:
                 if isinstance(err, SystemExit) and err.code != EX_CONFIG:
                     raise
                 attempt(env.store.update, b.id, BeadPatch(status="open", assignee=""))
-                v = vd.profile_ahead(env.version)
+                v = vd.profile_ahead(env.version, err)
             except (BdFailure, SlotGitError, OSError) as e:
                 attempt(env.store.unclaim, b.id)
                 v = vd.pre_engine(str(e))

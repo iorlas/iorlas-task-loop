@@ -17,6 +17,14 @@ class ConfigError(ValueError):
     """.task-loop.json is not a RepoProfile (an unknown key is the usual cause)."""
 
 
+class ProfileReadError(ConfigError):
+    """An existing profile could not be read; defaults must not replace it."""
+
+    def __init__(self, path: str, commit: str, error: Exception) -> None:
+        super().__init__(f"the repo profile {path} at {commit or 'working tree'} is unreadable: {error}; "
+                         "fix it, the factory stays parked")
+
+
 SLOT_PLACEHOLDERS: Final = ("slot", "slot_dir", "repo")
 
 

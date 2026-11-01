@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from taskloop.contracts import wire
+from taskloop.contracts.config import ProfileReadError
 from taskloop.contracts.enums import Result
 from taskloop.contracts.run import RunReport
 from taskloop.contracts.slots import SlotFailCode
@@ -14,7 +15,11 @@ FAULT_SLOT = "fault_slot"
 PROFILE_AHEAD = "profile_ahead"
 
 
-def profile_ahead(version: str) -> Verdict:
+def profile_ahead(version: str, error: BaseException | None = None) -> Verdict:
+    if isinstance(error, SystemExit):
+        error = error.__cause__
+    if isinstance(error, ProfileReadError):
+        return Verdict(Result.PAUSED, str(error), kind=PROFILE_AHEAD)
     return Verdict(Result.PAUSED, "profile newer than this tl: the repo's .task-loop.json is not understood by "
                    f"tl {version}; restart the factory on the installed version", kind=PROFILE_AHEAD)
 
@@ -75,6 +80,15 @@ def read(path: Path, rc: int | None, log_path: Path, version: str = "unknown") -
         text = path.read_text(encoding="utf-8")
     except OSError:
         if rc == EX_CONFIG:
+            try:
+                log = log_path.read_text(encoding="utf-8")
+            except (OSError, UnicodeError):
+                log = ""
+            for line in reversed(log.splitlines()):
+                diagnostic = line.removeprefix("task-loop: ")
+                if (diagnostic.startswith("the repo profile ") and " is unreadable: " in diagnostic
+                        and diagnostic.endswith("; fix it, the factory stays parked")):
+                    return Verdict(Result.PAUSED, diagnostic, kind=PROFILE_AHEAD), False
             return profile_ahead(version), False
         return Verdict(Result.FAILED, f"failed: no outcome from run-task (exit {rc}); see {log_path}"), False
     try:

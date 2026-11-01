@@ -17,7 +17,7 @@ from taskloop.app.loop.loop import Loop, LoopArgs
 from taskloop.app.loop.run import Where
 from taskloop.contracts import wire
 from taskloop.contracts.bead import Bead
-from taskloop.contracts.config import ConfigError, RepoProfile
+from taskloop.contracts.config import ConfigError, ProfileReadError, RepoProfile
 from taskloop.contracts.enums import Result
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.parks import ParkStore
@@ -26,6 +26,59 @@ from taskloop.domain.lanes import pauses
 
 
 class ProfileAhead(Rig):
+    def unreadable(self):
+        return ProfileReadError("/repo/.task-loop.json", "abc123", ValueError("bad JSON"))
+
+    def test_unreadable_run_log_parks_with_the_original_diagnostic(self):
+        error = self.unreadable()
+        path = Path(self.d1) / "absent.json"
+        log = Path(self.d1) / "run.log"
+        with mock.patch.object(Path, "read_text", side_effect=[FileNotFoundError(), f"task-loop: {error}\n"]):
+            verdict, gave = vd.read(path, EX_CONFIG, log, "test")
+        self.assertFalse(gave)
+        self.assertEqual((verdict.outcome, verdict.kind), (Result.PAUSED, vd.PROFILE_AHEAD))
+        self.assertEqual(verdict.why, str(error))
+        self.assertNotIn("newer than", verdict.why)
+
+    def test_unreadable_profile_at_startup_and_refresh_preserves_diagnostic(self):
+        for startup in (True, False):
+            with self.subTest(startup=startup):
+                loop = self.make_loop()
+                error = self.unreadable()
+                self.loop_env.fetch = mock.Mock()
+                self.loop_env.profile = mock.Mock(side_effect=error)
+                if startup:
+                    loop = Loop(self.loop_env, self.files, mock.Mock(), LoopArgs())
+                with mock.patch.object(loop, "prune"), mock.patch.object(loop, "run", side_effect=loop.refresh):
+                    self.assertEqual(loop.main(), EX_CONFIG)
+                record = self.files.write_exit.call_args.args[0]
+                self.assertEqual(record["reason"], vd.PROFILE_AHEAD)
+                self.assertEqual(record["detail"], str(error))
+
+    def test_config_exit_preserves_read_error_cause_but_unknown_fields_keep_newer_wording(self):
+        error = self.unreadable()
+        exited = SystemExit(EX_CONFIG)
+        exited.__cause__ = error
+        self.assertEqual(vd.profile_ahead("test", exited).why, str(error))
+        self.assertIn("profile newer than this tl", vd.profile_ahead("test", ConfigError("unknown field")).why)
+
+    def test_unreadable_profile_during_preparation_parks_without_bead_failure(self):
+        loop = self.make_loop()
+        bid = BeadId("x-1")
+        bead = Bead(id=bid, title="work", status="in_progress", assignee=ME, labels=["keep"])
+        self.bd.beads[bid] = bead
+        self.loop_env.claim = mock.Mock(return_value=(True, ""))
+        error = self.unreadable()
+        with mock.patch.object(loop.taker, "prepare", side_effect=error):
+            taken = loop.taker.attempt_all(
+                [bead], Where("s1", self.d1, None, self.t[0]), True, loop.prof.engine, mock.Mock(), mock.Mock())
+        assert taken.verdict is not None
+        self.assertEqual(taken.verdict.why, str(error))
+        self.assertEqual((self.bd.beads[bid].status, self.bd.beads[bid].labels), ("open", ["keep"]))
+        park = ParkStore(self.env.cfgdir).get(bid)
+        assert park is not None
+        self.assertEqual((park.permanence, park.retry_at), ("needs_owner", 0))
+
     def make_loop(self):
         self.loop_env = slot_loop_env(self.env)
         self.loop_env.profile = lambda: RepoProfile(slots=self.env.cfg)

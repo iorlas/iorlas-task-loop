@@ -28,13 +28,13 @@ class Running:
 class Core:
     def __init__(self, env: LoopEnv, files: LoopFiles, inherited: LoopState | None) -> None:
         self.env, self.files = env, files
-        profile_error = False
+        profile_error = ""
         try:
             self.prof: RepoProfile = env.profile()
         except (ConfigError, SystemExit) as err:
             if isinstance(err, SystemExit) and err.code != EX_CONFIG:
                 raise
-            profile_error = True
+            profile_error = vd.profile_ahead(env.version, err).why
             self.prof = RepoProfile()  # only enough state to record the startup exit
         self.started = inherited.started if inherited else env.now()
         carry = inherited.carry if inherited else Carry()
@@ -50,7 +50,7 @@ class Core:
         self.first_seen: dict[str, float] = {}
         self.exit: dict[str, str] = {}
         if profile_error:
-            self.left(vd.PROFILE_AHEAD, vd.profile_ahead(env.version).why)
+            self.left(vd.PROFILE_AHEAD, profile_error)
         self.beat_at = 0.0
         self.now_running: Running | None = None
         self.until = carry.until
