@@ -15,13 +15,13 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from taskloop.adapters import check_files
+from taskloop.app.checks.execution import HOST
 from taskloop.contracts import config, wire
 from taskloop.contracts.checks import BaseRedRecord, Check, CheckResult, PassRecord
 from taskloop.contracts.ids import CheckId, TreeSha
 from taskloop.contracts.ports import Git
 from taskloop.contracts.runkey import BaseSha, Digest, RunKey
 from taskloop.domain.checks import inputs
-from taskloop.domain.checks.names import norm
 from taskloop.stores.bundle import Stores
 
 NO_DIGEST = Digest("")
@@ -95,7 +95,7 @@ def repo_plan_digest(wt: str) -> Digest | None:
 
 class RunMemo:
     """The result store of one repo, asked and written for one tree and base. `run_id` and `host` are who writes (the provenance of a
-    pass). What this block has run is kept in memory (so a command is never launched twice in it)."""
+    pass). What this block has run is kept in memory by its complete resolved requirement."""
 
     def __init__(self, stores: Stores, repo: str, keys: InputKeys, base: BaseSha, engine_env: Mapping[str, str], run_id: str = "") -> None:
         self.stores, self.repo, self.keys, self.base, self.engine_env = stores, repo, keys, base, engine_env
@@ -103,6 +103,9 @@ class RunMemo:
         self.system = f"{platform.system()}-{platform.machine()}"
         self.lock = threading.Lock()  # lanes remember at the same time
         self.ran: dict[RunKey, tuple[CheckResult, float]] = {}  # this block's runs by command -> result, wall limit
+        self.executions: dict[CheckId, Digest] = {}
+        self.checks: dict[CheckId, Check] = {}
+        self.receipts: dict[CheckId, PassRecord] = {}
 
     def env_of(self, c: Check) -> Digest:
         """The env a check runs in: what the engine hands every child (the slot's, the registered names) and the check's own."""
@@ -113,7 +116,10 @@ class RunMemo:
         """The key of a run of this check on this tree; None when it may not be cached, or its `inputs` select nothing (a green over
         changed code would be a wrong hit). A check with `inputs_only` has neither tree nor base in its key: it is true for any base
         and any tree that reads the same inputs."""
-        if not c.cache:
+        if not c.cache or (c.container and c.id not in self.executions):
+            return None
+        dependencies = self.dependencies_of(c)
+        if dependencies is None:
             return None
         reads = "" if c.inputs and self.keys.dead(c) else self.keys.key(c)
         if not reads:
@@ -123,19 +129,36 @@ class RunMemo:
         base = self.base if whole or not c.inputs_only else BaseSha("")
         return RunKey(check=c.id, cmd=Digest(inputs.cmd_digest(c)), config=Digest(inputs.config_digest(c)),
                       toolchain=Digest(self.keys.toolchain(self.system)), tree=tree, base=base, inputs=Digest(reads),
-                      selected=Digest(inputs.selected_digest(c)), env=self.env_of(c))
+                      selected=Digest(inputs.selected_digest(c)), env=self.env_of(c), execution=self.execution(c),
+                      dependencies=dependencies)
+
+    def dependencies_of(self, c: Check) -> Digest | None:
+        """A reader's inputs include the exact receipts of its producers, never just their command text."""
+        records = []
+        for ident in c.reads:
+            producer = self.checks.get(ident)
+            expected = self.key(producer) if producer is not None else None
+            hit = self.receipts.get(ident)
+            if hit is None:
+                hit = self.hit(expected)
+            if hit is None or hit.key != expected or hit.result.status != "passed":
+                return None
+            records.append(wire.dump(hit))
+        return Digest(hashlib.sha256(json.dumps(records, sort_keys=True).encode()).hexdigest()) if records else NO_DIGEST
+
+    def execution(self, c: Check) -> Digest:
+        return self.executions.get(c.id, Digest("")) if c.container else HOST.identity
 
     def command_key(self, c: Check) -> RunKey:
-        """A command is its own identity within a block, whatever id it carries (a plan's copy of a registered command is that run)."""
-        return RunKey(check=CheckId(norm(c.cmd)), cmd=Digest(inputs.cmd_digest(c)), config=Digest(""), toolchain=Digest(""),
-                      tree=self.keys.tree, base=self.base, inputs=Digest(""), selected=Digest(""), env=self.env_of(c))
+        """Only the same registry requirement and resolved execution may share a result."""
+        return self.key(c.replace(cache=True)) or self.planned_key(c)
 
     def planned_key(self, c: Check, plan: Digest = NO_DIGEST, plan_output: Digest = NO_DIGEST) -> RunKey:
         """A plan decision is about this exact diff, even for inputs_only or cache:false checks; never reuse it as a pass."""
         return RunKey(check=c.id, cmd=Digest(inputs.cmd_digest(c)), config=Digest(inputs.config_digest(c)),
                       toolchain=Digest(self.keys.toolchain(self.system)), tree=self.keys.tree, base=self.base,
                       inputs=Digest(inputs.WHOLE_TREE), selected=Digest(inputs.selected_digest(c)), env=self.env_of(c),
-                      plan=plan, plan_output=plan_output)
+                      plan=plan, plan_output=plan_output, execution=self.execution(c))
 
     def base_key(self, c: Check) -> RunKey:
         """The run of the command on the untouched base: it reads that commit's tree, so no tree and no inputs."""
@@ -146,11 +169,28 @@ class RunMemo:
         if key is None:
             return None
         found = self.stores.results(self.repo, key.check).of(key_digest(key)).get()
-        return found if found is not None and found.key == key and found.result.status == "passed" else None
+        return found if (found is not None and found.key == key and found.result.status == "passed"
+                         and satisfied(found.result)) else None
 
     def has(self, c: Check) -> bool:
         """The run this check would make is already a fact (the land gate's whole question)."""
         return self.hit(self.key(c)) is not None
+
+    def result(self, c: Check, plan: Digest = NO_DIGEST) -> CheckResult | None:
+        """Authorize only evidence for the entire expected key; historical ID queries are display only."""
+        if c.container and c.id not in self.executions:
+            return None
+        hit = self.hit(self.key(c))
+        if hit is not None:
+            return hit.result
+        docs = self.stores.results(self.repo, c.id)
+        for name in docs:
+            rec = docs.of(name).get()
+            if (rec is not None and rec.tree == self.keys.tree and rec.base == self.base
+                    and rec.result.planned and satisfied(rec.result)
+                    and rec.key == self.planned_key(c, plan, rec.key.plan_output)):
+                return rec.result
+        return None
 
     def cached(self, c: Check, hit: PassRecord) -> CheckResult:
         """The remembered result as this round's: cached, with the round it ran in said (and that its log is gone when it is)."""
@@ -175,6 +215,7 @@ class RunMemo:
                              ts=time.time(), round=rnd, log_abs=log_abs))
 
     def _put(self, rec: PassRecord) -> None:
+        self.receipts[rec.key.check] = rec
         docs = self.stores.results(self.repo, rec.key.check)
         docs.of(key_digest(rec.key)).write(rec)
         with self.lock:
@@ -196,17 +237,17 @@ class RunMemo:
 
 
 def repo_green(stores: Stores, git: Git, wt: str, step: CheckId, tree: TreeSha, base: BaseSha) -> bool:
-    """is_green for the repo of the worktree `wt`."""
+    """Historical display query for the worktree's repo; never delivery authorization."""
     return is_green(stores, check_files.repo_key(git, wt), step, tree, base, repo_plan_digest(wt))
 
 
 def repo_green_result(stores: Stores, git: Git, wt: str, step: CheckId, tree: TreeSha, base: BaseSha) -> CheckResult | None:
-    """green_result for the repo of the worktree `wt`."""
+    """Historical display evidence for the worktree's repo; never delivery authorization."""
     return green_result(stores, check_files.repo_key(git, wt), step, tree, base, repo_plan_digest(wt))
 
 
 def is_green(stores: Stores, repo: str, step: CheckId, tree: TreeSha, base: BaseSha, plan: Digest | None = NO_DIGEST) -> bool:
-    """Read-only: a pass or planned skip is recorded for exactly this tree and base."""
+    """Historical display query only. Delivery must use RunMemo.result with the resolved requirement."""
     return green_result(stores, repo, step, tree, base, plan) is not None
 
 
@@ -217,7 +258,7 @@ def satisfied(res: CheckResult) -> bool:
 
 def green_result(stores: Stores, repo: str, step: CheckId, tree: TreeSha, base: BaseSha,
                  plan: Digest | None = NO_DIGEST) -> CheckResult | None:
-    """The same green decision as is_green, with its evidence for the CLI."""
+    """Historical display evidence; this ID-only query must never authorize delivery."""
     docs = stores.results(repo, step)
     names = docs.keys()  # a DocSet is not iterable: it has keys()
     for r in (docs.of(n).get() for n in names):

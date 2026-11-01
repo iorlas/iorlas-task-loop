@@ -7,6 +7,7 @@ from taskloop.adapters import check_files
 from taskloop.app.checks.attempts import Attempts, Outcome
 from taskloop.app.checks.cache import RunMemo
 from taskloop.app.checks.checklog import CheckLog
+from taskloop.app.checks.execution import EnvironmentUnavailable
 from taskloop.app.checks.gateplan import PlanDecision
 from taskloop.app.checks.host import CheckFault, CheckHost
 from taskloop.app.checks.lanes import Lanes
@@ -41,6 +42,7 @@ class CheckExecutor:
 
     def run_group(self, plan: CheckPlan, rnd: int) -> Round:
         """Run every step of the plan, in order, as one block (the cheap checks first, the Unity group last)."""
+        self.memo.checks = {step.check.id: step.check for step in plan.steps}
         st = Round(rnd, results=list(plan.skipped))
         self.logs.mkdir(exist_ok=True)
         self.began = time.time()
@@ -54,6 +56,10 @@ class CheckExecutor:
             for n, res in st.by_step.items():
                 if res.status == "skipped" and res.planned:
                     check = plan.steps[n].check
+                    execution = self.attempts.box.resolve(check)
+                    if isinstance(execution, EnvironmentUnavailable):
+                        continue
+                    self.memo.executions[check.id] = execution.identity
                     decision = self.planned if check.id in self.gates else None
                     key = (self.memo.planned_key(check, decision.command, decision.output) if decision is not None
                            else self.memo.planned_key(check))
@@ -81,9 +87,9 @@ class CheckExecutor:
             if skipped.why.endswith(FAILED_FIRST):
                 st.red_skipped.add(n)
             return skipped, None
-        if c.id in self.fix_red:
-            st.red = c.group
-            return self.fix_red[c.id], None
+        blocked = self._admit(c, st)
+        if blocked is not None:
+            return blocked, None
         again = self._reused(c, st)
         if again:
             st.red = c.group if again.exit != 0 else st.red
@@ -95,6 +101,7 @@ class CheckExecutor:
         hit = self.memo.hit(key)
         cid, name = None, self._log_name(n, c, st.n)
         if hit is not None:
+            self.memo.receipts[c.id] = hit
             self.memo.reuse(hit)
             res, where = self.memo.cached(c, hit).replace(lane=c.lane), hit.log_abs
             if res.note:
@@ -111,6 +118,17 @@ class CheckExecutor:
         if res.exit != 0 and not res.base_red:
             st.red = c.group
         return res, cid
+
+    def _admit(self, c: Check, st: Round) -> CheckResult | None:
+        if c.id in self.fix_red:
+            st.red = c.group
+            return self.fix_red[c.id]
+        execution = self.attempts.box.resolve(c)
+        if isinstance(execution, EnvironmentUnavailable):
+            return CheckResult(id=c.id, cmd=c.cmd, group=c.group, exit=UNVERIFIED_EXIT, status="unverified",
+                               why="environment unavailable: " + execution.reason, inputs_changed=True, lane=c.lane)
+        self.memo.executions[c.id] = execution.identity
+        return None
 
     def _deferred(self, c: Check, st: Round) -> CheckResult:
         """The check needs a resource this host lacks: it is not run, and not a failure (unverified). Whether the land may go on past it
@@ -161,9 +179,8 @@ class CheckExecutor:
         return ""
 
     def _reused(self, c: Check, st: Round) -> CheckResult | None:
-        """Each distinct command runs once per block, whatever limit its copy carries; the limit matters only when the first run
-        timed out under a shorter one."""
-        before = self.memo.ran.get(self.memo.command_key(c))
+        """Only the same resolved requirement can reuse a run. Readers always consume their own producer evidence."""
+        before = None if c.reads else self.memo.ran.get(self.memo.command_key(c))
         if before is None or (before[0].exit == 124 and before[1] < c.wall_min):
             return None
         self.host.log.note(f"`{c.cmd[:120]}` already ran in this block: its result is reused")

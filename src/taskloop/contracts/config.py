@@ -63,7 +63,7 @@ class ReviewSkipConfig(Rec):
 
 @final
 class ContainerConfig(Rec):
-    """Where a check that says `"in": "container"` runs: an image, or a Dockerfile of the repo (built once, tagged by its hash)."""
+    """Where a container check runs: an image or a Dockerfile, resolved to an immutable image before checking evidence."""
 
     image: str = ""
     dockerfile: str = ""

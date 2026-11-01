@@ -137,12 +137,12 @@ class EngineChecksTest(EngineTest):
         self.assertEqual([c.exit for c in res], [0, 0])  # the plan check ran after the repo check and read its log
         self.assertEqual(n.read_text(), "1")
 
-    def test_the_same_command_with_another_timeout_is_one_launch(self):
+    def test_the_same_command_under_distinct_registry_ids_runs_each_requirement(self):
         cmd, n = self.counting_check("ok", ok_after=1)
         eng = self.checks_engine(checks=[{"id": "a", "cmd": cmd, "group": "static", "wall_min": 1, "cache": False},
                                          {"id": "b", "cmd": cmd, "group": "tests", "wall_min": 2, "cache": False}])
         res = eng.run_checks({"checks": [], "files": []}, "s")
-        self.assertEqual((n.read_text(), [bool(c.reused) for c in res]), ("1", [False, True]))
+        self.assertEqual((n.read_text(), [bool(c.reused) for c in res]), ("11", [False, False]))
 
     def test_a_slot_wait_in_a_check_is_read_and_capped_at_its_wall_time(self):
         cmd, _n = self.counting_check("unity-slot: x got slot 0 after 99999999s", ok_after=1)

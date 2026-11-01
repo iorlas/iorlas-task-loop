@@ -150,7 +150,8 @@ def v_land_lock(a: Any, c: Ctx) -> int:
 def v_land_stack(a: Any, c: Ctx) -> int:
     repo = str(Path(a.repo).resolve())
     store = beadtools.bd_store(c.who.actor, repo)
-    return cli_land_stack.cmd_land_stack(a, c.who, c.git, c.spawner, store, ["uv", "run", "--script", str(Path(__file__).resolve())])
+    return cli_land_stack.cmd_land_stack(a, c.who, c.git, c.spawner, store,
+                                         ["uv", "run", "--script", str(Path(__file__).resolve())], env=c.env)
 
 
 def owner_parsers(sp):
@@ -428,7 +429,7 @@ VERBS: Final[dict[str, Handler]] = {
     "handoff": v_handoff,
     "wait": v_wait,
     "hooks": lambda a, c: cli_hooks.cmd_hooks(a, c.env, c.here.parents[1]),
-    "green": lambda a, c: cli_green.cmd_green(a, c.who.config, c.git),
+    "green": lambda a, c: cli_green.cmd_green(a, c.who.config, c.git, env=c.env, spawner=c.spawner),
     "judge-push": lambda a, c: importlib.import_module("taskloop.app.launch.push_judge").cmd_judge_push(
         a, who=c.who, env=c.env, spawner=c.spawner, git=c.git),
     "run-task": lambda a, c: importlib.import_module("taskloop.app.run.entry").main(a, env=c.env, spawner=c.spawner, git=c.git, who=c.who),

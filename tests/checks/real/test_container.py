@@ -51,23 +51,12 @@ class ContainerChecksTest(EngineTest):
     def test_docker_up_runs_in_the_container_with_the_hosts_result(self):
         res, log = self.run_one(WRITE)
         self.assertEqual((res.exit, res.status, res.tail), (0, "passed", "ok"))
-        self.assertTrue(log.startswith("in container img:1\n"))
+        self.assertTrue(log.startswith("in container sha256:img1\n"))
         self.assertIn("run", self.docker.verbs())
         self.assertFalse((self.wt / "made").exists())  # what the check writes inside stays inside
         self.assertEqual((self.eng.run_dir / "artifacts" / "c" / "attempt-1" / "p.txt").read_text(), "c")  # $TL_ARTIFACT_DIR comes back
         host, _ = self.run_one(WRITE, boxed=False)
         self.assertEqual(res.replace(secs=0, log="", wall_hit=False), host.replace(secs=0, log=""))
-
-    @real_git("the runner lists the worktree with a real git")
-    def test_docker_down_falls_back_to_the_host_with_one_warning(self):
-        self.docker.down()
-        res, log = self.run_one(WRITE)
-        self.assertEqual((res.exit, res.tail), (0, "ok"))
-        self.assertTrue(log.startswith("on host (docker not reachable)\n"))
-        self.assertEqual(self.docker.verbs(), ["info"])
-        self.assertEqual(len([c for c in self.warn.call_args_list if "docker not reachable" in c.args[0]]), 1)
-        self.assertTrue((self.wt / "made").exists())
-
 
     @real_git("the runner lists the worktree with a real git")
     def test_untracked_files_go_in_and_ignored_ones_do_not(self):

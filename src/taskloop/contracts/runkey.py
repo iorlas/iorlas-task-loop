@@ -26,5 +26,7 @@ class RunKey(Rec):
     inputs: Digest
     selected: Digest
     env: Digest
+    execution: Digest = Digest("")  # actual host or immutable image identity; legacy receipts cannot authorize execution
+    dependencies: Digest = Digest("")  # the exact producer receipts consumed by this execution
     plan: Digest = Digest("")  # argv digest for planned skips; empty for passes and legacy `when` skips
     plan_output: Digest = Digest("")  # output digest for producer skips; empty for passes and legacy `when` skips

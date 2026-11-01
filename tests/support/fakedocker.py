@@ -1,4 +1,4 @@
-"""A docker for tests that is not a process: the calls the engine and container_run.py make (`docker_ok`, `_docker`, `docker()` and the
+"""A docker for tests that is not a process: the calls the engine and container_run.py make (readiness, image inspection, docker and the
 `docker run` spawn) go to a recorder. `run` unpacks the tar the runner sends into a sandbox dir that stands for the container's disk
 (TMPDIR) and answers the check's argv through procsim (so the check is a fake too), so a check's result is real. No docker, no daemon."""
 import io
@@ -11,7 +11,7 @@ from unittest import mock
 
 from support import procsim
 from taskloop.adapters import container_run
-from taskloop.app.checks import container
+from taskloop.app.checks import container, execution
 
 
 class _Stdin(io.BytesIO):
@@ -41,13 +41,14 @@ class FakeDocker:
         self.root = Path(root)
         self.root.mkdir(parents=True, exist_ok=True)
         self.up = True
+        self.image_id = "sha256:img1"
         self.calls: list[list[str]] = []
         self.output = ""
         self.on_wait = None  # called inside `wait` of a run: a signal that arrives while the runner waits
         self.killed: set[str] = set()
 
     def install(self, test) -> None:
-        for target, name, fn in ((container, "docker_ok", self.docker_ok), (container, "_docker", self.docker_rc),
+        for target, name, fn in ((execution, "docker_ok", self.docker_ok), (execution, "image_identity", self.image_identity),
                                  (container_run, "docker", self.docker)):
             p = mock.patch.object(target, name, fn)
             p.start()
@@ -78,9 +79,9 @@ class FakeDocker:
         self.calls.append(["info"])
         return self.up
 
-    def docker_rc(self, spawner, *args: str) -> int:
-        self.calls.append(list(args))
-        return 0
+    def image_identity(self, spawner, image: str) -> str:
+        self.calls.append(["image", "inspect", image])
+        return self.image_id
 
     def docker(self, *args: str, **kw) -> subprocess.CompletedProcess:
         self.calls.append(list(args))

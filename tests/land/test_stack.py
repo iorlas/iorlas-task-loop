@@ -29,6 +29,7 @@ from taskloop.app.wire import closeguard
 from taskloop.cli.land_stack import cmd_land_stack
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.checks import Check, CheckResult
+from taskloop.contracts.config import load
 from taskloop.contracts.env import Env
 from taskloop.contracts.forge import StackItem
 from taskloop.contracts.gitfacts import LogRow, Ref, TreeEntry
@@ -322,12 +323,13 @@ class StoredGate(StackCase):
         tree, base = TreeSha("tree-" + OID["task/a"][:6]), BaseSha("origin/main")
         keys = InputKeys(self.git, str(self.repo), tree)
         keys.files = {}
-        memo = RunMemo(stores, check_files.repo_key(self.git, str(self.repo)), keys, base, {})
+        memo = RunMemo(stores, check_files.repo_key(self.git, str(self.repo)), keys, base, {"TL_SLOT": "check"})
         check = Check(id=CheckId("lint"), cmd="true", when=["src/**"])
         cmd = ["repo-plan", "steps", "--json"]
         skip = CheckResult.skipped(check, "no change under src/**").replace(planned=True)
         memo.remember(memo.planned_key(check, plan_digest(cmd)), skip, 1, "")
-        profile = {"engine": {"plan_cmd": ["old-plan"], "checks": [{"id": "lint", "argv": ["true"], "run": "gate"}]}}
+        profile = {"engine": {"plan_cmd": ["old-plan"], "checks": [
+            {"id": "lint", "argv": ["true"], "run": "gate", "when": ["src/**"]}]}}
         (self.repo / ".task-loop.json").write_text(json.dumps(profile))
         self.git.profiles[OID["task/a"]] = json.dumps(profile)
         self.assertEqual(self.deliver(StackItem(branch="task/a")), 1)
@@ -343,28 +345,31 @@ class StoredGate(StackCase):
         tree, base = TreeSha("tree-a"), BaseSha("base-a")
         keys = InputKeys(self.git, str(self.repo), tree)
         keys.files = {}
-        memo = RunMemo(stores, check_files.repo_key(self.git, str(self.repo)), keys, base, {})
+        memo = RunMemo(stores, check_files.repo_key(self.git, str(self.repo)), keys, base, {"TL_SLOT": "check"})
         check = Check(id=CheckId("coverage"), cmd="coverage", when=["src/**"])
         skip = CheckResult.skipped(check, "no change under src/**").replace(planned=True)
         memo.remember(memo.planned_key(check), skip, 1, "")
         log = RunLog(stores.run_log("gate-test"), run_id="gate-test", host="h")
         gate = StackGate(Cmds(self.sim, log, str(self.repo)), self.git, stores, str(self.repo), "origin/main", ["tl"])
-        self.assertEqual(gate.red([check.id], tree, base, plan_digest(None)), [])
-        self.assertEqual(gate.red([check.id], "other-tree", base, plan_digest(None)), [check.id])
-        self.assertEqual(gate.red([check.id], tree, "other-base", plan_digest(None)), [check.id])
-        self.assertEqual(gate.red([CheckId("never-ran")], tree, base, plan_digest(None)), ["never-ran"])
+        spec = {"id": "coverage", "argv": ["coverage"], "run": "gate", "when": ["src/**"]}
+        engine = load({"engine": {"checks": [spec]}}).engine
+        self.assertEqual(gate.red(engine, tree, base), [])
+        self.assertEqual(gate.red(engine, "other-tree", base), [check.id])
+        self.assertEqual(gate.red(engine, tree, "other-base"), [check.id])
+        other = load({"engine": {"checks": [{**spec, "id": "never-ran"}]}}).engine
+        self.assertEqual(gate.red(other, tree, base), ["never-ran"])
         memo.remember(memo.planned_key(check), skip.replace(planned=False, why="static failed first"), 2, "")
-        self.assertEqual(gate.red([check.id], tree, base, plan_digest(None)), [])  # invalid skip cannot overwrite a satisfied decision
+        self.assertEqual(gate.red(engine, tree, base), [])  # invalid skip cannot overwrite a satisfied decision
         cmd = ["repo-plan", "steps", "--json"]
         memo.remember(memo.planned_key(check, plan_digest(cmd)), skip, 3, "")
         profile = self.repo / ".task-loop.json"
         profile.write_text(json.dumps({"engine": {"plan_cmd": ["stale-plan"]}}))
         for argv, red in ((cmd, []), (["repo-plan", "changed"], [check.id]), (cmd, [])):
             with self.subTest(argv=argv):
-                self.git.profiles[OID["task/a"]] = json.dumps({"engine": {"plan_cmd": argv}})
+                self.git.profiles[OID["task/a"]] = json.dumps({"engine": {"plan_cmd": argv, "checks": [spec]}})
                 engine = gate.profile(OID["task/a"])
                 assert engine is not None
-                self.assertEqual(gate.red([check.id], tree, base, plan_digest(engine.plan_cmd)), red)
+                self.assertEqual(gate.red(engine, tree, base), red)
 
 
 class GateCase(StackCase):
@@ -373,7 +378,8 @@ class GateCase(StackCase):
         profile = '{"engine": {"checks": [{"id": "lint", "argv": ["true"], "run": "gate"}]}}'
         self.git.profiles = dict.fromkeys(OID.values(), profile)
         self.green: set[str] = set()  # trees the store holds a pass for
-        patch = mock.patch("taskloop.app.land.stackgate.is_green", lambda st, repo, step, tree, base, plan: tree in self.green)
+        patch = mock.patch.object(StackGate, "red", lambda gate, engine, tree, base, wt="":
+                                  [] if tree in self.green else [CheckId("lint")])
         patch.start()
         self.addCleanup(patch.stop)
 
@@ -426,9 +432,9 @@ class Gated(GateCase):
     def test_a_stale_checkout_cannot_require_coverage_removed_by_the_judged_commit(self):
         (self.repo / ".task-loop.json").write_text(
             '{"engine": {"checks": [{"id": "coverage", "argv": ["true"], "run": "gate"}]}}')
-        with mock.patch("taskloop.app.land.stackgate.is_green", return_value=True) as green:
+        with mock.patch.object(StackGate, "red", return_value=[]) as green:
             self.assertEqual(self.deliver(StackItem(branch="task/a")), 0)
-        self.assertEqual([call.args[2] for call in green.call_args_list], ["lint"])
+        self.assertEqual([[check.id for check in call.args[0].gate_checks] for call in green.call_args_list], [["lint"]])
         self.assertTrue(self.git.ran("show", OID["task/a"], ".task-loop.json"))
 
     def test_a_check_added_by_the_judged_commit_is_required(self):

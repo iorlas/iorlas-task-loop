@@ -10,6 +10,7 @@ from taskloop.app.land.stack import MODE, Stack, lock_path
 from taskloop.app.land.stackgate import StackGate
 from taskloop.app.wire import closeguard
 from taskloop.app.wire.slots import profile_slots, slot_of
+from taskloop.contracts.env import Env
 from taskloop.contracts.forge import StackItem
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId
@@ -39,7 +40,7 @@ def pairs(values: list[str], flag: str) -> dict[str, str]:
 
 
 def cmd_land_stack(a: argparse.Namespace, who: Identity, git: Git, spawner: Runs, store: Beads,
-                   tl: list[str]) -> int:
+                   tl: list[str], *, env: Env | None = None) -> int:
     """`store` is bd (the land record and the Dolt sync); `tl` is the argv that runs tl itself (the gate runs `tl check` through it)."""
     repo = str(Path(a.repo).resolve())
     beads, old = pairs(a.bead, "--bead"), pairs(a.supersede, "--supersede")
@@ -62,7 +63,8 @@ def cmd_land_stack(a: argparse.Namespace, who: Identity, git: Git, spawner: Runs
         return closeguard.record_land(who, store, git, repo, f"origin/{a.base}", BeadId(bead), sha, f"{MODE}: merged as {sha[:12]}")
 
     stack = Stack(forge, cmds, log, git, repo, lock, landed, store.dolt_push, who.actor, who.session,
-                  StackGate(cmds, git, stores, repo, f"origin/{a.base}", tl), store, a.wait_min, lambda bead: locator.add_bead(run, bead),
+                  StackGate(cmds, git, stores, repo, f"origin/{a.base}", tl, env), store, a.wait_min,
+                  lambda bead: locator.add_bead(run, bead),
                   lambda path: bool(slot_of(slot_repo, path, who, store, strict=True)), profile_slots(slot_repo).base)
     rc = 1
     try:

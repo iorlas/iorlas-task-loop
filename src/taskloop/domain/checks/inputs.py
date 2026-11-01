@@ -10,9 +10,9 @@ import json
 from collections.abc import Iterable, Mapping
 from typing import Final
 
+from taskloop.contracts.argv import argv_of
 from taskloop.contracts.checks import Check
 from taskloop.domain.checks.matchers import expand_braces, glob_re, literal_prefix
-from taskloop.domain.checks.names import norm
 
 ROOT_FILES: Final = ("justfile", "Justfile", ".justfile", "*.lock", "packages-lock.json", "package-lock.json", "Directory.Packages.props",
               "Directory.Build.props", "Directory.Build.targets", "global.json", "nuget.config", ".task-loop.json")
@@ -82,13 +82,14 @@ def reads_digest(check: Check, files: Mapping[str, str], ignored: Mapping[str, s
 
 
 def cmd_digest(check: Check) -> str:
-    return hashlib.sha1(norm(check.cmd).encode("utf-8", "surrogateescape")).hexdigest()
+    return hashlib.sha1(json.dumps(argv_of(check.cmd)).encode("utf-8", "surrogateescape")).hexdigest()
 
 
 def config_digest(check: Check) -> str:
     """The declared settings of a check that change what it reads or where it runs: a changed glob, exclude, inputs_only, container or
     fix command is another check, whatever its id."""
-    text = json.dumps([list(check.inputs), list(check.exclude), check.inputs_only, check.container, check.fix], separators=(",", ":"))
+    text = json.dumps([list(check.inputs), list(check.exclude), check.inputs_only, check.container, check.fix,
+                       check.when, check.needs, check.reads], separators=(",", ":"))
     return hashlib.sha1(text.encode("utf-8", "surrogateescape")).hexdigest()
 
 

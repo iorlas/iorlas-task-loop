@@ -8,6 +8,7 @@ from taskloop.app.checks import evidence, gateplan
 from taskloop.app.checks.attempts import Attempts
 from taskloop.app.checks.base import BaseCheck
 from taskloop.app.checks.cache import InputKeys, RunMemo
+from taskloop.app.checks.execution import ReadyExecution, Runs, resolve_container
 from taskloop.app.checks.executor import CheckExecutor
 from taskloop.app.checks.fixer import Fixer
 from taskloop.app.checks.host import CheckHost, CheckStuck
@@ -21,14 +22,14 @@ from taskloop.contracts.ports import Git
 from taskloop.contracts.runkey import BaseSha
 from taskloop.domain.checks.durations import merged, seconds
 from taskloop.domain.checks.plan import CheckPlan
-from taskloop.domain.checks.specs import diff_check, due, engine_digest, gate_items, items_of
+from taskloop.domain.checks.specs import diff_check, due, engine_digest, gate_items, items_of, repo_check
 from taskloop.domain.checks.writer_split import WriterSplit
 from taskloop.stores.api import Doc
 from taskloop.stores.bundle import Stores
 
 
 def cached_gate(cfg: EngineConfig, git: Git, wt: str, stores: Stores, env: Env, bead_env: Mapping[str, str],
-                tree: TreeSha, planned: gateplan.PlanDecision | None) -> bool:
+                tree: TreeSha, planned: gateplan.PlanDecision | None, spawner: Runs | None = None) -> bool:
     """Read gate evidence without running checks or a plan producer."""
     steps = gate_items(cfg)
     if not tree or not steps:
@@ -39,6 +40,12 @@ def cached_gate(cfg: EngineConfig, git: Git, wt: str, stores: Stores, env: Env, 
     keys = InputKeys(git, wt, tree)
     engine_env = {**childenv.reaching(childenv.current_env(env)), **bead_env}
     memo = RunMemo(stores, check_files.repo_key(git, wt), keys, BaseSha(base), engine_env)
+    memo.checks = {c.id: repo_check(c, cfg) for c in cfg.checks}
+    if any(c.container for c in items):
+        execution = resolve_container(cfg.container, wt, spawner) if spawner is not None else None
+        if not isinstance(execution, ReadyExecution):
+            return False
+        memo.executions.update({c.id: execution.identity for c in items if c.container})
     changed = git.changed_paths(wt, start, tree, required=True) if planned is None and any(c.when for c in items) else []
     return all(memo.has(c) or not due(c, changed, planned.skips if planned is not None else None) for c in items)
 
@@ -107,7 +114,7 @@ class Checker:
             return False
         base = host.git.rev_parse(str(host.wt), host.cfg.base)
         planned = gateplan.skipped(host, tree, base)
-        return cached_gate(host.cfg, host.git, str(host.wt), host.stores, host.env, host.bead_env, tree, planned)
+        return cached_gate(host.cfg, host.git, str(host.wt), host.stores, host.env, host.bead_env, tree, planned, host.spawner)
 
     def _history(self) -> tuple[Doc[Durations], Durations]:
         host = self.host

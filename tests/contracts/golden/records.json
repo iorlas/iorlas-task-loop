@@ -719,6 +719,8 @@
   "inputs": "a1",
   "selected": "",
   "env": "e1",
+  "execution": "",
+  "dependencies": "",
   "plan": "p1",
   "plan_output": "pout1"
  },
@@ -734,6 +736,8 @@
    "inputs": "a1",
    "selected": "",
    "env": "e1",
+   "execution": "",
+   "dependencies": "",
    "plan": "p1",
    "plan_output": "pout1"
   },
@@ -786,6 +790,8 @@
    "inputs": "a1",
    "selected": "",
    "env": "e1",
+   "execution": "",
+   "dependencies": "",
    "plan": "p1",
    "plan_output": "pout1"
   },

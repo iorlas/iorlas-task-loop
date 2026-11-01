@@ -13,8 +13,10 @@ from support import engine_case as te
 from support.builders import make_engine
 
 from taskloop.app.checks.container import Box
+from taskloop.app.checks.execution import ReadyExecution
 from taskloop.contracts import config
 from taskloop.contracts.env import snapshot
+from taskloop.contracts.runkey import Digest
 from taskloop.domain import slot_env
 
 KEYS = ("TMPDIR", "TMP", "TEMP", "DOTNET_CLI_HOME", "NUGET_SCRATCH", "NUGET_HTTP_CACHE_PATH", "NUGET_PLUGINS_CACHE_PATH",
@@ -69,9 +71,9 @@ class EverySpawnPath(te.EngineTest):
             env = snapshot()
         host = mock.Mock(env=env, bead_env=e.bead_env, run_dir=Path("r"), cfg=mock.Mock(container=None))
         box = Box(host, mock.Mock())
-        box._why, box._image = "", "img"
         check = mock.Mock(container=True, id="c")
-        argv, _ = box.plan(check, ["just", "x"], {})
+        with mock.patch.object(box, "resolve", return_value=ReadyExecution(Digest("sha256:image"), "sha256:image")):
+            argv, _ = box.plan(check, ["just", "x"], {})
         passed = [argv[i + 1] for i, a in enumerate(argv) if a == "--env"]
         self.assertIn(f"TL_SLOT={self.wt.name}", passed)
         self.assertEqual([p for p in passed if "tmp" in p.lower() or "/" in p], [])

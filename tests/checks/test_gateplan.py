@@ -27,6 +27,21 @@ def document(steps=None, **extra):
 
 
 class GatePlans(te.EngineTest):
+    def test_a_plan_for_another_base_cannot_skip_checks(self):
+        answer = document()
+        answer["base"] = "stale-base"
+        self.setup_plan(answer=Ran(exit=0, out=json.dumps(answer)))
+        run = self.run_gate()
+        self.assertEqual(run[0].status, "passed")
+        self.assertFalse(run[0].planned)
+
+    def test_a_plan_for_the_requested_base_retains_its_skip(self):
+        self.setup_plan()
+        answer = document()
+        answer["base"] = self.eng.git.rev_parse(str(self.eng.wt), self.eng.cfg.base)
+        self.answer = Ran(exit=0, out=json.dumps(answer))
+        self.assertTrue(self.run_gate()[0].planned)
+
     def test_failed_diff_cannot_authorize_a_legacy_when_skip(self):
         self.setup_plan()
         self.eng.cfg = self.eng.cfg.replace(plan_cmd=None)

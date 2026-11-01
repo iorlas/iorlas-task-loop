@@ -69,7 +69,7 @@ class Attempts:
         return rc, tail, seen, took
 
     def _exec(self, c: Check, log: Path, env: Mapping[str, str], stop: threading.Event | None) -> tuple[int, str]:
-        """The check's argv, on the host or (when it says `in: container` and docker is up) in a container; the log says where."""
+        """The admitted execution's argv; a required container never falls back to the host."""
         ids = {**step_env(self.host, c.id), EnvVar.TL_ARTIFACT_STEP.value: c.id}  # a new attempt directory for every run, a lock rerun too
         # what the repo's check declares in its `env` (it is part of the cache key: it must reach the child too)
         env = {**c.env, **env, **ids}

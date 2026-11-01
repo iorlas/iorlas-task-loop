@@ -94,6 +94,8 @@ def skipped(host: CheckHost, tree: str, base: str) -> PlanDecision | None:
         if ran.exit:
             raise ValueError(f"command exited {ran.exit}")
         plan = parse(ran.out)
+        if plan.base is not None and plan.base != base:
+            raise ValueError("plan base differs from the requested base")
         skips = {(s.name if s.name is not None else s.id) or "":
                  (s.reason if s.reason is not None else s.why) or "" for s in plan.steps if not s.run}
         return PlanDecision(skips, plan_digest(cmd), Digest(hashlib.sha1(ran.out.encode("utf-8")).hexdigest()))

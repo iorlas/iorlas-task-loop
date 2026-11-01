@@ -7,12 +7,12 @@ from typing import Any
 from taskloop.adapters import check_files, treehash
 from taskloop.adapters.threadflag import ThreadFlag
 from taskloop.app.checks.checklog import CheckLog
+from taskloop.app.checks.execution import check_env
 from taskloop.app.land.checkout import Checkout
 from taskloop.app.run.shell import Shell
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.enums import WaitWhat
 from taskloop.contracts.env import Env
-from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.ids import TreeSha
 from taskloop.contracts.locator import RunBundle
 from taskloop.contracts.ports import Git, Spawner
@@ -62,7 +62,7 @@ class CliHost:
         self.log = log
         self.checklog = CheckLog(self.log)
         self.run_dir = bundle.dir
-        self.bead_env: Mapping[str, str] = {EnvVar.TL_SLOT.value: "check"}
+        self.bead_env: Mapping[str, str] = check_env()
         self.killed = self.wall_hit = False
         self.halt = threading.Event()
         self.tree_memo: tuple[treehash.State, TreeSha] | None = None

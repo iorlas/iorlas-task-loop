@@ -13,12 +13,13 @@ from support.fakegit import ScriptedGit
 
 # isort: split
 from taskloop.adapters import check_files
-from taskloop.app.checks.cache import key_digest, plan_digest
+from taskloop.app.checks.cache import InputKeys, RunMemo, key_digest, plan_digest
 from taskloop.cli import green
-from taskloop.contracts.checks import CheckResult, PassRecord, Verdict
+from taskloop.contracts.checks import Check, CheckResult, PassRecord, Verdict
 from taskloop.contracts.ids import CheckId, TreeSha
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.runkey import BaseSha, Digest, RunKey
+from taskloop.contracts.runkey import BaseSha
+from taskloop.stores.memory import fake_stores
 from taskloop.stores.real import real_stores
 
 
@@ -27,14 +28,25 @@ class RepoGit(ScriptedGit):
 
     url = "git@example.com:o/repo.git"
 
+    profile = json.dumps({"engine": {"checks": [{"id": "unit", "argv": ["x"], "run": "gate"}]}})
+
+    def show(self, d, rev, path):
+        return self.profile
+
+    def ls_tree(self, d, rev, *paths, recursive=False):
+        return []
+
     def config_get(self, d: str, key: str) -> str:
         return self.url if d.startswith("/repo") else "git@example.com:o/other.git"
 
 
 def run(step="unit", tree="T1", base="B1", status: Verdict = "passed"):
-    key = RunKey(check=CheckId(step), cmd=Digest("c"), config=Digest("g"), toolchain=Digest("t"), tree=TreeSha(tree), base=BaseSha(base),
-                 inputs=Digest("i"), selected=Digest(""), env=Digest("e"))
-    res = CheckResult(id=CheckId(step), cmd="x", group="g", exit=0 if status == "passed" else 1, status=status)
+    keys = InputKeys(RepoGit(), "/repo", TreeSha(tree))
+    keys.files = {}
+    memo = RunMemo(fake_stores(), "repo", keys, BaseSha(base), {"TL_SLOT": "check"})
+    key = memo.key(Check(id=CheckId(step), cmd="x"))
+    assert key is not None
+    res = CheckResult(id=CheckId(step), cmd="x", group="tests", exit=0 if status == "passed" else 1, status=status)
     return PassRecord(key=key, result=res, tree=TreeSha(tree), base=BaseSha(base))
 
 
@@ -77,26 +89,33 @@ class GreenCase(unittest.TestCase):
         self.store(rec.replace(result=rec.result.replace(exit=None, why="static failed first")))
         self.assertEqual(self.ask(), 1)
 
-    def test_repo_config_selects_the_plan_digest_for_skips_and_leaves_passes_green(self):
+    def test_judged_config_selects_the_plan_digest_and_an_invalid_profile_refuses_passes(self):
         cmd = ["repo-plan", "steps", "--json"]
         rec = run(status="skipped")
         self.store(rec.replace(key=rec.key.replace(plan=plan_digest(cmd)),
                                result=rec.result.replace(exit=None, planned=True, why="no relevant paths")))
-        profile = Path(self.tmp.name) / ".task-loop.json"
         with mock.patch.object(self.git, "config_get", return_value=self.git.url):
             for argv, expected in ((cmd, 0), (["repo-plan", "other"], 1), (None, 1), (cmd, 0)):
                 with self.subTest(argv=argv):
-                    profile.write_text(json.dumps({"engine": {"plan_cmd": argv}}))
+                    self.git.profile = json.dumps({"engine": {"plan_cmd": argv, "checks": [
+                        {"id": "unit", "argv": ["x"], "run": "gate"}]}})
                     self.assertEqual(self.ask(repo=self.tmp.name), expected)
-            profile.write_text("invalid json")
+            self.git.profile = "invalid json"
             self.assertEqual(self.ask(repo=self.tmp.name), 1)
             self.store(run())
-            self.assertEqual(self.ask(repo=self.tmp.name), 0)
+            self.assertEqual(self.ask(repo=self.tmp.name), 1)
 
-    def test_a_pass_served_for_another_tree_and_base_is_green_for_them(self):
-        self.store(run().replace(tree=TreeSha("T2"), base=BaseSha("B2")))  # the record of a reuse: true for T2 on B2 now
-        self.assertEqual(self.ask(tree="T2", base="B2"), 0)
-        self.assertEqual(self.ask(), 1)
+    def test_metadata_cannot_relabel_a_whole_tree_pass_for_another_subject(self):
+        self.store(run().replace(tree=TreeSha("T2"), base=BaseSha("B2")))  # metadata cannot change the key's subject
+        self.assertEqual(self.ask(tree="T2", base="B2"), 1)
+        self.assertEqual(self.ask(), 0)
+
+    def test_changed_argv_or_environment_cannot_authorize_delivery(self):
+        self.store(run())
+        for change in ({"argv": ["other"]}, {"env": {"MODE": "other"}}):
+            with self.subTest(change=change):
+                self.git.profile = json.dumps({"engine": {"checks": [{"id": "unit", "argv": ["x"], **change}]}})
+                self.assertEqual(self.ask(), 1)
 
     def test_other_step_tree_base_or_repo_is_not_green(self):
         self.store(run())

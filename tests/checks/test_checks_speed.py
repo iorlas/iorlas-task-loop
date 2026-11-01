@@ -293,14 +293,12 @@ class CheapFirst(SpeedTest):
 
 
 class Duplicates(SpeedTest):
-    def test_a_command_the_engine_already_ran_is_not_launched_again(self):
-        """Not reachable from a plan (a wrapper of a registered check is refused at parse); the executor still never launches one
-        command twice in a block."""
+    def test_an_adhoc_copy_does_not_inherit_a_registry_receipt(self):
         cmd, n = self.sh_counter()
         eng = self.checks_engine(checks=[{"id": "unity-tests", "cmd": cmd, "group": "tests"}])
         res = eng.run_checks({"checks": ck([cmd]), "files": []}, "s")
         self.assertEqual((n.read_text(), sorted(bool(c.reused) for c in res), [c.status for c in res]),
-                         ("1", [False, True], ["passed"] * 2))
+                         ("11", [False, False], ["passed"] * 2))
 
     def test_another_argv_around_the_same_recipe_runs_as_written(self):
         cmd, n = self.sh_counter()
@@ -316,11 +314,11 @@ class Duplicates(SpeedTest):
         res = eng.run_checks({"checks": ck([red]), "files": []}, "s")
         self.assertEqual(([c.status for c in res], n.read_text()), (["failed", "skipped"], "1"))
 
-    def test_equal_argv_lists_are_one_command_whatever_the_spelling(self):
+    def test_equal_argv_lists_still_require_their_own_registry_identity(self):
         cmd, n = self.sh_counter()
         eng = self.checks_engine(checks=[{"id": "unity-tests", "cmd": cmd, "group": "tests"}])
         res = eng.run_checks({"checks": ck([cmd.replace(" ", "   ")]), "files": []}, "s")
-        self.assertEqual((n.read_text(), [bool(c.reused) for c in res]), ("1", [False, True]))
+        self.assertEqual((n.read_text(), [bool(c.reused) for c in res]), ("11", [False, False]))
 
 
 class Schedule(SpeedTest):
@@ -374,12 +372,12 @@ class Schedule(SpeedTest):
         res = eng.run_checks({"checks": ck(accept), "files": []}, "s")
         return res, launched, {i: secs.get(c.cmd, 0) if c.log else 0 for i, c in enumerate(res)}
 
-    def test_a_plan_copy_with_a_longer_limit_than_the_repo_check_is_one_launch(self):
+    def test_a_plan_copy_with_a_longer_limit_requires_its_own_execution(self):
         cmd, n = self.sh_counter()
         eng = self.checks_engine(checks=[{"id": "unity-tests", "cmd": cmd, "group": "tests", "wall_min": 30, "cache": False}])
         res = eng.run_checks({"checks": ck([cmd]), "files": []}, "s")  # the plan's copy gets check_wall_min, 60
         self.assertEqual(eng.cfg.check_wall_min, 60)
-        self.assertEqual((n.read_text(), [bool(c.reused) for c in res]), ("1", [False, True]))
+        self.assertEqual((n.read_text(), [bool(c.reused) for c in res]), ("11", [False, False]))
 
     def test_a_first_run_that_timed_out_under_a_shorter_limit_is_not_reused_by_a_longer_one(self):
         n = Path(self.tmp.name) / "slow-runs"
