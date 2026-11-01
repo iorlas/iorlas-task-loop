@@ -137,6 +137,12 @@ class Handler(BaseHTTPRequestHandler):
             d["card"]["marker"] = "exited"
             d["live"].update(kind="exited", exit_code=137, why="the worker was killed (out of memory)")
         d["description"] += self.details.get(q.get("id", ""), "")
+        if extra := self.details.get(q.get("id", "")):
+            for p in d["passes"]:
+                for stage in p.get("logs", []):
+                    for role in stage["roles"]:
+                        if not role["attempts"][-1].get("live"):
+                            role["attempts"][-1]["lines"].append({"t": d["t"], "text": extra, "tone": ""})
         if self.state == "bd-error":
             d.update(bd_error="comments locked\ninternal detail", bd_ok_at=d["t"] - 120 if q.get("id") == "lifesim-6dq0" else None)
         detail = wire.load(D.BeadDetail, d)

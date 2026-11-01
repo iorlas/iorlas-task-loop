@@ -60,7 +60,7 @@ CASES = [
 
 CASES += [(f"{dev}-{scn}", {"scn": scn, "w": size[0], "h": size[1]})
           for dev, size in (("desktop", DESKTOP), ("phone", PHONE))
-          for scn in ("headers", "runs", "pulse", "resources", "terminal", "rounds", "adhoc")]
+          for scn in ("headers", "runs", "pulse", "resources", "terminal", "rounds", "adhoc", "stages")]
 CASES += [(f"{dev}-pulse-motion", {"scn": "pulse", "w": size[0], "h": size[1], "motion": "normal"})
           for dev, size in (("desktop", DESKTOP), ("phone", PHONE))]
 CASES += [(f"{dev}-runs-empty", {"scn": "runs", "w": size[0], "h": size[1], "state": "empty"})

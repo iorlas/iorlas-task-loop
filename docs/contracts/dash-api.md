@@ -113,6 +113,14 @@ Tailnet reachability remains an owner access grant; these checks prevent browser
   by PID; the dashboard never acquires a lease. Configured slot lanes remain present while idle or before their first run.
 - `Pass.detail` preserves the leaving transition's full detail; `end_text` supplies its cause in words. The drawer clips the
   reason to one line with the full text on hover. A sent-back plan starts a new pass even when both steps have phase `plan`.
+- `Pass.logs[]` carries `{phase, roles: [{role, attempts: [{id, t, secs, outcome, lane, model, live, lines}]}]}`.
+  Attempts stay in call order within each recorded role; `lines` are typed `TermLine` records. Worker events join by
+  `CallStart.n` to the run's existing live file; check sections carry recorded results and tails, and the engine section
+  carries step summaries and the leaving Transition. An absent stage log or empty roles means no log for this stage.
+  These fields participate in the bead ETag. Selecting a stage survives revalidation; live attempts show the newest ten
+  lines, clipped with click-to-expand. `Cell.state=done` always shows a check mark, duration and `outcome`, even for short
+  stages; `overrun` is amber, `failed` red, `live` pulses, and `empty` is pending. Optional `budget_s` comes from recorded
+  overrun budgets or check wall limits; the cell shows planned seconds against actual `secs` only when that evidence exists.
 - Every bead id in the API is the full bd id including the project prefix ("lifesim-4buv", "tl-8k4"), never the short tail.
   The page may strip "<project>-" for display only; ids sent back in writes are the full ones.
 - Bead ids are paired with a project wherever a row can come from more than one (`Piece`, `Slot`, `AskCard`, `LedgerRow`).

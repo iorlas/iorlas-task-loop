@@ -58,7 +58,7 @@
   "retry_at": 0.0,
   "shots": 0
  },
- "version": "6428c7b4a43bb8a9",
+ "version": "f3905a4ed7354d81",
  "bd_ok_at": null,
  "bd_error": "",
  "description": "Autosave every 5 minutes. Part of Save system.",
@@ -78,45 +78,57 @@
    "cells": [
     {
      "phase": "plan",
-     "state": "visited",
+     "state": "done",
      "secs": 600,
      "tokens": 95000,
-     "last": ""
+     "last": "",
+     "outcome": "approved",
+     "budget_s": null
     },
     {
      "phase": "write",
-     "state": "visited",
+     "state": "done",
      "secs": 2040,
      "tokens": 323000,
-     "last": ""
+     "last": "",
+     "outcome": "done",
+     "budget_s": null
     },
     {
      "phase": "test",
-     "state": "small",
+     "state": "done",
      "secs": 480,
      "tokens": 76000,
-     "last": ""
+     "last": "",
+     "outcome": "passed",
+     "budget_s": null
     },
     {
      "phase": "review",
-     "state": "visited",
+     "state": "done",
      "secs": 600,
      "tokens": 95000,
-     "last": ""
+     "last": "",
+     "outcome": "approved",
+     "budget_s": null
     },
     {
      "phase": "look",
      "state": "skipped",
      "secs": 0,
      "tokens": 0,
-     "last": ""
+     "last": "",
+     "outcome": "",
+     "budget_s": null
     },
     {
      "phase": "land",
-     "state": "small",
+     "state": "done",
      "secs": 480,
      "tokens": 76000,
-     "last": ""
+     "last": "",
+     "outcome": "done",
+     "budget_s": null
     }
    ],
    "end": "done",
@@ -131,7 +143,8 @@
      "md": "landed on main",
      "phase": null
     }
-   ]
+   ],
+   "logs": []
   }
  ],
  "artifacts": [],

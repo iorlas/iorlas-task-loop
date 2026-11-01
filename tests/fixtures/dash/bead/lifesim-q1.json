@@ -33,7 +33,7 @@
   "retry_at": 0.0,
   "shots": 0
  },
- "version": "07306d2363fa6146",
+ "version": "bd18e97375d47483",
  "bd_ok_at": null,
  "bd_error": "",
  "description": "Inventory sorting by weight. Part of World.",
@@ -48,49 +48,62 @@
      "state": "empty",
      "secs": 0,
      "tokens": 0,
-     "last": ""
+     "last": "",
+     "outcome": "",
+     "budget_s": null
     },
     {
      "phase": "write",
      "state": "empty",
      "secs": 0,
      "tokens": 0,
-     "last": ""
+     "last": "",
+     "outcome": "",
+     "budget_s": null
     },
     {
      "phase": "test",
      "state": "empty",
      "secs": 0,
      "tokens": 0,
-     "last": ""
+     "last": "",
+     "outcome": "",
+     "budget_s": null
     },
     {
      "phase": "review",
      "state": "empty",
      "secs": 0,
      "tokens": 0,
-     "last": ""
+     "last": "",
+     "outcome": "",
+     "budget_s": null
     },
     {
      "phase": "look",
      "state": "empty",
      "secs": 0,
      "tokens": 0,
-     "last": ""
+     "last": "",
+     "outcome": "",
+     "budget_s": null
     },
     {
      "phase": "land",
      "state": "empty",
      "secs": 0,
      "tokens": 0,
-     "last": ""
+     "last": "",
+     "outcome": "",
+     "budget_s": null
     }
    ],
    "end": "",
    "end_text": "",
    "detail": "",
    "resumed": null,
-   "messages": []
+   "messages": [],
+   "logs": []
   }
  ],
  "artifacts": [],

@@ -12,6 +12,7 @@ from typing import Any, Literal
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
+from support.dash_stage_fixtures import stage_passes
 from taskloop.contracts import dash as D
 from taskloop.contracts import dashcost as DC
 from taskloop.contracts import wire
@@ -270,9 +271,9 @@ def passes(b: dict) -> list[D.Pass]:
                 continue
             secs, tok = int(c["m"] * 60), int(c["m"] * TOKENS_PER_MIN)
             cell_map: dict[str, D.CellState] = {"f": "failed", "live": "live", "wait": "you", "park": "you", "stuck": "stuck"}
-            small: D.CellState = "small" if c["m"] < 10 and tok < 100_000 else "visited"
-            state = cell_map.get(c["k"]) or small
-            cells.append(D.Cell(phase=st, state=state, secs=secs, tokens=tok, last=""))
+            state = cell_map.get(c["k"], "done")
+            outcome = "passed" if st == D.Phase.TEST else "approved" if st in (D.Phase.PLAN, D.Phase.REVIEW) else "done"
+            cells.append(D.Cell(phase=st, state=state, secs=secs, tokens=tok, outcome=outcome if state == "done" else ""))
         t0 = at(p["segs"][0][1]) if p["segs"] else NOW
         t1 = at(p["segs"][-1][2]) if p["segs"] else NOW
         last_pass = i == len(raw) - 1
@@ -280,7 +281,7 @@ def passes(b: dict) -> list[D.Pass]:
         resumed = D.Resumed(slot=b["slot"], branch=f"bd/{b['id']}", waited_secs=35 * 60) if p.get("resumed") else None
         detail = "the plan touches client/ without a Unity check" if b["id"] == L("d5f.48") and i == 0 else ""
         out.append(D.Pass(n=i + 1, cells=cells, end=p["end"], end_text=p["text"], detail=detail, resumed=resumed, messages=msgs))
-    return out
+    return stage_passes(b["id"], out, NOW)
 
 
 TERM = {L("5ban.3"): ["$ dotnet test --filter path_avoids_walls", "NavGrid: 48\u00d748 built in 12ms",

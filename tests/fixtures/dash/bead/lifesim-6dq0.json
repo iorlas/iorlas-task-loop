@@ -58,7 +58,7 @@
   "retry_at": 0.0,
   "shots": 0
  },
- "version": "f3b8a8514e20a3b7",
+ "version": "7ec6f7a3a4b93c00",
  "bd_ok_at": null,
  "bd_error": "",
  "description": "Rain lowers mood outdoors. Part of World.",
@@ -92,45 +92,57 @@
    "cells": [
     {
      "phase": "plan",
-     "state": "visited",
+     "state": "done",
      "secs": 1200,
      "tokens": 190000,
-     "last": ""
+     "last": "",
+     "outcome": "approved",
+     "budget_s": null
     },
     {
      "phase": "write",
-     "state": "visited",
+     "state": "overrun",
      "secs": 3600,
      "tokens": 570000,
-     "last": ""
+     "last": "",
+     "outcome": "done",
+     "budget_s": 3000
     },
     {
      "phase": "test",
      "state": "failed",
      "secs": 660,
      "tokens": 104500,
-     "last": ""
+     "last": "",
+     "outcome": "",
+     "budget_s": null
     },
     {
      "phase": "review",
      "state": "empty",
      "secs": 0,
      "tokens": 0,
-     "last": ""
+     "last": "",
+     "outcome": "",
+     "budget_s": null
     },
     {
      "phase": "look",
      "state": "empty",
      "secs": 0,
      "tokens": 0,
-     "last": ""
+     "last": "",
+     "outcome": "",
+     "budget_s": null
     },
     {
      "phase": "land",
      "state": "empty",
      "secs": 0,
      "tokens": 0,
-     "last": ""
+     "last": "",
+     "outcome": "",
+     "budget_s": null
     }
    ],
    "end": "test_failed",
@@ -152,6 +164,97 @@
      "md": "plan: 3 steps",
      "phase": null
     }
+   ],
+   "logs": [
+    {
+     "phase": "plan",
+     "roles": [
+      {
+       "role": "planner",
+       "attempts": [
+        {
+         "id": "p1",
+         "t": 1793043200.0,
+         "secs": 30,
+         "outcome": "ok",
+         "lane": "codex",
+         "model": "fixture-model",
+         "live": false,
+         "lines": [
+          {
+           "t": 1793043200.0,
+           "text": "plan: 3 steps",
+           "tone": ""
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "phase": "write",
+     "roles": [
+      {
+       "role": "writer",
+       "attempts": [
+        {
+         "id": "w1",
+         "t": 1793044200.0,
+         "secs": 30,
+         "outcome": "ok",
+         "lane": "codex",
+         "model": "fixture-model",
+         "live": false,
+         "lines": [
+          {
+           "t": 1793044200.0,
+           "text": "first write",
+           "tone": ""
+          }
+         ]
+        },
+        {
+         "id": "w2",
+         "t": 1793045200.0,
+         "secs": 30,
+         "outcome": "ok",
+         "lane": "codex",
+         "model": "fixture-model",
+         "live": false,
+         "lines": [
+          {
+           "t": 1793045200.0,
+           "text": "fixed weather_tick",
+           "tone": ""
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "role": "reviewer",
+       "attempts": [
+        {
+         "id": "r1",
+         "t": 1793046200.0,
+         "secs": 30,
+         "outcome": "ok",
+         "lane": "codex",
+         "model": "fixture-model",
+         "live": false,
+         "lines": [
+          {
+           "t": 1793046200.0,
+           "text": "approved",
+           "tone": ""
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    }
    ]
   },
   {
@@ -162,42 +265,54 @@
      "state": "skipped",
      "secs": 0,
      "tokens": 0,
-     "last": ""
+     "last": "",
+     "outcome": "",
+     "budget_s": null
     },
     {
      "phase": "write",
      "state": "live",
      "secs": 1980,
      "tokens": 313500,
-     "last": ""
+     "last": "",
+     "outcome": "",
+     "budget_s": null
     },
     {
      "phase": "test",
      "state": "empty",
      "secs": 0,
      "tokens": 0,
-     "last": ""
+     "last": "",
+     "outcome": "",
+     "budget_s": null
     },
     {
      "phase": "review",
      "state": "empty",
      "secs": 0,
      "tokens": 0,
-     "last": ""
+     "last": "",
+     "outcome": "",
+     "budget_s": null
     },
     {
      "phase": "look",
      "state": "empty",
      "secs": 0,
      "tokens": 0,
-     "last": ""
+     "last": "",
+     "outcome": "",
+     "budget_s": null
     },
     {
      "phase": "land",
      "state": "empty",
      "secs": 0,
      "tokens": 0,
-     "last": ""
+     "last": "",
+     "outcome": "",
+     "budget_s": null
     }
    ],
    "end": "",
@@ -218,6 +333,94 @@
      "who": "loop",
      "md": "test failed: `mood_rain_outdoor`",
      "phase": null
+    }
+   ],
+   "logs": [
+    {
+     "phase": "write",
+     "roles": [
+      {
+       "role": "writer",
+       "attempts": [
+        {
+         "id": "live-write",
+         "t": 1793050100.0,
+         "secs": 100,
+         "outcome": "running",
+         "lane": "codex",
+         "model": "fixture-model",
+         "live": true,
+         "lines": [
+          {
+           "t": 1793050188.0,
+           "text": "stage terminal line 0 long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output ",
+           "tone": ""
+          },
+          {
+           "t": 1793050189.0,
+           "text": "stage terminal line 1 long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output ",
+           "tone": ""
+          },
+          {
+           "t": 1793050190.0,
+           "text": "stage terminal line 2 long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output ",
+           "tone": ""
+          },
+          {
+           "t": 1793050191.0,
+           "text": "stage terminal line 3 long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output ",
+           "tone": ""
+          },
+          {
+           "t": 1793050192.0,
+           "text": "stage terminal line 4 long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output ",
+           "tone": ""
+          },
+          {
+           "t": 1793050193.0,
+           "text": "stage terminal line 5 long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output ",
+           "tone": ""
+          },
+          {
+           "t": 1793050194.0,
+           "text": "stage terminal line 6 long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output ",
+           "tone": ""
+          },
+          {
+           "t": 1793050195.0,
+           "text": "stage terminal line 7 long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output ",
+           "tone": ""
+          },
+          {
+           "t": 1793050196.0,
+           "text": "stage terminal line 8 long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output ",
+           "tone": ""
+          },
+          {
+           "t": 1793050197.0,
+           "text": "stage terminal line 9 long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output ",
+           "tone": ""
+          },
+          {
+           "t": 1793050198.0,
+           "text": "stage terminal line 10 long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output ",
+           "tone": ""
+          },
+          {
+           "t": 1793050199.0,
+           "text": "stage terminal line 11 long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output ",
+           "tone": ""
+          },
+          {
+           "t": 1793050200.0,
+           "text": "stage terminal line 12 long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output long output ",
+           "tone": ""
+          }
+         ]
+        }
+       ]
+      }
+     ]
     }
    ]
   }

@@ -71,6 +71,7 @@ class Run:
     assumed: int = 0  # Assumed records: what the planner planned around
     stuck: rec.Stuck | None = None  # the stuck episode still open at the run's newest record (stuck_of)
     waits: tuple[Wait, ...] = ()  # the ended waits (a lane, the network, a resource, a lock ...)
+    records: tuple[rec.EngineLog, ...] = ()  # retained typed rows for the drawer's role/attempt logs
 
     @property
     def slot(self) -> str:
@@ -153,4 +154,4 @@ def run_of(name: str, records: Sequence[rec.EngineLog], now: float) -> Run:
                tuple(r for r in body if isinstance(r, rec.Transition)), tuple(r for r in body if isinstance(r, rec.Artifacts)),
                checks, open_wait(body) if life is Liveness.LIVE else None, lane, code,
                said=tuple(r for r in body if isinstance(r, rec.Said)), assumed=sum(1 for r in body if isinstance(r, rec.Assumed)),
-               stuck=stuck_of(body), waits=waits_of(body))
+               stuck=stuck_of(body), waits=waits_of(body), records=tuple(body))

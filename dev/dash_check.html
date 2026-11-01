@@ -99,6 +99,36 @@ function type(sel, text) {
   el.dispatchEvent(new (win().Event)('input', { bubbles: true }));
 }
 const SCENARIOS = {
+  async stages() {
+    localStorage.clear();
+    await load('/#board~~lifesim-6dq0~p1'); await settle(1500);
+    const done = $('[data-stage="plan"]'), pending = $('[data-stage="review"]');
+    must(done?.textContent.includes('✓') && done.textContent.includes('20m'), 'done stage shows check and duration');
+    must(pending?.textContent.trim() === '', 'pending stage is empty');
+    must($('[data-stage="write"]')?.textContent.includes('overrun'), 'overrun visible');
+    must($('[data-stage="write"]')?.textContent.includes('planned'), 'planned versus actual visible');
+    await click('[data-stage="plan"]');
+    must($('.stage-log [data-role="planner"]'), 'done stage opens its role log');
+    await click('[data-stage="write"]');
+    must($('.stage-log [data-role="writer"]')?.querySelectorAll('.stage-attempt').length === 2, 'two writer attempts');
+    must($('.stage-log [data-role="reviewer"]'), 'reviewer separate from writer');
+    rules()('stage log');
+    const marker = `stage refreshed ${Date.now()}`;
+    await fetch('/dev/detail', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: 'lifesim-6dq0', text: marker }) });
+    await settle(3500);
+    must($('.stage-log')?.textContent.includes(marker), 'selected stage refreshes through bead change token');
+    await click('[data-stage="review"]');
+    must($('.stage-log')?.textContent.includes('no log for this stage'), 'pending stage explains missing log');
+    await load('/#board~~lifesim-6dq0~p2'); await settle(1500);
+    await click('[data-stage="write"]');
+    const rows = $$('.stage-log .mini .run-row');
+    must(rows.length === 10 && rows[0]?.textContent.startsWith('stage terminal line 12'), 'stage live tail keeps newest ten lines');
+    must(rows.every((r) => win().getComputedStyle(r).whiteSpace === 'nowrap'), 'live stage lines clip');
+    rows[0]?.click(); await settle();
+    must(rows[0]?.getAttribute('aria-expanded') === 'true', 'stage live line expands');
+    rules()('live stage log');
+  },
   async staleproject() {
     const snap = await (await fetch('/api/snapshot')).json();
     const phone = W <= 600;

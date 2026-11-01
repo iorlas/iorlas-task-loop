@@ -70,42 +70,54 @@
     {
      "cells": [
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "done",
        "phase": "plan",
        "secs": 30,
-       "state": "small",
+       "state": "done",
        "tokens": 1000
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "done",
        "phase": "write",
        "secs": 40,
        "state": "you",
        "tokens": 2000
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "",
        "phase": "test",
        "secs": 0,
        "state": "empty",
        "tokens": 0
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "",
        "phase": "review",
        "secs": 0,
        "state": "empty",
        "tokens": 0
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "",
        "phase": "look",
        "secs": 0,
        "state": "empty",
        "tokens": 0
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "",
        "phase": "land",
        "secs": 0,
        "state": "empty",
@@ -115,6 +127,116 @@
      "detail": "",
      "end": "asked",
      "end_text": "over budget: write 61 min of 60",
+     "logs": [
+      {
+       "phase": "plan",
+       "roles": [
+        {
+         "attempts": [
+          {
+           "id": "c1",
+           "lane": "OC Go",
+           "lines": [],
+           "live": false,
+           "model": "",
+           "outcome": "ok",
+           "secs": 30.0,
+           "t": 1800000500.0
+          }
+         ],
+         "role": "writer"
+        },
+        {
+         "attempts": [
+          {
+           "id": "n1",
+           "lane": "",
+           "lines": [
+            {
+             "t": 1800000500.0,
+             "text": "> plan",
+             "tone": ""
+            },
+            {
+             "t": 1800000530.0,
+             "text": "plan: done",
+             "tone": "dim"
+            }
+           ],
+           "live": false,
+           "model": "",
+           "outcome": "done",
+           "secs": 30.0,
+           "t": 1800000500.0
+          }
+         ],
+         "role": "engine"
+        }
+       ]
+      },
+      {
+       "phase": "write",
+       "roles": [
+        {
+         "attempts": [
+          {
+           "id": "c2",
+           "lane": "",
+           "lines": [],
+           "live": false,
+           "model": "",
+           "outcome": "ok",
+           "secs": 40.0,
+           "t": 1800000530.0
+          }
+         ],
+         "role": "writer"
+        },
+        {
+         "attempts": [
+          {
+           "id": "n2",
+           "lane": "",
+           "lines": [
+            {
+             "t": 1800000530.0,
+             "text": "> write 1",
+             "tone": ""
+            },
+            {
+             "t": 1800000570.0,
+             "text": "write: done",
+             "tone": "dim"
+            }
+           ],
+           "live": false,
+           "model": "",
+           "outcome": "done",
+           "secs": 40.0,
+           "t": 1800000530.0
+          }
+         ],
+         "role": "engine"
+        }
+       ]
+      },
+      {
+       "phase": "test",
+       "roles": []
+      },
+      {
+       "phase": "review",
+       "roles": []
+      },
+      {
+       "phase": "look",
+       "roles": []
+      },
+      {
+       "phase": "land",
+       "roles": []
+      }
+     ],
      "messages": [],
      "n": 1,
      "resumed": null
@@ -123,7 +245,7 @@
    "t": 1800036000.0,
    "unblocks": [],
    "v": 1,
-   "version": "c230362efc61211a",
+   "version": "015600e2b1be27dc",
    "waits_for": []
   },
   "ask-decision": {
@@ -196,42 +318,54 @@
     {
      "cells": [
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "done",
        "phase": "plan",
        "secs": 30,
-       "state": "small",
+       "state": "done",
        "tokens": 1000
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "done",
        "phase": "write",
        "secs": 40,
        "state": "you",
        "tokens": 2000
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "",
        "phase": "test",
        "secs": 0,
        "state": "empty",
        "tokens": 0
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "",
        "phase": "review",
        "secs": 0,
        "state": "empty",
        "tokens": 0
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "",
        "phase": "look",
        "secs": 0,
        "state": "empty",
        "tokens": 0
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "",
        "phase": "land",
        "secs": 0,
        "state": "empty",
@@ -241,6 +375,116 @@
      "detail": "",
      "end": "asked",
      "end_text": "owner decision needed: old format or new?",
+     "logs": [
+      {
+       "phase": "plan",
+       "roles": [
+        {
+         "attempts": [
+          {
+           "id": "c1",
+           "lane": "OC Go",
+           "lines": [],
+           "live": false,
+           "model": "",
+           "outcome": "ok",
+           "secs": 30.0,
+           "t": 1800000200.0
+          }
+         ],
+         "role": "writer"
+        },
+        {
+         "attempts": [
+          {
+           "id": "n1",
+           "lane": "",
+           "lines": [
+            {
+             "t": 1800000200.0,
+             "text": "> plan",
+             "tone": ""
+            },
+            {
+             "t": 1800000230.0,
+             "text": "plan: done",
+             "tone": "dim"
+            }
+           ],
+           "live": false,
+           "model": "",
+           "outcome": "done",
+           "secs": 30.0,
+           "t": 1800000200.0
+          }
+         ],
+         "role": "engine"
+        }
+       ]
+      },
+      {
+       "phase": "write",
+       "roles": [
+        {
+         "attempts": [
+          {
+           "id": "c2",
+           "lane": "",
+           "lines": [],
+           "live": false,
+           "model": "",
+           "outcome": "ok",
+           "secs": 40.0,
+           "t": 1800000230.0
+          }
+         ],
+         "role": "writer"
+        },
+        {
+         "attempts": [
+          {
+           "id": "n2",
+           "lane": "",
+           "lines": [
+            {
+             "t": 1800000230.0,
+             "text": "> write 1",
+             "tone": ""
+            },
+            {
+             "t": 1800000270.0,
+             "text": "write: done",
+             "tone": "dim"
+            }
+           ],
+           "live": false,
+           "model": "",
+           "outcome": "done",
+           "secs": 40.0,
+           "t": 1800000230.0
+          }
+         ],
+         "role": "engine"
+        }
+       ]
+      },
+      {
+       "phase": "test",
+       "roles": []
+      },
+      {
+       "phase": "review",
+       "roles": []
+      },
+      {
+       "phase": "look",
+       "roles": []
+      },
+      {
+       "phase": "land",
+       "roles": []
+      }
+     ],
      "messages": [],
      "n": 1,
      "resumed": null
@@ -249,7 +493,7 @@
    "t": 1800036000.0,
    "unblocks": [],
    "v": 1,
-   "version": "f1278e7de4b697c9",
+   "version": "10592a359d1613ae",
    "waits_for": []
   },
   "ask-stuck": {
@@ -322,42 +566,54 @@
     {
      "cells": [
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "done",
        "phase": "plan",
        "secs": 30,
-       "state": "small",
+       "state": "done",
        "tokens": 1000
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "done",
        "phase": "write",
        "secs": 40,
-       "state": "small",
+       "state": "done",
        "tokens": 2000
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "",
        "phase": "test",
        "secs": 0,
        "state": "empty",
        "tokens": 0
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "",
        "phase": "review",
        "secs": 0,
        "state": "empty",
        "tokens": 0
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "",
        "phase": "look",
        "secs": 0,
        "state": "empty",
        "tokens": 0
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "",
        "phase": "land",
        "secs": 0,
        "state": "empty",
@@ -367,6 +623,116 @@
      "detail": "",
      "end": "",
      "end_text": "stage 1 stuck after 3 rounds and 1 re-plan(s)",
+     "logs": [
+      {
+       "phase": "plan",
+       "roles": [
+        {
+         "attempts": [
+          {
+           "id": "c1",
+           "lane": "OC Go",
+           "lines": [],
+           "live": false,
+           "model": "",
+           "outcome": "ok",
+           "secs": 30.0,
+           "t": 1800000400.0
+          }
+         ],
+         "role": "writer"
+        },
+        {
+         "attempts": [
+          {
+           "id": "n1",
+           "lane": "",
+           "lines": [
+            {
+             "t": 1800000400.0,
+             "text": "> plan",
+             "tone": ""
+            },
+            {
+             "t": 1800000430.0,
+             "text": "plan: done",
+             "tone": "dim"
+            }
+           ],
+           "live": false,
+           "model": "",
+           "outcome": "done",
+           "secs": 30.0,
+           "t": 1800000400.0
+          }
+         ],
+         "role": "engine"
+        }
+       ]
+      },
+      {
+       "phase": "write",
+       "roles": [
+        {
+         "attempts": [
+          {
+           "id": "c2",
+           "lane": "",
+           "lines": [],
+           "live": false,
+           "model": "",
+           "outcome": "ok",
+           "secs": 40.0,
+           "t": 1800000430.0
+          }
+         ],
+         "role": "writer"
+        },
+        {
+         "attempts": [
+          {
+           "id": "n2",
+           "lane": "",
+           "lines": [
+            {
+             "t": 1800000430.0,
+             "text": "> write 1",
+             "tone": ""
+            },
+            {
+             "t": 1800000470.0,
+             "text": "write: done",
+             "tone": "dim"
+            }
+           ],
+           "live": false,
+           "model": "",
+           "outcome": "done",
+           "secs": 40.0,
+           "t": 1800000430.0
+          }
+         ],
+         "role": "engine"
+        }
+       ]
+      },
+      {
+       "phase": "test",
+       "roles": []
+      },
+      {
+       "phase": "review",
+       "roles": []
+      },
+      {
+       "phase": "look",
+       "roles": []
+      },
+      {
+       "phase": "land",
+       "roles": []
+      }
+     ],
      "messages": [],
      "n": 1,
      "resumed": null
@@ -375,7 +741,7 @@
    "t": 1800036000.0,
    "unblocks": [],
    "v": 1,
-   "version": "4e686b37cefea7f3",
+   "version": "2ffb895a8c92b9e8",
    "waits_for": []
   },
   "ask-ticket": {
@@ -448,42 +814,54 @@
     {
      "cells": [
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "done",
        "phase": "plan",
        "secs": 30,
-       "state": "small",
+       "state": "done",
        "tokens": 1000
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "done",
        "phase": "write",
        "secs": 40,
        "state": "you",
        "tokens": 2000
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "",
        "phase": "test",
        "secs": 0,
        "state": "empty",
        "tokens": 0
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "",
        "phase": "review",
        "secs": 0,
        "state": "empty",
        "tokens": 0
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "",
        "phase": "look",
        "secs": 0,
        "state": "empty",
        "tokens": 0
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "",
        "phase": "land",
        "secs": 0,
        "state": "empty",
@@ -493,6 +871,116 @@
      "detail": "",
      "end": "asked",
      "end_text": "ticket: the bead has no acceptance criteria",
+     "logs": [
+      {
+       "phase": "plan",
+       "roles": [
+        {
+         "attempts": [
+          {
+           "id": "c1",
+           "lane": "OC Go",
+           "lines": [],
+           "live": false,
+           "model": "",
+           "outcome": "ok",
+           "secs": 30.0,
+           "t": 1800000600.0
+          }
+         ],
+         "role": "writer"
+        },
+        {
+         "attempts": [
+          {
+           "id": "n1",
+           "lane": "",
+           "lines": [
+            {
+             "t": 1800000600.0,
+             "text": "> plan",
+             "tone": ""
+            },
+            {
+             "t": 1800000630.0,
+             "text": "plan: done",
+             "tone": "dim"
+            }
+           ],
+           "live": false,
+           "model": "",
+           "outcome": "done",
+           "secs": 30.0,
+           "t": 1800000600.0
+          }
+         ],
+         "role": "engine"
+        }
+       ]
+      },
+      {
+       "phase": "write",
+       "roles": [
+        {
+         "attempts": [
+          {
+           "id": "c2",
+           "lane": "",
+           "lines": [],
+           "live": false,
+           "model": "",
+           "outcome": "ok",
+           "secs": 40.0,
+           "t": 1800000630.0
+          }
+         ],
+         "role": "writer"
+        },
+        {
+         "attempts": [
+          {
+           "id": "n2",
+           "lane": "",
+           "lines": [
+            {
+             "t": 1800000630.0,
+             "text": "> write 1",
+             "tone": ""
+            },
+            {
+             "t": 1800000670.0,
+             "text": "write: done",
+             "tone": "dim"
+            }
+           ],
+           "live": false,
+           "model": "",
+           "outcome": "done",
+           "secs": 40.0,
+           "t": 1800000630.0
+          }
+         ],
+         "role": "engine"
+        }
+       ]
+      },
+      {
+       "phase": "test",
+       "roles": []
+      },
+      {
+       "phase": "review",
+       "roles": []
+      },
+      {
+       "phase": "look",
+       "roles": []
+      },
+      {
+       "phase": "land",
+       "roles": []
+      }
+     ],
      "messages": [],
      "n": 1,
      "resumed": null
@@ -501,7 +989,7 @@
    "t": 1800036000.0,
    "unblocks": [],
    "v": 1,
-   "version": "ffeb6566eee16eb9",
+   "version": "aa38d3695eed40a2",
    "waits_for": []
   },
   "ask-verify": {
@@ -574,42 +1062,54 @@
     {
      "cells": [
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "done",
        "phase": "plan",
        "secs": 30,
-       "state": "small",
+       "state": "done",
        "tokens": 1000
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "done",
        "phase": "write",
        "secs": 40,
        "state": "you",
        "tokens": 2000
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "",
        "phase": "test",
        "secs": 0,
        "state": "empty",
        "tokens": 0
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "",
        "phase": "review",
        "secs": 0,
        "state": "empty",
        "tokens": 0
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "",
        "phase": "look",
        "secs": 0,
        "state": "empty",
        "tokens": 0
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "",
        "phase": "land",
        "secs": 0,
        "state": "empty",
@@ -619,6 +1119,116 @@
      "detail": "",
      "end": "asked",
      "end_text": "verify: before land, the workers could not check: the look (other)",
+     "logs": [
+      {
+       "phase": "plan",
+       "roles": [
+        {
+         "attempts": [
+          {
+           "id": "c1",
+           "lane": "OC Go",
+           "lines": [],
+           "live": false,
+           "model": "",
+           "outcome": "ok",
+           "secs": 30.0,
+           "t": 1800000300.0
+          }
+         ],
+         "role": "writer"
+        },
+        {
+         "attempts": [
+          {
+           "id": "n1",
+           "lane": "",
+           "lines": [
+            {
+             "t": 1800000300.0,
+             "text": "> plan",
+             "tone": ""
+            },
+            {
+             "t": 1800000330.0,
+             "text": "plan: done",
+             "tone": "dim"
+            }
+           ],
+           "live": false,
+           "model": "",
+           "outcome": "done",
+           "secs": 30.0,
+           "t": 1800000300.0
+          }
+         ],
+         "role": "engine"
+        }
+       ]
+      },
+      {
+       "phase": "write",
+       "roles": [
+        {
+         "attempts": [
+          {
+           "id": "c2",
+           "lane": "",
+           "lines": [],
+           "live": false,
+           "model": "",
+           "outcome": "ok",
+           "secs": 40.0,
+           "t": 1800000330.0
+          }
+         ],
+         "role": "writer"
+        },
+        {
+         "attempts": [
+          {
+           "id": "n2",
+           "lane": "",
+           "lines": [
+            {
+             "t": 1800000330.0,
+             "text": "> write 1",
+             "tone": ""
+            },
+            {
+             "t": 1800000370.0,
+             "text": "write: done",
+             "tone": "dim"
+            }
+           ],
+           "live": false,
+           "model": "",
+           "outcome": "done",
+           "secs": 40.0,
+           "t": 1800000330.0
+          }
+         ],
+         "role": "engine"
+        }
+       ]
+      },
+      {
+       "phase": "test",
+       "roles": []
+      },
+      {
+       "phase": "review",
+       "roles": []
+      },
+      {
+       "phase": "look",
+       "roles": []
+      },
+      {
+       "phase": "land",
+       "roles": []
+      }
+     ],
      "messages": [],
      "n": 1,
      "resumed": null
@@ -627,7 +1237,7 @@
    "t": 1800036000.0,
    "unblocks": [],
    "v": 1,
-   "version": "4253ce3fe397ae32",
+   "version": "0618f6992f62fa40",
    "waits_for": []
   },
   "done": {
@@ -700,42 +1310,54 @@
     {
      "cells": [
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "done",
        "phase": "plan",
        "secs": 30,
-       "state": "small",
+       "state": "done",
        "tokens": 1000
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "done",
        "phase": "write",
        "secs": 40,
-       "state": "small",
+       "state": "done",
        "tokens": 2000
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "",
        "phase": "test",
        "secs": 0,
        "state": "empty",
        "tokens": 0
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "",
        "phase": "review",
        "secs": 0,
        "state": "empty",
        "tokens": 0
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "",
        "phase": "look",
        "secs": 0,
        "state": "empty",
        "tokens": 0
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "",
        "phase": "land",
        "secs": 0,
        "state": "empty",
@@ -745,6 +1367,116 @@
      "detail": "",
      "end": "done",
      "end_text": "landed",
+     "logs": [
+      {
+       "phase": "plan",
+       "roles": [
+        {
+         "attempts": [
+          {
+           "id": "c1",
+           "lane": "OC Go",
+           "lines": [],
+           "live": false,
+           "model": "",
+           "outcome": "ok",
+           "secs": 30.0,
+           "t": 1800000100.0
+          }
+         ],
+         "role": "writer"
+        },
+        {
+         "attempts": [
+          {
+           "id": "n1",
+           "lane": "",
+           "lines": [
+            {
+             "t": 1800000100.0,
+             "text": "> plan",
+             "tone": ""
+            },
+            {
+             "t": 1800000130.0,
+             "text": "plan: done",
+             "tone": "dim"
+            }
+           ],
+           "live": false,
+           "model": "",
+           "outcome": "done",
+           "secs": 30.0,
+           "t": 1800000100.0
+          }
+         ],
+         "role": "engine"
+        }
+       ]
+      },
+      {
+       "phase": "write",
+       "roles": [
+        {
+         "attempts": [
+          {
+           "id": "c2",
+           "lane": "",
+           "lines": [],
+           "live": false,
+           "model": "",
+           "outcome": "ok",
+           "secs": 40.0,
+           "t": 1800000130.0
+          }
+         ],
+         "role": "writer"
+        },
+        {
+         "attempts": [
+          {
+           "id": "n2",
+           "lane": "",
+           "lines": [
+            {
+             "t": 1800000130.0,
+             "text": "> write 1",
+             "tone": ""
+            },
+            {
+             "t": 1800000170.0,
+             "text": "write: done",
+             "tone": "dim"
+            }
+           ],
+           "live": false,
+           "model": "",
+           "outcome": "done",
+           "secs": 40.0,
+           "t": 1800000130.0
+          }
+         ],
+         "role": "engine"
+        }
+       ]
+      },
+      {
+       "phase": "test",
+       "roles": []
+      },
+      {
+       "phase": "review",
+       "roles": []
+      },
+      {
+       "phase": "look",
+       "roles": []
+      },
+      {
+       "phase": "land",
+       "roles": []
+      }
+     ],
      "messages": [],
      "n": 1,
      "resumed": null
@@ -753,7 +1485,7 @@
    "t": 1800036000.0,
    "unblocks": [],
    "v": 1,
-   "version": "2d4f207cc4fa20a3",
+   "version": "07472684a2573c07",
    "waits_for": []
   },
   "fault-denied": {
@@ -826,42 +1558,54 @@
     {
      "cells": [
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "done",
        "phase": "plan",
        "secs": 30,
-       "state": "small",
+       "state": "done",
        "tokens": 1000
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "done",
        "phase": "write",
        "secs": 40,
        "state": "you",
        "tokens": 2000
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "",
        "phase": "test",
        "secs": 0,
        "state": "empty",
        "tokens": 0
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "",
        "phase": "review",
        "secs": 0,
        "state": "empty",
        "tokens": 0
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "",
        "phase": "look",
        "secs": 0,
        "state": "empty",
        "tokens": 0
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "",
        "phase": "land",
        "secs": 0,
        "state": "empty",
@@ -871,6 +1615,116 @@
      "detail": "",
      "end": "asked",
      "end_text": "needs a human: the write step was denied rm and gave no answer",
+     "logs": [
+      {
+       "phase": "plan",
+       "roles": [
+        {
+         "attempts": [
+          {
+           "id": "c1",
+           "lane": "OC Go",
+           "lines": [],
+           "live": false,
+           "model": "",
+           "outcome": "ok",
+           "secs": 30.0,
+           "t": 1800001200.0
+          }
+         ],
+         "role": "writer"
+        },
+        {
+         "attempts": [
+          {
+           "id": "n1",
+           "lane": "",
+           "lines": [
+            {
+             "t": 1800001200.0,
+             "text": "> plan",
+             "tone": ""
+            },
+            {
+             "t": 1800001230.0,
+             "text": "plan: done",
+             "tone": "dim"
+            }
+           ],
+           "live": false,
+           "model": "",
+           "outcome": "done",
+           "secs": 30.0,
+           "t": 1800001200.0
+          }
+         ],
+         "role": "engine"
+        }
+       ]
+      },
+      {
+       "phase": "write",
+       "roles": [
+        {
+         "attempts": [
+          {
+           "id": "c2",
+           "lane": "",
+           "lines": [],
+           "live": false,
+           "model": "",
+           "outcome": "ok",
+           "secs": 40.0,
+           "t": 1800001230.0
+          }
+         ],
+         "role": "writer"
+        },
+        {
+         "attempts": [
+          {
+           "id": "n2",
+           "lane": "",
+           "lines": [
+            {
+             "t": 1800001230.0,
+             "text": "> write 1",
+             "tone": ""
+            },
+            {
+             "t": 1800001270.0,
+             "text": "write: done",
+             "tone": "dim"
+            }
+           ],
+           "live": false,
+           "model": "",
+           "outcome": "done",
+           "secs": 40.0,
+           "t": 1800001230.0
+          }
+         ],
+         "role": "engine"
+        }
+       ]
+      },
+      {
+       "phase": "test",
+       "roles": []
+      },
+      {
+       "phase": "review",
+       "roles": []
+      },
+      {
+       "phase": "look",
+       "roles": []
+      },
+      {
+       "phase": "land",
+       "roles": []
+      }
+     ],
      "messages": [],
      "n": 1,
      "resumed": null
@@ -879,7 +1733,7 @@
    "t": 1800036000.0,
    "unblocks": [],
    "v": 1,
-   "version": "c6f6873492d6b9a9",
+   "version": "756d9a4be2e6cdf9",
    "waits_for": []
   },
   "fault-engine": {
@@ -952,42 +1806,54 @@
     {
      "cells": [
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "done",
        "phase": "plan",
        "secs": 30,
-       "state": "small",
+       "state": "done",
        "tokens": 1000
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "done",
        "phase": "write",
        "secs": 40,
-       "state": "small",
+       "state": "done",
        "tokens": 2000
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "",
        "phase": "test",
        "secs": 0,
        "state": "empty",
        "tokens": 0
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "",
        "phase": "review",
        "secs": 0,
        "state": "empty",
        "tokens": 0
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "",
        "phase": "look",
        "secs": 0,
        "state": "empty",
        "tokens": 0
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "",
        "phase": "land",
        "secs": 0,
        "state": "empty",
@@ -997,6 +1863,116 @@
      "detail": "",
      "end": "",
      "end_text": "failed: engine error KeyError: 'x'",
+     "logs": [
+      {
+       "phase": "plan",
+       "roles": [
+        {
+         "attempts": [
+          {
+           "id": "c1",
+           "lane": "OC Go",
+           "lines": [],
+           "live": false,
+           "model": "",
+           "outcome": "ok",
+           "secs": 30.0,
+           "t": 1800001500.0
+          }
+         ],
+         "role": "writer"
+        },
+        {
+         "attempts": [
+          {
+           "id": "n1",
+           "lane": "",
+           "lines": [
+            {
+             "t": 1800001500.0,
+             "text": "> plan",
+             "tone": ""
+            },
+            {
+             "t": 1800001530.0,
+             "text": "plan: done",
+             "tone": "dim"
+            }
+           ],
+           "live": false,
+           "model": "",
+           "outcome": "done",
+           "secs": 30.0,
+           "t": 1800001500.0
+          }
+         ],
+         "role": "engine"
+        }
+       ]
+      },
+      {
+       "phase": "write",
+       "roles": [
+        {
+         "attempts": [
+          {
+           "id": "c2",
+           "lane": "",
+           "lines": [],
+           "live": false,
+           "model": "",
+           "outcome": "ok",
+           "secs": 40.0,
+           "t": 1800001530.0
+          }
+         ],
+         "role": "writer"
+        },
+        {
+         "attempts": [
+          {
+           "id": "n2",
+           "lane": "",
+           "lines": [
+            {
+             "t": 1800001530.0,
+             "text": "> write 1",
+             "tone": ""
+            },
+            {
+             "t": 1800001570.0,
+             "text": "write: done",
+             "tone": "dim"
+            }
+           ],
+           "live": false,
+           "model": "",
+           "outcome": "done",
+           "secs": 40.0,
+           "t": 1800001530.0
+          }
+         ],
+         "role": "engine"
+        }
+       ]
+      },
+      {
+       "phase": "test",
+       "roles": []
+      },
+      {
+       "phase": "review",
+       "roles": []
+      },
+      {
+       "phase": "look",
+       "roles": []
+      },
+      {
+       "phase": "land",
+       "roles": []
+      }
+     ],
      "messages": [],
      "n": 1,
      "resumed": null
@@ -1005,7 +1981,7 @@
    "t": 1800036000.0,
    "unblocks": [],
    "v": 1,
-   "version": "0bcce4ba0d589f31",
+   "version": "53325b7436094d26",
    "waits_for": []
   },
   "fault-infra": {
@@ -1078,42 +2054,54 @@
     {
      "cells": [
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "done",
        "phase": "plan",
        "secs": 30,
-       "state": "small",
+       "state": "done",
        "tokens": 1000
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "done",
        "phase": "write",
        "secs": 40,
-       "state": "small",
+       "state": "done",
        "tokens": 2000
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "",
        "phase": "test",
        "secs": 0,
        "state": "empty",
        "tokens": 0
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "",
        "phase": "review",
        "secs": 0,
        "state": "empty",
        "tokens": 0
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "",
        "phase": "look",
        "secs": 0,
        "state": "empty",
        "tokens": 0
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "",
        "phase": "land",
        "secs": 0,
        "state": "empty",
@@ -1123,6 +2111,116 @@
      "detail": "",
      "end": "",
      "end_text": "failed: infrastructure: no slot",
+     "logs": [
+      {
+       "phase": "plan",
+       "roles": [
+        {
+         "attempts": [
+          {
+           "id": "c1",
+           "lane": "OC Go",
+           "lines": [],
+           "live": false,
+           "model": "",
+           "outcome": "ok",
+           "secs": 30.0,
+           "t": 1800001400.0
+          }
+         ],
+         "role": "writer"
+        },
+        {
+         "attempts": [
+          {
+           "id": "n1",
+           "lane": "",
+           "lines": [
+            {
+             "t": 1800001400.0,
+             "text": "> plan",
+             "tone": ""
+            },
+            {
+             "t": 1800001430.0,
+             "text": "plan: done",
+             "tone": "dim"
+            }
+           ],
+           "live": false,
+           "model": "",
+           "outcome": "done",
+           "secs": 30.0,
+           "t": 1800001400.0
+          }
+         ],
+         "role": "engine"
+        }
+       ]
+      },
+      {
+       "phase": "write",
+       "roles": [
+        {
+         "attempts": [
+          {
+           "id": "c2",
+           "lane": "",
+           "lines": [],
+           "live": false,
+           "model": "",
+           "outcome": "ok",
+           "secs": 40.0,
+           "t": 1800001430.0
+          }
+         ],
+         "role": "writer"
+        },
+        {
+         "attempts": [
+          {
+           "id": "n2",
+           "lane": "",
+           "lines": [
+            {
+             "t": 1800001430.0,
+             "text": "> write 1",
+             "tone": ""
+            },
+            {
+             "t": 1800001470.0,
+             "text": "write: done",
+             "tone": "dim"
+            }
+           ],
+           "live": false,
+           "model": "",
+           "outcome": "done",
+           "secs": 40.0,
+           "t": 1800001430.0
+          }
+         ],
+         "role": "engine"
+        }
+       ]
+      },
+      {
+       "phase": "test",
+       "roles": []
+      },
+      {
+       "phase": "review",
+       "roles": []
+      },
+      {
+       "phase": "look",
+       "roles": []
+      },
+      {
+       "phase": "land",
+       "roles": []
+      }
+     ],
      "messages": [],
      "n": 1,
      "resumed": null
@@ -1131,7 +2229,7 @@
    "t": 1800036000.0,
    "unblocks": [],
    "v": 1,
-   "version": "eb0c44e35761b0c7",
+   "version": "7dcd403a93a87aed",
    "waits_for": []
   },
   "fault-land": {
@@ -1204,42 +2302,54 @@
     {
      "cells": [
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "done",
        "phase": "plan",
        "secs": 30,
-       "state": "small",
+       "state": "done",
        "tokens": 1000
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "done",
        "phase": "write",
        "secs": 40,
-       "state": "small",
+       "state": "done",
        "tokens": 2000
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "",
        "phase": "test",
        "secs": 0,
        "state": "empty",
        "tokens": 0
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "",
        "phase": "review",
        "secs": 0,
        "state": "empty",
        "tokens": 0
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "",
        "phase": "look",
        "secs": 0,
        "state": "empty",
        "tokens": 0
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "",
        "phase": "land",
        "secs": 0,
        "state": "empty",
@@ -1249,6 +2359,116 @@
      "detail": "",
      "end": "",
      "end_text": "failed: the land gate is red on main",
+     "logs": [
+      {
+       "phase": "plan",
+       "roles": [
+        {
+         "attempts": [
+          {
+           "id": "c1",
+           "lane": "OC Go",
+           "lines": [],
+           "live": false,
+           "model": "",
+           "outcome": "ok",
+           "secs": 30.0,
+           "t": 1800001300.0
+          }
+         ],
+         "role": "writer"
+        },
+        {
+         "attempts": [
+          {
+           "id": "n1",
+           "lane": "",
+           "lines": [
+            {
+             "t": 1800001300.0,
+             "text": "> plan",
+             "tone": ""
+            },
+            {
+             "t": 1800001330.0,
+             "text": "plan: done",
+             "tone": "dim"
+            }
+           ],
+           "live": false,
+           "model": "",
+           "outcome": "done",
+           "secs": 30.0,
+           "t": 1800001300.0
+          }
+         ],
+         "role": "engine"
+        }
+       ]
+      },
+      {
+       "phase": "write",
+       "roles": [
+        {
+         "attempts": [
+          {
+           "id": "c2",
+           "lane": "",
+           "lines": [],
+           "live": false,
+           "model": "",
+           "outcome": "ok",
+           "secs": 40.0,
+           "t": 1800001330.0
+          }
+         ],
+         "role": "writer"
+        },
+        {
+         "attempts": [
+          {
+           "id": "n2",
+           "lane": "",
+           "lines": [
+            {
+             "t": 1800001330.0,
+             "text": "> write 1",
+             "tone": ""
+            },
+            {
+             "t": 1800001370.0,
+             "text": "write: done",
+             "tone": "dim"
+            }
+           ],
+           "live": false,
+           "model": "",
+           "outcome": "done",
+           "secs": 40.0,
+           "t": 1800001330.0
+          }
+         ],
+         "role": "engine"
+        }
+       ]
+      },
+      {
+       "phase": "test",
+       "roles": []
+      },
+      {
+       "phase": "review",
+       "roles": []
+      },
+      {
+       "phase": "look",
+       "roles": []
+      },
+      {
+       "phase": "land",
+       "roles": []
+      }
+     ],
      "messages": [],
      "n": 1,
      "resumed": null
@@ -1257,7 +2477,7 @@
    "t": 1800036000.0,
    "unblocks": [],
    "v": 1,
-   "version": "0ebefd15cf6cdf45",
+   "version": "72bf298c64d489a8",
    "waits_for": []
   },
   "landed": {
@@ -1330,42 +2550,54 @@
     {
      "cells": [
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "done",
        "phase": "plan",
        "secs": 30,
-       "state": "small",
+       "state": "done",
        "tokens": 1000
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "done",
        "phase": "write",
        "secs": 40,
-       "state": "small",
+       "state": "done",
        "tokens": 2000
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "",
        "phase": "test",
        "secs": 0,
        "state": "empty",
        "tokens": 0
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "",
        "phase": "review",
        "secs": 0,
        "state": "empty",
        "tokens": 0
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "",
        "phase": "look",
        "secs": 0,
        "state": "empty",
        "tokens": 0
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "",
        "phase": "land",
        "secs": 0,
        "state": "empty",
@@ -1375,6 +2607,116 @@
      "detail": "",
      "end": "done",
      "end_text": "landed",
+     "logs": [
+      {
+       "phase": "plan",
+       "roles": [
+        {
+         "attempts": [
+          {
+           "id": "c1",
+           "lane": "OC Go",
+           "lines": [],
+           "live": false,
+           "model": "",
+           "outcome": "ok",
+           "secs": 30.0,
+           "t": 1800000000.0
+          }
+         ],
+         "role": "writer"
+        },
+        {
+         "attempts": [
+          {
+           "id": "n1",
+           "lane": "",
+           "lines": [
+            {
+             "t": 1800000000.0,
+             "text": "> plan",
+             "tone": ""
+            },
+            {
+             "t": 1800000030.0,
+             "text": "plan: done",
+             "tone": "dim"
+            }
+           ],
+           "live": false,
+           "model": "",
+           "outcome": "done",
+           "secs": 30.0,
+           "t": 1800000000.0
+          }
+         ],
+         "role": "engine"
+        }
+       ]
+      },
+      {
+       "phase": "write",
+       "roles": [
+        {
+         "attempts": [
+          {
+           "id": "c2",
+           "lane": "",
+           "lines": [],
+           "live": false,
+           "model": "",
+           "outcome": "ok",
+           "secs": 40.0,
+           "t": 1800000030.0
+          }
+         ],
+         "role": "writer"
+        },
+        {
+         "attempts": [
+          {
+           "id": "n2",
+           "lane": "",
+           "lines": [
+            {
+             "t": 1800000030.0,
+             "text": "> write 1",
+             "tone": ""
+            },
+            {
+             "t": 1800000070.0,
+             "text": "write: done",
+             "tone": "dim"
+            }
+           ],
+           "live": false,
+           "model": "",
+           "outcome": "done",
+           "secs": 40.0,
+           "t": 1800000030.0
+          }
+         ],
+         "role": "engine"
+        }
+       ]
+      },
+      {
+       "phase": "test",
+       "roles": []
+      },
+      {
+       "phase": "review",
+       "roles": []
+      },
+      {
+       "phase": "look",
+       "roles": []
+      },
+      {
+       "phase": "land",
+       "roles": []
+      }
+     ],
      "messages": [],
      "n": 1,
      "resumed": null
@@ -1383,7 +2725,7 @@
    "t": 1800036000.0,
    "unblocks": [],
    "v": 1,
-   "version": "aab1e62e4a846f7e",
+   "version": "e879ea34764a33d9",
    "waits_for": []
   },
   "owner-park": {
@@ -1456,42 +2798,54 @@
     {
      "cells": [
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "done",
        "phase": "plan",
        "secs": 30,
-       "state": "small",
+       "state": "done",
        "tokens": 1000
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "done",
        "phase": "write",
        "secs": 40,
-       "state": "small",
+       "state": "done",
        "tokens": 2000
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "",
        "phase": "test",
        "secs": 0,
        "state": "empty",
        "tokens": 0
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "",
        "phase": "review",
        "secs": 0,
        "state": "empty",
        "tokens": 0
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "",
        "phase": "look",
        "secs": 0,
        "state": "empty",
        "tokens": 0
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "",
        "phase": "land",
        "secs": 0,
        "state": "empty",
@@ -1501,6 +2855,116 @@
      "detail": "",
      "end": "parked",
      "end_text": "parked: by the owner (the branch and the checkpoint are kept; release the hold to go on)",
+     "logs": [
+      {
+       "phase": "plan",
+       "roles": [
+        {
+         "attempts": [
+          {
+           "id": "c1",
+           "lane": "OC Go",
+           "lines": [],
+           "live": false,
+           "model": "",
+           "outcome": "ok",
+           "secs": 30.0,
+           "t": 1800001100.0
+          }
+         ],
+         "role": "writer"
+        },
+        {
+         "attempts": [
+          {
+           "id": "n1",
+           "lane": "",
+           "lines": [
+            {
+             "t": 1800001100.0,
+             "text": "> plan",
+             "tone": ""
+            },
+            {
+             "t": 1800001130.0,
+             "text": "plan: done",
+             "tone": "dim"
+            }
+           ],
+           "live": false,
+           "model": "",
+           "outcome": "done",
+           "secs": 30.0,
+           "t": 1800001100.0
+          }
+         ],
+         "role": "engine"
+        }
+       ]
+      },
+      {
+       "phase": "write",
+       "roles": [
+        {
+         "attempts": [
+          {
+           "id": "c2",
+           "lane": "",
+           "lines": [],
+           "live": false,
+           "model": "",
+           "outcome": "ok",
+           "secs": 40.0,
+           "t": 1800001130.0
+          }
+         ],
+         "role": "writer"
+        },
+        {
+         "attempts": [
+          {
+           "id": "n2",
+           "lane": "",
+           "lines": [
+            {
+             "t": 1800001130.0,
+             "text": "> write 1",
+             "tone": ""
+            },
+            {
+             "t": 1800001170.0,
+             "text": "write: done",
+             "tone": "dim"
+            }
+           ],
+           "live": false,
+           "model": "",
+           "outcome": "done",
+           "secs": 40.0,
+           "t": 1800001130.0
+          }
+         ],
+         "role": "engine"
+        }
+       ]
+      },
+      {
+       "phase": "test",
+       "roles": []
+      },
+      {
+       "phase": "review",
+       "roles": []
+      },
+      {
+       "phase": "look",
+       "roles": []
+      },
+      {
+       "phase": "land",
+       "roles": []
+      }
+     ],
      "messages": [],
      "n": 1,
      "resumed": null
@@ -1509,7 +2973,7 @@
    "t": 1800036000.0,
    "unblocks": [],
    "v": 1,
-   "version": "c6e1ae3c28b651b6",
+   "version": "77ad556cca45b168",
    "waits_for": []
   },
   "pause-killed": {
@@ -1582,42 +3046,54 @@
     {
      "cells": [
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "done",
        "phase": "plan",
        "secs": 30,
-       "state": "small",
+       "state": "done",
        "tokens": 1000
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "done",
        "phase": "write",
        "secs": 40,
-       "state": "small",
+       "state": "done",
        "tokens": 2000
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "",
        "phase": "test",
        "secs": 0,
        "state": "empty",
        "tokens": 0
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "",
        "phase": "review",
        "secs": 0,
        "state": "empty",
        "tokens": 0
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "",
        "phase": "look",
        "secs": 0,
        "state": "empty",
        "tokens": 0
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "",
        "phase": "land",
        "secs": 0,
        "state": "empty",
@@ -1627,6 +3103,116 @@
      "detail": "",
      "end": "parked",
      "end_text": "failed: stopped (SIGTERM)",
+     "logs": [
+      {
+       "phase": "plan",
+       "roles": [
+        {
+         "attempts": [
+          {
+           "id": "c1",
+           "lane": "OC Go",
+           "lines": [],
+           "live": false,
+           "model": "",
+           "outcome": "ok",
+           "secs": 30.0,
+           "t": 1800001000.0
+          }
+         ],
+         "role": "writer"
+        },
+        {
+         "attempts": [
+          {
+           "id": "n1",
+           "lane": "",
+           "lines": [
+            {
+             "t": 1800001000.0,
+             "text": "> plan",
+             "tone": ""
+            },
+            {
+             "t": 1800001030.0,
+             "text": "plan: done",
+             "tone": "dim"
+            }
+           ],
+           "live": false,
+           "model": "",
+           "outcome": "done",
+           "secs": 30.0,
+           "t": 1800001000.0
+          }
+         ],
+         "role": "engine"
+        }
+       ]
+      },
+      {
+       "phase": "write",
+       "roles": [
+        {
+         "attempts": [
+          {
+           "id": "c2",
+           "lane": "",
+           "lines": [],
+           "live": false,
+           "model": "",
+           "outcome": "ok",
+           "secs": 40.0,
+           "t": 1800001030.0
+          }
+         ],
+         "role": "writer"
+        },
+        {
+         "attempts": [
+          {
+           "id": "n2",
+           "lane": "",
+           "lines": [
+            {
+             "t": 1800001030.0,
+             "text": "> write 1",
+             "tone": ""
+            },
+            {
+             "t": 1800001070.0,
+             "text": "write: done",
+             "tone": "dim"
+            }
+           ],
+           "live": false,
+           "model": "",
+           "outcome": "done",
+           "secs": 40.0,
+           "t": 1800001030.0
+          }
+         ],
+         "role": "engine"
+        }
+       ]
+      },
+      {
+       "phase": "test",
+       "roles": []
+      },
+      {
+       "phase": "review",
+       "roles": []
+      },
+      {
+       "phase": "look",
+       "roles": []
+      },
+      {
+       "phase": "land",
+       "roles": []
+      }
+     ],
      "messages": [],
      "n": 1,
      "resumed": null
@@ -1635,7 +3221,7 @@
    "t": 1800036000.0,
    "unblocks": [],
    "v": 1,
-   "version": "00f7ed83b27b892b",
+   "version": "88d093b170ca80de",
    "waits_for": []
   },
   "pause-lane": {
@@ -1708,42 +3294,54 @@
     {
      "cells": [
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "done",
        "phase": "plan",
        "secs": 30,
-       "state": "small",
+       "state": "done",
        "tokens": 1000
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "done",
        "phase": "write",
        "secs": 40,
-       "state": "small",
+       "state": "done",
        "tokens": 2000
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "",
        "phase": "test",
        "secs": 0,
        "state": "empty",
        "tokens": 0
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "",
        "phase": "review",
        "secs": 0,
        "state": "empty",
        "tokens": 0
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "",
        "phase": "look",
        "secs": 0,
        "state": "empty",
        "tokens": 0
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "",
        "phase": "land",
        "secs": 0,
        "state": "empty",
@@ -1753,6 +3351,116 @@
      "detail": "",
      "end": "lane_out",
      "end_text": "paused: no lane for the write step (CODEX_SUBSCRIPTION out until 14:00)",
+     "logs": [
+      {
+       "phase": "plan",
+       "roles": [
+        {
+         "attempts": [
+          {
+           "id": "c1",
+           "lane": "OC Go",
+           "lines": [],
+           "live": false,
+           "model": "",
+           "outcome": "ok",
+           "secs": 30.0,
+           "t": 1800000800.0
+          }
+         ],
+         "role": "writer"
+        },
+        {
+         "attempts": [
+          {
+           "id": "n1",
+           "lane": "",
+           "lines": [
+            {
+             "t": 1800000800.0,
+             "text": "> plan",
+             "tone": ""
+            },
+            {
+             "t": 1800000830.0,
+             "text": "plan: done",
+             "tone": "dim"
+            }
+           ],
+           "live": false,
+           "model": "",
+           "outcome": "done",
+           "secs": 30.0,
+           "t": 1800000800.0
+          }
+         ],
+         "role": "engine"
+        }
+       ]
+      },
+      {
+       "phase": "write",
+       "roles": [
+        {
+         "attempts": [
+          {
+           "id": "c2",
+           "lane": "",
+           "lines": [],
+           "live": false,
+           "model": "",
+           "outcome": "ok",
+           "secs": 40.0,
+           "t": 1800000830.0
+          }
+         ],
+         "role": "writer"
+        },
+        {
+         "attempts": [
+          {
+           "id": "n2",
+           "lane": "",
+           "lines": [
+            {
+             "t": 1800000830.0,
+             "text": "> write 1",
+             "tone": ""
+            },
+            {
+             "t": 1800000870.0,
+             "text": "write: done",
+             "tone": "dim"
+            }
+           ],
+           "live": false,
+           "model": "",
+           "outcome": "done",
+           "secs": 40.0,
+           "t": 1800000830.0
+          }
+         ],
+         "role": "engine"
+        }
+       ]
+      },
+      {
+       "phase": "test",
+       "roles": []
+      },
+      {
+       "phase": "review",
+       "roles": []
+      },
+      {
+       "phase": "look",
+       "roles": []
+      },
+      {
+       "phase": "land",
+       "roles": []
+      }
+     ],
      "messages": [],
      "n": 1,
      "resumed": null
@@ -1761,7 +3469,7 @@
    "t": 1800036000.0,
    "unblocks": [],
    "v": 1,
-   "version": "1cdf62039262a1b1",
+   "version": "5d211521336e1b63",
    "waits_for": []
   },
   "pause-network": {
@@ -1834,42 +3542,54 @@
     {
      "cells": [
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "done",
        "phase": "plan",
        "secs": 30,
-       "state": "small",
+       "state": "done",
        "tokens": 1000
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "done",
        "phase": "write",
        "secs": 40,
-       "state": "small",
+       "state": "done",
        "tokens": 2000
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "",
        "phase": "test",
        "secs": 0,
        "state": "empty",
        "tokens": 0
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "",
        "phase": "review",
        "secs": 0,
        "state": "empty",
        "tokens": 0
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "",
        "phase": "look",
        "secs": 0,
        "state": "empty",
        "tokens": 0
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "",
        "phase": "land",
        "secs": 0,
        "state": "empty",
@@ -1879,6 +3599,116 @@
      "detail": "",
      "end": "parked",
      "end_text": "paused: no network for the land push after 90 s; the branch is kept",
+     "logs": [
+      {
+       "phase": "plan",
+       "roles": [
+        {
+         "attempts": [
+          {
+           "id": "c1",
+           "lane": "OC Go",
+           "lines": [],
+           "live": false,
+           "model": "",
+           "outcome": "ok",
+           "secs": 30.0,
+           "t": 1800000900.0
+          }
+         ],
+         "role": "writer"
+        },
+        {
+         "attempts": [
+          {
+           "id": "n1",
+           "lane": "",
+           "lines": [
+            {
+             "t": 1800000900.0,
+             "text": "> plan",
+             "tone": ""
+            },
+            {
+             "t": 1800000930.0,
+             "text": "plan: done",
+             "tone": "dim"
+            }
+           ],
+           "live": false,
+           "model": "",
+           "outcome": "done",
+           "secs": 30.0,
+           "t": 1800000900.0
+          }
+         ],
+         "role": "engine"
+        }
+       ]
+      },
+      {
+       "phase": "write",
+       "roles": [
+        {
+         "attempts": [
+          {
+           "id": "c2",
+           "lane": "",
+           "lines": [],
+           "live": false,
+           "model": "",
+           "outcome": "ok",
+           "secs": 40.0,
+           "t": 1800000930.0
+          }
+         ],
+         "role": "writer"
+        },
+        {
+         "attempts": [
+          {
+           "id": "n2",
+           "lane": "",
+           "lines": [
+            {
+             "t": 1800000930.0,
+             "text": "> write 1",
+             "tone": ""
+            },
+            {
+             "t": 1800000970.0,
+             "text": "write: done",
+             "tone": "dim"
+            }
+           ],
+           "live": false,
+           "model": "",
+           "outcome": "done",
+           "secs": 40.0,
+           "t": 1800000930.0
+          }
+         ],
+         "role": "engine"
+        }
+       ]
+      },
+      {
+       "phase": "test",
+       "roles": []
+      },
+      {
+       "phase": "review",
+       "roles": []
+      },
+      {
+       "phase": "look",
+       "roles": []
+      },
+      {
+       "phase": "land",
+       "roles": []
+      }
+     ],
      "messages": [],
      "n": 1,
      "resumed": null
@@ -1887,7 +3717,7 @@
    "t": 1800036000.0,
    "unblocks": [],
    "v": 1,
-   "version": "be9ce9774e91cb65",
+   "version": "f704e61c2ea1579d",
    "waits_for": []
   },
   "wait-ask": {
@@ -1960,42 +3790,54 @@
     {
      "cells": [
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "done",
        "phase": "plan",
        "secs": 30,
-       "state": "small",
+       "state": "done",
        "tokens": 1000
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "done",
        "phase": "write",
        "secs": 40,
        "state": "you",
        "tokens": 2000
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "",
        "phase": "test",
        "secs": 0,
        "state": "empty",
        "tokens": 0
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "",
        "phase": "review",
        "secs": 0,
        "state": "empty",
        "tokens": 0
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "",
        "phase": "look",
        "secs": 0,
        "state": "empty",
        "tokens": 0
       },
       {
+       "budget_s": null,
        "last": "",
+       "outcome": "",
        "phase": "land",
        "secs": 0,
        "state": "empty",
@@ -2005,6 +3847,116 @@
      "detail": "",
      "end": "asked",
      "end_text": "waiting: for the owner's answer to ask g-1 (decision): which?",
+     "logs": [
+      {
+       "phase": "plan",
+       "roles": [
+        {
+         "attempts": [
+          {
+           "id": "c1",
+           "lane": "OC Go",
+           "lines": [],
+           "live": false,
+           "model": "",
+           "outcome": "ok",
+           "secs": 30.0,
+           "t": 1800000700.0
+          }
+         ],
+         "role": "writer"
+        },
+        {
+         "attempts": [
+          {
+           "id": "n1",
+           "lane": "",
+           "lines": [
+            {
+             "t": 1800000700.0,
+             "text": "> plan",
+             "tone": ""
+            },
+            {
+             "t": 1800000730.0,
+             "text": "plan: done",
+             "tone": "dim"
+            }
+           ],
+           "live": false,
+           "model": "",
+           "outcome": "done",
+           "secs": 30.0,
+           "t": 1800000700.0
+          }
+         ],
+         "role": "engine"
+        }
+       ]
+      },
+      {
+       "phase": "write",
+       "roles": [
+        {
+         "attempts": [
+          {
+           "id": "c2",
+           "lane": "",
+           "lines": [],
+           "live": false,
+           "model": "",
+           "outcome": "ok",
+           "secs": 40.0,
+           "t": 1800000730.0
+          }
+         ],
+         "role": "writer"
+        },
+        {
+         "attempts": [
+          {
+           "id": "n2",
+           "lane": "",
+           "lines": [
+            {
+             "t": 1800000730.0,
+             "text": "> write 1",
+             "tone": ""
+            },
+            {
+             "t": 1800000770.0,
+             "text": "write: done",
+             "tone": "dim"
+            }
+           ],
+           "live": false,
+           "model": "",
+           "outcome": "done",
+           "secs": 40.0,
+           "t": 1800000730.0
+          }
+         ],
+         "role": "engine"
+        }
+       ]
+      },
+      {
+       "phase": "test",
+       "roles": []
+      },
+      {
+       "phase": "review",
+       "roles": []
+      },
+      {
+       "phase": "look",
+       "roles": []
+      },
+      {
+       "phase": "land",
+       "roles": []
+      }
+     ],
      "messages": [],
      "n": 1,
      "resumed": null
@@ -2013,7 +3965,7 @@
    "t": 1800036000.0,
    "unblocks": [],
    "v": 1,
-   "version": "67900865c583a49b",
+   "version": "a147b80cf2f617b8",
    "waits_for": []
   }
  },

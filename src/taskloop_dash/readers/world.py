@@ -165,3 +165,18 @@ class Worlds:
         except OSError:
             return []
         return jsonl.records(str(files[-1]), decode=live_event) if files else []
+
+    def stage_events(self, runs: Sequence[Run]) -> dict[str, dict[int, Sequence[LiveEvent]]]:
+        """All retained calls, keyed by the engine's call number; paths only from RunLocator."""
+        out: dict[str, dict[int, Sequence[LiveEvent]]] = {}
+        for run in runs:
+            bundle = self.records.locator.get(run.name)
+            if bundle is None:
+                continue
+            calls: dict[int, Sequence[LiveEvent]] = {}
+            for path in sorted(bundle.live.glob("*.jsonl")):
+                number = path.stem.partition("-")[0]
+                if number.isdigit():
+                    calls[int(number)] = self.env.files.get(str(path), lambda p: jsonl.records(p, decode=live_event), [])
+            out[run.name] = calls
+        return out

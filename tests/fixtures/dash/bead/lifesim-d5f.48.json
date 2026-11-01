@@ -58,7 +58,7 @@
   "retry_at": 0.0,
   "shots": 4
  },
- "version": "182ba5f00634a276",
+ "version": "312237d0829b4922",
  "bd_ok_at": null,
  "bd_error": "",
  "description": "Fix save corruption on quit. Part of Save system.",
@@ -106,45 +106,57 @@
    "cells": [
     {
      "phase": "plan",
-     "state": "visited",
+     "state": "done",
      "secs": 960,
      "tokens": 152000,
-     "last": ""
+     "last": "",
+     "outcome": "approved",
+     "budget_s": null
     },
     {
      "phase": "write",
-     "state": "visited",
+     "state": "done",
      "secs": 2640,
      "tokens": 418000,
-     "last": ""
+     "last": "",
+     "outcome": "done",
+     "budget_s": null
     },
     {
      "phase": "test",
      "state": "failed",
      "secs": 540,
      "tokens": 85500,
-     "last": ""
+     "last": "",
+     "outcome": "",
+     "budget_s": null
     },
     {
      "phase": "review",
      "state": "empty",
      "secs": 0,
      "tokens": 0,
-     "last": ""
+     "last": "",
+     "outcome": "",
+     "budget_s": null
     },
     {
      "phase": "look",
      "state": "empty",
      "secs": 0,
      "tokens": 0,
-     "last": ""
+     "last": "",
+     "outcome": "",
+     "budget_s": null
     },
     {
      "phase": "land",
      "state": "empty",
      "secs": 0,
      "tokens": 0,
-     "last": ""
+     "last": "",
+     "outcome": "",
+     "budget_s": null
     }
    ],
    "end": "test_failed",
@@ -159,7 +171,8 @@
      "md": "plan: 5 steps",
      "phase": null
     }
-   ]
+   ],
+   "logs": []
   },
   {
    "n": 2,
@@ -169,42 +182,54 @@
      "state": "skipped",
      "secs": 0,
      "tokens": 0,
-     "last": ""
+     "last": "",
+     "outcome": "",
+     "budget_s": null
     },
     {
      "phase": "write",
-     "state": "visited",
+     "state": "done",
      "secs": 1740,
      "tokens": 275500,
-     "last": ""
+     "last": "",
+     "outcome": "done",
+     "budget_s": null
     },
     {
      "phase": "test",
      "state": "failed",
      "secs": 480,
      "tokens": 76000,
-     "last": ""
+     "last": "",
+     "outcome": "",
+     "budget_s": null
     },
     {
      "phase": "review",
      "state": "empty",
      "secs": 0,
      "tokens": 0,
-     "last": ""
+     "last": "",
+     "outcome": "",
+     "budget_s": null
     },
     {
      "phase": "look",
      "state": "empty",
      "secs": 0,
      "tokens": 0,
-     "last": ""
+     "last": "",
+     "outcome": "",
+     "budget_s": null
     },
     {
      "phase": "land",
      "state": "empty",
      "secs": 0,
      "tokens": 0,
-     "last": ""
+     "last": "",
+     "outcome": "",
+     "budget_s": null
     }
    ],
    "end": "test_failed",
@@ -219,7 +244,8 @@
      "md": "test failed: `save_roundtrip` (2nd time)",
      "phase": null
     }
-   ]
+   ],
+   "logs": []
   },
   {
    "n": 3,
@@ -229,42 +255,54 @@
      "state": "skipped",
      "secs": 0,
      "tokens": 0,
-     "last": ""
+     "last": "",
+     "outcome": "",
+     "budget_s": null
     },
     {
      "phase": "write",
-     "state": "visited",
+     "state": "done",
      "secs": 1320,
      "tokens": 209000,
-     "last": ""
+     "last": "",
+     "outcome": "done",
+     "budget_s": null
     },
     {
      "phase": "test",
-     "state": "small",
+     "state": "done",
      "secs": 480,
      "tokens": 76000,
-     "last": ""
+     "last": "",
+     "outcome": "passed",
+     "budget_s": null
     },
     {
      "phase": "review",
-     "state": "visited",
+     "state": "done",
      "secs": 720,
      "tokens": 114000,
-     "last": ""
+     "last": "",
+     "outcome": "approved",
+     "budget_s": null
     },
     {
      "phase": "look",
      "state": "empty",
      "secs": 0,
      "tokens": 0,
-     "last": ""
+     "last": "",
+     "outcome": "",
+     "budget_s": null
     },
     {
      "phase": "land",
      "state": "empty",
      "secs": 0,
      "tokens": 0,
-     "last": ""
+     "last": "",
+     "outcome": "",
+     "budget_s": null
     }
    ],
    "end": "asked",
@@ -293,7 +331,8 @@
      "md": "test failed: `save_roundtrip` (2nd time)",
      "phase": null
     }
-   ]
+   ],
+   "logs": []
   },
   {
    "n": 4,
@@ -303,42 +342,54 @@
      "state": "skipped",
      "secs": 0,
      "tokens": 0,
-     "last": ""
+     "last": "",
+     "outcome": "",
+     "budget_s": null
     },
     {
      "phase": "write",
      "state": "skipped",
      "secs": 0,
      "tokens": 0,
-     "last": ""
+     "last": "",
+     "outcome": "",
+     "budget_s": null
     },
     {
      "phase": "test",
      "state": "skipped",
      "secs": 0,
      "tokens": 0,
-     "last": ""
+     "last": "",
+     "outcome": "",
+     "budget_s": null
     },
     {
      "phase": "review",
-     "state": "visited",
+     "state": "done",
      "secs": 960,
      "tokens": 152000,
-     "last": ""
+     "last": "",
+     "outcome": "approved",
+     "budget_s": null
     },
     {
      "phase": "look",
      "state": "you",
      "secs": 1320,
      "tokens": 209000,
-     "last": ""
+     "last": "",
+     "outcome": "",
+     "budget_s": null
     },
     {
      "phase": "land",
      "state": "empty",
      "secs": 0,
      "tokens": 0,
-     "last": ""
+     "last": "",
+     "outcome": "",
+     "budget_s": null
     }
    ],
    "end": "",
@@ -360,7 +411,8 @@
      "md": "answered: keep autosave, add a confirm",
      "phase": null
     }
-   ]
+   ],
+   "logs": []
   }
  ],
  "artifacts": [

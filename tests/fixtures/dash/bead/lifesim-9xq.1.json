@@ -58,7 +58,7 @@
   "retry_at": 0.0,
   "shots": 0
  },
- "version": "5f1f814c68aff10e",
+ "version": "314df50b9dfba78f",
  "bd_ok_at": null,
  "bd_error": "",
  "description": "Fridge spoils food after 3 days. Part of Economy.",
@@ -78,45 +78,57 @@
    "cells": [
     {
      "phase": "plan",
-     "state": "small",
+     "state": "done",
      "secs": 240,
      "tokens": 38000,
-     "last": ""
+     "last": "",
+     "outcome": "approved",
+     "budget_s": null
     },
     {
      "phase": "write",
-     "state": "visited",
+     "state": "done",
      "secs": 600,
      "tokens": 95000,
-     "last": ""
+     "last": "",
+     "outcome": "done",
+     "budget_s": null
     },
     {
      "phase": "test",
-     "state": "small",
+     "state": "done",
      "secs": 300,
      "tokens": 47500,
-     "last": ""
+     "last": "",
+     "outcome": "passed",
+     "budget_s": null
     },
     {
      "phase": "review",
      "state": "live",
      "secs": 540,
      "tokens": 85500,
-     "last": ""
+     "last": "",
+     "outcome": "",
+     "budget_s": null
     },
     {
      "phase": "look",
      "state": "empty",
      "secs": 0,
      "tokens": 0,
-     "last": ""
+     "last": "",
+     "outcome": "",
+     "budget_s": null
     },
     {
      "phase": "land",
      "state": "empty",
      "secs": 0,
      "tokens": 0,
-     "last": ""
+     "last": "",
+     "outcome": "",
+     "budget_s": null
     }
    ],
    "end": "",
@@ -131,7 +143,8 @@
      "md": "2 notes so far (naming, a missing test)",
      "phase": null
     }
-   ]
+   ],
+   "logs": []
   }
  ],
  "artifacts": [],

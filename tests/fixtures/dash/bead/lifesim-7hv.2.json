@@ -58,7 +58,7 @@
   "retry_at": 0.0,
   "shots": 0
  },
- "version": "268c2d4e7cbfaba7",
+ "version": "8eb516729658541c",
  "bd_ok_at": null,
  "bd_error": "",
  "description": "Pets need feeding twice a day. Part of World.",
@@ -106,45 +106,57 @@
    "cells": [
     {
      "phase": "plan",
-     "state": "visited",
+     "state": "done",
      "secs": 720,
      "tokens": 114000,
-     "last": ""
+     "last": "",
+     "outcome": "approved",
+     "budget_s": null
     },
     {
      "phase": "write",
-     "state": "visited",
+     "state": "done",
      "secs": 2520,
      "tokens": 399000,
-     "last": ""
+     "last": "",
+     "outcome": "done",
+     "budget_s": null
     },
     {
      "phase": "test",
      "state": "failed",
      "secs": 480,
      "tokens": 76000,
-     "last": ""
+     "last": "",
+     "outcome": "",
+     "budget_s": null
     },
     {
      "phase": "review",
      "state": "empty",
      "secs": 0,
      "tokens": 0,
-     "last": ""
+     "last": "",
+     "outcome": "",
+     "budget_s": null
     },
     {
      "phase": "look",
      "state": "empty",
      "secs": 0,
      "tokens": 0,
-     "last": ""
+     "last": "",
+     "outcome": "",
+     "budget_s": null
     },
     {
      "phase": "land",
      "state": "empty",
      "secs": 0,
      "tokens": 0,
-     "last": ""
+     "last": "",
+     "outcome": "",
+     "budget_s": null
     }
    ],
    "end": "test_failed",
@@ -166,7 +178,8 @@
      "md": "plan: 3 steps",
      "phase": null
     }
-   ]
+   ],
+   "logs": []
   },
   {
    "n": 2,
@@ -176,42 +189,54 @@
      "state": "skipped",
      "secs": 0,
      "tokens": 0,
-     "last": ""
+     "last": "",
+     "outcome": "",
+     "budget_s": null
     },
     {
      "phase": "write",
-     "state": "visited",
+     "state": "done",
      "secs": 1560,
      "tokens": 247000,
-     "last": ""
+     "last": "",
+     "outcome": "done",
+     "budget_s": null
     },
     {
      "phase": "test",
      "state": "empty",
      "secs": 0,
      "tokens": 0,
-     "last": ""
+     "last": "",
+     "outcome": "",
+     "budget_s": null
     },
     {
      "phase": "review",
      "state": "empty",
      "secs": 0,
      "tokens": 0,
-     "last": ""
+     "last": "",
+     "outcome": "",
+     "budget_s": null
     },
     {
      "phase": "look",
      "state": "empty",
      "secs": 0,
      "tokens": 0,
-     "last": ""
+     "last": "",
+     "outcome": "",
+     "budget_s": null
     },
     {
      "phase": "land",
      "state": "empty",
      "secs": 0,
      "tokens": 0,
-     "last": ""
+     "last": "",
+     "outcome": "",
+     "budget_s": null
     }
    ],
    "end": "lane_out",
@@ -233,7 +258,8 @@
      "md": "test failed: `pet_hunger_tick`",
      "phase": null
     }
-   ]
+   ],
+   "logs": []
   },
   {
    "n": 3,
@@ -243,42 +269,54 @@
      "state": "skipped",
      "secs": 0,
      "tokens": 0,
-     "last": ""
+     "last": "",
+     "outcome": "",
+     "budget_s": null
     },
     {
      "phase": "write",
-     "state": "visited",
+     "state": "done",
      "secs": 1800,
      "tokens": 285000,
-     "last": ""
+     "last": "",
+     "outcome": "done",
+     "budget_s": null
     },
     {
      "phase": "test",
-     "state": "small",
+     "state": "done",
      "secs": 540,
      "tokens": 85500,
-     "last": ""
+     "last": "",
+     "outcome": "passed",
+     "budget_s": null
     },
     {
      "phase": "review",
-     "state": "visited",
+     "state": "done",
      "secs": 780,
      "tokens": 123500,
-     "last": ""
+     "last": "",
+     "outcome": "approved",
+     "budget_s": null
     },
     {
      "phase": "look",
      "state": "skipped",
      "secs": 0,
      "tokens": 0,
-     "last": ""
+     "last": "",
+     "outcome": "",
+     "budget_s": null
     },
     {
      "phase": "land",
-     "state": "small",
+     "state": "done",
      "secs": 480,
      "tokens": 76000,
-     "last": ""
+     "last": "",
+     "outcome": "done",
+     "budget_s": null
     }
    ],
    "end": "done",
@@ -304,7 +342,8 @@
      "md": "resumed on devbox·1 · claude from branch `bd/7hv.2` (pass ③ continues)",
      "phase": null
     }
-   ]
+   ],
+   "logs": []
   }
  ],
  "artifacts": [],

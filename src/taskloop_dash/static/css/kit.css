@@ -110,6 +110,12 @@ html.phone .ban{font-size:14px;padding:10px 16px}
 .row6 .v b{font-weight:400}.row6 .w1 b{opacity:.65}.row6 .w2 b{font-weight:600}.row6 .w3 b{font-weight:700}
 .row6 .v.t1{background:var(--v1)}.row6 .v.t2{background:var(--v2)}.row6 .v.t3{background:var(--v3)}.row6 .v.t4{background:var(--v4)}
 .row6 .v.s{background:var(--card);box-shadow:inset 0 0 0 1px var(--line)}
+.row6 .v.done{background:var(--okbg);color:var(--ok)}.row6 .v.overrun{background:var(--ambbg);color:var(--amb)}
+.row6>button.pending{background:var(--card);box-shadow:inset 0 0 0 1px var(--line)}
+.row6>button[data-stage]{height:auto;min-height:44px;padding:4px 1px;overflow-wrap:anywhere}
+.row6.hd>button{background:none;height:24px}.stage-budget{font-size:11px}
+.stage-log{margin:12px 16px;overflow-wrap:anywhere}.stage-log h4{margin:12px 0 6px}.stage-attempt p{font-size:12px;color:var(--mut)}
+.stage-log .term{height:auto;max-height:320px;overflow-y:auto}.stage-log .mini{max-height:none}
 .row6 .v.act{animation:pulo 1.6s ease-in-out infinite}@keyframes pulo{50%{box-shadow:inset 0 0 0 1.5px transparent}}
 .row6>div:empty{height:32px;border-radius:6px;box-shadow:inset 0 0 0 1px var(--line)}
 .row6.th{padding-top:4px}.row6.th>div{height:auto;display:flex;flex-direction:column;gap:3px}.row6.th img{width:100%;border-radius:4px;display:block}

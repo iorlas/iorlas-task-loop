@@ -20,7 +20,7 @@ from taskloop.contracts.wire import Rec
 
 Tone = Literal["", "you", "bad", "run", "watch"]
 SegKind = Literal["stage", "failed", "live", "ask", "answered", "parked", "look", "stuck", "projected", "wait_slot"]
-CellState = Literal["empty", "visited", "small", "skipped", "live", "failed", "you", "stuck"]
+CellState = Literal["empty", "visited", "small", "skipped", "done", "overrun", "live", "failed", "you", "stuck"]
 DotState = Literal["todo", "done", "live", "you", "bad"]
 PassEnd = Literal["", "test_failed", "replan", "asked", "parked", "lane_out", "sent_back", "stuck", "exited", "done", "noop"]
 
@@ -304,6 +304,32 @@ class Cell(Rec):
     secs: int = 0
     tokens: int = 0
     last: Annotated[str, msgspec.Meta(description="last comment of the stage, for the hover")] = ""
+    outcome: str = ""
+    budget_s: float | None = None
+
+
+@final
+class StageAttempt(Rec):
+    id: str
+    t: float
+    secs: float
+    outcome: str
+    lane: str = ""
+    model: str = ""
+    live: bool = False
+    lines: list[TermLine] = msgspec.field(default_factory=list)
+
+
+@final
+class StageRole(Rec):
+    role: str
+    attempts: list[StageAttempt]
+
+
+@final
+class StageLog(Rec):
+    phase: Phase
+    roles: list[StageRole]
 
 
 @final
@@ -322,6 +348,7 @@ class Pass(Rec):
     detail: str = ""
     resumed: Resumed | None = None
     messages: Annotated[list[Msg], msgspec.Meta(description="this pass only, newest first")] = msgspec.field(default_factory=list)
+    logs: list[StageLog] = msgspec.field(default_factory=list)
 
 
 @final

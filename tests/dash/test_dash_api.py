@@ -148,7 +148,24 @@ class Api(unittest.TestCase):
         d = wire.load(BeadDetail, json.loads(body))
         self.assertEqual((d.card.id, d.description, d.acceptance), ("b-1", "Clamp it.", "mood >= 0"))
         self.assertEqual([(m.who, m.md) for m in d.comments], [("denis", "mind the old save")])
-        self.assertEqual([(p.n, [c.state for c in p.cells if c.state != "empty"]) for p in d.passes], [(1, ["small", "live"])])
+        self.assertEqual([(p.n, [c.state for c in p.cells if c.state != "empty"]) for p in d.passes], [(1, ["done", "live"])])
+
+    def test_stage_live_lines_change_the_bead_etag_without_engine_changes(self):
+        # Resolve through the same locator as the dashboard; live files are keyed by CallStart.n.
+        bundle = self.dash.reads.worlds.records.locator.get("b-1-20261015-100000")
+        assert bundle is not None
+        bundle.live.mkdir(parents=True, exist_ok=True)
+        path = bundle.live / "01-plan.jsonl"
+        path.write_text(json.dumps({"k": "msg", "t": T + 3001, "text": "planner summary"}) + "\n")
+        code, body, headers = self.get("/api/bead", {"project": loop_key(self.repo), "id": "b-1"})
+        self.assertEqual(code, 200)
+        d = wire.load(BeadDetail, json.loads(body))
+        self.assertEqual(d.passes[0].logs[0].roles[0].attempts[0].lines[0].text, "planner summary")
+        path.write_text(json.dumps({"k": "msg", "t": T + 3001, "text": "updated planner summary"}) + "\n")
+        code, body, changed = self.get("/api/bead", {"project": loop_key(self.repo), "id": "b-1"}, headers["ETag"])
+        self.assertEqual(code, 200)
+        self.assertNotEqual(headers["ETag"], changed["ETag"])
+        self.assertIn("updated planner summary", body.decode())
         self.assertEqual((must(d.live).kind, must(d.live).phase.value), ("run", "write"))
 
     def test_bead_and_cost_have_independent_conditional_tokens(self):

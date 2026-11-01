@@ -11,7 +11,7 @@ from taskloop.contracts.dash import Artifact, AskCard, BeadDetail, CheckCount, L
 from taskloop.contracts.delegate import LiveCmdEnd, LiveCmdStart, LiveEvent, LiveTokens
 from taskloop.contracts.runlife import Liveness
 from taskloop_dash.tails import parse_ts
-from taskloop_dash.views import ledger, names, passes, phases
+from taskloop_dash.views import ledger, names, passes, phases, stage_logs
 from taskloop_dash.views.askcards import ask_card, look_card, stale_of
 from taskloop_dash.views.board import Board, blockers, is_work
 from taskloop_dash.views.runfacts import Run
@@ -65,7 +65,8 @@ def live_box(run: Run, ps: Sequence[passes.PassView], events: Sequence[LiveEvent
     return LiveBox(kind="run", phase=cur.phase, pass_n=n, t=cur.t0, cmd=cmd, tokens=tokens, checks=checks)
 
 
-def build(board: Board, p: ProjectIn, b: Bead, comments: Sequence[Comment], events: Sequence[LiveEvent]) -> BeadDetail:
+def build(board: Board, p: ProjectIn, b: Bead, comments: Sequence[Comment], events: Sequence[LiveEvent],
+          stage_events: dict[str, dict[int, Sequence[LiveEvent]]] | None = None) -> BeadDetail:
     w = board.w
     runs = list(w.runs.get((p.id, b.id), ()))
     ps = board.passes_of((p.id, b.id))
@@ -79,7 +80,8 @@ def build(board: Board, p: ProjectIn, b: Bead, comments: Sequence[Comment], even
         ask = next((look_card(p.id, i, card.t or 0.0) for i in p.looks if i.bead == b.id), None)
     return BeadDetail(
         t=w.now, card=card, description=b.description, acceptance=b.acceptance_criteria, comments=[comment_msg(c) for c in comments],
-        passes=[passes.pass_rec(x) for x in ps], artifacts=artifacts_of(b.id, runs, ps), waits_for=blockers(b, by_id),
+        passes=[passes.pass_rec(x).replace(logs=stage_logs.logs_of(x, (stage_events or {}).get(x.run.name, {}))) for x in ps],
+        artifacts=artifacts_of(b.id, runs, ps), waits_for=blockers(b, by_id),
         unblocks=[x.id for x in p.beads if is_work(x) and x.status != "closed" and b.id in blockers_ids(x)],
         live=live_box(runs[-1], ps, events) if runs else None, ask=ask)
 

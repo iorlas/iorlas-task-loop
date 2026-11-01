@@ -14,11 +14,9 @@ from taskloop.contracts.dash import Pass as PassRec
 from taskloop.contracts.enums import Outcome
 from taskloop.contracts.log import Said, Stuck, Transition
 from taskloop.contracts.runlife import Liveness
-from taskloop_dash.views import phases
+from taskloop_dash.views import phases, stage_logs
 from taskloop_dash.views.runfacts import Run, Span
 
-SMALL_SECS = 10 * 60  # a cell under this many seconds and SMALL_TOKENS is an empty tile (dash-spec §6)
-SMALL_TOKENS = 100_000
 SAID_ICON: Final = {"engine": "⚙️", "owner": "✉️"}  # who said it -> the message's icon (dash-spec 2.4: ✉️ is a note to the worker)
 STUCK_ICON: Final = "🛑"
 LAST_MAX = 160  # characters of a cell's last comment (the hover)
@@ -137,7 +135,15 @@ def cells_of(p: PassView) -> list[Cell]:
             out.append(Cell(phase=ph, state="skipped" if phases.ORDER[ph] < last else "empty"))
             continue
         here = phases.ORDER[ph] == last
-        state: CellState = "small" if secs[ph] < SMALL_SECS and tokens[ph] < SMALL_TOKENS else "visited"
+        spans = [s for s in p.spans if s.phase == ph]
+        budget, overrun = stage_logs.budget_of(p, ph)
+        actual = max(secs[ph], overrun)
+        outcome = spans[-1].outcome
+        state: CellState = "done" if all(s.t1 is not None for s in spans) else "stuck"
+        if budget is not None and actual > budget:
+            state = "overrun"
+        if any(s.outcome in ("red", "failed", "error", "wrong", "rejected") for s in spans):
+            state = "failed"
         if here and p.live:
             state = "live" if ph != Phase.LOOK else "you"
         elif here and p.end == "test_failed":
@@ -146,7 +152,8 @@ def cells_of(p: PassView) -> list[Cell]:
             state = "you"
         elif here and p.end == "stuck":
             state = "stuck"
-        out.append(Cell(phase=ph, state=state, secs=int(secs[ph]), tokens=tokens[ph], last=last_said(p, ph)))
+        out.append(Cell(phase=ph, state=state, secs=int(actual), tokens=tokens[ph], last=last_said(p, ph),
+                        outcome=outcome, budget_s=budget))
     return out
 
 

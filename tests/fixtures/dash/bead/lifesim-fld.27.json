@@ -58,7 +58,7 @@
   "retry_at": 0.0,
   "shots": 0
  },
- "version": "59b81243ee15b876",
+ "version": "43a78ea1f310dad0",
  "bd_ok_at": null,
  "bd_error": "",
  "description": "Rent and bills every week. Part of Economy.",
@@ -92,45 +92,57 @@
    "cells": [
     {
      "phase": "plan",
-     "state": "visited",
+     "state": "done",
      "secs": 720,
      "tokens": 114000,
-     "last": ""
+     "last": "",
+     "outcome": "approved",
+     "budget_s": null
     },
     {
      "phase": "write",
-     "state": "visited",
+     "state": "done",
      "secs": 1920,
      "tokens": 304000,
-     "last": ""
+     "last": "",
+     "outcome": "done",
+     "budget_s": null
     },
     {
      "phase": "test",
-     "state": "small",
+     "state": "done",
      "secs": 420,
      "tokens": 66500,
-     "last": ""
+     "last": "",
+     "outcome": "passed",
+     "budget_s": null
     },
     {
      "phase": "review",
-     "state": "small",
+     "state": "done",
      "secs": 420,
      "tokens": 66500,
-     "last": ""
+     "last": "",
+     "outcome": "approved",
+     "budget_s": null
     },
     {
      "phase": "look",
      "state": "empty",
      "secs": 0,
      "tokens": 0,
-     "last": ""
+     "last": "",
+     "outcome": "",
+     "budget_s": null
     },
     {
      "phase": "land",
      "state": "empty",
      "secs": 0,
      "tokens": 0,
-     "last": ""
+     "last": "",
+     "outcome": "",
+     "budget_s": null
     }
    ],
    "end": "asked",
@@ -159,7 +171,8 @@
      "md": "plan: 4 steps",
      "phase": null
     }
-   ]
+   ],
+   "logs": []
   }
  ],
  "artifacts": [],

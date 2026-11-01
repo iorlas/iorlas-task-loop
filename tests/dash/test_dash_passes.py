@@ -62,17 +62,17 @@ class Passes(unittest.TestCase):
 
     def test_the_cells_carry_minutes_tokens_and_a_state(self):
         by = {c.phase.value: (c.state, c.secs, c.tokens) for c in passes.cells_of(self.ps[0])}
-        self.assertEqual(by["plan"], ("visited", 840, 133_000))
-        self.assertEqual(by["write"], ("visited", 2760, 437_000))
+        self.assertEqual(by["plan"], ("done", 840, 133_000))
+        self.assertEqual(by["write"], ("done", 2760, 437_000))
         self.assertEqual(by["test"], ("failed", 480, 76_000))
         self.assertEqual(by["review"][0], "empty")
         second = {c.phase.value: c.state for c in passes.cells_of(self.ps[1])}
         self.assertEqual(second["plan"], "skipped")  # a stage the pass went past without visiting
-        self.assertEqual(second["write"], "visited")
+        self.assertEqual(second["write"], "done")
         third = {c.phase.value: (c.state, c.secs) for c in passes.cells_of(self.ps[2])}
-        self.assertEqual(third["write"], ("small", 590))  # under 10 min and under 100k
-        self.assertEqual(third["review"], ("small", 500))  # review and verify are one phase
-        self.assertEqual(third["land"], ("small", 80))  # gate and land are one phase
+        self.assertEqual(third["write"], ("done", 590))  # under 10 min and under 100k still shows done
+        self.assertEqual(third["review"], ("done", 500))  # review and verify are one phase
+        self.assertEqual(third["land"], ("done", 80))  # gate and land are one phase
         self.assertEqual(third["plan"][0], "skipped")
 
     def test_the_resumed_pass_says_where_and_how_long_it_waited(self):
