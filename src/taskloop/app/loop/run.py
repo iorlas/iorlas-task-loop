@@ -72,7 +72,10 @@ class BeadRun:
             self.publish(Running(b.id, at.slot, t0, child.pid, str(log_path), "" if at.slot else at.wt))
             self.say(f"{b.id} in {at.slot or at.wt} (log {log_path})")
             rc, stopped = self.wait(child, hold, b.id)
-        v, gave = vd.read(out, rc, log_path)
+        v, gave = vd.read(out, rc, log_path, env.version)
+        if v.kind == vd.PROFILE_AHEAD:
+            self.reopen(b.id)
+            return v.with_(run_log=str(log_path))
         moved = env.reload_note(b.id)  # the engine exec'd into a newer install and left this note; a clean end removes it
         soon = moved is not None and env.now() - moved.t < self.tune().reload_fallback
         if moved and soon and not gave and not stopped and rc not in (0, None) and code is None:

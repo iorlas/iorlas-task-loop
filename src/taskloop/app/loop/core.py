@@ -2,14 +2,16 @@
 import threading
 import time
 from dataclasses import dataclass
+from os import EX_CONFIG
 from pathlib import Path
 
+from taskloop.app.loop import verdict as vd
 from taskloop.app.loop.env import LoopEnv
 from taskloop.app.loop.files import LoopFiles, StopMode
 from taskloop.app.loop.gate import GateRole
 from taskloop.app.loop.net import NetState
 from taskloop.app.loop.settle import Counters
-from taskloop.contracts.config import LoopConfig, RepoProfile
+from taskloop.contracts.config import ConfigError, LoopConfig, RepoProfile
 from taskloop.contracts.loop import Carry, LoopState, QueueRow
 
 
@@ -26,7 +28,14 @@ class Running:
 class Core:
     def __init__(self, env: LoopEnv, files: LoopFiles, inherited: LoopState | None) -> None:
         self.env, self.files = env, files
-        self.prof: RepoProfile = env.profile()
+        profile_error = False
+        try:
+            self.prof: RepoProfile = env.profile()
+        except (ConfigError, SystemExit) as err:
+            if isinstance(err, SystemExit) and err.code != EX_CONFIG:
+                raise
+            profile_error = True
+            self.prof = RepoProfile()  # only enough state to record the startup exit
         self.started = inherited.started if inherited else env.now()
         carry = inherited.carry if inherited else Carry()
         self.carry_in = carry
@@ -40,6 +49,8 @@ class Core:
         self.rows: list[QueueRow] = []
         self.first_seen: dict[str, float] = {}
         self.exit: dict[str, str] = {}
+        if profile_error:
+            self.left(vd.PROFILE_AHEAD, vd.profile_ahead(env.version).why)
         self.beat_at = 0.0
         self.now_running: Running | None = None
         self.until = carry.until

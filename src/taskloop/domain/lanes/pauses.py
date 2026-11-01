@@ -47,6 +47,7 @@ TABLE: Final[dict[str, PauseRule]] = {
     "bad_request": PauseRule("needs_owner"),
     "caller": PauseRule("needs_owner"),
     "setup": PauseRule("needs_owner"),
+    "profile_ahead": PauseRule("needs_owner"),
     "contract_violation": PauseRule("needs_owner"),
     # Engine outcomes are typed reasons when no delegate stop supplied a finer one.
     "pause_lane": PauseRule("transient", 60, 3600),

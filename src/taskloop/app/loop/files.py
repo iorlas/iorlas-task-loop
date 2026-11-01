@@ -15,7 +15,7 @@ from taskloop.contracts.run import LoopLogLine
 from taskloop.contracts.stores import JsonStore, LoopLog, Page
 
 StopMode = Literal["now", "after", ""]
-EXIT_REASONS = ("drained", "until", "max_beads", "stop_request", "signal", "storm", "crash")
+EXIT_REASONS = ("drained", "until", "max_beads", "stop_request", "signal", "storm", "crash", "profile_ahead")
 
 
 def append_line(path: Path, line: str) -> None:

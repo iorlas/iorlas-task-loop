@@ -5,6 +5,7 @@ import json
 import socket
 import time
 from dataclasses import dataclass, field
+from os import EX_CONFIG
 from pathlib import Path
 
 from taskloop.app.loop import verdict as vd
@@ -23,6 +24,7 @@ from taskloop.app.slots.lease import Lease
 from taskloop.app.slots.pool import SlotPool
 from taskloop.contracts import runlife, wire
 from taskloop.contracts.bead import Bead
+from taskloop.contracts.config import ConfigError
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.loop import LoopState, QueueRow
 from taskloop.contracts.parks import ParkStore
@@ -90,8 +92,18 @@ class Loop(Core):
             self.env.event("reload", "", who="loop", old="", new=self.env.version, code_dir=self.env.code_dir,
                            why="handover state dropped: " + self.dropped)
         try:
+            if self.exit.get("reason") == vd.PROFILE_AHEAD:
+                self.say(self.exit["detail"])
+                return EX_CONFIG
             self.prune()
             return self.run()
+        except (ConfigError, SystemExit) as err:
+            if isinstance(err, SystemExit) and err.code != EX_CONFIG:
+                raise
+            why = vd.profile_ahead(self.env.version).why
+            self.say(why)
+            self.left(vd.PROFILE_AHEAD, why)
+            return EX_CONFIG
         except Exception as e:
             self.fall_back(e)
             raise
@@ -307,6 +319,7 @@ class Loop(Core):
 
     def work(self, cands: list[Bead], rule: QueueRule) -> int | None:
         env, slots = self.env, self.prof.slots.count > 0
+        pool = SlotPool(env.slot_env()) if slots else None
         got = self.acquire(min(prio_of(b) for b in cands)) if slots else ("", self.wt, None)
         if got is None:
             return None
@@ -319,15 +332,15 @@ class Loop(Core):
             lease.stop()
             env.drop_engine_lock(d)
             if slots:
-                self.release(name)
+                self.release(name, pool)
             self.running(None)
         if taken.verdict is None:  # every candidate is held by another session: the next pass sleeps until one is due
             return None
         return self.settle.apply(taken.verdict, taken.bead, name, slots)
 
-    def release(self, name: str) -> None:
+    def release(self, name: str, pool: SlotPool | None = None) -> None:
         with contextlib.suppress(SlotFail):
-            SlotPool(self.env.slot_env()).slot(name).release(mine=True)
+            (pool or SlotPool(self.env.slot_env())).slot(name).release(mine=True)
 
     def record(self, bead: str, slot: str, v: vd.Verdict) -> None:
         env = self.env

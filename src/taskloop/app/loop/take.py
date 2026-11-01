@@ -2,6 +2,7 @@
 import contextlib
 from collections.abc import Callable
 from dataclasses import dataclass
+from os import EX_CONFIG
 
 from taskloop.app.asks import parks
 from taskloop.app.loop import verdict as vd
@@ -12,10 +13,12 @@ from taskloop.app.slots.env import attempt
 from taskloop.app.slots.lease import Lease
 from taskloop.app.slots.pool import SlotPool
 from taskloop.contracts.bead import Bead
-from taskloop.contracts.config import EngineConfig, LoopConfig
+from taskloop.contracts.config import ConfigError, EngineConfig, LoopConfig
 from taskloop.contracts.enums import Result
+from taskloop.contracts.parks import ParkStore
 from taskloop.contracts.ports import BdFailure, BeadPatch
 from taskloop.contracts.slots import SlotFail, SlotGitError
+from taskloop.domain.lanes import pauses
 
 
 @dataclass
@@ -75,6 +78,13 @@ class Taker:
                     attempt(env.store.update, at.slot_bead, BeadPatch(set_metadata={"held_bead": b.id}))
         return None
 
+    def _park_profile_ahead(self, b: Bead, v: vd.Verdict) -> None:
+        if v.kind == vd.PROFILE_AHEAD:
+            env = self.env
+            store = ParkStore(env.cfgdir)
+            run = v.run or f"profile-ahead-{env.pid}-{env.now()}"
+            store.put(pauses.after_pause(store.get(b.id), b, run, env.now(), v.kind, lambda: 0.5))
+
     def attempt_all(self, cands: list[Bead], at: Where, slots: bool, ecfg: EngineConfig, rule: QueueRule,
                     lease: Lease) -> Taken:
         env, bid = self.env, ""
@@ -99,9 +109,15 @@ class Taker:
             lease.add(bid)
             try:
                 v = (self.prepare(at.slot, b.id) if slots else None) or self.run.run(b, at)
+            except (ConfigError, SystemExit) as err:
+                if isinstance(err, SystemExit) and err.code != EX_CONFIG:
+                    raise
+                attempt(env.store.update, b.id, BeadPatch(status="open", assignee=""))
+                v = vd.profile_ahead(env.version)
             except (BdFailure, SlotGitError, OSError) as e:
                 attempt(env.store.unclaim, b.id)
                 v = vd.pre_engine(str(e))
+            self._park_profile_ahead(b, v)
             self.record(b.id, at.slot, v)
             if v.outcome is not Result.TAKEN:
                 break

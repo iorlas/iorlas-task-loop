@@ -58,7 +58,8 @@ def load_profile(data: Any) -> RepoProfile:
     try:
         return config.load(data, say_to=sys.stderr)
     except config.ConfigError as e:
-        sys.exit(f"task-loop: {e}")
+        print(f"task-loop: {e}", file=sys.stderr)
+        sys.exit(os.EX_CONFIG)
 
 
 def cfg_source(repo: str, git: Git) -> tuple[RepoProfile, str, str]:

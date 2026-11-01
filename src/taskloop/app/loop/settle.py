@@ -3,6 +3,7 @@ or stop it. Returns the loop's exit code when the verdict ends it."""
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from os import EX_CONFIG
 from types import SimpleNamespace
 
 from taskloop.app.loop import verdict as vd
@@ -122,6 +123,10 @@ class Settle:
     def apply(self, v: vd.Verdict, bid: str, name: str, slots: bool) -> int | None:
         """None: the loop goes on."""
         t, c, env = self.tune(), self.c, self.env
+        if v.kind == vd.PROFILE_AHEAD:
+            self.say(v.why)
+            self.left(vd.PROFILE_AHEAD, v.why)
+            return EX_CONFIG
         if slots and name and self.count_slot(v, bid, name):
             return None
         rec = ParkStore(env.cfgdir).get(BeadId(bid)) if bid else None

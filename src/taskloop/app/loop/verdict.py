@@ -1,5 +1,6 @@
 """What a run of one bead gave the loop: run-task's outcome file (read at this one place) plus what the loop itself saw."""
 from dataclasses import dataclass, replace
+from os import EX_CONFIG
 from pathlib import Path
 from typing import Any
 
@@ -10,6 +11,12 @@ from taskloop.contracts.slots import SlotFailCode
 
 NETWORK = "pause_network"
 FAULT_SLOT = "fault_slot"
+PROFILE_AHEAD = "profile_ahead"
+
+
+def profile_ahead(version: str) -> Verdict:
+    return Verdict(Result.PAUSED, "profile newer than this tl: the repo's .task-loop.json is not understood by "
+                   f"tl {version}; restart the factory on the installed version", kind=PROFILE_AHEAD)
 
 
 @dataclass(frozen=True)
@@ -61,12 +68,14 @@ def taken(why: str) -> Verdict:
     return Verdict(Result.TAKEN, why)
 
 
-def read(path: Path, rc: int | None, log_path: Path) -> tuple[Verdict, bool]:
-    """(the verdict, whether run-task gave one). No file: failed, with the exit code and where its log is. A file that is not a
-    RunReport of this version (another shape, an unknown outcome) is failed too, and the verdict names the file and the fault."""
+def read(path: Path, rc: int | None, log_path: Path, version: str = "unknown") -> tuple[Verdict, bool]:
+    """(the verdict, whether run-task gave one). No file: exit 78 pauses for the owner; other exits fail with the log path.
+    A file that is not a RunReport of this version fails too, naming the file and the fault."""
     try:
         text = path.read_text(encoding="utf-8")
     except OSError:
+        if rc == EX_CONFIG:
+            return profile_ahead(version), False
         return Verdict(Result.FAILED, f"failed: no outcome from run-task (exit {rc}); see {log_path}"), False
     try:
         raw: RunReport = wire.load(RunReport, text)
