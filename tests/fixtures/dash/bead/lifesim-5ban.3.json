@@ -57,7 +57,7 @@
   "retry_at": 0.0,
   "shots": 0
  },
- "version": "e23f2a53fdcc1a07",
+ "version": "004364e2cbb21cba",
  "description": "NPC daily schedule pathing. Part of World.",
  "acceptance": "- works in a new save and an old one\n- tests cover the rule\n- no new warnings in the build",
  "comments": [

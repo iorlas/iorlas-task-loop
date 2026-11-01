@@ -57,7 +57,7 @@
   "retry_at": 0.0,
   "shots": 0
  },
- "version": "8bd8a724dcf34817",
+ "version": "d38d56a5c511d3ca",
  "description": "Fridge spoils food after 3 days. Part of Economy.",
  "acceptance": "- works in a new save and an old one\n- tests cover the rule\n- no new warnings in the build",
  "comments": [

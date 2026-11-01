@@ -36,7 +36,8 @@
    "ended": null,
    "reason": "Run 0: A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason ",
    "bead": "",
-   "branch": ""
+   "branch": "",
+   "retry_at": 0.0
   },
   {
    "run": "fixture-1",
@@ -49,7 +50,8 @@
    "ended": null,
    "reason": "Run 1: A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason ",
    "bead": "",
-   "branch": ""
+   "branch": "",
+   "retry_at": 0.0
   },
   {
    "run": "fixture-2",
@@ -62,7 +64,8 @@
    "ended": null,
    "reason": "Run 2: A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason ",
    "bead": "",
-   "branch": ""
+   "branch": "",
+   "retry_at": 0.0
   },
   {
    "run": "fixture-3",
@@ -75,7 +78,8 @@
    "ended": null,
    "reason": "Run 3: A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason ",
    "bead": "",
-   "branch": ""
+   "branch": "",
+   "retry_at": 0.0
   },
   {
    "run": "fixture-4",
@@ -88,7 +92,8 @@
    "ended": null,
    "reason": "Run 4: A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason ",
    "bead": "",
-   "branch": ""
+   "branch": "",
+   "retry_at": 0.0
   },
   {
    "run": "fixture-5",
@@ -101,7 +106,8 @@
    "ended": null,
    "reason": "Run 5: A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason ",
    "bead": "",
-   "branch": ""
+   "branch": "",
+   "retry_at": 0.0
   },
   {
    "run": "fixture-6",
@@ -114,7 +120,8 @@
    "ended": null,
    "reason": "Run 6: A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason ",
    "bead": "",
-   "branch": ""
+   "branch": "",
+   "retry_at": 0.0
   },
   {
    "run": "fixture-7",
@@ -127,7 +134,8 @@
    "ended": null,
    "reason": "Run 7: A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason ",
    "bead": "",
-   "branch": ""
+   "branch": "",
+   "retry_at": 0.0
   },
   {
    "run": "fixture-8",
@@ -140,7 +148,8 @@
    "ended": null,
    "reason": "Run 8: A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason ",
    "bead": "",
-   "branch": ""
+   "branch": "",
+   "retry_at": 0.0
   },
   {
    "run": "fixture-9",
@@ -153,7 +162,8 @@
    "ended": null,
    "reason": "Run 9: A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason ",
    "bead": "",
-   "branch": ""
+   "branch": "",
+   "retry_at": 0.0
   },
   {
    "run": "fixture-10",
@@ -166,7 +176,8 @@
    "ended": null,
    "reason": "Run 10: A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason ",
    "bead": "",
-   "branch": ""
+   "branch": "",
+   "retry_at": 0.0
   }
  ],
  "adhoc": [
@@ -181,7 +192,8 @@
    "ended": null,
    "reason": "",
    "bead": "",
-   "branch": "fixture/check"
+   "branch": "fixture/check",
+   "retry_at": 0.0
   }
  ],
  "leases": [
@@ -358,6 +370,7 @@
     "tone": "watch"
    },
    "assumptions": 1,
+   "retry_at": 0.0,
    "shots": 4
   },
   {
@@ -413,6 +426,7 @@
     "tone": ""
    },
    "assumptions": 2,
+   "retry_at": 0.0,
    "shots": 0
   },
   {
@@ -468,6 +482,7 @@
     "tone": ""
    },
    "assumptions": 0,
+   "retry_at": 0.0,
    "shots": 0
   },
   {
@@ -523,6 +538,7 @@
     "tone": "watch"
    },
    "assumptions": 0,
+   "retry_at": 0.0,
    "shots": 0
   },
   {
@@ -578,6 +594,7 @@
     "tone": ""
    },
    "assumptions": 0,
+   "retry_at": 0.0,
    "shots": 3
   },
   {
@@ -633,6 +650,7 @@
     "tone": "watch"
    },
    "assumptions": 0,
+   "retry_at": 0.0,
    "shots": 0
   },
   {
@@ -688,6 +706,7 @@
     "tone": ""
    },
    "assumptions": 0,
+   "retry_at": 0.0,
    "shots": 0
   },
   {
@@ -743,6 +762,7 @@
     "tone": ""
    },
    "assumptions": 0,
+   "retry_at": 0.0,
    "shots": 0
   },
   {
@@ -798,6 +818,7 @@
     "tone": ""
    },
    "assumptions": 0,
+   "retry_at": 0.0,
    "shots": 0
   },
   {
@@ -828,6 +849,7 @@
     "tone": ""
    },
    "assumptions": 0,
+   "retry_at": 0.0,
    "shots": 0
   },
   {
@@ -860,6 +882,7 @@
     "tone": ""
    },
    "assumptions": 0,
+   "retry_at": 0.0,
    "shots": 0
   },
   {
@@ -892,6 +915,7 @@
     "tone": ""
    },
    "assumptions": 0,
+   "retry_at": 0.0,
    "shots": 0
   },
   {
@@ -924,6 +948,7 @@
     "tone": ""
    },
    "assumptions": 0,
+   "retry_at": 0.0,
    "shots": 0
   },
   {
@@ -956,6 +981,7 @@
     "tone": ""
    },
    "assumptions": 0,
+   "retry_at": 0.0,
    "shots": 0
   },
   {
@@ -989,6 +1015,7 @@
     "tone": ""
    },
    "assumptions": 0,
+   "retry_at": 0.0,
    "shots": 0
   },
   {
@@ -1023,6 +1050,7 @@
     "tone": ""
    },
    "assumptions": 0,
+   "retry_at": 0.0,
    "shots": 0
   },
   {
@@ -1057,6 +1085,7 @@
     "tone": ""
    },
    "assumptions": 0,
+   "retry_at": 0.0,
    "shots": 0
   },
   {
@@ -1087,6 +1116,7 @@
     "tone": ""
    },
    "assumptions": 0,
+   "retry_at": 0.0,
    "shots": 0
   },
   {
@@ -1117,6 +1147,7 @@
     "tone": ""
    },
    "assumptions": 0,
+   "retry_at": 0.0,
    "shots": 0
   },
   {
@@ -1149,6 +1180,7 @@
     "tone": ""
    },
    "assumptions": 0,
+   "retry_at": 0.0,
    "shots": 0
   },
   {
@@ -1179,6 +1211,7 @@
     "tone": ""
    },
    "assumptions": 0,
+   "retry_at": 0.0,
    "shots": 0
   }
  ],

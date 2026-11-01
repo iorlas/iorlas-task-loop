@@ -57,7 +57,7 @@
   "retry_at": 0.0,
   "shots": 0
  },
- "version": "f58162dc75a861d8",
+ "version": "a8368e303e27c7ba",
  "description": "Pets need feeding twice a day. Part of World.",
  "acceptance": "- works in a new save and an old one\n- tests cover the rule\n- no new warnings in the build",
  "comments": [

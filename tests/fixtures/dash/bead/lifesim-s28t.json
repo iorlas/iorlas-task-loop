@@ -57,7 +57,7 @@
   "retry_at": 0.0,
   "shots": 3
  },
- "version": "0a13962390a8edc9",
+ "version": "4e6a87c84ca62618",
  "description": "Save/load screen polish. Part of Save system.",
  "acceptance": "- works in a new save and an old one\n- tests cover the rule\n- no new warnings in the build",
  "comments": [

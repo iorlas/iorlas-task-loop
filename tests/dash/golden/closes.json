@@ -109,6 +109,7 @@
        "tokens": 0
       }
      ],
+     "detail": "",
      "end": "asked",
      "end_text": "over budget: write 61 min of 60",
      "messages": [],
@@ -119,6 +120,7 @@
    "t": 1800036000.0,
    "unblocks": [],
    "v": 1,
+   "version": "f7810c3dcfc50618",
    "waits_for": []
   },
   "ask-decision": {
@@ -230,6 +232,7 @@
        "tokens": 0
       }
      ],
+     "detail": "",
      "end": "asked",
      "end_text": "owner decision needed: old format or new?",
      "messages": [],
@@ -240,6 +243,7 @@
    "t": 1800036000.0,
    "unblocks": [],
    "v": 1,
+   "version": "0843cc120fcfffed",
    "waits_for": []
   },
   "ask-stuck": {
@@ -351,6 +355,7 @@
        "tokens": 0
       }
      ],
+     "detail": "",
      "end": "",
      "end_text": "stage 1 stuck after 3 rounds and 1 re-plan(s)",
      "messages": [],
@@ -361,6 +366,7 @@
    "t": 1800036000.0,
    "unblocks": [],
    "v": 1,
+   "version": "6500b95fc9c9070a",
    "waits_for": []
   },
   "ask-ticket": {
@@ -472,6 +478,7 @@
        "tokens": 0
       }
      ],
+     "detail": "",
      "end": "asked",
      "end_text": "ticket: the bead has no acceptance criteria",
      "messages": [],
@@ -482,6 +489,7 @@
    "t": 1800036000.0,
    "unblocks": [],
    "v": 1,
+   "version": "e0a848376663ae95",
    "waits_for": []
   },
   "ask-verify": {
@@ -593,6 +601,7 @@
        "tokens": 0
       }
      ],
+     "detail": "",
      "end": "asked",
      "end_text": "verify: before land, the workers could not check: the look (other)",
      "messages": [],
@@ -603,6 +612,7 @@
    "t": 1800036000.0,
    "unblocks": [],
    "v": 1,
+   "version": "45e36e5654306fe6",
    "waits_for": []
   },
   "done": {
@@ -714,6 +724,7 @@
        "tokens": 0
       }
      ],
+     "detail": "",
      "end": "done",
      "end_text": "landed",
      "messages": [],
@@ -724,6 +735,7 @@
    "t": 1800036000.0,
    "unblocks": [],
    "v": 1,
+   "version": "c8ea4579bc653720",
    "waits_for": []
   },
   "fault-denied": {
@@ -835,6 +847,7 @@
        "tokens": 0
       }
      ],
+     "detail": "",
      "end": "asked",
      "end_text": "needs a human: the write step was denied rm and gave no answer",
      "messages": [],
@@ -845,6 +858,7 @@
    "t": 1800036000.0,
    "unblocks": [],
    "v": 1,
+   "version": "6f3e7c96f1e63ff5",
    "waits_for": []
   },
   "fault-engine": {
@@ -956,6 +970,7 @@
        "tokens": 0
       }
      ],
+     "detail": "",
      "end": "",
      "end_text": "failed: engine error KeyError: 'x'",
      "messages": [],
@@ -966,6 +981,7 @@
    "t": 1800036000.0,
    "unblocks": [],
    "v": 1,
+   "version": "f5a03cbf5e0f46c4",
    "waits_for": []
   },
   "fault-infra": {
@@ -1077,6 +1093,7 @@
        "tokens": 0
       }
      ],
+     "detail": "",
      "end": "",
      "end_text": "failed: infrastructure: no slot",
      "messages": [],
@@ -1087,6 +1104,7 @@
    "t": 1800036000.0,
    "unblocks": [],
    "v": 1,
+   "version": "2d106a56386994d3",
    "waits_for": []
   },
   "fault-land": {
@@ -1198,6 +1216,7 @@
        "tokens": 0
       }
      ],
+     "detail": "",
      "end": "",
      "end_text": "failed: the land gate is red on main",
      "messages": [],
@@ -1208,6 +1227,7 @@
    "t": 1800036000.0,
    "unblocks": [],
    "v": 1,
+   "version": "5134d78f84e9582f",
    "waits_for": []
   },
   "landed": {
@@ -1319,6 +1339,7 @@
        "tokens": 0
       }
      ],
+     "detail": "",
      "end": "done",
      "end_text": "landed",
      "messages": [],
@@ -1329,6 +1350,7 @@
    "t": 1800036000.0,
    "unblocks": [],
    "v": 1,
+   "version": "18cabb52bba857e6",
    "waits_for": []
   },
   "owner-park": {
@@ -1440,6 +1462,7 @@
        "tokens": 0
       }
      ],
+     "detail": "",
      "end": "parked",
      "end_text": "parked: by the owner (the branch and the checkpoint are kept; release the hold to go on)",
      "messages": [],
@@ -1450,6 +1473,7 @@
    "t": 1800036000.0,
    "unblocks": [],
    "v": 1,
+   "version": "9aff50982b068c65",
    "waits_for": []
   },
   "pause-killed": {
@@ -1561,6 +1585,7 @@
        "tokens": 0
       }
      ],
+     "detail": "",
      "end": "parked",
      "end_text": "failed: stopped (SIGTERM)",
      "messages": [],
@@ -1571,6 +1596,7 @@
    "t": 1800036000.0,
    "unblocks": [],
    "v": 1,
+   "version": "319577263a4905f0",
    "waits_for": []
   },
   "pause-lane": {
@@ -1682,6 +1708,7 @@
        "tokens": 0
       }
      ],
+     "detail": "",
      "end": "lane_out",
      "end_text": "paused: no lane for the write step (CODEX_SUBSCRIPTION out until 14:00)",
      "messages": [],
@@ -1692,6 +1719,7 @@
    "t": 1800036000.0,
    "unblocks": [],
    "v": 1,
+   "version": "4035fb5fad2bd598",
    "waits_for": []
   },
   "pause-network": {
@@ -1803,6 +1831,7 @@
        "tokens": 0
       }
      ],
+     "detail": "",
      "end": "parked",
      "end_text": "paused: no network for the land push after 90 s; the branch is kept",
      "messages": [],
@@ -1813,6 +1842,7 @@
    "t": 1800036000.0,
    "unblocks": [],
    "v": 1,
+   "version": "b9e1f3eef3310aa0",
    "waits_for": []
   },
   "wait-ask": {
@@ -1924,6 +1954,7 @@
        "tokens": 0
       }
      ],
+     "detail": "",
      "end": "asked",
      "end_text": "waiting: for the owner's answer to ask g-1 (decision): which?",
      "messages": [],
@@ -1934,10 +1965,12 @@
    "t": 1800036000.0,
    "unblocks": [],
    "v": 1,
+   "version": "14dde998d847a6a0",
    "waits_for": []
   }
  },
  "snapshot": {
+  "adhoc": [],
   "adrs": [],
   "asks": [],
   "backlog_more": 0,
@@ -2849,6 +2882,7 @@
    "sendbacks_per_bead": [],
    "weeks": []
   },
+  "leases": [],
   "ledger": [],
   "needs": [
    {
@@ -2888,6 +2922,6 @@
   "slots": [],
   "t": 1800036000.0,
   "v": 1,
-  "version": "ace2e8225999f301"
+  "version": "bcbc2b2ee6b43554"
  }
 }

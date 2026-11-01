@@ -57,7 +57,7 @@
   "retry_at": 0.0,
   "shots": 4
  },
- "version": "94f6d37d792b687c",
+ "version": "a656039d536c678f",
  "description": "Fix save corruption on quit. Part of Save system.",
  "acceptance": "- works in a new save and an old one\n- tests cover the rule\n- no new warnings in the build",
  "comments": [

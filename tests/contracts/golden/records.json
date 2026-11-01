@@ -297,7 +297,8 @@
   "ended": 1793050201.5,
   "reason": "w",
   "bead": "",
-  "branch": "feature/check"
+  "branch": "feature/check",
+  "retry_at": 0.0
  },
  "ResourceLease": {
   "name": "unity",
@@ -797,6 +798,7 @@
     "wait_seconds": 0.0,
     "artifact": "/r/checks/00.log",
     "artifact_hash": "9f2c",
+    "retry_at": 0.0,
     "outcome": "passed"
    },
    {
@@ -815,6 +817,7 @@
     "wait_seconds": null,
     "artifact": "",
     "artifact_hash": "",
+    "retry_at": 0.0,
     "outcome": "passed"
    }
   ]
@@ -856,6 +859,7 @@
   "wait_seconds": null,
   "artifact": "",
   "artifact_hash": "",
+  "retry_at": 0.0,
   "slot": "s1",
   "outcome": "landed",
   "minutes": 0.0,
@@ -1161,7 +1165,11 @@
   "hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
   "runs": 1,
   "run": "t-1-20261030-120000",
-  "t": 1793050200.5
+  "t": 1793050200.5,
+  "reason": "",
+  "permanence": "needs_owner",
+  "retry_at": 0.0,
+  "attempts": {}
  },
  "QueueItem": {
   "project": "p",
