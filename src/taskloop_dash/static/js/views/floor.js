@@ -18,6 +18,7 @@ export const zoomOf = () => (ZOOMS.includes(ui.opt) ? +ui.opt : 8);
 const LEGEND = [['', 'stage'], ['f', 'failed test'], ['live', 'running'], ['park', 'waiting on you'], ['parkx', 'parked'], ['proj', 'planned']];
 
 const tickLabel = (d) => (d < 0 ? `−${d <= -3600 && d % 3600 === 0 ? `${-d / 3600}h` : dur(-d)}` : `+${dur(d)}`);
+const starting = (s, now) => `starting ${s.bead} · ${dur(now - (s.t ?? now))}`;
 
 // slots grouped by machine, in snapshot order; the machine filter hides other machines
 function groups(snap) {
@@ -36,6 +37,7 @@ function Track({ snap, slot, x, now, beadOf }) {
   const pieces = snap.pieces.filter((p) => p.slot === slot.id && p.segs.length && beadOf(p) && visible(snap, beadOf(p)));
   const busy = pieces.some((p) => p.segs[p.segs.length - 1].t1 >= now - 60 && !['ask', 'answered', 'parked'].includes(p.segs[p.segs.length - 1].kind));
   const idle = (slot.state === 'free' || slot.state === 'idle') && !busy;
+  const start = slot.state === 'starting', b = beadOf(slot);
   return html`<div class="trk">${pieces.map((p) => {
     const b = beadOf(p), t0 = p.segs[0].t0, t1 = p.segs[p.segs.length - 1].t1;
     return html`<div key=${p.bead + p.n} class="nm" style=${`left:${x(t0)}px;width:${Math.max(2, x(t1) - x(t0))}px`} onClick=${() => openBead(b)}>
@@ -43,6 +45,8 @@ function Track({ snap, slot, x, now, beadOf }) {
       <${BeadLine} key=${`l${p.bead}${p.n}`} segs=${p.segs} pulse=${liveSegment(snap, p)} x=${x} ack=${muted(b)} cause=${causeOf(b)} sel=${ui.bead === b.id}
         cl=${!!p.from_slot} cr=${!!p.to_slot} capR=${p.to_slot ? `→ ${p.to_slot}` : ''} end=${p.landed ? '✅' : ''} onOpen=${() => openBead(b)} />`;
   })}
+    ${start && html`<div class="nm" style=${`left:${x(now)}px`} onClick=${b ? () => openBead(b) : undefined}><span>${b?.title || slot.bead}</span></div>
+      <div class="idl starting" title=${slot.startup} style=${`top:${LINE_Y}px;left:${x(now) + 6}px`}>${starting(slot, now)}${slot.startup && ` · ${slot.startup}`}</div>`}
     ${idle && html`<div class="idl" style=${`top:${LINE_Y}px;left:${x(now) + 6}px`}>${slot.idle_why || `idle · no ${slot.lane} work ready`}</div>`}
   </div>`;
 }
@@ -89,7 +93,7 @@ export function Floor({ snap, now, filters }) {
     H += GRP;
     for (const s of g.slots) {
       rows[s.id] = H;
-      labs.push(html`<div key=${s.id} class="lab"><b>${s.name}</b><small>${s.lane}</small></div>`);
+      labs.push(html`<div key=${s.id} class=${`lab ${s.state === 'starting' ? 'starting' : ''}`}><b>${s.name}</b><small>${s.lane}</small></div>`);
       if (pps) trks.push(html`<${Track} key=${s.id} snap=${snap} slot=${s} x=${x} now=${now} beadOf=${beadOf} />`);
       H += ROW;
     }
@@ -110,7 +114,7 @@ export function Floor({ snap, now, filters }) {
 
 // ---- phone: counts, then one card per slot
 
-const PILL = { running: 'live', stuck: 'stuck', look: 'ask', free: '', idle: '', held: '' };
+const PILL = { starting: 'live', running: 'live', stuck: 'stuck', look: 'ask', free: '', idle: '', held: '' };
 
 function slotNow(snap, slot) {
   const b = slot.bead ? idx(snap).beads.get(key(slot.project, slot.bead)) : null;
@@ -123,10 +127,12 @@ function slotNow(snap, slot) {
 
 function SlotCard({ snap, slot, now }) {
   const { b, pieces, piece, seg } = slotNow(snap, slot);
-  const st = slot.state, busy = st === 'running' || st === 'stuck' || st === 'look';
-  const pill = st === 'stuck' ? `stuck ${dur(now - (slot.t || now))}` : st === 'look' ? 'your look' : st === 'running' ? 'running' : st === 'held' ? 'held' : 'free';
+  const st = slot.state, busy = ['starting', 'running', 'stuck', 'look'].includes(st);
+  const pill = st === 'starting' ? 'starting' : st === 'stuck' ? `stuck ${dur(now - (slot.t || now))}` : st === 'look' ? 'your look' : st === 'running' ? 'running' : st === 'held' ? 'held' : 'free';
   let body;
-  if (b && busy) {
+  if (st === 'starting') {
+    body = html`<div class="t">${b?.title || slot.bead}</div><div class="s starting">${starting(slot, now)}${slot.startup && html`<div>${slot.startup}</div>`}</div>`;
+  } else if (b && busy) {
     const bits = [seg && `${seg.label} · ${dur(now - seg.t0)}`, b.loops > 0 && `↻${b.loops}`, piece && piece.from_slot && `↪ from ${piece.from_slot}`,
       slot.next && `next: ${slot.next}`].filter(Boolean);
     body = html`<div class="t">${b.title}</div><div class="s">${bits.join(' · ')}</div>`;
@@ -145,7 +151,7 @@ export function PhoneFloor({ snap, now }) {
   const slots = groups(snap).flatMap((g) => g.slots);
   if (!slots.length) return html`<${ActiveWork} snap=${snap} now=${now} /><${EmptyState} title="No slots yet." body="Slots appear once the loop runs a worker." /><${Runs} snap=${snap} now=${now} />`;
   const n = (...k) => slots.filter((s) => k.includes(s.state)).length;
-  const stat = [['run', n('running'), 'running'], ['x', n('stuck'), 'stuck'], ['you', n('look'), 'your look'], ['mut', n('free', 'idle', 'held'), 'free']];
+  const stat = [['run', n('starting', 'running'), 'running'], ['x', n('stuck'), 'stuck'], ['you', n('look'), 'your look'], ['mut', n('free', 'idle', 'held'), 'free']];
   return html`<div class="stat">${stat.map(([c, v, l]) => (v > 0 || c === 'run' || c === 'mut') && html`<span key=${l}><i class=${`dt ${c}`}></i>${v} ${l}</span>`)}</div>
     <${ActiveWork} snap=${snap} now=${now} />
     ${slots.map((s) => html`<${SlotCard} key=${s.id} snap=${snap} slot=${s} now=${now} />`)}

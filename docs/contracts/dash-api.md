@@ -105,6 +105,10 @@ in-process Port call (as `Ports.answer` is today), never a raw bd argv. There is
 - `Phase` maps engine steps: plan/replan → plan, write → write, checks → test, review + verify → review, look → look,
   gate + land → land. The spec calls these stages; the code says phase because three `Stage` records exist.
 - `Slot.lane` is the lane of the slot's current or last call; lanes are per call.
+- A claimed slot with a known open or in-progress `held_bead` and no live run is `starting`: `bead` names that work,
+  `t` is its slot claim time (`held_since`, falling back to `updated_at`), and `idle_why` says `starting <bead>`.
+  `startup` is a short line of recent claim/setup/rebase phases from the project events already loaded; empty when unavailable.
+  A live run takes precedence, and a claimed slot without known work keeps its idle/stray explanation.
 - `Totals.tone` is computed by the backend (watch at 2× usual, bad at 4×); the page never recomputes a threshold.
 - `CheckCount` comes only from typed check results, never from log text. `ToolCall` has name and argument only until delegate
   types the outcome. Absent means unknown.

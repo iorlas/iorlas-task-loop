@@ -455,7 +455,12 @@ def build() -> dict[str, Any]:
         slots=slots(data, all_pieces), beads=cards, pieces=all_pieces,
         asks=[ask_card(b) for b in beads if b["col"] in ("ask", "look")],
         ledger=ledger(data), adrs=adrs(data), learning=learning(), lanes=lanes(data))
-    out: dict[str, Any] = {"snapshot.json": snap}
+    starting = D.BeadCard(id="tl-00q", project="task-loop", title="Show slot start-up on the Floor", column=D.Column.WORKING,
+                          marker=D.Marker.RUN, status="claimed by tl-loop-fixture", tone="run", t=NOW - 60, slot="mac·4")
+    start_slot = D.Slot(id="mac·4", name="mac·4", lane="codex", state="starting", project="task-loop", bead=starting.id,
+                        t=NOW - 60, idle_why="starting tl-00q", startup="claimed · setup · rebase")
+    out: dict[str, Any] = {"snapshot.json": snap.replace(slots=[start_slot, *snap.slots], beads=[starting, *snap.beads]),
+                           "bead/tl-00q.json": D.BeadDetail(t=NOW, card=starting, description="The loop is setting up its slot.")}
     for b, c in zip(beads, cards, strict=True):
         if not b.get("seg"):
             continue

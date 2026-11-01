@@ -300,7 +300,7 @@ const SCENARIOS = {
     await load('/#board~tree'); await settle(1500);
     rules()('goals');
     if (phone) {
-      must($$('.pl .gr').length === 5, `5 roots (${$$('.pl .gr').length})`);
+      must($$('.pl .gr').length === 6, `6 roots (${$$('.pl .gr').length})`);
       await click('.pl .gr', 'First playable month');
       must(/#board~tree~~~lifesim-g1$/.test(win().location.hash), `goal level in the hash: ${win().location.hash}`);
       await click('.pl .gr', 'Tax at year end');
@@ -405,8 +405,16 @@ const SCENARIOS = {
     await load('/#floor'); await settle(1500);
     rules()('floor');
     must($$('.tb .bd.r.on,.nav .n').some((e) => e.textContent.trim() === '1'), 'Floor badge counts the stuck bead');
+    const start = $(phone ? '.slc .s.starting' : '.trk .idl.starting');
+    must(/starting tl-00q · \d+[smh]/.test(start?.textContent), 'starting bead and claim age shown');
+    must(start?.textContent.includes('claimed · setup · rebase'), 'loaded start-up phases shown');
+    const tone = doc().createElement('span');
+    tone.style.color = 'var(--run)'; doc().body.append(tone);
+    must(start && win().getComputedStyle(start).color === win().getComputedStyle(tone).color, 'starting uses running tone');
+    tone.remove();
+    must((phone ? start?.closest('.slc') : start?.parentElement)?.textContent.includes('Show slot start-up on the Floor'), 'starting bead title shown');
     if (phone) {
-      must($$('.slc').length === 5, `one card per slot (${$$('.slc').length})`);
+      must($$('.slc').length === 6, `one card per slot (${$$('.slc').length})`);
       must($$('.slc').some((c) => /stuck/.test(c.querySelector('.pill').textContent) && /NPC daily/.test(c.textContent)), 'devbox·2 card is stuck');
       must($$('.slc').some((c) => /Free · (lifesim · )?fld\.27 parked here/.test(c.textContent)), 'a parked slot reads Free · <bead> parked here');
       must($$('.slc .stp i').length > 5, 'strips drawn');

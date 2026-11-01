@@ -204,12 +204,13 @@ class Slot(Rec):
     id: str
     name: str
     lane: Annotated[str, msgspec.Meta(description="lane of the slot's current or last call")]
-    state: Literal["running", "stuck", "look", "free", "idle", "held"]
+    state: Literal["starting", "running", "stuck", "look", "free", "idle", "held"]
     project: str | None = None
     bead: str | None = None
     t: float | None = None
     next: str | None = None
     idle_why: str = ""
+    startup: str = ""  # last few start-up phases from the already loaded project events
 
 
 @final

@@ -261,6 +261,18 @@
  ],
  "slots": [
   {
+   "id": "mac·4",
+   "name": "mac·4",
+   "lane": "codex",
+   "state": "starting",
+   "project": "task-loop",
+   "bead": "tl-00q",
+   "t": 1793050140.0,
+   "next": null,
+   "idle_why": "starting tl-00q",
+   "startup": "claimed · setup · rebase"
+  },
+  {
    "id": "mac·1",
    "name": "mac·1",
    "lane": "claude",
@@ -269,7 +281,8 @@
    "bead": "lifesim-d5f.48",
    "t": 1793049840.0,
    "next": null,
-   "idle_why": ""
+   "idle_why": "",
+   "startup": ""
   },
   {
    "id": "mac·2",
@@ -280,7 +293,8 @@
    "bead": "lifesim-6dq0",
    "t": 1793048220.0,
    "next": "lifesim-q1",
-   "idle_why": ""
+   "idle_why": "",
+   "startup": ""
   },
   {
    "id": "mac·3",
@@ -291,7 +305,8 @@
    "bead": "lifesim-9xq.1",
    "t": 1793049660.0,
    "next": null,
-   "idle_why": ""
+   "idle_why": "",
+   "startup": ""
   },
   {
    "id": "devbox·1",
@@ -302,7 +317,8 @@
    "bead": "lifesim-fld.27",
    "t": 1793049480.0,
    "next": null,
-   "idle_why": "lifesim-fld.27 parked here, waits on your answer"
+   "idle_why": "lifesim-fld.27 parked here, waits on your answer",
+   "startup": ""
   },
   {
    "id": "devbox·2",
@@ -313,10 +329,42 @@
    "bead": "lifesim-5ban.3",
    "t": 1793048880.0,
    "next": null,
-   "idle_why": ""
+   "idle_why": "",
+   "startup": ""
   }
  ],
  "beads": [
+  {
+   "id": "tl-00q",
+   "project": "task-loop",
+   "title": "Show slot start-up on the Floor",
+   "column": "working",
+   "marker": "run",
+   "status": "claimed by tl-loop-fixture",
+   "tone": "run",
+   "t": 1793050140.0,
+   "epic": null,
+   "slot": "mac·4",
+   "lane": null,
+   "review": null,
+   "loops": 0,
+   "dots": [],
+   "needs": [],
+   "goal": false,
+   "waits_why": "",
+   "cause": null,
+   "ack": false,
+   "totals": {
+    "secs": 0,
+    "tokens": 0,
+    "usual": null,
+    "usual_n": 0,
+    "tone": ""
+   },
+   "assumptions": 0,
+   "retry_at": 0.0,
+   "shots": 0
+  },
   {
    "id": "lifesim-d5f.48",
    "project": "lifesim",
