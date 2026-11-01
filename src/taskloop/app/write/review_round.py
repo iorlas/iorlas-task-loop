@@ -125,6 +125,7 @@ class ReviewRound:
         for lo in routed.files:
             if FollowKey.of(e.bead, lo) not in {FollowKey.of(e.bead, x) for x in e.leftovers}:
                 e.leftovers.append(lo)
+                e.checkpoints.keep_pending("review")
                 e.log.note(f"filed as a follow-up bead, not sent back: {lo['title'][:120]}")
         out = fnd.lows_after_first(routed.findings, s.rounds + 1)
         out += fnd.unmapped(self.items(s), review.get("criteria") or [])
@@ -150,6 +151,7 @@ class ReviewRound:
             lines += ["unmet: " + u for u in review["unmet"]]
             e.comment(f"Review (engine, {s.name}{', same family as the writer' if same else ''}): " + "; ".join(lines))
         e.leftovers += review["leftovers"]
+        e.checkpoints.keep_pending("review")
         e.hand.note_lows(review["findings"])
 
     def verdict(self, s: StageState, review: dict[str, Any]) -> str:

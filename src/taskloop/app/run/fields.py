@@ -34,7 +34,6 @@ class RunFields(StateAttrs):
         self.stats: dict[str, int] = {"writes": 0, "rounds": 0, "reviews": 0, "replans": 0, "nodes": 0, "tests_added": 0,
                                       "tests_removed": 0, "tokens_in": 0, "tokens_cached": 0, "tokens_out": 0}
         self.session, self.fresh = who.session, fresh
-        self.leftovers: list[dict[str, str]] = []
         self.bead_parent = ""  # tl-bxk.10.23
         self.look_filed = False
         self.filed: list[str] = []

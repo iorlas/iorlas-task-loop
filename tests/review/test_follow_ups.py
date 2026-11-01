@@ -1,5 +1,6 @@
 """The follow-up beads the engine files (E7c), through the real close path on the fake bd: no `auto` label, one `from:` label naming the
 source bead and round, one bead per typed key (bead, category, file) and never more than the cap, the rest in one comment."""
+import re
 import sys
 import unittest
 from pathlib import Path
@@ -41,8 +42,9 @@ class FollowUps(unittest.TestCase):
     def test_a_filed_follow_up_has_one_from_label_and_never_auto(self):
         (made,) = self.go(leftovers=[{"title": "Rename x", "why": "w"}])
         labels = self.labels(made)
-        self.assertEqual(len(labels), 1)
-        self.assertRegex(labels[0], r"^from:t-1-r\d+$")
+        self.assertEqual(len(labels), 2)
+        self.assertEqual(sum(bool(re.fullmatch(r"from:t-1-r\d+", label)) for label in labels), 1)
+        self.assertEqual(sum(label.startswith("followup-key:") for label in labels), 1)
         self.assertIn("--no-inherit-labels", made)  # the source bead's own labels (auto) are not copied
 
     def test_two_findings_with_one_key_but_different_words_are_one_bead(self):

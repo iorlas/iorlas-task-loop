@@ -68,7 +68,6 @@ class RunOnce:
         assert ck is not None and ck.ended is not None
         end.outcome, _, _ = stored_end.loaded(ck.ended)
         e.resume.restore(ck, late=True)
-        e.leftovers = [dict(lo) for lo in ck.ended.leftovers]  # in memory only until the close stored them
         e.plan_data = ck.state.plan_data
         e.plan_summary = (e.plan_data or {}).get("summary", "")
         e.accepted = list(ck.state.accepted)

@@ -2,6 +2,7 @@
 (source bead, finding category, file), never by its title; a run files at most FOLLOW_UP_CAP of them, the rest go in one comment."""
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from hashlib import sha256
 from typing import Final
 
 FOLLOW_UP_CAP: Final = 3
@@ -24,7 +25,7 @@ class FollowKey:
 
 
 def label(bead: str, round_no: int) -> str:
-    """The one label a filed follow-up carries: where it came from."""
+    """The origin label a filed follow-up carries."""
     return f"from:{bead}-r{round_no}"
 
 
@@ -49,8 +50,14 @@ def title_prefix(bead: str) -> str:
 
 
 def labels(bead: str, round_no: int, lo: Mapping[str, str]) -> list[str]:
-    """The labels of a follow-up: where it came from, and the tag the unchecked-items follow-up carries."""
-    return [label(bead, round_no), *([TAG] if lo.get("category") == UNCHECKED else [])]
+    """The follow-up's origin, stable identity, and the unchecked-items tag when applicable."""
+    return [label(bead, round_no), key_label(bead, lo), *([TAG] if lo.get("category") == UNCHECKED else [])]
+
+
+def key_label(bead: str, lo: Mapping[str, str]) -> str:
+    """A label-safe, stable identity even when the subject is a title containing spaces or punctuation."""
+    key = str(FollowKey.of(bead, lo))
+    return "followup-key:" + sha256(key.encode("utf-8")).hexdigest()
 
 
 @dataclass(frozen=True)

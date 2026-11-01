@@ -109,6 +109,7 @@ class Judge:
             e.leftovers.append({"title": title, "why": (
                 f"The look judge found this on {e.bead_title or e.bead} ({d.item}); it came back after a fix or the render rounds were "
                 f"used up. Pictures: {', '.join(names) or 'none'}. Defect: {d.where} {d.why}")})
+            e.checkpoints.keep_pending("look")
             e.log.note(f"look defect filed as a follow-up: {d.why[:200]}")
 
     def look_write(self, st: Any) -> str:

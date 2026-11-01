@@ -58,17 +58,20 @@ class FileNotes:
         self.e = host
 
     def run(self, outcome: Outcome) -> Notes:
-        """The follow-ups filed; what was filed and what bd refused is kept in the checkpoint, where Reflect reads it."""
+        """File from the durable queue; Reflect reads the counts from the checkpoint and refused work stays in the outbox."""
         e = self.e
+        e.checkpoints.keep_pending()
         todo = len(fu.batch(e.bead, e.leftovers, e.filed).file)  # one per typed key, at most the cap
         lost = self.follow_ups(outcome)
+        if lost:
+            e.warn(f"required follow-up filing incomplete: {len(lost)} item(s) remain in the durable outbox for retry")
         noted = Notes(filed=todo - len(lost), unfiled=len(lost))
         e.checkpoints.keep_notes(noted)
         return noted
 
     def follow_ups(self, outcome: Outcome) -> list[dict[str, str]]:
         """Landed work leaves its notes: the ask closed, the unverified items and the unchecked look items said, evidence kept, and each
-        follow-up filed as a bead (what bd refuses is kept in the checkpoint, none lost)."""
+        follow-up filed as a bead (what bd refuses stays in the bead's durable outbox)."""
         e = self.e
         if outcome in DONE:
             old = e.stores.asks.get(e.bead)

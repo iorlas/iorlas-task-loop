@@ -79,6 +79,7 @@ class Cases:
                 continue
             e.leftovers.append({"title": title, "why": "A review noted this outside the task's "
                                    "done-when, so it was not verified before the land: " + u["what"][:600]})
+            e.checkpoints.keep_pending("scope")
         return keep
 
     def case_checks(self) -> list[PlanCheck]:

@@ -52,6 +52,7 @@ class Resume:
         if d.drop:
             e.checkpoints.drop()
         if ck is None or d.kind == "fresh":
+            e.checkpoints.keep_pending()
             return None, 0, None
         self.restore(ck, late=d.why != OUTSIDE)
         e.resumed = d.why != OUTSIDE
@@ -114,6 +115,7 @@ class Resume:
         e.extra = e.extra + saved.extra
         e.planner_ref = saved.planner_ref or e.planner_ref
         self.e.pending_land_validation = saved.pending_land_validation or (ck.feedback if ck.step == "land-verify-red" else "")
+        self.e.checkpoints.keep_pending()
 
     def apply(self, ck: Checkpoint, d: Decision) -> tuple[PlanData | None, int, RoundState | None]:
         e = self.e

@@ -11,6 +11,7 @@ from support.engine_case import BEAD, CLEAN, PLAN, WRITE, verdict
 
 from taskloop.contracts.config import ReviewSkipConfig
 from taskloop.contracts.ports import BeadQuery
+from taskloop.domain.review.followups import key_label, unchecked
 
 PLAIN = dict(BEAD, labels=[])  # f.txt, "f.txt exists": nothing visual about it
 GAP = {"what": "f.txt exists on a clean checkout", "kind": "checkable"}
@@ -51,11 +52,17 @@ class VerifyVisual(T.LandReviewBase):
         self.assertEqual((rc, self.creates(), len(s.calls)), (0, [], 3))
 
     def test_a_follow_up_an_earlier_run_filed_is_not_filed_again(self):
-        old = {"id": "t-5", "title": "Check after landing t-1: 1 item(s) nobody verified", "labels": ["follow-up"]}
+        old = {"id": "t-5", "title": "Check after landing t-1: 1 item(s) nobody verified",
+               "labels": ["follow-up", key_label("t-1", unchecked("t-1", [GAP]))]}
         self.store.put(old)
         rc, _ = self.go([GAP])
         self.assertEqual((rc, self.creates()), (0, []))
         self.assertEqual([b.id for b in self.store.find(BeadQuery(label="follow-up"))], ["t-5"])
+
+    def test_a_matching_title_without_the_exact_key_does_not_hide_pending_work(self):
+        self.store.put({"id": "t-5", "title": "Check after landing t-1: unrelated", "labels": ["follow-up"]})
+        rc, _ = self.go([GAP])
+        self.assertEqual((rc, len(self.creates())), (0, 1))
 
     def test_an_item_that_names_an_acceptance_criterion_is_asked_not_filed(self):
         bead = dict(PLAIN, acceptance_criteria="- f.txt exists once the stage has run twice")

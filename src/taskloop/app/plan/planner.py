@@ -64,6 +64,7 @@ class Planner:
         adds them, so a plan that asks the owner is not filed twice by the plan after the answer."""
         have = {lo["title"] for lo in self.e.leftovers}
         self.e.leftovers += [lo for lo in data["leftovers"] if lo["title"] not in have]
+        self.e.checkpoints.keep_pending("plan")
 
     # -- the run's plan
     def count(self, old: Any, again: bool, why: str) -> None:

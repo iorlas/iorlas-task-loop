@@ -25,10 +25,12 @@ from taskloop.contracts.checkpoint import (
     StageProgress,
     WriterSession,
 )
+from taskloop.contracts.followups import FollowupOutbox
 from taskloop.contracts.plancheck import PlanData
 from taskloop.contracts.review import Unfiled
 from taskloop.contracts.wire import Open
 from taskloop.domain.checks import trim
+from taskloop.domain.review.followups import FollowKey
 from taskloop.stores.api import Doc
 from taskloop.stores.bundle import Stores
 
@@ -87,6 +89,8 @@ class StateAttrs:
     handoff: Handoff
     stage_tree: str
     pending_land_validation: str
+    leftovers: list[dict[str, str]]
+    followup_ids: dict[str, str]
 
 
 def state_names() -> tuple[str, ...]:
@@ -186,10 +190,31 @@ class Checkpoints:
     def keep_filed(self, lost: list[dict[str, str]] | None = None) -> None:
         """The follow-ups filed so far and the ones bd refused (`lost`: kept, none lost): written at once, a kill loses no title."""
         self.e.unfiled += [Unfiled(title=lo["title"], why=lo["why"]) for lo in lost or []]
+        self.e.leftovers += [dict(lo) for lo in lost or []]
         ck = self.read()
         if ck is not None:
-            kept = ck.state.replace(review=review_of(self.e))
+            kept = ck.state.replace(review=review_of(self.e), followup_ids=dict(self.e.followup_ids))
             self.writer().write(ck.replace(state=kept))
+        self.keep_pending()
+
+    def keep_pending(self, origin: str = "close") -> None:
+        """Merge the bead's durable outbox with this run's queue before any external filing effect."""
+        e = self.e
+        if e.dry:
+            return
+        fence.check(e.store, e.claim)
+        doc = e.stores.followups.of(e.bead)
+        old = doc.need() or FollowupOutbox()
+        queued: dict[str, dict[str, str]] = {}
+        for lo in [*old.pending, *e.leftovers]:
+            key = str(FollowKey.of(e.bead, lo))
+            queued.setdefault(key, dict(lo, key=key, origin=lo.get("origin") or origin))
+        e.leftovers = list(queued.values())
+        pending = [lo for key, lo in queued.items() if key not in e.filed and key not in e.followup_ids]
+        if pending or old.pending:
+            doc.write(FollowupOutbox(pending=pending))
+        self.amend(lambda ck: ck.replace(state=ck.state.replace(leftovers=copy.deepcopy(e.leftovers),
+                                                               followup_ids=dict(e.followup_ids))))
 
     def keep_look(self) -> None:
         """What the owner-look bead needs goes into the record, so a crash after the land still files it."""

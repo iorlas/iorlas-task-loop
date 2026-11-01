@@ -5,6 +5,7 @@ from taskloop.contracts.adrs import AdrStore
 from taskloop.contracts.checkpoint import Checkpoint
 from taskloop.contracts.checks import BaseRedRecord, CheckRun, Durations, PassRecord
 from taskloop.contracts.config import HostResources
+from taskloop.contracts.followups import FollowupOutbox
 from taskloop.contracts.stores import AskStore, JsonStore
 from taskloop.stores.books import CheckpointBook
 from taskloop.stores.bundle import Stores
@@ -16,6 +17,7 @@ def real_stores(cfg: paths.ConfigDir) -> Stores:
         run_log=lambda run: stores.RunLog(cfg, run), events=stores.EventLog(cfg), traces=stores.TraceStore(cfg),
         asks=AskStore.at(cfg), adrs=lambda repo: AdrStore.at(cfg, repo),
         checkpoints=CheckpointBook(FileDocSet(cfg.checkpoint, Checkpoint)),
+        followups=FileDocSet(cfg.followup_outbox, FollowupOutbox),
         loop_state=lambda key: stores.LoopStateStore(cfg, key),
         loop_command=lambda key: stores.LoopCommandStore(cfg, key),
         loop_rest=lambda key: stores.RestStore(cfg, key),

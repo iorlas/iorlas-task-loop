@@ -119,6 +119,10 @@ class ConfigDir:
         """What a run leaves when it pauses for the network (contracts/run.py NetPause); taken once by the bead's next run."""
         return self.root / "pauses" / (f"{bead}.json")
 
+    def followup_outbox(self, bead: str) -> Path:
+        """Unfiled follow-ups for a bead; survives deletion of its run checkpoint."""
+        return self.root / "followups" / (f"{bead}.json")
+
     def check_run(self, run: RunId | str, rnd: int | None = None) -> Path:
         """The CheckRun of a round of the run; no round: the latest."""
         return self.run_dir(run) / ("engine-checks.json" if rnd is None else f"engine-checks.r{rnd}.json")

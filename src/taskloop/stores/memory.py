@@ -20,6 +20,7 @@ from taskloop.contracts.checkpoint import Checkpoint
 from taskloop.contracts.checks import BaseRedRecord, CheckRun, Durations, PassRecord
 from taskloop.contracts.config import HostResources
 from taskloop.contracts.enums import LockWhat
+from taskloop.contracts.followups import FollowupOutbox
 from taskloop.contracts.ledger import Adr, AdrUse, LedgerEntry
 from taskloop.contracts.locks import LockRecord, LockTimeout, Ticket, pid_alive
 from taskloop.contracts.loop import LoopCommand, LoopState, Rest
@@ -212,6 +213,7 @@ def fake_stores(pid: int | None = None) -> Stores:
         asks=AskStore(MemDocSet(Ask), MemLog(_decode(LedgerEntry))),
         adrs=lambda repo: adrs.setdefault(repo, AdrStore(MemDocSet(Adr), MemLog(_decode(AdrUse)))),
         checkpoints=CheckpointBook(MemDocSet(Checkpoint)),
+        followups=MemDocSet(FollowupOutbox),
         loop_state=lambda key: state.setdefault(key, MemDoc(LoopState)),
         loop_command=lambda key: cmds.setdefault(key, MemDoc(LoopCommand)),
         loop_rest=lambda key: rests.setdefault(key, MemDoc(Rest)),

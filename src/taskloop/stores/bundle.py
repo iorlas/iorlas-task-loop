@@ -6,6 +6,7 @@ from taskloop.contracts.adrs import AdrStore
 from taskloop.contracts.checks import BaseRedRecord, CheckRun, Durations, PassRecord
 from taskloop.contracts.config import HostResources
 from taskloop.contracts.events import Event
+from taskloop.contracts.followups import FollowupOutbox
 from taskloop.contracts.log import EngineLog
 from taskloop.contracts.loop import LoopCommand, LoopState, Rest
 from taskloop.contracts.stores import AskStore
@@ -22,6 +23,7 @@ class Stores:
     asks: AskStore
     adrs: Callable[[str], AdrStore]  # the decision store of a repo (its path)
     checkpoints: CheckpointBook
+    followups: DocSet[FollowupOutbox]
     loop_state: Callable[[str], Doc[LoopState]]
     loop_command: Callable[[str], Doc[LoopCommand]]
     loop_rest: Callable[[str], Doc[Rest]]

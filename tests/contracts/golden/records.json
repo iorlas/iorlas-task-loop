@@ -337,6 +337,17 @@
   "acceptance_first": false,
   "shots_fixed": true
  },
+ "FollowupOutbox": {
+  "v": 1,
+  "pending": [
+   {
+    "title": "later",
+    "why": "w",
+    "key": "tl-1|leftover|later",
+    "origin": "plan"
+   }
+  ]
+ },
  "Checkpoint": {
   "v": 3,
   "bead": "tl-1",
@@ -464,6 +475,8 @@
    },
    "stage_tree": "",
    "pending_land_validation": "red",
+   "leftovers": [],
+   "followup_ids": {},
    "review": {
     "reviews": 3,
     "rounds": 2,

@@ -56,6 +56,8 @@ SAMPLE: dict[str, Any] = {
     "handoff": Handoff(rounds=[Round(stage="s", round=1, kind="k", writer="w", open=["o"])], seen_lows=["l"]),
     "stage_tree": "T",
     "pending_land_validation": "red",
+    "leftovers": [{"title": "later", "why": "w", "key": "t-1|leftover|later", "origin": "plan"}],
+    "followup_ids": {"t-1|leftover|done": "fk-1"},
 }
 
 
@@ -72,6 +74,7 @@ class HeadGit(ScriptedGit):
 class Host(StateAttrs):
     def __init__(self) -> None:
         self.state = RunState()
+        self.dry = False
         self.bead, self.stores = "t-1", fake_stores()
         self.store, self.claim = FakeBeads(), fence.offline(BeadId("t-1"))
         self.checkpoints = Checkpoints(self)
@@ -186,6 +189,20 @@ class Park(unittest.TestCase):
         a, _ = self.parked()
         a.checkpoints.drop()
         self.assertIsNone(a.checkpoints.read())
+
+    def test_pending_followups_survive_an_immediate_crash_and_a_fresh_start(self):
+        a = Host()
+        a.checkpoints.save(step="write", stage=2)
+        a.leftovers.append({"title": "later", "why": "w"})
+        a.checkpoints.keep_pending("review")
+        ck = stored(a)
+        self.assertEqual((ck.step, ck.stage), ("write", 2))
+        b = Host()
+        b.stores = a.stores
+        Resume(b).restore(ck, late=False)
+        self.assertEqual(b.leftovers, a.leftovers)
+        self.assertEqual(b.leftovers[0]["origin"], "review")
+        self.assertEqual(b.state.start_again().leftovers, a.leftovers)
 
 
 class OneWriter(unittest.TestCase):

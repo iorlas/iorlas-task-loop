@@ -69,6 +69,7 @@ class Verifier:
             lo = followups.unchecked(e.bead, rest, followups.REVIEW_OFF if review_off else followups.NOT_VISUAL)
             if lo["title"] not in {x["title"] for x in e.leftovers}:
                 e.leftovers.append(lo)
+                e.checkpoints.keep_pending("verify")
             if review_off:
                 e.steps.begin("verify", f"{len(rest)} unchecked item(s): verify skipped ({SkipKind.REVIEW_OFF})")
                 e.steps.outcome("skipped", SkipKind.REVIEW_OFF)

@@ -101,12 +101,14 @@ class RunState(Rec, frozen=False):
     handoff: Handoff = msgspec.field(default_factory=Handoff)
     stage_tree: str = ""
     pending_land_validation: str = ""
+    leftovers: list[dict[str, str]] = msgspec.field(default_factory=list)
+    followup_ids: dict[str, str] = msgspec.field(default_factory=dict)
     review: ReviewState = msgspec.field(default_factory=ReviewState)
 
     def start_again(self) -> RunState:
         """The state of a task that starts again on the base: nothing of the old attempt, but what belongs to the bead (the follow-ups
         filed or refused, the owner's extra amends, the rebase resets, the brief as it is now, the planner thread)."""
-        keep = ("extra", "rebase_resets", "brief_hash", "snap", "planner_ref", "pending_land_validation")
+        keep = ("extra", "rebase_resets", "brief_hash", "snap", "planner_ref", "pending_land_validation", "leftovers", "followup_ids")
         return RunState(**{k: getattr(self, k) for k in keep})
 
     def dump(self) -> dict[str, Any]:
@@ -132,7 +134,7 @@ class EndRec(Rec):
     fp: str = ""  # the fault's fingerprint before any escalation (the trace and the report carry it)
     comment: bool = True  # False: the same fault was said within the hour
     escalated: bool = False
-    leftovers: list[dict[str, str]] = msgspec.field(default_factory=list)  # the follow-ups FileNotes files (they live in memory only)
+    leftovers: list[dict[str, str]] = msgspec.field(default_factory=list)  # the close's snapshot; RunState owns the queue
 
 
 @final
