@@ -18,6 +18,7 @@ class Kind(enum.Enum):
     WAIT_ASK = "wait_ask"  # an ask is still open: nothing new is asked or said
     PAUSE_LANE = "pause_lane"
     PAUSE_NETWORK = "pause_network"
+    ENGINE_CRASH = "engine_crash"
     PAUSE_KILLED = "pause_killed"
     PAUSE_MOVED = "pause_moved"  # the bead needs a resource this host lacks: labelled needs:X and re-queued
     OWNER_PARK = "owner_park"  # the owner parked it (a park request): the branch and checkpoint stay, the hold keeps the loop off
@@ -36,7 +37,7 @@ class Kind(enum.Enum):
 
 FINISH: Final = (Kind.LANDED, Kind.DONE)
 ASKS: Final = tuple(k for k in Kind if k.name.startswith("ASK_"))
-PAUSES: Final = tuple(k for k in Kind if k.name.startswith("PAUSE_"))
+PAUSES: Final = tuple(k for k in Kind if k.name.startswith("PAUSE_") or k is Kind.ENGINE_CRASH)
 FAULTS: Final = tuple(k for k in Kind if k.name.startswith("FAULT_"))
 
 

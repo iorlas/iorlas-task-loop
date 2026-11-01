@@ -405,7 +405,7 @@ class Engine(RunFields):
         """The run's outcome for the loop: landed (closed, done too), parked (blocked for the owner: an ask, or one
         still open), paused (the machine's trouble: lanes, login, network; the bead stays open), failed."""
         out = oc.POLICY[self.kind].loop
-        paused = out is Result.PAUSED
+        paused = out is Result.PAUSED or self.kind is Kind.ENGINE_CRASH
         return RunReport(outcome=out, bead=self.bead, why=self.why[:500], run=self.run_id, log=str(self.log_path),
                          minutes=round((time.time() - self.t0) / 60, 1), rounds=self.stats["rounds"],
                          tests_added=self.stats["tests_added"], asked=self.asked, retry_after=self.retry_after if paused else 0.0,

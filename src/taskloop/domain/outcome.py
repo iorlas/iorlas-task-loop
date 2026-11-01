@@ -73,6 +73,7 @@ POLICY: Final = {
     Kind.WAIT_ASK: Rule("none", Result.PARKED, "parked", False, "owner", wake="answer"),
     Kind.PAUSE_LANE: Rule("open", Result.PAUSED, "paused", False, "lane", wake="lane"),
     Kind.PAUSE_NETWORK: Rule("open", Result.PAUSED, "paused", False, "network", wake="net"),  # counts toward no cap
+    Kind.ENGINE_CRASH: Rule("open", Result.PARKED, "parked", False, "engineer", wake="cooldown"),
     Kind.PAUSE_KILLED: Rule("open", Result.PAUSED, "paused", False, "none"),
     Kind.PAUSE_MOVED: Rule("open", Result.PAUSED, "paused", False, "host"),  # its needs label keeps this host off; a capable host takes it
     Kind.OWNER_PARK: Rule("open", Result.PARKED, "parked", False, "owner"),

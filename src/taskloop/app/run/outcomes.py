@@ -20,7 +20,7 @@ def node_outcome(outcome: Outcome, kind: Kind) -> str:
         return "noop"
     if kind is Kind.PAUSE_KILLED:
         return "stopped"
-    if kind.name.startswith("PAUSE_") or kind is Kind.OWNER_PARK:
+    if kind.name.startswith("PAUSE_") or kind in (Kind.OWNER_PARK, Kind.ENGINE_CRASH):
         return "paused"
     if kind is Kind.WAIT_ASK:
         return "waiting"
@@ -35,7 +35,7 @@ def close_move(kind: Kind) -> tuple[str, str]:
         return "pause", "noop"
     if kind is Kind.PAUSE_KILLED:
         return "pause", "stopped"
-    if kind.name.startswith("PAUSE_") or kind is Kind.OWNER_PARK:
+    if kind.name.startswith("PAUSE_") or kind in (Kind.OWNER_PARK, Kind.ENGINE_CRASH):
         return "pause", "paused"
     if kind is Kind.WAIT_ASK:
         return "ask", "waiting"

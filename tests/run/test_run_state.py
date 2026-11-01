@@ -64,10 +64,10 @@ class ExitPaths(EngineTest):
             rc, _ = self.run_engine({"plan": [PLAN]})
         self.assertEqual((rc, self.manifest().state), (2, RunState.STOPPED))
 
-    def test_a_close_that_raises_still_leaves_a_terminal_state(self):
-        with mock.patch.object(Closer, "close", side_effect=OSError("disk")), self.assertRaises(OSError):
+    def test_a_close_that_raises_parks_the_run_with_its_work_kept(self):
+        with mock.patch.object(Closer, "close", side_effect=OSError("disk")):
             self.run_engine(LANDS)
-        self.assertEqual(self.manifest().state, RunState.DONE)  # the run finished its work; the close is what broke
+        self.assertEqual(self.manifest().state, RunState.PARKED)  # the crash is a typed park (engine_crash), the checkpoint stays
 
 
 class Settle(unittest.TestCase):

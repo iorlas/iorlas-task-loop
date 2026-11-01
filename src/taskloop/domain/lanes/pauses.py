@@ -27,6 +27,7 @@ TABLE: Final[dict[str, PauseRule]] = {
     "busy": PauseRule("transient", 30, 1800),
     "timeout": PauseRule("transient", 60, 3600),
     "network": PauseRule("transient", 30, 1800),
+    "engine_crash": PauseRule("transient", 60, 3600),
     "transient_infrastructure": PauseRule("transient", 60, 3600),
     "rate_limited": PauseRule("transient", 60, 3600),
     "hung": PauseRule("transient", 60, 3600),

@@ -9,14 +9,15 @@ from taskloop.app.land.gitcall import oneline
 from taskloop.app.release import reexec
 from taskloop.app.run import ended as stored_end
 from taskloop.app.run import requests
+from taskloop.app.run.crash import parked_crash
 from taskloop.app.run.records import terminal_state
 from taskloop.app.run.reload import Exec
 from taskloop.app.slots.lease import Lease
 from taskloop.contracts import fence
-from taskloop.contracts.enums import AskClass
+from taskloop.contracts.enums import AskClass, Step
 from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.kinds import Kind
-from taskloop.contracts.log import Beat
+from taskloop.contracts.log import Beat, Close
 from taskloop.contracts.plancheck import PlanData, RoundState
 from taskloop.contracts.run import RunState
 from taskloop.domain import outcome as oc
@@ -96,7 +97,13 @@ class RunOnce:
             what = "; ".join("{} ({}{})".format(u["what"], u["kind"], ("; " + u["why"]) if u.get("why") else "") for u in gaps)
             raise e.Blocked("verify: before land, the workers could not check: " + what,
                             askspecs.external_fact([u["what"] for u in gaps]), kind=Kind.ASK_DECISION)
-        sha = e.lander.finish(bead)
+        try:
+            sha = e.lander.finish(bead)
+        except (e.Blocked, ValueError):
+            raise
+        except Exception as err:
+            done = parked_crash(e, Step.LAND, err)
+            raise e.Blocked(done.detail, kind=done.kind) from err
         end.outcome = oc.make(Kind.LANDED, sha=sha) if sha else oc.make(Kind.DONE)
         if sha:
             e.owner_look.file_owner_look()  # before the checkpoint goes: a crash from here on still files it on resume
@@ -210,6 +217,15 @@ class RunOnce:
         """The close, then the run's one terminal state, whatever the close did (a close that raises still leaves a state)."""
         try:
             self.close(hb, end)
+        except (self.e.Blocked, ValueError):
+            raise
+        except Exception as err:
+            e = self.e
+            end.outcome = parked_crash(e, Step.CLOSE, err)
+            e.closer.pause(end.outcome)
+            e.steps.end()
+            e.log.emit(Close(outcome=end.outcome.word, why=e.why, retry_at=e.retry_after))
+            e.records.file_trace(end.outcome.word, e.why, e.landed_sha)
         finally:
             self.settle(end)
 
@@ -228,7 +244,8 @@ class RunOnce:
             hb.stop()
             return
         with e.stop_deferred():  # a stop here would skip the close: no trace, no bead update
-            if e.landed_sha and end.outcome.kind is not Kind.LANDED:  # stopped after the push: on the base, close it as landed
+            if e.landed_sha and end.outcome.kind not in (Kind.LANDED, Kind.ENGINE_CRASH):
+                # A late engine crash keeps its retry cursor even when the push already went through.
                 e.warn(f"{end.outcome.detail or end.outcome.word} after the land went through; closing it landed")
                 end.outcome = oc.make(Kind.LANDED, sha=e.landed_sha)
             hb.stop()

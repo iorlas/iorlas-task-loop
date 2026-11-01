@@ -43,7 +43,7 @@ class CheckExecutor:
     def run_group(self, plan: CheckPlan, rnd: int) -> Round:
         """Run every step of the plan, in order, as one block (the cheap checks first, the Unity group last)."""
         self.memo.checks = {step.check.id: step.check for step in plan.steps}
-        st = Round(rnd, results=list(plan.skipped))
+        st = Round(rnd, results=list(plan.skipped), env=dict(self.checklog.env))
         self.logs.mkdir(exist_ok=True)
         self.began = time.time()
         lanes = plan.lanes()
@@ -198,8 +198,11 @@ class CheckExecutor:
 
     def _publish(self, c: Check, res: CheckResult, log_abs: str, st: Round) -> None:
         """Later checks read this one's log and exit code: $TL_CHECK_LOG_<ID>, $TL_CHECK_RC_<ID>."""
-        if c.group != "acceptance" and res.exit is not None and Path(log_abs).is_file():
-            st.env[log_var(c.id)], st.env[rc_var(c.id)] = log_abs, str(res.exit)
+        if res.exit is not None and Path(log_abs).is_file():
+            values = {log_var(c.id): log_abs, rc_var(c.id): str(res.exit)}
+            st.env.update(values)
+            self.checklog.env.update(values)
+            self.checklog.logged.add(c.id)
 
     def _launch(self, step: Step, st: Round, name: str, key: RunKey | None) -> CheckResult:
         c = step.check
@@ -207,7 +210,7 @@ class CheckExecutor:
         try:
             with self.resources.hold(c, st.cancel) as lease:
                 t0 = time.time()  # the wait for a lease is not the check's time
-                out = self.attempts.run(c, self.logs / name, st.env, st.cancel)
+                out = self.attempts.run(c, self.logs / name, {**st.env, **self.checklog.env}, st.cancel)
                 took = round(time.time() - t0)
         except LeaseCancelled:
             return CheckResult.cancelled_by(c, st.cancel.red if st.cancel else "", at=round(t0 - self.began, 1))
@@ -215,6 +218,7 @@ class CheckExecutor:
             return CheckResult.cancelled_by(c, st.cancel.red if st.cancel else "", "checks/" + name, round(t0 - self.began, 1), took)
         self._fault(c, out, st)
         res = self._result(c, out, name, took).replace(waited=round(lease.waited, 1), lane=c.lane, at=round(t0 - self.began, 1))
+        res = res.replace(tail=res.tail + self._missing_log(out))
         if out.rc == 0:  # only a green run says what the check costs: a red one stops early
             self._unchanged()
             st.timings.append(Duration(t=time.time(), run_id=self.host.run_id, bead=self.host.bead, call_id=c.id, step=c.cmd,
@@ -223,6 +227,14 @@ class CheckExecutor:
             if key is not None:
                 self.memo.remember(key, res, st.n, str(self.logs / name))
         return res
+
+    def _missing_log(self, out: Outcome) -> str:
+        text = out.seen + out.tail
+        if out.rc and any(f"KeyError: '{prefix}" in text for prefix in ("TL_CHECK_LOG_", "TL_CHECK_RC_")):
+            ids = ", ".join(sorted(self.checklog.logged.copy())) or "none"
+            return ("\nthe check log variable is missing: that check did not run in this attempt "
+                    f"(ids with a log: {ids})")
+        return ""
 
     def _unchanged(self) -> None:
         if self.memo.keys.clean and self.host.checkout.tree_hash() != self.memo.keys.tree:

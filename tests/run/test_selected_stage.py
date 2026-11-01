@@ -163,6 +163,30 @@ class SelectedStage(unittest.TestCase):
         self.assertEqual(manifest.state, RunState.FAILED)
         self.assertIn("runner failed", manifest.reason)
 
+    def test_land_crash_parks_and_auto_next_retries_land(self):
+        e = self.e
+        e.checkpoints.read.return_value = Checkpoint(bead="t-1", run="old", t=1, step="land")
+        e.lander.gate.green.return_value = True
+        e.lander.finish.side_effect = KeyError("stale")
+        rc, manifest = self.invoke("land")
+        self.assertEqual((rc, manifest.state, manifest.next_step), (1, RunState.PARKED, Step.LAND))
+        self.assertEqual(e.kind.value, "engine_crash")
+        self.assertEqual(e.why, "land crashed: KeyError: 'stale'")
+        e.checkpoints.drop.assert_not_called()
+        e.checkpoints.drop_unless_fenced.assert_not_called()
+        e.checkpoints.save.assert_not_called()
+        e.lander.finish.side_effect = None
+        e.lander.finish.return_value = "landed-sha"
+        rc, manifest = self.invoke()
+        self.assertEqual((rc, manifest.next_step), (0, Step.CLOSE))
+
+    def test_interrupt_at_land_propagates(self):
+        self.e.lander.gate.green.return_value = True
+        self.e.lander.finish.side_effect = KeyboardInterrupt()
+        with self.assertRaises(KeyboardInterrupt):
+            self.invoke("land")
+        self.assertEqual(self.e.kind, Kind.FAULT_ENGINE)
+
     def test_typed_network_pause_keeps_the_loop_terminal_state(self):
         self.e.lander.gate.run.side_effect = Blocked("network unavailable", kind=Kind.PAUSE_NETWORK)
         rc, manifest = self.invoke("gate")

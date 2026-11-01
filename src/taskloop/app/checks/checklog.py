@@ -1,6 +1,7 @@
 """CheckLog: the records of the checks of a round. Every check leaves a start and an end under one id (one that never ran, a
 cached or reused or skipped result, leaves both at once), and the round leaves one Checks record: the CheckRun."""
 from taskloop.contracts.checks import Check, CheckResult, CheckRun
+from taskloop.contracts.ids import CheckId
 from taskloop.contracts.log import CheckEnd, Checks, CheckStart
 from taskloop.stores.runlog import RunLog
 
@@ -8,6 +9,8 @@ from taskloop.stores.runlog import RunLog
 class CheckLog:
     def __init__(self, log: RunLog) -> None:
         self.log = log
+        self.env: dict[str, str] = {}
+        self.logged: set[CheckId] = set()
 
     def start(self, c: Check, rnd: int, log: str = "") -> str:
         """A check begins running: its id, which `close` ends."""

@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 
 from taskloop.adapters import beadtools
 from taskloop.app.land.gate import Problem
+from taskloop.app.run.crash import parked_crash
 from taskloop.app.run.layout import repo_of
 from taskloop.app.run.records import terminal_state
 from taskloop.app.run.run_once import RunOnce
@@ -50,6 +51,9 @@ def run_stages(e: Engine, requested: str | None, *, continuous: bool) -> int:
         if continuous:
             run.rc = RunOnce(e).go()
             run.continued = e.moved
+            settled = locator.get(e.run_id)
+            if settled is not None and not settled.manifest.state.live:
+                run.terminal, run.reason = settled.manifest.state, settled.manifest.reason
         else:
             run.rc = one_stage(e, requested, locator)
             run.reason = e.why
@@ -104,6 +108,7 @@ def checkpoint_next(ck: Checkpoint) -> Step:
 
 def one_stage(e: Engine, requested: str | None, locator: RunLocator) -> int:
     lease = Lease(e.store, e.bead, e.env.bead(EnvVar.TASK_LOOP_SLOT_BEAD), on_beat=RunOnce(e).beat)
+    step = None
     try:
         ck = None if e.fresh else e.checkpoints.read()
         step = next_step(e, locator, ck, requested)
@@ -140,6 +145,9 @@ def one_stage(e: Engine, requested: str | None, locator: RunLocator) -> int:
         e.log.warn(e.why)
         return 1
     except BaseException as err:
+        if isinstance(err, Exception) and step is not None and step in (Step.LAND, Step.CLOSE):
+            parked_crash(e, step, err)
+            return 1
         e.kind, e.why = Kind.FAULT_ENGINE, str(err) or type(err).__name__
         raise
     finally:
