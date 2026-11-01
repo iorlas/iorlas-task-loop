@@ -76,9 +76,9 @@ class ReviewOff(unittest.TestCase):
         self.assertIn(acceptance, s.prompts[-1])
         self.assertIn(case["criterion"], s.prompts[-1])
 
-    def test_empty_acceptance_cannot_bypass_final_review(self):
-        rc, s = self.go(bead=dict(BEAD, acceptance_criteria=""), review="off")
-        self.assertEqual((rc, self.reviews(s)), (0, 1))
+    def test_empty_acceptance_is_blocked_at_the_ticket_not_skipped_by_review_off(self):
+        rc, _ = self.go(bead=dict(BEAD, acceptance_criteria=""), review="off")
+        self.assertEqual(rc, 2)
 
     def test_off_skips_only_intermediate_stages(self):
         stage = PLAN["stages"][0]
