@@ -18,6 +18,7 @@ from support.builders import cfg_with
 from support.logs import records
 
 from taskloop.app.plan.planner import Planner
+from taskloop.app.plan.sendback import SendBack
 from taskloop.app.run import engine
 from taskloop.contracts import answers, plancheck
 from taskloop.contracts.config import EngineConfig
@@ -479,7 +480,8 @@ class EnginePlanTest(EngineTest):
         self.assertEqual(rc, 2)
         ck = self.checkpoint()
         self.assertEqual((ck["plan"]["summary"], ck["planned"], ck["step"]), ("do it", 1, "write"))
-        rc, s = self.run_engine({"write": [WRITE, WRITE], "review": [CLEAN, CLEAN]})
+        with mock.patch.object(SendBack, "find", side_effect=AssertionError("a write checkpoint is already validated")):
+            rc, s = self.run_engine({"write": [WRITE, WRITE], "review": [CLEAN, CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         self.assertNotIn("planner", [c[0] for c in s.calls])
 

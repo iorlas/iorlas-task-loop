@@ -41,9 +41,14 @@ class Planner:
         """One planner answer, its checks validated before any write; the bad ones go back once."""
         e = self.e
         data, _ = e.ai("plan", title, prompt, step=step, mode=mode, at=(e.planned, 0, 0))
-        if self.fits(data):  # checkpoint first: a SIGTERM during the send-back below resumes with this plan
+        if self.fits(data):  # keep the answer through a stop, but revalidate it before any write
             e.plan_data = copy.deepcopy(data)
-            e.checkpoints.save(stage=0, rounds=0, n=0, feedback="", step="write")
+            e.checkpoints.save(stage=0, rounds=0, n=0, feedback="", step="plan")
+        return self.validate(data, prompt, step)
+
+    def validate(self, data: PlanData, prompt: str, step: str) -> PlanData:
+        """Validate a new or checkpointed draft; send a rejected answer back once before accepting it."""
+        e = self.e
         p = self.sendback.find(data)
         if p.any():  # asked once to rewrite them, like an invalid answer; not a counted re-plan
             why = self.sendback.text(p)
@@ -53,6 +58,12 @@ class Planner:
             data = self.sendback.rewrite(data, prompt, step, why)
             self.sendback.after_rewrite(data)
         return data
+
+    def resume_draft(self, data: PlanData) -> PlanData:
+        """Reuse the saved planner answer without counting or calling the planner again unless it needs a rewrite."""
+        prompt = self.prompts.build(data, False, "")
+        data = self.validate(data, prompt, "plan")
+        return self.accept(self.settle_question(data, prompt, "plan"), False)
 
     def fits(self, data: PlanData) -> bool:
         """A plan worth keeping through a stop: it has stages, asks nothing, and is not a split ask."""

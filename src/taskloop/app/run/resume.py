@@ -124,6 +124,9 @@ class Resume:
             plancheck.parse_stored(plan)  # a saved plan comes back with its risks and cases as dicts: their checks are parsed again
         if d.kind in ("amend", "replan"):
             return self.amend(ck, d)
+        if ck.step == "plan" and plan is not None:
+            e.log.note(f"resuming {ck.run}: validating the saved draft plan before any write")
+            return e.planner.resume_draft(plan), 0, None
         e.plan_data, e.plan_summary, e.accepted = plan, (plan or {})["summary"], list(ck.state.accepted)
         e.publish_plan()
         if d.redo_from is not None:
