@@ -18,6 +18,7 @@ from taskloop.contracts import dashhealth as DH
 from taskloop.contracts import schema, wire
 from taskloop.contracts.wire import Rec
 from taskloop_dash.api.writes import Writes
+from taskloop_dash.views.snapshot import version_of
 
 CLASS = {"snapshot.json": D.Snapshot, "bead/": D.BeadDetail, "live/": D.LivePage, "result.json": D.Result, "cost.json": DC.CostPage}
 
@@ -66,6 +67,13 @@ class DashFixtures(unittest.TestCase):
         raw["beads"][0]["surprise"] = 1
         with self.assertRaises(ValueError):
             wire.load(D.Snapshot, raw)
+
+    def test_every_bead_fixture_version_matches_the_server_after_decode(self) -> None:
+        for path in sorted((fx.DIR / "bead").glob("*.json")):
+            with self.subTest(bead=path.stem):
+                raw = json.loads(path.read_text(encoding="utf-8"))
+                detail = wire.load(D.BeadDetail, raw)
+                self.assertEqual(raw["version"], version_of(detail))
 
     def test_every_dash_record_is_in_a_fixture(self) -> None:
         seen: set = set()

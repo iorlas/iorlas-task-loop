@@ -58,7 +58,7 @@
   "retry_at": 0.0,
   "shots": 0
  },
- "version": "7ec6f7a3a4b93c00",
+ "version": "f01745305ceea823",
  "bd_ok_at": null,
  "bd_error": "",
  "description": "Rain lowers mood outdoors. Part of World.",
@@ -106,7 +106,7 @@
      "tokens": 570000,
      "last": "",
      "outcome": "done",
-     "budget_s": 3000
+     "budget_s": 3000.0
     },
     {
      "phase": "test",
@@ -175,7 +175,7 @@
         {
          "id": "p1",
          "t": 1793043200.0,
-         "secs": 30,
+         "secs": 30.0,
          "outcome": "ok",
          "lane": "codex",
          "model": "fixture-model",
@@ -201,7 +201,7 @@
         {
          "id": "w1",
          "t": 1793044200.0,
-         "secs": 30,
+         "secs": 30.0,
          "outcome": "ok",
          "lane": "codex",
          "model": "fixture-model",
@@ -217,7 +217,7 @@
         {
          "id": "w2",
          "t": 1793045200.0,
-         "secs": 30,
+         "secs": 30.0,
          "outcome": "ok",
          "lane": "codex",
          "model": "fixture-model",
@@ -238,7 +238,7 @@
         {
          "id": "r1",
          "t": 1793046200.0,
-         "secs": 30,
+         "secs": 30.0,
          "outcome": "ok",
          "lane": "codex",
          "model": "fixture-model",
@@ -345,7 +345,7 @@
         {
          "id": "live-write",
          "t": 1793050100.0,
-         "secs": 100,
+         "secs": 100.0,
          "outcome": "running",
          "lane": "codex",
          "model": "fixture-model",
