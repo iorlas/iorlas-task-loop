@@ -113,7 +113,7 @@ def error_of(stderr: str, stdout: str) -> BdError:
     text = f"{stderr}\n{asked if isinstance(asked, str) else stdout}"
     lint = LINT_MISSING.search(text)
     if lint:
-        return BdError(kind="lint", missing_sections=[h.strip() for h in re.findall(r"##\s*([^,#\n]+)", lint.group(1))],
+        return BdError(kind="lint", missing_sections=[h.strip() for h in re.findall(r"##\s*([^,#(\n]+)", text[lint.start():])],
                        text=text.strip()[:500])
     low = text.lower()
     kind = ("not_claimable" if "not claimable" in low or "already claimed" in low or "claimed by a different actor" in low else

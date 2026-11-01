@@ -1,0 +1,27 @@
+"""bd's lint error as a list (one section per line, each with its reason): every missing section is named, none with the reason."""
+import unittest
+
+import support.paths  # noqa: F401
+
+from taskloop.adapters import bd
+from taskloop.adapters.bdcreate import with_sections
+
+LIST = """Error: missing required sections for task:
+  - ## Acceptance Criteria (Define criteria to verify completion)
+  - ## Touches (Required by lint.sections.task config)
+"""
+
+
+class LintList(unittest.TestCase):
+    def test_every_section_of_a_listed_lint_error_is_named_without_its_reason(self):
+        err = bd.error_of(LIST, "")
+        self.assertEqual((err.kind, err.missing_sections), ("lint", ["Acceptance Criteria", "Touches"]))
+
+    def test_one_retry_adds_all_of_them(self):
+        body = with_sections("why", bd.error_of(LIST, "").missing_sections, "tl-1")
+        self.assertIn("## Acceptance Criteria\n", body)
+        self.assertIn("## Touches\n", body)
+
+
+if __name__ == "__main__":
+    unittest.main()
