@@ -56,6 +56,7 @@
   "assumptions": 0,
   "shots": 0
  },
+ "version": "f58162dc75a861d8",
  "description": "Pets need feeding twice a day. Part of World.",
  "acceptance": "- works in a new save and an old one\n- tests cover the rule\n- no new warnings in the build",
  "comments": [
@@ -144,6 +145,7 @@
    ],
    "end": "test_failed",
    "end_text": "test failed: back to write",
+   "detail": "",
    "resumed": null,
    "messages": [
     {
@@ -210,6 +212,7 @@
    ],
    "end": "lane_out",
    "end_text": "lane ran out, parked",
+   "detail": "",
    "resumed": null,
    "messages": [
     {
@@ -276,6 +279,7 @@
    ],
    "end": "done",
    "end_text": "landed",
+   "detail": "",
    "resumed": {
     "slot": "devbox·1",
     "branch": "bd/lifesim-7hv.2",

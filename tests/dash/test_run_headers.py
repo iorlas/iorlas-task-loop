@@ -7,6 +7,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support.fakes import FakeBeadStore
+from support.narrow import must
 from support.repos import write_repos
 
 from taskloop.app.run.layout import RunLayout
@@ -14,6 +15,7 @@ from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.run import RunState
 from taskloop.contracts.runlife import RETAIN
+from taskloop.contracts.stores import JsonStore
 from taskloop_dash.app import Dash
 from taskloop_dash.env import Env, Ports
 
@@ -79,3 +81,20 @@ class RunHeaders(unittest.TestCase):
         head, = self.dash.reads.snapshot().runs
         self.assertEqual((head.run, head.mode, head.owner, head.session),
                          (layout.run, "stage:gate", "mac-owner", "mac-session"))
+
+    def test_active_adhoc_work_and_four_configured_lanes_survive_without_slot_beads(self):
+        self.dash.env.ports.slot_count = lambda repo: 4
+        live = self.create("stage:check")
+        done = self.create("stage:gate")
+        self.locator.end(done.run, self.now, RunState.DONE)
+        self.locator.worktree(live.run, "/repo/slots/s2")
+        snap = self.dash.reads.snapshot()
+        self.assertEqual([(r.run, r.branch, r.owner) for r in snap.adhoc], [(live.run, "s2", "mac-owner")])
+        self.assertEqual([(s.name, s.state) for s in snap.slots], [(f"s{i}", "free") for i in range(1, 5)])
+        stored = must(self.locator.get(live.run)).manifest
+        JsonStore(self.cfg.run_manifest(live.run), type(stored)).write(stored.replace(branch="feature/check"))
+        self.now += 2
+        self.assertEqual(self.dash.reads.snapshot().adhoc[0].branch, "feature/check")
+        JsonStore(self.cfg.run_manifest(live.run), type(stored)).write(stored.replace(sha="0123456789abcdef"))
+        self.now += 2
+        self.assertEqual(self.dash.reads.snapshot().adhoc[0].branch, "01234567")

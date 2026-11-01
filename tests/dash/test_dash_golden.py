@@ -16,7 +16,7 @@ from support.fakes import FakeBeadStore
 from support.repos import write_repos
 
 from taskloop.contracts import wire
-from taskloop.contracts.dash import Snapshot
+from taskloop.contracts.dash import BeadDetail, Snapshot
 from taskloop_dash.app import Dash
 from taskloop_dash.env import Env, Ports
 from taskloop_dash.views.snapshot import version_of
@@ -83,6 +83,9 @@ class Golden(unittest.TestCase):
         # Fill newly added optional fields from the contract before comparing the recorded state and its hash.
         snap = wire.load(Snapshot, expected["snapshot"])
         expected["snapshot"] = wire.dump(snap.replace(version=version_of(snap)))
+        for name, body in expected["beads"].items():
+            detail = wire.load(BeadDetail, body)
+            expected["beads"][name] = wire.dump(detail.replace(version=version_of(detail)))
         self.assertEqual(got, expected)
 
 

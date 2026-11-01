@@ -15,10 +15,11 @@ import support.paths  # noqa: F401
 from taskloop.contracts import dash as D
 from taskloop.contracts import dashcost as DC
 from taskloop.contracts import wire
-from taskloop.contracts.dashruns import RunHeader
+from taskloop.contracts.dashruns import ResourceLease, RunHeader
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.needs import NeedRow
 from taskloop.contracts.run import RunState
+from taskloop_dash.views.snapshot import version_of
 
 ROOT = Path(__file__).resolve().parents[2]
 DIR = ROOT / "tests" / "fixtures" / "dash"
@@ -276,7 +277,8 @@ def passes(b: dict) -> list[D.Pass]:
         last_pass = i == len(raw) - 1
         msgs = [D.Msg(t=t, icon=e[1], who=e[2], md=md(e[3])) for t, e in evs if t0 <= t <= t1 or (last_pass and t >= t0)]
         resumed = D.Resumed(slot=b["slot"], branch=f"bd/{b['id']}", waited_secs=35 * 60) if p.get("resumed") else None
-        out.append(D.Pass(n=i + 1, cells=cells, end=p["end"], end_text=p["text"], resumed=resumed, messages=msgs))
+        detail = "the plan touches client/ without a Unity check" if b["id"] == L("d5f.48") and i == 0 else ""
+        out.append(D.Pass(n=i + 1, cells=cells, end=p["end"], end_text=p["text"], detail=detail, resumed=resumed, messages=msgs))
     return out
 
 
@@ -311,6 +313,8 @@ def tone(line: str) -> TermTone:
 
 def live_page(bead: str, lines: list[str], state: LiveState) -> D.LivePage:
     tl = [D.TermLine(t=NOW - (len(lines) - i) * 20, text=md(ln), tone=tone(ln)) for i, ln in enumerate(lines)]
+    if bead == L("6dq0"):
+        tl += [D.TermLine(t=NOW + i, text=f"fixture terminal line {i + 1}") for i in range(12)]
     tools = []
     for i, ln in enumerate(lines):
         m = re.match(r"(read|edit)\s+(\S+)", md(ln))
@@ -439,6 +443,9 @@ def build() -> dict[str, Any]:
             D.LoopInfo(project="lifesim", running=True, last_activity=NOW - 4, ready=2, quiet_since=NOW - 2400, health="stalled"),
             D.LoopInfo(project="task-loop", running=False, last_activity=NOW - 7200, ready=3, health="absent"),
         ]), needs=needs(cards),
+        adhoc=[RunHeader(run="fixture-adhoc", project="lifesim", mode="stage:check", owner="fixture-owner", session="fixture-session",
+                         state=RunState.RUNNING, started=NOW - 90, branch="fixture/check")],
+        leases=[ResourceLease(name="unity", holder="fixture-owner", since=NOW - 60, run="fixture-adhoc", project="lifesim")],
         projects=[D.Project(id="lifesim", name="lifesim"), D.Project(id="task-loop", name="task-loop")],
         epics=[D.Epic(id=k, project=v["project"], title=v["title"], open=v["done"] < v["total"], done=v["done"], total=v["total"])
                for k, v in epics.items()],
@@ -475,6 +482,9 @@ def build() -> dict[str, Any]:
     }
     out["cost.json"] = cost_page()
     out["result.json"] = D.Result(ok=True, message="Sent. lifesim-fld.27 resumes in its slot.")
+    for name, obj in out.items():
+        if isinstance(obj, (D.BeadDetail, DC.CostPage)):
+            out[name] = obj.replace(version=version_of(obj))
     return out
 
 

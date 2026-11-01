@@ -56,6 +56,7 @@
   "assumptions": 0,
   "shots": 0
  },
+ "version": "83ed5ea009843186",
  "description": "Prices with a currency sign. Part of Economy.",
  "acceptance": "- works in a new save and an old one\n- tests cover the rule\n- no new warnings in the build",
  "comments": [
@@ -123,6 +124,7 @@
    ],
    "end": "",
    "end_text": "",
+   "detail": "",
    "resumed": null,
    "messages": [
     {
@@ -182,6 +184,7 @@
    ],
    "end": "",
    "end_text": "",
+   "detail": "",
    "resumed": null,
    "messages": [
     {

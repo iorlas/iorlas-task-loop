@@ -27,6 +27,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 from taskloop.contracts import dash as D  # noqa: E402
 from taskloop.contracts import wire  # noqa: E402
+from taskloop.contracts.dashcost import CostPage  # noqa: E402
+from taskloop_dash.views.snapshot import version_of  # noqa: E402
 
 STATIC = ROOT / "src" / "taskloop_dash" / "static"
 FIX = ROOT / "tests" / "fixtures" / "dash"
@@ -60,16 +62,28 @@ def placeholder(name: str) -> str:
 class Handler(BaseHTTPRequestHandler):
     state = "ok"
     writes: ClassVar[list] = []  # every accepted POST as [verb, body], for the browser harness (GET /dev/writes)
+    details: ClassVar[dict[str, str]] = {}  # isolated in-memory mutations for resource polling checks
 
     def log_message(self, format: str, *args: Any) -> None:
         pass
 
-    def send(self, code: int, body: bytes, ctype: str = "application/json") -> None:
+    def send(self, code: int, body: bytes, ctype: str = "application/json", etag: str = "") -> None:
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Cache-Control", "no-store")
+        if etag:
+            self.send_header("ETag", f'"{etag}"')
         self.end_headers()
         self.wfile.write(body)
+
+    def resource(self, body: dict[str, Any], q: dict[str, str]) -> None:
+        token = body["version"]
+        held = q.get("since") or (self.headers.get("If-None-Match") or "").strip('"')
+        self.send(304 if held == token else 200, b"" if held == token else json.dumps(body).encode(), etag=token)
+
+    def cost(self, q: dict[str, str]) -> None:
+        page = wire.load(CostPage, json.loads((FIX / "cost.json").read_text(encoding="utf-8")))
+        self.resource(wire.dump(page.replace(version=version_of(page))), q)
 
     def json(self, obj: Any, code: int = 200) -> None:
         self.send(code, json.dumps(obj, ensure_ascii=False).encode())
@@ -86,25 +100,32 @@ class Handler(BaseHTTPRequestHandler):
         if u.path in ("/api/artifact", "/api/look-shot"):
             return self.send(200, placeholder(q.get("name", "shot")).encode(), TYPES[".svg"])
         route = {"/api/snapshot": self.snap, "/api/bead": self.bead, "/api/live": self.live,
-                 "/api/cost": lambda q: self.fixture(FIX / "cost.json")}.get(u.path)
+                 "/api/cost": self.cost}.get(u.path)
         if route is None:  # the assets sit at the root, as the dash serves them: pages load them by relative url
             return self.asset(u.path.removeprefix("/"))
         route(q)
 
     def snap(self, q: dict[str, str]) -> None:
         body = snapshot(self.state)
-        return self.send(304, b"") if q.get("since") == body["version"] else self.json(body)
+        self.resource(body, q)
 
     def bead(self, q: dict[str, str]) -> None:
         p = FIX / "bead" / f"{q.get('id', '')}.json"
-        if self.state != "variants" or q.get("id") != "lifesim-5ban.3" or not p.is_file():
-            return self.fixture(p)
+        if not p.resolve().is_relative_to(FIX) or not p.is_file():
+            return self.json({"error": "unknown bead"}, 404)
         d = json.loads(p.read_text(encoding="utf-8"))
-        d["card"]["marker"] = "exited"
-        d["live"].update(kind="exited", exit_code=137, why="the worker was killed (out of memory)")
-        return self.json(d)
+        if self.state == "variants" and q.get("id") == "lifesim-5ban.3":
+            d["card"]["marker"] = "exited"
+            d["live"].update(kind="exited", exit_code=137, why="the worker was killed (out of memory)")
+        d["description"] += self.details.get(q.get("id", ""), "")
+        detail = wire.load(D.BeadDetail, d)
+        self.resource(wire.dump(detail.replace(version=version_of(detail))), q)
 
     def do_POST(self) -> None:
+        if urlparse(self.path).path == "/dev/detail":
+            body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)))
+            self.details[str(body["id"])] = str(body["text"])
+            return self.json({"ok": True})
         verb = urlparse(self.path).path.removeprefix("/api/")
         if self.state == "down":
             return self.json({"error": "down"}, 503)
@@ -147,7 +168,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def make_handler(state: str) -> type[BaseHTTPRequestHandler]:
-    return type("Handler", (Handler,), {"state": state, "writes": []})
+    return type("Handler", (Handler,), {"state": state, "writes": [], "details": {}})
 
 
 def main(argv: list[str] | None = None) -> int:

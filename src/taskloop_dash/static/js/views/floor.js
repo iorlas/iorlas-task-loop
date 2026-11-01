@@ -8,7 +8,7 @@ import { set, ui } from '../state.js';
 import { EmptyState } from '../ui/kit.js';
 import { BeadLine, Strip, useWidth } from '../ui/line.js';
 import { openBead } from './shell.js';
-import { Runs } from './runs.js';
+import { ActiveWork, Runs } from './runs.js';
 
 const BACK_H = 8, AHEAD_H = 2, AXIS = 22, ROW = 46, GRP = 24, LINE_Y = 18;
 export const ZOOMS = ['2', '4', '8'];
@@ -79,7 +79,7 @@ export function Floor({ snap, now, filters }) {
   const beadOf = (p) => beads.get(key(p.project, p.bead));
   const gs = groups(snap);
   useEffect(() => { if (ref.current && w) ref.current.scrollLeft = x(now + 3600) - w; }, [zoom, !!w]);
-  if (!snap.slots.length) return html`<${EmptyState} title="No slots yet." body="Slots appear once the loop runs a worker." cmd="tl loop" /><${Runs} snap=${snap} now=${now} />`;
+  if (!snap.slots.length) return html`<${ActiveWork} snap=${snap} now=${now} /><${EmptyState} title="No slots yet." body="Slots appear once the loop runs a worker." cmd="tl loop" /><${Runs} snap=${snap} now=${now} />`;
   const rows = {};
   let H = AXIS;
   const labs = [], trks = [];
@@ -96,7 +96,7 @@ export function Floor({ snap, now, filters }) {
   }
   const ticks = [];
   for (let d = -BACK_H * 3600 + TICK[zoom]; d < AHEAD_H * 3600; d += TICK[zoom]) ticks.push(d);
-  return html`<div class="fbar"><span class="seg">${ZOOMS.map((z) => html`<button key=${z} class=${zoom === +z ? 'on' : ''} onClick=${() => set({ opt: z })}>${z} h</button>`)}</span>
+  return html`<${ActiveWork} snap=${snap} now=${now} /><div class="fbar"><span class="seg">${ZOOMS.map((z) => html`<button key=${z} class=${zoom === +z ? 'on' : ''} onClick=${() => set({ opt: z })}>${z} h</button>`)}</span>
       ${filters}<div class="leg">${LEGEND.map(([k, l]) => html`<span key=${l}><i class=${`lg ${k}`}></i>${l}</span>`)}</div></div>
     <div class="fl" style="--lw:120px"><div class="labs"><div class="axh"></div>${labs}</div>
       <div class="sc" ref=${ref}>${pps > 0 && html`<div class="cv" style=${`width:${W + 120}px;height:${H}px`}>
@@ -133,7 +133,7 @@ function SlotCard({ snap, slot, now }) {
   } else if (b) {
     body = html`<div class="t">Free · ${bid(b.id, b.project, ui.project === 'all')} parked here</div><div class="s">${slot.idle_why || 'waits on your answer'}</div>`;
   } else {
-    body = html`<div class="t">${slot.lane ? `Idle · no ${slot.lane} work ready` : 'Stray claim'}</div>${slot.idle_why && html`<div class="s">${slot.idle_why}</div>`}`;
+    body = html`<div class="t">${st === 'free' ? 'Free' : slot.lane ? `Idle · no ${slot.lane} work ready` : 'Stray claim'}</div>${slot.idle_why && html`<div class="s">${slot.idle_why}</div>`}`;
   }
   const m = machineOf(slot);
   return html`<article class=${`slc ${busy ? '' : 'idle'}`} role=${b ? 'button' : undefined} onClick=${b ? () => openBead(b) : undefined}>
@@ -143,10 +143,11 @@ function SlotCard({ snap, slot, now }) {
 
 export function PhoneFloor({ snap, now }) {
   const slots = groups(snap).flatMap((g) => g.slots);
-  if (!slots.length) return html`<${EmptyState} title="No slots yet." body="Slots appear once the loop runs a worker." /><${Runs} snap=${snap} now=${now} />`;
+  if (!slots.length) return html`<${ActiveWork} snap=${snap} now=${now} /><${EmptyState} title="No slots yet." body="Slots appear once the loop runs a worker." /><${Runs} snap=${snap} now=${now} />`;
   const n = (...k) => slots.filter((s) => k.includes(s.state)).length;
   const stat = [['run', n('running'), 'running'], ['x', n('stuck'), 'stuck'], ['you', n('look'), 'your look'], ['mut', n('free', 'idle', 'held'), 'free']];
   return html`<div class="stat">${stat.map(([c, v, l]) => (v > 0 || c === 'run' || c === 'mut') && html`<span key=${l}><i class=${`dt ${c}`}></i>${v} ${l}</span>`)}</div>
+    <${ActiveWork} snap=${snap} now=${now} />
     ${slots.map((s) => html`<${SlotCard} key=${s.id} snap=${snap} slot=${s} now=${now} />`)}
     <p class="hint3">Last 2 hours per slot. The full timeline is on the laptop.</p><${Runs} snap=${snap} now=${now} />`;
 }

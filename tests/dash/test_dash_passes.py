@@ -41,6 +41,15 @@ def comeback() -> list:
 
 
 class Passes(unittest.TestCase):
+    def test_a_sent_back_plan_keeps_its_transition_detail_on_the_first_pass(self):
+        detail = "the plan touches client/ without a Unity check"
+        script = (RunScript("tl-7").step("plan", 30)
+                  .add("transition", **{"from": "n1", "to": "plan", "cause": "plan_sent_back", "detail": detail})
+                  .step("plan", 30).step("write", 30).close("landed"))
+        ps = [passes.pass_rec(p) for p in passes.passes_of([script.run(NOW)])]
+        self.assertEqual([(p.n, p.end, p.detail) for p in ps], [(1, "replan", detail), (2, "done", "")])
+        self.assertEqual(ps[0].end_text, "re-plan")
+
     def setUp(self):
         self.runs = comeback()
         self.ps = passes.passes_of(self.runs)

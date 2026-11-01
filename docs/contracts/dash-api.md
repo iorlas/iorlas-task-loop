@@ -13,8 +13,8 @@ Neither side changes a field alone: a change is a commit to `dash.py` plus regen
 | method, path | body / query | answer |
 |---|---|---|
 | GET `/api/snapshot` | `since=<version>` optional | `Snapshot` with `ETag: "<version>"`; 304 when `since` or `If-None-Match` equals the current `version` |
-| GET `/api/bead` | `project`, `id` | `BeadDetail`; 404 for an unknown bead |
-| GET `/api/cost` | `window=24h\|7d`, `last=<runs>`, `project` optional | `CostPage`: time, fresh tokens and cost summed per stage and bead (and per stage of each bead) over the kept engine logs; a run is in the window when its newest record is, `last` takes that many newest runs instead; a cost the worker did not give is `unknown` calls, never 0; 400 for another window |
+| GET `/api/bead` | `project`, `id`, `since=<version>` optional | `BeadDetail` with its own content-hash `version` and `ETag`; 304 for a matching `since` or `If-None-Match`; 404 for an unknown bead |
+| GET `/api/cost` | `window=24h\|7d`, `last=<runs>`, `project`, `since=<version>` optional | `CostPage` with its own `version` and `ETag`; 304 for a matching token. Time, fresh tokens and cost summed per stage and bead over the kept engine logs; `last` takes that many newest runs; missing cost is counted as `unknown` calls; 400 for another window |
 | GET `/api/live` | `project`, `id`, `since=<cursor>`, `wait=<s>` | `LivePage` with lines after the cursor; long-poll over `api/live.py` and `runlife` |
 | POST `/api/<verb>` | the `WRITES[verb]` record as JSON | `Result` |
 | GET `/api/artifact` | `bead`, `name` | a file the run kept (`ConfigDir.artifacts`); HTML only as a download |
@@ -85,8 +85,15 @@ in-process Port call (as `Ports.answer` is today), never a raw bd argv. There is
 ## Semantics both sides rely on
 
 - Times are unix seconds (float). Durations are `*_secs` ints. Tokens are ints.
-- `Snapshot.version` changes whenever a field other than `t` changes. The page polls every 2.5 s while visible and sends
-  `since`. On a 304 it keeps the old `t` and ages from it plus the browser time elapsed since that fetch.
+- Snapshot, bead detail and cost each have a content-hash `version`, excluding `t` and the token itself. Every 2.5 s while
+  visible, the page revalidates the snapshot and its mounted drawer/cost resources independently, retaining their data during
+  requests and backing off on errors. A 304 validates the retained data; the drawer and cost show seconds since validation.
+  The server clock ages from the snapshot's original successful body fetch, including across 304 responses.
+- `Snapshot.adhoc` lists every live run without a bead, independent of the ten retained headers in `runs`. `RunHeader.branch`
+  is the manifest branch, short SHA, or worktree basename. `Snapshot.leases` lists live resource holder hints, joined to runs
+  by PID; the dashboard never acquires a lease. Configured slot lanes remain present while idle or before their first run.
+- `Pass.detail` preserves the leaving transition's full detail; `end_text` supplies its cause in words. The drawer clips the
+  reason to one line with the full text on hover. A sent-back plan starts a new pass even when both steps have phase `plan`.
 - Every bead id in the API is the full bd id including the project prefix ("lifesim-4buv", "tl-8k4"), never the short tail.
   The page may strip "<project>-" for display only; ids sent back in writes are the full ones.
 - Bead ids are paired with a project wherever a row can come from more than one (`Piece`, `Slot`, `AskCard`, `LedgerRow`).

@@ -12,7 +12,7 @@ from taskloop.contracts import wire
 from taskloop.contracts.adrs import AdrStore
 from taskloop.contracts.ask import Ask
 from taskloop.contracts.bead import Bead, Comment
-from taskloop.contracts.dashruns import RunHeader
+from taskloop.contracts.dashruns import ResourceLease, RunHeader
 from taskloop.contracts.delegate import LiveEvent
 from taskloop.contracts.enums import Outcome
 from taskloop.contracts.ids import BeadId
@@ -73,6 +73,7 @@ class Worlds:
             self.looks.shot_url(basename(path), s["path"]) for s in i["shots"] if s["role"] == "after"))
             for i in items if i["status"] == "open" and i["bead"]]
         return ProjectIn(id=id, name=id, beads=rows, slots=slots, loops=states, looks=looks, adrs=self.adrs(path),
+                         slot_count=env.ports.slot_count(path),
                          profile_error=env.ports.profile_error(path))
 
     def runs(self, full: BeadId | None = None) -> dict[str, list[Run]]:
@@ -98,7 +99,19 @@ class Worlds:
                 continue
             state = RunState.LOST if shown(m, now) is Liveness.LOST else m.state
             out.append(RunHeader(run=m.run, project=projects[m.repo], mode=m.mode, owner=m.owner, session=m.session,
-                                 state=state, started=m.started, ended=m.ended, reason=m.reason))
+                                 state=state, started=m.started, ended=m.ended, reason=m.reason, bead=m.bead,
+                                 branch=m.branch or m.sha[:8] or basename(m.worktree or m.repo)))
+        return out
+
+    def leases(self, now: float) -> list[ResourceLease]:
+        """Join a live lease's pid to its run manifest; the holder hint itself has no run id."""
+        runs = [b.manifest for b in self.records.locator.runs() if shown(b.manifest, now) is Liveness.LIVE]
+        projects = {path: project for project, path in self.repos().items()}
+        out: list[ResourceLease] = []
+        for name, rec in self.env.ports.resource_holders(self.env.config):
+            run = next((r for r in reversed(runs) if r.pid == rec.pid), None)
+            out.append(ResourceLease(name=name, holder=rec.holder, since=rec.t, run=run.run if run else "",
+                                     project=projects.get(run.repo, "") if run else ""))
         return out
 
     def adrs(self, path: str) -> list[AdrIn]:
@@ -127,7 +140,7 @@ class Worlds:
         projects = [replace(p, strays=strays_of(p.beads, p.slots, runs, now),
                             events=[e for e in events if e.repo and (e.repo == paths[p.id] or basename(e.repo) == p.id)]) for p in projects]
         return World(now=now, host=socket.gethostname(), version=env.version, projects=projects, runs=runs, asks=self.asks(),
-                     run_headers=self.run_headers(now),
+                     run_headers=self.run_headers(now), leases=self.leases(now),
                      status=StatusStore(env.config).get(), ledger=self.ledger(), landings=self.landings(),
                      parks=self.records.parks(), net_pauses=self.records.net_pauses(), skipped_traces=self.records.traces().skipped)
 

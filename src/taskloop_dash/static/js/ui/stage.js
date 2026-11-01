@@ -43,7 +43,8 @@ export function StageCard({ pass, now, artifacts = [], livePhase, live, children
     <div class="row6">${pass.cells.map((c) => html`<${Cell} key=${c.phase} c=${c} onPick=${pick} />`)}</div>
     <${Thumbs} pass=${pass} artifacts=${artifacts} livePhase=${livePhase} />
     ${pass.resumed && html`<div class="pend">↪ Resumed on <b>${pass.resumed.slot}</b> from branch <code>${pass.resumed.branch}</code> after ${dur(pass.resumed.waited_secs)} waiting for a slot</div>`}
-    ${pass.end && html`<div class="pend">${END[pass.end] || ''} ${pass.end_text || pass.end.replace('_', ' ')}</div>`}
+    ${(pass.end || pass.end_text || pass.detail) && html`<div class="pend pass-why" title=${`${pass.end_text || pass.end.replace('_', ' ')}${pass.detail ? ` · ${pass.detail}` : ''}`}>
+      ${END[pass.end] || ''} why: ${pass.end_text || pass.end.replace('_', ' ')}${pass.detail && ` · ${pass.detail}`}</div>`}
     ${live}${children}
     <div class="sx">Messages, newest first</div>
     <div class="stream">${pass.messages.map((m, i) => html`<div key=${i} data-phase-msg=${m.phase || ''} class=${i >= 10 ? 'old' : ''}><${MsgLine} msg=${m} now=${now} /></div>`)}

@@ -111,6 +111,7 @@ class RunLayout:
              where.create(repo, bead, now, loop, mode=mode, owner=owner, session=session))
         if taken:
             where.identify(b.run, mode, owner, session)
+        where.worktree(b.run, str(wt))
         task_dir = Path(wt) / TASK_EXCLUDE.rstrip("/") / bead
         task_dir.mkdir(parents=True, exist_ok=True)
         evidence = task_dir / "evidence"

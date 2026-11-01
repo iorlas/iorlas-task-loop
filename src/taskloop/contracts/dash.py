@@ -11,7 +11,7 @@ from typing import Annotated, ClassVar, Literal, final
 
 import msgspec
 
-from taskloop.contracts.dashruns import RunHeader, TermLine, ToolCall
+from taskloop.contracts.dashruns import ResourceLease, RunHeader, TermLine, ToolCall
 from taskloop.contracts.ids import WireBead
 from taskloop.contracts.needs import NeedRow
 from taskloop.contracts.pickset import QueueItem
@@ -335,6 +335,8 @@ class Snapshot(Rec):
     t: float
     server: ServerInfo
     runs: list[RunHeader] = msgspec.field(default_factory=list)
+    adhoc: list[RunHeader] = msgspec.field(default_factory=list)
+    leases: list[ResourceLease] = msgspec.field(default_factory=list)
     projects: list[Project] = msgspec.field(default_factory=list)
     epics: list[Epic] = msgspec.field(default_factory=list)
     slots: list[Slot] = msgspec.field(default_factory=list)
@@ -384,6 +386,7 @@ class Pass(Rec):
     cells: list[Cell]
     end: PassEnd = ""
     end_text: str = ""
+    detail: str = ""
     resumed: Resumed | None = None
     messages: Annotated[list[Msg], msgspec.Meta(description="this pass only, newest first")] = msgspec.field(default_factory=list)
 
@@ -434,6 +437,7 @@ class BeadDetail(Rec):
     V: ClassVar[int] = 1
     t: float
     card: BeadCard
+    version: str = ""
     description: str = ""
     acceptance: str = ""
     comments: list[Msg] = msgspec.field(default_factory=list)

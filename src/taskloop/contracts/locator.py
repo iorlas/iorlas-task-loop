@@ -111,6 +111,11 @@ class RunLocator:
         if old is not None:
             self._put(old.manifest.replace(next_step=step))
 
+    def worktree(self, run: str, path: str) -> None:
+        old = self.get(run)
+        if old is not None:
+            self._put(old.manifest.replace(worktree=path))
+
     def _put(self, m: RunManifest) -> None:
         JsonStore(self.cfg.run_manifest(m.run), RunManifest).write(m)
 

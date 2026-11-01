@@ -43,6 +43,18 @@ def read_holder(path: Path, pid: int | None = None) -> LockRecord | None:
         return None if pid is None else LockRecord(what=LockWhat.LAND, holder=f"pid {pid}", pid=pid, t=0.0)
 
 
+def resource_holders(cfg: paths.ConfigDir) -> list[tuple[str, LockRecord]]:
+    """Read holder hints only: never acquire, create, release or clean up a lock from a dashboard poll."""
+    out: list[tuple[str, LockRecord]] = []
+    for path in cfg.resource_locks():
+        rec = read_holder(path)
+        if rec is not None and rec.what is LockWhat.RESOURCE and rec.alive():
+            name, _, index = path.stem.removeprefix("resource-").rpartition("-")
+            if name and index.isdigit():
+                out.append((name, rec))
+    return out
+
+
 @contextlib.contextmanager
 def hold_path(path: Path | str, holder: str, *, what: LockWhat = LockWhat.LAND, timeout: float | None = None,
               waiting: Callable[[LockRecord | None], None] | None = None,

@@ -31,6 +31,7 @@
   "assumptions": 0,
   "shots": 0
  },
+ "version": "f22279bd136d3697",
  "description": "Inventory sorting by weight. Part of World.",
  "acceptance": "- works in a new save and an old one\n- tests cover the rule\n- no new warnings in the build",
  "comments": [],
@@ -83,6 +84,7 @@
    ],
    "end": "",
    "end_text": "",
+   "detail": "",
    "resumed": null,
    "messages": []
   }

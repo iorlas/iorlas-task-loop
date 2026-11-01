@@ -12,6 +12,7 @@ from typing import Any
 from taskloop.contracts.ask import Ask, AskAction
 from taskloop.contracts.dash import Result
 from taskloop.contracts.ids import BeadId
+from taskloop.contracts.locks import LockRecord
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import AnswerAsk, Beads
 from taskloop_dash.cache import FileCache, TtlCache
@@ -69,11 +70,21 @@ def _no_error(repo: str) -> str:
     return ""
 
 
+def _no_slots(repo: str) -> int:
+    return 0
+
+
+def _no_resources(cfg: ConfigDir) -> list[tuple[str, LockRecord]]:
+    return []
+
+
 @dataclass
 class Ports:
     """Read-only facts the launcher injects. The defaults say nothing, so a dash with no launcher still serves its own files."""
 
     slot_beads: Callable[[str], list[Bead]] = _no_beads  # this machine's slot beads of a repo
+    slot_count: Callable[[str], int] = _no_slots
+    resource_holders: Callable[[ConfigDir], list[tuple[str, LockRecord]]] = _no_resources
     profile_error: Callable[[str], str] = _no_error  # the repo's red row when its .task-loop.json does not load, else ""
     store: Callable[[str], Beads] = _no_store  # the typed bd port for a repo (the engine's BdStore); the only way the dash reaches bd
     answer: AnswerAsk = _no_answer  # file the owner's answer to an ask: the intake `tl answer` uses, receipt comment included

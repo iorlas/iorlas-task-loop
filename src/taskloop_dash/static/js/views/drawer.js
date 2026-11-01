@@ -12,17 +12,7 @@ import { Trace } from '../ui/line.js';
 import { END, passNum, StageCard } from '../ui/stage.js';
 import { Controls, PhoneControls } from './controls.js';
 
-function useDetail(card, version) {
-  const [st, setSt] = useState({ d: null, err: '' });
-  useEffect(() => {
-    let live = true;
-    api.bead(card.project, card.id).then((d) => live && setSt({ d, err: '' }), (e) => live && setSt((o) => ({ d: o.d, err: e.message })));
-    return () => { live = false; };
-  }, [card.project, card.id, version]);
-  return st;
-}
-
-const TERM_LINES = 6, EXIT_LINES = 20;
+const TERM_LINES = 10, EXIT_LINES = 20;
 const TONE = { err: 'e', ok: 'o', dim: 'd', warn: 'w' };
 
 // the terminal tail: lines appended to the DOM as they come, new ones fade in; Preact never re-renders its content
@@ -33,16 +23,20 @@ function Terminal({ card, keep = TERM_LINES, onTools }) {
     return api.liveTail(card.project, card.id, (page) => {
       if (page.error) return;
       for (const l of page.lines) {
-        const div = document.createElement('div');
-        div.className = `new ${TONE[l.tone] || ''}`;
-        div.textContent = l.text;
-        el.appendChild(div);
+        const row = document.createElement('button');
+        row.className = `run-row new ${TONE[l.tone] || ''}`;
+        row.textContent = row.title = l.text;
+        row.dataset.t = l.t;
+        row.setAttribute('aria-expanded', 'false');
+        row.onclick = () => row.setAttribute('aria-expanded', String(row.classList.toggle('expanded')));
+        el.prepend(row);
       }
-      while (el.childElementCount > keep) el.firstElementChild.remove();
+      [...el.children].sort((a, b) => +b.dataset.t - +a.dataset.t).forEach((r) => el.appendChild(r));
+      while (el.childElementCount > keep) el.lastElementChild.remove();
       if (onTools && page.tools.length) onTools((t) => [...t, ...page.tools]);
     });
-  }, [card.project, card.id]);
-  return html`<div class="term" ref=${ref}></div>`;
+  }, [card.project, card.id, keep]);
+  return html`<div class="term mini" ref=${ref}></div>`;
 }
 
 const TOOL_ICON = [[/edit|write|patch/i, '📝'], [/read|view|open/i, '📄'], [/grep|glob|search|find/i, '🔍'], [/bash|shell|exec|run/i, '⌨️']];
@@ -75,7 +69,7 @@ function TroubleBox({ d, now, children }) {
     <div class="nm2">${lv.cmd && html`<span class="lb">last</span><span><code>${lv.cmd}</code></span>`}
       ${lv.silent_secs != null && html`<span class="lb">watcher</span><span>no commits, no tool calls for ${dur(lv.silent_secs)}</span>`}
       ${lv.checks && html`<span class="lb">tests</span><span>${lv.checks.passed}/${lv.checks.total} passed · ${lv.checks.failed} failed${lv.checks.unverified ? html` · <b class="unv">${lv.checks.unverified} unverified</b>` : ''}</span>`}</div>
-    <${Terminal} card=${d.card} keep=${exited ? EXIT_LINES : TERM_LINES} />${children}</div>`;
+    <${Terminal} card=${d.card} keep=${EXIT_LINES} />${children}</div>`;
 }
 
 // the live box of the live pass: run, stuck, exited, an ask or a look (§6)
@@ -147,18 +141,20 @@ function useBodyScroll(ref, place, ready) {
 }
 
 export function BeadPage({ snap, card, now, phone }) {
-  const { d, err } = useDetail(card, snap.version);
+  const resource = api.useResource(`/api/bead?project=${encodeURIComponent(card.project)}&id=${encodeURIComponent(card.id)}`);
+  const { data: d, error: err } = resource;
   const scroller = useRef(null);
   useBodyScroll(scroller, `db:${card.project}/${card.id}`, !!d);
   const pieces = piecesOf(snap, card);
   const trace = html`<${Trace} pieces=${pieces} now=${now} ack=${muted(card)} cause=${causeOf(card)} labels=${!phone}
     endMark=${card.column === 'done' ? '✅' : ''} />`;
+  const status = html`<div class="data-age">${d && api.resourceAge(resource)}${err && ` · ${err}`}</div>`;
   const body = err && !d ? html`<${EmptyState} title=${`⚠️ ${err}`} body="The bead could not be read; the board keeps working." />`
     : d ? html`<${Body} d=${d} card=${card} snap=${snap} now=${now} phone=${phone} />` : html`<p class="loading">Loading…</p>`;
   if (!phone) {
-    return html`<div class="dh"><${Header} card=${card} d=${d} snap=${snap} />${trace}</div>
+    return html`<div class="dh"><${Header} card=${card} d=${d} snap=${snap} />${status}${trace}</div>
       <div class="db" ref=${scroller}>${body}</div><${Controls} key=${card.project + card.id} card=${card} />`;
   }
   return html`<div class="pgh"><button class="bk" onClick=${() => history.back()}>‹ Back</button><span class="id">${bid(card.id, card.project, allProjects())}</span><span></span></div>
-    <div class="pgb" ref=${scroller}><${Header} card=${card} d=${d} snap=${snap} phone />${trace}${body}</div><${PhoneControls} snap=${snap} card=${card} />`;
+    <div class="pgb" ref=${scroller}><${Header} card=${card} d=${d} snap=${snap} phone />${status}${trace}${body}</div><${PhoneControls} snap=${snap} card=${card} />`;
 }

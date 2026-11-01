@@ -4,6 +4,7 @@ from collections.abc import Mapping, Sequence
 
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.dash import Phase, Piece, Slot
+from taskloop.contracts.ids import BeadId
 from taskloop.contracts.runlife import Liveness
 from taskloop_dash.views import columns
 from taskloop_dash.views.runfacts import Run
@@ -25,6 +26,17 @@ def hold_until(b: Bead) -> float:
 
 def slot_name(b: Bead) -> str:
     return b.title.split()[-1]
+
+
+def slots_of(p: ProjectIn, runs: Mapping[str, Sequence[Run]], now: float) -> list[Slot]:
+    """Configured lanes exist even before a slot bead or its first run does."""
+    beads = list(p.slots)
+    names = {slot_name(b) for b in beads}
+    for i in range(1, p.slot_count + 1):
+        name = f"s{i}"
+        if name not in names:
+            beads.append(Bead(id=BeadId("slot-" + name), title="slot " + name, status="open"))
+    return [slot_of(p, b, runs, now) for b in sorted(beads, key=slot_name)]
 
 
 def on_slot(name: str, bead_ids: set[str], runs: Mapping[str, Sequence[Run]]) -> list[tuple[str, Run]]:

@@ -224,6 +224,14 @@ class Cards(Case):
 
 
 class Parts(Case):
+    def test_only_typed_epics_include_childless_epics_and_exclude_task_parents(self):
+        p = ProjectIn(id="p", name="p", beads=[
+            bead("task-parent", issue_type="task"), bead("task-child", parent="task-parent"),
+            bead("epic-empty", issue_type="epic"), bead("epic-closed", issue_type="epic", status="closed"),
+        ])
+        self.assertEqual([(e.id, e.open, e.total) for e in snapshot.epics_of(p)],
+                         [("epic-empty", True, 0), ("epic-closed", False, 0)])
+
     def test_only_an_open_epic_with_an_open_child_is_open(self):
         p = ProjectIn(id="p", name="p", beads=[
             bead("closed", status="closed", issue_type="epic"),

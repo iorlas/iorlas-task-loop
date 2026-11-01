@@ -42,6 +42,66 @@
    "t": 1793050180.0,
    "text": "mood_rain_outdoor ........ ok",
    "tone": "ok"
+  },
+  {
+   "t": 1793050200.0,
+   "text": "fixture terminal line 1",
+   "tone": ""
+  },
+  {
+   "t": 1793050201.0,
+   "text": "fixture terminal line 2",
+   "tone": ""
+  },
+  {
+   "t": 1793050202.0,
+   "text": "fixture terminal line 3",
+   "tone": ""
+  },
+  {
+   "t": 1793050203.0,
+   "text": "fixture terminal line 4",
+   "tone": ""
+  },
+  {
+   "t": 1793050204.0,
+   "text": "fixture terminal line 5",
+   "tone": ""
+  },
+  {
+   "t": 1793050205.0,
+   "text": "fixture terminal line 6",
+   "tone": ""
+  },
+  {
+   "t": 1793050206.0,
+   "text": "fixture terminal line 7",
+   "tone": ""
+  },
+  {
+   "t": 1793050207.0,
+   "text": "fixture terminal line 8",
+   "tone": ""
+  },
+  {
+   "t": 1793050208.0,
+   "text": "fixture terminal line 9",
+   "tone": ""
+  },
+  {
+   "t": 1793050209.0,
+   "text": "fixture terminal line 10",
+   "tone": ""
+  },
+  {
+   "t": 1793050210.0,
+   "text": "fixture terminal line 11",
+   "tone": ""
+  },
+  {
+   "t": 1793050211.0,
+   "text": "fixture terminal line 12",
+   "tone": ""
   }
  ],
  "tools": [

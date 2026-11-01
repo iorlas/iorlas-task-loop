@@ -56,6 +56,7 @@
   "assumptions": 0,
   "shots": 0
  },
+ "version": "adc5b2eb87f1d41c",
  "description": "Autosave every 5 minutes. Part of Save system.",
  "acceptance": "- works in a new save and an old one\n- tests cover the rule\n- no new warnings in the build",
  "comments": [
@@ -116,6 +117,7 @@
    ],
    "end": "done",
    "end_text": "landed",
+   "detail": "",
    "resumed": null,
    "messages": [
     {

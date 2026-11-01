@@ -295,7 +295,16 @@
   "state": "done",
   "started": 1793050200.5,
   "ended": 1793050201.5,
-  "reason": "w"
+  "reason": "w",
+  "bead": "",
+  "branch": "feature/check"
+ },
+ "ResourceLease": {
+  "name": "unity",
+  "holder": "tester:unity",
+  "since": 1793050200.5,
+  "run": "01KBN6Z0M4R5E8YQ2T7C9W3XHD",
+  "project": "lifesim"
  },
  "TermLine": {
   "t": 1793050200.5,
@@ -1288,7 +1297,10 @@
   "beads": [
    "tl-7y7"
   ],
-  "next_step": null
+  "next_step": null,
+  "worktree": "/r/slots/s1",
+  "branch": "feature/check",
+  "sha": "1234567890abcdef"
  },
  "DoneMemo": {
   "v": 1,

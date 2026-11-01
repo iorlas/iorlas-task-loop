@@ -34,7 +34,9 @@
    "state": "done",
    "started": 1793050200.0,
    "ended": null,
-   "reason": "Run 0: A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason "
+   "reason": "Run 0: A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason ",
+   "bead": "",
+   "branch": ""
   },
   {
    "run": "fixture-1",
@@ -45,7 +47,9 @@
    "state": "done",
    "started": 1793050140.0,
    "ended": null,
-   "reason": "Run 1: A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason "
+   "reason": "Run 1: A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason ",
+   "bead": "",
+   "branch": ""
   },
   {
    "run": "fixture-2",
@@ -56,7 +60,9 @@
    "state": "done",
    "started": 1793050080.0,
    "ended": null,
-   "reason": "Run 2: A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason "
+   "reason": "Run 2: A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason ",
+   "bead": "",
+   "branch": ""
   },
   {
    "run": "fixture-3",
@@ -67,7 +73,9 @@
    "state": "done",
    "started": 1793050020.0,
    "ended": null,
-   "reason": "Run 3: A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason "
+   "reason": "Run 3: A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason ",
+   "bead": "",
+   "branch": ""
   },
   {
    "run": "fixture-4",
@@ -78,7 +86,9 @@
    "state": "done",
    "started": 1793049960.0,
    "ended": null,
-   "reason": "Run 4: A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason "
+   "reason": "Run 4: A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason ",
+   "bead": "",
+   "branch": ""
   },
   {
    "run": "fixture-5",
@@ -89,7 +99,9 @@
    "state": "done",
    "started": 1793049900.0,
    "ended": null,
-   "reason": "Run 5: A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason "
+   "reason": "Run 5: A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason ",
+   "bead": "",
+   "branch": ""
   },
   {
    "run": "fixture-6",
@@ -100,7 +112,9 @@
    "state": "done",
    "started": 1793049840.0,
    "ended": null,
-   "reason": "Run 6: A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason "
+   "reason": "Run 6: A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason ",
+   "bead": "",
+   "branch": ""
   },
   {
    "run": "fixture-7",
@@ -111,7 +125,9 @@
    "state": "done",
    "started": 1793049780.0,
    "ended": null,
-   "reason": "Run 7: A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason "
+   "reason": "Run 7: A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason ",
+   "bead": "",
+   "branch": ""
   },
   {
    "run": "fixture-8",
@@ -122,7 +138,9 @@
    "state": "done",
    "started": 1793049720.0,
    "ended": null,
-   "reason": "Run 8: A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason "
+   "reason": "Run 8: A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason ",
+   "bead": "",
+   "branch": ""
   },
   {
    "run": "fixture-9",
@@ -133,7 +151,9 @@
    "state": "done",
    "started": 1793049660.0,
    "ended": null,
-   "reason": "Run 9: A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason "
+   "reason": "Run 9: A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason ",
+   "bead": "",
+   "branch": ""
   },
   {
    "run": "fixture-10",
@@ -144,7 +164,33 @@
    "state": "done",
    "started": 1793049600.0,
    "ended": null,
-   "reason": "Run 10: A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason "
+   "reason": "Run 10: A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason A long recorded reason ",
+   "bead": "",
+   "branch": ""
+  }
+ ],
+ "adhoc": [
+  {
+   "run": "fixture-adhoc",
+   "project": "lifesim",
+   "mode": "stage:check",
+   "owner": "fixture-owner",
+   "session": "fixture-session",
+   "state": "running",
+   "started": 1793050110.0,
+   "ended": null,
+   "reason": "",
+   "bead": "",
+   "branch": "fixture/check"
+  }
+ ],
+ "leases": [
+  {
+   "name": "unity",
+   "holder": "fixture-owner",
+   "since": 1793050140.0,
+   "run": "fixture-adhoc",
+   "project": "lifesim"
   }
  ],
  "projects": [

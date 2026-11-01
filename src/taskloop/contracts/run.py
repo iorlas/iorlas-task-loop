@@ -201,3 +201,6 @@ class RunManifest(Rec):
     session: str = ""
     beads: tuple[str, ...] = ()  # a run of several beads (a land-stack): the first is `bead`, the others follow here
     next_step: Step | None = None
+    worktree: str = ""
+    branch: str = ""
+    sha: str = ""

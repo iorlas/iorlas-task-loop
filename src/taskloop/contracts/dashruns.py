@@ -15,6 +15,17 @@ class RunHeader(Rec):
     started: float
     ended: float | None = None
     reason: str = ""
+    bead: str = ""
+    branch: str = ""
+
+
+@final
+class ResourceLease(Rec):
+    name: str
+    holder: str
+    since: float
+    run: str = ""
+    project: str = ""
 
 
 @final

@@ -8,6 +8,7 @@ from typing import Any
 
 from taskloop.adapters.bd import BdStore
 from taskloop.adapters.ident import config_dir
+from taskloop.adapters.locks import resource_holders
 from taskloop.app.asks.intake import Intake
 from taskloop.app.doctor import profiles
 from taskloop.app.run.requests import OwnerVerbs
@@ -140,10 +141,14 @@ def ports(env: Env) -> Ports:
     def slot_beads(repo: str) -> list[dict[str, Any]]:
         return [b.to_dict() for b in wslots.slot_beads(repo, dash)]
 
+    def slot_count(repo: str) -> int:
+        return wslots.profile_slots(repo).count
+
     def red_row(repo: str) -> str:
         return profiles.red_row(git, repo)
 
     return Ports(store=store, answer=answer_via(home),
                  **owner_writes(owner_intake(wire_asks.store(home), store, now, adrs=lambda repo: AdrStore.at(home, repo),
                                              factory=lambda: factory_store(home)), home),
-                 slot_beads=quiet(slot_beads, []), profile_error=quiet(red_row, ""))
+                 slot_beads=quiet(slot_beads, []), slot_count=quiet(slot_count, 0),
+                 resource_holders=resource_holders, profile_error=quiet(red_row, ""))

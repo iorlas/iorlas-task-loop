@@ -1,4 +1,4 @@
-"""The reads (GET /api/snapshot, GET /api/bead): typed records from the builders, encoded by the contracts wire form. The snapshot's
+"""Polled resources (snapshot, bead, cost): typed builder records in the contracts wire form. Each resource's content-hash
 `version` is its ETag: a request that already holds it (`since=` or If-None-Match) gets a 304 and no body."""
 
 import json
@@ -24,6 +24,15 @@ def encode(rec: Any) -> bytes:
 
 def etag(version: str) -> str:
     return f'"{version}"'
+
+
+def versioned(rec: Snapshot | BeadDetail | CostPage, q: dict[str, str], held: str | None) -> Reply:
+    """All polled resources use the same content hash and conditional response."""
+    version = snapshot.version_of(rec)
+    headers = {"ETag": etag(version)}
+    if (q.get("since") or (held or "").strip('"')) == version:
+        return 304, b"", headers
+    return 200, encode(rec.replace(version=version)), headers
 
 
 class Reads:
@@ -55,21 +64,17 @@ class Reads:
                                 lambda: cost.build(self.worlds.world(), window, last, project))
 
     def get(self, path: str, q: dict[str, str], if_none_match: str | None = None) -> Reply:
-        """(status, body, extra headers) of a GET of /api/snapshot or /api/bead."""
+        """(status, body, extra headers) of a polled resource GET."""
         if path == "/api/snapshot":
-            snap = self.snapshot()
-            held = q.get("since") or (if_none_match or "").strip('"')
-            if held == snap.version:
-                return 304, b"", {"ETag": etag(snap.version)}
-            return 200, encode(snap), {"ETag": etag(snap.version)}
+            return versioned(self.snapshot(), q, if_none_match)
         if path == "/api/bead":
             if not q.get("project") or not q.get("id"):
                 return 400, b'{"error": "project and id"}', {}
             detail = self.bead(q["project"], q["id"])
-            return (200, encode(detail), {}) if detail else (404, b'{"error": "no such bead"}', {})
+            return versioned(detail, q, if_none_match) if detail else (404, b'{"error": "no such bead"}', {})
         if path == "/api/cost":
             window, last = q.get("window", "24h"), q.get("last", "0")
             ok = window in cost.WINDOWS and last.isdigit()
             bad = (400, b'{"error": "window 24h|7d, last a number"}', {})
-            return (200, encode(self.cost(window, int(last), q.get("project", ""))), {}) if ok else bad
+            return versioned(self.cost(window, int(last), q.get("project", "")), q, if_none_match) if ok else bad
         return 404, b'{"error": "not found"}', {}

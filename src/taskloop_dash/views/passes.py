@@ -12,7 +12,7 @@ from typing import Final
 from taskloop.contracts.dash import Cell, CellState, Msg, PassEnd, Phase, Piece, Resumed, Seg, SegKind
 from taskloop.contracts.dash import Pass as PassRec
 from taskloop.contracts.enums import Outcome
-from taskloop.contracts.log import Said, Stuck
+from taskloop.contracts.log import Said, Stuck, Transition
 from taskloop.contracts.runlife import Liveness
 from taskloop_dash.views import phases
 from taskloop_dash.views.runfacts import Run, Span
@@ -32,6 +32,7 @@ class PassView:
     end: PassEnd
     text: str
     resumed: Resumed | None
+    detail: str = ""
 
     @property
     def t0(self) -> float:
@@ -47,13 +48,15 @@ class PassView:
         return self.run.life is Liveness.LIVE and self.end == "" and self.spans[-1].t1 is None
 
 
-def groups_of(spans: Sequence[Span]) -> list[list[Span]]:
+def groups_of(spans: Sequence[Span], transitions: Sequence[Transition] = ()) -> list[list[Span]]:
     """The spans of one run cut into passes: a phase no later than the pass's furthest, and not a repeat of the last, begins one."""
     groups: list[list[Span]] = [[spans[0]]]
     for s in spans[1:]:
         cur = groups[-1]
         far = max(phases.ORDER[x.phase] for x in cur if x.phase)
-        if s.phase == cur[-1].phase or (s.phase and phases.ORDER[s.phase] > far):
+        redone = any(t.from_id == cur[-1].id and cur[-1].t0 <= t.t <= s.t0
+                     and phases.end_of_cause(t.cause) for t in transitions)
+        if not redone and (s.phase == cur[-1].phase or (s.phase and phases.ORDER[s.phase] > far)):
             cur.append(s)
         else:
             groups.append([s])
@@ -82,14 +85,20 @@ def passes_of(runs: Sequence[Run]) -> list[PassView]:
     for run in runs:
         spans = [s for s in run.spans if s.phase]
         if spans:
-            groups = groups_of(spans)
+            groups = groups_of(spans, run.transitions)
             for i, g in enumerate(groups):
+                boundary = groups[i + 1][0].t0 if i + 1 < len(groups) else run.last_t
+                moved = [t for t in run.transitions if t.from_id == g[-1].id and g[-1].t0 <= t.t <= boundary]
+                transition = moved[-1] if moved else None
                 if i + 1 < len(groups):
                     end = loop_end(run, g[-1], groups[i + 1][0])
                     text = phases.end_text(end)
                 else:
                     end, text = last_end(run)
-                out.append(PassView(len(out) + 1, run, tuple(g), end, text, resumed_of(run, prev) if i == 0 else None))
+                if transition is not None:
+                    text = phases.end_text(phases.end_of_cause(transition.cause)) or transition.cause.replace("_", " ")
+                out.append(PassView(len(out) + 1, run, tuple(g), end, text, resumed_of(run, prev) if i == 0 else None,
+                                    transition.detail if transition else ""))
         prev = run
     return out
 
@@ -172,7 +181,7 @@ def totals_of(ps: Sequence[PassView]) -> tuple[int, int]:
 
 
 def pass_rec(p: PassView) -> PassRec:
-    return PassRec(n=p.n, cells=cells_of(p), end=p.end, end_text=p.text, resumed=p.resumed, messages=messages_of(p))
+    return PassRec(n=p.n, cells=cells_of(p), end=p.end, end_text=p.text, detail=p.detail, resumed=p.resumed, messages=messages_of(p))
 
 
 def landed(run: Run) -> bool:

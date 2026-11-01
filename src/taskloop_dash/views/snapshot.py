@@ -11,7 +11,8 @@ import time
 
 from taskloop.contracts import wire
 from taskloop.contracts.bead import Bead
-from taskloop.contracts.dash import AskCard, BeadCard, Column, Epic, Piece, Project, ServerInfo, Slot, Snapshot
+from taskloop.contracts.dash import AskCard, BeadCard, BeadDetail, Column, Epic, Piece, Project, ServerInfo, Slot, Snapshot
+from taskloop.contracts.dashcost import CostPage
 from taskloop_dash.views import floor, learning, ledger, needs, passes, queue
 from taskloop_dash.views.askcards import ask_card, look_card, stale_of
 from taskloop_dash.views.board import Board, is_infra, is_work, when
@@ -27,14 +28,14 @@ def midnight(now: float) -> float:
 
 
 def epics_of(p: ProjectIn) -> list[Epic]:
-    """An epic is a bead other beads name as their parent (or one bd types `epic`); done/total count its children."""
+    """Only bd's epic type makes an epic; done/total count its children."""
     work = [b for b in p.beads if is_work(b)]
     out: list[Epic] = []
     for e in p.beads:
         kids = [b for b in work if b.parent == e.id]
-        if kids and not is_infra(e):
+        if e.issue_type == "epic" and not is_infra(e):
             out.append(Epic(id=e.id, project=p.id, title=e.title,
-                            open=e.status != "closed" and any(b.status != "closed" for b in kids),
+                            open=e.status != "closed" and (not kids or any(b.status != "closed" for b in kids)),
                             done=sum(1 for b in kids if b.status == "closed"), total=len(kids)))
     return out
 
@@ -84,7 +85,7 @@ def asks_of(w: World, cards: list[BeadCard]) -> list[AskCard]:
 
 
 def slots_of(w: World) -> list[Slot]:
-    return [x for p in w.projects for x in [*(floor.slot_of(p, b, w.runs, w.now) for b in p.slots), *floor.stray_rows(p)]]
+    return [x for p in w.projects for x in [*floor.slots_of(p, w.runs, w.now), *floor.stray_rows(p)]]
 
 
 def build(w: World) -> Snapshot:
@@ -96,6 +97,8 @@ def build(w: World) -> Snapshot:
     snap = Snapshot(
         version="", t=0.0, server=ServerInfo(version=w.version, host=w.host, loops=loops),
         needs=needs.needs_of(w, loops), runs=sorted(w.run_headers, key=lambda r: r.started, reverse=True)[:10],
+        adhoc=sorted((r for r in w.run_headers if not r.bead and r.state.live), key=lambda r: r.started, reverse=True),
+        leases=list(w.leases),
         queue=[x for p in w.projects for x in queue.items_of(w, p)],
         projects=[Project(id=p.id, name=p.name, profile_error=p.profile_error) for p in w.projects],
         epics=[e for p in w.projects for e in epics_of(p)],
@@ -104,7 +107,7 @@ def build(w: World) -> Snapshot:
     return snap.replace(version=version_of(snap), t=w.now)
 
 
-def version_of(snap: Snapshot) -> str:
-    """A hash of the snapshot as encoded, `t` left out: it changes when anything the page shows changes."""
+def version_of(snap: Snapshot | CostPage | BeadDetail) -> str:
+    """A resource's content hash, excluding its build time and the token itself."""
     body = json.dumps(wire.dump(snap.replace(version="", t=0.0)), sort_keys=True, separators=(",", ":"))
     return hashlib.sha1(body.encode("utf-8")).hexdigest()[:16]

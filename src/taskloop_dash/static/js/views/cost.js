@@ -1,7 +1,8 @@
 // Cost (bead tl-7y6.4.9): where the time and the tokens went, summed per stage and bead over 24 h, 7 d or the last
 // runs. Two stacked bars per grouping (time, tokens) over a table with the cost. A cost the worker never gave is counted in its own
 // column ("n unknown"), never added as $0. Read-only: GET /api/cost.
-import { html, useEffect, useState } from '../../vendor/ui-runtime.js';
+import { html, useState } from '../../vendor/ui-runtime.js';
+import { resourceAge, useResource } from '../api.js';
 import { bid, dur, tokens } from '../format.js';
 import { ui } from '../state.js';
 import { EmptyState } from '../ui/kit.js';
@@ -34,17 +35,13 @@ function Group({ title, rows, name, drill, snap, open, onOpen }) {
 }
 
 export function Cost({ snap }) {
-  const [win, setWin] = useState('24h'), [page, setPage] = useState(null), [err, setErr] = useState(''), [open, setOpen] = useState('');
+  const [win, setWin] = useState('24h'), [open, setOpen] = useState('');
   const w = WINDOWS.find((x) => x[0] === win);
-  useEffect(() => {
-    let on = true;
-    const q = `window=${win === 'last' ? '7d' : win}&last=${w[2] || 0}${ui.project === 'all' ? '' : `&project=${encodeURIComponent(ui.project)}`}`;
-    fetch(`/api/cost?${q}`, { cache: 'no-store' }).then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((p) => { if (on) { setPage(p); setErr(''); } }).catch((e) => { if (on) setErr(String(e.message || e)); });
-    return () => { on = false; };
-  }, [win, ui.project]);
-  const bar = html`<div class="cw">${WINDOWS.map(([k, t]) => html`<button key=${k} class=${k === win ? 'on' : ''} onClick=${() => setWin(k)}>${t}</button>`)}</div>`;
-  if (err) return html`<div class="cost">${bar}<div class="ban bad">${err}</div></div>`;
+  const q = `window=${win === 'last' ? '7d' : win}&last=${w[2] || 0}${ui.project === 'all' ? '' : `&project=${encodeURIComponent(ui.project)}`}`;
+  const resource = useResource(`/api/cost?${q}`);
+  const { data: page, error: err } = resource;
+  const bar = html`<div class="cw">${WINDOWS.map(([k, t]) => html`<button key=${k} class=${k === win ? 'on' : ''} onClick=${() => setWin(k)}>${t}</button>`)}</div>
+    <div class="data-age">${page && resourceAge(resource)}${err && ` · ${err}`}</div>`;
   if (!page) return html`<div class="cost">${bar}<p class="loading">Loading…</p></div>`;
   if (!page.runs) return html`<div class="cost">${bar}<${EmptyState} title="No runs in this window." body="Runs older than the kept logs are not counted." /></div>`;
   return html`<div class="cost">${bar}

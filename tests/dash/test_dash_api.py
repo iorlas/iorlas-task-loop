@@ -150,6 +150,28 @@ class Api(unittest.TestCase):
         self.assertEqual([(p.n, [c.state for c in p.cells if c.state != "empty"]) for p in d.passes], [(1, ["small", "live"])])
         self.assertEqual((must(d.live).kind, must(d.live).phase.value), ("run", "write"))
 
+    def test_bead_and_cost_have_independent_conditional_tokens(self):
+        snapshot_token = json.loads(self.get("/api/snapshot")[1])["version"]
+        routes = [("/api/bead", {"project": "lifesim", "id": "b-1"}), ("/api/cost", {"window": "7d"})]
+        for route, query in routes:
+            with self.subTest(route=route):
+                code, body, headers = self.get(route, query)
+                token = json.loads(body)["version"]
+                self.assertEqual((code, headers["ETag"]), (200, f'"{token}"'))
+                self.now += 16
+                self.assertEqual(self.get(route, {**query, "since": token})[:2], (304, b""))
+                self.assertEqual(self.get(route, query, headers["ETag"])[:2], (304, b""))
+                if route == "/api/bead":
+                    self.store.note("b-1", {"author": "owner", "text": "detail changed without a snapshot change"})
+                else:
+                    RunScript("b-1", slot="a", at=3000).step("plan", 300, 40_000, "OC Go").close("landed").write(self.cfg)
+                self.now += 16
+                changed, body, _ = self.get(route, {**query, "since": token})
+                self.assertEqual(changed, 200)
+                self.assertNotEqual(json.loads(body)["version"], token)
+                if route == "/api/bead":
+                    self.assertEqual(json.loads(self.get("/api/snapshot")[1])["version"], snapshot_token)
+
     def test_unknown_or_malformed_requests(self):
         self.assertEqual(self.get("/api/bead", {"project": "lifesim", "id": "nope"})[0], 404)
         self.assertEqual(self.get("/api/bead", {"project": "other", "id": "b-1"})[0], 404)

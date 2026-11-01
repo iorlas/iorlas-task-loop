@@ -64,3 +64,7 @@ class LockRecord(Rec):
     holder: str
     pid: int
     t: float
+
+    def alive(self) -> bool:
+        """A holder hint from a dead process cannot represent a held lease."""
+        return pid_alive(self.pid)

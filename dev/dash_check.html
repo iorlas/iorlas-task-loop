@@ -99,6 +99,55 @@ function type(sel, text) {
   el.dispatchEvent(new (win().Event)('input', { bubbles: true }));
 }
 const SCENARIOS = {
+  async resources() {
+    localStorage.clear();
+    await load('/#board~~lifesim-6dq0~bead'); await settle(1500);
+    const before = await (await win().fetch('/api/snapshot')).json();
+    const marker = `detail changed ${Date.now()}`;
+    await fetch('/dev/detail', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: 'lifesim-6dq0', text: marker }) });
+    await settle(3500);
+    must(doc().body.textContent.includes(marker), 'open drawer refreshes detail without snapshot changes');
+    must((await win().fetch(`/api/snapshot?since=${before.version}`)).status === 304, 'snapshot still unchanged');
+    must(/updated \d+s ago/.test($('.data-age')?.textContent), 'drawer shows data age');
+    await load('/#cost'); await settle(1500);
+    must(/updated \d+s ago/.test($('.cost .data-age')?.textContent), 'cost shows data age');
+    rules()('resource age');
+  },
+  async terminal() {
+    localStorage.clear();
+    await load('/#board~~lifesim-6dq0'); await settle(1500);
+    const rows = $$('.mini .run-row');
+    must(rows.length === 10, `terminal retains ten rows (${rows.length})`);
+    must(rows.every((r, i) => !i || +rows[i - 1].dataset.t >= +r.dataset.t), 'terminal newest first');
+    must(rows[0]?.textContent === 'fixture terminal line 12', 'newest terminal line retained');
+    for (const r of rows) {
+      const cs = win().getComputedStyle(r);
+      must(cs.whiteSpace === 'nowrap' && cs.textOverflow === 'ellipsis' && r.title === r.textContent, 'clipped terminal with full hover');
+    }
+    rows[0]?.click(); await settle();
+    must(rows[0]?.getAttribute('aria-expanded') === 'true', 'terminal row expands on click');
+    rules()('terminal');
+  },
+  async rounds() {
+    localStorage.clear();
+    await load('/#board~~lifesim-d5f.48~p1'); await settle(1500);
+    const why = $('.pass-why');
+    must(why?.textContent.includes('the plan touches client/ without a Unity check'), 'drawer keeps transition detail');
+    must(why?.title.includes('the plan touches client/ without a Unity check'), 'full transition detail on hover');
+    must(win().getComputedStyle(why).textOverflow === 'ellipsis', 'transition reason clips to one line');
+    rules()('round reason');
+  },
+  async adhoc() {
+    localStorage.clear();
+    await load('/#floor'); await settle(1500);
+    const row = $('.adhoc-row'), lease = $('.lease-row');
+    must(row?.textContent.includes('ad-hoc: stage:check on fixture/check') && row.textContent.includes('fixture-owner'), 'ad-hoc work on Floor');
+    must(lease?.textContent.includes('unity: held by fixture-owner') && lease.textContent.includes('(run fixture-adhoc)'), 'Unity holder and run shown');
+    const lanes = $(W <= 600 ? '.slc' : '.fl');
+    must(!lanes || !!(row.compareDocumentPosition(lanes) & 4), 'ad-hoc work precedes slot lanes');
+    rules()('ad-hoc work');
+  },
   async headers() {
     localStorage.clear();
     await load('/#board'); await settle(1500);
@@ -183,7 +232,7 @@ const SCENARIOS = {
     must($$(phone ? '.pc' : '.kc').some((c) => /💀/.test(c.textContent) && /NPC daily/.test(c.textContent)) || $$('.tr,.pc,.kc').some((c) => /💀/.test(c.textContent)), 'the board marks the bead 💀');
     const box = $('.box.bad');
     must(box && /Worker exited · code 137/.test(box.textContent), `exit code shown: ${box && box.querySelector('.bh').textContent}`);
-    must(box && box.querySelectorAll('.term div').length > 6, `more than the 6 running lines (${box && box.querySelectorAll('.term div').length})`);
+    must(box && box.querySelectorAll('.term .run-row').length === 20, 'exited terminal keeps twenty rows');
     must(box && box.querySelector('.stopa'), 'the stop chips sit under it');
     rules()('exited');
   },
@@ -446,7 +495,7 @@ const SCENARIOS = {
     must(/Acceptance/.test($('.bead').textContent), 'Bead tab shows acceptance');
     rules()('drawer d5f.48');
     await load('/#board~~lifesim-6dq0'); await settle(2500);
-    must($$('.term div').length >= 5, `live tail has ${$$('.term div').length} lines`);
+    must($$('.term .run-row').length === 10, `live tail has ${$$('.term .run-row').length} lines`);
     must($('.box.run'), 'running box');
     rules()('drawer 6dq0');
     if (W > 600) {  // the native overlays: the drawer is a modal dialog, the tool-call list a popover that a click inside closes

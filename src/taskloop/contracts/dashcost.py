@@ -31,6 +31,7 @@ class CostPage(Rec):
     V: ClassVar[int] = 1
     t: float
     window: str
+    version: str = ""
     runs: int = 0
     stages: list[CostRow] = msgspec.field(default_factory=list)
     beads: list[CostRow] = msgspec.field(default_factory=list)
