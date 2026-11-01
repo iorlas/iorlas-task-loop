@@ -33,7 +33,7 @@ class CleanGate(EngineTest):
 
         eng = self.engine(procsim.fake("requires-evidence", check))
         proof = self.wt / relative
-        proof.parent.mkdir(parents=True)
+        proof.parent.mkdir(parents=True, exist_ok=True)
         proof.write_text("slot only")
         # A stage pass for the same tracked tree must not authorize delivery.
         self.assertFalse(eng.checker.run_items(gate_items(eng.cfg)).failed)
