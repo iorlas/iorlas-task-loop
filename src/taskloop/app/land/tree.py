@@ -6,6 +6,7 @@ from typing import Protocol
 
 from taskloop.app.land.gitcall import must
 from taskloop.app.land.parts import BeginSteps, FetchCheckout, StageCheckout
+from taskloop.app.slots.engine_lock import engine_busy
 from taskloop.app.slots.reset import leave_slot
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.ids import BeadId
@@ -132,6 +133,14 @@ class Tree:
         here = str(Path(e.wt).resolve())
         for there in e.git.checkouts(e.wt):
             if there.branch == branch and str(Path(there.path).resolve()) != here:
+                busy = engine_busy(there.path)
+                if busy:
+                    why = f"failed: {branch} is checked out in {there.path}: {busy}; left alone"
+                    e.warn(why)
+                    raise e.blocked_for(why, "FAULT_SLOT")
+                if e.git.branch(there.path) != branch:
+                    e.warn(f"{there.path} changed branch before detaching: left alone")
+                    continue
                 if e.git.dirty(there.path):
                     raise e.blocked_for(
                         f"failed: {branch} is checked out in {there.path} with uncommitted work; commit or clean it there", "FAULT_SLOT"
@@ -159,6 +168,6 @@ class Tree:
         if outcome in ("landed", "done") or not branch or branch != (e.branch or None):
             return
         try:
-            leave_slot(e.git, e.wt, e.cfg.base, branch, dirty=bool(e.checkout.dirty_status()))
+            leave_slot(e.git, e.wt, e.cfg.base, branch, dirty=lambda: bool(e.checkout.dirty_status()))
         except SlotGitError as err:
             e.warn(f"the slot could not be left at the base: {str(err).strip()[-160:]}")

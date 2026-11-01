@@ -1,6 +1,7 @@
 """Cleanup after a recorded land: compare the checked oids, log the result, and keep failures retryable."""
 from collections.abc import Callable
 
+from taskloop.app.slots.engine_lock import engine_busy
 from taskloop.app.slots.reset import leave_slot
 from taskloop.contracts import log as rec
 from taskloop.contracts.locator import RunLocator
@@ -39,6 +40,9 @@ def _tidy_checkouts(git: Git, repo: str, log: RunLog, branch: str, head: str,
             continue
         if co.main:
             return f"{branch} is checked out in the main checkout: kept"
+        busy = engine_busy(co.path)
+        if busy:
+            return f"worktree {co.path} stays: {branch} kept: {busy}"
         # A ref can move while the checkout list is being read. Never remove that checkout's newer work.
         if git.rev_parse(repo, f"refs/heads/{branch}") != head:
             return f"local {branch} moved before worktree removal: kept"

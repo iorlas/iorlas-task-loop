@@ -66,7 +66,7 @@ class Settle:
                         and v.why.endswith(" has uncommitted work of another branch"))
         if quick and not v.pre_engine and not dirty_branch:
             try:
-                SlotPool(self.env.slot_env()).named(name).ready_for("")
+                SlotPool(self.env.slot_env()).named(name).check_ready()
                 quick = False
             except SlotFail as err:
                 quick = err.code == "slot_broken"

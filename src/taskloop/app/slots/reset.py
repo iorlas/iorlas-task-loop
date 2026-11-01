@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, TypeVar
 
 from taskloop.app.slots import owned
+from taskloop.app.slots.engine_lock import engine_busy
 from taskloop.app.slots.env import SlotEnv, stamp
 from taskloop.contracts.ports import SlotGit
 from taskloop.contracts.slots import BranchPinned, DirtyTree, IndexLocked, RefRace, SlotFail, SlotGitError
@@ -39,10 +40,7 @@ def retrying[T](env: SlotEnv, what: str, call: Callable[[], T]) -> T:
 def ready_for(slot: Slot, bead: str, *, force: bool = False) -> None:
     env, d = slot.env, slot.dir
     holder = env.lock_pid(d)  # the lock judged busy below is the one dropped
-    busy = env.busy(d)  # never commit or switch branches under a running engine (2026-10-21, lifesim-5ar.7)
-    hold = slot.hold()
-    if not busy and hold:
-        busy = f"held by {hold.by} until {stamp(hold.until)}: {hold.why}"
+    busy = reset_busy(slot)
     if busy and not force:
         raise SlotFail("busy", f"slot {slot.name}: {busy}; not reset (--force: reset anyway and drop the lock)")
     if busy:
@@ -57,6 +55,29 @@ def ready_for(slot: Slot, bead: str, *, force: bool = False) -> None:
     check_out(slot, bead)
     retrying(env, f"slot {slot.name}", lambda: env.git.clean(d, env.cfg.keep))
     setup(slot, force=recreated)
+
+
+def reset_busy(slot: Slot) -> str:
+    """The ownership checks shared by reset and its read-only diagnostic."""
+    busy = slot.env.busy(slot.dir)
+    hold = slot.hold()
+    if not busy and hold:
+        busy = f"held by {hold.by} until {stamp(hold.until)}: {hold.why}"
+    return busy
+
+
+def check_ready(slot: Slot) -> None:
+    """Read current facts only: a released slot may already belong to another loop."""
+    busy = reset_busy(slot) or slot.free_reason()
+    if busy:
+        raise SlotFail("busy", f"slot {slot.name}: {busy}")
+    if not Path(slot.dir).is_dir():
+        raise SlotFail("slot_broken", f"slot {slot.name}: worktree missing")
+    env, d = slot.env, slot.dir
+    if retrying(env, f"slot {slot.name}", lambda: env.git.rebasing(d)):
+        raise SlotFail("slot_broken", f"slot {slot.name}: rebase in progress")
+    if retrying(env, f"slot {slot.name}", lambda: env.git.dirty(d)):
+        raise SlotFail("slot_broken", f"slot {slot.name}: uncommitted work")
 
 
 def keep_work(slot: Slot) -> None:
@@ -99,9 +120,21 @@ def free_branch(slot: Slot, branch: str) -> str:
     for c in held:
         busy = env.busy(c.path)
         if busy or c.main:
-            return "branch {} is checked out in {}{}".format(branch, c.path, ": " + busy if busy else " (the repo's own checkout)")
+            why = "branch {} is checked out in {}{}".format(branch, c.path, ": " + busy if busy else " (the repo's own checkout)")
+            env.say(why + "; left alone")
+            return why
     for c in held:
-        if not slot.pool.name_of(c.path) and not env.git.dirty(c.path) and env.git.remove_worktree(env.repo, c.path):
+        busy = env.busy(c.path)
+        if busy:
+            why = f"branch {branch} is checked out in {c.path}: {busy}"
+            env.say(why + "; left alone")
+            return why
+        if env.git.branch(c.path) != branch:
+            why = f"worktree {c.path} changed branch before freeing {branch}: left alone"
+            env.say(why)
+            return why
+        dirty = env.git.dirty(c.path)
+        if not slot.pool.name_of(c.path) and not dirty and env.git.remove_worktree(env.repo, c.path):
             env.say(f"FREED: branch {branch}: removed the clean worktree {c.path}")
             continue
         try:
@@ -155,9 +188,11 @@ def ensure_tree(slot: Slot) -> bool:
     return True
 
 
-def leave_slot(git: SlotGit, directory: str, base: str, branch: str, *, dirty: bool | None = None) -> bool:
+def leave_slot(git: SlotGit, directory: str, base: str, branch: str, *, dirty: Callable[[], bool] | None = None) -> bool:
     """Leave a clean slot detached at its base; preserve work that could not be saved."""
-    unsaved = git.dirty(directory) if dirty is None else dirty
+    if engine_busy(directory):
+        return False
+    unsaved = git.dirty(directory) if dirty is None else dirty()
     if unsaved or git.branch(directory) != branch:
         return False
     git.checkout_detached(directory, base)

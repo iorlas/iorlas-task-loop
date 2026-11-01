@@ -81,13 +81,13 @@ class Infrastructure(Rig):
         self.assertEqual(reset.call_count, 2 * LoopConfig().slot_fails_to_set_aside)
         aside.assert_called_once()
 
-    def test_an_engine_slot_failure_that_recovers_does_not_count_toward_set_aside(self):
+    def test_an_engine_slot_failure_with_ready_facts_does_not_count_toward_set_aside(self):
         counters = Counters(slot_quick={"s1": ["previous"]})
         settle, _files = self.settle(counters)
         verdict = vd.Verdict(Result.FAILED, kind="fault_slot", slot_fault="slot_broken", minutes=0.1)
-        with mock.patch.object(Slot, "ready_for") as reset:
+        with mock.patch.object(Slot, "check_ready") as probe:
             self.assertFalse(settle.count_slot(verdict, "x-1", "s1"))
-        reset.assert_called_once_with("")
+        probe.assert_called_once_with()
         self.assertEqual(counters.slot_quick["s1"], [])
 
     def test_another_branchs_unsaved_work_counts_even_when_the_slot_cannot_be_held(self):
@@ -100,10 +100,10 @@ class Infrastructure(Rig):
             slot_fault="slot_broken",
             minutes=0.3,
         )
-        with mock.patch.object(Slot, "ready_for") as reset, mock.patch("taskloop.app.loop.settle.verbs.hold", return_value=1) as hold:
+        with mock.patch.object(Slot, "check_ready") as probe, mock.patch("taskloop.app.loop.settle.verbs.hold", return_value=1) as hold:
             for number in range(LoopConfig().slot_fails_to_set_aside):
                 self.assertIsNone(settle.apply(verdict, f"x-{number}", "s1", True))
-        reset.assert_not_called()  # do not reset another branch's unsaved work to judge this failure
+        probe.assert_not_called()  # the verdict already establishes the dirty branch
         hold.assert_called_once()
         self.assertEqual(counters.slot_quick["s1"], [f"x-{LoopConfig().slot_fails_to_set_aside - 1}"])
         self.assertTrue(any("could not be set aside" in line for line in self.out))
@@ -119,6 +119,23 @@ class Infrastructure(Rig):
         for failure in failures:
             counters = Counters(slot_quick={"s1": ["previous"]})
             settle, _files = self.settle(counters)
-            with self.subTest(failure=failure), mock.patch.object(Slot, "ready_for", side_effect=failure):
+            with self.subTest(failure=failure), mock.patch.object(Slot, "check_ready", side_effect=failure):
                 self.assertFalse(settle.count_slot(verdict, "x-1", "s1"))
             self.assertEqual(counters.slot_quick["s1"], [])
+
+    def test_settle_probe_only_reads_git_even_when_leftover_work_exists(self):
+        for dirty in (False, True):
+            with self.subTest(dirty=dirty):
+                self.git.calls.clear()
+                self.git.tree(self.d1).dirty = dirty
+                self.git.tree(self.d1).branch = "task/other"
+                counters = Counters()
+                settle, _files = self.settle(counters)
+                verdict = vd.Verdict(Result.FAILED, kind="fault_slot", slot_fault="slot_broken", minutes=0.1)
+                with mock.patch("taskloop.app.slots.reset.setup") as setup:
+                    self.assertFalse(settle.count_slot(verdict, "x-1", "s1"))
+                setup.assert_not_called()
+                self.assertEqual(counters.slot_quick["s1"], ["x-1"] if dirty else [])
+                self.assertTrue(all(call[0] in ("dirty", "rebasing") for call in self.git.calls))
+                self.assertEqual(self.git.tree(self.d1).branch, "task/other")
+                self.assertEqual(self.git.tree(self.d1).dirty, dirty)

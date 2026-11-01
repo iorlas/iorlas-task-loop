@@ -142,6 +142,7 @@ class Reset(Rig):
     def test_a_dead_runs_worktree_holding_the_branch_is_freed(self):
         self.git.branches.add("task/x-1")
         self.git.elsewhere["task/x-1"] = Checkout(path="/w/old", branch="task/x-1", main=False)
+        self.git.tree("/w/old").branch = "task/x-1"
         self.slot().ready_for("x-1")
         self.assertEqual(self.git.removed, ["/w/old"])
         self.assertEqual(self.git.tree(self.d1).branch, "task/x-1")

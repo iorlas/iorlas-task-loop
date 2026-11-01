@@ -5,7 +5,7 @@ from pathlib import Path
 from taskloop.app.slots import owned
 from taskloop.app.slots.env import SlotEnv, peek, stamp
 from taskloop.app.slots.marks import clear_marks, held_by, hold_of, hold_until, mark_held, next_gen
-from taskloop.app.slots.reset import ready_for
+from taskloop.app.slots.reset import check_ready, ready_for
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.fence import SLOT_GEN, gen_of
 from taskloop.contracts.ids import BeadId
@@ -70,6 +70,10 @@ class Slot:
     def ready_for(self, bead: str, *, force: bool = False) -> None:
         """A clean tree on the bead's branch, leftover work committed (never wiped); see reset.py."""
         ready_for(self, bead, force=force)
+
+    def check_ready(self) -> None:
+        """Read-only readiness diagnostic; does not recover or reset the worktree."""
+        check_ready(self)
 
     def release(self, bead: str | None = None, *, mine: bool = False, force: bool = False, gen: int | None = None) -> bool:
         """Free the slot; fails busy while an engine runs in it (force drops the engine's lock and frees it). mine=True (a run
