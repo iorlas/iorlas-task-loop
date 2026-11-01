@@ -14,6 +14,8 @@ from taskloop.app.slots import verbs
 from taskloop.app.slots.pool import SlotPool
 from taskloop.contracts.config import LoopConfig
 from taskloop.contracts.enums import Result
+from taskloop.contracts.ids import BeadId
+from taskloop.contracts.parks import ParkStore
 from taskloop.contracts.ports import BdFailure
 from taskloop.contracts.slots import SlotFail, SlotGitError
 
@@ -122,6 +124,18 @@ class Settle:
         t, c, env = self.tune(), self.c, self.env
         if slots and name and self.count_slot(v, bid, name):
             return None
+        rec = ParkStore(env.cfgdir).get(BeadId(bid)) if bid else None
+        if rec and rec.reason and rec.run == v.run:
+            self.gate.held.pop(bid, None)
+            c.later.pop(bid, None)
+            if rec.permanence == "transient":
+                if v.paused_for_network:
+                    self.network(v, bid)
+                c.later[bid] = rec.retry_at
+                self.say(f"{bid}: {rec.reason}; retry at {time.strftime('%H:%M', time.localtime(rec.retry_at))}")
+            else:
+                self.say(f"{bid}: {rec.reason}; parked for the owner")
+            return None
         if v.pre_engine:  # the engine never started: no verdict on the run, so no failure toward the stop
             c.later[bid] = env.now() + t.pause_retry
             self.say(f"{bid} waiting for infrastructure before its engine starts: it will be retried")
@@ -129,6 +143,10 @@ class Settle:
         if v.paused_for_network:
             self.network(v, bid)
             return None
+        return self.counted(v, bid, name, slots)
+
+    def counted(self, v: vd.Verdict, bid: str, name: str, slots: bool) -> int | None:
+        c = self.c
         c.ran += 1
         if v.storm:  # this run's close tripped the storm detector (the engine wrote the record and the banner)
             print(v.storm)

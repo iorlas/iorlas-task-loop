@@ -173,6 +173,7 @@ class BeadCard(Rec):
     ack: bool = False
     totals: Totals = msgspec.field(default_factory=Totals)
     assumptions: int = 0
+    retry_at: float = 0.0
     shots: int = 0
 
 

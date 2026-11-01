@@ -1,4 +1,5 @@
 """Stage tests, part 3: the stale tree, slot hygiene, dead lanes, contracts and follow-ups. Split from test_stages."""
+
 import json
 import os
 import subprocess
@@ -45,7 +46,6 @@ from taskloop.domain.land.matchers import _TRANSIENT as TRANSIENT_PUSH
 
 class StaleTree(StagesTest):
     """tl-fsj: the tree a check runs on must have what the base's config names."""
-
 
     def main_moves(self, name="moved.txt"):
         base = Path(self.tmp.name, "base-moves")
@@ -117,7 +117,9 @@ class StaleTree(StagesTest):
             store=self.store,
             env=snapshot(),
             spawner=real_spawner(),
-            git=port_git(), who=who())
+            git=port_git(),
+            who=who(),
+        )
         self.junk_and_moving_main()
         (self.wt / "a.txt").write_text("edited and not committed\n")
         self.assertEqual(e.rebase.onto_base(), "")
@@ -160,7 +162,9 @@ class StaleTree(StagesTest):
             store=self.store,
             env=snapshot(),
             spawner=real_spawner(),
-            git=port_git(), who=who())
+            git=port_git(),
+            who=who(),
+        )
         before = gitq.git("rev-parse", "HEAD", cwd=e.wt)
         (self.wt / "g.txt").write_text("more work\n")
         te.sh("git", "commit", "-qam", "wip (t-1): blocked", cwd=self.wt)  # what reset() does with a dirty tree
@@ -216,13 +220,14 @@ class SlotHygiene(StagesTest):
             store=self.store,
             env=snapshot(),
             spawner=real_spawner(),
-            git=port_git(), who=who())
+            git=port_git(),
+            who=who(),
+        )
         self.assertEqual(e.checkout.dirty_status(), "")
         self.assertIn("?? client/", gitq.git("status", "--porcelain", cwd=e.wt))  # git alone calls it dirty: the old tree has no such rule
         Path(self.wt, "client/keep.log").write_text("real\n")  # negated by the base: real work
         Path(self.wt, "client/src.cs").write_text("real\n")
         self.assertEqual(sorted(ln[3:] for ln in e.checkout.dirty_status().splitlines()), ["client/keep.log", "client/src.cs"])
-
 
     def test_files_the_base_does_not_ignore_keep_a_parked_slot_where_it_is(self):
         rc, _s = self.run_engine({"plan": [PLAN], "write": [dict(WRITE, question="Which format?")]})
@@ -277,6 +282,7 @@ class SlotHygiene(StagesTest):
                     (Path(cwd) / "client").mkdir(exist_ok=True)
                     (Path(cwd) / "client" / "log.txt").write_text("unity\n")
                 return super().reply(role, prompt, schema, cwd, *a, **kw)
+
         with mock.patch.object(fake_route, "Script", Writer):
             rc, _s = self.run_engine({"plan": [PLAN], "write": [dict(WRITE, question="Which format?")]})
         self.assertEqual(rc, 2)
@@ -312,7 +318,8 @@ class DeadLane(StagesTest):
         rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [*self.blips(4), te.full(CLEAN, "r", family="openai")]})
         self.assertNotEqual(rc, 0)
         self.assertFalse(self.closed)
-        self.assertEqual((self.eng.pause_role, self.eng.retry_after), ("reviewer", 0.0))
+        self.assertEqual(self.eng.pause_role, "reviewer")
+        self.assertGreater(self.eng.retry_after or 0, 0)  # a missing lane is transient: it is retried on a timer
         self.assertIn("no lane of another family", self.eng.log_path.read_text())
 
     def test_delegates_same_family_flag_pauses_the_step_too(self):
@@ -333,7 +340,6 @@ class Contracts(StagesTest):
 
     def land_with(self, fails):
         return pusher("flaky-push", Path(self.tmp.name, "flaky-count"), cut_first=fails)
-
 
     def test_a_push_that_keeps_failing_pauses_the_bead_and_asks_nobody(self):
         rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, land=self.land_with(99))
@@ -451,8 +457,11 @@ class Contracts(StagesTest):
             if k.get("cwd") == str(other):
                 return mock.Mock(returncode=1, stdout="", stderr="dolt: database not found")
             if a[0] == "show":  # absent from the list: only a bead bd really does not know is gone (a gate or wisp is hidden from lists)
-                return (mock.Mock(returncode=0, stdout=json.dumps([{"id": "b-hidden", "status": "open"}]), stderr="") if a[1] == "b-hidden"
-                        else mock.Mock(returncode=1, stdout="", stderr=f"Error: no issue found matching {a[1]}"))
+                return (
+                    mock.Mock(returncode=0, stdout=json.dumps([{"id": "b-hidden", "status": "open"}]), stderr="")
+                    if a[1] == "b-hidden"
+                    else mock.Mock(returncode=1, stdout="", stderr=f"Error: no issue found matching {a[1]}")
+                )
             return mock.Mock(
                 returncode=0, stderr="", stdout=json.dumps([{"id": "b-open", "status": "open"}, {"id": "b-closed", "status": "closed"}])
             )
@@ -487,9 +496,16 @@ class PlanTimeout(StagesTest):
 
     @te.no_repo
     def test_the_limits_a_check_sets_for_itself_are_read_in_minutes(self):
-        for check, minutes in (("just play --timeout_ms 2400000", 40.0), ("tool -testTimeoutMs=1800000", 30.0), ("run --timeout=40m", 40.0),
-                               ("run --timeout 2h", 120.0), ("timeout 2400 python3 t.py", 40.0), ("x --timeout-min 45", 45.0),
-                               ("x timeout_seconds=600", 10.0), ("x --timeout 90", 1.5)):
+        for check, minutes in (
+            ("just play --timeout_ms 2400000", 40.0),
+            ("tool -testTimeoutMs=1800000", 30.0),
+            ("run --timeout=40m", 40.0),
+            ("run --timeout 2h", 120.0),
+            ("timeout 2400 python3 t.py", 40.0),
+            ("x --timeout-min 45", 45.0),
+            ("x timeout_seconds=600", 10.0),
+            ("x --timeout 90", 1.5),
+        ):
             got = [m for m, _ in sh_matchers.own_timeouts(check)]
             self.assertEqual(got, [minutes], check)
         for check in ("pytest tests", "grep -q timeout config.yaml", "x --timeouts 5", "x --no-timeout", "x timeout_msg"):
@@ -548,8 +564,12 @@ class ClaimPerBead(StagesTest):
     def test_a_claim_that_changed_hands_meanwhile_is_not_taken(self):
         blocked = dict(self.BEAD, status="blocked")
         cs = [{"author": "tl-x", "text": "Blocked: stuck", "created_at": "2026-10-25T10:00:00Z"}]
-        with self.store.stub(show=blocked), mock.patch.object(wrunning, "running", return_value={}), self.store.stub(comments=cs), \
-                self.store.stub(bd_fn=lambda *a, **k: mock.Mock(returncode=1)):
+        with (
+            self.store.stub(show=blocked),
+            mock.patch.object(wrunning, "running", return_value={}),
+            self.store.stub(comments=cs),
+            self.store.stub(bd_fn=lambda *a, **k: mock.Mock(returncode=1)),
+        ):
             ok, why = entry.admit("o67g", str(self.wt), port_git(), who(), store=self.store)
         self.assertFalse(ok)
         self.assertIn("changed hands", why)
@@ -608,6 +628,7 @@ class FreshAside(StagesTest):
 
 class FollowUps(StagesTest):
     """tl-7y6.7.9: a follow-up is filed only when bd's create worked; lint sections are added once; a refused one is never 'filed'."""
+
     LO: ClassVar[Any] = {"title": "Rename x", "why": "found in passing"}
     LINT = "missing required sections for task: ## Acceptance Criteria, ## Touches"
 
@@ -619,6 +640,7 @@ class FollowUps(StagesTest):
                 if always or not ("## Touches" in body and "## Acceptance Criteria" in body):
                     return mock.Mock(returncode=1, stdout="", stderr=self.LINT)
             return r
+
         return fake
 
     def reflect_comments(self):
@@ -644,8 +666,9 @@ class FollowUps(StagesTest):
         self.assertEqual(self.eng.filed, [])
         self.assertIn("filed=0", self.reflect_comments()[0])
         self.assertIn("unfiled=1", self.reflect_comments()[0])
-        self.assertTrue(any(c[:2] == ("comments", "add") and c[3].startswith("Follow-up (engine)") and "Rename x" in c[3]
-                            for c in self.bd_calls))
+        self.assertTrue(
+            any(c[:2] == ("comments", "add") and c[3].startswith("Follow-up (engine)") and "Rename x" in c[3] for c in self.bd_calls)
+        )
         self.assertEqual(len([c for c in self.bd_calls if c[:2] == ("create", "Rename x")]), 2)  # one retry, no more
 
     @te.no_repo
@@ -662,8 +685,10 @@ class EngineOnlyFlags(StagesTest):
     """The write step's request lists the engine-only recipes (route.py run --engine-only); read-only steps pass none."""
 
     def test_only_the_write_step_names_the_recipes_the_writer_must_not_run(self):
-        checks = [{"id": "slow", "cmd": procsim.fake("just slow", procsim.exits(0)), "group": "tests", "writer": False},
-                  {"id": "fmt", "cmd": procsim.fake("just fmt", procsim.exits(0)), "group": "static", "writer": True}]
+        checks = [
+            {"id": "slow", "cmd": procsim.fake("just slow", procsim.exits(0)), "group": "tests", "writer": False},
+            {"id": "fmt", "cmd": procsim.fake("just fmt", procsim.exits(0)), "group": "static", "writer": True},
+        ]
         _rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, checks=checks)
         flags = {role: [a[i + 1] for i, x in enumerate(a) if x == "--engine-only"] for a in s.argvs for role in [a[3]]}
         self.assertEqual(flags.get("worker"), ["slow"])

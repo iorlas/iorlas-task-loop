@@ -17,6 +17,7 @@ class RunHeader(Rec):
     reason: str = ""
     bead: str = ""
     branch: str = ""
+    retry_at: float = 0.0
 
 
 @final

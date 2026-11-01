@@ -21,8 +21,10 @@ from taskloop.contracts.checks import CheckRun
 from taskloop.contracts.dash import BeadDetail, CheckCount, Column, Marker, Snapshot
 from taskloop.contracts.delegate import LiveCmdEnd, LiveCmdStart, LiveTokens
 from taskloop.contracts.enums import AskClass, AskKind, AskStatus
+from taskloop.contracts.ids import BeadId
 from taskloop.contracts.log import RunStart
 from taskloop.contracts.loop import LoopState, QueueRow, Skip
+from taskloop.contracts.parks import Park
 from taskloop_dash.views import bead_detail, snapshot
 from taskloop_dash.views.board import Board, review_of
 from taskloop_dash.views.world import LookItem, ProjectIn, World
@@ -63,6 +65,28 @@ def slot_bead(name, status="open", **meta):
 
 
 class Case(unittest.TestCase):
+    def test_board_row_and_drawer_card_carry_the_persisted_retry_time(self):
+        w = self.world()
+        w = dataclasses.replace(
+            w,
+            parks={
+                "b-parked": Park(
+                    bead=BeadId("b-parked"),
+                    hash="h",
+                    runs=0,
+                    run="r",
+                    t=NOW,
+                    reason="no_lane",
+                    permanence="transient",
+                    retry_at=NOW + 60,
+                    attempts={"no_lane": 1},
+                )
+            },
+        )
+        p = w.projects[0]
+        b = next(b for b in p.beads if b.id == "b-parked")
+        self.assertEqual(Board(w).card(p, b, {}).retry_at, NOW + 60)
+
     def setUp(self):
         self.tz = os.environ.get("TZ")
         os.environ["TZ"] = "UTC"
@@ -233,11 +257,18 @@ class Parts(Case):
                          [("epic-empty", True, 0), ("epic-closed", False, 0)])
 
     def test_only_an_open_epic_with_an_open_child_is_open(self):
-        p = ProjectIn(id="p", name="p", beads=[
-            bead("closed", status="closed", issue_type="epic"),
-            bead("empty", issue_type="epic"), bead("active", issue_type="epic"),
-            bead("a", parent="closed"), bead("b", parent="empty", status="closed"), bead("c", parent="active"),
-        ])
+        p = ProjectIn(
+            id="p",
+            name="p",
+            beads=[
+                bead("closed", status="closed", issue_type="epic"),
+                bead("empty", issue_type="epic"),
+                bead("active", issue_type="epic"),
+                bead("a", parent="closed"),
+                bead("b", parent="empty", status="closed"),
+                bead("c", parent="active"),
+            ],
+        )
         self.assertEqual({e.id: e.open for e in snapshot.epics_of(p)}, {"closed": False, "empty": False, "active": True})
 
     def test_epics_roll_up_their_children(self):
@@ -334,12 +365,21 @@ class Detail(Case):
 
     def test_the_live_box_counts_unverified_checks_apart_from_passed_and_failed(self):
         run = CheckRun(round=1, results=[res("a", 0), res("b", 1), res("c", 86, status="unverified")])
-        script = (RunScript("b-run", slot="a", at=3000).step("checks", 50, 1, end=False)
-                  .wait(500)
-                  .add("checks", node_id="n1", run={k: v for k, v in wire.dump(run).items() if k != "v"}).beat())
+        script = (
+            RunScript("b-run", slot="a", at=3000)
+            .step("checks", 50, 1, end=False)
+            .wait(500)
+            .add("checks", node_id="n1", run={k: v for k, v in wire.dump(run).items() if k != "v"})
+            .beat()
+        )
         w = self.world()
-        d = bead_detail.build(Board(dataclasses.replace(w, runs={**w.runs, "b-run": [script.run(NOW)]})), w.projects[0],
-                              next(x for x in w.projects[0].beads if x.id == "b-run"), (), ())
+        d = bead_detail.build(
+            Board(dataclasses.replace(w, runs={**w.runs, "b-run": [script.run(NOW)]})),
+            w.projects[0],
+            next(x for x in w.projects[0].beads if x.id == "b-run"),
+            (),
+            (),
+        )
         box = must(d.live)
         self.assertEqual(must(box.checks), CheckCount(passed=1, failed=1, unverified=1, total=3))
 
@@ -383,9 +423,13 @@ class EngineFacts(Case):
 
     def stuck_world(self):
         w = self.world()
-        s = (RunScript("b-run", slot="a", at=3000).step("plan", 300, 20_000, "OC Go").add("assumed", step="n1", text="no Windows PC")
-             .add("said", step="n1", who="engine", text="Plan (engine): 1 stage")
-             .step("write", 200, 30_000, text="write 1: clamp mood", end=False))
+        s = (
+            RunScript("b-run", slot="a", at=3000)
+            .step("plan", 300, 20_000, "OC Go")
+            .add("assumed", step="n1", text="no Windows PC")
+            .add("said", step="n1", who="engine", text="Plan (engine): 1 stage")
+            .step("write", 200, 30_000, text="write 1: clamp mood", end=False)
+        )
         s.add("stuck", why="silent", step="write", since=s.t, limit_s=1800.0).beat()
         return dataclasses.replace(w, runs=dict(w.runs, **{"b-run": [s.run(NOW)]}))
 

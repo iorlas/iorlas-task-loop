@@ -62,6 +62,7 @@ class RunFields(StateAttrs):
         self.net_up_times: list[float] = []  # when a network stop came while the probe said up (three in five minutes pause the run)
         self.at_stage = 0  # the stage a call belongs to, for its key
         self.pause_role, self.pause_lane = "", ""  # the role and lane a paused run waits for: the loop wakes the bead when it is usable
+        self.pause_reason = ""  # typed delegate reason; otherwise the close uses the engine outcome kind
         self.budget_warned: set[float] = set()
         self.plan_assumed = False  # tl-ntp: the planner was sent back once to plan on assumptions
         self.plan_decided = False  # the planner was sent back once with the requirement that answers its question

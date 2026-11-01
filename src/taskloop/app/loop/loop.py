@@ -25,6 +25,7 @@ from taskloop.contracts import runlife, wire
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.loop import LoopState, QueueRow
+from taskloop.contracts.parks import ParkStore
 from taskloop.contracts.run import LoopLogLine
 from taskloop.contracts.slots import SlotFail
 
@@ -243,6 +244,11 @@ class Loop(Core):
         c, now = self.c, self.env.now()
         for rested, due in self.files.rests().items():  # another loop's pre-engine failure rests the bead here too
             c.later[rested] = max(c.later.get(rested, 0), due)
+        for row in q.ranked:
+            rec = ParkStore(self.env.cfgdir).get(row.bead.id)
+            if rec and rec.reason and rec.permanence == "transient":
+                c.later[row.bead.id] = rec.retry_at
+                self.gate.held.pop(row.bead.id, None)
         cands = [r.bead for r in q.ranked if c.later.get(r.bead.id, 0) <= now and self.gate.ready(r.bead.id)]
         cands.sort(key=lambda b: b.id not in c.net_first)  # a bead the network paused goes first, the same one (stable sort)
         if cands and cands[0].id not in c.net_first:
@@ -251,9 +257,11 @@ class Loop(Core):
 
     def idle(self, q: Queue) -> int | None:
         env, c = self.env, self.c
-        if q.ranked:
-            wake = min(self.gate.next_look(r.bead.id) if r.bead.id in self.gate.held and c.later.get(r.bead.id, 0) <= env.now()
-                       else c.later[r.bead.id] for r in q.ranked)
+        retries = [s.skip.until for s in q.skipped if s.skip.kind == "parked" and s.skip.until is not None]
+        if q.ranked or retries:
+            wakes = [self.gate.next_look(r.bead.id) if r.bead.id in self.gate.held and c.later.get(r.bead.id, 0) <= env.now()
+                     else c.later[r.bead.id] for r in q.ranked]
+            wake = min([*wakes, *retries])
             self.say("every ready bead waits for a lane or another session: looking again at "
                      + time.strftime("%H:%M:%S", time.localtime(wake)))
             self.nap(wake - env.now(), self.until)

@@ -63,7 +63,6 @@ class Flapping:
 
 
 class NetBase(te.EngineTest):
-
     def log(self, eng=None):
         return [json.loads(x) for x in (eng or self.eng).log_path.read_text().splitlines()]
 
@@ -121,8 +120,12 @@ class EveryStepResumes(NetBase):
 
     def test_a_drop_in_the_verify_resumes_the_verifier_thread(self):
         gaps = te.EngineTest.GAPS
-        answers = {"plan": [PLAN], "write": [WRITE], "review": [dict(CLEAN, unchecked=gaps)],
-                   "verify": [{"items": [verdict(n, "settled", f"a.cs:{n}") for n in (1, 2, 3)]}]}
+        answers = {
+            "plan": [PLAN],
+            "write": [WRITE],
+            "review": [dict(CLEAN, unchecked=gaps)],
+            "verify": [{"items": [verdict(n, "settled", f"a.cs:{n}") for n in (1, 2, 3)]}],
+        }
         self.drop_at("verify", answers)
 
     def test_a_drop_costs_no_attempt_whatever_the_number_of_drops(self):
@@ -234,7 +237,8 @@ class Pause(NetBase):
         first = self.eng
         r = first.result()
         self.assertEqual((r.outcome, r.kind), ("paused", Kind.PAUSE_NETWORK.value))
-        self.assertEqual((r.retry_after, r.role), (0, "reviewer"))
+        self.assertEqual(r.role, "reviewer")
+        self.assertGreater(r.retry_after or 0, 0)  # the network pause is transient: retried on a timer
         self.assertEqual((self.blocked, self.ask()), ([], None))
         self.assertFalse([c for c in self.bd_calls if c[:2] == ("label", "add")])  # no auto label, no engine-fault label
         self.assertTrue(any(c[:1] == ("update",) and "open" in c for c in self.bd_calls))

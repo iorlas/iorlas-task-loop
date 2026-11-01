@@ -15,7 +15,8 @@ from taskloop.contracts import fence
 from taskloop.contracts.checkpoint import Checkpoint, EndRec
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.kinds import Kind
-from taskloop.contracts.ports import Git
+from taskloop.contracts.paths import ConfigDir
+from taskloop.contracts.ports import Beads, Clock, Git
 from taskloop.domain import outcome as oc
 from taskloop.domain.asks.spec import AskSpec
 from taskloop.stores.runlog import RunLog
@@ -40,7 +41,15 @@ class CloseHost(Protocol):
     fp: str
     asked: bool
     dead: Checkpoint | None  # the checkpoint of a run that died inside its close (its outcome kept, a key unapplied), else None
+    retry_after: float
+    pause_reason: str
 
+    @property
+    def home(self) -> ConfigDir: ...
+    @property
+    def store(self) -> Beads: ...
+    @property
+    def clock(self) -> Clock: ...
     @property
     def bead(self) -> BeadId: ...
     @property

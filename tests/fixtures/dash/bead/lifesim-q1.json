@@ -29,6 +29,7 @@
    "tone": ""
   },
   "assumptions": 0,
+  "retry_at": 0.0,
   "shots": 0
  },
  "version": "f22279bd136d3697",

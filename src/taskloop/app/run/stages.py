@@ -23,6 +23,7 @@ from taskloop.contracts.enums import Step
 from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.kinds import Kind
 from taskloop.contracts.locator import RunBundle, RunLocator
+from taskloop.contracts.parks import ParkStore
 from taskloop.contracts.plancheck import RoundState
 from taskloop.contracts.run import RunState
 from taskloop.domain import outcome as oc
@@ -151,8 +152,14 @@ def one_stage(e: Engine, requested: str | None, locator: RunLocator) -> int:
 
 
 def record_stage(e: Engine) -> None:
-    outcome = oc.make(e.kind, e.why, sha=e.landed_sha).word
-    e.log.emit(rec.Close(outcome=outcome, why=e.why, sha=e.landed_sha))
+    done = oc.make(e.kind, e.why, sha=e.landed_sha)
+    if done.finished and not e.dry:
+        ParkStore(e.home).drop(e.bead)
+    else:
+        e.closer.pause(done)
+    outcome = done.word
+    retry_at = ParkStore(e.home).retry_at(e.bead, e.run_id)
+    e.log.emit(rec.Close(outcome=outcome, why=e.why, sha=e.landed_sha, retry_at=retry_at))
     e.records.file_trace(outcome, e.why, e.landed_sha)
 
 

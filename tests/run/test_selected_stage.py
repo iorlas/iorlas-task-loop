@@ -1,4 +1,5 @@
 """STAGERUN: stage-only calls reuse the engine operations and recorded run lifecycle."""
+
 import sys
 import tempfile
 import unittest
@@ -23,6 +24,7 @@ from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.kinds import Kind
 from taskloop.contracts.locator import RunLocator
+from taskloop.contracts.parks import Park, ParkStore
 from taskloop.contracts.run import RunManifest, RunState
 from taskloop.stores.memory import fake_stores
 from taskloop.stores.runlog import RunLog
@@ -44,6 +46,10 @@ class SelectedStage(unittest.TestCase):
         e.git.rev_parse.return_value = "head"
         e.env.bead.return_value = None
         e.claim, e.fresh, e.moved = None, False, False
+        e.dry = False
+        e.retry_after = 0.0
+        e.pause_reason, e.pause_role, e.pause_lane = "", "", ""
+        e.writer_family, e.replan_first = None, False
         e.landed_sha = ""
         e.Blocked, e.kind, e.why = Blocked, Kind.FAULT_ENGINE, ""
         e.plan_data = None
@@ -88,6 +94,8 @@ class SelectedStage(unittest.TestCase):
         self.assertEqual((manifest.mode, manifest.owner, manifest.session), ("stage:gate", "owner", "stage-session"))
         self.assertEqual((manifest.state, manifest.next_step), (RunState.DONE, Step.LAND))
         self.e.checkpoints.save.assert_called_once_with(step=Step.LAND, stage=0)
+        closes = [row.rec for row in self.e.stores.run_log(self.e.run_id).read_from(0).items if isinstance(row.rec, rec.Close)]
+        self.assertEqual([row.retry_at for row in closes], [0.0])
 
     def test_land_without_green_gate_is_refused_with_reason(self):
         rc, manifest = self.invoke("land")
@@ -161,6 +169,31 @@ class SelectedStage(unittest.TestCase):
         self.assertEqual((rc, manifest.state), (1, RunState.STOPPED))
         self.assertEqual(manifest.reason, "network unavailable")
 
+    def test_pause_close_records_the_durable_wake(self):
+        e = self.e
+        e.retry_after = 999.0
+        e.lander.gate.run.side_effect = Blocked("network unavailable", kind=Kind.PAUSE_NETWORK)
+
+        def pause(done):
+            ParkStore(e.home).put(
+                Park(bead=e.bead, hash="", runs=0, run=e.run_id, t=100.0, reason=done.kind.value, permanence="transient", retry_at=160.0)
+            )
+
+        e.closer.pause.side_effect = pause
+        rc, manifest = self.invoke("gate")
+        self.assertEqual((rc, manifest.state), (1, RunState.STOPPED))
+        closes = [row.rec for row in e.stores.run_log(e.run_id).read_from(0).items if isinstance(row.rec, rec.Close)]
+        self.assertEqual([row.retry_at for row in closes], [160.0])
+
+    def test_pause_close_ignores_an_older_runs_wake(self):
+        e = self.e
+        ParkStore(e.home).put(Park(bead=e.bead, hash="", runs=0, run="old", t=100.0, retry_at=160.0))
+        e.lander.gate.run.side_effect = Blocked("network unavailable", kind=Kind.PAUSE_NETWORK)
+        rc, manifest = self.invoke("gate")
+        self.assertEqual((rc, manifest.state), (1, RunState.STOPPED))
+        closes = [row.rec for row in e.stores.run_log(e.run_id).read_from(0).items if isinstance(row.rec, rec.Close)]
+        self.assertEqual([row.retry_at for row in closes], [0.0])
+
     def test_unknown_stage_lists_every_engine_step(self):
         with self.assertRaises(ValueError) as caught:
             parse_step("mac-gate")
@@ -207,8 +240,16 @@ class SelectedStage(unittest.TestCase):
 
         def write(s, **kwargs):
             self.assertFalse(kwargs["look"])
-            s.w = {"summary": "written", "checks_run": [], "question": "", "options": [], "decided": "",
-                   "bad_checks": [], "new_cases": [], "unchecked": []}
+            s.w = {
+                "summary": "written",
+                "checks_run": [],
+                "question": "",
+                "options": [],
+                "decided": "",
+                "bad_checks": [],
+                "new_cases": [],
+                "unchecked": [],
+            }
             s.wfam = e.writer_family = "openai"
             return ""
 
@@ -220,8 +261,7 @@ class SelectedStage(unittest.TestCase):
         e.stage_loop.writing.run.side_effect = write
         e.stage_loop.checking.run.side_effect = checks
         ck = None
-        for step, following in ((Step.WRITE, Step.LOOK), (Step.LOOK, Step.CHECKS),
-                                (Step.CHECKS, Step.REVIEW), (Step.REVIEW, Step.VERIFY)):
+        for step, following in ((Step.WRITE, Step.LOOK), (Step.LOOK, Step.CHECKS), (Step.CHECKS, Step.REVIEW), (Step.REVIEW, Step.VERIFY)):
             self.assertEqual(round_step(e, step, ck), following)
             saved = e.checkpoints.save.call_args.kwargs
             ck = Checkpoint(bead="t-1", run=e.run_id, t=1, **saved)

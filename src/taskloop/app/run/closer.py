@@ -7,7 +7,8 @@ import time
 from dataclasses import dataclass
 from typing import Protocol, assert_never
 
-from taskloop.app.asks import raiser
+from taskloop.adapters import beadtools
+from taskloop.app.asks import parks, raiser
 from taskloop.app.run import ended as stored_end
 from taskloop.app.run.closer_branch import DONE, ReleaseSlot, SaveBranch
 from taskloop.app.run.closer_decide import Decide
@@ -124,11 +125,27 @@ class Closer:
 
     def finish(self, done: oc.RunOutcome) -> None:
         e = self.e
+        self.pause(done)
         counts = "; ".join(f"{k}={v}" for k, v in e.stats.items())
         stats = f"cost=${e.cost:.2f}; minutes={int((time.time() - e.t0) / 60)}; {counts}"
         branch = e.git.branch(e.wt)
         plan = effects.plan_close(done, dry=e.dry, branch=branch, slot_gen=e.claim.slot_gen)
         interpret(e.bead, e.run_id, plan, CheckpointLedger(e.checkpoints), lambda eff: self.apply(eff, done, stats))
+
+    def pause(self, done: oc.RunOutcome) -> None:
+        """Persist only transient pause wakes; the close plan remains the authority for asks and owner parks."""
+        e = self.e
+        if e.dry or done.finished:
+            return
+        bead = beadtools.peek(e.store, e.bead)
+        if bead is None:
+            return
+        rec = parks.paused(e.home, bead, done.kind, e.run_id, e.clock.now(), reason=e.pause_reason,
+                           not_before=e.retry_after)
+        if rec is None:
+            return
+        e.retry_after = rec.retry_at
+        e.pause_reason = rec.reason
 
     def apply(self, eff: effects.CloseEffect, done: oc.RunOutcome, stats: str) -> None:
         """One effect of the close plan, done. The match is closed: a new effect is one more case here."""

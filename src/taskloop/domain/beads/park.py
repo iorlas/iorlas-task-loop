@@ -24,13 +24,18 @@ class Verdict:
     why: str
 
 
-def verdict(rec: Park | None, b: Bead, *, fresh: bool = False, answered: bool = False) -> Verdict | None:
+def verdict(rec: Park | None, b: Bead, *, fresh: bool = False, answered: bool = False, now: float = 0.0) -> Verdict | None:
     """Why the bead is not taken now, None when it may be. `answered`: the owner filed an answer on its ask (new input: a run goes
     on from it, and the count starts again), `fresh`: the owner asked for a new run by hand."""
     if rec is None or rec.hash != text_hash(b) or answered:
         return None
     if rec.runs >= HARD_AT:
         return Verdict("capped", f"{rec.runs} runs ended on a question with this text: change the description or acceptance criteria")
+    if rec.reason:
+        if fresh or (rec.permanence == "transient" and 0 < rec.retry_at <= now):
+            return None
+        wake = f"retry at epoch {rec.retry_at:g}" if rec.permanence == "transient" else "answer the owner ask"
+        return Verdict("parked", f"{rec.reason}: {wake}")
     if fresh:
         return None
     return Verdict("parked", "a run ended on a question and the bead text is unchanged: change it, answer the ask, or run it with --fresh")

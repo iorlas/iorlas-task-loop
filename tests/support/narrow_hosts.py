@@ -1,5 +1,6 @@
 """Small typed fakes of what a slice reads of the engine (app/run/waits.py WaitsHost, app/land/outbound.py OutboundHost): a class that
 has just those members, so the type checker proves the fake is enough and a slice that reads one more member breaks the test's types."""
+
 import contextlib
 import threading
 from collections.abc import Callable, Generator, Mapping, Sequence
@@ -60,8 +61,14 @@ class FakeWaitsHost:
         self.halted: list[str] = []
 
     @contextlib.contextmanager
-    def os_lock(self, path: Path | str, holder: str, waiting: Callable[[str], None] | None = None, timeout: float | None = None,
-                check: Callable[[], None] | None = None) -> Generator[Path | str]:
+    def os_lock(
+        self,
+        path: Path | str,
+        holder: str,
+        waiting: Callable[[str], None] | None = None,
+        timeout: float | None = None,
+        check: Callable[[], None] | None = None,
+    ) -> Generator[Path | str]:
         yield path
 
     def halt_point(self, when: bool = True, wait: float = 0) -> None:
@@ -95,8 +102,17 @@ class FakeOutboundHost:
     def tree(self) -> FakeTree:
         return FakeTree()
 
-    def sh(self, cmd: Sequence[str], timeout: float = 3600, check: bool = False, save: Path | None = None,
-           env: Mapping[str, str] | None = None, pin: bool = False, what: str = "command", cwd: Path | None = None) -> tuple[int, str]:
+    def sh(
+        self,
+        cmd: Sequence[str],
+        timeout: float = 3600,
+        check: bool = False,
+        save: Path | None = None,
+        env: Mapping[str, str] | None = None,
+        pin: bool = False,
+        what: str = "command",
+        cwd: Path | None = None,
+    ) -> tuple[int, str]:
         self.ran.append(cmd)
         return 0, ""
 
@@ -548,9 +564,16 @@ class LandKit:
         self.bd = BdOut(self.events)
         self.pusher = Pusher(self.pushing, NoLfs())
         parts = LandParts(
-            gate=gate or Gate(FakeGateHost(git_fn, self.cfg, self.land.log, checker)), commit=Commit(FakeCommitHost(git_fn, sh_fn)),
-            landed=Landed(self.landing), rebase=LandRebase(self.rebasing), recheck=Recheck(self.rechecking),
-            push=self.pusher, fix=FixOutside(self.fixing), sync=Sync(self.syncing, self.bd), out=NoWip())
+            gate=gate or Gate(FakeGateHost(git_fn, self.cfg, self.land.log, checker)),
+            commit=Commit(FakeCommitHost(git_fn, sh_fn)),
+            landed=Landed(self.landing),
+            rebase=LandRebase(self.rebasing),
+            recheck=Recheck(self.rechecking),
+            push=self.pusher,
+            fix=FixOutside(self.fixing),
+            sync=Sync(self.syncing, self.bd),
+            out=NoWip(),
+        )
         self.lander = Lander(self.land, parts)
 
 
@@ -570,6 +593,7 @@ def table_kit(table: FakeGit, **kw: Any) -> LandKit:
 
 
 # ---- the close: one small fake per step (app/run/closer_*.py) ----
+
 
 class Said:
     """comment and warn, recorded (a host that has both)."""
@@ -653,6 +677,11 @@ class FakeCloseHost(Said):
         self.cost = 0.0
         self.t0 = 0.0
         self.halt = threading.Event()
+        self.home = homes.cfg()
+        self.store = FakeBeads()
+        self.clock = FakeClock()
+        self.retry_after = 0.0
+        self.pause_reason = ""
 
     @property
     def git(self) -> Git:
@@ -722,5 +751,15 @@ class CloseKit:
         self.host = FakeCloseHost(dry)
         self.slot = SpySlot()
         self.calls: list[str] = []
-        self.closer = Closer(self.host, CloseParts(decide=SpyDecide(), branch=SpyBranch(self.calls), slot=self.slot, record=SpyRecord(),
-                                                   notes=SpyNotes(), reflect=SpyReflect(), settle=SpySettle()))
+        self.closer = Closer(
+            self.host,
+            CloseParts(
+                decide=SpyDecide(),
+                branch=SpyBranch(self.calls),
+                slot=self.slot,
+                record=SpyRecord(),
+                notes=SpyNotes(),
+                reflect=SpyReflect(),
+                settle=SpySettle(),
+            ),
+        )

@@ -3,6 +3,7 @@ import contextlib
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from taskloop.app.asks import parks
 from taskloop.app.loop import verdict as vd
 from taskloop.app.loop.env import LoopEnv
 from taskloop.app.loop.queue import QueueRule, has_areas
@@ -80,6 +81,8 @@ class Taker:
         v: vd.Verdict | None = None
         for b in cands:
             bid = b.id
+            if parks.gate(env.cfgdir, b, now=env.now()) is not None:
+                continue
             try:
                 held = self.claimed(b, at, ecfg, rule)
             except (BdFailure, SlotGitError, OSError) as e:

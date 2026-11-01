@@ -22,3 +22,4 @@ class Row(Tagged, kw_only=True):
     wait_seconds: float | None = None
     artifact: str = ""
     artifact_hash: str = ""
+    retry_at: float = 0.0  # a transient close's durable wake, UTC epoch seconds

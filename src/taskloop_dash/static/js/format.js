@@ -1,6 +1,7 @@
 // Pure formatting: ages, durations, token counts, bead ids, a small safe markdown. No DOM, no state.
 
 export const MARK = { run: '▶', ask: '🙋', look: '🙋', soft_ask: '⏩', parked: '⏸️', ready: '▷', blocked: '⏳', done: '✅', stuck: '🛑', exited: '💀' };
+export const retryTime = (epoch) => epoch ? `retry at ${new Date(epoch * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}` : '';
 
 // tone of a marker for colour classes: you (blue), bad (red), run (teal), '' (grey)
 export const MARK_TONE = { run: 'run', ask: 'you', look: 'you', soft_ask: 'you', stuck: 'bad', exited: 'bad' };

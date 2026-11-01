@@ -1,10 +1,12 @@
-"""parks/<bead>.json: what the loop knows of a bead that runs ended on a question. The hash is the bead's own text (title, description,
-acceptance) when the last such run ended, `runs` how many of them ended on that text. The loop will not take the bead again while the
-text is the same, and nobody takes it a third time: the owner changes the bead, or the record goes."""
+"""parks/<bead>.json: question counts and durable pause wakes. `runs` counts questions on the same bead text; `attempts` counts
+pauses by typed reason across runs. Transient pauses carry an epoch retry_at; needs_owner pauses wake on owner input."""
 from pathlib import Path
 from typing import ClassVar
 
+import msgspec
+
 from taskloop.contracts import paths
+from taskloop.contracts.delegate import Permanence
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.stores import JsonStore
 from taskloop.contracts.wire import Rec
@@ -17,6 +19,10 @@ class Park(Rec):
     runs: int  # runs that ended on a question with this hash
     run: str  # the last of them (a close that is applied twice counts once)
     t: float
+    reason: str = ""
+    permanence: Permanence = "needs_owner"
+    retry_at: float = 0.0
+    attempts: dict[str, int] = msgspec.field(default_factory=dict)
 
 
 class ParkStore:
@@ -27,6 +33,11 @@ class ParkStore:
 
     def get(self, bead: BeadId) -> Park | None:
         return JsonStore(self.cfg.park(bead), Park).get()
+
+    def retry_at(self, bead: BeadId, run: str) -> float:
+        """The durable wake for this run; an absent or older park has no timer."""
+        rec = self.get(bead)
+        return rec.retry_at if rec is not None and rec.run == run else 0.0
 
     def put(self, rec: Park) -> None:
         JsonStore(self.cfg.park(rec.bead), Park).write(rec)

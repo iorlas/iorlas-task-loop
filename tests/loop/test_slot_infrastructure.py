@@ -1,4 +1,5 @@
 """Infrastructure cannot burn a bead or quarantine a slot before recovery has been attempted."""
+
 import sys
 from pathlib import Path
 from unittest import mock
@@ -18,6 +19,7 @@ from taskloop.contracts.enums import Result
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ports import BdFailure
 from taskloop.contracts.slots import SlotFail, SlotGitError
+from taskloop.domain.lanes import pauses
 
 
 class Infrastructure(Rig):
@@ -27,8 +29,7 @@ class Infrastructure(Rig):
 
     def settle(self, counters):
         files = mock.Mock()
-        result = Settle(self.taker().env, files, LoopConfig, self.out.append, counters,
-                        mock.Mock(), mock.Mock(), mock.Mock())
+        result = Settle(self.taker().env, files, LoopConfig, self.out.append, counters, mock.Mock(), mock.Mock(), mock.Mock())
         return result, files
 
     def test_infrastructure_before_engine_requeues_without_failure_rest_or_slot_hold(self):
@@ -38,6 +39,7 @@ class Infrastructure(Rig):
             verdict = self.taker().prepare("s1", bid)
         assert verdict is not None
         self.assertEqual(verdict.outcome, Result.PAUSED)
+        self.assertEqual(pauses.rule(verdict.kind).permanence, "transient")
         self.assertEqual(self.bd.beads[bid].status, "open")
         self.assertEqual(self.bd.beads[bid].assignee, "")
         counters = Counters(slot_quick={"s1": ["previous"]})
@@ -68,8 +70,10 @@ class Infrastructure(Rig):
     def test_only_repeated_slot_faults_after_failed_recovery_allow_set_aside(self):
         counters = Counters()
         settle, _files = self.settle(counters)
-        with mock.patch.object(Slot, "ready_for", side_effect=SlotFail("slot_broken", "setup failed")) as reset, \
-                mock.patch.object(settle, "aside", return_value=True) as aside:
+        with (
+            mock.patch.object(Slot, "ready_for", side_effect=SlotFail("slot_broken", "setup failed")) as reset,
+            mock.patch.object(settle, "aside", return_value=True) as aside,
+        ):
             for number in range(LoopConfig().slot_fails_to_set_aside):
                 verdict = self.taker().prepare("s1", f"x-{number}")
                 assert verdict is not None
@@ -90,10 +94,13 @@ class Infrastructure(Rig):
         counters = Counters()
         settle, _files = self.settle(counters)
         verdict = vd.Verdict(
-            Result.FAILED, why="failed: worktree /w/.slots/s1 has uncommitted work of another branch",
-            kind="fault_slot", slot_fault="slot_broken", minutes=0.3)
-        with mock.patch.object(Slot, "ready_for") as reset, \
-                mock.patch("taskloop.app.loop.settle.verbs.hold", return_value=1) as hold:
+            Result.FAILED,
+            why="failed: worktree /w/.slots/s1 has uncommitted work of another branch",
+            kind="fault_slot",
+            slot_fault="slot_broken",
+            minutes=0.3,
+        )
+        with mock.patch.object(Slot, "ready_for") as reset, mock.patch("taskloop.app.loop.settle.verbs.hold", return_value=1) as hold:
             for number in range(LoopConfig().slot_fails_to_set_aside):
                 self.assertIsNone(settle.apply(verdict, f"x-{number}", "s1", True))
         reset.assert_not_called()  # do not reset another branch's unsaved work to judge this failure
@@ -103,8 +110,12 @@ class Infrastructure(Rig):
 
     def test_infrastructure_during_engine_slot_recovery_does_not_count_toward_set_aside(self):
         verdict = vd.Verdict(Result.FAILED, kind="fault_slot", slot_fault="slot_broken", minutes=0.1)
-        failures = [SlotFail("transient", "git/dolt/network unavailable"), SlotGitError("git unavailable"),
-                    BdFailure(BdError(kind="other", text="Dolt unavailable")), FileNotFoundError("slot directory missing")]
+        failures = [
+            SlotFail("transient", "git/dolt/network unavailable"),
+            SlotGitError("git unavailable"),
+            BdFailure(BdError(kind="other", text="Dolt unavailable")),
+            FileNotFoundError("slot directory missing"),
+        ]
         for failure in failures:
             counters = Counters(slot_quick={"s1": ["previous"]})
             settle, _files = self.settle(counters)

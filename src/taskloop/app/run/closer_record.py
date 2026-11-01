@@ -7,6 +7,9 @@ from taskloop.app.run import trace as runtrace
 from taskloop.app.run.steps import Open
 from taskloop.contracts import log as rec
 from taskloop.contracts.enums import Outcome
+from taskloop.contracts.ids import BeadId
+from taskloop.contracts.parks import ParkStore
+from taskloop.contracts.paths import ConfigDir
 from taskloop.domain import outcome as oc
 from taskloop.stores.runlog import RunLog
 
@@ -41,6 +44,12 @@ class RecordHost(Protocol):
     reflection: Mapping[str, object] | None
 
     @property
+    def home(self) -> ConfigDir: ...
+    @property
+    def bead(self) -> BeadId: ...
+    @property
+    def run_id(self) -> str: ...
+    @property
     def log(self) -> RunLog: ...
     @property
     def steps(self) -> RecordSteps: ...
@@ -68,7 +77,8 @@ class RecordRun:
         e.steps.end(outcomes.node_outcome(outcome, kind))
         e.steps.begin("close", f"close: {outcome}")
         code = runtrace.why_code(kind.value, outcome)
-        e.log.emit(rec.Close(outcome=Outcome(outcome), why_code=code, sha=sha or "", why=why[:500]))
+        retry_at = ParkStore(e.home).retry_at(e.bead, e.run_id)
+        e.log.emit(rec.Close(outcome=Outcome(outcome), why_code=code, sha=sha or "", why=why[:500], retry_at=retry_at))
         e.steps.outcome(outcome, why.splitlines()[0][:200] if why else "")
         e.steps.end()
         e.reflection = e.reflector.reflect_run(outcome, why)  # after the close node: the outcome is decided and nothing here changes it

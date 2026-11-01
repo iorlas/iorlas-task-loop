@@ -2,7 +2,7 @@
 // (src/taskloop/contracts/dash.py) and callbacks; they hold no server state and decide nothing the engine decides.
 import { html, useEffect, useRef, useState } from '../../vendor/ui-runtime.js';
 import { causeOf, muted, troubleOf } from '../data.js';
-import { MARK, MARK_TONE, age, bid, dur, md, tokens } from '../format.js';
+import { MARK, MARK_TONE, age, bid, dur, md, retryTime, tokens } from '../format.js';
 
 export function Button({ kind = '', onClick, title, disabled, children }) {
   return html`<button class=${`btn ${kind}`} title=${title} disabled=${disabled} onClick=${onClick}>${children}</button>`;
@@ -83,7 +83,7 @@ export const cardTone = (c) => (c.marker === 'stuck' || c.marker === 'exited' ||
 // until a cause is picked
 export function Status({ card }) {
   const c = troubleOf(card) && causeOf(card), seen = troubleOf(card) && muted(card) && !c;
-  return html`${card.marker === 'exited' ? '💀 ' : ''}${card.status}${troubleOf(card) && html` · ${c ? c.replace('_', ' ') : html`why? <b>?</b>`}${seen ? ' · 👁 seen' : ''}`}`;
+  return html`${card.marker === 'exited' ? '💀 ' : ''}${card.status}${card.retry_at ? ` · ${retryTime(card.retry_at)}` : ''}${troubleOf(card) && html` · ${c ? c.replace('_', ' ') : html`why? <b>?</b>`}${seen ? ' · 👁 seen' : ''}`}`;
 }
 
 // the Board card: meta line, title, one status line, phase dots and loops (dash-spec §3)

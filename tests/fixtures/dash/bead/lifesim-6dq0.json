@@ -54,6 +54,7 @@
    "tone": ""
   },
   "assumptions": 2,
+  "retry_at": 0.0,
   "shots": 0
  },
  "version": "09e933197411225b",

@@ -227,7 +227,7 @@ def rank_ready(env: LoopEnv, cfg: EngineConfig, say: Callable[[str], None] = pri
         chosen = pickset.members(env.store.find(BeadQuery(label=pickset.LABEL)) if not only else [], only)
     except BdFailure:  # a queue that cannot be read must not become "take anything"
         ready = []
-    rule = QueueRule(env.store, cfg, env.running(), env.lint, say, env.now, lambda b: parks.skip_of(env.cfgdir, b),
+    rule = QueueRule(env.store, cfg, env.running(), env.lint, say, env.now, lambda b: parks.skip_of(env.cfgdir, b, now=env.now()),
                     lambda b: hosts.skip_of(cfg, env.host(), b))
     rule.chosen, rule.only = chosen, bool(only)
     return rule.rank(ready, env.repo), rule

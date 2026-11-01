@@ -54,6 +54,7 @@
    "tone": "watch"
   },
   "assumptions": 1,
+  "retry_at": 0.0,
   "shots": 4
  },
  "version": "94f6d37d792b687c",

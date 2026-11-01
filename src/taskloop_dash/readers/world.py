@@ -93,14 +93,17 @@ class Worlds:
         """Stage runs need no bead or log to be visible. Read manifests only; never reconcile from the dashboard."""
         projects = {path: project for project, path in self.repos().items()}
         out: list[RunHeader] = []
+        parks = self.records.parks()
         for bundle in reversed(self.records.locator.runs()):
             m = bundle.manifest
             if not m.mode or m.repo not in projects or (not m.state.live and (m.ended or m.started) < now - RETAIN):
                 continue
             state = RunState.LOST if shown(m, now) is Liveness.LOST else m.state
+            park = parks.get(m.bead)
             out.append(RunHeader(run=m.run, project=projects[m.repo], mode=m.mode, owner=m.owner, session=m.session,
                                  state=state, started=m.started, ended=m.ended, reason=m.reason, bead=m.bead,
-                                 branch=m.branch or m.sha[:8] or basename(m.worktree or m.repo)))
+                                 branch=m.branch or m.sha[:8] or basename(m.worktree or m.repo),
+                                 retry_at=park.retry_at if park and park.run == m.run and not m.state.live else 0.0))
         return out
 
     def leases(self, now: float) -> list[ResourceLease]:

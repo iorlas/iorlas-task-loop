@@ -117,6 +117,8 @@ class Board:
         visited = {s.phase for x in ps for s in x.spans if s.phase}
         current = Phase.LOOK if mark is Marker.LOOK else (cur.phase if cur else None)
         lane = lane_of(runs)
+        park = self.w.parks.get(b.id)
+        retry_at = park.retry_at if park and park.permanence == "transient" and not f.open_run and not f.closed else 0.0
         return BeadCard(
             id=b.id, project=p.id, title=b.title, column=col, marker=mark, status=columns.status_line(f), tone=columns.tone_of(mark),
             t=self.entered(f, b, newest), epic=b.parent if b.parent in self.by_id[p.id] else None,
@@ -124,7 +126,7 @@ class Board:
             loops=sum(1 for x in ps if x.end in phases.LOOPED), dots=columns.dots_of(visited, current, mark, f.closed),
             needs=blocking,  # the snapshot drops the ids it trimmed away
             waits_why=waits.get(b.id, "") if col is Column.BACKLOG else "", totals=self.totals(ps, lane),
-            shots=len(self.shots(runs)), assumptions=sum(r.assumed for r in runs))
+            shots=len(self.shots(runs)), assumptions=sum(r.assumed for r in runs), retry_at=retry_at)
 
     @staticmethod
     def entered(f: columns.Facts, b: Bead, newest: Run | None) -> float | None:
