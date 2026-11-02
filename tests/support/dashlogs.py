@@ -76,7 +76,8 @@ class RunScript:
         return RunState.LOST if lost else RunState.DONE if self.closed() else RunState.RUNNING
 
     def run(self, now, lost=False):
-        return dataclasses.replace(run_of(self.name, self.records(), now), life=liveness(self.manifest(lost)))
+        return dataclasses.replace(run_of(self.name, self.records(), now), life=liveness(self.manifest(lost)),
+                                   records=tuple(r for r in self.records() if not isinstance(r, log.Beat)))
 
     def manifest(self, lost=False):
         return RunManifest(run=self.name, repo="/repo", bead=self.bead, started=self.t0, state=self.state(lost))

@@ -95,7 +95,8 @@ class Worlds:
 
     def bead_runs(self, path: str, bead: str) -> list[Run]:
         """Only this drawer's full history; never parse another bead's logs."""
-        return [self.runlogs.typed_run(b, self.env.clock())
+        return [replace(self.runlogs.typed_run(b, self.env.clock()),
+                        records=tuple(self.env.files.get(str(b.log), jsonl.records, [])))
                 for b in self.records.locator.of_bead(bead, repo=path) if b.log.is_file()]
 
     def runs(self, full: tuple[str, str] | None = None) -> dict[tuple[str, str], list[Run]]:

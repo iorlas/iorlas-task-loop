@@ -28,6 +28,12 @@ def rows_of(run: Run, span: Span) -> list[log.EngineLog]:
 
 
 def budget_of(p: PassView, phase: Phase) -> tuple[float | None, float]:
+    ids = {s.id for s in p.spans if s.phase == phase}
+    budgets = [b for b in p.run.budgets if b.id in ids]
+    if budgets:
+        if any(b.overruns for b in budgets):
+            return sum(b.budget for b in budgets), sum(b.elapsed for b in budgets)
+        return sum(b.checks for b in budgets) or None, 0.0
     rows = [r for s in p.spans if s.phase == phase for r in rows_of(p.run, s)]
     overruns = [r for r in rows if isinstance(r, log.Overrun)]
     if overruns:

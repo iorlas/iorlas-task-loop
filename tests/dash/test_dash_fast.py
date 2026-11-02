@@ -10,10 +10,9 @@ from support.dashlogs import bead
 from support.narrow import must
 
 from dash import test_dash_api as fixtures
-from taskloop.contracts import log
 from taskloop.contracts.ids import loop_key
 from taskloop_dash import jsonl
-from taskloop_dash.views.runfacts import run_of
+from taskloop_dash.views.runfacts import fold
 
 
 class FastReads(fixtures.ApiFixture):
@@ -129,6 +128,34 @@ class FastReads(fixtures.ApiFixture):
 
 
 class IncrementalLogs(fixtures.ApiFixture):
+    def test_cross_poll_call_pair_folds_only_appended_records(self):
+        reader = self.dash.runlogs
+        bundle = must(self.dash.records.locator.get("b-1-20261015-100000"))
+        reader.typed_run(bundle, self.now)
+        start = {"v": 3, "kind": "call_start", "t": self.now, "id": "late", "n": 2,
+                 "step": "write", "node": "n2", "role": "writer"}
+        end = {"v": 3, "kind": "call_end", "t": self.now + 2, "id": "late", "status": "ok",
+               "tokens": {"in": 10, "cached": 2, "out": 3}, "exit": 0}
+        with patch("taskloop_dash.readers.runlogs.fold", wraps=fold) as append:
+            for row in (start, end):
+                with bundle.log.open("ab") as file:
+                    file.write(json.dumps(row).encode() + b"\n")
+                made = reader.typed_run(bundle, self.now)
+                self.assertEqual([r.kind for r in append.call_args.args[1]], [row["kind"]])
+        self.assertEqual((made.calls[-1].t, made.calls[-1].tokens, made.exit_code), (self.now, 11, 0))
+        self.assertEqual(reader.runs[str(bundle.log)].state.open_calls, ())
+
+    def test_snapshot_omits_rows_and_drawer_loads_only_its_bead(self):
+        world, _ = self.dash.reads.built()
+        self.assertTrue(world.runs)
+        self.assertTrue(all(r.records == () for runs in world.runs.values() for r in runs))
+        with patch.object(jsonl, "records", wraps=jsonl.records) as read:
+            detail = must(self.dash.reads.bead(loop_key(self.repo), "b-1"))
+        engine_paths = [c.args[0] for c in read.call_args_list if "/engine/" in c.args[0]]
+        self.assertEqual(engine_paths, [str(self.cfg / "engine" / "b-1-20261015-100000.jsonl")])
+        self.assertTrue(any(role.role == "writer" for p in detail.passes for stage in p.logs for role in stage.roles))
+        self.assertTrue(all(r.records == () for runs in world.runs.values() for r in runs))
+
     def test_append_partial_rotation_and_truncation(self):
         reader = self.dash.reads.worlds.runlogs
         bundle = must(self.dash.records.locator.get("b-1-20261015-100000"))
@@ -154,7 +181,8 @@ class IncrementalLogs(fixtures.ApiFixture):
             self.assertEqual(parse.call_count, len(initial.splitlines()))
             parse.reset_mock()
             bundle.log.write_bytes(initial.splitlines(keepends=True)[0])
-            self.assertEqual(len(reader.typed_run(bundle, self.now).records), 1)
+            self.assertEqual(reader.typed_run(bundle, self.now).records, ())
+            self.assertEqual(reader.typed_run(bundle, self.now).spans, ())
             self.assertEqual(parse.call_count, 1)
 
     def test_only_last_beat_is_retained(self):
@@ -163,7 +191,7 @@ class IncrementalLogs(fixtures.ApiFixture):
         with bundle.log.open("ab") as file:
             for t in range(10):
                 file.write(json.dumps({"v": 3, "kind": "beat", "t": self.now + t}).encode() + b"\n")
-        with patch("taskloop_dash.readers.runlogs.run_of", wraps=run_of) as make:
-            reader.typed_run(bundle, self.now)
-            beats = [r for r in make.call_args.args[1] if isinstance(r, log.Beat)]
-            self.assertEqual([r.t for r in beats], [self.now + 9])
+        reader.typed_run(bundle, self.now)
+        tail = reader.runs[str(bundle.log)]
+        self.assertEqual(must(tail.beat).t, self.now + 9)
+        self.assertFalse(hasattr(tail, "records"))

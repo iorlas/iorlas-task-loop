@@ -11,7 +11,7 @@ from taskloop.contracts.locator import RunBundle
 from taskloop.contracts.runlife import shown
 from taskloop_dash import jsonl
 from taskloop_dash.cache import FileCache
-from taskloop_dash.views.runfacts import Run, run_of
+from taskloop_dash.views.runfacts import FoldState, Run, fold, run_from
 
 
 @dataclass
@@ -19,7 +19,7 @@ class LogTail:
     identity: tuple[int, int]
     size: int = 0
     offset: int = 0
-    records: list[log.EngineLog] = field(default_factory=list)
+    state: FoldState = field(default_factory=FoldState)
     beat: log.Beat | None = None
     made: Run | None = None
 
@@ -45,20 +45,20 @@ class RunLogs:
                     data = file.read()
             except OSError:
                 self.runs.pop(path, None)
-                return dataclasses.replace(run_of(b.run, [], now), life=shown(b.manifest, now))
+                return dataclasses.replace(run_from(b.run, FoldState(), now), life=shown(b.manifest, now))
             end = data.rfind(b"\n") + 1
-            changed = False
+            records: list[log.EngineLog] = []
             for raw in data[:end].splitlines():
                 rec = jsonl.parse(raw)
                 if isinstance(rec, log.Beat):
                     tail.beat = rec
                 elif rec is not None:
-                    tail.records.append(rec)
-                changed |= rec is not None
+                    records.append(rec)
             tail.offset += end
             tail.size = stat.st_size
-            if tail.made is None or changed:
-                tail.made = run_of(b.run, [*tail.records, *([tail.beat] if tail.beat else [])], now)
+            if tail.made is None or records:
+                tail.state = fold(tail.state, records)
+                tail.made = run_from(b.run, tail.state, now)
             self.runs[path] = tail
             self.runs.move_to_end(path)
             while len(self.runs) > 5000:

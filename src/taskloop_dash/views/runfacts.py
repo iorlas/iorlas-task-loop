@@ -13,6 +13,7 @@ from taskloop.contracts import log as rec
 from taskloop.contracts.dash import Phase
 from taskloop.contracts.runlife import Liveness
 from taskloop.contracts.trace import Tokens
+from taskloop.contracts.wire import Rec
 from taskloop_dash.views import phases
 
 
@@ -51,6 +52,16 @@ class Wait:
     secs: float
 
 
+class StepBudget(Rec):
+    """Only the totals stage cells display; one row per step, including zero overruns."""
+
+    id: str
+    checks: float = 0.0
+    overruns: int = 0
+    budget: float = 0.0
+    elapsed: float = 0.0
+
+
 @dataclass(frozen=True)
 class Run:
     name: str
@@ -71,7 +82,8 @@ class Run:
     assumed: int = 0  # Assumed records: what the planner planned around
     stuck: rec.Stuck | None = None  # the stuck episode still open at the run's newest record (stuck_of)
     waits: tuple[Wait, ...] = ()  # the ended waits (a lane, the network, a resource, a lock ...)
-    records: tuple[rec.EngineLog, ...] = ()  # retained typed rows for the drawer's role/attempt logs
+    records: tuple[rec.EngineLog, ...] = ()  # drawer-only rows, never attached by the snapshot fold
+    budgets: tuple[StepBudget, ...] = ()
 
     @property
     def slot(self) -> str:
@@ -142,16 +154,123 @@ def stuck_of(records: Sequence[rec.EngineLog]) -> rec.Stuck | None:
 
 
 def run_of(name: str, records: Sequence[rec.EngineLog], now: float) -> Run:
-    body = [r for r in records if not isinstance(r, rec.Beat)]
-    start = next((r for r in body if isinstance(r, rec.RunStart)), None)
-    close = next((r for r in reversed(body) if isinstance(r, rec.Close)), None)
-    last_t = max((r.t for r in body), default=0.0)
-    lane = next((r.lane for r in reversed(body) if isinstance(r, rec.CallEnd) and r.lane), "")
-    checks = next((r for r in reversed(body) if isinstance(r, rec.Checks)), None)
-    code = next((r.exit for r in reversed(body) if isinstance(r, rec.CallEnd) and r.exit is not None), None)
-    life = Liveness.LIVE  # the reader replaces it with the manifest's recorded state (readers/runlogs.py)
-    return Run(name, life, start, start.t if start else (body[0].t if body else 0.0), last_t, spans_of(body), calls_of(body), close,
-               tuple(r for r in body if isinstance(r, rec.Transition)), tuple(r for r in body if isinstance(r, rec.Artifacts)),
-               checks, open_wait(body) if life is Liveness.LIVE else None, lane, code,
-               said=tuple(r for r in body if isinstance(r, rec.Said)), assumed=sum(1 for r in body if isinstance(r, rec.Assumed)),
-               stuck=stuck_of(body), waits=waits_of(body), records=tuple(body))
+    """Whole-log convenience wrapper; readers keep FoldState and append to it instead."""
+    return run_from(name, fold(FoldState(), records), now)
+
+
+class PendingCall(Rec):
+    id: str
+    t: float
+    step: str
+
+
+class FoldState(Rec):
+    """Serializable facts, without the clock, liveness, or raw history.
+
+    Tuples grow only with displayed facts (steps, calls, waits, transitions, artifacts, comments).
+    Pairing frontiers keep only unfinished calls/waits; budgets hold four numbers per step.
+    All other fields hold a single value or the latest record. Beats are deliberately absent.
+    """
+
+    start: rec.RunStart | None = None
+    first_t: float | None = None
+    last_t: float = 0.0
+    spans: tuple[Span, ...] = ()
+    calls: tuple[Call, ...] = ()
+    waits: tuple[Wait, ...] = ()
+    open_calls: tuple[PendingCall, ...] = ()
+    open_waits: tuple[rec.WaitStart, ...] = ()
+    transitions: tuple[rec.Transition, ...] = ()
+    artifacts: tuple[rec.Artifacts, ...] = ()
+    said: tuple[rec.Said, ...] = ()
+    budgets: tuple[StepBudget, ...] = ()
+    checks: rec.Checks | None = None
+    close: rec.Close | None = None
+    stuck: rec.Stuck | None = None
+    assumed: int = 0
+    lane: str = ""
+    exit_code: int | None = None
+
+
+def budget_append(b: StepBudget, r: rec.EngineLog) -> StepBudget:
+    if isinstance(r, rec.Checks):
+        return b.replace(checks=b.checks + sum(c.wall_min * 60 for c in r.run if c.wall_min))
+    if isinstance(r, rec.Overrun):
+        return b.replace(overruns=b.overruns + 1, budget=b.budget + r.budget_s, elapsed=b.elapsed + r.elapsed_s)
+    return b
+
+
+def latest(state: FoldState, r: rec.EngineLog) -> FoldState:
+    """Single-value facts and the stuck episode; never keep unshown rows."""
+    state = state.replace(first_t=r.t if state.first_t is None else state.first_t,
+                          last_t=max(state.last_t, r.t) if state.first_t is not None else r.t,
+                          stuck=stuck_of([state.stuck, r]) if state.stuck else stuck_of([r]))
+    if isinstance(r, rec.RunStart) and state.start is None:
+        return state.replace(start=r)
+    if isinstance(r, rec.CallEnd):
+        return state.replace(lane=r.lane or state.lane, exit_code=r.exit if r.exit is not None else state.exit_code)
+    if isinstance(r, rec.Assumed):
+        return state.replace(assumed=state.assumed + 1)
+    if isinstance(r, rec.Close):
+        return state.replace(close=r)
+    if isinstance(r, rec.Checks):
+        return state.replace(checks=r)
+    return state
+
+
+def step_append(spans: list[Span], budgets: list[StepBudget], steps: dict[str, int], r: rec.EngineLog) -> None:
+    if isinstance(r, rec.StepStart):
+        steps[r.id] = len(spans)
+        spans.append(Span(r.id, r.step, phases.phase_of(r.step), r.t, None, "", r.text, 0.0))
+        budgets.append(StepBudget(id=r.id))
+    elif isinstance(r, rec.StepEnd) and r.id in steps:
+        i = steps[r.id]
+        s = spans[i]
+        spans[i] = Span(s.id, s.step, s.phase, s.t0, r.t, r.outcome, s.text, r.exec_seconds or 0.0)
+    if budgets:
+        budgets[-1] = budget_append(budgets[-1], r)
+
+
+def fold(state: FoldState, new_records: Sequence[rec.EngineLog]) -> FoldState:
+    """Pure append fold. Pair ids are unique within an engine log; starts precede their ends."""
+    spans, calls, waits = list(state.spans), list(state.calls), list(state.waits)
+    budgets = list(state.budgets)
+    steps = {s.id: i for i, s in enumerate(spans)}
+    pending = {c.id: c for c in state.open_calls}
+    opened = {w.id: w for w in state.open_waits}
+    transitions, artifacts, said = list(state.transitions), list(state.artifacts), list(state.said)
+    for r in new_records:
+        if isinstance(r, rec.Beat):
+            continue
+        state = latest(state, r)
+        step_append(spans, budgets, steps, r)
+        if isinstance(r, rec.CallStart):
+            pending[r.id] = PendingCall(id=r.id, t=r.t, step=r.step)
+        elif isinstance(r, rec.CallEnd):
+            start = pending.pop(r.id, None)
+            if start:
+                calls.append(Call(start.t, start.step, r.lane, fresh(r.tokens), r.cost, cost_known(r)))
+        elif isinstance(r, rec.WaitStart):
+            opened[r.id] = r
+        elif isinstance(r, rec.WaitEnd):
+            wait = opened.pop(r.id, None)
+            if wait:
+                waits.append(Wait(wait.what.value, r.wait_seconds or 0.0))
+        elif isinstance(r, rec.Transition):
+            transitions.append(r)
+        elif isinstance(r, rec.Artifacts):
+            artifacts.append(r)
+        elif isinstance(r, rec.Said):
+            said.append(r)
+    return state.replace(spans=tuple(spans), calls=tuple(calls), waits=tuple(waits), budgets=tuple(budgets),
+                         open_calls=tuple(pending.values()), open_waits=tuple(opened.values()),
+                         transitions=tuple(transitions), artifacts=tuple(artifacts), said=tuple(said))
+
+
+def run_from(name: str, state: FoldState, now: float) -> Run:
+    """Project stored facts; liveness is replaced from the manifest by the reader."""
+    s = state
+    return Run(name, Liveness.LIVE, s.start, s.start.t if s.start else (s.first_t or 0.0), s.last_t,
+               s.spans, s.calls, s.close, s.transitions, s.artifacts, s.checks,
+               s.open_waits[-1] if s.open_waits else None, s.lane, s.exit_code,
+               said=s.said, assumed=s.assumed, stuck=s.stuck, waits=s.waits, budgets=s.budgets)
