@@ -11,6 +11,7 @@ from taskloop.app.slots.engine_lock import engine_busy
 from taskloop.app.slots.env import SlotEnv, stamp
 from taskloop.contracts.ports import SlotGit
 from taskloop.contracts.slots import BranchPinned, DirtyTree, IndexLocked, RefRace, SlotFail, SlotGitError
+from taskloop.domain.land.matchers import NetText
 
 if TYPE_CHECKING:
     from taskloop.app.slots.pool import Slot
@@ -51,6 +52,8 @@ def ready_for(slot: Slot, bead: str, *, force: bool = False) -> None:
     try:
         env.git.fetch(d)
     except SlotGitError as e:  # the tree is still clean and on a known base: the checkout below decides
+        if NetText.down(e.tail):
+            raise
         env.warn(f"tl: fetch in slot {slot.name} failed: {e.tail}")
     check_out(slot, bead)
     retrying(env, f"slot {slot.name}", lambda: env.git.clean(d, env.cfg.keep))

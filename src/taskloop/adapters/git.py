@@ -38,6 +38,9 @@ class RealGit(LandGit):
     def branch(self, d: str) -> str:
         return self._ask(d, "symbolic-ref", "--short", "-q", "HEAD", missing=True)
 
+    def symbolic_ref(self, d: str, ref: str) -> str:
+        return self._ask(d, "symbolic-ref", "-q", ref, missing=True)
+
     def commit_all(self, d: str, branch: str, message: str) -> None:
         if not self.branch(d):
             self._must(d, "checkout", "-b", branch)

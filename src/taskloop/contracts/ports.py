@@ -206,6 +206,10 @@ class Git(SlotGit, Protocol):
         ...
 
     def is_ancestor(self, d: str, a: str, b: str) -> bool: ...
+    def symbolic_ref(self, d: str, ref: str) -> str:
+        """The full target of a symbolic ref, empty when absent or not symbolic; unknown reads raise."""
+        ...
+
     def rev_parse(self, d: str, rev: str) -> str:
         """The oid `rev` names, empty when it names nothing."""
         ...
@@ -267,6 +271,10 @@ class Git(SlotGit, Protocol):
 
     def diff(self, d: str, a: str, b: str, exclude: list[str] | None = None, stat: bool = False) -> str:
         """The patch (or with `stat` the summary) from tree a to tree b, leaving out the literal paths in `exclude`."""
+        ...
+
+    def profile_diff(self, d: str, base: str, tip: str) -> str:
+        """The exact text of git diff base tip -- .task-loop.json, including its final newline."""
         ...
 
     def add_worktree_force(self, repo: str, path: str, ref: str) -> None:

@@ -1,0 +1,267 @@
+"""Owner profile changes authorize one tip and patch, while retaining the base gate."""
+import argparse
+import hashlib
+import io
+import json
+import sys
+import unittest
+from contextlib import redirect_stdout
+from pathlib import Path
+from unittest import mock
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import support.paths  # noqa: F401
+from support.fake_clock import FakeClock
+from support.fakegit import FakeGit
+from support.narrow_hosts import FakePushHost, Stopped
+
+from taskloop.app.land.cmds import Cmds, Stop
+from taskloop.app.land.gate import mint
+from taskloop.app.land.profile_change import owner_refusal
+from taskloop.app.land.push import Pusher
+from taskloop.app.land.push_judge import PushStatus, judge_push
+from taskloop.app.land.stack import Stack
+from taskloop.app.land.stackgate import StackGate
+from taskloop.app.land.state import Land
+from taskloop.app.launch.check import run_check
+from taskloop.cli.land_stack import add_parser, cmd_land_stack
+from taskloop.contracts.config import load
+from taskloop.contracts.env import Env
+from taskloop.contracts.envvars import EnvVar, registered
+from taskloop.contracts.forge import StackItem
+from taskloop.contracts.gitfacts import TreeEntry
+from taskloop.contracts.ids import TreeSha
+from taskloop.contracts.profile_changes import ProfileChange
+from taskloop.contracts.runkey import BaseSha
+from taskloop.stores.memory import fake_stores
+
+TEXT = 'Denis: "I approve this profile" 2026-11-02T12:00Z'
+PATCH = 'diff --git a/.task-loop.json b/.task-loop.json\n-old\n+new\n'
+DIFF_SHA = hashlib.sha256(PATCH.encode()).hexdigest()
+
+
+def entry(oid):
+    return [TreeEntry(mode="100644", kind="blob", oid=oid, path=".task-loop.json")]
+
+
+class OwnerText(unittest.TestCase):
+    def test_invalid_text_exits_two_in_one_line_before_creating_a_run(self):
+        parser = argparse.ArgumentParser()
+        add_parser(parser.add_subparsers())
+        for text in ("", " " * 20, "yes 2026", "I approve this profile"):
+            with self.subTest(text=text):
+                args = parser.parse_args(["land-stack", "topic", "--profile-change", text])
+                out = io.StringIO()
+                with redirect_stdout(out), mock.patch("taskloop.cli.land_stack.RunLocator") as locator:
+                    rc = cmd_land_stack(args, mock.Mock(), mock.Mock(), mock.Mock(), mock.Mock(), ["tl"], env=Env())
+                self.assertEqual(rc, 2)
+                self.assertEqual(len(out.getvalue().splitlines()), 1)
+                locator.assert_not_called()
+
+    def test_engine_loop_run_and_lane_markers_refuse_even_when_empty(self):
+        markers = [var.value for var in EnvVar if not var.name.startswith("TASK_LOOP_DASH_")
+                   and not var.name.startswith("TASK_LOOP_SUITE_")]
+        for name in (*markers, "TL_CHECK_LOG_SUITE", "TL_CHECK_RC_SUITE"):
+            with self.subTest(name=name):
+                self.assertTrue(registered(name))
+                self.assertEqual(owner_refusal(TEXT, Env({name: ""})),
+                                 "profile change is an owner decision; not available to the engine or a lane")
+        self.assertEqual(owner_refusal(TEXT, Env()), "")
+        self.assertEqual(owner_refusal(None, Env({EnvVar.TL_RUN_ID: "run"})), "")
+
+    def test_cli_engine_context_refuses_before_any_write(self):
+        args = argparse.Namespace(profile_change=TEXT)
+        out = io.StringIO()
+        with redirect_stdout(out), mock.patch("taskloop.cli.land_stack.RunLocator") as locator:
+            rc = cmd_land_stack(args, mock.Mock(), mock.Mock(), mock.Mock(), mock.Mock(), ["tl"],
+                                env=Env({EnvVar.TL_RUN_ID: "run"}))
+        self.assertEqual(rc, 2)
+        self.assertEqual(out.getvalue().strip(),
+                         "profile change is an owner decision; not available to the engine or a lane")
+        locator.assert_not_called()
+
+
+class OwnerGate(unittest.TestCase):
+    def setUp(self):
+        self.git = FakeGit(**{"rev_parse__origin/main": "base", "rev_parse__tip^{tree}": "tree"})
+        self.cmds = mock.Mock(spec=Cmds)
+        self.cmds.port.side_effect = lambda text, fn: fn()
+        self.stores = fake_stores()
+        self.gate = StackGate(self.cmds, self.git, self.stores, "/repo", "origin/main", ["tl"])
+        self.policy = json.dumps({"engine": {"checks": [{"id": "base-check", "argv": ["true"], "run": "gate"}]}})
+        patch = mock.patch.object(self.git, "ls_tree", side_effect=lambda repo, rev, path: entry(rev))
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def test_without_flag_profile_changed_still_stops(self):
+        self.stores.profile_changes.append(ProfileChange(t=1000.0, owner_text=TEXT, repo="/repo", branch="topic",
+                                                        tip="tip", base="base", diff_sha=DIFF_SHA, pid=42))
+        with self.assertRaises(Stop) as raised:
+            self.gate.require("topic", "tip")
+        self.assertIn("profile_changed:", raised.exception.why)
+        self.cmds.run.assert_not_called()
+        self.assertEqual(len(self.stores.profile_changes.read_from().items), 1)
+
+    def test_engine_context_cannot_pass_the_option_at_the_application_boundary(self):
+        self.gate.env = Env({EnvVar.TASK_LOOP_WORKER: "1"})
+        with self.assertRaises(Stop) as raised:
+            self.gate.require("topic", "tip", profile_change=TEXT)
+        self.assertEqual(raised.exception.rc, 2)
+        self.assertEqual(raised.exception.why,
+                         "profile change is an owner decision; not available to the engine or a lane")
+        self.cmds.port.assert_not_called()
+
+    def test_owner_uses_base_gate_and_still_requires_evidence(self):
+        with (mock.patch.object(self.git, "show", return_value=self.policy),
+              mock.patch.object(self.gate, "worktree", return_value=""),
+              mock.patch.object(self.gate, "red", return_value=[]) as red):
+            self.assertEqual(self.gate.require("topic", "tip", profile_change=TEXT), "base")
+        self.assertEqual([check.id for check in red.call_args.args[0].gate_checks], ["base-check"])
+        with (mock.patch.object(self.git, "show", return_value=self.policy),
+              mock.patch.object(self.gate, "red", return_value=["base-check"]),
+              mock.patch.object(self.gate, "worktree", return_value=""), self.assertRaises(Stop)):
+            self.gate.require("topic", "tip", profile_change=TEXT)
+        self.assertEqual(self.stores.profile_changes.read_from().items, [])
+
+    def test_owner_runs_the_base_policy_and_rechecks_evidence(self):
+        with (mock.patch.object(self.git, "show", return_value=self.policy),
+              mock.patch.object(self.gate, "worktree", return_value="/worktree"),
+              mock.patch.object(self.gate, "red", side_effect=[["base-check"], []])):
+            self.assertEqual(self.gate.require("topic", "tip", profile_change=TEXT), "base")
+        self.cmds.run.assert_called_once_with(["tl", "check", "--repo", "/worktree", "--policy-commit", "base"])
+
+    def test_stack_records_exactly_one_row_after_gate_before_push(self):
+        log, forge = mock.Mock(), mock.Mock()
+        log.stamp = {}
+        stack = Stack(forge, self.cmds, log, self.git, "/repo", Path("/lock"), mock.Mock(), mock.Mock(),
+                      "owner", "session", self.gate, mock.Mock(), profile_change=TEXT)
+        pr = mock.Mock(state="OPEN", head_oid="tip")
+
+        def prepared(*args):
+            rows = [item.rec for item in self.stores.profile_changes.read_from().items]
+            self.assertEqual(len(rows), 1)
+            row = rows[0]
+            self.assertEqual((row.owner_text, row.repo, row.branch, row.tip, row.base, row.diff_sha),
+                             (TEXT, "/repo", "topic", "tip", "base", DIFF_SHA))
+            self.assertEqual((row.t, row.pid), (1000, 42))
+            return pr
+
+        with (mock.patch.object(stack, "resolve", return_value=("topic", "tip", pr)),
+              mock.patch.object(self.git, "show", return_value="{}"),
+              mock.patch.object(self.git, "profile_diff", return_value=PATCH) as diff,
+              mock.patch("taskloop.app.land.stack.time.time", return_value=1000),
+              mock.patch("taskloop.app.land.stack.os.getpid", return_value=42),
+              mock.patch.object(stack, "prepare", side_effect=prepared),
+              mock.patch.object(stack, "merged", return_value="merged"), mock.patch.object(stack, "after")):
+            stack.item(StackItem(branch="topic"))
+        diff.assert_called_once_with("/repo", "base", "tip")
+        self.assertEqual(len(self.stores.profile_changes.read_from().items), 1)
+
+    def test_a_failed_audit_stops_before_push_or_merge(self):
+        log = mock.Mock(stamp={})
+        stack = Stack(mock.Mock(), self.cmds, log, self.git, "/repo", Path("/lock"), mock.Mock(), mock.Mock(),
+                      "owner", "session", self.gate, mock.Mock(), profile_change=TEXT)
+        with (mock.patch.object(stack, "resolve", return_value=("topic", "tip", None)),
+              mock.patch.object(self.git, "show", return_value="{}"),
+              mock.patch.object(self.git, "profile_diff", return_value=PATCH),
+              mock.patch.object(self.stores.profile_changes, "append", side_effect=OSError("disk full")),
+              mock.patch.object(stack, "prepare") as prepare, mock.patch.object(stack, "merged") as merged,
+              self.assertRaises(Stop) as raised):
+            stack.item(StackItem(branch="topic"))
+        self.assertEqual(raised.exception.rc, 1)
+        self.assertIn("cannot append profile change audit", raised.exception.why)
+        prepare.assert_not_called()
+        merged.assert_not_called()
+
+
+class OwnerJudge(unittest.TestCase):
+    def setUp(self):
+        self.clock = FakeClock(1000)
+        self.git = FakeGit(merge_base="base", symbolic_ref="", dirty=True,
+                           **{"rev_parse__base^{tree}": "base-tree", "rev_parse__tip^{tree}": "tree",
+                              "rev_parse__HEAD^{tree}": "tree", "rev_parse__origin/main": "base", "rev_parse__HEAD": "tip"})
+        self.stores = fake_stores()
+        self.check = mock.Mock(return_value=0)
+        self.profile = json.dumps({"engine": {"checks": [{"id": "base-check", "argv": ["true"], "run": "gate"}]}})
+        for patch in (mock.patch.object(self.git, "ls_tree", side_effect=lambda repo, rev, path: entry(rev)),
+                      mock.patch.object(self.git, "show", side_effect=lambda repo, rev, path: self.profile),
+                      mock.patch.object(self.git, "profile_diff", return_value=PATCH)):
+            patch.start()
+            self.addCleanup(patch.stop)
+
+    def audit(self, **changes):
+        row = ProfileChange(t=self.clock.now(), owner_text=TEXT, repo="/repo", branch="topic", tip="tip", base="base",
+                            diff_sha=DIFF_SHA, pid=42)
+        self.stores.profile_changes.append(row.replace(**changes))
+
+    def judge(self):
+        return judge_push("/repo", f"refs/heads/topic tip refs/heads/topic {'0' * 40}\n", self.stores, self.git,
+                          self.check, env=Env(), clock=self.clock)
+
+    def test_fresh_matching_row_allows_but_only_with_base_evidence(self):
+        self.audit()
+        with mock.patch("taskloop.app.checks.authorization.results", return_value={"base-check": mock.Mock()}) as results:
+            self.assertEqual(self.judge().status, PushStatus.ALLOWED)
+        self.assertEqual([step.id for step in results.call_args.args[3].gate_checks], ["base-check"])
+        with mock.patch("taskloop.app.checks.authorization.results", return_value={"base-check": None}):
+            self.assertEqual(self.judge().status, PushStatus.REFUSED)
+
+    def test_missing_stale_wrong_tip_or_patch_never_authorizes(self):
+        for change in (None, {"t": 399}, {"tip": "other"}, {"diff_sha": "wrong"}, {"t": 1001}):
+            with self.subTest(change=change):
+                self.stores = fake_stores()
+                if change is not None:
+                    self.audit(**change)
+                result = self.judge()
+                self.assertEqual(result.status, PushStatus.REFUSED)
+                self.assertIn("profile_changed:", result.reasons[0])
+        self.check.assert_not_called()
+
+    def test_fake_clock_expiry_at_six_hundred_seconds(self):
+        self.profile = "{}"
+        self.audit()
+        self.clock.advance(600)
+        self.assertEqual(self.judge().status, PushStatus.ALLOWED)
+        self.clock.advance(0.01)
+        self.assertEqual(self.judge().status, PushStatus.REFUSED)
+
+    def test_check_retry_receives_the_base_registry_even_when_tip_removes_it(self):
+        self.audit()
+        self.git.replies[("dirty",)] = False
+        base_cfg = load(json.loads(self.profile)).engine
+        with (mock.patch.object(self.git, "show", side_effect=lambda repo, rev, path: self.profile if rev == "base-tree" else "{}"),
+              mock.patch.object(Path, "read_bytes", return_value=b"{}"),
+              mock.patch("taskloop.app.checks.authorization.results",
+                         side_effect=[{"base-check": None}, {"base-check": mock.Mock()}])):
+            self.assertEqual(self.judge().status, PushStatus.ALLOWED)
+        self.check.assert_called_once_with(base_cfg)
+
+    def test_constructed_engine_push_path_cannot_authorize_a_profile_change(self):
+        def push(argv, **kwargs):
+            decision = self.judge()
+            return int(decision.status), "\n".join(decision.reasons)
+
+        host = FakePushHost(self.git, push)
+        pusher = Pusher(host, mock.Mock(lfs_push=mock.Mock(return_value=(0, ""))))
+        with self.assertRaises(Stopped) as raised:
+            pusher.push(Land(), mint(TreeSha("tree"), BaseSha("base")))
+        self.assertIn("profile_changed:", str(raised.exception))
+        self.assertEqual(self.stores.profile_changes.read_from().items, [])
+
+
+class PolicyCheck(unittest.TestCase):
+    def test_explicit_policy_commit_supplies_the_base_registry(self):
+        git = FakeGit()
+        cfg = load({"engine": {"checks": [{"id": "base-check", "argv": ["true"], "run": "gate"}]}}).engine
+        args = argparse.Namespace(policy_commit="base", ids=[], all=False, list=False)
+        stage = mock.Mock()
+        stage.bundle.repo = "/repo"
+        with (mock.patch("taskloop.app.checks.authorization.profile", return_value=cfg) as profile,
+              mock.patch("taskloop.app.launch.check.profile_of", side_effect=AssertionError("tip profile used")),
+              mock.patch("taskloop.app.launch.check.CliHost") as host,
+              mock.patch("taskloop.app.launch.check.Checker") as checker, redirect_stdout(io.StringIO())):
+            checker.return_value.run_items.return_value.results = []
+            self.assertEqual(run_check(args, stage, env=Env(), spawner=mock.Mock(), git=git), 0)
+        self.assertEqual(host.call_args.args[1], cfg)
+        self.assertEqual([step.id for step in checker.return_value.run_items.call_args.args[0]], ["base-check"])
+        profile.assert_called_once_with(git, "/repo", TreeSha("base"))

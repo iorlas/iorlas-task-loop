@@ -695,6 +695,9 @@ class FakeCloseHost(Said):
         self.clock = FakeClock()
         self.retry_after = 0.0
         self.pause_reason = ""
+        self.why = ""
+        self.crash_fingerprint = ""
+        self.crash_site = ""
 
     @property
     def git(self) -> Git:

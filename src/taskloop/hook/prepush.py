@@ -11,15 +11,15 @@ def entry(argv: list[str], stdin_text: str, environ: Mapping[str, str]) -> int:
     try:
         if not argv:
             raise ValueError("delivery judge command is missing")
-        top = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True, check=False)
+        top = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True, check=False, timeout=15)
         if top.returncode or not top.stdout.strip():
             raise ValueError("cannot locate the repository")
         result = subprocess.run([argv[0], "judge-push", "--repo", top.stdout.strip()], input=stdin_text,
-                                text=True, check=False)
+                                text=True, check=False, timeout=3600)
         if result.returncode == 0:
             return 0
         print("tl pre-push: refused: delivery judge refused or is unavailable", file=sys.stderr)
-    except (OSError, ValueError, subprocess.SubprocessError) as err:
+    except Exception as err:
         print(f"tl pre-push: refused: delivery judge unavailable: {err}", file=sys.stderr)
     return 1
 
@@ -64,7 +64,7 @@ def githook(name: str, argv: list[str], stdin_text: str, environ: Mapping[str, s
         if not cmd:
             return 0
         return subprocess.run(cmd, input=stdin_text if name in STDIN_HOOKS else None, text=True, check=False).returncode
-    except (OSError, ValueError, subprocess.SubprocessError) as err:
+    except Exception as err:
         if name == "pre-push":
             print(f"tl pre-push: refused: chained hook unavailable: {err}", file=sys.stderr)
             return 1

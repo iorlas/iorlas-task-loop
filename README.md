@@ -52,6 +52,16 @@ Everything is recorded in the bead (plan, review findings, reflect stats, proven
 The method is [`skills/task-loop/SKILL.md`](skills/task-loop/SKILL.md); each repo's specifics go in its loop profile
 (`docs/agents/task-loop.md`) and `.task-loop.json`.
 
+For an owner-reviewed PR that changes `.task-loop.json`, Denis can use
+`tl land-stack ITEM... --profile-change 'Denis: "I approve this profile change" 2026-11-02T12:00Z'`.
+The text must contain his quoted words and a timestamp (at least 12 non-padding characters and a digit).
+This lifts only the profile-change refusal for this call's items; the base profile's gate and check evidence still apply.
+After the gate passes and before each item's push or merge, one atomic audit row is appended to
+`<config>/profile-changes.jsonl` with the time, owner text, repo, branch, tip, base, SHA-256 of the profile diff text, and PID.
+The pre-push judge accepts a profile change only with a matching tip and diff hash audited within the last 600 seconds.
+The engine, loop, run processes and worker lanes cannot use this flag; no environment variable grants approval.
+A process that can write `<config>/profile-changes.jsonl` can forge an approval row.
+
 ## Slots
 
 For repos with a heavy setup (an engine import, a large restore), slots are persistent worktrees set up once and

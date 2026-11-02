@@ -19,6 +19,7 @@ from contracts import samples as S
 from taskloop.contracts import delegate, enums, events, ids, log, trace, wire
 from taskloop.contracts.ask import Ask
 from taskloop.contracts.loop import LoopCommand
+from taskloop.contracts.parks import Park
 from taskloop.contracts.wire import Rec, StaleRecord
 
 GOLDEN = Path(__file__).resolve().parent / "golden"
@@ -120,6 +121,14 @@ class Golden(unittest.TestCase):
 
 
 class Refusals(unittest.TestCase):
+    def test_park_without_fingerprint_still_reads_as_v1(self):
+        sample = S.OTHERS["Park"]
+        old = wire.dump(sample)
+        del old["fingerprint"]
+        loaded = wire.load(Park, old)
+        self.assertEqual(loaded.fingerprint, "")
+        self.assertEqual(old["v"], 1)
+
     def wire(self, **kw):
         d = wire.dump(S.OUTCOME)
         d.update(kw)

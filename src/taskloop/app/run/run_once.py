@@ -99,7 +99,7 @@ class RunOnce:
                             askspecs.external_fact([u["what"] for u in gaps]), kind=Kind.ASK_DECISION)
         try:
             sha = e.lander.finish(bead)
-        except (e.Blocked, ValueError):
+        except (e.Blocked, fence.Fenced, ValueError):
             raise
         except Exception as err:
             done = parked_crash(e, Step.LAND, err)
@@ -217,6 +217,9 @@ class RunOnce:
         """The close, then the run's one terminal state, whatever the close did (a close that raises still leaves a state)."""
         try:
             self.close(hb, end)
+        except fence.Fenced as err:
+            self.e.fenced = err.why
+            raise
         except (self.e.Blocked, ValueError):
             raise
         except Exception as err:

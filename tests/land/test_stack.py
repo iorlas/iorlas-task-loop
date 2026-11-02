@@ -1,6 +1,7 @@
 """`tl land-stack`: a stack of branches or PRs is delivered in order, each PR's own merge commit recorded, under the land lock, every
 command a row of one run, and the first failure ends it with its own exit code and touches nothing later."""
 import contextlib
+import hashlib
 import io
 import json
 import sys
@@ -59,7 +60,8 @@ class RepoGit(ScriptedGit):
 
     def ls_tree(self, d, rev, *paths, recursive=False):
         self.seen("ls_tree", rev, *paths)
-        return [TreeEntry(mode="100644", kind="blob", oid="profile", path=".task-loop.json")] if rev in self.profiles else []
+        return [TreeEntry(mode="100644", kind="blob", oid=hashlib.sha256(self.profiles[rev].encode()).hexdigest(),
+                          path=".task-loop.json")] if rev in self.profiles else []
 
     def show(self, d, rev, path):
         self.seen("show", rev, path)
@@ -318,7 +320,7 @@ class RemoteOnly(StackCase):
 
 
 class StoredGate(StackCase):
-    def test_delivery_compares_planned_skips_to_the_judged_commits_producer(self):
+    def test_delivery_compares_planned_skips_to_the_base_policy_producer(self):
         stores = real_stores(self.cfg)
         tree, base = TreeSha("tree-" + OID["task/a"][:6]), BaseSha("origin/main")
         keys = InputKeys(self.git, str(self.repo), tree)
@@ -332,11 +334,13 @@ class StoredGate(StackCase):
             {"id": "lint", "argv": ["true"], "run": "gate", "when": ["src/**"]}]}}
         (self.repo / ".task-loop.json").write_text(json.dumps(profile))
         self.git.profiles[OID["task/a"]] = json.dumps(profile)
+        self.git.profiles["origin/main"] = json.dumps(profile)
         self.assertEqual(self.deliver(StackItem(branch="task/a")), 1)
         self.assertEqual(self.sim.ran("git push"), [])
         self.assertEqual(self.sim.ran("gh pr merge"), [])
         profile["engine"]["plan_cmd"] = cmd
         self.git.profiles[OID["task/a"]] = json.dumps(profile)
+        self.git.profiles["origin/main"] = json.dumps(profile)
         self.assertEqual(self.deliver(StackItem(branch="task/a")), 0)
         self.assertEqual(self.sim.ran("tl check"), [])
 
@@ -376,7 +380,7 @@ class GateCase(StackCase):
     def setUp(self):
         super().setUp()
         profile = '{"engine": {"checks": [{"id": "lint", "argv": ["true"], "run": "gate"}]}}'
-        self.git.profiles = dict.fromkeys(OID.values(), profile)
+        self.git.profiles = dict.fromkeys([*OID.values(), "origin/main"], profile)
         self.green: set[str] = set()  # trees the store holds a pass for
         patch = mock.patch.object(StackGate, "red", lambda gate, engine, tree, base, wt="":
                                   [] if tree in self.green else [CheckId("lint")])
@@ -427,31 +431,34 @@ class Gated(GateCase):
 
     def test_a_repo_without_a_gate_step_passes(self):
         self.git.profiles[OID["task/a"]] = '{"engine": {"checks": [{"id": "x", "argv": ["true"], "run": "stage"}]}}'
+        self.git.profiles["origin/main"] = self.git.profiles[OID["task/a"]]
         self.assertEqual(self.deliver(StackItem(branch="task/a")), 0)
 
-    def test_a_stale_checkout_cannot_require_coverage_removed_by_the_judged_commit(self):
+    def test_a_stale_checkout_cannot_replace_the_base_policy(self):
         (self.repo / ".task-loop.json").write_text(
             '{"engine": {"checks": [{"id": "coverage", "argv": ["true"], "run": "gate"}]}}')
         with mock.patch.object(StackGate, "red", return_value=[]) as green:
             self.assertEqual(self.deliver(StackItem(branch="task/a")), 0)
         self.assertEqual([[check.id for check in call.args[0].gate_checks] for call in green.call_args_list], [["lint"]])
-        self.assertTrue(self.git.ran("show", OID["task/a"], ".task-loop.json"))
+        self.assertTrue(self.git.ran("show", "origin/main", ".task-loop.json"))
 
-    def test_a_check_added_by_the_judged_commit_is_required(self):
+    def test_a_checkout_without_checks_cannot_remove_the_base_gate(self):
         (self.repo / ".task-loop.json").write_text('{"engine": {"checks": []}}')
         self.assertEqual(self.deliver(StackItem(branch="task/a")), 1)
         self.assertIn("not green for lint", self.kinds("warn")[0]["text"])
         self.assertEqual(self.sim.ran("git push"), [])
         self.assertEqual(self.sim.ran("gh pr merge"), [])
 
-    def test_an_absent_profile_at_the_judged_commit_has_no_gate(self):
+    def test_a_profile_removed_by_the_judged_commit_is_refused(self):
         (self.repo / ".task-loop.json").write_text(self.git.profiles.pop(OID["task/a"]))
-        self.assertEqual(self.deliver(StackItem(branch="task/a")), 0)
+        self.assertEqual(self.deliver(StackItem(branch="task/a")), 1)
+        self.assertIn("profile_changed: task/a", self.kinds("warn")[0]["text"])
+        self.assertEqual(self.sim.ran("tl check"), [])
 
     def test_an_invalid_judged_profile_stops_before_push_or_merge(self):
         self.git.profiles[OID["task/a"]] = "{"
         self.assertEqual(self.deliver(StackItem(branch="task/a")), 1)
-        self.assertIn(OID["task/a"] + ":.task-loop.json", self.kinds("warn")[0]["text"])
+        self.assertIn("profile_changed: task/a", self.kinds("warn")[0]["text"])
         self.assertEqual(self.sim.ran("git push"), [])
         self.assertEqual(self.sim.ran("gh pr merge"), [])
 
@@ -464,6 +471,23 @@ class Gated(GateCase):
 
 
 class Verb(StackCase):
+    def test_owner_profile_flag_lands_and_writes_one_shared_audit_row(self):
+        text = 'Denis: "I approve the profile" 2026-11-02T12:00Z'
+        patch = 'diff --git a/.task-loop.json b/.task-loop.json\n-old\n+new\n'
+        self.git.profiles["origin/main"] = "{}"
+        self.git.profiles[OID["task/a"]] = '{"engine": {"checks": []}}'
+        args = Namespace(items=["task/a"], repo=str(self.repo), base="main", method="squash", bead=[], supersede=[],
+                         wait_min=None, profile_change=text)
+        who = Identity(actor="tl-me", home=self.tmp.name, session="sess-1")
+        with (contextlib.redirect_stdout(io.StringIO()), mock.patch.object(self.git, "profile_diff", return_value=patch)):
+            rc = cmd_land_stack(args, who, self.git, self.sim, self.bd("a"), ["tl"], env=Env())
+        self.assertEqual(rc, 0)
+        rows = [item.rec for item in real_stores(self.cfg).profile_changes.read_from().items]
+        self.assertEqual(len(rows), 1)
+        self.assertEqual((rows[0].owner_text, rows[0].tip, rows[0].diff_sha),
+                         (text, OID["task/a"], hashlib.sha256(patch.encode()).hexdigest()))
+        self.assertTrue(self.sim.ran("git push"))
+
     def test_an_unknown_explicit_bead_stops_the_whole_stack_before_push_or_merge(self):
         who = Identity(actor="tl-me", home=self.tmp.name, session="s")
         for items, beads in ((["task/a", "task/b"], ["task/b=missing-bead"]), (["293"], ["293=missing-bead"])):
@@ -481,7 +505,7 @@ class Verb(StackCase):
 
     def test_the_verb_makes_a_run_the_board_finds_through_its_manifest(self):
         a = Namespace(items=["task/a", "task/b"], repo=str(self.repo), base="main", method="squash", bead=["task/b=tl-b"], supersede=[],
-                      wait_min=None)
+                      wait_min=None, profile_change=None)
         store = self.bd("a", "tl-b")
         who = Identity(actor="tl-me", home=self.tmp.name, session="sess-1")
         with contextlib.redirect_stdout(io.StringIO()):
@@ -506,7 +530,8 @@ class Verb(StackCase):
         return store
 
     def verb(self, items, bead, who, store=None):
-        a = Namespace(items=items, repo=str(self.repo), base="main", method="squash", bead=bead, supersede=[], wait_min=None)
+        a = Namespace(items=items, repo=str(self.repo), base="main", method="squash", bead=bead, supersede=[], wait_min=None,
+                      profile_change=None)
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             rc = cmd_land_stack(a, who, self.git, self.sim, store or self.bd("lifesim-fvit"), ["tl"])

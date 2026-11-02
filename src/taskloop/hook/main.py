@@ -7,7 +7,7 @@ from pathlib import Path
 
 def main(argv: list[str], stdin_text: str, plugin_root: Path, environ: Mapping[str, str] | None = None) -> int:
     """`hook.py pretool | session-start | precompact | githook NAME TL ARGS`. The hook's stdout goes to Claude Code;
-    a failure is silent (exit 0)."""
+    a failure is silent (exit 0), except pre-push failures refuse delivery (exit 1)."""
     event = argv[0] if argv else ""
     try:
         if event == "pretool":
@@ -19,7 +19,10 @@ def main(argv: list[str], stdin_text: str, plugin_root: Path, environ: Mapping[s
         else:
             print(f"hook.py: unknown event {event!r}", file=sys.stderr)
             return 2
-    except Exception:
+    except Exception as err:
+        if argv[:2] == ["githook", "pre-push"]:
+            print(f"tl pre-push: refused: delivery judge unavailable: {err}", file=sys.stderr)
+            return 1
         return 0
     if out:
         print(out)

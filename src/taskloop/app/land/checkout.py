@@ -8,6 +8,7 @@ from taskloop.contracts.gitfacts import StatusRow
 from taskloop.contracts.ids import TreeSha
 from taskloop.contracts.ports import Git
 from taskloop.contracts.slots import SlotGitError
+from taskloop.domain.land.matchers import NetText
 from taskloop.stores.runlog import RunLog
 
 
@@ -63,7 +64,9 @@ class Checkout:
             e.git.fetch(e.wt)
         except SlotGitError as err:
             if check:
-                raise e.blocked_for(f"failed: `git fetch -q origin`: {err}", "FAULT_INFRA") from err
+                down = NetText.down(str(err))
+                kind = "PAUSE_NETWORK" if down else "FAULT_INFRA"
+                raise e.blocked_for(f"{'paused' if down else 'failed'}: `git fetch -q origin`: {err}", kind) from err
             return 1, str(err)
         return 0, ""
 

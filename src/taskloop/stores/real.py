@@ -10,11 +10,13 @@ from taskloop.contracts.stores import AskStore, JsonStore
 from taskloop.stores.books import CheckpointBook
 from taskloop.stores.bundle import Stores
 from taskloop.stores.files import FileDocSet, FileTickets
+from taskloop.stores.profile_changes import profile_changes
 
 
 def real_stores(cfg: paths.ConfigDir) -> Stores:
     return Stores(
         run_log=lambda run: stores.RunLog(cfg, run), events=stores.EventLog(cfg), traces=stores.TraceStore(cfg),
+        profile_changes=profile_changes(cfg),
         asks=AskStore.at(cfg), adrs=lambda repo: AdrStore.at(cfg, repo),
         checkpoints=CheckpointBook(FileDocSet(cfg.checkpoint, Checkpoint)),
         followups=FileDocSet(cfg.followup_outbox, FollowupOutbox),

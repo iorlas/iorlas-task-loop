@@ -196,6 +196,13 @@ class RunMemo:
                 return rec.result
         return None
 
+    def latest(self, c: Check) -> PassRecord | None:
+        """The newest stored receipt of the check made for this tree and base; display only (it names what differs)."""
+        docs = self.stores.results(self.repo, c.id)
+        names = docs.keys()  # a DocSet is not iterable: it has keys()
+        found = [r for n in names if (r := docs.of(n).get()) is not None and r.tree == self.keys.tree and r.base == self.base]
+        return max(found, key=lambda r: r.ts, default=None)
+
     def cached(self, c: Check, hit: PassRecord) -> CheckResult:
         """The remembered result as this round's: cached, with the round it ran in said (and that its log is gone when it is)."""
         note = "inputs unchanged since round %s" % (hit.round or "?") if c.inputs else ""

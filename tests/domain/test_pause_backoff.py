@@ -13,6 +13,51 @@ from taskloop.domain.lanes import pauses
 
 
 class Backoff(unittest.TestCase):
+    def test_engine_crash_fourth_attempt_needs_owner(self):
+        b = Bead(id=BeadId("t-1"), title="work", status="open")
+        rec = None
+        for n, wait in enumerate((60, 120, 240, 0), 1):
+            rec = pauses.after_pause(rec, b, f"r{n}", 1000, "engine_crash", lambda: 0.5)
+            self.assertEqual(rec.attempts, {"engine_crash": n})
+            self.assertEqual(rec.permanence, "transient" if wait else "needs_owner")
+            self.assertEqual(rec.retry_at, 1000 + wait if wait else 0.0)
+
+    def test_matching_crash_site_escalates_only_across_runs(self):
+        b = Bead(id=BeadId("t-1"), title="work", status="open")
+        first = pauses.after_pause(None, b, "r1", 100, "engine_crash", lambda: 0.5, fingerprint="abc")
+        self.assertEqual(first.fingerprint, "abc")
+        self.assertIs(pauses.after_pause(first, b, "r1", 200, "engine_crash", lambda: 0.5, fingerprint="abc"), first)
+        for fp, permanence in (("abc", "needs_owner"), ("def", "transient"), ("", "transient")):
+            with self.subTest(fingerprint=fp):
+                second = pauses.after_pause(first, b, "r2", 200, "engine_crash", lambda: 0.5, fingerprint=fp)
+                self.assertEqual(second.permanence, permanence)
+                self.assertEqual(second.attempts, {"engine_crash": 2})
+                if permanence == "needs_owner":
+                    self.assertEqual(second.retry_at, 0.0)
+
+    def test_other_reasons_have_no_cap_or_fingerprint_escalation(self):
+        b = Bead(id=BeadId("t-1"), title="work", status="open")
+        for reason, policy in pauses.TABLE.items():
+            if reason in ("engine_crash", "network", "pause_network"):
+                continue
+            rec = None
+            for n in range(5):
+                rec = pauses.after_pause(rec, b, f"r{n}", 100, reason, lambda: 0.5, fingerprint="abc")
+                self.assertEqual(rec.permanence, policy.permanence)
+                self.assertEqual(rec.retry_at, 100 + pauses.delay(policy, n, lambda: 0.5)
+                                 if policy.permanence == "transient" else 0.0)
+
+    def test_network_pauses_never_charge_attempts_or_owner_run_limits(self):
+        b = Bead(id=BeadId("t-1"), title="work", status="open")
+        rec = pauses.after_pause(None, b, "prior", 1, "busy", lambda: 0.5)
+        for n in range(20):
+            for reason in ("network", "pause_network"):
+                rec = pauses.after_pause(rec, b, f"{reason}-{n}", 100 + n, reason, lambda: 0.5)
+                self.assertEqual(rec.attempts, {"busy": 1})
+                self.assertEqual(rec.runs, 0)
+                self.assertEqual(rec.permanence, "transient")
+                self.assertEqual(rec.retry_at, 130 + n)
+
     def test_exponential_grows_then_caps_with_injected_twenty_percent_jitter(self):
         policy = pauses.PauseRule("transient", 10, 40)
         self.assertEqual([pauses.delay(policy, n, lambda: 0.5) for n in range(5)], [10, 20, 40, 40, 40])

@@ -95,7 +95,7 @@ def roles(repo: str | Path, env: Env, git: Git) -> dict[str, bool | None] | None
 
 def make_probe(repo: str | Path, env: Env, git: Git) -> dg.RouteProbe | None:
     route = delegate_route(repo, env, git)
-    return dg.RouteProbe(route) if route else None
+    return dg.RouteProbe(route, ("github.com",)) if route else None
 
 
 def storm(repo: str, cfg: paths.ConfigDir, now: Callable[[], float] = trail.now, *, git: Git) -> Storm | None:

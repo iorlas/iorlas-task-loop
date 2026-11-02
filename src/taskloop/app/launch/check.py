@@ -5,8 +5,8 @@ in every case. It claims no bead and writes no bd; its manifest and evidence use
 import argparse
 import json
 from pathlib import Path
-from typing import Any
 
+from taskloop.app.checks import authorization
 from taskloop.app.checks.runner import Checker
 from taskloop.app.launch.check_host import CliHost
 from taskloop.app.run.stage_run import StageRun, stage_run
@@ -16,6 +16,7 @@ from taskloop.contracts.checks import CheckResult, Phase
 from taskloop.contracts.config import CheckSpec, EngineConfig
 from taskloop.contracts.env import Env
 from taskloop.contracts.identity import Identity
+from taskloop.contracts.ids import TreeSha
 from taskloop.contracts.ports import Git, Spawner
 from taskloop.domain.checks.specs import gate_items, repo_check
 
@@ -59,16 +60,24 @@ def profile_of(repo: str) -> EngineConfig:
     return wslots.load_profile(data).engine
 
 
-def cmd_check(a: Any, *, who: Identity, env: Env, spawner: Spawner, git: Git) -> int:
+def policy_of(repo: str, git: Git, commit: str) -> EngineConfig:
+    """Delivery checks use the committed base registry; ordinary tl check uses the worktree."""
+    return authorization.profile(git, repo, TreeSha(commit))
+
+
+def cmd_check(a: argparse.Namespace, *, who: Identity, env: Env, spawner: Spawner, git: Git,
+              policy: EngineConfig | None = None) -> int:
     repo = git.toplevel(a.repo) or str(Path(a.repo).resolve())
     with stage_run(who, repo, f"stage:{a.cmd}") as stage:
-        stage.rc = run_check(a, stage, env=env, spawner=spawner, git=git)
+        stage.rc = run_check(a, stage, env=env, spawner=spawner, git=git, policy=policy)
         return stage.rc
 
 
-def run_check(a: argparse.Namespace, stage: StageRun, *, env: Env, spawner: Spawner, git: Git) -> int:
+def run_check(a: argparse.Namespace, stage: StageRun, *, env: Env, spawner: Spawner, git: Git,
+              policy: EngineConfig | None = None) -> int:
     repo = stage.bundle.repo
-    cfg = profile_of(repo)
+    commit = a.policy_commit
+    cfg = policy if policy is not None else policy_of(repo, git, commit) if commit else profile_of(repo)
     if a.list:
         print("\n".join(listing(cfg)) or "(no checks in engine.checks)")
         return 0

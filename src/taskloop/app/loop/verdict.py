@@ -9,6 +9,7 @@ from taskloop.contracts.config import ProfileReadError
 from taskloop.contracts.enums import Result
 from taskloop.contracts.run import RunReport
 from taskloop.contracts.slots import SlotFailCode
+from taskloop.domain.land.matchers import NetText
 
 NETWORK = "pause_network"
 FAULT_SLOT = "fault_slot"
@@ -62,6 +63,8 @@ class Verdict:
 
 
 def pre_engine(why: str, slot_fault: SlotFailCode | None = None, *, recovery_failed: bool = False) -> Verdict:
+    if NetText.down(why):
+        return Verdict(Result.PAUSED, f"paused before the engine: {why}", kind=NETWORK, pre_engine=True)
     if slot_fault == "slot_broken" and recovery_failed:
         return Verdict(Result.FAILED, f"failed before the engine: {why}", pre_engine=True,
                        slot_fault=slot_fault, recovery_failed=True)

@@ -127,6 +127,9 @@ class Settle:
             self.say(v.why)
             self.left(vd.PROFILE_AHEAD, v.why)
             return EX_CONFIG
+        if v.paused_for_network:
+            self.network(v, bid)
+            return None
         if slots and name and self.count_slot(v, bid, name):
             return None
         rec = ParkStore(env.cfgdir).get(BeadId(bid)) if bid else None
@@ -134,8 +137,6 @@ class Settle:
             self.gate.held.pop(bid, None)
             c.later.pop(bid, None)
             if rec.permanence == "transient":
-                if v.paused_for_network:
-                    self.network(v, bid)
                 c.later[bid] = rec.retry_at
                 self.say(f"{bid}: {rec.reason}; retry at {time.strftime('%H:%M', time.localtime(rec.retry_at))}")
             else:
@@ -144,9 +145,6 @@ class Settle:
         if v.pre_engine:  # the engine never started: no verdict on the run, so no failure toward the stop
             c.later[bid] = env.now() + t.pause_retry
             self.say(f"{bid} waiting for infrastructure before its engine starts: it will be retried")
-            return None
-        if v.paused_for_network:
-            self.network(v, bid)
             return None
         return self.counted(v, bid, name, slots)
 

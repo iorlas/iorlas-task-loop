@@ -9,6 +9,7 @@ from taskloop.contracts.events import Event
 from taskloop.contracts.followups import FollowupOutbox
 from taskloop.contracts.log import EngineLog
 from taskloop.contracts.loop import LoopCommand, LoopState, Rest
+from taskloop.contracts.profile_changes import ProfileChange
 from taskloop.contracts.stores import AskStore
 from taskloop.contracts.trace import RunTrace
 from taskloop.stores.api import Doc, DocSet, LockTable, Log, Tickets
@@ -20,6 +21,7 @@ class Stores:
     run_log: Callable[[str], Log[EngineLog]]
     events: Log[Event]
     traces: Log[RunTrace]
+    profile_changes: Log[ProfileChange]
     asks: AskStore
     adrs: Callable[[str], AdrStore]  # the decision store of a repo (its path)
     checkpoints: CheckpointBook

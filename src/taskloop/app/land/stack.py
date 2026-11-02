@@ -5,6 +5,7 @@ Per item: push the branch and see it on the remote, open its PR when it has none
 it replaces is closed only after the replacement merged. After the last, bd's Dolt data is synced. The first failure ends the run with
 the failing command's exit code and leaves every later item untouched. Every command is a row of the run's log (Cmds)."""
 import contextlib
+import os
 import time
 from collections.abc import Callable, Generator
 from pathlib import Path
@@ -13,6 +14,7 @@ from taskloop.adapters import landlock
 from taskloop.app.land import cleanup
 from taskloop.app.land.cmds import Cmds, Stop
 from taskloop.app.land.forge import Forge
+from taskloop.app.land.profile_change import diff_sha
 from taskloop.app.land.stackgate import StackGate
 from taskloop.contracts import log as rec
 from taskloop.contracts.enums import Outcome, WhyCode
@@ -20,6 +22,7 @@ from taskloop.contracts.forge import CLOSED, MERGED, OPEN, Pr, StackItem
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import Beads, DoltPush, Git
+from taskloop.contracts.profile_changes import ProfileChange
 from taskloop.contracts.slots import MissingRemote
 from taskloop.domain.land.matchers import no_dolt_remote
 from taskloop.stores.runlog import RunLog
@@ -42,13 +45,14 @@ class Stack:
     def __init__(self, forge: Forge, cmds: Cmds, log: RunLog, git: Git, repo: str, lock: Path, record: Callable[[str, str], int],
                  sync: Callable[[], DoltPush], owner: str, session: str, gate: StackGate, beads: Beads, wait_min: float | None = None,
                  named: Callable[[str], None] = lambda _bead: None,
-                 is_slot: Callable[[str], bool] = lambda _path: False, slot_base: str = "") -> None:
+                 is_slot: Callable[[str], bool] = lambda _path: False, slot_base: str = "", *, profile_change: str | None = None) -> None:
         self.forge, self.cmds, self.log, self.git, self.repo, self.lock = forge, cmds, log, git, repo, lock
         self.record, self.sync, self.owner, self.session, self.wait_min = record, sync, owner, session, wait_min
         self.gate, self.named = gate, named  # named(bead): the run's manifest learns each bead
         self.beads, self.failure_reason = beads, ""
         self.is_slot = is_slot
         self.slot_base = slot_base or f"origin/{forge.base}"
+        self.profile_change = profile_change
         self.recorded = 0
         self.synced = False  # bd sync was tried
         self.last = ""  # the merge commit of the last item delivered
@@ -96,7 +100,9 @@ class Stack:
         try:
             if pr is None or pr.state == OPEN:  # a PR already merged or closed is prepare's to judge
                 self.forge.fetch()  # the judged commit's profile, and the base as origin has it now
-                self.gate.require(branch, oid)
+                base = self.gate.require(branch, oid, profile_change=self.profile_change)
+                if self.profile_change is not None:
+                    self.audit_profile(branch, oid, base)
             pr = self.prepare(item, branch, oid, pr)
             head = pr.head_oid
             sha = self.merged(item, pr, head)
@@ -106,6 +112,18 @@ class Stack:
         self.log.emit(rec.StepEnd(id=sid, step=name, outcome="landed", detail=sha[:12]))
         self.last = sha
         self.after(item, pr, branch, head, sha)
+
+    def audit_profile(self, branch: str, tip: str, base: str) -> None:
+        """One atomic row per explicitly authorized item, after evidence and before its push or merge."""
+        assert self.profile_change is not None
+        digest = self.cmds.port(f"git diff {base} {tip} -- .task-loop.json",
+                                lambda: diff_sha(self.git, self.repo, base, tip))
+        try:
+            self.gate.stores.profile_changes.append(ProfileChange(
+                t=time.time(), owner_text=self.profile_change, repo=self.repo, branch=branch,
+                tip=tip, base=base, diff_sha=digest, pid=os.getpid()))
+        except OSError as err:
+            raise Stop(1, f"cannot append profile change audit: {err}") from None
 
     def resolve(self, item: StackItem) -> tuple[str, str, Pr | None]:
         """(branch, the oid to deliver, its PR if there is one): a PR is the forge's word, a branch is this clone's."""

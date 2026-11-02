@@ -10,7 +10,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
-from taskloop.hook import prepush
+from taskloop.hook import main, prepush
 
 
 class PushClient(unittest.TestCase):
@@ -36,9 +36,17 @@ class PushClient(unittest.TestCase):
                 self.assertNotEqual(self.ask(subprocess.CompletedProcess([], code, "", "unavailable"))[0], 0)
 
     def test_a_missing_erroring_or_timed_out_judge_refuses(self):
-        for error in (FileNotFoundError("tl"), ValueError("bad argv"), subprocess.TimeoutExpired("tl", 1)):
+        for error in (FileNotFoundError("tl"), ValueError("bad argv"), subprocess.TimeoutExpired("tl", 1),
+                      RuntimeError("unexpected judge failure"), AttributeError("invalid answer")):
             with self.subTest(error=error):
                 self.assertNotEqual(self.ask(error)[0], 0)
+
+    def test_an_unparsable_judge_answer_refuses(self):
+        self.assertNotEqual(self.ask(object())[0], 0)
+
+    def test_judge_invocation_has_a_finite_timeout(self):
+        _, run = self.ask(subprocess.CompletedProcess([], 0))
+        self.assertGreater(run.call_args.kwargs["timeout"], 0)
 
     def test_missing_command_or_failed_repo_discovery_refuses(self):
         with redirect_stderr(io.StringIO()):
@@ -54,3 +62,20 @@ class PushClient(unittest.TestCase):
               mock.patch.object(prepush, "original_hooks_dir", side_effect=OSError("unreadable")),
               redirect_stderr(io.StringIO())):
             self.assertNotEqual(prepush.githook("pre-push", ["tl"], self.request, {"TL_LAND": "1"}), 0)
+
+    def test_dispatcher_refuses_unexpected_pre_push_errors(self):
+        stderr = io.StringIO()
+        with (mock.patch.object(main.importlib, "import_module", side_effect=RuntimeError("judge failed")),
+              redirect_stderr(stderr)):
+            self.assertNotEqual(main.main(["githook", "pre-push", "tl"], self.request, Path("/plugin"), {}), 0)
+        self.assertIn("judge failed", stderr.getvalue())
+
+    def test_unexpected_chained_hook_errors_refuse(self):
+        with (mock.patch.object(prepush, "entry", return_value=0),
+              mock.patch.object(prepush, "original_hooks_dir", side_effect=RuntimeError("unexpected")),
+              redirect_stderr(io.StringIO())):
+            self.assertNotEqual(prepush.githook("pre-push", ["tl"], self.request, {}), 0)
+
+    def test_dispatcher_preserves_pretool_error_behavior(self):
+        with mock.patch.object(main.importlib, "import_module", side_effect=RuntimeError("hook failed")):
+            self.assertEqual(main.main(["pretool"], "{}", Path("/plugin"), {}), 0)

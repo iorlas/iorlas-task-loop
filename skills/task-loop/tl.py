@@ -290,6 +290,7 @@ def check_parser(sp):
     p.add_argument("--repo", default=".", metavar="DIR", help="the worktree (default: the current directory)")
     p.add_argument("--all", action="store_true", help="ignore `when`: every gate step runs")
     p.add_argument("--list", action="store_true", help="print the registry (id, run, group, when, argv) and exit 0")
+    p.add_argument("--policy-commit", metavar="SHA", help="run the delivery gate from this committed base profile")
 
 
 def build_parser():

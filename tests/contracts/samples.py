@@ -29,6 +29,7 @@ from taskloop.contracts import (
     parks,
     pickset,
     plancheck,
+    profile_changes,
     requests,
     review,
     run,
@@ -304,6 +305,8 @@ REVIEW_STATE = review.ReviewState(
     verified=[trace.Verified(what="w", kind="checkable", verdict="settled", evidence="e", why="y")], filed=["f"],
     unfiled=[review.Unfiled(title="t", why="lint")])
 OTHERS = {
+    "ProfileChange": profile_changes.ProfileChange(t=T, owner_text='Denis: "approved" 2026-11-02T12:00Z', repo="/repo",
+                                                   branch="topic", tip="tip", base="base", diff_sha="sha256", pid=42),
     "Epic": dash.Epic(id="t-epic", project=loop_key("/repos/task-loop"), title="Active epic", open=True, done=1, total=2),
     "RunTrace": TRACE,
     "Ask": ASK,
@@ -455,7 +458,7 @@ OTHERS = {
         at=T, lanes=[snapshots.LaneStatus(id="A", state="ready")], needs_input=[snapshots.NeedInput(what="w")]
     ),
     "Landed": landed.Landed(bead=BeadId("t-1"), sha="a" * 40, base="origin/main", t=T),
-    "Park": parks.Park(bead=BeadId("t-1"), hash="b" * 40, runs=1, run="t-1-20261030-120000", t=T),
+    "Park": parks.Park(bead=BeadId("t-1"), hash="b" * 40, runs=1, run="t-1-20261030-120000", t=T, fingerprint="a1b2c3d4e5f6"),
     "QueueItem": pickset.QueueItem(project="p", bead="t-1", title="queued", pos=1, state="next", why="1st of 2 chosen"),
     "SessionIndex": snapshots.SessionIndex(session="s", transcript="/t.jsonl", cwd="/w", source="startup", t=T),
     "ReposIndex": snapshots.ReposIndex(repos={"/r": snapshots.RepoEntry(added=T)}),

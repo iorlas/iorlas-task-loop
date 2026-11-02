@@ -6,6 +6,7 @@ from pathlib import Path
 
 from taskloop.app.land.cmds import Cmds, Runs
 from taskloop.app.land.forge import Forge
+from taskloop.app.land.profile_change import owner_refusal
 from taskloop.app.land.stack import MODE, Stack, lock_path
 from taskloop.app.land.stackgate import StackGate
 from taskloop.app.wire import closeguard
@@ -42,6 +43,11 @@ def pairs(values: list[str], flag: str) -> dict[str, str]:
 def cmd_land_stack(a: argparse.Namespace, who: Identity, git: Git, spawner: Runs, store: Beads,
                    tl: list[str], *, env: Env | None = None) -> int:
     """`store` is bd (the land record and the Dolt sync); `tl` is the argv that runs tl itself (the gate runs `tl check` through it)."""
+    env = env or Env()
+    profile_change = a.profile_change
+    if why := owner_refusal(profile_change, env):
+        print(why)
+        return 2
     repo = str(Path(a.repo).resolve())
     beads, old = pairs(a.bead, "--bead"), pairs(a.supersede, "--supersede")
     for flag, given in (("--bead", beads), ("--supersede", old)):
@@ -65,7 +71,8 @@ def cmd_land_stack(a: argparse.Namespace, who: Identity, git: Git, spawner: Runs
     stack = Stack(forge, cmds, log, git, repo, lock, landed, store.dolt_push, who.actor, who.session,
                   StackGate(cmds, git, stores, repo, f"origin/{a.base}", tl, env), store, a.wait_min,
                   lambda bead: locator.add_bead(run, bead),
-                  lambda path: bool(slot_of(slot_repo, path, who, store, strict=True)), profile_slots(slot_repo).base)
+                  lambda path: bool(slot_of(slot_repo, path, who, store, strict=True)), profile_slots(slot_repo).base,
+                  profile_change=profile_change)
     rc = 1
     try:
         rc = stack.run(items)
@@ -87,3 +94,4 @@ def add_parser(sp: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     p.add_argument("--bead", action="append", default=[], metavar="ITEM=BEAD", help="the bead to record the land on (task/<bead> names it)")
     p.add_argument("--supersede", action="append", default=[], metavar="ITEM=PR", help="an older PR to close once this item has merged")
     p.add_argument("--wait-min", type=float, default=None, help="give up (exit 75) after this long waiting for the land lock")
+    p.add_argument("--profile-change", metavar="TEXT", help="owner's quoted approval and timestamp for this call's profile changes")

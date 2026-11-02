@@ -43,7 +43,7 @@ def entering(cfg: ConfigDir, b: Bead) -> None:
 
 
 def paused(cfg: ConfigDir, b: Bead, kind: Kind, run: str, now: float, *, reason: str = "",
-           not_before: float = 0.0, draw: Callable[[], float] = random) -> Park | None:
+           not_before: float = 0.0, draw: Callable[[], float] = random, fingerprint: str = "") -> Park | None:
     """File a pause's wake, including an empty plan's explicit owner wake."""
     if kind is Kind.NOOP:
         reason = "plan_noop"
@@ -52,7 +52,7 @@ def paused(cfg: ConfigDir, b: Bead, kind: Kind, run: str, now: float, *, reason:
         return None
     store = ParkStore(cfg)
     old = store.get(b.id)
-    rec = pauses.after_pause(old, b, run, now, reason, draw, not_before)
+    rec = pauses.after_pause(old, b, run, now, reason, draw, not_before, fingerprint=fingerprint)
     store.put(rec)
     return rec
 

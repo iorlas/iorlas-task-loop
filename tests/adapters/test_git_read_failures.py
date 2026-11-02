@@ -22,8 +22,8 @@ class GitReadFailures(unittest.TestCase):
                  ("rev_parse", ("HEAD",)), ("has_commit", ("abc",)), ("checkouts", ()),
                  ("merge_base", ("a", "b")), ("is_ancestor", ("a", "b")), ("git_dir", ()),
                  ("rebasing", ()), ("changed_paths", ("a", "b")), ("diff_entries", ("a", "b")),
-                 ("diff", ("a", "b")), ("unmerged", ()), ("staged", ()),
-                 ("for_each_ref", ()), ("merged", ("HEAD",))]
+                 ("diff", ("a", "b")), ("profile_diff", ("a", "b")), ("unmerged", ()), ("staged", ()),
+                 ("for_each_ref", ()), ("merged", ("HEAD",)), ("symbolic_ref", ("refs/remotes/origin/HEAD",))]
         for name, args in calls:
             for code, diagnostic in ((128, "fatal: unreadable checkout"), (1, "Verrouillage impossible")):
                 with (self.subTest(name=name, code=code),
@@ -35,6 +35,7 @@ class GitReadFailures(unittest.TestCase):
         absent = subprocess.CompletedProcess([], 1, "", "")
         with mock.patch.object(self.git, "_run", return_value=absent):
             self.assertEqual(self.git.branch("/checkout"), "")
+            self.assertEqual(self.git.symbolic_ref("/checkout", "refs/remotes/origin/HEAD"), "")
             self.assertEqual(self.git.rev_parse("/checkout", "missing"), "")
             self.assertFalse(self.git.has_branch("/checkout", "missing"))
             self.assertFalse(self.git.has_commit("/checkout", "missing"))
@@ -44,6 +45,13 @@ class GitReadFailures(unittest.TestCase):
             for name, args in (("dirty", ()), ("changed_paths", ("a", "b"))):
                 with self.subTest(name=name), self.assertRaises(GitReadFailure):
                     getattr(self.git, name)("/checkout", *args)
+
+    def test_profile_diff_preserves_the_exact_patch_and_only_reads_the_profile(self):
+        patch = 'diff --git a/.task-loop.json b/.task-loop.json\n-old\n+new\n'
+        with mock.patch.object(self.git, "_run", return_value=subprocess.CompletedProcess([], 0, patch, "")) as run:
+            self.assertEqual(self.git.profile_diff("/checkout", "base", "tip"), patch)
+        run.assert_called_once_with("/checkout", "diff", "--no-ext-diff", "--no-textconv", "base", "tip", "--", ".task-loop.json",
+                                    extra=None)
 
     def test_read_process_failures_are_typed(self):
         for error in (OSError("unavailable"), subprocess.TimeoutExpired("git", 1)):

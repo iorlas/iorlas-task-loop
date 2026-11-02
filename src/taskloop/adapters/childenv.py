@@ -73,6 +73,15 @@ def tool_env(base: Mapping[str, str], extra: Mapping[str, str] | None = None) ->
     return env
 
 
+CHECK_SECRETS = frozenset({"SSH_AUTH_SOCK", "GIT_SSH_COMMAND", "GH_TOKEN", "GITHUB_TOKEN", "GH_CONFIG_DIR",
+                           "GIT_ASKPASS", "SSH_ASKPASS"})
+
+
+def check_env(base: Mapping[str, str], extra: Mapping[str, str] | None = None) -> dict[str, str]:
+    """Checks get the tool environment without transport credentials, including any supplied in `extra`."""
+    return {k: v for k, v in tool_env(base, extra).items() if k not in CHECK_SECRETS and not k.startswith("GIT_CREDENTIAL")}
+
+
 # Registered names that differ run to run without changing what a check does (paths of this run, ids of this process): not part of a
 # result's identity. Every other registered name that reaches the child is.
 PER_RUN = frozenset({EnvVar.TL_ARTIFACT_DIR, EnvVar.TL_ARTIFACT_STEP, EnvVar.TL_RUN_ID, EnvVar.TL_RUN_DIR, EnvVar.TL_ATTEMPT,

@@ -134,6 +134,9 @@ def one_stage(e: Engine, requested: str | None, locator: RunLocator) -> int:
         locator.advance(e.run_id, following)
         e.kind, e.why = Kind.LANDED if step is Step.LAND else Kind.DONE, ""
         return 0
+    except fence.Fenced as err:
+        e.fenced = err.why
+        raise
     except e.Blocked as err:
         e.kind, e.why = err.kind, err.why
         if err.spec is not None:
@@ -151,12 +154,18 @@ def one_stage(e: Engine, requested: str | None, locator: RunLocator) -> int:
         e.kind, e.why = Kind.FAULT_ENGINE, str(err) or type(err).__name__
         raise
     finally:
-        lease.stop()
-        e.steps.only = None
-        e.steps.end()
-        record_stage(e)
-        if e.claim is not None and not fence.stale(e.store, e.claim):
-            e.store.unclaim(e.bead)
+        finish_stage(e, lease)
+
+
+def finish_stage(e: Engine, lease: Lease) -> None:
+    lease.stop()
+    e.steps.only = None
+    e.steps.end()
+    if e.fenced:
+        return
+    record_stage(e)
+    if e.claim is not None and not fence.stale(e.store, e.claim):
+        e.store.unclaim(e.bead)
 
 
 def record_stage(e: Engine) -> None:

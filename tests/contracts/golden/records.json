@@ -1,4 +1,14 @@
 {
+ "ProfileChange": {
+  "t": 1793050200.5,
+  "owner_text": "Denis: \"approved\" 2026-11-02T12:00Z",
+  "repo": "/repo",
+  "branch": "topic",
+  "tip": "tip",
+  "base": "base",
+  "diff_sha": "sha256",
+  "pid": 42
+ },
  "Epic": {
   "id": "t-epic",
   "project": "task-loop-48643b50",
@@ -1200,7 +1210,8 @@
   "reason": "",
   "permanence": "needs_owner",
   "retry_at": 0.0,
-  "attempts": {}
+  "attempts": {},
+  "fingerprint": "a1b2c3d4e5f6"
  },
  "QueueItem": {
   "project": "p",

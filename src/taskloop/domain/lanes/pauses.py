@@ -18,6 +18,7 @@ class PauseRule:
     permanence: Permanence
     base_s: float = 0.0
     cap_s: float = 0.0
+    max_attempts: int = 0
 
 
 TABLE: Final[dict[str, PauseRule]] = {
@@ -27,7 +28,7 @@ TABLE: Final[dict[str, PauseRule]] = {
     "busy": PauseRule("transient", 30, 1800),
     "timeout": PauseRule("transient", 60, 3600),
     "network": PauseRule("transient", 30, 1800),
-    "engine_crash": PauseRule("transient", 60, 3600),
+    "engine_crash": PauseRule("transient", 60, 3600, max_attempts=3),
     "transient_infrastructure": PauseRule("transient", 60, 3600),
     "rate_limited": PauseRule("transient", 60, 3600),
     "hung": PauseRule("transient", 60, 3600),
@@ -89,16 +90,27 @@ def delay(policy: PauseRule, attempt: int, random: Callable[[], float]) -> float
     return min(policy.base_s * 2 ** min(max(attempt, 0), 63), policy.cap_s) * (0.8 + 0.4 * random())
 
 
+def exhausted(policy: PauseRule, rec: Park | None, reason: str, attempt: int, fingerprint: str) -> bool:
+    if policy.max_attempts and attempt >= policy.max_attempts:
+        return True
+    return (reason == "engine_crash" and rec is not None and rec.reason == reason
+            and bool(fingerprint) and rec.fingerprint == fingerprint)
+
+
 def after_pause(rec: Park | None, b: Bead, run: str, now: float, reason: str,
-                random: Callable[[], float], not_before: float = 0.0, *, question: bool = False) -> Park:
+                random: Callable[[], float], not_before: float = 0.0, *, question: bool = False, fingerprint: str = "") -> Park:
     if rec is not None and rec.run == run:
         return rec
     policy = rule(reason)
     counts = dict(rec.attempts) if rec else {}
     attempt = counts.get(reason, 0)
-    counts[reason] = attempt + 1
-    retry_at = max(now + delay(policy, attempt, random), not_before) if policy.permanence == "transient" else 0.0
+    if reason in ("network", "pause_network"):
+        attempt = 0  # outages never consume a bead's attempts; only the loop's probe gates recovery
+    else:
+        counts[reason] = attempt + 1
+    permanence: Permanence = "needs_owner" if exhausted(policy, rec, reason, attempt, fingerprint) else policy.permanence
+    retry_at = max(now + delay(policy, attempt, random), not_before) if permanence == "transient" else 0.0
     h = text_hash(b)
     runs = (rec.runs + 1 if rec and rec.hash == h else 1) if question else 0
     return Park(bead=b.id, hash=h, runs=runs, run=run, t=now, reason=reason,
-                permanence=policy.permanence, retry_at=retry_at, attempts=counts)
+                permanence=permanence, retry_at=retry_at, attempts=counts, fingerprint=fingerprint)

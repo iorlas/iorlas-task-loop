@@ -15,13 +15,16 @@ import support.paths  # noqa: E402, F401
 from taskloop.adapters import childenv  # noqa: E402
 from taskloop.adapters.check_files import repo_key  # noqa: E402
 from taskloop.adapters.git import RealGit  # noqa: E402
-from taskloop.app.checks.cache import key_digest  # noqa: E402
+from taskloop.app.checks import authorization  # noqa: E402
+from taskloop.app.checks.cache import InputKeys, RunMemo  # noqa: E402
+from taskloop.app.checks.execution import check_env  # noqa: E402
 from taskloop.app.wire.hook import write_hooks  # noqa: E402
-from taskloop.contracts.checks import CheckResult, PassRecord  # noqa: E402
+from taskloop.contracts.checks import CheckResult  # noqa: E402
 from taskloop.contracts.env import Env  # noqa: E402
-from taskloop.contracts.ids import CheckId, TreeSha  # noqa: E402
+from taskloop.contracts.ids import TreeSha  # noqa: E402
 from taskloop.contracts.paths import ConfigDir  # noqa: E402
-from taskloop.contracts.runkey import BaseSha, Digest, RunKey  # noqa: E402
+from taskloop.contracts.runkey import BaseSha  # noqa: E402
+from taskloop.domain.checks.specs import gate_items  # noqa: E402
 from taskloop.stores.real import real_stores  # noqa: E402
 
 JUDGE_TL = """#!{python}
@@ -85,12 +88,16 @@ class Base(unittest.TestCase):
     def stamp(self, rev):
         tree = TreeSha(self.git(self.repo, "rev-parse", rev + "^{tree}").stdout.strip())
         base = BaseSha(self.git(self.repo, "rev-parse", "origin/main").stdout.strip())
-        key = RunKey(check=CheckId("suite"), cmd=Digest("c"), config=Digest("g"), toolchain=Digest("t"),
-                     tree=tree, base=base, inputs=Digest("i"), selected=Digest(""), env=Digest("e"))
-        result = CheckResult(id=key.check, cmd="true", group="gate", exit=0, status="passed")
-        repo = repo_key(RealGit(Env(self.env)), str(self.repo))
-        real_stores(ConfigDir(self.cfg)).results(repo, key.check).of(key_digest(key)).write(
-            PassRecord(key=key, result=result, tree=tree, base=base))
+        env, wt = Env(self.env), str(self.repo)
+        git = RealGit(env)
+        cfg = authorization.profile(git, wt, tree)
+        engine_env = {**childenv.reaching(childenv.current_env(env)), **check_env()}
+        memo = RunMemo(real_stores(ConfigDir(self.cfg)), repo_key(git, wt), InputKeys(git, wt, tree), base, engine_env)
+        for step in gate_items(cfg):
+            key = memo.key(step)
+            assert key is not None
+            result = CheckResult(id=step.id, cmd=step.cmd, group=step.group, exit=0, status="passed")
+            memo.remember(key, result, 1, "")
 
     def push(self, *refspecs, env=None):
         return self.git(self.repo, "push", "-q", "origin", *refspecs, env=env, check=False)
@@ -156,9 +163,8 @@ class PrePush(Base):
         self.assertEqual(self.git(self.origin, "branch", "--list", "x").stdout, "")
 
     def test_an_undecodable_profile_refuses_before_remote_mutation(self):
-        self.commit("b")
-        self.stamp("HEAD")
         (self.repo / ".task-loop.json").write_text("{")
+        self.commit("b")
         self.assertNotEqual(self.push("HEAD:refs/heads/x").returncode, 0)
         self.assertEqual(self.git(self.origin, "branch", "--list", "x").stdout, "")
 
@@ -167,10 +173,13 @@ class PrePush(Base):
         (self.repo / "stray").write_text("x")
         self.assertEqual(self.push("--no-verify", "HEAD:refs/heads/x").returncode, 0)
 
-    def test_a_repo_without_a_gate_step_has_nothing_to_ask(self):
+    def test_a_tip_cannot_remove_the_base_gate(self):
         (self.repo / ".task-loop.json").write_text("{}")
         self.git(self.repo, "commit", "-qam", "profile")
-        self.assertEqual(self.push("HEAD:refs/heads/x").returncode, 0)
+        result = self.push("HEAD:refs/heads/x")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("profile_changed:", result.stderr)
+        self.assertEqual(self.git(self.origin, "branch", "--list", "x").stdout, "")
 
 
 class Chain(Base):

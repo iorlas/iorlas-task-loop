@@ -43,6 +43,12 @@ class CloseHost(Protocol):
     dead: Checkpoint | None  # the checkpoint of a run that died inside its close (its outcome kept, a key unapplied), else None
     retry_after: float
     pause_reason: str
+    why: str
+
+    @property
+    def crash_fingerprint(self) -> str: ...
+    @property
+    def crash_site(self) -> str: ...
 
     @property
     def home(self) -> ConfigDir: ...

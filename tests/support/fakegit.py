@@ -65,6 +65,9 @@ class FakeGit(ScriptedGit):
     def branch(self, d: str) -> str:
         return str(self.answer("branch"))
 
+    def symbolic_ref(self, d: str, ref: str) -> str:
+        return str(self.answer("symbolic_ref", ref))
+
     def dirty(self, d: str) -> bool:
         return bool(self.answer("dirty"))
 

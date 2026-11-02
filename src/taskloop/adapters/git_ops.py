@@ -11,6 +11,10 @@ PUSH_WALL_S = 3600.0  # a push (or an LFS upload) that has not ended after this 
 
 
 class LandGit(GitBase):
+    def profile_diff(self, d: str, base: str, tip: str) -> str:
+        """Preserve the complete patch text used by the owner's audit and the pre-push judge."""
+        return self._read(d, "diff", "--no-ext-diff", "--no-textconv", base, tip, "--", ".task-loop.json")
+
     def unpinned(self) -> Self:
         """The same port asked as a worker's or a check's git would see the folder (no pin): for whether the pin itself is right."""
         return type(self)(self.env, self.sleep, pinned=False)

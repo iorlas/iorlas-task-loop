@@ -8,10 +8,26 @@ _TRANSIENT: Final = re.compile(
     r"Temporary failure in name resolution|error: 5\d\d|HTTP/\d(?:\.\d)? 5\d\d",
     re.I,
 )
+_NETWORK: Final = re.compile(
+    r"could not resolve host|temporary failure in name resolution|"
+    r"unable to access[^\n]*(?:could not resolve|connection timed out|connection refused|failed to connect|"
+    r"network is unreachable|ssl connection timeout|operation timed out)|"
+    r"connection reset by peer|early eof|the remote end hung up unexpectedly|kex_exchange_identification|"
+    r"ssh: connect to host[^\n]*(?:timed out|refused|unreachable|resolve)",
+    re.I,
+)
 _REJECTED: Final = re.compile(r"rejected|non-fast-forward|fetch first|stale info")
 _LFS_ATTR: Final = re.compile(r"^[^#\n]*\bfilter=lfs\b", re.M)
 _NO_REMOTE: Final = re.compile(r"no (?:dolt )?remotes?\b|remote[^\n]{0,40}not (?:configured|found)|no such remote|no upstream", re.I)
 _FAILED_PREFIX: Final = re.compile(r"^(failed|paused): ")
+
+
+class NetText:
+    """Git transport evidence; an authentication or repository access error alone is no network outage."""
+
+    @staticmethod
+    def down(tail: str) -> bool:
+        return _NETWORK.search(tail[-600:]) is not None
 
 
 class Push:

@@ -5,7 +5,7 @@ import signal
 import threading
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Protocol, assert_never
 
 from taskloop.adapters import beadtools
@@ -127,6 +127,8 @@ class Closer:
     def finish(self, done: oc.RunOutcome) -> None:
         e = self.e
         self.pause(done)
+        if done.kind is Kind.ENGINE_CRASH:
+            done = oc.make(done.kind, e.why)
         counts = "; ".join(f"{k}={v}" for k, v in e.stats.items())
         stats = f"cost=${e.cost:.2f}; minutes={int((time.time() - e.t0) / 60)}; {counts}"
         branch = e.git.branch(e.wt)
@@ -142,11 +144,19 @@ class Closer:
         if bead is None:
             return
         rec = parks.paused(e.home, bead, done.kind, e.run_id, e.clock.now(), reason=e.pause_reason,
-                           not_before=e.retry_after)
+                           not_before=e.retry_after, fingerprint=e.crash_fingerprint if done.kind is Kind.ENGINE_CRASH else "")
         if rec is None:
             return
         e.retry_after = rec.retry_at
         e.pause_reason = rec.reason
+        if done.kind is Kind.ENGINE_CRASH:
+            e.fp = rec.fingerprint
+            if rec.permanence == "needs_owner" and not e.asked:
+                count = rec.attempts[rec.reason]
+                e.why = f"engine crashed {count} times at {e.crash_site}: {done.detail}; traceback in {e.run_id}"
+                spec = replace(askspecs.repeated_fault(count, " ".join(e.why.splitlines())),
+                               decision="The engine keeps crashing; how should it go on?")
+                e.asked = bool(e.ask_flow.raise_ask(spec, e.why, Kind.ASK_STUCK))
 
     def apply(self, eff: effects.CloseEffect, done: oc.RunOutcome, stats: str) -> None:
         """One effect of the close plan, done. The match is closed: a new effect is one more case here."""

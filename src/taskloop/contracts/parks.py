@@ -23,6 +23,7 @@ class Park(Rec):
     permanence: Permanence = "needs_owner"
     retry_at: float = 0.0
     attempts: dict[str, int] = msgspec.field(default_factory=dict)
+    fingerprint: str = ""
 
 
 class ParkStore:

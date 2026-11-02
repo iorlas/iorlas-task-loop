@@ -60,7 +60,8 @@ class Decide:
         e.kind = e.disp.kind
         if e.disp.escalated:
             e.warn(f"the same fault {oc.KNOBS['fault_retries']} times on this bead: asking the owner once")
-        self.storm(history, kind, o, why)
+        if o.rule.storm:
+            self.storm(history, kind, o, why)
         return e.kind
 
     def storm(self, history: Sequence[Mapping[str, object]], kind: Kind, o: oc.RunOutcome, why: str) -> None:

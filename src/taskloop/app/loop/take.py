@@ -85,6 +85,15 @@ class Taker:
             run = v.run or f"profile-ahead-{env.pid}-{env.now()}"
             store.put(pauses.after_pause(store.get(b.id), b, run, env.now(), v.kind, lambda: 0.5))
 
+    def _held(self, bid: str, at: Where, held: vd.Verdict) -> Taken | None:
+        """A bead that is not to be run now: recorded and cooled (a network pause is neither), and a pre-engine failure ends the pass."""
+        if held.outcome is Result.SKIPPED:
+            return None
+        self.record(bid, at.slot, held)
+        if not held.paused_for_network:
+            self.later[bid] = self.env.now() + self.tune().pause_retry
+        return Taken(held, bid) if held.pre_engine else None
+
     def attempt_all(self, cands: list[Bead], at: Where, slots: bool, ecfg: EngineConfig, rule: QueueRule,
                     lease: Lease) -> Taken:
         env, bid = self.env, ""
@@ -99,12 +108,9 @@ class Taker:
                 attempt(env.store.unclaim, b.id)
                 held = vd.pre_engine(str(e))
             if held is not None:
-                if held.outcome is Result.SKIPPED:
-                    continue
-                self.record(bid, at.slot, held)
-                self.later[bid] = env.now() + self.tune().pause_retry
-                if held.pre_engine:
-                    return Taken(held, bid)
+                taken = self._held(bid, at, held)
+                if taken is not None:
+                    return taken
                 continue
             lease.add(bid)
             try:

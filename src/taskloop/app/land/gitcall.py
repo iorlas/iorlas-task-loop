@@ -5,6 +5,7 @@ from typing import Protocol
 
 from taskloop.contracts.ports import Git
 from taskloop.contracts.slots import SlotGitError
+from taskloop.domain.land.matchers import NetText
 
 
 class BlockedFor(Protocol):
@@ -16,7 +17,8 @@ def must[T](e: BlockedFor, what: str, call: Callable[[], T], kind: str = "FAULT_
     try:
         return call()
     except SlotGitError as err:
-        raise e.blocked_for(f"failed: `git {what}`: {err}", kind) from err
+        down = kind == "FAULT_INFRA" and NetText.down(str(err))
+        raise e.blocked_for(f"{'paused' if down else 'failed'}: `git {what}`: {err}", "PAUSE_NETWORK" if down else kind) from err
 
 
 def oneline(git: Git, d: str, include: list[str], exclude: list[str], limit: int) -> str:

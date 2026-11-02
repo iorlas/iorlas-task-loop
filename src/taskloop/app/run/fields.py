@@ -87,6 +87,7 @@ class RunFields(StateAttrs):
         self.why, self.asked = "", False  # what result() tells the loop
         self.kind = Kind.FAULT_ENGINE  # the run's outcome.Kind, after the close's escalation
         self.fp, self.storm = "", ""  # its fingerprint, a storm banner
+        self.crash_fingerprint, self.crash_site = "", ""
         self.disp: oc.Disposition | None = None
         self.retry_after = 0.0  # a pause for a lane: when delegate says it is back (epoch; 0 = unknown)
         self.landed_sha = ""  # set the moment the push goes through: whatever stops the run after it, the bead landed

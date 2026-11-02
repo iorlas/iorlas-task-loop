@@ -52,6 +52,10 @@ class ConfigDir:
     def traces(self) -> Path:
         return self.root / "traces.jsonl"
 
+    def profile_changes(self) -> Path:
+        """The owner's audit of profile changes delivered by land-stack."""
+        return self.root / "profile-changes.jsonl"
+
     def ask(self, bead: BeadId | str) -> Path:
         return self.root / "asks" / (f"{bead}.json")
 
