@@ -22,6 +22,7 @@ from taskloop.contracts.ledger import LedgerEntry
 from taskloop.contracts.loop import LoopState
 from taskloop.contracts.run import RunState
 from taskloop.contracts.runlife import RETAIN, Liveness, shown
+from taskloop.contracts.slots import slots_of
 from taskloop.contracts.stores import AskStore, JsonStore, LedgerStore, StatusStore
 from taskloop_dash import jsonl
 from taskloop_dash.api.looks import Looks
@@ -66,7 +67,7 @@ class Worlds:
         raw = self.beads.beads_of(path)
         rows = typed_beads(raw)
         bd_ok_at, bd_error = self.beads.health(path)
-        slots = typed_beads(env.ports.slot_beads(path))
+        slots = slots_of(rows, socket.gethostname())
         states = [s for s in (JsonStore(f, LoopState).get() for f in sorted(env.config.loop_state(loop_key(path)).parent.glob(
             loop_key(path) + ".*.json"))) if s is not None]
         _, items = self.looks.look_items(id, raw)
@@ -76,7 +77,26 @@ class Worlds:
         return ProjectIn(id=id, name=basename(path), beads=rows, slots=slots, loops=states, looks=looks, adrs=self.adrs(path),
                          slot_count=env.ports.slot_count(path),
                          bd_ok_at=bd_ok_at, bd_error=bd_error,
-                         profile_error=env.ports.profile_error(path))
+                         profile_error=self.profile_error(path))
+
+    def profile_error(self, path: str) -> str:
+        """Keep the row while its source files are unchanged; unknown sources fall back to 30 seconds."""
+        env = self.env
+        stamp = env.ports.profile_stamp(path)
+        key = "profile:" + path
+        hit = env.ttl.peek(key)
+        if hit:
+            before, row = hit[1]
+            if before == stamp and (stamp is not None or env.clock() - hit[0] < 30):
+                return row
+        row = env.ports.profile_error(path)
+        env.ttl.put(key, (stamp, row))
+        return row
+
+    def bead_runs(self, path: str, bead: str) -> list[Run]:
+        """Only this drawer's full history; never parse another bead's logs."""
+        return [self.runlogs.typed_run(b, self.env.clock())
+                for b in self.records.locator.of_bead(bead, repo=path) if b.log.is_file()]
 
     def runs(self, full: tuple[str, str] | None = None) -> dict[tuple[str, str], list[Run]]:
         """(repo key, bead) -> runs, oldest first: retained logs, and all of `full`'s."""

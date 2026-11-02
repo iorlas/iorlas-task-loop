@@ -66,7 +66,7 @@ class Golden(unittest.TestCase):
             run.add("step_end", id=f"n{run.n}", step="close", outcome="done", exec_seconds=1)
             run.write(self.cfg, repo=str(self.repo))
             self.paths[name] = str(self.cfg / "engine" / f"{run.name}.jsonl")
-        ports = Ports(store=lambda r: self.store, slot_beads=lambda r: [])
+        ports = Ports(store=lambda r: self.store)
         self.dash = Dash(Env(config=self.cfg, home=root, ports=ports, clock=lambda: NOW, version="v-test"))
 
     def tearDown(self):

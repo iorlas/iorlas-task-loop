@@ -2,6 +2,7 @@
 file, a fake bd), its handler on a loopback port. The snapshot's version is its ETag: an unchanged one answers 304, a poll never runs bd."""
 
 import json
+import socket
 import sys
 import tempfile
 import threading
@@ -32,7 +33,7 @@ from taskloop_dash.http import make_handler
 NOW = T + 3600
 
 
-class Api(unittest.TestCase):
+class ApiFixture(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         root = Path(self.tmp.name)
@@ -76,17 +77,20 @@ class Api(unittest.TestCase):
             return real_find(query)
 
         self.store.find = counting
-        slots = [bead("s-a", "slot box a", "in_progress", labels=["slot"], assignee="tl-a").to_dict()]
+        self.store.put(bead("s-a", f"slot {socket.gethostname()} a", "in_progress", labels=["slot"], assignee="tl-a"))
         self.now = NOW
-        ports = Ports(store=lambda repo: self.store, slot_beads=lambda repo: slots)
+        ports = Ports(store=lambda repo: self.store)
         self.dash = Dash(Env(config=self.cfg, home=root, ports=ports, clock=lambda: self.now, version="v-test"))
 
     def tearDown(self):
+        self.dash.reads.wait()
         self.tmp.cleanup()
 
     def get(self, path, q=None, held=None):
         return self.dash.reads.get(path, q or {}, held)
 
+
+class Api(ApiFixture):
     def test_snapshot_decodes_strictly_with_the_facts_of_the_machine(self):
         code, body, headers = self.get("/api/snapshot")
         self.assertEqual(code, 200)
@@ -116,6 +120,7 @@ class Api(unittest.TestCase):
         version = json.loads(body)["version"]
         self.now += 5  # the snapshot is rebuilt, nothing changed
         self.assertEqual(self.get("/api/snapshot", {"since": version})[:2], (304, b""))
+        self.dash.reads.wait()
         self.assertEqual(self.get("/api/snapshot", {}, headers["ETag"])[:2], (304, b""))
         code, body, _ = self.get("/api/snapshot", {"since": "stale"})
         self.assertEqual((code, json.loads(body)["version"], json.loads(body)["t"]), (200, version, self.now))
@@ -123,10 +128,13 @@ class Api(unittest.TestCase):
     def test_a_new_record_gives_a_new_version(self):
         _, body, _ = self.get("/api/snapshot")
         before = json.loads(body)["version"]
+        must(self.dash.records.locator.get("b-1-20261015-100000")).log.unlink()
         RunScript("b-1", slot="a", at=3000).step("plan", 300, 20_000, "OC Go").step("write", 200, 30_000, text="write 1", end=False).step(
             "checks", 60, 1
         ).beat().write(self.cfg, repo=str(self.repo))
         self.now += 5
+        self.get("/api/snapshot")  # stale response schedules the refresh
+        self.dash.reads.wait()
         self.assertNotEqual(json.loads(self.get("/api/snapshot")[1])["version"], before)
 
     def test_a_poll_does_not_run_bd_every_time(self):
@@ -162,6 +170,9 @@ class Api(unittest.TestCase):
         d = wire.load(BeadDetail, json.loads(body))
         self.assertEqual(d.passes[0].logs[0].roles[0].attempts[0].lines[0].text, "planner summary")
         path.write_text(json.dumps({"k": "msg", "t": T + 3001, "text": "updated planner summary"}) + "\n")
+        self.now += 4
+        self.get("/api/bead", {"project": loop_key(self.repo), "id": "b-1"})
+        self.dash.reads.wait()
         code, body, changed = self.get("/api/bead", {"project": loop_key(self.repo), "id": "b-1"}, headers["ETag"])
         self.assertEqual(code, 200)
         self.assertNotEqual(headers["ETag"], changed["ETag"])
@@ -185,6 +196,9 @@ class Api(unittest.TestCase):
                     RunScript("b-1", slot="a", at=3000).step("plan", 300, 40_000, "OC Go").close("landed").write(
                         self.cfg, repo=str(self.repo))
                 self.now += 16
+                if route == "/api/bead":
+                    self.get(route, query)
+                    self.dash.reads.wait()
                 changed, body, _ = self.get(route, {**query, "since": token})
                 self.assertEqual(changed, 200)
                 self.assertNotEqual(json.loads(body)["version"], token)

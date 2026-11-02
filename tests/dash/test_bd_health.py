@@ -39,6 +39,7 @@ class BdHealth(unittest.TestCase):
         self.now = 1000.0
         self.env = Env(self.cfg, home=root, ports=Ports(store=lambda _: self.store), clock=lambda: self.now)
         self.dash = Dash(self.env)
+        self.addCleanup(self.dash.reads.wait)
 
     def test_failed_reads_keep_rows_and_time_then_recover_without_caching_failure(self):
         for comment in (False, True):
@@ -74,12 +75,16 @@ class BdHealth(unittest.TestCase):
         before = self.dash.reads.snapshot()
         self.now += 61
         with self.store.stub(find_fn=unreadable):
+            self.dash.reads.snapshot()
+            self.dash.reads.wait()
             failed = self.dash.reads.snapshot()
         self.assertEqual(failed.beads, before.beads)
         self.assertEqual(failed.projects[0].bd_ok_at, 1000.0)
         self.assertEqual(failed.projects[0].bd_error, ERROR)
         self.assertNotEqual(failed.version, before.version)
-        self.now += 2
+        self.now += 4
+        self.dash.reads.snapshot()
+        self.dash.reads.wait()
         recovered = self.dash.reads.snapshot()
         self.assertEqual((recovered.projects[0].bd_ok_at, recovered.projects[0].bd_error), (self.now, ""))
         self.assertNotEqual(recovered.version, failed.version)
@@ -89,11 +94,16 @@ class BdHealth(unittest.TestCase):
         before = json.loads(self.dash.reads.get("/api/bead", query)[1])
         self.now += 16
         with self.store.stub(comments_fn=unreadable):
+            self.dash.reads.get("/api/bead", query)
+            self.dash.reads.wait()
             failed = json.loads(self.dash.reads.get("/api/bead", query)[1])
         self.assertEqual(failed["comments"], before["comments"])
         self.assertEqual(failed["bd_ok_at"], 1000.0)
         self.assertEqual(failed["bd_error"], ERROR)
         self.assertNotEqual(failed["version"], before["version"])
+        self.now += 4
+        self.dash.reads.get("/api/bead", query)
+        self.dash.reads.wait()
         recovered = json.loads(self.dash.reads.get("/api/bead", query)[1])
         self.assertEqual((recovered["bd_ok_at"], recovered["bd_error"]), (self.now, ""))
 
@@ -130,6 +140,9 @@ class BdHealth(unittest.TestCase):
             snap = self.dash.reads.snapshot()
         self.assertEqual(snap.beads, [])
         self.assertEqual((snap.projects[0].bd_ok_at, snap.projects[0].bd_error), (None, ERROR))
+        self.now += 4
+        self.dash.reads.snapshot()
+        self.dash.reads.wait()
         with self.store.stub(comments_fn=unreadable):
             detail = must(self.dash.reads.bead(loop_key(self.repo), "b-1"))
         self.assertEqual((detail.bd_ok_at, detail.bd_error, detail.comments), (None, ERROR, []))

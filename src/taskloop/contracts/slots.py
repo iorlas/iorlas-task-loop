@@ -4,13 +4,20 @@ A slot is one worktree plus the bd bead that is its lease. `Slot.take`, `ready_f
 whose `code` is one of four closed values; git's own failures are the typed `SlotGitError`s below, classified once by the
 adapter (the only place that reads git's words), never by the caller.
 """
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import Literal, final
 
+from taskloop.contracts.bead import Bead
 from taskloop.contracts.wire import Rec
 
 HELD_KEYS = ("held_by", "held_since", "held_why", "hold_until", "held_bead")  # the marks on a slot bead while it is held
 SlotFailCode = Literal["slot_broken", "bead_pinned", "busy", "transient"]
+
+
+def slots_of(beads: Sequence[Bead], host: str) -> list[Bead]:
+    """Nonclosed leases named `slot <host> <name>`, in title order, from an existing listing."""
+    return sorted((b for b in beads if "slot" in b.labels and b.status != "closed"
+                   and len(b.title.split()) == 3 and b.title.split()[:2] == ["slot", host]), key=lambda b: b.title)
 
 
 class SlotFail(Exception):

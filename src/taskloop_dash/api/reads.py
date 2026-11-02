@@ -2,19 +2,22 @@
 `version` is its ETag: a request that already holds it (`since=` or If-None-Match) gets a 304 and no body."""
 
 import json
+from dataclasses import replace
 from typing import Any
 
 from taskloop.contracts import wire
 from taskloop.contracts.dash import BeadDetail, Snapshot
 from taskloop.contracts.dashcost import CostPage
-from taskloop.contracts.ids import is_bead_id
+from taskloop.contracts.ids import BeadId, is_bead_id
 from taskloop_dash.env import Env
 from taskloop_dash.readers.world import Worlds
+from taskloop_dash.refresh import RefreshCache
 from taskloop_dash.views import bead_detail, cost, snapshot
 from taskloop_dash.views.board import Board
 from taskloop_dash.views.runfacts import Run
+from taskloop_dash.views.world import World
 
-SNAPSHOT_TTL = 1.0  # seconds one built snapshot answers every poll
+SNAPSHOT_TTL = 3.0  # at least the page's polling interval
 Reply = tuple[int, bytes, dict[str, str]]
 
 
@@ -38,10 +41,23 @@ def versioned(rec: Snapshot | BeadDetail | CostPage, q: dict[str, str], held: st
 class Reads:
     def __init__(self, env: Env, worlds: Worlds) -> None:
         self.env, self.worlds = env, worlds
+        self.cache: RefreshCache[tuple[World, Snapshot]] = RefreshCache(env.clock)
+        self.details: RefreshCache[BeadDetail | None] = RefreshCache(env.clock)
+
+    def wait(self) -> None:
+        self.details.wait()
+        self.cache.wait()
+
+    def built(self) -> tuple[World, Snapshot]:
+        """Publish a snapshot and its source world atomically."""
+        def build() -> tuple[World, Snapshot]:
+            world = self.worlds.world()
+            return world, snapshot.build(world)
+        return self.cache.get("snapshot", SNAPSHOT_TTL, build)
 
     def snapshot(self) -> Snapshot:
         self.env.touch()
-        return self.env.ttl.get("snapshot", SNAPSHOT_TTL, lambda: snapshot.build(self.worlds.world()))
+        return self.built()[1]
 
     def bead(self, project: str, bead: str) -> BeadDetail | None:
         """The drawer of one bead; None for a bead no project of the machine lists."""
@@ -49,12 +65,16 @@ class Reads:
         path = self.worlds.repos().get(project)
         if path is None or not is_bead_id(bead):
             return None
-        w = self.worlds.world(full=(project, bead))
+        return self.details.get(f"bead:{project}:{bead}", SNAPSHOT_TTL, lambda: self._bead(project, bead, path))
+
+    def _bead(self, project: str, bead: BeadId, path: str) -> BeadDetail | None:
+        w, _ = self.cache.peek("snapshot") or self.built()
         p = next((x for x in w.projects if x.id == project), None)
         b = next((x for x in p.beads if x.id == bead), None) if p else None
         if p is None or b is None:
             return None
-        runs = w.runs.get((project, bead), [])
+        runs = self.worlds.bead_runs(path, bead)
+        w = replace(w, now=self.env.clock(), runs={**w.runs, (project, bead): runs})
         newest: Run | None = runs[-1] if runs else None
         comments = self.worlds.comments(path, bead)
         bd_ok_at, bd_error = self.worlds.beads.health(path, bead)

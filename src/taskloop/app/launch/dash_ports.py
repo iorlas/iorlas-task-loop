@@ -1,4 +1,4 @@
-"""The dashboard's ports, made from the engine code: the read-only facts the package taskloop_dash may not import (the slot beads),
+"""The dashboard's ports, made from the engine code: the read-only facts the package taskloop_dash may not import (slot capacity),
 the owner's writes through the intake, and bd through the engine's adapter."""
 
 import os
@@ -20,7 +20,6 @@ from taskloop.contracts.adrs import AdrStore
 from taskloop.contracts.ask import Ask, AskAction
 from taskloop.contracts.dash import Result, Stick
 from taskloop.contracts.env import Env
-from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import AnswerAsk, BdFailure, Beads
@@ -136,10 +135,6 @@ def ports(env: Env) -> Ports:
     """`python3 -m taskloop_dash --ports taskloop.app.launch.dash_ports:ports`: the dashboard builds its ports from the engine's code."""
     git = real.git(env)
     home = ConfigDir(config_dir(env))
-    dash = Identity(actor=DASH_ACTOR, home=str(home.root))
-
-    def slot_beads(repo: str) -> list[dict[str, Any]]:
-        return [b.to_dict() for b in wslots.slot_beads(repo, dash)]
 
     def slot_count(repo: str) -> int:
         return wslots.profile_slots(repo).count
@@ -150,5 +145,5 @@ def ports(env: Env) -> Ports:
     return Ports(store=store, answer=answer_via(home),
                  **owner_writes(owner_intake(wire_asks.store(home), store, now, adrs=lambda repo: AdrStore.at(home, repo),
                                              factory=lambda: factory_store(home)), home),
-                 slot_beads=quiet(slot_beads, []), slot_count=quiet(slot_count, 0),
-                 resource_holders=resource_holders, profile_error=quiet(red_row, ""))
+                 slot_count=quiet(slot_count, 0),
+                 resource_holders=resource_holders, profile_error=quiet(red_row, ""), profile_stamp=quiet(profiles.stamp, None))

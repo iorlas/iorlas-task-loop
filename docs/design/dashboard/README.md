@@ -29,6 +29,11 @@ heartbeats and terminal states. Check evidence is retained under the run directo
 
 ## Server
 
+- Snapshot polls reuse a finished snapshot and its world for at least 3 seconds. A stale poll starts one background refresh and
+  returns the last build immediately; only the first build waits. Each bead drawer uses the same rule, taking the snapshot's
+  world plus that bead's full run history, comments and live events. Engine logs are read from a byte cursor; rotation or
+  truncation resets it, and incomplete lines wait. Slot leases share the bead listing's last-touched stamp. Profile errors stay
+  cached while the base-ref files and profile's base choice are unchanged; unknown Git layouts or revisions fall back to 30 seconds.
 - Bind: 127.0.0.1 plus the Tailscale address when present (`TASK_LOOP_DASH_BIND` overrides, `TASK_LOOP_DASH_PORT` the port).
   No auth: the server refuses any address outside loopback and Tailscale (`bind.allowed_addr`), never 0.0.0.0; `tl dash ensure`
   deletes the old `dash.token`.

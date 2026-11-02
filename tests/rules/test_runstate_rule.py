@@ -22,6 +22,7 @@ ALLOWS_BEAT = {
     "src/taskloop/domain/stuck.py",  # the stuck rule: a Beat is the tick, not activity
     "src/taskloop/app/run/run_once.py",  # the engine writes it
     "src/taskloop_dash/jsonl.py", "src/taskloop_dash/api/live.py", "src/taskloop_dash/views/runfacts.py",  # a Beat is no event
+    "src/taskloop_dash/readers/runlogs.py",  # compact Beats to the latest tick; liveness still comes only from runlife.shown
 }
 ALLOWS_STALE = {"src/taskloop/contracts/runlife.py"}
 ALLOWS_PID_ALIVE = {  # the lock table's and the loop's own pid probes, and the reconciler

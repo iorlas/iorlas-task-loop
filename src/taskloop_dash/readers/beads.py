@@ -14,8 +14,7 @@ from taskloop.contracts.ports import BdFailure, BeadQuery
 from taskloop_dash.env import Bead, Env
 from taskloop_dash.readers.records import Records
 
-MAX_AGE = 60  # seconds a listing is kept when bd's marker did not move
-SETTLE = 5  # seconds a listing is kept whatever the marker says
+MAX_AGE = 60  # fallback lifetime when bd's last-touched marker is unavailable
 SHARED = 30  # seconds another process's listing on disk is good enough
 DETAIL_TTL = 15  # seconds a successful comments read is kept
 
@@ -27,7 +26,7 @@ class Observation:
     rows: list[Bead] = field(default_factory=list)
     ok_at: float | None = None
     error: str = ""
-    marker: float = 0.0
+    marker: int | None = None
 
 
 def row_of(b: TypedBead) -> dict[str, Any]:
@@ -54,7 +53,7 @@ class Beads:
         obs = self.observed.get(self._key(repo, bead), Observation())
         return obs.ok_at, obs.error
 
-    def _observe(self, key: str, read: Callable[[], list[Bead]], marker: float = 0.0) -> Observation:
+    def _observe(self, key: str, read: Callable[[], list[Bead]], marker: int | None = None) -> Observation:
         try:
             rows = read()
         except (BdFailure, ValueError, OSError) as exc:
@@ -67,18 +66,18 @@ class Beads:
         return obs
 
     def beads_of(self, repo: str) -> list[Bead]:
-        """bd list for one repo, re-run only when bd's last-touched marker moved (or every minute)."""
+        """Keep successful listings until last-touched moves; without a marker, re-read every minute."""
         env, clock = self.env, self.env.clock
         try:
-            m = (Path(repo) / ".beads" / "last-touched").stat().st_mtime
+            m = (Path(repo) / ".beads" / "last-touched").stat().st_mtime_ns
         except OSError:
-            m = 0
+            m = None
         key = self._key(repo)
         hit = env.ttl.peek(key)
         if hit:
             obs: Observation = hit[1]
             age = clock() - obs.ok_at if obs.ok_at is not None else MAX_AGE
-            if age < SETTLE or (obs.marker == m and age < MAX_AGE):
+            if obs.marker == m and (m is not None or age < MAX_AGE):
                 return obs.rows
         disk = env.config.beads_cache(repo)
         if key not in self.observed:  # reuse another process's success, preserving its original observation time
@@ -95,7 +94,7 @@ class Beads:
     def _list(self, repo: str) -> list[Bead]:
         return [row_of(b) for b in self.env.ports.store(repo).find(BeadQuery(include_closed=True))]
 
-    def _shared(self, disk: Path, marker: float) -> Observation | None:
+    def _shared(self, disk: Path, marker: int | None) -> Observation | None:
         try:
             c = json.loads(disk.read_text(encoding="utf-8"))
             if isinstance(c, dict) and self.env.clock() - float(c["t"]) < SHARED and c.get("m") == marker and isinstance(c["beads"], list):

@@ -4,6 +4,8 @@ import json
 from collections.abc import Callable
 from pathlib import Path
 
+from taskloop.adapters.gitmemo import ref_files
+from taskloop.adapters.gitrepo import Sig, git_dirs, is_dir_sig, sig
 from taskloop.contracts import config
 from taskloop.contracts.ports import Git
 from taskloop.contracts.slots import NotARepo, SlotGitError
@@ -20,6 +22,43 @@ def _base_name(repo: str | Path) -> str:
     except (OSError, ValueError, AttributeError):
         name = None
     return name if isinstance(name, str) and name else config.RepoProfile().engine.base
+
+
+def stamp(repo: str | Path) -> tuple[str, tuple[Sig, ...]] | None:
+    """Files deciding `source`, without Git: checkout identity, profile's base choice, loose and packed refs.
+
+    Unknown revision expressions and ref backends have no stamp; callers must use a bounded fallback cache.
+    """
+    dirs = git_dirs(repo)
+    files = ref_files(("rev-parse", _base_name(repo) + "^{commit}"), dirs) if dirs else None
+    if dirs is None or files is None:
+        return None
+    gd, common, dot_git = dirs
+    pending = files[2:]  # packed-refs and shallow need signatures only
+    seen = set(pending)
+    for _ in range(8):
+        targets: list[Path] = []
+        for path in pending:
+            try:
+                text = path.read_text(encoding="utf-8").strip()
+            except (OSError, ValueError):
+                continue
+            if text.startswith("ref:"):
+                name = text[4:].strip()
+                if not name.startswith("refs/") or ".." in Path(name).parts:
+                    return None
+                target = common / name
+                if target in seen:
+                    continue
+                seen.add(target)
+                targets.append(target)
+        files.extend(targets)
+        if not targets:
+            break
+        pending = targets
+    else:
+        return None
+    return str(gd), (is_dir_sig(dot_git), sig(gd / "commondir"), sig(Path(repo) / FILE), *(sig(f) for f in files))
 
 
 def source(git: Git, repo: str | Path) -> tuple[str, str]:

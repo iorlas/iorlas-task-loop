@@ -10,7 +10,7 @@ from taskloop.contracts.bead import Bead
 from taskloop.contracts.fence import SLOT_GEN, gen_of
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ports import BdFailure, BeadQuery, Beads
-from taskloop.contracts.slots import Hold, SlotFail
+from taskloop.contracts.slots import Hold, SlotFail, slots_of
 
 
 class Slot:
@@ -115,7 +115,7 @@ def machine_slots(store: Beads, host: str) -> list[Bead]:
         found = store.find(BeadQuery(label="slot", include_closed=True))
     except BdFailure:
         return []
-    return sorted((b for b in found if b.status != "closed" and b.title.split()[1:2] == [host]), key=lambda b: b.title)
+    return slots_of(found, host)
 
 
 class SlotPool:

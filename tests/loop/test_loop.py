@@ -63,7 +63,7 @@ class FakeBd:
         self.beads: dict[str, dict[str, Any]] = {b["id"]: dict(b) for b in beads}
         self.parents = dict(parents or {})  # beads not in the ready list (epics): id -> parent
         self.slots: dict[str, dict[str, Any]] = {f"sl-{i}": {"id": f"sl-{i}", "title": f"slot {ident.hostname()} s{i}", "status": "open",
-                                    "assignee": ""} for i in range(1, slots + 1)}
+                                    "assignee": "", "labels": ["slot"]} for i in range(1, slots + 1)}
         self.taken_by_other = set()  # claims another session wins
         self.calls = []
 

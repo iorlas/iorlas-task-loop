@@ -33,8 +33,9 @@ class RunHeaders(unittest.TestCase):
         write_repos(self.cfg.root / "repos.json", self.repo)
         self.locator = RunLocator(self.cfg)
         self.now = 1800000000.0
-        ports = Ports(store=lambda repo: FakeBeadStore(), slot_beads=lambda repo: [])
+        ports = Ports(store=lambda repo: FakeBeadStore())
         self.dash = Dash(Env(config=self.cfg.root, home=root, ports=ports, clock=lambda: self.now))
+        self.addCleanup(self.dash.reads.wait)
 
     def create(self, mode="stage:gate", started=None):
         return self.locator.create(str(self.repo), "", self.now if started is None else started,
@@ -53,7 +54,9 @@ class RunHeaders(unittest.TestCase):
         self.assertEqual(self.cfg.run_manifest(bundle.run).read_bytes(), before)
         self.locator.end(bundle.run, self.now + 1, RunState.FAILED, "exit 1")
         ended = self.cfg.run_manifest(bundle.run).read_bytes()
-        self.now += 2
+        self.now += 4
+        self.dash.reads.snapshot()
+        self.dash.reads.wait()
         terminal = self.dash.reads.snapshot()
         self.assertEqual((terminal.runs[0].state, terminal.runs[0].reason), (RunState.FAILED, "exit 1"))
         self.assertNotEqual(terminal.version, snap.version)
@@ -94,8 +97,12 @@ class RunHeaders(unittest.TestCase):
         self.assertEqual([(s.name, s.state) for s in snap.slots], [(f"s{i}", "free") for i in range(1, 5)])
         stored = must(self.locator.get(live.run)).manifest
         JsonStore(self.cfg.run_manifest(live.run), type(stored)).write(stored.replace(branch="feature/check"))
-        self.now += 2
+        self.now += 4
+        self.dash.reads.snapshot()
+        self.dash.reads.wait()
         self.assertEqual(self.dash.reads.snapshot().adhoc[0].branch, "feature/check")
         JsonStore(self.cfg.run_manifest(live.run), type(stored)).write(stored.replace(sha="0123456789abcdef"))
-        self.now += 2
+        self.now += 4
+        self.dash.reads.snapshot()
+        self.dash.reads.wait()
         self.assertEqual(self.dash.reads.snapshot().adhoc[0].branch, "01234567")
