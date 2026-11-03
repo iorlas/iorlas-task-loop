@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: E402, F401
 from support import homes  # noqa: E402
 from support.dashes import make_dash  # noqa: E402
+from support.factory_index import ingest  # noqa: E402
 from support.logs import typed  # noqa: E402
 from support.narrow import must  # noqa: E402
 from support.runs import manifest  # noqa: E402
@@ -135,6 +136,8 @@ class Crash(unittest.TestCase):
         return manifest(self.cfg, RUN, BEAD, self.t0, repo="/no/repo", **{**base, **fields})
 
     def dash_says(self) -> str:
+        runlife.reconcile(ConfigDir(self.cfg), self.now)
+        ingest(self.cfg, self.now)
         self.dash.env.files.items.clear()
         return self.dash.live.page(loop_key(self.bundle.repo), BEAD)[1]["state"]
 
@@ -221,7 +224,8 @@ class BeatsAreNoEvents(unittest.TestCase):
         put(self.log, [typed("warn", self.t0 + 200, text="slow")])
         os.utime(self.log, (self.t0 + 200, self.t0 + 200))
         dash = make_dash(config=self.cfg, clock=lambda: self.t0 + 201)
-        run = dash.live.live_run(self.bundle)
+        ingest(self.cfg, self.t0 + 201)
+        run = dash.live.live_run(self.bundle.run)
         run.refresh()
         self.assertEqual([e["k"] for e in live_api.page(run)["events"]], ["run_start", "step_start", "warn"])
         self.assertEqual(dash.live.page(loop_key(self.bundle.repo), BEAD)[1]["state"], "live")

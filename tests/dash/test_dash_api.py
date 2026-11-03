@@ -15,6 +15,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support.dashlogs import RunScript, T, bead
+from support.factory_index import ingest
 from support.fakes import FakeBeadStore
 from support.narrow import must
 from support.repos import write_repos
@@ -25,6 +26,7 @@ from taskloop.contracts.dash import BeadDetail, Snapshot
 from taskloop.contracts.dashcost import CostPage
 from taskloop.contracts.enums import AskClass, AskKind, AskStatus
 from taskloop.contracts.ids import BeadId, loop_key
+from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.stores import AskStore
 from taskloop_dash.app import Dash
 from taskloop_dash.env import Env, Ports
@@ -80,6 +82,7 @@ class ApiFixture(unittest.TestCase):
         self.store.put(bead("s-a", f"slot {socket.gethostname()} a", "in_progress", labels=["slot"], assignee="tl-a"))
         self.now = NOW
         ports = Ports(store=lambda repo: self.store)
+        ingest(self.cfg, self.now)
         self.dash = Dash(Env(config=self.cfg, home=root, ports=ports, clock=lambda: self.now, version="v-test"))
 
     def tearDown(self):
@@ -87,6 +90,7 @@ class ApiFixture(unittest.TestCase):
         self.tmp.cleanup()
 
     def get(self, path, q=None, held=None):
+        ingest(self.cfg, self.now)
         return self.dash.reads.get(path, q or {}, held)
 
 
@@ -128,7 +132,7 @@ class Api(ApiFixture):
     def test_a_new_record_gives_a_new_version(self):
         _, body, _ = self.get("/api/snapshot")
         before = json.loads(body)["version"]
-        must(self.dash.records.locator.get("b-1-20261015-100000")).log.unlink()
+        must(RunLocator(self.dash.env.config).get("b-1-20261015-100000")).log.unlink()
         RunScript("b-1", slot="a", at=3000).step("plan", 300, 20_000, "OC Go").step("write", 200, 30_000, text="write 1", end=False).step(
             "checks", 60, 1
         ).beat().write(self.cfg, repo=str(self.repo))
@@ -160,7 +164,7 @@ class Api(ApiFixture):
 
     def test_stage_live_lines_change_the_bead_etag_without_engine_changes(self):
         # Resolve through the same locator as the dashboard; live files are keyed by CallStart.n.
-        bundle = self.dash.reads.worlds.records.locator.get("b-1-20261015-100000")
+        bundle = RunLocator(self.dash.env.config).get("b-1-20261015-100000")
         assert bundle is not None
         bundle.live.mkdir(parents=True, exist_ok=True)
         path = bundle.live / "01-plan.jsonl"

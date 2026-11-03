@@ -94,6 +94,8 @@ reader, and how delegate connects (worker-run, one table in SKILL.md).
 
 ## Conventions & Patterns
 
+- "We need to use only our database": factory.db is for state, with no file fallback. Logs (engine, worker console, transcripts) stay files behind a log reader, rotated by age.
+
 - Python 3.15+; macOS and Linux (in containers too), POSIX only. Dependencies: runtime ones are declared inline in `skills/task-loop/tl.py`
   (PEP 723, the same pin as pyproject.toml's `dependencies`; tests/rules/test_pep723.py holds them equal) and run with `uv run --script`: the
   `tl` shim, the loop's own spawns, dev/release.py and dev/suite.py. Dev and test tools live in pyproject.toml's `dev` group. The

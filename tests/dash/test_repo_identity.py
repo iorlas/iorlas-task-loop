@@ -6,6 +6,7 @@ from pathlib import Path
 
 import support.paths  # noqa: F401
 from support.dashlogs import RunScript, T, bead
+from support.factory_index import ingest
 from support.fakes import FakeBeadStore
 from support.narrow import must
 from support.repos import write_repos
@@ -41,6 +42,7 @@ class RepoIdentity(unittest.TestCase):
         env = Env(cfg, home=root, clock=lambda: T + 200)
         intake = owner_intake(AskStore.at(env.config), self.stores.__getitem__, env.clock)
         env.ports = Ports(store=self.stores.__getitem__, **owner_writes(intake, env.config))
+        ingest(env.config, env.clock())
         self.dash = Dash(env)
 
     def test_same_basename_projects_have_distinct_keys_and_names(self):

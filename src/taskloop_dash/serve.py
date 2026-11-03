@@ -16,6 +16,7 @@ from taskloop_dash import bind
 from taskloop_dash.app import Dash
 from taskloop_dash.env import Env
 from taskloop_dash.http import make_handler
+from taskloop_dash.index.worker import Worker
 
 IDLE_CHECK = 300  # seconds between idle checks
 STATIC = Path(__file__).resolve().parent / "static"
@@ -69,8 +70,13 @@ def start(env: Env, here: Path, process: ProcessEnv,
 
 def main(env: Env, here: Path, process: ProcessEnv, argv: Sequence[str] | None = None) -> None:
     servers, addrs, port, dash = start(env, here, process, argv)
+    worker = Worker(env.config)
+    worker.start()
     for s in servers[1:]:
         threading.Thread(target=s.serve_forever, daemon=True).start()
     threading.Thread(target=idle_watch, args=(dash, float(process.get(EnvVar.TASK_LOOP_DASH_IDLE_H, "6"))), daemon=True).start()
     print("task-loop dashboard {} on {}".format(env.version, ", ".join(bind.urls(addrs, port))), flush=True)
-    servers[0].serve_forever()
+    try:
+        servers[0].serve_forever()
+    finally:
+        worker.close()

@@ -46,6 +46,7 @@ class ServerInfo(Rec):
     version: Annotated[str, msgspec.Meta(description="server code hash; a change means reload the page")]
     host: str
     loops: list[LoopInfo] = msgspec.field(default_factory=list)
+    database_error: str | msgspec.UnsetType = msgspec.UNSET
 
 
 @final

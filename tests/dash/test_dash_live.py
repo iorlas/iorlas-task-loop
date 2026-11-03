@@ -5,6 +5,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -14,6 +15,7 @@ for sub in ("dash", "", "tests"):
     sys.path.insert(0, str(SKILL / sub) if sub != "tests" else str(ROOT / "tests"))
 import support.paths  # noqa: E402, F401
 from support import dlcall, fake_route  # noqa: E402
+from support.factory_index import ingest  # noqa: E402
 from support.logs import typed  # noqa: E402
 from support.narrow import must  # noqa: E402
 from support.runs import manifest  # noqa: E402
@@ -21,6 +23,7 @@ from support.runs import manifest  # noqa: E402
 from taskloop.adapters import delegate as dl  # noqa: E402
 from taskloop.adapters import runner as live_runner  # noqa: E402
 from taskloop.app.run import engine  # noqa: E402
+from taskloop.contracts.paths import ConfigDir  # noqa: E402
 from taskloop_dash.api import live  # noqa: E402
 
 BEAD, STAMP = "tl-live.1", "20261026-100000"
@@ -59,12 +62,16 @@ def make_run(root):
 class Feed(unittest.TestCase):
     def run_of(self, d):
         b, lf = make_run(d)
-        return str(b.log), lf, live.LiveRun(b)
+        return str(b.log), lf, live.LiveRun(ConfigDir(Path(d) / 'task-loop'), b.run)
+
+    def refresh(self, run):
+        ingest(run.cfg, time.time())
+        run.refresh()
 
     def test_merge_by_time_seq_keys_and_the_cursor(self):
         with tempfile.TemporaryDirectory() as d:
             log, lf, run = self.run_of(d)
-            run.refresh()
+            self.refresh(run)
             a = live.page(run)
             ts = [e["t"] for e in a["events"]]
             self.assertEqual(ts, sorted(ts))
@@ -77,13 +84,13 @@ class Feed(unittest.TestCase):
             put(lf, [{"t": T + 9, "k": "cmd_end", "id": "1", "exit": 1, "out": "boom", "secs": 2.0}])
             with open(lf, "a") as f:
                 f.write(f'{{"t": {T + 10}, "k": "msg", "te')  # a half-written line waits
-            run.refresh()
+            self.refresh(run)
             b = live.page(run, live.decode(a["cursor"]))
             self.assertEqual([(e["k"], e["id"]) for e in b["events"]], [("cmd_end", "1")])
             with open(lf, "a") as f:
                 f.write('xt": "hi"}\n')
             put(log, [typed("warn", T + 11, text="slow")])
-            run.refresh()
+            self.refresh(run)
             c = live.page(run, live.decode(b["cursor"]))
             self.assertEqual([(x["k"], x["t"]) for x in c["events"]], [("msg", T + 10), ("warn", T + 11)])
             self.assertIsNone(live.decode("garbage!"))
@@ -102,17 +109,27 @@ class Feed(unittest.TestCase):
                     typed("unlock", T + 17, what="land_lock", secs=1.0),
                 ],
             )
-            run.refresh()
+            self.refresh(run)
             got = {e["k"]: e for e in live.page(run)["events"]}
             for k in ("wait_start", "wait_end", "vendor_error", "kill", "lock", "unlock"):
                 self.assertIn(k, got)
             self.assertEqual((got["wait_end"]["wait_seconds"], got["vendor_error"]["reason"]), (60, "hung"))
 
+    def test_engine_cursor_survives_a_fresh_reader(self):
+        with tempfile.TemporaryDirectory() as d:
+            log, _lf, run = self.run_of(d)
+            run.refresh()
+            cursor = live.page(run)["cursor"]
+            put(log, [typed("warn", T + 20, text="appended")])
+            fresh = live.LiveRun(run.cfg, run.run)
+            fresh.refresh()
+            self.assertEqual([e["k"] for e in live.page(fresh, live.decode(cursor))["events"]], ["warn"])
+
     def test_a_run_without_worker_files(self):
         with tempfile.TemporaryDirectory() as d:
             _log, lf, run = self.run_of(d)
             os.remove(lf)
-            run.refresh()
+            self.refresh(run)
             self.assertEqual({e["src"] for e in run.events()}, {"engine"})
 
     def test_long_poll_returns_when_a_file_grows_and_waits_when_none_does(self):

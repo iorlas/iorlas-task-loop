@@ -5,8 +5,9 @@ One read-only server per machine (`python3 -m taskloop_dash` on the interpreter 
 - **The rule:** [dash-spec.md](dash-spec.md). Owner decisions: [dash-decisions.md](dash-decisions.md). The mocks it names
   (`dash-round-*.html`) show the result; older mocks are history.
 - **The API:** [docs/contracts/dash-api.md](../../contracts/dash-api.md), records in `src/taskloop/contracts/dash.py`.
-- **What it reads:** the engine logs, asks, the ask ledger, decisions, loop state and lane status under `~/.config/task-loop`,
-  and bd through the typed `Beads` port. It runs no process and writes only through `Ports` (the owner's verbs). Every format
+- **What it reads:** run state from `factory.db`; engine and worker logs through `readers/logs.py`; asks, the ask ledger,
+  decisions, loop state and lane status under `~/.config/task-loop`, and bd through the typed `Beads` port.
+  The index thread writes derived state; owner actions write through `Ports`. Every format
   it does not own is in [docs/dev/integrations.md](../../dev/integrations.md).
 
 ## Code
@@ -14,7 +15,7 @@ One read-only server per machine (`python3 -m taskloop_dash` on the interpreter 
 Standalone `tl check` and `tl gate` runs use the engine's run manifests, with modes `stage:check` and `stage:gate`.
 The snapshot includes the ten newest retained stage run headers by start time, even without a bead or log. Both Floor layouts
 show them in the Runs panel: mode, project, state, age and a clipped reason, with owner, session and the full reason on hover
-or click. Runs remain accessible when the board is empty. These headers only read manifests; the verb owns
+or click. Runs remain accessible when the board is empty. These headers read indexed manifests from factory.db; the verb owns
 heartbeats and terminal states. Check evidence is retained under the run directory after success and failure.
 
 | where | what |
@@ -23,6 +24,7 @@ heartbeats and terminal states. Check evidence is retained under the run directo
 | `src/taskloop_dash/http.py` | the routes: the page and its modules, GET `/api/snapshot`, `/api/bead`, `/api/live`, `/api/artifact`, `/api/look-shot`, `/api/version`, POST `/api/<verb>` |
 | `src/taskloop_dash/api/` | `reads.py` (snapshot with ETag, bead), `liveview.py` + `live.py` (the live tail), `writes.py` (the verbs), `looks.py`, `artifacts.py` |
 | `src/taskloop_dash/readers/` | `world.py` gathers one `World` per snapshot from records, bd, runs and looks |
+| `src/taskloop_dash/index/` | one thread folds appended engine-log bytes and persists state and source cursors atomically in factory.db |
 | `src/taskloop_dash/views/` | pure builders from the world to the contract records (`snapshot.py`, `bead_detail.py`, `board.py`, `passes.py`, ...) |
 | `dev/dash_fixtures.py` | the page against `tests/fixtures/dash/`, no engine |
 | `dev/dash_check.py` | headless-Chrome checks of the page against the fixtures, or read-only against a running dash (`--base`) |
@@ -31,12 +33,18 @@ heartbeats and terminal states. Check evidence is retained under the run directo
 
 - Snapshot polls reuse a finished snapshot and its world for at least 3 seconds. A stale poll starts one background refresh and
   returns the last build immediately; only the first build waits. Each bead drawer uses the same rule, taking the snapshot's
-  world plus that bead's full run history, comments and live events. Engine logs are read from a byte cursor; rotation or
-  truncation resets it, and incomplete lines wait. Slot leases share the bead listing's last-touched stamp. Profile errors stay
+  world plus that bead's full run history, comments and live events. Run state is read only from factory.db. A missing,
+  incompatible, corrupt or stale (>5 s) DB suppresses run data and shows one database-unavailable line, including on cached reads.
+  The indexer scans at most once per second, with about 200 ms per pass; pending work continues next pass. It identifies engine
+  logs by device, inode and SHA-256 of the first 256 bytes (or the shorter file), resetting on replacement or shrink.
+  Complete-line offsets and folded facts commit together. A corrupt DB is quarantined as `factory.db.bad-<t>` and rebuilt.
+  `tl doctor --reindex` rebuilds only index-owned rows and prints counts and time. Logs remain files behind a reader with opaque
+  cursors; the drawer reads only its bead's logs. Log rotation and age pruning belong to tl-zej9.18.
+  Slot leases share the bead listing's last-touched stamp. Profile errors stay
   cached while the base-ref files and profile's base choice are unchanged; unknown Git layouts or revisions fall back to 30 seconds.
 - Bind: 127.0.0.1 plus the Tailscale address when present (`TASK_LOOP_DASH_BIND` overrides, `TASK_LOOP_DASH_PORT` the port).
   No auth: the server refuses any address outside loopback and Tailscale (`bind.allowed_addr`), never 0.0.0.0; `tl dash ensure`
   deletes the old `dash.token`.
-- `/api/version` names the code that runs; `tl dash ensure` restarts a server whose code is older.
+- `/api/version` names the code that runs and reports `database_error`; `tl dash ensure` restarts a server whose code is older.
 - It exits after hours with no task-loop event and no page request (`TASK_LOOP_DASH_IDLE_H`, default 6).
 - A broken record answers that request with a 500 and the error; it never takes the page down.

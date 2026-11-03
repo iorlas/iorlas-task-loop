@@ -22,6 +22,10 @@ class ConfigDir:
     def engine_dir(self) -> Path:
         return self.root / "engine"
 
+    def factory_db(self) -> Path:
+        """The host's shared factory journal and dashboard read model."""
+        return self.root / "factory.db"
+
     def runs_dir(self) -> Path:
         return self.root / "runs"
 

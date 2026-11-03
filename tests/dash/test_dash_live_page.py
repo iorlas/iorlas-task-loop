@@ -8,6 +8,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support.dashes import make_dash
+from support.factory_index import ingest
 from support.logs import typed
 from support.runs import manifest
 
@@ -47,6 +48,7 @@ class LivePageApi(unittest.TestCase):
                       {"t": T + 10, "k": "cmd_end", "id": "1", "exit": 1, "secs": 2.0, "out": "a\nFAILED test_x\n"}])
 
     def get(self, since="", wait="0"):
+        ingest(self.dash.env.config, self.now)
         code, body = self.dash.live.page(loop_key("/repo"), BEAD, since, wait)
         self.assertEqual(code, 200)
         return wire.load(LivePage, body)  # strict: an unknown or missing key raises
@@ -72,11 +74,11 @@ class LivePageApi(unittest.TestCase):
 
     def test_the_cursor_round_trips_and_a_beat_is_no_line(self):
         first = self.get()
-        self.assertEqual(live.decode(first.cursor), self.dash.live.live_run(self.bundle).offsets())
+        self.assertEqual(live.decode(first.cursor), self.dash.live.live_run(self.bundle.run).offsets())
         self.assertEqual(self.get(first.cursor).lines, [])
         put(self.log, [typed("beat", T + 20)])
         quiet = self.get(first.cursor)
-        self.assertEqual((quiet.lines, quiet.cursor == first.cursor), ([], False))  # the offset moved, nothing to show
+        self.assertEqual((quiet.lines, quiet.cursor == first.cursor), ([], False))  # log cursor advances past Beats
         put(self.lf, [{"t": T + 21, "k": "msg", "text": "done"}, {"t": T + 22, "k": "stall", "secs": 61}])
         more = self.get(quiet.cursor)
         self.assertEqual([(ln.text, ln.tone) for ln in more.lines], [("done", ""), ("no output for 61s", "err")])
@@ -98,6 +100,7 @@ class LivePageApi(unittest.TestCase):
         self.assertEqual(self.get().state, "ended")
 
     def test_no_run_is_404_and_an_odd_id_is_never_read(self):
+        ingest(self.dash.env.config, self.now)
         self.assertEqual(self.dash.live.page(loop_key("/repo"), "nope-1")[0], 404)
         self.assertEqual(self.dash.live.page(loop_key("/repo"), "--x")[0], 404)
 

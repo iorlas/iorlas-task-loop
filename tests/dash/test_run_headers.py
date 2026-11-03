@@ -6,6 +6,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
+from support.factory_index import ingest
 from support.fakes import FakeBeadStore
 from support.narrow import must
 from support.repos import write_repos
@@ -38,6 +39,10 @@ class RunHeaders(unittest.TestCase):
         self.dash = Dash(Env(config=self.cfg.root, home=root, ports=ports, clock=lambda: self.now))
         self.addCleanup(self.dash.reads.wait)
 
+    def snapshot(self):
+        ingest(self.cfg, self.now)
+        return self.dash.reads.snapshot()
+
     def create(self, mode="stage:gate", started=None):
         return self.locator.create(str(self.repo), "", self.now if started is None else started,
                                    mode=mode, owner="mac-owner", session="mac-session")
@@ -46,7 +51,7 @@ class RunHeaders(unittest.TestCase):
         bundle = self.create()
         self.locator.beat(bundle.run, self.now)
         before = self.cfg.run_manifest(bundle.run).read_bytes()
-        snap = self.dash.reads.snapshot()
+        snap = self.snapshot()
         self.assertEqual(snap.beads, [])
         self.assertFalse(bundle.log.exists())
         head, = snap.runs
@@ -56,9 +61,9 @@ class RunHeaders(unittest.TestCase):
         self.locator.end(bundle.run, self.now + 1, RunState.FAILED, "exit 1")
         ended = self.cfg.run_manifest(bundle.run).read_bytes()
         self.now += 4
-        self.dash.reads.snapshot()
+        self.snapshot()
         self.dash.reads.wait()
-        terminal = self.dash.reads.snapshot()
+        terminal = self.snapshot()
         self.assertEqual((terminal.runs[0].state, terminal.runs[0].reason), (RunState.FAILED, "exit 1"))
         self.assertNotEqual(terminal.version, snap.version)
         self.assertEqual(self.cfg.run_manifest(bundle.run).read_bytes(), ended)
@@ -69,13 +74,13 @@ class RunHeaders(unittest.TestCase):
         self.locator.end(old.run, self.now - RETAIN - 1, RunState.DONE)
         done = self.create()
         self.locator.end(done.run, self.now, RunState.DONE)
-        headers = self.dash.reads.snapshot().runs
+        headers = self.snapshot().runs
         self.assertEqual([h.run for h in headers], [done.run, live.run])
 
     def test_snapshot_caps_run_headers_at_ten_newest_first(self):
         # Deliberately create manifests out of start order; locator order is no guarantee.
         created = [self.create(started=self.now - i * 60) for i in (4, 0, 8, 2, 11, 1, 10, 3, 9, 5, 7, 6)]
-        headers = self.dash.reads.snapshot().runs
+        headers = self.snapshot().runs
         self.assertEqual(len(headers), 10)
         self.assertEqual([h.started for h in headers], [self.now - i * 60 for i in range(10)])
         self.assertEqual(headers[0].run, created[1].run)
@@ -83,7 +88,7 @@ class RunHeaders(unittest.TestCase):
     def test_engine_layout_manifest_supplies_run_header_identity(self):
         layout = RunLayout.open("t-1", self.repo, None, self.cfg, str(self.repo), self.now,
                                 mode="stage:gate", owner="mac-owner", session="mac-session")
-        head, = self.dash.reads.snapshot().runs
+        head, = self.snapshot().runs
         self.assertEqual((head.run, head.mode, head.owner, head.session),
                          (layout.run, "stage:gate", "mac-owner", "mac-session"))
 
@@ -93,17 +98,17 @@ class RunHeaders(unittest.TestCase):
         done = self.create("stage:gate")
         self.locator.end(done.run, self.now, RunState.DONE)
         self.locator.worktree(live.run, "/repo/slots/s2")
-        snap = self.dash.reads.snapshot()
+        snap = self.snapshot()
         self.assertEqual([(r.run, r.branch, r.owner) for r in snap.adhoc], [(live.run, "s2", "mac-owner")])
         self.assertEqual([(s.name, s.state) for s in snap.slots], [(f"s{i}", "free") for i in range(1, 5)])
         stored = must(self.locator.get(live.run)).manifest
         JsonStore(self.cfg.run_manifest(live.run), type(stored)).write(stored.replace(branch="feature/check"))
         self.now += 4
-        self.dash.reads.snapshot()
+        self.snapshot()
         self.dash.reads.wait()
-        self.assertEqual(self.dash.reads.snapshot().adhoc[0].branch, "feature/check")
+        self.assertEqual(self.snapshot().adhoc[0].branch, "feature/check")
         JsonStore(self.cfg.run_manifest(live.run), type(stored)).write(stored.replace(sha="0123456789abcdef"))
         self.now += 4
-        self.dash.reads.snapshot()
+        self.snapshot()
         self.dash.reads.wait()
-        self.assertEqual(self.dash.reads.snapshot().adhoc[0].branch, "01234567")
+        self.assertEqual(self.snapshot().adhoc[0].branch, "01234567")

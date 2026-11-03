@@ -80,7 +80,7 @@ def _typed_dict(cls: Any) -> dict[str, Any]:
 
 def _hint_generic(h: Any, origin: Any, args: tuple[Any, ...]) -> dict[str, Any]:
     if origin is Union or origin is types.UnionType:
-        return _nullable([_hint(a) for a in args if a is not type(None)], type(None) in args)
+        return _nullable([_hint(a) for a in args if a not in (type(None), msgspec.UnsetType)], type(None) in args)
     if origin is Literal:
         kinds = {type(a) for a in args}
         node: dict[str, Any] = {"enum": list(args)}

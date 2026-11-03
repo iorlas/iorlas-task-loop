@@ -10,7 +10,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
-from taskloop.contracts import wire
+from taskloop.contracts import factorydb, wire
 from taskloop.contracts.adrs import AdrStore
 from taskloop.contracts.ask import Ask
 from taskloop.contracts.bead import Bead, Comment
@@ -25,13 +25,14 @@ from taskloop.contracts.runlife import RETAIN, Liveness, shown
 from taskloop.contracts.slots import slots_of
 from taskloop.contracts.slottable import SlotSource
 from taskloop.contracts.stores import AskStore, JsonStore, LedgerStore, StatusStore
-from taskloop_dash import jsonl
 from taskloop_dash.api.looks import Looks
 from taskloop_dash.env import Env
+from taskloop_dash.readers import dbruns
 from taskloop_dash.readers.beads import Beads, basename
+from taskloop_dash.readers.dbruns import StoredRun
+from taskloop_dash.readers.logs import Logs
 from taskloop_dash.readers.observed import strays_of
 from taskloop_dash.readers.records import Records
-from taskloop_dash.readers.runlogs import RunLogs
 from taskloop_dash.views.runfacts import Run
 from taskloop_dash.views.world import AdrIn, Landing, LookItem, ProjectIn, World
 
@@ -48,20 +49,17 @@ def typed_beads(rows: Sequence[dict[str, Any]]) -> list[Bead]:
     return out
 
 
-def live_event(data: object) -> LiveEvent:
-    """A live-file line as its typed event (`k` names the kind; the file carries no `v`), as the runner reads it."""
-    if not isinstance(data, dict):
-        raise ValueError("not a live event")
-    return wire.load(LiveEvent, {**{k: v for k, v in data.items() if k != "k"}, "kind": data.get("k"), "v": 1})
-
-
 class Worlds:
-    def __init__(self, env: Env, records: Records, beads: Beads, runlogs: RunLogs, looks: Looks) -> None:
-        self.env, self.records, self.beads, self.runlogs, self.looks = env, records, beads, runlogs, looks
+    def __init__(self, env: Env, records: Records, beads: Beads, looks: Looks) -> None:
+        self.env, self.records, self.beads, self.looks = env, records, beads, looks
+        self.logs = Logs(env.config)
 
     def repos(self) -> dict[str, str]:
         """{immutable project key: registered repo path}."""
         return {loop_key(p): p for p in self.records.repos()}
+
+    def database_error(self) -> str:
+        return factorydb.database_error(self.env.config.factory_db(), self.env.clock())
 
     def project(self, id: str, path: str) -> ProjectIn:
         env = self.env
@@ -110,31 +108,35 @@ class Worlds:
         return row
 
     def bead_runs(self, path: str, bead: str) -> list[Run]:
-        """Only this drawer's full history; never parse another bead's logs."""
-        return [replace(self.runlogs.typed_run(b, self.env.clock()),
-                        records=tuple(self.env.files.get(str(b.log), jsonl.records, [])))
-                for b in self.records.locator.of_bead(bead, repo=path) if b.log.is_file()]
+        """DB state and log-reader history for only this drawer's runs."""
+        now = self.env.clock()
+        rows, _ = dbruns.read(self.env.config, now, repo=path, bead=bead)
+        return [replace(r.project(now), records=self.logs.records(r.manifest.run)) for r in rows if r.has_log]
 
-    def runs(self, full: tuple[str, str] | None = None) -> dict[tuple[str, str], list[Run]]:
-        """(repo key, bead) -> runs, oldest first: retained logs, and all of `full`'s."""
+    def runs(self, full: tuple[str, str] | None = None, rows: list[StoredRun] | None = None) -> dict[tuple[str, str], list[Run]]:
+        """(repo key, bead) -> indexed runs, oldest first, with drawer retention."""
         now = self.env.clock()
         out: dict[tuple[str, str], list[Run]] = {}
-        for bead, bundles in self.records.engine_logs().items():
-            out[bead] = [self.runlogs.typed_run(b, now) for b in bundles]
-        if full:
-            out[full] = [self.runlogs.typed_run(b, now) for b in self.records.engine_logs(retain=False).get(full, [])]
-        return {b: r for b, r in out.items() if r}
+        if rows is None:
+            rows, _ = dbruns.read(self.env.config, now)
+        for row in rows:
+            key = (loop_key(row.manifest.repo), row.manifest.bead)
+            if row.has_log and (key == full or row.manifest.state.live or row.log_mtime >= now - RETAIN):
+                out.setdefault(key, []).append(row.project(now))
+        return out
 
     def asks(self) -> dict[tuple[str, str], Ask]:
         return {(loop_key(a.repo), a.bead): a for a in AskStore.at(self.env.config).live()}
 
-    def run_headers(self, now: float) -> list[RunHeader]:
-        """Stage runs need no bead or log to be visible. Read manifests only; never reconcile from the dashboard."""
+    def run_headers(self, now: float, rows: list[StoredRun] | None = None) -> list[RunHeader]:
+        """Stage runs need no bead or log to be visible; their manifest is indexed."""
         projects = {path: project for project, path in self.repos().items()}
         out: list[RunHeader] = []
         parks = self.records.parks()
-        for bundle in reversed(self.records.locator.runs()):
-            m = bundle.manifest
+        if rows is None:
+            rows, _ = dbruns.read(self.env.config, now)
+        for row in reversed(rows):
+            m = row.manifest
             if not m.mode or m.repo not in projects or (not m.state.live and (m.ended or m.started) < now - RETAIN):
                 continue
             state = RunState.LOST if shown(m, now) is Liveness.LOST else m.state
@@ -145,9 +147,11 @@ class Worlds:
                                  retry_at=park.retry_at if park and park.run == m.run and not m.state.live else 0.0))
         return out
 
-    def leases(self, now: float) -> list[ResourceLease]:
+    def leases(self, now: float, rows: list[StoredRun] | None = None) -> list[ResourceLease]:
         """Join a live lease's pid to its run manifest; the holder hint itself has no run id."""
-        runs = [b.manifest for b in self.records.locator.runs() if shown(b.manifest, now) is Liveness.LIVE]
+        if rows is None:
+            rows, _ = dbruns.read(self.env.config, now)
+        runs = [r.manifest for r in rows if shown(r.manifest, now) is Liveness.LIVE]
         projects = {path: project for project, path in self.repos().items()}
         out: list[ResourceLease] = []
         for name, rec in self.env.ports.resource_holders(self.env.config):
@@ -175,7 +179,9 @@ class Worlds:
 
     def world(self, full: tuple[str, str] | None = None) -> World:
         env = self.env
-        now, runs = env.clock(), self.runs(full)
+        now = env.clock()
+        rows, database_error = dbruns.read(env.config, now)
+        runs = self.runs(full, rows)
         paths = self.repos()
         projects = [self.project(i, p) for i, p in paths.items()]
         names = Counter(p.name for p in projects)
@@ -184,7 +190,7 @@ class Worlds:
         projects = [replace(p, strays=strays_of(p.beads, p.slots, {b: r for (key, b), r in runs.items() if key == p.id}, now),
                             events=[e for e in events if e.repo == paths[p.id]]) for p in projects]
         return World(now=now, host=socket.gethostname(), version=env.version, projects=projects, runs=runs, asks=self.asks(),
-                     run_headers=self.run_headers(now), leases=self.leases(now),
+                     run_headers=self.run_headers(now, rows), leases=self.leases(now, rows), database_error=database_error,
                      status=StatusStore(env.config).get(), ledger=self.ledger(), landings=self.landings(),
                      parks=self.records.parks(), net_pauses=self.records.net_pauses(), skipped_traces=self.records.traces().skipped)
 
@@ -194,26 +200,8 @@ class Worlds:
 
     def live_events(self, run: Run | None) -> list[LiveEvent]:
         """The typed events of the newest call file of a run that still writes (delegate's per-call live files)."""
-        b = self.records.locator.get(run.name) if run else None
-        if b is None:
-            return []
-        try:
-            files = sorted(b.live.glob("*.jsonl"), key=lambda f: f.stat().st_mtime)
-        except OSError:
-            return []
-        return jsonl.records(str(files[-1]), decode=live_event) if files else []
+        return self.logs.console(run.name) if run else []
 
     def stage_events(self, runs: Sequence[Run]) -> dict[str, dict[int, Sequence[LiveEvent]]]:
-        """All retained calls, keyed by the engine's call number; paths only from RunLocator."""
-        out: dict[str, dict[int, Sequence[LiveEvent]]] = {}
-        for run in runs:
-            bundle = self.records.locator.get(run.name)
-            if bundle is None:
-                continue
-            calls: dict[int, Sequence[LiveEvent]] = {}
-            for path in sorted(bundle.live.glob("*.jsonl")):
-                number = path.stem.partition("-")[0]
-                if number.isdigit():
-                    calls[int(number)] = self.env.files.get(str(path), lambda p: jsonl.records(p, decode=live_event), [])
-            out[run.name] = calls
-        return out
+        """Delegate live lines keep their own file reader; they are not run history."""
+        return {run.name: dict(self.logs.calls(run.name)) for run in runs}

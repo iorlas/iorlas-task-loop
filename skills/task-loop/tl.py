@@ -74,6 +74,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))  # taskloop
 
 from taskloop.adapters import beadtools, gitrepo, ident, landlock
 from taskloop.app.launch import dash as wire_dash
+from taskloop.app.launch import reindex
 from taskloop.app.release import pins
 from taskloop.app.track import trail, verbs
 from taskloop.app.wire import asks as wire_asks
@@ -158,7 +159,8 @@ def v_land_stack(a: Any, c: Ctx) -> int:
 def owner_parsers(sp):
     sp.add_parser("actor")
     sp.add_parser("selftest", help="run one bead through the engine with a fake lane in a temp repo; exit 1 when it cannot")
-    sp.add_parser("doctor", help="warn about git settings that let a slot's git leave the slot")
+    sp.add_parser("doctor", help="warn about git settings that let a slot's git leave the slot").add_argument(
+        "--reindex", action="store_true", help="rebuild the dashboard's run index in factory.db")
     p = sp.add_parser("register", help="add a repository to the dashboard")
     p.add_argument("directory", nargs="?", default=".", metavar="DIR",
                    help="Git working directory (default: current directory)")
@@ -388,6 +390,8 @@ def repo_of(a: Any, c: Ctx) -> str:
 
 
 def v_doctor(a: Any, c: Ctx) -> int:
+    if a.reindex:
+        return reindex.run(c.who.config)
     return doctor.run(c.here.parents[1], c.env, c.git, c.who)
 
 

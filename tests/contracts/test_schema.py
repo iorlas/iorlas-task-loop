@@ -81,6 +81,15 @@ class AnswerSchemas(unittest.TestCase):
 
 
 class Generator(unittest.TestCase):
+    def test_unset_is_omission_not_a_json_type(self):
+        class Probe(Rec):
+            detail: str | msgspec.UnsetType = msgspec.UNSET
+
+        result = schema.of(Probe)
+        self.assertEqual(result["properties"]["detail"], {"type": "string"})
+        self.assertEqual(result["required"], [])
+        self.assertEqual(wire.dump(Probe()), {})
+
     def test_scalars_enums_nullable_and_docs(self):
 
         class Probe(Rec):

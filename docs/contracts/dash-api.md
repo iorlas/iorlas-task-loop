@@ -6,6 +6,10 @@ Source of truth: `src/taskloop/contracts/dash.py` (records, enums, `WRITES`). Sa
 `tests/support/dash_fixtures.py` from the round-8b mock; `UPDATE_GOLDEN=1` rewrites it). Test: `tests/contracts/test_dash.py`.
 Design: `docs/design/dashboard/dash-spec.md` §11.
 
+Run state comes only from factory.db. `Snapshot.server.database_error` is omitted when healthy; otherwise it carries the plain
+database-unavailable line shown by the page, and no run state is served. `/api/version.database_error` reports the same health
+check (an empty string when healthy). Logs stay behind `readers/logs.py`; clients treat all live-feed cursors as opaque.
+
 Neither side changes a field alone: a change is a commit to `dash.py` plus regenerated fixtures, and both sides follow it.
 
 `Project.id` and every `project` reference carry the registered checkout key (`contracts.ids.loop_key(repo)`, also used by
@@ -27,7 +31,7 @@ a newer run in place of the one the owner saw. A cause naming an ask also verifi
 | POST `/api/<verb>` | the `WRITES[verb]` record as JSON | `Result` |
 | GET `/api/artifact` | `bead`, `name` | a file the run kept (`ConfigDir.artifacts`); HTML only as a download |
 | GET `/api/look-shot` | `repo`, `path` | a picture an open look item names, read from the repo |
-| GET `/api/version` | | `{version, pid, urls, started, script, binds, port}`: what `tl dash ensure` checks |
+| GET `/api/version` | | `{version, pid, urls, started, script, binds, port, database_error}`: what `tl dash ensure` checks |
 
 Verbs: `answer`, `look`, `stick`, `prune`, `cause`, `ack`, `park`, `stop`, `note`. The dashboard runs no process: a write is an
 in-process Port call (as `Ports.answer` is today), never a raw bd argv. There is no auth (the bind is loopback and Tailscale only). A refused write is
@@ -41,7 +45,7 @@ Tailnet reachability remains an owner access grant; these checks prevent browser
 
 - **Built (backend items 3, 4, 6, 7 and 8):** `live`, `answer`, `look`, `cause`, `ack`, `stick`, `prune`, `park`, `stop`, `note`, and
   `answer` with `kind=ask_back`; every verb of `WRITES` is routed to a Port, none answers "Not available yet.". `live` takes `id` (the bead; its newest
-  run in `project`); its cursor is `api/live.py`'s byte-offset cursor; 404 for a bead with no run in that project. Each write is one `Ports`
+  run in `project`); its cursor is the log reader's opaque cursor; 404 for a bead with no run in that project, 503 when run state is unavailable. Each write is one `Ports`
   call into an `Intake` verb (`taskloop/app/asks/intake.py`): `answer` re-sent for an answered, unused ask amends it; `look` is keyed by
   the look item id (`<source bead>#<n>`; the source bead also works while it has one waiting item), `redo` needs a note; `cause` and
   `ack` are bd metadata `owner_cause` (JSON `scope, cause, t, by`) and `owner_ack` (JSON `scope, t, by`), `scope` the observed

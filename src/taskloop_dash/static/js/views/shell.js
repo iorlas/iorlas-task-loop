@@ -18,6 +18,9 @@ export function BdBanner({ source, project, now }) {
 // §10: unreachable (red line, retry with backoff, last data greyed), stale > 5 min, loop not running
 export function Banners({ snap, now }) {
   const out = [];
+  if (snap.server.database_error) {
+    out.push(html`<div key="database" class="ban bad">${snap.server.database_error}</div>`);
+  }
   if (api.net.error && snap) {
     out.push(html`<div key="down" class="ban bad">Server unreachable (${api.net.error}); showing the last data from ${age(now - api.dataAge(), now)} ago ·
       <button class="lnk" onClick=${api.retry}>Retry</button></div>`);

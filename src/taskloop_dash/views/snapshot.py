@@ -99,8 +99,11 @@ def build(w: World) -> Snapshot:
     ids = {(c.project, c.id) for c in cards}
     cards = [c.replace(needs=[n for n in c.needs if (c.project, n) in ids]) for c in cards]
     loops = [needs.health(w, p) for p in w.projects]
+    server = ServerInfo(version=w.version, host=w.host, loops=loops)
+    if w.database_error:
+        server = server.replace(database_error=w.database_error)
     snap = Snapshot(
-        version="", t=0.0, server=ServerInfo(version=w.version, host=w.host, loops=loops),
+        version="", t=0.0, server=server,
         needs=needs.needs_of(w, loops), runs=sorted(w.run_headers, key=lambda r: r.started, reverse=True)[:10],
         adhoc=sorted((r for r in w.run_headers if not r.bead and r.state.live), key=lambda r: r.started, reverse=True),
         leases=list(w.leases),

@@ -5,11 +5,13 @@ Warm polls advance the clock four seconds; refresh includes waiting for backgrou
 The final row forces a full build after 121 seconds to expose stamp caching beyond the fallback TTLs.
 """
 
+import argparse
 import builtins
 import cProfile
 import os
 import subprocess
 import sys
+import tempfile
 import time
 from collections import Counter
 from collections.abc import Callable
@@ -18,11 +20,14 @@ from pathlib import Path
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+import dash_profile_fixture
+
 from taskloop.app.launch import dash_ports
 from taskloop.contracts.env import snapshot
-from taskloop.contracts.paths import default_root
+from taskloop.contracts.paths import ConfigDir, default_root
 from taskloop_dash.app import Dash
 from taskloop_dash.env import Env
+from taskloop_dash.index import Indexer, reindex
 from taskloop_dash.views import snapshot as snapshots
 
 
@@ -90,23 +95,30 @@ def measure(endpoint, state, call):
         instrument(stack, counts)
         start = time.perf_counter()
         profiler.enable()
-        call()
+        result = call()
         profiler.disable()
         elapsed = (time.perf_counter() - start) * 1000
     views = sum(entry.inlinetime for entry in profiler.getstats() if not isinstance(entry.code, str)
                 and "taskloop_dash/views" in entry.code.co_filename) * 1000
     print(f"| {endpoint} | {state} | {elapsed:.2f} | {counts['processes']} | {counts['opens']} | "
           f"{counts['bytes']} | {counts['stats']} | {counts['dirlists']} | {views:.2f} |", flush=True)
+    return result
 
 
-def main():
-    process = snapshot()
+def profile(cfg, ports, fixture):
+    """Index once, then measure a fresh process and ordinary polls independently."""
     offset = [0.0]
-    dash = Dash(Env(default_root(process), ports=dash_ports.ports(process),
-                    clock=lambda: time.time() + offset[0], version="profile"))
+    env = Env(cfg.root, home=cfg.root, ports=ports, clock=lambda: time.time() + offset[0], version="profile")
+    dash = Dash(env)
     print("| Endpoint | State | ms | Processes | Opens | Bytes | Stats | Dirlists | Views ms |")
     print("|---|---|---:|---:|---:|---:|---:|---:|---:|")
-    measure("snapshot", "cold", dash.reads.snapshot)
+    counts = measure("index", "from scratch", lambda: reindex(cfg, clock=env.clock))
+    print(f"Indexed {counts['run']} runs and {counts['source']} sources.", flush=True)
+    subprocess.run([sys.executable, __file__, "--cold", "--config", str(cfg.root), *(["--fixture"] if fixture else [])], check=True)
+    with Indexer(cfg, clock=env.clock) as index:
+        while not index.pass_once():
+            pass
+    measure("snapshot", "first in parent", dash.reads.snapshot)
     # Discover the drawer from the built world rather than creating another world.
     world, _ = dash.reads.built()
     pair = next(((p.id, b.id) for p in world.projects for b in p.beads if "slot" not in b.labels), None)
@@ -117,11 +129,39 @@ def main():
         if name != "snapshot":
             measure(name, "cold", call)
         offset[0] += 4
+        with Indexer(cfg, clock=env.clock) as index:
+            while not index.pass_once():
+                pass
         measure(name, "warm poll", call)
         measure(name, "refresh drain", dash.reads.wait)
         measure(name, "hot", call)
     offset[0] += 121
+    with Indexer(cfg, clock=env.clock) as index:
+        while not index.pass_once():
+            pass
     measure("snapshot", "full build +121s", lambda: snapshots.build(dash.reads.worlds.world()))
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--config", type=Path)
+    ap.add_argument("--fixture", action="store_true", help="171 generated runs inside .task/scratch; no host state")
+    ap.add_argument("--cold", action="store_true", help=argparse.SUPPRESS)
+    args = ap.parse_args()
+    process = snapshot()
+    ports = dash_profile_fixture.ports() if args.fixture else dash_ports.ports(process)
+    cfg = ConfigDir(args.config or default_root(process))
+    if args.cold:
+        measure("snapshot", "cold process, indexed DB", Dash(Env(cfg.root, home=cfg.root, ports=ports)).reads.snapshot)
+    elif args.fixture:
+        scratch = Path(__file__).resolve().parents[1] / ".task" / "scratch"
+        scratch.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix="dash-profile-", dir=scratch) as folder:
+            cfg = ConfigDir(folder)
+            dash_profile_fixture.populate(cfg)
+            profile(cfg, ports, True)
+    else:
+        profile(cfg, ports, False)
 
 
 if __name__ == "__main__":

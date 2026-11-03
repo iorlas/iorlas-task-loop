@@ -102,7 +102,8 @@ def make_handler(
             try:
                 if u.path == "/api/version":
                     body = {"version": dash.env.version, "pid": os.getpid(), "urls": urls(addrs, port), "started": dash.env.started,
-                            "script": script, "binds": list(addrs), "port": port}
+                            "script": script, "binds": list(addrs), "port": port,
+                            "database_error": dash.reads.worlds.database_error()}
                     return self.send(200, json.dumps(body).encode(), "application/json")
                 got = route(dash, static, u.path, q, self.headers.get("If-None-Match"))
             except Exception as e:  # a broken transcript must not take the page down

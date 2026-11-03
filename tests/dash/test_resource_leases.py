@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
+from support.factory_index import ingest
 from support.fakes import FakeBeadStore
 from support.repos import write_repos
 
@@ -40,6 +41,7 @@ class Leases(unittest.TestCase):
             for path, pid in ((held, os.getpid()), (dead, 999999)):
                 JsonStore(holder_file(path), LockRecord).write(
                     LockRecord(what=LockWhat.RESOURCE, holder="owner:unity-check", pid=pid, t=990))
+            ingest(cfg, 1000)
             before = {p: p.read_bytes() for p in held.parent.iterdir()}
             ports = Ports(store=lambda repo: FakeBeadStore(), resource_holders=resource_holders)
             with patch("taskloop.contracts.locks.pid_alive", side_effect=lambda pid: pid == os.getpid()):

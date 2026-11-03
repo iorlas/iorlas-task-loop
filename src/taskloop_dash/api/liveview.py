@@ -4,11 +4,11 @@ import threading
 from typing import Any
 
 from taskloop.contracts import wire
-from taskloop.contracts.ids import is_bead_id
-from taskloop.contracts.locator import RunBundle
+from taskloop.contracts.ids import is_bead_id, loop_key
 from taskloop.contracts.runlife import shown
 from taskloop_dash.api import live as live_api
 from taskloop_dash.env import Env
+from taskloop_dash.readers import dbruns
 from taskloop_dash.readers.records import Records
 from taskloop_dash.views import live_lines
 
@@ -21,28 +21,28 @@ class Live:
         self.runs: dict[str, live_api.LiveRun] = {}
         self.lock = threading.Lock()
 
-    def live_run(self, b: RunBundle) -> live_api.LiveRun:
-        path = b.run
+    def live_run(self, path: str) -> live_api.LiveRun:
         with self.lock:
             if path not in self.runs:
                 while len(self.runs) >= LIVE_MAX:
                     self.runs.pop(next(iter(self.runs)))
-                self.runs[path] = live_api.LiveRun(b)
+                self.runs[path] = live_api.LiveRun(self.env.config, path)
             return self.runs[path]
 
     def page(self, project: str, bead: str, since: str = "", wait: str | float = "0") -> tuple[int, dict[str, Any]]:
         """The bead's newest run as a typed LivePage. Without `since` the newest events, with it only what is new, held up to `wait`
         seconds until a file grows. 404 for a bead with no run."""
         self.env.touch()
-        logs = self.records.engine_logs(retain=False).get((project, bead), []) if is_bead_id(bead) else []
+        rows, error = dbruns.read(self.env.config, self.env.clock(), bead=bead)
+        if error:
+            return 503, {"error": error}
+        logs = [r for r in rows if loop_key(r.manifest.repo) == project and r.has_log] if is_bead_id(bead) else []
         if not logs:
             return 404, {"error": "no engine run for this bead"}
-        lr = self.live_run(logs[-1])
+        lr = self.live_run(logs[-1].manifest.run)
         try:
             hold = float(wait or 0)
         except ValueError:
             hold = 0.0
-        lr.refresh()
-        cursor = live_api.decode(since or None)
-        got = live_api.poll(lr, cursor, hold)
+        got = lr.read(since, hold)
         return 200, wire.dump(live_lines.page(got["events"], got["cursor"], shown(logs[-1].manifest, self.env.clock())))

@@ -1,15 +1,20 @@
 """Schema v1 and conservative SQLite opens for the shared factory journal.
 
 Connections belong to their caller's thread. Writers use begin_immediate for
-short transactions; an unavailable database leaves the caller on file storage.
+short transactions; unavailable databases are reported without file fallback.
 """
 
+import json
 import os
 import sqlite3
 import sys
 from collections.abc import Generator
 from contextlib import contextmanager, suppress
+from dataclasses import dataclass
 from pathlib import Path
+
+from taskloop.contracts import wire
+from taskloop.contracts.run import RunManifest
 
 SCHEMA_VERSION = 1
 DDL = """
@@ -210,7 +215,7 @@ def _open(path: str | os.PathLike[str], *, readonly: bool) -> sqlite3.Connection
 
 
 def open_rw(path: str | os.PathLike[str]) -> sqlite3.Connection | None:
-    """Open or initialize a WAL database, falling back on incompatible storage."""
+    """Open or initialize a WAL database; return None on incompatible storage."""
     return _open(path, readonly=False)
 
 
@@ -302,3 +307,63 @@ def prune_older_than(
                 params = (cutoff_t, cutoff_t) if table == "check_round" else (cutoff_t,)
                 counts[table] = con.execute(f'DELETE FROM "{table}" WHERE {predicates[table]}', params).rowcount
     return counts
+
+
+DatabaseError = sqlite3.DatabaseError
+
+
+def _run_health(con: sqlite3.Connection, now: float) -> str:
+    stamp = con.execute("SELECT t FROM kv WHERE k='index.run.pass'").fetchone()
+    if stamp is None or now - stamp[0] > 5:
+        return "database unavailable: indexer's last pass is older than 5 s"
+    source = con.execute("SELECT error FROM source WHERE family='run' AND error IS NOT NULL LIMIT 1").fetchone()
+    return f"database unavailable: run source unreadable: {source[0]}" if source else ""
+
+
+def database_error(path: Path, now: float) -> str:
+    """Freshness check used even when a snapshot is cached; no run-file IO."""
+    con = open_ro(path)
+    if con is None:
+        return "database unavailable: " + ("missing" if not path.exists() else "unopenable, corrupt, or incompatible schema")
+    try:
+        return _run_health(con, now)
+    except sqlite3.Error:
+        return "database unavailable: corrupt or unreadable run data"
+    finally:
+        con.close()
+
+
+@dataclass(frozen=True)
+class RunRow:
+    """Indexed manifest and encoded fold state; no dashboard types cross this boundary."""
+
+    manifest: RunManifest
+    state: str
+    has_log: bool
+    log_mtime: float
+
+
+def run_rows(path: Path, now: float, *, repo: str | None = None, bead: str | None = None) -> tuple[list[RunRow], str]:
+    """One consistent DB read, including freshness; never consult a run file.
+
+    Manifest fields absent from schema v1 (pid, heartbeat, host) are kept in
+    the facts envelope. Log history never enters this database.
+    """
+    con = open_ro(path)
+    if con is None:
+        return [], "database unavailable: " + ("missing" if not path.exists() else "unopenable, corrupt, or incompatible schema")
+    try:
+        con.execute("BEGIN")
+        if error := _run_health(con, now):
+            return [], error
+        rows = con.execute(
+            "SELECT json_extract(facts, '$.manifest'), json_extract(facts, '$.state'), "
+            "json_extract(facts, '$.has_log'), json_extract(facts, '$.log_mtime') "
+            "FROM run WHERE (? IS NULL OR repo=?) AND (? IS NULL OR bead=?) ORDER BY started, run",
+            (repo, repo, bead, bead)).fetchall()
+        return [RunRow(wire.load(RunManifest, dict(json.loads(r[0]), v=RunManifest.V)), r[1], bool(r[2]), r[3] or 0)
+                for r in rows if r[0] and r[1]], ""
+    except (sqlite3.Error, ValueError, TypeError):
+        return [], "database unavailable: corrupt or unreadable run data"
+    finally:
+        con.close()

@@ -53,6 +53,8 @@ class Reads:
         def build() -> tuple[World, Snapshot]:
             world = self.worlds.world()
             return world, snapshot.build(world)
+        if self.worlds.database_error():
+            return build()
         return self.cache.get("snapshot", SNAPSHOT_TTL, build)
 
     def snapshot(self) -> Snapshot:
@@ -65,10 +67,12 @@ class Reads:
         path = self.worlds.repos().get(project)
         if path is None or not is_bead_id(bead):
             return None
+        if self.worlds.database_error():
+            return self._bead(project, bead, path)
         return self.details.get(f"bead:{project}:{bead}", SNAPSHOT_TTL, lambda: self._bead(project, bead, path))
 
     def _bead(self, project: str, bead: BeadId, path: str) -> BeadDetail | None:
-        w, _ = self.cache.peek("snapshot") or self.built()
+        w, _ = self.built()
         p = next((x for x in w.projects if x.id == project), None)
         b = next((x for x in p.beads if x.id == bead), None) if p else None
         if p is None or b is None:
@@ -83,6 +87,8 @@ class Reads:
 
     def cost(self, window: str, last: int, project: str) -> CostPage:
         self.env.touch()
+        if self.worlds.database_error():
+            return cost.build(self.worlds.world(), window, last, project)
         return self.env.ttl.get(f"cost:{window}:{last}:{project}", SNAPSHOT_TTL,
                                 lambda: cost.build(self.worlds.world(), window, last, project))
 

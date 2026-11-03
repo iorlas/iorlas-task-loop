@@ -77,3 +77,4 @@ class World:
     parks: Mapping[str, Park] = field(default_factory=dict)  # bead -> its sealed Park record
     net_pauses: Mapping[str, NetPause] = field(default_factory=dict)  # bead -> a run that paused for the network, not yet taken up
     skipped_traces: int = 0  # trace lines that are not a RunTrace of this version: left out, never guessed at
+    database_error: str = ""

@@ -6,6 +6,7 @@ import sys
 from unittest.mock import patch
 
 from support.dashlogs import bead
+from support.factory_index import ingest
 
 from dash import test_dash_api as fixtures
 from taskloop.adapters.ident import hostname
@@ -52,6 +53,7 @@ class SnapshotStamps(fixtures.ApiFixture):
         sys.addaudithook(audit)
 
         def build():
+            ingest(self.cfg, self.now)
             events.clear()
             active[0] = True
             try:

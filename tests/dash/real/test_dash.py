@@ -43,6 +43,7 @@ class Live(unittest.TestCase):
                 "XDG_CONFIG_HOME": d, "APPDATA": d, "TASK_LOOP_DASH_BIND": "127.0.0.1", "HOME": d, "USERPROFILE": d}), serving() as base:
             v = json.loads(urllib.request.urlopen(base + "/api/version", timeout=10).read())
             self.assertTrue(v["version"])
+            self.assertTrue(v["database_error"].startswith("database unavailable:"))
             self.assertIn(b"task-loop", urllib.request.urlopen(base + "/").read())
 
 

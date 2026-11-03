@@ -8,8 +8,7 @@ from typing import Any
 
 from taskloop.contracts import events, wire
 from taskloop.contracts.events import Event
-from taskloop.contracts.ids import BeadId, loop_key
-from taskloop.contracts.locator import RunBundle, RunLocator
+from taskloop.contracts.ids import BeadId
 from taskloop.contracts.parks import Park
 from taskloop.contracts.run import NetPause
 from taskloop.contracts.runlife import RETAIN
@@ -30,7 +29,6 @@ class TraceBook:
 class Records:
     def __init__(self, env: Env) -> None:
         self.env = env
-        self.locator = RunLocator(env.config)
 
     def events(self) -> list[Event]:
         """The events of the last week, re-read when the file changes. A row that is not an Event of this version (an older `v`, an
@@ -84,17 +82,3 @@ class Records:
                 runs[str(t.run)] = t
             return TraceBook(runs, skipped)
         return self.env.files.get(str(self.env.config.traces()), load, TraceBook({}, 0))
-
-    def engine_logs(self, retain: bool = True) -> dict[tuple[str, str], list[RunBundle]]:
-        """(repo key, bead) -> logged runs, oldest first; `retain`: only logs written lately."""
-        now = self.env.clock()
-        cut = now - RETAIN if retain else 0
-        out: dict[tuple[str, str], list[RunBundle]] = {}
-        for b in self.locator.runs():
-            try:
-                if os.path.getmtime(b.log) < cut:
-                    continue
-            except OSError:
-                continue
-            out.setdefault((loop_key(b.manifest.repo), b.bead), []).append(b)
-        return out
