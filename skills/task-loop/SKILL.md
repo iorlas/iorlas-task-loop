@@ -121,7 +121,7 @@ open its PR if it has none, merge under the land lock with `--match-head-commit`
 sha (merge and record are one lock hold); a superseded PR is closed only after its replacement merged; the local branch and worktree go
 only at the oid that landed; then `bd sync`. The first failure ends the run with that command's exit code and leaves later items alone.
 It is one run, labelled `stage:land-stack`, with every command a row. No command is ever taken from a PR body or bead text.
-A task, feature or bug bead with an engine run or a `task/<bead>` branch is closed (`tl close`, `tl bd close`, a release's `--bead`) only
+A task, feature or bug bead with an engine run or a `task/<bead>` branch is closed (`tl close`, `tl task close`, a release's `--bead`) only
 with a land on record, or a typed reason: `duplicate`, `wontfix`, `superseded`, `epic`, or `manual-landed-with-sha:<sha>` (the sha must be an
 ancestor of the base; it is recorded as the land). `tl land ID --sha SHA` records one by hand (same ancestor check). The refusal names the fix.
 
@@ -326,7 +326,7 @@ No `slots` (or `count` 0): slots are off. No profile: say so in one line, use
 ## Identity
 
 Sessions share one database, and bd lets the same actor claim a bead twice silently, so every bd call names the
-session: `tl bd <command>` (actor `tl-<first 8 of $CLAUDE_CODE_SESSION_ID>`; `tl actor` prints it). The lifecycle
+session: `tl task <command>` (actor `tl-<first 8 of $CLAUDE_CODE_SESSION_ID>`; `tl actor` prints it). The lifecycle
 calls below (`tl claim`, `tl close`, ...) do this themselves and also record the event for the dashboard and in the
 bead's provenance.
 
@@ -342,7 +342,7 @@ and validates both before pushing. Three lost push races stop the release. Relea
 
 1. `tl dash ensure`: starts the dashboard if it is not running (one per machine) and prints its addresses. Tell the
    owner the address in one line.
-2. `git worktree prune`; `tl bd dolt pull`.
+2. `git worktree prune`; `tl task dolt pull`.
 3. Where to work:
    - **Slots on:** `tl slot init` once per machine (creates the slot beads `slot <host> s1..sN` and their worktrees);
      then `tl slot take` → prints `NAME DIR SLOT-BEAD`, or `NONE` (all held: stop with that one line). Keep the
@@ -400,7 +400,7 @@ landing). Stop a run only when it is burning a paid lane or doing damage.
 | budget 50% / 80% | fine once; on every task → the beads are too big (split them) or the budget too small |
 | push rejected | normal under parallel landings; five in a row → main is too busy, run fewer at once |
 
-Reopen = `tl bd update <id> --status open --append-notes "<answer or correction>"`, then run the engine again: it
+Reopen = `tl task update <id> --status open --append-notes "<answer or correction>"`, then run the engine again: it
 continues the task branch (its earlier work is kept) and the next plan reads the note.
 
 ## 3. After each run
@@ -408,12 +408,12 @@ continues the task branch (its earlier work is kept) and the next plan reads the
 - Landed: next bead (step 1).
 - Blocked with an owner question: leave it; it goes in the final report.
 - Blocked or failed for any other reason: act on the ⚠ table, then rerun or move on.
-- Every problem you notice gets a bead (`tl bd create ... --deps discovered-from:<id>`); problems with the engine
+- Every problem you notice gets a bead (`tl task create ... --deps discovered-from:<id>`); problems with the engine
   itself go to iorlas-task-loop.
 
 ## 4. Stop
 
-No candidate left: `tl bd dolt push`, the profile's close step; slots on: `tl slot release <name>`; slots off:
+No candidate left: `tl task dolt push`, the profile's close step; slots on: `tl slot release <name>`; slots off:
 `tl worktree sunset --self-too` (removes your worktree if it is clean). One report to the owner: beads closed, beads
 filed, beads blocked with their question, the dashboard address. Nothing else.
 

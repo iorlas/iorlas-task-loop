@@ -1,5 +1,5 @@
 """The close guard: a task, feature or bug bead that has an engine run or a task branch is closed only with a land on record, or a typed
-reason. One function (`refusal`) decides; every close goes through it: `tl close`, `tl bd close`, the release's close. The engine's own
+reason. One function (`refusal`) decides; every close goes through it: `tl close`, `tl task close`, the release's close. The engine's own
 close after its run passes `ENGINE`: that run is the record.
 
 A land on record is a LANDED row in traces.jsonl (the engine writes one per landed run; `record_land` writes the same row for a land by
@@ -63,8 +63,8 @@ def record_land(who: Identity, store: Beads, git: Git, repo: str, base: str, bea
 
 def fix(bead: str) -> str:
     return (f"tl land {bead} --sha SHA   (when the work is on the base), or: "
-            f"tl bd close {bead} --reason 'manual-landed-with-sha:<sha> <why>', or a typed reason: "
-            f"tl bd close {bead} --reason 'duplicate|wontfix|superseded|epic <why>'")
+            f"tl task close {bead} --reason 'manual-landed-with-sha:<sha> <why>', or a typed reason: "
+            f"tl task close {bead} --reason 'duplicate|wontfix|superseded|epic <why>'")
 
 
 def refusal(who: Identity, store: Beads, git: Git, repo: str, bead: BeadId, reason: str) -> str:

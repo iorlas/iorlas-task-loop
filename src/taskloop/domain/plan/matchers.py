@@ -42,12 +42,6 @@ def without_runner(cmd: str) -> str:
     return GATE_RUNNER.sub("", cmd)
 
 
-def bead_ids(prefix: str, text: str) -> list[str]:
-    """The ids of beads with prefix `prefix` that `text` names, in order, once each."""
-    found = re.findall(rf"(?<![\w.-])({re.escape(prefix)}-[A-Za-z0-9]+(?:\.[0-9]+)*)", text)
-    return list(dict.fromkeys(found))
-
-
 class AcceptanceText:
     """Where a bead states what done means."""
 

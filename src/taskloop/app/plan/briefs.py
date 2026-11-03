@@ -4,6 +4,7 @@ engine's files live outside it so the worker cannot change them."""
 import hashlib
 from typing import Any
 
+from taskloop.adapters.bdids import mentioned_ids
 from taskloop.adapters.bdsafe import peek
 from taskloop.app.asks import intake
 from taskloop.contracts.bead import Bead
@@ -36,7 +37,8 @@ class Briefs:
         bead = peek(e.store, e.bead) or Bead(id=e.bead, title="", status="")
         comments = e.store.comments(e.bead)
         hint = str(bead.metadata.get(intake.HINT) or "")
-        linked = bf.linked(e.bead, bead, comments, intake.engine_written, lambda i: peek(e.store, BeadId(i)), e.store.comments)
+        linked = bf.linked(e.bead, bead, comments, intake.engine_written,
+                           lambda i: peek(e.store, BeadId(i)), e.store.comments, mentioned_ids)
         said = e.planner.cap.answered_words()  # the owner's typed answer is no comment: the brief carries it for the workers
         answer = f"\n## Owner answer (to ask {e.answered.id})\n{said}\n" if said and e.answered else ""
         brief = self.fit(bead, comments, hint, len(linked.encode()) + len(answer.encode())).plus("linked", linked).plus("answer", answer)

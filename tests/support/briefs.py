@@ -2,6 +2,7 @@
 from collections.abc import Sequence
 from typing import Any
 
+from taskloop.adapters.bdids import mentioned_ids
 from taskloop.app.asks import intake
 from taskloop.app.plan.briefs import ENGINE_LABELS
 from taskloop.contracts.bead import Bead, Comment
@@ -15,7 +16,7 @@ def brief_digest(bead: Bead, comments: Sequence[Comment], owner_only: bool = Fal
 
 
 def linked_text(bead_id: str, bead: Bead, comments: Sequence[Comment], show: Any, comments_of: Any, cap: int = 10, each: int = 400) -> str:
-    return bf.linked(bead_id, bead, comments, intake.engine_written, show, comments_of, cap, each)
+    return bf.linked(bead_id, bead, comments, intake.engine_written, show, comments_of, mentioned_ids, cap, each)
 
 
 def bead_snapshot(bead: Bead, comments: Sequence[Comment]) -> BriefSnap:

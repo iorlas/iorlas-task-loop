@@ -1,4 +1,4 @@
-"""`tl close` and `tl bd close` as a person runs them: from the repo of the current directory, through the close guard
+"""`tl close` and `tl task close` as a person runs them: from the repo of the current directory, through the close guard
 (app/wire/closeguard.py). `tl land` is cli/land.py."""
 from taskloop.app.launch import repos
 from taskloop.app.track import verbs
@@ -13,6 +13,6 @@ def cmd_close(bead: BeadId, reason: str | None, who: Identity, git: Git, store: 
 
 
 def guard(who: Identity, git: Git, store: Beads) -> verbs.Guard:
-    """The close guard of the repo of the current directory (what `tl bd close` runs before bd does)."""
+    """The close guard of the repo of the current directory (what `tl task close` runs before bd does)."""
     return closeguard.guard_for(who, store, git, repos.repo_root())
 

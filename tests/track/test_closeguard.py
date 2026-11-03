@@ -1,5 +1,5 @@
 """The close guard (app/wire/closeguard.py): a task, feature or bug bead with an engine run or a task branch is closed only with a land on
-record or a typed reason; a manual sha counts only as an ancestor of the base. `tl close`, `tl bd close` and the release go through it."""
+record or a typed reason; a manual sha counts only as an ancestor of the base. `tl close`, `tl task close` and the release go through it."""
 import contextlib
 import io
 import time
@@ -76,7 +76,7 @@ class Guarded(unittest.TestCase):
         why = self.ask("done")
         self.assertIn("no land on record", why)
         self.assertIn(f"tl land {self.bead} --sha SHA", why)
-        self.assertIn(f"tl bd close {self.bead} --reason 'manual-landed-with-sha:<sha>", why)
+        self.assertIn(f"tl task close {self.bead} --reason 'manual-landed-with-sha:<sha>", why)
 
     def test_a_task_branch_alone_is_refused_local_or_origin(self):
         self.add("bug")

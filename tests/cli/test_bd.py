@@ -41,8 +41,42 @@ class BdExit(unittest.TestCase):
 
     def test_dispatch_reports_missing_bd_as_before(self):
         with mock.patch.object(tl, "Ctx"), mock.patch.object(beadtools.shutil, "which", return_value=None):
-            result = tl_main("bd", "ready", cwd=Path.cwd())
+            result = tl_main("task", "ready", cwd=Path.cwd())
         self.assertEqual((result.returncode, result.stdout, result.stderr), (1, "", "tl: bd is not on PATH\n"))
+
+    def test_bd_is_an_unknown_verb_before_context_or_adapter_creation(self):
+        with mock.patch.object(tl, "Ctx") as context, mock.patch.object(beadtools, "bd_store") as store:
+            result = tl_main("bd", "show", "X", cwd=Path.cwd())
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("invalid choice: 'bd'", result.stderr)
+        context.assert_not_called()
+        store.assert_not_called()
+
+    def test_task_show_reaches_the_guarded_adapter_passthrough(self):
+        context = mock.Mock()
+        context.who.actor = "tl-session"
+        store = mock.Mock()
+        store.passthrough.return_value = mock.Mock(out="shown\n", err="", code=0)
+        with (mock.patch.object(tl, "Ctx", return_value=context),
+              mock.patch.object(beadtools, "bd_store", return_value=store) as factory,
+              mock.patch.object(tl.cli_closing, "guard", return_value=mock.Mock()) as guard):
+            result = tl_main("task", "show", "X", cwd=Path.cwd())
+        self.assertEqual((result.returncode, result.stdout, result.stderr), (0, "shown\n", ""))
+        factory.assert_called_once_with("tl-session")
+        guard.assert_called_once_with(context.who, context.git, store)
+        store.passthrough.assert_called_once_with(["show", "X"])
+
+    def test_task_close_refusal_stops_before_adapter_execution(self):
+        context, store = mock.Mock(), mock.Mock()
+        refusal = mock.Mock(return_value="no land on record; use tl task close X --reason duplicate")
+        with (mock.patch.object(tl, "Ctx", return_value=context),
+              mock.patch.object(beadtools, "bd_store", return_value=store),
+              mock.patch.object(tl.cli_closing, "guard", return_value=refusal)):
+            result = tl_main("task", "close", "X", cwd=Path.cwd())
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("no land on record", result.stderr)
+        refusal.assert_called_once_with("X", "")
+        store.passthrough.assert_not_called()
 
     def test_missing_bd_failure_exits_at_cli_boundary(self):
         call = mock.Mock(side_effect=BdCommandFailure("tl: bd is not on PATH"))

@@ -136,7 +136,7 @@ def bd_close_args(rest: list[str]) -> tuple[list[str], str]:
 
 
 def passthrough(store: BdStore, rest: list[str], guard: Guard) -> int:
-    """`tl bd ...`: bd with this session's actor and --json, through the adapter. A `close` goes through the close guard first."""
+    """`tl task ...`: bd with this session's actor and --json, through the adapter. A `close` goes through the close guard first."""
     if rest[:1] in (["close"], ["done"]):
         ids, reason = bd_close_args(rest)
         for bead in ids:

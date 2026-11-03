@@ -6,7 +6,7 @@
 """tl.py: the task-loop command line; every verb lives in src/taskloop. Python 3.15+ and msgspec, run with `uv run --script`; macOS, Linux.
 
   tl.py actor                                   the --actor name this session uses for every bd call
-  tl.py bd ARGS...                              run bd with this session's actor (in the current directory)
+  tl.py task ARGS...                            run bd with this session's actor (in the current directory)
   tl.py register [DIR]                          add a repo to the dashboard (default: current directory)
   tl.py claim ID [--worktree DIR]               claim a bead, record it (bd provenance + local event)
   tl.py heartbeat ID                            keep the claim alive (run in a background loop)
@@ -164,7 +164,7 @@ def owner_parsers(sp):
     p = sp.add_parser("register", help="add a repository to the dashboard")
     p.add_argument("directory", nargs="?", default=".", metavar="DIR",
                    help="Git working directory (default: current directory)")
-    p = sp.add_parser("bd")
+    p = sp.add_parser("task")
     p.add_argument("rest", nargs=argparse.REMAINDER)
     p = sp.add_parser("claim")
     p.add_argument("id")
@@ -334,7 +334,7 @@ def of_args(fn: Callable[..., int], *names: str) -> Handler:
     return call
 
 
-def v_bd(a: Any, c: Ctx) -> int:
+def v_task(a: Any, c: Ctx) -> int:
     store = beadtools.bd_store(c.who.actor)
     return verbs.passthrough(store, a.rest, cli_closing.guard(c.who, c.git, store))
 
@@ -410,7 +410,7 @@ def v_handoff(a: Any, c: Ctx) -> int:
 
 VERBS: Final[dict[str, Handler]] = {
     "actor": v_actor,
-    "bd": v_bd,
+    "task": v_task,
     "register": v_register,
     "claim": v_claim,
     "land": v_land,

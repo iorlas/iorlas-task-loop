@@ -193,7 +193,7 @@ class BdStore:
         return r
 
     def passthrough(self, args: list[str]) -> BdRun:
-        """`tl bd ...`: whatever the person typed, with the actor and JSON like every call. A `dolt push` bd answered with a
+        """`tl task ...`: whatever the person typed, with the actor and JSON like every call. A `dolt push` bd answered with a
         rejection but exit 0 exits 1 here."""
         r = self._call(*args)
         if r.code == 0 and args[:2] == ["dolt", "push"] and PUSH_REJECTED.search(r.err + r.out):

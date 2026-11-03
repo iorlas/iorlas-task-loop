@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from taskloop.adapters import beadtools
+from taskloop.adapters.bdids import prefix_of
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.paths import ConfigDir
@@ -53,7 +54,7 @@ def repo_traces(repo: str, git: Git, cfg: ConfigDir) -> Traces:
 
 
 def prefix(bead: str | None) -> str:
-    return (bead or "").split("-")[0]
+    return prefix_of(bead)
 
 
 def bead_status(bead: BeadId, repo: str, who: Identity, store: Beads | None = None) -> str | None:

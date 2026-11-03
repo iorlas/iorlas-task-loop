@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from taskloop.adapters import looks
+from taskloop.adapters.bdids import prefix_of
 from taskloop.app.look.keep import Keeper, place
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.log import Artifacts
@@ -109,7 +110,7 @@ class Pictures:
         """Pictures matching `pattern` in other beads' artifact folders of this repo's beads (same id prefix, e.g. "lifesim-"),
         oldest first."""
         e = self.e
-        root, prefix = self.artifacts_dir(e.bead).parent, e.bead.split("-")[0] + "-"
+        root, prefix = self.artifacts_dir(e.bead).parent, prefix_of(e.bead) + "-"
         found = [f for d in root.glob(glob.escape(prefix) + "*") if d.name != e.bead and d.is_dir() and not d.is_symlink()
                  for f in d.glob(pattern) if f.is_file() and not f.is_symlink()]
         return sorted(found, key=lambda f: f.stat().st_mtime)

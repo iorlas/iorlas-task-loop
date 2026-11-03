@@ -54,6 +54,7 @@ uv run --script skills/task-loop/tl.py factory start [--repo DIR]          # det
 ```
 
 Everything is recorded in the bead (plan, review findings, reflect stats, provenance of who claimed and landed it).
+Use `tl task <command>` for tracker commands with the session's actor, for example `tl task show <id>`.
 The method is [`skills/task-loop/SKILL.md`](skills/task-loop/SKILL.md); each repo's specifics go in its loop profile
 (`docs/agents/task-loop.md`) and `.task-loop.json`.
 

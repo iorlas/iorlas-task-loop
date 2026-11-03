@@ -7,7 +7,6 @@ from typing import Any, Final
 
 from taskloop.contracts.bead import Bead, Comment
 from taskloop.contracts.checkpoint import BriefSnap
-from taskloop.domain.plan.matchers import bead_ids
 
 FIELDS: Final = ("title", "description", "acceptance_criteria", "design", "notes")
 DIFF_CAP: Final = 4096
@@ -156,13 +155,14 @@ def diff(old: BriefSnap, new: BriefSnap, answer: str = "", comments: bool = True
 
 
 def linked(bead_id: str, bead: Bead, comments: Sequence[Comment], is_engine: Callable[[str], bool], show: Callable[[str], Bead | None],
-           comments_of: Callable[[str], Sequence[Comment]], cap: int = 10, each: int = 400) -> str:
+           comments_of: Callable[[str], Sequence[Comment]], mentioned_ids: Callable[[str, str], list[str]],
+           cap: int = 10, each: int = 400) -> str:
     """The decisions that live in other beads: the dependencies and the parent first, then the ids the task text and the people's
     comments name (not the engine's own comments); title, status, close reason, the last comment; each at most `each` chars, at most
     `cap` beads. tl-bxk.10.10"""
     text = " ".join(str(getattr(bead, k)) for k in FIELDS) + " " + " ".join(c.text for c in comments if not is_engine(c.text))
     deps = {d.id: d for d in bead.dependencies if d.id}
-    named = bead_ids(bead_id.split("-", maxsplit=1)[0], text)
+    named = mentioned_ids(bead_id, text)
     ids = [i for i in dict.fromkeys([*deps, bead.parent, *named]) if i and i != bead_id][:cap]
     out = []
     for i in ids:

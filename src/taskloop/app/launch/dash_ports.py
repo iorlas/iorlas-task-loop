@@ -31,7 +31,7 @@ DASH_ACTOR = "tl-dash"  # the dashboard's bd actor
 
 
 def quiet(fn: Callable[..., Any], default: Any) -> Callable[..., Any]:
-    """A port that never raises: tl.bd exits when bd is not on PATH."""
+    """A port that never raises: `tl task` exits when bd is not on PATH."""
     def call(*a: Any) -> Any:
         try:
             return fn(*a)
