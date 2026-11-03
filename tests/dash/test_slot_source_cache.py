@@ -1,11 +1,9 @@
 """The slot count's git read is kept while the profile's source files are unchanged, however old; the slot folders are listed again."""
 import unittest
-from types import SimpleNamespace
 from typing import Any, cast
 
 from taskloop.contracts.slottable import SlotSource
-from taskloop_dash.cache import TtlCache
-from taskloop_dash.env import Ports
+from taskloop_dash.env import Env, Ports
 from taskloop_dash.readers.world import Worlds
 
 
@@ -18,8 +16,8 @@ class SlotSourceCache(unittest.TestCase):
             return SlotSource(host="h", count=4, source="origin/main", sha="abc", dirs=self.dirs, root="/r/.slots")
 
         ports = Ports(slot_source=read, slot_dirs=lambda root: self.dirs, profile_stamp=lambda repo: self.stamp)
-        env = SimpleNamespace(ports=ports, ttl=TtlCache(lambda: self.now), clock=lambda: self.now)
-        self.worlds = Worlds(*[cast(Any, x) for x in (env, None, None, None, None)])
+        env = Env(config=".", ports=ports, clock=lambda: self.now)
+        self.worlds = Worlds(*[cast(Any, x) for x in (env, None, None, None)])
 
     def test_a_stamped_source_is_read_once_across_the_ttl_and_again_when_it_changes(self):
         self.worlds.slot_source("/r")
