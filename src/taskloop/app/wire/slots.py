@@ -115,12 +115,16 @@ def slot_source(repo: str, git: Git) -> SlotSource:
     disk. A bad profile exits (cfg_source says so); a caller that must not exit answers for it."""
     profile_, base, commit = cfg_source(repo, git)
     cfg = profile_.slots
-    root = Path(slot_dir(repo, "x", cfg)).parent
+    root = str(Path(slot_dir(repo, "x", cfg)).parent)
+    return SlotSource(host=hostname(), count=cfg.count, source=base if commit else WORKTREE, sha=commit, dirs=slot_dirs(root), root=root)
+
+
+def slot_dirs(root: str) -> frozenset[str]:
+    """The names of the slot folders in `root` (no process: a directory listing)."""
     try:
-        dirs = frozenset(d.name for d in root.iterdir() if d.is_dir())
+        return frozenset(d.name for d in Path(root).iterdir() if d.is_dir())
     except OSError:
-        dirs = frozenset()
-    return SlotSource(host=hostname(), count=cfg.count, source=base if commit else WORKTREE, sha=commit, dirs=dirs)
+        return frozenset()
 
 
 def slot_table(repo: str, who: Identity, git: Git, now: float, live: Mapping[str, LiveSlot] | None = None,
