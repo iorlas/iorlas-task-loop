@@ -52,7 +52,7 @@ class ProbeChecks(unittest.TestCase):
         seen = json.loads(out_file.read_text())
         engine_marks = ("DECLARED", "DELEGATE_DEPTH", "TASK_LOOP_WORKER")  # the check's own env, and what a child of the engine is told
         admitted = (*engine_marks, *CHECK_HOME_NAMES, *check_caches({}), "PWD", "SHLVL", "_")
-        stray = [k for k in seen if not allowed(k) and k not in admitted]
+        stray = [k for k in seen if not allowed(k) and k not in admitted and not k.startswith("XDG_")]
         self.assertEqual(stray, [], "names outside the allowlist reached the child")
         self.assertNotIn("NOT_ON_THE_LIST", seen)
         self.assertIn("DECLARED", seen)

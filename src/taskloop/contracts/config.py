@@ -174,6 +174,8 @@ class EngineConfig(Rec):
     land_optimistic_tries: int = 2  # gate re-runs outside the land lock when main moved under it, then inside (0: inside)
     base: str = "origin/main"
     check_links: bool = True
+    # A check runs with a private empty HOME when true; default to the real HOME because toolchains keep licences under it.
+    check_scratch_home: bool = False
     pick_label: str = ""
     needs_info_label: str = "needs-info"
     skip_labels: list[str] = msgspec.field(default_factory=list)

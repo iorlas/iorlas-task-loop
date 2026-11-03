@@ -22,8 +22,7 @@ class CheckEnvironment(unittest.TestCase):
             ArgvChecks(Env(base)).run(CheckSpec(argv=["true"], cwd="/repo"))
         env = runner.call_args.args[2]
         self.assertFalse({"SSH_AUTH_SOCK", "GH_TOKEN", "GIT_SSH_COMMAND"} & env.keys())
-        self.assertNotEqual(env["HOME"], "/owner")
-        self.assertFalse(Path(env["HOME"]).exists())
+        self.assertEqual(env["HOME"], "/owner")
         git_env = RealGit(Env(base)).git_env("/repo")
         self.assertEqual(git_env["SSH_AUTH_SOCK"], "/agent")
         self.assertEqual(git_env["GIT_SSH_COMMAND"], "ssh custom")

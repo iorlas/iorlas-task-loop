@@ -98,20 +98,28 @@ def check_caches(base: Mapping[str, str]) -> dict[str, str]:
     return {k: base.get(k) or v for k, v in defaults.items()}
 
 
-def check_env(base: Mapping[str, str], extra: Mapping[str, str] | None = None, *, home: str) -> dict[str, str]:
-    """Checks cannot restore credentials or the owner's HOME through their declared environment."""
+def check_env(base: Mapping[str, str], extra: Mapping[str, str] | None = None, *, home: str | None) -> dict[str, str]:
+    """Strip check secrets in both modes; an explicit home isolates configuration from the owner's HOME."""
     env = {k: v for k, v in tool_env(base, extra).items() if k not in CHECK_SECRETS and not k.startswith("GIT_CREDENTIAL")}
-    env.update(check_caches({**base, **{k: v for k, v in (extra or {}).items() if k != "HOME"}}))
-    env.update(HOME=home, XDG_CONFIG_HOME=str(Path(home) / ".config"), XDG_DATA_HOME=str(Path(home) / ".local/share"),
-               XDG_STATE_HOME=str(Path(home) / ".local/state"), MISE_CONFIG_DIR=str(Path(home) / ".config/mise"))
+    source = {**base, **{k: v for k, v in (extra or {}).items() if home is None or k != "HOME"}}
+    env.update(check_caches(source))
+    if home is None:
+        env.update({k: v for k, v in source.items() if k in CHECK_HOME_NAMES or k.startswith("XDG_")})
+    else:
+        env.update(HOME=home, XDG_CONFIG_HOME=str(Path(home) / ".config"), XDG_DATA_HOME=str(Path(home) / ".local/share"),
+                   XDG_STATE_HOME=str(Path(home) / ".local/state"), MISE_CONFIG_DIR=str(Path(home) / ".config/mise"))
     return env
 
 
 @contextmanager
-def check_environment(base: Mapping[str, str], extra: Mapping[str, str] | None = None) -> Generator[dict[str, str]]:
-    """One private HOME per execution, removed after the whole process group has stopped, including on exceptions."""
-    with tempfile.TemporaryDirectory(prefix="tl-check-home-") as home:
-        yield check_env(base, extra, home=home)
+def check_environment(base: Mapping[str, str], extra: Mapping[str, str] | None = None, *,
+                      scratch_home: bool) -> Generator[dict[str, str]]:
+    """Optionally use a private HOME, removed after the whole process group stops, including on exceptions."""
+    if scratch_home:
+        with tempfile.TemporaryDirectory(prefix="tl-check-home-") as home:
+            yield check_env(base, extra, home=home)
+    else:
+        yield check_env(base, extra, home=None)
 
 
 # Registered names that differ run to run without changing what a check does (paths of this run, ids of this process): not part of a

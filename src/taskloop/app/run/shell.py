@@ -57,7 +57,7 @@ class Shell:
         extra = {**childenv.WORKER_MARK, **e.bead_env, **(pinned_env(e.wt) if pin else {}), **(env or {})}
         try:
             if what in {"check", "check fix"}:
-                with childenv.check_environment(e.env.vars, extra) as clean:
+                with childenv.check_environment(e.env.vars, extra, scratch_home=e.cfg.check_scratch_home) as clean:
                     return e.spawner.stream(list(cmd), cwd=None if cwd is None else str(cwd), env={}, extra=clean,
                                             on_output=chunks.append, timeout_s=timeout, stop=stop)
             return e.spawner.stream(list(cmd), cwd=None if cwd is None else str(cwd), extra=extra, on_output=chunks.append,

@@ -87,7 +87,7 @@ def skipped(host: CheckHost, tree: str, base: str) -> PlanDecision | None:
         if not start:
             raise ValueError("cannot resolve the diff's merge-base")
         paths = host.git.changed_paths(wt, start, tree, required=True)
-        with check_environment(host.env.vars, host.bead_env) as env:
+        with check_environment(host.env.vars, host.bead_env, scratch_home=host.cfg.check_scratch_home) as env:
             ran = host.spawner.run([*argv, "--base", base, "--paths-stdin"], cwd=wt, env={},
                                    extra=env, timeout_s=PLAN_TIMEOUT_S, input="".join(p + "\0" for p in paths))
         if ran.timed_out:

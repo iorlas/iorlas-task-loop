@@ -2,14 +2,17 @@
 import hashlib
 import json
 import sys
+from pathlib import Path
 from unittest import mock
 
 from support import engine_case as te
 from support.narrow import must
 
+from taskloop.adapters.childenv import CHECK_SECRETS
 from taskloop.app.checks.cache import is_green, plan_digest
 from taskloop.app.checks.gateplan import PlanDecision, parse, skipped
 from taskloop.contracts.config import ConfigError
+from taskloop.contracts.env import Env
 from taskloop.contracts.ids import CheckId, TreeSha
 from taskloop.contracts.ports import Ran
 from taskloop.contracts.runkey import BaseSha
@@ -27,6 +30,25 @@ def document(steps=None, **extra):
 
 
 class GatePlans(te.EngineTest):
+    def test_plan_producer_uses_the_profile_home_mode_and_always_strips_secrets(self):
+        self.setup_plan()
+        secrets = {**dict.fromkeys(CHECK_SECRETS, "secret"), "GIT_CREDENTIAL_HELPER": "secret"}
+        self.eng.env = Env({"HOME": "/owner", **secrets})
+        self.eng.bead_env = secrets
+        base = self.eng.git.rev_parse(str(self.eng.wt), self.eng.cfg.base)
+        tree = self.eng.checkout.tree_hash()
+        for scratch_home in (False, True):
+            with self.subTest(scratch_home=scratch_home):
+                self.eng.cfg = self.eng.cfg.replace(check_scratch_home=scratch_home)
+                self.assertIsNotNone(skipped(self.eng, tree, base))
+                env = self.calls[-1][1]["extra"]
+                self.assertFalse(secrets.keys() & env.keys())
+                if scratch_home:
+                    self.assertNotEqual(env["HOME"], "/owner")
+                    self.assertFalse(Path(env["HOME"]).exists())
+                else:
+                    self.assertEqual(env["HOME"], "/owner")
+
     def test_a_plan_for_another_base_cannot_skip_checks(self):
         answer = document()
         answer["base"] = "stale-base"

@@ -9,11 +9,12 @@ TIMEOUT_NOTE = "\n(timed out after %g min: everything the check started was stop
 
 
 class ArgvChecks:
-    def __init__(self, env: Env) -> None:
+    def __init__(self, env: Env, *, scratch_home: bool = False) -> None:
         self.env = env
+        self.scratch_home = scratch_home
 
     def run(self, spec: CheckSpec) -> CheckResult:
-        with check_environment(self.env.vars, spec.env) as env:
+        with check_environment(self.env.vars, spec.env, scratch_home=self.scratch_home) as env:
             ran = run_group(list(spec.argv), spec.cwd, env, spec.timeout_s)
         out = ran.out + ran.err
         if ran.timed_out:

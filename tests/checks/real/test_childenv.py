@@ -1,4 +1,4 @@
-"""Real check children resolve ~ to a private HOME, never the fake owner's credential and configuration canaries."""
+"""Real check children retain the caller's HOME by default and isolate it when the profile opts in."""
 import json
 import subprocess
 import sys
@@ -16,6 +16,7 @@ from taskloop.adapters.checks_argv import ArgvChecks
 from taskloop.adapters.childenv import CHECK_SECRETS
 from taskloop.adapters.spawner import RealSpawner
 from taskloop.app.run.shell import Shell
+from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.env import Env
 from taskloop.contracts.ports import CheckSpec
 
@@ -47,17 +48,32 @@ class CheckHomeCanaryTest(unittest.TestCase):
         self.assertFalse(Path(seen["home"]).exists())
         self.assertTrue((self.owner / ".ssh/canary").is_file())
 
+    def assert_owner_home(self):
+        seen = json.loads(self.output.read_text())
+        self.assertEqual(seen["home"], str(self.owner))
+        self.assertIn(str(self.owner / "canary"), seen["canaries"])
+        self.assertFalse(CHECK_SECRETS & seen["env"].keys())
+        self.assertFalse(any(name.startswith("GIT_CREDENTIAL") for name in seen["env"]))
+
+    def test_standalone_argv_check_defaults_to_owner_home_and_strips_secrets(self):
+        (self.owner / "canary").write_text("synthetic toolchain state")
+        secrets = {**dict.fromkeys(CHECK_SECRETS, "synthetic-secret"), "GIT_CREDENTIAL_HELPER": "synthetic-helper"}
+        env = Env({"HOME": str(self.owner), **secrets})
+        result = ArgvChecks(env).run(CheckSpec(argv=[sys.executable, "-c", self.probe], cwd=str(self.root), env=secrets))
+        self.assertEqual(result.exit, 0, result.out)
+        self.assert_owner_home()
+
     def test_standalone_argv_check_cannot_find_owner_state_through_home(self):
         env = Env({"HOME": str(self.owner), "SSH_AUTH_SOCK": "/synthetic-agent"})
-        result = ArgvChecks(env).run(CheckSpec(argv=[sys.executable, "-c", self.probe], cwd=str(self.root),
-                                              env={"HOME": str(self.owner), "GH_TOKEN": "synthetic-token"}))
+        result = ArgvChecks(env, scratch_home=True).run(CheckSpec(argv=[sys.executable, "-c", self.probe], cwd=str(self.root),
+                                                               env={"HOME": str(self.owner), "GH_TOKEN": "synthetic-token"}))
         self.assertEqual(result.exit, 0, result.out)
         self.assert_isolated()
 
     def test_real_shell_checks_and_fixes_use_the_scrubbed_environment(self):
         env = Env({"HOME": str(self.owner), "SSH_AUTH_SOCK": "/synthetic-agent", "GIT_SSH_COMMAND": "synthetic-ssh"})
         host = SimpleNamespace(env=env, bead_env={}, spawner=RealSpawner(env), wt=self.root,
-                               halt=threading.Event(), log=mock.Mock(), halt_point=mock.Mock())
+                               halt=threading.Event(), log=mock.Mock(), halt_point=mock.Mock(), cfg=EngineConfig(check_scratch_home=True))
         host.log.next_id.return_value = "m1"
         for what in ("check", "check fix"):
             with self.subTest(what=what), mock.patch.object(childenv, "check_env", wraps=childenv.check_env) as builder:
@@ -71,12 +87,38 @@ class CheckHomeCanaryTest(unittest.TestCase):
                 self.assertEqual(seen["env"]["UV_CACHE_DIR"], str(self.owner / ".cache/uv"))
                 self.assertEqual(seen["env"]["DOTNET_CLI_HOME"], str(self.owner))
 
+    def test_real_shell_checks_and_fixes_default_to_owner_home_and_strip_secrets(self):
+        (self.owner / "canary").write_text("synthetic toolchain state")
+        secrets = {**dict.fromkeys(CHECK_SECRETS, "synthetic-secret"), "GIT_CREDENTIAL_HELPER": "synthetic-helper"}
+        env = Env({"HOME": str(self.owner), **secrets})
+        host = SimpleNamespace(env=env, bead_env={}, spawner=RealSpawner(env), wt=self.root, cfg=EngineConfig(),
+                               halt=threading.Event(), log=mock.Mock(), halt_point=mock.Mock())
+        host.log.next_id.return_value = "m1"
+        for what in ("check", "check fix"):
+            with self.subTest(what=what):
+                rc, tail = Shell(host).run([sys.executable, "-c", self.probe], what=what, env=secrets)
+                self.assertEqual(rc, 0, tail)
+                self.assert_owner_home()
+
     def test_cli_gate_in_real_git_checkout_cannot_find_owner_state_through_home(self):
+        self.run_cli_gate(scratch_home=True)
+        self.assert_isolated()
+
+    def test_cli_gate_defaults_to_owner_home_and_strips_secrets(self):
+        (self.owner / "canary").write_text("synthetic toolchain state")
+        self.run_cli_gate()
+        self.assert_owner_home()
+
+    def run_cli_gate(self, *, scratch_home=False):
         repo = self.root / "repo"
         repo.mkdir()
         checks = [{"id": "probe", "argv": [sys.executable, "-c", self.probe], "run": "gate",
-                   "env": {"HOME": str(self.owner), "GH_TOKEN": "synthetic-token"}}]
-        (repo / ".task-loop.json").write_text(json.dumps({"engine": {"base": "main", "checks": checks}}))
+                   "env": {"HOME": str(self.owner), **dict.fromkeys(CHECK_SECRETS, "synthetic-secret"),
+                           "GIT_CREDENTIAL_HELPER": "synthetic-helper"}}]
+        engine: dict[str, object] = {"base": "main", "checks": checks}
+        if scratch_home:
+            engine["check_scratch_home"] = True
+        (repo / ".task-loop.json").write_text(json.dumps({"engine": engine}))
         for args in (("init", "-q", "-b", "main"), ("add", ".task-loop.json"), ("commit", "-qm", "canary")):
             subprocess.run(["git", "-c", "user.name=Canary", "-c", "user.email=canary@example.invalid", *args],
                            cwd=repo, capture_output=True, check=True)
@@ -84,4 +126,3 @@ class CheckHomeCanaryTest(unittest.TestCase):
                       env={"HOME": str(self.owner), "XDG_CONFIG_HOME": str(self.root / "config"),
                            "SSH_AUTH_SOCK": "/synthetic-agent", "GIT_SSH_COMMAND": "synthetic-ssh"})
         self.assertEqual(ran.returncode, 0, ran.stdout + ran.stderr)
-        self.assert_isolated()

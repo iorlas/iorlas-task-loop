@@ -44,6 +44,8 @@ answer. Code routes and accepts by rule (checks green, nothing blocking in the r
 Gate checks default to `"run_in": "clean"` (a fresh checkout of committed HEAD). A check that needs the slot's ignored setup
 inputs can declare `"run_in": "slot"`; the slot must match the committed tree. See [check fields](docs/dev/integrations.md#check-fields).
 
+Checks keep the caller's HOME by default; `engine.check_scratch_home` (default `false`) opts into a private empty HOME, with check secrets stripped in both modes.
+
 Or let the loop run the queue by itself, one bead after another, each in any free slot:
 
 ```sh

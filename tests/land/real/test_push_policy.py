@@ -48,7 +48,7 @@ class PushPolicy(unittest.TestCase):
 
             def check(policy):
                 for step in json.loads(profile.read_text())["engine"]["checks"]:
-                    ArgvChecks(env).run(CheckSpec(argv=step["argv"], cwd=str(repo)))
+                    ArgvChecks(env, scratch_home=policy.check_scratch_home).run(CheckSpec(argv=step["argv"], cwd=str(repo)))
                 return 0
 
             checked = mock.Mock(side_effect=check)

@@ -10,12 +10,38 @@ from taskloop.adapters.childenv import CHECK_SECRETS, check_env, check_environme
 from taskloop.app.checks.container import Box
 from taskloop.app.checks.execution import ReadyExecution
 from taskloop.contracts.checks import Check
+from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.env import Env
 from taskloop.contracts.ids import CheckId
 from taskloop.contracts.runkey import Digest
 
 
 class CheckEnvironmentTest(unittest.TestCase):
+    def test_profile_defaults_to_the_callers_home(self):
+        self.assertFalse(EngineConfig().check_scratch_home)
+
+    def test_default_mode_preserves_home_and_config_without_creating_a_directory(self):
+        base = {"HOME": "/owner", "XDG_CONFIG_HOME": "/config", "XDG_DATA_HOME": "/data",
+                "XDG_STATE_HOME": "/state", "MISE_CONFIG_DIR": "/mise", "XDG_CACHE_HOME": "/cache", "XDG_RUNTIME_DIR": "/runtime",
+                **dict.fromkeys(CHECK_SECRETS, "parent-secret"), "GIT_CREDENTIAL_HELPER": "secret"}
+        extra = {"XDG_CONFIG_HOME": "/declared-config", **dict.fromkeys(CHECK_SECRETS, "declared-secret")}
+        with (mock.patch("taskloop.adapters.childenv.tempfile.TemporaryDirectory") as temporary,
+              check_environment(base, extra, scratch_home=False) as out):
+            expected = {k: v for k, v in base.items() if k not in CHECK_SECRETS and not k.startswith("GIT_CREDENTIAL")}
+            expected["XDG_CONFIG_HOME"] = "/declared-config"
+            self.assertEqual({k: out[k] for k in expected}, expected)
+            self.assertFalse(CHECK_SECRETS & out.keys())
+            self.assertNotIn("GIT_CREDENTIAL_HELPER", out)
+            self.assertEqual(out["UV_CACHE_DIR"], "/cache/uv")
+            self.assertEqual(out["MISE_DATA_DIR"], "/data/mise")
+        temporary.assert_not_called()
+
+    def test_default_mode_keeps_absent_config_names_absent_and_honors_declared_home(self):
+        out = check_env({"HOME": "/owner"}, {"HOME": "/declared"}, home=None)
+        self.assertEqual(out["HOME"], "/declared")
+        self.assertEqual(out["DOTNET_CLI_HOME"], "/declared")
+        self.assertFalse({"XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "MISE_CONFIG_DIR"} & out.keys())
+
     def test_builder_overrides_home_and_config_after_declared_env(self):
         base = {"HOME": "/owner", "PATH": "/tools/bin", "SSH_AUTH_SOCK": "/agent", "GH_TOKEN": "parent-secret"}
         extra = {**dict.fromkeys(CHECK_SECRETS, "declared-secret"), "HOME": "/owner", "XDG_CONFIG_HOME": "/owner/config",
@@ -45,18 +71,21 @@ class CheckEnvironmentTest(unittest.TestCase):
         caches = {"XDG_CACHE_HOME": "/cache", "UV_CACHE_DIR": "/uv", "UV_PYTHON_INSTALL_DIR": "/python",
                   "DOTNET_CLI_HOME": "/dotnet", "NUGET_PACKAGES": "/nuget", "MISE_CACHE_DIR": "/mise-cache",
                   "MISE_DATA_DIR": "/mise-data", "MISE_STATE_DIR": "/mise-state"}
-        out = check_env({"HOME": "/owner", **caches, "MISE_SECRET_TOKEN": "secret"},
-                        {"DOTNET_CLI_HOME": "/slot/dotnet"}, home="/scratch")
-        self.assertEqual({k: out[k] for k in caches}, {**caches, "DOTNET_CLI_HOME": "/slot/dotnet"})
-        self.assertNotIn("MISE_SECRET_TOKEN", out)
+        for home in (None, "/scratch"):
+            with self.subTest(home=home):
+                out = check_env({"HOME": "/owner", **caches, "MISE_SECRET_TOKEN": "secret"},
+                                {"DOTNET_CLI_HOME": "/slot/dotnet"}, home=home)
+                self.assertEqual({k: out[k] for k in caches}, {**caches, "DOTNET_CLI_HOME": "/slot/dotnet"})
+                self.assertNotIn("MISE_SECRET_TOKEN", out)
 
     def test_each_execution_has_a_private_home_and_cleans_up_on_error(self):
-        with check_environment({"HOME": "/owner"}) as first:
+        with check_environment({"HOME": "/owner"}, scratch_home=True) as first:
             home = Path(first["HOME"])
             self.assertTrue(home.is_dir())
             self.assertEqual(home.stat().st_mode & 0o777, 0o700)
             (home / "state").write_text("private")
-            with self.assertRaisesRegex(RuntimeError, "child failed"), check_environment({"HOME": "/owner"}) as second:
+            with (self.assertRaisesRegex(RuntimeError, "child failed"),
+                  check_environment({"HOME": "/owner"}, scratch_home=True) as second):
                 other = Path(second["HOME"])
                 self.assertNotEqual(home, other)
                 self.assertFalse((other / "state").exists())
@@ -91,7 +120,8 @@ class EngineCheckEnvironmentTest(te.EngineTest):
             return 0, "isolated"
 
         cmd = procsim.fake("probe-check-home", probe)
-        eng = self.checks_engine(checks=[{"id": "probe", "cmd": cmd, "env": {"GH_TOKEN": "secret", "HOME": "/owner"}}])
+        eng = self.checks_engine(check_scratch_home=True,
+                                 checks=[{"id": "probe", "cmd": cmd, "env": {"GH_TOKEN": "secret", "HOME": "/owner"}}])
         for what in ("check", "check fix"):
             rc, _ = eng.sh(["probe-check-home"], what=what, env={"SSH_AUTH_SOCK": "/agent", "HOME": "/owner"})
             self.assertEqual(rc, 0)
