@@ -11,7 +11,7 @@ from pathlib import Path
 from taskloop.adapters import beadtools, gitrepo, ident, landlock
 from taskloop.adapters.ident import config_dir
 from taskloop.adapters.versionfile import NoVersion, set_version
-from taskloop.app.release import clone, manifest, publish, selfupdate, shell, suite, tidy, train
+from taskloop.app.release import canary, clone, manifest, publish, selfupdate, shell, suite, tidy
 from taskloop.app.release.push import push_main, release_lock_path
 from taskloop.app.release.shell import Abort, Shell, say
 from taskloop.contracts.bd_errors import BdCommandFailure
@@ -31,7 +31,6 @@ class Request:
     reason: str = ""
     from_branch: str = ""
     minor: bool = False
-    urgent: str = ""
 
 
 def next_version(where: Path, minor: bool, sh: Shell) -> str:
@@ -64,7 +63,26 @@ def bump_and_commit(tool_root: Path, where: Path, req: Request, sh: Shell) -> st
     manifest.write(where, publish.git_must(lambda: sh.port.ls_files(str(where)), where))  # after the bump: it lists plugin.json as it ships
     publish.git_must(lambda: sh.port.stage(str(where), publish.PLUGIN, manifest.NAME), where)
     publish.git_must(lambda: sh.port.commit_staged(str(where), f"{version}: {req.message}{publish.TRAILER}"), where)
+    check_bump(where, before, version, sh)
     return version
+
+
+def check_bump(where: Path, before: str, version: str, sh: Shell) -> None:
+    """Only the two generated files may differ from the verified commit, including hook side effects."""
+    changed = publish.git_must(lambda: sh.port.changed_paths(str(where), before, "HEAD", required=True), where)
+    if set(changed) != {publish.PLUGIN, manifest.NAME}:
+        raise Abort("release bump changed files beyond plugin.json and MANIFEST.sha256; nothing pushed")
+    if publish.git_must(lambda: sh.port.status(str(where)), where):
+        raise Abort("release clone changed after the bump; nothing pushed")
+    try:
+        plugin = json.loads((where / publish.PLUGIN).read_text(encoding="utf-8"))
+        problems = manifest.verify(where)
+        tracked = publish.git_must(lambda: sh.port.ls_files(str(where)), where)
+        complete = (where / manifest.NAME).read_text(encoding="utf-8") == manifest.build(where, tracked)
+    except (OSError, ValueError) as e:
+        raise Abort(f"invalid release metadata: {e}") from None
+    if not isinstance(plugin, dict) or plugin.get("version") != version or problems or not complete:
+        raise Abort("release version or manifest is invalid; nothing pushed")
 
 
 def refuse_open_children(req: Request, repo: Path, who: Identity, store: Beads | None) -> None:
@@ -98,7 +116,7 @@ def close_bead(req: Request, repo: Path, who: Identity, store: Beads | None, whe
 
 
 def release(req: Request, repo: Path, market: Path, tool_root: Path, sh: Shell, who: Identity, closer: Closer,
-            store: Beads | None = None, *, clock: Callable[[], float] = time.time) -> str:
+            store: Beads | None = None) -> str:
     """Release `repo` from the clone: its main checkout may be dirty or on any branch and is left as it was. The marketplace
     checkout must be clean on main (it is pushed from)."""
     refuse_open_children(req, repo, who, store)
@@ -107,7 +125,6 @@ def release(req: Request, repo: Path, market: Path, tool_root: Path, sh: Shell, 
     if not url:
         raise Abort(f"{repo} has no origin remote")
     where = clone.ready(config_dir(sh.env), url, sh)
-    train.require_slot(config_dir(sh.env), url, req.urgent, clock)
     tip = sh.port.rev_parse(str(repo), "refs/heads/" + req.from_branch) if req.from_branch else ""
     if req.from_branch:
         clone.replay_branch(where, repo, req.from_branch, sh)
@@ -115,7 +132,6 @@ def release(req: Request, repo: Path, market: Path, tool_root: Path, sh: Shell, 
     def again() -> str:
         return bump_and_commit(tool_root, where, req, sh)
     version = push_main(where, req.message, again(), base, again, sh)
-    train.shipped(config_dir(sh.env), url, version, req.urgent, clock)
     say(f"pushed {version}: {req.message}")
     publish.tag(where, "v" + version, "the plugin repo", sh)
     close_bead(req, repo, who, store, where, sh, version, closer)
@@ -162,7 +178,6 @@ def main(argv: list[str] | None, tool_root: Path, spawner: Spawner, port: Git, e
     home = ConfigDir(config_dir(env))
     ap = argparse.ArgumentParser(prog="release.py", description=doc)
     ap.add_argument("message", nargs="?")
-    ap.add_argument("--urgent", default=None, help="override the two-hour train interval with a reason")
     ap.add_argument("--devbox-ok", metavar="VERSION", help="acknowledge the devbox canary before moving the Mac pin")
     ap.add_argument("--bead", type=parse_bead_id, default=None, help="close this bead after the push")
     ap.add_argument("--reason", default="", help="the close reason (default: the message)")
@@ -171,11 +186,9 @@ def main(argv: list[str] | None, tool_root: Path, spawner: Spawner, port: Git, e
     ap.add_argument("--repo", default=gitrepo.repo_root(str(tool_root)), help="the main checkout (default: this repo's)")
     ap.add_argument("--marketplace", default=str(Path.home() / "Workspaces" / MARKETPLACE))
     a = ap.parse_args(argv)
-    if a.urgent is not None and not a.urgent.strip():
-        ap.error("--urgent needs a nonblank reason")
     if bool(a.message) == bool(a.devbox_ok):
         ap.error("provide a release message or --devbox-ok VERSION")
-    req = Request(a.message or "devbox-ok " + a.devbox_ok, a.bead, a.reason, a.from_branch, a.minor, a.urgent or "")
+    req = Request(a.message or "devbox-ok " + a.devbox_ok, a.bead, a.reason, a.from_branch, a.minor)
     repo, market = Path(gitrepo.repo_root(a.repo)), Path(a.marketplace)
     url = sh.port.remote_url(str(repo), "origin") or str(repo)
     holder = f"pid {os.getpid()} since {time.strftime('%H:%M:%S')}: {req.message}"
@@ -184,11 +197,11 @@ def main(argv: list[str] | None, tool_root: Path, spawner: Spawner, port: Git, e
         newer = None
         with landlock.os_lock(path, holder, lambda by: say(f"waiting for the release lock (held by {by})")):
             if a.devbox_ok:
-                train.devbox_ok(home.root, url, a.devbox_ok)
+                canary.devbox_ok(home.root, url, a.devbox_ok, sh)
                 say(f"ring devbox-ok: {a.devbox_ok}; Mac standing pin may now move through tl pin")
                 return 0
             newer = selfupdate.newer_release(tool_root, clone.ready(home.root, url, sh), sh, env)
-            version = "" if newer else release(req, repo, market, tool_root, sh, who, closer, clock=clock)
+            version = "" if newer else release(req, repo, market, tool_root, sh, who, closer)
         if newer:  # the lock is released above: the exec'd release takes it
             selfupdate.exec_release(newer, sys.argv[1:] if argv is None else argv, repo, env)
         record(ReleaseResult(ok=True, version=version, summary="released " + version, at=clock(), branch=req.from_branch or "main",

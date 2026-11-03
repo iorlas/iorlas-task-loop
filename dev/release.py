@@ -6,7 +6,7 @@
 """Release the plugin: one release at a time, the version from origin, the suite green, the marketplace bumped.
 
     uv run --script dev/release.py "message" [--bead ID --reason R] [--from-branch B] [--minor]
-                           [--repo DIR] [--marketplace DIR] [--urgent "why"]
+                           [--repo DIR] [--marketplace DIR]
     uv run --script dev/release.py --devbox-ok VERSION
 
 A thin caller of src/taskloop/app/release/, always running origin/main's release code: once the clone is on origin/main, a launching
@@ -19,8 +19,10 @@ release has pushed and installed), run the repo's gate (`just check`; skipped wh
 aborts with the output tail), commit the next patch version of .claude-plugin/plugin.json (--minor: the minor) as "<version>: <message>",
 push under the land lock. The gate and suite are cached by pre-bump tree and command. When origin/main moves, the release drops the
 bump, rebases and verifies the changed tree outside the land lock, then takes the lock again to push (three attempts maximum).
-A successful push records the devbox ring and starts a two-hour interval; --urgent requires a reason to bypass it.
-After the devbox canary succeeds, --devbox-ok VERSION records permission for the Mac standing pin to move through tl pin.
+A successful push enters the devbox ring. Releases have no minimum interval.
+After the devbox canary succeeds, --devbox-ok VERSION publishes devbox-ok/vVERSION on origin for the Mac's tl pin.
+Rollback to an older installed version needs no new acknowledgement. The post-bump check validates the version and manifest,
+and permits only those two files to differ from the tested tree. Three lost push races stop the release. There is no CI gate (D-11).
 Then it tags v<version>, closes the bead, bumps the plugin's entry in the
 marketplace checkout (clean, on main), pushes it, tags it `iorlas-task-loop-v<version>`, runs `claude plugin marketplace update` and
 `claude plugin update`. The installed cache dir for the new version must exist afterwards: if not, the install runs once more, then the

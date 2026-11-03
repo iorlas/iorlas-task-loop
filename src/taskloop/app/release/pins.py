@@ -5,11 +5,12 @@ import sys
 import time
 from pathlib import Path
 
-from taskloop.adapters.ident import claude_dir, config_dir
+from taskloop.adapters.ident import PLUGIN_ROOT, claude_dir, config_dir
 from taskloop.app.release.catalog import PLUGINS, cache_dirs, installed_version, previous_version, version_tuple
-from taskloop.app.release.train import mac_pin_refusal
+from taskloop.app.release.canary import mac_pin_refusal
 from taskloop.contracts.env import Env
 from taskloop.contracts.paths import ConfigDir
+from taskloop.contracts.ports import Git
 from taskloop.contracts.snapshots import Pin
 from taskloop.contracts.stores import PinStore
 
@@ -43,11 +44,26 @@ def clear_pin(env: Env) -> bool:
     return had
 
 
-def set_pin(env: Env, task_loop: str = "", delegate: str = "") -> tuple[Pin, str]:
+def pin_refusal(env: Env, version: str, old: Pin, git: Git | None) -> str:
+    claude = claude_dir(env)
+    current = old.task_loop or installed_version("task-loop", claude) or max(
+        cache_dirs("task-loop", claude), key=lambda v: version_tuple(v) or (), default="")
+    if current and (version_tuple(version) or ()) < (version_tuple(current) or ()):
+        return ""
+    if git is None:
+        return "refused: a git port is required to read origin's devbox acknowledgement"
+    try:
+        url = json.loads((PLUGIN_ROOT / ".claude-plugin/plugin.json").read_text(encoding="utf-8"))["repository"]
+    except (OSError, ValueError, KeyError) as e:
+        return f"refused: cannot find the release origin: {e}"
+    return mac_pin_refusal(PLUGIN_ROOT, url, version, git)
+
+
+def set_pin(env: Env, task_loop: str = "", delegate: str = "", git: Git | None = None) -> tuple[Pin, str]:
     """(the pin now, "" or why it is refused): a version that is not installed is refused, never pinned."""
     old = read_pin(env)
     if sys.platform == "darwin" and task_loop and task_loop != old.task_loop:
-        why = mac_pin_refusal(config_dir(env), task_loop)
+        why = pin_refusal(env, task_loop, old, git)
         if why:
             return old, why
     want = {"task-loop": task_loop, "delegate": delegate}
@@ -76,7 +92,7 @@ def rollback_target(env: Env) -> tuple[str, str, str]:
     return prev, keep if keep in cache_dirs("delegate", claude) else "", ""
 
 
-def run_pin(env: Env, version: str | None, delegate: str | None, clear: bool) -> int:
+def run_pin(env: Env, version: str | None, delegate: str | None, clear: bool, git: Git | None = None) -> int:
     """`tl pin [VERSION] [--delegate V] [--clear]`: show, set or clear the pin."""
     if clear:
         if version or delegate:
@@ -87,7 +103,7 @@ def run_pin(env: Env, version: str | None, delegate: str | None, clear: bool) ->
         pin = pin_store(env).get()
         print(json.dumps(pin.to_dict()) if pin else "no pin")
         return 0
-    pin, why = set_pin(env, version or "", delegate or "")
+    pin, why = set_pin(env, version or "", delegate or "", git)
     if why:
         print("tl: " + why, file=sys.stderr)
         return 2
@@ -95,10 +111,10 @@ def run_pin(env: Env, version: str | None, delegate: str | None, clear: bool) ->
     return 0
 
 
-def run_rollback(env: Env) -> int:
+def run_rollback(env: Env, git: Git | None = None) -> int:
     """`tl rollback`: pin the previous task-loop version (the delegate stays as it is)."""
     prev, keep, why = rollback_target(env)
     if why:
         print("tl: " + why, file=sys.stderr)
         return 2
-    return run_pin(env, prev, keep, False)
+    return run_pin(env, prev, keep, False, git)

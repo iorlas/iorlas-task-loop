@@ -110,7 +110,7 @@ def isolated_env(home: Path, base: Env) -> dict[str, str]:
     env = tool_env(base.vars, {"HOME": str(home), "XDG_CONFIG_HOME": str(home / ".config"), "TMPDIR": str(home / "tmp")})
     env[EnvVar.TL_WORKER_MB.value] = str(WORKER_BUDGET_MB)  # the address-space cap of each xdist worker (tests/conftest.py)
     env["UV_OFFLINE"] = "1"  # dependencies were prewarmed before isolated pytest workers start
-    env["UV_CACHE_DIR"] = str(config_dir(base) / "uv-cache")
+    env["UV_CACHE_DIR"] = str(uv_cache(base))
     for k in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "PYTHONPATH"):  # the tree under test sets its own PYTHONPATH
         env.pop(k, None)
     return env
@@ -191,6 +191,7 @@ def _host_suite(tool_root: Path, repo: Path, sh: Shell) -> None:
     n = workers(sh.env)
     refuse_if_short(n, available_mb())
     say(f"running the full suite in {n} workers, then the serial group")
+    tool_root = repo if (repo / "pyproject.toml").is_file() else tool_root
     prewarm(tool_root, sh)
     work = Path(tempfile.mkdtemp(prefix="tl-suite-"))
     try:
@@ -204,9 +205,13 @@ def _host_suite(tool_root: Path, repo: Path, sh: Shell) -> None:
     say("suite green")
 
 
+def uv_cache(env: Env) -> Path:
+    return Path(env.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "task-loop" / "uv"
+
+
 def prewarm(tool_root: Path, sh: Shell) -> None:
     """Resolve tools online once; isolated workers share this cache and spawn with UV_OFFLINE=1."""
-    extra = {"UV_CACHE_DIR": str(config_dir(sh.env) / "uv-cache"), "UV_OFFLINE": "0"}
+    extra = {"UV_CACHE_DIR": str(uv_cache(sh.env)), "UV_OFFLINE": "0"}
     sh.run(["uv", "sync", "--frozen", "--quiet", "--project", str(tool_root)], tool_root, extra=extra)
     for script in ("skills/task-loop/tl.py", "dev/release.py", "dev/suite.py"):
         sh.run(["uv", "run", "--script", str(tool_root / script), "--help"], tool_root, extra=extra)
