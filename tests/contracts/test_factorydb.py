@@ -16,12 +16,11 @@ import support.paths  # noqa: F401
 from taskloop.contracts import factorydb
 
 TABLES = {
-    "family", "source", "run", "attempt", "step", "lease", "event", "check_pass",
+    "family", "source", "bead", "run", "attempt", "step", "lease", "check_pass",
     "check_round", "ask", "ask_ledger", "kv", "effect", "wait", "signal",
 }
 INDEXES = {
-    "run_bead", "run_recent", "run_live", "event_t", "event_run", "event_bead",
-    "event_repo", "check_tree", "ask_live",
+    "run_bead", "run_recent", "run_live", "bead_status", "check_tree", "ask_live",
 }
 
 
@@ -150,7 +149,7 @@ class FactoryDbTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "transaction"):
             factorydb.cas_update(con, "ask", "bead", "b", 0, status="answered")
         with factorydb.begin_immediate(con):
-            for table in TABLES - {"run", "ask"}:
+            for table in TABLES - {"run", "ask", "bead"}:
                 with self.subTest(table=table), self.assertRaisesRegex(ValueError, "unrevisioned"):
                     factorydb.cas_update(con, table, "id", "key", 0)
 
@@ -242,6 +241,139 @@ class FactoryDbTest(unittest.TestCase):
         factorydb._CHECKED.clear()
         with patch.object(factorydb.sqlite3, "connect", side_effect=bad_connection):
             self.assertIsNone(factorydb.open_rw(self.path))
+
+    def test_family_accepts_only_single_authorities(self):
+        con = self.rw()
+        for authority in ("files", "db"):
+            con.execute("INSERT INTO family VALUES (?,?,1)", (authority, authority))
+        with self.assertRaises(sqlite3.IntegrityError):
+            con.execute("INSERT INTO family VALUES ('bad','both',1)")
+
+    def test_bead_projection_is_index_owned_and_revisioned(self):
+        con = self.rw()
+        self.assertEqual(factorydb.OWNERS["bead"], "index")
+        self.assertEqual(con.execute("PRAGMA foreign_key_list(bead)").fetchall(), [])
+        con.execute("INSERT INTO bead(id,repo_key,status,updated,fetched) VALUES ('opaque.id','repo','open',1,2)")
+        self.assertEqual(
+            con.execute("SELECT title,priority,type,parent,assignee,labels,rev FROM bead").fetchone(),
+            ("", None, "", "", "", "[]", 0),
+        )
+        with factorydb.begin_immediate(con):
+            self.assertTrue(factorydb.cas_update(con, "bead", "id", "opaque.id", 0, parent="unrelated", status="closed"))
+            self.assertFalse(factorydb.cas_update(con, "bead", "id", "opaque.id", 0, status="stale"))
+        self.assertEqual(con.execute("SELECT parent,status,rev FROM bead").fetchone(), ("unrelated", "closed", 1))
+
+    def test_change_counter_observes_only_other_connection_commits(self):
+        writer = self.rw()
+        reader = self.ro()
+        before_reader = factorydb.change_counter(reader)
+        before_writer = factorydb.change_counter(writer)
+        self.assertIsInstance(before_reader, int)
+        with factorydb.begin_immediate(writer):
+            writer.execute("INSERT INTO kv(k,v,t) VALUES ('key','value',1)")
+            self.assertEqual(factorydb.change_counter(reader), before_reader)
+        after_reader = factorydb.change_counter(reader)
+        self.assertNotEqual(after_reader, before_reader)
+        self.assertEqual(factorydb.change_counter(writer), before_writer)
+        self.assertEqual(factorydb.change_counter(reader), after_reader)
+        with self.assertRaises(ValueError), factorydb.begin_immediate(writer):
+            writer.execute("UPDATE kv SET v='rolled back'")
+            raise ValueError("abort")
+        self.assertEqual(factorydb.change_counter(reader), after_reader)
+
+    def seed_history(self, con, run="old", state="done", ended=2):
+        con.execute(
+            "INSERT INTO run(run,repo,repo_key,bead,state,started,ended,writer) VALUES (?,'repo','repo',?,?,1,?,'engine')",
+            (run, run, state, ended),
+        )
+        con.execute("INSERT INTO attempt(run,n,started,ended) VALUES (?,1,1,2)", (run,))
+        con.execute("INSERT INTO step(run,key,try,attempt,status,started,ended) VALUES (?,'s',1,1,'ok',1,2)", (run,))
+        con.execute("INSERT INTO effect(key,run,name,state,intent_at,done_at) VALUES (?,?,'e','done',1,2)", (run, run))
+        con.execute("INSERT INTO check_round(run,round,ts,body) VALUES (?,1,2,'{}')", (run,))
+
+    def test_prune_deletes_old_finished_history_and_returns_counts(self):
+        con = self.rw()
+        self.seed_history(con)
+        con.execute("INSERT INTO ask(bead,id,status,t,body) VALUES ('old','a','answered',1,'{}')")
+        con.execute("INSERT INTO ask_ledger(t,event,ask,bead,body,origin) VALUES (2,'answer','a','old','{}','o')")
+        con.execute("INSERT INTO ask_ledger(t,event,body,origin) VALUES (10,'answer','{}','recent')")
+        counts = factorydb.prune_older_than(con, 10)
+        self.assertEqual(counts, dict.fromkeys(("ask_ledger", "check_round", "step", "attempt", "effect", "run"), 1))
+        self.assertEqual(con.execute("SELECT origin FROM ask_ledger").fetchall(), [("recent",)])
+        self.assertEqual(con.execute("SELECT status FROM ask").fetchall(), [("answered",)])
+        self.assertFalse(con.in_transaction)
+        self.assertTrue(all(count == 0 for count in factorydb.prune_older_than(con, 10).values()))
+
+    def test_prune_keeps_live_recent_and_referenced_runs_with_their_history(self):
+        con = self.rw()
+        for run, state, ended in (
+            ("running", "running", 2), ("created", "created", 2), ("unfinished", "done", None),
+            ("recent", "done", 10), ("lease", "done", 2), ("wait", "done", 2),
+            ("signal", "done", 2), ("ask", "done", 2), ("soft", "done", 2),
+        ):
+            self.seed_history(con, run, state, ended)
+        con.execute("INSERT INTO lease(kind,name,holder,run,since) VALUES ('run','l','h','lease',1)")
+        con.execute("INSERT INTO wait(repo,run,kind,since) VALUES ('repo','wait','lane',1)")
+        con.execute("INSERT INTO signal(run,kind,at) VALUES ('signal','stop',1)")
+        for bead, status in (("ask", "open"), ("soft", "open_soft")):
+            con.execute("INSERT INTO ask(bead,id,status,t,body) VALUES (?,?,?,1,'{}')", (bead, bead, status))
+        self.assertTrue(all(count == 0 for count in factorydb.prune_older_than(con, 10).values()))
+        for table in ("run", "attempt", "step", "effect", "check_round"):
+            self.assertEqual(con.execute(f'SELECT count(*) FROM "{table}"').fetchone(), (9,))
+        for table in ("lease", "wait", "signal"):
+            self.assertEqual(con.execute(f'SELECT count(*) FROM "{table}"').fetchone(), (1,))
+        self.assertEqual(con.execute("SELECT count(*) FROM ask").fetchone(), (2,))
+
+    def test_prune_keeps_open_ask_and_running_run_audit(self):
+        con = self.rw()
+        self.seed_history(con, "running", "running")
+        self.seed_ask(con)
+        for bead in ("running", "b"):
+            con.execute("INSERT INTO ask_ledger(t,event,bead,body,origin) VALUES (1,'state',?,'{}',?)", (bead, bead))
+        self.assertTrue(all(count == 0 for count in factorydb.prune_older_than(con, 10).values()))
+        self.assertEqual(con.execute("SELECT count(*) FROM ask_ledger").fetchone(), (2,))
+
+    def test_prune_consumed_signal_does_not_pin_history(self):
+        con = self.rw()
+        self.seed_history(con)
+        con.execute("INSERT INTO signal(run,kind,at,taken) VALUES ('old','stop',1,2)")
+        self.assertEqual(factorydb.prune_older_than(con, 10)["run"], 1)
+        self.assertEqual(con.execute("SELECT taken FROM signal").fetchall(), [(2.0,)])
+
+    def test_prune_standalone_gate_rounds_by_timestamp(self):
+        con = self.rw()
+        for number, ts in ((1, 2), (2, 10), (3, None)):
+            con.execute("INSERT INTO check_round(run,round,ts,body) VALUES ('standalone',?,?,'{}')", (number, ts))
+        self.assertEqual(factorydb.prune_older_than(con, 10, ("check_round",)), {"check_round": 1})
+        self.assertEqual(con.execute("SELECT round FROM check_round ORDER BY round").fetchall(), [(2,), (3,)])
+
+    def test_prune_subset_keeps_parent_until_all_children_are_removed(self):
+        con = self.rw()
+        self.seed_history(con)
+        self.assertEqual(factorydb.prune_older_than(con, 10, ("run",)), {"run": 0})
+        self.assertEqual(factorydb.prune_older_than(con, 10, ("step", "run")), {"step": 1, "run": 0})
+        self.assertEqual(
+            factorydb.prune_older_than(con, 10, ("attempt", "effect", "check_round", "run")),
+            {"check_round": 1, "attempt": 1, "effect": 1, "run": 1},
+        )
+
+    def test_prune_rejects_state_tables_before_deleting_anything(self):
+        con = self.rw()
+        self.seed_history(con)
+        for table in TABLES - {"ask_ledger", "check_round", "step", "attempt", "effect", "run"}:
+            with self.subTest(table=table), self.assertRaisesRegex(ValueError, "history"):
+                factorydb.prune_older_than(con, 10, ("step", table))
+        self.assertEqual(con.execute("SELECT count(*) FROM step").fetchone(), (1,))
+
+    def test_prune_rolls_back_all_deletes_if_parent_delete_fails(self):
+        con = self.rw()
+        self.seed_history(con)
+        con.execute("CREATE TRIGGER retain_run BEFORE DELETE ON run BEGIN SELECT RAISE(ABORT,'retain'); END")
+        with self.assertRaisesRegex(sqlite3.IntegrityError, "retain"):
+            factorydb.prune_older_than(con, 10)
+        for table in ("run", "attempt", "step", "effect", "check_round"):
+            self.assertEqual(con.execute(f'SELECT count(*) FROM "{table}"').fetchone(), (1,))
+        self.assertFalse(con.in_transaction)
 
     def test_quick_check_creation_once_per_writable_process_and_version_mismatch(self):
         checks = []

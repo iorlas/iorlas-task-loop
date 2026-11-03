@@ -16,6 +16,7 @@ class FactoryOwnersTest(unittest.TestCase):
             with self.subTest(table=table):
                 self.assertIn(role, {"index", "engine", "loop", "owner"})
         self.assertEqual(OWNERS["lease"], "loop")
-        self.assertEqual(OWNERS["event"], "engine")
+        self.assertNotIn("event", OWNERS)  # logs stay files: the DB holds state only
+        self.assertEqual(OWNERS["bead"], "index")
         self.assertEqual(OWNERS["ask"], "engine")
         self.assertEqual(OWNERS["ask_ledger"], "engine")

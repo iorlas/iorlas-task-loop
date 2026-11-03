@@ -14,10 +14,14 @@ from pathlib import Path
 SCHEMA_VERSION = 1
 DDL = """
 CREATE TABLE family (name TEXT PRIMARY KEY,
-  authority TEXT NOT NULL CHECK (authority IN ('files','dual','db')), since REAL NOT NULL);
+  authority TEXT NOT NULL CHECK (authority IN ('files','db')), since REAL NOT NULL);
 CREATE TABLE source (path TEXT PRIMARY KEY, family TEXT NOT NULL,
   dev INTEGER, ino INTEGER, size INTEGER, mtime_ns INTEGER, head TEXT,
   offset INTEGER NOT NULL DEFAULT 0, seen REAL NOT NULL, error TEXT);
+CREATE TABLE bead (id TEXT PRIMARY KEY, repo_key TEXT NOT NULL, title TEXT NOT NULL DEFAULT '', status TEXT NOT NULL,
+  priority INTEGER, type TEXT NOT NULL DEFAULT '', parent TEXT NOT NULL DEFAULT '', assignee TEXT NOT NULL DEFAULT '',
+  labels TEXT NOT NULL DEFAULT '[]', updated REAL NOT NULL, fetched REAL NOT NULL, rev INTEGER NOT NULL DEFAULT 0);
+CREATE INDEX bead_status ON bead(repo_key, status);
 CREATE TABLE run (run TEXT PRIMARY KEY, repo TEXT NOT NULL, repo_key TEXT NOT NULL, bead TEXT NOT NULL DEFAULT '',
   mode TEXT NOT NULL DEFAULT '', owner TEXT, session TEXT, loop TEXT, worktree TEXT, branch TEXT, sha TEXT,
   state TEXT NOT NULL, reason TEXT, started REAL NOT NULL, ended REAL, next_step TEXT,
@@ -38,14 +42,6 @@ CREATE TABLE step (run TEXT NOT NULL REFERENCES run, key TEXT NOT NULL, try INTE
 CREATE TABLE lease (kind TEXT NOT NULL CHECK (kind IN ('run','loop','resource','slot')), name TEXT NOT NULL,
   holder TEXT NOT NULL, run TEXT, host TEXT, pid INTEGER, start_id TEXT, since REAL NOT NULL, beat REAL, until REAL,
   body TEXT, PRIMARY KEY (kind, name));
-CREATE TABLE event (id INTEGER PRIMARY KEY, t REAL NOT NULL, src TEXT NOT NULL,
-  kind TEXT NOT NULL, repo_key TEXT, bead TEXT, run TEXT, host TEXT, actor TEXT, session TEXT,
-  body TEXT NOT NULL,
-  origin TEXT NOT NULL UNIQUE);
-CREATE INDEX event_t ON event(t);
-CREATE INDEX event_run ON event(run, id);
-CREATE INDEX event_bead ON event(bead, t);
-CREATE INDEX event_repo ON event(repo_key, src, t);
 CREATE TABLE check_pass (repo_key TEXT NOT NULL, check_id TEXT NOT NULL, digest TEXT NOT NULL,
   kind TEXT NOT NULL CHECK (kind IN ('pass','base_red')), tree TEXT, base TEXT, run TEXT, host TEXT, ts REAL NOT NULL,
   body TEXT NOT NULL,
@@ -74,18 +70,18 @@ CREATE TABLE signal (
 """
 
 # One owner role per table: other actors submit writes through that role's store.
-# The loop owns leases; the engine records events and AskStore writes, including
+# The loop owns leases; the engine records AskStore writes, including
 # owner answers. Lease reconciliation must use the loop store's guarded verbs,
-# not cas_update (leases and append-only events have no revision column).
+# not cas_update (leases and the ask ledger have no revision column).
 # DB-04+ must route today's engine park writes through the loop-owned wait store.
 OWNERS: dict[str, str] = {
     "family": "index",
     "source": "index",
+    "bead": "index",  # Cached tracker projection; parent is an opaque field.
     "run": "engine",
     "attempt": "engine",  # Reconcile may mark lost only after the loop guards the expired lease.
     "step": "engine",
     "lease": "loop",
-    "event": "engine",
     "check_pass": "engine",
     "check_round": "engine",
     "ask": "engine",
@@ -95,7 +91,7 @@ OWNERS: dict[str, str] = {
     "wait": "loop",
     "signal": "owner",
 }
-REVISIONED_TABLES = frozenset({"run", "ask"})
+REVISIONED_TABLES = frozenset({"run", "ask", "bead"})
 # Successful writable checks are cached per resolved file identity, per process.
 # Dashboard read-only opens skip quick_check; creation and version mismatches
 # always check. Replacing the file invalidates the cache; in-place damage after
@@ -249,3 +245,60 @@ def cas_update(con: sqlite3.Connection, table: str, key_col: str, key: SqlValue,
     assignments.append('"rev"="rev"+1')
     statement = f"UPDATE {_identifier(table)} SET {', '.join(assignments)} WHERE {_identifier(key_col)}=? AND rev=?"
     return con.execute(statement, (*cols.values(), key, rev)).rowcount == 1
+
+
+def change_counter(con: sqlite3.Connection) -> int:
+    """Return data_version, which changes only when ANOTHER connection commits.
+
+    A long-polling reader keeps its connection open and compares successive
+    values on that connection; values from different connections do not compare.
+    """
+    return int(con.execute("PRAGMA data_version").fetchone()[0])
+
+
+def prune_older_than(
+    con: sqlite3.Connection,
+    cutoff_t: float,
+    tables: tuple[str, ...] = ("ask_ledger", "check_round", "step", "attempt", "effect", "run"),
+) -> dict[str, int]:
+    """Apply the sole age-retention path, atomically, to selected history tables.
+
+    Run history ages from ended, never started. Retain runs referenced by any
+    lease or wait, an unconsumed signal, or an open ask. Current state tables
+    are never pruned. Subsets retain parents with remaining history children.
+    The caller must not already have a transaction open.
+    """
+    order = ("ask_ledger", "check_round", "step", "attempt", "effect", "run")
+    selected = set(tables)
+    if selected - set(order):
+        raise ValueError("only history tables may be pruned")
+    eligible = """SELECT r.run FROM run AS r
+        WHERE r.ended < ? AND r.state NOT IN ('created','running')
+        AND NOT EXISTS (SELECT 1 FROM lease AS l WHERE l.run=r.run)
+        AND NOT EXISTS (SELECT 1 FROM wait AS w WHERE w.run=r.run)
+        AND NOT EXISTS (SELECT 1 FROM signal AS s WHERE s.run=r.run AND s.taken IS NULL)
+        AND NOT EXISTS (SELECT 1 FROM ask AS a WHERE a.bead=r.bead AND a.status IN ('open','open_soft'))"""
+    predicates = {
+        "ask_ledger": """t < ?
+            AND NOT EXISTS (SELECT 1 FROM ask AS a
+                WHERE (a.id=ask_ledger.ask OR a.bead=ask_ledger.bead) AND a.status IN ('open','open_soft'))
+            AND NOT EXISTS (SELECT 1 FROM run AS r
+                WHERE r.bead=ask_ledger.bead AND r.state IN ('created','running'))""",
+        "check_round": f"""ts < ? AND NOT EXISTS (
+            SELECT 1 FROM run AS parent WHERE parent.run=check_round.run AND parent.run NOT IN ({eligible}))""",
+        "step": f"run IN ({eligible})",
+        "attempt": f"run IN ({eligible})",
+        "effect": f"run IN ({eligible})",
+        "run": f"""run IN ({eligible})
+            AND NOT EXISTS (SELECT 1 FROM step WHERE step.run=run.run)
+            AND NOT EXISTS (SELECT 1 FROM attempt WHERE attempt.run=run.run)
+            AND NOT EXISTS (SELECT 1 FROM effect WHERE effect.run=run.run)
+            AND NOT EXISTS (SELECT 1 FROM check_round WHERE check_round.run=run.run)""",
+    }
+    counts: dict[str, int] = {}
+    with begin_immediate(con):
+        for table in order:
+            if table in selected:
+                params = (cutoff_t, cutoff_t) if table == "check_round" else (cutoff_t,)
+                counts[table] = con.execute(f'DELETE FROM "{table}" WHERE {predicates[table]}', params).rowcount
+    return counts
