@@ -12,6 +12,7 @@ from taskloop.domain.lanes import pin
 from taskloop.domain.lanes import policy as lp
 from taskloop.domain.lanes.notes import NET_BACKOFF, NOTES
 from taskloop.domain.lanes.roles import READ_ONLY_NODES
+from taskloop.domain.review.availability import ReviewUnavailable
 
 ASK_KINDS: Final = ("ASK_STUCK",)
 VERBS: Final = {
@@ -155,7 +156,9 @@ class LaneActs:
         return self.wc.again(c, a.resume, stop=stop, note="")
 
     def end(self, c: Any, res: DelegateResult, stop: lp.Stop, a: lp.Yield | lp.Fail) -> None:
-        """A Yield (pause) or Fail ends the step: the Blocked carries the outcome Kind and the stop."""
+        """An exhausted invalid review is unavailable; other stops end the step with their Blocked outcome."""
+        if (c.node, a.kind, stop.reason) == ("review", "FAULT_INFRA", "schema_invalid"):
+            raise ReviewUnavailable(stop.reason)
         e, ops = self.e, self.wc.ops
         e.pause_reason = stop.reason if isinstance(a, lp.Yield) or a.kind.startswith("FAULT_") else ""
         retry_after = 0.0

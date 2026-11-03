@@ -13,6 +13,7 @@ from taskloop.domain.prompts.common import LATER_CASES, UNCHECKED_TEXT
 from taskloop.domain.prompts.review import acceptance_text, review_prompt
 from taskloop.domain.review import findings as fnd
 from taskloop.domain.review import switch
+from taskloop.domain.review.availability import ReviewUnavailable
 from taskloop.domain.review.followups import FollowKey
 from taskloop.domain.review.matchers import AcceptanceItems
 from taskloop.domain.review.skip import SkipKind
@@ -33,12 +34,32 @@ class ReviewRound:
         e.stats["reviews"] += 1
         e.ask_flow.review_cap()
         kinds = e.newfiles.new_by_kind()
-        review, _ = e.ai("review", s.name, self.prompt(s, kinds), writer_family=s.wfam, visual=not s.fix and e.pictures.stage_visual(s.st),
-                         round=s.rounds + 1, at=(s.sk, s.rounds, s.n), **s.meta)
+        try:
+            review, _ = e.ai("review", s.name, self.prompt(s, kinds), writer_family=s.wfam,
+                             visual=not s.fix and e.pictures.stage_visual(s.st),
+                             round=s.rounds + 1, at=(s.sk, s.rounds, s.n), **s.meta)
+        except ReviewUnavailable:
+            self.unavailable(s)
+            return ACCEPT
         e.accepted_new += [p for p in review.get("accept_files") or [] if p in kinds["unexplained"] and p not in e.accepted_new]
         review = self.triage(s, review, kinds)
         self.settle(s, review)
         return self.verdict(s, review)
+
+    def unavailable(self, s: StageState) -> None:
+        """Delegate exhausted the worker retry policy on an invalid review: continue with an explicit missing review.
+
+        Keep unchecked work for verification; an unavailable reviewer has settled none of it. Other faults still stop the run.
+        """
+        e = self.e
+        e.unchecked = list({u["what"]: u for u in e.unchecked + s.wrote_unchecked}.values())
+        note = f"{s.name}: review unavailable after bounded delegate retries (schema_invalid); stage continues"
+        e.steps.outcome("unavailable", "schema_invalid: delegate retries exhausted")
+        e.steps.move("next", "review_unavailable", note)
+        e.lane_notes.append(note)
+        e.warn(note)
+        e.comment("Review (engine): " + note)
+        e.checkpoints.keep_pending("review")
 
     def switched_off(self, s: StageState) -> bool:
         """True when an intermediate stage's review is switched off (engine.review or label review-off): the review step ends
