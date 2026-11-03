@@ -20,7 +20,7 @@ HOME = frozenset({"src/taskloop/adapters/git.py", "src/taskloop/adapters/git_bas
 # Why a file outside HOME still names git, each one a command that is data or a script git cannot be asked through.
 STAYS = {
     "src/taskloop/hook/prepush.py": "the git pre-push hook: plain python3 in git's hook path, it imports no port and no record",
-    "src/taskloop/adapters/markers.py": "a plain-python3 script run in the slot (conflict markers): it imports no taskloop code",
+    "src/taskloop/adapters/markers.py": "the conflict-marker script uses procs to run git grep from the slot",
     "src/taskloop/contracts/config.py": "the default of the repo's land command, an argv the shell runs: data, not a call",
 }
 

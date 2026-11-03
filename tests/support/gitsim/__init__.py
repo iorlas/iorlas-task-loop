@@ -17,6 +17,8 @@ from unittest import mock
 
 import stream_proc
 
+from taskloop.adapters import procs
+
 from . import diffs, read, rebase, refs, remote, status, trees, write
 from .ctx import Ctx
 from .model import Fail, W, locate
@@ -129,7 +131,7 @@ class Sim:
             self.problems.append(f"{self.case.id()}: {e}")
             raise
 
-    def sp_run(self, real: Callable[..., Any]) -> Callable[..., Any]:
+    def sp_run(self, real: Callable[..., Any], *, captured: bool = False) -> Callable[..., Any]:
         def run(argv: Any, *a: Any, **kw: Any) -> Any:
             if not is_git(argv):
                 return real(argv, *a, **kw)
@@ -137,8 +139,8 @@ class Sim:
             rc, out, err = self.answer(list(argv), kw.get("cwd"), kw.get("env"), data.encode() if isinstance(data, str) else data)
             if kw.get("check") and rc:
                 raise subprocess.CalledProcessError(rc, argv, out, err.encode())
-            cap = kw.get("capture_output") or kw.get("stdout") == subprocess.PIPE
-            cape = kw.get("capture_output") or kw.get("stderr") == subprocess.PIPE
+            cap = kw.get("capture", True) if captured else kw.get("capture_output") or kw.get("stdout") == subprocess.PIPE
+            cape = kw.get("capture", True) if captured else kw.get("capture_output") or kw.get("stderr") == subprocess.PIPE
             conv = (lambda b: b.decode("utf-8", "replace")) if textual(kw) else (lambda b: b)
             return subprocess.CompletedProcess(argv, rc, conv(out) if cap else None, conv(err.encode()) if cape else None)
         return run
@@ -164,6 +166,7 @@ class Sim:
 
     def install(self, stack: contextlib.ExitStack) -> None:
         stack.enter_context(mock.patch.object(subprocess, "run", self.sp_run(subprocess.run)))
+        stack.enter_context(mock.patch.object(procs, "run_bytes", self.sp_run(procs.run_bytes, captured=True)))
         stack.enter_context(mock.patch.object(stream_proc, "run", self.sp_stream(stream_proc.run)))
         stack.enter_context(mock.patch.object(subprocess.Popen, "__init__", self.guard(subprocess.Popen.__init__)))
         shim = Path(stack.enter_context(tempfile.TemporaryDirectory(prefix="tl-nogit-")))

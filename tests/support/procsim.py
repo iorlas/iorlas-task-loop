@@ -22,6 +22,8 @@ from unittest import mock
 import pytest
 import stream_proc
 
+from taskloop.adapters import procs
+
 Fake = Callable[[Path, Mapping[str, str]], tuple[Any, ...]]  # (exit, output) or (exit, output, seconds it would take)
 
 
@@ -140,7 +142,7 @@ class Procs:
             return rc, out, "blocks"
         return rc, out, bool(rest) and timeout is not None and rest[0] > timeout
 
-    def sp_run(self, real: Callable[..., Any]) -> Callable[..., Any]:
+    def sp_run(self, real: Callable[..., Any], *, captured: bool = False) -> Callable[..., Any]:
         def run(argv: Any, *a: Any, **kw: Any) -> Any:
             hit = self.find(argv)
             if hit is None:
@@ -149,7 +151,7 @@ class Procs:
             if wall:
                 raise subprocess.TimeoutExpired(argv, kw.get("timeout") or 0, out.encode())
             text = bool(kw.get("text") or kw.get("encoding") or kw.get("universal_newlines"))
-            cap = kw.get("capture_output") or kw.get("stdout") == subprocess.PIPE
+            cap = kw.get("capture", True) if captured else kw.get("capture_output") or kw.get("stdout") == subprocess.PIPE
             done = subprocess.CompletedProcess(argv, rc, (out if text else out.encode()) if cap else None, None)
             if kw.get("check") and done.returncode:
                 raise subprocess.CalledProcessError(done.returncode, argv, done.stdout, None)
@@ -210,6 +212,7 @@ class Procs:
 
     def install(self, stack: contextlib.ExitStack) -> None:
         stack.enter_context(mock.patch.object(subprocess, "run", self.sp_run(subprocess.run)))
+        stack.enter_context(mock.patch.object(procs, "run_bytes", self.sp_run(procs.run_bytes, captured=True)))
         stack.enter_context(mock.patch.object(stream_proc, "run", self.sp_stream(stream_proc.run)))
         stack.enter_context(mock.patch.object(shutil, "which", self.which(shutil.which)))
         stack.enter_context(mock.patch.object(subprocess.Popen, "__init__", self.guard(subprocess.Popen.__init__)))

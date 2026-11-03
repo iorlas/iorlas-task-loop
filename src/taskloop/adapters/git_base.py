@@ -8,7 +8,7 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
-from taskloop.adapters import gitmemo
+from taskloop.adapters import gitmemo, procs
 from taskloop.adapters.childenv import tool_env, without
 from taskloop.adapters.gitrepo import pinned_env
 from taskloop.contracts.env import Env
@@ -87,14 +87,9 @@ class GitBase:
 
     def _run(self, d: str, *args: str, stdin: str | None = None, timeout: float | None = None,
              extra: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
-        return subprocess.run(
+        return procs.run(
             ["git", "-C", d, *args],
             env={**self.git_env(d), **(extra or {})},
-            check=False,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
             input=stdin,
             timeout=timeout,
         )

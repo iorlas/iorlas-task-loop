@@ -52,12 +52,15 @@ class LandLockTests(unittest.TestCase):
         self.env = {"XDG_CONFIG_HOME": str(Path(self.tmp.name) / "cfg")}
         subprocess.run(["git", "init", "-q", self.repo], check=True)
         self.cmds = []
+        self.real_popen_held = procs.popen_held
         patched = mock.patch.object(procs, "popen_held", self.start)
         patched.start()
         self.addCleanup(patched.stop)
         self.body = lambda: 0
 
-    def start(self, cmd):
+    def start(self, cmd, **kw):
+        if cmd[0] == "git":  # git reads go through the captured runner, which spawns by the same call: only the land command is faked
+            return self.real_popen_held(cmd, **kw)
         self.cmds.append(cmd)
         return Child(self.body), Held()
 

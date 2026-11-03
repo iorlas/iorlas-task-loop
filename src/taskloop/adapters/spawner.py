@@ -1,6 +1,6 @@
 """Spawner (the port in contracts/ports.py) on real processes: the one way app/ and cli/ start a child.
-Every child's environment is built by `childenv.tool_env` (an allowlist of names, no virtualenv); a child that outlives the call
-is spawned through stream-proc's held spawn (adapters/procs.py), in a session of its own."""
+Every child's environment is built by `childenv.tool_env` (an allowlist of names, no virtualenv); captured and detached children
+use stream-proc's held spawn (adapters/procs.py), in sessions of their own, with whole-tree cleanup on a timeout or exception."""
 import subprocess
 import threading
 from collections.abc import Callable, Mapping
@@ -57,8 +57,7 @@ class RealSpawner:
     def run(self, argv: list[str], *, cwd: str | None = None, env: Mapping[str, str] | None = None, extra: Mapping[str, str] | None = None,
             timeout_s: float | None = None, capture: bool = True, input: str | None = None) -> Ran:
         try:
-            r = subprocess.run(argv, cwd=cwd, env=self._env(env, extra), capture_output=capture, text=True, encoding="utf-8",
-                               errors="replace", timeout=timeout_s, check=False, input=input)
+            r = procs.run(argv, cwd=cwd, env=self._env(env, extra), capture=capture, timeout=timeout_s, input=input)
         except subprocess.TimeoutExpired as e:
             out = e.stdout.decode("utf-8", "replace") if isinstance(e.stdout, bytes) else (e.stdout or "")
             err = e.stderr.decode("utf-8", "replace") if isinstance(e.stderr, bytes) else (e.stderr or "")
@@ -66,7 +65,7 @@ class RealSpawner:
         return Ran(exit=r.returncode, out=r.stdout or "", err=r.stderr or "")
 
     def run_bytes(self, argv: list[str], *, cwd: str | None = None, extra: Mapping[str, str] | None = None) -> RanBytes:
-        r = subprocess.run(argv, cwd=cwd, env=self._env(None, extra), capture_output=True, check=False)
+        r = procs.run_bytes(argv, cwd=cwd, env=self._env(None, extra))
         return RanBytes(exit=r.returncode, out=r.stdout or b"", err=r.stderr or b"")
 
     def stream(self, argv: list[str], *, cwd: str | None = None, env: Mapping[str, str] | None = None,

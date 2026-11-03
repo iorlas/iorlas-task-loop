@@ -6,6 +6,8 @@ import time
 from collections.abc import Callable, Mapping
 from pathlib import Path
 
+from taskloop.adapters import procs
+
 WORD_TTL_S = 120.0  # a tool installed since is found within two minutes
 JUSTFILES = ("justfile", "Justfile", ".justfile")
 
@@ -38,8 +40,7 @@ class PathProbe:
             return self.justfile[1]
         names: set[str] | None = None
         try:
-            r = subprocess.run(["just", "--dump", "--dump-format", "json"], capture_output=True, check=False, text=True,
-                               cwd=str(self.wt), timeout=20, env=self.env)
+            r = procs.run(["just", "--dump", "--dump-format", "json"], cwd=str(self.wt), timeout=20, env=self.env)
             if r.returncode == 0:
                 d = json.loads(r.stdout)
                 names = set(d.get("recipes") or {}) | set(d.get("aliases") or {})

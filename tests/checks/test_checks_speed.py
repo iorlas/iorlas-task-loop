@@ -1,7 +1,6 @@
 """Check rounds that cost less: per-check input cache, cheap-first order, duplicate runs, wall limits."""
 import json
 import shlex
-import subprocess
 import sys
 import unittest
 from pathlib import Path
@@ -19,6 +18,7 @@ from support.spawn import port_git
 
 from taskloop.adapters import (
     check_files,
+    procs,
 )
 from taskloop.app.checks.cache import InputKeys
 from taskloop.app.wire import doctor
@@ -149,8 +149,8 @@ class InputCache(SpeedTest):
 
     def test_the_ignored_walk_is_cut_to_the_globs_folders_and_the_excluded_ones(self):
         seen = []
-        real = subprocess.run
-        with mock.patch.object(subprocess, "run", side_effect=lambda args, **kw: (seen.append(args), real(args, **kw))[1]):
+        real = procs.run_bytes
+        with mock.patch.object(procs, "run_bytes", side_effect=lambda args, **kw: (seen.append(args), real(args, **kw))[1]):
             ignored_paths(str(self.wt), ["client/Assets/{App,Core}/**"], ["client/Assets/App/*/Gen/**"])
         spec = " ".join(seen[0])
         self.assertIn(":(literal)client/Assets/App/", spec)

@@ -10,7 +10,7 @@ from pathlib import Path
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[3]
-from taskloop.adapters import slotcheck, treehash  # noqa: E402
+from taskloop.adapters import procs, slotcheck, treehash  # noqa: E402
 from taskloop.adapters.git import RealGit  # noqa: E402
 from taskloop.app.run import engine  # noqa: E402
 from taskloop.contracts.env import snapshot  # noqa: E402
@@ -115,13 +115,13 @@ class GitMemoTest(unittest.TestCase):
         eng = engine.Engine.__new__(engine.Engine)
         eng.wt, eng.git = str(self.repo), self.git
         (self.repo / "f.txt").write_text("2\n")
-        real = subprocess.run
+        real = procs.run_bytes
         for failing in ("read-tree", "add", "write-tree"):
             def run(cmd, *a, _failing=failing, **k):
                 if _failing in cmd:
                     return subprocess.CompletedProcess(cmd, 128, b"", b"fatal: planted")
                 return real(cmd, *a, **k)
-            with self.subTest(failing), mock.patch.object(subprocess, "run", run):
+            with self.subTest(failing), mock.patch.object(procs, "run_bytes", run):
                 eng.tree_memo = None
                 with self.assertRaises(treehash.TreeHashError) as got:
                     eng.checkout.tree_hash()

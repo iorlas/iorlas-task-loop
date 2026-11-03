@@ -1,10 +1,10 @@
 """Git (the port in contracts/ports.py) on the real git binary, pinned to the checkout. git's words are read here and nowhere else:
 a failure becomes one of the typed SlotGitErrors (BranchPinned, DirtyTree, RefRace, IndexLocked) or the plain SlotGitError."""
 import os
-import subprocess
 import tempfile
 from typing import Literal
 
+from taskloop.adapters import procs
 from taskloop.adapters.git_base import classify
 from taskloop.adapters.git_ops import LandGit
 from taskloop.contracts.gitfacts import ConfigEntry, GitOutcome, GrepHit, LogRow, Pick, Ref, StatusRow, TreeEntry
@@ -304,12 +304,10 @@ class RealGit(LandGit):
         return out
 
     def worktree_state(self, d: str) -> bytes | None:
-        r = subprocess.run(
+        r = procs.run_bytes(
             ["git", "--no-optional-locks", "status", "--porcelain=v2", "--branch", "-z", "--untracked-files=all"],
             cwd=d,
             env=self.git_env(d),
-            capture_output=True,
-            check=False,
         )
         return r.stdout if r.returncode == 0 else None
 

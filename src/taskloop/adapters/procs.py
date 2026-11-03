@@ -20,6 +20,50 @@ STOP_GRACE_S = 5.0
 __all__ = ["TermHold", "alive", "popen_held", "proc_start", "stop_tree"]
 
 
+def run_bytes(argv: list[str], *, cwd: str | None = None, env: Mapping[str, str] | None = None,
+              timeout: float | None = None, input: bytes | None = None, capture: bool = True,
+              inherit_stdin: bool = True) -> subprocess.CompletedProcess[bytes]:
+    """A captured runner using stream-proc's held spawn and tree stop, preserving binary data and stdin.
+
+    stream_proc.run only offers decoded line callbacks and /dev/null stdin. Use its lifecycle here with communicate
+    for exact bytes, input and inherited descriptors; the vendored shelf stays byte-identical to its recorded tag.
+    """
+    p, hold = popen_held(argv, cwd=cwd, env=env, start_new_session=True,
+                         stdin=subprocess.PIPE if input is not None else (None if inherit_stdin else subprocess.DEVNULL),
+                         stdout=subprocess.PIPE if capture else None, stderr=subprocess.PIPE if capture else None)
+    try:
+        hold.replay()
+        stdout, stderr = p.communicate(input=input, timeout=timeout)
+    except subprocess.TimeoutExpired as err:
+        stop_tree(p, grace=STOP_GRACE_S)
+        # Bound the drain even if an unrelated process inherited a pipe; retain the complete partial output.
+        try:
+            err.output, err.stderr = p.communicate(timeout=2.0)
+        except subprocess.TimeoutExpired as drain:
+            err.output = drain.output if drain.output is not None else err.output
+            err.stderr = drain.stderr if drain.stderr is not None else err.stderr
+        raise
+    except BaseException:
+        stop_tree(p, grace=STOP_GRACE_S)
+        raise
+    finally:
+        for pipe in (p.stdin, p.stdout, p.stderr):
+            if pipe is not None:
+                pipe.close()
+    return subprocess.CompletedProcess(argv, p.wait(), stdout or b"", stderr or b"")
+
+
+def run(argv: list[str], *, cwd: str | None = None, env: Mapping[str, str] | None = None,
+        timeout: float | None = None, input: str | None = None, capture: bool = True,
+        inherit_stdin: bool = True) -> subprocess.CompletedProcess[str]:
+    """UTF-8 text capture, with subprocess.run's newline conversion and timeout exception."""
+    res = run_bytes(argv, cwd=cwd, env=env, timeout=timeout, input=None if input is None else input.encode("utf-8"),
+                    capture=capture, inherit_stdin=inherit_stdin)
+    out, err = (s.decode("utf-8", "replace").replace("\r\n", "\n").replace("\r", "\n")
+                for s in (res.stdout or b"", res.stderr or b""))
+    return subprocess.CompletedProcess(argv, res.returncode, out, err)
+
+
 @dataclass(frozen=True)
 class Ran:
     exit: int

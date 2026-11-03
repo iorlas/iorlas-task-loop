@@ -34,6 +34,8 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+from taskloop.adapters import procs
+
 Method = dict[str, Any]
 Methods = dict[str, Method]
 
@@ -172,7 +174,7 @@ def downscale(src: str | Path, dst: str | Path, px: float) -> str:
         cmd = [tool, str(src), "-resize", f"{int(px)}x{int(px)}>", str(dst)] if tool else None
     if cmd:
         try:
-            r = subprocess.run(cmd, capture_output=True, timeout=120, check=False)
+            r = procs.run_bytes(cmd, timeout=120)
             if r.returncode == 0 and Path(dst).is_file():
                 return ""
         except (OSError, subprocess.SubprocessError):

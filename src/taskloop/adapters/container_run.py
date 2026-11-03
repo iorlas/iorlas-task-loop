@@ -27,8 +27,8 @@ INSIDE = ('t=${TMPDIR:-/tmp}; rm -rf "$t/tl-w" "$t/tl-art"; mkdir -p "$t/tl-w" "
 ART_IN_BOX = "/tmp/tl-art"
 
 
-def docker(*args: str, **kw: Any) -> subprocess.CompletedProcess[bytes]:
-    return subprocess.run(["docker", *args], capture_output=True, check=False, **kw)
+def docker(*args: str) -> subprocess.CompletedProcess[bytes]:
+    return procs.run_bytes(["docker", *args])
 
 
 def files(git: RealGit, root: str) -> list[str]:

@@ -12,6 +12,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+from taskloop.adapters import procs
 from taskloop.contracts.bead import BdError, Bead, Comment, Dep
 from taskloop.contracts.ids import BeadId, is_bead_id, parse_bead_id
 from taskloop.contracts.ports import BdFailure, BeadPatch, BeadQuery, DoltPush, NewBead
@@ -34,8 +35,7 @@ Runner = Callable[[list[str], str | None], BdRun]
 def subprocess_runner(argv: list[str], cwd: str | None, timeout: float | None = None) -> BdRun:
     """The one `bd` process call. A timeout is code 124."""
     try:
-        r = subprocess.run(argv, cwd=cwd, capture_output=True, text=True, encoding="utf-8", errors="replace", stdin=subprocess.DEVNULL,
-                           timeout=timeout, check=False)
+        r = procs.run(argv, cwd=cwd, timeout=timeout, inherit_stdin=False)
     except OSError as e:
         return BdRun(127, "", f"bd: {e}")
     except subprocess.TimeoutExpired:
