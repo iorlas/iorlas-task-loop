@@ -78,7 +78,7 @@ logic test that spawns, forks or runs real git fails; a real test that never spa
 conftest).
 
 Dev and test tools (pytest, pytest-xdist) are the `dev` group of pyproject.toml, locked in uv.lock; `uv run` syncs them.
-The Mac gate and the release suite are the gates. Linux locally: `docker run --rm -v "$PWD":/src:ro python:3.15-slim ...`.
+CI runs the suite and `just check` on Ubuntu with Python 3.15. Linux locally: `docker run --rm -v "$PWD":/src:ro python:3.15-slim ...`.
 Caps (tests/rules/gate_rules.py): 400 SLOC per file, 80 per function, 800 per test file; the KNOWN_OVERSIZE table (tests/rules/rules_ratchet.json) may only shrink.
 Architecture (layers, app slices, dashboard, `import re` placement): the `.importlinter` contracts; lazy imports, banned modules, module docstrings: ruff (PLC0415, TID251, D100). Both run in `just rules`.
 
