@@ -6,12 +6,13 @@ from atomic_io import atomic_write_text
 from taskloop.app.wire import brief
 from taskloop.contracts.env import Env
 from taskloop.contracts.identity import Identity
+from taskloop.contracts.ports import Git
 from taskloop.domain.brief import handoff_text
 
 
-def write(repo: str, plugin_root: Path, now: float, env: Env, who: Identity | None = None) -> Path:
+def write(repo: str, plugin_root: Path, now: float, env: Env, who: Identity | None = None, git: Git | None = None) -> Path:
     f = brief.handoff_file(repo, env)
-    atomic_write_text(f, handoff_text(brief.build(repo, plugin_root, now, env, who)), fsync=False)
+    atomic_write_text(f, handoff_text(brief.build(repo, plugin_root, now, env, who, git)), fsync=False)
     return f
 
 

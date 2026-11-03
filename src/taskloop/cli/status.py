@@ -12,9 +12,9 @@ def run_status(repo: str, plugin_root: Path, now: float, as_json: bool, env: Env
     return 0
 
 
-def run_handoff(op: str, repo: str, plugin_root: Path, now: float, env: Env, who: Identity) -> int:
+def run_handoff(op: str, repo: str, plugin_root: Path, now: float, env: Env, who: Identity, git: Git) -> int:
     if op == "write":
-        print(handoff.write(repo, plugin_root, now, env, who))
+        print(handoff.write(repo, plugin_root, now, env, who, git))
         return 0
     text = handoff.read(repo, env)
     print(text or f"no handoff written for {repo} (tl handoff write)", end="" if text else "\n")

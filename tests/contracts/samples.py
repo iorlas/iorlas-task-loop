@@ -422,6 +422,8 @@ OTHERS = {
     "Ticket": locks.Ticket(pid=5, why="slot", since=T, prio=1, seq=3, pid_start=T, bead="x-1"),
     "LockRecord": locks.LockRecord(what=LockWhat.LAND, holder="tl-1", pid=5, t=T),
     "Hold": slots.Hold(by="tl-1", since="2026-10-28T03:00:00", why="screenshots", until=T),
+    "SlotView": slots.SlotView(id="s1", state="held", holder="tl-1", held_reason="screenshots", held_until=T),
+    "SlotTable": slots.SlotTable(configured=1, slots=[slots.SlotView(id="s1", state="free")], source="origin/main", source_sha="a" * 7),
     "Ref": gitfacts.Ref(name="refs/heads/task/x-1", oid="a" * 40),
     "Pick": gitfacts.Pick(oid="a" * 40, upstream=True),
     "LogRow": gitfacts.LogRow(oid="a" * 40, time=5, subject="s"),

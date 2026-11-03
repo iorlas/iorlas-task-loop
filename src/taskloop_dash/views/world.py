@@ -13,6 +13,7 @@ from taskloop.contracts.loop import LoopState
 from taskloop.contracts.parks import Park
 from taskloop.contracts.reconcile import Stray
 from taskloop.contracts.run import NetPause
+from taskloop.contracts.slottable import SlotSource
 from taskloop.contracts.snapshots import StatusSnapshot
 from taskloop_dash.views.runfacts import Run
 
@@ -49,7 +50,7 @@ class ProjectIn:
     name: str
     beads: Sequence[Bead]  # bd list, closed ones too, slot and look beads included
     slots: Sequence[Bead] = ()  # this machine's slot beads
-    slot_count: int = 0
+    slot_source: SlotSource = field(default_factory=SlotSource)  # count, base ref and sha of the profile the loops read; the slot folders
     loops: Sequence[LoopState] = ()  # every loop state file of the repo
     looks: Sequence[LookItem] = ()
     adrs: Sequence[AdrIn] = ()  # the repo's decisions in force, oldest first

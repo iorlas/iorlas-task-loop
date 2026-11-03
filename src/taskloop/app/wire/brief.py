@@ -8,7 +8,6 @@ from taskloop.adapters.ident import claude_dir, config_dir
 from taskloop.app.doctor import profiles
 from taskloop.app.loop.files import LoopFiles
 from taskloop.app.release import catalog, pins
-from taskloop.app.slots import marks
 from taskloop.app.wire import asks as wire_asks
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts.bd_errors import BdCommandFailure
@@ -17,6 +16,7 @@ from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import loop_key
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdFailure, Git
+from taskloop.contracts.slots import SlotView
 from taskloop.contracts.stores import ReposStore
 from taskloop.domain.brief import AskLine, Brief, LoopLine, status_json, status_lines
 
@@ -30,21 +30,26 @@ def running_version(plugin_root: Path) -> str:
         return ""
 
 
-def slot_lines(repo: str, who: Identity, now: float) -> tuple[str, ...]:
-    """One line per slot of this machine. A repo without bd or slots has none."""
+def slot_lines(repo: str, who: Identity, now: float, git: Git) -> tuple[str, ...]:
+    """One line per slot of the slot table (the same rows the dash lists): config from the base ref, state from `now`. A repo without bd
+    or a readable profile has none."""
     try:
-        beads = wslots.slot_beads(repo, who)
+        table = wslots.slot_table(repo, who, git, now)
     except (BdCommandFailure, SystemExit, OSError, ValueError, BdFailure):
         return ()
-    out: list[str] = []
-    for b in beads:
-        held = marks.hold_of(b, now)
-        state = f"held by {marks.held_by(b)}" if held else (f"claimed by {b.assignee}" if b.assignee else "free")
-        out.append(f"{b.title.split()[-1]}: {state}")
-    return tuple(out)
+    return tuple(line_of(v) for v in table.slots if v.state != "retiring") + (
+        (f"(slots.count {table.configured} from {table.source}{' ' + table.source_sha[:7] if table.source_sha else ''})",)
+        if table.slots else ())
 
 
-def build(repo: str, plugin_root: Path, now: float, env: Env, who: Identity | None = None) -> Brief:
+def line_of(v: SlotView) -> str:
+    what = {"free": "free", "held": f"held by {v.holder}: {v.held_reason}", "running": f"running {v.bead}".rstrip(),
+            "setup": f"starting {v.bead}", "claimed": f"claimed by {v.holder or '?'}, no live run",
+            "dead": f"claimed by {v.holder or '?'}, folder missing"}.get(v.state, v.state)
+    return f"{v.id}: {what}" + (" (above slots.count)" if v.beyond_count else "")
+
+
+def build(repo: str, plugin_root: Path, now: float, env: Env, who: Identity | None = None, git: Git | None = None) -> Brief:
     """`who`: ask bd for the slots too, as that actor (one subprocess; the hooks that must be fast leave it out)."""
     cfg = ConfigDir(config_dir(env))
     files = LoopFiles(cfg, loop_key(repo), pidcheck.pid_alive, lambda: now)
@@ -59,7 +64,7 @@ def build(repo: str, plugin_root: Path, now: float, env: Env, who: Identity | No
         repo=repo, now=now,
         loops=tuple(LoopLine(st.pid, st.started, st.bead or "", st.slot or "", st.version) for st in loops),
         last_beat=last_beat, last_exit=str(last.get("reason") or ""), asks=asks,
-        slots=slot_lines(repo, who, now) if who else (), recent=recent,
+        slots=slot_lines(repo, who, now, git) if who and git else (), recent=recent,
         version=running_version(plugin_root), installed=catalog.installed_version("task-loop", claude_dir(env)), pinned=(pin or ""))
 
 
@@ -68,7 +73,7 @@ def handoff_file(repo: str, env: Env) -> Path:
 
 
 def status_text(repo: str, plugin_root: Path, now: float, as_json: bool, env: Env, who: Identity, git: Git) -> str:
-    b = build(repo, plugin_root, now, env, who)
+    b = build(repo, plugin_root, now, env, who, git)
     # a bad profile is its repo's row
     red = profiles.red_rows(git, sorted({repo, *profiles.registered(ReposStore(ConfigDir(config_dir(env))))}))
     if as_json:

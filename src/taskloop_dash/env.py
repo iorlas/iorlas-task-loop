@@ -3,6 +3,7 @@
 The dash imports `taskloop.contracts` and nothing else of the main package. A fact that lives in engine code (slot capacity, bd, the
 owner's writes) comes in as a callable on `Ports`, made by the launcher; a test passes fakes."""
 
+import socket
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -15,6 +16,7 @@ from taskloop.contracts.ids import BeadId
 from taskloop.contracts.locks import LockRecord
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import AnswerAsk, Beads
+from taskloop.contracts.slottable import SlotSource
 from taskloop_dash.cache import FileCache, TtlCache
 from taskloop_dash.tails import Tails
 
@@ -70,8 +72,8 @@ def _no_stamp(repo: str) -> object | None:
     return None
 
 
-def _no_slots(repo: str) -> int:
-    return 0
+def _no_slots(repo: str) -> SlotSource:
+    return SlotSource(host=socket.gethostname())
 
 
 def _no_resources(cfg: ConfigDir) -> list[tuple[str, LockRecord]]:
@@ -82,7 +84,7 @@ def _no_resources(cfg: ConfigDir) -> list[tuple[str, LockRecord]]:
 class Ports:
     """Read-only facts the launcher injects. The defaults say nothing, so a dash with no launcher still serves its own files."""
 
-    slot_count: Callable[[str], int] = _no_slots
+    slot_source: Callable[[str], SlotSource] = _no_slots  # the slot count as the loops read it (origin/main), the host and the slot folders
     resource_holders: Callable[[ConfigDir], list[tuple[str, LockRecord]]] = _no_resources
     profile_error: Callable[[str], str] = _no_error  # the repo's red row when its .task-loop.json does not load, else ""
     profile_stamp: Callable[[str], object | None] = _no_stamp  # process-free signature of the files deciding profile_error
