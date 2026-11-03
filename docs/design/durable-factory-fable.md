@@ -304,7 +304,7 @@ Three tests are the gate for the whole thing, run nightly after S2:
 2. **Network-down matrix**: for each step, inject `Could not resolve host` on every outbound call for N calls; assert the single
    `wait(network)` row, the resume on the same run id, zero `FAULT_*` and zero storm; then the "probe says up, calls fail" variant assert the
    30-min pause and one ntfy.
-3. **Clock jump**: `TL_CLOCK_OFFSET` ±7 d between attempts and inside one attempt; assert no early wake, no false lost, no cap double-count.
+3. **Clock jump**: `TL\_CLOCK\_OFFSET` ±7 d between attempts and inside one attempt; assert no early wake, no false lost, no cap double-count.
 
 ---
 

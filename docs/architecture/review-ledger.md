@@ -339,7 +339,7 @@ Row count: 425 (above the 250-350 target because every low-confidence and contra
 | M-290 | Release runs the suite 3x; the cache key is the post-bump tree; release reruns the suite inside the land lock; cache records container suite | OPS-F-01, OPS-O-23, OPS-O-31 | ops | both | ✅ | P1 | S | | R9-26 |
 | M-291 | Release gate is red more often than green; a release ledger; 353 red logs | OPS-F-02, DES-O-15 | ops, des | both | ❓ | P1 | S | | R9-23 |
 | M-292 | Flake ledger from red suite logs; quarantine ratchet; junit output | OPS-O-04, FORE-F-05, FORE-O-07, OPS-F-04 | ops, fore | both | ✅ | P1 | M | real tests are red most | R9-23 |
-| M-293 | Per-test time limits flake under load; `TL_TIME_SCALE` | OPS-F-03, OPS-O-05 | ops | both | ✅ | P1 | S | | R9-23 |
+| M-293 | Per-test time limits flake under load; `TL\_TIME\_SCALE` | OPS-F-03, OPS-O-05 | ops | both | ✅ | P1 | S | | R9-23 |
 | M-294 | Red logs written twice | OPS-F-05 | ops | F | ✅ | P3 | S | | R9-27 |
 | M-295 | CI red for 300 runs: gate on it or delete; delete the unit job (third run nobody reads) | OPS-O-02, OPS-F-11 | ops | both | ✅ | P1 | S | same goal, different cut | R9-24 / DQ-16 |
 | M-296 | macOS never tested in CI; macos-latest job; compatibility matrix | OPS-O-03, FORE-F-24 | ops, fore | both | ✅ | P1 | S | | R9-24 |

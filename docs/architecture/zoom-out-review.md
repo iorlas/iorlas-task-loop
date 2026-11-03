@@ -198,7 +198,7 @@ proposal, verdict, effort, order.
   session starts there. c4-task-loop item 3.
 - **Kind:** state with several writers; coupling. **Severity: P2.**
 - **Proposal:** the engine passes its own `tl.py` path to its children (`childenv` already injects `core.hooksPath`; add
-  `TASK_LOOP_TL`); the dispatcher prefers it and falls back to the shim; write the shim with `atomic_io`.
+  `TASK\_LOOP\_TL`); the dispatcher prefers it and falls back to the shim; write the shim with `atomic_io`.
 - **Verdict:** ✅ do. **Effort:** S. **Order:** with Z01-Z03 (one push-path release).
 
 ### Z15. The engine's lock lives in the writer's directory

@@ -86,7 +86,7 @@ Kind: `boundary` (security-boundary weakness), `injection`, `authority` (who may
 - **06**: Add `\.config/task-loop\b|\.claude/plugins\b|\.claude/\.credentials\.json|\.claude\.json\b` to `SECRET_RE` and the matching entries to OpenCode `SECRETS`, with one test per path per lane.
 - **07**: Add `BLOCKED_BINARIES = {"gh", "glab", "git-credential", "git-credential-osxkeychain"}` to `writer_problem` and a `GH_TOKEN`-only path for `land-stack`.
 - **09**: Add `bd` and `dolt` to the same list; then run the Codex-in-slot test.
-- **10**: In `make_handler`, before any POST on a non-loopback address, call Tailscale's local API `whois` for the peer and compare the login to `TASK_LOOP_DASH_OWNER`.
+- **10**: In `make_handler`, before any POST on a non-loopback address, call Tailscale's local API `whois` for the peer and compare the login to `TASK\_LOOP\_DASH\_OWNER`.
 - **11**: Install 0.23.299 (or later) on the Mac today and read back `installed_plugins.json`.
 - **12**: One rule test in `tests/rules/` that greps the static tree for `__html` outside `kit.js:Md` and asserts `md()` begins with `esc`.
 - **13**: `engine_written(comment)` takes the `Comment` record and decides by `author`, with `tl-dash` mapped to owner only once SEC-FABLE-10 lands.

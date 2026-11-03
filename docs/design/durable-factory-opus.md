@@ -438,7 +438,7 @@ needs resume from data). S5 and S6 last. Each slice is one announced release.
 ### 4.3 The tests that prove it
 
 1. **Kill-at-every-step matrix** (R9-15, logic kind with fakes; a real-git subset for land, nightly).
-   - Env `TL_KILLPOINT=<step_id>:<phase>`, where phase ∈ {`after_started`, `inside_effect_before_apply`, `after_apply_before_mark`, `after_ok`}. The journal raises `os._exit(137)` at that point.
+   - Env `TL\_KILLPOINT=<step_id>:<phase>`, where phase ∈ {`after_started`, `inside_effect_before_apply`, `after_apply_before_mark`, `after_ok`}. The journal raises `os._exit(137)` at that point.
    - For every step id of a three-stage fixture plan and every phase: kill, run the reconciler, resume.
    - Assert: (a) the next step id equals the uninterrupted run's; (b) each effect's fake counter is exactly 1 (push, close, comment, create); (c) the final journal, minus
      timestamps, equals the uninterrupted one.
