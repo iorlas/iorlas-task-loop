@@ -81,12 +81,14 @@ class Complete(unittest.TestCase):
         keys = [ast.dump(key) for key in table.keys if key is not None]
         self.assertEqual(len(keys), len(set(keys)))
 
-    def test_every_transient_policy_is_capped_except_network(self):
+    def test_every_transient_pause_policy_is_capped_except_network(self):
         for key, policy in TABLE.items():
             with self.subTest(key=key):
                 if policy.permanence == "transient":
-                    network = key in (("delegate", Reason.NETWORK), ("engine", Reason.PAUSE_NETWORK))
-                    if network:
+                    uncapped = key in (("delegate", Reason.NETWORK), ("engine", Reason.PAUSE_NETWORK),
+                                       ("engine", Reason.FAULT_INFRA), ("engine", Reason.FAULT_CRASHED),
+                                       ("engine", Reason.FAULT_STALE_BASE))
+                    if uncapped:
                         self.assertEqual(policy.max_attempts, 0)
                     else:
                         self.assertGreater(policy.max_attempts, 0)

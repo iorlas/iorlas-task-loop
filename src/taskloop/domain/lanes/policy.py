@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from typing import Final
 
 from taskloop.contracts.delegate import REASON_TIMEOUT, DelegateResult
+from taskloop.domain.lanes.pause_reasons import Producer
 from taskloop.domain.lanes.retry import PLAN, RetryPlan
 
 SCOPES: Final = ("bead", "caller", "model", "lane", "machine")
@@ -54,6 +55,7 @@ class Stop:
     fingerprint: str = ""
     exit_code: int | None = None  # the worker's exit status (negative: ended by that signal)
     timed_out: bool = False  # the engine or delegate ended the call at its time limit
+    producer: Producer = "delegate"
 
 
 def stop_of(res: DelegateResult) -> Stop | None:
@@ -79,6 +81,7 @@ def stop_of(res: DelegateResult) -> Stop | None:
         "",
         res.exit_code,
         st.reason == REASON_TIMEOUT,
+        st.producer,
     )
 
 

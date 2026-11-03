@@ -176,7 +176,7 @@ def synth_for(contract: Mapping[str, Any], reason: str, default: tuple[Scope, Pe
         perm = delegate_wire.pick(row.get("permanence"), delegate_wire.PERMANENCE, default[1])
     else:
         scope, perm = default
-    return delegate_wire.synth(reason, scope, perm, text, ref)
+    return delegate_wire.synth(reason, scope, perm, text, ref, producer="engine" if reason == "no_answer" else "delegate")
 
 
 def call(

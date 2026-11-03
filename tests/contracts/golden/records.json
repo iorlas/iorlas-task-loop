@@ -1676,7 +1676,8 @@
    "ref": "r",
    "fix": "f",
    "resumable": true,
-   "partial": false
+   "partial": false,
+   "producer": "delegate"
   },
   "data": {
    "summary": "s"

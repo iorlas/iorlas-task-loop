@@ -72,8 +72,11 @@ class EngineCrash(EngineTest):
 
     def test_value_error_at_land_parks_with_checkpoint_and_traceback(self):
         self.crash_land(ValueError("refused"))
-        self.assertEqual(self.eng.kind, Kind.ENGINE_CRASH)
-        self.assertEqual(must(ParkStore(self.eng.home).get(self.eng.bead)).reason, "engine_crash")
+        self.assertEqual(self.eng.kind, Kind.PAUSE_LANE)
+        self.assertEqual(must(ParkStore(self.eng.home).get(self.eng.bead)).reason, "stage_refused")
+        self.assertTrue(self.eng.asked)
+        self.assertNotIn("crashing", str(self.ask()))
+        self.assertNotIn("crashed", self.eng.why)
         self.assertEqual(must(read_ck(self.eng)).step, "land")
         self.assertIn("ValueError: refused", self.eng.log_path.read_text())
         self.assertIn("Traceback (most recent call last)", self.eng.log_path.read_text())

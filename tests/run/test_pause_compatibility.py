@@ -17,6 +17,7 @@ from taskloop.contracts.parks import Park
 from taskloop.domain import outcome as oc
 from taskloop.domain.beads import park
 from taskloop.domain.beads.park import text_hash
+from taskloop.domain.lanes import pauses
 
 
 class PauseCompatibility(unittest.TestCase):
@@ -24,7 +25,7 @@ class PauseCompatibility(unittest.TestCase):
         self.bead = Bead(id=BeadId("t-1"), title="work", status="open")
         self.cfg = mock.Mock()
 
-    def test_owner_and_unknown_reasons_create_owner_parks_without_asks(self):
+    def test_owner_and_unknown_reasons_create_owner_parks_with_one_ask(self):
         for reason in (
             "logged_out",
             "secrets",
@@ -43,10 +44,23 @@ class PauseCompatibility(unittest.TestCase):
                 host.clock.now.return_value = 100
                 with mock.patch("taskloop.app.run.closer.beadtools.peek", return_value=self.bead):
                     Closer(host, mock.Mock()).pause(oc.make(Kind.PAUSE_LANE, "paused"))
-                self.assertEqual((host.retry_after, host.asked, host.pause_reason), (0, False, reason))
-                host.ask_flow.raise_ask.assert_not_called()
+                self.assertEqual((host.retry_after, host.asked, host.pause_reason), (0, True, reason))
+                host.ask_flow.raise_ask.assert_called_once()
                 rec = store.return_value.put.call_args.args[0]
                 self.assertEqual((rec.reason, rec.permanence, rec.retry_at), (reason, "needs_owner", 0))
+
+    def test_every_capped_policy_is_charged_by_the_pause_path(self):
+        for (producer, reason), policy in pauses.TABLE.items():
+            if not policy.max_attempts:
+                continue
+            with self.subTest(producer=producer, reason=reason), mock.patch.object(parks, "ParkStore") as store:
+                store.return_value.get.return_value = None
+                for n in range(policy.max_attempts + 1):
+                    rec = parks.paused(self.cfg, self.bead, Kind.PAUSE_LANE, f"r{n}", 100, reason=reason, producer=producer)
+                    assert rec is not None
+                    self.assertEqual(rec.attempts, {pauses.attempt_key(reason, producer): n + 1})
+                    self.assertEqual(rec.permanence, "transient" if n < policy.max_attempts else "needs_owner")
+                    store.return_value.get.return_value = rec
 
     def test_faults_asks_and_owner_holds_do_not_acquire_retry_records(self):
         for kind in (*FAULTS, *ASKS, Kind.WAIT_ASK, Kind.OWNER_PARK):

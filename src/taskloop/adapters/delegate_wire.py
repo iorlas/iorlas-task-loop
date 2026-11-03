@@ -1,7 +1,7 @@
 """delegate's contract-3 answer (one JSON object) as a `DelegateResult`. Reads are tolerant of keys we do not model; an answer
 that breaks the shape becomes a synthesized stop, never an exception. A status word and a next step are derived from `stop`
 here and nowhere else (`answer_status`, `answer_next`): contract 3 removed them from the wire and from `DelegateResult`."""
-from typing import Any, get_args
+from typing import Any, Literal, get_args
 
 from taskloop.contracts.delegate import (
     REASON_TIMEOUT,
@@ -38,9 +38,10 @@ _FAILED = ("worker_failed", "schema_invalid", "secrets")
 _ERROR = ("bad_request", "caller", "setup", "crash", "contract_violation")
 
 
-def synth(reason: str, scope: Scope, permanence: Permanence, text: str, ref: str = "") -> DelegateResult:
+def synth(reason: str, scope: Scope, permanence: Permanence, text: str, ref: str = "", *,
+          producer: Literal["delegate", "engine"] = "delegate") -> DelegateResult:
     """A result delegate did not write: the engine's own account of a call that gave no usable answer."""
-    stop = StopFacts(reason=reason, scope=scope, permanence=permanence, retry=Retry(kind="none"), ref=ref)
+    stop = StopFacts(reason=reason, scope=scope, permanence=permanence, retry=Retry(kind="none"), ref=ref, producer=producer)
     return DelegateResult(text=text[-2000:], say=text[:300], ref=ref or None, stop=stop)
 
 

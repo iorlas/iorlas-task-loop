@@ -14,6 +14,7 @@ class Reason(StrEnum):
     TIMEOUT = "timeout"
     NETWORK = "network"
     ENGINE_CRASH = "engine_crash"
+    STAGE_REFUSED = "stage_refused"
     TRANSIENT_INFRASTRUCTURE = "transient_infrastructure"
     RATE_LIMITED = "rate_limited"
     HUNG = "hung"

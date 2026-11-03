@@ -27,6 +27,7 @@ from taskloop.contracts.locator import RunBundle, RunLocator
 from taskloop.contracts.parks import ParkStore
 from taskloop.contracts.plancheck import RoundState
 from taskloop.contracts.run import RunState
+from taskloop.domain import effects
 from taskloop.domain import outcome as oc
 from taskloop.domain.plan.matchers import AcceptanceText
 
@@ -144,8 +145,11 @@ def one_stage(e: Engine, requested: str | None, locator: RunLocator) -> int:
         e.log.warn(e.why)
         return 1
     except ValueError as err:
-        e.kind, e.why = Kind.FAULT_ENGINE, str(err)
-        e.log.warn(e.why)
+        if step is not None and step in (Step.LAND, Step.CLOSE):
+            parked_crash(e, step, err)
+        else:
+            e.kind, e.why = Kind.FAULT_ENGINE, str(err)
+            e.log.warn(e.why)
         return 1
     except BaseException as err:
         if isinstance(err, Exception) and step is not None and step in (Step.LAND, Step.CLOSE):
@@ -174,6 +178,8 @@ def record_stage(e: Engine) -> None:
         ParkStore(e.home).drop(e.bead)
     else:
         e.closer.pause(done)
+        if done.kind is Kind.NOOP and not e.dry:
+            e.closer.apply(effects.RaiseAsk(), done, "")
     outcome = done.word
     retry_at = ParkStore(e.home).retry_at(e.bead, e.run_id)
     e.log.emit(rec.Close(outcome=outcome, why=e.why, sha=e.landed_sha, retry_at=retry_at))
@@ -243,13 +249,13 @@ def finish_step(e: Engine, step: Step, bead: Bead) -> Step | None:
     elif step is Step.LAND:
         try:
             sha = e.lander.finish(bead)
+            if not sha:
+                raise ValueError("land refused: no land was recorded")
         except (e.Blocked, fence.Fenced):
             raise
         except Exception as err:
             done = parked_crash(e, step, err)
             raise e.Blocked(done.detail, kind=done.kind) from err
-        if not sha:
-            raise ValueError("land refused: no land was recorded")
         e.landed_sha = sha
         following = Step.CLOSE
     elif step is Step.CLOSE:

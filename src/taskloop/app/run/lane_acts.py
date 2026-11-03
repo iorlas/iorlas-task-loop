@@ -162,7 +162,7 @@ class LaneActs:
             raise ReviewUnavailable(stop.reason)
         e, ops = self.e, self.wc.ops
         e.pause_reason = stop.reason if isinstance(a, lp.Yield) or a.kind.startswith("FAULT_") else ""
-        e.pause_producer = "delegate" if e.pause_reason else "engine"
+        e.pause_producer = stop.producer if e.pause_reason else "engine"
         retry_after = 0.0
         if isinstance(a, lp.Yield):
             retry_after = a.retry_after if a.retry_after > e.clock.now() else 0.0  # a hint: the loop wakes the bead when its role is usable

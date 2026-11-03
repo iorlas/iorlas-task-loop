@@ -26,6 +26,7 @@ from taskloop.contracts.kinds import Kind
 from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.parks import Park, ParkStore
 from taskloop.contracts.run import RunManifest, RunState
+from taskloop.domain import effects
 from taskloop.stores.memory import fake_stores
 from taskloop.stores.runlog import RunLog
 
@@ -98,10 +99,18 @@ class SelectedStage(unittest.TestCase):
         closes = [row.rec for row in self.e.stores.run_log(self.e.run_id).read_from(0).items if isinstance(row.rec, rec.Close)]
         self.assertEqual([row.retry_at for row in closes], [0.0])
 
+    def test_standalone_empty_plan_files_its_owner_ask(self):
+        self.e.planner.plan.side_effect = Blocked("noop: no work", kind=Kind.NOOP)
+        rc, manifest = self.invoke("plan")
+        self.assertEqual((rc, manifest.state), (1, RunState.PARKED))
+        self.e.closer.apply.assert_called_once()
+        effect, done, stats = self.e.closer.apply.call_args.args
+        self.assertEqual((effect, done.kind, stats), (effects.RaiseAsk(), Kind.NOOP, ""))
+
     def test_land_without_green_gate_is_refused_with_reason(self):
         rc, manifest = self.invoke("land")
         self.assertEqual(rc, 1)
-        self.assertEqual(manifest.state, RunState.FAILED)
+        self.assertEqual(manifest.state, RunState.STOPPED)
         self.assertIn("no green gate for the current tree and base", manifest.reason)
         self.e.lander.finish.assert_not_called()
         self.e.lander.gate.run.assert_not_called()
@@ -187,6 +196,24 @@ class SelectedStage(unittest.TestCase):
         with self.assertRaises(KeyboardInterrupt):
             self.invoke("land")
         self.assertEqual(self.e.kind, Kind.FAULT_ENGINE)
+
+    def test_land_without_a_recorded_sha_parks_and_keeps_its_cursor(self):
+        self.e.lander.gate.green.return_value = True
+        self.e.lander.finish.return_value = ""
+        rc, manifest = self.invoke("land")
+        self.assertEqual((rc, manifest.state, manifest.next_step), (1, RunState.STOPPED, Step.LAND))
+        self.assertEqual((self.e.kind, self.e.pause_reason), (Kind.PAUSE_LANE, "stage_refused"))
+        self.assertIn("no land was recorded", manifest.reason)
+        self.e.checkpoints.drop.assert_not_called()
+        self.e.checkpoints.drop_unless_fenced.assert_not_called()
+
+    def test_stale_gate_refusal_is_an_owner_pause_without_crash_wording(self):
+        self.e.lander.gate.green.return_value = True
+        self.e.lander.finish.side_effect = ValueError("land refused: gate is no longer green for this tree and base")
+        rc, manifest = self.invoke("land")
+        self.assertEqual((rc, manifest.state), (1, RunState.STOPPED))
+        self.assertEqual((self.e.kind, self.e.pause_reason), (Kind.PAUSE_LANE, "stage_refused"))
+        self.assertNotIn("crash", manifest.reason)
 
     def test_typed_network_pause_keeps_the_loop_terminal_state(self):
         self.e.lander.gate.run.side_effect = Blocked("network unavailable", kind=Kind.PAUSE_NETWORK)

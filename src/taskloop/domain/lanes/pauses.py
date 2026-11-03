@@ -1,7 +1,8 @@
 """Durable pause policy: every known reason has either a clock wake or an owner wake.
 
 Delegate reasons are open on the wire. Unknown ones are held for the owner, never guessed transient.
-Attempt zero is the first pause; every transient reason allows three retries except network outages, which charge nothing.
+Attempt zero is the first pause; transient pauses allow three retries except network outages, which charge nothing.
+Fault outcomes keep their separate history-based retry policy and do not consume pause attempts.
 History lives in the existing Park record across retries and reason changes, keyed by producer:reason.
 """
 from collections.abc import Callable
@@ -31,6 +32,7 @@ TABLE: Final[dict[tuple[Producer, Reason], PauseRule]] = {
     ("delegate", Reason.TIMEOUT): PauseRule("transient", 60, 3600, 3),
     ("delegate", Reason.NETWORK): PauseRule("transient", 30, 1800),
     ("engine", Reason.ENGINE_CRASH): PauseRule("transient", 60, 3600, 3),
+    ("engine", Reason.STAGE_REFUSED): PauseRule("needs_owner"),
     ("engine", Reason.TRANSIENT_INFRASTRUCTURE): PauseRule("transient", 60, 3600, 3),
     ("delegate", Reason.RATE_LIMITED): PauseRule("transient", 60, 3600, 3),
     ("delegate", Reason.HUNG): PauseRule("transient", 60, 3600, 3),
@@ -57,9 +59,10 @@ TABLE: Final[dict[tuple[Producer, Reason], PauseRule]] = {
     ("engine", Reason.PAUSE_NETWORK): PauseRule("transient", 30, 1800),
     ("engine", Reason.PAUSE_KILLED): PauseRule("transient", 60, 3600, 3),
     ("engine", Reason.PAUSE_MOVED): PauseRule("transient", 60, 3600, 3),
-    ("engine", Reason.FAULT_INFRA): PauseRule("transient", 60, 3600, 3),
-    ("engine", Reason.FAULT_CRASHED): PauseRule("transient", 60, 3600, 3),
-    ("engine", Reason.FAULT_STALE_BASE): PauseRule("transient", 60, 3600, 3),
+    # Fault retries are charged by outcome.apply, not the durable pause budget.
+    ("engine", Reason.FAULT_INFRA): PauseRule("transient", 60, 3600),
+    ("engine", Reason.FAULT_CRASHED): PauseRule("transient", 60, 3600),
+    ("engine", Reason.FAULT_STALE_BASE): PauseRule("transient", 60, 3600),
     ("engine", Reason.FAULT_SLOT): PauseRule("needs_owner"),
     ("engine", Reason.FAULT_DENIED): PauseRule("needs_owner"),
     ("engine", Reason.FAULT_PLAN): PauseRule("needs_owner"),

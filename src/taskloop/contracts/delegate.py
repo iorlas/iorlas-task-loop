@@ -86,6 +86,7 @@ class StopFacts(Rec):
     fix: str = ""
     resumable: bool = False
     partial: bool = False
+    producer: Literal["delegate", "engine"] = "delegate"
 
 
 @final
