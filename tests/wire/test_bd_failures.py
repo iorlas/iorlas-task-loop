@@ -24,8 +24,8 @@ class BdFallbacks(unittest.TestCase):
 
     def test_brief_omits_slots_when_bd_is_missing(self):
         who = Identity(actor="owner", home=".")
-        with mock.patch.object(slots, "bd_store", side_effect=BdCommandFailure("tl: bd is not on PATH")):
-            self.assertEqual(brief.slot_lines("/repo", who, 0), ())
+        with mock.patch.object(slots, "slot_table", side_effect=BdCommandFailure("tl: bd is not on PATH")):
+            self.assertEqual(brief.slot_lines("/repo", who, 0, mock.Mock()), ())
 
     def test_sweep_remains_optional_when_bd_is_missing(self):
         who = Identity(actor="owner", home=".")
