@@ -21,6 +21,7 @@ from taskloop.app.slots.pool import SlotPool, machine_slots
 from taskloop.app.track import trail
 from taskloop.app.track.trail import event
 from taskloop.contracts import config
+from taskloop.contracts.bd_errors import BdCommandFailure
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.config import EngineConfig, RepoProfile, SlotsConfig
 from taskloop.contracts.identity import Identity
@@ -214,7 +215,7 @@ def bead_priority(repo: str, bead_id: BeadId, who: Identity, store: Beads | None
     """The priority (0 = P0) of a bead, DEFAULT_PRIO when it cannot be read."""
     try:
         return prio_of(peek(store or bd_store(who.actor, repo), bead_id))
-    except SystemExit:  # no bd: it waits as a P2
+    except BdCommandFailure:  # no bd: it waits as a P2
         return DEFAULT_PRIO
 
 

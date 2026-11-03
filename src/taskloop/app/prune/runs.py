@@ -9,6 +9,7 @@ from pathlib import Path
 
 from taskloop.app.run import layout
 from taskloop.app.track import trail
+from taskloop.contracts.bd_errors import BdCommandFailure
 from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdFailure, BeadQuery, Beads
@@ -37,7 +38,7 @@ def open_beads(repos: list[str], store_of: Callable[[str], Beads]) -> tuple[set[
     for repo in repos:
         try:
             found |= {b.id for b in store_of(repo).find(BeadQuery())}
-        except (BdFailure, SystemExit, OSError) as e:
+        except (BdCommandFailure, BdFailure, SystemExit, OSError) as e:
             return set(), f"bd did not answer in {repo} ({str(getattr(e, 'error', e))[:80]})"
     return found, ""
 

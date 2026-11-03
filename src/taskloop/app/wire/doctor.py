@@ -10,6 +10,7 @@ from taskloop.app.doctor import profiles
 from taskloop.app.release import catalog, manifest
 from taskloop.app.wire.slots import cfg_source
 from taskloop.contracts import runlife
+from taskloop.contracts.bd_errors import BdCommandFailure
 from taskloop.contracts.config import RepoProfile
 from taskloop.contracts.env import Env
 from taskloop.contracts.identity import Identity
@@ -55,7 +56,7 @@ def bead_lint_warnings(repo: str, who: Identity, store: Beads | None = None) -> 
     """tl-f52: one line per open bead whose text cites material outside the repo (beadlint). [] when bd cannot be read."""
     try:
         beads = (store or bd_store(who.actor, repo)).find(BeadQuery(status="open"))
-    except (SystemExit, OSError, BdFailure):
+    except (BdCommandFailure, SystemExit, OSError, BdFailure):
         return []
     out: list[str] = []
     for b in beads:

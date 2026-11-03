@@ -148,7 +148,7 @@ def _update_known(who: Identity, c: dict[str, Any], repo: str, bead: str, state:
         if not dry:
             beadtools.attempt(
                 beadtools.bd_store(who.actor, repo).add_comment,
-                bead,
+                BeadId(bead),
                 "Reflect digest: the cause recurred in {:d} more run(s): {}\n{}".format(
                     len(new), ", ".join(new), "\n".join(evidence_lines(dict(c, items=[i for i in c["items"] if i["run"] in new])))
                 ),

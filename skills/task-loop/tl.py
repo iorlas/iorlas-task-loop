@@ -83,6 +83,7 @@ from taskloop.app.wire import lanes as wire_lanes
 from taskloop.app.wire import slots as wslots
 from taskloop.app.wire import usage as wire_usage
 from taskloop.cli import asks as cli_asks
+from taskloop.cli import bd as cli_bd
 from taskloop.cli import closing as cli_closing
 from taskloop.cli import factory as cli_factory
 from taskloop.cli import green as cli_green
@@ -454,7 +455,7 @@ def main(argv: list[str] | None = None, here: Path = HERE, now: Callable[[], flo
     a = build_parser().parse_args(argv)
     env = snapshot()
     ctx = Ctx(here, now, list(argv) if argv is not None else sys.argv[1:], env, real.spawner(env), real.git(env), ident.identity(env))
-    return VERBS[a.cmd](a, ctx)
+    return cli_bd.required(VERBS[a.cmd], a, ctx)
 
 
 if __name__ == "__main__":

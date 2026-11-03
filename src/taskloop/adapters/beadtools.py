@@ -1,52 +1,25 @@
-"""The bd of this session and the three ways a caller treats a refusal (end the command, an empty answer, carry on)."""
+"""The bd of this session and required or tolerant calls; command exit policy lives in cli."""
 import shutil
-import sys
 from collections.abc import Callable
-from typing import Any, TypeVar
 
 from taskloop.adapters.bd import BdStore
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.ports import BdFailure, Beads
+from taskloop.adapters.bdsafe import attempt, listed, peek
+from taskloop.contracts.bd_errors import BdCommandFailure
+from taskloop.contracts.ports import BdFailure
 
-T = TypeVar("T")
+__all__ = ["attempt", "bd_store", "listed", "peek"]
 
 
 def bd_store(actor: str, cwd: object = None) -> BdStore:
     """The bd of the session `actor` names (adapters/bd.py, the one place that starts `bd`), asking the tracker of `cwd` (default: here)."""
     if not shutil.which("bd"):
-        sys.exit("tl: bd is not on PATH")
+        raise BdCommandFailure("tl: bd is not on PATH")
     return BdStore(actor, str(cwd) if cwd else None)
 
 
-def peek(store: Beads, bead_id: BeadId) -> Bead | None:
-    """The bead, None when it is not there or bd could not be asked (a caller that must tell the two apart calls store.show)."""
+def must[**P, T](call: Callable[P, T], *args: P.args, **kw: P.kwargs) -> T:
+    """A required bd operation; the CLI decides how to report its failure."""
     try:
-        return store.show(bead_id)
-    except BdFailure:
-        return None
-
-
-def must[T](call: Callable[..., T], *args: Any) -> T:
-    """A bd write that ends the command when bd refuses."""
-    try:
-        return call(*args)
+        return call(*args, **kw)
     except BdFailure as e:
-        sys.exit("tl: " + e.error.text)
-
-
-def listed[T](call: Callable[..., list[T]], *args: Any) -> list[T]:
-    """The beads a bd read lists, none when bd could not be asked."""
-    try:
-        return call(*args)
-    except BdFailure:
-        return []
-
-
-def attempt(call: Callable[..., object], *args: Any, **kw: Any) -> bool:
-    """A bd write whose refusal changes nothing: True when it worked."""
-    try:
-        call(*args, **kw)
-        return True
-    except BdFailure:
-        return False
+        raise BdCommandFailure("tl: " + e.error.text) from e

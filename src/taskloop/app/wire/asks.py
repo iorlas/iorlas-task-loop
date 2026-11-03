@@ -6,6 +6,7 @@ from taskloop.adapters import ident
 from taskloop.adapters.beadtools import bd_store
 from taskloop.app.asks import setup_retry, sweeps
 from taskloop.app.track.trail import now
+from taskloop.contracts.bd_errors import BdCommandFailure
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.paths import ConfigDir
@@ -24,7 +25,7 @@ def sweep(which: str, who: Identity, home: ConfigDir, every: int = 600) -> list[
         return list(fn(store(home), lambda repo: bd_store(who.actor, repo), home.ask_marker("swept" if which == "close" else "parked"),
                        now(),
             every))
-    except SystemExit:  # no bd on this machine
+    except BdCommandFailure:  # no bd on this machine
         return []
 
 

@@ -1,11 +1,12 @@
-"""Two bd calls whose refusal changes nothing."""
-from typing import Any
+"""Shared bd calls whose refusal means absence or changes nothing."""
+from collections.abc import Callable
 
 from taskloop.contracts.bead import Bead
-from taskloop.contracts.ports import BdFailure
+from taskloop.contracts.ids import BeadId
+from taskloop.contracts.ports import BdFailure, Beads
 
 
-def peek(store: Any, bead_id: str) -> Bead | None:
+def peek(store: Beads, bead_id: BeadId) -> Bead | None:
     """The bead, None when it is not there or bd could not be asked."""
     try:
         return store.show(bead_id)
@@ -13,10 +14,18 @@ def peek(store: Any, bead_id: str) -> Bead | None:
         return None
 
 
-def attempt(call: Any, *args: Any, **kw: Any) -> bool:
+def attempt[**P](call: Callable[P, object], *args: P.args, **kw: P.kwargs) -> bool:
     """A bd write whose refusal changes nothing: True when it worked."""
     try:
         call(*args, **kw)
         return True
     except BdFailure:
         return False
+
+
+def listed[**P, T](call: Callable[P, list[T]], *args: P.args, **kw: P.kwargs) -> list[T]:
+    """The beads a bd read lists, none when bd could not be asked."""
+    try:
+        return call(*args, **kw)
+    except BdFailure:
+        return []

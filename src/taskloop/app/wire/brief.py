@@ -11,6 +11,7 @@ from taskloop.app.release import catalog, pins
 from taskloop.app.slots import marks
 from taskloop.app.wire import asks as wire_asks
 from taskloop.app.wire import slots as wslots
+from taskloop.contracts.bd_errors import BdCommandFailure
 from taskloop.contracts.env import Env
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import loop_key
@@ -33,7 +34,7 @@ def slot_lines(repo: str, who: Identity, now: float) -> tuple[str, ...]:
     """One line per slot of this machine. A repo without bd or slots has none."""
     try:
         beads = wslots.slot_beads(repo, who)
-    except (SystemExit, OSError, ValueError, BdFailure):
+    except (BdCommandFailure, SystemExit, OSError, ValueError, BdFailure):
         return ()
     out: list[str] = []
     for b in beads:

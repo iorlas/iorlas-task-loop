@@ -14,6 +14,7 @@ from taskloop.adapters.versionfile import NoVersion, set_version
 from taskloop.app.release import clone, manifest, publish, selfupdate, shell, suite, tidy
 from taskloop.app.release.push import push_main, release_lock_path
 from taskloop.app.release.shell import Abort, Shell, say
+from taskloop.contracts.bd_errors import BdCommandFailure
 from taskloop.contracts.env import Env
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import MARKETPLACE, BeadId, parse_bead_id
@@ -69,7 +70,7 @@ def refuse_open_children(req: Request, repo: Path, who: Identity, store: Beads |
         return
     try:
         kids = [b.id for b in (store or beadtools.bd_store(who.actor, repo)).find(BeadQuery()) if b.parent == req.bead]
-    except (BdFailure, SystemExit):
+    except (BdCommandFailure, BdFailure, SystemExit):
         return
     if kids:
         raise Abort(f"--bead {req.bead} has open children ({', '.join(sorted(kids))}): finish or close them, or release without --bead")
@@ -86,7 +87,7 @@ def close_bead(req: Request, repo: Path, who: Identity, store: Beads | None, whe
         return
     try:
         why = closer(who, store or beadtools.bd_store(who.actor, repo), sh.port, str(where), req.bead, req.reason or req.message, version)
-    except (BdFailure, SystemExit) as e:
+    except (BdCommandFailure, BdFailure, SystemExit) as e:
         why = str(getattr(e, "error", e))[-300:]
     if why:
         say(f"warning: bd close {req.bead} failed: {why}")
@@ -143,7 +144,7 @@ def record(result: ReleaseResult, req: Request, repo: Path, who: Identity, home:
         text = "release FAILED: {}{}".format(result.summary, ("; log " + result.log) if result.log else "")
         try:
             (store or beadtools.bd_store(who.actor, repo)).add_comment(req.bead, text)
-        except (BdFailure, SystemExit) as e:
+        except (BdCommandFailure, BdFailure, SystemExit) as e:
             say("warning: bd comment {} failed: {}".format(req.bead, str(getattr(e, "error", e))[-300:]))
 
 
