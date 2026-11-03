@@ -68,9 +68,14 @@ class PushJudge:
         digest = diff_sha(self.git, self.repo, base, tip)
         return any(row.diff_sha == digest for row in candidates)
 
-    def policy_commit(self, tip: PushTip) -> str:
+    def base_ref(self, cfg: EngineConfig | None = None) -> str:
+        if cfg is not None:
+            return cfg.base
         target = self.git.symbolic_ref(self.repo, "refs/remotes/origin/HEAD")
-        base_ref = target.removeprefix("refs/remotes/") if target else "origin/main"
+        return target.removeprefix("refs/remotes/") if target else "origin/main"
+
+    def policy_commit(self, tip: PushTip) -> str:
+        base_ref = self.base_ref()
         remote_ref = "refs/heads/" + base_ref.removeprefix("origin/")
         commit = (tip.remote_sha if tip.remote_ref == remote_ref and tip.remote_sha.strip("0")
                   else self.git.merge_base(self.repo, tip.sha, base_ref))
@@ -96,7 +101,7 @@ class PushJudge:
         return authorization.profile(self.git, self.repo, tree) if policy else None
 
     def base_for(self, tip: PushTip, cfg: EngineConfig) -> str:
-        if tip.remote_ref == "refs/heads/" + cfg.base.split("/", 1)[-1] and tip.remote_sha.strip("0"):
+        if tip.remote_ref == "refs/heads/" + cfg.base.removeprefix("origin/") and tip.remote_sha.strip("0"):
             return tip.remote_sha
         return self.git.rev_parse(self.repo, cfg.base)
 
@@ -134,9 +139,16 @@ class PushJudge:
             policies = [self.policy_profile(tip) for tip in tips]
         except ProfileChanged as err:
             return PushDecision(PushStatus.REFUSED, (str(err),))
+        deliveries = [(tip, cfg) for tip, cfg in zip(tips, policies, strict=True)
+                      if tip.remote_ref == "refs/heads/" + self.base_ref(cfg).removeprefix("origin/")]
+        if not deliveries:
+            return PushDecision(PushStatus.ALLOWED)
+        return self.judge_delivery(deliveries)
+
+    def judge_delivery(self, deliveries: list[tuple[PushTip, EngineConfig | None]]) -> PushDecision:
         stamped: set[str] = set()
         named: dict[str, str] = {}
-        for tip, cfg in zip(tips, policies, strict=True):
+        for tip, cfg in deliveries:
             self.unproven = []
             if self.green_or_checked(tip, cfg):
                 stamped.add(tip.sha)
@@ -144,7 +156,7 @@ class PushJudge:
                 named[tip.sha] = " for " + ", ".join(f"{s} (no receipt for this tree and base)" for s in self.unproven)
         refused = tuple(
             f"{tip.ref} ({tip.sha[:12]}) is not green{named.get(tip.sha, '')}; run `tl check` in its worktree, then push"
-            for tip in tips if tip.sha not in stamped
+            for tip, _cfg in deliveries if tip.sha not in stamped
             and not any(self.git.is_ancestor(self.repo, tip.sha, top) for top in stamped))
         return PushDecision(PushStatus.REFUSED if refused else PushStatus.ALLOWED, refused)
 

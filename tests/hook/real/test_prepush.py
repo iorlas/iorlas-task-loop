@@ -113,42 +113,50 @@ class PrePush(Base):
         self.stamp("HEAD")
         self.assertEqual(self.push("HEAD:refs/heads/x").returncode, 0)
 
+    def test_a_task_push_needs_no_receipts_even_with_a_dirty_worktree(self):
+        self.commit("b")
+        (self.repo / "stray").write_text("x")
+        self.assertEqual(self.push("HEAD:refs/heads/task/x").returncode, 0)
+        self.assertIn("judge-push --repo", self.calls.read_text())
+        self.assertFalse(list(self.cfg.rglob("*.json")), "a task push must not run the check service")
+
     def test_a_red_or_unknown_tip_is_refused_when_the_worktree_is_not_that_head(self):
         tip = self.commit("b")
         self.commit("c")  # HEAD moved on and nothing is stamped: the tip pushed is neither green nor the checked-out HEAD
-        r = self.push(f"{tip}:refs/heads/x")
+        r = self.push(f"{tip}:refs/heads/main")
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("is not green", r.stderr)
-        self.assertEqual(self.git(self.origin, "branch", "--list", "x").stdout, "")
+        self.assertNotEqual(self.git(self.origin, "rev-parse", "main").stdout.strip(), tip)
 
     def test_the_head_that_is_not_green_runs_the_plan_then_passes(self):
         self.commit("b")
-        self.assertEqual(self.push("HEAD:refs/heads/x").returncode, 0)
+        self.assertEqual(self.push("HEAD:refs/heads/main").returncode, 0)
         self.assertIn("judge-push --repo", self.calls.read_text())
         self.assertTrue(list(self.cfg.rglob("*.json")), "the application check service must retain evidence")
 
     def test_a_dirty_worktree_does_not_run_the_plan(self):
         self.commit("b")
         (self.repo / "stray").write_text("x")
-        self.assertNotEqual(self.push("HEAD:refs/heads/x").returncode, 0)
+        self.assertNotEqual(self.push("HEAD:refs/heads/main").returncode, 0)
 
-    def test_a_stack_with_a_stamped_top_passes_and_a_lower_tip_alone_does_not(self):
+    def test_a_mixed_push_with_a_stamped_base_passes_and_an_unproven_base_does_not(self):
         low = self.commit("b")
         top = self.commit("c")
         self.stamp(top)
-        self.assertEqual(self.push(f"{low}:refs/heads/low", f"{top}:refs/heads/top").returncode, 0)
+        self.assertEqual(self.push(f"{low}:refs/heads/low", f"{top}:refs/heads/main").returncode, 0)
         self.git(self.repo, "reset", "-q", "--hard", top)
         mid = self.commit("d")
         self.commit("e")  # HEAD is past mid, so the plan cannot run for it
-        self.assertNotEqual(self.push(f"{mid}:refs/heads/mid").returncode, 0)
+        self.assertNotEqual(self.push(f"{mid}:refs/heads/main").returncode, 0)
 
     def test_the_old_marker_cannot_authorize_an_ungreen_dirty_push(self):
         self.commit("b")
         (self.repo / "stray").write_text("x")
-        r = self.push("HEAD:refs/heads/x", env={**self.env, "TL_LAND": "1"})
+        tip = self.git(self.repo, "rev-parse", "HEAD").stdout.strip()
+        r = self.push("HEAD:refs/heads/main", env={**self.env, "TL_LAND": "1"})
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("judge-push", self.calls.read_text())
-        self.assertEqual(self.git(self.origin, "branch", "--list", "x").stdout, "")
+        self.assertNotEqual(self.git(self.origin, "rev-parse", "main").stdout.strip(), tip)
 
     def test_an_unavailable_judge_refuses_before_remote_mutation(self):
         self.commit("b")
@@ -215,7 +223,7 @@ class Chain(Base):
         self.recorder()
         tip = self.commit("b")
         self.commit("c")
-        self.assertNotEqual(self.push(f"{tip}:refs/heads/x").returncode, 0)
+        self.assertNotEqual(self.push(f"{tip}:refs/heads/main").returncode, 0)
         self.assertFalse(self.rec.exists())
 
     def test_the_old_marker_cannot_skip_the_repos_hook(self):

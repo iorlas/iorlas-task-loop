@@ -195,7 +195,7 @@ class OwnerJudge(unittest.TestCase):
         self.stores.profile_changes.append(row.replace(**changes))
 
     def judge(self):
-        return judge_push("/repo", f"refs/heads/topic tip refs/heads/topic {'0' * 40}\n", self.stores, self.git,
+        return judge_push("/repo", f"refs/heads/topic tip refs/heads/main {'0' * 40}\n", self.stores, self.git,
                           self.check, env=Env(), clock=self.clock)
 
     def test_fresh_matching_row_allows_but_only_with_base_evidence(self):

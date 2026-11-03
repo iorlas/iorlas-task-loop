@@ -35,6 +35,7 @@ class PushJudge(unittest.TestCase):
         self.git = FakeGit(rev_parse__HEAD="head", dirty=False, is_ancestor=False, merge_base="policy", symbolic_ref="")
         self.git.replies.update({("rev_parse", "origin/main"): "base", ("rev_parse", "head^{tree}"): "tree",
                                  ("rev_parse", "low^{tree}"): "lower", ("rev_parse", "policy^{tree}"): "policy-tree",
+                                 ("rev_parse", "task/x^{tree}"): "task-tree",
                                  ("rev_parse", "old-base^{tree}"): "policy-tree"})
         self.stores = fake_stores()
         self.check = mock.Mock(return_value=1)
@@ -51,7 +52,7 @@ class PushJudge(unittest.TestCase):
         self.env = Env({"PATH": "/tools"})
         self.spawner = mock.Mock()
 
-    def request(self, *tips, remote="refs/heads/topic", old="0" * 40):
+    def request(self, *tips, remote="refs/heads/main", old="0" * 40):
         return "".join(f"refs/heads/{tip} {tip} {remote} {old}\n" for tip in tips)
 
     def judge(self, text=None):
@@ -78,6 +79,66 @@ class PushJudge(unittest.TestCase):
     def test_valid_profile_uses_the_application_evidence_store(self):
         self.stamp()
         self.assertEqual(self.judge().status, PushStatus.ALLOWED)
+        self.check.assert_not_called()
+
+    def test_non_base_tips_need_no_receipts_or_checks(self):
+        self.git.replies[("rev_parse", "HEAD")] = "task/x"
+        for remote in ("refs/heads/task/x", "refs/heads/wip/x", "refs/heads/topic"):
+            with self.subTest(remote=remote), mock.patch("taskloop.app.checks.authorization.results") as evidence:
+                decision = self.judge(self.request("task/x", remote=remote))
+                self.assertEqual(decision.status, PushStatus.ALLOWED)
+                self.assertEqual(decision.reasons, ())
+                evidence.assert_not_called()
+        self.check.assert_not_called()
+
+    def test_task_tip_pushed_to_base_still_needs_receipts(self):
+        self.git.replies[("rev_parse", "HEAD")] = "task/x"
+        decision = self.judge(self.request("task/x"))
+        self.assertEqual(decision.status, PushStatus.REFUSED)
+        self.assertIn("suite (no receipt for this tree and base)", decision.reasons[0])
+        self.check.assert_called_once_with(load(json.loads(self.tip_profile)).engine)
+
+    def test_mixed_push_checks_only_the_base_tip(self):
+        request = self.request("task/x", remote="refs/heads/task/x") + self.request("head")
+        with mock.patch("taskloop.app.checks.authorization.results", return_value={"suite": None}) as evidence:
+            decision = self.judge(request)
+        self.assertEqual(decision.status, PushStatus.REFUSED)
+        self.assertEqual(len(decision.reasons), 1)
+        self.assertTrue(decision.reasons[0].startswith("refs/heads/head "))
+        self.assertEqual(evidence.call_count, 1)
+        self.assertEqual(evidence.call_args.args[4], TreeSha("tree"))
+        self.check.assert_called_once_with(load(json.loads(self.tip_profile)).engine)
+        self.check.reset_mock()
+        self.stamp()
+        self.assertEqual(self.judge(request).status, PushStatus.ALLOWED)
+        self.check.assert_not_called()
+
+    def test_non_base_tip_cannot_cover_an_unproven_base_tip(self):
+        self.stamp()
+        self.git.replies[("is_ancestor",)] = True
+        request = self.request("head", remote="refs/heads/task/x") + self.request("low")
+        self.assertEqual(self.judge(request).status, PushStatus.REFUSED)
+        self.check.assert_not_called()
+
+    def test_non_base_tip_still_refuses_profile_changes(self):
+        original = self.ls_tree.return_value
+        changed = [TreeEntry(mode="100644", kind="blob", oid="changed", path=".task-loop.json")]
+        self.ls_tree.side_effect = lambda repo, rev, path: original if rev == "policy-tree" else changed
+        decision = self.judge(self.request("task/x", remote="refs/heads/task/x"))
+        self.assertEqual(decision.status, PushStatus.REFUSED)
+        self.assertTrue(decision.reasons[0].startswith("profile_changed: refs/heads/task/x "))
+        self.check.assert_not_called()
+
+    def test_mixed_push_checks_every_profiles_policy_before_receipts(self):
+        original = self.ls_tree.return_value
+        changed = [TreeEntry(mode="100644", kind="blob", oid="changed", path=".task-loop.json")]
+        self.ls_tree.side_effect = lambda repo, rev, path: changed if rev == "task-tree" else original
+        request = self.request("head") + self.request("task/x", remote="refs/heads/task/x")
+        with mock.patch("taskloop.app.checks.authorization.results") as evidence:
+            decision = self.judge(request)
+        self.assertEqual(decision.status, PushStatus.REFUSED)
+        self.assertTrue(decision.reasons[0].startswith("profile_changed: refs/heads/task/x "))
+        evidence.assert_not_called()
         self.check.assert_not_called()
 
     def test_unknown_tip_is_refused_and_a_clean_head_can_run_checks(self):
@@ -216,6 +277,27 @@ class PushJudge(unittest.TestCase):
         self.git.replies[("rev_parse", "origin/trunk")] = "base"
         self.stamp()
         self.assertEqual(self.judge().status, PushStatus.ALLOWED)
+        self.assertTrue(self.git.ran("merge_base", "head", "origin/trunk"))
+
+    def test_configured_base_ref_is_delivery_even_from_a_task_branch(self):
+        for base in ("origin/trunk", "trunk", "origin/release/stable", "release/stable"):
+            with self.subTest(base=base):
+                self.tip_profile = json.dumps({"engine": {"base": base, "checks": [
+                    {"id": "suite", "argv": ["true"], "run": "gate"}]}})
+                self.git.replies[("rev_parse", base)] = "base"
+                remote = "refs/heads/" + base.removeprefix("origin/")
+                self.assertEqual(self.judge(self.request("task/x", remote=remote)).status, PushStatus.REFUSED)
+                self.assertEqual(self.judge(self.request("task/x", remote="refs/heads/main")).status, PushStatus.ALLOWED)
+        self.check.assert_not_called()
+
+    def test_missing_profile_resolves_the_same_default_base_as_policy_commit(self):
+        self.ls_tree.return_value = []
+        self.git.replies[("symbolic_ref",)] = "refs/remotes/origin/trunk"
+        with mock.patch("taskloop.app.land.push_judge.PushJudge.green_or_checked", return_value=True) as green:
+            self.assertEqual(self.judge(self.request("head", remote="refs/heads/main")).status, PushStatus.ALLOWED)
+            green.assert_not_called()
+            self.assertEqual(self.judge(self.request("head", remote="refs/heads/trunk")).status, PushStatus.ALLOWED)
+            green.assert_called_once()
         self.assertTrue(self.git.ran("merge_base", "head", "origin/trunk"))
 
     def test_empty_base_gate_still_refuses_profile_changes(self):
