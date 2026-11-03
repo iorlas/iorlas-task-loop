@@ -82,16 +82,18 @@ class Worlds:
                          profile_error=self.profile_error(path))
 
     def slot_source(self, path: str) -> SlotSource:
-        """The slot count and folders; the port reads the profile with git, so a hit needs the same profile stamp and under 30 seconds."""
+        """The slot count as the loops read it. Like the red row, the git read is kept while the profile's source files are unchanged (30
+        seconds when they cannot be stamped); the folders are listed every time, which spawns nothing."""
         env = self.env
         stamp = env.ports.profile_stamp(path)
         key = "slots:" + path
         hit = env.ttl.peek(key)
-        if hit and hit[1][0] == stamp and env.clock() - hit[0] < 30:
-            return hit[1][1]
-        found = env.ports.slot_source(path)
-        env.ttl.put(key, (stamp, found))
-        return found
+        if hit and hit[1][0] == stamp and (stamp is not None or env.clock() - hit[0] < 30):
+            found = hit[1][1]
+        else:
+            found = env.ports.slot_source(path)
+            env.ttl.put(key, (stamp, found))
+        return replace(found, dirs=env.ports.slot_dirs(found.root)) if found.root else found
 
     def profile_error(self, path: str) -> str:
         """Keep the row while its source files are unchanged; unknown sources fall back to 30 seconds."""

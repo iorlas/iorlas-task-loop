@@ -1,7 +1,6 @@
 """DB-02: full snapshot builds spawn only when their source stamps change."""
 
 import os
-import socket
 import subprocess
 import sys
 from unittest.mock import patch
@@ -9,6 +8,7 @@ from unittest.mock import patch
 from support.dashlogs import bead
 
 from dash import test_dash_api as fixtures
+from taskloop.adapters.ident import hostname
 from taskloop.app.doctor import profiles
 from taskloop.app.launch import dash_ports
 from taskloop.contracts.env import Env as ProcessEnv
@@ -29,7 +29,7 @@ class SnapshotStamps(fixtures.ApiFixture):
 
     def test_full_build_audits_processes_and_invalidates_only_matching_source(self):
         ref, marker = self.sources()
-        self.store.put(bead("s-z", f"slot {socket.gethostname()} z", labels=["slot"]))
+        self.store.put(bead("s-z", f"slot {hostname()} z", labels=["slot"]))
         original = self.store.find
 
         def spawn():
@@ -70,7 +70,7 @@ class SnapshotStamps(fixtures.ApiFixture):
             self.assertEqual(build().slots, first.slots)
             self.assertEqual(events, [])
             self.assertEqual((self.finds, row.call_count), (1, 1))
-            self.store.put(bead("s-y", f"slot {socket.gethostname()} y", labels=["slot"]))
+            self.store.put(bead("s-y", f"slot {hostname()} y", labels=["slot"]))
             stamp = marker.stat().st_mtime_ns + 1
             os.utime(marker, ns=(stamp, stamp))
             changed = build()

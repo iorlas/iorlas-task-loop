@@ -102,3 +102,4 @@ class SlotSource:
     source: str = ""  # the base ref (origin/main) the profile was read from, or "worktree"
     sha: str = ""
     dirs: frozenset[str] | None = None  # names of the existing slot folders; None: unknown
+    root: str = ""  # the folder the slot folders are in (listed again by `slot_dirs`: a listing spawns nothing)

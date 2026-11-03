@@ -76,6 +76,10 @@ def _no_slots(repo: str) -> SlotSource:
     return SlotSource(host=socket.gethostname())
 
 
+def _no_dirs(root: str) -> frozenset[str] | None:
+    return None
+
+
 def _no_resources(cfg: ConfigDir) -> list[tuple[str, LockRecord]]:
     return []
 
@@ -84,6 +88,7 @@ def _no_resources(cfg: ConfigDir) -> list[tuple[str, LockRecord]]:
 class Ports:
     """Read-only facts the launcher injects. The defaults say nothing, so a dash with no launcher still serves its own files."""
 
+    slot_dirs: Callable[[str], frozenset[str] | None] = _no_dirs  # names of the slot folders in a folder; a listing, never a process
     slot_source: Callable[[str], SlotSource] = _no_slots  # the slot count as the loops read it (origin/main), the host and the slot folders
     resource_holders: Callable[[ConfigDir], list[tuple[str, LockRecord]]] = _no_resources
     profile_error: Callable[[str], str] = _no_error  # the repo's red row when its .task-loop.json does not load, else ""
