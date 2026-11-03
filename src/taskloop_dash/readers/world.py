@@ -23,6 +23,7 @@ from taskloop.contracts.loop import LoopState
 from taskloop.contracts.run import RunState
 from taskloop.contracts.runlife import RETAIN, Liveness, shown
 from taskloop.contracts.slots import slots_of
+from taskloop.contracts.slottable import SlotSource
 from taskloop.contracts.stores import AskStore, JsonStore, LedgerStore, StatusStore
 from taskloop_dash import jsonl
 from taskloop_dash.api.looks import Looks
@@ -67,7 +68,8 @@ class Worlds:
         raw = self.beads.beads_of(path)
         rows = typed_beads(raw)
         bd_ok_at, bd_error = self.beads.health(path)
-        slots = slots_of(rows, socket.gethostname())
+        slot_source = self.slot_source(path)
+        slots = slots_of(rows, slot_source.host)
         states = [s for s in (JsonStore(f, LoopState).get() for f in sorted(env.config.loop_state(loop_key(path)).parent.glob(
             loop_key(path) + ".*.json"))) if s is not None]
         _, items = self.looks.look_items(id, raw)
@@ -75,9 +77,21 @@ class Worlds:
             self.looks.shot_url(id, s["path"]) for s in i["shots"] if s["role"] == "after"))
             for i in items if i["status"] == "open" and i["bead"]]
         return ProjectIn(id=id, name=basename(path), beads=rows, slots=slots, loops=states, looks=looks, adrs=self.adrs(path),
-                         slot_count=env.ports.slot_count(path),
+                         slot_source=slot_source,
                          bd_ok_at=bd_ok_at, bd_error=bd_error,
                          profile_error=self.profile_error(path))
+
+    def slot_source(self, path: str) -> SlotSource:
+        """The slot count and folders; the port reads the profile with git, so a hit needs the same profile stamp and under 30 seconds."""
+        env = self.env
+        stamp = env.ports.profile_stamp(path)
+        key = "slots:" + path
+        hit = env.ttl.peek(key)
+        if hit and hit[1][0] == stamp and env.clock() - hit[0] < 30:
+            return hit[1][1]
+        found = env.ports.slot_source(path)
+        env.ttl.put(key, (stamp, found))
+        return found
 
     def profile_error(self, path: str) -> str:
         """Keep the row while its source files are unchanged; unknown sources fall back to 30 seconds."""

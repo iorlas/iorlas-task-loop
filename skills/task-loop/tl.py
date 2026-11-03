@@ -400,7 +400,7 @@ def v_wait(a: Any, c: Ctx) -> int:
 
 
 def v_handoff(a: Any, c: Ctx) -> int:
-    return status.run_handoff(a.op, repo_of(a, c), c.here.parents[1], c.now(), c.env, c.who)
+    return status.run_handoff(a.op, repo_of(a, c), c.here.parents[1], c.now(), c.env, c.who, c.git)
 
 
 VERBS: Final[dict[str, Handler]] = {

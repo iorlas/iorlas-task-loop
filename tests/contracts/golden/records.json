@@ -1057,6 +1057,40 @@
   "why": "screenshots",
   "until": 1793050200.5
  },
+ "SlotView": {
+  "id": "s1",
+  "state": "held",
+  "holder": "tl-1",
+  "bead": "",
+  "since": "",
+  "held_reason": "screenshots",
+  "held_until": 1793050200.5,
+  "idle_why": "",
+  "dir_exists": true,
+  "beyond_count": false,
+  "pid": null
+ },
+ "SlotTable": {
+  "configured": 1,
+  "slots": [
+   {
+    "id": "s1",
+    "state": "free",
+    "holder": "",
+    "bead": "",
+    "since": "",
+    "held_reason": "",
+    "held_until": 0.0,
+    "idle_why": "",
+    "dir_exists": true,
+    "beyond_count": false,
+    "pid": null
+   }
+  ],
+  "source": "origin/main",
+  "source_sha": "aaaaaaa",
+  "v": 1
+ },
  "Ref": {
   "name": "refs/heads/task/x-1",
   "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"

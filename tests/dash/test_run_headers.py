@@ -16,6 +16,7 @@ from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.run import RunState
 from taskloop.contracts.runlife import RETAIN
+from taskloop.contracts.slottable import SlotSource
 from taskloop.contracts.stores import JsonStore
 from taskloop_dash.app import Dash
 from taskloop_dash.env import Env, Ports
@@ -87,7 +88,7 @@ class RunHeaders(unittest.TestCase):
                          (layout.run, "stage:gate", "mac-owner", "mac-session"))
 
     def test_active_adhoc_work_and_four_configured_lanes_survive_without_slot_beads(self):
-        self.dash.env.ports.slot_count = lambda repo: 4
+        self.dash.env.ports.slot_source = lambda repo: SlotSource(host="h", count=4)
         live = self.create("stage:check")
         done = self.create("stage:gate")
         self.locator.end(done.run, self.now, RunState.DONE)

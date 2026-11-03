@@ -5,7 +5,7 @@ import json
 import os
 import sys
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -28,7 +28,8 @@ from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ids import loop_key as repo_key
 from taskloop.contracts.paths import TASK_EXCLUDE
 from taskloop.contracts.ports import BdFailure, BeadQuery, Beads, Git, Spawner
-from taskloop.contracts.slots import NotARepo, SlotFail, SlotGitError
+from taskloop.contracts.slots import NotARepo, SlotFail, SlotGitError, SlotTable
+from taskloop.contracts.slottable import WORKTREE, LiveSlot, SlotSource, build_slot_table
 from taskloop.stores.files import FileTickets
 
 
@@ -97,12 +98,42 @@ def load_cfg(repo: str, git: Git) -> EngineConfig:
     return cfg_source(repo, git)[0].engine
 
 
-def profile_slots(repo: str) -> SlotsConfig:
-    """The `slots` block of the repo's loop profile (.task-loop.json in the working tree)."""
+def profile_slots(repo: str, git: Git | None = None) -> SlotsConfig:
+    """The `slots` block of the repo's loop profile. With `git`, as committed on the base ref (what the loops read, `cfg_source`: a stale
+    checkout does not change the count); without, the working tree's copy (no git to ask; prefer passing one)."""
+    if git is not None:
+        return cfg_source(repo, git)[0].slots
     try:
         return load_profile(json.loads((Path(repo) / ".task-loop.json").read_text(encoding="utf-8"))).slots
     except (OSError, ValueError):
         return SlotsConfig()
+
+
+def slot_source(repo: str, git: Git) -> SlotSource:
+    """The slot count the loops use (the profile on the base ref, as `cfg_source` reads it), this machine's host and the slot folders on
+    disk. A bad profile exits (cfg_source says so); a caller that must not exit answers for it."""
+    profile_, base, commit = cfg_source(repo, git)
+    cfg = profile_.slots
+    root = Path(slot_dir(repo, "x", cfg)).parent
+    try:
+        dirs = frozenset(d.name for d in root.iterdir() if d.is_dir())
+    except OSError:
+        dirs = frozenset()
+    return SlotSource(host=hostname(), count=cfg.count, source=base if commit else WORKTREE, sha=commit, dirs=dirs)
+
+
+def slot_table(repo: str, who: Identity, git: Git, now: float, live: Mapping[str, LiveSlot] | None = None,
+               store: Beads | None = None) -> SlotTable:
+    """The one slot table of this repo on this machine (contracts/slottable): the config from the base ref, the slot beads of this host,
+    `live` the runs the caller saw alive (slot name -> run)."""
+    src = slot_source(repo, git)
+    beads = slot_beads(repo, who, store)
+    store = store or bd_store(who.actor, repo)
+    try:
+        open_ids = [b.id for b in store.find(BeadQuery()) if b.status in ("open", "in_progress")]
+    except BdFailure:
+        open_ids = []
+    return build_slot_table(beads, src.count, live or {}, src.dirs, now, src.source, src.sha, open_ids)
 
 
 def slot_dir(repo: str, name: str, cfg: SlotsConfig) -> str:
@@ -227,7 +258,7 @@ def worktrees(repo: str, git: Git, who: Identity, slots: list[Bead] | None = Non
         found: list[str] = []  # slot folders may exist before the repository does
     beads = slot_beads(repo, who) if slots is None else slots
     if beads:  # no slot beads, no profile read: a repo whose profile is bad still lists its worktrees
-        cfg = profile_slots(repo)
+        cfg = profile_slots(repo, git)
         found += [slot_dir(repo, b.title.split()[-1], cfg) for b in beads]
     seen: set[str] = set()
     keep: list[str] = []
@@ -277,7 +308,7 @@ def worktree(git: Git, who: Identity, op: str, self_too: bool = False) -> int:
             continue
         if owner != who.actor and any(w == owner or w.startswith(owner + "-") for w in live if w):
             continue  # a loop of that session claims as <owner>-<suffix>
-        if lost := owned.losses(git, str(d), profile_slots(repo).base):
+        if lost := owned.losses(git, str(d), profile_slots(repo, git).base):
             print("KEEP " + str(d) + ": removing it would lose\n" + "\n".join("  " + x for x in lost[: owned.SHOWN]))
             continue
         git.remove_worktree(repo, str(d))
@@ -292,7 +323,7 @@ def owned_worktrees(git: Git, who: Identity, op: str) -> int:
     """`tl worktrees [clean]`: list every worktree of this repo (owned, foreign, orphaned), or remove the owned ones that are merged
     and clean."""
     repo = repo_root()
-    cfg = profile_slots(repo)
+    cfg = profile_slots(repo, git)
     slots_dir = str(Path(slot_dir(repo, "x", cfg)).parent)
     if op == "clean":
         return owned.clean(git, who.config, repo_key(repo), repo, slots_dir, cfg.base, cfg.count, engine_busy)

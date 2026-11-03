@@ -7,7 +7,7 @@ from collections.abc import Callable
 from typing import Any
 
 from taskloop.adapters.bd import BdStore
-from taskloop.adapters.ident import config_dir
+from taskloop.adapters.ident import config_dir, hostname
 from taskloop.adapters.locks import resource_holders
 from taskloop.app.asks.intake import Intake
 from taskloop.app.doctor import profiles
@@ -23,6 +23,7 @@ from taskloop.contracts.env import Env
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import AnswerAsk, BdFailure, Beads
+from taskloop.contracts.slottable import SlotSource
 from taskloop.contracts.stores import AskStore, ReposStore
 from taskloop_dash.env import Ports
 
@@ -136,8 +137,12 @@ def ports(env: Env) -> Ports:
     git = real.git(env)
     home = ConfigDir(config_dir(env))
 
-    def slot_count(repo: str) -> int:
-        return wslots.profile_slots(repo).count
+    def slot_source(repo: str) -> SlotSource:
+        """What the loops count (origin/main's profile); a profile that does not load shows no lanes, its red row says why."""
+        try:
+            return wslots.slot_source(repo, git)
+        except (Exception, SystemExit):
+            return SlotSource(host=hostname(), source="unreadable")
 
     def red_row(repo: str) -> str:
         return profiles.red_row(git, repo)
@@ -145,5 +150,5 @@ def ports(env: Env) -> Ports:
     return Ports(store=store, answer=answer_via(home),
                  **owner_writes(owner_intake(wire_asks.store(home), store, now, adrs=lambda repo: AdrStore.at(home, repo),
                                              factory=lambda: factory_store(home)), home),
-                 slot_count=quiet(slot_count, 0),
+                 slot_source=slot_source,
                  resource_holders=resource_holders, profile_error=quiet(red_row, ""), profile_stamp=quiet(profiles.stamp, None))

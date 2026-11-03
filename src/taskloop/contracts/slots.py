@@ -105,3 +105,34 @@ class Checkout(Rec):
     path: str
     branch: str
     main: bool
+
+
+SlotState = Literal["free", "claimed", "running", "held", "setup", "dead", "retiring"]
+
+
+@final
+class SlotView(Rec):
+    """One slot as every reader shows it (dash lane, `tl status` line, doctor row); the state is computed from `now`, not a raw mark."""
+
+    id: str
+    state: SlotState
+    holder: str = ""  # the live run, the hold's owner or the claim's assignee
+    bead: str = ""  # the bead the slot works on or is starting
+    since: str = ""
+    held_reason: str = ""
+    held_until: float = 0.0
+    idle_why: str = ""
+    dir_exists: bool = True
+    beyond_count: bool = False  # the slot's name is above the configured count: it is finishing, no new work goes to it
+    pid: int | None = None  # of the live run's process, when a caller knows it
+
+
+@final
+class SlotTable(Rec):
+    """The slots of one repo on one machine. The count is `len(slots)`: there is no second number to disagree with."""
+
+    configured: int  # slots.count of the profile read from `source`
+    slots: list[SlotView]
+    source: str  # the base ref the profile was read from (origin/main), or "worktree" when that ref does not resolve
+    source_sha: str = ""
+    v: int = 1
