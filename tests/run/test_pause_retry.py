@@ -40,13 +40,14 @@ class Retry(te.EngineTest):
         self.assertEqual([row.outcome for row in closes], ["noop"])
         self.assertEqual(closes[0].why, "noop: the plan found nothing to implement: " + summary)
 
-    def test_no_lane_retry_reuses_the_completed_plan_when_inputs_are_unchanged(self):
-        rc, first = self.run_engine({"plan": [te.PLAN], "write": [te.stop("no_lane")]}, writer_family=["openai"])
+    def test_transient_retry_reuses_the_completed_plan_when_inputs_are_unchanged(self):
+        later = te.stop("rate_limited", at=10**12)
+        rc, first = self.run_engine({"plan": [te.PLAN], "write": [later]}, writer_family=["openai"])
         self.assertEqual(rc, 2)
         self.assertEqual(first.nodes.count("plan"), 1)
         paused = ParkStore(self.eng.home).get(self.eng.bead)
         assert paused is not None
-        self.assertEqual((paused.reason, paused.permanence), ("no_lane", "transient"))
+        self.assertEqual((paused.reason, paused.permanence), ("rate_limited", "transient"))
         self.assertGreater(paused.retry_at, paused.t)
         self.assertEqual(self.eng.result().retry_after, paused.retry_at)
         closes = [row.rec for row in self.eng.stores.run_log(self.eng.run_id).read_from(0).items if isinstance(row.rec, Close)]
@@ -58,10 +59,35 @@ class Retry(te.EngineTest):
         self.assertEqual(second.nodes[0], "write")
         self.assertIsNone(ParkStore(self.eng.home).get(self.eng.bead))
 
-    def test_owner_pause_keeps_its_old_outcome_no_ask_no_timer_no_park(self):
+    def test_owner_pause_has_a_durable_owner_wake_without_a_timer_or_ask(self):
         stopped = te.stop("no_lane")
         stopped["stop"]["reason"] = "engine_only_unenforced"
         rc, _ = self.run_engine({"plan": [te.PLAN], "write": [stopped]})
         self.assertEqual(rc, 2)
-        self.assertIsNone(ParkStore(self.eng.home).get(self.eng.bead))
+        rec = ParkStore(self.eng.home).get(self.eng.bead)
+        assert rec is not None
+        self.assertEqual((rec.reason, rec.permanence, rec.retry_at), ("engine_only_unenforced", "needs_owner", 0))
         self.assertIsNone(self.ask())
+
+    def test_no_lane_and_delegate_crash_need_owner_even_with_a_retry_hint(self):
+        for reason in ("no_lane", "crash"):
+            with self.subTest(reason=reason):
+                rc, _ = self.run_engine({"plan": [te.PLAN], "write": [te.stop(reason, at=10**12)]}, fresh=True)
+                self.assertEqual(rc, 2)
+                rec = ParkStore(self.eng.home).get(self.eng.bead)
+                assert rec is not None
+                self.assertEqual((rec.reason, rec.permanence, rec.retry_at), (reason, "needs_owner", 0))
+                self.assertEqual(self.eng.result().retry_after, 0)
+
+    def test_repeated_transient_pause_parks_and_asks_after_three_retries(self):
+        for n in range(4):
+            answers = {"write": [te.stop("rate_limited", at=10**12)]}
+            if n == 0:
+                answers["plan"] = [te.PLAN]
+            self.run_engine(answers)
+        rec = ParkStore(self.eng.home).get(self.eng.bead)
+        assert rec is not None
+        self.assertEqual(rec.attempts, {"delegate:rate_limited": 4})
+        self.assertEqual((rec.permanence, rec.retry_at), ("needs_owner", 0))
+        self.assertTrue(self.eng.asked)
+        self.assertIn("rate_limited paused 4 times", str(self.ask()))

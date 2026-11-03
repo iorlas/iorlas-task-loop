@@ -14,7 +14,7 @@ def recent_closes(traces: str | Path, repo: str, now: float, window: float | Non
     out: list[dict[str, Any]] = []
     try:
         lines = Path(traces).read_text(encoding="utf-8", errors="replace").splitlines()
-    except OSError:
+    except FileNotFoundError:
         return out
     for ln in lines:
         if '"kind"' not in ln:

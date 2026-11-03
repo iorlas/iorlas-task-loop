@@ -1,7 +1,8 @@
 """Durable pause policy: every known reason has either a clock wake or an owner wake.
 
 Delegate reasons are open on the wire. Unknown ones are held for the owner, never guessed transient.
-Attempt zero is the first pause; history lives in the existing Park record across retries and reason changes.
+Attempt zero is the first pause; every transient reason allows three retries except network outages, which charge nothing.
+History lives in the existing Park record across retries and reason changes, keyed by producer:reason.
 """
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -11,6 +12,7 @@ from taskloop.contracts.bead import Bead
 from taskloop.contracts.delegate import Permanence
 from taskloop.contracts.parks import Park
 from taskloop.domain.beads.park import text_hash
+from taskloop.domain.lanes.pause_reasons import Producer, Reason, Unknown, parse
 
 
 @dataclass(frozen=True)
@@ -21,68 +23,87 @@ class PauseRule:
     max_attempts: int = 0
 
 
-TABLE: Final[dict[str, PauseRule]] = {
-    "no_lane": PauseRule("transient", 60, 3600),
-    "only_family_unready": PauseRule("transient", 60, 3600),
-    "same_family": PauseRule("transient", 60, 3600),
-    "busy": PauseRule("transient", 30, 1800),
-    "timeout": PauseRule("transient", 60, 3600),
-    "network": PauseRule("transient", 30, 1800),
-    "engine_crash": PauseRule("transient", 60, 3600, max_attempts=3),
-    "transient_infrastructure": PauseRule("transient", 60, 3600),
-    "rate_limited": PauseRule("transient", 60, 3600),
-    "hung": PauseRule("transient", 60, 3600),
-    "vendor_blip": PauseRule("transient", 30, 1800),
-    "worker_failed": PauseRule("transient", 60, 3600),
-    "schema_invalid": PauseRule("transient", 60, 3600),
-    "held": PauseRule("transient", 60, 3600),
-    "duplicate_task": PauseRule("transient", 30, 1800),
-    "lock": PauseRule("transient", 30, 1800),
-    "crash": PauseRule("transient", 60, 3600),
-    "no_answer": PauseRule("transient", 60, 3600),
-    "killed": PauseRule("transient", 60, 3600),
-    "engine_only_unenforced": PauseRule("needs_owner"),
-    "overrun": PauseRule("needs_owner"),
-    "secrets": PauseRule("needs_owner"),
-    "credit_exhausted": PauseRule("needs_owner"),
-    "logged_out": PauseRule("needs_owner"),
-    "bad_request": PauseRule("needs_owner"),
-    "caller": PauseRule("needs_owner"),
-    "setup": PauseRule("needs_owner"),
-    "profile_ahead": PauseRule("needs_owner"),
-    "contract_violation": PauseRule("needs_owner"),
-    # Engine outcomes are typed reasons when no delegate stop supplied a finer one.
-    "pause_lane": PauseRule("transient", 60, 3600),
-    "pause_network": PauseRule("transient", 30, 1800),
-    "pause_killed": PauseRule("transient", 60, 3600),
-    "pause_moved": PauseRule("transient", 60, 3600),
-    "fault_infra": PauseRule("transient", 60, 3600),
-    "fault_crashed": PauseRule("transient", 60, 3600),
-    "fault_stale_base": PauseRule("transient", 60, 3600),
-    "fault_slot": PauseRule("needs_owner"),
-    "fault_denied": PauseRule("needs_owner"),
-    "fault_plan": PauseRule("needs_owner"),
-    "fault_land": PauseRule("needs_owner"),
-    "fault_engine": PauseRule("needs_owner"),
-    "fault_bad_request": PauseRule("needs_owner"),
-    "fault_contract_skew": PauseRule("needs_owner"),
-    "fault_base_red": PauseRule("needs_owner"),
-    "ask_decision": PauseRule("needs_owner"),
-    "ask_stuck": PauseRule("needs_owner"),
-    "ask_budget": PauseRule("needs_owner"),
-    "ask_ticket": PauseRule("needs_owner"),
-    "wait_ask": PauseRule("needs_owner"),
-    "owner_park": PauseRule("needs_owner"),
-    "plan_noop": PauseRule("needs_owner"),
-    "lost_run": PauseRule("transient", 60, 3600),
-    "bd_push_rejected": PauseRule("needs_owner"),
-    "dolt_push_rejected": PauseRule("needs_owner"),
-    "forge_5xx": PauseRule("transient", 30, 1800),
+TABLE: Final[dict[tuple[Producer, Reason], PauseRule]] = {
+    ("delegate", Reason.NO_LANE): PauseRule("needs_owner"),
+    ("delegate", Reason.ONLY_FAMILY_UNREADY): PauseRule("transient", 60, 3600, 3),
+    ("engine", Reason.SAME_FAMILY): PauseRule("transient", 60, 3600, 3),
+    ("delegate", Reason.BUSY): PauseRule("transient", 30, 1800, 3),
+    ("delegate", Reason.TIMEOUT): PauseRule("transient", 60, 3600, 3),
+    ("delegate", Reason.NETWORK): PauseRule("transient", 30, 1800),
+    ("engine", Reason.ENGINE_CRASH): PauseRule("transient", 60, 3600, 3),
+    ("engine", Reason.TRANSIENT_INFRASTRUCTURE): PauseRule("transient", 60, 3600, 3),
+    ("delegate", Reason.RATE_LIMITED): PauseRule("transient", 60, 3600, 3),
+    ("delegate", Reason.HUNG): PauseRule("transient", 60, 3600, 3),
+    ("delegate", Reason.VENDOR_BLIP): PauseRule("transient", 30, 1800, 3),
+    ("delegate", Reason.WORKER_FAILED): PauseRule("transient", 60, 3600, 3),
+    ("delegate", Reason.SCHEMA_INVALID): PauseRule("transient", 60, 3600, 3),
+    ("delegate", Reason.HELD): PauseRule("transient", 60, 3600, 3),
+    ("delegate", Reason.DUPLICATE_TASK): PauseRule("transient", 30, 1800, 3),
+    ("delegate", Reason.LOCK): PauseRule("transient", 30, 1800, 3),
+    ("delegate", Reason.CRASH): PauseRule("needs_owner"),
+    ("engine", Reason.NO_ANSWER): PauseRule("transient", 60, 3600, 3),
+    ("delegate", Reason.KILLED): PauseRule("transient", 60, 3600, 3),
+    ("delegate", Reason.ENGINE_ONLY_UNENFORCED): PauseRule("needs_owner"),
+    ("engine", Reason.OVERRUN): PauseRule("needs_owner"),
+    ("delegate", Reason.SECRETS): PauseRule("needs_owner"),
+    ("delegate", Reason.CREDIT_EXHAUSTED): PauseRule("needs_owner"),
+    ("delegate", Reason.LOGGED_OUT): PauseRule("needs_owner"),
+    ("delegate", Reason.BAD_REQUEST): PauseRule("needs_owner"),
+    ("delegate", Reason.CALLER): PauseRule("needs_owner"),
+    ("delegate", Reason.SETUP): PauseRule("needs_owner"),
+    ("engine", Reason.PROFILE_AHEAD): PauseRule("needs_owner"),
+    ("engine", Reason.CONTRACT_VIOLATION): PauseRule("needs_owner"),
+    ("engine", Reason.PAUSE_LANE): PauseRule("transient", 60, 3600, 3),
+    ("engine", Reason.PAUSE_NETWORK): PauseRule("transient", 30, 1800),
+    ("engine", Reason.PAUSE_KILLED): PauseRule("transient", 60, 3600, 3),
+    ("engine", Reason.PAUSE_MOVED): PauseRule("transient", 60, 3600, 3),
+    ("engine", Reason.FAULT_INFRA): PauseRule("transient", 60, 3600, 3),
+    ("engine", Reason.FAULT_CRASHED): PauseRule("transient", 60, 3600, 3),
+    ("engine", Reason.FAULT_STALE_BASE): PauseRule("transient", 60, 3600, 3),
+    ("engine", Reason.FAULT_SLOT): PauseRule("needs_owner"),
+    ("engine", Reason.FAULT_DENIED): PauseRule("needs_owner"),
+    ("engine", Reason.FAULT_PLAN): PauseRule("needs_owner"),
+    ("engine", Reason.FAULT_LAND): PauseRule("needs_owner"),
+    ("engine", Reason.FAULT_ENGINE): PauseRule("needs_owner"),
+    ("engine", Reason.FAULT_BAD_REQUEST): PauseRule("needs_owner"),
+    ("engine", Reason.FAULT_CONTRACT_SKEW): PauseRule("needs_owner"),
+    ("engine", Reason.FAULT_BASE_RED): PauseRule("needs_owner"),
+    ("engine", Reason.ASK_DECISION): PauseRule("needs_owner"),
+    ("engine", Reason.ASK_STUCK): PauseRule("needs_owner"),
+    ("engine", Reason.ASK_BUDGET): PauseRule("needs_owner"),
+    ("engine", Reason.ASK_TICKET): PauseRule("needs_owner"),
+    ("engine", Reason.WAIT_ASK): PauseRule("needs_owner"),
+    ("engine", Reason.OWNER_PARK): PauseRule("needs_owner"),
+    ("engine", Reason.PLAN_NOOP): PauseRule("needs_owner"),
+    ("engine", Reason.LOST_RUN): PauseRule("transient", 60, 3600, 3),
+    ("engine", Reason.BD_PUSH_REJECTED): PauseRule("needs_owner"),
+    ("engine", Reason.DOLT_PUSH_REJECTED): PauseRule("needs_owner"),
+    ("engine", Reason.FORGE_5XX): PauseRule("transient", 30, 1800, 3),
 }
 
 
-def rule(reason: str) -> PauseRule:
-    return TABLE.get(reason, PauseRule("needs_owner"))
+def producer_of(reason: str) -> Producer:
+    return "engine" if ("engine", reason) in TABLE else "delegate"
+
+
+def attempt_key(reason: str, producer: Producer | None = None) -> str:
+    return f"{producer or producer_of(reason)}:{reason}"
+
+
+def rule(reason: str | Unknown, producer: Producer | None = None) -> PauseRule:
+    known = parse(reason) if isinstance(reason, str) else reason
+    if isinstance(known, Unknown):
+        return PauseRule("needs_owner")
+    return TABLE.get((producer or producer_of(known), known), PauseRule("needs_owner"))
+
+
+def history(rec: Park | None) -> dict[str, int]:
+    """Qualify legacy counters without resetting their retry budgets on upgrade."""
+    counts: dict[str, int] = {}
+    for key, count in (rec.attempts if rec else {}).items():
+        qualified = key if ":" in key else attempt_key(key)
+        counts[qualified] = max(counts.get(qualified, 0), count)
+    return counts
 
 
 def delay(policy: PauseRule, attempt: int, random: Callable[[], float]) -> float:
@@ -98,16 +119,20 @@ def exhausted(policy: PauseRule, rec: Park | None, reason: str, attempt: int, fi
 
 
 def after_pause(rec: Park | None, b: Bead, run: str, now: float, reason: str,
-                random: Callable[[], float], not_before: float = 0.0, *, question: bool = False, fingerprint: str = "") -> Park:
+                random: Callable[[], float], not_before: float = 0.0, *, question: bool = False, fingerprint: str = "",
+                producer: Producer | None = None) -> Park:
     if rec is not None and rec.run == run:
         return rec
-    policy = rule(reason)
-    counts = dict(rec.attempts) if rec else {}
-    attempt = counts.get(reason, 0)
-    if reason in ("network", "pause_network"):
+    producer = producer or producer_of(reason)
+    policy = rule(reason, producer)
+    counts = history(rec)
+    key = attempt_key(reason, producer)
+    attempt = counts.get(key, 0)
+    if (producer, reason) in (("delegate", "network"), ("engine", "pause_network")):
         attempt = 0  # outages never consume a bead's attempts; only the loop's probe gates recovery
     else:
-        counts[reason] = attempt + 1
+        counts[key] = attempt + 1
+    fingerprint = fingerprint if producer == "engine" else ""
     permanence: Permanence = "needs_owner" if exhausted(policy, rec, reason, attempt, fingerprint) else policy.permanence
     retry_at = max(now + delay(policy, attempt, random), not_before) if permanence == "transient" else 0.0
     h = text_hash(b)

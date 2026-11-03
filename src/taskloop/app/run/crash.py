@@ -20,5 +20,6 @@ def parked_crash(e: Engine, step: str, err: Exception) -> oc.RunOutcome:
     why = f"{step} crashed: {type(err).__name__}: {err}"[:200]
     e.kind, e.why = Kind.ENGINE_CRASH, why
     e.pause_reason = e.kind.value
+    e.pause_producer = "engine"
     e.log.warn(why + "\n" + "".join(traceback.format_exception(err)))
     return oc.make(e.kind, why)

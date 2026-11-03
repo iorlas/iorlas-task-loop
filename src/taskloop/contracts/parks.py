@@ -1,5 +1,6 @@
 """parks/<bead>.json: question counts and durable pause wakes. `runs` counts questions on the same bead text; `attempts` counts
-pauses by typed reason across runs. Transient pauses carry an epoch retry_at; needs_owner pauses wake on owner input."""
+pauses by producer:reason across runs (legacy bare reasons are read on upgrade). Transient pauses carry an epoch retry_at;
+needs_owner pauses wake on owner input."""
 from pathlib import Path
 from typing import ClassVar
 

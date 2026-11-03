@@ -17,6 +17,7 @@ from taskloop.contracts.kinds import Kind
 from taskloop.contracts.review import Unfiled
 from taskloop.contracts.wire import Open
 from taskloop.domain import outcome as oc
+from taskloop.domain.lanes.pause_reasons import Producer
 
 
 class RunFields(StateAttrs):
@@ -62,6 +63,7 @@ class RunFields(StateAttrs):
         self.at_stage = 0  # the stage a call belongs to, for its key
         self.pause_role, self.pause_lane = "", ""  # the role and lane a paused run waits for: the loop wakes the bead when it is usable
         self.pause_reason = ""  # typed delegate reason; otherwise the close uses the engine outcome kind
+        self.pause_producer: Producer = "engine"
         self.budget_warned: set[float] = set()
         self.plan_assumed = False  # tl-ntp: the planner was sent back once to plan on assumptions
         self.plan_decided = False  # the planner was sent back once with the requirement that answers its question

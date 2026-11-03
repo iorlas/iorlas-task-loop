@@ -1,9 +1,9 @@
 """A run that goes on in another process: the counters kept across a network pause or an exec into a newer install, and the exec at a
 step boundary."""
-import contextlib
 import os
 import sys
 import time
+import traceback
 from pathlib import Path
 from typing import Any
 
@@ -79,7 +79,7 @@ class Reload:
         try:
             found = (e.newer_fn or (lambda: newer(e.env)))()
         except Exception as err:  # looking for a newer install never stops a run
-            e.warn(f"looking for a newer task-loop failed: {err}")
+            e.warn(f"looking for a newer task-loop failed: {err}\n" + traceback.format_exc())
             return
         if not found:
             return
@@ -113,8 +113,10 @@ class Reload:
         handed = childenv.exec_env(e.env, {EnvVar.TL_REEXEC: Reexec(
             run=run, bead=e.bead, pid=os.getpid(), frm=here, owned=RUN_SLOT["owned"]).text()})
         for f in (sys.stdout, sys.stderr):
-            with contextlib.suppress(Exception):
+            try:
                 f.flush()
+            except Exception as err:
+                e.warn(f"could not flush output before reload: {err}\n" + traceback.format_exc())
         try:
             (e.exec_fn or reexec.exec_in_place)([*childenv.script_argv(d / "skills" / "task-loop" / "tl.py", e.env), *argv], handed)
             e.moved = True

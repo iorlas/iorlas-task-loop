@@ -1,5 +1,6 @@
 """One run of the engine: claim checks, the stages, the land, and the close-out that always runs."""
 import contextlib
+import traceback
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -57,6 +58,7 @@ class RunOnce:
         except Exec:
             pass  # the process image is gone; nothing below runs in a real exec
         except Exception as err:  # the close-out must run whatever broke
+            e.log.warn("engine error\n" + "".join(traceback.format_exception(err)))
             end.outcome = oc.make(Kind.FAULT_ENGINE, f"failed: engine error {type(err).__name__}: {err}")
         finally:
             self.close_out(hb, end)
@@ -99,7 +101,7 @@ class RunOnce:
                             askspecs.external_fact([u["what"] for u in gaps]), kind=Kind.ASK_DECISION)
         try:
             sha = e.lander.finish(bead)
-        except (e.Blocked, fence.Fenced, ValueError):
+        except (e.Blocked, fence.Fenced):
             raise
         except Exception as err:
             done = parked_crash(e, Step.LAND, err)
@@ -220,7 +222,7 @@ class RunOnce:
         except fence.Fenced as err:
             self.e.fenced = err.why
             raise
-        except (self.e.Blocked, ValueError):
+        except self.e.Blocked:
             raise
         except Exception as err:
             e = self.e

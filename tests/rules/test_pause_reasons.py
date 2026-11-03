@@ -4,11 +4,13 @@ import ast
 import json
 import sys
 import unittest
+from collections import Counter
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
+from taskloop.domain.lanes.pause_reasons import Reason
 from taskloop.domain.lanes.pauses import TABLE
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -60,11 +62,34 @@ class Complete(unittest.TestCase):
         reasons: set[str] = set()
         for path in (ROOT / "src").rglob("*.py"):
             reasons.update(produced(path.read_text(encoding="utf-8")))
-        self.assertEqual(reasons - TABLE.keys(), set())
+        self.assertEqual(reasons - {reason.value for _, reason in TABLE}, set())
 
     def test_all_recorded_delegate_contract_reasons_have_a_policy(self):
         contract = ROOT / "tests/fixtures/delegate3/skills/delegate/contract.json"
-        self.assertEqual(set(json.loads(contract.read_text())["reasons"]) - TABLE.keys(), set())
+        for reason, facts in json.loads(contract.read_text())["reasons"].items():
+            with self.subTest(reason=reason):
+                self.assertEqual(TABLE[("delegate", Reason(reason))].permanence, facts["permanence"])
+
+    def test_every_reason_has_exactly_one_policy(self):
+        self.assertEqual(Counter(reason for _, reason in TABLE), Counter(Reason))
+
+    def test_table_has_no_duplicate_source_keys(self):
+        source = ast.parse((ROOT / "src/taskloop/domain/lanes/pauses.py").read_text())
+        table = next(n.value for n in source.body if isinstance(n, ast.AnnAssign)
+                     and isinstance(n.target, ast.Name) and n.target.id == "TABLE")
+        assert isinstance(table, ast.Dict)
+        keys = [ast.dump(key) for key in table.keys if key is not None]
+        self.assertEqual(len(keys), len(set(keys)))
+
+    def test_every_transient_policy_is_capped_except_network(self):
+        for key, policy in TABLE.items():
+            with self.subTest(key=key):
+                if policy.permanence == "transient":
+                    network = key in (("delegate", Reason.NETWORK), ("engine", Reason.PAUSE_NETWORK))
+                    if network:
+                        self.assertEqual(policy.max_attempts, 0)
+                    else:
+                        self.assertGreater(policy.max_attempts, 0)
 
     def test_scanner_catches_new_constants_enums_and_synthesized_reasons(self):
         source = (

@@ -20,10 +20,12 @@ from taskloop.app.run.closer_settle import Settle
 from taskloop.contracts.checkpoint import Checkpoint, Notes
 from taskloop.contracts.enums import Outcome
 from taskloop.contracts.kinds import ASKS, Kind
+from taskloop.contracts.parks import Park
 from taskloop.domain import effects
 from taskloop.domain import outcome as oc
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.interpret import CheckpointLedger, interpret
+from taskloop.domain.lanes import pauses
 
 
 class DecideStep(Protocol):
@@ -144,19 +146,29 @@ class Closer:
         if bead is None:
             return
         rec = parks.paused(e.home, bead, done.kind, e.run_id, e.clock.now(), reason=e.pause_reason,
-                           not_before=e.retry_after, fingerprint=e.crash_fingerprint if done.kind is Kind.ENGINE_CRASH else "")
+                           not_before=e.retry_after, fingerprint=e.crash_fingerprint if done.kind is Kind.ENGINE_CRASH else "",
+                           producer=e.pause_producer)
         if rec is None:
             return
         e.retry_after = rec.retry_at
         e.pause_reason = rec.reason
+        self.ask_pause(rec, done)
+
+    def ask_pause(self, rec: Park, done: oc.RunOutcome) -> None:
+        """An exhausted retry budget has one owner question; immediate owner stops only keep their wake."""
+        e = self.e
         if done.kind is Kind.ENGINE_CRASH:
             e.fp = rec.fingerprint
             if rec.permanence == "needs_owner" and not e.asked:
-                count = rec.attempts[rec.reason]
+                count = pauses.history(rec)[pauses.attempt_key(rec.reason, e.pause_producer)]
                 e.why = f"engine crashed {count} times at {e.crash_site}: {done.detail}; traceback in {e.run_id}"
                 spec = replace(askspecs.repeated_fault(count, " ".join(e.why.splitlines())),
                                decision="The engine keeps crashing; how should it go on?")
                 e.asked = bool(e.ask_flow.raise_ask(spec, e.why, Kind.ASK_STUCK))
+        elif rec.permanence == "needs_owner" and pauses.rule(rec.reason, e.pause_producer).max_attempts and not e.asked:
+            count = pauses.history(rec)[pauses.attempt_key(rec.reason, e.pause_producer)]
+            why = f"{rec.reason} paused {count} times: {done.detail}"
+            e.asked = bool(e.ask_flow.raise_ask(askspecs.repeated_fault(count, " ".join(why.splitlines())), why, Kind.ASK_STUCK))
 
     def apply(self, eff: effects.CloseEffect, done: oc.RunOutcome, stats: str) -> None:
         """One effect of the close plan, done. The match is closed: a new effect is one more case here."""

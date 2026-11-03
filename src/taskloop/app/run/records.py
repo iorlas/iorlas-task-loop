@@ -1,6 +1,7 @@
 """What a run records about itself: why it started, its run record in the engine log, its line in traces.jsonl."""
 import contextlib
 import time
+import traceback
 from typing import Any
 
 from taskloop.adapters import ident
@@ -89,8 +90,10 @@ class Records:
 
     def settle(self, state: RunState, reason: str) -> None:
         """The run's one terminal state, on every exit path (the close-out calls it last, whatever happened before)."""
-        with contextlib.suppress(OSError):
+        try:
             RunLocator(self.e.home).end(self.e.run_id, time.time(), state, reason)
+        except (OSError, ValueError) as err:
+            self.e.warn(f"could not settle run {self.e.run_id}: {err}\n" + traceback.format_exc())
 
     def file_trace(self, outcome: Outcome, why: str, sha: str) -> None:
         """One line per engine run in traces.jsonl, never pruned: bead, repo, branch, every session, the outcome."""

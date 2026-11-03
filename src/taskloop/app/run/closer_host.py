@@ -19,6 +19,7 @@ from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import Beads, Clock, Git
 from taskloop.domain import outcome as oc
 from taskloop.domain.asks.spec import AskSpec
+from taskloop.domain.lanes.pause_reasons import Producer
 from taskloop.stores.runlog import RunLog
 
 
@@ -43,6 +44,7 @@ class CloseHost(Protocol):
     dead: Checkpoint | None  # the checkpoint of a run that died inside its close (its outcome kept, a key unapplied), else None
     retry_after: float
     pause_reason: str
+    pause_producer: Producer
     why: str
 
     @property

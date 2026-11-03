@@ -2,6 +2,7 @@
 (`ConfigDir.artifacts`). Symlinks, secret-looking names and big files are skipped; nothing here raises into the engine and no model is
 called. The dashboard lists the directory as <img>/<a> links."""
 import fnmatch
+import traceback
 from pathlib import Path
 
 from atomic_io import atomic_write_bytes
@@ -61,7 +62,7 @@ class StepArtifacts:
             if names:
                 self.log.emit(Artifacts(id=step_id, step=step, bead=self.bead, names=names))
         except Exception as e:  # pictures are never worth a run
-            self.log.warn(f"artifacts: {type(e).__name__}: {e}")
+            self.log.warn(f"artifacts: {type(e).__name__}: {e}\n" + traceback.format_exc())
 
 
 __all__ = ["MAX_BYTES", "SECRET_NAMES", "StepArtifacts", "ingest"]

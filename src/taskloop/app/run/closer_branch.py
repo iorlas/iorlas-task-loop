@@ -1,5 +1,5 @@
 """The close's work on the slot: the branch saved (a wip commit, the checkpoint marked closed), the slot left."""
-import contextlib
+import traceback
 from collections.abc import Callable
 from typing import Protocol
 
@@ -85,7 +85,7 @@ class ReleaseSlot:
     def run(self, branch: str, outcome: Outcome) -> None:
         """Last: the trace and the comments read the branch. A slot whose lease moved on (another generation) is not this run's to touch."""
         e = self.e
-        with contextlib.suppress(Exception):
+        try:
             if e.claim.slot_bead and fence.stale(e.store, e.claim):
                 return
             e.tree.leave_slot(outcome, branch)
@@ -93,3 +93,5 @@ class ReleaseSlot:
                 repo = next((co.path for co in e.git.checkouts(e.wt) if co.main), e.wt)
                 cleanup.retry_logged(e.git, e.log, lambda path: bool(slot_of(repo, path, e.who, e.store, strict=True)),
                                      profile_slots(repo).base)
+        except Exception as err:
+            e.log.warn(f"could not release slot: {err}\n" + traceback.format_exc())

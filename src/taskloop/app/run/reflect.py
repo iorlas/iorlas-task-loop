@@ -1,4 +1,5 @@
 """The run's reflection (tl-05s): one cheap read-only call at the close that says what went well and badly."""
+import traceback
 from typing import Any
 
 from taskloop.adapters import childenv
@@ -53,7 +54,7 @@ class Reflector:
             data = unstrict(res.data, answers.schema_for("reflect"))
             return None if answers.check("reflect", False, data) else data
         except Exception as err:  # nothing here may touch the run's outcome
-            e.warn(f"no reflection: {type(err).__name__}: {str(err)[:160]}")
+            e.warn(f"no reflection: {type(err).__name__}: {str(err)[:160]}\n" + traceback.format_exc())
             return None
 
     def reflect_prompt(self, outcome: str, why: str) -> str:

@@ -509,14 +509,14 @@ class DelegateLauncher(T.EngineTest):
                             for c in self.bd_calls))
         self.assertNotIn("needs a human", self.eng.log_path.read_text())
 
-    def test_every_lane_out_with_a_time_pauses_until_it(self):
+    def test_no_lane_needs_owner_even_with_a_predicted_time(self):
         due = time.time() + 3 * 3600
         none = stop("no_lane", at=due, say="every lane is out")
         rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE, self.OUT_OWNER, none],
                                  "review": [review(unmet=["more"])]})
         self.assertEqual(rc, 2)
         self.assertEqual(self.blocked, [])
-        self.assertAlmostEqual(self.eng.retry_after, due, delta=1)
+        self.assertEqual(self.eng.retry_after, 0)
 
     def test_close_with_an_empty_reason_still_closes(self):
         c = wslots.load_cfg(str(self.wt), port_git())

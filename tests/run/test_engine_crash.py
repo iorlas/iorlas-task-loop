@@ -57,6 +57,8 @@ class EngineCrash(EngineTest):
             e.stage_loop.writing.run = mock.Mock(side_effect=KeyError("write"))
         self.run_engine({"plan": [PLAN]}, prep=prep)
         self.assertEqual(self.eng.kind, Kind.FAULT_ENGINE)
+        self.assertIn("Traceback (most recent call last)", self.eng.log_path.read_text())
+        self.assertIn("KeyError: 'write'", self.eng.log_path.read_text())
 
     def test_keyboard_interrupt_at_land_still_propagates(self):
         with self.assertRaises(KeyboardInterrupt):
@@ -68,9 +70,13 @@ class EngineCrash(EngineTest):
             self.crash_land(SystemExit(3))
         self.assertNotEqual(self.eng.kind.value, "engine_crash")
 
-    def test_value_error_at_land_keeps_engine_fault_behavior(self):
+    def test_value_error_at_land_parks_with_checkpoint_and_traceback(self):
         self.crash_land(ValueError("refused"))
-        self.assertEqual(self.eng.kind, Kind.FAULT_ENGINE)
+        self.assertEqual(self.eng.kind, Kind.ENGINE_CRASH)
+        self.assertEqual(must(ParkStore(self.eng.home).get(self.eng.bead)).reason, "engine_crash")
+        self.assertEqual(must(read_ck(self.eng)).step, "land")
+        self.assertIn("ValueError: refused", self.eng.log_path.read_text())
+        self.assertIn("Traceback (most recent call last)", self.eng.log_path.read_text())
 
     def test_continuous_close_crash_parks_and_keeps_its_close_ledger(self):
         def prep(e):

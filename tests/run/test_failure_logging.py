@@ -1,0 +1,72 @@
+"""Best-effort run operations leave tracebacks when they fail instead of hiding missing evidence."""
+import sys
+import unittest
+from pathlib import Path
+from unittest import mock
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import support.paths  # noqa: F401
+
+from taskloop.app.run.artifacts import StepArtifacts
+from taskloop.app.run.closer_branch import ReleaseSlot
+from taskloop.app.run.closer_decide import Decide
+from taskloop.app.run.records import Records
+from taskloop.app.run.reflect import Reflector
+from taskloop.app.run.reload import Reload
+from taskloop.contracts.enums import Outcome
+from taskloop.contracts.ids import BeadId
+from taskloop.contracts.kinds import Kind
+from taskloop.contracts.run import RunState
+from taskloop.domain import outcome as oc
+
+
+class FailureLogging(unittest.TestCase):
+    def assert_traceback(self, text, message):
+        self.assertIn(message, text)
+        self.assertIn("Traceback (most recent call last)", text)
+
+    def test_retry_history_read_failure_is_logged_before_using_empty_history(self):
+        host = mock.Mock(bead=BeadId("t-1"))
+        host.clock.now.return_value = 100
+        with mock.patch("taskloop.adapters.storm.recent_closes", side_effect=OSError("unreadable")), \
+                mock.patch.object(Decide, "repo_id", return_value="repo"):
+            self.assertEqual(Decide(host).run(oc.make(Kind.PAUSE_LANE, "paused")), Kind.PAUSE_LANE)
+        self.assert_traceback(host.warn.call_args.args[0], "could not read retry history: unreadable")
+
+    def test_settle_failure_is_logged_and_does_not_replace_the_run_outcome(self):
+        for error in (OSError("disk"), ValueError("record")):
+            with self.subTest(error=type(error).__name__):
+                host = mock.Mock(run_id="r1")
+                with mock.patch("taskloop.app.run.records.RunLocator") as locator:
+                    locator.return_value.end.side_effect = error
+                    Records(host).settle(RunState.PARKED, "paused")
+                self.assert_traceback(host.warn.call_args.args[0], "could not settle run r1")
+
+    def test_artifact_catch_all_logs_traceback(self):
+        log = mock.Mock()
+        copier = StepArtifacts("t-1", Path("source"), Path("dest"), log)
+        with mock.patch("taskloop.app.run.artifacts.ingest", side_effect=RuntimeError("copy")):
+            copier("s1", "write")
+        self.assert_traceback(log.warn.call_args.args[0], "RuntimeError: copy")
+
+    def test_reflection_catch_all_logs_traceback(self):
+        host = mock.Mock()
+        reflector = Reflector(host)
+        with mock.patch.object(reflector, "worth_asking", return_value=True), \
+                mock.patch.object(reflector, "reflect_prompt", side_effect=RuntimeError("prompt")):
+            self.assertIsNone(reflector.reflect_run("done", "finished"))
+        self.assert_traceback(host.warn.call_args.args[0], "RuntimeError: prompt")
+
+    def test_release_catch_all_logs_traceback(self):
+        host = mock.Mock()
+        host.claim.slot_bead = ""
+        host.tree.leave_slot.side_effect = RuntimeError("slot")
+        ReleaseSlot(host).run("task/t-1", Outcome.PARKED)
+        self.assert_traceback(host.log.warn.call_args.args[0], "RuntimeError: slot")
+
+    def test_reload_lookup_catch_all_logs_traceback(self):
+        host = mock.Mock(dry=False, argv=["run-task", "t-1"])
+        host.newer_fn.side_effect = RuntimeError("lookup")
+        with mock.patch("taskloop.app.run.reload.reexec.reexec_args", return_value=host.argv):
+            Reload(host).safe_point("land")
+        self.assert_traceback(host.warn.call_args.args[0], "RuntimeError: lookup")

@@ -14,6 +14,7 @@ from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.stores import AskStore
 from taskloop.domain.beads import park
 from taskloop.domain.lanes import pauses
+from taskloop.domain.lanes.pause_reasons import Producer
 
 
 def answered(ask: Ask | None) -> bool:
@@ -43,16 +44,17 @@ def entering(cfg: ConfigDir, b: Bead) -> None:
 
 
 def paused(cfg: ConfigDir, b: Bead, kind: Kind, run: str, now: float, *, reason: str = "",
-           not_before: float = 0.0, draw: Callable[[], float] = random, fingerprint: str = "") -> Park | None:
+           not_before: float = 0.0, draw: Callable[[], float] = random, fingerprint: str = "",
+           producer: Producer | None = None) -> Park | None:
     """File a pause's wake, including an empty plan's explicit owner wake."""
     if kind is Kind.NOOP:
         reason = "plan_noop"
     reason = reason or kind.value
-    if kind is not Kind.NOOP and (kind not in PAUSES or pauses.rule(reason).permanence != "transient"):
+    if kind is not Kind.NOOP and kind not in PAUSES:
         return None
     store = ParkStore(cfg)
     old = store.get(b.id)
-    rec = pauses.after_pause(old, b, run, now, reason, draw, not_before, fingerprint=fingerprint)
+    rec = pauses.after_pause(old, b, run, now, reason, draw, not_before, fingerprint=fingerprint, producer=producer)
     store.put(rec)
     return rec
 

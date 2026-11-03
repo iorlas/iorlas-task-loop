@@ -241,7 +241,13 @@ def finish_step(e: Engine, step: Step, bead: Bead) -> Step | None:
             raise ValueError(result.text)
         following = Step.LAND
     elif step is Step.LAND:
-        sha = e.lander.finish(bead)
+        try:
+            sha = e.lander.finish(bead)
+        except (e.Blocked, fence.Fenced):
+            raise
+        except Exception as err:
+            done = parked_crash(e, step, err)
+            raise e.Blocked(done.detail, kind=done.kind) from err
         if not sha:
             raise ValueError("land refused: no land was recorded")
         e.landed_sha = sha

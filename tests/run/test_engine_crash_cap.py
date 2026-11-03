@@ -33,7 +33,7 @@ class CrashCap(EngineTest):
         park = must(ParkStore(e.home).get(e.bead))
         self.assertNotEqual(first.run, park.run)
         self.assertEqual(park.fingerprint, first.fingerprint)
-        self.assertEqual((park.permanence, park.retry_at, park.attempts), ("needs_owner", 0.0, {"engine_crash": 2}))
+        self.assertEqual((park.permanence, park.retry_at, park.attempts), ("needs_owner", 0.0, {"engine:engine_crash": 2}))
         self.assertTrue(e.asked)
         for text in (e.why, str(self.ask())):
             self.assertIn("engine crashed 2 times at test_engine_crash_cap.py:fail_land:", text)
@@ -51,7 +51,7 @@ class CrashCap(EngineTest):
         self.crash({})
         park = must(store.get(self.eng.bead))
         self.assertEqual((park.permanence, park.retry_at), ("needs_owner", 0.0))
-        self.assertEqual(park.attempts, {"engine_crash": 4})
+        self.assertEqual(park.attempts, {"engine:engine_crash": 4})
         self.assertTrue(self.eng.asked)
         self.assertIn("engine crashed 4 times at", str(self.ask()))
 

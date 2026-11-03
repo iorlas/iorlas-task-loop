@@ -24,7 +24,7 @@ class PauseCompatibility(unittest.TestCase):
         self.bead = Bead(id=BeadId("t-1"), title="work", status="open")
         self.cfg = mock.Mock()
 
-    def test_owner_and_unknown_reasons_do_not_create_a_park_or_ask(self):
+    def test_owner_and_unknown_reasons_create_owner_parks_without_asks(self):
         for reason in (
             "logged_out",
             "secrets",
@@ -36,14 +36,17 @@ class PauseCompatibility(unittest.TestCase):
         ):
             with self.subTest(reason=reason), mock.patch.object(parks, "ParkStore") as store:
                 host = mock.Mock(
-                    dry=False, home=self.cfg, bead=self.bead.id, run_id="r1", pause_reason=reason, retry_after=0.0, asked=False
+                    dry=False, home=self.cfg, bead=self.bead.id, run_id="r1", pause_reason=reason,
+                    pause_producer="delegate", retry_after=0.0, asked=False
                 )
+                store.return_value.get.return_value = None
                 host.clock.now.return_value = 100
                 with mock.patch("taskloop.app.run.closer.beadtools.peek", return_value=self.bead):
                     Closer(host, mock.Mock()).pause(oc.make(Kind.PAUSE_LANE, "paused"))
                 self.assertEqual((host.retry_after, host.asked, host.pause_reason), (0, False, reason))
                 host.ask_flow.raise_ask.assert_not_called()
-                store.assert_not_called()
+                rec = store.return_value.put.call_args.args[0]
+                self.assertEqual((rec.reason, rec.permanence, rec.retry_at), (reason, "needs_owner", 0))
 
     def test_faults_asks_and_owner_holds_do_not_acquire_retry_records(self):
         for kind in (*FAULTS, *ASKS, Kind.WAIT_ASK, Kind.OWNER_PARK):
@@ -64,7 +67,8 @@ class PauseCompatibility(unittest.TestCase):
             rec = parks.paused(self.cfg, self.bead, Kind.PAUSE_LANE, "r1", 100, reason="rate_limited", not_before=900, draw=lambda: 0.5)
             assert rec is not None
             self.assertEqual(
-                (rec.reason, rec.permanence, rec.retry_at, rec.attempts), ("rate_limited", "transient", 900, {"rate_limited": 1})
+                (rec.reason, rec.permanence, rec.retry_at, rec.attempts),
+                ("rate_limited", "transient", 900, {"delegate:rate_limited": 1})
             )
             store.return_value.put.assert_called_once_with(rec)
 

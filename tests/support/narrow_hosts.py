@@ -37,6 +37,7 @@ from taskloop.contracts.plancheck import PlanCheck, PlanData, StageData
 from taskloop.contracts.ports import Beads, Clock, DoltPush, Git
 from taskloop.domain import outcome as oc
 from taskloop.domain.asks.spec import AskSpec
+from taskloop.domain.lanes.pause_reasons import Producer
 from taskloop.stores.bundle import Stores
 from taskloop.stores.memory import fake_stores
 from taskloop.stores.runlog import RunLog
@@ -696,6 +697,7 @@ class FakeCloseHost(Said):
         self.clock = FakeClock()
         self.retry_after = 0.0
         self.pause_reason = ""
+        self.pause_producer: Producer = "engine"
         self.why = ""
         self.crash_fingerprint = ""
         self.crash_site = ""

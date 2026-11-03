@@ -132,6 +132,7 @@ class LaneActs:
             c.state.consumed()
         e.retry_after, e.pause_role, e.pause_lane = 0.0, c.role, res.lane or ""
         e.pause_reason = "same_family"
+        e.pause_producer = "engine"
         why = f"paused: no lane of another family than the writer's ({c.writer_family}) for the {c.node} step; it runs when one is free"
         e.steps.outcome("paused", "same family")
         e.steps.move("pause", "paused", f"lane for {c.node}: only the writer's own family ({c.writer_family}) answered")
@@ -161,6 +162,7 @@ class LaneActs:
             raise ReviewUnavailable(stop.reason)
         e, ops = self.e, self.wc.ops
         e.pause_reason = stop.reason if isinstance(a, lp.Yield) or a.kind.startswith("FAULT_") else ""
+        e.pause_producer = "delegate" if e.pause_reason else "engine"
         retry_after = 0.0
         if isinstance(a, lp.Yield):
             retry_after = a.retry_after if a.retry_after > e.clock.now() else 0.0  # a hint: the loop wakes the bead when its role is usable

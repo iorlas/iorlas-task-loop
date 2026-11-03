@@ -10,6 +10,7 @@ import support.paths  # noqa: F401
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.ids import BeadId
 from taskloop.domain.lanes import pauses
+from taskloop.domain.lanes.pause_reasons import Reason, Unknown, parse
 
 
 class Backoff(unittest.TestCase):
@@ -18,7 +19,7 @@ class Backoff(unittest.TestCase):
         rec = None
         for n, wait in enumerate((60, 120, 240, 0), 1):
             rec = pauses.after_pause(rec, b, f"r{n}", 1000, "engine_crash", lambda: 0.5)
-            self.assertEqual(rec.attempts, {"engine_crash": n})
+            self.assertEqual(rec.attempts, {"engine:engine_crash": n})
             self.assertEqual(rec.permanence, "transient" if wait else "needs_owner")
             self.assertEqual(rec.retry_at, 1000 + wait if wait else 0.0)
 
@@ -31,21 +32,22 @@ class Backoff(unittest.TestCase):
             with self.subTest(fingerprint=fp):
                 second = pauses.after_pause(first, b, "r2", 200, "engine_crash", lambda: 0.5, fingerprint=fp)
                 self.assertEqual(second.permanence, permanence)
-                self.assertEqual(second.attempts, {"engine_crash": 2})
+                self.assertEqual(second.attempts, {"engine:engine_crash": 2})
                 if permanence == "needs_owner":
                     self.assertEqual(second.retry_at, 0.0)
 
-    def test_other_reasons_have_no_cap_or_fingerprint_escalation(self):
+    def test_every_non_network_transient_reason_stops_after_its_cap(self):
         b = Bead(id=BeadId("t-1"), title="work", status="open")
-        for reason, policy in pauses.TABLE.items():
-            if reason in ("engine_crash", "network", "pause_network"):
+        for (producer, reason), policy in pauses.TABLE.items():
+            if policy.permanence != "transient" or not policy.max_attempts:
                 continue
             rec = None
-            for n in range(5):
-                rec = pauses.after_pause(rec, b, f"r{n}", 100, reason, lambda: 0.5, fingerprint="abc")
-                self.assertEqual(rec.permanence, policy.permanence)
-                self.assertEqual(rec.retry_at, 100 + pauses.delay(policy, n, lambda: 0.5)
-                                 if policy.permanence == "transient" else 0.0)
+            with self.subTest(producer=producer, reason=reason):
+                for n in range(policy.max_attempts + 2):
+                    rec = pauses.after_pause(rec, b, f"r{n}", 100, reason, lambda: 0.5, producer=producer)
+                    transient = n < policy.max_attempts
+                    self.assertEqual(rec.permanence, "transient" if transient else "needs_owner")
+                    self.assertEqual(rec.retry_at, 100 + pauses.delay(policy, n, lambda: 0.5) if transient else 0.0)
 
     def test_network_pauses_never_charge_attempts_or_owner_run_limits(self):
         b = Bead(id=BeadId("t-1"), title="work", status="open")
@@ -53,7 +55,7 @@ class Backoff(unittest.TestCase):
         for n in range(20):
             for reason in ("network", "pause_network"):
                 rec = pauses.after_pause(rec, b, f"{reason}-{n}", 100 + n, reason, lambda: 0.5)
-                self.assertEqual(rec.attempts, {"busy": 1})
+                self.assertEqual(rec.attempts, {"delegate:busy": 1})
                 self.assertEqual(rec.runs, 0)
                 self.assertEqual(rec.permanence, "transient")
                 self.assertEqual(rec.retry_at, 130 + n)
@@ -68,17 +70,36 @@ class Backoff(unittest.TestCase):
 
     def test_reason_counts_survive_other_reasons_and_the_same_run_is_idempotent(self):
         b = Bead(id=BeadId("t-1"), title="work", status="open")
-        first = pauses.after_pause(None, b, "r1", 100, "no_lane", lambda: 0.5)
+        first = pauses.after_pause(None, b, "r1", 100, "rate_limited", lambda: 0.5)
         other = pauses.after_pause(first, b, "r2", 200, "busy", lambda: 0.5)
-        again = pauses.after_pause(other, b, "r3", 300, "no_lane", lambda: 0.5)
+        again = pauses.after_pause(other, b, "r3", 300, "rate_limited", lambda: 0.5)
         self.assertEqual((first.retry_at, other.retry_at, again.retry_at), (160, 230, 420))
-        self.assertEqual(again.attempts, {"no_lane": 2, "busy": 1})
-        self.assertEqual(pauses.after_pause(again, b, "r3", 999, "no_lane", lambda: 1), again)
+        self.assertEqual(again.attempts, {"delegate:rate_limited": 2, "delegate:busy": 1})
+        self.assertEqual(pauses.after_pause(again, b, "r3", 999, "rate_limited", lambda: 1), again)
 
     def test_predicted_lane_time_is_a_lower_bound_and_unknown_reasons_need_owner(self):
         b = Bead(id=BeadId("t-1"), title="work", status="open")
-        rec = pauses.after_pause(None, b, "r1", 100, "no_lane", lambda: 0, not_before=900)
+        rec = pauses.after_pause(None, b, "r1", 100, "rate_limited", lambda: 0, not_before=900)
         self.assertEqual(rec.retry_at, 900)
-        for reason in ("engine_only_unenforced", "logged_out", "new_vendor_reason"):
+        for reason in ("engine_only_unenforced", "logged_out", "new_vendor_reason", "no_lane", "crash"):
             owner = pauses.after_pause(rec, b, "r2", 100, reason, lambda: 1, not_before=900)
             self.assertEqual((owner.permanence, owner.retry_at), ("needs_owner", 0))
+
+    def test_unknown_preserves_raw_value_and_cannot_borrow_another_producers_policy(self):
+        self.assertEqual(parse("future_reason"), Unknown("future_reason"))
+        self.assertEqual(parse("busy"), Reason.BUSY)
+        self.assertEqual(pauses.rule(Unknown("busy")).permanence, "needs_owner")
+        self.assertEqual(pauses.rule("engine_crash", "delegate").permanence, "needs_owner")
+        b = Bead(id=BeadId("t-1"), title="work", status="open")
+        rec = pauses.after_pause(None, b, "r1", 100, "busy", lambda: 0.5, producer="engine")
+        rec = pauses.after_pause(rec, b, "r2", 100, "busy", lambda: 0.5, producer="delegate")
+        self.assertEqual(rec.attempts, {"engine:busy": 1, "delegate:busy": 1})
+        self.assertEqual(rec.permanence, "transient")
+
+    def test_legacy_history_keeps_its_retry_budget(self):
+        b = Bead(id=BeadId("t-1"), title="work", status="open")
+        first = pauses.after_pause(None, b, "r1", 100, "busy", lambda: 0.5)
+        legacy = first.replace(attempts={"busy": 3, "delegate:busy": 2})
+        rec = pauses.after_pause(legacy, b, "r2", 200, "busy", lambda: 0.5)
+        self.assertEqual(rec.attempts, {"delegate:busy": 4})
+        self.assertEqual((rec.permanence, rec.retry_at), ("needs_owner", 0))

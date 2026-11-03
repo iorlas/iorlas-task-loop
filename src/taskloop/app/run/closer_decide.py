@@ -1,6 +1,6 @@
 """The close's decision: the outcome's Kind after POLICY (a fault seen too often on one bead becomes one ask), the trace fields, the
 fingerprint, and the storm check (never for a pause or an ask)."""
-import contextlib
+import traceback
 from collections.abc import Mapping, Sequence
 from typing import Protocol
 
@@ -54,8 +54,10 @@ class Decide:
         now = e.clock.now()
         e.fp = o.fingerprint
         history: Sequence[Mapping[str, object]] = ()
-        with contextlib.suppress(OSError):
+        try:
             history = storm_file.recent_closes(self.e.home.traces(), self.repo_id(), now)
+        except OSError as err:
+            e.warn(f"could not read retry history: {err}\n" + traceback.format_exc())
         e.disp = oc.apply(o, e.bead, history, now)
         e.kind = e.disp.kind
         if e.disp.escalated:
