@@ -6,8 +6,8 @@ import time
 from pathlib import Path
 
 from taskloop.adapters.ident import PLUGIN_ROOT, claude_dir, config_dir
-from taskloop.app.release.catalog import PLUGINS, cache_dirs, installed_version, previous_version, version_tuple
 from taskloop.app.release.canary import mac_pin_refusal
+from taskloop.app.release.catalog import PLUGINS, cache_dirs, installed_version, previous_version, version_tuple
 from taskloop.contracts.env import Env
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import Git
