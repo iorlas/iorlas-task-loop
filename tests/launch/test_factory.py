@@ -24,9 +24,6 @@ from taskloop.contracts.ports import Spawner
 
 class Factory(unittest.TestCase):
     def setUp(self):
-        ensure = patch.object(cli.supervisor, "ensure")
-        ensure.start()
-        self.addCleanup(ensure.stop)
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.files = LoopFiles(ConfigDir(Path(self.temp.name)), "repo-key", lambda pid: pid == 123, lambda: 42)
@@ -189,6 +186,7 @@ class Factory(unittest.TestCase):
             self.assertEqual(argv[1:], ["/code/tl.py", "loop", "--repo", "/repo", "--wait-drained"])
             dash.assert_called_once_with("ensure", Env({}), self.spawn)
             self.assertIn("already running" if already else "started", output.getvalue())
+        self.spawn.start.assert_not_called()
 
     def test_factory_parser_defaults_and_options(self):
         parser = argparse.ArgumentParser()
@@ -199,13 +197,12 @@ class Factory(unittest.TestCase):
         logs = parser.parse_args(["factory", "logs", "-n", "3", "-f", "--repo", "/repo"])
         self.assertEqual((logs.n, logs.follow, logs.repo), (3, True, "/repo"))
         self.assertTrue(parser.parse_args(["factory", "stop", "--now"]).now)
+        with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            parser.parse_args(["factory", "supervise"])
 
 
 class Lanes(unittest.TestCase):
     def setUp(self):
-        ensure = patch.object(cli.supervisor, "ensure")
-        ensure.start()
-        self.addCleanup(ensure.stop)
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
         self.files = LoopFiles(ConfigDir(Path(temp.name)), "repo-key", lambda pid: True, lambda: 42)
@@ -320,12 +317,12 @@ class Lanes(unittest.TestCase):
             self.start()
         self.assertEqual(self.files.read(120), existing)
 
-    def test_caffeinate_once_for_each_new_lane(self):
-        self.spawn.start.side_effect = [*self.children, Mock(), Mock(), Mock()]
+    def test_caffeinate_only_once_for_first_new_lane(self):
+        self.spawn.start.side_effect = [*self.children, Mock()]
         with patch.object(adapter, "caffeinate_argv", return_value=["caffeinate", "-w", "123"]) as awake:
             factory.start(self.files, "/repo", "1", [], self.spawn, self.publish, lanes=3)
-        self.assertEqual([call.args[0] for call in awake.call_args_list], [123, 124, 125])
-        self.assertEqual(self.spawn.start.call_count, 6)
+        awake.assert_called_once_with(123)
+        self.assertEqual(self.spawn.start.call_count, 4)
 
     def test_default_lane_count_and_start_messages(self):
         for count, wanted in ((3, 3), (0, 1)):
@@ -377,6 +374,12 @@ class Lanes(unittest.TestCase):
         self.assertIn("LANE 1 LAST EXIT pid=123 time=42 reason=low_disk", output)
         self.assertIn("LANE 2 LAST EXIT pid=124 time=42 reason=signal", output)
         self.assertNotIn("reason=crash", output)
+
+    def test_stop_without_live_lanes_reports_not_running(self):
+        result, output, errors = self.invoke("stop")
+        self.assertEqual((result, output, errors), (1, "not running\n", ""))
+        self.spawn.start.assert_not_called()
+        self.spawn.stop_pid.assert_not_called()
 
     def test_logs_select_lane_two_and_refuse_missing_lane(self):
         self.start()

@@ -426,12 +426,9 @@ print PID, version, repo, log path and dashboard addresses; status includes curr
 `tl factory stop [--repo DIR] [--now]` uses the same graceful stop as `tl stop`, targeting each live loop's recorded PID and start time.
 `tl factory logs [--repo DIR] [-n N] [-f]` prints the last 50 lines by default and optionally follows the console log.
 The first lane's PID is `loop.pid` under `<config>/loop/<repo-key>/`; each `factory-lane-K.log` links to its `factory-<pid>.log`.
-A detached supervisor checks for dead lanes every ten seconds and refills them; factory stop disables refills first.
-On macOS each new child gets an available `caffeinate -i -w <pid>`, ending with that child. No OS service or LaunchAgent
+On macOS an available `caffeinate -i -w <pid>` prevents idle sleep while the first newly launched loop lives. No OS service
 is installed; manually run `tl factory start` again after a reboot. Start/stop also work from a phone's SSH terminal on the host.
-Failed restarts file a soft Factory down notification in the existing owner ask inbox. Status detects a missing supervisor
-and files the same notification; a killed supervisor needs an external status check to report its absence.
-Supervisor output is in `supervisor.log` beside the lane logs. Stopping a repo's factory leaves the shared dashboard available.
+Stopping a repo's factory leaves the shared dashboard available.
 Storm, low disk, low RAM and no-lane conditions are waits, each with a probe time and wake condition in loop state.
 After repeated quick failures of the same bead in one slot, that loop needs a successful reset/setup probe or a different
 eligible bead before retaking it there. Different beads never accumulate toward this threshold. A failed probe excludes
@@ -565,7 +562,7 @@ duration back (`90m`, `12h`, `2d`); default the last 24 h. `--since HH:MM` is it
   ticket), `paused` (`paused:`/`waiting:`), `failed` (everything else, crashes included).
 - **Asks:** every blocked run with an ask, plus a run that went on from an ask raised earlier (its log's `ask X is
   answered` note). An answer by anyone counts as an ask. Who answered is the first person's comment after the ask
-  comment: signed `(Claude, supervising.)`, `checked by Claude` or `delegated the call to Claude` is the supervisor,
+  comment: signed `(Claude, supervising.)`, `checked by Claude` or `delegated the call to Claude` is the supervising agent,
   anything else the owner, none is open.
 - **Crashes:** the loop saw run-task exit with no outcome; an engine log with no `close:` and no trace, quiet 30 min
   with no live `run-task <bead>`; or a trace closed `failed: engine error ...` (an exception the engine caught). A stop

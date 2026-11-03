@@ -5,7 +5,7 @@ outcome. An ask that ended unanswered (closed, withdrawn, or replaced by a newer
 that were answered. A row is open only while its ask is the bead's live ask."""
 from collections.abc import Sequence
 
-from taskloop.contracts.ask import FACTORY_NOTICE_RUN, Ask
+from taskloop.contracts.ask import Ask
 from taskloop.contracts.dash import AdrRow, LedgerRow, Similar
 from taskloop.contracts.ids import loop_key
 from taskloop.contracts.ledger import LedgerEntry
@@ -46,7 +46,7 @@ def ledger_rows(w: World, shown: set[tuple[str, str]]) -> list[LedgerRow]:
     out: list[LedgerRow] = []
     for rs in by_ask(w.ledger).values():
         row = row_of(rs, w.asks.get((project_of(rs[0].repo), rs[0].bead)))
-        if row is not None and (row.status == "answered" or row.run == FACTORY_NOTICE_RUN or (row.project, row.bead) in shown):
+        if row is not None and (row.status == "answered" or (row.project, row.bead) in shown):
             out.append(row)
     return sorted(out, key=lambda r: -r.t)[:LEDGER_MAX]
 

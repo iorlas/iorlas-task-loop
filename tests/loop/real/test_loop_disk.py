@@ -31,7 +31,8 @@ class DiskPreflight(LoopBase):
     def test_below_the_threshold_the_loop_waits_without_claiming_then_wakes(self):
         self.beads({"x-1": [rec("landed")]})
 
-        def free():
+        def free(cfg):
+            self.assertEqual(cfg.root, Path(os.environ["XDG_CONFIG_HOME"]) / "task-loop")
             if self.clock.t < self.clock.t0 + 120:
                 self.assertEqual(self.started, [])
                 return GB
