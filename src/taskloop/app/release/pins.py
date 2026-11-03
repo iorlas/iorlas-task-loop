@@ -7,6 +7,7 @@ from pathlib import Path
 
 from taskloop.adapters.ident import claude_dir, config_dir
 from taskloop.app.release.catalog import PLUGINS, cache_dirs, installed_version, previous_version, version_tuple
+from taskloop.app.release.train import mac_pin_refusal
 from taskloop.contracts.env import Env
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.snapshots import Pin
@@ -44,13 +45,17 @@ def clear_pin(env: Env) -> bool:
 
 def set_pin(env: Env, task_loop: str = "", delegate: str = "") -> tuple[Pin, str]:
     """(the pin now, "" or why it is refused): a version that is not installed is refused, never pinned."""
+    old = read_pin(env)
+    if sys.platform == "darwin" and task_loop and task_loop != old.task_loop:
+        why = mac_pin_refusal(config_dir(env), task_loop)
+        if why:
+            return old, why
     want = {"task-loop": task_loop, "delegate": delegate}
     for key, v in want.items():
         if v and v not in cache_dirs(key, claude_dir(env)):
             have = sorted(cache_dirs(key, claude_dir(env)), key=lambda x: version_tuple(x) or ())
             return read_pin(env), "refused: {} {} is not installed under {} (installed: {})".format(
                 PLUGINS[key][0], v, claude_dir(env) / "plugins" / "cache", ", ".join(have) or "none")
-    old = read_pin(env)
     pin = old.replace(task_loop=task_loop or old.task_loop, delegate=delegate or old.delegate, pinned_at=time.time())
     pin_store(env).write(pin)
     return pin, ""

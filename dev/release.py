@@ -6,7 +6,8 @@
 """Release the plugin: one release at a time, the version from origin, the suite green, the marketplace bumped.
 
     uv run --script dev/release.py "message" [--bead ID --reason R] [--from-branch B] [--minor]
-                           [--repo DIR] [--marketplace DIR]
+                           [--repo DIR] [--marketplace DIR] [--urgent "why"]
+    uv run --script dev/release.py --devbox-ok VERSION
 
 A thin caller of src/taskloop/app/release/, always running origin/main's release code: once the clone is on origin/main, a launching
 checkout whose src/ or dev/release.py differs (it lags; nothing updates it) is replaced by an exec of the clone's dev/release.py with the
@@ -16,9 +17,11 @@ same arguments (--repo made explicit), after the lock is dropped so the exec'd r
 In the clone: fetch, check out origin/main, replay B's commits on it when --from-branch is given (B and its worktrees stay until the
 release has pushed and installed), run the repo's gate (`just check`; skipped when there is no justfile) and the full suite (red in either
 aborts with the output tail), commit the next patch version of .claude-plugin/plugin.json (--minor: the minor) as "<version>: <message>",
-push under the land lock. The gate and suite are skipped, and the log says "suite cache hit", when this exact tree already passed this
-exact command. When origin/main moved since the bump it drops the bump, rebases, takes the next version and verifies again, still under
-the lock; a push refused all the same gets one more such round. Then it tags v<version>, closes the bead, bumps the plugin's entry in the
+push under the land lock. The gate and suite are cached by pre-bump tree and command. When origin/main moves, the release drops the
+bump, rebases and verifies the changed tree outside the land lock, then takes the lock again to push (three attempts maximum).
+A successful push records the devbox ring and starts a two-hour interval; --urgent requires a reason to bypass it.
+After the devbox canary succeeds, --devbox-ok VERSION records permission for the Mac standing pin to move through tl pin.
+Then it tags v<version>, closes the bead, bumps the plugin's entry in the
 marketplace checkout (clean, on main), pushes it, tags it `iorlas-task-loop-v<version>`, runs `claude plugin marketplace update` and
 `claude plugin update`. The installed cache dir for the new version must exist afterwards: if not, the install runs once more, then the
 release exits non-zero naming the failing command. Every release writes <config>/releases/last.json; a failed one also comments on --bead

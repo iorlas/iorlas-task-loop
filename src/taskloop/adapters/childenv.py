@@ -38,6 +38,8 @@ ALLOWED = frozenset({
     # git's identity where no user.name is configured (CI, a fresh HOME)
     "GIT_AUTHOR_NAME", "GIT_AUTHOR_EMAIL", "GIT_COMMITTER_NAME", "GIT_COMMITTER_EMAIL",
     "UV",  # the uv that started the engine (uv run sets it): script_argv re-runs tl.py and release.py with it, not a PATH shim
+    "UV_OFFLINE",  # release suite workers use prewarmed script environments, including their nested spawns
+    "UV_CACHE_DIR",  # the same prewarmed cache despite each worker's isolated HOME
     "SSH_AUTH_SOCK", "GIT_SSH_COMMAND",  # a push over ssh finds its key in the agent / the owner's ssh command
 })
 ALLOWED_PREFIXES = (

@@ -332,6 +332,12 @@ bead's provenance.
 
 ## 0. Start (once)
 
+At Night start, run `tl pin VERSION` with the chosen installed task-loop version before starting loops, and start
+the Night loop with `--pin`. The Mac standing pin may move only after the release's devbox canary is confirmed:
+`uv run --script dev/release.py --devbox-ok VERSION` records that acknowledgement. Releases initially enter the
+`devbox` ring; installing a release does not move the owner's standing pin. A second release within two hours
+needs `--urgent "why"`; the release clone's config state retains that reason.
+
 1. `tl dash ensure`: starts the dashboard if it is not running (one per machine) and prints its addresses. Tell the
    owner the address in one line.
 2. `git worktree prune`; `tl bd dolt pull`.

@@ -1,5 +1,5 @@
 """Files other readers build their view from: the delegate status snapshot, the indexes, pins and the release result."""
-from typing import Any, ClassVar, final
+from typing import Any, ClassVar, Literal, final
 
 import msgspec
 
@@ -94,6 +94,17 @@ class Pin(Rec):
     task_loop: str | None = msgspec.field(default=None, name="task-loop")
     delegate: str | None = None
     pinned_at: float | None = None
+
+
+@final
+class ReleaseTrain(Rec):
+    """Release clone policy state; devbox acknowledgement authorizes a Mac standing pin."""
+
+    V: ClassVar[int] = 1
+    version: str
+    at: float
+    ring: Literal["devbox", "devbox-ok"] = "devbox"
+    urgent: str = ""
 
 
 @final

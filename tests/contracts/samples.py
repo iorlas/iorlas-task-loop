@@ -465,6 +465,7 @@ OTHERS = {
     "ReposIndex": snapshots.ReposIndex(repos={"/r": snapshots.RepoEntry(added=T)}),
     "SharedNotes": snapshots.SharedNotes(flakes={"test_x": T}, notes=["n"]),
     "Pin": snapshots.Pin(task_loop="0.23.38", delegate=None, pinned_at=T),
+    "ReleaseTrain": snapshots.ReleaseTrain(version="0.23.57", at=T, ring="devbox-ok", urgent="repair"),
     "ReleaseResult": snapshots.ReleaseResult(
         ok=False, version="0.23.57", summary="s", at=T, branch="b", message="m", tests=["t"], log="/l"),
     "SuiteGreens": snapshots.SuiteGreens(greens=[snapshots.GreenRun(tree="t" * 40, command="just check", at=T)]),

@@ -93,6 +93,30 @@ class Release(unittest.TestCase):
     def release(self, *args):
         return self.world.release(*args)
 
+    def test_release_train_refuses_a_second_release_and_accepts_an_urgent_reason(self):
+        first = self.release("first")
+        self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
+        runs = len(self.world.trees)
+        second = self.release("too soon")
+        self.assertEqual(second.returncode, 1)
+        self.assertIn("less than 2 hours", second.stderr)
+        self.assertEqual(len(self.world.trees), runs)
+        self.assertEqual(self.version(self.origin)["version"], "0.1.1")
+        urgent = self.release("repair", "--urgent", "production outage")
+        self.assertEqual(urgent.returncode, 0, urgent.stdout + urgent.stderr)
+        self.assertEqual(self.version(self.origin)["version"], "0.1.2")
+
+    def test_devbox_acknowledgement_records_the_ring_without_releasing_again(self):
+        first = self.release("first")
+        self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
+        runs = len(self.world.trees)
+        result = self.world.release("--devbox-ok", "0.1.1")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        ring = homes.config_dir() / "release" / "rings" / "0.1.1.json"
+        self.assertEqual(json.loads(ring.read_text())["ring"], "devbox-ok")
+        self.assertEqual(len(self.world.trees), runs)
+        self.assertEqual(self.version(self.origin)["version"], "0.1.1")
+
     def real_release(self, *args):
         """dev/release.py as its own process, with a `uv` and a `bd` that only log (the venv is there; the tracker is not)."""
         shim = self.home / "bin"
@@ -148,10 +172,10 @@ class Release(unittest.TestCase):
         self.assertEqual((self.git("rev-parse", "HEAD", cwd=self.repo), self.git("status", "--porcelain", cwd=self.repo),
                           (self.repo / PLUGIN).read_bytes()), before)
         self.assertEqual(self.git("branch", "--show-current", cwd=self.repo), "task/wip")
-        clones = list((self.home / "cfg" / "task-loop" / "release").iterdir())
+        clones = list((self.home / "cfg" / "task-loop" / "release").glob("*/.git"))
         self.assertEqual(len(clones), 1)  # the persistent clone: the next release reuses it
-        self.assertEqual(self.release("fix again").returncode, 0)
-        self.assertEqual(list((self.home / "cfg" / "task-loop" / "release").iterdir()), clones)
+        self.assertEqual(self.release("fix again", "--urgent", "exercise another release").returncode, 0)
+        self.assertEqual(list((self.home / "cfg" / "task-loop" / "release").glob("*/.git")), clones)
         self.assertEqual(self.version(self.origin)["version"], "0.1.2")
 
     def test_a_dirty_marketplace_checkout_is_refused_before_anything_moves(self):
@@ -255,7 +279,7 @@ class Release(unittest.TestCase):
                 self.write(self.seed / "other.txt", name + "\n")
                 self.commit(self.seed, "moved on")
                 runs = len(self.world.trees)
-                r = self.release("z", "--from-branch", name)
+                r = self.release("z", "--from-branch", name, "--urgent", "exercise both branch sources")
                 self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
                 self.assertEqual(r.stdout.count("running the full suite"), 1)
                 tested = self.world.trees[runs:]  # the suite saw both changes: the branch's and the one origin moved on with
@@ -294,7 +318,7 @@ class Release(unittest.TestCase):
         self.assertEqual(self.market_versions()["iorlas-task-loop"], "0.1.0")
         self.assertEqual(self.world.claude_log, [])
 
-    def test_two_branch_releases_queue_rebase_and_test_the_pushed_tree(self):
+    def test_two_branch_releases_queue_rebase_and_test_the_pushed_tree(self):  # noqa: PLR0915
         # two releases at once, as threads of this process (the lock is the kernel's, per open file): the first holds its suite open
         ready, proceed = threading.Event(), threading.Event()
         self.git("pull", "-q", "--ff-only", "origin", "main", cwd=self.repo)
@@ -306,7 +330,7 @@ class Release(unittest.TestCase):
             self.git("checkout", "-q", "main", cwd=self.repo)
 
         def hold_first(repo):
-            if json.loads((repo / PLUGIN).read_text())["version"] == "0.1.1":
+            if json.loads((repo / PLUGIN).read_text())["version"] == "0.1.0":
                 ready.set()
                 self.assertTrue(proceed.wait(120), "first suite was not released")
 
@@ -318,7 +342,8 @@ class Release(unittest.TestCase):
 
         self.world.on_suite = hold_first
         results = {}
-        threads = [threading.Thread(target=lambda n=n: results.update({n: self.release(n, "--from-branch", "task/" + n)}))
+        threads = [threading.Thread(target=lambda n=n: results.update({n: self.release(
+            n, "--from-branch", "task/" + n, "--urgent", "exercise release queue")}))
                    for n in ("first", "second")]
         try:
             threads[0].start()
@@ -341,8 +366,13 @@ class Release(unittest.TestCase):
             self.assertTrue(commit)
             paths = self.git("ls-tree", "-r", "--name-only", commit, cwd=self.origin).splitlines()
             pushed = {p: subprocess.check_output(["git", "show", commit + ":" + p], cwd=self.origin) for p in paths}
-            tested = [t for t in self.world.trees if json.loads(t[PLUGIN])["version"] == version]
-            self.assertEqual(tested, [pushed])  # once, on exactly the tracked contents that landed
+            tested = [t for t in self.world.trees if t.get(message + ".txt") == (message + "\n").encode()]
+            if message == "first":
+                tested = [t for t in tested if "second.txt" not in t]
+            self.assertEqual(len(tested), 1)
+            for generated in (PLUGIN, manifest.NAME):
+                pushed.pop(generated, None)
+            self.assertEqual({p: b for p, b in tested[0].items() if p not in (PLUGIN, manifest.NAME)}, pushed)
         for name in ("first", "second"):
             self.assertEqual(self.git("branch", "--list", "task/" + name, cwd=self.repo), "")  # landed: removed after the install
             self.assertEqual(self.git("show", "main:" + name + ".txt", cwd=self.origin), name)
@@ -384,11 +414,11 @@ class Release(unittest.TestCase):
 
         def reset_clone(tree):
             where = clone.clone_dir(homes.config_dir(), str(self.origin))
-            self.git("reset", "-q", "--hard", "origin/main", cwd=where)
+            self.git("commit", "--allow-empty", "-qm", "unexpected clone mutation", cwd=where)
         self.world.on_suite = reset_clone
         r = self.release("fix")
         self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
-        self.assertIn("HEAD is not the 0.1.1 commit", r.stderr)
+        self.assertIn("release clone HEAD changed during the suite", r.stderr)
         self.assertEqual(self.git("rev-parse", "main", cwd=self.origin), before)
         self.assertEqual(self.tags(self.origin), [])
 
@@ -429,17 +459,18 @@ class Release(unittest.TestCase):
         self.assertIn("worktree", r.stdout)
         self.assertIn("kept", r.stdout)
 
-    def test_a_loop_landing_during_every_suite_run_never_fails_the_release(self):
-        # race test (tl-bxk.11.1): loops land on the same origin; each lands when the land lock is free. A land during
-        # the suite moved origin/main, the retry's suite saw another land, and the release aborted. The release now
-        # pushes under the land lock: after the first suite no land gets in between its rebase, suite and push.
+    def test_a_loop_landing_during_the_suite_is_reverified_outside_the_land_lock(self):
+        # Both suite runs allow a loop to acquire the land lock; only the first introduces a new tree.
         side = self.home / "side"
         self.git("clone", "-q", str(self.origin), str(side), cwd=self.home)
         self.git("pull", "-q", "origin", "main", cwd=self.repo)
 
         def a_loop_lands_meanwhile(_repo):  # what an engine does at land, the lock taken as it takes it
+            self.assertLessEqual(len(self.world.trees), 2)
             try:
                 with landlock.os_lock(landlock.land_lock_path(homes.cfg(), str(self.origin)), "a loop's land", timeout=0):
+                    if len(self.world.trees) > 1:
+                        return
                     self.git("pull", "-q", "--rebase", "origin", "main", cwd=side)
                     name = f"land-{time.time_ns()}.txt"
                     self.write(side / name, "x")
@@ -447,7 +478,7 @@ class Release(unittest.TestCase):
                     self.git("commit", "-qm", f"a bead (x-{name})", cwd=side)
                     self.git("push", "-q", "origin", "HEAD:main", cwd=side)
             except TimeoutError:
-                pass  # a land would wait here
+                self.fail("suite ran while the release held the land lock")
 
         self.world.on_suite = a_loop_lands_meanwhile
         r = self.release("mine")
