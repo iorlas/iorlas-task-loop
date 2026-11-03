@@ -1,5 +1,6 @@
 """The slot code's world, built from this machine: the repo's profile, its bd, git and ticket line, the worktrees of the repo and the
 loop's own worktree when slots are off. The composition root for `tl slot ...`, the loop and the engine."""
+import contextlib
 import functools
 import json
 import os
@@ -129,10 +130,9 @@ def slot_table(repo: str, who: Identity, git: Git, now: float, live: Mapping[str
     src = slot_source(repo, git)
     beads = slot_beads(repo, who, store)
     store = store or bd_store(who.actor, repo)
-    try:
+    open_ids: list[str] = []
+    with contextlib.suppress(BdFailure):  # no bd answer: no claim is shown as starting work
         open_ids = [b.id for b in store.find(BeadQuery()) if b.status in ("open", "in_progress")]
-    except BdFailure:
-        open_ids = []
     return build_slot_table(beads, src.count, live or {}, src.dirs, now, src.source, src.sha, open_ids)
 
 
