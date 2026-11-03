@@ -101,7 +101,7 @@ CMD = {"pick_label": "auto", "skip_review": config.ReviewSkipConfig(tests=["t/**
        "visual_paths": config.VisualConfig(include=["a/**"]), "write_fresh_above_k": 150.0, "max_rounds": 4,
        "checks": [config.CheckSpec(id=CheckId("fmt"), argv=["just", "fmt"], group="static", when=["x/**"], inputs="a/**",
                                   where="container"),
-                  config.CheckSpec(id=CheckId("unity"), argv=["just", "check-unity"], run="gate", needs=["unity"])],
+                  config.CheckSpec(id=CheckId("unity"), argv=["just", "check-unity"], run="gate", run_in="slot", needs=["unity"])],
        "resources": {"unity": config.ResourceSpec(limit=2)},
        "container": config.ContainerConfig(image="img:1")}
 
@@ -362,6 +362,7 @@ OTHERS = {
     "Check": checks.Check(
         id=CheckId("unity-tests"),
         cmd="just unity-tests",
+        run_in="slot",
         group="tests",
         when=["client/**"],
         retry=1,

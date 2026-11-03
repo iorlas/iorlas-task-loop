@@ -154,7 +154,7 @@ def release_dead(repo: str, store: Beads, now: float, git: Git, who: Identity) -
 def chores(repo: str, spawner: Spawner, env: Env, git: Git, who: Identity) -> None:
     wlanes.chore(console.say, spawner, env)  # delegate's lane status filed again when the snapshot is 20 min old (the dash reads the file)
     # asks of closed beads closed, unanswered ones parked, answers no run used flagged
-    wasks.sweep_asks(who, who.config, console.say, wslots.load_cfg(repo, git))
+    wasks.sweep_asks(who, who.config, console.say, wslots.load_cfg(repo, git), repo)
     try:
         reflect.maybe_run(spawner, env, who.config)  # the run reflections into beads, once a day (tl-bl5)
     except Exception as e:

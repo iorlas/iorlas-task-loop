@@ -241,6 +241,12 @@ land command and never in a dry run. No `-u` or git config mutation is used. Fai
 `PAUSE_NETWORK` for network errors, otherwise `FAULT_LAND`. `tl prune` deletes that remote task ref once the bead is closed and
 its land commit is on the checkout's HEAD.
 
+**Gate execution location.** Check field `run_in` defaults to `"clean"`: land runs the check in a fresh checkout of committed HEAD.
+Use `"run_in": "slot"` for a check that needs ignored setup inputs in the slot (for example Unity dependencies). The slot must
+match `HEAD^{tree}` before either mode runs. Stage rounds still use the slot. Mixed gates keep plan order, dependencies, resource
+leases (`needs`), and skip-after-red semantics. Receipts distinguish clean execution from slot execution, including ignored
+slot inputs selected by `inputs`. Unknown `run_in` values fail profile loading.
+
 **Check inputs (the result store).** A repo check may list `inputs`, globs over repo paths (`*` and `?` stay in one folder, `**` crosses folders, `{a,b}` is either; the same rules for tracked and gitignored files; `when` still uses shell-style matching, where `*` crosses `/`):
 `"checks": [{"id": "unity-tests", "argv": ["just", "unity-tests"], "group": "tests", "inputs": ["client/**", "content/**", "src/**"]}]`.
 A green result goes to the repo's result store (one file per key, shared by every bead, stage, gate and `tl check` of the repo; it

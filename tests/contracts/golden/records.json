@@ -702,6 +702,7 @@
   ],
   "tags": [],
   "needs": [],
+  "run_in": "slot",
   "lane": ""
  },
  "plancheck.Ref": {
@@ -1477,6 +1478,7 @@
      ],
      "group": "static",
      "run": "stage",
+     "run_in": "clean",
      "when": [
       "x/**"
      ],
@@ -1506,6 +1508,7 @@
      ],
      "group": "tests",
      "run": "gate",
+     "run_in": "slot",
      "when": [],
      "retry": 0,
      "wall_min": null,

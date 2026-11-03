@@ -41,6 +41,9 @@ model family) → gate → land → close, each AI step a headless worker (Codex
 answer. Code routes and accepts by rule (checks green, nothing blocking in the review); close always runs. Its output is verbose with
 ⚠ lines for anything the watching session should react to. Settings: `.task-loop.json` → `engine`.
 
+Gate checks default to `"run_in": "clean"` (a fresh checkout of committed HEAD). A check that needs the slot's ignored setup
+inputs can declare `"run_in": "slot"`; the slot must match the committed tree. See [check fields](docs/dev/integrations.md#check-fields).
+
 Or let the loop run the queue by itself, one bead after another, each in any free slot:
 
 ```sh

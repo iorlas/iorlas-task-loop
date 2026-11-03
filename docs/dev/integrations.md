@@ -23,6 +23,20 @@ load and the plan lint say so in one line). A pipeline, redirect or loop belongs
 Inside the engine the canonical text of a check is `shlex.join(argv)` (check identity, logs, the dashboard); `shlex.split`
 turns it back. Nothing in task-loop parses shell syntax.
 
+### Check fields
+
+`engine.checks` declares `id`, `argv`, `group`, and `run` (`stage`, `gate`, or `both`).
+`needs` lists declared resources whose leases the check holds during execution.
+`run_in` is `clean` by default: land checks execute committed HEAD in a fresh checkout. Use `slot` for checks that need
+gitignored setup inputs in the host's own worktree, such as Unity's installed dependencies. Both modes require the slot's
+tree hash to equal `HEAD^{tree}`. Stage checks still run in the slot. Unknown `run_in` values fail profile loading.
+Mixed gates preserve plan order, dependencies, resource leases, and skip-after-red behavior. Receipts identify the execution
+location; a clean receipt cannot substitute for a slot receipt. Slot input keys include ignored files matching `inputs`.
+
+An ask whose reason contains `is not set up` receives an engine-authored `retry` answer when its failing gate check now
+declares `run_in: slot`, or when that bead's engine starts. This happens at most once per bead per release version, recorded
+in bead metadata as `setup_retry_versions`. The answer reopens the bead and restores a pick label only if parking removed it.
+
 `engine.prepare` optionally declares coordinator prerequisites, for example
 `{"cmd": ["dotnet", "restore"], "inputs": ["**/*.csproj", "Directory.Packages.props", "**/packages.lock.json"], "timeout_min": 30}`.
 The coordinator runs the argv through Spawner in the bead's worktree, with its own network access, before the first write.

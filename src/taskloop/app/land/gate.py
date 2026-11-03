@@ -113,7 +113,7 @@ class Gate:
         self.e = host
 
     def green(self) -> bool:
-        """The gate already passed on exactly this tree (and base): every step is green in the cache or not due."""
+        """Both clean and slot steps passed on this tree and base, using each location's own input keys."""
         return self.e.checker.gate_green(clean=True)
 
     def passed(self) -> GatePass | None:
@@ -141,6 +141,8 @@ class Gate:
         started = time.time()
         e.log.emit(rec.GateStart(cmd=e.cfg.gate_text, log=str(e.run_dir / "checks"), tree=tree))
         try:
+            # Keep both locations in one plan: a red in either group blocks the gate and its later dependent steps.
+            # The checker routes slot items through non-clean input keys while guarding the committed tree in both hosts.
             run = e.checker.run_items(gate_items(e.cfg), clean=True)
         except CheckFault as fault:
             e.log.emit(rec.GateEnd(exit=fault.rc, exec_seconds=round(time.time() - started)))

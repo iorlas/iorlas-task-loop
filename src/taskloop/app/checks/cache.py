@@ -107,6 +107,7 @@ class RunMemo:
         self.lock = threading.Lock()  # lanes remember at the same time
         self.ran: dict[RunKey, tuple[CheckResult, float]] = {}  # this block's runs by command -> result, wall limit
         self.executions: dict[CheckId, Digest] = {}
+        self.slot_keys: InputKeys | None = None
         self.checks: dict[CheckId, Check] = {}
         self.receipts: dict[CheckId, PassRecord] = {}
 
@@ -124,7 +125,8 @@ class RunMemo:
         dependencies = self.dependencies_of(c)
         if dependencies is None:
             return None
-        reads = "" if c.inputs and self.keys.dead(c) else self.keys.key(c)
+        keys = self.slot_keys if c.run_in == "slot" and self.slot_keys is not None else self.keys
+        reads = "" if c.inputs and keys.dead(c) else keys.key(c)
         if not reads:
             return None
         whole = not c.inputs
@@ -146,11 +148,15 @@ class RunMemo:
                 hit = self.hit(expected)
             if hit is None or hit.key != expected or hit.result.status != "passed":
                 return None
-            records.append(wire.dump(hit))
+            # A freshly constructed result may carry integer seconds; decoding its receipt normalizes them to floats.
+            # Hash the same typed wire form before and after storage, including all producer evidence.
+            records.append(wire.dump(wire.load(PassRecord, wire.dump(hit))))
         return Digest(hashlib.sha256(json.dumps(records, sort_keys=True).encode()).hexdigest()) if records else NO_DIGEST
 
     def execution(self, c: Check) -> Digest:
         identity = self.executions.get(c.id, Digest("")) if c.container else HOST.identity
+        if c.run_in == "slot":
+            return Digest("slot-v1:" + identity)
         return Digest("clean-v1:" + identity) if self.keys.clean else identity
 
     def command_key(self, c: Check) -> RunKey:

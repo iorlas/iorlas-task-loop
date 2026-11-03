@@ -90,6 +90,7 @@ class CheckSpec(Rec):
     argv: list[str]
     group: Literal["static", "tests", "acceptance"] = "tests"
     run: Literal["stage", "gate", "both"] = "stage"  # stage: the round after each write; gate: land's gate steps (and `tl check`); both
+    run_in: Literal["clean", "slot"] = "clean"  # gate: fresh committed checkout by default; slot: committed slot with setup inputs
     when: list[str] = msgspec.field(default_factory=list)
     retry: int = 0
     wall_min: float | None = None  # this check's wall-time limit; absent: engine.check_wall_min

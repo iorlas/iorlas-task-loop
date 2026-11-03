@@ -2,7 +2,8 @@
 import time
 from typing import Any
 
-from taskloop.app.asks import raiser
+from taskloop.adapters import ident
+from taskloop.app.asks import raiser, setup_retry
 from taskloop.app.run.blocked import Blocked
 from taskloop.app.run.layout import repo_of
 from taskloop.contracts.kinds import Kind
@@ -18,6 +19,8 @@ class AskFlow:
         """An open ask is never asked again: with the bead unchanged the run waits; a change (the owner's comment or edit) or a
         filed answer answers it, and the run goes on from its checkpoint."""
         e = self.e
+        if not e.dry:
+            setup_retry.retry_setup(e.stores.asks, e.store, e.bead, ident.plugin_version(), time.time(), e.cfg, starting=True)
         state, a = raiser.check(e.stores.asks, e.bead, e.brief_hash, e.fresh, time.time())
         if state == "wait" and a:
             raise Blocked(raiser.waiting_line(a), kind=Kind.WAIT_ASK)

@@ -8,6 +8,7 @@ import tempfile
 import threading
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
@@ -76,6 +77,29 @@ class Gate(te.EngineTest):
 
 
 class Env(te.EngineTest):
+    def test_slot_receipts_name_the_location_and_never_match_clean_receipts(self):
+        c = Check(id=CheckId("setup"), cmd="true")
+        m = memo()
+        m.keys.clean = True
+        clean_key = must(m.key(c))
+        slot_key = must(m.key(c.replace(run_in="slot")))
+        self.assertNotEqual(clean_key, slot_key)
+        self.assertEqual(slot_key.execution, "slot-v1:host-v1")
+        m.keys.clean = False
+        self.assertEqual(m.key(c.replace(run_in="slot")), slot_key)
+
+    def test_clean_gate_slot_receipt_hashes_the_slots_ignored_inputs(self):
+        c = Check(id=CheckId("setup"), cmd="true", run_in="slot", inputs=["client/**"], inputs_only=True)
+        m = memo(files={"client/main.cs": "tracked"})
+        m.keys.clean = True
+        slot = InputKeys(m.keys.git, m.keys.wt, m.keys.tree)
+        slot.files = m.keys.files
+        m.slot_keys = slot
+        with mock.patch.object(slot, "ignored_of", return_value={"client/setup": "one"}):
+            before = must(m.key(c))
+        with mock.patch.object(slot, "ignored_of", return_value={"client/setup": "two"}):
+            self.assertNotEqual(m.key(c), before)
+
     def test_a_changed_check_env_misses_the_memo_even_without_inputs(self):
         n = Path(self.tmp.name) / "runs"
         cmd = procsim.fake("e", procsim.appends(n))

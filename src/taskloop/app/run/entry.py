@@ -18,7 +18,7 @@ from atomic_io import atomic_write_text
 
 from taskloop.adapters import beadtools, childenv, gitrepo, ident
 from taskloop.adapters import halt as halting
-from taskloop.app.asks import intake, parks
+from taskloop.app.asks import intake, parks, setup_retry
 from taskloop.app.loop.queue import has_areas
 from taskloop.app.reconcile import leases
 from taskloop.app.run import console, preflight, running
@@ -194,6 +194,9 @@ def run_main_stoppable(a: Any, store: Any = None, *, env: Env, spawner: Spawner,
         who = ident.identity(env)
     repo = gitrepo.repo_root()
     cfg = wslots.load_cfg(repo, git)
+    if not a.dry_run:
+        setup_retry.retry_setup(AskStore.at(who.config), store or beadtools.bd_store(who.actor, repo),
+                                a.id, ident.plugin_version(), time.time(), cfg, starting=True)
     if a.slot == "any":
         return run_any_slot(a, repo, cfg, store, env=env, spawner=spawner, git=git, who=who)
     return run_in(a, repo, cfg, store, env=env, spawner=spawner, git=git, who=who)

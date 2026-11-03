@@ -9,6 +9,14 @@ from taskloop.contracts.config import ConfigError, RepoProfile, load
 
 
 class RepoProfileKeys(unittest.TestCase):
+    def test_run_in_defaults_to_clean_and_refuses_unknown_locations(self):
+        check = {"id": "a", "argv": ["a"]}
+        self.assertEqual(load({"engine": {"checks": [check]}}).engine.checks[0].run_in, "clean")
+        self.assertEqual(load({"engine": {"checks": [{**check, "run_in": "slot"}]}}).engine.checks[0].run_in, "slot")
+        for bad in ("worktree", "", None, 1):
+            with self.subTest(bad=bad), self.assertRaises(ConfigError):
+                load({"engine": {"checks": [{**check, "run_in": bad}]}})
+
     def test_prepare_accepts_typed_argv_inputs_timeout_and_default_triggers(self):
         cfg = load({"engine": {"prepare": {"cmd": ["dotnet", "restore"], "inputs": ["**/*.csproj"]}}}).engine.prepare
         assert cfg is not None

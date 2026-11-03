@@ -78,6 +78,7 @@ class Check(Rec):
     reads: list[CheckId] = msgspec.field(default_factory=list)  # registered checks whose log and exit code it reads: it runs after them
     tags: list[Tag] = msgspec.field(default_factory=list)
     needs: list[str] = msgspec.field(default_factory=list)  # resources it holds a machine-wide lease on while it runs
+    run_in: Literal["clean", "slot"] = "clean"  # filesystem used by the committed land gate; stage rounds always use the slot
     lane: str = ""  # its lane: the checks of one run in order, the lanes in parallel
 
 

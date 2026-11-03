@@ -30,7 +30,8 @@ from taskloop.stores.bundle import Stores
 
 
 def cached_gate(cfg: EngineConfig, git: Git, wt: str, stores: Stores, env: Env, bead_env: Mapping[str, str],
-                tree: TreeSha, planned: gateplan.PlanDecision | None, spawner: Runs | None = None, *, clean: bool = False) -> bool:
+                tree: TreeSha, planned: gateplan.PlanDecision | None, spawner: Runs | None = None, *, clean: bool = False,
+                slot_wt: str | None = None) -> bool:
     """Read gate evidence without running checks or a plan producer."""
     steps = gate_items(cfg)
     if not tree or not steps:
@@ -41,12 +42,16 @@ def cached_gate(cfg: EngineConfig, git: Git, wt: str, stores: Stores, env: Env, 
     keys = InputKeys(git, wt, tree, clean=clean)
     engine_env = {**childenv.reaching(childenv.current_env(env)), **bead_env}
     memo = RunMemo(stores, check_files.repo_key(git, wt), keys, BaseSha(base), engine_env)
+    if clean or slot_wt is not None:
+        memo.slot_keys = InputKeys(git, slot_wt or wt, tree)
     memo.checks = {c.id: repo_check(c, cfg) for c in cfg.checks}
-    if any(c.container for c in items):
-        execution = resolve_container(cfg.container, wt, spawner) if spawner is not None else None
+    memo.checks.update({c.id: c for c in steps})
+    for location in {c.run_in for c in items if c.container}:
+        root = slot_wt if location == "slot" and slot_wt is not None else wt
+        execution = resolve_container(cfg.container, root, spawner) if spawner is not None else None
         if not isinstance(execution, ReadyExecution):
             return False
-        memo.executions.update({c.id: execution.identity for c in items if c.container})
+        memo.executions.update({c.id: execution.identity for c in items if c.container and c.run_in == location})
     changed = git.changed_paths(wt, start, tree, required=True) if planned is None and any(c.when for c in items) else []
     return all(memo.has(c) or not due(c, changed, planned.skips if planned is not None else None) for c in items)
 
@@ -55,9 +60,11 @@ class Checker:
     """The round's steps: plan, run, remember (cache, durations), report (log rows, the CheckRun file), and stop a run that keeps
     failing the same way."""
 
-    def __init__(self, host: CheckHost, sleep: Callable[[float], None] = time.sleep, *, clean: bool = False) -> None:
+    def __init__(self, host: CheckHost, sleep: Callable[[float], None] = time.sleep, *, clean: bool = False,
+                 slot_host: CheckHost | None = None) -> None:
         self.host, self.sleep = host, sleep
         self.clean = clean
+        self.slot_host = slot_host
         self.round = 0
         self.latest: CheckRun | None = None
         self.streak: list[str] = []  # the signatures of the rounds in a row that ended red
@@ -92,11 +99,11 @@ class Checker:
         and cache as a stage's round: groups in order, a red group skips the groups after it, a step green at its inputs is cached.
         A clean diff check is left out of the result (show_clean keeps it: `tl check` prints a line for it). No fix commands and no
         base run (the tree is the rebased one: a red is red). everything: `when` is ignored. learn: the durations of what passed are
-        remembered. clean: judge the committed HEAD in a temporary checkout with its own receipt identity.
+        remembered. clean: judge committed HEAD, routing run_in=slot to the guarded slot and other checks to a fresh checkout.
         The rows are the check log's (start and end per step); no step book, no streak."""
         if clean:
             with isolated(self.host) as clean_host:
-                checker = Checker(clean_host, self.sleep, clean=True)
+                checker = Checker(clean_host, self.sleep, clean=True, slot_host=self.host)
                 checker.round = self.round
                 run = checker.run_items(items, everything, learn, show_clean)
                 self.round = checker.round
@@ -122,7 +129,7 @@ class Checker:
         if clean:
             try:
                 with isolated(self.host) as clean_host:
-                    return Checker(clean_host, self.sleep, clean=True).gate_green()
+                    return Checker(clean_host, self.sleep, clean=True, slot_host=self.host).gate_green()
             except CheckFault:
                 return False
         host = self.host
@@ -132,7 +139,7 @@ class Checker:
         base = host.git.rev_parse(str(host.wt), host.cfg.base)
         planned = gateplan.skipped(host, tree, base)
         return cached_gate(host.cfg, host.git, str(host.wt), host.stores, host.env, host.bead_env, tree, planned, host.spawner,
-                           clean=self.clean)
+                           clean=self.clean, slot_wt=str(self.slot_host.wt) if self.slot_host is not None else None)
 
     def _history(self) -> tuple[Doc[Durations], Durations]:
         host = self.host
@@ -146,13 +153,23 @@ class Checker:
         keys = InputKeys(host.git, host.wt, tree, clean=self.clean)
         engine_env = {**childenv.reaching(childenv.current_env(host.env)), **host.bead_env}
         repo = check_files.repo_key(host.git, str(host.wt))
-        return RunMemo(host.stores, repo, keys, BaseSha(base), engine_env, host.run_id)
+        memo = RunMemo(host.stores, repo, keys, BaseSha(base), engine_env, host.run_id)
+        if self.slot_host is not None:
+            # The mixed plan shares receipts, but slot requirements use a non-clean checker's ignored-input digests.
+            slot_checker = Checker(self.slot_host, self.sleep, clean=False)
+            memo.slot_keys = slot_checker._memo(tree, base).keys
+        return memo
 
     def _executor(self, memo: RunMemo, history: Durations, base_run: bool, fix_red: dict[str, CheckResult] | None = None,
                   everything: bool = False, planned: gateplan.PlanDecision | None = None) -> CheckExecutor:
         host = self.host
         attempts = Attempts(host, BaseCheck(host, memo, base_run), self.sleep)
-        return CheckExecutor(host, memo, attempts, host.checklog, history, fix_red, everything, planned)
+        executor = CheckExecutor(host, memo, attempts, host.checklog, history, fix_red, everything, planned)
+        if self.slot_host is not None:
+            slot = self.slot_host
+            slot_attempts = Attempts(slot, BaseCheck(slot, memo, base_run), self.sleep)
+            executor.slot = CheckExecutor(slot, memo, slot_attempts, slot.checklog, history, fix_red, everything, planned)
+        return executor
 
     def _diff_check(self, tree: str) -> list[Check]:
         """The built-in `git diff --check` over the diff from the merge-base with the base to the tree (untracked files included; none

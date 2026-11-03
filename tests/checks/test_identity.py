@@ -16,7 +16,8 @@ from taskloop.app.checks.runner import cached_gate
 from taskloop.app.land.cmds import Cmds
 from taskloop.app.land.stackgate import StackGate
 from taskloop.cli.green import cmd_green
-from taskloop.contracts.checks import Check, CheckResult
+from taskloop.contracts import wire
+from taskloop.contracts.checks import Check, CheckResult, PassRecord
 from taskloop.contracts.config import ContainerConfig, load
 from taskloop.contracts.env import Env
 from taskloop.contracts.gitfacts import TreeEntry
@@ -84,6 +85,20 @@ class Identity(unittest.TestCase):
         result = CheckResult(id=self.check.id, cmd="true", group="tests", exit=0, status="passed")
         self.memo.remember(key.replace(execution=Digest("")), result, 1, "")
         self.assertIsNone(self.memo.result(self.check))
+
+    def test_reader_key_survives_the_producers_receipt_wire_round_trip(self):
+        producer = self.check.replace(id=CheckId("producer"), run_in="slot")
+        reader = self.check.replace(reads=[producer.id])
+        self.memo.checks = {producer.id: producer, reader.id: reader}
+        key = self.memo.key(producer)
+        assert key is not None
+        result = CheckResult(id=producer.id, cmd="true", group="tests", exit=0, status="passed", secs=1)
+        self.memo.remember(key, result, 1, "/producer.log")
+        before = self.memo.key(reader)
+        self.assertIsNotNone(before)
+        receipt = self.memo.receipts[producer.id]
+        self.memo.receipts[producer.id] = wire.load(PassRecord, wire.dump(receipt))
+        self.assertEqual(self.memo.key(reader), before)
 
     def test_argv_identity_preserves_whitespace_inside_an_argument(self):
         self.assertNotEqual(self.memo.key(self.check.replace(cmd="echo 'a b'")),

@@ -39,6 +39,7 @@ class CheckExecutor:
         self.logs = host.run_dir / "checks"
         self.resources = Resources(host)
         self.began = time.time()  # the block's start: where a check's `at` counts from
+        self.slot: CheckExecutor | None = None  # clean gate: the same round, with slot attempts and resource leases
 
     def run_group(self, plan: CheckPlan, rnd: int) -> Round:
         """Run every step of the plan, in order, as one block (the cheap checks first, the Unity group last)."""
@@ -46,6 +47,8 @@ class CheckExecutor:
         st = Round(rnd, results=list(plan.skipped), env=dict(self.checklog.env))
         self.logs.mkdir(exist_ok=True)
         self.began = time.time()
+        if self.slot is not None:
+            self.slot.began = self.began
         lanes = plan.lanes()
         if len(lanes) > 1:  # lanes run at the same time; the first red cancels the rest
             st = Lanes(self.host, self.step, self.drop).run(plan, lanes, st)
@@ -53,11 +56,14 @@ class CheckExecutor:
             for n, step in enumerate(plan.steps):
                 self.step(step, n, st)
         self._unchanged()
+        if self.slot is not None:
+            self.slot._unchanged()
         if (self.planned is None or self.planned.output) and not any(r.red or r.cancelled for r in st.results):
             for n, res in st.by_step.items():
                 if res.status == "skipped" and res.planned:
                     check = plan.steps[n].check
-                    execution = self.attempts.box.resolve(check)
+                    runner = self.slot if self.slot is not None and check.run_in == "slot" else self
+                    execution = runner.attempts.box.resolve(check)
                     if isinstance(execution, EnvironmentUnavailable):
                         continue
                     self.memo.executions[check.id] = execution.identity
@@ -69,6 +75,10 @@ class CheckExecutor:
 
     def step(self, step: Step, n: int, st: Round) -> None:
         """One step: decided, run if it must, recorded."""
+        if self.slot is not None and step.check.run_in == "slot":
+            self.slot._unchanged()
+            self.slot.step(step, n, st)
+            return
         res, cid = self._decide(step, n, st)
         st.results.append(res)
         st.by_step[n] = res

@@ -17,6 +17,8 @@ class CheckLog:
         cid = self.log.next_id("k")
         self.log.emit(CheckStart(id=cid, check=c.id, group=c.group, cmd=c.cmd, round=rnd, log=log, timeout_s=c.wall_min * 60,
                                lane=c.lane))
+        if c.run_in == "slot":
+            self.log.note(f"check {c.id}: execution in slot")
         return cid
 
     def close(self, c: Check, res: CheckResult, cid: str | None, rnd: int) -> None:
