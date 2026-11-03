@@ -150,5 +150,5 @@ def ports(env: Env) -> Ports:
     return Ports(store=store, answer=answer_via(home),
                  **owner_writes(owner_intake(wire_asks.store(home), store, now, adrs=lambda repo: AdrStore.at(home, repo),
                                              factory=lambda: factory_store(home)), home),
-                 slot_source=slot_source,
+                 slot_source=slot_source, slot_dirs=wslots.slot_dirs,
                  resource_holders=resource_holders, profile_error=quiet(red_row, ""), profile_stamp=quiet(profiles.stamp, None))
