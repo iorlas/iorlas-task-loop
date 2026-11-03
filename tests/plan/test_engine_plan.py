@@ -324,7 +324,7 @@ class EnginePlanTest(EngineTest):
         self.assertEqual((first.outcome, first.kind, first.storm), ("failed", "fault_bad_request", ""))
         self.run_engine({"plan": [PLAN], "write": [self.bad_request()]}, bead="t-2")
         second = self.eng.result()
-        self.assertTrue(second.storm.startswith("STOPPED: storm FAULT_BAD_REQUEST"), second.storm)
+        self.assertTrue(second.storm.startswith("WAIT: storm FAULT_BAD_REQUEST"), second.storm)
         self.assertIn("t-1,t-2", second.storm)
         self.run_engine({"plan": [PLAN], "write": [self.bad_request()]}, bead="t-3")
         self.assertEqual(self.eng.result().storm, "")  # the record is live: no second banner

@@ -24,6 +24,9 @@ from taskloop.contracts.ports import Spawner
 
 class Factory(unittest.TestCase):
     def setUp(self):
+        ensure = patch.object(cli.supervisor, "ensure")
+        ensure.start()
+        self.addCleanup(ensure.stop)
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.files = LoopFiles(ConfigDir(Path(self.temp.name)), "repo-key", lambda pid: pid == 123, lambda: 42)
@@ -200,6 +203,9 @@ class Factory(unittest.TestCase):
 
 class Lanes(unittest.TestCase):
     def setUp(self):
+        ensure = patch.object(cli.supervisor, "ensure")
+        ensure.start()
+        self.addCleanup(ensure.stop)
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
         self.files = LoopFiles(ConfigDir(Path(temp.name)), "repo-key", lambda pid: True, lambda: 42)
@@ -314,12 +320,12 @@ class Lanes(unittest.TestCase):
             self.start()
         self.assertEqual(self.files.read(120), existing)
 
-    def test_caffeinate_only_once_for_first_new_lane(self):
-        self.spawn.start.side_effect = [*self.children, Mock()]
+    def test_caffeinate_once_for_each_new_lane(self):
+        self.spawn.start.side_effect = [*self.children, Mock(), Mock(), Mock()]
         with patch.object(adapter, "caffeinate_argv", return_value=["caffeinate", "-w", "123"]) as awake:
             factory.start(self.files, "/repo", "1", [], self.spawn, self.publish, lanes=3)
-        awake.assert_called_once_with(123)
-        self.assertEqual(self.spawn.start.call_count, 4)
+        self.assertEqual([call.args[0] for call in awake.call_args_list], [123, 124, 125])
+        self.assertEqual(self.spawn.start.call_count, 6)
 
     def test_default_lane_count_and_start_messages(self):
         for count, wanted in ((3, 3), (0, 1)):

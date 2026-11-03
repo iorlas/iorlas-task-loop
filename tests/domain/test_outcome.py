@@ -108,7 +108,7 @@ class Storm(unittest.TestCase):
         c.advance(60)
         trip = lh.storm_trip(h, "b", Kind.FAULT_BAD_REQUEST, fp, c.now())
         self.assertEqual(must(trip).beads, ("a", "b"))
-        self.assertIn("then delete /cfg/storm/r.json", lh.banner(must(trip), "/cfg/storm/r.json"))
+        self.assertIn("clear /cfg/storm/r.json to wake sooner", lh.banner(must(trip), "/cfg/storm/r.json"))
         self.assertIsNone(lh.storm_trip(h, "a", Kind.FAULT_BAD_REQUEST, fp, c.now()))  # one bead repeating is no storm
         c.advance(1800)
         self.assertIsNone(lh.storm_trip(h, "b", Kind.FAULT_BAD_REQUEST, fp, c.now()))  # outside the window

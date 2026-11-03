@@ -426,9 +426,9 @@ class LoopSelfUpdate(LoopBase):
         # the new process: same pid, the state in the environment, the new install as the running code
         os.environ["TL_LOOP_STATE"] = self.execs[0][2]
         with self.running_from(self.cache / "0.2.0" / "skills" / "task-loop"):
-            self.assertEqual(self.run_loop(), 2)  # one more failure is the second in a row
-        self.assertIn("STOPPED: 2 failures in a row (x-1, x-2)", self.out)
-        self.assertEqual([b for b, _ in self.started], ["x-1", "x-2"])
+            self.assertEqual(self.run_loop(), 0)
+        self.assertIn("WAIT: 2 runs gave no outcome", self.out)
+        self.assertEqual([b for b, _ in self.started], ["x-1", "x-2", "x-3"])
         self.assertEqual(self.execs[0][4], actor)
 
     def test_max_beads_counts_the_beads_run_before_the_move(self):

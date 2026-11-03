@@ -10,6 +10,7 @@ import json
 import time
 
 from taskloop.contracts import wire
+from taskloop.contracts.ask import FACTORY_NOTICE_RUN
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.dash import AskCard, BeadCard, BeadDetail, Column, Epic, Piece, Project, ServerInfo, Slot, Snapshot
 from taskloop.contracts.dashcost import CostPage
@@ -82,6 +83,8 @@ def asks_of(w: World, cards: list[BeadCard]) -> list[AskCard]:
             if a is not None and (p.id, b.id) in ids:
                 out.append(ask_card(p.id, a, ledger.similar_of(a, p, w), stale_of(a, p)))
         out += [look_card(p.id, i, ids[(p.id, i.bead)]) for i in p.looks if (p.id, i.bead) in ids]
+        out += [ask_card(p.id, a) for (project, _bead), a in w.asks.items()
+                if project == p.id and a.run == FACTORY_NOTICE_RUN and (p.id, a.bead) not in ids]
     return out
 
 

@@ -28,15 +28,20 @@ class DiskPreflight(LoopBase):
         p.start()
         self.addCleanup(p.stop)
 
-    def test_below_the_threshold_the_loop_exits_0_without_claiming_a_bead_and_says_why(self):
-        bd = self.beads({"x-1": [rec("landed")]})
-        self.free(1)
-        self.assertEqual(self.run_loop(), 0)
-        self.assertEqual(self.started, [])
-        self.assertFalse([c for c in bd.calls if c[0] == "update" and "--claim" in c and c[1] == "x-1"])
-        self.assertIn("1.0 GB free", self.out)
-        self.assertIn("loop.min_free_gb 5", self.out)
-        self.assertEqual(looptest.last_exit(str(self.repo))["reason"], "low_disk")
+    def test_below_the_threshold_the_loop_waits_without_claiming_then_wakes(self):
+        self.beads({"x-1": [rec("landed")]})
+
+        def free():
+            if self.clock.t < self.clock.t0 + 120:
+                self.assertEqual(self.started, [])
+                return GB
+            return 50 * GB
+
+        with mock.patch.object(wloop, "free_bytes", side_effect=free):
+            self.assertEqual(self.run_loop(), 0)
+        self.assertEqual([b for b, _ in self.started], ["x-1"])
+        self.assertIn("WAIT low_disk", self.out)
+        self.assertEqual(looptest.last_exit(str(self.repo))["reason"], "drained")
 
     def test_the_threshold_is_a_config_key(self):
         (self.repo / ".task-loop.json").write_text('{"slots": {"count": 2}, "loop": {"min_free_gb": 0.5}}')

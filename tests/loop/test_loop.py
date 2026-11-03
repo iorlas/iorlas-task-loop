@@ -255,6 +255,7 @@ class LoopBase(Base):
         }  # delegate's `status --json` roles{}: a test makes it a function of the clock
         self.script, self.hold, self.started, self.during = {}, {}, [], []
         for p in (mock.patch.object(Core, "nap", self.clock.nap),
+                  mock.patch.object(wloop, "available_mb", return_value=None),
                   mock.patch.object(wloop, "delegate_route", return_value="/fake/route.py"),
                   mock.patch.object(wloop.dg, "role_status", side_effect=lambda route, env: self.roles()),
                   mock.patch.object(real, "spawner", return_value=mock.Mock(

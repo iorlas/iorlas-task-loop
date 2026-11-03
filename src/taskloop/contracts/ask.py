@@ -10,6 +10,7 @@ from taskloop.contracts.ids import BeadId
 from taskloop.contracts.wire import Rec
 
 AskAction = Literal["rerun", "confirm", "split", "text"]
+FACTORY_NOTICE_RUN = "factory"  # reserved run identity for host notices, which have no work bead or worker
 CauseBy = Literal["agent", "owner"]
 
 

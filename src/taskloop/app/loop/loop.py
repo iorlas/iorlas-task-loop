@@ -10,6 +10,7 @@ from os import EX_CONFIG
 from pathlib import Path
 
 from taskloop.app.loop import verdict as vd
+from taskloop.app.loop import waits
 from taskloop.app.loop.core import Core, prio_of
 from taskloop.app.loop.env import LoopEnv
 from taskloop.app.loop.files import LoopFiles
@@ -27,7 +28,7 @@ from taskloop.contracts import runlife, wire
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.config import ConfigError
 from taskloop.contracts.ids import BeadId
-from taskloop.contracts.loop import LoopState, QueueRow
+from taskloop.contracts.loop import LoopState, LoopWait, QueueRow
 from taskloop.contracts.parks import ParkStore
 from taskloop.contracts.run import LoopLogLine
 from taskloop.contracts.slots import SlotFail
@@ -179,18 +180,21 @@ class Loop(Core):
             self.say(f"{c.ran} bead(s) run (--max-beads)")
             self.left("max_beads")
             return 0
-        free, need = self.env.free_bytes(), int(self.tune().min_free_gb * (1 << 30))
-        if free < need:  # a full disk fails every run: claim nothing, end cleanly
-            why = f"only {free / (1 << 30):.1f} GB free on the config dir's disk, below loop.min_free_gb {self.tune().min_free_gb:g}"
-            self.left("low_disk", why)
-            self.say(f"stopped: {why}; no bead is claimed (free space, or tl prune, then start the loop again)")
-            return 0
-        storm = self.env.storm()  # another run (any loop) tripped the storm detector: nothing is claimed until it expires
-        if storm:
-            print(storm.banner)
-            self.left("storm", storm.fingerprint)
-            return 2
         return None
+
+    def resource_wait(self) -> bool:
+        self.prof = self.env.profile()
+        wait = waits.blocked(self.env, self.tune()) or self.c.wait
+        if wait and wait.probe_at <= self.env.now():
+            self.c.wait = None
+            wait = waits.blocked(self.env, self.tune())
+        self.wait = wait
+        if wait is None:
+            return False
+        self.say(f"WAIT {wait.reason} {wait.fingerprint}: wakes when {wait.wake}")
+        self.publish()
+        self.nap(max(1, wait.probe_at - self.env.now()), self.until)
+        return True
 
     def net_wait(self) -> bool:
         """True when the network is down and the loop napped: no claim, a probe every net_probe s, the same bead first after."""
@@ -212,6 +216,8 @@ class Loop(Core):
         if done is not None:
             return done
         if self.net_wait():
+            return None
+        if self.resource_wait():
             return None
         self.refresh()
         self.maybe_move()
@@ -284,7 +290,10 @@ class Loop(Core):
             wake = min([*wakes, *retries])
             self.say("every ready bead waits for a lane or another session: looking again at "
                      + time.strftime("%H:%M:%S", time.localtime(wake)))
-            self.nap(wake - env.now(), self.until)
+            self.wait = LoopWait(reason="no_lane", wake="role usable or retry due", probe_at=wake)
+            self.publish()
+            delay = max(1, wake - env.now())
+            self.nap(min(self.tune().poll, delay) if self.gate.held else delay, self.until)
             return None
         areas = q.areas()
         if areas:  # not drained: those beads run once their area frees; --until still ends the loop
@@ -334,7 +343,9 @@ class Loop(Core):
         name, d, slot_bead = got
         lease = Lease(env.store, slot_bead, every=self.tune().heartbeat).start()
         try:
-            env.loop_lock(d, name, slot_bead, "")  # from the take to run-task's own lock: no hand run gets in, the slot reset included
+            env.loop_lock(d, name, slot_bead, "")  # from the take through reset: no hand run gets in
+            if slots:
+                cands = self.settle.candidates(name, cands)
             taken = self.taker.attempt_all(cands, Where(name, d, slot_bead, self.started), slots, self.prof.engine, rule, lease)
         finally:
             lease.stop()

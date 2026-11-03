@@ -37,6 +37,15 @@ class QueueRow(Rec):
     title: str = ""
 
 
+class LoopWait(Rec):
+    """A live loop's wait and the condition checked at its next probe."""
+
+    reason: Literal["storm", "low_disk", "low_ram", "no_lane"]
+    wake: str
+    probe_at: float
+    fingerprint: str = ""
+
+
 class Carry(Rec):
     """What a loop hands to the install it moves to (the state JSON in TL_LOOP_STATE): counters and rests of this loop run."""
 
@@ -76,6 +85,7 @@ class LoopState(Rec):
     lanes_seen: list[str] = msgspec.field(default_factory=list)
     log: str = ""
     carry: Carry = msgspec.field(default_factory=Carry)
+    wait: LoopWait | None = None
 
 
 class LoopTarget(Rec):

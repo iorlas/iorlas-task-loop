@@ -3,7 +3,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from taskloop.app.launch import dash, factory, loop, repos
+from taskloop.app.launch import dash, factory, loop, repos, supervisor
 from taskloop.app.loop.exits import last_by_lane
 from taskloop.app.loop.files import LoopFiles
 from taskloop.app.wire import real
@@ -42,10 +42,12 @@ def _positive(value: str) -> int:
 
 
 def _stop(a: argparse.Namespace, files: LoopFiles, who: Identity) -> int:
+    supervised = supervisor.enabled(files).exists()
+    supervisor.disable(files)
     stopped = files.request_stop(a.now, who.actor)
     if not stopped:
-        print("not running")
-        return 1
+        print("supervisor stopped" if supervised else "not running")
+        return 0 if supervised else 1
     for st in stopped:
         print(f"STOP {'NOW' if a.now else 'after the current bead'}: loop pid {st.pid}")
     return 0
@@ -60,24 +62,37 @@ def _logs(a: argparse.Namespace, files: LoopFiles, states: list[LoopState]) -> i
     return 0
 
 
+def _control(a: argparse.Namespace, files: LoopFiles, who: Identity, repo: str, version: str,
+             argv: list[str], spawner: Spawner) -> int:
+    if a.op == "supervise":
+        return supervisor.run(files, repo, version, argv, spawner)
+    if a.op == "stop":
+        return _stop(a, files, who)
+    return _logs(a, files, files.live())
+
+
 def run(a: argparse.Namespace, env: Env, spawner: Spawner, who: Identity, here: Path) -> int:
     repo = repos.repo_root(a.repo)
     files = loop.files_of(repo, who.config)
     version = factory.version()
+    argv = [sys.executable, str(here / "tl.py"), "loop", "--repo", repo, "--wait-drained"]
     try:
+        if a.op in ("supervise", "stop", "logs"):
+            return _control(a, files, who, repo, version, argv, spawner)
         if a.op == "start":
             lanes = a.lanes if a.lanes is not None else _wanted(repo, env)
-            argv = [sys.executable, str(here / "tl.py"), "loop", "--repo", repo, "--wait-drained"]
+            supervisor.ensure(files, repo, [sys.executable, str(here / "tl.py"), "factory", "supervise", "--repo", repo],
+                              spawner, lanes)
             states, added = factory.start(files, repo, version, argv, spawner, lanes=lanes)
             print(f"started {added} more lane(s)" if added else f"already running ({len(states)} lanes)")
             facts(files, states, repo, version)
             return dash.run("ensure", env, spawner)
-        if a.op == "stop":
-            return _stop(a, files, who)
         states = files.live()
-        if a.op == "logs":
-            return _logs(a, files, states)
         facts(files, list(factory.lane_states(files, states).values()), repo, version)
+        supervised = supervisor.alive(files)
+        print("SUPERVISOR " + ("running" if supervised else "down"))
+        if supervisor.enabled(files).exists() and not supervised:
+            supervisor.alert(files, repo, "supervisor process is gone")
         try:
             wanted = str(_wanted(repo, env))
         except RuntimeError:
@@ -98,7 +113,7 @@ def run(a: argparse.Namespace, env: Env, spawner: Spawner, who: Identity, here: 
 def add_parser(sp: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     parser = sp.add_parser("factory", help="run the factory independently of this terminal")
     operations = parser.add_subparsers(dest="op", required=True)
-    for op in ("start", "status", "stop", "logs"):
+    for op in ("start", "status", "stop", "logs", "supervise"):
         command = operations.add_parser(op)
         command.add_argument("--repo", metavar="DIR")
         if op == "start":

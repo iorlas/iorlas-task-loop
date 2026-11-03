@@ -10,7 +10,7 @@ from typing import Final
 
 from taskloop.app.asks import looks, stick, sweeps
 from taskloop.contracts.adrs import AdrStore
-from taskloop.contracts.ask import Ask, AskAction, AskAnswer, ThreadEntry
+from taskloop.contracts.ask import FACTORY_NOTICE_RUN, Ask, AskAction, AskAnswer, ThreadEntry
 from taskloop.contracts.dash import OwnerCause, Stick
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ports import BdFailure, BeadPatch, Beads
@@ -104,6 +104,8 @@ class Intake:
         done, why = (self.asks.amend if amend else self.asks.answer)(bead, ask.id, given)
         if why:
             return done, why
+        if done is not None and done.run == FACTORY_NOTICE_RUN:
+            return done, ""  # a host acknowledgement has no work bead to reopen or worker to resume
         with contextlib.suppress(BdFailure):  # the loop's own reopen takes a blocked bead whose ask is answered
             self.store.update(bead, BeadPatch(status="open"))
         self.note(bead, receipt("answer", given.text, ask=ask.id, action=action))

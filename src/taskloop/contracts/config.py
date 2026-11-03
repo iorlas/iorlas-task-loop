@@ -140,10 +140,9 @@ class LoopConfig(Rec):
     net_probe: float = 60  # while the network is down the loop looks every this many seconds
     beat_every: float = 60  # the state file's beat is refreshed at most this often
     logs_kept: int = 5
-    slot_fails_to_set_aside: int = 2  # instant failures in a row on one slot that set it aside
+    slot_fails_to_set_aside: int = 2  # same bead's quick failures in one slot before requiring recovery or different work
     quick_fail_min: float = 1.5  # a failed run shorter than this, in minutes, is an instant failure
-    slot_aside_min: float = 720
-    fails_to_stop: int = 2  # runs in a row that gave no verdict that stop the loop
+    fails_to_stop: int = 2  # legacy key: runs with no verdict before a storm cooldown wait
     pauses_to_rest: int = 3  # a bead paused this often in one loop run rests for `rest`
     rest: float = 3600
     area_poll: float = 60
@@ -152,7 +151,8 @@ class LoopConfig(Rec):
     absent: float = 600  # ready beads, no live loop and no beat for this long: the loop is absent
     reload_fallback: float = 120  # a run-task that dies this soon after a re-exec is put back on the version it came from
     keep_days: float = 14  # `tl prune`: run data past this goes (30 days at least; not a bead not closed), a merged tree idle this long
-    min_free_gb: float = 5  # the loop claims nothing, and exits 0, while the config dir's disk has less free than this
+    min_free_gb: float = 5  # claim nothing until the config disk has this much free space
+    min_ram_mb: int = 1024  # claim nothing below this available RAM; an unknown reading does not block
     build_dir: str = "~/Workspaces/wt"  # `tl prune` removes merged, clean worktrees under here (never a loop slot)
 
 

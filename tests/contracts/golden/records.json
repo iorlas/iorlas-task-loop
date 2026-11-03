@@ -925,6 +925,12 @@
   "owned": "s1",
   "fallback": true
  },
+ "LoopWait": {
+  "reason": "low_disk",
+  "wake": "config disk free >= 5 GB",
+  "probe_at": 1793050260.5,
+  "fingerprint": ""
+ },
  "LoopState": {
   "v": 2,
   "pid": 1789,
@@ -980,7 +986,8 @@
    "back": "",
    "moved_at": 0.0,
    "fallback": false
-  }
+  },
+  "wait": null
  },
  "LoopTarget": {
   "pid": 4242,
@@ -1661,7 +1668,6 @@
    "logs_kept": 5,
    "slot_fails_to_set_aside": 2,
    "quick_fail_min": 1.5,
-   "slot_aside_min": 720,
    "fails_to_stop": 2,
    "pauses_to_rest": 3,
    "rest": 3600,
@@ -1672,6 +1678,7 @@
    "reload_fallback": 120,
    "keep_days": 14,
    "min_free_gb": 5,
+   "min_ram_mb": 1024,
    "build_dir": "~/Workspaces/wt"
   }
  },

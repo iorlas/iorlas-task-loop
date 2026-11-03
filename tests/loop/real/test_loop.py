@@ -568,11 +568,11 @@ class Loop(LoopBase):
         self.assertEqual([b for b, _ in self.started], ["x-1", "x-1", "x-1", "x-2", "x-1"])
         self.assertTrue(any(n >= 3000 for n in self.clock.naps))
 
-    def test_a_park_moves_on_and_two_failures_in_a_row_stop_parks_never_count(self):
+    def test_a_park_moves_on_and_two_failures_wait_parks_never_count(self):
         self.beads({"x-1": [rec("failed")], "x-2": [rec("parked")], "x-3": [rec("failed")], "x-4": [rec("landed")]})
-        self.assertEqual(self.run_loop(), 2)
-        self.assertEqual([b for b, _ in self.started], ["x-1", "x-2", "x-3"])
-        self.assertIn("2 failures in a row", self.out)
+        self.assertEqual(self.run_loop(), 0)
+        self.assertEqual([b for b, _ in self.started], ["x-1", "x-2", "x-3", "x-4"])
+        self.assertIn("WAIT: 2 runs gave no outcome", self.out)
 
     def test_faults_with_a_kind_cool_their_bead_and_do_not_count_toward_a_stop(self):
         # tl-7y6.2.3: a FAULT_* is the storm detector's, not a failure count. Two different faults: both beads rest, the third runs.
@@ -586,9 +586,9 @@ class Loop(LoopBase):
         self.assertEqual(sorted(rests), ["x-1", "x-2"])
         self.assertTrue(all(abs(t - (self.clock.t0 + 1800)) < 600 for t in rests.values()))  # fault_cooldown_s, not an hour
 
-    def test_a_run_that_tripped_the_storm_stops_the_loop_with_its_banner_and_leaves_the_beads_open(self):
+    def test_a_run_that_tripped_the_storm_waits_and_leaves_the_beads_open(self):
         # tl-bxk.10.31: Codex rejected the schema for every bead; the loop drained 53 of them. The second bead trips the storm.
-        banner = "STOPPED: storm FAULT_BAD_REQUEST bad_request on x-1,x-2 (the beads stay open; look at their logs)"
+        banner = "WAIT: storm FAULT_BAD_REQUEST bad_request on x-1,x-2 (the beads stay open; look at their logs)"
         def bad(**kw):
             return rec(
                 "failed",
@@ -599,25 +599,23 @@ class Loop(LoopBase):
             )
 
         self.beads({"x-1": [bad()], "x-2": [bad(storm=banner)], "x-3": [rec("landed")]})
-        self.assertEqual(self.run_loop(), 2)
-        self.assertEqual([b for b, _ in self.started], ["x-1", "x-2"])
-        self.assertEqual(self.out.count("STOPPED: storm"), 1)
+        self.assertEqual(self.run_loop("--max-beads", "3"), 0)
+        self.assertEqual([b for b, _ in self.started], ["x-1", "x-2", "x-3"])
+        self.assertEqual(self.out.count("WAIT: storm"), 1)
         self.assertEqual([self.bd.beads[b]["status"] for b in ("x-1", "x-2")], ["open", "open"])
-        self.assertEqual(looptest.last_exit(str(self.repo))["reason"], "storm")
+        self.assertIn("WAIT storm", self.out)
+        self.assertEqual(looptest.last_exit(str(self.repo))["reason"], "max_beads")
 
-    def test_a_live_storm_record_stops_a_loop_before_any_claim_with_one_line(self):
+    def test_a_live_storm_record_waits_before_any_claim_then_expires(self):
         self.beads({"x-1": [rec("landed")]})
         path = storm_path(homes.config_dir(), repo_url(port_git(), str(self.repo)))
         write_storm(path, "FAULT_INFRA y", ("x-8", "x-9"), self.clock.t, self.clock.t, oc.KNOBS["storm_window_s"])
-        self.assertEqual(self.run_loop(), 2)
-        self.assertEqual(self.started, [])
-        self.assertEqual(self.out.count("STOPPED: storm FAULT_INFRA y on x-8,x-9"), 1)
-        self.assertIn(str(path), self.out)
-        self.clock.t += 31 * 60  # it expires by itself
         self.assertEqual(self.run_loop(), 0)
         self.assertEqual([b for b, _ in self.started], ["x-1"])
+        self.assertIn("WAIT storm FAULT_INFRA y", self.out)
+        self.assertGreaterEqual(self.clock.t - self.clock.t0, oc.KNOBS["storm_window_s"])
 
-    def test_two_instant_failures_on_one_slot_set_the_slot_aside_and_the_loop_goes_on(self):
+    def test_different_beads_failing_quickly_do_not_hold_the_slot(self):
         # tl-g6a: s4 fed 7 beads in under a minute each, 'worktree has uncommitted work of another branch'
         def bad():
             return rec(
@@ -635,10 +633,8 @@ class Loop(LoopBase):
             verbs, "hold", side_effect=lambda env, a: holds.append(("hold", a.name, a.why, a.for_min)) or 0 if True else real(env, a)
         ), mock.patch.object(Slot, "ready_for", side_effect=SlotFail("slot_broken", "setup still fails after recovery")):
             self.run_loop()
-        self.assertEqual([h[:2] for h in holds], [("hold", "s1")])
-        self.assertIn("SET ASIDE", self.out)
-        self.assertIn("set aside by tl loop: 2 runs failed", holds[0][2])
-        self.assertEqual(holds[0][3], LoopConfig().slot_aside_min)
+        self.assertEqual(holds, [])
+        self.assertNotIn("waits for a successful reset probe", self.out)
         self.assertNotIn("2 failures in a row", self.out)  # the slot's failures are not the beads' or the loop's
         self.assertEqual([b for b, _ in self.started], ["x-1", "x-2", "x-3"])
 
@@ -691,7 +687,7 @@ class Loop(LoopBase):
             self.run_loop()
         self.assertEqual(holds, [])  # not the slot's
 
-    def test_a_slot_that_cannot_be_held_is_said_so_and_the_failures_still_count(self):
+    def test_different_beads_never_attempt_a_slot_hold(self):
         def bad():
             return rec(
                 "failed",
@@ -702,9 +698,10 @@ class Loop(LoopBase):
             )
 
         self.beads({"x-1": [bad()], "x-2": [bad()], "x-3": [rec("landed")]}, slots=2)
-        with mock.patch.object(verbs, "hold", side_effect=lambda env, a: 1):
+        with mock.patch.object(verbs, "hold", side_effect=AssertionError("automatic holds are forbidden")) as hold:
             self.run_loop()
-        self.assertIn("could not be set aside", self.out)
+        hold.assert_not_called()
+        self.assertNotIn("waits for a successful reset probe", self.out)
         self.assertNotIn("SET ASIDE", self.out)
 
     def test_a_landed_bead_ends_a_run_of_failures(self):
@@ -714,7 +711,7 @@ class Loop(LoopBase):
 
     def test_a_crash_with_no_outcome_is_a_failure(self):
         self.beads({"x-1": [None], "x-2": [None], "x-3": [rec("landed")]})
-        self.assertEqual(self.run_loop(), 2)
+        self.assertEqual(self.run_loop("--max-beads", "3"), 0)
         self.assertEqual(self.lines()[0]["outcome"], "failed")
         self.assertIn("no outcome", self.lines()[0]["why"])
 

@@ -395,6 +395,7 @@ OTHERS = {
     "Identity": identity.Identity(actor="tl-abcdef12", home="/home/u/.config/task-loop", session="abcdef12-0000"),
     "CallIdentity": run.CallIdentity(semantics="s", worktree="/wt", cwd="/wt", tree="t", cwd_tree="t", head="h", cwd_head="h"),
     "Reexec": run.Reexec(run=str(RUN), bead="tl-1", pid=0, frm="0.23.56", owned="s1", fallback=True),
+    "LoopWait": loop.LoopWait(reason="low_disk", wake="config disk free >= 5 GB", probe_at=T + 60),
     "LoopState": loop.LoopState(
         pid=1789,
         started=T,

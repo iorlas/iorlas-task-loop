@@ -5,6 +5,7 @@ anything."""
 import contextlib
 import functools
 import os
+import platform
 import shutil
 import sys
 import uuid
@@ -12,7 +13,7 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
-from taskloop.adapters import applog, beadtools, childenv, ident, pidcheck
+from taskloop.adapters import applog, beadtools, childenv, ident, pidcheck, ram
 from taskloop.adapters import delegate as dg
 from taskloop.adapters import storm as storm_file
 from taskloop.adapters.locks import hold_path
@@ -26,7 +27,7 @@ from taskloop.app.loop.loop import parse_handover
 from taskloop.app.loop.versions import Installs
 from taskloop.app.prune import verb as prune_verb
 from taskloop.app.reconcile import leases
-from taskloop.app.release import catalog, pins, reexec, seams, shell
+from taskloop.app.release import catalog, pins, reexec, seams, shell, suite
 from taskloop.app.report import reflect
 from taskloop.app.run import console, entry
 from taskloop.app.run.running import area_lock, running
@@ -72,6 +73,16 @@ def free_bytes(cfg: paths.ConfigDir) -> int:
     return shutil.disk_usage(cfg.root).free
 
 
+def available_mb(spawner: Spawner) -> int | None:
+    if platform.system() != "Darwin":
+        return suite.available_mb()
+    try:
+        result = spawner.run(["/usr/bin/vm_stat"], timeout_s=2)
+        return ram.available_mb(result.out) if result.exit == 0 else None
+    except OSError:
+        return None
+
+
 def files_of(repo: str, cfg: paths.ConfigDir, now: Callable[[], float] = trail.now) -> LoopFiles:
     return LoopFiles(cfg, wslots.repo_key(repo), pidcheck.pid_alive, now)
 
@@ -104,8 +115,8 @@ def storm(repo: str, cfg: paths.ConfigDir, now: Callable[[], float] = trail.now,
     if not rec:
         return None
     banner = (
-        "STOPPED: storm {} on {}; the beads stay open (look at their logs). Record {} expires {:d} min after it was written; "
-        "delete it to start sooner"
+        "WAIT: storm {} on {}; the beads stay open (look at their logs). Record {} expires {:d} min after it was written; "
+        "clear it to wake sooner"
     ).format(rec.get("fingerprint"), ",".join(rec.get("beads") or []), path, (oc.KNOBS["storm_window_s"] // 60))
     return Storm(rec.get("fingerprint") or "", banner)
 
@@ -270,6 +281,7 @@ def build(repo: str, store: Beads | None = None, session_actor: str = "", here: 
             who=who,
         ),
         free_bytes=lambda: free_bytes(cfg),
+        available_mb=lambda: available_mb(spawner),
     )
 
 

@@ -13,7 +13,7 @@ from taskloop.app.loop.gate import GateRole
 from taskloop.app.loop.net import NetState
 from taskloop.app.loop.settle import Counters
 from taskloop.contracts.config import ConfigError, LoopConfig, RepoProfile
-from taskloop.contracts.loop import Carry, LoopState, QueueRow
+from taskloop.contracts.loop import Carry, LoopState, LoopWait, QueueRow
 
 
 @dataclass(frozen=True)
@@ -55,6 +55,7 @@ class Core:
             self.left(vd.PROFILE_AHEAD, profile_error)
         self.beat_at = 0.0
         self.now_running: Running | None = None
+        self.wait: LoopWait | None = None
         self.until = carry.until
         self.wt = carry.wt
         self.st = LoopState(pid=env.pid, started=self.started, t=env.now(), repo=env.repo, version=env.version, code_dir=env.code_dir,
@@ -101,7 +102,7 @@ class Core:
         stop = LoopFiles.stop_request(mode, "tl", self.env.now()) if mode else None
         r = self.now_running
         self.st = self.st.replace(
-            t=self.env.now(), queue=self.rows, carry=self.carry(), stop=stop, log=str(self.log or ""),
+            t=self.env.now(), queue=self.rows, carry=self.carry(), stop=stop, log=str(self.log or ""), wait=self.wait,
             worktree=r.worktree if r else self.wt, bead=r.bead if r else None, slot=r.slot if r else None,
             since=r.since if r else None, child=r.child if r else None, run_log=r.run_log if r else "")
         self.beat_at = self.env.now()

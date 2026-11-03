@@ -99,13 +99,15 @@ def _wait(files: LoopFiles, children: list[tuple[Child, Path]], sleep: Callable[
 
 
 def start(files: LoopFiles, repo: str, version: str, argv: list[str], spawner: Spawner,
-          sleep: Callable[[float], None] = time.sleep, *, lanes: int = 1) -> tuple[list[LoopState], int]:
+          sleep: Callable[[float], None] = time.sleep, *, lanes: int = 1, enabled: Path | None = None) -> tuple[list[LoopState], int]:
     """Top up under the loop lock; return all lanes and the number newly launched."""
     if lanes < 1:
         raise ValueError("lanes must be at least 1")
     children: list[tuple[Child, Path]] = []
     with files.lock():
         states = files.live()
+        if enabled is not None and not enabled.exists():
+            return states, 0
         numbered = lane_states(files, states)
         for _ in range(max(0, lanes - len(states))):
             lane = next(k for k in range(1, lanes + 1) if k not in numbered)
@@ -117,10 +119,11 @@ def start(files: LoopFiles, repo: str, version: str, argv: list[str], spawner: S
     # The child uses the same lock to publish; wait outside the launch lock.
     if children:
         states.extend(_wait(files, children, sleep))
-        keep_awake = platform_factory.caffeinate_argv(children[0][0].pid)
-        if keep_awake:
-            with contextlib.suppress(FileNotFoundError):
-                spawner.start(keep_awake, stdin="null", out="null")
+        for child, _path in children:
+            keep_awake = platform_factory.caffeinate_argv(child.pid)
+            if keep_awake:
+                with contextlib.suppress(OSError):
+                    spawner.start(keep_awake, stdin="null", out="null")
     return list(lane_states(files, states).values()), len(children)
 
 

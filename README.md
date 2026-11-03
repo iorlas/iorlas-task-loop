@@ -84,8 +84,23 @@ One read-only server per machine, started by the loop (`tl.py dash ensure`), def
 Desktop session or open terminal. It keeps polling when the queue drains. Repeating it reports `already running`.
 Use `tl factory status`, `tl factory stop` (finish the current bead), `tl factory stop --now`, and
 `tl factory logs [-n 50] [-f]`; each accepts `--repo DIR`. Start and status print the repo, version, PID, log and dashboard URL.
-The loop's PID and console log are in `<config>/loop/<repo-key>/loop.pid` and `factory.log`, alongside its existing run logs.
-On macOS, installed `caffeinate` prevents idle sleep while the loop lives. This installs no OS service and does not restart after reboot.
+The first lane's PID is in `<config>/loop/<repo-key>/loop.pid`; numbered `factory-lane-K.log` links point to each child's
+`factory-<pid>.log`, alongside existing run logs.
+`tl factory start` also starts a detached supervisor on this host for the repo. It checks every ten seconds and refills dead
+lanes, including after a failed restart. `tl factory stop` disables refills before stopping loops. On macOS, each new child
+gets an optional `caffeinate -i -w <pid>`; these end with their children. No OS service or LaunchAgent is installed.
+After a reboot, manually run `tl factory start` again. From a phone's SSH terminal, run `tl factory start --repo /path/to/repo`
+or `tl factory stop --repo /path/to/repo` on the host. The shared dashboard stays available after a stop.
+Failed restarts raise one soft **Factory down** notification in the existing owner ask inbox. `tl factory status` also
+detects a missing supervisor and raises that notification; a killed supervisor cannot report its own death until status is checked.
+Supervisor output is in `<config>/loop/<repo-key>/supervisor.log`.
+
+Storms, low disk, low available RAM and unavailable lanes keep loops alive as waits with explicit probe times and wake
+conditions. Disk and RAM wake when their configured thresholds (`loop.min_free_gb`, `loop.min_ram_mb`) are met; storms wake
+when their fingerprint record expires or is cleared; lanes wake when usable or their retry is due. Stops and `--until` still work.
+Consecutive quick failures of the same bead in a slot make that bead wait for a successful reset/setup probe or different
+eligible work. Different beads do not accumulate failures together. Failed probes exclude the slot until a probe passes
+on a normal loop pass; there is no timed set-aside. Resource and lane waits poll their wake conditions at the pass interval.
 
 - **Board:** every bead of every registered repo by stage (backlog, working, asking, AI review, your look, landing, done),
   and the goal tree.

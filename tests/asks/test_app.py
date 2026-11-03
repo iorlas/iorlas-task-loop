@@ -13,6 +13,7 @@ from support.tiers import domain
 
 from taskloop.adapters.bd import BdRun, BdStore
 from taskloop.app.asks import intake, raiser, sweeps
+from taskloop.contracts.ask import FACTORY_NOTICE_RUN
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.enums import AskStatus
 from taskloop.contracts.ids import BeadId
@@ -88,6 +89,15 @@ class SweepTest(unittest.TestCase):
 
     def raise_for(self, bead: str, now: float = T) -> None:
         raiser.raise_ask(self.asks, specs.missing_criteria(), asking(bead, str(self.repo), now))
+
+    def test_factory_notice_survives_missing_bead_sweep_and_ack_needs_no_worker(self) -> None:
+        at = dataclasses.replace(asking("factory-host", str(self.repo)), run=FACTORY_NOTICE_RUN)
+        spec = specs.open_question("Restart the factory?", None, default="Keep retrying")
+        ask = must(raiser.raise_ask(self.asks, spec, at)[0])
+        self.assertEqual(sweeps.close_stale(self.asks, lambda r: self.store, self.marker, T), [])
+        self.assertEqual(self.asks.get(ask.bead), ask)
+        intake.Intake(self.asks, self.store, lambda: T + 10, "denis").answer(ask.bead, "text", "Restarted")
+        self.assertEqual(sweeps.unused_answers(self.asks, T + 5000), [])
 
     def test_asks_of_closed_or_missing_beads_are_closed_once_per_window(self) -> None:
         for b in ("fk-1", "fk-2", "fk-9"):

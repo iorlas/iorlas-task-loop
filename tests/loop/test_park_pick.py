@@ -94,7 +94,10 @@ class Pick(unittest.TestCase):
         parks.paused(self.cfg, bead(), Kind.PAUSE_LANE, "r1", 100, reason="busy", draw=lambda: 0.5, permanence="transient")
         rule = QueueRule(mock.Mock(), EngineConfig(), {}, lambda _: "", parked=lambda b: parks.skip_of(self.cfg, b, now=100))
         loop = mock.Mock(env=mock.Mock(now=lambda: 100), until=0)
+        loop.gate.held = {}  # a timed pause has no role condition; a bare Mock would be truthy
         self.assertIsNone(Loop.idle(loop, rule.rank([bead()], "")))
+        self.assertEqual((loop.wait.reason, loop.wait.probe_at), ("no_lane", 130))
+        loop.publish.assert_called_once_with()
         loop.nap.assert_called_once_with(30, 0)
         loop.left.assert_not_called()
 

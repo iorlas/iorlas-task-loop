@@ -4,7 +4,7 @@ import contextlib
 from collections.abc import Callable
 from pathlib import Path
 
-from taskloop.contracts.ask import Ask
+from taskloop.contracts.ask import FACTORY_NOTICE_RUN, Ask
 from taskloop.contracts.enums import AskStatus
 from taskloop.contracts.ids import BeadId, is_bead_id
 from taskloop.contracts.ports import BdFailure, BeadPatch, BeadQuery, Beads
@@ -31,6 +31,8 @@ def touch(marker: Path) -> None:
 def by_repo(live: list[Ask]) -> dict[str, list[Ask]]:
     out: dict[str, list[Ask]] = {}
     for a in live:
+        if a.run == FACTORY_NOTICE_RUN:
+            continue  # a host notice has no work bead to close or reopen
         if a.repo and (Path(a.repo) / ".beads").is_dir():  # which tracker to ask is unknown otherwise: bd would walk up to another
             out.setdefault(a.repo, []).append(a)
     return out
@@ -128,7 +130,8 @@ def reask_orphans(asks: AskStore, store: Beads, marker: Path, now: float, pick: 
 
 def unused_answers(asks: AskStore, now: float, after_s: float = UNUSED_ANSWER_S) -> list[Ask]:
     """Answers filed and not used by any run for `after_s`: the loop is not picking the bead up (the engine's fault, not the owner's)."""
-    return [a for a in asks.all() if a.status == AskStatus.ANSWERED and a.consumed is None and a.answered is not None
+    return [a for a in asks.all() if a.run != FACTORY_NOTICE_RUN and a.status == AskStatus.ANSWERED
+            and a.consumed is None and a.answered is not None
             and now - a.answered > after_s]
 
 

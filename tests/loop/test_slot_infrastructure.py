@@ -44,7 +44,7 @@ class Infrastructure(Rig):
         self.assertEqual(self.bd.beads[bid].assignee, "")
         counters = Counters(slot_quick={"s1": ["previous"]})
         settle, files = self.settle(counters)
-        with mock.patch("taskloop.app.loop.settle.verbs.hold") as hold:
+        with mock.patch.object(settle, "aside") as hold:
             settle.apply(verdict, bid, "s1", True)
         hold.assert_not_called()
         files.rest_bead.assert_not_called()
@@ -74,10 +74,10 @@ class Infrastructure(Rig):
             mock.patch.object(Slot, "ready_for", side_effect=SlotFail("slot_broken", "setup failed")) as reset,
             mock.patch.object(settle, "aside", return_value=True) as aside,
         ):
-            for number in range(LoopConfig().slot_fails_to_set_aside):
-                verdict = self.taker().prepare("s1", f"x-{number}")
+            for _ in range(LoopConfig().slot_fails_to_set_aside):
+                verdict = self.taker().prepare("s1", "x-1")
                 assert verdict is not None
-                settle.apply(verdict, f"x-{number}", "s1", True)
+                settle.apply(verdict, "x-1", "s1", True)
         self.assertEqual(reset.call_count, 2 * LoopConfig().slot_fails_to_set_aside)
         aside.assert_called_once()
 
@@ -90,7 +90,7 @@ class Infrastructure(Rig):
         probe.assert_called_once_with()
         self.assertEqual(counters.slot_quick["s1"], [])
 
-    def test_another_branchs_unsaved_work_counts_even_when_the_slot_cannot_be_held(self):
+    def test_different_beads_do_not_accumulate_slot_failures(self):
         counters = Counters()
         settle, _files = self.settle(counters)
         verdict = vd.Verdict(
@@ -100,13 +100,13 @@ class Infrastructure(Rig):
             slot_fault="slot_broken",
             minutes=0.3,
         )
-        with mock.patch.object(Slot, "check_ready") as probe, mock.patch("taskloop.app.loop.settle.verbs.hold", return_value=1) as hold:
+        with mock.patch.object(Slot, "check_ready") as probe, mock.patch.object(settle, "aside") as hold:
             for number in range(LoopConfig().slot_fails_to_set_aside):
                 self.assertIsNone(settle.apply(verdict, f"x-{number}", "s1", True))
         probe.assert_not_called()  # the verdict already establishes the dirty branch
-        hold.assert_called_once()
+        hold.assert_not_called()
         self.assertEqual(counters.slot_quick["s1"], [f"x-{LoopConfig().slot_fails_to_set_aside - 1}"])
-        self.assertTrue(any("could not be set aside" in line for line in self.out))
+        self.assertEqual(counters.slot_blocked, {})
 
     def test_infrastructure_during_engine_slot_recovery_does_not_count_toward_set_aside(self):
         verdict = vd.Verdict(Result.FAILED, kind="fault_slot", slot_fault="slot_broken", minutes=0.1)

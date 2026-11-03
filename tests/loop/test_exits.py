@@ -74,11 +74,26 @@ class LaneExits(unittest.TestCase):
             loop.main()
         self.assertIn("startup disk failure", str(self.records()[0]["detail"]))
 
-    def test_low_disk_ends_without_claiming_work(self):
+    def test_low_disk_wait_stops_on_signal_and_logs_exit_without_claiming_work(self):
         loop = self.loop()
         self.env.free_bytes.return_value = 0
+
+        def stop_wait(seconds):
+            loop.sigterm.set()  # release the real nap even though this test's clock is fixed
+            self.assertGreater(seconds, 0)
+            self.assertEqual(self.records(), [])
+            state = self.files.read(self.env.pid)
+            assert state is not None and state.wait is not None
+            self.assertEqual(state.wait.reason, "low_disk")
+            self.assertFalse(loop.exit)
+
+        self.env.sleep.side_effect = stop_wait
         self.assertEqual(loop.main(), 0)
-        self.assertEqual(self.records()[0]["reason"], "low_disk")
+        self.env.sleep.assert_called_once()
+        loop.write_exit()  # the normal boundary and a later callback still write only once
+        self.assertEqual(len(self.records()), 1)
+        self.assertEqual((self.records()[0]["reason"], self.records()[0]["lane"]), ("signal", 2))
+        self.env.fetch.assert_not_called()
         self.env.claim.assert_not_called()
 
     def test_atexit_callback_records_exit_and_is_unregistered(self):

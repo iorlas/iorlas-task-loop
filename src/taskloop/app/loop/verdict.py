@@ -40,6 +40,7 @@ class Verdict:
     retry_after: float = 0.0
     role: str = ""
     storm: str = ""
+    fingerprint: str = ""
     pre_engine: bool = False  # the engine never started: no verdict on the bead
     slot_fault: SlotFailCode | None = None  # the slot's own git state broke, not the bead
     recovery_failed: bool = False  # a slot reset was retried before judging the slot broken
@@ -101,4 +102,5 @@ def read(path: Path, rc: int | None, log_path: Path, version: str = "unknown") -
     return Verdict(
         outcome=raw.outcome, why=raw.why, kind=raw.kind, minutes=raw.minutes, rounds=raw.rounds, tests_added=raw.tests_added,
         asked=raw.asked, run=raw.run, log=raw.log, retry_after=raw.retry_after or 0.0, role=raw.role, storm=raw.storm,
+        fingerprint=raw.fingerprint,
         slot_fault="slot_broken" if raw.kind == FAULT_SLOT else None), True

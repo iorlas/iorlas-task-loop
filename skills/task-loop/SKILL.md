@@ -425,9 +425,18 @@ It keeps polling an empty queue; repeating start prints `already running`. Start
 print PID, version, repo, log path and dashboard addresses; status includes current beads when known and exits 1 when not running.
 `tl factory stop [--repo DIR] [--now]` uses the same graceful stop as `tl stop`, targeting each live loop's recorded PID and start time.
 `tl factory logs [--repo DIR] [-n N] [-f]` prints the last 50 lines by default and optionally follows the console log.
-The console log and PID file live beside existing loop logs under `<config>/loop/<repo-key>/` as `factory.log` and `loop.pid`.
-On macOS an available `caffeinate -i -w <pid>` prevents idle sleep while the loop lives. No OS service is installed;
-start again after a reboot. Stopping a repo's factory leaves the shared dashboard available for other repos.
+The first lane's PID is `loop.pid` under `<config>/loop/<repo-key>/`; each `factory-lane-K.log` links to its `factory-<pid>.log`.
+A detached supervisor checks for dead lanes every ten seconds and refills them; factory stop disables refills first.
+On macOS each new child gets an available `caffeinate -i -w <pid>`, ending with that child. No OS service or LaunchAgent
+is installed; manually run `tl factory start` again after a reboot. Start/stop also work from a phone's SSH terminal on the host.
+Failed restarts file a soft Factory down notification in the existing owner ask inbox. Status detects a missing supervisor
+and files the same notification; a killed supervisor needs an external status check to report its absence.
+Supervisor output is in `supervisor.log` beside the lane logs. Stopping a repo's factory leaves the shared dashboard available.
+Storm, low disk, low RAM and no-lane conditions are waits, each with a probe time and wake condition in loop state.
+After repeated quick failures of the same bead in one slot, that loop needs a successful reset/setup probe or a different
+eligible bead before retaking it there. Different beads never accumulate toward this threshold. A failed probe excludes
+the slot until a probe succeeds on a normal loop pass, with no timed hold. Resource and lane waits poll wake conditions;
+only retries of failed operations (including vendor usage-limit unlocks) carry retry times.
 
 `tl loop` runs the queue by itself, one bead at a time, in the foreground of any shell (a background job, tmux, a
 container); the session that starts it only watches it.
@@ -482,7 +491,9 @@ container); the session that starts it only watches it.
   `loop.keep_days` (14; beads not closed, parked ones included, keep theirs), worktrees under `loop.build_dir` (`~/Workspaces/wt`) whose HEAD
   is on origin/main, clean and idle that long, local `release/*` branches on origin/main, and local `task/*` branches of closed beads (`git branch -d` only: git's refusal keeps one); plain `git worktree remove`, never --force, and
   it says what it removed and what it kept and why. Below `loop.min_free_gb` (5) free on the config dir's disk the loop claims nothing and
-  exits 0 (reason `low_disk`). A run keeps at most `engine.evidence_cap_mb` (200) of new evidence; a picture identical to one kept before is a link.
+  waits until free space recovers, probing every `loop.net_probe` seconds. Below `loop.min_ram_mb` (1024) available RAM it
+  waits the same way; an unknown RAM reading does not block. A run keeps at most `engine.evidence_cap_mb` (200) of new evidence;
+  a picture identical to one kept before is a link.
 - **Leases:** the loop heartbeats the slot bead and the task bead from the slot take to the release (a slow slot
   setup included); run-task heartbeats both too (`TASK_LOOP_SLOT_BEAD`), so a loop killed with SIGKILL leaves its
   slot held until the running bead ends, then the lease lapses and the next sweep (the loop's step, `run-task`, `tl prune`) frees it.

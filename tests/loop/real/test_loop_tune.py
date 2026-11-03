@@ -29,16 +29,18 @@ class Tune(LoopBase):
     def test_a_loop_block_overrides_a_constant_and_a_missing_key_keeps_the_default(self):
         self.config(loop={"fails_to_stop": 1})
         self.beads({"x-1": [rec("failed")], "x-2": [rec("landed")]})
-        self.assertEqual(self.run_loop(), 2)
-        self.assertEqual([b for b, _ in self.started], ["x-1"])  # one failure stops it
+        self.assertEqual(self.run_loop(), 0)
+        self.assertEqual([b for b, _ in self.started], ["x-1", "x-2"])
+        self.assertIn("WAIT: 1 runs gave no outcome", self.out)
         self.assertEqual(LoopConfig().fails_to_stop, 2)
         self.assertEqual(LoopConfig().poll, 2)
 
     def test_a_changed_block_applies_at_the_next_pass(self):
         self.beads({"x-1": [rec("landed")], "x-2": [rec("failed")], "x-3": [rec("landed")]})
         self.during.append(lambda: self.config(loop={"fails_to_stop": 1}))
-        self.assertEqual(self.run_loop(), 2)
-        self.assertEqual([b for b, _ in self.started], ["x-1", "x-2"])
+        self.assertEqual(self.run_loop(), 0)
+        self.assertEqual([b for b, _ in self.started], ["x-1", "x-2", "x-3"])
+        self.assertIn("WAIT: 1 runs gave no outcome", self.out)
 
     @staticmethod
     def meta(bd, slot_bead, meta):

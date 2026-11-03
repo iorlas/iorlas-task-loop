@@ -19,7 +19,7 @@ from support.repos import write_repos
 
 from taskloop.app.asks import intake, raiser
 from taskloop.contracts import wire
-from taskloop.contracts.ask import SimilarRef, ThreadEntry
+from taskloop.contracts.ask import FACTORY_NOTICE_RUN, SimilarRef, ThreadEntry
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.dash import Column, Marker, OwnerCause, Result, Stick
 from taskloop.contracts.ids import BeadId, loop_key
@@ -78,6 +78,15 @@ class Case(unittest.TestCase):
 
 
 class Cards(Case):
+    def test_factory_down_notice_shows_in_inbox_and_ledger_without_a_work_bead(self):
+        spec = specs.open_question("Restart the factory?", None, default="Keep retrying")
+        ask = must(raiser.raise_ask(self.asks, spec, raiser.Asking(
+            bead=BeadId("factory-host"), run=FACTORY_NOTICE_RUN, brief_hash="", repo=REPO, title="Factory down", now=T))[0])
+        snap = self.snap([])
+        self.assertEqual([card.id for card in snap.asks], [ask.id])
+        self.assertEqual([row.ask for row in snap.ledger], [ask.id])
+        self.assertEqual(snap.beads, [])
+
     def test_an_ask_card_carries_the_typed_fields_of_the_ask(self):
         key = self.raise_("b-0", T).key
         adr = self.stores.adrs(REPO).add(Adr(id="", n=0, repo=REPO, text="Rent is weekly", question=Q, answer="rent", ask="b-0-1",

@@ -2,7 +2,7 @@
 and `release` fail with a SlotFail (slot_broken, bead_pinned or busy); the pool takes the first free one."""
 from pathlib import Path
 
-from taskloop.app.slots import owned
+from taskloop.app.slots import aside, owned
 from taskloop.app.slots.env import SlotEnv, peek, stamp
 from taskloop.app.slots.marks import clear_marks, held_by, hold_of, hold_until, mark_held, next_gen
 from taskloop.app.slots.reset import check_ready, ready_for
@@ -65,7 +65,10 @@ class Slot:
             fresh = self.pool.bead(self.name)
             if fresh is None:
                 raise SlotFail("slot_broken", f"no slot {self.name} on {self.env.host} (tl slot list)")
-            return Slot(self.pool, self.name, fresh).take_locked(why, bead)
+            target = Slot(self.pool, self.name, fresh)
+            if not aside.probe(target):
+                raise SlotFail("slot_broken", f"slot {self.name}: reset probe has not passed")
+            return self.pool.slot(self.name).take_locked(why, bead)
 
     def ready_for(self, bead: str, *, force: bool = False) -> None:
         """A clean tree on the bead's branch, leftover work committed (never wiped); see reset.py."""
@@ -164,8 +167,11 @@ class SlotPool:
             for slot in self.slots():
                 if not self.configured(slot.name):
                     continue
+                if not aside.probe(slot):
+                    continue
+                fresh = self.slot(slot.name)  # the probe released its claim and changed its marks
                 try:
-                    return slot.name, slot.dir, slot.take_locked(why, bead, ticket)
+                    return fresh.name, fresh.dir, fresh.take_locked(why, bead, ticket)
                 except SlotFail:
                     continue
         return None
@@ -180,7 +186,7 @@ class SlotPool:
         """An expired hold gives its slot bead back (the holder's claim with it), so the slot is free at once. Takes no lock:
         the caller holds the take lock, so a stale look never wipes a slot another session took meanwhile."""
         for b in self.beads():
-            if hold_until(b) and not hold_of(b, self.env.now()):
+            if hold_until(b) and (b.metadata.get("aside_probe") == "pending" or not hold_of(b, self.env.now())):
                 clear_marks(self.env, b.id)  # first: see Slot.release_locked
                 if b.status == "in_progress" and (b.assignee in ("", b.metadata.get("held_by")) or b.assignee.startswith("tl-")):
                     self.unclaim(b, force=True)

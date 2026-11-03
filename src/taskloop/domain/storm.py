@@ -42,5 +42,5 @@ def storm_trip(history: Sequence[Mapping[str, Any]], bead: str, kind: Kind, fing
 
 def banner(trip: StormTrip, record: str) -> str:
     """The stop line: the beads stay open; the way to start sooner is to delete the record at `record`."""
-    return "STOPPED: storm {} on {} (the beads stay open; look at their logs, then delete {})".format(
+    return "WAIT: storm {} on {} (the beads stay open; the record expires, or clear {} to wake sooner)".format(
         trip.fingerprint, ",".join(trip.beads), record)

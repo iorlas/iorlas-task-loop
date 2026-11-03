@@ -1,21 +1,22 @@
-"""What the loop does with a bead's verdict: count it, rest the bead, set a broken slot aside, hold the loop for the network
-or stop it. Returns the loop's exit code when the verdict ends it."""
+"""Count a bead's verdict, cool it, set a broken slot aside, or wait for a resource to recover.
+Only a configuration refusal ends the loop here; NETPAUSE keeps its own counters and probes."""
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from os import EX_CONFIG
-from types import SimpleNamespace
 
 from taskloop.app.loop import verdict as vd
 from taskloop.app.loop.env import LoopEnv, Probe
 from taskloop.app.loop.files import LoopFiles
 from taskloop.app.loop.gate import GateRole
 from taskloop.app.loop.net import NetState
-from taskloop.app.slots import verbs
+from taskloop.app.slots import aside
 from taskloop.app.slots.pool import SlotPool
+from taskloop.contracts.bead import Bead
 from taskloop.contracts.config import LoopConfig
 from taskloop.contracts.enums import Result
 from taskloop.contracts.ids import BeadId
+from taskloop.contracts.loop import LoopWait
 from taskloop.contracts.parks import ParkStore
 from taskloop.contracts.ports import BdFailure
 from taskloop.contracts.slots import SlotFail, SlotGitError
@@ -29,8 +30,10 @@ class Counters:
     pauses: dict[str, int] = field(default_factory=dict)
     warned: list[str] = field(default_factory=list)  # once-per-loop-run warnings (a missing install dir)
     slot_quick: dict[str, list[str]] = field(default_factory=dict)  # slot -> the beads that failed in an instant there, in a row
+    slot_blocked: dict[str, str] = field(default_factory=dict)  # slot -> bead requiring recovery or different work
     net_first: list[str] = field(default_factory=list)  # beads the network paused: they go first when it is back
     net_down_t: float = 0.0
+    wait: LoopWait | None = None
 
 
 class Settle:
@@ -40,22 +43,35 @@ class Settle:
         self.probe: Probe | None = None
 
     def aside(self, name: str, bid: str, v: vd.Verdict) -> bool:
-        """tl-g6a: a broken slot must not eat the queue: the failures are the slot's, not the beads' or the loop's. True when
-        the slot is set aside (the failures before it no longer count toward the stop)."""
+        """Stop retaking this bead until recovery or different eligible work."""
         t = self.tune()
         quick = self.c.slot_quick.setdefault(name, [])
         why = f"{len(quick)} runs failed within {t.quick_fail_min:g} min each ({', '.join(quick)}): last: {v.why[:160]}"
-        ask = SimpleNamespace(name=name, why="set aside by tl loop: " + why, for_min=t.slot_aside_min)
-        held = verbs.hold(self.env.slot_env(), ask) == 0
-        hours = int(t.slot_aside_min // 60)
-        self.say(f"SLOT {name} " + (f"SET ASIDE for {hours} h" if held else "could not be set aside (another loop has it)") + f": {why}")
-        self.env.event("slot_aside", bid, slot=name, why=why, held=held, repo=self.env.repo)
-        if held:
-            self.c.fails = [f for f in self.c.fails if f not in quick]
-            self.c.slot_quick[name] = []
-        else:
-            self.c.slot_quick[name] = quick[-1:]  # still failing: asked again after the next one
-        return held
+        self.c.slot_blocked[name] = bid
+        self.say(f"SLOT {name}: {bid} waits for a successful reset probe or a different eligible bead: {why}")
+        self.env.event("slot_aside", bid, slot=name, why=why, held=False, repo=self.env.repo)
+        self.c.fails = [f for f in self.c.fails if f not in quick]
+        self.c.slot_quick[name] = []
+        return True
+
+    def candidates(self, name: str, cands: list[Bead]) -> list[Bead]:
+        """The slot is claimed by this loop. Prefer different work, otherwise prove recovery."""
+        for source, blocked in list(self.c.slot_blocked.items()):
+            different = [b for b in cands if b.id != blocked]
+            if different or self.recovered(source, name):
+                self.c.slot_blocked.pop(source, None)
+                cands = different or cands
+            else:
+                cands = []
+        return cands
+
+    def recovered(self, source: str, claimed: str) -> bool:
+        """A loop cannot evade the bead's recovery condition by taking another slot."""
+        pool = SlotPool(self.env.slot_env())
+        if source == claimed:
+            return aside.check(pool.slot(source))
+        with pool.env.take_lock():
+            return aside.probe(pool.slot(source), required=True)
 
     def count_slot(self, v: vd.Verdict, bid: str, name: str) -> bool:
         """True when the slot was set aside for this failure: the bead's turn is over, nothing else is counted."""
@@ -72,7 +88,8 @@ class Settle:
                 quick = err.code == "slot_broken"
             except (BdFailure, SlotGitError, OSError):
                 quick = False
-        self.c.slot_quick[name] = ([*self.c.slot_quick.get(name, []), bid]) if quick else []
+        previous = self.c.slot_quick.get(name, [])
+        self.c.slot_quick[name] = ([*previous, bid] if previous and previous[-1] == bid else [bid]) if quick else []
         return len(self.c.slot_quick[name]) >= self.tune().slot_fails_to_set_aside and self.aside(name, bid, v)
 
     def network(self, v: vd.Verdict, bid: str) -> None:
@@ -108,16 +125,16 @@ class Settle:
 
     def failed(self, v: vd.Verdict, bid: str, name: str, slots: bool) -> int | None:
         t, c, env = self.tune(), self.c, self.env
-        if v.fault:  # a fault of the machine or the engine: the bead is open, labelled, cooled; the storm is the stop
+        if v.fault:  # a fault of the machine or engine: the bead is open, labelled and cooled; a storm waits
             self.files.rest_bead(bid, env.now() + t.fault_cooldown)
             c.later[bid] = env.now() + t.fault_cooldown
         elif not (slots and name and c.slot_quick.get(name)):  # no verdict at all (run-task died); an instant slot failure is the slot's
             c.fails.append(bid)
         if len(c.fails) >= t.fails_to_stop:
-            print(f"STOPPED: {len(c.fails)} failures in a row ({', '.join(c.fails)}); "
-                  "look at their logs (tl loop status) before starting again")
-            self.left("storm", f"{len(c.fails)} runs gave no outcome")
-            return 2
+            self.say(f"WAIT: {len(c.fails)} runs gave no outcome; quarantined until the cooldown probe")
+            c.wait = LoopWait(reason="storm", fingerprint="missing_outcome", wake="failure cooldown expires",
+                              probe_at=env.now() + t.fault_cooldown)
+            c.fails = []
         return None
 
     def apply(self, v: vd.Verdict, bid: str, name: str, slots: bool) -> int | None:
@@ -152,9 +169,9 @@ class Settle:
         c = self.c
         c.ran += 1
         if v.storm:  # this run's close tripped the storm detector (the engine wrote the record and the banner)
-            print(v.storm)
-            self.left("storm", v.storm[:200])
-            return 2
+            self.say(v.storm)
+            c.wait = LoopWait(reason="storm", fingerprint=v.fingerprint, wake="storm record expires or is cleared",
+                              probe_at=self.env.now() + self.tune().poll)
         if v.outcome is Result.LANDED:
             c.fails = []
         elif v.outcome is Result.FAILED:
