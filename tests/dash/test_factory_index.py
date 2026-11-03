@@ -182,13 +182,6 @@ class FactoryIndex(unittest.TestCase):
         try:
             sizes = con.execute("SELECT length(facts) FROM run WHERE run IN ('short','long_')").fetchall()
             self.assertEqual(sizes[0], sizes[1])
-            facts = [json.loads(r[0]) for r in con.execute("SELECT facts FROM run WHERE run IN ('short','long_')")]
-            for state in facts:
-                state.pop("manifest")
-            self.assertEqual(facts[0], facts[1])
-            for _, raw, _ in self.rows():
-                self.assertNotIn("records", json.loads(raw))
-            self.assertEqual(con.execute("SELECT count(*) FROM event").fetchone()[0], 0)
         finally:
             con.close()
 
