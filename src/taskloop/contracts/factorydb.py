@@ -73,25 +73,34 @@ CREATE TABLE signal (
 );
 """
 
-# These are the authoritative writers; the indexer only projects file-owned rows.
-# Shared lease/event rows require the per-row guards in the storage contract.
+# One owner role per table: other actors submit writes through that role's store.
+# The loop owns leases; the engine records events and AskStore writes, including
+# owner answers. Lease reconciliation must use the loop store's guarded verbs,
+# not cas_update (leases and append-only events have no revision column).
+# DB-04+ must route today's engine park writes through the loop-owned wait store.
 OWNERS: dict[str, str] = {
     "family": "index",
     "source": "index",
     "run": "engine",
-    "attempt": "engine",  # Reconcile may mark lost only after a CAS on the expired lease.
+    "attempt": "engine",  # Reconcile may mark lost only after the loop guards the expired lease.
     "step": "engine",
-    "lease": "any:cas",
-    "event": "any:cas",
+    "lease": "loop",
+    "event": "engine",
     "check_pass": "engine",
     "check_round": "engine",
-    "ask": "owner",
-    "ask_ledger": "owner",
+    "ask": "engine",
+    "ask_ledger": "engine",
     "kv": "index",
     "effect": "engine",
     "wait": "loop",
     "signal": "owner",
 }
+REVISIONED_TABLES = frozenset({"run", "ask"})
+# Successful writable checks are cached per resolved file identity, per process.
+# Dashboard read-only opens skip quick_check; creation and version mismatches
+# always check. Replacing the file invalidates the cache; in-place damage after
+# a successful check is left to SQLite's normal read/write error handling.
+_CHECKED: set[tuple[int, Path, int, int]] = set()
 
 type SqlValue = str | int | float | bytes | None
 
@@ -106,23 +115,42 @@ def _mount_path(value: str) -> Path:
     return Path(value)
 
 
-def _unsafe_filesystem(path: Path) -> bool:
-    """Use the deepest mount, including for a database that does not yet exist."""
-    with suppress(OSError, ValueError, RuntimeError):
+def _filesystem_type(resolved: Path) -> str:
+    """Linux exposes mount types; statvfs has no portable filesystem type field.
+
+    In particular, macOS statvfs cannot identify SMB/NFS. Without spawning or
+    platform-specific ABI bindings, report unknown and reject mounted ancestors
+    below root conservatively (even local removable disks).
+    """
+    fstype = "unknown"
+    if sys.platform.startswith("linux"):
+        mounts = []
+        for line in Path("/proc/mounts").read_text(encoding="utf-8").splitlines():
+            fields = line.split()
+            if len(fields) >= 3:
+                mount = _mount_path(fields[1])
+                if resolved.is_relative_to(mount):
+                    mounts.append((len(mount.parts), fields[2]))
+        if mounts:
+            fstype = max(mounts, key=lambda item: item[0])[1]
+    return fstype
+
+
+def _unsafe_filesystem(path: Path) -> bool | None:
+    """Use the deepest mount; detection errors mean the caller must fall back.
+
+    Unknown types are allowed only on paths without a mount below root. This
+    cannot identify a network-backed root filesystem; operators on such hosts
+    must keep file storage. No external commands are run by this contract.
+    """
+    try:
         resolved = path.resolve()
-        if sys.platform.startswith("linux"):
-            mounts = []
-            for line in Path("/proc/mounts").read_text(encoding="utf-8").splitlines():
-                fields = line.split()
-                if len(fields) >= 3:
-                    mount = _mount_path(fields[1])
-                    if resolved.is_relative_to(mount):
-                        mounts.append((len(mount.parts), fields[2]))
-            return bool(mounts) and _unsafe_fstype(max(mounts, key=lambda item: item[0])[1])
-        if sys.platform == "darwin":
-            probe = resolved if resolved.exists() else resolved.parent
-            return _unsafe_fstype(getattr(os.statvfs(probe), "f_fstypename", ""))
-    return False
+        fstype = _filesystem_type(resolved)
+        if fstype == "unknown":
+            return any(os.path.ismount(parent) for parent in (resolved, *resolved.parents) if parent != Path(parent.anchor))
+        return _unsafe_fstype(fstype)
+    except (OSError, ValueError, RuntimeError):
+        return None
 
 
 def _journal_mode(con: sqlite3.Connection, *, readonly: bool) -> str:
@@ -131,22 +159,42 @@ def _journal_mode(con: sqlite3.Connection, *, readonly: bool) -> str:
 
 
 def _schema_ready(con: sqlite3.Connection, *, readonly: bool) -> bool:
+    """Initialize under the writer lock; return whether this open created it."""
+    created = False
     version = con.execute("PRAGMA user_version").fetchone()[0]
     if version == 0 and not readonly:
-        empty = con.execute("SELECT 1 FROM sqlite_master LIMIT 1").fetchone() is None
-        if empty:
-            # executescript commits a pending transaction first: BEGIN must be
-            # inside the script so DDL and version publication are atomic.
-            con.executescript(f"BEGIN IMMEDIATE;\n{DDL}\nPRAGMA user_version={SCHEMA_VERSION};\nCOMMIT;")
-            version = SCHEMA_VERSION
-    return version == SCHEMA_VERSION
+        with begin_immediate(con):
+            version = con.execute("PRAGMA user_version").fetchone()[0]
+            empty = con.execute("SELECT 1 FROM sqlite_master LIMIT 1").fetchone() is None
+            if version == 0 and empty:
+                # Individual statements preserve the transaction (executescript
+                # commits it first). DDL contains no triggers or embedded ';'.
+                for statement in DDL.split(";"):
+                    if statement.strip():
+                        con.execute(statement)
+                con.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
+                version = SCHEMA_VERSION
+                created = True
+    if version != SCHEMA_VERSION:
+        con.execute("PRAGMA quick_check").fetchall()
+        raise sqlite3.DatabaseError("unsupported schema version")
+    return created
+
+
+def _check_integrity(con: sqlite3.Connection, target: Path, *, created: bool, readonly: bool) -> None:
+    stat = target.stat()
+    identity = (os.getpid(), target.resolve(), stat.st_dev, stat.st_ino)
+    if created or (not readonly and identity not in _CHECKED):
+        if con.execute("PRAGMA quick_check").fetchall() != [("ok",)]:
+            raise sqlite3.DatabaseError("integrity check failed")
+        _CHECKED.add(identity)
 
 
 def _open(path: str | os.PathLike[str], *, readonly: bool) -> sqlite3.Connection | None:
     con = None
     try:
         target = Path(path)
-        if _unsafe_filesystem(target):
+        if _unsafe_filesystem(target) is not False:
             return None
         address = f"{target.resolve().as_uri()}?mode=ro" if readonly else os.fspath(path)
         con = sqlite3.connect(address, uri=readonly, isolation_level=None, timeout=5.0)
@@ -155,10 +203,8 @@ def _open(path: str | os.PathLike[str], *, readonly: bool) -> sqlite3.Connection
             raise sqlite3.DatabaseError("WAL unavailable")
         con.execute("PRAGMA synchronous=NORMAL")
         con.execute("PRAGMA foreign_keys=ON")
-        if not _schema_ready(con, readonly=readonly):
-            raise sqlite3.DatabaseError("unsupported schema version")
-        if con.execute("PRAGMA quick_check").fetchall() != [("ok",)]:
-            raise sqlite3.DatabaseError("integrity check failed")
+        created = _schema_ready(con, readonly=readonly)
+        _check_integrity(con, target, created=created, readonly=readonly)
         return con
     except (sqlite3.Error, OSError, ValueError, RuntimeError):
         if con is not None:
@@ -195,8 +241,10 @@ def _identifier(name: str) -> str:
 
 def cas_update(con: sqlite3.Connection, table: str, key_col: str, key: SqlValue, rev: int, **cols: SqlValue) -> bool:
     """Update a revisioned row inside the caller's begin_immediate transaction."""
-    if table not in OWNERS or "rev" in cols or key_col in cols:
-        raise ValueError("unknown table or update of revision/key column")
+    if table not in REVISIONED_TABLES or "rev" in cols or key_col in cols:
+        raise ValueError("unrevisioned table or update of revision/key column")
+    if not con.in_transaction:
+        raise ValueError("CAS requires a caller-owned transaction")
     assignments = [f"{_identifier(column)}=?" for column in cols]
     assignments.append('"rev"="rev"+1')
     statement = f"UPDATE {_identifier(table)} SET {', '.join(assignments)} WHERE {_identifier(key_col)}=? AND rev=?"
