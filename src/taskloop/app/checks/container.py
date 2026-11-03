@@ -41,6 +41,10 @@ class Box:
         art = forward.pop(EnvVar.TL_ARTIFACT_DIR, "")
         for host_path in (EnvVar.TL_RUN_DIR, EnvVar.TL_WORKTREE):  # host paths: they mean nothing inside
             forward.pop(host_path, None)
+        # The runner sets scratch HOME inside the container. Do not use the host builder here: its hooks and toolchain
+        # cache defaults are host paths. Keep the existing explicit forwarding, with credentials and owner config removed.
+        forward = {k: v for k, v in forward.items()
+                   if k not in childenv.CHECK_SECRETS | childenv.CHECK_HOME_NAMES and not k.startswith("GIT_CREDENTIAL")}
         name = "tl-check-" + "".join(ch if ch.isalnum() or ch in "_.-" else "-" for ch in f"{self.host.run_dir.name}-{c.id}")
         cmd = [sys.executable, str(RUNNER), "--image", execution.image, "--name", name, "--art", art]
         cmd += [x for k, v in forward.items() for x in ("--env", f"{k}={v}")]

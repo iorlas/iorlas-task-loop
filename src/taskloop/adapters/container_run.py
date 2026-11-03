@@ -22,7 +22,8 @@ from taskloop.adapters.git import RealGit
 from taskloop.contracts.env import snapshot
 
 INSIDE = ('t=${TMPDIR:-/tmp}; rm -rf "$t/tl-w" "$t/tl-art"; mkdir -p "$t/tl-w" "$t/tl-art" && tar -x -C "$t/tl-w"'
-          ' && cd "$t/tl-w/$TL_BOX_CWD" && export TL_ARTIFACT_DIR="$t/tl-art" TL_WORKTREE="$t/tl-w"'
+          ' && mkdir -p /tmp/tl-home && chmod 700 /tmp/tl-home'
+          ' && cd "$t/tl-w/$TL_BOX_CWD" && export HOME=/tmp/tl-home TL_ARTIFACT_DIR="$t/tl-art" TL_WORKTREE="$t/tl-w"'
           ' && exec "$@"')  # the image must not set TMPDIR
 ART_IN_BOX = "/tmp/tl-art"
 

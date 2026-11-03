@@ -56,6 +56,10 @@ class Shell:
         e = self.e
         extra = {**childenv.WORKER_MARK, **e.bead_env, **(pinned_env(e.wt) if pin else {}), **(env or {})}
         try:
+            if what in {"check", "check fix"}:
+                with childenv.check_environment(e.env.vars, extra) as clean:
+                    return e.spawner.stream(list(cmd), cwd=None if cwd is None else str(cwd), env={}, extra=clean,
+                                            on_output=chunks.append, timeout_s=timeout, stop=stop)
             return e.spawner.stream(list(cmd), cwd=None if cwd is None else str(cwd), extra=extra, on_output=chunks.append,
                                     timeout_s=timeout, stop=stop)
         except BaseException:  # stopped (stream-proc stopped the tree first): never leave a check (just check, Unity) running

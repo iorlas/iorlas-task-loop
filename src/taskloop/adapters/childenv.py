@@ -3,7 +3,9 @@ Never a copy of the whole process environment: a Python virtualenv of ours must 
 2026-10-30), and a TL_* or TASK_LOOP_* name that is not in the registry (contracts/envvars.py) is not handed on."""
 import os
 import shutil
-from collections.abc import Mapping
+import tempfile
+from collections.abc import Generator, Mapping
+from contextlib import contextmanager
 from pathlib import Path
 
 import child_env
@@ -75,11 +77,39 @@ def tool_env(base: Mapping[str, str], extra: Mapping[str, str] | None = None) ->
 
 CHECK_SECRETS = frozenset({"SSH_AUTH_SOCK", "GIT_SSH_COMMAND", "GH_TOKEN", "GITHUB_TOKEN", "GH_CONFIG_DIR",
                            "GIT_ASKPASS", "SSH_ASKPASS"})
+CHECK_HOME_NAMES = frozenset({"HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "MISE_CONFIG_DIR"})
 
 
-def check_env(base: Mapping[str, str], extra: Mapping[str, str] | None = None) -> dict[str, str]:
-    """Checks get the tool environment without transport credentials, including any supplied in `extra`."""
-    return {k: v for k, v in tool_env(base, extra).items() if k not in CHECK_SECRETS and not k.startswith("GIT_CREDENTIAL")}
+def check_caches(base: Mapping[str, str]) -> dict[str, str]:
+    """Keep installed toolchains and warm caches reachable after HOME changes; these paths are not credential stores.
+
+    Shared caches are intended for reuse, not a filesystem sandbox: environment isolation does not make them read-only.
+    Only named mise directories are admitted, never arbitrary MISE_* settings (which can contain credentials).
+    """
+    home = Path(base.get("HOME") or "/nonexistent")
+    cache = base.get("XDG_CACHE_HOME") or str(home / ".cache")
+    data = base.get("XDG_DATA_HOME") or str(home / ".local/share")
+    defaults = {"XDG_CACHE_HOME": cache, "UV_CACHE_DIR": str(Path(cache) / "uv"),
+                "UV_PYTHON_INSTALL_DIR": str(Path(data) / "uv/python"), "DOTNET_CLI_HOME": str(home),
+                "NUGET_PACKAGES": str(home / ".nuget/packages"), "MISE_CACHE_DIR": str(Path(cache) / "mise"),
+                "MISE_DATA_DIR": str(Path(data) / "mise"), "MISE_STATE_DIR": str(home / ".local/state/mise")}
+    return {k: base.get(k) or v for k, v in defaults.items()}
+
+
+def check_env(base: Mapping[str, str], extra: Mapping[str, str] | None = None, *, home: str) -> dict[str, str]:
+    """Checks cannot restore credentials or the owner's HOME through their declared environment."""
+    env = {k: v for k, v in tool_env(base, extra).items() if k not in CHECK_SECRETS and not k.startswith("GIT_CREDENTIAL")}
+    env.update(check_caches({**base, **{k: v for k, v in (extra or {}).items() if k != "HOME"}}))
+    env.update(HOME=home, XDG_CONFIG_HOME=str(Path(home) / ".config"), XDG_DATA_HOME=str(Path(home) / ".local/share"),
+               XDG_STATE_HOME=str(Path(home) / ".local/state"), MISE_CONFIG_DIR=str(Path(home) / ".config/mise"))
+    return env
+
+
+@contextmanager
+def check_environment(base: Mapping[str, str], extra: Mapping[str, str] | None = None) -> Generator[dict[str, str]]:
+    """One private HOME per execution, removed after the whole process group has stopped, including on exceptions."""
+    with tempfile.TemporaryDirectory(prefix="tl-check-home-") as home:
+        yield check_env(base, extra, home=home)
 
 
 # Registered names that differ run to run without changing what a check does (paths of this run, ids of this process): not part of a

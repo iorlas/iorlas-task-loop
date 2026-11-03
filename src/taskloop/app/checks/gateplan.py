@@ -5,6 +5,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+from taskloop.adapters.childenv import check_environment
 from taskloop.app.checks.cache import NO_DIGEST, plan_digest
 from taskloop.app.checks.host import CheckHost
 from taskloop.contracts import wire
@@ -86,9 +87,9 @@ def skipped(host: CheckHost, tree: str, base: str) -> PlanDecision | None:
         if not start:
             raise ValueError("cannot resolve the diff's merge-base")
         paths = host.git.changed_paths(wt, start, tree, required=True)
-        ran = host.spawner.run([*argv, "--base", base, "--paths-stdin"], cwd=wt,
-                               extra=host.bead_env, timeout_s=PLAN_TIMEOUT_S,
-                               input="".join(p + "\0" for p in paths))
+        with check_environment(host.env.vars, host.bead_env) as env:
+            ran = host.spawner.run([*argv, "--base", base, "--paths-stdin"], cwd=wt, env={},
+                                   extra=env, timeout_s=PLAN_TIMEOUT_S, input="".join(p + "\0" for p in paths))
         if ran.timed_out:
             raise ValueError(f"command timed out after {PLAN_TIMEOUT_S:g}s")
         if ran.exit:

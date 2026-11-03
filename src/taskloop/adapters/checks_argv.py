@@ -1,6 +1,6 @@
 """`Checks` over an argv: the command is exec'd as given, in its own process group, with no shell in between."""
 
-from taskloop.adapters.childenv import check_env
+from taskloop.adapters.childenv import check_environment
 from taskloop.adapters.procs import capture as run_group
 from taskloop.contracts.env import Env
 from taskloop.contracts.ports import CheckResult, CheckSpec
@@ -13,7 +13,8 @@ class ArgvChecks:
         self.env = env
 
     def run(self, spec: CheckSpec) -> CheckResult:
-        ran = run_group(list(spec.argv), spec.cwd, check_env(self.env.vars, spec.env), spec.timeout_s)
+        with check_environment(self.env.vars, spec.env) as env:
+            ran = run_group(list(spec.argv), spec.cwd, env, spec.timeout_s)
         out = ran.out + ran.err
         if ran.timed_out:
             out += TIMEOUT_NOTE % round(spec.timeout_s / 60, 2)

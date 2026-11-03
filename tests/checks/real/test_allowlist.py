@@ -13,7 +13,7 @@ from pathlib import Path
 
 from support.tlmain import tl_main
 
-from taskloop.adapters.childenv import allowed
+from taskloop.adapters.childenv import CHECK_HOME_NAMES, allowed, check_caches
 
 ROOT = Path(__file__).resolve().parents[3]
 IDENT = ["-c", "user.email=t@t", "-c", "user.name=t"]
@@ -51,7 +51,8 @@ class ProbeChecks(unittest.TestCase):
         self.assertEqual(rc, 0, out)
         seen = json.loads(out_file.read_text())
         engine_marks = ("DECLARED", "DELEGATE_DEPTH", "TASK_LOOP_WORKER")  # the check's own env, and what a child of the engine is told
-        stray = [k for k in seen if not allowed(k) and k not in (*engine_marks, "PWD", "SHLVL", "_")]  # PWD and the like: set by the shell
+        admitted = (*engine_marks, *CHECK_HOME_NAMES, *check_caches({}), "PWD", "SHLVL", "_")
+        stray = [k for k in seen if not allowed(k) and k not in admitted]
         self.assertEqual(stray, [], "names outside the allowlist reached the child")
         self.assertNotIn("NOT_ON_THE_LIST", seen)
         self.assertIn("DECLARED", seen)

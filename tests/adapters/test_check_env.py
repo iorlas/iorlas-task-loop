@@ -22,7 +22,8 @@ class CheckEnvironment(unittest.TestCase):
             ArgvChecks(Env(base)).run(CheckSpec(argv=["true"], cwd="/repo"))
         env = runner.call_args.args[2]
         self.assertFalse({"SSH_AUTH_SOCK", "GH_TOKEN", "GIT_SSH_COMMAND"} & env.keys())
-        self.assertEqual(env["HOME"], "/owner")
+        self.assertNotEqual(env["HOME"], "/owner")
+        self.assertFalse(Path(env["HOME"]).exists())
         git_env = RealGit(Env(base)).git_env("/repo")
         self.assertEqual(git_env["SSH_AUTH_SOCK"], "/agent")
         self.assertEqual(git_env["GIT_SSH_COMMAND"], "ssh custom")
@@ -30,6 +31,6 @@ class CheckEnvironment(unittest.TestCase):
     def test_declared_environment_cannot_restore_credentials(self):
         secrets = dict.fromkeys(("SSH_AUTH_SOCK", "GIT_SSH_COMMAND", "GH_TOKEN", "GITHUB_TOKEN", "GH_CONFIG_DIR",
                                  "GIT_ASKPASS", "SSH_ASKPASS", "GIT_CREDENTIAL_HELPER", "GIT_CREDENTIAL"), "secret")
-        env = check_env(secrets, {**secrets, "MODE": "safe"})
+        env = check_env(secrets, {**secrets, "MODE": "safe"}, home="/scratch")
         self.assertFalse(secrets.keys() & env.keys())
         self.assertEqual(env["MODE"], "safe")
