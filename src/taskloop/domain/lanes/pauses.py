@@ -24,6 +24,17 @@ class PauseRule:
     max_attempts: int = 0
 
 
+MACHINE_FIXED: Final[frozenset[Reason]] = frozenset({
+    Reason.NO_LANE,  # The owner restores an available lane.
+    Reason.LOGGED_OUT,  # The owner renews the lane's login.
+    Reason.CREDIT_EXHAUSTED,  # The owner replenishes the account's credit.
+    Reason.SECRETS,  # The owner supplies the machine's missing credentials.
+    Reason.SETUP,  # The owner repairs the delegate installation or configuration.
+    Reason.CONTRACT_VIOLATION,  # The owner restores compatible engine and delegate contracts.
+    Reason.ENGINE_ONLY_UNENFORCED,  # The owner fixes enforcement of engine-only commands.
+})
+
+
 TABLE: Final[dict[tuple[Producer, Reason], PauseRule]] = {
     ("delegate", Reason.NO_LANE): PauseRule("needs_owner"),
     ("delegate", Reason.ONLY_FAMILY_UNREADY): PauseRule("transient", 60, 3600, 3),

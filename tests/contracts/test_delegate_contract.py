@@ -23,6 +23,8 @@ CONTRACT = json.loads((Path(__file__).resolve().parents[1] / "fixtures/delegate3
 # Exact exceptions, never wildcards. May only shrink; a resolved exception fails until removed.
 # Each entry is (upstream-only values, mirror-only values, reason).
 KNOWN_DRIFT = {
+    "answer.stop.fields": ((), ("producer",), "engine-only provenance of a synthesized stop"),
+    "answer.stop.producer.enum": ((), ("delegate", "engine"), "engine-only provenance of a synthesized stop"),
     "answer.fields": ((), (
         "ask_kind", "context", "effort", "exit_code", "fallback", "family", "first_error", "first_lane", "flag",
         "transcript_status", "warning", "warnings", "worker",

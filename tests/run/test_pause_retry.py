@@ -59,7 +59,7 @@ class Retry(te.EngineTest):
         self.assertEqual(second.nodes[0], "write")
         self.assertIsNone(ParkStore(self.eng.home).get(self.eng.bead))
 
-    def test_owner_pause_has_an_ask_and_no_timer(self):
+    def test_machine_owner_pause_has_no_ask_and_no_timer(self):
         stopped = te.stop("no_lane")
         stopped["stop"]["reason"] = "engine_only_unenforced"
         rc, _ = self.run_engine({"plan": [te.PLAN], "write": [stopped]})
@@ -67,8 +67,8 @@ class Retry(te.EngineTest):
         rec = ParkStore(self.eng.home).get(self.eng.bead)
         assert rec is not None
         self.assertEqual((rec.reason, rec.permanence, rec.retry_at), ("engine_only_unenforced", "needs_owner", 0))
-        self.assertIsNotNone(self.ask())
-        self.assertTrue(self.eng.asked)
+        self.assertIsNone(self.ask())
+        self.assertFalse(self.eng.asked)
 
     def test_no_lane_and_delegate_crash_need_owner_even_with_a_retry_hint(self):
         for reason in ("no_lane", "crash"):
@@ -79,8 +79,8 @@ class Retry(te.EngineTest):
                 assert rec is not None
                 self.assertEqual((rec.reason, rec.permanence, rec.retry_at), (reason, "needs_owner", 0))
                 self.assertEqual(self.eng.result().retry_after, 0)
-                self.assertIsNotNone(self.ask())
-                self.assertTrue(self.eng.asked)
+                self.assertEqual(self.eng.asked, reason == "crash")
+                self.assertEqual(self.ask() is not None, reason == "crash")
 
     def test_repeated_transient_pause_parks_and_asks_after_three_retries(self):
         for n in range(4):

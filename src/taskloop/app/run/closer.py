@@ -155,7 +155,7 @@ class Closer:
         self.ask_pause(rec, done)
 
     def ask_pause(self, rec: Park, done: oc.RunOutcome) -> None:
-        """Every owner pause files a question; an empty plan's close effect owns its question."""
+        """Ask for owner help or exhausted retries; machine fixes stay pauses, and task asks keep their close effect."""
         e = self.e
         if done.kind is Kind.ENGINE_CRASH:
             e.fp = rec.fingerprint
@@ -165,7 +165,8 @@ class Closer:
                 spec = replace(askspecs.repeated_fault(count, " ".join(e.why.splitlines())),
                                decision="The engine keeps crashing; how should it go on?")
                 e.asked = bool(e.ask_flow.raise_ask(spec, e.why, Kind.ASK_STUCK))
-        elif rec.permanence == "needs_owner" and done.kind is not Kind.NOOP and not e.asked:
+        elif (rec.permanence == "needs_owner" and rec.reason not in pauses.MACHINE_FIXED
+              and done.kind is not Kind.NOOP and not e.asked):
             count = pauses.history(rec)[pauses.attempt_key(rec.reason, e.pause_producer)]
             why = f"{rec.reason} paused {count} times: {done.detail}"
             spec = replace(askspecs.repeated_fault(count, " ".join(why.splitlines())),
