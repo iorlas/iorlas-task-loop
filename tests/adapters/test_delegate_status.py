@@ -18,6 +18,8 @@ from taskloop.contracts.delegate_status import snapshot_of  # noqa: E402
 from taskloop.contracts.snapshots import StatusSnapshot  # noqa: E402
 
 REAL = json.loads((ROOT / "tests" / "fixtures" / "delegate_status_0.51.0_real.json").read_text())
+FIXTURE_SCHEMA = json.loads((ROOT / "tests/fixtures/delegate3/skills/delegate/contract.json").read_text(
+    encoding="utf-8"))["status_schema"]
 
 
 def keys(j: dict, path: str = "") -> set[str]:
@@ -101,18 +103,18 @@ def installed_schema() -> dict:
 
 
 class Schema(unittest.TestCase):
-    """The installed delegate's own status_schema (delegate 0.52.0+, from its typed Status records) against our fixture and reader."""
+    """The vendored status schema always checks the fixture and reader; only the live subprocess needs an install."""
 
     def test_the_real_fixture_has_exactly_the_keys_the_schema_names(self):
-        self.assertEqual(key_errors(REAL, installed_schema()), [])
+        self.assertEqual(key_errors(REAL, FIXTURE_SCHEMA), [])
 
     def test_the_schema_catches_a_dropped_and_an_added_key(self):
-        schema = installed_schema()
+        schema = FIXTURE_SCHEMA
         self.assertTrue(key_errors({k: v for k, v in REAL.items() if k != "ts"}, schema))
         self.assertTrue(key_errors(dict(REAL, surprise=1), schema))
 
     def test_every_key_the_reader_consumes_is_one_the_schema_names(self):
-        props = installed_schema()["properties"]
+        props = FIXTURE_SCHEMA["properties"]
         lane = props["cockpit"]["properties"]["lanes"]["items"]["properties"]
         old = props["lanes"]["additionalProperties"]["properties"]
         for k in ("ts", "lanes", "cockpit", "needs_input"):
