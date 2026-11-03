@@ -13,6 +13,7 @@ from taskloop.app.run.closer_record import RecordHost
 from taskloop.app.run.closer_settle import SettleHost
 from taskloop.contracts import fence
 from taskloop.contracts.checkpoint import Checkpoint, EndRec
+from taskloop.contracts.delegate import Permanence
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.kinds import Kind
 from taskloop.contracts.paths import ConfigDir
@@ -45,6 +46,7 @@ class CloseHost(Protocol):
     retry_after: float
     pause_reason: str
     pause_producer: Producer
+    pause_permanence: Permanence | None
     why: str
 
     @property

@@ -653,6 +653,17 @@ Finished tasks stay visible for 7 days.
 
 ## Workers
 
+The engine's node-to-role map is the source for the generated `domain/lanes/roles.py`
+(`python3 dev/generate_lane_roles.py` prints that module; the domain tests check parity):
+
+| node | delegate role |
+|---|---|
+| plan | planner |
+| write | worker |
+| review | reviewer |
+| verify | reviewer |
+| look | reviewer |
+
 The loop needs these kinds of worker; it does not care what runs them.
 
 | kind | does | never |

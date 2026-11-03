@@ -11,6 +11,7 @@ from taskloop.contracts import fence
 from taskloop.contracts.checkpoint import Checkpoint, RunState
 from taskloop.contracts.checks import CheckRun
 from taskloop.contracts.config import EngineConfig
+from taskloop.contracts.delegate import Permanence
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.kinds import Kind
@@ -64,6 +65,7 @@ class RunFields(StateAttrs):
         self.pause_role, self.pause_lane = "", ""  # the role and lane a paused run waits for: the loop wakes the bead when it is usable
         self.pause_reason = ""  # typed delegate reason; otherwise the close uses the engine outcome kind
         self.pause_producer: Producer = "engine"
+        self.pause_permanence: Permanence | None = None
         self.budget_warned: set[float] = set()
         self.plan_assumed = False  # tl-ntp: the planner was sent back once to plan on assumptions
         self.plan_decided = False  # the planner was sent back once with the requirement that answers its question

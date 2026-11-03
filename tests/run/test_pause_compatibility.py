@@ -38,7 +38,7 @@ class PauseCompatibility(unittest.TestCase):
             with self.subTest(reason=reason), mock.patch.object(parks, "ParkStore") as store:
                 host = mock.Mock(
                     dry=False, home=self.cfg, bead=self.bead.id, run_id="r1", pause_reason=reason,
-                    pause_producer="delegate", retry_after=0.0, asked=False
+                    pause_producer="delegate", pause_permanence="needs_owner", retry_after=0.0, asked=False
                 )
                 store.return_value.get.return_value = None
                 host.clock.now.return_value = 100
@@ -57,7 +57,7 @@ class PauseCompatibility(unittest.TestCase):
             with self.subTest(reason=reason), mock.patch.object(parks, "ParkStore") as store:
                 host = mock.Mock(
                     dry=False, home=self.cfg, bead=self.bead.id, run_id="r1", pause_reason=reason,
-                    pause_producer=producer, retry_after=0.0, asked=False
+                    pause_producer=producer, pause_permanence="needs_owner", retry_after=0.0, asked=False
                 )
                 store.return_value.get.return_value = None
                 host.clock.now.return_value = 100
@@ -71,7 +71,10 @@ class PauseCompatibility(unittest.TestCase):
                 self.assertEqual((rec.reason, rec.permanence, rec.retry_at), (reason, "needs_owner", 0))
 
     def test_every_capped_policy_is_charged_by_the_pause_path(self):
-        for (producer, reason), policy in pauses.TABLE.items():
+        policies = dict(pauses.TABLE)
+        for reason in pauses.BACKOFF:
+            policies[("delegate", reason)] = pauses.rule(reason, "delegate", "transient")
+        for (producer, reason), policy in policies.items():
             if not policy.max_attempts:
                 continue
             with self.subTest(producer=producer, reason=reason), mock.patch.object(parks, "ParkStore") as store:
@@ -79,7 +82,7 @@ class PauseCompatibility(unittest.TestCase):
                 for n in range(policy.max_attempts + 1):
                     host = mock.Mock(
                         dry=False, home=self.cfg, bead=self.bead.id, run_id=f"r{n}", pause_reason=reason,
-                        pause_producer=producer, retry_after=0.0, asked=False
+                        pause_producer=producer, pause_permanence=policy.permanence, retry_after=0.0, asked=False
                     )
                     host.clock.now.return_value = 100
                     with mock.patch("taskloop.app.run.closer.beadtools.peek", return_value=self.bead):
@@ -107,7 +110,8 @@ class PauseCompatibility(unittest.TestCase):
     def test_transient_pause_still_records_backoff_and_predicted_lower_bound(self):
         with mock.patch.object(parks, "ParkStore") as store:
             store.return_value.get.return_value = None
-            rec = parks.paused(self.cfg, self.bead, Kind.PAUSE_LANE, "r1", 100, reason="rate_limited", not_before=900, draw=lambda: 0.5)
+            rec = parks.paused(self.cfg, self.bead, Kind.PAUSE_LANE, "r1", 100, reason="rate_limited",
+                               not_before=900, draw=lambda: 0.5, permanence="transient")
             assert rec is not None
             self.assertEqual(
                 (rec.reason, rec.permanence, rec.retry_at, rec.attempts),

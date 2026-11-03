@@ -147,7 +147,7 @@ class Closer:
             return
         rec = parks.paused(e.home, bead, done.kind, e.run_id, e.clock.now(), reason=e.pause_reason,
                            not_before=e.retry_after, fingerprint=e.crash_fingerprint if done.kind is Kind.ENGINE_CRASH else "",
-                           producer=e.pause_producer)
+                           producer=e.pause_producer, permanence=e.pause_permanence)
         if rec is None:
             return
         e.retry_after = rec.retry_at

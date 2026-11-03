@@ -30,6 +30,7 @@ from taskloop.contracts import fence
 from taskloop.contracts.checkpoint import Checkpoint, EndRec, Notes
 from taskloop.contracts.checks import Check, CheckRun
 from taskloop.contracts.config import EngineConfig
+from taskloop.contracts.delegate import Permanence
 from taskloop.contracts.enums import Outcome
 from taskloop.contracts.ids import BeadId, TreeSha
 from taskloop.contracts.kinds import Kind
@@ -698,6 +699,7 @@ class FakeCloseHost(Said):
         self.retry_after = 0.0
         self.pause_reason = ""
         self.pause_producer: Producer = "engine"
+        self.pause_permanence: Permanence | None = None
         self.why = ""
         self.crash_fingerprint = ""
         self.crash_site = ""

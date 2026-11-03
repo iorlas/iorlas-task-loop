@@ -63,7 +63,7 @@ class Pick(unittest.TestCase):
         self.assertIsNone(ParkStore(self.cfg).get(BeadId("t-1")))
 
     def test_transient_pause_is_persisted_and_the_queue_wakes_exactly_when_due(self):
-        rec = parks.paused(self.cfg, bead(), Kind.PAUSE_LANE, "r1", 100, reason="busy", draw=lambda: 0.5)
+        rec = parks.paused(self.cfg, bead(), Kind.PAUSE_LANE, "r1", 100, reason="busy", draw=lambda: 0.5, permanence="transient")
         assert rec is not None
         self.assertEqual((rec.reason, rec.permanence, rec.retry_at), ("busy", "transient", 130))
         self.assertEqual(ParkStore(self.cfg).get(bead().id), rec)
@@ -75,7 +75,7 @@ class Pick(unittest.TestCase):
                 self.assertEqual(q.skipped[0].skip.until, 130)
 
     def test_take_path_cannot_claim_early_but_re_takes_a_due_pause_without_owner_action(self):
-        parks.paused(self.cfg, bead(), Kind.PAUSE_LANE, "r1", 100, reason="busy", draw=lambda: 0.5)
+        parks.paused(self.cfg, bead(), Kind.PAUSE_LANE, "r1", 100, reason="busy", draw=lambda: 0.5, permanence="transient")
         env = mock.Mock(cfgdir=self.cfg, now=mock.Mock(return_value=129), claim=mock.Mock(return_value=(True, "")))
         runner = mock.Mock()
         runner.run.return_value = Verdict(Result.LANDED)
@@ -91,7 +91,7 @@ class Pick(unittest.TestCase):
         runner.run.assert_called_once_with(bead(), at)
 
     def test_a_queue_of_timed_pauses_waits_instead_of_exiting_drained(self):
-        parks.paused(self.cfg, bead(), Kind.PAUSE_LANE, "r1", 100, reason="busy", draw=lambda: 0.5)
+        parks.paused(self.cfg, bead(), Kind.PAUSE_LANE, "r1", 100, reason="busy", draw=lambda: 0.5, permanence="transient")
         rule = QueueRule(mock.Mock(), EngineConfig(), {}, lambda _: "", parked=lambda b: parks.skip_of(self.cfg, b, now=100))
         loop = mock.Mock(env=mock.Mock(now=lambda: 100), until=0)
         self.assertIsNone(Loop.idle(loop, rule.rank([bead()], "")))
@@ -99,7 +99,7 @@ class Pick(unittest.TestCase):
         loop.left.assert_not_called()
 
     def test_a_persisted_deadline_supersedes_a_stale_role_hold_and_cooldown(self):
-        parks.paused(self.cfg, bead(), Kind.PAUSE_LANE, "r1", 100, reason="busy", draw=lambda: 0.5)
+        parks.paused(self.cfg, bead(), Kind.PAUSE_LANE, "r1", 100, reason="busy", draw=lambda: 0.5, permanence="transient")
         rule = QueueRule(mock.Mock(), EngineConfig(), {}, lambda _: "")
         loop = mock.Mock(env=mock.Mock(cfgdir=self.cfg, now=lambda: 130))
         loop.c.later = {"t-1": 99999}

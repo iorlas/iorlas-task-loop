@@ -12,19 +12,17 @@ Design: 60-design-A1 sec 2.2, 60-design-A3 sec 2.2, 61-integration sec 5.5.
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Final
+from typing import Final, get_args
 
-from taskloop.contracts.delegate import REASON_TIMEOUT, DelegateResult
+from taskloop.contracts.delegate import REASON_TIMEOUT, DelegateResult, Permanence, RetryKind, Scope
 from taskloop.domain.lanes.pause_reasons import Producer
 from taskloop.domain.lanes.retry import PLAN, RetryPlan
 
-SCOPES: Final = ("bead", "caller", "model", "lane", "machine")
-PERMANENCES: Final = ("transient", "needs_owner")
-RETRY_KINDS: Final = ("none", "predicted", "poll")
+SCOPES: Final[tuple[Scope, ...]] = get_args(Scope)
+PERMANENCES: Final[tuple[Permanence, ...]] = get_args(Permanence)
+RETRY_KINDS: Final[tuple[RetryKind, ...]] = get_args(RetryKind)
 
-# The 20 legal tuples: needs_owner is always retry none (5), transient takes every retry kind (15).
-LEGAL: Final = tuple([(s, "needs_owner", "none") for s in SCOPES] + [(s, "transient", k) for s in SCOPES for k in RETRY_KINDS])
-
+# Engine scheduling policy; these knobs are not fields or defaults in delegate's schema.
 KNOBS: Final = {
     "wait_cap_s": 180,  # a lane back sooner than this is waited for in-process; later it is a PAUSE_LANE with a wake time
     "net_wait_cap_s": 600,  # one call waits this long for the network, then yields PAUSE_NETWORK
@@ -319,6 +317,9 @@ TABLE: Final[dict[tuple[str, str, str], Callable[[Stop, Ctx, Knobs, RetryPlan], 
     ("lane", "transient", "none"): _lane_none,
     ("model", "transient", "none"): _lane_none,
 }
+
+# The executable grid is checked against the vendored contract, including its reason facts.
+LEGAL: Final = tuple(TABLE)
 
 
 def decide(stop: Stop, ctx: Ctx, cfg: Knobs = KNOBS, plan: RetryPlan = PLAN) -> Action:

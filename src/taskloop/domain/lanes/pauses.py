@@ -1,6 +1,6 @@
 """Durable pause policy: every known reason has either a clock wake or an owner wake.
 
-Delegate reasons are open on the wire. Unknown ones are held for the owner, never guessed transient.
+Delegate reasons are open on the wire; their stop facts decide permanence, including unfamiliar reasons.
 Attempt zero is the first pause; transient pauses allow three retries except network outages, which charge nothing.
 Fault outcomes keep their separate history-based retry policy and do not consume pause attempts.
 History lives in the existing Park record across retries and reason changes, keyed by producer:reason.
@@ -13,7 +13,7 @@ from taskloop.contracts.bead import Bead
 from taskloop.contracts.delegate import Permanence
 from taskloop.contracts.parks import Park
 from taskloop.domain.beads.park import text_hash
-from taskloop.domain.lanes.pause_reasons import Producer, Reason, Unknown, parse
+from taskloop.domain.lanes.pause_reasons import Producer, Reason, Unknown
 
 
 @dataclass(frozen=True)
@@ -22,6 +22,38 @@ class PauseRule:
     base_s: float = 0.0
     cap_s: float = 0.0
     max_attempts: int = 0
+
+
+@dataclass(frozen=True)
+class Backoff:
+    base_s: float = 60
+    cap_s: float = 3600
+    max_attempts: int = 3
+
+
+# Engine retry budgets, not delegate classifications. Delegate callers supply stop
+# permanence; without those facts there is no basis for an automatic retry.
+BACKOFF: Final[dict[str, Backoff]] = {
+    Reason.ONLY_FAMILY_UNREADY: Backoff(),
+    Reason.BUSY: Backoff(30, 1800),
+    Reason.TIMEOUT: Backoff(),
+    Reason.NETWORK: Backoff(30, 1800, 0),
+    Reason.RATE_LIMITED: Backoff(),
+    Reason.HUNG: Backoff(),
+    Reason.VENDOR_BLIP: Backoff(30, 1800),
+    Reason.WORKER_FAILED: Backoff(),
+    Reason.SCHEMA_INVALID: Backoff(),
+    Reason.HELD: Backoff(),
+    Reason.DUPLICATE_TASK: Backoff(30, 1800),
+    Reason.LOCK: Backoff(30, 1800),
+    Reason.KILLED: Backoff(),
+}
+
+# Released engine policy wins even when a delegate supplies transient retry hints.
+OVERRIDES: Final[dict[str, tuple[Permanence, str]]] = {
+    Reason.NO_LANE: ("needs_owner", "The owner must restore an available lane; a predicted time cannot repair it."),
+    Reason.CRASH: ("needs_owner", "A delegate crash needs owner investigation after in-process retries are exhausted."),
+}
 
 
 MACHINE_FIXED: Final[frozenset[Reason]] = frozenset({
@@ -35,35 +67,16 @@ MACHINE_FIXED: Final[frozenset[Reason]] = frozenset({
 })
 
 
-TABLE: Final[dict[tuple[Producer, Reason], PauseRule]] = {
-    ("delegate", Reason.NO_LANE): PauseRule("needs_owner"),
+TABLE: Final[dict[tuple[Producer, str], PauseRule]] = {
+    # Locally synthesized delegate reasons absent from delegate's recorded contract.
     ("delegate", Reason.ONLY_FAMILY_UNREADY): PauseRule("transient", 60, 3600, 3),
+    ("delegate", Reason.ENGINE_ONLY_UNENFORCED): PauseRule("needs_owner"),
     ("engine", Reason.SAME_FAMILY): PauseRule("transient", 60, 3600, 3),
-    ("delegate", Reason.BUSY): PauseRule("transient", 30, 1800, 3),
-    ("delegate", Reason.TIMEOUT): PauseRule("transient", 60, 3600, 3),
-    ("delegate", Reason.NETWORK): PauseRule("transient", 30, 1800),
     ("engine", Reason.ENGINE_CRASH): PauseRule("transient", 60, 3600, 3),
     ("engine", Reason.STAGE_REFUSED): PauseRule("needs_owner"),
     ("engine", Reason.TRANSIENT_INFRASTRUCTURE): PauseRule("transient", 60, 3600, 3),
-    ("delegate", Reason.RATE_LIMITED): PauseRule("transient", 60, 3600, 3),
-    ("delegate", Reason.HUNG): PauseRule("transient", 60, 3600, 3),
-    ("delegate", Reason.VENDOR_BLIP): PauseRule("transient", 30, 1800, 3),
-    ("delegate", Reason.WORKER_FAILED): PauseRule("transient", 60, 3600, 3),
-    ("delegate", Reason.SCHEMA_INVALID): PauseRule("transient", 60, 3600, 3),
-    ("delegate", Reason.HELD): PauseRule("transient", 60, 3600, 3),
-    ("delegate", Reason.DUPLICATE_TASK): PauseRule("transient", 30, 1800, 3),
-    ("delegate", Reason.LOCK): PauseRule("transient", 30, 1800, 3),
-    ("delegate", Reason.CRASH): PauseRule("needs_owner"),
     ("engine", Reason.NO_ANSWER): PauseRule("transient", 60, 3600, 3),
-    ("delegate", Reason.KILLED): PauseRule("transient", 60, 3600, 3),
-    ("delegate", Reason.ENGINE_ONLY_UNENFORCED): PauseRule("needs_owner"),
     ("engine", Reason.OVERRUN): PauseRule("needs_owner"),
-    ("delegate", Reason.SECRETS): PauseRule("needs_owner"),
-    ("delegate", Reason.CREDIT_EXHAUSTED): PauseRule("needs_owner"),
-    ("delegate", Reason.LOGGED_OUT): PauseRule("needs_owner"),
-    ("delegate", Reason.BAD_REQUEST): PauseRule("needs_owner"),
-    ("delegate", Reason.CALLER): PauseRule("needs_owner"),
-    ("delegate", Reason.SETUP): PauseRule("needs_owner"),
     ("engine", Reason.PROFILE_AHEAD): PauseRule("needs_owner"),
     ("engine", Reason.CONTRACT_VIOLATION): PauseRule("needs_owner"),
     ("engine", Reason.PAUSE_LANE): PauseRule("transient", 60, 3600, 3),
@@ -104,17 +117,26 @@ def attempt_key(reason: str, producer: Producer | None = None) -> str:
     return f"{producer or producer_of(reason)}:{reason}"
 
 
-def rule(reason: str | Unknown, producer: Producer | None = None) -> PauseRule:
-    known = parse(reason) if isinstance(reason, str) else reason
-    if isinstance(known, Unknown):
+def rule(reason: str | Unknown, producer: Producer | None = None, permanence: Permanence | None = None) -> PauseRule:
+    raw = reason if isinstance(reason, str) else reason.raw
+    producer = producer or producer_of(raw)
+    policy = TABLE.get((producer, raw)) if isinstance(reason, str) else None
+    if policy is not None:
+        return policy
+    if producer == "engine":
         return PauseRule("needs_owner")
-    return TABLE.get((producer or producer_of(known), known), PauseRule("needs_owner"))
+    backoff = BACKOFF.get(raw) if isinstance(reason, str) else None
+    permanence = OVERRIDES[raw][0] if raw in OVERRIDES else permanence or "needs_owner"
+    if permanence == "needs_owner":
+        return PauseRule(permanence)
+    backoff = backoff or Backoff()
+    return PauseRule(permanence, backoff.base_s, backoff.cap_s, backoff.max_attempts)
 
 
 def history(rec: Park | None) -> dict[str, int]:
     """Qualify legacy counters without resetting their retry budgets on upgrade."""
     counts: dict[str, int] = {}
-    for key, count in (rec.attempts if rec else {}).items():
+    for key, count in (rec.attempts if rec is not None else {}).items():
         qualified = key if ":" in key else attempt_key(key)
         counts[qualified] = max(counts.get(qualified, 0), count)
     return counts
@@ -134,11 +156,11 @@ def exhausted(policy: PauseRule, rec: Park | None, reason: str, attempt: int, fi
 
 def after_pause(rec: Park | None, b: Bead, run: str, now: float, reason: str,
                 random: Callable[[], float], not_before: float = 0.0, *, question: bool = False, fingerprint: str = "",
-                producer: Producer | None = None) -> Park:
+                producer: Producer | None = None, permanence: Permanence | None = None) -> Park:
     if rec is not None and rec.run == run:
         return rec
     producer = producer or producer_of(reason)
-    policy = rule(reason, producer)
+    policy = rule(reason, producer, permanence)
     counts = history(rec)
     key = attempt_key(reason, producer)
     attempt = counts.get(key, 0)
@@ -147,9 +169,9 @@ def after_pause(rec: Park | None, b: Bead, run: str, now: float, reason: str,
     else:
         counts[key] = attempt + 1
     fingerprint = fingerprint if producer == "engine" else ""
-    permanence: Permanence = "needs_owner" if exhausted(policy, rec, reason, attempt, fingerprint) else policy.permanence
-    retry_at = max(now + delay(policy, attempt, random), not_before) if permanence == "transient" else 0.0
+    wake_permanence: Permanence = "needs_owner" if exhausted(policy, rec, reason, attempt, fingerprint) else policy.permanence
+    retry_at = max(now + delay(policy, attempt, random), not_before) if wake_permanence == "transient" else 0.0
     h = text_hash(b)
-    runs = (rec.runs + 1 if rec and rec.hash == h else 1) if question else 0
+    runs = (rec.runs + 1 if rec is not None and rec.hash == h else 1) if question else 0
     return Park(bead=b.id, hash=h, runs=runs, run=run, t=now, reason=reason,
-                permanence=permanence, retry_at=retry_at, attempts=counts, fingerprint=fingerprint)
+                permanence=wake_permanence, retry_at=retry_at, attempts=counts, fingerprint=fingerprint)
