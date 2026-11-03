@@ -1,0 +1,74 @@
+"""Gate-only commands are named up front and left to land if the planner's rewrite keeps them."""
+import sys
+from pathlib import Path
+from unittest import mock
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import support.paths  # noqa: F401
+from support.builders import cfg_with
+from support.checks import typed
+from support.engine_case import CLEAN, HAS_F, PLAN, WRITE, EngineTest
+
+from taskloop.app.plan.planner import Planner
+from taskloop.app.plan.sendback import SendBack
+from taskloop.contracts.plancheck import adhoc
+from taskloop.domain.checks import lint
+
+
+class GateOnly(EngineTest):
+    def test_the_brief_names_every_gate_command_including_default_reasons(self):
+        rc, script = self.run_engine(
+            {"plan": [PLAN], "write": [WRITE], "review": [CLEAN]},
+            checks=[{"id": "layers", "cmd": "echo client-layers", "run": "gate"},
+                    {"id": "suite", "cmd": "echo suite", "run": "gate", "why": "needs the rebased tree"}],
+        )
+        self.assertEqual(rc, 0)
+        brief = script.prompts[0]
+        self.assertIn("`echo client-layers`", brief)
+        self.assertIn("`echo suite` (needs the rebased tree)", brief)
+
+    def test_a_single_gate_command_is_named_once(self):
+        rc, script = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, gate="echo gate")
+        self.assertEqual(rc, 0)
+        self.assertNotIn("These run only in the gate at land too", script.prompts[0])
+        self.assertIn("never put `echo gate` in a stage's checks", script.prompts[0])
+
+    def test_a_gate_check_left_after_rewrite_is_dropped_and_the_run_continues(self):
+        self.assert_gate_drop([HAS_F])
+
+    def test_dropping_the_last_check_keeps_the_stage_and_the_run_continues(self):
+        self.assert_gate_drop([])
+
+    def assert_gate_drop(self, keep):
+        command = "env CI=1 echo client-layers"
+        bad = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[*keep, command])])
+        rc, script = self.run_engine(
+            {"plan": [bad, bad], "write": [WRITE], "review": [CLEAN]}, gate_only=["echo client-layers"],
+        )
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual([c[0] for c in script.calls], ["planner", "planner", "worker", "reviewer"])
+        plan = self.eng.plan_data
+        assert plan is not None
+        stages = plan["stages"]
+        self.assertEqual(len(stages), 1)
+        self.assertEqual(stages[0]["checks"], [adhoc(c) for c in keep])
+        note = f"Plan check `{command}` left to the gate"
+        self.assertIn(note, self.eng.log_path.read_text())
+        self.assertIn(note, Planner.summary(plan))
+        self.assertIn(note, (self.eng.run_dir / "plan.json").read_text())
+        self.assertTrue(any(note in c[3] for c in self.bd_calls if c[:2] == ("comments", "add")))
+
+    def test_gate_checks_in_risks_and_cases_are_left_to_land_too(self):
+        host = mock.Mock(cfg=cfg_with(gate_only=["echo gate"]))
+        data = typed(dict(PLAN, risks=[{"what": "risk", "check": "echo gate"}],
+                          cases=[{"criterion": "f.txt exists", "check": "echo gate"}]))
+        with mock.patch.object(lint, "dry_check", return_value=[]):
+            SendBack(host).after_rewrite(data)
+        self.assertIsNone(data["risks"][0]["check"])
+        self.assertIsNone(data["cases"][0]["check"])
+        self.assertEqual(data["cases"][0]["proved_by"], "engine_step")
+        self.assertEqual(data["cases"][0]["via"], "land gate")
+        self.assertEqual(lint.gate_only_checks(data, host.cfg), [])
+        self.assertEqual(lint.ledger_problems(data), [])
+        self.assertEqual(len(data["assumptions"]), 1)
+        host.log.note.assert_called_once()

@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from taskloop.app.plan.assume import assume
 from taskloop.contracts import plancheck
 from taskloop.contracts.plancheck import PlanData
 from taskloop.domain.checks import lint, planref
@@ -106,16 +107,14 @@ class SendBack:
     def after_rewrite(self, data: PlanData) -> None:
         """What the rewrite still gets wrong: a stop, or (the heuristics) a warning; there is no second send-back."""
         e = self.e
-        only, bad, gated = gate_only_criteria(data, e.cfg), lint.tracker_checks(data), lint.gate_only_checks(data, e.cfg)
+        only, bad = gate_only_criteria(data, e.cfg), lint.tracker_checks(data)
         if only:
             raise e.blocked_for(f"failed: the plan's acceptance is still only the gate after one rewrite ({GATE_ONLY_ACCEPTANCE}): "
                                 + "; ".join(only)[:400], "FAULT_PLAN")
         if bad:
             raise e.blocked_for("failed: the plan's checks still read the issue tracker after one rewrite: " + "; ".join(bad)[:400],
                                 "FAULT_PLAN")
-        if gated:
-            raise e.blocked_for("failed: the plan's checks still run gate-only commands after one rewrite: "
-                                + "; ".join(f"{c} ({w})" for c, w in gated)[:400], "FAULT_PLAN")
+        self.leave_to_gate(data)
         refused = planref.refusals(planref.plan_checks(data), e.cfg)
         if refused:
             raise e.blocked_for("failed: the plan's checks still name or wrap registered checks wrongly after one rewrite: "
@@ -127,3 +126,18 @@ class SendBack:
                                 + "; ".join(paths)[:400], "FAULT_PLAN")
         if dry:
             e.warn("the plan's checks may still not run after one rewrite: " + "; ".join(dry)[:300])
+
+    def leave_to_gate(self, data: PlanData) -> None:
+        """Drop commands the rewrite left for stage checks but only the land gate may run; keep their stages and a visible note."""
+        gated = dict(lint.gate_only_checks(data, self.e.cfg))
+        dropped = {c for c in lint.own_checks(data) if c.text in gated}
+        for stage in data["stages"]:
+            stage["checks"] = [c for c in stage["checks"] if c not in dropped]
+        for risk in data.get("risks") or []:
+            if risk.get("check") in dropped:
+                risk["check"] = None
+        for case in data.get("cases") or []:
+            if case.get("check") in dropped:
+                case.update(check=None, proved_by="engine_step", via="land gate")
+        for cmd, why in gated.items():
+            assume(data, f"Plan check `{cmd}` left to the gate: {why}", self.e.log.note)

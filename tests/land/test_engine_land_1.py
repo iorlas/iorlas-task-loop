@@ -49,6 +49,7 @@ from support.narrow import must
 from taskloop.adapters import (
     ident,
 )
+from taskloop.app.plan.planner import Planner
 from taskloop.app.run import engine
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.ids import BeadId
@@ -198,11 +199,15 @@ class EngineLand1Test(EngineTest):
 
     def test_the_gate_command_is_always_gate_only(self):
         bad = dict(PLAN, cases=[{"criterion": "the repo is green", "check": "just  check"}])
-        _rc, s = self.run_engine({"plan": [bad, bad]}, gate="just check")
-        self.assertEqual([c[0] for c in s.calls], ["planner", "planner"])
+        rc, s = self.run_engine({"plan": [bad, bad], "write": [WRITE], "review": [CLEAN]},
+                                gate=procsim.fake("just check", procsim.exits(0)))
+        self.assertEqual(rc, 0)
+        self.assertEqual([c[0] for c in s.calls], ["planner", "planner", "worker", "reviewer"])
         self.assertIn("just check runs only in the gate at land", s.prompts[1])
         self.assertEqual(self.blocked, [])
-        self.assertIn("gate", self.said())
+        plan = self.eng.plan_data
+        assert plan is not None
+        self.assertIn("left to the gate", Planner.summary(plan))
 
     def test_acceptance_that_is_only_the_gate_is_sent_back_naming_the_rule(self):
         # tl-7y6.7.15: the engine runs the gate at land; "just check green" as acceptance proves nothing the land does not

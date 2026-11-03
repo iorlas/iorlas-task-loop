@@ -9,6 +9,7 @@ from taskloop.app.plan.probe import AcProbe
 from taskloop.contracts import plancheck
 from taskloop.contracts.ports import Git
 from taskloop.domain.checks import lint
+from taskloop.domain.checks.names import norm
 from taskloop.domain.prompts.plan import PLAN_PROMPT, VISUAL_PLAN, VISUAL_STAGES
 
 REPLAN_CALLS = 6  # the calls a replan may spend looking (study 63: the median replan used 4)
@@ -93,11 +94,17 @@ class PlanPrompt:
         rules.append("Checks run on the uncommitted working tree after each write. The engine runs the gate{} once, on "
                      "the rebased tree at land: never put {} in a stage's checks, and a criterion that names it is proven "
                      "by that land gate: write no case for it.".format((f" (`{gate}`)") if has else "", f"`{gate}`" if has else "it"))
-        extra_gated = [(c, w) for c, w in lint.gate_only(e.cfg) if w != lint.GATE_WHY]
-        if extra_gated:
-            rules.append("These run only in the gate at land too, never in a check: "
-                         + "; ".join(f"`{c}` ({w})" for c, w in extra_gated) + ".")
+        rules.extend(self.extra_gates())
         return rules
+
+    def extra_gates(self) -> list[str]:
+        """Name every gate-only command beyond the gate command already named in the preceding rule."""
+        gate = norm(self.e.cfg.gate_text)
+        extra_gated = [(c, w) for c, w in lint.gate_only(self.e.cfg) if c != gate]
+        if extra_gated:
+            return ["These run only in the gate at land too, never in a check: "
+                    + "; ".join(f"`{c}`" + (f" ({w})" if w != lint.GATE_WHY else "") for c, w in extra_gated) + "."]
+        return []
 
     def tail(self) -> str:
         """The owner's verify answer and the stages already accepted on this branch."""
