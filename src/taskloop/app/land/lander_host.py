@@ -10,7 +10,7 @@ from taskloop.app.land.fix_outside import FixOutsideHost
 from taskloop.app.land.gate import GateCheckout, GateHost, GateSteps
 from taskloop.app.land.land_rebase import LandRebaseHost
 from taskloop.app.land.landed import LandedHost
-from taskloop.app.land.outbound import OutboundCheckout, OutboundHost
+from taskloop.app.land.outbound import OutboundCheckout, OutboundHost, OutboundSteps
 from taskloop.app.land.parts import BeginSteps, FetchCheckout, LandLocks, MoveSteps, NetWorker, OutcomeSteps, StageCheckout, Strays
 from taskloop.app.land.push import PushHost
 from taskloop.app.land.recheck import RecheckCheckpoints, RecheckHost
@@ -67,7 +67,7 @@ class LandHost(Protocol):
     def move_host(self, needs: list[str], why: str) -> Exception: ...
 
 
-class LandSteps(BeginSteps, OutcomeSteps, MoveSteps, GateSteps, Protocol):
+class LandSteps(OutboundSteps, OutcomeSteps, MoveSteps, GateSteps, Protocol):
     pass
 
 

@@ -20,9 +20,10 @@ KEEP_DAYS: Final = 30  # days run data of a closed bead is kept at least (logs, 
 
 # The stuck rule (dash-spec 2.4, 2.6), in one place: a step silent this long (no record but Beats, no worker output) is stuck, and so are
 # SAME_RED rounds in a row with the same red checks. The limits sit above the engine's own stops of a silent worker (write_idle_min 25).
-SILENT_LIMIT: Final[dict[Step, float]] = {
+SILENT_LIMIT: Final[dict[str, float]] = {
     Step.PLAN: 20 * 60.0, Step.REPLAN: 20 * 60.0, Step.WRITE: 30 * 60.0, Step.CHECKS: 45 * 60.0, Step.REVIEW: 20 * 60.0,
     Step.VERIFY: 20 * 60.0, Step.LOOK: 20 * 60.0, Step.GATE: 45 * 60.0, Step.LAND: 20 * 60.0,
+    "push": 60 * 60.0,  # an internal step, not a selectable stage; includes LFS and the pre-push hook (up to 2900 s)
 }
 SILENT_DEFAULT: Final = 30 * 60.0  # a step the table does not name (reset, close, reflect)
 SAME_RED: Final = 3
@@ -30,10 +31,7 @@ SAME_RED: Final = 3
 
 def silent_limit(step: str) -> float:
     """The seconds of silence after which `step` is stuck."""
-    try:
-        return SILENT_LIMIT.get(Step(step), SILENT_DEFAULT)
-    except ValueError:
-        return SILENT_DEFAULT
+    return SILENT_LIMIT.get(step, SILENT_DEFAULT)
 
 
 class Liveness(StrEnum):

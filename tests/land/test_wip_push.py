@@ -88,6 +88,7 @@ class WipPush(EngineTest):
             checkout=SimpleNamespace(stage_all=lambda: None),
             clock=SimpleNamespace(monotonic=lambda: 1.0),
             log=SimpleNamespace(note=lambda _m: None),
+            steps=mock.Mock(),
             git=SimpleNamespace(
                 staged=lambda _d: False,
                 lfs_push=lambda d, r, refs: calls.append(("lfs", r, *refs)) or GitOutcome(ok=True, output=""),

@@ -5,6 +5,7 @@ import shutil
 from pathlib import Path
 from typing import Protocol
 
+from taskloop.app.land.parts import BeginSteps
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ports import Clock, DoltPush, Git
@@ -52,6 +53,10 @@ class OutboundTree(Protocol):
     def wip(self, why: str, everything: bool = ...) -> bool: ...
 
 
+class OutboundSteps(BeginSteps, Protocol):
+    def end(self, outcome: str = ...) -> None: ...
+
+
 class OutboundHost(Protocol):
     """What the pushes read of the engine: the land command, the clock, git, the shell for the land command, bd's dolt push, the log."""
 
@@ -77,6 +82,8 @@ class OutboundHost(Protocol):
     def checkout(self) -> OutboundCheckout: ...
     @property
     def tree(self) -> OutboundTree: ...
+    @property
+    def steps(self) -> OutboundSteps: ...
     def blocked_for(self, why: str, kind: str) -> Exception: ...
 
 
@@ -110,6 +117,17 @@ class Outbound:
         want = target(e.cfg.land)
         if e.dry or want is None:
             return
+        e.steps.begin("push", f"push accepted stage {stage}", stage=stage)
+        outcome = "failed"
+        try:
+            self.push_stage(stage, want[0])
+            outcome = "done"
+        finally:
+            e.steps.end(outcome)
+
+    def push_stage(self, stage: int, remote: str) -> None:
+        """Commit and push the accepted stage inside its own timed step, including LFS and the pre-push hook."""
+        e = self.e
         e.checkout.stage_all()
         if e.git.staged(e.wt):  # staged work: a wip commit of what the stages meant
             e.tree.wip(f"stage {stage} accepted", everything=False)
@@ -117,18 +135,18 @@ class Outbound:
         rc, tail = self.lfs_push()  # git-lfs's hook is not on the hooks path: else the branch lacks its LFS files
         if not rc:
             t0 = e.clock.monotonic()
-            done = e.git.push_lease(e.wt, want[0], f"HEAD:{ref}")
+            done = e.git.push_lease(e.wt, remote, f"HEAD:{ref}")
             rc, tail = (0 if done.ok else 1), done.output
             e.log.note(
-                f"git push --force-with-lease {want[0]} HEAD:{ref}: {'ok' if rc == 0 else 'failed'} in "
+                f"git push --force-with-lease {remote} HEAD:{ref}: {'ok' if rc == 0 else 'failed'} in "
                 f"{e.clock.monotonic() - t0:.1f}s"
             )
         if rc and "stale info" in tail:  # the remote branch was pushed from another machine and this clone has no copy of it
-            raise e.blocked_for(f"failed: {ref} on {want[0]} holds work this clone has never fetched (another machine ran this bead); "
+            raise e.blocked_for(f"failed: {ref} on {remote} holds work this clone has never fetched (another machine ran this bead); "
                                 f"fetch it and decide which work to keep, then rerun\n{tail.strip()[-400:]}", "FAULT_LAND")
         if rc:
             kind = "PAUSE_NETWORK" if Push.transient(tail) else "FAULT_LAND"
-            raise e.blocked_for(f"{'paused' if kind == 'PAUSE_NETWORK' else 'failed'}: the work-in-progress push of {ref} to {want[0]} "
+            raise e.blocked_for(f"{'paused' if kind == 'PAUSE_NETWORK' else 'failed'}: the work-in-progress push of {ref} to {remote} "
                                 f"failed after stage {stage}; the branch is kept, the next run continues it\n{tail.strip()[-400:]}", kind)
 
     def bd_sync(self, sha: str) -> None:

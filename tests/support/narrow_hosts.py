@@ -84,8 +84,9 @@ class FakeOutboundHost:
         self.wt = "."
         self.dry = dry
         self.lines: list[str] = []  # what the log said
-        self.log = RunLog(fake_stores().run_log("run"), echo=self.lines.append)
         self.clock = FakeClock()
+        self.log = RunLog(fake_stores().run_log("run"), echo=self.lines.append, clock=self.clock.now)
+        self.steps = Steps(self.log, self.clock.now)
         self.result = result
         self.ran: list[Sequence[str]] = []
         self.git: Git = ScriptedGit()

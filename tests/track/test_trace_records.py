@@ -63,31 +63,34 @@ class TraceRecords(te.EngineTest):
     def test_every_node_has_an_id_a_step_its_counters_and_an_end(self):
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0)
+        # IDs follow execution order: the accepted-stage push owns a timed step before land.
         self.assertEqual(self.steps(), [(1, "reset"), (2, "plan"), (3, "write"), (4, "checks"), (5, "review"),
-                                        (6, "land"), (7, "close")])
+                                        (6, "push"), (7, "land"), (8, "close")])
         nodes = {num(r.id): r for r in records(self.eng, rec.StepStart)}
         self.assertEqual(nodes[3].text, "write: stage 1/1 write 1")
         self.assertEqual({k: getattr(nodes[3], k) for k in ("stage", "stages", "write", "round")},
                          {"stage": 1, "stages": 1, "write": 1, "round": 1})
-        self.assertIn("(try 1)", nodes[6].text)
+        self.assertEqual(nodes[6].stage, 1)
+        self.assertIn("(try 1)", nodes[7].text)
         ends = {num(r.id): r for r in records(self.eng, rec.StepEnd)}
-        self.assertEqual(sorted(ends), [1, 2, 3, 4, 5, 6, 7])
+        self.assertEqual(sorted(ends), [1, 2, 3, 4, 5, 6, 7, 8])
         self.assertEqual(ends[4].outcome, "green")
         self.assertEqual(ends[5].outcome, "clean")
-        self.assertEqual(ends[6].outcome, "landed")
+        self.assertEqual(ends[6].outcome, "done")
         self.assertEqual(ends[7].outcome, "landed")
+        self.assertEqual(ends[8].outcome, "landed")
         for e in ends.values():
             self.assertGreaterEqual(e.t, nodes[num(e.id)].t)
         self.assertEqual([(num(s.node), s.resume) for s, _ in calls(self.eng)], [(2, False), (3, False), (5, False)])
         self.assertIn((5, "next", "accepted"), self.transitions())
-        self.assertIn((6, "close", "landed"), self.transitions())
+        self.assertIn((7, "close", "landed"), self.transitions())
 
     def test_red_checks_go_back_to_the_writer_and_every_check_round_is_kept(self):
         plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[GREEN_ON_2ND_WRITE])])
         rc, _ = self.run_engine({"plan": [plan], "write": [WRITE, WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual([s for _, s in self.steps()], ["reset", "plan", "write", "checks", "write", "checks", "review",
-                                                        "land", "close"])
+                                                        "push", "land", "close"])
         self.assertIn((4, "write", "checks_red"), self.transitions())
         red = next(r for r in records(self.eng, rec.Transition) if r.cause == "checks_red")
         self.assertIn("1 failed", red.detail)
@@ -158,11 +161,11 @@ class TraceRecords(te.EngineTest):
         gate = procsim.fake("red-on-d2", lambda cwd, env: (1 if procsim.f_txt(cwd) == "d2" else 0, ""))
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE, WRITE], "review": [CLEAN, CLEAN]}, gate=gate)
         self.assertEqual(rc, 0, self.blocked)
-        self.assertIn((6, "fix", "gate_red"), self.transitions())
+        self.assertIn((7, "fix", "gate_red"), self.transitions())
         fixw = next(r for r in records(self.eng, rec.StepStart) if r.step == "write" and r.fix)
         self.assertEqual((fixw.fix, fixw.write), (1, 1))
-        self.assertEqual(self.steps()[-2:], [(10, "land"), (11, "close")])
-        self.assertEqual({num(r.id): r for r in records(self.eng, rec.StepEnd)}[6].outcome, "gate red")
+        self.assertEqual(self.steps()[-2:], [(11, "land"), (12, "close")])
+        self.assertEqual({num(r.id): r for r in records(self.eng, rec.StepEnd)}[7].outcome, "gate red")
 
     def test_the_trace_says_why_each_run_started_and_which_run_came_before(self):
         rc, _ = self.run_engine({"plan": [dict(PLAN, irreversible="push_shared", question="Old format or new?")]})
