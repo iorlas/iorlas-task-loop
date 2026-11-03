@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Literal
 
 from taskloop.adapters.locks import hold_path
+from taskloop.app.loop import exits
 from taskloop.contracts import paths
 from taskloop.contracts.enums import LockWhat
 from taskloop.contracts.loop import LoopCommand, LoopState, LoopTarget, Rest, StopRequest
@@ -15,7 +16,10 @@ from taskloop.contracts.run import LoopLogLine
 from taskloop.contracts.stores import JsonStore, LoopLog, Page
 
 StopMode = Literal["now", "after", ""]
-EXIT_REASONS = ("drained", "until", "max_beads", "stop_request", "signal", "storm", "crash", "profile_ahead")
+EXIT_REASONS = (
+    "drained", "until", "max_beads", "stop_request", "signal", "storm", "crash", "profile_ahead",
+    "low_disk", "system_exit", "lost",
+)
 
 
 def append_line(path: Path, line: str) -> None:
@@ -57,11 +61,20 @@ class LoopFiles:
             if st is None:
                 continue
             if not self.pid_alive(st.pid):
+                self.record_dead(st)
                 with contextlib.suppress(OSError):
                     f.replace(self.runs() / f"died-{st.pid}.json")
             elif st.pid != but:
                 out.append(st)
         return sorted(out, key=lambda st: st.started)
+
+    def record_dead(self, st: LoopState, reason: str = "lost",
+                    detail: str = "process disappeared without an exit record; cause unknown") -> None:
+        directory = self.cfg.loop_runs(self.key)
+        recorded = exits.rows(directory / "factory.log")
+        if not any(rec.get("pid") == st.pid and rec.get("started") == st.started for rec in recorded):
+            exits.record(directory, {"v": 1, "pid": st.pid, "started": st.started, "repo": st.repo, "t": self.now(),
+                                     "reason": reason, "detail": detail})
 
     def died(self) -> list[LoopState]:
         found = (JsonStore(f, LoopState).get() for f in self.runs().glob("died-*.json"))
@@ -124,7 +137,7 @@ class LoopFiles:
         return self.log().tail(last)
 
     def write_exit(self, rec: dict[str, object]) -> None:
-        append_line(self.runs() / "exits.jsonl", json.dumps(rec))
+        exits.record(self.cfg.loop_runs(self.key), rec)
 
     def last_exit(self) -> dict[str, object]:
         try:

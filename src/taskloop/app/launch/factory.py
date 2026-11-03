@@ -77,6 +77,10 @@ def _wait(files: LoopFiles, children: list[tuple[Child, Path]], sleep: Callable[
         for child, path in children:
             code = child.poll()
             if code is not None:
+                state = files.read(child.pid)
+                if state is not None:
+                    files.record_dead(state, "signal" if code < 0 else "clean" if code == 0 else "crash",
+                                      f"launcher observed exit {code}")
                 raise RuntimeError(f"loop exited {code}; see {path}")
             if child.pid in ready:
                 continue

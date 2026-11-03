@@ -1,4 +1,5 @@
 """The loop process itself: its log, its state file, its stop and its nap. The pass logic is in loop.py."""
+import contextlib
 import threading
 import time
 from dataclasses import dataclass
@@ -49,6 +50,7 @@ class Core:
         self.rows: list[QueueRow] = []
         self.first_seen: dict[str, float] = {}
         self.exit: dict[str, str] = {}
+        self.exit_written = False
         if profile_error:
             self.left(vd.PROFILE_AHEAD, profile_error)
         self.beat_at = 0.0
@@ -128,11 +130,15 @@ class Core:
     def write_exit(self) -> None:
         """A loop that exits writes its reason to the repo's exits file and its event log; `tl loop status` shows the last one.
         A loop that cannot (SIGKILL) leaves died-<pid>.json."""
-        reason = self.exit.get("reason") or ("signal" if self.sigterm.is_set() else "crash")
+        if self.exit_written:
+            return
+        self.exit_written = True
+        reason = "signal" if self.sigterm.is_set() else self.exit.get("reason") or "crash"
         detail = self.exit.get("detail", "")
         self.files.write_exit({"v": 1, "pid": self.env.pid, "repo": self.env.repo, "t": self.env.now(), "started": self.started,
                                "reason": reason, "detail": detail, "log_path": str(self.log or "")})
-        self.env.event("loop_exit", who="loop", repo=self.env.repo, pid=self.env.pid, reason=reason, detail=detail[:200])
+        with contextlib.suppress(OSError):
+            self.env.event("loop_exit", who="loop", repo=self.env.repo, pid=self.env.pid, reason=reason, detail=detail[:200])
 
 
 def prio_of(bead: object, default: int = 2) -> int:

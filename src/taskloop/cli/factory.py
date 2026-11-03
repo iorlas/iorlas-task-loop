@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 
 from taskloop.app.launch import dash, factory, loop, repos
+from taskloop.app.loop.exits import last_by_lane
 from taskloop.app.loop.files import LoopFiles
 from taskloop.app.wire import real
 from taskloop.contracts.env import Env
@@ -82,6 +83,9 @@ def run(a: argparse.Namespace, env: Env, spawner: Spawner, who: Identity, here: 
         except RuntimeError:
             wanted = "?"  # status must answer even when the profile cannot be read
         print(f"LANES running={len(states)} wanted={wanted}")
+        for rec in last_by_lane(files.cfg.loop_runs(files.key)):
+            print(f"LANE {rec.get('lane', rec['pid'])} LAST EXIT pid={rec['pid']} time={rec.get('t')} "
+                  f"reason={rec['reason']} {rec.get('detail', '')}")
         dash.url(env)
         return 0 if states else 1
     except (OSError, RuntimeError, ValueError) as error:

@@ -1,4 +1,5 @@
 """The loop: one process runs ready beads one after another, each through `tl run-task` in any free slot."""
+import atexit
 import contextlib
 import datetime
 import json
@@ -83,15 +84,16 @@ class Loop(Core):
 
     # ---- the process -------------------------------------------------------------------------------------------
     def main(self) -> int:
-        self.open_log()
-        with self.files.lock():
-            self.publish()
-            self.files.clean_command()
-        if self.dropped:
-            self.say(f"warn: the state handed over could not be read ({self.dropped}): dropped, a clean pass starts")
-            self.env.event("reload", "", who="loop", old="", new=self.env.version, code_dir=self.env.code_dir,
-                           why="handover state dropped: " + self.dropped)
+        atexit.register(self.write_exit)
         try:
+            self.open_log()
+            with self.files.lock():
+                self.publish()
+                self.files.clean_command()
+            if self.dropped:
+                self.say(f"warn: the state handed over could not be read ({self.dropped}): dropped, a clean pass starts")
+                self.env.event("reload", "", who="loop", old="", new=self.env.version, code_dir=self.env.code_dir,
+                               why="handover state dropped: " + self.dropped)
             if self.exit.get("reason") == vd.PROFILE_AHEAD:
                 self.say(self.exit["detail"])
                 return EX_CONFIG
@@ -99,17 +101,23 @@ class Loop(Core):
             return self.run()
         except (ConfigError, SystemExit) as err:
             if isinstance(err, SystemExit) and err.code != EX_CONFIG:
+                self.left("system_exit", str(err))
                 raise
             why = vd.profile_ahead(self.env.version, err).why
             self.say(why)
             self.left(vd.PROFILE_AHEAD, why)
             return EX_CONFIG
         except Exception as e:
+            self.left("crash", f"{type(e).__name__}: {e}")
             self.fall_back(e)
+            raise
+        except BaseException as error:
+            self.left("signal" if isinstance(error, KeyboardInterrupt) else "system_exit", str(error))
             raise
         finally:
             self.write_exit()
-            with self.files.lock():
+            atexit.unregister(self.write_exit)
+            with contextlib.suppress(OSError), self.files.lock():
                 self.files.remove(self.env.pid)
                 self.files.clean_command()
 
@@ -174,8 +182,8 @@ class Loop(Core):
         free, need = self.env.free_bytes(), int(self.tune().min_free_gb * (1 << 30))
         if free < need:  # a full disk fails every run: claim nothing, end cleanly
             why = f"only {free / (1 << 30):.1f} GB free on the config dir's disk, below loop.min_free_gb {self.tune().min_free_gb:g}"
-            self.say(f"stopped: {why}; no bead is claimed (free space, or tl prune, then start the loop again)")
             self.left("low_disk", why)
+            self.say(f"stopped: {why}; no bead is claimed (free space, or tl prune, then start the loop again)")
             return 0
         storm = self.env.storm()  # another run (any loop) tripped the storm detector: nothing is claimed until it expires
         if storm:

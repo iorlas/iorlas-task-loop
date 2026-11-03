@@ -1,6 +1,7 @@
 """Factory orchestration uses loop records and fake processes, never a terminal or a service manager."""
 import argparse
 import io
+import json
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
@@ -82,6 +83,20 @@ class Factory(unittest.TestCase):
         self.child.poll.return_value = 2
         with self.assertRaisesRegex(RuntimeError, r"loop exited 2; see .*factory-123\.log"):
             factory.start(self.files, "/repo", "1", [], self.spawn)
+
+    def test_launcher_records_every_observed_exit_code(self):
+        for code, reason in ((0, "clean"), (2, "crash"), (-9, "signal"), (-15, "signal")):
+            with self.subTest(code=code):
+                (self.files.runs() / "factory.log").unlink(missing_ok=True)
+                self.child.poll.return_value = code
+                self.files.remove(123)
+                with self.assertRaises(RuntimeError):
+                    factory.start(self.files, "/repo", "1", [], self.spawn)
+                records = [json.loads(line) for line in (self.files.runs() / "factory.log").read_text().splitlines()]
+                self.assertEqual(len(records), 1)
+                self.assertEqual((records[0]["pid"], records[0]["lane"], records[0]["t"]), (123, 1, 42))
+                self.assertEqual(records[0]["reason"], reason)
+                self.assertIn(str(code), records[0]["detail"])
 
     def test_stop_uses_the_same_targeted_graceful_command_for_both_modes(self):
         self.files.write(self.state)
@@ -343,6 +358,19 @@ class Lanes(unittest.TestCase):
         for pid in (123, 124, 125):
             self.assertIn(f"STOP after the current bead: loop pid {pid}", output)
             self.assertEqual(self.files.stop_for(pid, 40), "after")
+
+    def test_status_shows_last_exit_for_each_lane_even_when_none_are_running(self):
+        self.start()
+        for pid, reason in ((123, "crash"), (124, "signal"), (123, "low_disk")):
+            self.files.write_exit({"pid": pid, "started": 40, "t": 42, "reason": reason})
+        for pid in (123, 124, 125):
+            self.files.remove(pid)
+        result, output, _ = self.invoke("status")
+        self.assertEqual(result, 1)
+        self.assertIn("LANES running=0 wanted=3", output)
+        self.assertIn("LANE 1 LAST EXIT pid=123 time=42 reason=low_disk", output)
+        self.assertIn("LANE 2 LAST EXIT pid=124 time=42 reason=signal", output)
+        self.assertNotIn("reason=crash", output)
 
     def test_logs_select_lane_two_and_refuse_missing_lane(self):
         self.start()

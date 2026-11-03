@@ -207,4 +207,4 @@ class ProfileAhead(Rig):
         ):
             loop.main()
         self.assertEqual(exited.exception.code, 1)
-        self.assertEqual(self.files.write_exit.call_args.args[0]["reason"], "crash")
+        self.assertEqual(self.files.write_exit.call_args.args[0]["reason"], "system_exit")
