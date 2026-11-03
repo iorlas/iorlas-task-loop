@@ -7,8 +7,9 @@ from taskloop.contracts.dash import Phase, Piece, Slot
 from taskloop.contracts.events import Claim, SlotSetup, SlotTake, Stage
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.runlife import Liveness
+from taskloop.contracts.slots import SlotTable
+from taskloop.contracts.slottable import LiveSlot, build_slot_table, slot_view
 from taskloop_dash.tails import parse_ts
-from taskloop_dash.views import columns
 from taskloop_dash.views.runfacts import Run
 from taskloop_dash.views.world import ProjectIn
 
@@ -30,15 +31,23 @@ def slot_name(b: Bead) -> str:
     return b.title.split()[-1]
 
 
+def table_of(p: ProjectIn, runs: Mapping[str, Sequence[Run]], now: float) -> SlotTable:
+    """The project's slot table (taskloop.contracts.slottable): configured lanes exist even before a slot bead or its first run does."""
+    src = p.slot_source
+    live = {}
+    for b in p.beads:
+        for r in runs.get(b.id, ()):
+            if r.life is Liveness.LIVE and r.slot:
+                live[r.slot] = LiveSlot(run=r.name, bead=b.id, since=str(r.t0))
+    open_ids = [x.id for x in p.beads if x.status in ("open", "in_progress")]
+    return build_slot_table(p.slots, src.count, live, src.dirs, now, src.source, src.sha, open_ids)
+
+
 def slots_of(p: ProjectIn, runs: Mapping[str, Sequence[Run]], now: float) -> list[Slot]:
-    """Configured lanes exist even before a slot bead or its first run does."""
-    beads = list(p.slots)
-    names = {slot_name(b) for b in beads}
-    for i in range(1, p.slot_count + 1):
-        name = f"s{i}"
-        if name not in names:
-            beads.append(Bead(id=BeadId("slot-" + name), title="slot " + name, status="open"))
-    return [slot_of(p, b, runs, now) for b in sorted(beads, key=slot_name)]
+    """The Floor's lanes, one per row of the slot table; a free slot above the count is retiring and gets no lane."""
+    beads = {slot_name(b): b for b in p.slots}
+    return [slot_of(p, beads.get(v.id) or Bead(id=BeadId("slot-" + v.id), title="slot " + v.id, status="open"), runs, now)
+            for v in table_of(p, runs, now).slots if v.state != "retiring"]
 
 
 def on_slot(name: str, bead_ids: set[str], runs: Mapping[str, Sequence[Run]]) -> list[tuple[str, Run]]:
@@ -48,31 +57,29 @@ def on_slot(name: str, bead_ids: set[str], runs: Mapping[str, Sequence[Run]]) ->
 
 
 def slot_of(p: ProjectIn, b: Bead, runs: Mapping[str, Sequence[Run]], now: float) -> Slot:
-    """One slot bead: held, running, starting a known bead, claimed with no known work (a stray), or free. `lane` is that of the
-    slot's current or last call. A slot's `next` stays unset (no source until the queue names the slot)."""
+    """One slot bead as a lane: held, running, starting a known bead, claimed with no known work (a stray), or free. `lane` is that of
+    the slot's current or last call. The state is the table's (`slot_view`); the lane adds what only the runs and events know."""
     name = slot_name(b)
     seen = on_slot(name, {x.id for x in p.beads}, runs)
     lane = next((r.lane for _, r in reversed(seen) if r.lane), "")
     live = [(bead, r) for bead, r in seen if r.life is Liveness.LIVE]
-    if hold_until(b) > now:
-        why = columns.first_line(str(b.metadata.get("held_why") or "")) or "held"
-        who = b.metadata.get("held_by") or "?"
-        return Slot(id=name, name=name, lane=lane, state="held", project=p.id, idle_why=f"held by {who}: {why}")
-    if live:
+    run = LiveSlot(run=live[-1][1].name, bead=live[-1][0], since=str(live[-1][1].t0)) if live else None
+    dirs = p.slot_source.dirs
+    v = slot_view(name, b, run, dirs is None or name in dirs, False, now, {x.id for x in p.beads if x.status in ("open", "in_progress")})
+    if v.state == "held":
+        return Slot(id=name, name=name, lane=lane, state="held", project=p.id, idle_why=v.idle_why)
+    if v.state == "running":
         bead, r = live[-1]
         cur = r.current()
-        state = "look" if cur and cur.phase == Phase.LOOK else "running"
-        return Slot(id=name, name=name, lane=r.lane or lane, state=state, project=p.id, bead=bead, t=r.t0)
-    if b.status != "open":
-        held = b.metadata.get("held_bead")
-        target = next((x for x in p.beads if x.id == held and x.status in ("open", "in_progress")), None)
-        if target:
-            t = parse_ts(b.metadata.get("held_since")) or parse_ts(b.updated_at)
-            return Slot(id=name, name=name, lane=lane, state="starting", project=p.id, bead=target.id, t=t,
-                        idle_why=f"starting {target.id}", startup=startup_of(p, name, target.id, t, now))
+        return Slot(id=name, name=name, lane=r.lane or lane, state="look" if cur and cur.phase == Phase.LOOK else "running",
+                    project=p.id, bead=bead, t=r.t0)
+    if v.state == "setup":
+        t = parse_ts(b.metadata.get("held_since")) or parse_ts(b.updated_at)
+        return Slot(id=name, name=name, lane=lane, state="starting", project=p.id, bead=v.bead, t=t, idle_why=v.idle_why,
+                    startup=startup_of(p, name, v.bead, t, now))
+    if v.state in ("claimed", "dead"):
         stray = next((x for x in p.strays if x.kind == "slot" and x.ref == b.id), None)
-        return Slot(id=name, name=name, lane=lane, state="idle", project=p.id,
-                    idle_why=stray.why if stray else f"claimed by {b.assignee or '?'}, no live run")
+        return Slot(id=name, name=name, lane=lane, state="idle", project=p.id, idle_why=stray.why if stray else v.idle_why)
     return Slot(id=name, name=name, lane=lane, state="free", project=p.id)
 
 

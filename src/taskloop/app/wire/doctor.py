@@ -8,6 +8,7 @@ from taskloop.adapters.beadtools import bd_store
 from taskloop.adapters.ident import claude_dir, config_dir
 from taskloop.app.doctor import profiles
 from taskloop.app.release import catalog, manifest
+from taskloop.app.wire import slots as wslots
 from taskloop.app.wire.slots import cfg_source
 from taskloop.contracts import runlife
 from taskloop.contracts.bd_errors import BdCommandFailure
@@ -73,6 +74,20 @@ def bead_lint_warnings(repo: str, who: Identity, store: Beads | None = None) -> 
 OWNERSHIP = "## Ownership"
 
 
+def slot_warnings(repo: str, who: Identity, git: Git, now: float) -> tuple[str, list[str]]:
+    """(the slot table's one-line summary, its WARN lines): the slots as `tl status` and the dash list them, against config and folders."""
+    try:
+        table = wslots.slot_table(repo, who, git, now)
+    except (SystemExit, OSError, ValueError, BdFailure) as err:
+        return f"slots: not read ({err})", []
+    states = ", ".join(f"{v.id} {v.state}" for v in table.slots) or "none"
+    where = f"{table.source} {table.source_sha[:7]}".strip()
+    warns = [f"slot {v.id} is {v.state}: {v.idle_why}" for v in table.slots if v.state == "dead"]
+    warns += [f"slot {v.id} is above slots.count {table.configured} and still {v.state}" for v in table.slots
+              if v.beyond_count and v.state not in ("free", "retiring")]
+    return f"slots: {table.configured} configured from {where}; {states}", warns
+
+
 def install_problems(plugin_root: Path, env: Env) -> list[str]:
     """What is wrong with the plugin install this tl runs from and the one Claude Code records as installed: a file that differs from
     MANIFEST.sha256 (named), an AGENTS.md without its ownership section. A source checkout has no manifest and is checked for none."""
@@ -99,7 +114,9 @@ def run(plugin_root: Path, env: Env, git: Git, who: Identity) -> int:
     _, base, commit = source
     print(f"config: .task-loop.json from base {base} at commit {commit}" if commit else
           f"config: .task-loop.json from working tree {repo} (base {base} unresolved; no commit read)")
-    warns = git_warnings(repo, source, git) + bead_lint_warnings(repo, who)
+    slot_line, slot_warns = slot_warnings(repo, who, git, time.time())
+    print(slot_line)
+    warns = git_warnings(repo, source, git) + bead_lint_warnings(repo, who) + slot_warns
     warns += [f"run {r} is lost: its process is gone and it recorded no end" for r in runlife.reconcile(who.config, time.time())]
     print(f"contracts: {Path(contracts.__file__).resolve().parent}")
     print(f"engine: {pin.describe(pin.families(source[0].engine.writer_family, []))}")
