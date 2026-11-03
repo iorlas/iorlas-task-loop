@@ -506,8 +506,10 @@ class Executable(StagesTest):
         probe = self.probe()
         for tool in ("make", "npm"):  # tools a dev machine has; this test is about the grammar, not about what is installed
             probe.words[tool] = (True, time.time())
-        for ok in ("env -i PATH=x git --version", "make", "node_modules/.bin/jest", "~/bin/foo", ".venv/bin/python -c pass"):
+        for ok in ("env -i PATH=x git --version", "make"):
             self.assertEqual(self.problems(ok, probe), [], ok)
+        for missing in ("node_modules/.bin/jest", "~/bin/foo", ".venv/bin/python -c pass"):
+            self.assertIn("CHECKPATH:", self.problems(missing, probe)[0], missing)
 
 
     def test_a_missing_script_is_found_unless_a_stage_makes_it(self):

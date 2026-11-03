@@ -74,7 +74,12 @@ class Attempts:
         # what the repo's check declares in its `env` (it is part of the cache key: it must reach the child too)
         env = {**c.env, **env, **ids}
         argv, where = self.box.plan(c, argv_of(c.cmd), env)
-        rc, tail = self.host.sh(argv, timeout=c.wall_min * 60, save=log, what="check", env=env, stop=stop)
+        try:
+            rc, tail = self.host.sh(argv, timeout=c.wall_min * 60, save=log, what="check", env=env, stop=stop)
+        except OSError as error:
+            rc = 127 if isinstance(error, FileNotFoundError) else 126
+            tail = f"check `{c.id}` could not start `{argv[0]}`: {error}"
+            log.write_text(tail + "\n", encoding="utf-8")
         if where:
             log.write_text(where + "\n" + self._read(log, ""), encoding="utf-8")
         # before a retry, the next check or the slot's reset overwrites what this attempt left

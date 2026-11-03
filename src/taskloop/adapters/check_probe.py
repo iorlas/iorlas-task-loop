@@ -22,7 +22,8 @@ class PathProbe:
         """True when `word` resolves to an executable on the PATH a check will see (the worktree's env), shutil.which."""
         known = self.words.get(word)
         if known is None or self.clock() - known[1] > WORD_TTL_S:
-            known = (shutil.which(word, path=self.env.get("PATH")) is not None, self.clock())
+            program = str(self.wt / word) if "/" in word else word
+            known = (shutil.which(program, path=self.env.get("PATH")) is not None, self.clock())
             self.words[word] = known
         return known[0]
 

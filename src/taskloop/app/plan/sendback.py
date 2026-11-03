@@ -49,7 +49,7 @@ class SendBack:
     def find(self, data: PlanData) -> Problems:
         """The problems of a first answer."""
         e = self.e
-        dry = lint.dry_check(data, e.shell_probe())
+        dry = lint.dry_check(data, e.shell_probe(), e.cfg)
         dry += (lint.ledger_problems(data) + lint.own_timeout_problems(data, e.cfg.check_wall_min)
                 + lint.evidence_problems(data, str(e.evidence_dir)))
         # tl-wjj: no stages, no question and nothing to file breaks the plan contract: back once. With leftovers it is the
@@ -120,6 +120,10 @@ class SendBack:
         if refused:
             raise e.blocked_for("failed: the plan's checks still name or wrap registered checks wrongly after one rewrite: "
                                 + "; ".join(refused)[:400], "FAULT_PLAN")
-        dry = lint.dry_check(data, e.shell_probe())
+        dry = lint.dry_check(data, e.shell_probe(), e.cfg)
+        paths = [why for why in dry if "CHECKPATH:" in why]
+        if paths:
+            raise e.blocked_for("failed: CHECKPATH: check executable paths are still invalid after one rewrite: "
+                                + "; ".join(paths)[:400], "FAULT_PLAN")
         if dry:
             e.warn("the plan's checks may still not run after one rewrite: " + "; ".join(dry)[:300])

@@ -6,8 +6,9 @@ from typing import Final
 
 from taskloop.contracts.argv import FORM, argv_problems
 from taskloop.contracts.config import EngineConfig
-from taskloop.contracts.plancheck import Adhoc
+from taskloop.contracts.plancheck import Adhoc, Ref
 from taskloop.contracts.ports import TreeProbe
+from taskloop.domain.checks import produced
 from taskloop.domain.checks.cmd import matchers as sh
 from taskloop.domain.checks.names import norm
 from taskloop.domain.checks.planref import JUST_PLAIN_FLAGS, Plan, adhocs, plan_checks
@@ -85,14 +86,15 @@ def evidence_problems(plan: Plan, evidence: str) -> list[str]:
     return out
 
 
-def command_problems(argv: Sequence[str], probe: TreeProbe, made: Sequence[str] = ()) -> list[str]:
+def command_problems(argv: Sequence[str], probe: TreeProbe, made: Sequence[str] = (),
+                     earlier: Sequence[Adhoc] = ()) -> list[str]:
     """[why a plan check cannot start]: a program that is no file of the tree and not on PATH (lifesim-fld.10 planned 'After building
     the current player: python3 ...', a sentence run as the command `After`); a `just` recipe the tree's justfile does not have
     (lifesim-ov3w). Only the program word is judged."""
     out: list[str] = []
     for w in dict.fromkeys([argv[0], *sh.head(argv)[:1]]):
         if "/" in w:
-            out += _path_problem(w, probe, made)
+            out += _path_problem(w, probe, made, earlier)
         elif not probe.has_command(w):
             out.append(f"`{w}` is not an executable here (nothing on PATH): the first word of a check is a program, never a sentence")
     if "just" in sh.head(argv)[:1] and not any(os.path.basename(f).lower() in ("justfile", ".justfile") for f in made):
@@ -104,18 +106,34 @@ def command_problems(argv: Sequence[str], probe: TreeProbe, made: Sequence[str] 
     return out
 
 
-def _path_problem(w: str, probe: TreeProbe, made: Sequence[str]) -> list[str]:
-    if w.startswith("~"):
-        return []  # no shell expands it: judged by nobody
-    if not w.startswith(("./", "/")) and not probe.is_dir(w.split("/", maxsplit=1)[0]):
-        return []  # `.venv/bin/python`: its folder is not in the tree (a setup makes it)
+def _path_problem(w: str, probe: TreeProbe, made: Sequence[str], earlier: Sequence[Adhoc]) -> list[str]:
     g = os.path.normpath(w)
-    if probe.exists(w) or any(g == k or g.startswith(k + "/") for k in map(os.path.normpath, made)):
+    if ((probe.exists(w) and not probe.is_dir(w) and probe.has_command(w))
+            or any(g == k or g.startswith(k + "/") for k in map(os.path.normpath, made))
+            or any(produced.produces(c.argv, w) for c in earlier)):
         return []
-    return [f"`{w}` is not a file of this tree and no stage lists it in files"]
+    return [f"CHECKPATH: `{w}` is not a file of this tree that can be executed and no earlier step produces it"]
 
 
-def dry_check(plan: Plan, probe: TreeProbe) -> list[str]:
+def _before(plan: Plan, check: Adhoc, cfg: EngineConfig | None) -> tuple[list[str], list[Adhoc]]:
+    """Writers finish a stage's files before its checks; later stages cannot supply an executable for this one."""
+    files: list[str] = []
+    earlier: list[Adhoc] = []
+    registered = {k.id: Adhoc(argv=tuple(k.argv), reads=()) for k in cfg.stage_checks} if cfg else {}
+    earlier.extend(registered[r] for r in check.reads if r in registered)
+    for stage in plan.get("stages") or []:
+        files.extend(stage["files"])
+        for c in stage["checks"]:
+            if c == check:
+                return files, earlier
+            if isinstance(c, Adhoc):
+                earlier.append(c)
+            elif isinstance(c, Ref) and c.check in registered:
+                earlier.append(registered[c.check])
+    return files, earlier
+
+
+def dry_check(plan: Plan, probe: TreeProbe, cfg: EngineConfig | None = None) -> list[str]:
     """[error]: the plan's checks that cannot run: a shell string in disguise, a program that does not resolve, a file the check
     reads that is neither in the tree nor a file some stage names."""
     errs: list[str] = []
@@ -128,7 +146,8 @@ def dry_check(plan: Plan, probe: TreeProbe) -> list[str]:
         if argv_problems(argv):
             errs += [f"`{c}`: {w}" for w in argv_problems(argv)]
             continue
-        errs += [f"`{c}`: {w}" for w in command_problems(argv, probe, made)]
+        files, earlier = _before(plan, a, cfg)
+        errs += [f"`{c}`: {w}" for w in command_problems(argv, probe, files, earlier)]
         iso = sh.isolated_module(argv)
         if iso and probe.is_dir(iso.split(".")[0]):
             errs.append(f"`{c}`: python -I removes the working directory from the import path, so `{iso}` cannot be imported; drop -I, "
