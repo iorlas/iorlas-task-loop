@@ -106,4 +106,5 @@ reader, and how delegate connects (worker-run, one table in SKILL.md).
 - Never touch a transcript or another tool's state: the dashboard reads, `tl.py` writes only `~/.config/task-loop` and bd.
 - Release only through `uv run --script dev/release.py "message" [--bead ID --reason R] [--from-branch B]`: it takes the
   release lock, works in its own persistent clone (`<config>/release/`; the main checkout is never touched), bumps `.claude-plugin/plugin.json` from origin/main and the iorlas-marketplace entry, runs the suite,
-  pushes and installs. Never bump a version by hand.
+  pushes and installs. Never bump a version by hand. A new `.task-loop.json` key ships one release after the code that reads it: the installed
+  pre-push judge reads the profile at the pushed tip and refuses a key it does not know (`unknown field`).

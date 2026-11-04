@@ -215,6 +215,15 @@ class Release(Case):
         assert self.version(self.origin)["version"] == "0.1.0"
         assert self.world.claude_log == []
 
+    def test_a_push_the_origin_refuses_prints_the_refusal_and_moves_nothing(self):
+        hook = self.origin / "hooks" / "pre-receive"
+        hook.write_text("#!/bin/sh\necho 'tl pre-push: refused: refs/heads/main is not green for suite' >&2\nexit 1\n")
+        hook.chmod(0o755)
+        r = self.release("fix")
+        assert r.returncode != 0
+        assert "refused: refs/heads/main is not green for suite" in r.stderr
+        assert self.version(self.origin)["version"] == "0.1.0"
+
     def test_a_red_gate_aborts_before_the_suite_with_the_output_tail_and_a_green_one_runs_just_check(self):
         self.write(self.seed / "justfile", "check:\n    true\n")
         self.commit(self.seed, "gate")
