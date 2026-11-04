@@ -104,9 +104,9 @@ def answered_asks(run: RunTrace) -> set[str]:
 def who_answered(comments: Sequence[Comment], n: int) -> list[str]:
     """For the bead's last n asks: 'supervisor', 'owner' or 'open', from the first person's comment after each."""
     out = []
-    asks = [i for i, c in enumerate(comments) if c.text.startswith("Ask (engine) ")]
+    asks = [i for i, c in enumerate(comments) if intake.engine_written(c) and c.text.startswith("Ask (engine) ")]
     for i in asks[-n:] if n else []:
-        reply = next((c for c in comments[i + 1:] if not intake.engine_written(c.text)), None)
+        reply = next((c for c in comments[i + 1:] if not intake.engine_written(c)), None)
         out.append("open" if reply is None else "supervisor" if matchers.supervised(reply.text) else "owner")
     return out + ["unknown"] * (n - len(out))
 

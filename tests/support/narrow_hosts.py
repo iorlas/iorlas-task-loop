@@ -27,6 +27,7 @@ from taskloop.app.run.budget import Budget
 from taskloop.app.run.closer import CloseParts, Closer
 from taskloop.app.run.steps import Steps
 from taskloop.contracts import fence
+from taskloop.contracts.bead import Bead
 from taskloop.contracts.checkpoint import Checkpoint, EndRec, Notes
 from taskloop.contracts.checks import Check, CheckRun
 from taskloop.contracts.config import EngineConfig
@@ -518,6 +519,9 @@ class FakeLandHost:
         last_run: CheckRun | None = None,
         dry: bool = False,
     ) -> None:
+        self.bead = BeadId("t-1")
+        self.store = FakeBeads()
+        self.store.beads[self.bead] = Bead(id=self.bead, title="t", status="open")
         self.pending_land_validation = ""
         self.task_branch = ""
         self.cfg = cfg
@@ -537,7 +541,7 @@ class FakeLandHost:
     def land_lock_path(self) -> Path:
         return Path("lock")
 
-    def blocked_for(self, why: str, kind: str) -> Exception:
+    def blocked_for(self, why: str, kind: str, *, spec: AskSpec | None = None) -> Exception:
         return stopped(why, kind)
 
     def move_host(self, needs: list[str], why: str) -> Exception:

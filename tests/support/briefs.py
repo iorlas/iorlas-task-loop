@@ -12,15 +12,15 @@ from taskloop.domain.plan import brief as bf
 
 def brief_digest(bead: Bead, comments: Sequence[Comment], owner_only: bool = False, ignore: Sequence[str] = ()) -> str:
     hint = str(bead.metadata.get(intake.HINT) or "")
-    return bf.render(bead, comments, intake.engine_written, hint, owner_only, (*ENGINE_LABELS, *ignore)).text
+    return bf.render(bead, comments, "denis", hint, owner_only, (*ENGINE_LABELS, *ignore)).text
 
 
 def linked_text(bead_id: str, bead: Bead, comments: Sequence[Comment], show: Any, comments_of: Any, cap: int = 10, each: int = 400) -> str:
-    return bf.linked(bead_id, bead, comments, intake.engine_written, show, comments_of, mentioned_ids, cap, each)
+    return bf.linked(bead_id, bead, comments, "denis", show, comments_of, mentioned_ids, cap, each)
 
 
 def bead_snapshot(bead: Bead, comments: Sequence[Comment]) -> BriefSnap:
-    return bf.snapshot(bead, comments, intake.engine_written)
+    return bf.snapshot(bead, comments, "denis")
 
 
 bead_diff = bf.diff

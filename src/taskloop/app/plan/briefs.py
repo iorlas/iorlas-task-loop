@@ -26,9 +26,9 @@ class Briefs:
         """The brief with the oldest comments left out until it fits cfg.brief_kb: the bead's text, the hint, the linked beads and the
         owner's answer (`other` bytes) are never cut. The limit stays; it is not raised."""
         e = self.e
-        base = bf.render(bead, [], intake.engine_written, hint)
+        base = bf.render(bead, [], e.cfg.owner_author, hint)
         room = int(float(e.cfg.brief_kb) * 1024) - len(base.text.encode()) - other
-        return bf.render(bead, comments, intake.engine_written, hint, room=max(room, 0))
+        return bf.render(bead, comments, e.cfg.owner_author, hint, room=max(room, 0))
 
     def export(self) -> None:
         """Write the brief to the run dir and to the copy a resumed writer re-reads; refresh the hash that tells a rerun the owner changed
@@ -37,17 +37,17 @@ class Briefs:
         bead = peek(e.store, e.bead) or Bead(id=e.bead, title="", status="")
         comments = e.store.comments(e.bead)
         hint = str(bead.metadata.get(intake.HINT) or "")
-        linked = bf.linked(e.bead, bead, comments, intake.engine_written,
+        linked = bf.linked(e.bead, bead, comments, e.cfg.owner_author,
                            lambda i: peek(e.store, BeadId(i)), e.store.comments, mentioned_ids)
         said = e.planner.cap.answered_words()  # the owner's typed answer is no comment: the brief carries it for the workers
         answer = f"\n## Owner answer (to ask {e.answered.id})\n{said}\n" if said and e.answered else ""
         brief = self.fit(bead, comments, hint, len(linked.encode()) + len(answer.encode())).plus("linked", linked).plus("answer", answer)
-        e.snap = bf.snapshot(bead, comments, intake.engine_written)
+        e.snap = bf.snapshot(bead, comments, e.cfg.owner_author)
         (e.run_dir / "brief.md").write_text(brief.text, encoding="utf-8")
         e.brief_file.write_text(brief.text, encoding="utf-8")  # a resumed writer is told where to re-read it (tl-bxk.10.29)
         # the hash is what tells a rerun the owner changed something: the engine's own close line and labels are not that
         ours = [x for x in (e.cfg.pick_label, e.cfg.needs_info_label) if x]
-        plain = bf.render(bead, comments, intake.engine_written, hint, owner_only=True, engine_labels=(*ENGINE_LABELS, *ours))
+        plain = bf.render(bead, comments, e.cfg.owner_author, hint, owner_only=True, engine_labels=(*ENGINE_LABELS, *ours))
         e.brief_hash = hashlib.sha1(plain.text.encode("utf-8")).hexdigest()
         self.parts = brief.sizes()
         if brief.dropped:

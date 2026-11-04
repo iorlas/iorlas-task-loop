@@ -27,6 +27,7 @@ class Request(unittest.TestCase):
         ):
             with self.subTest(node=node, pinned=pinned, recipes=recipes):
                 host = mock.Mock(session="s", bead="t-1")
+                host.git.diff_entries.return_value = []
                 host.cfg.writer_family = pinned
                 host.budget.labels = []
                 host.checker.split.return_value.engine_recipes.return_value = recipes

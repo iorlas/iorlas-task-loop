@@ -4,9 +4,11 @@ import json
 from typing import TYPE_CHECKING
 
 from taskloop.adapters import delegate as dg
+from taskloop.app.asks import trustroots
 from taskloop.app.run.blocked import refuse_over_cap
 from taskloop.contracts import log as rec
 from taskloop.contracts.delegate import RunRequest
+from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.checks import planref
 from taskloop.domain.lanes import pin
 from taskloop.domain.prompts.write import ENGINE_ONLY_ADVISORY
@@ -18,6 +20,10 @@ if TYPE_CHECKING:
 
 def request(e: Engine, c: Call, live: str, timeout_s: int, idle_s: int) -> RunRequest:
     """Only a pinned write may ask delegate to treat the engine-only guard as advisory."""
+    if c.role == "reviewer":
+        why = trustroots.refusal(e.git, e.wt, e.cfg.base, e.store.show(e.bead))
+        if why:
+            raise e.blocked_for(why, "ASK_DECISION", spec=askspecs.open_question(why, None, "decision"))
     only_family = pin.for_role(c.role, pin.families(e.cfg.writer_family, e.budget.labels))
     recipes = e.checker.split().engine_recipes(planref.stage_commands(e.plan_data, e.cfg)) if c.node == "write" else []
     return RunRequest(

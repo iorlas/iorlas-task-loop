@@ -16,7 +16,9 @@ from taskloop.app.land.push import PushHost
 from taskloop.app.land.recheck import RecheckCheckpoints, RecheckHost
 from taskloop.app.land.sync import SyncCheckpoints, SyncHost
 from taskloop.contracts.checks import CheckRun
-from taskloop.contracts.ports import Git
+from taskloop.contracts.ids import BeadId
+from taskloop.contracts.ports import Beads, Git
+from taskloop.domain.asks.spec import AskSpec
 from taskloop.stores.bundle import Stores
 from taskloop.stores.runlog import RunLog
 
@@ -36,6 +38,10 @@ class LandHost(Protocol):
     pending_land_validation: str  # set while the land's retry checks still need accepted checks and review
     task_branch: str
 
+    @property
+    def bead(self) -> BeadId: ...
+    @property
+    def store(self) -> Beads: ...
     @property
     def cfg(self) -> LandConfig: ...
     @property
@@ -63,7 +69,7 @@ class LandHost(Protocol):
     @property
     def wt(self) -> str: ...
     def land_lock_path(self) -> Path: ...
-    def blocked_for(self, why: str, kind: str) -> Exception: ...
+    def blocked_for(self, why: str, kind: str, *, spec: AskSpec | None = ...) -> Exception: ...
     def move_host(self, needs: list[str], why: str) -> Exception: ...
 
 

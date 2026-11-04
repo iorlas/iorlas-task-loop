@@ -11,6 +11,7 @@ from typing import Final
 from taskloop.app.asks import looks, stick, sweeps
 from taskloop.contracts.adrs import AdrStore
 from taskloop.contracts.ask import Ask, AskAction, AskAnswer, ThreadEntry
+from taskloop.contracts.bead import Comment
 from taskloop.contracts.dash import OwnerCause, Stick
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ports import BdFailure, BeadPatch, Beads
@@ -31,11 +32,6 @@ ASK_WHY: Final = {"gone": "This ask no longer exists.", "withdrawn": "The engine
                   "superseded": "The engine asked again for this bead; the new ask replaces this one.",
                   "consumed": "A run already used the answer."}
 RECEIPT: Final = "Owner (tl) "
-# What the engine writes into a bead (comments, and lines of Notes). It is never the owner's: not in the brief, not in the brief hash,
-# not in the snapshot an amend diffs against, not in an answer. A receipt is ours too.
-ENGINE_PREFIXES: Final = ("Plan (engine", "Review (engine", "Reflect (engine", "Blocked:", "Ask (engine", "Evidence (engine",
-                          "Parked (engine", "Lane (engine", "Verify (engine", "Resume (engine", "Look (engine", "Land (engine",
-                          "Follow-up (engine", "Engine paused:", "Engine failed:", RECEIPT)
 
 
 def parse_until(text: str, now: float) -> float:
@@ -52,13 +48,14 @@ def held(meta: Mapping[str, str], now: float) -> str:
 
 @dataclass(frozen=True)
 class Parsed:
-    kind: str  # answer, hint, hold, override, decision (a receipt of that verb), engine (the engine's own), note (everything else)
+    kind: str  # answer, hint, hold, override, decision (a receipt of that verb), note (everything else)
     fields: dict[str, str] = field(default_factory=dict)
     body: str = ""
 
 
-def engine_written(text: str) -> bool:
-    return (text or "").lstrip().startswith(ENGINE_PREFIXES)
+def engine_written(comment: Comment) -> bool:
+    """The bd actor convention identifies engine comments, irrespective of their prose."""
+    return comment.author.startswith("tl-")
 
 
 def receipt(verb: str, body: str = "", **fields: str) -> str:
@@ -67,8 +64,7 @@ def receipt(verb: str, body: str = "", **fields: str) -> str:
 
 
 def parse(comment: str) -> Parsed:
-    """(kind, fields, body) of a comment. Only a receipt of ours has a verb; the engine's comments are `engine`; anything else, whatever it
-    says and however it is worded, is a `note`. Nothing is ever done because of how a note reads."""
+    """Label receipt text for display only; this grants no authority. Anything else is a note."""
     text = (comment or "").strip()
     if text.startswith(RECEIPT):
         head, _sep, body = text[len(RECEIPT):].partition(": ")
@@ -76,7 +72,7 @@ def parse(comment: str) -> Parsed:
         verb = words[0] if words else ""
         if verb in VERBS:
             return Parsed(verb, dict(w.split("=", 1) for w in words[1:] if "=" in w), body.strip())
-    return Parsed("engine" if engine_written(text) else "note", {}, text)
+    return Parsed("note", {}, text)
 
 
 class Intake:

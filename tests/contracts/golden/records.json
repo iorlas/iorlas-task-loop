@@ -1497,6 +1497,7 @@
    "land_optimistic_tries": 2,
    "base": "origin/main",
    "check_links": true,
+   "owner_author": "",
    "check_scratch_home": true,
    "pick_label": "auto",
    "needs_info_label": "needs-info",

@@ -44,7 +44,6 @@ from taskloop.adapters import (
 from taskloop.adapters import delegate as dl
 from taskloop.adapters import delegate as lroute  # noqa: F401
 from taskloop.adapters import halt as halting
-from taskloop.app.asks import intake
 from taskloop.app.release import seams
 from taskloop.app.run import (
     engine,
@@ -420,7 +419,7 @@ class EngineTest(unittest.TestCase):
         script = fake_route.Script(answers, j_extra)
         c = wslots.load_cfg(str(self.wt), port_git())
         fresh = cfg.pop("fresh", False)
-        c = cfg_with(c, **{"reflect": False, **cfg, **(raw or {})})  # the reflection is one more call; its own tests switch it on
+        c = cfg_with(c, **{"reflect": False, "owner_author": "denis", **cfg, **(raw or {})})
         with delegate_stack(script, route):
             self.eng = engine.Engine(
                 BeadId(bead), str(self.wt), c, store=self.store, fresh=fresh, env=snapshot(), spawner=real_spawner(),
@@ -532,7 +531,7 @@ class EngineTest(unittest.TestCase):
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_text(json.dumps(ask))
         with self.store.stub(show=dict(BEAD, **bead), comments=list(comments)):
-            ok, why = entry.admit("t-1", str(self.wt), port_git(), who(), store=self.store)
+            ok, why = entry.admit("t-1", str(self.wt), port_git(), who(), store=self.store, owner_author="denis")
         updates = [c for c in self.bd_calls if c[:1] == ("update",)]
         return ok, why, updates
 
@@ -643,7 +642,7 @@ class EngineTest(unittest.TestCase):
             ("tl-x", ln)
             for ln in re.findall(r"(?m)^(?:Blocked:|Reflect \(engine\)).*$", (BRIEFS / (name + ".md")).read_text(encoding="utf-8"))
         ]
-        return [{"author": a, "text": t} for a, t in comments + last if intake.engine_written(t)] + [
+        return [{"author": a, "text": t} for a, t in comments + last if a.startswith("tl-")] + [
             {"author": "tl-x", "text": "Engine paused: paused: no lane for write until 10:00 (no_lane: Hold the task)"}], notes
 
 

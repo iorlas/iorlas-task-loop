@@ -24,7 +24,7 @@ GOLDEN = Path(__file__).resolve().parents[1] / "fixtures" / "brief_golden"
 def render(name: str) -> bf.Brief:
     bead, comments, owner_only = beads(name)
     hint = str(bead.metadata.get(intake.HINT) or "")
-    return bf.render(bead, comments, intake.engine_written, hint, owner_only, (*ENGINE_LABELS, "tl-pick"))
+    return bf.render(bead, comments, "denis", hint, owner_only, (*ENGINE_LABELS, "tl-pick"))
 
 
 class Golden(unittest.TestCase):
@@ -85,7 +85,8 @@ class Diff(unittest.TestCase):
 
 class FitsTheLimit(unittest.TestCase):
     def brief(self, bead: Bead, comments: list[Comment], kb: float = 5) -> bf.Brief:
-        host = SimpleNamespace(cfg=SimpleNamespace(brief_kb=kb))
+        owner = "a" if comments and comments[0].author == "a" else "denis"
+        host = SimpleNamespace(cfg=SimpleNamespace(brief_kb=kb, owner_author=owner))
         return Briefs(host).fit(bead, comments, "", 0)
 
     def test_a_brief_that_grows_over_five_reruns_stays_under_the_limit_oldest_comments_first(self):
@@ -123,7 +124,8 @@ class FitsTheLimit(unittest.TestCase):
             store = SimpleNamespace(comments=lambda i: [Comment(author="a", text="one"), Comment(author="a", text="two")],
                                     show=lambda i: bead)
             host = SimpleNamespace(
-                cfg=SimpleNamespace(brief_kb=5, pick_label="", needs_info_label=""), store=store, bead="t-1", run_dir=Path(d),
+                cfg=SimpleNamespace(brief_kb=5, pick_label="", needs_info_label="", owner_author="a"),
+                store=store, bead="t-1", run_dir=Path(d),
                 brief_file=Path(d) / "b.md", answered=None, warn=warns.append, log=SimpleNamespace(note=notes.append),
                 planner=SimpleNamespace(cap=SimpleNamespace(answered_words=lambda: "")))
             with mock.patch.object(mod, "peek", lambda store, bead_id: bead):

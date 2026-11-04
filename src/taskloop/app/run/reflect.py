@@ -4,6 +4,7 @@ from typing import Any
 
 from taskloop.adapters import childenv
 from taskloop.adapters import delegate as dg
+from taskloop.app.asks import trustroots
 from taskloop.contracts import answers
 from taskloop.contracts import log as rec
 from taskloop.contracts.delegate import RunRequest
@@ -34,6 +35,10 @@ class Reflector:
         if not self.worth_asking(why):
             return None
         try:
+            refusal = trustroots.refusal(e.git, str(e.wt), e.cfg.base, e.store.show(e.bead))
+            if refusal:
+                e.warn("no reflection: " + refusal)
+                return None
             prompt = self.reflect_prompt(outcome, why)
             over = caps.check("reviewer", prompt)
             if over is not None:  # never blocks the close: an over-cap reflection is no reflection

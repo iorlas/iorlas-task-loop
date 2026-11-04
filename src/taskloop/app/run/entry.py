@@ -41,9 +41,9 @@ from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdFailure, BeadPatch, Beads, Git, Spawner
 from taskloop.contracts.run import Reexec, RunReport
 from taskloop.contracts.stores import AskStore
+from taskloop.domain.plan.brief import owner_written
 
 say = console.say
-engine_written = intake.engine_written  # what the engine (or a receipt of ours) wrote into a bead is never the owner's (tl-7y6.6.2)
 TL_PY = Path(__file__).resolve().parents[4] / "skills" / "task-loop" / "tl.py"
 
 
@@ -73,17 +73,17 @@ def _foreign_claim(b: Any, repo: Any, git: Git, who: Identity, store: Any, fresh
     return f"another run of {bead_id} is still running as {holder} (a live claim)" + (f"; its engine log: {logs[-1]}" if logs else "")
 
 
-def _blocked_by_engine(b: Any, store: Any, home: ConfigDir) -> str:
+def _blocked_by_engine(b: Any, store: Any, home: ConfigDir, owner_author: str) -> str:
     """Why a bead the engine blocked stays blocked ("" when a plain retry may reopen it)."""
     bead_id = b.id
     held = [d.id for d in b.dependencies if d.type == "blocks" and d.status != "closed"]
     if held:
         return "blocked by {}".format(", ".join(held))
     cs = store.comments(bead_id)
-    blocks = [c for c in cs if c.text.startswith("Blocked:")]
+    blocks = [c for c in cs if intake.engine_written(c) and c.text.startswith("Blocked:")]
     if not blocks:
         return "blocked by a person, not by the engine"
-    after = [c for c in cs if c.created_at > blocks[-1].created_at and not engine_written(c.text)]
+    after = [c for c in cs if c.created_at > blocks[-1].created_at and owner_written(c, owner_author)]
     ask = AskStore.at(home).get(bead_id)
     asking = ask is not None and ask.consumed is None and ask.status in (AskStatus.OPEN, AskStatus.PARKED, AskStatus.ANSWERED)
     if ask is not None and asking and ask.answer is not None:  # tl-gy4: an answer filed on the ask (dashboard, tl ask answer) is an answer
@@ -95,7 +95,8 @@ def _blocked_by_engine(b: Any, store: Any, home: ConfigDir) -> str:
     return ""
 
 
-def admit(bead_id: Any, repo: Any, git: Git, who: Identity, store: Any = None, at: Any = None, fresh: bool = False) -> Any:
+def admit(bead_id: Any, repo: Any, git: Git, who: Identity, store: Any = None, at: Any = None, fresh: bool = False,
+          owner_author: str = "") -> Any:
     """(ok, why): whether run-task may take the bead, never taking what a person holds. A bead the engine blocked is reopened for a
     plain retry, or when a comment after the block answers the open ask; it stays blocked when a person commented after the block with
     no ask open (they may have parked it), while an ask waits unanswered, or while another bead blocks it. A claim by another actor
@@ -113,7 +114,7 @@ def admit(bead_id: Any, repo: Any, git: Git, who: Identity, store: Any = None, a
     takeover = bool(fresh and holder and holder != me)  # _foreign_claim let it through: no engine runs the bead
     if b.status != "blocked" and not takeover:
         return True, ""
-    why = _blocked_by_engine(b, store, who.config) if b.status == "blocked" else ""
+    why = _blocked_by_engine(b, store, who.config, owner_author) if b.status == "blocked" else ""
     if why:
         return False, why
     # tl-kwo: only if the claim is still the one just read (bd applies --if-assignee atomically): two loops looking at one freed bead
@@ -381,7 +382,7 @@ def run_bead(a: Any, repo: Any, cfg: Any, wt: Any, store: Any = None, *, env: En
         if why := parked(a.id, bool(getattr(a, "fresh", False)), repo, who, store):
             print(f"TAKEN: {why}")
             return RunReport(outcome=Result.TAKEN, bead=a.id, why=why)
-        ok, why = admit(a.id, repo, git, who, store, fresh=bool(getattr(a, "fresh", False)))
+        ok, why = admit(a.id, repo, git, who, store, fresh=bool(getattr(a, "fresh", False)), owner_author=cfg.owner_author)
         if not ok:
             print(f"TAKEN: {why}")
             return RunReport(outcome=Result.TAKEN, bead=a.id, why=why)

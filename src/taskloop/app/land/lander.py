@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
+from taskloop.app.asks import trustroots
 from taskloop.app.land import verified
 from taskloop.app.land.commit import Commit
 from taskloop.app.land.fix_outside import FixOutside
@@ -21,6 +22,7 @@ from taskloop.app.land.state import Land, Next, Phase, Placing
 from taskloop.app.land.sync import Sync
 from taskloop.contracts import log as rec
 from taskloop.contracts.bead import Bead
+from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.lanes import policy as lp
 
 
@@ -94,6 +96,9 @@ class Lander:
     def finish(self, bead: Bead) -> str:
         """The task's one commit, then the land. -> the landed sha, or "" (nothing changed, or a dry run)."""
         e = self.e
+        why = trustroots.refusal(e.git, e.wt, e.cfg.base, e.store.show(e.bead))
+        if why:
+            raise e.blocked_for(why, "ASK_DECISION", spec=askspecs.open_question(why, None, "decision"))
         if e.pending_land_validation:
             raise e.blocked_for("land retry validation still needs accepted checks and review; branch kept", "FAULT_LAND")
         skipped = verified.refuse(verified.latest(e.last_run, lambda: e.stores.check_run(e.run_dir.name, None).get()), e)

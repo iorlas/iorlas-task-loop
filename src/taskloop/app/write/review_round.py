@@ -4,6 +4,7 @@ the writer, until the rounds are used up."""
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from taskloop.app.asks import trustroots
 from taskloop.app.checks.evidence import compact
 from taskloop.app.write import review_skip
 from taskloop.app.write.state import ACCEPT, AGAIN, REPLAN, StageState
@@ -29,6 +30,9 @@ class ReviewRound:
     def run(self, s: StageState) -> str:
         """-> ACCEPT, AGAIN (sent back) or REPLAN."""
         e = self.e
+        why = trustroots.refusal(e.git, str(e.wt), e.cfg.base, e.store.show(e.bead))
+        if why:
+            raise e.blocked_for(why, "ASK_DECISION", spec=askspecs.open_question(why, None, "decision"))
         if self.switched_off(s) or self.skipped(s):
             return ACCEPT
         e.stats["reviews"] += 1

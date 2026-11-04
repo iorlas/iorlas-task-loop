@@ -56,10 +56,15 @@ def people_lines(text: str | None) -> str:
     return "\n".join(x for x in lines if not x.lstrip().startswith(("Engine paused:", "Engine failed:"))).strip()
 
 
-def render(bead: Bead, comments: Sequence[Comment], is_engine: Callable[[str], bool], hint: str = "", owner_only: bool = False,
+def owner_written(comment: Comment, owner: str) -> bool:
+    """Only bd's exact configured author is the owner; prose and missing authors grant no authority."""
+    return bool(owner) and comment.author == owner
+
+
+def render(bead: Bead, comments: Sequence[Comment], owner: str, hint: str = "", owner_only: bool = False,
            engine_labels: Sequence[str] = (), room: int | None = None) -> Brief:
-    """Markdown brief: title, the bead's text fields whole, related beads by title, people's comments whole, and the bead's labels.
-    Nothing the engine wrote (comments, Notes lines) is in it (tl-7y6.6.2). owner_only also leaves out `engine_labels`: the checkpoint
+    """Markdown brief: title, the bead's text fields whole, related beads by title, owner's comments whole, and the bead's labels.
+    Only the configured bd author supplies comment instructions. owner_only also leaves out `engine_labels`: the checkpoint
     compares that text, so an engine run never looks like the owner's edit. `room` is the bytes the comments may take: the oldest go
     first, the newest stays whole, and a line names how many were left out."""
     parts: list[tuple[str, str]] = [("title", f"# {bead.id}: {bead.title}")]
@@ -76,7 +81,7 @@ def render(bead: Bead, comments: Sequence[Comment], is_engine: Callable[[str], b
         parts += [("related", f"- {d.id} {d.title} [{d.status or '?'}]") for d in bead.dependencies]
     if hint.strip():
         parts += [("hint", ""), ("hint", "## Owner hint"), ("hint", hint.strip())]
-    people = [c for c in comments if not is_engine(c.text)]
+    people = [c for c in comments if owner_written(c, owner)]
     lines = [f"- {c.author or '?'}: {c.text.strip()}" for c in people]
     dropped = fit(lines, room)
     if people:
@@ -114,12 +119,12 @@ def boundaries(parts: Sequence[tuple[str, str]]) -> tuple[Section, ...]:
     return tuple(out)
 
 
-def snapshot(bead: Bead, comments: Sequence[Comment], is_engine: Callable[[str], bool]) -> BriefSnap:
-    """What a later amend diffs against: the bead's text fields, issue type, dependencies (id:type) and the people's comments, as the
+def snapshot(bead: Bead, comments: Sequence[Comment], owner: str) -> BriefSnap:
+    """What a later amend diffs against: the bead's text fields, issue type, dependencies (id:type) and the owner's comments, as the
     planner saw them."""
     deps = sorted(f"{d.id}:{d.type}" for d in bead.dependencies if d.id)
     return BriefSnap(fields={k: (people_lines if k == "notes" else str.strip)(getattr(bead, k)) for k in FIELDS},
-                     issue_type=bead.issue_type.strip(), deps=deps, comments=[c.text.strip() for c in comments if not is_engine(c.text)])
+                     issue_type=bead.issue_type.strip(), deps=deps, comments=[c.text.strip() for c in comments if owner_written(c, owner)])
 
 
 def field_diff(a: str, b: str) -> str:
@@ -154,13 +159,13 @@ def diff(old: BriefSnap, new: BriefSnap, answer: str = "", comments: bool = True
     return "\n".join(out)
 
 
-def linked(bead_id: str, bead: Bead, comments: Sequence[Comment], is_engine: Callable[[str], bool], show: Callable[[str], Bead | None],
+def linked(bead_id: str, bead: Bead, comments: Sequence[Comment], owner: str, show: Callable[[str], Bead | None],
            comments_of: Callable[[str], Sequence[Comment]], mentioned_ids: Callable[[str, str], list[str]],
            cap: int = 10, each: int = 400) -> str:
-    """The decisions that live in other beads: the dependencies and the parent first, then the ids the task text and the people's
-    comments name (not the engine's own comments); title, status, close reason, the last comment; each at most `each` chars, at most
+    """The decisions that live in other beads: the dependencies and the parent first, then ids the task text and the owner's
+    comments name; title, status, close reason, the last owner comment; each at most `each` chars, at most
     `cap` beads. tl-bxk.10.10"""
-    text = " ".join(str(getattr(bead, k)) for k in FIELDS) + " " + " ".join(c.text for c in comments if not is_engine(c.text))
+    text = " ".join(str(getattr(bead, k)) for k in FIELDS) + " " + " ".join(c.text for c in comments if owner_written(c, owner))
     deps = {d.id: d for d in bead.dependencies if d.id}
     named = mentioned_ids(bead_id, text)
     ids = [i for i in dict.fromkeys([*deps, bead.parent, *named]) if i and i != bead_id][:cap]
@@ -171,8 +176,7 @@ def linked(bead_id: str, bead: Bead, comments: Sequence[Comment], is_engine: Cal
             d = show(i) or d
         if d is None:
             continue
-        # no field tells an owner from another author: a comment is anyone's but the engine's
-        notes = [c for c in comments_of(i) if not is_engine(c.text)]
+        notes = [c for c in comments_of(i) if owner_written(c, owner)]
         line = f"- {i} [{d.status or '?'}] " + " ".join(d.title.split())
         if d.close_reason.strip():
             line += "\n  closed: " + " ".join(d.close_reason.split())

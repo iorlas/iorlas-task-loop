@@ -668,7 +668,7 @@ class EngineLand1Test(EngineTest):
         self.assertEqual(ck["pending_land_validation"], seen["failure"])
         red_plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[FALSE])]) if role != "reviewer" else PLAN
         red_review = review(findings=[finding("high")]) if role == "reviewer" else CLEAN
-        with self.store.stub(comments=[{"author": "owner", "text": "Recover validation."}]):
+        with self.store.stub(comments=[{"author": "denis", "text": "Recover validation."}]):
             rc, script = self.run_engine({"plan": [red_plan], "write": [WRITE], "review": [red_review]},
                                          gate=gate, max_rounds=1, max_check_tries=1, max_replans=1)
         self.assertEqual(rc, 2, self.blocked)
@@ -684,7 +684,7 @@ class EngineLand1Test(EngineTest):
         self.assertEqual(self.lands, [])
 
     def recover_green(self, recovery, closed_before, gate):
-        with self.store.stub(comments=[{"author": "owner", "text": "Recover with passing checks and review."}]):
+        with self.store.stub(comments=[{"author": "denis", "text": "Recover with passing checks and review."}]):
             rc, script = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]},
                                          gate=gate, max_rounds=1, max_check_tries=1, max_replans=2)
         self.assertEqual(rc, 0, self.blocked)

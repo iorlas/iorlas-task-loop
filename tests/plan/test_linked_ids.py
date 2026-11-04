@@ -18,7 +18,7 @@ class LinkedIds(unittest.TestCase):
         records = {i: Bead(id=i, title=i, status="open") for i in (parent, named_id)}
         mentions = mock.Mock(return_value=[named_id])
         show = mock.Mock(side_effect=records.get)
-        text = linked(task_id, bead, [], lambda _: False, show, lambda _: [], mentions)
+        text = linked(task_id, bead, [], "Denis Tomilin", show, lambda _: [], mentions)
         mentions.assert_called_once()
         self.assertEqual(mentions.call_args.args[0], task_id)
         self.assertIn("Use the decision", mentions.call_args.args[1])

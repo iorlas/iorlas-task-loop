@@ -445,11 +445,11 @@ class EnginePlanTest(EngineTest):
         self.assertEqual(rc, 2)
         self.file_answer("rerun", "Allow one more run. The amends were supervisor comments, not requirement changes")
 
-    def test_tl_9un_12_supervisor_comments_after_a_cap_answer_never_ask_at_the_replan_cap(self):
+    def test_tl_9un_12_owner_comments_after_a_cap_answer_never_ask_at_the_replan_cap(self):
         self.cap_answered_rerun()
         before = len(self.blocked)
         for n in range(3):  # more comment-only amends than the cap allows
-            with self.stop_at("reviewer", 1), self.store.stub(comments=[{"author": "supervisor", "text": f"Keep it small {n}."}]):
+            with self.stop_at("reviewer", 1), self.store.stub(comments=[{"author": "denis", "text": f"Keep it small {n}."}]):
                 self.run_engine({"plan": [PLAN], "write": [WRITE]}, max_rounds=1, max_replans=1)
             self.assertNotIn("re-planned", " ".join(self.blocked[before:]))
         amends = [e for e in self.eng.plan_log if "comments only" in e.why]

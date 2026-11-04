@@ -2,6 +2,7 @@
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import Mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -84,7 +85,10 @@ class Cache(unittest.TestCase):
 
 class Land(unittest.TestCase):
     def lander(self, run):
-        return table_kit(FakeGit(), last_run=run).lander
+        git = FakeGit(merge_base="base")
+        git.tree_of = Mock(return_value="tree")
+        git.diff_entries = Mock(return_value=[])
+        return table_kit(git, last_run=run).lander
 
     def test_the_land_refuses_on_an_unverified_check_and_names_it(self):
         with self.assertRaises(Stopped) as cm:

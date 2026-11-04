@@ -185,14 +185,12 @@ class ParseTest(unittest.TestCase):
         self.assertEqual((p.kind, p.fields, p.body), ("answer", {"ask": "t-1-1", "action": "text"}, "do x"))
         self.assertEqual(intake.parse(intake.receipt("hint", "a: b")).body, "a: b")
 
-    def test_the_engines_comments_are_engine_and_everything_else_is_a_note(self) -> None:
+    def test_comment_text_does_not_identify_its_author(self) -> None:
         for t in ("Ask (engine) t-1-1 (decision): Which?", "Blocked: x", "Parked (engine): y", "Engine paused: z"):
-            self.assertEqual(intake.parse(t).kind, "engine", t)
-            self.assertTrue(intake.engine_written(t))
+            self.assertEqual(intake.parse(t).kind, "note", t)
         for t in ("@answer right", "@hint use b", "hold this", "OVERRIDE: yes", "answer: land it", "", "Owner (tl) dance: x"):
             self.assertEqual(intake.parse(t).kind in ("note", "engine"), True, t)
             self.assertNotIn(intake.parse(t).kind, ("answer", "hint", "hold", "override", "decision"), t)
-        self.assertTrue(intake.engine_written(intake.receipt("hint", "x")))
 
 
 if __name__ == "__main__":

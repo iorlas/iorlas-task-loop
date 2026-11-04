@@ -1,0 +1,56 @@
+"""Protected changes stop before review or land, including changes hidden by renames."""
+import unittest
+from unittest.mock import Mock
+
+from taskloop.app.asks import trustroots
+from taskloop.contracts.bead import Bead
+from taskloop.contracts.gitfacts import DiffEntry
+from taskloop.contracts.ids import BeadId
+
+
+class TrustRoots(unittest.TestCase):
+    def setUp(self):
+        self.bead = Bead(id=BeadId("t-1"), title="Change", status="open")
+        self.git = Mock()
+        self.git.merge_base.return_value = "fork"
+        self.git.tree_of.return_value = "candidate"
+        self.git.diff_entries.return_value = []
+
+    def refusal(self):
+        return trustroots.refusal(self.git, "/work", "origin/main", self.bead)
+
+    def test_all_protected_paths_require_owner_approval(self):
+        for path in ("AGENTS.md", "CLAUDE.md", ".claude/settings.json", ".claude/hooks/a",
+                     "mise.toml", ".codex/config.toml", ".task-loop.json", "githooks/pre-push"):
+            for status in ("A", "M", "D", "T"):
+                with self.subTest(path=path, status=status):
+                    self.git.diff_entries.return_value = [DiffEntry(status=status, path=path)]
+                    self.assertIn(path, self.refusal())
+                    self.assertIn("owner-approved", self.refusal())
+
+    def test_rename_into_or_out_of_a_protected_path_is_refused(self):
+        for old, path in (("AGENTS.md", "ordinary.md"), ("ordinary.md", ".codex/rules")):
+            self.git.diff_entries.return_value = [DiffEntry(status="R", old=old, path=path)]
+            self.assertTrue(self.refusal())
+
+    def test_unrelated_paths_are_allowed_and_the_whole_candidate_uses_the_merge_base(self):
+        self.git.diff_entries.return_value = [DiffEntry(status="M", path="src/a.py"),
+                                               DiffEntry(status="A", path="githooks-example/a")]
+        self.assertEqual(self.refusal(), "")
+        self.git.merge_base.assert_called_with("/work", "origin/main", "HEAD")
+        self.git.tree_of.assert_called_with("/work")
+        self.git.diff_entries.assert_called_with("/work", "fork", "candidate", required=True)
+
+    def test_only_the_exact_owner_label_authorizes_the_change(self):
+        self.git.diff_entries.return_value = [DiffEntry(status="M", path="CLAUDE.md")]
+        self.bead.labels[:] = ["owner-approved-ish"]
+        self.assertTrue(self.refusal())
+        self.bead.labels[:] = ["owner-approved"]
+        self.assertEqual(self.refusal(), "")
+
+    def test_unreadable_diff_or_missing_bead_never_authorizes_review(self):
+        self.git.diff_entries.side_effect = ValueError("unreadable diff")
+        with self.assertRaisesRegex(ValueError, "unreadable diff"):
+            self.refusal()
+        self.assertTrue(trustroots.refusal(self.git, "/work", "origin/main", None))
+

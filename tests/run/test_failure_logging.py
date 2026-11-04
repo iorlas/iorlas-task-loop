@@ -51,6 +51,7 @@ class FailureLogging(unittest.TestCase):
 
     def test_reflection_catch_all_logs_traceback(self):
         host = mock.Mock()
+        host.git.diff_entries.return_value = []
         reflector = Reflector(host)
         with mock.patch.object(reflector, "worth_asking", return_value=True), \
                 mock.patch.object(reflector, "reflect_prompt", side_effect=RuntimeError("prompt")):

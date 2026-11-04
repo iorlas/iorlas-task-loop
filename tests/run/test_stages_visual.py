@@ -599,7 +599,7 @@ class Claims(StagesTest):
             "lease_expires_at": "2999-01-01T00:00:00Z",
             "dependencies": [],
         }
-        comments = [{"text": "Blocked: stuck: re-planned 3 times", "created_at": "1", "author": "engine"}]
+        comments = [{"text": "Blocked: stuck: re-planned 3 times", "created_at": "1", "author": "tl-engine"}]
         with self.store.stub(show=parked), \
                 self.store.stub(comments=comments), mock.patch.object(wrunning, "running", return_value={}):
             ok, why = entry.admit("t-1", str(self.wt), port_git(), who(), store=self.store)
