@@ -7,6 +7,7 @@ from collections.abc import Callable
 from contextlib import AbstractContextManager
 from typing import Protocol
 
+from taskloop.contracts.checks import PassRecord
 from taskloop.contracts.enums import LockWhat
 from taskloop.contracts.locks import LockRecord, Ticket
 from taskloop.contracts.stores import Page, Read
@@ -28,6 +29,12 @@ class DocSet[T](Protocol):
 
     def of(self, key: str) -> Doc[T]: ...
     def keys(self) -> list[str]: ...
+
+
+class Passes(DocSet[PassRecord], Protocol):
+    """Pass receipts with atomic retention of the newest timestamps."""
+
+    def keep_newest(self, n: int) -> None: ...
 
 
 class Log[T](Protocol):

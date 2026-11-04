@@ -10,6 +10,7 @@ from taskloop.contracts import attemptrows, factorydb, wire
 from taskloop.contracts.guard import guard
 from taskloop.contracts.ids import loop_key
 from taskloop.contracts.paths import ConfigDir, RunFiles
+from taskloop.contracts.receiptrows import import_legacy_receipts
 from taskloop.contracts.run import DoneMemo, RunManifest
 from taskloop.contracts.stores import JsonStore
 
@@ -152,14 +153,15 @@ def _import_step_file(con: factorydb.sqlite3.Connection, path: Path, m: RunManif
 
 
 def import_once(cfg: ConfigDir) -> None:
-    """One directory listing per config root per process, independent of locator count."""
+    """One legacy import pass per config root per process, independent of locator count."""
     key = (os.getpid(), str(cfg.root.resolve()))
     if key in _IMPORTED:
         return
-    if not cfg.runs_dir().exists():
+    if not cfg.runs_dir().exists() and not (cfg.root / "results").exists():
         _IMPORTED.add(key)
         return
     with guard(cfg.lock_record("run-import", "legacy")):
         if key not in _IMPORTED:
+            import_legacy_receipts(cfg)
             import_legacy(cfg)
             _IMPORTED.add(key)

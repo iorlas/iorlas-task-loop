@@ -207,7 +207,7 @@ class CheckRun(Rec):
 
 @final
 class PassRecord(Rec):
-    """results/<repo>/<check>/<key digest>.json: one remembered pass or planned skip and the key it holds for. `tree` and `base` are the
+    """factory.db check_pass: one remembered pass or planned skip and the key it holds for. `tree` and `base` are the
     tree and base it was last true for (a key without them is true for any). run_id, host, ts: who made it; `origin`: the run that
     first made the result when this record is a reuse on a newer tree or base. log_abs: the saved output (may be gone: it expires)."""
 
@@ -226,7 +226,7 @@ class PassRecord(Rec):
 
 @final
 class BaseRedRecord(Rec):
-    """results/<repo>/base-red/<key digest>.json: whether a check was red on the untouched base (`key.base`)."""
+    """factory.db check_pass kind base_red: whether a check was red on the untouched base (`key.base`)."""
 
     V: ClassVar[int] = 1
     key: RunKey

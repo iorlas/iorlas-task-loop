@@ -1,6 +1,8 @@
 """Authorization and reuse require the complete execution identity."""
+import tempfile
 import unittest
 from argparse import Namespace
+from pathlib import Path
 from unittest import mock
 
 from support import procsim
@@ -9,14 +11,14 @@ from support.spawn import port_git
 
 from taskloop.adapters import check_files
 from taskloop.app.checks.attempts import Attempts, Outcome
-from taskloop.app.checks.cache import InputKeys, RunMemo
+from taskloop.app.checks.cache import KEEP, InputKeys, RunMemo
 from taskloop.app.checks.execution import EnvironmentUnavailable, ReadyExecution, image_identity, resolve_container
 from taskloop.app.checks.gateplan import PlanDecision
 from taskloop.app.checks.runner import cached_gate
 from taskloop.app.land.cmds import Cmds
 from taskloop.app.land.stackgate import StackGate
 from taskloop.cli.green import cmd_green
-from taskloop.contracts import wire
+from taskloop.contracts import factorydb, wire
 from taskloop.contracts.checks import Check, CheckResult, PassRecord
 from taskloop.contracts.config import ContainerConfig, load
 from taskloop.contracts.env import Env
@@ -27,6 +29,7 @@ from taskloop.contracts.ports import Git, Ran
 from taskloop.contracts.runkey import BaseSha, Digest
 from taskloop.domain.checks.specs import diff_check, gate_items
 from taskloop.stores.memory import fake_stores
+from taskloop.stores.real import real_stores
 from taskloop.stores.runlog import RunLog
 
 
@@ -105,6 +108,50 @@ class Identity(unittest.TestCase):
                             self.memo.key(self.check.replace(cmd="echo 'a  b'")))
 
 
+class DatabaseIdentity(Identity):
+    """The CHECKIDENT corpus must give the same answers through the production DB store."""
+
+    def setUp(self):
+        super().setUp()
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.addCleanup(factorydb.close_shared)
+        self.cfg = ConfigDir(Path(tmp.name))
+        self.memo.stores = real_stores(self.cfg)
+
+    def test_remember_hit_latest_and_base_red_survive_a_new_store_bundle(self):
+        key = self.memo.key(self.check)
+        assert key is not None
+        result = CheckResult(id=self.check.id, cmd=self.check.cmd, group="tests", exit=0, status="passed")
+        self.memo.remember(key, result, 4, "/logs/check")
+        self.memo.set_base_red(self.check, True)
+        self.memo.stores = real_stores(self.cfg)
+        self.memo.receipts.clear()
+        hit = self.memo.hit(key)
+        assert hit is not None
+        self.assertEqual(hit.result, result)
+        self.assertEqual(self.memo.latest(self.check), hit)
+        self.assertEqual(self.memo.result(self.check), result)
+        self.assertTrue(self.memo.base_was_red(self.check))
+        self.assertFalse((self.cfg.root / "results").exists())
+        self.assertIsNone(self.memo.hit(key.replace(execution=Digest("different"))))
+
+    def test_remember_prunes_to_the_newest_eight_receipts(self):
+        keys = []
+        for i in range(KEEP + 3):
+            self.memo.keys.tree = TreeSha(f"tree-{i}")
+            key = self.memo.key(self.check)
+            assert key is not None
+            keys.append(key)
+            result = CheckResult(id=self.check.id, cmd=self.check.cmd, group="tests", exit=0, status="passed")
+            with mock.patch("taskloop.app.checks.cache.time.time", return_value=float(i)):
+                self.memo.remember(key, result, i, "")
+        self.assertEqual(len(self.memo.stores.results("repo", self.check.id).keys()), KEEP)
+        self.assertIsNone(self.memo.hit(keys[0]))
+        self.assertIsNotNone(self.memo.hit(keys[-1]))
+        self.assertEqual(self.memo.latest(self.check), self.memo.hit(keys[-1]))
+
+
 class Resolution(unittest.TestCase):
     def test_image_inspection_resolves_an_immutable_identity(self):
         spawner = mock.Mock()
@@ -129,13 +176,16 @@ class Resolution(unittest.TestCase):
 
 
 class DeliveryIdentity(unittest.TestCase):
+    def stores(self):
+        return fake_stores()
+
     def test_gate_stack_and_green_agree_on_changed_requirements(self):
         git = mock.create_autospec(Git, instance=True)
         git.config_get.return_value = "repo"
         git.ls_tree.return_value = []
         git.rev_parse.return_value = "base"
         git.merge_base.return_value = "base"
-        tree, base, stores = TreeSha("tree"), BaseSha("base"), fake_stores()
+        tree, base, stores = TreeSha("tree"), BaseSha("base"), self.stores()
         cfg = load({"engine": {"checks": [{"id": "test", "argv": ["true"], "run": "gate"}]}}).engine
         keys = InputKeys(git, "/repo", tree)
         memo = RunMemo(stores, check_files.repo_key(git, "/repo"), keys, base, {"TL_SLOT": "check"})
@@ -159,6 +209,16 @@ class DeliveryIdentity(unittest.TestCase):
                                  expected)
         git.ls_tree.return_value = [TreeEntry(mode="100644", kind="blob", oid="changed", path="mise.toml")]
         self.assertEqual(stack.red(cfg, tree, base), [CheckId("test")])
+
+
+class DatabaseDeliveryIdentity(DeliveryIdentity):
+    """Authorization, stack gate and green queries keep their full-key checks over SQL receipts."""
+
+    def stores(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.addCleanup(factorydb.close_shared)
+        return real_stores(ConfigDir(Path(tmp.name)))
 
 
 class UnavailableContainer(EngineTest):

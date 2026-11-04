@@ -1,7 +1,7 @@
 """RunMemo: the repo's one result store, written by every runner (a stage's round, the land gate, a standalone `tl check`). A pass is a
 fact about a RunKey (the check and its command and settings, the tree or its `inputs` (and the base unless `inputs_only`), the
 selected tests, the toolchain and the env it ran in) and is kept with who made it (run, host, time) and where its output is. Each key
-is a file of its own, written whole: runners writing at once never lose each other's pass. A failure can come from outside git
+is a DB row of its own, written whole: runners writing at once never lose each other's pass. A failure can come from outside git
 (stale build output, a held editor, a flake) and always reruns. A check that may not be cached (`cache: false`, a plan's own command)
 has no pass key. The land gate asks the same store as the round: there is no second copy of the decision. A planned `when` skip is
 recorded only after a clean round, for its exact tree and base; it is never reused as a pass."""
@@ -9,7 +9,6 @@ import hashlib
 import json
 import os
 import platform
-import threading
 import time
 from collections.abc import Mapping
 from pathlib import Path
@@ -68,7 +67,7 @@ KEEP = 8  # passes kept per check: the newest by time (a whole-tree check leaves
 
 
 def key_digest(key: RunKey) -> str:
-    """The name of a key's file: sha1 of the key's fields."""
+    """The receipt digest: sha1 of the key's fields."""
     fields = wire.dump(key)
     if not key.plan:
         del fields["plan"]  # preserve existing pass keys
@@ -104,7 +103,6 @@ class RunMemo:
         self.stores, self.repo, self.keys, self.base, self.engine_env = stores, repo, keys, base, engine_env
         self.run_id, self.host = run_id, platform.node()
         self.system = f"{platform.system()}-{platform.machine()}"
-        self.lock = threading.Lock()  # lanes remember at the same time
         self.ran: dict[RunKey, tuple[CheckResult, float]] = {}  # this block's runs by command -> result, wall limit
         self.executions: dict[CheckId, Digest] = {}
         self.slot_keys: InputKeys | None = None
@@ -235,12 +233,7 @@ class RunMemo:
         self.receipts[rec.key.check] = rec
         docs = self.stores.results(self.repo, rec.key.check)
         docs.of(key_digest(rec.key)).write(rec)
-        with self.lock:
-            names = docs.keys()
-            if len(names) > KEEP:
-                have = [(r.ts, n) for n in names if (r := docs.of(n).get()) is not None]
-                for _, n in sorted(have, reverse=True)[KEEP:]:
-                    docs.of(n).delete()
+        docs.keep_newest(KEEP)
 
     def base_was_red(self, c: Check) -> bool | None:
         """True or False when the command has run on this base (by any runner of the repo); None when it has not."""

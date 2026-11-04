@@ -79,6 +79,13 @@ class MemDocSet[T](DocSet[T]):
     def keys(self) -> list[str]:
         return sorted(k for k, d in self.docs.items() if d.data is not None)
 
+    def keep_newest(self, n: int) -> None:
+        if n < 0:
+            raise ValueError("keep_newest requires a nonnegative count")
+        have = [(rec.ts, key) for key in self.keys() if isinstance(rec := self.of(key).get(), PassRecord)]
+        for _, key in sorted(have, reverse=True)[n:]:
+            self.of(key).delete()
+
 
 class MemJsonl(RotatingJsonl):
     """The Jsonl file API over a bytearray, parsed by the same code."""

@@ -146,12 +146,11 @@ class ConfigDir:
         return self.root / "artifacts" / str(bead)
 
     def result(self, repo_key: str, check: str, digest: str) -> Path:
-        """The result store: one file per key, in the folder of the repo and the check (the folder is the check id's sha1, so any id is
-        a safe name). A later bead moves the repo's folder under repos/<repo-key>/."""
+        """Legacy importer only: receipt rollback copy under the hashed check ID; current receipts live in factory.db."""
         return self.root / "results" / repo_key / hashlib.sha1(check.encode("utf-8", "surrogateescape")).hexdigest()[:12] / f"{digest}.json"
 
     def base_red(self, repo_key: str, digest: str) -> Path:
-        """Whether a check was red on an untouched base: one file per key, beside the passes."""
+        """Legacy importer only: base-red rollback copy; current receipts live in factory.db."""
         return self.root / "results" / repo_key / "base-red" / f"{digest}.json"
 
     def check_durations(self, repo_key: str) -> Path:

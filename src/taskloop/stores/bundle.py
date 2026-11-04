@@ -5,7 +5,7 @@ from collections.abc import Callable
 from any_lease import Leases
 
 from taskloop.contracts.adrs import AdrStore
-from taskloop.contracts.checks import BaseRedRecord, CheckRun, Durations, PassRecord
+from taskloop.contracts.checks import BaseRedRecord, CheckRun, Durations
 from taskloop.contracts.config import HostResources
 from taskloop.contracts.events import Event
 from taskloop.contracts.followups import FollowupOutbox
@@ -14,7 +14,7 @@ from taskloop.contracts.loop import LoopCommand, LoopState, Rest
 from taskloop.contracts.profile_changes import ProfileChange
 from taskloop.contracts.stores import AskStore
 from taskloop.contracts.trace import RunTrace
-from taskloop.stores.api import Doc, DocSet, LockTable, Log, Tickets
+from taskloop.stores.api import Doc, DocSet, LockTable, Log, Passes, Tickets
 from taskloop.stores.books import CheckpointBook
 
 
@@ -31,7 +31,7 @@ class Stores:
     loop_state: Callable[[str], Doc[LoopState]]
     loop_command: Callable[[str], Doc[LoopCommand]]
     loop_rest: Callable[[str], Doc[Rest]]
-    results: Callable[[str, str], DocSet[PassRecord]]  # the passes of a check of a repo (repo key, check id), one per run key
+    results: Callable[[str, str], Passes]  # the passes of a check of a repo (repo key, check id), one per run key
     base_red: Callable[[str], DocSet[BaseRedRecord]]  # whether a check was red on its base, one per run key (repo key)
     durations: DocSet[Durations]  # one per repo
     check_run: Callable[[str, int | None], Doc[CheckRun]]  # a run's round (None: its latest)
