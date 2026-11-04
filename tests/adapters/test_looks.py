@@ -6,6 +6,7 @@ import tempfile
 from pathlib import Path
 
 from support.case import Case
+from support.imagetools import without_image_tools
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -133,8 +134,8 @@ class Judge(Case):
                      "recoloured the picker", "a matter of taste is never a defect", "magenta"):
             assert part in text
 
-    def test_downscale_falls_back_to_a_copy_and_says_so(self):
-        with tempfile.TemporaryDirectory() as d:
+    def test_downscale_falls_back_to_a_copy_and_says_so(self):  # no image tool, so no real process either
+        with tempfile.TemporaryDirectory() as d, without_image_tools():
             src = Path(d, "a.png")
             src.write_bytes(b"not an image")
             why = looks.downscale(src, Path(d, "sub", "b.png"), 100)

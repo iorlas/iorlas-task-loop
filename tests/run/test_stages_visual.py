@@ -23,6 +23,7 @@ from support.fakes import (
     FakeBeadStore,
     must_bead,
 )
+from support.imagetools import without_image_tools
 from support.spawn import port_git, real_spawner
 from support.who import who
 
@@ -72,6 +73,9 @@ class VisualWork(StagesTest):
 
     def setup_method(self):
         super().setup_method()
+        no_tool = without_image_tools()
+        no_tool.start()
+        self.addCleanup(no_tool.stop)
         procsim.fake("shot-tool", self.shot(0), args=True)
         procsim.fake("shot-tool-fails", self.shot(3), args=True)
         base = Path(self.tmp.name, "base-files")

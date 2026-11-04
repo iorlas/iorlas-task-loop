@@ -119,7 +119,7 @@ class StagePreflight(Case):
         assert not self.who.config.root.exists()
 
     def test_live_previous_run_refuses_explicit_and_auto_dry_runs_without_changing_manifest(self):
-        old = self.locator.create(str(self.wt), "t-1", 1)
+        old = self.locator.create(str(self.wt.resolve()), "t-1", 1)
         before = RunRows(self.who.config).snapshot(old.run)
         for stage in ("gate", None):
             self.a.stage = stage
@@ -131,7 +131,7 @@ class StagePreflight(Case):
         self.spawner.run.assert_not_called()
 
     def dirty_previous(self, state):
-        previous = self.locator.create(str(self.wt), "t-1", 1)
+        previous = self.locator.create(str(self.wt.resolve()), "t-1", 1)
         self.locator.advance(previous.run, Step.GATE)
         self.locator.end(previous.run, 2, state)
         self.git.status.return_value = [StatusRow(path="src/main.py", index=" ", work="M"),
@@ -234,7 +234,7 @@ class StagePreflight(Case):
         )
 
     def test_layout_identifies_taken_up_run_as_well_as_new_runs(self):
-        previous = self.locator.create(str(self.wt), "t-1", 1)
+        previous = self.locator.create(str(self.wt.resolve()), "t-1", 1)
         layout = RunLayout.open("t-1", self.wt, previous.run, self.who.config, str(self.wt), 2,
                                 mode="auto-next", owner=self.who.actor, session=self.who.session)
         opened = self.locator.get(layout.run)
