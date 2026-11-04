@@ -38,10 +38,13 @@ class NotARepo(GitUnavailable):
 
 
 class WorktreeRemoveRefused(GitUnavailable):
-    """Removal was refused; ``reason`` is the final nonempty line of git's stderr."""
+    """Removal was refused; ``reason`` is git's first diagnostic (or final nonempty line)."""
 
-    def __init__(self, reason: str) -> None:
-        super().__init__(reason)
+    def __init__(self, reason: str, *, code: int = 128, hint_line: str | None = None) -> None:
+        message = f"git worktree remove exited {code}: {reason}"
+        if hint_line and hint_line != reason:
+            message += " | " + hint_line
+        super().__init__(message)
         self.reason = reason
 
 
@@ -63,7 +66,7 @@ class BranchPinned(GitUnavailable):
 
 _INDEX_LOCK = re.compile(r"index\.lock")
 _REF_STALE = re.compile(r"incorrect old value|is at \S+ but expected \S+")
-_REF_LOCK = re.compile(r"cannot lock ref[^\n]*\.lock|Unable to create '[^']*\.lock'")
+_REF_LOCK = re.compile(r"(?:cannot lock ref[^\n]*\.lock|Unable to create '[^'\n]*\.lock')[^\n]*File exists")
 _REF_RACE = re.compile(r"cannot lock ref|unable to update local ref|Unable to create '[^']*\.lock'")
 _PINNED = re.compile(r"already (?:checked out|used by worktree) at '?([^'\n]*)'?")
 _MISSING_REVISION = re.compile(r"fatal: (?:bad revision '.+'|Not a valid object name .+)")

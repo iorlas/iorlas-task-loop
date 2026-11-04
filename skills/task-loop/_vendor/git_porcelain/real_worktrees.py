@@ -32,8 +32,10 @@ def drop_worktree(repo: RealRepo, path: Path, *, force: bool, missing_ok: bool) 
                 error = unavailable(args, done)
                 if type(error) is not GitUnavailable:
                     raise error
-                lines = done.err.strip().splitlines()
-                raise WorktreeRemoveRefused(lines[-1] if lines else "git worktree remove failed")
+                lines = [line.strip() for line in done.err.splitlines() if line.strip()]
+                last = lines[-1] if lines else "git worktree remove failed"
+                reason = next((line for line in lines if line.startswith(("fatal:", "error:"))), last)
+                raise WorktreeRemoveRefused(reason, code=done.rc, hint_line=last)
         if missing_ok:
             repo.run(repo.path, "worktree", "prune")
     finally:
