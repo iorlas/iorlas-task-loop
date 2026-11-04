@@ -15,7 +15,7 @@ from contextlib import contextmanager, suppress
 from dataclasses import dataclass
 from pathlib import Path
 
-from taskloop.contracts import wire
+from taskloop.contracts import factorymigrate, wire
 from taskloop.contracts.factoryconnections import SharedConnections
 from taskloop.contracts.guard import guard
 from taskloop.contracts.run import RunManifest
@@ -99,8 +99,8 @@ OWNERS: dict[str, str] = {
 }
 REVISIONED_TABLES = frozenset({"run", "ask", "bead"})
 # Successful writable checks are cached per resolved file identity, per process.
-# Dashboard read-only opens skip quick_check; creation and version mismatches
-# always check. Replacing the file invalidates the cache; in-place damage after
+# Dashboard read-only opens skip quick_check; creation always checks.
+# Replacing the file invalidates the cache; in-place damage after
 # a successful check is left to SQLite's normal read/write error handling.
 _CHECKED: set[tuple[int, Path, int, int]] = set()
 _FILESYSTEMS: dict[str, bool] = {}
@@ -208,8 +208,15 @@ def _schema_ready(con: sqlite3.Connection, version: int, *, readonly: bool) -> b
                 con.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
                 version = SCHEMA_VERSION
                 created = True
-    if version != SCHEMA_VERSION:
-        con.execute("PRAGMA quick_check").fetchall()
+    if version > SCHEMA_VERSION:
+        raise factorymigrate.SchemaError(
+            f"factory.db is schema v{version}, this task-loop knows v{SCHEMA_VERSION}: update task-loop")
+    if version < SCHEMA_VERSION and readonly:
+        raise factorymigrate.SchemaError(
+            f"factory.db is schema v{version}, this task-loop knows v{SCHEMA_VERSION}: the engine has not upgraded it yet")
+    if 2 <= version < SCHEMA_VERSION:
+        factorymigrate.upgrade(con, factorymigrate.STEPS, version, SCHEMA_VERSION)
+    elif version != SCHEMA_VERSION:
         raise sqlite3.DatabaseError("unsupported schema version")
     return created
 
@@ -238,6 +245,8 @@ def _open(path: str | os.PathLike[str], *, readonly: bool, shared: bool = False)
             con = sqlite3.connect(address, isolation_level=None, timeout=5.0, check_same_thread=not shared)
             version = con.execute("PRAGMA user_version").fetchone()[0]
         con.execute("PRAGMA busy_timeout=5000")
+        if version > SCHEMA_VERSION or (readonly and version < SCHEMA_VERSION):
+            _schema_ready(con, version, readonly=readonly)
         if _journal_mode(con, readonly=readonly) != "wal":
             raise sqlite3.DatabaseError("WAL unavailable")
         con.execute("PRAGMA synchronous=NORMAL")
@@ -245,10 +254,12 @@ def _open(path: str | os.PathLike[str], *, readonly: bool, shared: bool = False)
         created = _schema_ready(con, version, readonly=readonly)
         _check_integrity(con, resolved, created=created, readonly=readonly)
         return con
-    except (sqlite3.Error, OSError, ValueError, RuntimeError):
+    except (sqlite3.Error, OSError, ValueError, RuntimeError) as error:
         if con is not None:
             with suppress(sqlite3.Error):
                 con.close()
+        if isinstance(error, factorymigrate.SchemaError):
+            raise
         return None
 
 
@@ -276,7 +287,7 @@ def _retire_v1(path: Path) -> None:
 
 
 def open_rw(path: str | os.PathLike[str]) -> sqlite3.Connection | None:
-    """Open or initialize a WAL database; return None on incompatible storage."""
+    """Open or initialize WAL; schema errors raise, unavailable storage returns None."""
     return _open(path, readonly=False)
 
 
@@ -302,13 +313,8 @@ atexit.register(close_shared)
 def begin_immediate(con: sqlite3.Connection) -> Generator[None]:
     """Reserve the writer, committing on success and rolling back on failure."""
     try:
-        con.execute("BEGIN IMMEDIATE")
-        try:
+        with factorymigrate.begin_immediate(con):
             yield
-            con.commit()
-        except BaseException:
-            con.rollback()
-            raise
     except sqlite3.DatabaseError:
         _SHARED.discard(con)
         raise
@@ -398,11 +404,22 @@ def _run_health(con: sqlite3.Connection, now: float) -> str:
     return f"database unavailable: run source unreadable: {source[0]}" if source else ""
 
 
+def _readable(path: Path) -> tuple[sqlite3.Connection | None, str]:
+    """The read-only connection, or why there is none; a schema this task-loop cannot read is named, never shown as an empty factory."""
+    try:
+        con = open_ro(path)
+    except factorymigrate.SchemaError as error:
+        return None, f"database unavailable: {error}"
+    if con is None:
+        return None, "database unavailable: " + ("missing" if not path.exists() else "unopenable, corrupt, or incompatible schema")
+    return con, ""
+
+
 def database_error(path: Path, now: float) -> str:
     """Freshness check used even when a snapshot is cached; no run-file IO."""
-    con = open_ro(path)
+    con, error = _readable(path)
     if con is None:
-        return "database unavailable: " + ("missing" if not path.exists() else "unopenable, corrupt, or incompatible schema")
+        return error
     try:
         return _run_health(con, now)
     except sqlite3.Error:
@@ -426,9 +443,9 @@ def run_rows(path: Path, now: float, *, repo: str | None = None, bead: str | Non
 
     Manifests belong to the engine; the indexer owns only log facts.
     """
-    con = open_ro(path)
+    con, error = _readable(path)
     if con is None:
-        return [], "database unavailable: " + ("missing" if not path.exists() else "unopenable, corrupt, or incompatible schema")
+        return [], error
     try:
         con.execute("BEGIN")
         if error := _run_health(con, now):

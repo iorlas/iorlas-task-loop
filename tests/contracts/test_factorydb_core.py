@@ -149,8 +149,10 @@ class FactoryDbTest(unittest.TestCase):
     def test_wrong_version_is_rejected_without_replacing_it(self):
         con = self.rw()
         con.execute("PRAGMA user_version=99")
-        self.assertIsNone(factorydb.open_rw(self.path))
-        self.assertIsNone(factorydb.open_ro(self.path))
+        with self.assertRaisesRegex(factorydb.DatabaseError, "schema v99.*knows v2.*update task-loop"):
+            factorydb.open_rw(self.path)
+        with self.assertRaisesRegex(factorydb.DatabaseError, "schema v99.*knows v2.*update task-loop"):
+            factorydb.open_ro(self.path)
         self.assertEqual(con.execute("PRAGMA user_version").fetchone(), (99,))
 
     def test_unversioned_nonempty_database_is_not_initialized(self):
@@ -170,7 +172,8 @@ class FactoryDbTest(unittest.TestCase):
         con = sqlite3.connect(self.path)
         self.addCleanup(con.close)
         con.execute("PRAGMA user_version=1")
-        self.assertIsNone(factorydb.open_ro(self.path))
+        with self.assertRaisesRegex(factorydb.DatabaseError, "engine has not upgraded it yet"):
+            factorydb.open_ro(self.path)
 
     def test_missing_read_only_database_stays_missing(self):
         self.assertIsNone(factorydb.open_ro(self.path))
@@ -427,7 +430,7 @@ class FactoryDbTest(unittest.TestCase):
             self.assertEqual(con.execute(f'SELECT count(*) FROM "{table}"').fetchone(), (1,))
         self.assertFalse(con.in_transaction)
 
-    def test_quick_check_creation_once_per_writable_process_and_version_mismatch(self):
+    def test_quick_check_once_per_writable_process_and_skips_version_mismatch(self):
         checks = []
 
         class CountingConnection(sqlite3.Connection):
@@ -453,9 +456,11 @@ class FactoryDbTest(unittest.TestCase):
             self.rw()
             self.assertEqual(len(checks), 2)
             con.execute("PRAGMA user_version=99")
-            self.assertIsNone(factorydb.open_rw(self.path))
-            self.assertIsNone(factorydb.open_ro(self.path))
-            self.assertEqual(len(checks), 4)
+            with self.assertRaises(factorydb.DatabaseError):
+                factorydb.open_rw(self.path)
+            with self.assertRaises(factorydb.DatabaseError):
+                factorydb.open_ro(self.path)
+            self.assertEqual(len(checks), 2)
 
 
 if __name__ == "__main__":
