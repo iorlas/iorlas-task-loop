@@ -34,6 +34,9 @@ tree hash to equal `HEAD^{tree}`. Stage checks still run in the slot. Unknown `r
 Mixed gates preserve plan order, dependencies, resource leases, and skip-after-red behavior. Receipts identify the execution
 location; a clean receipt cannot substitute for a slot receipt. Slot input keys include ignored files matching `inputs`.
 
+`inputs` must list every file the check reads, directly or through the scripts it runs (helpers, imports, config, pin files). A missed file
+is a stale green: a cache hit lands untested code. There is no sampling audit; fix the glob when a bug traces to a missed input (SKILL.md, Check inputs).
+
 An ask whose reason contains `is not set up` receives an engine-authored `retry` answer when its failing gate check now
 declares `run_in: slot`, or when that bead's engine starts. This happens at most once per bead per release version, recorded
 in bead metadata as `setup_retry_versions`. The answer reopens the bead and restores a pick label only if parking removed it.
