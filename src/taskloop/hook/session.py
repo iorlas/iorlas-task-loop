@@ -15,16 +15,18 @@ def context_out(text: str) -> str:
 
 
 def start(stdin_text: str, plugin_root: Path, env: Env, git: Git) -> str:
-    """Never fails the session. After a compaction (source "compact") the stdout carries the handoff as added context."""
-    index.session_start(stdin_text, env)
-    index.write_shim(plugin_root, env)
-    index.write_hooks(plugin_root, env)
+    """Introduce task-loop in profile repos; after compaction append the handoff. Never fail the session."""
     try:
+        index.session_start(stdin_text, env)
+        index.write_shim(plugin_root, env)
+        index.write_hooks(plugin_root, env)
         data = json.loads(stdin_text or "{}")
+        repo = index.repo_of(git, data)
+        parts = [index.self_description(repo)]
         if data.get("source") == "compact":
-            repo = index.repo_of(git, data)
-            return context_out(handoff.read(repo, env) if repo else "")
-    except (ValueError, AttributeError, OSError):
+            parts.append(handoff.read(repo, env) if repo else "")
+        return context_out("\n\n".join(part for part in parts if part))
+    except Exception:
         pass
     return ""
 

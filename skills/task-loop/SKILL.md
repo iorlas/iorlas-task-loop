@@ -16,10 +16,6 @@ constraint; time is: run independent work in parallel, and when a check is slow,
 
 Read this skill and the profile in full at the start and again after every context compaction.
 
-`tl` below means `uv run --script ${CLAUDE_SKILL_DIR}/tl.py` (macOS and Linux; `~/.config/task-loop/bin/tl` is the same command, kept by the
-SessionStart hook). It names the session for bd, records what the loop does for the dashboard, and runs slots. Python 3.15+ and uv; the
-script's header declares its one dependency (msgspec), which uv installs once and caches.
-
 ## The loop profile
 
 `docs/agents/task-loop.md` in the repo (or the file the repo's AGENTS.md names) is for you and for people; the engine
@@ -322,13 +318,6 @@ A repo's `just check` is then one line, `tl check` (`~/.config/task-loop/bin/tl`
 
 No `slots` (or `count` 0): slots are off. No profile: say so in one line, use
 `bd ready --exclude-type epic --exclude-label slot`, the gate the repo's AGENTS.md names, and land on main by push.
-
-## Identity
-
-Sessions share one database, and bd lets the same actor claim a bead twice silently, so every bd call names the
-session: `tl task <command>` (actor `tl-<first 8 of $CLAUDE_CODE_SESSION_ID>`; `tl actor` prints it). The lifecycle
-calls below (`tl claim`, `tl close`, ...) do this themselves and also record the event for the dashboard and in the
-bead's provenance.
 
 ## 0. Start (once)
 

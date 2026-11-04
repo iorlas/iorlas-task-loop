@@ -11,6 +11,12 @@ from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import Git
 from taskloop.contracts.snapshots import SessionIndex
 from taskloop.contracts.stores import SessionStore
+from taskloop.domain import selfdescribe
+
+
+def self_description(repo: str) -> str:
+    """A cheap profile presence check; sessions need no profile parsing or tracker calls."""
+    return selfdescribe.text() if repo and (Path(repo) / ".task-loop.json").is_file() else ""
 
 
 def session_start(stdin_text: str, env: Env) -> None:

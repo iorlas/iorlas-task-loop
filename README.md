@@ -5,6 +5,8 @@ backlog: several sessions at once, each in its own worktree or slot, claim a rea
 workers, verify, land on main and close it, then take the next. A live dashboard shows every task, the session
 working on it, its workers and their logs.
 
+The SessionStart hook injects task-loop's self-description into sessions in repos with `.task-loop.json`.
+
 ## Install (any machine)
 
 ```sh
