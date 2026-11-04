@@ -220,7 +220,7 @@ class CheckExecutor:
         try:
             with self.resources.hold(c, st.cancel) as lease:
                 t0 = time.time()  # the wait for a lease is not the check's time
-                out = self.attempts.run(c, self.logs / name, {**st.env, **self.checklog.env}, st.cancel)
+                out = self.attempts.run(c, self.logs / name, {**st.env, **self.checklog.env, **lease.env}, st.cancel)
                 took = round(time.time() - t0)
         except LeaseCancelled:
             return CheckResult.cancelled_by(c, st.cancel.red if st.cancel else "", at=round(t0 - self.began, 1))

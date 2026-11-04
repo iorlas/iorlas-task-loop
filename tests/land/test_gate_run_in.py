@@ -13,7 +13,6 @@ from taskloop.app.checks.host import CheckFault
 from taskloop.app.checks.runner import cached_gate
 from taskloop.app.land.gate import Gate, GatePass, Problem
 from taskloop.contracts.checks import CheckFaultKind
-from taskloop.contracts.enums import LockWhat
 from taskloop.domain.checks.specs import gate_items
 
 
@@ -34,7 +33,7 @@ class SlotGate(EngineTest):
             seen.append(Path(cwd))
             self.assertEqual(Path(cwd), self.wt)
             self.assertEqual((Path(cwd) / "setup.txt").read_text(), "installed")
-            self.assertIsNotNone(eng.stores.locks.holder(LockWhat.RESOURCE, "unity-0"))
+            self.assertTrue(eng.stores.leases.holders("unity", 1))
             return 0, ""
 
         eng = self.engine([{"id": "unity", "cmd": procsim.fake("slot-setup", check), "run": "gate",
@@ -44,7 +43,7 @@ class SlotGate(EngineTest):
         self.assertTrue(Gate(eng).green())
         self.assertIsInstance(Gate(eng).run(), GatePass)
         self.assertEqual(seen, [self.wt])
-        self.assertIsNone(eng.stores.locks.holder(LockWhat.RESOURCE, "unity-0"))
+        self.assertFalse(eng.stores.leases.holders("unity", 1))
 
     def test_mixed_checks_keep_plan_order_and_each_cwd(self):
         seen = []

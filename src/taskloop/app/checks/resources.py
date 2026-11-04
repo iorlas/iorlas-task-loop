@@ -1,22 +1,25 @@
 """Resources: the scarce tools a check may need (`needs: ["unity"]`, declared in engine.resources with a machine-wide `limit`).
 
-A check holds one lease per resource it needs while it runs. A lease is one of `limit` named locks of the machine's lock table
-(~/.config/task-loop/locks), so the limit holds across slots and loops and a dead holder frees its lease by itself. The wait is
-recorded: in the wait log (WaitWhat.RESOURCE, outside the run's budget) and per check (`CheckResult.waited`, `CheckEnd.waited`).
+A check holds one lease per resource it needs while it runs. A lease is one of `limit` units of the machine's lease table
+(~/.config/task-loop/leases, any_lease), so the limit holds across slots, loops and manual runs (`python3 -m any_lease run
+--root <table> unity N label -- cmd`), and a dead holder frees its unit by itself (a flock). The holder record is the label
+`bead:check` plus its lane; `tl status` and the dashboard read it. The wait is recorded: in the wait log (WaitWhat.RESOURCE, with
+the check, its lane and the holders; outside the run's budget) and per check (`CheckResult.waited`, `CheckEnd.waited`).
+The check's command gets ANY_LEASE_HELD and ANY_LEASE_ROOT, so a manual-run wrapper inside it does not take a second unit.
 
 Which resources this host has is ~/.config/task-loop/host.json (HostResources); a check that needs one the host lacks is not run here
 (`lacking`): the executor defers it."""
 import contextlib
 import threading
-import time
-from collections.abc import Callable, Generator
-from dataclasses import dataclass
+from collections.abc import Generator
+from dataclasses import dataclass, field
 from typing import Protocol
+
+from any_lease import LeaseCancelledError, Waiting
 
 from taskloop.contracts.checks import Check
 from taskloop.contracts.config import EngineConfig
-from taskloop.contracts.enums import LockWhat, WaitWhat
-from taskloop.contracts.locks import LockTimeout
+from taskloop.contracts.enums import WaitWhat
 from taskloop.domain.checks import affinity
 from taskloop.stores.bundle import Stores
 
@@ -24,8 +27,8 @@ POLL_S = 0.5  # how often a waiting check looks for a free lease
 
 
 class ResourceWaits(Protocol):
-    def start(self, what: WaitWhat, holder: str = ..., until: float | None = ...) -> str: ...
-    def add(self, secs: float, what: WaitWhat, wid: str | None = ...) -> None: ...
+    def start(self, what: WaitWhat, holder: str = ..., until: float | None = ..., lane: str = ..., check: str = ...) -> str: ...
+    def add(self, secs: float, what: WaitWhat, wid: str | None = ..., lane: str = ..., check: str = ...) -> None: ...
 
 
 class ResourceHost(Protocol):
@@ -51,11 +54,12 @@ class LeaseCancelled(Exception):
 @dataclass
 class Lease:
     waited: float = 0.0  # seconds spent queuing for the leases of one check
+    env: dict[str, str] = field(default_factory=dict[str, str])  # what the check's command is told of the leases it holds
 
 
 class Resources:
-    def __init__(self, host: ResourceHost, sleep: Callable[[float], None] = time.sleep) -> None:
-        self.host, self.sleep = host, sleep
+    def __init__(self, host: ResourceHost) -> None:
+        self.host = host
         self._have: set[str] | None = None
 
     def have(self) -> set[str]:
@@ -78,30 +82,41 @@ class Resources:
             return
         with contextlib.ExitStack() as stack:
             for name in sorted(c.needs):
-                lease.waited += self._take(stack, name, f"{self.host.bead}:{c.id}", cancel)
+                lease.waited += self._take(stack, c, name, cancel)
+            lease.env = {"ANY_LEASE_HELD": ":".join(sorted(c.needs)), "ANY_LEASE_ROOT": str(self.host.stores.leases.root)}
             yield lease
 
-    def _take(self, stack: contextlib.ExitStack, name: str, who: str, cancel: threading.Event | None) -> float:
-        """Win one of the resource's `limit` leases (waiting for one); -> the seconds waited."""
-        locks, limit = self.host.stores.locks, self.host.cfg.resources[name].limit
-        started, wid = time.time(), None
-        while True:
-            if cancel is not None and cancel.is_set():
-                raise LeaseCancelled(name)
-            for i in range(limit):
-                try:
-                    stack.enter_context(locks.hold(LockWhat.RESOURCE, f"{name}-{i}", who, timeout=0))
-                except LockTimeout:
-                    continue
-                waited = time.time() - started if wid is not None else 0.0
-                if wid is not None:
-                    self.host.waits.add(waited, WaitWhat.RESOURCE, wid)
-                return waited
-            if wid is None:
-                wid = self.host.waits.start(WaitWhat.RESOURCE, name)
-                self.host.warn(f"waiting for the {name} resource ({limit} at a time on this machine)")
-            self.host.halt_point()
-            if cancel is None:
-                self.sleep(POLL_S)
-            else:
-                cancel.wait(POLL_S)
+    def _declare(self, name: str, limit: int) -> None:
+        """The profile's limit is the one declared number; the table keeps it (`<name>.limit`). A changed profile limit replaces the
+        old one while nothing holds the resource; while it is held, the ValueError (naming both numbers) stops the check."""
+        leases = self.host.stores.leases
+        try:
+            leases.declare(name, limit)
+        except ValueError:
+            if leases.holders(name):
+                raise
+            (leases.root / f"{name}.limit").unlink(missing_ok=True)
+            leases.declare(name, limit)
+
+    def _take(self, stack: contextlib.ExitStack, c: Check, name: str, cancel: threading.Event | None) -> float:
+        """Win one of the resource's `limit` units (waiting for one); -> the seconds waited."""
+        host, limit = self.host, self.host.cfg.resources[name].limit
+        wid: list[str] = []
+        self._declare(name, limit)
+
+        def waiting(w: Waiting) -> None:
+            if not wid:
+                who = ", ".join((o.holder.label or "?") if o.holder else "?" for o in w.occupants)
+                wid.append(host.waits.start(WaitWhat.RESOURCE, who, lane=c.lane, check=c.id))
+                host.warn(f"waiting for the {name} resource ({limit} at a time on this machine; held by {who})")
+            host.halt_point()
+
+        try:
+            held = host.stores.leases.acquire(name, limit, cancel=cancel, label=f"{host.bead}:{c.id}", on_wait=waiting, poll=POLL_S,
+                                              meta={"bead": host.bead, "check": c.id, "lane": c.lane})
+        except LeaseCancelledError as e:
+            raise LeaseCancelled(name) from e
+        stack.callback(held.release)
+        if wid:
+            host.waits.add(held.waited, WaitWhat.RESOURCE, wid[0], lane=c.lane, check=c.id)
+        return held.waited

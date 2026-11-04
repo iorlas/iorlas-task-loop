@@ -1,5 +1,7 @@
 """Resource classes (tl-7k8.5): `needs: [unity]` takes a machine-wide lease (at most `limit` at once, the wait recorded per check); a
 host without the resource defers the check, and the land goes on past it only when the diff did not touch what the check reads."""
+import os
+import subprocess
 import sys
 import threading
 import time
@@ -11,16 +13,22 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support.engine_case import CLEAN, PLAN, WRITE, EngineTest
 from support.logs import records
+from support.procsim import real_proc
 
 # isort: split
+from any_lease import Leases
+
 from taskloop.app.checks import resources
 from taskloop.app.checks.resources import Resources
 from taskloop.app.land import verified
 from taskloop.app.plan.planner import Planner
+from taskloop.app.run.waits import Waits
+from taskloop.app.wire.brief import held_resources
 from taskloop.contracts.checks import UNVERIFIED_EXIT, Check, CheckResult, CheckRun
 from taskloop.contracts.config import ConfigError, EngineConfig, HostResources, ResourceSpec, load
-from taskloop.contracts.enums import LockWhat, WaitWhat
+from taskloop.contracts.enums import WaitWhat
 from taskloop.contracts.ids import CheckId
+from taskloop.contracts.paths import ConfigDir
 from taskloop.domain.checks.inputs import touched
 from taskloop.stores.memory import fake_stores
 
@@ -30,14 +38,14 @@ UNITY = {"unity": {"limit": 1}}
 
 class FakeWaits:
     def __init__(self) -> None:
-        self.rows: list[tuple[str, WaitWhat, float | None]] = []
+        self.rows: list[tuple] = []
 
-    def start(self, what, holder="", until=None):
-        self.rows.append(("start", what, None))
+    def start(self, what, holder="", until=None, lane="", check=""):
+        self.rows.append(("start", what, holder, lane, check))
         return "w1"
 
-    def add(self, secs, what, wid=None):
-        self.rows.append(("add", what, secs))
+    def add(self, secs, what, wid=None, lane="", check=""):
+        self.rows.append(("add", what, secs, lane, check))
 
 
 class FakeHost:
@@ -53,19 +61,32 @@ class FakeHost:
     def halt_point(self, when=True, wait=0): ...
 
 
-def unity_check(id="u") -> Check:
-    return Check(id=CheckId(id), cmd=id, needs=["unity"])
+def unity_check(id="u", lane="") -> Check:
+    return Check(id=CheckId(id), cmd=id, needs=["unity"], lane=lane)
+
+
+def python(code: str, *args: str) -> subprocess.Popen:
+    return subprocess.Popen([sys.executable, "-c", code, *args], stdout=subprocess.PIPE, text=True)
+
+
+HOLD = ("import sys, time; from pathlib import Path; from any_lease import Leases\n"
+        "h = Leases(Path(sys.argv[1])).acquire('unity', 1, label='other:proc'); print('held', flush=True); time.sleep(60)")
 
 
 class Lease(unittest.TestCase):
+    def setUp(self) -> None:
+        patcher = mock.patch.object(resources, "POLL_S", 0.02)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def run_checks(self, limit: int, n: int) -> tuple[int, list[float]]:
         """n threads each run a check that needs unity for 0.15 s: -> the most that ran at once, and each one's wait."""
         host = FakeHost(limit)
-        res = Resources(host, sleep=lambda s: time.sleep(0.01))
+        res = Resources(host)
         now, top, lock, waited = [0], [0], threading.Lock(), []
 
         def one(i):
-            with res.hold(unity_check(f"u{i}")) as lease:
+            with res.hold(unity_check(f"u{i}", lane=f"l{i}")) as lease:
                 with lock:
                     now[0] += 1
                     top[0] = max(top[0], now[0])
@@ -91,21 +112,90 @@ class Lease(unittest.TestCase):
 
     def test_the_wait_is_booked_as_a_resource_wait(self):
         self.run_checks(1, 2)
-        kinds = [(k, w) for k, w, _ in self.host.fake_waits.rows]
+        kinds = [(r[0], r[1]) for r in self.host.fake_waits.rows]
         self.assertEqual(kinds, [("start", WaitWhat.RESOURCE), ("add", WaitWhat.RESOURCE)])
-        self.assertGreater(self.host.fake_waits.rows[1][2] or 0, 0.1)
+        self.assertGreater(self.host.fake_waits.rows[1][2], 0.1)
+
+    def test_the_wait_names_the_waiting_check_its_lane_and_the_holder(self):
+        host, first = FakeHost(1), threading.Event()
+        res = Resources(host)
+
+        def holder():
+            with res.hold(unity_check("first", lane="a")):
+                first.set()
+                time.sleep(0.2)
+
+        t = threading.Thread(target=holder)
+        t.start()
+        first.wait(5)
+        with res.hold(unity_check("second", lane="b")):
+            pass
+        t.join()
+        start, add = host.fake_waits.rows
+        self.assertEqual(start[2:], ("t-1:first", "b", "second"))  # holder bead:check, waiting lane and check
+        self.assertEqual((add[3], add[4]), ("b", "second"))
+
+    def test_status_reads_the_holder_bead_and_check_from_the_lease_label(self):
+        host = FakeHost(1)
+        cfg = ConfigDir(host.stores.leases.root.parent / "cfg")
+        with Leases(cfg.leases()).acquire("unity", 1, label="t-9:unity-tests"):
+            self.assertEqual([(r.name, r.bead, r.check) for r in held_resources(cfg)], [("unity", "t-9", "unity-tests")])
+        self.assertEqual(held_resources(cfg), ())
 
     def test_a_check_without_needs_takes_no_lease(self):
         host = FakeHost(1)
         with Resources(host).hold(Check(id=CheckId("x"), cmd="x")) as lease:
-            self.assertEqual(host.stores.locks.holder(LockWhat.RESOURCE, "unity-0"), None)
+            self.assertEqual(list(host.stores.leases.root.glob("*")), [])
         self.assertEqual(lease.waited, 0.0)
 
-    def test_the_lease_is_the_machine_lock_table_and_is_freed_after_the_block(self):
+    def test_the_lease_is_the_machine_table_and_is_freed_after_the_block(self):
+        host = FakeHost(1)
+        with Resources(host).hold(unity_check("u", lane="a")) as lease:
+            (occ,) = host.stores.leases.holders("unity", 1)
+            assert occ.holder is not None
+            self.assertEqual((occ.holder.label, occ.holder.meta["lane"]), ("t-1:u", "a"))
+            self.assertEqual(lease.env, {"ANY_LEASE_HELD": "unity", "ANY_LEASE_ROOT": str(host.stores.leases.root)})
+        self.assertEqual(host.stores.leases.holders("unity", 1), ())
+
+    @real_proc("a SIGKILLed process must give its unit back: the kernel frees the flock")
+    def test_a_killed_holder_releases_its_lease(self):
+        host = FakeHost(1)
+        proc = python(HOLD, str(host.stores.leases.root))
+        self.addCleanup(proc.kill)
+        assert proc.stdout is not None
+        self.assertEqual(proc.stdout.readline().strip(), "held")  # a real process has the only unit
+        self.assertEqual(len(host.stores.leases.holders("unity", 1)), 1)
+        proc.kill()
+        proc.wait(10)
+        with Resources(host).hold(unity_check()) as lease:  # the kernel dropped its flock: no stale lease
+            self.assertLess(lease.waited, 5)
+
+    @real_proc("a real `python -m any_lease run` queues behind the engine on the same table")
+    def test_a_manual_run_and_the_engine_share_one_lease(self):
+        host = FakeHost(1)
+        root = str(host.stores.leases.root)
+        run = [sys.executable, "-m", "any_lease", "run", "--root", root, "--poll", "0.05", "unity", "1", "manual", "--", "true"]
+        with Resources(host).hold(unity_check()) as lease:
+            manual = subprocess.Popen(run, stderr=subprocess.PIPE, text=True)
+            self.addCleanup(manual.kill)
+            time.sleep(1)
+            self.assertIsNone(manual.poll())  # queues behind the engine's lease
+            nested = subprocess.run(run, env={**os.environ, **lease.env}, timeout=10, check=False)  # inside the check's command: just runs
+            self.assertEqual(nested.returncode, 0)
+        self.assertEqual(manual.wait(10), 0)
+        assert manual.stderr is not None
+        self.assertIn("t-1:u", manual.stderr.read())  # it told who it waited for
+
+    def test_a_changed_profile_limit_replaces_the_declared_one_while_idle_and_is_refused_while_held(self):
         host = FakeHost(1)
         with Resources(host).hold(unity_check()):
-            self.assertIsNotNone(host.stores.locks.holder(LockWhat.RESOURCE, "unity-0"))
-        self.assertIsNone(host.stores.locks.holder(LockWhat.RESOURCE, "unity-0"))
+            pass
+        host.cfg = EngineConfig(resources={"unity": ResourceSpec(limit=2)})
+        with Resources(host).hold(unity_check()):
+            self.assertEqual(host.stores.leases.declare("unity"), 2)
+            host.cfg = EngineConfig(resources={"unity": ResourceSpec(limit=3)})
+            with self.assertRaises(ValueError), Resources(host).hold(unity_check("v")):
+                pass
 
 
 class Host(unittest.TestCase):
@@ -173,15 +263,15 @@ class Engine(EngineTest):
 
     def test_the_wait_for_the_lease_is_recorded_on_the_check_result_and_its_end_row(self):
         gate, polled = threading.Event(), threading.Event()  # the holder has the lease; the check polled and found it taken
-        real_init = Resources.__init__
+        real_start = Waits.start
 
-        def init(res, host, sleep=time.sleep):
-            real_init(res, host, sleep)
-            res.sleep = lambda s: (polled.set(), sleep(s))[1]  # the check's first wait is its first poll that lost
+        def start(waits, what, *a, **kw):
+            polled.set()  # the check's first wait is its first poll that lost
+            return real_start(waits, what, *a, **kw)
 
         def hold_it(eng):
             def hold():
-                with eng.stores.locks.hold(LockWhat.RESOURCE, "unity-0", "another slot"):
+                with eng.stores.leases.acquire("unity", 1, label="other:slot"):
                     gate.set()
                     polled.wait(30)  # freed only after the check lost a poll, however slow the engine start is
                     time.sleep(0.25)  # a fixed hold after that: the check waits at least this long
@@ -189,12 +279,14 @@ class Engine(EngineTest):
             threading.Thread(target=hold, daemon=True).start()
             gate.wait(5)
 
-        with mock.patch.object(resources, "POLL_S", 0.02), mock.patch.object(Resources, "__init__", init):
+        with mock.patch.object(resources, "POLL_S", 0.02), mock.patch.object(Waits, "start", start):
             rc, _ = self.run_engine(ANSWERS, prep=hold_it, resources=UNITY, checks=self.checks(["f.txt"]))
         self.assertEqual(rc, 0, self.blocked)
         waits = sorted(r["wait_seconds"] for r in records(self.eng, "check_end"))
         self.assertGreaterEqual(waits[-1], 0.2, waits)  # the unity check queued behind the other slot's lease
         self.assertEqual(waits[:-1], [0.0] * (len(waits) - 1))  # and no other check waited
+        (begin,), (end,) = records(self.eng, "wait_start"), records(self.eng, "wait_end")
+        self.assertEqual((begin["holder"], begin["check"], end["check"]), ("other:slot", "ut", "ut"))
 
     def test_a_host_without_the_resource_lands_when_the_diff_leaves_the_inputs_alone(self):
         rc, _ = self.run_engine(ANSWERS, prep=self.lacking, resources=UNITY, checks=self.checks(["client/**"]))

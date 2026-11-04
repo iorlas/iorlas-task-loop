@@ -194,9 +194,10 @@ class ConfigDir:
     def lock_record(self, what: str, ident: str) -> Path:
         return self.root / "locks" / (f"{what}-{ident}.lock")
 
-    def resource_locks(self) -> list[Path]:
-        """Resource locks with holder hints, including every lease index of each resource."""
-        return [p.with_suffix("") for p in sorted((self.root / "locks").glob("resource-*.lock.holder"))]
+    def leases(self) -> Path:
+        """The lease table (any_lease): `<name>.limit` and `<name>-<n>.lock` for each engine.resources entry, shared with manual
+        runs (`python3 -m any_lease run --root <this> unity N label -- cmd`)."""
+        return self.root / "leases"
 
     def snapshot(self, repo_key: str, name: str) -> Path:
         return self.root / "snapshots" / (f"{repo_key}.{name}.json")

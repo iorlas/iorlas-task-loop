@@ -172,12 +172,16 @@ class WaitStart(LogRec, tag="wait_start"):
     what: WaitWhat
     holder: str = ""
     until: float | None = None
+    lane: str = ""  # a resource wait: the lane of the waiting check and its id
+    check: str = ""
 
 
 @final
 class WaitEnd(LogRec, tag="wait_end"):
     id: str
     in_budget: bool = False
+    lane: str = ""
+    check: str = ""
 
 
 @final

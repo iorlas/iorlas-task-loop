@@ -13,6 +13,7 @@ import time
 from collections.abc import Callable, Generator
 from pathlib import Path
 
+from any_lease import Leases
 from atomic_io import atomic_write_json
 from process_lock import LockHeldError, ProcessLock, held
 
@@ -44,14 +45,15 @@ def read_holder(path: Path, pid: int | None = None) -> LockRecord | None:
 
 
 def resource_holders(cfg: paths.ConfigDir) -> list[tuple[str, LockRecord]]:
-    """Read holder hints only: never acquire, create, release or clean up a lock from a dashboard poll."""
-    out: list[tuple[str, LockRecord]] = []
-    for path in cfg.resource_locks():
-        rec = read_holder(path)
-        if rec is not None and rec.what is LockWhat.RESOURCE and rec.alive():
-            name, _, index = path.stem.removeprefix("resource-").rpartition("-")
-            if name and index.isdigit():
-                out.append((name, rec))
+    """The units of every declared resource that are taken now: read only, nothing is acquired, created or cleaned up. `holder` is
+    the label the holder wrote (`bead:check` for the engine, whatever a manual run named itself)."""
+    table, out = Leases(cfg.leases()), list[tuple[str, LockRecord]]()
+    for limit in sorted(cfg.leases().glob("*.limit")):
+        name = limit.stem
+        for occ in table.holders(name):
+            if occ.holder is not None:
+                out.append((name, LockRecord(what=LockWhat.RESOURCE, holder=occ.holder.label or "?", pid=occ.holder.pid,
+                                             t=occ.holder.created)))
     return out
 
 

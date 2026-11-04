@@ -2,6 +2,8 @@
 import dataclasses
 from collections.abc import Callable
 
+from any_lease import Leases
+
 from taskloop.contracts.adrs import AdrStore
 from taskloop.contracts.checks import BaseRedRecord, CheckRun, Durations, PassRecord
 from taskloop.contracts.config import HostResources
@@ -35,4 +37,5 @@ class Stores:
     check_run: Callable[[str, int | None], Doc[CheckRun]]  # a run's round (None: its latest)
     host: Doc[HostResources]  # this machine's own file (resources it has); a person writes it
     locks: LockTable
+    leases: Leases  # engine.resources: counting leases across processes (any_lease), shared with manual runs
     tickets: Tickets

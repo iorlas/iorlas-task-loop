@@ -1,4 +1,6 @@
 """The file-backed Stores of one process: everything under one ConfigDir."""
+from any_lease import Leases
+
 from taskloop.adapters.locks import ProcessLockTable
 from taskloop.contracts import paths, stores
 from taskloop.contracts.adrs import AdrStore
@@ -27,4 +29,4 @@ def real_stores(cfg: paths.ConfigDir) -> Stores:
         base_red=lambda repo: FileDocSet(lambda digest: cfg.base_red(repo, digest), BaseRedRecord),
         durations=FileDocSet(cfg.check_durations, Durations),
         check_run=lambda run, rnd: JsonStore(cfg.check_run(run, rnd), CheckRun),
-        host=JsonStore(cfg.host(), HostResources), locks=ProcessLockTable(cfg), tickets=FileTickets(cfg))
+        host=JsonStore(cfg.host(), HostResources), locks=ProcessLockTable(cfg), leases=Leases(cfg.leases()), tickets=FileTickets(cfg))

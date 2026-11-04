@@ -2,11 +2,15 @@
 import contextlib
 import json
 import os
+import shutil
+import tempfile
 import threading
 import time
+import weakref
 from collections.abc import Callable
 from pathlib import Path
 
+from any_lease import Leases
 from atomic_io import atomic_write_text
 
 from taskloop.contracts import paths, wire
@@ -96,3 +100,11 @@ class FileTickets:
     @staticmethod
     def _seq(p: Path) -> int:
         return int(p.stem) if p.stem.isdigit() and not p.name.startswith(".") else 0
+
+
+def temp_leases() -> Leases:
+    """A lease table of its own in a temp folder, for fakes (flocks are the real thing: one folder is one table); removed with the table."""
+    root = tempfile.mkdtemp(prefix="tl-leases-")
+    table = Leases(Path(root))
+    weakref.finalize(table, shutil.rmtree, root, True)
+    return table

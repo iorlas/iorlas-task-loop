@@ -16,7 +16,6 @@ from support.logs import records
 # isort: split
 from taskloop.app.run.blocked import Blocked
 from taskloop.contracts.config import ConfigError, load
-from taskloop.contracts.enums import LockWhat
 from taskloop.domain.checks.specs import gate_items
 
 UNITY = {"unity": {"limit": 1}}
@@ -69,7 +68,7 @@ class Lanes(EngineTest):
         running = threading.Event()
 
         def under_lease(cwd, env):
-            held.append(self.eng.stores.locks.holder(LockWhat.RESOURCE, "unity-0"))
+            held.append(self.eng.stores.leases.holders("unity", 1))
             running.set()
             return procsim.blocks()(cwd, env)
 
@@ -77,14 +76,14 @@ class Lanes(EngineTest):
         red = procsim.fake("red", lambda cwd, env: (running.wait(5) and 1, ""))  # red only once the other lane holds its lease
         self.go([spec("slow", slow, "x", needs=["unity"]), spec("red", red, "y")], resources=UNITY)
         self.assertEqual(len(held), 1)
-        self.assertIsNotNone(held[0])  # it did hold the lease while it ran
-        self.assertIsNone(self.eng.stores.locks.holder(LockWhat.RESOURCE, "unity-0"))  # and the cancel gave it back
+        self.assertTrue(held[0])  # it did hold the lease while it ran
+        self.assertFalse(self.eng.stores.leases.holders("unity", 1))  # and the cancel gave it back
 
     def test_a_lane_waiting_for_a_lease_stops_waiting_when_cancelled(self):
         taken, release = threading.Event(), threading.Event()
 
         def hold():
-            with self.eng.stores.locks.hold(LockWhat.RESOURCE, "unity-0", "another slot"):
+            with self.eng.stores.leases.acquire("unity", 1, label="another slot"):
                 taken.set()
                 release.wait(10)
 

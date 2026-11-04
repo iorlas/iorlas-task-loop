@@ -32,6 +32,7 @@ from taskloop.contracts.wire import Refused
 from taskloop.stores.api import Doc, DocSet
 from taskloop.stores.books import CheckpointBook
 from taskloop.stores.bundle import Stores
+from taskloop.stores.files import temp_leases
 
 
 class MemDoc[T](Doc[T]):
@@ -223,4 +224,4 @@ def fake_stores(pid: int | None = None) -> Stores:
         base_red=lambda repo: reds.setdefault(repo, MemDocSet(BaseRedRecord)),
         durations=MemDocSet(Durations),
         check_run=lambda run, rnd: check_runs.setdefault((run, rnd), MemDoc(CheckRun)),
-        host=MemDoc(HostResources), locks=MemLockTable(pid), tickets=MemTickets())
+        host=MemDoc(HostResources), locks=MemLockTable(pid), leases=temp_leases(), tickets=MemTickets())

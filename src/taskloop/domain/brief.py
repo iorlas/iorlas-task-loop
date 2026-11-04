@@ -37,6 +37,16 @@ class AskLine:
 
 
 @dataclass(frozen=True)
+class ResourceLine:
+    """One held unit of an engine.resources lease: who holds it (bead and check, from the holder's label) and since when."""
+
+    name: str
+    bead: str
+    check: str
+    since: float
+
+
+@dataclass(frozen=True)
 class Brief:
     repo: str
     now: float
@@ -45,6 +55,7 @@ class Brief:
     last_exit: str = ""
     asks: tuple[AskLine, ...] = ()
     slots: tuple[str, ...] = ()
+    resources: tuple[ResourceLine, ...] = ()
     recent: tuple[str, ...] = ()
     version: str = ""
     installed: str = ""
@@ -80,6 +91,9 @@ def body(b: Brief) -> list[str]:
     if b.slots:
         out.append("slots:")
         out += [f"  {s}" for s in b.slots]
+    if b.resources:
+        out.append("resources held:")
+        out += [f"  {r.name}: {r.bead} {r.check} held {max(0, int(b.now - r.since))} s" for r in b.resources]
     if b.recent:
         out.append("recent beads:")
         out += [f"  {r}" for r in b.recent]

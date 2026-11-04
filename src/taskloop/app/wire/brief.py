@@ -5,6 +5,7 @@ from pathlib import Path
 
 from taskloop.adapters import pidcheck
 from taskloop.adapters.ident import claude_dir, config_dir
+from taskloop.adapters.locks import resource_holders
 from taskloop.app.doctor import profiles
 from taskloop.app.loop.files import LoopFiles
 from taskloop.app.release import catalog, pins
@@ -18,7 +19,7 @@ from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdFailure, Git
 from taskloop.contracts.slots import SlotView
 from taskloop.contracts.stores import ReposStore
-from taskloop.domain.brief import AskLine, Brief, LoopLine, status_json, status_lines
+from taskloop.domain.brief import AskLine, Brief, LoopLine, ResourceLine, status_json, status_lines
 
 RECENT = 5
 
@@ -49,6 +50,15 @@ def line_of(v: SlotView) -> str:
     return f"{v.id}: {what}" + (" (above slots.count)" if v.beyond_count else "")
 
 
+def held_resources(cfg: ConfigDir) -> tuple[ResourceLine, ...]:
+    """Every taken unit of the lease table (the machine's, all repos): the holder's label is `bead:check`."""
+    out = []
+    for name, rec in resource_holders(cfg):
+        bead, _, check = rec.holder.partition(":")
+        out.append(ResourceLine(name, bead, check, rec.t))
+    return tuple(out)
+
+
 def build(repo: str, plugin_root: Path, now: float, env: Env, who: Identity | None = None, git: Git | None = None) -> Brief:
     """`who`: ask bd for the slots too, as that actor (one subprocess; the hooks that must be fast leave it out)."""
     cfg = ConfigDir(config_dir(env))
@@ -64,7 +74,7 @@ def build(repo: str, plugin_root: Path, now: float, env: Env, who: Identity | No
         repo=repo, now=now,
         loops=tuple(LoopLine(st.pid, st.started, st.bead or "", st.slot or "", st.version) for st in loops),
         last_beat=last_beat, last_exit=str(last.get("reason") or ""), asks=asks,
-        slots=slot_lines(repo, who, now, git) if who and git else (), recent=recent,
+        slots=slot_lines(repo, who, now, git) if who and git else (), resources=held_resources(cfg), recent=recent,
         version=running_version(plugin_root), installed=catalog.installed_version("task-loop", claude_dir(env)), pinned=(pin or ""))
 
 

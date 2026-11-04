@@ -1,6 +1,7 @@
 """The plugin's hooks (hooks/hook.py): what PreToolUse refuses, what SessionStart and PreCompact do, and that each finishes fast as a real
 process. The status and the handoff text they share: size caps and the first line."""
 import contextlib
+import dataclasses
 import io
 import json
 import os
@@ -17,7 +18,18 @@ sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: E402, F401
 
-from taskloop.domain.brief import HANDOFF_BYTES, RULES, STATUS_BYTES, STATUS_LINES, AskLine, Brief, LoopLine, handoff_text, status_lines  # noqa: E402
+from taskloop.domain.brief import (  # noqa: E402
+    HANDOFF_BYTES,
+    RULES,
+    STATUS_BYTES,
+    STATUS_LINES,
+    AskLine,
+    Brief,
+    LoopLine,
+    ResourceLine,
+    handoff_text,
+    status_lines,
+)
 from taskloop.hook import pretool  # noqa: E402
 
 
@@ -68,6 +80,11 @@ class Texts(unittest.TestCase):
         self.assertLessEqual(len(lines), STATUS_LINES)
         self.assertLessEqual(len("\n".join(lines).encode()), STATUS_BYTES)
         self.assertRegex(lines[-1], r"^\.\.\. \d+ more line")
+
+    def test_status_lists_each_held_resource_with_holder_bead_check_and_seconds_held(self):
+        b = dataclasses.replace(self.brief(slots=0), resources=(ResourceLine("unity", "tl-x.3", "unity-tests", 2_000_000.0 - 125.0),))
+        self.assertIn("resources held:", status_lines(b))
+        self.assertIn("  unity: tl-x.3 unity-tests held 125 s", status_lines(b))
 
     def test_a_small_status_is_whole(self):
         lines = status_lines(self.brief(asks=2, slots=2))
