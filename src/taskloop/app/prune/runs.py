@@ -1,5 +1,4 @@
-"""What `tl prune` does to run data: the three sweeps that already exist (check-round logs, run folders, engine logs) with one age, the
-event log trimmed to it, and nothing of a bead that is still open or parked."""
+"""One retention age for run files, factory history and trace logs; open beads and live runs stay."""
 import contextlib
 import os
 import shutil
@@ -7,10 +6,12 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+from taskloop.app.prune.traces import prune_traces
 from taskloop.app.run import layout
 from taskloop.app.track import trail
+from taskloop.contracts import factorydb
 from taskloop.contracts.bd_errors import BdCommandFailure
-from taskloop.contracts.locator import RunLocator
+from taskloop.contracts.locator import RunBundle, RunLocator
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdFailure, BeadQuery, Beads
 from taskloop.contracts.runlife import KEEP_DAYS
@@ -48,15 +49,56 @@ def kept_days(configured: float) -> float:
     return max(configured, KEEP_DAYS)
 
 
-def prune_runs(cfg: ConfigDir, days: float, exempt: set[str], now: float, dry_run: bool) -> list[Gone]:
-    """The one rule for run data (the only sweep of it): run folders (evidence included), check-round logs and engine logs older than
-    `kept_days(days)`, none of a bead in `exempt` (not closed), then the event log. One scan makes the plan; the dry run prints it and
-    the real run deletes exactly it. -> what went, or with `dry_run` what would."""
+def bundles_for_prune(cfg: ConfigDir) -> list[RunBundle]:
+    """Discovery must neither create a missing DB nor fail the verb on an unavailable one."""
+    try:
+        return RunLocator(cfg).runs() if cfg.factory_db().exists() else []
+    except (factorydb.DatabaseError, OSError):
+        return []
+
+
+def prune_runs(cfg: ConfigDir, days: float, exempt: set[str], now: float, dry_run: bool,
+               say: Callable[[str], None] = print) -> list[Gone]:
+    """Prune files, DB history and traces with kept_days(days), exemptions and one dry-run plan.
+
+    Return the existing Gone list for files; report history/trace row counts through say.
+    Unavailable databases keep all run data. A missing database is never created.
+    """
     days = kept_days(days)
-    bundles = RunLocator(cfg).runs()  # before any folder goes: a bundle is found by its manifest
-    dirs = layout.prune_run_dirs(cfg, days, exempt, True)
-    rounds = [f for f in layout.prune_check_rounds(cfg, days, exempt, True) if not any(d in f.parents for d in dirs)]
-    logs = layout.prune_run_logs(cfg, now, days * 86400, exempt, True)
+    con = None
+    try:
+        try:
+            if cfg.factory_db().exists():
+                con = factorydb.open_rw(cfg.factory_db())
+                if con is None:
+                    say("prune: factory.db history kept: database unavailable")
+                    return []
+            bundles = RunLocator(cfg).runs() if con is not None else []
+        except (factorydb.DatabaseError, OSError):
+            say("prune: factory.db history kept: database unavailable")
+            return []
+        protected = exempt | {b.bead for b in bundles if b.manifest.state.live}
+        gone = _prune_files(cfg, days, protected, now, dry_run, bundles)
+        would = "would remove" if dry_run else "removed"
+        if con is not None:
+            counts = factorydb.prune_older_than(con, now - days * 86400, keep_beads=frozenset(exempt), dry_run=dry_run)
+            summary = ", ".join(f"{n} {table}(s)" for table, n in counts.items())
+            say(f"prune: factory.db history: {would} {summary}")
+        rows = prune_traces(cfg, days, now, dry_run, frozenset(protected))
+        say(f"prune: traces.jsonl: {would} {rows} row(s)")
+        return gone
+    finally:
+        if con is not None:
+            con.close()
+
+
+def _prune_files(cfg: ConfigDir, days: float, exempt: set[str], now: float, dry_run: bool,
+                 bundles: list[RunBundle]) -> list[Gone]:
+    """Scan before deleting DB manifests, so each run's files remain discoverable."""
+    dirs = layout.prune_run_dirs(cfg, days, exempt, True) if bundles else []
+    rounds = [f for f in layout.prune_check_rounds(cfg, days, exempt, True)
+              if not any(d in f.parents for d in dirs)] if bundles else []
+    logs = layout.prune_run_logs(cfg, now, days * 86400, exempt, True) if bundles else []
     suites = [f for f in cfg.suite_logs() if f.stat().st_mtime < now - days * 86400]
     found = [Gone(p, size_of(p)) for p in [*dirs, *rounds, *logs, *suites] if p.exists()]
     if not dry_run:

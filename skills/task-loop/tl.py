@@ -253,7 +253,8 @@ def loop_parsers(sp):
     p.add_argument("--ready", action="store_true")
     p.add_argument("--fix", action="store_true")
     p.add_argument("--repo")
-    p = sp.add_parser("prune", help="remove old run data, merged build worktrees and release branches (--dry-run: only say)")
+    p = sp.add_parser("prune", help="remove old run files, DB history, traces, merged build trees and release branches "
+                      "(--dry-run: only say)")
     p.add_argument("--repo")
     p.add_argument("--dry-run", action="store_true")
     p = sp.add_parser("stop", help="stop the repo's loop after its current bead (--now: SIGTERM the bead's run)")

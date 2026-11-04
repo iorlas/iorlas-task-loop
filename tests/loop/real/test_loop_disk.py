@@ -17,6 +17,7 @@ from support.runs import manifest
 
 from loop.test_loop import Base, LoopBase, rec
 from taskloop.app.launch import loop as wloop
+from taskloop.contracts.run import RunState
 
 GB = 1 << 30
 
@@ -80,7 +81,8 @@ class PruneVerb(Base):
         subprocess.run(["git", "init", "-q", str(self.repo)], check=True)
         self.fake()
         stem = "x-1-20200101-000000"
-        run = manifest(Path(os.environ["XDG_CONFIG_HOME"]) / "task-loop", stem, "x-1", 0.0).dir
+        config = Path(os.environ["XDG_CONFIG_HOME"]) / "task-loop"
+        run = manifest(config, stem, "x-1", 0.0, state=RunState.DONE, ended=1.0).dir  # a live run is never pruned
         (run / "evidence").mkdir(parents=True)
         (run / "evidence" / "a.png").write_bytes(b"P" * 100)
         old = time.time() - 40 * 86400

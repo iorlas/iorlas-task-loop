@@ -30,6 +30,7 @@ from taskloop.contracts.env import snapshot
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdError, BdFailure, Beads
+from taskloop.contracts.run import RunState
 
 DAY = 86400
 GIT_ENV = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@x", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@x"}
@@ -71,7 +72,8 @@ class RunData(Case):
 
     def run_of(self, bead, age_days):
         stem = f"{bead}-20260101-000000"
-        d = manifest(self.cfg, stem, bead, self.now - age_days * DAY).dir
+        ended = self.now - age_days * DAY
+        d = manifest(self.cfg, stem, bead, ended, ended=ended, state=RunState.DONE).dir
         (d / "evidence").mkdir(parents=True)
         (d / "evidence" / "a.png").write_bytes(b"P" * 2048)
         log = self.cfg.engine_log(stem)

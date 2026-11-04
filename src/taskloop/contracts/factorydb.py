@@ -15,7 +15,7 @@ from pathlib import Path
 import sqlite_store
 from sqlite_store import SqlValue
 
-from taskloop.contracts import factorymigrate, wire
+from taskloop.contracts import factorymigrate, factoryprune, wire
 from taskloop.contracts.run import RunManifest
 
 SCHEMA_VERSION = 2
@@ -109,6 +109,9 @@ _STORE = sqlite_store.Store(SCHEMA)
 SchemaError = sqlite_store.SchemaError
 
 
+prune_older_than = factoryprune.prune_older_than
+
+
 def open_rw(path: str | os.PathLike[str]) -> sqlite3.Connection | None:
     """Open or initialize WAL; schema errors raise, unavailable storage returns None."""
     return _STORE.open_rw(path)
@@ -162,54 +165,6 @@ def quarantine(path: Path) -> Path:
 def clear_filesystem_cache() -> None:
     """Forget mount verdicts after mount changes or replacement of a probe."""
     sqlite_store.clear_filesystem_cache()
-
-
-def prune_older_than(
-    con: sqlite3.Connection,
-    cutoff_t: float,
-    tables: tuple[str, ...] = ("ask_ledger", "check_round", "step", "attempt", "effect", "run"),
-) -> dict[str, int]:
-    """Apply the sole age-retention path, atomically, to selected history tables.
-
-    Run history ages from ended, never started. Retain runs referenced by any
-    lease or wait, an unconsumed signal, or an open ask. Current state tables
-    are never pruned. Subsets retain parents with remaining history children.
-    The caller must not already have a transaction open.
-    """
-    order = ("ask_ledger", "check_round", "step", "attempt", "effect", "run")
-    selected = set(tables)
-    if selected - set(order):
-        raise ValueError("only history tables may be pruned")
-    eligible = """SELECT r.run FROM run AS r
-        WHERE r.ended < ? AND r.state NOT IN ('created','running')
-        AND NOT EXISTS (SELECT 1 FROM lease AS l WHERE l.run=r.run)
-        AND NOT EXISTS (SELECT 1 FROM wait AS w WHERE w.run=r.run)
-        AND NOT EXISTS (SELECT 1 FROM signal AS s WHERE s.run=r.run AND s.taken IS NULL)
-        AND NOT EXISTS (SELECT 1 FROM ask AS a WHERE a.bead=r.bead AND a.status IN ('open','open_soft'))"""
-    predicates = {
-        "ask_ledger": """t < ?
-            AND NOT EXISTS (SELECT 1 FROM ask AS a
-                WHERE (a.id=ask_ledger.ask OR a.bead=ask_ledger.bead) AND a.status IN ('open','open_soft'))
-            AND NOT EXISTS (SELECT 1 FROM run AS r
-                WHERE r.bead=ask_ledger.bead AND r.state IN ('created','running'))""",
-        "check_round": f"""ts < ? AND NOT EXISTS (
-            SELECT 1 FROM run AS parent WHERE parent.run=check_round.run AND parent.run NOT IN ({eligible}))""",
-        "step": f"run IN ({eligible})",
-        "attempt": f"run IN ({eligible})",
-        "effect": f"run IN ({eligible})",
-        "run": f"""run IN ({eligible})
-            AND NOT EXISTS (SELECT 1 FROM step WHERE step.run=run.run)
-            AND NOT EXISTS (SELECT 1 FROM attempt WHERE attempt.run=run.run)
-            AND NOT EXISTS (SELECT 1 FROM effect WHERE effect.run=run.run)
-            AND NOT EXISTS (SELECT 1 FROM check_round WHERE check_round.run=run.run)""",
-    }
-    counts: dict[str, int] = {}
-    with begin_immediate(con):
-        for table in order:
-            if table in selected:
-                params = (cutoff_t, cutoff_t) if table == "check_round" else (cutoff_t,)
-                counts[table] = con.execute(f'DELETE FROM "{table}" WHERE {predicates[table]}', params).rowcount
-    return counts
 
 
 DatabaseError = sqlite3.DatabaseError

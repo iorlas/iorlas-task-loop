@@ -131,7 +131,7 @@ class Records:
             run_log=e.env.get(EnvVar.TASK_LOOP_RUN_LOG)))
 
     def file_trace(self, record: RunFinish) -> None:
-        """One line per engine run in traces.jsonl, never pruned: bead, repo, branch, every session, the outcome."""
+        """One line per engine run in traces.jsonl: age-pruned by tl prune, retaining every LANDED record."""
         e = self.e
         outcome, why, sha, kind = record.outcome, record.why, record.sha, record.kind
         try:

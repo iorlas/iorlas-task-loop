@@ -1,4 +1,5 @@
-"""`tl prune [--dry-run]`: the run data past `loop.keep_days`, then one reconcile sweep (build trees, release branches, landed task
+"""`tl prune [--dry-run]`: run files, factory.db history and traces.jsonl past the retention age, then one reconcile sweep
+(build trees, release branches, landed task
 branches, and the claims and slots whose lease ended with no live run), removed; what stays, with why.
 Idempotent: a second run finds nothing. The loop runs it at its start."""
 from collections.abc import Callable
@@ -11,7 +12,6 @@ from taskloop.app.release.shell import Shell
 from taskloop.app.run import running
 from taskloop.contracts.config import LoopConfig
 from taskloop.contracts.identity import Identity
-from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import Beads
 
@@ -29,8 +29,8 @@ def run(cfg: ConfigDir, loop: LoopConfig, repos: list[str], store_of: Callable[[
     if why:
         say(f"prune: run data kept: {why}")
     else:
-        folders = RunLocator(cfg).runs()
-        gone = runs.prune_runs(cfg, loop.keep_days, exempt, now, dry_run)
+        folders = runs.bundles_for_prune(cfg)
+        gone = runs.prune_runs(cfg, loop.keep_days, exempt, now, dry_run, say)
         for g in gone:
             say(f"prune: {would}{g.path} ({mb(g.bytes)})")
         count += len(gone)

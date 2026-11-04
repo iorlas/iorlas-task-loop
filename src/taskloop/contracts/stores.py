@@ -88,8 +88,18 @@ class EventLog(JsonlStore[events.Event]):
 
 
 class TraceStore(JsonlStore[RunTrace]):
+    """Run traces; append and age retention share one outer lock."""
+
     def __init__(self, cfg: paths.ConfigDir) -> None:
         super().__init__(cfg.traces(), _one(RunTrace))
+
+    def lock_path(self) -> Path:
+        return self.file.path.with_name(self.file.path.name + ".prune.lock")
+
+    @override
+    def append(self, rec: RunTrace) -> int:
+        with guard(self.lock_path()):
+            return super().append(rec)
 
 
 class LoopLog(JsonlStore[LoopLogLine]):
