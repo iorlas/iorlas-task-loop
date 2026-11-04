@@ -75,7 +75,7 @@ class RunData(unittest.TestCase):
         (d / "evidence" / "a.png").write_bytes(b"P" * 2048)
         log = self.cfg.engine_log(stem)
         log.write_text("{}\n")
-        for p in (d / "evidence" / "a.png", d / "evidence", d / "manifest.json", d, log):
+        for p in (d / "evidence" / "a.png", d / "evidence", d, log):
             os.utime(p, (self.now - age_days * DAY,) * 2)
 
     def prune(self, store, dry_run=False, days=14):
