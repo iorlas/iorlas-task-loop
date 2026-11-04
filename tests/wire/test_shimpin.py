@@ -1,4 +1,5 @@
 """Old sessions keep launchers on the newest readable numeric cache install."""
+import os
 import tempfile
 from pathlib import Path
 from unittest import mock
@@ -55,8 +56,9 @@ class ShimPin(Case):
         for f in self.files():
             assert not f.stat().st_mode & 0o222
             assert f.stat().st_mode & 0o111
-            with pytest.raises(PermissionError):
-                f.write_text("exec old tl.py")  # what an older install's write_shim / write_hooks do
+            if os.geteuid():  # root writes through a read-only mode
+                with pytest.raises(PermissionError):
+                    f.write_text("exec old tl.py")  # what an older install's write_shim / write_hooks do
         self.assert_targets(new)
         newest = self.install("0.23.101")
         self.write(newest)
