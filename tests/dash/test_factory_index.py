@@ -203,7 +203,7 @@ class FactoryIndex(unittest.TestCase):
         self.assertTrue(world.runs)
         self.assertFalse(first.server.database_error)
         now[0] += 6
-        with patch("taskloop_dash.readers.logs.Logs.records", side_effect=AssertionError("state fallback")):
+        with patch("taskloop_dash.readers.logs.Logs.records", side_effect=AssertionError("unexpected log read for state")):
             world, stale = dash.reads.built()
             self.assertEqual(world.runs, {})
             self.assertTrue(stale.server.database_error)
@@ -245,7 +245,7 @@ class FactoryIndex(unittest.TestCase):
                     con.execute("PRAGMA user_version=99" if kind == "wrong" else "UPDATE kv SET t=0 WHERE k='index.run.pass'")
                     con.close()
                 dash = Dash(Env(self.cfg.root, clock=lambda: NOW))
-                with patch("taskloop.contracts.locator.RunLocator.runs", side_effect=AssertionError("file fallback")):
+                with patch("taskloop.contracts.locator.RunLocator.runs", side_effect=AssertionError("unexpected run-file read")):
                     world = dash.reads.worlds.world()
                     self.assertFalse(world.runs)
                     self.assertTrue(world.database_error)

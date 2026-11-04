@@ -1,4 +1,4 @@
-"""Factory schema, fallback conditions and WAL transaction guarantees."""
+"""Factory schema, rejected database opens and WAL transaction guarantees."""
 
 import sqlite3
 import sys
@@ -95,7 +95,7 @@ class FactoryDbTest(unittest.TestCase):
             self.assertEqual(tables, TABLES)
         self.rw()
 
-    def test_wrong_version_falls_back_without_replacing_it(self):
+    def test_wrong_version_is_rejected_without_replacing_it(self):
         con = self.rw()
         con.execute("PRAGMA user_version=2")
         self.assertIsNone(factorydb.open_rw(self.path))
@@ -109,12 +109,12 @@ class FactoryDbTest(unittest.TestCase):
         self.assertIsNone(factorydb.open_rw(self.path))
         self.assertEqual(con.execute("PRAGMA user_version").fetchone(), (0,))
 
-    def test_corrupt_bytes_fall_back(self):
+    def test_corrupt_bytes_are_rejected(self):
         self.path.write_bytes(b"this is not a SQLite database")
         self.assertIsNone(factorydb.open_rw(self.path))
         self.assertIsNone(factorydb.open_ro(self.path))
 
-    def test_non_wal_database_falls_back(self):
+    def test_non_wal_database_is_rejected(self):
         self.assertIsNone(factorydb.open_rw(":memory:"))
         con = sqlite3.connect(self.path)
         self.addCleanup(con.close)
@@ -179,7 +179,7 @@ class FactoryDbTest(unittest.TestCase):
         self.assertEqual(con.execute("SELECT * FROM kv").fetchall(), [])
         self.assertFalse(con.in_transaction)
 
-    def test_unsafe_filesystem_falls_back_before_connecting(self):
+    def test_unsafe_filesystem_is_rejected_before_connecting(self):
         with patch.object(factorydb, "_unsafe_filesystem", return_value=True):
             self.assertIsNone(factorydb.open_rw(self.path))
             self.assertIsNone(factorydb.open_ro(self.path))
@@ -191,7 +191,7 @@ class FactoryDbTest(unittest.TestCase):
             self.assertTrue(factorydb._unsafe_filesystem(Path("/mnt/remote.db")))
             self.assertFalse(factorydb._unsafe_filesystem(Path("/mnt/local disk/factory.db")))
 
-    def test_mount_detection_failure_falls_back_before_connecting(self):
+    def test_mount_detection_failure_prevents_connecting(self):
         with patch.object(factorydb.sys, "platform", "linux"), patch.object(Path, "read_text", side_effect=OSError):
             self.assertIsNone(factorydb._unsafe_filesystem(self.path))
             self.assertIsNone(factorydb.open_rw(self.path))
@@ -209,7 +209,7 @@ class FactoryDbTest(unittest.TestCase):
             self.assertTrue(factorydb._unsafe_filesystem(mounted / "nested/factory.db"))
             self.assertFalse(factorydb._unsafe_filesystem(Path("/Users/local/factory.db")))
 
-    def test_unknown_mount_probe_failure_falls_back(self):
+    def test_unknown_mount_probe_failure_prevents_connecting(self):
         with (
             patch.object(factorydb, "_filesystem_type", return_value="unknown"),
             patch.object(factorydb.os.path, "ismount", side_effect=OSError),
@@ -224,7 +224,7 @@ class FactoryDbTest(unittest.TestCase):
         self.assertEqual(con.execute("PRAGMA user_version").fetchone(), (0,))
         self.assertEqual(con.execute("SELECT name FROM sqlite_master").fetchall(), [])
 
-    def test_failed_quick_check_falls_back(self):
+    def test_failed_quick_check_is_rejected(self):
         class BadCheckConnection(sqlite3.Connection):
             def execute(self, sql, parameters=()):
                 if sql == "PRAGMA quick_check":
@@ -246,8 +246,9 @@ class FactoryDbTest(unittest.TestCase):
         con = self.rw()
         for authority in ("files", "db"):
             con.execute("INSERT INTO family VALUES (?,?,1)", (authority, authority))
-        with self.assertRaises(sqlite3.IntegrityError):
-            con.execute("INSERT INTO family VALUES ('bad','both',1)")
+        for authority in ("dual", "both"):
+            with self.subTest(authority=authority), self.assertRaises(sqlite3.IntegrityError):
+                con.execute("INSERT INTO family VALUES ('bad',?,1)", (authority,))
 
     def test_bead_projection_is_index_owned_and_revisioned(self):
         con = self.rw()

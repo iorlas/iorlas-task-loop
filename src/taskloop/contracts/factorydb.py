@@ -1,7 +1,7 @@
 """Schema v1 and conservative SQLite opens for the shared factory journal.
 
 Connections belong to their caller's thread. Writers use begin_immediate for
-short transactions; unavailable databases are reported without file fallback.
+short transactions; unavailable databases are reported as visible errors.
 """
 
 import json
@@ -139,11 +139,11 @@ def _filesystem_type(resolved: Path) -> str:
 
 
 def _unsafe_filesystem(path: Path) -> bool | None:
-    """Use the deepest mount; detection errors mean the caller must fall back.
+    """Use the deepest mount; detection errors prevent opening the database.
 
     Unknown types are allowed only on paths without a mount below root. This
-    cannot identify a network-backed root filesystem; operators on such hosts
-    must keep file storage. No external commands are run by this contract.
+    cannot identify a network-backed root filesystem; operators must place the
+    database on supported local storage. No external commands are run by this contract.
     """
     try:
         resolved = path.resolve()
