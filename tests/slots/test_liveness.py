@@ -125,6 +125,13 @@ class Watching(Rig):
         self.assertEqual(self.tick(5000), [])
         self.assertEqual((self.slot("s1").slot_bead().status, self.slot("s2").slot_bead().status), ("in_progress", "in_progress"))
 
+    def test_a_lock_written_by_the_looking_process_itself_is_a_lock(self):
+        """engine_busy calls a lock of the asking process "mine", i.e. not busy: the slot a process holds is not an orphan to it."""
+        self.slot("s1").take("tl loop")
+        self.env.lock_pid = lambda wt: self.env.pid
+        self.assertEqual(self.tick(5000), [])
+        self.assertEqual(self.slot("s1").slot_bead().status, "in_progress")
+
     def test_a_slot_set_aside_is_stamped_once_flagged_when_old_and_cleared_when_it_recovers(self):
         self.slot("s1").take("a person")  # the probe below is the only free slot's
         bid = self.slot("s2").slot_bead().id

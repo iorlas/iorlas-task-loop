@@ -392,7 +392,7 @@ def repo_of(a: Any, c: Ctx) -> str:
 def v_doctor(a: Any, c: Ctx) -> int:
     if a.reindex:
         return reindex.run(c.who.config)
-    return doctor.run(c.here.parents[1], c.env, c.git, c.who)
+    return doctor.run(c.here.parents[1], c.env, c.git, c.who, c.spawner)
 
 
 def v_status(a: Any, c: Ctx) -> int:

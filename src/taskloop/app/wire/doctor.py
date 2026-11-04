@@ -10,7 +10,6 @@ from taskloop.adapters.ident import claude_dir, config_dir
 from taskloop.app.doctor import profiles
 from taskloop.app.release import catalog, manifest
 from taskloop.app.slots import watchdog
-from taskloop.app.wire import real
 from taskloop.app.wire import slots as wslots
 from taskloop.app.wire.slots import cfg_source
 from taskloop.contracts import runlife
@@ -19,7 +18,7 @@ from taskloop.contracts.config import RepoProfile
 from taskloop.contracts.env import Env
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import BdFailure, BeadQuery, Beads, Git
+from taskloop.contracts.ports import BdFailure, BeadQuery, Beads, Git, Spawner
 from taskloop.contracts.slots import SlotGitError
 from taskloop.contracts.stores import ReposStore
 from taskloop.domain.beads import matchers as beadlint
@@ -77,7 +76,7 @@ def bead_lint_warnings(repo: str, who: Identity, store: Beads | None = None) -> 
 OWNERSHIP = "## Ownership"
 
 
-def slot_warnings(repo: str, who: Identity, git: Git, now: float, env: Env | None = None) -> tuple[str, list[str]]:
+def slot_warnings(repo: str, who: Identity, git: Git, now: float, spawner: Spawner | None = None) -> tuple[str, list[str]]:
     """(the slot table's one-line summary, its WARN lines): the slots as `tl status` and the dash list them, against config and folders."""
     try:
         table = wslots.slot_table(repo, who, git, now)
@@ -88,9 +87,9 @@ def slot_warnings(repo: str, who: Identity, git: Git, now: float, env: Env | Non
     warns = [f"slot {v.id} is {v.state}: {v.idle_why}" for v in table.slots if v.state == "dead"]
     warns += [f"slot {v.id} is above slots.count {table.configured} and still {v.state}" for v in table.slots
               if v.beyond_count and v.state not in ("free", "retiring")]
-    if env is not None:  # tl-bxk.10.33.12: the liveness invariants, read only (the loop and the waiters heal)
+    if spawner is not None:  # tl-bxk.10.33.12: the liveness invariants, read only (the loop and the waiters heal)
         with contextlib.suppress(SystemExit, OSError, ValueError, BdFailure):
-            warns += watchdog.lines(watchdog.look(wslots.slot_env(repo, spawner=real.spawner(env), git=git, who=who)))
+            warns += watchdog.lines(watchdog.look(wslots.slot_env(repo, spawner=spawner, git=git, who=who)))
     return f"slots: {table.configured} configured from {where}; {states}", warns
 
 
@@ -112,7 +111,7 @@ def install_problems(plugin_root: Path, env: Env) -> list[str]:
     return out
 
 
-def run(plugin_root: Path, env: Env, git: Git, who: Identity) -> int:
+def run(plugin_root: Path, env: Env, git: Git, who: Identity, spawner: Spawner | None = None) -> int:
     repo = git.toplevel(".") or os.getcwd()
     if profiles.report(git, repo, ReposStore(ConfigDir(config_dir(env)))):  # a bad profile is a red row of its repo, not a traceback
         return 1
@@ -120,7 +119,7 @@ def run(plugin_root: Path, env: Env, git: Git, who: Identity) -> int:
     _, base, commit = source
     print(f"config: .task-loop.json from base {base} at commit {commit}" if commit else
           f"config: .task-loop.json from working tree {repo} (base {base} unresolved; no commit read)")
-    slot_line, slot_warns = slot_warnings(repo, who, git, time.time(), env)
+    slot_line, slot_warns = slot_warnings(repo, who, git, time.time(), spawner)
     print(slot_line)
     warns = git_warnings(repo, source, git) + bead_lint_warnings(repo, who) + slot_warns
     warns += [f"run {r} is lost: its process is gone and it recorded no end" for r in runlife.reconcile(who.config, time.time())]

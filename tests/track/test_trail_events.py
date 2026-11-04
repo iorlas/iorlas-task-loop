@@ -28,6 +28,7 @@ CALLS = {
     "slot_hold": {"slot": "s1", "slot_bead": "slot-1", "why": "by hand", "until": 1.5e9},
     "slot_aside": {"slot": "s1", "why": "3 runs failed", "held": True},
     "slot_hold_expired": {"slot": "s1", "slot_bead": "slot-1"},
+    "slot_stall": {"slot": "s1", "invariant": "orphan_held", "why": "held 1000 s, no engine lock", "since": 1.5e9, "healed": True},
     "block": {"why": "needs a human"},
     "close": {"reason": "done"},
     "land": {"sha": "abc"},

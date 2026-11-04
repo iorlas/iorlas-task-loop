@@ -51,7 +51,7 @@ def facts(env: SlotEnv, now: float, *, stamp: bool = False) -> tuple[list[SlotFa
         if b is None or not pool.configured(slot.name):
             continue
         pending = b.metadata.get("aside_probe") == "pending"
-        locked = bool(env.busy(slot.dir))
+        locked = bool(env.busy(slot.dir)) or env.lock_pid(slot.dir) == env.pid  # a lock this process wrote is judged "mine", not busy
         since = _epoch(b.updated_at, True) if b.updated_at else None
         aside: float | None = None
         if pending:
