@@ -4,6 +4,8 @@ import sys
 from pathlib import Path
 from unittest import mock
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support import procsim
@@ -36,14 +38,14 @@ class CleanGate(EngineTest):
         proof.parent.mkdir(parents=True, exist_ok=True)
         proof.write_text("slot only")
         # A stage pass for the same tracked tree must not authorize delivery.
-        self.assertFalse(eng.checker.run_items(gate_items(eng.cfg)).failed)
-        self.assertFalse(Gate(eng).green())
+        assert not eng.checker.run_items(gate_items(eng.cfg)).failed
+        assert not Gate(eng).green()
         got = Gate(eng).run()
-        self.assertIsInstance(got, Problem)
         assert isinstance(got, Problem)
-        self.assertEqual(got.kind, ProblemKind.GATE)
-        self.assertIn("missing evidence", got.text)
-        self.assertEqual(proof.read_text(), "slot only")
+        assert isinstance(got, Problem)
+        assert got.kind == ProblemKind.GATE
+        assert "missing evidence" in got.text
+        assert proof.read_text() == "slot only"
 
     def test_checks_see_committed_files_and_declared_artifact_output(self):
         seen = []
@@ -51,24 +53,24 @@ class CleanGate(EngineTest):
         def check(cwd, env):
             root = Path(cwd)
             seen.append(root)
-            self.assertEqual((root / "a.txt").read_text(), "a\n")
-            self.assertFalse((root / "ignored.txt").exists())
-            self.assertFalse((root / "untracked.txt").exists())
-            self.assertEqual(env[EnvVar.TL_WORKTREE], str(root))
+            assert (root / "a.txt").read_text() == "a\n"
+            assert not (root / "ignored.txt").exists()
+            assert not (root / "untracked.txt").exists()
+            assert env[EnvVar.TL_WORKTREE] == str(root)
             (Path(env[EnvVar.TL_ARTIFACT_DIR]) / "result.txt").write_text("result")
             return 0, ""
 
         eng = self.engine(procsim.fake("clean-inputs", check))
         (self.wt / "ignored.txt").write_text("keep me")
         got = Gate(eng).run()
-        self.assertIsInstance(got, GatePass)
-        self.assertNotEqual(seen, [self.wt])
-        self.assertTrue(all(not root.exists() for root in seen))
-        self.assertEqual((self.wt / "ignored.txt").read_text(), "keep me")
-        self.assertTrue(list(eng.run_dir.glob("artifacts/evidence/attempt-*/result.txt")))
-        self.assertTrue(Gate(eng).green())
+        assert isinstance(got, GatePass)
+        assert seen != [self.wt]
+        assert all(not root.exists() for root in seen)
+        assert (self.wt / "ignored.txt").read_text() == "keep me"
+        assert list(eng.run_dir.glob("artifacts/evidence/attempt-*/result.txt"))
+        assert Gate(eng).green()
         Gate(eng).run()
-        self.assertEqual(len(seen), 1)  # only a clean gate's pass can be reused
+        assert len(seen) == 1  # only a clean gate's pass can be reused
 
     def test_detached_checkout_is_removed_when_a_check_raises(self):
         seen = []
@@ -78,16 +80,16 @@ class CleanGate(EngineTest):
             raise RuntimeError("check interrupted")
 
         eng = self.engine(procsim.fake("interrupted-gate", check))
-        with self.assertRaisesRegex(RuntimeError, "check interrupted"):
+        with pytest.raises(RuntimeError, match="check interrupted"):
             Gate(eng).run()
-        self.assertTrue(seen)
-        self.assertTrue(all(not root.exists() for root in seen))
+        assert seen
+        assert all(not root.exists() for root in seen)
 
     def test_checkout_failure_never_runs_checks_in_the_slot(self):
         eng = self.engine("true")
         with (mock.patch.object(eng.git, "add_worktree", side_effect=SlotGitError("checkout failed")),
               mock.patch.object(eng, "sh") as sh,
-              self.assertRaisesRegex(SlotGitError, "checkout failed")):
+              pytest.raises(SlotGitError, match="checkout failed")):
             Gate(eng).run()
         sh.assert_not_called()
 
@@ -100,25 +102,25 @@ class CleanGate(EngineTest):
         def plan(argv, **kw):
             root = Path(kw["cwd"])
             seen.append(root)
-            self.assertFalse((root / "ignored.txt").exists())
+            assert not (root / "ignored.txt").exists()
             output = {"version": 1, "base": None, "empty": False, "full": True, "full_reasons": [], "steps": []}
             return Ran(exit=0, out=json.dumps(output))
 
         with (mock.patch("taskloop.app.checks.gateplan.shutil.which", return_value="repo-plan"),
               mock.patch.object(eng.spawner, "run", side_effect=plan)):
             got = Gate(eng).run()
-        self.assertIsInstance(got, Problem)
-        self.assertTrue(seen)
-        self.assertTrue(all(not root.exists() for root in seen))
+        assert isinstance(got, Problem)
+        assert seen
+        assert all(not root.exists() for root in seen)
 
     def test_dirty_slot_is_refused_without_running_or_removing_its_work(self):
         eng = self.engine("true")
         (self.wt / "untracked.txt").write_text("keep me")
-        self.assertFalse(Gate(eng).green())
-        with mock.patch.object(eng, "sh") as sh, self.assertRaisesRegex(Blocked, "committed tree"):
+        assert not Gate(eng).green()
+        with mock.patch.object(eng, "sh") as sh, pytest.raises(Blocked, match="committed tree"):
             Gate(eng).run()
         sh.assert_not_called()
-        self.assertEqual((self.wt / "untracked.txt").read_text(), "keep me")
+        assert (self.wt / "untracked.txt").read_text() == "keep me"
 
     def test_check_cannot_mutate_the_clean_tree_and_cache_a_pass(self):
         def change(cwd, env):
@@ -126,7 +128,7 @@ class CleanGate(EngineTest):
             return 0, ""
 
         eng = self.engine(procsim.fake("mutates-tree", change))
-        with self.assertRaisesRegex(Blocked, "changed its judged tree"):
+        with pytest.raises(Blocked, match="changed its judged tree"):
             Gate(eng).run()
-        self.assertEqual((self.wt / "a.txt").read_text(), "a\n")
-        self.assertFalse(Gate(eng).green())
+        assert (self.wt / "a.txt").read_text() == "a\n"
+        assert not Gate(eng).green()

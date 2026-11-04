@@ -39,45 +39,45 @@ class WipPush(EngineTest):
 
         with mock.patch.object(RealGit, "push_lease", spy):
             rc, _ = self.run_engine(RUN)
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertEqual(seen, [WIP] * len(seen))
-        self.assertTrue(seen)
-        self.assertFalse(self.origin_ref("refs/heads/task/t-1"))  # the land then deleted the pushed task branch (LANDBRANCH)
-        self.assertEqual(self.config(), before)
+        assert rc == 0, self.blocked
+        assert seen == [WIP] * len(seen)
+        assert seen
+        assert not self.origin_ref("refs/heads/task/t-1")  # the land then deleted the pushed task branch (LANDBRANCH)
+        assert self.config() == before
 
     def test_a_failed_push_blocks_the_bead_with_gits_words(self):
         out = GitOutcome(ok=False, output="fatal: unable to access 'https://x/r.git/': Could not resolve host: x")
         with mock.patch.object(RealGit, "push_lease", return_value=out):
             rc, _ = self.run_engine(RUN)
-        self.assertNotEqual(rc, 0)
+        assert rc != 0
         said = " ".join(r["text"] for r in records(self.eng, "warn"))
-        self.assertIn("paused: the work-in-progress push", said)
-        self.assertIn("Could not resolve host", said)
-        self.assertFalse(self.closed)
-        self.assertFalse(self.origin_ref("refs/heads/task/t-1"))
+        assert "paused: the work-in-progress push" in said
+        assert "Could not resolve host" in said
+        assert not self.closed
+        assert not self.origin_ref("refs/heads/task/t-1")
 
     def test_a_refused_push_is_a_land_fault(self):
         out = GitOutcome(ok=False, output=" ! [rejected] HEAD -> task/t-1 (stale info)\nerror: failed to push some refs")
         with mock.patch.object(RealGit, "push_lease", return_value=out):
             self.run_engine(RUN)
         said = " ".join(r["text"] for r in records(self.eng, "warn"))
-        self.assertIn("holds work this clone has never fetched (another machine ran this bead)", said)
+        assert "holds work this clone has never fetched (another machine ran this bead)" in said
         asked = " ".join(str(c) for c in self.store.calls)
-        self.assertIn("stale info", asked)
-        self.assertIn("engine-fault", asked)
+        assert "stale info" in asked
+        assert "engine-fault" in asked
 
     def test_hook_refusal_and_complete_stage_push_output_are_kept(self):
         refusal = "gate: refusing the push: run just check"
         output = "progress\n" * 250 + refusal + "\n" + "progress\n" * 250 + "error: failed to push some refs\n"
         with mock.patch.object(RealGit, "push_lease", return_value=GitOutcome(ok=False, output=output)):
             rc, _ = self.run_engine(RUN)
-        self.assertNotEqual(rc, 0)
+        assert rc != 0
         files = list((self.eng.run_dir / "land-push").glob("*.log"))
-        self.assertEqual(len(files), 1)
-        self.assertEqual(files[0].read_text(), output)
+        assert len(files) == 1
+        assert files[0].read_text() == output
         closed = " ".join(r["why"] for r in records(self.eng, "close"))
-        self.assertIn(refusal, closed)
-        self.assertIn(str(files[0]), closed)
+        assert refusal in closed
+        assert str(files[0]) in closed
 
     def test_a_custom_land_command_pushes_nothing(self):
         pushed = []
@@ -88,8 +88,8 @@ class WipPush(EngineTest):
             return real(this, cmd, *a, **kw)
         with mock.patch.object(Engine, "sh", spy):
             self.run_engine(RUN, land=["git", "log"])
-        self.assertFalse([c for c in pushed if c[:2] == ["git", "push"]])
-        self.assertFalse(self.origin_ref("refs/heads/task/t-1"))
+        assert not [c for c in pushed if c[:2] == ["git", "push"]]
+        assert not self.origin_ref("refs/heads/task/t-1")
 
     def test_an_lfs_repo_pushes_its_lfs_files_first(self):
         calls = []
@@ -111,7 +111,7 @@ class WipPush(EngineTest):
         (self.wt / ".gitattributes").write_text("*.bin filter=lfs diff=lfs merge=lfs -text\n")
         with mock.patch("taskloop.app.land.outbound.shutil.which", return_value="/usr/bin/git-lfs"):
             Outbound(e).wip_push(1)
-        self.assertEqual([c[0] for c in calls], ["lfs", "push"])
+        assert [c[0] for c in calls] == ["lfs", "push"]
 
     def test_a_dry_run_pushes_nothing(self):
         e = SimpleNamespace(dry=True, cfg=SimpleNamespace(land=["git", "push", "origin", "HEAD:main"]), sh=mock.Mock(), git=mock.Mock())

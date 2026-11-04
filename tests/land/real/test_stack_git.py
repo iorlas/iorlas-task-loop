@@ -1,8 +1,10 @@
 """The push and the look at the remote of a stack delivery, over real git and a bare origin."""
 import sys
 import tempfile
-import unittest
 from pathlib import Path
+
+import pytest
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401
@@ -25,8 +27,8 @@ from taskloop.stores.real import real_stores
 from taskloop.stores.runlog import RunLog
 
 
-class RealPush(unittest.TestCase):
-    def setUp(self):
+class RealPush(Case):
+    def setup_method(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         root = Path(self.tmp.name)
@@ -49,10 +51,10 @@ class RealPush(unittest.TestCase):
 
     @real_git("the push must reach a bare origin and ls-remote must show it")
     def test_a_pushed_branch_is_seen_on_the_remote_and_a_missing_one_is_empty(self):
-        self.assertEqual(self.forge.remote_oid("task/a"), "")
+        assert self.forge.remote_oid("task/a") == ""
         self.forge.push("task/a", self.oid)
-        self.assertEqual(self.forge.remote_oid("task/a"), self.oid)
-        self.assertEqual(gitq.git("rev-parse", "refs/heads/task/a", cwd=self.origin), self.oid)
+        assert self.forge.remote_oid("task/a") == self.oid
+        assert gitq.git("rev-parse", "refs/heads/task/a", cwd=self.origin) == self.oid
 
     @real_git("a rejected push is git's refusal and stops the delivery")
     def test_a_push_the_remote_rejects_stops_the_delivery(self):
@@ -61,7 +63,7 @@ class RealPush(unittest.TestCase):
         gitq.git("commit", "-q", "-a", "-m", "two", cwd=self.repo)
         gitq.git("checkout", "-q", "--orphan", "other", cwd=self.repo)
         gitq.git("commit", "-q", "--allow-empty", "-m", "unrelated", cwd=self.repo)
-        with self.assertRaises(Stop):
+        with pytest.raises(Stop):
             self.forge.push("task/a", gitq.git("rev-parse", "HEAD", cwd=self.repo))
 
     @real_git("a real pre-push hook's long stdout and refusal must survive git's footer and land's error handling")
@@ -76,19 +78,18 @@ class RealPush(unittest.TestCase):
                         f'echo "{refusal}" >&2\nexit 1\n')
         hook.chmod(0o755)
         forge = Forge(self.cmds, RealGit(env), str(self.repo), "main")
-        with self.assertRaises(Stop) as raised:
+        with pytest.raises(Stop) as raised:
             forge.push("task/a", self.oid)
         files = list((self.run_dir / "land-push").glob("*.log"))
-        self.assertEqual(len(files), 1)
-        self.assertIn(str(files[0]), raised.exception.why)
-        self.assertIn(refusal, raised.exception.why)
-        self.assertNotIn("failed to push some refs", raised.exception.why)
+        assert len(files) == 1
+        assert str(files[0]) in raised.value.why
+        assert refusal in raised.value.why
+        assert "failed to push some refs" not in raised.value.why
         output = files[0].read_text()
-        self.assertEqual([line for line in output.splitlines() if line.startswith("hook output ")],
-                         [f"hook output {n}" for n in range(500)])
-        self.assertIn(refusal, output)
-        self.assertIn("failed to push some refs", output)
-        self.assertEqual(self.forge.remote_oid("task/a"), "")
+        assert [line for line in output.splitlines() if line.startswith("hook output ")] == [f"hook output {n}" for n in range(500)]
+        assert refusal in output
+        assert "failed to push some refs" in output
+        assert self.forge.remote_oid("task/a") == ""
 
     @real_git("a branch only origin has must be found with ls-remote, fetched and resolved to its oid")
     def test_a_branch_only_origin_has_is_resolved_by_fetching_it(self):
@@ -107,12 +108,8 @@ class RealPush(unittest.TestCase):
                       lambda b, s: 0, lambda: DoltPush(0, ""),
                       "me", "s", gate, FakeBeads(actor="me"))
         branch, got, _ = stack.resolve(StackItem(branch="task/remote-only"))
-        self.assertEqual((branch, got), ("task/remote-only", oid))
-        self.assertEqual(self.git.rev_parse(str(other), oid), oid)
-        with self.assertRaises(Stop) as e:
+        assert (branch, got) == ("task/remote-only", oid)
+        assert self.git.rev_parse(str(other), oid) == oid
+        with pytest.raises(Stop) as e:
             stack.resolve(StackItem(branch="task/nowhere"))
-        self.assertIn("git ls-remote origin refs/heads/task/nowhere", e.exception.why)
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert "git ls-remote origin refs/heads/task/nowhere" in e.value.why

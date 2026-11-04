@@ -27,11 +27,11 @@ class EngineCleanup(EngineTest):
         owned.create(port_git(), who().config, loop_key(str(main)), str(main), str(self.wt), "origin/main", kind="slot",
                      run="test", bead="", host="test", now=0, exclude=lambda: None)
         rc, _ = self.run_engine(RUN)
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertTrue(self.wt.is_dir())
-        self.assertEqual(gitq.git("branch", "--show-current", cwd=self.wt), "")
-        self.assertEqual(gitq.git("rev-parse", "HEAD", cwd=self.wt), gitq.git("rev-parse", "origin/main", cwd=main))
-        self.assertEqual(gitq.git("branch", "--list", "task/t-1", cwd=main), "")
+        assert rc == 0, self.blocked
+        assert self.wt.is_dir()
+        assert gitq.git("branch", "--show-current", cwd=self.wt) == ""
+        assert gitq.git("rev-parse", "HEAD", cwd=self.wt) == gitq.git("rev-parse", "origin/main", cwd=main)
+        assert gitq.git("branch", "--list", "task/t-1", cwd=main) == ""
 
     def linked(self):
         """Run the engine in a linked checkout, so removing it cannot remove the main clone."""
@@ -45,13 +45,13 @@ class EngineCleanup(EngineTest):
     def test_engine_push_land_removes_remote_local_and_worktree_after_recording_receipt(self):
         main = self.linked()
         rc, _ = self.run_engine(RUN)
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertFalse(self.wt.exists())
-        self.assertEqual(gitq.git("branch", "--list", "task/t-1", cwd=main), "")
-        self.assertEqual(gitq.git("ls-remote", "origin", "refs/heads/task/t-1", cwd=main), "")
-        self.assertTrue(records(self.eng, "land_receipt"))
+        assert rc == 0, self.blocked
+        assert not self.wt.exists()
+        assert gitq.git("branch", "--list", "task/t-1", cwd=main) == ""
+        assert gitq.git("ls-remote", "origin", "refs/heads/task/t-1", cwd=main) == ""
+        assert records(self.eng, "land_receipt")
         done = records(self.eng, "land_cleanup")[-1]
-        self.assertEqual((done["local_outcome"], done["remote_outcome"]), ("gone", "gone"))
+        assert (done["local_outcome"], done["remote_outcome"]) == ("gone", "gone")
 
     @real_git("a remote task ref moves after the engine push checked it: force-with-lease must preserve it")
     def test_remote_that_moves_after_the_push_check_is_kept_on_retry(self):
@@ -69,12 +69,12 @@ class EngineCleanup(EngineTest):
 
         with mock.patch.object(Pusher, "push", push):
             rc, _ = self.run_engine(RUN)
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertTrue(moved)
+        assert rc == 0, self.blocked
+        assert moved
         cleanup.retry_logged(self.eng.git, self.eng.log)
-        self.assertEqual(gitq.git("ls-remote", "origin", "refs/heads/task/t-1", cwd=main).split()[0], moved[0])
+        assert gitq.git("ls-remote", "origin", "refs/heads/task/t-1", cwd=main).split()[0] == moved[0]
         done = records(self.eng, "land_cleanup")[-1]
-        self.assertEqual((done["local_outcome"], done["remote_outcome"]), ("gone", "pending"))
+        assert (done["local_outcome"], done["remote_outcome"]) == ("gone", "pending")
 
     @real_git("an already-deleted task ref is success even when the original explicit lease is stale")
     def test_remote_already_gone_is_success(self):
@@ -88,7 +88,7 @@ class EngineCleanup(EngineTest):
 
         with mock.patch.object(cleanup, "retry", gone):
             rc, _ = self.run_engine(RUN)
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertFalse(self.wt.exists())
+        assert rc == 0, self.blocked
+        assert not self.wt.exists()
         done = records(self.eng, "land_cleanup")[-1]
-        self.assertEqual((done["local_outcome"], done["remote_outcome"]), ("gone", "gone"))
+        assert (done["local_outcome"], done["remote_outcome"]) == ("gone", "gone")

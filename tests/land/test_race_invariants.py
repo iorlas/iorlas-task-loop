@@ -50,6 +50,7 @@ from support.fake_clock import FakeClock
 from support.narrow import must
 from support.rebind import rebind
 from support.spawn import port_git, real_spawner
+from support.stdout import stdout_in
 
 from taskloop.adapters import (
     beadtools,
@@ -115,9 +116,10 @@ def claims(a):
 
 
 @unittest.skipIf(os.name == "nt", "fcntl locks (tl has none on Windows: documented no-op)")
+@stdout_in("out")
 class Invariants(test_loop.Base):
-    def setUp(self):
-        super().setUp()
+    def setup_method(self):
+        super().setup_method()
         self.clock = FakeClock(1_800_000_000.0)
         self.live = {os.getpid()}  # the fake process table: a pid in it is alive
         self.actors = {}  # thread name -> actor name (default: the thread's name)
@@ -132,9 +134,6 @@ class Invariants(test_loop.Base):
         self.addCleanup(stack.close)
         sim = gitsim.Sim(self)
         sim.install(stack)  # the port's own git calls (RealGit) are answered in process: no repo here, so they find nothing
-        p = mock.patch.object(sys, "stdout", self.out)
-        p.start()
-        self.addCleanup(p.stop)
         self.repo_s = str(self.repo)
         self.lock_calls = []  # (thread name) of every landlock.os_lock call
         real = landlock.os_lock
@@ -147,7 +146,7 @@ class Invariants(test_loop.Base):
 
     @contextlib.contextmanager
     def watching(self, watch):
-        """Every lock taken in the process goes through `watch` for the length of a `with` (it ends in the lock held at setUp)."""
+        """Every lock taken in the process goes through `watch` for the length of a `with` (it ends in the lock held at setup_method)."""
         current = landlock.os_lock
         for mod in list(sys.modules.values()):
             for name, val in list(getattr(mod, "__dict__", {}).items()):
@@ -185,7 +184,7 @@ class Invariants(test_loop.Base):
             t.start()
         for t in ths:
             t.join(GUARD)
-        self.assertFalse([t.name for t in ths if t.is_alive()], "a thread hung")
+        assert not [t.name for t in ths if t.is_alive()], "a thread hung"
         if errs:
             raise next(iter(errs.values()))
         return res
@@ -234,14 +233,14 @@ class Invariants(test_loop.Base):
             me = support_who.who()
             return verbs.claim(me, BeadId("w-1"), beadtools.bd_store(me.actor), port_git(), self.repo_s, None)
         res = self.together(dict.fromkeys("ABCD", claim))
-        self.assertEqual(sorted(res.values()), [0, 1, 1, 1], res)
+        assert sorted(res.values()) == [0, 1, 1, 1], res
         (winner,) = [a for b, a in bd.won if b == "w-1"]
-        self.assertEqual(bd.beads["w-1"]["assignee"], winner)
-        self.assertEqual(self.out.getvalue().count("CLAIMED w-1"), 1)
+        assert bd.beads["w-1"]["assignee"] == winner
+        assert self.out.getvalue().count("CLAIMED w-1") == 1
         # the main thread, a fifth session
         late = verbs.claim(support_who.who(), BeadId("w-1"), beadtools.bd_store(support_who.who().actor), port_git(), self.repo_s, None)
-        self.assertEqual((late, [a for b, a in bd.won if b == "w-1"]), (1, [winner]))
-        self.assertEqual(beadtools.bd_store(support_who.who().actor).ready(), [])  # nothing is left for a loop to pick and run again
+        assert (late, [a for b, a in bd.won if b == "w-1"]) == (1, [winner])
+        assert beadtools.bd_store(support_who.who().actor).ready() == []  # nothing is left for a loop to pick and run again
 
     # -- 2: no slot used by two at once, a hold included -----------------------------------------------------------------
 
@@ -255,27 +254,27 @@ class Invariants(test_loop.Base):
             lambda: sl.take_slot(self.repo_s, self.cfg, "loop"), lambda: wslots.take_named_slot(self.repo_s, "s1", self.cfg, "hand",
                 spawner=real_spawner(), git=port_git(), who=support_who.who())
         )
-        self.assertEqual(got["A"][0], "s1")
-        self.assertIsNone(got["B"][0], got)  # refused: the slot is held
-        self.assertIn("held by", got["B"][1])
+        assert got["A"][0] == "s1"
+        assert got["B"][0] is None, got  # refused: the slot is held
+        assert "held by" in got["B"][1]
         got = self.race(lambda: self.hold("s2"), lambda: wslots.take_named_slot(self.repo_s, "s2", self.cfg, "hand",
             spawner=real_spawner(), git=port_git(), who=support_who.who()))
-        self.assertEqual(got["A"], 0)
-        self.assertIsNone(got["B"][0], got)
-        self.assertIn("held by", got["B"][1])
+        assert got["A"] == 0
+        assert got["B"][0] is None, got
+        assert "held by" in got["B"][1]
         # the hold stays: no loop take, no hand run, no second hold gets it
-        self.assertEqual(must(sl.take_slot(self.repo_s, self.cfg, "loop"))[0], "s3")
-        self.assertIsNone(sl.take_slot(self.repo_s, self.cfg, "loop"))  # s1 and s3 used, s2 held
-        self.assertIn("held by", wslots.take_named_slot(self.repo_s, "s2", self.cfg, "hand", spawner=real_spawner(),
-            git=port_git(), who=support_who.who())[1])
+        assert must(sl.take_slot(self.repo_s, self.cfg, "loop"))[0] == "s3"
+        assert sl.take_slot(self.repo_s, self.cfg, "loop") is None  # s1 and s3 used, s2 held
+        assert "held by" in wslots.take_named_slot(self.repo_s, "s2", self.cfg, "hand", spawner=real_spawner(),
+            git=port_git(), who=support_who.who())[1]
         self.actors["MainThread"] = "tl-other"
-        self.assertEqual(self.hold("s1"), 1)  # a slot in use is never held
-        self.assertEqual(self.hold("s2"), 1)  # another session's hold is not taken over
+        assert self.hold("s1") == 1  # a slot in use is never held
+        assert self.hold("s2") == 1  # another session's hold is not taken over
         # the hold runs out on the fake clock: the next take frees it and gets the slot
         self.clock.advance(30 * 60 + 1)
-        self.assertEqual(must(sl.take_slot(self.repo_s, self.cfg, "loop"))[0], "s2")
+        assert must(sl.take_slot(self.repo_s, self.cfg, "loop"))[0] == "s2"
         owners = {b["title"].split()[-1]: b["assignee"] for b in bd.slots.values()}
-        self.assertEqual(owners, {"s1": "tl-one", "s2": "tl-other", "s3": "tl-main"})
+        assert owners == {"s1": "tl-one", "s2": "tl-other", "s3": "tl-main"}
 
     # -- 3: no two beads of one area at once -----------------------------------------------------------------------------
 
@@ -317,13 +316,13 @@ class Invariants(test_loop.Base):
             return real_hold(*a, **kw)
         with mock.patch.object(running, "hold_path", hold):
             got = self.together({"A": run("w-1", "sl-1", "A"), "B": run("w-2", "sl-2", "B")})
-        self.assertEqual(got["A"], "", got)
-        self.assertIn("area a busy: w-1 in s1", got["B"])
-        self.assertIn("(--exclusive-area)", got["B"])
+        assert got["A"] == "", got
+        assert "area a busy: w-1 in s1" in got["B"]
+        assert "(--exclusive-area)" in got["B"]
         marked = [s for s, b in bd.slots.items() if (b.get("metadata") or {}).get("held_bead")]
-        self.assertEqual(marked, ["sl-1"])
-        self.assertEqual(run("w-3", "sl-3", "C")(), "")  # area b is free
-        self.assertEqual(sorted(running.running(self.repo_s, port_git(), support_who.who()).items()), [("w-1", "s1"), ("w-3", "s3")])
+        assert marked == ["sl-1"]
+        assert run("w-3", "sl-3", "C")() == ""  # area b is free
+        assert sorted(running.running(self.repo_s, port_git(), support_who.who()).items()) == [("w-1", "s1"), ("w-3", "s3")]
 
     # -- 4: slots served in ticket order ---------------------------------------------------------------------------------
 
@@ -357,9 +356,9 @@ class Invariants(test_loop.Base):
         for name, prio in (("W1", 2), ("W2", 2), ("W3", 0)):  # arrival order W1, W2, W3; W3 is the urgent one
             waiters[name] = Waiter(name, prio)
             waiters[name].start()
-            self.assertTrue(waiters[name].settled.wait(GUARD))  # it has its ticket and has looked once
+            assert waiters[name].settled.wait(GUARD)  # it has its ticket and has looked once
         line = [t.why for t in wslots.waiting_line(self.repo_s, support_who.who())]
-        self.assertEqual(line, ["W3", "W1", "W2"])
+        assert line == ["W3", "W1", "W2"]
         # the owner lets go
         wslots.release_slot(self.repo_s, "s1", force=True, spawner=real_spawner(), git=port_git(), who=support_who.who())
         pending = ["W2", "W1", "W3"]  # woken against the line
@@ -367,25 +366,25 @@ class Invariants(test_loop.Base):
             for n in pending:
                 waiters[n].settled.clear()
                 waiters[n].wake.set()
-                self.assertTrue(waiters[n].settled.wait(GUARD))
+                assert waiters[n].settled.wait(GUARD)
             (done,) = [n for n in pending if waiters[n].got]
             served.append(done)
             pending.remove(done)
             wslots.release_slot(self.repo_s, "s1", force=True, spawner=real_spawner(), git=port_git(), who=support_who.who())
         for w in waiters.values():
             w.join(GUARD)
-        self.assertEqual(served, ["W3", "W1", "W2"])
-        self.assertEqual(list(sl.ticket_dir(self.repo_s).glob("*.json")), [])
+        assert served == ["W3", "W1", "W2"]
+        assert list(sl.ticket_dir(self.repo_s).glob("*.json")) == []
         # a waiter whose process is gone is dropped by whoever reads the line, and blocks nobody
         d = sl.ticket_dir(self.repo_s)
         (d / "000099.json").write_text(json.dumps({"v": 1, "seq": 99, "prio": 0, "pid": sl.dead_pid(), "why": "dead", "since": 1}))
-        self.assertEqual(wslots.waiting_line(self.repo_s, support_who.who()), [])
-        self.assertFalse((d / "000099.json").exists())
-        self.assertEqual(must(wslots.wait_slot(self.repo_s, self.cfg, "late", stop=lambda: True, spawner=real_spawner(),
-            git=port_git(), who=support_who.who()))[0], "s1")
+        assert wslots.waiting_line(self.repo_s, support_who.who()) == []
+        assert not (d / "000099.json").exists()
+        assert must(wslots.wait_slot(self.repo_s, self.cfg, "late", stop=lambda: True, spawner=real_spawner(),
+            git=port_git(), who=support_who.who()))[0] == "s1"
         # tickets taken at once are all different and numbered in arrival order
         seqs = self.together({f"T{i}": (lambda: sl.take_ticket(self.repo_s, "x").seq) for i in range(6)})
-        self.assertEqual(sorted(seqs.values()), list(range(min(seqs.values()), min(seqs.values()) + 6)))
+        assert sorted(seqs.values()) == list(range(min(seqs.values()), min(seqs.values()) + 6))
 
     # -- 5: no checkout under another process's live engine lock ---------------------------------------------------------
 
@@ -399,27 +398,28 @@ class Invariants(test_loop.Base):
         put_lock(
             s1, {"pid": OTHER_ENGINE, "start": f"T{int(OTHER_ENGINE)}", "bead": "w-9", "started": self.clock.now()}
         )
-        self.assertIn(f"pid {int(OTHER_ENGINE)} runs w-9", engine_lock.engine_busy(s1))
-        self.assertEqual(bd.slots["sl-1"]["status"], "open")  # the slot bead says free
-        self.assertEqual(must(sl.take_slot(self.repo_s, self.cfg, "loop"))[0], "s2")  # a loop passes over s1
-        self.assertIn("busy", wslots.take_named_slot(self.repo_s, "s1", self.cfg, "hand", spawner=real_spawner(),
-            git=port_git(), who=support_who.who())[1])
-        self.assertEqual(self.hold("s1"), 1)
-        self.assertIn("BUSY", self.out.getvalue())
+        assert f"pid {int(OTHER_ENGINE)} runs w-9" in engine_lock.engine_busy(s1)
+        assert bd.slots["sl-1"]["status"] == "open"  # the slot bead says free
+        assert must(sl.take_slot(self.repo_s, self.cfg, "loop"))[0] == "s2"  # a loop passes over s1
+        assert "busy" in wslots.take_named_slot(self.repo_s, "s1", self.cfg, "hand", spawner=real_spawner(),
+            git=port_git(), who=support_who.who())[1]
+        assert self.hold("s1") == 1
+        assert "BUSY" in self.out.getvalue()
         with mock.patch.object(git_adapter.RealGit, "_run", side_effect=AssertionError("git ran in a live slot")):
-            self.assertEqual(self.main(["slot", "reset", "s1", "--bead", "w-1"]), 4)  # the reset stops before any git
-            self.assertEqual(self.main(["slot", "release", "s1"]), 1)
+            assert self.main(["slot", "reset", "s1", "--bead", "w-1"]) == 4  # the reset stops before any git
+            assert self.main(["slot", "release", "s1"]) == 1
         listing = "task/w-9"
         listed = [Checkout(path=s1, branch=listing, main=False), Checkout(path=s2, branch="", main=False)]
         with mock.patch.object(git_adapter.RealGit, "checkouts", return_value=listed):  # any other git call would find the same text
-            self.assertIn(
-                "runs w-9", reset.free_branch(sl.pool(self.repo_s, cfg=self.cfg).named("s2"), listing)
+            assert (
+                "runs w-9"
+                in reset.free_branch(sl.pool(self.repo_s, cfg=self.cfg).named("s2"), listing)
             )  # its branch is not taken from it
-        self.assertEqual(getattr(engine_lock.read_engine_lock(s1), "pid", None), OTHER_ENGINE)  # and its lock is still there
+        assert getattr(engine_lock.read_engine_lock(s1), "pid", None) == OTHER_ENGINE  # and its lock is still there
         self.live.discard(OTHER_ENGINE)  # the engine died: its lock is no obstacle
-        self.assertEqual(engine_lock.engine_busy(s1), "")
-        self.assertEqual(wslots.take_named_slot(self.repo_s, "s1", self.cfg, "hand", spawner=real_spawner(),
-            git=port_git(), who=support_who.who())[1], "")
+        assert engine_lock.engine_busy(s1) == ""
+        assert wslots.take_named_slot(self.repo_s, "s1", self.cfg, "hand", spawner=real_spawner(),
+            git=port_git(), who=support_who.who())[1] == ""
 
     # -- 6/7: lands and releases, on one lock, against one origin --------------------------------------------------------
 
@@ -551,15 +551,15 @@ class Invariants(test_loop.Base):
         with self.watching(watch):
             self.together({"X": section(lander_over(eng()).lock()), "Y": section(lander_over(eng()).lock()),
                            "Z": section(landlock.os_lock(landlock.land_lock_path(homes.cfg(), url), "release: z"))})
-        self.assertEqual((most[0], sorted(entered)), (1, ["X", "Y", "Z"]))
+        assert (most[0], sorted(entered)) == (1, ["X", "Y", "Z"])
         o = self.releases()
-        self.assertEqual(o.most, 1)  # never two pushes inside the lock at once
+        assert o.most == 1  # never two pushes inside the lock at once
         accepted = [r for r, what in o.log if what == "accepted"]
-        self.assertEqual(sorted(accepted), ["A", "B"])  # each release pushed exactly once
+        assert sorted(accepted) == ["A", "B"]  # each release pushed exactly once
         first, second = (r for r, _ in o.versions)
-        self.assertEqual([what for r, what in o.log if r == first], ["push", "accepted"])
+        assert [what for r, what in o.log if r == first] == ["push", "accepted"]
         late = [what for r, what in o.log if r == second]
-        self.assertLess(late.index("rebase"), late.index("accepted"))  # the late one rebased onto the first's push before its own
+        assert late.index("rebase") < late.index("accepted")  # the late one rebased onto the first's push before its own
 
     def test_every_release_takes_a_distinct_version(self):
         """Two releases bumped on one base (both 0.1.1) end as 0.1.1 and 0.1.2: the one that lost the race bumps again on the new base.
@@ -567,18 +567,18 @@ class Invariants(test_loop.Base):
         self.tracker()
         o = self.releases()
         versions = sorted(v for _, v in o.versions)
-        self.assertEqual(versions, ["0.1.1", "0.1.2"])
-        self.assertEqual(sorted(o.got.values()), ["0.1.1", "0.1.2"])  # what each release reports is what it pushed
+        assert versions == ["0.1.1", "0.1.2"]
+        assert sorted(o.got.values()) == ["0.1.1", "0.1.2"]  # what each release reports is what it pushed
 
     # -- 8: nothing left held --------------------------------------------------------------------------------------------
 
     def nothing_held(self, slots):
         for b in self.bd.slots.values():
-            self.assertEqual((b["status"], b.get("assignee") or ""), ("open", ""), b)
-            self.assertFalse(set(b.get("metadata") or {}) & set(marks.HELD_KEYS), b)
-        self.assertEqual(list(sl.ticket_dir(self.repo_s).glob("*.json")), [])
+            assert (b["status"], b.get("assignee") or "") == ("open", ""), b
+            assert not set(b.get("metadata") or {}) & set(marks.HELD_KEYS), b
+        assert list(sl.ticket_dir(self.repo_s).glob("*.json")) == []
         for n in slots:
-            self.assertFalse(engine_lock.engine_lock_path(wslots.slot_dir(self.repo_s, n, self.cfg)).exists(), n)
+            assert not engine_lock.engine_lock_path(wslots.slot_dir(self.repo_s, n, self.cfg)).exists(), n
         for lock in (homes.config_dir() / "locks").glob("*.lock"):
             with open(str(lock), "a+") as f:
                 must(fcntl).flock(f, must(fcntl).LOCK_EX | must(fcntl).LOCK_NB)  # raises while a holder is left
@@ -629,12 +629,8 @@ class Invariants(test_loop.Base):
         self.actors["MainThread"] = "tl-main"
         for name in ("s1", "s2"):
             sb = wslots.take_named_slot(repo, name, cfg, "next", spawner=real_spawner(), git=port_git(), who=support_who.who())[0]
-            self.assertTrue(sb, name)  # the expired hold and the dead engine's lock are no obstacle
+            assert sb, name  # the expired hold and the dead engine's lock are no obstacle
             wslots.release_slot(repo, name, mine=True, spawner=real_spawner(), git=port_git(), who=support_who.who())
-        self.assertEqual(wslots.waiting_line(repo, support_who.who()), [])
+        assert wslots.waiting_line(repo, support_who.who()) == []
         engine_lock.drop_engine_lock(d2, 5252)
         self.nothing_held(names)
-
-
-if __name__ == "__main__":
-    unittest.main()

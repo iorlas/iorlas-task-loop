@@ -1,12 +1,13 @@
 """Accepted-stage pushes own their elapsed time and silence limit, including time in the pre-push hook."""
 
 import tempfile
-import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
+import pytest
 import support.paths  # noqa: F401
+from support.case import Case
 from support.narrow import must
 from support.narrow_hosts import FakeOutboundHost
 
@@ -22,8 +23,8 @@ from taskloop.contracts.stores import JsonlStore
 from taskloop.stores.runlog import RunLog
 
 
-class PushTiming(unittest.TestCase):
-    def setUp(self):
+class PushTiming(Case):
+    def setup_method(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.path = Path(tmp.name) / "run.jsonl"
@@ -46,22 +47,21 @@ class PushTiming(unittest.TestCase):
 
     def test_long_push_is_booked_to_push_without_a_review_silence_warning(self):
         def push(_wt, _remote, _ref):
-            self.assertEqual(must(self.host.steps.cur).step, "push")
+            assert must(self.host.steps.cur).step == "push"
             self.clock.advance(2900)
             self.host.log.emit(rec.Beat())
             self.tick.tick()
-            self.assertEqual(self.tick.watch.step, "push")
-            self.assertFalse([r for r in self.records() if isinstance(r, rec.Stuck)])
+            assert self.tick.watch.step == "push"
+            assert not [r for r in self.records() if isinstance(r, rec.Stuck)]
             return GitOutcome(ok=True, output="")
 
         with mock.patch.object(self.host.git, "push_lease", side_effect=push):
             Outbound(self.host).wip_push(1)
-        self.assertEqual(self.ends(), [("review", 559, "done"), ("push", 2900, "done")])
-        self.assertIsNone(self.host.steps.cur)
-        self.assertAlmostEqual(self.budget.spent_min(), 3459 / 60)
-        self.assertEqual(self.budget.waited, 0)
-        self.assertEqual([(b.step, b.minutes, b.rounds) for b in run_breakdown(self.path)],
-                         [("push", 48.0, 1), ("review", 9.0, 1)])
+        assert self.ends() == [("review", 559, "done"), ("push", 2900, "done")]
+        assert self.host.steps.cur is None
+        assert self.budget.spent_min() == pytest.approx(3459 / 60, abs=5e-08)
+        assert self.budget.waited == 0
+        assert [(b.step, b.minutes, b.rounds) for b in run_breakdown(self.path)] == [("push", 48.0, 1), ("review", 9.0, 1)]
 
     def test_failed_or_interrupted_push_closes_its_timed_step(self):
         for result in (GitOutcome(ok=False, output="Could not resolve host: origin"), OSError("push interrupted")):
@@ -76,16 +76,16 @@ class PushTiming(unittest.TestCase):
                     return result
 
                 with (mock.patch.object(self.host.git, "push_lease", side_effect=push),
-                      self.assertRaises((RuntimeError, OSError))):
+                      pytest.raises((RuntimeError, OSError))):
                     Outbound(self.host).wip_push(1)
-                self.assertEqual(self.ends()[-2:], [("review", 60, "done"), ("push", 2900, "failed")])
-                self.assertIsNone(self.host.steps.cur)
+                assert self.ends()[-2:] == [("review", 60, "done"), ("push", 2900, "failed")]
+                assert self.host.steps.cur is None
                 self.tick.tick()
-                self.assertFalse([r for r in self.records() if isinstance(r, rec.Stuck)])
+                assert not [r for r in self.records() if isinstance(r, rec.Stuck)]
 
     def test_lfs_time_belongs_to_the_same_push_step(self):
         def lfs():
-            self.assertEqual(must(self.host.steps.cur).step, "push")
+            assert must(self.host.steps.cur).step == "push"
             self.clock.advance(300)
             return 0, ""
 
@@ -97,8 +97,8 @@ class PushTiming(unittest.TestCase):
         out = Outbound(self.host)
         with mock.patch.object(out, "lfs_push", side_effect=lfs), mock.patch.object(self.host.git, "push_lease", side_effect=push):
             out.wip_push(1)
-        self.assertEqual(self.ends(), [("review", 559, "done"), ("push", 3200, "done")])
-        self.assertFalse([r for r in self.records() if isinstance(r, rec.Stuck)])
+        assert self.ends() == [("review", 559, "done"), ("push", 3200, "done")]
+        assert not [r for r in self.records() if isinstance(r, rec.Stuck)]
 
     def test_failed_lfs_push_is_timed_and_prevents_the_git_push(self):
         def lfs():
@@ -108,22 +108,22 @@ class PushTiming(unittest.TestCase):
 
         out = Outbound(self.host)
         with (mock.patch.object(out, "lfs_push", side_effect=lfs), mock.patch.object(self.host.git, "push_lease") as push,
-              self.assertRaisesRegex(RuntimeError, "PAUSE_NETWORK")):
+              pytest.raises(RuntimeError, match="PAUSE_NETWORK")):
             out.wip_push(1)
         push.assert_not_called()
-        self.assertEqual(self.ends(), [("review", 559, "done"), ("push", 2900, "failed")])
-        self.assertIsNone(self.host.steps.cur)
-        self.assertFalse([r for r in self.records() if isinstance(r, rec.Stuck)])
+        assert self.ends() == [("review", 559, "done"), ("push", 2900, "failed")]
+        assert self.host.steps.cur is None
+        assert not [r for r in self.records() if isinstance(r, rec.Stuck)]
 
     def test_push_has_its_own_silence_limit_and_the_next_review_keeps_its_limit(self):
         def push(_wt, _remote, _ref):
             self.clock.advance(silent_limit("push") - 1)
             self.tick.tick()
-            self.assertFalse([r for r in self.records() if isinstance(r, rec.Stuck)])
+            assert not [r for r in self.records() if isinstance(r, rec.Stuck)]
             self.clock.advance(1)
             self.tick.tick()
             stuck = [r for r in self.records() if isinstance(r, rec.Stuck)]
-            self.assertEqual([(r.step, r.limit_s) for r in stuck], [("push", silent_limit("push"))])
+            assert [(r.step, r.limit_s) for r in stuck] == [("push", silent_limit("push"))]
             return GitOutcome(ok=True, output="")
 
         with mock.patch.object(self.host.git, "push_lease", side_effect=push):
@@ -132,7 +132,7 @@ class PushTiming(unittest.TestCase):
         self.clock.advance(silent_limit("review"))
         self.tick.tick()
         stuck = [r for r in self.records() if isinstance(r, rec.Stuck)]
-        self.assertEqual([r.step for r in stuck], ["push", "review"])
+        assert [r.step for r in stuck] == ["push", "review"]
 
     def test_dry_run_or_custom_land_does_not_start_a_push_step(self):
         for dry, land in ((True, ["git", "push", "origin", "HEAD:main"]), (False, ["custom-land"])):
@@ -142,5 +142,5 @@ class PushTiming(unittest.TestCase):
                 with mock.patch.object(self.host.git, "push_lease") as push:
                     Outbound(self.host).wip_push(1)
                 push.assert_not_called()
-                self.assertEqual(must(self.host.steps.cur).step, "review")
-                self.assertEqual(self.ends(), [])
+                assert must(self.host.steps.cur).step == "review"
+                assert self.ends() == []

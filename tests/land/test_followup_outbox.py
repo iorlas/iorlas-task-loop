@@ -1,10 +1,12 @@
 """Follow-up creation survives a kill and a disposable run checkpoint, using only fakes."""
 import sys
-import unittest
 from collections.abc import Mapping
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
+
+import pytest
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -67,7 +69,7 @@ class Host(StateAttrs):
         self.checkout = SimpleNamespace(branch_now=lambda: self.task_branch)
 
 
-class FollowupOutbox(unittest.TestCase):
+class FollowupOutbox(Case):
     def host(self):
         h = Host()
         h.checkpoints.save(step="write")
@@ -77,35 +79,35 @@ class FollowupOutbox(unittest.TestCase):
 
     def test_kill_after_create_before_checkpoint_resolves_even_a_closed_bead(self):
         h = self.host()
-        with mock.patch.object(h.checkpoints, "keep_filed", side_effect=Killed), self.assertRaises(Killed):
+        with mock.patch.object(h.checkpoints, "keep_filed", side_effect=Killed), pytest.raises(Killed):
             file_follow_ups(h)
         made = next(iter(h.store.beads))
         h.store.close(made, "done")
         b = Host()
         b.store, b.stores = h.store, h.stores
-        self.assertEqual(file_follow_ups(b), [])
-        self.assertEqual(len(b.store.beads), 1)
+        assert file_follow_ups(b) == []
+        assert len(b.store.beads) == 1
         key = str(FollowKey.of(b.bead, h.leftovers[0]))
-        self.assertEqual(must(b.checkpoints.read()).state.followup_ids[key], made)
+        assert must(b.checkpoints.read()).state.followup_ids[key] == made
 
     def test_refused_queue_survives_checkpoint_deletion_and_retries_by_key(self):
         h = self.host()
         h.store.refuse_create = [BdError(kind="other", text="offline")]
-        self.assertEqual(len(file_follow_ups(h)), 1)
+        assert len(file_follow_ups(h)) == 1
         h.warn.assert_called()
         h.checkpoints.drop()
         b = Host()
         b.store, b.stores = h.store, h.stores
-        self.assertEqual(file_follow_ups(b), [])
-        self.assertEqual(len(b.store.beads), 1)
-        self.assertEqual(must(b.stores.followups.of(b.bead).need()).pending, [])
+        assert file_follow_ups(b) == []
+        assert len(b.store.beads) == 1
+        assert must(b.stores.followups.of(b.bead).need()).pending == []
 
     def test_failed_lookup_keeps_the_outbox_and_does_not_create(self):
         h = self.host()
         with mock.patch.object(h.store, "find", side_effect=BdFailure(BdError(kind="other", text="offline"))):
-            self.assertEqual(len(file_follow_ups(h)), 1)
-        self.assertEqual(h.store.beads, {})
-        self.assertEqual(len(must(h.stores.followups.of(h.bead).need()).pending), 1)
+            assert len(file_follow_ups(h)) == 1
+        assert h.store.beads == {}
+        assert len(must(h.stores.followups.of(h.bead).need()).pending) == 1
 
     def test_malformed_successful_lookup_keeps_pending_work_without_creating(self):
         for output in ("truncated", '{"issues": []}', '[{"id": "t-2"}, {}]'):
@@ -118,31 +120,31 @@ class FollowupOutbox(unittest.TestCase):
                     return BdRun(0, output, "")
 
                 with mock.patch.object(h, "store", BdStore("x", exe="bd", run=run)):
-                    self.assertEqual(file_follow_ups(h), h.leftovers)
-                self.assertEqual(len(calls), 1)
-                self.assertEqual(calls[0][:4], ["list", "-n", "0", "--all"])
-                self.assertIn("--label", calls[0])
-                self.assertEqual((h.filed, h.followup_ids), ([], {}))
-                self.assertEqual(len(must(h.stores.followups.of(h.bead).need()).pending), 1)
+                    assert file_follow_ups(h) == h.leftovers
+                assert len(calls) == 1
+                assert calls[0][:4] == ["list", "-n", "0", "--all"]
+                assert "--label" in calls[0]
+                assert (h.filed, h.followup_ids) == ([], {})
+                assert len(must(h.stores.followups.of(h.bead).need()).pending) == 1
 
     def test_file_notes_reports_and_warns_about_required_work_in_the_outbox(self):
         h = self.host()
         h.leftovers = []  # only the durable queue knows what still needs filing
         h.store.refuse_create = [BdError(kind="other", text="offline")]
         notes = FileNotes(h).run(Outcome.FAILED)
-        self.assertEqual((notes.filed, notes.unfiled), (0, 1))
-        self.assertTrue(any("durable outbox" in call.args[0] for call in h.warn.call_args_list))
-        self.assertEqual(len(must(h.stores.followups.of(h.bead).need()).pending), 1)
+        assert (notes.filed, notes.unfiled) == (0, 1)
+        assert any("durable outbox" in call.args[0] for call in h.warn.call_args_list)
+        assert len(must(h.stores.followups.of(h.bead).need()).pending) == 1
 
     def test_over_cap_items_remain_for_the_next_run(self):
         h = self.host()
         h.leftovers += [{"title": f"later {n}", "why": "w"} for n in range(3)]
         file_follow_ups(h)
-        self.assertEqual(len(h.store.beads), 3)
-        self.assertEqual(len(must(h.stores.followups.of(h.bead).need()).pending), 1)
+        assert len(h.store.beads) == 3
+        assert len(must(h.stores.followups.of(h.bead).need()).pending) == 1
         h.checkpoints.drop()
         b = Host()
         b.store, b.stores = h.store, h.stores
         file_follow_ups(b)
-        self.assertEqual(len(b.store.beads), 4)
-        self.assertEqual(must(b.stores.followups.of(b.bead).need()).pending, [])
+        assert len(b.store.beads) == 4
+        assert must(b.stores.followups.of(b.bead).need()).pending == []

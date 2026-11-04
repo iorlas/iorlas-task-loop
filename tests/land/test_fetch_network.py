@@ -1,8 +1,10 @@
 """Connectivity failures before work pause the factory rather than failing a bead."""
 import sys
-import unittest
 from pathlib import Path
 from unittest import mock
+
+import pytest
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -15,7 +17,7 @@ from taskloop.domain.land.matchers import NetText, Push
 DNS = "fatal: unable to access 'https://github.com/org/repo': Could not resolve host: github.com"
 
 
-class Connectivity(unittest.TestCase):
+class Connectivity(Case):
     def test_network_table(self):
         positives = (
             DNS,
@@ -48,15 +50,15 @@ class Connectivity(unittest.TestCase):
         )
         for text in positives:
             with self.subTest(text=text):
-                self.assertTrue(NetText.down(text.swapcase()))
+                assert NetText.down(text.swapcase())
         for text in negatives:
             with self.subTest(text=text):
-                self.assertFalse(NetText.down(text))
+                assert not NetText.down(text)
 
     def test_only_the_last_600_characters_are_network_evidence(self):
-        self.assertFalse(NetText.down(DNS + "x" * 600))
-        self.assertTrue(NetText.down("x" * 600 + DNS))
-        self.assertTrue(Push.transient("RPC failed"))
+        assert not NetText.down(DNS + "x" * 600)
+        assert NetText.down("x" * 600 + DNS)
+        assert Push.transient("RPC failed")
 
     def test_checked_fetch_classifies_network_and_preserves_other_faults(self):
         for text, kind, prefix in ((DNS, "PAUSE_NETWORK", "paused"),
@@ -66,15 +68,15 @@ class Connectivity(unittest.TestCase):
                 host.git.fetch.side_effect = SlotGitError(text)
                 blocked = RuntimeError("blocked")
                 host.blocked_for.return_value = blocked
-                with self.assertRaises(RuntimeError) as caught:
+                with pytest.raises(RuntimeError) as caught:
                     Checkout(host).fetch(check=True)
-                self.assertIs(caught.exception, blocked)
+                assert caught.value is blocked
                 host.blocked_for.assert_called_once_with(f"{prefix}: `git fetch -q origin`: {text}", kind)
 
     def test_unchecked_fetch_keeps_its_return_contract(self):
         host = mock.Mock(wt="/slot")
         host.git.fetch.side_effect = SlotGitError(DNS)
-        self.assertEqual(Checkout(host).fetch(), (1, DNS))
+        assert Checkout(host).fetch() == (1, DNS)
         host.blocked_for.assert_not_called()
 
     def test_required_git_calls_classify_network_failures_before_work(self):
@@ -84,6 +86,6 @@ class Connectivity(unittest.TestCase):
                 host = mock.Mock()
                 host.blocked_for.return_value = RuntimeError("blocked")
                 call = mock.Mock(side_effect=SlotGitError(text))
-                with self.assertRaises(RuntimeError):
+                with pytest.raises(RuntimeError):
                     must(host, "checkout task/x-1", call)
                 host.blocked_for.assert_called_once_with(f"{prefix}: `git checkout task/x-1`: {text}", kind)

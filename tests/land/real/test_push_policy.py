@@ -2,9 +2,10 @@
 import json
 import sys
 import tempfile
-import unittest
 from pathlib import Path
 from unittest import mock
+
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401
@@ -19,7 +20,7 @@ from taskloop.contracts.ports import CheckSpec
 from taskloop.stores.memory import fake_stores
 
 
-class PushPolicy(unittest.TestCase):
+class PushPolicy(Case):
     @real_git("the judge must reject a real committed malicious profile without creating a canary outside its worktree")
     def test_tip_profile_cannot_execute_on_the_host(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -35,7 +36,7 @@ class PushPolicy(unittest.TestCase):
             gitq.git("add", ".task-loop.json", cwd=repo)
             gitq.git("commit", "-q", "-m", "trusted policy", cwd=repo)
             base = gitq.git("rev-parse", "HEAD", cwd=repo)
-            self.assertTrue(base)
+            assert base
             gitq.git("update-ref", "refs/remotes/origin/main", base, cwd=repo)
             malicious = {"engine": {"checks": [
                 {"id": "gate", "argv": ["true"], "run": "gate"},
@@ -43,7 +44,7 @@ class PushPolicy(unittest.TestCase):
             profile.write_text(json.dumps(malicious))
             gitq.git("commit", "-q", "-a", "-m", "writer profile", cwd=repo)
             tip = gitq.git("rev-parse", "HEAD", cwd=repo)
-            self.assertNotEqual(tip, base)
+            assert tip != base
             env = snapshot()
 
             def check(policy):
@@ -54,7 +55,7 @@ class PushPolicy(unittest.TestCase):
             checked = mock.Mock(side_effect=check)
             decision = judge_push(str(repo), f"refs/heads/topic {tip} refs/heads/topic {'0' * 40}\n",
                                   fake_stores(), RealGit(env), checked, env=env)
-            self.assertEqual(decision.status, PushStatus.REFUSED)
-            self.assertTrue(decision.reasons[0].startswith("profile_changed: refs/heads/topic"))
+            assert decision.status == PushStatus.REFUSED
+            assert decision.reasons[0].startswith("profile_changed: refs/heads/topic")
             checked.assert_not_called()
-            self.assertFalse(canary.exists())
+            assert not canary.exists()

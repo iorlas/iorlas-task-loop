@@ -7,6 +7,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from unittest import mock
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support.engine_case import CLEAN, PLAN, WRITE, EngineTest
@@ -29,12 +31,12 @@ RUN = ({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
 
 class Argv(EngineTest):
     def test_a_custom_land_command_is_no_push(self):
-        self.assertIsNone(outbound.target(["just", "land"]))
+        assert outbound.target(["just", "land"]) is None
 
     def test_the_remote_and_the_pushed_ref_come_from_the_push_argv(self):
-        self.assertEqual(outbound.target(["git", "push", "origin", "HEAD:main"]), ("origin", ["HEAD"]))
-        self.assertEqual(outbound.target(["git", "push", "-q", "up", "+bd/x:main"]), ("up", ["bd/x"]))
-        self.assertEqual(outbound.target(["git", "push"]), ("origin", ["HEAD"]))
+        assert outbound.target(["git", "push", "origin", "HEAD:main"]) == ("origin", ["HEAD"])
+        assert outbound.target(["git", "push", "-q", "up", "+bd/x:main"]) == ("up", ["bd/x"])
+        assert outbound.target(["git", "push"]) == ("origin", ["HEAD"])
 
     no_repo = True
 
@@ -44,33 +46,33 @@ class Sync(EngineTest):
 
     def test_a_dry_run_syncs_nothing(self):
         events: list[str] = []
-        self.assertEqual(AfterLand(FakeSyncHost(events, dry=True), BdOut(events)).run("abc"), "abc")
-        self.assertEqual(events, [])
+        assert AfterLand(FakeSyncHost(events, dry=True), BdOut(events)).run("abc") == "abc"
+        assert events == []
 
     def test_no_landed_sha_syncs_nothing(self):
         events: list[str] = []
         AfterLand(FakeSyncHost(events), BdOut(events)).run("")
-        self.assertEqual(events, [])
+        assert events == []
 
     def test_a_failed_sync_blocks_the_bead_with_the_error_and_a_missing_remote_is_quiet(self):
         host = FakeOutboundHost(result=(1, "dolt: could not read Username for 'https://github.com'"))
-        with self.assertRaises(RuntimeError) as cm:
+        with pytest.raises(RuntimeError) as cm:
             outbound.Outbound(host).bd_sync("abc1234567890")
-        self.assertTrue(str(cm.exception).startswith("PAUSE_NETWORK: "))
-        self.assertIn("failed in", host.lines[0])
-        self.assertIn("landed abc123456789", str(cm.exception))
-        self.assertIn("could not read Username", str(cm.exception))
+        assert str(cm.value).startswith("PAUSE_NETWORK: ")
+        assert "failed in" in host.lines[0]
+        assert "landed abc123456789" in str(cm.value)
+        assert "could not read Username" in str(cm.value)
         quiet = FakeOutboundHost(result=(1, "Error: no remote configured"))
         outbound.Outbound(quiet).bd_sync("abc")
-        self.assertEqual(quiet.lines, [])
+        assert quiet.lines == []
 
     def test_sync_failure_is_a_transient_pause_on_first_sight(self):
         host = FakeOutboundHost(result=(1, "remote unavailable"))
-        with mock.patch.object(host, "blocked_for", blocked_for), self.assertRaises(Blocked) as stopped:
+        with mock.patch.object(host, "blocked_for", blocked_for), pytest.raises(Blocked) as stopped:
             outbound.Outbound(host).bd_sync("abc")
-        outcome = stopped.exception.outcome
-        self.assertEqual(oc.POLICY[outcome.kind].loop, Result.PAUSED)
-        self.assertEqual(pauses.rule(outcome.kind.value, "engine").permanence, "transient")
+        outcome = stopped.value.outcome
+        assert oc.POLICY[outcome.kind].loop == Result.PAUSED
+        assert pauses.rule(outcome.kind.value, "engine").permanence == "transient"
 
     no_repo = True
 
@@ -82,10 +84,10 @@ class Land(EngineTest):
 
         with mock.patch.object(outbound.Outbound, "bd_sync", side_effect=unavailable):
             rc, _ = self.run_engine(RUN)
-        self.assertEqual(rc, 2)
-        self.assertTrue(self.eng.landed_sha)
-        self.assertEqual(self.eng.result().outcome, "paused")
-        self.assertFalse(self.closed)
+        assert rc == 2
+        assert self.eng.landed_sha
+        assert self.eng.result().outcome == "paused"
+        assert not self.closed
 
     def fake_lfs(self):
         """A git-lfs on PATH that notes its argv and what origin's main was at that moment."""
@@ -104,9 +106,9 @@ class Land(EngineTest):
         which = shutil.which
         with mock.patch("taskloop.app.land.outbound.shutil.which", lambda w, *a, **kw: None if w == "git-lfs" else which(w, *a, **kw)):
             rc, _ = self.run_engine(RUN)
-        self.assertNotEqual(rc, 0)
-        self.assertTrue(any("git-lfs is not installed" in r["text"] for r in records(self.eng, "warn")))
-        self.assertFalse(self.closed)
+        assert rc != 0
+        assert any("git-lfs is not installed" in r["text"] for r in records(self.eng, "warn"))
+        assert not self.closed
 
     def test_a_repo_without_lfs_runs_no_lfs_and_syncs_bd_after_the_lock(self):
         held, seen = [], []
@@ -124,8 +126,8 @@ class Land(EngineTest):
             return mock.Mock(returncode=1 if argv[:1] == ("sync",) else 0, stdout="", stderr="dolt: boom")
         with mock.patch.object(Lander, "lock", lock), self.store.stub(bd_fn=bd):
             rc, _ = self.run_engine(RUN)
-        self.assertEqual(rc, 2, self.blocked)
-        self.assertEqual(self.eng.result().outcome, "paused")
-        self.assertFalse(self.closed)
-        self.assertEqual([h for a, h in seen if a == ("sync",)], [False])  # once, outside the lock; its outage is retryable
-        self.assertTrue(any("bd sync" in r["text"] for r in records(self.eng, "warn")))
+        assert rc == 2, self.blocked
+        assert self.eng.result().outcome == "paused"
+        assert not self.closed
+        assert [h for a, h in seen if a == ("sync",)] == [False]  # once, outside the lock; its outage is retryable
+        assert any("bd sync" in r["text"] for r in records(self.eng, "warn"))

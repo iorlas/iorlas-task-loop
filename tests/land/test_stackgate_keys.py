@@ -1,10 +1,13 @@
 """A receipt `tl check` wrote in a clean worktree counts for `tl land-stack` when it judges from that worktree (detached at the oid
 too), and a refusal names, per step, the first key field that differs from the newest receipt on that tree and base."""
 import json
+import re
 import tempfile
-import unittest
 from pathlib import Path
 from unittest import mock
+
+import pytest
+from support.case import Case
 
 from taskloop.adapters import check_files, childenv
 from taskloop.app.checks.cache import InputKeys, RunMemo
@@ -73,8 +76,8 @@ def write_receipts(stores, git: Git, wt: str) -> RunMemo:
     return memo
 
 
-class StackGateKeys(unittest.TestCase):
-    def setUp(self):
+class StackGateKeys(Case):
+    def setup_method(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.repo = Checkouts(Path(tmp.name))
@@ -87,45 +90,46 @@ class StackGateKeys(unittest.TestCase):
 
     def test_a_clean_detached_worktree_at_the_oid_is_where_the_gate_judges(self):
         write_receipts(self.stores, self.repo.git, str(self.repo.wt))
-        self.assertEqual(self.gate.worktree("task/lifesim-fmtfix-r3", OID), str(self.repo.wt))
+        assert self.gate.worktree("task/lifesim-fmtfix-r3", OID) == str(self.repo.wt)
         self.gate.require("task/lifesim-fmtfix-r3", OID)  # green: no Stop, no `tl check` run
         self.spawner.run.assert_not_called()
 
     def test_the_main_checkout_cannot_reproduce_a_worktree_receipt_over_ignored_inputs(self):
         """The production failure: judged from the main checkout, the gitignored build output under `inputs` is another file."""
         write_receipts(self.stores, self.repo.git, str(self.repo.wt))
-        self.assertEqual(self.gate.red(self.engine, TREE, BASE, str(self.repo.wt)), [])
-        self.assertEqual(self.gate.red(self.engine, TREE, BASE, str(self.repo.main)), [CheckId("unity-tests")])
-        self.assertRegex(self.gate.why[CheckId("unity-tests")], r"^inputs differ \(expected [0-9a-f]{12} found [0-9a-f]{12}\)")
+        assert self.gate.red(self.engine, TREE, BASE, str(self.repo.wt)) == []
+        assert self.gate.red(self.engine, TREE, BASE, str(self.repo.main)) == [CheckId("unity-tests")]
+        assert re.search(r"^inputs differ \(expected [0-9a-f]{12} found [0-9a-f]{12}\)", self.gate.why[CheckId("unity-tests")])
 
     def test_a_refusal_names_the_first_differing_field_of_each_step(self):
         write_receipts(self.stores, self.repo.git, str(self.repo.wt))
         self.repo.git.checkouts.return_value = self.repo.git.checkouts.return_value[:1]  # no worktree has it out
-        with self.assertRaises(Stop) as stop:
+        with pytest.raises(Stop) as stop:
             self.gate.require("task/lifesim-fmtfix-r3", OID)
-        self.assertIn("is not green for unity-tests (inputs differ (expected ", stop.exception.why)
-        self.assertIn("no clean worktree has it out", stop.exception.why)
+        assert "is not green for unity-tests (inputs differ (expected " in stop.value.why
+        assert "no clean worktree has it out" in stop.value.why
 
     def test_a_step_with_no_receipt_on_this_tree_says_so(self):
-        self.assertEqual(self.gate.red(self.engine, TREE, BASE, str(self.repo.wt)), ["fmt", "unity-check", "unity-tests"])
-        self.assertEqual(set(self.gate.why.values()), {"no receipt for this tree and base"})
+        assert self.gate.red(self.engine, TREE, BASE, str(self.repo.wt)) == ["fmt", "unity-check", "unity-tests"]
+        assert set(self.gate.why.values()) == {"no receipt for this tree and base"}
 
     def test_a_changed_command_still_misses_and_is_named(self):
         write_receipts(self.stores, self.repo.git, str(self.repo.wt))
         changed = load({"engine": {**PROFILE["engine"], "checks": [{**PROFILE["engine"]["checks"][0], "argv": ["false"]}]}}).engine
-        self.assertEqual(self.gate.red(changed, TREE, BASE, str(self.repo.wt)), ["fmt"])
-        self.assertTrue(self.gate.why[CheckId("fmt")].startswith("cmd differs (expected "))
+        assert self.gate.red(changed, TREE, BASE, str(self.repo.wt)) == ["fmt"]
+        assert self.gate.why[CheckId("fmt")].startswith("cmd differs (expected ")
 
 
-class FirstDifference(unittest.TestCase):
+class FirstDifference(Case):
     def test_fields_are_compared_in_key_order_and_equal_keys_have_none(self):
         memo = write_receipts(fake_stores(), _flat_git(), "/unused")
         key = memo.receipts[CheckId("fmt")].key
-        self.assertEqual(first_difference(key, key), "")
-        self.assertEqual(first_difference(key, key.replace(env=Digest("e" * 40), execution=Digest("x"))),
-                         f"env differs (expected {key.env[:12]} found eeeeeeeeeeee)")
-        self.assertEqual(first_difference(key, key.replace(dependencies=Digest("d" * 64))),
-                         "dependencies differ (expected none found dddddddddddd)")
+        assert first_difference(key, key) == ""
+        assert (
+            first_difference(key, key.replace(env=Digest("e" * 40), execution=Digest("x")))
+            == f"env differs (expected {key.env[:12]} found eeeeeeeeeeee)"
+        )
+        assert first_difference(key, key.replace(dependencies=Digest("d" * 64))) == "dependencies differ (expected none found dddddddddddd)"
 
 
 def _flat_git() -> Git:

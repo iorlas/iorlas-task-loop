@@ -1,6 +1,5 @@
 """Stage tests, part 3: the stale tree, slot hygiene, dead lanes, contracts and follow-ups. Split from test_stages."""
 import sys
-import unittest
 from pathlib import Path
 from typing import Any, ClassVar
 from unittest import mock
@@ -53,7 +52,7 @@ class SlotHygiene(StagesTest):
             env=snapshot(),
             spawner=real_spawner(),
             git=port_git(), who=who())
-        self.assertEqual(e.checkout.dirty_status(), "")
+        assert e.checkout.dirty_status() == ""
 
 
 class Contracts(StagesTest):
@@ -65,11 +64,11 @@ class Contracts(StagesTest):
     @real_git("the land script is a child process that runs git push itself")
     def test_a_network_failure_on_the_push_is_retried_with_a_rest_and_lands(self):
         rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, land=self.land_with(2))
-        self.assertEqual(rc, 0, self.blocked)
+        assert rc == 0, self.blocked
         text = self.eng.log_path.read_text()
-        self.assertEqual(text.count("the push failed with a network error"), 2)
-        self.assertIsNone(self.eng.__dict__.get("asked") or None)
-        self.assertTrue(self.closed and self.closed[0].startswith("merged"))
+        assert text.count("the push failed with a network error") == 2
+        assert (self.eng.__dict__.get("asked") or None) is None
+        assert self.closed and self.closed[0].startswith("merged")
 
 
 class FollowUps(StagesTest):
@@ -89,7 +88,3 @@ class FollowUps(StagesTest):
 
     def reflect_comments(self):
         return [c[3] for c in self.bd_calls if c[:2] == ("comments", "add") and c[3].startswith("Reflect (engine)")]
-
-
-if __name__ == "__main__":
-    unittest.main()

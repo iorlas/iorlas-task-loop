@@ -1,8 +1,9 @@
 """A green gate can certify only the inputs its checks actually observed."""
 import sys
-import unittest
 from collections.abc import Callable, Sequence
 from pathlib import Path
+
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -51,8 +52,8 @@ class Checking:
         return run
 
 
-class GateIdentity(unittest.TestCase):
-    def setUp(self) -> None:
+class GateIdentity(Case):
+    def setup_method(self) -> None:
         self.git = MovingGit()
         cfg = EngineConfig(checks=[CheckSpec(id=CheckId("gate"), argv=["gate"], run="gate")])
         self.host = FakeGateHost(self.git, cfg, RunLog(fake_stores().run_log("run")))
@@ -64,10 +65,10 @@ class GateIdentity(unittest.TestCase):
         return Gate(self.host).run()
 
     def assert_stale(self, got: GatePass | Problem) -> None:
-        self.assertIsInstance(got, Problem)
         assert isinstance(got, Problem)
-        self.assertEqual(got.kind, ProblemKind.STALE)
-        self.assertIsNone(self.host.gate_log)
+        assert isinstance(got, Problem)
+        assert got.kind == ProblemKind.STALE
+        assert self.host.gate_log is None
 
     def test_tree_changed_during_checks_issues_no_token(self) -> None:
         def move() -> None:
@@ -93,6 +94,6 @@ class GateIdentity(unittest.TestCase):
 
     def test_unchanged_inputs_issue_the_captured_token(self) -> None:
         got = self.run_gate(lambda: None)
-        self.assertIsInstance(got, GatePass)
         assert isinstance(got, GatePass)
-        self.assertEqual((got.tree, got.base, got.config), ("tree", "base", engine_digest(self.host.cfg)))
+        assert isinstance(got, GatePass)
+        assert (got.tree, got.base, got.config) == ("tree", "base", engine_digest(self.host.cfg))

@@ -3,6 +3,8 @@ import sys
 from pathlib import Path
 from unittest import mock
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support import procsim
@@ -31,21 +33,21 @@ class SlotGate(EngineTest):
 
         def check(cwd, env):
             seen.append(Path(cwd))
-            self.assertEqual(Path(cwd), self.wt)
-            self.assertEqual((Path(cwd) / "setup.txt").read_text(), "installed")
-            self.assertTrue(eng.stores.leases.holders("unity", 1))
+            assert Path(cwd) == self.wt
+            assert (Path(cwd) / "setup.txt").read_text() == "installed"
+            assert eng.stores.leases.holders("unity", 1)
             held = (env.get("ANY_LEASE_HELD"), env.get("ANY_LEASE_ROOT"))  # what a run wrapper inside the command reads
-            self.assertEqual(held, ("unity", str(eng.stores.leases.root)))
+            assert held == ("unity", str(eng.stores.leases.root))
             return 0, ""
 
         eng = self.engine([{"id": "unity", "cmd": procsim.fake("slot-setup", check), "run": "gate",
                             "run_in": "slot", "needs": ["unity"]}], resources={"unity": {"limit": 1}})
-        self.assertFalse(Gate(eng).green())
-        self.assertIsInstance(Gate(eng).run(), GatePass)
-        self.assertTrue(Gate(eng).green())
-        self.assertIsInstance(Gate(eng).run(), GatePass)
-        self.assertEqual(seen, [self.wt])
-        self.assertFalse(eng.stores.leases.holders("unity", 1))
+        assert not Gate(eng).green()
+        assert isinstance(Gate(eng).run(), GatePass)
+        assert Gate(eng).green()
+        assert isinstance(Gate(eng).run(), GatePass)
+        assert seen == [self.wt]
+        assert not eng.stores.leases.holders("unity", 1)
 
     def test_mixed_checks_keep_plan_order_and_each_cwd(self):
         seen = []
@@ -62,12 +64,12 @@ class SlotGate(EngineTest):
             {"id": "third", "cmd": command("third"), "run": "gate", "run_in": "slot", "group": "acceptance"},
         ])
         run = eng.checker.run_items(gate_items(eng.cfg), clean=True)
-        self.assertFalse(run.failed)
-        self.assertEqual([name for name, _ in seen], ["first", "second", "third"])
-        self.assertEqual([root == self.wt for _, root in seen], [True, False, True])
-        self.assertTrue(eng.checker.gate_green(clean=True))
+        assert not run.failed
+        assert [name for name, _ in seen] == ["first", "second", "third"]
+        assert [root == self.wt for _, root in seen] == [True, False, True]
+        assert eng.checker.gate_green(clean=True)
         eng.checker.run_items(gate_items(eng.cfg), clean=True)
-        self.assertEqual(len(seen), 3)
+        assert len(seen) == 3
 
     def test_red_in_either_location_skips_the_later_group(self):
         for location in ("clean", "slot"):
@@ -78,10 +80,10 @@ class SlotGate(EngineTest):
                      "run_in": "slot" if location == "clean" else "clean"},
                 ])
                 run = eng.checker.run_items(gate_items(eng.cfg), clean=True)
-                self.assertEqual([(r.id, r.status) for r in run], [("red", "failed"), ("later", "skipped")])
-                self.assertFalse(eng.checker.gate_green(clean=True))
-                self.assertIsInstance(Gate(eng).run(), Problem)
-                self.assertIsNone(Gate(eng).passed())
+                assert [(r.id, r.status) for r in run] == [("red", "failed"), ("later", "skipped")]
+                assert not eng.checker.gate_green(clean=True)
+                assert isinstance(Gate(eng).run(), Problem)
+                assert Gate(eng).passed() is None
 
     def test_slot_input_changes_invalidate_gate_and_preview_memos(self):
         eng = self.engine([{"id": "slot", "cmd": "true", "run": "gate", "run_in": "slot",
@@ -92,35 +94,35 @@ class SlotGate(EngineTest):
             return cached_gate(eng.cfg, eng.git, str(self.wt), eng.stores, eng.env,
                                eng.checkout.tree_hash(), None, eng.spawner, clean=True, slot_wt=str(self.wt))
 
-        self.assertTrue(eng.checker.gate_green(clean=True))
-        self.assertTrue(Gate(eng).green())
-        self.assertTrue(preview_green())
+        assert eng.checker.gate_green(clean=True)
+        assert Gate(eng).green()
+        assert preview_green()
         (self.wt / "setup.txt").write_text("new installation")
-        self.assertFalse(eng.checker.gate_green(clean=True))
-        self.assertFalse(Gate(eng).green())
-        self.assertFalse(preview_green())
+        assert not eng.checker.gate_green(clean=True)
+        assert not Gate(eng).green()
+        assert not preview_green()
 
     def test_fresh_reader_cannot_reuse_a_slot_receipt_without_its_ignored_inputs(self):
         eng = self.engine([
             {"id": "producer", "cmd": "true", "run": "gate", "run_in": "slot", "inputs": ["**"]},
             {"id": "reader", "cmd": "true", "run": "gate", "reads": ["producer"]},
         ])
-        self.assertIsInstance(Gate(eng).run(), GatePass)
-        self.assertTrue(Gate(eng).green())
+        assert isinstance(Gate(eng).run(), GatePass)
+        assert Gate(eng).green()
         with isolated(eng) as fresh:
-            self.assertFalse((Path(fresh.wt) / "setup.txt").exists())
-            self.assertFalse(cached_gate(eng.cfg, eng.git, str(fresh.wt), eng.stores, eng.env,
-                                         eng.checkout.tree_hash(), None, eng.spawner, clean=True))
+            assert not (Path(fresh.wt) / "setup.txt").exists()
+            assert not cached_gate(eng.cfg, eng.git, str(fresh.wt), eng.stores, eng.env,
+                                         eng.checkout.tree_hash(), None, eng.spawner, clean=True)
 
     def test_clean_reader_consumes_the_slot_producers_receipt_and_log(self):
         def producer(cwd, env):
-            self.assertEqual(Path(cwd), self.wt)
+            assert Path(cwd) == self.wt
             return 0, "slot proof"
 
         def reader(cwd, env):
-            self.assertNotEqual(Path(cwd), self.wt)
-            self.assertIn("slot proof", Path(env["TL_CHECK_LOG_PRODUCER"]).read_text())
-            self.assertEqual(env["TL_CHECK_RC_PRODUCER"], "0")
+            assert Path(cwd) != self.wt
+            assert "slot proof" in Path(env["TL_CHECK_LOG_PRODUCER"]).read_text()
+            assert env["TL_CHECK_RC_PRODUCER"] == "0"
             return 0, ""
 
         eng = self.engine([
@@ -128,17 +130,17 @@ class SlotGate(EngineTest):
             {"id": "reader", "cmd": procsim.fake("clean-reader", reader), "run": "gate", "reads": ["producer"]},
         ])
         run = eng.checker.run_items(gate_items(eng.cfg), clean=True)
-        self.assertEqual([(r.id, r.status) for r in run], [("producer", "passed"), ("reader", "passed")])
-        self.assertTrue(eng.checker.gate_green(clean=True))
+        assert [(r.id, r.status) for r in run] == [("producer", "passed"), ("reader", "passed")]
+        assert eng.checker.gate_green(clean=True)
 
     def test_dirty_slot_is_refused_before_any_check(self):
         eng = self.engine([{"id": "slot", "cmd": "true", "run": "gate", "run_in": "slot"}])
         (self.wt / "untracked.txt").write_text("keep")
-        with mock.patch.object(eng, "sh") as sh, self.assertRaises(CheckFault) as fault:
+        with mock.patch.object(eng, "sh") as sh, pytest.raises(CheckFault) as fault:
             eng.checker.run_items(gate_items(eng.cfg), clean=True)
-        self.assertEqual(fault.exception.kind, CheckFaultKind.DIRTY_SLOT)
+        assert fault.value.kind == CheckFaultKind.DIRTY_SLOT
         sh.assert_not_called()
-        self.assertFalse(eng.checker.gate_green(clean=True))
+        assert not eng.checker.gate_green(clean=True)
 
     def test_slot_check_cannot_change_the_judged_tree(self):
         def change(cwd, env):
@@ -146,9 +148,9 @@ class SlotGate(EngineTest):
             return 0, ""
 
         eng = self.engine([{"id": "slot", "cmd": procsim.fake("slot-mutator", change), "run": "gate", "run_in": "slot"}])
-        with self.assertRaisesRegex(CheckFault, "changed its judged tree"):
+        with pytest.raises(CheckFault, match="changed its judged tree"):
             eng.checker.run_items(gate_items(eng.cfg), clean=True)
-        self.assertFalse(eng.checker.gate_green(clean=True))
+        assert not eng.checker.gate_green(clean=True)
 
     def test_client_change_lands_with_setup_only_in_the_slot(self):
         seen = []
@@ -167,16 +169,16 @@ class SlotGate(EngineTest):
 
         def slot_check(cwd, env):
             seen.append("slot")
-            self.assertEqual(Path(cwd), self.wt)
-            self.assertEqual((Path(cwd) / "client/Library/setup").read_text(), "installed")
-            self.assertTrue((Path(cwd) / "client/main.cs").is_file())
+            assert Path(cwd) == self.wt
+            assert (Path(cwd) / "client/Library/setup").read_text() == "installed"
+            assert (Path(cwd) / "client/main.cs").is_file()
             return 0, ""
 
         def clean_check(cwd, env):
             seen.append("clean")
-            self.assertNotEqual(Path(cwd), self.wt)
-            self.assertFalse((Path(cwd) / "client/Library/setup").exists())
-            self.assertTrue((Path(cwd) / "client/main.cs").is_file())
+            assert Path(cwd) != self.wt
+            assert not (Path(cwd) / "client/Library/setup").exists()
+            assert (Path(cwd) / "client/main.cs").is_file()
             return 0, ""
 
         plan = dict(PLAN, stages=[dict(PLAN["stages"][0], files=["f.txt", "client/main.cs"])])
@@ -185,11 +187,11 @@ class SlotGate(EngineTest):
              "run_in": "slot", "inputs": ["client/**"]},
             {"id": "client-clean", "cmd": procsim.fake("client-clean", clean_check), "run": "gate"},
         ])
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertEqual(self.eng.result().outcome, "landed")
-        self.assertEqual(script.nodes, ["plan", "write", "review"])
-        self.assertEqual(self.eng.git.show(str(self.wt), self.eng.landed_sha, "client/main.cs"), "class Client {}\n")
+        assert rc == 0, self.blocked
+        assert self.eng.result().outcome == "landed"
+        assert script.nodes == ["plan", "write", "review"]
+        assert self.eng.git.show(str(self.wt), self.eng.landed_sha, "client/main.cs") == "class Client {}\n"
         landed_paths = [entry.path for entry in self.eng.git.ls_tree(str(self.wt), self.eng.landed_sha, recursive=True)]
-        self.assertNotIn("client/Library/setup", landed_paths)
-        self.assertIn("slot", seen)
-        self.assertIn("clean", seen)
+        assert "client/Library/setup" not in landed_paths
+        assert "slot" in seen
+        assert "clean" in seen

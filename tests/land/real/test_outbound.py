@@ -35,20 +35,20 @@ class Land(EngineTest):
         hook.write_text("#!/bin/sh\necho hook ran >&2\nexit 1\n")
         hook.chmod(0o755)
         rc, _ = self.run_engine(RUN)
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertEqual(gitq.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
+        assert rc == 0, self.blocked
+        assert gitq.git("show", "origin/main:f.txt", cwd=str(self.wt)) == "d2"
 
     @real_git("git runs git-lfs: the order of lfs push and push is what git does")
     def test_an_lfs_repo_pushes_the_ref_s_objects_before_the_push(self):
         self.put_repo_file(".gitattributes", ATTR)
         with self.fake_lfs():
             rc, _ = self.run_engine(RUN)
-        self.assertEqual(rc, 0, self.blocked)
+        assert rc == 0, self.blocked
         lines = self.lfs_log.read_text().splitlines()
         said, at_lfs = lines[-2:]  # the land's own LFS push (each accepted stage's WIP push sent one before it)
-        self.assertEqual(said, "push origin HEAD")
-        self.assertEqual(len(lines) % 2, 0)
-        self.assertNotEqual(at_lfs, gitq.git("rev-parse", "origin/main", cwd=str(self.wt)))  # origin had not the commit yet
-        self.assertTrue(any("git lfs push origin HEAD" in r["text"] for r in records(self.eng, "note")))
+        assert said == "push origin HEAD"
+        assert len(lines) % 2 == 0
+        assert at_lfs != gitq.git("rev-parse", "origin/main", cwd=str(self.wt))  # origin had not the commit yet
+        assert any("git lfs push origin HEAD" in r["text"] for r in records(self.eng, "note"))
 
 

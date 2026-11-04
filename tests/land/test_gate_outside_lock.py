@@ -3,10 +3,11 @@ under the outside gate more often than allowed. The pushed tree is always one th
 (a base tip that moves on fetch; a rebase gives the tree of the base it lands on); the gate's cache is a recorder with the engine's rule: a
 green gate is a fact about a tree and its base (the per-check cache itself is tests/checks/test_gate_steps.py)."""
 import sys
-import unittest
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
+
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -134,60 +135,56 @@ class World:
         return self.lander.land()
 
 
-class GateOutsideLock(unittest.TestCase):
+class GateOutsideLock(Case):
     def test_main_unchanged_gates_once_outside_and_the_push_needs_no_second_gate(self):
         w = World(["b0", "b0"], [PUSHED])
         w.land()
-        self.assertEqual(w.gated, ["b0"])
-        self.assertEqual(w.events, ["fetch", "rebase", "gate", "enter", "fetch*", "rebase", "push", "exit"])
-        self.assertEqual(w.pushed, [("b0", "b0", True, True)])
-        self.assertEqual([(t.gate, t.failing) for t in w.emitted], [("outside", ""), ("cached", "")])
+        assert w.gated == ["b0"]
+        assert w.events == ["fetch", "rebase", "gate", "enter", "fetch*", "rebase", "push", "exit"]
+        assert w.pushed == [("b0", "b0", True, True)]
+        assert [(t.gate, t.failing) for t in w.emitted] == [("outside", ""), ("cached", "")]
 
     def test_main_moved_lets_the_lock_go_and_gates_outside_again_up_to_the_tries_then_inside(self):
         w = World(["b0", "b1", "b1", "b2", "b2", "b3", "b3"], [PUSHED])
         w.land()
-        self.assertEqual(w.gated, ["b0", "b1", "b2", "b3"])  # outside, again outside twice, then inside the lock
-        self.assertEqual(w.events.count("gate"), 3)
-        self.assertEqual(w.events.count("gate*"), 1)
-        self.assertEqual(w.events.count("enter"), 3)
-        self.assertEqual([p[:2] for p in w.pushed], [("b3", "b3")])
+        assert w.gated == ["b0", "b1", "b2", "b3"]  # outside, again outside twice, then inside the lock
+        assert w.events.count("gate") == 3
+        assert w.events.count("gate*") == 1
+        assert w.events.count("enter") == 3
+        assert [p[:2] for p in w.pushed] == [("b3", "b3")]
         wheres = [t.gate for t in w.emitted]
-        self.assertEqual(wheres, ["outside", "", "outside", "", "outside", "inside"])
-        self.assertEqual([t.failing for t in w.emitted][1], "stale")
+        assert wheres == ["outside", "", "outside", "", "outside", "inside"]
+        assert [t.failing for t in w.emitted][1] == "stale"
 
     def test_no_tries_gates_inside_the_lock_as_before(self):
         w = World(["b0"], [PUSHED], tries=0)
         w.land()
-        self.assertEqual(w.events, ["enter", "fetch*", "rebase", "gate*", "push", "exit"])
+        assert w.events == ["enter", "fetch*", "rebase", "gate*", "push", "exit"]
 
     def test_a_lost_push_race_gates_outside_again_and_every_pushed_tree_passed_on_its_base(self):
         w = World(["b0", "b0", "b1", "b1", "b1"], [REJECTED, PUSHED])
         w.land()
-        self.assertEqual(w.gated, ["b0", "b1"])
-        self.assertEqual(w.events.count("gate"), 2)
-        self.assertTrue(all(p[3] and p[0] == p[1] for p in w.pushed))
-        self.assertEqual(len(w.pushed), 2)
+        assert w.gated == ["b0", "b1"]
+        assert w.events.count("gate") == 2
+        assert all(p[3] and p[0] == p[1] for p in w.pushed)
+        assert len(w.pushed) == 2
 
     def test_tl_dnw_tl_pg0_a_rejected_push_with_main_unmoved_retries_in_the_same_lock_without_gating_again(self):
         w = World(["b0", "b0", "b0", "b0"], [REJECTED, PUSHED])
         w.land()
-        self.assertEqual(w.gated, ["b0"])  # the same tree and base: the memo answers, the gate is not run again
-        self.assertEqual((w.events.count("enter"), w.events.count("exit")), (1, 1))
-        self.assertEqual(len(w.pushed), 2)
+        assert w.gated == ["b0"]  # the same tree and base: the memo answers, the gate is not run again
+        assert (w.events.count("enter"), w.events.count("exit")) == (1, 1)
+        assert len(w.pushed) == 2
 
     def test_a_red_gate_outside_goes_to_a_fix_round_without_ever_taking_the_lock(self):
         w = World(["b0", "b0", "b0"], [PUSHED], reds=1)
         w.land()
-        self.assertEqual(w.events[:5], ["fetch", "rebase", "gate", "fix:gate", "fetch"])
-        self.assertEqual(w.events.index("enter"), w.events.index("fix:gate") + 4)  # a second gate (green) before the lock
+        assert w.events[:5] == ["fetch", "rebase", "gate", "fix:gate", "fetch"]
+        assert w.events.index("enter") == w.events.index("fix:gate") + 4  # a second gate (green) before the lock
         first = next(t for t in w.emitted)
-        self.assertEqual((first.gate, first.failing), ("outside", "gate"))
+        assert (first.gate, first.failing) == ("outside", "gate")
 
     def test_main_moving_under_the_gate_is_not_a_fix_round(self):
         w = World(["b0", "b1", "b1", "b1", "b1"], [PUSHED])
         w.land()
-        self.assertEqual(w.fixes, [])
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert w.fixes == []
