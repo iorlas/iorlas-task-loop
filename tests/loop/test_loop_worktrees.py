@@ -1,8 +1,9 @@
 """Two loops on one repo never share a worktree: the first takes its session's loop-<session>, every later one its own actor's."""
 import sys
-import unittest
 from pathlib import Path
 from types import SimpleNamespace
+
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
@@ -31,21 +32,17 @@ class Fleet:
         return name
 
 
-class TwoLoops(unittest.TestCase):
+class TwoLoops(Case):
     def test_loops_of_one_session_on_one_repo_get_distinct_worktrees(self):
         fleet = Fleet()
         a, b, c = fleet.start(101, "fa5db6"), fleet.start(102, "09ac11"), fleet.start(103, "77e0d2")
-        self.assertEqual(a, "eaa4b1f2")  # the first: its session's
-        self.assertEqual((b, c), ("eaa4b1f2-09ac11", "eaa4b1f2-77e0d2"))  # then each its own actor's
-        self.assertEqual(len({a, b, c}), 3)
+        assert a == "eaa4b1f2"  # the first: its session's
+        assert (b, c) == ("eaa4b1f2-09ac11", "eaa4b1f2-77e0d2")  # then each its own actor's
+        assert len({a, b, c}) == 3
 
     def test_a_restarted_loop_takes_its_session_worktree_back_once_the_other_is_gone(self):
         fleet = Fleet()
         fleet.start(101, "fa5db6")
         fleet.start(102, "09ac11")
         del fleet.states[101]  # the first died
-        self.assertEqual(fleet.start(103, "77e0d2"), "eaa4b1f2")
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert fleet.start(103, "77e0d2") == "eaa4b1f2"

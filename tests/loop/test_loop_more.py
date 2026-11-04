@@ -5,7 +5,6 @@ import os
 import shutil
 import sys
 import tempfile
-import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
@@ -39,16 +38,16 @@ class LoopHealth(LoopBase):
     def test_a_loop_killed_without_an_exit_line_leaves_its_state_as_died_pid_json(self):
         self.beads({})
         looptest.write_state(str(self.repo), pid=999999, started=self.clock.t)
-        self.assertEqual(looptest.live(str(self.repo)), [])  # no such process
+        assert looptest.live(str(self.repo)) == []  # no such process
         died = looptest.files(str(self.repo)).runs() / "died-999999.json"
-        self.assertEqual(json.loads(died.read_text())["pid"], 999999)
+        assert json.loads(died.read_text())["pid"] == 999999
 
 
 class StopRequests(LoopBase):
     """`tl stop` writes one LoopCommand naming the live loops; a loop it does not name (started later) ignores it."""
 
-    def setUp(self):
-        super().setUp()
+    def setup_method(self):
+        super().setup_method()
         self.repo_s = str(self.repo)
         self.old_pid = os.getppid()  # a live process that is no loop of this test
         self.files = looptest.files(self.repo_s)
@@ -58,7 +57,7 @@ class StopRequests(LoopBase):
 
     def stop(self, now=False):
         with redirect_stdout(io.StringIO()):
-            self.assertEqual(self.main(["stop", "--repo", self.repo_s] + (["--now"] if now else [])), 0)
+            assert self.main(["stop", "--repo", self.repo_s] + (["--now"] if now else [])) == 0
         return self.files.command().get()
 
 
@@ -67,7 +66,7 @@ class StopRequests(LoopBase):
         f.parent.mkdir(parents=True, exist_ok=True)
         for text in ("", "after", json.dumps({"mode": "after", "time": 1}), json.dumps({"v": 2, "action": "stop_now"})):
             f.write_text(text)
-            self.assertEqual(self.files.stop_for(self.old_pid, self.clock.t), "", text)
+            assert self.files.stop_for(self.old_pid, self.clock.t) == "", text
 
 
 class Moved(Exception):
@@ -77,8 +76,8 @@ class Moved(Exception):
 class LoopSelfUpdate(LoopBase):
     """Between beads the loop re-execs into the newest install of the plugin (fake version trees)."""
 
-    def setUp(self):
-        super().setUp()
+    def setup_method(self):
+        super().setup_method()
         self.cache = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, self.cache, True)
         self.execs = []
@@ -99,7 +98,3 @@ class LoopSelfUpdate(LoopBase):
 
     def pin(self, **v):
         (homes.config_dir() / "pinned.json").write_text(json.dumps(v))
-
-
-if __name__ == "__main__":
-    unittest.main()

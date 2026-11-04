@@ -4,9 +4,10 @@ a network pause keeps its run id, cost and time budget, and a paused bead wakes 
 
 import json
 import sys
-import unittest
 from collections import Counter
 from pathlib import Path
+
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401
@@ -54,11 +55,11 @@ class NetBase(te.EngineTest):
         eng = eng or self.eng
         causes = self.causes(eng)
         for bad in ("lane_out", "fallback_retake", "denied_retry", "delegate_crash", "lane_wait", "invalid_output", "replan"):
-            self.assertNotIn(bad, causes)
-        self.assertEqual((eng.stats["replans"], eng.stats["rounds"]), (0, 0))
-        self.assertEqual((self.blocked, self.ask()), ([], None))
-        self.assertFalse([c for c in self.bd_calls if c[:2] == ("label", "add")], self.bd_calls)
-        self.assertFalse(list((homes.config_dir() / "storm").glob("*.json")) if (homes.config_dir() / "storm").is_dir() else [])
+            assert bad not in causes
+        assert (eng.stats["replans"], eng.stats["rounds"]) == (0, 0)
+        assert (self.blocked, self.ask()) == ([], None)
+        assert not [c for c in self.bd_calls if c[:2] == ("label", "add")], self.bd_calls
+        assert not (list((homes.config_dir() / "storm").glob("*.json")) if (homes.config_dir() / "storm").is_dir() else [])
 
     def thread_of(self, s, node):
         """(resume ref of each call of `node`, in order)."""
@@ -74,12 +75,12 @@ class Land(NetBase):
         land = pusher("cut-push", count, cut_first=2)
         probe = Cycling(2)
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, probe=probe, land=land)
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertEqual(Counter(s.nodes), Counter({"plan": 1, "write": 1, "review": 1}))  # no step again for a failed push
-        self.assertTrue(self.closed and self.closed[0].startswith("merged"))
-        self.assertEqual(gitq.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
-        self.assertGreaterEqual(probe.calls, 2)
-        self.assertEqual(count.read_text(), "3")  # two cuts, then the push
+        assert rc == 0, self.blocked
+        assert Counter(s.nodes) == Counter({"plan": 1, "write": 1, "review": 1})  # no step again for a failed push
+        assert self.closed and self.closed[0].startswith("merged")
+        assert gitq.git("show", "origin/main:f.txt", cwd=str(self.wt)) == "d2"
+        assert probe.calls >= 2
+        assert count.read_text() == "3"  # two cuts, then the push
         self.assert_no_charge()
 
     @real_git("the land script is a child process that runs git push itself")
@@ -87,12 +88,12 @@ class Land(NetBase):
         count = Path(self.tmp.name, "pushes")
         land = pusher("took-push", count, then_fail=CUT)
         rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, probe=Cycling(1), land=land)
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertEqual(count.read_text(), "1")  # pushed once; the second look found it on the base
-        self.assertTrue(self.closed and self.closed[0].startswith("merged"))
+        assert rc == 0, self.blocked
+        assert count.read_text() == "1"  # pushed once; the second look found it on the base
+        assert self.closed and self.closed[0].startswith("merged")
         subjects = gitq.git("log", "--format=%s", "origin/main", cwd=str(self.wt)).splitlines()  # pyrefly: ignore[missing-attribute]
-        self.assertEqual(sum("(t-1)" in x for x in subjects), 1)  # one commit of the bead on the base
-        self.assertIn("already", self.eng.log_path.read_text())
+        assert sum("(t-1)" in x for x in subjects) == 1  # one commit of the bead on the base
+        assert "already" in self.eng.log_path.read_text()
         self.assert_no_charge()
 
     @real_git("the land script is a child process that runs git push itself")
@@ -101,21 +102,21 @@ class Land(NetBase):
         pushed = pusher("odd-push", count, then_fail="fatal: the hook lost its answer\n")
         again = pusher("counted-push", count)
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, land=pushed)
-        self.assertEqual(rc, 2)  # the run reported a failed land: the bead is open, the branch is kept
-        self.assertEqual((count.read_text(), self.closed), ("1", []))
-        self.assertEqual(gitq.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")  # but it is on the base
+        assert rc == 2  # the run reported a failed land: the bead is open, the branch is kept
+        assert (count.read_text(), self.closed) == ("1", [])
+        assert gitq.git("show", "origin/main:f.txt", cwd=str(self.wt)) == "d2"  # but it is on the base
         rc, _s = self.run_engine({"write": [WRITE], "review": [CLEAN]}, land=again)  # the next run
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertEqual(count.read_text(), "1")  # not pushed again
-        self.assertTrue(self.closed and self.closed[0].startswith("merged"))
+        assert rc == 0, self.blocked
+        assert count.read_text() == "1"  # not pushed again
+        assert self.closed and self.closed[0].startswith("merged")
         subjects = gitq.git("log", "--format=%s", "origin/main", cwd=str(self.wt)).splitlines()  # pyrefly: ignore[missing-attribute]
-        self.assertEqual(sum("(t-1)" in x for x in subjects), 1)
+        assert sum("(t-1)" in x for x in subjects) == 1
 
 
-class Gate(unittest.TestCase):
+class Gate(Case):
     """GateRole: a paused bead waits for delegate to call its role usable; a time hint never blocks; unknown fails open."""
 
-    def setUp(self):
+    def setup_method(self):
         self.t = 1_800_000_000.0
         self.roles: dict[str, bool | None] = {"worker": False}
         self.reads = 0
@@ -137,7 +138,3 @@ class ResumeLook(test_stages_visual.VisualWork):
 for _name in dir(test_stages_visual.VisualWork):  # the visual fixture only: not every test of its class again
     if _name.startswith("test_") and _name not in ResumeLook.__dict__:
         setattr(ResumeLook, _name, None)
-
-
-if __name__ == "__main__":
-    unittest.main()

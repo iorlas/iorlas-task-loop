@@ -5,7 +5,6 @@ import os
 import shutil
 import sys
 import tempfile
-import unittest
 from pathlib import Path
 from unittest import mock
 
@@ -32,8 +31,8 @@ class Moving(LoopBase):
     def install(self, ver, **kw):
         return looptest.fake_install(self.cache, ver, **kw)
 
-    def setUp(self):
-        super().setUp()
+    def setup_method(self):
+        super().setup_method()
         self.cache = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, self.cache, True)
         self.execs = []
@@ -64,15 +63,11 @@ class Entry(Moving):
     def test_with_no_entry_the_highest_directory_above_the_running_one_is_the_fallback(self):
         self.install("0.2.0")
         self.install("0.3.0")
-        self.assertEqual(self.target(), ("0.3.0", self.cache / "0.3.0"))
+        assert self.target() == ("0.3.0", self.cache / "0.3.0")
 
     def test_a_pin_still_beats_the_entry(self):
         self.install("0.2.0")
         self.install("0.3.0")
         self.installed("0.3.0")
         (homes.config_dir() / "pinned.json").write_text(json.dumps({"v": 1, "task-loop": "0.2.0"}))
-        self.assertEqual(self.target(), ("0.2.0", self.cache / "0.2.0"))
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert self.target() == ("0.2.0", self.cache / "0.2.0")

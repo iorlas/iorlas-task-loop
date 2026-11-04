@@ -7,10 +7,11 @@ import os
 import subprocess
 import sys
 import tempfile
-import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest import mock
+
+from support.case import Case
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
@@ -45,8 +46,8 @@ def sh(*a, cwd):
     return subprocess.run(list(a), cwd=str(cwd), check=True, capture_output=True, text=True).stdout.strip()
 
 
-class HeldBranch(unittest.TestCase):
-    def setUp(self):
+class HeldBranch(Case):
+    def setup_method(self):
         self.tmp = tempfile.TemporaryDirectory()
         home = Path(os.path.realpath(self.tmp.name))
         env = {"HOME": str(home), "XDG_CONFIG_HOME": str(home / "cfg"), "APPDATA": str(home / "cfg"),
@@ -89,23 +90,23 @@ class HeldBranch(unittest.TestCase):
 
     def test_a_clean_worktree_holding_the_branch_is_removed(self):
         rc, out, _ = self.reset()
-        self.assertEqual(rc, 0, out)
-        self.assertIn("FREED", out)
-        self.assertEqual(self.branch_in_slot(), "task/x-1")
-        self.assertFalse(self.old.exists())
-        self.assertEqual(sh("git", "rev-parse", "task/x-1", cwd=self.repo), self.tip)  # the commit stays
+        assert rc == 0, out
+        assert "FREED" in out
+        assert self.branch_in_slot() == "task/x-1"
+        assert not self.old.exists()
+        assert sh("git", "rev-parse", "task/x-1", cwd=self.repo) == self.tip  # the commit stays
 
     def test_a_dirty_worktree_holding_the_branch_is_detached_with_its_files(self):
         (self.old / "work.txt").write_text("edited, not committed\n")
         (self.old / "new.txt").write_text("untracked\n")
         rc, out, _ = self.reset()
-        self.assertEqual(rc, 0, out)
-        self.assertIn("detached", out)
-        self.assertEqual(self.branch_in_slot(), "task/x-1")
-        self.assertEqual((self.old / "work.txt").read_text(), "edited, not committed\n")
-        self.assertEqual((self.old / "new.txt").read_text(), "untracked\n")
-        self.assertEqual(sh("git", "rev-parse", "HEAD", cwd=self.old), self.tip)
-        self.assertEqual(subprocess.run(["git", "symbolic-ref", "-q", "HEAD"], cwd=str(self.old), check=False).returncode, 1)
+        assert rc == 0, out
+        assert "detached" in out
+        assert self.branch_in_slot() == "task/x-1"
+        assert (self.old / "work.txt").read_text() == "edited, not committed\n"
+        assert (self.old / "new.txt").read_text() == "untracked\n"
+        assert sh("git", "rev-parse", "HEAD", cwd=self.old) == self.tip
+        assert subprocess.run(["git", "symbolic-ref", "-q", "HEAD"], cwd=str(self.old), check=False).returncode == 1
 
     @real_proc(LIVE_PID)
     def test_a_worktree_with_a_live_lock_keeps_the_branch_and_the_answer_is_taken(self):
@@ -114,14 +115,14 @@ class HeldBranch(unittest.TestCase):
         self.addCleanup(k.kill)
         put_lock(str(self.old), {"pid": k.pid, "start": pidcheck.proc_start(k.pid), "bead": "x-1", "started": 1})
         rc, out, why = self.reset()
-        self.assertEqual(rc, 5, out)
-        self.assertIn("TAKEN", out)
-        self.assertIn(str(self.old), why)
-        self.assertEqual(sh("git", "symbolic-ref", "--short", "HEAD", cwd=self.old), "task/x-1")
+        assert rc == 5, out
+        assert "TAKEN" in out
+        assert str(self.old) in why
+        assert sh("git", "symbolic-ref", "--short", "HEAD", cwd=self.old) == "task/x-1"
 
     def test_a_dead_lock_does_not_hold_the_branch(self):
         put_lock(str(self.old), {"pid": 2 ** 22 + 7, "bead": "x-1", "started": 1})
-        self.assertEqual(self.reset()[0], 0)
+        assert self.reset()[0] == 0
 
 
 class PreEngineFailure(tlp.LoopBase):
@@ -137,33 +138,29 @@ class PreEngineFailure(tlp.LoopBase):
                 )
 
         with mock.patch.object(Taker, "prepare", prepare):
-            self.assertEqual(self.run_loop(), 0)  # two beads failed before their engines: no "2 failures in a row"
-        self.assertNotIn("STOPPED", self.out)
-        self.assertEqual(calls[:2], ["x-1", "x-2"])
+            assert self.run_loop() == 0  # two beads failed before their engines: no "2 failures in a row"
+        assert "STOPPED" not in self.out
+        assert calls[:2] == ["x-1", "x-2"]
         lines = self.lines()
-        self.assertIn("did not give a clean tree: fatal: 'task/x-1'", lines[0]["why"])
-        self.assertIn("slot reset s1 for x-1", lines[0]["why"])
-        self.assertFalse(looptest.rest_file(str(self.repo)).exists())
+        assert "did not give a clean tree: fatal: 'task/x-1'" in lines[0]["why"]
+        assert "slot reset s1 for x-1" in lines[0]["why"]
+        assert not looptest.rest_file(str(self.repo)).exists()
 
     def test_a_second_loop_leaves_the_bead_the_first_one_rested(self):
         self.beads({"x-1": [tlp.rec("landed")], "x-2": [tlp.rec("landed")]})
         looptest.files(str(self.repo)).rest_bead("x-1", self.clock.t + 3600)  # the other loop's pre-engine failure
         self.run_loop("--max-beads", "1")
-        self.assertEqual([b for b, _ in self.started], ["x-2"])
+        assert [b for b, _ in self.started] == ["x-2"]
 
     def test_a_real_engine_failure_still_counts(self):
         self.beads({"x-1": [tlp.rec("failed")], "x-2": [tlp.rec("failed")], "x-3": [tlp.rec("landed")]})
-        self.assertEqual(self.run_loop(), 0)
-        self.assertIn("WAIT: 2 runs gave no outcome", self.out)
-        self.assertFalse(looptest.rests(str(self.repo)))
+        assert self.run_loop() == 0
+        assert "WAIT: 2 runs gave no outcome" in self.out
+        assert not looptest.rests(str(self.repo))
 
     def test_a_branch_held_live_is_taken_not_failed(self):
         self.beads({"x-1": [tlp.rec("landed")], "x-2": [tlp.rec("landed")]})
         with mock.patch.object(Taker, "prepare", side_effect=[vd.taken("branch task/x-1 is checked out in /w"), None]):
-            self.assertEqual(self.run_loop("--max-beads", "1"), 0)
-        self.assertEqual(self.lines()[0]["outcome"], "taken")
-        self.assertEqual([b for b, _ in self.started], ["x-2"])
-
-
-if __name__ == "__main__":
-    unittest.main()
+            assert self.run_loop("--max-beads", "1") == 0
+        assert self.lines()[0]["outcome"] == "taken"
+        assert [b for b, _ in self.started] == ["x-2"]

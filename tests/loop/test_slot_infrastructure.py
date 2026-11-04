@@ -38,24 +38,24 @@ class Infrastructure(Rig):
         with mock.patch.object(Slot, "ready_for", side_effect=SlotGitError("git/dolt/network unavailable")):
             verdict = self.taker().prepare("s1", bid)
         assert verdict is not None
-        self.assertEqual(verdict.outcome, Result.PAUSED)
-        self.assertEqual(pauses.rule(verdict.kind).permanence, "transient")
-        self.assertEqual(self.bd.beads[bid].status, "open")
-        self.assertEqual(self.bd.beads[bid].assignee, "")
+        assert verdict.outcome == Result.PAUSED
+        assert pauses.rule(verdict.kind).permanence == "transient"
+        assert self.bd.beads[bid].status == "open"
+        assert self.bd.beads[bid].assignee == ""
         counters = Counters(slot_quick={"s1": ["previous"]})
         settle, files = self.settle(counters)
         with mock.patch.object(settle, "aside") as hold:
             settle.apply(verdict, bid, "s1", True)
         hold.assert_not_called()
         files.rest_bead.assert_not_called()
-        self.assertEqual((counters.ran, counters.fails, counters.pauses), (0, [], {}))
-        self.assertEqual(counters.slot_quick["s1"], [])
-        self.assertEqual(counters.later[bid], self.env.now() + LoopConfig().pause_retry)
+        assert (counters.ran, counters.fails, counters.pauses) == (0, [], {})
+        assert counters.slot_quick["s1"] == []
+        assert counters.later[bid] == self.env.now() + LoopConfig().pause_retry
 
     def test_a_reset_that_self_heals_is_not_a_slot_failure(self):
         with mock.patch.object(Slot, "ready_for", side_effect=[SlotFail("slot_broken", "setup failed"), None]) as reset:
-            self.assertIsNone(self.taker().prepare("s1", "x-1"))
-        self.assertEqual(reset.call_count, 2)
+            assert self.taker().prepare("s1", "x-1") is None
+        assert reset.call_count == 2
 
     def test_bd_and_filesystem_failures_are_transient_without_slot_failure_counts(self):
         failures = [BdFailure(BdError(kind="other", text="Dolt unavailable")), OSError("slot directory missing")]
@@ -63,9 +63,9 @@ class Infrastructure(Rig):
             with self.subTest(failure=failure), mock.patch.object(Slot, "ready_for", side_effect=failure):
                 verdict = self.taker().prepare("s1", "x-1")
             assert verdict is not None
-            self.assertTrue(verdict.pre_engine)
-            self.assertEqual(verdict.outcome, Result.PAUSED)
-            self.assertFalse(verdict.quick_slot_failure(LoopConfig().quick_fail_min))
+            assert verdict.pre_engine
+            assert verdict.outcome == Result.PAUSED
+            assert not verdict.quick_slot_failure(LoopConfig().quick_fail_min)
 
     def test_only_repeated_slot_faults_after_failed_recovery_allow_set_aside(self):
         counters = Counters()
@@ -78,7 +78,7 @@ class Infrastructure(Rig):
                 verdict = self.taker().prepare("s1", "x-1")
                 assert verdict is not None
                 settle.apply(verdict, "x-1", "s1", True)
-        self.assertEqual(reset.call_count, 2 * LoopConfig().slot_fails_to_set_aside)
+        assert reset.call_count == 2 * LoopConfig().slot_fails_to_set_aside
         aside.assert_called_once()
 
     def test_an_engine_slot_failure_with_ready_facts_does_not_count_toward_set_aside(self):
@@ -86,9 +86,9 @@ class Infrastructure(Rig):
         settle, _files = self.settle(counters)
         verdict = vd.Verdict(Result.FAILED, kind="fault_slot", slot_fault="slot_broken", minutes=0.1)
         with mock.patch.object(Slot, "check_ready") as probe:
-            self.assertFalse(settle.count_slot(verdict, "x-1", "s1"))
+            assert not settle.count_slot(verdict, "x-1", "s1")
         probe.assert_called_once_with()
-        self.assertEqual(counters.slot_quick["s1"], [])
+        assert counters.slot_quick["s1"] == []
 
     def test_different_beads_do_not_accumulate_slot_failures(self):
         counters = Counters()
@@ -102,11 +102,11 @@ class Infrastructure(Rig):
         )
         with mock.patch.object(Slot, "check_ready") as probe, mock.patch.object(settle, "aside") as hold:
             for number in range(LoopConfig().slot_fails_to_set_aside):
-                self.assertIsNone(settle.apply(verdict, f"x-{number}", "s1", True))
+                assert settle.apply(verdict, f"x-{number}", "s1", True) is None
         probe.assert_not_called()  # the verdict already establishes the dirty branch
         hold.assert_not_called()
-        self.assertEqual(counters.slot_quick["s1"], [f"x-{LoopConfig().slot_fails_to_set_aside - 1}"])
-        self.assertEqual(counters.slot_blocked, {})
+        assert counters.slot_quick["s1"] == [f"x-{LoopConfig().slot_fails_to_set_aside - 1}"]
+        assert counters.slot_blocked == {}
 
     def test_infrastructure_during_engine_slot_recovery_does_not_count_toward_set_aside(self):
         verdict = vd.Verdict(Result.FAILED, kind="fault_slot", slot_fault="slot_broken", minutes=0.1)
@@ -120,8 +120,8 @@ class Infrastructure(Rig):
             counters = Counters(slot_quick={"s1": ["previous"]})
             settle, _files = self.settle(counters)
             with self.subTest(failure=failure), mock.patch.object(Slot, "check_ready", side_effect=failure):
-                self.assertFalse(settle.count_slot(verdict, "x-1", "s1"))
-            self.assertEqual(counters.slot_quick["s1"], [])
+                assert not settle.count_slot(verdict, "x-1", "s1")
+            assert counters.slot_quick["s1"] == []
 
     def test_settle_probe_only_reads_git_even_when_leftover_work_exists(self):
         for dirty in (False, True):
@@ -133,12 +133,12 @@ class Infrastructure(Rig):
                 settle, _files = self.settle(counters)
                 verdict = vd.Verdict(Result.FAILED, kind="fault_slot", slot_fault="slot_broken", minutes=0.1)
                 with mock.patch("taskloop.app.slots.reset.setup") as setup:
-                    self.assertFalse(settle.count_slot(verdict, "x-1", "s1"))
+                    assert not settle.count_slot(verdict, "x-1", "s1")
                 setup.assert_not_called()
-                self.assertEqual(counters.slot_quick["s1"], ["x-1"] if dirty else [])
-                self.assertTrue(all(call[0] in ("dirty", "rebasing") for call in self.git.calls))
-                self.assertEqual(self.git.tree(self.d1).branch, "task/other")
-                self.assertEqual(self.git.tree(self.d1).dirty, dirty)
+                assert counters.slot_quick["s1"] == (["x-1"] if dirty else [])
+                assert all(call[0] in ("dirty", "rebasing") for call in self.git.calls)
+                assert self.git.tree(self.d1).branch == "task/other"
+                assert self.git.tree(self.d1).dirty == dirty
 
 
 class SetupOwnTree(Rig):
@@ -153,10 +153,10 @@ class SetupOwnTree(Rig):
                 mock.patch("taskloop.app.loop.take.setup") as base_setup:
             verdict = taker.prepare("s1", bid)
         assert verdict is not None
-        self.assertEqual((verdict.outcome, verdict.kind, verdict.pre_engine), (Result.PAUSED, vd.SETUP_OWN_TREE, False))
-        self.assertEqual(reset.call_args_list[-1], mock.call(""))
+        assert (verdict.outcome, verdict.kind, verdict.pre_engine) == (Result.PAUSED, vd.SETUP_OWN_TREE, False)
+        assert reset.call_args_list[-1] == mock.call("")
         base_setup.assert_called_once()
-        self.assertEqual(self.bd.beads[bid].status, "open")
+        assert self.bd.beads[bid].status == "open"
 
     def test_setup_failing_on_the_base_too_stays_a_slot_failure(self):
         bid = BeadId("x-1")
@@ -167,5 +167,5 @@ class SetupOwnTree(Rig):
                 mock.patch("taskloop.app.loop.take.setup", side_effect=broken):
             verdict = taker.prepare("s1", bid)
         assert verdict is not None
-        self.assertTrue(verdict.pre_engine)
-        self.assertTrue(verdict.recovery_failed)
+        assert verdict.pre_engine
+        assert verdict.recovery_failed

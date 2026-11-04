@@ -4,7 +4,6 @@ import os
 import subprocess
 import sys
 import time
-import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
@@ -32,46 +31,48 @@ class DiskPreflight(LoopBase):
         self.beads({"x-1": [rec("landed")]})
 
         def free(cfg):
-            self.assertEqual(cfg.root, Path(os.environ["XDG_CONFIG_HOME"]) / "task-loop")
+            assert cfg.root == Path(os.environ["XDG_CONFIG_HOME"]) / "task-loop"
             if self.clock.t < self.clock.t0 + 120:
-                self.assertEqual(self.started, [])
+                assert self.started == []
                 return GB
             return 50 * GB
 
         with mock.patch.object(wloop, "free_bytes", side_effect=free):
-            self.assertEqual(self.run_loop(), 0)
-        self.assertEqual([b for b, _ in self.started], ["x-1"])
-        self.assertIn("WAIT low_disk", self.out)
-        self.assertEqual(looptest.last_exit(str(self.repo))["reason"], "drained")
+            assert self.run_loop() == 0
+        assert [b for b, _ in self.started] == ["x-1"]
+        assert "WAIT low_disk" in self.out
+        assert looptest.last_exit(str(self.repo))["reason"] == "drained"
 
     def test_the_threshold_is_a_config_key(self):
         (self.repo / ".task-loop.json").write_text('{"slots": {"count": 2}, "loop": {"min_free_gb": 0.5}}')
         self.beads({"x-1": [rec("landed")]})
         self.free(1)
-        self.assertEqual(self.run_loop(), 0)
-        self.assertEqual([b for b, _ in self.started], ["x-1"])
+        assert self.run_loop() == 0
+        assert [b for b, _ in self.started] == ["x-1"]
 
     def test_with_room_enough_the_loop_runs_the_bead(self):
         self.beads({"x-1": [rec("landed")]})
         self.free(50)
-        self.assertEqual(self.run_loop(), 0)
-        self.assertEqual([b for b, _ in self.started], ["x-1"])
+        assert self.run_loop() == 0
+        assert [b for b, _ in self.started] == ["x-1"]
 
     def test_the_loop_prunes_once_at_its_start_before_any_bead(self):
         self.beads({"x-1": [rec("landed")]})
         self.free(50)
-        with mock.patch.object(wloop.prune_verb, "run", side_effect=lambda *a, **k: self.assertEqual(self.started, [])) as run:
+        def prune(*a, **k):
+            assert self.started == []
+        with mock.patch.object(wloop.prune_verb, "run", side_effect=prune) as run:
             self.run_loop()
-        self.assertEqual(run.call_count, 1)
-        self.assertFalse(run.call_args.args[5])  # not a dry run
+        assert run.call_count == 1
+        assert not run.call_args.args[5]  # not a dry run
 
     def test_a_prune_that_breaks_never_stops_the_loop(self):
         self.beads({"x-1": [rec("landed")]})
         self.free(50)
         with mock.patch.object(wloop.prune_verb, "run", side_effect=RuntimeError("boom")):
-            self.assertEqual(self.run_loop(), 0)
-        self.assertIn("prune failed: RuntimeError: boom", self.out)
-        self.assertEqual([b for b, _ in self.started], ["x-1"])
+            assert self.run_loop() == 0
+        assert "prune failed: RuntimeError: boom" in self.out
+        assert [b for b, _ in self.started] == ["x-1"]
 
 
 class PruneVerb(Base):
@@ -89,13 +90,9 @@ class PruneVerb(Base):
         for argv in (["--dry-run"], [], []):
             out = io.StringIO()
             with redirect_stdout(out):
-                self.assertEqual(self.main(["prune", "--repo", str(self.repo), *argv]), 0)
+                assert self.main(["prune", "--repo", str(self.repo), *argv]) == 0
             outs.append(out.getvalue())
-            self.assertEqual(run.exists(), argv == ["--dry-run"])
-        self.assertIn("would remove", outs[0])
-        self.assertIn("removed", outs[1])
-        self.assertIn("removed 0 item(s)", outs[2])
-
-
-if __name__ == "__main__":
-    unittest.main()
+            assert run.exists() == (argv == ["--dry-run"])
+        assert "would remove" in outs[0]
+        assert "removed" in outs[1]
+        assert "removed 0 item(s)" in outs[2]

@@ -5,11 +5,12 @@ a network pause keeps its work, cost and time budget, and a paused bead wakes wh
 import json
 import sys
 import time
-import unittest
 from collections import Counter
 from pathlib import Path
 from typing import Any, ClassVar
 from unittest import mock
+
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -75,11 +76,11 @@ class NetBase(te.EngineTest):
         eng = eng or self.eng
         causes = self.causes(eng)
         for bad in ("lane_out", "fallback_retake", "denied_retry", "delegate_crash", "lane_wait", "invalid_output", "replan"):
-            self.assertNotIn(bad, causes)
-        self.assertEqual((eng.stats["replans"], eng.stats["rounds"]), (0, 0))
-        self.assertEqual((self.blocked, self.ask()), ([], None))
-        self.assertFalse([c for c in self.bd_calls if c[:2] == ("label", "add")], self.bd_calls)
-        self.assertFalse(list((homes.config_dir() / "storm").glob("*.json")) if (homes.config_dir() / "storm").is_dir() else [])
+            assert bad not in causes
+        assert (eng.stats["replans"], eng.stats["rounds"]) == (0, 0)
+        assert (self.blocked, self.ask()) == ([], None)
+        assert not [c for c in self.bd_calls if c[:2] == ("label", "add")], self.bd_calls
+        assert not (list((homes.config_dir() / "storm").glob("*.json")) if (homes.config_dir() / "storm").is_dir() else [])
 
     def thread_of(self, s, node):
         """(resume ref of each call of `node`, in order)."""
@@ -97,15 +98,15 @@ class EveryStepResumes(NetBase):
         answers[node].insert(0, drop("net-" + node))
         probe = probe or Cycling(2)
         rc, s = self.run_engine(answers, probe=probe, **cfg)
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertEqual(self.thread_of(s, node), [None, "net-" + node], node)  # the second call goes on in the first one's thread
+        assert rc == 0, self.blocked
+        assert self.thread_of(s, node) == [None, "net-" + node], node  # the second call goes on in the first one's thread
         i = [k for k, n in enumerate(s.nodes) if n == node][1]
-        self.assertEqual(s.prompts[i], callstate.NETWORK_RESUME_DELTA)  # a short note: the brief is not sent twice
+        assert s.prompts[i] == callstate.NETWORK_RESUME_DELTA  # a short note: the brief is not sent twice
         once = Counter(n for n in s.nodes if n != node)
-        self.assertTrue(once and set(once.values()) == {1}, once)  # nothing finished was asked again
-        self.assertGreaterEqual(probe.calls, 2)
-        self.assertEqual(self.eng.result().outcome, "landed")
-        self.assertIn("network_wait", self.causes())
+        assert once and set(once.values()) == {1}, once  # nothing finished was asked again
+        assert probe.calls >= 2
+        assert self.eng.result().outcome == "landed"
+        assert "network_wait" in self.causes()
         self.assert_no_charge()
         return s
 
@@ -114,7 +115,7 @@ class EveryStepResumes(NetBase):
 
     def test_a_drop_in_the_write_resumes_the_writer_thread_and_the_work_is_kept(self):
         self.drop_at("write")
-        self.assertEqual(self.eng.writer.delegate, "ref-write")  # the thread the engine now holds is the one the answer named
+        assert self.eng.writer.delegate == "ref-write"  # the thread the engine now holds is the one the answer named
 
     def test_a_drop_in_the_review_resumes_the_reviewer_thread(self):
         self.drop_at("review")
@@ -133,30 +134,30 @@ class EveryStepResumes(NetBase):
         # no cap counts a network stop: not the one retry of a bead failure, not the three polls, not the crash rests
         answers = {"plan": [PLAN], "write": [drop("net-write")] * 6 + [WRITE], "review": [CLEAN]}
         rc, s = self.run_engine(answers, probe=Flapping())
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertEqual(self.thread_of(s, "write"), [None] + ["net-write"] * 6)
+        assert rc == 0, self.blocked
+        assert self.thread_of(s, "write") == [None] + ["net-write"] * 6
         self.assert_no_charge()
 
     def test_a_probe_that_keeps_failing_calls_pauses_the_run_visibly_and_charges_nothing(self):
         # the probe says up and the calls say down, three times in five minutes: a proxy or DNS fault the probe cannot see
         answers = {"plan": [PLAN], "write": [drop("net-write")] * 4 + [WRITE], "review": [CLEAN]}
         rc, _s = self.run_engine(answers, probe=netgate.FakeProbe([True]))
-        self.assertEqual(rc, 2)
+        assert rc == 2
         r = self.eng.result()
-        self.assertEqual((r.outcome, r.kind), ("paused", Kind.PAUSE_NETWORK.value))
-        self.assertEqual((self.blocked, self.ask()), ([], None))
-        self.assertFalse([c for c in self.bd_calls if c[:2] == ("label", "add")])
+        assert (r.outcome, r.kind) == ("paused", Kind.PAUSE_NETWORK.value)
+        assert (self.blocked, self.ask()) == ([], None)
+        assert not [c for c in self.bd_calls if c[:2] == ("label", "add")]
 
 
 class TwoDrops(NetBase):
     def test_two_drops_then_success_is_one_step_in_one_thread_and_charges_nothing(self):
         answers = {"plan": [PLAN], "write": [drop("net-write"), drop("net-write"), WRITE], "review": [CLEAN]}
         rc, s = self.run_engine(answers, probe=Flapping())
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertEqual(self.thread_of(s, "write"), [None, "net-write", "net-write"])  # the ref the first drop named, on both resumes
+        assert rc == 0, self.blocked
+        assert self.thread_of(s, "write") == [None, "net-write", "net-write"]  # the ref the first drop named, on both resumes
         ends = [r for r in self.log() if r.get("kind") == "step_end" and r.get("step") == "write"]
-        self.assertEqual(len(ends), 1)
-        self.assertEqual(self.causes().count("network_wait"), 2)
+        assert len(ends) == 1
+        assert self.causes().count("network_wait") == 2
         self.assert_no_charge()
 
 
@@ -170,17 +171,17 @@ class FinishedOutput(NetBase):
 
         answers = {"plan": [PLAN], "write": [cut_after_writing], "review": [CLEAN]}
         rc, s = self.run_engine(answers, probe=Cycling(2))
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertEqual(Counter(s.nodes), Counter({"plan": 1, "write": 1, "review": 1}))  # the write is not a redo
-        self.assertTrue(list(self.eng.run_dir.glob("write-*.json")))
-        self.assertEqual(self.eng.result().outcome, "landed")
+        assert rc == 0, self.blocked
+        assert Counter(s.nodes) == Counter({"plan": 1, "write": 1, "review": 1})  # the write is not a redo
+        assert list(self.eng.run_dir.glob("write-*.json"))
+        assert self.eng.result().outcome == "landed"
         self.assert_no_charge()
 
     def test_a_drop_with_no_valid_data_is_still_resumed(self):
         answers = {"plan": [PLAN], "write": [drop("net-write", data={"bogus": 1}), WRITE], "review": [CLEAN]}
         rc, s = self.run_engine(answers, probe=Cycling(2))
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertEqual(self.thread_of(s, "write"), [None, "net-write"])
+        assert rc == 0, self.blocked
+        assert self.thread_of(s, "write") == [None, "net-write"]
         self.assert_no_charge()
 
 
@@ -190,18 +191,18 @@ class ResumeRefused(NetBase):
     def test_a_refused_resume_becomes_one_new_thread(self):
         answers = {"plan": [PLAN], "write": [drop("net-write"), stop("bad_request"), WRITE], "review": [CLEAN]}
         rc, s = self.run_engine(answers, probe=Cycling(2))
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertEqual(self.thread_of(s, "write"), [None, "net-write", None])
+        assert rc == 0, self.blocked
+        assert self.thread_of(s, "write") == [None, "net-write", None]
         first, _, third = (s.prompts[i] for i, n in enumerate(s.nodes) if n == "write")
-        self.assertTrue(third.startswith(first))  # the whole brief again, no transcript seeding
-        self.assertEqual(self.eng.result().outcome, "landed")
+        assert third.startswith(first)  # the whole brief again, no transcript seeding
+        assert self.eng.result().outcome == "landed"
 
     def test_a_second_refusal_is_the_fault_not_a_loop(self):
         answers = {"plan": [PLAN], "write": [drop("net-write"), stop("bad_request"), stop("bad_request"), WRITE], "review": [CLEAN]}
         rc, s = self.run_engine(answers, probe=Cycling(2))
-        self.assertEqual(rc, 2)
-        self.assertEqual(self.thread_of(s, "write"), [None, "net-write", None])
-        self.assertEqual(self.eng.result().kind, Kind.FAULT_BAD_REQUEST.value)
+        assert rc == 2
+        assert self.thread_of(s, "write") == [None, "net-write", None]
+        assert self.eng.result().kind == Kind.FAULT_BAD_REQUEST.value
 
 
 class Checks(NetBase):
@@ -213,15 +214,15 @@ class Checks(NetBase):
         cfg = {"checks": [{"id": "bump", "cmd": bump, "group": "tests"}]}
         answers = {"plan": [PLAN], "write": [WRITE], "review": [drop("net-review")] * 40}
         rc, s = self.run_engine(answers, probe=netgate.FakeProbe([False]), **cfg)  # the network stays down: the run pauses
-        self.assertEqual(rc, 2)
-        self.assertEqual(self.eng.result().kind, Kind.PAUSE_NETWORK.value)
-        self.assertEqual(count.read_text(), "1")
+        assert rc == 2
+        assert self.eng.result().kind == Kind.PAUSE_NETWORK.value
+        assert count.read_text() == "1"
         rc, s = self.run_engine({"review": [CLEAN]}, probe=Cycling(0), **cfg)
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertEqual(s.nodes, ["review"])  # the plan and the write were not asked again
-        self.assertEqual(s.calls[0][1], "net-review")
-        self.assertEqual(count.read_text(), "1")  # the tree did not change: the green result was kept
-        self.assertEqual(self.eng.result().outcome, "landed")
+        assert rc == 0, self.blocked
+        assert s.nodes == ["review"]  # the plan and the write were not asked again
+        assert s.calls[0][1] == "net-review"
+        assert count.read_text() == "1"  # the tree did not change: the green result was kept
+        assert self.eng.result().outcome == "landed"
 
 
 class Pause(NetBase):
@@ -230,46 +231,46 @@ class Pause(NetBase):
     def pause_in_review(self, probe=None, **kw):
         answers = {"plan": [PLAN], "write": [WRITE], "review": [drop("net-review")] * 40}
         rc, s = self.run_engine(answers, probe=probe or netgate.FakeProbe([False]), **kw)
-        self.assertEqual(rc, 2)
+        assert rc == 2
         return s
 
     def test_continuing_uses_a_new_run_id_but_keeps_cost_and_excludes_pause_time_from_its_budget(self):
         self.pause_in_review()
         first = self.eng
         r = first.result()
-        self.assertEqual((r.outcome, r.kind), ("paused", Kind.PAUSE_NETWORK.value))
-        self.assertEqual(r.role, "reviewer")
-        self.assertGreater(r.retry_after or 0, 0)  # the network pause is transient: retried on a timer
-        self.assertEqual((self.blocked, self.ask()), ([], None))
-        self.assertFalse([c for c in self.bd_calls if c[:2] == ("label", "add")])  # no auto label, no engine-fault label
-        self.assertTrue(any(c[:1] == ("update",) and "open" in c for c in self.bd_calls))
+        assert (r.outcome, r.kind) == ("paused", Kind.PAUSE_NETWORK.value)
+        assert r.role == "reviewer"
+        assert (r.retry_after or 0) > 0  # the network pause is transient: retried on a timer
+        assert (self.blocked, self.ask()) == ([], None)
+        assert not [c for c in self.bd_calls if c[:2] == ("label", "add")]  # no auto label, no engine-fault label
+        assert any(c[:1] == ("update",) and "open" in c for c in self.bd_calls)
         cost, run = first.cost, first.log_path.stem
         real = time.time
         with mock.patch.object(time, "time", lambda: real() + 7200):  # the bead waited two hours for the network
             rc, s = self.run_engine({"review": [CLEAN]}, probe=Cycling(0))
             second = self.eng
-            self.assertEqual(rc, 0, self.blocked)
-            self.assertNotEqual(second.log_path.stem, run)
+            assert rc == 0, self.blocked
+            assert second.log_path.stem != run
             before = RunLocator(first.home).get(run)
             after = RunLocator(second.home).get(second.run_id)
             assert before is not None and after is not None
             assert before.manifest.finish is not None and after.manifest.finish is not None
-            self.assertEqual(before.manifest.finish.kind, Kind.PAUSE_NETWORK.value)
-            self.assertEqual(after.manifest.finish.kind, Kind.LANDED.value)
-            self.assertGreaterEqual(second.cost, cost)  # its cost goes on
-            self.assertLess(second.budget.spent_min(), 30)  # the two hours of pause are not charged to the time budget
-        self.assertEqual(s.nodes, ["review"])
-        self.assertEqual(s.calls[0][1], "net-review")
-        self.assertFalse((homes.config_dir() / "pauses" / "t-1.json").exists())  # taken once
+            assert before.manifest.finish.kind == Kind.PAUSE_NETWORK.value
+            assert after.manifest.finish.kind == Kind.LANDED.value
+            assert second.cost >= cost  # its cost goes on
+            assert second.budget.spent_min() < 30  # the two hours of pause are not charged to the time budget
+        assert s.nodes == ["review"]
+        assert s.calls[0][1] == "net-review"
+        assert not (homes.config_dir() / "pauses" / "t-1.json").exists()  # taken once
 
     def test_the_engine_comment_of_a_pause_does_not_make_the_next_run_plan_again(self):
         self.pause_in_review()
         said = [c[3] for c in self.bd_calls if c[:3] == ("comments", "add", "t-1") and c[3].startswith("Engine paused:")]
-        self.assertTrue(said, self.bd_calls)
+        assert said, self.bd_calls
         with self.store.stub(comments=[{"author": "tl-a", "text": t} for t in said]):
             rc, s = self.run_engine({"review": [CLEAN]}, probe=Cycling(0))
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertNotIn("plan", s.nodes)  # the brief it was planned from is the same brief
+        assert rc == 0, self.blocked
+        assert "plan" not in s.nodes  # the brief it was planned from is the same brief
 
     def test_a_pause_older_than_the_longest_one_is_a_new_run(self):
         self.pause_in_review()
@@ -277,13 +278,13 @@ class Pause(NetBase):
         real = time.time
         with mock.patch.object(time, "time", lambda: real() + reexec.NET_PAUSE_ADOPT_S + 60):
             self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, probe=Cycling(0))
-        self.assertNotEqual(self.eng.log_path.stem, run)
+        assert self.eng.log_path.stem != run
 
     def test_a_lane_pause_names_the_role_the_loop_waits_for(self):
         out = stop("rate_limited", at=time.time() + 3 * 3600, lane="OPENAI_SUBSCRIPTION")
         self.run_engine({"plan": [PLAN], "write": [out]})
         r = self.eng.result()
-        self.assertEqual((r.outcome, r.kind, r.role, r.lane), ("paused", "pause_lane", "worker", "OPENAI_SUBSCRIPTION"))
+        assert (r.outcome, r.kind, r.role, r.lane) == ("paused", "pause_lane", "worker", "OPENAI_SUBSCRIPTION")
 
 
 class Replay5ban16(NetBase):
@@ -299,25 +300,25 @@ class Replay5ban16(NetBase):
 
     def test_the_logged_drop_replays_to_one_resume_of_the_same_thread(self):
         ref, said = self.facts()
-        self.assertIn("Reconnecting... waiting for network", said)
+        assert "Reconnecting... waiting for network" in said
         cut = stop("network", ref, partial=True, say=said, tokens={"in": 738090, "cached": 664320, "out": 6851})
         rc, s = self.run_engine({"plan": [cut, PLAN], "write": [WRITE], "review": [CLEAN]}, probe=Cycling(1))
-        self.assertEqual(rc, 0, self.blocked)
+        assert rc == 0, self.blocked
         planner = [c for c in s.calls if c[0] == "planner"]
-        self.assertEqual([c[1] for c in planner], [None, ref])  # exactly one resume, in the same thread
+        assert [c[1] for c in planner] == [None, ref]  # exactly one resume, in the same thread
         plan_ends = [r for r in self.log() if r.get("kind") == "step_end" and r.get("step") == "plan"]
-        self.assertEqual(len(plan_ends), 1)  # one plan node, ended once
-        self.assertNotIn("invalid_output", self.causes())
-        self.assertNotIn("plan output invalid", self.eng.log_path.read_text())
+        assert len(plan_ends) == 1  # one plan node, ended once
+        assert "invalid_output" not in self.causes()
+        assert "plan output invalid" not in self.eng.log_path.read_text()
         sessions = [x for x in self.eng.sessions if x["node"] == "plan"]
-        self.assertEqual([x["attempt"] for x in sessions][-1], 1)  # the attempt counter did not move
+        assert [x["attempt"] for x in sessions][-1] == 1  # the attempt counter did not move
         self.assert_no_charge()
 
 
-class Gate(unittest.TestCase):
+class Gate(Case):
     """GateRole: a paused bead waits for delegate to call its role usable; a time hint never blocks; unknown fails open."""
 
-    def setUp(self):
+    def setup_method(self):
         self.t = 1_800_000_000.0
         self.roles: dict[str, bool | None] = {"worker": False}
         self.reads = 0
@@ -329,35 +330,35 @@ class Gate(unittest.TestCase):
 
     def test_a_bead_wakes_when_its_role_is_usable(self):
         self.gate.hold("x-1", "worker")
-        self.assertFalse(self.gate.ready("x-1"))
+        assert not self.gate.ready("x-1")
         self.t += LoopConfig().gate_cache + 1
         self.roles["worker"] = True
-        self.assertTrue(self.gate.ready("x-1"))
-        self.assertNotIn("x-1", self.gate.held)  # woken once
-        self.assertTrue(self.gate.ready("x-2"))  # a bead that is not held is never gated
+        assert self.gate.ready("x-1")
+        assert "x-1" not in self.gate.held  # woken once
+        assert self.gate.ready("x-2")  # a bead that is not held is never gated
 
     def test_the_view_is_cached_for_30_seconds(self):
         self.gate.hold("x-1", "worker")
         for _ in range(5):
             self.gate.ready("x-1")
             self.t += 5
-        self.assertEqual(self.reads, 1)
+        assert self.reads == 1
         self.t += LoopConfig().gate_cache
         self.gate.ready("x-1")
-        self.assertEqual(self.reads, 2)
+        assert self.reads == 2
 
     def test_an_unknown_role_fails_open_after_the_unknown_wait_and_not_before(self):
         self.roles.clear()
         self.gate.hold("x-1", "worker")
         self.t += LoopConfig().gate_unknown - 1
-        self.assertFalse(self.gate.ready("x-1"))
+        assert not self.gate.ready("x-1")
         self.t += 2
-        self.assertTrue(self.gate.ready("x-1"))
+        assert self.gate.ready("x-1")
 
     def test_a_role_that_is_down_keeps_the_bead_waiting_however_long(self):
         self.gate.hold("x-1", "worker")
         self.t += 10 * 3600
-        self.assertFalse(self.gate.ready("x-1"))
+        assert not self.gate.ready("x-1")
 
     def test_nothing_is_written_back(self):
         self.gate.hold("x-1", "worker")
@@ -374,11 +375,11 @@ class ResumeLook(test_stages_visual.VisualWork):
         probe = Cycling(2)
         answers = {"plan": [te.PLAN], "write": [self.write()], "look": [drop("net-look"), self.judged()], "review": [CLEAN]}
         rc, s = self.go(answers, probe=probe)
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertEqual([s.calls[i][1] for i, n in enumerate(s.nodes) if n == "look"], [None, "net-look"])
-        self.assertEqual(Counter(n for n in s.nodes if n != "look"), Counter({"plan": 1, "write": 1, "review": 1}))
-        self.assertIn("network_wait", [r.get("cause") for r in self.log() if r.get("kind") == "transition"])
-        self.assertEqual((self.blocked, self.ask()), ([], None))
+        assert rc == 0, self.blocked
+        assert [s.calls[i][1] for i, n in enumerate(s.nodes) if n == "look"] == [None, "net-look"]
+        assert Counter(n for n in s.nodes if n != "look") == Counter({"plan": 1, "write": 1, "review": 1})
+        assert "network_wait" in [r.get("cause") for r in self.log() if r.get("kind") == "transition"]
+        assert (self.blocked, self.ask()) == ([], None)
 
     def log(self):
         return [json.loads(x) for x in self.eng.log_path.read_text().splitlines()]
@@ -387,7 +388,3 @@ class ResumeLook(test_stages_visual.VisualWork):
 for _name in dir(test_stages_visual.VisualWork):  # the visual fixture only: not every test of its class again
     if _name.startswith("test_") and _name not in ResumeLook.__dict__:
         setattr(ResumeLook, _name, None)
-
-
-if __name__ == "__main__":
-    unittest.main()

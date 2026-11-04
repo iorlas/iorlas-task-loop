@@ -11,5 +11,5 @@ class LoopStopLogic(LoopBase):
     def test_stop_with_no_loop_running_says_so(self):
         out = io.StringIO()
         with redirect_stdout(out):
-            self.assertEqual(self.main(["stop", "--repo", str(self.repo)]), 1)
-        self.assertIn("no loop", out.getvalue())
+            assert self.main(["stop", "--repo", str(self.repo)]) == 1
+        assert "no loop" in out.getvalue()

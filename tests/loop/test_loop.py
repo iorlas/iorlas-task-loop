@@ -8,12 +8,13 @@ import stat
 import subprocess
 import sys
 import tempfile
-import unittest
 from collections.abc import Callable
 from contextlib import redirect_stdout
 from pathlib import Path
 from typing import Any, ClassVar
 from unittest import mock
+
+from support.case import Case
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
@@ -131,8 +132,8 @@ class FakeBd:
         return 0
 
 
-class Base(unittest.TestCase):
-    def setUp(self):
+class Base(Case):
+    def setup_method(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.home = Path(self.tmp.name)
         self.repo = self.home / "repo"
@@ -163,7 +164,7 @@ class Base(unittest.TestCase):
         finally:
             self.here = before
 
-    def tearDown(self):
+    def teardown_method(self):
         os.chdir(self.cwd)
 
         def force(fn, path, _):
@@ -247,8 +248,8 @@ class FakeChild:
 class LoopBase(Base):
     """The loop with run-task faked (FakeChild) and slot setup skipped; no tests of its own."""
 
-    def setUp(self):
-        super().setUp()
+    def setup_method(self):
+        super().setup_method()
         self.clock = Clock()
         self.roles: Callable[[], dict[str, dict[str, Any]]] = lambda: {
             "worker": {"usable": True}
@@ -294,10 +295,10 @@ class Loop(LoopBase):
                        carry=Carry(gated={"x-1": ("worker", 5.0)}, ran=1))
         got, why = parse_handover(json.dumps(wire.dump(st)))
         assert got is not None
-        self.assertEqual((got.carry.gated, got.carry.ran, why), ({"x-1": ("worker", 5.0)}, 1, ""))
+        assert (got.carry.gated, got.carry.ran, why) == ({"x-1": ("worker", 5.0)}, 1, "")
         got, why = parse_handover(json.dumps({"gated": {"x-1": ["worker", 5.0]}, "ran": 1}))  # an old shape: absent, never trusted
-        self.assertIsNone(got)
-        self.assertIn("v=None", why)
+        assert got is None
+        assert "v=None" in why
 
 
     def other_loop(self):
@@ -306,7 +307,3 @@ class Loop(LoopBase):
         self.addCleanup(lambda: (k.kill(), k.wait()))
         looptest.write_state(str(self.repo), pid=k.pid, started=self.clock.t, bead="x-9", slot="s2", since=self.clock.t)
         return k
-
-
-if __name__ == "__main__":
-    unittest.main()
