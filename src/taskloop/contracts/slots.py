@@ -26,10 +26,11 @@ class SlotFail(Exception):
     slot cannot clear (a dirty tree it cannot commit, a lock that stays, no such slot). transient: infrastructure failed,
     without evidence that the slot itself is broken."""
 
-    def __init__(self, code: SlotFailCode, why: str) -> None:
+    def __init__(self, code: SlotFailCode, why: str, *, setup: bool = False) -> None:
         super().__init__(why)
         self.code: SlotFailCode = code
         self.why = why
+        self.setup = setup  # the slot's setup command exited non-zero (its tree is the suspect, not git)
 
 
 class SlotGitError(Exception):

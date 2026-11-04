@@ -25,6 +25,7 @@ RELEASED: dict[tuple[Producer, str], PauseRule] = {
     ("delegate", "network"): PauseRule("transient", 30, 1800),
     ("engine", "engine_crash"): PauseRule("transient", 60, 3600, 3),
     ("engine", "stage_refused"): PauseRule("needs_owner"),
+    ("engine", "setup_own_tree"): PauseRule("needs_owner"),
     ("engine", "transient_infrastructure"): PauseRule("transient", 60, 3600, 3),
     ("delegate", "rate_limited"): PauseRule("transient", 60, 3600, 3),
     ("delegate", "hung"): PauseRule("transient", 60, 3600, 3),

@@ -14,6 +14,7 @@ from taskloop.domain.land.matchers import NetText
 NETWORK = "pause_network"
 FAULT_SLOT = "fault_slot"
 PROFILE_AHEAD = "profile_ahead"
+SETUP_OWN_TREE = "setup_own_tree"
 
 
 def profile_ahead(version: str, error: BaseException | None = None) -> Verdict:
@@ -71,6 +72,11 @@ def pre_engine(why: str, slot_fault: SlotFailCode | None = None, *, recovery_fai
                        slot_fault=slot_fault, recovery_failed=True)
     return Verdict(Result.PAUSED, f"transient before the engine: {why}", kind="transient_infrastructure", pre_engine=True,
                    slot_fault=slot_fault)
+
+
+def setup_own_tree(why: str, run: str) -> Verdict:
+    """The slot's setup fails with the bead's tree and passes on the base: the bead is parked for the owner, the slot is clean."""
+    return Verdict(Result.PAUSED, f"setup fails with this bead's own tree (it passes on the base): {why}", kind=SETUP_OWN_TREE, run=run)
 
 
 def taken(why: str) -> Verdict:

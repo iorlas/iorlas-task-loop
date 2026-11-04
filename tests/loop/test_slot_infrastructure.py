@@ -139,3 +139,33 @@ class Infrastructure(Rig):
                 self.assertTrue(all(call[0] in ("dirty", "rebasing") for call in self.git.calls))
                 self.assertEqual(self.git.tree(self.d1).branch, "task/other")
                 self.assertEqual(self.git.tree(self.d1).dirty, dirty)
+
+
+class SetupOwnTree(Rig):
+    """tl-bxk.10.33.11: a setup that fails with the bead's tree and passes on the base is the bead's, not an infrastructure wait."""
+
+    def test_setup_failing_only_with_the_beads_tree_parks_the_bead_and_leaves_the_slot_clean(self):
+        bid = BeadId("x-1")
+        self.bd.beads[bid] = Bead(id=bid, title="work", status="in_progress", assignee=ME)
+        taker = Taker(slot_loop_env(self.env), mock.Mock(), LoopConfig, self.out.append, mock.Mock(), {})
+        broken = SlotFail("slot_broken", "setup exited 1", setup=True)
+        with mock.patch.object(Slot, "ready_for", side_effect=[broken, broken, None]) as reset, \
+                mock.patch("taskloop.app.loop.take.setup") as base_setup:
+            verdict = taker.prepare("s1", bid)
+        assert verdict is not None
+        self.assertEqual((verdict.outcome, verdict.kind, verdict.pre_engine), (Result.PAUSED, vd.SETUP_OWN_TREE, False))
+        self.assertEqual(reset.call_args_list[-1], mock.call(""))
+        base_setup.assert_called_once()
+        self.assertEqual(self.bd.beads[bid].status, "open")
+
+    def test_setup_failing_on_the_base_too_stays_a_slot_failure(self):
+        bid = BeadId("x-1")
+        self.bd.beads[bid] = Bead(id=bid, title="work", status="in_progress", assignee=ME)
+        taker = Taker(slot_loop_env(self.env), mock.Mock(), LoopConfig, self.out.append, mock.Mock(), {})
+        broken = SlotFail("slot_broken", "setup exited 1", setup=True)
+        with mock.patch.object(Slot, "ready_for", side_effect=[broken, broken, None]), \
+                mock.patch("taskloop.app.loop.take.setup", side_effect=broken):
+            verdict = taker.prepare("s1", bid)
+        assert verdict is not None
+        self.assertTrue(verdict.pre_engine)
+        self.assertTrue(verdict.recovery_failed)

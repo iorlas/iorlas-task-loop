@@ -12,6 +12,7 @@ from taskloop.app.loop.run import BeadRun, Where
 from taskloop.app.slots.env import attempt
 from taskloop.app.slots.lease import Lease
 from taskloop.app.slots.pool import SlotPool
+from taskloop.app.slots.reset import setup
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.config import ConfigError, EngineConfig, LoopConfig
 from taskloop.contracts.enums import Result
@@ -55,8 +56,21 @@ class Taker:
                 return vd.taken(e.why)
             if e.code == "busy":
                 return vd.pre_engine(f"tl slot reset {slot} for {bead} found the slot busy (a live engine or a hold)")
+            if e.setup and self._base_sets_up(slot):  # the slot is fine and clean at the base: the bead's tree breaks the setup
+                return vd.setup_own_tree(e.why, f"setup-{self.env.pid}-{self.env.now()}")
             return vd.pre_engine(f"tl slot reset {slot} for {bead} did not give a clean tree: {e.why}", e.code,
                                  recovery_failed=e.code == "slot_broken")
+
+    def _base_sets_up(self, slot: str) -> bool:
+        """Whether the slot, detached at the base, passes its setup (the bead's work is kept on its branch): then a setup that
+        failed with the bead's tree is the bead's fault, not an infrastructure wait that holds the slot (tl-bxk.10.33.11)."""
+        try:
+            target = SlotPool(self.env.slot_env()).named(slot)
+            target.ready_for("")
+            setup(target, force=True)
+        except (SlotFail, SlotGitError, BdFailure, OSError):
+            return False
+        return True
 
     def claimed(self, b: Bead, at: Where, ecfg: EngineConfig, rule: QueueRule) -> vd.Verdict | None:
         """The area check, the claim and the mark that makes the area busy, as one. A verdict: the bead is not to be run now;
@@ -79,7 +93,7 @@ class Taker:
         return None
 
     def _park_profile_ahead(self, b: Bead, v: vd.Verdict) -> None:
-        if v.kind == vd.PROFILE_AHEAD:
+        if v.kind in (vd.PROFILE_AHEAD, vd.SETUP_OWN_TREE):
             env = self.env
             store = ParkStore(env.cfgdir)
             run = v.run or f"profile-ahead-{env.pid}-{env.now()}"

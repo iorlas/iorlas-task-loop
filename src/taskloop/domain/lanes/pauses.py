@@ -78,6 +78,7 @@ TABLE: Final[dict[tuple[Producer, str], PauseRule]] = {
     ("engine", Reason.NO_ANSWER): PauseRule("transient", 60, 3600, 3),
     ("engine", Reason.OVERRUN): PauseRule("needs_owner"),
     ("engine", Reason.PROFILE_AHEAD): PauseRule("needs_owner"),
+    ("engine", Reason.SETUP_OWN_TREE): PauseRule("needs_owner"),
     ("engine", Reason.CONTRACT_VIOLATION): PauseRule("needs_owner"),
     ("engine", Reason.PAUSE_LANE): PauseRule("transient", 60, 3600, 3),
     ("engine", Reason.PAUSE_NETWORK): PauseRule("transient", 30, 1800),

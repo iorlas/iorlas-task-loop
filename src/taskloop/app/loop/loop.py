@@ -31,6 +31,7 @@ from taskloop.contracts.config import ConfigError
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.loop import LoopState, LoopWait, QueueRow
 from taskloop.contracts.parks import ParkStore
+from taskloop.contracts.ports import BdFailure
 from taskloop.contracts.run import LoopLogLine
 from taskloop.contracts.slots import SlotFail
 
@@ -339,6 +340,8 @@ class Loop(Core):
     def work(self, cands: list[Bead], rule: QueueRule) -> int | None:
         env, slots = self.env, self.prof.slots.count > 0
         pool = SlotPool(env.slot_env()) if slots else None
+        if pool:
+            self.reclaim(pool)
         got = self.acquire(min(prio_of(b) for b in cands)) if slots else ("", self.wt, None)
         if got is None:
             return None
@@ -360,8 +363,21 @@ class Loop(Core):
         return self.settle.apply(taken.verdict, taken.bead, name, slots)
 
     def release(self, name: str, pool: SlotPool | None = None) -> None:
-        with contextlib.suppress(SlotFail):
+        try:
             (pool or SlotPool(self.env.slot_env())).slot(name).release(mine=True)
+        except SlotFail:
+            pass
+        except BdFailure as e:  # the slot bead stays claimed: the next pass gives it back (reclaim)
+            self.say(f"tl: slot {name} was not released ({e}); the next pass gives it back")
+
+    def reclaim(self, pool: SlotPool) -> None:
+        """One loop holds one slot (tl-bxk.10.33.14): a slot this loop still holds before it takes another is a leak."""
+        try:
+            for slot in pool.leaked():
+                self.say(f"tl: slot {slot.name} was still held by this loop with no run in it: released")
+                slot.release(mine=False)
+        except (SlotFail, BdFailure) as e:
+            self.say(f"tl: slot leak check failed: {e}")
 
     def record(self, bead: str, slot: str, v: vd.Verdict) -> None:
         env = self.env

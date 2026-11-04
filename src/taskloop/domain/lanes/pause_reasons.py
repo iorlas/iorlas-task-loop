@@ -36,6 +36,7 @@ class Reason(StrEnum):
     CALLER = "caller"
     SETUP = "setup"
     PROFILE_AHEAD = "profile_ahead"
+    SETUP_OWN_TREE = "setup_own_tree"
     CONTRACT_VIOLATION = "contract_violation"
     PAUSE_LANE = "pause_lane"
     PAUSE_NETWORK = "pause_network"

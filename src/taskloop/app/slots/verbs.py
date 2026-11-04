@@ -29,7 +29,10 @@ def listing(env: SlotEnv, a: Any) -> int:
         m = b.metadata
         holder = (m.get("held_by") or b.assignee or "?") if held else "-"
         why = (f"{hold.why} (hold until {stamp(hold.until)})" if hold else
-               "{} since {}".format(m.get("held_why") or "?", m.get("held_since") or "?") if held else "-")
+               ("{} since {}".format(m.get("held_why") or "?", m.get("held_since") or "?") if m.get("held_since")
+                else f"claimed, no take record (bead updated {b.updated_at or '?'})") if held else "-")
+        if m.get("aside_probe") == "pending":  # degraded capacity: the next take probes it (tl-bxk.10.33.13)
+            why += " [set aside: reset probe pending]"
         env.say("\t".join([s.name, b.id, b.status, holder, why, env.busy(s.dir) or "-", s.dir]))
     for n, t in enumerate(waiting_line(env), 1):
         env.say("\t".join(["WAITING", str(n), f"P{order(t)[0]}", f"pid {t.pid}", t.why or "-", stamp(t.since) if t.since else "-"]))

@@ -145,6 +145,12 @@ class SlotPool:
         b = self.bead(name)
         return Slot(self, name, b)
 
+    def leaked(self) -> list[Slot]:
+        """The slots this session's actor still holds with no hold and no engine in them: what a release that failed left (a loop
+        holds one slot at a time, so at the start of a pass any such slot is a leak, tl-bxk.10.33.14)."""
+        return [s for s in self.slots() if s.bead is not None and s.bead.status != "open" and s.bead.assignee == self.env.actor
+                and not s.hold() and not self.env.busy(s.dir)]
+
     def name_of(self, wt: str) -> str:
         """The slot whose worktree `wt` is, or ""."""
         here = Path(wt).resolve()
