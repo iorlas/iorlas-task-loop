@@ -5,7 +5,7 @@ import os
 import time
 from collections.abc import Callable
 
-from taskloop.contracts import factorydb, log
+from taskloop.contracts import factorydb, log, runfacts
 from taskloop.contracts.askrows import import_legacy_asks
 from taskloop.contracts.locator import RunBundle, RunLocator
 from taskloop.contracts.paths import ConfigDir
@@ -46,7 +46,7 @@ class Indexer:
     def clear(self) -> None:
         """Clear log folds and cursors while preserving authoritative state and revisions."""
         with factorydb.begin_immediate(self.con):
-            self.con.execute("UPDATE run SET facts=NULL, facts_upto=NULL")
+            runfacts.clear_facts(self.con)
             self.con.execute("DELETE FROM source WHERE family='run'")
             self.con.execute("DELETE FROM kv WHERE k='index.run.pass'")
         self.pending = None
@@ -84,8 +84,7 @@ class Indexer:
                 self.con.execute("DELETE FROM source WHERE path=? AND family='run'", (path,))
 
     def _run(self, bundle: RunBundle, deadline: float) -> bool:
-        row = self.con.execute("SELECT facts FROM run WHERE run=?", (bundle.run,)).fetchone()
-        facts = decode(row[0] if row else None)
+        facts = decode(runfacts.read_facts(self.con, bundle.run))
         source = self.con.execute("SELECT dev,ino,size,head,offset,mtime_ns,error FROM source WHERE path=?", (str(bundle.log),)).fetchone()
         try:
             with bundle.log.open("rb") as file:
@@ -140,7 +139,7 @@ class Indexer:
         return offset >= stat.st_size or (consumed < len(data) and b"\n" not in data[consumed:])
 
     def _write(self, bundle: RunBundle, facts: Facts, offset: int) -> None:
-        self.con.execute("UPDATE run SET facts=?, facts_upto=? WHERE run=?", (encode(facts), offset, bundle.run))
+        runfacts.write_facts(self.con, bundle.run, encode(facts), offset)
 
 
 def reindex(cfg: ConfigDir, *, clock: Callable[[], float] = time.time) -> dict[str, float | int]:
@@ -153,7 +152,6 @@ def reindex(cfg: ConfigDir, *, clock: Callable[[], float] = time.time) -> dict[s
         index.clear()
         while not index.pass_once():
             pass
-        counts = {table: index.con.execute(f"SELECT count(*) FROM {table} " +
-                  ("" if table == "run" else "WHERE family='run'")).fetchone()[0]
-                  for table in ("run", "source")}
+        counts = {"run": runfacts.count_runs(index.con),
+                  "source": index.con.execute("SELECT count(*) FROM source WHERE family='run'").fetchone()[0]}
     return {**counts, "seconds": time.monotonic() - start}
