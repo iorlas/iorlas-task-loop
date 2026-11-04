@@ -6,11 +6,13 @@ import json
 import os
 import sys
 import tempfile
-import unittest
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 from unittest import mock
+
+import pytest
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -45,7 +47,7 @@ def answer_of(step: Step) -> dict[str, Any]:
 
 
 @contract
-class FakeDelegateContract(DelegateContract, unittest.TestCase):
+class FakeDelegateContract(DelegateContract, Case):
     def make(self, *steps: Step) -> FakeDelegate:
         self.fake = FakeDelegate(*steps)
         return self.fake
@@ -68,7 +70,7 @@ def stub_in_process(argv: list[str], cwd: str | None, env: Mapping[str, str] | N
 class RouteHarness:
     IN_PROCESS = True  # the stub runs in this process; a class that sets False starts it as route.py is started
 
-    def setUp(self) -> None:
+    def setup_method(self) -> None:
         self.tmp = tempfile.TemporaryDirectory()
         self.script = Path(self.tmp.name, "script.json")
         self.addCleanup(self.tmp.cleanup)  # type: ignore[attr-defined]
@@ -89,19 +91,19 @@ class RouteHarness:
 
 
 @contract
-class RouteDelegateContract(RouteHarness, DelegateContract, unittest.TestCase):
+class RouteDelegateContract(RouteHarness, DelegateContract, Case):
     def seen(self) -> list[dict[str, Any]]:
         rows = [json.loads(x) for x in Path(str(self.script) + ".calls").read_text(encoding="utf-8").splitlines()]
         return [{"role": r["argv"][r["argv"].index("run") + 1], "task": r["argv"][r["argv"].index("--task") + 1],
                  "brief": r["brief"], "schema": r["schema"]} for r in rows]
 
     def test_steps_play_in_order_and_the_last_repeats(self) -> None:
-        self.skipTest("one script per process: sequencing is the fake's feature")
+        pytest.skip("one script per process: sequencing is the fake's feature")
 
 
 @contract
 @real_proc("argv and stdout through a real pipe, the live file tailed while the child runs, the engine's stop of a child past its deadline")
-class RouteDelegateProcess(RouteHarness, unittest.TestCase):
+class RouteDelegateProcess(RouteHarness, Case):
     """Real processes: what only a child has (argv and stdout through a pipe, the live file tailed while it runs, the engine's stop)."""
     IN_PROCESS = False
 
@@ -109,18 +111,18 @@ class RouteDelegateProcess(RouteHarness, unittest.TestCase):
         events = (LiveCmdStart(t=1.0, id="c1", text="ls"), LiveMsg(t=2.0, text="hi"), LiveEnd(t=3.0, status="done", secs=2.0))
         seen: list[Any] = []
         self.make(done(None, "ok", *events, ref="r")).run(req(), "b", SCHEMA, seen.append)
-        self.assertEqual(seen, list(events))
+        assert seen == list(events)
 
     def test_a_child_past_the_deadline_is_stopped(self) -> None:
         self.write(answer=None, sleep=30)
         got = self.route(timeout_s=0.5, backstop_s=0.0).run(req(), "b", SCHEMA)
         assert got.stop is not None, got
-        self.assertEqual((answer_status(got), got.stop.reason), ("timeout", "timeout"))
-        self.assertLess(got.secs, 5)
+        assert (answer_status(got), got.stop.reason) == ("timeout", "timeout")
+        assert got.secs < 5
 
 
 @contract
-class RouteDelegateFailures(RouteHarness, unittest.TestCase):
+class RouteDelegateFailures(RouteHarness, Case):
     def stop_of(self, **script: Any) -> Any:
         self.write(**script)
         got = self.route(timeout_s=0.5, backstop_s=0.0).run(req(), "b", SCHEMA)
@@ -129,28 +131,27 @@ class RouteDelegateFailures(RouteHarness, unittest.TestCase):
 
     def test_no_answer_is_a_crash(self) -> None:
         got = self.stop_of(answer=None)
-        self.assertEqual((answer_status(got), got.stop.reason, got.stop.permanence), ("error", "crash", "needs_owner"))
+        assert (answer_status(got), got.stop.reason, got.stop.permanence) == ("error", "crash", "needs_owner")
 
     def test_garbage_is_a_crash(self) -> None:
-        self.assertEqual(self.stop_of(raw="Traceback ...").stop.reason, "crash")
+        assert self.stop_of(raw="Traceback ...").stop.reason == "crash"
 
     def test_an_answer_that_is_not_contract_4_is_a_violation(self) -> None:
-        self.assertEqual(self.stop_of(answer={"v": 2, "status": "done"}).stop.reason, "contract_violation")
+        assert self.stop_of(answer={"v": 2, "status": "done"}).stop.reason == "contract_violation"
 
     def test_a_malformed_stop_is_a_violation(self) -> None:
-        self.assertEqual(self.stop_of(answer={"contract": 4, "stop": {"reason": "x", "scope": "galaxy"}}).stop.reason,
-                         "contract_violation")
+        assert self.stop_of(answer={"contract": 4, "stop": {"reason": "x", "scope": "galaxy"}}).stop.reason == "contract_violation"
 
     def test_the_old_contract_is_visible_to_the_gate(self) -> None:
         self.write(contract=2)
-        self.assertEqual(self.route().speaks(), 2)
+        assert self.route().speaks() == 2
 
     def test_sandbox_limit_denials_are_not_carried(self) -> None:
         a = answer_of(done(ref="r"))
         a["denied"] = [{"kind": "sandbox_limit", "tool": "ps"}, {"kind": "policy", "tool": "rm", "input": {"a": 1}}]
         self.write(answer=a)
         got = self.route().run(req(), "b", SCHEMA)
-        self.assertEqual([(d.kind, d.tool, d.input) for d in got.denied], [("policy", "rm", {"a": 1})])
+        assert [(d.kind, d.tool, d.input) for d in got.denied] == [("policy", "rm", {"a": 1})]
 
     def test_usage_tokens_keep_fresh_and_cached_input_apart(self) -> None:
         a = answer_of(done(ref="r"))
@@ -158,14 +159,16 @@ class RouteDelegateFailures(RouteHarness, unittest.TestCase):
         self.write(answer=a)
         got = self.route().run(req(), "b", SCHEMA)
         assert got.usage is not None and got.usage.tokens is not None
-        self.assertEqual((got.usage.tokens.in_fresh, got.usage.tokens.cache_read, got.usage.tokens.cache_write, got.usage.tokens.out),
-                         (10, 90, None, 5))
+        assert (
+            (got.usage.tokens.in_fresh, got.usage.tokens.cache_read, got.usage.tokens.cache_write, got.usage.tokens.out)
+            == (10, 90, None, 5)
+        )
 
     def test_an_unknown_live_line_is_passed_over(self) -> None:
         self.write(answer=answer_of(done(ref="r")), live=[{"k": "from_the_future", "t": 1.0}])
         seen: list[Any] = []
-        self.assertEqual(answer_status(self.route().run(req(), "b", SCHEMA, seen.append)), "done")
-        self.assertEqual(seen, [])
+        assert answer_status(self.route().run(req(), "b", SCHEMA, seen.append)) == "done"
+        assert seen == []
 
 
 def wire_line(event: Any) -> dict[str, Any]:
@@ -176,27 +179,23 @@ def wire_line(event: Any) -> dict[str, Any]:
 
 
 @domain
-class FakeDelegateLogic(unittest.TestCase):
+class FakeDelegateLogic(Case):
     def test_resume_is_echoed_as_the_ref(self) -> None:
         d = FakeDelegate(done())
-        self.assertEqual(d.run(req(resume="s-9"), "b", SCHEMA).ref, "s-9")
-        self.assertEqual(d.run(req(), "b", SCHEMA).ref, "fake-2")
+        assert d.run(req(resume="s-9"), "b", SCHEMA).ref == "s-9"
+        assert d.run(req(), "b", SCHEMA).ref == "fake-2"
 
     def test_the_wire_status_table(self) -> None:
         cases = [("timeout", "bead", "timeout"), ("worker_failed", "bead", "failed"), ("bad_request", "caller", "error"),
                  ("busy", "lane", "lane_out"), ("network", "machine", "stop")]
         for reason, scope, want in cases:
             with self.subTest(reason):
-                self.assertEqual(answer_status(stopped(reason, scope).result), want)
+                assert answer_status(stopped(reason, scope).result) == want
 
     def test_calls_are_recorded(self) -> None:
         d = FakeDelegate()
         d.run(req(role="plan"), "the brief", SCHEMA)
-        self.assertEqual([(c.req.role, c.brief) for c in d.calls], [("plan", "the brief")])
+        assert [(c.req.role, c.brief) for c in d.calls] == [("plan", "the brief")]
 
     def test_the_wire_mapper_rejects_a_status_answer(self) -> None:
-        self.assertEqual(delegate_wire.result_of({"v": 2, "status": "done"}).stop.reason, "contract_violation")  # type: ignore[union-attr]
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert delegate_wire.result_of({"v": 2, "status": "done"}).stop.reason == "contract_violation"  # type: ignore[union-attr]

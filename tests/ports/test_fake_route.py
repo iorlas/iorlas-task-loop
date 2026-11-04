@@ -9,10 +9,12 @@ import shlex
 import subprocess
 import sys
 import tempfile
-import unittest
 from pathlib import Path
 from typing import Any
 from unittest import mock
+
+import pytest
+from support.case import Case
 
 ROOT = Path(__file__).resolve().parents[2]
 SKILL = ROOT / "skills" / "task-loop"
@@ -41,8 +43,8 @@ FIXTURES = sorted((DELEGATE / "tests" / "contract" / "fixtures").glob("*.json"))
 FAKE = str(Path(__file__).resolve().parents[1] / "support" / "fake_route.py")
 
 
-class Fake(unittest.TestCase):
-    def setUp(self):
+class Fake(Case):
+    def setup_method(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.dir = Path(self.tmp.name)
         self.script = self.dir / "script.json"
@@ -50,7 +52,7 @@ class Fake(unittest.TestCase):
         self.resolved = dl.Resolved(DELEGATE, FAKE, CONTRACT, "explicit")
         self.addCleanup(self.tmp.cleanup)
 
-    def tearDown(self):
+    def teardown_method(self):
         self.tmp.cleanup()
 
     def script_with(self, steps, net=None):
@@ -82,28 +84,28 @@ class Fake(unittest.TestCase):
             return done.returncode, done.stdout
         procsim.fake(shlex.join([sys.executable, FAKE]), route, args=True)
         out = subprocess.run([sys.executable, FAKE, "contract", "--json"], capture_output=True, text=True, env=self.env, check=False).stdout
-        self.assertEqual(sorted(json.loads(out)), ["capabilities", "contract", "reasons", "run_args"])
-        self.assertEqual(json.loads(out)["contract"], 4)
-        self.assertEqual(json.loads(out)["capabilities"], ["writer_exec_allow"])
+        assert sorted(json.loads(out)) == ["capabilities", "contract", "reasons", "run_args"]
+        assert json.loads(out)["contract"] == 4
+        assert json.loads(out)["capabilities"] == ["writer_exec_allow"]
         with mock.patch.dict(os.environ, self.env):
             probe = dl.RouteProbe(FAKE)
             got = [probe.up(), probe.up(), probe.up()]
-        self.assertEqual(got, [False, True, True])
+        assert got == [False, True, True]
 
     def test_argv_uses_only_flags_the_contract_lists(self):
         argv = self.req(resume="r", authored_by="a", call_id="c", brief_path="b.md", schema_path="s.json",
                         writer_exec_allow=[["just", "shot"]]).to_argv("python3", "route.py")
-        self.assertNotIn("--host", argv)
-        self.assertNotIn("--no-wait", argv)
+        assert "--host" not in argv
+        assert "--no-wait" not in argv
         flags = {x for x in argv if x.startswith("--")}
-        self.assertLessEqual(flags, set(CONTRACT["run_args"]))
-        self.assertIn("--timeout", flags)
-        self.assertEqual(argv[argv.index("--timeout") + 1], "900")
+        assert flags <= set(CONTRACT["run_args"])
+        assert "--timeout" in flags
+        assert argv[argv.index("--timeout") + 1] == "900"
 
     def test_a_done_answer_has_no_stop_and_carries_the_ref(self):
         self.script_with([{"step": "done", "data": {"a": 1}}])
         r = self.call()
-        self.assertEqual((r.done, r.stop, r.data, r.ref, r.source), (True, None, {"a": 1}, "fake-1", "delegate"))
+        assert (r.done, r.stop, r.data, r.ref, r.source) == (True, None, {"a": 1}, "fake-1", "delegate")
 
     def test_answer_keeps_the_actual_argv_and_unabridged_stdout_and_stderr(self):
         seen = []
@@ -116,11 +118,11 @@ class Fake(unittest.TestCase):
             return subprocess.CompletedProcess(argv, 0, stdout, stderr)
 
         answer = dl.call(self.resolved, self.req(), "do it", {}, runner, {})
-        self.assertEqual(list(answer.argv), seen[0])
-        self.assertTrue(seen[0][seen[0].index("--brief") + 1].endswith("brief.md"))
-        self.assertTrue(seen[0][seen[0].index("--schema") + 1].endswith("schema.json"))
-        self.assertEqual(answer.raw, body)
-        self.assertEqual(answer.trace, stdout + "\n" + stderr)
+        assert list(answer.argv) == seen[0]
+        assert seen[0][seen[0].index("--brief") + 1].endswith("brief.md")
+        assert seen[0][seen[0].index("--schema") + 1].endswith("schema.json")
+        assert answer.raw == body
+        assert answer.trace == stdout + "\n" + stderr
 
     def test_every_fixture_replays_to_its_expected_reason_and_a_policy_action(self):
         replayed = 0
@@ -134,75 +136,71 @@ class Fake(unittest.TestCase):
             self.script_with([fx.stem])
             r = self.call()
             replayed += 1
-            self.assertEqual(must(r.stop).reason, exp, fx.name)
-            self.assertEqual((must(r.stop).scope, must(r.stop).permanence, must(r.stop).retry_kind), lp_facts(exp), fx.name)
+            assert must(r.stop).reason == exp, fx.name
+            assert (must(r.stop).scope, must(r.stop).permanence, must(r.stop).retry_kind) == lp_facts(exp), fx.name
             a = lp.decide(must(r.stop), lp.Ctx(now=1000.0))
-            self.assertFalse(isinstance(a, (lp.Yield, lp.Fail)) and oc.make(Kind[a.kind]).rule.makes_ask, fx.name)
-        self.assertGreaterEqual(replayed, 5)
+            assert not (isinstance(a, (lp.Yield, lp.Fail)) and oc.make(Kind[a.kind]).rule.makes_ask), fx.name
+        assert replayed >= 5
 
     # --- the contract and the table agree ---------------------------------------------------------------------------
 
     def test_the_closed_lists_equal_contract_json_and_every_reason_has_a_policy_row(self):
-        self.assertEqual(tuple(CONTRACT["scopes"]), tuple(sorted(lp.SCOPES, key=CONTRACT["scopes"].index)))
-        self.assertEqual(set(CONTRACT["scopes"]), set(lp.SCOPES))
-        self.assertEqual(set(CONTRACT["permanences"]), set(lp.PERMANENCES))
-        self.assertEqual(set(CONTRACT["retry_kinds"]), set(lp.RETRY_KINDS))
+        assert tuple(CONTRACT["scopes"]) == tuple(sorted(lp.SCOPES, key=CONTRACT["scopes"].index))
+        assert set(CONTRACT["scopes"]) == set(lp.SCOPES)
+        assert set(CONTRACT["permanences"]) == set(lp.PERMANENCES)
+        assert set(CONTRACT["retry_kinds"]) == set(lp.RETRY_KINDS)
         for reason, r in CONTRACT["reasons"].items():  # adding a reason without a row fails here
             facts = (r["scope"], r["permanence"], r["retry"])
-            self.assertIn(facts, lp.TABLE, f"reason {reason} has no lane_policy row for {facts}")
+            assert facts in lp.TABLE, f"reason {reason} has no lane_policy row for {facts}"
 
     # --- synthesized stops, never a raise ---------------------------------------------------------------------------
 
     def test_no_answer_is_a_synthesized_stop_of_the_machine_that_tries_again(self):
         r = self.call(runner=lambda cmd, **kw: subprocess.CompletedProcess(cmd, 1, "", "Traceback"), resume="r1")
-        self.assertEqual((r.source, must(r.stop).reason), ("synthesized", "no_answer"))  # not delegate's own `crash` (needs_owner)
-        self.assertEqual((must(r.stop).scope, must(r.stop).permanence, must(r.stop).retry_kind), ("machine", "transient", "none"))
-        self.assertEqual(must(r.stop).ref, "r1")
+        assert (r.source, must(r.stop).reason) == ("synthesized", "no_answer")  # not delegate's own `crash` (needs_owner)
+        assert (must(r.stop).scope, must(r.stop).permanence, must(r.stop).retry_kind) == ("machine", "transient", "none")
+        assert must(r.stop).ref == "r1"
 
     def test_a_wrong_shape_is_a_contract_violation_and_a_call_the_engine_ended_is_a_timeout(self):
         for bad in ('{"v": 2, "status": "done"}', '{"contract": 2, "stop": null}', '{"contract": 4}', '{"contract": 4, "stop": 7}'):
             r = self.call(runner=lambda cmd, _bad=bad, **kw: subprocess.CompletedProcess(cmd, 0, _bad, ""))
-            self.assertEqual(must(r.stop).reason, "contract_violation", bad)
-            self.assertEqual((must(r.stop).scope, must(r.stop).permanence), ("machine", "needs_owner"))
+            assert must(r.stop).reason == "contract_violation", bad
+            assert (must(r.stop).scope, must(r.stop).permanence) == ("machine", "needs_owner")
 
         def hang(cmd, **kw):
             raise dl.Stopped("no worker output for 20 min")
         r = self.call(runner=hang, resume="r9")
-        self.assertEqual((must(r.stop).reason, must(r.stop).scope, must(r.stop).ref), ("timeout", "bead", "r9"))
-        self.assertIn("no worker output", r.say)
+        assert (must(r.stop).reason, must(r.stop).scope, must(r.stop).ref) == ("timeout", "bead", "r9")
+        assert "no worker output" in r.say
 
         def backstop(cmd, **kw):
             raise subprocess.TimeoutExpired(cmd, 1)
-        self.assertEqual(must(self.call(runner=backstop).stop).reason, "timeout")
+        assert must(self.call(runner=backstop).stop).reason == "timeout"
 
         def missing(cmd, **kw):
             raise FileNotFoundError("python")
-        self.assertEqual(must(self.call(runner=missing).stop).reason, "no_answer")
+        assert must(self.call(runner=missing).stop).reason == "no_answer"
 
     def test_a_killed_stop_is_a_signal_and_sandbox_limit_denials_do_not_count(self):
         k = lp.stop_of(delegate_wire.result_of(fake_route.stop_answer("killed", "r1")))
-        self.assertEqual(
-            (must(k).scope, must(k).permanence, must(k).retry_kind, bool(must(k).signal)), ("machine", "transient", "none", True)
-        )
-        self.assertIsInstance(lp.decide(must(k), lp.Ctx(now=1.0)), lp.Yield)
+        assert (must(k).scope, must(k).permanence, must(k).retry_kind, bool(must(k).signal)) == ("machine", "transient", "none", True)
+        assert isinstance(lp.decide(must(k), lp.Ctx(now=1.0)), lp.Yield)
         n = lp.stop_of(delegate_wire.result_of(fake_route.stop_answer("network", "r1", partial=True)))
-        self.assertEqual(
-            (must(n).reason, must(n).ref, must(n).resumable, must(n).partial, must(n).signal), ("network", "r1", True, True, 0)
-        )
+        assert (must(n).reason, must(n).ref, must(n).resumable, must(n).partial, must(n).signal) == ("network", "r1", True, True, 0)
         j = {
             "denied": [
                 {"kind": "sandbox_limit", "tool": "Bash", "input": {}},
                 {"kind": "policy", "tool": "Bash", "input": {"command": "ls"}},
             ]
         }
-        self.assertEqual([d.kind for d in delegate_wire.denied_of(j["denied"])], ["policy"])
+        assert [d.kind for d in delegate_wire.denied_of(j["denied"])] == ["policy"]
 
     def test_the_copy_of_the_contract_in_this_repo_is_delegates(self):
         real = Path(os.environ.get("DELEGATE_R20") or Path.home() / "Workspaces" / "iorlas-delegate-R20")
         mine = fake_route.VENDORED / "skills" / "delegate" / "contract.json"
         if not (real / "skills" / "delegate" / "contract.json").is_file():
-            self.skipTest("no delegate checkout of contract 4 here")
-        self.assertEqual(json.loads(mine.read_text()), json.loads((real / "skills" / "delegate" / "contract.json").read_text()))
+            pytest.skip("no delegate checkout of contract 4 here")
+        assert json.loads(mine.read_text()) == json.loads((real / "skills" / "delegate" / "contract.json").read_text())
 
     # --- the done-when: drops twice, then succeeds ------------------------------------------------------------------
 
@@ -234,24 +232,24 @@ class Fake(unittest.TestCase):
     def test_a_vendor_that_drops_twice_then_succeeds_is_one_step_with_one_ref(self):
         probe = netgate.FakeProbe([False, False, True, False, True])
         r, st, actions, calls, _ = self.drive([{"step": "network", "partial": True}, {"step": "network", "partial": True}, "done"], probe)
-        self.assertEqual((r.done, r.stop, calls), (True, None, 3))
-        self.assertEqual({r.ref, st.ref}, {"fake-1"})                       # the ref of call 1 is the ref of the answer
+        assert (r.done, r.stop, calls) == (True, None, 3)
+        assert {r.ref, st.ref} == {"fake-1"}                       # the ref of call 1 is the ref of the answer
         runs = [a for a in self.argv_log() if a[0] == "run"]
-        self.assertEqual(len(runs), 3)
-        self.assertNotIn("--resume", runs[0])
-        self.assertEqual([a[a.index("--resume") + 1] for a in runs[1:]], ["fake-1", "fake-1"])
-        self.assertEqual(len(actions), 2)
-        self.assertTrue(all(isinstance(a, lp.WaitNet) and a.resume == "fake-1" and a.charges == "" for a in actions))
-        self.assertEqual(st.phase, "returned")
-        self.assertEqual(must(cs.reattach(cs.load_for(self.dir / "ck", "t-1", ("write", 1, 0, 1))))[0], "answer")
+        assert len(runs) == 3
+        assert "--resume" not in runs[0]
+        assert [a[a.index("--resume") + 1] for a in runs[1:]] == ["fake-1", "fake-1"]
+        assert len(actions) == 2
+        assert all(isinstance(a, lp.WaitNet) and a.resume == "fake-1" and a.charges == "" for a in actions)
+        assert st.phase == "returned"
+        assert must(cs.reattach(cs.load_for(self.dir / "ck", "t-1", ("write", 1, 0, 1))))[0] == "answer"
 
     def test_a_dropped_call_charges_no_counter_and_marks_no_lane(self):
         r, _st, actions, _calls, _clk = self.drive(["network", "done"], netgate.FakeProbe([False, True]))
         a = actions[0]
         for charged in ("attempt", "crashes", "polls", "waited_lane_s"):
-            self.assertNotEqual(a.charges, charged)
-        self.assertNotIsInstance(a, (lp.Reroute, lp.NewThread, lp.Retry, lp.Fail))
-        self.assertTrue(r.done)
+            assert a.charges != charged
+        assert not isinstance(a, (lp.Reroute, lp.NewThread, lp.Retry, lp.Fail))
+        assert r.done
 
     def test_a_restart_after_the_first_drop_resumes_the_ref_from_the_call_state(self):
         self.script_with(["network", "done"])
@@ -259,9 +257,9 @@ class Fake(unittest.TestCase):
         first = self.call()
         st.note_ref(first.ref)
         what = cs.reattach(cs.load_for(self.dir / "ck", "t-1", ("write", 1, 0, 1)))  # the loop was killed here
-        self.assertEqual(must(what)[:2], ("resume", "fake-1"))
+        assert must(what)[:2] == ("resume", "fake-1")
         again = self.call(resume=must(what)[1])
-        self.assertEqual((again.done, again.ref), (True, "fake-1"))
+        assert (again.done, again.ref) == (True, "fake-1")
 
 
 def lp_facts(reason):
@@ -269,7 +267,7 @@ def lp_facts(reason):
     return (r["scope"], r["permanence"], r["retry"])
 
 
-class Resolve(unittest.TestCase):
+class Resolve(Case):
     def make(self, root, contract):
         d = Path(root) / "delegate"
         (d / "skills" / "delegate").mkdir(parents=True)
@@ -279,27 +277,19 @@ class Resolve(unittest.TestCase):
     def test_an_explicit_dir_wins_a_missing_pin_refuses_and_skew_refuses(self):
         with tempfile.TemporaryDirectory() as t:
             d = self.make(t, dl.CONTRACT)
-            self.assertEqual(only(dl.Resolved, dl.resolve(path=str(d))).source, "explicit")
-            self.assertEqual(
-                only(dl.Refusal, dl.resolve(pinned=Path(t) / "gone", installed=d)).kind, "pin_missing_dir"
-            )  # a pin never falls through
-            self.assertEqual(only(dl.Resolved, dl.resolve(pinned=d, installed=None)).source, "pinned")
-            self.assertEqual(only(dl.Refusal, dl.resolve(pinned=Path(t), installed=None)).kind, "pin_unreadable")
+            assert only(dl.Resolved, dl.resolve(path=str(d))).source == "explicit"
+            assert only(dl.Refusal, dl.resolve(pinned=Path(t) / "gone", installed=d)).kind == "pin_missing_dir"  # a pin never falls through
+            assert only(dl.Resolved, dl.resolve(pinned=d, installed=None)).source == "pinned"
+            assert only(dl.Refusal, dl.resolve(pinned=Path(t), installed=None)).kind == "pin_unreadable"
             with mock.patch.object(dl, "installed_dir", return_value=None):
-                self.assertEqual(only(dl.Refusal, dl.resolve(pinned=None)).kind, "not_installed")
-            self.assertEqual(
-                only(dl.Refusal, dl.resolve(path=str(self.make(Path(t) / "n", dl.CONTRACT + 1)))).kind, "skew_delegate_newer_no_match"
-            )
-            self.assertEqual(only(dl.Refusal, dl.resolve(path=str(self.make(Path(t) / "o", dl.CONTRACT - 1)))).kind, "skew_delegate_older")
+                assert only(dl.Refusal, dl.resolve(pinned=None)).kind == "not_installed"
+            assert only(dl.Refusal, dl.resolve(path=str(self.make(Path(t) / "n", dl.CONTRACT + 1)))).kind == "skew_delegate_newer_no_match"
+            assert only(dl.Refusal, dl.resolve(path=str(self.make(Path(t) / "o", dl.CONTRACT - 1)))).kind == "skew_delegate_older"
 
     def test_installed_dir_reads_the_user_scope_record_not_a_glob(self):
         with tempfile.TemporaryDirectory() as t:
             (Path(t) / "plugins").mkdir()
             (Path(t) / "plugins" / "installed_plugins.json").write_text(json.dumps({"plugins": {
                 "iorlas-delegate@m": [{"scope": "project", "installPath": "/p"}, {"scope": "user", "installPath": "/u"}]}}))
-            self.assertEqual(dl.installed_dir(Path(t)), Path("/u"))
-            self.assertIsNone(dl.installed_dir(Path(t) / "none"))
-
-
-if __name__ == "__main__":
-    unittest.main()
+            assert dl.installed_dir(Path(t)) == Path("/u")
+            assert dl.installed_dir(Path(t) / "none") is None

@@ -1,11 +1,11 @@
 """adapters/git.py: the shared Git contract on the gitsim (logic: no process), plus the classifier of git's words."""
 import contextlib
-import unittest
 
 import support.paths  # noqa: F401
 
 # isort: split
 from support import gitsim
+from support.case import Case
 
 from ports.git_contract import GitContract, contract
 from ports.git_contract_land import LandContract
@@ -14,7 +14,7 @@ from taskloop.contracts.env import snapshot
 
 
 @contract
-class GitSimContract(GitContract, LandContract, unittest.TestCase):
+class GitSimContract(GitContract, LandContract, Case):
     def start(self) -> None:
         gitsim.reset()
         stack = contextlib.ExitStack()

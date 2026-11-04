@@ -2,9 +2,10 @@
 import subprocess
 import sys
 import tempfile
-import unittest
 from pathlib import Path
 from unittest import mock
+
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401
@@ -17,7 +18,7 @@ from taskloop.contracts.env import snapshot
 
 
 @contract
-class RealGitContract(GitContract, LandContract, unittest.TestCase):
+class RealGitContract(GitContract, LandContract, Case):
     def start(self) -> None:
         pass
 
@@ -25,7 +26,7 @@ class RealGitContract(GitContract, LandContract, unittest.TestCase):
         return RealGit(snapshot())
 
 
-class IgnoreSpaceDoesNotDependOnTheGitVersion(unittest.TestCase):
+class IgnoreSpaceDoesNotDependOnTheGitVersion(Case):
     """An older git lists a whitespace-only change as M even under -w: the adapter must drop it itself."""
 
     def test_a_whitespace_only_m_row_from_git_is_dropped_and_a_real_edit_kept(self) -> None:
@@ -44,4 +45,4 @@ class IgnoreSpaceDoesNotDependOnTheGitVersion(unittest.TestCase):
             listed = ["M", "w.txt", "M", "x.txt"]
             with mock.patch.object(LandGit, "_diff_paths", return_value=listed):
                 got = git.diff_entries(tmp, "HEAD~1", "HEAD", ignore_space=True)
-        self.assertEqual([(e.status, e.path) for e in got], [("M", "x.txt")])
+        assert [(e.status, e.path) for e in got] == [("M", "x.txt")]
