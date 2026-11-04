@@ -6,7 +6,9 @@ import os
 import subprocess
 import sys
 import tempfile
-import unittest
+
+import pytest
+from support.case import Case
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from support.narrow import must
@@ -29,13 +31,13 @@ def in_process(cwd, *argv):
 FUNC = 'def area(self, w, h):\n    """Rectangle area."""\n    return self.scale * w * h\n'
 
 
-class CheckMove(unittest.TestCase):
-    def setUp(self):
+class CheckMove(Case):
+    def setup_method(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.d = self.tmp.name
         self.git("init", "-q")
 
-    def tearDown(self):
+    def teardown_method(self):
         self.tmp.cleanup()
 
     def git(self, *a):
@@ -73,44 +75,44 @@ class CheckMove(unittest.TestCase):
     def test_move_passes(self):
         b = self.base()
         rc, out = self.run_tool(b, self.move(FUNC))
-        self.assertEqual(rc, 0, out)
-        self.assertIn("a.py:area", out)
+        assert rc == 0, out
+        assert "a.py:area" in out
 
     def test_planted_edit_fails_and_names(self):
         b = self.base()
         rc, out = self.run_tool(b, self.move(FUNC.replace("w * h", "w * h + 1")))
-        self.assertNotEqual(rc, 0)
-        self.assertIn("FAIL", out)
-        self.assertIn("area", out)
+        assert rc != 0
+        assert "FAIL" in out
+        assert "area" in out
 
     def test_the_script_exits_1_naming_the_failure_and_0_for_a_move(self):
         b = self.base()
         rc, out = self.run_tool(b, self.move(FUNC.replace("w * h", "w * h + 1")))
-        self.assertEqual(rc, 1)
-        self.assertIn("FAIL: a.py:area", out)
+        assert rc == 1
+        assert "FAIL: a.py:area" in out
         rc, out = self.run_tool(b, self.move(FUNC))
-        self.assertEqual(rc, 0, out)
+        assert rc == 0, out
 
     def test_deleted_without_destination_fails(self):
         b = self.base()
         self.write("a.py", "import os\n\ndef keep():\n    return 1\n")
         rc, out = self.run_tool(b, self.commit("del"))
-        self.assertNotEqual(rc, 0)
-        self.assertIn("area", out)
+        assert rc != 0
+        assert "area" in out
 
     def test_rename_only_with_flag(self):
         b = self.base()
         h = self.move(FUNC.replace("self", "eng"))
         rc, out = self.run_tool(b, h)
-        self.assertNotEqual(rc, 0, out)
+        assert rc != 0, out
         rc, out = self.run_tool(b, h, "--rename", "self=eng")
-        self.assertEqual(rc, 0, out)
+        assert rc == 0, out
 
     def test_class_move_passes(self):
         cls = 'class K:\n    """doc"""\n    def m(self):\n        return 2\n'
         b = self.base(cls)
         rc, out = self.run_tool(b, self.move(cls))
-        self.assertEqual(rc, 0, out)
+        assert rc == 0, out
 
     def edit_in_place(self):
         b = self.base()
@@ -120,36 +122,36 @@ class CheckMove(unittest.TestCase):
     def test_in_place_edit_fails_and_names(self):
         b, h = self.edit_in_place()
         rc, out = self.run_tool(b, h)
-        self.assertNotEqual(rc, 0)
-        self.assertIn("a.py:area changed in place", out)
+        assert rc != 0
+        assert "a.py:area changed in place" in out
 
     def test_allow_edit_passes_in_place(self):
         b, h = self.edit_in_place()
         rc, out = self.run_tool(b, h, "--allow-edit", "a.py:area")
-        self.assertEqual(rc, 0, out)
+        assert rc == 0, out
 
     def test_unaccounted_new_function_fails_then_allowed(self):
         b = self.base()
         self.write("a.py", self.read("a.py") + "\ndef extra():\n    return 3\n")
         h = self.commit("add")
         rc, out = self.run_tool(b, h)
-        self.assertNotEqual(rc, 0)
-        self.assertIn("a.py:extra added", out)
+        assert rc != 0
+        assert "a.py:extra added" in out
         rc, out = self.run_tool(b, h, "--allow-edit", "a.py:extra")
-        self.assertEqual(rc, 0, out)
+        assert rc == 0, out
 
     def test_top_level_statement_change_fails(self):
         b = self.base()
         self.write("a.py", self.read("a.py") + "\nLIMIT = 5\n")
         rc, out = self.run_tool(b, self.commit("const"))
-        self.assertNotEqual(rc, 0)
-        self.assertIn("a.py:<module>", out)
+        assert rc != 0
+        assert "a.py:<module>" in out
 
     def test_import_and_comment_only_passes(self):
         b = self.base()
         self.write("a.py", "# note\nimport os\nimport sys\n\n\n" + FUNC + "\n\ndef keep():\n    return 1\n")
         rc, out = self.run_tool(b, self.commit("imports"))
-        self.assertEqual(rc, 0, out)
+        assert rc == 0, out
 
     def test_real_trim_commit(self):
         # Runs against this repo's history; skipped if history is shallow.
@@ -157,20 +159,16 @@ class CheckMove(unittest.TestCase):
                            cwd=ROOT, stdout=subprocess.PIPE, text=True, check=False)
         sha = r.stdout.split()[-1] if r.stdout.split() else ""
         if not sha:
-            self.skipTest("trim.py history unavailable")
+            pytest.skip("trim.py history unavailable")
 
         def run(*extra):
             return in_process(ROOT, sha + "~1", sha, *extra)
         rc, out = run()
-        self.assertNotEqual(rc, 0, out)
-        self.assertIn("engine.py:Engine.fix changed in place", out)
+        assert rc != 0, out
+        assert "engine.py:Engine.fix changed in place" in out
         allow = []
         for line in out.splitlines():
             if line.startswith("FAIL: "):
                 allow += ["--allow-edit", line[6:].split(" ")[0]]
         rc, out = run(*allow)
-        self.assertEqual(rc, 0, out)
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert rc == 0, out

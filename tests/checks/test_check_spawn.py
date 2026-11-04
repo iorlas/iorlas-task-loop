@@ -23,14 +23,14 @@ class SpawnFailure(EngineTest):
                 with mock.patch.object(eng, "sh", side_effect=error), mock.patch.object(eng.checker, "_diff_check", return_value=[]):
                     run = eng.run_checks({"checks": ck(["./missing/check"]), "files": []}, "spawn failure")
                 failed = next(c for c in run.failed if c.cmd == "./missing/check")
-                self.assertEqual((failed.status, failed.exit), ("failed", code))
-                self.assertIn("could not start", failed.tail)
-                self.assertIn(str(error), failed.tail)
-                self.assertIn(str(error), (eng.run_dir / failed.log).read_text())
+                assert (failed.status, failed.exit) == ("failed", code)
+                assert "could not start" in failed.tail
+                assert str(error) in failed.tail
+                assert str(error) in (eng.run_dir / failed.log).read_text()
 
     def test_a_spawn_failure_on_the_base_also_returns_an_exit_code(self):
         eng = self.checks_engine()
         base = BaseCheck(eng, mock.Mock(spec=RunMemo), enabled=False)
         for error, code in ((FileNotFoundError("missing"), 127), (OSError("bad executable"), 126)):
             with self.subTest(error=error), mock.patch.object(eng, "sh", side_effect=error):
-                self.assertEqual(base._rc(self.wt, Check(id=CheckId("spawn"), cmd="./missing/check"), None), code)
+                assert base._rc(self.wt, Check(id=CheckId("spawn"), cmd="./missing/check"), None) == code

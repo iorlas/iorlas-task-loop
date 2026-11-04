@@ -5,7 +5,6 @@ import shlex
 import subprocess
 import sys
 import time
-import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -44,12 +43,12 @@ class RealLanes(EngineTest):
                                          {"id": "red", "cmd": red, "run": "gate", "lane": "light"}])
         t0 = time.time()
         run = eng.checker.run_items(gate_items(eng.cfg))
-        self.assertLess(time.time() - t0, 15)  # the child sleeps 62 s: the cancel, not its end, ended the lane
+        assert time.time() - t0 < 15  # the child sleeps 62 s: the cancel, not its end, ended the lane
         child = int(pids.read_text())
-        self.assertTrue(until(lambda: not alive(child), limit=5), "the cancelled lane's child outlived the cancel")
-        self.assertIsNone(bystander.poll(), "a process the gate did not start was signalled")
+        assert until(lambda: not alive(child), limit=5), "the cancelled lane's child outlived the cancel"
+        assert bystander.poll() is None, "a process the gate did not start was signalled"
         done = {str(c.id): c for c in run.results}
-        self.assertEqual((done["red"].status, done["slow"].status, done["slow"].cancelled), ("failed", "skipped", True))
+        assert (done["red"].status, done["slow"].status, done["slow"].cancelled) == ("failed", "skipped", True)
 
     @te.POSIX_CHECK
     @te.real_proc("two real lanes write at once: each log must hold only its own lines, whole")
@@ -62,11 +61,7 @@ class RealLanes(EngineTest):
         eng = self.checks_engine(checks=[{"id": "a", "cmd": printer("A"), "run": "gate", "lane": "one"},
                                          {"id": "b", "cmd": printer("B"), "run": "gate", "lane": "two"}])
         run = eng.checker.run_items(gate_items(eng.cfg))
-        self.assertEqual([c.status for c in run.results], ["passed", "passed"])
+        assert [c.status for c in run.results] == ["passed", "passed"]
         for res, tag in zip(run.results, "AB", strict=True):
             got = (Path(eng.run_dir) / res.log).read_text().split()
-            self.assertEqual(got, [f"{tag}-{i}" for i in range(lines)], res.id)
-
-
-if __name__ == "__main__":
-    unittest.main()
+            assert got == [f"{tag}-{i}" for i in range(lines)], res.id

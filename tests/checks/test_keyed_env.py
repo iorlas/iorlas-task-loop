@@ -31,27 +31,26 @@ class KeyedEnv(EngineTest):
         cmd = procsim.fake("observe-slot-env", lambda cwd, env: (seen.append(dict(env)) or 0, ""))
         eng = self.engine(cmd)
         result = eng.run_checks({"checks": [], "files": []}, "round")[0]
-        self.assertEqual(result.status, "passed")
-        self.assertFalse(result.cached)
-        self.assertEqual(len(seen), 1)
-        self.assertEqual(seen[0]["TL_SLOT"], "slot-a")
-        self.assertEqual(seen[0]["TMPDIR"], eng.bead_env["TMPDIR"])
+        assert result.status == "passed"
+        assert not result.cached
+        assert len(seen) == 1
+        assert seen[0]["TL_SLOT"] == "slot-a"
+        assert seen[0]["TMPDIR"] == eng.bead_env["TMPDIR"]
         tree = eng.checkout.tree_hash()
         base = BaseSha(eng.git.rev_parse(str(eng.wt), eng.cfg.base))
         check = gate_items(eng.cfg)[0]
         memo = authorization.memo_for(eng.stores, eng.git, str(eng.wt), eng.cfg, tree, base, eng.env)
-        self.assertEqual(memo.result(check), result)
-        self.assertEqual(authorization.results(eng.stores, eng.git, str(eng.wt), eng.cfg, tree, base, eng.env),
-                         {check.id: result})
+        assert memo.result(check) == result
+        assert authorization.results(eng.stores, eng.git, str(eng.wt), eng.cfg, tree, base, eng.env) == {check.id: result}
         cli = self.cli(eng)
-        self.assertEqual(cli.bead_env, check_env())
-        self.assertEqual(Checker(cli)._memo(tree, base).result(check), result)
-        self.assertTrue(Checker(cli).run_items([check])[0].cached)
+        assert cli.bead_env == check_env()
+        assert Checker(cli)._memo(tree, base).result(check) == result
+        assert Checker(cli).run_items([check])[0].cached
         eng.bead_env = slot_env(Path(self.tmp.name) / "state-b", "repo", "slot-b")
         other = Checker(eng)
-        self.assertEqual(other._memo(tree, base).result(check), result)
-        self.assertTrue(other.run_items([check])[0].cached)
-        self.assertEqual(len(seen), 1)
+        assert other._memo(tree, base).result(check) == result
+        assert other.run_items([check])[0].cached
+        assert len(seen) == 1
 
     def test_all_three_memo_construction_sites_produce_equal_keys(self):
         eng = self.engine(env={"MODE": "declared", "TL_SLOT": "declared-slot"})
@@ -70,12 +69,12 @@ class KeyedEnv(EngineTest):
             return memo
 
         with mock.patch("taskloop.app.checks.runner.RunMemo", side_effect=capture):
-            self.assertTrue(cached_gate(eng.cfg, eng.git, str(eng.wt), eng.stores, eng.env, tree, None))
-        self.assertEqual(len(memos), 1)
+            assert cached_gate(eng.cfg, eng.git, str(eng.wt), eng.stores, eng.env, tree, None)
+        assert len(memos) == 1
         key = engine.key(check)
-        self.assertIsNotNone(key)
+        assert key is not None
         for memo in (delivery, standalone, memos[0]):
-            self.assertEqual(memo.key(check), key)
-            self.assertNotEqual(memo.key(check.replace(env={"MODE": "changed", "TL_SLOT": "declared-slot"})), key)
-            self.assertNotEqual(memo.key(check.replace(env={"MODE": "declared", "TL_SLOT": "changed-slot"})), key)
+            assert memo.key(check) == key
+            assert memo.key(check.replace(env={"MODE": "changed", "TL_SLOT": "declared-slot"})) != key
+            assert memo.key(check.replace(env={"MODE": "declared", "TL_SLOT": "changed-slot"})) != key
 

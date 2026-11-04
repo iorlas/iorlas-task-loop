@@ -25,11 +25,11 @@ class AcceptanceLogs(EngineTest):
         second = Check(id=CheckId("second"), cmd=read, group="acceptance", cache=False)
         e.checker.run_items([first, second])
         e.checker.run_items([second])
-        self.assertEqual(len(seen), 2)
+        assert len(seen) == 2
         for env in seen:
-            self.assertTrue(Path(env["TL_CHECK_LOG_FIRST"]).is_file())
-            self.assertEqual(env["TL_CHECK_RC_FIRST"], "0")
-            self.assertNotIn("TL_CHECK_LOG_NEVER", env)
+            assert Path(env["TL_CHECK_LOG_FIRST"]).is_file()
+            assert env["TL_CHECK_RC_FIRST"] == "0"
+            assert "TL_CHECK_LOG_NEVER" not in env
 
     def test_missing_log_keyerror_explains_which_checks_have_logs(self):
         for prefix in ("TL_CHECK_LOG_", "TL_CHECK_RC_"):
@@ -42,6 +42,6 @@ class AcceptanceLogs(EngineTest):
                     Check(id=CheckId("reader"), cmd=fail, group="acceptance", cache=False),
                 ])
                 tail = next(r.tail for r in run if r.id == "reader")
-                self.assertIn(output, tail)
-                self.assertIn("the check log variable is missing: that check did not run in this attempt (ids with a log:", tail)
-                self.assertIn("first", tail.splitlines()[-1])
+                assert output in tail
+                assert "the check log variable is missing: that check did not run in this attempt (ids with a log:" in tail
+                assert "first" in tail.splitlines()[-1]

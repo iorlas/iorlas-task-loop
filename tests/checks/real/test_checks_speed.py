@@ -3,7 +3,6 @@ import json
 import os
 import subprocess
 import sys
-import unittest
 from pathlib import Path
 from typing import Any
 
@@ -45,10 +44,6 @@ class WallLimit(SpeedTest):
                 f"start_new_session=True)\ntime.sleep(30)")
         eng = self.checks_engine(checks=[{"id": "t", "cmd": PY + " -c " + te.shq(code), "group": "tests", "wall_min": 0.01}])
         res = eng.run_checks({"checks": [], "files": []}, "s")
-        self.assertEqual(res[0].exit, 124)
-        self.assertIn("before", (Path(eng.run_dir) / res[0].log).read_text())
-        self.assertTrue(until(lambda: self.alive(mark) == "", limit=5), "the setsid descendant outlived the check")
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert res[0].exit == 124
+        assert "before" in (Path(eng.run_dir) / res[0].log).read_text()
+        assert until(lambda: self.alive(mark) == "", limit=5), "the setsid descendant outlived the check"

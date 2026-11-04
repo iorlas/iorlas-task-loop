@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 from unittest import mock
 
+import pytest
 from support import engine_case as te
 from support.narrow import must
 
@@ -40,37 +41,37 @@ class GatePlans(te.EngineTest):
         for scratch_home in (False, True):
             with self.subTest(scratch_home=scratch_home):
                 self.eng.cfg = self.eng.cfg.replace(check_scratch_home=scratch_home)
-                self.assertIsNotNone(skipped(self.eng, tree, base))
+                assert skipped(self.eng, tree, base) is not None
                 env = self.calls[-1][1]["extra"]
-                self.assertFalse(secrets.keys() & env.keys())
+                assert not secrets.keys() & env.keys()
                 if scratch_home:
-                    self.assertNotEqual(env["HOME"], "/owner")
-                    self.assertFalse(Path(env["HOME"]).exists())
+                    assert env["HOME"] != "/owner"
+                    assert not Path(env["HOME"]).exists()
                 else:
-                    self.assertEqual(env["HOME"], "/owner")
+                    assert env["HOME"] == "/owner"
 
     def test_a_plan_for_another_base_cannot_skip_checks(self):
         answer = document()
         answer["base"] = "stale-base"
         self.setup_plan(answer=Ran(exit=0, out=json.dumps(answer)))
         run = self.run_gate()
-        self.assertEqual(run[0].status, "passed")
-        self.assertFalse(run[0].planned)
+        assert run[0].status == "passed"
+        assert not run[0].planned
 
     def test_a_plan_for_the_requested_base_retains_its_skip(self):
         self.setup_plan()
         answer = document()
         answer["base"] = self.eng.git.rev_parse(str(self.eng.wt), self.eng.cfg.base)
         self.answer = Ran(exit=0, out=json.dumps(answer))
-        self.assertTrue(self.run_gate()[0].planned)
+        assert self.run_gate()[0].planned
 
     def test_failed_diff_cannot_authorize_a_legacy_when_skip(self):
         self.setup_plan()
         self.eng.cfg = self.eng.cfg.replace(plan_cmd=None)
         with (mock.patch.object(self.eng.git, "changed_paths", side_effect=GitReadFailure("diff unavailable")),
-              self.assertRaises(GitReadFailure)):
+              pytest.raises(GitReadFailure)):
             self.run_gate()
-        self.assertFalse(self.green("coverage"))
+        assert not self.green("coverage")
 
     def test_failed_git_observations_cannot_authorize_planned_skips(self):
         self.setup_plan()
@@ -79,8 +80,8 @@ class GatePlans(te.EngineTest):
         for method in ("dirty", "rev_parse", "merge_base", "changed_paths"):
             with (self.subTest(method=method),
                   mock.patch.object(self.eng.git, method, side_effect=GitReadFailure("unreadable"))):
-                self.assertEqual(skipped(self.eng, tree, base), PlanDecision({}))
-                self.assertEqual(self.calls, [])
+                assert skipped(self.eng, tree, base) == PlanDecision({})
+                assert self.calls == []
 
     def setup_plan(self, answer=None, checks=None):
         self.eng = self.checks_engine(plan_cmd=["repo-plan", "steps", "--json"], checks=checks or [
@@ -118,13 +119,13 @@ class GatePlans(te.EngineTest):
 
     def test_skip_is_recorded_with_reason_and_green_only_for_this_diff(self):
         self.setup_plan()
-        self.assertFalse(self.green("coverage"))
+        assert not self.green("coverage")
         result = self.run_gate()[0]
-        self.assertEqual((result.status, result.planned, result.why), ("skipped", True, "no relevant change"))
-        self.assertTrue(self.green("coverage"))
-        self.assertFalse(self.green("coverage", tree=TreeSha("other")))
-        self.assertFalse(self.green("coverage", base=BaseSha("other")))
-        self.assertTrue(self.eng.checker.gate_green())
+        assert (result.status, result.planned, result.why) == ("skipped", True, "no relevant change")
+        assert self.green("coverage")
+        assert not self.green("coverage", tree=TreeSha("other"))
+        assert not self.green("coverage", base=BaseSha("other"))
+        assert self.eng.checker.gate_green()
 
     def test_skip_records_the_command_and_exact_printed_document_hash(self):
         self.setup_plan()
@@ -132,23 +133,22 @@ class GatePlans(te.EngineTest):
         for output in outputs:
             self.answer = Ran(exit=0, out=output)
             run = self.run_gate()
-            self.assertEqual(run[0].status, "skipped")
-        rows = self.stored("coverage", run)
-        self.assertEqual(len(rows), 2)
-        self.assertEqual({r.key.plan for r in rows}, {plan_digest(self.eng.cfg.plan_cmd)})
-        self.assertEqual({r.key.plan_output for r in rows},
-                         {hashlib.sha1(output.encode("utf-8")).hexdigest() for output in outputs})
-        self.assertTrue(self.green("coverage"))
+            assert run[0].status == "skipped"
+        rows = self.stored("coverage", run)  # type: ignore[unbound-name]  # the loop above runs twice
+        assert len(rows) == 2
+        assert {r.key.plan for r in rows} == {plan_digest(self.eng.cfg.plan_cmd)}
+        assert {r.key.plan_output for r in rows} == {hashlib.sha1(output.encode("utf-8")).hexdigest() for output in outputs}
+        assert self.green("coverage")
 
     def test_full_argv_resolved_base_checkout_and_nul_stdin(self):
         self.setup_plan()
         self.run_gate()
         argv, kw = next(c for c in self.calls if c[0][0] == "repo-plan")
         base = self.eng.git.rev_parse(str(self.eng.wt), self.eng.cfg.base)
-        self.assertEqual(argv, ["repo-plan", "steps", "--json", "--base", base, "--paths-stdin"])
-        self.assertEqual(kw["cwd"], str(self.eng.wt))
-        self.assertEqual(kw["input"], "".join(p + "\0" for p in self.eng.git.changed_paths(
-            str(self.eng.wt), self.eng.git.merge_base(str(self.eng.wt), base, "HEAD"), self.eng.checkout.tree_hash())))
+        assert argv == ["repo-plan", "steps", "--json", "--base", base, "--paths-stdin"]
+        assert kw["cwd"] == str(self.eng.wt)
+        assert kw["input"] == "".join(p + "\0" for p in self.eng.git.changed_paths(
+            str(self.eng.wt), self.eng.git.merge_base(str(self.eng.wt), base, "HEAD"), self.eng.checkout.tree_hash()))
 
     def test_dirty_checkout_requires_every_step_without_running_the_plan(self):
         self.setup_plan()
@@ -156,16 +156,16 @@ class GatePlans(te.EngineTest):
         tree = self.eng.checkout.tree_hash()
         base = self.eng.git.rev_parse(str(self.eng.wt), self.eng.cfg.base)
         with mock.patch.object(self.eng, "warn") as warn:
-            self.assertEqual(skipped(self.eng, tree, base), PlanDecision({}))
-        self.assertEqual(self.calls, [])
+            assert skipped(self.eng, tree, base) == PlanDecision({})
+        assert self.calls == []
         warn.assert_called_once_with("plan not used; every step required: checkout is dirty")
 
     def test_a_different_head_tree_requires_every_step_without_running_the_plan(self):
         self.setup_plan()
         base = self.eng.git.rev_parse(str(self.eng.wt), self.eng.cfg.base)
         with mock.patch.object(self.eng, "warn") as warn:
-            self.assertEqual(skipped(self.eng, "other-tree", base), PlanDecision({}))
-        self.assertEqual(self.calls, [])
+            assert skipped(self.eng, "other-tree", base) == PlanDecision({})
+        assert self.calls == []
         warn.assert_called_once_with("plan not used; every step required: HEAD tree differs from the judged tree")
 
     def test_dirty_run_items_runs_every_check_and_records_only_passes(self):
@@ -175,13 +175,13 @@ class GatePlans(te.EngineTest):
         (self.wt / "uncommitted.txt").write_text("dirty\n")
         with mock.patch.object(self.eng, "warn") as warn:
             run = self.run_gate()
-        self.assertEqual([(r.status, r.planned) for r in run], [("passed", False), ("passed", False)])
-        self.assertEqual(self.calls, [])
+        assert [(r.status, r.planned) for r in run] == [("passed", False), ("passed", False)]
+        assert self.calls == []
         warn.assert_called_once_with("plan not used; every step required: checkout is dirty")
         for name in ("coverage", "lint"):
             rows = self.stored(name, run)
-            self.assertTrue(rows)
-            self.assertTrue(all(r.result.status == "passed" and not r.key.plan and not r.key.plan_output for r in rows))
+            assert rows
+            assert all(r.result.status == "passed" and not r.key.plan and not r.key.plan_output for r in rows)
 
     def test_head_mismatch_run_items_runs_every_check_and_records_only_passes(self):
         self.setup_plan()
@@ -191,59 +191,59 @@ class GatePlans(te.EngineTest):
                                "other-tree" if ref == "HEAD^{tree}" else rev_parse(wt, ref)), \
                 mock.patch.object(self.eng, "warn") as warn:
             run = self.run_gate()
-        self.assertEqual([(r.status, r.planned) for r in run], [("passed", False)])
-        self.assertEqual(run.tree, tree)
-        self.assertEqual(self.calls, [])
+        assert [(r.status, r.planned) for r in run] == [("passed", False)]
+        assert run.tree == tree
+        assert self.calls == []
         warn.assert_called_once_with("plan not used; every step required: HEAD tree differs from the judged tree")
         rows = self.stored("coverage", run)
-        self.assertTrue(rows)
-        self.assertTrue(all(r.result.status == "passed" and not r.key.plan and not r.key.plan_output for r in rows))
+        assert rows
+        assert all(r.result.status == "passed" and not r.key.plan and not r.key.plan_output for r in rows)
 
     def test_failed_plan_requires_stage_only_checks_too(self):
         self.setup_plan(Ran(exit=1), checks=[
             {"id": "stage-only", "cmd": "true", "run": "stage", "when": ["never/**"]}])
         run = self.eng.run_checks({"checks": [], "files": []}, "stage")
-        self.assertEqual([(r.status, r.planned) for r in run], [("passed", False)])
-        self.assertTrue(all(r.result.status == "passed" for r in self.stored("stage-only", run)))
+        assert [(r.status, r.planned) for r in run] == [("passed", False)]
+        assert all(r.result.status == "passed" for r in self.stored("stage-only", run))
 
     def test_no_producer_preserves_legacy_when_without_checkout_guards(self):
         self.setup_plan()
         self.eng.cfg = self.eng.cfg.replace(plan_cmd=None)
         with mock.patch.object(self.eng.git, "dirty") as dirty:
-            self.assertIsNone(skipped(self.eng, "other-tree", "base"))
+            assert skipped(self.eng, "other-tree", "base") is None
         dirty.assert_not_called()
-        self.assertEqual(self.calls, [])
+        assert self.calls == []
 
     def test_changed_plan_argv_invalidates_a_skip_but_not_a_pass(self):
         self.setup_plan()
         self.run_gate()
         original = self.eng.cfg.plan_cmd
         self.eng.cfg = self.eng.cfg.replace(plan_cmd=["repo-plan", "steps", "--new-policy"])
-        self.assertFalse(self.green("coverage"))
+        assert not self.green("coverage")
         self.eng.cfg = self.eng.cfg.replace(plan_cmd=original)
-        self.assertTrue(self.green("coverage"))
+        assert self.green("coverage")
         self.eng.checker.run_items(gate_items(self.eng.cfg), everything=True)
         self.eng.cfg = self.eng.cfg.replace(plan_cmd=["different-plan"])
-        self.assertTrue(self.green("coverage"))
+        assert self.green("coverage")
 
     def test_run_true_and_unknown_registry_steps_remain_required_despite_when(self):
         self.setup_plan(Ran(exit=0, out=json.dumps(document([step(run=True)]))), checks=[
             {"id": name, "cmd": "true", "run": "gate", "when": ["never/**"]} for name in ("coverage", "unknown")])
-        self.assertFalse(self.eng.checker.gate_green())
-        self.assertEqual([r.status for r in self.run_gate()], ["passed", "passed"])
+        assert not self.eng.checker.gate_green()
+        assert [r.status for r in self.run_gate()] == ["passed", "passed"]
 
     def test_another_repo_step_can_be_planned_without_a_tl_code_change(self):
         self.setup_plan(Ran(exit=0, out=json.dumps(document([step("new-step")]))), checks=[
             {"id": "new-step", "cmd": "true", "run": "gate"}])
-        self.assertEqual(self.run_gate()[0].status, "skipped")
-        self.assertTrue(self.green("new-step"))
+        assert self.run_gate()[0].status == "skipped"
+        assert self.green("new-step")
 
     def test_stage_round_uses_the_plan_for_both_checks_and_keeps_stage_when(self):
         self.setup_plan(Ran(exit=0, out=json.dumps(document([step(run=True)]))), checks=[
             {"id": "coverage", "cmd": "true", "run": "both", "when": ["never/**"]},
             {"id": "stage-only", "cmd": "true", "run": "stage", "when": ["never/**"]}])
         run = self.eng.run_checks({"checks": [], "files": []}, "stage")
-        self.assertEqual([(r.id, r.status) for r in run], [("coverage", "passed"), ("stage-only", "skipped")])
+        assert [(r.id, r.status) for r in run] == [("coverage", "passed"), ("stage-only", "skipped")]
 
     def test_failed_plans_require_every_step_and_print_one_line(self):
         answers = [Ran(exit=7), Ran(exit=124, timed_out=True), Ran(exit=0, out="not json"),
@@ -252,11 +252,11 @@ class GatePlans(te.EngineTest):
         for answer in answers:
             with self.subTest(answer=answer), mock.patch.object(self.eng, "warn") as warn:
                 self.answer = answer
-                self.assertEqual([r.status for r in self.run_gate()], ["passed"])
+                assert [r.status for r in self.run_gate()] == ["passed"]
                 warn.assert_called_once()
                 line = warn.call_args.args[0]
-                self.assertIn("plan not used; every step required:", line)
-                self.assertNotIn("\n", line)
+                assert "plan not used; every step required:" in line
+                assert "\n" not in line
 
     def test_spawn_and_diff_failures_also_require_all_steps(self):
         self.setup_plan()
@@ -266,20 +266,20 @@ class GatePlans(te.EngineTest):
         for answers in failures:
             with self.subTest(answers=answers), mock.patch.object(self.eng, "warn") as warn:
                 self.spawned.side_effect = answers
-                self.assertEqual(skipped(self.eng, tree, base), PlanDecision({}))
+                assert skipped(self.eng, tree, base) == PlanDecision({})
                 warn.assert_called_once()
 
     def test_a_red_round_never_records_its_planned_skip(self):
         self.setup_plan(checks=[{"id": "coverage", "cmd": "true", "run": "gate", "group": "static"},
                                 {"id": "red", "cmd": te.FALSE, "run": "gate"}])
-        self.assertTrue(self.run_gate().failed)
-        self.assertFalse(self.green("coverage"))
+        assert self.run_gate().failed
+        assert not self.green("coverage")
 
     def test_all_bypasses_the_plan(self):
         self.setup_plan()
         run = self.eng.checker.run_items(gate_items(self.eng.cfg), everything=True)
-        self.assertEqual(run[0].status, "passed")
-        self.assertEqual(self.calls, [])
+        assert run[0].status == "passed"
+        assert self.calls == []
 
     def test_python_uses_python3_when_only_python3_resolves(self):
         self.setup_plan()
@@ -287,7 +287,7 @@ class GatePlans(te.EngineTest):
         with mock.patch("taskloop.app.checks.gateplan.shutil.which", side_effect=lambda word, **kw:
                         {"python3": "/bin/python3", "git": "/usr/bin/git"}.get(word)):
             self.run_gate()
-        self.assertEqual(self.calls[0][0][:4], ["python3", "tools/gate_plan.py", "steps", "--json"])
+        assert self.calls[0][0][:4] == ["python3", "tools/gate_plan.py", "steps", "--json"]
 
     def test_python_uses_coordinator_interpreter_when_neither_spelling_exists(self):
         self.setup_plan()
@@ -295,7 +295,7 @@ class GatePlans(te.EngineTest):
         with mock.patch("taskloop.app.checks.gateplan.shutil.which", side_effect=lambda word, **kw:
                         word if word not in ("python", "python3") else None):
             self.run_gate()
-        self.assertEqual(self.calls[0][0][0], sys.executable)
+        assert self.calls[0][0][0] == sys.executable
 
     def test_missing_executable_is_one_config_note_without_spawning(self):
         self.setup_plan()
@@ -303,10 +303,10 @@ class GatePlans(te.EngineTest):
                            side_effect=lambda word, **kw: "/usr/bin/git" if word == "git" else None), \
                 mock.patch.object(self.eng.log, "note") as note:
             for _ in range(3):
-                with self.assertRaisesRegex(ConfigError, "engine.plan_cmd.*repo-plan"):
+                with pytest.raises(ConfigError, match=r"engine.plan_cmd.*repo-plan"):
                     self.run_gate()
         note.assert_called_once()
-        self.assertEqual(self.calls, [])
+        assert self.calls == []
 
     def test_warning_is_once_per_run_per_reason_across_rounds(self):
         self.setup_plan()
@@ -318,17 +318,17 @@ class GatePlans(te.EngineTest):
                 skipped(self.eng, tree, base)
                 self.answer = Ran(exit=8)
                 skipped(self.eng, tree, base)
-        self.assertEqual(warn.call_count, 2)
+        assert warn.call_count == 2
 
     def test_aliases_and_unknown_fields_are_accepted_but_missing_or_wrong_types_fail(self):
         aliased = step(optional="future", resources=["tool"])
         aliased["id"], aliased["why"] = aliased.pop("name"), aliased.pop("reason")
-        self.assertEqual(parse(json.dumps(document([aliased], optional=True))).steps[0].id, "coverage")
+        assert parse(json.dumps(document([aliased], optional=True))).steps[0].id == "coverage"
         for key in ("lane", "run", "argv", "pre", "recipe", "name", "reason"):
             bad = step()
             del bad[key]
-            with self.subTest(key=key), self.assertRaises(ValueError):
+            with self.subTest(key=key), pytest.raises(ValueError):
                 parse(json.dumps(document([bad])))
         for bad in (step(run="false"), {**step(), "argv": [1]}, {**step(), "pre": ["cmd"]}):
-            with self.subTest(bad=bad), self.assertRaises(ValueError):
+            with self.subTest(bad=bad), pytest.raises(ValueError):
                 parse(json.dumps(document([bad])))

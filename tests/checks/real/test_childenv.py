@@ -4,11 +4,11 @@ import subprocess
 import sys
 import tempfile
 import threading
-import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
+from support.case import Case
 from support.tlmain import tl_main
 
 from taskloop.adapters import childenv
@@ -21,8 +21,8 @@ from taskloop.contracts.env import Env
 from taskloop.contracts.ports import CheckSpec
 
 
-class CheckHomeCanaryTest(unittest.TestCase):
-    def setUp(self):
+class CheckHomeCanaryTest(Case):
+    def setup_method(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
@@ -41,33 +41,33 @@ class CheckHomeCanaryTest(unittest.TestCase):
 
     def assert_isolated(self):
         seen = json.loads(self.output.read_text())
-        self.assertNotEqual(seen["home"], str(self.owner))
-        self.assertTrue(seen["private"])
-        self.assertEqual(seen["canaries"], [])
-        self.assertFalse(CHECK_SECRETS & seen["env"].keys())
-        self.assertFalse(Path(seen["home"]).exists())
-        self.assertTrue((self.owner / ".ssh/canary").is_file())
+        assert seen["home"] != str(self.owner)
+        assert seen["private"]
+        assert seen["canaries"] == []
+        assert not CHECK_SECRETS & seen["env"].keys()
+        assert not Path(seen["home"]).exists()
+        assert (self.owner / ".ssh/canary").is_file()
 
     def assert_owner_home(self):
         seen = json.loads(self.output.read_text())
-        self.assertEqual(seen["home"], str(self.owner))
-        self.assertIn(str(self.owner / "canary"), seen["canaries"])
-        self.assertFalse(CHECK_SECRETS & seen["env"].keys())
-        self.assertFalse(any(name.startswith("GIT_CREDENTIAL") for name in seen["env"]))
+        assert seen["home"] == str(self.owner)
+        assert str(self.owner / "canary") in seen["canaries"]
+        assert not CHECK_SECRETS & seen["env"].keys()
+        assert not any(name.startswith("GIT_CREDENTIAL") for name in seen["env"])
 
     def test_standalone_argv_check_defaults_to_owner_home_and_strips_secrets(self):
         (self.owner / "canary").write_text("synthetic toolchain state")
         secrets = {**dict.fromkeys(CHECK_SECRETS, "synthetic-secret"), "GIT_CREDENTIAL_HELPER": "synthetic-helper"}
         env = Env({"HOME": str(self.owner), **secrets})
         result = ArgvChecks(env).run(CheckSpec(argv=[sys.executable, "-c", self.probe], cwd=str(self.root), env=secrets))
-        self.assertEqual(result.exit, 0, result.out)
+        assert result.exit == 0, result.out
         self.assert_owner_home()
 
     def test_standalone_argv_check_cannot_find_owner_state_through_home(self):
         env = Env({"HOME": str(self.owner), "SSH_AUTH_SOCK": "/synthetic-agent"})
         result = ArgvChecks(env, scratch_home=True).run(CheckSpec(argv=[sys.executable, "-c", self.probe], cwd=str(self.root),
                                                                env={"HOME": str(self.owner), "GH_TOKEN": "synthetic-token"}))
-        self.assertEqual(result.exit, 0, result.out)
+        assert result.exit == 0, result.out
         self.assert_isolated()
 
     def test_real_shell_checks_and_fixes_use_the_scrubbed_environment(self):
@@ -80,12 +80,12 @@ class CheckHomeCanaryTest(unittest.TestCase):
                 rc, tail = Shell(host).run([sys.executable, "-c", self.probe], what=what,
                                           env={"HOME": str(self.owner), "SSH_AUTH_SOCK": "/declared-agent",
                                                "GIT_SSH_COMMAND": "declared-ssh"})
-                self.assertEqual(rc, 0, tail)
+                assert rc == 0, tail
                 self.assert_isolated()
                 seen = json.loads(self.output.read_text())
-                self.assertEqual(seen["home"], builder.call_args.kwargs["home"])
-                self.assertEqual(seen["env"]["UV_CACHE_DIR"], str(self.owner / ".cache/uv"))
-                self.assertEqual(seen["env"]["DOTNET_CLI_HOME"], str(self.owner))
+                assert seen["home"] == builder.call_args.kwargs["home"]
+                assert seen["env"]["UV_CACHE_DIR"] == str(self.owner / ".cache/uv")
+                assert seen["env"]["DOTNET_CLI_HOME"] == str(self.owner)
 
     def test_real_shell_checks_and_fixes_default_to_owner_home_and_strip_secrets(self):
         (self.owner / "canary").write_text("synthetic toolchain state")
@@ -97,7 +97,7 @@ class CheckHomeCanaryTest(unittest.TestCase):
         for what in ("check", "check fix"):
             with self.subTest(what=what):
                 rc, tail = Shell(host).run([sys.executable, "-c", self.probe], what=what, env=secrets)
-                self.assertEqual(rc, 0, tail)
+                assert rc == 0, tail
                 self.assert_owner_home()
 
     def test_cli_gate_in_real_git_checkout_cannot_find_owner_state_through_home(self):
@@ -125,4 +125,4 @@ class CheckHomeCanaryTest(unittest.TestCase):
         ran = tl_main("check", "--repo", str(repo), "--all", "probe", cwd=repo,
                       env={"HOME": str(self.owner), "XDG_CONFIG_HOME": str(self.root / "config"),
                            "SSH_AUTH_SOCK": "/synthetic-agent", "GIT_SSH_COMMAND": "synthetic-ssh"})
-        self.assertEqual(ran.returncode, 0, ran.stdout + ran.stderr)
+        assert ran.returncode == 0, ran.stdout + ran.stderr

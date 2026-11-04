@@ -3,6 +3,8 @@ the result is the host path's."""
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support.engine_case import EngineTest, real_git
@@ -34,8 +36,8 @@ BOX = {"image": "img:1"}
 
 
 class ContainerChecksTest(EngineTest):
-    def setUp(self):
-        super().setUp()
+    def setup_method(self):
+        super().setup_method()
         self.docker = FakeDocker(Path(self.tmp.name) / "fake-docker")
         self.docker.install(self)
 
@@ -50,13 +52,13 @@ class ContainerChecksTest(EngineTest):
     @real_git("the runner lists the worktree with a real git")
     def test_docker_up_runs_in_the_container_with_the_hosts_result(self):
         res, log = self.run_one(WRITE)
-        self.assertEqual((res.exit, res.status, res.tail), (0, "passed", "ok"))
-        self.assertTrue(log.startswith("in container sha256:img1\n"))
-        self.assertIn("run", self.docker.verbs())
-        self.assertFalse((self.wt / "made").exists())  # what the check writes inside stays inside
-        self.assertEqual((self.eng.run_dir / "artifacts" / "c" / "attempt-1" / "p.txt").read_text(), "c")  # $TL_ARTIFACT_DIR comes back
+        assert (res.exit, res.status, res.tail) == (0, "passed", "ok")
+        assert log.startswith("in container sha256:img1\n")
+        assert "run" in self.docker.verbs()
+        assert not (self.wt / "made").exists()  # what the check writes inside stays inside
+        assert (self.eng.run_dir / "artifacts" / "c" / "attempt-1" / "p.txt").read_text() == "c"  # $TL_ARTIFACT_DIR comes back
         host, _ = self.run_one(WRITE, boxed=False)
-        self.assertEqual(res.replace(secs=0, at=0, log="", wall_hit=False), host.replace(secs=0, at=0, log=""))
+        assert res.replace(secs=0, at=0, log="", wall_hit=False) == host.replace(secs=0, at=0, log="")
 
     @real_git("the runner lists the worktree with a real git")
     def test_untracked_files_go_in_and_ignored_ones_do_not(self):
@@ -64,8 +66,8 @@ class ContainerChecksTest(EngineTest):
         (self.wt / "skip.log").write_text("x\n")
         (self.wt / ".gitignore").write_text("*.log\n")
         _, log = self.run_one(LIST)
-        self.assertIn("'new.txt'", log)
-        self.assertNotIn("skip.log", log)
+        assert "'new.txt'" in log
+        assert "skip.log" not in log
 
     @real_git("the runner lists the worktree with a real git")
     def test_a_stop_kills_the_named_container(self):
@@ -75,8 +77,8 @@ class ContainerChecksTest(EngineTest):
         self.docker.on_wait = lambda name: handlers[signal.SIGTERM](signal.SIGTERM, None)
         name = "tl-check-t-1-c"
         with mock.patch.object(container_run.signal, "signal", handlers.setdefault), \
-                mock.patch("os.getcwd", return_value=str(self.wt)), self.assertRaises(SystemExit) as stop:
+                mock.patch("os.getcwd", return_value=str(self.wt)), pytest.raises(SystemExit) as stop:
             container_run.main(["--image", "img:1", "--name", name, "--", "box-list"])
-        self.assertEqual(stop.exception.code, 128 + signal.SIGTERM)
-        self.assertEqual([c for c in self.docker.calls if c[0] == "kill"], [["kill", name]])
+        assert stop.value.code == 128 + signal.SIGTERM
+        assert [c for c in self.docker.calls if c[0] == "kill"] == [["kill", name]]
 

@@ -5,9 +5,11 @@ import subprocess
 import sys
 import threading
 import time
-import unittest
 from pathlib import Path
 from unittest import mock
+
+import pytest
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -73,8 +75,8 @@ HOLD = ("import sys, time; from pathlib import Path; from any_lease import Lease
         "h = Leases(Path(sys.argv[1])).acquire('unity', 1, label='other:proc'); print('held', flush=True); time.sleep(60)")
 
 
-class Lease(unittest.TestCase):
-    def setUp(self) -> None:
+class Lease(Case):
+    def setup_method(self) -> None:
         patcher = mock.patch.object(resources, "POLL_S", 0.02)
         patcher.start()
         self.addCleanup(patcher.stop)
@@ -103,18 +105,18 @@ class Lease(unittest.TestCase):
 
     def test_a_limit_of_one_runs_one_such_check_at_a_time(self):
         top, waited = self.run_checks(1, 3)
-        self.assertEqual(top, 1)
-        self.assertEqual(sum(1 for w in waited if w > 0.1), 2)  # two of the three queued behind another
+        assert top == 1
+        assert sum(1 for w in waited if w > 0.1) == 2  # two of the three queued behind another
 
     def test_a_limit_of_two_runs_two(self):
         top, _ = self.run_checks(2, 4)
-        self.assertEqual(top, 2)
+        assert top == 2
 
     def test_the_wait_is_booked_as_a_resource_wait(self):
         self.run_checks(1, 2)
         kinds = [(r[0], r[1]) for r in self.host.fake_waits.rows]
-        self.assertEqual(kinds, [("start", WaitWhat.RESOURCE), ("add", WaitWhat.RESOURCE)])
-        self.assertGreater(self.host.fake_waits.rows[1][2], 0.1)
+        assert kinds == [("start", WaitWhat.RESOURCE), ("add", WaitWhat.RESOURCE)]
+        assert self.host.fake_waits.rows[1][2] > 0.1
 
     def test_the_wait_names_the_waiting_check_its_lane_and_the_holder(self):
         host, first = FakeHost(1), threading.Event()
@@ -132,31 +134,31 @@ class Lease(unittest.TestCase):
             pass
         t.join()
         start, add = host.fake_waits.rows
-        self.assertEqual(start[2:], ("t-1:first", "b", "second"))  # holder bead:check, waiting lane and check
-        self.assertEqual((add[3], add[4]), ("b", "second"))
+        assert start[2:] == ("t-1:first", "b", "second")  # holder bead:check, waiting lane and check
+        assert (add[3], add[4]) == ("b", "second")
 
     def test_status_reads_the_holder_bead_and_check_from_the_lease_label(self):
         host = FakeHost(1)
         cfg = ConfigDir(host.stores.leases.root.parent / "cfg")
         with Leases(cfg.leases()).acquire("unity", 1, label="t-9:unity-tests"):
-            self.assertEqual([(r.name, r.bead, r.check) for r in held_resources(cfg)], [("unity", "t-9", "unity-tests")])
-        self.assertEqual(held_resources(cfg), ())
+            assert [(r.name, r.bead, r.check) for r in held_resources(cfg)] == [("unity", "t-9", "unity-tests")]
+        assert held_resources(cfg) == ()
 
     def test_a_check_without_needs_takes_no_lease(self):
         host = FakeHost(1)
         with Resources(host).hold(Check(id=CheckId("x"), cmd="x")) as lease:
-            self.assertEqual(list(host.stores.leases.root.glob("*")), [])
-        self.assertEqual(lease.waited, 0.0)
+            assert list(host.stores.leases.root.glob("*")) == []
+        assert lease.waited == 0.0
 
     def test_the_lease_is_the_machine_table_and_is_freed_after_the_block(self):
         host = FakeHost(1)
         with Resources(host).hold(unity_check("u", lane="a")) as lease:
             (occ,) = host.stores.leases.holders("unity", 1)
             assert occ.holder is not None
-            self.assertAlmostEqual(occ.holder.created, time.time(), delta=5)  # `tl status` counts the seconds held from it
-            self.assertEqual((occ.holder.label, occ.holder.meta["lane"]), ("t-1:u", "a"))
-            self.assertEqual(lease.env, {"ANY_LEASE_HELD": "unity", "ANY_LEASE_ROOT": str(host.stores.leases.root)})
-        self.assertEqual(host.stores.leases.holders("unity", 1), ())
+            assert occ.holder.created == pytest.approx(time.time(), abs=5)  # `tl status` counts the seconds held from it
+            assert (occ.holder.label, occ.holder.meta["lane"]) == ("t-1:u", "a")
+            assert lease.env == {"ANY_LEASE_HELD": "unity", "ANY_LEASE_ROOT": str(host.stores.leases.root)}
+        assert host.stores.leases.holders("unity", 1) == ()
 
     @real_proc("a SIGKILLed process must give its unit back: the kernel frees the flock")
     def test_a_killed_holder_releases_its_lease(self):
@@ -164,12 +166,12 @@ class Lease(unittest.TestCase):
         proc = python(HOLD, str(host.stores.leases.root))
         self.addCleanup(proc.kill)
         assert proc.stdout is not None
-        self.assertEqual(proc.stdout.readline().strip(), "held")  # a real process has the only unit
-        self.assertEqual(len(host.stores.leases.holders("unity", 1)), 1)
+        assert proc.stdout.readline().strip() == "held"  # a real process has the only unit
+        assert len(host.stores.leases.holders("unity", 1)) == 1
         proc.kill()
         proc.wait(10)
         with Resources(host).hold(unity_check()) as lease:  # the kernel dropped its flock: no stale lease
-            self.assertLess(lease.waited, 5)
+            assert lease.waited < 5
 
     @real_proc("a real `python -m any_lease run` queues behind the engine on the same table")
     def test_a_manual_run_and_the_engine_share_one_lease(self):
@@ -180,12 +182,12 @@ class Lease(unittest.TestCase):
             manual = subprocess.Popen(run, stderr=subprocess.PIPE, text=True)
             self.addCleanup(manual.kill)
             time.sleep(1)
-            self.assertIsNone(manual.poll())  # queues behind the engine's lease
+            assert manual.poll() is None  # queues behind the engine's lease
             nested = subprocess.run(run, env={**os.environ, **lease.env}, timeout=10, check=False)  # inside the check's command: just runs
-            self.assertEqual(nested.returncode, 0)
-        self.assertEqual(manual.wait(10), 0)
+            assert nested.returncode == 0
+        assert manual.wait(10) == 0
         assert manual.stderr is not None
-        self.assertIn("t-1:u", manual.stderr.read())  # it told who it waited for
+        assert "t-1:u" in manual.stderr.read()  # it told who it waited for
 
     def test_a_changed_profile_limit_replaces_the_declared_one_while_idle_and_is_refused_while_held(self):
         host = FakeHost(1)
@@ -193,66 +195,66 @@ class Lease(unittest.TestCase):
             pass
         host.cfg = EngineConfig(resources={"unity": ResourceSpec(limit=2)})
         with Resources(host).hold(unity_check()):
-            self.assertEqual(host.stores.leases.declare("unity"), 2)
+            assert host.stores.leases.declare("unity") == 2
             host.cfg = EngineConfig(resources={"unity": ResourceSpec(limit=3)})
-            with self.assertRaises(ValueError), Resources(host).hold(unity_check("v")):
+            with pytest.raises(ValueError), Resources(host).hold(unity_check("v")):
                 pass
 
 
-class Host(unittest.TestCase):
+class Host(Case):
     def test_no_host_file_means_the_host_has_every_declared_resource(self):
         host = FakeHost(1)
-        self.assertEqual(Resources(host).lacking(unity_check()), [])
+        assert Resources(host).lacking(unity_check()) == []
 
     def test_a_host_file_names_what_the_host_has(self):
         host = FakeHost(1)
         host.stores.host.write(HostResources(resources=[]))
-        self.assertEqual(Resources(host).lacking(unity_check()), ["unity"])
+        assert Resources(host).lacking(unity_check()) == ["unity"]
         host.stores.host.write(HostResources(resources=["unity"]))
-        self.assertEqual(Resources(host).lacking(unity_check()), [])
+        assert Resources(host).lacking(unity_check()) == []
 
     def test_a_check_needing_an_undeclared_resource_is_refused_at_load(self):
-        with self.assertRaises(ConfigError) as cm:
+        with pytest.raises(ConfigError) as cm:
             load({"engine": {"checks": [{"id": "u", "argv": ["true"], "needs": ["unity"]}]}})
-        self.assertIn("engine.resources does not declare", str(cm.exception))
+        assert "engine.resources does not declare" in str(cm.value)
         ok = load({"engine": {"resources": UNITY, "checks": [{"id": "u", "argv": ["true"], "needs": ["unity"]}]}})
-        self.assertEqual(ok.engine.checks[0].needs, ["unity"])
+        assert ok.engine.checks[0].needs == ["unity"]
 
     def test_an_unknown_key_in_a_resource_is_refused(self):
-        with self.assertRaises(ConfigError):
+        with pytest.raises(ConfigError):
             load({"engine": {"resources": {"unity": {"limit": 1, "slots": 2}}}})
-        with self.assertRaises(ConfigError):
+        with pytest.raises(ConfigError):
             load({"engine": {"resources": {"unity": {"limit": 0}}}})
 
 
-class Touched(unittest.TestCase):
+class Touched(Case):
     def test_a_diff_touches_a_check_by_its_inputs(self):
         c = Check(id=CheckId("u"), cmd="u", inputs=["client/**"], inputs_only=True)
-        self.assertTrue(touched(c, ["client/a.cs"]))
-        self.assertFalse(touched(c, ["docs/a.md", "justfile"]))
-        self.assertTrue(touched(c.replace(inputs_only=False), ["justfile"]))  # the cache key reads the justfile too
-        self.assertTrue(touched(Check(id=CheckId("w"), cmd="w"), ["docs/a.md"]))  # no inputs: the whole tree
-        self.assertFalse(touched(Check(id=CheckId("w"), cmd="w"), []))
+        assert touched(c, ["client/a.cs"])
+        assert not touched(c, ["docs/a.md", "justfile"])
+        assert touched(c.replace(inputs_only=False), ["justfile"])  # the cache key reads the justfile too
+        assert touched(Check(id=CheckId("w"), cmd="w"), ["docs/a.md"])  # no inputs: the whole tree
+        assert not touched(Check(id=CheckId("w"), cmd="w"), [])
 
 
-class Deferral(unittest.TestCase):
+class Deferral(Case):
     def deferred(self, changed: bool) -> CheckResult:
         return CheckResult(id=CheckId("u"), cmd="u", group="tests", exit=UNVERIFIED_EXIT, status="unverified", deferred=["unity"],
                            inputs_changed=changed)
 
     def test_a_deferred_check_with_unchanged_inputs_is_passed_over_and_named(self):
         run = CheckRun(round=1, results=[self.deferred(False)])
-        self.assertEqual((verified.refusal(run), verified.passed_over(run)), ("", ["u"]))
+        assert (verified.refusal(run), verified.passed_over(run)) == ("", ["u"])
 
     def test_a_deferred_check_with_changed_inputs_waits_for_a_host_with_the_resource(self):
         run = CheckRun(round=1, results=[self.deferred(True)])
-        self.assertEqual(verified.kind_of(run), "PAUSE_MOVED")
-        self.assertIn("labelled needs:unity", verified.refusal(run))
-        self.assertEqual(verified.moves(run), ["unity"])
+        assert verified.kind_of(run) == "PAUSE_MOVED"
+        assert "labelled needs:unity" in verified.refusal(run)
+        assert verified.moves(run) == ["unity"]
 
     def test_another_unverified_check_keeps_the_land_a_fault(self):
         other = CheckResult(id=CheckId("r"), cmd="r", group="tests", exit=UNVERIFIED_EXIT, status="unverified")
-        self.assertEqual(verified.kind_of(CheckRun(round=1, results=[self.deferred(True), other])), "FAULT_LAND")
+        assert verified.kind_of(CheckRun(round=1, results=[self.deferred(True), other])) == "FAULT_LAND"
 
 
 class Engine(EngineTest):
@@ -282,45 +284,41 @@ class Engine(EngineTest):
 
         with mock.patch.object(resources, "POLL_S", 0.02), mock.patch.object(Waits, "start", start):
             rc, _ = self.run_engine(ANSWERS, prep=hold_it, resources=UNITY, checks=self.checks(["f.txt"]))
-        self.assertEqual(rc, 0, self.blocked)
+        assert rc == 0, self.blocked
         waits = sorted(r["wait_seconds"] for r in records(self.eng, "check_end"))
-        self.assertGreaterEqual(waits[-1], 0.2, waits)  # the unity check queued behind the other slot's lease
-        self.assertEqual(waits[:-1], [0.0] * (len(waits) - 1))  # and no other check waited
+        assert waits[-1] >= 0.2, waits  # the unity check queued behind the other slot's lease
+        assert waits[:-1] == [0.0] * (len(waits) - 1)  # and no other check waited
         (begin,), (end,) = records(self.eng, "wait_start"), records(self.eng, "wait_end")
-        self.assertEqual((begin["holder"], begin["check"], end["check"]), ("other:slot", "ut", "ut"))
+        assert (begin["holder"], begin["check"], end["check"]) == ("other:slot", "ut", "ut")
 
     def test_a_host_without_the_resource_lands_when_the_diff_leaves_the_inputs_alone(self):
         rc, _ = self.run_engine(ANSWERS, prep=self.lacking, resources=UNITY, checks=self.checks(["client/**"]))
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertEqual(records(self.eng, "gate_end")[-1]["deferred"], ["ut"])
+        assert rc == 0, self.blocked
+        assert records(self.eng, "gate_end")[-1]["deferred"] == ["ut"]
         notes = " ".join(str(r.get("text", "")) for r in records(self.eng, "note"))
-        self.assertIn("deferred checks", notes)
-        self.assertIn("ut", notes)
+        assert "deferred checks" in notes
+        assert "ut" in notes
 
     def test_a_plan_that_touches_the_inputs_moves_the_bead_before_any_code_is_written(self):
         rc, _ = self.run_engine(ANSWERS, prep=self.lacking, resources=UNITY, checks=self.checks(["f.txt"]))
-        self.assertNotEqual(rc, 0)
+        assert rc != 0
         r = self.eng.result()
-        self.assertEqual((r.outcome, r.kind), ("paused", "pause_moved"))
-        self.assertIn("labelled needs:unity", r.why)
-        self.assertEqual(self.store.said("label", "add"), [("label", "add", "t-1", "needs:unity")])
-        self.assertEqual(records(self.eng, "gate_end"), [])
+        assert (r.outcome, r.kind) == ("paused", "pause_moved")
+        assert "labelled needs:unity" in r.why
+        assert self.store.said("label", "add") == [("label", "add", "t-1", "needs:unity")]
+        assert records(self.eng, "gate_end") == []
 
     def test_a_diff_that_hits_the_inputs_the_plan_did_not_name_moves_the_bead_at_the_land(self):
         with mock.patch.object(Planner, "move_if_lacking"):  # the plan did not see it: the land is the second look
             rc, _ = self.run_engine(ANSWERS, prep=self.lacking, resources=UNITY, checks=[dict(self.checks(["f.txt"])[0], run="gate")])
-        self.assertNotEqual(rc, 0)
+        assert rc != 0
         r = self.eng.result()
-        self.assertEqual((r.outcome, r.kind), ("paused", "pause_moved"))
-        self.assertEqual(self.store.said("label", "add"), [("label", "add", "t-1", "needs:unity")])
-        self.assertEqual(self.store.said("close"), [])
-        self.assertEqual([g["exit"] for g in records(self.eng, "gate_end")], [1])  # it got as far as the land's gate
+        assert (r.outcome, r.kind) == ("paused", "pause_moved")
+        assert self.store.said("label", "add") == [("label", "add", "t-1", "needs:unity")]
+        assert self.store.said("close") == []
+        assert [g["exit"] for g in records(self.eng, "gate_end")] == [1]  # it got as far as the land's gate
 
     def test_a_host_that_has_the_resource_adds_no_label_and_lands(self):
         rc, _ = self.run_engine(ANSWERS, resources=UNITY, checks=self.checks(["f.txt"]))
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertEqual(self.store.said("label", "add"), [])
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert rc == 0, self.blocked
+        assert self.store.said("label", "add") == []

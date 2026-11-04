@@ -3,6 +3,8 @@ the result is the host path's."""
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support.engine_case import EngineTest, no_repo
@@ -32,8 +34,8 @@ BOX = {"image": "img:1"}
 
 
 class ContainerChecksTest(EngineTest):
-    def setUp(self):
-        super().setUp()
+    def setup_method(self):
+        super().setup_method()
         self.docker = FakeDocker(Path(self.tmp.name) / "fake-docker")
         self.docker.install(self)
 
@@ -48,9 +50,9 @@ class ContainerChecksTest(EngineTest):
 
     def test_a_check_without_in_never_calls_docker(self):
         res, log = self.run_one(WRITE, boxed=False)
-        self.assertEqual(res.exit, 0)
-        self.assertNotIn("container", log)
-        self.assertEqual(self.docker.calls, [])
+        assert res.exit == 0
+        assert "container" not in log
+        assert self.docker.calls == []
 
 
     @no_repo
@@ -58,7 +60,7 @@ class ContainerChecksTest(EngineTest):
         for bad in ({"container": {"image": "a", "dockerfile": "b"}}, {"container": {}}, {"container": {"imag": "a"}},
                     {"checks": [{"id": "c", "argv": ["true"], "in": "container"}]},
                     {"container": BOX, "checks": [{"id": "c", "argv": ["true"], "in": "vm"}]}):
-            with self.assertRaises(config.ConfigError, msg=str(bad)):
+            with pytest.raises(config.ConfigError):
                 config.load({"engine": bad})
         got = config.load({"engine": {"container": {"dockerfile": "D"}}}).engine.container
-        self.assertEqual(got and got.dockerfile, "D")
+        assert (got and got.dockerfile) == "D"

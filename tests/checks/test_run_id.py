@@ -31,17 +31,19 @@ class RunId(EngineTest):
 
     def test_a_check_process_sees_the_id_of_its_run(self):
         _res, out = self.run_one()
-        self.assertIn("run=" + self.eng.run_id, out)
-        self.assertTrue(self.eng.run_id)
+        assert "run=" + self.eng.run_id in out
+        assert self.eng.run_id
 
     def test_the_run_id_is_no_part_of_a_results_identity(self):
-        self.assertNotIn(EnvVar.TL_RUN_ID.value, childenv.reaching({EnvVar.TL_RUN_ID.value: "x-1-2026"}))
+        assert EnvVar.TL_RUN_ID.value not in childenv.reaching({EnvVar.TL_RUN_ID.value: "x-1-2026"})
 
     def test_every_row_of_the_run_and_the_duration_history_carry_it(self):
         self.run_one()
         rows = records(self.eng)
-        self.assertTrue(rows)
-        self.assertEqual({r["run_id"] for r in rows}, {self.eng.run_id})
+        assert rows
+        assert {r["run_id"] for r in rows} == {self.eng.run_id}
         hist = self.eng.stores.durations.of(check_files.repo_key(self.eng.git, str(self.eng.wt))).get() or Durations()
-        self.assertEqual([(r.run_id, r.bead, r.call_id, r.outcome) for r in hist.rows if r.call_id == "c"],
-                         [(self.eng.run_id, self.eng.bead, "c", "passed")])
+        assert (
+            [(r.run_id, r.bead, r.call_id, r.outcome) for r in hist.rows if r.call_id == "c"]
+            == [(self.eng.run_id, self.eng.bead, "c", "passed")]
+        )

@@ -1,13 +1,14 @@
 """`tl check`: the repo's registry of checks run by a person, in a real worktree, through the engine's own runner."""
 import json
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
-import unittest
 from pathlib import Path
 
 from support import procsim
+from support.case import Case
 from support.tlmain import tl_main
 
 CHECKS = [
@@ -18,7 +19,7 @@ CHECKS = [
 ]
 
 
-class TlCheck(unittest.TestCase):
+class TlCheck(Case):
     def test_clean_repo_check_records_the_repo_plans_skip_for_green(self):
         producer = Path(self.tmp.name, "plan.py")
         body = {"version": 1, "base": None, "empty": True, "full": False, "full_reasons": [], "steps": [
@@ -31,16 +32,16 @@ class TlCheck(unittest.TestCase):
         self.git("add", "-A")
         self.git("commit", "-qm", "repo plan")
         rc, out = self.tl("--repo", str(self.repo))
-        self.assertEqual(rc, 0, out)
-        self.assertIn("skipped (no relevant paths)", out)
+        assert rc == 0, out
+        assert "skipped (no relevant paths)" in out
         base = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=self.repo, text=True).strip()
         tree = subprocess.check_output(["git", "rev-parse", "HEAD^{tree}"], cwd=self.repo, text=True).strip()
         green = tl_main("green", "selected", "--repo", str(self.repo), "--tree", tree, "--base", base,
                         cwd=self.repo, env={"XDG_CONFIG_HOME": str(Path(self.tmp.name, "cfg"))})
-        self.assertEqual(green.returncode, 0, green.stdout)
-        self.assertIn("skipped-by-plan: no relevant paths", green.stdout)
+        assert green.returncode == 0, green.stdout
+        assert "skipped-by-plan: no relevant paths" in green.stdout
 
-    def setUp(self):
+    def setup_method(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.repo = Path(self.tmp.name, "repo")
@@ -67,67 +68,63 @@ class TlCheck(unittest.TestCase):
 
     def test_it_runs_the_gate_steps_and_exits_1_on_a_red_one(self):
         rc, out = self.tl()
-        self.assertEqual(rc, 1)
-        self.assertRegex(out, r"fmt\s+ok\s+\d+s")
-        self.assertRegex(out, r"unit\s+FAILED\s+\d+s")
-        self.assertIn("unit saw a failure", out)  # the tail of the red step
-        self.assertNotIn("docs", out)  # run stage: not in the gate
-        self.assertRegex(out, r"ui\s+skipped \(no change under ui/\*\*\)")
+        assert rc == 1
+        assert re.search(r"fmt\s+ok\s+\d+s", out)
+        assert re.search(r"unit\s+FAILED\s+\d+s", out)
+        assert "unit saw a failure" in out  # the tail of the red step
+        assert "docs" not in out  # run stage: not in the gate
+        assert re.search(r"ui\s+skipped \(no change under ui/\*\*\)", out)
 
     def test_a_red_run_keeps_its_evidence_and_prints_the_path(self):
         _rc, out = self.tl()
         line = next(x for x in out.splitlines() if x.startswith("evidence kept in "))
         kept = Path(line.removeprefix("evidence kept in "))
-        self.assertTrue(kept.is_dir())
+        assert kept.is_dir()
         self.profile(CHECKS[:1])
         rc, out = self.tl()
-        self.assertEqual(rc, 0)
-        self.assertNotIn("evidence kept", out)
+        assert rc == 0
+        assert "evidence kept" not in out
 
     def test_all_ignores_when(self):
         _rc, out = self.tl("--all")
-        self.assertRegex(out, r"ui\s+ok")
+        assert re.search(r"ui\s+ok", out)
 
     def test_green_gate_exits_0_and_a_second_run_is_cached(self):
         self.profile(CHECKS[:1])
-        self.assertEqual(self.tl()[0], 0)
+        assert self.tl()[0] == 0
         rc, out = self.tl()
-        self.assertEqual(rc, 0)
-        self.assertRegex(out, r"fmt\s+cached")
+        assert rc == 0
+        assert re.search(r"fmt\s+cached", out)
 
     def test_named_ids_run_only_those_whatever_their_run(self):
         rc, out = self.tl("docs")
-        self.assertEqual(rc, 0)
-        self.assertRegex(out, r"docs\s+ok")
-        self.assertNotIn("fmt", out)
-        self.assertEqual(self.tl("nope")[0], 1)
+        assert rc == 0
+        assert re.search(r"docs\s+ok", out)
+        assert "fmt" not in out
+        assert self.tl("nope")[0] == 1
 
     def test_it_prints_a_diff_check_line_first_and_a_red_one_names_the_file_and_line(self):
         self.profile(CHECKS[:1])
         rc, out = self.tl()
-        self.assertEqual(rc, 0)
-        self.assertRegex(out.splitlines()[0], r"diff-check\s+ok\s+\d+s")
+        assert rc == 0
+        assert re.search(r"diff-check\s+ok\s+\d+s", out.splitlines()[0])
         (self.repo / "new.txt").write_text("fine\nbad  \n")  # untracked, new: the diff check reads the tree, not the index
         rc, out = self.tl()
-        self.assertEqual(rc, 1)
-        self.assertRegex(out, r"diff-check\s+FAILED")
-        self.assertIn("new.txt:2: trailing whitespace.", out)
-        self.assertRegex(out, r"fmt\s+ok")  # the cheap group's other checks still ran
+        assert rc == 1
+        assert re.search(r"diff-check\s+FAILED", out)
+        assert "new.txt:2: trailing whitespace." in out
+        assert re.search(r"fmt\s+ok", out)  # the cheap group's other checks still ran
 
     def test_list_prints_the_registry_and_exits_0(self):
         rc, out = self.tl("--list")
-        self.assertEqual(rc, 0)
+        assert rc == 0
         lines = out.splitlines()
-        self.assertEqual(len(lines), len(CHECKS))
-        self.assertTrue(lines[3].startswith("ui  run=gate  group=tests  when=ui/**  "))
-        self.assertIn("run=stage", lines[2])
+        assert len(lines) == len(CHECKS)
+        assert lines[3].startswith("ui  run=gate  group=tests  when=ui/**  ")
+        assert "run=stage" in lines[2]
 
     def test_it_claims_nothing_and_writes_results_and_run_evidence(self):
         self.tl()
         written = {p.relative_to(Path(self.tmp.name, "cfg")).parts[1] for p in Path(self.tmp.name, "cfg").rglob("*") if p.is_file()}
-        self.assertLessEqual(written, {"results", "locks", "runs", "engine", "factory.db", "factory.db-wal", "factory.db-shm"})
-        self.assertTrue({"runs", "engine"} <= written)
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert written <= {"results", "locks", "runs", "engine", "factory.db", "factory.db-wal", "factory.db-shm"}
+        assert {"runs", "engine"} <= written

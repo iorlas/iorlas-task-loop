@@ -4,8 +4,10 @@ import contextlib
 import io
 import json
 import sys
-import unittest
 from pathlib import Path
+
+import pytest
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
@@ -28,15 +30,15 @@ class Quiet(SpeedTest):
 
     def test_a_silent_sleeping_check_is_not_stopped(self):
         eng, res = self.run_one(procsim.fake("sleep-1", procsim.takes(1)))
-        self.assertEqual((res.status, res.exit), ("passed", 0))
-        self.assertEqual(self.log(eng, "kill"), [])
+        assert (res.status, res.exit) == ("passed", 0)
+        assert self.log(eng, "kill") == []
 
     def test_a_busy_silent_check_passes(self):
         _eng, res = self.run_one(procsim.fake("busy", procsim.exits(0)))
-        self.assertEqual(res.status, "passed")
+        assert res.status == "passed"
 
 
-class RetiredKeys(unittest.TestCase):
+class RetiredKeys(Case):
     """check_idle_min (engine) and idle_min (a check) cannot stop anything any more: a profile that still has them loads, says so
     once on one line each, and the file is not touched."""
 
@@ -53,13 +55,13 @@ class RetiredKeys(unittest.TestCase):
         with contextlib.redirect_stderr(err):
             for _ in range(2):
                 profile = wslots.load_profile(json.loads(f.read_text()))
-        self.assertEqual((profile.engine.check_wall_min, profile.engine.checks[0].wall_min), (20, 90))
+        assert (profile.engine.check_wall_min, profile.engine.checks[0].wall_min) == (20, 90)
         lines = err.getvalue().splitlines()
-        self.assertEqual(len(lines), 2, lines)  # one per key, not per load
-        self.assertTrue(all(".task-loop.json" in x and "retired and ignored; safe to delete" in x for x in lines))
-        self.assertIn("engine.check_idle_min", lines[0])
-        self.assertIn("engine.checks[0].idle_min", lines[1])
-        self.assertEqual(f.read_bytes(), before)
+        assert len(lines) == 2, lines  # one per key, not per load
+        assert all(".task-loop.json" in x and "retired and ignored; safe to delete" in x for x in lines)
+        assert "engine.check_idle_min" in lines[0]
+        assert "engine.checks[0].idle_min" in lines[1]
+        assert f.read_bytes() == before
 
     def test_each_renamed_key_fails_naming_the_new_one_and_a_retired_one_does_not(self):
         rows = [({"engine": {"checks": [{"id": "a", "argv": ["x"]}, {"id": "b", "argv": ["x"], "timeout_min": 5}]}},
@@ -67,15 +69,11 @@ class RetiredKeys(unittest.TestCase):
                 ({"engine": {"check_timeout_min": 30}}, "engine: check_timeout_min was renamed to check_wall_min")]
         for raw, msg in rows:
             with self.subTest(msg):
-                with self.assertRaises(config.ConfigError) as cm:
+                with pytest.raises(config.ConfigError) as cm:
                     config.load(raw)
-                self.assertIn(msg, str(cm.exception))
-        self.assertEqual(config.load({"engine": {"check_idle_min": 3}}).engine.check_wall_min, 60)
+                assert msg in str(cm.value)
+        assert config.load({"engine": {"check_idle_min": 3}}).engine.check_wall_min == 60
 
     def test_an_unknown_key_still_fails(self):
-        with self.assertRaises(SystemExit):
+        with pytest.raises(SystemExit):
             wslots.load_profile({"engine": {"check_idle_mins": 3}})
-
-
-if __name__ == "__main__":
-    unittest.main()

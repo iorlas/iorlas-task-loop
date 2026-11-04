@@ -1,8 +1,10 @@
 """A check that exits UNVERIFIED_EXIT is unverified: never passed, never cached as a pass, and the land refuses on it."""
 import sys
-import unittest
 from pathlib import Path
 from unittest.mock import Mock
+
+import pytest
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -43,23 +45,22 @@ class Recorded(EngineTest):
         st = {"checks": [], "files": []}
         first = eng.run_checks(st, "s")
         again = eng.run_checks(st, "s")
-        self.assertEqual((first[0].status, first[0].exit, first[0].word), ("unverified", UNVERIFIED_EXIT, CheckStatus.UNVERIFIED))
-        self.assertEqual(count.read_text(), "xx")  # not retried within a round, not served from the cache in the next
-        self.assertFalse(again[0].cached)
-        self.assertEqual([[c.id for c in group] for group in (first.passed, first.failed, first.unverified)], [[], [], ["render"]])
+        assert (first[0].status, first[0].exit, first[0].word) == ("unverified", UNVERIFIED_EXIT, CheckStatus.UNVERIFIED)
+        assert count.read_text() == "xx"  # not retried within a round, not served from the cache in the next
+        assert not again[0].cached
+        assert [[c.id for c in group] for group in (first.passed, first.failed, first.unverified)] == [[], [], ["render"]]
 
     def test_the_verdict_is_closed(self):
-        self.assertEqual([verdict_of(0), verdict_of(1), verdict_of(UNVERIFIED_EXIT), verdict_of(124)],
-                         ["passed", "failed", "unverified", "failed"])
+        assert [verdict_of(0), verdict_of(1), verdict_of(UNVERIFIED_EXIT), verdict_of(124)] == ["passed", "failed", "unverified", "failed"]
 
     def test_the_round_text_marks_it_apart(self):
         text = "\n".join(evidence.round_lines([unverified(), res("ok", 0)]))
-        self.assertIn("? [tests] `render` exit 86 (unverified", text)
+        assert "? [tests] `render` exit 86 (unverified" in text
         run = CheckRun(round=1, results=[unverified(), res("ok", 0)])
-        self.assertIn("1 passed, 1 unverified: render", evidence.round_outcome(run))
+        assert "1 passed, 1 unverified: render" in evidence.round_outcome(run)
 
 
-class Cache(unittest.TestCase):
+class Cache(Case):
     def memo(self, seed=None):
         stores, keys = fake_stores(), InputKeys(port_git(), "/nonexistent", TreeSha("t"))
         keys.files = {}  # the tree has no pin files (and git is not asked)
@@ -73,17 +74,17 @@ class Cache(unittest.TestCase):
     def test_a_cached_unverified_result_is_never_reused_as_a_pass(self):
         c = Check(id=CheckId("render"), cmd="render")
         seeded = self.memo((c, unverified()))
-        self.assertIsNone(seeded.hit(seeded.key(c)))
+        assert seeded.hit(seeded.key(c)) is None
         fresh = self.memo()
         key = must(fresh.key(c))
         fresh.remember(key, unverified(), 1, "/log")
-        self.assertIsNone(fresh.hit(key))
+        assert fresh.hit(key) is None
         fresh.remember(key, res("render", 0), 1, "/log")
-        self.assertIsNotNone(fresh.hit(key))
-        self.assertTrue(fresh.has(c))
+        assert fresh.hit(key) is not None
+        assert fresh.has(c)
 
 
-class Land(unittest.TestCase):
+class Land(Case):
     def lander(self, run):
         git = FakeGit(merge_base="base")
         git.tree_of = Mock(return_value="tree")
@@ -91,16 +92,12 @@ class Land(unittest.TestCase):
         return table_kit(git, last_run=run).lander
 
     def test_the_land_refuses_on_an_unverified_check_and_names_it(self):
-        with self.assertRaises(Stopped) as cm:
+        with pytest.raises(Stopped) as cm:
             self.lander(CheckRun(round=1, results=[res("ok", 0), unverified("render-evidence")])).finish(
                 Bead(id=BeadId("t-1"), title="t", status="open"))
-        self.assertIn("`render-evidence` is unverified", cm.exception.why)
-        self.assertEqual(cm.exception.kind, "FAULT_LAND")
+        assert "`render-evidence` is unverified" in cm.value.why
+        assert cm.value.kind == "FAULT_LAND"
 
     def test_nothing_unverified_is_no_refusal(self):
-        self.assertEqual(verified.refusal(CheckRun(round=1, results=[res("ok", 0)])), "")
-        self.assertFalse(verified.deferred(unverified()))
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert verified.refusal(CheckRun(round=1, results=[res("ok", 0)])) == ""
+        assert not verified.deferred(unverified())

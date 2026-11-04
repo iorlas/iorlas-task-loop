@@ -8,9 +8,9 @@ import os
 import pwd
 import subprocess
 import tempfile
-import unittest
 from pathlib import Path
 
+from support.case import Case
 from support.tlmain import tl_main
 
 from taskloop.adapters.childenv import CHECK_HOME_NAMES, allowed, check_caches
@@ -23,8 +23,8 @@ def git(cwd: Path, *a: str) -> str:
     return subprocess.run(["git", *IDENT, *a], cwd=cwd, check=True, capture_output=True, text=True).stdout
 
 
-class ProbeChecks(unittest.TestCase):
-    def setUp(self):
+class ProbeChecks(Case):
+    def setup_method(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.cfg = str(Path(self.tmp.name, "cfg"))
@@ -48,15 +48,11 @@ class ProbeChecks(unittest.TestCase):
         os.environ.setdefault("NOT_ON_THE_LIST", "x")
         self.addCleanup(os.environ.pop, "NOT_ON_THE_LIST", None)
         rc, out = self.check(repo, "probe")
-        self.assertEqual(rc, 0, out)
+        assert rc == 0, out
         seen = json.loads(out_file.read_text())
         engine_marks = ("DECLARED", "DELEGATE_DEPTH", "TASK_LOOP_WORKER")  # the check's own env, and what a child of the engine is told
         admitted = (*engine_marks, *CHECK_HOME_NAMES, *check_caches({}), "PWD", "SHLVL", "_")
         stray = [k for k in seen if not allowed(k) and k not in admitted and not k.startswith("XDG_")]
-        self.assertEqual(stray, [], "names outside the allowlist reached the child")
-        self.assertNotIn("NOT_ON_THE_LIST", seen)
-        self.assertIn("DECLARED", seen)
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert stray == [], "names outside the allowlist reached the child"
+        assert "NOT_ON_THE_LIST" not in seen
+        assert "DECLARED" in seen

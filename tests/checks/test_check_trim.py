@@ -2,8 +2,9 @@
 import re
 import sys
 import tempfile
-import unittest
 from pathlib import Path
+
+from support.case import Case
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -35,86 +36,86 @@ MUST = {
 LOGPATH = "/runs/r1/checks/00-check.r1.log"
 
 
-class TrimFixtures(unittest.TestCase):
+class TrimFixtures(Case):
     def test_every_failing_name_and_first_assertion_survives_within_the_cap(self):
         for name, must in MUST.items():
             with self.subTest(log=name):
                 text = (FIX / name).read_text()
                 out = trim.trim_log(text, log=LOGPATH)
-                self.assertLessEqual(len(out.encode()), trim.CAP, name)
-                self.assertIn(LOGPATH, out)  # the full log is one path away
+                assert len(out.encode()) <= trim.CAP, name
+                assert LOGPATH in out  # the full log is one path away
                 for line in must:
-                    self.assertIn(line, out, f"{name} lost: {line}")
+                    assert line in out, f"{name} lost: {line}"
 
     def test_too_many_failures_for_the_cap_keep_the_first_ones_and_say_what_was_left_out(self):
         text = "\n".join(f"FAILED tests/t.py::test_case_{int(i):03d} - assert {i} == 0" for i in range(300))
         out = trim.trim_log(text, log=LOGPATH)
-        self.assertLessEqual(len(out.encode()), trim.CAP)
-        self.assertIn("more failing lines left out", out)
-        self.assertIn("test_case_000", out)  # the first failures come first
+        assert len(out.encode()) <= trim.CAP
+        assert "more failing lines left out" in out
+        assert "test_case_000" in out  # the first failures come first
 
     def test_the_tail_is_kept_and_noise_in_the_middle_is_not(self):
         text = "\n".join([f"boring line {i}" for i in range(500)] + ["FAILED test_x - assert 1 == 2"] +
                          [f"tail line {i}" for i in range(60)])
         out = trim.trim_log(text, log=LOGPATH)
-        self.assertIn("tail line 59", out)
-        self.assertIn("FAILED test_x", out)
-        self.assertNotIn("boring line 250", out)
-        self.assertLessEqual(len(out.encode()), trim.CAP)
+        assert "tail line 59" in out
+        assert "FAILED test_x" in out
+        assert "boring line 250" not in out
+        assert len(out.encode()) <= trim.CAP
 
     def test_a_giant_line_and_a_small_cap_still_fit(self):
         text = "FAIL: test_a\n" + "x" * 100000 + "\nAssertionError: boom\n" + "\n".join(f"l{i}" for i in range(300))
         out = trim.trim_log(text, log=LOGPATH, cap=1024)
-        self.assertLessEqual(len(out.encode()), 1024)
-        self.assertIn("FAIL: test_a", out)
-        self.assertIn("AssertionError: boom", out)
+        assert len(out.encode()) <= 1024
+        assert "FAIL: test_a" in out
+        assert "AssertionError: boom" in out
 
     def test_zero_errors_is_no_failure_line(self):
         text = "\n".join(["    0 Error(s)", "Failed: 0"] * 5 + [f"line {i}" for i in range(100)] + ["done"])
         out = trim.trim_log(text, cap=600)
-        self.assertNotIn("0 Error(s)", out)
+        assert "0 Error(s)" not in out
 
     def test_a_green_check_is_one_line_with_no_log(self):
         green = trim.green_line("just check", 12.4)
-        self.assertEqual(green.count("\n"), 0)
-        self.assertEqual(green, "`just check` passed in 12 s")
+        assert green.count("\n") == 0
+        assert green == "`just check` passed in 12 s"
         text = (FIX / "long_green.log").read_text()
-        self.assertNotIn("PASS tests", green + text[:0])
+        assert "PASS tests" not in green + text[:0]
 
 
-class BriefPaths(unittest.TestCase):
-    def setUp(self):
+class BriefPaths(Case):
+    def setup_method(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.run_dir = Path(self.tmp.name)
         (self.run_dir / "checks").mkdir()
         for f in FIX.glob("*.log"):
             (self.run_dir / "checks" / f.name).write_text(f.read_text())
 
-    def tearDown(self):
+    def teardown_method(self):
         self.tmp.cleanup()
 
     def test_failure_brief_trims_every_red_fixture_and_names_the_log(self):
         for name, must in MUST.items():
             with self.subTest(log=name):
                 out = evidence.failure_brief([res(cmd="c", exit=1, log="checks/" + name)], self.run_dir)
-                self.assertLessEqual(len(out.encode()), trim.CAP)
-                self.assertIn(str(self.run_dir / "checks" / name), out)
+                assert len(out.encode()) <= trim.CAP
+                assert str(self.run_dir / "checks" / name) in out
                 for line in must:  # a compiler's diagnostics are listed as file:line:col (diagnostics.py)
-                    self.assertIn(re.sub(r"\((\d+),(\d+)\)", r":\1:\2", line), out)
+                    assert re.sub(r"\((\d+),(\d+)\)", r":\1:\2", line) in out
 
     def test_compact_red_keeps_the_failing_name_and_green_stays_one_line(self):
         tail = (FIX / "unittest_fail.log").read_text()[-1500:]
         red = evidence.compact([res(cmd="t", exit=1, group="tests", tail=tail)])
-        self.assertEqual(red.count("\n"), 0)
-        self.assertLessEqual(len(red), 700)
-        self.assertIn("FAIL: test_refund_rounds", red)
+        assert red.count("\n") == 0
+        assert len(red) <= 700
+        assert "FAIL: test_refund_rounds" in red
         green = evidence.compact([res(cmd="t", exit=0, group="tests", tail=(FIX / "long_green.log").read_text()[-1500:])])
-        self.assertEqual(green.count("\n"), 0)
+        assert green.count("\n") == 0
 
     def test_the_stored_log_is_not_changed(self):
         before = (self.run_dir / "checks" / "nunit_fail.log").read_text()
         evidence.failure_brief([res(cmd="c", exit=1, log="checks/nunit_fail.log")], self.run_dir)
-        self.assertEqual((self.run_dir / "checks" / "nunit_fail.log").read_text(), before)
+        assert (self.run_dir / "checks" / "nunit_fail.log").read_text() == before
 
 
 class RedCheckPrompt(te.EngineTest):
@@ -129,19 +130,15 @@ class RedCheckPrompt(te.EngineTest):
         check = procsim.fake("noisy-check", noisy)
         plan = dict(te.PLAN, stages=[dict(te.PLAN["stages"][0], checks=[check])])
         rc, s = self.run_engine({"plan": [plan], "write": [te.WRITE, te.WRITE], "review": [te.CLEAN]})
-        self.assertEqual(rc, 0, self.blocked)
+        assert rc == 0, self.blocked
         writes = [p for (c, p) in zip(s.calls, s.prompts, strict=False) if c[0] == "worker"]
-        self.assertEqual(len(writes), 2)
+        assert len(writes) == 2
         second = writes[1]
-        self.assertIn("These checks fail", second)
-        self.assertIn("FAIL: test_refund_rounds", second)
-        self.assertIn("AssertionError: 10.04 != 10.05", second)
-        self.assertIn(".log", second)  # the path of the full log
-        self.assertNotIn("setup step 300 ok", second)
-        self.assertNotIn("setup step 598 ok", second)  # only the line before the failure comes with it
-        self.assertLess(len(second) - len(writes[0]), 2 * trim.CAP)
-        self.assertNotIn("setup step", writes[0])  # the first write has no check output at all
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert "These checks fail" in second
+        assert "FAIL: test_refund_rounds" in second
+        assert "AssertionError: 10.04 != 10.05" in second
+        assert ".log" in second  # the path of the full log
+        assert "setup step 300 ok" not in second
+        assert "setup step 598 ok" not in second  # only the line before the failure comes with it
+        assert len(second) - len(writes[0]) < 2 * trim.CAP
+        assert "setup step" not in writes[0]  # the first write has no check output at all

@@ -2,6 +2,8 @@
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import gitq, procsim
@@ -34,7 +36,7 @@ class EngineChecksTest(EngineTest):
         return procsim.fake(f"sleep-{secs}", procsim.takes(secs, then=procsim.appends(counter)))
     def test_a_stop_during_a_check_stops_the_check_and_everything_it_started(self):
         if os.name == "nt":
-            self.skipTest("POSIX process groups")
+            pytest.skip("POSIX process groups")
         eng = engine.Engine(
             BeadId("t-1"),
             str(self.wt),
@@ -52,19 +54,19 @@ class EngineChecksTest(EngineTest):
         self.addCleanup(signal.signal, signal.SIGALRM, old)
         signal.setitimer(signal.ITIMER_REAL, 0.5)
         self.addCleanup(signal.setitimer, signal.ITIMER_REAL, 0)
-        with self.assertRaises(engine.Blocked):
+        with pytest.raises(engine.Blocked):
             eng.sh(shlex.split(self.spawn(pidfile)))
         child = int(pidfile.read_text())
         if not until(lambda: pid_gone(child), 2.5):
             os.kill(child, 9)
-            self.fail("the check's child outlived the stop")
+            pytest.fail("the check's child outlived the stop")
     def test_sigterm_during_a_stage_check_stops_its_tree_and_still_closes(self):
         pidfile = Path(self.tmp.name, "child.pid")
         check = self.spawn(pidfile, term=True)
         plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[check])])
         with self.stoppable():
             rc, _ = self.run_engine({"plan": [plan], "write": [WRITE], "review": [CLEAN]})
-        self.assertEqual(rc, 2)
-        self.assertIn("stopped (SIGTERM)", self.said())
+        assert rc == 2
+        assert "stopped (SIGTERM)" in self.said()
         self.assertDead(self.child_of(pidfile))
-        self.assertIn("wip (t-1)", gitq.git("log", "-1", "--format=%s", "task/t-1", cwd=str(self.wt)))
+        assert "wip (t-1)" in gitq.git("log", "-1", "--format=%s", "task/t-1", cwd=str(self.wt))

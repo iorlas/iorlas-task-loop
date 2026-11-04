@@ -2,8 +2,9 @@
 import os
 import subprocess
 import tempfile
-import unittest
 from pathlib import Path
+
+from support.case import Case
 
 from taskloop.adapters.checks_argv import ArgvChecks
 from taskloop.adapters.git import RealGit
@@ -11,7 +12,7 @@ from taskloop.contracts.env import Env
 from taskloop.contracts.ports import CheckSpec
 
 
-class CheckHooks(unittest.TestCase):
+class CheckHooks(Case):
     def test_suite_push_uses_git_defaults_instead_of_the_pinned_judge(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -33,10 +34,10 @@ class CheckHooks(unittest.TestCase):
                 subprocess.run(["git", *args], cwd=repo, env=base, capture_output=True, check=True)
             refused = subprocess.run(["git", "push", "origin", "HEAD:main"], cwd=repo, env=pinned,
                                      capture_output=True, text=True, check=False)
-            self.assertNotEqual(refused.returncode, 0)
-            self.assertIn("no suite receipt", refused.stderr)
+            assert refused.returncode != 0
+            assert "no suite receipt" in refused.stderr
             result = ArgvChecks(Env(pinned)).run(CheckSpec(argv=["git", "push", "origin", "HEAD:main"], cwd=str(repo)))
-            self.assertEqual(result.exit, 0, result.out)
+            assert result.exit == 0, result.out
             tip = subprocess.run(["git", "--git-dir", str(origin), "rev-parse", "refs/heads/main"],
                                  env=base, capture_output=True, text=True, check=True).stdout.strip()
-            self.assertEqual(tip, port.rev_parse(str(repo), "HEAD"))
+            assert tip == port.rev_parse(str(repo), "HEAD")

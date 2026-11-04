@@ -2,9 +2,10 @@
 the same red three rounds in a row, a retry that cannot change the answer, the compile errors Unity wrote elsewhere, the plan lint."""
 import json
 import sys
-import unittest
 from pathlib import Path
 from typing import Any, ClassVar, cast
+
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
@@ -23,7 +24,7 @@ from taskloop.domain.checks import lint, planref
 ST = {"checks": [], "files": []}
 
 
-class Base(unittest.TestCase):
+class Base(Case):
     """The engine harness of tests/test_engine.py, borrowed method by method (its setUp builds the repo, the fake bd and the config)."""
 
     wt: Path
@@ -31,11 +32,11 @@ class Base(unittest.TestCase):
     eng: Any
     blocked: list[str]
 
-    def setUp(self):
-        te.EngineTest.setUp(cast(Any, self))
+    def setup_method(self):
+        te.EngineTest.setup_method(cast(Any, self))
 
-    def tearDown(self):
-        te.EngineTest.tearDown(cast(Any, self))
+    def teardown_method(self):
+        te.EngineTest.teardown_method(cast(Any, self))
 
     def fake_bd(self, *a, **kw):
         return te.EngineTest.fake_bd(cast(Any, self), *a, **kw)
@@ -53,11 +54,11 @@ class Base(unittest.TestCase):
 class OneCheckRun(Base):
     def test_the_round_file_and_the_log_row_are_one_check_run(self):
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
-        self.assertEqual(rc, 0)
+        assert rc == 0
         stored = self.eng.stores.check_run(self.eng.run_dir.name, 1).get()
         rows = [json.loads(x) for x in self.eng.log_path.read_text().splitlines() if '"kind": "checks"' in x]
-        self.assertEqual(wire.load(CheckRun, dict(rows[0]["run"], v=CheckRun.V)), stored)
-        self.assertTrue(stored.results and all(c.log for c in stored.results))
+        assert wire.load(CheckRun, dict(rows[0]["run"], v=CheckRun.V)) == stored
+        assert stored.results and all(c.log for c in stored.results)
 
 
 class ProducerDidNotRun(Base):
@@ -67,44 +68,40 @@ class ProducerDidNotRun(Base):
     def test_a_consumer_of_a_skipped_producer_is_skipped_never_failed(self):
         eng = self.checks_engine(checks=self.REPO)
         run = eng.run_checks({"checks": ck([self.READER]), "files": []}, "s")
-        self.assertEqual([c.status for c in run], ["skipped", "skipped"])
-        self.assertEqual(run.results[1].producer, "unity-tests")
-        self.assertEqual(run.failed, [])
-        self.assertIn("(producer unity-tests did not run)", "\n".join(evidence.round_lines(run.results)))
+        assert [c.status for c in run] == ["skipped", "skipped"]
+        assert run.results[1].producer == "unity-tests"
+        assert run.failed == []
+        assert "(producer unity-tests did not run)" in "\n".join(evidence.round_lines(run.results))
 
     def test_a_consumer_of_a_check_the_round_does_not_have_is_skipped_too(self):
         eng = self.checks_engine(checks=[])
         run = eng.run_checks({"checks": ck([adhoc('test -r "$TL_CHECK_LOG_NOPE"', (CheckId("nope"),))]), "files": []}, "s")
-        self.assertEqual([(c.status, c.producer) for c in run], [("skipped", "nope")])
+        assert [(c.status, c.producer) for c in run] == [("skipped", "nope")]
 
     def test_it_costs_no_write_round(self):
         plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[self.READER.to_dict()])])
         rc, s = self.run_engine({"plan": [plan], "write": [WRITE] * 3, "review": [CLEAN]}, checks=self.REPO)
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertEqual([c[0] for c in s.calls].count("worker"), 1)
+        assert rc == 0, self.blocked
+        assert [c[0] for c in s.calls].count("worker") == 1
 
     def test_a_genuinely_red_producer_fails_the_round_naming_it(self):
         eng = self.checks_engine(checks=[{"id": "unity-tests", "cmd": te.FALSE, "group": "tests"}])
         run = eng.run_checks({"checks": ck([self.READER]), "files": []}, "s")
-        self.assertEqual([c.id for c in run.failed], ["unity-tests"])
-        self.assertEqual(run.results[1].status, "skipped")
-        self.assertEqual(run.results[1].producer, "unity-tests")
+        assert [c.id for c in run.failed] == ["unity-tests"]
+        assert run.results[1].status == "skipped"
+        assert run.results[1].producer == "unity-tests"
 
     def test_a_read_of_a_check_the_repo_does_not_have_is_refused_at_parse(self):
         cfg = cfg_with(checks=self.REPO)
         got = planref.refusals([adhoc("cat x", (CheckId("absent"),)), adhoc("cat x", (CheckId("unity-tests"),))], cfg)
-        self.assertEqual(len(got), 1)
-        self.assertIn("reads `absent`", got[0])
-        self.assertIn("unity-tests", got[0])
+        assert len(got) == 1
+        assert "reads `absent`" in got[0]
+        assert "unity-tests" in got[0]
 
     def test_the_plan_lint_rejects_a_read_of_the_evidence_folder_nothing_makes(self):
         def own(files, cmd):
             return typed(dict(PLAN, stages=[dict(PLAN["stages"][0], files=files, checks=[cmd])]))
 
         ev = ".task/t-1/evidence"
-        self.assertEqual(len(lint.evidence_problems(own(["f.txt"], f"grep -q ok {ev}/out.log"), ev)), 1)
-        self.assertEqual(lint.evidence_problems(own([ev + "/out.log"], f"grep -q ok {ev}/out.log"), ev), [])
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert len(lint.evidence_problems(own(["f.txt"], f"grep -q ok {ev}/out.log"), ev)) == 1
+        assert lint.evidence_problems(own([ev + "/out.log"], f"grep -q ok {ev}/out.log"), ev) == []
