@@ -4,7 +4,7 @@ from typing import Any, Final, Literal, TextIO, final
 
 import msgspec
 
-from taskloop.contracts import wire
+from taskloop.contracts import inputsets, wire
 from taskloop.contracts.argv import FORM, shape_problem, text_of
 from taskloop.contracts.ids import CheckId, mangle
 from taskloop.contracts.wire import Rec
@@ -193,6 +193,8 @@ class EngineConfig(Rec):
     delegate: str = ""
     untracked_ignore: list[str] = msgspec.field(default_factory=list)
     checks: list[CheckSpec] = msgspec.field(default_factory=list)
+    input_sets: dict[str, list[str]] = msgspec.field(default_factory=dict)  # name -> globs; a check's inputs, exclude and when say "@name"
+    hatch: list[str] = msgspec.field(default_factory=list)  # files whose change forces every check with inputs or when (the gate's own)
     plan_cmd: list[str] | None = None  # full argv of the repo's neutral gate-plan producer
     prepare: PrepareConfig | None = None
     # added to (over) the slot's environment; {slot} {slot_dir} {repo} filled in
@@ -398,7 +400,7 @@ def load(data: Any, say_to: TextIO | None = None) -> RepoProfile:
     boxed = [k.id for k in profile.engine.checks if k.where == "container"]
     if boxed and not box:
         raise ConfigError(f"the repo profile: check {boxed[0]} says \"in\": \"container\" but engine.container is not set")
-    bad_needs = resource_problem(profile.engine)
+    bad_needs = resource_problem(profile.engine) or inputsets.problem(profile.engine)
     if bad_needs:
         raise ConfigError(f"the repo profile: {bad_needs}")
     bad_graph = graph_problem(profile.engine.checks)

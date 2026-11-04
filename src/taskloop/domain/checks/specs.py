@@ -4,6 +4,7 @@ import json
 from collections.abc import Mapping, Sequence
 from typing import Final, assert_never
 
+from taskloop.contracts import inputsets
 from taskloop.contracts.argv import text_of
 from taskloop.contracts.checks import Check, Phase, Tag
 from taskloop.contracts.config import CheckSpec, EngineConfig
@@ -52,10 +53,10 @@ def wall_limit(k: CheckSpec | None, cfg: EngineConfig, phase: Phase) -> float:
 
 def repo_check(k: CheckSpec, cfg: EngineConfig, phase: Phase = Phase.STAGE) -> Check:
     """A configured check, with the engine's limits where it names none (in the gate: engine.gate_timeout_min)."""
-    inputs = [k.inputs] if isinstance(k.inputs, str) else list(k.inputs)
-    return Check(id=k.id, cmd=k.cmd, group=k.group, when=list(k.when), retry=k.retry,
+    return Check(id=k.id, cmd=k.cmd, group=k.group, when=inputsets.forced(cfg, k.when), retry=k.retry,
                  wall_min=wall_limit(k, cfg, phase), cache=k.cache is not False,
-                 inputs=inputs, inputs_only=k.inputs_only, exclude=list(k.exclude), env=dict(k.env), repo=True, writer=k.writer,
+                 inputs=inputsets.forced(cfg, k.inputs), inputs_only=k.inputs_only,
+                 exclude=inputsets.expand(cfg, k.exclude), env=dict(k.env), repo=True, writer=k.writer,
                  writer_max_s=k.writer_check_max_s, tail_log=k.tail_log, keep=list(k.keep), needs=list(k.needs), lane=k.lane,
                  pass_files=k.pass_files, run_in=k.run_in,
                  fix=text_of(k.fix) if k.fix else "", container=k.where == "container", reads=list(k.reads), tags=tags_of(k.id, k.cmd))

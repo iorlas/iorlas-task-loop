@@ -13,6 +13,7 @@ from taskloop.app.launch.check_host import CliHost
 from taskloop.app.launch.staged import staged_tree
 from taskloop.app.run.stage_run import StageRun, stage_run
 from taskloop.app.wire import slots as wslots
+from taskloop.contracts import inputsets
 from taskloop.contracts.argv import text_of
 from taskloop.contracts.checks import CheckResult, Phase
 from taskloop.contracts.config import CheckSpec, EngineConfig
@@ -27,7 +28,8 @@ TAIL_LINES = 15
 
 def listing(cfg: EngineConfig) -> list[str]:
     """The registry, one line per check: id, run, group, when, argv."""
-    return [f"{k.id}  run={k.run}  group={k.group}  when={','.join(k.when) or '-'}  {text_of(k.argv)}" for k in cfg.checks]
+    return [f"{k.id}  run={k.run}  group={k.group}  when={','.join(inputsets.expand(cfg, k.when)) or '-'}  {text_of(k.argv)}"
+            for k in cfg.checks]
 
 
 def step_line(c: CheckResult) -> str:

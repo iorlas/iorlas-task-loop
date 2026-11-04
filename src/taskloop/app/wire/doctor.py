@@ -14,7 +14,7 @@ from taskloop.app.slots import watchdog
 from taskloop.app.wire import hook
 from taskloop.app.wire import slots as wslots
 from taskloop.app.wire.slots import cfg_source
-from taskloop.contracts import runlife
+from taskloop.contracts import inputsets, runlife
 from taskloop.contracts.bd_errors import BdCommandFailure
 from taskloop.contracts.config import RepoProfile
 from taskloop.contracts.env import Env
@@ -47,13 +47,15 @@ def git_warnings(repo: str, source: Source | None, git: Git) -> list[str]:
     except SlotGitError:
         files = []
     for c in profile.engine.checks:  # inputs globs that match no tracked file would cache a green over changed code
-        ins = [c.inputs] if isinstance(c.inputs, str) else list(c.inputs)
+        ins = inputsets.expand(profile.engine, c.inputs)
         if not ins:
             out.append(f"check {c.id}: declares no inputs, so its result is keyed on the whole tree and base and is rerun whenever "
                        "anything moves; list the globs it reads (`inputs`, with `inputs_only` when they are complete).")
         for g in dead_globs(files, ins):
             out.append(f"check {c.id}: inputs glob {g} matches no tracked file, so the check is never cached; braces are "
                        "{a,b}, `*` stays in one folder, `**` crosses.")
+    out += [f"engine.input_sets.{n} is named by no check (`inputs`, `exclude`, `when`) and not by engine.hatch: delete it."
+            for n in inputsets.unused(profile.engine)]
     return out
 
 

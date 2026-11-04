@@ -207,6 +207,18 @@ class InputCache(SpeedTest):
         self.assertIn("client/{A,B}/**", " ".join(warns))
         self.assertEqual([w.split(":")[0] for w in warns if "declares no inputs" in w], ["check w"])  # the one without inputs
 
+    def test_doctor_reports_an_input_set_no_check_uses_and_looks_through_a_used_one(self):
+        (self.wt / "a.cs").write_text("1\n")
+        (self.wt / ".task-loop.json").write_text(json.dumps({"engine": {"input_sets": {"cs": ["*.cs"], "idle": ["*.md"]}, "checks": [
+            {"id": "u", "argv": ["x"], "inputs": ["@cs"]}]}}))
+        te.sh("git", "add", "-A", cwd=self.wt)
+        te.sh("git", "commit", "-qm", "sets", cwd=self.wt)
+        te.sh("git", "update-ref", "refs/remotes/origin/main", "HEAD", cwd=self.wt)
+        warns = doctor.git_warnings(str(self.wt), None, port_git())
+        self.assertEqual([w for w in warns if "input_sets" in w], ["engine.input_sets.idle is named by no check (`inputs`, `exclude`, `when`) "
+                                                                   "and not by engine.hatch: delete it."])
+        self.assertFalse([w for w in warns if "matches no tracked file" in w])  # @cs was read as *.cs
+
     def test_without_inputs_any_untracked_file_still_throws_the_result_away(self):
         cmd, n = self.bump()
         eng = self.checks_engine(checks=[{"id": "t", "cmd": cmd, "group": "tests"}])

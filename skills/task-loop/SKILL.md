@@ -322,6 +322,12 @@ left: the check is skipped, and the result says so (`skipped (no change under <w
 set, another run), and a pass_files check has no base run. The arguments are not chunked: a list too long for the OS (`E2BIG`) is exit 126.
 `--staged` and `--all` together are refused.
 
+**`engine.input_sets` and `engine.hatch`.** A profile writes a glob list once, `"input_sets": {"code": ["src/**", "lib/**"]}`, and a check names
+it as `"@code"` in `inputs`, `exclude` or `when` (a single entry or mixed with plain globs; the engine reads the expanded list, so editing a set
+re-keys the checks that name it). A set holds plain globs (no `@` inside); a name nobody declared is refused at load. `"hatch": [".task-loop.json",
+"tools/gate.py"]` (globs or `@set`) lists the files whose change forces every check: they join the `inputs` and the `when` of each check that has
+some, even one with `inputs_only`; a check with neither already reads the whole tree and runs always. `tl doctor` says a set no check and no hatch names.
+
 A repo's `just check` is then one line, `tl check` (`~/.config/task-loop/bin/tl` is the shim), and each step's own recipe
 (`just check-dotnet`) stays available alone.
 
