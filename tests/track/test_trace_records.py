@@ -6,7 +6,6 @@ import json
 import os
 import sys
 import time
-import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
 
@@ -62,123 +61,121 @@ class TraceRecords(te.EngineTest):
 
     def test_every_node_has_an_id_a_step_its_counters_and_an_end(self):
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
-        self.assertEqual(rc, 0)
+        assert rc == 0
         # IDs follow execution order: the accepted-stage push owns a timed step before land.
-        self.assertEqual(self.steps(), [(1, "reset"), (2, "plan"), (3, "write"), (4, "checks"), (5, "review"),
-                                        (6, "push"), (7, "land"), (8, "close")])
+        assert self.steps() == [(1, "reset"), (2, "plan"), (3, "write"), (4, "checks"), (5, "review"),
+                                        (6, "push"), (7, "land"), (8, "close")]
         nodes = {num(r.id): r for r in records(self.eng, rec.StepStart)}
-        self.assertEqual(nodes[3].text, "write: stage 1/1 write 1")
-        self.assertEqual({k: getattr(nodes[3], k) for k in ("stage", "stages", "write", "round")},
-                         {"stage": 1, "stages": 1, "write": 1, "round": 1})
-        self.assertEqual(nodes[6].stage, 1)
-        self.assertIn("(try 1)", nodes[7].text)
+        assert nodes[3].text == "write: stage 1/1 write 1"
+        assert {k: getattr(nodes[3], k) for k in ("stage", "stages", "write", "round")} == {"stage": 1, "stages": 1, "write": 1, "round": 1}
+        assert nodes[6].stage == 1
+        assert "(try 1)" in nodes[7].text
         ends = {num(r.id): r for r in records(self.eng, rec.StepEnd)}
-        self.assertEqual(sorted(ends), [1, 2, 3, 4, 5, 6, 7, 8])
-        self.assertEqual(ends[4].outcome, "green")
-        self.assertEqual(ends[5].outcome, "clean")
-        self.assertEqual(ends[6].outcome, "done")
-        self.assertEqual(ends[7].outcome, "landed")
-        self.assertEqual(ends[8].outcome, "landed")
+        assert sorted(ends) == [1, 2, 3, 4, 5, 6, 7, 8]
+        assert ends[4].outcome == "green"
+        assert ends[5].outcome == "clean"
+        assert ends[6].outcome == "done"
+        assert ends[7].outcome == "landed"
+        assert ends[8].outcome == "landed"
         for e in ends.values():
-            self.assertGreaterEqual(e.t, nodes[num(e.id)].t)
-        self.assertEqual([(num(s.node), s.resume) for s, _ in calls(self.eng)], [(2, False), (3, False), (5, False)])
-        self.assertIn((5, "next", "accepted"), self.transitions())
-        self.assertIn((7, "close", "landed"), self.transitions())
+            assert e.t >= nodes[num(e.id)].t
+        assert [(num(s.node), s.resume) for s, _ in calls(self.eng)] == [(2, False), (3, False), (5, False)]
+        assert (5, "next", "accepted") in self.transitions()
+        assert (7, "close", "landed") in self.transitions()
 
     def test_red_checks_go_back_to_the_writer_and_every_check_round_is_kept(self):
         plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[GREEN_ON_2ND_WRITE])])
         rc, _ = self.run_engine({"plan": [plan], "write": [WRITE, WRITE], "review": [CLEAN]})
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertEqual([s for _, s in self.steps()], ["reset", "plan", "write", "checks", "write", "checks", "review",
-                                                        "push", "land", "close"])
-        self.assertIn((4, "write", "checks_red"), self.transitions())
+        assert rc == 0, self.blocked
+        assert [s for _, s in self.steps()] == ["reset", "plan", "write", "checks", "write", "checks", "review",
+                                                        "push", "land", "close"]
+        assert (4, "write", "checks_red") in self.transitions()
         red = next(r for r in records(self.eng, rec.Transition) if r.cause == "checks_red")
-        self.assertIn("1 failed", red.detail)
+        assert "1 failed" in red.detail
         second = next(r for r in records(self.eng, rec.StepStart) if num(r.id) == 5)
-        self.assertEqual((second.write, second.round), (2, 1))
+        assert (second.write, second.round) == (2, 1)
         rounds = records(self.eng, rec.Checks)
-        self.assertEqual([(num(r.node_id), r.run.round) for r in rounds], [(4, 1), (6, 2)])
-        self.assertEqual([i.status for i in rounds[0].run.results], ["failed"])
-        self.assertEqual([i.status for i in rounds[1].run.results], ["passed"])
+        assert [(num(r.node_id), r.run.round) for r in rounds] == [(4, 1), (6, 2)]
+        assert [i.status for i in rounds[0].run.results] == ["failed"]
+        assert [i.status for i in rounds[1].run.results] == ["passed"]
         item = rounds[0].run.results[0]
-        self.assertTrue(item.id and item.cmd and item.log)
-        self.assertEqual(item.exit, 1)
+        assert item.id and item.cmd and item.log
+        assert item.exit == 1
         run = self.eng.run_dir
-        self.assertTrue((run / rounds[0].run.results[0].log).exists())
-        self.assertTrue((run / rounds[1].run.results[0].log).exists())
-        self.assertNotEqual(rounds[0].run.results[0].log, rounds[1].run.results[0].log)
-        self.assertTrue((run / "engine-checks.r1.json").exists())
-        self.assertTrue((run / "engine-checks.r2.json").exists())
-        self.assertTrue((run / "engine-checks.json").exists())  # the latest round, as before
+        assert (run / rounds[0].run.results[0].log).exists()
+        assert (run / rounds[1].run.results[0].log).exists()
+        assert rounds[0].run.results[0].log != rounds[1].run.results[0].log
+        assert (run / "engine-checks.r1.json").exists()
+        assert (run / "engine-checks.r2.json").exists()
+        assert (run / "engine-checks.json").exists()  # the latest round, as before
 
     def test_a_review_that_sends_the_stage_back_is_a_round_with_its_reason(self):
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE, WRITE],
                                  "review": [review(unmet=["a"], findings=[te.finding("high")]), CLEAN]})
-        self.assertEqual(rc, 0)
+        assert rc == 0
         t = next(r for r in records(self.eng, rec.Transition) if r.cause == "review_sendback")
-        self.assertEqual((num(t.from_id), t.to), (5, "write"))
-        self.assertIn("1 finding", t.detail)
-        self.assertIn("1 unmet", t.detail)
+        assert (num(t.from_id), t.to) == (5, "write")
+        assert "1 finding" in t.detail
+        assert "1 unmet" in t.detail
         ends = {num(r.id): r for r in records(self.eng, rec.StepEnd)}
-        self.assertEqual(ends[5].outcome, "sent back")
+        assert ends[5].outcome == "sent back"
         w2 = next(r for r in records(self.eng, rec.StepStart) if num(r.id) == 6)
-        self.assertEqual((w2.write, w2.round), (2, 2))
+        assert (w2.write, w2.round) == (2, 2)
 
     def test_a_writer_who_says_the_checks_are_wrong_goes_to_a_replan(self):
         plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[FALSE])])
         flag = dict(WRITE, bad_checks=[{"cmd": FALSE, "why": "it exits 1 whatever the code does"}])
         rc, _ = self.run_engine({"plan": [plan, PLAN], "write": [flag, WRITE], "review": [CLEAN]})
-        self.assertEqual(rc, 0)
-        self.assertIn((4, "replan", "bad_checks"), self.transitions())
-        self.assertEqual(dict(self.steps())[5], "replan")
+        assert rc == 0
+        assert (4, "replan", "bad_checks") in self.transitions()
+        assert dict(self.steps())[5] == "replan"
 
     def test_a_decision_asks_the_owner(self):
         rc, _ = self.run_engine({"plan": [dict(PLAN, irreversible="push_shared", question="Old format or new?")]})
-        self.assertEqual(rc, 2)
-        self.assertIn((2, "ask", "decision"), self.transitions())
+        assert rc == 2
+        assert (2, "ask", "decision") in self.transitions()
         ends = {num(r.id): r for r in records(self.eng, rec.StepEnd)}
-        self.assertEqual(ends[2].outcome, "asks")
+        assert ends[2].outcome == "asks"
 
     def test_a_resumed_writer_whose_lane_is_out_goes_on_as_a_new_thread(self):
         L = test_engine_units.DelegateLauncher
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE, L.OUT_LONG, L.FRESH],
                                  "review": [review(unmet=["more"]), CLEAN]})
-        self.assertEqual(rc, 0, self.blocked)
+        assert rc == 0, self.blocked
         t = next(r for r in records(self.eng, rec.Transition) if r.cause == "lane_out")
-        self.assertEqual((num(t.from_id), t.to), (6, "write"))
+        assert (num(t.from_id), t.to) == (6, "write")
         sess = [(s, e) for s, e in calls(self.eng) if num(s.node) == 6]
-        self.assertEqual([(e.status, e.reason, s.resume) for s, e in sess], [("stopped", "rate_limited", True), ("done", None, False)])
-        self.assertEqual(sess[1][1].model, "sonnet")
+        assert [(e.status, e.reason, s.resume) for s, e in sess] == [("stopped", "rate_limited", True), ("done", None, False)]
+        assert sess[1][1].model == "sonnet"
 
     def test_a_long_lane_out_pauses_with_the_time_the_lane_is_back(self):
         due = time.time() + 3 * 3600
         self.run_engine({"plan": [PLAN], "write": [stop("rate_limited", at=due, say="out", lane="OPENAI_SUBSCRIPTION")]})
         t = next(r for r in records(self.eng, rec.Transition) if r.cause == "paused")
-        self.assertEqual((num(t.from_id), t.to), (3, "pause"))
-        self.assertEqual({num(r.id): r for r in records(self.eng, rec.StepEnd)}[3].outcome, "paused")
+        assert (num(t.from_id), t.to) == (3, "pause")
+        assert {num(r.id): r for r in records(self.eng, rec.StepEnd)}[3].outcome == "paused"
 
     def test_a_red_gate_goes_to_a_fix_round_with_its_counters(self):
         gate = procsim.fake("red-on-d2", lambda cwd, env: (1 if procsim.f_txt(cwd) == "d2" else 0, ""))
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE, WRITE], "review": [CLEAN, CLEAN]}, gate=gate)
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertIn((7, "fix", "gate_red"), self.transitions())
+        assert rc == 0, self.blocked
+        assert (7, "fix", "gate_red") in self.transitions()
         fixw = next(r for r in records(self.eng, rec.StepStart) if r.step == "write" and r.fix)
-        self.assertEqual((fixw.fix, fixw.write), (1, 1))
-        self.assertEqual(self.steps()[-2:], [(11, "land"), (12, "close")])
-        self.assertEqual({num(r.id): r for r in records(self.eng, rec.StepEnd)}[7].outcome, "gate red")
+        assert (fixw.fix, fixw.write) == (1, 1)
+        assert self.steps()[-2:] == [(11, "land"), (12, "close")]
+        assert {num(r.id): r for r in records(self.eng, rec.StepEnd)}[7].outcome == "gate red"
 
     def test_the_trace_says_why_each_run_started_and_which_run_came_before(self):
         rc, _ = self.run_engine({"plan": [dict(PLAN, irreversible="push_shared", question="Old format or new?")]})
         first = self.eng.log_path.stem
         with self.store.stub(comments=[{"author": "denis", "text": "Old format."}]):
             rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
-        self.assertEqual(rc, 0)
+        assert rc == 0
         traces = [json.loads(x) for x in (homes.config_dir() / "traces.jsonl").read_text().splitlines()]
-        self.assertEqual([(t["started_because"], t["prev_run"], t["ask"]) for t in traces],
-                         [("first", "", ""), ("answer", first, "t-1-1")])
+        assert [(t["started_because"], t["prev_run"], t["ask"]) for t in traces] == [("first", "", ""), ("answer", first, "t-1-1")]
         run = records(self.eng, rec.RunStart)[-1]
-        self.assertEqual((run.started_because, run.parent_id, run.ask), ("answer", first, "t-1-1"))
-        self.assertEqual(run.run_id, self.eng.log_path.stem)
+        assert (run.started_because, run.parent_id, run.ask) == ("answer", first, "t-1-1")
+        assert run.run_id == self.eng.log_path.stem
 
     def test_a_run_after_a_stop_resumes_from_the_checkpoint(self):
         two = te.EngineTest.TWO
@@ -186,17 +183,17 @@ class TraceRecords(te.EngineTest):
             self.run_engine({"plan": [two], "write": [WRITE, WRITE], "review": [CLEAN]})
         first = self.eng.log_path.stem
         rc, _ = self.run_engine({"write": [WRITE], "review": [CLEAN]})
-        self.assertEqual(rc, 0)
+        assert rc == 0
         run = records(self.eng, rec.RunStart)[-1]
-        self.assertEqual((run.started_because, run.parent_id), ("resume", first))
+        assert (run.started_because, run.parent_id) == ("resume", first)
 
     def test_a_rerun_without_a_checkpoint_is_a_retry(self):
         self.run_engine({"plan": [stop("worker_failed", say="boom")] * 2})
         first = self.eng.log_path.stem
-        self.assertFalse((homes.config_dir() / "checkpoints" / "t-1.json").exists())
+        assert not (homes.config_dir() / "checkpoints" / "t-1.json").exists()
         self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         run = records(self.eng, rec.RunStart)[-1]
-        self.assertEqual((run.started_because, run.parent_id), ("retry", first))
+        assert (run.started_because, run.parent_id) == ("retry", first)
 
     def test_starting_a_run_sweeps_no_check_log_however_old_only_tl_prune_does(self):
         old = homes.config_dir() / "runs" / "t-0-20261001-000000" / "checks"
@@ -215,18 +212,14 @@ class TraceRecords(te.EngineTest):
             env=snapshot(),
             spawner=real_spawner(),
             git=port_git(), who=who())
-        self.assertTrue((old / "00-a.r1.log").exists())  # SWEEPKEEP: the bead may still be open; tl prune knows, a start does not
-        self.assertTrue((old / "00-a.log").exists())
-        self.assertTrue((new / "00-a.r1.log").exists())
+        assert (old / "00-a.r1.log").exists()  # SWEEPKEEP: the bead may still be open; tl prune knows, a start does not
+        assert (old / "00-a.log").exists()
+        assert (new / "00-a.r1.log").exists()
 
     def test_tl_trace_still_reads_the_new_trace(self):
         self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         out = io.StringIO()
         with redirect_stdout(out):
             rc = verbs.trace(BeadId("t-1"), 0, False, snapshot())
-        self.assertEqual(rc, 0)
-        self.assertIn("landed", out.getvalue())
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert rc == 0
+        assert "landed" in out.getvalue()

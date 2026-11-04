@@ -3,7 +3,6 @@ record or a typed reason; a manual sha counts only as an ancestor of the base. `
 import contextlib
 import io
 import time
-import unittest
 from unittest import mock
 
 import support.paths  # noqa: F401
@@ -11,6 +10,7 @@ from support import homes
 from support.who import who
 
 # isort: split
+from support.case import Case
 from support.fake_beads import FakeBeads
 from support.fakegit import ScriptedGit
 
@@ -46,10 +46,10 @@ class Git(ScriptedGit):
         return "git@x:y/z.git"
 
 
-class Guarded(unittest.TestCase):
+class Guarded(Case):
     n = 0
 
-    def setUp(self):
+    def setup_method(self):
         Guarded.n += 1
         self.bead = BeadId(f"cg-{Guarded.n}")
         self.bd = FakeBeads(actor="tl-me")
@@ -68,54 +68,54 @@ class Guarded(unittest.TestCase):
 
     def landed(self):
         TraceStore(homes.cfg())  # the store exists; the row comes from record_land
-        self.assertEqual(closeguard.record_land(who(), self.bd, Git(on_base=(SHA,)), "/r", "origin/main", self.bead, SHA, "t"), 0)
+        assert closeguard.record_land(who(), self.bd, Git(on_base=(SHA,)), "/r", "origin/main", self.bead, SHA, "t") == 0
 
     def test_a_run_and_no_land_is_refused_and_names_the_fix(self):
         self.add()
         self.run_of_bead()
         why = self.ask("done")
-        self.assertIn("no land on record", why)
-        self.assertIn(f"tl land {self.bead} --sha SHA", why)
-        self.assertIn(f"tl task close {self.bead} --reason 'manual-landed-with-sha:<sha>", why)
+        assert "no land on record" in why
+        assert f"tl land {self.bead} --sha SHA" in why
+        assert f"tl task close {self.bead} --reason 'manual-landed-with-sha:<sha>" in why
 
     def test_a_task_branch_alone_is_refused_local_or_origin(self):
         self.add("bug")
         for ref in (f"refs/heads/task/{self.bead}", f"refs/remotes/origin/task/{self.bead}"):
-            self.assertIn("no land", self.ask("done", Git(branches=(ref,))))
+            assert "no land" in self.ask("done", Git(branches=(ref,)))
 
     def test_no_run_and_no_branch_closes_freely(self):
         self.add()
-        self.assertEqual(self.ask("done"), "")
+        assert self.ask("done") == ""
 
     def test_an_epic_and_other_types_close_freely_even_with_a_run(self):
         self.add("epic")
         self.run_of_bead()
-        self.assertEqual(self.ask("done"), "")
+        assert self.ask("done") == ""
         self.add("chore")
-        self.assertEqual(self.ask("done"), "")
+        assert self.ask("done") == ""
 
     def test_each_typed_reason_closes(self):
         self.add()
         self.run_of_bead()
         for r in ("duplicate of x-1", "wontfix: not needed", "superseded by x-2", "epic"):
-            self.assertEqual(self.ask(r), "", r)
+            assert self.ask(r) == "", r
 
     def test_a_land_on_record_closes(self):
         self.add()
         self.run_of_bead()
         self.landed()
-        self.assertEqual(self.ask("done"), "")
+        assert self.ask("done") == ""
 
     def test_a_manual_sha_is_accepted_only_as_an_ancestor_and_is_recorded_as_the_land(self):
         self.add()
         self.run_of_bead()
         why = self.ask(f"manual-landed-with-sha:{SHA} hand merge", Git(on_base=()))
-        self.assertIn("not an ancestor of origin/main", why)
-        self.assertFalse(closeguard.has_land(who(), self.bead))
-        self.assertEqual(self.ask(f"manual-landed-with-sha:{SHA} hand merge", Git(on_base=(SHA,))), "")
+        assert "not an ancestor of origin/main" in why
+        assert not closeguard.has_land(who(), self.bead)
+        assert self.ask(f"manual-landed-with-sha:{SHA} hand merge", Git(on_base=(SHA,))) == ""
         rows = [i.rec for i in TraceStore(homes.cfg()).read_from(0).items if i.rec.bead == self.bead]
-        self.assertEqual([(r.outcome, r.sha) for r in rows], [(Outcome.LANDED, SHA)])
-        self.assertEqual(self.ask("done"), "")  # the land is on record now
+        assert [(r.outcome, r.sha) for r in rows] == [(Outcome.LANDED, SHA)]
+        assert self.ask("done") == ""  # the land is on record now
 
     def test_close_as_refuses_before_bd_and_the_engine_guard_passes(self):
         self.add()
@@ -124,37 +124,33 @@ class Guarded(unittest.TestCase):
         err = io.StringIO()
         with contextlib.redirect_stderr(err):
             rc = verbs.close(who(), self.bead, self.bd, closeguard.guard_for(who(), self.bd, Git(), "/r"), "done")
-        self.assertEqual(rc, 1)
-        self.assertIn("no land on record", err.getvalue())
-        self.assertEqual(self.bd.beads[self.bead].status, "in_progress")
-        self.assertEqual(verbs.close(who(), self.bead, self.bd, closeguard.ENGINE, "merged"), 0)
-        self.assertEqual(self.bd.beads[self.bead].status, "closed")
+        assert rc == 1
+        assert "no land on record" in err.getvalue()
+        assert self.bd.beads[self.bead].status == "in_progress"
+        assert verbs.close(who(), self.bead, self.bd, closeguard.ENGINE, "merged") == 0
+        assert self.bd.beads[self.bead].status == "closed"
 
     def test_tl_bd_close_is_guarded_by_id_and_reason_in_any_spelling(self):
         self.add()
         self.run_of_bead()
-        self.assertEqual(verbs.bd_close_args(["close", str(self.bead), "-r", "duplicate x"]), ([str(self.bead)], "duplicate x"))
-        self.assertEqual(verbs.bd_close_args(["done", "--reason=wontfix", str(self.bead), "--session", "s"]), ([str(self.bead)], "wontfix"))
+        assert verbs.bd_close_args(["close", str(self.bead), "-r", "duplicate x"]) == ([str(self.bead)], "duplicate x")
+        assert verbs.bd_close_args(["done", "--reason=wontfix", str(self.bead), "--session", "s"]) == ([str(self.bead)], "wontfix")
         guard = closeguard.guard_for(who(), self.bd, Git(), "/r")
         store = mock.Mock()
         err = io.StringIO()
         with contextlib.redirect_stderr(err):
-            self.assertEqual(verbs.passthrough(store, ["close", str(self.bead), "--reason", "done"], guard), 1)
+            assert verbs.passthrough(store, ["close", str(self.bead), "--reason", "done"], guard) == 1
         store.passthrough.assert_not_called()
-        self.assertIn("no land on record", err.getvalue())
+        assert "no land on record" in err.getvalue()
         store.passthrough.return_value = mock.Mock(out="", err="", code=0)
-        self.assertEqual(verbs.passthrough(store, ["close", str(self.bead), "--reason", "wontfix"], guard), 0)
-        self.assertEqual(verbs.passthrough(store, ["list"], guard), 0)
+        assert verbs.passthrough(store, ["close", str(self.bead), "--reason", "wontfix"], guard) == 0
+        assert verbs.passthrough(store, ["list"], guard) == 0
 
     def test_a_release_records_its_push_as_the_land_then_closes(self):
         self.add()
         self.run_of_bead()
         git = Git(on_base=(SHA,))
         git.rev_parse = lambda d, rev: SHA  # type: ignore[method-assign]
-        self.assertEqual(closeguard.close_released(who(), self.bd, git, "/clone", self.bead, "released 1.2.3", "1.2.3"), "")
-        self.assertEqual(self.bd.beads[self.bead].status, "closed")
-        self.assertTrue(closeguard.has_land(who(), self.bead))
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert closeguard.close_released(who(), self.bd, git, "/clone", self.bead, "released 1.2.3", "1.2.3") == ""
+        assert self.bd.beads[self.bead].status == "closed"
+        assert closeguard.has_land(who(), self.bead)

@@ -4,10 +4,12 @@ import contextlib
 import os
 import sys
 import tempfile
-import unittest
 from pathlib import Path
 from typing import Any, get_args
 from unittest import mock
+
+import pytest
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -49,28 +51,24 @@ def isolated_home():
         yield
 
 
-class EveryKindDecodes(unittest.TestCase):
+class EveryKindDecodes(Case):
     def test_the_calls_cover_every_kind_of_the_contract(self):
         union: Any = events.Event
-        self.assertEqual(set(CALLS), {m.__struct_config__.tag for m in get_args(union)})
+        assert set(CALLS) == {m.__struct_config__.tag for m in get_args(union)}
 
     def test_each_row_written_decodes_strictly_with_its_fields(self):
         for kind, fields in CALLS.items():
             with self.subTest(kind), isolated_home():
                 trail.event(who(), kind, "x-1", repo="/r", **fields)
                 (row,) = eventlog.read()
-                self.assertEqual(row["v"], EventRec.V)
+                assert row["v"] == EventRec.V
                 got = events.decode(row)
-                self.assertEqual((got.kind, got.bead, got.repo), (kind, "x-1", "/r"))
-                self.assertEqual({k: v for k, v in wire.dump(got).items() if k in fields}, fields)
+                assert (got.kind, got.bead, got.repo) == (kind, "x-1", "/r")
+                assert {k: v for k, v in wire.dump(got).items() if k in fields} == fields
 
     def test_a_kind_or_field_the_contract_does_not_name_is_refused_and_nothing_is_written(self):
         for kind, fields in (("slot-hold", {}), ("land", {"slotty": 1})):
             with self.subTest(kind), isolated_home():
-                with self.assertRaises(ValueError):
+                with pytest.raises(ValueError):
                     trail.event(who(), kind, "x-1", repo="/r", **fields)
-                self.assertEqual(eventlog.read(), [])
-
-
-if __name__ == "__main__":
-    unittest.main()
+                assert eventlog.read() == []

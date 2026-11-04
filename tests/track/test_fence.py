@@ -3,11 +3,13 @@ the checkpoint, and is told why."""
 import contextlib
 import io
 import sys
-import unittest
 from contextlib import redirect_stderr
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
+
+import pytest
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -41,18 +43,18 @@ def taken(bd: FakeBeads, slot_bead: str = "") -> fence.Claim:
     return fence.take(bd, BeadId("x-1"), ME, BeadId(slot_bead))
 
 
-class Generation(unittest.TestCase):
+class Generation(Case):
     def test_every_take_bumps_the_bead_generation(self):
         bd = world()
         first = taken(bd)
         bd.unclaim(BeadId("x-1"))
         second = taken(bd)
-        self.assertEqual((first.gen, second.gen), (1, 2))
-        self.assertEqual(fence.stale(bd, second), "")
-        self.assertIn("taken again by another run (generation 2, this run holds 1)", fence.stale(bd, first))
+        assert (first.gen, second.gen) == (1, 2)
+        assert fence.stale(bd, second) == ""
+        assert "taken again by another run (generation 2, this run holds 1)" in fence.stale(bd, first)
 
     def test_only_the_fence_makes_a_claim(self):
-        with self.assertRaises(TypeError):
+        with pytest.raises(TypeError):
             fence.Claim(object(), "x-1", ME, 1, "", 0)  # type: ignore[arg-type]
 
     def test_a_slot_taken_again_fences_the_run_that_held_it(self):
@@ -61,17 +63,17 @@ class Generation(unittest.TestCase):
         c = taken(bd, "sl-1")
         slot = BeadId("sl-1")
         bd.beads[slot] = bd.beads[slot].replace(metadata={fence.SLOT_GEN: "4"})  # the same actor takes it again: a higher number
-        self.assertIn("slot bead sl-1 was taken again (generation 4, this run holds 3)", fence.stale(bd, c))
+        assert "slot bead sl-1 was taken again (generation 4, this run holds 3)" in fence.stale(bd, c)
 
     def test_a_bd_that_cannot_be_asked_fences_nothing(self):
         bd = world()
         c = taken(bd)
         del bd.beads[BeadId("x-1")]
-        self.assertEqual(fence.stale(bd, c), "")
+        assert fence.stale(bd, c) == ""
 
 
-class Refused(unittest.TestCase):
-    def setUp(self):
+class Refused(Case):
+    def setup_method(self):
         for name in ("event", "prune_events", "provenance"):  # the trail is a file under the repo: not what is tried here
             self.enterContext(mock.patch.object(verbs, name, lambda *a, **kw: None))
         self.bd = world()
@@ -87,39 +89,39 @@ class Refused(unittest.TestCase):
 
     def test_close_by_the_stale_run_is_refused_and_says_why(self):
         rc, err = self.err(lambda: verbs.close_as(who(), self.old, "merged", self.bd, closeguard.ENGINE))
-        self.assertEqual(rc, 1)
-        self.assertIn("fenced: x-1 not closed", err)
-        self.assertIn("generation 2, this run holds 1", err)
-        self.assertEqual(self.bd.beads[BeadId("x-1")].status, "in_progress")
-        self.assertEqual(verbs.close_as(who(), self.new, "merged", self.bd, closeguard.ENGINE), 0)
-        self.assertEqual(self.bd.beads[BeadId("x-1")].status, "closed")
+        assert rc == 1
+        assert "fenced: x-1 not closed" in err
+        assert "generation 2, this run holds 1" in err
+        assert self.bd.beads[BeadId("x-1")].status == "in_progress"
+        assert verbs.close_as(who(), self.new, "merged", self.bd, closeguard.ENGINE) == 0
+        assert self.bd.beads[BeadId("x-1")].status == "closed"
 
     def test_block_by_the_stale_run_is_refused(self):
         rc, err = self.err(lambda: verbs.block_as(who(), self.old, "stuck", self.bd))
-        self.assertEqual(rc, 1)
-        self.assertIn("fenced: x-1 not blocked", err)
-        self.assertEqual(self.bd.beads[BeadId("x-1")].status, "in_progress")
+        assert rc == 1
+        assert "fenced: x-1 not blocked" in err
+        assert self.bd.beads[BeadId("x-1")].status == "in_progress"
 
     def test_land_by_the_stale_run_records_nothing(self):
         rc, err = self.err(lambda: verbs.land(who(), BeadId("x-1"), "abc123", self.bd, port_git(), claim=self.old))
-        self.assertEqual(rc, 1)
-        self.assertIn("fenced: land of x-1 not recorded", err)
+        assert rc == 1
+        assert "fenced: land of x-1 not recorded" in err
 
     def test_the_checkpoint_of_the_stale_run_is_not_written(self):
         stores = fake_stores()
         host = SimpleNamespace(bead="x-1", stores=stores, store=self.bd, claim=self.old)
         ck = Checkpoints(host)
-        with self.assertRaises(fence.Fenced) as cm:
+        with pytest.raises(fence.Fenced) as cm:
             ck.writer()
-        self.assertIn("taken again", cm.exception.why)
+        assert "taken again" in cm.value.why
         host.claim = self.new
-        self.assertIs(ck.writer(), ck.doc)
+        assert ck.writer() is ck.doc
 
     def test_a_close_sends_the_assignee_guard_and_a_changed_assignee_refuses_it(self):
         self.bd.beads[BeadId("x-1")] = self.bd.beads[BeadId("x-1")].replace(assignee="tl-other")  # the claim changed hands
         rc, err = self.err(lambda: verbs.close_as(who(), self.new, "merged", self.bd, closeguard.ENGINE))
-        self.assertEqual((rc, self.bd.beads[BeadId("x-1")].status), (1, "in_progress"))
-        self.assertIn("assignee changed", err)
+        assert (rc, self.bd.beads[BeadId("x-1")].status) == (1, "in_progress")
+        assert "assignee changed" in err
 
     def test_a_fenced_run_closes_nothing_and_says_it_was_fenced_out(self):
         warned, closed = [], []
@@ -128,11 +130,7 @@ class Refused(unittest.TestCase):
                                records=SimpleNamespace(settle=lambda *a: None))
         hb = mock.Mock()
         RunOnce(host).close_out(hb, Ended())
-        self.assertEqual(closed, [])
-        self.assertIn("fenced out", warned[0])
-        self.assertIn("taken again by another run", host.fenced)
-        self.assertEqual(self.bd.beads[BeadId("x-1")].status, "in_progress")
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert closed == []
+        assert "fenced out" in warned[0]
+        assert "taken again by another run" in host.fenced
+        assert self.bd.beads[BeadId("x-1")].status == "in_progress"
