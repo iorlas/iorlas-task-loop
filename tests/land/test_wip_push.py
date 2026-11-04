@@ -66,6 +66,19 @@ class WipPush(EngineTest):
         self.assertIn("stale info", asked)
         self.assertIn("engine-fault", asked)
 
+    def test_hook_refusal_and_complete_stage_push_output_are_kept(self):
+        refusal = "gate: refusing the push: run just check"
+        output = "progress\n" * 250 + refusal + "\n" + "progress\n" * 250 + "error: failed to push some refs\n"
+        with mock.patch.object(RealGit, "push_lease", return_value=GitOutcome(ok=False, output=output)):
+            rc, _ = self.run_engine(RUN)
+        self.assertNotEqual(rc, 0)
+        files = list((self.eng.run_dir / "land-push").glob("*.log"))
+        self.assertEqual(len(files), 1)
+        self.assertEqual(files[0].read_text(), output)
+        closed = " ".join(r["why"] for r in records(self.eng, "close"))
+        self.assertIn(refusal, closed)
+        self.assertIn(str(files[0]), closed)
+
     def test_a_custom_land_command_pushes_nothing(self):
         pushed = []
         real = Engine.sh

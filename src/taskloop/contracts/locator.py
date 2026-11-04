@@ -163,12 +163,12 @@ class RunLocator:
             self._put(old.manifest.replace(state=RunState.RUNNING, heartbeat=now))
 
     def end(self, run: str, now: float, state: RunState, reason: str = "") -> None:
-        """The run ended: its terminal state, why, and when. A run that is already terminal is left as it is (a state is set once)."""
+        """Keep the terminal reason intact, including diagnostics and evidence paths."""
         if state.live:
             raise ValueError(f"{state} is not a terminal state")
         old = self.get(run)
         if old is not None and old.manifest.state.live:
-            self._put(old.manifest.replace(state=state, ended=now, heartbeat=now, reason=reason[:300]))
+            self._put(old.manifest.replace(state=state, ended=now, heartbeat=now, reason=reason))
 
     def mark_lost(self, run: str, reason: str) -> None:
         """The reconciler's one write: a run still in a live state becomes `lost`, once, with its reason (`runlife.reconcile` decides)."""

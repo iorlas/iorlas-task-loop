@@ -34,11 +34,12 @@ class SlotFail(Exception):
 
 
 class SlotGitError(Exception):
-    """git failed in a slot; `tail` is its message's decisive line."""
+    """git failed in a slot; `tail` holds diagnostics, `output` preserves captured stdout and stderr when available."""
 
-    def __init__(self, tail: str) -> None:
+    def __init__(self, tail: str, *, output: str | None = None) -> None:
         super().__init__(tail)
         self.tail = tail
+        self.output = tail if output is None else output
 
 
 class GitReadFailure(SlotGitError):

@@ -44,8 +44,10 @@ class Shell:
             text += self.killed(res, rc, what, timeout, started)
         if save:
             Path(save).write_text(text, encoding="utf-8")
-        tail = "\n".join(text.strip().splitlines()[-15:])
-        e.log.emit(rec.CmdEnd(id=cid, exit=rc, exec_seconds=round(time.time() - started, 1), out=tail[-600:] if rc else ""))
+        push = len(cmd) > 1 and Path(cmd[0]).name == "git" and cmd[1] == "push"
+        tail = text if push else "\n".join(text.strip().splitlines()[-15:])
+        out = tail if push else tail[-600:]
+        e.log.emit(rec.CmdEnd(id=cid, exit=rc, exec_seconds=round(time.time() - started, 1), out=out if rc else ""))
         e.halt_point(what != "check")  # a stop, not the command's verdict (a stopped check reports itself first)
         if check and rc:
             raise Blocked(f"failed: `{text_of(cmd)}` exit {rc}\n{tail}", kind=Kind.FAULT_INFRA)

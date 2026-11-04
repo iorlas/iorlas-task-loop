@@ -29,6 +29,9 @@ class ConfigDir:
     def runs_dir(self) -> Path:
         return self.root / "runs"
 
+    def land_push(self, stamp: int, branch: str) -> Path:
+        return self.root / "land-push" / f"{stamp}-{branch}.log"
+
     def run_manifest(self, run: RunId | str) -> Path:
         """runs/<run>/manifest.json: the one authority on a run (contracts/run.py RunManifest); only the locator reads it."""
         return self.run_dir(run) / "manifest.json"
@@ -255,6 +258,9 @@ class RunFiles:
 
     def pause(self) -> Path:
         return self.dir / "pause.json"
+
+    def push_log(self, stamp: int) -> Path:
+        return self.dir / "land-push" / f"{stamp}.log"
 
     def reexec(self) -> Path:
         return self.dir / "reexec.json"

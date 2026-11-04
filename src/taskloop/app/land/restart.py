@@ -72,13 +72,13 @@ class Restart:
         try:
             e.git.rename_branch(e.wt, branch, stale)
         except SlotGitError as err:  # never reset a branch whose work could not be kept
-            e.warn(f"resume conflict, but the branch could not be kept aside ({str(err).strip()[-160:]}): it stays as it was")
+            e.warn(f"resume conflict, but the branch could not be kept aside ({str(err).strip()}): it stays as it was")
             return False
         must(e, f"checkout -B {branch} {e.cfg.base}", lambda: e.git.checkout_reset(e.wt, branch, e.cfg.base))
         e.checkpoints.drop()
         self.forget()
         e.steps.move("plan", "resume_conflict",
-                     f"the branch's earlier work conflicts with {e.cfg.base}: kept as {stale}, planning fresh. {why[:160]}")
+                     f"the branch's earlier work conflicts with {e.cfg.base}: kept as {stale}, planning fresh. {why}")
         e.log.note(f"resume conflict: {branch} kept as {stale}; the task starts again on {e.cfg.base}")
         e.comment(f"Resume (engine): the earlier work on {branch} conflicts with {e.cfg.base}. It is kept as the branch {stale}; "
                   f"the task starts again on {e.cfg.base} with a fresh plan.")

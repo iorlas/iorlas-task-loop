@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Protocol
 
 from taskloop.app.land.parts import BeginSteps
+from taskloop.app.land.push_evidence import failure
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ports import Clock, DoltPush, Git
@@ -68,6 +69,8 @@ class OutboundHost(Protocol):
     def cfg(self) -> EngineConfig: ...
     @property
     def wt(self) -> str: ...
+    @property
+    def run_dir(self) -> Path: ...
     @property
     def git(self) -> Git: ...
     @property
@@ -141,13 +144,14 @@ class Outbound:
                 f"git push --force-with-lease {remote} HEAD:{ref}: {'ok' if rc == 0 else 'failed'} in "
                 f"{e.clock.monotonic() - t0:.1f}s"
             )
+        why = failure(tail, e.run_dir, ref) if rc else ""
         if rc and "stale info" in tail:  # the remote branch was pushed from another machine and this clone has no copy of it
             raise e.blocked_for(f"failed: {ref} on {remote} holds work this clone has never fetched (another machine ran this bead); "
-                                f"fetch it and decide which work to keep, then rerun\n{tail.strip()[-400:]}", "FAULT_LAND")
+                                f"fetch it and decide which work to keep, then rerun\n{why}", "FAULT_LAND")
         if rc:
             kind = "PAUSE_NETWORK" if Push.transient(tail) else "FAULT_LAND"
             raise e.blocked_for(f"{'paused' if kind == 'PAUSE_NETWORK' else 'failed'}: the work-in-progress push of {ref} to {remote} "
-                                f"failed after stage {stage}; the branch is kept, the next run continues it\n{tail.strip()[-400:]}", kind)
+                                f"failed after stage {stage}; the branch is kept, the next run continues it\n{why}", kind)
 
     def bd_sync(self, sha: str) -> None:
         """After the land, outside the lock: `bd sync` (pull, then push; bd's own `dolt push` exits 0 on a rejection). No remote is a
@@ -165,4 +169,4 @@ class Outbound:
         e.log.note(f"bd sync: {'ok' if rc == 0 else 'failed'} in {e.clock.monotonic() - t0:.1f}s")
         if rc != 0:
             raise e.blocked_for(f"failed: landed {sha[:12]}, but bd sync after the land failed (exit {rc}; fix bd's Dolt remote, then "
-                                f"rerun: the rerun finds the land and pushes again)\n{text.strip()[-400:]}", "PAUSE_NETWORK")
+                                f"rerun: the rerun finds the land and pushes again)\n{text.strip()}", "PAUSE_NETWORK")

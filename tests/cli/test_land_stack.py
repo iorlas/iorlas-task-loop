@@ -26,6 +26,8 @@ class Items(unittest.TestCase):
         r = tl_main("land-stack", "--help", cwd=".")
         self.assertEqual(r.returncode, 0)
         self.assertIn("--supersede", r.stdout)
+        self.assertIn("checkout of the branch tree", " ".join(r.stdout.split()))
+        self.assertIn("hook gates the checked-out tree", " ".join(r.stdout.split()))
 
 
 if __name__ == "__main__":

@@ -30,7 +30,7 @@ class Clock(Protocol):
 
 class Sh(Protocol):
     """The engine's one way to run a command (an argv, no shell): (exit code, the last lines of its output).
-    The whole output goes to `save`."""
+    Git pushes return complete output; the whole output of any command goes to `save`."""
 
     def __call__(self, cmd: Sequence[str], timeout: float = ..., check: bool = ..., save: Path | None = ...,
                  env: Mapping[str, str] | None = ..., pin: bool = ..., what: str = ..., cwd: Path | None = ...) -> tuple[int, str]: ...

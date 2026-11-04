@@ -67,7 +67,7 @@ class FixOutside:
             return
         if e.fixes < e.cfg.max_fix_rounds:
             first = problem.text.strip().splitlines() or [""]
-            red = f"gate red on the rebased tree: {(problem.named or first[-1])[:200]}"
+            red = f"gate red on the rebased tree: {problem.named or first[-1]}"
             e.steps.move("fix", cause, red if problem.kind is ProblemKind.GATE else problem.text.splitlines()[0])
         fixed = e.fixer.fix(problem.kind, problem.text)
         stages = len(plancheck.stages_of(e.plan_data))

@@ -42,8 +42,10 @@ def error_line(text: str) -> str:
 
 def push_error_line(text: str) -> str:
     """Keep push rejection and hook diagnostics instead of git's generic failed-to-push trailer."""
-    lines = [ln.strip() for ln in text.splitlines() if ln.strip().startswith(("!", "remote:", "hint:"))]
-    return (" | ".join(lines) or error_line(text))[:400]
+    lines = [ln for ln in text.splitlines() if ln.strip() and "failed to push some refs" not in ln.lower()]
+    selected = [ln.strip() for ln in lines if ln.lstrip().startswith(("!", "remote:", "hint:"))
+                or any(word in ln.lower() for word in ("refus", "reject", "error:", "pre-push", "gate:"))]
+    return " | ".join(selected[:8] or lines[-8:]) or "no message from git"
 
 
 def classify(stderr: str, *, push: bool = False) -> SlotGitError:
@@ -103,7 +105,10 @@ class GitBase:
     def _must(self, d: str, *args: str, extra: dict[str, str] | None = None) -> str:
         r = self._run(d, *args, extra=extra)
         if r.returncode != 0:
-            raise classify(r.stderr or r.stdout, push=args[0] == "push")
+            output = r.stdout + r.stderr
+            err = classify(output if args[0] == "push" else r.stderr or r.stdout, push=args[0] == "push")
+            err.output = output
+            raise err
         return r.stdout.strip()
 
     def _read(self, d: str, *args: str, missing: bool = False, extra: dict[str, str] | None = None) -> str:
@@ -148,4 +153,5 @@ class GitBase:
             r = self._run(d, *args, stdin=stdin, timeout=timeout, extra=extra)
         except subprocess.TimeoutExpired:
             return GitOutcome(ok=False, output=f"git {args[0]} timed out after {round((timeout or 0) / 60)} min")
-        return GitOutcome(ok=r.returncode == 0, output=(r.stdout + r.stderr).strip())
+        output = r.stdout + r.stderr
+        return GitOutcome(ok=r.returncode == 0, output=output if "push" in args[:2] else output.strip())

@@ -63,7 +63,7 @@ def file_follow_ups(e: FollowUpHost) -> list[dict[str, str]]:
             e.checkpoints.keep_filed()
         else:
             unfiled.append(dict(lo))
-            e.warn(f"follow-up not filed: {lo['title'][:80]}: {err[:200]}")
+            e.warn(f"follow-up not filed: {lo['title'][:80]}: {err}")
     if unfiled:
         e.comment(f"Follow-up (engine): bd refused {len(unfiled)} follow-up(s), none was filed: {named(unfiled)}")
         e.checkpoints.keep_filed(unfiled)

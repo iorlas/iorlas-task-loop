@@ -18,7 +18,7 @@ def loads(text: str, what: str, many: bool = False) -> list[Pr]:
         data = json.loads(text)
         return [gh_pr(d) for d in (data if many else [data])]
     except ValueError:  # a bad JSON text, or a ValidationError (a ValueError) from the record
-        raise Stop(1, f"{what}: gh answered something that is not a PR: {text.strip()[:200]!r}") from None
+        raise Stop(1, f"{what}: gh answered something that is not a PR: {text.strip()!r}") from None
 
 
 class Forge:
@@ -39,7 +39,7 @@ class Forge:
         out = self.cmds.must(["gh", "pr", "create", "--head", branch, "--base", self.base, "--title", title, "--body", body]).out
         url = next((ln.strip() for ln in reversed(out.splitlines()) if ln.strip().startswith("http")), "")
         if not url:
-            raise Stop(1, f"gh pr create for {branch} printed no PR url: {out.strip()[-200:]!r}")
+            raise Stop(1, f"gh pr create for {branch} printed no PR url: {out.strip()!r}")
         return self.view(url)
 
     def retarget(self, pr: Pr) -> None:
@@ -55,7 +55,7 @@ class Forge:
     def push(self, branch: str, oid: str) -> None:
         """Push exactly `oid` to the branch (no force; the repo's pre-push hook decides, as for any push) and see it on the remote."""
         spec = f"{oid}:refs/heads/{branch}"
-        self.cmds.port(f"git push {self.remote} {spec}", lambda: self.git.push(self.repo, self.remote, spec))
+        self.cmds.port(f"git push {self.remote} {spec}", lambda: self.git.push(self.repo, self.remote, spec), push_branch=branch)
         there = self.remote_oid(branch)
         if there != oid:
             raise Stop(1, f"pushed {branch} at {oid[:12]} but {self.remote} shows {there[:12] or 'no such branch'}")

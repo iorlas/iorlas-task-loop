@@ -126,7 +126,7 @@ class Checkout:
             except SlotGitError as err:
                 why = str(err)
         if check and why:
-            raise e.blocked_for(f"failed: staging the slot's paths: {why[-600:]}", "FAULT_SLOT")
+            raise e.blocked_for(f"failed: staging the slot's paths: {why}", "FAULT_SLOT")
         return 1 if why else 0
 
     def tree_hash(self) -> TreeSha:

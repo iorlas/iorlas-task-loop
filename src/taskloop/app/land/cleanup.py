@@ -101,7 +101,7 @@ def retry(git: Git, log: RunLog, row: rec.LandCleanup, is_slot: Callable[[str], 
                 local = "gone"
         except Exception as err:
             detail.append(f"local: {err}")
-    done = row.replace(local_outcome=local, remote_outcome=remote, detail="; ".join(detail)[-1200:])
+    done = row.replace(local_outcome=local, remote_outcome=remote, detail="; ".join(detail))
     log.emit(done)
     if detail:
         log.note(f"landed {row.sha[:12]}; cleanup pending: {done.detail}")

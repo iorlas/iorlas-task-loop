@@ -120,7 +120,7 @@ class Tree:
             e.git.rename_branch(e.wt, branch, stale)
         except SlotGitError as err:
             raise e.blocked_for(
-                f"failed: --fresh could not keep the old branch aside as {stale}: {str(err).strip()[-200:]}", "FAULT_SLOT"
+                f"failed: --fresh could not keep the old branch aside as {stale}: {str(err).strip()}", "FAULT_SLOT"
             ) from err
         e.log.note(f"--fresh: the old branch {branch} is kept as {stale}; the task starts again on {e.cfg.base}")
         e.comment(f"Fresh (engine): --fresh: the earlier work on {branch} is kept as the branch {stale}; "
@@ -157,8 +157,8 @@ class Tree:
         # slot and failed the next bead there (lifesim-6pld, then rl4s)
         done = e.git.try_commit(e.wt, f"wip ({e.bead}): {why}", verify=False)
         if not done.ok:
-            e.warn(f"the wip commit ({why}) failed, the work stays uncommitted in {e.wt}: {done.output.strip()[-300:]}")
-            e.log.note(f"wip commit failed: {done.output.strip()[-300:]}")
+            e.warn(f"the wip commit ({why}) failed, the work stays uncommitted in {e.wt}: {done.output.strip()}")
+            e.log.note(f"wip commit failed: {done.output.strip()}")
         return done.ok
 
     def leave_slot(self, outcome: str, branch: str) -> None:
@@ -170,4 +170,4 @@ class Tree:
         try:
             leave_slot(e.git, e.wt, e.cfg.base, branch, dirty=lambda: bool(e.checkout.dirty_status()))
         except SlotGitError as err:
-            e.warn(f"the slot could not be left at the base: {str(err).strip()[-160:]}")
+            e.warn(f"the slot could not be left at the base: {str(err).strip()}")

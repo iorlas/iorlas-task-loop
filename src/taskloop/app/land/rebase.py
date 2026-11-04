@@ -114,7 +114,7 @@ class Rebase:
         e.git.rebase_abort(e.wt)
         if self.squashed:
             e.git.reset(e.wt, orig, "hard")
-        last = tail.strip().splitlines()[-1][:200] if tail.strip() else "conflict"
+        last = tail.strip() or "conflict"
         e.warn(f"the task branch could not be rebased onto {e.cfg.base} before planning: {last}")
         return "conflict"
 

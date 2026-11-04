@@ -155,7 +155,7 @@ class StackCase(unittest.TestCase):
     def deliver(self, *items, **kw):
         run = "land-stack-20261031-100000"
         log = RunLog(real_stores(self.cfg).run_log(run), run_id=run, host="h")
-        cmds = Cmds(self.sim, log, str(self.repo))
+        cmds = Cmds(self.sim, log, str(self.repo), self.cfg.run_dir(run))
         lock = landlock.land_lock_path(self.cfg, "git@example.com:o/r.git")
         forge = Forge(cmds, self.git, str(self.repo), "main")
         gate = StackGate(cmds, self.git, real_stores(self.cfg), str(self.repo), "origin/main", ["tl"])

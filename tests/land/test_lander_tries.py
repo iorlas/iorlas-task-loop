@@ -89,6 +89,20 @@ class PushedSha(unittest.TestCase):
 
 
 class Pushing(unittest.TestCase):
+    def test_a_hook_refusal_in_long_output_keeps_the_full_transcript(self):
+        refusal = "gate: refusing the push: run just check"
+        output = "progress\n" * 250 + refusal + "\n" + "progress\n" * 250 + "error: failed to push some refs\n"
+        lander, host = land_with(repo(["a"] * 4, ["h", "h", "h"], [(1, output)]))
+        self.addCleanup(host.pushing.tmp.cleanup)
+        with self.assertRaises(Stopped) as raised:
+            lander.tries(Land())
+        files = list((host.pushing.run_dir / "land-push").glob("*.log"))
+        self.assertEqual(len(files), 1)
+        self.assertEqual(files[0].read_text(), output)
+        self.assertIn(refusal, raised.exception.why)
+        self.assertIn(str(files[0]), raised.exception.why)
+        self.assertNotIn("failed to push some refs", raised.exception.why)
+
     def test_a_network_error_on_the_push_rests_the_land_instead_of_failing_it(self):
         g = repo(["a"] * 4, ["h", "h", "h"], [(128, "fatal: unable to access 'x': Could not resolve host")])
         lander, _ = land_with(g, up=False)

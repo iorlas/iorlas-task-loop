@@ -2,7 +2,9 @@
 has just those members, so the type checker proves the fake is enough and a slice that reads one more member breaks the test's types."""
 
 import contextlib
+import tempfile
 import threading
+import weakref
 from collections.abc import Callable, Generator, Mapping, Sequence
 from contextlib import AbstractContextManager
 from pathlib import Path
@@ -85,6 +87,9 @@ class FakeOutboundHost:
         self.bead = BeadId("t-1")
         self.cfg = EngineConfig(land=["git", "push", "origin", "HEAD:main"])
         self.wt = "."
+        self.tmp = tempfile.TemporaryDirectory()
+        weakref.finalize(self, self.tmp.cleanup)
+        self.run_dir = Path(self.tmp.name)
         self.dry = dry
         self.lines: list[str] = []  # what the log said
         self.clock = FakeClock()
@@ -361,6 +366,9 @@ class FakePushHost:
         self.cfg = cfg or EngineConfig(base="origin/main", land=["git", "push", "-q", "origin", "HEAD:main"])
         self.git, self.sh = git, sh
         self.wt = "/wt"
+        self.tmp = tempfile.TemporaryDirectory()
+        weakref.finalize(self, self.tmp.cleanup)
+        self.run_dir = Path(self.tmp.name)
         self.store: Beads = FakeBeads()
         self.claim = fence.offline(BeadId("t-1"))
         self.steps = OutcomesMoves()

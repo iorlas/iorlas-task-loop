@@ -84,6 +84,15 @@ class Locator(unittest.TestCase):
         again = self.where.take_up(a.run, "/r/x", "tl-1", T0 + 10).manifest
         self.assertEqual((again.state, again.ended, again.reason), (RunState.CREATED, None, ""))
 
+    def test_terminal_reason_preserves_long_diagnostics_and_evidence_paths(self):
+        run = self.where.create("/r/x", "tl-1", T0)
+        reason = "push failed: " + "hook details " * 50 + "\npush output: /runs/r/land-push/123.log"
+        self.where.end(run.run, T0 + 9, RunState.FAILED, reason)
+        saved = RunLocator(self.cfg).get(run.run)
+        self.assertIsNotNone(saved)
+        assert saved is not None
+        self.assertEqual(saved.manifest.reason, reason)
+
     def test_mark_lost_changes_a_live_run_once(self):
         a = self.where.create("/r/x", "tl-1", T0)
         self.where.mark_lost(a.run, "gone")

@@ -231,6 +231,6 @@ class Stack:
             done = self.sync()
         except Exception as e:  # bd itself failed
             done = DoltPush(1, str(e))
-        self.log.emit(rec.CmdEnd(id=cid, exit=done.code, out=done.text[-600:]))
+        self.log.emit(rec.CmdEnd(id=cid, exit=done.code, out=done.text))
         if done.code and not (done.code == 1 and no_dolt_remote(done.text)):
-            raise Stop(done.code, f"bd sync failed (exit {done.code}): {done.text.strip()[-300:]}")
+            raise Stop(done.code, f"bd sync failed (exit {done.code}): {done.text.strip()}")

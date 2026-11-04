@@ -59,7 +59,7 @@ def cmd_land_stack(a: argparse.Namespace, who: Identity, git: Git, spawner: Runs
     run = locator.create(repo, "", time.time(), mode=MODE, owner=who.actor, session=who.session).run  # the board finds a run through it
     stores = real_stores(who.config)
     log = RunLog(stores.run_log(run), echo=None, run_id=run, host=socket.gethostname())
-    cmds = Cmds(spawner, log, repo)
+    cmds = Cmds(spawner, log, repo, who.config.run_dir(run))
     lock = lock_path(who.config, git, repo)
     forge = Forge(cmds, git, repo, a.base, a.method)
     slot_repo = next((co.path for co in git.checkouts(repo) if co.main), repo)
@@ -88,7 +88,8 @@ def cmd_land_stack(a: argparse.Namespace, who: Identity, git: Git, spawner: Runs
 def add_parser(sp: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     p = sp.add_parser("land-stack", help="push, open, merge and record PRs, branches or a stack of them; stops at the first failure")
     p.add_argument("items", nargs="+", metavar="ITEM", help="a PR number or url, or a branch; lowest of the stack first")
-    p.add_argument("--repo", default=".", metavar="DIR", help="the repo's checkout (default: the current directory)")
+    p.add_argument("--repo", default=".", metavar="DIR",
+                   help="must be a checkout of the branch tree: the repo's hook gates the checked-out tree (default: current directory)")
     p.add_argument("--base", default="main", help="the branch the PRs land on (default main)")
     p.add_argument("--method", choices=["squash", "merge", "rebase"], default="squash", help="how the forge merges (default squash)")
     p.add_argument("--bead", action="append", default=[], metavar="ITEM=BEAD", help="the bead to record the land on (task/<bead> names it)")

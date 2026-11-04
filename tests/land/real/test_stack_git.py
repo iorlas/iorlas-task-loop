@@ -17,7 +17,7 @@ from taskloop.app.land.cmds import Cmds, Stop
 from taskloop.app.land.forge import Forge
 from taskloop.app.land.stack import Stack
 from taskloop.app.land.stackgate import StackGate
-from taskloop.contracts.env import snapshot
+from taskloop.contracts.env import Env, snapshot
 from taskloop.contracts.forge import StackItem
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import DoltPush
@@ -43,7 +43,8 @@ class RealPush(unittest.TestCase):
         self.oid = gitq.git("rev-parse", "HEAD", cwd=self.repo)
         log = RunLog(real_stores(ConfigDir(root / "cfg")).run_log("land-stack-20261031-100000"), run_id="r")
         self.git, self.log = RealGit(snapshot()), log
-        self.cmds = Cmds(ForgeSim(), log, str(self.repo))
+        self.run_dir = root / "cfg" / "runs" / "r"
+        self.cmds = Cmds(ForgeSim(), log, str(self.repo), self.run_dir)
         self.forge = Forge(self.cmds, self.git, str(self.repo), "main")
 
     @real_git("the push must reach a bare origin and ls-remote must show it")
@@ -62,6 +63,32 @@ class RealPush(unittest.TestCase):
         gitq.git("commit", "-q", "--allow-empty", "-m", "unrelated", cwd=self.repo)
         with self.assertRaises(Stop):
             self.forge.push("task/a", gitq.git("rev-parse", "HEAD", cwd=self.repo))
+
+    @real_git("a real pre-push hook's long stdout and refusal must survive git's footer and land's error handling")
+    def test_hook_refusal_names_an_uncut_transcript(self):
+        env = Env({**snapshot().vars, "XDG_CONFIG_HOME": str(Path(self.tmp.name) / "hook-config")})
+        hooks = ConfigDir(Path(self.tmp.name) / "hook-config" / "task-loop").hooks_dir()
+        hooks.mkdir(parents=True)
+        hook = hooks / "pre-push"
+        refusal = "gate: refusing the push: run just check"
+        hook.write_text('#!/bin/sh\ni=0\nwhile [ "$i" -lt 500 ]; do\n'
+                        '  echo "hook output $i"\n  i=$((i + 1))\ndone\n'
+                        f'echo "{refusal}" >&2\nexit 1\n')
+        hook.chmod(0o755)
+        forge = Forge(self.cmds, RealGit(env), str(self.repo), "main")
+        with self.assertRaises(Stop) as raised:
+            forge.push("task/a", self.oid)
+        files = list((self.run_dir / "land-push").glob("*.log"))
+        self.assertEqual(len(files), 1)
+        self.assertIn(str(files[0]), raised.exception.why)
+        self.assertIn(refusal, raised.exception.why)
+        self.assertNotIn("failed to push some refs", raised.exception.why)
+        output = files[0].read_text()
+        self.assertEqual([line for line in output.splitlines() if line.startswith("hook output ")],
+                         [f"hook output {n}" for n in range(500)])
+        self.assertIn(refusal, output)
+        self.assertIn("failed to push some refs", output)
+        self.assertEqual(self.forge.remote_oid("task/a"), "")
 
     @real_git("a branch only origin has must be found with ls-remote, fetched and resolved to its oid")
     def test_a_branch_only_origin_has_is_resolved_by_fetching_it(self):

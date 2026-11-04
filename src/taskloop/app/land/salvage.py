@@ -50,7 +50,7 @@ class Salvage:
             if d != "accept":
                 e.warn("resume: the conflict fix did not pass its checks and review; the stage goes on from it")
         except e.FixFailed as err:
-            e.warn(f"the resume conflict fix failed: {str(err).splitlines()[0][:200]}")
+            e.warn(f"the resume conflict fix failed: {err}")
         finally:
             e.fixes = fixes  # the land's two fix rounds are its own
         if e.git.rebasing(e.wt):
