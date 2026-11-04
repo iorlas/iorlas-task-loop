@@ -702,6 +702,8 @@
   ],
   "tags": [],
   "needs": [],
+  "pass_files": false,
+  "files": [],
   "run_in": "slot",
   "lane": ""
  },
@@ -1541,6 +1543,7 @@
      "reads": [],
      "lane": "",
      "needs": [],
+     "pass_files": false,
      "fix": []
     },
     {
@@ -1571,6 +1574,7 @@
      "needs": [
       "unity"
      ],
+     "pass_files": false,
      "fix": []
     }
    ],
