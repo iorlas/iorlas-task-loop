@@ -1,8 +1,9 @@
 """`diff(observed)`: a table, each row an observed state and the actions it maps to. No git, no bd, no process."""
 import sys
-import unittest
 from dataclasses import replace
 from pathlib import Path
+
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -179,19 +180,15 @@ ROWS: list[tuple[str, Observed, list[Action]]] = [
 ]
 
 
-class Diff(unittest.TestCase):
+class Diff(Case):
     def test_every_row(self):
         for name, observed, expected in ROWS:
             with self.subTest(name):
-                self.assertEqual(diff(observed), expected)
+                assert diff(observed) == expected
 
     def test_nothing_observed_nothing_to_do(self):
-        self.assertEqual(diff(world()), [])
+        assert diff(world()) == []
 
     def test_the_action_list_is_the_same_every_time(self):
         o = world(repo(beads=(bead("a-1"),), task_branches=(task("task/a-1"),)), trees=(tree(),))
-        self.assertEqual(diff(o), diff(o))
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert diff(o) == diff(o)

@@ -3,7 +3,6 @@ import copy
 import json
 import subprocess
 import sys
-import unittest
 from pathlib import Path
 from unittest import mock
 
@@ -48,21 +47,17 @@ class EverySpawnPath(te.EngineTest):
             gate, land = dumper("dump-gate", out("gate")), dumper("dump-land", out("land"), push)
             rc, _ = self.run_engine({"plan": [plan], "write": [WRITE], "review": [CLEAN]}, gate=gate, land=land,
                                     slot_env={"MY": "{repo}/{slot}"})
-        self.assertEqual(rc, 0, self.blocked)
+        assert rc == 0, self.blocked
         slot = self.wt.name
         for name in ("check", "gate", "land"):
             env = self.dumps(name)
-            self.assertEqual(env["TL_SLOT"], slot, name)
-            self.assertEqual(env["MY"], f"{self.eng.bead_env['SharedCompilationId'].removesuffix('-' + slot)}/{slot}")
+            assert env["TL_SLOT"] == slot, name
+            assert env["MY"] == f"{self.eng.bead_env['SharedCompilationId'].removesuffix('-' + slot)}/{slot}"
             for k in KEYS:
-                self.assertEqual(env[k], self.eng.bead_env[k], (name, k))
-        self.assertTrue(seen)
+                assert env[k] == self.eng.bead_env[k], (name, k)
+        assert seen
         for env in seen:  # the workers, through route.py
             for k in KEYS:
-                self.assertEqual(env[k], self.eng.bead_env[k], k)
-        self.assertTrue(Path(self.eng.bead_env["TMPDIR"]).is_dir())
-        self.assertNotIn(str(self.wt), self.eng.bead_env["TMPDIR"])  # outside the worktree
-
-
-if __name__ == "__main__":
-    unittest.main()
+                assert env[k] == self.eng.bead_env[k], k
+        assert Path(self.eng.bead_env["TMPDIR"]).is_dir()
+        assert str(self.wt) not in self.eng.bead_env["TMPDIR"]  # outside the worktree

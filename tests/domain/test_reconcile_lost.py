@@ -1,9 +1,10 @@
 """The classification of a bead-branch commit (domain/reconcile/lost.py), one table row per class and per rule that decides it."""
 import sys
-import unittest
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
+
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -43,21 +44,17 @@ ROWS = [
 ]
 
 
-class Classify(unittest.TestCase):
+class Classify(Case):
     def test_every_row_of_the_table(self) -> None:
         for name, c, cls, why in ROWS:
             with self.subTest(name):
                 [f] = findings(Observed(now=0.0, keep_days=0.0, commits=(c,)))
-                self.assertEqual(f.cls, cls)
-                self.assertIn(why, f.why)
+                assert f.cls == cls
+                assert why in f.why
 
     def test_every_class_has_a_row(self) -> None:
-        self.assertEqual({r[2] for r in ROWS}, {LANDED, SUPERSEDED, RECLAIMED, PENDING, UNKNOWN, LOST})
+        assert {r[2] for r in ROWS} == {LANDED, SUPERSEDED, RECLAIMED, PENDING, UNKNOWN, LOST}
 
     def test_findings_keep_the_order_seen(self) -> None:
         cs = tuple(commit(sha=str(i)) for i in range(3))
-        self.assertEqual([f.commit.sha for f in findings(Observed(now=0.0, keep_days=0.0, commits=cs))], ["0", "1", "2"])
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert [f.commit.sha for f in findings(Observed(now=0.0, keep_days=0.0, commits=cs))] == ["0", "1", "2"]

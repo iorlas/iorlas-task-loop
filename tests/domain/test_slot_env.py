@@ -3,9 +3,11 @@ import json
 import os
 import subprocess
 import sys
-import unittest
 from pathlib import Path
 from unittest import mock
+
+import pytest
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -28,26 +30,26 @@ def push(cwd):
     return done.returncode, done.stdout + done.stderr
 
 
-class Pure(unittest.TestCase):
+class Pure(Case):
     def test_slots_differ_and_the_same_slot_is_stable(self):
         a, a2, b = (slot_env.slot_env(Path("/s") / n, "repo", n) for n in ("A", "A", "B"))
-        self.assertEqual(a, a2)
+        assert a == a2
         for k in KEYS:
-            self.assertIn(k, a)
-        self.assertEqual(a["TL_SLOT"], "A")
-        self.assertEqual(a["SharedCompilationId"], "repo-A")
-        self.assertTrue(all(a[k] != b[k] for k in KEYS), [k for k in KEYS if a[k] == b[k]])
+            assert k in a
+        assert a["TL_SLOT"] == "A"
+        assert a["SharedCompilationId"] == "repo-A"
+        assert all(a[k] != b[k] for k in KEYS), [k for k in KEYS if a[k] == b[k]]
 
     def test_slot_env_adds_and_overrides_with_placeholders_filled(self):
         env = slot_env.slot_env(Path("/s/A"), "repo", "A", {"TMPDIR": "{slot_dir}/t2", "X_HOME": "{slot_dir}/x-{repo}-{slot}"})
-        self.assertEqual((env["TMPDIR"], env["X_HOME"], env["TMP"]), ("/s/A/t2", "/s/A/x-repo-A", "/s/A/tmp"))
+        assert (env["TMPDIR"], env["X_HOME"], env["TMP"]) == ("/s/A/t2", "/s/A/x-repo-A", "/s/A/tmp")
 
     def test_an_unknown_placeholder_is_refused_at_load(self):
         for bad in ("{nope}", "{", "{0}"):
-            with self.assertRaises(config.ConfigError, msg=bad):
+            with pytest.raises(config.ConfigError):
                 config.load({"engine": {"slot_env": {"K": bad}}})
         ok = config.load({"engine": {"slot_env": {"K": "{slot}-{slot_dir}-{repo}"}}})
-        self.assertEqual(ok.engine.slot_env["K"], "{slot}-{slot_dir}-{repo}")
+        assert ok.engine.slot_env["K"] == "{slot}-{slot_dir}-{repo}"
 
 
 class EverySpawnPath(te.EngineTest):
@@ -60,9 +62,9 @@ class EverySpawnPath(te.EngineTest):
         other = self.wt.parent / "wt2"
         other.mkdir()
         a1, a2, b = mk(self.wt, "t-1"), mk(self.wt, "t-2"), mk(other, "t-3")
-        self.assertEqual(a1, a2)
-        self.assertNotEqual(a1["TMPDIR"], b["TMPDIR"])
-        self.assertNotEqual(a1["SharedCompilationId"], b["SharedCompilationId"])
+        assert a1 == a2
+        assert a1["TMPDIR"] != b["TMPDIR"]
+        assert a1["SharedCompilationId"] != b["SharedCompilationId"]
 
     def test_a_container_check_is_given_the_slot_name_only(self):
         e = make_engine(self.wt, store=self.store)
@@ -75,9 +77,5 @@ class EverySpawnPath(te.EngineTest):
         with mock.patch.object(box, "resolve", return_value=ReadyExecution(Digest("sha256:image"), "sha256:image")):
             argv, _ = box.plan(check, ["just", "x"], {})
         passed = [argv[i + 1] for i, a in enumerate(argv) if a == "--env"]
-        self.assertIn(f"TL_SLOT={self.wt.name}", passed)
-        self.assertEqual([p for p in passed if "tmp" in p.lower() or "/" in p], [])
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert f"TL_SLOT={self.wt.name}" in passed
+        assert [p for p in passed if "tmp" in p.lower() or "/" in p] == []

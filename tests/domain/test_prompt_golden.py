@@ -4,9 +4,10 @@ A change to prompt text shows up here as a diff against tests/fixtures/prompts/*
 UPDATE_GOLDEN=1 python -m pytest tests/test_prompt_golden.py and commit the golden diff with the change."""
 import os
 import sys
-import unittest
 from pathlib import Path
 from types import SimpleNamespace
+
+from support.case import Case
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -70,12 +71,12 @@ def render_resume(failed=None):
         checks=eng.briefing.stage_checks_text(CHECKS, skip=failed), where=where, feedback="")
 
 
-class Golden(unittest.TestCase):
+class Golden(Case):
     def check(self, name, text):
         path = GOLDEN / (name + ".txt")
         if os.environ.get("UPDATE_GOLDEN"):
             path.write_text(text, encoding="utf-8")
-        self.assertEqual(path.read_text(encoding="utf-8"), text, f"golden {path.name} differs (UPDATE_GOLDEN=1 rewrites it)")
+        assert path.read_text(encoding="utf-8") == text, f"golden {path.name} differs (UPDATE_GOLDEN=1 rewrites it)"
 
     def test_templates(self):
         for name, module in TEMPLATES.items():
@@ -89,7 +90,7 @@ class Golden(unittest.TestCase):
         self.check("write-red", render_write(failed=["just unity-tests", "just fmt-check"]))
 
     def test_write_prompt_without_rules(self):
-        self.assertNotIn("worker_rules", render_write(rules=""))
+        assert "worker_rules" not in render_write(rules="")
 
     def test_resumed_write_delta(self):
         self.check("write-resume", render_resume())
@@ -100,15 +101,15 @@ class Golden(unittest.TestCase):
 
     def test_rules_are_inlined_once_and_no_prompt_names_codex_md(self):
         full = render_write()
-        self.assertEqual(full.count(RULES), 1)
-        self.assertLessEqual(len(RULES.encode("utf-8")), cp.RULES_MAX)
+        assert full.count(RULES) == 1
+        assert len(RULES.encode("utf-8")) <= cp.RULES_MAX
         resume = render_resume()
-        self.assertNotIn("Read ", resume)
-        self.assertNotIn(RULES, resume)
-        self.assertNotIn("worker_rules", resume)
+        assert "Read " not in resume
+        assert RULES not in resume
+        assert "worker_rules" not in resume
         every = [*(getattr(module, n) for n, module in TEMPLATES.items()), wp.WRITE_RULES, wp.DONE_SO_FAR, wp.STAGES_DONE]
         for text in [*every, full, resume, render_review(), render_review(last=True), render_review(fix=True, last=True)]:
-            self.assertNotIn("codex.md", text)
+            assert "codex.md" not in text
 
     def test_each_check_command_is_named_once_in_the_may_run_lists(self):
         for failed in (None, ["just unity-tests"], ["python3 -m unittest tests.test_f", "just fmt-check"]):
@@ -116,10 +117,10 @@ class Golden(unittest.TestCase):
                 with self.subTest(failed=failed):
                     lists = text[text.index("The stage's checks"):text.index("If a command is refused")]
                     for cmd in [*CHECKS, "just fmt-check"]:
-                        self.assertLessEqual(lists.count("- " + cmd), 1, cmd)
+                        assert lists.count("- " + cmd) <= 1, cmd
                     if failed is None:  # the whole list: every command named, once
                         for cmd in [*CHECKS, "just fmt-check"]:
-                            self.assertEqual(lists.count("- " + cmd), 1, cmd)
+                            assert lists.count("- " + cmd) == 1, cmd
 
     def test_review_stage(self):
         self.check("review-stage", render_review())
@@ -138,11 +139,7 @@ class Golden(unittest.TestCase):
             return next(ln for ln in t.splitlines() if ln.startswith("- unmet:"))
 
         fix = render_review(fix=True)
-        self.assertEqual(line(fix), line(rp.REVIEW_PROMPT).format(scope="the stage goal"))
-        self.assertNotIn("fix only", line(fix))
-        self.assertIn("\nScope of this fix round: " + FIX_SCOPE + "\n", fix)
-        self.assertNotIn("Scope of this fix round", render_review())
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert line(fix) == line(rp.REVIEW_PROMPT).format(scope="the stage goal")
+        assert "fix only" not in line(fix)
+        assert "\nScope of this fix round: " + FIX_SCOPE + "\n" in fix
+        assert "Scope of this fix round" not in render_review()

@@ -2,8 +2,9 @@
 
 import json
 import sys
-import unittest
 from pathlib import Path
+
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401
@@ -77,7 +78,7 @@ RELEASED: dict[tuple[Producer, str], PauseRule] = {
 }
 
 
-class ReleasedPolicy(unittest.TestCase):
+class ReleasedPolicy(Case):
     def test_every_released_rule_keeps_its_classification_and_numbers(self):
         contract = Path(__file__).resolve().parents[2] / "fixtures/delegate4/skills/delegate/contract.json"
         reasons = json.loads(contract.read_text())["reasons"]
@@ -86,23 +87,23 @@ class ReleasedPolicy(unittest.TestCase):
                 permanence: Permanence | None = None
                 if producer == "delegate" and reason in reasons:
                     raw = reasons[reason]["permanence"]
-                    self.assertIn(raw, ("transient", "needs_owner"))
+                    assert raw in ("transient", "needs_owner")
                     permanence = "transient" if raw == "transient" else "needs_owner"
                     if permanence != expected.permanence:
-                        self.assertIn(reason, pauses.OVERRIDES)
-                self.assertEqual(pauses.rule(reason, producer, permanence), expected)
+                        assert reason in pauses.OVERRIDES
+                assert pauses.rule(reason, producer, permanence) == expected
 
     def test_owner_overrides_ignore_transient_hints_and_predicted_times(self):
         bead = Bead(id=BeadId("t-1"), title="work", status="open")
         for reason in ("no_lane", "crash"):
             with self.subTest(reason=reason):
-                self.assertEqual(pauses.rule(reason, "delegate", "transient"), PauseRule("needs_owner"))
+                assert pauses.rule(reason, "delegate", "transient") == PauseRule("needs_owner")
                 rec = pauses.after_pause(None, bead, "r1", 100, reason, lambda: 0.5,
                                          not_before=900, producer="delegate", permanence="transient")
-                self.assertEqual((rec.permanence, rec.retry_at), ("needs_owner", 0))
+                assert (rec.permanence, rec.retry_at) == ("needs_owner", 0)
 
     def test_machine_fixed_reasons_keep_the_released_membership(self):
-        self.assertEqual(pauses.MACHINE_FIXED, {
+        assert {
             "no_lane", "logged_out", "credit_exhausted", "secrets", "setup",
             "contract_violation", "engine_only_unenforced",
-        })
+        } == pauses.MACHINE_FIXED

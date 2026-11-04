@@ -1,7 +1,9 @@
 """domain/review/skip.py: a stage's review is skipped only when every changed path is mechanical; one other path means review."""
 import sys
-import unittest
 from pathlib import Path
+
+import pytest
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -24,61 +26,57 @@ def go(*entries: DiffEntry, loud: tuple[str, ...] | None = None, formatter: bool
     return decide(list(entries), significant, rules, has_formatter=formatter, maps_acceptance=maps_acceptance)
 
 
-class SkipKinds(unittest.TestCase):
+class SkipKinds(Case):
     def test_allow_listed_config_is_skipped(self):
-        self.assertEqual(go(mod("config/a.json")), (SkipKind.CONFIG,))
+        assert go(mod("config/a.json")) == (SkipKind.CONFIG,)
 
     def test_a_100_percent_rename_is_skipped(self):
-        self.assertEqual(go(DiffEntry(status="R", path="new/x.py", old="old/x.py")), (SkipKind.RENAME,))
+        assert go(DiffEntry(status="R", path="new/x.py", old="old/x.py")) == (SkipKind.RENAME,)
 
     def test_a_formatter_only_change_is_skipped(self):
-        self.assertEqual(go(mod("src/a.rs"), loud=()), (SkipKind.FORMATTER,))
+        assert go(mod("src/a.rs"), loud=()) == (SkipKind.FORMATTER,)
 
     def test_formatter_only_needs_a_registered_formatter(self):
-        self.assertEqual(go(mod("src/a.rs"), loud=(), formatter=False), ())
+        assert go(mod("src/a.rs"), loud=(), formatter=False) == ()
 
     def test_a_whitespace_change_in_python_is_not_formatter_only(self):
-        self.assertEqual(go(mod("src/a.py"), loud=()), ())
+        assert go(mod("src/a.py"), loud=()) == ()
 
     def test_generated_files_are_skipped(self):
-        self.assertEqual(go(mod("gen/api.ts")), (SkipKind.GENERATED,))
+        assert go(mod("gen/api.ts")) == (SkipKind.GENERATED,)
 
     def test_tools_and_tests_only_are_skipped(self):
-        self.assertEqual(go(mod("tools/x.py")), (SkipKind.TOOLS,))
-        self.assertEqual(go(mod("tests/test_a.py"), DiffEntry(status="A", path="tests/b.py")), (SkipKind.TESTS,))
+        assert go(mod("tools/x.py")) == (SkipKind.TOOLS,)
+        assert go(mod("tests/test_a.py"), DiffEntry(status="A", path="tests/b.py")) == (SkipKind.TESTS,)
 
     def test_several_classes_give_each_reason_once(self):
-        self.assertEqual(go(mod("config/a.json"), mod("gen/x"), mod("gen/y")), (SkipKind.CONFIG, SkipKind.GENERATED))
+        assert go(mod("config/a.json"), mod("gen/x"), mod("gen/y")) == (SkipKind.CONFIG, SkipKind.GENERATED)
 
 
-class CodeChangeMeansReview(unittest.TestCase):
+class CodeChangeMeansReview(Case):
     def test_one_code_path_among_mechanical_ones_is_reviewed(self):
-        self.assertEqual(go(mod("config/a.json"), mod("tests/t.py"), mod("src/app.py")), ())
+        assert go(mod("config/a.json"), mod("tests/t.py"), mod("src/app.py")) == ()
 
     def test_the_stage_that_maps_the_acceptance_is_reviewed_whatever_its_paths(self):
-        self.assertEqual(go(mod("tests/t.py"), maps_acceptance=True), ())
-        self.assertEqual(go(DiffEntry(status="R", path="b", old="a"), maps_acceptance=True), ())
+        assert go(mod("tests/t.py"), maps_acceptance=True) == ()
+        assert go(DiffEntry(status="R", path="b", old="a"), maps_acceptance=True) == ()
 
     def test_nothing_changed_is_reviewed(self):
-        self.assertEqual(go(), ())
+        assert go() == ()
 
     def test_no_allow_list_skips_nothing_but_renames(self):
-        self.assertEqual(go(mod("tests/t.py"), rules=ReviewSkipConfig()), ())
+        assert go(mod("tests/t.py"), rules=ReviewSkipConfig()) == ()
 
     def test_docs_and_markdown_are_never_skipped_whatever_the_list_says(self):
         wide = ReviewSkipConfig(config=["**"], tests=["**"])
-        self.assertEqual(go(mod("docs/design.txt"), rules=wide), ())
-        self.assertEqual(go(mod("README.md"), mod("tests/t.py"), rules=wide), ())
-        self.assertEqual(go(DiffEntry(status="R", path="x.md", old="y.md"), rules=wide), ())
+        assert go(mod("docs/design.txt"), rules=wide) == ()
+        assert go(mod("README.md"), mod("tests/t.py"), rules=wide) == ()
+        assert go(DiffEntry(status="R", path="x.md", old="y.md"), rules=wide) == ()
 
     def test_the_profile_itself_is_never_skipped(self):
-        self.assertEqual(go(mod(".task-loop.json"), rules=ReviewSkipConfig(config=["*.json"])), ())
+        assert go(mod(".task-loop.json"), rules=ReviewSkipConfig(config=["*.json"])) == ()
 
     def test_an_unknown_key_in_the_allow_list_is_refused(self):
-        with self.assertRaises(config.ConfigError):
+        with pytest.raises(config.ConfigError):
             config.load({"engine": {"skip_review": {"docs": ["**"]}}})
-        self.assertEqual(config.load({"engine": {"skip_review": {"tests": ["t/**"]}}}).engine.skip_review.tests, ["t/**"])
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert config.load({"engine": {"skip_review": {"tests": ["t/**"]}}}).engine.skip_review.tests == ["t/**"]
