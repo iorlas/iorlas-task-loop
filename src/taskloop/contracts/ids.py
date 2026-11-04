@@ -115,8 +115,10 @@ def repo_key(common_dir: str) -> str:
 
 
 def loop_key(repo: object) -> str:
-    """The key of a repo checkout in the loop's and the slots' files: its folder name and 8 hex of sha1 of its path."""
-    return f"{Path(str(repo)).name}-{hashlib.sha1(str(repo).encode()).hexdigest()[:8]}"
+    """The key of a repo checkout in the loop's and the slots' files: its folder name and 8 hex of sha1 of its real path (git answers the
+    real path of a folder under a symlink, macOS /var -> /private/var; the same checkout must not get two keys)."""
+    real = os.path.realpath(str(repo))
+    return f"{Path(real).name}-{hashlib.sha1(real.encode()).hexdigest()[:8]}"
 
 
 def mangle(check_id: CheckId) -> str:
