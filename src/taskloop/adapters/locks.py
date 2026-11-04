@@ -50,7 +50,11 @@ def resource_holders(cfg: paths.ConfigDir) -> list[tuple[str, LockRecord]]:
     table, out = Leases(cfg.leases()), list[tuple[str, LockRecord]]()
     for limit in sorted(cfg.leases().glob("*.limit")):
         name = limit.stem
-        for occ in table.holders(name):
+        try:
+            taken = table.holders(name)
+        except ValueError:  # a limit file nobody can read is that resource's missing row, never the page
+            continue
+        for occ in taken:
             if occ.holder is not None:
                 out.append((name, LockRecord(what=LockWhat.RESOURCE, holder=occ.holder.label or "?", pid=occ.holder.pid,
                                              t=occ.holder.created)))

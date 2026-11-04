@@ -34,6 +34,8 @@ class SlotGate(EngineTest):
             self.assertEqual(Path(cwd), self.wt)
             self.assertEqual((Path(cwd) / "setup.txt").read_text(), "installed")
             self.assertTrue(eng.stores.leases.holders("unity", 1))
+            held = (env.get("ANY_LEASE_HELD"), env.get("ANY_LEASE_ROOT"))  # what a run wrapper inside the command reads
+            self.assertEqual(held, ("unity", str(eng.stores.leases.root)))
             return 0, ""
 
         eng = self.engine([{"id": "unity", "cmd": procsim.fake("slot-setup", check), "run": "gate",

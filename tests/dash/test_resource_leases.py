@@ -1,6 +1,7 @@
 """The Floor reads resource holder hints through ConfigDir without taking or changing a lock."""
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -32,6 +33,7 @@ class ResourceLeases(unittest.TestCase):
             unit = table.acquire("unity", 2, label="owner:unity-check")  # this process holds one of two units; the other is free
             self.addCleanup(unit.release)
             ingest(cfg, 1000)
+            self.assertAlmostEqual(table.holders("unity")[0].holder.created, time.time(), delta=5)  # type: ignore[union-attr]
             before = {p: p.read_bytes() for p in cfg.leases().iterdir()}
             ports = Ports(store=lambda repo: FakeBeadStore(), resource_holders=resource_holders)
             snap = Dash(Env(config=cfg.root, home=root, ports=ports, clock=lambda: 1000)).reads.snapshot()

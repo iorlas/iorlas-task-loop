@@ -153,6 +153,7 @@ class Lease(unittest.TestCase):
         with Resources(host).hold(unity_check("u", lane="a")) as lease:
             (occ,) = host.stores.leases.holders("unity", 1)
             assert occ.holder is not None
+            self.assertAlmostEqual(occ.holder.created, time.time(), delta=5)  # `tl status` counts the seconds held from it
             self.assertEqual((occ.holder.label, occ.holder.meta["lane"]), ("t-1:u", "a"))
             self.assertEqual(lease.env, {"ANY_LEASE_HELD": "unity", "ANY_LEASE_ROOT": str(host.stores.leases.root)})
         self.assertEqual(host.stores.leases.holders("unity", 1), ())
