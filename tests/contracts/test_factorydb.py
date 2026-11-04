@@ -68,7 +68,7 @@ class FactoryDbTest(unittest.TestCase):
         self.assertEqual(self.rw().execute("SELECT bead,rev FROM ask").fetchall(), [("b", 0)])
 
     def test_concurrent_initializers_both_open_the_same_fresh_file(self):
-        ready = Barrier(2, timeout=1)
+        ready = Barrier(2, timeout=30)  # an upper bound for a loaded host, not a wait: both threads release it as they arrive
         begin = factorydb.begin_immediate
 
         @contextmanager
