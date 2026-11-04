@@ -62,7 +62,7 @@ This protocol applies when ending a Beads implementation workflow. It is subordi
 
 ```bash
 just test-fast -n auto         # the inner loop: logic tests only (-m "not real and not e2e"; also what plain `just test` / `uv run pytest` run)
-uv run pytest tests/land -q    # one slice folder, module or test (tests/land/test_x.py::Class::test); the tests are unittest TestCases
+uv run pytest tests/land -q    # one slice folder, module or test (tests/land/test_x.py::Class::test); the tests are plain pytest classes: `assert`, `setup_method`, fixtures; `support.case.Case` still gives `addCleanup` and `subTest`; write new tests as pytest functions or classes, never `unittest`
 just test-all -n auto          # every kind: logic, real, e2e (`serial` ones need dev/suite.py to run alone)
 uv run --script dev/suite.py  # what a release runs: every kind, xdist workers, then the serial group alone; takes the host-wide suite lock
 just check                     # ruff + pyrefly + import-linter + tests/rules/gate_rules.py (tools pinned in mise.toml; `mise install`)

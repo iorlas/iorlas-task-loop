@@ -128,7 +128,7 @@ def case_helpers(request, subtests):
         yield
         return
     with contextlib.ExitStack() as stack:
-        case._testMethodName = request.node.name
+        case._testMethodName = request.node.originalname
         case.id = lambda: request.node.nodeid
         case.addCleanup = stack.callback
         case.enterContext = stack.enter_context
