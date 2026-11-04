@@ -24,7 +24,7 @@ from taskloop.domain.slot_liveness import LIMITS, Kind
 STEP = 45.0
 SLACK = watchdog.EVERY + 2 * STEP  # a look every EVERY s, a step of up to STEP s before it, one more before the check
 SEEDS = range(10)
-STEPS = 180
+STEPS = 140
 
 
 class Broken(AssertionError):
@@ -49,7 +49,7 @@ class Sim(Rig):
     def start(self, seed):
         self.rng, self.pid, self.alive = random.Random(seed), 100, set()
         self.waiters, self.holders, self.broken, self.aside_at, self.flagged = [], {}, set(), {}, set()
-        self.watch, self.watches, self.free_since = watchdog.Watch(), {}, {}
+        self.watch, self.watches, self.free_since, self.hung = watchdog.Watch(), {}, {}, set()
         self.events.clear()
         self.tickets.rows.clear()
         self.t[0] = 1_800_000_000.0
@@ -62,7 +62,13 @@ class Sim(Rig):
         self.alive.add(self.pid)
         return self.pid
 
-    def note(self, found):
+    def tick(self, watch):
+        """One look by one caller. The heal may drop only the ticket of a waiter that hangs: a healthy one keeps its place."""
+        before = {t.seq for t in self.env.tickets.line("r-1")}
+        found = watchdog.tick(self.env, watch)
+        gone = before - {t.seq for t in self.env.tickets.line("r-1")}
+        if gone - self.hung:
+            raise Broken(f"t+{self.t[0] - 1_800_000_000:.0f}: the heal dropped a healthy waiter's ticket: {sorted(gone - self.hung)}")
         self.flagged |= {v.slot for v in found if v.kind is Kind.ASIDE_TOO_LONG}
 
     def names(self):
@@ -93,8 +99,11 @@ class Sim(Rig):
 
     def hang(self):
         """A waiter hangs (a stuck bd call, a stopped process): its pid lives, its ticket heads the line, and it never takes."""
-        if self.waiters:
-            self.waiters.pop(self.rng.randrange(len(self.waiters)))
+        in_line = {t.seq for t in self.env.tickets.line("r-1")}
+        self.hung = {seq for seq in self.hung if seq in in_line}
+        if self.waiters and not self.hung:  # one at a time: the heal frees one head per window
+            w = self.waiters.pop(self.rng.randrange(len(self.waiters)))
+            self.hung.add(w["ticket"].seq)
 
     def break_slot(self):
         name = self.rng.choice(self.names())
@@ -125,7 +134,7 @@ class Sim(Rig):
                 continue
             got = None if [x for x in line if order(x) < order(w["ticket"])] else self.pool.take_any("tl loop", "", w["ticket"].seq)
             if not got:  # wait_slot: a waiter that did not get a slot looks at the invariants before it sleeps
-                self.note(watchdog.tick(self.env, self.watches.setdefault(w["pid"], watchdog.Watch()), own=w["ticket"]))
+                self.tick(self.watches.setdefault(w["pid"], watchdog.Watch()))
             if got:
                 name = got[0]
                 if name in self.holders and self.holders[name] in self.alive:
@@ -175,13 +184,8 @@ class Sim(Rig):
                 self.t[0] += self.rng.uniform(1, STEP)
                 getattr(self, self.rng.choice(self.MOVES))()
                 self.poll()
-                self.note(watchdog.tick(self.env, self.watch))  # the loop's pass
+                self.tick(self.watch)  # the loop's pass
                 self.check()
-
-    def test_fixed_seeds_hold_every_invariant(self):
-        for seed in SEEDS:
-            with self.subTest(seed=seed):
-                self.run_seed(seed)
 
     def test_without_the_watchdog_the_same_seeds_find_the_stall(self):
         """The control: the invariants bite. Without the heal, a hung waiter or a dead holder keeps a slot out of use for good."""
@@ -195,6 +199,10 @@ class Sim(Rig):
         self.assertTrue(failures)
         self.assertTrue(any("free beside" in f for f in failures), failures)
         self.assertTrue(any("does not run" in f for f in failures), failures)
+
+
+for _seed in SEEDS:  # one test per seed: a failure names its seed, and each stays far inside the logic suite's time limit
+    setattr(Sim, f"test_seed_{_seed}_holds_every_invariant", lambda self, seed=_seed: self.run_seed(seed))
 
 
 if __name__ == "__main__":

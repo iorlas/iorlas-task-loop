@@ -86,14 +86,20 @@ class Watching(Rig):
     def stalls(self):
         return [e for e in self.events if e[0] == "slot_stall"]
 
-    def test_a_free_slot_beside_a_live_waiter_is_logged_and_the_first_ticket_goes(self):
+    def test_a_free_slot_beside_a_head_that_never_takes_costs_the_head_its_ticket_one_per_window(self):
         for _ in range(2):
             self.env.tickets.take("r-1", "tl loop", 2, pid=os.getpid(), now=self.t[0])
         self.assertEqual(self.tick(60), [])
-        found = self.tick(100)
+        found = self.tick(100)  # the violation shows (160 s) but this caller saw the head for 100 s only
         self.assertEqual(kinds(found), [(Kind.FREE_BESIDE_WAITER, "s1"), (Kind.FREE_BESIDE_WAITER, "s2")])
-        self.assertEqual([t.seq for t in self.env.tickets.line("r-1")], [])  # one drop per violation: the whole stuck head went
+        self.assertEqual([t.seq for t in self.env.tickets.line("r-1")], [1, 2])
         self.assertEqual(len(self.stalls()), 2)
+        self.tick(30)  # a whole window as head: #1 goes, once for both slots
+        self.assertEqual([t.seq for t in self.env.tickets.line("r-1")], [2])
+        self.tick(30)  # #2 heads the line only now: its own window starts
+        self.assertEqual([t.seq for t in self.env.tickets.line("r-1")], [2])
+        self.tick(130)
+        self.assertEqual([t.seq for t in self.env.tickets.line("r-1")], [])
 
     def test_a_violation_that_goes_on_is_logged_once_per_episode_and_again_after_the_relog_time(self):
         self.slot("s1").take("a person")

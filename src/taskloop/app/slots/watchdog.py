@@ -10,7 +10,6 @@ from taskloop.app.slots.env import SlotEnv, attempt
 from taskloop.app.slots.marks import hold_of
 from taskloop.app.slots.pool import SlotPool
 from taskloop.contracts.bead import Bead
-from taskloop.contracts.locks import Ticket
 from taskloop.contracts.ports import BdFailure, BeadPatch
 from taskloop.contracts.slots import SlotFail
 from taskloop.domain.slot_liveness import LIMITS, Kind, Limits, SlotFact, Violation, Waiter, violations
@@ -25,6 +24,7 @@ class Watch:
     """What one caller remembers between its ticks: when it last looked and when it logged each violation (one row per episode)."""
 
     looked: float | None = None
+    head: tuple[int, float] | None = None  # (seq of the first ticket, when this caller first saw it first)
     logged: dict[tuple[str, str], float] = field(default_factory=dict)  # (invariant, slot) -> when
 
 
@@ -68,19 +68,26 @@ def facts(env: SlotEnv, now: float, *, stamp: bool = False) -> tuple[list[SlotFa
     return out, [Waiter(t.seq, t.since) for t in env.tickets.line(env.repo_key)]
 
 
-def heal(env: SlotEnv, v: Violation, own: Ticket | None = None) -> bool:
-    """True when the cause was removed. A free slot beside waiters that do not take it: the tickets ahead of the caller's own `own`
-    (the caller polls, so it is the proof the line is stuck there), else the first one, go; a waiter needs no ticket to take, so a live
-    one still can, and one hung in a call, which held the whole line, cannot. An automatic holder with no engine lock: its lease is
-    dropped. A slot set aside, or a ready bead nobody picks, only says so."""
+def heal(env: SlotEnv, v: Violation, watch: Watch, limits: Limits = LIMITS) -> bool:
+    """True when the cause is gone. A free slot beside waiters that do not take it: under the take lock (a waiter inside a long probe
+    holds it, and that is no stall), once the violation is seen again, the first ticket goes if `watch` has seen it head the line for a
+    whole window: a waiter needs no ticket to take, so a live one still can, and one hung in a call, which held the whole line,
+    cannot. One ticket per window: the next head gets its own. An automatic holder with no engine lock: its lease is dropped. A slot
+    set aside, or a ready bead nobody picks, only says so."""
     pool = SlotPool(env)
     try:
         if v.kind is Kind.FREE_BESIDE_WAITER:
             with env.take_lock():
                 pool.free_expired()
-            line = env.tickets.line(env.repo_key)
-            for t in [x for x in line if own is not None and (x.prio, x.seq) < (own.prio, own.seq)] or line[:1]:
-                env.tickets.drop(env.repo_key, t.seq)
+                now = env.now()
+                slots, waiters = facts(env, now)
+                if not any(x.kind is v.kind and x.slot == v.slot for x in violations(slots, waiters, now, limits=limits)):
+                    return True  # the line moved while the lock was held by someone
+                head = next(iter(env.tickets.line(env.repo_key)), None)
+                if head is None or watch.head is None or watch.head[0] != head.seq or now - watch.head[1] < limits.grant_s:
+                    return False
+                env.tickets.drop(env.repo_key, head.seq)
+                watch.head = None  # the next head is seen afresh: one ticket per window
             return True
         if v.kind is Kind.ORPHAN_HELD:
             slot = pool.slot(v.slot)
@@ -101,8 +108,7 @@ def look(env: SlotEnv, *, ready_since: float | None = None, idle_lanes: int = 0,
     return violations(slots, waiters, now, ready_since=ready_since, idle_lanes=idle_lanes, limits=limits)
 
 
-def tick(env: SlotEnv, watch: Watch, *, ready_since: float | None = None, idle_lanes: int = 0, limits: Limits = LIMITS,
-         own: Ticket | None = None) -> list[Violation]:
+def tick(env: SlotEnv, watch: Watch, *, ready_since: float | None = None, idle_lanes: int = 0, limits: Limits = LIMITS) -> list[Violation]:
     """Look (at most every EVERY s per `watch`), log each new violation as an event and heal it; -> the violations found."""
     now = env.now()
     if watch.looked is not None and now - watch.looked < EVERY:
@@ -112,9 +118,12 @@ def tick(env: SlotEnv, watch: Watch, *, ready_since: float | None = None, idle_l
         slots, waiters = facts(env, now, stamp=True)
     except (BdFailure, OSError):
         return []
+    head = waiters[0].seq if waiters else None
+    if head is not None and (watch.head is None or watch.head[0] != head):
+        watch.head = (head, now)  # who heads the line, and since when this caller has seen it
     found = violations(slots, waiters, now, ready_since=ready_since, idle_lanes=idle_lanes, limits=limits)
     for v in found:
-        healed = heal(env, v, own)
+        healed = heal(env, v, watch, limits)
         key = (v.kind.value, v.slot)
         if key not in watch.logged or now - watch.logged[key] >= RELOG:
             watch.logged[key] = now

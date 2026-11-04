@@ -41,7 +41,7 @@ def wait_slot(env: SlotEnv, why: str, bead: str = "", stop: Callable[[], bool] |
                     return got
             if stop and stop():
                 return None
-            watchdog.tick(env, watch, own=ticket)  # tl-bxk.10.33.12: a free slot beside a waiter is healed, not waited out
+            watchdog.tick(env, watch)  # tl-bxk.10.33.12: a free slot beside a waiter is healed, not waited out
             if on_wait:
                 on_wait(len(ahead))
             nap(delay)
