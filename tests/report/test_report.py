@@ -2,17 +2,20 @@
 import io
 import json
 import os
+import re
 import shutil
 import stat
 import subprocess
 import sys
 import tempfile
 import time
-import unittest
 from contextlib import redirect_stdout
 from datetime import datetime
 from pathlib import Path
 from unittest import mock
+
+import pytest
+from support.case import Case
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
@@ -46,8 +49,8 @@ def commit(repo, name, text, msg, t):
     return git(repo, "rev-parse", "HEAD")
 
 
-class Base(unittest.TestCase):
-    def setUp(self):
+class Base(Case):
+    def setup_method(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.home = Path(self.tmp.name)
         env = {"XDG_CONFIG_HOME": str(self.home / "cfg"), "APPDATA": str(self.home / "cfg"),
@@ -60,7 +63,7 @@ class Base(unittest.TestCase):
         git(self.repo, "init", "-q", "-b", "main")
         commit(self.repo, "a.txt", "a\n", "init", T0 - 600 * MIN)
 
-    def tearDown(self):
+    def teardown_method(self):
         self.env.stop()
 
         def force(fn, path, _):  # Windows: git's pack files are read-only
@@ -71,31 +74,31 @@ class Base(unittest.TestCase):
 
 # ---- the window -------------------------------------------------------------------------------------------------------
 
-class ParseTime(unittest.TestCase):
+class ParseTime(Case):
     NOW = datetime(2026, 10, 21, 20, 30).timestamp()
 
     def test_hh_mm_is_today(self):
-        self.assertEqual(matchers.parse_time("06:00", self.NOW), datetime(2026, 10, 21, 6, 0).timestamp())
+        assert matchers.parse_time("06:00", self.NOW) == datetime(2026, 10, 21, 6, 0).timestamp()
 
     def test_durations_count_back_from_now(self):
-        self.assertEqual(matchers.parse_time("12h", self.NOW), self.NOW - 12 * 3600)
-        self.assertEqual(matchers.parse_time("90m", self.NOW), self.NOW - 90 * 60)
-        self.assertEqual(matchers.parse_time("2d", self.NOW), self.NOW - 2 * 86400)
+        assert matchers.parse_time("12h", self.NOW) == self.NOW - 12 * 3600
+        assert matchers.parse_time("90m", self.NOW) == self.NOW - 90 * 60
+        assert matchers.parse_time("2d", self.NOW) == self.NOW - 2 * 86400
 
     def test_iso_local_and_with_offset(self):
-        self.assertEqual(matchers.parse_time("2026-10-20T22:15", self.NOW), datetime(2026, 10, 20, 22, 15).timestamp())
-        self.assertEqual(matchers.parse_time("2026-10-20 22:15", self.NOW), datetime(2026, 10, 20, 22, 15).timestamp())
-        self.assertEqual(matchers.parse_time("2026-10-20", self.NOW), datetime(2026, 10, 20).timestamp())
-        self.assertEqual(matchers.parse_time("2026-10-21T03:00:00Z", self.NOW), 1792551600.0)
+        assert matchers.parse_time("2026-10-20T22:15", self.NOW) == datetime(2026, 10, 20, 22, 15).timestamp()
+        assert matchers.parse_time("2026-10-20 22:15", self.NOW) == datetime(2026, 10, 20, 22, 15).timestamp()
+        assert matchers.parse_time("2026-10-20", self.NOW) == datetime(2026, 10, 20).timestamp()
+        assert matchers.parse_time("2026-10-21T03:00:00Z", self.NOW) == 1792551600.0
 
     def test_since_hh_mm_rolls_back_until_rolls_forward(self):
         morning = datetime(2026, 10, 21, 7, 0).timestamp()
-        self.assertEqual(matchers.parse_time("22:00", morning), datetime(2026, 10, 20, 22, 0).timestamp())
-        self.assertEqual(matchers.parse_time("22:00", morning, forward=True), datetime(2026, 10, 21, 22, 0).timestamp())
-        self.assertEqual(matchers.parse_time("06:00", morning, forward=True), datetime(2026, 10, 22, 6, 0).timestamp())
+        assert matchers.parse_time("22:00", morning) == datetime(2026, 10, 20, 22, 0).timestamp()
+        assert matchers.parse_time("22:00", morning, forward=True) == datetime(2026, 10, 21, 22, 0).timestamp()
+        assert matchers.parse_time("06:00", morning, forward=True) == datetime(2026, 10, 22, 6, 0).timestamp()
 
     def test_nonsense_is_refused(self):
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             matchers.parse_time("yesterday-ish", self.NOW)
 
 
@@ -118,10 +121,10 @@ def session(role, family, tin, cached, out):
     return {"role": role, "family": family, "tokens": {"in": tin, "cached": cached, "out": out}}
 
 
-class PlannerReport(unittest.TestCase):
+class PlannerReport(Case):
     """tl-bxk.10.13: planner calls per bead and their input tokens, from delegate's history and the engine logs."""
 
-    def setUp(self):
+    def setup_method(self):
         self.tmp = tempfile.TemporaryDirectory()
         home = Path(self.tmp.name)
         self.env = mock.patch.dict(os.environ, {"HOME": str(home), "XDG_CONFIG_HOME": str(home / "cfg"),
@@ -142,26 +145,28 @@ class PlannerReport(unittest.TestCase):
         manifest(homes.config_dir(), "x-2-20261021-060000", "x-2", t).log.write_text(json.dumps(
             {"v": 2, "t": t, "kind": "step_start", "id": "n1", "text": "plan: plan", "step": "plan"}) + "\n")
 
-    def tearDown(self):
+    def teardown_method(self):
         self.env.stop()
         self.tmp.cleanup()
 
     def test_calls_are_split_into_first_again_amend_and_send_back_and_input_is_in_plus_cached(self):
         p = planner.planner_stats(homes.cfg(), T0 - 1, T0 + 100, history=self.hist)
         by = {x["bead"]: x for x in p["per_bead"]}
-        self.assertEqual({k: by["x-1"][k] for k in ("calls", "first", "again", "amend", "back", "other", "input")},
-                         {"calls": 4, "first": 1, "again": 1, "amend": 1, "back": 1, "other": 0, "input": 16100})
-        self.assertEqual((by["x-2"]["calls"], by["x-2"]["first"], by["x-2"]["input"]), (1, 1, 1000))
-        self.assertEqual((p["calls"], p["beads"], p["input"]), (6, 3, 17101))  # the worker call is no planner call
+        assert (
+            {k: by["x-1"][k] for k in ("calls", "first", "again", "amend", "back", "other", "input")}
+            == {"calls": 4, "first": 1, "again": 1, "amend": 1, "back": 1, "other": 0, "input": 16100}
+        )
+        assert (by["x-2"]["calls"], by["x-2"]["first"], by["x-2"]["input"]) == (1, 1, 1000)
+        assert (p["calls"], p["beads"], p["input"]) == (6, 3, 17101)  # the worker call is no planner call
         only = planner.planner_stats(homes.cfg(), T0 - 1, T0 + 100, {"x"}, history=self.hist)
-        self.assertEqual((only["calls"], only["beads"]), (5, 2))
-        self.assertEqual(planner.planner_stats(homes.cfg(), T0 + 50, T0 + 100, history=self.hist)["calls"], 0)  # outside the window
+        assert (only["calls"], only["beads"]) == (5, 2)
+        assert planner.planner_stats(homes.cfg(), T0 + 50, T0 + 100, history=self.hist)["calls"] == 0  # outside the window
 
     def test_input_is_in_when_in_already_holds_the_cache_else_in_plus_cached(self):
-        self.assertEqual(planner.input_tokens({"in": 10000, "cached": 9000}), 10000)   # delegate 0.22+ and Codex
-        self.assertEqual(planner.input_tokens({"in": 1000, "cached": 9000}), 10000)    # before 0.22: uncached-only in
-        self.assertEqual(planner.input_tokens({"in": 5, "cached": 0}), 5)
-        self.assertEqual(planner.input_tokens({}), 0)
+        assert planner.input_tokens({"in": 10000, "cached": 9000}) == 10000   # delegate 0.22+ and Codex
+        assert planner.input_tokens({"in": 1000, "cached": 9000}) == 10000    # before 0.22: uncached-only in
+        assert planner.input_tokens({"in": 5, "cached": 0}) == 5
+        assert planner.input_tokens({}) == 0
 
     def test_the_cli_prints_the_planner_table_read_only(self):
         before = sorted(p.name for p in self.eng.iterdir())
@@ -169,11 +174,7 @@ class PlannerReport(unittest.TestCase):
         with mock.patch.object(planner, "HISTORY", str(self.hist)), redirect_stdout(out):
             rc = tl.main(["report", "--planner", "--prefix", "x", "--since", "2026-10-21", "--until", "2026-10-22"])
         text = out.getvalue()
-        self.assertEqual(rc, 0)
-        self.assertIn("planner: 5 calls on 2 beads", text)
-        self.assertRegex(text, r"x-1\s+4\s+1\s+1\s+1\s+1\s+0\s+0\.02")
-        self.assertEqual(before, sorted(p.name for p in self.eng.iterdir()))
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert rc == 0
+        assert "planner: 5 calls on 2 beads" in text
+        assert re.search(r"x-1\s+4\s+1\s+1\s+1\s+1\s+0\s+0\.02", text)
+        assert before == sorted(p.name for p in self.eng.iterdir())

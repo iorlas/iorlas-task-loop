@@ -9,11 +9,12 @@ import subprocess
 import sys
 import tempfile
 import time
-import unittest
 from contextlib import redirect_stdout
 from datetime import datetime
 from pathlib import Path
 from unittest import mock
+
+from support.case import Case
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
@@ -66,8 +67,8 @@ def commit(repo, name, text, msg, t):
     return git(repo, "rev-parse", "HEAD")
 
 
-class Base(unittest.TestCase):
-    def setUp(self):
+class Base(Case):
+    def setup_method(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.home = Path(self.tmp.name)
         env = {"XDG_CONFIG_HOME": str(self.home / "cfg"), "APPDATA": str(self.home / "cfg"),
@@ -80,7 +81,7 @@ class Base(unittest.TestCase):
         git(self.repo, "init", "-q", "-b", "main")
         commit(self.repo, "a.txt", "a\n", "init", T0 - 600 * MIN)
 
-    def tearDown(self):
+    def teardown_method(self):
         self.env.stop()
 
         def force(fn, path, _):  # Windows: git's pack files are read-only
@@ -113,13 +114,13 @@ class LostWork(Base):
     def test_an_orphan_commit_on_a_closed_beads_branch_is_lost(self):
         sha, = self.branch("task/t-1", [("f.txt", "work\n", "wip (t-1): failed")], T0)
         rows = self.lost({"t-1": "closed"})
-        self.assertEqual(self.by_class(rows), {"lost": [("task/t-1", sha[:8])]})
-        self.assertIn("closed", rows[0]["why"])
+        assert self.by_class(rows) == {"lost": [("task/t-1", sha[:8])]}
+        assert "closed" in rows[0]["why"]
 
     def test_a_fast_forward_land_leaves_nothing_to_check(self):
         self.branch("task/t-1", [("f.txt", "work\n", "work (t-1)")], T0)
         git(self.repo, "merge", "-q", "--ff-only", "task/t-1")
-        self.assertEqual(self.lost({"t-1": "closed"}), [])
+        assert self.lost({"t-1": "closed"}) == []
 
     def test_a_squash_land_covers_the_branch_commits_before_it(self):
         self.branch("task/t-1", [("f.txt", "one\n", "wip (t-1): blocked"), ("g.txt", "two\n", "wip (t-1): paused")], T0)
@@ -128,8 +129,8 @@ class LostWork(Base):
         git(self.repo, "add", "-A")
         git(self.repo, "commit", "-qm", "Do the thing (t-1)", t=T0 + 30 * MIN)
         rows = self.lost({"t-1": "closed"})
-        self.assertEqual(set(self.by_class(rows)), {"landed"})
-        self.assertEqual(len(rows), 2)
+        assert set(self.by_class(rows)) == {"landed"}
+        assert len(rows) == 2
 
     def test_the_recorded_land_sha_on_the_base_covers_the_branch(self):
         self.branch("task/t-1", [("f.txt", "one\n", "wip (t-1): blocked")], T0)
@@ -138,7 +139,7 @@ class LostWork(Base):
         git(self.repo, "commit", "-qm", "a title the bead lost", t=T0 + 30 * MIN)
         land = git(self.repo, "rev-parse", "HEAD")
         landing = wire.load(RunTrace, trace("t-1", "landed", 0, 31, sha=land))
-        self.assertEqual(set(self.by_class(self.lost({"t-1": "closed"}, [landing]))), {"landed"})
+        assert set(self.by_class(self.lost({"t-1": "closed"}, [landing]))) == {"landed"}
 
     def squash_land(self, subject):
         (self.repo / "f.txt").write_text("one, edited at land\n")
@@ -150,73 +151,73 @@ class LostWork(Base):
         self.branch("task/t-1", [("f.txt", "one\n", "wip (t-1): blocked")], T0)
         land = self.squash_land("a title the bead lost")
         LandedStore(homes.config_dir()).put(Landed(bead=BeadId("t-1"), sha=land, base="main", t=T0 + 31 * MIN))
-        self.assertEqual(set(self.by_class(self.lost({"t-1": "closed"}))), {"landed"})
+        assert set(self.by_class(self.lost({"t-1": "closed"}))) == {"landed"}
 
     def test_a_record_whose_sha_is_not_on_the_base_is_no_land(self):
         self.branch("task/t-1", [("f.txt", "one\n", "wip (t-1): blocked")], T0)
         off = self.branch("task/other", [("g.txt", "x\n", "other")], T0)[0]
         LandedStore(homes.config_dir()).put(Landed(bead=BeadId("t-1"), sha=off, base="main", t=T0 + 31 * MIN))
-        self.assertIn("lost", self.by_class(self.lost({"t-1": "closed"})))
+        assert "lost" in self.by_class(self.lost({"t-1": "closed"}))
 
     def test_a_revert_that_names_the_bead_is_no_land(self):
         self.branch("task/t-1", [("f.txt", "one\n", "wip (t-1): blocked")], T0)
         self.squash_land('Revert "Do the thing (t-1)"')
         rows = self.lost({"t-1": "closed"})
-        self.assertEqual(set(self.by_class(rows)), {"lost"})
+        assert set(self.by_class(rows)) == {"lost"}
 
     def test_a_cherry_picked_commit_is_landed_by_its_patch(self):
         sha, = self.branch("task/t-1", [("f.txt", "work\n", "work")], T0)
         git(self.repo, "cherry-pick", sha)
-        self.assertEqual(set(self.by_class(self.lost({"t-1": "closed"}))), {"landed"})
+        assert set(self.by_class(self.lost({"t-1": "closed"}))) == {"landed"}
 
     def test_work_after_the_land_is_lost(self):
         self.branch("task/t-1", [("f.txt", "late\n", "wip (t-1): after")], T0 + 60 * MIN)
         (self.repo / "g.txt").write_text("landed\n")
         git(self.repo, "add", "-A")
         git(self.repo, "commit", "-qm", "Do the thing (t-1)", t=T0)
-        self.assertEqual(set(self.by_class(self.lost({"t-1": "closed"}))), {"lost"})
+        assert set(self.by_class(self.lost({"t-1": "closed"}))) == {"lost"}
 
     def test_a_paused_beads_wip_is_pending_not_lost(self):
         self.branch("task/t-1", [("f.txt", "work\n", "wip (t-1): paused")], T0)
         rows = self.lost({"t-1": "open"})
-        self.assertEqual(set(self.by_class(rows)), {"pending"})
+        assert set(self.by_class(rows)) == {"pending"}
 
     def test_a_later_run_reclaims_the_wip(self):
         self.branch("task/t-1", [("f.txt", "work\n", "wip (t-1): blocked")], T0)
         later = wire.load(RunTrace, trace("t-1", "blocked", 10, 20, why="paused: x", kind="pause_lane"))
-        self.assertEqual(set(self.by_class(self.lost({"t-1": "in_progress"}, [later]))), {"reclaimed"})
+        assert set(self.by_class(self.lost({"t-1": "in_progress"}, [later]))) == {"reclaimed"}
 
     def test_a_tracker_outage_is_unknown_never_lost(self):
         self.branch("task/t-1", [("f.txt", "work\n", "wip (t-1): paused")], T0)
-        self.assertEqual(set(self.by_class(self.lost({"t-1": "?"}))), {"unknown"})
+        assert set(self.by_class(self.lost({"t-1": "?"}))) == {"unknown"}
 
     def test_bd_failing_reads_as_unknown(self):
         with tlbd.bd_boundary(result=tlbd.done(returncode=1, stderr="dolt: connection refused")):
-            self.assertEqual(inputs.bead_status(BeadId("t-1"), str(self.repo), who()), "?")
+            assert inputs.bead_status(BeadId("t-1"), str(self.repo), who()) == "?"
         with tlbd.bd_boundary(result=tlbd.done(returncode=1, stderr="Error: issue t-1 not found")):
-            self.assertIsNone(inputs.bead_status(BeadId("t-1"), str(self.repo), who()))
+            assert inputs.bead_status(BeadId("t-1"), str(self.repo), who()) is None
 
     def test_a_slot_resets_wip_branch_is_lost(self):
         self.branch("wip/s1/1792540800", [("f.txt", "dead session\n", "wip: left in slot s1")], T0)
-        self.assertEqual(set(self.by_class(self.lost({}))), {"lost"})
+        assert set(self.by_class(self.lost({}))) == {"lost"}
 
     def test_a_branch_fresh_set_aside_is_superseded_and_names_its_bead(self):
         self.branch("task/t-1-stale-20261020-101500", [("f.txt", "old try\n", "wip (t-1): blocked")], T0)
         rows = self.lost({"t-1": "closed"})
-        self.assertEqual(self.by_class(rows), {"superseded": [("task/t-1-stale-20261020-101500", rows[0]["sha"][:8])]})
-        self.assertEqual(rows[0]["bead"], "t-1")
+        assert self.by_class(rows) == {"superseded": [("task/t-1-stale-20261020-101500", rows[0]["sha"][:8])]}
+        assert rows[0]["bead"] == "t-1"
 
     def test_a_set_aside_branch_whose_bead_landed_later_is_landed(self):
         self.branch("task/t-1-stale-20261020-101500", [("f.txt", "old try\n", "wip (t-1): blocked")], T0)
         (self.repo / "g.txt").write_text("landed\n")
         git(self.repo, "add", "-A")
         git(self.repo, "commit", "-qm", "Do the thing (t-1)", t=T0 + 30 * MIN)
-        self.assertEqual(set(self.by_class(self.lost({"t-1": "closed"}))), {"landed"})
+        assert set(self.by_class(self.lost({"t-1": "closed"}))) == {"landed"}
 
     def test_since_skips_older_commits(self):
         self.branch("task/t-1", [("f.txt", "old\n", "wip (t-1): failed")], T0 - 120 * MIN)
-        self.assertEqual(self.lost({"t-1": "closed"}, since=T0), [])
-        self.assertEqual(len(self.lost({"t-1": "closed"})), 1)
+        assert self.lost({"t-1": "closed"}, since=T0) == []
+        assert len(self.lost({"t-1": "closed"})) == 1
 
 
 # ---- 10.1: the scorecard ----------------------------------------------------------------------------------------------
@@ -237,8 +238,8 @@ def session(role, family, tin, cached, out):
 
 
 class Scorecard(Base):
-    def setUp(self):
-        super().setUp()
+    def setup_method(self):
+        super().setup_method()
         self.wt = str(self.repo / ".slots" / "s1")
         w = self.wt
         runs = [
@@ -317,41 +318,41 @@ class Scorecard(Base):
             f.write(json.dumps(dict(trace("t-1", "landed", 10, 40, sha="a1", worktree=self.wt), v=1)) + "\n")
             f.write(json.dumps({"run": "t-1-old", "outcome": "landed"}) + "\n")
         c = self.card()
-        self.assertEqual((c["skipped_traces"], c["beads"]), (before + 2, 11))  # nothing is read from them
+        assert (c["skipped_traces"], c["beads"]) == (before + 2, 11)  # nothing is read from them
 
     def test_the_six_counts(self):
         c = self.card()
-        self.assertEqual(c["beads"], 11)  # t-1..t-8, t-10..t-12 (t-9 still runs); not t-0, not o-1
-        self.assertEqual(c["landed"], 4)
-        self.assertEqual(c["landed_no_ask"], 1)  # t-1; t-2, t-3 and t-7 landed after an ask
-        self.assertEqual(c["parked"], 1)  # t-4
-        self.assertEqual(c["paused"], 1)  # t-5
-        self.assertEqual(c["failed"], 5)  # t-6, the stopped t-11, and the crashed t-8, t-10 and t-12
-        self.assertEqual(c["crashes"], 3)  # not t-1 (a traceback in route.py's stderr), not t-11 (a stop)
-        self.assertEqual(sorted(x["bead"] for x in c["crash_list"]), ["t-10", "t-12", "t-8"])
-        self.assertEqual(c["lost"], 1)  # t-6; t-1's squash-landed wip is no loss
-        self.assertEqual(c["pending_list"], [])
+        assert c["beads"] == 11  # t-1..t-8, t-10..t-12 (t-9 still runs); not t-0, not o-1
+        assert c["landed"] == 4
+        assert c["landed_no_ask"] == 1  # t-1; t-2, t-3 and t-7 landed after an ask
+        assert c["parked"] == 1  # t-4
+        assert c["paused"] == 1  # t-5
+        assert c["failed"] == 5  # t-6, the stopped t-11, and the crashed t-8, t-10 and t-12
+        assert c["crashes"] == 3  # not t-1 (a traceback in route.py's stderr), not t-11 (a stop)
+        assert sorted(x["bead"] for x in c["crash_list"]) == ["t-10", "t-12", "t-8"]
+        assert c["lost"] == 1  # t-6; t-1's squash-landed wip is no loss
+        assert c["pending_list"] == []
 
     def test_who_answered_the_asks(self):
         a = self.card()["asks"]
-        self.assertEqual((a["count"], a["beads"]), (4, 4))
-        self.assertEqual((a["supervisor"], a["owner"], a["open"]), (1, 1, 1))
+        assert (a["count"], a["beads"]) == (4, 4)
+        assert (a["supervisor"], a["owner"], a["open"]) == (1, 1, 1)
 
     def test_minutes_rounds_and_tokens(self):
         c = self.card()
-        self.assertEqual(c["minutes"]["median"], 20)  # traced beads: 1 2 10 10 20 30 30 30 45
-        self.assertEqual(c["minutes"]["p90"], 45)
-        self.assertEqual(c["rounds"], 1)
-        self.assertEqual(c["replans"], 1)
-        self.assertEqual(c["tokens"]["lane"]["codex"], {"in": 1010, "cached": 900, "out": 51})
-        self.assertEqual(c["tokens"]["lane"]["claude"], {"in": 100, "cached": 80, "out": 10})
-        self.assertEqual(c["tokens"]["role"]["worker"]["in"], 1000)
+        assert c["minutes"]["median"] == 20  # traced beads: 1 2 10 10 20 30 30 30 45
+        assert c["minutes"]["p90"] == 45
+        assert c["rounds"] == 1
+        assert c["replans"] == 1
+        assert c["tokens"]["lane"]["codex"] == {"in": 1010, "cached": 900, "out": 51}
+        assert c["tokens"]["lane"]["claude"] == {"in": 100, "cached": 80, "out": 10}
+        assert c["tokens"]["role"]["worker"]["in"] == 1000
 
     def test_the_m2_verdict_names_what_failed(self):
         c = self.card()
-        self.assertFalse(c["m2"]["pass"])
+        assert not c["m2"]["pass"]
         failed = {k for k, v in c["m2"]["checks"].items() if not v["ok"]}
-        self.assertEqual(failed, {"landed_no_ask", "lost", "crashes"})
+        assert failed == {"landed_no_ask", "lost", "crashes"}
 
     def test_the_cli_prints_a_table_and_a_verdict_and_json(self):
         args = ["report", "--repo", str(self.repo), "--since", "2026-10-21T06:00", "--until", "2026-10-21T09:20"]
@@ -363,20 +364,16 @@ class Scorecard(Base):
             out = io.StringIO()
             with redirect_stdout(out):
                 rc = tl.main(args)
-            self.assertEqual(rc, 1)  # M2 failed
+            assert rc == 1  # M2 failed
             text = out.getvalue()
-            self.assertIn("M2 FAIL", text)
-            self.assertIn("crashes 3", text)
+            assert "M2 FAIL" in text
+            assert "crashes 3" in text
             out = io.StringIO()
             with redirect_stdout(out):
                 tl.main([*args, "--json"])
-            self.assertEqual(json.loads(out.getvalue())["landed"], 4)
+            assert json.loads(out.getvalue())["landed"] == 4
             out = io.StringIO()
             with redirect_stdout(out):
                 rc = tl.main(["lost", "--repo", str(self.repo)])
-            self.assertIn("task/t-6", out.getvalue())
-            self.assertEqual(rc, 1)
-
-
-if __name__ == "__main__":
-    unittest.main()
+            assert "task/t-6" in out.getvalue()
+            assert rc == 1

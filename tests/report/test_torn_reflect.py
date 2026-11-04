@@ -2,9 +2,11 @@
 import os
 import sys
 import tempfile
-import unittest
 from pathlib import Path
 from unittest import mock
+
+import pytest
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -14,8 +16,8 @@ from taskloop.app.report import reflect as rd
 from taskloop.contracts.wire import Refused
 
 
-class TornReflect(unittest.TestCase):
-    def setUp(self) -> None:
+class TornReflect(Case):
+    def setup_method(self) -> None:
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         root = Path(tmp.name)
@@ -27,13 +29,9 @@ class TornReflect(unittest.TestCase):
         self.path.write_text('{"v": 1, "filed"')
 
     def test_read_and_write_back_refuse_with_the_path(self) -> None:
-        with self.assertRaises(Refused) as ctx:
+        with pytest.raises(Refused) as ctx:
             rd.read_state(homes.cfg())
-        self.assertIn(str(self.path), str(ctx.exception))
-        with self.assertRaises(Refused):
+        assert str(self.path) in str(ctx.value)
+        with pytest.raises(Refused):
             rd.due(homes.cfg())
-        self.assertEqual(self.path.read_text(), '{"v": 1, "filed"')
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert self.path.read_text() == '{"v": 1, "filed"'
