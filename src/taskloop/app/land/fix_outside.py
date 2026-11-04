@@ -50,8 +50,10 @@ class FixOutsideHost(Protocol):
     def blocked_for(self, why: str, kind: str) -> Exception: ...
 
 
-# STALE has no fix round
-CAUSE: Final = MappingProxyType({ProblemKind.GATE: "gate_red", ProblemKind.VERIFY: "checks_red", ProblemKind.CONFLICT: "conflict"})
+# A stale gate is retried without a fix round.
+CAUSE: Final = MappingProxyType({
+    ProblemKind.GATE: "gate_red", ProblemKind.VERIFY: "checks_red", ProblemKind.CONFLICT: "conflict", ProblemKind.STALE: None,
+})
 
 
 class FixOutside:
@@ -60,8 +62,10 @@ class FixOutside:
 
     def run(self, problem: Problem) -> None:
         e = self.e
+        cause = CAUSE[problem.kind]
+        if cause is None:
+            return
         if e.fixes < e.cfg.max_fix_rounds:
-            cause = CAUSE[problem.kind]
             first = problem.text.strip().splitlines() or [""]
             red = f"gate red on the rebased tree: {(problem.named or first[-1])[:200]}"
             e.steps.move("fix", cause, red if problem.kind is ProblemKind.GATE else problem.text.splitlines()[0])

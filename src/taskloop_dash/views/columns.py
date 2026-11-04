@@ -15,8 +15,11 @@ from taskloop.contracts.runlife import Liveness
 from taskloop_dash.views import names, phases
 
 PARKING = (Outcome.PARKED, Outcome.BLOCKED, Outcome.NOOP)
-CURRENT_DOT: Final[dict[Marker, DotState]] = {
-    Marker.RUN: "live", Marker.ASK: "you", Marker.LOOK: "you", Marker.EXITED: "bad", Marker.STUCK: "bad"}
+CURRENT_DOT: Final[dict[Marker, DotState | None]] = {
+    Marker.RUN: "live", Marker.ASK: "you", Marker.LOOK: "you", Marker.EXITED: "bad", Marker.STUCK: "bad",
+    Marker.SOFT_ASK: None, Marker.PARKED: None, Marker.NOOP: None, Marker.READY: None,
+    Marker.BLOCKED: None, Marker.DONE: None,
+}
 
 
 @dataclass(frozen=True)
@@ -111,6 +114,6 @@ def dots_of(visited: set[Phase], current: Phase | None, m: Marker, closed: bool)
     for ph in Phase:
         state: DotState = "done" if closed or ph in visited else "todo"
         if not closed and ph == current:
-            state = CURRENT_DOT.get(m, state)
+            state = CURRENT_DOT[m] or state
         out.append(PhaseDot(phase=ph, state=state))
     return out

@@ -28,7 +28,7 @@ class QuotedAsksTest(unittest.TestCase):
     def test_infra_classes_never_become_asks(self) -> None:
         for cls in INFRA:
             self.assertIn("never an ask", " ".join(lint(GOOD.replace(ask_class=cls))), cls)
-        self.assertEqual(set(AskClass) - INFRA, set(KIND_OF))
+        self.assertEqual(set(AskClass) - INFRA, {cls for cls, kind in KIND_OF.items() if kind is not None})
 
 
 @domain

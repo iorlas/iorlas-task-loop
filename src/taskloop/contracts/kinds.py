@@ -41,7 +41,14 @@ PAUSES: Final = tuple(k for k in Kind if k.name.startswith("PAUSE_") or k is Kin
 FAULTS: Final = tuple(k for k in Kind if k.name.startswith("FAULT_"))
 
 
-ASK_NAME: Final = {Kind.ASK_DECISION: "decision", Kind.ASK_STUCK: "stuck", Kind.ASK_BUDGET: "budget", Kind.ASK_TICKET: "ticket"}
+ASK_NAME: Final = {
+    Kind.ASK_DECISION: "decision", Kind.ASK_STUCK: "stuck", Kind.ASK_BUDGET: "budget", Kind.ASK_TICKET: "ticket",
+    Kind.LANDED: "", Kind.DONE: "", Kind.NOOP: "", Kind.CUT: "", Kind.WAIT_ASK: "",
+    Kind.PAUSE_LANE: "", Kind.PAUSE_NETWORK: "", Kind.ENGINE_CRASH: "", Kind.PAUSE_KILLED: "", Kind.PAUSE_MOVED: "",
+    Kind.OWNER_PARK: "", Kind.FAULT_INFRA: "", Kind.FAULT_SLOT: "", Kind.FAULT_DENIED: "", Kind.FAULT_STALE_BASE: "",
+    Kind.FAULT_PLAN: "", Kind.FAULT_LAND: "", Kind.FAULT_ENGINE: "", Kind.FAULT_BAD_REQUEST: "",
+    Kind.FAULT_CONTRACT_SKEW: "", Kind.FAULT_BASE_RED: "", Kind.FAULT_CRASHED: "",
+}
 
 
 class Action(enum.Enum):

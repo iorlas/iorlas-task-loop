@@ -63,10 +63,10 @@ def stop_why(
     until: float = 0.0,
     crashes: int = 1,
     denied: Sequence[Denial] = (),
-    now: float | None = None,
+    *,
+    now: float,
 ) -> str:
     """`kind`: the outcome Kind's name."""
-    now = time.time() if now is None else now
     at = (" until " + time.strftime("%H:%M:%S", time.localtime(until))) if until > now else ""
     w = Said(node, stop, (said or "").strip()[:200], at, f" [{stop.fix}]" if stop.fix else "", crashes, denied)
     make = WHY.get(kind)

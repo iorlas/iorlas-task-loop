@@ -73,6 +73,8 @@ class PauseCompatibility(unittest.TestCase):
     def test_every_capped_policy_is_charged_by_the_pause_path(self):
         policies = dict(pauses.TABLE)
         for reason in pauses.BACKOFF:
+            if pauses.BACKOFF[reason] is None:
+                continue
             policies[("delegate", reason)] = pauses.rule(reason, "delegate", "transient")
         for (producer, reason), policy in policies.items():
             if not policy.max_attempts:

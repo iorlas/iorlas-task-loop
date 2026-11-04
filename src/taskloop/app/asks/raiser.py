@@ -41,7 +41,10 @@ def build(spec: AskSpec, n: int, at: Asking) -> Ask:
 def raise_ask(asks: AskStore, spec: AskSpec, at: Asking, adrs: AdrStore | None = None) -> tuple[Ask | None, list[str]]:
     """File the ask and return it; (None, the broken lint rules) when it is not one an owner can answer: nothing is written then,
     and no prose ask takes its place. The ask carries what its repeat key matched: answered past asks and the repo's ADRs."""
-    ask = build(spec, asks.next_n(at.bead), at)
+    try:
+        ask = build(spec, asks.next_n(at.bead), at)
+    except ValueError as error:
+        return None, [str(error)]
     problems = lint(ask)
     if problems:
         return None, problems
@@ -87,4 +90,7 @@ def leave_queue(store: Beads, bead: BeadId, pick: str, info: str) -> str:
 
 def problems(spec: AskSpec) -> list[str]:
     """The lint rules this spec breaks as an ask: what the close checks before it files anything."""
-    return lint(build(spec, 1, Asking(bead=parse_bead_id("lint-probe"), run="", brief_hash="", repo="", title="", now=0.0)))
+    try:
+        return lint(build(spec, 1, Asking(bead=parse_bead_id("lint-probe"), run="", brief_hash="", repo="", title="", now=0.0)))
+    except ValueError as error:
+        return [str(error)]

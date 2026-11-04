@@ -18,6 +18,7 @@ from taskloop.contracts.enums import AskStatus
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ports import NewBead
 from taskloop.domain.asks import specs
+from taskloop.domain.asks.lint import INFRA
 from taskloop.stores.memory import fake_stores
 
 T = 1000.0
@@ -44,6 +45,18 @@ class RaiserTest(unittest.TestCase):
         a, problems = raiser.raise_ask(self.asks, bad, asking())
         self.assertEqual((a, self.asks.get(BeadId("t-1"))), (None, None))
         self.assertIn("decision: does not end in '?'", problems)
+
+    def test_infrastructure_specs_are_refused_before_an_ask_is_built(self) -> None:
+        for classification in INFRA:
+            with self.subTest(classification=classification):
+                spec = dataclasses.replace(specs.missing_criteria(), ask_class=classification)
+                with self.assertRaisesRegex(ValueError, "never an ask"):
+                    raiser.build(spec, 1, asking())
+                self.assertIn("never an ask", " ".join(raiser.problems(spec)))
+                ask, problems = raiser.raise_ask(self.asks, spec, asking())
+                self.assertIsNone(ask)
+                self.assertIn("never an ask", " ".join(problems))
+        self.assertEqual(self.asks.rows(), [])
 
     def test_the_next_run_waits_while_nothing_changed_and_goes_on_when_answered_or_changed(self) -> None:
         self.assertEqual(raiser.check(self.asks, BeadId("t-1"), "h", False, T), ("none", None))

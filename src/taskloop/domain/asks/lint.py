@@ -14,6 +14,8 @@ KIND_OF: Final = {
     AskClass.UNPROVEN: AskKind.STUCK, AskClass.NO_PROGRESS: AskKind.STUCK, AskClass.CAP_REACHED: AskKind.STUCK,
     AskClass.OVER_BUDGET: AskKind.BUDGET,
     AskClass.MISSING_CRITERIA: AskKind.TICKET, AskClass.TOO_BIG: AskKind.TICKET,
+    AskClass.LANE_FAILURE: None, AskClass.BAD_REQUEST: None, AskClass.SANDBOX_DENIAL: None,
+    AskClass.STALE_BASE: None, AskClass.MISSING_TOOL: None,
 }
 DECISION_MAX: Final = 120
 TRIED_MAX: Final = 3

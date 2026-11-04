@@ -23,9 +23,10 @@ KEEP_DAYS: Final = 30  # days run data of a closed bead is kept at least (logs, 
 SILENT_LIMIT: Final[dict[str, float]] = {
     Step.PLAN: 20 * 60.0, Step.REPLAN: 20 * 60.0, Step.WRITE: 30 * 60.0, Step.CHECKS: 45 * 60.0, Step.REVIEW: 20 * 60.0,
     Step.VERIFY: 20 * 60.0, Step.LOOK: 20 * 60.0, Step.GATE: 45 * 60.0, Step.LAND: 20 * 60.0,
+    Step.RESET: 30 * 60.0, Step.CLOSE: 30 * 60.0, Step.REFLECT: 30 * 60.0,
     "push": 60 * 60.0,  # an internal step, not a selectable stage; includes LFS and the pre-push hook (up to 2900 s)
 }
-SILENT_DEFAULT: Final = 30 * 60.0  # a step the table does not name (reset, close, reflect)
+SILENT_DEFAULT: Final = 30 * 60.0  # internal steps without a dedicated limit
 SAME_RED: Final = 3
 
 

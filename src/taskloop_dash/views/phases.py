@@ -8,7 +8,7 @@ from taskloop.contracts.enums import Cause, Outcome, Step, WhyCode
 from taskloop.contracts.log import Close
 
 ORDER: Final = {p: i for i, p in enumerate(Phase)}
-STEP_PHASE: Final = {
+STEP_PHASE: Final[dict[Step, Phase | None]] = {
     Step.PLAN: Phase.PLAN,
     Step.REPLAN: Phase.PLAN,
     Step.WRITE: Phase.WRITE,
@@ -18,6 +18,7 @@ STEP_PHASE: Final = {
     Step.LOOK: Phase.LOOK,
     Step.GATE: Phase.LAND,
     Step.LAND: Phase.LAND,
+    Step.RESET: None, Step.CLOSE: None, Step.REFLECT: None,
 }  # reset, close and reflect are not drawn
 PHASE_COLUMN: Final = {
     Phase.PLAN: Column.WORKING,
@@ -40,6 +41,8 @@ CODE_END: Final[dict[WhyCode, PassEnd]] = {
     WhyCode.STOPPED_BY_COORDINATOR: "parked",
     WhyCode.VERIFY: "sent_back",
     WhyCode.GATE_RED: "test_failed",
+    WhyCode.FAILED: "", WhyCode.STUCK: "", WhyCode.CHECK_BEFORE_LAND: "",
+    WhyCode.HUNG: "", WhyCode.SCHEMA_INVALID: "", WhyCode.RESOURCE: "",
 }
 CAUSE_END: Final[dict[str, PassEnd]] = {
     Cause.BAD_CHECKS: "test_failed",
@@ -48,6 +51,7 @@ CAUSE_END: Final[dict[str, PassEnd]] = {
     Cause.PUSH_RACE: "test_failed",
     Cause.VERIFY_WRONG: "sent_back",
     Cause.PLAN_SENT_BACK: "replan",
+    Cause.LANE_OUT: "", Cause.LANE_WAIT: "", Cause.INVALID_OUTPUT: "",
 }
 END_TEXT: Final[dict[PassEnd, str]] = {
     "": "",

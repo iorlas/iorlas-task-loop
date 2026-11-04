@@ -20,4 +20,7 @@ class AskSpec:
 
     @property
     def kind(self) -> AskKind:
-        return KIND_OF[self.ask_class]
+        kind = KIND_OF[self.ask_class]
+        if kind is None:
+            raise ValueError(f"class: {self.ask_class.value} is the engine's own trouble, never an ask")
+        return kind

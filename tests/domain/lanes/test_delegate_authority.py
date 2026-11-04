@@ -25,8 +25,9 @@ class ContractParity(unittest.TestCase):
         for reason, facts in CONTRACT["reasons"].items():
             with self.subTest(reason=reason):
                 expected = facts["permanence"]
-                if reason in pauses.OVERRIDES:
-                    expected, explanation = pauses.OVERRIDES[reason]
+                override = pauses.OVERRIDES.get(reason)
+                if override is not None:
+                    expected, explanation = override
                     self.assertTrue(explanation.strip())
                 # Any engine row sharing a delegate reason must also disclose divergence.
                 for (_, name), row in pauses.TABLE.items():
@@ -92,6 +93,8 @@ class DelegatePauses(unittest.TestCase):
 
     def test_all_delegate_backoff_budgets_and_network_exemption_are_kept(self):
         for reason, backoff in pauses.BACKOFF.items():
+            if backoff is None:
+                continue
             with self.subTest(reason=reason):
                 rec = None
                 for n in range(5):
@@ -111,7 +114,7 @@ class DelegatePauses(unittest.TestCase):
         expected = dict.fromkeys(standard, pauses.Backoff(60, 3600, 3))
         expected.update(dict.fromkeys(quick, pauses.Backoff(30, 1800, 3)))
         expected["network"] = pauses.Backoff(30, 1800, 0)
-        self.assertEqual(pauses.BACKOFF, expected)
+        self.assertEqual({reason: backoff for reason, backoff in pauses.BACKOFF.items() if backoff is not None}, expected)
         self.assertEqual(pauses.MACHINE_FIXED, {
             "no_lane", "logged_out", "credit_exhausted", "secrets", "setup", "contract_violation", "engine_only_unenforced",
         })

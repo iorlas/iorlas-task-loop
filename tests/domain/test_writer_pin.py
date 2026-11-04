@@ -44,7 +44,7 @@ class Pin(unittest.TestCase):
         self.assertIsInstance(action, lp.Yield)
         assert isinstance(action, lp.Yield)
         for why in (pin.stop_why("write", ["openai"], reason, "CODEX: just check", stop.fix),
-                    says.stop_why("write", action.kind, stop, "CODEX: just check")):
+                    says.stop_why("write", action.kind, stop, "CODEX: just check", now=0)):
             self.assertIn("paused: the writer's harness cannot deny the engine-only recipes:", why)
             self.assertIn("CODEX: just check", why)
             self.assertIn(stop.fix, why)

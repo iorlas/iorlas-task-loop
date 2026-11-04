@@ -33,7 +33,7 @@ class Backoff:
 
 # Engine retry budgets, not delegate classifications. Delegate callers supply stop
 # permanence; without those facts there is no basis for an automatic retry.
-BACKOFF: Final[dict[str, Backoff]] = {
+BACKOFF: Final[dict[str, Backoff | None]] = {
     Reason.ONLY_FAMILY_UNREADY: Backoff(),
     Reason.BUSY: Backoff(30, 1800),
     Reason.TIMEOUT: Backoff(),
@@ -47,12 +47,37 @@ BACKOFF: Final[dict[str, Backoff]] = {
     Reason.DUPLICATE_TASK: Backoff(30, 1800),
     Reason.LOCK: Backoff(30, 1800),
     Reason.KILLED: Backoff(),
+    Reason.NO_LANE: None, Reason.SAME_FAMILY: None, Reason.ENGINE_CRASH: None, Reason.STAGE_REFUSED: None,
+    Reason.TRANSIENT_INFRASTRUCTURE: None, Reason.CRASH: None, Reason.NO_ANSWER: None, Reason.ENGINE_ONLY_UNENFORCED: None,
+    Reason.OVERRUN: None, Reason.SECRETS: None, Reason.CREDIT_EXHAUSTED: None, Reason.LOGGED_OUT: None,
+    Reason.BAD_REQUEST: None, Reason.CALLER: None, Reason.SETUP: None, Reason.PROFILE_AHEAD: None, Reason.CONTRACT_VIOLATION: None,
+    Reason.PAUSE_LANE: None, Reason.PAUSE_NETWORK: None, Reason.PAUSE_KILLED: None, Reason.PAUSE_MOVED: None,
+    Reason.FAULT_INFRA: None, Reason.FAULT_CRASHED: None, Reason.FAULT_STALE_BASE: None, Reason.FAULT_SLOT: None,
+    Reason.FAULT_DENIED: None, Reason.FAULT_PLAN: None, Reason.FAULT_LAND: None, Reason.FAULT_ENGINE: None,
+    Reason.FAULT_BAD_REQUEST: None, Reason.FAULT_CONTRACT_SKEW: None, Reason.FAULT_BASE_RED: None,
+    Reason.ASK_DECISION: None, Reason.ASK_STUCK: None, Reason.ASK_BUDGET: None, Reason.ASK_TICKET: None,
+    Reason.WAIT_ASK: None, Reason.OWNER_PARK: None, Reason.PLAN_NOOP: None, Reason.LOST_RUN: None,
+    Reason.BD_PUSH_REJECTED: None, Reason.DOLT_PUSH_REJECTED: None, Reason.FORGE_5XX: None,
 }
 
 # Released engine policy wins even when a delegate supplies transient retry hints.
-OVERRIDES: Final[dict[str, tuple[Permanence, str]]] = {
+OVERRIDES: Final[dict[str, tuple[Permanence, str] | None]] = {
     Reason.NO_LANE: ("needs_owner", "The owner must restore an available lane; a predicted time cannot repair it."),
     Reason.CRASH: ("needs_owner", "A delegate crash needs owner investigation after in-process retries are exhausted."),
+    Reason.ONLY_FAMILY_UNREADY: None, Reason.SAME_FAMILY: None, Reason.BUSY: None, Reason.TIMEOUT: None, Reason.NETWORK: None,
+    Reason.ENGINE_CRASH: None, Reason.STAGE_REFUSED: None, Reason.TRANSIENT_INFRASTRUCTURE: None,
+    Reason.RATE_LIMITED: None, Reason.HUNG: None, Reason.VENDOR_BLIP: None, Reason.WORKER_FAILED: None,
+    Reason.SCHEMA_INVALID: None, Reason.HELD: None, Reason.DUPLICATE_TASK: None, Reason.LOCK: None, Reason.NO_ANSWER: None,
+    Reason.KILLED: None, Reason.ENGINE_ONLY_UNENFORCED: None, Reason.OVERRUN: None, Reason.SECRETS: None,
+    Reason.CREDIT_EXHAUSTED: None, Reason.LOGGED_OUT: None, Reason.BAD_REQUEST: None, Reason.CALLER: None,
+    Reason.SETUP: None, Reason.PROFILE_AHEAD: None, Reason.CONTRACT_VIOLATION: None,
+    Reason.PAUSE_LANE: None, Reason.PAUSE_NETWORK: None, Reason.PAUSE_KILLED: None, Reason.PAUSE_MOVED: None,
+    Reason.FAULT_INFRA: None, Reason.FAULT_CRASHED: None, Reason.FAULT_STALE_BASE: None, Reason.FAULT_SLOT: None,
+    Reason.FAULT_DENIED: None, Reason.FAULT_PLAN: None, Reason.FAULT_LAND: None, Reason.FAULT_ENGINE: None,
+    Reason.FAULT_BAD_REQUEST: None, Reason.FAULT_CONTRACT_SKEW: None, Reason.FAULT_BASE_RED: None,
+    Reason.ASK_DECISION: None, Reason.ASK_STUCK: None, Reason.ASK_BUDGET: None, Reason.ASK_TICKET: None,
+    Reason.WAIT_ASK: None, Reason.OWNER_PARK: None, Reason.PLAN_NOOP: None, Reason.LOST_RUN: None,
+    Reason.BD_PUSH_REJECTED: None, Reason.DOLT_PUSH_REJECTED: None, Reason.FORGE_5XX: None,
 }
 
 
@@ -127,7 +152,8 @@ def rule(reason: str | Unknown, producer: Producer | None = None, permanence: Pe
     if producer == "engine":
         return PauseRule("needs_owner")
     backoff = BACKOFF.get(raw) if isinstance(reason, str) else None
-    permanence = OVERRIDES[raw][0] if raw in OVERRIDES else permanence or "needs_owner"
+    override = OVERRIDES.get(raw)
+    permanence = override[0] if override is not None else permanence or "needs_owner"
     if permanence == "needs_owner":
         return PauseRule(permanence)
     backoff = backoff or Backoff()

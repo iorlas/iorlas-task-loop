@@ -33,7 +33,8 @@ def contract_permanences() -> dict[str, Permanence]:
 
 
 def missing_policies(reasons: set[str], contract: Mapping[str, Permanence]) -> set[str]:
-    return reasons - ({reason for _, reason in TABLE} | set(OVERRIDES) | set(contract))
+    overrides = {reason for reason, override in OVERRIDES.items() if override is not None}
+    return reasons - ({reason for _, reason in TABLE} | overrides | set(contract))
 
 
 def declaration(node: ast.AST) -> set[str]:
@@ -87,14 +88,18 @@ class Complete(unittest.TestCase):
     def test_all_recorded_delegate_contract_reasons_have_a_policy(self):
         for reason, permanence in contract_permanences().items():
             with self.subTest(reason=reason):
-                expected = OVERRIDES[reason][0] if reason in OVERRIDES else permanence
+                override = OVERRIDES.get(reason)
+                expected = override[0] if override is not None else permanence
                 self.assertEqual(rule(reason, "delegate", permanence).permanence, expected)
 
     def test_a_reason_without_any_policy_is_rejected_by_coverage(self):
         self.assertEqual(missing_policies({"new_unclassified_reason"}, contract_permanences()), {"new_unclassified_reason"})
 
     def test_overrides_have_explanations_and_do_not_duplicate_table_rows(self):
-        for reason, (_, explanation) in OVERRIDES.items():
+        for reason, override in OVERRIDES.items():
+            if override is None:
+                continue
+            _, explanation = override
             with self.subTest(reason=reason):
                 self.assertTrue(explanation.strip())
                 self.assertNotIn(("delegate", reason), TABLE)
@@ -104,7 +109,7 @@ class Complete(unittest.TestCase):
         self.assertEqual(missing_policies(set(Reason), contract), set())
         # Overrides deliberately replace contract permanence; table rows are separate policies.
         counts = Counter(reason for _, reason in TABLE)
-        counts.update(set(OVERRIDES) | set(contract))
+        counts.update({reason for reason, override in OVERRIDES.items() if override is not None} | set(contract))
         self.assertEqual(counts, Counter(Reason))
 
     def test_table_has_no_duplicate_source_keys(self):

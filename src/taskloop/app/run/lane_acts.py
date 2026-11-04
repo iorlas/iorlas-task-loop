@@ -184,7 +184,7 @@ class LaneActs:
         pinned = pin.for_role(c.role, pin.families(e.cfg.writer_family, e.budget.labels))
         if isinstance(a, lp.Yield) and pinned and stop.reason in pin.STOP_REASONS:  # the pin found no ready lane: say it
             raise ops.blocked(pin.stop_why(c.node, pinned, stop.reason, res.say or stop.fix, stop.fix), a.kind, stop)
-        why = ops.stop_why(c.node, a.kind, stop, res.say, retry_after, c.counts["crashes"] + 1, res.denied)
+        why = ops.stop_why(c.node, a.kind, stop, res.say, retry_after, c.counts["crashes"] + 1, res.denied, now=e.clock.now())
         raise ops.blocked(why, a.kind, stop)
 
     def wait_net(self, c: Any, res: DelegateResult, stop: lp.Stop, a: lp.WaitNet) -> None:
