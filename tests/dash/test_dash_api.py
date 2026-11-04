@@ -83,7 +83,8 @@ class ApiFixture(unittest.TestCase):
         self.now = NOW
         ports = Ports(store=lambda repo: self.store)
         ingest(self.cfg, self.now)
-        self.dash = Dash(Env(config=self.cfg, home=root, ports=ports, clock=lambda: self.now, version="v-test"))
+        self.dash = Dash(Env(config=self.cfg, home=root, ports=ports, clock=lambda: self.now, version="v-test",
+                             host=socket.gethostname()))
 
     def tearDown(self):
         self.dash.reads.wait()

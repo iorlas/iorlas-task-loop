@@ -3,7 +3,6 @@ owner-look items, the engine logs as typed runs, the live asks, the ask ledger, 
 delegate's lane status. Read only; a poll never runs bd: the bead list and the look items
 keep to their TTLs."""
 
-import socket
 from collections import Counter
 from collections.abc import Sequence
 from dataclasses import replace
@@ -91,7 +90,7 @@ class Worlds:
         else:
             found = env.ports.slot_source(path)
             env.ttl.put(key, (stamp, found))
-        return replace(found, dirs=env.ports.slot_dirs(found.root)) if found.root else found
+        return replace(found, host=env.host, dirs=env.ports.slot_dirs(found.root) if found.root else found.dirs)
 
     def profile_error(self, path: str) -> str:
         """Keep the row while its source files are unchanged; unknown sources fall back to 30 seconds."""
@@ -189,7 +188,7 @@ class Worlds:
         events = self.records.events()
         projects = [replace(p, strays=strays_of(p.beads, p.slots, {b: r for (key, b), r in runs.items() if key == p.id}, now),
                             events=[e for e in events if e.repo == paths[p.id]]) for p in projects]
-        return World(now=now, host=socket.gethostname(), version=env.version, projects=projects, runs=runs, asks=self.asks(),
+        return World(now=now, host=env.host, version=env.version, projects=projects, runs=runs, asks=self.asks(),
                      run_headers=self.run_headers(now, rows), leases=self.leases(now, rows), database_error=database_error,
                      status=StatusStore(env.config).get(), ledger=self.ledger(), landings=self.landings(),
                      parks=self.records.parks(), net_pauses=self.records.net_pauses(), skipped_traces=self.records.traces().skipped)

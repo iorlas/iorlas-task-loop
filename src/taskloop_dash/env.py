@@ -3,7 +3,6 @@
 The dash imports `taskloop.contracts` and nothing else of the main package. A fact that lives in engine code (slot capacity, bd, the
 owner's writes) comes in as a callable on `Ports`, made by the launcher; a test passes fakes."""
 
-import socket
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -73,7 +72,7 @@ def _no_stamp(repo: str) -> object | None:
 
 
 def _no_slots(repo: str) -> SlotSource:
-    return SlotSource(host=socket.gethostname())
+    return SlotSource(host="")
 
 
 def _no_dirs(root: str) -> frozenset[str] | None:
@@ -108,12 +107,13 @@ class Ports:
 
 class Env:
     def __init__(self, config: Path | str, home: Path | str | None = None, ports: Ports | None = None,
-                 clock: Callable[[], float] = time.time, version: str = "", tails: Tails | None = None) -> None:
+                 clock: Callable[[], float] = time.time, version: str = "", tails: Tails | None = None, host: str = "") -> None:
         self.config = ConfigDir(config)
         self.home = Path(home) if home else Path.home()
         self.ports = ports or Ports()
         self.clock = clock
         self.version = version
+        self.host = host
         self.tails = tails or Tails()
         self.ttl = TtlCache(clock)
         self.files = FileCache()

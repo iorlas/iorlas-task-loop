@@ -8,6 +8,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -69,7 +70,7 @@ class Golden(unittest.TestCase):
             self.paths[name] = str(self.cfg / "engine" / f"{run.name}.jsonl")
         ports = Ports(store=lambda r: self.store)
         ingest(self.cfg, NOW)
-        self.dash = Dash(Env(config=self.cfg, home=root, ports=ports, clock=lambda: NOW, version="v-test"))
+        self.dash = Dash(Env(config=self.cfg, home=root, ports=ports, clock=lambda: NOW, version="v-test", host="devbox"))
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -104,6 +105,16 @@ class Golden(unittest.TestCase):
             detail = wire.load(BeadDetail, body)
             expected["beads"][name] = wire.dump(detail.replace(version=version_of(detail)))
         self.assertEqual(got, expected)
+
+    def test_the_golden_is_the_same_under_different_system_hostnames(self):
+        for hostname in ("devbox", "dtomilin-mWG"):
+            with self.subTest(hostname=hostname), patch("socket.gethostname", return_value=hostname) as system_host:
+                # Fresh caches ensure each host is tested through all readers.
+                self.dash = Dash(Env(config=self.cfg, home=self.repo.parent, ports=Ports(store=lambda _: self.store),
+                                     clock=lambda: NOW, version="v-test", host="devbox"))
+                self.test_the_answers_for_the_recorded_state_are_the_golden()
+                self.assertEqual(self.dash.reads.worlds.slot_source(str(self.repo)).host, "devbox")
+                system_host.assert_not_called()
 
 
 if __name__ == "__main__":

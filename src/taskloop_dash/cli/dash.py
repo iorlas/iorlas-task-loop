@@ -5,6 +5,7 @@ and says nothing for the facts only the engine holds."""
 import argparse
 import hashlib
 import importlib
+import socket
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from types import ModuleType
@@ -42,5 +43,6 @@ def main(argv: Sequence[str] | None = None, load: Callable[[str], ModuleType] = 
     ap.add_argument("--ports", default=None, help="MODULE:FUNC returning the Ports (the engine's read-only facts)")
     known, rest = ap.parse_known_args(argv)
     process = penv.snapshot()
-    env = Env(config=default_root(process), ports=resolve_ports(known.ports, process, load), version=code_version())
+    env = Env(config=default_root(process), ports=resolve_ports(known.ports, process, load), version=code_version(),
+              host=socket.gethostname())
     serve.main(env, here, process, rest)  # the dash's edge: the process environment is taken here, once
