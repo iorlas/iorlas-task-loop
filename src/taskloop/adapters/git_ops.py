@@ -7,7 +7,7 @@ from typing import Self
 from git_porcelain.errors import GitError
 from git_porcelain.real import RealRepo
 
-from taskloop.adapters.git_base import GitBase, classify
+from taskloop.adapters.git_base import GitBase, classify, real_checkout
 from taskloop.adapters.git_pool import pool_error, pool_read_error
 from taskloop.contracts.gitfacts import DiffEntry, GitOutcome
 from taskloop.contracts.slots import GitReadFailure, MissingRevision
@@ -39,7 +39,7 @@ class LandGit(GitBase):
 
     def unmerged(self, d: str) -> list[str]:
         try:
-            return list(self._pool(d).worktree(Path(d).absolute()).unmerged())
+            return list(self._pool(d).worktree(real_checkout(d)).unmerged())
         except GitError as err:
             raise pool_read_error(err) from err
 
@@ -126,7 +126,7 @@ class LandGit(GitBase):
 
     def rebase_continue(self, d: str) -> GitOutcome:
         try:
-            result = self._pool(d).worktree(Path(d).absolute()).continue_rebase()
+            result = self._pool(d).worktree(real_checkout(d)).continue_rebase()
         except GitError as err:
             raise pool_error(err) from err
         return GitOutcome(ok=result.ok, output=result.output)

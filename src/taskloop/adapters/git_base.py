@@ -26,6 +26,13 @@ from taskloop.contracts.slots import (
     SlotGitError,
 )
 
+
+def real_checkout(d: str) -> Path:
+    """The checkout's real path, the spelling git itself reports (macOS: the temp dir /var is /private/var). Every port call names the
+    checkout by it, so the pin (GIT_DIR, GIT_WORK_TREE) and the cwd git sees are one spelling."""
+    return Path(d).resolve()
+
+
 INDEX_LOCK = re.compile(r"index\.lock")
 REF_RACE = re.compile(r"incorrect old value|cannot lock ref|unable to update local ref|Unable to create '[^']*\.lock'")
 PINNED = re.compile(r"already (?:checked out|used by worktree) at '?([^'\n]*)'?")
