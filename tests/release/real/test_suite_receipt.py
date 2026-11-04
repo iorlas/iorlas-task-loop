@@ -69,10 +69,10 @@ class ReleaseReceipt(unittest.TestCase):
             memo = authorization.memo_for(stores, port, d, cfg, TreeSha(tree), BaseSha(base), env, sh.spawner)
             check = next(c for c in gate_items(cfg) if c.id == CheckId("suite"))
             rec = memo.hit(memo.key(check))
-            self.assertIsNotNone(rec)
+            assert rec is not None
             self.assertEqual((rec.tree, rec.base, rec.result.status), (tree, base, "passed"))
             actual_push(d, remote, refspec)
-        with (mock.patch.object(suite, "verify", side_effect=lambda *a: verify(*a, checks)),
+        with (mock.patch.object(suite, "verify", side_effect=lambda tool, at, shell: verify(tool, at, shell, checks)),
               mock.patch.object(port, "push", side_effect=judged_push)):
             def bump():
                 return flow.bump_and_commit(repo, repo, flow.Request("receipt"), sh)
