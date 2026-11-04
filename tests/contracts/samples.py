@@ -260,6 +260,7 @@ EVENTS = {
     "slot_setup": _ev(events.SlotSetup, slot="s1", worktree="/w", exit=0, exec_seconds=12.5),
     "slot_hold": _ev(events.SlotHold, slot="s1", slot_bead="slot-1", until=T + 3600, why="screenshots"),
     "slot_aside": _ev(events.SlotAside, slot="s1", held=True, why="busy"),
+    "slot_stall": _ev(events.SlotStall, slot="s1", invariant="free_beside_waiter", why="s1 free beside 2 waiters", since=T, healed=True),
     "block": _ev(events.Block, why_code=WhyCode.NEEDS_HUMAN, why="needs a human"),
     "close": _ev(events.BeadClosed, reason="done"),
     "land": _ev(events.Land, sha="abc"),

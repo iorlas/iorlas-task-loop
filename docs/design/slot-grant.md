@@ -13,3 +13,9 @@ Verdicts: ✅ do, ❌ refuse. Cost = rough size. Incident: docs/incidents/2026-1
 
 ## Order decision (before or inside DB-08)
 Neither. (a'), (b), (c), (d) first on files, as part of LOOPWALL, because they need no database and remove the live risk. The DB-backed `grant()` becomes its own family `slot` AFTER DB-03 and finish_run (tl-zej9.14), and the property test from (c) is its parity proof: the same random-interleaving suite runs against the file implementation and the DB implementation and must agree.
+
+## Status of the file version (tl-bxk.10.33.12)
+- (b) shipped: `domain/slot_liveness.py` (pure: slots, line, now -> violations), `app/slots/watchdog.py` (reads the facts, logs a `slot_stall` event once per episode, heals). It runs in every waiter's poll (`line.wait_slot`, so loops and `run-task --wait`), once a loop pass (`loop.py step`) and read-only in `tl doctor`.
+- Heals: a free slot beside waiters that do not take it drops the tickets ahead of the caller (the first one when the caller is no waiter): a waiter needs no ticket to take. A slot an automatic taker holds with no engine lock for 15 min loses its lease. A slot set aside for 30 min, and a ready bead beside an idle lane and a free slot for 10 min, are only reported.
+- Which 2026-11-03 hypothesis survives the current code: the 12 h set-aside is gone (a pending probe is retried on every take). Still possible, and now caught: a setup that never passes (aside_too_long), a live waiter hung with its ticket at the head (free_beside_waiter), a holder that died without releasing (orphan_held). Pid reuse behind a dead ticket is not realistic: the next reader of the line drops a dead ticket within seconds.
+- (c) shipped: `tests/slots/test_slot_sim.py`, ten fixed seeds on the real SlotPool, ticket line and watchdog; the control test turns the heal off and the same seeds must break both invariants.

@@ -4,6 +4,7 @@ A waiter (a loop, run-task --slot any) takes a Ticket; only the first live ticke
 gone is dropped by whoever reads the line (the store does it)."""
 from collections.abc import Callable
 
+from taskloop.app.slots import watchdog
 from taskloop.app.slots.env import DEFAULT_PRIO, TICKET_POLL, SlotEnv
 from taskloop.app.slots.pool import SlotPool
 from taskloop.contracts.ids import BeadId
@@ -30,7 +31,7 @@ def wait_slot(env: SlotEnv, why: str, bead: str = "", stop: Callable[[], bool] |
     nap = sleep or env.sleep
     pool = SlotPool(env)
     ticket = env.tickets.take(env.repo_key, why, prio, pid=env.pid, now=env.now(), bead=bead)
-    delay = first
+    delay, watch = first, watchdog.Watch()
     try:
         while True:
             ahead = [x for x in waiting_line(env) if order(x) < order(ticket)]
@@ -40,6 +41,7 @@ def wait_slot(env: SlotEnv, why: str, bead: str = "", stop: Callable[[], bool] |
                     return got
             if stop and stop():
                 return None
+            watchdog.tick(env, watch, own=ticket)  # tl-bxk.10.33.12: a free slot beside a waiter is healed, not waited out
             if on_wait:
                 on_wait(len(ahead))
             nap(delay)

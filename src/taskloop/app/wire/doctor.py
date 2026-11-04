@@ -1,4 +1,5 @@
 """`tl doctor`: what is off in the repo's setup for the loop, one line each, and the repo-profile report."""
+import contextlib
 import os
 import time
 from pathlib import Path
@@ -8,6 +9,8 @@ from taskloop.adapters.beadtools import bd_store
 from taskloop.adapters.ident import claude_dir, config_dir
 from taskloop.app.doctor import profiles
 from taskloop.app.release import catalog, manifest
+from taskloop.app.slots import watchdog
+from taskloop.app.wire import real
 from taskloop.app.wire import slots as wslots
 from taskloop.app.wire.slots import cfg_source
 from taskloop.contracts import runlife
@@ -74,7 +77,7 @@ def bead_lint_warnings(repo: str, who: Identity, store: Beads | None = None) -> 
 OWNERSHIP = "## Ownership"
 
 
-def slot_warnings(repo: str, who: Identity, git: Git, now: float) -> tuple[str, list[str]]:
+def slot_warnings(repo: str, who: Identity, git: Git, now: float, env: Env | None = None) -> tuple[str, list[str]]:
     """(the slot table's one-line summary, its WARN lines): the slots as `tl status` and the dash list them, against config and folders."""
     try:
         table = wslots.slot_table(repo, who, git, now)
@@ -85,6 +88,9 @@ def slot_warnings(repo: str, who: Identity, git: Git, now: float) -> tuple[str, 
     warns = [f"slot {v.id} is {v.state}: {v.idle_why}" for v in table.slots if v.state == "dead"]
     warns += [f"slot {v.id} is above slots.count {table.configured} and still {v.state}" for v in table.slots
               if v.beyond_count and v.state not in ("free", "retiring")]
+    if env is not None:  # tl-bxk.10.33.12: the liveness invariants, read only (the loop and the waiters heal)
+        with contextlib.suppress(SystemExit, OSError, ValueError, BdFailure):
+            warns += watchdog.lines(watchdog.look(wslots.slot_env(repo, spawner=real.spawner(env), git=git, who=who)))
     return f"slots: {table.configured} configured from {where}; {states}", warns
 
 
@@ -114,7 +120,7 @@ def run(plugin_root: Path, env: Env, git: Git, who: Identity) -> int:
     _, base, commit = source
     print(f"config: .task-loop.json from base {base} at commit {commit}" if commit else
           f"config: .task-loop.json from working tree {repo} (base {base} unresolved; no commit read)")
-    slot_line, slot_warns = slot_warnings(repo, who, git, time.time())
+    slot_line, slot_warns = slot_warnings(repo, who, git, time.time(), env)
     print(slot_line)
     warns = git_warnings(repo, source, git) + bead_lint_warnings(repo, who) + slot_warns
     warns += [f"run {r} is lost: its process is gone and it recorded no end" for r in runlife.reconcile(who.config, time.time())]

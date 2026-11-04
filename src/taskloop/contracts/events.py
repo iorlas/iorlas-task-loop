@@ -63,6 +63,17 @@ class SlotAside(EventRec, tag="slot_aside"):
 
 
 @final
+class SlotStall(EventRec, tag="slot_stall"):
+    """A slot liveness invariant that did not hold (domain/slot_liveness.py), and whether the watchdog healed it."""
+
+    slot: str = ""
+    invariant: str = ""
+    why: str = ""
+    since: float = 0.0
+    healed: bool = False
+
+
+@final
 class SlotHoldExpired(EventRec, tag="slot_hold_expired"):
     slot: str = ""
     slot_bead: str = ""
@@ -140,8 +151,8 @@ class InstallMissing(EventRec, tag="install_missing"):
 
 
 Event = (
-    Claim | Stage | SlotTake | SlotRelease | SlotSetup | SlotHold | SlotAside | SlotHoldExpired | Block | BeadClosed | Land | CodeReloaded
-    | ReloadFallback | WorktreeStart | WorktreeSunset | LoopExit | NetUp | NetDown | InstallMissing
+    Claim | Stage | SlotTake | SlotRelease | SlotSetup | SlotHold | SlotAside | SlotStall | SlotHoldExpired | Block | BeadClosed | Land
+    | CodeReloaded | ReloadFallback | WorktreeStart | WorktreeSunset | LoopExit | NetUp | NetDown | InstallMissing
 )
 
 

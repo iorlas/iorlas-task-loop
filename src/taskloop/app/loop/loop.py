@@ -22,7 +22,7 @@ from taskloop.app.loop.settle import Settle
 from taskloop.app.loop.take import Taker
 from taskloop.app.loop.versions import Installs
 from taskloop.app.slots import line as slots_line
-from taskloop.app.slots import owned
+from taskloop.app.slots import owned, watchdog
 from taskloop.app.slots.lease import Lease
 from taskloop.app.slots.pool import SlotPool
 from taskloop.contracts import runlife, wire
@@ -80,6 +80,7 @@ class Loop(Core):
         self.runner = BeadRun(env, files, installs, self.tune, self.stop_mode, self.running, self.beat, self.say)
         self.taker = Taker(env, self.runner, self.tune, self.say, self.record, self.c.later)
         self.refuser = Refuser(env.store, self.say)  # lint refusals: one label and comment per bead, one line per loop
+        self.watch = watchdog.Watch()  # the slot liveness look (tl-bxk.10.33.12)
         self.area_wait = [0.0, 0.0]  # when every ready bead began waiting for an area, and when that was last said
         if inherited:
             self.st = LoopState(pid=env.pid, started=self.started, t=env.now(), repo=env.repo, version=env.version, code_dir=env.code_dir,
@@ -230,6 +231,9 @@ class Loop(Core):
         self.env.chores()
         q, rule = self.queue()
         cands = self.candidates(q)
+        if self.prof.slots.count > 0:  # tl-bxk.10.33.12: the slot liveness invariants, once per EVERY s
+            since = min((self.first_seen.get(b.id, self.env.now()) for b in cands), default=None)
+            watchdog.tick(self.env.slot_env(), self.watch, ready_since=since, idle_lanes=1)
         if cands:
             self.area_wait[0] = 0.0
             return self.work(cands, rule)
