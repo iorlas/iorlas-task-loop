@@ -7,7 +7,7 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING, Final, Literal
 
-from git_porcelain import real_parse, real_read
+from git_porcelain import real_checkout, real_observe, real_parse, real_read
 from git_porcelain.api import (
     Aborted,
     BranchHeld,
@@ -29,6 +29,7 @@ from git_porcelain.api import (
 )
 from git_porcelain.errors import GitUnavailable, some
 from git_porcelain.real_done import unavailable
+from git_porcelain.remote_validation import validate_remote
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -59,17 +60,16 @@ __all__ = [
 
 # Another process fetching into the same repository at the same moment: the ref is where it should be, the fetch
 # only lost the lock (task-loop measured 150 of 180 simultaneous fetches failing so).
-_REF_RACE: Final = re.compile(
+REF_RACE: Final = re.compile(
     r"incorrect old value|cannot lock ref|unable to update local ref|Unable to create '[^']*\.lock'|failed: reference already exists"
 )
 _FETCH_TRIES: Final = 5
-_TRANSIENT: Final = re.compile(
+TRANSIENT: Final = re.compile(
     r"curl \d+|Broken pipe|Connection (?:reset|timed out|refused)|Could not resolve host|early EOF|RPC failed|remote end hung up|"
     r"SSL_ERROR|TLS|Operation timed out|Network is unreachable|Temporary failure in name resolution|error: 5\d\d|HTTP/\d(?:\.\d)? 5\d\d|"
     r"Could not read from remote repository|does not appear to be a git repository|unable to access",
     re.IGNORECASE,
 )
-_NOT_A_HOOK: Final = ("index.lock", "tell me who you are", "empty ident", "unable to auto-detect", "not a git repository", "unmerged files")
 _MARKERS: Final = re.compile(r"^(?:<<<<<<<|>>>>>>>)(?: |$)", re.MULTILINE)
 
 
@@ -85,12 +85,13 @@ def _done[T](repo: RealRepo, result: T) -> T:
 
 # -- Repo -------------------------------------------------------------------------------------------------
 def sync(repo: RealRepo, remote: str) -> SyncResult:
+    validate_remote(remote)
     try:
         for attempt in range(_FETCH_TRIES):
-            done = repo.run(repo.path, "fetch", "--quiet", remote, check=False, timeout=repo.remote_timeout)
+            done = repo.run(repo.path, "fetch", "--quiet", "--", remote, check=False, timeout=repo.remote_timeout)
             if done.rc == 0:
                 return Synced()
-            if attempt == _FETCH_TRIES - 1 or not _REF_RACE.search(done.tail):
+            if attempt == _FETCH_TRIES - 1 or not REF_RACE.search(done.tail):
                 return Offline(done.tail)
             repo.sleep(0.1 * (attempt + 1))
         return Offline("fetch gave up")  # pragma: no cover - the loop returns on its last turn
@@ -111,7 +112,12 @@ def exclude_locally(repo: RealRepo, patterns: Sequence[str]) -> None:
 
 
 # -- Worktree ---------------------------------------------------------------------------------------------
-def _stage(wt: RealWorktree, paths: Literal["own", "all"], base: str | None) -> None:
+def _stage(wt: RealWorktree, paths: Literal["own", "all", "tracked", "staged"], base: str | None) -> None:
+    if paths == "staged":
+        return
+    if paths == "tracked":
+        wt.run("add", "-u")
+        return
     if paths == "all":
         wt.run("add", "-A")
         return
@@ -125,7 +131,7 @@ def record(
     wt: RealWorktree,
     message: str,
     *,
-    paths: Literal["own", "all"],
+    paths: Literal["own", "all", "tracked", "staged"],
     base: str | None,
     mode: Literal["new", "amend", "squash_to"],
     squash_to: Sha | None,
@@ -135,6 +141,7 @@ def record(
     if mode == "squash_to" and squash_to is None:
         msg = "mode='squash_to' needs squash_to"
         raise ValueError(msg)
+    wt.run("rev-parse", "--git-dir")
     old = real_read.head_of(wt)
     if mode == "amend" and old is None:
         msg = "nothing to amend: HEAD is unborn"
@@ -143,7 +150,10 @@ def record(
         _stage(wt, paths, base)
         target = squash_to if mode == "squash_to" else old
         against = str(target) if target is not None else "4b825dc642cb6eb9a060e54bf8d69288fbee4904"  # the empty tree
-        if wt.run("diff", "--cached", "--quiet", against, check=False).rc == 0 and not allow_empty:
+        delta = wt.run("diff", "--cached", "--quiet", against, check=False)
+        if delta.rc not in {0, 1}:
+            raise unavailable(("diff",), delta)
+        if delta.rc == 0 and not allow_empty and mode != "amend":
             return NothingToRecord()
         if mode == "squash_to":
             wt.run("reset", "-q", "--soft", str(squash_to))
@@ -153,7 +163,7 @@ def record(
         if done.rc != 0:
             if mode == "squash_to" and old is not None:
                 wt.run("reset", "-q", "--soft", str(old))
-            if hooks and not any(mark in done.tail.lower() for mark in _NOT_A_HOOK):
+            if hooks and "hook" in done.tail.lower():
                 return HookRejected(done.tail)
             raise unavailable(args, done)
         head = real_read.head_of(wt)
@@ -165,7 +175,7 @@ def record(
 
 def _clean(wt: RealWorktree, clean_keep: Sequence[str] | None) -> None:
     if clean_keep is not None:
-        wt.run("clean", "-fdq", *(arg for pattern in clean_keep for arg in ("-e", pattern)))
+        real_checkout.clean(wt, clean_keep, ignored=False)
 
 
 def _same(a: Path, b: Path) -> bool:
@@ -184,12 +194,13 @@ def take_branch(
     holders = tuple(w for w in wt.repo.worktrees() if w.branch == branch and not _same(w.path, wt.path))
     if holders:
         return BranchHeld(holders)
+    base = real_checkout.resolve_commit(wt, base)
     ref = f"refs/heads/{branch}"
     exists = wt.run("rev-parse", "--verify", "-q", ref, check=False).rc == 0
     kept: str | None = None
     try:
         if mode == "resume":
-            wt.run("checkout", "-q", branch, "--") if exists else wt.run("checkout", "-q", "-b", branch, base)
+            wt.run("checkout", "-q", branch, "--") if exists else wt.run("checkout", "-q", "-b", branch, "--end-of-options", base, "--")
         else:
             if mode == "fresh" and exists and keep_aside_as is not None and int(wt.run("rev-list", "--count", f"{base}..{branch}").out) > 0:
                 if wt.run("rev-parse", "--verify", "-q", f"refs/heads/{keep_aside_as}", check=False).rc == 0:
@@ -197,7 +208,7 @@ def take_branch(
                     raise ValueError(msg)
                 wt.run("branch", "-m", branch, keep_aside_as)
                 kept = keep_aside_as
-            wt.run("checkout", "-q", "-B", branch, base)
+            wt.run("checkout", "-q", "-B", branch, "--end-of-options", base, "--")
         _clean(wt, clean_keep)
         head = real_read.head_of(wt)
         head = some(head)
@@ -241,7 +252,33 @@ def _count(wt: RealWorktree, spec: str) -> int:
     return int(wt.run("rev-list", "--count", spec).out.strip())
 
 
-def rebase_onto(wt: RealWorktree, base: str, squash_message: str | None) -> RebaseResult:
+def _squash_before_rebase(
+    wt: RealWorktree, base: str, message: str, old: Sha, *, squash_failure: Literal["raise", "continue_unsquashed"]
+) -> tuple[bool, str | None]:
+    base = real_checkout.resolve_commit(wt, base)
+    fork = wt.run("merge-base", "--end-of-options", "HEAD", base, check=False).out.strip()
+    if not fork or _count(wt, f"{fork}..HEAD") <= 1:
+        return False, None
+    wt.run("reset", "-q", "--soft", fork)
+    made = wt.repo.run(wt.path, *_identity_args(wt.repo), "commit", "-q", "--no-verify", "--allow-empty", "-m", message, check=False)
+    if made.rc == 0:
+        return True, None
+    wt.run("reset", "-q", "--hard", str(old))
+    if squash_failure == "raise":
+        raise unavailable(("commit",), made)
+    return False, (made.out + made.err).strip()
+
+
+def rebase_onto(
+    wt: RealWorktree,
+    base: str,
+    squash_message: str | None,
+    *,
+    squash_failure: Literal["raise", "continue_unsquashed"] = "raise",
+    update_refs: bool | None = None,
+) -> RebaseResult:
+    if squash_failure not in {"raise", "continue_unsquashed"}:
+        raise ValueError(squash_failure)
     if _paused(wt):
         msg = "a rebase is already paused here: finish_rebase first"
         raise ValueError(msg)
@@ -252,28 +289,22 @@ def rebase_onto(wt: RealWorktree, base: str, squash_message: str | None) -> Reba
     if old is None:
         msg = "nothing to rebase: HEAD is unborn"
         raise ValueError(msg)
+    base = real_checkout.resolve_commit(wt, base)
     if _count(wt, f"HEAD..{base}") == 0:
         return UpToDate()
     squashed = False
+    squash_diagnostic: str | None = None
     try:
         if squash_message is not None:
-            fork = wt.run("merge-base", "HEAD", base, check=False).out.strip()
-            if fork and _count(wt, f"{fork}..HEAD") > 1:
-                wt.run("reset", "-q", "--soft", fork)
-                made = wt.repo.run(
-                    wt.path, *_identity_args(wt.repo), "commit", "-q", "--no-verify", "--allow-empty", "-m", squash_message, check=False
-                )
-                if made.rc != 0:
-                    wt.run("reset", "-q", "--hard", str(old))
-                    raise unavailable(("commit",), made)
-                squashed = True
-        done = wt.run("-c", "rebase.updateRefs=false", "-c", "core.editor=true", "rebase", "-q", base, check=False)
+            squashed, squash_diagnostic = _squash_before_rebase(wt, base, squash_message, old, squash_failure=squash_failure)
+        flags = [] if update_refs is None else ["--update-refs" if update_refs else "--no-update-refs"]
+        done = wt.run("-c", "core.editor=true", "rebase", "-q", *flags, "--end-of-options", base, check=False)
         if done.rc == 0:
             new = real_read.head_of(wt)
             new = some(new)
-            return Rebased(old, new, squashed)
+            return Rebased(old, new, squashed, squash_diagnostic)
         if _paused(wt):
-            return Conflict(real_read.unmerged(wt), done.tail, old)
+            return Conflict(real_observe.unmerged(wt), (done.out + done.err).strip(), old, squash_diagnostic)
         if squashed:
             wt.run("reset", "-q", "--hard", str(old))
         raise unavailable(("rebase",), done)
@@ -308,7 +339,7 @@ def finish_rebase(wt: RealWorktree, action: Literal["continue", "abort"], restor
             return Rebased(head, head, squashed=False)
         orig = _orig_head(wt)
         files = real_read.unmerged(wt)
-        marked = tuple(f for f in files if _has_markers(wt.path / f))
+        marked = tuple(f for f in files if has_markers(wt.path / f))
         if marked:
             return Conflict(marked, "conflict markers remain", orig)
         if files:
@@ -325,7 +356,7 @@ def finish_rebase(wt: RealWorktree, action: Literal["continue", "abort"], restor
         wt.repo.invalidate()
 
 
-def _has_markers(path: Path) -> bool:
+def has_markers(path: Path) -> bool:
     try:
         return _MARKERS.search(path.read_text(encoding="utf-8", errors="replace")) is not None
     except OSError:
@@ -333,13 +364,22 @@ def _has_markers(path: Path) -> bool:
 
 
 def push(wt: RealWorktree, dst: str, remote: str, hook_env: Mapping[str, str] | None) -> PushResult:
+    validate_remote(remote)
     head = real_read.head_of(wt)
     if head is None:
         msg = "nothing to push: HEAD is unborn"
         raise ValueError(msg)
     try:
         done = wt.repo.run(
-            wt.path, "push", "--porcelain", remote, f"HEAD:refs/heads/{dst}", check=False, env=hook_env, timeout=wt.repo.remote_timeout
+            wt.path,
+            "push",
+            "--porcelain",
+            "--",
+            remote,
+            f"HEAD:refs/heads/{dst}",
+            check=False,
+            env=hook_env,
+            timeout=wt.repo.remote_timeout,
         )
     finally:
         wt.repo.invalidate()
@@ -351,7 +391,7 @@ def _classify_push(done: Done, head: Sha) -> PushResult:
         return Pushed(head)
     if any(line.flag == "!" for line in real_parse.parse_push(done.out)):
         return Rejected(done.tail)
-    if _TRANSIENT.search(done.tail):
+    if TRANSIENT.search(done.tail):
         return Transient(done.tail)
     if "failed to push some refs" in done.err or done.out.strip() == "" or "pre-push" in done.err:
         return HookRejected(done.tail)

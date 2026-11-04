@@ -33,6 +33,26 @@ class MissingRevision(GitUnavailable):
     """A revision does not identify a git object."""
 
 
+class MissingRemote(GitUnavailable):
+    """The requested named remote is not configured."""
+
+
+class GitReadFailure(GitUnavailable):
+    """An observation failed; absence cannot be inferred."""
+
+
+class GitTimeout(GitUnavailable):
+    """The child exceeded its deadline; distinct from a failure to invoke it."""
+
+
+class DirtyTree(GitUnavailable):
+    """Local changes would be overwritten by the requested operation."""
+
+
+class BranchExists(GitUnavailable):
+    """Exclusive branch creation or rename found an existing destination."""
+
+
 class NotARepo(GitUnavailable):
     """The requested path is outside a repository or does not exist."""
 
@@ -57,7 +77,7 @@ class RefRace(GitUnavailable):
 
 
 class BranchPinned(GitUnavailable):
-    """Another worktree has the branch checked out; ``holder`` names it."""
+    """A worktree has the branch checked out; ``holder`` names it."""
 
     def __init__(self, message: str, holder: str, *, retryable: bool = False, hint: str | None = None) -> None:
         super().__init__(message, retryable=retryable, hint=hint)
@@ -82,6 +102,12 @@ def failure(message: str, stderr: str, code: int, *, retryable: bool = False, hi
         kind, retryable = IndexLocked, True
     elif match := _PINNED.search(stderr):
         return BranchPinned(message, match.group(1).strip(), hint=hint)
+    elif re.search(r"(?:local changes|untracked working tree files)[\s\S]*would be overwritten|would be overwritten by checkout", stderr):
+        kind = DirtyTree
+    elif re.search(r"(?:a branch named|a branch) '.+' already exists", stderr, re.IGNORECASE):
+        kind = BranchExists
+    elif re.search(r"fatal: no branch named '.+'\.?", stderr, re.IGNORECASE):
+        kind = MissingRevision
     elif _REF_STALE.search(stderr) or _REF_RACE.search(stderr):
         kind = RefRace
         retryable = _REF_LOCK.search(stderr) is not None and _REF_STALE.search(stderr) is None
@@ -101,10 +127,15 @@ def failure(message: str, stderr: str, code: int, *, retryable: bool = False, hi
 
 
 __all__ = [
+    "BranchExists",
     "BranchPinned",
+    "DirtyTree",
     "GitError",
+    "GitReadFailure",
+    "GitTimeout",
     "GitUnavailable",
     "IndexLocked",
+    "MissingRemote",
     "MissingRevision",
     "NotARepo",
     "RefRace",

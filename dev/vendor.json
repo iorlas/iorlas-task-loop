@@ -19,9 +19,9 @@
   },
   {
     "name": "git_porcelain",
-    "shelf_tag": "git-porcelain-v0.9.1",
-    "shelf_commit": "d3b17a76b1ae9211a896e3df16d14664fcb30f0b",
-    "tree_hash": "5951ad8286ad5d1288543172bf0c8d175a14e23b78a6637bf574d5d56de4d20f"
+    "shelf_tag": "git-porcelain-v0.10.0",
+    "shelf_commit": "a94d332033d658ca3e49bec9f22b81754eaf3abf",
+    "tree_hash": "a6acb461541240a864d4146efd783f6363087c9b180b02ba8517398c1f93e336"
   },
   {
     "name": "jsonl_log",

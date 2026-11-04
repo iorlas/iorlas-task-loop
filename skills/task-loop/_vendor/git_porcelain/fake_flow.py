@@ -10,6 +10,7 @@ from git_porcelain.errors import GitUnavailable, WorktreeRemoveRefused, some
 from git_porcelain.fake_merge import merge_trees, replay_list
 from git_porcelain.fake_ops import hard_to, is_clean, make_commit, require_index, switch_tree
 from git_porcelain.fake_store import CheckoutState, Rebase, ancestors
+from git_porcelain.remote_validation import validate_remote
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -20,16 +21,22 @@ if TYPE_CHECKING:
 
 __all__ = ["continue_rebase", "fetch", "push", "rebase_abort", "start_rebase", "worktree_add", "worktree_remove"]
 
-_MARKERS: Final = re.compile(r"^(?:<<<<<<<|>>>>>>>)(?: |$)", re.MULTILINE)
+MARKERS: Final = re.compile(r"^(?:<<<<<<<|>>>>>>>)(?: |$)", re.MULTILINE)
 
 
-def start_rebase(repo: RepoState, wt: CheckoutState, head: str, target: str) -> Rebased | Conflict:
+def start_rebase(repo: RepoState, wt: CheckoutState, head: str, target: str, *, update_refs: bool = False) -> Rebased | Conflict:
     """Detach at ``target`` and replay ``head``'s own commits on it, as ``git rebase`` does."""
     old = dict(repo.head_files(wt))
     new = dict(repo.store.commits[target].files)
     switch_tree(repo, wt, new, old)
     todo = replay_list(repo, head, target)
     state = Rebase(head, wt.head_ref, target, new, todo)
+    if update_refs:
+        held = {other.head_ref for other in repo.worktrees.values()}
+        replayed = {commit.sha for commit in todo}
+        state.update_refs = {
+            ref: sha for ref, sha in repo.refs.items() if ref.startswith("refs/heads/") and ref not in held and sha in replayed
+        }
     wt.head_ref, wt.detached, wt.rebase = None, target, state
     return _replay(repo, wt, state)
 
@@ -50,9 +57,12 @@ def _replay(repo: RepoState, wt: CheckoutState, state: Rebase) -> Rebased | Conf
             state.current = repo.store.put_commit(merged, (state.current,), commit.message, repo.tick()).sha
             state.files = merged
             wt.detached = state.current
+        state.rewritten[commit.sha] = state.current
     new = state.current
     wt.head_ref, wt.detached, wt.rebase = state.orig_ref, None if state.orig_ref else new, None
     repo.move_head(wt, new)
+    for ref, old in state.update_refs.items():
+        repo.refs[ref] = state.rewritten.get(old, old)
     return Rebased(Sha(state.orig_sha), Sha(new), squashed=False)
 
 
@@ -74,7 +84,7 @@ def continue_rebase(repo: RepoState, wt: CheckoutState) -> Rebased | Conflict:
     state = wt.rebase
     state = some(state)
     require_index(wt)
-    marked = tuple(sorted(p for p in wt.unmerged if _MARKERS.search(wt.files.get(p, b"").decode("utf-8", "replace"))))
+    marked = tuple(sorted(p for p in wt.unmerged if MARKERS.search(wt.files.get(p, b"").decode("utf-8", "replace"))))
     if marked:
         return Conflict(marked, "conflict markers remain", Sha(state.orig_sha))
     for path in wt.unmerged:
@@ -86,6 +96,8 @@ def continue_rebase(repo: RepoState, wt: CheckoutState) -> Rebased | Conflict:
     if dict(wt.index) == state.files:
         return Conflict((), "No changes - did you forget to use 'git add'?", Sha(state.orig_sha))
     state.current = make_commit(repo, wt, state.pending.message if state.pending else "", (state.current,))
+    if state.pending is not None:
+        state.rewritten[state.pending.sha] = state.current
     state.files = dict(wt.index)
     state.pending = None
     return _replay(repo, wt, state)
@@ -127,7 +139,7 @@ def worktree_remove(repo: RepoState, path: Path, *, force: bool) -> None:
     del repo.worktrees[path]
 
 
-def _remote_state(repo: RepoState, name: str) -> RepoState | str:
+def remote_state(repo: RepoState, name: str) -> RepoState | str:
     """The remote's repository, or why it cannot be reached."""
     found = repo.remote_repos.get(name)
     if found is None:
@@ -139,7 +151,8 @@ def _remote_state(repo: RepoState, name: str) -> RepoState | str:
 
 def fetch(repo: RepoState, name: str) -> SyncResult:
     """Copy the remote's objects and set ``refs/remotes/<name>/<branch>`` for each of its branches."""
-    there = _remote_state(repo, name)
+    validate_remote(name)
+    there = remote_state(repo, name)
     if isinstance(there, str):
         return Offline(there)
     repo.store.absorb(there.store)
@@ -151,14 +164,15 @@ def fetch(repo: RepoState, name: str) -> SyncResult:
 
 def push(repo: RepoState, wt: CheckoutState, dst: str, name: str, env: Mapping[str, str]) -> PushResult:
     """Fast-forward (or create) branch ``dst`` on the remote; the pre-push knobs first, then the network."""
+    validate_remote(name)
     sha = repo.head_sha(wt)
     if sha is None:
         msg = "nothing to push: HEAD is unborn"
         raise ValueError(msg)
-    refusal = _hook_refusal(repo, env)
+    refusal = hook_refusal(repo, env)
     if refusal is not None:
         return refusal
-    there = _remote_state(repo, name)
+    there = remote_state(repo, name)
     if isinstance(there, str):
         return Transient(there)
     ref = f"refs/heads/{dst}"
@@ -171,7 +185,7 @@ def push(repo: RepoState, wt: CheckoutState, dst: str, name: str, env: Mapping[s
     return Pushed(Sha(sha))
 
 
-def _hook_refusal(repo: RepoState, env: Mapping[str, str]) -> HookRejected | None:
+def hook_refusal(repo: RepoState, env: Mapping[str, str]) -> HookRejected | None:
     if repo.hooks.refuse_push:
         return HookRejected("pre-push hook declined the push")
     missing = {k: v for k, v in repo.hooks.push_requires_env.items() if env.get(k) != v}

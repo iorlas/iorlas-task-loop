@@ -6,7 +6,7 @@ import hashlib
 from typing import TYPE_CHECKING
 
 from git_porcelain import ignore_rules
-from git_porcelain.api import Change, Diff, Dirty, Health, LogEntry, Relation, RepoIdentity, Sha, Snapshot, Tree, TreeId, WorktreeInfo
+from git_porcelain.api import Change, Diff, Dirty, Health, LogEntry, Pick, Relation, RepoIdentity, Sha, Snapshot, Tree, TreeId, WorktreeInfo
 from git_porcelain.errors import GitUnavailable, MissingRevision
 from git_porcelain.fake_diff import diff_stat, diff_text, grep_files, status_entries
 from git_porcelain.fake_ignore import Ignore
@@ -22,6 +22,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "branches",
+    "cherry",
     "diff",
     "dirty",
     "grep",
@@ -150,6 +151,14 @@ def relate(repo: RepoState, wt: CheckoutState, a: str, b: str) -> Relation:
     return Relation(Sha(fork) if fork else None, len(mine - theirs), len(theirs - mine))
 
 
+def cherry(repo: RepoState, wt: CheckoutState, upstream: str, head: str) -> tuple[Pick, ...]:
+    left = ancestors(repo.store, resolve_commit(repo, wt, upstream))
+    right = ancestors(repo.store, resolve_commit(repo, wt, head))
+    patches = {_patch_id(repo, repo.store.commits[sha]) for sha in left - right if len(repo.store.commits[sha].parents) < 2}
+    commits = sorted((repo.store.commits[sha] for sha in right - left if len(repo.store.commits[sha].parents) < 2), key=lambda c: c.order)
+    return tuple(Pick(Sha(commit.sha), _patch_id(repo, commit) in patches) for commit in commits)
+
+
 def _patch_id(repo: RepoState, commit: CommitObj) -> frozenset[tuple[str, tuple[str, ...]]]:
     before = repo.store.commits[commit.parents[0]].files if commit.parents else {}
     found: list[tuple[str, tuple[str, ...]]] = []
@@ -158,7 +167,8 @@ def _patch_id(repo: RepoState, commit: CommitObj) -> frozenset[tuple[str, tuple[
             text = diff_text(
                 {path: before[path]} if path in before else {}, {path: commit.files[path]} if path in commit.files else {}, repo.store
             )
-            found.append((path, tuple(ln for ln in text.splitlines() if ln[:1] in "+-" and not ln.startswith(("+++", "---")))))
+            lines = tuple("".join(ln.split()) for ln in text.splitlines() if ln[:1] in "+-" and not ln.startswith(("+++", "---")))
+            found.append((path, lines))
     return frozenset(found)
 
 

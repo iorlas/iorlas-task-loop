@@ -33,6 +33,7 @@ __all__ = [
     "BranchHeld",
     "BranchTaken",
     "Change",
+    "CommandResult",
     "Conflict",
     "Diff",
     "Dirty",
@@ -43,15 +44,18 @@ __all__ = [
     "LogEntry",
     "NothingToRecord",
     "Offline",
+    "Pick",
     "PushResult",
     "Pushed",
     "RebaseResult",
     "Rebased",
     "RecordResult",
     "Recorded",
+    "RefRejected",
     "Rejected",
     "Relation",
     "Released",
+    "RemoteRejected",
     "Repo",
     "RepoIdentity",
     "Sha",
@@ -166,6 +170,22 @@ class Relation:
 
 
 @dataclass(frozen=True)
+class Pick:
+    """One oldest-first git cherry row; upstream means an equivalent patch exists there."""
+
+    oid: Sha
+    upstream: bool
+
+
+@dataclass(frozen=True)
+class CommandResult:
+    """Exit status and complete stripped stdout plus stderr; command refusals are data."""
+
+    ok: bool
+    output: str
+
+
+@dataclass(frozen=True)
 class WorktreeInfo:
     path: Path
     head: Sha | None
@@ -254,6 +274,7 @@ class Rebased:
     old_head: Sha
     new_head: Sha
     squashed: bool
+    squash_failure: str | None = None
 
 
 @dataclass(frozen=True)
@@ -263,6 +284,7 @@ class Conflict:
     files: tuple[str, ...]
     tail: str
     old_head: Sha
+    squash_failure: str | None = None
 
 
 @dataclass(frozen=True)
@@ -277,6 +299,18 @@ class Pushed:
 
 @dataclass(frozen=True)
 class Rejected:
+    tail: str
+
+
+@dataclass(frozen=True)
+class RefRejected(Rejected):
+    """The destination changed or the update was not a fast-forward."""
+
+
+@dataclass(frozen=True)
+class RemoteRejected:
+    """The remote refused an update for policy or another non-race reason."""
+
     tail: str
 
 
@@ -299,13 +333,33 @@ RecordResult = Recorded | NothingToRecord | HookRejected
 TakeResult = BranchTaken | BranchHeld
 RebaseResult = UpToDate | Rebased | Conflict
 FinishResult = Rebased | Conflict | Aborted
-PushResult = Pushed | Rejected | Transient | HookRejected
+PushResult = Pushed | Rejected | Transient | HookRejected | RemoteRejected
 SyncResult = Synced | Offline
 
 
 # -- the seam ---------------------------------------------------------------------------------------------
 class Repo(Protocol):
     """What every checkout of one repository shares."""
+
+    def merge_base(self, a: str, b: str) -> Sha | None:
+        """None only for missing revisions or unrelated histories; observation faults raise GitReadFailure."""
+        ...
+
+    def cherry(self, upstream: str, head: str) -> tuple[Pick, ...]:
+        """Non-merge picks in git cherry order with patch equivalence."""
+        ...
+
+    def remote_url(self, remote: str) -> str:
+        """Expanded fetch URL; MissingRemote only for a missing named remote."""
+        ...
+
+    def fetch(self, remote: str = "origin", *, refspecs: Sequence[str] = (), timeout: float | None = None) -> None:
+        """Fetch named remote or source URL/path, writing FETCH_HEAD; retry ref-lock races five times."""
+        ...
+
+    def delete_remote_at(self, remote: str, ref: str, expected: Sha) -> None:
+        """Lease-guarded deletion of a full refs/ name; authoritative absence also succeeds after refusal."""
+        ...
 
     def identity(self) -> RepoIdentity:
         """Root, common dir, origin url and key. Asked once per process."""
@@ -328,11 +382,19 @@ class Repo(Protocol):
         patch_equivalent_to: str | None = None,
     ) -> tuple[LogEntry, ...]:
         """Commits reachable from ``revs`` and not from ``not_on``, newest first. ``patch_equivalent_to`` (one
-        rev in ``revs``) sets ``LogEntry.upstream`` by patch id."""
+        base) sets ``LogEntry.upstream`` by patch id."""
         ...
 
     def branches(self, prefix: str = "") -> tuple[tuple[str, Sha], ...]:
         """Local branches whose name starts with ``prefix``, sorted, with their tips."""
+        ...
+
+    def rename_branch(self, old: str, new: str) -> None:
+        """Rename a local branch without replacing an existing branch."""
+        ...
+
+    def delete_branch(self, branch: str, *, expected: Sha) -> None:
+        """Delete only at ``expected``; checked out raises ``BranchPinned``, stale tip non-retryable ``RefRace``."""
         ...
 
     def tree(self, rev: str) -> Tree | None:
@@ -376,6 +438,30 @@ class Worktree(Protocol):
 
     path: Path
 
+    def branch(self) -> str | None:
+        """Symbolic HEAD's short branch name, including unborn branches; None when detached."""
+        ...
+
+    def checkout(self, ref: str) -> None:
+        """Check out an existing branch or commit-ish, preserving compatible local edits."""
+        ...
+
+    def checkout_new(self, branch: str, start: str = "HEAD") -> None:
+        """Create and check out a branch exclusively; ``BranchExists`` if already present."""
+        ...
+
+    def clean(self, keep: Sequence[str] = (), *, ignored: bool = False) -> None:
+        """Remove untracked files except keep patterns; optionally remove ignored files too."""
+        ...
+
+    def reset(self, rev: str, *, mode: Literal["soft", "mixed", "hard"] = "mixed") -> None:
+        """Move HEAD; mixed also resets the index, hard also discards tracked file edits."""
+        ...
+
+    def checkout_force(self, branch: str, start: str) -> None:
+        """Create or reset a branch at start and check it out, discarding local changes."""
+        ...
+
     @property
     def repo(self) -> Repo:
         """The repository this checkout belongs to."""
@@ -404,7 +490,7 @@ class Worktree(Protocol):
         self,
         message: str,
         *,
-        paths: Literal["own", "all"] = "own",
+        paths: Literal["own", "all", "tracked", "staged"] = "own",
         base: str | None = None,
         mode: Literal["new", "amend", "squash_to"] = "new",
         squash_to: Sha | None = None,
@@ -412,7 +498,9 @@ class Worktree(Protocol):
         allow_empty: bool = False,
     ) -> RecordResult:
         """Stage and commit. ``own``: tracked changes plus untracked files base's ignore rules do not cover, by
-        exact path. ``all``: everything. ``amend`` folds into HEAD (empty ``message`` keeps its message);
+        exact path. ``all``: everything. ``tracked``: index-tracked changes, including staged additions,
+        without untracked files. ``staged``: commit the existing index without staging working files.
+        ``amend`` folds into HEAD (empty ``message`` keeps its message), even without staged changes;
         ``squash_to`` first moves HEAD softly to ``squash_to``. Hooks are skipped unless ``hooks``."""
         ...
 
@@ -439,9 +527,71 @@ class Worktree(Protocol):
         """Detach HEAD at ``base`` (the branch stays); ``clean_keep`` as in :meth:`take_branch`."""
         ...
 
-    def rebase_onto(self, base: str, *, squash_message: str | None = None) -> RebaseResult:
+    def rebase_onto(
+        self,
+        base: str,
+        *,
+        squash_message: str | None = None,
+        squash_failure: Literal["raise", "continue_unsquashed"] = "raise",
+        update_refs: bool | None = None,
+    ) -> RebaseResult:
         """Replay the branch onto ``base``; with ``squash_message``, first squash a branch of more than one commit.
         A conflict leaves the rebase paused. Raises ``ValueError`` on a tracked-dirty tree or a paused rebase."""
+        ...
+
+    def rebase(self, base: str, *, update_refs: bool | None = None) -> CommandResult:
+        """Invoke rebase even when up to date; preserve every git refusal and diagnostic."""
+        ...
+
+    def continue_rebase(self, *, stage_conflicts: bool = False, check_markers: bool = False, missing_ok: bool = False) -> CommandResult:
+        """Continue using the existing index unless staging is explicitly requested."""
+        ...
+
+    def abort_rebase(self, *, missing_ok: bool = True, restore_to: Sha | None = None) -> CommandResult:
+        """Abort, optionally restoring HEAD; missing_ok permits no paused rebase, even unborn."""
+        ...
+
+    def rebasing(self) -> bool:
+        """Observe both rebase backends in this checkout's git directory."""
+        ...
+
+    def unmerged(self) -> tuple[str, ...]:
+        """Fresh NUL-safe unmerged paths in git order; observation faults raise GitReadFailure."""
+        ...
+
+    def push_request(
+        self,
+        remote: str | None,
+        refspecs: Sequence[str],
+        *,
+        options: Sequence[str] = (),
+        force: bool = False,
+        allow_delete: bool = False,
+        hook_env: Mapping[str, str] | None = None,
+        timeout: float | None = None,
+    ) -> CommandResult:
+        """Push supplied forms and options; force/deletion need explicit opt ins. Pin HEAD before hooks."""
+        ...
+
+    def push_refspecs(
+        self,
+        remote: str,
+        refspecs: Sequence[str],
+        *,
+        force: bool = False,
+        allow_delete: bool = False,
+        hook_env: Mapping[str, str] | None = None,
+        timeout: float | None = None,
+    ) -> PushResult:
+        """Push explicit refs with opt ins for force/deletion; deletion-only success has an empty sha."""
+        ...
+
+    def push_lease(self, remote: str, refspec: str, *, timeout: float = 3600) -> CommandResult:
+        """Push with plain force-with-lease and normal hooks, without changing upstream config."""
+        ...
+
+    def lfs_push(self, remote: str, refs: Sequence[str], *, timeout: float = 3600) -> CommandResult:
+        """Upload all requested refs in one invocation without installing LFS or hooks."""
         ...
 
     def finish_rebase(self, action: Literal["continue", "abort"], *, restore_to: Sha | None = None) -> FinishResult:

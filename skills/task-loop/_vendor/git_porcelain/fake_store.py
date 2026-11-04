@@ -108,6 +108,8 @@ class Rebase:
     files: dict[str, str]
     todo: list[CommitObj] = field(default_factory=list)
     pending: CommitObj | None = None
+    update_refs: dict[str, str] = field(default_factory=dict)
+    rewritten: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -132,8 +134,13 @@ class Hooks:
     """What the repository's hooks do, as knobs (no hook runs in memory)."""
 
     refuse_commit: bool = False
+    commit_failure: str | None = None
     refuse_push: bool = False
     push_requires_env: dict[str, str] = field(default_factory=dict)
+    squash_failure: str | None = None
+    lfs_push_failure: str | None = None
+    lfs_available: bool = False
+    lfs_spawn_failure: str | None = None
 
 
 @dataclass

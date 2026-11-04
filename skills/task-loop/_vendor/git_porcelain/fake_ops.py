@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from git_porcelain.errors import BranchPinned, GitUnavailable, IndexLocked
+from git_porcelain.errors import BranchPinned, DirtyTree, GitUnavailable, IndexLocked
 from git_porcelain.fake_diff import status_entries
 from git_porcelain.fake_ignore import Ignore
 from git_porcelain.fake_store import blob_sha
@@ -72,7 +72,7 @@ def switch_tree(repo: RepoState, wt: CheckoutState, new: Mapping[str, str], old:
     for path in changed:
         if _modified(wt, old, path) or (path not in wt.index and path in wt.files and path in new):
             msg = f"git: your local changes to '{path}' would be overwritten by checkout"
-            raise GitUnavailable(msg)
+            raise DirtyTree(msg)
     for path in changed:
         if path in new:
             wt.index[path] = new[path]
@@ -140,9 +140,10 @@ def make_commit(repo: RepoState, wt: CheckoutState, message: str, parents: tuple
     return made.sha
 
 
-def clean(repo: RepoState, wt: CheckoutState, keep: Sequence[str]) -> None:
-    """Remove untracked files that no ignore rule (the ``.gitignore`` or a ``keep`` pattern) protects."""
-    ignore = ignore_of(repo, wt, keep)
+def clean(repo: RepoState, wt: CheckoutState, keep: Sequence[str], *, ignored: bool = False) -> None:
+    """Remove untracked files except keep patterns; optionally include ignored files."""
+    lines = [] if ignored else [*repo.info_exclude, *wt.files.get(".gitignore", b"").decode("utf-8", "replace").splitlines()]
+    ignore = Ignore([*lines, *keep])
     for path in [p for p in wt.files if p not in wt.index and not ignore.ignores(p)]:
         del wt.files[path]
 
