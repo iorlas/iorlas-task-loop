@@ -2,9 +2,10 @@
 source bead and round, one bead per typed key (bead, category, file) and never more than the cap, the rest in one comment."""
 import re
 import sys
-import unittest
 from pathlib import Path
 from typing import Any
+
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -18,18 +19,18 @@ def demand(n, file="f.txt", category="logic"):
     return dict(finding("high"), file=file, category=category, fix=f"close bead number {n}")
 
 
-class FollowUps(unittest.TestCase):
+class FollowUps(Case):
     eng: Any
     store: Any
-    setUp: Any = T.EngineTest.setUp
-    tearDown: Any = T.EngineTest.tearDown
+    setup_method: Any = T.EngineTest.setup_method
+    teardown_method: Any = T.EngineTest.teardown_method
     commit_base_cfg: Any = T.EngineTest.commit_base_cfg
     fake_bd: Any = T.EngineTest.fake_bd
     run_engine: Any = T.EngineTest.run_engine
 
     def go(self, reviews=(CLEAN,), leftovers=()):
         rc, _ = self.run_engine({"plan": [dict(PLAN, leftovers=list(leftovers))], "write": [WRITE], "review": list(reviews)})
-        self.assertEqual(rc, 0)
+        assert rc == 0
         return [c for c in self.store.calls if c[0] == "create"]
 
     def comments(self, start):
@@ -42,32 +43,28 @@ class FollowUps(unittest.TestCase):
     def test_a_filed_follow_up_has_one_from_label_and_never_auto(self):
         (made,) = self.go(leftovers=[{"title": "Rename x", "why": "w"}])
         labels = self.labels(made)
-        self.assertEqual(len(labels), 2)
-        self.assertEqual(sum(bool(re.fullmatch(r"from:t-1-r\d+", label)) for label in labels), 1)
-        self.assertEqual(sum(label.startswith("followup-key:") for label in labels), 1)
-        self.assertIn("--no-inherit-labels", made)  # the source bead's own labels (auto) are not copied
+        assert len(labels) == 2
+        assert sum(bool(re.fullmatch(r"from:t-1-r\d+", label)) for label in labels) == 1
+        assert sum(label.startswith("followup-key:") for label in labels) == 1
+        assert "--no-inherit-labels" in made  # the source bead's own labels (auto) are not copied
 
     def test_two_findings_with_one_key_but_different_words_are_one_bead(self):
         made = self.go([review(findings=[demand(1), demand(2)]), CLEAN])
-        self.assertEqual(len(made), 1)
+        assert len(made) == 1
 
     def test_findings_in_other_files_or_categories_are_other_beads(self):
         made = self.go([review(findings=[demand(1), demand(2, file="g.txt"), demand(3, category="docs")]), CLEAN])
-        self.assertEqual(len(made), 3)
+        assert len(made) == 3
 
     def test_at_most_the_cap_are_filed_and_the_rest_are_one_comment(self):
         over = FOLLOW_UP_CAP + 2
         made = self.go([review(findings=[demand(i, file=f"f{i}.txt") for i in range(over)]), CLEAN])
-        self.assertEqual(len(made), FOLLOW_UP_CAP)
+        assert len(made) == FOLLOW_UP_CAP
         (note,) = self.comments("Follow-up (engine): not filed")
-        self.assertIn(f"{over - FOLLOW_UP_CAP} more", note)
+        assert f"{over - FOLLOW_UP_CAP} more" in note
 
     def test_the_key_is_bead_category_and_file(self):
         a = FollowKey.of("t-1", {"title": "A", "why": "w", "category": "logic", "file": "f.txt"})
         b = FollowKey.of("t-1", {"title": "B", "why": "w", "category": "logic", "file": "f.txt"})
-        self.assertEqual(a, b)
-        self.assertNotEqual(a, FollowKey.of("t-2", {"title": "A", "why": "w", "category": "logic", "file": "f.txt"}))
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert a == b
+        assert a != FollowKey.of("t-2", {"title": "A", "why": "w", "category": "logic", "file": "f.txt"})

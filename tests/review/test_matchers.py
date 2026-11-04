@@ -1,7 +1,8 @@
 """Every regular expression of the review/verify prose is a named matcher; each has a table of real wording below."""
 import sys
-import unittest
 from pathlib import Path
+
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -10,11 +11,11 @@ from taskloop.domain.review import kinds
 from taskloop.domain.review.matchers import AcceptanceItems, BdDemand, CodeNames, EngineActions, GateProof, Tools, Wording, word_in
 
 
-class Table(unittest.TestCase):
+class Table(Case):
     def rows(self, fn, table):
         for text, want in table:
             with self.subTest(text):
-                self.assertEqual(fn(text), want)
+                assert fn(text) == want
 
 
 class ToolsTable(Table):
@@ -55,9 +56,9 @@ class EngineActionsTable(Table):
                                                   ("the engine merges", True), ("it lands well", False)])
 
     def test_engine_does_needs_leftovers_for_filing(self):
-        self.assertFalse(kinds.engine_does("File beads for the table", False))
-        self.assertTrue(kinds.engine_does("File beads for the table", True))
-        self.assertTrue(kinds.engine_does("The gate runs at land", False))
+        assert not kinds.engine_does("File beads for the table", False)
+        assert kinds.engine_does("File beads for the table", True)
+        assert kinds.engine_does("The gate runs at land", False)
 
 
 class BdDemandTable(Table):
@@ -108,10 +109,10 @@ class GateProofTable(Table):
             ("cannot verify the ui layout of unit-tests", False), ("unit-tests passes", False)])
 
     def test_names(self):
-        self.assertEqual(GateProof.check_names("cannot prove `unit-tests` and lint/x ran"), ["unit-tests", "lint/x"])
-        self.assertEqual(GateProof.first_named("unity-tests passes", ["lint", "unity-tests"]), "unity-tests")
-        self.assertTrue(word_in("lint", "ran lint ok"))
-        self.assertFalse(word_in("lint", "ran lint-all ok"))
+        assert GateProof.check_names("cannot prove `unit-tests` and lint/x ran") == ["unit-tests", "lint/x"]
+        assert GateProof.first_named("unity-tests passes", ["lint", "unity-tests"]) == "unity-tests"
+        assert word_in("lint", "ran lint ok")
+        assert not word_in("lint", "ran lint-all ok")
 
 
 class AcceptanceItemsTable(Table):
@@ -122,17 +123,13 @@ class AcceptanceItemsTable(Table):
             ("1. one\n2) two", [("A1", "one"), ("A2", "two")]), ("\u2022 a\n\u2022 b", [("A1", "a"), ("A2", "b")])])
 
 
-class ResolveKind(unittest.TestCase):
+class ResolveKind(Case):
     def test_a_kind_moves_only_to_a_stricter_route(self):
         yes, no = (lambda: True), (lambda: False)
-        self.assertEqual(kinds.resolve_kind("checkable", "taste", "", no, no), "checkable")
-        self.assertEqual(kinds.resolve_kind("taste", "owner_decision", "", no, no), "owner_decision")
-        self.assertEqual(kinds.resolve_kind("engine_step", "engine_step", "", no, no), "checkable")
-        self.assertEqual(kinds.resolve_kind("engine_step", "engine_step", "", yes, no), "engine_step")
-        self.assertEqual(kinds.resolve_kind("external_fact", None, "", no, no), "checkable")
-        self.assertEqual(kinds.resolve_kind("external_fact", None, "https://x", no, no), "external_fact")
-        self.assertEqual(kinds.resolve_kind("taste", None, "", no, yes), "checkable")
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert kinds.resolve_kind("checkable", "taste", "", no, no) == "checkable"
+        assert kinds.resolve_kind("taste", "owner_decision", "", no, no) == "owner_decision"
+        assert kinds.resolve_kind("engine_step", "engine_step", "", no, no) == "checkable"
+        assert kinds.resolve_kind("engine_step", "engine_step", "", yes, no) == "engine_step"
+        assert kinds.resolve_kind("external_fact", None, "", no, no) == "checkable"
+        assert kinds.resolve_kind("external_fact", None, "https://x", no, no) == "external_fact"
+        assert kinds.resolve_kind("taste", None, "", no, yes) == "checkable"

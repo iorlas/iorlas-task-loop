@@ -1,9 +1,10 @@
 """Review switches affect intermediate stages; the final acceptance review always runs."""
 import json
 import sys
-import unittest
 from pathlib import Path
 from typing import Any
+
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -16,29 +17,29 @@ CASE = {"criterion": "the file f.txt exists", "check": adhoc(HAS_F), "class": "t
 COVERED = dict(PLAN, cases=[CASE])
 
 
-class Switch(unittest.TestCase):
+class Switch(Case):
     def test_the_label_turns_it_off_and_nothing_turns_it_on(self):
-        self.assertEqual(switch.mode("on", ["review-off"]), "off")
-        self.assertEqual(switch.mode("sampled", []), "sampled")
+        assert switch.mode("on", ["review-off"]) == "off"
+        assert switch.mode("sampled", []) == "sampled"
 
     def test_sampled_reviews_every_nth_stage_and_the_last(self):
         got = [switch.reviews("sampled", stage=i, last=i == 4, every=3) for i in range(5)]
-        self.assertEqual(got, [False, False, True, False, True])
-        self.assertTrue(switch.reviews("off", stage=2, last=True, every=3))
-        self.assertFalse(switch.reviews("off", stage=0, last=False, every=3))
-        self.assertTrue(switch.reviews("on", stage=0, last=False, every=3))
+        assert got == [False, False, True, False, True]
+        assert switch.reviews("off", stage=2, last=True, every=3)
+        assert not switch.reviews("off", stage=0, last=False, every=3)
+        assert switch.reviews("on", stage=0, last=False, every=3)
 
     def test_every_mode_requires_the_final_review(self):
         for mode in ("on", "off", "sampled"):
             with self.subTest(mode=mode):
-                self.assertTrue(switch.reviews(mode, stage=0, last=True, every=5))
+                assert switch.reviews(mode, stage=0, last=True, every=5)
 
 
-class ReviewOff(unittest.TestCase):
+class ReviewOff(Case):
     eng: Any
     store: Any
-    setUp: Any = T.EngineTest.setUp
-    tearDown: Any = T.EngineTest.tearDown
+    setup_method: Any = T.EngineTest.setup_method
+    teardown_method: Any = T.EngineTest.teardown_method
     fake_bd: Any = T.EngineTest.fake_bd
     run_engine: Any = T.EngineTest.run_engine
     ask: Any = T.EngineTest.ask
@@ -56,54 +57,50 @@ class ReviewOff(unittest.TestCase):
 
     def test_off_requires_a_final_reviewer_even_when_cases_name_acceptance(self):
         rc, s = self.go(review="off")
-        self.assertEqual((rc, self.reviews(s)), (0, 1))
+        assert (rc, self.reviews(s)) == (0, 1)
         ends = [r for r in self.log() if r.get("step") == "review" and r.get("outcome") == "skipped"]
-        self.assertEqual(ends, [])
+        assert ends == []
         start = next(r for r in self.log() if "worktree" in r and "review" in r)
-        self.assertEqual(start["review"], "off")
+        assert start["review"] == "off"
 
     def test_the_label_cannot_remove_final_review_from_an_on_profile(self):
         rc, s = self.go(bead=dict(BEAD, labels=["visual", "review-off"]))
-        self.assertEqual((rc, self.reviews(s)), (0, 1))
+        assert (rc, self.reviews(s)) == (0, 1)
 
     def test_negated_criterion_and_unrelated_green_check_cannot_bypass_reviewer(self):
         acceptance = "Account deletion preserves audit history"
         case = dict(CASE, criterion="Account deletion removes audit history")
         rc, s = self.go(plan=dict(PLAN, cases=[case]), bead=dict(BEAD, acceptance_criteria=acceptance),
                         reviews=[review(question="Should account deletion preserve audit history?")], review="off")
-        self.assertEqual((rc, self.reviews(s)), (2, 1))
-        self.assertFalse(self.eng.landed_sha)
-        self.assertIn(acceptance, s.prompts[-1])
-        self.assertIn(case["criterion"], s.prompts[-1])
+        assert (rc, self.reviews(s)) == (2, 1)
+        assert not self.eng.landed_sha
+        assert acceptance in s.prompts[-1]
+        assert case["criterion"] in s.prompts[-1]
 
     def test_empty_acceptance_is_blocked_at_the_ticket_not_skipped_by_review_off(self):
         rc, _ = self.go(bead=dict(BEAD, acceptance_criteria=""), review="off")
-        self.assertEqual(rc, 2)
+        assert rc == 2
 
     def test_off_skips_only_intermediate_stages(self):
         stage = PLAN["stages"][0]
         plan = dict(COVERED, stages=[stage, dict(stage, goal="again")])
         rc, s = self.go(plan=plan, writes=2, review="off")
-        self.assertEqual((rc, self.reviews(s, 2)), (0, 1))
+        assert (rc, self.reviews(s, 2)) == (0, 1)
         ends = [r for r in self.log() if r.get("step") == "review" and r.get("outcome") == "skipped"]
-        self.assertEqual([r["detail"] for r in ends], ["review-off"])
+        assert [r["detail"] for r in ends] == ["review-off"]
 
     def test_on_still_reviews(self):
         rc, s = self.go()
-        self.assertEqual((rc, self.reviews(s)), (0, 1))
+        assert (rc, self.reviews(s)) == (0, 1)
 
     def test_an_acceptance_item_no_case_names_is_reviewed_after_all(self):
         rc, s = self.go(plan=PLAN, review="off")
-        self.assertEqual((rc, self.reviews(s)), (0, 1))
+        assert (rc, self.reviews(s)) == (0, 1)
 
     def test_sampled_skips_the_middle_stage_and_reviews_the_last(self):
         stage = PLAN["stages"][0]
         plan = dict(COVERED, stages=[stage, dict(stage, goal="again")])
         rc, s = self.go(plan=plan, writes=2, review="sampled", review_every=5)
-        self.assertEqual((rc, self.reviews(s, 2)), (0, 1))
+        assert (rc, self.reviews(s, 2)) == (0, 1)
         ends = [r for r in self.log() if r.get("step") == "review" and r.get("outcome") == "skipped"]
-        self.assertEqual([r["detail"] for r in ends], ["review-sampled"])
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert [r["detail"] for r in ends] == ["review-sampled"]

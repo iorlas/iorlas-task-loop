@@ -43,112 +43,114 @@ class EngineReviewTest(EngineTest):
     def test_review_sends_an_unmet_requirement_back_to_the_same_writer(self):
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, WRITE],
                                  "review": [review(unmet=["cant-sit-still still carries example: true"]), CLEAN]})
-        self.assertEqual(rc, 0)
-        self.assertEqual([c[1] for c in s.calls if c[0] == "worker"], [None, "ref-write"])
-        self.assertIn("cant-sit-still still carries example: true", [p for (c, p) in zip(s.calls, s.prompts, strict=False)
-                                                                     if c[0] == "worker"][1])
+        assert rc == 0
+        assert [c[1] for c in s.calls if c[0] == "worker"] == [None, "ref-write"]
+        assert "cant-sit-still still carries example: true" in [p for (c, p) in zip(s.calls, s.prompts, strict=False)
+                                                                     if c[0] == "worker"][1]
 
     def test_red_checks_never_reach_review_and_end_the_round(self):
         plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[FALSE])])
         rc, s = self.run_engine({"plan": [plan], "write": [WRITE] * 4}, max_rounds=2, max_check_tries=2, max_replans=0, max_same_red=0)
-        self.assertEqual(rc, 2)
-        self.assertNotIn("reviewer", [c[0] for c in s.calls])
-        self.assertEqual([c[0] for c in s.calls].count("worker"), 4)
-        self.assertIn("stuck", self.blocked[0])
-        self.assertEqual((self.eng.stats["writes"], self.eng.stats["rounds"]), (4, 2))
+        assert rc == 2
+        assert "reviewer" not in [c[0] for c in s.calls]
+        assert [c[0] for c in s.calls].count("worker") == 4
+        assert "stuck" in self.blocked[0]
+        assert (self.eng.stats["writes"], self.eng.stats["rounds"]) == (4, 2)
 
     def test_low_findings_are_noted_and_do_not_send_back(self):
         rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [review(findings=[finding("low")])]})
-        self.assertEqual(rc, 0)
-        self.assertTrue(any(c[:2] == ("comments", "add") and "a low fix" in c[3] for c in self.bd_calls))
+        assert rc == 0
+        assert any(c[:2] == ("comments", "add") and "a low fix" in c[3] for c in self.bd_calls)
 
     def test_a_medium_finding_sends_back(self):
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, WRITE],
                                  "review": [review(findings=[finding("high")]), CLEAN]})
-        self.assertEqual(rc, 0)
-        self.assertEqual([c[0] for c in s.calls].count("worker"), 2)
+        assert rc == 0
+        assert [c[0] for c in s.calls].count("worker") == 2
 
     def test_only_the_last_stages_review_checks_every_bead_requirement(self):
         two = dict(PLAN, stages=[PLAN["stages"][0], dict(PLAN["stages"][0], goal="add f again")])
         rc, s = self.run_engine({"plan": [two], "write": [WRITE, WRITE], "review": [CLEAN, CLEAN]})
-        self.assertEqual(rc, 0)
+        assert rc == 0
         reviews = [p for (c, p) in zip(s.calls, s.prompts, strict=False) if c[0] == "reviewer"]
-        self.assertNotIn("every requirement", reviews[0])
-        self.assertIn("every requirement", reviews[1])
+        assert "every requirement" not in reviews[0]
+        assert "every requirement" in reviews[1]
 
     def test_a_review_question_an_accepted_requirement_decides_is_a_fix_round_citing_it(self):
         # lifesim-d5f.58: 'undo, or change R10?' became an owner decision ask; R10 already decides it
         q = "The writer changed the general rule; it contradicts R10. (a) undo and fix the test another way, (b) change R10"
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, WRITE],
                                  "review": [review(question=q, decided=self.R10), CLEAN]})
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertEqual(self.blocked, [])
-        self.assertIsNone(self.ask())
+        assert rc == 0, self.blocked
+        assert self.blocked == []
+        assert self.ask() is None
         writes = [p for (c, p) in zip(s.calls, s.prompts, strict=False) if c[0] == "worker"]
-        self.assertEqual(len(writes), 2)
-        self.assertIn(self.R10, writes[1])
-        self.assertIn("decided", s.prompts[2])
+        assert len(writes) == 2
+        assert self.R10 in writes[1]
+        assert "decided" in s.prompts[2]
 
     def test_a_stop_mid_stage_2_resumes_stage_2_at_its_round_with_the_same_thread(self):
         with self.stop_at("reviewer", 3):  # stage 1 accepted; stage 2 sent back once; stopped in its second review
             rc, _ = self.run_engine({"plan": [self.TWO], "write": [WRITE, WRITE, WRITE],
                                      "review": [CLEAN, review(unmet=["more"])]})
-        self.assertEqual(rc, 2)
+        assert rc == 2
         ck = self.checkpoint()
-        self.assertEqual((ck["stage"], ck["rounds"], ck["accepted"]), (1, 1, [0]))
-        self.assertEqual(ck["writer"], "ref-write")
+        assert (ck["stage"], ck["rounds"], ck["accepted"]) == (1, 1, [0])
+        assert ck["writer"] == "ref-write"
         rc, s = self.run_engine({"write": [WRITE], "review": [CLEAN]})
-        self.assertEqual(rc, 0)
-        self.assertEqual([c[0] for c in s.calls], ["worker", "reviewer"])  # no plan, no stage 1
-        self.assertEqual(s.calls[0][1], "ref-write")                      # the writer's thread goes on
-        self.assertIn("stage two", s.prompts[0])
-        self.assertIn("round 2", self.eng.log_path.read_text())
+        assert rc == 0
+        assert [c[0] for c in s.calls] == ["worker", "reviewer"]  # no plan, no stage 1
+        assert s.calls[0][1] == "ref-write"                      # the writer's thread goes on
+        assert "stage two" in s.prompts[0]
+        assert "round 2" in self.eng.log_path.read_text()
         self.assertNoCheckpoint()                                # landed: nothing left to resume
 
     def test_the_writer_may_add_a_case_it_is_run_and_shown_to_the_review(self):
         seen, extra = self.counter("extra")
         w = dict(WRITE, new_cases=[{"criterion": "f.txt exists", "check": extra, "why": "found an edge"}])
         rc, s = self.run_engine({"plan": [PLAN], "write": [w], "review": [CLEAN]})
-        self.assertEqual(rc, 0)
-        self.assertEqual(seen.read_text(), "1")
+        assert rc == 0
+        assert seen.read_text() == "1"
         rv = s.prompts[2]
-        self.assertIn("added by the writer", rv)
-        self.assertIn("found an edge", rv)
-        self.assertEqual(must(self.eng.plan_data)["cases"][0]["by"], "writer")
+        assert "added by the writer" in rv
+        assert "found an edge" in rv
+        assert must(self.eng.plan_data)["cases"][0]["by"] == "writer"
 
     def test_a_verify_ask_is_a_decision_and_takes_the_bead_out_of_the_pick_queue(self):
         r = dict(CLEAN, unchecked=[{"what": "the cited spec link did not open", "kind": "link"}])
         with self.store.stub(show=dict(BEAD, labels=["auto", "visual"])):
             _rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [r], "verify": [STILL_OPEN]},
                                     pick_label="auto")
-        self.assertEqual((self.ask()["kind"], self.ask()["class"]), ("decision", "external_fact"))
-        self.assertIn(("label", "remove", "t-1", "auto"), self.bd_calls)
+        assert (self.ask()["kind"], self.ask()["class"]) == ("decision", "external_fact")
+        assert ("label", "remove", "t-1", "auto") in self.bd_calls
 
     def test_a_writer_or_reviewer_decision_carries_its_options_too(self):
         rc, _ = self.run_engine({"plan": [PLAN], "write": [dict(WRITE, question="Which?", options=self.CHOICES[:2])]})
-        self.assertEqual(rc, 2)
-        self.assertEqual([o["text"] for o in self.ask()["options"]], ["B: keep it parked", "A: build the slice now"])
+        assert rc == 2
+        assert [o["text"] for o in self.ask()["options"]] == ["B: keep it parked", "A: build the slice now"]
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [dict(CLEAN, question="Which?", options=self.CHOICES[:2])]})
-        self.assertEqual(rc, 2)
-        self.assertEqual(len(self.ask()["options"]), 2)
+        assert rc == 2
+        assert len(self.ask()["options"]) == 2
 
     def test_a_verify_ask_offers_right_and_a_wrong_that_opens_the_box(self):
         r = dict(CLEAN, unchecked=[{"what": "the cited spec link did not open", "kind": "link"}])
         self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [r], "verify": [STILL_OPEN]})
-        self.assertEqual([(o["label"], o["action"], o["edit"]) for o in self.ask()["options"]],
-                         [("Right, land it", "confirm", False), ("Wrong: say what", "text", True)])
+        assert (
+            [(o["label"], o["action"], o["edit"]) for o in self.ask()["options"]]
+            == [("Right, land it", "confirm", False), ("Wrong: say what", "text", True)]
+        )
 
     def test_what_the_writer_could_not_check_goes_to_the_review_which_decides(self):
         # lifesim-jjso: the writer could not run Unity, the engine's cases then did; the land must not stop on that
         w = dict(WRITE, unchecked=[{"what": "the Unity tests need the host", "kind": "case"}])
         rc, s = self.run_engine({"plan": [PLAN], "write": [w], "review": [CLEAN]})
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertIn("the Unity tests need the host", s.prompts[2])
+        assert rc == 0, self.blocked
+        assert "the Unity tests need the host" in s.prompts[2]
 
     def test_only_non_final_stages_are_told_a_later_stage_case_is_not_unchecked(self):
         rc, s = self.run_engine({"plan": [self.TWO], "write": [WRITE, WRITE], "review": [CLEAN, CLEAN]})
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertEqual(["is not unchecked" in p for p in s.prompts[1:5]], [True, True, False, False])
+        assert rc == 0, self.blocked
+        assert ["is not unchecked" in p for p in s.prompts[1:5]] == [True, True, False, False]
 
     RUFF: ClassVar[Any] = {"what": "nobody ran ruff on tools/*.py", "kind": "tooling"}
 
@@ -175,15 +177,15 @@ class EngineReviewTest(EngineTest):
     def test_an_unchecked_item_for_a_tool_the_repo_does_not_use_is_dropped_with_the_evidence(self):
         with mock.patch.object(engine, "tool_on_path", side_effect=self.no_ruff):
             rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [dict(CLEAN, unchecked=[self.RUFF])]})
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertIsNone(self.ask())
-        self.assertNotIn("reviewer", [c[0] for c in s.calls][3:])  # no verifier call for it
+        assert rc == 0, self.blocked
+        assert self.ask() is None
+        assert "reviewer" not in [c[0] for c in s.calls][3:]  # no verifier call for it
         verify = next(c[3] for c in self.bd_calls if c[:2] == ("comments", "add") and c[3].startswith("Verify (engine)"))
-        self.assertIn("not a check here", verify)
-        self.assertIn("which ruff: not found", verify)
-        self.assertIn("git grep -w -I ruff", verify)
+        assert "not a check here" in verify
+        assert "which ruff: not found" in verify
+        assert "git grep -w -I ruff" in verify
         causes = [json.loads(ln) for ln in self.eng.log_path.read_text().splitlines() if '"transition"' in ln]
-        self.assertTrue(any(t["cause"] == "not_a_check" for t in causes))
+        assert any(t["cause"] == "not_a_check" for t in causes)
 
     @EXIT_127
     @without_shims
@@ -195,9 +197,9 @@ class EngineReviewTest(EngineTest):
         with mock.patch.object(engine, "tool_on_path", side_effect=self.no_ruff), self.ruff_cannot_start():
             rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [dict(CLEAN, unchecked=[self.RUFF])],
                                      "verify": [STILL_OPEN]})
-        self.assertEqual(rc, 2)
-        self.assertEqual((self.ask()["kind"], self.ask()["class"]), ("decision", "external_fact"))
-        self.assertIn("ruff", self.card())
+        assert rc == 2
+        assert (self.ask()["kind"], self.ask()["class"]) == ("decision", "external_fact")
+        assert "ruff" in self.card()
 
     @EXIT_127
     @without_shims
@@ -205,14 +207,14 @@ class EngineReviewTest(EngineTest):
         with mock.patch.object(engine, "tool_on_path", return_value="/opt/bin/ruff"), self.ruff_cannot_start():
             rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [dict(CLEAN, unchecked=[self.RUFF])],
                                      "verify": [STILL_OPEN]})
-        self.assertEqual(rc, 2)
-        self.assertIn("ruff", self.card())
+        assert rc == 2
+        assert "ruff" in self.card()
 
     def test_prose_that_happens_to_name_a_tool_still_goes_to_the_verifier(self):
         cfg = wslots.load_cfg(str(self.wt), port_git())
         with mock.patch.object(engine, "tool_on_path", return_value=None):
             for what in ("the biome transition fades in", "no black screen between lots"):
-                self.assertEqual(self.unused(what, cfg), "", what)
+                assert self.unused(what, cfg) == "", what
 
     def test_a_tool_the_tree_mentions_anywhere_still_goes_to_the_verifier(self):
         cfg = self.wt / ".config"
@@ -221,45 +223,45 @@ class EngineReviewTest(EngineTest):
         sh("git", "add", "-A", cwd=self.wt)
         sh("git", "commit", "-qm", "tools", cwd=self.wt)
         with mock.patch.object(engine, "tool_on_path", return_value=None):
-            self.assertEqual(self.unused("nobody ran csharpier on src/", wslots.load_cfg(str(self.wt), port_git())), "")
+            assert self.unused("nobody ran csharpier on src/", wslots.load_cfg(str(self.wt), port_git())) == ""
 
     def test_only_the_unused_tool_item_is_dropped_the_rest_go_to_the_verifier(self):
         cfg = wslots.load_cfg(str(self.wt), port_git())
         with mock.patch.object(engine, "tool_on_path", side_effect=self.no_ruff):
-            self.assertIn("not a check here", self.unused(self.RUFF["what"], cfg, self.no_ruff))
-            self.assertEqual(self.unused(self.GAPS[1]["what"], cfg, self.no_ruff), "")
+            assert "not a check here" in self.unused(self.RUFF["what"], cfg, self.no_ruff)
+            assert self.unused(self.GAPS[1]["what"], cfg, self.no_ruff) == ""
 
     def test_only_the_items_the_verifier_leaves_open_go_to_the_owner(self):
         answer = {"items": [verdict(1, "settled", "guid: 3f2a is unique"), verdict(2, "settled", "Boot.cs:14"),
                             verdict(3, "open", why="taste: it needs a phone and the owner's eye")]}
         rc, _ = self.verified(answer)
-        self.assertEqual(rc, 2)
+        assert rc == 2
         a = self.ask()
-        self.assertEqual(a["kind"], "decision")
-        self.assertIn("the menu reads well on a phone", self.card())
-        self.assertIn("the owner's eye", a["why"])
-        self.assertNotIn("Boot() calls", a["why"])
-        self.assertNotIn(".meta", self.card())
+        assert a["kind"] == "decision"
+        assert "the menu reads well on a phone" in self.card()
+        assert "the owner's eye" in a["why"]
+        assert "Boot() calls" not in a["why"]
+        assert ".meta" not in self.card()
 
     def test_the_verifier_runs_once_and_what_its_fix_leaves_unchecked_goes_to_the_owner(self):
         answer = {"items": [verdict(1, "wrong", why="the guid is not unique"), verdict(2, "settled", "Boot.cs:14"),
                             verdict(3, "open", why="taste")]}
         left = dict(CLEAN, unchecked=[{"what": "the new guid is unique across Assets", "kind": "tooling"}])
         rc, s = self.verified(answer, write=[WRITE, WRITE], review=[dict(CLEAN, unchecked=self.GAPS), left])
-        self.assertEqual(rc, 2)
-        self.assertEqual([c[0] for c in s.calls].count("reviewer"), 3)  # stage review, the verifier, the fix's review
+        assert rc == 2
+        assert [c[0] for c in s.calls].count("reviewer") == 3  # stage review, the verifier, the fix's review
         q = self.card()
-        self.assertIn("the menu reads well on a phone", q)
-        self.assertIn("the new guid is unique across Assets", q)
+        assert "the menu reads well on a phone" in q
+        assert "the new guid is unique across Assets" in q
 
     def test_a_verifier_that_cannot_run_leaves_every_item_to_the_owner(self):
         out = stop("rate_limited", at=time.time() + 7200, say="no lane")
         rc, _ = self.verified(out, verify=[out])  # the lane is out for hours: given up at once
-        self.assertEqual(rc, 2)
+        assert rc == 2
         q = self.card()
         for item in self.GAPS:
-            self.assertIn(item["what"], q)
-        self.assertIn("could not self-verify", self.eng.log_path.read_text())
+            assert item["what"] in q
+        assert "could not self-verify" in self.eng.log_path.read_text()
 
     def test_links_that_do_not_open_go_back_to_the_writer_and_unverified_ones_to_the_owner(self):
         """tl-bxk.7 (lifesim-ggi: 7 of 19 links 403 from the host, 'verified' from a sandbox with no network)."""
@@ -273,20 +275,20 @@ class EngineReviewTest(EngineTest):
         with mock.patch.object(Checkout, "task_diff", return_value=self.RESEARCH_DIFF):
             review = {"findings": []}
             eng.link_check.link_judged(review)
-            self.assertEqual(len(review["findings"]), 1)
-            self.assertIn("https://fab.com/s/abc did not open from the engine's host (HTTP 403)", review["findings"][0]["fix"])
-            self.assertEqual(review["findings"][0]["file"], "notes/hair.md")
-            self.assertEqual([(u["kind"], u["source"]) for u in eng.unverified], [("external_fact", "https://sketchfab.com/m/x")])
-            self.assertIn("Beards: (unverified)", eng.unverified[0]["what"])
+            assert len(review["findings"]) == 1
+            assert "https://fab.com/s/abc did not open from the engine's host (HTTP 403)" in review["findings"][0]["fix"]
+            assert review["findings"][0]["file"] == "notes/hair.md"
+            assert [(u["kind"], u["source"]) for u in eng.unverified] == [("external_fact", "https://sketchfab.com/m/x")]
+            assert "Beards: (unverified)" in eng.unverified[0]["what"]
             opened.clear()
             review = {"findings": []}
             eng.link_check.link_judged(review)  # the link that opened is not opened again; the two that did not are
-            self.assertEqual(sorted(opened), ["https://fab.com/s/abc", "https://sketchfab.com/m/x"])
-            self.assertEqual(len(eng.unverified), 1)
+            assert sorted(opened) == ["https://fab.com/s/abc", "https://sketchfab.com/m/x"]
+            assert len(eng.unverified) == 1
         eng.cfg = cfg_with(eng.cfg, check_links=False)
         review = {"findings": []}
         eng.link_check.link_judged(review)
-        self.assertEqual(review["findings"], [])
+        assert review["findings"] == []
 
     def test_a_host_that_reaches_nothing_makes_no_findings_and_a_raising_check_is_a_failed_link(self):
         self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
@@ -295,17 +297,17 @@ class EngineReviewTest(EngineTest):
         with mock.patch.object(Checkout, "task_diff", return_value=self.RESEARCH_DIFF):
             review = {"findings": []}
             eng.link_check.link_judged(review)
-            self.assertEqual((review["findings"], eng.unverified), ([], []))  # offline: nothing the writer can fix
-            self.assertIn("looks offline", eng.log_path.read_text())
+            assert (review["findings"], eng.unverified) == ([], [])  # offline: nothing the writer can fix
+            assert "looks offline" in eng.log_path.read_text()
             eng.link_tries.clear()
             eng.link_fn = lambda url: (_ for _ in ()).throw(RuntimeError("boom"))
             review = {"findings": []}
             eng.link_check.link_judged(review)
-            self.assertEqual(len(review["findings"]), 2)  # a check that raised failed that link; the run goes on
+            assert len(review["findings"]) == 2  # a check that raised failed that link; the run goes on
 
     def test_an_infrastructure_failure_in_verify_fails_the_run_instead_of_being_swallowed(self):
         # lifesim 2026-10-22: the 53 beads failed in the verify step, whose Blocked used to mean "the owner checks them"
         r = dict(CLEAN, unchecked=[{"what": "the cited spec link did not open", "kind": "link"}])
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [r], "verify": [self.bad_request()]})
-        self.assertEqual((rc, self.ask(), self.blocked), (2, None, []))
-        self.assertTrue(self.eng.result().why.startswith("failed: infrastructure: bad_request"))
+        assert (rc, self.ask(), self.blocked) == (2, None, [])
+        assert self.eng.result().why.startswith("failed: infrastructure: bad_request")
