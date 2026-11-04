@@ -40,8 +40,14 @@ def error_line(text: str) -> str:
     return next((ln for ln in lines if ln.startswith(("fatal:", "error:"))), lines[-1] if lines else "no message from git")
 
 
-def classify(stderr: str) -> SlotGitError:
-    tail = error_line(stderr)
+def push_error_line(text: str) -> str:
+    """Keep push rejection and hook diagnostics instead of git's generic failed-to-push trailer."""
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip().startswith(("!", "remote:", "hint:"))]
+    return (" | ".join(lines) or error_line(text))[:400]
+
+
+def classify(stderr: str, *, push: bool = False) -> SlotGitError:
+    tail = push_error_line(stderr) if push else error_line(stderr)
     if INDEX_LOCK.search(stderr):
         return IndexLocked(tail)
     if m := PINNED.search(stderr):
@@ -97,7 +103,7 @@ class GitBase:
     def _must(self, d: str, *args: str, extra: dict[str, str] | None = None) -> str:
         r = self._run(d, *args, extra=extra)
         if r.returncode != 0:
-            raise classify(r.stderr or r.stdout)
+            raise classify(r.stderr or r.stdout, push=args[0] == "push")
         return r.stdout.strip()
 
     def _read(self, d: str, *args: str, missing: bool = False, extra: dict[str, str] | None = None) -> str:

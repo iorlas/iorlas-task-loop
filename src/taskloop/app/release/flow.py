@@ -208,8 +208,8 @@ def main(argv: list[str] | None, tool_root: Path, spawner: Spawner, port: Git, e
                              message=req.message), req, repo, who, home)
     except Abort as e:
         print("release: " + str(e), file=sys.stderr)
-        first = str(e).strip().splitlines()[0] if str(e).strip() else "failed"
-        summary = (f"{e.version} was pushed but " if e.version else "nothing released: ") + first
+        message = " | ".join(str(e).strip().splitlines()) or "failed"
+        summary = ((f"{e.version} was pushed but " if e.version else "nothing released: ") + message)[:500]
         record(ReleaseResult(ok=False, version=e.version, summary=summary, tests=list(e.tests), log=e.log, at=clock(),
                              branch=req.from_branch or "main", message=req.message), req, repo, who, home)
         print("release FAILED: " + summary + ((f" (log {e.log})") if e.log else ""), file=sys.stderr)
