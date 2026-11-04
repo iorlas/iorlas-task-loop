@@ -5,12 +5,15 @@ import dataclasses
 import io
 import json
 import os
+import re
 import runpy
 import sys
 import tempfile
-import unittest
 from pathlib import Path
 from unittest import mock
+
+import pytest
+from support.case import Case
 
 ROOT = Path(__file__).resolve().parents[2]
 HOOK = ROOT / "hooks" / "hook.py"
@@ -42,27 +45,27 @@ def denied(tool, **args):
     return json.loads(out)["hookSpecificOutput"]["permissionDecisionReason"] if out else ""
 
 
-class PreToolUse(unittest.TestCase):
+class PreToolUse(Case):
     def test_pkill_and_killall_are_denied_wherever_they_stand_as_a_command(self):
         for cmd in ('pkill -f "unittest discover"', "killall python3", "cd x && pkill -f foo", "sudo pkill foo", "ls; killall node",
                     "sh -c 'pkill -f x'", "bash -c \"cd a && killall b\"", "/usr/bin/pkill -9 x", "echo hi\npkill foo"):
             with self.subTest(cmd=cmd):
-                self.assertNotEqual(denied("Bash", command=cmd), "")
+                assert denied("Bash", command=cmd) != ""
 
     def test_other_commands_are_allowed_even_when_they_mention_the_word(self):
         for cmd in ("ls -la", "echo pkill", "git commit -m 'no pkill here'", "grep -r killall src", "kill 4242", "python3 -m unittest",
                     "unterminated 'quote pkill"):
             with self.subTest(cmd=cmd):
-                self.assertEqual(denied("Bash", command=cmd), "")
+                assert denied("Bash", command=cmd) == ""
 
     def test_other_tools_and_unreadable_input_are_allowed(self):
-        self.assertEqual(call("Read", file_path="/x"), "")
-        self.assertEqual(pretool.main("not json"), "")
-        self.assertEqual(pretool.main(""), "")
-        self.assertEqual(pretool.main('{"tool_name": "Bash", "tool_input": "oops"}'), "")
+        assert call("Read", file_path="/x") == ""
+        assert pretool.main("not json") == ""
+        assert pretool.main("") == ""
+        assert pretool.main('{"tool_name": "Bash", "tool_input": "oops"}') == ""
 
 
-class Texts(unittest.TestCase):
+class Texts(Case):
     def brief(self, asks=0, loops=0, slots=30):
         return Brief(repo="/r", now=2_000_000.0, last_beat=1_999_000.0, version="1", installed="1",
                      loops=tuple(LoopLine(100 + i, 1_990_000.0, "tl-x", "s1", "1") for i in range(loops)),
@@ -70,38 +73,38 @@ class Texts(unittest.TestCase):
                      slots=tuple(f"s{i}: free" for i in range(slots)), recent=tuple(f"tl-{i} landed (5 min)" for i in range(5)))
 
     def test_the_first_line_says_whether_the_loop_runs_and_when_it_last_did_something(self):
-        self.assertTrue(status_lines(self.brief(loops=1))[0].startswith("loop RUNNING"))
+        assert status_lines(self.brief(loops=1))[0].startswith("loop RUNNING")
         first = status_lines(self.brief())[0]
-        self.assertTrue(first.startswith("loop NOT RUNNING"))
-        self.assertIn("last activity 16 min ago", first)
+        assert first.startswith("loop NOT RUNNING")
+        assert "last activity 16 min ago" in first
 
     def test_a_huge_status_stays_within_40_lines_and_8_kb_and_says_what_it_left_out(self):
         lines = status_lines(self.brief(asks=500, loops=3))
-        self.assertLessEqual(len(lines), STATUS_LINES)
-        self.assertLessEqual(len("\n".join(lines).encode()), STATUS_BYTES)
-        self.assertRegex(lines[-1], r"^\.\.\. \d+ more line")
+        assert len(lines) <= STATUS_LINES
+        assert len("\n".join(lines).encode()) <= STATUS_BYTES
+        assert re.search(r"^\.\.\. \d+ more line", lines[-1])
 
     def test_status_lists_each_held_resource_with_holder_bead_check_and_seconds_held(self):
         b = dataclasses.replace(self.brief(slots=0), resources=(ResourceLine("unity", "tl-x.3", "unity-tests", 2_000_000.0 - 125.0),))
-        self.assertIn("resources held:", status_lines(b))
-        self.assertIn("  unity: tl-x.3 unity-tests held 125 s", status_lines(b))
+        assert "resources held:" in status_lines(b)
+        assert "  unity: tl-x.3 unity-tests held 125 s" in status_lines(b)
 
     def test_a_small_status_is_whole(self):
         lines = status_lines(self.brief(asks=2, slots=2))
-        self.assertNotIn("more line", "\n".join(lines))
-        self.assertIn("asks: 2 open", lines)
+        assert "more line" not in "\n".join(lines)
+        assert "asks: 2 open" in lines
 
     def test_a_huge_handoff_stays_within_4_kb_and_keeps_the_standing_rules(self):
         text = handoff_text(self.brief(asks=500, loops=3))
-        self.assertLessEqual(len(text.encode()), HANDOFF_BYTES)
+        assert len(text.encode()) <= HANDOFF_BYTES
         for rule in RULES:
-            self.assertIn(rule, text)
+            assert rule in text
 
 
-class Speed(unittest.TestCase):
+class Speed(Case):
     """A hook runs before every tool call: pretool imports no store, adapter, app, record or msgspec module; an unknown event fails."""
 
-    def setUp(self):
+    def setup_method(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.env = dict(os.environ, XDG_CONFIG_HOME=self.tmp.name, CLAUDE_CONFIG_DIR=self.tmp.name)
@@ -109,10 +112,6 @@ class Speed(unittest.TestCase):
 
     def test_an_unknown_event_is_an_error_not_a_silent_pass(self):
         with mock.patch.object(sys, "argv", [str(HOOK), "nonsense"]), mock.patch.object(sys, "stdin", io.StringIO("{}")), \
-                mock.patch.dict(os.environ, self.env), contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as stop:
+                mock.patch.dict(os.environ, self.env), contextlib.redirect_stderr(io.StringIO()), pytest.raises(SystemExit) as stop:
             runpy.run_path(str(HOOK), run_name="__main__")
-        self.assertEqual(stop.exception.code, 2)
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert stop.value.code == 2

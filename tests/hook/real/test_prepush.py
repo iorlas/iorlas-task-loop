@@ -8,6 +8,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from support.case import Case
+
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: E402, F401
@@ -47,8 +49,8 @@ raise SystemExit(cmd_judge_push(args, who=who, env=env, spawner=RealSpawner(env)
 """
 
 
-class Base(unittest.TestCase):
-    def setUp(self):
+class Base(Case):
+    def setup_method(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         t = Path(self.tmp.name)
@@ -106,88 +108,88 @@ class Base(unittest.TestCase):
 class PrePush(Base):
     def test_the_hooks_path_reaches_git_from_the_child_env(self):
         want = str(Path(self.tmp.name) / "task-loop" / "githooks")
-        self.assertEqual(self.git(self.repo, "config", "core.hooksPath").stdout.strip(), want)
+        assert self.git(self.repo, "config", "core.hooksPath").stdout.strip() == want
 
     def test_a_green_tip_passes(self):
         self.commit("b")
         self.stamp("HEAD")
-        self.assertEqual(self.push("HEAD:refs/heads/x").returncode, 0)
+        assert self.push("HEAD:refs/heads/x").returncode == 0
 
     def test_a_task_push_needs_no_receipts_even_with_a_dirty_worktree(self):
         self.commit("b")
         (self.repo / "stray").write_text("x")
-        self.assertEqual(self.push("HEAD:refs/heads/task/x").returncode, 0)
-        self.assertIn("judge-push --repo", self.calls.read_text())
-        self.assertFalse(list(self.cfg.rglob("*.json")), "a task push must not run the check service")
+        assert self.push("HEAD:refs/heads/task/x").returncode == 0
+        assert "judge-push --repo" in self.calls.read_text()
+        assert not list(self.cfg.rglob("*.json")), "a task push must not run the check service"
 
     def test_a_red_or_unknown_tip_is_refused_when_the_worktree_is_not_that_head(self):
         tip = self.commit("b")
         self.commit("c")  # HEAD moved on and nothing is stamped: the tip pushed is neither green nor the checked-out HEAD
         r = self.push(f"{tip}:refs/heads/main")
-        self.assertNotEqual(r.returncode, 0)
-        self.assertIn("is not green", r.stderr)
-        self.assertNotEqual(self.git(self.origin, "rev-parse", "main").stdout.strip(), tip)
+        assert r.returncode != 0
+        assert "is not green" in r.stderr
+        assert self.git(self.origin, "rev-parse", "main").stdout.strip() != tip
 
     def test_the_head_that_is_not_green_runs_the_plan_then_passes(self):
         self.commit("b")
-        self.assertEqual(self.push("HEAD:refs/heads/main").returncode, 0)
-        self.assertIn("judge-push --repo", self.calls.read_text())
-        self.assertTrue(list(self.cfg.rglob("*.json")), "the application check service must retain evidence")
+        assert self.push("HEAD:refs/heads/main").returncode == 0
+        assert "judge-push --repo" in self.calls.read_text()
+        assert list(self.cfg.rglob("*.json")), "the application check service must retain evidence"
 
     def test_a_dirty_worktree_does_not_run_the_plan(self):
         self.commit("b")
         (self.repo / "stray").write_text("x")
-        self.assertNotEqual(self.push("HEAD:refs/heads/main").returncode, 0)
+        assert self.push("HEAD:refs/heads/main").returncode != 0
 
     def test_a_mixed_push_with_a_stamped_base_passes_and_an_unproven_base_does_not(self):
         low = self.commit("b")
         top = self.commit("c")
         self.stamp(top)
-        self.assertEqual(self.push(f"{low}:refs/heads/low", f"{top}:refs/heads/main").returncode, 0)
+        assert self.push(f"{low}:refs/heads/low", f"{top}:refs/heads/main").returncode == 0
         self.git(self.repo, "reset", "-q", "--hard", top)
         mid = self.commit("d")
         self.commit("e")  # HEAD is past mid, so the plan cannot run for it
-        self.assertNotEqual(self.push(f"{mid}:refs/heads/main").returncode, 0)
+        assert self.push(f"{mid}:refs/heads/main").returncode != 0
 
     def test_the_old_marker_cannot_authorize_an_ungreen_dirty_push(self):
         self.commit("b")
         (self.repo / "stray").write_text("x")
         tip = self.git(self.repo, "rev-parse", "HEAD").stdout.strip()
         r = self.push("HEAD:refs/heads/main", env={**self.env, "TL_LAND": "1"})
-        self.assertNotEqual(r.returncode, 0)
-        self.assertIn("judge-push", self.calls.read_text())
-        self.assertNotEqual(self.git(self.origin, "rev-parse", "main").stdout.strip(), tip)
+        assert r.returncode != 0
+        assert "judge-push" in self.calls.read_text()
+        assert self.git(self.origin, "rev-parse", "main").stdout.strip() != tip
 
     def test_an_unavailable_judge_refuses_before_remote_mutation(self):
         self.commit("b")
         (Path(self.tmp.name) / "task-loop/bin/tl").unlink()
-        self.assertNotEqual(self.push("HEAD:refs/heads/x").returncode, 0)
-        self.assertEqual(self.git(self.origin, "branch", "--list", "x").stdout, "")
+        assert self.push("HEAD:refs/heads/x").returncode != 0
+        assert self.git(self.origin, "branch", "--list", "x").stdout == ""
 
     def test_an_erroring_judge_refuses_before_remote_mutation(self):
         self.commit("b")
         (Path(self.tmp.name) / "task-loop/bin/tl").write_text("#!/bin/sh\nexit 2\n")
-        self.assertNotEqual(self.push("HEAD:refs/heads/x").returncode, 0)
-        self.assertEqual(self.git(self.origin, "branch", "--list", "x").stdout, "")
+        assert self.push("HEAD:refs/heads/x").returncode != 0
+        assert self.git(self.origin, "branch", "--list", "x").stdout == ""
 
     def test_an_undecodable_profile_refuses_before_remote_mutation(self):
         (self.repo / ".task-loop.json").write_text("{")
         self.commit("b")
-        self.assertNotEqual(self.push("HEAD:refs/heads/x").returncode, 0)
-        self.assertEqual(self.git(self.origin, "branch", "--list", "x").stdout, "")
+        assert self.push("HEAD:refs/heads/x").returncode != 0
+        assert self.git(self.origin, "branch", "--list", "x").stdout == ""
 
     def test_no_verify_still_beats_the_default(self):
         self.commit("b")
         (self.repo / "stray").write_text("x")
-        self.assertEqual(self.push("--no-verify", "HEAD:refs/heads/x").returncode, 0)
+        assert self.push("--no-verify", "HEAD:refs/heads/x").returncode == 0
 
     def test_a_tip_cannot_remove_the_base_gate(self):
         (self.repo / ".task-loop.json").write_text("{}")
         self.git(self.repo, "commit", "-qam", "profile")
         result = self.push("HEAD:refs/heads/x")
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("profile_changed:", result.stderr)
-        self.assertEqual(self.git(self.origin, "branch", "--list", "x").stdout, "")
+        assert result.returncode != 0
+        assert "profile_changed:" in result.stderr
+        assert self.git(self.origin, "branch", "--list", "x").stdout == ""
 
 
 class Chain(Base):
@@ -208,30 +210,30 @@ class Chain(Base):
         self.recorder()
         self.commit("b")
         self.stamp("HEAD")
-        self.assertEqual(self.push("HEAD:refs/heads/x").returncode, 0)
+        assert self.push("HEAD:refs/heads/x").returncode == 0
         text = self.rec.read_text()
-        self.assertIn("args: origin ", text)
-        self.assertIn("refs/heads/x", text)
+        assert "args: origin " in text
+        assert "refs/heads/x" in text
 
     def test_the_repos_hook_failing_refuses_the_push(self):
         self.recorder(rc=3)
         self.commit("b")
         self.stamp("HEAD")
-        self.assertNotEqual(self.push("HEAD:refs/heads/x").returncode, 0)
+        assert self.push("HEAD:refs/heads/x").returncode != 0
 
     def test_tl_refusing_stops_before_the_repos_hook(self):
         self.recorder()
         tip = self.commit("b")
         self.commit("c")
-        self.assertNotEqual(self.push(f"{tip}:refs/heads/main").returncode, 0)
-        self.assertFalse(self.rec.exists())
+        assert self.push(f"{tip}:refs/heads/main").returncode != 0
+        assert not self.rec.exists()
 
     def test_the_old_marker_cannot_skip_the_repos_hook(self):
         self.recorder(rc=3)
         self.commit("b")
         self.stamp("HEAD")
-        self.assertNotEqual(self.push("HEAD:refs/heads/x", env={**self.env, "TL_LAND": "1"}).returncode, 0)
-        self.assertTrue(self.rec.exists())
+        assert self.push("HEAD:refs/heads/x", env={**self.env, "TL_LAND": "1"}).returncode != 0
+        assert self.rec.exists()
 
     def test_the_original_hooks_path_is_followed(self):
         other = Path(self.tmp.name) / "myhooks"
@@ -239,28 +241,28 @@ class Chain(Base):
         self.own_hook("exit 4\n", where=other)
         self.commit("b")
         self.stamp("HEAD")
-        self.assertNotEqual(self.push("HEAD:refs/heads/x").returncode, 0)
+        assert self.push("HEAD:refs/heads/x").returncode != 0
 
     def test_another_hook_name_is_chained_too(self):
         self.own_hook("exit 5\n", name="pre-commit")
         (self.repo / "z").write_text("z")
         self.git(self.repo, "add", "-A")
-        self.assertNotEqual(self.git(self.repo, "commit", "-q", "-m", "z", check=False).returncode, 0)
+        assert self.git(self.repo, "commit", "-q", "-m", "z", check=False).returncode != 0
 
     def test_the_install_is_idempotent_and_writes_a_dispatcher_per_hook(self):
         before = {f.name: f.stat().st_mtime_ns for f in (Path(self.tmp.name) / "task-loop" / "githooks").iterdir()}
         write_hooks(ROOT, Env({"XDG_CONFIG_HOME": self.tmp.name}))
         after = {f.name: f.stat().st_mtime_ns for f in (Path(self.tmp.name) / "task-loop" / "githooks").iterdir()}
-        self.assertEqual(before, after)
-        self.assertIn("pre-push", after)
-        self.assertIn("commit-msg", after)
+        assert before == after
+        assert "pre-push" in after
+        assert "commit-msg" in after
 
 
 @unittest.skipUnless(shutil.which("git-lfs") or subprocess.run(["git", "lfs", "version"], capture_output=True, check=False).returncode == 0,
                      "git-lfs is not installed on this box")
 class Lfs(Base):
-    def setUp(self):
-        super().setUp()
+    def setup_method(self):
+        super().setup_method()
         self.git(self.repo, "lfs", "install", "--local", env=self.plain)  # writes the git-lfs shims into .git/hooks, the repo's own hooks
         (self.repo / ".gitattributes").write_text("*.bin filter=lfs diff=lfs merge=lfs -text\n")
         self.git(self.repo, "add", "-A")
@@ -277,8 +279,8 @@ class Lfs(Base):
         self.stamp("HEAD")
         self.git(self.repo, "config", "lfs.url", str(self.origin))
         r = self.push("HEAD:refs/heads/x")
-        self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertTrue(self.objects(), "the LFS object was skipped")
+        assert r.returncode == 0, r.stderr
+        assert self.objects(), "the LFS object was skipped"
 
     def test_a_repo_with_lfs_but_no_pre_push_hook_still_uploads(self):
         (self.repo / ".git" / "hooks" / "pre-push").unlink()
@@ -287,9 +289,5 @@ class Lfs(Base):
         self.git(self.repo, "commit", "-qm", "big")
         self.stamp("HEAD")
         self.git(self.repo, "config", "lfs.url", str(self.origin))
-        self.assertEqual(self.push("HEAD:refs/heads/x").returncode, 0)
-        self.assertTrue(self.objects(), "the LFS object was skipped")
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert self.push("HEAD:refs/heads/x").returncode == 0
+        assert self.objects(), "the LFS object was skipped"

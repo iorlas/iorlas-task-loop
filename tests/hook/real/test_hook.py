@@ -6,10 +6,12 @@ import os
 import subprocess
 import sys
 import tempfile
-import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
+
+import pytest
+from support.case import Case
 
 ROOT = Path(__file__).resolve().parents[3]
 HOOK = ROOT / "hooks" / "hook.py"
@@ -33,8 +35,8 @@ def denied(tool, **args):
     return json.loads(out)["hookSpecificOutput"]["permissionDecisionReason"] if out else ""
 
 
-class Sessions(unittest.TestCase):
-    def setUp(self):
+class Sessions(Case):
+    def setup_method(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.home = Path(self.tmp.name)
@@ -58,62 +60,62 @@ class Sessions(unittest.TestCase):
         return json.dumps({"session_id": "s1", "transcript_path": "/t.jsonl", "cwd": str(self.repo), **kw})
 
     def test_session_start_indexes_the_session_and_points_the_tl_shim_at_this_install(self):
-        self.assertEqual(session.start(self.event(source="startup"), self.root, snapshot(), port_git()), "")
-        self.assertEqual(json.loads((self.cfg / "sessions" / "s1.json").read_text())["transcript"], "/t.jsonl")
+        assert session.start(self.event(source="startup"), self.root, snapshot(), port_git()) == ""
+        assert json.loads((self.cfg / "sessions" / "s1.json").read_text())["transcript"] == "/t.jsonl"
         shim = (self.cfg / "bin" / "tl").read_text()
-        self.assertIn("exec uv run --quiet --script " + str(self.root / "skills" / "task-loop" / "tl.py"), shim)
-        self.assertTrue(os.access(self.cfg / "bin" / "tl", os.X_OK))
+        assert "exec uv run --quiet --script " + str(self.root / "skills" / "task-loop" / "tl.py") in shim
+        assert os.access(self.cfg / "bin" / "tl", os.X_OK)
 
     def test_session_start_never_fails_on_input_it_cannot_read(self):
-        self.assertEqual(session.start("not json", self.root, snapshot(), port_git()), "")
-        self.assertEqual(session.start("", self.root, snapshot(), port_git()), "")
+        assert session.start("not json", self.root, snapshot(), port_git()) == ""
+        assert session.start("", self.root, snapshot(), port_git()) == ""
 
     def test_a_compaction_writes_the_handoff_and_the_session_that_follows_gets_it_as_context(self):
-        self.assertEqual(session.start(self.event(source="compact"), self.root, snapshot(), port_git()), "")  # nothing written yet
+        assert session.start(self.event(source="compact"), self.root, snapshot(), port_git()) == ""  # nothing written yet
         session.precompact(self.event(), self.root, snapshot(), port_git())
         out = json.loads(session.start(self.event(source="compact"), self.root, snapshot(), port_git()))["hookSpecificOutput"]
-        self.assertEqual(out["hookEventName"], "SessionStart")
+        assert out["hookEventName"] == "SessionStart"
         text = out["additionalContext"]
-        self.assertIn("loop NOT RUNNING", text)
-        self.assertIn("running 9.9.9", text)
-        self.assertLessEqual(len(text.encode()), HANDOFF_BYTES)
+        assert "loop NOT RUNNING" in text
+        assert "running 9.9.9" in text
+        assert len(text.encode()) <= HANDOFF_BYTES
         for rule in RULES:
-            self.assertIn(rule, text)
+            assert rule in text
         fresh = session.start(self.event(source="startup"), self.root, snapshot(), port_git())
-        self.assertEqual(fresh, "")  # a fresh session gets no handoff
+        assert fresh == ""  # a fresh session gets no handoff
 
     def test_a_worktree_shares_the_handoff_of_its_main_checkout(self):
         subprocess.run(["git", "-C", str(self.repo), "commit", "-q", "--allow-empty", "-m", "x"], check=True, capture_output=True)
         wt = self.home / "wt"
         subprocess.run(["git", "-C", str(self.repo), "worktree", "add", "-q", "-b", "b", str(wt)], check=True, capture_output=True)
         session.precompact(self.event(cwd=str(wt)), self.root, snapshot(), port_git())
-        self.assertIn(
-            "loop NOT RUNNING",
-            json.loads(session.start(self.event(source="compact"), self.root, snapshot(), port_git()))["hookSpecificOutput"][
-                "additionalContext"],
+        assert (
+            "loop NOT RUNNING"
+            in json.loads(session.start(self.event(source="compact"), self.root, snapshot(), port_git()))["hookSpecificOutput"][
+                "additionalContext"]
         )
 
     def test_tl_status_and_handoff_read_the_stores(self):
         out = io.StringIO()
         with redirect_stdout(out):
-            self.assertEqual(tl.main(["status", "--brief", "--repo", str(self.repo)], here=self.root / "skills" / "task-loop"), 0)
-        self.assertTrue(out.getvalue().splitlines()[0].startswith("loop NOT RUNNING"), out.getvalue())
+            assert tl.main(["status", "--brief", "--repo", str(self.repo)], here=self.root / "skills" / "task-loop") == 0
+        assert out.getvalue().splitlines()[0].startswith("loop NOT RUNNING"), out.getvalue()
         out = io.StringIO()
         with redirect_stdout(out):
             tl.main(["status", "--json", "--repo", str(self.repo)], here=self.root / "skills" / "task-loop")
-        self.assertFalse(json.loads(out.getvalue())["running"])
+        assert not json.loads(out.getvalue())["running"]
         out = io.StringIO()
         with redirect_stdout(out):
-            self.assertEqual(tl.main(["handoff", "show", "--repo", str(self.repo)], here=self.root / "skills" / "task-loop"), 1)
-            self.assertEqual(tl.main(["handoff", "write", "--repo", str(self.repo)], here=self.root / "skills" / "task-loop"), 0)
-            self.assertEqual(tl.main(["handoff", "show", "--repo", str(self.repo)], here=self.root / "skills" / "task-loop"), 0)
-        self.assertIn("standing rules", out.getvalue())
+            assert tl.main(["handoff", "show", "--repo", str(self.repo)], here=self.root / "skills" / "task-loop") == 1
+            assert tl.main(["handoff", "write", "--repo", str(self.repo)], here=self.root / "skills" / "task-loop") == 0
+            assert tl.main(["handoff", "show", "--repo", str(self.repo)], here=self.root / "skills" / "task-loop") == 0
+        assert "standing rules" in out.getvalue()
 
 
-class Speed(unittest.TestCase):
+class Speed(Case):
     """A hook runs before every tool call: pretool imports no store, adapter, app, record or msgspec module; an unknown event fails."""
 
-    def setUp(self):
+    def setup_method(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.env = dict(os.environ, XDG_CONFIG_HOME=self.tmp.name, CLAUDE_CONFIG_DIR=self.tmp.name)
@@ -124,16 +126,12 @@ class Speed(unittest.TestCase):
             "'msgspec'))])"
         ).format(str(ROOT / "src"))
         r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
-        self.assertEqual(r.stdout.strip(), "[]")
+        assert r.stdout.strip() == "[]"
     def test_pretool_runs_on_the_system_python3_without_uv_or_python_3_15(self):
         system = Path("/usr/bin/python3")
         if not system.exists():
-            self.skipTest("no /usr/bin/python3")
+            pytest.skip("no /usr/bin/python3")
         event = json.dumps({"tool_name": "Bash", "tool_input": {"command": "pkill -f foo"}})
         r = subprocess.run([str(system), str(HOOK), "pretool"], input=event, capture_output=True, text=True, env=self.env, check=False)
-        self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertIn("deny", r.stdout)
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert r.returncode == 0, r.stderr
+        assert "deny" in r.stdout

@@ -1,17 +1,18 @@
 """SessionStart introduces task-loop only in profile repos and survives hook failures."""
 import json
 import tempfile
-import unittest
 from pathlib import Path
 from unittest import mock
+
+from support.case import Case
 
 from taskloop.contracts.env import Env
 from taskloop.domain import selfdescribe
 from taskloop.hook import session
 
 
-class SessionContext(unittest.TestCase):
-    def setUp(self):
+class SessionContext(Case):
+    def setup_method(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.repo = Path(tmp.name)
@@ -38,24 +39,24 @@ class SessionContext(unittest.TestCase):
         for source in ("startup", "resume", "clear", "compact"):
             with self.subTest(source=source):
                 out = json.loads(self.start(source))["hookSpecificOutput"]
-                self.assertEqual(out["hookEventName"], "SessionStart")
-                self.assertEqual(out["additionalContext"], selfdescribe.text())
+                assert out["hookEventName"] == "SessionStart"
+                assert out["additionalContext"] == selfdescribe.text()
 
     def test_no_profile_adds_no_context(self):
         for source in ("startup", "resume", "clear", "compact"):
             with self.subTest(source=source):
-                self.assertEqual(self.start(source), "")
+                assert self.start(source) == ""
 
     def test_compact_introduction_precedes_handoff_with_a_blank_line(self):
         self.profile()
         self.read.return_value = "handoff text"
         context = json.loads(self.start("compact"))["hookSpecificOutput"]["additionalContext"]
-        self.assertEqual(context, selfdescribe.text() + "\n\nhandoff text")
+        assert context == selfdescribe.text() + "\n\nhandoff text"
 
     def test_handoff_without_a_profile_is_preserved(self):
         self.read.return_value = "handoff text"
         context = json.loads(self.start("compact"))["hookSpecificOutput"]["additionalContext"]
-        self.assertEqual(context, "handoff text")
+        assert context == "handoff text"
 
     def test_startup_does_not_read_a_handoff(self):
         self.profile()
@@ -68,21 +69,21 @@ class SessionContext(unittest.TestCase):
         worktree.mkdir()
         event = json.dumps({"cwd": str(worktree), "source": "startup"})
         out = session.start(event, self.repo, self.env, self.git)
-        self.assertEqual(json.loads(out)["hookSpecificOutput"]["additionalContext"], selfdescribe.text())
+        assert json.loads(out)["hookSpecificOutput"]["additionalContext"] == selfdescribe.text()
         self.git.common_dir.assert_called_once_with(str(worktree))
 
     def test_a_profile_check_failure_returns_empty_text(self):
         with mock.patch.object(Path, "is_file", side_effect=OSError("unavailable")):
-            self.assertEqual(self.start("startup"), "")
+            assert self.start("startup") == ""
 
     def test_hook_failures_return_empty_text(self):
         for name in ("session_start", "write_shim", "write_hooks", "repo_of", "self_description"):
             with self.subTest(name=name), mock.patch.object(session.index, name, side_effect=RuntimeError("unavailable")):
-                self.assertEqual(self.start("startup"), "")
+                assert self.start("startup") == ""
         with mock.patch.object(session.handoff, "read", side_effect=OSError("unavailable")):
-            self.assertEqual(self.start("compact"), "")
+            assert self.start("compact") == ""
 
     def test_unreadable_input_returns_empty_text(self):
         for event in ("not json", "", "[]", "null"):
             with self.subTest(event=event):
-                self.assertEqual(session.start(event, self.repo, self.env, self.git), "")
+                assert session.start(event, self.repo, self.env, self.git) == ""
