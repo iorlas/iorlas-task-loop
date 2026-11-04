@@ -1,9 +1,10 @@
 """One slot table: the count follows the base ref profile, not the working tree; the dash and `tl status` list the same slots."""
 import sys
-import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
+
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -34,14 +35,16 @@ def git_with(count_on_base, sha="abc1234"):
     return git
 
 
-class SlotTableSource(unittest.TestCase):
+class SlotTableSource(Case):
     def test_a_stale_working_tree_count_loses_to_the_base_ref(self):
         stale = '{"slots": {"count": 2}}'
         with mock.patch.object(Path, "read_text", return_value=stale), mock.patch.object(Path, "iterdir", return_value=iter(())):
             table = slot_table("/repo", who(), git_with(4), NOW, store=FakeBeadStore())
-        self.assertEqual((table.configured, [v.id for v in table.slots], table.source, table.source_sha),
-                         (4, ["s1", "s2", "s3", "s4"], "origin/main", "abc1234"))
-        self.assertEqual(len(table.slots), table.configured)
+        assert (
+            (table.configured, [v.id for v in table.slots], table.source, table.source_sha)
+            == (4, ["s1", "s2", "s3", "s4"], "origin/main", "abc1234")
+        )
+        assert len(table.slots) == table.configured
 
     def test_without_a_resolvable_base_the_working_tree_is_the_source_and_says_so(self):
         git = mock.Mock(spec=Git)
@@ -49,10 +52,10 @@ class SlotTableSource(unittest.TestCase):
         with mock.patch.object(Path, "read_text", return_value='{"slots": {"count": 2}}'), \
                 mock.patch.object(Path, "iterdir", return_value=iter(())):
             src = slot_source("/repo", git)
-        self.assertEqual((src.count, src.source, src.sha), (2, WORKTREE, ""))
+        assert (src.count, src.source, src.sha) == (2, WORKTREE, "")
 
 
-class SlotTableStates(unittest.TestCase):
+class SlotTableStates(Case):
     def table(self, beads, live=None, dirs=None, count=4, targets=()):
         return build_slot_table(beads, count, live or {}, dirs, NOW, "origin/main", "abc", targets)
 
@@ -63,29 +66,29 @@ class SlotTableStates(unittest.TestCase):
         beads = [slot_bead("s1", hold_until=NOW + 60, held_by="denis", held_why="by hand\nmore"),
                  slot_bead("s2", hold_until=NOW - 60, held_by="denis")]
         got = {v.id: v for v in self.table(beads=beads).slots}
-        self.assertEqual((got["s1"].state, got["s1"].held_reason, got["s1"].held_until), ("held", "by hand", NOW + 60))
-        self.assertEqual(got["s2"].state, "free")
+        assert (got["s1"].state, got["s1"].held_reason, got["s1"].held_until) == ("held", "by hand", NOW + 60)
+        assert got["s2"].state == "free"
 
     def test_every_state(self):
         beads = [slot_bead("s1", "in_progress"), slot_bead("s2", "in_progress", held_bead="b-1"), slot_bead("s3", "in_progress"),
                  slot_bead("s5")]
         live = {"s1": LiveSlot(run="r1", bead="b-9", pid=7)}
         got = self.states(beads=beads, live=live, dirs={"s1", "s2", "s5"}, count=4, targets=["b-1"])
-        self.assertEqual(got, {"s1": "running", "s2": "setup", "s3": "dead", "s4": "free", "s5": "retiring"})
+        assert got == {"s1": "running", "s2": "setup", "s3": "dead", "s4": "free", "s5": "retiring"}
 
     def test_a_stray_claim_is_claimed_and_a_configured_slot_without_a_bead_is_free(self):
         got = self.states(beads=[slot_bead("s1", "in_progress")], count=2)
-        self.assertEqual(got, {"s1": "claimed", "s2": "free"})
+        assert got == {"s1": "claimed", "s2": "free"}
 
     def test_the_live_run_names_its_holder_and_pid(self):
         v = self.table(beads=[], live={"s1": LiveSlot(run="r1", bead="b-1", pid=42)}).slots[0]
-        self.assertEqual((v.state, v.holder, v.bead, v.pid), ("running", "r1", "b-1", 42))
+        assert (v.state, v.holder, v.bead, v.pid) == ("running", "r1", "b-1", 42)
 
 
-class OneSetOfSlots(unittest.TestCase):
+class OneSetOfSlots(Case):
     """Held, free and a stray claim: `tl status` and the dash list the same slot ids in the same states."""
 
-    def setUp(self):
+    def setup_method(self):
         self.beads = [slot_bead("s1", hold_until=NOW + 900, held_by="denis", held_why="testing"), slot_bead("s3", "in_progress")]
         self.store = FakeBeadStore()
         for b in self.beads:
@@ -102,11 +105,7 @@ class OneSetOfSlots(unittest.TestCase):
         src = SlotSource(count=3, source="origin/main", sha="abc1234", dirs=frozenset({"s1", "s3"}))
         project = ProjectIn(id="p", name="p", beads=[], slots=self.beads, slot_source=src)
         lanes = {s.id: s.state for s in floor.slots_of(project, {}, NOW)}
-        self.assertEqual(lanes, {"s1": "held", "s2": "free", "s3": "idle"})
-        self.assertEqual([(v.id, v.state) for v in table.slots], [("s1", "held"), ("s2", "free"), ("s3", "claimed")])
-        self.assertEqual([x.split(":")[0] for x in lines[:3]], list(lanes))
-        self.assertIn("slots.count 3 from origin/main abc1234", lines[-1])
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert lanes == {"s1": "held", "s2": "free", "s3": "idle"}
+        assert [(v.id, v.state) for v in table.slots] == [("s1", "held"), ("s2", "free"), ("s3", "claimed")]
+        assert [x.split(":")[0] for x in lines[:3]] == list(lanes)
+        assert "slots.count 3 from origin/main abc1234" in lines[-1]

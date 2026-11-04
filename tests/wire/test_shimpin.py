@@ -1,15 +1,16 @@
 """Old sessions keep launchers on the newest readable numeric cache install."""
 import tempfile
-import unittest
 from pathlib import Path
 from unittest import mock
+
+from support.case import Case
 
 from taskloop.app.wire import doctor, hook
 from taskloop.contracts.env import Env
 
 
-class ShimPin(unittest.TestCase):
-    def setUp(self):
+class ShimPin(Case):
+    def setup_method(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.root = Path(tmp.name)
@@ -28,16 +29,16 @@ class ShimPin(unittest.TestCase):
 
     def write(self, root):
         hook.write_shim(root, self.env)
-        self.assertEqual(len(hook.write_hooks(root, self.env)), len(hook.HOOK_NAMES))
+        assert len(hook.write_hooks(root, self.env)) == len(hook.HOOK_NAMES)
 
     def files(self):
         return [self.config / "bin/tl", *(self.config / "githooks" / n for n in hook.HOOK_NAMES)]
 
     def assert_targets(self, root):
-        self.assertIn(str(root / "skills/task-loop/tl.py"), self.files()[0].read_text())
+        assert str(root / "skills/task-loop/tl.py") in self.files()[0].read_text()
         for f in self.files()[1:]:
-            self.assertIn(str(root / "hooks/hook.py"), f.read_text())
-            self.assertIn(str(self.config / "bin/tl"), f.read_text())
+            assert str(root / "hooks/hook.py") in f.read_text()
+            assert str(self.config / "bin/tl") in f.read_text()
 
     def test_old_session_never_downgrades_newer_shim_or_hooks(self):
         new = self.install("0.23.100")
@@ -45,7 +46,7 @@ class ShimPin(unittest.TestCase):
         before = [(f.read_bytes(), f.stat().st_mtime_ns) for f in self.files()]
         self.write(self.old)
         self.assert_targets(new)
-        self.assertEqual(before, [(f.read_bytes(), f.stat().st_mtime_ns) for f in self.files()])
+        assert before == [(f.read_bytes(), f.stat().st_mtime_ns) for f in self.files()]
 
     def test_new_install_upgrades_both_launchers_in_numeric_order(self):
         self.write(self.old)
@@ -73,8 +74,8 @@ class ShimPin(unittest.TestCase):
                 return read(path)
             with self.subTest(name=name), mock.patch.object(Path, "read_bytes", unreadable):
                 hook.write_shim(self.old, self.env)
-                self.assertEqual(hook.write_hooks(self.old, self.env), [])
-            self.assertEqual(before, [f.read_bytes() for f in self.files()])
+                assert hook.write_hooks(self.old, self.env) == []
+            assert before == [f.read_bytes() for f in self.files()]
 
     def test_doctor_reports_shim_or_hook_skew_in_one_finding(self):
         self.write(self.old)
@@ -90,10 +91,10 @@ class ShimPin(unittest.TestCase):
                 with mock.patch.object(doctor.catalog, "installed_version", return_value=""), \
                         mock.patch.object(doctor.catalog, "cache_dirs", return_value={}):
                     findings = doctor.install_problems(self.old, self.env)
-                self.assertEqual(len(findings), 1)
-                self.assertIn("older than newest installed task-loop 0.23.100", findings[0])
-                self.assertIn("shim" if stale == "shim" else "pre-push", findings[0])
+                assert len(findings) == 1
+                assert "older than newest installed task-loop 0.23.100" in findings[0]
+                assert ("shim" if stale == "shim" else "pre-push") in findings[0]
         self.write(new)
         with mock.patch.object(doctor.catalog, "installed_version", return_value=""), \
                 mock.patch.object(doctor.catalog, "cache_dirs", return_value={}):
-            self.assertEqual(doctor.install_problems(self.old, self.env), [])
+            assert doctor.install_problems(self.old, self.env) == []
