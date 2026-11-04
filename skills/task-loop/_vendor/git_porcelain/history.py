@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Literal
 
 from git_porcelain.errors import GitError
 from git_porcelain.porcelain import _head_from_files, _run, git_returncode, has_conflict_markers, merge_in_progress, run_git, unmerged_paths
+from git_porcelain.revision_validation import validate_revisions
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping, Sequence
@@ -184,6 +185,7 @@ def log_grep(repo: Path, pattern: str, *, limit: int = 20) -> list[Commit]:
 
 def show_at(repo: Path, rel: str, rev: str) -> str | None:
     """The text of ``rel`` as of ``rev``, or None when the path did not exist there."""
+    validate_revisions(rev)
     try:
         return run_git(repo, "show", f"{rev}:{rel}")
     except GitError:
@@ -192,7 +194,8 @@ def show_at(repo: Path, rel: str, rev: str) -> str | None:
 
 def is_ancestor(repo: Path, ancestor: str, descendant: str) -> bool:
     """True when ``ancestor`` is reachable from ``descendant`` (a push would fast-forward)."""
-    return git_returncode(repo, "merge-base", "--is-ancestor", ancestor, descendant) == 0
+    validate_revisions(ancestor, descendant)
+    return git_returncode(repo, "merge-base", "--is-ancestor", "--end-of-options", ancestor, descendant) == 0
 
 
 def upstream(repo: Path) -> str | None:
@@ -308,7 +311,7 @@ def merge(
     args = [*_config_args(config), "-c", "merge.conflictStyle=diff3", "merge", "--no-verify", "--no-edit"]
     if message is not None:
         args += ["-m", _message(message, trailers)]
-    proc = _run(repo, (*args, ref), _identity_env(author, committer), None)
+    proc = _run(repo, (*args, "--", ref), _identity_env(author, committer), None)
     if proc.returncode != 0:
         if merge_in_progress(repo):
             return MergeResult("conflict", changed=_changed_since(repo, before), conflicted=tuple(unmerged_paths(repo)))

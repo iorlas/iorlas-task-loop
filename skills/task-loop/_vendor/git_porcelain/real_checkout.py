@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 from git_porcelain.errors import BranchPinned, MissingRevision
 from git_porcelain.real_done import unavailable
+from git_porcelain.revision_validation import validate_revisions
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -17,7 +18,7 @@ if TYPE_CHECKING:
 
 def branch(wt: RealWorktree) -> str | None:
     """Read symbolic HEAD, including an unborn branch."""
-    done = wt.run("symbolic-ref", "--quiet", "--short", "HEAD", check=False)
+    done = wt.run("symbolic-ref", "--short", "-q", "HEAD", check=False)
     if done.rc == 1 and not done.out and not done.err:
         return None
     if done.rc:
@@ -27,6 +28,7 @@ def branch(wt: RealWorktree) -> str | None:
 
 def resolve_commit(wt: RealWorktree, ref: str) -> str:
     """Validate a revision without option parsing and return its commit OID."""
+    validate_revisions(ref)
     done = wt.run("rev-parse", "--verify", "--end-of-options", f"{ref}^{{commit}}", check=False)
     if done.rc:
         error = unavailable(("rev-parse",), done)

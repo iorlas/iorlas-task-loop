@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Final
 from git_porcelain import ignore_rules, real_cache, real_env, real_parse
 from git_porcelain.api import Diff, Dirty, Health, LogEntry, Relation, RepoIdentity, Sha, Snapshot, Tree, TreeId, WorktreeInfo
 from git_porcelain.real_done import unavailable
+from git_porcelain.revision_validation import validate_revisions
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
@@ -74,11 +75,13 @@ def identity(repo: RealRepo) -> RepoIdentity:
 
 
 def relate(repo: RealRepo, a: str, b: str) -> Relation:
+    validate_revisions(a, b)
+
     def compute() -> Relation:
-        base = repo.run(repo.path, "merge-base", a, b, check=False)
+        base = repo.run(repo.path, "merge-base", "--end-of-options", a, b, check=False)
         if base.rc not in (0, 1):
             raise unavailable(("merge-base", a, b), base)
-        counts = repo.run(repo.path, "rev-list", "--left-right", "--count", f"{a}...{b}").out.split()
+        counts = repo.run(repo.path, "rev-list", "--left-right", "--count", "--end-of-options", f"{a}...{b}").out.split()
         return Relation(Sha(base.out.strip()) if base.rc == 0 and base.out.strip() else None, int(counts[0]), int(counts[1]))
 
     return _rev_memo(repo, ("relate", a, b), (a, b), compute)
@@ -87,6 +90,7 @@ def relate(repo: RealRepo, a: str, b: str) -> Relation:
 def history(
     repo: RealRepo, revs: Sequence[str], not_on: Sequence[str], limit: int | None, patch_equivalent_to: str | None
 ) -> tuple[LogEntry, ...]:
+    validate_revisions(*revs, *not_on, *([patch_equivalent_to] if patch_equivalent_to is not None else []))
     if patch_equivalent_to is not None and len(revs) != 1:
         msg = "patch_equivalent_to needs exactly one rev"
         raise ValueError(msg)
@@ -98,7 +102,7 @@ def history(
         rows = real_parse.parse_log(out)
         if patch_equivalent_to is None:
             return tuple(LogEntry(sha, ts, subject, body, None) for sha, ts, subject, body in rows)
-        cherry = repo.run(repo.path, "cherry", patch_equivalent_to, revs[0]).out.splitlines()
+        cherry = repo.run(repo.path, "cherry", "--", patch_equivalent_to, revs[0]).out.splitlines()
         pending = {line[2:].strip() for line in cherry if line.startswith("+ ")}
         return tuple(LogEntry(sha, ts, subject, body, sha not in pending) for sha, ts, subject, body in rows)
 
@@ -118,9 +122,11 @@ def branches(repo: RealRepo, prefix: str) -> tuple[tuple[str, Sha], ...]:
 
 
 def tree(repo: RealRepo, rev: str) -> Tree | None:
+    validate_revisions(rev)
+
     def resolve() -> Sha | None:
         for kind in ("commit", "tree"):
-            done = repo.run(repo.path, "rev-parse", "--verify", "-q", f"{rev}^{{{kind}}}", check=False)
+            done = repo.run(repo.path, "rev-parse", "--verify", "-q", "--end-of-options", f"{rev}^{{{kind}}}", check=False)
             if done.rc == 0 and done.out.strip():
                 return Sha(done.out.strip())
         return None
@@ -189,6 +195,7 @@ def health(wt: RealWorktree) -> Health:
 
 
 def snapshot(wt: RealWorktree, base: str, *, inputs: Sequence[str] = ()) -> Snapshot:
+    validate_revisions(base)
     repo = wt.repo
     text = wt.run(_NO_LOCK, "status", "--porcelain=v2", "--branch", "-z", "--untracked-files=all").out
     state = real_parse.parse_status(text)
@@ -210,7 +217,7 @@ def snapshot(wt: RealWorktree, base: str, *, inputs: Sequence[str] = ()) -> Snap
     base_tip = Sha(lines[-1])
     if state.head is None:
         return Snapshot(work, None, None, state.branch, base_tip, base_tip)
-    merged = wt.run("merge-base", base, "HEAD", check=False)
+    merged = wt.run("merge-base", "--end-of-options", str(base_tip), "HEAD", check=False)
     mb = Sha(merged.out.strip()) if merged.rc == 0 and merged.out.strip() else base_tip
     return Snapshot(work, Sha(state.head), TreeId(lines[0]), state.branch, mb, base_tip)
 
@@ -227,6 +234,8 @@ def _write_tree(wt: RealWorktree, *, has_head: bool, inputs: Sequence[str]) -> T
 
 
 def diff(wt: RealWorktree, a: str, b: str, *, exclude: tuple[str, ...], cap: int | None) -> Diff:
+    validate_revisions(a, b)
+
     def compute() -> Diff:
         scope = ["--", ".", *(f":(exclude,literal){p}" for p in exclude)] if exclude else []
         common = ("--no-color", "--no-ext-diff", "--no-renames", a, b)
@@ -244,6 +253,7 @@ def diff(wt: RealWorktree, a: str, b: str, *, exclude: tuple[str, ...], cap: int
 
 
 def dirty(wt: RealWorktree, base: str | None, ignored_under: tuple[str, ...]) -> Dirty:
+    validate_revisions(*([base] if base is not None else []))
     state = real_parse.parse_status(wt.run(_NO_LOCK, "status", "--porcelain=v2", "-z", "--untracked-files=all", "--no-renames").out)
     ignored_by_base = _base_ignored(wt, base, state.untracked) if base is not None and state.untracked else frozenset()
     ignored: tuple[str, ...] = ()
@@ -276,7 +286,7 @@ def _base_ignored(wt: RealWorktree, base: str, untracked: Sequence[str]) -> froz
 
 
 def _base_rules(wt: RealWorktree, base: str) -> tuple[str, ...]:
-    listing = wt.run("ls-tree", "-r", "--name-only", "-z", base).out
+    listing = wt.run("ls-tree", "-r", "--name-only", "-z", "--", base).out
     texts: dict[str, str] = {}
     for path in (p for p in listing.split("\0") if ignore_rules.is_ignore_file(p)):
         shown = wt.run("cat-file", "blob", f"{base}:{path}", check=False)
@@ -286,6 +296,7 @@ def _base_rules(wt: RealWorktree, base: str) -> tuple[str, ...]:
 
 
 def landed(wt: RealWorktree, base: str, title_suffix: str) -> Sha | None:
+    validate_revisions(base)
     done = wt.run("log", "-1", "--format=%H%x1f%s", check=False)
     if done.rc != 0 or "\x1f" not in done.out:
         return None

@@ -33,14 +33,16 @@ class Done:
         return (self.err.strip() or self.out.strip())[-_TAIL:]
 
 
-def unavailable(args: Sequence[str], done: Done) -> GitUnavailable:
+def unavailable(args: Sequence[str], done: Done, *, full_output: bool = False) -> GitUnavailable:
     """The infrastructure failure of a git child that exited non-zero."""
     low = done.tail.lower()
     hint = "set user.name and user.email" if "tell me who you are" in low or "empty ident" in low else None
+    output = (done.out + done.err).strip()
     return failure(
-        f"git {args[0] if args else ''} exited {done.rc}: {done.tail}",
+        f"git {args[0] if args else ''} exited {done.rc}: {output if full_output else done.tail}",
         done.err or done.out,
         done.rc,
         retryable=any(mark in low for mark in _LOCKED),
         hint=hint,
+        output=output,
     )

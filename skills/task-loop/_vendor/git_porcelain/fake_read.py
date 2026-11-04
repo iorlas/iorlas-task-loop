@@ -12,6 +12,7 @@ from git_porcelain.fake_diff import diff_stat, diff_text, grep_files, status_ent
 from git_porcelain.fake_ignore import Ignore
 from git_porcelain.fake_ops import ignore_of, is_clean
 from git_porcelain.fake_store import ancestors
+from git_porcelain.revision_validation import validate_revisions
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -29,6 +30,7 @@ __all__ = [
     "health",
     "history",
     "identity",
+    "is_ancestor",
     "relate",
     "resolve_commit",
     "snapshot",
@@ -67,6 +69,7 @@ def health(repo: RepoState, wt: CheckoutState | None, path: Path) -> Health:
 
 
 def resolve_commit(repo: RepoState, wt: CheckoutState, rev: str) -> str:
+    validate_revisions(rev)
     sha = repo.commit_named(rev, wt)
     if sha is None:
         msg = f"git: bad revision '{rev}'"
@@ -80,6 +83,7 @@ def _merge_base(repo: RepoState, left: str, right: str) -> str | None:
 
 
 def snapshot(repo: RepoState, wt: CheckoutState, base: str, *, inputs: Sequence[str] = ()) -> Snapshot:
+    validate_revisions(base)
     files = dict(repo.head_files(wt))
     ignore = ignore_of(repo, wt)
     for path, data in wt.files.items():
@@ -110,6 +114,7 @@ def _letter(path: str, left: Mapping[str, object], right: Mapping[str, object]) 
 
 
 def diff(repo: RepoState, wt: CheckoutState, a: str, b: str, *, exclude: Sequence[str], cap: int | None) -> Diff:
+    validate_revisions(a, b)
     left, right = repo.tree_named(a, wt), repo.tree_named(b, wt)
     stats = diff_stat(left, right, repo.store, exclude)
     if not stats:
@@ -122,6 +127,7 @@ def diff(repo: RepoState, wt: CheckoutState, a: str, b: str, *, exclude: Sequenc
 
 
 def dirty(repo: RepoState, wt: CheckoutState, *, base: str | None, ignored_under: Sequence[str]) -> Dirty:
+    validate_revisions(*([base] if base is not None else []))
     entries = status_entries(repo.head_files(wt), wt, ignore_of(repo, wt))
     tracked = sorted({p for e in entries if e.code != "??" for p in (e.path, e.orig_path) if p})
     untracked = tuple(sorted(e.path for e in entries if e.code == "??"))
@@ -144,7 +150,14 @@ def _ignore_files(repo: RepoState, commit: str) -> dict[str, str]:
     return {p: repo.store.blobs[s].decode("utf-8", "replace") for p, s in files.items() if ignore_rules.is_ignore_file(p)}
 
 
+def is_ancestor(repo: RepoState, wt: CheckoutState, a: str, b: str) -> bool:
+    validate_revisions(a, b)
+    left, right = resolve_commit(repo, wt, a), resolve_commit(repo, wt, b)
+    return left in ancestors(repo.store, right)
+
+
 def relate(repo: RepoState, wt: CheckoutState, a: str, b: str) -> Relation:
+    validate_revisions(a, b)
     left, right = resolve_commit(repo, wt, a), resolve_commit(repo, wt, b)
     mine, theirs = ancestors(repo.store, left), ancestors(repo.store, right)
     fork = _merge_base(repo, left, right)
@@ -152,6 +165,7 @@ def relate(repo: RepoState, wt: CheckoutState, a: str, b: str) -> Relation:
 
 
 def cherry(repo: RepoState, wt: CheckoutState, upstream: str, head: str) -> tuple[Pick, ...]:
+    validate_revisions(upstream, head)
     left = ancestors(repo.store, resolve_commit(repo, wt, upstream))
     right = ancestors(repo.store, resolve_commit(repo, wt, head))
     patches = {_patch_id(repo, repo.store.commits[sha]) for sha in left - right if len(repo.store.commits[sha].parents) < 2}
@@ -175,6 +189,7 @@ def _patch_id(repo: RepoState, commit: CommitObj) -> frozenset[tuple[str, tuple[
 def history(
     repo: RepoState, wt: CheckoutState, revs: Sequence[str], *, not_on: Sequence[str], limit: int | None, patch_equivalent_to: str | None
 ) -> tuple[LogEntry, ...]:
+    validate_revisions(*revs, *not_on, *([patch_equivalent_to] if patch_equivalent_to is not None else []))
     if patch_equivalent_to is not None and len(revs) != 1:
         msg = "patch_equivalent_to needs exactly one rev"
         raise ValueError(msg)
@@ -208,6 +223,7 @@ def branches(repo: RepoState, prefix: str) -> tuple[tuple[str, Sha], ...]:
 
 
 def tree(repo: RepoState, wt: CheckoutState, rev: str) -> Tree | None:
+    validate_revisions(rev)
     sha = repo.commit_named(rev, wt)
     files: Mapping[str, str] | None = repo.store.commits[sha].files if sha else repo.store.trees.get(rev)
     if files is None:

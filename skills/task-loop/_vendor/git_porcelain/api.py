@@ -51,10 +51,12 @@ __all__ = [
     "Rebased",
     "RecordResult",
     "Recorded",
+    "RefEntry",
     "RefRejected",
     "Rejected",
     "Relation",
     "Released",
+    "RemoteRef",
     "RemoteRejected",
     "Repo",
     "RepoIdentity",
@@ -186,6 +188,22 @@ class CommandResult:
 
 
 @dataclass(frozen=True)
+class RefEntry:
+    """A full local ref name and its object id."""
+
+    name: str
+    sha: Sha
+
+
+@dataclass(frozen=True)
+class RemoteRef:
+    """An advertised ref, including HEAD and peeled tags; names remain fully qualified."""
+
+    name: str
+    oid: Sha
+
+
+@dataclass(frozen=True)
 class WorktreeInfo:
     path: Path
     head: Sha | None
@@ -227,16 +245,22 @@ class Tree:
 @dataclass(frozen=True)
 class Recorded:
     sha: Sha
+    output: str = ""
 
 
 @dataclass(frozen=True)
 class NothingToRecord:
-    pass
+    output: str = ""
 
 
 @dataclass(frozen=True)
 class HookRejected:
     tail: str
+    output: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.output:
+            object.__setattr__(self, "output", self.tail)
 
 
 @dataclass(frozen=True)
@@ -341,8 +365,34 @@ SyncResult = Synced | Offline
 class Repo(Protocol):
     """What every checkout of one repository shares."""
 
+    def tag(self, name: str, rev: str) -> None:
+        """Create a lightweight tag; TagExists for an existing tag, MissingRevision for an absent object."""
+        ...
+
+    def count(self, include: Sequence[str], exclude: Sequence[str] = ()) -> int:
+        """Count reachable commits minus exclusions; empty include is zero, absent revisions raise MissingRevision."""
+        ...
+
+    def refs(self, prefixes: Sequence[str]) -> tuple[RefEntry, ...]:
+        """Sorted for-each-ref rows for arbitrary prefixes; empty prefixes select all. Failures raise GitUnavailable."""
+        ...
+
+    def ls_remote(self, remote: str, patterns: Sequence[str] = ()) -> tuple[RemoteRef, ...]:
+        """Advertise remote refs with tail globs and injected environment; transport failures raise GitUnavailable."""
+        ...
+
+    def is_ancestor(self, a: str, b: str) -> bool:
+        """Whether a is reachable from b; missing revisions raise MissingRevision, faults raise GitReadFailure.
+
+        Leading-dash revisions raise ValueError before invoking git.
+        """
+        ...
+
     def merge_base(self, a: str, b: str) -> Sha | None:
-        """None only for missing revisions or unrelated histories; observation faults raise GitReadFailure."""
+        """None only for missing revisions or unrelated histories; observation faults raise GitReadFailure.
+
+        Leading-dash revisions raise ValueError before invoking git.
+        """
         ...
 
     def cherry(self, upstream: str, head: str) -> tuple[Pick, ...]:
@@ -438,6 +488,18 @@ class Worktree(Protocol):
 
     path: Path
 
+    def stage(self, paths: Sequence[str], *, literal: bool = True) -> None:
+        """Stage additions, edits and deletions via NUL-delimited pathspecs; git refusals raise GitUnavailable."""
+        ...
+
+    def stage_tracked(self) -> None:
+        """Stage index-tracked edits/deletions (add -u); failures raise GitUnavailable."""
+        ...
+
+    def merge_ff(self, rev: str) -> None:
+        """Fast-forward only; NotFastForward for divergence, MissingRevision for absence, DirtyTree for overwrite."""
+        ...
+
     def branch(self) -> str | None:
         """Symbolic HEAD's short branch name, including unborn branches; None when detached."""
         ...
@@ -501,7 +563,9 @@ class Worktree(Protocol):
         exact path. ``all``: everything. ``tracked``: index-tracked changes, including staged additions,
         without untracked files. ``staged``: commit the existing index without staging working files.
         ``amend`` folds into HEAD (empty ``message`` keeps its message), even without staged changes;
-        ``squash_to`` first moves HEAD softly to ``squash_to``. Hooks are skipped unless ``hooks``."""
+        ``squash_to`` first moves HEAD softly to ``squash_to``. Hooks are skipped unless ``hooks``.
+        Results retain complete combined command output; infrastructure exceptions carry ``output`` too.
+        Marker text is not a precondition: git decides whether the index can commit."""
         ...
 
     def take_branch(
@@ -540,7 +604,11 @@ class Worktree(Protocol):
         ...
 
     def rebase(self, base: str, *, update_refs: bool | None = None) -> CommandResult:
-        """Invoke rebase even when up to date; preserve every git refusal and diagnostic."""
+        """Resolve base to a commit OID, then invoke rebase even when up to date.
+
+        Leading-dash bases raise ValueError; absent bases raise MissingRevision.
+        Preserve every git rebase refusal and diagnostic.
+        """
         ...
 
     def continue_rebase(self, *, stage_conflicts: bool = False, check_markers: bool = False, missing_ok: bool = False) -> CommandResult:

@@ -25,7 +25,7 @@ from pathlib import Path, PurePath
 from typing import TYPE_CHECKING, Literal, Self
 
 from git_porcelain import fake_checkout as checkout_ops
-from git_porcelain import fake_commands, fake_remote
+from git_porcelain import fake_commands, fake_operations, fake_remote
 from git_porcelain import fake_flow as flow
 from git_porcelain import fake_read as read
 from git_porcelain import fake_write as write
@@ -36,6 +36,7 @@ from git_porcelain.fake_ops import branch_ref, clean, hard_to
 from git_porcelain.fake_plumbing import FakePlumbing
 from git_porcelain.fake_store import CheckoutState, Hooks, RepoState
 from git_porcelain.fake_worktrees import worktree_state
+from git_porcelain.revision_validation import validate_revisions
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -50,8 +51,10 @@ if TYPE_CHECKING:
         PushResult,
         RebaseResult,
         RecordResult,
+        RefEntry,
         Relation,
         Released,
+        RemoteRef,
         RepoIdentity,
         Snapshot,
         StillHeld,
@@ -156,6 +159,23 @@ class FakeRepo:
         self._state.worktrees[path].missing = True
 
     # -- Repo ------------------------------------------------------------------------------------------
+    def tag(self, name: str, rev: str) -> None:
+        fake_operations.tag(self._state, self._anchor(), name, rev)
+
+    def count(self, include: Sequence[str], exclude: Sequence[str] = ()) -> int:
+        return fake_operations.count(self._state, self._anchor(), include, exclude)
+
+    def refs(self, prefixes: Sequence[str]) -> tuple[RefEntry, ...]:
+        self._anchor()
+        return fake_operations.refs(self._state, prefixes)
+
+    def ls_remote(self, remote: str, patterns: Sequence[str] = ()) -> tuple[RemoteRef, ...]:
+        self._anchor()
+        return fake_operations.ls_remote(self._state, remote, patterns)
+
+    def is_ancestor(self, a: str, b: str) -> bool:
+        return read.is_ancestor(self._state, self._read_anchor(), a, b)
+
     def merge_base(self, a: str, b: str) -> Sha | None:
         wt = self._read_anchor()
         try:
@@ -230,7 +250,7 @@ class FakeRepo:
 
     def add_worktree(self, path: Path, rev: str, *, force: bool = False) -> FakeWorktree:
         wt = self._anchor()
-        flow.worktree_add(self._state, path, self._state.commit_named(rev, wt), force=force)
+        flow.worktree_add(self._state, path, read.resolve_commit(self._state, wt, rev), force=force)
         return FakeWorktree(self, path)
 
     def drop_worktree(self, path: Path, *, force: bool = False, missing_ok: bool = True) -> None:
@@ -309,6 +329,16 @@ class FakeWorktree:
     # -- Worktree --------------------------------------------------------------------------------------
     def health(self) -> Health:
         return read.health(self._repo, self._find(), self.path)
+
+    def stage(self, paths: Sequence[str], *, literal: bool = True) -> None:
+        fake_operations.stage(self._repo, self.state(), paths, literal=literal)
+
+    def stage_tracked(self) -> None:
+        wt = self.state()
+        fake_operations.stage(self._repo, wt, list(wt.index), literal=True)
+
+    def merge_ff(self, rev: str) -> None:
+        self.repo.plumbing().merge_ff(self.path, rev)
 
     def branch(self) -> str | None:
         return checkout_ops.branch(self.state())
@@ -456,6 +486,7 @@ class FakeWorktree:
         return flow.push(self._repo, self.state(), dst, remote, hook_env or {})
 
     def landed(self, base: str, title_suffix: str) -> Sha | None:
+        validate_revisions(base)
         wt = self.state()
         tip = self._repo.head_sha(wt)
         if tip is None or not self._repo.store.commits[tip].message.partition("\n")[0].endswith(title_suffix):

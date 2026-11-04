@@ -19,6 +19,8 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
     from pathlib import Path
 
+    from git_porcelain.api import CommandResult
+
 __all__ = ["CheckoutState", "CommitObj", "Hooks", "Rebase", "RepoState", "Store", "ancestors", "blob_sha", "tree_sha"]
 
 _CLOCK = itertools.count(1)
@@ -135,6 +137,9 @@ class Hooks:
 
     refuse_commit: bool = False
     commit_failure: str | None = None
+    commit_output: str = ""
+    rebase_result: CommandResult | None = None
+    rebase_spawn_failure: str | None = None
     refuse_push: bool = False
     push_requires_env: dict[str, str] = field(default_factory=dict)
     squash_failure: str | None = None
@@ -192,7 +197,7 @@ class RepoState:
     def _base(self, name: str, wt: CheckoutState) -> str | None:
         if name in {"HEAD", "@"}:
             return self.head_sha(wt)
-        for prefix in ("", "refs/", "refs/heads/", "refs/remotes/"):
+        for prefix in ("", "refs/", "refs/tags/", "refs/heads/", "refs/remotes/"):
             target = prefix + name
             seen: set[str] = set()
             while target in self.symbolic_refs:

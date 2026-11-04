@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from git_porcelain import real_observe, real_write
+from git_porcelain import real_checkout, real_observe, real_write
 from git_porcelain.api import CommandResult
 from git_porcelain.errors import GitTimeout
 
@@ -35,8 +35,9 @@ def command(
 
 
 def rebase(wt: RealWorktree, base: str, *, update_refs: bool | None) -> CommandResult:
-    flags = [] if update_refs is None else ["--update-refs" if update_refs else "--no-update-refs"]
-    return command(wt, ["-c", "core.editor=true", "rebase", *flags, "--", base])
+    target = real_checkout.resolve_commit(wt, base)
+    config = [] if update_refs is None else ["-c", f"rebase.updateRefs={str(update_refs).lower()}"]
+    return command(wt, [*config, "rebase", "-q", target])
 
 
 def continue_rebase(wt: RealWorktree, *, stage_conflicts: bool, check_markers: bool, missing_ok: bool) -> CommandResult:
@@ -56,9 +57,10 @@ def continue_rebase(wt: RealWorktree, *, stage_conflicts: bool, check_markers: b
 
 
 def abort_rebase(wt: RealWorktree, *, missing_ok: bool, restore_to: Sha | None) -> CommandResult:
+    target = real_checkout.resolve_commit(wt, str(restore_to)) if restore_to is not None else None
     result = CommandResult(ok=True, output="")
     if not missing_ok or real_observe.rebasing(wt):
         result = command(wt, ["rebase", "--abort"])
-    if result.ok and restore_to is not None:
-        result = command(wt, ["reset", "--hard", str(restore_to)])
+    if result.ok and target is not None:
+        result = command(wt, ["reset", "--hard", target])
     return result

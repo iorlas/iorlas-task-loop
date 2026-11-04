@@ -15,7 +15,17 @@ import subprocess
 import time
 from typing import TYPE_CHECKING
 
-from git_porcelain import real_checkout, real_commands, real_env, real_observe, real_read, real_remote, real_worktrees, real_write
+from git_porcelain import (
+    real_checkout,
+    real_commands,
+    real_env,
+    real_observe,
+    real_operations,
+    real_read,
+    real_remote,
+    real_worktrees,
+    real_write,
+)
 from git_porcelain.errors import GitTimeout, GitUnavailable
 from git_porcelain.real_done import Done, unavailable
 
@@ -35,8 +45,10 @@ if TYPE_CHECKING:
         PushResult,
         RebaseResult,
         RecordResult,
+        RefEntry,
         Relation,
         Released,
+        RemoteRef,
         RepoIdentity,
         Sha,
         Snapshot,
@@ -133,6 +145,21 @@ class RealRepo:
         self.refs_seen.clear()
 
     # -- Repo ------------------------------------------------------------------------------------------
+    def tag(self, name: str, rev: str) -> None:
+        real_operations.tag(self, name, rev)
+
+    def count(self, include: Sequence[str], exclude: Sequence[str] = ()) -> int:
+        return real_operations.count(self, include, exclude)
+
+    def refs(self, prefixes: Sequence[str]) -> tuple[RefEntry, ...]:
+        return real_operations.refs(self, prefixes)
+
+    def ls_remote(self, remote: str, patterns: Sequence[str] = ()) -> tuple[RemoteRef, ...]:
+        return real_operations.ls_remote(self, remote, patterns)
+
+    def is_ancestor(self, a: str, b: str) -> bool:
+        return real_observe.is_ancestor(self, a, b)
+
     def merge_base(self, a: str, b: str) -> Sha | None:
         return real_observe.merge_base(self, a, b)
 
@@ -213,6 +240,15 @@ class RealWorktree:
 
     def health(self) -> Health:
         return real_read.health(self)
+
+    def stage(self, paths: Sequence[str], *, literal: bool = True) -> None:
+        real_operations.stage(self, paths, literal=literal)
+
+    def stage_tracked(self) -> None:
+        real_operations.stage_tracked(self)
+
+    def merge_ff(self, rev: str) -> None:
+        real_operations.merge_ff(self, rev)
 
     def branch(self) -> str | None:
         return real_checkout.branch(self)

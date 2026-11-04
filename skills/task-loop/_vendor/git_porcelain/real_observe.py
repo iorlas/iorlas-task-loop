@@ -7,8 +7,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from git_porcelain.api import Pick, Sha
-from git_porcelain.errors import GitReadFailure, GitUnavailable, MissingRemote
+from git_porcelain.errors import GitReadFailure, GitUnavailable, MissingRemote, MissingRevision
 from git_porcelain.real_done import unavailable
+from git_porcelain.revision_validation import validate_revisions
 
 if TYPE_CHECKING:
     from git_porcelain.real import RealRepo, RealWorktree
@@ -33,14 +34,14 @@ def _read(repo: RealRepo, *args: str, stdin: str | None = None) -> Done:
     return done
 
 
-def merge_base(repo: RealRepo, a: str, b: str) -> Sha | None:
-    resolved: list[str] = []
+def _missing_revision(repo: RealRepo, a: str, b: str) -> str | None:
+    """Verify absence only after a failed read; corrupt objects remain read failures."""
     for rev in (a, b):
         done = _read(repo, "rev-parse", "--verify", "--quiet", "--end-of-options", f"{rev}^{{commit}}")
         if done.rc == 1 and not done.raw and not done.err:
             probe = _read(repo, "cat-file", "--batch-check", stdin=f"{rev}\n")
             if probe.rc == 0 and probe.out == f"{rev} missing\n" and not probe.err:
-                return None
+                return rev
             msg = f"cannot verify missing revision {rev}: {probe.out}{probe.err}"
             raise GitReadFailure(msg)
         if done.rc or not re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", done.out.strip()):
@@ -51,9 +52,27 @@ def merge_base(repo: RealRepo, a: str, b: str) -> Sha | None:
         if obj.rc:
             msg = f"cannot read {rev}: {obj.out}{obj.err}"
             raise GitReadFailure(msg)
-        resolved.append(done.out.strip())
-    done = _read(repo, "merge-base", *resolved)
-    if done.rc == 1 and not done.raw and not done.err:
+    return None
+
+
+def is_ancestor(repo: RealRepo, a: str, b: str) -> bool:
+    validate_revisions(a, b)
+    done = _read(repo, "merge-base", "--is-ancestor", "--end-of-options", a, b)
+    if done.rc in (0, 1) and not done.raw and not done.err:
+        return done.rc == 0
+    error = unavailable(("merge-base", "--is-ancestor", a, b), done)
+    if isinstance(error, MissingRevision):
+        raise error
+    msg = f"merge-base --is-ancestor failed: {done.out}{done.err}"
+    raise GitReadFailure(msg)
+
+
+def merge_base(repo: RealRepo, a: str, b: str) -> Sha | None:
+    validate_revisions(a, b)
+    done = _read(repo, "merge-base", "--end-of-options", a, b)
+    if done.rc == 1:
+        return None
+    if done.rc not in (0, 1) and _missing_revision(repo, a, b) is not None:
         return None
     if done.rc or not re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", done.out.strip()):
         msg = f"merge-base failed: {done.out}{done.err}"
@@ -62,7 +81,8 @@ def merge_base(repo: RealRepo, a: str, b: str) -> Sha | None:
 
 
 def cherry(repo: RealRepo, upstream: str, head: str) -> tuple[Pick, ...]:
-    done = repo.run(repo.path, "cherry", upstream, head)
+    validate_revisions(upstream, head)
+    done = repo.run(repo.path, "cherry", "--", upstream, head)
     rows: list[Pick] = []
     for line in done.out.splitlines():
         if not re.fullmatch(r"[+-] (?:[0-9a-f]{40}|[0-9a-f]{64})", line):

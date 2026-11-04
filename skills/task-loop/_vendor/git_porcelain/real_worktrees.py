@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 from git_porcelain.errors import GitUnavailable, NotARepo, WorktreeRemoveRefused
 from git_porcelain.real_done import unavailable
+from git_porcelain.revision_validation import validate_revisions
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -16,8 +17,9 @@ __all__ = ["add_worktree", "drop_worktree", "prune_worktrees", "worktree_state"]
 
 
 def add_worktree(repo: RealRepo, path: Path, rev: str, *, force: bool) -> RealWorktree:
+    validate_revisions(rev)
     try:
-        repo.run(repo.path, "worktree", "add", "-q", "--detach", *(["--force"] if force else []), str(path), rev)
+        repo.run(repo.path, "worktree", "add", "-q", "--detach", *(["--force"] if force else []), "--", str(path), rev)
     finally:
         repo.invalidate()
     return repo.worktree(path)

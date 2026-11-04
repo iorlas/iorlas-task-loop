@@ -129,7 +129,7 @@ def push_refspecs(
         source = next((src for spec in specs if (src := spec.removeprefix("+").partition(":")[0])), None)
         if not specs:
             source = "HEAD"
-        sha = wt.run("rev-parse", "--verify", source).out.strip() if source is not None else ""
+        sha = wt.run("rev-parse", "--verify", "--end-of-options", source).out.strip() if source is not None else ""
         return Pushed(Sha(sha))
     if real_write.TRANSIENT.search(output):
         return Transient(output)

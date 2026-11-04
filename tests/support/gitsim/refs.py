@@ -69,6 +69,7 @@ def patch_of(sha: str) -> frozenset[tuple[str, tuple[str, ...]]]:
 
 def cmd_cherry(c: Ctx) -> int:
     _, rest = flags(c.args)
+    rest = [a for a in rest if a != "--"]
     up, head = c.r.resolve(rest[0]), c.r.resolve(rest[1] if len(rest) > 1 else "HEAD")
     if up is None or head is None:
         raise Fail(f"fatal: unknown commit {rest[0] if up is None else rest[1]}", 128)

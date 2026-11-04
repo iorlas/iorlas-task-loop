@@ -8,6 +8,7 @@ from git_porcelain import fake_checkout, fake_flow, fake_write
 from git_porcelain.api import CommandResult, Conflict
 from git_porcelain.errors import GitUnavailable
 from git_porcelain.fake_ops import require_index, stage, tracked_dirty
+from git_porcelain.fake_read import resolve_commit
 
 if TYPE_CHECKING:
     from git_porcelain.api import Sha
@@ -15,6 +16,11 @@ if TYPE_CHECKING:
 
 
 def rebase(repo: RepoState, state: CheckoutState, base: str, *, update_refs: bool | None) -> CommandResult:
+    base = resolve_commit(repo, state, base)
+    if repo.hooks.rebase_spawn_failure is not None:
+        raise GitUnavailable(repo.hooks.rebase_spawn_failure)
+    if repo.hooks.rebase_result is not None:
+        return repo.hooks.rebase_result
     if state.rebase is not None:
         return CommandResult(ok=False, output="fatal: there is already a rebase-merge directory")
     if tracked_dirty(state, repo.head_files(state)):
@@ -48,14 +54,15 @@ def continue_rebase(
 
 
 def abort_rebase(repo: RepoState, state: CheckoutState, *, missing_ok: bool, restore_to: Sha | None) -> CommandResult:
+    target = resolve_commit(repo, state, str(restore_to)) if restore_to is not None else None
     if state.rebase is None and not missing_ok:
         return CommandResult(ok=False, output="fatal: No rebase in progress?")
     try:
         if state.rebase is not None:
             require_index(state)
             fake_flow.rebase_abort(repo, state)
-        if restore_to is not None:
-            fake_checkout.reset(repo, state, restore_to, mode="hard")
+        if target is not None:
+            fake_checkout.reset(repo, state, target, mode="hard")
     except GitUnavailable as exc:
         return CommandResult(ok=False, output=str(exc))
     return CommandResult(ok=True, output="")
