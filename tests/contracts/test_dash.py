@@ -5,8 +5,10 @@ import json
 import os
 import sys
 import typing
-import unittest
 from pathlib import Path
+
+import pytest
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -40,32 +42,32 @@ def records(obj, seen: set) -> None:
             records(v, seen)
 
 
-class DashFixtures(unittest.TestCase):
-    def setUp(self) -> None:
+class DashFixtures(Case):
+    def setup_method(self) -> None:
         self.built = fx.build()
 
     def test_committed_fixtures_are_what_the_builder_makes(self) -> None:
         if os.environ.get("UPDATE_GOLDEN"):
             fx.write()
         on_disk = {str(p.relative_to(fx.DIR)) for p in fx.DIR.rglob("*.json") if p.name != "mock-8b.json"}
-        self.assertEqual(on_disk, set(self.built), "stale or missing fixture files; UPDATE_GOLDEN=1 rewrites them")
+        assert on_disk == set(self.built), "stale or missing fixture files; UPDATE_GOLDEN=1 rewrites them"
         for rel, obj in self.built.items():
-            self.assertEqual((fx.DIR / rel).read_text(encoding="utf-8"), fx.encode(obj), f"{rel} drifted; UPDATE_GOLDEN=1")
+            assert (fx.DIR / rel).read_text(encoding="utf-8") == fx.encode(obj), f"{rel} drifted; UPDATE_GOLDEN=1"
 
     def test_every_fixture_decodes_strictly_and_round_trips(self) -> None:
         for rel in self.built:
             raw = json.loads((fx.DIR / rel).read_text(encoding="utf-8"))
             if rel == "writes.json":
-                self.assertEqual(set(raw), set(D.WRITES))
+                assert set(raw) == set(D.WRITES)
                 for verb, body in raw.items():
-                    self.assertEqual(wire.dump(wire.load(D.WRITES[verb], body)), body, verb)
+                    assert wire.dump(wire.load(D.WRITES[verb], body)) == body, verb
                 continue
-            self.assertEqual(wire.dump(wire.load(cls_of(rel), raw)), raw, rel)
+            assert wire.dump(wire.load(cls_of(rel), raw)) == raw, rel
 
     def test_unknown_keys_are_refused(self) -> None:
         raw = json.loads((fx.DIR / "snapshot.json").read_text(encoding="utf-8"))
         raw["beads"][0]["surprise"] = 1
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             wire.load(D.Snapshot, raw)
 
     def test_every_bead_fixture_version_matches_the_server_after_decode(self) -> None:
@@ -73,17 +75,17 @@ class DashFixtures(unittest.TestCase):
             with self.subTest(bead=path.stem):
                 raw = json.loads(path.read_text(encoding="utf-8"))
                 detail = wire.load(D.BeadDetail, raw)
-                self.assertEqual(raw["version"], version_of(detail))
+                assert raw["version"] == version_of(detail)
 
     def test_every_dash_record_is_in_a_fixture(self) -> None:
         seen: set = set()
         records(self.built, seen)
         mine = {c for c in vars(D).values() if isinstance(c, type) and issubclass(c, Rec) and c.__module__ in (D.__name__, DH.__name__)}
-        self.assertEqual({c.__name__ for c in mine - seen}, set())
+        assert {c.__name__ for c in mine - seen} == set()
 
     def test_every_record_has_a_schema(self) -> None:
         for c in (D.Snapshot, D.BeadDetail, D.LivePage, D.Result, DC.CostPage, *D.WRITES.values()):
-            self.assertIn("properties", schema.of(c), c.__name__)
+            assert "properties" in schema.of(c), c.__name__
 
     def test_bead_ids_resolve(self) -> None:
         snap: D.Snapshot = self.built["snapshot.json"]
@@ -91,26 +93,22 @@ class DashFixtures(unittest.TestCase):
         named = [p.bead for p in snap.pieces] + [s.bead for s in snap.slots if s.bead] + [a.bead for a in snap.asks]
         # ledger rows may name beads that landed before midnight, which the snapshot no longer carries
         named += [n for b in snap.beads for n in b.needs] + [r.bead for r in snap.ledger if r.status != "answered"]
-        self.assertEqual(set(named) - ids, set())
+        assert set(named) - ids == set()
         slots = {s.id for s in snap.slots}
-        self.assertEqual({p.slot for p in snap.pieces} - slots, set())
+        assert {p.slot for p in snap.pieces} - slots == set()
         for rel, d in self.built.items():
             if rel.startswith("bead/"):
-                self.assertEqual(rel, f"bead/{d.card.id}.json")
-                self.assertEqual(set(d.waits_for + d.unblocks) - ids, set(), rel)
+                assert rel == f"bead/{d.card.id}.json"
+                assert set(d.waits_for + d.unblocks) - ids == set(), rel
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
-class DashCommandUnion(unittest.TestCase):
+class DashCommandUnion(Case):
     def test_the_command_union_is_exactly_the_record_of_each_verb(self) -> None:
-        self.assertEqual(set(typing.get_args(D.DashCommand)), set(D.WRITES.values()))
-        self.assertEqual(len(set(D.WRITES.values())), len(D.WRITES), "two verbs share a record: the server could not tell them apart")
+        assert set(typing.get_args(D.DashCommand)) == set(D.WRITES.values())
+        assert len(set(D.WRITES.values())) == len(D.WRITES), "two verbs share a record: the server could not tell them apart"
 
     def test_every_verb_is_handled_by_the_server_match(self) -> None:
         # a member the match does not handle reaches assert_never; the 404/400/200 paths of each verb are in tests/dash/test_dash_writes.py
         src = inspect.getsource(Writes.dispatch)
         for cls in D.WRITES.values():
-            self.assertIn(f"case {cls.__name__}():", src)
+            assert f"case {cls.__name__}():" in src

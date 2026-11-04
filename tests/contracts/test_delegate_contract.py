@@ -6,9 +6,10 @@ StatusSnapshot is a projection of status, so its renamed and joined fields are m
 import copy
 import json
 import sys
-import unittest
 from pathlib import Path
 from typing import get_args, get_type_hints
+
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -128,58 +129,57 @@ def status_projection() -> dict:
     }}
 
 
-class DelegateContract(unittest.TestCase):
+class DelegateContract(Case):
     def test_run_and_status_struct_fields_and_literals_match_the_vendored_contract(self):
-        self.assertEqual(CONTRACT["contract"], 4)
+        assert CONTRACT["contract"] == 4
         drift = differences(CONTRACT["answer_schema"], schema.of(delegate.DelegateResult), "answer")
         drift.update(differences(CONTRACT["status_schema"], status_projection(), "status"))
         engine_reasons = {value for name, value in vars(delegate).items() if name.startswith("REASON_")}
         missing_reasons = engine_reasons - set(CONTRACT["reasons"])
         if missing_reasons:
             drift["reasons.engine_codes"] = ((), tuple(sorted(missing_reasons)))
-        self.assertTrue(all(reason for _, _, reason in KNOWN_DRIFT.values()))
-        self.assertEqual(drift, {path: (left, right) for path, (left, right, _) in KNOWN_DRIFT.items()})
+        assert all(reason for _, _, reason in KNOWN_DRIFT.values())
+        assert drift == {path: (left, right) for path, (left, right, _) in KNOWN_DRIFT.items()}
 
     def test_closed_stop_vocabularies_and_open_reasons_match(self):
         for name, literal in (("scopes", delegate.Scope), ("permanences", delegate.Permanence),
                               ("retry_kinds", delegate.RetryKind), ("denied_kinds", delegate.DenialKind)):
             with self.subTest(name=name):
-                self.assertEqual(set(CONTRACT[name]), set(get_args(literal)))
-        self.assertIs(get_type_hints(delegate.StopFacts)["reason"], str)
+                assert set(CONTRACT[name]) == set(get_args(literal))
+        assert get_type_hints(delegate.StopFacts)["reason"] is str
         # Reasons are explicitly open; only unknown engine constants are ratcheted above.
         for reason, facts in CONTRACT["reasons"].items():
             for field, vocabulary in (("scope", "scopes"), ("permanence", "permanences"), ("retry", "retry_kinds")):
                 with self.subTest(reason=reason, field=field):
-                    self.assertIn(facts[field], CONTRACT[vocabulary])
+                    assert facts[field] in CONTRACT[vocabulary]
 
     def test_diff_detects_nested_added_removed_and_renamed_fields_and_enum_values(self):
         base = {"properties": {"rows": {"items": {"properties": {"state": {"enum": ["ready", "off"]}}}}}}
         changed = copy.deepcopy(base)
         props = changed["properties"]["rows"]["items"]["properties"]
         props["new_state"] = props.pop("state")
-        self.assertEqual(differences(base, changed, "status"), {
+        assert differences(base, changed, "status") == {
             "status.rows[].fields": (("state",), ("new_state",)),
             "status.rows[].state.enum": (("off", "ready"), ()),
             "status.rows[].new_state.enum": ((), ("off", "ready")),
-        })
+        }
         props["state"] = props.pop("new_state")
         props["state"]["enum"] = ["ready", "new"]
-        self.assertEqual(differences(base, changed, "status"), {
+        assert differences(base, changed, "status") == {
             "status.rows[].state.enum": (("off",), ("new",)),
-        })
+        }
 
     def test_diff_walks_dictionary_values_and_uses_encoded_field_names(self):
-        self.assertEqual(differences(
+        assert differences(
             {"additionalProperties": {"properties": {"from": {"enum": [1]}}}},
-            {"additionalProperties": {"properties": {"from": {"enum": [2]}}}}, "rows"),
-            {"rows{}.from.enum": ((1,), (2,))})
-        self.assertIn("from", schema.of(delegate.TranscriptInfo)["properties"])
-        self.assertNotIn("from_", schema.of(delegate.TranscriptInfo)["properties"])
+            {"additionalProperties": {"properties": {"from": {"enum": [2]}}}}, "rows") == {"rows{}.from.enum": ((1,), (2,))}
+        assert "from" in schema.of(delegate.TranscriptInfo)["properties"]
+        assert "from_" not in schema.of(delegate.TranscriptInfo)["properties"]
 
     def test_diff_detects_new_literals_inside_an_unmapped_subtree(self):
         upstream = {"properties": {"ignored": {"items": {"properties": {"state": {"enum": ["new"]}}}}}}
-        self.assertEqual(differences(upstream, {}, "status"), {
+        assert differences(upstream, {}, "status") == {
             "status.fields": (("ignored",), ()),
             "status.ignored[].fields": (("state",), ()),
             "status.ignored[].state.enum": (("new",), ()),
-        })
+        }

@@ -1,8 +1,10 @@
 """ReviewState is the one review/verify field of the run state: its fields are listed here, it round-trips through dump."""
 import json
 import sys
-import unittest
 from pathlib import Path
+
+import pytest
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -15,25 +17,21 @@ from taskloop.contracts.wire import StaleRecord
 FIELDS = ["reviews", "rounds", "unchecked", "unverified", "verified", "filed", "unfiled"]
 
 
-class ReviewStateFields(unittest.TestCase):
+class ReviewStateFields(Case):
     def test_the_fields_are_exactly_these(self):
-        self.assertEqual(list(wire.names(ReviewState)), FIELDS)
+        assert list(wire.names(ReviewState)) == FIELDS
 
     def test_an_empty_state_dumps_and_reads_back(self):
         d = ReviewState().dump()
-        self.assertEqual(d["v"], 1)
-        self.assertEqual(ReviewState.from_dump(json.loads(json.dumps(d))), ReviewState())
+        assert d["v"] == 1
+        assert ReviewState.from_dump(json.loads(json.dumps(d))) == ReviewState()
 
     def test_the_sample_round_trips(self):
         s = S.REVIEW_STATE
-        self.assertEqual(ReviewState.from_dump(json.loads(json.dumps(s.dump()))), s)
+        assert ReviewState.from_dump(json.loads(json.dumps(s.dump()))) == s
 
     def test_a_foreign_version_or_key_is_refused(self):
-        with self.assertRaises(StaleRecord):
+        with pytest.raises(StaleRecord):
             ReviewState.from_dump({"v": 2})
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             ReviewState.from_dump({"v": 1, "extra": 1})
-
-
-if __name__ == "__main__":
-    unittest.main()

@@ -4,12 +4,13 @@ import os
 import sqlite3
 import tempfile
 import time
-import unittest
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
 import support.paths  # noqa: F401
+from support.case import Case
 from support.narrow import must
 
 from taskloop.contracts import factorydb
@@ -18,8 +19,8 @@ from taskloop.contracts.run import RunManifest
 from taskloop.contracts.runrows import RunRows
 
 
-class SharedWriterTest(unittest.TestCase):
-    def setUp(self):
+class SharedWriterTest(Case):
+    def setup_method(self):
         factorydb.close_shared()
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
@@ -31,25 +32,25 @@ class SharedWriterTest(unittest.TestCase):
         return must(factorydb.shared_rw(self.path))
 
     def assert_closed(self, con):
-        with self.assertRaises(sqlite3.ProgrammingError):
+        with pytest.raises(sqlite3.ProgrammingError):
             con.execute("SELECT 1")
 
     def test_calls_and_resolved_aliases_reuse_the_same_connection(self):
         con = self.shared()
         alias = self.path.parent / "alias"
         alias.symlink_to(self.path.parent, target_is_directory=True)
-        self.assertIs(self.shared(), con)
-        self.assertIs(factorydb.shared_rw(alias / self.path.name), con)
-        self.assertFalse(con.in_transaction)
+        assert self.shared() is con
+        assert factorydb.shared_rw(alias / self.path.name) is con
+        assert not con.in_transaction
 
     def test_deleted_file_closes_stale_writer_and_creates_a_new_database(self):
         con = self.shared()
         con.execute("INSERT INTO kv(k,v,t) VALUES ('old','value',1)")
         self.path.unlink()
         fresh = self.shared()
-        self.assertIsNot(fresh, con)
+        assert fresh is not con
         self.assert_closed(con)
-        self.assertEqual(fresh.execute("SELECT * FROM kv").fetchall(), [])
+        assert fresh.execute("SELECT * FROM kv").fetchall() == []
 
     def test_replaced_file_is_reopened_with_its_own_contents(self):
         con = self.shared()
@@ -63,70 +64,70 @@ class SharedWriterTest(unittest.TestCase):
             self.path.with_name(self.path.name + suffix).unlink(missing_ok=True)
         replacement.rename(self.path)
         fresh = self.shared()
-        self.assertIsNot(fresh, con)
+        assert fresh is not con
         self.assert_closed(con)
-        self.assertEqual(fresh.execute("SELECT k FROM kv").fetchall(), [("new",)])
+        assert fresh.execute("SELECT k FROM kv").fetchall() == [("new",)]
 
     def test_other_thread_gets_its_own_writer_and_cleanup_closes_both(self):
         con = self.shared()
 
         def in_thread():
             first = self.shared()
-            self.assertIs(first, self.shared())
+            assert first is self.shared()
             return first
 
         with ThreadPoolExecutor(max_workers=1) as pool:
             other = pool.submit(in_thread).result()
-        self.assertIsNot(other, con)
+        assert other is not con
         factorydb.close_shared()
         self.assert_closed(con)
         self.assert_closed(other)
-        self.assertIsNot(self.shared(), con)
+        assert self.shared() is not con
 
     def test_pid_change_gets_a_new_writer_and_cleanup_only_closes_that_process(self):
         con = self.shared()
         pid = os.getpid()
         with patch.object(factorydb.os, "getpid", return_value=pid + 1):
             child = self.shared()
-            self.assertIsNot(child, con)
-            self.assertIs(self.shared(), child)
+            assert child is not con
+            assert self.shared() is child
             factorydb.close_shared()
             self.assert_closed(child)
-            self.assertEqual(con.execute("SELECT 1").fetchone(), (1,))
-        self.assertIs(self.shared(), con)
+            assert con.execute("SELECT 1").fetchone() == (1,)
+        assert self.shared() is con
 
     def test_closed_and_unfinished_connections_are_replaced(self):
         con = self.shared()
         con.close()
         fresh = self.shared()
-        self.assertIsNot(fresh, con)
+        assert fresh is not con
         fresh.execute("BEGIN IMMEDIATE")
         fresh.execute("INSERT INTO kv(k,v,t) VALUES ('rollback','value',1)")
         clean = self.shared()
-        self.assertIsNot(clean, fresh)
+        assert clean is not fresh
         self.assert_closed(fresh)
-        self.assertFalse(clean.in_transaction)
-        self.assertEqual(clean.execute("SELECT * FROM kv").fetchall(), [])
+        assert not clean.in_transaction
+        assert clean.execute("SELECT * FROM kv").fetchall() == []
 
     def test_database_errors_evict_the_writer_and_roll_back_changes(self):
         for error in (sqlite3.DatabaseError("corrupt"), sqlite3.OperationalError("database disk image is malformed")):
             with self.subTest(error=error):
                 con = self.shared()
-                with self.assertRaises(type(error)), factorydb.begin_immediate(con):
+                with pytest.raises(type(error)), factorydb.begin_immediate(con):
                     con.execute("INSERT INTO kv(k,v,t) VALUES ('rollback','value',1)")
                     raise error
                 self.assert_closed(con)
                 fresh = self.shared()
-                self.assertIsNot(fresh, con)
-                self.assertEqual(fresh.execute("SELECT * FROM kv").fetchall(), [])
+                assert fresh is not con
+                assert fresh.execute("SELECT * FROM kv").fetchall() == []
 
     def test_begin_failure_evicts_the_writer(self):
         con = self.shared()
         con.execute("BEGIN IMMEDIATE")
-        with self.assertRaises(sqlite3.OperationalError), factorydb.begin_immediate(con):
-            self.fail("a nested transaction must not begin")
+        with pytest.raises(sqlite3.OperationalError), factorydb.begin_immediate(con):
+            pytest.fail("a nested transaction must not begin")
         self.assert_closed(con)
-        self.assertFalse(self.shared().in_transaction)
+        assert not self.shared().in_transaction
 
     def test_commit_failure_evicts_the_writer_and_rolls_back(self):
         class BrokenCommit(sqlite3.Connection):
@@ -142,27 +143,27 @@ class SharedWriterTest(unittest.TestCase):
 
         with patch.object(factorydb.sqlite3, "connect", side_effect=broken_connection):
             con = self.shared()
-            with self.assertRaisesRegex(sqlite3.DatabaseError, "commit failed"), factorydb.begin_immediate(con):
+            with pytest.raises(sqlite3.DatabaseError, match="commit failed"), factorydb.begin_immediate(con):
                 con.execute("INSERT INTO kv(k,v,t) VALUES ('rollback','value',1)")
         self.assert_closed(con)
-        self.assertEqual(self.shared().execute("SELECT * FROM kv").fetchall(), [])
+        assert self.shared().execute("SELECT * FROM kv").fetchall() == []
 
     def test_runrows_commit_and_rollback_keep_writer_idle_and_changes_atomic(self):
         rows = RunRows(self.cfg)
         manifest = RunManifest(run="r", repo="/repo", bead="b", started=1.0)
         rows.put(manifest)
         con = self.shared()
-        self.assertFalse(con.in_transaction)
-        with self.assertRaisesRegex(ValueError, "abort"), rows.transaction() as writer:
-            self.assertIs(writer, con)
+        assert not con.in_transaction
+        with pytest.raises(ValueError, match="abort"), rows.transaction() as writer:
+            assert writer is con
             rows.write(writer, manifest.replace(owner="rolled back"))
             raise ValueError("abort")
-        self.assertFalse(con.in_transaction)
-        self.assertIs(self.shared(), con)
-        self.assertEqual(rows.get("r"), manifest)
+        assert not con.in_transaction
+        assert self.shared() is con
+        assert rows.get("r") == manifest
         reader = must(factorydb.open_ro(self.path))
         try:
-            self.assertEqual(reader.execute("SELECT count(*) FROM run").fetchone(), (1,))
+            assert reader.execute("SELECT count(*) FROM run").fetchone() == (1,)
         finally:
             reader.close()
 
@@ -172,5 +173,5 @@ class SharedWriterTest(unittest.TestCase):
         started = time.perf_counter()
         for _ in range(200):
             rows.put(manifest)
-            self.assertEqual(rows.get("r"), manifest)
-        self.assertLess(time.perf_counter() - started, 0.5)
+            assert rows.get("r") == manifest
+        assert time.perf_counter() - started < 0.5

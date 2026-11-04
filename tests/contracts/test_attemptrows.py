@@ -2,13 +2,14 @@
 
 import os
 import tempfile
-import unittest
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from threading import Barrier
 from unittest.mock import patch
 
+import pytest
 import support.paths  # noqa: F401
+from support.case import Case
 from support.narrow import must
 
 from taskloop.contracts import attemptrows, factorydb
@@ -19,8 +20,8 @@ from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.run import RunFinish, RunState
 
 
-class AttemptRows(unittest.TestCase):
-    def setUp(self):
+class AttemptRows(Case):
+    def setup_method(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.cfg = ConfigDir(Path(tmp.name))
@@ -35,28 +36,28 @@ class AttemptRows(unittest.TestCase):
         first = self.where.take_up("r", "/repo", "b", 10)
         again = self.where.take_up("r", "/repo", "b", 20)
         rows = self.attempts("r")
-        self.assertEqual((first.manifest.attempts, again.manifest.attempts), (1, 2))
-        self.assertEqual([r[0] for r in rows], [1, 2])
-        self.assertEqual(rows[-1][0], must(self.where.get("r")).manifest.attempts)
-        self.assertEqual(rows[1][1:3], (host_name(), os.getpid()))
-        self.assertTrue(rows[1][3])
-        self.assertEqual(rows[0][3], rows[1][3])
-        self.assertEqual(rows[1][4:8], (20, 20, None, None))
-        self.assertEqual(rows[0][6:8], (20, "yielded"))
-        self.assertTrue(all(r[9:] == (None, None) for r in rows))
+        assert (first.manifest.attempts, again.manifest.attempts) == (1, 2)
+        assert [r[0] for r in rows] == [1, 2]
+        assert rows[-1][0] == must(self.where.get("r")).manifest.attempts
+        assert rows[1][1:3] == (host_name(), os.getpid())
+        assert rows[1][3]
+        assert rows[0][3] == rows[1][3]
+        assert rows[1][4:8] == (20, 20, None, None)
+        assert rows[0][6:8] == (20, "yielded")
+        assert all(r[9:] == (None, None) for r in rows)
         created = self.where.create("/repo", "b", 30)
-        self.assertEqual(self.attempts(created.run)[0][:6], (1, host_name(), os.getpid(), rows[1][3], 30, 30))
+        assert self.attempts(created.run)[0][:6] == (1, host_name(), os.getpid(), rows[1][3], 30, 30)
 
     def test_beat_updates_only_current_open_attempt_and_terminal_ticks_do_nothing(self):
         self.where.take_up("r", "/repo", "b", 10)
         self.where.take_up("r", "/repo", "b", 20)
         self.where.beat("r", 25)
-        self.assertEqual([r[5] for r in self.attempts("r")], [10, 25])
-        self.assertEqual(must(self.where.get("r")).manifest.heartbeat, 25)
+        assert [r[5] for r in self.attempts("r")] == [10, 25]
+        assert must(self.where.get("r")).manifest.heartbeat == 25
         self.where.end("r", 30, RunState.DONE)
         before = self.attempts("r")
         self.where.beat("r", 40)
-        self.assertEqual(self.attempts("r"), before)
+        assert self.attempts("r") == before
 
     def test_mark_lost_end_and_finish_close_once_with_the_winning_reason(self):
         for verb, expected in (("lost", "lost"), ("end", "finished"), ("finish", "yielded")):
@@ -71,16 +72,16 @@ class AttemptRows(unittest.TestCase):
                     finish_run(self.cfg, run, RunFinish(state=RunState.STOPPED, ended=20, outcome=Outcome.FAILED,
                                                        result=Result.PAUSED, kind="pause_network", why="offline"))
                 manifest = must(self.where.get(run)).manifest
-                self.assertEqual(self.attempts(run)[0][6:9], (manifest.ended, expected, manifest.reason))
+                assert self.attempts(run)[0][6:9] == (manifest.ended, expected, manifest.reason)
                 before = self.attempts(run)
                 self.where.end(run, 40, RunState.FAILED, "later")
-                self.assertEqual(self.attempts(run), before)
+                assert self.attempts(run) == before
 
     def test_asked_and_killed_outcomes(self):
         for state, expected in ((RunState.PARKED, "asked"), (RunState.STOPPED, "killed")):
             run = self.where.create("/repo", "b", 10).run
             self.where.end(run, 20, state, "reason")
-            self.assertEqual(self.attempts(run)[0][6:9], (20, expected, "reason"))
+            assert self.attempts(run)[0][6:9] == (20, expected, "reason")
 
     def test_two_threads_serialize_counter_and_rows(self):
         self.where.take_up("r", "/repo", "b", 10)
@@ -93,38 +94,38 @@ class AttemptRows(unittest.TestCase):
 
         with ThreadPoolExecutor(max_workers=2) as pool:
             list(pool.map(take, range(2)))
-        self.assertEqual([r[0] for r in self.attempts("r")], [1, 2, 3])
-        self.assertEqual(must(self.where.get("r")).manifest.attempts, 3)
-        self.assertEqual(sum(r[6] is None for r in self.attempts("r")), 1)
+        assert [r[0] for r in self.attempts("r")] == [1, 2, 3]
+        assert must(self.where.get("r")).manifest.attempts == 3
+        assert sum(r[6] is None for r in self.attempts("r")) == 1
 
     def test_failed_attempt_insert_rolls_back_counter_and_previous_attempt_close(self):
         self.where.take_up("r", "/repo", "b", 10)
         before = self.where.rows.snapshot("r"), self.attempts("r")
-        with patch.object(attemptrows, "ensure", side_effect=ValueError("abort")), self.assertRaises(ValueError):
+        with patch.object(attemptrows, "ensure", side_effect=ValueError("abort")), pytest.raises(ValueError):
             self.where.take_up("r", "/repo", "b", 20)
-        self.assertEqual((self.where.rows.snapshot("r"), self.attempts("r")), before)
+        assert (self.where.rows.snapshot("r"), self.attempts("r")) == before
 
     def test_attempt_close_failure_rolls_back_terminal_manifest_write(self):
         self.where.take_up("r", "/repo", "b", 10)
         before = self.where.rows.snapshot("r"), self.attempts("r")
-        with patch.object(attemptrows, "close", side_effect=ValueError("abort")), self.assertRaises(ValueError):
+        with patch.object(attemptrows, "close", side_effect=ValueError("abort")), pytest.raises(ValueError):
             self.where.end("r", 20, RunState.DONE)
-        self.assertEqual((self.where.rows.snapshot("r"), self.attempts("r")), before)
+        assert (self.where.rows.snapshot("r"), self.attempts("r")) == before
 
     def test_counter_cannot_move_backwards(self):
         self.where.take_up("r", "/repo", "b", 10)
         current = self.where.take_up("r", "/repo", "b", 20).manifest
         before = self.where.rows.snapshot("r")
-        with self.assertRaises(factorydb.DatabaseError):
+        with pytest.raises(factorydb.DatabaseError):
             self.where.rows.put(current.replace(attempts=1))
-        self.assertEqual(self.where.rows.snapshot("r"), before)
+        assert self.where.rows.snapshot("r") == before
 
     def test_resumed_terminal_close_has_its_own_live_attempt_without_replacing_the_answer(self):
         self.where.take_up("r", "/repo", "b", 10)
         self.where.end("r", 20, RunState.DONE, "winner")
         self.where.take_up("r", "/repo", "b", 30)
         self.where.beat("r", 35)
-        self.assertEqual(self.attempts("r")[1][5:8], (35, None, None))
+        assert self.attempts("r")[1][5:8] == (35, None, None)
         self.where.end("r", 40, RunState.FAILED, "loser")
-        self.assertEqual(self.attempts("r")[1][6:9], (40, "finished", "winner"))
-        self.assertEqual(must(self.where.get("r")).manifest.ended, 20)
+        assert self.attempts("r")[1][6:9] == (40, "finished", "winner")
+        assert must(self.where.get("r")).manifest.ended == 20

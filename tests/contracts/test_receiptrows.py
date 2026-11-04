@@ -2,12 +2,13 @@
 
 import json
 import tempfile
-import unittest
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
 import support.paths  # noqa: F401
+from support.case import Case
 
 from taskloop.contracts import factorydb, wire
 from taskloop.contracts.checks import BaseRedRecord, CheckResult, PassRecord
@@ -21,8 +22,8 @@ from taskloop.stores.memory import MemDocSet
 from taskloop.stores.real import real_stores
 
 
-class ReceiptRowsTest(unittest.TestCase):
-    def setUp(self):
+class ReceiptRowsTest(Case):
+    def setup_method(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.addCleanup(factorydb.close_shared)
@@ -46,39 +47,39 @@ class ReceiptRowsTest(unittest.TestCase):
     def test_roundtrip_upsert_and_relational_columns_share_the_wire_record(self):
         for rec in (self.receipt(), self.receipt(3.0).replace(tree=TreeSha("new-tree"), host="new-host", run_id="new-run")):
             self.docs.of("digest").write(rec)
-            self.assertEqual(self.docs.of("digest").get(), rec)
-            self.assertEqual(self.docs.of("digest").need(), rec)
-            self.assertEqual(self.docs.of("digest").read(), Present(rec))
+            assert self.docs.of("digest").get() == rec
+            assert self.docs.of("digest").need() == rec
+            assert self.docs.of("digest").read() == Present(rec)
             row = self.connection().execute("SELECT repo_key,check_id,digest,kind,tree,base,run,host,ts,body FROM check_pass").fetchone()
-            self.assertEqual(row[:9], ("repo", "test", "digest", "pass", rec.tree, rec.base, rec.run_id, rec.host, rec.ts))
-            self.assertEqual(json.loads(row[9]), wire.dump(rec))
+            assert row[:9] == ("repo", "test", "digest", "pass", rec.tree, rec.base, rec.run_id, rec.host, rec.ts)
+            assert json.loads(row[9]) == wire.dump(rec)
         self.docs.of("digest").delete()
-        self.assertIsNone(self.docs.of("digest").get())
-        self.assertEqual(self.docs.of("digest").read(), Absent())
-        self.assertEqual(self.docs.keys(), [])
+        assert self.docs.of("digest").get() is None
+        assert self.docs.of("digest").read() == Absent()
+        assert self.docs.keys() == []
 
     def test_missing_reads_and_deletes_do_not_create_a_database(self):
-        self.assertIsNone(self.docs.of("absent").get())
-        self.assertIsNone(self.docs.of("absent").need())
-        self.assertEqual(self.docs.keys(), [])
+        assert self.docs.of("absent").get() is None
+        assert self.docs.of("absent").need() is None
+        assert self.docs.keys() == []
         self.docs.of("absent").delete()
         self.docs.keep_newest(8)
-        self.assertFalse(self.cfg.factory_db().exists())
+        assert not self.cfg.factory_db().exists()
 
     def test_corrupt_or_unavailable_db_and_invalid_body_raise_database_error(self):
         self.cfg.factory_db().write_bytes(b"not sqlite")
-        with self.assertRaises(factorydb.DatabaseError):
+        with pytest.raises(factorydb.DatabaseError):
             self.docs.of("digest").get()
-        with self.assertRaises(factorydb.DatabaseError):
+        with pytest.raises(factorydb.DatabaseError):
             self.docs.keys()
         self.cfg.factory_db().unlink()
-        with patch.object(factorydb, "shared_rw", return_value=None), self.assertRaises(factorydb.DatabaseError):
+        with patch.object(factorydb, "shared_rw", return_value=None), pytest.raises(factorydb.DatabaseError):
             self.docs.of("digest").write(self.receipt())
         self.docs.of("digest").write(self.receipt())
         con = self.connection()
         with factorydb.begin_immediate(con):
             con.execute("UPDATE check_pass SET body='{' ")
-        with self.assertRaises(factorydb.DatabaseError):
+        with pytest.raises(factorydb.DatabaseError):
             self.docs.of("digest").get()
 
     def test_keys_are_sorted_and_families_are_isolated(self):
@@ -87,7 +88,7 @@ class ReceiptRowsTest(unittest.TestCase):
         self.stores.results("other", "test").of("foreign").write(self.receipt())
         self.stores.results("repo", "other").of("other-check").write(
             self.receipt().replace(key=self.receipt().key.replace(check=CheckId("other"))))
-        self.assertEqual(self.docs.keys(), ["a", "m", "z"])
+        assert self.docs.keys() == ["a", "m", "z"]
 
     def test_base_red_keeps_its_check_id_and_key_tree_and_base(self):
         rec = self.receipt()
@@ -95,13 +96,13 @@ class ReceiptRowsTest(unittest.TestCase):
         for check in ("test", "other"):
             red = BaseRedRecord(key=rec.key.replace(check=CheckId(check)), red=True, run_id="r", host="h", ts=3.0)
             reds.of(check).write(red)
-            self.assertEqual(reds.of(check).get(), red)
+            assert reds.of(check).get() == red
             row = self.connection().execute("SELECT check_id,kind,tree,base,run,host,ts FROM check_pass WHERE digest=?",
                                             (check,)).fetchone()
-            self.assertEqual(row, (check, "base_red", red.key.tree, red.key.base, "r", "h", 3.0))
-        self.assertEqual(reds.keys(), ["other", "test"])
+            assert row == (check, "base_red", red.key.tree, red.key.base, "r", "h", 3.0)
+        assert reds.keys() == ["other", "test"]
         reds.of("test").delete()
-        self.assertEqual(reds.keys(), ["other"])
+        assert reds.keys() == ["other"]
 
     def test_keep_newest_is_one_delete_and_matches_the_memory_store(self):
         mem = MemDocSet(PassRecord)
@@ -119,14 +120,14 @@ class ReceiptRowsTest(unittest.TestCase):
             self.docs.keep_newest(8)
         finally:
             con.set_trace_callback(None)
-        self.assertEqual([s.split()[0] for s in statements], ["BEGIN", "DELETE", "COMMIT"])
+        assert [s.split()[0] for s in statements] == ["BEGIN", "DELETE", "COMMIT"]
         mem.keep_newest(8)
-        self.assertEqual(self.docs.keys(), [f"d{i:02}" for i in range(4, 12)])
-        self.assertEqual(self.docs.keys(), mem.keys())
-        self.assertEqual(other.keys(), ["untouched"])
-        self.assertEqual(self.stores.base_red("repo").of("untouched").get(), red)
+        assert self.docs.keys() == [f"d{i:02}" for i in range(4, 12)]
+        assert self.docs.keys() == mem.keys()
+        assert other.keys() == ["untouched"]
+        assert self.stores.base_red("repo").of("untouched").get() == red
         self.docs.keep_newest(0)
-        self.assertEqual(self.docs.keys(), [])
+        assert self.docs.keys() == []
 
     def test_two_threads_writing_different_digests_lose_nothing(self):
         def write(prefix):
@@ -137,7 +138,7 @@ class ReceiptRowsTest(unittest.TestCase):
             futures = [pool.submit(write, prefix) for prefix in ("a", "b")]
             for future in futures:
                 future.result()
-        self.assertEqual(self.docs.keys(), [f"{prefix}{i:02}" for prefix in ("a", "b") for i in range(20)])
+        assert self.docs.keys() == [f"{prefix}{i:02}" for prefix in ("a", "b") for i in range(20)]
 
     def legacy_files(self):
         rec = self.receipt()
@@ -151,54 +152,54 @@ class ReceiptRowsTest(unittest.TestCase):
 
     def test_import_three_valid_one_torn_is_insert_only_and_preserves_files(self):
         files = self.legacy_files()
-        self.assertEqual(import_legacy_receipts(self.cfg), 3)
-        self.assertEqual(self.docs.keys(), ["one", "two"])
+        assert import_legacy_receipts(self.cfg) == 3
+        assert self.docs.keys() == ["one", "two"]
         red = self.stores.base_red("repo").of("red").get()
         assert red is not None
-        self.assertTrue(red.red)
-        self.assertEqual({p: p.read_bytes() for p in files}, files)
+        assert red.red
+        assert {p: p.read_bytes() for p in files} == files
         current = self.receipt(20.0).replace(host="new")
         self.docs.of("one").write(current)
         self.docs.of("two").delete()
         with patch.object(JsonStore, "get", side_effect=AssertionError("legacy reread")):
-            self.assertEqual(import_legacy_receipts(self.cfg), 0)
-        self.assertEqual(self.docs.of("one").get(), current)
-        self.assertIsNone(self.docs.of("two").get())
-        self.assertEqual({p: p.read_bytes() for p in files}, files)
+            assert import_legacy_receipts(self.cfg) == 0
+        assert self.docs.of("one").get() == current
+        assert self.docs.of("two").get() is None
+        assert {p: p.read_bytes() for p in files} == files
 
     def test_import_does_not_overwrite_an_existing_row_without_a_source_marker(self):
         self.legacy_files()
         current = self.receipt(20.0)
         self.docs.of("one").write(current)
-        self.assertEqual(import_legacy_receipts(self.cfg), 2)
-        self.assertEqual(self.docs.of("one").get(), current)
+        assert import_legacy_receipts(self.cfg) == 2
+        assert self.docs.of("one").get() == current
 
     def test_live_store_never_reads_legacy_files_on_a_miss_or_database_error(self):
         self.legacy_files()
         with patch.object(JsonStore, "get", side_effect=AssertionError("file fallback")):
-            self.assertIsNone(self.docs.of("one").get())
-            self.assertEqual(self.docs.keys(), [])
-            self.assertFalse(self.cfg.factory_db().exists())
+            assert self.docs.of("one").get() is None
+            assert self.docs.keys() == []
+            assert not self.cfg.factory_db().exists()
             self.cfg.factory_db().write_bytes(b"broken database")
-            with self.assertRaises(factorydb.DatabaseError):
+            with pytest.raises(factorydb.DatabaseError):
                 self.docs.of("one").get()
 
     def test_unreadable_database_is_not_an_absent_receipt(self):
         with patch.object(Path, "stat", side_effect=PermissionError("unreadable")):
-            with self.assertRaises(factorydb.DatabaseError):
+            with pytest.raises(factorydb.DatabaseError):
                 self.docs.of("one").get()
-            with self.assertRaises(factorydb.DatabaseError):
+            with pytest.raises(factorydb.DatabaseError):
                 self.docs.keys()
 
     def test_locator_first_use_imports_receipts_even_without_legacy_runs(self):
         self.legacy_files()
-        self.assertEqual(RunLocator(self.cfg).runs(), [])
-        self.assertEqual(self.docs.keys(), ["one", "two"])
+        assert RunLocator(self.cfg).runs() == []
+        assert self.docs.keys() == ["one", "two"]
         with patch.object(JsonStore, "get", side_effect=AssertionError("legacy reread")):
-            self.assertEqual(RunLocator(self.cfg).runs(), [])
+            assert RunLocator(self.cfg).runs() == []
 
     def test_mismatched_check_is_rejected(self):
         docs = DbDocSet(self.cfg, "repo", "other", "pass", PassRecord)
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             docs.of("digest").write(self.receipt())
-        self.assertEqual(docs.keys(), [])
+        assert docs.keys() == []

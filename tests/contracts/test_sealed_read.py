@@ -1,8 +1,10 @@
 """JsonStore.read says which of four it found, and a caller that must not read a damaged file as empty refuses it by name."""
 import sys
 import tempfile
-import unittest
 from pathlib import Path
+
+import pytest
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -12,52 +14,48 @@ from taskloop.contracts.stores import Absent, ForeignVersion, JsonStore, Present
 from taskloop.contracts.wire import Refused
 
 
-class SealedRead(unittest.TestCase):
-    def setUp(self) -> None:
+class SealedRead(Case):
+    def setup_method(self) -> None:
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.path = Path(tmp.name) / "n.json"
         self.store = JsonStore(self.path, NetPause)
 
     def test_four_results(self) -> None:
-        self.assertEqual(self.store.read(), Absent())
+        assert self.store.read() == Absent()
         rec = NetPause(run="r", bead="b", t=1.0)
         self.store.write(rec)
-        self.assertEqual(self.store.read(), Present(rec))
+        assert self.store.read() == Present(rec)
         self.path.write_text('{"v": 1, "run": "r"')
-        self.assertIsInstance(self.store.read(), Torn)
+        assert isinstance(self.store.read(), Torn)
         self.path.write_text('{"v": 99, "run": "r", "bead": "b", "t": 1.0}')
-        self.assertEqual(self.store.read(), ForeignVersion(self.path, 99, NetPause.V))
+        assert self.store.read() == ForeignVersion(self.path, 99, NetPause.V)
 
     def test_get_is_lossy_and_need_refuses_with_the_path(self) -> None:
-        self.assertIsNone(self.store.need())
+        assert self.store.need() is None
         self.path.write_text("{")
-        self.assertIsNone(self.store.get())
-        with self.assertRaises(Refused) as ctx:
+        assert self.store.get() is None
+        with pytest.raises(Refused) as ctx:
             self.store.need()
-        self.assertIn(str(self.path), str(ctx.exception))
+        assert str(self.path) in str(ctx.value)
         self.path.write_text('{"v": 99}')
-        with self.assertRaises(Refused) as ctx:
+        with pytest.raises(Refused) as ctx:
             self.store.need()
-        self.assertIn(str(self.path), str(ctx.exception))
+        assert str(self.path) in str(ctx.value)
 
 
-class Handover(unittest.TestCase):
+class Handover(Case):
     def test_the_tl_reexec_text_round_trips_and_a_bad_one_is_refused_by_name(self) -> None:
         rec = Reexec(run="r", bead="b", pid=42, frm="0.1.0", owned="s1", fallback=True)
-        self.assertEqual(Reexec.parse(rec.text()), rec)
-        self.assertIsNone(Reexec.parse(""))
+        assert Reexec.parse(rec.text()) == rec
+        assert Reexec.parse("") is None
         for bad in ('{"run": "r", "bead": "b", "from": "x", "owned": "s1"}', "{", '{"v": 1, "run": "r"}'):
-            with self.assertRaises(Refused) as ctx:
+            with pytest.raises(Refused) as ctx:
                 Reexec.parse(bad)
-            self.assertIn("TL_REEXEC", str(ctx.exception))
+            assert "TL_REEXEC" in str(ctx.value)
 
     def test_the_reexec_pid_defaults_to_none_for_an_older_install_and_must_be_an_integer(self) -> None:
         old = Reexec.parse('{"v": 1, "run": "r", "bead": "b", "from": "0.1.0"}')
-        self.assertEqual(old and old.pid, 0)
-        with self.assertRaisesRegex(Refused, "pid"):
+        assert (old and old.pid) == 0
+        with pytest.raises(Refused, match="pid"):
             Reexec.parse('{"v": 1, "run": "r", "bead": "b", "from": "0.1.0", "pid": "42"}')
-
-
-if __name__ == "__main__":
-    unittest.main()

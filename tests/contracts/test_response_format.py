@@ -4,8 +4,9 @@ tokens) was exactly this unsaid: the contract went out raw, its optional fields 
 `required`. engine.strict makes the wire form; these tests hold that promise for every schema, both shapes walked."""
 import json
 import sys
-import unittest
 from pathlib import Path
+
+from support.case import Case
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -73,18 +74,18 @@ def variants():
                 yield "{}{}".format(node, " (visual)" if visual else ""), answers.schema_for(node, visual)
 
 
-class ResponseFormatContracts(unittest.TestCase):
+class ResponseFormatContracts(Case):
     def test_all_response_formats_are_strict(self):
         """Every schema the engine sends (planner, writer, reviewer, verifier, look, reflect; a visual stage's variants
         too) is valid strict output: every properties key in required, additionalProperties:false, at any depth."""
         for label, contract in variants():
-            self.assertEqual(strict_errors(schema.strict(contract)), [], label)
+            assert strict_errors(schema.strict(contract)) == [], label
 
     def test_optional_properties_are_nullable(self):
         """What the contract leaves optional, the strict form sent accepts as null — enum values included, so a worker
         that answers null for a field it must always send validates against the contract once mapped back."""
         for label, contract in variants():
-            self.assertEqual(nullable_errors(contract, schema.strict(contract)), [], label)
+            assert nullable_errors(contract, schema.strict(contract)) == [], label
 
     def test_pre_fix_unchecked_fixture_is_rejected(self):
         """The write step's unchecked.items exactly as it went out before the 2026-10-23 fix (ebee8e5): `source` in
@@ -92,10 +93,10 @@ class ResponseFormatContracts(unittest.TestCase):
         same checker that passes HEAD fails on this fixture, names where, and passes its strict conversion."""
         broken = json.loads(PRE_FIX_UNCHECKED.read_text(encoding="utf-8"))
         errs = strict_errors(broken)
-        self.assertTrue(errs)
-        self.assertTrue(all("source" in e for e in errs), errs)  # the diagnostic is a path to the offending property
-        self.assertEqual(schema.strict(broken)["properties"]["source"]["type"], ["string", "null"])
-        self.assertEqual(strict_errors(schema.strict(broken)), [])
+        assert errs
+        assert all("source" in e for e in errs), errs  # the diagnostic is a path to the offending property
+        assert schema.strict(broken)["properties"]["source"]["type"] == ["string", "null"]
+        assert strict_errors(schema.strict(broken)) == []
 
     def test_walker_rejects_nested_nullable_violations(self):
         """A violation under an optional array of optional objects cannot pass: the walk reads a nullable type (a list)
@@ -107,14 +108,10 @@ class ResponseFormatContracts(unittest.TestCase):
                         "properties": {"inner": {"type": "object", "additionalProperties": False,
                                                  "required": ["who"], "properties": {"who": {"type": "string"}}},
                                        "note": {"type": ["string", "null"]}}}}}}
-        self.assertEqual(strict_errors(sent()), [])
+        assert strict_errors(sent()) == []
         missing = sent()
         missing["properties"]["rows"]["items"]["properties"]["inner"]["required"] = []
-        self.assertEqual(strict_errors(missing), ["$.rows[].inner.who: a property not in required"])
+        assert strict_errors(missing) == ["$.rows[].inner.who: a property not in required"]
         loose = sent()
         del loose["properties"]["rows"]["items"]["additionalProperties"]
-        self.assertEqual(strict_errors(loose), ["$.rows[]: additionalProperties is not false"])
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert strict_errors(loose) == ["$.rows[]: additionalProperties is not false"]
