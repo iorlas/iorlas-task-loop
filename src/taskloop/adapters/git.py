@@ -5,6 +5,7 @@ from contextlib import suppress
 from pathlib import Path
 from typing import Literal
 
+from git_porcelain.api import BranchHeld, Recorded
 from git_porcelain.errors import GitError, WorktreeRemoveRefused
 from git_porcelain.real import RealRepo
 
@@ -12,7 +13,7 @@ from taskloop.adapters.git_base import classify
 from taskloop.adapters.git_ops import LandGit
 from taskloop.adapters.git_pool import UnpinnedRepo, pool_error, pool_read_error
 from taskloop.contracts.gitfacts import ConfigEntry, GitOutcome, GrepHit, LogRow, Pick, Ref, StatusRow, TreeEntry
-from taskloop.contracts.slots import Checkout, GitReadFailure, MissingRevision, NotARepo, NotAWorktree, RefRace, SlotGitError
+from taskloop.contracts.slots import BranchPinned, Checkout, GitReadFailure, MissingRevision, NotARepo, NotAWorktree, RefRace, SlotGitError
 
 FETCH_TRIES = 5
 
@@ -54,12 +55,20 @@ class RealGit(LandGit):
 
     def commit_all(self, d: str, branch: str, message: str) -> None:
         if not self.branch(d):
+            # take_branch(resume) accepts an existing branch; this must refuse to overwrite a checkpoint.
             self._must(d, "checkout", "-b", branch)
-        self._must(d, "add", "-A")
-        self._must(d, "commit", "-q", "--no-verify", "-m", message)
+        try:
+            result = self._pool(d).worktree(Path(d).absolute()).record(message, paths="all", hooks=False)
+        except GitError as err:
+            raise pool_error(err) from err
+        if not isinstance(result, Recorded):
+            raise SlotGitError("nothing to commit")
 
     def has_branch(self, d: str, branch: str) -> bool:
-        return bool(self.rev_parse(d, "refs/heads/" + branch))
+        try:
+            return any(name == branch for name, _ in self._pool(d).branches(prefix=branch))
+        except GitError as err:
+            raise pool_read_error(err) from err
 
     def checkout(self, d: str, branch: str) -> None:
         self._must(d, "checkout", branch)
@@ -68,7 +77,19 @@ class RealGit(LandGit):
         self._must(d, "checkout", "-b", branch, start)
 
     def checkout_detached(self, d: str, ref: str) -> None:
-        self._must(d, "checkout", "--detach", ref)
+        try:
+            self._pool(d).worktree(Path(d).absolute()).park(ref)
+        except GitError as err:
+            raise pool_error(err) from err
+
+    def checkout_reset(self, d: str, branch: str, start: str) -> None:
+        try:
+            result = self._pool(d).worktree(Path(d).absolute()).take_branch(branch, start, mode="restart")
+        except GitError as err:
+            raise pool_error(err) from err
+        if isinstance(result, BranchHeld):
+            holder = str(result.holders[0].path)
+            raise BranchPinned(f"branch {branch!r} is already used by worktree at '{holder}'", holder)
 
     def clean(self, d: str, keep: list[str], ignored: bool = False) -> None:
         self._run(d, "clean", "-fdxq" if ignored else "-fdq", *[x for k in keep for x in ("-e", k)])

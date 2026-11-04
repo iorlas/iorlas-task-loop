@@ -28,7 +28,7 @@ def short(name: str) -> str:
 def render(fmt: str, name: str, oid: str) -> str:
     """A for-each-ref / branch --format string with the three fields the port uses."""
     return (fmt.replace("%(refname:short)", short(name)).replace("%(refname)", name).replace("%(objectname)", oid)
-            .replace("%x00", "\0"))
+            .replace("%x00", "\0").replace("%00", "\0"))
 
 
 def format_of(fl: list[str], default: str) -> str:

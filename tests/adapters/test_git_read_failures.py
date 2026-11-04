@@ -18,7 +18,7 @@ class GitReadFailures(unittest.TestCase):
         self.git = RealGit(Env(), pinned=False)
 
     def test_failed_decision_reads_never_answer_clean_empty_or_missing(self):
-        calls = [("status", ()), ("branch", ()), ("has_branch", ("task/a",)),
+        calls = [("status", ()), ("branch", ()),
                  ("rev_parse", ("HEAD",)), ("has_commit", ("abc",)),
                  ("merge_base", ("a", "b")), ("is_ancestor", ("a", "b")), ("git_dir", ()),
                  ("rebasing", ()), ("changed_paths", ("a", "b")), ("diff_entries", ("a", "b")),
@@ -37,7 +37,6 @@ class GitReadFailures(unittest.TestCase):
             self.assertEqual(self.git.branch("/checkout"), "")
             self.assertEqual(self.git.symbolic_ref("/checkout", "refs/remotes/origin/HEAD"), "")
             self.assertEqual(self.git.rev_parse("/checkout", "missing"), "")
-            self.assertFalse(self.git.has_branch("/checkout", "missing"))
             self.assertFalse(self.git.has_commit("/checkout", "missing"))
             self.assertEqual(self.git.merge_base("/checkout", "a", "b"), "")
             self.assertFalse(self.git.is_ancestor("/checkout", "a", "b"))

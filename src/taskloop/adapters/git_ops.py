@@ -80,9 +80,6 @@ class LandGit(GitBase):
     def rename_branch(self, d: str, old: str, new: str) -> None:
         self._must(d, "branch", "-m", old, new)
 
-    def checkout_reset(self, d: str, branch: str, start: str) -> None:
-        self._must(d, "checkout", "-q", "-B", branch, start)
-
     def try_commit(self, d: str, message: str, verify: bool = True, allow_empty: bool = False) -> GitOutcome:
         opts = [*([] if verify else ["--no-verify"]), *(["--allow-empty"] if allow_empty else [])]
         return self._try(d, "commit", "-q", *opts, "-m", message)

@@ -117,6 +117,34 @@ class RealGitPoolTest(unittest.TestCase):
         self.assertEqual(treehash.tree_of(self.git, self.repo), worktree.snapshot("main", inputs=("declared.txt",)).tree)
         self.assertEqual((self.repo / ".git" / "index").read_bytes(), index_before)
 
+    def test_preservation_keeps_the_linked_checkout_and_index_pinned(self):
+        slot, decoy = (self.home / name for name in ("slot", "decoy"))
+        self.git.add_worktree(str(self.repo), str(slot), "main")
+        gitdir = Path(self.run_git(slot, "rev-parse", "--absolute-git-dir"))
+        decoy.mkdir()
+        (decoy / "untouched").write_text("decoy\n")
+        self.run_git(self.repo, "config", "core.worktree", str(decoy))
+        polluted = {**snapshot().vars, "GIT_DIR": str(decoy), "GIT_WORK_TREE": str(decoy), "GIT_INDEX_FILE": str(decoy / "index"),
+                    "GIT_AUTHOR_NAME": "Test", "GIT_AUTHOR_EMAIL": "test@example.invalid",
+                    "GIT_COMMITTER_NAME": "Test", "GIT_COMMITTER_EMAIL": "test@example.invalid"}
+        port = RealGit(Env(polluted))
+        (slot / "new.txt").write_text("checkpoint\n")
+        main_index = (self.repo / ".git" / "index").read_bytes()
+        with mock.patch("git_porcelain.real.subprocess.run", wraps=subprocess.run) as run:
+            port.commit_all(str(slot), "wip/slot", "checkpoint")
+            self.assertTrue(port.has_branch(str(slot), "wip/slot"))
+            port.checkout_detached(str(slot), "main")
+            port.checkout_reset(str(slot), "task/slot", "wip/slot")
+        for call in run.call_args_list:
+            child = call.kwargs["env"]
+            self.assertEqual(child["GIT_DIR"], str(gitdir))
+            self.assertEqual(child["GIT_WORK_TREE"], str(slot))
+            self.assertNotIn("GIT_INDEX_FILE", child)
+        self.assertEqual((slot / "new.txt").read_text(), "checkpoint\n")
+        self.assertEqual((self.repo / ".git" / "index").read_bytes(), main_index)
+        self.assertEqual(list(decoy.iterdir()), [decoy / "untouched"])
+        self.assertEqual(port.env.vars, polluted)
+
     def test_tree_of_keeps_untracked_ignored_inputs_out_of_the_whole_tree_key(self):
         (self.repo / ".gitignore").write_text("declared.txt\n")
         declared = self.repo / "declared.txt"
