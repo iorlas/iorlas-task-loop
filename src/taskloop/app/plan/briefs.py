@@ -5,8 +5,8 @@ import hashlib
 from typing import Any
 
 from taskloop.adapters.bdids import mentioned_ids
-from taskloop.adapters.bdsafe import peek
 from taskloop.app.asks import intake
+from taskloop.contracts.bdsafe import peek
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.ids import BeadId
 from taskloop.domain.plan import brief as bf

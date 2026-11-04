@@ -1,7 +1,9 @@
 """Who holds a slot, since when and why: the marks on the slot's bead, read as typed values and written in one place."""
-from taskloop.app.slots.env import SlotEnv, attempt, stamp
+from taskloop.app.slots.env import SlotEnv, stamp
+from taskloop.contracts.bdsafe import attempt
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.fence import SLOT_GEN, gen_of
+from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ports import BeadPatch
 from taskloop.contracts.slots import HELD_KEYS, Hold
 
@@ -40,7 +42,7 @@ def mark_held(env: SlotEnv, bead_id: str, why: str, until: float = 0, bead: str 
             sets[key] = value
         else:
             unset.append(key)
-    attempt(env.store.update, bead_id, BeadPatch(set_metadata=sets, unset_metadata=unset))
+    attempt(env.store.update, BeadId(bead_id), BeadPatch(set_metadata=sets, unset_metadata=unset))
 
 
 def next_gen(b: Bead | None) -> int:
@@ -49,4 +51,4 @@ def next_gen(b: Bead | None) -> int:
 
 
 def clear_marks(env: SlotEnv, bead_id: str) -> None:
-    attempt(env.store.update, bead_id, BeadPatch(unset_metadata=list(HELD_KEYS)))
+    attempt(env.store.update, BeadId(bead_id), BeadPatch(unset_metadata=list(HELD_KEYS)))

@@ -4,20 +4,13 @@ slot bead's `held_gen`), so a run whose lease lapsed and was retaken, or a secon
 no longer the current one: `check` refuses it with the reason, and close, block, land and the checkpoint writes call `check` first."""
 from typing import final
 
+from taskloop.contracts.bdsafe import peek
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.ids import BeadId
-from taskloop.contracts.ports import BdFailure, BeadPatch, Beads
+from taskloop.contracts.ports import BeadPatch, Beads
 
 BEAD_GEN = "fence_gen"
 SLOT_GEN = "held_gen"  # never cleared with the slot's holder marks: a retake after a release must still be a higher number
-
-
-def peek(store: Beads, bead_id: BeadId) -> Bead | None:
-    """The bead, None when it is not there or bd could not be asked."""
-    try:
-        return store.show(bead_id)
-    except BdFailure:
-        return None
 
 
 class Fenced(Exception):

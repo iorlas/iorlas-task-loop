@@ -6,9 +6,10 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from taskloop.app.slots.env import SlotEnv, attempt
+from taskloop.app.slots.env import SlotEnv
 from taskloop.app.slots.marks import hold_of
 from taskloop.app.slots.pool import SlotPool
+from taskloop.contracts.bdsafe import attempt
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.ports import BdFailure, BeadPatch
 from taskloop.contracts.slots import SlotFail

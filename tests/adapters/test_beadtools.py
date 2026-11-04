@@ -5,7 +5,8 @@ import pytest
 import support.paths  # noqa: F401
 from support.case import Case
 
-from taskloop.adapters import bdsafe, beadtools
+from taskloop.adapters import beadtools
+from taskloop.contracts import bdsafe
 from taskloop.contracts.bd_errors import BdCommandFailure
 from taskloop.contracts.bead import BdError, Bead
 from taskloop.contracts.ids import BeadId

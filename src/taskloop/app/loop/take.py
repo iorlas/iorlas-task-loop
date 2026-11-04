@@ -9,13 +9,14 @@ from taskloop.app.loop import verdict as vd
 from taskloop.app.loop.env import LoopEnv
 from taskloop.app.loop.queue import QueueRule, has_areas
 from taskloop.app.loop.run import BeadRun, Where
-from taskloop.app.slots.env import attempt
 from taskloop.app.slots.lease import Lease
 from taskloop.app.slots.pool import SlotPool
 from taskloop.app.slots.reset import setup
+from taskloop.contracts.bdsafe import attempt
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.config import ConfigError, EngineConfig, LoopConfig
 from taskloop.contracts.enums import Result
+from taskloop.contracts.ids import BeadId
 from taskloop.contracts.parks import ParkStore
 from taskloop.contracts.ports import BdFailure, BeadPatch
 from taskloop.contracts.slots import SlotFail, SlotGitError
@@ -48,10 +49,10 @@ class Taker:
                 target.ready_for(bead)  # retry preservation/reset/setup before counting a slot fault
             return None
         except (BdFailure, SlotGitError, OSError) as e:
-            attempt(self.env.store.unclaim, bead)
+            attempt(self.env.store.unclaim, BeadId(bead))
             return vd.pre_engine(str(e))
         except SlotFail as e:
-            attempt(self.env.store.unclaim, bead)
+            attempt(self.env.store.unclaim, BeadId(bead))
             if e.code == "bead_pinned":  # a live run holds the bead's branch: not this loop's failure
                 return vd.taken(e.why)
             if e.code == "busy":

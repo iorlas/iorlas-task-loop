@@ -3,8 +3,8 @@ allows one more run."""
 
 from typing import Any
 
-from taskloop.adapters.bdsafe import attempt, peek
 from taskloop.app.asks import intake
+from taskloop.contracts.bdsafe import attempt, peek
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.checkpoint import Checkpoint
 from taskloop.contracts.enums import AskClass

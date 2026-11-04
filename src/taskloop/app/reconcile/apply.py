@@ -4,6 +4,7 @@ from collections.abc import Callable
 
 from taskloop.app.release import tidy
 from taskloop.contracts import fence
+from taskloop.contracts.bdsafe import peek
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ports import BdFailure, BeadPatch, Beads, Git
 from taskloop.contracts.slots import HELD_KEYS
@@ -23,7 +24,7 @@ def give_back(store: Beads, bead: BeadId, holder: str, gen: int, key: str, patch
     """Give a held bead back while it is still `holder`'s at generation `gen` (read again here: a retake bumped it). -> why not, ""
     when done. bd checks the holder atomically (`if_assignee`), so a retake between the look and the write changes nothing."""
     try:
-        b = fence.peek(store, bead)
+        b = peek(store, bead)
         if b is None:
             return "bd could not show it"
         if b.status not in ("in_progress", "open") or b.assignee != holder:  # open: a paused run leaves its bead so

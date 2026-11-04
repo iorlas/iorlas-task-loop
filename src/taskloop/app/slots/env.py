@@ -8,10 +8,8 @@ from pathlib import Path
 from typing import Any
 
 from taskloop.contracts import paths
-from taskloop.contracts.bead import Bead
 from taskloop.contracts.config import SlotsConfig
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.ports import BdFailure, Beads, SlotGit
+from taskloop.contracts.ports import Beads, SlotGit
 from taskloop.stores.api import Tickets
 
 DEFAULT_PRIO = 2
@@ -50,20 +48,3 @@ class SlotEnv:
 
 def stamp(t: float) -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(t))
-
-
-def peek(store: Beads, bead_id: BeadId) -> Bead | None:
-    """The bead, None when it is not there or bd could not be asked."""
-    try:
-        return store.show(bead_id)
-    except BdFailure:
-        return None
-
-
-def attempt(call: Callable[..., Any], *args: Any) -> bool:
-    """A bd write whose refusal changes nothing: True when it worked."""
-    try:
-        call(*args)
-        return True
-    except BdFailure:
-        return False
