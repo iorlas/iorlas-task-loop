@@ -49,7 +49,7 @@ def add(c: Ctx) -> int:
     args = c.args
     r = c.r
     new = args[args.index("-b") + 1] if "-b" in args else ""
-    pos = [a for a in rest if a != new and a != "--"]
+    pos = [a for a in rest if a not in (new, "--")]
     dest = (Path(c.cwd) / pos[0]).resolve()
     ref = pos[1] if len(pos) > 1 else ""
     sha = r.resolve(ref or ("HEAD" if new or "--detach" in fl else dest.name))
