@@ -98,6 +98,31 @@ def write_shim(plugin_root: Path, env: Env) -> None:
         put_launcher(config_dir(env) / "bin" / "tl", text)
 
 
+def path_link(env: Env) -> Path:
+    """~/.local/bin/tl, under the HOME of `env` (a test passes its own, so none ever touches the real one)."""
+    return Path(env.get("HOME") or Path.home()) / ".local" / "bin" / "tl"
+
+
+def link_state(env: Env) -> str:
+    """The PATH link: 'ours' (a symlink to the shim), 'foreign' (anything else is there), 'missing', or 'windows' (no link there)."""
+    if os.name == "nt":
+        return "windows"
+    link, shim = path_link(env), config_dir(env) / "bin" / "tl"
+    if link.is_symlink():
+        return "ours" if os.readlink(link) == str(shim) or os.path.realpath(link) == os.path.realpath(shim) else "foreign"
+    return "foreign" if link.exists() else "missing"
+
+
+def ensure_path_link(env: Env) -> None:
+    """Link ~/.local/bin/tl to the shim, so `tl` works from any shell. Never replaces a different `tl`, never makes ~/.local (a machine
+    without it does not use it), idempotent, and never raises: a session must start."""
+    with contextlib.suppress(OSError):
+        link = path_link(env)
+        if link_state(env) == "missing" and link.parent.parent.is_dir():
+            link.parent.mkdir(exist_ok=True)
+            link.symlink_to(config_dir(env) / "bin" / "tl")
+
+
 def put_launcher(f: Path, text: str) -> None:
     """Write a launcher read-only, through a temp file and os.replace: an older install's write_text (it writes its own path
     unconditionally) fails on the read-only file and swallows the error, so a session on an old plugin cannot downgrade it."""

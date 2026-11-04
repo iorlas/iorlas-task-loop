@@ -19,6 +19,7 @@ def start(stdin_text: str, plugin_root: Path, env: Env, git: Git) -> str:
     try:
         index.session_start(stdin_text, env)
         index.write_shim(plugin_root, env)
+        index.ensure_path_link(env)
         index.write_hooks(plugin_root, env)
         data = json.loads(stdin_text or "{}")
         repo = index.repo_of(git, data)

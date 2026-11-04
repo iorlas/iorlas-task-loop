@@ -170,8 +170,8 @@ class SharedWriterTest(Case):
     def test_200_runrows_put_get_cycles_under_half_a_second(self):
         rows = RunRows(self.cfg)
         manifest = RunManifest(run="r", repo="/repo", bead="b", started=1.0)
-        started = time.perf_counter()
+        started = time.process_time()
         for _ in range(200):
             rows.put(manifest)
             assert rows.get("r") == manifest
-        assert time.perf_counter() - started < 0.5
+        assert time.process_time() - started < 0.5

@@ -5,11 +5,12 @@ import argparse
 from collections.abc import Callable
 from pathlib import Path
 
-from taskloop.app.wire.hook import write_hooks
+from taskloop.app.wire.hook import ensure_path_link, write_hooks
 from taskloop.contracts.env import Env
 
 
 def cmd_hooks(a: argparse.Namespace, env: Env, plugin_root: Path, out: Callable[[str], None] = print) -> int:
+    ensure_path_link(env)
     written = write_hooks(plugin_root, env)
     if not written:
         out("tl: could not write the git hooks")

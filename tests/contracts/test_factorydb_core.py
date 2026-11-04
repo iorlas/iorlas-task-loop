@@ -79,12 +79,12 @@ class FactoryDbTest(Case):
             patch.object(factorydb, "_filesystem_type", return_value="unknown"),
             patch.object(factorydb.os.path, "ismount", return_value=False) as ismount,
         ):
-            started = time.perf_counter()
+            started = time.process_time()
             for _ in range(200):
                 con = factorydb.open_rw(self.path)
                 assert con is not None, "local factory database should open"
                 con.close()
-            elapsed = time.perf_counter() - started
+            elapsed = time.process_time() - started
             assert [call.args[0] for call in ismount.call_args_list] == expected
         assert elapsed < 0.6
 

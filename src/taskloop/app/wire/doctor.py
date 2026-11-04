@@ -126,6 +126,18 @@ def launcher_problems(plugin_root: Path, env: Env) -> list[str]:
     return [f"{', '.join(stale)} points at a version older than newest installed task-loop {newest.name}"] if stale else []
 
 
+def path_link_line(env: Env) -> tuple[str, bool]:
+    """(the doctor's line about the `tl` on PATH, True when a different `tl` is in the way)."""
+    state, link = hook.link_state(env), hook.path_link(env)
+    if state == "windows":
+        return f"PATH tl: no link on Windows; run {config_dir(env) / 'bin' / 'tl'}", False
+    on_path = str(link.parent) in (env.get("PATH") or "").split(os.pathsep)
+    where = f"{link.parent} is {'on' if on_path else 'NOT on'} PATH"
+    if state == "foreign":
+        return f"PATH tl is not ours: {link}; {where}", True
+    return f"PATH tl: {link} {'-> the shim' if state == 'ours' else 'is missing (the next session start links it)'}; {where}", False
+
+
 def install_problems(plugin_root: Path, env: Env) -> list[str]:
     """What is wrong with the plugin install this tl runs from and the one Claude Code records as installed: a file that differs from
     MANIFEST.sha256 (named), an AGENTS.md without its ownership section. A source checkout has no manifest and is checked for none."""
@@ -154,7 +166,10 @@ def run(plugin_root: Path, env: Env, git: Git, who: Identity, spawner: Spawner |
           f"config: .task-loop.json from working tree {repo} (base {base} unresolved; no commit read)")
     slot_line, slot_warns = slot_warnings(repo, who, git, time.time(), spawner)
     print(slot_line)
-    warns = git_warnings(repo, source, git) + bead_lint_warnings(repo, who) + slot_warns
+    link_line, foreign = path_link_line(env)
+    if not foreign:
+        print(link_line)  # a foreign `tl` is a WARN below
+    warns = git_warnings(repo, source, git) + bead_lint_warnings(repo, who) + slot_warns + ([link_line] if foreign else [])
     warns += [f"run {r} is lost: its process is gone and it recorded no end" for r in runlife.reconcile(who.config, time.time())]
     print(f"contracts: {Path(contracts.__file__).resolve().parent}")
     print(f"engine: {pin.describe(pin.families(source[0].engine.writer_family, []))}")

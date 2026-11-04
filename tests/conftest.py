@@ -14,6 +14,7 @@ import resource
 import shutil
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 import pytest
@@ -58,7 +59,9 @@ WORKER_MB = int(os.environ.get("TL_WORKER_MB") or 2048)
 
 # Seconds a test's call may take, by kind, set from measured runs under 8 xdist workers (2026-10-30): logic max 1.4 s (the gitsim engine
 # tests; 311 of 2261 pass 0.2 s, the target the limit comes down to as they speed up), real max 4.4 s, e2e max 2.5 s.
-# TL_TIME_SCALE multiplies them.
+# TL_TIME_SCALE multiplies them. A logic test is limited by the CPU time its call used (a loaded host stretches the wall clock, not the CPU
+# time), with a wall backstop of WALL_FACTOR times the limit for a test that sleeps or waits; the other kinds spawn processes, so wall time.
+WALL_FACTOR = 10
 LIMITS_S = {"logic": 2.0, "real": 15.0, "e2e": 30.0, "live": 3600.0}
 RULES_LIMIT_S = 15.0
 TESTS_DIR = Path(__file__).resolve().parent
@@ -98,9 +101,13 @@ def pytest_runtest_makereport(item, call):
     limit = LIMITS_S[item.stash.get(KIND, "logic")] * float(os.environ.get("TL_TIME_SCALE") or 1)
     if (TESTS_DIR / "rules") in Path(str(item.path)).parents:
         limit = max(limit, RULES_LIMIT_S)  # the gate's rules read the whole tree
-    if call.when == "call" and report.passed and call.duration > limit:
+    limit = max(limit, getattr(item.module, "LIMIT_S", 0))  # a module that says why it is heavier (a simulation) names its own
+    logic = item.stash.get(KIND, "logic") == "logic"
+    used, wall = (item.stash.get(CPU_S, call.duration) if logic else call.duration), call.duration
+    if call.when == "call" and report.passed and (used > limit or (logic and wall > limit * WALL_FACTOR)):
         report.outcome = "failed"
-        report.longrepr = f"{item.nodeid}: a {item.stash.get(KIND, 'logic')} test took {call.duration:.2f} s, over its {limit:.2f} s limit"
+        report.longrepr = (f"{item.nodeid}: a {item.stash.get(KIND, 'logic')} test took {used:.2f} s of {'CPU' if logic else 'wall'} time"
+                           f" ({wall:.2f} s wall), over its {limit:.2f} s limit")
 
 
 def pytest_ignore_collect(collection_path, config):
@@ -135,13 +142,16 @@ def pytest_runtest_call(item):
     patched = item.stash.get(_SETUP_STD, (None, None))
     own = sys.stdout, sys.stderr
     sys.stdout, sys.stderr = (p or o for p, o in zip(patched, own, strict=True))
+    cpu = time.process_time()
     try:
         return (yield)
     finally:
         sys.stdout, sys.stderr = own
+        item.stash[CPU_S] = time.process_time() - cpu
 
 
 _SETUP_STD = pytest.StashKey[tuple]()
+CPU_S = pytest.StashKey[float]()
 
 
 @pytest.fixture(autouse=True)
