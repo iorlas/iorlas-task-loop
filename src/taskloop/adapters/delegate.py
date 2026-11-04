@@ -1,7 +1,7 @@
 """The one link to delegate's route.py for the engine: which install, the handshake file, `call`, and the read-only side commands.
 
 `resolve` picks the install in this order: an explicit path, the `pinned.json` entry, then `installed_plugins.json` user scope (never a
-glob over the cache), and refuses a contract it does not speak (contract 3: every answer carries `stop`, null = done). `call` runs one
+glob over the cache), and refuses a contract it does not speak (contract 4: every answer carries `stop`, null = done). `call` runs one
 `route.py run` built by `RunRequest.to_argv` (the only argv builder), never raises (but an interruption), and returns a `DelegateResult`:
 a call that printed nothing is a synthesized `no_answer`, an answer that breaks the shape a `contract_violation`, a call the engine had
 to stop a `timeout`. Facts of a synthesized stop come from the install's contract.json. Nothing here reads prose."""

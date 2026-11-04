@@ -340,7 +340,7 @@ class DelegateLauncher(T.EngineTest):
         self.assertIn(FRESH_WRITER_TEXT, s.prompts[0])
         self.assertEqual(s.calls[1], ("reviewer", None, "openai"))
 
-    # contract 3: an answer that picked a lane says whether it is a fallback (and from which first lane, when it can)
+    # contract 4: an answer that picked a lane says whether it is a fallback (and from which first lane, when it can)
     SONNET_FB: ClassVar[Any] = dict(FRESH, rung=1, fallback=True, fallback_reason="ceiling", first_lane="OPENAI_SUBSCRIPTION")
     CODEX_FIRST: ClassVar[Any] = dict(BACK, rung=0, fallback=False, fallback_reason=None)
     no_checks: ClassVar[Any] = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[])])  # FRESH writes no f.txt
@@ -479,7 +479,7 @@ class DelegateLauncher(T.EngineTest):
         self.assertTrue(any(c[:1] == ("update",) and "open" in c for c in self.bd_calls))
         self.assertIn("claude auth login", self.eng.log_path.read_text())
 
-    # contract 3: logged_out is lane / needs_owner: the lane waits for its owner, the step never retries it and never asks
+    # contract 4: logged_out is lane / needs_owner: the lane waits for its owner, the step never retries it and never asks
     def test_a_logged_out_lane_pauses_with_the_login_fix_and_no_ask(self):
         out = stop("logged_out", family="claude", say="claude is not logged in", fix=self.LOGIN_CLAUDE)
         rc, s = self.run_engine({"plan": [PLAN], "write": [out, WRITE]})
@@ -566,7 +566,7 @@ class DelegateLauncher(T.EngineTest):
         self.assertTrue(Path(other, "dirty.txt").exists())
 
     def test_an_answer_of_another_contract_pauses(self):
-        rc, _ = self.run_engine({"plan": [dict(full(PLAN), contract=4)]})
+        rc, _ = self.run_engine({"plan": [dict(full(PLAN), contract=3)]})
         self.assertEqual(rc, 2)
         self.assertIn("contract_violation", self.said())
 

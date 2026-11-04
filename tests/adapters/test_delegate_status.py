@@ -18,7 +18,7 @@ from taskloop.contracts.delegate_status import snapshot_of  # noqa: E402
 from taskloop.contracts.snapshots import StatusSnapshot  # noqa: E402
 
 REAL = json.loads((ROOT / "tests" / "fixtures" / "delegate_status_0.51.0_real.json").read_text())
-FIXTURE_SCHEMA = json.loads((ROOT / "tests/fixtures/delegate3/skills/delegate/contract.json").read_text(
+FIXTURE_SCHEMA = json.loads((ROOT / "tests/fixtures/delegate4/skills/delegate/contract.json").read_text(
     encoding="utf-8"))["status_schema"]
 
 

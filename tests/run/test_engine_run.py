@@ -707,7 +707,7 @@ class EngineRunTest(EngineTest):
             ).run()
         self.assertEqual(rc, 2)
         self.assertEqual(script.calls, [])
-        self.assertIn("contract 3", self.said())
+        self.assertIn("contract 4", self.said())
         self.assertIn("update", self.said())
 
     @no_repo

@@ -32,13 +32,13 @@ STUB = str(Path(__file__).parent / "stub_route.py")
 
 
 def answer_of(step: Step) -> dict[str, Any]:
-    """A step as delegate's contract-3 wire."""
+    """A step as delegate's contract-4 wire."""
     r = step.result
     st = r.stop
     stop = None if st is None else {"reason": st.reason, "scope": st.scope, "permanence": st.permanence,
                                     "retry": {"kind": st.retry.kind, "at": st.retry.at}, "ref": st.ref,
                                     "resumable": st.resumable, "partial": st.partial}
-    return {"contract": 3, "data": r.data, "text": r.text, "say": r.say, "ref": r.ref, "lane": r.lane, "model": r.model,
+    return {"contract": 4, "data": r.data, "text": r.text, "say": r.say, "ref": r.ref, "lane": r.lane, "model": r.model,
             "tokens": None, "cost": 0, "secs": 0.1, "run_id": "stub", "call_id": None, "transcript": None, "denied": [],
             "git_violation": [], "usage": {"tokens": None, "cost": 0, "secs": 0.1, "turns": 1, "context_k": None, "answer_bytes": 0},
             "stop": stop}
@@ -134,11 +134,11 @@ class RouteDelegateFailures(RouteHarness, unittest.TestCase):
     def test_garbage_is_a_crash(self) -> None:
         self.assertEqual(self.stop_of(raw="Traceback ...").stop.reason, "crash")
 
-    def test_an_answer_that_is_not_contract_3_is_a_violation(self) -> None:
+    def test_an_answer_that_is_not_contract_4_is_a_violation(self) -> None:
         self.assertEqual(self.stop_of(answer={"v": 2, "status": "done"}).stop.reason, "contract_violation")
 
     def test_a_malformed_stop_is_a_violation(self) -> None:
-        self.assertEqual(self.stop_of(answer={"contract": 3, "stop": {"reason": "x", "scope": "galaxy"}}).stop.reason,
+        self.assertEqual(self.stop_of(answer={"contract": 4, "stop": {"reason": "x", "scope": "galaxy"}}).stop.reason,
                          "contract_violation")
 
     def test_the_old_contract_is_visible_to_the_gate(self) -> None:

@@ -1,4 +1,4 @@
-"""WorkerCall: one AI step through delegate (contract 3). Delegate picks lane and model, limits apply, it records the run.
+"""WorkerCall: one AI step through delegate (contract 4). Delegate picks lane and model, limits apply, it records the run.
 
 `run` builds the request (`RunRequest`, the only argv builder is its `to_argv`), makes the call, and for a stopped call asks
 `lanes.policy.decide` what to do and lets `LaneActs` do it; a done call's answer is validated against the node's schema, a broken

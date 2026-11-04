@@ -29,6 +29,7 @@ class Request(unittest.TestCase):
                 host = mock.Mock(session="s", bead="t-1")
                 host.git.diff_entries.return_value = []
                 host.cfg.writer_family = pinned
+                host.cfg.writer_exec_allow = []
                 host.budget.labels = []
                 host.checker.split.return_value.engine_recipes.return_value = recipes
                 call = mock.Mock(node=node, role=role, cwd="/w", title="T", resume=None, writer=None)

@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def contract_permanences() -> dict[str, Permanence]:
-    contract = ROOT / "tests/fixtures/delegate3/skills/delegate/contract.json"
+    contract = ROOT / "tests/fixtures/delegate4/skills/delegate/contract.json"
     policies: dict[str, Permanence] = {}
     for reason, facts in json.loads(contract.read_text())["reasons"].items():
         permanence = facts["permanence"]

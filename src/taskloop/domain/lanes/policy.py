@@ -58,7 +58,7 @@ class Stop:
 
 def stop_of(res: DelegateResult) -> Stop | None:
     """The `Stop` of a result that stopped (None for a done call): the answer's `stop{}` facts plus what its worker did. A `killed`
-    stop is a signal (contract 3 states no signal number, and (machine, transient, none) alone cannot tell it from a crash)."""
+    stop is a signal (contract 4 states no signal number, and (machine, transient, none) alone cannot tell it from a crash)."""
     st = res.stop
     if st is None:
         return None

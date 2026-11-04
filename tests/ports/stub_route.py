@@ -1,5 +1,5 @@
 """A route.py stand-in for the Delegate contract suite (a plain python script, no shell). $STUB_SCRIPT names a JSON file:
-{"contract": 3, "answer": {...} | null, "raw": "text printed instead of the answer", "live": [event dicts], "sleep": secs}.
+{"contract": 4, "answer": {...} | null, "raw": "text printed instead of the answer", "live": [event dicts], "sleep": secs}.
 Every `run` appends {"argv", "brief", "schema"} to <script>.calls and writes the live file ($DELEGATE_LIVE_FILE)."""
 import json
 import os
@@ -16,7 +16,7 @@ def main(argv):
     with open(script_path, encoding="utf-8") as f:
         script = json.load(f)
     if argv[0] == "contract":
-        print(json.dumps({"contract": script.get("contract", 3)}))
+        print(json.dumps({"contract": script.get("contract", 4)}))
         return 0
     with open(opt(argv, "--brief"), encoding="utf-8") as f:
         brief = f.read()

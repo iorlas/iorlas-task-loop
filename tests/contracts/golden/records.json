@@ -1508,6 +1508,7 @@
    "epic_only": false,
    "reflect": true,
    "writer_family": [],
+   "writer_exec_allow": [],
    "planner_notes": "",
    "shot_table": "",
    "write_fresh_stage_k": 100,
@@ -1711,10 +1712,11 @@
   "engine_only_advisory": true,
   "only_family": [
    "openai"
-  ]
+  ],
+  "writer_exec_allow": []
  },
  "DelegateResult": {
-  "contract": 3,
+  "contract": 4,
   "stop": {
    "reason": "rate_limited",
    "scope": "lane",

@@ -2,6 +2,7 @@
 
 Mirrors of what delegate emits; delegate's generated contract.json is the authority and a later release checks these fields
 against it. `RunRequest.to_argv` is the only place that builds the `route.py run` argv."""
+import json
 from typing import Any, ClassVar, Final, Literal, final
 
 import msgspec
@@ -48,6 +49,7 @@ class RunRequest(Rec):
     engine_only_advisory: bool = False
     # families the call may use (--only-family once each): set on a worker call only (domain/lanes/pin.py)
     only_family: list[str] = msgspec.field(default_factory=list)
+    writer_exec_allow: list[list[str]] = msgspec.field(default_factory=list)
 
     def to_argv(self, python: str, route: str) -> list[str]:
         out = [python, route, "run", self.role, "--brief", self.brief_path, "--cwd", self.cwd, "--schema", self.schema_path]
@@ -64,6 +66,8 @@ class RunRequest(Rec):
             out.append("--engine-only-advisory")
         for fam in self.only_family:
             out += ["--only-family", fam]
+        if self.writer_exec_allow:
+            out += ["--writer-exec-allow", json.dumps(self.writer_exec_allow, separators=(",", ":"))]
         return out
 
     def env(self) -> dict[str, str]:
@@ -163,10 +167,10 @@ class WorkerEnd(Rec):
 
 @final
 class DelegateResult(Rec):
-    """The answer of `route.py run` (delegate contract 3): `stop` is None for a done call or the agent-tool handoff
+    """The answer of `route.py run` (delegate contract 4): `stop` is None for a done call or the agent-tool handoff
     (`agent_model` set); no status, next, reason or retry_after."""
 
-    contract: Literal[3] = 3
+    contract: Literal[4] = 4
     stop: StopFacts | None = None
     data: dict[str, Any] | None = None
     text: str = ""

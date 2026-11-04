@@ -43,7 +43,7 @@ class Recovery(unittest.TestCase):
         st = call_state.begin(
             self.host.call_dir(), "run-1", "t-1", c.key, execution_id=c.sha,
         )
-        raw = {"contract": 3, "stop": None, "data": {"summary": "done"}, "ref": "writer-1"}
+        raw = {"contract": 4, "stop": None, "data": {"summary": "done"}, "ref": "writer-1"}
         st.returned(raw, self.root / "answer.json")
         if memo:
             st.consumed()
@@ -122,7 +122,7 @@ class Recovery(unittest.TestCase):
         self.host.git.tree_of.return_value = "written-tree"
         self.host.stats = {"nodes": 1}
         self.host.clock = SimpleNamespace(now=lambda: 1.0)
-        raw = {"contract": 3, "stop": None, "data": {"summary": "done"}}
+        raw = {"contract": 4, "stop": None, "data": {"summary": "done"}}
         ans = worker_call.dg.Answer(worker_call.delegate_wire.result_of(raw), raw)
         self.worker.note_result(c, ans, mock.Mock())
         again = self.call()
@@ -142,7 +142,7 @@ class Recovery(unittest.TestCase):
         self.host.git.tree_of.return_value = "written-tree"
         self.host.stats = {"nodes": 1}
         self.host.clock = SimpleNamespace(now=lambda: 1.0)
-        raw = {"contract": 3, "stop": None, "data": {"summary": "done"}}
+        raw = {"contract": 4, "stop": None, "data": {"summary": "done"}}
         ans = worker_call.dg.Answer(worker_call.delegate_wire.result_of(raw), raw)
         self.worker.note_result(c, ans, mock.Mock())
         self.assertEqual(c.sha, before)
@@ -163,7 +163,7 @@ class Recovery(unittest.TestCase):
         c = self.call()
         self.worker.attach(c)
         st = call_state.begin(self.host.call_dir(), "run-1", "t-1", c.key, execution_id=c.sha)
-        st.returned({"contract": 3, "stop": None, "data": {}}, self.root / "answer.json")
+        st.returned({"contract": 4, "stop": None, "data": {}}, self.root / "answer.json")
         st.consumed()
         done_memo.keep(self.root, c.key, c.sha, st.answer_file, must(c.prepared).snapshot)
         self.host.git.tree_of.return_value = "wip-tree"
@@ -248,7 +248,7 @@ class Recovery(unittest.TestCase):
         self.host.git.tree_of.return_value = ""
         self.host.stats = {"nodes": 1}
         self.host.clock = SimpleNamespace(now=lambda: 1.0)
-        raw = {"contract": 3, "stop": None, "data": {"summary": "done"}}
+        raw = {"contract": 4, "stop": None, "data": {"summary": "done"}}
         ans = worker_call.dg.Answer(worker_call.delegate_wire.result_of(raw), raw)
         with self.assertRaises(ValueError):
             self.worker.note_result(c, ans, mock.Mock())
@@ -261,7 +261,7 @@ class Recovery(unittest.TestCase):
     def test_legacy_memo_is_not_upgraded_from_its_prompt_hash(self):
         c = self.call()
         answer = self.root / "legacy.json"
-        answer.write_text('{"contract": 3, "stop": null, "data": {}}')
+        answer.write_text('{"contract": 4, "stop": null, "data": {}}')
         done_memo.keep(self.root, c.key, "old-prompt-sha", str(answer))
         self.worker.attach(c)
         self.assertIsNone(c.finished)

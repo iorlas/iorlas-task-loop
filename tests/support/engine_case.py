@@ -203,7 +203,7 @@ STILL_OPEN = {"items": [verdict(1, "open", why="only the owner can open it")]}
 
 
 def stop(reason, ref="", **kw):
-    """A stopped answer, contract 3: the row of `reason` in delegate's contract.json (kw: at, fix, partial, say, family, lane ...)."""
+    """A stopped answer, contract 4: the row of `reason` in delegate's contract.json (kw: at, fix, partial, say, family, lane ...)."""
     return fake_route.stop_answer(reason, ref, **kw)
 
 
@@ -231,7 +231,7 @@ def no_sleep_here():
 
 
 def delegate_stack(script, route="/fake/route.py"):
-    """The engine's delegate for a test: `route` resolved on fake_route's contract 3, `script` as the process seam, no real sleep."""
+    """The engine's delegate for a test: `route` resolved on fake_route's contract 4, `script` as the process seam, no real sleep."""
     res = dl.Resolved(Path(route).parent, route, fake_route.CONTRACT, "explicit")
     stack = contextlib.ExitStack()
     for p in (

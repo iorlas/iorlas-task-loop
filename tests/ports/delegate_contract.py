@@ -24,8 +24,8 @@ class DelegateContract:
         """What the delegate was asked, per call: role, task, brief, schema."""
         raise NotImplementedError
 
-    def test_it_speaks_contract_3(self) -> None:
-        self.assertEqual(self.make(done(ref="r")).speaks(), 3)  # type: ignore[attr-defined]
+    def test_it_speaks_contract_4(self) -> None:
+        self.assertEqual(self.make(done(ref="r")).speaks(), 4)  # type: ignore[attr-defined]
 
     def test_done_carries_the_answer(self) -> None:
         d = self.make(done({"x": 1}, "all good", ref="r-1"))

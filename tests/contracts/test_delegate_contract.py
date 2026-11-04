@@ -1,7 +1,6 @@
 """Always compare delegate's vendored contract with the records that task-loop reads.
 
-The upstream contract 3 is not a superset: it drops --failed and agent_model. Keep the existing run contract;
-only its missing status_schema was copied from iorlas-delegate/skills/delegate/contract.json on 2026-11-03.
+The schema is copied from delegate 0.56.0. The engine reads a projection of its answer, tolerating unmodeled keys.
 StatusSnapshot is a projection of status, so its renamed and joined fields are mapped back to their wire paths below.
 """
 import copy
@@ -17,31 +16,29 @@ import support.paths  # noqa: F401
 from taskloop.contracts import delegate, schema
 from taskloop.contracts.snapshots import StatusSnapshot
 
-CONTRACT = json.loads((Path(__file__).resolve().parents[1] / "fixtures/delegate3/skills/delegate/contract.json").read_text(
+CONTRACT = json.loads((Path(__file__).resolve().parents[1] / "fixtures/delegate4/skills/delegate/contract.json").read_text(
     encoding="utf-8"))
 
-# Exact exceptions, never wildcards. May only shrink; a resolved exception fails until removed.
+# Exact projection differences, never wildcards; a resolved exception fails until removed.
 # Each entry is (upstream-only values, mirror-only values, reason).
 KNOWN_DRIFT = {
     "answer.stop.fields": ((), ("producer",), "engine-only provenance of a synthesized stop"),
     "answer.stop.producer.enum": ((), ("delegate", "engine"), "engine-only provenance of a synthesized stop"),
-    "answer.fields": ((), (
-        "ask_kind", "context", "effort", "exit_code", "fallback", "family", "first_error", "first_lane", "flag",
-        "transcript_status", "warning", "warnings", "worker",
-    ), "The retained older fixture predates fields already read by the engine; removing them changes runtime behavior."),
-    "answer.tokens.fields": ((), ("cached", "in", "out"),
-                             "The retained fixture requires tokens but does not describe its fields."),
-    "answer.usage.tokens.fields": ((), ("cache_write_by_ttl",),
-                                   "The retained fixture predates the per-TTL accounting already read by the engine."),
-    "answer.worker.fields": ((), (
-        "end", "kill_sent", "pgid", "pid", "start", "stopped", "survivors", "term_sent", "waited_s",
-    ), "The retained run fixture predates the worker lifecycle record."),
-    "answer.worker.end.enum": ((), ("error", "ok", "timeout", "worker_survived"),
-                               "The retained run fixture predates the worker lifecycle vocabulary."),
-    "answer.worker.survivors[].fields": ((), ("pid", "start"),
-                                        "The retained run fixture predates surviving-worker identities."),
-    "reasons.engine_codes": ((), ("engine_only_unenforced", "only_family_unready", "overrun"),
-                             "The retained fixture lacks two newer delegate reasons; overrun is created by the engine itself."),
+    "answer.fields": (("ask_user", "brief_prefix", "cwd", "fallback_reason", "needs_input", "notice", "rung"), (),
+                      "These delegate routing and interactive fields are outside the engine answer projection."),
+    "answer.ask_kind.enum": (("decision",), (), "The engine keeps ask_kind as an open string."),
+    "answer.ask_user.fields": (("options", "question", "then"), (), "The engine does not consume delegate's interactive ask."),
+    "answer.context.fields": (("env_keys", "instructions"), (), "The engine keeps context as an open dictionary."),
+    "answer.transcript_status.enum": (("died_before_session_id", "not_launched", "ok", "ref_unresolvable", "unsupported", None), (),
+                                      "The engine keeps transcript_status as an open string."),
+    "answer.usage.tokens.anyOf[0].fields": (("cache_read", "cache_write", "cache_write_by_ttl", "cached", "in", "in_fresh", "out"), (),
+                                          "The engine projects usage tokens into one typed accounting record."),
+    "answer.usage.tokens.anyOf[1].fields": (("cached", "in", "out"), (),
+                                          "The engine does not model delegate's legacy token variant."),
+    "answer.usage.tokens.fields": ((), ("cache_read", "cache_write", "cache_write_by_ttl", "in_fresh", "out"),
+                                   "The engine projects usage tokens into one typed accounting record."),
+    "reasons.engine_codes": ((), ("only_family_unready", "overrun"),
+                             "The released schema omits the family refusal; overrun is synthesized by the engine."),
     "status.fields": (("age_s", "asks", "auth", "cheap", "health", "holds", "network", "roles", "running"), (),
                       "StatusSnapshot deliberately persists only the lane cards and requests for input."),
     "status.lanes{}.fields": (("burn", "pace"), (), "The snapshot does not persist delegate's pace display."),
@@ -133,7 +130,7 @@ def status_projection() -> dict:
 
 class DelegateContract(unittest.TestCase):
     def test_run_and_status_struct_fields_and_literals_match_the_vendored_contract(self):
-        self.assertEqual(CONTRACT["contract"], 3)
+        self.assertEqual(CONTRACT["contract"], 4)
         drift = differences(CONTRACT["answer_schema"], schema.of(delegate.DelegateResult), "answer")
         drift.update(differences(CONTRACT["status_schema"], status_projection(), "status"))
         engine_reasons = {value for name, value in vars(delegate).items() if name.startswith("REASON_")}

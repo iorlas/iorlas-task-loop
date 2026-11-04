@@ -1,4 +1,4 @@
-"""tl-6ax: every delegate call resolves the delegate route.py again; a newer one is used only when it speaks contract 3."""
+"""tl-6ax: every delegate call resolves the delegate route.py again; a newer one is used only when it speaks contract 4."""
 import json
 import os
 import sys
@@ -19,16 +19,17 @@ from taskloop.app.release import seams  # noqa: E402
 from taskloop.app.run.delegation import Delegation  # noqa: E402
 from taskloop.contracts.env import snapshot  # noqa: E402
 
-C3 = {"contract": 3, "reasons": {}}
-OLD = {"contract": 2, "reasons": {}}
+C4 = {"contract": 4, "reasons": {}}
+OLD = {"contract": 3, "reasons": {}}
 
 
 class Stub:
     """Just what Delegation.route touches."""
     def __init__(self, cfg, route):
-        self.cfg, self.route, self.contract, self.notes = cfg_with(**cfg), route, {"contract": 3}, []
+        self.cfg, self.route, self.contract, self.notes = cfg_with(**cfg), route, {"contract": 4}, []
         self.resolved, self.refusal, self.router = None, None, seams.DelegateRoute(snapshot())
         self.log = types.SimpleNamespace(note=self.notes.append)
+        self.budget = types.SimpleNamespace(labels=[])
 
 
 class RouteRefresh(unittest.TestCase):
@@ -41,7 +42,7 @@ class RouteRefresh(unittest.TestCase):
             self.addCleanup(patch.stop)
         os.environ.pop("CLAUDE_CONFIG_DIR", None)
 
-    def install(self, v, contract=C3, record=True):
+    def install(self, v, contract=C4, record=True):
         """A delegate version in the cache; `record` makes it the one installed_plugins.json names (the installed one)."""
         root = Path(self.home.name, ".claude/plugins/cache/iorlas-marketplace/iorlas-delegate", v)
         p = root / "skills/delegate"
@@ -81,13 +82,21 @@ class RouteRefresh(unittest.TestCase):
         eng = Stub({"delegate": mine}, mine)
         self.assertEqual(self.call(eng), mine)
 
-    def test_a_newer_delegate_without_v2_is_ignored_with_a_note(self):
+    def test_a_newer_delegate_with_contract_three_is_ignored_with_a_note(self):
         old = self.install("0.40.10")
         eng = Stub({}, old)
         self.call(eng)
         self.install("0.40.12", OLD)
         self.assertEqual(self.call(eng), old)
         self.assertTrue(any("keeping" in n for n in eng.notes))
+
+    def test_refresh_without_grant_capability_keeps_the_admitted_delegate(self):
+        old = self.install("0.56.0", {**C4, "capabilities": ["writer_exec_allow"]})
+        eng = Stub({"writer_family": ["openai"], "writer_exec_allow": [["just", "shot"]]}, old)
+        self.assertEqual(self.call(eng), old)
+        self.install("0.56.1", C4)
+        self.assertEqual(self.call(eng), old)
+        self.assertTrue(any("capability" in n and "keeping" in n for n in eng.notes))
 
     def test_every_call_is_logged_with_its_path(self):
         old = self.install("0.40.10")

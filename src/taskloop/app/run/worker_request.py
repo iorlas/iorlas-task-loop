@@ -40,6 +40,7 @@ def request(e: Engine, c: Call, live: str, timeout_s: int, idle_s: int) -> RunRe
         idle_s=idle_s,
         live_file=live,
         only_family=only_family,
+        writer_exec_allow=e.cfg.writer_exec_allow if c.role == pin.PINNED_ROLE else [],
         engine_only=recipes,
         engine_only_advisory=bool(only_family and recipes),
     )

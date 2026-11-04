@@ -1,4 +1,4 @@
-"""`FakeDelegate`: scripted answers and live events, no process. Each `run` takes the next step; the last step repeats.
+"""`FakeDelegate`: contract-4 scripted answers and live events, no process. Each `run` takes the next step; the last step repeats.
 Like the stand-in route.py it replaces: `--resume X` is echoed as the answer's `ref`, a call without one opens `fake-<n>`."""
 from dataclasses import dataclass
 from typing import Any

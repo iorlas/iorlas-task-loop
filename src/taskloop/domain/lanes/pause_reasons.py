@@ -27,6 +27,7 @@ class Reason(StrEnum):
     CRASH = "crash"
     NO_ANSWER = "no_answer"
     KILLED = "killed"
+    WORKER_SURVIVED = "worker_survived"
     ENGINE_ONLY_UNENFORCED = "engine_only_unenforced"
     OVERRUN = "overrun"
     SECRETS = "secrets"

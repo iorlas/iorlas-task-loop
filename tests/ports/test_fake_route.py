@@ -1,6 +1,6 @@
-"""The fake route.py process (tl-7y6.4.3), contract 3, and the network-resume done-when (tl-7y6.2.13): a vendor that drops
+"""The fake route.py process (tl-7y6.4.3), contract 4, and the network-resume done-when (tl-7y6.2.13): a vendor that drops
 mid-stream twice and then succeeds is one step, one ref, no lane out, no retry counted. The contract is FAKE_ROUTE_DELEGATE's, else
-the copy in tests/fixtures/delegate3 (compared to a real delegate checkout when ~/Workspaces/iorlas-delegate-R20 or the env names one)."""
+the copy in tests/fixtures/delegate4 (compared to a real delegate checkout when ~/Workspaces/iorlas-delegate-R20 or the env names one)."""
 import contextlib
 import io
 import json
@@ -82,15 +82,17 @@ class Fake(unittest.TestCase):
             return done.returncode, done.stdout
         procsim.fake(shlex.join([sys.executable, FAKE]), route, args=True)
         out = subprocess.run([sys.executable, FAKE, "contract", "--json"], capture_output=True, text=True, env=self.env, check=False).stdout
-        self.assertEqual(sorted(json.loads(out)), ["contract", "reasons", "run_args"])
-        self.assertEqual(json.loads(out)["contract"], 3)
+        self.assertEqual(sorted(json.loads(out)), ["capabilities", "contract", "reasons", "run_args"])
+        self.assertEqual(json.loads(out)["contract"], 4)
+        self.assertEqual(json.loads(out)["capabilities"], ["writer_exec_allow"])
         with mock.patch.dict(os.environ, self.env):
             probe = dl.RouteProbe(FAKE)
             got = [probe.up(), probe.up(), probe.up()]
         self.assertEqual(got, [False, True, True])
 
     def test_argv_uses_only_flags_the_contract_lists(self):
-        argv = self.req(resume="r", authored_by="a", call_id="c", brief_path="b.md", schema_path="s.json").to_argv("python3", "route.py")
+        argv = self.req(resume="r", authored_by="a", call_id="c", brief_path="b.md", schema_path="s.json",
+                        writer_exec_allow=[["just", "shot"]]).to_argv("python3", "route.py")
         self.assertNotIn("--host", argv)
         self.assertNotIn("--no-wait", argv)
         flags = {x for x in argv if x.startswith("--")}
@@ -158,7 +160,7 @@ class Fake(unittest.TestCase):
         self.assertEqual(must(r.stop).ref, "r1")
 
     def test_a_wrong_shape_is_a_contract_violation_and_a_call_the_engine_ended_is_a_timeout(self):
-        for bad in ('{"v": 2, "status": "done"}', '{"contract": 2, "stop": null}', '{"contract": 3}', '{"contract": 3, "stop": 7}'):
+        for bad in ('{"v": 2, "status": "done"}', '{"contract": 2, "stop": null}', '{"contract": 4}', '{"contract": 4, "stop": 7}'):
             r = self.call(runner=lambda cmd, _bad=bad, **kw: subprocess.CompletedProcess(cmd, 0, _bad, ""))
             self.assertEqual(must(r.stop).reason, "contract_violation", bad)
             self.assertEqual((must(r.stop).scope, must(r.stop).permanence), ("machine", "needs_owner"))
@@ -199,7 +201,7 @@ class Fake(unittest.TestCase):
         real = Path(os.environ.get("DELEGATE_R20") or Path.home() / "Workspaces" / "iorlas-delegate-R20")
         mine = fake_route.VENDORED / "skills" / "delegate" / "contract.json"
         if not (real / "skills" / "delegate" / "contract.json").is_file():
-            self.skipTest("no delegate checkout of contract 3 here")
+            self.skipTest("no delegate checkout of contract 4 here")
         self.assertEqual(json.loads(mine.read_text()), json.loads((real / "skills" / "delegate" / "contract.json").read_text()))
 
     # --- the done-when: drops twice, then succeeds ------------------------------------------------------------------

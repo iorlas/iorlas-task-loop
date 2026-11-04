@@ -34,6 +34,18 @@ def describe(pinned: Sequence[str]) -> str:
             "a bead label writer-family:<f> overrides)")
 
 
+def exec_allow_problem(grant: Sequence[Sequence[str]], configured: Sequence[str], labels: Collection[str],
+                       contract: int, capabilities: object) -> str:
+    """A host execution grant requires an explicit Codex writer and delegate's advertised enforcement capability."""
+    if not grant:
+        return ""
+    if list(configured) != ["openai"] or families(configured, labels) != ["openai"]:
+        return 'engine.writer_exec_allow requires engine.writer_family exactly ["openai"] and an openai bead pin (Codex writer)'
+    if contract != 4 or not isinstance(capabilities, list) or "writer_exec_allow" not in capabilities:
+        return "delegate lacks the contract 4 writer_exec_allow capability required by engine.writer_exec_allow"
+    return ""
+
+
 def unenforced_why(node: str, said: str, fix: str = "") -> str:
     """An enforcement stop needs a harness or an explicit advisory call, not a wait for capacity."""
     return (f"paused: the writer's harness cannot deny the engine-only recipes: {said}"

@@ -24,6 +24,7 @@ from taskloop.contracts.plancheck import PlanData, RoundState
 from taskloop.contracts.run import RunState
 from taskloop.domain import outcome as oc
 from taskloop.domain.asks import specs as askspecs
+from taskloop.domain.lanes import pin
 from taskloop.domain.lanes.liveness import LIVENESS
 from taskloop.domain.plan.matchers import AcceptanceText
 from taskloop.domain.review.kinds import UNCHECKED_KINDS
@@ -133,6 +134,10 @@ class RunOnce:
             raise e.Blocked(f"failed: the engine needs the iorlas-delegate plugin that speaks contract {dg.CONTRACT} "
                             f"({why.kind} {why.detail}); update both: claude plugin update iorlas-delegate@iorlas-marketplace",
                             kind=Kind.FAULT_CONTRACT_SKEW)
+        problem = pin.exec_allow_problem(e.cfg.writer_exec_allow, e.cfg.writer_family, bead.labels,
+                                         e.contract.get("contract", 0), e.contract.get("capabilities", []))
+        if problem:
+            raise e.Blocked(problem, kind=Kind.FAULT_CONTRACT_SKEW)
         e.log.note(f"workers: delegate {e.route} (contract {dg.CONTRACT})")
         e.log.note("task-loop {}".format(ident.plugin_version() or "(unknown version)"))
         e.tree.reset(bead)

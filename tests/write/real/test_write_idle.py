@@ -54,7 +54,7 @@ ROUTE = textwrap.dedent('''
             if mode == "chatty":
                 open(os.path.join(d, "done"), "w").close()
     w.wait()
-    print(json.dumps({"contract": 3, "data": {}, "ref": "r"}))
+    print(json.dumps({"contract": 4, "data": {}, "ref": "r"}))
 ''')
 @unittest.skipUnless(POSIX, "process groups")
 class StreamRunnerCall(unittest.TestCase):

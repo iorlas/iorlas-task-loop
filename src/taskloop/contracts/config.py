@@ -186,6 +186,7 @@ class EngineConfig(Rec):
     epic_only: bool = False
     reflect: bool = True
     writer_family: list[str] = msgspec.field(default_factory=list)  # e.g. ["openai"]: --only-family on every worker call
+    writer_exec_allow: list[list[str]] = msgspec.field(default_factory=list)
     planner_notes: str = ""
     shot_table: str = ""
     write_fresh_stage_k: float = 100
@@ -366,6 +367,13 @@ def resource_problem(eng: EngineConfig) -> str:
     return ""
 
 
+def grant_problem(eng: EngineConfig) -> str:
+    """Why engine.writer_exec_allow is malformed ('' when it is not); delegate checks the binaries against its own host.json."""
+    if any(not argv or any(not arg for arg in argv) for argv in eng.writer_exec_allow):
+        return "engine.writer_exec_allow entries must be nonempty lists of nonempty strings"
+    return ""
+
+
 def _prepare_commands(prepare: PrepareConfig | None) -> list[list[str]]:
     if prepare is None:
         return []
@@ -400,7 +408,7 @@ def load(data: Any, say_to: TextIO | None = None) -> RepoProfile:
     boxed = [k.id for k in profile.engine.checks if k.where == "container"]
     if boxed and not box:
         raise ConfigError(f"the repo profile: check {boxed[0]} says \"in\": \"container\" but engine.container is not set")
-    bad_needs = resource_problem(profile.engine) or inputsets.problem(profile.engine)
+    bad_needs = resource_problem(profile.engine) or inputsets.problem(profile.engine) or grant_problem(profile.engine)
     if bad_needs:
         raise ConfigError(f"the repo profile: {bad_needs}")
     bad_graph = graph_problem(profile.engine.checks)

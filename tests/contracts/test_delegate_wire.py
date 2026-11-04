@@ -1,4 +1,4 @@
-"""The typed delegate answer (contract 3) agrees with the adapter that reads it and the policy tables (lane policy)."""
+"""The typed delegate answer (contract 4) agrees with the adapter that reads it and the policy tables (lane policy)."""
 import sys
 import unittest
 from pathlib import Path
@@ -14,7 +14,7 @@ from taskloop.contracts import delegate, wire
 from taskloop.domain.lanes import policy as lp
 
 
-class Contract3(unittest.TestCase):
+class Contract4(unittest.TestCase):
     def test_the_contract_number_is_the_one_the_engine_speaks(self):
         self.assertEqual(get_args(get_type_hints(delegate.DelegateResult)["contract"]), (dl.CONTRACT,))
 

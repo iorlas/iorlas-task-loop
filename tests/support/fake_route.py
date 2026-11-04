@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""A stand-in for delegate's route.py (contract 3), at two levels, for tests only (tl-7y6.4.3).
+"""A stand-in for delegate's route.py (contract 4), at two levels, for tests only (tl-7y6.4.3).
 
 Process level: `contract --json`, `net` and `run`, scripted. FAKE_ROUTE_SCRIPT names a JSON file {"steps": [...], "net": [true|
 false, ...]}; each `run` takes the next step: "done", a reason of contract.json ("network"), a fixture stem ("killed_exit_15_25oct"),
@@ -10,7 +10,7 @@ In process: `Script`/`DelegateScript`, a `runner` for delegate_link.call (the en
 from queues, the way the engine's own tests need; `stop_answer(reason, ...)` builds one stopped answer. Both build answers from
 `answer()`, which reads contract.json, so a field delegate adds is a field the fakes answer with.
 
-The contract comes from FAKE_ROUTE_DELEGATE (a delegate checkout), else the copy in tests/fixtures/delegate3 (tests compare it to a
+The contract comes from FAKE_ROUTE_DELEGATE (a delegate checkout), else the copy in tests/fixtures/delegate4 (tests compare it to a
 real checkout when one is there). Python 3.8+, stdlib only.
 """
 
@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import ClassVar
 
 HERE = Path(__file__).resolve().parent
-VENDORED = HERE.parent / "fixtures" / "delegate3"
+VENDORED = HERE.parent / "fixtures" / "delegate4"
 
 
 def delegate_dir():
@@ -38,7 +38,7 @@ def contract(delegate=None):
 def handshake(delegate=None):
     """What `route.py contract --json` prints."""
     c = contract(delegate)
-    return {"contract": c["contract"], "reasons": c["reasons"], "run_args": c["run_args"]}
+    return {"contract": c["contract"], "capabilities": c["capabilities"], "reasons": c["reasons"], "run_args": c["run_args"]}
 
 
 CONTRACT = handshake()
@@ -85,7 +85,7 @@ def as_argv(data):
 
 
 def answer(c, reason, ref="", resumed=False, data=None, text="ok", **kw):
-    """One contract-3 answer. reason None = done. kw: resumable, partial, at, fix, signal go to the stop; the rest overrides a field."""
+    """One contract-4 answer. reason None = done. kw: resumable, partial, at, fix, signal go to the stop; the rest overrides a field."""
     stop_kw = {k: kw.pop(k) for k in ("resumable", "partial", "at", "fix", "signal") if k in kw}
     base = {
         "contract": c["contract"],

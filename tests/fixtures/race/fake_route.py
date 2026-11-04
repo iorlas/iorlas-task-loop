@@ -1,4 +1,4 @@
-"""delegate's route.py for the race test (contract 3): plan one stage, the worker writes f-<bead>.txt after a seeded
+"""delegate's route.py for the race test (contract 4): plan one stage, the worker writes f-<bead>.txt after a seeded
 pause, the review passes. Each worker call appends a witness line to $FAKE_ROUTE_LOG: the worktree's branch and engine
 lock at its start and end, so a reset under a live engine shows."""
 
@@ -63,7 +63,7 @@ def main(a):
                                 "unchecked": [], "look": ""}
     ref, family = "ref-%s-%s" % (node, bead), "openai" if node == "write" else "claude"
     tokens = {"in": 1, "cached": 0, "out": 1}
-    print(json.dumps({"contract": 3, "data": data, "text": "ok", "say": "", "ref": ref, "lane": "L", "model": "m", "effort": "e",
+    print(json.dumps({"contract": 4, "data": data, "text": "ok", "say": "", "ref": ref, "lane": "L", "model": "m", "effort": "e",
                       "family": family, "flag": None, "fallback": False, "first_lane": "L", "rung": 0, "tokens": tokens, "cost": 0.0,
                       "secs": 1, "run_id": "race", "call_id": "race", "transcript": None, "transcript_info": None, "denied": [],
                       "git_violation": [], "warnings": [], "usage": {"tokens": tokens, "cost": 0.0, "secs": 1, "turns": 1,

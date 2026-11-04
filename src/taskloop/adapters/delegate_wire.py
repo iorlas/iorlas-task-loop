@@ -1,6 +1,6 @@
-"""delegate's contract-3 answer (one JSON object) as a `DelegateResult`. Reads are tolerant of keys we do not model; an answer
+"""delegate's contract-4 answer (one JSON object) as a `DelegateResult`. Reads are tolerant of keys we do not model; an answer
 that breaks the shape becomes a synthesized stop, never an exception. A status word and a next step are derived from `stop`
-here and nowhere else (`answer_status`, `answer_next`): contract 3 removed them from the wire and from `DelegateResult`."""
+here and nowhere else (`answer_status`, `answer_next`): contract 4 carries neither on the wire or in `DelegateResult`."""
 from typing import Any, Literal, get_args
 
 from taskloop.contracts.delegate import (
@@ -25,7 +25,7 @@ from taskloop.contracts.delegate import (
 )
 from taskloop.contracts.trace import Tokens
 
-CONTRACT = 3
+CONTRACT = 4
 SCOPES: tuple[Scope, ...] = get_args(Scope)
 PERMANENCE: tuple[Permanence, ...] = get_args(Permanence)
 RETRY: tuple[RetryKind, ...] = get_args(RetryKind)
@@ -179,7 +179,7 @@ def _dict(v: Any) -> dict[str, Any] | None:
 
 def result_of(j: Any) -> DelegateResult:
     if not isinstance(j, dict) or j.get("contract") != CONTRACT or "stop" not in j:
-        return synth("contract_violation", "machine", "needs_owner", f"an answer that is not delegate contract 3: {j!r:.300}")
+        return synth("contract_violation", "machine", "needs_owner", f"an answer that is not delegate contract 4: {j!r:.300}")
     try:
         stop = stop_of(j["stop"])
     except ValueError as e:

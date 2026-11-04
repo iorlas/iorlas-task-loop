@@ -9,7 +9,7 @@ class Briefing:
         self.e = host
 
     def where(self, node: Any, checks: Any = (), failed: Any = None, listed: Any = ()):
-        """What the step is for, never what its sandbox allows: delegate tells each worker that (worker-run v3).
+        """What the step is for, never what its sandbox allows: delegate tells each worker that (worker-run v4).
         For the writer: which checks it may run (fast ones) and which are the engine's (slow ones), minus `listed` (the
         commands the stage's own check list already names)."""
         e = self.e

@@ -48,7 +48,7 @@ REVIEW: Final[dict[str, Any]] = {
 
 
 def lane(cmd: list[str], **kw: Any) -> Completed:
-    """Fake route.py run: one contract 3 answer on stdout."""
+    """Fake route.py run: one contract 4 answer on stdout."""
     schema = json.loads(Path(cmd[cmd.index("--schema") + 1]).read_text(encoding="utf-8"))
     props, cwd = schema.get("properties", {}), cmd[cmd.index("--cwd") + 1]
     if "stages" in props:
@@ -96,7 +96,9 @@ def run_engine(home: Path, wt: Path, env: Env) -> tuple[int, Bead]:
     """(exit code, the bead as the fake bd holds it) after one bead ran through the engine on the scripted lane."""
     cfg = wslots.load_cfg(str(wt), real.git(env))
     res = seams.resolve_delegate(env, cfg.delegate)  # the configured delegate's own contract when there is one; else a bare one
-    contract = res.contract if isinstance(res, dg.Resolved) else {"contract": dg.CONTRACT, "reasons": {}, "run_args": []}
+    contract = res.contract if isinstance(res, dg.Resolved) else {
+        "contract": dg.CONTRACT, "capabilities": ["writer_exec_allow"], "reasons": {}, "run_args": [],
+    }
     resolved = dg.Resolved(Path("/selftest"), "/selftest/route.py", contract, "explicit")
     store = MemoryBeads()
     t1 = parse_bead_id("t-1")

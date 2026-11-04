@@ -81,7 +81,7 @@ class DelegateLauncher(T.EngineTest):
         return mock.patch.object(lroute, "lane_status", return_value={k: {"out": v} for k, v in out.items()})
 
 
-    # contract 3: an answer that picked a lane says whether it is a fallback (and from which first lane, when it can)
+    # contract 4: an answer that picked a lane says whether it is a fallback (and from which first lane, when it can)
     SONNET_FB: ClassVar[Any] = dict(FRESH, rung=1, fallback=True, fallback_reason="ceiling", first_lane="OPENAI_SUBSCRIPTION")
     CODEX_FIRST: ClassVar[Any] = dict(BACK, rung=0, fallback=False, fallback_reason=None)
     no_checks: ClassVar[Any] = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[])])  # FRESH writes no f.txt
@@ -103,7 +103,7 @@ class DelegateLauncher(T.EngineTest):
     LOGIN_CLAUDE = "run `claude auth login`"
 
 
-    # contract 3: logged_out is lane / needs_owner: the lane waits for its owner, the step never retries it and never asks
+    # contract 4: logged_out is lane / needs_owner: the lane waits for its owner, the step never retries it and never asks
 
 
 class NoBackgroundGit(T.EngineTest):

@@ -9,7 +9,7 @@ from taskloop.contracts.ports import Git
 from taskloop.stores import call_state
 
 # Bump when answer interpretation changes incompatibly, even if the JSON schema does not.
-PRODUCER = "worker-run:3;answers:1"
+PRODUCER = "worker-run:4;answers:1"
 
 
 def prepare_call(input: NodeInput, context: ExecutionContext) -> PreparedCall:

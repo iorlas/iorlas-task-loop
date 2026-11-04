@@ -84,7 +84,7 @@ delegate directly). The two touch in three places only:
    reviewer, hard) to delegate's role names. That mapping is the only delegate vocabulary in this plugin. When
    delegate renames roles or changes how it is asked, update that table.
 
-3. **worker-run v3** (`docs/contracts/worker-run-v3.md`): the engine runs each AI step with `route.py run ROLE` and
+3. **worker-run v4** (`docs/contracts/worker-run-v4.md`): the engine runs each AI step with `route.py run ROLE` and
    feeds usage with `route.py status --claude-usage` (`tl usage`). Code: `WorkerCall` in `app/run/worker_call.py`,
    `worker_request.request`, `RunRequest.to_argv`, `tl.py` `usage`. Before recovery, WorkerCall prepares the effective request
    and identifies the worktree, cwd, HEAD, tree contents, policy, schema and answer producer contract. Completed writer
@@ -94,10 +94,14 @@ delegate directly). The two touch in three places only:
    a configured check (or the gate) its writer must not run (delegate 0.50+; `RunRequest.engine_only`, built only by `to_argv`); read-only
    steps pass none. A worker call also passes `--only-family F` once per family of `engine.writer_family` (or the bead's `writer-family:<f>`
    labels; delegate PINFAMILY; `RunRequest.only_family`, `domain/lanes/pin.py`); the planner, reviewer and reflect calls pass none. A `stop`
-   with reason `only_family_unready` (or `no_lane` while pinned) pauses the run with the pin in words (`lane_acts.end`). Only route.py from delegate 0.14.0 or later is used; none installed, or an
-   answer with another `v`, blocks the task with what to do. Delegate keeps its state in its plugin data dir, so always call the
+   with reason `only_family_unready` (or `no_lane` while pinned) pauses the run with the pin in words (`lane_acts.end`). Only route.py from delegate 0.56.0 or later speaking contract 4 is used; none installed, or an
+   answer with another `contract`, blocks the task with what to do. Delegate keeps its state in its plugin data dir, so always call the
    installed route.py, never a checkout's (a checkout reads `~/.config/delegate`, another store).
 
-Never read delegate's files, and call `route.py` only through worker-run v3. A new need from delegate becomes a new optional
-field in worker-run (minor) or a new major version (breaking: change the spec, make the reader accept both, then the
-producer).
+The profile's `engine.writer_exec_allow` optionally grants argv prefixes to the Codex writer. A nonempty grant requires
+contract 4 and capability `writer_exec_allow`, plus `engine.writer_family` exactly `["openai"]` and no conflicting bead pin.
+Only writer calls carry `--writer-exec-allow` with compact JSON; an empty grant sends no flag. Delegate checks binaries
+against its host policy. See worker-run v4 for the host execution boundary and NETISO limitation.
+
+Never read delegate's private state, and call `route.py` only through worker-run v4. A breaking contract change replaces
+the supported version on both sides; task-loop has no compatibility shim.

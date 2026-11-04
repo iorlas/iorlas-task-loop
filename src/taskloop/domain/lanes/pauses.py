@@ -47,6 +47,7 @@ BACKOFF: Final[dict[str, Backoff | None]] = {
     Reason.DUPLICATE_TASK: Backoff(30, 1800),
     Reason.LOCK: Backoff(30, 1800),
     Reason.KILLED: Backoff(),
+    Reason.WORKER_SURVIVED: None,
     Reason.NO_LANE: None, Reason.SAME_FAMILY: None, Reason.ENGINE_CRASH: None, Reason.STAGE_REFUSED: None,
     Reason.TRANSIENT_INFRASTRUCTURE: None, Reason.CRASH: None, Reason.NO_ANSWER: None, Reason.ENGINE_ONLY_UNENFORCED: None,
     Reason.OVERRUN: None, Reason.SECRETS: None, Reason.CREDIT_EXHAUSTED: None, Reason.LOGGED_OUT: None,
@@ -69,7 +70,7 @@ OVERRIDES: Final[dict[str, tuple[Permanence, str] | None]] = {
     Reason.ENGINE_CRASH: None, Reason.STAGE_REFUSED: None, Reason.TRANSIENT_INFRASTRUCTURE: None,
     Reason.RATE_LIMITED: None, Reason.HUNG: None, Reason.VENDOR_BLIP: None, Reason.WORKER_FAILED: None,
     Reason.SCHEMA_INVALID: None, Reason.HELD: None, Reason.DUPLICATE_TASK: None, Reason.LOCK: None, Reason.NO_ANSWER: None,
-    Reason.KILLED: None, Reason.ENGINE_ONLY_UNENFORCED: None, Reason.OVERRUN: None, Reason.SECRETS: None,
+    Reason.KILLED: None, Reason.WORKER_SURVIVED: None, Reason.ENGINE_ONLY_UNENFORCED: None, Reason.OVERRUN: None, Reason.SECRETS: None,
     Reason.CREDIT_EXHAUSTED: None, Reason.LOGGED_OUT: None, Reason.BAD_REQUEST: None, Reason.CALLER: None,
     Reason.SETUP: None, Reason.SETUP_OWN_TREE: None, Reason.PROFILE_AHEAD: None, Reason.CONTRACT_VIOLATION: None,
     Reason.PAUSE_LANE: None, Reason.PAUSE_NETWORK: None, Reason.PAUSE_KILLED: None, Reason.PAUSE_MOVED: None,
@@ -96,7 +97,6 @@ MACHINE_FIXED: Final[frozenset[Reason]] = frozenset({
 TABLE: Final[dict[tuple[Producer, str], PauseRule]] = {
     # Locally synthesized delegate reasons absent from delegate's recorded contract.
     ("delegate", Reason.ONLY_FAMILY_UNREADY): PauseRule("transient", 60, 3600, 3),
-    ("delegate", Reason.ENGINE_ONLY_UNENFORCED): PauseRule("needs_owner"),
     ("engine", Reason.SAME_FAMILY): PauseRule("transient", 60, 3600, 3),
     ("engine", Reason.ENGINE_CRASH): PauseRule("transient", 60, 3600, 3),
     ("engine", Reason.STAGE_REFUSED): PauseRule("needs_owner"),
