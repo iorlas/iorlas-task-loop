@@ -6,9 +6,10 @@ import os
 import subprocess
 import sys
 import tempfile
-import unittest
 from pathlib import Path
 from unittest import mock
+
+from support.case import Case
 
 ROOT = Path(__file__).resolve().parents[2]
 SRC = ROOT / "skills" / "task-loop"
@@ -20,8 +21,8 @@ import support.paths  # noqa: E402, F401
 import tl  # noqa: E402
 
 
-class SelfTest(unittest.TestCase):
-    def setUp(self):
+class SelfTest(Case):
+    def setup_method(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.home = Path(os.path.realpath(self.tmp.name))
@@ -41,13 +42,9 @@ class SelfTest(unittest.TestCase):
                 super().__init__(*a, **k)
         with mock.patch.object(subprocess, "Popen", Counting), contextlib.redirect_stdout(out):
             rc = tl.main(["selftest"])
-        self.assertEqual(rc, 0, out.getvalue()[-800:])
-        self.assertIn("selftest ok", out.getvalue())
+        assert rc == 0, out.getvalue()[-800:]
+        assert "selftest ok" in out.getvalue()
         print("selftest:", out.getvalue().strip().splitlines()[-1], f"{len(spawned)} processes (metric only)")
-        self.assertFalse((Path.home() / ".config").exists())  # the real config dir was never made
-        self.assertGreater(len(spawned), 50)  # the counter sees the engine's git work: a zero would mean it counts nothing
-        self.assertLess(len(spawned), 250, [x if isinstance(x, str) else " ".join(map(str, x[:3])) for x in spawned[-10:]])
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert not (Path.home() / ".config").exists()  # the real config dir was never made
+        assert len(spawned) > 50  # the counter sees the engine's git work: a zero would mean it counts nothing
+        assert len(spawned) < 250, [x if isinstance(x, str) else " ".join(map(str, x[:3])) for x in spawned[-10:]]

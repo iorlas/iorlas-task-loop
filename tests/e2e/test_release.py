@@ -20,6 +20,8 @@ from support import homes
 # isort: split
 import contextlib
 
+import pytest
+from support.case import Case
 from support.narrow import must
 from support.procsim import real_proc
 from support.release_world import IDENTITY, MARKET, PLUGIN, World, git
@@ -36,8 +38,8 @@ PYTEST_RED = ("FAILED tests/test_red.py::R::test_red_one - AssertionError: boom\
 
 
 @unittest.skipIf(os.name == "nt", "the lock is fcntl")
-class Release(unittest.TestCase):
-    def setUp(self):
+class Release(Case):
+    def setup_method(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.rmtree)
         h = self.home = Path(self.tmp.name)
@@ -95,42 +97,40 @@ class Release(unittest.TestCase):
 
     def test_consecutive_releases_succeed_without_a_minimum_interval(self):
         first = self.release("first")
-        self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
+        assert first.returncode == 0, first.stdout + first.stderr
         runs = len(self.world.trees)
         second = self.release("second")
-        self.assertEqual(second.returncode, 0, second.stdout + second.stderr)
-        self.assertEqual(len(self.world.trees), runs + 1)
-        self.assertEqual(self.version(self.origin)["version"], "0.1.2")
-        self.assertTrue(self.last()["ok"])
-        self.assertEqual(self.last()["version"], "0.1.2")
-        self.assertEqual(self.world.store.said("comments", "add"), [])
-        self.assertEqual(self.git("log", "-1", "--format=%B", "main", cwd=self.origin),
-                         "0.1.2: second" + publish.TRAILER)
+        assert second.returncode == 0, second.stdout + second.stderr
+        assert len(self.world.trees) == runs + 1
+        assert self.version(self.origin)["version"] == "0.1.2"
+        assert self.last()["ok"]
+        assert self.last()["version"] == "0.1.2"
+        assert self.world.store.said("comments", "add") == []
+        assert self.git("log", "-1", "--format=%B", "main", cwd=self.origin) == "0.1.2: second" + publish.TRAILER
 
     def test_devbox_acknowledgement_records_the_ring_without_releasing_again(self):
         first = self.release("first")
-        self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
+        assert first.returncode == 0, first.stdout + first.stderr
         runs = len(self.world.trees)
         with unittest.mock.patch.dict(os.environ, XDG_CONFIG_HOME=str(self.home / "other-machine")):
             result = self.world.release("--devbox-ok", "0.1.1")
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertEqual(self.git("rev-parse", "devbox-ok/v0.1.1", cwd=self.origin),
-                         self.git("rev-parse", "v0.1.1", cwd=self.origin))
-        self.assertEqual(len(self.world.trees), runs)
-        self.assertEqual(self.version(self.origin)["version"], "0.1.1")
-        self.assertEqual(canary.mac_pin_refusal(self.home, str(self.origin), "0.1.1", self.world.port), "")
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert self.git("rev-parse", "devbox-ok/v0.1.1", cwd=self.origin) == self.git("rev-parse", "v0.1.1", cwd=self.origin)
+        assert len(self.world.trees) == runs
+        assert self.version(self.origin)["version"] == "0.1.1"
+        assert canary.mac_pin_refusal(self.home, str(self.origin), "0.1.1", self.world.port) == ""
 
     def test_consecutive_releases_across_config_dirs_and_url_spellings(self):
         first = self.release("first")
-        self.assertEqual(first.returncode, 0, first.stderr)
+        assert first.returncode == 0, first.stderr
         self.git("remote", "set-url", "origin", self.origin.as_uri(), cwd=self.repo)
         other = self.home / "other-machine"
         with unittest.mock.patch.dict(os.environ, XDG_CONFIG_HOME=str(other)):
             result = self.release("second")
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertEqual(self.version(self.origin)["version"], "0.1.2")
-        self.assertTrue((other / "task-loop/releases/last.json").exists())
-        self.assertEqual(self.world.store.said("comments", "add"), [])
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert self.version(self.origin)["version"] == "0.1.2"
+        assert (other / "task-loop/releases/last.json").exists()
+        assert self.world.store.said("comments", "add") == []
 
     def test_another_release_during_the_suite_retries_with_the_next_version(self):
         def racer(_tree):
@@ -140,11 +140,11 @@ class Release(unittest.TestCase):
 
         self.world.on_suite = racer
         result = self.release("mine")
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertEqual(self.version(self.origin)["version"], "0.1.2")
-        self.assertEqual(len(self.world.trees), 2)
-        self.assertEqual(self.world.store.said("comments", "add"), [])
-        self.assertTrue(self.last()["ok"])
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert self.version(self.origin)["version"] == "0.1.2"
+        assert len(self.world.trees) == 2
+        assert self.world.store.said("comments", "add") == []
+        assert self.last()["ok"]
 
     def real_release(self, *args):
         """dev/release.py as its own process, with a `uv` and a `bd` that only log (the venv is there; the tracker is not)."""
@@ -174,20 +174,20 @@ class Release(unittest.TestCase):
                    "    fcntl.flock(os.open(f, os.O_RDWR), fcntl.LOCK_EX | fcntl.LOCK_NB)\nprint('LOCK TAKEN')\n")
         self.commit(self.seed, "newer release code")
         r = self.real_release("msg", "--minor")
-        self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertIn(f"CHILD ['msg', '--minor', '--repo', '{self.repo}', '--marketplace', '{self.market}'] 1", r.stdout)
-        self.assertIn("LOCK TAKEN", r.stdout)
-        self.assertEqual(self.version(self.origin)["version"], "0.1.0")  # the fake child released nothing; this run did not either
+        assert r.returncode == 0, r.stderr
+        assert f"CHILD ['msg', '--minor', '--repo', '{self.repo}', '--marketplace', '{self.market}'] 1" in r.stdout
+        assert "LOCK TAKEN" in r.stdout
+        assert self.version(self.origin)["version"] == "0.1.0"  # the fake child released nothing; this run did not either
         where = clone.clone_dir(homes.config_dir(), str(self.origin))
-        self.assertIsNotNone(selfupdate.newer_release(ROOT, where, self.sh, Env({})))
+        assert selfupdate.newer_release(ROOT, where, self.sh, Env({})) is not None
         handed = Env({EnvVar.TL_RELEASE_REEXEC.value: "1"})
-        self.assertIsNone(selfupdate.newer_release(ROOT, where, self.sh, handed))  # an exec'd release never execs again
+        assert selfupdate.newer_release(ROOT, where, self.sh, handed) is None  # an exec'd release never execs again
 
     def test_the_exec_marker_reaches_no_child_the_release_starts(self):
         handed = Env({EnvVar.TL_RELEASE_REEXEC.value: "1", "PATH": "/bin"})
-        self.assertIsNone(selfupdate.newer_release(self.repo, self.repo, self.sh, handed))
-        self.assertNotIn(EnvVar.TL_RELEASE_REEXEC.value, childenv.tool_env(handed.vars))
-        self.assertEqual(childenv.exec_env(handed, {EnvVar.TL_RELEASE_REEXEC: "1"})[EnvVar.TL_RELEASE_REEXEC.value], "1")
+        assert selfupdate.newer_release(self.repo, self.repo, self.sh, handed) is None
+        assert EnvVar.TL_RELEASE_REEXEC.value not in childenv.tool_env(handed.vars)
+        assert childenv.exec_env(handed, {EnvVar.TL_RELEASE_REEXEC: "1"})[EnvVar.TL_RELEASE_REEXEC.value] == "1"
 
     def test_a_dirty_main_checkout_on_another_branch_is_released_from_and_left_byte_identical(self):
         self.git("checkout", "-q", "-b", "task/wip", cwd=self.repo)
@@ -196,24 +196,24 @@ class Release(unittest.TestCase):
         before = (self.git("rev-parse", "HEAD", cwd=self.repo), self.git("status", "--porcelain", cwd=self.repo),
                   (self.repo / PLUGIN).read_bytes())
         r = self.release("fix")
-        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertEqual(self.version(self.origin)["version"], "0.1.1")
-        self.assertEqual((self.git("rev-parse", "HEAD", cwd=self.repo), self.git("status", "--porcelain", cwd=self.repo),
-                          (self.repo / PLUGIN).read_bytes()), before)
-        self.assertEqual(self.git("branch", "--show-current", cwd=self.repo), "task/wip")
+        assert r.returncode == 0, r.stdout + r.stderr
+        assert self.version(self.origin)["version"] == "0.1.1"
+        assert (self.git("rev-parse", "HEAD", cwd=self.repo), self.git("status", "--porcelain", cwd=self.repo),
+                          (self.repo / PLUGIN).read_bytes()) == before
+        assert self.git("branch", "--show-current", cwd=self.repo) == "task/wip"
         clones = list((self.home / "cfg" / "task-loop" / "release").glob("*/.git"))
-        self.assertEqual(len(clones), 1)  # the persistent clone: the next release reuses it
-        self.assertEqual(self.release("fix again").returncode, 0)
-        self.assertEqual(list((self.home / "cfg" / "task-loop" / "release").glob("*/.git")), clones)
-        self.assertEqual(self.version(self.origin)["version"], "0.1.2")
+        assert len(clones) == 1  # the persistent clone: the next release reuses it
+        assert self.release("fix again").returncode == 0
+        assert list((self.home / "cfg" / "task-loop" / "release").glob("*/.git")) == clones
+        assert self.version(self.origin)["version"] == "0.1.2"
 
     def test_a_dirty_marketplace_checkout_is_refused_before_anything_moves(self):
         (self.market / "stray.txt").write_text("x")
         r = self.release("fix")
-        self.assertNotEqual(r.returncode, 0)
-        self.assertIn("dirty", r.stderr)
-        self.assertEqual(self.version(self.origin)["version"], "0.1.0")
-        self.assertEqual(self.world.claude_log, [])
+        assert r.returncode != 0
+        assert "dirty" in r.stderr
+        assert self.version(self.origin)["version"] == "0.1.0"
+        assert self.world.claude_log == []
 
     def test_a_red_gate_aborts_before_the_suite_with_the_output_tail_and_a_green_one_runs_just_check(self):
         self.write(self.seed / "justfile", "check:\n    true\n")
@@ -221,22 +221,22 @@ class Release(unittest.TestCase):
         self.git("pull", "-q", cwd=self.repo)
         self.world.just_exit = 1
         r = self.release("fix")
-        self.assertNotEqual(r.returncode, 0)
-        self.assertIn("gate is red", r.stderr)
-        self.assertIn("ruff: E501 somewhere", r.stderr)
-        self.assertEqual(self.version(self.origin)["version"], "0.1.0")
-        self.assertEqual(self.git("status", "--porcelain", cwd=self.repo), "")
+        assert r.returncode != 0
+        assert "gate is red" in r.stderr
+        assert "ruff: E501 somewhere" in r.stderr
+        assert self.version(self.origin)["version"] == "0.1.0"
+        assert self.git("status", "--porcelain", cwd=self.repo) == ""
         self.world.just_exit = 0
         r = self.release("fix")
-        self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertEqual(self.version(self.origin)["version"], "0.1.1")
-        self.assertEqual([c[-1] for c in self.world.just_log], ["check", "check"])
+        assert r.returncode == 0, r.stderr
+        assert self.version(self.origin)["version"] == "0.1.1"
+        assert [c[-1] for c in self.world.just_log] == ["check", "check"]
 
     def test_a_repo_without_a_justfile_skips_the_gate(self):
         r = self.release("fix", "--minor")
-        self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertEqual(self.world.just_log, [])
-        self.assertEqual(self.version(self.origin)["version"], "0.2.0")  # --minor bumps the minor, resets the patch
+        assert r.returncode == 0, r.stderr
+        assert self.world.just_log == []
+        assert self.version(self.origin)["version"] == "0.2.0"  # --minor bumps the minor, resets the patch
 
     def test_a_red_suite_aborts_and_leaves_main_where_it_was(self):
         # the branch is stale (origin moved on) and rebase.updateRefs is on: a red suite after the rebase keeps the branch ref
@@ -251,17 +251,17 @@ class Release(unittest.TestCase):
         self.commit(self.seed, "advance main")
         origin = self.git("rev-parse", "main", cwd=self.origin)
         r = self.release("fix", "--from-branch", "task/x")
-        self.assertNotEqual(r.returncode, 0)
-        self.assertIn("suite", r.stderr)
-        self.assertIn("red after rebase", r.stderr)
-        self.assertEqual(self.git("rev-parse", "main", cwd=self.origin), origin)
-        self.assertEqual(self.git("rev-parse", "task/x", cwd=self.repo), source)  # a red release keeps the branch and worktree
-        self.assertTrue(wt.is_dir())
-        self.assertEqual(self.git("config", "--get", "rebase.updateRefs", cwd=self.repo), "true")
-        self.assertEqual(self.git("rev-parse", "HEAD", cwd=self.repo), start)
-        self.assertEqual(self.git("status", "--porcelain", cwd=self.repo), "")
-        self.assertEqual(self.market_versions()["iorlas-task-loop"], "0.1.0")
-        self.assertEqual(self.world.claude_log, [])
+        assert r.returncode != 0
+        assert "suite" in r.stderr
+        assert "red after rebase" in r.stderr
+        assert self.git("rev-parse", "main", cwd=self.origin) == origin
+        assert self.git("rev-parse", "task/x", cwd=self.repo) == source  # a red release keeps the branch and worktree
+        assert wt.is_dir()
+        assert self.git("config", "--get", "rebase.updateRefs", cwd=self.repo) == "true"
+        assert self.git("rev-parse", "HEAD", cwd=self.repo) == start
+        assert self.git("status", "--porcelain", cwd=self.repo) == ""
+        assert self.market_versions()["iorlas-task-loop"] == "0.1.0"
+        assert self.world.claude_log == []
 
     def test_the_version_comes_from_origin_and_the_branch_lands_fast_forward(self):
         bumped = json.loads((self.seed / PLUGIN).read_text())
@@ -275,16 +275,15 @@ class Release(unittest.TestCase):
         self.git("commit", "-qm", "Add feature (tl-1)", cwd=self.repo)
         self.git("checkout", "-q", "main", cwd=self.repo)
         r = self.release("feature", "--from-branch", "task/y", "--bead", "tl-1", "--reason", "landed")
-        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertEqual(self.version(self.origin)["version"], "0.1.6")
-        self.assertEqual(self.git("log", "--format=%s", "-2", "main", cwd=self.origin).splitlines(),
-                         ["0.1.6: feature", "Add feature (tl-1)"])
-        self.assertIn("Co-Authored-By: Claude", self.git("log", "-1", "--format=%B", "main", cwd=self.origin))
+        assert r.returncode == 0, r.stdout + r.stderr
+        assert self.version(self.origin)["version"] == "0.1.6"
+        assert self.git("log", "--format=%s", "-2", "main", cwd=self.origin).splitlines() == ["0.1.6: feature", "Add feature (tl-1)"]
+        assert "Co-Authored-By: Claude" in self.git("log", "-1", "--format=%B", "main", cwd=self.origin)
         calls = self.world.store.calls  # bd's own argv: tests/adapters; the release is the bead's land, then the close
-        self.assertEqual([c[:2] for c in calls], [("provenance", "record"), ("close", "tl-1")])
-        self.assertEqual(calls[-1], ("close", "tl-1", "--reason", "landed"))
-        self.assertEqual(self.market_versions()["iorlas-task-loop"], "0.1.6")
-        self.assertEqual(json.loads((self.repo / PLUGIN).read_text())["author"], {"name": "t"})  # the rest kept
+        assert [c[:2] for c in calls] == [("provenance", "record"), ("close", "tl-1")]
+        assert calls[-1] == ("close", "tl-1", "--reason", "landed")
+        assert self.market_versions()["iorlas-task-loop"] == "0.1.6"
+        assert json.loads((self.repo / PLUGIN).read_text())["author"] == {"name": "t"}  # the rest kept
 
     def test_a_stale_branch_is_rebased_before_the_suite(self):
         self.git("config", "rebase.updateRefs", "true", cwd=self.repo)  # the removal of the source branch must survive it
@@ -309,18 +308,18 @@ class Release(unittest.TestCase):
                 self.commit(self.seed, "moved on")
                 runs = len(self.world.trees)
                 r = self.release("z", "--from-branch", name)
-                self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-                self.assertEqual(r.stdout.count("running the full suite"), 1)
+                assert r.returncode == 0, r.stdout + r.stderr
+                assert r.stdout.count("running the full suite") == 1
                 tested = self.world.trees[runs:]  # the suite saw both changes: the branch's and the one origin moved on with
-                self.assertEqual([(t["z.txt"], t["other.txt"]) for t in tested], [((name + "\n").encode(),) * 2])
+                assert [(t["z.txt"], t["other.txt"]) for t in tested] == [((name + "\n").encode(),) * 2]
                 if remote_only:  # no local branch to remove: the remote one stays
-                    self.assertEqual(self.git("rev-parse", "origin/" + name, cwd=self.repo), source)
+                    assert self.git("rev-parse", "origin/" + name, cwd=self.repo) == source
                 else:  # the clean worktree and the local branch are gone
-                    self.assertFalse(worktree.exists())
-                    self.assertEqual(self.git("branch", "--list", name, cwd=self.repo), "")
-                self.assertEqual(self.git("show", "main:z.txt", cwd=self.origin), name)
-                self.assertEqual(self.git("show", "main:other.txt", cwd=self.origin), name)
-                self.assertEqual(self.git("rev-list", "--merges", "main", cwd=self.origin), "")
+                    assert not worktree.exists()
+                    assert self.git("branch", "--list", name, cwd=self.repo) == ""
+                assert self.git("show", "main:z.txt", cwd=self.origin) == name
+                assert self.git("show", "main:other.txt", cwd=self.origin) == name
+                assert self.git("rev-list", "--merges", "main", cwd=self.origin) == ""
 
     def test_a_rebase_conflict_aborts_and_restores_main(self):
         start = self.git("rev-parse", "HEAD", cwd=self.repo)
@@ -334,18 +333,18 @@ class Release(unittest.TestCase):
         self.commit(self.seed, "conflicting change")
         origin = self.git("rev-parse", "main", cwd=self.origin)
         r = self.release("conflict", "--from-branch", "task/conflict")
-        self.assertNotEqual(r.returncode, 0)
-        self.assertIn("rebase", r.stderr)
-        self.assertNotIn("running the full suite", r.stdout)
-        self.assertEqual(self.git("rev-parse", "HEAD", cwd=self.repo), start)
-        self.assertEqual(self.git("branch", "--show-current", cwd=self.repo), "main")
-        self.assertEqual(self.git("status", "--porcelain", cwd=self.repo), "")
-        self.assertEqual(self.git("rev-parse", "task/conflict", cwd=self.repo), source)
-        self.assertEqual(self.git("rev-parse", "main", cwd=self.origin), origin)
-        self.assertFalse((self.repo / ".git" / "rebase-merge").exists())
-        self.assertFalse((self.repo / ".git" / "rebase-apply").exists())
-        self.assertEqual(self.market_versions()["iorlas-task-loop"], "0.1.0")
-        self.assertEqual(self.world.claude_log, [])
+        assert r.returncode != 0
+        assert "rebase" in r.stderr
+        assert "running the full suite" not in r.stdout
+        assert self.git("rev-parse", "HEAD", cwd=self.repo) == start
+        assert self.git("branch", "--show-current", cwd=self.repo) == "main"
+        assert self.git("status", "--porcelain", cwd=self.repo) == ""
+        assert self.git("rev-parse", "task/conflict", cwd=self.repo) == source
+        assert self.git("rev-parse", "main", cwd=self.origin) == origin
+        assert not (self.repo / ".git" / "rebase-merge").exists()
+        assert not (self.repo / ".git" / "rebase-apply").exists()
+        assert self.market_versions()["iorlas-task-loop"] == "0.1.0"
+        assert self.world.claude_log == []
 
     def test_two_branch_releases_queue_rebase_and_test_the_pushed_tree(self):  # noqa: PLR0915
         # two releases at once, as threads of this process (the lock is the kernel's, per open file): the first holds its suite open
@@ -361,12 +360,12 @@ class Release(unittest.TestCase):
         def hold_first(repo):
             if json.loads((repo / PLUGIN).read_text())["version"] == "0.1.0":
                 ready.set()
-                self.assertTrue(proceed.wait(120), "first suite was not released")
+                assert proceed.wait(120), "first suite was not released"
 
         def wait_for(predicate):
             deadline = time.monotonic() + 120
             while not predicate():
-                self.assertLess(time.monotonic(), deadline, "release did not reach synchronization point")
+                assert time.monotonic() < deadline, "release did not reach synchronization point"
                 time.sleep(0.02)
 
         self.world.on_suite = hold_first
@@ -379,37 +378,37 @@ class Release(unittest.TestCase):
             wait_for(ready.is_set)
             threads[1].start()
             wait_for(lambda: "waiting for the release lock" in self.world.stdout.bufs["second"].getvalue())
-            self.assertRegex(self.world.stdout.bufs["second"].getvalue(),
-                             rf"held by pid {os.getpid()} since \d{{2}}:\d{{2}}:\d{{2}}: first")
-            self.assertTrue(threads[1].is_alive())
-            self.assertEqual(self.version(self.origin)["version"], "0.1.0")
-            self.assertEqual(len(self.world.trees), 1)  # the second release has not reached its suite
+            assert re.search(rf"held by pid {os.getpid()} since \d{{2}}:\d{{2}}:\d{{2}}: first",
+                             self.world.stdout.bufs["second"].getvalue())
+            assert threads[1].is_alive()
+            assert self.version(self.origin)["version"] == "0.1.0"
+            assert len(self.world.trees) == 1  # the second release has not reached its suite
             proceed.set()
         finally:
             proceed.set()
             for t in threads:
                 t.join(60)
-        self.assertEqual({n: r.returncode for n, r in results.items()}, {"first": 0, "second": 0}, results)
+        assert {n: r.returncode for n, r in results.items()} == {"first": 0, "second": 0}, results
         for version, message in (("0.1.1", "first"), ("0.1.2", "second")):
             commit = self.git("log", "--format=%H", "--fixed-strings", "--grep=" + version + ": " + message, "main", cwd=self.origin)
-            self.assertTrue(commit)
+            assert commit
             paths = self.git("ls-tree", "-r", "--name-only", commit, cwd=self.origin).splitlines()
             pushed = {p: subprocess.check_output(["git", "show", commit + ":" + p], cwd=self.origin) for p in paths}
             tested = [t for t in self.world.trees if t.get(message + ".txt") == (message + "\n").encode()]
             if message == "first":
                 tested = [t for t in tested if "second.txt" not in t]
-            self.assertEqual(len(tested), 1)
+            assert len(tested) == 1
             for generated in (PLUGIN, manifest.NAME):
                 pushed.pop(generated, None)
-            self.assertEqual({p: b for p, b in tested[0].items() if p not in (PLUGIN, manifest.NAME)}, pushed)
+            assert {p: b for p, b in tested[0].items() if p not in (PLUGIN, manifest.NAME)} == pushed
         for name in ("first", "second"):
-            self.assertEqual(self.git("branch", "--list", "task/" + name, cwd=self.repo), "")  # landed: removed after the install
-            self.assertEqual(self.git("show", "main:" + name + ".txt", cwd=self.origin), name)
-            self.assertEqual(results[name].stdout.count("running the full suite"), 1)
-        self.assertEqual(self.version(self.origin)["version"], "0.1.2")
-        self.assertEqual(self.market_versions()["iorlas-task-loop"], "0.1.2")
-        self.assertEqual(self.updates(), 2)
-        self.assertEqual(self.git("status", "--porcelain", cwd=self.repo), "")
+            assert self.git("branch", "--list", "task/" + name, cwd=self.repo) == ""  # landed: removed after the install
+            assert self.git("show", "main:" + name + ".txt", cwd=self.origin) == name
+            assert results[name].stdout.count("running the full suite") == 1
+        assert self.version(self.origin)["version"] == "0.1.2"
+        assert self.market_versions()["iorlas-task-loop"] == "0.1.2"
+        assert self.updates() == 2
+        assert self.git("status", "--porcelain", cwd=self.repo) == ""
 
     def test_a_push_race_rebases_reruns_the_suite_and_takes_the_next_version(self):
         self.git("config", "rebase.updateRefs", "true", cwd=self.repo)
@@ -426,15 +425,17 @@ class Release(unittest.TestCase):
 
         self.world.before_push = racer
         r = self.release("mine", "--from-branch", "task/race")
-        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertIn("push race", r.stdout)
-        self.assertRegex(r.stdout, r"origin/main [0-9a-f]{40} is not the base [0-9a-f]{40}")
-        self.assertEqual(len(self.world.trees), 2)  # the suite ran again on the rebased tree
-        self.assertEqual(self.git("log", "--format=%s", "-3", "main", cwd=self.origin).splitlines(),
-                         ["0.1.2: mine", "branch change", "0.1.1: racer"])
-        self.assertEqual(self.git("branch", "--list", "task/race", cwd=self.repo), "")  # landed: removed after the install
-        self.assertEqual(self.git("show", "main:feature.txt", cwd=self.origin), "survives the push race")
-        self.assertEqual(self.market_versions()["iorlas-task-loop"], "0.1.2")
+        assert r.returncode == 0, r.stdout + r.stderr
+        assert "push race" in r.stdout
+        assert re.search(r"origin/main [0-9a-f]{40} is not the base [0-9a-f]{40}", r.stdout)
+        assert len(self.world.trees) == 2  # the suite ran again on the rebased tree
+        assert (
+            self.git("log", "--format=%s", "-3", "main", cwd=self.origin).splitlines()
+            == ["0.1.2: mine", "branch change", "0.1.1: racer"]
+        )
+        assert self.git("branch", "--list", "task/race", cwd=self.repo) == ""  # landed: removed after the install
+        assert self.git("show", "main:feature.txt", cwd=self.origin) == "survives the push race"
+        assert self.market_versions()["iorlas-task-loop"] == "0.1.2"
 
     def test_a_clone_reset_under_the_release_pushes_nothing_and_tags_nothing(self):
         # 0.23.198: a second release (an older caller under another lock key) reset the shared clone to origin/main during the
@@ -446,10 +447,10 @@ class Release(unittest.TestCase):
             self.git("commit", "--allow-empty", "-qm", "unexpected clone mutation", cwd=where)
         self.world.on_suite = reset_clone
         r = self.release("fix")
-        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
-        self.assertIn("release clone HEAD changed during the suite", r.stderr)
-        self.assertEqual(self.git("rev-parse", "main", cwd=self.origin), before)
-        self.assertEqual(self.tags(self.origin), [])
+        assert r.returncode == 1, r.stdout + r.stderr
+        assert "release clone HEAD changed during the suite" in r.stderr
+        assert self.git("rev-parse", "main", cwd=self.origin) == before
+        assert self.tags(self.origin) == []
 
     def branch_in_worktree(self, name="task/y", dirty=False):
         """Branch `name` with one commit, checked out in its own worktree next to the main checkout; -> the worktree."""
@@ -469,24 +470,23 @@ class Release(unittest.TestCase):
     def test_from_branch_removes_the_branch_and_its_worktree_after_the_push_and_the_install(self):
         wt = self.branch_in_worktree()
         r = self.release("feature", "--from-branch", "task/y")
-        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertFalse(wt.exists())
-        self.assertEqual(self.branches(), [])
-        self.assertIn("removed branch task/y and its worktrees", r.stdout)
-        self.assertEqual(self.git("rev-parse", "--abbrev-ref", "HEAD", cwd=self.repo), "main")  # the main checkout was not touched
+        assert r.returncode == 0, r.stdout + r.stderr
+        assert not wt.exists()
+        assert self.branches() == []
+        assert "removed branch task/y and its worktrees" in r.stdout
+        assert self.git("rev-parse", "--abbrev-ref", "HEAD", cwd=self.repo) == "main"  # the main checkout was not touched
         # nothing landed meanwhile: no push race (tl-bxk.12.8), and the branch landed fast-forward under the version commit
-        self.assertNotIn("push race", r.stdout)
-        self.assertEqual(self.git("log", "--format=%s", "-2", "main", cwd=self.origin).splitlines(),
-                         ["0.1.1: feature", "Add feature (tl-1)"])
+        assert "push race" not in r.stdout
+        assert self.git("log", "--format=%s", "-2", "main", cwd=self.origin).splitlines() == ["0.1.1: feature", "Add feature (tl-1)"]
 
     def test_a_worktree_with_an_untracked_file_is_never_forced_so_it_and_the_branch_stay(self):
         wt = self.branch_in_worktree(dirty=True)
         r = self.release("feature", "--from-branch", "task/y")
-        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)  # the release itself succeeded
-        self.assertTrue((wt / "scratch.txt").is_file())
-        self.assertEqual(self.branches(), ["task/y"])
-        self.assertIn("worktree", r.stdout)
-        self.assertIn("kept", r.stdout)
+        assert r.returncode == 0, r.stdout + r.stderr  # the release itself succeeded
+        assert (wt / "scratch.txt").is_file()
+        assert self.branches() == ["task/y"]
+        assert "worktree" in r.stdout
+        assert "kept" in r.stdout
 
     def test_a_loop_landing_during_the_suite_is_reverified_outside_the_land_lock(self):
         # Both suite runs allow a loop to acquire the land lock; only the first introduces a new tree.
@@ -495,7 +495,7 @@ class Release(unittest.TestCase):
         self.git("pull", "-q", "origin", "main", cwd=self.repo)
 
         def a_loop_lands_meanwhile(_repo):  # what an engine does at land, the lock taken as it takes it
-            self.assertLessEqual(len(self.world.trees), 2)
+            assert len(self.world.trees) <= 2
             try:
                 with landlock.os_lock(landlock.land_lock_path(homes.cfg(), str(self.origin)), "a loop's land", timeout=0):
                     if len(self.world.trees) > 1:
@@ -507,16 +507,16 @@ class Release(unittest.TestCase):
                     self.git("commit", "-qm", f"a bead (x-{name})", cwd=side)
                     self.git("push", "-q", "origin", "HEAD:main", cwd=side)
             except TimeoutError:
-                self.fail("suite ran while the release held the land lock")
+                pytest.fail("suite ran while the release held the land lock")
 
         self.world.on_suite = a_loop_lands_meanwhile
         r = self.release("mine")
-        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        assert r.returncode == 0, r.stdout + r.stderr
         subjects = self.git("log", "--format=%s", "main", cwd=self.origin).splitlines()
-        self.assertEqual(subjects[0], "0.1.1: mine")
-        self.assertTrue(any(s.startswith("a bead") for s in subjects), subjects)
-        self.assertEqual(self.git("rev-list", "--merges", "main", cwd=self.origin), "")
-        self.assertEqual(len(self.world.trees), 2)  # the first suite, then the one after the land it let in
+        assert subjects[0] == "0.1.1: mine"
+        assert any(s.startswith("a bead") for s in subjects), subjects
+        assert self.git("rev-list", "--merges", "main", cwd=self.origin) == ""
+        assert len(self.world.trees) == 2  # the first suite, then the one after the land it let in
 
     def last(self):
         return json.loads((self.home / "cfg" / "task-loop" / "releases" / "last.json").read_text())
@@ -526,47 +526,49 @@ class Release(unittest.TestCase):
 
     def test_a_release_tags_both_repos_and_pushes_the_tags(self):
         r = self.release("fix")
-        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertEqual(self.tags(self.origin), ["v0.1.1"])
-        self.assertEqual(self.tags(self.morigin), ["iorlas-task-loop-v0.1.1"])
-        self.assertEqual(self.git("rev-parse", "v0.1.1^{commit}", cwd=self.origin), self.git("rev-parse", "main", cwd=self.origin))
-        self.assertEqual(self.git("rev-parse", "iorlas-task-loop-v0.1.1^{commit}", cwd=self.morigin),
-                         self.git("rev-parse", "main", cwd=self.morigin))
-        self.assertEqual(self.last()["ok"], True)
-        self.assertEqual(self.last()["version"], "0.1.1")
+        assert r.returncode == 0, r.stdout + r.stderr
+        assert self.tags(self.origin) == ["v0.1.1"]
+        assert self.tags(self.morigin) == ["iorlas-task-loop-v0.1.1"]
+        assert self.git("rev-parse", "v0.1.1^{commit}", cwd=self.origin) == self.git("rev-parse", "main", cwd=self.origin)
+        assert (
+            self.git("rev-parse", "iorlas-task-loop-v0.1.1^{commit}", cwd=self.morigin)
+            == self.git("rev-parse", "main", cwd=self.morigin)
+        )
+        assert self.last()["ok"] is True
+        assert self.last()["version"] == "0.1.1"
         out = self.home / "shipped"  # the committed manifest matches exactly what was pushed
         self.git("clone", "-q", str(self.origin), str(out), cwd=self.home)
-        self.assertEqual(manifest.verify(out), [])
+        assert manifest.verify(out) == []
         listed = {line.split("  ", 1)[1] for line in (out / manifest.NAME).read_text().splitlines()}
-        self.assertEqual(listed, {PLUGIN, ".gitignore", "tests/test_ok.py"})
+        assert listed == {PLUGIN, ".gitignore", "tests/test_ok.py"}
         (out / "tests" / "test_ok.py").write_text("changed")
-        self.assertEqual(manifest.verify(out), ["tests/test_ok.py differs from MANIFEST.sha256"])
+        assert manifest.verify(out) == ["tests/test_ok.py differs from MANIFEST.sha256"]
 
     def test_a_forced_install_error_exits_nonzero_after_one_retry_and_reports_to_the_bead(self):
         self.world.claude_fail = "always"
         wt = self.branch_in_worktree()
         r = self.release("fix", "--from-branch", "task/y", "--bead", "tl-x1", "--reason", "done")
-        self.assertNotEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertTrue(wt.is_dir())  # a failed install keeps the branch and its worktree
-        self.assertEqual(self.branches(), ["task/y"])
-        self.assertEqual(self.updates(), 2)
-        self.assertIn("claude plugin update iorlas-task-loop@iorlas-marketplace", r.stderr)  # the failing command
-        self.assertIn("fetch-pack", r.stderr)
+        assert r.returncode != 0, r.stdout + r.stderr
+        assert wt.is_dir()  # a failed install keeps the branch and its worktree
+        assert self.branches() == ["task/y"]
+        assert self.updates() == 2
+        assert "claude plugin update iorlas-task-loop@iorlas-marketplace" in r.stderr  # the failing command
+        assert "fetch-pack" in r.stderr
         last_line = r.stderr.strip().splitlines()[-1]
-        self.assertTrue(last_line.startswith("release FAILED: 0.1.1 was pushed but"), last_line)
+        assert last_line.startswith("release FAILED: 0.1.1 was pushed but"), last_line
         rec = self.last()
-        self.assertEqual((rec["ok"], rec["version"]), (False, "0.1.1"))
+        assert (rec["ok"], rec["version"]) == (False, "0.1.1")
         (comment,) = self.world.store.said("comments", "add")
-        self.assertTrue(comment[2] == "tl-x1" and comment[3].startswith("release FAILED"), comment)
-        self.assertEqual(self.version(self.origin)["version"], "0.1.1")  # pushed all the same: the failure is the install's
-        self.assertEqual(self.tags(self.origin), ["v0.1.1"])
+        assert comment[2] == "tl-x1" and comment[3].startswith("release FAILED"), comment
+        assert self.version(self.origin)["version"] == "0.1.1"  # pushed all the same: the failure is the install's
+        assert self.tags(self.origin) == ["v0.1.1"]
 
     def test_an_install_that_fails_once_is_retried_and_the_release_succeeds(self):
         self.world.claude_fail = "once"
         r = self.release("fix")
-        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertEqual(self.updates(), 2)
-        self.assertTrue((self.home / "claude/plugins/cache/iorlas-marketplace/iorlas-task-loop/0.1.1/.claude-plugin/plugin.json").is_file())
+        assert r.returncode == 0, r.stdout + r.stderr
+        assert self.updates() == 2
+        assert (self.home / "claude/plugins/cache/iorlas-marketplace/iorlas-task-loop/0.1.1/.claude-plugin/plugin.json").is_file()
 
     def test_a_red_suite_writes_a_failure_record_with_the_failing_tests_and_comments_on_the_bead(self):
         """The suite's output (pytest's summary lines): the failing ids, the saved log, the record."""
@@ -574,57 +576,53 @@ class Release(unittest.TestCase):
         self.commit(self.seed, "red")
         self.git("pull", "-q", "origin", "main", cwd=self.repo)
         r = self.release("fix", "--bead", "tl-x2")
-        self.assertNotEqual(r.returncode, 0)
+        assert r.returncode != 0
         for want in ("FAILED tests/test_red.py::R::test_red_one", "FAILED tests/test_red.py::R::test_red_two", "AssertionError: boom",
                      "ValueError: bang", "2 failed"):
-            self.assertIn(want, r.stderr)
+            assert want in r.stderr
         m = re.search(r"full output: (\S+)", r.stderr)
-        self.assertTrue(m, r.stderr)
+        assert m, r.stderr
         saved = Path(must(m).group(1))
-        self.assertIn(str(self.home / "cfg" / "task-loop" / "releases"), str(saved))
-        self.assertIn("FAILED tests/test_red.py::R::test_red_one", saved.read_text())
-        self.assertEqual(self.git("status", "--porcelain", cwd=self.repo), "")
-        self.assertEqual((self.tags(self.origin), self.tags(self.repo), self.tags(self.morigin)), ([], [], []))  # no tag when red
+        assert str(self.home / "cfg" / "task-loop" / "releases") in str(saved)
+        assert "FAILED tests/test_red.py::R::test_red_one" in saved.read_text()
+        assert self.git("status", "--porcelain", cwd=self.repo) == ""
+        assert (self.tags(self.origin), self.tags(self.repo), self.tags(self.morigin)) == ([], [], [])  # no tag when red
         rec = self.last()
-        self.assertFalse(rec["ok"])
-        self.assertEqual(rec["branch"], "main")
-        self.assertTrue(any("test_red_one" in t for t in rec["tests"]), rec)
-        self.assertTrue(Path(rec["log"]).is_file())
+        assert not rec["ok"]
+        assert rec["branch"] == "main"
+        assert any("test_red_one" in t for t in rec["tests"]), rec
+        assert Path(rec["log"]).is_file()
         (comment,) = self.world.store.said("comments", "add")
-        self.assertTrue(comment[2] == "tl-x2" and comment[3].startswith("release FAILED"), comment)
-        self.assertTrue(r.stderr.strip().splitlines()[-1].startswith("release FAILED: nothing released: "))
-        self.assertEqual(self.world.store.said("close"), [])
+        assert comment[2] == "tl-x2" and comment[3].startswith("release FAILED"), comment
+        assert r.stderr.strip().splitlines()[-1].startswith("release FAILED: nothing released: ")
+        assert self.world.store.said("close") == []
 
     def test_a_later_success_replaces_the_failure_record(self):
         self.write(self.seed / "tests" / "RED", "FAILED tests/test_red.py::R::test_red_one - AssertionError: boom\n1 failed\n")
         self.commit(self.seed, "red")
         self.git("pull", "-q", "origin", "main", cwd=self.repo)
-        self.assertNotEqual(self.release("fix", "--bead", "tl-x2").returncode, 0)
-        self.assertFalse(self.last()["ok"])
-        self.assertEqual(self.world.store.said("close"), [])
+        assert self.release("fix", "--bead", "tl-x2").returncode != 0
+        assert not self.last()["ok"]
+        assert self.world.store.said("close") == []
         self.git("rm", "-q", "tests/RED", cwd=self.repo)
         self.git("commit", "-qm", "green", cwd=self.repo)
         self.git("push", "-q", "origin", "HEAD:main", cwd=self.repo)
-        self.assertEqual(self.release("fix").returncode, 0)
-        self.assertTrue(self.last()["ok"])
+        assert self.release("fix").returncode == 0
+        assert self.last()["ok"]
 
     def test_a_bead_with_an_open_child_is_refused_before_anything_is_pushed(self):
         """tl-t7i.5 was closed by a release while its other half was open: --bead names finished work."""
         self.world.store.put({"id": "tl-kid", "title": "other half", "status": "open", "parent": "tl-half"})
         before = self.git("rev-parse", "origin/main", cwd=self.repo)
         r = self.release("fix", "--bead", "tl-half", "--reason", "done")
-        self.assertNotEqual(r.returncode, 0)
-        self.assertIn("tl-half has open children (tl-kid)", r.stderr)
-        self.assertEqual(self.git("rev-parse", "origin/main", cwd=self.repo), before)
-        self.assertEqual(self.world.store.said("close"), [])
-        self.assertEqual(self.tags(self.origin), [])
+        assert r.returncode != 0
+        assert "tl-half has open children (tl-kid)" in r.stderr
+        assert self.git("rev-parse", "origin/main", cwd=self.repo) == before
+        assert self.world.store.said("close") == []
+        assert self.tags(self.origin) == []
 
     def test_a_bead_whose_children_are_closed_is_released_and_closed(self):
         self.world.store.put({"id": "tl-kid", "title": "other half", "status": "closed", "parent": "tl-half"})
         r = self.release("fix", "--bead", "tl-half", "--reason", "done")
-        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertEqual(len(self.world.store.said("close", "tl-half")), 1)
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert r.returncode == 0, r.stdout + r.stderr
+        assert len(self.world.store.said("close", "tl-half")) == 1
