@@ -64,7 +64,13 @@ class LandGit(GitBase):
                 if not path:
                     raise GitReadFailure("git diff: incomplete path record")
                 out.append(DiffEntry(status=status[0], path=path))
+        if ignore_space:
+            out = [e for e in out if e.status != "M" or self._space_changes(d, a, b, e.path)]
         return out
+
+    def _space_changes(self, d: str, a: str, b: str, path: str) -> bool:
+        """Older git still lists a whitespace-only edit as M under -w; the path's own -w diff decides, whatever the version."""
+        return not self._predicate(d, "diff", "--no-ext-diff", "--quiet", "-w", "--ignore-blank-lines", a, b, "--", path)
 
     def staged(self, d: str) -> bool:
         return not self._predicate(d, "diff", "--cached", "--quiet")

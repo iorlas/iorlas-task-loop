@@ -40,10 +40,15 @@ class PortPushHasNoGateAuthority(unittest.TestCase):
         hook = hooks / "pre-push"
         hook.write_text('#!/bin/sh\n[ -n "$TL_LAND" ] || { echo refused: not green >&2; exit 1; }\n')
         hook.chmod(0o755)
+        ran = subprocess.run([str(hook)], capture_output=True, text=True, env={"PATH": os.environ.get("PATH", "")}, check=False)
+        self.assertEqual(ran.returncode, 1, f"precondition: the refusing pre-push hook cannot run here ({ran.stderr.strip() or 'no output'}): "
+                         f"is {hooks} on a noexec mount, or is /bin/sh missing?")
         self.port = RealGit(Env({k: v for k, v in snapshot().vars.items() if k != "TL_LAND"}), pinned=False)
 
     def test_the_port_and_plain_push_both_meet_the_refusing_hook(self):
-        self.assertNotEqual(sh("git", "push", "-q", "origin", "main", cwd=self.repo, check=False).returncode, 0)
+        plain = sh("git", "push", "-q", "origin", "main", cwd=self.repo, check=False)
+        self.assertNotEqual(plain.returncode, 0, "precondition: this git ignored core.hooksPath, so the refusing hook never ran "
+                            f"({sh('git', '--version', cwd=self.repo).stdout.strip()}; push said: {plain.stderr.strip()!r})")
         with self.assertRaises(SlotGitError):
             self.port.push(str(self.repo), "origin", "main")
         self.assertNotEqual(sh("git", "rev-parse", "--verify", "main", cwd=self.remote, check=False).returncode, 0)
