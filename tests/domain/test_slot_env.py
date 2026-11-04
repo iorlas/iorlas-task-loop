@@ -66,7 +66,7 @@ class EverySpawnPath(te.EngineTest):
 
     def test_a_container_check_is_given_the_slot_name_only(self):
         e = make_engine(self.wt, store=self.store)
-        clean = {k: v for k, v in os.environ.items() if not k.startswith("TL_CHECK_")}  # `tl check` exports its logs to later checks
+        clean = {k: v for k, v in os.environ.items() if not k.startswith("TL_")}  # `tl check` exports its run (TL_BRANCH, TL_CHECK_*...)
         with mock.patch.dict(os.environ, clean, clear=True):
             env = snapshot()
         host = mock.Mock(env=env, bead_env=e.bead_env, run_dir=Path("r"), cfg=mock.Mock(container=None))
