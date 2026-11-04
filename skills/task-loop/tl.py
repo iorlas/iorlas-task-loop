@@ -52,6 +52,7 @@
   tl.py wait --bead ID|--any [--timeout S]      block until the run ends or an ask opens; one line, the exit code says which (--help)
   tl.py green STEP [--repo DIR] --tree T --base B  is the check step green for the tree and base, from the result store (exit 0 yes, 1 no)
   tl.py hooks install                           write the git hooks (pre-push asks tl judge-push) into <config>/githooks/
+  tl.py setup --plan [--repo DIR] [--json]      what this machine and repo still need: checks, safe fixes, questions (read-only)
   tl.py ask show ID                             one ask: question, owner cause, blocking, default, similar, thread, outcome (read-only)
   tl.py handoff write|show [--repo DIR]         the <= 4 KB handoff a compaction hands to the next session (hooks/hook.py writes it)
 
@@ -92,6 +93,7 @@ from taskloop.cli import hooks as cli_hooks
 from taskloop.cli import land as cli_land
 from taskloop.cli import land_stack as cli_land_stack
 from taskloop.cli import queue as cli_queue
+from taskloop.cli import setup as cli_setup
 from taskloop.cli import slots as slots_cli
 from taskloop.cli import status
 from taskloop.cli import wait as cli_wait
@@ -312,6 +314,7 @@ def build_parser():
     p.add_argument("--no-run", action="store_true", help="read the evidence only: a missing receipt refuses, no check is started")
     cli_land_stack.add_parser(sp)
     cli_hooks.add_parser(sp)
+    cli_setup.add_parser(sp)
     return ap
 
 
@@ -437,6 +440,7 @@ VERBS: Final[dict[str, Handler]] = {
     "handoff": v_handoff,
     "wait": v_wait,
     "hooks": lambda a, c: cli_hooks.cmd_hooks(a, c.env, c.here.parents[1]),
+    "setup": lambda a, c: cli_setup.cmd_setup(a, c.env, c.here.parents[1]),
     "green": lambda a, c: cli_green.cmd_green(a, c.who.config, c.git, env=c.env, spawner=c.spawner),
     "judge-push": lambda a, c: importlib.import_module("taskloop.app.launch.push_judge").cmd_judge_push(
         a, who=c.who, env=c.env, spawner=c.spawner, git=c.git),

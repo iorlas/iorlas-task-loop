@@ -1,0 +1,81 @@
+"""`tl setup --plan` looks at a throwaway HOME and a repo and writes nothing."""
+import argparse
+import json
+import tempfile
+from pathlib import Path
+
+from support.case import Case
+
+from taskloop.app.wire import setup
+from taskloop.cli import setup as cli_setup
+from taskloop.contracts.env import Env
+
+
+def tree(root: Path) -> list[str]:
+    return sorted(str(p.relative_to(root)) for p in root.rglob("*"))
+
+
+class SetupPlan(Case):
+    def setup_method(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.home = Path(tmp.name)
+        self.env = Env({"HOME": str(self.home), "XDG_CONFIG_HOME": str(self.home / ".config")})
+        self.plugin = self.home / "plugin"
+        self.repo = self.home / "repo"
+        self.repo.mkdir()
+
+    def checks(self, plan):
+        return {c.id: c for c in plan.checks}
+
+    def test_a_bare_machine_is_planned_and_nothing_is_created(self):
+        before = tree(self.home)
+        plan = setup.plan(self.plugin, self.env, self.repo)
+        assert tree(self.home) == before
+        checks = self.checks(plan)
+        assert not checks["config"].ok
+        assert not checks["shim"].ok
+        assert not checks["githooks"].ok
+        assert {f.id for f in plan.fixes} == {"shim", "githooks"}  # no ~/.local here, so no PATH link to offer
+
+    def test_a_local_folder_adds_the_path_link_fix_and_a_made_link_clears_it(self):
+        (self.home / ".local").mkdir()
+        assert "path-link" in {f.id for f in setup.plan(self.plugin, self.env, None).fixes}
+        (self.home / ".local" / "bin").mkdir()
+        (self.home / ".local" / "bin" / "tl").symlink_to(self.home / ".config" / "task-loop" / "bin" / "tl")
+        assert "path-link" not in {f.id for f in setup.plan(self.plugin, self.env, None).fixes}
+
+    def test_a_repo_without_a_profile_gets_the_questions_tailored_to_its_stack(self):
+        (self.repo / "ProjectSettings").mkdir()
+        (self.repo / "ProjectSettings" / "ProjectVersion.txt").write_text("m_EditorVersion: 6000.0\n")
+        (self.repo / "justfile").write_text("check:\n    true\n")
+        plan = setup.plan(self.plugin, self.env, self.repo)
+        assert [q.id for q in plan.questions] == ["lanes", "unity-lease", "gate"]
+        assert plan.questions[0].default == "4"
+        assert "unity" in self.checks(plan)["stack"].detail
+        assert not self.checks(plan)["profile"].ok
+
+    def test_a_unity_project_one_folder_down_is_found(self):
+        (self.repo / "client" / "ProjectSettings").mkdir(parents=True)
+        (self.repo / "client" / "ProjectSettings" / "ProjectVersion.txt").write_text("m_EditorVersion: 6000.0\n")
+        assert setup.stacks(self.repo) == {"unity": "client/ProjectSettings/ProjectVersion.txt"}
+
+    def test_a_profile_that_loads_asks_nothing_and_a_stale_key_is_named(self):
+        profile = self.repo / ".task-loop.json"
+        profile.write_text(json.dumps({"slots": {"count": 2}}))
+        plan = setup.repo_part(self.repo)
+        assert plan.questions == []
+        assert self.checks(plan)["profile"].ok
+        profile.write_text(json.dumps({"slots": {"cuont": 2}}))
+        stale = self.checks(setup.repo_part(self.repo))["profile"]
+        assert not stale.ok
+        assert "cuont" in stale.detail
+
+    def test_the_command_prints_the_plan_as_json_or_text_and_exits_1_while_something_is_missing(self):
+        shown = []
+        args = argparse.Namespace(repo=str(self.repo), json=True)
+        assert cli_setup.cmd_setup(args, self.env, self.plugin, shown.append) == 1
+        assert [c["id"] for c in json.loads(shown[0])["checks"]][:2] == ["config", "shim"]
+        args.json = False
+        cli_setup.cmd_setup(args, self.env, self.plugin, shown.append)
+        assert shown[1].startswith("TODO config:")

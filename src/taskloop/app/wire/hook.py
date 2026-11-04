@@ -9,7 +9,7 @@ from taskloop.adapters import gitrepo
 from taskloop.adapters.ident import config_dir
 from taskloop.app.track.trail import now
 from taskloop.contracts.env import Env
-from taskloop.contracts.paths import ConfigDir
+from taskloop.contracts.paths import ConfigDir, default_root
 from taskloop.contracts.ports import Git
 from taskloop.contracts.snapshots import SessionIndex
 from taskloop.contracts.stores import SessionStore
@@ -107,7 +107,7 @@ def link_state(env: Env) -> str:
     """The PATH link: 'ours' (a symlink to the shim), 'foreign' (anything else is there), 'missing', or 'windows' (no link there)."""
     if os.name == "nt":
         return "windows"
-    link, shim = path_link(env), config_dir(env) / "bin" / "tl"
+    link, shim = path_link(env), default_root(env) / "bin" / "tl"  # not config_dir: it makes the folder, and this only looks
     if link.is_symlink():
         return "ours" if os.readlink(link) == str(shim) or os.path.realpath(link) == os.path.realpath(shim) else "foreign"
     return "foreign" if link.exists() else "missing"
