@@ -6,7 +6,7 @@ import re
 from typing import TYPE_CHECKING, Final
 
 from git_porcelain.api import Conflict, HookRejected, Offline, Pushed, Rebased, Rejected, Sha, Synced, Transient
-from git_porcelain.errors import GitUnavailable, some
+from git_porcelain.errors import GitUnavailable, WorktreeRemoveRefused, some
 from git_porcelain.fake_merge import merge_trees, replay_list
 from git_porcelain.fake_ops import hard_to, is_clean, make_commit, require_index, switch_tree
 from git_porcelain.fake_store import CheckoutState, Rebase, ancestors
@@ -101,9 +101,10 @@ def rebase_abort(repo: RepoState, wt: CheckoutState) -> None:
     wt.rebase = None
 
 
-def worktree_add(repo: RepoState, path: Path, sha: str | None) -> CheckoutState:
+def worktree_add(repo: RepoState, path: Path, sha: str | None, *, force: bool = False) -> CheckoutState:
     """A new linked worktree at ``path``, detached at the commit."""
-    if path in repo.worktrees or sha is None:
+    target = repo.worktrees.get(path)
+    if (target is not None and not (force and target.missing and not target.main)) or sha is None:
         msg = f"git worktree add exited 128: '{path}' already exists or the revision is unknown"
         raise GitUnavailable(msg)
     files = repo.store.commits[sha].files
@@ -114,12 +115,15 @@ def worktree_add(repo: RepoState, path: Path, sha: str | None) -> CheckoutState:
 
 def worktree_remove(repo: RepoState, path: Path, *, force: bool) -> None:
     target = repo.worktrees.get(path)
-    if target is None or target.main:
-        msg = f"git worktree remove exited 128: '{path}' is not a linked working tree"
-        raise GitUnavailable(msg)
+    if target is None:
+        msg = f"fatal: '{path}' is not a working tree"
+        raise WorktreeRemoveRefused(msg)
+    if target.main:
+        msg = f"fatal: '{path}' is a main working tree"
+        raise WorktreeRemoveRefused(msg)
     if not force and not target.missing and not is_clean(repo, target):
-        msg = f"git worktree remove exited 128: '{path}' contains modified or untracked files, use --force to delete it"
-        raise GitUnavailable(msg)
+        msg = f"fatal: '{path}' contains modified or untracked files, use --force to delete it"
+        raise WorktreeRemoveRefused(msg)
     del repo.worktrees[path]
 
 

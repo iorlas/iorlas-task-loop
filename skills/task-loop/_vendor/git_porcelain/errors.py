@@ -2,8 +2,9 @@
 
 The host translates :class:`GitError` into its own error type at the seam (a2kay
 maps it to its typed ``GitError`` for the error dispatcher). :class:`GitUnavailable` is what the
-``Repo``/``Worktree`` protocols raise: infrastructure only (git missing, a held ``index.lock``, no identity,
-not a repository, a timeout), never an expected outcome.
+``Repo``/``Worktree`` protocols raise for infrastructure (git missing, a held ``index.lock``, no identity,
+not a repository, a timeout). ``WorktreeRemoveRefused`` also inherits it for compatibility with callers
+already catching removal failures, and carries the expected refusal's diagnostic separately.
 """
 
 from __future__ import annotations
@@ -36,6 +37,14 @@ class NotARepo(GitUnavailable):
     """The requested path is outside a repository or does not exist."""
 
 
+class WorktreeRemoveRefused(GitUnavailable):
+    """Removal was refused; ``reason`` is the final nonempty line of git's stderr."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
+
+
 class IndexLocked(GitUnavailable):
     """Another writer holds the index lock."""
 
@@ -53,7 +62,9 @@ class BranchPinned(GitUnavailable):
 
 
 _INDEX_LOCK = re.compile(r"index\.lock")
-_REF_RACE = re.compile(r"incorrect old value|cannot lock ref|unable to update local ref|Unable to create '[^']*\.lock'")
+_REF_STALE = re.compile(r"incorrect old value|is at \S+ but expected \S+")
+_REF_LOCK = re.compile(r"cannot lock ref[^\n]*\.lock|Unable to create '[^']*\.lock'")
+_REF_RACE = re.compile(r"cannot lock ref|unable to update local ref|Unable to create '[^']*\.lock'")
 _PINNED = re.compile(r"already (?:checked out|used by worktree) at '?([^'\n]*)'?")
 _MISSING_REVISION = re.compile(r"fatal: (?:bad revision '.+'|Not a valid object name .+)")
 _AMBIGUOUS_REVISION = re.compile(r"fatal: ambiguous argument '.+': unknown revision or path not in the working tree\.")
@@ -68,8 +79,9 @@ def failure(message: str, stderr: str, code: int, *, retryable: bool = False, hi
         kind, retryable = IndexLocked, True
     elif match := _PINNED.search(stderr):
         return BranchPinned(message, match.group(1).strip(), hint=hint)
-    elif _REF_RACE.search(stderr):
-        kind, retryable = RefRace, True
+    elif _REF_STALE.search(stderr) or _REF_RACE.search(stderr):
+        kind = RefRace
+        retryable = _REF_LOCK.search(stderr) is not None and _REF_STALE.search(stderr) is None
     elif code == 128:
         if (
             tail == "fatal: not a git repository (or any of the parent directories): .git"
@@ -85,7 +97,18 @@ def failure(message: str, stderr: str, code: int, *, retryable: bool = False, hi
     return kind(message, retryable=retryable, hint=hint)
 
 
-__all__ = ["BranchPinned", "GitError", "GitUnavailable", "IndexLocked", "MissingRevision", "NotARepo", "RefRace", "failure", "some"]
+__all__ = [
+    "BranchPinned",
+    "GitError",
+    "GitUnavailable",
+    "IndexLocked",
+    "MissingRevision",
+    "NotARepo",
+    "RefRace",
+    "WorktreeRemoveRefused",
+    "failure",
+    "some",
+]
 
 
 def some[T](value: T | None) -> T:

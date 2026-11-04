@@ -1,11 +1,11 @@
 """Reset diagnostics never repair a released slot; branch freeing checks fresh ownership."""
-import subprocess
 import sys
 from pathlib import Path
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
+from git_porcelain.errors import GitUnavailable
 
 from slots.test_slot_pool import Rig
 from taskloop.adapters.git import RealGit
@@ -21,8 +21,7 @@ class ResetOwnership(Rig):
         work = Path(self.d1) / "untracked.txt"
         work.write_text("keep me")
         adapter = RealGit(Env(), pinned=False)
-        failed = subprocess.CompletedProcess([], 128, "", "status unavailable")
-        with (mock.patch.object(adapter, "_run", return_value=failed),
+        with (mock.patch.object(adapter, "_pool", side_effect=GitUnavailable("status unavailable")),
               mock.patch.object(self.git, "dirty", side_effect=adapter.dirty),
               mock.patch("taskloop.app.slots.reset.setup") as setup):
             self.assertEqual(self.code(lambda: self.slot().ready_for("x-1")), "transient")

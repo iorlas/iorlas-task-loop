@@ -5,7 +5,7 @@ refusal) is private to this file. Every write clears the mutable memo, even when
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING, Final, Literal, TypeVar
+from typing import TYPE_CHECKING, Final, Literal
 
 from git_porcelain import real_parse, real_read
 from git_porcelain.api import (
@@ -46,8 +46,6 @@ if TYPE_CHECKING:
     from git_porcelain.real_done import Done
 
 __all__ = [
-    "add_worktree",
-    "drop_worktree",
     "exclude_locally",
     "finish_rebase",
     "park",
@@ -80,10 +78,7 @@ def _identity_args(repo: RealRepo) -> list[str]:
     return [] if who is None else ["-c", f"user.name={who.name}", "-c", f"user.email={who.email}"]
 
 
-T = TypeVar("T")
-
-
-def _done(repo: RealRepo, result: T) -> T:
+def _done[T](repo: RealRepo, result: T) -> T:
     repo.invalidate()
     return result
 
@@ -99,23 +94,6 @@ def sync(repo: RealRepo, remote: str) -> SyncResult:
                 return Offline(done.tail)
             repo.sleep(0.1 * (attempt + 1))
         return Offline("fetch gave up")  # pragma: no cover - the loop returns on its last turn
-    finally:
-        repo.invalidate()
-
-
-def add_worktree(repo: RealRepo, path: Path, rev: str) -> RealWorktree:
-    try:
-        repo.run(repo.path, "worktree", "add", "-q", "--detach", str(path), rev)
-    finally:
-        repo.invalidate()
-    return repo.worktree(path)
-
-
-def drop_worktree(repo: RealRepo, path: Path, *, force: bool) -> None:
-    try:
-        if path.exists():
-            repo.run(repo.path, "worktree", "remove", *(["--force"] if force else []), str(path))
-        repo.run(repo.path, "worktree", "prune")
     finally:
         repo.invalidate()
 

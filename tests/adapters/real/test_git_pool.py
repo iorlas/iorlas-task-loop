@@ -10,7 +10,9 @@ import support.paths  # noqa: F401
 
 # isort: split
 from git_porcelain import real_env
+from git_porcelain.real import RealRepo
 
+from taskloop.adapters import treehash
 from taskloop.adapters.git import RealGit
 from taskloop.contracts.env import Env, snapshot
 from taskloop.contracts.slots import SlotGitError
@@ -68,3 +70,49 @@ class RealGitPoolTest(unittest.TestCase):
         self.assertEqual((gitdir / "index").read_bytes(), index_before)
         self.assertEqual(port.git_env(first), env_before)
         self.assertEqual(port.env.vars, polluted)
+
+    def test_pool_operations_keep_linked_checkout_and_index_pinned(self):
+        first, slot, decoy = (self.home / name for name in ("first", "slot", "decoy"))
+        self.git.add_worktree(str(self.repo), str(first), "main")
+        gitdir = Path(self.run_git(first, "rev-parse", "--absolute-git-dir"))
+        decoy.mkdir()
+        self.run_git(self.repo, "config", "core.worktree", str(decoy))
+        polluted = {**snapshot().vars, "GIT_DIR": str(decoy), "GIT_WORK_TREE": str(decoy), "GIT_INDEX_FILE": str(decoy / "index")}
+        port = RealGit(Env(polluted))
+        index_before = (gitdir / "index").read_bytes()
+        with mock.patch("git_porcelain.real.subprocess.run", wraps=subprocess.run) as run:
+            port.add_worktree_force(str(first), str(slot), "main")
+            self.assertIn(str(slot), [co.path for co in port.checkouts(str(first))])
+            self.assertFalse(port.dirty(str(first)))
+            self.assertIsInstance(port.worktree_state(str(first)), bytes)
+            self.assertTrue(port.remove_worktree(str(first), str(slot)))
+            self.assertFalse(port.remove_worktree(str(first), str(slot)))
+            port.add_worktree_force(str(first), str(slot), "main")
+            self.assertEqual(port.remove_worktree_why(str(first), str(slot)), "")
+            port.add_worktree_force(str(first), str(slot), "main")
+            port.remove_worktree_force(str(first), str(slot))
+            port.prune_worktrees(str(first))
+        for call in run.call_args_list:
+            child = call.kwargs["env"]
+            self.assertEqual(child["GIT_DIR"], str(gitdir))
+            self.assertEqual(child["GIT_WORK_TREE"], str(first))
+            self.assertNotIn("GIT_INDEX_FILE", child)
+        self.assertEqual((gitdir / "index").read_bytes(), index_before)
+        self.assertFalse((decoy / "index").exists())
+        self.assertEqual(port.env.vars, polluted)
+
+    def test_tree_of_matches_snapshot_with_a_tracked_ignored_declared_input(self):
+        (self.repo / ".gitignore").write_text("declared.txt\n")
+        declared = self.repo / "declared.txt"
+        declared.write_text("initial\n")
+        self.run_git(self.repo, "add", ".gitignore")
+        self.run_git(self.repo, "add", "--force", "declared.txt")
+        self.run_git(self.repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid",
+                     "-c", "commit.gpgSign=false", "commit", "-qm", "tracked ignored input")
+        declared.write_text("changed ignored input\n")
+        (self.repo / "untracked.txt").write_text("untracked\n")
+        self.assertEqual(self.run_git(self.repo, "check-ignore", "--no-index", "declared.txt"), "declared.txt")
+        index_before = (self.repo / ".git" / "index").read_bytes()
+        worktree = RealRepo(self.repo, env=self.git.git_env(self.repo), memoize=False).worktree(self.repo)
+        self.assertEqual(treehash.tree_of(self.git, self.repo), worktree.snapshot("main", inputs=("declared.txt",)).tree)
+        self.assertEqual((self.repo / ".git" / "index").read_bytes(), index_before)

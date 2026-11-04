@@ -2,16 +2,16 @@
 a failure becomes one of the typed SlotGitErrors (BranchPinned, DirtyTree, RefRace, IndexLocked) or the plain SlotGitError."""
 import os
 import tempfile
+from contextlib import suppress
 from pathlib import Path
 from typing import Literal
 
-from git_porcelain.errors import GitError
+from git_porcelain.errors import GitError, WorktreeRemoveRefused
 from git_porcelain.real import RealRepo
 
-from taskloop.adapters import procs
 from taskloop.adapters.git_base import classify
 from taskloop.adapters.git_ops import LandGit
-from taskloop.adapters.git_pool import pool_error
+from taskloop.adapters.git_pool import UnpinnedRepo, pool_error, pool_read_error
 from taskloop.contracts.gitfacts import ConfigEntry, GitOutcome, GrepHit, LogRow, Pick, Ref, StatusRow, TreeEntry
 from taskloop.contracts.slots import Checkout, GitReadFailure, MissingRevision, NotARepo, NotAWorktree, RefRace, SlotGitError
 
@@ -38,7 +38,14 @@ class RealGit(LandGit):
         self._run(d, "rebase", "--abort")
 
     def dirty(self, d: str) -> bool:
-        return bool(self.status(d))
+        try:
+            return self._pool(d).worktree(Path(d).absolute()).dirty().raw
+        except GitError as err:
+            raise pool_read_error(err) from err
+
+    def _pool(self, d: str) -> RealRepo:
+        repo = RealRepo if self.pinned else UnpinnedRepo
+        return repo(Path(d).absolute(), env=self.git_env(d), memoize=False, sleep=self.sleep)
 
     def branch(self, d: str) -> str:
         return self._ask(d, "symbolic-ref", "--short", "-q", "HEAD", missing=True)
@@ -68,36 +75,30 @@ class RealGit(LandGit):
         self._run(d, "clean", "-fdxq" if ignored else "-fdq", *[x for k in keep for x in ("-e", k)])
 
     def checkouts(self, d: str) -> list[Checkout]:
-        # Porcelain v0.8.0 lists without -z: quoted paths and truncated records do not round-trip.
-        out = self._read(d, "worktree", "list", "--porcelain", "-z")
-        if out and not out.endswith("\0\0"):
-            raise GitReadFailure("git worktree list: incomplete checkout record")
-        found = []
-        for i, block in enumerate(out.split("\0\0")[:-1]):
-            lines = block.split("\0")
-            path = next((ln[9:] for ln in lines if ln.startswith("worktree ")), "")
-            branch = next((ln[18:] for ln in lines if ln.startswith("branch refs/heads/")), "")
-            if not path:
-                raise GitReadFailure("git worktree list: missing checkout path")
-            found.append(Checkout(path=path, branch=branch, main=i == 0))
-        return found
+        try:
+            return [Checkout(path=str(w.path), branch=w.branch or "", main=w.is_main) for w in self._pool(d).worktrees()]
+        except GitError as err:
+            raise pool_read_error(err) from err
 
     def remove_worktree(self, repo: str, path: str) -> bool:
-        # drop_worktree silently accepts absent paths and also prunes; this port reports a second removal as False.
-        return self._run(repo, "worktree", "remove", path).returncode == 0
+        try:
+            self._pool(repo).drop_worktree(Path(path), missing_ok=False)
+        except GitError:
+            return False
+        return True
 
     def remove_worktree_why(self, repo: str, path: str) -> str:
-        # Callers display the last stderr line verbatim; drop_worktree exposes a prefixed, truncated exception instead.
-        r = self._run(repo, "worktree", "remove", path)
-        return "" if r.returncode == 0 else (r.stderr.strip().splitlines() or ["git worktree remove failed"])[-1]
+        try:
+            self._pool(repo).drop_worktree(Path(path), missing_ok=False)
+        except WorktreeRemoveRefused as err:
+            return err.reason
+        except GitError as err:
+            raise pool_error(err) from err
+        return ""
 
     def add_worktree(self, repo: str, path: str, ref: str) -> None:
-        if not self.pinned:
-            # RealRepo always pins pool operations; keep the explicitly unpinned port's behavior.
-            self._must(repo, "worktree", "add", "--detach", path, ref)
-            return
         try:
-            RealRepo(Path(repo).absolute(), env=self.git_env(repo), memoize=False, sleep=self.sleep).add_worktree(Path(path), ref)
+            self._pool(repo).add_worktree(Path(path), ref)
         except GitError as err:
             raise pool_error(err) from err
 
@@ -319,27 +320,26 @@ class RealGit(LandGit):
         return out
 
     def worktree_state(self, d: str) -> bytes | None:
-        # Tree-hash memo input, not pool state: the port requires the exact v2 --branch bytes, including invalid UTF-8.
-        r = procs.run_bytes(
-            ["git", "--no-optional-locks", "status", "--porcelain=v2", "--branch", "-z", "--untracked-files=all"],
-            cwd=d,
-            env=self.git_env(d),
-        )
-        return r.stdout if r.returncode == 0 else None
+        try:
+            return self._pool(d).worktree_state(Path(d).absolute())
+        except GitError:
+            return None
 
     def diff(self, d: str, a: str, b: str, exclude: list[str] | None = None, stat: bool = False) -> str:
         spec = ["--", ".", *(":(exclude,literal)" + p for p in exclude)] if exclude else []
         return self._read(d, "diff", *(["--stat"] if stat else []), a, b, *spec).strip()
 
     def add_worktree_force(self, repo: str, path: str, ref: str) -> None:
-        # Porcelain v0.8.0 add_worktree has no force option (needed to reuse stale registrations).
-        self._must(repo, "worktree", "add", "--detach", "--force", path, ref)
+        try:
+            self._pool(repo).add_worktree(Path(path), ref, force=True)
+        except GitError as err:
+            raise pool_error(err) from err
 
     def remove_worktree_force(self, repo: str, path: str) -> None:
-        # drop_worktree also prunes unrelated registrations; retain the remove-only operation.
-        self._run(repo, "worktree", "remove", "--force", path)
+        with suppress(GitError):
+            self._pool(repo).drop_worktree(Path(path), force=True, missing_ok=False)
 
     def prune_worktrees(self, repo: str) -> None:
-        # Porcelain v0.8.0 has no standalone prune method on Repo or RealRepo.
-        self._run(repo, "worktree", "prune")
+        with suppress(GitError):
+            self._pool(repo).prune_worktrees()
 

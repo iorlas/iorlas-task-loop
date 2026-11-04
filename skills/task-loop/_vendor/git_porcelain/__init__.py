@@ -49,7 +49,16 @@ from git_porcelain.api import (
     Worktree,
     WorktreeInfo,
 )
-from git_porcelain.errors import BranchPinned, GitError, GitUnavailable, IndexLocked, MissingRevision, NotARepo, RefRace
+from git_porcelain.errors import (
+    BranchPinned,
+    GitError,
+    GitUnavailable,
+    IndexLocked,
+    MissingRevision,
+    NotARepo,
+    RefRace,
+    WorktreeRemoveRefused,
+)
 from git_porcelain.history import (
     Commit,
     Identity,
@@ -141,6 +150,7 @@ __all__ = [
     "UpToDate",
     "Worktree",
     "WorktreeInfo",
+    "WorktreeRemoveRefused",
     "branches",
     "check_ignore",
     "classify_remote_failure",

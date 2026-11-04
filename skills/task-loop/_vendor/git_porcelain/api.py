@@ -6,13 +6,15 @@ runs the git binary; ``FakeRepo`` (``git_porcelain.testing``) models the same do
 contract suite runs the same scenarios against both, so the fake cannot drift.
 
 Failure has two classes. An expected condition (nothing to commit, a rebase conflict, a rejected push) is a
-variant of the result union, ``match``-able. Infrastructure (git missing, ``index.lock`` held, no identity, not
+variant of the result union, ``match``-able; worktree removal instead raises ``WorktreeRemoveRefused``.
+Infrastructure (git missing, ``index.lock`` held, no identity, not
 a repository, a timeout, a revision that does not resolve) raises :class:`GitUnavailable`; no operation returns
 an empty string for a failure. A precondition the caller must check first (a rebase on a tracked-dirty tree)
 raises ``ValueError``: a programming error, not a git outcome.
 
-Nothing git-specific crosses the seam: callers pass shas and plain ref names, and get records back; argv,
-exit codes, stderr text, ``GIT_*`` variables and ``.git`` layout stay inside the implementations.
+Callers pass shas and plain ref names and get records back; argv, exit codes, ``GIT_*`` variables and ``.git``
+layout stay inside the implementations. ``worktree_state`` deliberately exposes porcelain bytes for signatures;
+``WorktreeRemoveRefused.reason`` exposes the diagnostic a caller can show when removal is refused.
 """
 
 from __future__ import annotations
@@ -341,12 +343,23 @@ class Repo(Protocol):
         """Every worktree, the main one first; ``dirty`` is filled only with ``with_dirty``."""
         ...
 
-    def add_worktree(self, path: Path, rev: str) -> Worktree:
-        """A new linked worktree at ``path``, detached at ``rev``."""
+    def add_worktree(self, path: Path, rev: str, *, force: bool = False) -> Worktree:
+        """A linked worktree detached at ``rev``; ``force`` permits a registered but missing checkout."""
         ...
 
-    def drop_worktree(self, path: Path, *, force: bool = False) -> None:
-        """Remove a worktree (a dirty one needs ``force``; one whose folder is gone is only forgotten), then prune."""
+    def drop_worktree(self, path: Path, *, force: bool = False, missing_ok: bool = True) -> None:
+        """Remove a worktree, raising ``WorktreeRemoveRefused`` with git's reason on refusal.
+        By default absent folders are accepted and registrations pruned. ``missing_ok=False``
+        requires a registered linked worktree and never prunes other registrations."""
+        ...
+
+    def prune_worktrees(self) -> None:
+        """Prune stale worktree registrations without removing live checkouts."""
+        ...
+
+    def worktree_state(self, path: Path) -> bytes | None:
+        """Raw ``--no-optional-locks status --porcelain=v2 --branch -z --untracked-files=all``.
+        Never memoized; None when the path is not a worktree."""
         ...
 
     def exclude_locally(self, patterns: Sequence[str]) -> None:

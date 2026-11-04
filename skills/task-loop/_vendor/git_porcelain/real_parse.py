@@ -1,4 +1,4 @@
-"""Parsers for the formats RealGit reads: ``status v2 -z``, ``worktree list --porcelain``, a ``\\x1f/\\x1e`` log,
+"""Parsers for the formats RealGit reads: ``status v2 -z``, ``worktree list --porcelain -z``, a ``\\x1f/\\x1e`` log,
 ``diff --raw --numstat -z``, ``ls-tree -z``, ``push --porcelain`` and ``config --show-origin``. Pure functions on text."""
 
 from __future__ import annotations
@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Final
 
 from git_porcelain.api import Change, Sha
+from git_porcelain.errors import GitUnavailable
 
 __all__ = [
     "PushLine",
@@ -66,15 +67,28 @@ def parse_status(text: str) -> StatusV2:
 
 
 def parse_worktrees(text: str) -> list[tuple[Path, str | None, str | None]]:
-    """``worktree list --porcelain`` blocks as ``(path, head, branch)``; the first is the main checkout."""
+    """Complete ``worktree list --porcelain -z`` records; paths are literal, never quoted."""
+    if not text or not text.endswith("\0\0"):
+        msg = "git worktree list: incomplete record"
+        raise GitUnavailable(msg)
     found: list[tuple[Path, str | None, str | None]] = []
-    for block in text.split("\n\n"):
-        fields = dict(line.partition(" ")[::2] for line in block.splitlines() if line)
-        if "worktree" not in fields:
-            continue
+    for block in text[:-2].split("\0\0"):
+        records = block.split("\0")
+        fields = dict(line.partition(" ")[::2] for line in records)
+        bare = "bare" in fields
+        if (
+            not records[0].startswith("worktree ")
+            or not fields.get("worktree")
+            or len(fields) != len(records)
+            or (not bare and not re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", fields.get("HEAD", "")))
+            or (not bare and (("branch" in fields) == ("detached" in fields)))
+            or ("branch" in fields and not fields["branch"].startswith("refs/heads/"))
+        ):
+            msg = "git worktree list: malformed or incomplete record"
+            raise GitUnavailable(msg)
         sha = fields.get("HEAD", _UNBORN)
         ref = fields.get("branch")
-        found.append((Path(fields["worktree"]), None if sha == _UNBORN else sha, ref.removeprefix("refs/heads/") if ref else None))
+        found.append((Path(fields["worktree"]), None if not sha.strip("0") else sha, ref.removeprefix("refs/heads/") if ref else None))
     return found
 
 

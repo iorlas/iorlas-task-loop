@@ -18,8 +18,8 @@ class GitReadFailures(unittest.TestCase):
         self.git = RealGit(Env(), pinned=False)
 
     def test_failed_decision_reads_never_answer_clean_empty_or_missing(self):
-        calls = [("dirty", ()), ("status", ()), ("branch", ()), ("has_branch", ("task/a",)),
-                 ("rev_parse", ("HEAD",)), ("has_commit", ("abc",)), ("checkouts", ()),
+        calls = [("status", ()), ("branch", ()), ("has_branch", ("task/a",)),
+                 ("rev_parse", ("HEAD",)), ("has_commit", ("abc",)),
                  ("merge_base", ("a", "b")), ("is_ancestor", ("a", "b")), ("git_dir", ()),
                  ("rebasing", ()), ("changed_paths", ("a", "b")), ("diff_entries", ("a", "b")),
                  ("diff", ("a", "b")), ("profile_diff", ("a", "b")), ("unmerged", ()), ("staged", ()),
@@ -42,7 +42,7 @@ class GitReadFailures(unittest.TestCase):
             self.assertEqual(self.git.merge_base("/checkout", "a", "b"), "")
             self.assertFalse(self.git.is_ancestor("/checkout", "a", "b"))
             self.assertTrue(self.git.staged("/checkout"))
-            for name, args in (("dirty", ()), ("changed_paths", ("a", "b"))):
+            for name, args in (("status", ()), ("changed_paths", ("a", "b"))):
                 with self.subTest(name=name), self.assertRaises(GitReadFailure):
                     getattr(self.git, name)("/checkout", *args)
 
@@ -56,7 +56,7 @@ class GitReadFailures(unittest.TestCase):
     def test_read_process_failures_are_typed(self):
         for error in (OSError("unavailable"), subprocess.TimeoutExpired("git", 1)):
             with mock.patch.object(self.git, "_run", side_effect=error), self.assertRaises(GitReadFailure):
-                self.git.dirty("/checkout")
+                self.git.status("/checkout")
 
     def test_failed_queries_are_not_memoized(self):
         self.git.pinned = True
@@ -85,7 +85,6 @@ class GitReadFailures(unittest.TestCase):
                                   ("diff_entries", ("a", "b"), "M\0"),
                                   ("diff_entries", ("a", "b"), "Mystery\0path\0"),
                                   ("changed_paths", ("a", "b"), "path\0\0"),
-                                  ("checkouts", (), "worktree /checkout\0"),
                                   ("status", (), "?? incomplete")):
             with (self.subTest(method=method),
                   mock.patch.object(self.git, "_run", return_value=subprocess.CompletedProcess([], 0, out, "")),

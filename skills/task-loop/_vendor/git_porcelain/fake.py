@@ -33,6 +33,7 @@ from git_porcelain.fake_diff import grep_files
 from git_porcelain.fake_ops import branch_ref, hard_to
 from git_porcelain.fake_plumbing import FakePlumbing
 from git_porcelain.fake_store import CheckoutState, Hooks, RepoState
+from git_porcelain.fake_worktrees import worktree_state
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -185,17 +186,26 @@ class FakeRepo:
         self._anchor()
         return read.worktrees(self._state, with_dirty=with_dirty)
 
-    def add_worktree(self, path: Path, rev: str) -> FakeWorktree:
+    def add_worktree(self, path: Path, rev: str, *, force: bool = False) -> FakeWorktree:
         wt = self._anchor()
-        flow.worktree_add(self._state, path, self._state.commit_named(rev, wt))
+        flow.worktree_add(self._state, path, self._state.commit_named(rev, wt), force=force)
         return FakeWorktree(self, path)
 
-    def drop_worktree(self, path: Path, *, force: bool = False) -> None:
+    def drop_worktree(self, path: Path, *, force: bool = False, missing_ok: bool = True) -> None:
         self._anchor()
-        if not (target := self._state.worktrees.get(path)) or not target.missing:
+        target = self._state.worktrees.get(path)
+        if not missing_ok or (target is not None and not target.missing):
             flow.worktree_remove(self._state, path, force=force)
+        if missing_ok:
+            self.prune_worktrees()
+
+    def prune_worktrees(self) -> None:
+        self._anchor()
         for gone in [p for p, w in self._state.worktrees.items() if w.missing and not w.main]:
             del self._state.worktrees[gone]
+
+    def worktree_state(self, path: Path) -> bytes | None:
+        return worktree_state(self._state, path)
 
     def exclude_locally(self, patterns: Sequence[str]) -> None:
         self._anchor()

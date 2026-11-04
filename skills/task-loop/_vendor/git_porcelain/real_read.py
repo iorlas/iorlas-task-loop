@@ -144,7 +144,7 @@ def tree(repo: RealRepo, rev: str) -> Tree | None:
 
 def worktrees(repo: RealRepo, *, with_dirty: bool) -> tuple[WorktreeInfo, ...]:
     def compute() -> tuple[WorktreeInfo, ...]:
-        rows = real_parse.parse_worktrees(repo.run(repo.path, "worktree", "list", "--porcelain").out)
+        rows = real_parse.parse_worktrees(repo.run(repo.path, "worktree", "list", "--porcelain", "-z").out)
         return tuple(WorktreeInfo(path, Sha(head) if head else None, branch, i == 0, None) for i, (path, head, branch) in enumerate(rows))
 
     found = repo.memo(("worktrees",), compute, forever=False)

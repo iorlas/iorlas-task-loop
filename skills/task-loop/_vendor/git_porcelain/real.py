@@ -15,7 +15,7 @@ import subprocess
 import time
 from typing import TYPE_CHECKING, TypeVar
 
-from git_porcelain import real_env, real_read, real_write
+from git_porcelain import real_env, real_read, real_worktrees, real_write
 from git_porcelain.errors import GitUnavailable
 from git_porcelain.real_done import Done, unavailable
 
@@ -161,11 +161,17 @@ class RealRepo:
     def worktrees(self, *, with_dirty: bool = False) -> tuple[WorktreeInfo, ...]:
         return real_read.worktrees(self, with_dirty=with_dirty)
 
-    def add_worktree(self, path: Path, rev: str) -> RealWorktree:
-        return real_write.add_worktree(self, path, rev)
+    def add_worktree(self, path: Path, rev: str, *, force: bool = False) -> RealWorktree:
+        return real_worktrees.add_worktree(self, path, rev, force=force)
 
-    def drop_worktree(self, path: Path, *, force: bool = False) -> None:
-        real_write.drop_worktree(self, path, force=force)
+    def drop_worktree(self, path: Path, *, force: bool = False, missing_ok: bool = True) -> None:
+        real_worktrees.drop_worktree(self, path, force=force, missing_ok=missing_ok)
+
+    def prune_worktrees(self) -> None:
+        real_worktrees.prune_worktrees(self)
+
+    def worktree_state(self, path: Path) -> bytes | None:
+        return real_worktrees.worktree_state(self, path)
 
     def exclude_locally(self, patterns: Sequence[str]) -> None:
         real_write.exclude_locally(self, patterns)

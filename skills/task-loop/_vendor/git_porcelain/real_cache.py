@@ -17,7 +17,7 @@ import hashlib
 import os
 import re
 import stat
-from typing import TYPE_CHECKING, Final, TypeVar
+from typing import TYPE_CHECKING, Final
 
 from git_porcelain import real_env
 
@@ -29,7 +29,6 @@ if TYPE_CHECKING:
 
 __all__ = ["heads_files", "is_sha", "refs_memo", "rev_files", "tree_key", "validated"]
 
-_T = TypeVar("_T")
 _SHA: Final = re.compile(r"[0-9a-f]{40}")
 _BAD_NAME: Final = re.compile(r"[~^@:{}*?\\\[\s]|\.\.|\.lock$|^-|^[0-9a-f]{4,40}$")
 _BIG: Final = 64 * 1024 * 1024
@@ -94,14 +93,14 @@ def heads_files(repo: RealRepo) -> list[Path] | None:
     return found
 
 
-def refs_memo(repo: RealRepo, key: object, revs: Iterable[str], compute: Callable[[], _T]) -> _T:
+def refs_memo[T](repo: RealRepo, key: object, revs: Iterable[str], compute: Callable[[], T]) -> T:
     """``compute()`` once per state of the ref files behind ``revs``; recomputed when any of them changed."""
     dirs = _dirs(repo)
     files = None if dirs is None else rev_files(dirs[0], dirs[1], revs)
     return validated(repo, key, files, compute)
 
 
-def validated(repo: RealRepo, key: object, files: list[Path] | None, compute: Callable[[], _T]) -> _T:
+def validated[T](repo: RealRepo, key: object, files: list[Path] | None, compute: Callable[[], T]) -> T:
     if not repo.memoize or files is None:
         return compute()
     sigs = tuple(sig(f) for f in files)  # taken before git runs: a change during it shows next time

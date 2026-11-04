@@ -61,7 +61,7 @@ class FakePlumbing:
         # A zero old oid means the ref must be absent, as for update-ref.
         if current != (None if set(oid) == {"0"} else oid):
             msg = f"cannot lock ref '{ref}': incorrect old value"
-            raise RefRace(msg, retryable=True)
+            raise RefRace(msg)
         if target == "HEAD":
             wt.detached = None
         else:

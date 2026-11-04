@@ -285,7 +285,7 @@ class GatePlans(te.EngineTest):
         self.setup_plan()
         self.eng.cfg = self.eng.cfg.replace(plan_cmd=["python", "tools/gate_plan.py", "steps", "--json"])
         with mock.patch("taskloop.app.checks.gateplan.shutil.which", side_effect=lambda word, **kw:
-                        "/bin/python3" if word == "python3" else None):
+                        {"python3": "/bin/python3", "git": "/usr/bin/git"}.get(word)):
             self.run_gate()
         self.assertEqual(self.calls[0][0][:4], ["python3", "tools/gate_plan.py", "steps", "--json"])
 
@@ -299,7 +299,8 @@ class GatePlans(te.EngineTest):
 
     def test_missing_executable_is_one_config_note_without_spawning(self):
         self.setup_plan()
-        with mock.patch("taskloop.app.checks.gateplan.shutil.which", return_value=None), \
+        with mock.patch("taskloop.app.checks.gateplan.shutil.which",
+                           side_effect=lambda word, **kw: "/usr/bin/git" if word == "git" else None), \
                 mock.patch.object(self.eng.log, "note") as note:
             for _ in range(3):
                 with self.assertRaisesRegex(ConfigError, "engine.plan_cmd.*repo-plan"):
