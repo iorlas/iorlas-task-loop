@@ -2,11 +2,12 @@
 loop's files, the slots and the run rows alike."""
 
 from support import homes
+
 from taskloop.app.launch import loop as wloop
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts.ids import loop_key
-from taskloop.contracts.loop import LoopState
 from taskloop.contracts.locator import RunLocator
+from taskloop.contracts.loop import LoopState
 
 
 class TestRepoKey:
