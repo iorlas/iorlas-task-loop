@@ -4,7 +4,11 @@ words (commit, push, rebase --continue), and the rest of the staged-work and bra
 from pathlib import Path
 from typing import Self
 
+from git_porcelain.errors import GitError
+from git_porcelain.real import RealRepo
+
 from taskloop.adapters.git_base import GitBase, classify
+from taskloop.adapters.git_pool import pool_error, pool_read_error
 from taskloop.contracts.gitfacts import DiffEntry, GitOutcome
 from taskloop.contracts.slots import GitReadFailure, MissingRevision
 
@@ -12,6 +16,9 @@ PUSH_WALL_S = 3600.0  # a push (or an LFS upload) that has not ended after this 
 
 
 class LandGit(GitBase):
+    def _pool(self, d: str) -> RealRepo:
+        raise NotImplementedError
+
     def profile_diff(self, d: str, base: str, tip: str) -> str:
         """Preserve the complete patch text used by the owner's audit and the pre-push judge."""
         return self._read(d, "diff", "--no-ext-diff", "--no-textconv", base, tip, "--", ".task-loop.json")
@@ -21,11 +28,20 @@ class LandGit(GitBase):
         return type(self)(self.env, self.sleep, pinned=False)
 
     def count(self, d: str, include: list[str], exclude: list[str] | None = None) -> int:
-        out = self._must(d, "rev-list", "--count", *include, *(f"^{x}" for x in exclude or []))
-        return int(out) if out.isdigit() else 0
+        if not include:
+            # history([]) defaults to HEAD; rev-list has no default positive revision.
+            out = self._must(d, "rev-list", "--count", *(f"^{x}" for x in exclude or []))
+            return int(out) if out.isdigit() else 0
+        try:
+            return len(self._pool(d).history(include, not_on=exclude or []))
+        except GitError as err:
+            raise pool_error(err) from err
 
     def unmerged(self, d: str) -> list[str]:
-        return self._paths(d, "diff", "--name-only", "-z", "--diff-filter=U")
+        try:
+            return list(self._pool(d).worktree(Path(d).absolute()).unmerged())
+        except GitError as err:
+            raise pool_read_error(err) from err
 
     def changed_paths(self, d: str, a: str, b: str, *, required: bool = False) -> list[str]:
         return self._diff_paths(d, a, b, "--name-only", required=required)
@@ -94,17 +110,26 @@ class LandGit(GitBase):
             raise classify(r.stderr or r.stdout)
 
     def rename_branch(self, d: str, old: str, new: str) -> None:
-        self._must(d, "branch", "-m", old, new)
+        try:
+            self._pool(d).rename_branch(old, new)
+        except GitError as err:
+            raise pool_error(err) from err
 
     def try_commit(self, d: str, message: str, verify: bool = True, allow_empty: bool = False) -> GitOutcome:
+        # record() has no complete stdout+stderr for hook refusals, empty index, or successful hooks.
         opts = [*([] if verify else ["--no-verify"]), *(["--allow-empty"] if allow_empty else [])]
         return self._try(d, "commit", "-q", *opts, "-m", message)
 
     def amend(self, d: str) -> None:
+        # record(amend) replaces unborn-HEAD refusal with ValueError and truncates other diagnostics.
         self._must(d, "commit", "-q", "--no-verify", "--amend", "--no-edit")
 
     def rebase_continue(self, d: str) -> GitOutcome:
-        return self._try(d, "-c", "core.editor=true", "rebase", "--continue")
+        try:
+            result = self._pool(d).worktree(Path(d).absolute()).continue_rebase()
+        except GitError as err:
+            raise pool_error(err) from err
+        return GitOutcome(ok=result.ok, output=result.output)
 
     def push_lease(self, d: str, remote: str, refspec: str) -> GitOutcome:
         return self._try(d, "push", "--force-with-lease", remote, refspec, timeout=PUSH_WALL_S)

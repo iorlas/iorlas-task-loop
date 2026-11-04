@@ -22,7 +22,8 @@ def cmd_rev_parse(c: Ctx) -> int:
         sha = r.resolve(name)
         if sha is None:
             if "--verify" in fl:
-                raise Fail("" if "-q" in fl else "fatal: Needed a single revision", 1 if "-q" in fl else 128)
+                quiet = "-q" in fl or "--quiet" in fl
+                raise Fail("" if quiet else "fatal: Needed a single revision", 1 if quiet else 128)
             raise Fail(f"fatal: ambiguous argument '{name}': unknown revision or path not in the working tree.", 128)
         c.say(sha)
     return 0
@@ -32,7 +33,8 @@ def cmd_symbolic_ref(c: Ctx) -> int:
     fl, _ = flags(c.args)
     b = c.r.head_ref()
     if not b:
-        raise Fail("" if "-q" in fl else "fatal: ref HEAD is not a symbolic ref", 1 if "-q" in fl else 128)
+        quiet = "-q" in fl or "--quiet" in fl
+        raise Fail("" if quiet else "fatal: ref HEAD is not a symbolic ref", 1 if quiet else 128)
     c.say(b if "--short" in fl else "refs/heads/" + b)
     return 0
 
@@ -61,7 +63,9 @@ def cmd_log(c: Ctx) -> int:
     for cm in found[:limit]:
         subject = cm.msg.splitlines()[0] if cm.msg else ""
         if fmt is not None:
-            c.say(fmt.replace("%x00", "\0").replace("%H", cm.sha).replace("%ct", str(cm.seq)).replace("%s", subject))
+            body = cm.msg.partition("\n\n")[2]
+            rendered = re.sub(r"%x([0-9a-fA-F]{2})", lambda m: chr(int(m[1], 16)), fmt)
+            c.say(rendered.replace("%H", cm.sha).replace("%ct", str(cm.seq)).replace("%s", subject).replace("%b", body))
         else:
             c.say(f"{cm.sha[:7]} {cm.msg}" if "--oneline" in fl else subject)
     return 0
@@ -69,6 +73,12 @@ def cmd_log(c: Ctx) -> int:
 
 def cmd_rev_list(c: Ctx) -> int:
     fl, rest = flags(c.args)
+    if "--left-right" in fl and "--count" in fl:
+        left, _, right = rest[0].partition("...")
+        a, _ = c.revs([left])
+        b, _ = c.revs([right])
+        c.say(f"{len(walk(a, b))}\t{len(walk(b, a))}")
+        return 0
     inc, exc = c.revs(rest)
     found = walk(inc, exc)
     if "--count" in fl:
@@ -76,6 +86,20 @@ def cmd_rev_list(c: Ctx) -> int:
     else:
         for cm in found:
             c.say(cm.sha)
+    return 0
+
+
+def cmd_cat_file(c: Ctx) -> int:
+    """Object existence and batch absence probes used by fail-loud merge-base reads."""
+    fl, rest = flags(c.args)
+    if "--batch-check" in fl:
+        for name in c.stdin.decode().splitlines():
+            sha = c.r.resolve(name)
+            c.say(f"{sha} commit 0" if sha else f"{name} missing")
+        return 0
+    sha = c.r.resolve(rest[0])
+    if sha is None:
+        raise Fail(f"fatal: Not a valid object name {rest[0]}", 128)
     return 0
 
 

@@ -3,9 +3,9 @@ a failure becomes one of the typed SlotGitErrors (BranchPinned, DirtyTree, RefRa
 import os
 from contextlib import suppress
 from pathlib import Path
-from typing import Literal
+from typing import Literal, override
 
-from git_porcelain.api import BranchHeld, Recorded
+from git_porcelain.api import BranchHeld, Recorded, Sha
 from git_porcelain.errors import GitError, WorktreeRemoveRefused
 from git_porcelain.real import RealRepo
 
@@ -31,11 +31,16 @@ class RealGit(LandGit):
             self.sleep(0.1 * (i + 1))
 
     def rebasing(self, d: str) -> bool:
-        gd = self._ask(d, "rev-parse", "--git-dir")
-        return bool(gd) and any(os.path.isdir(os.path.join(d, gd, x)) for x in ("rebase-merge", "rebase-apply"))
+        try:
+            return self._pool(d).worktree(Path(d).absolute()).rebasing()
+        except GitError as err:
+            raise pool_read_error(err) from err
 
     def rebase_abort(self, d: str) -> None:
-        self._run(d, "rebase", "--abort")
+        try:
+            self._pool(d).worktree(Path(d).absolute()).abort_rebase(missing_ok=False)
+        except GitError as err:
+            raise pool_error(err) from err
 
     def dirty(self, d: str) -> bool:
         try:
@@ -43,6 +48,7 @@ class RealGit(LandGit):
         except GitError as err:
             raise pool_read_error(err) from err
 
+    @override
     def _pool(self, d: str) -> RealRepo:
         repo = RealRepo if self.pinned else UnpinnedRepo
         return repo(Path(d).absolute(), env=self.git_env(d), memoize=False, sleep=self.sleep)
@@ -56,7 +62,7 @@ class RealGit(LandGit):
     def commit_all(self, d: str, branch: str, message: str) -> None:
         if not self.branch(d):
             # take_branch(resume) accepts an existing branch; this must refuse to overwrite a checkpoint.
-            self._must(d, "checkout", "-b", branch)
+            self.checkout_new(d, branch, "HEAD")
         try:
             result = self._pool(d).worktree(Path(d).absolute()).record(message, paths="all", hooks=False)
         except GitError as err:
@@ -71,10 +77,16 @@ class RealGit(LandGit):
             raise pool_read_error(err) from err
 
     def checkout(self, d: str, branch: str) -> None:
-        self._must(d, "checkout", branch)
+        try:
+            self._pool(d).worktree(Path(d).absolute()).checkout(branch)
+        except GitError as err:
+            raise pool_error(err) from err
 
     def checkout_new(self, d: str, branch: str, start: str) -> None:
-        self._must(d, "checkout", "-b", branch, start)
+        try:
+            self._pool(d).worktree(Path(d).absolute()).checkout_new(branch, start)
+        except GitError as err:
+            raise pool_error(err) from err
 
     def checkout_detached(self, d: str, ref: str) -> None:
         try:
@@ -92,7 +104,12 @@ class RealGit(LandGit):
             raise BranchPinned(f"branch {branch!r} is already used by worktree at '{holder}'", holder)
 
     def clean(self, d: str, keep: list[str], ignored: bool = False) -> None:
-        self._run(d, "clean", "-fdxq" if ignored else "-fdq", *[x for k in keep for x in ("-e", k)])
+        try:
+            self._pool(d).worktree(Path(d).absolute()).clean(keep, ignored=ignored)
+        except GitError as err:
+            # The old best-effort clean ignored command refusal, but not invocation failure.
+            if not str(err).startswith("git clean exited "):
+                raise pool_error(err) from err
 
     def checkouts(self, d: str) -> list[Checkout]:
         try:
@@ -142,13 +159,19 @@ class RealGit(LandGit):
         return [Ref(name=name, oid=oid) for oid, _, name in (ln.partition("\t") for ln in out.splitlines())]
 
     def cherry(self, d: str, upstream: str, head: str) -> list[Pick]:
-        out = self._must(d, "cherry", upstream, head)
-        return [Pick(oid=ln[2:], upstream=ln[0] == "-") for ln in out.splitlines() if ln[:2] in ("+ ", "- ")]
+        try:
+            return [Pick(oid=row.oid, upstream=row.upstream) for row in self._pool(d).cherry(upstream, head)]
+        except GitError as err:
+            raise pool_error(err) from err
 
     def merged(self, d: str, into: str) -> list[Ref]:
-        out = self._read(d, "branch", "--merged", into, "--format=%(objectname) %(refname:short)")
-        rows = [ln.partition(" ") for ln in out.splitlines()]
-        return [Ref(name=name, oid=oid) for oid, _, name in rows if not name.startswith("(")]
+        try:
+            repo = self._pool(d)
+            repo.relate(into, into)  # Validate even when no local branches exist.
+            return [Ref(name=name, oid=oid) for name, oid in repo.branches()
+                    if not name.startswith("(") and repo.relate(oid, into).ahead == 0]
+        except GitError as err:
+            raise pool_read_error(err) from err
 
     def merge_base(self, d: str, a: str, b: str) -> str:
         try:
@@ -169,13 +192,11 @@ class RealGit(LandGit):
         return self._ask(d, "rev-parse", "--verify", "-q", rev, missing=True)
 
     def log(self, d: str, include: list[str], exclude: list[str] | None = None, limit: int = 0, grep: str = "") -> list[LogRow]:
-        args = ["log", "--format=%H%x00%ct%x00%s", *include, *(["--not", *exclude] if exclude else [])]
-        if grep:
-            args += ["--fixed-strings", "--grep=" + grep]
-        elif limit:
-            args += ["-n", str(limit)]
-        rows = [ln.split("\0", 2) for ln in self._must(d, *args).splitlines()]
-        found = [LogRow(oid=o, time=int(t) if t.isdigit() else 0, subject=s) for o, t, s in rows if grep in s]
+        try:
+            rows = self._pool(d).history(include, not_on=exclude or [], limit=limit if limit and not grep else None)
+        except GitError as err:
+            raise pool_error(err) from err
+        found = [LogRow(oid=row.sha, time=row.ts, subject=row.subject) for row in rows if grep in row.subject]
         return found[:limit] if limit else found
 
     def ls_tree(self, d: str, rev: str, *paths: str, recursive: bool = False) -> list[TreeEntry]:
@@ -229,17 +250,24 @@ class RealGit(LandGit):
     # -- writes ----------------------------------------------------------------------------------------------------------------
 
     def rebase(self, d: str, onto: str, update_refs: bool = True) -> GitOutcome:
+        # rebase() lacks quiet mode; rebase_onto() skips Git or raises before it can report dirty/paused refusals.
         opts = [] if update_refs else ["-c", "rebase.updateRefs=false"]
         return self._try(d, *opts, "rebase", "-q", onto)
 
     def reset(self, d: str, rev: str, mode: Literal["soft", "mixed", "hard"] = "mixed") -> None:
-        self._must(d, "reset", "-q", "--" + mode, rev)
+        try:
+            self._pool(d).worktree(Path(d).absolute()).reset(rev, mode=mode)
+        except GitError as err:
+            raise pool_error(err) from err
 
     def tag(self, d: str, name: str, rev: str = "HEAD") -> None:
         self._must(d, "tag", name, rev)
 
     def delete_branch_at(self, d: str, branch: str, oid: str) -> None:
-        self._must(d, "update-ref", "-d", "refs/heads/" + branch, oid)
+        try:
+            self._pool(d).delete_branch(branch, expected=Sha(oid))
+        except GitError as err:
+            raise pool_error(err) from err
 
     def delete_remote_at(self, d: str, remote: str, ref: str, oid: str) -> None:
         try:
@@ -251,7 +279,10 @@ class RealGit(LandGit):
                 raise
 
     def checkout_force(self, d: str, branch: str, start: str) -> None:
-        self._must(d, "checkout", "-q", "-f", "-B", branch, start)
+        try:
+            self._pool(d).worktree(Path(d).absolute()).checkout_force(branch, start)
+        except GitError as err:
+            raise pool_error(err) from err
 
     def fetch_ref(self, d: str, source: str, ref: str) -> None:
         self._must(d, "fetch", "-q", source, ref)
@@ -260,9 +291,11 @@ class RealGit(LandGit):
         return self._ask(d, "remote", "get-url", remote)
 
     def merge_ff(self, d: str, rev: str) -> None:
+        # The path-based porcelain helper cannot carry our injected environment and checkout pin.
         self._must(d, "merge", "-q", "--ff-only", rev)
 
     def commit_tracked(self, d: str, message: str) -> None:
+        # record(tracked) loses complete refusal output and NothingToRecord's original diagnostic.
         self._must(d, "commit", "-q", "-a", "-m", message)
 
     def pull_rebase(self, d: str, remote: str, branch: str) -> None:
@@ -273,6 +306,7 @@ class RealGit(LandGit):
         self._must(d, "add", "--", *paths)
 
     def commit_staged(self, d: str, message: str) -> None:
+        # record(staged) truncates hook errors and replaces empty-index diagnostics with a marker.
         self._must(d, "commit", "-q", "-m", message)
 
     # -- reads of files, config and the work tree --------------------------------------------------------------------------------

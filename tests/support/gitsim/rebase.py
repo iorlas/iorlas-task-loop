@@ -116,4 +116,4 @@ def cmd_rebase(c: Ctx) -> int:
         return cont(c)
     if "--abort" in fl:
         return abort(c)
-    return start(c, rest[0])
+    return start(c, next(arg for arg in rest if arg != "--"))

@@ -8,6 +8,10 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
+# isort: split
+from git_porcelain.api import Relation
+from git_porcelain.real import Done, unavailable
+
 from taskloop.adapters.git import RealGit
 from taskloop.contracts.env import Env
 from taskloop.contracts.slots import GitReadFailure
@@ -28,12 +32,18 @@ class GitReadFailures(unittest.TestCase):
             for code, diagnostic in ((128, "fatal: unreadable checkout"), (1, "Verrouillage impossible")):
                 with (self.subTest(name=name, code=code),
                       mock.patch.object(self.git, "_run", return_value=subprocess.CompletedProcess([], code, "", diagnostic)),
+                      mock.patch("git_porcelain.real.RealRepo.run",
+                                 side_effect=unavailable(("read",), Done(code, b"", diagnostic))),
                       self.assertRaises(GitReadFailure)):
                     getattr(self.git, name)("/checkout", *args)
 
     def test_expected_absence_is_command_specific(self):
         absent = subprocess.CompletedProcess([], 1, "", "")
-        with mock.patch.object(self.git, "_run", return_value=absent):
+        with (mock.patch.object(self.git, "_run", return_value=absent),
+              mock.patch.object(self.git, "_pool") as pool):
+            pool.return_value.worktree.return_value.branch.return_value = None
+            pool.return_value.merge_base.return_value = None
+            pool.return_value.relate.return_value = Relation(None, 1, 1)
             self.assertEqual(self.git.branch("/checkout"), "")
             self.assertEqual(self.git.symbolic_ref("/checkout", "refs/remotes/origin/HEAD"), "")
             self.assertEqual(self.git.rev_parse("/checkout", "missing"), "")
@@ -75,9 +85,10 @@ class GitReadFailures(unittest.TestCase):
         name = " leading\nname\n"
         for method, args in (("changed_paths", ("a", "b")), ("unmerged", ())):
             with (self.subTest(method=method),
-                  mock.patch.object(self.git, "_run", return_value=subprocess.CompletedProcess([], 0, name + "\0", "")) as run):
+                  mock.patch.object(self.git, "_run", return_value=subprocess.CompletedProcess([], 0, name + "\0", "")) as run,
+                  mock.patch("git_porcelain.real.RealRepo.run", return_value=Done(0, (name + "\0").encode(), "")) as pool_run):
                 self.assertEqual(getattr(self.git, method)("/checkout", *args), [name])
-                self.assertIn("-z", run.call_args.args)
+                self.assertIn("-z", (pool_run if method == "unmerged" else run).call_args.args)
 
     def test_truncated_or_unknown_diff_and_status_rows_are_faults(self):
         for method, args, out in (("diff_entries", ("a", "b"), "R100\0old\0"),

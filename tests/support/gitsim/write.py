@@ -151,6 +151,7 @@ def cmd_reset(c: Ctx) -> int:
 
 def cmd_branch(c: Ctx) -> int:
     fl, rest = flags(c.args)
+    rest = [arg for arg in rest if arg != "--"]
     r = c.r
     if "-m" in fl or "-M" in fl:
         old, new = (rest if len(rest) == 2 else [r.head_ref(), rest[0]])

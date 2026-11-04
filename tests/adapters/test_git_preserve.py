@@ -40,12 +40,12 @@ class GitPreserveTest(unittest.TestCase):
 
     def test_detached_record_still_requires_exclusive_branch_creation(self):
         with (mock.patch.object(self.git, "branch", return_value=""),
-              mock.patch.object(self.git, "_must") as create,
+              mock.patch.object(self.git, "checkout_new") as create,
               mock.patch.object(self.git, "_pool") as make):
             record = make.return_value.worktree.return_value.record
             record.return_value = Recorded(Sha("checkpoint"))
             self.git.commit_all("/pool", "wip/slot", "checkpoint")
-        create.assert_called_once_with("/pool", "checkout", "-b", "wip/slot")
+        create.assert_called_once_with("/pool", "wip/slot", "HEAD")
         record.assert_called_once_with("checkpoint", paths="all", hooks=False)
 
     def test_empty_record_remains_a_port_failure(self):
