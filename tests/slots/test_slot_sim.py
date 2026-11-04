@@ -3,7 +3,6 @@ at the head of the line, setup failures and stale claims run the real SlotPool, 
 processes; fixed seeds. After every step: a grantable slot never sits beside a live waiter beyond the watchdog's window, a slot is never
 held by a process that is not running beyond its window, and a slot set aside long enough has been flagged."""
 import random
-import unittest
 from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import patch
@@ -36,8 +35,8 @@ def iso(t: float) -> str:
 
 
 class Sim(Rig):
-    def setUp(self):
-        super().setUp()
+    def setup_method(self):
+        super().setup_method()
         self.bd.beads[BeadId("sl-s3")] = Bead(id=BeadId("sl-s3"), title="slot h s3", status="open", labels=["slot"])
         Path(self.env.dir_of("s3")).mkdir(parents=True)
         self.env.cfg = self.env.cfg.replace(count=3)
@@ -196,14 +195,10 @@ class Sim(Rig):
                     self.run_seed(seed)
                 except Broken as err:
                     failures.append(str(err))
-        self.assertTrue(failures)
-        self.assertTrue(any("free beside" in f for f in failures), failures)
-        self.assertTrue(any("does not run" in f for f in failures), failures)
+        assert failures
+        assert any("free beside" in f for f in failures), failures
+        assert any("does not run" in f for f in failures), failures
 
 
 for _seed in SEEDS:  # one test per seed: a failure names its seed, and each stays far inside the logic suite's time limit
     setattr(Sim, f"test_seed_{_seed}_holds_every_invariant", lambda self, seed=_seed: self.run_seed(seed))
-
-
-if __name__ == "__main__":
-    unittest.main()

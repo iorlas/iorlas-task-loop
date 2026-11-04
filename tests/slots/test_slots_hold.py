@@ -6,6 +6,7 @@ import threading
 import time
 from unittest import mock
 
+import pytest
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import slots as sl
 from support import tlbd
@@ -32,7 +33,7 @@ class SlotListLogic(Slots):
             sl.drop_ticket(self.repo, a)
             sl.drop_ticket(self.repo, b)
         rows = [x.split("\t") for x in out.splitlines() if x.startswith("WAITING")]
-        self.assertEqual([(r[1], r[2], r[4]) for r in rows], [("1", "P0", "run-task hclf.34"), ("2", "P2", "run-task late-p2")])
+        assert [(r[1], r[2], r[4]) for r in rows] == [("1", "P0", "run-task hclf.34"), ("2", "P2", "run-task late-p2")]
 
 
 class HoldLogic(Slots):
@@ -41,10 +42,10 @@ class HoldLogic(Slots):
 
         self.cli("slot", "hold", "s1", "--why", "a person")
         until = float(bd.slots["sl-1"]["metadata"]["hold_until"])  # pyrefly: ignore[bad-index]
-        self.assertAlmostEqual(until - self.clock.t, 3600, delta=1)
+        assert until - self.clock.t == pytest.approx(3600, abs=1)
         self.clock.t += 1800
-        self.assertEqual(self.cli("slot", "hold", "s1", "--why", "a person")[0], 0)
-        self.assertAlmostEqual(float(bd.slots["sl-1"]["metadata"]["hold_until"]) - self.clock.t, 3600, delta=1)  # pyrefly: ignore[bad-index]
+        assert self.cli("slot", "hold", "s1", "--why", "a person")[0] == 0
+        assert float(bd.slots["sl-1"]["metadata"]["hold_until"]) - self.clock.t == pytest.approx(3600, abs=1)  # pyrefly: ignore[bad-index]
 
 
 class HoldRacesLogic(Slots):
@@ -52,16 +53,16 @@ class HoldRacesLogic(Slots):
         bd = self.beads({})
         bd.taken_by_other.add("sl-1")
         rc, out = self.cli("slot", "hold", "s1", "--why", "x")
-        self.assertEqual(rc, 1)
-        self.assertIn("BUSY", out)
-        self.assertNotIn("hold_until", bd.slots["sl-1"].get("metadata", {}))
+        assert rc == 1
+        assert "BUSY" in out
+        assert "hold_until" not in bd.slots["sl-1"].get("metadata", {})
 
     @NO_FCNTL
     def test_a_hold_taken_while_the_loop_releases_the_slot_is_kept(self):
         # race test (tl-bxk.11.1): the release unclaimed the slot bead, a person's hold claimed it at once, and the
         # release's own clean-up then wiped the hold's metadata: the hold was gone, the slot only leased
         bd = self.beads({})
-        self.assertTrue(sl.take_slot(str(self.repo), SlotsConfig()))
+        assert sl.take_slot(str(self.repo), SlotsConfig())
         real, holds = bd.__call__, []
         racer: list[threading.Thread] = []
 
@@ -75,13 +76,13 @@ class HoldRacesLogic(Slots):
                 th = threading.Thread(target=hold)
                 th.start()
                 th.join(0.3)
-                self.assertEqual(holds, [])
+                assert holds == []
                 racer.append(th)
             return r
         with tlbd.bd_boundary(racing):
             wslots.release_slot(str(self.repo), "s1", spawner=real_spawner(), git=port_git(), who=who())
         racer[0].join(10)
-        self.assertEqual(holds, [0])
-        self.assertEqual(bd.slots["sl-1"]["assignee"], "tl-denis000")
-        self.assertIn("hold_until", bd.slots["sl-1"].get("metadata", {}))
-        self.assertTrue(marks.hold_of(as_bead(bd.slots["sl-1"]), time.time()))
+        assert holds == [0]
+        assert bd.slots["sl-1"]["assignee"] == "tl-denis000"
+        assert "hold_until" in bd.slots["sl-1"].get("metadata", {})
+        assert marks.hold_of(as_bead(bd.slots["sl-1"]), time.time())

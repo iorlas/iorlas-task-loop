@@ -21,19 +21,19 @@ class Leak(Rig):
 
     def test_a_slot_the_actor_holds_with_no_engine_is_a_leak(self):
         self.claim("s1")
-        self.assertEqual([s.name for s in self.pool.leaked()], ["s1"])
+        assert [s.name for s in self.pool.leaked()] == ["s1"]
 
     def test_a_slot_with_a_live_engine_another_actors_slot_or_a_free_one_is_not(self):
         self.claim("s1")
         self.busy_at[self.env.dir_of("s1")] = "engine pid 7"
         self.claim("s2", "someone-else")
-        self.assertEqual(self.pool.leaked(), [])
+        assert self.pool.leaked() == []
 
     def test_releasing_a_leaked_slot_frees_it(self):
         self.claim("s1")
         for slot in self.pool.leaked():
             slot.release(mine=False)
-        self.assertEqual(self.bd.beads[BeadId("sl-s1")].status, "open")
+        assert self.bd.beads[BeadId("sl-s1")].status == "open"
 
 
 class ListShowsAside(Rig):
@@ -42,11 +42,11 @@ class ListShowsAside(Rig):
         self.bd.beads[sb.id] = msgspec.structs.replace(sb, metadata={"aside_probe": "pending"})
         with mock.patch.object(verbs, "waiting_line", return_value=[]):
             verbs.listing(self.env, None)
-        self.assertTrue(any("s1" in line and "set aside: reset probe pending" in line for line in self.out))
+        assert any("s1" in line and "set aside: reset probe pending" in line for line in self.out)
 
     def test_a_claim_without_a_take_record_says_so_instead_of_question_marks(self):
         sb = self.bd.beads[BeadId("sl-s2")]
         self.bd.beads[sb.id] = msgspec.structs.replace(sb, status="in_progress", assignee=ME)
         with mock.patch.object(verbs, "waiting_line", return_value=[]):
             verbs.listing(self.env, None)
-        self.assertTrue(any("claimed, no take record" in line for line in self.out))
+        assert any("claimed, no take record" in line for line in self.out)

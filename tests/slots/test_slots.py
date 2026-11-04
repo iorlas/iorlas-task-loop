@@ -14,6 +14,8 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
 
+from support.case import Case
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # python3 -m unittest tests.test_slots, from the repo root
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 
@@ -51,17 +53,17 @@ def sleeper():
 
 
 class Slots(LoopBase):
-    def setUp(self):
-        super().setUp()
+    def setup_method(self):
+        super().setup_method()
         self.kids = []
         for n in ("s1", "s2"):
             (self.repo / ".slots" / n).mkdir(parents=True)
 
-    def tearDown(self):
+    def teardown_method(self):
         for k in self.kids:
             k.kill()
             k.wait()
-        super().tearDown()
+        super().teardown_method()
 
     def slot(self, n):
         return str(self.repo / ".slots" / n)
@@ -111,10 +113,10 @@ class SameActor(Slots):
                                                "slot_bead": "sl-1"})
         loop = {"TASK_LOOP_SLOT_BEAD": "sl-1", "TASK_LOOP_LOOP_PID": str(os.getppid())}
         with mock.patch.dict(os.environ, loop):
-            self.assertEqual(engine_lock.engine_busy(self.slot("s1"), handoff=snapshot()), "")
-            self.assertTrue(engine_lock.engine_busy(self.slot("s1")))
+            assert engine_lock.engine_busy(self.slot("s1"), handoff=snapshot()) == ""
+            assert engine_lock.engine_busy(self.slot("s1"))
         with mock.patch.dict(os.environ, {**loop, "TASK_LOOP_SLOT_BEAD": "sl-2"}):
-            self.assertTrue(engine_lock.engine_busy(self.slot("s1"), handoff=snapshot()))
+            assert engine_lock.engine_busy(self.slot("s1"), handoff=snapshot())
 
     def test_the_parent_pid_alone_is_not_the_loop(self):
         """run-task runs under `uv run --script`, so its parent is uv: only the pid the loop exported counts (0.23.169-0.23.173 refused
@@ -123,7 +125,7 @@ class SameActor(Slots):
                                                "slot_bead": "sl-1"})
         with mock.patch.dict(os.environ, {"TASK_LOOP_SLOT_BEAD": "sl-1"}):
             os.environ.pop("TASK_LOOP_LOOP_PID", None)
-            self.assertTrue(engine_lock.engine_busy(self.slot("s1"), handoff=snapshot()))
+            assert engine_lock.engine_busy(self.slot("s1"), handoff=snapshot())
 
 
 class HoldRaces(Slots):
@@ -132,24 +134,24 @@ class HoldRaces(Slots):
     def test_releasing_a_slot_claimed_by_another_actor_frees_the_claim_too(self):
         # lifesim 0.23.34: `slot release --force` cleared the marks but the loop actor's claim kept the slot bead in_progress
         bd = self.beads({})
-        self.assertTrue(sl.take_slot(str(self.repo), SlotsConfig()))
+        assert sl.take_slot(str(self.repo), SlotsConfig())
         bd.slots["sl-1"].update(status="in_progress", assignee="tl-551cf8ee")
         wslots.release_slot(str(self.repo), "s1", spawner=real_spawner(), git=port_git(), who=who())
-        self.assertEqual(bd.slots["sl-1"]["assignee"], "tl-551cf8ee")  # without --force another actor's claim is left alone
+        assert bd.slots["sl-1"]["assignee"] == "tl-551cf8ee"  # without --force another actor's claim is left alone
         wslots.release_slot(str(self.repo), "s1", force=True, spawner=real_spawner(), git=port_git(), who=who())
-        self.assertEqual((bd.slots["sl-1"]["status"], bd.slots["sl-1"]["assignee"]), ("open", ""))
+        assert (bd.slots["sl-1"]["status"], bd.slots["sl-1"]["assignee"]) == ("open", "")
 
     def test_an_expired_hold_frees_the_claim_of_the_loop_that_held_the_slot(self):
         bd = self.beads({})
-        self.assertTrue(sl.take_slot(str(self.repo), SlotsConfig()))
+        assert sl.take_slot(str(self.repo), SlotsConfig())
         bd.slots["sl-1"].update(status="in_progress", assignee="tl-551cf8ee")
         bd.slots["sl-1"].setdefault("metadata", {}).update(held_by="tl-abcdef12-f296a9", hold_until="1000")
         sl.free_expired(str(self.repo))
-        self.assertEqual((bd.slots["sl-1"]["status"], bd.slots["sl-1"]["assignee"]), ("open", ""))
+        assert (bd.slots["sl-1"]["status"], bd.slots["sl-1"]["assignee"]) == ("open", "")
 
 
 @unittest.skipUnless(POSIX, "process groups")
-class NeverSignalOneself(unittest.TestCase):
+class NeverSignalOneself(Case):
     """A recorded or parsed pid or group id is a claim: no stop, reap or kill path may act on it when it is ours."""
 
     def test_stop_server_never_stops_the_calling_process(self):
@@ -162,4 +164,4 @@ class NeverSignalOneself(unittest.TestCase):
         before = signal.getsignal(signal.SIGTERM)
         with mock.patch.object(entry, "run_main_stoppable", return_value=0):
             entry.run_main(mock.Mock(), env=snapshot(), spawner=real_spawner(), git=port_git(), who=who())
-        self.assertIs(signal.getsignal(signal.SIGTERM), before)
+        assert signal.getsignal(signal.SIGTERM) is before

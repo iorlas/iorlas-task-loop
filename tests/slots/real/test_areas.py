@@ -63,8 +63,8 @@ NO_FCNTL = unittest.skipIf(os.name == "nt", "the lock is fcntl; tl has none on W
 
 
 class AreasBase(Slots):
-    def setUp(self):
-        super().setUp()
+    def setup_method(self):
+        super().setup_method()
         (self.repo / ".task-loop.json").write_text(json.dumps({"slots": {"count": 2}, "engine": AREAS_JSON}))
 
     def lanes(self, script, lanes, slots=2):
@@ -88,19 +88,19 @@ class Areas(AreasBase):
         bd = self.lanes({"x-1": [], "x-2": [], "x-3": [], "x-4": []}, {"x-1": "live", "x-2": "live", "x-3": "shell"})
         self.running(bd, "x-1")
         ids, skipped = self.order()
-        self.assertEqual(ids, ["x-3", "x-4"])
-        self.assertEqual(skipped, {"x-2": "area live busy: x-1 in s1"})
+        assert ids == ["x-3", "x-4"]
+        assert skipped == {"x-2": "area live busy: x-1 in s1"}
         _rc, out = self.cli("next", "--repo", str(self.repo))
-        self.assertIn("NEXT x-3", out)
-        self.assertIn("skip x-2: area live busy: x-1 in s1", out)
+        assert "NEXT x-3" in out
+        assert "skip x-2: area live busy: x-1 in s1" in out
     def test_a_live_engine_lock_naming_a_bead_makes_its_area_busy_a_dead_one_does_not(self):
         bd = self.lanes({"x-1": [], "x-2": []}, {"x-1": "live", "x-2": "live"})
         bd.beads["x-1"].update(status="in_progress", assignee="denis")
         k = self.live_lock("s2", bead="x-1")  # a run whose slot bead says nothing (an older engine, a --worktree run)
-        self.assertEqual(self.order(), ([], {"x-2": "area live busy: x-1 in s2"}))
+        assert self.order() == ([], {"x-2": "area live busy: x-1 in s2"})
         k.kill()
         k.wait()
-        self.assertEqual(self.order()[0], ["x-2"])
+        assert self.order()[0] == ["x-2"]
 
     def test_the_area_is_free_again_once_the_running_bead_ends(self):
         bd = self.lanes({"x-1": [], "x-2": [], "x-3": [rec("landed")]}, {"x-1": "live", "x-2": "live", "x-3": "shell"})
@@ -113,12 +113,12 @@ class Areas(AreasBase):
                 self.run_loop("--max-beads", "1")
             return 0
         rc, _r, _ = self.run_task("x-1", slot="s1", engine_run=during)
-        self.assertEqual(rc, 0)
-        self.assertEqual(seen["queue"], (["x-3"], {"x-2": "area live busy: x-1 in s1"}))
-        self.assertEqual(self.started, [("x-3", "s2")])  # the other area's bead, never x-2 beside x-1
+        assert rc == 0
+        assert seen["queue"] == (["x-3"], {"x-2": "area live busy: x-1 in s1"})
+        assert self.started == [("x-3", "s2")]  # the other area's bead, never x-2 beside x-1
         bd.beads["x-1"]["status"] = "closed"
-        self.assertEqual(self.order(), (["x-2"], {}))
-        self.assertNotIn("held_bead", bd.slots["sl-1"].get("metadata") or {})  # the slot's release clears the mark
+        assert self.order() == (["x-2"], {})
+        assert "held_bead" not in (bd.slots["sl-1"].get("metadata") or {})  # the slot's release clears the mark
 
     def test_the_claim_checks_the_area_again_under_the_area_lock(self):
         """Two loops read the queue at once: both see the area free; the claim re-checks under one lock."""
@@ -131,10 +131,10 @@ class Areas(AreasBase):
                 return {"live": ("x-9", "s2")}
             return real(*a, **kw)
         with mock.patch.object(QueueRule, "busy_areas", autospec=True, side_effect=busy):
-            self.assertEqual(self.run_loop("--max-beads", "1"), 0)
-        self.assertEqual(self.started, [("x-2", "s1")])
-        self.assertEqual(bd.beads["x-1"]["status"], "open")
-        self.assertFalse([c for c in bd.calls if c[:1] == ("update",) and c[1:2] == ("x-1",) and "--claim" in c])
+            assert self.run_loop("--max-beads", "1") == 0
+        assert self.started == [("x-2", "s1")]
+        assert bd.beads["x-1"]["status"] == "open"
+        assert not [c for c in bd.calls if c[:1] == ("update",) and c[1:2] == ("x-1",) and "--claim" in c]
 
     def test_the_claim_sees_a_bead_that_began_to_run_while_the_loop_waited_for_its_slot(self):
         """tl-na3: the loop read the queue (x-1 and x-2 of one area, nothing running), then waited in the slot line; a hand run
@@ -154,9 +154,9 @@ class Areas(AreasBase):
             bd.slots["sl-3"].update(status="open", assignee="", metadata={})
         self.during.append(lambda: seen.update(x1=bd.beads["x-1"]["status"]))
         with mock.patch.object(Loop, "acquire", acquire), mock.patch.object(Core, "nap", staticmethod(nap)):
-            self.assertEqual(self.run_loop("--max-beads", "1"), 0)
-        self.assertEqual([b for b, _ in self.started], ["x-2"])
-        self.assertEqual(seen["x1"], "closed", "x-2 ran while x-1 of its area was running")
+            assert self.run_loop("--max-beads", "1") == 0
+        assert [b for b, _ in self.started] == ["x-2"]
+        assert seen["x1"] == "closed", "x-2 ran while x-1 of its area was running"
 
     def test_the_loop_marks_its_slot_with_the_bead_it_runs(self):
         bd = self.lanes({"x-1": [rec("landed")]}, {"x-1": "live"})
@@ -164,16 +164,16 @@ class Areas(AreasBase):
         self.during.append(lambda: seen.update(meta=dict(bd.slots["sl-1"].get("metadata") or {}),
                                                lock=engine_lock.read_engine_lock(self.slot("s1"))))
         self.run_loop()
-        self.assertEqual(seen["meta"].get("held_bead"), "x-1")
-        self.assertEqual(seen["lock"].bead, "x-1")
+        assert seen["meta"].get("held_bead") == "x-1"
+        assert seen["lock"].bead == "x-1"
 
     def test_a_failed_bead_gives_back_its_slot_and_its_area_so_the_loop_goes_on(self):
         """tl-bjd: w-5 of the race failed and its area stayed busy. The slot's release clears the bead's mark, whatever the outcome."""
         bd = self.lanes({"x-1": [rec("failed")], "x-2": [rec("landed")]}, {"x-1": "live", "x-2": "live"}, slots=1)
-        self.assertEqual(self.run_loop("--max-beads", "2"), 0)
-        self.assertEqual(self.started, [("x-1", "s1"), ("x-2", "s1")])  # x-2 is of the failed bead's area, in the failed bead's slot
-        self.assertEqual((bd.slots["sl-1"]["status"], bd.slots["sl-1"]["assignee"]), ("open", ""))
-        self.assertFalse(set(bd.slots["sl-1"].get("metadata") or {}) & set(marks.HELD_KEYS))
+        assert self.run_loop("--max-beads", "2") == 0
+        assert self.started == [("x-1", "s1"), ("x-2", "s1")]  # x-2 is of the failed bead's area, in the failed bead's slot
+        assert (bd.slots["sl-1"]["status"], bd.slots["sl-1"]["assignee"]) == ("open", "")
+        assert not set(bd.slots["sl-1"].get("metadata") or {}) & set(marks.HELD_KEYS)
 
     def test_when_every_ready_bead_waits_for_its_area_the_loop_waits_instead_of_draining(self):
         bd = self.lanes({"x-1": [], "x-2": [rec("landed")]}, {"x-1": "live", "x-2": "live"})
@@ -185,10 +185,10 @@ class Areas(AreasBase):
             bd.beads["x-1"].update(status="closed", assignee="")  # x-1 ends
             bd.slots["sl-1"].update(status="open", assignee="", metadata={})
         with mock.patch.object(Core, "nap", staticmethod(nap)):
-            self.assertEqual(self.run_loop(), 0)
-        self.assertIn(round(LoopConfig().area_poll), self.clock.naps)
-        self.assertEqual([b for b, _ in self.started], ["x-2"])
-        self.assertIn("area", self.out)
+            assert self.run_loop() == 0
+        assert round(LoopConfig().area_poll) in self.clock.naps
+        assert [b for b, _ in self.started] == ["x-2"]
+        assert "area" in self.out
 
     def test_a_mark_a_reclaim_left_on_a_slot_bead_is_cleared_by_the_next_take(self):
         """bd reclaim frees a dead loop's slot bead but keeps its metadata: a hold or a loop's take there must not
@@ -196,12 +196,12 @@ class Areas(AreasBase):
         bd = self.lanes({"x-1": [], "x-2": []}, {"x-1": "live", "x-2": "live"})
         bd.beads["x-1"]["status"] = "closed"
         bd.slots["sl-1"]["metadata"] = {"held_bead": "x-1"}  # open, as reclaim left it
-        self.assertEqual(self.cli("slot", "hold", "s1", "--why", "screenshots")[0], 0)
-        self.assertEqual(wloop.running(str(self.repo), port_git(), who()), {})
-        self.assertEqual(self.order(), (["x-2"], {}))
+        assert self.cli("slot", "hold", "s1", "--why", "screenshots")[0] == 0
+        assert wloop.running(str(self.repo), port_git(), who()) == {}
+        assert self.order() == (["x-2"], {})
         bd.slots["sl-2"]["metadata"] = {"held_bead": "x-1"}
-        self.assertEqual(must(sl.take_slot(str(self.repo), self.cfg_slots()))[0], "s2")
-        self.assertEqual(wloop.running(str(self.repo), port_git(), who()), {})
+        assert must(sl.take_slot(str(self.repo), self.cfg_slots()))[0] == "s2"
+        assert wloop.running(str(self.repo), port_git(), who()) == {}
 
     def cfg_slots(self):
         return wslots.profile_slots(str(self.repo))
@@ -210,35 +210,35 @@ class Areas(AreasBase):
         bd = self.lanes({"x-1": [], "x-2": []}, {"x-1": "live", "x-2": "live"})
         self.running(bd, "x-1")
         rc, r, out = self.run_task("x-2", slot="s2")
-        self.assertEqual((rc, r["outcome"]), (0, "landed"))
-        self.assertIn("area live busy: x-1 in s1", out)
-        self.assertIn("--exclusive-area", out)
+        assert (rc, r["outcome"]) == (0, "landed")
+        assert "area live busy: x-1 in s1" in out
+        assert "--exclusive-area" in out
         self.made.assert_called()
 
     def test_exclusive_area_refuses_a_hand_run_in_a_busy_area_and_gives_the_slot_back(self):
         bd = self.lanes({"x-1": [], "x-2": []}, {"x-1": "live", "x-2": "live"})
         self.running(bd, "x-1")
         rc, r, _out = self.run_task("x-2", slot="s2", flags={"exclusive_area": True})
-        self.assertEqual((rc, r["outcome"]), (1, "taken"))
-        self.assertIn("area live busy: x-1 in s1", r["why"])
+        assert (rc, r["outcome"]) == (1, "taken")
+        assert "area live busy: x-1 in s1" in r["why"]
         self.made.assert_not_called()
-        self.assertEqual((bd.slots["sl-2"]["status"], bd.slots["sl-2"]["assignee"]), ("open", ""))
-        self.assertFalse(engine_lock.engine_lock_path(self.slot("s2")).exists())
+        assert (bd.slots["sl-2"]["status"], bd.slots["sl-2"]["assignee"]) == ("open", "")
+        assert not engine_lock.engine_lock_path(self.slot("s2")).exists()
 
     def test_a_hand_run_in_a_free_area_or_with_no_area_says_nothing(self):
         bd = self.lanes({"x-1": [], "x-2": [], "x-3": []}, {"x-1": "live", "x-2": "shell"})
         self.running(bd, "x-1")
         for b in ("x-2", "x-3"):
             _rc, r, out = self.run_task(b, slot="s2", flags={"exclusive_area": True})
-            self.assertEqual(r["outcome"], "landed", out)
-            self.assertNotIn("area", out)
+            assert r["outcome"] == "landed", out
+            assert "area" not in out
 
 
 class Line(Slots):
     """The slot line: tickets under the repo's slot state, served first come first."""
 
-    def setUp(self):
-        super().setUp()
+    def setup_method(self):
+        super().setup_method()
         self.cfg = wslots.profile_slots(str(self.repo))
 
     def tickets(self):
@@ -258,7 +258,7 @@ class Line(Slots):
         end = time.monotonic() + secs
         while time.monotonic() < end and not cond():
             time.sleep(0.01)
-        self.assertTrue(cond())
+        assert cond()
     def test_a_waiter_behind_a_live_ticket_never_takes_a_free_slot_and_a_killed_waiter_does_not_block(self):
         self.beads({}, slots=1)
         k = subprocess.Popen(["sleep", "60"])  # a live pid for the first in line
@@ -267,34 +267,34 @@ class Line(Slots):
         tries = []
         got = wslots.wait_slot(str(self.repo), self.cfg, "second", poll=(0.01, 0.01),
                            stop=lambda: tries.append(1) or len(tries) >= 5, spawner=real_spawner(), git=port_git(), who=who())
-        self.assertIsNone(got)  # the slot is free, but the first in line is alive
-        self.assertEqual(len(self.tickets()), 1)  # its own ticket gone, the first one's kept
+        assert got is None  # the slot is free, but the first in line is alive
+        assert len(self.tickets()) == 1  # its own ticket gone, the first one's kept
         k.kill()
         k.wait()
         got = wslots.wait_slot(str(self.repo), self.cfg, "second", poll=(0.01, 0.01), stop=lambda: True, spawner=real_spawner(),
             git=port_git(), who=who())
-        self.assertEqual(must(got)[0], "s1")
-        self.assertEqual(self.tickets(), [])  # the dead waiter's ticket was dropped
+        assert must(got)[0] == "s1"
+        assert self.tickets() == []  # the dead waiter's ticket was dropped
 
 
     def test_run_task_slot_any_takes_a_free_slot_and_gives_it_back(self):
         bd = self.beads({"x-1": []})
         bd.slots["sl-1"].update(status="in_progress", assignee="tl-other")
         rc, r, _ = self.run_task("x-1", slot="any")
-        self.assertEqual((rc, r["outcome"]), (0, "landed"))
-        self.assertEqual(self.made.call_args[0][1], str(Path(self.slot("s2")).resolve()))
-        self.assertEqual((bd.slots["sl-2"]["status"], bd.slots["sl-2"]["assignee"]), ("open", ""))
-        self.assertEqual(self.tickets(), [])
+        assert (rc, r["outcome"]) == (0, "landed")
+        assert self.made.call_args[0][1] == str(Path(self.slot("s2")).resolve())
+        assert (bd.slots["sl-2"]["status"], bd.slots["sl-2"]["assignee"]) == ("open", "")
+        assert self.tickets() == []
 
     def test_run_task_slot_any_without_wait_refuses_when_none_is_free(self):
         bd = self.beads({"x-1": []}, slots=1)
         bd.slots["sl-1"].update(status="in_progress", assignee="tl-other")
         rc, r, _out = self.run_task("x-1", slot="any")
-        self.assertEqual((rc, r["outcome"]), (1, "taken"))
-        self.assertIn("no free slot", r["why"])
+        assert (rc, r["outcome"]) == (1, "taken")
+        assert "no free slot" in r["why"]
         self.made.assert_not_called()
-        self.assertEqual(bd.slots["sl-1"]["assignee"], "tl-other")
-        self.assertEqual(self.tickets(), [])
+        assert bd.slots["sl-1"]["assignee"] == "tl-other"
+        assert self.tickets() == []
 
     def test_run_task_slot_any_wait_gets_the_slot_once_it_frees(self):
         bd = self.beads({"x-1": []}, slots=1)
@@ -302,9 +302,9 @@ class Line(Slots):
         threading.Timer(0.2, lambda: bd.slots["sl-1"].update(status="open", assignee="")).start()
         with mock.patch.object(slots_line, "TICKET_POLL", (0.01, 0.05)):
             rc, r, out = self.run_task("x-1", slot="any", flags={"wait": True})
-        self.assertEqual((rc, r["outcome"]), (0, "landed"), out)
-        self.assertEqual(self.made.call_args[0][1], str(Path(self.slot("s1")).resolve()))
-        self.assertEqual((bd.slots["sl-1"]["status"], bd.slots["sl-1"]["assignee"]), ("open", ""))
+        assert (rc, r["outcome"]) == (0, "landed"), out
+        assert self.made.call_args[0][1] == str(Path(self.slot("s1")).resolve())
+        assert (bd.slots["sl-1"]["status"], bd.slots["sl-1"]["assignee"]) == ("open", "")
 
     def test_the_loop_waits_in_the_line_too(self):
         self.beads({"x-1": [rec("landed")]}, slots=1)
@@ -317,14 +317,10 @@ class Line(Slots):
             if len(naps) == 3:
                 sl.drop_ticket(self.repo, first)  # served (or gone)
         with mock.patch.object(Core, "nap", staticmethod(nap)):
-            self.assertEqual(self.run_loop(), 0)
-        self.assertGreaterEqual(len(naps), 3)  # the slot was free all along: the loop waited its turn
-        self.assertEqual(self.started, [("x-1", "s1")])
-        self.assertIn("in line", self.out)
-
-
-if __name__ == "__main__":
-    unittest.main()
+            assert self.run_loop() == 0
+        assert len(naps) >= 3  # the slot was free all along: the loop waited its turn
+        assert self.started == [("x-1", "s1")]
+        assert "in line" in self.out
 
 
 class ReviewFixes(AreasBase):
@@ -346,21 +342,21 @@ class ReviewFixes(AreasBase):
         with tlbd.bd_boundary(bd_x1_unreadable):
             ranked, skip = looptest.queue(str(self.repo), say=err.write)
         ids, skipped = [b.id for b, _ in ranked], dict(skip)
-        self.assertEqual(ids, ["x-4"])  # a bead of no area is unrestricted
-        self.assertIn("area live busy: x-1 in s1", skipped["x-2"])
-        self.assertIn("area shell busy: x-1 in s1", skipped["x-3"])
-        self.assertIn("x-1", err.getvalue())
+        assert ids == ["x-4"]  # a bead of no area is unrestricted
+        assert "area live busy: x-1 in s1" in skipped["x-2"]
+        assert "area shell busy: x-1 in s1" in skipped["x-3"]
+        assert "x-1" in err.getvalue()
 
 
     def test_a_long_area_wait_says_how_long_and_who_holds_it_and_until_still_ends_the_loop(self):
         bd = self.lanes({"x-1": [], "x-2": []}, {"x-1": "live", "x-2": "live"})
         self.running(bd, "x-1")  # a hung but live holder
         until = (datetime.datetime.fromtimestamp(self.clock()) + datetime.timedelta(minutes=25)).strftime("%H:%M")
-        self.assertEqual(self.run_loop("--until", until), 0)
-        self.assertIn("waiting 10 min on area live held by x-1 in s1", self.out)
-        self.assertIn("waiting 20 min on area live held by x-1 in s1", self.out)
-        self.assertIn("reached", self.out)
-        self.assertEqual(self.started, [])
+        assert self.run_loop("--until", until) == 0
+        assert "waiting 10 min on area live held by x-1 in s1" in self.out
+        assert "waiting 20 min on area live held by x-1 in s1" in self.out
+        assert "reached" in self.out
+        assert self.started == []
 
     @NO_FCNTL
     def test_two_exclusive_hand_runs_in_one_area_let_the_first_in_win(self):
@@ -392,4 +388,4 @@ class ReviewFixes(AreasBase):
                 t.start()
             for t in ths:
                 t.join(60)
-        self.assertEqual(sorted(outs.values()), ["landed", "taken"], outs)
+        assert sorted(outs.values()) == ["landed", "taken"], outs

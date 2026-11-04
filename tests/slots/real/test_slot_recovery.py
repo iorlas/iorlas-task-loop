@@ -30,12 +30,12 @@ class SlotRecovery(Rig):
         slot.ready_for("")
         shutil.rmtree(slot.dir)
         slot.ready_for("")
-        self.assertTrue(Path(slot.dir, "a.txt").exists())
-        self.assertEqual(git(slot.dir, "rev-parse", "HEAD"), git(self.repo, "rev-parse", "origin/main"))
+        assert Path(slot.dir, "a.txt").exists()
+        assert git(slot.dir, "rev-parse", "HEAD") == git(self.repo, "rev-parse", "origin/main")
         shutil.rmtree(slot.dir)
         taker = Taker(slot_loop_env(env), mock.Mock(), mock.Mock(),
                       mock.Mock(), mock.Mock(), {})
-        self.assertIsNone(taker.prepare("s1", "a"))
-        self.assertTrue(Path(slot.dir, "a.txt").exists())
-        self.assertEqual(git(slot.dir, "branch", "--show-current"), "task/a")
-        self.assertEqual(setup.call_count, 3)  # old matching setup stamps cannot skip setup in a recreated tree
+        assert taker.prepare("s1", "a") is None
+        assert Path(slot.dir, "a.txt").exists()
+        assert git(slot.dir, "branch", "--show-current") == "task/a"
+        assert setup.call_count == 3  # old matching setup stamps cannot skip setup in a recreated tree

@@ -12,8 +12,8 @@ from taskloop.contracts.slots import SlotFail
 
 
 class Aside(Rig):
-    def setUp(self):
-        super().setUp()
+    def setup_method(self):
+        super().setup_method()
         self.env.cfg = self.env.cfg.replace(count=1)
 
     def pending(self):
@@ -24,42 +24,42 @@ class Aside(Rig):
         now = self.t[0]
         with patch.object(Slot, "ready_for", side_effect=SlotFail("slot_broken", "setup failed")) as probe:
             for _ in range(3):
-                self.assertIsNone(self.pool.take_any("work"))
-                self.assertIsNone(self.slot().hold())
-                self.assertEqual(self.slot().slot_bead().status, "open")
-            self.assertEqual(probe.call_count, 3)
-        self.assertEqual(self.t[0], now)
-        self.assertEqual(self.slot().slot_bead().metadata["aside_probe"], "pending")
+                assert self.pool.take_any("work") is None
+                assert self.slot().hold() is None
+                assert self.slot().slot_bead().status == "open"
+            assert probe.call_count == 3
+        assert self.t[0] == now
+        assert self.slot().slot_bead().metadata["aside_probe"] == "pending"
 
     def test_successful_probe_returns_slot_immediately(self):
         self.pending()
         with patch.object(Slot, "ready_for") as probe, patch.object(aside, "setup") as setup:
-            self.assertIsNotNone(self.pool.take_any("work"))
+            assert self.pool.take_any("work") is not None
         probe.assert_called_once_with("")
         setup.assert_called_once()
         assert setup.call_args is not None
-        self.assertTrue(setup.call_args.kwargs["force"])
+        assert setup.call_args.kwargs["force"]
         bead = self.slot().slot_bead()
-        self.assertEqual(bead.status, "in_progress")
-        self.assertNotIn("aside_level", bead.metadata)
-        self.assertNotIn("aside_probe", bead.metadata)
+        assert bead.status == "in_progress"
+        assert "aside_level" not in bead.metadata
+        assert "aside_probe" not in bead.metadata
 
     def test_healthy_slot_does_not_probe(self):
         with patch.object(Slot, "ready_for") as probe:
-            self.assertIsNotNone(self.pool.take_any("work"))
+            assert self.pool.take_any("work") is not None
         probe.assert_not_called()
 
     def test_failed_setup_keeps_probe_pending(self):
         self.pending()
         with patch.object(Slot, "ready_for"), patch.object(aside, "setup", side_effect=SlotFail("slot_broken", "setup failed")):
-            self.assertIsNone(self.pool.take_any("work"))
-        self.assertEqual(self.slot().slot_bead().metadata["aside_probe"], "pending")
+            assert self.pool.take_any("work") is None
+        assert self.slot().slot_bead().metadata["aside_probe"] == "pending"
 
     def test_busy_slot_is_never_reset_by_probe(self):
         self.pending()
         self.slot().take_locked("another worker")
         with patch.object(Slot, "ready_for") as probe:
-            self.assertIsNone(self.pool.take_any("work"))
+            assert self.pool.take_any("work") is None
         probe.assert_not_called()
 
     def test_legacy_automatic_hold_does_not_delay_recovery(self):
@@ -67,5 +67,5 @@ class Aside(Rig):
         mark_held(self.env, self.slot().slot_bead().id, "old automatic hold", self.t[0] + 720 * 60)
         self.pending()
         with patch.object(Slot, "ready_for"), patch.object(aside, "setup"):
-            self.assertIsNotNone(self.pool.take_any("work"))
-        self.assertIsNone(self.slot().hold())
+            assert self.pool.take_any("work") is not None
+        assert self.slot().hold() is None

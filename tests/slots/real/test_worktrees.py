@@ -4,8 +4,9 @@ import os
 import subprocess
 import sys
 import tempfile
-import unittest
 from pathlib import Path
+
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401
@@ -24,8 +25,8 @@ def git(cwd, *args):
     return r.stdout.strip()
 
 
-class Rig(unittest.TestCase):
-    def setUp(self):
+class Rig(Case):
+    def setup_method(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         root = Path(tmp.name).resolve()
@@ -56,12 +57,12 @@ class Rig(unittest.TestCase):
 class Create(Rig):
     def test_create_makes_the_worktree_and_records_its_owner(self):
         wt = self.make(owned.loop_path(self.repo, "abc"))
-        self.assertTrue(Path(wt, "a.txt").exists())
+        assert Path(wt, "a.txt").exists()
         rec = owned.docs(self.cfg, KEY).of(owned.key_of(wt)).get()
         assert rec is not None
-        self.assertEqual((rec.kind, rec.run, rec.bead, rec.host, rec.created), ("loop", "tl-x", "b-1", "h", 5.0))
+        assert (rec.kind, rec.run, rec.bead, rec.host, rec.created) == ("loop", "tl-x", "b-1", "h", 5.0)
         self.make(wt)  # again: reused, the record kept
-        self.assertEqual(len(owned.docs(self.cfg, KEY).keys()), 1)
+        assert len(owned.docs(self.cfg, KEY).keys()) == 1
 
 
 class Survey(Rig):
@@ -71,20 +72,20 @@ class Survey(Rig):
         git(self.repo, "worktree", "add", "-q", "--detach", owned.loop_path(self.repo, "old"), "origin/main")  # tl-named, no record
         gone = self.make(owned.loop_path(self.repo, "gone"))
         subprocess.run(["rm", "-rf", gone], check=True)
-        self.assertEqual(self.states(), {"cc": "foreign", "loop-gone": "orphaned", "loop-mine": "owned", "loop-old": "orphaned"})
+        assert self.states() == {"cc": "foreign", "loop-gone": "orphaned", "loop-mine": "owned", "loop-old": "orphaned"}
 
     def test_a_stray_slot_folder_is_not_a_worktree(self):
         Path(self.slots_dir, "s9").mkdir(parents=True)
-        self.assertEqual(self.states(), {})
+        assert self.states() == {}
 
 
 class Clean(Rig):
     def test_a_merged_clean_owned_worktree_is_removed_with_its_record(self):
         wt = self.make(owned.loop_path(self.repo, "a"))
         code, out = self.clean()
-        self.assertEqual(code, 0, out)
-        self.assertFalse(Path(wt).exists())
-        self.assertEqual(owned.docs(self.cfg, KEY).keys(), [])
+        assert code == 0, out
+        assert not Path(wt).exists()
+        assert owned.docs(self.cfg, KEY).keys() == []
 
     def test_unmerged_commits_are_refused_and_named(self):
         wt = self.make(owned.loop_path(self.repo, "a"))
@@ -92,20 +93,20 @@ class Clean(Rig):
         git(wt, "add", "-A")
         git(wt, "commit", "-qm", "wip (x-1)")
         code, out = self.clean()
-        self.assertEqual(code, 1)
-        self.assertIn("1 commit(s) not on origin/main", out)
-        self.assertIn("wip (x-1)", out)
-        self.assertTrue(Path(wt).exists())
+        assert code == 1
+        assert "1 commit(s) not on origin/main" in out
+        assert "wip (x-1)" in out
+        assert Path(wt).exists()
 
     def test_dirty_and_untracked_files_are_refused_and_named(self):
         wt = self.make(owned.loop_path(self.repo, "a"))
         Path(wt, "a.txt").write_text("changed")
         Path(wt, "new.txt").write_text("n")
         code, out = self.clean()
-        self.assertEqual(code, 1)
-        self.assertIn("changed a.txt", out)
-        self.assertIn("untracked new.txt", out)
-        self.assertTrue(Path(wt).exists())
+        assert code == 1
+        assert "changed a.txt" in out
+        assert "untracked new.txt" in out
+        assert Path(wt).exists()
 
     def test_a_patch_already_on_main_counts_as_merged(self):
         wt = self.make(owned.loop_path(self.repo, "a"))
@@ -115,32 +116,32 @@ class Clean(Rig):
         git(self.repo, "cherry-pick", git(wt, "rev-parse", "HEAD"))
         git(self.repo, "push", "-q", "origin", "HEAD:main")
         git(self.repo, "fetch", "-q")
-        self.assertEqual(self.clean()[0], 0)
-        self.assertFalse(Path(wt).exists())
+        assert self.clean()[0] == 0
+        assert not Path(wt).exists()
 
     def test_foreign_and_unrecorded_worktrees_are_never_touched(self):
         cc = str(Path(self.repo, ".claude", "worktrees", "cc"))
         old = owned.loop_path(self.repo, "old")
         for d in (cc, old):
             git(self.repo, "worktree", "add", "-q", "--detach", d, "origin/main")
-        self.assertEqual(self.clean()[0], 0)
-        self.assertTrue(Path(cc).exists() and Path(old).exists())
+        assert self.clean()[0] == 0
+        assert Path(cc).exists() and Path(old).exists()
 
     def test_a_busy_worktree_stays(self):
         wt = self.make(owned.loop_path(self.repo, "a"))
         code, out = self.clean(busy=lambda d: "run x")
-        self.assertEqual(code, 1)
-        self.assertIn("busy: run x", out)
-        self.assertTrue(Path(wt).exists())
+        assert code == 1
+        assert "busy: run x" in out
+        assert Path(wt).exists()
 
     def test_a_slot_within_the_count_stays_and_one_beyond_it_goes(self):
         s1, s3 = (self.make(str(Path(self.slots_dir, n)), kind="slot") for n in ("s1", "s3"))
-        self.assertEqual(self.clean(count=2)[0], 0)
-        self.assertTrue(Path(s1).exists())
-        self.assertFalse(Path(s3).exists())
+        assert self.clean(count=2)[0] == 0
+        assert Path(s1).exists()
+        assert not Path(s3).exists()
 
     def test_a_record_whose_worktree_is_gone_is_dropped(self):
         wt = self.make(owned.loop_path(self.repo, "a"))
         subprocess.run(["rm", "-rf", wt], check=True)
-        self.assertEqual(self.clean()[0], 0)
-        self.assertEqual(owned.docs(self.cfg, KEY).keys(), [])
+        assert self.clean()[0] == 0
+        assert owned.docs(self.cfg, KEY).keys() == []
