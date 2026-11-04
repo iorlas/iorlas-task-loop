@@ -710,6 +710,7 @@ class FakeCloseHost(Said):
         self.log = RunLog(self.stores.run_log("run"))
         self.stats = {"rounds": 0}
         self.leftovers: list[Mapping[str, str]] = []
+        self.sessions: list[Mapping[str, str]] = []
         self.dry = dry
         self.claim = fence.offline(BeadId("t-1"))
         self.run_id = "t-1-r1"
