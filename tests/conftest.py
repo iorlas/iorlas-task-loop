@@ -119,10 +119,36 @@ def pytest_pycollect_makeitem(collector, name, obj):
     return None
 
 
+@pytest.hookimpl(wrapper=True, trylast=True)
+def pytest_runtest_setup(item):
+    """unittest's setUp ran in the test's own phase; setup_method runs in pytest's setup phase, and pytest swaps sys.stdout / sys.stderr at
+    the start of every phase. A patch of either made while setting up (mock.patch of sys.stdout, a redirect) is carried into the call."""
+    before = sys.stdout, sys.stderr
+    try:
+        return (yield)
+    finally:
+        item.stash[_SETUP_STD] = tuple(now if now is not was else None for was, now in zip(before, (sys.stdout, sys.stderr), strict=True))
+
+
+@pytest.hookimpl(wrapper=True, trylast=True)
+def pytest_runtest_call(item):
+    patched = item.stash.get(_SETUP_STD, (None, None))
+    own = sys.stdout, sys.stderr
+    sys.stdout, sys.stderr = (p or o for p, o in zip(patched, own, strict=True))
+    try:
+        return (yield)
+    finally:
+        sys.stdout, sys.stderr = own
+
+
+_SETUP_STD = pytest.StashKey[tuple]()
+
+
 @pytest.fixture(autouse=True)
-def case_helpers(request, subtests):
+def case_helpers(request, procs):
     """The unittest names the plain test classes still use: self.addCleanup (runs last-in-first-out after the test and its teardown_method),
-    self.enterContext, self.subTest (pytest's `subtests`), self._testMethodName and self.id()."""
+    self.enterContext, self.subTest (pytest's `subtests`), self._testMethodName and self.id(). It depends on `procs` so that the cleanups,
+    which undo patches made in setup_method on top of the process sim, run before the sim is uninstalled."""
     case = request.instance
     if case is None:
         yield
@@ -138,7 +164,7 @@ def case_helpers(request, subtests):
             """pytest's subtest swaps sys.stdout and sys.stderr for its own capture and puts its own back at the end: keep the test's."""
             streams = sys.stdout, sys.stderr
             try:
-                with subtests.test(msg, **params):
+                with request.getfixturevalue("subtests").test(msg, **params):
                     sys.stdout, sys.stderr = streams
                     yield
             finally:
