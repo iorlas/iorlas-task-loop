@@ -6,6 +6,7 @@ import os
 import random
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
@@ -17,9 +18,11 @@ from dash import test_dash_api as fixtures
 from taskloop.contracts import factorydb
 from taskloop.contracts.ids import loop_key
 from taskloop.contracts.paths import ConfigDir
+from taskloop.contracts.runrows import RunRows
 from taskloop_dash.app import Dash
 from taskloop_dash.env import Env
 from taskloop_dash.index import Indexer, reindex
+from taskloop_dash.readers import dbruns
 
 NOW = T + 3600
 
@@ -30,6 +33,7 @@ class FactoryIndex(unittest.TestCase):
         self.addCleanup(tmp.cleanup)
         self.cfg = ConfigDir(Path(tmp.name))
         self.paths = []
+        self.scripts = []
         for i in range(12):
             script = RunScript(f"b-{i}", at=i).step("plan", 2, i + 1)
             for _ in range(i):
@@ -40,6 +44,16 @@ class FactoryIndex(unittest.TestCase):
                 file.write(b'{"v":3,"kind":"beat"')
             os.utime(path, (NOW, NOW))
             self.paths.append(path)
+            self.scripts.append(script)
+
+    def test_persisted_facts_match_the_existing_whole_log_fixture_projection(self):
+        self.ingest()
+        rows, error = dbruns.read(self.cfg, NOW)
+        self.assertEqual(error, "")
+        by_run = {row.manifest.run: row for row in rows}
+        for script in self.scripts:
+            with self.subTest(run=script.name):
+                self.assertEqual(by_run[script.name].project(NOW), replace(script.run(NOW), records=()))
 
     def rows(self):
         con = must(factorydb.open_ro(self.cfg.factory_db()))
@@ -133,16 +147,16 @@ class FactoryIndex(unittest.TestCase):
         self.addCleanup(con.close)
         self.assertEqual(con.execute("SELECT offset FROM source WHERE path=?", (str(path),)).fetchone()[0], path.stat().st_size)
 
-    def test_other_writers_survive_update_deletion_and_reindex(self):
+    def test_state_and_revision_survive_log_deletion_and_reindex(self):
         self.ingest()
         con = must(factorydb.open_rw(self.cfg.factory_db()))
         run = self.rows()[0][0]
-        con.execute("UPDATE run SET writer='engine:1' WHERE run=?", (run,))
-        before = con.execute("SELECT * FROM run WHERE run=?", (run,)).fetchone()
+        before = RunRows(self.cfg).snapshot(run)
         self.paths[0].unlink()
         self.ingest()
         reindex(self.cfg, clock=lambda: NOW)
-        self.assertEqual(con.execute("SELECT * FROM run WHERE run=?", (run,)).fetchone(), before)
+        self.assertEqual(RunRows(self.cfg).snapshot(run), before)
+        self.assertEqual(con.execute("SELECT json_extract(facts,'$.has_log') FROM run WHERE run=?", (run,)).fetchone(), (0,))
         con.close()
 
     def test_snapshot_reads_no_run_files(self):
@@ -188,8 +202,9 @@ class FactoryIndex(unittest.TestCase):
     def test_budget_carries_work_and_commits_matching_cursors(self):
         with Indexer(self.cfg, clock=lambda: NOW) as index:
             self.assertFalse(index.pass_once(budget=0))
-            self.assertEqual(len(self.rows()), 1)
-            self.assertEqual(self.rows()[0][2], self.sources()[0][7])
+            folded = [row for row in self.rows() if row[1] is not None]
+            self.assertEqual(len(folded), 1)
+            self.assertEqual(folded[0][2], self.sources()[0][7])
         self.ingest()
         incremental = self.rows()
         reindex(self.cfg, clock=lambda: NOW)
@@ -223,19 +238,23 @@ class FactoryIndex(unittest.TestCase):
         self.ingest()
         self.assertEqual(factorydb.database_error(self.cfg.factory_db(), NOW), "")
 
-    def test_vanished_manifest_removes_only_its_derived_rows(self):
+    def test_vanished_run_folder_preserves_state_and_log_facts(self):
         self.ingest()
         run = self.paths[0].stem
-        self.cfg.run_manifest(run).unlink()
+        before = RunRows(self.cfg).snapshot(run)
+        self.cfg.run_dir(run).rmdir()
         self.ingest()
-        self.assertNotIn(run, [r[0] for r in self.rows()])
-        self.assertNotIn(str(self.paths[0]), [s[0] for s in self.sources()])
+        self.assertEqual(RunRows(self.cfg).snapshot(run), before)
+        self.assertIn(run, [r[0] for r in self.rows()])
+        self.assertIn(str(self.paths[0]), [s[0] for s in self.sources()])
 
     def test_missing_wrong_corrupt_and_stale_db_show_no_runs(self):
         for kind in ("missing", "wrong", "corrupt", "stale"):
             with self.subTest(kind=kind):
-                reindex(self.cfg, clock=lambda: NOW)
-                path = self.cfg.factory_db()
+                cfg = ConfigDir(self.cfg.root / kind)
+                RunScript("b-1").step("plan", 1).close("done").write(cfg.root)
+                reindex(cfg, clock=lambda: NOW)
+                path = cfg.factory_db()
                 if kind == "missing":
                     path.unlink()
                 elif kind == "corrupt":
@@ -244,15 +263,18 @@ class FactoryIndex(unittest.TestCase):
                     con = must(factorydb.open_rw(path))
                     con.execute("PRAGMA user_version=99" if kind == "wrong" else "UPDATE kv SET t=0 WHERE k='index.run.pass'")
                     con.close()
-                dash = Dash(Env(self.cfg.root, clock=lambda: NOW))
+                dash = Dash(Env(cfg.root, clock=lambda: NOW))
                 with patch("taskloop.contracts.locator.RunLocator.runs", side_effect=AssertionError("unexpected run-file read")):
                     world = dash.reads.worlds.world()
                     self.assertFalse(world.runs)
                     self.assertTrue(world.database_error)
                     self.assertTrue(dash.reads.snapshot().server.database_error)
-                self.ingest()
-                self.assertTrue(self.rows())
-        self.assertTrue(list(self.cfg.root.glob("factory.db.bad-*")))
+                if kind in ("wrong", "corrupt"):
+                    before = path.read_bytes()
+                    with self.assertRaises(factorydb.DatabaseError):
+                        reindex(cfg, clock=lambda: NOW)
+                    self.assertEqual(path.read_bytes(), before)
+                    self.assertEqual(list(cfg.root.glob("factory.db.bad-*")), [])
 
 
 class LogBoundary(fixtures.ApiFixture):

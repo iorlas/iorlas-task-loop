@@ -61,12 +61,17 @@ class RequestFile(unittest.TestCase):
         self.assertIsNone(requests.peek(self.cfg, RUN))
 
     def test_a_request_for_another_repo_or_bead_writes_nothing(self):
-        before = {p: p.read_bytes() for p in self.cfg.root.rglob("*") if p.is_file()}
+        before = self.files()
         for repo, bead in (("/other", "tl-5"), ("/repo", "tl-6")):
             with self.subTest(repo=repo, bead=bead):
                 why = requests.post(self.cfg, RUN, "dash", self.now, repo=repo, bead=bead, stop=True)
                 self.assertIn("repo and bead", why)
-        self.assertEqual({p: p.read_bytes() for p in self.cfg.root.rglob("*") if p.is_file()}, before)
+        self.assertEqual(self.files(), before)
+
+    def files(self):
+        """Every file a request could write; the factory db and its import lock belong to the reader."""
+        return {p: p.read_bytes() for p in self.cfg.root.rglob("*")
+                if p.is_file() and "locks" not in p.parts and not p.name.startswith("factory.db")}
 
     def test_a_run_that_ends_before_the_lock_is_acquired_is_refused(self):
         original = requests.locked

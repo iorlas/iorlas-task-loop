@@ -1,10 +1,10 @@
-"""Schema v1 and conservative SQLite opens for the shared factory journal.
+"""Schema v2 and conservative SQLite opens for the shared factory journal.
 
 Connections belong to their caller's thread. Writers use begin_immediate for
 short transactions; unavailable databases are reported as visible errors.
 """
 
-import json
+import logging
 import os
 import sqlite3
 import sys
@@ -15,12 +15,11 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from taskloop.contracts import wire
+from taskloop.contracts.guard import guard
 from taskloop.contracts.run import RunManifest
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 DDL = """
-CREATE TABLE family (name TEXT PRIMARY KEY,
-  authority TEXT NOT NULL CHECK (authority IN ('files','db')), since REAL NOT NULL);
 CREATE TABLE source (path TEXT PRIMARY KEY, family TEXT NOT NULL,
   dev INTEGER, ino INTEGER, size INTEGER, mtime_ns INTEGER, head TEXT,
   offset INTEGER NOT NULL DEFAULT 0, seen REAL NOT NULL, error TEXT);
@@ -34,7 +33,7 @@ CREATE TABLE run (run TEXT PRIMARY KEY, repo TEXT NOT NULL, repo_key TEXT NOT NU
   outcome TEXT, why TEXT, version TEXT, stats TEXT,
   bundle TEXT,
   facts TEXT, facts_upto INTEGER,
-  writer TEXT NOT NULL,
+  manifest TEXT NOT NULL,
   rev INTEGER NOT NULL DEFAULT 0);
 CREATE INDEX run_bead ON run(bead, started);
 CREATE INDEX run_recent ON run(repo_key, started);
@@ -81,7 +80,6 @@ CREATE TABLE signal (
 # not cas_update (leases and the ask ledger have no revision column).
 # DB-04+ must route today's engine park writes through the loop-owned wait store.
 OWNERS: dict[str, str] = {
-    "family": "index",
     "source": "index",
     "bead": "index",  # Cached tracker projection; parent is an opaque field.
     "run": "engine",
@@ -209,6 +207,10 @@ def _open(path: str | os.PathLike[str], *, readonly: bool) -> sqlite3.Connection
             return None
         address = f"{target.resolve().as_uri()}?mode=ro" if readonly else os.fspath(path)
         con = sqlite3.connect(address, uri=readonly, isolation_level=None, timeout=5.0)
+        if not readonly and con.execute("PRAGMA user_version").fetchone()[0] == 1:
+            con.close()
+            _migrate_v1(target)
+            con = sqlite3.connect(address, isolation_level=None, timeout=5.0)
         con.execute("PRAGMA busy_timeout=5000")
         if _journal_mode(con, readonly=readonly) != "wal":
             raise sqlite3.DatabaseError("WAL unavailable")
@@ -222,6 +224,29 @@ def _open(path: str | os.PathLike[str], *, readonly: bool) -> sqlite3.Connection
             with suppress(sqlite3.Error):
                 con.close()
         return None
+
+
+def _migrate_v1(path: Path) -> None:
+    """Serialize retirement and recheck after waiting for another opener."""
+    with guard(path.with_suffix(".schema.lock")):
+        probe = sqlite3.connect(path, isolation_level=None, timeout=5.0)
+        try:
+            version = probe.execute("PRAGMA user_version").fetchone()[0]
+        finally:
+            probe.close()
+        if version == 1:
+            _retire_v1(path)
+
+
+def _retire_v1(path: Path) -> None:
+    """V1 contained derived data only; preserve it and initialize authoritative v2."""
+    bad = path.with_name(f"{path.name}.bad-{time.time_ns()}")
+    path.replace(bad)
+    for suffix in ("-wal", "-shm"):
+        side = Path(str(path) + suffix)
+        if side.exists():
+            side.replace(Path(str(bad) + suffix))
+    logging.getLogger(__name__).warning("Moved derived schema v1 to %s; creating factory.db schema v2", bad)
 
 
 def open_rw(path: str | os.PathLike[str]) -> sqlite3.Connection | None:
@@ -356,8 +381,7 @@ class RunRow:
 def run_rows(path: Path, now: float, *, repo: str | None = None, bead: str | None = None) -> tuple[list[RunRow], str]:
     """One consistent DB read, including freshness; never consult a run file.
 
-    Manifest fields absent from schema v1 (pid, heartbeat, host) are kept in
-    the facts envelope. Log history never enters this database.
+    Manifests belong to the engine; the indexer owns only log facts.
     """
     con = open_ro(path)
     if con is None:
@@ -367,12 +391,11 @@ def run_rows(path: Path, now: float, *, repo: str | None = None, bead: str | Non
         if error := _run_health(con, now):
             return [], error
         rows = con.execute(
-            "SELECT json_extract(facts, '$.manifest'), json_extract(facts, '$.state'), "
+            "SELECT manifest, COALESCE(json_extract(facts, '$.state'), '{}'), "
             "json_extract(facts, '$.has_log'), json_extract(facts, '$.log_mtime') "
             "FROM run WHERE (? IS NULL OR repo=?) AND (? IS NULL OR bead=?) ORDER BY started, run",
             (repo, repo, bead, bead)).fetchall()
-        return [RunRow(wire.load(RunManifest, dict(json.loads(r[0]), v=RunManifest.V)), r[1], bool(r[2]), r[3] or 0)
-                for r in rows if r[0] and r[1]], ""
+        return [RunRow(wire.load(RunManifest, r[0]), r[1], bool(r[2]), r[3] or 0) for r in rows], ""
     except (sqlite3.Error, ValueError, TypeError):
         return [], "database unavailable: corrupt or unreadable run data"
     finally:

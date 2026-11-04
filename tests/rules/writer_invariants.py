@@ -27,7 +27,7 @@ WRITERS: Final = {
     'NetPauseStore': {'taskloop.app.release.reexec', 'taskloop.app.run.reload'},
     'RunCountersStore': {'taskloop.app.run.reload'},
     'EngineLockStore': {'taskloop.app.slots.engine_lock'},
-    'RunManifestStore': {'taskloop.contracts.locator', 'taskloop.contracts.finish'},
+    'RunManifestStore': {'taskloop.contracts.runrows'},
 }
 PATH_STORES: Final = {
     'pin': 'PinStore', 'status': 'StatusStore', 'status_tried': 'StatusTriedStore', 'repos': 'ReposStore',

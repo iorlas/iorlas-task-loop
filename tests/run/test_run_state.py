@@ -1,4 +1,4 @@
-"""RUNSTATE (tl-9un.48): the engine records its run's state in runs/<run>/manifest.json: running while it goes, and one terminal state
+"""RUNSTATE (tl-9un.48): the engine records its run's state in factory.db: running while it goes, and one terminal state
 on EVERY exit path of the process (landed, an ask, an engine fault, a SIGTERM, a fence, a close that itself raises). An exec into a newer
 install is no exit: the run stays live for the process that takes it up. Fakes throughout; the killed-process case is under real/."""
 import contextlib

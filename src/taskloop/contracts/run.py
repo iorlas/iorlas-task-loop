@@ -207,7 +207,7 @@ class RunFinish(Rec):
 
 @final
 class RunManifest(Rec):
-    """runs/<run>/manifest.json: the authority on one run. The id is opaque; the bead, the repo, the times, the loop and the run's state
+    """factory.db run.manifest: the authority on one run. The id is opaque; the bead, the repo, the times, the loop and the run's state
     live here and nowhere in a file name or a log gap. `state` is written by the engine (created, running on each heartbeat, one terminal
     state on every exit) or by the reconciler (lost); `heartbeat` is the time of the engine's last tick, `pid` and `host` the process that
     owns it, `reason` why it ended. `ended` is None while the run goes; `attempts` counts the engine processes that worked on it (an exec

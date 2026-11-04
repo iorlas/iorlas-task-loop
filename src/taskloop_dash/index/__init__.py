@@ -1,15 +1,14 @@
-"""The only run-file reader for dashboard state, persisting resumable folds in factory.db."""
+"""Persist resumable engine-log facts alongside authoritative database run rows."""
 
 import hashlib
 import os
 import time
 from collections.abc import Callable
-from pathlib import Path
 
 from taskloop.contracts import factorydb, log
-from taskloop.contracts.ids import loop_key
 from taskloop.contracts.locator import RunBundle, RunLocator
 from taskloop.contracts.paths import ConfigDir
+from taskloop.contracts.runrows import import_legacy
 from taskloop_dash import jsonl
 from taskloop_dash.index.facts import Facts, append, decode, encode
 
@@ -31,23 +30,10 @@ class Indexer:
     def _open(self):
         path = self.cfg.factory_db()
         self.cfg.root.mkdir(parents=True, exist_ok=True)
-        existed = path.exists()
         con = factorydb.open_rw(path)
-        if con is None and existed:
-            self._quarantine()
-            con = factorydb.open_rw(path)
         if con is None:
-            raise OSError("factory.db unavailable for indexing")
+            raise factorydb.DatabaseError("factory.db unavailable for indexing")
         return con
-
-    def _quarantine(self) -> None:
-        path = self.cfg.factory_db()
-        bad = path.with_name(f"{path.name}.bad-{time.time_ns()}")
-        path.replace(bad)
-        for suffix in ("-wal", "-shm"):
-            side = Path(str(path) + suffix)
-            if side.exists():
-                side.replace(Path(str(bad) + suffix))
 
     def __enter__(self):
         return self
@@ -56,9 +42,9 @@ class Indexer:
         self.con.close()
 
     def clear(self) -> None:
-        """Rebuild only this role's derived rows; preserve every other writer."""
+        """Clear log folds and cursors while preserving authoritative state and revisions."""
         with factorydb.begin_immediate(self.con):
-            self.con.execute("DELETE FROM run WHERE writer='index'")
+            self.con.execute("UPDATE run SET facts=NULL, facts_upto=NULL")
             self.con.execute("DELETE FROM source WHERE family='run'")
             self.con.execute("DELETE FROM kv WHERE k='index.run.pass'")
         self.pending = None
@@ -66,16 +52,7 @@ class Indexer:
     def pass_once(self, budget: float = 0.2) -> bool:
         """Carry unfinished logs/scans to the next pass; return whether this sweep finished."""
         deadline = time.monotonic() + budget
-        try:
-            return self._pass(deadline)
-        except factorydb.DatabaseError as error:
-            if getattr(error, "sqlite_errorname", "") not in ("SQLITE_CORRUPT", "SQLITE_NOTADB"):
-                raise
-            self.con.close()
-            self._quarantine()
-            self.con = self._open()
-            self.pending = None
-            return False
+        return self._pass(deadline)
 
     def _pass(self, deadline: float) -> bool:
         if self.pending is None:
@@ -91,7 +68,6 @@ class Indexer:
                 break
         finished = not self.pending
         with factorydb.begin_immediate(self.con):
-            self.con.execute("INSERT INTO family VALUES ('run','files',?) ON CONFLICT(name) DO NOTHING", (self.clock(),))
             if finished:
                 self._sweep()
                 self.pending = None
@@ -104,18 +80,10 @@ class Indexer:
         for path, in self.con.execute("SELECT path FROM source WHERE family='run'").fetchall():
             if path not in active:
                 self.con.execute("DELETE FROM source WHERE path=? AND family='run'", (path,))
-        for run, in self.con.execute("SELECT run FROM run WHERE writer='index'").fetchall():
-            if run not in self.found:
-                self.con.execute("DELETE FROM run WHERE run=? AND writer='index'", (run,))
 
     def _run(self, bundle: RunBundle, deadline: float) -> bool:
-        row = self.con.execute("SELECT facts, writer FROM run WHERE run=?", (bundle.run,)).fetchone()
-        if row and row[1] != "index":
-            return True
-        authority = self.con.execute("SELECT authority FROM family WHERE name='run'").fetchone()
-        if authority and authority[0] != "files":
-            return True
-        facts = decode(row[0] if row else None, bundle.manifest)
+        row = self.con.execute("SELECT facts FROM run WHERE run=?", (bundle.run,)).fetchone()
+        facts = decode(row[0] if row else None)
         source = self.con.execute("SELECT dev,ino,size,head,offset,mtime_ns,error FROM source WHERE path=?", (str(bundle.log),)).fetchone()
         try:
             with bundle.log.open("rb") as file:
@@ -126,9 +94,9 @@ class Indexer:
                 if source and source[2] is not None and hashlib.sha256(prefix[:min(HEAD, source[2])]).hexdigest() != source[3]:
                     reset = True
                 if (not reset and source and source[4] == stat.st_size and source[5] == stat.st_mtime_ns
-                        and source[6] is None and facts.manifest == bundle.manifest):
+                        and source[6] is None):
                     return True
-                facts = Facts(manifest=bundle.manifest) if reset else facts.replace(manifest=bundle.manifest)
+                facts = Facts() if reset else facts
                 offset = 0 if reset else source[4]
                 file.seek(offset)
                 data = file.read(CHUNK)
@@ -136,8 +104,7 @@ class Indexer:
                     data += file.readline()  # a single large record still makes progress
         except FileNotFoundError:
             self.con.execute("DELETE FROM source WHERE path=? AND family='run'", (str(bundle.log),))
-            self.con.execute("DELETE FROM run WHERE run=? AND writer='index'", (bundle.run,))
-            self._write(bundle, Facts(manifest=bundle.manifest), 0)
+            self._write(bundle, Facts(), 0)
             return True
         except OSError as error:
             self.con.execute("INSERT INTO source(path,family,seen,error) VALUES (?,'run',?,?) "
@@ -171,25 +138,18 @@ class Indexer:
         return offset >= stat.st_size or (consumed < len(data) and b"\n" not in data[consumed:])
 
     def _write(self, bundle: RunBundle, facts: Facts, offset: int) -> None:
-        m = bundle.manifest
-        cols = ("run", "repo", "repo_key", "bead", "mode", "owner", "session", "loop", "worktree", "branch", "sha",
-                "state", "reason", "started", "ended", "next_step", "bundle", "facts", "facts_upto", "writer")
-        values = (m.run, m.repo, loop_key(m.repo), m.bead, m.mode, m.owner, m.session, m.loop, m.worktree, m.branch, m.sha,
-                  m.state.value, m.reason, m.started, m.ended, m.next_step.value if m.next_step else None,
-                  str(bundle.dir), encode(facts), offset, "index")
-        self.con.execute(f"INSERT INTO run ({','.join(cols)}) VALUES ({','.join('?' for _ in cols)}) "
-                         f"ON CONFLICT(run) DO UPDATE SET {','.join(c + '=excluded.' + c for c in cols[1:])} "
-                         "WHERE run.writer='index'", values)
+        self.con.execute("UPDATE run SET facts=?, facts_upto=? WHERE run=?", (encode(facts), offset, bundle.run))
 
 
 def reindex(cfg: ConfigDir, *, clock: Callable[[], float] = time.time) -> dict[str, float | int]:
     """The doctor's full rebuild uses exactly the worker's ingestion code."""
     start = time.monotonic()
+    import_legacy(cfg)
     with Indexer(cfg, clock=clock) as index:
         index.clear()
         while not index.pass_once():
             pass
         counts = {table: index.con.execute(f"SELECT count(*) FROM {table} " +
-                  ("WHERE writer='index'" if table == "run" else "WHERE family='run'")).fetchone()[0]
+                  ("" if table == "run" else "WHERE family='run'")).fetchone()[0]
                   for table in ("run", "source")}
     return {**counts, "seconds": time.monotonic() - start}

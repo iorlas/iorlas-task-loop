@@ -2,7 +2,9 @@
 import os
 import tempfile
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from threading import Barrier
 
 import support.paths  # noqa: F401
 
@@ -42,19 +44,16 @@ class Locator(unittest.TestCase):
         self.assertEqual(self.where.newest("tl-1").run, a.run)  # type: ignore[union-attr]
         self.assertEqual((a.bead, a.repo, a.started), ("tl-1", "/r/x", T0 + 3))
 
-    def test_a_folder_without_a_readable_manifest_is_no_run(self):
+    def test_a_folder_without_a_database_row_is_no_run(self):
         a = self.where.create("/r/x", "tl-1", T0)
         self.cfg.run_dir("tl-9-20261027-000000").mkdir(parents=True)  # the old layout: a folder named by bead and stamp
-        torn = self.cfg.run_dir("01KBN6Z0M4R5E8YQ2T7C9W3XHD")
-        torn.mkdir(parents=True)
-        (torn / "manifest.json").write_text("{")
+        self.cfg.run_dir("01KBN6Z0M4R5E8YQ2T7C9W3XHD").mkdir(parents=True)
         self.assertEqual([x.run for x in self.where.runs()], [a.run])
 
-    def test_a_manifest_under_another_run_name_is_not_trusted(self):
+    def test_a_database_run_does_not_need_its_run_folder(self):
         a = self.where.create("/r/x", "tl-1", T0)
-        other = self.cfg.run_dir("01KBN6Z0M4R5E8YQ2T7C9W3XHD")
-        other.mkdir(parents=True)
-        (other / "manifest.json").write_text(self.cfg.run_manifest(a.run).read_text())
+        self.cfg.run_dir(a.run).rmdir()
+        self.assertEqual(self.where.get(a.run), a)
         self.assertEqual([x.run for x in self.where.runs()], [a.run])
 
     def test_taking_a_run_up_counts_an_attempt_and_the_end_is_written_once(self):
@@ -111,6 +110,29 @@ class Locator(unittest.TestCase):
         a = self.where.create("/r/x", "tl-1", T0)
         self.assertEqual((a.log, a.err, a.live, a.dir), (self.cfg.engine_log(a.run), self.cfg.engine_log(a.run).with_suffix(".stderr"),
                                                          self.cfg.live_dir(a.run), self.cfg.run_dir(a.run)))
+
+    def test_two_threads_take_up_beat_identify_and_add_beads_without_losing_changes(self):
+        a = self.where.create("/r/x", "tl-1", T0)
+        barrier = Barrier(2, timeout=5)
+
+        def update(worker):
+            where = RunLocator(self.cfg)
+            barrier.wait()
+            for n in range(10):
+                where.take_up(a.run, "/r/x", "tl-1", T0 + n)
+                where.beat(a.run, T0 + n)
+                where.identify(a.run, "stage:gate", "owner", "session")
+                where.add_bead(a.run, f"{worker}-{n}")
+
+        with ThreadPoolExecutor(max_workers=2) as threads:
+            list(threads.map(update, ("a", "b")))
+        saved = self.where.get(a.run)
+        assert saved is not None
+        self.assertEqual(saved.manifest.attempts, 21)
+        self.assertEqual(set(saved.manifest.beads), {f"{worker}-{n}" for worker in ("a", "b") for n in range(10)})
+        self.assertEqual((saved.manifest.mode, saved.manifest.owner, saved.manifest.session), ("stage:gate", "owner", "session"))
+        self.assertEqual(saved.manifest.state, RunState.RUNNING)
+        self.assertEqual(saved.manifest.heartbeat, T0 + 9)
 
 
 if __name__ == "__main__":

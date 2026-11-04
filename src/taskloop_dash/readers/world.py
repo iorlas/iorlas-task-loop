@@ -128,7 +128,7 @@ class Worlds:
         return {(loop_key(a.repo), a.bead): a for a in AskStore.at(self.env.config).live()}
 
     def run_headers(self, now: float, rows: list[StoredRun] | None = None) -> list[RunHeader]:
-        """Stage runs need no bead or log to be visible; their manifest is indexed."""
+        """Stage runs need no bead or log to be visible; read their authoritative DB manifest."""
         projects = {path: project for project, path in self.repos().items()}
         out: list[RunHeader] = []
         parks = self.records.parks()

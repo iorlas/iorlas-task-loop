@@ -1,4 +1,4 @@
-"""First-writer-wins run completion, using the manifest and the existing file-family lock."""
+"""First-writer-wins completion in factory.db, with separately serialized file projections."""
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -7,7 +7,7 @@ from taskloop.contracts.finish_projection import history
 from taskloop.contracts.guard import guard
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.run import RunFinish, RunManifest, RunState
-from taskloop.contracts.stores import JsonStore
+from taskloop.contracts.runrows import RunRows, import_once
 
 
 @dataclass(frozen=True)
@@ -38,26 +38,24 @@ def finish_run(cfg: ConfigDir, run: str, candidate: RunFinish,
     """
     if candidate.state.live:
         raise ValueError(f"{candidate.state} is not a terminal state")
-    with guard(cfg.lock_record("run", run)):
-        doc = JsonStore(cfg.run_manifest(run), RunManifest)
-        old = doc.need()
+    import_once(cfg)
+    doc = RunRows(cfg)
+    with doc.transaction() as con:
+        old = doc.read(con, run)
         if old is None or old.run != run:
             raise ValueError(f"no manifest for run {run}")
         won = old.state.live
         record = candidate if won else previous_finish(old)
         if won:
-            doc.write(old.replace(state=record.state, ended=record.ended, heartbeat=record.ended,
-                                  reason=record.why, sha=record.sha, finish=record, finish_projected=False))
+            doc.write(con, old.replace(state=record.state, ended=record.ended, heartbeat=record.ended,
+                                       reason=record.why, sha=record.sha, finish=record, finish_projected=False))
     with guard(cfg.lock_record("finish-history", run)):
-        winner = doc.need()
+        winner = doc.get(run)
         assert winner is not None
         if not winner.finish_projected:
             if project is None:
                 history(cfg, winner, record)
             else:
                 project(winner, record)
-            with guard(cfg.lock_record("run", run)):
-                current = doc.need()
-                assert current is not None
-                doc.write(current.replace(finish_projected=True))
+            doc.change(run, lambda current: current.replace(finish_projected=True))
     return FinishResult(record, won)

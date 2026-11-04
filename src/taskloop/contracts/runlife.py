@@ -1,5 +1,5 @@
 """How long a run lives, from its manifest alone: the one liveness rule every reader shares. A run's state is RECORDED by its writer
-(contracts/run.py RunState, runs/<run>/manifest.json), never inferred from a log gap: the engine marks it running on every
+(contracts/run.py RunState, factory.db run.manifest), never inferred from a log gap: the engine marks it running on every
 heartbeat and terminal on every exit; `reconcile` (tl processes only) is the one writer of `lost`, `is_lost` the one decision it and the
 read-only dashboard share. How long its files are kept is KEEP_DAYS, swept by `tl prune` alone."""
 from collections.abc import Callable

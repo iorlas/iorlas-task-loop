@@ -14,8 +14,9 @@ from support.runs import manifest
 
 from taskloop.app.launch.dash_ports import owner_intake, owner_writes
 from taskloop.contracts.ids import loop_key
-from taskloop.contracts.run import RunManifest, RunState
-from taskloop.contracts.stores import AskStore, JsonStore
+from taskloop.contracts.run import RunState
+from taskloop.contracts.runrows import RunRows
+from taskloop.contracts.stores import AskStore
 from taskloop_dash.app import Dash
 from taskloop_dash.env import Env, Ports
 
@@ -80,8 +81,8 @@ class RepoIdentity(unittest.TestCase):
         body = {"project": loop_key(self.repos[0]), "bead": "b-2", "run": self.runs[0]}
         self.assertIn("repo and bead", self.dash.writes.post("stop", body)[1]["message"])
         cfg = self.dash.env.config
-        store = JsonStore(cfg.run_manifest(self.runs[0]), RunManifest)
-        store.write(must(store.get()).replace(state=RunState.DONE))
+        store = RunRows(cfg)
+        store.put(must(store.get(self.runs[0])).replace(state=RunState.DONE))
         body["bead"] = "b-1"
         out = self.dash.writes.post("stop", body)[1]
         self.assertFalse(out["ok"])

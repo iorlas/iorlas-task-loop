@@ -1,21 +1,15 @@
-"""Find runs and update their live metadata; finish_run owns the terminal answer. The manifest is the authority (run id,
-repo, bead, start and end, loop, attempts); nothing else reads a bead, a repo or a time out of a file name or a path depth. Queries: a
-run id -> its bundle; (repo, bead) -> its runs; a repo -> its runs; every run, by start time. A directory scan plus the manifests, no
-index: a manifest is decoded again only when its file changed. A run folder without a manifest is not a run here. The manifest also
-holds the run's state (RunState): the engine writes it, `reconcile` marks a dead run lost, and every reader reads only that state."""
+"""Find and update authoritative run manifests in factory.db; finish_run owns the terminal answer."""
 import os
 from collections.abc import Callable
-from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from pathlib import Path
 
 from taskloop.contracts.enums import Step
 from taskloop.contracts.finish import FinishResult, finish_run, previous_finish
-from taskloop.contracts.guard import guard
 from taskloop.contracts.ids import RunId
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.run import RunManifest, RunState
-from taskloop.contracts.stores import JsonStore
+from taskloop.contracts.runrows import RunRows, import_once
 
 
 def host_name() -> str:
@@ -51,11 +45,14 @@ class RunBundle:
 
 
 class RunLocator:
-    """Finds runs under a ConfigDir. Keep one per process where scans repeat: it remembers the manifests it decoded."""
+    """Finds runs in the shared database without holding a connection."""
 
     def __init__(self, cfg: ConfigDir) -> None:
         self.cfg = cfg
-        self._seen: dict[str, tuple[tuple[int, int], RunManifest | None]] = {}
+        self.rows = RunRows(cfg)
+
+    def _ready(self) -> None:
+        import_once(self.cfg)
 
     def bundle(self, manifest: RunManifest) -> RunBundle:
         c = self.cfg
@@ -64,55 +61,30 @@ class RunLocator:
 
     def get(self, run: str) -> RunBundle | None:
         """The bundle of a run id; None when it has no readable manifest."""
-        m = JsonStore(self.cfg.run_manifest(run), RunManifest).get()
+        self._ready()
+        m = self.rows.get(run)
         return self.bundle(m) if m is not None and m.run == run else None
 
     def runs(self) -> list[RunBundle]:
         """Every run that has a manifest, oldest start first (ties: by id)."""
-        found: list[RunBundle] = []
-        try:
-            entries = [e for e in os.scandir(self.cfg.runs_dir()) if e.is_dir()]
-        except OSError:
-            return found
-        for e in entries:
-            m = self._manifest(e.name)
-            if m is not None and m.run == e.name:
-                found.append(self.bundle(m))
-        return sorted(found, key=lambda b: (b.started, b.run))
+        self._ready()
+        return [self.bundle(m) for m in self.rows.all()]
 
     def of_bead(self, bead: str, repo: str | None = None) -> list[RunBundle]:
         """The runs of a bead (of one repo when `repo` is named), oldest first."""
-        return [b for b in self.runs() if b.bead == bead and (repo is None or b.repo == repo)]
+        self._ready()
+        return [self.bundle(m) for m in self.rows.of_bead(bead, repo)]
 
     def of_repo(self, repo: str) -> list[RunBundle]:
-        return [b for b in self.runs() if b.repo == repo]
+        self._ready()
+        return [self.bundle(m) for m in self.rows.of_repo(repo)]
 
     def newest(self, bead: str, repo: str | None = None) -> RunBundle | None:
         return next(iter(reversed(self.of_bead(bead, repo))), None)
 
-    def _manifest(self, run: str) -> RunManifest | None:
-        path = self.cfg.run_manifest(run)
-        try:
-            st = path.stat()
-        except OSError:
-            self._seen.pop(run, None)
-            return None
-        sig = (st.st_mtime_ns, st.st_size)
-        hit = self._seen.get(run)
-        if hit is None or hit[0] != sig:
-            hit = (sig, JsonStore(path, RunManifest).get())
-            self._seen[run] = hit
-        return hit[1]
-
-    # the writer: the engine of the run, and the one reconciler
-    def held(self, run: str) -> AbstractContextManager[None]:
-        return guard(self.cfg.lock_record("run", run))
-
     def _change(self, run: str, change: Callable[[RunManifest], RunManifest]) -> None:
-        with self.held(run):
-            old = self.get(run)
-            if old is not None:
-                self._put(change(old.manifest))
+        self._ready()
+        self.rows.change(run, change)
 
     def identify(self, run: str, mode: str, owner: str, session: str) -> None:
         self._change(run, lambda m: m.replace(mode=mode, owner=owner, session=session))
@@ -124,7 +96,8 @@ class RunLocator:
         self._change(run, lambda m: m.replace(worktree=path))
 
     def _put(self, m: RunManifest) -> None:
-        JsonStore(self.cfg.run_manifest(m.run), RunManifest).write(m)
+        self._ready()
+        self.rows.put(m)
 
     def create(self, repo: str, bead: str, now: float, loop: str | None = None, *, mode: str = "", owner: str = "",
                session: str = "") -> RunBundle:
@@ -148,15 +121,13 @@ class RunLocator:
         answer; a run folder with no manifest gets one. A terminal network pause continues under a new run id instead."""
         self.cfg.run_dir(run).mkdir(parents=True, exist_ok=True)
         self.cfg.engine_dir().mkdir(parents=True, exist_ok=True)
-        with self.held(run):
-            old = self.get(run)
-            if old is not None and not old.manifest.state.live:
-                self._put(old.manifest.replace(attempts=old.manifest.attempts + 1))  # the answer stays; the process still counts
-                return self.get(run) or old
+        self._ready()
+        with self.rows.transaction() as con:
+            old = self.rows.read(con, run)
             own = {"heartbeat": now, "pid": os.getpid(), "host": host_name()}
-            m = (old.manifest.replace(attempts=old.manifest.attempts + 1, **own) if old
+            m = (old.replace(attempts=old.attempts + 1, **(own if old.state.live else {})) if old
                  else RunManifest(run=run, repo=repo, bead=bead, started=now, **own))
-            self._put(m)
+            self.rows.write(con, m)
         return self.bundle(m)
 
     def add_bead(self, run: str, bead: str) -> None:

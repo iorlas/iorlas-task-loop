@@ -1,4 +1,4 @@
-"""RUNSTATE (tl-9un.48): a run's liveness is RECORDED (runs/<run>/manifest.json, RunState), never inferred by a reader from a gap in a log.
+"""RUNSTATE (tl-9un.48): a run's liveness is RECORDED (factory.db, RunState), never inferred by a reader from a gap in a log.
 Over src, as an AST scan:
  - no module reads the engine log's Beat records to decide life: `Beat` is named only where the stuck rule's tick and the event filters are
    (ALLOWS_BEAT), so a reader cannot compare a log's newest record with the clock;

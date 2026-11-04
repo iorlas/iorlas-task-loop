@@ -125,7 +125,7 @@ class TlCheck(unittest.TestCase):
     def test_it_claims_nothing_and_writes_results_and_run_evidence(self):
         self.tl()
         written = {p.relative_to(Path(self.tmp.name, "cfg")).parts[1] for p in Path(self.tmp.name, "cfg").rglob("*") if p.is_file()}
-        self.assertLessEqual(written, {"results", "locks", "runs", "engine"})
+        self.assertLessEqual(written, {"results", "locks", "runs", "engine", "factory.db", "factory.db-wal", "factory.db-shm"})
         self.assertTrue({"runs", "engine"} <= written)
 
 

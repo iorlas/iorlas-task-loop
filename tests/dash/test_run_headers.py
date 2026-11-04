@@ -17,8 +17,8 @@ from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.run import RunState
 from taskloop.contracts.runlife import RETAIN
+from taskloop.contracts.runrows import RunRows
 from taskloop.contracts.slottable import SlotSource
-from taskloop.contracts.stores import JsonStore
 from taskloop_dash.app import Dash
 from taskloop_dash.env import Env, Ports
 
@@ -50,23 +50,23 @@ class RunHeaders(unittest.TestCase):
     def test_manifest_only_run_is_visible_on_an_empty_board_with_identity_and_terminal_state(self):
         bundle = self.create()
         self.locator.beat(bundle.run, self.now)
-        before = self.cfg.run_manifest(bundle.run).read_bytes()
+        before = RunRows(self.cfg).snapshot(bundle.run)
         snap = self.snapshot()
         self.assertEqual(snap.beads, [])
         self.assertFalse(bundle.log.exists())
         head, = snap.runs
         self.assertEqual((head.run, head.project, head.mode, head.owner, head.session, head.state),
                          (bundle.run, loop_key(self.repo), "stage:gate", "mac-owner", "mac-session", RunState.RUNNING))
-        self.assertEqual(self.cfg.run_manifest(bundle.run).read_bytes(), before)
+        self.assertEqual(RunRows(self.cfg).snapshot(bundle.run), before)
         self.locator.end(bundle.run, self.now + 1, RunState.FAILED, "exit 1")
-        ended = self.cfg.run_manifest(bundle.run).read_bytes()
+        ended = RunRows(self.cfg).snapshot(bundle.run)
         self.now += 4
         self.snapshot()
         self.dash.reads.wait()
         terminal = self.snapshot()
         self.assertEqual((terminal.runs[0].state, terminal.runs[0].reason), (RunState.FAILED, "exit 1"))
         self.assertNotEqual(terminal.version, snap.version)
-        self.assertEqual(self.cfg.run_manifest(bundle.run).read_bytes(), ended)
+        self.assertEqual(RunRows(self.cfg).snapshot(bundle.run), ended)
 
     def test_retention_keeps_old_live_runs_and_recent_done_runs(self):
         live = self.create("stage:check", self.now - RETAIN - 10)
@@ -102,12 +102,12 @@ class RunHeaders(unittest.TestCase):
         self.assertEqual([(r.run, r.branch, r.owner) for r in snap.adhoc], [(live.run, "s2", "mac-owner")])
         self.assertEqual([(s.name, s.state) for s in snap.slots], [(f"s{i}", "free") for i in range(1, 5)])
         stored = must(self.locator.get(live.run)).manifest
-        JsonStore(self.cfg.run_manifest(live.run), type(stored)).write(stored.replace(branch="feature/check"))
+        RunRows(self.cfg).put(stored.replace(branch="feature/check"))
         self.now += 4
         self.snapshot()
         self.dash.reads.wait()
         self.assertEqual(self.snapshot().adhoc[0].branch, "feature/check")
-        JsonStore(self.cfg.run_manifest(live.run), type(stored)).write(stored.replace(sha="0123456789abcdef"))
+        RunRows(self.cfg).put(stored.replace(sha="0123456789abcdef"))
         self.now += 4
         self.snapshot()
         self.dash.reads.wait()

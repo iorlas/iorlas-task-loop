@@ -26,6 +26,7 @@ from taskloop.contracts.ids import BeadId
 from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.ports import Git
 from taskloop.contracts.run import RunReport, RunState
+from taskloop.contracts.runrows import RunRows
 from taskloop.stores.memory import fake_stores
 
 
@@ -118,12 +119,12 @@ class StagePreflight(unittest.TestCase):
 
     def test_live_previous_run_refuses_explicit_and_auto_dry_runs_without_changing_manifest(self):
         old = self.locator.create(str(self.wt), "t-1", 1)
-        before = self.who.config.run_manifest(old.run).read_bytes()
+        before = RunRows(self.who.config).snapshot(old.run)
         for stage in ("gate", None):
             self.a.stage = stage
             self.assertEqual(self.run_in(), 1)
         self.assertIn(f"previous run {old.run} is still created", self.output.getvalue())
-        self.assertEqual(self.who.config.run_manifest(old.run).read_bytes(), before)
+        self.assertEqual(RunRows(self.who.config).snapshot(old.run), before)
         self.assertEqual(len(self.locator.runs()), 1)
         self.git.try_commit.assert_not_called()
         self.spawner.run.assert_not_called()

@@ -33,7 +33,7 @@ class ConfigDir:
         return self.root / "land-push" / f"{stamp}-{branch}.log"
 
     def run_manifest(self, run: RunId | str) -> Path:
-        """runs/<run>/manifest.json: the one authority on a run (contracts/run.py RunManifest); only the locator reads it."""
+        """Legacy rollback copy, read only by runrows.import_legacy; current manifests live in factory.db."""
         return self.run_dir(run) / "manifest.json"
 
     def hooks_dir(self) -> Path:

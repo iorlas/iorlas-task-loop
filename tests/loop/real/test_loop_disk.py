@@ -83,7 +83,7 @@ class PruneVerb(Base):
         (run / "evidence").mkdir(parents=True)
         (run / "evidence" / "a.png").write_bytes(b"P" * 100)
         old = time.time() - 40 * 86400
-        for p in (run / "evidence" / "a.png", run / "evidence", run / "manifest.json", run):
+        for p in (run / "evidence" / "a.png", run / "evidence", run):
             os.utime(p, (old, old))
         outs = []
         for argv in (["--dry-run"], [], []):

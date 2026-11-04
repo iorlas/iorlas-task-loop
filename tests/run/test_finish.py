@@ -22,6 +22,7 @@ from taskloop.contracts.kinds import Kind
 from taskloop.contracts.locator import RunLocator, host_name
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.run import RunState
+from taskloop.contracts.runrows import RunRows
 from taskloop.contracts.stores import EventLog, LoopLog, RunLog, TraceStore
 from taskloop.domain import outcome as oc
 from taskloop.domain.asks import specs
@@ -69,12 +70,12 @@ class Finish(unittest.TestCase):
 
     def test_real_finish_then_mark_lost_preserves_the_entire_answer(self):
         first = finish_run(self.cfg, self.run_id, answer(oc.make(Kind.LANDED, "ok", sha="c" * 40), 155.0))
-        before = self.cfg.run_manifest(self.run_id).read_bytes()
+        before = RunRows(self.cfg).snapshot(self.run_id)
         lost = self.where.mark_lost(self.run_id, "process disappeared")
         assert lost is not None
         self.assertFalse(lost.won)
         self.assertEqual(lost.record, first.record)
-        self.assertEqual(self.cfg.run_manifest(self.run_id).read_bytes(), before)
+        self.assertEqual(RunRows(self.cfg).snapshot(self.run_id), before)
         self.assertEqual([len(rows) for rows in self.rows()], [1, 1, 1, 1])
 
     def test_mark_lost_then_late_close_returns_the_lost_answer(self):
@@ -129,7 +130,9 @@ class Finish(unittest.TestCase):
         kept = wire.load(EndRec, result.record.end)
         self.assertEqual(kept.kind, done.kind.value)
         self.assertEqual(outcome(result.record), done)
-        self.assertEqual(json.loads(self.cfg.run_manifest(self.run_id).read_text())["finish"]["ended"], 180.0)
+        row = RunRows(self.cfg).snapshot(self.run_id)
+        assert row is not None
+        self.assertEqual(json.loads(row[0])["finish"]["ended"], 180.0)
 
     def test_late_heartbeat_metadata_and_take_up_preserve_the_answer(self):
         first = finish_run(self.cfg, self.run_id, answer(oc.make(Kind.DONE), 190.0))
@@ -142,15 +145,15 @@ class Finish(unittest.TestCase):
 
     def test_an_inflight_heartbeat_cannot_restore_a_live_snapshot_after_finish(self):
         read, release = threading.Event(), threading.Event()
-        original = self.where.get
+        original = self.where.rows.read
 
-        def snapshot(run):
-            bundle = original(run)
+        def snapshot(con, run):
+            bundle = original(con, run)
             read.set()
             self.assertTrue(release.wait(timeout=5))
             return bundle
 
-        with mock.patch.object(self.where, "get", side_effect=snapshot), ThreadPoolExecutor(max_workers=2) as threads:
+        with mock.patch.object(self.where.rows, "read", side_effect=snapshot), ThreadPoolExecutor(max_workers=2) as threads:
             beating = threads.submit(self.where.beat, self.run_id, 140.0)
             self.assertTrue(read.wait(timeout=5))
             finishing = threads.submit(finish_run, self.cfg, self.run_id, answer(oc.make(Kind.DONE), 150.0))

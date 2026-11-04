@@ -11,6 +11,7 @@ from taskloop_dash.views.runfacts import FoldState, Run, run_from
 
 @dataclass(frozen=True)
 class StoredRun:
+    """Engine-owned manifest joined to optional indexer-owned log facts."""
     manifest: RunManifest
     state: FoldState
     has_log: bool

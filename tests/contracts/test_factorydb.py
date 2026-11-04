@@ -16,7 +16,7 @@ import support.paths  # noqa: F401
 from taskloop.contracts import factorydb
 
 TABLES = {
-    "family", "source", "bead", "run", "attempt", "step", "lease", "check_pass",
+    "source", "bead", "run", "attempt", "step", "lease", "check_pass",
     "check_round", "ask", "ask_ledger", "kv", "effect", "wait", "signal",
 }
 INDEXES = {
@@ -53,7 +53,7 @@ class FactoryDbTest(unittest.TestCase):
 
     def test_fresh_open_creates_schema_and_pragmas(self):
         con = self.rw()
-        self.assertEqual(con.execute("PRAGMA user_version").fetchone(), (1,))
+        self.assertEqual(con.execute("PRAGMA user_version").fetchone(), (2,))
         self.assertEqual(con.execute("PRAGMA journal_mode").fetchone(), ("wal",))
         self.assertEqual(con.execute("PRAGMA synchronous").fetchone(), (1,))
         self.assertEqual(con.execute("PRAGMA busy_timeout").fetchone(), (5000,))
@@ -97,10 +97,10 @@ class FactoryDbTest(unittest.TestCase):
 
     def test_wrong_version_is_rejected_without_replacing_it(self):
         con = self.rw()
-        con.execute("PRAGMA user_version=2")
+        con.execute("PRAGMA user_version=99")
         self.assertIsNone(factorydb.open_rw(self.path))
         self.assertIsNone(factorydb.open_ro(self.path))
-        self.assertEqual(con.execute("PRAGMA user_version").fetchone(), (2,))
+        self.assertEqual(con.execute("PRAGMA user_version").fetchone(), (99,))
 
     def test_unversioned_nonempty_database_is_not_initialized(self):
         con = sqlite3.connect(self.path)
@@ -242,13 +242,12 @@ class FactoryDbTest(unittest.TestCase):
         with patch.object(factorydb.sqlite3, "connect", side_effect=bad_connection):
             self.assertIsNone(factorydb.open_rw(self.path))
 
-    def test_family_accepts_only_single_authorities(self):
+    def test_run_has_no_family_authority_or_writer_column(self):
         con = self.rw()
-        for authority in ("files", "db"):
-            con.execute("INSERT INTO family VALUES (?,?,1)", (authority, authority))
-        for authority in ("dual", "both"):
-            with self.subTest(authority=authority), self.assertRaises(sqlite3.IntegrityError):
-                con.execute("INSERT INTO family VALUES ('bad',?,1)", (authority,))
+        self.assertEqual(con.execute("SELECT name FROM sqlite_master WHERE name='family'").fetchall(), [])
+        columns = {r[1]: r for r in con.execute("PRAGMA table_info(run)")}
+        self.assertNotIn("writer", columns)
+        self.assertEqual(columns["manifest"][3], 1)
 
     def test_bead_projection_is_index_owned_and_revisioned(self):
         con = self.rw()
@@ -284,7 +283,7 @@ class FactoryDbTest(unittest.TestCase):
 
     def seed_history(self, con, run="old", state="done", ended=2):
         con.execute(
-            "INSERT INTO run(run,repo,repo_key,bead,state,started,ended,writer) VALUES (?,'repo','repo',?,?,1,?,'engine')",
+            "INSERT INTO run(run,repo,repo_key,bead,state,started,ended,manifest) VALUES (?,'repo','repo',?,?,1,?,'{}')",
             (run, run, state, ended),
         )
         con.execute("INSERT INTO attempt(run,n,started,ended) VALUES (?,1,1,2)", (run,))
@@ -401,7 +400,7 @@ class FactoryDbTest(unittest.TestCase):
             self.rw()
             self.rw()
             self.assertEqual(len(checks), 2)
-            con.execute("PRAGMA user_version=2")
+            con.execute("PRAGMA user_version=99")
             self.assertIsNone(factorydb.open_rw(self.path))
             self.assertIsNone(factorydb.open_ro(self.path))
             self.assertEqual(len(checks), 4)
