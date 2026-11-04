@@ -10,9 +10,11 @@ import sys
 import tempfile
 import threading
 import time
-import unittest
 from pathlib import Path
 from unittest import mock
+
+import pytest
+from support.case import Case
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
@@ -55,8 +57,8 @@ def sh(*args, cwd):
     subprocess.run(list(args), cwd=cwd, check=True, capture_output=True)
 
 
-class Base(unittest.TestCase):
-    def setUp(self):
+class Base(Case):
+    def setup_method(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.home = Path(self.tmp.name)
         env = {"XDG_CONFIG_HOME": str(self.home / "cfg"), "APPDATA": str(self.home / "cfg"),
@@ -66,7 +68,7 @@ class Base(unittest.TestCase):
         self.env.start()
         os.environ.pop("TASK_LOOP_ACTOR", None)
 
-    def tearDown(self):
+    def teardown_method(self):
         self.env.stop()
 
         def force(fn, path, _):  # Windows: git's pack files are read-only
@@ -79,19 +81,19 @@ class Base(unittest.TestCase):
 
 class Identity(Base):
     def test_actor_is_per_session(self):
-        self.assertEqual(who().actor, "tl-abcdef12")
+        assert who().actor == "tl-abcdef12"
 
     def test_actor_without_session_id_is_still_per_process(self):
         os.environ.pop("CLAUDE_CODE_SESSION_ID")
         os.environ["CLAUDE_PID"] = "4242"
-        self.assertTrue(who().actor.endswith("-4242"))
+        assert who().actor.endswith("-4242")
 
     def test_actor_override(self):
         os.environ["TASK_LOOP_ACTOR"] = "me"
-        self.assertEqual(who().actor, "me")
+        assert who().actor == "me"
 
     def test_config_dir_is_created(self):
-        self.assertTrue(homes.config_dir().is_dir())
+        assert homes.config_dir().is_dir()
 
 
 class Records(Base):
@@ -99,11 +101,11 @@ class Records(Base):
         trail.event(who(),"claim", "x-1", repo=str(self.home), worktree="/w")
         trail.event(who(),"close", "x-1", repo=str(self.home))
         lines = (homes.config_dir() / "events.jsonl").read_text().splitlines()
-        self.assertEqual([json.loads(ln)["kind"] for ln in lines], ["claim", "close"])
-        self.assertEqual(json.loads(lines[0])["session"], "abcdef12-3456")
-        self.assertIn(str(self.home), json.loads((homes.config_dir() / "repos.json").read_text())["repos"])
+        assert [json.loads(ln)["kind"] for ln in lines] == ["claim", "close"]
+        assert json.loads(lines[0])["session"] == "abcdef12-3456"
+        assert str(self.home) in json.loads((homes.config_dir() / "repos.json").read_text())["repos"]
 
-    @unittest.skipIf(os.name == "nt", "the registry lock is fcntl")
+    @pytest.mark.skipif(os.name == "nt", reason="the registry lock is fcntl")
     def test_writers_registering_at_once_neither_crash_nor_lose_a_repo(self):
         # race test (tl-bxk.11.1): every process wrote repos.tmp; the second os.replace found it gone and the event
         # (a claim's, a slot take's) raised. Each writer now has its own tmp file, under a lock, so none is lost.
@@ -120,9 +122,9 @@ class Records(Base):
             p.start()
         for p in ps:
             p.join(60)
-        self.assertEqual(errs, [])
+        assert errs == []
         repos = json.loads((homes.config_dir() / "repos.json").read_text())["repos"]
-        self.assertEqual(len(repos), 50)
+        assert len(repos) == 50
 
     def test_prune_keeps_recent(self):
         f = homes.config_dir() / "events.jsonl"
@@ -130,7 +132,7 @@ class Records(Base):
         new = json.dumps({"t": trail.now(), "kind": "new"})
         f.write_text((old + "\n") * 120000 + new + "\n")
         trail.prune_events(homes.cfg())
-        self.assertEqual([json.loads(ln)["kind"] for ln in f.read_text().splitlines()], ["new"])
+        assert [json.loads(ln)["kind"] for ln in f.read_text().splitlines()] == ["new"]
 
 
 class UsageCLI(Base):
@@ -146,9 +148,9 @@ class UsageCLI(Base):
         procsim.fake(shlex.join([sys.executable, str(d / "route.py")]), route, args=True)
         env = dict(os.environ, HOME=str(self.home), USERPROFILE=str(self.home))
         r = tl_main("usage", "[]", cwd=self.home, env=env)
-        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertIn("5h 6.0%, week 4.0%", r.stdout)
-        self.assertEqual(got, [["status", "--claude-usage", "[]", "--json"]])
+        assert r.returncode == 0, r.stdout + r.stderr
+        assert "5h 6.0%, week 4.0%" in r.stdout
+        assert got == [["status", "--claude-usage", "[]", "--json"]]
 
 
 class TraceCLI(Base):
@@ -161,17 +163,17 @@ class TraceCLI(Base):
         other = dict(run, run="b-2-x", bead="b-2")
         (cfg / "traces.jsonl").write_text(json.dumps(run) + "\n" + json.dumps(other) + "\n")
         r = tl_main("trace", "b-1", cwd=self.home, env={"HOME": str(self.home)})
-        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertIn("b-1-20261019-010000  b-1  landed  10 min", r.stdout)
-        self.assertIn("thr-9", r.stdout)
-        self.assertNotIn("b-2-x", r.stdout)
+        assert r.returncode == 0, r.stdout + r.stderr
+        assert "b-1-20261019-010000  b-1  landed  10 min" in r.stdout
+        assert "thr-9" in r.stdout
+        assert "b-2-x" not in r.stdout
 
 
 class SlotReset(Base):
     """A slot reset must never lose a dead session's work."""
 
-    def setUp(self):
-        super().setUp()
+    def setup_method(self):
+        super().setup_method()
         self.origin = self.home / "origin.git"
         self.repo = self.home / "repo"
         sh("git", "init", "-q", "--bare", "-b", "main", str(self.origin), cwd=self.home)
@@ -189,9 +191,9 @@ class SlotReset(Base):
         # a reset is about git; the slot-bead lookup gets an empty bd, so no real bd (absent on CI) is needed
         tlbd.install(self, result=tlbd.done("[]"))
 
-    def tearDown(self):
+    def teardown_method(self):
         os.chdir(self.cwd)
-        super().tearDown()
+        super().teardown_method()
 
     def reset(self, bead):
         return tl.main(["slot", "reset", "s1", "--bead", bead])
@@ -200,8 +202,8 @@ class SlotReset(Base):
 class PinAndRollback(Base):
     """pinned.json and the verbs that write it, against a scratch CLAUDE_CONFIG_DIR laid out as the plugin cache is."""
 
-    def setUp(self):
-        super().setUp()
+    def setup_method(self):
+        super().setup_method()
         self.claude = self.home / "claude"
         p = mock.patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": str(self.claude)})
         p.start()
@@ -237,74 +239,70 @@ class PinAndRollback(Base):
 
     def test_pin_writes_both_versions_and_clear_removes_the_file(self):
         rc, out, _ = self.pin("0.2.0", "--delegate", "0.5.0")
-        self.assertEqual(rc, 0, out)
+        assert rc == 0, out
         pin = self.pinned()
-        self.assertEqual((pin["task-loop"], pin["delegate"]), ("0.2.0", "0.5.0"))
-        self.assertEqual(self.pin("--delegate", "0.6.0")[0], 0)  # one side only: the other stays
-        self.assertEqual((self.pinned()["task-loop"], self.pinned()["delegate"]), ("0.2.0", "0.6.0"))
-        self.assertEqual(self.pin("--clear")[0], 0)
-        self.assertFalse((homes.config_dir() / "pinned.json").exists())
-        self.assertEqual(self.pin("--clear")[0], 0)  # clearing nothing is fine
+        assert (pin["task-loop"], pin["delegate"]) == ("0.2.0", "0.5.0")
+        assert self.pin("--delegate", "0.6.0")[0] == 0  # one side only: the other stays
+        assert (self.pinned()["task-loop"], self.pinned()["delegate"]) == ("0.2.0", "0.6.0")
+        assert self.pin("--clear")[0] == 0
+        assert not (homes.config_dir() / "pinned.json").exists()
+        assert self.pin("--clear")[0] == 0  # clearing nothing is fine
 
     def test_a_pin_to_a_missing_cache_dir_is_refused_and_writes_nothing(self):
         rc, _, err = self.pin("0.3.0")
-        self.assertEqual(rc, 2)
-        self.assertIn("0.3.0 is not installed", err)
-        self.assertIn("0.1.0, 0.2.0, 0.10.0", err)
-        self.assertEqual(self.pin("0.2.0", "--delegate", "9.9.9")[0], 2)
-        self.assertFalse((homes.config_dir() / "pinned.json").exists())  # not even the valid half
+        assert rc == 2
+        assert "0.3.0 is not installed" in err
+        assert "0.1.0, 0.2.0, 0.10.0" in err
+        assert self.pin("0.2.0", "--delegate", "9.9.9")[0] == 2
+        assert not (homes.config_dir() / "pinned.json").exists()  # not even the valid half
         shutil.rmtree(self.claude / "plugins/cache/iorlas-marketplace/iorlas-task-loop/0.1.0/skills")  # half-copied
-        self.assertEqual(self.pin("0.1.0")[0], 2)
+        assert self.pin("0.1.0")[0] == 2
 
     def test_rollback_pins_the_previous_version_and_keeps_the_installed_delegate(self):
         out = io.StringIO()
         with mock.patch.object(sys, "stdout", out):
-            self.assertEqual(tl.main(["rollback"]), 0)
+            assert tl.main(["rollback"]) == 0
         pin = self.pinned()
-        self.assertEqual((pin["task-loop"], pin["delegate"]), ("0.2.0", "0.6.0"))  # numbers: 0.2.0 comes before 0.10.0
+        assert (pin["task-loop"], pin["delegate"]) == ("0.2.0", "0.6.0")  # numbers: 0.2.0 comes before 0.10.0
         with mock.patch.object(sys, "stdout", out):
-            self.assertEqual(tl.main(["rollback"]), 0)  # again: one step further back from the pin
-        self.assertEqual(self.pinned()["task-loop"], "0.1.0")
+            assert tl.main(["rollback"]) == 0  # again: one step further back from the pin
+        assert self.pinned()["task-loop"] == "0.1.0"
         with mock.patch.object(sys, "stdout", out), mock.patch.object(sys, "stderr", io.StringIO()):
-            self.assertEqual(tl.main(["rollback"]), 2)  # nothing older
-        self.assertEqual(self.pinned()["task-loop"], "0.1.0")
+            assert tl.main(["rollback"]) == 2  # nothing older
+        assert self.pinned()["task-loop"] == "0.1.0"
 
     def test_find_route_follows_the_pin_then_the_installed_entry_not_the_newest_directory(self):
         self.record("iorlas-delegate", "0.5.0")  # the plugin manager installed 0.5.0; 0.6.0 is only a directory
         def route():
             return lroute.find_route("", pins.pinned_dir("delegate", snapshot()), homes.claude_dir() / "plugins" / "cache",
                                                   lroute.installed_dir(homes.claude_dir()))
-        self.assertIn("/iorlas-delegate/0.5.0/", must(route()))
-        self.assertEqual(self.pin("0.1.0", "--delegate", "0.6.0")[0], 0)
-        self.assertIn("/iorlas-delegate/0.6.0/", must(route()))
+        assert "/iorlas-delegate/0.5.0/" in must(route())
+        assert self.pin("0.1.0", "--delegate", "0.6.0")[0] == 0
+        assert "/iorlas-delegate/0.6.0/" in must(route())
 
     def test_the_drill_pin_decides_what_loop_and_find_route_pick_then_clear_returns_to_the_newest(self):
 
         def route():
             return lroute.find_route("", pins.pinned_dir("delegate", snapshot()), homes.claude_dir() / "plugins" / "cache")
-        self.assertIn("0.6.0", must(route()))  # no pin: the newest
-        self.assertEqual(self.pin("0.1.0", "--delegate", "0.5.0")[0], 0)
-        self.assertIn("/iorlas-delegate/0.5.0/", must(route()))
+        assert "0.6.0" in must(route())  # no pin: the newest
+        assert self.pin("0.1.0", "--delegate", "0.5.0")[0] == 0
+        assert "/iorlas-delegate/0.5.0/" in must(route())
         root = self.claude / "plugins/cache/iorlas-marketplace/iorlas-task-loop/0.2.0"
         def target(**kw):
             return wloop.installs(homes.cfg(), snapshot(), here=root / "skills" / "task-loop").target(**kw)
-        self.assertEqual(target(), ("0.1.0", root.parent / "0.1.0"))  # older than the running one: still the pin
-        self.assertEqual(target(skip=["0.1.0"]), None)
-        self.assertEqual(self.pin("--clear")[0], 0)
-        self.assertEqual(target(), ("0.10.0", root.parent / "0.10.0"))
-        self.assertIn("0.6.0", must(route()))
+        assert target() == ("0.1.0", root.parent / "0.1.0")  # older than the running one: still the pin
+        assert target(skip=["0.1.0"]) is None
+        assert self.pin("--clear")[0] == 0
+        assert target() == ("0.10.0", root.parent / "0.10.0")
+        assert "0.6.0" in must(route())
         # the CLI end to end, main(argv) with only the scratch dirs in its environment
         cli = ["pin"]
         r = tl_main(*cli, "0.2.0", "--delegate", "0.5.0", cwd=self.home, env={"HOME": str(self.home)})
-        self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertIn("/iorlas-delegate/0.5.0/", must(route()))
+        assert r.returncode == 0, r.stderr
+        assert "/iorlas-delegate/0.5.0/" in must(route())
         r = tl_main(*cli, "0.4.0", cwd=self.home, env={"HOME": str(self.home)})
-        self.assertEqual(r.returncode, 2)
-        self.assertEqual(self.pinned()["task-loop"], "0.2.0")
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert r.returncode == 2
+        assert self.pinned()["task-loop"] == "0.2.0"
 
 
 def ask_file(asks, bead, **over):
@@ -314,7 +312,7 @@ def ask_file(asks, bead, **over):
     (asks / (f"{bead}.json")).write_text(json.dumps(rec))
 
 
-class AskCli(unittest.TestCase):
+class AskCli(Case):
     """tl ask: the inbox from the terminal. An answer is a typed record on the ask, never a comment."""
 
     def test_list_answer_and_withdraw(self):
@@ -331,20 +329,20 @@ class AskCli(unittest.TestCase):
                 out = io.StringIO()
                 with mock.patch("sys.stdout", out):
                     c = ctx()
-                    self.assertEqual(tl.v_ask(ns(), c), 0)
-                    self.assertEqual(tl.v_ask(ns(op="answer", bead="x-1", text=["right"]), c), 0)
-                    self.assertEqual(tl.v_ask(ns(op="withdraw", bead="x-2", text=["no", "longer"]), c), 0)
-                    self.assertEqual(tl.v_ask(ns(op="answer", bead="nope", text=["x"]), c), 1)
-                    self.assertEqual(tl.v_ask(ns(op="answer", bead="x-1", text=["again"]), c), 1)  # already answered
-                    self.assertEqual(tl.v_ask(ns(op="answer", bead="x-1", text=["again"], amend=True), c), 0)
-                self.assertIn("x-1", out.getvalue())
+                    assert tl.v_ask(ns(), c) == 0
+                    assert tl.v_ask(ns(op="answer", bead="x-1", text=["right"]), c) == 0
+                    assert tl.v_ask(ns(op="withdraw", bead="x-2", text=["no", "longer"]), c) == 0
+                    assert tl.v_ask(ns(op="answer", bead="nope", text=["x"]), c) == 1
+                    assert tl.v_ask(ns(op="answer", bead="x-1", text=["again"]), c) == 1  # already answered
+                    assert tl.v_ask(ns(op="answer", bead="x-1", text=["again"], amend=True), c) == 0
+                assert "x-1" in out.getvalue()
                 a = json.loads((asks / "x-1.json").read_text())
-                self.assertEqual((a["status"], a["answer"]["action"], a["answer"]["text"]), ("answered", "text", "again"))
+                assert (a["status"], a["answer"]["action"], a["answer"]["text"]) == ("answered", "text", "again")
                 a = json.loads((asks / "x-2.json").read_text())
-                self.assertEqual((a["status"], a["closed_why"]), ("withdrawn", "no longer"))
+                assert (a["status"], a["closed_why"]) == ("withdrawn", "no longer")
 
 
-class ParkStaleAsks(unittest.TestCase):
+class ParkStaleAsks(Case):
     """tl-bxk.8.25: an ask with no answer 3 days after it was asked is parked, once, with a comment; it still waits."""
 
     def test_parks_only_late_unanswered_open_asks(self):
@@ -359,11 +357,11 @@ class ParkStaleAsks(unittest.TestCase):
                 ask_file(asks, bead, parks_at=parks, repo=str(d), **extra)
             env = {"XDG_CONFIG_HOME": str(d), "APPDATA": str(d), "HOME": str(d), "USERPROFILE": str(d)}
             with mock.patch.dict(os.environ, env), tlbd.bd_boundary() as bd_calls:
-                self.assertEqual(wasks.sweep("park", who(), homes.cfg(), every=0), ["late"])
-                self.assertEqual(wasks.sweep("park", who(), homes.cfg(), every=600), [])  # throttled
+                assert wasks.sweep("park", who(), homes.cfg(), every=0) == ["late"]
+                assert wasks.sweep("park", who(), homes.cfg(), every=600) == []  # throttled
             def status(b):
                 return json.loads((asks / (f"{b}.json")).read_text())["status"]
-            self.assertEqual([status(b) for b in ("late", "fresh", "done", "closed")], ["parked", "open", "answered", "closed"])
+            assert [status(b) for b in ("late", "fresh", "done", "closed")] == ["parked", "open", "answered", "closed"]
             log = "\n".join(" ".join(c) for c in bd_calls.calls)
-            self.assertIn("comments add late Parked (engine): ask late-1 got no answer in 3 days", log)
-            self.assertEqual(log.count("comments add"), 1)
+            assert "comments add late Parked (engine): ask late-1 got no answer in 3 days" in log
+            assert log.count("comments add") == 1

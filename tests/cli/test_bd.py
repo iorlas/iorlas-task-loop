@@ -1,9 +1,10 @@
 """Required bd failures retain their historical command exit code and diagnostic."""
-import unittest
 from pathlib import Path
 from unittest import mock
 
+import pytest
 import support.paths  # noqa: F401
+from support.case import Case
 from support.tlmain import tl, tl_main
 
 from taskloop.adapters import beadtools
@@ -13,20 +14,20 @@ from taskloop.contracts.bead import BdError
 from taskloop.contracts.ports import BdFailure
 
 
-class BdExit(unittest.TestCase):
+class BdExit(Case):
     def test_required_adapter_failure_exits_with_the_same_message(self):
         call = mock.Mock(side_effect=BdFailure(BdError(kind="other", text="database locked")))
-        with self.assertRaises(SystemExit) as caught:
+        with pytest.raises(SystemExit) as caught:
             bd.required(beadtools.must, call)
-        self.assertEqual(caught.exception.code, "tl: database locked")
+        assert caught.value.code == "tl: database locked"
 
     def test_required_success_passes_arguments_and_result(self):
         call = mock.Mock(return_value=7)
-        self.assertEqual(bd.required(call, "bead", reason="done"), 7)
+        assert bd.required(call, "bead", reason="done") == 7
         call.assert_called_once_with("bead", reason="done")
 
     def test_other_errors_propagate(self):
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             bd.required(mock.Mock(side_effect=ValueError("bad input")))
 
     def test_dispatch_reports_required_failure_as_exit_one_on_stderr(self):
@@ -37,18 +38,18 @@ class BdExit(unittest.TestCase):
 
         with mock.patch.object(tl, "Ctx"), mock.patch.dict(tl.VERBS, {"actor": verb}):
             result = tl_main("actor", cwd=Path.cwd())
-        self.assertEqual((result.returncode, result.stdout, result.stderr), (1, "", "tl: database locked\n"))
+        assert (result.returncode, result.stdout, result.stderr) == (1, "", "tl: database locked\n")
 
     def test_dispatch_reports_missing_bd_as_before(self):
         with mock.patch.object(tl, "Ctx"), mock.patch.object(beadtools.shutil, "which", return_value=None):
             result = tl_main("task", "ready", cwd=Path.cwd())
-        self.assertEqual((result.returncode, result.stdout, result.stderr), (1, "", "tl: bd is not on PATH\n"))
+        assert (result.returncode, result.stdout, result.stderr) == (1, "", "tl: bd is not on PATH\n")
 
     def test_bd_is_an_unknown_verb_before_context_or_adapter_creation(self):
         with mock.patch.object(tl, "Ctx") as context, mock.patch.object(beadtools, "bd_store") as store:
             result = tl_main("bd", "show", "X", cwd=Path.cwd())
-        self.assertEqual(result.returncode, 2)
-        self.assertIn("invalid choice: 'bd'", result.stderr)
+        assert result.returncode == 2
+        assert "invalid choice: 'bd'" in result.stderr
         context.assert_not_called()
         store.assert_not_called()
 
@@ -61,7 +62,7 @@ class BdExit(unittest.TestCase):
               mock.patch.object(beadtools, "bd_store", return_value=store) as factory,
               mock.patch.object(tl.cli_closing, "guard", return_value=mock.Mock()) as guard):
             result = tl_main("task", "show", "X", cwd=Path.cwd())
-        self.assertEqual((result.returncode, result.stdout, result.stderr), (0, "shown\n", ""))
+        assert (result.returncode, result.stdout, result.stderr) == (0, "shown\n", "")
         factory.assert_called_once_with("tl-session")
         guard.assert_called_once_with(context.who, context.git, store)
         store.passthrough.assert_called_once_with(["show", "X"])
@@ -73,13 +74,13 @@ class BdExit(unittest.TestCase):
               mock.patch.object(beadtools, "bd_store", return_value=store),
               mock.patch.object(tl.cli_closing, "guard", return_value=refusal)):
             result = tl_main("task", "close", "X", cwd=Path.cwd())
-        self.assertEqual(result.returncode, 1)
-        self.assertIn("no land on record", result.stderr)
+        assert result.returncode == 1
+        assert "no land on record" in result.stderr
         refusal.assert_called_once_with("X", "")
         store.passthrough.assert_not_called()
 
     def test_missing_bd_failure_exits_at_cli_boundary(self):
         call = mock.Mock(side_effect=BdCommandFailure("tl: bd is not on PATH"))
-        with self.assertRaises(SystemExit) as caught:
+        with pytest.raises(SystemExit) as caught:
             bd.required(call)
-        self.assertEqual(caught.exception.code, "tl: bd is not on PATH")
+        assert caught.value.code == "tl: bd is not on PATH"

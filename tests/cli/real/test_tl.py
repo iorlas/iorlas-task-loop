@@ -12,6 +12,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from support.case import Case
+
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -43,8 +45,8 @@ def sh(*args, cwd):
     subprocess.run(list(args), cwd=cwd, check=True, capture_output=True)
 
 
-class Base(unittest.TestCase):
-    def setUp(self):
+class Base(Case):
+    def setup_method(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.home = Path(self.tmp.name)
         env = {"XDG_CONFIG_HOME": str(self.home / "cfg"), "APPDATA": str(self.home / "cfg"),
@@ -54,7 +56,7 @@ class Base(unittest.TestCase):
         self.env.start()
         os.environ.pop("TASK_LOOP_ACTOR", None)
 
-    def tearDown(self):
+    def teardown_method(self):
         self.env.stop()
 
         def force(fn, path, _):  # Windows: git's pack files are read-only
@@ -66,8 +68,8 @@ class Base(unittest.TestCase):
 
 
 class RegisterCLI(Base):
-    def setUp(self):
-        super().setUp()
+    def setup_method(self):
+        super().setup_method()
         self.repo = self.home / "repo"
         sh("git", "init", "-q", str(self.repo), cwd=self.home)
         self.config = self.home / "cfg" / "task-loop"
@@ -77,16 +79,16 @@ class RegisterCLI(Base):
         return tl_main(*args, cwd=cwd or self.home)
 
     def assert_registered(self, result):
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout, "REGISTERED " + str(self.repo.resolve()) + "\n")
-        self.assertEqual(result.stderr, "")
+        assert result.returncode == 0, result.stderr
+        assert result.stdout == "REGISTERED " + str(self.repo.resolve()) + "\n"
+        assert result.stderr == ""
         repos = json.loads(self.registry.read_text())["repos"]
-        self.assertIn(str(self.repo.resolve()), repos)
-        self.assertIsInstance(repos[str(self.repo.resolve())]["added"], (int, float))
+        assert str(self.repo.resolve()) in repos
+        assert isinstance(repos[str(self.repo.resolve())]["added"], (int, float))
 
     def test_default_directory(self):
         self.assert_registered(self.cli("register", cwd=self.repo))
-        self.assertEqual([p for p in self.config.iterdir() if p.name != "locks"], [self.registry])  # no tmp left
+        assert [p for p in self.config.iterdir() if p.name != "locks"] == [self.registry]  # no tmp left
 
     def test_explicit_relative_subdirectory(self):
         (self.repo / "nested dir").mkdir()
@@ -100,8 +102,8 @@ class RegisterCLI(Base):
         original = self.registry.read_bytes()
         self.assert_registered(self.cli("register", cwd=worktree))
         self.assert_registered(self.cli("register", str(worktree)))
-        self.assertEqual(self.registry.read_bytes(), original)
-        self.assertEqual(len(json.loads(original)["repos"]), 1)
+        assert self.registry.read_bytes() == original
+        assert len(json.loads(original)["repos"]) == 1
 
     def test_repeated_registration_preserves_entries_and_metadata(self):
         self.config.mkdir(parents=True)
@@ -110,11 +112,11 @@ class RegisterCLI(Base):
         self.assert_registered(self.cli("register", str(self.repo)))
         original = self.registry.read_bytes()
         self.assert_registered(self.cli("register", str(self.repo)))
-        self.assertEqual(self.registry.read_bytes(), original)
+        assert self.registry.read_bytes() == original
         repos = json.loads(original)["repos"]
-        self.assertEqual(len(repos), 2)
+        assert len(repos) == 2
         for path, metadata in existing.items():
-            self.assertEqual(repos[path], metadata)
+            assert repos[path] == metadata
 
     def in_process(self, *args):
         out, err, cwd = io.StringIO(), io.StringIO(), os.getcwd()
@@ -143,40 +145,40 @@ class RegisterCLI(Base):
             for args in cases:
                 with self.subTest(configured=configured, args=args):
                     rc, out, err = self.in_process(*args)
-                    self.assertEqual(rc, 1)
-                    self.assertEqual(out, "")
-                    self.assertEqual(len(err.splitlines()), 1)
-                    self.assertTrue(err.startswith("tl: "), err)
+                    assert rc == 1
+                    assert out == ""
+                    assert len(err.splitlines()) == 1
+                    assert err.startswith("tl: "), err
                     if configured:
-                        self.assertEqual(self.registry.read_bytes(), original)
-                        self.assertEqual([p for p in self.config.iterdir() if p.name != "locks"], [self.registry])  # no tmp left
+                        assert self.registry.read_bytes() == original
+                        assert [p for p in self.config.iterdir() if p.name != "locks"] == [self.registry]  # no tmp left
                     else:
-                        self.assertFalse(self.config.parent.exists())
+                        assert not self.config.parent.exists()
 
     def test_invalid_input_exits_1_with_one_tl_line_on_stderr_and_no_traceback(self):
         result = self.cli("register", str(self.home / "missing"))
-        self.assertEqual(result.returncode, 1)
-        self.assertEqual(result.stdout, "")
-        self.assertEqual(len(result.stderr.splitlines()), 1)
-        self.assertTrue(result.stderr.startswith("tl: "), result.stderr)
-        self.assertNotIn("Traceback", result.stderr)
+        assert result.returncode == 1
+        assert result.stdout == ""
+        assert len(result.stderr.splitlines()) == 1
+        assert result.stderr.startswith("tl: "), result.stderr
+        assert "Traceback" not in result.stderr
 
     def test_help_documents_register_and_optional_directory(self):
         result = self.cli("--help")
-        self.assertEqual(result.returncode, 0)
-        self.assertIn("register [DIR]", result.stdout)
+        assert result.returncode == 0
+        assert "register [DIR]" in result.stdout
         result = self.cli("register", "--help")
-        self.assertEqual(result.returncode, 0)
-        self.assertIn("[DIR]", result.stdout)
-        self.assertIn("current directory", result.stdout)
-        self.assertFalse(self.config.parent.exists())
+        assert result.returncode == 0
+        assert "[DIR]" in result.stdout
+        assert "current directory" in result.stdout
+        assert not self.config.parent.exists()
 
 
 class SlotReset(Base):
     """A slot reset must never lose a dead session's work."""
 
-    def setUp(self):
-        super().setUp()
+    def setup_method(self):
+        super().setup_method()
         self.origin = self.home / "origin.git"
         self.repo = self.home / "repo"
         sh("git", "init", "-q", "--bare", "-b", "main", str(self.origin), cwd=self.home)
@@ -194,9 +196,9 @@ class SlotReset(Base):
         # a reset is about git; the slot-bead lookup gets an empty bd, so no real bd (absent on CI) is needed
         tlbd.install(self, result=tlbd.done("[]"))
 
-    def tearDown(self):
+    def teardown_method(self):
         os.chdir(self.cwd)
-        super().tearDown()
+        super().teardown_method()
 
     def reset(self, bead):
         return tl.main(["slot", "reset", "s1", "--bead", bead])
@@ -207,18 +209,18 @@ class SlotReset(Base):
         (self.slot / "junk.tmp").write_text("x")
         sh("git", "add", "junk.tmp", cwd=self.slot)
         sh("git", "commit", "-qm", "junk", cwd=self.slot)  # committed work on a detached head is not our concern
-        self.assertEqual(self.reset("t-1"), 0)
-        self.assertEqual(gitq.git("symbolic-ref", "--short", "HEAD", cwd=str(self.slot)), "task/t-1")
-        self.assertTrue((self.slot / "ignored" / "big").exists())
+        assert self.reset("t-1") == 0
+        assert gitq.git("symbolic-ref", "--short", "HEAD", cwd=str(self.slot)) == "task/t-1"
+        assert (self.slot / "ignored" / "big").exists()
 
     def test_dirty_slot_work_is_committed_not_wiped(self):
         sh("git", "checkout", "-q", "-b", "task/t-0", cwd=self.slot)
         (self.slot / "a.txt").write_text("changed by a dead session\n")
         (self.slot / "new.txt").write_text("new\n")
-        self.assertEqual(self.reset("t-1"), 0)
-        self.assertEqual(gitq.git("status", "--porcelain", cwd=str(self.slot)), "")
-        self.assertEqual(gitq.git("show", "task/t-0:new.txt", cwd=str(self.slot)), "new")
-        self.assertEqual(gitq.git("show", "task/t-0:a.txt", cwd=str(self.slot)), "changed by a dead session")
+        assert self.reset("t-1") == 0
+        assert gitq.git("status", "--porcelain", cwd=str(self.slot)) == ""
+        assert gitq.git("show", "task/t-0:new.txt", cwd=str(self.slot)) == "new"
+        assert gitq.git("show", "task/t-0:a.txt", cwd=str(self.slot)) == "changed by a dead session"
 
     def test_reset_for_a_bead_keeps_its_existing_branch(self):
         sh("git", "checkout", "-q", "-b", "task/t-1", cwd=self.slot)
@@ -226,23 +228,23 @@ class SlotReset(Base):
         sh("git", "add", "-A", cwd=self.slot)
         sh("git", "commit", "-qm", "wip (t-1): blocked", cwd=self.slot)
         sh("git", "checkout", "-q", "--detach", "origin/main", cwd=self.slot)
-        self.assertEqual(self.reset("t-1"), 0)
-        self.assertEqual(gitq.git("symbolic-ref", "--short", "HEAD", cwd=str(self.slot)), "task/t-1")
-        self.assertEqual((self.slot / "work.txt").read_text(), "reviewed work\n")
+        assert self.reset("t-1") == 0
+        assert gitq.git("symbolic-ref", "--short", "HEAD", cwd=str(self.slot)) == "task/t-1"
+        assert (self.slot / "work.txt").read_text() == "reviewed work\n"
 
     def test_loop_folders_are_excluded_from_git_add(self):
         wslots.exclude_local(port_git(),str(self.repo), ".slots/", ".task/")
         wslots.exclude_local(port_git(),str(self.repo), ".slots/")
         exclude = (self.repo / ".git" / "info" / "exclude").read_text()
-        self.assertEqual(exclude.split().count(".slots/"), 1)
-        self.assertNotIn(".slots", gitq.git("status", "--porcelain", "--untracked-files=all", cwd=str(self.repo)))
+        assert exclude.split().count(".slots/") == 1
+        assert ".slots" not in gitq.git("status", "--porcelain", "--untracked-files=all", cwd=str(self.repo))
 
     def test_detached_dirty_work_goes_to_wip_branch(self):
         (self.slot / "new.txt").write_text("new\n")
-        self.assertEqual(self.reset("t-2"), 0)
+        assert self.reset("t-2") == 0
         wip = [b for b in gitq.git("branch", "--list", "wip/*", cwd=str(self.slot)).split() if b.startswith("wip/")]
-        self.assertEqual(len(wip), 1)
-        self.assertEqual(gitq.git("show", wip[0] + ":new.txt", cwd=str(self.slot)), "new")
+        assert len(wip) == 1
+        assert gitq.git("show", wip[0] + ":new.txt", cwd=str(self.slot)) == "new"
 
     def test_setup_runs_only_when_inputs_change(self):
         cfg = {
@@ -263,15 +265,15 @@ class SlotReset(Base):
         sh("git", "add", "-A", cwd=self.slot)
         sh("git", "commit", "-qm", "ignore log", cwd=self.slot)
         sh("git", "push", "-q", "origin", "HEAD:main", cwd=self.slot)
-        self.assertEqual(self.reset("t-1"), 0)
-        self.assertEqual(self.reset("t-2"), 0)
-        self.assertEqual((self.slot / "setup.log").read_text().count("run"), 1)
+        assert self.reset("t-1") == 0
+        assert self.reset("t-2") == 0
+        assert (self.slot / "setup.log").read_text().count("run") == 1
 
 
 @unittest.skipIf(os.name == "nt", "the fixture's live process is a POSIX ps lookup")
 class CutoverCheck(Base):
-    def setUp(self):
-        super().setUp()
+    def setup_method(self):
+        super().setup_method()
         self.repo = self.home / "repo"
         self.repo.mkdir()
         sh("git", "init", "-q", cwd=self.repo)
@@ -288,7 +290,7 @@ class CutoverCheck(Base):
 
     def test_nothing_live_exits_0(self):
         rc, out = self.check()
-        self.assertEqual((rc, out.split()[0]), (0, "CLEAR:"))
+        assert (rc, out.split()[0]) == (0, "CLEAR:")
     def test_a_live_loop_and_a_live_run_exit_1_and_are_listed_a_dead_one_is_not(self):
         child = subprocess.Popen(["sleep", "60"])
         self.addCleanup(child.wait)  # cleanups run last-in first-out: kill, then wait
@@ -297,17 +299,13 @@ class CutoverCheck(Base):
         put_lock(str(self.repo), {"pid": child.pid, "start": pidcheck.proc_start(child.pid), "bead": "x-7",
                                               "by": "engine", "started": time.time()})
         rc, out = self.check()
-        self.assertEqual(rc, 1, out)
-        self.assertIn(f"LIVE loop pid {child.pid} on {self.repo} running x-9", out)
-        self.assertIn(f"LIVE run in {self.repo}: engine pid {child.pid} runs x-7", out)
+        assert rc == 1, out
+        assert f"LIVE loop pid {child.pid} on {self.repo} running x-9" in out
+        assert f"LIVE run in {self.repo}: engine pid {child.pid} runs x-7" in out
         rc, out = self.check("--json")
-        self.assertEqual((rc, sorted(x["kind"] for x in json.loads(out)["live"])), (1, ["loop", "run"]))
+        assert (rc, sorted(x["kind"] for x in json.loads(out)["live"])) == (1, ["loop", "run"])
         child.kill()
         child.wait()
-        self.assertEqual(self.check()[0], 0)
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert self.check()[0] == 0
 
 

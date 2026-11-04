@@ -2,9 +2,10 @@
 import argparse
 import sys
 import tempfile
-import unittest
 from pathlib import Path
 from typing import ClassVar
+
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -40,8 +41,8 @@ class Clock:
             self.on_sleep(self)
 
 
-class WaitCase(unittest.TestCase):
-    def setUp(self):
+class WaitCase(Case):
+    def setup_method(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.cfg = ConfigDir(self.tmp.name)
@@ -78,56 +79,56 @@ class WaitCase(unittest.TestCase):
     def test_an_ended_run_exits_by_its_outcome(self):
         for outcome, code in (("landed", 0), ("done", 0), ("parked", 11), ("failed", 11), ("blocked", 11)):
             self.log(close=outcome)
-            self.assertEqual(self.go("--bead", BEAD)[0], code, outcome)
-        self.assertTrue(self.out[0].startswith("ended done: " + RUN))
+            assert self.go("--bead", BEAD)[0] == code, outcome
+        assert self.out[0].startswith("ended done: " + RUN)
 
     def test_a_lost_run_has_its_own_code(self):
         self.log(state=RunState.LOST)
-        self.assertEqual(self.go("--bead", BEAD)[0], wait.CRASHED)
+        assert self.go("--bead", BEAD)[0] == wait.CRASHED
 
     def test_a_killed_engine_is_reconciled_to_lost_by_the_wait_itself(self):
         self.log(beat=T - 400, host=host_name(), pid=4_194_303)  # running, stale, and nobody's pid
         rc, _ = self.go("--bead", BEAD)
-        self.assertEqual((rc, self.out[0].startswith("lost: " + RUN)), (wait.CRASHED, True))
+        assert (rc, self.out[0].startswith("lost: " + RUN)) == (wait.CRASHED, True)
 
     def test_a_silent_log_is_no_sign_of_death(self):
         self.log(beat=T - 99_999)  # no record for a day, and no host to probe: the recorded state is running
-        self.assertEqual(self.go("--bead", BEAD, "--timeout", "3")[0], wait.TIMEOUT)
+        assert self.go("--bead", BEAD, "--timeout", "3")[0] == wait.TIMEOUT
 
     def test_no_run_has_its_own_code(self):
-        self.assertEqual(self.go("--bead", BEAD)[0], wait.NO_RUN)
-        self.assertEqual(self.go("--any")[0], wait.NO_RUN)
+        assert self.go("--bead", BEAD)[0] == wait.NO_RUN
+        assert self.go("--any")[0] == wait.NO_RUN
 
     def test_a_live_run_waits_then_reports_its_close(self):
         self.log()
         rc, c = self.go("--bead", BEAD, clock=Clock(lambda c: self.log(close="landed", beat=c.t) if c.slept == 3 else None))
-        self.assertEqual((rc, c.slept), (0, 3))
+        assert (rc, c.slept) == (0, 3)
 
     def test_timeout_prints_one_line_and_its_code(self):
         self.log()
         rc, c = self.go("--bead", BEAD, "--timeout", "5")
-        self.assertEqual((rc, len(self.out), c.t - T), (wait.TIMEOUT, 1, 5.0))
-        self.assertTrue(self.out[0].startswith("timeout"))
+        assert (rc, len(self.out), c.t - T) == (wait.TIMEOUT, 1, 5.0)
+        assert self.out[0].startswith("timeout")
 
     def test_an_ask_that_opens_ends_the_wait(self):
         self.log()
         rc, _ = self.go("--bead", BEAD, clock=Clock(lambda c: self.ask(c.t)))
-        self.assertEqual((rc, self.out), (wait.ASK, ["ask: t-1 t-1-1 [decision] Keep v1?"]))
+        assert (rc, self.out) == (wait.ASK, ["ask: t-1 t-1-1 [decision] Keep v1?"])
 
     def test_an_ask_older_than_the_wait_does_not_end_it(self):
         self.log()
         self.ask(t=T - 100)
-        self.assertEqual(self.go("--bead", BEAD, "--timeout", "3")[0], wait.TIMEOUT)
+        assert self.go("--bead", BEAD, "--timeout", "3")[0] == wait.TIMEOUT
 
     def test_any_waits_for_the_first_live_run_of_the_repo_to_end(self):
         self.log()
         self.log("t-2-20261026-100000")
         rc, _ = self.go("--any", clock=Clock(lambda c: self.log("t-2-20261026-100000", close="failed", beat=c.t)))
-        self.assertEqual((rc, self.out[0].startswith("ended failed: t-2-")), (wait.ENDED_NOT_OK, True))
+        assert (rc, self.out[0].startswith("ended failed: t-2-")) == (wait.ENDED_NOT_OK, True)
 
     def test_help_documents_every_code(self):
         for code in (0, wait.ASK, wait.ENDED_NOT_OK, wait.CRASHED, wait.NO_RUN, wait.TIMEOUT):
-            self.assertIn(f"  {code}  ", wait.CODES)
+            assert f"  {code}  " in wait.CODES
 
 
 class Show(WaitCase):
@@ -143,15 +144,11 @@ class Show(WaitCase):
         self.asks.put(a)
         for key in ("t-1-1", BEAD):
             self.out.clear()
-            self.assertEqual(self.show(key), 0)
+            assert self.show(key) == 0
             text = "\n".join(self.out)
             for want in ("question: Keep v1?", "owner cause: decision", "blocking: no", "default: keep v1", "adr adr-3", "[owner] why?",
                          "outcome: -"):
-                self.assertIn(want, text)
+                assert want in text
 
     def test_an_unknown_id_is_one_line_and_nonzero(self):
-        self.assertEqual((self.show("nope"), self.out), (1, ["tl: no ask nope"]))
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert (self.show("nope"), self.out) == (1, ["tl: no ask nope"])

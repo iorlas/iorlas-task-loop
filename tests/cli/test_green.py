@@ -2,10 +2,11 @@
 import json
 import sys
 import tempfile
-import unittest
 from argparse import Namespace
 from pathlib import Path
 from unittest import mock
+
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -50,8 +51,8 @@ def run(step="unit", tree="T1", base="B1", status: Verdict = "passed"):
     return PassRecord(key=key, result=res, tree=TreeSha(tree), base=BaseSha(base))
 
 
-class GreenCase(unittest.TestCase):
-    def setUp(self):
+class GreenCase(Case):
+    def setup_method(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.cfg = ConfigDir(self.tmp.name)
@@ -68,26 +69,26 @@ class GreenCase(unittest.TestCase):
             real_stores(self.cfg).results(repo, r.key.check).of(key_digest(r.key)).write(r)
 
     def test_no_store_is_not_green(self):
-        self.assertEqual(self.ask(), 1)
-        self.assertEqual(self.out, ["not green: unit tree T1 base B1"])
+        assert self.ask() == 1
+        assert self.out == ["not green: unit tree T1 base B1"]
 
     def test_pass_for_that_tree_and_base_is_green(self):
         self.store(run())
-        self.assertEqual(self.ask(), 0)
-        self.assertEqual(self.out, ["green: unit tree T1 base B1 (passed)"])
+        assert self.ask() == 0
+        assert self.out == ["green: unit tree T1 base B1 (passed)"]
 
     def test_a_planned_skip_is_green_and_prints_its_reason(self):
         rec = run(status="skipped")
         self.store(rec.replace(result=rec.result.replace(exit=None, planned=True, why="no change under ui/**")))
-        self.assertEqual(self.ask(), 0)
-        self.assertEqual(self.out, ["green: unit tree T1 base B1 (skipped-by-plan: no change under ui/**)"])
-        self.assertEqual(self.ask(tree="T2"), 1)
-        self.assertEqual(self.ask(base="B2"), 1)
+        assert self.ask() == 0
+        assert self.out == ["green: unit tree T1 base B1 (skipped-by-plan: no change under ui/**)"]
+        assert self.ask(tree="T2") == 1
+        assert self.ask(base="B2") == 1
 
     def test_a_failed_first_skip_is_never_green(self):
         rec = run(status="skipped")
         self.store(rec.replace(result=rec.result.replace(exit=None, why="static failed first")))
-        self.assertEqual(self.ask(), 1)
+        assert self.ask() == 1
 
     def test_judged_config_selects_the_plan_digest_and_an_invalid_profile_refuses_passes(self):
         cmd = ["repo-plan", "steps", "--json"]
@@ -99,42 +100,38 @@ class GreenCase(unittest.TestCase):
                 with self.subTest(argv=argv):
                     self.git.profile = json.dumps({"engine": {"plan_cmd": argv, "checks": [
                         {"id": "unit", "argv": ["x"], "run": "gate"}]}})
-                    self.assertEqual(self.ask(repo=self.tmp.name), expected)
+                    assert self.ask(repo=self.tmp.name) == expected
             self.git.profile = "invalid json"
-            self.assertEqual(self.ask(repo=self.tmp.name), 1)
+            assert self.ask(repo=self.tmp.name) == 1
             self.store(run())
-            self.assertEqual(self.ask(repo=self.tmp.name), 1)
+            assert self.ask(repo=self.tmp.name) == 1
 
     def test_metadata_cannot_relabel_a_whole_tree_pass_for_another_subject(self):
         self.store(run().replace(tree=TreeSha("T2"), base=BaseSha("B2")))  # metadata cannot change the key's subject
-        self.assertEqual(self.ask(tree="T2", base="B2"), 1)
-        self.assertEqual(self.ask(), 0)
+        assert self.ask(tree="T2", base="B2") == 1
+        assert self.ask() == 0
 
     def test_changed_argv_or_environment_cannot_authorize_delivery(self):
         self.store(run())
         for change in ({"argv": ["other"]}, {"env": {"MODE": "other"}}):
             with self.subTest(change=change):
                 self.git.profile = json.dumps({"engine": {"checks": [{"id": "unit", "argv": ["x"], **change}]}})
-                self.assertEqual(self.ask(), 1)
+                assert self.ask() == 1
 
     def test_other_step_tree_base_or_repo_is_not_green(self):
         self.store(run())
-        self.assertEqual(self.ask(step="lint"), 1)
-        self.assertEqual(self.ask(tree="T2"), 1)
-        self.assertEqual(self.ask(base="B2"), 1)
-        self.assertEqual(self.ask(repo="/elsewhere"), 1)
+        assert self.ask(step="lint") == 1
+        assert self.ask(tree="T2") == 1
+        assert self.ask(base="B2") == 1
+        assert self.ask(repo="/elsewhere") == 1
 
     def test_a_remembered_non_pass_is_not_green(self):
         self.store(run(status="failed"))
-        self.assertEqual(self.ask(), 1)
+        assert self.ask() == 1
 
     def test_asking_writes_nothing(self):
         self.store(run())
         before = sorted(p for p in Path(self.tmp.name).rglob("*"))
         self.ask()
         self.ask(repo="/elsewhere")
-        self.assertEqual(sorted(Path(self.tmp.name).rglob("*")), before)
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert sorted(Path(self.tmp.name).rglob("*")) == before
