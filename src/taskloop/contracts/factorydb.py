@@ -277,13 +277,18 @@ def _migrate_v1(path: Path) -> None:
 
 def _retire_v1(path: Path) -> None:
     """V1 contained derived data only; preserve it and initialize authoritative v2."""
+    bad = quarantine(path)
+    logging.getLogger(__name__).warning("Moved derived schema v1 to %s; creating factory.db schema v2", bad)
+
+
+def quarantine(path: Path) -> Path:
+    """Preserve a database and its sidecars together, leaving its original path free."""
     bad = path.with_name(f"{path.name}.bad-{time.time_ns()}")
-    path.replace(bad)
-    for suffix in ("-wal", "-shm"):
+    for suffix in ("", "-wal", "-shm"):
         side = Path(str(path) + suffix)
         if side.exists():
             side.replace(Path(str(bad) + suffix))
-    logging.getLogger(__name__).warning("Moved derived schema v1 to %s; creating factory.db schema v2", bad)
+    return bad
 
 
 def open_rw(path: str | os.PathLike[str]) -> sqlite3.Connection | None:

@@ -36,7 +36,7 @@ from taskloop.app.track import trail, verbs
 from taskloop.app.wire import asks as wasks
 from taskloop.app.wire import lanes as wlanes
 from taskloop.app.wire import slots as wslots
-from taskloop.contracts import paths
+from taskloop.contracts import factorybackup, paths
 from taskloop.contracts.config import HostResources, RepoProfile
 from taskloop.contracts.enums import LockWhat
 from taskloop.contracts.env import Env
@@ -170,6 +170,10 @@ def chores(repo: str, spawner: Spawner, env: Env, git: Git, who: Identity) -> No
         reflect.maybe_run(spawner, env, who.config)  # the run reflections into beads, once a day (tl-bl5)
     except Exception as e:
         console.say(f"loop: reflect digest: {e}")
+    try:
+        factorybackup.backup(who.config, trail.now())
+    except Exception as e:
+        console.say(f"loop: db backup: {e}")
 
 
 def claim(repo: str, store: Beads, bead: BeadId, wt: str, slot: str, git: Git, who: Identity,

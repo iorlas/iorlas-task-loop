@@ -279,6 +279,23 @@ class FactoryIndex(Case):
                     assert list(cfg.root.glob("factory.db.bad-*")) == []
 
 
+def test_truncated_database_shows_unavailable_without_reading_retained_files(tmp_path):
+    cfg = ConfigDir(tmp_path)
+    RunScript("b-truncated").step("plan", 1).close("done").write(cfg.root)
+    reindex(cfg, clock=lambda: NOW)
+    factorydb.close_shared()
+    dash = Dash(Env(cfg.root, clock=lambda: NOW))
+    assert dash.reads.worlds.world().runs
+    cfg.factory_db().write_bytes(b"")
+    with patch("taskloop.contracts.locator.RunLocator.runs", side_effect=AssertionError("unexpected run-file read")):
+        world = dash.reads.worlds.world()
+        assert not world.runs
+        assert world.database_error.startswith("database unavailable:")
+        assert str(dash.reads.snapshot().server.database_error).startswith("database unavailable:")
+    assert cfg.factory_db().read_bytes() == b""
+    assert not list(cfg.root.glob("factory.db.bad-*"))
+
+
 class LogBoundary(fixtures.ApiFixture):
     def test_drawer_and_live_api_use_the_log_reader(self):
         self.dash.reads.snapshot()
