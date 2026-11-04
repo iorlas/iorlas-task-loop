@@ -118,7 +118,7 @@ def storm(repo: str, cfg: paths.ConfigDir, now: Callable[[], float] = trail.now,
         "WAIT: storm {} on {}; the beads stay open (look at their logs). Record {} expires {:d} min after it was written; "
         "clear it to wake sooner"
     ).format(rec.get("fingerprint"), ",".join(rec.get("beads") or []), path, (oc.KNOBS["storm_window_s"] // 60))
-    return Storm(rec.get("fingerprint") or "", banner)
+    return Storm(rec.get("fingerprint") or "", banner, float(rec["t"]) + oc.KNOBS["storm_window_s"])
 
 
 def landed_on_base(repo: str, cfg: paths.ConfigDir, store: Beads, wt: str, bead_id: BeadId, git: Git) -> bool:

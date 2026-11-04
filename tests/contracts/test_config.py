@@ -9,6 +9,12 @@ from taskloop.contracts.config import ConfigError, RepoProfile, load
 
 
 class RepoProfileKeys(unittest.TestCase):
+    def test_wait_poll_defaults_and_override_are_independent_of_child_poll(self):
+        self.assertEqual(load({}).loop.wait_poll, 30)
+        tune = load({"loop": {"wait_poll": 7.5}}).loop
+        self.assertEqual(tune.wait_poll, 7.5)
+        self.assertEqual(tune.poll, 2)
+
     def test_run_in_defaults_to_clean_and_refuses_unknown_locations(self):
         check = {"id": "a", "argv": ["a"]}
         self.assertEqual(load({"engine": {"checks": [check]}}).engine.checks[0].run_in, "clean")

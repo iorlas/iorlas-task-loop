@@ -1658,6 +1658,7 @@
   },
   "loop": {
    "poll": 2,
+   "wait_poll": 30,
    "heartbeat": 60,
    "drained_poll": 300,
    "pause_retry": 900,

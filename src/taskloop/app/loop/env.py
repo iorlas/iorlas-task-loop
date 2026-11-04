@@ -28,6 +28,7 @@ class Storm:
 
     fingerprint: str
     banner: str
+    expires: float | None = None
 
 
 @dataclass(frozen=True)

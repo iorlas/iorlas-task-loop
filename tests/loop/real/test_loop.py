@@ -614,6 +614,18 @@ class Loop(LoopBase):
         self.assertEqual([b for b, _ in self.started], ["x-1"])
         self.assertIn("WAIT storm FAULT_INFRA y", self.out)
         self.assertGreaterEqual(self.clock.t - self.clock.t0, oc.KNOBS["storm_window_s"])
+        self.assertEqual(self.out.count("WAIT storm FAULT_INFRA y"),
+                         oc.KNOBS["storm_window_s"] / LoopConfig().wait_poll)
+
+    def test_a_storm_expiring_before_the_next_probe_wakes_at_expiry(self):
+        self.beads({"x-1": [rec("landed")]})
+        path = storm_path(homes.config_dir(), repo_url(port_git(), str(self.repo)))
+        window = oc.KNOBS["storm_window_s"]
+        write_storm(path, "FAULT_INFRA y", ("x-8", "x-9"), self.clock.t - window + 7, self.clock.t, window)
+        self.assertEqual(self.run_loop(), 0)
+        self.assertEqual([b for b, _ in self.started], ["x-1"])
+        self.assertEqual(self.clock.naps[0], 7)
+        self.assertEqual(self.out.count("WAIT storm FAULT_INFRA y"), 1)
 
     def test_different_beads_failing_quickly_do_not_hold_the_slot(self):
         # tl-g6a: s4 fed 7 beads in under a minute each, 'worktree has uncommitted work of another branch'

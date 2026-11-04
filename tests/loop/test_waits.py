@@ -10,10 +10,11 @@ from taskloop.app.loop.loop import Loop, LoopArgs
 from taskloop.app.loop.queue import Queue, Ranked
 from taskloop.app.loop.settle import Settle
 from taskloop.app.loop.verdict import Verdict
+from taskloop.app.loop.waits import blocked
 from taskloop.app.slots import aside
 from taskloop.app.slots.pool import Slot
 from taskloop.contracts.bead import Bead
-from taskloop.contracts.config import RepoProfile
+from taskloop.contracts.config import LoopConfig, RepoProfile
 from taskloop.contracts.enums import Result
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.slots import SlotFail
@@ -37,9 +38,11 @@ class Waits(Rig):
                 loop = self.make_loop()
                 loop.env.free_bytes = lambda low=reason == "low_disk": 0 if low else 1 << 62
                 loop.env.available_mb = lambda low=reason == "low_ram": 0 if low else None
+                start = self.t[0]
                 self.assertIsNone(loop.step())
                 assert loop.wait is not None
                 self.assertEqual(loop.wait.reason, reason)
+                self.assertEqual(self.t[0] - start, LoopConfig().wait_poll)  # the one nap lasted a whole wait_poll
                 self.assertTrue(loop.wait.wake)
                 self.assertFalse(loop.exit)
                 self.assertEqual(loop.c.ran, 0)
@@ -51,12 +54,36 @@ class Waits(Rig):
     def test_storm_quarantines_one_fingerprint_and_clear_wakes(self):
         loop = self.make_loop()
         loop.env.storm = lambda: Storm("FAULT_INFRA one", "storm")
+        start = self.t[0]
         self.assertIsNone(loop.step())
         assert loop.wait is not None
         self.assertEqual(loop.wait.fingerprint, "FAULT_INFRA one")
+        self.assertEqual(self.t[0] - start, LoopConfig().wait_poll)
         self.assertFalse(loop.exit)
         loop.env.storm = lambda: None
         self.assertFalse(loop.resource_wait())
+
+    def test_resource_probe_interval_is_independent_of_child_poll_and_floored(self):
+        loop = self.make_loop()
+        for reason in ("low_disk", "low_ram", "storm"):
+            loop.env.free_bytes = lambda low=reason == "low_disk": 0 if low else 1 << 62
+            loop.env.available_mb = lambda low=reason == "low_ram": 0 if low else None
+            loop.env.storm = lambda: Storm("FAULT_INFRA one", "storm")
+            for interval, expected in ((45, 45), (0, 1), (-2, 1)):
+                with self.subTest(reason=reason, interval=interval):
+                    wait = blocked(loop.env, LoopConfig(poll=7, wait_poll=interval))
+                    assert wait is not None
+                    self.assertEqual(wait.reason, reason)
+                    self.assertEqual(wait.probe_at, self.t[0] + expected)
+
+    def test_storm_probes_at_expiry_or_interval_with_a_one_second_floor(self):
+        loop = self.make_loop()
+        for remaining, expected in ((90, 30), (7, 7), (0.5, 1), (0, 1), (-1, 1)):
+            with self.subTest(remaining=remaining):
+                loop.env.storm = lambda remaining=remaining: Storm("FAULT_INFRA one", "storm", self.t[0] + remaining)
+                wait = blocked(loop.env, LoopConfig())
+                assert wait is not None
+                self.assertEqual(wait.probe_at, self.t[0] + expected)
 
     def test_missing_outcomes_wait_for_cooldown_and_stop_still_works(self):
         loop = self.make_loop()

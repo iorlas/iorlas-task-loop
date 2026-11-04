@@ -132,6 +132,7 @@ class LoopConfig(Rec):
     """The `loop` block: the loop's constants. A key left out keeps the code default; read again at every tick."""
 
     poll: float = 2  # seconds between looks at a running child (stop command, slot lease)
+    wait_poll: float = 30  # seconds between probes of a resource or storm wait
     heartbeat: float = 60  # the slot bead's lease is kept alive this often while a bead runs
     drained_poll: float = 300  # --wait-drained: how often an empty queue is looked at again
     pause_retry: float = 900  # a bead another session holds, or a pause with no delegate to ask: try it again after this
