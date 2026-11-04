@@ -7,7 +7,6 @@ import os
 import shutil
 import sys
 import time
-import unittest
 from pathlib import Path
 from unittest import mock
 
@@ -61,8 +60,8 @@ BREAK_PLAN = (PLAN_DEF, PLAN_DEF + "        raise RuntimeError('planted: cannot 
 class Reload(te.EngineTest):
     # the engine fixture of test_engine (a repo with an origin, bd and the landing faked), without its tests
 
-    def setUp(self):
-        te.EngineTest.setUp(self)
+    def setup_method(self):
+        te.EngineTest.setup_method(self)
         self.cache = Path(self.tmp.name, "cache")
         here = self.install("0.1.0", fake=True)
         self.here = here  # the install the engine under test runs from (wloop.newer / build take it)
@@ -97,7 +96,7 @@ class Reload(te.EngineTest):
         if plant:
             f = d.parents[1] / plant[2]
             text = f.read_text(encoding="utf-8")
-            self.assertIn(plant[0], text)
+            assert plant[0] in text
             f.write_text(text.replace(plant[0], plant[1], 1), encoding="utf-8")
         return d
 
@@ -149,71 +148,72 @@ class Reload(te.EngineTest):
         script = fake_route.Script({"plan": [te.PLAN], "write": [te.WRITE], "review": [te.CLEAN]})
         eng = self.engine_for(script)
         self.run_with(eng, script, during=lambda: self.install("0.2.0"))
-        self.assertTrue(eng.moved)
+        assert eng.moved
         run = eng.log_path.stem
-        self.assertEqual(len(self.execs), 1)
+        assert len(self.execs) == 1
         ex = self.execs[0]
-        self.assertEqual(ex["argv"][:5], childenv.script_argv(self.cache / "0.2.0" / "skills" / "task-loop" / "tl.py", snapshot()))
-        self.assertEqual(ex["argv"][5:], ["run-task", "t-1", "--outcome-file", "/x/out.json", "--worktree", str(self.wt)])  # no --fresh
-        self.assertEqual(ex["env"]["run"], run)
-        self.assertEqual(ex["env"]["pid"], os.getpid())
-        self.assertEqual((ex["marker"]["from"], ex["marker"]["to"], ex["marker"]["step"]), ("0.1.0", "0.2.0", "land"))
+        assert ex["argv"][:5] == childenv.script_argv(self.cache / "0.2.0" / "skills" / "task-loop" / "tl.py", snapshot())
+        assert ex["argv"][5:] == ["run-task", "t-1", "--outcome-file", "/x/out.json", "--worktree", str(self.wt)]  # no --fresh
+        assert ex["env"]["run"] == run
+        assert ex["env"]["pid"] == os.getpid()
+        assert (ex["marker"]["from"], ex["marker"]["to"], ex["marker"]["step"]) == ("0.1.0", "0.2.0", "land")
         # the stage was accepted on 0.1.0; the checkpoint says land; the move is one event old -> new
         ck = read_ck(eng)
-        self.assertEqual((ck.step, ck.run), ("land", run))
+        assert (ck.step, ck.run) == ("land", run)
         ev = [e for e in self.events() if e["kind"] == "reload"]
-        self.assertEqual([(e["old"], e["new"], e["who"], e["run_id"]) for e in ev], [("0.1.0", "0.2.0", "engine", run)])
-        self.assertEqual([c[0] for c in script.calls], ["planner", "worker", "reviewer"])  # land and close have not run yet
-        self.assertEqual(self.closed, [])
+        assert [(e["old"], e["new"], e["who"], e["run_id"]) for e in ev] == [("0.1.0", "0.2.0", "engine", run)]
+        assert [c[0] for c in script.calls] == ["planner", "worker", "reviewer"]  # land and close have not run yet
+        assert self.closed == []
         # the new image: same environment, the TL_REEXEC hand-over, the same checkpoint and log
         with mock.patch.object(ident, "plugin_version", return_value="0.2.0"):
             eng2 = self.engine_for(script, env=Env({**snapshot().vars, "TL_REEXEC": json.dumps(ex["env"])}))
-            self.assertEqual(eng2.log_path, eng.log_path)  # same run id, same log and run dir
-            self.assertEqual(eng2.run_dir, eng.run_dir)
-            self.assertNotIn("TL_REEXEC", childenv.tool_env(eng2.env.vars))  # no child inherits it
+            assert eng2.log_path == eng.log_path  # same run id, same log and run dir
+            assert eng2.run_dir == eng.run_dir
+            assert "TL_REEXEC" not in childenv.tool_env(eng2.env.vars)  # no child inherits it
             rc = self.run_with(eng2, script)
-        self.assertEqual(rc, 0)
-        self.assertTrue(self.closed and self.closed[0].startswith("merged "))
-        self.assertEqual(gitq.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")  # pyrefly: ignore[missing-attribute]
-        self.assertFalse(homes.cfg().reexec_note(BeadId("t-1")).exists())  # a run that ended is no crash after an exec
+        assert rc == 0
+        assert self.closed and self.closed[0].startswith("merged ")
+        assert gitq.git("show", "origin/main:f.txt", cwd=str(self.wt)) == "d2"  # pyrefly: ignore[missing-attribute]
+        assert not homes.cfg().reexec_note(BeadId("t-1")).exists()  # a run that ended is no crash after an exec
         logs = [json.loads(x) for x in eng.log_path.read_text().splitlines()]
-        self.assertEqual(len([x for x in logs if x["kind"] == "run_start"]), 1)  # one run record for the one run
-        self.assertTrue(
-            [x["text"] for x in logs if x["kind"] == "note" and x["text"].startswith("task-loop 0.")][-1].startswith("task-loop 0.2.0 took")
-        )
-        self.assertTrue(any(f"took over run {run} from 0.1.0" in x.get("text", "") for x in logs))
-        self.assertEqual([x["step"] for x in logs if x["kind"] == "reload"], ["land"])  # the move is a record of its own
-        self.assertEqual(eng2.stats["writes"], eng.stats["writes"])  # the counters went across
+        assert len([x for x in logs if x["kind"] == "run_start"]) == 1  # one run record for the one run
+        notes = [x["text"] for x in logs if x["kind"] == "note" and x["text"].startswith("task-loop 0.")]
+        assert notes[-1].startswith("task-loop 0.2.0 took")
+        assert any(f"took over run {run} from 0.1.0" in x.get("text", "") for x in logs)
+        assert [x["step"] for x in logs if x["kind"] == "reload"] == ["land"]  # the move is a record of its own
+        assert eng2.stats["writes"] == eng.stats["writes"]  # the counters went across
 
     def test_the_move_slot_is_handed_on_and_given_back_by_the_new_image(self):
-        self.assertEqual(reexec.reexec_args(["run-task", "t-1", "--slot", "any", "--wait", "--worktree", "/w", "--quiet"], "s2", "/wt"),
-                         ["run-task", "t-1", "--quiet", "--slot", "s2", "--worktree", "/wt"])
-        self.assertIsNone(reexec.reexec_args(["loop", "--repo", "."], "", "/wt"))
+        assert (
+            reexec.reexec_args(["run-task", "t-1", "--slot", "any", "--wait", "--worktree", "/w", "--quiet"], "s2", "/wt")
+            == ["run-task", "t-1", "--quiet", "--slot", "s2", "--worktree", "/wt"]
+        )
+        assert reexec.reexec_args(["loop", "--repo", "."], "", "/wt") is None
         handed = Env({"TL_REEXEC": Reexec(run="x", bead="t-1", pid=os.getpid(), frm="0.1.0", owned="s2").text()})
-        self.assertTrue(entry._handed_slot("s2", handed))
-        self.assertFalse(entry._handed_slot("s3", handed))
-        self.assertFalse(entry._handed_slot("s2", Env()))
+        assert entry._handed_slot("s2", handed)
+        assert not entry._handed_slot("s3", handed)
+        assert not entry._handed_slot("s2", Env())
 
     def test_a_dry_run_and_a_run_not_started_by_run_task_never_move(self):
         self.install("0.2.0")
         script = fake_route.Script({"plan": [te.PLAN], "write": [te.WRITE], "review": [te.CLEAN]})
         eng = self.engine_for(script)
         eng.argv = ["something-else"]
-        self.assertEqual(self.run_with(eng, script), 0)
-        self.assertEqual(self.execs, [])
-        self.assertEqual([e for e in self.events() if e["kind"] == "reload"], [])
+        assert self.run_with(eng, script) == 0
+        assert self.execs == []
+        assert [e for e in self.events() if e["kind"] == "reload"] == []
 
     def test_a_refused_version_is_skipped_until_it_is_installed_again_and_a_newer_one_is_taken(self):
         inst = wloop.installs(homes.cfg(), snapshot(), here=self.here)
         self.install("0.2.0", plant=BREAK_PLAN)  # a copy: a link would share the files the install key is made of
-        self.assertEqual(must(run_reload.newer(snapshot(), self.here.parents[1])), ("0.2.0", self.cache / "0.2.0"))
+        assert must(run_reload.newer(snapshot(), self.here.parents[1])) == ("0.2.0", self.cache / "0.2.0")
         inst.record_bad("0.2.0", "run-task died (exit 1) 3 s after the exec into it")  # what the crash fallback writes
-        self.assertIsNone(run_reload.newer(snapshot(), self.here.parents[1]))  # refused, key unchanged
+        assert run_reload.newer(snapshot(), self.here.parents[1]) is None  # refused, key unchanged
         shutil.rmtree(self.cache / "0.2.0")
         self.install("0.2.0")  # the same number, re-released
-        self.assertEqual(must(run_reload.newer(snapshot(), self.here.parents[1]))[0], "0.2.0")
+        assert must(run_reload.newer(snapshot(), self.here.parents[1]))[0] == "0.2.0"
         self.install("0.3.0")
-        self.assertEqual(must(run_reload.newer(snapshot(), self.here.parents[1]))[0], "0.3.0")
+        assert must(run_reload.newer(snapshot(), self.here.parents[1]))[0] == "0.3.0"
 
     # -- the crash after an exec: the loop puts the run back on the version it came from, once
     def test_a_run_task_that_dies_right_after_the_exec_is_restarted_once_on_the_old_version(self):
@@ -268,17 +268,17 @@ class Reload(te.EngineTest):
             assert t1 is not None
             r = run.run(t1, Where("s1", str(self.wt), BeadId("sb-1"), 0.0))
             leaked = os.environ.get("TL_REEXEC")
-        self.assertEqual(r.outcome, "landed")
-        self.assertEqual(len(spawned), 2)
-        self.assertEqual(spawned[1][:5], childenv.script_argv(old / "tl.py", snapshot()))
-        self.assertIsNone(leaked)  # the loop's own environment keeps no hand-over for its later run-tasks
-        self.assertEqual(spawned_env[0]["run"], "t-1-20261026-120000")  # the fallback child got it
-        self.assertEqual(pids, [str(os.getpid())] * 2)  # run-task's parent is uv: the loop names itself for the lock handoff
+        assert r.outcome == "landed"
+        assert len(spawned) == 2
+        assert spawned[1][:5] == childenv.script_argv(old / "tl.py", snapshot())
+        assert leaked is None  # the loop's own environment keeps no hand-over for its later run-tasks
+        assert spawned_env[0]["run"] == "t-1-20261026-120000"  # the fallback child got it
+        assert pids == [str(os.getpid())] * 2  # run-task's parent is uv: the loop names itself for the lock handoff
         fb = [e for e in self.events() if e["kind"] == "reload_fallback"]
-        self.assertEqual([(e["old"], e["new"]) for e in fb], [("0.2.0", "0.1.0")])
-        self.assertIn("0.2.0", [e["version"] for e in json.loads((homes.config_dir() / "bad-versions.json").read_text())["entries"]])
-        self.assertTrue(any("RED" in c for c in said))
-        self.assertFalse(homes.cfg().reexec_note(BeadId("t-1")).exists())
+        assert [(e["old"], e["new"]) for e in fb] == [("0.2.0", "0.1.0")]
+        assert "0.2.0" in [e["version"] for e in json.loads((homes.config_dir() / "bad-versions.json").read_text())["entries"]]
+        assert any("RED" in c for c in said)
+        assert not homes.cfg().reexec_note(BeadId("t-1")).exists()
 
     # -- point 2: delegate is resolved per call, never held
     def test_delegate_route_is_resolved_again_each_call(self):
@@ -288,24 +288,21 @@ class Reload(te.EngineTest):
         ) as fr:
             eng = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(),
                 git=port_git(), who=who())
-            self.assertEqual(eng.delegation.route(), "/b/route.py")
-            self.assertEqual(eng.delegation.route(), "/b/route.py")
-            self.assertEqual(fr.call_count, 3)
+            assert eng.delegation.route() == "/b/route.py"
+            assert eng.delegation.route() == "/b/route.py"
+            assert fr.call_count == 3
 
     # -- point 4: loop state and dashboard lane
     def test_loop_state_names_the_running_version_and_code_dir(self):
         repo = str(self.wt)
         env = wloop.build(repo, store=FakeBeads(), here=self.here, env=snapshot(), spawner=real_spawner(), git=port_git(), who=who())
-        self.assertEqual((env.version, env.code_dir), ("0.1.0", str(self.here)))
+        assert (env.version, env.code_dir) == ("0.1.0", str(self.here))
 
     def test_releases_behind_counts_installed_versions_above_it(self):
         for v in ("0.1.0", "0.2.0", "0.10.0"):  # <claude dir>/plugins/cache/<marketplace>/<plugin>/<version>
             main = Path(self.tmp.name, "claude", "plugins", "cache", "m", "iorlas-task-loop", v, "skills", "task-loop", "tl.py")
             main.parent.mkdir(parents=True)
             main.write_text("")
-        self.assertEqual(catalog.releases_behind("0.1.0", homes.claude_dir()), 2)
-        self.assertEqual(catalog.releases_behind("0.2.0", homes.claude_dir()), 1)
-        self.assertEqual(catalog.releases_behind("0.10.0", homes.claude_dir()), 0)
-
-if __name__ == "__main__":
-    unittest.main()
+        assert catalog.releases_behind("0.1.0", homes.claude_dir()) == 2
+        assert catalog.releases_behind("0.2.0", homes.claude_dir()) == 1
+        assert catalog.releases_behind("0.10.0", homes.claude_dir()) == 0

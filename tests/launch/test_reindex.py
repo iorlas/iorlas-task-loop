@@ -1,10 +1,10 @@
 """The doctor's reindex verb launches the same state indexer and reports its work."""
 
 import tempfile
-import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from support.case import Case
 from support.dashlogs import RunScript
 from support.narrow import must
 from support.spawn import port_git, real_spawner
@@ -20,7 +20,7 @@ from taskloop.contracts.runrows import RunRows
 from taskloop.contracts.stores import JsonStore
 
 
-class Reindex(unittest.TestCase):
+class Reindex(Case):
     def test_doctor_flag_rebuilds_and_reports_counts_without_running_diagnostics(self):
         with tempfile.TemporaryDirectory() as folder:
             cfg = ConfigDir(Path(folder))
@@ -36,12 +36,11 @@ class Reindex(unittest.TestCase):
                          who=Identity(actor="test", home=str(cfg.root)))
             with patch.object(reindex, "print", create=True) as output, \
                     patch.object(tl.doctor, "run", side_effect=AssertionError("ordinary diagnostics ran")):
-                self.assertEqual(tl.v_doctor(args, ctx), 0)
-            self.assertIn("reindexed: 1 runs, 1 sources in", output.call_args.args[0])
+                assert tl.v_doctor(args, ctx) == 0
+            assert "reindexed: 1 runs, 1 sources in" in output.call_args.args[0]
             con = must(factorydb.open_ro(cfg.factory_db()))
             try:
-                self.assertEqual(con.execute("SELECT rev, manifest IS NOT NULL, facts IS NOT NULL FROM run").fetchall(),
-                                 [(0, 1, 1)])
-                self.assertEqual(rows.get(script.name), original)
+                assert con.execute("SELECT rev, manifest IS NOT NULL, facts IS NOT NULL FROM run").fetchall() == [(0, 1, 1)]
+                assert rows.get(script.name) == original
             finally:
                 con.close()

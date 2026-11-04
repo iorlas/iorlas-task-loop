@@ -1,9 +1,10 @@
 """`tl judge-push --no-run` reads evidence only: a push without a receipt is refused and no check is started."""
 import argparse
 import sys
-import unittest
 from pathlib import Path
 from unittest import mock
+
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -13,7 +14,7 @@ from taskloop.app.launch import push_judge
 from taskloop.contracts.config import EngineConfig
 
 
-class JudgePushNoRun(unittest.TestCase):
+class JudgePushNoRun(Case):
     def run_cmd(self, *, no_run: bool):
         seen = {}
 
@@ -29,14 +30,10 @@ class JudgePushNoRun(unittest.TestCase):
 
     def test_no_run_never_starts_a_check_and_reports_not_green(self):
         code, ran = self.run_cmd(no_run=True)
-        self.assertEqual(code, 1)
+        assert code == 1
         ran.assert_not_called()
 
     def test_default_still_runs_the_check(self):
         code, ran = self.run_cmd(no_run=False)
-        self.assertEqual(code, 0)
+        assert code == 0
         ran.assert_called_once()
-
-
-if __name__ == "__main__":
-    unittest.main()

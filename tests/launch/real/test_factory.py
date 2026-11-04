@@ -3,15 +3,15 @@ import json
 import sys
 import tempfile
 import time
-import unittest
 from pathlib import Path
 
 import support.paths
+from support.case import Case
 
 from taskloop.adapters import procs
 
 
-class DetachedFactory(unittest.TestCase):
+class DetachedFactory(Case):
     def test_child_survives_launchers_process_group_with_null_stdin(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -39,24 +39,24 @@ class DetachedFactory(unittest.TestCase):
             parent = procs.spawn([sys.executable, "-c", launcher])
             child = None
             try:
-                self.assertEqual(parent.wait(timeout=5), 0)
+                assert parent.wait(timeout=5) == 0
                 record = json.loads(recorded.read_text())
-                self.assertTrue(record["start"])
+                assert record["start"]
                 child = procs.PidHandle(record["pid"], record["start"])
                 child_pid = child.pid
                 until = time.monotonic() + 5
                 while (not proof.exists() or not proof.stat().st_size) and time.monotonic() < until:
                     time.sleep(0.02)
                 facts = json.loads(proof.read_text())
-                self.assertEqual(facts["pid"], child_pid)
-                self.assertNotEqual(facts["pgid"], parent.pid)
-                self.assertEqual(facts["pgid"], child_pid)
-                self.assertTrue(facts["null"])
-                self.assertFalse(procs.alive(parent.pid))
-                self.assertFalse(any(row.pgid == parent.pid for row in (procs.table() or {}).values()))
-                self.assertTrue(procs.alive(child_pid))
-                self.assertEqual(procs.stop_pid(child.pid, child.start, grace=0.2), ())
-                self.assertFalse(procs.alive(child_pid))
+                assert facts["pid"] == child_pid
+                assert facts["pgid"] != parent.pid
+                assert facts["pgid"] == child_pid
+                assert facts["null"]
+                assert not procs.alive(parent.pid)
+                assert not any(row.pgid == parent.pid for row in (procs.table() or {}).values())
+                assert procs.alive(child_pid)
+                assert procs.stop_pid(child.pid, child.start, grace=0.2) == ()
+                assert not procs.alive(child_pid)
             finally:
                 if child is None and recorded.exists():
                     record = json.loads(recorded.read_text())
