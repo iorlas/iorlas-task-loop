@@ -740,6 +740,7 @@ class Loop(LoopBase):
         self.assertEqual([b for b, _ in self.started], ["x-1", "x-1"])
         self.assertGreaterEqual(self.clock.t - self.clock.t0, LoopConfig().gate_unknown)
         self.assertLess(self.clock.t - self.clock.t0, LoopConfig().gate_unknown + 2 * LoopConfig().gate_cache)
+        self.assertLessEqual(len(self.clock.naps), LoopConfig().gate_unknown / LoopConfig().gate_cache + 2)
 
     def test_a_role_that_stays_down_keeps_the_bead_waiting_while_others_run(self):
         self.roles = lambda: {"worker": {"usable": False}}

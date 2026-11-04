@@ -293,7 +293,7 @@ class Loop(Core):
             self.wait = LoopWait(reason="no_lane", wake="role usable or retry due", probe_at=wake)
             self.publish()
             delay = max(1, wake - env.now())
-            self.nap(min(self.tune().poll, delay) if self.gate.held else delay, self.until)
+            self.nap(min(self.tune().gate_cache, delay) if self.gate.held else delay, self.until)
             return None
         areas = q.areas()
         if areas:  # not drained: those beads run once their area frees; --until still ends the loop

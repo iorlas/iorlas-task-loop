@@ -85,8 +85,7 @@ class Waits(Rig):
         self.assertEqual(loop.st.wait, loop.wait)
         self.assertFalse(loop.exit)
         usable[0] = True
-        self.assertFalse(loop.gate.ready(bead.id))  # the unavailable role view is still cached
-        self.t[0] = loop.wait.probe_at
+        self.t[0] = loop.wait.probe_at  # the idle nap lasted a whole role-view cache; the next look sees the recovery
         self.assertTrue(loop.gate.ready(bead.id))
         self.assertNotIn(bead.id, loop.gate.held)
         self.assertFalse(loop.resource_wait())
