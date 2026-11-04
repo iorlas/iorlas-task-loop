@@ -64,6 +64,13 @@ class Already(unittest.TestCase):
 
 
 class Pushes(unittest.TestCase):
+    def test_only_moved_ref_rejections_are_retryable(self):
+        for reason in ("fetch first", "non-fast-forward", "stale info"):
+            self.assertTrue(Push.rejected(f" ! [rejected] HEAD -> main ({reason})"))
+        for text in ("pre-push: rejected; fetch first", " ! [remote rejected] main (non-fast-forward)",
+                     " ! [rejected] main (other policy)", "fatal: unable to access origin"):
+            self.assertFalse(Push.rejected(text))
+
     def test_what_the_network_killed_is_told_from_what_the_hooks_said(self):
         self.assertTrue(Push.transient("fatal: unable to access: curl 56 Recv failure"))
         self.assertFalse(Push.transient("pre-push hook: 3 tests failed\n" + "ok\n" * 400))

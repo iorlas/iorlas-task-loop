@@ -75,6 +75,8 @@ class Pusher:
         with e.stop_deferred() as stop:  # a push half done is no state to stop in: finish it, then stop
             lrc, ltail = self.out.lfs_push()  # the pushed ref's LFS objects first: the push must not point at objects origin lacks
             sha = e.git.rev_parse(e.wt, "HEAD")  # the commit pushed, named in the refspec
+            # push_request strips diagnostics; push_refspecs also drops successful hook output and adds processes.
+            # Keep configured commands here until the Git port can return the complete captured-SHA request outcome.
             rc, tail = e.sh(pin_head(e.cfg.land, sha), pin=True) if lrc == 0 else (lrc, ltail)
             if rc != 0:
                 sha = ""

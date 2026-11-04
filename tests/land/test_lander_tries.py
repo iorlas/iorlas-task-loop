@@ -89,6 +89,21 @@ class PushedSha(unittest.TestCase):
 
 
 class Pushing(unittest.TestCase):
+    def test_hook_and_remote_refusals_that_say_rejected_are_faults(self):
+        for text in ("pre-push: rejected by policy; fetch first will not help",
+                     " ! [remote rejected] HEAD -> main (pre-receive hook declined)",
+                     " ! [rejected] HEAD -> main (fetch first)\n ! [remote rejected] topic (policy)"):
+            with self.subTest(text=text):
+                g = repo(["a"] * 4, ["h"] * 3, [(1, text)])
+                lander, host = land_with(g)
+                self.addCleanup(host.pushing.tmp.cleanup)
+                state = Land()
+                with self.assertRaises(Stopped) as caught:
+                    lander.tries(state)
+                self.assertEqual(caught.exception.kind, "FAULT_LAND")
+                self.assertEqual(state.pushes, 0)
+                self.assertEqual(sum(call[0] == "push" for call in g.calls), 1)
+
     def test_a_hook_refusal_in_long_output_keeps_the_full_transcript(self):
         refusal = "gate: refusing the push: run just check"
         output = "progress\n" * 250 + refusal + "\n" + "progress\n" * 250 + "error: failed to push some refs\n"

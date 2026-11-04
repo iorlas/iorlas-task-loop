@@ -16,7 +16,7 @@ _NETWORK: Final = re.compile(
     r"ssh: connect to host[^\n]*(?:timed out|refused|unreachable|resolve)",
     re.I,
 )
-_REJECTED: Final = re.compile(r"rejected|non-fast-forward|fetch first|stale info")
+_REJECTED: Final = re.compile(r"\[rejected\].*(?:non-fast-forward|fetch first|stale info)")
 _LFS_ATTR: Final = re.compile(r"^[^#\n]*\bfilter=lfs\b", re.M)
 _NO_REMOTE: Final = re.compile(r"no (?:dolt )?remotes?\b|remote[^\n]{0,40}not (?:configured|found)|no such remote|no upstream", re.I)
 _FAILED_PREFIX: Final = re.compile(r"^(failed|paused): ")
@@ -39,7 +39,10 @@ class Push:
 
     @staticmethod
     def rejected(tail: str) -> bool:
-        return _REJECTED.search(tail) is not None
+        # Mirror RefRejected: every refused ref must be a moved-base/lease rejection.
+        # Hook text and [remote rejected] rows are policy refusals, even when they mention a race.
+        refused = [line for line in tail.splitlines() if line.lstrip().startswith("!")]
+        return bool(refused) and all(_REJECTED.search(line) is not None for line in refused)
 
 
 def lfs_in(attributes: str) -> bool:
