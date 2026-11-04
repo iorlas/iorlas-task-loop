@@ -56,16 +56,16 @@ class DiagnosticsTest(Base):
     def test_the_next_brief_lists_each_diagnostic_once_with_file_line_rule_and_message(self):
         _rc, s = self.run_engine_with_writer()
         brief = self.writer_prompts(s)[1]
-        self.assertIn("/work/client/Assets/Scripts/Unit07.cs:10:8: warning CA1807: Member 'M7' is unused", brief)
-        self.assertEqual(brief.count("Unit07.cs"), 1)  # once, not once per target framework
-        self.assertNotIn("[/work/client/Game.csproj", brief)
+        assert "/work/client/Assets/Scripts/Unit07.cs:10:8: warning CA1807: Member 'M7' is unused" in brief
+        assert brief.count("Unit07.cs") == 1  # once, not once per target framework
+        assert "[/work/client/Game.csproj" not in brief
 
     def test_two_failing_rounds_become_one_fix_round_when_the_writer_gets_the_diagnostics(self):
         rc, s = self.run_engine_with_writer()
-        self.assertEqual(rc, 0)
-        self.assertEqual(len(self.writer_prompts(s)), 2)  # the write, then one fix round that the green check ends
+        assert rc == 0
+        assert len(self.writer_prompts(s)) == 2  # the write, then one fix round that the green check ends
 
     def test_a_container_check_is_not_one_the_writer_is_told_to_run(self):
         eng = self.checks_engine(checks=[{"id": "lint", "cmd": "true", "group": "static", "in": "container", "writer": True}],
                                  container={"image": "x"})
-        self.assertTrue(eng.checker.split().engine_only("true"))
+        assert eng.checker.split().engine_only("true")

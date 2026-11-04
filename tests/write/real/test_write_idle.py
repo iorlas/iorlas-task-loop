@@ -13,6 +13,9 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+import pytest
+from support.case import Case
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 
@@ -57,8 +60,8 @@ ROUTE = textwrap.dedent('''
     print(json.dumps({"contract": 4, "data": {}, "ref": "r"}))
 ''')
 @unittest.skipUnless(POSIX, "process groups")
-class StreamRunnerCall(unittest.TestCase):
-    def setUp(self):
+class StreamRunnerCall(Case):
+    def setup_method(self):
         self.tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         self.d = Path(self.tmp.name)
         (self.d / "route.py").write_text(ROUTE)
@@ -87,17 +90,17 @@ class StreamRunnerCall(unittest.TestCase):
         seen = []
         r, go = self.run_route("chatty", on_worker=seen.append, CHAT_UNTIL=str(time.time() + 0.4))
         done = go()
-        self.assertEqual((must(r.worker).pid, must(r.worker).run_id), (self.worker_pid(), "run1"))
-        self.assertEqual(seen, [r.worker])
-        self.assertEqual(done.returncode, 0)
-        self.assertEqual(r.stop, {})
+        assert (must(r.worker).pid, must(r.worker).run_id) == (self.worker_pid(), "run1")
+        assert seen == [r.worker]
+        assert done.returncode == 0
+        assert r.stop == {}
 
     def test_the_wall_limit_stops_the_call_through_stream_proc(self):
         r, go = self.run_route("", wall=0.8)
-        with self.assertRaises(Stopped):
+        with pytest.raises(Stopped):
             go()
-        self.assertEqual(r.stop["kind"], "wall")
-        self.assertFalse(procs.alive(self.worker_pid()))
+        assert r.stop["kind"] == "wall"
+        assert not procs.alive(self.worker_pid())
 
 
 class SurvivorBlocksTheRetry(te.EngineTest):
@@ -125,7 +128,3 @@ class SurvivorBlocksTheRetry(te.EngineTest):
 for _name in dir(te.EngineTest):  # the engine fixture only: not every test of its class again
     if _name.startswith("test_") and _name not in SurvivorBlocksTheRetry.__dict__:
         setattr(SurvivorBlocksTheRetry, _name, None)
-
-
-if __name__ == "__main__":
-    unittest.main()

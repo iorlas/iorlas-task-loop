@@ -9,9 +9,11 @@ import json
 import os
 import sys
 import textwrap
-import unittest
 from pathlib import Path
 from unittest import mock
+
+import pytest
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
@@ -60,17 +62,17 @@ ROUTE = textwrap.dedent('''
 ''')
 
 
-class NoEngineSideSilence(unittest.TestCase):
+class NoEngineSideSilence(Case):
     def test_the_engine_has_no_warn_stop_cap_timer_of_its_own(self):
-        self.assertFalse(hasattr(runner, "Silence") or hasattr(runner, "WATCH_S"))
-        self.assertNotIn("silence", inspect.signature(runner.StreamRunner).parameters)
+        assert not (hasattr(runner, "Silence") or hasattr(runner, "WATCH_S"))
+        assert "silence" not in inspect.signature(runner.StreamRunner).parameters
         cfg = set(wire.names(EngineConfig))
-        self.assertTrue({"write_idle_min", "write_cap_min"} <= cfg)
-        self.assertFalse({"write_idle_warn_min", "write_idle_stop_min"} & cfg)
+        assert {"write_idle_min", "write_cap_min"} <= cfg
+        assert not {"write_idle_warn_min", "write_idle_stop_min"} & cfg
 
     def test_a_retired_tier_key_in_the_profile_fails_loudly(self):
         for key in ("write_idle_warn_min", "write_idle_stop_min"):
-            with self.assertRaises(ConfigError):
+            with pytest.raises(ConfigError):
                 load({"engine": {key: 15}})
 
 
@@ -97,19 +99,19 @@ class SurvivorBlocksTheRetry(te.EngineTest):
 
     def test_a_write_whose_worker_outlived_the_stop_fails_the_node_and_is_not_retried(self):
         rc, script = self.blocked_write(stop_alive=[4242])
-        self.assertEqual(rc, 2)
-        self.assertEqual([x[0] for x in script.calls].count("worker"), 1)  # no second attempt into the same worktree
-        self.assertIn("4242", self.eng.why)
-        self.assertIn("still alive", self.eng.why)
+        assert rc == 2
+        assert [x[0] for x in script.calls].count("worker") == 1  # no second attempt into the same worktree
+        assert "4242" in self.eng.why
+        assert "still alive" in self.eng.why
 
     def test_worker_survived_in_the_answer_blocks_the_bead_with_the_pids(self):
         worker = {"end": "worker_survived", "stopped": True, "term_sent": True, "kill_sent": True, "waited_s": 9.0,
                   "survivors": [{"pid": 31337, "start": "5"}, {"pid": 31338, "start": "6"}], "pid": 31337, "pgid": 31337, "start": "5"}
         rc, script = self.blocked_write(worker=worker)
-        self.assertEqual(rc, 2)
-        self.assertEqual([x[0] for x in script.calls].count("worker"), 1)
+        assert rc == 2
+        assert [x[0] for x in script.calls].count("worker") == 1
         for pid in ("31337", "31338"):
-            self.assertIn(pid, self.eng.why)
+            assert pid in self.eng.why
 
     def test_the_write_call_carries_delegates_idle_limit_and_one_wall_cap_in_its_argv(self):
         script = fake_route.Script({"plan": [te.PLAN], "write": [te.WRITE], "review": [te.CLEAN]})
@@ -127,10 +129,10 @@ class SurvivorBlocksTheRetry(te.EngineTest):
         by_role = {a[a.index("run") + 1]: a for a in argvs}
         w = by_role["worker"]
         want = (str(int(c.write_idle_min * 60)), str(int(c.write_cap_min * 60)))
-        self.assertEqual((w[w.index("--idle") + 1], w[w.index("--timeout") + 1]), want)
-        self.assertEqual(w.count("--timeout"), 1)
-        self.assertNotIn("--idle", by_role["reviewer"])  # delegate's own default for the others
-        self.assertNotIn("--idle", by_role["planner"])
+        assert (w[w.index("--idle") + 1], w[w.index("--timeout") + 1]) == want
+        assert w.count("--timeout") == 1
+        assert "--idle" not in by_role["reviewer"]  # delegate's own default for the others
+        assert "--idle" not in by_role["planner"]
 
     def test_a_write_under_the_idle_rules_gets_no_close_to_the_limit_warning(self):
         eng = engine.Engine(
@@ -145,14 +147,10 @@ class SurvivorBlocksTheRetry(te.EngineTest):
         eng.records.anomalies("write", r, 1)
         eng.records.anomalies("review", r, 1)
         warned = [json.loads(x)["text"] for x in Path(eng.log_path).read_text().splitlines() if '"warn"' in x]
-        self.assertEqual(len(warned), 1)  # the review's, not the write's
-        self.assertTrue(warned[0].startswith("review took"))
+        assert len(warned) == 1  # the review's, not the write's
+        assert warned[0].startswith("review took")
 
 
 for _name in dir(te.EngineTest):  # the engine fixture only: not every test of its class again
     if _name.startswith("test_") and _name not in SurvivorBlocksTheRetry.__dict__:
         setattr(SurvivorBlocksTheRetry, _name, None)
-
-
-if __name__ == "__main__":
-    unittest.main()
