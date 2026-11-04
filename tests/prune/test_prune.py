@@ -5,11 +5,12 @@ import subprocess
 import sys
 import tempfile
 import time
-import unittest
 from collections.abc import Callable
 from pathlib import Path
 from typing import cast
 from unittest import mock
+
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -55,8 +56,8 @@ class Store:
         return self.beads
 
 
-class RunData(unittest.TestCase):
-    def setUp(self):
+class RunData(Case):
+    def setup_method(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
@@ -89,26 +90,26 @@ class RunData(unittest.TestCase):
 
     def test_an_old_run_of_a_closed_bead_goes_and_a_young_one_stays(self):
         self.prune(Store())
-        self.assertEqual(self.left(), ["x-3-20260101-000000"])
-        self.assertFalse(self.cfg.engine_log("x-1-20260101-000000").exists())
-        self.assertTrue(self.cfg.engine_log("x-3-20260101-000000").exists())
+        assert self.left() == ["x-3-20260101-000000"]
+        assert not self.cfg.engine_log("x-1-20260101-000000").exists()
+        assert self.cfg.engine_log("x-3-20260101-000000").exists()
 
     def test_beads_still_open_and_parked_keep_their_old_runs(self):
         out = self.prune(Store(("x-1", "open"), ("x-2", "blocked")))
-        self.assertEqual(self.left(), ["x-1-20260101-000000", "x-2-20260101-000000", "x-3-20260101-000000"])
-        self.assertTrue(self.cfg.engine_log("x-2-20260101-000000").exists())
-        self.assertIn("2 of beads still open or parked", out[-1])
+        assert self.left() == ["x-1-20260101-000000", "x-2-20260101-000000", "x-3-20260101-000000"]
+        assert self.cfg.engine_log("x-2-20260101-000000").exists()
+        assert "2 of beads still open or parked" in out[-1]
 
     def test_bd_not_answering_keeps_all_run_data_and_says_why(self):
         out = self.prune(Store(fail=True))
-        self.assertEqual(len(self.left()), 3)
-        self.assertTrue(any("run data kept: bd did not answer" in ln for ln in out))
+        assert len(self.left()) == 3
+        assert any("run data kept: bd did not answer" in ln for ln in out)
 
     def test_dry_run_says_what_would_go_and_removes_nothing(self):
         out = self.prune(Store(), dry_run=True)
-        self.assertEqual(len(self.left()), 3)
-        self.assertTrue(self.cfg.engine_log("x-1-20260101-000000").exists())
-        self.assertTrue(any("would remove" in ln and "x-1-20260101-000000" in ln for ln in out))
+        assert len(self.left()) == 3
+        assert self.cfg.engine_log("x-1-20260101-000000").exists()
+        assert any("would remove" in ln and "x-1-20260101-000000" in ln for ln in out)
 
     def test_the_real_run_deletes_exactly_the_planned_list_from_one_scan(self):
         scans = []
@@ -121,8 +122,8 @@ class RunData(unittest.TestCase):
             return gone
         with mock.patch.object(layout, "prune_run_dirs", scan):
             self.prune(Store())
-        self.assertEqual(scans, [True])
-        self.assertEqual(self.left(), ["x-3-20260101-000000", "x-4-20260101-000000"])
+        assert scans == [True]
+        assert self.left() == ["x-3-20260101-000000", "x-4-20260101-000000"]
 
     def test_old_saved_suite_logs_go_and_last_json_stays(self):
         rel = self.cfg.root / "releases"
@@ -131,20 +132,20 @@ class RunData(unittest.TestCase):
             (rel / name).write_text("x" * 10)
             os.utime(rel / name, (self.now - age * DAY,) * 2)
         self.prune(Store())
-        self.assertEqual(sorted(p.name for p in rel.iterdir()), ["last.json", "suite-2.log"])
+        assert sorted(p.name for p in rel.iterdir()) == ["last.json", "suite-2.log"]
 
     def test_a_second_run_removes_nothing(self):
         self.prune(Store())
         again = self.prune(Store())
-        self.assertIn("removed 0 item(s)", " ".join(again))
+        assert "removed 0 item(s)" in " ".join(again)
 
     def test_a_closed_bead_keeps_its_run_data_30_days_whatever_the_config_says(self):
         for bead, age in (("x-5", 29), ("x-6", 31)):
             self.run_of(bead, age)
         self.prune(Store(), days=7)
-        self.assertEqual(self.left(), ["x-3-20260101-000000", "x-5-20260101-000000"])
-        self.assertTrue(self.cfg.engine_log("x-5-20260101-000000").exists())
-        self.assertFalse(self.cfg.engine_log("x-6-20260101-000000").exists())
+        assert self.left() == ["x-3-20260101-000000", "x-5-20260101-000000"]
+        assert self.cfg.engine_log("x-5-20260101-000000").exists()
+        assert not self.cfg.engine_log("x-6-20260101-000000").exists()
 
     def test_a_bead_that_is_not_closed_loses_nothing_at_any_age_by_prune_or_by_a_run_starting(self):
         self.run_of("x-7", 400)
@@ -154,9 +155,9 @@ class RunData(unittest.TestCase):
         os.utime(logs / "00-c.r1.log", (self.now - 400 * DAY,) * 2)
         RunLayout.open("x-8", self.root / "wt", None, self.cfg, "/repo", self.now)  # a run starting sweeps nothing
         self.prune(Store(("x-7", "open")), days=7)
-        self.assertTrue((logs / "00-c.r1.log").exists())
-        self.assertTrue(self.cfg.engine_log("x-7-20260101-000000").exists())
-        self.assertFalse(self.cfg.engine_log("x-1-20260101-000000").exists())  # a closed one's, 45 days old, went with prune
+        assert (logs / "00-c.r1.log").exists()
+        assert self.cfg.engine_log("x-7-20260101-000000").exists()
+        assert not self.cfg.engine_log("x-1-20260101-000000").exists()  # a closed one's, 45 days old, went with prune
 
     def test_the_evidence_of_a_closed_bead_goes_with_its_run_folder_after_30_days_not_before(self):
         for bead, age in (("x-5", 29), ("x-6", 31)):
@@ -170,18 +171,18 @@ class RunData(unittest.TestCase):
             os.utime(art.parent.parent, (self.now - age * DAY,) * 2)
             os.utime(self.cfg.run_dir(f"{bead}-20260101-000000"), (self.now - age * DAY,) * 2)
         self.prune(Store())
-        self.assertTrue((self.cfg.run_dir("x-5-20260101-000000") / "artifacts/u/attempt-1/check.log").exists())
-        self.assertFalse(self.cfg.run_dir("x-6-20260101-000000").exists())
+        assert (self.cfg.run_dir("x-5-20260101-000000") / "artifacts/u/attempt-1/check.log").exists()
+        assert not self.cfg.run_dir("x-6-20260101-000000").exists()
 
     def test_the_one_age_number_is_the_config_key(self):
         self.prune(Store(), days=60)
-        self.assertEqual(len(self.left()), 3)
-        self.assertEqual(LoopConfig().keep_days, 14)
-        self.assertEqual(runs.size_of(self.cfg.run_dir("x-3-20260101-000000") / "evidence"), 2048)
+        assert len(self.left()) == 3
+        assert LoopConfig().keep_days == 14
+        assert runs.size_of(self.cfg.run_dir("x-3-20260101-000000") / "evidence") == 2048
 
 
-class Trees(unittest.TestCase):
-    def setUp(self):
+class Trees(Case):
+    def setup_method(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
@@ -212,7 +213,7 @@ class Trees(unittest.TestCase):
         return sweep(repos or [str(self.repo)], None, self.build, days, now or self.later, dry_run, GIT, homes.cfg())
 
 
-class Landed(unittest.TestCase):
+class Landed(Case):
     """Closed beads' local task/* branches: `git branch -d`; origin's task/<bead> of a landed one: `git push origin --delete`."""
 
     commit = cast(Callable[..., None], Trees.commit)
@@ -231,8 +232,8 @@ class Landed(unittest.TestCase):
     def heads(self):
         return git(self.repo, "for-each-ref", "--format=%(refname:short)", "refs/heads/").split()
 
-    def setUp(self):
-        Trees.setUp(cast(Trees, self))
+    def setup_method(self):
+        Trees.setup_method(cast(Trees, self))
         for b in ("task/a-1", "task/a-2", "worker/a-1", "claude/a-1", "task/a-9", "task/custom"):
             git(self.repo, "branch", b, "origin/main")
         git(self.repo, "checkout", "-q", "-b", "task/a-3")  # unmerged: has a commit of its own
@@ -247,7 +248,3 @@ class Landed(unittest.TestCase):
         (self.repo / f"{bead}.txt").write_text("x")
         git(self.repo, "add", f"{bead}.txt")
         git(self.repo, "commit", "-q", "-m", f"work ({bead})")
-
-
-if __name__ == "__main__":
-    unittest.main()

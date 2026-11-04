@@ -3,8 +3,9 @@ and the write is left alone."""
 import sys
 import tempfile
 import time
-import unittest
 from pathlib import Path
+
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401
@@ -23,8 +24,8 @@ from taskloop.domain.reconcile.facts import FreeSlot, ReleaseClaim
 ENDED = "2000-01-01T00:00:00Z"
 
 
-class Strays(unittest.TestCase):
-    def setUp(self):
+class Strays(Case):
+    def setup_method(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.repo = Path(tmp.name) / "repo"
@@ -48,34 +49,30 @@ class Strays(unittest.TestCase):
 
     def test_a_stray_slot_and_its_dead_claim_are_given_back(self):
         plan = self.plan()
-        self.assertEqual([type(a) for a in plan], [ReleaseClaim, FreeSlot])
+        assert [type(a) for a in plan] == [ReleaseClaim, FreeSlot]
         removed, kept = apply(plan, False, RealGit(snapshot()), lambda r: self.store)
-        self.assertEqual((len(removed), kept), (2, []))
+        assert (len(removed), kept) == (2, [])
         slot, work = self.store.show(self.slot), self.store.show(self.work)
-        self.assertEqual((slot.status, slot.assignee, work.status, work.assignee), ("open", "", "open", ""))  # type: ignore[union-attr]
-        self.assertNotIn("held_by", slot.metadata)  # type: ignore[union-attr]
-        self.assertEqual(slot.metadata["held_gen"], "5")  # type: ignore[union-attr]
-        self.assertEqual(self.plan(), [])  # a second sweep finds nothing
+        assert (slot.status, slot.assignee, work.status, work.assignee) == ("open", "", "open", "")  # type: ignore[union-attr]
+        assert "held_by" not in slot.metadata  # type: ignore[union-attr]
+        assert slot.metadata["held_gen"] == "5"  # type: ignore[union-attr]
+        assert self.plan() == []  # a second sweep finds nothing
 
     def test_a_live_run_keeps_both(self):
-        self.assertEqual(self.plan({self.work: "s1"}), [])
+        assert self.plan({self.work: "s1"}) == []
 
     def test_a_slot_and_claim_retaken_after_the_look_are_left_alone(self):
         plan = self.plan()
         for b, key in ((self.slot, "held_gen"), (self.work, "fence_gen")):  # a new run takes them under the same actor
             self.store.update(b, BeadPatch(set_metadata={key: "6"}))
         removed, kept = apply(plan, False, RealGit(snapshot()), lambda r: self.store)
-        self.assertEqual(removed, [])
-        self.assertTrue(all("taken again" in k for k in kept) and len(kept) == 2)
-        self.assertEqual((self.store.show(self.slot).assignee, self.store.show(self.work).assignee), ("tl-dead", "tl-dead"))  # type: ignore[union-attr]
+        assert removed == []
+        assert all("taken again" in k for k in kept) and len(kept) == 2
+        assert (self.store.show(self.slot).assignee, self.store.show(self.work).assignee) == ("tl-dead", "tl-dead")  # type: ignore[union-attr]
 
     def test_a_slot_retaken_by_another_actor_is_left_alone(self):
         plan = self.plan()
         self.store.update(self.slot, BeadPatch(assignee="tl-new", set_metadata={"held_gen": "6"}))
         removed, kept = apply([a for a in plan if isinstance(a, FreeSlot)], False, RealGit(snapshot()), lambda r: self.store)
-        self.assertEqual((removed, self.store.show(self.slot).assignee), ([], "tl-new"))  # type: ignore[union-attr]
-        self.assertIn("no longer held", kept[0])
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert (removed, self.store.show(self.slot).assignee) == ([], "tl-new")  # type: ignore[union-attr]
+        assert "no longer held" in kept[0]

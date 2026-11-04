@@ -5,10 +5,11 @@ import subprocess
 import sys
 import tempfile
 import time
-import unittest
 from collections.abc import Callable
 from pathlib import Path
 from typing import cast
+
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401
@@ -78,8 +79,8 @@ class Store:
         return self.beads
 
 
-class Trees(unittest.TestCase):
-    def setUp(self):
+class Trees(Case):
+    def setup_method(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
@@ -112,51 +113,51 @@ class Trees(unittest.TestCase):
     def test_a_merged_clean_tree_is_removed_with_plain_git_and_the_main_checkout_stays(self):
         d = self.tree("done")
         removed, kept = self.prune()
-        self.assertFalse(d.exists())
-        self.assertEqual((len(removed), kept), (1, []))
-        self.assertTrue((self.repo / ".git").is_dir())
+        assert not d.exists()
+        assert (len(removed), kept) == (1, [])
+        assert (self.repo / ".git").is_dir()
 
     def test_a_tree_with_an_untracked_or_changed_file_is_kept(self):
         a, b = self.tree("untracked"), self.tree("changed")
         (a / "new.txt").write_text("n")
         (b / "changed.txt").write_text("edited")
         removed, kept = self.prune()
-        self.assertTrue(a.exists() and b.exists())
-        self.assertEqual(removed, [])
-        self.assertTrue(all("uncommitted or untracked files" in k for k in kept) and len(kept) == 2)
+        assert a.exists() and b.exists()
+        assert removed == []
+        assert all("uncommitted or untracked files" in k for k in kept) and len(kept) == 2
 
     def test_a_tree_not_merged_into_origin_main_is_kept(self):
         d = self.tree("wip", merged=False)
         _, kept = self.prune()
-        self.assertTrue(d.exists())
-        self.assertIn("not merged into origin/main", kept[0])
+        assert d.exists()
+        assert "not merged into origin/main" in kept[0]
 
     def test_a_tree_used_in_the_last_keep_days_is_kept_even_when_merged(self):
         d = self.tree("fresh")
         removed, kept = self.prune(now=time.time())
-        self.assertTrue(d.exists())
-        self.assertEqual(removed, [])
-        self.assertIn("used in the last 14 days", kept[0])
+        assert d.exists()
+        assert removed == []
+        assert "used in the last 14 days" in kept[0]
 
     def test_a_tree_a_run_holds_is_kept(self):
         d = self.tree("busy")
         (d / ".task").mkdir()
         (d / ".task" / "engine.lock").write_text("pid")
         _, kept = self.prune()
-        self.assertTrue(d.exists())
-        self.assertIn("engine lock", kept[0])
+        assert d.exists()
+        assert "engine lock" in kept[0]
 
     def test_a_tree_of_a_repo_nobody_registered_is_left_alone(self):
         d = self.tree("theirs")
         removed, kept = self.prune(repos=[str(self.root / "elsewhere")])
-        self.assertTrue(d.exists())
-        self.assertEqual((removed, kept), ([], []))
+        assert d.exists()
+        assert (removed, kept) == ([], [])
 
     def test_dry_run_removes_nothing_and_says_what_would_go(self):
         d = self.tree("done")
         removed, _ = self.prune(dry_run=True)
-        self.assertTrue(d.exists())
-        self.assertTrue(removed[0].startswith("would remove worktree"))
+        assert d.exists()
+        assert removed[0].startswith("would remove worktree")
 
     def test_release_branches_on_origin_main_go_and_the_others_stay(self):
         git(self.repo, "branch", "release/behind", "origin/main")  # nothing of its own: on main
@@ -164,10 +165,10 @@ class Trees(unittest.TestCase):
         git(self.repo, "worktree", "remove", str(self.build / "rel"))
         d = self.tree("open", branch="release/open", merged=False)
         removed, kept = self.prune()
-        self.assertEqual(sorted(r.split(" ")[1] for r in removed if " branch " in " " + r), ["release/behind", "release/merged"])
-        self.assertTrue(any("release/open" in k and "checked out in a worktree" in k for k in kept))
-        self.assertEqual(git(self.repo, "for-each-ref", "--format=%(refname:short)", "refs/heads/release/").split(), ["release/open"])
-        self.assertTrue(d.exists())
+        assert sorted(r.split(" ")[1] for r in removed if " branch " in " " + r) == ["release/behind", "release/merged"]
+        assert any("release/open" in k and "checked out in a worktree" in k for k in kept)
+        assert git(self.repo, "for-each-ref", "--format=%(refname:short)", "refs/heads/release/").split() == ["release/open"]
+        assert d.exists()
 
     def test_a_commit_added_to_a_release_branch_after_the_check_survives_the_prune(self):
         self.tree("rel", branch="release/merged")
@@ -181,9 +182,9 @@ class Trees(unittest.TestCase):
             git(self.repo, "checkout", "-q", "main")
         removed, kept = sweep([str(self.repo)], None, self.build, 14, self.later, False,
                               racing("delete_branch_at", land_one_more), homes.cfg())
-        self.assertEqual(removed, [])
-        self.assertTrue(any("release/merged" in k for k in kept))
-        self.assertEqual(git(self.repo, "rev-parse", "release/merged"), keep[0])
+        assert removed == []
+        assert any("release/merged" in k for k in kept)
+        assert git(self.repo, "rev-parse", "release/merged") == keep[0]
 
     def test_a_branch_whose_patches_were_replayed_onto_main_goes(self):
         git(self.repo, "checkout", "-q", "-b", "release/replayed")
@@ -198,13 +199,13 @@ class Trees(unittest.TestCase):
         git(other, "push", "-q", "origin", "HEAD:main")
         git(self.repo, "fetch", "-q")
         removed, _ = self.prune()
-        self.assertEqual(git(self.repo, "for-each-ref", "refs/heads/release/"), "")
-        self.assertTrue(any("release/replayed" in r for r in removed))
+        assert git(self.repo, "for-each-ref", "refs/heads/release/") == ""
+        assert any("release/replayed" in r for r in removed)
 
     def test_a_branch_whose_last_commit_is_recent_is_kept(self):
         git(self.repo, "branch", "release/new", "origin/main")
         _, kept = self.prune(now=time.time())
-        self.assertIn("under 14 days old", kept[0])
+        assert "under 14 days old" in kept[0]
 
     def test_one_verb_prunes_run_data_trees_and_branches_and_is_idempotent(self):
         d = self.tree("done")
@@ -214,12 +215,12 @@ class Trees(unittest.TestCase):
             out.append([])
             verb.run(cfg, LoopConfig(build_dir=str(self.build)), [str(self.repo)], lambda r: cast(Beads, Store()), self.later, False,
                      SH, out[-1].append, who=who())
-        self.assertFalse(d.exists())
-        self.assertTrue(any(ln.startswith("prune: removed worktree") for ln in out[0]))
-        self.assertFalse(any("removed worktree" in ln for ln in out[1]))
+        assert not d.exists()
+        assert any(ln.startswith("prune: removed worktree") for ln in out[0])
+        assert not any("removed worktree" in ln for ln in out[1])
 
 
-class Landed(unittest.TestCase):
+class Landed(Case):
     """Closed beads' local task/* branches: `git branch -d`; origin's task/<bead> of a landed one: `git push origin --delete`."""
 
     commit = cast(Callable[..., None], Trees.commit)
@@ -239,8 +240,8 @@ class Landed(unittest.TestCase):
     def heads(self):
         return git(self.repo, "for-each-ref", "--format=%(refname:short)", "refs/heads/").split()
 
-    def setUp(self):
-        Trees.setUp(cast(Trees, self))
+    def setup_method(self):
+        Trees.setup_method(cast(Trees, self))
         for b in ("task/a-1", "task/a-2", "worker/a-1", "claude/a-1", "task/a-9", "task/custom"):
             git(self.repo, "branch", b, "origin/main")
         git(self.repo, "checkout", "-q", "-b", "task/a-3")  # unmerged: has a commit of its own
@@ -252,22 +253,22 @@ class Landed(unittest.TestCase):
 
     def test_a_closed_beads_merged_branch_goes_and_the_rest_stay_with_reasons(self):
         removed, kept = self.prune(**{"a-5": {"branch": "task/custom"}})
-        self.assertEqual(sorted(r.split()[1] for r in removed), ["task/a-1", "task/custom"])
-        self.assertEqual(sorted(self.heads()), ["claude/a-1", "main", "task/a-2", "task/a-3", "task/a-4", "task/a-9", "worker/a-1"])
+        assert sorted(r.split()[1] for r in removed) == ["task/a-1", "task/custom"]
+        assert sorted(self.heads()) == ["claude/a-1", "main", "task/a-2", "task/a-3", "task/a-4", "task/a-9", "worker/a-1"]
         why = {k.split()[1].rstrip(":"): k for k in kept}
-        self.assertIn("not merged", why["task/a-3"])
-        self.assertIn("checked out in a worktree", why["task/a-4"])
-        self.assertIn("not closed", why["task/a-2"])
-        self.assertIn("not closed", why["task/a-9"])
-        self.assertFalse(any("worker/" in k or "claude/" in k for k in removed + kept))
+        assert "not merged" in why["task/a-3"]
+        assert "checked out in a worktree" in why["task/a-4"]
+        assert "not closed" in why["task/a-2"]
+        assert "not closed" in why["task/a-9"]
+        assert not any("worker/" in k or "claude/" in k for k in removed + kept)
 
     def test_dry_run_only_says_and_a_second_run_finds_nothing(self):
         before = self.heads()
         removed, _ = self.prune(dry_run=True)
-        self.assertEqual(self.heads(), before)
-        self.assertTrue(removed[0].startswith("would remove branch task/a-1"))
-        self.assertEqual(len(self.prune()[0]), 1)
-        self.assertEqual(self.prune()[0], [])
+        assert self.heads() == before
+        assert removed[0].startswith("would remove branch task/a-1")
+        assert len(self.prune()[0]) == 1
+        assert self.prune()[0] == []
 
     def land_commit(self, bead):
         (self.repo / f"{bead}.txt").write_text("x")
@@ -282,17 +283,19 @@ class Landed(unittest.TestCase):
         self.land_commit("a-0")  # landed but no remote ref
         removed, _ = self.prune()
         remote = git(self.origin, "for-each-ref", "--format=%(refname)").split()
-        self.assertEqual(sorted(r for r in remote if "task/" in r or "claude/" in r),
-                         ["refs/heads/claude/a-1", "refs/heads/task/a-2", "refs/heads/task/a-3"])
-        self.assertEqual([r for r in removed if r.startswith("remote branch")], ["remote branch task/a-1 (repo)"])
+        assert (
+            sorted(r for r in remote if "task/" in r or "claude/" in r)
+            == ["refs/heads/claude/a-1", "refs/heads/task/a-2", "refs/heads/task/a-3"]
+        )
+        assert [r for r in removed if r.startswith("remote branch")] == ["remote branch task/a-1 (repo)"]
 
     def test_a_dry_run_keeps_the_remote_branch_and_says_so(self):
         git(self.repo, "push", "-q", "origin", "task/a-1")
         git(self.repo, "checkout", "-q", "main")
         self.land_commit("a-1")
         removed, _ = self.prune(dry_run=True)
-        self.assertIn("refs/heads/task/a-1", git(self.origin, "for-each-ref", "--format=%(refname)"))
-        self.assertTrue(any(r.startswith("would remove remote branch task/a-1") for r in removed))
+        assert "refs/heads/task/a-1" in git(self.origin, "for-each-ref", "--format=%(refname)")
+        assert any(r.startswith("would remove remote branch task/a-1") for r in removed)
 
     def test_a_commit_added_to_a_task_branch_after_the_check_survives_the_prune(self):
         def late():
@@ -301,9 +304,9 @@ class Landed(unittest.TestCase):
             git(self.repo, "checkout", "-q", "main")
         sh = racing("delete_branch_at", late)
         removed, kept = sweep([str(self.repo)], lambda r: cast(Beads, self.store()), None, 14, 0, False, sh, homes.cfg())
-        self.assertEqual(removed, [])
-        self.assertIn("task/a-1", self.heads())
-        self.assertTrue(any(k.startswith("branch task/a-1") for k in kept))
+        assert removed == []
+        assert "task/a-1" in self.heads()
+        assert any(k.startswith("branch task/a-1") for k in kept)
 
     def test_a_commit_pushed_to_the_remote_task_branch_after_the_check_survives_the_prune(self):
         git(self.repo, "push", "-q", "origin", "task/a-1")
@@ -318,30 +321,26 @@ class Landed(unittest.TestCase):
             git(other, "push", "-q", "origin", "task/a-1")
         sh = racing("delete_remote_at", late)
         removed, kept = sweep([str(self.repo)], lambda r: cast(Beads, self.store()), None, 14, 0, False, sh, homes.cfg())
-        self.assertEqual([r for r in removed if r.startswith("remote")], [])
-        self.assertIn("refs/heads/task/a-1", git(self.origin, "for-each-ref", "--format=%(refname)"))
-        self.assertTrue(any(k.startswith("remote branch task/a-1") for k in kept))
+        assert [r for r in removed if r.startswith("remote")] == []
+        assert "refs/heads/task/a-1" in git(self.origin, "for-each-ref", "--format=%(refname)")
+        assert any(k.startswith("remote branch task/a-1") for k in kept)
 
     def test_the_code_never_forces_a_branch_delete(self):
         src = Path(apply.__file__).read_text(encoding="utf-8") + Path(observe.__file__).read_text(encoding="utf-8")
-        self.assertNotIn('"-D"', src)
-        self.assertNotIn("--force", src)
+        assert '"-D"' not in src
+        assert "--force" not in src
 
     def test_bd_not_answering_keeps_every_branch(self):
         removed, kept = sweep([str(self.repo)], lambda r: cast(Beads, Store(fail=True)), None, 14, 0, False, GIT, homes.cfg())
-        self.assertEqual(removed, [])
-        self.assertIn("bd did not answer", kept[0])
+        assert removed == []
+        assert "bd did not answer" in kept[0]
 
     def test_the_landed_record_decides_a_title_does_not(self):
         cfg = ConfigDir(self.root / "cfg")
         self.land_commit("a-1")  # titled (a-1) but a revert-like title is not what counts
         git(self.repo, "commit", "-q", "--amend", "-m", 'Revert "work (a-1)"')
-        self.assertFalse(observe.landed(self.repo, BeadId("a-1"), GIT, cfg))  # no record, a revert subject: not landed
+        assert not observe.landed(self.repo, BeadId("a-1"), GIT, cfg)  # no record, a revert subject: not landed
         LandedStore(cfg).put(LandedRec(bead=BeadId("a-1"), sha=git(self.repo, "rev-parse", "HEAD"), base="origin/main", t=1.0))
-        self.assertTrue(observe.landed(self.repo, BeadId("a-1"), GIT, cfg))  # the record's sha is on HEAD
+        assert observe.landed(self.repo, BeadId("a-1"), GIT, cfg)  # the record's sha is on HEAD
         LandedStore(cfg).put(LandedRec(bead=BeadId("a-1"), sha=git(self.repo, "rev-parse", "task/a-3"), base="origin/main", t=1.0))
-        self.assertFalse(observe.landed(self.repo, BeadId("a-1"), GIT, cfg))  # a sha that never reached HEAD
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert not observe.landed(self.repo, BeadId("a-1"), GIT, cfg)  # a sha that never reached HEAD
