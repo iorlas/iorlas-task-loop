@@ -7,6 +7,7 @@ from support import engine_case as te
 from support import procsim
 
 from taskloop.adapters.childenv import CHECK_SECRETS, check_env, check_environment, tool_env
+from taskloop.adapters.git import RealGit
 from taskloop.app.checks.container import Box
 from taskloop.app.checks.execution import ReadyExecution
 from taskloop.contracts.checks import Check
@@ -17,6 +18,22 @@ from taskloop.contracts.runkey import Digest
 
 
 class CheckEnvironmentTest(unittest.TestCase):
+    def test_pinned_hooks_are_removed_only_for_checks_and_other_config_is_renumbered(self):
+        base = {"GIT_CONFIG_COUNT": "3", "GIT_CONFIG_KEY_0": "user.name", "GIT_CONFIG_VALUE_0": "Suite",
+                "GIT_CONFIG_KEY_1": "core.hooksPath", "GIT_CONFIG_VALUE_1": "/global/hooks",
+                "GIT_CONFIG_KEY_2": "protocol.file.allow", "GIT_CONFIG_VALUE_2": "always",
+                "GIT_CONFIG_GLOBAL": "/suite/gitconfig", "GIT_CONFIG_NOSYSTEM": "1"}
+        pinned = RealGit(Env(base)).git_env("/repo")
+        for scratch in (False, True):
+            with self.subTest(scratch=scratch), check_environment(pinned, scratch_home=scratch) as out:
+                config = {k: v for k, v in out.items() if k.startswith("GIT_CONFIG_")}
+                self.assertEqual(config, {"GIT_CONFIG_COUNT": "2", "GIT_CONFIG_KEY_0": "user.name",
+                                          "GIT_CONFIG_VALUE_0": "Suite", "GIT_CONFIG_KEY_1": "protocol.file.allow",
+                                          "GIT_CONFIG_VALUE_1": "always", "GIT_CONFIG_GLOBAL": "/suite/gitconfig",
+                                          "GIT_CONFIG_NOSYSTEM": "1"})
+        self.assertIn("core.hooksPath", pinned.values())
+        self.assertIn("core.hooksPath", tool_env(base).values())
+
     def test_profile_defaults_to_the_callers_home(self):
         self.assertFalse(EngineConfig().check_scratch_home)
 

@@ -126,9 +126,10 @@ layers =
     land
     write | review | plan | look
     report
-    checks
     reconcile
-    release | track | doctor
+    release
+    checks
+    track | doctor
     slots
     asks
 
@@ -335,12 +336,11 @@ forbidden_modules =
 allow_indirect_imports = True
 
 [importlinter:contract:app-release]
-name = app slice release imports only itself
+name = app slice release imports checks
 type = forbidden
 source_modules = taskloop.app.release
 forbidden_modules =
     taskloop.app.asks
-    taskloop.app.checks
     taskloop.app.doctor
     taskloop.app.land
     taskloop.app.launch

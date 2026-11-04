@@ -64,6 +64,7 @@ def bump_and_commit(tool_root: Path, where: Path, req: Request, sh: Shell) -> st
     publish.git_must(lambda: sh.port.stage(str(where), publish.PLUGIN, manifest.NAME), where)
     publish.git_must(lambda: sh.port.commit_staged(str(where), f"{version}: {req.message}{publish.TRAILER}"), where)
     check_bump(where, before, version, sh)
+    suite.record_receipt(where, sh)
     return version
 
 

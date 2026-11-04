@@ -1,0 +1,42 @@
+"""A suite child can push to its own origin while tl's refusing global hook is installed."""
+import os
+import subprocess
+import tempfile
+import unittest
+from pathlib import Path
+
+from taskloop.adapters.checks_argv import ArgvChecks
+from taskloop.adapters.git import RealGit
+from taskloop.contracts.env import Env
+from taskloop.contracts.ports import CheckSpec
+
+
+class CheckHooks(unittest.TestCase):
+    def test_suite_push_uses_git_defaults_instead_of_the_pinned_judge(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo, origin = root / "repo", root / "origin.git"
+            repo.mkdir()
+            base = {"PATH": os.environ["PATH"], "HOME": str(root), "XDG_CONFIG_HOME": str(root / "config"),
+                    "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": "/dev/null",
+                    "GIT_AUTHOR_NAME": "Suite", "GIT_AUTHOR_EMAIL": "suite@example.invalid",
+                    "GIT_COMMITTER_NAME": "Suite", "GIT_COMMITTER_EMAIL": "suite@example.invalid"}
+            port = RealGit(Env(base))
+            pinned = port.git_env(repo)
+            hooks = Path(pinned[f"GIT_CONFIG_VALUE_{int(pinned['GIT_CONFIG_COUNT']) - 1}"])
+            hooks.mkdir(parents=True)
+            hook = hooks / "pre-push"
+            hook.write_text("#!/bin/sh\necho 'no suite receipt for this tree and base' >&2\nexit 1\n")
+            hook.chmod(0o755)
+            for args in (("init", "--bare", str(origin)), ("init", "-b", "main"),
+                         ("commit", "--allow-empty", "-m", "suite fixture"), ("remote", "add", "origin", str(origin))):
+                subprocess.run(["git", *args], cwd=repo, env=base, capture_output=True, check=True)
+            refused = subprocess.run(["git", "push", "origin", "HEAD:main"], cwd=repo, env=pinned,
+                                     capture_output=True, text=True, check=False)
+            self.assertNotEqual(refused.returncode, 0)
+            self.assertIn("no suite receipt", refused.stderr)
+            result = ArgvChecks(Env(pinned)).run(CheckSpec(argv=["git", "push", "origin", "HEAD:main"], cwd=str(repo)))
+            self.assertEqual(result.exit, 0, result.out)
+            tip = subprocess.run(["git", "--git-dir", str(origin), "rev-parse", "refs/heads/main"],
+                                 env=base, capture_output=True, text=True, check=True).stdout.strip()
+            self.assertEqual(tip, port.rev_parse(str(repo), "HEAD"))

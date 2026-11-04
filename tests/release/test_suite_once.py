@@ -33,6 +33,7 @@ class SuiteOnce(unittest.TestCase):
         port.rev_parse.return_value = "before"
         port.show.return_value = plugin.read_text()
         port.ls_files.return_value = [flow.publish.PLUGIN]
+        port.ls_tree.return_value = []
         port.changed_paths.return_value = [flow.publish.PLUGIN, flow.manifest.NAME]
         port.status.return_value = []
         sh = replace(quiet_shell(), port=port, env=self.env)

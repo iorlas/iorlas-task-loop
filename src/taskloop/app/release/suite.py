@@ -16,12 +16,18 @@ from taskloop.adapters import landlock
 from taskloop.adapters.childenv import tool_env
 from taskloop.adapters.ident import config_dir
 from taskloop.adapters.suiteout import Part, failing_tests, failure_report, merge_outputs, ran_line
+from taskloop.app.checks import authorization
 from taskloop.app.release.cache import SuiteCache
 from taskloop.app.release.shell import Abort, Shell, say
+from taskloop.contracts.checks import CheckResult
 from taskloop.contracts.env import Env
 from taskloop.contracts.envvars import EnvVar
+from taskloop.contracts.ids import CheckId, TreeSha
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import Spawner
+from taskloop.contracts.runkey import BaseSha
+from taskloop.domain.checks.specs import gate_items
+from taskloop.stores.real import real_stores
 
 LONG = 3 * 3600.0  # a hang guard for a whole gate run
 STALE_TMP_S = 2 * LONG  # a tl-suite-* dir this old belongs to a suite that was killed without unwinding (SIGKILL): no live one runs so long
@@ -266,3 +272,28 @@ def verify(tool_root: Path, repo: Path, sh: Shell, checks: Callable[[Path, Path,
     checks(tool_root, repo, sh)
     cache.record(tree, command, time.time())
     return False
+
+
+def record_receipt(repo: Path, sh: Shell) -> None:
+    """Publish the verified release bump using the delivery judge's policy, store and complete check key."""
+    d = str(repo)
+    # An unconfigured repo has no registry evidence for the judge to require.
+    if not sh.port.ls_tree(d, sh.port.rev_parse(d, "origin/main^{tree}"), ".task-loop.json"):
+        return
+    base = BaseSha(sh.port.rev_parse(d, "origin/main"))
+    tree = TreeSha(sh.port.rev_parse(d, "HEAD^{tree}"))
+    cfg = authorization.profile(sh.port, d, TreeSha(base))
+    checks = [c for c in gate_items(cfg) if c.id == CheckId("suite")]
+    if not checks:
+        return
+    stores = real_stores(ConfigDir(config_dir(sh.env)))
+    memo = authorization.memo_for(stores, sh.port, d, cfg, tree, base, sh.env, sh.spawner)
+    for check in checks:
+        if check.cmd != "python3 dev/suite-docker.py" or check.env or check.fix or check.container or check.reads:
+            raise Abort("release cannot attest a customized suite check; run `tl check` for this registry")
+        key = memo.key(check)
+        if key is None:
+            raise Abort("release suite has no reusable check identity; nothing pushed")
+        result = CheckResult(id=check.id, cmd=check.cmd, group=check.group, exit=0, status="passed",
+                             note="release gate and suite verified before the version and manifest bump")
+        memo.remember(key, result, 0, "")

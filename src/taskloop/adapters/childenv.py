@@ -111,15 +111,27 @@ def check_env(base: Mapping[str, str], extra: Mapping[str, str] | None = None, *
     return env
 
 
+def without_check_hooks(env: dict[str, str]) -> dict[str, str]:
+    """Remove injected hooks from git's config sequence, preserving the order of all other entries."""
+    count = int(env.get("GIT_CONFIG_COUNT", "0"))
+    entries = [(env[f"GIT_CONFIG_KEY_{i}"], env[f"GIT_CONFIG_VALUE_{i}"]) for i in range(count)
+               if env[f"GIT_CONFIG_KEY_{i}"].lower() != "core.hookspath"]
+    out = {k: v for k, v in env.items() if not k.startswith(("GIT_CONFIG_KEY_", "GIT_CONFIG_VALUE_"))}
+    out["GIT_CONFIG_COUNT"] = str(len(entries))
+    for i, (key, value) in enumerate(entries):
+        out[f"GIT_CONFIG_KEY_{i}"], out[f"GIT_CONFIG_VALUE_{i}"] = key, value
+    return out
+
+
 @contextmanager
 def check_environment(base: Mapping[str, str], extra: Mapping[str, str] | None = None, *,
                       scratch_home: bool) -> Generator[dict[str, str]]:
     """Optionally use a private HOME, removed after the whole process group stops, including on exceptions."""
     if scratch_home:
         with tempfile.TemporaryDirectory(prefix="tl-check-home-") as home:
-            yield check_env(base, extra, home=home)
+            yield without_check_hooks(check_env(base, extra, home=home))
     else:
-        yield check_env(base, extra, home=None)
+        yield without_check_hooks(check_env(base, extra, home=None))
 
 
 # Registered names that differ run to run without changing what a check does (paths of this run, ids of this process): not part of a
