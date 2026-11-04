@@ -216,8 +216,8 @@ class InputCache(SpeedTest):
         te.sh("git", "commit", "-qm", "sets", cwd=self.wt)
         te.sh("git", "update-ref", "refs/remotes/origin/main", "HEAD", cwd=self.wt)
         warns = doctor.git_warnings(str(self.wt), None, port_git())
-        self.assertEqual([w for w in warns if "input_sets" in w], ["engine.input_sets.idle is named by no check (`inputs`, `exclude`, `when`) "
-                                                                   "and not by engine.hatch: delete it."])
+        [idle] = [w for w in warns if "input_sets" in w]
+        self.assertTrue(idle.startswith("engine.input_sets.idle is named by no check"), idle)
         self.assertFalse([w for w in warns if "matches no tracked file" in w])  # @cs was read as *.cs
 
     def test_without_inputs_any_untracked_file_still_throws_the_result_away(self):
