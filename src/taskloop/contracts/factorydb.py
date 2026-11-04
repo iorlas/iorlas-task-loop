@@ -8,6 +8,7 @@ import json
 import os
 import sqlite3
 import sys
+import time
 from collections.abc import Generator
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass
@@ -155,8 +156,17 @@ def _unsafe_filesystem(path: Path) -> bool | None:
 
 
 def _journal_mode(con: sqlite3.Connection, *, readonly: bool) -> str:
-    row = con.execute("PRAGMA journal_mode" if readonly else "PRAGMA journal_mode=WAL").fetchone()
-    return str(row[0]).lower() if row else ""
+    """SQLite does not apply busy_timeout to a journal-mode switch: two openers of a fresh file race and one gets "database is
+    locked" at once. Retry that within the same 5 s busy window."""
+    deadline = time.monotonic() + 5.0
+    while True:
+        try:
+            row = con.execute("PRAGMA journal_mode" if readonly else "PRAGMA journal_mode=WAL").fetchone()
+            return str(row[0]).lower() if row else ""
+        except sqlite3.OperationalError as e:
+            if "locked" not in str(e) or time.monotonic() >= deadline:
+                raise
+            time.sleep(0.01)
 
 
 def _schema_ready(con: sqlite3.Connection, *, readonly: bool) -> bool:
