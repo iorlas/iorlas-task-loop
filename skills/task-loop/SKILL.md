@@ -220,7 +220,8 @@ tree at land (see **The gate**). **Every push consults the delivery judge:** tl'
 `<config>/githooks/`, plain python3) forwards the entire Git stdin request to `tl judge-push --repo DIR`. The application reads the
 typed profile and shared check evidence, evaluates all pushed tips and their bases, and returns allowed, refused, or unavailable.
 Only allowed permits transport; an unavailable judge, invalid profile, or hook error refuses before remote mutation. A green tip
-passes; a tip without evidence runs the application's check service when it is the clean checked-out HEAD and is refused otherwise.
+passes; a tip without evidence runs the application's check service when it is the clean checked-out HEAD and is refused otherwise
+(`tl judge-push --no-run` reads the evidence only and never starts a check: a missing receipt refuses).
 A lower tip of a pushed stack passes when a green tip above it is pushed with it, never alone. Generic Git push, leased push, and
 remote deletion carry no checked-delivery marker; the land pusher requires a GatePass and verifies its tree and base before transport.
 The retired `TL_LAND` marker grants no authority. An intentional owner override remains `git push --no-verify` or an explicit

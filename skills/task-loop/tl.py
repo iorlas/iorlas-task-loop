@@ -309,6 +309,7 @@ def build_parser():
     cli_green.add_parser(sp)
     p = sp.add_parser("judge-push", help="judge the complete Git pre-push request on stdin; unavailable refuses")
     p.add_argument("--repo", default=".", metavar="DIR")
+    p.add_argument("--no-run", action="store_true", help="read the evidence only: a missing receipt refuses, no check is started")
     cli_land_stack.add_parser(sp)
     cli_hooks.add_parser(sp)
     return ap
