@@ -1,7 +1,6 @@
 """A run that goes on in another process: the counters kept across a network pause or an exec into a newer install, and the exec at a
 step boundary."""
 import os
-import shutil
 import sys
 import time
 import traceback
@@ -19,6 +18,7 @@ from taskloop.contracts.env import Env
 from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.paths import ConfigDir, RunFiles
 from taskloop.contracts.run import NetPause, Reexec, ReexecNote, RunCounters
+from taskloop.contracts.runrows import RunRows
 from taskloop.contracts.stores import JsonStore
 
 
@@ -58,9 +58,11 @@ class Reload:
 
     def carry_done_memo(self, paused: Path) -> None:
         """The answers the paused run already took go on under this run's id: no finished call is asked again."""
-        memo = RunFiles(paused).done_memo()
-        if memo.is_file():
-            shutil.copyfile(memo, RunFiles(self.e.run_dir).done_memo())
+        with RunRows(self.e.home).transaction() as con:
+            con.execute("INSERT INTO step (run,key,try,attempt,status,started,ended,input_digest,result,fingerprint,calls) "
+                        "SELECT ?,key,try,attempt,status,started,ended,input_digest,result,fingerprint,calls "
+                        "FROM step WHERE run=? AND status='done' ON CONFLICT(run,key,try) DO NOTHING",
+                        (self.e.run_id, paused.name))
 
     def save_net_pause(self) -> None:
         """The run paused for the network: keep its counters for the next run of this bead. Its terminal answer stays immutable;

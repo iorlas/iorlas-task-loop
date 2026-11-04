@@ -10,7 +10,12 @@ import support.paths  # noqa: F401
 from support.narrow import must
 
 from taskloop.app.run import done_memo, worker_call
+from taskloop.contracts import factorydb, wire
 from taskloop.contracts.delegate import RunRequest
+from taskloop.contracts.locator import RunLocator
+from taskloop.contracts.paths import ConfigDir
+from taskloop.contracts.run import DoneEntry, RunManifest
+from taskloop.contracts.runrows import RunRows
 from taskloop.stores import call_state
 
 
@@ -18,7 +23,11 @@ class Recovery(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        self.root = Path(self.tmp.name)
+        self.cfg = ConfigDir(Path(self.tmp.name))
+        self.root = self.cfg.run_dir("run-1")
+        self.root.mkdir(parents=True)
+        self.rows = RunRows(self.cfg)
+        self.rows.put(RunManifest(run="run-1", repo="/repo", bead="t-1", started=1.0))
         self.host = SimpleNamespace(
             wt="/repo", bead="t-1", run_id="run-1", run_dir=self.root,
             call_dir=lambda: self.root / "calls", log=mock.Mock(),
@@ -265,3 +274,41 @@ class Recovery(unittest.TestCase):
         done_memo.keep(self.root, c.key, "old-prompt-sha", str(answer))
         self.worker.attach(c)
         self.assertIsNone(c.finished)
+
+    def test_consumed_memo_upserts_step_with_current_attempt_and_rejects_changed_sha(self):
+        answer = self.root / "answer.json"
+        answer.write_text('{"answer": 1}')
+        key = ("write", 1)
+        with mock.patch.object(done_memo.time, "time", return_value=10):
+            done_memo.keep(self.root, key, "sha-1", str(answer))
+        self.assertEqual(done_memo.recall(self.root, key, "sha-1"), {"answer": 1})
+        self.assertIsNone(done_memo.recall(self.root, key, "changed"))
+        RunLocator(self.cfg).take_up("run-1", "/repo", "t-1", 15)
+        with mock.patch.object(done_memo.time, "time", return_value=20):
+            done_memo.keep(self.root, key, "sha-2", str(answer))
+        with self.rows.transaction() as con:
+            rows = con.execute("SELECT key,try,attempt,status,started,ended,input_digest,result,calls FROM step").fetchall()
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0][:7], ('["write", 1]', 1, 2, "done", 20, 20, "sha-2"))
+        self.assertEqual(wire.load(DoneEntry, rows[0][7]), DoneEntry(sha="sha-2", file=str(answer)))
+        self.assertEqual(rows[0][8], 0)
+        self.assertIsNone(done_memo.recall(self.root, key, "sha-1"))
+        self.assertEqual(done_memo.recall(self.root, key, "sha-2"), {"answer": 1})
+
+    def test_corrupt_step_and_database_raise_instead_of_reading_legacy_state(self):
+        answer = self.root / "answer.json"
+        answer.write_text('{}')
+        done_memo.keep(self.root, (1,), "sha", str(answer))
+        with self.rows.transaction() as con:
+            con.execute("UPDATE step SET input_digest='different' WHERE run='run-1'")
+        with self.assertRaises(factorydb.DatabaseError):
+            done_memo.recall(self.root, (1,), "sha")
+        with self.rows.transaction() as con:
+            con.execute("UPDATE step SET result='{' WHERE run='run-1'")
+        with self.assertRaises(factorydb.DatabaseError):
+            done_memo.recall(self.root, (1,), "sha")
+        self.cfg.factory_db().write_bytes(b"broken database")
+        with self.assertRaises(factorydb.DatabaseError):
+            done_memo.recall(self.root, (1,), "sha")
+        with self.assertRaises(factorydb.DatabaseError):
+            done_memo.keep(self.root, (1,), "sha", str(answer))

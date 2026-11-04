@@ -4,26 +4,41 @@ Legacy prompt-only hashes cannot match the versioned execution identity; their o
 """
 
 import json
+import time
 from pathlib import Path
 from typing import Any
 
 from taskloop.app.run import worker_identity
-from taskloop.contracts.guard import guard
-from taskloop.contracts.paths import RunFiles
-from taskloop.contracts.run import CallIdentity, DoneEntry, DoneMemo
-from taskloop.contracts.stores import JsonStore
+from taskloop.contracts import factorydb, wire
+from taskloop.contracts.paths import ConfigDir
+from taskloop.contracts.run import CallIdentity, DoneEntry
+from taskloop.contracts.runrows import RunRows
 
 
-def _store(run_dir: Path) -> JsonStore[DoneMemo]:
-    return JsonStore(RunFiles(run_dir).done_memo(), DoneMemo)
+def _rows(run_dir: Path) -> RunRows:
+    return RunRows(ConfigDir(run_dir.parent.parent))
+
+
+def _entry(run_dir: Path, key: str) -> DoneEntry | None:
+    with _rows(run_dir).transaction() as con:
+        row = con.execute("SELECT result,input_digest FROM step WHERE run=? AND key=? AND try=1 AND status='done'",
+                          (run_dir.name, key)).fetchone()
+        if row is None:
+            return None
+        try:
+            entry = wire.load(DoneEntry, row[0])
+            if entry.sha != row[1]:
+                raise ValueError("step digest disagrees with its receipt")
+            return entry
+        except (ValueError, TypeError) as error:
+            raise factorydb.DatabaseError(f"unreadable consumed step: {run_dir.name} {key}") from error
 
 
 def recall(
     run_dir: Path, key: tuple[Any, ...], sha: str, identity: CallIdentity | None = None,
 ) -> dict[str, Any] | None:
     """Reuse consumed work against its admitted inputs, before later engine effects."""
-    memo = _store(run_dir).get()
-    entry = memo.done.get(json.dumps(list(key))) if memo else None
+    entry = _entry(run_dir, json.dumps(list(key)))
     if entry is None:
         return None
     if entry.identity is not None and identity is not None:
@@ -48,11 +63,15 @@ def keep(
     """The answer of the call at `key` was valid and used: remember where its raw copy is."""
     if not answer_file:
         return
-    store = _store(run_dir)
-    try:
-        with guard(store.path.with_name(store.path.name + ".lock")):  # read, add, write as one step
-            memo = store.get() or DoneMemo()
-            entry = DoneEntry(sha=sha, file=answer_file, identity=identity)
-            store.write(memo.replace(done={**memo.done, json.dumps(list(key)): entry}))
-    except OSError:
-        pass
+    rows = _rows(run_dir)
+    with rows.transaction() as con:
+        m = rows.read(con, run_dir.name)
+        if m is None:
+            raise factorydb.DatabaseError(f"no run for consumed step: {run_dir.name}")
+        now = time.time()
+        entry = DoneEntry(sha=sha, file=answer_file, identity=identity)
+        con.execute("INSERT INTO step (run,key,try,attempt,status,started,ended,input_digest,result,calls) "
+                    "VALUES (?,?,1,?,'done',?,?,?,?,0) ON CONFLICT(run,key,try) DO UPDATE SET "
+                    "attempt=excluded.attempt,status=excluded.status,started=excluded.started,ended=excluded.ended,"
+                    "input_digest=excluded.input_digest,result=excluded.result,calls=excluded.calls",
+                    (m.run, json.dumps(list(key)), m.attempts, now, now, sha, json.dumps(wire.dump(entry))))

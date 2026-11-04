@@ -12,7 +12,7 @@ RUN_FILE_READERS = {"taskloop.contracts.runrows"}
 
 def legacy_readers(tree):
     return [n.lineno for n in ast.walk(tree)
-            if isinstance(n, ast.Attribute) and n.attr == "run_manifest"]
+            if isinstance(n, ast.Attribute) and n.attr in {"run_manifest", "done_memo", "legacy_done_memo"}]
 
 
 class FactoryOwnersTest(unittest.TestCase):
@@ -45,3 +45,5 @@ class FactoryOwnersTest(unittest.TestCase):
 
     def test_reader_rule_sees_a_planted_file_read(self):
         self.assertEqual(legacy_readers(ast.parse("JsonStore(cfg.run_manifest(run), RunManifest).get()")), [1])
+        self.assertEqual(legacy_readers(ast.parse("RunFiles(run_dir).done_memo().read_text()")), [1])
+        self.assertEqual(legacy_readers(ast.parse("RunFiles(run_dir).legacy_done_memo().read_text()")), [1])

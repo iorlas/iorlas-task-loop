@@ -4,12 +4,13 @@ import json
 import os
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
+from pathlib import Path
 
-from taskloop.contracts import factorydb, wire
+from taskloop.contracts import attemptrows, factorydb, wire
 from taskloop.contracts.guard import guard
 from taskloop.contracts.ids import loop_key
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.run import RunManifest
+from taskloop.contracts.paths import ConfigDir, RunFiles
+from taskloop.contracts.run import DoneMemo, RunManifest
 from taskloop.contracts.stores import JsonStore
 
 _IMPORTED: set[tuple[int, str]] = set()
@@ -55,7 +56,8 @@ class RunRows:
         with self.transaction() as con:
             self.write(con, manifest, expect_rev)
 
-    def write(self, con: factorydb.sqlite3.Connection, m: RunManifest, expect_rev: int | None = None) -> None:
+    def write(self, con: factorydb.sqlite3.Connection, m: RunManifest, expect_rev: int | None = None,
+              *, attempt_started: float | None = None) -> None:
         if not con.in_transaction:
             raise ValueError("run writes require a caller-owned transaction")
         if expect_rev is not None:
@@ -72,6 +74,7 @@ class RunRows:
                   finish.why if finish else None)
         con.execute(f"INSERT INTO run ({','.join(cols)}) VALUES ({','.join('?' for _ in cols)}) "
                     f"ON CONFLICT(run) DO UPDATE SET {','.join(c + '=excluded.' + c for c in cols[1:])}, rev=run.rev+1", values)
+        attemptrows.ensure(con, m, attempt_started)
 
     def change(self, run: str, change: Callable[[RunManifest], RunManifest]) -> None:
         with self.transaction() as con:
@@ -119,13 +122,36 @@ def import_legacy(cfg: ConfigDir) -> int:
     with store.transaction() as con:
         known = {row[0] for row in con.execute("SELECT run FROM run")}
         for entry in entries:
-            if entry.name in known or not entry.is_dir():
+            if not entry.is_dir():
                 continue
-            m = JsonStore(cfg.run_manifest(entry.name), RunManifest).get()
+            m = store.read(con, entry.name) if entry.name in known else JsonStore(cfg.run_manifest(entry.name), RunManifest).get()
             if m is not None and m.run == entry.name:
-                store.write(con, m)
-                count += 1
+                if entry.name not in known:
+                    store.write(con, m)
+                    count += 1
+                else:
+                    attemptrows.ensure(con, m)
+                _import_steps(con, cfg, m)
     return count
+
+
+def _import_steps(con: factorydb.sqlite3.Connection, cfg: ConfigDir, m: RunManifest) -> None:
+    files = RunFiles(cfg.run_dir(m.run))
+    for path in (files.done_memo(), files.legacy_done_memo()):
+        _import_step_file(con, path, m)
+
+
+def _import_step_file(con: factorydb.sqlite3.Connection, path: Path, m: RunManifest) -> None:
+    """A source marker prevents rereading even torn or empty legacy memos."""
+    if con.execute("SELECT 1 FROM source WHERE path=?", (str(path),)).fetchone():
+        return
+    if con.execute("SELECT 1 FROM step WHERE run=? LIMIT 1", (m.run,)).fetchone() is None:
+        memo = JsonStore(path, DoneMemo).get()
+        for key, entry in (memo.done.items() if memo else ()):
+            con.execute("INSERT INTO step (run,key,try,attempt,status,started,ended,input_digest,result,calls) "
+                        "VALUES (?,?,1,?,'done',?,?,?,?,0)",
+                        (m.run, key, m.attempts, m.started, m.started, entry.sha, json.dumps(wire.dump(entry))))
+    con.execute("INSERT INTO source (path,family,seen) VALUES (?,'step',?)", (str(path), m.started))
 
 
 def import_once(cfg: ConfigDir) -> None:

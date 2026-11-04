@@ -95,10 +95,6 @@ class RunLocator:
     def worktree(self, run: str, path: str) -> None:
         self._change(run, lambda m: m.replace(worktree=path))
 
-    def _put(self, m: RunManifest) -> None:
-        self._ready()
-        self.rows.put(m)
-
     def create(self, repo: str, bead: str, now: float, loop: str | None = None, *, mode: str = "", owner: str = "",
                session: str = "") -> RunBundle:
         """A new run: a fresh opaque id, its folder and its manifest (state created, owned by this process). `mode`, `owner` and
@@ -112,7 +108,9 @@ class RunLocator:
             break
         m = RunManifest(run=run, repo=repo, bead=bead, started=now, loop=loop, heartbeat=now, pid=os.getpid(), host=host_name(),
                         mode=mode, owner=owner, session=session)
-        self._put(m)
+        self._ready()
+        with self.rows.transaction() as con:
+            self.rows.write(con, m, attempt_started=now)
         self.cfg.engine_dir().mkdir(parents=True, exist_ok=True)
         return self.bundle(m)
 
@@ -127,7 +125,7 @@ class RunLocator:
             own = {"heartbeat": now, "pid": os.getpid(), "host": host_name()}
             m = (old.replace(attempts=old.attempts + 1, **(own if old.state.live else {})) if old
                  else RunManifest(run=run, repo=repo, bead=bead, started=now, **own))
-            self.rows.write(con, m)
+            self.rows.write(con, m, attempt_started=now)
         return self.bundle(m)
 
     def add_bead(self, run: str, bead: str) -> None:
@@ -141,7 +139,13 @@ class RunLocator:
 
     def beat(self, run: str, now: float) -> None:
         """The engine's tick: the run is running and alive as of `now`. A run that already has a terminal state keeps it."""
-        self._change(run, lambda m: m.replace(state=RunState.RUNNING, heartbeat=now) if m.state.live else m)
+        self._ready()
+        with self.rows.transaction() as con:
+            m = self.rows.read(con, run)
+            if m is not None:
+                if m.state.live:
+                    self.rows.write(con, m.replace(state=RunState.RUNNING, heartbeat=now))
+                con.execute("UPDATE attempt SET beat=? WHERE run=? AND n=? AND ended IS NULL", (now, run, m.attempts))
 
     def end(self, run: str, now: float, state: RunState, reason: str = "") -> FinishResult | None:
         """Compatibility entry for callers with only a state; finish_run owns every terminal write."""

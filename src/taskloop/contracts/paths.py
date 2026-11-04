@@ -266,6 +266,11 @@ class RunFiles:
         return self.dir / "reexec.json"
 
     def done_memo(self) -> Path:
+        """Legacy import only; consumed steps now live in factory.db."""
+        return self.dir / "done-memo.json"
+
+    def legacy_done_memo(self) -> Path:
+        """The earlier on-disk memo spelling, also read only by the importer."""
         return self.dir / "done.json"
 
     def handoff(self) -> Path:

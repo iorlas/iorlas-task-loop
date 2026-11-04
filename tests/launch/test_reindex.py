@@ -29,7 +29,8 @@ class Reindex(unittest.TestCase):
             original = must(rows.get(script.name))
             JsonStore(cfg.run_manifest(script.name), RunManifest).write(original)
             with rows.transaction() as con:
-                con.execute("DELETE FROM run WHERE run=?", (script.name,))
+                for table in ("attempt", "step", "run"):
+                    con.execute(f"DELETE FROM {table} WHERE run=?", (script.name,))
             args = tl.build_parser().parse_args(["doctor", "--reindex"])
             ctx = tl.Ctx(tl.HERE, lambda: 0.0, [], Env({}), spawner=real_spawner(), git=port_git(),
                          who=Identity(actor="test", home=str(cfg.root)))

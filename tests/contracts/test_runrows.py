@@ -14,8 +14,8 @@ from taskloop.contracts import factorydb, wire
 from taskloop.contracts.enums import Outcome, Result, Step, WhyCode
 from taskloop.contracts.ids import loop_key
 from taskloop.contracts.locator import RunLocator
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.run import RunFinish, RunManifest, RunState
+from taskloop.contracts.paths import ConfigDir, RunFiles
+from taskloop.contracts.run import CallIdentity, DoneEntry, DoneMemo, RunFinish, RunManifest, RunState
 from taskloop.contracts.runrows import RunRows, StaleRevision, import_legacy
 from taskloop.contracts.stores import JsonStore
 
@@ -113,6 +113,47 @@ class RunRowsTest(unittest.TestCase):
         self.assertEqual(import_legacy(self.cfg), 0)
         self.assertEqual(self.rows.all(), [])
         self.assertEqual(path.read_bytes(), before)
+
+    def test_legacy_steps_and_one_synthetic_attempt_import_once_without_changing_files(self):
+        for name in ("valid", "torn", "old-name"):
+            self.legacy(self.complete().replace(run=name))
+        valid = RunFiles(self.cfg.run_dir("valid")).done_memo()
+        old = RunFiles(self.cfg.run_dir("old-name")).legacy_done_memo()
+        entry = DoneEntry(sha="old-prompt-sha", file="/answer", identity=CallIdentity(
+            semantics="sem", worktree="/wt", cwd="/wt", tree="tree", cwd_tree="tree", head="head", cwd_head="head"))
+        for path in (valid, old):
+            JsonStore(path, DoneMemo).write(DoneMemo(done={'["write", 1]': entry}))
+        torn = RunFiles(self.cfg.run_dir("torn")).done_memo()
+        torn.write_text("{")
+        files = {path: path.read_bytes() for path in (valid, old, torn)}
+        self.assertEqual(import_legacy(self.cfg), 3)
+        with self.rows.transaction() as con:
+            steps = con.execute("SELECT run,key,try,attempt,status,started,ended,input_digest,result,calls "
+                                "FROM step ORDER BY run").fetchall()
+            attempts = con.execute("SELECT run,n,started,ended,end_kind,fault_class,fingerprint "
+                                   "FROM attempt ORDER BY run").fetchall()
+        self.assertEqual([r[0] for r in steps], ["old-name", "valid"])
+        for row in steps:
+            self.assertEqual(row[1:8], ('["write", 1]', 1, 4, "done", 10, 10, "old-prompt-sha"))
+            self.assertEqual(wire.load(DoneEntry, row[8]), entry)
+            self.assertEqual(row[9], 0)
+        self.assertEqual(attempts, [(name, 4, 10, 20, None, None, None) for name in ("old-name", "torn", "valid")])
+        self.assertEqual({path: path.read_bytes() for path in files}, files)
+        with patch.object(JsonStore, "get", side_effect=AssertionError("legacy reread")):
+            self.assertEqual(import_legacy(self.cfg), 0)
+
+    def test_legacy_memo_never_replaces_existing_step_rows(self):
+        m = self.complete()
+        self.legacy(m)
+        self.rows.put(m)
+        path = RunFiles(self.cfg.run_dir(m.run)).done_memo()
+        JsonStore(path, DoneMemo).write(DoneMemo(done={'[1]': DoneEntry(sha="stale", file="/old")}))
+        with self.rows.transaction() as con:
+            con.execute("INSERT INTO step (run,key,try,attempt,status,started,input_digest) "
+                        "VALUES ('r','[2]',1,4,'done',10,'current')")
+        self.assertEqual(import_legacy(self.cfg), 0)
+        with self.rows.transaction() as con:
+            self.assertEqual(con.execute("SELECT key,input_digest FROM step").fetchall(), [("[2]", "current")])
 
     def test_v1_is_moved_aside_and_v2_created_with_one_warning(self):
         path = self.cfg.factory_db()

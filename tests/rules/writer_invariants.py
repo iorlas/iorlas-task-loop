@@ -21,7 +21,6 @@ WRITERS: Final = {
     'LoopCommandStore': {'taskloop.app.loop.files'},
     'RestStore': {'taskloop.app.loop.files'},
     'BadVersionStore': {'taskloop.app.loop.versions'},
-    'DoneMemoStore': {'taskloop.app.run.done_memo'},
     'HandoffMirrorStore': {'taskloop.app.write.handoff'},
     'ReexecNoteStore': {'taskloop.app.release.reexec', 'taskloop.app.run.reload'},
     'NetPauseStore': {'taskloop.app.release.reexec', 'taskloop.app.run.reload'},
@@ -35,7 +34,7 @@ PATH_STORES: Final = {
     'park': 'ParkStore', 'landed': 'LandedStore', 'traces': 'TraceStore',
     'loop_state': 'LoopStateStore', 'loop_command': 'LoopCommandStore', 'loop_rest': 'RestStore',
     'bad_versions': 'BadVersionStore', 'suite_green': 'SuiteGreenStore',
-    'done_memo': 'DoneMemoStore', 'handoff': 'HandoffMirrorStore', 'reexec_note': 'ReexecNoteStore',
+    'handoff': 'HandoffMirrorStore', 'reexec_note': 'ReexecNoteStore',
     'net_pause': 'NetPauseStore', 'pause': 'RunCountersStore', 'reexec': 'RunCountersStore',
 }
 MUTATIONS: Final = {'write', 'put', 'append', 'delete', 'add', 'update', 'replace', 'clear', 'drop'}

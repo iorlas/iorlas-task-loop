@@ -1415,7 +1415,15 @@
    "[1]": {
     "sha": "s",
     "file": "/f",
-    "identity": null
+    "identity": {
+     "semantics": "sem",
+     "worktree": "/wt",
+     "cwd": "/wt",
+     "tree": "tree",
+     "cwd_tree": "tree",
+     "head": "head",
+     "cwd_head": "head"
+    }
    }
   }
  },

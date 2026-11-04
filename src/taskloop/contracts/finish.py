@@ -2,6 +2,7 @@
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from taskloop.contracts import attemptrows
 from taskloop.contracts.enums import Outcome, Result
 from taskloop.contracts.finish_projection import history
 from taskloop.contracts.guard import guard
@@ -49,6 +50,7 @@ def finish_run(cfg: ConfigDir, run: str, candidate: RunFinish,
         if won:
             doc.write(con, old.replace(state=record.state, ended=record.ended, heartbeat=record.ended,
                                        reason=record.why, sha=record.sha, finish=record, finish_projected=False))
+        attemptrows.close(con, run, record, candidate.ended)
     with guard(cfg.lock_record("finish-history", run)):
         winner = doc.get(run)
         assert winner is not None
