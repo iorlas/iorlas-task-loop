@@ -3,11 +3,12 @@ against the in-memory ones, so a fake cannot drift from the real thing without a
 import os
 import threading
 import time
-import unittest
 from typing import Any, cast
 
+import pytest
 from contracts import samples as S
 from rigs import dead_pid
+from support.case import Case
 from support.narrow import must
 
 from taskloop.contracts import wire
@@ -20,11 +21,11 @@ from taskloop.contracts.loop import LoopCommand, LoopState, Rest
 CK = cast(Checkpoint, S.OTHERS["Checkpoint"])
 
 
-class Base(unittest.TestCase):
+class Base(Case):
     def make_rig(self) -> Any:
         raise NotImplementedError
 
-    def setUp(self) -> None:
+    def setup_method(self) -> None:
         self.rig = self.make_rig()
         self.addCleanup(self.rig.close)
         self.s = self.rig.stores
@@ -33,29 +34,29 @@ class Base(unittest.TestCase):
 class DocContract(Base):
     def test_a_missing_document_reads_as_none_and_a_write_reads_back_equal(self) -> None:
         doc = self.s.loop_state("k")
-        self.assertIsNone(doc.get())
+        assert doc.get() is None
         doc.write(S.other(LoopState))
-        self.assertEqual(doc.get(), S.other(LoopState))
-        self.assertEqual(self.s.loop_state("k").get(), S.other(LoopState))  # a new handle sees it
-        self.assertIsNone(self.s.loop_state("other").get())
+        assert doc.get() == S.other(LoopState)
+        assert self.s.loop_state("k").get() == S.other(LoopState)  # a new handle sees it
+        assert self.s.loop_state("other").get() is None
 
     def test_a_write_replaces_whole_and_delete_removes(self) -> None:
         doc = self.s.loop_rest("k")
         doc.write(S.other(Rest))
         doc.write(S.other(Rest).replace(beads={"b-2": 7.0}))
-        self.assertEqual(doc.get().beads, {"b-2": 7.0})
+        assert doc.get().beads == {"b-2": 7.0}
         doc.delete()
-        self.assertIsNone(doc.get())
+        assert doc.get() is None
         doc.delete()  # deleting nothing is fine
 
     def test_a_document_of_another_version_or_shape_reads_as_absent(self) -> None:
         doc = self.s.loop_command("k")
         self.rig.poison(doc, {"v": 99, "action": "resume", "by": "x", "t": 1.0})
-        self.assertIsNone(doc.get())
+        assert doc.get() is None
         self.rig.poison(doc, {"v": 1, "action": "dance", "by": "x", "t": 1.0})
-        self.assertIsNone(doc.get())
+        assert doc.get() is None
         doc.write(S.other(LoopCommand))
-        self.assertEqual(doc.get(), S.other(LoopCommand))
+        assert doc.get() == S.other(LoopCommand)
 
 
 class AskContract(Base):
@@ -69,63 +70,63 @@ class AskContract(Base):
         self.raise_ask("b2", t=S.T + 5)
         self.raise_ask("b1", AskStatus.PARKED, t=S.T)
         self.raise_ask("b3", AskStatus.WITHDRAWN)
-        self.assertEqual([a.bead for a in self.s.asks.live()], ["b1", "b2"])
+        assert [a.bead for a in self.s.asks.live()] == ["b1", "b2"]
 
     def test_answer_records_the_owner_choice_once(self) -> None:
         self.raise_ask("b1")
         ans = AskAnswer(action="rerun", text="go", t=S.T + 9, by="denis")  # pyrefly: ignore[unexpected-keyword]
         done, why = self.s.asks.answer("b1", "b1-1", ans)
-        self.assertEqual((why, done.status, done.answer, done.answered), ("", AskStatus.ANSWERED, ans, S.T + 9))
-        self.assertEqual(self.s.asks.of("b1").get(), done)
-        self.assertEqual(self.s.asks.answer("b1", "b1-1", ans)[1], "answered")  # the first answer wins
-        self.assertEqual(self.s.asks.answer("nope", "nope-1", ans), (None, "gone"))
-        self.assertEqual(self.s.asks.answer("b1", "b1-0", ans)[1], "superseded")
+        assert (why, done.status, done.answer, done.answered) == ("", AskStatus.ANSWERED, ans, S.T + 9)
+        assert self.s.asks.of("b1").get() == done
+        assert self.s.asks.answer("b1", "b1-1", ans)[1] == "answered"  # the first answer wins
+        assert self.s.asks.answer("nope", "nope-1", ans) == (None, "gone")
+        assert self.s.asks.answer("b1", "b1-0", ans)[1] == "superseded"
 
     def test_amend_replaces_an_answer_no_run_used_and_consume_ends_it(self) -> None:
         self.raise_ask("b1")
         one = AskAnswer(action="text", text="a", t=S.T + 1, by="d")  # pyrefly: ignore[unexpected-keyword]
         two = AskAnswer(action="text", text="b", t=S.T + 2, by="d")  # pyrefly: ignore[unexpected-keyword]
         self.s.asks.answer("b1", "b1-1", one)
-        self.assertEqual(self.s.asks.amend("b1", "b1-1", two)[0].answer, two)
+        assert self.s.asks.amend("b1", "b1-1", two)[0].answer == two
         used = self.s.asks.consume("b1", S.T + 5)
-        self.assertEqual((used.consumed, used.answer), (S.T + 5, two))
-        self.assertIsNone(self.s.asks.consume("b1", S.T + 6))  # used once
-        self.assertEqual(self.s.asks.amend("b1", "b1-1", one)[1], "consumed")
+        assert (used.consumed, used.answer) == (S.T + 5, two)
+        assert self.s.asks.consume("b1", S.T + 6) is None  # used once
+        assert self.s.asks.amend("b1", "b1-1", one)[1] == "consumed"
 
     def test_withdraw_only_an_ask_no_run_used(self) -> None:
         self.raise_ask("b1")
         done, why = self.s.asks.withdraw("b1", "b1-1", "no longer", S.T + 1)
-        self.assertEqual((why, done.status, done.closed_why), ("", AskStatus.WITHDRAWN, "no longer"))
-        self.assertEqual(self.s.asks.withdraw("b1", "b1-1", "again", S.T + 2)[1], "")  # already withdrawn: fine
+        assert (why, done.status, done.closed_why) == ("", AskStatus.WITHDRAWN, "no longer")
+        assert self.s.asks.withdraw("b1", "b1-1", "again", S.T + 2)[1] == ""  # already withdrawn: fine
         self.raise_ask("b2")
         self.s.asks.consume("b2", S.T + 1, unanswered=True)
-        self.assertEqual(self.s.asks.withdraw("b2", "b2-1", "x", S.T + 2)[1], "consumed")
+        assert self.s.asks.withdraw("b2", "b2-1", "x", S.T + 2)[1] == "consumed"
 
     def test_close_and_park_touch_only_the_ask_they_read(self) -> None:
         self.raise_ask("b1")
-        self.assertFalse(self.s.asks.close("b1", "b1-0", "gone"))
-        self.assertTrue(self.s.asks.park("b1", "b1-1"))
-        self.assertFalse(self.s.asks.park("b1", "b1-1"))  # parked already
-        self.assertTrue(self.s.asks.close("b1", "b1-1", "the bead is closed"))
-        self.assertEqual(self.s.asks.get("b1").closed_why, "the bead is closed")
+        assert not self.s.asks.close("b1", "b1-0", "gone")
+        assert self.s.asks.park("b1", "b1-1")
+        assert not self.s.asks.park("b1", "b1-1")  # parked already
+        assert self.s.asks.close("b1", "b1-1", "the bead is closed")
+        assert self.s.asks.get("b1").closed_why == "the bead is closed"
 
 
 class CheckpointContract(Base):
     def test_a_full_checkpoint_round_trips(self) -> None:
         self.s.checkpoints.of("tl-1").write(CK)
-        self.assertEqual(self.s.checkpoints.of("tl-1").get(), CK)
+        assert self.s.checkpoints.of("tl-1").get() == CK
 
     def test_open_beads_leaves_out_a_closed_one(self) -> None:
         self.s.checkpoints.of("tl-1").write(CK)
         self.s.checkpoints.of("tl-2").write(CK.replace(bead="tl-2"))
-        self.assertEqual(self.s.checkpoints.open_beads(), ["tl-1", "tl-2"])
+        assert self.s.checkpoints.open_beads() == ["tl-1", "tl-2"]
         self.s.checkpoints.of("tl-1").write(CK.replace(closed=True))
-        self.assertEqual(self.s.checkpoints.open_beads(), ["tl-2"])
+        assert self.s.checkpoints.open_beads() == ["tl-2"]
 
     def test_delete_removes_the_record(self) -> None:
         self.s.checkpoints.of("tl-1").write(CK)
         self.s.checkpoints.of("tl-1").delete()
-        self.assertEqual(self.s.checkpoints.docs.keys(), [])
+        assert self.s.checkpoints.docs.keys() == []
 
 
 class LogContract(Base):
@@ -138,25 +139,25 @@ class LogContract(Base):
             with self.subTest(type(recs[0]).__name__):
                 offs = [log.append(r) for r in recs]
                 page = log.read_from(0)
-                self.assertEqual([i.rec for i in page.items], recs)
-                self.assertEqual([i.start for i in page.items], offs)
-                self.assertEqual(offs[0], 0)
+                assert [i.rec for i in page.items] == recs
+                assert [i.start for i in page.items] == offs
+                assert offs[0] == 0
                 log.append(recs[0])
                 again = log.read_from(page.cursor)
-                self.assertEqual([i.rec for i in again.items], [recs[0]])
-                self.assertEqual(again.cursor, log.read_from(0).cursor)
+                assert [i.rec for i in again.items] == [recs[0]]
+                assert again.cursor == log.read_from(0).cursor
 
     def test_limit_and_tail(self) -> None:
         log, recs = self.logs()[0]
         for r in recs:
             log.append(r)
         first = log.read_from(0, limit=2)
-        self.assertEqual([i.rec for i in first.items], recs[:2])
-        self.assertEqual([i.rec for i in log.read_from(first.cursor).items], recs[2:])
-        self.assertEqual([i.rec for i in log.tail(3).items], recs[-3:])
+        assert [i.rec for i in first.items] == recs[:2]
+        assert [i.rec for i in log.read_from(first.cursor).items] == recs[2:]
+        assert [i.rec for i in log.tail(3).items] == recs[-3:]
         before = log.tail(3).items[0].start
-        self.assertEqual([i.rec for i in log.tail(2, before).items], recs[-5:-3])
-        self.assertEqual(log.tail(0).items, [])
+        assert [i.rec for i in log.tail(2, before).items] == recs[-5:-3]
+        assert log.tail(0).items == []
 
     def test_a_torn_last_line_waits_and_is_whole_once_finished(self) -> None:
         log, recs = self.logs()[0]
@@ -164,10 +165,10 @@ class LogContract(Base):
         line = (__import__("json").dumps(wire.dump(recs[1]), ensure_ascii=False, separators=(", ", ": ")) + "\n").encode()
         self.rig.tear(log, line[:20])
         page = log.read_from(0)
-        self.assertEqual([i.rec for i in page.items], [recs[0]])
-        self.assertEqual(page.cursor, page.items[0].end)  # the cursor stays before the torn line
+        assert [i.rec for i in page.items] == [recs[0]]
+        assert page.cursor == page.items[0].end  # the cursor stays before the torn line
         self.rig.tear(log, line[20:])
-        self.assertEqual([i.rec for i in log.read_from(page.cursor).items], [recs[1]])
+        assert [i.rec for i in log.read_from(page.cursor).items] == [recs[1]]
 
     def test_a_complete_line_of_another_family_or_version_is_skipped_and_counted(self) -> None:
         log, recs = self.logs()[0]
@@ -175,37 +176,37 @@ class LogContract(Base):
         self.rig.tear(log, b'{"v": 99, "kind": "note", "t": 1.0, "text": "x"}\nnot json\n[1]\n{"kind": "mystery"}\n')
         log.append(recs[1])
         page = log.read_from(0)
-        self.assertEqual([i.rec for i in page.items], [recs[0], recs[1]])
-        self.assertEqual(page.skipped, 2)  # the two JSON objects the family refuses; "not json" and "[1]" never become entries
+        assert [i.rec for i in page.items] == [recs[0], recs[1]]
+        assert page.skipped == 2  # the two JSON objects the family refuses; "not json" and "[1]" never become entries
 
     def test_two_runs_have_two_logs(self) -> None:
         self.s.run_log("a").append(S.LOG["note"])
-        self.assertEqual(self.s.run_log("b").read_from(0).items, [])
-        self.assertEqual(len(self.s.run_log("a").read_from(0).items), 1)
-        self.assertEqual(self.s.events.read_from(0).items, [])
+        assert self.s.run_log("b").read_from(0).items == []
+        assert len(self.s.run_log("a").read_from(0).items) == 1
+        assert self.s.events.read_from(0).items == []
 
 
 class LockContract(Base):
     W = LockWhat.LAND
 
     def test_hold_names_the_holder_and_free_means_none(self) -> None:
-        self.assertIsNone(self.s.locks.holder(self.W, "r"))
+        assert self.s.locks.holder(self.W, "r") is None
         with self.s.locks.hold(self.W, "r", "tl-1 landing") as rec:
-            self.assertEqual((rec.holder, rec.what, rec.pid), ("tl-1 landing", self.W, os.getpid()))
-            self.assertEqual(self.s.locks.holder(self.W, "r").holder, "tl-1 landing")
-            self.assertIsNone(self.s.locks.holder(self.W, "other"))
-            self.assertIsNone(self.s.locks.holder(LockWhat.REVIEW, "r"))
-        self.assertIsNone(self.s.locks.holder(self.W, "r"))
+            assert (rec.holder, rec.what, rec.pid) == ("tl-1 landing", self.W, os.getpid())
+            assert self.s.locks.holder(self.W, "r").holder == "tl-1 landing"
+            assert self.s.locks.holder(self.W, "other") is None
+            assert self.s.locks.holder(LockWhat.REVIEW, "r") is None
+        assert self.s.locks.holder(self.W, "r") is None
 
     def test_a_second_taker_times_out_and_is_told_who_holds(self) -> None:
         seen: list[Any] = []
         with self.s.locks.hold(self.W, "r", "first"):
             t0 = time.monotonic()
-            with self.assertRaises(LockTimeout) as cm, self.s.locks.hold(self.W, "r", "second", timeout=0.2, waiting=seen.append):
-                self.fail("got a held lock")
-            self.assertGreaterEqual(time.monotonic() - t0, 0.15)
-        self.assertEqual(must(cm.exception.holder).holder, "first")
-        self.assertEqual([h.holder for h in seen], ["first"])  # told once, before it waited
+            with pytest.raises(LockTimeout) as cm, self.s.locks.hold(self.W, "r", "second", timeout=0.2, waiting=seen.append):
+                pytest.fail("got a held lock")
+            assert time.monotonic() - t0 >= 0.15
+        assert must(cm.value.holder).holder == "first"
+        assert [h.holder for h in seen] == ["first"]  # told once, before it waited
         with self.s.locks.hold(self.W, "r", "third", timeout=0.2):
             pass  # the lock is free again
 
@@ -216,14 +217,14 @@ class LockContract(Base):
             with self.s.locks.hold(self.W, "r", "waiter", timeout=5):
                 got.append("waiter")
 
-        with self.assertRaises(RuntimeError), self.s.locks.hold(self.W, "r", "first"):
+        with pytest.raises(RuntimeError), self.s.locks.hold(self.W, "r", "first"):
             t = threading.Thread(target=waiter)
             t.start()
             time.sleep(0.1)
-            self.assertEqual(got, [])
+            assert got == []
             raise RuntimeError("holder fails")
         t.join(5)
-        self.assertEqual(got, ["waiter"])
+        assert got == ["waiter"]
 
     def test_only_one_thread_is_inside_at_a_time(self) -> None:
         inside, worst, hits = [0], [0], [0]
@@ -240,13 +241,13 @@ class LockContract(Base):
         ts = [threading.Thread(target=work) for _ in range(4)]
         [t.start() for t in ts]
         [t.join(30) for t in ts]
-        self.assertEqual((worst[0], hits[0]), (1, 20))
+        assert (worst[0], hits[0]) == (1, 20)
 
     def test_a_lock_whose_recorded_holder_is_alive_is_not_broken(self) -> None:
         self.rig.plant_lock(self.W, "r", "other", os.getpid())
-        self.assertEqual(self.s.locks.holder(self.W, "r").holder, "other")
-        with self.assertRaises(LockTimeout), self.s.locks.hold(self.W, "r", "me", timeout=0.3):
-            self.fail("took a live lock")
+        assert self.s.locks.holder(self.W, "r").holder == "other"
+        with pytest.raises(LockTimeout), self.s.locks.hold(self.W, "r", "me", timeout=0.3):
+            pytest.fail("took a live lock")
 
 
 class TicketContract(Base):
@@ -255,24 +256,24 @@ class TicketContract(Base):
         a = t.take("k", "slot", 2, pid=os.getpid(), now=S.T)
         b = t.take("k", "slot", 0, pid=os.getpid(), now=S.T + 1, pid_start=S.T)
         c = t.take("k", "slot", 2, pid=os.getpid(), now=S.T + 2)
-        self.assertEqual((a.seq, b.seq, c.seq), (1, 2, 3))
-        self.assertEqual([x.seq for x in t.line("k")], [2, 1, 3])
-        self.assertEqual(t.line("k")[0], b)
+        assert (a.seq, b.seq, c.seq) == (1, 2, 3)
+        assert [x.seq for x in t.line("k")] == [2, 1, 3]
+        assert t.line("k")[0] == b
         t.drop("k", 1)
-        self.assertEqual(t.take("k", "slot", 2, pid=os.getpid(), now=S.T).seq, 4)
-        self.assertEqual(t.line("other"), [])
+        assert t.take("k", "slot", 2, pid=os.getpid(), now=S.T).seq == 4
+        assert t.line("other") == []
 
     def test_numbers_keep_growing_after_the_line_has_emptied(self) -> None:
         t = self.s.tickets
         first = t.take("k", "slot", 2, pid=os.getpid(), now=S.T)
         t.drop("k", first.seq)
-        self.assertGreater(t.take("k", "slot", 2, pid=os.getpid(), now=S.T).seq, first.seq)
+        assert t.take("k", "slot", 2, pid=os.getpid(), now=S.T).seq > first.seq
 
     def test_a_dead_waiter_drops_out_of_the_line(self) -> None:
         t = self.s.tickets
         t.take("k", "dead", 0, pid=dead_pid(), now=S.T)
         live = t.take("k", "live", 5, pid=os.getpid(), now=S.T)
-        self.assertEqual([x.seq for x in t.line("k")], [live.seq])
+        assert [x.seq for x in t.line("k")] == [live.seq]
         t.drop("k", live.seq)
         t.drop("k", live.seq)
-        self.assertEqual(t.line("k"), [])
+        assert t.line("k") == []

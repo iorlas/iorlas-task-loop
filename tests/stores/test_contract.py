@@ -5,9 +5,11 @@ import json
 import os
 import sys
 import threading
-import unittest
 from pathlib import Path
 from typing import Any, cast
+
+import pytest
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -49,8 +51,8 @@ del _base
 
 
 @contract
-class RealRaces(unittest.TestCase):
-    def setUp(self) -> None:
+class RealRaces(Case):
+    def setup_method(self) -> None:
         self.rig = RealRig()
         self.addCleanup(self.rig.close)
         self.cfg = self.rig.cfg
@@ -71,11 +73,11 @@ class RealRaces(unittest.TestCase):
         for t in self.append_from(path, 60, [f"p{i}" for i in range(6)]):
             t.join(60)
         entries, cursor = jsonl.Jsonl(path).read_from(0)
-        self.assertEqual(len(entries), 360)
-        self.assertEqual(cursor, path.stat().st_size)
+        assert len(entries) == 360
+        assert cursor == path.stat().st_size
         for i in range(6):
-            self.assertEqual([e.data["i"] for e in entries if e.data["who"] == f"p{i}"], list(range(60)))  # each writer's order holds
-        self.assertEqual(len({e.start for e in entries}), 360)
+            assert [e.data["i"] for e in entries if e.data["who"] == f"p{i}"] == list(range(60))  # each writer's order holds
+        assert len({e.start for e in entries}) == 360
 
     def test_a_reader_following_a_cursor_while_writers_append_sees_each_line_once(self) -> None:
         path = self.cfg.root / "y.jsonl"
@@ -86,8 +88,8 @@ class RealRaces(unittest.TestCase):
             seen += [(e.data["who"], e.data["i"]) for e in entries]
         entries, cursor = jsonl.Jsonl(path).read_from(cursor)
         seen += [(e.data["who"], e.data["i"]) for e in entries]
-        self.assertEqual(len(seen), 240)
-        self.assertEqual(len(set(seen)), 240)
+        assert len(seen) == 240
+        assert len(set(seen)) == 240
 
     def test_a_reader_never_sees_half_a_document_while_writers_replace_it(self) -> None:
 
@@ -109,8 +111,8 @@ class RealRaces(unittest.TestCase):
                 bad.append("absent")
         stop.set()
         w.join()
-        self.assertEqual(bad, [])
-        self.assertEqual([p.name for p in cast(Any, doc).path.parent.iterdir()], [cast(Any, doc).path.name])  # no temp file left behind
+        assert bad == []
+        assert [p.name for p in cast(Any, doc).path.parent.iterdir()] == [cast(Any, doc).path.name]  # no temp file left behind
 
     def test_holders_taking_one_lock_do_not_lose_updates(self) -> None:
         counter = self.cfg.root / "count.txt"
@@ -128,23 +130,19 @@ class RealRaces(unittest.TestCase):
             t.start()
         for t in ts:
             t.join(90)
-        self.assertEqual(int(counter.read_text()), 100)
+        assert int(counter.read_text()) == 100
 
     @real_proc("the file locks and the append-only log hold across real processes: races, a killed holder")
     def test_a_killed_holder_frees_its_lock_at_once(self) -> None:
         self.rig.plant_lock(LockWhat.AREA, "a", "victim", os.getpid())
         holder = self.rig.procs[-1]
-        with self.assertRaises(TimeoutError), self.rig.stores.locks.hold(LockWhat.AREA, "a", "me", timeout=0.2):
-            self.fail("took a held lock")
+        with pytest.raises(TimeoutError), self.rig.stores.locks.hold(LockWhat.AREA, "a", "me", timeout=0.2):
+            pytest.fail("took a held lock")
         holder.kill()  # a process this test forked
         with self.rig.stores.locks.hold(LockWhat.AREA, "a", "me", timeout=2) as rec:
-            self.assertEqual(rec.holder, "me")
+            assert rec.holder == "me"
 
     def test_the_holder_file_is_a_json_record_of_the_holder(self) -> None:
         with self.rig.stores.locks.hold(LockWhat.LAND, "r", "tl-1"):
             data = json.loads(self.cfg.lock_record("land", "r").with_name("land-r.lock.holder").read_text())
-        self.assertEqual((data["holder"], data["pid"], data["what"]), ("tl-1", os.getpid(), "land"))
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert (data["holder"], data["pid"], data["what"]) == ("tl-1", os.getpid(), "land")
