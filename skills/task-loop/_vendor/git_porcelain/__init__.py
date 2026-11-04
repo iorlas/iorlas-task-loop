@@ -41,6 +41,7 @@ from git_porcelain.api import (
     Relation,
     Released,
     RemoteRef,
+    RemoteRefs,
     RemoteRejected,
     Repo,
     RepoIdentity,
@@ -92,7 +93,7 @@ from git_porcelain.history import (
     upstream,
 )
 from git_porcelain.lfs import lfs_available, lfs_checkout, lfs_fetch, lfs_paths, lfs_push, lfs_setup
-from git_porcelain.plumbing import Ref
+from git_porcelain.plumbing import Ref, Refs
 from git_porcelain.porcelain import (
     StatusEntry,
     dirty_rels,
@@ -155,12 +156,14 @@ __all__ = [
     "RefEntry",
     "RefRace",
     "RefRejected",
+    "Refs",
     "Rejected",
     "Relation",
     "Released",
     "RemoteError",
     "RemoteFailure",
     "RemoteRef",
+    "RemoteRefs",
     "RemoteRejected",
     "Repo",
     "RepoIdentity",

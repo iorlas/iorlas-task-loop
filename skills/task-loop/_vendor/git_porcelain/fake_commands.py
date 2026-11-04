@@ -28,8 +28,8 @@ def rebase(repo: RepoState, state: CheckoutState, base: str, *, update_refs: boo
     try:
         done = fake_write.rebase_onto(repo, state, base, None, update_refs=update_refs)
     except (GitUnavailable, ValueError) as exc:
-        return CommandResult(ok=False, output=str(exc))
-    return CommandResult(ok=not isinstance(done, Conflict), output=done.tail if isinstance(done, Conflict) else "")
+        return CommandResult(ok=False, output=exc.output if isinstance(exc, GitUnavailable) else str(exc))
+    return CommandResult(ok=not isinstance(done, Conflict), output=done.output)
 
 
 def continue_rebase(
@@ -43,14 +43,14 @@ def continue_rebase(
         try:
             stage(repo, state, sorted(state.unmerged))
         except GitUnavailable as exc:
-            return CommandResult(ok=False, output=str(exc))
+            return CommandResult(ok=False, output=exc.output)
     if state.unmerged or any(state.files.get(path) != repo.store.blobs[sha] for path, sha in state.index.items()):
         return CommandResult(ok=False, output="You must edit all merge conflicts and then mark them as resolved using git add")
     try:
         result = fake_flow.continue_rebase(repo, state)
     except GitUnavailable as exc:
-        return CommandResult(ok=False, output=str(exc))
-    return CommandResult(ok=not isinstance(result, Conflict), output=result.tail if isinstance(result, Conflict) else "")
+        return CommandResult(ok=False, output=exc.output)
+    return CommandResult(ok=not isinstance(result, Conflict), output=result.output)
 
 
 def abort_rebase(repo: RepoState, state: CheckoutState, *, missing_ok: bool, restore_to: Sha | None) -> CommandResult:
@@ -64,5 +64,5 @@ def abort_rebase(repo: RepoState, state: CheckoutState, *, missing_ok: bool, res
         if target is not None:
             fake_checkout.reset(repo, state, target, mode="hard")
     except GitUnavailable as exc:
-        return CommandResult(ok=False, output=str(exc))
+        return CommandResult(ok=False, output=exc.output)
     return CommandResult(ok=True, output="")

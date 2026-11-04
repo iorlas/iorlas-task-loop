@@ -10,9 +10,13 @@ name refs are kept while the files they come from are unchanged (``real_cache``)
 
 from __future__ import annotations
 
+import json
 import shutil
 import subprocess
 import time
+from contextlib import nullcontext
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING
 
 from git_porcelain import (
@@ -31,7 +35,6 @@ from git_porcelain.real_done import Done, unavailable
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
-    from pathlib import Path
     from typing import Literal
 
     from git_porcelain.api import (
@@ -48,7 +51,7 @@ if TYPE_CHECKING:
         RefEntry,
         Relation,
         Released,
-        RemoteRef,
+        RemoteRefs,
         RepoIdentity,
         Sha,
         Snapshot,
@@ -61,6 +64,35 @@ if TYPE_CHECKING:
     from git_porcelain.history import Identity
 
 __all__ = ["Done", "RealRepo", "RealWorktree", "unavailable"]
+
+
+def _trace_hooks(trace: Path) -> tuple[tuple[str, ...], tuple[tuple[str, int], ...]]:
+    if not trace.exists():
+        return (), ()
+    hooks: list[str] = []
+    children: dict[tuple[str, int], str] = {}
+    exits: list[tuple[str, int]] = []
+    for line in trace.read_text(encoding="utf-8", errors="replace").splitlines():
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(event, dict):
+            continue
+        child_id, sid = event.get("child_id"), event.get("sid", "")
+        if not isinstance(child_id, int) or not isinstance(sid, str):
+            continue
+        key = (sid, child_id)
+        if event.get("event") == "child_start" and event.get("child_class") == "hook":
+            name = event.get("hook_name")
+            if isinstance(name, str):
+                hooks.append(name)
+                children[key] = name
+        elif event.get("event") == "child_exit" and key in children:
+            code = event.get("code")
+            if isinstance(code, int):
+                exits.append((children.pop(key), code))
+    return tuple(hooks), tuple(exits)
 
 
 class RealRepo:
@@ -109,21 +141,33 @@ class RealRepo:
         if self.observer is not None:
             self.observer(args)
         try:
-            done = subprocess.run(
-                [*real_env.argv_prefix(cwd, pin_env), *args],
-                check=False,
-                capture_output=True,
-                env=child,
-                timeout=timeout,
-                input=None if stdin is None else stdin.encode("utf-8", "surrogateescape"),
-            )
+            pushing = bool(args and args[0] == "push")
+            context = TemporaryDirectory(prefix="git-porcelain-") if pushing else nullcontext()
+            with context as trace_dir:
+                trace = Path(trace_dir) / "events" if trace_dir is not None else None
+                if trace is not None:
+                    # Git resolves hooksPath, includes and environment overrides itself. Its child_start
+                    # event proves an executable hook actually ran, even when that hook printed nothing.
+                    child["GIT_TRACE2_EVENT"] = str(trace)
+                done = subprocess.run(
+                    [*real_env.argv_prefix(cwd, pin_env), *args],
+                    check=False,
+                    capture_output=True,
+                    env=child,
+                    timeout=timeout,
+                    input=None if stdin is None else stdin.encode("utf-8", "surrogateescape"),
+                )
+                hooks, hook_exits = _trace_hooks(trace) if trace is not None else ((), ())
         except subprocess.TimeoutExpired as exc:
             msg = f"git {args[0] if args else ''} timed out after {timeout}s"
-            raise GitTimeout(msg, retryable=True) from exc
+            stdout = exc.stdout or b""
+            stderr = exc.stderr or b""
+            output = (stdout + stderr).decode("utf-8", "replace").strip()
+            raise GitTimeout(msg, retryable=True, output=output) from exc
         except OSError as exc:
             msg = f"failed to invoke git: {exc}"
             raise GitUnavailable(msg) from exc
-        result = Done(done.returncode, done.stdout, done.stderr.decode("utf-8", "replace"))
+        result = Done(done.returncode, done.stdout, done.stderr.decode("utf-8", "replace"), hooks=hooks, hook_exits=hook_exits)
         if check and result.rc != 0:
             raise unavailable(args, result)
         return result
@@ -154,7 +198,7 @@ class RealRepo:
     def refs(self, prefixes: Sequence[str]) -> tuple[RefEntry, ...]:
         return real_operations.refs(self, prefixes)
 
-    def ls_remote(self, remote: str, patterns: Sequence[str] = ()) -> tuple[RemoteRef, ...]:
+    def ls_remote(self, remote: str, patterns: Sequence[str] = ()) -> RemoteRefs:
         return real_operations.ls_remote(self, remote, patterns)
 
     def is_ancestor(self, a: str, b: str) -> bool:
@@ -169,11 +213,11 @@ class RealRepo:
     def remote_url(self, remote: str) -> str:
         return real_observe.remote_url(self, remote)
 
-    def fetch(self, remote: str = "origin", *, refspecs: Sequence[str] = (), timeout: float | None = None) -> None:
-        real_remote.fetch(self, remote, refspecs, timeout)
+    def fetch(self, remote: str = "origin", *, refspecs: Sequence[str] = (), timeout: float | None = None) -> CommandResult:
+        return real_remote.fetch(self, remote, refspecs, timeout)
 
-    def delete_remote_at(self, remote: str, ref: str, expected: Sha) -> None:
-        real_remote.delete_remote_at(self, remote, ref, expected)
+    def delete_remote_at(self, remote: str, ref: str, expected: Sha, *, missing_ok: bool = True) -> CommandResult:
+        return real_remote.delete_remote_at(self, remote, ref, expected, missing_ok=missing_ok)
 
     def identity(self) -> RepoIdentity:
         return real_read.identity(self)
@@ -370,8 +414,8 @@ class RealWorktree:
     def finish_rebase(self, action: Literal["continue", "abort"], *, restore_to: Sha | None = None) -> FinishResult:
         return real_write.finish_rebase(self, action, restore_to)
 
-    def push(self, dst: str, *, remote: str = "origin", hook_env: Mapping[str, str] | None = None) -> PushResult:
-        return real_write.push(self, dst, remote, hook_env)
+    def push(self, dst: str, *, remote: str = "origin", hook_env: Mapping[str, str] | None = None, head: Sha | None = None) -> PushResult:
+        return real_write.push(self, dst, remote, hook_env, head)
 
     def landed(self, base: str, title_suffix: str) -> Sha | None:
         return real_read.landed(self, base, title_suffix)

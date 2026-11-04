@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from git_porcelain.api import CommandResult
 from git_porcelain.errors import GitError, failure
 
 if TYPE_CHECKING:
@@ -53,13 +54,16 @@ def _run(
             check=False,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             env={**_git_env(), **(env or {})},
             timeout=timeout,
             input=stdin,
         )
     except subprocess.TimeoutExpired as exc:
         msg = f"git {args[0] if args else ''} timed out after {timeout}s"
-        raise GitError(msg, retryable=True) from exc
+        output = ((exc.stdout or b"") + (exc.stderr or b"")).decode("utf-8", "replace").strip()
+        raise GitError(msg, retryable=True, output=output) from exc
     except OSError as exc:  # pragma: no cover - exec failure
         msg = f"failed to invoke git: {exc}"
         raise GitError(msg, retryable=False) from exc
@@ -82,8 +86,18 @@ def run_git(
     proc = _run(vault, args, env, timeout, stdin)
     if check and proc.returncode != 0:
         msg = f"git {args[0] if args else ''} exited {proc.returncode}: {proc.stderr.strip()[:300]}"
-        raise failure(msg, proc.stderr, proc.returncode)
+        raise failure(msg, proc.stderr, proc.returncode, output=(proc.stdout + proc.stderr).strip())
     return proc.stdout
+
+
+def run_git_result(vault: Path, *args: str, env: Mapping[str, str] | None = None, timeout: float | None = None) -> CommandResult:
+    """One invocation with complete stdout and stderr on success and on raised failure."""
+    proc = _run(vault, args, env, timeout)
+    output = (proc.stdout + proc.stderr).strip()
+    if proc.returncode:
+        msg = f"git {args[0] if args else ''} exited {proc.returncode}: {proc.stderr.strip()[-600:]}"
+        raise failure(msg, proc.stderr, proc.returncode, output=output)
+    return CommandResult(ok=True, output=output)
 
 
 def git_returncode(vault: Path, *args: str) -> int:
@@ -188,19 +202,23 @@ def readiness(vault: Path, *, check_push: bool = True) -> dict[str, Any]:
 
     ``check_push=False`` skips the network ``ls-remote`` probe — used by ``intro``,
     which must stay local/fast; ``push_access`` is then reported as ``None``.
+    A remote probe costs three processes: identity, configured remotes, then ls-remote.
+    ``output`` retains the probe's complete stdout and stderr (empty when skipped).
     """
     if shutil.which(_GIT) is None or not is_repo(vault):
-        return {"is_repo": False, "identity": False, "remote": False, "push_access": False}
+        return {"is_repo": False, "identity": False, "remote": False, "push_access": False, "output": ""}
     email = run_git(vault, "config", "user.email", check=False).strip()
     remote = run_git(vault, "remote", check=False).strip()
     push_access: bool | None = None
+    output = ""
     if check_push and remote:
         try:
-            run_git(vault, "ls-remote", "--exit-code", check=True)
+            output = run_git_result(vault, "ls-remote", "--exit-code").output
             push_access = True
-        except GitError:
+        except GitError as exc:
             push_access = False
-    return {"is_repo": True, "identity": bool(email), "remote": bool(remote), "push_access": push_access}
+            output = exc.output
+    return {"is_repo": True, "identity": bool(email), "remote": bool(remote), "push_access": push_access, "output": output}
 
 
 def unmerged_paths(vault: Path, *, env: Mapping[str, str] | None = None) -> list[str]:

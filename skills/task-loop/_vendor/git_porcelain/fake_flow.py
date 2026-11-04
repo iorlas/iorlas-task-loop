@@ -5,8 +5,8 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING, Final
 
-from git_porcelain.api import Conflict, HookRejected, Offline, Pushed, Rebased, Rejected, Sha, Synced, Transient
-from git_porcelain.errors import GitUnavailable, WorktreeRemoveRefused, some
+from git_porcelain.api import Conflict, HookRejected, Offline, Pushed, Rebased, RefRejected, Sha, Synced, Transient
+from git_porcelain.errors import GitUnavailable, RefRace, WorktreeRemoveRefused, some
 from git_porcelain.fake_merge import merge_trees, replay_list
 from git_porcelain.fake_ops import hard_to, is_clean, make_commit, require_index, switch_tree
 from git_porcelain.fake_store import CheckoutState, Rebase, ancestors
@@ -149,9 +149,23 @@ def remote_state(repo: RepoState, name: str) -> RepoState | str:
     return found
 
 
-def fetch(repo: RepoState, name: str) -> SyncResult:
+def fetch_races(repo: RepoState) -> None:
+    """Consume at most five simulated ref races, matching the real fetch attempt budget."""
+    races = repo.hooks.fetch_ref_races
+    repo.hooks.fetch_ref_races = max(0, races - 5)
+    if races >= 5:
+        msg = "error: cannot lock ref 'refs/remotes/origin/main': is at abc but expected def"
+        raise RefRace(msg)
+
+
+def fetch(repo: RepoState, name: str, *, retry: bool = True) -> SyncResult:
     """Copy the remote's objects and set ``refs/remotes/<name>/<branch>`` for each of its branches."""
     validate_remote(name)
+    if retry:
+        try:
+            fetch_races(repo)
+        except RefRace as exc:
+            return Offline(exc.tail, output=exc.output)
     there = remote_state(repo, name)
     if isinstance(there, str):
         return Offline(there)
@@ -162,16 +176,21 @@ def fetch(repo: RepoState, name: str) -> SyncResult:
     return Synced()
 
 
-def push(repo: RepoState, wt: CheckoutState, dst: str, name: str, env: Mapping[str, str]) -> PushResult:
+def push(repo: RepoState, wt: CheckoutState, dst: str, name: str, env: Mapping[str, str], *, head: Sha | None = None) -> PushResult:
     """Fast-forward (or create) branch ``dst`` on the remote; the pre-push knobs first, then the network."""
     validate_remote(name)
-    sha = repo.head_sha(wt)
+    if head is not None and re.fullmatch(r"[0-9a-f]{40}(?:[0-9a-f]{24})?", head) is None:
+        msg = "head must be a full object id"
+        raise ValueError(msg)
+    sha = head if head is not None else repo.head_sha(wt)
     if sha is None:
         msg = "nothing to push: HEAD is unborn"
         raise ValueError(msg)
     refusal = hook_refusal(repo, env)
     if refusal is not None:
         return refusal
+    if repo.hooks.push_transport_failure is not None:
+        return Transient(repo.hooks.push_transport_failure)
     there = remote_state(repo, name)
     if isinstance(there, str):
         return Transient(there)
@@ -179,13 +198,16 @@ def push(repo: RepoState, wt: CheckoutState, dst: str, name: str, env: Mapping[s
     there.store.absorb(repo.store)
     old = there.refs.get(ref)
     if old is not None and old not in ancestors(there.store, sha):
-        return Rejected(f"! [rejected] HEAD -> {dst} (non-fast-forward)")
+        return RefRejected(f"! [rejected] HEAD -> {dst} (non-fast-forward)")
     there.refs[ref] = sha
     repo.refs[f"refs/remotes/{name}/{dst}"] = sha
-    return Pushed(Sha(sha))
+    return Pushed(Sha(sha), output=f"To {name}\n \t{sha}:{ref}\t{sha[:7]}\nDone")
 
 
 def hook_refusal(repo: RepoState, env: Mapping[str, str]) -> HookRejected | None:
+    if repo.hooks.push_output is not None:
+        output = (repo.hooks.push_output + "error: failed to push some refs\n").strip()
+        return HookRejected(output[-600:], output=output)
     if repo.hooks.refuse_push:
         return HookRejected("pre-push hook declined the push")
     missing = {k: v for k, v in repo.hooks.push_requires_env.items() if env.get(k) != v}

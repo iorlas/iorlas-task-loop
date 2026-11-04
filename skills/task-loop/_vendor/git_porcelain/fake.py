@@ -54,7 +54,7 @@ if TYPE_CHECKING:
         RefEntry,
         Relation,
         Released,
-        RemoteRef,
+        RemoteRefs,
         RepoIdentity,
         Snapshot,
         StillHeld,
@@ -169,7 +169,7 @@ class FakeRepo:
         self._anchor()
         return fake_operations.refs(self._state, prefixes)
 
-    def ls_remote(self, remote: str, patterns: Sequence[str] = ()) -> tuple[RemoteRef, ...]:
+    def ls_remote(self, remote: str, patterns: Sequence[str] = ()) -> RemoteRefs:
         self._anchor()
         return fake_operations.ls_remote(self._state, remote, patterns)
 
@@ -191,14 +191,14 @@ class FakeRepo:
         self._read_anchor()
         return fake_remote.remote_url(self._state, remote)
 
-    def fetch(self, remote: str = "origin", *, refspecs: Sequence[str] = (), timeout: float | None = None) -> None:
+    def fetch(self, remote: str = "origin", *, refspecs: Sequence[str] = (), timeout: float | None = None) -> CommandResult:
         _ = timeout  # In-memory operations have no elapsed process time.
         self._anchor()
-        fake_remote.fetch(self._state, remote, refspecs)
+        return fake_remote.fetch(self._state, remote, refspecs)
 
-    def delete_remote_at(self, remote: str, ref: str, expected: Sha) -> None:
+    def delete_remote_at(self, remote: str, ref: str, expected: Sha, *, missing_ok: bool = True) -> CommandResult:
         self._anchor()
-        fake_remote.delete_remote_at(self._state, remote, ref, expected)
+        return fake_remote.delete_remote_at(self._state, remote, ref, expected, missing_ok=missing_ok)
 
     def _anchor(self) -> CheckoutState:
         return FakeWorktree(self, self.path).state()
@@ -482,8 +482,8 @@ class FakeWorktree:
     def finish_rebase(self, action: Literal["continue", "abort"], *, restore_to: Sha | None = None) -> FinishResult:
         return write.finish_rebase(self._repo, self.state(), action, restore_to)
 
-    def push(self, dst: str, *, remote: str = "origin", hook_env: Mapping[str, str] | None = None) -> PushResult:
-        return flow.push(self._repo, self.state(), dst, remote, hook_env or {})
+    def push(self, dst: str, *, remote: str = "origin", hook_env: Mapping[str, str] | None = None, head: Sha | None = None) -> PushResult:
+        return flow.push(self._repo, self.state(), dst, remote, hook_env or {}, head=head)
 
     def landed(self, base: str, title_suffix: str) -> Sha | None:
         validate_revisions(base)

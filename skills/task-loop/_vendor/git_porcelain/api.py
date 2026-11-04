@@ -19,13 +19,57 @@ layout stay inside the implementations. ``worktree_state`` deliberately exposes 
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import TYPE_CHECKING, Literal, NewType, Protocol
+from typing import TYPE_CHECKING, Literal, Protocol
 
+from git_porcelain.api_results import (
+    Aborted,
+    BranchHeld,
+    BranchTaken,
+    Change,
+    CommandResult,
+    Conflict,
+    Diff,
+    Dirty,
+    FinishResult,
+    Health,
+    HookRejected,
+    LogEntry,
+    NothingToRecord,
+    Offline,
+    Pick,
+    Pushed,
+    PushResult,
+    Rebased,
+    RebaseResult,
+    Recorded,
+    RecordResult,
+    Ref,
+    RefEntry,
+    RefRejected,
+    Refs,
+    Rejected,
+    Relation,
+    Released,
+    RemoteRef,
+    RemoteRefs,
+    RemoteRejected,
+    RepoIdentity,
+    Sha,
+    Snapshot,
+    StillHeld,
+    Synced,
+    SyncResult,
+    TakeResult,
+    Transient,
+    Tree,
+    TreeId,
+    UpToDate,
+    WorktreeInfo,
+)
 from git_porcelain.errors import GitUnavailable
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping, Sequence
+    from collections.abc import Mapping, Sequence
     from pathlib import Path
 
 __all__ = [
@@ -51,12 +95,15 @@ __all__ = [
     "Rebased",
     "RecordResult",
     "Recorded",
+    "Ref",
     "RefEntry",
     "RefRejected",
+    "Refs",
     "Rejected",
     "Relation",
     "Released",
     "RemoteRef",
+    "RemoteRefs",
     "RemoteRejected",
     "Repo",
     "RepoIdentity",
@@ -73,292 +120,6 @@ __all__ = [
     "Worktree",
     "WorktreeInfo",
 ]
-
-Sha = NewType("Sha", str)
-TreeId = NewType("TreeId", str)
-
-
-# -- facts ------------------------------------------------------------------------------------------------
-@dataclass(frozen=True)
-class RepoIdentity:
-    """Where the repository lives and one stable name for it. ``root`` is the main checkout, ``key`` is
-    ``sha1(common_dir)[:12]`` (the same for every worktree)."""
-
-    root: Path
-    common_dir: Path
-    origin_url: str | None
-    key: str
-
-
-@dataclass(frozen=True)
-class Health:
-    """Whether a checkout is the repository it claims to be. ``set_in`` is the config file to fix."""
-
-    ok: bool
-    problem: Literal["worktree_redirected", "bare", "toplevel_mismatch"] | None
-    detail: str
-    set_in: Path | None
-    worktree_config: bool
-
-
-@dataclass(frozen=True)
-class Snapshot:
-    """The work as git would commit it. ``tree`` includes untracked files; ``head_tree`` is the committed tree
-    (a gate key, a hook env value). ``base`` is the merge-base of the base ref and HEAD (``base_tip`` when HEAD is
-    unborn); ``base_tip`` is the base ref's commit now (a check-cache key)."""
-
-    tree: TreeId
-    head: Sha | None
-    head_tree: TreeId | None
-    branch: str | None
-    base: Sha
-    base_tip: Sha
-
-
-@dataclass(frozen=True)
-class Change:
-    path: str
-    kind: Literal["A", "M", "D"]
-    added: int
-    deleted: int
-
-
-@dataclass(frozen=True)
-class Diff:
-    """Between two trees. ``changes == ()`` and ``patch == ""`` mean no change, not an error."""
-
-    changes: tuple[Change, ...]
-    patch: str
-    truncated: bool
-
-
-@dataclass(frozen=True)
-class Dirty:
-    """One status read. Raw dirty is ``tracked or untracked``; meaningful dirty is
-    ``tracked or (untracked - base_ignored)``. ``ignored`` lists only ignored files under the asked prefixes."""
-
-    tracked: tuple[str, ...]
-    untracked: tuple[str, ...]
-    base_ignored: frozenset[str]
-    ignored: tuple[str, ...]
-
-    @property
-    def raw(self) -> bool:
-        return bool(self.tracked or self.untracked)
-
-    @property
-    def meaningful(self) -> bool:
-        return bool(self.tracked or set(self.untracked) - self.base_ignored)
-
-
-@dataclass(frozen=True)
-class LogEntry:
-    """A commit as ``Repo.history`` returns it. ``upstream``: its patch is already on the asked base, else None."""
-
-    sha: Sha
-    ts: int
-    subject: str
-    body: str
-    upstream: bool | None
-
-
-@dataclass(frozen=True)
-class Relation:
-    """``a`` against ``b``: ``ahead = |b..a|``, ``behind = |a..b|``."""
-
-    merge_base: Sha | None
-    ahead: int
-    behind: int
-
-
-@dataclass(frozen=True)
-class Pick:
-    """One oldest-first git cherry row; upstream means an equivalent patch exists there."""
-
-    oid: Sha
-    upstream: bool
-
-
-@dataclass(frozen=True)
-class CommandResult:
-    """Exit status and complete stripped stdout plus stderr; command refusals are data."""
-
-    ok: bool
-    output: str
-
-
-@dataclass(frozen=True)
-class RefEntry:
-    """A full local ref name and its object id."""
-
-    name: str
-    sha: Sha
-
-
-@dataclass(frozen=True)
-class RemoteRef:
-    """An advertised ref, including HEAD and peeled tags; names remain fully qualified."""
-
-    name: str
-    oid: Sha
-
-
-@dataclass(frozen=True)
-class WorktreeInfo:
-    path: Path
-    head: Sha | None
-    branch: str | None
-    is_main: bool
-    dirty: bool | None
-
-
-class Tree:
-    """A commit's (or tree's) files, read lazily. Resolved once at construction; ``files`` lists on first use."""
-
-    def __init__(
-        self,
-        sha: Sha,
-        lister: Callable[[], Mapping[str, tuple[str, Sha]]],
-        reader: Callable[[str], bytes | None],
-    ) -> None:
-        self.sha = sha
-        self._lister = lister
-        self._reader = reader
-        self._files: Mapping[str, tuple[str, Sha]] | None = None
-        self._blobs: dict[str, bytes | None] = {}
-
-    @property
-    def files(self) -> Mapping[str, tuple[str, Sha]]:
-        """Path to ``(mode, blob sha)``."""
-        if self._files is None:
-            self._files = self._lister()
-        return self._files
-
-    def read(self, path: str) -> bytes | None:
-        """The bytes of ``path`` here; None when absent."""
-        if path not in self._blobs:
-            self._blobs[path] = self._reader(path)
-        return self._blobs[path]
-
-
-# -- results of the write operations ----------------------------------------------------------------------
-@dataclass(frozen=True)
-class Recorded:
-    sha: Sha
-    output: str = ""
-
-
-@dataclass(frozen=True)
-class NothingToRecord:
-    output: str = ""
-
-
-@dataclass(frozen=True)
-class HookRejected:
-    tail: str
-    output: str = ""
-
-    def __post_init__(self) -> None:
-        if not self.output:
-            object.__setattr__(self, "output", self.tail)
-
-
-@dataclass(frozen=True)
-class BranchTaken:
-    branch: str
-    head: Sha
-    created: bool
-    kept_aside: str | None
-
-
-@dataclass(frozen=True)
-class BranchHeld:
-    holders: tuple[WorktreeInfo, ...]
-
-
-@dataclass(frozen=True)
-class Released:
-    path: Path
-    how: Literal["removed", "detached"]
-
-
-@dataclass(frozen=True)
-class StillHeld:
-    path: Path
-    why: str
-
-
-@dataclass(frozen=True)
-class UpToDate:
-    pass
-
-
-@dataclass(frozen=True)
-class Rebased:
-    old_head: Sha
-    new_head: Sha
-    squashed: bool
-    squash_failure: str | None = None
-
-
-@dataclass(frozen=True)
-class Conflict:
-    """A rebase stopped on conflicts (or ``finish_rebase("continue")`` found markers left). It stays paused."""
-
-    files: tuple[str, ...]
-    tail: str
-    old_head: Sha
-    squash_failure: str | None = None
-
-
-@dataclass(frozen=True)
-class Aborted:
-    head: Sha
-
-
-@dataclass(frozen=True)
-class Pushed:
-    sha: Sha
-
-
-@dataclass(frozen=True)
-class Rejected:
-    tail: str
-
-
-@dataclass(frozen=True)
-class RefRejected(Rejected):
-    """The destination changed or the update was not a fast-forward."""
-
-
-@dataclass(frozen=True)
-class RemoteRejected:
-    """The remote refused an update for policy or another non-race reason."""
-
-    tail: str
-
-
-@dataclass(frozen=True)
-class Transient:
-    tail: str
-
-
-@dataclass(frozen=True)
-class Synced:
-    pass
-
-
-@dataclass(frozen=True)
-class Offline:
-    tail: str
-
-
-RecordResult = Recorded | NothingToRecord | HookRejected
-TakeResult = BranchTaken | BranchHeld
-RebaseResult = UpToDate | Rebased | Conflict
-FinishResult = Rebased | Conflict | Aborted
-PushResult = Pushed | Rejected | Transient | HookRejected | RemoteRejected
-SyncResult = Synced | Offline
 
 
 # -- the seam ---------------------------------------------------------------------------------------------
@@ -377,7 +138,7 @@ class Repo(Protocol):
         """Sorted for-each-ref rows for arbitrary prefixes; empty prefixes select all. Failures raise GitUnavailable."""
         ...
 
-    def ls_remote(self, remote: str, patterns: Sequence[str] = ()) -> tuple[RemoteRef, ...]:
+    def ls_remote(self, remote: str, patterns: Sequence[str] = ()) -> RemoteRefs:
         """Advertise remote refs with tail globs and injected environment; transport failures raise GitUnavailable."""
         ...
 
@@ -403,12 +164,12 @@ class Repo(Protocol):
         """Expanded fetch URL; MissingRemote only for a missing named remote."""
         ...
 
-    def fetch(self, remote: str = "origin", *, refspecs: Sequence[str] = (), timeout: float | None = None) -> None:
-        """Fetch named remote or source URL/path, writing FETCH_HEAD; retry ref-lock races five times."""
+    def fetch(self, remote: str = "origin", *, refspecs: Sequence[str] = (), timeout: float | None = None) -> CommandResult:
+        """Fetch with bounded ref-race retries, writing FETCH_HEAD; raise on final refusal."""
         ...
 
-    def delete_remote_at(self, remote: str, ref: str, expected: Sha) -> None:
-        """Lease-guarded deletion of a full refs/ name; authoritative absence also succeeds after refusal."""
+    def delete_remote_at(self, remote: str, ref: str, expected: Sha, *, missing_ok: bool = True) -> CommandResult:
+        """Lease-guarded deletion; missing_ok=False avoids the verification call after refusal."""
         ...
 
     def identity(self) -> RepoIdentity:
@@ -638,7 +399,7 @@ class Worktree(Protocol):
         hook_env: Mapping[str, str] | None = None,
         timeout: float | None = None,
     ) -> CommandResult:
-        """Push supplied forms and options; force/deletion need explicit opt ins. Pin HEAD before hooks."""
+        """Push supplied forms and options once; force/deletion need explicit opt ins. Git resolves HEAD."""
         ...
 
     def push_refspecs(
@@ -667,8 +428,8 @@ class Worktree(Protocol):
         ``abort``: abandon, then ``reset --hard`` to ``restore_to`` when given. A no-op when nothing is paused."""
         ...
 
-    def push(self, dst: str, *, remote: str = "origin", hook_env: Mapping[str, str] | None = None) -> PushResult:
-        """Push HEAD to branch ``dst`` (never forced). The repository's pre-push hook runs, with ``hook_env`` added."""
+    def push(self, dst: str, *, remote: str = "origin", hook_env: Mapping[str, str] | None = None, head: Sha | None = None) -> PushResult:
+        """Push HEAD or caller-supplied full ``head`` to ``dst``; supplying it avoids a resolution process."""
         ...
 
     def landed(self, base: str, title_suffix: str) -> Sha | None:

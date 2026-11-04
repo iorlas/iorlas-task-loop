@@ -5,8 +5,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from git_porcelain import real_checkout
-from git_porcelain.api import RefEntry, RemoteRef, Sha
-from git_porcelain.errors import MissingRevision
+from git_porcelain.api import RefEntry, RemoteRef, RemoteRefs, Sha
+from git_porcelain.errors import GitReadFailure, MissingRevision
 from git_porcelain.real_done import unavailable
 from git_porcelain.remote_validation import validate_remote
 from git_porcelain.revision_validation import validate_revisions
@@ -45,10 +45,16 @@ def refs(repo: RealRepo, prefixes: Sequence[str]) -> tuple[RefEntry, ...]:
     return tuple(RefEntry(name, Sha(oid)) for oid, name in (line.split(" ", 1) for line in done.out.splitlines()))
 
 
-def ls_remote(repo: RealRepo, remote: str, patterns: Sequence[str]) -> tuple[RemoteRef, ...]:
+def ls_remote(repo: RealRepo, remote: str, patterns: Sequence[str]) -> RemoteRefs:
     validate_remote(remote)
     done = repo.run(repo.path, "ls-remote", "--", remote, *patterns, timeout=repo.remote_timeout)
-    return tuple(RemoteRef(name, Sha(oid)) for oid, name in (line.split("\t", 1) for line in done.out.splitlines()))
+    try:
+        return RemoteRefs(
+            (RemoteRef(name, Sha(oid)) for oid, name in (line.split("\t", 1) for line in done.out.splitlines())), output=done.output
+        )
+    except ValueError as exc:
+        msg = "ls-remote returned a malformed record"
+        raise GitReadFailure(msg, output=done.output) from exc
 
 
 def stage(wt: RealWorktree, paths: Sequence[str], *, literal: bool) -> None:

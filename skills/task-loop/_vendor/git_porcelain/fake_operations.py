@@ -6,7 +6,7 @@ import fnmatch
 from typing import TYPE_CHECKING
 
 from git_porcelain import fake_ops
-from git_porcelain.api import RefEntry, RemoteRef, Sha
+from git_porcelain.api import RefEntry, RemoteRef, RemoteRefs, Sha
 from git_porcelain.errors import GitUnavailable, TagExists
 from git_porcelain.fake_read import resolve_commit
 from git_porcelain.fake_store import ancestors
@@ -80,7 +80,7 @@ def ref_matches(name: str, prefix: str) -> bool:
     return name == prefix or name.startswith(prefix.rstrip("/") + "/") or fnmatch.fnmatchcase(name, prefix)
 
 
-def ls_remote(repo: RepoState, remote: str, patterns: Sequence[str]) -> tuple[RemoteRef, ...]:
+def ls_remote(repo: RepoState, remote: str, patterns: Sequence[str]) -> RemoteRefs:
     validate_remote(remote)
     name = next((key for key, url in repo.remotes.items() if url == remote), remote)
     there = repo.remote_repos.get(name)
@@ -90,7 +90,8 @@ def ls_remote(repo: RepoState, remote: str, patterns: Sequence[str]) -> tuple[Re
     rows = dict(there.refs)
     if (head := rows.get(f"refs/heads/{there.default_branch}")) is not None:
         rows["HEAD"] = head
-    return tuple(RemoteRef(ref, Sha(oid)) for ref, oid in sorted(rows.items()) if not patterns or any(tail_match(ref, p) for p in patterns))
+    refs = [RemoteRef(ref, Sha(oid)) for ref, oid in sorted(rows.items()) if not patterns or any(tail_match(ref, p) for p in patterns)]
+    return RemoteRefs(refs, output="\n".join(f"{row.oid}\t{row.name}" for row in refs))
 
 
 def tail_match(name: str, pattern: str) -> bool:

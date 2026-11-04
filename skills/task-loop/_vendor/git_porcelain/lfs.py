@@ -26,6 +26,8 @@ from git_porcelain.porcelain import git_returncode, run_git
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
 
+    from git_porcelain.api import CommandResult
+
 _FILTER = {
     "filter.lfs.process": "git-lfs filter-process",
     "filter.lfs.clean": "git-lfs clean -- %f",
@@ -84,11 +86,11 @@ def lfs_paths(repo: Path, paths: Iterable[str]) -> set[str]:
     return owned
 
 
-def lfs_push(repo: Path, remote: str, ref: str, *, timeout: float = 600, config: Mapping[str, str] | None = None) -> None:
+def lfs_push(repo: Path, remote: str, ref: str, *, timeout: float = 600, config: Mapping[str, str] | None = None) -> CommandResult:
     """Upload the LFS objects ``ref`` references to ``remote``. Call before ``git push``."""
-    _remote(repo, "lfs", "push", remote, ref, timeout=timeout, config=config)
+    return _remote(repo, "lfs", "push", remote, ref, timeout=timeout, config=config)
 
 
-def lfs_fetch(repo: Path, remote: str, ref: str, *, timeout: float = 600, config: Mapping[str, str] | None = None) -> None:
+def lfs_fetch(repo: Path, remote: str, ref: str, *, timeout: float = 600, config: Mapping[str, str] | None = None) -> CommandResult:
     """Download the LFS objects ``ref`` references from ``remote``. Call before a merge."""
-    _remote(repo, "lfs", "fetch", remote, ref, timeout=timeout, config=config)
+    return _remote(repo, "lfs", "fetch", remote, ref, timeout=timeout, config=config)

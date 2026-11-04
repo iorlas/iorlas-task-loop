@@ -25,8 +25,10 @@ def command(
 ) -> CommandResult:
     try:
         done = wt.repo.run(wt.path, *args, check=False, env=env, timeout=timeout)
-        return CommandResult(ok=done.rc == 0, output=(done.out + done.err).strip())
+        return CommandResult(ok=done.rc == 0, output=done.output)
     except GitTimeout as exc:
+        if exc.output:
+            return CommandResult(ok=False, output=exc.output)
         if lfs and timeout == 3600:
             return CommandResult(ok=False, output="git lfs timed out after 60 min")
         return CommandResult(ok=False, output=str(exc))
@@ -52,7 +54,7 @@ def continue_rebase(wt: RealWorktree, *, stage_conflicts: bool, check_markers: b
         )
         wt.repo.invalidate()
         if done.rc:
-            return CommandResult(ok=False, output=(done.out + done.err).strip())
+            return CommandResult(ok=False, output=done.output)
     return command(wt, ["-c", "core.editor=true", "rebase", "--continue"])
 
 

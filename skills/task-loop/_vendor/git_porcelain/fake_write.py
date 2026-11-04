@@ -258,7 +258,7 @@ def rebase_onto(
     )
     done = flow.start_rebase(repo, wt, started, target, update_refs=updates)
     if isinstance(done, Rebased):
-        return Rebased(Sha(head), done.new_head, squashed=squashed, squash_failure=squash_diagnostic)
+        return Rebased(Sha(head), done.new_head, squashed=squashed, squash_failure=squash_diagnostic, output=done.output)
     return replace(done, old_head=Sha(head), squash_failure=squash_diagnostic)
 
 

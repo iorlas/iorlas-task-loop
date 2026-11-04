@@ -7,11 +7,11 @@ import re
 from typing import TYPE_CHECKING
 
 from git_porcelain import fake_flow
-from git_porcelain.api import Conflict, Offline
+from git_porcelain.api import CommandResult, Conflict, Offline
 from git_porcelain.errors import GitUnavailable, MissingRevision, NotARepo, NotFastForward, RefRace
 from git_porcelain.fake_ops import ignore_of, require_index, switch_tree, tracked_dirty
 from git_porcelain.fake_store import ancestors
-from git_porcelain.plumbing import Ref
+from git_porcelain.plumbing import Ref, Refs
 from git_porcelain.revision_validation import validate_revisions
 
 if TYPE_CHECKING:
@@ -35,7 +35,7 @@ class FakePlumbing:
             raise NotARepo(msg)
         return found
 
-    def ls_remote(self, repo: Path, remote: str, *patterns: str) -> list[Ref]:
+    def ls_remote(self, repo: Path, remote: str, *patterns: str) -> Refs:
         self._checkout(repo)
         there = self.state.remote_repos.get(remote)
         if there is None:
@@ -46,9 +46,10 @@ class FakePlumbing:
         refs = dict(there.refs)
         if (head := refs.get(f"refs/heads/{there.default_branch}")) is not None:
             refs["HEAD"] = head
-        return [
+        rows = [
             Ref(name, oid) for name, oid in sorted(refs.items()) if not patterns or any(_tail_match(name, pattern) for pattern in patterns)
         ]
+        return Refs(rows, output="\n".join(f"{row.oid}\t{row.name}" for row in rows))
 
     def branches(self, repo: Path, remote: str | None = None) -> list[Ref]:
         self._checkout(repo)
@@ -110,14 +111,14 @@ class FakePlumbing:
         switch_tree(self.state, wt, self.state.store.commits[target].files, self.state.head_files(wt))
         self.state.move_head(wt, target)
 
-    def pull_rebase(self, repo: Path, remote: str, branch: str) -> None:
+    def pull_rebase(self, repo: Path, remote: str, branch: str) -> CommandResult:
         wt = self._checkout(repo)
         if tracked_dirty(wt, self.state.head_files(wt)):
             msg = "cannot pull with rebase: you have unstaged changes"
             raise GitUnavailable(msg)
         result = fake_flow.fetch(self.state, remote)
         if isinstance(result, Offline):
-            raise GitUnavailable(result.tail)
+            raise GitUnavailable(result.tail, output=result.output)
         ref = f"refs/remotes/{remote}/{branch}"
         target = self.state.refs.get(ref)
         if target is None:
@@ -130,7 +131,8 @@ class FakePlumbing:
             require_index(wt)
             rebased = fake_flow.start_rebase(self.state, wt, head, target)
             if isinstance(rebased, Conflict):
-                raise GitUnavailable(rebased.tail)
+                raise GitUnavailable(rebased.tail, output=rebased.output)
+        return CommandResult(ok=True, output=f"From {remote}\n * branch {branch} -> FETCH_HEAD")
 
     def check_ignore(self, repo: Path, paths: Sequence[str]) -> set[str]:
         if not paths:

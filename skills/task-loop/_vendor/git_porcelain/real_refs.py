@@ -4,19 +4,27 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from git_porcelain.plumbing import Ref
-from git_porcelain.porcelain import run_git
+from git_porcelain.errors import GitReadFailure
+from git_porcelain.plumbing import Ref, Refs
+from git_porcelain.porcelain import _run, run_git
 from git_porcelain.real import RealRepo
-from git_porcelain.real_done import unavailable
+from git_porcelain.real_done import Done, unavailable
 
 if TYPE_CHECKING:
     from pathlib import Path
 
 
-def ls_remote(repo: Path, remote: str, *patterns: str) -> list[Ref]:
+def ls_remote(repo: Path, remote: str, *patterns: str) -> Refs:
     """Advertised remote refs (including HEAD and peeled tags), filtered by git's tail globs."""
-    out = run_git(repo, "ls-remote", "--", remote, *patterns)
-    return [Ref(name, oid) for oid, name in (line.split("\t", 1) for line in out.splitlines())]
+    proc = _run(repo, ("ls-remote", "--", remote, *patterns), None, None)
+    done = Done(proc.returncode, proc.stdout.encode("utf-8", "surrogateescape"), proc.stderr)
+    if done.rc:
+        raise unavailable(("ls-remote",), done)
+    try:
+        return Refs((Ref(name, oid) for oid, name in (line.split("\t", 1) for line in done.out.splitlines())), output=done.output)
+    except ValueError as exc:
+        msg = "ls-remote returned a malformed record"
+        raise GitReadFailure(msg, output=done.output) from exc
 
 
 def branches(repo: Path, remote: str | None = None) -> list[Ref]:

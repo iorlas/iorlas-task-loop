@@ -11,14 +11,17 @@ from __future__ import annotations
 
 import re
 
+from git_porcelain.diagnostic_output import redact_output
+
 
 class GitError(Exception):
     """A git invocation failed. ``retryable`` marks transient failures; ``hint`` is optional."""
 
-    def __init__(self, message: str, *, retryable: bool = False, hint: str | None = None) -> None:
-        super().__init__(message)
+    def __init__(self, message: str, *, retryable: bool = False, hint: str | None = None, output: str = "") -> None:
+        super().__init__(redact_output(message))
         self.retryable = retryable
         self.hint = hint
+        self.output = redact_output(output)
 
 
 class GitUnavailable(GitError):
@@ -29,11 +32,11 @@ class GitUnavailable(GitError):
 
     def __init__(self, message: str, *, retryable: bool = False, hint: str | None = None, output: str | None = None) -> None:
         super().__init__(message, retryable=retryable, hint=hint)
-        self.output = message if output is None else output
+        self.output = redact_output(message if output is None else output)
 
     @property
     def tail(self) -> str:
-        return str(self)
+        return str(self)[-600:]
 
 
 class MissingRevision(GitUnavailable):
@@ -47,9 +50,18 @@ class MissingRemote(GitUnavailable):
 class GitReadFailure(GitUnavailable):
     """An observation failed; absence cannot be inferred."""
 
+    def __init__(
+        self, message: str, *, retryable: bool = False, hint: str | None = None, output: str | None = None, push_output: str = ""
+    ) -> None:
+        super().__init__(message, retryable=retryable, hint=hint, output=output)
+        self.push_output = redact_output(push_output)
+
 
 class GitTimeout(GitUnavailable):
     """The child exceeded its deadline; distinct from a failure to invoke it."""
+
+    def __init__(self, message: str, *, retryable: bool = False, hint: str | None = None, output: str = "") -> None:
+        super().__init__(message, retryable=retryable, hint=hint, output=output)
 
 
 class DirtyTree(GitUnavailable):

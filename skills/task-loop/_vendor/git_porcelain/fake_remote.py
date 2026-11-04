@@ -41,16 +41,17 @@ def remote_url(state: RepoState, remote: str) -> str:
     return url
 
 
-def fetch(state: RepoState, remote: str, refspecs: Sequence[str]) -> None:
+def fetch(state: RepoState, remote: str, refspecs: Sequence[str]) -> CommandResult:
     validate_remote(remote)
+    fake_flow.fetch_races(state)
     name, there = _source(state, remote)
     state.store.absorb(there.store)
     if not refspecs:
-        fake_flow.fetch(state, name)
+        fake_flow.fetch(state, name, retry=False)
         tip = there.refs.get(f"refs/heads/{there.default_branch}")
         if tip:
             state.refs["FETCH_HEAD"] = tip
-        return
+        return CommandResult(ok=True, output="")
     for index, spec in enumerate(refspecs):
         src, colon, dst = spec.removeprefix("+").partition(":")
         ref = src if src in there.refs else f"refs/heads/{src}"
@@ -64,28 +65,32 @@ def fetch(state: RepoState, remote: str, refspecs: Sequence[str]) -> None:
             state.refs[dst] = sha
         if ref.startswith("refs/heads/") and remote in state.remotes:
             state.refs[f"refs/remotes/{name}/{ref.removeprefix('refs/heads/')}"] = sha
+    return CommandResult(ok=True, output="")
 
 
-def delete_remote_at(state: RepoState, remote: str, ref: str, expected: Sha) -> None:
+def delete_remote_at(state: RepoState, remote: str, ref: str, expected: Sha, *, missing_ok: bool = True) -> CommandResult:
     validate_remote(remote)
     validate_delete_ref(ref)
     try:
         name, there = _source(state, remote)
     except GitUnavailable as exc:
+        if not missing_ok:
+            raise
         msg = f"cannot verify remote deletion: {exc}"
-        raise GitReadFailure(msg) from exc
+        raise GitReadFailure(msg, output=exc.output, push_output=exc.output) from exc
     old = there.refs.get(ref)
-    if old is None:
-        return
+    if old is None and missing_ok:
+        return CommandResult(ok=True, output=f"To {remote}\n!\t:{ref}\t[rejected] (stale info)\nDone")
     if old != expected:
         msg = "[rejected] (stale info)"
         raise GitUnavailable(msg)
     refusal = fake_flow.hook_refusal(state, {})
     if refusal:
-        raise GitUnavailable(refusal.tail)
+        raise GitUnavailable(refusal.tail, output=refusal.output)
     del there.refs[ref]
     if remote in state.remotes and ref.startswith("refs/heads/"):
         state.refs.pop(f"refs/remotes/{name}/{ref.removeprefix('refs/heads/')}", None)
+    return CommandResult(ok=True, output=f"To {remote}\n-\t:{ref}\t[deleted]\nDone")
 
 
 def _push_specs(state: RepoState, checkout: CheckoutState, name: str, refspecs: Sequence[str]) -> list[str]:
@@ -218,17 +223,37 @@ def _send_specs(
 ) -> PushResult:
     captured = state.head_sha(checkout)
     result_sha: str | None = None
+    rows: list[str] = [f"To {name}"]
+    refusals: list[RefRejected | RemoteRejected] = []
     for spec in specs:
         forced = spec.startswith("+") or "--force" in options or "-f" in options or "--mirror" in options
         dst, sha = _resolve_push(state, checkout, spec, captured, options=options)
         rejected = _check_push(state, there, name, dst, sha, force=forced, options=options)
         if rejected is not None:
-            return rejected
+            rows.append(f"!\t{spec}\t{rejected.tail}")
+            refusals.append(rejected)
+            continue
+        old = there.refs.get(dst)
+        if sha is None:
+            flag, summary = "-", "[deleted]"
+        elif old == sha:
+            flag, summary = "=", "[up to date]"
+        elif old is None:
+            flag, summary = "*", "[new reference]"
+        else:
+            flag, summary = " ", f"{old[:7]}..{sha[:7]}"
+        rows.append(f"{flag}\t{spec}\t{summary}")
         if "--dry-run" not in options:
             _apply_push(state, there, name, dst, sha)
             if sha is not None and result_sha is None:
                 result_sha = sha
-    return Pushed(Sha(result_sha or ""))
+    output = "\n".join([*rows, "Done"])
+    if refusals:
+        output += f"\nerror: failed to push some refs to '{name}'"
+        raced = len(refusals) == len(specs) and all(isinstance(refusal, RefRejected) for refusal in refusals)
+        kind = RefRejected if raced else RemoteRejected
+        return kind(refusals[0].tail, output=output)
+    return Pushed(Sha(result_sha or ""), output=output)
 
 
 def push_refspecs(
@@ -247,10 +272,12 @@ def push_refspecs(
     refusal = fake_flow.hook_refusal(state, hook_env or {})
     if refusal:
         return refusal
+    if state.hooks.push_transport_failure is not None:
+        return Transient(state.hooks.push_transport_failure)
     try:
         name, there = _source(state, remote)
     except GitUnavailable as exc:
-        return Transient(str(exc))
+        return Transient(str(exc), output=exc.output)
     _validate_options(options)
     specs = _requested_specs(state, checkout, name, there, refspecs, options=options)
     return _send_specs(state, checkout, name, there, specs, options=options)
@@ -278,5 +305,5 @@ def push_request(
     try:
         result = push_refspecs(state, checkout, name, refspecs, hook_env=hook_env, options=options, force=force, allow_delete=allow_delete)
     except GitUnavailable as exc:
-        return CommandResult(ok=False, output=str(exc))
-    return CommandResult(ok=isinstance(result, Pushed), output="" if isinstance(result, Pushed) else result.tail)
+        return CommandResult(ok=False, output=exc.output)
+    return CommandResult(ok=isinstance(result, Pushed), output=result.output)

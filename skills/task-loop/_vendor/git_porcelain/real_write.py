@@ -7,7 +7,7 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING, Final, Literal
 
-from git_porcelain import real_checkout, real_observe, real_parse, real_read
+from git_porcelain import real_checkout, real_observe, real_read, real_remote
 from git_porcelain.api import (
     Aborted,
     BranchHeld,
@@ -16,18 +16,15 @@ from git_porcelain.api import (
     HookRejected,
     NothingToRecord,
     Offline,
-    Pushed,
     Rebased,
     Recorded,
-    Rejected,
     Released,
     Sha,
     StillHeld,
     Synced,
-    Transient,
     UpToDate,
 )
-from git_porcelain.errors import GitUnavailable, some
+from git_porcelain.errors import some
 from git_porcelain.real_done import unavailable
 from git_porcelain.remote_validation import validate_remote
 from git_porcelain.revision_validation import validate_revisions
@@ -59,12 +56,6 @@ __all__ = [
     "take_branch",
 ]
 
-# Another process fetching into the same repository at the same moment: the ref is where it should be, the fetch
-# only lost the lock (task-loop measured 150 of 180 simultaneous fetches failing so).
-REF_RACE: Final = re.compile(
-    r"incorrect old value|cannot lock ref|unable to update local ref|Unable to create '[^']*\.lock'|failed: reference already exists"
-)
-_FETCH_TRIES: Final = 5
 TRANSIENT: Final = re.compile(
     r"curl \d+|Broken pipe|Connection (?:reset|timed out|refused)|Could not resolve host|early EOF|RPC failed|remote end hung up|"
     r"SSL_ERROR|TLS|Operation timed out|Network is unreachable|Temporary failure in name resolution|error: 5\d\d|HTTP/\d(?:\.\d)? 5\d\d|"
@@ -88,14 +79,8 @@ def _done[T](repo: RealRepo, result: T) -> T:
 def sync(repo: RealRepo, remote: str) -> SyncResult:
     validate_remote(remote)
     try:
-        for attempt in range(_FETCH_TRIES):
-            done = repo.run(repo.path, "fetch", "--quiet", "--", remote, check=False, timeout=repo.remote_timeout)
-            if done.rc == 0:
-                return Synced()
-            if attempt == _FETCH_TRIES - 1 or not REF_RACE.search(done.tail):
-                return Offline(done.tail)
-            repo.sleep(0.1 * (attempt + 1))
-        return Offline("fetch gave up")  # pragma: no cover - the loop returns on its last turn
+        done = real_remote.fetch_done(repo, remote, (), repo.remote_timeout)
+        return Offline(done.tail, output=done.output) if done.rc else Synced(output=done.output)
     finally:
         repo.invalidate()
 
@@ -158,7 +143,7 @@ def record(
             return record_failure(args, done, hooks=hooks)
         head = real_read.head_of(wt)
         head = some(head)
-        return Recorded(head, output=(done.out + done.err).strip())
+        return Recorded(head, output=done.output)
     finally:
         wt.repo.invalidate()
 
@@ -192,7 +177,7 @@ def record_args(message: str, mode: Literal["new", "amend", "squash_to"], *, hoo
 
 def record_failure(args: Sequence[str], done: Done, *, hooks: bool) -> RecordResult:
     """Keep complete command diagnostics, including hooks that never name themselves."""
-    output = (done.out + done.err).strip()
+    output = done.output
     if hooks and _hook_rejection(output):
         return HookRejected(output, output=output)
     raise unavailable(args, done, full_output=True)
@@ -315,7 +300,7 @@ def _squash_before_rebase(
     wt.run("reset", "-q", "--hard", str(old))
     if squash_failure == "raise":
         raise unavailable(("commit",), made)
-    return False, (made.out + made.err).strip()
+    return False, made.output
 
 
 def rebase_onto(
@@ -352,9 +337,9 @@ def rebase_onto(
         if done.rc == 0:
             new = real_read.head_of(wt)
             new = some(new)
-            return Rebased(old, new, squashed, squash_diagnostic)
+            return Rebased(old, new, squashed, squash_diagnostic, output=done.output)
         if _paused(wt):
-            return Conflict(real_observe.unmerged(wt), (done.out + done.err).strip(), old, squash_diagnostic)
+            return Conflict(real_observe.unmerged(wt), done.tail, old, squash_diagnostic, output=done.output)
         if squashed:
             wt.run("reset", "-q", "--hard", str(old))
         raise unavailable(("rebase",), done)
@@ -377,13 +362,14 @@ def finish_rebase(wt: RealWorktree, action: Literal["continue", "abort"], restor
     paused = _paused(wt)
     try:
         if action == "abort":
+            output = ""
             if paused:
-                wt.run("rebase", "--abort")
+                output = wt.run("rebase", "--abort").output
             if target is not None:
-                wt.run("reset", "-q", "--hard", target)
+                output = (output + "\n" + wt.run("reset", "-q", "--hard", target).output).strip()
             head = real_read.head_of(wt)
             head = some(head)
-            return Aborted(head)
+            return Aborted(head, output=output)
         head = real_read.head_of(wt)
         head = some(head)
         if not paused:
@@ -399,9 +385,9 @@ def finish_rebase(wt: RealWorktree, action: Literal["continue", "abort"], restor
         if done.rc == 0:
             new = real_read.head_of(wt)
             new = some(new)
-            return Rebased(orig, new, squashed=False)
+            return Rebased(orig, new, squashed=False, output=done.output)
         if _paused(wt):
-            return Conflict(real_read.unmerged(wt), done.tail, orig)
+            return Conflict(real_read.unmerged(wt), done.tail, orig, output=done.output)
         raise unavailable(("rebase",), done)
     finally:
         wt.repo.invalidate()
@@ -414,9 +400,16 @@ def has_markers(path: Path) -> bool:
         return False
 
 
-def push(wt: RealWorktree, dst: str, remote: str, hook_env: Mapping[str, str] | None) -> PushResult:
+def push(wt: RealWorktree, dst: str, remote: str, hook_env: Mapping[str, str] | None, head: Sha | None = None) -> PushResult:
+    """Push a pinned HEAD in two processes: rev-parse supplies the full SHA absent from porcelain.
+
+    Pass an already known full SHA as head for a single-process typed push.
+    """
     validate_remote(remote)
-    head = real_read.head_of(wt)
+    if head is not None and re.fullmatch(r"[0-9a-f]{40}(?:[0-9a-f]{24})?", head) is None:
+        msg = "head must be a full object id"
+        raise ValueError(msg)
+    head = head if head is not None else real_read.head_of(wt)
     if head is None:
         msg = "nothing to push: HEAD is unborn"
         raise ValueError(msg)
@@ -427,24 +420,11 @@ def push(wt: RealWorktree, dst: str, remote: str, hook_env: Mapping[str, str] | 
             "--porcelain",
             "--",
             remote,
-            f"HEAD:refs/heads/{dst}",
+            f"{head}:refs/heads/{dst}",
             check=False,
             env=hook_env,
             timeout=wt.repo.remote_timeout,
         )
     finally:
         wt.repo.invalidate()
-    return _classify_push(done, head)
-
-
-def _classify_push(done: Done, head: Sha) -> PushResult:
-    if done.rc == 0:
-        return Pushed(head)
-    if any(line.flag == "!" for line in real_parse.parse_push(done.out)):
-        return Rejected(done.tail)
-    if TRANSIENT.search(done.tail):
-        return Transient(done.tail)
-    if "failed to push some refs" in done.err or done.out.strip() == "" or "pre-push" in done.err:
-        return HookRejected(done.tail)
-    msg = f"git push exited {done.rc}: {done.tail}"
-    raise GitUnavailable(msg)
+    return real_remote.classify_push(done, head)

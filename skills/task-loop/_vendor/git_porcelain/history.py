@@ -19,13 +19,25 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING, Literal
 
+from git_porcelain.diagnostic_output import redact_output
 from git_porcelain.errors import GitError
-from git_porcelain.porcelain import _head_from_files, _run, git_returncode, has_conflict_markers, merge_in_progress, run_git, unmerged_paths
+from git_porcelain.porcelain import (
+    _head_from_files,
+    _run,
+    git_returncode,
+    has_conflict_markers,
+    merge_in_progress,
+    run_git,
+    run_git_result,
+    unmerged_paths,
+)
 from git_porcelain.revision_validation import validate_revisions
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping, Sequence
     from pathlib import Path
+
+    from git_porcelain.api import CommandResult
 
 RemoteFailure = Literal["offline", "auth", "rejected", "other"]
 MergeState = Literal["up_to_date", "fast_forward", "merged", "conflict", "blocked"]
@@ -54,8 +66,8 @@ class Commit:
 class RemoteError(GitError):
     """A push or fetch failed. ``reason`` says what a host can do about it."""
 
-    def __init__(self, message: str, *, reason: RemoteFailure) -> None:
-        super().__init__(message, retryable=reason == "offline")
+    def __init__(self, message: str, *, reason: RemoteFailure, output: str = "") -> None:
+        super().__init__(message, retryable=reason == "offline", output=output)
         self.reason: RemoteFailure = reason
 
 
@@ -229,12 +241,12 @@ def classify_remote_failure(stderr: str) -> RemoteFailure:
     return "other"
 
 
-def _remote(repo: Path, *args: str, timeout: float, config: Mapping[str, str] | None = None) -> None:
+def _remote(repo: Path, *args: str, timeout: float, config: Mapping[str, str] | None = None) -> CommandResult:
     try:
-        run_git(repo, *_config_args(config), *args, timeout=timeout)
+        return run_git_result(repo, *_config_args(config), *args, timeout=timeout)
     except GitError as exc:
-        reason = "offline" if exc.retryable else classify_remote_failure(str(exc))
-        raise RemoteError(str(exc), reason=reason) from exc
+        reason = "offline" if exc.retryable else classify_remote_failure(exc.output or str(exc))
+        raise RemoteError(str(exc), reason=reason, output=exc.output) from exc
 
 
 def push(
@@ -244,7 +256,7 @@ def push(
     *,
     timeout: float = 120,
     config: Mapping[str, str] | None = None,
-) -> None:
+) -> CommandResult:
     """Push the current branch to its upstream, or ``refspec`` to ``remote``. Never forces.
 
     ``git push`` runs the repo's ``pre-push`` hook (git-lfs installs one); ``config`` turns it
@@ -254,15 +266,15 @@ def push(
         args.append(remote)
         if refspec is not None:
             args.append(refspec)
-    _remote(repo, *args, timeout=timeout, config=config)
+    return _remote(repo, *args, timeout=timeout, config=config)
 
 
-def fetch(repo: Path, remote: str | None = None, *, timeout: float = 120, config: Mapping[str, str] | None = None) -> None:
+def fetch(repo: Path, remote: str | None = None, *, timeout: float = 120, config: Mapping[str, str] | None = None) -> CommandResult:
     """Fetch the remote's refs. Never touches the working tree or the current branch.
 
     A fetch that brings new commits starts a detached ``git maintenance run --auto``; ``config``
     turns that off (``{"maintenance.auto": "false"}``) — each entry is a ``git -c key=value``."""
-    _remote(repo, "fetch", "--quiet", *([remote] if remote else []), timeout=timeout, config=config)
+    return _remote(repo, "fetch", "--quiet", *([remote] if remote else []), timeout=timeout, config=config)
 
 
 @dataclass(frozen=True)
@@ -278,6 +290,7 @@ class MergeResult:
     changed: tuple[str, ...] = ()
     conflicted: tuple[str, ...] = ()
     error: str | None = None
+    output: str = ""
 
 
 def _changed_since(repo: Path, rev: str) -> tuple[str, ...]:
@@ -312,11 +325,12 @@ def merge(
     if message is not None:
         args += ["-m", _message(message, trailers)]
     proc = _run(repo, (*args, "--", ref), _identity_env(author, committer), None)
+    output = redact_output((proc.stdout + proc.stderr).strip())
     if proc.returncode != 0:
         if merge_in_progress(repo):
-            return MergeResult("conflict", changed=_changed_since(repo, before), conflicted=tuple(unmerged_paths(repo)))
-        return MergeResult("blocked", error=(proc.stderr or proc.stdout).strip()[:500])
-    return MergeResult("fast_forward" if fast_forward else "merged", changed=_changed_since(repo, before))
+            return MergeResult("conflict", changed=_changed_since(repo, before), conflicted=tuple(unmerged_paths(repo)), output=output)
+        return MergeResult("blocked", error=output, output=output)
+    return MergeResult("fast_forward" if fast_forward else "merged", changed=_changed_since(repo, before), output=output)
 
 
 def finish_merge(
@@ -347,8 +361,8 @@ def finish_merge(
         run_git(repo, "add", "-A", "--", *[f":(literal){p}" for p in wanted])
     args = [*_config_args(config), "commit", "--no-verify", "-q"]
     args += ["--no-edit"] if message is None else ["-m", _message(message, trailers)]
-    run_git(repo, *args, env=_identity_env(author, committer))
-    return MergeResult("merged", changed=_changed_since(repo, "HEAD^1"))
+    done = run_git_result(repo, *args, env=_identity_env(author, committer))
+    return MergeResult("merged", changed=_changed_since(repo, "HEAD^1"), output=done.output)
 
 
 __all__ = [
