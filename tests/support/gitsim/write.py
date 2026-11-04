@@ -88,7 +88,7 @@ def cmd_checkout(c: Ctx) -> int:
 
 
 def checkout(c: Ctx) -> int:
-    args, r = c.args, c.r
+    args, r = [a for a in c.args if a != "--end-of-options"], c.r
     old = r.head_snap()
     for flag in ("-b", "-B"):
         if flag in args:
