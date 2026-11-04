@@ -37,10 +37,38 @@ SHIM = (
 )
 
 
+def version_key(name: str) -> tuple[int, ...]:
+    """Numeric cache version, or () for a source checkout / unrelated directory."""
+    parts = name.split(".")
+    return tuple(int(p) for p in parts) if all(p.isascii() and p.isdecimal() for p in parts) else ()
+
+
+def newest_install(plugin_root: Path) -> Path:
+    """Choose among sibling cache versions; source checkouts run their own code."""
+    if not version_key(plugin_root.name):
+        return plugin_root
+    return max((p for p in plugin_root.parent.iterdir() if version_key(p.name) and p.is_dir()),
+               key=lambda p: version_key(p.name), default=plugin_root)
+
+
+def readable_install(plugin_root: Path) -> Path | None:
+    """Do not replace either launcher when the newest install is incomplete or unreadable."""
+    try:
+        newest = newest_install(plugin_root)
+        for name in ("skills/task-loop/tl.py", "hooks/hook.py"):
+            (newest / name).read_bytes()
+        return newest
+    except OSError:
+        return None
+
+
 def write_shim(plugin_root: Path, env: Env) -> None:
-    """<config>/bin/tl: a path that does not change with the plugin version, running this install's tl.py through `uv run --script`."""
+    """<config>/bin/tl: a stable path running the newest readable install through `uv run --script`."""
+    install = readable_install(plugin_root)
+    if install is None:
+        return
     f = config_dir(env) / "bin" / "tl"
-    text = SHIM.replace("{tl}", shlex.quote(str(plugin_root / "skills" / "task-loop" / "tl.py")))
+    text = SHIM.replace("{tl}", shlex.quote(str(install / "skills" / "task-loop" / "tl.py")))
     try:
         if f.is_file() and f.read_text(encoding="utf-8") == text:
             return
@@ -66,8 +94,11 @@ def write_hooks(plugin_root: Path, env: Env) -> list[Path]:
     """<config>/githooks/: one dispatcher per client hook name. It runs tl's logic (pre-push), then the repo's own hook of that name,
     found at run time, so a repo's changed hooks are followed without a rewrite. Every subprocess tl starts gets this folder as
     core.hooksPath (adapters/childenv.hooks_vars). Idempotent; a failure to write is silent (a session must start)."""
+    install = readable_install(plugin_root)
+    if install is None:
+        return []
     root = config_dir(env)
-    hook, tl = shlex.quote(str(plugin_root / "hooks" / "hook.py")), shlex.quote(str(root / "bin" / "tl"))
+    hook, tl = shlex.quote(str(install / "hooks" / "hook.py")), shlex.quote(str(root / "bin" / "tl"))
     out = []
     for name in HOOK_NAMES:
         text = GIT_HOOK.replace("{hook}", hook).replace("{tl}", tl).replace("{name}", name)

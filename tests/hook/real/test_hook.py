@@ -50,6 +50,9 @@ class Sessions(unittest.TestCase):
         self.root = self.home / "plugin"
         (self.root / ".claude-plugin").mkdir(parents=True)
         (self.root / ".claude-plugin" / "plugin.json").write_text('{"version": "9.9.9"}')
+        for name in ("skills/task-loop/tl.py", "hooks/hook.py"):  # a complete install: write_shim skips an incomplete one
+            (self.root / name).parent.mkdir(parents=True, exist_ok=True)
+            (self.root / name).write_text("")
 
     def event(self, **kw):
         return json.dumps({"session_id": "s1", "transcript_path": "/t.jsonl", "cwd": str(self.repo), **kw})

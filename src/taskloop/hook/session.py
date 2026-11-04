@@ -1,4 +1,4 @@
-"""The SessionStart and PreCompact hooks: index the session, keep the `tl` shim pointing at this install, write the handoff before a
+"""The SessionStart and PreCompact hooks: index the session, keep launchers on the newest install, write the handoff before a
 compaction and give it back after one."""
 import json
 import time

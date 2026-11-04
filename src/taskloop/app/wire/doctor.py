@@ -1,6 +1,7 @@
 """`tl doctor`: what is off in the repo's setup for the loop, one line each, and the repo-profile report."""
 import contextlib
 import os
+import shlex
 import time
 from pathlib import Path
 
@@ -10,6 +11,7 @@ from taskloop.adapters.ident import claude_dir, config_dir
 from taskloop.app.doctor import profiles
 from taskloop.app.release import catalog, manifest
 from taskloop.app.slots import watchdog
+from taskloop.app.wire import hook
 from taskloop.app.wire import slots as wslots
 from taskloop.app.wire.slots import cfg_source
 from taskloop.contracts import runlife
@@ -93,10 +95,38 @@ def slot_warnings(repo: str, who: Identity, git: Git, now: float, spawner: Spawn
     return f"slots: {table.configured} configured from {where}; {states}", warns
 
 
+def launcher_problems(plugin_root: Path, env: Env) -> list[str]:
+    """One finding for launchers still pointing at an older sibling cache version."""
+    try:
+        newest = hook.newest_install(plugin_root)
+    except OSError:
+        return []
+    version = hook.version_key(newest.name)
+    if not version:
+        return []
+    root = config_dir(env)
+    stale = []
+    for name, path in [("shim", root / "bin/tl"), *((n, root / "githooks" / n) for n in hook.HOOK_NAMES)]:
+        try:
+            words = shlex.split(path.read_text(encoding="utf-8"), comments=True)
+        except (OSError, ValueError):
+            continue
+        for word in words:
+            try:
+                relative = Path(word).relative_to(newest.parent)
+            except ValueError:
+                continue
+            target = hook.version_key(relative.parts[0]) if relative.parts else ()
+            if target and target < version:
+                stale.append(name)
+                break
+    return [f"{', '.join(stale)} points at a version older than newest installed task-loop {newest.name}"] if stale else []
+
+
 def install_problems(plugin_root: Path, env: Env) -> list[str]:
     """What is wrong with the plugin install this tl runs from and the one Claude Code records as installed: a file that differs from
     MANIFEST.sha256 (named), an AGENTS.md without its ownership section. A source checkout has no manifest and is checked for none."""
-    out: list[str] = []
+    out = launcher_problems(plugin_root, env)
     try:
         agents = (plugin_root / "AGENTS.md").read_text(encoding="utf-8")
     except OSError:

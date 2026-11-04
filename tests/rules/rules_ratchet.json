@@ -7,7 +7,7 @@
  "sloc": 88076,
  "sloc_growth": {
   "from": 88076,
-  "to": 90817,
-  "why": "tl-7i9k.12: add AST enum-totality, SCC/fan-out, source-size and store-writer invariants with planted regression tests; explicitly complete ten constant enum tables. The 710 added SLOC establish these checks and preserve existing policy behavior. Repeated slice deny contracts are replaced by one allow-table. Follow-up fixes narrow AST assignments and refuse infrastructure AskSpecs before constructing an Ask, with regression coverage. Rebased onto origin/main at 0.23.347: 1862 more SLOC landed on main from other releases between this branch's base and the rebase (GITADOPT3, UNJAM, UNJAM2, CRASHCAP2, TRUSTROOTS, LIVENESS, DIFFWS, VENDORGP); they are not this bead's growth, and this bead's own growth is unchanged at 710 SLOC. tl-7k8.10: +169 SLOC for pass_files and tl check --staged (passfiles.py, staged.py, Git.staged_paths/export_index)."
+  "to": 90955,
+  "why": "tl-7i9k.12: add AST enum-totality, SCC/fan-out, source-size and store-writer invariants with planted regression tests; explicitly complete ten constant enum tables. The 710 added SLOC establish these checks and preserve existing policy behavior. Repeated slice deny contracts are replaced by one allow-table. Follow-up fixes narrow AST assignments and refuse infrastructure AskSpecs before constructing an Ask, with regression coverage. Rebased onto origin/main at 0.23.347: 1862 more SLOC landed on main from other releases between this branch's base and the rebase (GITADOPT3, UNJAM, UNJAM2, CRASHCAP2, TRUSTROOTS, LIVENESS, DIFFWS, VENDORGP); they are not this bead's growth, and this bead's own growth is unchanged at 710 SLOC. tl-7k8.10: +169 SLOC for pass_files and tl check --staged (passfiles.py, staged.py, Git.staged_paths/export_index). tl-7i9k.57 SHIMPIN: +138 SLOC (the shim and git hooks pick the newest installed task-loop and never downgrade; tl doctor reports a stale shim or hook; tests)."
  }
 }
