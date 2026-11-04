@@ -9,7 +9,6 @@ import sys
 import tempfile
 import textwrap
 import time
-import unittest
 from pathlib import Path
 from unittest import mock
 
@@ -59,7 +58,7 @@ ROUTE = textwrap.dedent('''
     w.wait()
     print(json.dumps({"contract": 4, "data": {}, "ref": "r"}))
 ''')
-@unittest.skipUnless(POSIX, "process groups")
+@pytest.mark.skipif(not (POSIX), reason="process groups")
 class StreamRunnerCall(Case):
     def setup_method(self):
         self.tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)

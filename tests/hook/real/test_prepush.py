@@ -5,9 +5,9 @@ import shutil
 import subprocess
 import sys
 import tempfile
-import unittest
 from pathlib import Path
 
+import pytest
 from support.case import Case
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -258,8 +258,10 @@ class Chain(Base):
         assert "commit-msg" in after
 
 
-@unittest.skipUnless(shutil.which("git-lfs") or subprocess.run(["git", "lfs", "version"], capture_output=True, check=False).returncode == 0,
-                     "git-lfs is not installed on this box")
+HAS_LFS = shutil.which("git-lfs") or subprocess.run(["git", "lfs", "version"], capture_output=True, check=False).returncode == 0
+
+
+@pytest.mark.skipif(not HAS_LFS, reason="git-lfs is not installed on this box")
 class Lfs(Base):
     def setup_method(self):
         super().setup_method()

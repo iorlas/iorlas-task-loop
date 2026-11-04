@@ -10,11 +10,12 @@ import subprocess
 import sys
 import threading
 import time
-import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
 from typing import Any
 from unittest import mock
+
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # python3 -m unittest tests.test_areas, from the repo root
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
@@ -59,7 +60,7 @@ HERE = Path(__file__).resolve().parents[3] / "skills" / "task-loop"
 AREAS_JSON = {"area_label_prefix": "lane:", "areas": {"core": ["e-core"], "build": ["build"]}}
 
 
-NO_FCNTL = unittest.skipIf(os.name == "nt", "the lock is fcntl; tl has none on Windows (documented no-op)")
+NO_FCNTL = pytest.mark.skipif(os.name == "nt", reason="the lock is fcntl; tl has none on Windows (documented no-op)")
 
 
 class AreasBase(Slots):

@@ -14,7 +14,6 @@ import tempfile
 import threading
 import time
 import types
-import unittest
 from pathlib import Path
 from typing import Any, ClassVar
 from unittest import mock
@@ -89,11 +88,12 @@ def sh(*a, cwd):
     subprocess.run(list(a), cwd=cwd, check=True, capture_output=True)
 
 
-POSIX_CHECK = unittest.skipIf(os.name == "nt", "the check is bash (operators, $VAR, rm, test, grep, sleep, /dev/null); "
+POSIX_CHECK = pytest.mark.skipif(os.name == "nt", reason="the check is bash (operators, $VAR, rm, test, grep, sleep, /dev/null); "
                                               "on Windows the engine runs checks through cmd.exe")
 
 
-ENGINE_BASH = unittest.skipIf(os.name == "nt", "the engine's own conflict-marker check (`! git grep ...`) is bash; cmd.exe cannot parse it")
+ENGINE_BASH = pytest.mark.skipif(os.name == "nt",
+                                 reason="the engine's own conflict-marker check (`! git grep ...`) is bash; cmd.exe cannot parse it")
 
 
 def without_shims(fn):
@@ -107,13 +107,13 @@ def without_shims(fn):
     return run
 
 
-EXIT_127 = unittest.skipIf(os.name == "nt", "the engine reads a missing tool as bash's exit 127; cmd.exe reports it as exit 1")
+EXIT_127 = pytest.mark.skipif(os.name == "nt", reason="the engine reads a missing tool as bash's exit 127; cmd.exe reports it as exit 1")
 
 
-SH_FAKE = unittest.skipIf(os.name == "nt", "the bd fake is a #!/bin/sh script, which Windows cannot execute")
+SH_FAKE = pytest.mark.skipif(os.name == "nt", reason="the bd fake is a #!/bin/sh script, which Windows cannot execute")
 
 
-NO_FCNTL = unittest.skipIf(os.name == "nt", "the lock is fcntl; tl has none on Windows (documented no-op)")
+NO_FCNTL = pytest.mark.skipif(os.name == "nt", reason="the lock is fcntl; tl has none on Windows (documented no-op)")
 
 
 def shq(text):

@@ -8,10 +8,10 @@ import os
 import sys
 import threading
 import time
-import unittest
 from pathlib import Path
 from unittest import mock
 
+import pytest
 from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # python3 -m unittest tests.test_areas, from the repo root
@@ -55,7 +55,7 @@ def tbead(*a, **k):
     return as_bead(bead(*a, **k))
 
 
-NO_FCNTL = unittest.skipIf(os.name == "nt", "the lock is fcntl; tl has none on Windows (documented no-op)")
+NO_FCNTL = pytest.mark.skipif(os.name == "nt", reason="the lock is fcntl; tl has none on Windows (documented no-op)")
 
 
 def area_of(b, cfg, cache):

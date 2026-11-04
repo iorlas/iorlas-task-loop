@@ -1,15 +1,15 @@
 """dev/release.py loads every module of the release at start: it rebases and bumps the clone it runs from."""
 import importlib.util
 import sys
-import unittest
 from pathlib import Path
 
+import pytest
 from support.case import Case
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
-@unittest.skipUnless(hasattr(sys, "set_lazy_imports"), "lazy imports are a 3.15 feature")
+@pytest.mark.skipif(not (hasattr(sys, "set_lazy_imports")), reason="lazy imports are a 3.15 feature")
 class Eager(Case):
     def test_the_release_modules_are_loaded_when_the_script_starts(self):
         before = sys.get_lazy_imports()

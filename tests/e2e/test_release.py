@@ -37,7 +37,7 @@ PYTEST_RED = ("FAILED tests/test_red.py::R::test_red_one - AssertionError: boom\
               "FAILED tests/test_red.py::R::test_red_two - ValueError: bang\n2 failed in 0.05s\n")
 
 
-@unittest.skipIf(os.name == "nt", "the lock is fcntl")
+@pytest.mark.skipif(os.name == "nt", reason="the lock is fcntl")
 class Release(Case):
     def setup_method(self):
         self.tmp = tempfile.TemporaryDirectory()

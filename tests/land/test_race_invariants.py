@@ -26,12 +26,12 @@ import os
 import sys
 import threading
 import types
-import unittest
 from dataclasses import replace
 from pathlib import Path
 from typing import Any, cast
 from unittest import mock
 
+import pytest
 import support.paths  # noqa: F401
 import support.who as support_who
 from support import homes
@@ -115,7 +115,7 @@ def claims(a):
     return a[:1] == ("update",) and "--claim" in a
 
 
-@unittest.skipIf(os.name == "nt", "fcntl locks (tl has none on Windows: documented no-op)")
+@pytest.mark.skipif(os.name == "nt", reason="fcntl locks (tl has none on Windows: documented no-op)")
 @stdout_in("out")
 class Invariants(test_loop.Base):
     def setup_method(self):

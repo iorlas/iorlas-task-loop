@@ -10,10 +10,10 @@ import signal
 import subprocess
 import tempfile
 import threading
-import unittest
 from pathlib import Path
 from unittest import mock
 
+import pytest
 from support import homes
 from support.case import Case
 from support.procsim import real_proc
@@ -22,7 +22,7 @@ from support.waits import until
 
 from taskloop.adapters import landlock, procs
 
-NO_FCNTL = unittest.skipIf(os.name == "nt", "the lock is fcntl; tl has none on Windows (documented no-op)")
+NO_FCNTL = pytest.mark.skipif(os.name == "nt", reason="the lock is fcntl; tl has none on Windows (documented no-op)")
 
 
 class Held:

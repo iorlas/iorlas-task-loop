@@ -9,11 +9,11 @@ import signal
 import subprocess
 import sys
 import time
-import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
 
+import pytest
 from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # python3 -m unittest tests.test_slots, from the repo root
@@ -45,7 +45,7 @@ LIVE_PID = "a live pid that is not this process: a real sleep child (an engine l
 POSIX = os.name != "nt"
 
 
-NO_FCNTL = unittest.skipIf(os.name == "nt", "the lock is fcntl; tl has none on Windows (documented no-op)")
+NO_FCNTL = pytest.mark.skipif(os.name == "nt", reason="the lock is fcntl; tl has none on Windows (documented no-op)")
 
 
 def sleeper():
@@ -150,7 +150,7 @@ class HoldRaces(Slots):
         assert (bd.slots["sl-1"]["status"], bd.slots["sl-1"]["assignee"]) == ("open", "")
 
 
-@unittest.skipUnless(POSIX, "process groups")
+@pytest.mark.skipif(not (POSIX), reason="process groups")
 class NeverSignalOneself(Case):
     """A recorded or parsed pid or group id is a claim: no stop, reap or kill path may act on it when it is ours."""
 

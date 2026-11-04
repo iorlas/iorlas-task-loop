@@ -8,10 +8,10 @@ import subprocess
 import sys
 import tempfile
 import time
-import unittest
 from pathlib import Path
 from unittest import mock
 
+import pytest
 from support.case import Case
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -270,7 +270,7 @@ class SlotReset(Base):
         assert (self.slot / "setup.log").read_text().count("run") == 1
 
 
-@unittest.skipIf(os.name == "nt", "the fixture's live process is a POSIX ps lookup")
+@pytest.mark.skipif(os.name == "nt", reason="the fixture's live process is a POSIX ps lookup")
 class CutoverCheck(Base):
     def setup_method(self):
         super().setup_method()

@@ -10,11 +10,12 @@ import signal
 import subprocess
 import sys
 import time
-import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
 from typing import Any
 from unittest import mock
+
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # python3 -m unittest tests.test_slots, from the repo root
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
@@ -46,7 +47,7 @@ POSIX = os.name != "nt"
 REAL_PREPARE = Taker.prepare  # LoopBase stubs it
 
 
-NO_FCNTL = unittest.skipIf(os.name == "nt", "the lock is fcntl; tl has none on Windows (documented no-op)")
+NO_FCNTL = pytest.mark.skipif(os.name == "nt", reason="the lock is fcntl; tl has none on Windows (documented no-op)")
 
 
 def sleeper():
@@ -283,7 +284,7 @@ class Hold(Slots):
         assert bd.slots["sl-1"]["status"] == "in_progress"
 
 
-@unittest.skipUnless(POSIX, "ps start times and zombies")
+@pytest.mark.skipif(not (POSIX), reason="ps start times and zombies")
 class StaleLocks(Slots):
     """A lock outlives a SIGKILLed engine: its pid may be reused or a zombie; neither keeps the slot busy forever."""
     def test_a_reused_pid_with_another_start_time_is_dead(self):

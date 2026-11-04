@@ -6,7 +6,6 @@ import subprocess
 import sys
 import tempfile
 import time
-import unittest
 from pathlib import Path
 from unittest import mock
 
@@ -37,7 +36,7 @@ class ChildEnv(Case):
         assert ran.out.split() == ["/home/u/.claude-alt", "None"]
 
 
-@unittest.skipUnless(POSIX, "process groups")
+@pytest.mark.skipif(not (POSIX), reason="process groups")
 class Capture(Case):
     def test_it_collects_output_and_the_exit_code(self):
         ran = procs.capture(["sh", "-c", "echo out; echo err >&2; exit 3"], None, None, 30)
@@ -53,7 +52,7 @@ class Capture(Case):
             assert not procs.alive(int((Path(d) / "pid").read_text()))
 
 
-@unittest.skipUnless(POSIX, "process groups")
+@pytest.mark.skipif(not (POSIX), reason="process groups")
 class SigtermWhileSpawning(Case):
     """A SIGTERM during `Popen()` runs the engine's raising handler inside the constructor: the caller never gets the Popen object. The
     stream-proc spawn holds the signal until the child is in hand and stops it."""
