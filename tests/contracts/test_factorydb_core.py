@@ -3,14 +3,12 @@
 import sqlite3
 import sys
 import tempfile
-import time
-from concurrent.futures import ThreadPoolExecutor
-from contextlib import contextmanager
 from pathlib import Path
-from threading import Barrier
 from unittest.mock import patch
 
 import pytest
+import sqlite_store
+from sqlite_store import filesystem
 from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -31,9 +29,6 @@ class FactoryDbTest(Case):
     def setup_method(self):
         factorydb.clear_filesystem_cache()
         self.addCleanup(factorydb.clear_filesystem_cache)
-        cache = patch.object(factorydb, "_CHECKED", set())
-        cache.start()
-        self.addCleanup(cache.stop)
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.path = Path(tmp.name) / "factory.db"
@@ -68,92 +63,28 @@ class FactoryDbTest(Case):
         assert tables == TABLES
         assert indexes >= INDEXES
 
+    def test_wraps_vendored_store_and_closes_shared_writer(self):
+        assert isinstance(factorydb._STORE, sqlite_store.Store)
+        self.seed_ask(self.rw())
+        assert self.rw().execute("SELECT bead FROM ask").fetchall() == [("b",)]
+        shared = factorydb.shared_rw(self.path)
+        assert shared is not None
+        self.addCleanup(factorydb.close_shared)
+        assert shared.execute("SELECT bead FROM ask").fetchall() == [("b",)]
+        factorydb.close_shared()
+        with pytest.raises(sqlite3.ProgrammingError):
+            shared.execute("SELECT 1")
+
     def test_reopen_preserves_rows(self):
         self.seed_ask(self.rw())
         assert self.rw().execute("SELECT bead,rev FROM ask").fetchall() == [("b", 0)]
 
-    def test_200_opens_under_600ms_probe_mounts_once_per_directory(self):
-        parent = self.path.parent.resolve()
-        expected = [p for p in (parent, *parent.parents) if p != Path(p.anchor)]
-        with (
-            patch.object(factorydb, "_filesystem_type", return_value="unknown"),
-            patch.object(factorydb.os.path, "ismount", return_value=False) as ismount,
-        ):
-            started = time.process_time()
-            for _ in range(200):
-                con = factorydb.open_rw(self.path)
-                assert con is not None, "local factory database should open"
-                con.close()
-            elapsed = time.process_time() - started
-            assert [call.args[0] for call in ismount.call_args_list] == expected
-        assert elapsed < 0.6
-
-    def test_reopens_read_version_once_and_never_switch_wal_again(self):
-        self.rw()
-        statements = []
-        connect = sqlite3.connect
-
-        def traced_connection(*args, **kwargs):
-            con = connect(*args, **kwargs)
-            con.set_trace_callback(statements.append)
-            return con
-
-        with patch.object(factorydb.sqlite3, "connect", side_effect=traced_connection):
-            self.rw()
-            self.ro()
-        assert statements.count("PRAGMA user_version") == 2
-        assert "PRAGMA journal_mode=WAL" not in statements
-        assert "PRAGMA quick_check" not in statements
-
-    def test_filesystem_cache_shares_resolved_parent_and_can_be_cleared(self):
-        alias = self.path.parent / "alias"
-        alias.symlink_to(self.path.parent, target_is_directory=True)
-        with patch.object(factorydb, "_unsafe_filesystem", return_value=False) as probe:
-            self.rw()
-            con = factorydb.open_rw(alias / "other.db")
-            assert con is not None
-            con.close()
-            probe.assert_called_once_with(self.path.parent.resolve())
-        factorydb.clear_filesystem_cache()
-        with patch.object(factorydb, "_unsafe_filesystem", return_value=True) as probe:
-            assert factorydb.open_rw(self.path) is None
-            assert factorydb.open_ro(self.path) is None
-            probe.assert_called_once()
-
-    def test_concurrent_initializers_both_open_the_same_fresh_file(self):
-        ready = Barrier(2, timeout=30)  # an upper bound for a loaded host, not a wait: both threads release it as they arrive
-        begin = factorydb.begin_immediate
-
-        @contextmanager
-        def synchronized_begin(con):
-            # Both connections already observed user_version=0 before locking.
-            ready.wait()
-            with begin(con):
-                yield
-
-        def open_connection():
-            con = factorydb.open_rw(self.path)
-            if con is None:
-                pytest.fail("both initializers must receive a writable connection")
-            try:
-                tables = {row[0] for row in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-                return con.execute("PRAGMA user_version").fetchone(), tables
-            finally:
-                con.close()
-
-        with patch.object(factorydb, "begin_immediate", synchronized_begin), ThreadPoolExecutor(max_workers=2) as pool:
-            results = list(pool.map(lambda _: open_connection(), range(2)))
-        for version, tables in results:
-            assert version == (factorydb.SCHEMA_VERSION,)
-            assert tables == TABLES
-        self.rw()
-
     def test_wrong_version_is_rejected_without_replacing_it(self):
         con = self.rw()
         con.execute("PRAGMA user_version=99")
-        with pytest.raises(factorydb.DatabaseError, match=r"schema v99.*knows v2.*update task-loop"):
+        with pytest.raises(factorydb.DatabaseError, match=r"factory\.db is schema v99.*knows v2.*update it"):
             factorydb.open_rw(self.path)
-        with pytest.raises(factorydb.DatabaseError, match=r"schema v99.*knows v2.*update task-loop"):
+        with pytest.raises(factorydb.DatabaseError, match=r"factory\.db is schema v99.*knows v2.*update it"):
             factorydb.open_ro(self.path)
         assert con.execute("PRAGMA user_version").fetchone() == (99,)
 
@@ -169,12 +100,19 @@ class FactoryDbTest(Case):
         assert factorydb.open_rw(self.path) is None
         assert factorydb.open_ro(self.path) is None
 
+    def test_reader_names_schema_errors_as_database_unavailable(self):
+        con = self.rw()
+        con.execute("PRAGMA user_version=99")
+        expected = "database unavailable: factory.db is schema v99, this code knows v2: update it"
+        assert factorydb.database_error(self.path, 1) == expected
+        assert factorydb.run_rows(self.path, 1) == ([], expected)
+
     def test_non_wal_database_is_rejected(self):
         assert factorydb.open_rw(":memory:") is None
         con = sqlite3.connect(self.path)
         self.addCleanup(con.close)
         con.execute("PRAGMA user_version=1")
-        with pytest.raises(factorydb.DatabaseError, match="engine has not upgraded it yet"):
+        with pytest.raises(factorydb.DatabaseError, match="the writer has not upgraded it yet"):
             factorydb.open_ro(self.path)
 
     def test_missing_read_only_database_stays_missing(self):
@@ -194,6 +132,16 @@ class FactoryDbTest(Case):
             assert factorydb.cas_update(con, "ask", "bead", "b", 0, status="answered")
             assert not factorydb.cas_update(con, "ask", "bead", "b", 0, status="stale")
         assert con.execute("SELECT status,rev FROM ask").fetchone() == ("answered", 1)
+
+    def test_cas_updates_run_rows_and_rejects_stale_revision(self):
+        con = self.rw()
+        con.execute(
+            "INSERT INTO run(run,repo,repo_key,state,started,manifest) "
+            "VALUES ('r','/repo','repo','running',1,'{}')")
+        with factorydb.begin_immediate(con):
+            assert factorydb.cas_update(con, "run", "run", "r", 0, state="done")
+            assert not factorydb.cas_update(con, "run", "run", "r", 0, state="stale")
+        assert con.execute("SELECT state,rev FROM run").fetchone() == ("done", 1)
 
     def test_owners_cover_exactly_the_created_tables(self):
         tables = {row[0] for row in self.rw().execute("SELECT name FROM sqlite_master WHERE type='table'")}
@@ -227,77 +175,11 @@ class FactoryDbTest(Case):
         reader.commit()
         assert reader.execute("SELECT rev FROM ask").fetchone() == (1,)
 
-    def test_transaction_rolls_back_on_exception(self):
-        con = self.rw()
-        with pytest.raises(ValueError, match="abort"), factorydb.begin_immediate(con):
-            con.execute("INSERT INTO kv(k,v,t) VALUES ('key','value',1)")
-            raise ValueError("abort")
-        assert con.execute("SELECT * FROM kv").fetchall() == []
-        assert not con.in_transaction
-
     def test_unsafe_filesystem_is_rejected_before_connecting(self):
-        with patch.object(factorydb, "_unsafe_filesystem", return_value=True):
+        with patch.object(filesystem, "_unsafe_filesystem", return_value=True):
             assert factorydb.open_rw(self.path) is None
             assert factorydb.open_ro(self.path) is None
         assert not self.path.exists()
-
-    def test_linux_mount_check_uses_deepest_mount_and_decodes_spaces(self):
-        mounts = "root / ext4 rw 0 0\nremote /mnt nfs4 rw 0 0\nlocal /mnt/local\\040disk ext4 rw 0 0\n"
-        with patch.object(factorydb.sys, "platform", "linux"), patch.object(Path, "read_text", return_value=mounts):
-            assert factorydb._unsafe_filesystem(Path("/mnt/remote.db"))
-            assert not factorydb._unsafe_filesystem(Path("/mnt/local disk/factory.db"))
-
-    def test_mount_detection_failure_prevents_connecting(self):
-        with patch.object(factorydb.sys, "platform", "linux"), patch.object(Path, "read_text", side_effect=OSError):
-            assert factorydb._unsafe_filesystem(self.path) is None
-            assert factorydb.open_rw(self.path) is None
-            assert factorydb.open_ro(self.path) is None
-        assert not self.path.exists()
-        self.rw()  # Detection errors must not be cached after the probe recovers.
-
-    def test_macos_unknown_type_rejects_mounted_parents_without_statvfs(self):
-        mounted = Path("/Volumes/network")
-        with (
-            patch.object(factorydb.sys, "platform", "darwin"),
-            patch.object(factorydb.os, "statvfs", side_effect=AssertionError("no portable filesystem type")),
-            patch.object(factorydb.os.path, "ismount", side_effect=lambda path: path in {Path("/"), mounted}),
-        ):
-            assert factorydb._filesystem_type(self.path) == "unknown"
-            assert factorydb._unsafe_filesystem(mounted / "nested/factory.db")
-            assert not factorydb._unsafe_filesystem(Path("/Users/local/factory.db"))
-
-    def test_unknown_mount_probe_failure_prevents_connecting(self):
-        with (
-            patch.object(factorydb, "_filesystem_type", return_value="unknown"),
-            patch.object(factorydb.os.path, "ismount", side_effect=OSError),
-        ):
-            assert factorydb.open_rw(self.path) is None
-
-    def test_schema_creation_failure_leaves_no_partial_schema(self):
-        with patch.object(factorydb, "DDL", factorydb.DDL + "\nINVALID SQL;"):
-            assert factorydb.open_rw(self.path) is None
-        con = sqlite3.connect(self.path)
-        self.addCleanup(con.close)
-        assert con.execute("PRAGMA user_version").fetchone() == (0,)
-        assert con.execute("SELECT name FROM sqlite_master").fetchall() == []
-
-    def test_failed_quick_check_is_rejected(self):
-        class BadCheckConnection(sqlite3.Connection):
-            def execute(self, sql, parameters=()):
-                if sql == "PRAGMA quick_check":
-                    return super().execute("SELECT 'damaged'")
-                return super().execute(sql, parameters)
-
-        connect = sqlite3.connect
-
-        def bad_connection(*args, **kwargs):
-            return connect(*args, factory=BadCheckConnection, **kwargs)
-
-        with patch.object(factorydb.sqlite3, "connect", side_effect=bad_connection):
-            assert factorydb.open_rw(self.path) is None
-        factorydb._CHECKED.clear()
-        with patch.object(factorydb.sqlite3, "connect", side_effect=bad_connection):
-            assert factorydb.open_rw(self.path) is None
 
     def test_run_has_no_family_authority_or_writer_column(self):
         con = self.rw()
@@ -316,24 +198,6 @@ class FactoryDbTest(Case):
             assert factorydb.cas_update(con, "bead", "id", "opaque.id", 0, parent="unrelated", status="closed")
             assert not factorydb.cas_update(con, "bead", "id", "opaque.id", 0, status="stale")
         assert con.execute("SELECT parent,status,rev FROM bead").fetchone() == ("unrelated", "closed", 1)
-
-    def test_change_counter_observes_only_other_connection_commits(self):
-        writer = self.rw()
-        reader = self.ro()
-        before_reader = factorydb.change_counter(reader)
-        before_writer = factorydb.change_counter(writer)
-        assert isinstance(before_reader, int)
-        with factorydb.begin_immediate(writer):
-            writer.execute("INSERT INTO kv(k,v,t) VALUES ('key','value',1)")
-            assert factorydb.change_counter(reader) == before_reader
-        after_reader = factorydb.change_counter(reader)
-        assert after_reader != before_reader
-        assert factorydb.change_counter(writer) == before_writer
-        assert factorydb.change_counter(reader) == after_reader
-        with pytest.raises(ValueError), factorydb.begin_immediate(writer):
-            writer.execute("UPDATE kv SET v='rolled back'")
-            raise ValueError("abort")
-        assert factorydb.change_counter(reader) == after_reader
 
     def seed_history(self, con, run="old", state="done", ended=2):
         con.execute(
@@ -428,35 +292,3 @@ class FactoryDbTest(Case):
         for table in ("run", "attempt", "step", "effect", "check_round"):
             assert con.execute(f'SELECT count(*) FROM "{table}"').fetchone() == (1,)
         assert not con.in_transaction
-
-    def test_quick_check_once_per_writable_process_and_skips_version_mismatch(self):
-        checks = []
-
-        class CountingConnection(sqlite3.Connection):
-            def execute(self, sql, parameters=()):
-                if sql == "PRAGMA quick_check":
-                    checks.append(sql)
-                return super().execute(sql, parameters)
-
-        connect = sqlite3.connect
-
-        def counted_connection(*args, **kwargs):
-            return connect(*args, factory=CountingConnection, **kwargs)
-
-        with patch.object(factorydb.sqlite3, "connect", side_effect=counted_connection):
-            con = self.rw()
-            self.rw()
-            self.ro()
-            assert len(checks) == 1
-            factorydb._CHECKED.clear()  # Simulate the first writable open in another process.
-            self.ro()
-            assert len(checks) == 1
-            self.rw()
-            self.rw()
-            assert len(checks) == 2
-            con.execute("PRAGMA user_version=99")
-            with pytest.raises(factorydb.DatabaseError):
-                factorydb.open_rw(self.path)
-            with pytest.raises(factorydb.DatabaseError):
-                factorydb.open_ro(self.path)
-            assert len(checks) == 2

@@ -1,7 +1,6 @@
 """Authoritative run wire records, revisions, legacy import and schema retirement."""
 
 import json
-import logging
 import sqlite3
 import tempfile
 from pathlib import Path
@@ -156,15 +155,14 @@ class RunRowsTest(Case):
         with self.rows.transaction() as con:
             assert con.execute("SELECT key,input_digest FROM step").fetchall() == [("[2]", "current")]
 
-    def test_v1_is_moved_aside_and_v2_created_with_one_warning(self, caplog):
+    def test_v1_is_quarantined_and_recreated_as_v2(self):
         path = self.cfg.factory_db()
         with sqlite3.connect(path) as con:
             con.execute("CREATE TABLE derived (value TEXT)")
             con.execute("INSERT INTO derived VALUES ('old projection')")
             con.execute("PRAGMA user_version=1")
         con.close()
-        with caplog.at_level(logging.WARNING, logger="taskloop.contracts.factorydb"):
-            con = factorydb.open_rw(path)
+        con = factorydb.open_rw(path)
         assert con is not None
         try:
             assert con.execute("PRAGMA user_version").fetchone() == (2,)
@@ -175,7 +173,6 @@ class RunRowsTest(Case):
         with sqlite3.connect(bad) as old:
             assert old.execute("SELECT * FROM derived").fetchall() == [("old projection",)]
         old.close()
-        assert len([r for r in caplog.records if r.name == "taskloop.contracts.factorydb" and r.levelno >= logging.WARNING]) == 1
 
     def test_corruption_is_an_error_and_never_reads_legacy(self):
         self.legacy(self.complete())

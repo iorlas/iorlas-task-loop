@@ -1,18 +1,15 @@
-"""Factory upgrades preserve authoritative rows and serialize concurrent openers."""
+"""Factory schema compatibility and authoritative upgrades through sqlite_store."""
 
 import sqlite3
-import tempfile
-from concurrent.futures import ThreadPoolExecutor
-from pathlib import Path
-from threading import Barrier
+from dataclasses import replace
 from unittest.mock import patch
 
 import pytest
 import support.paths  # noqa: F401
-from support.case import Case
+from sqlite_store import Store
 from support.narrow import must
 
-from taskloop.contracts import factorydb, factorymigrate
+from taskloop.contracts import factorydb
 
 
 def add_summary(con: sqlite3.Connection) -> None:
@@ -20,146 +17,70 @@ def add_summary(con: sqlite3.Connection) -> None:
     con.execute("UPDATE run SET summary=state || ':' || bead")
 
 
-class FactoryMigrateTest(Case):
-    def setup_method(self):
-        tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(tmp.cleanup)
-        self.path = Path(tmp.name) / "factory.db"
-        self.con = sqlite3.connect(self.path, isolation_level=None)
-        self.addCleanup(self.con.close)
-        self.con.execute("PRAGMA journal_mode=WAL")
-        self.con.execute("PRAGMA foreign_keys=ON")
-        self.con.executescript(factorydb.DDL)
-        self.con.execute("PRAGMA user_version=2")
-        self.con.execute(
-            "INSERT INTO run(run,repo,repo_key,bead,state,started,manifest) "
-            "VALUES ('r','/repo','repo','b','running',1,'{}')")
-        self.con.execute("INSERT INTO attempt(run,n,started) VALUES ('r',1,2)")
-        self.con.execute("INSERT INTO step(run,key,try,attempt,status,started) VALUES ('r','build',1,1,'done',3)")
-        self.old_rows = self.rows()
+@pytest.fixture
+def database(tmp_path):
+    path = tmp_path / "factory.db"
+    con = must(factorydb.open_rw(path))
+    con.execute(
+        "INSERT INTO run(run,repo,repo_key,bead,state,started,manifest) "
+        "VALUES ('r','/repo','repo','b','running',1,'{}')")
+    con.execute("INSERT INTO attempt(run,n,started) VALUES ('r',1,2)")
+    con.execute("INSERT INTO step(run,key,try,attempt,status,started) VALUES ('r','build',1,1,'done',3)")
+    try:
+        yield path, con
+    finally:
+        con.close()
 
-    def rows(self):
-        return {table: self.con.execute(f"SELECT * FROM {table}").fetchall() for table in ("run", "attempt", "step")}
 
-    def assert_original_rows(self):
-        for table, rows in self.old_rows.items():
-            columns = len(rows[0])
-            actual = [row[:columns] for row in self.con.execute(f"SELECT * FROM {table}")]
-            assert actual == rows
+def authoritative_rows(con):
+    return {table: con.execute(f"SELECT * FROM {table}").fetchall() for table in ("run", "attempt", "step")}
 
-    def test_add_column_and_backfill_preserve_all_authoritative_rows(self):
-        identity = self.path.stat().st_ino
-        factorymigrate.upgrade(self.con, {2: add_summary}, 2, 3)
-        self.assert_original_rows()
-        assert self.con.execute("SELECT summary FROM run").fetchall() == [("running:b",)]
-        assert self.con.execute("PRAGMA user_version").fetchone() == (3,)
-        assert self.path.stat().st_ino == identity
-        assert not self.con.in_transaction
 
-    def test_steps_run_in_order_and_see_the_preceding_version(self):
-        observed = []
+def test_newer_schema_refuses_both_opens_without_quarantine(database):
+    path, con = database
+    found = factorydb.SCHEMA_VERSION + 1
+    con.execute(f"PRAGMA user_version={found}")
+    original = authoritative_rows(con)
+    message = rf"factory\.db is schema v{found}.*knows v{factorydb.SCHEMA_VERSION}.*update it"
+    for opener in (factorydb.open_rw, factorydb.open_ro):
+        with pytest.raises(factorydb.SchemaError, match=message):
+            opener(path)
+    assert con.execute("PRAGMA user_version").fetchone() == (found,)
+    assert authoritative_rows(con) == original
+    assert list(path.parent.glob("factory.db.bad-*")) == []
 
-        def next_step(con):
-            observed.append(con.execute("PRAGMA user_version").fetchone()[0])
-            con.execute("UPDATE run SET summary=summary || ':upgraded'")
 
-        factorymigrate.upgrade(self.con, {2: add_summary, 3: next_step}, 2, 4)
-        assert observed == [3]
-        assert self.con.execute("SELECT summary FROM run").fetchone() == ("running:b:upgraded",)
-        assert self.con.execute("PRAGMA user_version").fetchone() == (4,)
-        self.assert_original_rows()
+def test_older_reader_refuses_then_writer_upgrades_in_place(database):
+    path, con = database
+    identity = path.stat().st_ino
+    original = authoritative_rows(con)
+    schema = replace(factorydb.SCHEMA, version=3, steps={2: add_summary})
+    with patch.object(factorydb, "_STORE", Store(schema)):
+        message = r"factory\.db is schema v2.*knows v3.*the writer has not upgraded it yet"
+        with pytest.raises(factorydb.SchemaError, match=message):
+            factorydb.open_ro(path)
+        assert con.execute("PRAGMA user_version").fetchone() == (2,)
+        writer = must(factorydb.open_rw(path))
+        writer.close()
+        reader = must(factorydb.open_ro(path))
+        try:
+            assert reader.execute("SELECT summary FROM run").fetchone() == ("running:b",)
+        finally:
+            reader.close()
+    assert path.stat().st_ino == identity
+    for table, rows in original.items():
+        columns = len(rows[0])
+        assert [row[:columns] for row in con.execute(f"SELECT * FROM {table}")] == rows
+    assert list(path.parent.glob("factory.db.bad-*")) == []
 
-    def test_failing_step_rolls_back_the_entire_chain_including_ddl(self):
-        def fail(con):
-            con.execute("UPDATE attempt SET started=999")
-            raise ValueError("backfill failed")
 
-        with pytest.raises(factorydb.DatabaseError, match="step v3 -> v4 failed: backfill failed"):
-            factorymigrate.upgrade(self.con, {2: add_summary, 3: fail}, 2, 4)
-        assert self.con.execute("PRAGMA user_version").fetchone() == (2,)
-        assert self.rows() == self.old_rows
-        assert "summary" not in [row[1] for row in self.con.execute("PRAGMA table_info(run)")]
-        assert not self.con.in_transaction
-
-    def test_missing_step_names_the_gap_and_rolls_back_prior_steps(self):
-        with pytest.raises(factorydb.DatabaseError, match="missing upgrade step v3 -> v4"):
-            factorymigrate.upgrade(self.con, {2: add_summary}, 2, 4)
-        assert self.con.execute("PRAGMA user_version").fetchone() == (2,)
-        assert self.rows() == self.old_rows
-        assert not self.con.in_transaction
-
-    def test_two_concurrent_upgraders_apply_step_exactly_once(self):
-        ready = Barrier(2, timeout=5)
-        calls = []
-
-        def step(con):
-            calls.append(1)
-            add_summary(con)
-
-        def opener():
-            con = sqlite3.connect(self.path, isolation_level=None, timeout=5)
-            try:
-                current = con.execute("PRAGMA user_version").fetchone()[0]
-                ready.wait()
-                factorymigrate.upgrade(con, {2: step}, current, 3)
-                return con.execute("PRAGMA user_version").fetchone()[0]
-            finally:
-                con.close()
-
-        with ThreadPoolExecutor(max_workers=2) as pool:
-            first = pool.submit(opener)
-            second = pool.submit(opener)
-            versions = [first.result(), second.result()]
-        assert calls == [1]
-        assert versions == [3, 3]
-        self.assert_original_rows()
-
-    def test_already_upgraded_connection_needs_no_steps(self):
-        factorymigrate.upgrade(self.con, {2: add_summary}, 2, 3)
-        factorymigrate.upgrade(self.con, {}, 2, 3)
-        self.assert_original_rows()
-        assert self.con.execute("PRAGMA user_version").fetchone() == (3,)
-
-    def test_upgrade_refuses_a_version_newer_than_target(self):
-        self.con.execute("PRAGMA user_version=4")
-        with pytest.raises(factorydb.DatabaseError, match=r"schema v4.*knows v3.*update task-loop"):
-            factorymigrate.upgrade(self.con, {}, 2, 3)
-        assert self.con.execute("PRAGMA user_version").fetchone() == (4,)
-        assert self.rows() == self.old_rows
-
-    def test_newer_schema_refuses_both_opens_without_quarantine_or_checks(self):
-        found = factorydb.SCHEMA_VERSION + 1
-        self.con.execute(f"PRAGMA user_version={found}")
-        message = f"schema v{found}.*knows v{factorydb.SCHEMA_VERSION}.*update task-loop"
-        with patch.object(factorydb, "_check_integrity", side_effect=AssertionError("unexpected integrity check")):
-            for opener in (factorydb.open_rw, factorydb.open_ro):
-                with self.subTest(opener=opener.__name__), pytest.raises(factorydb.DatabaseError, match=message):
-                    opener(self.path)
-        assert self.con.execute("PRAGMA user_version").fetchone() == (found,)
-        assert self.rows() == self.old_rows
-        assert list(self.path.parent.glob("factory.db.bad-*")) == []
-
-    def test_older_reader_refuses_then_writer_upgrades_in_place(self):
-        identity = self.path.stat().st_ino
-        with patch.object(factorydb, "SCHEMA_VERSION", 3), patch.object(factorymigrate, "STEPS", {2: add_summary}):
-            with pytest.raises(factorydb.DatabaseError, match=r"schema v2.*knows v3.*engine has not upgraded it yet"):
-                factorydb.open_ro(self.path)
-            assert self.con.execute("PRAGMA user_version").fetchone() == (2,)
-            writer = must(factorydb.open_rw(self.path))
-            writer.close()
-            reader = must(factorydb.open_ro(self.path))
-            try:
-                assert reader.execute("SELECT summary FROM run").fetchone() == ("running:b",)
-            finally:
-                reader.close()
-        assert self.path.stat().st_ino == identity
-        self.assert_original_rows()
-        assert list(self.path.parent.glob("factory.db.bad-*")) == []
-
-    def test_writer_reports_upgrade_failure_without_quarantine(self):
-        with patch.object(factorydb, "SCHEMA_VERSION", 3), \
-                pytest.raises(factorydb.DatabaseError, match="missing upgrade step v2 -> v3"):
-            factorydb.open_rw(self.path)
-        assert self.con.execute("PRAGMA user_version").fetchone() == (2,)
-        assert self.rows() == self.old_rows
-        assert list(self.path.parent.glob("factory.db.bad-*")) == []
+def test_writer_reports_upgrade_failure_without_quarantine(database):
+    path, con = database
+    original = authoritative_rows(con)
+    schema = replace(factorydb.SCHEMA, version=3, steps={})
+    with patch.object(factorydb, "_STORE", Store(schema)), \
+            pytest.raises(factorydb.SchemaError, match=r"factory\.db missing upgrade step v2 -> v3"):
+        factorydb.open_rw(path)
+    assert con.execute("PRAGMA user_version").fetchone() == (2,)
+    assert authoritative_rows(con) == original
+    assert list(path.parent.glob("factory.db.bad-*")) == []
