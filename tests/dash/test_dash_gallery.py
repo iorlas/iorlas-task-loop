@@ -4,9 +4,10 @@ them, the page's answer through POST /api/look and the `look` port. The verb its
 import os
 import sys
 import tempfile
-import unittest
 from pathlib import Path
 from unittest import mock
+
+from support.case import Case
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -30,34 +31,34 @@ def using(fake):
     return mock.patch.object(LOOKS.env.ports, "store", lambda repo: fake)
 
 
-class Items(unittest.TestCase):
+class Items(Case):
     def test_metadata_items(self):
         fake = world("open", "good")
         with using(fake):
             items = LOOKS.collect("/r", [{"id": "tl-look", "labels": [gallery.LABEL], "created_at": "2026-10-23T10:00:00Z"},
                                            {"id": "x", "labels": ["auto"]}])
-        self.assertEqual([i["status"] for i in items], ["open", "good"])
-        self.assertEqual([s["role"] for s in items[0]["shots"]], ["before", "after"])
-        self.assertTrue(items[0]["filed"] > 0)
-        self.assertEqual(gallery.summary(items), {"open": 1, "good": 1, "redo": 0})
+        assert [i["status"] for i in items] == ["open", "good"]
+        assert [s["role"] for s in items[0]["shots"]] == ["before", "after"]
+        assert items[0]["filed"] > 0
+        assert gallery.summary(items) == {"open": 1, "good": 1, "redo": 0}
 
     def test_old_bead_falls_back_to_the_description(self):
         desc = ("## tl-9: Settings screen\nScreenshots of tl-9 (Settings screen), committed with its land:\n- docs/e/tl-9/a.png\n"
                 "- docs/e/tl-9/b.jpg\n\nWhat the agent judged: ok\n\n## tl-8: Other\nNothing to see")
         got = gallery.parse_description(desc, "tl-look")
-        self.assertEqual(len(got), 1)
-        self.assertEqual((got[0]["id"], got[0]["bead"], got[0]["title"]), ("tl-9#0", "tl-9", "Settings screen"))
-        self.assertEqual([s["role"] for s in got[0]["shots"]], ["after", "after"])
+        assert len(got) == 1
+        assert (got[0]["id"], got[0]["bead"], got[0]["title"]) == ("tl-9#0", "tl-9", "Settings screen")
+        assert [s["role"] for s in got[0]["shots"]] == ["after", "after"]
 
     def test_junk_in_metadata_is_skipped(self):
         got = gallery.items_of(
             "b", {"metadata": {"looks": ["x", {"no": "id"}, {"id": "a#1", "shots": ["z", {"path": "p.png"}], "status": "weird"}]}}
         )
-        self.assertEqual([(i["id"], i["status"], len(i["shots"])) for i in got], [("a#1", "open", 1)])
+        assert [(i["id"], i["status"], len(i["shots"])) for i in got] == [("a#1", "open", 1)]
 
 
-class Pictures(unittest.TestCase):
-    def setUp(self):
+class Pictures(Case):
+    def setup_method(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.repo = Path(self.tmp.name) / "repo"
         (self.repo / "docs/evidence/tl-1").mkdir(parents=True)
@@ -65,43 +66,43 @@ class Pictures(unittest.TestCase):
         (Path(self.tmp.name) / "secret.png").write_bytes(PNG)
         self.items = gallery.items_of("tl-look", {"metadata": {"looks": looks("open")}})
 
-    def tearDown(self):
+    def teardown_method(self):
         self.tmp.cleanup()
 
     def test_a_listed_picture_is_served(self):
         data, ctype = must(LOOKS.picture(str(self.repo), "docs/evidence/tl-1/m1.png", self.items))
-        self.assertEqual((data, ctype), (PNG, "image/png"))
+        assert (data, ctype) == (PNG, "image/png")
 
     def test_only_listed_pictures(self):
         for rel in ("../secret.png", "docs/evidence/tl-1/other.png", "/etc/passwd", "docs/evidence/tl-1/m1.png/../../../../secret.png", ""):
-            self.assertIsNone(LOOKS.picture(str(self.repo), rel, self.items), rel)
+            assert LOOKS.picture(str(self.repo), rel, self.items) is None, rel
 
     def test_a_listed_path_that_escapes_the_repo_is_not_read(self):
         items = gallery.items_of("b", {"metadata": {"looks": [{"id": "a#1", "shots": [{"path": "../secret.png"}]}]}})
-        self.assertIsNone(LOOKS.picture(str(self.repo), "../secret.png", items))
+        assert LOOKS.picture(str(self.repo), "../secret.png", items) is None
 
     def test_lfs_pointer_and_missing_file_are_not_pictures(self):
         (self.repo / "docs/evidence/tl-1/m1.png").write_bytes(b"version https://git-lfs.github.com/spec/v1\noid sha256:0\n")
-        self.assertIsNone(LOOKS.picture(str(self.repo), "docs/evidence/tl-1/m1.png", self.items))
+        assert LOOKS.picture(str(self.repo), "docs/evidence/tl-1/m1.png", self.items) is None
 
     def test_a_non_picture_extension_is_refused(self):
         items = gallery.items_of("b", {"metadata": {"looks": [{"id": "a#1", "shots": [{"path": "docs/x.html"}]}]}})
-        self.assertIsNone(LOOKS.picture(str(self.repo), "docs/x.html", items))
+        assert LOOKS.picture(str(self.repo), "docs/x.html", items) is None
 
 
-class Hardening(unittest.TestCase):
+class Hardening(Case):
     def test_a_backslash_path_from_windows_matches(self):
         items = gallery.items_of("b", {"metadata": {"looks": [{"id": "a#1", "shots": [{"path": "docs\\e\\a.png"}]}]}})
-        self.assertEqual(items[0]["shots"][0]["path"], "docs/e/a.png")
+        assert items[0]["shots"][0]["path"] == "docs/e/a.png"
 
 
-class ShotUrl(unittest.TestCase):
+class ShotUrl(Case):
     def test_a_picture_kept_as_an_artifact_is_served_by_the_artifact_url(self):
-        self.assertEqual(LOOKS.shot_url("demo", "artifact:tl-1/a b.png"), "/api/artifact?bead=tl-1&name=a%20b.png")
-        self.assertEqual(LOOKS.shot_url("demo", "docs/a.png"), "/api/look-shot?repo=demo&path=docs/a.png")
+        assert LOOKS.shot_url("demo", "artifact:tl-1/a b.png") == "/api/artifact?bead=tl-1&name=a%20b.png"
+        assert LOOKS.shot_url("demo", "docs/a.png") == "/api/look-shot?repo=demo&path=docs/a.png"
 
 
-class Api(unittest.TestCase):
+class Api(Case):
     def test_items_pictures_and_the_answer(self):
         fake = world("open")
         with tempfile.TemporaryDirectory() as home:
@@ -118,14 +119,11 @@ class Api(unittest.TestCase):
             with mock.patch.object(dash.env.ports, "store", lambda repo: fake), \
                     mock.patch.object(dash.beads, "beads_of", lambda r: [{"id": "tl-look", "labels": [gallery.LABEL]}]):
                 path, items = dash.looks.look_items(loop_key(repo))
-                self.assertEqual((Path(path).name, [i["status"] for i in items]), ("demo", ["open"]))
-                self.assertEqual(dash.looks.look_shot(loop_key(repo), "docs/evidence/tl-1/m1.png"), (PNG, "image/png"))
-                self.assertIsNone(dash.looks.look_shot(loop_key(repo), "docs/evidence/tl-1/nope.png"))
+                assert (Path(path).name, [i["status"] for i in items]) == ("demo", ["open"])
+                assert dash.looks.look_shot(loop_key(repo), "docs/evidence/tl-1/m1.png") == (PNG, "image/png")
+                assert dash.looks.look_shot(loop_key(repo), "docs/evidence/tl-1/nope.png") is None
                 good = {"project": loop_key(repo), "bead": "tl-1#1", "verdict": "good", "note": ""}
-                self.assertEqual(dash.writes.post("look", good), (200, {"ok": True, "message": ""}))
-                self.assertEqual([i["status"] for i in dash.looks.look_items(loop_key(repo))[1]], ["good"])
-                self.assertFalse(dash.writes.post("look", dict(good, project="nowhere"))[1]["ok"])
-                self.assertFalse(dash.writes.post("look", dict(good, verdict="redo"))[1]["ok"])  # redo needs a note
-
-if __name__ == "__main__":
-    unittest.main()
+                assert dash.writes.post("look", good) == (200, {"ok": True, "message": ""})
+                assert [i["status"] for i in dash.looks.look_items(loop_key(repo))[1]] == ["good"]
+                assert not dash.writes.post("look", dict(good, project="nowhere"))[1]["ok"]
+                assert not dash.writes.post("look", dict(good, verdict="redo"))[1]["ok"]  # redo needs a note

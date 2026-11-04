@@ -1,22 +1,21 @@
 """Stage logs preserve roles, attempts, boundaries and recorded budgets."""
 
-import unittest
-
+from support.case import Case
 from support.dashlogs import RunScript, T
 
 from taskloop.contracts.delegate import LiveMsg
 from taskloop_dash.views import passes, stage_logs
 
 
-class StageLogs(unittest.TestCase):
+class StageLogs(Case):
     def test_short_completed_stage_is_done_and_pending_has_no_log(self):
         run = RunScript("b-1").step("plan", 30, outcome="approved").close("done").run(T + 100)
         (p,) = passes.passes_of([run])
         cell = passes.cells_of(p)[0]
-        self.assertEqual((cell.state, cell.secs, cell.outcome), ("done", 30, "approved"))
+        assert (cell.state, cell.secs, cell.outcome) == ("done", 30, "approved")
         logs = stage_logs.logs_of(p, {})
-        self.assertTrue(logs[0].roles)
-        self.assertEqual(logs[1].roles, [])
+        assert logs[0].roles
+        assert logs[1].roles == []
 
     def test_roles_attempts_live_lines_and_transition_stay_in_their_stage(self):
         s = RunScript("b-1").add("step_start", id="w", step="write")
@@ -30,25 +29,25 @@ class StageLogs(unittest.TestCase):
         logs = stage_logs.logs_of(p, {1: [LiveMsg(t=T + 2, text="first writer")],
                                       2: [LiveMsg(t=T + 12, text="second writer")]})
         roles = logs[1].roles
-        self.assertEqual([r.role for r in roles], ["writer", "reviewer", "engine"])
-        self.assertEqual([a.id for a in roles[0].attempts], ["c1", "c2"])
+        assert [r.role for r in roles] == ["writer", "reviewer", "engine"]
+        assert [a.id for a in roles[0].attempts] == ["c1", "c2"]
         a = roles[0].attempts[1]
-        self.assertEqual((a.lane, a.model, a.t, a.secs, a.outcome), ("codex", "model", T + 10, 10, "ok"))
-        self.assertIn("second writer", [ln.text for ln in a.lines])
-        self.assertNotIn("first writer", [ln.text for ln in a.lines])
-        self.assertIn("ready to test", " ".join(ln.text for a in roles[-1].attempts for ln in a.lines))
+        assert (a.lane, a.model, a.t, a.secs, a.outcome) == ("codex", "model", T + 10, 10, "ok")
+        assert "second writer" in [ln.text for ln in a.lines]
+        assert "first writer" not in [ln.text for ln in a.lines]
+        assert "ready to test" in " ".join(ln.text for a in roles[-1].attempts for ln in a.lines)
 
     def test_recorded_overrun_is_amber_state_with_planned_and_actual(self):
         s = RunScript("b-1").step("review", 90, outcome="approved")
         s.add("overrun", stage="review", budget_s=60, elapsed_s=90).close("done")
         (p,) = passes.passes_of([s.run(T + 100)])
         cell = next(c for c in passes.cells_of(p) if c.phase == "review")
-        self.assertEqual((cell.state, cell.budget_s, cell.secs, cell.outcome), ("overrun", 60, 90, "approved"))
+        assert (cell.state, cell.budget_s, cell.secs, cell.outcome) == ("overrun", 60, 90, "approved")
 
     def test_failed_step_before_a_later_success_stays_failed(self):
         s = RunScript("b-1").step("checks", 10, outcome="red").step("review", 10).close("done")
         (p,) = passes.passes_of([s.run(T + 100)])
-        self.assertEqual(next(c.state for c in passes.cells_of(p) if c.phase == "test"), "failed")
+        assert next(c.state for c in passes.cells_of(p) if c.phase == "test") == "failed"
 
     def test_check_tail_and_within_budget_duration_are_recorded(self):
         s = RunScript("b-1").step("checks", 30, outcome="green")
@@ -57,10 +56,10 @@ class StageLogs(unittest.TestCase):
              "tail": "all tests passed", "secs": 30, "wall_min": 1, "lane": "unit"}]}).close("done")
         (p,) = passes.passes_of([s.run(T + 100)])
         cell = next(c for c in passes.cells_of(p) if c.phase == "test")
-        self.assertEqual((cell.state, cell.secs, cell.budget_s), ("done", 30, 60))
+        assert (cell.state, cell.secs, cell.budget_s) == ("done", 30, 60)
         role = next(r for r in stage_logs.logs_of(p, {})[2].roles if r.role == "checks")
-        self.assertEqual(role.attempts[0].outcome, "passed")
-        self.assertIn("all tests passed", [ln.text for ln in role.attempts[0].lines])
+        assert role.attempts[0].outcome == "passed"
+        assert "all tests passed" in [ln.text for ln in role.attempts[0].lines]
 
     def test_repeated_phase_in_a_new_pass_does_not_reuse_old_attempts(self):
         s = RunScript("b-1").step("write", 10, 1).step("checks", 10, outcome="red").move("write", "bad_checks")
@@ -68,4 +67,4 @@ class StageLogs(unittest.TestCase):
         first, second = passes.passes_of([s.run(T + 100)])
         old = stage_logs.logs_of(first, {})[1].roles[0].attempts
         new = stage_logs.logs_of(second, {})[1].roles[0].attempts
-        self.assertEqual(([a.id for a in old], [a.id for a in new]), (["c1"], ["c3"]))
+        assert ([a.id for a in old], [a.id for a in new]) == (["c1"], ["c3"])

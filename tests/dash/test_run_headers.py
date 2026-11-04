@@ -1,8 +1,9 @@
 """Standalone runs stay visible without beads, and dashboard polls never write their manifests."""
 import sys
 import tempfile
-import unittest
 from pathlib import Path
+
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -23,8 +24,8 @@ from taskloop_dash.app import Dash
 from taskloop_dash.env import Env, Ports
 
 
-class RunHeaders(unittest.TestCase):
-    def setUp(self):
+class RunHeaders(Case):
+    def setup_method(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         root = Path(tmp.name)
@@ -52,21 +53,23 @@ class RunHeaders(unittest.TestCase):
         self.locator.beat(bundle.run, self.now)
         before = RunRows(self.cfg).snapshot(bundle.run)
         snap = self.snapshot()
-        self.assertEqual(snap.beads, [])
-        self.assertFalse(bundle.log.exists())
+        assert snap.beads == []
+        assert not bundle.log.exists()
         head, = snap.runs
-        self.assertEqual((head.run, head.project, head.mode, head.owner, head.session, head.state),
-                         (bundle.run, loop_key(self.repo), "stage:gate", "mac-owner", "mac-session", RunState.RUNNING))
-        self.assertEqual(RunRows(self.cfg).snapshot(bundle.run), before)
+        assert (
+            (head.run, head.project, head.mode, head.owner, head.session, head.state)
+            == (bundle.run, loop_key(self.repo), "stage:gate", "mac-owner", "mac-session", RunState.RUNNING)
+        )
+        assert RunRows(self.cfg).snapshot(bundle.run) == before
         self.locator.end(bundle.run, self.now + 1, RunState.FAILED, "exit 1")
         ended = RunRows(self.cfg).snapshot(bundle.run)
         self.now += 4
         self.snapshot()
         self.dash.reads.wait()
         terminal = self.snapshot()
-        self.assertEqual((terminal.runs[0].state, terminal.runs[0].reason), (RunState.FAILED, "exit 1"))
-        self.assertNotEqual(terminal.version, snap.version)
-        self.assertEqual(RunRows(self.cfg).snapshot(bundle.run), ended)
+        assert (terminal.runs[0].state, terminal.runs[0].reason) == (RunState.FAILED, "exit 1")
+        assert terminal.version != snap.version
+        assert RunRows(self.cfg).snapshot(bundle.run) == ended
 
     def test_retention_keeps_old_live_runs_and_recent_done_runs(self):
         live = self.create("stage:check", self.now - RETAIN - 10)
@@ -75,22 +78,21 @@ class RunHeaders(unittest.TestCase):
         done = self.create()
         self.locator.end(done.run, self.now, RunState.DONE)
         headers = self.snapshot().runs
-        self.assertEqual([h.run for h in headers], [done.run, live.run])
+        assert [h.run for h in headers] == [done.run, live.run]
 
     def test_snapshot_caps_run_headers_at_ten_newest_first(self):
         # Deliberately create manifests out of start order; locator order is no guarantee.
         created = [self.create(started=self.now - i * 60) for i in (4, 0, 8, 2, 11, 1, 10, 3, 9, 5, 7, 6)]
         headers = self.snapshot().runs
-        self.assertEqual(len(headers), 10)
-        self.assertEqual([h.started for h in headers], [self.now - i * 60 for i in range(10)])
-        self.assertEqual(headers[0].run, created[1].run)
+        assert len(headers) == 10
+        assert [h.started for h in headers] == [self.now - i * 60 for i in range(10)]
+        assert headers[0].run == created[1].run
 
     def test_engine_layout_manifest_supplies_run_header_identity(self):
         layout = RunLayout.open("t-1", self.repo, None, self.cfg, str(self.repo), self.now,
                                 mode="stage:gate", owner="mac-owner", session="mac-session")
         head, = self.snapshot().runs
-        self.assertEqual((head.run, head.mode, head.owner, head.session),
-                         (layout.run, "stage:gate", "mac-owner", "mac-session"))
+        assert (head.run, head.mode, head.owner, head.session) == (layout.run, "stage:gate", "mac-owner", "mac-session")
 
     def test_active_adhoc_work_and_four_configured_lanes_survive_without_slot_beads(self):
         self.dash.env.ports.slot_source = lambda repo: SlotSource(host="h", count=4)
@@ -99,16 +101,16 @@ class RunHeaders(unittest.TestCase):
         self.locator.end(done.run, self.now, RunState.DONE)
         self.locator.worktree(live.run, "/repo/slots/s2")
         snap = self.snapshot()
-        self.assertEqual([(r.run, r.branch, r.owner) for r in snap.adhoc], [(live.run, "s2", "mac-owner")])
-        self.assertEqual([(s.name, s.state) for s in snap.slots], [(f"s{i}", "free") for i in range(1, 5)])
+        assert [(r.run, r.branch, r.owner) for r in snap.adhoc] == [(live.run, "s2", "mac-owner")]
+        assert [(s.name, s.state) for s in snap.slots] == [(f"s{i}", "free") for i in range(1, 5)]
         stored = must(self.locator.get(live.run)).manifest
         RunRows(self.cfg).put(stored.replace(branch="feature/check"))
         self.now += 4
         self.snapshot()
         self.dash.reads.wait()
-        self.assertEqual(self.snapshot().adhoc[0].branch, "feature/check")
+        assert self.snapshot().adhoc[0].branch == "feature/check"
         RunRows(self.cfg).put(stored.replace(sha="0123456789abcdef"))
         self.now += 4
         self.snapshot()
         self.dash.reads.wait()
-        self.assertEqual(self.snapshot().adhoc[0].branch, "01234567")
+        assert self.snapshot().adhoc[0].branch == "01234567"

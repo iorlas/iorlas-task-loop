@@ -3,11 +3,11 @@
 import dataclasses
 import json
 import random
-import unittest
 from pathlib import Path
 from typing import get_args
 
 import msgspec
+from support.case import Case
 from support.dashlogs import RunScript, T
 
 from taskloop.contracts import log as rec
@@ -66,23 +66,23 @@ def whole(name, records):
         assumed=sum(isinstance(r, rec.Assumed) for r in body), stuck=facts.stuck_of(body), waits=facts.waits_of(body))
 
 
-class RunFold(unittest.TestCase):
+class RunFold(Case):
     def check_records(self, name, records):
         empty = facts.FoldState()
         state = facts.fold(empty, records)
         made = facts.run_from(name, state, T)
-        self.assertEqual(dataclasses.replace(made, budgets=()), whole(name, records))
-        self.assertEqual(made.records, ())
+        assert dataclasses.replace(made, budgets=()) == whole(name, records)
+        assert made.records == ()
         restored = wire.load(facts.FoldState, json.dumps(wire.dump(state)))
-        self.assertEqual(restored, state)
-        self.assertEqual(facts.run_from(name, restored, T), made)
+        assert restored == state
+        assert facts.run_from(name, restored, T) == made
         splits = range(len(records) + 1) if len(records) < 100 else random.Random(5).sample(range(len(records) + 1), 40)
         for i in splits:
             with self.subTest(name=name, split=i):
                 prefix = facts.fold(empty, records[:i])
                 saved = wire.load(facts.FoldState, json.dumps(wire.dump(prefix)))
-                self.assertEqual(facts.fold(saved, records[i:]), state)
-                self.assertEqual(prefix, facts.fold(empty, records[:i]))
+                assert facts.fold(saved, records[i:]) == state
+                assert prefix == facts.fold(empty, records[:i])
 
     def test_engine_fixture_corpus(self):
         paths = sorted(Path("tests/fixtures/state/engine").glob("*.jsonl"))
@@ -94,7 +94,7 @@ class RunFold(unittest.TestCase):
                 count += 1
                 with self.subTest(path=path):
                     self.check_records(path.stem, rows)
-        self.assertGreater(count, 0)
+        assert count > 0
 
     def test_pairs_stuck_and_non_events_across_every_boundary(self):
         s = RunScript("b-1").add("wait_start", id="w1", what="lane")
@@ -111,10 +111,10 @@ class RunFold(unittest.TestCase):
         s = RunScript("b-1").step("write", 1, 2)
         state = facts.fold(facts.FoldState(), s.records())
         before = wire.dump(state)
-        self.assertEqual(state.open_calls, ())
-        self.assertEqual(state.open_waits, ())
+        assert state.open_calls == ()
+        assert state.open_waits == ()
         noise = [rec.Note(t=s.t, text="ignored"), rec.Beat(t=s.t + 100)] * 1000
-        self.assertEqual(wire.dump(facts.fold(state, noise)), before)
+        assert wire.dump(facts.fold(state, noise)) == before
 
     def test_generated_stage_facts_and_budget_totals(self):
         s = RunScript("b-1").step("plan", 10, 100, cost=0.1, source="harness")
@@ -126,4 +126,4 @@ class RunFold(unittest.TestCase):
             {"id": "unit", "cmd": "pytest", "group": "tests", "exit": 0, "status": "passed", "wall_min": 2}]})
         self.check_records(s.name, s.records())
         state = facts.fold(facts.FoldState(), s.records())
-        self.assertEqual([(b.checks, b.budget, b.elapsed) for b in state.budgets], [(0, 0, 0), (0, 10, 20), (120, 0, 0)])
+        assert [(b.checks, b.budget, b.elapsed) for b in state.budgets] == [(0, 0, 0), (0, 10, 20), (120, 0, 0)]

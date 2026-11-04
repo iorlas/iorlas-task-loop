@@ -4,9 +4,11 @@ import io
 import os
 import sys
 import tempfile
-import unittest
 from pathlib import Path
 from unittest import mock
+
+import pytest
+from support.case import Case
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -20,8 +22,8 @@ from taskloop_dash.cli import dash as dash_cli  # noqa: E402
 TS = "100.64.1.2"  # tailscale-like (CGNAT) address
 
 
-class Env(unittest.TestCase):
-    def setUp(self):
+class Env(Case):
+    def setup_method(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.home = Path(self.tmp.name).resolve() / "home"
         self.state = self.home / ".config" / "task-loop"
@@ -31,7 +33,7 @@ class Env(unittest.TestCase):
         for d in (self.dev, self.cache):  # the rules look at where the code lives
             d.mkdir(parents=True)
 
-    def tearDown(self):
+    def teardown_method(self):
         self.tmp.cleanup()
 
     def with_repos(self):
@@ -46,9 +48,9 @@ class Env(unittest.TestCase):
         if public:
             env["TASK_LOOP_DASH_DEV_PUBLIC"] = "1"
         err = io.StringIO()
-        with mock.patch.dict(os.environ, env, clear=True), contextlib.redirect_stderr(err), self.assertRaises(SystemExit) as stop:
+        with mock.patch.dict(os.environ, env, clear=True), contextlib.redirect_stderr(err), pytest.raises(SystemExit) as stop:
             dash_cli.main(list(args), here=where)
-        return stop.exception.code, err.getvalue()
+        return stop.value.code, err.getvalue()
 
     def guard(self, addrs, port, where=None, **kw):
         return bind.bind_refusal(addrs, port, here=where or self.dev, home=self.home, state=self.state, process=ProcessEnv(), **kw)
@@ -58,62 +60,58 @@ class DevCopyRefused(Env):
     def test_port_7878_refused_exit_2(self):
         self.with_repos()
         code, err = self.run_server(self.dev, "--port", "7878", "--bind", "127.0.0.1")
-        self.assertEqual(code, 2)
-        self.assertIn("7878", err)
-        self.assertIn("TASK_LOOP_DASH_DEV_PUBLIC", err)
+        assert code == 2
+        assert "7878" in err
+        assert "TASK_LOOP_DASH_DEV_PUBLIC" in err
 
     def test_wildcard_and_hostnames_are_not_loopback(self):
         for a in ("0.0.0.0", "::", "myhost.local"):
-            self.assertTrue(self.guard([a], 0), a)
+            assert self.guard([a], 0), a
 
     def test_loopback_random_port_allowed(self):
         for a in ("127.0.0.1", "::1", "localhost"):
-            self.assertIsNone(self.guard([a], 0), a)
+            assert self.guard([a], 0) is None, a
 
     def test_one_bad_address_in_a_list_refuses(self):
-        self.assertTrue(self.guard(["127.0.0.1", TS], 0))
+        assert self.guard(["127.0.0.1", TS], 0)
 
 
 class Override(Env):
     def test_env_allows_dev_public_address_and_port(self):
         self.with_repos()
         process = ProcessEnv({"TASK_LOOP_DASH_DEV_PUBLIC": "1"})
-        self.assertIsNone(bind.bind_refusal([TS], 7878, here=self.dev, home=self.home, state=self.state, process=process))
+        assert bind.bind_refusal([TS], 7878, here=self.dev, home=self.home, state=self.state, process=process) is None
 
 
     def test_only_value_1_counts(self):
         process = ProcessEnv({"TASK_LOOP_DASH_DEV_PUBLIC": "0"})
-        self.assertTrue(bind.bind_refusal([TS], 0, here=self.dev, home=self.home, state=self.state, process=process))
+        assert bind.bind_refusal([TS], 0, here=self.dev, home=self.home, state=self.state, process=process)
 
 
 class InstalledCopy(Env):
     def test_cache_copy_may_bind_tailscale_and_7878(self):
         self.with_repos()
-        self.assertIsNone(self.guard(["127.0.0.1", TS], 7878, where=self.cache))
+        assert self.guard(["127.0.0.1", TS], 7878, where=self.cache) is None
 
     def test_symlink_into_cache_does_not_count(self):
         link = Path(self.tmp.name) / "link"
         link.symlink_to(self.dev)
-        self.assertTrue(self.guard([TS], 0, where=link))
+        assert self.guard([TS], 0, where=link)
 
     def test_symlink_out_of_cache_does_not_count(self):
         link = self.home / ".claude" / "plugins" / "cache" / "evil"
         link.symlink_to(self.dev)
-        self.assertTrue(self.guard([TS], 0, where=link))
+        assert self.guard([TS], 0, where=link)
 
     def test_cache_lookalike_path_does_not_count(self):
         fake = Path(self.tmp.name) / "x" / ".claude" / "plugins" / "cache" / "dash"
         fake.mkdir(parents=True)
-        self.assertTrue(self.guard([TS], 0, where=fake))
+        assert self.guard([TS], 0, where=fake)
 
 
 class EmptyState(Env):
     def test_guard_refuses_installed_copy_too(self):
-        self.assertIn("repos.json", must(self.guard(["127.0.0.1"], 7878, where=self.cache)))
+        assert "repos.json" in must(self.guard(["127.0.0.1"], 7878, where=self.cache))
 
     def test_other_port_needs_no_repos_json(self):
-        self.assertIsNone(self.guard(["127.0.0.1"], 0, where=self.cache))
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert self.guard(["127.0.0.1"], 0, where=self.cache) is None

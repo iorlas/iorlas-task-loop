@@ -2,8 +2,9 @@
 import os
 import sys
 import tempfile
-import unittest
 from pathlib import Path
+
+from support.case import Case
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -38,13 +39,13 @@ def fake_run(cfg: str, dash) -> None:
     write_log(Path(cfg) / "engine" / (RUN + ".jsonl"), recs)
 
 
-class Gallery(unittest.TestCase):
-    def setUp(self):
+class Gallery(Case):
+    def setup_method(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.dash = make_dash(config=self.tmp.name)
         fake_run(self.tmp.name, self.dash)
 
-    def tearDown(self):
+    def teardown_method(self):
         self.tmp.cleanup()
 
     def test_html_is_only_ever_a_download_and_a_pdf_opens_as_a_pdf(self):
@@ -52,10 +53,6 @@ class Gallery(unittest.TestCase):
         (art / "page.html").write_text("<script>alert(1)</script>")
         served = {n: http.route(self.dash, STATIC, "/api/artifact", {"bead": BEAD, "name": n})
                   for n in ("page.html", "report.pdf", "a.png")}
-        self.assertEqual(must(served["page.html"])[2], "application/octet-stream")
-        self.assertEqual(must(served["report.pdf"])[2], "application/pdf")
-        self.assertEqual(must(served["a.png"])[2], "image/png")
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert must(served["page.html"])[2] == "application/octet-stream"
+        assert must(served["report.pdf"])[2] == "application/pdf"
+        assert must(served["a.png"])[2] == "image/png"

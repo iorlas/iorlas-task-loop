@@ -3,9 +3,10 @@
 import io
 import json
 import sys
-import unittest
 from pathlib import Path
 from unittest import mock
+
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -17,7 +18,7 @@ HOST = "127.0.0.1:7878"
 HEADERS = {"Host": HOST, "Origin": f"http://{HOST}", "X-Taskloop-Dash": "1", "Content-Type": "application/json"}
 
 
-class WritePolicy(unittest.TestCase):
+class WritePolicy(Case):
     def request(self, headers, verb="answer", extra=(), port=7878):
         dash = mock.Mock()
         dash.writes.post.return_value = (200, {"ok": True})
@@ -37,9 +38,9 @@ class WritePolicy(unittest.TestCase):
         for verb in WRITES:
             with self.subTest(verb=verb, headers=headers, extra=extra):
                 response, post, consumed = self.request(headers, verb, extra)
-                self.assertIn(f" {code} ".encode(), response.split(b"\r\n", 1)[0])
+                assert f" {code} ".encode() in response.split(b"\r\n", 1)[0]
                 post.assert_not_called()
-                self.assertEqual(consumed, 0)
+                assert consumed == 0
 
     def test_host_must_be_known_and_use_the_bound_port(self):
         for host in (None, "evil.example:7878", "127.0.0.1:9999", "100.101.102.104:7878", "localhost",
@@ -87,18 +88,18 @@ class WritePolicy(unittest.TestCase):
                 for verb in WRITES:
                     with self.subTest(host=host, origin=origin, verb=verb):
                         response, post, consumed = self.request(headers, verb)
-                        self.assertIn(b" 200 ", response.split(b"\r\n", 1)[0])
-                        self.assertEqual(json.loads(response.split(b"\r\n\r\n", 1)[1]), {"ok": True})
+                        assert b" 200 " in response.split(b"\r\n", 1)[0]
+                        assert json.loads(response.split(b"\r\n\r\n", 1)[1]) == {"ok": True}
                         post.assert_called_once_with(verb, {"text": "go"})
-                        self.assertGreater(consumed, 0)
+                        assert consumed > 0
 
     def test_default_http_port_and_host_case_are_normalized(self):
         response, post, _ = self.request({**HEADERS, "Host": "LOCALHOST", "Origin": "http://localhost:80"}, port=80)
-        self.assertIn(b" 200 ", response.split(b"\r\n", 1)[0])
+        assert b" 200 " in response.split(b"\r\n", 1)[0]
         post.assert_called_once()
 
     def test_browser_write_helper_sends_the_required_header(self):
         api = Path(__file__).resolve().parents[2] / "src/taskloop_dash/static/js/api.js"
         write = api.read_text(encoding="utf-8").split("export async function write(", 1)[1].split("const LIVE_WAIT_S", 1)[0]
-        self.assertIn("'X-Taskloop-Dash': '1'", write)
-        self.assertIn("'Content-Type': 'application/json'", write)
+        assert "'X-Taskloop-Dash': '1'" in write
+        assert "'Content-Type': 'application/json'" in write

@@ -6,8 +6,9 @@ import subprocess
 import sys
 import tempfile
 import time
-import unittest
 from pathlib import Path
+
+from support.case import Case
 
 ROOT = Path(__file__).resolve().parents[2]
 SKILL = ROOT / "skills" / "task-loop"
@@ -59,7 +60,7 @@ def make_run(root):
     return b, lf
 
 
-class Feed(unittest.TestCase):
+class Feed(Case):
     def run_of(self, d):
         b, lf = make_run(d)
         return str(b.log), lf, live.LiveRun(ConfigDir(Path(d) / 'task-loop'), b.run)
@@ -74,26 +75,26 @@ class Feed(unittest.TestCase):
             self.refresh(run)
             a = live.page(run)
             ts = [e["t"] for e in a["events"]]
-            self.assertEqual(ts, sorted(ts))
-            self.assertEqual([e["seq"].split(":")[0] for e in a["events"]][:3], ["engine", "engine", "engine"])
-            self.assertEqual(len({e["seq"] for e in a["events"]}), len(a["events"]))
+            assert ts == sorted(ts)
+            assert [e["seq"].split(":")[0] for e in a["events"]][:3] == ["engine", "engine", "engine"]
+            assert len({e["seq"] for e in a["events"]}) == len(a["events"])
             pairs = {(e["src"], e["k"], e.get("id")) for e in a["events"]}
-            self.assertIn(("engine", "cmd_end", "m1"), pairs)
-            self.assertIn(("01-write", "cmd_start", "1"), pairs)
-            self.assertEqual(live.page(run, live.decode(a["cursor"]))["events"], [])  # nothing new: nothing
+            assert ("engine", "cmd_end", "m1") in pairs
+            assert ("01-write", "cmd_start", "1") in pairs
+            assert live.page(run, live.decode(a["cursor"]))["events"] == []  # nothing new: nothing
             put(lf, [{"t": T + 9, "k": "cmd_end", "id": "1", "exit": 1, "out": "boom", "secs": 2.0}])
             with open(lf, "a") as f:
                 f.write(f'{{"t": {T + 10}, "k": "msg", "te')  # a half-written line waits
             self.refresh(run)
             b = live.page(run, live.decode(a["cursor"]))
-            self.assertEqual([(e["k"], e["id"]) for e in b["events"]], [("cmd_end", "1")])
+            assert [(e["k"], e["id"]) for e in b["events"]] == [("cmd_end", "1")]
             with open(lf, "a") as f:
                 f.write('xt": "hi"}\n')
             put(log, [typed("warn", T + 11, text="slow")])
             self.refresh(run)
             c = live.page(run, live.decode(b["cursor"]))
-            self.assertEqual([(x["k"], x["t"]) for x in c["events"]], [("msg", T + 10), ("warn", T + 11)])
-            self.assertIsNone(live.decode("garbage!"))
+            assert [(x["k"], x["t"]) for x in c["events"]] == [("msg", T + 10), ("warn", T + 11)]
+            assert live.decode("garbage!") is None
 
     def test_every_engine_kind_passes_through(self):
         with tempfile.TemporaryDirectory() as d:
@@ -112,8 +113,8 @@ class Feed(unittest.TestCase):
             self.refresh(run)
             got = {e["k"]: e for e in live.page(run)["events"]}
             for k in ("wait_start", "wait_end", "vendor_error", "kill", "lock", "unlock"):
-                self.assertIn(k, got)
-            self.assertEqual((got["wait_end"]["wait_seconds"], got["vendor_error"]["reason"]), (60, "hung"))
+                assert k in got
+            assert (got["wait_end"]["wait_seconds"], got["vendor_error"]["reason"]) == (60, "hung")
 
     def test_engine_cursor_survives_a_fresh_reader(self):
         with tempfile.TemporaryDirectory() as d:
@@ -123,19 +124,19 @@ class Feed(unittest.TestCase):
             put(log, [typed("warn", T + 20, text="appended")])
             fresh = live.LiveRun(run.cfg, run.run)
             fresh.refresh()
-            self.assertEqual([e["k"] for e in live.page(fresh, live.decode(cursor))["events"]], ["warn"])
+            assert [e["k"] for e in live.page(fresh, live.decode(cursor))["events"]] == ["warn"]
 
     def test_a_run_without_worker_files(self):
         with tempfile.TemporaryDirectory() as d:
             _log, lf, run = self.run_of(d)
             os.remove(lf)
             self.refresh(run)
-            self.assertEqual({e["src"] for e in run.events()}, {"engine"})
+            assert {e["src"] for e in run.events()} == {"engine"}
 
     def test_long_poll_returns_when_a_file_grows_and_waits_when_none_does(self):
         with tempfile.TemporaryDirectory() as d:
             _log, lf, run = self.run_of(d)
-            self.assertTrue(live.poll(run, None))
+            assert live.poll(run, None)
             cur = live.page(run)["cursor"]
             now = [0.0]
             naps = []
@@ -144,8 +145,8 @@ class Feed(unittest.TestCase):
                 naps.append(secs)
                 now[0] += secs
 
-            self.assertEqual(live.poll(run, live.decode(cur), wait=0.5, sleep=nap, clock=lambda: now[0])["events"], [])
-            self.assertGreaterEqual(sum(naps), 0.5)  # nothing grew: it held the whole wait
+            assert live.poll(run, live.decode(cur), wait=0.5, sleep=nap, clock=lambda: now[0])["events"] == []
+            assert sum(naps) >= 0.5  # nothing grew: it held the whole wait
 
             def grow(secs):
                 nap(secs)
@@ -153,15 +154,15 @@ class Feed(unittest.TestCase):
 
             now[0], naps[:] = 0.0, []
             got = live.poll(run, live.decode(cur), wait=2, sleep=grow, clock=lambda: now[0])
-            self.assertEqual(len(naps), 1)  # a file grew: it returned at once
-            self.assertEqual([e["k"] for e in got["events"]], ["tool_start"])
+            assert len(naps) == 1  # a file grew: it returned at once
+            assert [e["k"] for e in got["events"]] == ["tool_start"]
 
 
-class CallSite(unittest.TestCase):
+class CallSite(Case):
     def test_file_name(self):
         p = live_runner.live_path("/e/r1.live", 3, "write")
-        self.assertEqual(p, "/e/r1.live/03-write.jsonl")
-        self.assertTrue(live_runner.live_path("/e/x.live", 12, "re view/2").endswith(".live/12-re-view-2.jsonl"))
+        assert p == "/e/r1.live/03-write.jsonl"
+        assert live_runner.live_path("/e/x.live", 12, "re view/2").endswith(".live/12-re-view-2.jsonl")
 
     def test_the_call_sets_the_env(self):
 
@@ -172,20 +173,16 @@ class CallSite(unittest.TestCase):
             return subprocess.CompletedProcess(cmd, 0, "", "")
         res = dl.Resolved(Path("/fake"), "/fake/route.py", fake_route.CONTRACT, "explicit")
         dlcall.call(res, "worker", "p", {}, ".", runner, live_file="/x/y.live/01-write.jsonl")
-        self.assertEqual(must(seen[0])["DELEGATE_LIVE_FILE"], "/x/y.live/01-write.jsonl")
+        assert must(seen[0])["DELEGATE_LIVE_FILE"] == "/x/y.live/01-write.jsonl"
         dlcall.call(res, "worker", "p", {}, ".", runner, env={})
-        self.assertNotIn("DELEGATE_LIVE_FILE", must(seen[1]))
+        assert "DELEGATE_LIVE_FILE" not in must(seen[1])
 
     def test_engine_numbers_its_calls(self):
         with tempfile.TemporaryDirectory() as d:
             e = object.__new__(engine.Engine)
             e.live_dir, e.live_n = Path(d) / (f"{BEAD}-{STAMP}.live"), 0
             p1, p2 = e.live("plan"), e.live("write")
-            self.assertTrue(p1.endswith(".live/01-plan.jsonl") and p2.endswith(".live/02-write.jsonl"))
-            self.assertTrue(os.path.isdir(os.path.dirname(p1)))
+            assert p1.endswith(".live/01-plan.jsonl") and p2.endswith(".live/02-write.jsonl")
+            assert os.path.isdir(os.path.dirname(p1))
             src = Path(engine.__file__).with_name("worker_call.py").read_text(encoding="utf-8")
-            self.assertEqual(src.count("e.live("), 1)  # the one delegate call site passes it
-
-
-if __name__ == "__main__":
-    unittest.main()
+            assert src.count("e.live(") == 1  # the one delegate call site passes it

@@ -4,9 +4,10 @@ import os
 import socket
 import sys
 import tempfile
-import unittest
 from pathlib import Path
 from unittest import mock
+
+from support.case import Case
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -40,45 +41,45 @@ def live(script, version="v1", binds=("127.0.0.1",), pid=4242):
             "urls": [f"http://{b}:7878" for b in binds], "started": 1.0}
 
 
-class StaleReason(unittest.TestCase):
-    def setUp(self):
+class StaleReason(Case):
+    def setup_method(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.script = Path(self.tmp.name) / "server.py"
         self.script.write_text("")
 
-    def tearDown(self):
+    def teardown_method(self):
         self.tmp.cleanup()
 
     def test_current_server_is_not_stale(self):
-        self.assertIsNone(dash_server.stale_reason(live(self.script), "v1", ["127.0.0.1"]))
+        assert dash_server.stale_reason(live(self.script), "v1", ["127.0.0.1"]) is None
 
     def test_deleted_script_is_stale(self):
         v = live(Path(self.tmp.name) / "gone" / "server.py")
-        self.assertIn("gone", must(dash_server.stale_reason(v, "v1", ["127.0.0.1"])))
+        assert "gone" in must(dash_server.stale_reason(v, "v1", ["127.0.0.1"]))
 
     def test_version_differs_is_stale(self):
-        self.assertIn("version", must(dash_server.stale_reason(live(self.script, "v0"), "v1", ["127.0.0.1"])))
+        assert "version" in must(dash_server.stale_reason(live(self.script, "v0"), "v1", ["127.0.0.1"]))
 
     def test_missing_address_is_stale(self):
         r = dash_server.stale_reason(live(self.script), "v1", ["127.0.0.1", "100.1.2.3"])
-        self.assertIn("100.1.2.3", must(r))
+        assert "100.1.2.3" in must(r)
 
     def test_extra_address_is_fine(self):
-        self.assertIsNone(dash_server.stale_reason(live(self.script, binds=("127.0.0.1", "100.1.2.3")), "v1", ["127.0.0.1"]))
+        assert dash_server.stale_reason(live(self.script, binds=("127.0.0.1", "100.1.2.3")), "v1", ["127.0.0.1"]) is None
 
     def test_old_server_without_script_or_binds_is_stale(self):
         v = live(self.script)
         del v["script"], v["binds"]
-        self.assertIsNotNone(dash_server.stale_reason(v, "v1", ["127.0.0.1"]))
+        assert dash_server.stale_reason(v, "v1", ["127.0.0.1"]) is not None
 
     def test_is_task_loop_server_shape(self):
-        self.assertTrue(dash_server.is_dash_server(live(self.script)))
-        self.assertFalse(dash_server.is_dash_server({"hello": 1}))
-        self.assertFalse(dash_server.is_dash_server(None))
+        assert dash_server.is_dash_server(live(self.script))
+        assert not dash_server.is_dash_server({"hello": 1})
+        assert not dash_server.is_dash_server(None)
 
 
-class EnsureFlow(unittest.TestCase):
-    def setUp(self):
+class EnsureFlow(Case):
+    def setup_method(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.script = Path(self.tmp.name) / "server.py"
         self.script.write_text("")
@@ -92,7 +93,7 @@ class EnsureFlow(unittest.TestCase):
             q.start()
             self.addCleanup(q.stop)
 
-    def tearDown(self):
+    def teardown_method(self):
         # dash_server.run leaves dash.log open; the mocked Popen keeps it alive in a cycle, and Windows will not delete an open file
         gc.collect()
         self.tmp.cleanup()
@@ -111,32 +112,32 @@ class EnsureFlow(unittest.TestCase):
     def test_current_server_is_kept(self):
         v = live(self.script, binds=("127.0.0.1", "100.1.2.3"))
         rc, stops, popens = self.run_ensure([v])
-        self.assertEqual((rc, stops, popens), (0, [], []))
+        assert (rc, stops, popens) == (0, [], [])
 
     def test_an_old_token_file_is_deleted(self):
         tok = Path(self.tmp.name) / "task-loop" / "dash.token"
         tok.parent.mkdir(parents=True, exist_ok=True)
         tok.write_text("old")
         self.run_ensure([live(self.script, binds=("127.0.0.1", "100.1.2.3"))])
-        self.assertFalse(tok.exists())
+        assert not tok.exists()
 
     def test_server_missing_tailscale_bind_is_replaced(self):
         old = live(self.script)
         new = live(self.script, binds=("127.0.0.1", "100.1.2.3"))
         rc, stops, popens = self.run_ensure([old, None, new])
-        self.assertEqual(rc, 0)
-        self.assertEqual(stops, [old])
-        self.assertEqual(len(popens), 1)
+        assert rc == 0
+        assert stops == [old]
+        assert len(popens) == 1
 
     def test_deleted_worktree_server_is_replaced(self):
         old = live(Path(self.tmp.name) / "wt" / "server.py", binds=("127.0.0.1", "100.1.2.3"))
         new = live(self.script, binds=("127.0.0.1", "100.1.2.3"))
         rc, stops, popens = self.run_ensure([old, None, new])
-        self.assertEqual((rc, stops, len(popens)), (0, [old], 1))
+        assert (rc, stops, len(popens)) == (0, [old], 1)
 
     def test_foreign_listener_is_never_stopped(self):
         rc, stops, popens = self.run_ensure([{"hello": "world"}])
-        self.assertEqual((rc, stops, popens), (1, [], []))
+        assert (rc, stops, popens) == (1, [], [])
 
     def test_start_failure_is_reported_with_log(self):
         proc = mock.Mock()
@@ -148,10 +149,10 @@ class EnsureFlow(unittest.TestCase):
                 mock.patch.object(dash_server.time, "sleep"), \
                 mock.patch("builtins.print") as pr:
             rc = dash_server.run("ensure", snapshot(), spawner=real_spawner())
-        self.assertEqual(rc, 1)
+        assert rc == 1
         out = " ".join(str(c.args[0]) for c in pr.call_args_list)
-        self.assertIn("100.1.2.3", out)
-        self.assertIn("pid 99", out)
+        assert "100.1.2.3" in out
+        assert "pid 99" in out
 
     def test_dev_checkout_ensure_never_touches_the_installed_port(self):
         os.environ.pop("TASK_LOOP_DASH_PORT")
@@ -165,50 +166,46 @@ class EnsureFlow(unittest.TestCase):
                     mock.patch.object(procs, "spawn", return_value=proc) as popen, \
                     mock.patch.object(dash_server.time, "sleep"):
                 rc = dash_server.run("ensure", snapshot(), spawner=real_spawner())
-        self.assertEqual(rc, 0)
+        assert rc == 0
         stop.assert_not_called()
         cmd = popen.call_args.args[0]
-        self.assertEqual(cmd[cmd.index("--port") + 1], "54321")
-        self.assertEqual(cmd[cmd.index("--bind") + 1], "127.0.0.1")
+        assert cmd[cmd.index("--port") + 1] == "54321"
+        assert cmd[cmd.index("--bind") + 1] == "127.0.0.1"
         ping.assert_called_with(54321)
 
 
-class DevCheckout(unittest.TestCase):
+class DevCheckout(Case):
     def test_git_worktree_is_dev(self):
         with tempfile.TemporaryDirectory() as d:
             (Path(d) / ".git").write_text("gitdir: /x")
             sub = Path(d) / "skills" / "task-loop" / "dash"
             sub.mkdir(parents=True)
-            self.assertTrue(bind.is_dev_checkout(sub))
+            assert bind.is_dev_checkout(sub)
 
     def test_plugin_cache_is_not_dev_even_inside_git(self):
         with tempfile.TemporaryDirectory() as d:
             (Path(d) / ".git").mkdir()
             sub = Path(d) / "plugins" / "cache" / "mk" / "tl" / "0.17.0" / "skills" / "task-loop" / "dash"
             sub.mkdir(parents=True)
-            self.assertFalse(bind.is_dev_checkout(sub))
+            assert not bind.is_dev_checkout(sub)
 
     def test_plain_directory_is_not_dev(self):
         with tempfile.TemporaryDirectory() as d:
-            self.assertFalse(bind.is_dev_checkout(Path(d)))
+            assert not bind.is_dev_checkout(Path(d))
 
     def test_dev_defaults_to_loopback_random_port(self):
         addrs, port = bind.plan(None, None, dev=True, process=ProcessEnv())
-        self.assertEqual(addrs, ["127.0.0.1"])
-        self.assertEqual(port, 0)
+        assert addrs == ["127.0.0.1"]
+        assert port == 0
 
     def test_dev_with_explicit_port_or_bind_is_honoured(self):
         addrs, port = bind.plan(9999, "127.0.0.1,100.9.9.9", dev=True, process=ProcessEnv())
-        self.assertEqual((addrs, port), (["127.0.0.1", "100.9.9.9"], 9999))
+        assert (addrs, port) == (["127.0.0.1", "100.9.9.9"], 9999)
         addrs, port = bind.plan(9999, None, dev=True, process=ProcessEnv())
-        self.assertEqual((addrs, port), (["127.0.0.1"], 9999))
+        assert (addrs, port) == (["127.0.0.1"], 9999)
 
     def test_the_server_alone_binds_loopback_on_7878_and_the_launcher_adds_tailscale(self):
-        self.assertEqual(bind.plan(None, None, dev=False, process=ProcessEnv()), (["127.0.0.1"], 7878))  # the server runs no network tool
+        assert bind.plan(None, None, dev=False, process=ProcessEnv()) == (["127.0.0.1"], 7878)  # the server runs no network tool
         with mock.patch.object(dash_server, "tailscale_ip", return_value="100.1.2.3"):
-            self.assertEqual(dash_server.default_binds(ProcessEnv(), spawner=real_spawner()), ["127.0.0.1", "100.1.2.3"])
-        self.assertEqual(dash_server.inet_addrs("2: eth0 inet 100.64.0.5/32 scope global\n inet6 fe80::1/64 inet bogus"), ["100.64.0.5"])
-
-
-if __name__ == "__main__":
-    unittest.main()
+            assert dash_server.default_binds(ProcessEnv(), spawner=real_spawner()) == ["127.0.0.1", "100.1.2.3"]
+        assert dash_server.inet_addrs("2: eth0 inet 100.64.0.5/32 scope global\n inet6 fe80::1/64 inet bogus") == ["100.64.0.5"]

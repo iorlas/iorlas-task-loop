@@ -2,8 +2,9 @@
 
 import sys
 import tempfile
-import unittest
 from pathlib import Path
+
+from support.case import Case
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tests"))
@@ -12,8 +13,8 @@ import support.paths  # noqa: E402, F401
 from taskloop_dash.http import route  # noqa: E402
 
 
-class Static(unittest.TestCase):
-    def setUp(self):
+class Static(Case):
+    def setup_method(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         base = Path(tmp.name)
@@ -33,12 +34,12 @@ class Static(unittest.TestCase):
         return got[:3] if got else None
 
     def test_serves_types(self):
-        self.assertEqual(self.get("/js/app.js"), (200, b"export{}", "text/javascript; charset=utf-8"))
-        self.assertEqual(self.get("/css/kit.css"), (200, b"a{}", "text/css; charset=utf-8"))
+        assert self.get("/js/app.js") == (200, b"export{}", "text/javascript; charset=utf-8")
+        assert self.get("/css/kit.css") == (200, b"a{}", "text/css; charset=utf-8")
 
     def test_the_root_is_the_page(self):
         for p in ("/", "/index.html"):
-            self.assertEqual(self.get(p), (200, b"<page>", "text/html; charset=utf-8"))
+            assert self.get(p) == (200, b"<page>", "text/html; charset=utf-8")
 
     def test_rejected_is_404(self):
         bad = ["/../outside.js", "/js/../../outside.js", "/%2e%2e/outside.js", "/js/%2e%2e/%2e%2e/outside.js", "/js%2f..%2f..%2foutside.js",
@@ -46,16 +47,12 @@ class Static(unittest.TestCase):
                "/components.html", "/js/components.js", "/js", "/js/", "/css", "/nope.js", "/index.html/x", "/v2", "/live.html"]
         for p in bad:
             with self.subTest(p=p):
-                self.assertIsNone(self.get(p))
+                assert self.get(p) is None
 
     def test_size_cap(self):
         (self.s / "js/big.js").write_bytes(b"x" * 2_000_001)
-        self.assertIsNone(self.get("/js/big.js"))
+        assert self.get("/js/big.js") is None
 
     def test_a_missing_page_is_no_route(self):
         (self.s / "index.html").unlink()
-        self.assertIsNone(self.get("/"))
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert self.get("/") is None

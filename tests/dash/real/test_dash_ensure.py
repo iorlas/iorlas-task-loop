@@ -5,9 +5,11 @@ import os
 import socket
 import sys
 import tempfile
-import unittest
 from pathlib import Path
 from unittest import mock
+
+import pytest
+from support.case import Case
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -34,21 +36,21 @@ def live(script, version="v1", binds=("127.0.0.1",), pid=4242):
             "urls": [f"http://{b}:7878" for b in binds], "started": 1.0}
 
 
-class LoudBind(unittest.TestCase):
-    def setUp(self):
+class LoudBind(Case):
+    def setup_method(self):
         p = mock.patch.object(socket, "getfqdn", lambda name="": name)
         p.start()
         self.addCleanup(p.stop)
 
     def test_open_servers_fails_on_any_address(self):
         port = free_port()
-        with self.assertRaises(bind.BindError) as cm:
+        with pytest.raises(bind.BindError) as cm:
             bind.open_servers(["127.0.0.1", "203.0.113.9"], port, mock.Mock())
-        self.assertIn(f"203.0.113.9:{port}", str(cm.exception))
+        assert f"203.0.113.9:{port}" in str(cm.value)
 
     def test_open_servers_closes_earlier_sockets_on_failure(self):
         port = free_port()
-        with self.assertRaises(bind.BindError):
+        with pytest.raises(bind.BindError):
             bind.open_servers(["127.0.0.1", "203.0.113.9"], port, mock.Mock())
         s = socket.socket()
         s.bind(("127.0.0.1", port))  # would raise if the first server were left open
@@ -59,16 +61,16 @@ class LoudBind(unittest.TestCase):
         cfg = tempfile.mkdtemp()
         err = io.StringIO()
         with mock.patch.dict(os.environ, {"TASK_LOOP_DASH_DEV_PUBLIC": "1", "XDG_CONFIG_HOME": cfg, "APPDATA": cfg}), \
-                contextlib.redirect_stderr(err), self.assertRaises(SystemExit) as stop:
+                contextlib.redirect_stderr(err), pytest.raises(SystemExit) as stop:
             dash_cli.main(["--port", str(port), "--bind", "127.0.0.1,100.64.0.199"])  # a Tailscale address this host does not have
-        self.assertNotEqual(stop.exception.code, 0)
-        self.assertIn(f"100.64.0.199:{port}", err.getvalue())
+        assert stop.value.code != 0
+        assert f"100.64.0.199:{port}" in err.getvalue()
         s = socket.socket()
-        self.assertNotEqual(s.connect_ex(("127.0.0.1", port)), 0)
+        assert s.connect_ex(("127.0.0.1", port)) != 0
         s.close()
 
 
-class DevCheckout(unittest.TestCase):
+class DevCheckout(Case):
 
 
     def test_dev_server_listens_on_random_loopback_port(self):
@@ -77,15 +79,11 @@ class DevCheckout(unittest.TestCase):
             servers, addrs, port, _dash = serve.start(Env(config=cfg, ports=Ports()), dash_cli.PACKAGE, snapshot(), [])
         try:
             first = ", ".join(bind.urls(addrs, port))  # what the server prints on its first line
-            self.assertIn("127.0.0.1:", first)
-            self.assertNotIn(":7878", first)
-            self.assertNotIn("100.", first)
+            assert "127.0.0.1:" in first
+            assert ":7878" not in first
+            assert "100." not in first
         finally:
             for s in servers:
                 s.server_close()
         # a dev server must not claim the shared pid file
-        self.assertFalse((Path(cfg) / "task-loop" / "dash.pid").exists())
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert not (Path(cfg) / "task-loop" / "dash.pid").exists()

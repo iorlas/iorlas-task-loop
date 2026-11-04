@@ -1,14 +1,15 @@
 """The slot count's git read is kept while the profile's source files are unchanged, however old; the slot folders are listed again."""
-import unittest
 from typing import Any, cast
+
+from support.case import Case
 
 from taskloop.contracts.slottable import SlotSource
 from taskloop_dash.env import Env, Ports
 from taskloop_dash.readers.world import Worlds
 
 
-class SlotSourceCache(unittest.TestCase):
-    def setUp(self):
+class SlotSourceCache(Case):
+    def setup_method(self):
         self.now, self.reads, self.stamp, self.dirs = 0.0, 0, ("s", 1), frozenset({"s1"})
 
         def read(repo):
@@ -23,16 +24,16 @@ class SlotSourceCache(unittest.TestCase):
         self.worlds.slot_source("/r")
         self.now += 3600
         self.worlds.slot_source("/r")
-        self.assertEqual(self.reads, 1)
+        assert self.reads == 1
         self.stamp = ("s", 2)
         self.worlds.slot_source("/r")
-        self.assertEqual(self.reads, 2)
+        assert self.reads == 2
 
     def test_the_folders_are_listed_again_without_a_read(self):
         self.worlds.slot_source("/r")
         self.dirs = frozenset({"s1", "s2"})
-        self.assertEqual(self.worlds.slot_source("/r").dirs, self.dirs)
-        self.assertEqual(self.reads, 1)
+        assert self.worlds.slot_source("/r").dirs == self.dirs
+        assert self.reads == 1
 
     def test_an_unstamped_source_is_read_again_after_thirty_seconds(self):
         self.stamp = None
@@ -41,8 +42,4 @@ class SlotSourceCache(unittest.TestCase):
         self.worlds.slot_source("/r")
         self.now += 2
         self.worlds.slot_source("/r")
-        self.assertEqual(self.reads, 2)
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert self.reads == 2

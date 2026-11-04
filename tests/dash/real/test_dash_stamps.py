@@ -65,22 +65,22 @@ class SnapshotStamps(fixtures.ApiFixture):
         with patch.object(dash_ports, "store", return_value=self.store), patch.object(profiles, "red_row", side_effect=red_row) as row:
             self.dash.env.ports = dash_ports.ports(ProcessEnv({"HOME": self.tmp.name, "XDG_CONFIG_HOME": self.tmp.name}))
             first = build()
-            self.assertIn("z", [s.id for s in first.slots])
-            self.assertTrue(events)
-            self.assertEqual((self.finds, row.call_count), (1, 1))
+            assert "z" in [s.id for s in first.slots]
+            assert events
+            assert (self.finds, row.call_count) == (1, 1)
             self.now += 121  # beyond snapshot, profile, shared listing, and fallback listing TTLs
-            self.assertEqual(build().slots, first.slots)
-            self.assertEqual(events, [])
-            self.assertEqual((self.finds, row.call_count), (1, 1))
+            assert build().slots == first.slots
+            assert events == []
+            assert (self.finds, row.call_count) == (1, 1)
             self.store.put(bead("s-y", f"slot {hostname()} y", labels=["slot"]))
             stamp = marker.stat().st_mtime_ns + 1
             os.utime(marker, ns=(stamp, stamp))
             changed = build()
-            self.assertIn("y", [s.id for s in changed.slots])
-            self.assertTrue(events)
-            self.assertEqual((self.finds, row.call_count), (2, 1))
+            assert "y" in [s.id for s in changed.slots]
+            assert events
+            assert (self.finds, row.call_count) == (2, 1)
             ref.write_text("b" * 40 + "\n")
             changed = build()
-            self.assertEqual(changed.projects[0].profile_error, "RED " + "b" * 40)
-            self.assertTrue(events)
-            self.assertEqual((self.finds, row.call_count), (2, 2))
+            assert changed.projects[0].profile_error == "RED " + "b" * 40
+            assert events
+            assert (self.finds, row.call_count) == (2, 2)

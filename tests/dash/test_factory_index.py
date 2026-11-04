@@ -5,11 +5,12 @@ import json
 import os
 import random
 import tempfile
-import unittest
 from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+from support.case import Case
 from support.dashlogs import RunScript, T
 from support.narrow import must
 from support.runs import manifest
@@ -27,8 +28,8 @@ from taskloop_dash.readers import dbruns
 NOW = T + 3600
 
 
-class FactoryIndex(unittest.TestCase):
-    def setUp(self):
+class FactoryIndex(Case):
+    def setup_method(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.cfg = ConfigDir(Path(tmp.name))
@@ -49,11 +50,11 @@ class FactoryIndex(unittest.TestCase):
     def test_persisted_facts_match_the_existing_whole_log_fixture_projection(self):
         self.ingest()
         rows, error = dbruns.read(self.cfg, NOW)
-        self.assertEqual(error, "")
+        assert error == ""
         by_run = {row.manifest.run: row for row in rows}
         for script in self.scripts:
             with self.subTest(run=script.name):
-                self.assertEqual(by_run[script.name].project(NOW), replace(script.run(NOW), records=()))
+                assert by_run[script.name].project(NOW) == replace(script.run(NOW), records=())
 
     def rows(self):
         con = must(factorydb.open_ro(self.cfg.factory_db()))
@@ -96,8 +97,8 @@ class FactoryIndex(unittest.TestCase):
                     except InterruptedError:
                         pass
                 self.ingest()
-                self.assertEqual(self.rows(), expected)
-                self.assertEqual(self.sources(), expected_sources)
+                assert self.rows() == expected
+                assert self.sources() == expected_sources
 
     def test_interruptions_seeds_0_to_7(self):
         self.check_interruptions(range(8))
@@ -125,7 +126,7 @@ class FactoryIndex(unittest.TestCase):
                 elif kind == "replace":
                     inode = path.stat().st_ino
                     path.write_bytes(original)
-                    self.assertEqual(path.stat().st_ino, inode)
+                    assert path.stat().st_ino == inode
                 elif kind == "truncate":
                     path.write_bytes(original.splitlines(keepends=True)[0])
                 else:
@@ -133,7 +134,7 @@ class FactoryIndex(unittest.TestCase):
                 self.ingest()
                 incremental = self.rows()
                 reindex(self.cfg, clock=lambda: NOW)
-                self.assertEqual(self.rows(), incremental)
+                assert self.rows() == incremental
 
     def test_restart_parses_only_appended_complete_lines(self):
         self.ingest()
@@ -145,7 +146,7 @@ class FactoryIndex(unittest.TestCase):
         self.ingest()
         con = must(factorydb.open_ro(self.cfg.factory_db()))
         self.addCleanup(con.close)
-        self.assertEqual(con.execute("SELECT offset FROM source WHERE path=?", (str(path),)).fetchone()[0], path.stat().st_size)
+        assert con.execute("SELECT offset FROM source WHERE path=?", (str(path),)).fetchone()[0] == path.stat().st_size
 
     def test_state_and_revision_survive_log_deletion_and_reindex(self):
         self.ingest()
@@ -155,8 +156,8 @@ class FactoryIndex(unittest.TestCase):
         self.paths[0].unlink()
         self.ingest()
         reindex(self.cfg, clock=lambda: NOW)
-        self.assertEqual(RunRows(self.cfg).snapshot(run), before)
-        self.assertEqual(con.execute("SELECT json_extract(facts,'$.has_log') FROM run WHERE run=?", (run,)).fetchone(), (0,))
+        assert RunRows(self.cfg).snapshot(run) == before
+        assert con.execute("SELECT json_extract(facts,'$.has_log') FROM run WHERE run=?", (run,)).fetchone() == (0,)
         con.close()
 
     def test_snapshot_reads_no_run_files(self):
@@ -165,13 +166,13 @@ class FactoryIndex(unittest.TestCase):
 
         def guarded(path, *args, **kwargs):
             if isinstance(path, (str, Path)) and Path(path).is_relative_to(self.cfg.root):
-                self.assertNotIn(Path(path).relative_to(self.cfg.root).parts[0], ("engine", "runs"))
+                assert Path(path).relative_to(self.cfg.root).parts[0] not in ("engine", "runs")
             return original(path, *args, **kwargs)
 
         dash = Dash(Env(self.cfg.root, clock=lambda: NOW))
         with patch("builtins.open", guarded), patch("io.open", guarded):
             world = dash.reads.worlds.world()
-            self.assertTrue(world.runs)
+            assert world.runs
             dash.reads.snapshot()
 
     def test_drawer_and_live_use_only_the_log_reader(self):
@@ -180,7 +181,7 @@ class FactoryIndex(unittest.TestCase):
         with patch("taskloop_dash.readers.logs.Logs.records", return_value=()) as history, \
                 patch("taskloop_dash.readers.logs.Logs.read", return_value=((), "")) as tail, \
                 patch("builtins.open", side_effect=AssertionError("caller opened a run log")):
-            self.assertTrue(dash.reads.worlds.bead_runs("/repo", "b-0"))
+            assert dash.reads.worlds.bead_runs("/repo", "b-0")
             history.assert_called_once_with(self.paths[0].stem)
             feed = dash.live.live_run(self.paths[0].stem)
             feed.refresh()
@@ -195,33 +196,33 @@ class FactoryIndex(unittest.TestCase):
         con = must(factorydb.open_ro(self.cfg.factory_db()))
         try:
             sizes = con.execute("SELECT length(facts) FROM run WHERE run IN ('short','long_')").fetchall()
-            self.assertEqual(sizes[0], sizes[1])
+            assert sizes[0] == sizes[1]
         finally:
             con.close()
 
     def test_budget_carries_work_and_commits_matching_cursors(self):
         with Indexer(self.cfg, clock=lambda: NOW) as index:
-            self.assertFalse(index.pass_once(budget=0))
+            assert not index.pass_once(budget=0)
             folded = [row for row in self.rows() if row[1] is not None]
-            self.assertEqual(len(folded), 1)
-            self.assertEqual(folded[0][2], self.sources()[0][7])
+            assert len(folded) == 1
+            assert folded[0][2] == self.sources()[0][7]
         self.ingest()
         incremental = self.rows()
         reindex(self.cfg, clock=lambda: NOW)
-        self.assertEqual(self.rows(), incremental)
+        assert self.rows() == incremental
 
     def test_cached_snapshot_drops_run_data_as_soon_as_db_is_stale(self):
         self.ingest()
         now = [NOW]
         dash = Dash(Env(self.cfg.root, clock=lambda: now[0]))
         world, first = dash.reads.built()
-        self.assertTrue(world.runs)
-        self.assertFalse(first.server.database_error)
+        assert world.runs
+        assert not first.server.database_error
         now[0] += 6
         with patch("taskloop_dash.readers.logs.Logs.records", side_effect=AssertionError("unexpected log read for state")):
             world, stale = dash.reads.built()
-            self.assertEqual(world.runs, {})
-            self.assertTrue(stale.server.database_error)
+            assert world.runs == {}
+            assert stale.server.database_error
 
     def test_unreadable_source_reports_error_and_recovers(self):
         self.ingest()
@@ -234,9 +235,9 @@ class FactoryIndex(unittest.TestCase):
 
         with patch.object(Path, "open", blocked):
             self.ingest()
-        self.assertIn("source unreadable", factorydb.database_error(self.cfg.factory_db(), NOW))
+        assert "source unreadable" in factorydb.database_error(self.cfg.factory_db(), NOW)
         self.ingest()
-        self.assertEqual(factorydb.database_error(self.cfg.factory_db(), NOW), "")
+        assert factorydb.database_error(self.cfg.factory_db(), NOW) == ""
 
     def test_vanished_run_folder_preserves_state_and_log_facts(self):
         self.ingest()
@@ -244,9 +245,9 @@ class FactoryIndex(unittest.TestCase):
         before = RunRows(self.cfg).snapshot(run)
         self.cfg.run_dir(run).rmdir()
         self.ingest()
-        self.assertEqual(RunRows(self.cfg).snapshot(run), before)
-        self.assertIn(run, [r[0] for r in self.rows()])
-        self.assertIn(str(self.paths[0]), [s[0] for s in self.sources()])
+        assert RunRows(self.cfg).snapshot(run) == before
+        assert run in [r[0] for r in self.rows()]
+        assert str(self.paths[0]) in [s[0] for s in self.sources()]
 
     def test_missing_wrong_corrupt_and_stale_db_show_no_runs(self):
         for kind in ("missing", "wrong", "corrupt", "stale"):
@@ -267,15 +268,15 @@ class FactoryIndex(unittest.TestCase):
                 dash = Dash(Env(cfg.root, clock=lambda: NOW))
                 with patch("taskloop.contracts.locator.RunLocator.runs", side_effect=AssertionError("unexpected run-file read")):
                     world = dash.reads.worlds.world()
-                    self.assertFalse(world.runs)
-                    self.assertTrue(world.database_error)
-                    self.assertTrue(dash.reads.snapshot().server.database_error)
+                    assert not world.runs
+                    assert world.database_error
+                    assert dash.reads.snapshot().server.database_error
                 if kind in ("wrong", "corrupt"):
                     before = path.read_bytes()
-                    with self.assertRaises(factorydb.DatabaseError):
+                    with pytest.raises(factorydb.DatabaseError):
                         reindex(cfg, clock=lambda: NOW)
-                    self.assertEqual(path.read_bytes(), before)
-                    self.assertEqual(list(cfg.root.glob("factory.db.bad-*")), [])
+                    assert path.read_bytes() == before
+                    assert list(cfg.root.glob("factory.db.bad-*")) == []
 
 
 class LogBoundary(fixtures.ApiFixture):
@@ -285,7 +286,7 @@ class LogBoundary(fixtures.ApiFixture):
 
         def guarded(path, *args, **kw):
             if isinstance(path, (str, Path)) and Path(path).is_relative_to(self.cfg):
-                self.assertNotIn(Path(path).relative_to(self.cfg).parts[0], ("engine", "runs"))
+                assert Path(path).relative_to(self.cfg).parts[0] not in ("engine", "runs")
             return original(path, *args, **kw)
 
         with patch("builtins.open", guarded), patch("io.open", guarded), \
@@ -294,8 +295,8 @@ class LogBoundary(fixtures.ApiFixture):
                 patch("taskloop_dash.readers.logs.Logs.console", return_value=[]), \
                 patch("taskloop_dash.readers.logs.Logs.calls", return_value={}):
             detail = self.dash.reads.bead(loop_key(self.repo), "b-1")
-            self.assertIsNotNone(detail)
+            assert detail is not None
             code, _ = self.dash.live.page(loop_key(self.repo), "b-1")
-            self.assertEqual(code, 200)
+            assert code == 200
         history.assert_called_once_with("b-1-20261015-100000")
         tail.assert_called()

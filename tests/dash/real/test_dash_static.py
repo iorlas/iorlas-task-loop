@@ -4,11 +4,12 @@ together stay within 100 KB gzip; and the fixture dev server (dev/dash_fixtures.
 import importlib.util
 import json
 import threading
-import unittest
 import urllib.error
 import urllib.request
 from http.server import ThreadingHTTPServer
 from pathlib import Path
+
+from support.case import Case
 
 ROOT = Path(__file__).resolve().parents[3]
 STATIC = ROOT / "src" / "taskloop_dash" / "static"
@@ -23,16 +24,16 @@ def load_dev_server():
     return mod
 
 
-class DevServer(unittest.TestCase):
+class DevServer(Case):
     @classmethod
-    def setUpClass(cls):
+    def setup_class(cls):
         mod = load_dev_server()
         cls.srv = ThreadingHTTPServer(("127.0.0.1", 0), mod.make_handler("ok"))
         threading.Thread(target=cls.srv.serve_forever, args=(0.01,), daemon=True).start()
         cls.base = f"http://127.0.0.1:{cls.srv.server_address[1]}"
 
     @classmethod
-    def tearDownClass(cls):
+    def teardown_class(cls):
         cls.srv.shutdown()
         cls.srv.server_close()
 
@@ -54,18 +55,18 @@ class DevServer(unittest.TestCase):
     def test_pages_and_assets(self):
         for path in ("/", "/components.html", "/check.html"):
             with self.subTest(path=path):
-                self.assertEqual(self.get(path)[0], 200)
+                assert self.get(path)[0] == 200
         for p in STATIC.rglob("*"):
             if p.is_file() and p.suffix in (".js", ".css", ".html"):
                 with self.subTest(asset=p.name):
-                    self.assertEqual(self.get("/" + p.relative_to(STATIC).as_posix())[0], 200)
-        self.assertEqual(self.get("/../dev/dash_fixtures.py")[0], 404)
+                    assert self.get("/" + p.relative_to(STATIC).as_posix())[0] == 200
+        assert self.get("/../dev/dash_fixtures.py")[0] == 404
 
     def test_snapshot_and_its_304(self):
         code, body = self.get("/api/snapshot")
-        self.assertEqual(code, 200)
+        assert code == 200
         version = json.loads(body)["version"]
-        self.assertEqual(self.get(f"/api/snapshot?since={version}")[0], 304)
+        assert self.get(f"/api/snapshot?since={version}")[0] == 304
 
     def test_every_bead_and_live_fixture(self):
         snap = json.loads((FIX / "snapshot.json").read_text(encoding="utf-8"))
@@ -74,17 +75,13 @@ class DevServer(unittest.TestCase):
             for f in sorted((FIX / kind).glob("*.json")):
                 with self.subTest(kind=kind, id=f.stem):
                     code, body = self.get(f"/api/{kind}?project={project[f.stem]}&id={f.stem}")
-                    self.assertEqual(code, 200)
-                    self.assertEqual(json.loads(body), json.loads(f.read_text(encoding="utf-8")))
-        self.assertEqual(self.get("/api/bead?project=x&id=nope")[0], 404)
+                    assert code == 200
+                    assert json.loads(body) == json.loads(f.read_text(encoding="utf-8"))
+        assert self.get("/api/bead?project=x&id=nope")[0] == 404
 
     def test_every_write_and_a_bad_body(self):
         for verb, body in json.loads((FIX / "writes.json").read_text(encoding="utf-8")).items():
             with self.subTest(verb=verb):
-                self.assertEqual(self.post(f"/api/{verb}", json.dumps(body).encode()), 200)
-        self.assertEqual(self.post("/api/answer", b'{"project": "x", "unknown": 1}'), 400)
-        self.assertEqual(self.post("/api/nope", b"{}"), 404)
-
-
-if __name__ == "__main__":
-    unittest.main()
+                assert self.post(f"/api/{verb}", json.dumps(body).encode()) == 200
+        assert self.post("/api/answer", b'{"project": "x", "unknown": 1}') == 400
+        assert self.post("/api/nope", b"{}") == 404

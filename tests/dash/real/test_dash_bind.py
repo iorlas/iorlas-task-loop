@@ -4,9 +4,11 @@ import io
 import os
 import sys
 import tempfile
-import unittest
 from pathlib import Path
 from unittest import mock
+
+import pytest
+from support.case import Case
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -17,8 +19,8 @@ from taskloop_dash import bind  # noqa: E402
 from taskloop_dash.cli import dash as dash_cli  # noqa: E402
 
 
-class Env(unittest.TestCase):
-    def setUp(self):
+class Env(Case):
+    def setup_method(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.home = Path(self.tmp.name).resolve() / "home"
         self.state = self.home / ".config" / "task-loop"
@@ -28,7 +30,7 @@ class Env(unittest.TestCase):
         for d in (self.dev, self.cache):  # the rules look at where the code lives
             d.mkdir(parents=True)
 
-    def tearDown(self):
+    def teardown_method(self):
         self.tmp.cleanup()
 
     def with_repos(self):
@@ -43,13 +45,9 @@ class Env(unittest.TestCase):
         if public:
             env["TASK_LOOP_DASH_DEV_PUBLIC"] = "1"
         err = io.StringIO()
-        with mock.patch.dict(os.environ, env, clear=True), contextlib.redirect_stderr(err), self.assertRaises(SystemExit) as stop:
+        with mock.patch.dict(os.environ, env, clear=True), contextlib.redirect_stderr(err), pytest.raises(SystemExit) as stop:
             dash_cli.main(list(args), here=where)
-        return stop.exception.code, err.getvalue()
+        return stop.value.code, err.getvalue()
 
     def guard(self, addrs, port, where=None, **kw):
         return bind.bind_refusal(addrs, port, here=where or self.dev, home=self.home, state=self.state, process=ProcessEnv(), **kw)
-
-
-if __name__ == "__main__":
-    unittest.main()

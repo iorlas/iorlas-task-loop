@@ -6,9 +6,10 @@ import json
 import os
 import sys
 import tempfile
-import unittest
 from pathlib import Path
 from unittest.mock import patch
+
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -47,8 +48,8 @@ CLOSES = [
 ]
 
 
-class Golden(unittest.TestCase):
-    def setUp(self):
+class Golden(Case):
+    def setup_method(self):
         self.tmp = tempfile.TemporaryDirectory()
         root = Path(self.tmp.name)
         repo = root / "lifesim"
@@ -72,7 +73,7 @@ class Golden(unittest.TestCase):
         ingest(self.cfg, NOW)
         self.dash = Dash(Env(config=self.cfg, home=root, ports=ports, clock=lambda: NOW, version="v-test", host="devbox"))
 
-    def tearDown(self):
+    def teardown_method(self):
         self.tmp.cleanup()
 
     def answers(self):
@@ -104,7 +105,7 @@ class Golden(unittest.TestCase):
         for name, body in expected["beads"].items():
             detail = wire.load(BeadDetail, body)
             expected["beads"][name] = wire.dump(detail.replace(version=version_of(detail)))
-        self.assertEqual(got, expected)
+        assert got == expected
 
     def test_the_golden_is_the_same_under_different_system_hostnames(self):
         for hostname in ("devbox", "dtomilin-mWG"):
@@ -113,9 +114,5 @@ class Golden(unittest.TestCase):
                 self.dash = Dash(Env(config=self.cfg, home=self.repo.parent, ports=Ports(store=lambda _: self.store),
                                      clock=lambda: NOW, version="v-test", host="devbox"))
                 self.test_the_answers_for_the_recorded_state_are_the_golden()
-                self.assertEqual(self.dash.reads.worlds.slot_source(str(self.repo)).host, "devbox")
+                assert self.dash.reads.worlds.slot_source(str(self.repo)).host == "devbox"
                 system_host.assert_not_called()
-
-
-if __name__ == "__main__":
-    unittest.main()

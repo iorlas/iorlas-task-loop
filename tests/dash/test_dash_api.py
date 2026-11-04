@@ -6,11 +6,12 @@ import socket
 import sys
 import tempfile
 import threading
-import unittest
 import urllib.error
 import urllib.request
 from http.server import ThreadingHTTPServer
 from pathlib import Path
+
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -35,8 +36,8 @@ from taskloop_dash.http import make_handler
 NOW = T + 3600
 
 
-class ApiFixture(unittest.TestCase):
-    def setUp(self):
+class ApiFixture(Case):
+    def setup_method(self):
         self.tmp = tempfile.TemporaryDirectory()
         root = Path(self.tmp.name)
         self.repo = root / "lifesim"
@@ -86,7 +87,7 @@ class ApiFixture(unittest.TestCase):
         self.dash = Dash(Env(config=self.cfg, home=root, ports=ports, clock=lambda: self.now, version="v-test",
                              host=socket.gethostname()))
 
-    def tearDown(self):
+    def teardown_method(self):
         self.dash.reads.wait()
         self.tmp.cleanup()
 
@@ -98,15 +99,15 @@ class ApiFixture(unittest.TestCase):
 class Api(ApiFixture):
     def test_snapshot_decodes_strictly_with_the_facts_of_the_machine(self):
         code, body, headers = self.get("/api/snapshot")
-        self.assertEqual(code, 200)
+        assert code == 200
         snap = wire.load(Snapshot, json.loads(body))
-        self.assertEqual(headers["ETag"], f'"{snap.version}"')
+        assert headers["ETag"] == f'"{snap.version}"'
         by = {c.id: c for c in snap.beads}
-        self.assertEqual((by["b-1"].column.value, by["b-1"].marker.value, by["b-1"].slot, by["b-1"].lane), ("working", "run", "a", "OC Go"))
-        self.assertEqual((by["b-2"].column.value, by["b-2"].status), ("questions", "Weekly or monthly?"))
-        self.assertEqual((by["b-3"].column.value, by["b-3"].marker.value), ("backlog", "ready"))
-        self.assertEqual([(s.id, s.state, s.bead) for s in snap.slots], [("a", "running", "b-1")])
-        self.assertEqual((snap.server.version, [p.id for p in snap.projects]), ("v-test", [loop_key(self.repo)]))
+        assert (by["b-1"].column.value, by["b-1"].marker.value, by["b-1"].slot, by["b-1"].lane) == ("working", "run", "a", "OC Go")
+        assert (by["b-2"].column.value, by["b-2"].status) == ("questions", "Weekly or monthly?")
+        assert (by["b-3"].column.value, by["b-3"].marker.value) == ("backlog", "ready")
+        assert [(s.id, s.state, s.bead) for s in snap.slots] == [("a", "running", "b-1")]
+        assert (snap.server.version, [p.id for p in snap.projects]) == ("v-test", [loop_key(self.repo)])
 
     def test_a_repo_with_a_bad_profile_is_a_red_project_and_the_good_one_still_serves(self):
         bad = self.repo.parent / "broken"
@@ -115,20 +116,20 @@ class Api(ApiFixture):
         row = f"RED {bad}: {bad}/.task-loop.json: engine.checks"
         self.dash.env.ports.profile_error = lambda repo: row if repo == str(bad) else ""
         code, body, _ = self.get("/api/snapshot")
-        self.assertEqual(code, 200)
+        assert code == 200
         snap = wire.load(Snapshot, json.loads(body))
-        self.assertEqual({p.id: p.profile_error for p in snap.projects}, {loop_key(self.repo): "", loop_key(bad): row})
-        self.assertIn("b-1", {c.id for c in snap.beads})
+        assert {p.id: p.profile_error for p in snap.projects} == {loop_key(self.repo): "", loop_key(bad): row}
+        assert "b-1" in {c.id for c in snap.beads}
 
     def test_an_unchanged_snapshot_answers_304_by_since_and_by_etag(self):
         _, body, headers = self.get("/api/snapshot")
         version = json.loads(body)["version"]
         self.now += 5  # the snapshot is rebuilt, nothing changed
-        self.assertEqual(self.get("/api/snapshot", {"since": version})[:2], (304, b""))
+        assert self.get("/api/snapshot", {"since": version})[:2] == (304, b"")
         self.dash.reads.wait()
-        self.assertEqual(self.get("/api/snapshot", {}, headers["ETag"])[:2], (304, b""))
+        assert self.get("/api/snapshot", {}, headers["ETag"])[:2] == (304, b"")
         code, body, _ = self.get("/api/snapshot", {"since": "stale"})
-        self.assertEqual((code, json.loads(body)["version"], json.loads(body)["t"]), (200, version, self.now))
+        assert (code, json.loads(body)["version"], json.loads(body)["t"]) == (200, version, self.now)
 
     def test_a_new_record_gives_a_new_version(self):
         _, body, _ = self.get("/api/snapshot")
@@ -140,28 +141,28 @@ class Api(ApiFixture):
         self.now += 5
         self.get("/api/snapshot")  # stale response schedules the refresh
         self.dash.reads.wait()
-        self.assertNotEqual(json.loads(self.get("/api/snapshot")[1])["version"], before)
+        assert json.loads(self.get("/api/snapshot")[1])["version"] != before
 
     def test_a_poll_does_not_run_bd_every_time(self):
         for _ in range(4):
             self.get("/api/snapshot")
             self.now += 1.5
-        self.assertEqual(self.finds, 1)
+        assert self.finds == 1
 
     def test_the_cost_page_decodes_and_refuses_a_bad_window(self):
         code, body, _ = self.get("/api/cost", {"window": "7d", "project": loop_key(self.repo)})
         page = wire.load(CostPage, json.loads(body))
-        self.assertEqual((code, page.window, page.runs, [r.key for r in page.stages]), (200, "7d", 2, ["plan", "write"]))
-        self.assertEqual(self.get("/api/cost", {"window": "3y"})[0], 400)
-        self.assertEqual(self.get("/api/cost", {"last": "x"})[0], 400)
+        assert (code, page.window, page.runs, [r.key for r in page.stages]) == (200, "7d", 2, ["plan", "write"])
+        assert self.get("/api/cost", {"window": "3y"})[0] == 400
+        assert self.get("/api/cost", {"last": "x"})[0] == 400
 
     def test_the_bead_drawer(self):
         code, body, _ = self.get("/api/bead", {"project": loop_key(self.repo), "id": "b-1"})
-        self.assertEqual(code, 200)
+        assert code == 200
         d = wire.load(BeadDetail, json.loads(body))
-        self.assertEqual((d.card.id, d.description, d.acceptance), ("b-1", "Clamp it.", "mood >= 0"))
-        self.assertEqual([(m.who, m.md) for m in d.comments], [("denis", "mind the old save")])
-        self.assertEqual([(p.n, [c.state for c in p.cells if c.state != "empty"]) for p in d.passes], [(1, ["done", "live"])])
+        assert (d.card.id, d.description, d.acceptance) == ("b-1", "Clamp it.", "mood >= 0")
+        assert [(m.who, m.md) for m in d.comments] == [("denis", "mind the old save")]
+        assert [(p.n, [c.state for c in p.cells if c.state != "empty"]) for p in d.passes] == [(1, ["done", "live"])]
 
     def test_stage_live_lines_change_the_bead_etag_without_engine_changes(self):
         # Resolve through the same locator as the dashboard; live files are keyed by CallStart.n.
@@ -171,18 +172,18 @@ class Api(ApiFixture):
         path = bundle.live / "01-plan.jsonl"
         path.write_text(json.dumps({"k": "msg", "t": T + 3001, "text": "planner summary"}) + "\n")
         code, body, headers = self.get("/api/bead", {"project": loop_key(self.repo), "id": "b-1"})
-        self.assertEqual(code, 200)
+        assert code == 200
         d = wire.load(BeadDetail, json.loads(body))
-        self.assertEqual(d.passes[0].logs[0].roles[0].attempts[0].lines[0].text, "planner summary")
+        assert d.passes[0].logs[0].roles[0].attempts[0].lines[0].text == "planner summary"
         path.write_text(json.dumps({"k": "msg", "t": T + 3001, "text": "updated planner summary"}) + "\n")
         self.now += 4
         self.get("/api/bead", {"project": loop_key(self.repo), "id": "b-1"})
         self.dash.reads.wait()
         code, body, changed = self.get("/api/bead", {"project": loop_key(self.repo), "id": "b-1"}, headers["ETag"])
-        self.assertEqual(code, 200)
-        self.assertNotEqual(headers["ETag"], changed["ETag"])
-        self.assertIn("updated planner summary", body.decode())
-        self.assertEqual((must(d.live).kind, must(d.live).phase.value), ("run", "write"))
+        assert code == 200
+        assert headers["ETag"] != changed["ETag"]
+        assert "updated planner summary" in body.decode()
+        assert (must(d.live).kind, must(d.live).phase.value) == ("run", "write")
 
     def test_bead_and_cost_have_independent_conditional_tokens(self):
         snapshot_token = json.loads(self.get("/api/snapshot")[1])["version"]
@@ -191,10 +192,10 @@ class Api(ApiFixture):
             with self.subTest(route=route):
                 code, body, headers = self.get(route, query)
                 token = json.loads(body)["version"]
-                self.assertEqual((code, headers["ETag"]), (200, f'"{token}"'))
+                assert (code, headers["ETag"]) == (200, f'"{token}"')
                 self.now += 1 if route == "/api/bead" else 16  # comment ok time stays unchanged within its reuse window
-                self.assertEqual(self.get(route, {**query, "since": token})[:2], (304, b""))
-                self.assertEqual(self.get(route, query, headers["ETag"])[:2], (304, b""))
+                assert self.get(route, {**query, "since": token})[:2] == (304, b"")
+                assert self.get(route, query, headers["ETag"])[:2] == (304, b"")
                 if route == "/api/bead":
                     self.store.note("b-1", {"author": "owner", "text": "detail changed without a snapshot change"})
                 else:
@@ -205,32 +206,32 @@ class Api(ApiFixture):
                     self.get(route, query)
                     self.dash.reads.wait()
                 changed, body, _ = self.get(route, {**query, "since": token})
-                self.assertEqual(changed, 200)
-                self.assertNotEqual(json.loads(body)["version"], token)
+                assert changed == 200
+                assert json.loads(body)["version"] != token
                 if route == "/api/bead":
-                    self.assertEqual(json.loads(self.get("/api/snapshot")[1])["version"], snapshot_token)
+                    assert json.loads(self.get("/api/snapshot")[1])["version"] == snapshot_token
 
     def test_unknown_or_malformed_requests(self):
-        self.assertEqual(self.get("/api/bead", {"project": loop_key(self.repo), "id": "nope"})[0], 404)
-        self.assertEqual(self.get("/api/bead", {"project": "other", "id": "b-1"})[0], 404)
-        self.assertEqual(self.get("/api/bead", {"project": loop_key(self.repo), "id": "--flag"})[0], 404)
-        self.assertEqual(self.get("/api/bead", {"id": "b-1"})[0], 400)
-        self.assertEqual(self.get("/api/nothing")[0], 404)
+        assert self.get("/api/bead", {"project": loop_key(self.repo), "id": "nope"})[0] == 404
+        assert self.get("/api/bead", {"project": "other", "id": "b-1"})[0] == 404
+        assert self.get("/api/bead", {"project": loop_key(self.repo), "id": "--flag"})[0] == 404
+        assert self.get("/api/bead", {"id": "b-1"})[0] == 400
+        assert self.get("/api/nothing")[0] == 404
 
 
 class Wire(Api):
-    def setUp(self):
-        super().setUp()
+    def setup_method(self):
+        super().setup_method()
         static = Path(self.tmp.name)
         (static / "index.html").write_text("<html></html>")
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(self.dash, 0, ["127.0.0.1"], static, "s"))
         threading.Thread(target=self.server.serve_forever, args=(0.01,), daemon=True).start()  # shutdown waits one poll
         self.base = f"http://127.0.0.1:{self.server.server_address[1]}"
 
-    def tearDown(self):
+    def teardown_method(self):
         self.server.shutdown()
         self.server.server_close()
-        super().tearDown()
+        super().teardown_method()
 
     def fetch(self, path, headers=None):
         req = urllib.request.Request(self.base + path, headers=headers or {})
@@ -242,15 +243,11 @@ class Wire(Api):
 
     def test_etag_and_304_over_http(self):
         code, body, headers = self.fetch("/api/snapshot")
-        self.assertEqual(code, 200)
+        assert code == 200
         etag = headers["ETag"]
-        self.assertEqual(etag, f'"{json.loads(body)["version"]}"')
-        self.assertEqual(self.fetch("/api/snapshot", {"If-None-Match": etag})[:2], (304, b""))
-        self.assertEqual(self.fetch("/api/snapshot?since=" + json.loads(body)["version"])[0], 304)
-        self.assertEqual(self.fetch(f"/api/bead?project={loop_key(self.repo)}&id=nope")[0], 404)
-        self.assertEqual(self.fetch(f"/api/bead?project={loop_key(self.repo)}&id=b-1")[0], 200)
-        self.assertEqual(self.fetch("/api/tasks")[0], 404)  # the old API is gone
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert etag == f'"{json.loads(body)["version"]}"'
+        assert self.fetch("/api/snapshot", {"If-None-Match": etag})[:2] == (304, b"")
+        assert self.fetch("/api/snapshot?since=" + json.loads(body)["version"])[0] == 304
+        assert self.fetch(f"/api/bead?project={loop_key(self.repo)}&id=nope")[0] == 404
+        assert self.fetch(f"/api/bead?project={loop_key(self.repo)}&id=b-1")[0] == 200
+        assert self.fetch("/api/tasks")[0] == 404  # the old API is gone

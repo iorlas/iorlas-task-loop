@@ -1,10 +1,10 @@
 """Repository collisions must never mix dashboard reads or owner writes."""
 
 import tempfile
-import unittest
 from pathlib import Path
 
 import support.paths  # noqa: F401
+from support.case import Case
 from support.dashlogs import RunScript, T, bead
 from support.factory_index import ingest
 from support.fakes import FakeBeadStore
@@ -21,8 +21,8 @@ from taskloop_dash.app import Dash
 from taskloop_dash.env import Env, Ports
 
 
-class RepoIdentity(unittest.TestCase):
-    def setUp(self):
+class RepoIdentity(Case):
+    def setup_method(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         root = Path(tmp.name)
@@ -48,22 +48,21 @@ class RepoIdentity(unittest.TestCase):
 
     def test_same_basename_projects_have_distinct_keys_and_names(self):
         projects = self.dash.reads.snapshot().projects
-        self.assertEqual({p.id for p in projects}, {loop_key(r) for r in self.repos})
-        self.assertEqual(len({p.name for p in projects}), 2)
-        self.assertTrue(all(p.name.startswith("demo") for p in projects))
-        self.assertTrue(all(p.id not in p.name for p in projects))
+        assert {p.id for p in projects} == {loop_key(r) for r in self.repos}
+        assert len({p.name for p in projects}) == 2
+        assert all(p.name.startswith("demo") for p in projects)
+        assert all(p.id not in p.name for p in projects)
 
     def test_same_bead_runs_stay_in_their_project(self):
         cards = self.dash.reads.snapshot().beads
-        self.assertEqual({c.project: c.totals.tokens for c in cards},
-                         {loop_key(r): 100 + n for n, r in enumerate(self.repos)})
+        assert {c.project: c.totals.tokens for c in cards} == {loop_key(r): 100 + n for n, r in enumerate(self.repos)}
         for n, repo in enumerate(self.repos):
             detail = must(self.dash.reads.bead(loop_key(repo), "b-1"))
-            self.assertEqual(detail.card.totals.tokens, 100 + n)
+            assert detail.card.totals.tokens == 100 + n
             code, page = self.dash.live.page(loop_key(repo), "b-1")
-            self.assertEqual(code, 200)
-            self.assertIn(f"repo {n}", str(page))
-            self.assertNotIn(f"repo {1 - n}", str(page))
+            assert code == 200
+            assert f"repo {n}" in str(page)
+            assert f"repo {1 - n}" not in str(page)
 
     def test_cross_repo_stop_is_refused_without_writing(self):
         for verb, fields in (("stop", {}), ("park", {}), ("note", {"text": "hello"}),
@@ -71,34 +70,34 @@ class RepoIdentity(unittest.TestCase):
             with self.subTest(verb=verb):
                 code, out = self.dash.writes.post(verb, {"project": loop_key(self.repos[0]), "bead": "b-1",
                                                         "run": self.runs[1], **fields})
-                self.assertEqual(code, 200)
-                self.assertFalse(out["ok"])
-                self.assertIn("repo", out["message"].lower())
-        self.assertFalse(any(self.dash.env.config.run_request(r).exists() for r in self.runs))
-        self.assertFalse(any(s.show("b-1").metadata for s in self.stores.values()))
+                assert code == 200
+                assert not out["ok"]
+                assert "repo" in out["message"].lower()
+        assert not any(self.dash.env.config.run_request(r).exists() for r in self.runs)
+        assert not any(s.show("b-1").metadata for s in self.stores.values())
 
     def test_stop_refuses_the_wrong_bead_and_an_observed_run_that_ended(self):
         body = {"project": loop_key(self.repos[0]), "bead": "b-2", "run": self.runs[0]}
-        self.assertIn("repo and bead", self.dash.writes.post("stop", body)[1]["message"])
+        assert "repo and bead" in self.dash.writes.post("stop", body)[1]["message"]
         cfg = self.dash.env.config
         store = RunRows(cfg)
         store.put(must(store.get(self.runs[0])).replace(state=RunState.DONE))
         body["bead"] = "b-1"
         out = self.dash.writes.post("stop", body)[1]
-        self.assertFalse(out["ok"])
-        self.assertIn("no run", out["message"])
-        self.assertFalse(cfg.run_request(self.runs[0]).exists())
-        self.assertFalse(self.stores[str(self.repos[0])].show("b-1").metadata)
+        assert not out["ok"]
+        assert "no run" in out["message"]
+        assert not cfg.run_request(self.runs[0]).exists()
+        assert not self.stores[str(self.repos[0])].show("b-1").metadata
 
     def test_stop_targets_the_observed_run_even_when_a_newer_run_exists(self):
         repo = self.repos[0]
         cfg = self.dash.env.config
         manifest(cfg, "successor", "b-1", T + 150, repo=str(repo), state=RunState.RUNNING)
         code, out = self.dash.writes.post("stop", {"project": loop_key(repo), "bead": "b-1", "run": self.runs[0]})
-        self.assertEqual((code, out["ok"]), (200, True))
-        self.assertTrue(cfg.run_request(self.runs[0]).exists())
-        self.assertFalse(cfg.run_request("successor").exists())
+        assert (code, out["ok"]) == (200, True)
+        assert cfg.run_request(self.runs[0]).exists()
+        assert not cfg.run_request("successor").exists()
 
     def test_old_command_without_observed_run_is_a_bad_body(self):
         code, _ = self.dash.writes.post("stop", {"project": loop_key(self.repos[0]), "bead": "b-1"})
-        self.assertEqual(code, 400)
+        assert code == 400

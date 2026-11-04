@@ -2,8 +2,9 @@
 Each grouping is one exact snapshot; an unknown cost is counted apart, never summed as 0."""
 
 import sys
-import unittest
 from pathlib import Path
+
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -37,33 +38,31 @@ def view(rows):
     return [(r.key, r.secs, r.tokens, r.cost, r.calls, r.unknown) for r in rows]
 
 
-class Cost(unittest.TestCase):
-    def setUp(self):
+class Cost(Case):
+    def setup_method(self):
         self.page = cost.build(world(), "24h")
 
     def test_by_stage(self):
-        self.assertEqual(view(self.page.stages), [
-            ("write", 900, 10000, 3.0, 3, 1), ("plan", 180, 1400, 0.5, 2, 1), ("test", 60, 0, 0.0, 0, 0), ("review", 50, 700, 0.0, 1, 0)])
+        assert view(self.page.stages) == [
+            ("write", 900, 10000, 3.0, 3, 1), ("plan", 180, 1400, 0.5, 2, 1), ("test", 60, 0, 0.0, 0, 0), ("review", 50, 700, 0.0, 1, 0)]
 
     def test_by_bead_and_the_drill_down(self):
-        self.assertEqual(view(self.page.beads), [("b-1", 1110, 11700, 3.5, 5, 1), ("b-2", 80, 400, 0.0, 1, 1)])
-        self.assertEqual([(r.bead, r.key, r.secs, r.tokens) for r in self.page.drill if r.bead == "b-1"],
-                         [("b-1", "write", 900, 10000), ("b-1", "plan", 100, 1000), ("b-1", "test", 60, 0), ("b-1", "review", 50, 700)])
+        assert view(self.page.beads) == [("b-1", 1110, 11700, 3.5, 5, 1), ("b-2", 80, 400, 0.0, 1, 1)]
+        assert (
+            [(r.bead, r.key, r.secs, r.tokens) for r in self.page.drill if r.bead == "b-1"]
+            == [("b-1", "write", 900, 10000), ("b-1", "plan", 100, 1000), ("b-1", "test", 60, 0), ("b-1", "review", 50, 700)]
+        )
 
     def test_waits(self):
-        self.assertEqual(view(self.page.waits), [("resource", 15, 0, 0.0, 0, 0)])
+        assert view(self.page.waits) == [("resource", 15, 0, 0.0, 0, 0)]
 
     def test_the_window_and_the_project_and_the_last_runs(self):
-        self.assertEqual(self.page.runs, 3)
-        self.assertEqual(cost.build(world(), "7d").runs, 3)
-        self.assertEqual(cost.build(world(), "24h", project="q").runs, 0)
-        self.assertEqual([r.key for r in cost.build(world(), "24h", last=1).beads], ["b-2"])
+        assert self.page.runs == 3
+        assert cost.build(world(), "7d").runs == 3
+        assert cost.build(world(), "24h", project="q").runs == 0
+        assert [r.key for r in cost.build(world(), "24h", last=1).beads] == ["b-2"]
 
     def test_unknown_cost_is_not_zero_dollars(self):
         row = next(r for r in self.page.stages if r.key == "plan")
-        self.assertEqual((row.cost, row.unknown), (0.5, 1))
-        self.assertIsInstance(row, CostRow)
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert (row.cost, row.unknown) == (0.5, 1)
+        assert isinstance(row, CostRow)

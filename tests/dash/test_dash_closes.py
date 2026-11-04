@@ -5,8 +5,9 @@ are skipped and counted."""
 import json
 import sys
 import tempfile
-import unittest
 from pathlib import Path
+
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -37,7 +38,7 @@ def trace(run: str, outcome: Outcome, ended: float, replans: int = 0) -> RunTrac
                     started=ended - 60, ended=ended, outcome=outcome, why="", sha="", stats=Stats(replans=replans))
 
 
-class Traces(unittest.TestCase):
+class Traces(Case):
     def test_traces_of_another_version_are_skipped_and_counted(self):
         with tempfile.TemporaryDirectory() as d:
             cfg = Path(d)
@@ -47,8 +48,4 @@ class Traces(unittest.TestCase):
             (cfg / "traces.jsonl").write_text("\n".join(json.dumps(r) for r in rows) + "\nnot json\n", encoding="utf-8")
             env = Env(config=cfg, home=cfg, clock=lambda: T, version="v")
             book = Records(env).traces()
-            self.assertEqual((sorted(book.runs), book.skipped), (["01KBN6Z0M4R5E8YQ2T7C9W3XA1", "01KBN6Z0M4R5E8YQ2T7C9W3XA2"], 3))
-
-
-if __name__ == "__main__":
-    unittest.main()
+            assert (sorted(book.runs), book.skipped) == (["01KBN6Z0M4R5E8YQ2T7C9W3XA1", "01KBN6Z0M4R5E8YQ2T7C9W3XA2"], 3)
