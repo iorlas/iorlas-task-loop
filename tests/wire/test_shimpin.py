@@ -3,6 +3,7 @@ import tempfile
 from pathlib import Path
 from unittest import mock
 
+import pytest
 from support.case import Case
 
 from taskloop.app.wire import doctor, hook
@@ -48,6 +49,19 @@ class ShimPin(Case):
         self.assert_targets(new)
         assert before == [(f.read_bytes(), f.stat().st_mtime_ns) for f in self.files()]
 
+    def test_an_older_plugins_own_write_cannot_overwrite_the_launchers_but_a_newer_install_replaces_them(self):
+        new = self.install("0.23.100")
+        self.write(new)
+        for f in self.files():
+            assert not f.stat().st_mode & 0o222
+            assert f.stat().st_mode & 0o111
+            with pytest.raises(PermissionError):
+                f.write_text("exec old tl.py")  # what an older install's write_shim / write_hooks do
+        self.assert_targets(new)
+        newest = self.install("0.23.101")
+        self.write(newest)
+        self.assert_targets(newest)
+
     def test_new_install_upgrades_both_launchers_in_numeric_order(self):
         self.write(self.old)
         self.assert_targets(self.old)
@@ -87,6 +101,7 @@ class ShimPin(Case):
                 elif stale == "hook":
                     hook.write_shim(new, self.env)
                     f = self.config / "githooks/pre-push"
+                    f.chmod(0o755)
                     f.write_text(f.read_text().replace(str(new), str(self.old)))
                 with mock.patch.object(doctor.catalog, "installed_version", return_value=""), \
                         mock.patch.object(doctor.catalog, "cache_dirs", return_value={}):

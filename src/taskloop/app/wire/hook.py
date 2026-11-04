@@ -1,5 +1,7 @@
 """The SessionStart hook: index the session id -> its transcript path. Must never fail the session."""
+import contextlib
 import json
+import os
 import shlex
 from pathlib import Path
 
@@ -67,16 +69,21 @@ def write_shim(plugin_root: Path, env: Env) -> None:
     install = readable_install(plugin_root)
     if install is None:
         return
-    f = config_dir(env) / "bin" / "tl"
     text = SHIM.replace("{tl}", shlex.quote(str(install / "skills" / "task-loop" / "tl.py")))
-    try:
-        if f.is_file() and f.read_text(encoding="utf-8") == text:
-            return
-        f.parent.mkdir(parents=True, exist_ok=True)
-        f.write_text(text, encoding="utf-8")
-        f.chmod(0o755)
-    except OSError:
-        pass
+    with contextlib.suppress(OSError):
+        put_launcher(config_dir(env) / "bin" / "tl", text)
+
+
+def put_launcher(f: Path, text: str) -> None:
+    """Write a launcher read-only, through a temp file and os.replace: an older install's write_text (it writes its own path
+    unconditionally) fails on the read-only file and swallows the error, so a session on an old plugin cannot downgrade it."""
+    if f.is_file() and f.read_text(encoding="utf-8") == text:
+        return
+    f.parent.mkdir(parents=True, exist_ok=True)
+    tmp = f.with_name(f".{f.name}.{os.getpid()}")
+    tmp.write_text(text, encoding="utf-8")
+    tmp.chmod(0o555)
+    tmp.replace(f)
 
 
 # The client hooks tl's dir answers (git reads core.hooksPath for all of them); the dispatcher of each also runs the repo's own hook.
@@ -104,10 +111,7 @@ def write_hooks(plugin_root: Path, env: Env) -> list[Path]:
         text = GIT_HOOK.replace("{hook}", hook).replace("{tl}", tl).replace("{name}", name)
         f = ConfigDir(root).hooks_dir() / name
         try:
-            if not (f.is_file() and f.read_text(encoding="utf-8") == text):
-                f.parent.mkdir(parents=True, exist_ok=True)
-                f.write_text(text, encoding="utf-8")
-                f.chmod(0o755)
+            put_launcher(f, text)
         except OSError:
             return []
         out.append(f)
