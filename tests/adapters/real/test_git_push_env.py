@@ -42,7 +42,8 @@ class PortPushHasNoGateAuthority(unittest.TestCase):
         hook.chmod(0o755)
         bare = {"PATH": os.environ.get("PATH", "")}
         ran = subprocess.run([str(hook)], capture_output=True, text=True, env=bare, check=False)
-        self.assertEqual(ran.returncode, 1, f"precondition: the refusing pre-push hook cannot run here ({ran.stderr.strip() or 'no output'}): "
+        why = ran.stderr.strip() or "no output"
+        self.assertEqual(ran.returncode, 1, f"precondition: the refusing pre-push hook cannot run here ({why}): "
                          f"is {hooks} on a noexec mount, or is /bin/sh missing?")
         self.port = RealGit(Env({k: v for k, v in snapshot().vars.items() if k != "TL_LAND"}), pinned=False)
 
