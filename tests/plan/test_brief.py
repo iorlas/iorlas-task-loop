@@ -1,10 +1,11 @@
 """The brief renderer: the text stays byte-identical to the golden set, and the section boundaries cover it exactly."""
 import sys
 import tempfile
-import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
+
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -27,35 +28,35 @@ def render(name: str) -> bf.Brief:
     return bf.render(bead, comments, "denis", hint, owner_only, (*ENGINE_LABELS, "tl-pick"))
 
 
-class Golden(unittest.TestCase):
+class Golden(Case):
     def test_the_text_is_byte_identical_to_the_golden_set(self):
         for name in CASES:
             with self.subTest(name):
-                self.assertEqual(render(name).text.encode(), (GOLDEN / f"{name}.md").read_bytes())
+                assert render(name).text.encode() == (GOLDEN / f"{name}.md").read_bytes()
 
     def test_the_sections_tile_the_text_exactly(self):
         for name in CASES:
             with self.subTest(name):
                 brief = render(name)
                 raw = brief.text.encode()
-                self.assertEqual(brief.sections[0].start, 0)
-                self.assertEqual(brief.sections[-1].end, len(raw))
+                assert brief.sections[0].start == 0
+                assert brief.sections[-1].end == len(raw)
                 for a, b in zip(brief.sections, brief.sections[1:], strict=False):
-                    self.assertEqual(a.end, b.start)
-                self.assertEqual(sum(brief.sizes().values()), len(raw))
+                    assert a.end == b.start
+                assert sum(brief.sizes().values()) == len(raw)
 
     def test_a_section_names_what_it_costs(self):
         sizes = render("full").sizes()
-        self.assertEqual(list(sizes)[:3], ["title", "meta", "description"])
-        self.assertIn("comments", sizes)
+        assert list(sizes)[:3] == ["title", "meta", "description"]
+        assert "comments" in sizes
         raw = render("full").text.encode()
         comments = next(s for s in render("full").sections if s.name == "comments")
-        self.assertTrue(raw[comments.start:comments.end].decode().startswith("\n## Comments\n- denis"))
+        assert raw[comments.start:comments.end].decode().startswith("\n## Comments\n- denis")
 
     def test_linked_beads_join_as_a_section_of_their_own(self):
         brief = render("full").plus("linked", bf.LINKED_HEAD + "- t-0 [open] The epic\n")
-        self.assertEqual(brief.sizes()["linked"], len((bf.LINKED_HEAD + "- t-0 [open] The epic\n").encode()))
-        self.assertEqual(sum(brief.sizes().values()), len(brief.text.encode()))
+        assert brief.sizes()["linked"] == len((bf.LINKED_HEAD + "- t-0 [open] The epic\n").encode())
+        assert sum(brief.sizes().values()) == len(brief.text.encode())
 
 
 REPLAY = ("lifesim-5ban.28-20261022-234409", "lifesim-hclf.30-20261024-053813", "lifesim-yxbb.12-20261024-121436",
@@ -64,26 +65,26 @@ REPLAY = ("lifesim-5ban.28-20261022-234409", "lifesim-hclf.30-20261024-053813", 
 # the same project nearest to them in size (the named ones that are here, 5ban.28, and their neighbours hclf.30 and yxbb.12).
 
 
-class PlannerBudget(unittest.TestCase):
+class PlannerBudget(Case):
     def test_the_planner_prompt_of_a_replayed_brief_stays_under_the_budget_with_room_for_the_rules(self):
         rules_room = 2 * 1024  # worker rules, notes and the where text ride after the brief
         for name in REPLAY:
             with self.subTest(name):
                 brief = (Path(__file__).resolve().parents[1] / "fixtures" / "briefs" / f"{name}.md").read_text(encoding="utf-8")
                 prompt = PLAN_PROMPT.format(brief=brief, wt="/work/tree")
-                self.assertLess(len(prompt.encode()) + rules_room, PLAN_BRIEF_KB * 1024)
+                assert len(prompt.encode()) + rules_room < PLAN_BRIEF_KB * 1024
 
 
-class Diff(unittest.TestCase):
+class Diff(Case):
     def test_a_field_diff_over_the_cap_is_cut_and_says_how_much_was_not_shown(self):
         out = bf.field_diff("line\n" * 2000 + "A", "line\n" * 2000 + "B\n" + "more\n" * 2000)
-        self.assertIn("diff cut at 4 KB;", out)
-        self.assertIn("more characters not shown", out)
-        self.assertLessEqual(len(out), bf.DIFF_CAP + 120)
-        self.assertEqual(bf.field_diff("a", "a"), "")
+        assert "diff cut at 4 KB;" in out
+        assert "more characters not shown" in out
+        assert len(out) <= bf.DIFF_CAP + 120
+        assert bf.field_diff("a", "a") == ""
 
 
-class FitsTheLimit(unittest.TestCase):
+class FitsTheLimit(Case):
     def brief(self, bead: Bead, comments: list[Comment], kb: float = 5) -> bf.Brief:
         owner = "a" if comments and comments[0].author == "a" else "denis"
         host = SimpleNamespace(cfg=SimpleNamespace(brief_kb=kb, owner_author=owner))
@@ -96,26 +97,26 @@ class FitsTheLimit(unittest.TestCase):
             comments.append(Comment(author="denis", text=f"decision {rerun}: " + "x" * 2000))
             out = self.brief(bead, comments)
             with self.subTest(rerun=rerun):
-                self.assertLess(len(out.text.encode()), 5 * 1024)
-                self.assertIn("Add the file f.", out.text)
-                self.assertIn("f exists", out.text)
-                self.assertIn(f"decision {rerun}:", out.text)  # the newest stays
-        self.assertNotIn("decision 1:", out.text)
-        self.assertEqual(out.dropped, 3)
-        self.assertIn("(+3 older comments left out", out.text)
-        self.assertLess(out.text.index("(+3"), out.text.index("decision 4:"))
+                assert len(out.text.encode()) < 5 * 1024
+                assert "Add the file f." in out.text
+                assert "f exists" in out.text
+                assert f"decision {rerun}:" in out.text  # the newest stays
+        assert "decision 1:" not in out.text  # type: ignore[unbound-name]  # the loop above runs five times
+        assert out.dropped == 3
+        assert "(+3 older comments left out" in out.text
+        assert out.text.index("(+3") < out.text.index("decision 4:")
 
     def test_the_newest_comment_stays_even_when_it_alone_is_over_the_limit(self):
         bead = Bead(id=BeadId("t-1"), title="T", status="open")
         out = self.brief(bead, [Comment(author="a", text="old"), Comment(author="a", text="n" * 9000)])
-        self.assertIn("n" * 9000, out.text)
-        self.assertNotIn("- a: old", out.text)
+        assert "n" * 9000 in out.text
+        assert "- a: old" not in out.text
 
     def test_a_bead_text_over_the_limit_is_never_cut_and_the_comments_all_go_but_the_newest(self):
         bead = Bead(id=BeadId("t-1"), title="T", status="open", description="d" * 7000)
         out = self.brief(bead, [Comment(author="a", text="one"), Comment(author="a", text="two")])
-        self.assertIn("d" * 7000, out.text)
-        self.assertEqual(out.dropped, 1)
+        assert "d" * 7000 in out.text
+        assert out.dropped == 1
 
     def test_export_warns_naming_the_bead_text_size_when_the_text_alone_is_over_the_limit(self):
         bead = Bead(id=BeadId("t-1"), title="T", status="open", description="d" * 7000)
@@ -130,10 +131,6 @@ class FitsTheLimit(unittest.TestCase):
                 planner=SimpleNamespace(cap=SimpleNamespace(answered_words=lambda: "")))
             with mock.patch.object(mod, "peek", lambda store, bead_id: bead):
                 Briefs(host).export()
-        self.assertEqual(len(warns), 1)
-        self.assertIn("bead's own text is 7 KB", warns[0])
-        self.assertIn("1 oldest comments left out", notes[0])
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert len(warns) == 1
+        assert "bead's own text is 7 KB" in warns[0]
+        assert "1 oldest comments left out" in notes[0]

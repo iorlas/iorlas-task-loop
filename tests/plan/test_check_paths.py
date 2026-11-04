@@ -1,8 +1,9 @@
 """CHECKPATH: missing check executables replan before any writer; only earlier producers exempt an output."""
 import sys
-import unittest
 from pathlib import Path
 from unittest import mock
+
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -24,8 +25,8 @@ def stage(*commands: str, files: tuple[str, ...] = ()) -> StageData:
     return StageData(files=list(files), checks=checks)
 
 
-class CheckPaths(unittest.TestCase):
-    def setUp(self):
+class CheckPaths(Case):
+    def setup_method(self):
         self.probe = mock.Mock(spec=TreeProbe)
         self.probe.exists.return_value = False
         self.probe.is_dir.return_value = False
@@ -38,53 +39,53 @@ class CheckPaths(unittest.TestCase):
         for path in (TYPO, "./missing/tool", "/missing/tool", ".venv/bin/python", "~/missing/tool"):
             with self.subTest(path=path):
                 errors = self.problems(stage(path))
-                self.assertEqual(len(errors), 1)
-                self.assertIn("CHECKPATH:", errors[0])
-                self.assertIn(path, errors[0])
+                assert len(errors) == 1
+                assert "CHECKPATH:" in errors[0]
+                assert path in errors[0]
 
     def test_an_existing_file_is_allowed_but_a_directory_is_rejected(self):
         self.probe.exists.return_value = True
-        self.assertEqual(self.problems(stage(OUTPUT)), [])
+        assert self.problems(stage(OUTPUT)) == []
         self.probe.is_dir.return_value = True
-        self.assertIn("CHECKPATH:", self.problems(stage(OUTPUT))[0])
+        assert "CHECKPATH:" in self.problems(stage(OUTPUT))[0]
 
     def test_an_existing_file_without_execute_permission_is_rejected(self):
         self.probe.exists.return_value = True
         self.probe.has_command.return_value = False
-        self.assertIn("CHECKPATH:", self.problems(stage(OUTPUT))[0])
+        assert "CHECKPATH:" in self.problems(stage(OUTPUT))[0]
 
     def test_a_build_output_is_exempt_only_when_the_earlier_build_produces_that_path(self):
-        self.assertEqual(self.problems(stage(BUILD, OUTPUT)), [])
-        self.assertEqual(self.problems(stage(BUILD), stage(OUTPUT)), [])
+        assert self.problems(stage(BUILD, OUTPUT)) == []
+        assert self.problems(stage(BUILD), stage(OUTPUT)) == []
         for commands in ((BUILD, TYPO), (OUTPUT, BUILD), ("echo build", OUTPUT),
                          (BUILD + " -c Release", OUTPUT), (BUILD + " -f net8.0", OUTPUT)):
             with self.subTest(commands=commands):
-                self.assertTrue(any("CHECKPATH:" in e for e in self.problems(stage(*commands))))
+                assert any("CHECKPATH:" in e for e in self.problems(stage(*commands)))
 
     def test_an_explicit_compiler_output_is_exempt_but_an_unrelated_output_is_not(self):
-        self.assertEqual(self.problems(stage("cc source.c -o ./out/tool", "./out/tool")), [])
-        self.assertTrue(self.problems(stage("cc source.c -o ./out/tool", "./out/typo")))
-        self.assertEqual(self.problems(stage(BUILD + " --output out", "./out/Sim.Scenarios")), [])
-        self.assertTrue(self.problems(stage(BUILD + " --output out", "./out/Sim.Scenenarios")))
+        assert self.problems(stage("cc source.c -o ./out/tool", "./out/tool")) == []
+        assert self.problems(stage("cc source.c -o ./out/tool", "./out/typo"))
+        assert self.problems(stage(BUILD + " --output out", "./out/Sim.Scenarios")) == []
+        assert self.problems(stage(BUILD + " --output out", "./out/Sim.Scenenarios"))
 
     def test_a_writer_can_create_the_executable_but_a_later_stage_cannot_supply_it(self):
-        self.assertEqual(self.problems(stage(OUTPUT, files=(OUTPUT,))), [])
-        self.assertEqual(self.problems(stage(files=(OUTPUT,)), stage(OUTPUT)), [])
-        self.assertIn("CHECKPATH:", self.problems(stage(OUTPUT), stage(files=(OUTPUT,)))[0])
+        assert self.problems(stage(OUTPUT, files=(OUTPUT,))) == []
+        assert self.problems(stage(files=(OUTPUT,)), stage(OUTPUT)) == []
+        assert "CHECKPATH:" in self.problems(stage(OUTPUT), stage(files=(OUTPUT,)))[0]
 
     def test_wrapped_executables_and_case_checks_are_validated(self):
-        self.assertIn("CHECKPATH:", self.problems(stage("env CI=1 " + TYPO))[0])
+        assert "CHECKPATH:" in self.problems(stage("env CI=1 " + TYPO))[0]
         data = PlanData(stages=[stage(BUILD)], cases=[{"criterion": "runs", "check": adhoc(OUTPUT)}])
-        self.assertEqual(lint.dry_check(data, self.probe), [])
+        assert lint.dry_check(data, self.probe) == []
         data["cases"][0]["check"] = adhoc(TYPO)
-        self.assertIn("CHECKPATH:", lint.dry_check(data, self.probe)[0])
+        assert "CHECKPATH:" in lint.dry_check(data, self.probe)[0]
 
     def test_a_registered_build_can_produce_the_executable(self):
         cfg = cfg_with(checks=[{"id": "build", "cmd": BUILD, "group": "tests"}])
         data = PlanData(stages=[StageData(files=[], checks=[Ref(check=CheckId("build")), adhoc(OUTPUT)])])
-        self.assertEqual(lint.dry_check(data, self.probe, cfg), [])
+        assert lint.dry_check(data, self.probe, cfg) == []
         data["stages"][0]["checks"] = [adhoc(OUTPUT, (CheckId("build"),))]
-        self.assertEqual(lint.dry_check(data, self.probe, cfg), [])
+        assert lint.dry_check(data, self.probe, cfg) == []
 
 
 class BeforeWriters(EngineTest):
@@ -93,13 +94,13 @@ class BeforeWriters(EngineTest):
 
     def test_the_typo_is_sent_back_before_dispatching_the_writer(self):
         rc, script = self.run_engine({"plan": [self.bad_plan(), PLAN], "write": [WRITE], "review": [CLEAN]})
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertEqual([c[0] for c in script.calls], ["planner", "planner", "worker", "reviewer"])
-        self.assertIn("CHECKPATH:", script.prompts[1])
-        self.assertIn(TYPO, script.prompts[1])
+        assert rc == 0, self.blocked
+        assert [c[0] for c in script.calls] == ["planner", "planner", "worker", "reviewer"]
+        assert "CHECKPATH:" in script.prompts[1]
+        assert TYPO in script.prompts[1]
 
     def test_an_uncorrected_typo_stops_as_a_plan_failure_without_a_writer(self):
         rc, script = self.run_engine({"plan": [self.bad_plan(), self.bad_plan()]})
-        self.assertEqual(rc, 2)
-        self.assertEqual([c[0] for c in script.calls], ["planner", "planner"])
-        self.assertIn("CHECKPATH", self.said())
+        assert rc == 2
+        assert [c[0] for c in script.calls] == ["planner", "planner"]
+        assert "CHECKPATH" in self.said()

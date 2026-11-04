@@ -22,16 +22,16 @@ class GateOnly(EngineTest):
             checks=[{"id": "layers", "cmd": "echo client-layers", "run": "gate"},
                     {"id": "suite", "cmd": "echo suite", "run": "gate", "why": "needs the rebased tree"}],
         )
-        self.assertEqual(rc, 0)
+        assert rc == 0
         brief = script.prompts[0]
-        self.assertIn("`echo client-layers`", brief)
-        self.assertIn("`echo suite` (needs the rebased tree)", brief)
+        assert "`echo client-layers`" in brief
+        assert "`echo suite` (needs the rebased tree)" in brief
 
     def test_a_single_gate_command_is_named_once(self):
         rc, script = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, gate="echo gate")
-        self.assertEqual(rc, 0)
-        self.assertNotIn("These run only in the gate at land too", script.prompts[0])
-        self.assertIn("never put `echo gate` in a stage's checks", script.prompts[0])
+        assert rc == 0
+        assert "These run only in the gate at land too" not in script.prompts[0]
+        assert "never put `echo gate` in a stage's checks" in script.prompts[0]
 
     def test_a_gate_check_left_after_rewrite_is_dropped_and_the_run_continues(self):
         self.assert_gate_drop([HAS_F])
@@ -45,18 +45,18 @@ class GateOnly(EngineTest):
         rc, script = self.run_engine(
             {"plan": [bad, bad], "write": [WRITE], "review": [CLEAN]}, gate_only=["echo client-layers"],
         )
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertEqual([c[0] for c in script.calls], ["planner", "planner", "worker", "reviewer"])
+        assert rc == 0, self.blocked
+        assert [c[0] for c in script.calls] == ["planner", "planner", "worker", "reviewer"]
         plan = self.eng.plan_data
         assert plan is not None
         stages = plan["stages"]
-        self.assertEqual(len(stages), 1)
-        self.assertEqual(stages[0]["checks"], [adhoc(c) for c in keep])
+        assert len(stages) == 1
+        assert stages[0]["checks"] == [adhoc(c) for c in keep]
         note = f"Plan check `{command}` left to the gate"
-        self.assertIn(note, self.eng.log_path.read_text())
-        self.assertIn(note, Planner.summary(plan))
-        self.assertIn(note, (self.eng.run_dir / "plan.json").read_text())
-        self.assertTrue(any(note in c[3] for c in self.bd_calls if c[:2] == ("comments", "add")))
+        assert note in self.eng.log_path.read_text()
+        assert note in Planner.summary(plan)
+        assert note in (self.eng.run_dir / "plan.json").read_text()
+        assert any(note in c[3] for c in self.bd_calls if c[:2] == ("comments", "add"))
 
     def test_gate_checks_in_risks_and_cases_are_left_to_land_too(self):
         host = mock.Mock(cfg=cfg_with(gate_only=["echo gate"]))
@@ -64,11 +64,11 @@ class GateOnly(EngineTest):
                           cases=[{"criterion": "f.txt exists", "check": "echo gate"}]))
         with mock.patch.object(lint, "dry_check", return_value=[]):
             SendBack(host).after_rewrite(data)
-        self.assertIsNone(data["risks"][0]["check"])
-        self.assertIsNone(data["cases"][0]["check"])
-        self.assertEqual(data["cases"][0]["proved_by"], "engine_step")
-        self.assertEqual(data["cases"][0]["via"], "land gate")
-        self.assertEqual(lint.gate_only_checks(data, host.cfg), [])
-        self.assertEqual(lint.ledger_problems(data), [])
-        self.assertEqual(len(data["assumptions"]), 1)
+        assert data["risks"][0]["check"] is None
+        assert data["cases"][0]["check"] is None
+        assert data["cases"][0]["proved_by"] == "engine_step"
+        assert data["cases"][0]["via"] == "land gate"
+        assert lint.gate_only_checks(data, host.cfg) == []
+        assert lint.ledger_problems(data) == []
+        assert len(data["assumptions"]) == 1
         host.log.note.assert_called_once()

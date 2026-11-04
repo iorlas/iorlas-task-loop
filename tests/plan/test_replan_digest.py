@@ -1,8 +1,9 @@
 """The replan prompt carries the tree's diff stat and a budget for looking, and only on a replan."""
 import sys
-import unittest
 from pathlib import Path
 from types import SimpleNamespace
+
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -24,19 +25,15 @@ def host(tree="abc"):
                            routing=SimpleNamespace(ledger=lambda: ledger))
 
 
-class Digest(unittest.TestCase):
+class Digest(Case):
     def test_a_replan_gets_the_diff_stat_and_the_budget(self):
         text = PlanPrompt(host(), StatGit(snapshot())).history({"stages": []}, False)
-        self.assertIn("<tree>\na.py | 2 +-\n</tree>", text)
-        self.assertIn(f"at most {REPLAN_CALLS} files", text)
-        self.assertIn("sent back: x", text)
+        assert "<tree>\na.py | 2 +-\n</tree>" in text
+        assert f"at most {REPLAN_CALLS} files" in text
+        assert "sent back: x" in text
 
     def test_a_first_plan_gets_neither(self):
-        self.assertEqual(PlanPrompt(host(), StatGit(snapshot())).history(None, False), "")
+        assert PlanPrompt(host(), StatGit(snapshot())).history(None, False) == ""
 
     def test_no_tree_says_nothing_changed(self):
-        self.assertIn("(no file changed yet)", PlanPrompt(host(tree=""), StatGit(snapshot())).history(None, True))
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert "(no file changed yet)" in PlanPrompt(host(tree=""), StatGit(snapshot())).history(None, True)

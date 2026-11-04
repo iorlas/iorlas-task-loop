@@ -1,15 +1,15 @@
 """Linked briefs treat IDs as opaque and ask the tracker reader to find prose references."""
-import unittest
 from unittest import mock
 
 import support.paths  # noqa: F401
+from support.case import Case
 
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.ids import BeadId
 from taskloop.domain.plan.brief import linked
 
 
-class LinkedIds(unittest.TestCase):
+class LinkedIds(Case):
     def test_opaque_id_and_parent_are_passed_whole(self):
         task_id = BeadId("opaque-with-dashes.and.dots")
         parent = BeadId("unrelated-parent.namespace")
@@ -20,8 +20,8 @@ class LinkedIds(unittest.TestCase):
         show = mock.Mock(side_effect=records.get)
         text = linked(task_id, bead, [], "Denis Tomilin", show, lambda _: [], mentions)
         mentions.assert_called_once()
-        self.assertEqual(mentions.call_args.args[0], task_id)
-        self.assertIn("Use the decision", mentions.call_args.args[1])
-        self.assertEqual(show.call_args_list, [mock.call(parent), mock.call(named_id)])
-        self.assertIn(parent, text)
-        self.assertIn(named_id, text)
+        assert mentions.call_args.args[0] == task_id
+        assert "Use the decision" in mentions.call_args.args[1]
+        assert show.call_args_list == [mock.call(parent), mock.call(named_id)]
+        assert parent in text
+        assert named_id in text
