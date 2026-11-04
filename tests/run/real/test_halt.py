@@ -6,9 +6,10 @@ import sys
 import tempfile
 import threading
 import time
-import unittest
 from pathlib import Path
 from typing import Any
+
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
@@ -39,15 +40,15 @@ class Halt(te.EngineTest):
         with halting.halt_on_sigterm():
             rc, _ = self.run_engine({"plan": [plan], "write": [WRITE], "review": [CLEAN]})
         waiter.join(5)
-        self.assertFalse(waiter.is_alive())
-        self.assertLess(time.time() - t, 60)
-        self.assertEqual(rc, 2)
-        self.assertIn("stopped (SIGTERM)", self.said())
+        assert not waiter.is_alive()
+        assert time.time() - t < 60
+        assert rc == 2
+        assert "stopped (SIGTERM)" in self.said()
         self.assertDead(self.child_of(pidfile))
         rows = [json.loads(line) for line in self.eng.log_path.read_text().splitlines()]
-        self.assertEqual([r["why"] for r in rows if r["kind"] == "kill"], ["stopped"])
-        self.assertIn("wip (t-1)", gitq.git("log", "-1", "--format=%s", "task/t-1", cwd=str(self.wt)))
-        self.assertIsNone(halting.RUN_HALT["ev"])
+        assert [r["why"] for r in rows if r["kind"] == "kill"] == ["stopped"]
+        assert "wip (t-1)" in gitq.git("log", "-1", "--format=%s", "task/t-1", cwd=str(self.wt))
+        assert halting.RUN_HALT["ev"] is None
     def test_a_worker_call_is_stopped_by_the_run_flag_and_its_process_is_gone(self):
         d = Path(tempfile.mkdtemp())
         self.addCleanup(lambda: __import__("shutil").rmtree(d, ignore_errors=True))
@@ -58,13 +59,9 @@ class Halt(te.EngineTest):
         threading.Thread(target=lambda: (te.until(pidfile.exists, WAIT), te.until(lambda: pidfile.read_text().strip(), WAIT),
                                          r.outer.set()), daemon=True).start()
         t = time.time()
-        with self.assertRaises(delegate.Stopped):
+        with pytest.raises(delegate.Stopped):
             r(["sh", "-c", 'echo $$ > "$0"; sleep 30', str(pidfile)])
-        self.assertLess(time.time() - t, 20)
-        self.assertEqual(r.obs["why"], "interrupted")
+        assert time.time() - t < 20
+        assert r.obs["why"] == "interrupted"
         te.until(lambda: te.pid_gone(int(pidfile.read_text())), 3)
-        self.assertTrue(te.pid_gone(int(pidfile.read_text())))
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert te.pid_gone(int(pidfile.read_text()))

@@ -2,9 +2,11 @@
 
 import sys
 import tempfile
-import unittest
 from pathlib import Path
 from unittest import mock
+
+import pytest
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -34,8 +36,8 @@ from taskloop.stores.memory import fake_stores
 from taskloop.stores.runlog import RunLog
 
 
-class SelectedStage(unittest.TestCase):
-    def setUp(self):
+class SelectedStage(Case):
+    def setup_method(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.repo = Path(tmp.name) / "repo"
@@ -90,39 +92,39 @@ class SelectedStage(unittest.TestCase):
 
     def test_gate_runs_only_gate_and_keeps_identified_terminal_manifest(self):
         rc, manifest = self.invoke("gate")
-        self.assertEqual(rc, 0)
+        assert rc == 0
         self.e.lander.gate.run.assert_called_once_with()
         self.e.lander.finish.assert_not_called()
         self.e.tree.reset.assert_not_called()
         self.e.planner.plan.assert_not_called()
         self.e.closer.close.assert_not_called()
-        self.assertEqual((manifest.mode, manifest.owner, manifest.session), ("stage:gate", "owner", "stage-session"))
-        self.assertEqual((manifest.state, manifest.next_step), (RunState.DONE, Step.LAND))
+        assert (manifest.mode, manifest.owner, manifest.session) == ("stage:gate", "owner", "stage-session")
+        assert (manifest.state, manifest.next_step) == (RunState.DONE, Step.LAND)
         self.e.checkpoints.save.assert_called_once_with(step=Step.LAND, stage=0)
         closes = [row.rec for row in self.e.stores.run_log(self.e.run_id).read_from(0).items if isinstance(row.rec, rec.Close)]
-        self.assertEqual([row.retry_at for row in closes], [0.0])
+        assert [row.retry_at for row in closes] == [0.0]
 
     def test_standalone_empty_plan_files_its_owner_ask(self):
         self.e.planner.plan.side_effect = Blocked("noop: no work", kind=Kind.NOOP)
         rc, manifest = self.invoke("plan")
-        self.assertEqual((rc, manifest.state), (1, RunState.PARKED))
+        assert (rc, manifest.state) == (1, RunState.PARKED)
         self.e.closer.apply.assert_called_once()
         effect, done, stats = self.e.closer.apply.call_args.args
-        self.assertEqual((effect, done.kind, stats), (effects.RaiseAsk(), Kind.NOOP, ""))
+        assert (effect, done.kind, stats) == (effects.RaiseAsk(), Kind.NOOP, "")
 
     def test_land_without_green_gate_is_refused_with_reason(self):
         rc, manifest = self.invoke("land")
-        self.assertEqual(rc, 1)
-        self.assertEqual(manifest.state, RunState.STOPPED)
-        self.assertIn("no green gate for the current tree and base", manifest.reason)
+        assert rc == 1
+        assert manifest.state == RunState.STOPPED
+        assert "no green gate for the current tree and base" in manifest.reason
         self.e.lander.finish.assert_not_called()
         self.e.lander.gate.run.assert_not_called()
 
     def test_auto_next_uses_checkpoint_stage_and_mode(self):
         self.e.checkpoints.read.return_value = Checkpoint(bead="t-1", run="old", t=1, step="gate")
         rc, manifest = self.invoke()
-        self.assertEqual(rc, 0)
-        self.assertEqual(manifest.mode, "auto-next")
+        assert rc == 0
+        assert manifest.mode == "auto-next"
         self.e.lander.gate.run.assert_called_once_with()
         self.e.tree.reset.assert_not_called()
 
@@ -131,7 +133,7 @@ class SelectedStage(unittest.TestCase):
         self.locator.advance(previous.run, Step.GATE)
         self.locator.end(previous.run, 2, RunState.DONE)
         rc, manifest = self.invoke()
-        self.assertEqual((rc, manifest.mode), (0, "auto-next"))
+        assert (rc, manifest.mode) == (0, "auto-next")
         self.e.lander.gate.run.assert_called_once_with()
 
     def test_failed_manifest_cursor_wins_over_an_older_checkpoint(self):
@@ -139,42 +141,42 @@ class SelectedStage(unittest.TestCase):
         previous = self.locator.create(str(self.repo), "t-1", 2)
         self.locator.advance(previous.run, Step.GATE)
         self.locator.end(previous.run, 3, RunState.FAILED, "gate failed")
-        self.assertEqual(self.invoke()[0], 0)
+        assert self.invoke()[0] == 0
         self.e.lander.gate.run.assert_called_once_with()
 
     def test_explicit_stage_can_rerun_after_a_completed_run(self):
         previous = self.locator.create(str(self.repo), "t-1", 1)
         self.locator.end(previous.run, 2, RunState.DONE)
-        self.assertEqual(self.invoke("gate")[0], 0)
+        assert self.invoke("gate")[0] == 0
 
     def test_live_previous_run_refuses_auto_next(self):
         previous = self.locator.create(str(self.repo), "t-1", 1)
         self.locator.beat(previous.run, 2)
         rc, manifest = self.invoke()
-        self.assertEqual(rc, 1)
-        self.assertIn("still running", manifest.reason)
+        assert rc == 1
+        assert "still running" in manifest.reason
         self.e.lander.gate.run.assert_not_called()
 
     def test_close_without_land_is_refused(self):
         rc, manifest = self.invoke("close")
-        self.assertEqual(rc, 1)
-        self.assertIn("no land on record", manifest.reason)
+        assert rc == 1
+        assert "no land on record" in manifest.reason
         self.e.closer.close.assert_not_called()
 
     def test_red_gate_preserves_reason_and_does_not_advance(self):
         self.e.lander.gate.run.return_value = Problem(ProblemKind.GATE, "gate steps red: mac")
         rc, manifest = self.invoke("gate")
-        self.assertEqual((rc, manifest.state, manifest.next_step), (1, RunState.FAILED, Step.GATE))
-        self.assertIn("gate steps red: mac", manifest.reason)
+        assert (rc, manifest.state, manifest.next_step) == (1, RunState.FAILED, Step.GATE)
+        assert "gate steps red: mac" in manifest.reason
         self.e.checkpoints.save.assert_not_called()
 
     def test_exception_still_seals_manifest(self):
         self.e.lander.gate.run.side_effect = RuntimeError("runner failed")
-        with self.assertRaisesRegex(RuntimeError, "runner failed"):
+        with pytest.raises(RuntimeError, match="runner failed"):
             self.invoke("gate")
         manifest = self.manifest()
-        self.assertEqual(manifest.state, RunState.FAILED)
-        self.assertIn("runner failed", manifest.reason)
+        assert manifest.state == RunState.FAILED
+        assert "runner failed" in manifest.reason
 
     def test_land_crash_parks_and_auto_next_retries_land(self):
         e = self.e
@@ -182,31 +184,31 @@ class SelectedStage(unittest.TestCase):
         e.lander.gate.green.return_value = True
         e.lander.finish.side_effect = KeyError("stale")
         rc, manifest = self.invoke("land")
-        self.assertEqual((rc, manifest.state, manifest.next_step), (1, RunState.PARKED, Step.LAND))
-        self.assertEqual(e.kind.value, "engine_crash")
-        self.assertEqual(e.why, "land crashed: KeyError: 'stale'")
+        assert (rc, manifest.state, manifest.next_step) == (1, RunState.PARKED, Step.LAND)
+        assert e.kind.value == "engine_crash"
+        assert e.why == "land crashed: KeyError: 'stale'"
         e.checkpoints.drop.assert_not_called()
         e.checkpoints.drop_unless_fenced.assert_not_called()
         e.checkpoints.save.assert_not_called()
         e.lander.finish.side_effect = None
         e.lander.finish.return_value = "landed-sha"
         rc, manifest = self.invoke()
-        self.assertEqual((rc, manifest.next_step), (0, Step.CLOSE))
+        assert (rc, manifest.next_step) == (0, Step.CLOSE)
 
     def test_interrupt_at_land_propagates(self):
         self.e.lander.gate.green.return_value = True
         self.e.lander.finish.side_effect = KeyboardInterrupt()
-        with self.assertRaises(KeyboardInterrupt):
+        with pytest.raises(KeyboardInterrupt):
             self.invoke("land")
-        self.assertEqual(self.e.kind, Kind.FAULT_ENGINE)
+        assert self.e.kind == Kind.FAULT_ENGINE
 
     def test_land_without_a_recorded_sha_parks_and_keeps_its_cursor(self):
         self.e.lander.gate.green.return_value = True
         self.e.lander.finish.return_value = ""
         rc, manifest = self.invoke("land")
-        self.assertEqual((rc, manifest.state, manifest.next_step), (1, RunState.STOPPED, Step.LAND))
-        self.assertEqual((self.e.kind, self.e.pause_reason), (Kind.PAUSE_LANE, "stage_refused"))
-        self.assertIn("no land was recorded", manifest.reason)
+        assert (rc, manifest.state, manifest.next_step) == (1, RunState.STOPPED, Step.LAND)
+        assert (self.e.kind, self.e.pause_reason) == (Kind.PAUSE_LANE, "stage_refused")
+        assert "no land was recorded" in manifest.reason
         self.e.checkpoints.drop.assert_not_called()
         self.e.checkpoints.drop_unless_fenced.assert_not_called()
 
@@ -214,15 +216,15 @@ class SelectedStage(unittest.TestCase):
         self.e.lander.gate.green.return_value = True
         self.e.lander.finish.side_effect = ValueError("land refused: gate is no longer green for this tree and base")
         rc, manifest = self.invoke("land")
-        self.assertEqual((rc, manifest.state), (1, RunState.STOPPED))
-        self.assertEqual((self.e.kind, self.e.pause_reason), (Kind.PAUSE_LANE, "stage_refused"))
-        self.assertNotIn("crash", manifest.reason)
+        assert (rc, manifest.state) == (1, RunState.STOPPED)
+        assert (self.e.kind, self.e.pause_reason) == (Kind.PAUSE_LANE, "stage_refused")
+        assert "crash" not in manifest.reason
 
     def test_typed_network_pause_keeps_the_loop_terminal_state(self):
         self.e.lander.gate.run.side_effect = Blocked("network unavailable", kind=Kind.PAUSE_NETWORK)
         rc, manifest = self.invoke("gate")
-        self.assertEqual((rc, manifest.state), (1, RunState.STOPPED))
-        self.assertEqual(manifest.reason, "network unavailable")
+        assert (rc, manifest.state) == (1, RunState.STOPPED)
+        assert manifest.reason == "network unavailable"
 
     def test_pause_close_records_the_durable_wake(self):
         e = self.e
@@ -243,42 +245,42 @@ class SelectedStage(unittest.TestCase):
 
         e.records.finish.side_effect = finish
         rc, manifest = self.invoke("gate")
-        self.assertEqual((rc, manifest.state), (1, RunState.STOPPED))
+        assert (rc, manifest.state) == (1, RunState.STOPPED)
         closes = [row.rec for row in e.stores.run_log(e.run_id).read_from(0).items if isinstance(row.rec, rec.Close)]
-        self.assertEqual([row.retry_at for row in closes], [160.0])
+        assert [row.retry_at for row in closes] == [160.0]
 
     def test_pause_close_ignores_an_older_runs_wake(self):
         e = self.e
         ParkStore(e.home).put(Park(bead=e.bead, hash="", runs=0, run="old", t=100.0, retry_at=160.0))
         e.lander.gate.run.side_effect = Blocked("network unavailable", kind=Kind.PAUSE_NETWORK)
         rc, manifest = self.invoke("gate")
-        self.assertEqual((rc, manifest.state), (1, RunState.STOPPED))
+        assert (rc, manifest.state) == (1, RunState.STOPPED)
         closes = [row.rec for row in e.stores.run_log(e.run_id).read_from(0).items if isinstance(row.rec, rec.Close)]
-        self.assertEqual([row.retry_at for row in closes], [0.0])
+        assert [row.retry_at for row in closes] == [0.0]
 
     def test_unknown_stage_lists_every_engine_step(self):
-        with self.assertRaises(ValueError) as caught:
+        with pytest.raises(ValueError) as caught:
             parse_step("mac-gate")
         for step in Step:
-            self.assertIn(step.value, str(caught.exception))
+            assert step.value in str(caught.value)
         result = tl_main("run-task", "t-1", "--stage", "mac-gate", cwd=self.repo)
-        self.assertNotEqual(result.returncode, 0)
+        assert result.returncode != 0
         for step in Step:
-            self.assertIn(step.value, result.stderr)
+            assert step.value in result.stderr
 
     def test_single_stage_cursor_stops_before_another_step_begins(self):
         self.open_run()
         self.e.steps.only = Step.GATE
         self.e.steps.begin("gate", "gate")
-        with self.assertRaisesRegex(ValueError, "stopped before land"):
+        with pytest.raises(ValueError, match="stopped before land"):
             self.e.steps.begin("land", "land")
-        self.assertEqual(self.e.steps.cur.step, "gate")
+        assert self.e.steps.cur.step == "gate"
 
     def test_land_cannot_rerun_a_gate_that_went_stale(self):
         self.open_run()
         self.e.steps.only = Step.LAND
         self.e.checker.gate_green.return_value = False
-        with self.assertRaisesRegex(ValueError, "no longer green"):
+        with pytest.raises(ValueError, match="no longer green"):
             Gate(self.e).run()
         self.e.checker.run_items.assert_not_called()
 
@@ -286,9 +288,9 @@ class SelectedStage(unittest.TestCase):
         self.open_run()
         with mock.patch("taskloop.app.run.stages.RunOnce") as once:
             once.return_value.go.return_value = 0
-            self.assertEqual(run_stages(self.e, None, continuous=True), 0)
+            assert run_stages(self.e, None, continuous=True) == 0
         once.return_value.go.assert_called_once_with()
-        self.assertEqual(self.manifest().mode, "loop")
+        assert self.manifest().mode == "loop"
         self.e.lander.gate.run.assert_not_called()
 
     def test_separate_round_steps_keep_writer_and_check_evidence_then_reset_counters(self):
@@ -301,7 +303,7 @@ class SelectedStage(unittest.TestCase):
         e.stage_loop.reviewing.run.return_value = ACCEPT
 
         def write(s, **kwargs):
-            self.assertFalse(kwargs["look"])
+            assert not kwargs["look"]
             s.w = {
                 "summary": "written",
                 "checks_run": [],
@@ -316,7 +318,7 @@ class SelectedStage(unittest.TestCase):
             return ""
 
         def checks(s):
-            self.assertEqual(s.w["summary"], "written")
+            assert s.w["summary"] == "written"
             s.run = e.last_run = CheckRun(round=1)
             return ""
 
@@ -324,16 +326,16 @@ class SelectedStage(unittest.TestCase):
         e.stage_loop.checking.run.side_effect = checks
         ck = None
         for step, following in ((Step.WRITE, Step.LOOK), (Step.LOOK, Step.CHECKS), (Step.CHECKS, Step.REVIEW), (Step.REVIEW, Step.VERIFY)):
-            self.assertEqual(round_step(e, step, ck), following)
+            assert round_step(e, step, ck) == following
             saved = e.checkpoints.save.call_args.kwargs
             ck = Checkpoint(bead="t-1", run=e.run_id, t=1, **saved)
             if following is not Step.VERIFY:
                 assert ck.progress is not None
                 assert ck.progress.write is not None
-                self.assertEqual((ck.n, ck.progress.write.summary), (1, "written"))
+                assert (ck.n, ck.progress.write.summary) == (1, "written")
         assert ck is not None
-        self.assertEqual((ck.stage, ck.n, ck.rounds, ck.progress), (1, 0, 0, None))
-        self.assertEqual(e.accepted, [0])
+        assert (ck.stage, ck.n, ck.rounds, ck.progress) == (1, 0, 0, None)
+        assert e.accepted == [0]
         e.stage_loop.writing.run.assert_called_once()
         e.stage_loop.checking.run.assert_called_once()
         e.stage_loop.reviewing.run.assert_called_once()

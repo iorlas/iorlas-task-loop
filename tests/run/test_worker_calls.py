@@ -4,10 +4,11 @@ CallEnd. The policy's own tables are in test_lane_policy; the live file and the 
 
 import sys
 import time
-import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
+
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
@@ -30,12 +31,10 @@ def napper(nap):
     return SimpleNamespace(sleep=nap, strftime=time.strftime, localtime=time.localtime, time=time.time)
 
 
-class RetryRows(unittest.TestCase):
+class RetryRows(Case):
     def test_seven_kinds_and_every_limit_is_one_row(self):
         got = {r.kind: (r.limit, r.then) for r in retry.ROWS}
-        self.assertEqual(
-            got,
-            {
+        assert got == {
                 "invalid_output": (1, "fault"),
                 "denied_read": (1, "fault"),
                 "denied_secret": (1, "fault"),
@@ -43,13 +42,12 @@ class RetryRows(unittest.TestCase):
                 "resume_refused": (1, "fault"),
                 "crash": (2, "fault"),
                 "worker_failed": (1, "ask"),
-            },
-        )
+            }
 
     def test_left_and_rest_read_the_rows(self):
-        self.assertTrue(retry.PLAN.left("lane_poll", 2))
-        self.assertFalse(retry.PLAN.left("lane_poll", 3))
-        self.assertEqual([retry.PLAN.rest("crash", n) for n in (0, 1, 5)], [30.0, 120.0, 120.0])
+        assert retry.PLAN.left("lane_poll", 2)
+        assert not retry.PLAN.left("lane_poll", 3)
+        assert [retry.PLAN.rest("crash", n) for n in (0, 1, 5)] == [30.0, 120.0, 120.0]
 
 
 class Calls(te.EngineTest):
@@ -75,12 +73,12 @@ class Calls(te.EngineTest):
 
         script = Script({"plan": [te.PLAN], "write": [te.WRITE], "review": [te.CLEAN]})
         rc, _ = self.go(script)
-        self.assertEqual(rc, 0)
+        assert rc == 0
         over = records(self.eng, "overrun")
-        self.assertEqual(len(over), 1)
-        self.assertEqual(over[0]["stage"], "review")
-        self.assertEqual(over[0]["budget_s"], 600.0)  # the default: review_budget_min 10
-        self.assertEqual(script.nodes.count("review"), 1)  # the hung call never answered; the next rung did (the loop went on)
+        assert len(over) == 1
+        assert over[0]["stage"] == "review"
+        assert over[0]["budget_s"] == 600.0  # the default: review_budget_min 10
+        assert script.nodes.count("review") == 1  # the hung call never answered; the next rung did (the loop went on)
 
     def test_four_busy_answers_cost_at_most_three_sleeps(self):
         busy = te.stop("busy", "ref-write", say="state lock held")
@@ -88,7 +86,7 @@ class Calls(te.EngineTest):
             {"plan": [te.PLAN], "write": [te.WRITE, busy, busy, busy, busy, te.WRITE], "review": [te.review(unmet=["more"]), te.CLEAN]}
         )
         _rc, nap = self.go(script)
-        self.assertLessEqual(nap.call_count, 3)
+        assert nap.call_count <= 3
 
     def test_a_write_that_timed_out_gets_a_retry_decision_with_the_timeout_and_the_exit(self):
         class Script(fake_route.Script):
@@ -102,25 +100,25 @@ class Calls(te.EngineTest):
         script = Script({"plan": [te.PLAN], "write": [te.WRITE], "review": [te.CLEAN]})
         self.go(script)
         dec = records(self.eng, "retry_decision")
-        self.assertTrue(dec)
-        self.assertEqual(dec[0]["plan"], "worker_failed")
-        self.assertEqual(dec[0]["exit"], -15)
-        self.assertIn(dec[0]["action"], ("reroute", "new_thread", "retry", "ask"))
+        assert dec
+        assert dec[0]["plan"] == "worker_failed"
+        assert dec[0]["exit"] == -15
+        assert dec[0]["action"] in ("reroute", "new_thread", "retry", "ask")
 
     def test_call_end_carries_the_exit_of_the_worker(self):
         script = fake_route.Script({"plan": [te.PLAN], "write": [te.full(te.WRITE, "w1", exit_code=0)], "review": [te.CLEAN]})
         self.go(script)
         ends = [r for r in records(self.eng, "call_end") if r.get("exit") is not None]
-        self.assertEqual([r["exit"] for r in ends], [0])  # the write's; the planner and the reviewer ran no worker
+        assert [r["exit"] for r in ends] == [0]  # the write's; the planner and the reviewer ran no worker
 
     def test_call_end_names_where_its_cost_came_from(self):
         script = fake_route.Script({"plan": [te.PLAN], "write": [te.full(te.WRITE, "w1", exit_code=0)], "review": [te.CLEAN]})
         self.go(script)
         ends = records(self.eng, "call_end")
-        self.assertTrue(ends)
+        assert ends
         answered = [r for r in ends if r["status"] != "stopped"]  # an interrupted call has no answer, so no source
-        self.assertTrue(answered)
-        self.assertEqual({r["cost_source"] for r in answered} - {"harness", "free", "unknown"}, set())
+        assert answered
+        assert {r["cost_source"] for r in answered} - {"harness", "free", "unknown"} == set()
 
     def test_every_worker_call_is_told_its_run_through_the_six_names(self):
         seen = []
@@ -134,23 +132,19 @@ class Calls(te.EngineTest):
         with mock.patch.object(worker_call.dg, "call", spy):
             self.go(script)
         e = self.eng
-        self.assertTrue(seen)
+        assert seen
         for env in seen:
-            self.assertEqual(env["TL_RUN_ID"], e.run_id)
-            self.assertEqual(env["TL_RUN_DIR"], str(e.run_dir))
-            self.assertEqual(env["TL_WORKTREE"], str(e.wt))
-            self.assertEqual(env["TL_ATTEMPT"], "1")
-            self.assertTrue(env["TL_BRANCH"])
+            assert env["TL_RUN_ID"] == e.run_id
+            assert env["TL_RUN_DIR"] == str(e.run_dir)
+            assert env["TL_WORKTREE"] == str(e.wt)
+            assert env["TL_ATTEMPT"] == "1"
+            assert env["TL_BRANCH"]
             art = Path(env["TL_ARTIFACT_DIR"])
-            self.assertEqual(art.parent.parent, e.run_dir / "artifacts")
-            self.assertEqual(art.name, "attempt-1")
-            self.assertTrue(art.is_dir())
+            assert art.parent.parent == e.run_dir / "artifacts"
+            assert art.name == "attempt-1"
+            assert art.is_dir()
 
 
 for _name in dir(te.EngineTest):  # the engine fixture only
     if _name.startswith("test_") and _name not in Calls.__dict__:
         setattr(Calls, _name, None)
-
-
-if __name__ == "__main__":
-    unittest.main()

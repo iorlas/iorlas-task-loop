@@ -1,12 +1,13 @@
 """A network continuation copies only consumed SQL steps after creating its run."""
 
 import tempfile
-import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import pytest
 import support.paths  # noqa: F401
+from support.case import Case
 
 from taskloop.app.run import done_memo
 from taskloop.app.run.reload import Reload
@@ -15,8 +16,8 @@ from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.paths import ConfigDir, RunFiles
 
 
-class CarryDoneMemo(unittest.TestCase):
-    def setUp(self):
+class CarryDoneMemo(Case):
+    def setup_method(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.cfg = ConfigDir(Path(tmp.name))
@@ -40,19 +41,19 @@ class CarryDoneMemo(unittest.TestCase):
         before = self.steps(self.paused.run)
         with patch.object(RunFiles, "done_memo", side_effect=AssertionError("legacy file read")):
             Reload(self.host).carry_done_memo(self.paused.dir)
-        self.assertEqual(self.steps(self.new.run), [row for row in before if row[3] == "done"])
-        self.assertEqual(self.steps(self.paused.run), before)
-        self.assertEqual(done_memo.recall(self.new.dir, ("write", 1), "sha"), {"answer": "done"})
-        self.assertIsNone(done_memo.recall(self.new.dir, ("write", 1), "changed"))
+        assert self.steps(self.new.run) == [row for row in before if row[3] == "done"]
+        assert self.steps(self.paused.run) == before
+        assert done_memo.recall(self.new.dir, ("write", 1), "sha") == {"answer": "done"}
+        assert done_memo.recall(self.new.dir, ("write", 1), "changed") is None
         done_memo.keep(self.new.dir, ("write", 1), "new-sha", str(answer))
         Reload(self.host).carry_done_memo(self.paused.dir)
-        self.assertEqual(self.steps(self.new.run)[0][6], "new-sha")
+        assert self.steps(self.new.run)[0][6] == "new-sha"
 
     def test_copy_requires_destination_run_and_rolls_back_on_foreign_key_failure(self):
         answer = self.paused.dir / "answer.json"
         answer.write_text('{}')
         done_memo.keep(self.paused.dir, (1,), "sha", str(answer))
         self.host.run_id = "missing"
-        with self.assertRaises(factorydb.DatabaseError):
+        with pytest.raises(factorydb.DatabaseError):
             Reload(self.host).carry_done_memo(self.paused.dir)
-        self.assertEqual(self.steps("missing"), [])
+        assert self.steps("missing") == []

@@ -1,9 +1,10 @@
 """Transient retry scheduling must not change existing owner, ask or infrastructure closes."""
 
 import sys
-import unittest
 from pathlib import Path
 from unittest import mock
+
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -20,8 +21,8 @@ from taskloop.domain.beads.park import text_hash
 from taskloop.domain.lanes import pauses
 
 
-class PauseCompatibility(unittest.TestCase):
-    def setUp(self):
+class PauseCompatibility(Case):
+    def setup_method(self):
         self.bead = Bead(id=BeadId("t-1"), title="work", status="open")
         self.cfg = mock.Mock()
 
@@ -46,10 +47,10 @@ class PauseCompatibility(unittest.TestCase):
                     host.run_id = f"r{n}"
                     with mock.patch("taskloop.app.run.closer.beadtools.peek", return_value=self.bead):
                         Closer(host, mock.Mock()).pause(oc.make(Kind.PAUSE_LANE, "paused"))
-                    self.assertEqual((host.retry_after, host.asked, host.pause_reason), (0, False, reason))
+                    assert (host.retry_after, host.asked, host.pause_reason) == (0, False, reason)
                     host.ask_flow.raise_ask.assert_not_called()
                     rec = store.return_value.put.call_args.args[0]
-                    self.assertEqual((rec.reason, rec.permanence, rec.retry_at), (reason, "needs_owner", 0))
+                    assert (rec.reason, rec.permanence, rec.retry_at) == (reason, "needs_owner", 0)
                     store.return_value.get.return_value = rec
 
     def test_owner_pauses_without_retry_caps_ask_unless_the_machine_needs_repair(self):
@@ -62,13 +63,13 @@ class PauseCompatibility(unittest.TestCase):
                 store.return_value.get.return_value = None
                 host.clock.now.return_value = 100
                 host.ask_flow.raise_ask.return_value = True
-                self.assertEqual(pauses.rule(reason, producer).max_attempts, 0)
+                assert pauses.rule(reason, producer).max_attempts == 0
                 with mock.patch("taskloop.app.run.closer.beadtools.peek", return_value=self.bead):
                     Closer(host, mock.Mock()).pause(oc.make(Kind.PAUSE_LANE, "paused"))
-                self.assertEqual((host.retry_after, host.asked), (0, True))
+                assert (host.retry_after, host.asked) == (0, True)
                 host.ask_flow.raise_ask.assert_called_once()
                 rec = store.return_value.put.call_args.args[0]
-                self.assertEqual((rec.reason, rec.permanence, rec.retry_at), (reason, "needs_owner", 0))
+                assert (rec.reason, rec.permanence, rec.retry_at) == (reason, "needs_owner", 0)
 
     def test_every_capped_policy_is_charged_by_the_pause_path(self):
         policies = dict(pauses.TABLE)
@@ -90,17 +91,17 @@ class PauseCompatibility(unittest.TestCase):
                     with mock.patch("taskloop.app.run.closer.beadtools.peek", return_value=self.bead):
                         Closer(host, mock.Mock()).pause(oc.make(Kind.PAUSE_LANE, "paused"))
                     rec = store.return_value.put.call_args.args[0]
-                    self.assertEqual(rec.attempts, {pauses.attempt_key(reason, producer): n + 1})
-                    self.assertEqual(rec.permanence, "transient" if n < policy.max_attempts else "needs_owner")
-                    self.assertEqual(host.asked, n == policy.max_attempts)
-                    self.assertEqual(host.ask_flow.raise_ask.call_count, int(n == policy.max_attempts))
+                    assert rec.attempts == {pauses.attempt_key(reason, producer): n + 1}
+                    assert rec.permanence == ("transient" if n < policy.max_attempts else "needs_owner")
+                    assert host.asked == (n == policy.max_attempts)
+                    assert host.ask_flow.raise_ask.call_count == int(n == policy.max_attempts)
                     store.return_value.get.return_value = rec
 
     def test_faults_asks_and_owner_holds_do_not_acquire_retry_records(self):
         for kind in (*FAULTS, *ASKS, Kind.WAIT_ASK, Kind.OWNER_PARK):
             with self.subTest(kind=kind), mock.patch.object(parks, "ParkStore") as store:
                 # Even a transient delegate reason must not override the outcome's existing handling.
-                self.assertIsNone(parks.paused(self.cfg, self.bead, kind, "r1", 100, reason="worker_failed"))
+                assert parks.paused(self.cfg, self.bead, kind, "r1", 100, reason="worker_failed") is None
                 store.assert_not_called()
 
     def test_question_close_keeps_its_original_record_fields(self):
@@ -115,9 +116,9 @@ class PauseCompatibility(unittest.TestCase):
             rec = parks.paused(self.cfg, self.bead, Kind.PAUSE_LANE, "r1", 100, reason="rate_limited",
                                not_before=900, draw=lambda: 0.5, permanence="transient")
             assert rec is not None
-            self.assertEqual(
-                (rec.reason, rec.permanence, rec.retry_at, rec.attempts),
-                ("rate_limited", "transient", 900, {"delegate:rate_limited": 1})
+            assert (
+                (rec.reason, rec.permanence, rec.retry_at, rec.attempts)
+                == ("rate_limited", "transient", 900, {"delegate:rate_limited": 1})
             )
             store.return_value.put.assert_called_once_with(rec)
 
@@ -126,10 +127,10 @@ class PauseCompatibility(unittest.TestCase):
             store.return_value.get.return_value = None
             rec = parks.paused(self.cfg, self.bead, Kind.NOOP, "r1", 100, draw=lambda: 0.5)
             assert rec is not None
-            self.assertEqual((rec.reason, rec.permanence, rec.retry_at), ("plan_noop", "needs_owner", 0))
-            self.assertIsNotNone(park.verdict(rec, self.bead, now=10_000_000))
-            self.assertIsNone(park.verdict(rec, self.bead, answered=True))
-            self.assertIsNone(park.verdict(rec, self.bead.replace(description="Implement this")))
+            assert (rec.reason, rec.permanence, rec.retry_at) == ("plan_noop", "needs_owner", 0)
+            assert park.verdict(rec, self.bead, now=10_000_000) is not None
+            assert park.verdict(rec, self.bead, answered=True) is None
+            assert park.verdict(rec, self.bead.replace(description="Implement this")) is None
             store.return_value.put.assert_called_once_with(rec)
             parks.ended(self.cfg, self.bead, Kind.NOOP, "r1", 100)
             store.return_value.drop.assert_not_called()

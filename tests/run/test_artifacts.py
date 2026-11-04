@@ -2,9 +2,10 @@
 import os
 import sys
 import tempfile
-import unittest
 from pathlib import Path
 from unittest import mock
+
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
@@ -18,13 +19,13 @@ from taskloop.stores.memory import fake_stores
 from taskloop.stores.runlog import RunLog
 
 
-class Ingest(unittest.TestCase):
-    def setUp(self):
+class Ingest(Case):
+    def setup_method(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.src, self.dest = Path(self.tmp.name, "src"), Path(self.tmp.name, "dest", "tl-1")
         self.src.mkdir()
 
-    def tearDown(self):
+    def teardown_method(self):
         self.tmp.cleanup()
 
     def test_plain_files_are_copied_secrets_symlinks_and_big_files_are_not(self):
@@ -37,24 +38,24 @@ class Ingest(unittest.TestCase):
         with mock.patch.object(artifacts, "MAX_BYTES", 3):
             (self.src / "big.bin").write_bytes(b"1234")
             got = artifacts.ingest(self.src, self.dest)
-        self.assertEqual(got, ["shot.png"])
-        self.assertEqual(sorted(p.name for p in self.dest.iterdir()), ["shot.png"])  # %PDF is 4 bytes: over the patched cap
+        assert got == ["shot.png"]
+        assert sorted(p.name for p in self.dest.iterdir()) == ["shot.png"]  # %PDF is 4 bytes: over the patched cap
 
     def test_a_name_in_skip_stays_out(self):
         (self.src / "check.log").write_text("x")
         (self.src / "a.png").write_bytes(b"1")
-        self.assertEqual(artifacts.ingest(self.src, self.dest, skip=frozenset({"check.log"})), ["a.png"])
+        assert artifacts.ingest(self.src, self.dest, skip=frozenset({"check.log"})) == ["a.png"]
 
     def test_ingest_is_idempotent_and_never_raises(self):
         (self.src / "a.png").write_bytes(b"1")
-        self.assertEqual(artifacts.ingest(self.src, self.dest), ["a.png"])
+        assert artifacts.ingest(self.src, self.dest) == ["a.png"]
         (self.src / "a.png").write_bytes(b"2")
-        self.assertEqual(artifacts.ingest(self.src, self.dest), ["a.png"])
-        self.assertEqual((self.dest / "a.png").read_bytes(), b"2")
-        self.assertEqual(artifacts.ingest(self.src / "missing", self.dest), [])
+        assert artifacts.ingest(self.src, self.dest) == ["a.png"]
+        assert (self.dest / "a.png").read_bytes() == b"2"
+        assert artifacts.ingest(self.src / "missing", self.dest) == []
 
 
-class AtStepEnd(unittest.TestCase):
+class AtStepEnd(Case):
     """The engine ingests as a step ends: one Artifacts record under that step, only for files new since the last step, no model call."""
 
     def test_a_step_that_left_files_logs_one_record_before_its_end_and_a_later_step_logs_only_new_ones(self):
@@ -72,13 +73,13 @@ class AtStepEnd(unittest.TestCase):
             (src / "b.pdf").write_bytes(b"2")
             steps.end()
             kinds = [(r.kind, getattr(r, "names", None)) for r in (i.rec for i in stores.run_log("r").read_from().items)]
-            self.assertEqual([k for k in kinds if k[1]], [("artifacts", ["a.png"]), ("artifacts", ["b.pdf"])])
-            self.assertEqual([k[0] for k in kinds[:3]], ["step_start", "artifacts", "step_end"])
-            self.assertEqual(sorted(p.name for p in dest.iterdir()), ["a.png", "b.pdf"])
+            assert [k for k in kinds if k[1]] == [("artifacts", ["a.png"]), ("artifacts", ["b.pdf"])]
+            assert [k[0] for k in kinds[:3]] == ["step_start", "artifacts", "step_end"]
+            assert sorted(p.name for p in dest.iterdir()) == ["a.png", "b.pdf"]
 
 
-class Page(unittest.TestCase):
-    def setUp(self):
+class Page(Case):
+    def setup_method(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.dash = make_dash(config=self.tmp.name)
         self.dir = self.dash.env.config.artifacts(BeadId("tl-1"))
@@ -88,17 +89,13 @@ class Page(unittest.TestCase):
         (self.dir / "page.html").write_text("<script>alert(1)</script>")
         os.symlink("/etc/passwd", self.dir / "link.txt")
 
-    def tearDown(self):
+    def teardown_method(self):
         self.tmp.cleanup()
 
     def test_a_file_is_served_with_a_safe_type_and_bad_names_are_refused(self):
-        self.assertEqual(self.dash.artifacts.file("tl-1", "shot.png"), (b"png", "image/png"))
-        self.assertEqual(self.dash.artifacts.file("tl-1", "r.pdf"), (b"%PDF", "application/pdf"))
-        self.assertEqual(must(self.dash.artifacts.file("tl-1", "page.html"))[1], "application/octet-stream")  # never run as a page
+        assert self.dash.artifacts.file("tl-1", "shot.png") == (b"png", "image/png")
+        assert self.dash.artifacts.file("tl-1", "r.pdf") == (b"%PDF", "application/pdf")
+        assert must(self.dash.artifacts.file("tl-1", "page.html"))[1] == "application/octet-stream"  # never run as a page
         for bad in ("link.txt", "../shot.png", "a/b", ".x", "", "missing.png"):
-            self.assertIsNone(self.dash.artifacts.file("tl-1", bad), bad)
-        self.assertIsNone(self.dash.artifacts.file("../tl-1", "shot.png"))
-
-
-if __name__ == "__main__":
-    unittest.main()
+            assert self.dash.artifacts.file("tl-1", bad) is None, bad
+        assert self.dash.artifacts.file("../tl-1", "shot.png") is None

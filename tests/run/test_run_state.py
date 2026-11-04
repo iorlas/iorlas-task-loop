@@ -4,10 +4,12 @@ install is no exit: the run stays live for the process that takes it up. Fakes t
 import contextlib
 import signal as sig
 import sys
-import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
+
+import pytest
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
@@ -38,8 +40,8 @@ class ExitPaths(EngineTest):
     def test_a_run_that_lands_ends_done(self):
         rc, _ = self.run_engine(LANDS)
         m = self.manifest()
-        self.assertEqual((rc, m.state), (0, RunState.DONE))
-        self.assertIsNotNone(m.ended)
+        assert (rc, m.state) == (0, RunState.DONE)
+        assert m.ended is not None
 
     def test_a_run_that_ends_on_a_question_ends_parked_with_the_reason(self):
         def ask(*a, **k):
@@ -47,30 +49,30 @@ class ExitPaths(EngineTest):
         with mock.patch.object(Planner, "plan", side_effect=ask):
             self.run_engine({})
         m = self.manifest()
-        self.assertEqual(m.state, RunState.PARKED)
-        self.assertIn("which way", m.reason)
+        assert m.state == RunState.PARKED
+        assert "which way" in m.reason
 
     def test_an_engine_exception_ends_failed(self):
         with mock.patch.object(Planner, "plan", side_effect=RuntimeError("boom")):
             rc, _ = self.run_engine({})
         m = self.manifest()
-        self.assertEqual((rc, m.state), (2, RunState.FAILED))
-        self.assertIn("boom", m.reason)
+        assert (rc, m.state) == (2, RunState.FAILED)
+        assert "boom" in m.reason
 
     def test_a_sigterm_ends_stopped(self):
         if not hasattr(sig, "SIGTERM"):
-            self.skipTest("POSIX signal")
+            pytest.skip("POSIX signal")
         with mock.patch.object(engine.Engine, "stop_pending", True, create=True):
             rc, _ = self.run_engine({"plan": [PLAN]})
-        self.assertEqual((rc, self.manifest().state), (2, RunState.STOPPED))
+        assert (rc, self.manifest().state) == (2, RunState.STOPPED)
 
     def test_a_close_that_raises_parks_the_run_with_its_work_kept(self):
         with mock.patch.object(Closer, "close", side_effect=OSError("disk")):
             self.run_engine(LANDS)
-        self.assertEqual(self.manifest().state, RunState.PARKED)  # the crash is a typed park (engine_crash), the checkpoint stays
+        assert self.manifest().state == RunState.PARKED  # the crash is a typed park (engine_crash), the checkpoint stays
 
 
-class Settle(unittest.TestCase):
+class Settle(Case):
     """close_out's last word, on a stand-in host: the fence and the exec."""
 
     def host(self, **kw):
@@ -84,21 +86,17 @@ class Settle(unittest.TestCase):
         h, calls = self.host(fenced="taken again by another run")
         with mock.patch.object(RunOnce, "close"):
             RunOnce(h).close_out(mock.Mock(), Ended())
-        self.assertEqual(calls, [(RunState.STOPPED, "fenced out: taken again by another run")])
+        assert calls == [(RunState.STOPPED, "fenced out: taken again by another run")]
 
     def test_an_exec_into_a_newer_install_ends_nothing(self):
         h, calls = self.host()
         h.moved = True
         RunOnce(h).close_out(mock.Mock(), Ended(oc.make(Kind.LANDED, sha="abc")))
-        self.assertEqual(calls, [])
+        assert calls == []
 
     def test_each_kind_maps_to_one_state(self):
         want = {Kind.LANDED: RunState.DONE, Kind.DONE: RunState.DONE, Kind.FAULT_ENGINE: RunState.FAILED,
                 Kind.PAUSE_KILLED: RunState.STOPPED, Kind.PAUSE_NETWORK: RunState.STOPPED, Kind.OWNER_PARK: RunState.PARKED,
                 Kind.WAIT_ASK: RunState.PARKED}
         for kind, state in want.items():
-            self.assertEqual(terminal_state(oc.make(kind)), state, kind)
-
-
-if __name__ == "__main__":
-    unittest.main()
+            assert terminal_state(oc.make(kind)) == state, kind

@@ -2,9 +2,10 @@
 takes the recorded answer and the engine still builds the recorded input. UPDATE_GOLDEN=1 rewrites the input.txt files."""
 import os
 import sys
-import unittest
 from pathlib import Path
 from unittest import mock
+
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
@@ -20,30 +21,30 @@ ALL = ex.cases()
 
 class Recorded(te.EngineTest):
     def test_there_is_one_exchange_per_role(self):
-        self.assertEqual({e.role for e in ALL}, {"planner", "writer", "reviewer"})
+        assert {e.role for e in ALL} == {"planner", "writer", "reviewer"}
 
     def test_every_case_says_what_is_real_and_what_is_not(self):
         for e in ALL:
             with self.subTest(e.name):
-                self.assertIn(e.meta["answer"], ("real", "synthetic"))
-                self.assertIn(e.meta["input"], ("real", "synthetic"))
-                self.assertTrue(e.meta["source"])
+                assert e.meta["answer"] in ("real", "synthetic")
+                assert e.meta["input"] in ("real", "synthetic")
+                assert e.meta["source"]
 
     def test_the_cases_replay(self):
         for e in ALL:
             with self.subTest(e.name):
-                self.setUp()  # a fresh world per case: one engine per test
+                self.setup_method()  # a fresh world per case: one engine per test
                 try:
                     ex.replay(self, e)
                 finally:
-                    self.tearDown()
+                    self.teardown_method()
 
 
 class Breaks(te.EngineTest):
     """The goldens do fail: a changed prompt or answer is a red test, not a silent pass (and never rewrites a golden)."""
 
-    def setUp(self):
-        super().setUp()
+    def setup_method(self):
+        super().setup_method()
         env = mock.patch.dict(os.environ)
         env.start()
         self.addCleanup(env.stop)
@@ -53,21 +54,17 @@ class Breaks(te.EngineTest):
         by = {e.role: e for e in ALL}
         for role, mod, name in (("planner", pp, "PLAN_PROMPT"), ("writer", wp, "WRITE_PROMPT"), ("reviewer", rp, "REVIEW_PROMPT")):
             with self.subTest(role):
-                self.setUp()
+                self.setup_method()
                 try:
-                    with mock.patch.object(mod, name, getattr(mod, name) + "\nExtra line.\n"), self.assertRaises(AssertionError):
+                    with mock.patch.object(mod, name, getattr(mod, name) + "\nExtra line.\n"), pytest.raises(AssertionError):
                         ex.replay(self, by[role])
                 finally:
-                    self.tearDown()
+                    self.teardown_method()
 
     def test_an_answer_the_parser_rejects_fails_its_golden(self):
         for e in ALL:
             with self.subTest(e.name):
                 gone = {k: v for k, v in e.answer.items() if k not in {"summary", "findings"}}
                 broken = ex.Exchange(e.role, e.case, e.dir, e.meta, e.bead, gone, e.plan)
-                with self.assertRaises(AssertionError):
+                with pytest.raises(AssertionError):
                     ex.replay(self, broken)
-
-
-if __name__ == "__main__":
-    unittest.main()

@@ -1,9 +1,11 @@
 """Wire permanence reaches durable parks without changing machine repair or exhausted retry asks."""
 
 import sys
-import unittest
 from pathlib import Path
 from unittest import mock
+
+import pytest
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -20,7 +22,7 @@ from taskloop.domain import outcome as oc
 from taskloop.domain.lanes import policy
 
 
-class DelegatePauseFacts(unittest.TestCase):
+class DelegatePauseFacts(Case):
     def test_unknown_wire_stop_reaches_durable_pause_and_preserves_owner_asks(self):
         bead = Bead(id=BeadId("t-1"), title="work", status="open")
         for permanence in policy.PERMANENCES:
@@ -39,13 +41,13 @@ class DelegatePauseFacts(unittest.TestCase):
                 worker = mock.Mock()
                 worker.ops.blocked = blocked_for
                 call = mock.Mock(role="worker", node="write", counts={"crashes": 0})
-                with self.assertRaises(Blocked):
+                with pytest.raises(Blocked):
                     LaneActs(host, worker).end(call, result, stop, action)
-                self.assertEqual(host.pause_permanence, permanence)
+                assert host.pause_permanence == permanence
                 store.return_value.get.return_value = None
                 with mock.patch("taskloop.app.run.closer.beadtools.peek", return_value=bead):
                     Closer(host, mock.Mock()).pause(oc.make(Kind.PAUSE_LANE, "paused"))
                 saved = store.return_value.put.call_args.args[0]
-                self.assertEqual(saved.permanence, permanence)
-                self.assertEqual(saved.retry_at, 900 if permanence == "transient" else 0)
-                self.assertEqual(host.ask_flow.raise_ask.call_count, int(permanence == "needs_owner"))
+                assert saved.permanence == permanence
+                assert saved.retry_at == (900 if permanence == "transient" else 0)
+                assert host.ask_flow.raise_ask.call_count == int(permanence == "needs_owner")

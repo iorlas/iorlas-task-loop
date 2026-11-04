@@ -1,10 +1,11 @@
 """RunState and its one writer: every field survives a park, adding one is one edit, and nothing else writes the record."""
 import sys
 import typing
-import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
+
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -99,32 +100,32 @@ def stored(h: Host) -> Checkpoint:
     return ck
 
 
-class Fields(unittest.TestCase):
+class Fields(Case):
     def test_the_sample_names_every_field_so_a_new_one_cannot_pass_unnoticed(self):
-        self.assertEqual(set(SAMPLE), set(state_names()))
+        assert set(SAMPLE) == set(state_names())
 
     def test_the_engine_declares_every_field_with_the_type_the_state_holds(self):
         declared, held = typing.get_type_hints(StateAttrs), typing.get_type_hints(RunState)
-        self.assertEqual({k: declared[k] for k in state_names()}, {k: held[k] for k in state_names()})
-        self.assertFalse(hasattr(StateAttrs, "__getattr__"))  # an attribute the state lacks is an error, not an Any
+        assert {k: declared[k] for k in state_names()} == {k: held[k] for k in state_names()}
+        assert not hasattr(StateAttrs, "__getattr__")  # an attribute the state lacks is an error, not an Any
 
     def test_the_engine_reads_and_writes_every_field_through_the_state(self):
         h = Host()
         for name in state_names():
             setattr(h, name, SAMPLE[name])
-            self.assertIs(getattr(h.state, name), SAMPLE[name], name)
+            assert getattr(h.state, name) is SAMPLE[name], name
 
     def test_the_dump_holds_every_field_and_nothing_else(self):
         dump = RunState().dump()
-        self.assertEqual(set(dump), set(wire.names(RunState)))
-        self.assertEqual(set(dump["review"]), set(wire.names(ReviewState)))
+        assert set(dump) == set(wire.names(RunState))
+        assert set(dump["review"]) == set(wire.names(ReviewState))
 
     def test_a_dump_loads_back_to_the_same_state(self):
         s = RunState(**SAMPLE)
-        self.assertEqual(RunState.from_dump(s.dump()), s)
+        assert RunState.from_dump(s.dump()) == s
 
 
-class Park(unittest.TestCase):
+class Park(Case):
     """Everything that survives a park: saved by the one writer, handed back by the resume."""
 
     def parked(self) -> tuple[Host, Host]:
@@ -148,22 +149,22 @@ class Park(unittest.TestCase):
             if name in kept:
                 continue
             want = a.state.pending_land_validation if name == "pending_land_validation" else getattr(a.state, name)
-            self.assertEqual(getattr(b, name), want, name)
-        self.assertEqual((b.snap, b.brief_hash), (snap, "now"))  # the bead as it is now, not as it was planned
-        self.assertEqual((b.unverified, b.filed, b.unfiled), (a.unverified, a.filed, a.unfiled))  # the ReviewState folds them in
+            assert getattr(b, name) == want, name
+        assert (b.snap, b.brief_hash) == (snap, "now")  # the bead as it is now, not as it was planned
+        assert (b.unverified, b.filed, b.unfiled) == (a.unverified, a.filed, a.unfiled)  # the ReviewState folds them in
 
     def test_an_edit_from_outside_hands_back_only_what_every_resume_keeps(self):
         _a, b = self.parked()
         Resume(b).restore(stored(b), late=False)
         for name in LATE:
-            self.assertEqual(getattr(b, name), getattr(RunState(), name), name)
-        self.assertEqual((b.filed, b.unfiled), ([], []))  # filed titles are the late ones too
-        self.assertEqual(b.look_paths, ["p.png"])
+            assert getattr(b, name) == getattr(RunState(), name), name
+        assert (b.filed, b.unfiled) == ([], [])  # filed titles are the late ones too
+        assert b.look_paths == ["p.png"]
 
     def test_a_pending_land_validation_parks_at_land_verify_red(self):
         a, _ = self.parked()
         ck = stored(a)
-        self.assertEqual((ck.step, ck.feedback), ("land-verify-red", "red"))
+        assert (ck.step, ck.feedback) == ("land-verify-red", "red")
 
     def test_close_keeps_the_head_and_the_filed_titles(self):
         a, _ = self.parked()
@@ -171,24 +172,24 @@ class Park(unittest.TestCase):
         a.filed.append("y")
         a.checkpoints.close()
         ck = stored(a)
-        self.assertEqual((ck.closed, ck.head, ck.state.review.filed), (True, "h9", ["x", "y"]))
+        assert (ck.closed, ck.head, ck.state.review.filed) == (True, "h9", ["x", "y"])
 
     def test_a_red_gate_at_land_parks_the_next_run_at_gate_red(self):
         a, _ = self.parked()
         a.state.pending_land_validation = ""
         a.checkpoints.save(step="land")
         a.checkpoints.close("gate red on the rebased tree")
-        self.assertEqual(stored(a).step, "gate-red")
+        assert stored(a).step == "gate-red"
 
     def test_refused_follow_ups_are_kept_beside_the_filed_ones(self):
         a, _ = self.parked()
         a.checkpoints.keep_filed([{"title": "t2", "why": "lint"}])
-        self.assertEqual([u.title for u in stored(a).state.review.unfiled], ["t", "t2"])
+        assert [u.title for u in stored(a).state.review.unfiled] == ["t", "t2"]
 
     def test_drop_removes_the_record(self):
         a, _ = self.parked()
         a.checkpoints.drop()
-        self.assertIsNone(a.checkpoints.read())
+        assert a.checkpoints.read() is None
 
     def test_pending_followups_survive_an_immediate_crash_and_a_fresh_start(self):
         a = Host()
@@ -196,16 +197,16 @@ class Park(unittest.TestCase):
         a.leftovers.append({"title": "later", "why": "w"})
         a.checkpoints.keep_pending("review")
         ck = stored(a)
-        self.assertEqual((ck.step, ck.stage), ("write", 2))
+        assert (ck.step, ck.stage) == ("write", 2)
         b = Host()
         b.stores = a.stores
         Resume(b).restore(ck, late=False)
-        self.assertEqual(b.leftovers, a.leftovers)
-        self.assertEqual(b.leftovers[0]["origin"], "review")
-        self.assertEqual(b.state.start_again().leftovers, a.leftovers)
+        assert b.leftovers == a.leftovers
+        assert b.leftovers[0]["origin"] == "review"
+        assert b.state.start_again().leftovers == a.leftovers
 
 
-class OneWriter(unittest.TestCase):
+class OneWriter(Case):
     def test_nothing_but_the_writer_writes_a_checkpoint(self):
         """The record is written only by app/run/state.py (and the stores that hold it): no other src or engine code opens it."""
         hits = []
@@ -214,12 +215,8 @@ class OneWriter(unittest.TestCase):
             text = path.read_text(encoding="utf-8")
             if ("stores.checkpoints" in text or "checkpoints.of(" in text or "cfg.checkpoint(" in text) and rel not in OK:
                 hits.append(rel)
-        self.assertEqual(hits, [])
+        assert hits == []
 
 
 OK = {"src/taskloop/app/run/state.py", "src/taskloop/stores/books.py", "src/taskloop/stores/real.py", "src/taskloop/stores/memory.py",
       "src/taskloop/app/run/shared.py"}  # shared.py: the sibling's plan is read (siblings()), never written
-
-
-if __name__ == "__main__":
-    unittest.main()

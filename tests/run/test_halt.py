@@ -3,9 +3,10 @@ point. Real processes; the signal is raised by signal.raise_signal, never os.kil
 import sys
 import threading
 import time
-import unittest
 from pathlib import Path
 from typing import Any
+
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
@@ -27,11 +28,7 @@ class Halt(te.EngineTest):
         eng = self.checks_engine()
         threading.Timer(0.3, eng.halt.set).start()
         t = time.time()
-        with self.assertRaises(engine.Blocked) as cm:
+        with pytest.raises(engine.Blocked) as cm:
             eng.halt_point(wait=30)
-        self.assertLess(time.time() - t, 10)
-        self.assertEqual(cm.exception.kind, Kind.PAUSE_KILLED)
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert time.time() - t < 10
+        assert cm.value.kind == Kind.PAUSE_KILLED

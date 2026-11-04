@@ -5,7 +5,6 @@ import os
 import signal
 import subprocess
 import sys
-import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -42,39 +41,35 @@ class KilledEngine(te.EngineTest):
         try:
             until(marker.exists, WAIT)
             pid, run = marker.read_text().split()
-            self.assertEqual(int(pid), child.pid)
+            assert int(pid) == child.pid
             cfg, where = homes.cfg(), RunLocator(homes.cfg())
             m = must(where.get(run)).manifest
-            self.assertEqual((m.state, m.pid), (RunState.RUNNING, child.pid))
+            assert (m.state, m.pid) == (RunState.RUNNING, child.pid)
             later = m.heartbeat + STALE_AFTER + 1
-            self.assertEqual(runlife.reconcile(cfg, later), [], "a stale heartbeat does not mark a process that lives")
+            assert runlife.reconcile(cfg, later) == [], "a stale heartbeat does not mark a process that lives"
             os.kill(child.pid, signal.SIGKILL)  # the pid of the child this test started
         finally:
             child.wait(WAIT)
-        self.assertEqual(runlife.reconcile(cfg, m.heartbeat + 1), [], "a dead process with a fresh heartbeat may be a restart")
+        assert runlife.reconcile(cfg, m.heartbeat + 1) == [], "a dead process with a fresh heartbeat may be a restart"
         ingest(cfg, later)
         shown = make_dash(config=cfg.root, clock=lambda: later).live.page(loop_key(m.repo), "t-1")[1]["state"]
-        self.assertEqual(shown, "lost", "the dashboard displays lost before anything wrote it")
-        self.assertEqual(must(where.get(run)).manifest.state, RunState.RUNNING)
-        self.assertEqual(runlife.reconcile(cfg, later), [run])
+        assert shown == "lost", "the dashboard displays lost before anything wrote it"
+        assert must(where.get(run)).manifest.state == RunState.RUNNING
+        assert runlife.reconcile(cfg, later) == [run]
         got = must(where.get(run)).manifest
-        self.assertEqual(got.state, RunState.LOST)
-        self.assertIn(f"pid {child.pid}", got.reason)
-        self.assertEqual(runlife.reconcile(cfg, later + 99), [], "once")
+        assert got.state == RunState.LOST
+        assert f"pid {child.pid}" in got.reason
+        assert runlife.reconcile(cfg, later + 99) == [], "once"
         # every reader reads the recorded state
         ingest(cfg, later)
         dash = make_dash(config=cfg.root, clock=lambda: later)
-        self.assertEqual(dash.live.page(loop_key(m.repo), "t-1")[1]["state"], "lost")
+        assert dash.live.page(loop_key(m.repo), "t-1")[1]["state"] == "lost"
         indexed, = dash.reads.worlds.runs()[(loop_key(m.repo), "t-1")]
-        self.assertEqual(indexed.name, run)
-        self.assertIs(indexed.life, Liveness.LOST)
+        assert indexed.name == run
+        assert indexed.life is Liveness.LOST
         code, line = must(wait.verdict(cfg, run, later))
-        self.assertEqual(code, wait.CRASHED)
-        self.assertIn("lost", line)
+        assert code == wait.CRASHED
+        assert "lost" in line
         crashes = card.crashes(str(m.repo), m.started - 1, later, [], cfg, now=later)
-        self.assertEqual([c["run"] for c in crashes], [run])
-        self.assertFalse(requests.live(cfg, run, later))
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert [c["run"] for c in crashes] == [run]
+        assert not requests.live(cfg, run, later)

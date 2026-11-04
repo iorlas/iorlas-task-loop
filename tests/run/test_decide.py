@@ -1,9 +1,10 @@
 """resume_decision is a pure table: a checkpoint and the world in, resume | amend | replan | fresh | land out."""
 import dataclasses
 import sys
-import unittest
 from pathlib import Path
 from typing import Any, ClassVar
+
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -29,7 +30,7 @@ def world(**kw) -> World:
     return dataclasses.replace(World(branch="task/t-1", head="h1", brief_hash="b1"), **kw)
 
 
-class Table(unittest.TestCase):
+class Table(Case):
     CASES: ClassVar[Any] = [
         # name, checkpoint, world, kind, why
         ("no checkpoint", None, world(), "fresh", ""),
@@ -82,28 +83,24 @@ class Table(unittest.TestCase):
         for name, checkpoint, w, kind, why in self.CASES:
             with self.subTest(name):
                 d = resume_decision(checkpoint, w)
-                self.assertEqual(d.kind, kind)
+                assert d.kind == kind
                 if why:
-                    self.assertEqual(d.why, why)
+                    assert d.why == why
 
     def test_only_a_stale_or_foreign_checkpoint_is_dropped(self):
         drops = {n: resume_decision(c, w).drop for n, c, w, *_ in self.CASES}
-        self.assertEqual({n for n, d in drops.items() if d}, {"--fresh", "another branch", "no plan yet"})
+        assert {n for n, d in drops.items() if d} == {"--fresh", "another branch", "no plan yet"}
 
     def test_a_resume_keeps_the_stage_and_its_counters(self):
         d = resume_decision(ck(), world())
-        self.assertEqual((d.stage, d.continues, d.redo_from), (1, True, None))
+        assert (d.stage, d.continues, d.redo_from) == (1, True, None)
 
     def test_a_missing_file_sends_the_run_back_to_that_stage_without_counters(self):
         d = resume_decision(ck(), world(missing_stage=0))
-        self.assertEqual((d.stage, d.continues, d.redo_from), (0, False, 0))
+        assert (d.stage, d.continues, d.redo_from) == (0, False, 0)
 
     def test_the_decision_reads_nothing_but_its_arguments(self):
         c, w = ck(), world(brief_hash="b2", brief_diff="x", brief_diff_quiet="x")
         before = (c.to_dict(), w)
         resume_decision(c, w)
-        self.assertEqual((c.to_dict(), w), before)
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert (c.to_dict(), w) == before

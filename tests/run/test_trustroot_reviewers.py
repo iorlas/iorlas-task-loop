@@ -1,9 +1,10 @@
 """No secondary reviewer loads unapproved worktree trust roots."""
-import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
+import pytest
+from support.case import Case
 from support.engine_case import BEAD, CLEAN, PLAN, WRITE, EngineTest
 
 from taskloop.app.run.blocked import Blocked, blocked_for
@@ -17,7 +18,7 @@ from taskloop.contracts.kinds import Kind
 from taskloop.contracts.paths import ConfigDir
 
 
-class ReviewerTrustRoots(unittest.TestCase):
+class ReviewerTrustRoots(Case):
     def host(self):
         git = Mock()
         git.merge_base.return_value = "fork"
@@ -30,9 +31,9 @@ class ReviewerTrustRoots(unittest.TestCase):
     def test_all_reviewers_park_before_dispatch(self):
         for node in ("review", "verify", "look"):
             with self.subTest(node=node):
-                with self.assertRaises(Blocked) as caught:
+                with pytest.raises(Blocked) as caught:
                     request(self.host(), Mock(role="reviewer", node=node), "", 0, 0)
-                self.assertEqual(caught.exception.kind, Kind.ASK_DECISION)
+                assert caught.value.kind == Kind.ASK_DECISION
 
     def test_reflection_is_omitted_when_trust_roots_are_unapproved(self):
         host = self.host()
@@ -41,12 +42,12 @@ class ReviewerTrustRoots(unittest.TestCase):
         host.sessions = [{"node": "write"}]
         reflector = Reflector(host)
         reflector.reflect_prompt = Mock(side_effect=AssertionError("must not build a reviewer prompt"))
-        self.assertIsNone(reflector.reflect_run("parked", "trust roots changed"))
+        assert reflector.reflect_run("parked", "trust roots changed") is None
         reflector.reflect_prompt.assert_not_called()
-        self.assertIn("owner-approved", host.warn.call_args.args[0])
+        assert "owner-approved" in host.warn.call_args.args[0]
 
 
-class AdmissionAuthors(unittest.TestCase):
+class AdmissionAuthors(Case):
     def test_only_the_owner_can_leave_a_parking_instruction_after_an_engine_block(self):
         bead = Bead(id=BeadId("t-1"), title="Change", status="blocked")
         block = Comment(author="tl-engine", text="Blocked: failed", created_at="1")
@@ -58,7 +59,7 @@ class AdmissionAuthors(unittest.TestCase):
                 with patch("taskloop.app.run.entry.AskStore.at") as asks:
                     asks.return_value.get.return_value = None
                     why = _blocked_by_engine(bead, store, ConfigDir("/unused"), "owner")
-                self.assertEqual(bool(why), expected)
+                assert bool(why) == expected
 
 
 class TrustRootParking(EngineTest):
@@ -74,15 +75,15 @@ class TrustRootParking(EngineTest):
 
     def test_an_unapproved_writer_change_parks_the_bead_without_review_or_reflection(self):
         rc, script = self.run_engine({"plan": [self.trust_plan()], "write": [self.write_trustroot]}, reflect=True)
-        self.assertEqual(rc, 2)
-        self.assertEqual([call[0] for call in script.calls], ["planner", "worker"])
-        self.assertIn(".claude/settings.json", self.ask()["why"])
-        self.assertIn("owner-approved", self.ask()["why"])
-        self.assertTrue(any("trust roots changed" in why for why in self.blocked))
+        assert rc == 2
+        assert [call[0] for call in script.calls] == ["planner", "worker"]
+        assert ".claude/settings.json" in self.ask()["why"]
+        assert "owner-approved" in self.ask()["why"]
+        assert any("trust roots changed" in why for why in self.blocked)
 
     def test_owner_approved_changes_continue_through_review_and_land(self):
         with self.store.stub(show=dict(BEAD, labels=["owner-approved"])):
             rc, script = self.run_engine({"plan": [self.trust_plan()], "write": [self.write_trustroot], "review": [CLEAN]})
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertEqual([call[0] for call in script.calls], ["planner", "worker", "reviewer"])
-        self.assertTrue(self.eng.landed_sha)
+        assert rc == 0, self.blocked
+        assert [call[0] for call in script.calls] == ["planner", "worker", "reviewer"]
+        assert self.eng.landed_sha

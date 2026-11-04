@@ -3,9 +3,10 @@ import importlib.util
 import json
 import sys
 import tempfile
-import unittest
 from pathlib import Path
 from typing import Any
+
+from support.case import Case
 
 ROOT = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location("record_exchange", ROOT / "dev" / "record_exchange.py")
@@ -15,7 +16,7 @@ sys.modules["record_exchange"] = rec
 spec.loader.exec_module(rec)
 
 
-class Record(unittest.TestCase):
+class Record(Case):
     def test_a_run_folder_becomes_a_case(self):
         with tempfile.TemporaryDirectory() as tmp:
             run, root = Path(tmp, "run"), Path(tmp, "ex")
@@ -26,13 +27,13 @@ class Record(unittest.TestCase):
             bead = Path(tmp, "bead.json")
             bead.write_text('[{"id": "b-1"}]')
             rec.EXCHANGES = root
-            self.assertEqual(rec.main([str(run), "reviewer", "c", "--bead", str(bead)]), 0)
+            assert rec.main([str(run), "reviewer", "c", "--bead", str(bead)]) == 0
             case = root / "reviewer" / "c"
-            self.assertEqual(json.loads((case / "answer.json").read_text()), {"v": 2})  # the last round's answer
-            self.assertEqual(json.loads((case / "plan.json").read_text()), {"summary": "p"})
-            self.assertEqual(json.loads((case / "bead.json").read_text()), {"id": "b-1"})
+            assert json.loads((case / "answer.json").read_text()) == {"v": 2}  # the last round's answer
+            assert json.loads((case / "plan.json").read_text()) == {"summary": "p"}
+            assert json.loads((case / "bead.json").read_text()) == {"id": "b-1"}
             meta = json.loads((case / "meta.json").read_text())
-            self.assertEqual((meta["node"], meta["answer"], meta["input"]), ("review", "real", "synthetic"))
+            assert (meta["node"], meta["answer"], meta["input"]) == ("review", "real", "synthetic")
 
     def test_the_sent_prompt_is_kept_with_its_worktree_as_a_placeholder(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -44,8 +45,4 @@ class Record(unittest.TestCase):
             prompt.write_text("work in /home/u/wt now")
             rec.EXCHANGES = root
             rec.main([str(run), "planner", "c", "--bead", str(bead), "--prompt", str(prompt), "--wt", "/home/u/wt"])
-            self.assertEqual((root / "planner" / "c" / "input.txt").read_text(), "work in <WT> now")
-
-
-if __name__ == "__main__":
-    unittest.main()
+            assert (root / "planner" / "c" / "input.txt").read_text() == "work in <WT> now"

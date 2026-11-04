@@ -1,8 +1,9 @@
 """Best-effort run operations leave tracebacks when they fail instead of hiding missing evidence."""
 import sys
-import unittest
 from pathlib import Path
 from unittest import mock
+
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -20,17 +21,17 @@ from taskloop.contracts.run import RunState
 from taskloop.domain import outcome as oc
 
 
-class FailureLogging(unittest.TestCase):
+class FailureLogging(Case):
     def assert_traceback(self, text, message):
-        self.assertIn(message, text)
-        self.assertIn("Traceback (most recent call last)", text)
+        assert message in text
+        assert "Traceback (most recent call last)" in text
 
     def test_retry_history_read_failure_is_logged_before_using_empty_history(self):
         host = mock.Mock(bead=BeadId("t-1"))
         host.clock.now.return_value = 100
         with mock.patch("taskloop.adapters.storm.recent_closes", side_effect=OSError("unreadable")), \
                 mock.patch.object(Decide, "repo_id", return_value="repo"):
-            self.assertEqual(Decide(host).run(oc.make(Kind.PAUSE_LANE, "paused")), Kind.PAUSE_LANE)
+            assert Decide(host).run(oc.make(Kind.PAUSE_LANE, "paused")) == Kind.PAUSE_LANE
         self.assert_traceback(host.warn.call_args.args[0], "could not read retry history: unreadable")
 
     def test_settle_failure_is_logged_and_does_not_replace_the_run_outcome(self):
@@ -55,7 +56,7 @@ class FailureLogging(unittest.TestCase):
         reflector = Reflector(host)
         with mock.patch.object(reflector, "worth_asking", return_value=True), \
                 mock.patch.object(reflector, "reflect_prompt", side_effect=RuntimeError("prompt")):
-            self.assertIsNone(reflector.reflect_run("done", "finished"))
+            assert reflector.reflect_run("done", "finished") is None
         self.assert_traceback(host.warn.call_args.args[0], "RuntimeError: prompt")
 
     def test_release_catch_all_logs_traceback(self):

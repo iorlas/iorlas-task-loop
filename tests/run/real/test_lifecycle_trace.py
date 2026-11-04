@@ -6,8 +6,8 @@ import json
 import os
 import signal
 import threading
-import unittest
 
+import pytest
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as te
 from support import homes
@@ -37,23 +37,23 @@ class TraceTelemetry(te.EngineTest):
 
     def assert_row(self, outcome=None, because="first"):
         row = self.traces()[-1]
-        self.assertEqual(row["started_because"], because)
-        self.assertIn(row["started_because"], lifecycle.STARTED_BECAUSE)
-        self.assertIn("fingerprint", row)
-        self.assertEqual(row["fingerprint"], lifecycle.run_fingerprint(row["outcome"], row["why"]))
+        assert row["started_because"] == because
+        assert row["started_because"] in lifecycle.STARTED_BECAUSE
+        assert "fingerprint" in row
+        assert row["fingerprint"] == lifecycle.run_fingerprint(row["outcome"], row["why"])
         if outcome is not None:
-            self.assertEqual(row["outcome"], outcome)
+            assert row["outcome"] == outcome
         if row["outcome"] in ("landed", "done"):
-            self.assertEqual(row["fingerprint"], "")
+            assert row["fingerprint"] == ""
         else:
-            self.assertTrue(row["fingerprint"])
+            assert row["fingerprint"]
         for old in ("run", "bead", "repo_url", "worktree", "branch", "version", "started", "ended", "outcome", "why",
                     "cost", "stats", "sessions", "log", "prev_run", "ask"):
-            self.assertIn(old, row)
+            assert old in row
         return row
 
 
-    @unittest.skipIf(os.name == "nt", "the engine stops a process group; sleep is POSIX")
+    @pytest.mark.skipif(os.name == "nt", reason="the engine stops a process group; sleep is POSIX")
     def test_an_interrupted_command_leaves_a_kill_record_and_its_tree_is_stopped(self):
         eng = engine.Engine(
             BeadId("t-1"),
@@ -68,7 +68,7 @@ class TraceTelemetry(te.EngineTest):
         stop_waiting, delivered = threading.Event(), threading.Event()
 
         def raising(signum, frame):  # the test owns SIGINT: interrupt_main does nothing unless a Python handler is installed
-            if delivered.is_set():  # a second interrupt the watcher queued before the first landed: it must not hit tearDown
+            if delivered.is_set():  # a second interrupt the watcher queued before the first landed: it must not hit teardown_method
                 return
             delivered.set()
             raise KeyboardInterrupt
@@ -85,14 +85,10 @@ class TraceTelemetry(te.EngineTest):
         watcher.start()
         self.addCleanup(watcher.join)
         self.addCleanup(stop_waiting.set)
-        with self.assertRaises(KeyboardInterrupt):
+        with pytest.raises(KeyboardInterrupt):
             eng.sh(["sh", "-c", 'touch "$0"; exec sleep 30', str(started)], timeout=60)
         kills = [json.loads(line) for line in eng.log_path.read_text().splitlines()
                  if json.loads(line)["kind"] == "kill"]
-        self.assertTrue(kills)
-        self.assertEqual(kills[-1]["why"], "interrupted")
-        self.assertIn("observed_t", kills[-1])
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert kills
+        assert kills[-1]["why"] == "interrupted"
+        assert "observed_t" in kills[-1]

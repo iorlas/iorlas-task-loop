@@ -1,12 +1,13 @@
 """Wall deadlines and bounded lock waits survive slow or hung work."""
 import contextlib
-import unittest
 from collections.abc import Callable, Generator
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
+import pytest
 import support.paths  # noqa: F401
+from support.case import Case
 from support.fake_deadline import FakeDeadline
 from support.narrow_hosts import FakeWaitsHost
 
@@ -18,7 +19,7 @@ from taskloop.contracts.kinds import Kind
 from taskloop.domain.lanes.liveness import LIVENESS, LivenessCaps
 
 
-class RunDeadline(unittest.TestCase):
+class RunDeadline(Case):
     def test_deadline_parks_and_still_closes_a_hung_run(self):
         host = SimpleNamespace(store=None, bead="b", env=mock.Mock(), checkpoints=mock.Mock(), dead=None,
                                Blocked=Blocked, moved=False)
@@ -28,12 +29,12 @@ class RunDeadline(unittest.TestCase):
                 mock.patch("taskloop.app.run.run_once.LIVENESS", LivenessCaps(run_s=0.02)), \
                 mock.patch.object(once, "run", side_effect=lambda *a: timer.wait(0.5)), \
                 mock.patch.object(once, "close_out") as close:
-            self.assertEqual(once.go(), 2)
-        self.assertIs(close.call_args.args[1].outcome.kind, Kind.OWNER_PARK)
-        self.assertIn("deadline", close.call_args.args[1].outcome.detail)
+            assert once.go() == 2
+        assert close.call_args.args[1].outcome.kind is Kind.OWNER_PARK
+        assert "deadline" in close.call_args.args[1].outcome.detail
 
 
-class LockWait(unittest.TestCase):
+class LockWait(Case):
     def test_lock_wait_has_finite_timeout_and_a_transient_stop(self):
         host = FakeWaitsHost()
         waits = Waits(host)
@@ -43,15 +44,15 @@ class LockWait(unittest.TestCase):
                  timeout: float | None = None, check: Callable[[], None] | None = None) -> Generator[Path | str]:
             assert timeout is not None
             assert waiting is not None
-            self.assertEqual(timeout, LIVENESS.lock_wait_s)
+            assert timeout == LIVENESS.lock_wait_s
             waiting("holder")
             host.fake_clock.advance(timeout)
             raise TimeoutError("holder")
             yield path
 
-        with mock.patch.object(host, "os_lock", busy), self.assertRaises(Blocked) as stopped, waits.locked("land_lock", "lock"):
-            self.fail("acquired a busy lock")
-        self.assertIs(stopped.exception.kind, Kind.PAUSE_LANE)
+        with mock.patch.object(host, "os_lock", busy), pytest.raises(Blocked) as stopped, waits.locked("land_lock", "lock"):
+            pytest.fail("acquired a busy lock")
+        assert stopped.value.kind is Kind.PAUSE_LANE
         rows = [row.rec for row in host.stores.run_log("run").read_from(0).items]
-        self.assertEqual(sum(isinstance(row, rec.WaitEnd) for row in rows), 1)
-        self.assertEqual(host.waited, LIVENESS.lock_wait_s)
+        assert sum(isinstance(row, rec.WaitEnd) for row in rows) == 1
+        assert host.waited == LIVENESS.lock_wait_s

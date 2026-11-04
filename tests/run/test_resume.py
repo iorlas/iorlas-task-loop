@@ -1,8 +1,9 @@
 """What a resume hands the stage loop once the decision is made: where it goes on, and what it puts back in the engine."""
 import sys
-import unittest
 from pathlib import Path
 from types import SimpleNamespace
+
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -30,19 +31,15 @@ def ck(step="write", stage=1) -> Checkpoint:
                       state=RunState(plan_data=PLAN, accepted=[0]))
 
 
-class Apply(unittest.TestCase):
+class Apply(Case):
     def test_a_mid_stage_resume_goes_on_at_the_same_stage_and_round(self):
         h = Host()
         plan, stage, state = Resume(h).apply(ck(), Decision(kind="resume", stage=1))
-        self.assertEqual((plan, stage, state), (PLAN, 1, {"rounds": 2, "n": 3, "feedback": "fb"}))
-        self.assertEqual((h.plan_data, h.plan_summary, h.accepted, h.published), (PLAN, "two stages", [0], 1))
+        assert (plan, stage, state) == (PLAN, 1, {"rounds": 2, "n": 3, "feedback": "fb"})
+        assert (h.plan_data, h.plan_summary, h.accepted, h.published) == (PLAN, "two stages", [0], 1)
 
     def test_every_stage_accepted_goes_straight_to_land_with_no_stage_state(self):
         h = Host()
         plan, stage, state = Resume(h).apply(ck(step="land", stage=2), Decision(kind="land", stage=2, why="confirmed"))
-        self.assertEqual((plan, stage, state), (PLAN, 2, None))
-        self.assertIn("straight to land", h.notes[-1])
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert (plan, stage, state) == (PLAN, 2, None)
+        assert "straight to land" in h.notes[-1]

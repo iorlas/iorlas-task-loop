@@ -21,9 +21,9 @@ class StagePrepare(EngineTest):
 
         with mock.patch.object(eng.spawner, "run", return_value=Ran(exit=0)) as run, \
                 mock.patch.object(eng.stage_loop.writing, "run", side_effect=write) as writer:
-            self.assertEqual(run_round_step(eng, Step.WRITE, state), (Step.LOOK, False))
-        self.assertEqual((run.call_count, writer.call_count), (2, 2))
-        self.assertEqual((state.n, eng.stats["writes"], eng.replans), (1, 1, 0))
+            assert run_round_step(eng, Step.WRITE, state) == (Step.LOOK, False)
+        assert (run.call_count, writer.call_count) == (2, 2)
+        assert (state.n, eng.stats["writes"], eng.replans) == (1, 1, 0)
 
     def test_check_step_repairs_and_repeats_write_without_incrementing_attempt(self):
         eng = self.checks_engine(prepare={"cmd": ["restore"]})
@@ -36,7 +36,7 @@ class StagePrepare(EngineTest):
         with mock.patch.object(eng.spawner, "run", return_value=Ran(exit=0)) as run, \
                 mock.patch.object(eng.stage_loop.checking, "run", side_effect=check), \
                 mock.patch.object(eng.stage_loop.writing, "run", return_value="") as writer:
-            self.assertEqual(run_round_step(eng, Step.CHECKS, state), (Step.LOOK, False))
+            assert run_round_step(eng, Step.CHECKS, state) == (Step.LOOK, False)
         run.assert_called_once()
         writer.assert_called_once_with(state, look=False)
-        self.assertEqual((state.n, eng.stats["writes"], eng.replans), (1, 0, 0))
+        assert (state.n, eng.stats["writes"], eng.replans) == (1, 0, 0)

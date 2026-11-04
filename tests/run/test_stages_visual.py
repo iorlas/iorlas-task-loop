@@ -3,7 +3,6 @@ import json
 import subprocess
 import sys
 import time
-import unittest
 from pathlib import Path
 from typing import Any, ClassVar
 from unittest import mock
@@ -71,8 +70,8 @@ class VisualWork(StagesTest):
     }
     VIS: ClassVar[Any] = {"include": ["f.txt"]}
 
-    def setUp(self):
-        super().setUp()
+    def setup_method(self):
+        super().setup_method()
         procsim.fake("shot-tool", self.shot(0), args=True)
         procsim.fake("shot-tool-fails", self.shot(3), args=True)
         base = Path(self.tmp.name, "base-files")
@@ -103,102 +102,100 @@ class VisualWork(StagesTest):
     def test_a_look_judge_with_no_lane_leaves_the_pictures_unjudged_and_the_bead_unparked(self):
         late = te.stop("no_lane", at=time.time() + 3600, family="xai", lane="GROK", say="no lane")
         rc, s = self.go({"plan": [PLAN], "write": [self.write()], "look": [late], "review": [CLEAN]})
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertIn("the look judge had no lane", self.eng.log_path.read_text())
-        self.assertIn("look judge, round 1", self.eng.look_unjudged)
-        self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "reviewer", "reviewer"])  # the judge's one try, then the review
+        assert rc == 0, self.blocked
+        assert "the look judge had no lane" in self.eng.log_path.read_text()
+        assert "look judge, round 1" in self.eng.look_unjudged
+        assert [c[0] for c in s.calls] == ["planner", "worker", "reviewer", "reviewer"]  # the judge's one try, then the review
 
     def test_a_login_or_a_crash_is_not_swallowed_by_the_look_judge(self):
         out = te.stop("logged_out", family="claude", lane="CLAUDE", say="logged out")
         _rc, _s = self.go({"plan": [PLAN], "write": [self.write()], "look": [out, out]})
-        self.assertIn("paused", self.eng.why)
+        assert "paused" in self.eng.why
 
     def test_the_judge_from_the_writers_family_is_not_taken(self):
         rc, _s = self.go({"plan": [PLAN], "write": [self.write()], "look": [self.judged()], "review": [CLEAN]},
                         j_extra={"look": [{"flag": "same_family"}]})
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertIn("no lane for the look judge", " ".join(self.eng.look_notes))
+        assert rc == 0, self.blocked
+        assert "no lane for the look judge" in " ".join(self.eng.look_notes)
 
     def test_the_writer_is_asked_for_shot_requests_not_screenshots(self):
         rc, s = self.go({"plan": [PLAN], "write": [self.write()], "look": [self.judged()], "review": [CLEAN]})
-        self.assertEqual(rc, 0, self.blocked)
+        assert rc == 0, self.blocked
         first = s.prompts[1]
-        self.assertIn("You cannot render it here: the engine does", first)
-        self.assertIn("ScreenShots: the main screen", first)
-        self.assertNotIn("Save a screenshot of every changed", first)
+        assert "You cannot render it here: the engine does" in first
+        assert "ScreenShots: the main screen" in first
+        assert "Save a screenshot of every changed" not in first
 
     def test_the_engine_renders_and_a_judge_with_only_the_pictures_reads_them(self):
         rc, s = self.go({"plan": [PLAN], "write": [self.write()], "look": [self.judged()], "review": [CLEAN]})
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertEqual(self.roles(s), ["planner", "worker", "reviewer", "reviewer"])  # the judge, then the review
+        assert rc == 0, self.blocked
+        assert self.roles(s) == ["planner", "worker", "reviewer", "reviewer"]  # the judge, then the review
         judge = s.prompts[2]
-        self.assertIn("You judge how a screen looks from pictures", judge)
-        self.assertIn("main.png", judge)
+        assert "You judge how a screen looks from pictures" in judge
+        assert "main.png" in judge
         cwd = Path(s.cwds[2])
-        self.assertEqual(cwd.name, "r1")
-        self.assertEqual(sorted(p.name for p in cwd.iterdir() if p.is_file()), ["main.png"])  # no repo, only the pictures
-        self.assertTrue((self.eng.evidence_dir / "main.png").is_file())  # the full-size copy for the land and the review
-        self.assertIn("a look judge", s.prompts[3])  # the reviewer is told, and does not open the pictures by default
+        assert cwd.name == "r1"
+        assert sorted(p.name for p in cwd.iterdir() if p.is_file()) == ["main.png"]  # no repo, only the pictures
+        assert (self.eng.evidence_dir / "main.png").is_file()  # the full-size copy for the land and the review
+        assert "a look judge" in s.prompts[3]  # the reviewer is told, and does not open the pictures by default
 
     def test_the_judge_is_from_the_other_family_like_the_review(self):
         _rc, s = self.go({"plan": [PLAN], "write": [self.write()], "look": [self.judged()], "review": [CLEAN]})
-        self.assertIsNotNone(s.calls[2][2])  # authored-by: the writer's family
+        assert s.calls[2][2] is not None  # authored-by: the writer's family
 
     def test_a_defect_goes_back_to_the_writer_as_text_then_a_second_render_passes(self):
         defect = self.judged(("main.png, top right", "The Save button is clipped at the right edge"))
         rc, s = self.go({"plan": [PLAN], "write": [self.write(), self.write()], "look": [defect, self.judged()], "review": [CLEAN]})
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertEqual(self.roles(s), ["planner", "worker", "reviewer", "worker", "reviewer", "reviewer"])
+        assert rc == 0, self.blocked
+        assert self.roles(s) == ["planner", "worker", "reviewer", "worker", "reviewer", "reviewer"]
         again = s.prompts[3]
-        self.assertIn("Save button is clipped at the right edge", again)
-        self.assertIn("main.png", again)
-        self.assertEqual([x for x in self.created() if x.startswith("Look:")], [])
+        assert "Save button is clipped at the right edge" in again
+        assert "main.png" in again
+        assert [x for x in self.created() if x.startswith("Look:")] == []
 
     def test_the_same_defect_twice_is_a_leftover_not_a_third_write(self):
         defect = self.judged(("main.png", "The Save button is clipped at the right edge"))
         same = self.judged(("main.png", "Save button clipped at right edge of the card"))
         rc, s = self.go({"plan": [PLAN], "write": [self.write(), self.write()], "look": [defect, same], "review": [CLEAN]})
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertEqual(self.roles(s).count("worker"), 2)
-        self.assertEqual(len([t for t in self.created() if t.startswith("Look:")]), 1)
+        assert rc == 0, self.blocked
+        assert self.roles(s).count("worker") == 2
+        assert len([t for t in self.created() if t.startswith("Look:")]) == 1
 
     def test_a_new_defect_in_the_last_render_round_is_a_leftover_too(self):
         one = self.judged(("main.png", "The Save button is clipped"))
         two = self.judged(("main.png", "A magenta texture on the sofa"))
         rc, s = self.go({"plan": [PLAN], "write": [self.write(), self.write()], "look": [one, two], "review": [CLEAN]})
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertEqual(self.roles(s).count("worker"), 2)  # two render rounds, no third
-        self.assertEqual([t for t in self.created() if t.startswith("Look:")], ["Look: A magenta texture on the sofa"])
+        assert rc == 0, self.blocked
+        assert self.roles(s).count("worker") == 2  # two render rounds, no third
+        assert [t for t in self.created() if t.startswith("Look:")] == ["Look: A magenta texture on the sofa"]
 
     def test_a_method_the_table_does_not_have_is_a_defect_with_no_judge_call(self):
         bad = dict(WRITE, shots=[{"method": "Nope", "args": [], "names": []}])
         rc, s = self.go({"plan": [PLAN], "write": [bad, self.write()], "look": [self.judged()], "review": [CLEAN]})
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertEqual(self.roles(s), ["planner", "worker", "worker", "reviewer", "reviewer"])
-        self.assertIn("no shot method 'Nope'", s.prompts[2])
+        assert rc == 0, self.blocked
+        assert self.roles(s) == ["planner", "worker", "worker", "reviewer", "reviewer"]
+        assert "no shot method 'Nope'" in s.prompts[2]
 
     def test_a_visual_write_with_no_shots_and_no_reason_is_asked_once_more_at_no_cost_to_the_rounds(self):
         rc, s = self.go({"plan": [PLAN], "write": [WRITE, self.write()], "look": [self.judged()], "review": [CLEAN]})
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertEqual(
-            self.roles(s), ["planner", "worker", "worker", "reviewer", "reviewer"]
-        )  # the second write, then the judge, then the review
-        self.assertIn("named no shots and gave no logic_only reason", s.prompts[2])
-        self.assertIn("ScreenShots: the main screen", s.prompts[2])  # the table is in the question
-        self.assertEqual(self.eng.stats["rounds"], 0)  # not a send-back round
-        self.assertIn("shots_contract", self.eng.log_path.read_text())
-        self.assertTrue((self.eng.evidence_dir / "main.png").is_file())  # the second answer's shots were rendered
+        assert rc == 0, self.blocked
+        assert self.roles(s) == ["planner", "worker", "worker", "reviewer", "reviewer"]  # the second write, then the judge, then the review
+        assert "named no shots and gave no logic_only reason" in s.prompts[2]
+        assert "ScreenShots: the main screen" in s.prompts[2]  # the table is in the question
+        assert self.eng.stats["rounds"] == 0  # not a send-back round
+        assert "shots_contract" in self.eng.log_path.read_text()
+        assert (self.eng.evidence_dir / "main.png").is_file()  # the second answer's shots were rendered
 
     def test_a_logic_only_reason_or_shots_need_no_second_ask(self):
         _rc, s = self.go({"plan": [PLAN], "write": [dict(WRITE, logic_only="a rename: nothing on screen differs")], "review": [CLEAN]})
-        self.assertEqual(self.roles(s), ["planner", "worker", "reviewer"])
+        assert self.roles(s) == ["planner", "worker", "reviewer"]
         _rc, s = self.go({"plan": [PLAN], "write": [self.write()], "look": [self.judged()], "review": [CLEAN]})
-        self.assertEqual(self.roles(s).count("worker"), 1)
+        assert self.roles(s).count("worker") == 1
 
     def test_a_writer_that_still_names_nothing_gets_a_warning_from_the_review_not_a_send_back(self):
         _rc, s = self.go({"plan": [PLAN], "write": [WRITE, WRITE, WRITE, WRITE], "review": [CLEAN, CLEAN]})
-        self.assertIn("asked for no shots", self.eng.log_path.read_text())
-        self.assertEqual(sum(1 for t in s.prompts if "named no shots and gave no logic_only reason" in t), 1)  # asked once, not again
+        assert "asked for no shots" in self.eng.log_path.read_text()
+        assert sum(1 for t in s.prompts if "named no shots and gave no logic_only reason" in t) == 1  # asked once, not again
 
     def test_the_planner_is_told_the_rule_and_the_repos_shot_methods(self):
         base = Path(self.tmp.name, "base-files")
@@ -209,52 +206,52 @@ class VisualWork(StagesTest):
         te.sh("git", "pull", "-q", "origin", "main", cwd=self.wt)
         _rc, s = self.go({"plan": [PLAN], "write": [self.write()], "review": [CLEAN]}, table="lifesim.json")
         planner = s.prompts[0]
-        self.assertIn("changes how something looks", planner)
-        self.assertIn("logic_only", planner)
-        self.assertIn("(f.txt)", planner)  # the visual paths
-        self.assertIn("- BuildShots: Build mode: flat, drag, undo", planner)
-        self.assertIn("- PoseShots: Every declared body slot", planner)
-        self.assertNotIn("Diagnostic records", planner)  # a line per method, not the whole summary
+        assert "changes how something looks" in planner
+        assert "logic_only" in planner
+        assert "(f.txt)" in planner  # the visual paths
+        assert "- BuildShots: Build mode: flat, drag, undo" in planner
+        assert "- PoseShots: Every declared body slot" in planner
+        assert "Diagnostic records" not in planner  # a line per method, not the whole summary
 
     def test_without_a_shot_table_a_visual_stage_works_the_old_way(self):
         _rc, s = self.go({"plan": [PLAN], "write": [WRITE, WRITE], "review": [CLEAN, CLEAN]}, table="")
-        self.assertIn("Save a screenshot of every changed", s.prompts[1])
-        self.assertNotIn("You cannot render it here", s.prompts[1])
-        self.assertNotIn("look", list(self.eng.run_dir.glob("look-*.json")))
+        assert "Save a screenshot of every changed" in s.prompts[1]
+        assert "You cannot render it here" not in s.prompts[1]
+        assert "look" not in list(self.eng.run_dir.glob("look-*.json"))
 
     def test_the_table_is_read_from_the_base_branch_not_the_working_copy(self):
         (self.wt / "shots.json").write_text(json.dumps({"v": 1, "methods": [{"method": "Evil", "argv": ["touch", "pwned"]}]}))
         cfg = cfg_with(wslots.load_cfg(str(self.wt), port_git()), shot_table="shots.json")
         e = engine.Engine(BeadId("t-1"), str(self.wt), cfg, store=self.store, env=snapshot(), spawner=real_spawner(),
             git=port_git(), who=who())
-        self.assertEqual(list(e.pictures.shot_methods()), ["ScreenShots"])
+        assert list(e.pictures.shot_methods()) == ["ScreenShots"]
 
     def test_a_missing_table_is_warned_once_and_the_old_way_stands(self):
         cfg = cfg_with(wslots.load_cfg(str(self.wt), port_git()), shot_table="nowhere.json")
         e = engine.Engine(BeadId("t-1"), str(self.wt), cfg, store=self.store, env=snapshot(), spawner=real_spawner(),
             git=port_git(), who=who())
-        self.assertEqual(e.pictures.shot_methods(), {})
-        self.assertEqual(e.pictures.shot_methods(), {})
+        assert e.pictures.shot_methods() == {}
+        assert e.pictures.shot_methods() == {}
 
     def test_look_and_taste_cases_have_no_command_and_run_nothing(self):
         cases = [{"criterion": "the picker shows", "check": "", "class": "look-objective"},
                  {"criterion": "it reads well", "check": "", "class": "taste"}]
         rc, s = self.go({"plan": [dict(PLAN, cases=cases)], "write": [self.write()], "look": [self.judged()], "review": [CLEAN]})
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertIn("the picker shows", s.prompts[2])  # the judge judges the look-objective item
-        self.assertNotIn("it reads well", s.prompts[2])
-        self.assertEqual(self.eng.cases.case_checks(), [])
+        assert rc == 0, self.blocked
+        assert "the picker shows" in s.prompts[2]  # the judge judges the look-objective item
+        assert "it reads well" not in s.prompts[2]
+        assert self.eng.cases.case_checks() == []
 
     def test_the_planner_is_told_the_classes_and_to_assume_a_missing_reference(self):
         _rc, s = self.go({"plan": [PLAN], "write": [self.write()], "look": [self.judged()], "review": [CLEAN]})
         plan_prompt = s.prompts[0]
-        self.assertIn("look-objective:", plan_prompt)
-        self.assertIn("Never invent one as a check", plan_prompt)
-        self.assertIn("assume the look", plan_prompt)  # no reference image in the task
+        assert "look-objective:" in plan_prompt
+        assert "Never invent one as a check" in plan_prompt
+        assert "assume the look" in plan_prompt  # no reference image in the task
 
     def test_a_visual_repo_without_a_shot_table_is_told_nothing_of_classes(self):
         _rc, s = self.go({"plan": [PLAN], "write": [WRITE, WRITE], "review": [CLEAN, CLEAN]}, table="")
-        self.assertNotIn("look-objective:", s.prompts[0])
+        assert "look-objective:" not in s.prompts[0]
 
     TWO: ClassVar[Any] = dict(PLAN, stages=[PLAN["stages"][0], dict(PLAN["stages"][0], goal="add g")],
                cases=[{"criterion": "the picker shows a hue gradient", "check": "", "class": "look-objective"}])
@@ -262,18 +259,18 @@ class VisualWork(StagesTest):
     def test_the_plans_look_items_are_judged_on_the_last_stage_only(self):
         rc, s = self.go({"plan": [self.TWO], "write": [self.write(), self.write()], "look": [self.judged(), self.judged()],
                          "review": [CLEAN, CLEAN]})
-        self.assertEqual(rc, 0, self.blocked)
+        assert rc == 0, self.blocked
         judges = [p for p in s.prompts if p.startswith("You judge how a screen looks")]
-        self.assertEqual(len(judges), 2)
-        self.assertNotIn("hue gradient", judges[0])
-        self.assertIn("hue gradient", judges[1])
+        assert len(judges) == 2
+        assert "hue gradient" not in judges[0]
+        assert "hue gradient" in judges[1]
 
     def test_only_the_engines_own_pictures_count_with_a_shot_table(self):
         e = make_engine(self.wt, cfg={"shot_table": "shots.json"}, store=self.store, attrs={"rendered_names": ["main.png"]})
         e.evidence_dir.mkdir(parents=True, exist_ok=True)
         (e.evidence_dir / "writer.png").write_bytes(b"x")
         (e.evidence_dir / "main.png").write_bytes(b"x")
-        self.assertEqual(e.pictures.shots(), ["main.png"])
+        assert e.pictures.shots() == ["main.png"]
 
     @te.POSIX_CHECK
     def test_a_failed_shot_command_is_a_defect_even_if_it_left_a_picture(self):
@@ -287,8 +284,8 @@ class VisualWork(StagesTest):
             _rc, s = self.go({"plan": [PLAN], "write": [self.write(), self.write()], "review": [CLEAN]})
         finally:
             self.TABLE["methods"][0]["argv"] = ["shot-tool", "{out}", "{args}"]
-        self.assertEqual(self.roles(s)[:3], ["planner", "worker", "worker"])  # no judge call: the render failed
-        self.assertIn("failed (exit 3)", s.prompts[2])
+        assert self.roles(s)[:3] == ["planner", "worker", "worker"]  # no judge call: the render failed
+        assert "failed (exit 3)" in s.prompts[2]
 
     def test_pictures_made_before_a_later_fix_are_rendered_again_before_the_land(self):
         red_once = procsim.fake("red-on-d2", lambda cwd, env: (1 if procsim.f_txt(cwd) == "d2" else 0, ""))  # red after the first write
@@ -302,9 +299,9 @@ class VisualWork(StagesTest):
             },
             look_rounds=1,
         )
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertIn("rendering the last shots again", self.eng.log_path.read_text())
-        self.assertEqual(self.eng.render_stale, False)
+        assert rc == 0, self.blocked
+        assert "rendering the last shots again" in self.eng.log_path.read_text()
+        assert self.eng.render_stale is False
 
     def test_a_resumed_stage_keeps_its_render_rounds(self):
         e = make_engine(
@@ -323,7 +320,7 @@ class VisualWork(StagesTest):
         gitq.git("checkout", "-q", "-b", "task/t-1", cwd=e.wt)
         e.checkpoints.save(stage=0, rounds=0, n=1, feedback="", step="write")
         ck = read_ck(e).state
-        self.assertEqual((ck.look_done, sorted(ck.rendered_names), ck.render_stale), (1, ["a.png"], True))
+        assert (ck.look_done, sorted(ck.rendered_names), ck.render_stale) == (1, ["a.png"], True)
         again = engine.Engine(
             BeadId("t-1"),
             str(self.wt),
@@ -334,11 +331,11 @@ class VisualWork(StagesTest):
             git=port_git(), who=who())
         again.tree.reset(must_bead(BEAD))
         again.resume.point()
-        self.assertEqual((again.look_done, again.rendered_names, again.render_stale), (1, ["a.png"], True))
+        assert (again.look_done, again.rendered_names, again.render_stale) == (1, ["a.png"], True)
 
     def test_a_non_visual_repo_gets_none_of_it(self):
         _rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
-        self.assertNotIn("look-objective:", s.prompts[0])
+        assert "look-objective:" not in s.prompts[0]
 
     def test_the_gallery_data_lands_in_the_owner_look_beads_metadata(self):
         e = make_engine(self.wt, store=self.store, attrs={
@@ -354,11 +351,11 @@ class VisualWork(StagesTest):
                 self.store.stub(bd_fn=lambda *a, **k: sent.append(a) or mock.Mock(returncode=0, stdout="", stderr="")):
             e.owner_look.write_looks(BeadId("lk-1"))
         (call,) = sent
-        self.assertEqual(call[:3], ("update", "lk-1", "--metadata"))
+        assert call[:3] == ("update", "lk-1", "--metadata")
         meta = json.loads(call[3])
-        self.assertEqual(meta["keep"], "me")
-        self.assertEqual([x["id"] for x in meta["looks"]], ["t-0#1", "t-1#1"])
-        self.assertEqual(meta["looks"][1]["status"], "good")  # the owner's answer stays
+        assert meta["keep"] == "me"
+        assert [x["id"] for x in meta["looks"]] == ["t-0#1", "t-1#1"]
+        assert meta["looks"][1]["status"] == "good"  # the owner's answer stays
         e.leftovers = []
         old["metadata"]["looks"].pop()
         sent.clear()
@@ -366,9 +363,9 @@ class VisualWork(StagesTest):
                 self.store.stub(bd_fn=lambda *a, **k: sent.append(a) or mock.Mock(returncode=0, stdout="", stderr="")):
             e.owner_look.write_looks(BeadId("lk-1"))
         entry = json.loads(sent[0][3])["looks"][-1]
-        self.assertEqual((entry["id"], entry["bead"], entry["title"], entry["status"]), ("t-1#1", "t-1", "it reads well", "open"))
-        self.assertEqual(entry["note"], "the main screen shows")
-        self.assertEqual(entry["shots"], [{"path": "artifact:t-1/main.png", "role": "after", "label": "main"}])
+        assert (entry["id"], entry["bead"], entry["title"], entry["status"]) == ("t-1#1", "t-1", "it reads well", "open")
+        assert entry["note"] == "the main screen shows"
+        assert entry["shots"] == [{"path": "artifact:t-1/main.png", "role": "after", "label": "main"}]
 
 
 class ResumeCount(StagesTest):
@@ -393,12 +390,12 @@ class ResumeCount(StagesTest):
     def test_the_owners_answer_is_no_failed_plan_even_at_the_limit(self):
         ask = dict(WRITE, question="Which format?")
         rc, _ = self.run_engine({"plan": [PLAN], "write": [ask]}, max_replans=0)  # one plan allowed, no amend
-        self.assertEqual(rc, 2)
+        assert rc == 2
         with self.store.stub(comments=[{"author": "denis", "text": "Use the new format."}]):
             rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, max_replans=0)
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertEqual(s.calls[0][0], "planner")  # it amended
-        self.assertEqual((self.eng.planned, self.eng.plan_log[-1].counted), (1, False))
+        assert rc == 0, self.blocked
+        assert s.calls[0][0] == "planner"  # it amended
+        assert (self.eng.planned, self.eng.plan_log[-1].counted) == (1, False)
 
     def test_an_edit_with_no_ask_still_counts(self):
         # who edited the bead is not known: a comment from a sibling agent must not lift the limit
@@ -407,49 +404,49 @@ class ResumeCount(StagesTest):
         path.unlink()
         with self.store.stub(show=dict(BEAD, description="Also say hi.")):
             _rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, max_replans=1)
-        self.assertEqual(self.eng.plan_log[-1].counted, True)
+        assert self.eng.plan_log[-1].counted is True
 
     def test_a_failed_plan_still_counts_and_the_limit_still_stops(self):
         flag = dict(WRITE, bad_checks=[{"cmd": FALSE, "why": "never passes"}])
         bad = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[FALSE])])
         rc, _s = self.run_engine({"plan": [bad, bad], "write": [flag, flag]}, max_replans=1)
-        self.assertEqual(rc, 2)
-        self.assertTrue(self.blocked and self.blocked[0].startswith(REPLAN_CAP))
+        assert rc == 2
+        assert self.blocked and self.blocked[0].startswith(REPLAN_CAP)
 
     def test_a_rebase_onto_a_new_base_starts_the_plan_count_again(self):
         self.behind_branch()
         e = make_engine(self.wt, store=self.store, attrs={"planned": 3, "plan_log": [{"mode": "plan", "why": "x"}] * 3})
         gitq.git("checkout", "-q", "task/t-1", cwd=e.wt)
-        self.assertEqual(e.rebase.onto_base(), "rebased")
-        self.assertEqual((e.planned, e.rebase_resets), (0, 1))
-        self.assertEqual(e.plan_log[-1].counted, False)  # the history stays, with a note
-        self.assertEqual(e.rebase.onto_base(), "")  # nothing behind now
+        assert e.rebase.onto_base() == "rebased"
+        assert (e.planned, e.rebase_resets) == (0, 1)
+        assert e.plan_log[-1].counted is False  # the history stays, with a note
+        assert e.rebase.onto_base() == ""  # nothing behind now
 
     def test_the_count_starts_again_after_a_rebase_at_most_twice_per_bead(self):
         e = make_engine(self.wt, store=self.store, attrs={"rebase_resets": MAX_REBASE_RESETS, "planned": 3})
         self.behind_branch()
         gitq.git("checkout", "-q", "task/t-1", cwd=e.wt)
-        self.assertEqual(e.rebase.onto_base(), "rebased")
-        self.assertEqual(e.planned, 3)  # a bead stuck for a real reason still reaches the limit while main moves
+        assert e.rebase.onto_base() == "rebased"
+        assert e.planned == 3  # a bead stuck for a real reason still reaches the limit while main moves
 
     def test_a_branch_that_conflicts_with_main_starts_again_fresh_and_nothing_is_counted(self):
         self.behind_branch(conflict=True)
         with self.store.stub(comments=[{"author": "denis", "text": "Use the new format."}]):
             rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, max_replans=0)
-        self.assertEqual(rc, 0, self.blocked)
+        assert rc == 0, self.blocked
         text = self.eng.log_path.read_text()
-        self.assertIn("resume_conflict", text)
-        self.assertIn("resume conflict: task/t-1 kept as task/t-1-stale-", text)
-        self.assertNotIn("<old_plan>", s.prompts[0])  # a fresh plan, not an amend
-        self.assertIn("Use the new format.", s.prompts[0])  # the answer is in the planner's brief
-        self.assertEqual(self.eng.planned, 1)
+        assert "resume_conflict" in text
+        assert "resume conflict: task/t-1 kept as task/t-1-stale-" in text
+        assert "<old_plan>" not in s.prompts[0]  # a fresh plan, not an amend
+        assert "Use the new format." in s.prompts[0]  # the answer is in the planner's brief
+        assert self.eng.planned == 1
         out = subprocess.run(
             ["git", "branch", "--list", "task/t-1-stale-*"], cwd=self.wt, capture_output=True, text=True, check=False
         ).stdout
-        self.assertIn("task/t-1-stale-", out)  # the earlier work is kept
+        assert "task/t-1-stale-" in out  # the earlier work is kept
         shown = subprocess.run(["git", "show", "origin/main:a.txt"], cwd=self.wt, capture_output=True, text=True, check=False).stdout
-        self.assertEqual(shown, "main moved on\n")
-        self.assertTrue(any("Resume (engine)" in str(c) for c in self.bd_calls))  # the bead says where the parked work is
+        assert shown == "main moved on\n"
+        assert any("Resume (engine)" in str(c) for c in self.bd_calls)  # the bead says where the parked work is
 
     # -- tl-7y6.2.19: a resume conflict is squashed and fixed in place (a few files), not thrown away
     def wip_branch(self, steps, main, files=("a.txt",)):
@@ -487,34 +484,31 @@ class ResumeCount(StagesTest):
     def test_wip_commits_that_conflict_only_unsquashed_are_squashed_and_rebase_without_a_fix(self):
         self.wip_branch(["step 1", "step 2", "step 3", "main moved on"], "main moved on")
         rc, s = self.run_engine({"write": [WRITE], "review": [CLEAN]})
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertEqual([c[0] for c in s.calls], ["worker", "reviewer"])  # no fix round, no plan
+        assert rc == 0, self.blocked
+        assert [c[0] for c in s.calls] == ["worker", "reviewer"]  # no fix round, no plan
         text = self.eng.log_path.read_text()
-        self.assertIn("squashed the branch's wip commits into one", text)
-        self.assertNotIn("resume_conflict", text)
-        self.assertFalse(self.last_trace()["salvaged"])
-        self.assertEqual(gitq.git("show", "origin/main:a.txt", cwd=str(self.wt)), "main moved on")
-        self.assertEqual(
-            subprocess.run(
+        assert "squashed the branch's wip commits into one" in text
+        assert "resume_conflict" not in text
+        assert not self.last_trace()["salvaged"]
+        assert gitq.git("show", "origin/main:a.txt", cwd=str(self.wt)) == "main moved on"
+        assert subprocess.run(
                 ["git", "branch", "--list", "task/t-1-stale-*"], cwd=self.wt, capture_output=True, text=True, check=False
-            ).stdout,
-            "",
-        )
+            ).stdout == ""
 
     def test_a_resume_conflict_in_more_than_ten_files_starts_again_as_before(self):
         files = [f"c{n}.txt" for n in range(11)]
         self.wip_branch(["mine 1", "mine 2"], "theirs", files=files)
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "reviewer"])
-        self.assertIn("resume_conflict", self.eng.log_path.read_text())
-        self.assertFalse(self.last_trace()["salvaged"])
+        assert rc == 0, self.blocked
+        assert [c[0] for c in s.calls] == ["planner", "worker", "reviewer"]
+        assert "resume_conflict" in self.eng.log_path.read_text()
+        assert not self.last_trace()["salvaged"]
         out = subprocess.run(
             ["git", "branch", "--list", "task/t-1-stale-*"], cwd=self.wt, capture_output=True, text=True, check=False
         ).stdout
-        self.assertIn("task/t-1-stale-", out)
+        assert "task/t-1-stale-" in out
         stale = out.split()[-1]
-        self.assertEqual(gitq.git("show", stale + ":c0.txt", cwd=str(self.wt)), "mine 2")  # the work is kept whole
+        assert gitq.git("show", stale + ":c0.txt", cwd=str(self.wt)) == "mine 2"  # the work is kept whole
 
     def test_exactly_ten_conflicted_files_are_still_fixed(self):
         files = [f"c{n}.txt" for n in range(10)]
@@ -529,28 +523,28 @@ class ResumeCount(StagesTest):
             return r
         with mock.patch.object(fake_route.Script, "reply", fix_all):
             rc, s = self.run_engine({"write": [WRITE, WRITE], "review": [CLEAN, CLEAN]})
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertEqual([c[0] for c in s.calls], ["worker", "reviewer", "worker", "reviewer"])  # the conflict fix, then the stage; no plan
-        self.assertIn("conflict", s.prompts[0])
-        self.assertNotIn("resume_conflict", self.eng.log_path.read_text())
-        self.assertTrue(self.last_trace()["salvaged"])
-        self.assertEqual(gitq.git("show", "origin/main:c0.txt", cwd=str(self.wt)), "merged")
-        self.assertEqual(self.eng.fixes, 0)  # the land's two fix rounds are its own
+        assert rc == 0, self.blocked
+        assert [c[0] for c in s.calls] == ["worker", "reviewer", "worker", "reviewer"]  # the conflict fix, then the stage; no plan
+        assert "conflict" in s.prompts[0]
+        assert "resume_conflict" not in self.eng.log_path.read_text()
+        assert self.last_trace()["salvaged"]
+        assert gitq.git("show", "origin/main:c0.txt", cwd=str(self.wt)) == "merged"
+        assert self.eng.fixes == 0  # the land's two fix rounds are its own
         stale = subprocess.run(["git", "branch", "--list", "task/t-1-stale-*"], cwd=self.wt, capture_output=True, text=True, check=False)
-        self.assertEqual(stale.stdout, "")
+        assert stale.stdout == ""
 
     def test_a_conflict_fix_that_does_not_resolve_it_restores_the_branch_and_starts_again(self):
         self.wip_branch(["mine 1", "mine 2"], "theirs")
         rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE] * 3, "review": [CLEAN]}, max_check_tries=1, max_rounds=1)
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertIn("resume_conflict", self.eng.log_path.read_text())
-        self.assertFalse(self.last_trace()["salvaged"])
+        assert rc == 0, self.blocked
+        assert "resume_conflict" in self.eng.log_path.read_text()
+        assert not self.last_trace()["salvaged"]
         out = subprocess.run(
             ["git", "branch", "--list", "task/t-1-stale-*"], cwd=self.wt, capture_output=True, text=True, check=False
         ).stdout
         stale = out.split()[-1]
-        self.assertEqual(gitq.git("show", stale + ":a.txt", cwd=str(self.wt)), "mine 2")  # the original work, not a half-fixed rebase
-        self.assertEqual(self.eng.fixes, 0)
+        assert gitq.git("show", stale + ":a.txt", cwd=str(self.wt)) == "mine 2"  # the original work, not a half-fixed rebase
+        assert self.eng.fixes == 0
 
     def test_a_branch_that_cannot_be_kept_aside_is_not_reset(self):
         self.behind_branch(conflict=True)
@@ -560,11 +554,11 @@ class ResumeCount(StagesTest):
         patch = mock.patch.object(type(e.git), "rename_branch", side_effect=SlotGitError("refused"))
         patch.start()
         self.addCleanup(patch.stop)
-        self.assertFalse(e.restart.again("x"))
-        self.assertEqual(gitq.git("rev-parse", "HEAD", cwd=e.wt), before)  # the work is where it was
+        assert not e.restart.again("x")
+        assert gitq.git("rev-parse", "HEAD", cwd=e.wt) == before  # the work is where it was
         patch.stop()
         gitq.git("checkout", "-q", "--detach", cwd=e.wt)
-        self.assertFalse(e.restart.again("x"))  # detached: nothing renamed or reset
+        assert not e.restart.again("x")  # detached: nothing renamed or reset
 
     def test_a_fresh_start_clears_what_the_old_attempt_left(self):
         self.behind_branch(conflict=True)
@@ -583,9 +577,9 @@ class ResumeCount(StagesTest):
         )
         gitq.git("checkout", "-q", "task/t-1", cwd=e.wt)
         e.handoff.rounds = [Round(stage="s", round=1, kind="k")]
-        self.assertTrue(e.restart.again("x"))
-        self.assertEqual((e.unverified, e.look_paths, e.handoff.rounds, e.fixes, e.replans, e.rendered_names), ([], [], [], 0, 0, []))
-        self.assertEqual(e.verify_answer, "Use the old format")  # the owner's word still goes to the planner
+        assert e.restart.again("x")
+        assert (e.unverified, e.look_paths, e.handoff.rounds, e.fixes, e.replans, e.rendered_names) == ([], [], [], 0, 0, [])
+        assert e.verify_answer == "Use the old format"  # the owner's word still goes to the planner
 
 
 class Claims(StagesTest):
@@ -603,53 +597,53 @@ class Claims(StagesTest):
         with self.store.stub(show=parked), \
                 self.store.stub(comments=comments), mock.patch.object(wrunning, "running", return_value={}):
             ok, why = entry.admit("t-1", str(self.wt), port_git(), who(), store=self.store)
-        self.assertTrue(ok, why)
-        self.assertEqual(why, "reopened")
-        self.assertEqual(self.store.calls[0], ("update", "t-1", "--status", "open", "--if-assignee", "tl-2be89f88", "--assignee", ""))
+        assert ok, why
+        assert why == "reopened"
+        assert self.store.calls[0] == ("update", "t-1", "--status", "open", "--if-assignee", "tl-2be89f88", "--assignee", "")
 
     def test_a_parked_bead_with_an_engine_still_on_it_is_a_live_claim(self):
         parked = {"id": "t-1", "status": "blocked", "assignee": "tl-2be89f88", "lease_expires_at": "", "dependencies": []}
         with self.store.stub(show=parked), \
                 mock.patch.object(wrunning, "running", return_value={"t-1": "s2"}):
             ok, why = entry.admit("t-1", str(self.wt), port_git(), who(), store=self.store)
-        self.assertFalse(ok)
-        self.assertIn("a live claim", why)
+        assert not ok
+        assert "a live claim" in why
 
     def test_a_working_bead_that_is_still_claimed_after_the_sweep_is_a_live_claim(self):
         busy = {"id": "t-1", "status": "in_progress", "assignee": "tl-2be89f88", "lease_expires_at": "", "dependencies": []}
         with self.store.stub(show=busy):
             ok, why = entry.admit("t-1", str(self.wt), port_git(), who(), store=self.store)
-        self.assertFalse(ok)
-        self.assertIn("a live claim", why)
+        assert not ok
+        assert "a live claim" in why
 
     @te.no_repo
     def test_parking_a_bead_lets_go_of_its_claim(self):
         for holder, expect in (("tl-2be89f88", ("update", "t-1", "--status", "blocked", "--assignee", "")),
                                ("denis", ("update", "t-1", "--status", "blocked")), ("", ("update", "t-1", "--status", "blocked"))):
             store = FakeBeadStore().put({"id": "t-1", "assignee": holder})
-            self.assertEqual(verbs.block(who(), BeadId("t-1"), "stuck", store), 0)
-            self.assertEqual(store.said("update")[0], expect, holder)  # a person's own claim stays theirs
+            assert verbs.block(who(), BeadId("t-1"), "stuck", store) == 0
+            assert store.said("update")[0] == expect, holder  # a person's own claim stays theirs
 
     def test_a_plan_with_no_stages_goes_back_to_the_planner_once(self):
         empty = dict(PLAN, stages=[])
         rc, s = self.run_engine({"plan": [empty, PLAN], "write": [WRITE], "review": [CLEAN]})
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertEqual([c[0] for c in s.calls], ["planner", "planner", "worker", "reviewer"])
-        self.assertIn("it has no stages, no question and no leftovers", s.prompts[1])
-        self.assertIn("has no stages", self.eng.log_path.read_text())
+        assert rc == 0, self.blocked
+        assert [c[0] for c in s.calls] == ["planner", "planner", "worker", "reviewer"]
+        assert "it has no stages, no question and no leftovers" in s.prompts[1]
+        assert "has no stages" in self.eng.log_path.read_text()
 
     def test_a_plan_that_stays_empty_after_the_send_back_parks_noop(self):
         empty = dict(PLAN, stages=[])
         rc, s = self.run_engine({"plan": [empty, empty]})
-        self.assertNotEqual(rc, 0)
-        self.assertEqual(self.blocked, [])
-        self.assertIn("noop: the plan found nothing to implement", te.EngineTest.said(self))
-        self.assertEqual([c[0] for c in s.calls], ["planner", "planner"])
+        assert rc != 0
+        assert self.blocked == []
+        assert "noop: the plan found nothing to implement" in te.EngineTest.said(self)
+        assert [c[0] for c in s.calls] == ["planner", "planner"]
 
     def test_an_empty_plan_with_leftovers_or_a_question_is_not_sent_back(self):
         rc, s = self.run_engine({"plan": [dict(PLAN, stages=[], leftovers=[{"title": "File it", "why": "x"}])]})
-        self.assertEqual([c[0] for c in s.calls], ["planner"])
-        self.assertEqual(rc, 2)
+        assert [c[0] for c in s.calls] == ["planner"]
+        assert rc == 2
 
     REFLECTION: ClassVar[Any] = {
         "went_well": ["the plan was right at once"],
@@ -667,51 +661,47 @@ class Claims(StagesTest):
 
     def test_a_run_ends_with_a_reflection_in_the_trace_and_the_bead_comment(self):
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN], "reflect": [self.REFLECTION]}, reflect=True)
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "reviewer", "reviewer"])  # the reflection is the last call
-        self.assertIn("Bead t-1: Add f", s.prompts[3])
-        self.assertIn("session ref-write", s.prompts[3])  # the sessions to cite
+        assert rc == 0, self.blocked
+        assert [c[0] for c in s.calls] == ["planner", "worker", "reviewer", "reviewer"]  # the reflection is the last call
+        assert "Bead t-1: Add f" in s.prompts[3]
+        assert "session ref-write" in s.prompts[3]  # the sessions to cite
         last = json.loads((homes.config_dir() / "traces.jsonl").read_text().splitlines()[-1])
-        self.assertEqual(last["reflection"]["went_badly"][0]["cause"], "prompt")
-        self.assertEqual(last["reflection"]["went_badly"][0]["session"], "ref-review")
+        assert last["reflection"]["went_badly"][0]["cause"] == "prompt"
+        assert last["reflection"]["went_badly"][0]["session"] == "ref-review"
         comment = next(c[3] for c in self.bd_calls if c[:2] == ("comments", "add") and c[3].startswith("Reflect (engine)"))
-        self.assertIn("reflection: badly: [prompt] the review sent the same finding back twice (session ref-review)", comment)
-        self.assertLess(comment.index("reflection:"), comment.index("filed="))  # first: the view of the last run clips at 400 characters
-        self.assertEqual(last["stats"]["tokens_in"], sum(s["tokens"]["in"] for s in last["sessions"] if s["node"] != "reflect"))
+        assert "reflection: badly: [prompt] the review sent the same finding back twice (session ref-review)" in comment
+        assert comment.index("reflection:") < comment.index("filed=")  # first: the view of the last run clips at 400 characters
+        assert last["stats"]["tokens_in"] == sum(s["tokens"]["in"] for s in last["sessions"] if s["node"] != "reflect")
 
     def test_a_reflection_that_fails_changes_nothing(self):
         crash = fake_route.NO_ANSWER
         rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN], "reflect": [crash, crash, crash]}, reflect=True)
-        self.assertEqual(rc, 0, self.blocked)
+        assert rc == 0, self.blocked
         last = json.loads((homes.config_dir() / "traces.jsonl").read_text().splitlines()[-1])
-        self.assertEqual((last["outcome"], last["reflection"]), ("landed", None))
-        self.assertTrue(self.closed and self.closed[0].startswith("merged"))
+        assert (last["outcome"], last["reflection"]) == ("landed", None)
+        assert self.closed and self.closed[0].startswith("merged")
 
     def test_no_reflection_for_a_paused_run_or_when_switched_off(self):
         _rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})  # reflect off in the harness
-        self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "reviewer"])
+        assert [c[0] for c in s.calls] == ["planner", "worker", "reviewer"]
         e = make_engine(self.wt, cfg={"reflect": True}, store=self.store, attrs={
             "route": "/fake/route.py",
             "sessions": [{"node": "plan"}],
             })
-        self.assertIsNone(e.reflector.reflect_run("failed", "failed: x"))  # a run that only planned
+        assert e.reflector.reflect_run("failed", "failed: x") is None  # a run that only planned
         e.sessions = [{"node": "plan"}, {"node": "write"}]
-        self.assertIsNone(e.reflector.reflect_run("blocked", "paused: no lane for write until 04:00"))
+        assert e.reflector.reflect_run("blocked", "paused: no lane for write until 04:00") is None
         e.stop_pending = True
-        self.assertIsNone(e.reflector.reflect_run("landed", ""))  # a stop is on its way
+        assert e.reflector.reflect_run("landed", "") is None  # a stop is on its way
         e.stop_pending = False
-        self.assertIsNone(e.reflector.reflect_run("failed", "failed: infrastructure: bad_request"))
+        assert e.reflector.reflect_run("failed", "failed: infrastructure: bad_request") is None
         e.dry = True
-        self.assertIsNone(e.reflector.reflect_run("landed", ""))
+        assert e.reflector.reflect_run("landed", "") is None
 
     @te.no_repo
     def test_the_reflection_text_names_cause_and_session(self):
         text = outcomes.reflection_text(self.REFLECTION)
-        self.assertIn("[prompt]", text)
-        self.assertIn("(session ref-review)", text)
-        self.assertEqual(outcomes.reflection_text(None), "")
-        self.assertIn("badly: none", outcomes.reflection_text(dict(self.REFLECTION, went_badly=[])))
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert "[prompt]" in text
+        assert "(session ref-review)" in text
+        assert outcomes.reflection_text(None) == ""
+        assert "badly: none" in outcomes.reflection_text(dict(self.REFLECTION, went_badly=[]))

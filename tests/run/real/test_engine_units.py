@@ -9,7 +9,6 @@ import signal
 import subprocess
 import sys
 import time
-import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
 from typing import Any, ClassVar
@@ -114,12 +113,8 @@ class NoBackgroundGit(T.EngineTest):
                 got = subprocess.run(
                     ["git", "-C", str(repo), "config", "--local", "--get", key], capture_output=True, text=True, check=False
                 )
-                self.assertEqual(got.stdout.strip(), want, f"{repo} {key}")
-        self.assertEqual(os.environ["GIT_CONFIG_KEY_0"], "maintenance.auto")  # the env covers every other git call
+                assert got.stdout.strip() == want, f"{repo} {key}"
+        assert os.environ["GIT_CONFIG_KEY_0"] == "maintenance.auto"  # the env covers every other git call
 
     def tmp_repo(self, name):
         return Path(self.tmp.name) / name
-
-
-if __name__ == "__main__":
-    unittest.main()

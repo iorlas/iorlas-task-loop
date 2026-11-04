@@ -41,15 +41,15 @@ class Restage(StagesTest):
             seen.append(Path(cwd, "m.txt").exists())
             return self.write_g(s, node, cwd, resume)
         rc, _s = self.run_engine({"plan": [TWO], "write": [WRITE, second], "review": [self.move_main(), CLEAN]})
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertEqual(seen, [True])
+        assert rc == 0, self.blocked
+        assert seen == [True]
         text = self.eng.log_path.read_text()
-        self.assertIn("rebased the task branch onto the latest origin/main (1 commits behind) between stages", text)
+        assert "rebased the task branch onto the latest origin/main (1 commits behind) between stages" in text
 
     def test_main_did_not_move_no_rebase(self):
         rc, _s = self.run_engine({"plan": [TWO], "write": [WRITE, self.write_g], "review": [CLEAN, CLEAN]})
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertNotIn("rebased the task branch", self.eng.log_path.read_text())
+        assert rc == 0, self.blocked
+        assert "rebased the task branch" not in self.eng.log_path.read_text()
 
     @staticmethod
     def mine(_s, _node, cwd, _resume):
@@ -62,14 +62,14 @@ class Restage(StagesTest):
             return WRITE
         rc, s = self.run_engine({"plan": [TWO], "write": [self.mine, fix, self.write_g],
                                  "review": [self.move_main("a.txt", "theirs\n"), CLEAN, CLEAN]})
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertIn("conflict", s.prompts[2])
-        self.assertIn("fixed in place", self.eng.log_path.read_text())
-        self.assertEqual(gitq.git("show", "origin/main:a.txt", cwd=self.eng.wt), "merged")
+        assert rc == 0, self.blocked
+        assert "conflict" in s.prompts[2]
+        assert "fixed in place" in self.eng.log_path.read_text()
+        assert gitq.git("show", "origin/main:a.txt", cwd=self.eng.wt) == "merged"
 
     def test_a_failed_fix_blocks_with_the_branch_kept(self):
         rc, _s = self.run_engine({"plan": [TWO], "write": [self.mine, WRITE, WRITE],
                                   "review": [self.move_main("a.txt", "theirs\n"), CLEAN, CLEAN]}, max_check_tries=1, max_rounds=1)
-        self.assertNotEqual(rc, 0)
-        self.assertIn("no longer fits", self.eng.log_path.read_text())
-        self.assertEqual(gitq.git("show", "task/t-1:a.txt", cwd=self.eng.wt), "mine")  # the work is kept as it was
+        assert rc != 0
+        assert "no longer fits" in self.eng.log_path.read_text()
+        assert gitq.git("show", "task/t-1:a.txt", cwd=self.eng.wt) == "mine"  # the work is kept as it was

@@ -6,9 +6,10 @@ import json
 import os
 import sys
 import tempfile
-import unittest
 from pathlib import Path
 from unittest import mock
+
+from support.case import Case
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -50,21 +51,21 @@ def started(t: float) -> list[dict]:
     return [typed("run_start", t, run_id=RUN, bead=BEAD, worktree="/w"), typed("step_start", t + 1, id="n1", step="write", text="write")]
 
 
-class Rule(unittest.TestCase):
+class Rule(Case):
     def test_each_recorded_state_reads_one_way(self):
         want = {RunState.CREATED: Liveness.LIVE, RunState.RUNNING: Liveness.LIVE, RunState.DONE: Liveness.ENDED,
                 RunState.FAILED: Liveness.ENDED, RunState.PARKED: Liveness.ENDED, RunState.STOPPED: Liveness.ENDED,
                 RunState.LOST: Liveness.LOST}
-        self.assertEqual(set(want), set(RunState))
+        assert set(want) == set(RunState)
         for state, life in want.items():
             m = RunManifest(run=RUN, repo="/r", bead=BEAD, started=0.0, state=state)
-            self.assertIs(liveness(m), life, state)
+            assert liveness(m) is life, state
 
     def test_the_limit_leaves_room_for_missed_beats(self):
-        self.assertGreaterEqual(N, 2 * BEAT_EVERY)  # a run is silent at most one beat; N/2 is that and a margin
+        assert N >= 2 * BEAT_EVERY  # a run is silent at most one beat; N/2 is that and a margin
 
 
-class Decision(unittest.TestCase):
+class Decision(Case):
     """is_lost is the one decision: the writer applies it and the read-only dashboard displays it, so they cannot differ."""
 
     def m(self, **kw):
@@ -74,12 +75,12 @@ class Decision(unittest.TestCase):
     def test_only_a_stale_live_run_of_this_host_with_a_dead_pid_is_lost(self):
         dead, alive = (lambda p: False), (lambda p: True)
         late = 1000.0 + N
-        self.assertTrue(runlife.is_lost(self.m(), "h", late, dead))
-        self.assertFalse(runlife.is_lost(self.m(), "h", late - 1, dead))  # fresh heartbeat
-        self.assertFalse(runlife.is_lost(self.m(), "h", late, alive))  # its process lives
-        self.assertFalse(runlife.is_lost(self.m(), "other", late, dead))  # another machine's pid says nothing
-        self.assertFalse(runlife.is_lost(self.m(state=RunState.DONE), "h", late, dead))  # terminal stays
-        self.assertTrue(runlife.is_lost(self.m(pid=0), "h", late, alive))  # no pid recorded
+        assert runlife.is_lost(self.m(), "h", late, dead)
+        assert not runlife.is_lost(self.m(), "h", late - 1, dead)  # fresh heartbeat
+        assert not runlife.is_lost(self.m(), "h", late, alive)  # its process lives
+        assert not runlife.is_lost(self.m(), "other", late, dead)  # another machine's pid says nothing
+        assert not runlife.is_lost(self.m(state=RunState.DONE), "h", late, dead)  # terminal stays
+        assert runlife.is_lost(self.m(pid=0), "h", late, alive)  # no pid recorded
 
     def test_what_the_dashboard_shows_is_what_reconcile_writes(self):
         with tempfile.TemporaryDirectory() as d:
@@ -88,14 +89,14 @@ class Decision(unittest.TestCase):
             for run, pid in (("r-dead", NOBODY), ("r-live", os.getpid())):
                 manifest(cfg, run, BEAD, now - 9999, state=RunState.RUNNING, heartbeat=now - 9999, host=host_name(), pid=pid)
             before = {b.run: runlife.shown(b.manifest, now) for b in RunLocator(cfg).runs()}
-            self.assertEqual(before, {"r-dead": Liveness.LOST, "r-live": Liveness.LIVE})
-            self.assertEqual(RunLocator(cfg).get("r-dead").manifest.state, RunState.RUNNING)  # showing wrote nothing  # type: ignore[union-attr]
-            self.assertEqual(runlife.reconcile(cfg, now), ["r-dead"])
+            assert before == {"r-dead": Liveness.LOST, "r-live": Liveness.LIVE}
+            assert RunLocator(cfg).get("r-dead").manifest.state == RunState.RUNNING  # showing wrote nothing  # type: ignore[union-attr]
+            assert runlife.reconcile(cfg, now) == ["r-dead"]
             after = {b.run: liveness(b.manifest) for b in RunLocator(cfg).runs()}
-            self.assertEqual(after, before)
+            assert after == before
 
 
-class Beats(unittest.TestCase):
+class Beats(Case):
     def test_every_beat_of_the_lease_also_writes_a_beat_record(self):
         class Store:
             def heartbeat(self, bead):
@@ -105,15 +106,15 @@ class Beats(unittest.TestCase):
         lease = Lease(mock.Mock(wraps=Store()), BeadId("t-1"), on_beat=lambda: seen.append("beat"))
         lease.beat()
         lease.beat()
-        self.assertEqual(seen, ["beat", "beat"])
-        self.assertEqual(lease.every, BEAT_EVERY)
+        assert seen == ["beat", "beat"]
+        assert lease.every == BEAT_EVERY
 
 
-class Crash(unittest.TestCase):
+class Crash(Case):
     """A kill -9: the manifest says running and its heartbeat ages. Once the heartbeat is stale and the pid gone the reconciler marks the
     run lost, and the dashboard's live view and the report both read that; a live pid, another host or an ended run is never marked."""
 
-    def setUp(self):
+    def setup_method(self):
         self.tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         home = Path(self.tmp.name)
         self.cfg = home / "task-loop"
@@ -128,7 +129,7 @@ class Crash(unittest.TestCase):
         self.now = self.t0 + 5
         self.dash = make_dash(config=self.cfg, clock=lambda: self.now)
 
-    def tearDown(self):
+    def teardown_method(self):
         self.tmp.cleanup()
 
     def record(self, **fields: object):
@@ -151,40 +152,40 @@ class Crash(unittest.TestCase):
 
     def test_a_fresh_heartbeat_reads_live_in_both(self):
         self.now = self.t0 + 5 + N - 1
-        self.assertEqual(self.dash_says(), "live")
-        self.assertEqual(self.report_crashes(), [])
+        assert self.dash_says() == "live"
+        assert self.report_crashes() == []
 
     def test_a_killed_run_reads_lost_once_its_heartbeat_is_stale(self):
         for age in (N, 2 * N):
             self.record(pid=NOBODY)  # running again, as the engine left it
             self.now = self.t0 + 5 + age
-            self.assertEqual(self.dash_says(), "lost", age)
-            self.assertEqual(self.report_crashes(), [RUN], age)
-            self.assertIn("is gone", must(RunLocator(ConfigDir(self.cfg)).get(RUN)).manifest.reason)
+            assert self.dash_says() == "lost", age
+            assert self.report_crashes() == [RUN], age
+            assert "is gone" in must(RunLocator(ConfigDir(self.cfg)).get(RUN)).manifest.reason
 
     def test_a_stale_run_whose_process_lives_or_is_elsewhere_is_not_lost(self):
         self.now = self.t0 + 5 + 9 * N
         self.record(pid=os.getpid())
-        self.assertEqual(self.dash_says(), "live")
+        assert self.dash_says() == "live"
         self.record(pid=NOBODY, host="another-machine")
-        self.assertEqual(self.dash_says(), "live")
+        assert self.dash_says() == "live"
 
     def test_lost_is_set_once(self):
         self.now = self.t0 + 5 + 2 * N
         where = RunLocator(ConfigDir(self.cfg))
-        self.assertEqual(runlife.reconcile(ConfigDir(self.cfg), self.now), [RUN])
+        assert runlife.reconcile(ConfigDir(self.cfg), self.now) == [RUN]
         again = where.get(RUN)
-        self.assertEqual(runlife.reconcile(ConfigDir(self.cfg), self.now + 99), [])
-        self.assertEqual(where.get(RUN), again)
+        assert runlife.reconcile(ConfigDir(self.cfg), self.now + 99) == []
+        assert where.get(RUN) == again
 
     def test_an_ended_run_reads_ended_in_both(self):
         self.record(state=RunState.DONE, pid=NOBODY)
         self.now = self.t0 + 9 + 50 * N
-        self.assertEqual(self.dash_says(), "ended")
-        self.assertEqual(self.report_crashes(), [])
+        assert self.dash_says() == "ended"
+        assert self.report_crashes() == []
 
 
-class Sweep(unittest.TestCase):
+class Sweep(Case):
     def test_a_log_older_than_retain_goes_with_its_live_folder_and_a_recent_or_live_one_stays(self):
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as d:
             cfg = ConfigDir(Path(d) / "task-loop")
@@ -204,13 +205,13 @@ class Sweep(unittest.TestCase):
             make("t-3-20261029-100000", now - 20)  # a live run
             layout.prune_run_logs(cfg, now, KEEP_DAYS * 86400)
             left = sorted(p.name for p in (cfg.root / "engine").iterdir())
-            self.assertEqual(left, sorted(f"{r}.{e}" for r in ("t-2-20261020-100000", "t-3-20261029-100000")
-                                          for e in ("jsonl", "stderr", "live")))
-            self.assertTrue((cfg.live_dir("t-3-20261029-100000") / "01-write.jsonl").exists())
+            assert left == sorted(f"{r}.{e}" for r in ("t-2-20261020-100000", "t-3-20261029-100000")
+                                          for e in ("jsonl", "stderr", "live"))
+            assert (cfg.live_dir("t-3-20261029-100000") / "01-write.jsonl").exists()
 
 
-class BeatsAreNoEvents(unittest.TestCase):
-    def setUp(self):
+class BeatsAreNoEvents(Case):
+    def setup_method(self):
         self.tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         self.addCleanup(self.tmp.cleanup)
         self.cfg = Path(self.tmp.name) / "task-loop"
@@ -227,10 +228,6 @@ class BeatsAreNoEvents(unittest.TestCase):
         ingest(self.cfg, self.t0 + 201)
         run = dash.live.live_run(self.bundle.run)
         run.refresh()
-        self.assertEqual([e["k"] for e in live_api.page(run)["events"]], ["run_start", "step_start", "warn"])
-        self.assertEqual(dash.live.page(loop_key(self.bundle.repo), BEAD)[1]["state"], "live")
-        self.assertEqual(jsonl.records(str(self.log))[-1].kind, "warn")
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert [e["k"] for e in live_api.page(run)["events"]] == ["run_start", "step_start", "warn"]
+        assert dash.live.page(loop_key(self.bundle.repo), BEAD)[1]["state"] == "live"
+        assert jsonl.records(str(self.log))[-1].kind == "warn"

@@ -1,7 +1,6 @@
 """tl-bxk.13: stage handoffs (docs/design/stages.md). Reuses test_engine's harness without re-running its tests."""
 import json
 import sys
-import unittest
 from pathlib import Path
 from typing import Any, ClassVar, cast
 
@@ -71,21 +70,21 @@ class Executable(StagesTest):
         tools.need(self, "just")
         self.enterContext(tools.on_path("just"))
         (self.wt / "justfile").write_text("fmt-check:\n\techo ok\n")
-        self.assertEqual(self.problems("just fmt-check"), [])
+        assert self.problems("just fmt-check") == []
         bad = self.problems("just unity-play-tests")
-        self.assertEqual(len(bad), 1)
-        self.assertIn("no recipe unity-play-tests", bad[0])
-        self.assertIn("fmt-check", bad[0])
+        assert len(bad) == 1
+        assert "no recipe unity-play-tests" in bad[0]
+        assert "fmt-check" in bad[0]
     def test_just_aliases_private_recipes_options_and_a_recipe_a_stage_adds(self):
         tools.need(self, "just")
         self.enterContext(tools.on_path("just"))
         (self.wt / "justfile").write_text("alias ci := check\ncheck:\n\techo ok\n_private:\n\techo p\n")
         for ok in ("just ci", "just _private", "just --justfile justfile check", "just --set v x check", "just -d . check", "just check"):
-            self.assertEqual(self.problems(ok), [], ok)
-        self.assertEqual(len(self.problems("just nope")), 1)
-        self.assertEqual(self.problems("just newrecipe", made=["justfile"]), [])  # a stage adds it
+            assert self.problems(ok) == [], ok
+        assert len(self.problems("just nope")) == 1
+        assert self.problems("just newrecipe", made=["justfile"]) == []  # a stage adds it
         (self.wt / "justfile").write_text("newrecipe:\n\techo n\n")  # a rebase changes the file: seen at once
-        self.assertEqual(self.problems("just newrecipe"), [])
+        assert self.problems("just newrecipe") == []
 
 
     PATH1 = ".task/t-1/evidence/sleeper-on-bed.txt"
@@ -122,7 +121,3 @@ class Ledger(StagesTest):
     def plan(self, **kw):
         return dict(PLAN, cases=[self.FILE, self.DEFER, {"criterion": "f exists", "check": HAS_F, "proved_by": "check"}],
                     leftovers=self.LEFT, **kw)
-
-
-if __name__ == "__main__":
-    unittest.main()

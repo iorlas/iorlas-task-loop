@@ -1,8 +1,9 @@
 """EFFECTS: a kill between two effects of the close resumes at the first unapplied one; the bd close happens once."""
 import sys
-import unittest
 from pathlib import Path
 from unittest import mock
+
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
@@ -62,14 +63,14 @@ class CloseResume(Base):
                     _real(self, eff, *a)
 
                 with mock.patch.object(Closer, "apply", dying):
-                    with self.assertRaises(Killed):
+                    with pytest.raises(Killed):
                         eng.closer.close(oc.make(Kind.DONE))
                     keys = read_ck(eng).applied
-                    self.assertEqual(len(keys), kill_at)
+                    assert len(keys) == kill_at
                     again = closer_over(eng)  # a new process: the ledger is the checkpoint
                     again.close(oc.make(Kind.DONE))
-                self.assertEqual(len(seen), n, "every effect ran, none twice")
-                self.assertEqual(self.closes(), 1)
+                assert len(seen) == n, "every effect ran, none twice"
+                assert self.closes() == 1
 
 
 class ColdRestart(Base):
@@ -86,7 +87,7 @@ class ColdRestart(Base):
                 raise Killed
             real(this, eff, *a)
 
-        with mock.patch.object(Closer, "apply", dying), self.assertRaises(Killed):
+        with mock.patch.object(Closer, "apply", dying), pytest.raises(Killed):
             eng.closer.close(outcome or oc.make(Kind.DONE))
         return eng
 
@@ -98,24 +99,24 @@ class ColdRestart(Base):
     def test_a_new_process_takes_the_dead_runs_id_from_its_checkpoint(self):
         dead = self.killed_at(fx.CloseBead)
         again = self.cold()
-        self.assertEqual(again.log_path.stem, dead.log_path.stem)
-        self.assertIsNotNone(again.dead)
+        assert again.log_path.stem == dead.log_path.stem
+        assert again.dead is not None
 
     def test_a_closed_run_leaves_nothing_to_finish(self):
         eng = self.engine()
         eng.closer.close(oc.make(Kind.FAULT_INFRA, "failed: infrastructure x"))  # not finished: the checkpoint stays, whole
-        self.assertIsNone(self.cold().dead)
+        assert self.cold().dead is None
 
     def test_the_restarted_process_applies_the_remaining_effects_and_closes_the_bead_once(self):
         self.killed_at(fx.CloseBead)
         before = self.closes()
-        self.assertEqual(before, 0)
+        assert before == 0
         again = self.cold()
         again.run()
-        self.assertEqual(self.closes(), 1)
-        self.assertIsNone(read_ck(again))  # the finished run's checkpoint went last
+        assert self.closes() == 1
+        assert read_ck(again) is None  # the finished run's checkpoint went last
         again2 = self.cold()  # a third process finds nothing to do
-        self.assertIsNone(again2.dead)
+        assert again2.dead is None
 
     def test_a_kill_before_each_effect_then_a_cold_restart_closes_the_bead_once(self):
         for at in (fx.SaveBranch, fx.RecordRun, fx.FileNotes, fx.Reflect, fx.CloseBead, fx.ReleaseSlot, fx.DropCheckpoint):
@@ -123,32 +124,28 @@ class ColdRestart(Base):
                 self.bd_calls.clear()
                 self.killed_at(at)
                 self.cold().run()
-                self.assertEqual(self.closes(), 1)
+                assert self.closes() == 1
 
     def test_reflect_says_the_counts_FileNotes_stored_not_what_memory_has_after_a_kill(self):
         lo = [{"title": "Leftover one", "why": "later"}, {"title": "Leftover two", "why": "later"}]
         self.killed_at(fx.Reflect, leftovers=lo)
-        self.assertEqual(read_ck(self.cold()).notes.filed, 2)
+        assert read_ck(self.cold()).notes.filed == 2
         creates = sum(1 for c in self.bd_calls if c[:1] == ("create",))
-        self.assertEqual(creates, 2)
+        assert creates == 2
         again = self.cold()
         again.run()
         reflect = [c[3] for c in self.store.said("comments", "add") if c[3].startswith("Reflect (engine)")]
-        self.assertEqual(len(reflect), 1)
-        self.assertIn("filed=2;", reflect[0])
-        self.assertEqual(sum(1 for c in self.bd_calls if c[:1] == ("create",)), 2, "nothing filed twice")
+        assert len(reflect) == 1
+        assert "filed=2;" in reflect[0]
+        assert sum(1 for c in self.bd_calls if c[:1] == ("create",)) == 2, "nothing filed twice"
 
     def test_an_ask_outcome_keeps_its_spec_through_the_checkpoint_and_the_bead_is_blocked_once(self):
         spec = askspecs.external_fact(["x"])
         ask = oc.make(Kind.ASK_DECISION, "needs a fact", spec=spec)
-        self.assertEqual(ended.loaded(ended.stored("r", ask, None, "", []))[0], ask)
+        assert ended.loaded(ended.stored("r", ask, None, "", []))[0] == ask
         dead = self.killed_at(fx.BlockBead, outcome=ask)
         bundle = RunLocator(dead.home).get(dead.run_id)
         assert bundle is not None and bundle.manifest.finish is not None
-        self.assertEqual(read_ck(dead).ended, wire.load(EndRec, bundle.manifest.finish.end))
+        assert read_ck(dead).ended == wire.load(EndRec, bundle.manifest.finish.end)
         self.cold().run()
-        self.assertEqual(sum(1 for c in self.bd_calls if c[:1] == ("block",) or "blocked" in c), 1)
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert sum(1 for c in self.bd_calls if c[:1] == ("block",) or "blocked" in c) == 1

@@ -1,7 +1,6 @@
 """tl-7y6.24: a worker that leaves the task branch or adds a worktree fails the bead (FAULT_ENGINE) with what moved."""
 
 import sys
-import unittest
 from pathlib import Path
 from unittest import mock
 
@@ -55,12 +54,12 @@ class Strays(te.EngineTest):
 
     def test_a_worker_that_stays_passes(self):
         rc, _ = self.go()
-        self.assertEqual(rc, 0)
-        self.assertEqual(self.raised, [])
+        assert rc == 0
+        assert self.raised == []
 
     def test_a_worker_that_checks_out_another_branch_fails_the_bead_with_the_branch_it_left(self):
         self.go(lambda cwd: ("checkout", "-b", "elsewhere"))
-        self.assertEqual(self.raised, [("FAULT_ENGINE", "failed: the worker left task/t-1 for elsewhere")])
+        assert self.raised == [("FAULT_ENGINE", "failed: the worker left task/t-1 for elsewhere")]
 
     def test_a_worker_that_adds_a_worktree_in_its_slot_fails_the_bead_with_its_path(self):
         path = {}
@@ -68,12 +67,8 @@ class Strays(te.EngineTest):
             path["p"] = str((Path(cwd) / ".wt" / "extra").resolve())
             return ("worktree", "add", "--detach", path["p"])
         self.go(add)
-        self.assertEqual(self.raised, [("FAULT_ENGINE", f"failed: the worker added worktree {path['p']}")])
+        assert self.raised == [("FAULT_ENGINE", f"failed: the worker added worktree {path['p']}")]
 
     def test_a_worktree_added_outside_the_slot_is_not_the_workers(self):
         self.go(lambda cwd: ("worktree", "add", "--detach", str(Path(self.tmp.name) / "other-slot")))  # another slot, a base check
-        self.assertEqual(self.raised, [])
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert self.raised == []
