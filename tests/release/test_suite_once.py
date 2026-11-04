@@ -121,3 +121,8 @@ class SuiteOnce(unittest.TestCase):
         self.assertEqual((env["UV_CACHE_DIR"], env["UV_OFFLINE"]), (cache, "1"))
         child = tool_env(env)
         self.assertEqual((child["UV_CACHE_DIR"], child["UV_OFFLINE"]), (cache, "1"))
+
+    def test_isolated_workers_never_carry_the_owners_hooks_path(self):
+        env = suite.isolated_env(self.root / "worker", self.env)
+        keys = [env[f"GIT_CONFIG_KEY_{i}"].lower() for i in range(int(env.get("GIT_CONFIG_COUNT", "0")))]
+        self.assertNotIn("core.hookspath", keys)

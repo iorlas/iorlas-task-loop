@@ -13,7 +13,7 @@ from pathlib import Path
 from types import FrameType
 
 from taskloop.adapters import landlock
-from taskloop.adapters.childenv import tool_env
+from taskloop.adapters.childenv import tool_env, without_check_hooks
 from taskloop.adapters.ident import config_dir
 from taskloop.adapters.suiteout import Part, failing_tests, failure_report, merge_outputs, ran_line
 from taskloop.app.checks import authorization
@@ -113,7 +113,9 @@ def isolated_env(home: Path, base: Env) -> dict[str, str]:
     real = Path.home() / ".gitconfig"
     if real.is_file():
         (home / ".gitconfig").write_bytes(real.read_bytes())
-    env = tool_env(base.vars, {"HOME": str(home), "XDG_CONFIG_HOME": str(home / ".config"), "TMPDIR": str(home / "tmp")})
+    # The owner's hooks dir stays out: a test pushing to its own temp origin must not meet the real pre-push judge.
+    homes = {"HOME": str(home), "XDG_CONFIG_HOME": str(home / ".config"), "TMPDIR": str(home / "tmp")}
+    env = without_check_hooks(tool_env(base.vars, homes))
     env[EnvVar.TL_WORKER_MB.value] = str(WORKER_BUDGET_MB)  # the address-space cap of each xdist worker (tests/conftest.py)
     env["UV_OFFLINE"] = "1"  # dependencies were prewarmed before isolated pytest workers start
     env["UV_CACHE_DIR"] = str(uv_cache(base))
