@@ -1,11 +1,11 @@
 """Release failure records and the final status line retain multiline refusal reasons."""
 import io
-import unittest
 from contextlib import nullcontext, redirect_stderr
 from pathlib import Path
 from unittest import mock
 
 import support.paths  # noqa: F401
+from support.case import Case
 
 from taskloop.app.release import flow, publish
 from taskloop.app.release.shell import Abort
@@ -13,7 +13,7 @@ from taskloop.contracts.env import Env
 from taskloop.contracts.slots import SlotGitError
 
 
-class FailureSummary(unittest.TestCase):
+class FailureSummary(Case):
     def test_failed_release_keeps_the_reason_in_the_record_comment_and_final_line(self):
         refusal = "! [remote rejected] main -> main (pre-receive hook declined)"
         message = "the push was refused and origin/main did not move:\n" + refusal
@@ -42,14 +42,13 @@ class FailureSummary(unittest.TestCase):
               mock.patch.object(flow, "ReleaseResultStore") as results,
               mock.patch.object(flow.beadtools, "bd_store", return_value=store), redirect_stderr(output)):
             code = flow.main(["fix", "--bead", "tl-v11i"], Path("tool"), spawner, port, Env(), mock.Mock(), clock=lambda: 1.0)
-        self.assertEqual(code, 1)
+        assert code == 1
         result = results.return_value.write.call_args.args[0]
-        self.assertEqual(result.summary, expected)
-        self.assertEqual(result.log, error.log)
-        self.assertNotIn("\n", result.summary)
-        self.assertLessEqual(len(result.summary), 500)
-        self.assertEqual(output.getvalue().splitlines()[-1],
-                         "release FAILED: " + expected + (f" (log {error.log})" if error.log else ""))
+        assert result.summary == expected
+        assert result.log == error.log
+        assert "\n" not in result.summary
+        assert len(result.summary) <= 500
+        assert output.getvalue().splitlines()[-1] == "release FAILED: " + expected + (f" (log {error.log})" if error.log else "")
         store.add_comment.assert_called_once_with("tl-v11i", "release FAILED: " + expected +
                                                   ("; log " + error.log if error.log else ""))
 

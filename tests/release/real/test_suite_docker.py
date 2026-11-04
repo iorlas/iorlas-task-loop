@@ -5,9 +5,10 @@ import signal
 import subprocess
 import sys
 import time
-import unittest
 from pathlib import Path
 
+import pytest
+from support.case import Case
 from support.narrow import must
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -16,10 +17,10 @@ sd = importlib.util.module_from_spec(must(spec))
 must(must(spec).loader).exec_module(sd)
 
 
-class SuiteDocker(unittest.TestCase):
+class SuiteDocker(Case):
     def test_sigterm_removes_the_named_container(self):
         if not sd.docker_ok():  # asked here, not at import: collecting the suite starts no docker
-            self.skipTest("needs a reachable docker")
+            pytest.skip("needs a reachable docker")
         env = dict(os.environ, TASK_LOOP_SUITE_INSIDE="cat >/dev/null; sleep 300")
         p = subprocess.Popen([sys.executable, str(ROOT / "dev" / "suite-docker.py"), "--repo", str(ROOT)], env=env,
                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -33,15 +34,11 @@ class SuiteDocker(unittest.TestCase):
             if containers():
                 break
             time.sleep(0.1)
-        self.assertTrue(containers(), "the container never started")
+        assert containers(), "the container never started"
         p.send_signal(signal.SIGTERM)
         p.wait(timeout=20)
         for _ in range(50):
             if not containers():
                 break
             time.sleep(0.1)
-        self.assertEqual(containers(), [])
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert containers() == []

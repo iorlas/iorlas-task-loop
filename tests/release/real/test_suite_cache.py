@@ -4,8 +4,10 @@ import os
 import subprocess
 import sys
 import tempfile
-import unittest
 from pathlib import Path
+
+import pytest
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
@@ -19,8 +21,8 @@ from taskloop.contracts.env import snapshot
 from taskloop.contracts.paths import ConfigDir
 
 
-class Verify(unittest.TestCase):
-    def setUp(self) -> None:
+class Verify(Case):
+    def setup_method(self) -> None:
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         root = Path(self.tmp.name)
@@ -56,39 +58,35 @@ class Verify(unittest.TestCase):
         raise Abort("the suite is red")
 
     def test_the_same_tree_under_the_same_command_runs_once(self):
-        self.assertFalse(suite.verify(self.repo, self.repo, self.sh, self.checks))
-        self.assertTrue(suite.verify(self.repo, self.repo, self.sh, self.checks))
-        self.assertEqual(self.ran, ["ran"])
+        assert not suite.verify(self.repo, self.repo, self.sh, self.checks)
+        assert suite.verify(self.repo, self.repo, self.sh, self.checks)
+        assert self.ran == ["ran"]
 
     def test_a_changed_tree_runs_again(self):
         suite.verify(self.repo, self.repo, self.sh, self.checks)
         self.commit("a.txt", "two")
-        self.assertFalse(suite.verify(self.repo, self.repo, self.sh, self.checks))
-        self.assertEqual(self.ran, ["ran", "ran"])
+        assert not suite.verify(self.repo, self.repo, self.sh, self.checks)
+        assert self.ran == ["ran", "ran"]
 
     def test_a_red_run_is_never_remembered_so_the_next_run_is_real(self):
-        with self.assertRaises(Abort):
+        with pytest.raises(Abort):
             suite.verify(self.repo, self.repo, self.sh, self.red)
-        with self.assertRaises(Abort):
+        with pytest.raises(Abort):
             suite.verify(self.repo, self.repo, self.sh, self.red)
-        self.assertEqual(self.ran, ["red", "red"])
+        assert self.ran == ["red", "red"]
 
     def test_another_command_is_a_miss(self):
         suite.verify(self.repo, self.repo, self.sh, self.checks)
         del os.environ["TASK_LOOP_SUITE_HOST"]  # the container suite is another command
         self.sh = self.shell_now()
-        self.assertFalse(suite.verify(self.repo, self.repo, self.sh, self.checks))
-        self.assertEqual(self.ran, ["ran", "ran"])
+        assert not suite.verify(self.repo, self.repo, self.sh, self.checks)
+        assert self.ran == ["ran", "ran"]
 
     def test_a_torn_cache_file_is_a_miss_not_a_crash(self):
         suite.verify(self.repo, self.repo, self.sh, self.checks)
         f = Path(self.tmp.name) / "cfg" / "task-loop" / "releases" / "suite-green.json"
         f.write_text("{torn")
-        self.assertFalse(suite.verify(self.repo, self.repo, self.sh, self.checks))
+        assert not suite.verify(self.repo, self.repo, self.sh, self.checks)
         greens = json.loads(f.read_text())["greens"]
-        self.assertEqual(len(greens), 1)
-        self.assertTrue(SuiteCache(ConfigDir(f.parents[1])).hit(greens[0]["tree"], greens[0]["command"]))
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert len(greens) == 1
+        assert SuiteCache(ConfigDir(f.parents[1])).hit(greens[0]["tree"], greens[0]["command"])

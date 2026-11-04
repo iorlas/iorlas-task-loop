@@ -4,9 +4,10 @@ import os
 import sys
 import tempfile
 import types
-import unittest
 from pathlib import Path
 from unittest import mock
+
+from support.case import Case
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -32,8 +33,8 @@ class Stub:
         self.budget = types.SimpleNamespace(labels=[])
 
 
-class RouteRefresh(unittest.TestCase):
-    def setUp(self):
+class RouteRefresh(Case):
+    def setup_method(self):
         self.home = tempfile.TemporaryDirectory()
         self.addCleanup(self.home.cleanup)
         for patch in (mock.patch.object(Path, "home", return_value=Path(self.home.name)),
@@ -60,11 +61,11 @@ class RouteRefresh(unittest.TestCase):
     def test_a_newer_delegate_appearing_between_two_calls_is_used_by_the_second(self):
         old = self.install("0.40.10")
         eng = Stub({}, old)
-        self.assertEqual(self.call(eng), old)
+        assert self.call(eng) == old
         new = self.install("0.40.12")
-        self.assertEqual(self.call(eng), new)
-        self.assertEqual(eng.route, new)
-        self.assertTrue(any("0.40.12" in n for n in eng.notes))
+        assert self.call(eng) == new
+        assert eng.route == new
+        assert any("0.40.12" in n for n in eng.notes)
 
     def test_a_pin_keeps_the_old_one(self):
         old = self.install("0.40.10", record=False)
@@ -73,38 +74,34 @@ class RouteRefresh(unittest.TestCase):
         pin.parent.mkdir(parents=True)
         pin.write_text(json.dumps({"v": 1, "delegate": "0.40.10"}))
         eng = Stub({}, old)
-        self.assertEqual(self.call(eng), old)
-        self.assertIsNone(eng.refusal)
+        assert self.call(eng) == old
+        assert eng.refusal is None
 
     def test_a_configured_path_wins(self):
         mine = self.install("0.1.0")
         self.install("0.40.12")
         eng = Stub({"delegate": mine}, mine)
-        self.assertEqual(self.call(eng), mine)
+        assert self.call(eng) == mine
 
     def test_a_newer_delegate_with_contract_three_is_ignored_with_a_note(self):
         old = self.install("0.40.10")
         eng = Stub({}, old)
         self.call(eng)
         self.install("0.40.12", OLD)
-        self.assertEqual(self.call(eng), old)
-        self.assertTrue(any("keeping" in n for n in eng.notes))
+        assert self.call(eng) == old
+        assert any("keeping" in n for n in eng.notes)
 
     def test_refresh_without_grant_capability_keeps_the_admitted_delegate(self):
         old = self.install("0.56.0", {**C4, "capabilities": ["writer_exec_allow"]})
         eng = Stub({"writer_family": ["openai"], "writer_exec_allow": [["just", "shot"]]}, old)
-        self.assertEqual(self.call(eng), old)
+        assert self.call(eng) == old
         self.install("0.56.1", C4)
-        self.assertEqual(self.call(eng), old)
-        self.assertTrue(any("capability" in n and "keeping" in n for n in eng.notes))
+        assert self.call(eng) == old
+        assert any("capability" in n and "keeping" in n for n in eng.notes)
 
     def test_every_call_is_logged_with_its_path(self):
         old = self.install("0.40.10")
         eng = Stub({}, old)
         self.call(eng)
         self.call(eng)
-        self.assertEqual(sum(old in n for n in eng.notes), 2)
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert sum(old in n for n in eng.notes) == 2

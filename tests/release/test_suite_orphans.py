@@ -2,11 +2,12 @@
 import os
 import tempfile
 import threading
-import unittest
 from pathlib import Path
 from unittest import mock
 
+import pytest
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
+from support.case import Case
 from support.shells import quiet_shell
 from support.waits import until
 
@@ -17,7 +18,7 @@ from taskloop.app.release.shell import Abort
 ROOT = Path(__file__).resolve().parents[2]
 
 
-class OneSuitePerHost(unittest.TestCase):
+class OneSuitePerHost(Case):
     def test_a_second_suite_waits_for_the_first_and_says_who_holds_it(self):
         said, ran = [], threading.Event()
         with tempfile.TemporaryDirectory() as d:
@@ -27,28 +28,28 @@ class OneSuitePerHost(unittest.TestCase):
                 with landlock.os_lock(lock, "pid 1 since 10:00:00: the first suite"):
                     t = threading.Thread(target=suite.host_suite, args=(ROOT, ROOT, quiet_shell()))
                     t.start()
-                    self.assertTrue(until(lambda: any("held by pid 1 since 10:00:00: the first suite" in m for m in said), 15))
-                    self.assertFalse(ran.is_set())
+                    assert until(lambda: any("held by pid 1 since 10:00:00: the first suite" in m for m in said), 15)
+                    assert not ran.is_set()
                 t.join(30)
-                self.assertTrue(ran.is_set())
-        self.assertTrue(any("waiting for the suite lock" in m for m in said))
+                assert ran.is_set()
+        assert any("waiting for the suite lock" in m for m in said)
 
 
-class MemoryLimits(unittest.TestCase):
+class MemoryLimits(Case):
 
     def test_a_host_with_less_free_memory_than_the_budgets_is_refused_in_one_line(self):
         with tempfile.TemporaryDirectory() as d:
             info = Path(d) / "meminfo"
             info.write_text("MemTotal: 99999999 kB\nMemAvailable:     3145728 kB\nMemFree: 1 kB\n")
             with mock.patch.object(suite, "MEMINFO", info), mock.patch.object(suite, "PROC_CGROUP", Path(d) / "no-cgroup"):
-                self.assertEqual(suite.available_mb(), 3072)
+                assert suite.available_mb() == 3072
                 suite.refuse_if_short(1, suite.available_mb())  # 3072 MB covers one worker
-                with self.assertRaises(Abort) as raised:
+                with pytest.raises(Abort) as raised:
                     suite.refuse_if_short(3, suite.available_mb())
-            line = str(raised.exception)
-            self.assertEqual(len(line.splitlines()), 1)
-            self.assertIn("3072 MB available", line)
-            self.assertIn(f"{3 * suite.WORKER_BUDGET_MB} MB needed", line)
+            line = str(raised.value)
+            assert len(line.splitlines()) == 1
+            assert "3072 MB available" in line
+            assert f"{3 * suite.WORKER_BUDGET_MB} MB needed" in line
 
     def test_the_suite_refuses_before_running_when_memory_is_short(self):
         with tempfile.TemporaryDirectory() as d:
@@ -57,10 +58,6 @@ class MemoryLimits(unittest.TestCase):
             with mock.patch.object(suite, "MEMINFO", info), mock.patch.object(suite, "PROC_CGROUP", Path(d) / "no-cgroup"), \
                     mock.patch.object(suite, "suite_lock_path", return_value=Path(d) / "l.lock"), \
                     mock.patch.object(suite, "run_parts") as ran, mock.patch.dict(os.environ, {"TASK_LOOP_SUITE_WORKERS": "2"}), \
-                    self.assertRaises(Abort):
+                    pytest.raises(Abort):
                 suite.host_suite(ROOT, ROOT, quiet_shell())
             ran.assert_not_called()
-
-
-if __name__ == "__main__":
-    unittest.main()

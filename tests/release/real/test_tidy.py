@@ -3,8 +3,9 @@ import os
 import subprocess
 import sys
 import tempfile
-import unittest
 from pathlib import Path
+
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
@@ -24,8 +25,8 @@ def git(cwd, *args):
     return r.stdout.strip()
 
 
-class DropBranch(unittest.TestCase):
-    def setUp(self) -> None:
+class DropBranch(Case):
+    def setup_method(self) -> None:
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.repo = Path(self.tmp.name) / "repo"
@@ -36,8 +37,8 @@ class DropBranch(unittest.TestCase):
 
     def test_the_branch_goes_at_the_checked_tip(self):
         tip = tidy.tip_of(GIT, str(self.repo), "feat")
-        self.assertEqual(tidy.drop_branch(GIT, str(self.repo), "feat", tip), [])
-        self.assertEqual(tidy.tip_of(GIT, str(self.repo), "feat"), "")
+        assert tidy.drop_branch(GIT, str(self.repo), "feat", tip) == []
+        assert tidy.tip_of(GIT, str(self.repo), "feat") == ""
 
     def test_a_commit_added_after_the_check_keeps_the_branch(self):
         tip = tidy.tip_of(GIT, str(self.repo), "feat")  # checked here (the suite runs next)
@@ -45,10 +46,6 @@ class DropBranch(unittest.TestCase):
         git(self.repo, "commit", "-q", "--allow-empty", "-m", "added during the suite")
         git(self.repo, "checkout", "-q", "main")
         kept = tidy.drop_branch(GIT, str(self.repo), "feat", tip)
-        self.assertEqual(len(kept), 1)
-        self.assertIn("branch feat kept", kept[0])
-        self.assertNotEqual(tidy.tip_of(GIT, str(self.repo), "feat"), tip)
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert len(kept) == 1
+        assert "branch feat kept" in kept[0]
+        assert tidy.tip_of(GIT, str(self.repo), "feat") != tip

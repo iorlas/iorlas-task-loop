@@ -3,9 +3,11 @@ import os
 import sys
 import tempfile
 import time
-import unittest
 from pathlib import Path
 from unittest import mock
+
+import pytest
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -15,8 +17,8 @@ from taskloop.app.release import suite
 from taskloop.app.release.shell import Abort
 
 
-class SuiteTmp(unittest.TestCase):
-    def setUp(self):
+class SuiteTmp(Case):
+    def setup_method(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.tmpdir = Path(self.tmp.name)
@@ -43,20 +45,20 @@ class SuiteTmp(unittest.TestCase):
 
     def test_a_green_suite_removes_its_tmp_dir(self):
         self.run_suite(lambda: [])
-        self.assertEqual(len(self.seen[0]), 1)
-        self.assertEqual(self.dirs(), [])
+        assert len(self.seen[0]) == 1
+        assert self.dirs() == []
 
     def test_a_red_suite_removes_its_tmp_dir(self):
-        with self.assertRaises(Abort):
+        with pytest.raises(Abort):
             self.run_suite(lambda: [], green=False)
-        self.assertEqual(self.dirs(), [])
+        assert self.dirs() == []
 
     def test_a_suite_that_dies_with_an_exception_removes_its_tmp_dir(self):
         def boom():
             raise RuntimeError("the run broke")
-        with self.assertRaises(RuntimeError):
+        with pytest.raises(RuntimeError):
             self.run_suite(boom)
-        self.assertEqual(self.dirs(), [])
+        assert self.dirs() == []
 
     def test_a_dir_left_by_a_killed_suite_is_swept_and_a_young_one_stays(self):
         old, young = self.tmpdir / "tl-suite-old", self.tmpdir / "tl-suite-young"
@@ -65,8 +67,4 @@ class SuiteTmp(unittest.TestCase):
         long_ago = time.time() - suite.STALE_TMP_S - 60
         os.utime(old, (long_ago, long_ago))
         suite.sweep_stale_tmp()
-        self.assertEqual(self.dirs(), ["tl-suite-young"])
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert self.dirs() == ["tl-suite-young"]
