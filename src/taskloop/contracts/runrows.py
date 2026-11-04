@@ -7,6 +7,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from taskloop.contracts import attemptrows, factorydb, wire
+from taskloop.contracts.askrows import has_legacy_asks, import_legacy_asks
 from taskloop.contracts.guard import guard
 from taskloop.contracts.ids import loop_key
 from taskloop.contracts.paths import ConfigDir, RunFiles
@@ -157,11 +158,12 @@ def import_once(cfg: ConfigDir) -> None:
     key = (os.getpid(), str(cfg.root.resolve()))
     if key in _IMPORTED:
         return
-    if not cfg.runs_dir().exists() and not (cfg.root / "results").exists():
+    if not (any(p.exists() for p in (cfg.runs_dir(), cfg.root / "results")) or has_legacy_asks(cfg)):
         _IMPORTED.add(key)
         return
     with guard(cfg.lock_record("run-import", "legacy")):
         if key not in _IMPORTED:
+            import_legacy_asks(cfg)
             import_legacy_receipts(cfg)
             import_legacy(cfg)
             _IMPORTED.add(key)

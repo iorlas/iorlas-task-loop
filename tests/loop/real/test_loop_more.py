@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: E402, F401
 from support import homes  # noqa: E402
+from support.askjson import unreadable_ask  # noqa: E402
 from support.spawn import port_git  # noqa: E402
 from support.who import who  # noqa: E402
 
@@ -167,9 +168,7 @@ class LoopHealth(LoopBase):
         assert f"tl loop --repo {self.repo}" in out
 
     def test_a_bead_parked_on_a_dropped_ask_shows_in_status(self):
-        f = homes.config_dir() / "asks" / "x-1.json"
-        f.parent.mkdir(parents=True, exist_ok=True)
-        f.write_text(json.dumps({"v": 1, "id": "x-1-2", "bead": "x-1", "status": "open"}))
+        unreadable_ask(homes.cfg(), "x-1", json.dumps({"v": 1, "id": "x-1-2", "bead": "x-1", "status": "open"}))
         assert "x-1  " in self.status()
         assert "its ask was dropped at upgrade" in self.status()
 

@@ -12,7 +12,6 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as te
 from support import (
     gitq,
-    homes,
     procsim,
 )
 from support.builders import make_engine, plan_of
@@ -740,8 +739,7 @@ class Inputs(StagesTest):
         assert "Windows PC" in s.prompts[1]  # the writer reads the plan, assumptions included
 
     def ask(self):
-        p = homes.config_dir() / "asks" / "t-1.json"
-        return json.loads(p.read_text()) if p.exists() else None
+        return te.read_ask()
 
     def test_a_plan_question_about_missing_inputs_proceeds_to_write_with_an_assumption(self):
         q = dict(PLAN, question="84-self-hosting.md is outside the worktree: which draft do I follow?",

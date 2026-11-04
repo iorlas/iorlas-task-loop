@@ -1,17 +1,18 @@
 """One reader and one writer per file family. A missing, torn or stale (foreign `v`) file reads as absent."""
 import contextlib
-import dataclasses
 import json
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Final, Protocol, override
 
-from atomic_io import atomic_write_bytes, atomic_write_json
+from atomic_io import atomic_write_bytes
 from jsonl_log import KEEP, ROTATE_BYTES, Entry
 
-from taskloop.contracts import events, log, paths, wire
+from taskloop.contracts import docstore, events, log, paths, wire
 from taskloop.contracts.ask import Ask, AskAnswer, ThreadEntry
+from taskloop.contracts.askrows import AskRows, DbDocs, DbLedger
 from taskloop.contracts.dash import OwnerCause, Stick
+from taskloop.contracts.docstore import ForeignVersion, Item, JsonStore, Ledger, Page, Present, Torn, refusal
 from taskloop.contracts.enums import AskStatus
 from taskloop.contracts.guard import guard
 from taskloop.contracts.ids import BeadId
@@ -39,98 +40,8 @@ from taskloop.contracts.wire import Refused
 LIVE = (AskStatus.OPEN, AskStatus.PARKED)
 HAD_PICK: Final = "had_pick_label"  # bead metadata: the pick label the park took off, to give back
 ORPHAN: Final = "parked; its ask was dropped at upgrade; `tl answer --rerun` or reopen to re-ask"
-
-
-@dataclasses.dataclass(frozen=True)
-class Present[T]:
-    rec: T
-
-
-@dataclasses.dataclass(frozen=True)
-class Absent:
-    """No file (nothing was ever written, or it was deleted)."""
-
-
-@dataclasses.dataclass(frozen=True)
-class Torn:
-    """A file that is there and is not a record of the class: half written, bad JSON, a wrong shape, or unreadable."""
-
-    path: Path
-    why: str
-
-
-@dataclasses.dataclass(frozen=True)
-class ForeignVersion:
-    """A record of another `v` (an older or newer install wrote it): never migrated, never read as empty."""
-
-    path: Path
-    found: object
-    want: int
-
-
-type Read[T] = Present[T] | Absent | Torn | ForeignVersion
-
-
-def refusal(r: Torn | ForeignVersion) -> str:
-    if isinstance(r, Torn):
-        return f"{r.path} is torn or not a record of this version ({r.why}): fix or delete it; it is not read as empty"
-    return f"{r.path} is v{r.found!r}, this install reads v{r.want}: delete it or run the install that wrote it"
-
-
-class JsonStore[T]:
-    """One JSON document (indent 1), replaced atomically: a reader sees the old file or the new one, never half.
-
-    `read` says which of four it found; the caller decides. `get` is the lossy view (Torn and ForeignVersion read as None) for files
-    that are caches or can be derived again; `need` is the strict one (it refuses a file that is there and cannot be read)."""
-
-    def __init__(self, path: Path, cls: type[T]) -> None:
-        self.path = Path(path)
-        self.cls = cls
-
-    def read(self) -> Read[T]:
-        try:
-            text = self.path.read_text(encoding="utf-8")
-        except FileNotFoundError:
-            return Absent()
-        except OSError as err:
-            return Torn(self.path, str(err))
-        try:
-            return Present(wire.load(self.cls, json.loads(text)))
-        except wire.StaleRecord as err:
-            return ForeignVersion(self.path, err.found, err.want)
-        except ValueError as err:  # msgspec.ValidationError, bad JSON
-            return Torn(self.path, str(err))
-
-    def get(self) -> T | None:
-        r = self.read()
-        return r.rec if isinstance(r, Present) else None
-
-    def need(self) -> T | None:
-        """The record, None when there is no file; Refused (naming the file) when one is there and cannot be read."""
-        r = self.read()
-        if isinstance(r, (Torn, ForeignVersion)):
-            raise Refused(refusal(r))
-        return r.rec if isinstance(r, Present) else None
-
-    def write(self, rec: T) -> None:
-        atomic_write_json(self.path, wire.dump(rec), indent=1, fsync=False)
-
-    def delete(self) -> None:
-        self.path.unlink(missing_ok=True)
-
-
-@dataclasses.dataclass(frozen=True)
-class Item[T]:
-    start: int
-    end: int
-    rec: T
-
-
-@dataclasses.dataclass(frozen=True)
-class Page[T]:
-    items: list[Item[T]]
-    cursor: int
-    skipped: int = 0  # complete lines that were not a record of this family (stale v, unknown kind, bad JSON shape)
+Absent = docstore.Absent
+type Read[T] = docstore.Read[T]
 
 
 class JsonlStore[T]:
@@ -224,39 +135,24 @@ class UsageHistory(JsonlStore[UsageRow]):
             return gone
 
 
-class LedgerStore(JsonlStore[LedgerEntry]):
-    """The ask ledger: append-only, one row per transition of an ask, never swept."""
-
+class LedgerStore(DbLedger):
+    """The authoritative ask ledger in factory.db."""
     def __init__(self, cfg: paths.ConfigDir) -> None:
-        super().__init__(cfg.ask_ledger(), _one(LedgerEntry))
+        super().__init__(AskRows(cfg))
 
 
 class AskDocs(Protocol):
-    """Where the ask documents live: one per bead (files for real, dicts for the fake)."""
+    """Where the ask documents live: DB rows for real, dicts for the fake."""
 
     def of(self, key: str) -> Any: ...
     def keys(self) -> list[str]: ...
 
 
-class AskFiles:
-    def __init__(self, cfg: paths.ConfigDir) -> None:
-        self.cfg = cfg
-
-    def of(self, key: str) -> JsonStore[Ask]:
-        return JsonStore(self.cfg.ask(key), Ask)
-
-    def keys(self) -> list[str]:
-        return self.cfg.ask_beads()
-
-
 class AskStore:
-    """The one reader and the one writer of asks/<bead>.json: the engine raises and consumes, `tl` sweeps and answers, the dashboard
-    answers. One record per bead; a newer ask replaces the older. Every write holds the bead's lock (`held`) across its read and its
-    put, so a stale copy never undoes a newer one. A lock rather than a revision compare-and-swap: a CAS still needs the read-check-
-    write to be atomic, which on a plain file is a lock anyway, and a lock leaves the document's wire format alone. `held` is None
-    for the in-memory fake (one thread)."""
+    """One ask per bead. `held` makes read, decision, document and ledger writes atomic;
+    the in-memory fake uses a null context."""
 
-    def __init__(self, docs: AskDocs, ledger: JsonlStore[LedgerEntry] | None = None,
+    def __init__(self, docs: AskDocs, ledger: Ledger[LedgerEntry] | None = None,
                  held: Callable[[str], contextlib.AbstractContextManager[None]] | None = None) -> None:
         self.docs = docs
         self.ledger = ledger
@@ -264,7 +160,8 @@ class AskStore:
 
     @classmethod
     def at(cls, cfg: paths.ConfigDir) -> AskStore:
-        return cls(AskFiles(cfg), LedgerStore(cfg), lambda bead: guard(cfg.lock_record("ask", bead)))
+        rows = AskRows(cfg)
+        return cls(DbDocs(rows), DbLedger(rows), lambda bead: rows.transaction())
 
     def _lock(self, bead: BeadId) -> contextlib.AbstractContextManager[None]:
         return self.held(str(bead)) if self.held is not None else contextlib.nullcontext()
@@ -286,17 +183,17 @@ class AskStore:
         return [e for e in self.rows() if e.ask == ask_id]
 
     def file(self, ask: Ask) -> None:
-        """A new ask: the document, and the ledger's raise row. Refused when the bead's file is torn."""
+        """A new ask: the document and the ledger's raise row. Refused when the stored body is torn."""
         with self._lock(ask.bead):
             self.get(ask.bead)
             self.put(ask)
-        self.log(ask, "raise", ask.t)
+            self.log(ask, "raise", ask.t)
 
     def of(self, bead: BeadId) -> Any:
         return self.docs.of(str(bead))
 
     def get(self, bead: BeadId) -> Ask | None:
-        """The bead's ask; None when it has none or it is of another version (an orphan). A torn file is Refused, never read as no ask:
+        """The bead's ask; None when it has none or it is of another version (an orphan). A torn body is Refused, never read as no ask:
         the next write would overwrite what the owner may still need."""
         r = self.docs.of(str(bead)).read()
         if isinstance(r, Torn):
@@ -304,22 +201,22 @@ class AskStore:
         return r.rec if isinstance(r, Present) else None
 
     def all(self) -> list[Ask]:
-        """Every readable ask (a torn or foreign file is not one: `orphans` and `torn` name them)."""
+        """Every readable ask (`orphans` and `torn` name the unreadable rows)."""
         names = self.docs.keys()
         return [r.rec for r in (self.docs.of(k).read() for k in names) if isinstance(r, Present)]
 
     def orphans(self) -> list[str]:
-        """Beads whose ask file is of another version: their ask was dropped at upgrade, and the bead may still be parked on it."""
+        """Beads whose ask is of another version: the bead may still be parked on it."""
         names = self.docs.keys()
         return [k for k in names if isinstance(self.docs.of(k).read(), ForeignVersion)]
 
     def torn(self) -> list[str]:
-        """Beads whose ask file is torn: left as it is, listed by what is wrong; the owner fixes or deletes it."""
+        """Beads whose stored ask body is torn, listed by what is wrong; the owner fixes or deletes it."""
         names = self.docs.keys()
         return [f"{k}: {refusal(r)}" for k in names if isinstance(r := self.docs.of(k).read(), Torn)]
 
     def drop(self, bead: BeadId) -> None:
-        """Delete the bead's ask file, whatever it holds (an unreadable one is the only caller's case)."""
+        """Delete the bead's ask row, whatever its body holds."""
         self.docs.of(str(bead)).delete()
 
     def live(self) -> list[Ask]:
@@ -358,10 +255,12 @@ class AskStore:
         with self._lock(bead):
             a, why = self.state(bead, ask_id)
             if a is None or why:
+                if a is not None:
+                    self.log(a.replace(id=ask_id, answer=answer), "answer_refused", answer.t, why=why)
                 return a, why
             done = a.replace(status=AskStatus.ANSWERED, answer=answer, answered=answer.t)
             self.put(done)
-        self.log(done, "answer", answer.t)
+            self.log(done, "answer", answer.t)
         return done, ""
 
     def amend(self, bead: BeadId, ask_id: str, answer: AskAnswer) -> tuple[Ask | None, str]:
@@ -372,7 +271,7 @@ class AskStore:
                 return a, why
             done = a.replace(status=AskStatus.ANSWERED, answer=answer, answered=answer.t)
             self.put(done)
-        self.log(done, "answer", answer.t)
+            self.log(done, "answer", answer.t)
         return done, ""
 
     def consume(self, bead: BeadId, now: float, *, unanswered: bool = False) -> Ask | None:
@@ -387,7 +286,7 @@ class AskStore:
                 return None
             done = a.replace(status=AskStatus.ANSWERED, answered=a.answered or now, consumed=now)
             self.put(done)
-        self.log(done, "consume", now)
+            self.log(done, "consume", now)
         return done
 
     def withdraw(self, bead: BeadId, ask_id: str, why: str, now: float) -> tuple[Ask | None, str]:
@@ -400,7 +299,7 @@ class AskStore:
                 return a, ""
             done = a.replace(status=AskStatus.WITHDRAWN, closed_why=why, answered=now if a.answer else None)
             self.put(done)
-        self.log(done, "withdraw", now, why=why)
+            self.log(done, "withdraw", now, why=why)
         return done, ""
 
     def close(self, bead: BeadId, ask_id: str, why: str, now: float = 0.0) -> bool:
@@ -411,7 +310,7 @@ class AskStore:
                 return False
             done = a.replace(status=AskStatus.CLOSED, closed_why=why)
             self.put(done)
-        self.log(done, "close", now, why=why)
+            self.log(done, "close", now, why=why)
         return True
 
     def park(self, bead: BeadId, ask_id: str) -> bool:
@@ -425,7 +324,7 @@ class AskStore:
     def follow(self, ask_id: str, event: LedgerEvent, now: float, **changes: Any) -> bool:
         """A row after the newest one of the ask, with `changes` (cause, outcome...). Works for a past ask too: its document may
         be gone (one per bead) but its ledger rows are not. -> False when the ledger has never heard of the ask."""
-        rows = self.history(ask_id)
+        rows = [row for row in self.history(ask_id) if row.event != "answer_refused"]
         if not rows or self.ledger is None:
             return False
         self.ledger.append(rows[-1].replace(**{"t": now, "event": event, "similar": [], "why": "", **changes}))
@@ -437,7 +336,7 @@ class AskStore:
             a = self.get(bead)
             if a is not None and a.id == ask_id:
                 self.put(a.replace(owner_cause=cause, cause_by="owner"))
-        return self.follow(ask_id, "cause", now, cause=cause, cause_by="owner")
+            return self.follow(ask_id, "cause", now, cause=cause, cause_by="owner")
 
     def stuck(self, bead: BeadId, ask_id: str, outcome: Stick, ref: str, now: float) -> bool:
         """What the owner made of the answer (adr, ref, factory, fix, demote, once): on the document while it is still the bead's ask,
@@ -446,7 +345,7 @@ class AskStore:
             a = self.get(bead)
             if a is not None and a.id == ask_id:
                 self.put(a.replace(outcome=outcome, outcome_ref=ref))
-        return self.follow(ask_id, "demote" if outcome is Stick.DEMOTE else "stick", now, outcome=outcome, outcome_ref=ref)
+            return self.follow(ask_id, "demote" if outcome is Stick.DEMOTE else "stick", now, outcome=outcome, outcome_ref=ref)
 
     def say(self, bead: BeadId, ask_id: str, entry: ThreadEntry) -> tuple[Ask | None, str]:
         """An ask-back entry on a live ask (the ask stays open). -> (the ask, "" or why not)."""

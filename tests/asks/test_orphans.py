@@ -10,6 +10,7 @@ from support.case import Case
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
+from support.askjson import unreadable_ask
 from support.fake_beads import FakeBeads
 from support.tiers import domain
 
@@ -29,8 +30,7 @@ class OrphanTest(Case):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.cfg = ConfigDir(Path(self.tmp.name))
-        self.cfg.ask(BeadId("tl-7")).parent.mkdir(parents=True)
-        self.cfg.ask(BeadId("tl-7")).write_text(json.dumps({"v": 1, "id": "tl-7-2", "bead": "tl-7", "status": "open", "kind": "verify"}))
+        unreadable_ask(self.cfg, "tl-7", json.dumps({"v": 1, "id": "tl-7-2", "bead": "tl-7", "status": "open", "kind": "verify"}))
         self.asks = AskStore.at(self.cfg)
         self.store = FakeBeads()
         self.store.beads[BeadId("tl-7")] = Bead(id=BeadId("tl-7"), title="t", status="blocked", labels=["needs-info"])

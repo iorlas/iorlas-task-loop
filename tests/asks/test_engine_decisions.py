@@ -1,6 +1,5 @@
 """The engine side of asks and decisions: the planner reads the repo's decisions and cites them, a reversible plan question becomes a
 soft ask the run goes on past, an agent's declared cause reaches the ask, and a repeat is matched when it is raised."""
-import json
 import subprocess
 import sys
 from pathlib import Path
@@ -98,4 +97,4 @@ class EngineDecisions(EngineTest):
         first = must(self.asks().get(BeadId("t-1")))
         assert (first.key, first.similar) == (key, [SimilarRef(kind="adr", id=adr.id)])
         intake.Intake(self.asks(), self.store, lambda: 5.0, "denis").answer(BeadId("t-1"), "text", "hold")
-        assert json.loads((homes.config_dir() / "ask-ledger.jsonl").read_text().splitlines()[0])["event"] == "raise"
+        assert self.asks().rows()[0].event == "raise"

@@ -10,6 +10,7 @@ from taskloop.contracts.factorydb import DDL, OWNERS
 
 RUN_FILE_READERS = {"taskloop.contracts.runrows"}
 RECEIPT_FILE_READERS = {"taskloop.contracts.receiptrows"}
+ASK_FILE_READERS = {"taskloop.contracts.askrows"}
 
 
 def legacy_readers(tree):
@@ -21,6 +22,13 @@ def receipt_file_readers(tree):
     return [n.lineno for n in ast.walk(tree)
             if isinstance(n, ast.Attribute) and n.attr in {"result", "base_red"}
             and isinstance(n.value, ast.Name) and n.value.id == "cfg"]
+
+
+def ask_file_readers(tree):
+    return [n.lineno for n in ast.walk(tree)
+            if isinstance(n, ast.Attribute) and n.attr in {"ask", "ask_beads", "ask_ledger", "asks_dir"}
+            and ((isinstance(n.value, ast.Name) and n.value.id == "cfg")
+                 or (isinstance(n.value, ast.Attribute) and n.value.attr == "cfg"))]
 
 
 class FactoryOwnersTest(Case):
@@ -51,6 +59,8 @@ class FactoryOwnersTest(Case):
                 bad.extend(f"{module}:{line}" for line in legacy_readers(ast.parse(path.read_text(encoding="utf-8"))))
             if module not in RECEIPT_FILE_READERS:
                 bad.extend(f"{module}:{line}" for line in receipt_file_readers(ast.parse(path.read_text(encoding="utf-8"))))
+            if module not in ASK_FILE_READERS and module != "taskloop.contracts.paths":
+                bad.extend(f"{module}:{line}" for line in ask_file_readers(ast.parse(path.read_text(encoding="utf-8"))))
         assert bad == []
 
     def test_reader_rule_sees_a_planted_file_read(self):
@@ -60,3 +70,7 @@ class FactoryOwnersTest(Case):
         assert receipt_file_readers(ast.parse("JsonStore(cfg.result(repo, check, digest), PassRecord).get()")) == [1]
         assert receipt_file_readers(ast.parse("cfg.base_red(repo, digest).read_bytes()")) == [1]
         assert receipt_file_readers(ast.parse("stores.base_red(repo).of(digest).get()")) == []
+        assert ask_file_readers(ast.parse("JsonStore(cfg.ask(bead), Ask).read()")) == [1]
+        assert ask_file_readers(ast.parse("cfg.ask_beads()")) == [1]
+        assert ask_file_readers(ast.parse("self.cfg.ask_ledger().read_text()")) == [1]
+        assert ask_file_readers(ast.parse("AskStore.at(cfg).all()")) == []

@@ -163,7 +163,7 @@ class Intake:
     def stick(self, ask_id: str, outcome: Stick, text: str = "") -> str:
         """Turn an answered ask into what the owner chose (an ADR, a factory bead, a fix of the bead text, a link to a decision, or just
         a record). Works from the ledger, so it also holds for an ask a newer one replaced. -> "" or why it was refused."""
-        rows = self.asks.history(ask_id)
+        rows = [row for row in self.asks.history(ask_id) if row.event != "answer_refused"]
         raised = next((r for r in rows if r.event == "raise"), None)
         answered = next((r for r in reversed(rows) if r.event == "answer"), None)
         if raised is None:

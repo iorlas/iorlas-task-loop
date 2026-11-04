@@ -12,6 +12,7 @@ from typing import Any
 from taskloop.contracts import factorydb, wire
 from taskloop.contracts.adrs import AdrStore
 from taskloop.contracts.ask import Ask
+from taskloop.contracts.askrows import read_snapshot
 from taskloop.contracts.bead import Bead, Comment
 from taskloop.contracts.dashruns import ResourceLease, RunHeader
 from taskloop.contracts.delegate import LiveEvent
@@ -23,7 +24,7 @@ from taskloop.contracts.run import RunState
 from taskloop.contracts.runlife import RETAIN, Liveness, shown
 from taskloop.contracts.slots import slots_of
 from taskloop.contracts.slottable import SlotSource
-from taskloop.contracts.stores import AskStore, JsonStore, LedgerStore, StatusStore
+from taskloop.contracts.stores import LIVE, JsonStore, StatusStore
 from taskloop_dash.api.looks import Looks
 from taskloop_dash.env import Env
 from taskloop_dash.readers import dbruns
@@ -125,7 +126,8 @@ class Worlds:
         return out
 
     def asks(self) -> dict[tuple[str, str], Ask]:
-        return {(loop_key(a.repo), a.bead): a for a in AskStore.at(self.env.config).live()}
+        asks, _ = read_snapshot(self.env.config)
+        return {(loop_key(a.repo), a.bead): a for a in asks if a.status in LIVE}
 
     def run_headers(self, now: float, rows: list[StoredRun] | None = None) -> list[RunHeader]:
         """Stage runs need no bead or log to be visible; read their authoritative DB manifest."""
@@ -168,7 +170,7 @@ class Worlds:
         return self.env.ttl.get("v2adrs:" + path, LEDGER_TTL, load)
 
     def ledger(self) -> list[LedgerEntry]:
-        return self.env.ttl.get("v2ledger", LEDGER_TTL, lambda: [i.rec for i in LedgerStore(self.env.config).read_from(0).items])
+        return self.env.ttl.get("v2ledger", LEDGER_TTL, lambda: read_snapshot(self.env.config)[1])
 
     def landings(self) -> list[Landing]:
         """The runs of the traces that landed: when each ended and how many plans it redid."""
@@ -180,6 +182,11 @@ class Worlds:
         env = self.env
         now = env.clock()
         rows, database_error = dbruns.read(env.config, now)
+        try:
+            asks, ledger = read_snapshot(env.config)
+        except factorydb.DatabaseError as error:
+            asks, ledger = list[Ask](), list[LedgerEntry]()
+            database_error = f"database unavailable: {error}; run tl doctor --reindex"
         runs = self.runs(full, rows)
         paths = self.repos()
         projects = [self.project(i, p) for i, p in paths.items()]
@@ -188,9 +195,10 @@ class Worlds:
         events = self.records.events()
         projects = [replace(p, strays=strays_of(p.beads, p.slots, {b: r for (key, b), r in runs.items() if key == p.id}, now),
                             events=[e for e in events if e.repo == paths[p.id]]) for p in projects]
-        return World(now=now, host=env.host, version=env.version, projects=projects, runs=runs, asks=self.asks(),
+        return World(now=now, host=env.host, version=env.version, projects=projects, runs=runs,
+                     asks={(loop_key(a.repo), a.bead): a for a in asks if a.status in LIVE},
                      run_headers=self.run_headers(now, rows), leases=self.leases(now, rows), database_error=database_error,
-                     status=StatusStore(env.config).get(), ledger=self.ledger(), landings=self.landings(),
+                     status=StatusStore(env.config).get(), ledger=ledger, landings=self.landings(),
                      parks=self.records.parks(), net_pauses=self.records.net_pauses(), skipped_traces=self.records.traces().skipped)
 
     def comments(self, path: str, bead: BeadId) -> list[Comment]:

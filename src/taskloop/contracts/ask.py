@@ -1,4 +1,4 @@
-"""Ask: a question the engine puts to the owner (asks/<bead>.json, v2), and the owner's answer. Every field is typed: the page and the
+"""Ask: a question the engine puts to the owner (factory.db, wire v3), and the owner's answer. Every field is typed: the page and the
 engine read fields, never prose."""
 from typing import ClassVar, Literal, final
 

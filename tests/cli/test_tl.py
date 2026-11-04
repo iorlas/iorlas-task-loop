@@ -45,6 +45,10 @@ from taskloop.app.release import pins  # noqa: E402
 from taskloop.app.track import trail  # noqa: E402
 from taskloop.app.wire import asks as wasks  # noqa: E402
 from taskloop.contracts import wire  # noqa: E402
+from taskloop.contracts.ask import Ask  # noqa: E402
+from taskloop.contracts.ids import BeadId  # noqa: E402
+from taskloop.contracts.paths import ConfigDir  # noqa: E402
+from taskloop.contracts.stores import AskStore  # noqa: E402
 
 
 def ctx() -> tl.Ctx:
@@ -306,10 +310,10 @@ class PinAndRollback(Base):
 
 
 def ask_file(asks, bead, **over):
-    """A current-version ask record on disk, the way the engine files one."""
+    """A current-version ask in the database, the way the engine files one."""
     base = wire.dump(S.ASK)
     rec = {**base, "id": bead + "-1", "bead": bead, "status": "open", "answer": None, "answered": None, "consumed": None, **over}
-    (asks / (f"{bead}.json")).write_text(json.dumps(rec))
+    asks.put(wire.load(Ask, rec))
 
 
 class AskCli(Case):
@@ -318,8 +322,7 @@ class AskCli(Case):
     def test_list_answer_and_withdraw(self):
         with tempfile.TemporaryDirectory() as tmp:
             d = Path(tmp)
-            asks = d / "task-loop" / "asks"
-            asks.mkdir(parents=True)
+            asks = AskStore.at(ConfigDir(d / "task-loop"))
             for bead in ("x-1", "x-2"):
                 ask_file(asks, bead, parks_at=9e12, repo=str(d), title="T " + bead)
             env = {"XDG_CONFIG_HOME": str(d), "APPDATA": str(d), "HOME": str(d), "USERPROFILE": str(d)}
@@ -336,9 +339,9 @@ class AskCli(Case):
                     assert tl.v_ask(ns(op="answer", bead="x-1", text=["again"]), c) == 1  # already answered
                     assert tl.v_ask(ns(op="answer", bead="x-1", text=["again"], amend=True), c) == 0
                 assert "x-1" in out.getvalue()
-                a = json.loads((asks / "x-1.json").read_text())
+                a = wire.dump(must(asks.of(BeadId("x-1")).get()))
                 assert (a["status"], a["answer"]["action"], a["answer"]["text"]) == ("answered", "text", "again")
-                a = json.loads((asks / "x-2.json").read_text())
+                a = wire.dump(must(asks.of(BeadId("x-2")).get()))
                 assert (a["status"], a["closed_why"]) == ("withdrawn", "no longer")
 
 
@@ -348,8 +351,7 @@ class ParkStaleAsks(Case):
     def test_parks_only_late_unanswered_open_asks(self):
         with tempfile.TemporaryDirectory() as tmp:
             d = Path(tmp)
-            asks = d / "task-loop" / "asks"
-            asks.mkdir(parents=True)
+            asks = AskStore.at(ConfigDir(d / "task-loop"))
             now = time.time()
             done = {"status": "answered", "answered": now, "answer": {"action": "text", "text": "x", "t": now, "by": "denis"}}
             for bead, parks, extra in (("late", now - 10, {}), ("fresh", now + 9e4, {}), ("done", now - 10, done),
@@ -360,7 +362,7 @@ class ParkStaleAsks(Case):
                 assert wasks.sweep("park", who(), homes.cfg(), every=0) == ["late"]
                 assert wasks.sweep("park", who(), homes.cfg(), every=600) == []  # throttled
             def status(b):
-                return json.loads((asks / (f"{b}.json")).read_text())["status"]
+                return must(asks.of(b).get()).status.value
             assert [status(b) for b in ("late", "fresh", "done", "closed")] == ["parked", "open", "answered", "closed"]
             log = "\n".join(" ".join(c) for c in bd_calls.calls)
             assert "comments add late Parked (engine): ask late-1 got no answer in 3 days" in log

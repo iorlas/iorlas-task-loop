@@ -55,7 +55,7 @@ from taskloop.app.run import (
 from taskloop.app.wire import slots as wslots
 from taskloop.app.write.newfiles import NewFiles
 from taskloop.contracts import wire
-from taskloop.contracts.ask import AskAnswer
+from taskloop.contracts.ask import Ask, AskAnswer
 from taskloop.contracts.checks import CheckRun
 from taskloop.contracts.env import snapshot
 from taskloop.contracts.ids import BeadId
@@ -302,9 +302,9 @@ def no_repo(fn):
 
 
 def read_ask(bead="t-1") -> Any:
-    """The bead's ask record as the dict on disk, or None."""
-    p = homes.config_dir() / "asks" / (f"{bead}.json")
-    return json.loads(p.read_text()) if p.exists() else None
+    """The bead's authoritative ask as a wire dict, or None."""
+    ask = AskStore.at(homes.cfg()).get(BeadId(bead))
+    return wire.dump(ask) if ask is not None else None
 
 
 def card_of(a):
@@ -531,9 +531,7 @@ class EngineTest(Case):
 
     def admit(self, bead, comments=(), ask=None):
         if ask:
-            p = homes.config_dir() / "asks" / "t-1.json"
-            p.parent.mkdir(parents=True, exist_ok=True)
-            p.write_text(json.dumps(ask))
+            self.asks().put(wire.load(Ask, {**ask, "bead": "t-1"}))
         with self.store.stub(show=dict(BEAD, **bead), comments=list(comments)):
             ok, why = entry.admit("t-1", str(self.wt), port_git(), who(), store=self.store, owner_author="denis")
         updates = [c for c in self.bd_calls if c[:1] == ("update",)]

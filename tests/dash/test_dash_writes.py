@@ -44,9 +44,7 @@ class Writes(Case):
         self.repo = repo
         write_repos(self.dash.env.config.repos(), repo)
         self.asks = AskStore.at(self.dash.env.config)
-        path = self.dash.env.config.ask(BeadId("b-1"))
-        path.parent.mkdir(parents=True)
-        path.write_text(json.dumps(wire.dump(ASK)))
+        self.asks.put(ASK)
         log = manifest(self.dash.env.config, RUN, "tl-5", NOW - 5, repo=str(repo)).log
         log.parent.mkdir(parents=True, exist_ok=True)
         log.write_text(json.dumps(typed("run_start", NOW - 5, run_id=RUN, bead="tl-5", worktree="")) + "\n")
@@ -84,14 +82,14 @@ class Writes(Case):
         assert "already used" in res.message
 
     def test_refused_answers_change_nothing(self):
-        before = (self.dash.env.config.ask(BeadId("b-1"))).read_text()
+        before = self.asks.get(BeadId("b-1"))
         for body, why in (({"ask": "b-1-1", "option": 9}, "not one of this ask"), ({"ask": "b-1-1", "option": -1}, "not one of this ask"),
                           ({"ask": "b-1-1", "text": "  "}, "Write an answer"), ({"ask": "nope-1", "text": "x"}, "no longer exists"),
                           ({"ask": "b-1-7", "text": "x"}, "asked again")):
             res = self.post("answer", {"project": loop_key(self.repo), "kind": "answer", **body})
             assert not res.ok, body
             assert why in res.message, body
-        assert self.dash.env.config.ask(BeadId("b-1")).read_text() == before
+        assert self.asks.get(BeadId("b-1")) == before
 
     # park, stop, note (backend item 7): the newest run's request file, the hold and the receipt through Intake
 

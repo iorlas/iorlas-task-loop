@@ -10,6 +10,7 @@ from unittest import mock
 
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import gitq, homes
+from support.askjson import unreadable_ask
 from support.engine_case import BEAD, CAT_ENV, CLEAN, PLAN, WRITE, EngineTest, ask_rec, review, stop, verdict
 from support.runs import manifest
 
@@ -17,6 +18,7 @@ from taskloop.adapters import (
     links,
 )
 from taskloop.app.land.checkout import Checkout
+from taskloop.contracts.ids import BeadId
 from taskloop.domain.checks import retry
 
 
@@ -78,7 +80,7 @@ class EngineAsksTest(EngineTest):
             assert rc == 2, q
             assert self.ask()["kind"] == "decision"
             assert [c[0] for c in s.calls] == ["planner"]
-            (homes.config_dir() / "asks" / "t-1.json").unlink()
+            self.asks().drop(BeadId("t-1"))
 
     def test_a_missing_requirement_is_still_a_decision_ask(self):
         self.asks_the_owner("No requirement says what the empty filter shows: nothing, or everything?")
@@ -182,9 +184,8 @@ class EngineAsksTest(EngineTest):
         assert b["prompt_chars"] < a["prompt_chars"]
 
     def test_a_bead_parked_on_a_dropped_v1_ask_asks_again_with_a_v3_ask(self):
-        p = homes.config_dir() / "asks" / "t-1.json"
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(json.dumps({"v": 1, "id": "t-1-4", "bead": "t-1", "status": "open", "kind": "verify", "question": "old?"}))
+        unreadable_ask(homes.cfg(), "t-1", json.dumps(
+            {"v": 1, "id": "t-1-4", "bead": "t-1", "status": "open", "kind": "verify", "question": "old?"}))
         assert self.asks().orphans() == ["t-1"]
         rc, s = self.run_engine({"plan": [dict(PLAN, irreversible="push_shared", question="Old format or new?")]})
         assert rc == 2
@@ -242,8 +243,7 @@ class EngineAsksTest(EngineTest):
     def test_a_parked_ask_still_waits_for_the_owner(self):
         self.run_engine({"plan": [dict(PLAN, irreversible="push_shared", question="Old format or new?")]})
         a = self.ask()
-        a["status"] = "parked"
-        (homes.config_dir() / "asks" / ("{}.json".format(a["bead"]))).write_text(json.dumps(a))
+        assert self.asks().park(a["bead"], a["id"])
         rc, s = self.run_engine({})
         assert (rc, s.calls) == (2, [])
         assert self.ask()["status"] == "parked"

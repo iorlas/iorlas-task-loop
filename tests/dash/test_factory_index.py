@@ -66,7 +66,7 @@ class FactoryIndex(Case):
     def sources(self):
         con = must(factorydb.open_ro(self.cfg.factory_db()))
         try:
-            return con.execute("SELECT * FROM source ORDER BY path").fetchall()
+            return con.execute("SELECT * FROM source WHERE family='run' ORDER BY path").fetchall()
         finally:
             con.close()
 

@@ -20,7 +20,7 @@ from support.case import Case
 
 ROOT = Path(__file__).resolve().parents[2]
 import support.paths  # noqa: E402, F401
-from support import gitq, homes  # noqa: E402
+from support import gitq  # noqa: E402
 from support.checkpoints import read_ck  # noqa: E402
 
 from taskloop.adapters import delegate as dl  # noqa: E402
@@ -484,7 +484,7 @@ class DelegateLauncher(T.EngineTest):
         rc, s = self.run_engine({"plan": [PLAN], "write": [out, WRITE]})
         assert rc == 2
         assert [c[0] for c in s.calls].count("worker") == 1
-        assert (self.blocked, (homes.config_dir() / "asks" / "t-1.json").exists()) == ([], False)
+        assert (self.blocked, self.ask()) == ([], None)
         assert any(c[:3] == ("comments", "add", "t-1") and any("run `claude auth login`" in x for x in c)
                             for c in self.bd_calls)
 

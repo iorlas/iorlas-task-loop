@@ -20,8 +20,10 @@ from support import tlbd  # noqa: E402
 from support.dashes import serving  # noqa: E402
 
 from taskloop.app.launch import dash_ports  # noqa: E402
-from taskloop.contracts import wire  # noqa: E402
 from taskloop.contracts.env import snapshot  # noqa: E402
+from taskloop.contracts.ids import BeadId  # noqa: E402
+from taskloop.contracts.paths import ConfigDir  # noqa: E402
+from taskloop.contracts.stores import AskStore  # noqa: E402
 
 
 def line(**kw):
@@ -55,11 +57,9 @@ class Asks(Case):
     def test_no_credentials_needed_to_read_or_answer(self):
         with tempfile.TemporaryDirectory() as tmp:
             d = Path(tmp)
-            asks = d / "task-loop" / "asks"
-            asks.mkdir(parents=True)
-            rec = wire.dump(MOCKS["lifesim-22b3"].replace(bead="x-1", id="x-1-1", repo=str(d), t=time.time() - 3600,
-                                                    parks_at=time.time() + 86400))
-            (asks / "x-1.json").write_text(json.dumps(rec))
+            asks = AskStore.at(ConfigDir(d / "task-loop"))
+            asks.put(MOCKS["lifesim-22b3"].replace(bead="x-1", id="x-1-1", repo=str(d), t=time.time() - 3600,
+                                                parks_at=time.time() + 86400))
             env = {"XDG_CONFIG_HOME": str(d), "APPDATA": str(d), "TASK_LOOP_DASH_BIND": "127.0.0.1", "HOME": str(d), "USERPROFILE": str(d)}
             with mock.patch.dict(os.environ, env), tlbd.bd_boundary() as bd_calls, serving(dash_ports.ports(snapshot())) as base:
                 for path in ("/", "/api/snapshot", "/api/cost", "/api/version"):
@@ -76,6 +76,7 @@ class Asks(Case):
                     except urllib.error.HTTPError as e:
                         return e.code, None
                 assert post("new") == (200, {"ok": True, "message": ""})
-                got = json.loads((asks / "x-1.json").read_text())
-                assert (got["status"], got["answer"]["text"], got["answer"]["by"]) == ("answered", "new", "dash")
+                got = asks.get(BeadId("x-1"))
+                assert got is not None and got.answer is not None
+                assert (got.status.value, got.answer.text, got.answer.by) == ("answered", "new", "dash")
                 assert ("update", "x-1", "--status", "open") in bd_calls.calls

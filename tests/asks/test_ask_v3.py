@@ -9,6 +9,7 @@ from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
+from support.askjson import unreadable_ask
 from support.fake_beads import FakeBeads
 from support.narrow import must
 from support.tiers import domain
@@ -66,8 +67,7 @@ class AskV3(Case):
             cfg = ConfigDir(tmp)
             asks = AskStore.at(cfg)
             old = wire.dump(must(raiser.raise_ask(fake_stores().asks, question(), asking())[0])) | {"v": 2}
-            cfg.ask(BeadId("t-1")).parent.mkdir(parents=True)
-            cfg.ask(BeadId("t-1")).write_text(json.dumps(old))
+            unreadable_ask(cfg, "t-1", json.dumps(old))
             assert (asks.get(BeadId("t-1")), asks.orphans(), asks.live()) == (None, ["t-1"], [])
 
 
@@ -119,7 +119,7 @@ class Ledger(Case):
             cfg = ConfigDir(tmp)
             asks = AskStore.at(cfg)
             raiser.raise_ask(asks, question(), asking())
-            assert (cfg.ask_ledger().parent, asks.orphans(), len(asks.rows())) == (cfg.root, [], 1)
+            assert (cfg.factory_db().is_file(), asks.orphans(), len(asks.rows())) == (True, [], 1)
             sweeps.close_stale(asks, lambda _r: FakeBeads(), cfg.ask_marker("s"), T + 10 ** 7)
             assert len(asks.rows()) == 1
 

@@ -23,7 +23,8 @@ def project_of(repo: str) -> str:
 def by_ask(rows: Sequence[LedgerEntry]) -> dict[tuple[str, str], list[LedgerEntry]]:
     out: dict[tuple[str, str], list[LedgerEntry]] = {}
     for r in rows:
-        out.setdefault((project_of(r.repo), r.ask), []).append(r)
+        if r.event != "answer_refused":
+            out.setdefault((project_of(r.repo), r.ask), []).append(r)
     return out
 
 

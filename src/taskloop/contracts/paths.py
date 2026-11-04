@@ -64,13 +64,15 @@ class ConfigDir:
         return self.root / "profile-changes.jsonl"
 
     def ask(self, bead: BeadId | str) -> Path:
+        """Legacy ask input for the one-time importer only."""
         return self.root / "asks" / (f"{bead}.json")
 
     def asks_dir(self) -> Path:
+        """Legacy ask directory for the one-time importer only."""
         return self.root / "asks"
 
     def ask_beads(self) -> list[str]:
-        """The beads that have an ask file, sorted."""
+        """Legacy beads, sorted; used only by the one-time importer."""
         try:
             return sorted(p.stem for p in self.asks_dir().glob("*.json"))
         except OSError:
@@ -81,7 +83,7 @@ class ConfigDir:
         return self.root / "asks" / ("." + sweep)
 
     def ask_ledger(self) -> Path:
-        """The append-only ledger of every ask transition; never swept."""
+        """Legacy ledger input for the one-time importer only."""
         return self.root / "ask-ledger.jsonl"
 
     def adr_dir(self, repo_key: str) -> Path:

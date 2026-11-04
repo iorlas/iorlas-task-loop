@@ -400,8 +400,7 @@ class ResumeCount(StagesTest):
     def test_an_edit_with_no_ask_still_counts(self):
         # who edited the bead is not known: a comment from a sibling agent must not lift the limit
         self.run_engine({"plan": [PLAN], "write": [dict(WRITE, question="Which format?")]}, max_replans=1)
-        path = homes.config_dir() / "asks" / "t-1.json"
-        path.unlink()
+        self.asks().drop(BeadId("t-1"))
         with self.store.stub(show=dict(BEAD, description="Also say hi.")):
             _rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, max_replans=1)
         assert self.eng.plan_log[-1].counted is True

@@ -563,8 +563,9 @@ class EngineRunTest(EngineTest):
         ):
             denied = [dict(x, kind="policy", path="") for x in denied0]
             stuck = stop("secrets", "w1", denied=denied) if reason else full(None, "w1", text="no", denied=denied)
-            for f in (homes.config_dir() / "asks" / "t-1.json", homes.config_dir() / "checkpoints" / "t-1.json"):
-                f.unlink() if f.exists() else None  # each case starts as a new bead: an open ask would make the run wait
+            self.asks().drop(BeadId("t-1"))
+            f = homes.config_dir() / "checkpoints" / "t-1.json"
+            f.unlink() if f.exists() else None  # each case starts as a new bead: an open ask would make the run wait
             # a secrets stop gets the one new thread told to use apply_patch (lane_policy), then the fault; the rest is not retried
             rc, s = self.run_engine({"plan": [PLAN], "write": [stuck, stuck if reason else WRITE], "review": [CLEAN]})
             assert (rc, [c[0] for c in s.calls].count("worker")) == (2, 2 if reason else 1), denied

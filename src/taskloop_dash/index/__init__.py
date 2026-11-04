@@ -6,6 +6,7 @@ import time
 from collections.abc import Callable
 
 from taskloop.contracts import factorydb, log
+from taskloop.contracts.askrows import import_legacy_asks
 from taskloop.contracts.locator import RunBundle, RunLocator
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.receiptrows import import_legacy_receipts
@@ -147,6 +148,7 @@ def reindex(cfg: ConfigDir, *, clock: Callable[[], float] = time.time) -> dict[s
     start = time.monotonic()
     import_legacy(cfg)
     import_legacy_receipts(cfg)
+    import_legacy_asks(cfg)
     with Indexer(cfg, clock=clock) as index:
         index.clear()
         while not index.pass_once():

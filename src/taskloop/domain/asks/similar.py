@@ -28,6 +28,6 @@ def find(key: str, ask: str, ledger: Iterable[LedgerEntry], adrs: Iterable[Adr])
     answered = {e.ask for e in ledger if e.event == "answer"}
     seen: list[str] = []
     for e in sorted(ledger, key=lambda e: -e.t):
-        if e.key == key and e.ask != ask and e.ask in answered and e.ask not in seen:
+        if e.event != "answer_refused" and e.key == key and e.ask != ask and e.ask in answered and e.ask not in seen:
             seen.append(e.ask)
     return [SimilarRef(kind="adr", id=a.id) for a in adrs if a.key == key] + [SimilarRef(kind="ask", id=i) for i in seen[:3]]

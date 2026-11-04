@@ -193,7 +193,7 @@ class StoresTest(Case):
 
     def test_each_family_lives_where_paths_says(self):
         assert stores.TraceStore(self.cfg).file.path.name == "traces.jsonl"
-        assert stores.AskStore.at(self.cfg).of(BeadId("tl-1")).path == self.cfg.root / "asks" / "tl-1.json"
+        assert stores.AskStore.at(self.cfg).of(BeadId("tl-1")).path == self.cfg.factory_db()
         stores.AskStore.at(self.cfg).of(BeadId("tl-1")).write(S.other(Ask))
         assert stores.AskStore.at(self.cfg).of(BeadId("tl-1")).get() == S.other(Ask)
         el = stores.EventLog(self.cfg)

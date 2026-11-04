@@ -1,5 +1,5 @@
-"""The ask ledger and the decision store as typed records. The ledger (ask-ledger.jsonl) is append-only and never swept: one row per
-transition of an ask, so history outlives the one-file-per-bead ask document. An ADR is a decision of the owner that the plan stage
+"""The ask ledger and the decision store as typed records. The ledger in factory.db is append-only: one row per
+transition of an ask, so history outlives the one-document-per-bead ask. An ADR is a decision of the owner that the plan stage
 reads; its uses (a plan cited it) are rows of their own, so a reuse counter never rewrites the ADR."""
 from typing import ClassVar, Final, Literal, final
 
@@ -10,8 +10,8 @@ from taskloop.contracts.dash import OwnerCause, Stick
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.wire import Rec
 
-LedgerEvent = Literal["raise", "answer", "consume", "close", "withdraw", "cause", "stick", "demote"]
-LEDGER_EVENTS: Final = ("raise", "answer", "consume", "close", "withdraw", "cause", "stick", "demote")
+LedgerEvent = Literal["raise", "answer", "answer_refused", "consume", "close", "withdraw", "cause", "stick", "demote"]
+LEDGER_EVENTS: Final = ("raise", "answer", "answer_refused", "consume", "close", "withdraw", "cause", "stick", "demote")
 
 
 @final

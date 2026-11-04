@@ -37,6 +37,8 @@ from taskloop.app.run import entry
 from taskloop.app.run import running as wrunning
 from taskloop.app.wire import asks as wasks
 from taskloop.app.wire import slots as wslots
+from taskloop.contracts import wire
+from taskloop.contracts.ask import Ask
 from taskloop.contracts.env import snapshot
 from taskloop.contracts.gitfacts import GitOutcome
 from taskloop.contracts.ids import BeadId
@@ -431,18 +433,15 @@ class Contracts(StagesTest):
         assert s.calls[0][0] == "planner"
 
     def test_asks_of_closed_or_missing_beads_are_closed_and_others_left(self):
-        asks = homes.config_dir() / "asks"
-        asks.mkdir(exist_ok=True)
+        asks = self.asks()
         other = Path(self.tmp.name) / "other-repo"
         (other / ".beads").mkdir(parents=True)
         (Path(self.wt) / ".beads").mkdir(exist_ok=True)
         for bead in ("b-open", "b-closed", "b-gone", "b-hidden"):
-            (asks / (f"{bead}.json")).write_text(json.dumps(te.ask_rec(id=bead + "-1", bead=bead, repo=str(self.wt))))
-        (asks / "b-flaky.json").write_text(
-            json.dumps(te.ask_rec(id="f-1", bead="b-flaky", repo=str(other)))
-        )  # its tracker fails: the ask stays
-        (asks / "b-norepo.json").write_text(json.dumps(te.ask_rec(id="n-1", bead="b-norepo", repo="")))
-        (asks / "b-answered.json").write_text(json.dumps(te.ask_rec(id="x", bead="b-answered", status="answered")))
+            asks.put(wire.load(Ask, te.ask_rec(id=bead + "-1", bead=bead, repo=str(self.wt))))
+        asks.put(wire.load(Ask, te.ask_rec(id="f-1", bead="b-flaky", repo=str(other))))  # its tracker fails: the ask stays
+        asks.put(wire.load(Ask, te.ask_rec(id="n-1", bead="b-norepo", repo="")))
+        asks.put(wire.load(Ask, te.ask_rec(id="x", bead="b-answered", status="answered")))
         calls = []
 
         def fake_bd(*a, **k):
@@ -464,10 +463,7 @@ class Contracts(StagesTest):
             assert sorted(closed) == ["b-closed", "b-gone"]
             assert wasks.sweep("close", who(), homes.cfg()) == []  # throttled
         assert [c[0][0] for c in calls].count("list") == 2  # one list per repo, not one read per ask (a show only for an absent id)
-        state = {
-            b: json.loads((asks / (f"{b}.json")).read_text())["status"]
-            for b in ("b-open", "b-closed", "b-gone", "b-hidden", "b-flaky", "b-answered", "b-norepo")
-        }
+        state = {a.bead: a.status.value for a in asks.all()}
         assert state == {
                 "b-hidden": "open",
                 "b-open": "open",
