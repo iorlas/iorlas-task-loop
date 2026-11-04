@@ -4,6 +4,7 @@ Connections belong to their caller's thread. Writers use begin_immediate for
 short transactions; unavailable databases are reported as visible errors.
 """
 
+import atexit
 import logging
 import os
 import sqlite3
@@ -15,6 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from taskloop.contracts import wire
+from taskloop.contracts.factoryconnections import SharedConnections
 from taskloop.contracts.guard import guard
 from taskloop.contracts.run import RunManifest
 
@@ -101,6 +103,10 @@ REVISIONED_TABLES = frozenset({"run", "ask", "bead"})
 # always check. Replacing the file invalidates the cache; in-place damage after
 # a successful check is left to SQLite's normal read/write error handling.
 _CHECKED: set[tuple[int, Path, int, int]] = set()
+_FILESYSTEMS: dict[str, bool] = {}
+_FILESYSTEM_PID = [os.getpid()]
+_SHARED = SharedConnections()
+os.register_at_fork(after_in_child=_SHARED.after_fork)
 
 type SqlValue = str | int | float | bytes | None
 
@@ -137,20 +143,37 @@ def _filesystem_type(resolved: Path) -> str:
 
 
 def _unsafe_filesystem(path: Path) -> bool | None:
-    """Use the deepest mount; detection errors prevent opening the database.
+    """Use the deepest mount of a resolved path; errors prevent opening it.
 
     Unknown types are allowed only on paths without a mount below root. This
     cannot identify a network-backed root filesystem; operators must place the
     database on supported local storage. No external commands are run by this contract.
     """
     try:
-        resolved = path.resolve()
-        fstype = _filesystem_type(resolved)
+        fstype = _filesystem_type(path)
         if fstype == "unknown":
-            return any(os.path.ismount(parent) for parent in (resolved, *resolved.parents) if parent != Path(parent.anchor))
+            return any(os.path.ismount(parent) for parent in (path, *path.parents) if parent != Path(parent.anchor))
         return _unsafe_fstype(fstype)
     except (OSError, ValueError, RuntimeError):
         return None
+
+
+def clear_filesystem_cache() -> None:
+    """Forget mount verdicts, including when tests replace filesystem probes."""
+    _FILESYSTEMS.clear()
+    _FILESYSTEM_PID[0] = os.getpid()
+
+
+def _filesystem_allowed(parent: Path) -> bool:
+    if os.getpid() != _FILESYSTEM_PID[0]:
+        clear_filesystem_cache()
+    key = str(parent)
+    if key not in _FILESYSTEMS:
+        verdict = _unsafe_filesystem(parent)
+        if verdict is None:
+            return False
+        _FILESYSTEMS[key] = verdict
+    return not _FILESYSTEMS[key]
 
 
 def _journal_mode(con: sqlite3.Connection, *, readonly: bool) -> str:
@@ -159,7 +182,9 @@ def _journal_mode(con: sqlite3.Connection, *, readonly: bool) -> str:
     deadline = time.monotonic() + 5.0
     while True:
         try:
-            row = con.execute("PRAGMA journal_mode" if readonly else "PRAGMA journal_mode=WAL").fetchone()
+            row = con.execute("PRAGMA journal_mode").fetchone()
+            if not readonly and row and str(row[0]).lower() != "wal":
+                row = con.execute("PRAGMA journal_mode=WAL").fetchone()
             return str(row[0]).lower() if row else ""
         except sqlite3.OperationalError as e:
             if "locked" not in str(e) or time.monotonic() >= deadline:
@@ -167,10 +192,9 @@ def _journal_mode(con: sqlite3.Connection, *, readonly: bool) -> str:
             time.sleep(0.01)
 
 
-def _schema_ready(con: sqlite3.Connection, *, readonly: bool) -> bool:
+def _schema_ready(con: sqlite3.Connection, version: int, *, readonly: bool) -> bool:
     """Initialize under the writer lock; return whether this open created it."""
     created = False
-    version = con.execute("PRAGMA user_version").fetchone()[0]
     if version == 0 and not readonly:
         with begin_immediate(con):
             version = con.execute("PRAGMA user_version").fetchone()[0]
@@ -192,32 +216,34 @@ def _schema_ready(con: sqlite3.Connection, *, readonly: bool) -> bool:
 
 def _check_integrity(con: sqlite3.Connection, target: Path, *, created: bool, readonly: bool) -> None:
     stat = target.stat()
-    identity = (os.getpid(), target.resolve(), stat.st_dev, stat.st_ino)
+    identity = (os.getpid(), target, stat.st_dev, stat.st_ino)
     if created or (not readonly and identity not in _CHECKED):
         if con.execute("PRAGMA quick_check").fetchall() != [("ok",)]:
             raise sqlite3.DatabaseError("integrity check failed")
         _CHECKED.add(identity)
 
 
-def _open(path: str | os.PathLike[str], *, readonly: bool) -> sqlite3.Connection | None:
+def _open(path: str | os.PathLike[str], *, readonly: bool, shared: bool = False) -> sqlite3.Connection | None:
     con = None
     try:
-        target = Path(path)
-        if _unsafe_filesystem(target) is not False:
+        resolved = Path(path).resolve()
+        if not _filesystem_allowed(resolved.parent):
             return None
-        address = f"{target.resolve().as_uri()}?mode=ro" if readonly else os.fspath(path)
-        con = sqlite3.connect(address, uri=readonly, isolation_level=None, timeout=5.0)
-        if not readonly and con.execute("PRAGMA user_version").fetchone()[0] == 1:
+        address = f"{resolved.as_uri()}?mode=ro" if readonly else os.fspath(path)
+        con = sqlite3.connect(address, uri=readonly, isolation_level=None, timeout=5.0, check_same_thread=not shared)
+        version = con.execute("PRAGMA user_version").fetchone()[0]
+        if not readonly and version == 1:
             con.close()
-            _migrate_v1(target)
-            con = sqlite3.connect(address, isolation_level=None, timeout=5.0)
+            _migrate_v1(resolved)
+            con = sqlite3.connect(address, isolation_level=None, timeout=5.0, check_same_thread=not shared)
+            version = con.execute("PRAGMA user_version").fetchone()[0]
         con.execute("PRAGMA busy_timeout=5000")
         if _journal_mode(con, readonly=readonly) != "wal":
             raise sqlite3.DatabaseError("WAL unavailable")
         con.execute("PRAGMA synchronous=NORMAL")
         con.execute("PRAGMA foreign_keys=ON")
-        created = _schema_ready(con, readonly=readonly)
-        _check_integrity(con, target, created=created, readonly=readonly)
+        created = _schema_ready(con, version, readonly=readonly)
+        _check_integrity(con, resolved, created=created, readonly=readonly)
         return con
     except (sqlite3.Error, OSError, ValueError, RuntimeError):
         if con is not None:
@@ -259,15 +285,32 @@ def open_ro(path: str | os.PathLike[str]) -> sqlite3.Connection | None:
     return _open(path, readonly=True)
 
 
+def shared_rw(path: str | os.PathLike[str]) -> sqlite3.Connection | None:
+    """Reuse this thread's idle writer only while its process and file identity match."""
+    return _SHARED.get(path, lambda target: _open(target, readonly=False, shared=True))
+
+
+def close_shared() -> None:
+    """Close all writers cached by this process, including those of finished threads."""
+    _SHARED.close()
+
+
+atexit.register(close_shared)
+
+
 @contextmanager
 def begin_immediate(con: sqlite3.Connection) -> Generator[None]:
     """Reserve the writer, committing on success and rolling back on failure."""
-    con.execute("BEGIN IMMEDIATE")
     try:
-        yield
-        con.commit()
-    except BaseException:
-        con.rollback()
+        con.execute("BEGIN IMMEDIATE")
+        try:
+            yield
+            con.commit()
+        except BaseException:
+            con.rollback()
+            raise
+    except sqlite3.DatabaseError:
+        _SHARED.discard(con)
         raise
 
 

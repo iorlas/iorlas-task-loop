@@ -255,6 +255,7 @@ class FactoryIndex(unittest.TestCase):
                 RunScript("b-1").step("plan", 1).close("done").write(cfg.root)
                 reindex(cfg, clock=lambda: NOW)
                 path = cfg.factory_db()
+                factorydb.close_shared()  # the writer's wal would otherwise still hold the rows the test damages in the main file
                 if kind == "missing":
                     path.unlink()
                 elif kind == "corrupt":

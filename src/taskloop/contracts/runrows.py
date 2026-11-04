@@ -21,7 +21,7 @@ class StaleRevision(ValueError):
 
 
 class RunRows:
-    """Each operation owns a short-lived connection; transactions never span external work."""
+    """Operations reuse a thread's writer; short transactions never span external work."""
 
     def __init__(self, cfg: ConfigDir) -> None:
         self.cfg = cfg
@@ -29,14 +29,11 @@ class RunRows:
     @contextmanager
     def transaction(self) -> Generator[factorydb.sqlite3.Connection]:
         self.cfg.root.mkdir(parents=True, exist_ok=True)
-        con = factorydb.open_rw(self.cfg.factory_db())
+        con = factorydb.shared_rw(self.cfg.factory_db())
         if con is None:
             raise factorydb.DatabaseError("factory.db unavailable for run state")
-        try:
-            with factorydb.begin_immediate(con):
-                yield con
-        finally:
-            con.close()
+        with factorydb.begin_immediate(con):
+            yield con
 
     def get(self, run: str) -> RunManifest | None:
         if not self.cfg.factory_db().exists():

@@ -30,6 +30,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402, F401  (ROOT/src on sys.path; after the bytecode setup above)
 from support import procsim  # noqa: E402
 
+from taskloop.contracts import factorydb  # noqa: E402
+
 
 def preload_src():
     """Import every module of the package now, at collection, not inside the first test a worker runs: the engine imports about 200 of them
@@ -106,6 +108,16 @@ def pytest_ignore_collect(collection_path, config):
         expr = (config.getoption("markexpr", "") or "").split()
         return not ("live" in expr and "not" not in expr)
     return None
+
+
+@pytest.fixture(autouse=True)
+def filesystem_cache():
+    """Tests must not inherit connections or patched mount verdicts."""
+    factorydb.close_shared()
+    factorydb.clear_filesystem_cache()
+    yield
+    factorydb.close_shared()
+    factorydb.clear_filesystem_cache()
 
 
 @pytest.fixture(autouse=True)
