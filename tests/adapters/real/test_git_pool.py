@@ -116,3 +116,44 @@ class RealGitPoolTest(unittest.TestCase):
         worktree = RealRepo(self.repo, env=self.git.git_env(self.repo), memoize=False).worktree(self.repo)
         self.assertEqual(treehash.tree_of(self.git, self.repo), worktree.snapshot("main", inputs=("declared.txt",)).tree)
         self.assertEqual((self.repo / ".git" / "index").read_bytes(), index_before)
+
+    def test_tree_of_keeps_untracked_ignored_inputs_out_of_the_whole_tree_key(self):
+        (self.repo / ".gitignore").write_text("declared.txt\n")
+        declared = self.repo / "declared.txt"
+        declared.write_text("ignored input\n")
+        before = treehash.tree_of(self.git, self.repo)
+        state = treehash.state_of(self.git, self.repo)
+        declared.write_text("changed ignored input\n")
+        self.assertEqual(treehash.tree_of(self.git, self.repo), before)
+        self.assertEqual(treehash.state_of(self.git, self.repo), state)
+        worktree = RealRepo(self.repo, env=self.git.git_env(self.repo)).worktree(self.repo)
+        self.assertNotEqual(before, worktree.snapshot("HEAD", inputs=("declared.txt",)).tree)
+
+    def test_snapshot_hash_keeps_linked_checkout_and_temporary_index_pinned(self):
+        slot, decoy = (self.home / name for name in ("slot", "decoy"))
+        self.git.add_worktree(str(self.repo), str(slot), "main")
+        gitdir = Path(self.run_git(slot, "rev-parse", "--absolute-git-dir"))
+        decoy.mkdir()
+        self.run_git(self.repo, "config", "core.worktree", str(decoy))
+        polluted = {**snapshot().vars, "GIT_DIR": str(decoy), "GIT_WORK_TREE": str(decoy), "GIT_INDEX_FILE": str(decoy / "index")}
+        port = RealGit(Env(polluted))
+        (slot / "new.txt").write_text("new\n")
+        index_before = (gitdir / "index").read_bytes()
+        with mock.patch("git_porcelain.real.subprocess.run", wraps=subprocess.run) as run:
+            tree = treehash.tree_of(port, slot)
+        self.assertTrue(tree)
+        temporary_indexes = set()
+        for call in run.call_args_list:
+            child = call.kwargs["env"]
+            self.assertEqual(child["GIT_DIR"], str(gitdir))
+            self.assertEqual(child["GIT_WORK_TREE"], str(slot))
+            if any(cmd in call.args[0] for cmd in ("read-tree", "add", "write-tree")):
+                temporary_indexes.add(child["GIT_INDEX_FILE"])
+            else:
+                self.assertNotIn("GIT_INDEX_FILE", child)
+        self.assertEqual(len(temporary_indexes), 1)
+        self.assertNotIn(str(gitdir / "index"), temporary_indexes)
+        self.assertTrue(all(not Path(index).exists() for index in temporary_indexes))
+        self.assertEqual((gitdir / "index").read_bytes(), index_before)
+        self.assertFalse((decoy / "index").exists())
+        self.assertEqual(port.env.vars, polluted)

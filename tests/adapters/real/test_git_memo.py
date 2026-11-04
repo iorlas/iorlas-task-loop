@@ -9,11 +9,16 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-ROOT = Path(__file__).resolve().parents[3]
-from taskloop.adapters import procs, slotcheck, treehash  # noqa: E402
-from taskloop.adapters.git import RealGit  # noqa: E402
-from taskloop.app.run import engine  # noqa: E402
-from taskloop.contracts.env import snapshot  # noqa: E402
+import support.paths  # noqa: F401
+
+# isort: split
+from git_porcelain.errors import GitUnavailable
+from git_porcelain.real import RealWorktree
+
+from taskloop.adapters import slotcheck, treehash
+from taskloop.adapters.git import RealGit
+from taskloop.app.run import engine
+from taskloop.contracts.env import snapshot
 
 
 def sh(*a, cwd):
@@ -115,13 +120,13 @@ class GitMemoTest(unittest.TestCase):
         eng = engine.Engine.__new__(engine.Engine)
         eng.wt, eng.git = str(self.repo), self.git
         (self.repo / "f.txt").write_text("2\n")
-        real = procs.run_bytes
+        real = RealWorktree.run
         for failing in ("read-tree", "add", "write-tree"):
-            def run(cmd, *a, _failing=failing, **k):
-                if _failing in cmd:
-                    return subprocess.CompletedProcess(cmd, 128, b"", b"fatal: planted")
-                return real(cmd, *a, **k)
-            with self.subTest(failing), mock.patch.object(procs, "run_bytes", run):
+            def run(wt, *args, _failing=failing, **kwargs):
+                if _failing in args:
+                    raise GitUnavailable(f"git {_failing} failed: fatal: planted")
+                return real(wt, *args, **kwargs)
+            with self.subTest(failing), mock.patch.object(RealWorktree, "run", run):
                 eng.tree_memo = None
                 with self.assertRaises(treehash.TreeHashError) as got:
                     eng.checkout.tree_hash()

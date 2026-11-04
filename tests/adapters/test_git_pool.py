@@ -137,3 +137,23 @@ class GitPoolTest(unittest.TestCase):
         raw = b"# branch.head main\0? invalid-\xff\0"
         with mock.patch("git_porcelain.real.RealRepo.run", return_value=Done(0, raw, "")):
             self.assertEqual(self.git.worktree_state("/pool"), raw)
+
+    def test_tree_of_keeps_the_port_shape_over_a_porcelain_snapshot(self):
+        repo = FakeRepo.init(Path("/pool"))
+        work = repo.worktree(repo.path)
+        work.write_file("tracked", "one\n")
+        work.record("initial", paths="all")
+        work.write_file("tracked", "two\n")
+        work.write_file("untracked", "new\n")
+        with mock.patch("taskloop.adapters.git.RealRepo", return_value=repo):
+            tree = self.git.tree_of("/pool")
+        self.assertIsInstance(tree, str)
+        self.assertEqual(tree, work.snapshot("HEAD").tree)
+
+    def test_tree_of_translates_snapshot_failure(self):
+        with mock.patch.object(self.git, "_pool") as make:
+            error = errors.GitUnavailable("snapshot unavailable")
+            make.return_value.worktree.return_value.snapshot.side_effect = error
+            with self.assertRaises(SlotGitError) as caught:
+                self.git.tree_of("/pool")
+        self.assertIs(caught.exception.__cause__, error)

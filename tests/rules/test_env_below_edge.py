@@ -22,7 +22,7 @@ RECORD = Path(__file__).with_name("env_ratchet.json")
 EDGE = frozenset({"src/taskloop/contracts/env.py", "src/taskloop_dash/cli/dash.py",  # the owner of os.environ, and the dashboard's edge
                   "src/taskloop/hook/session.py", "src/taskloop/adapters/container_run.py"})  # the hooks' edge, and a script run by path
 CALL = re.compile(r"\b(?:penv\.)?(?:ambient|ambient_bead|ambient_set|snapshot)\(")
-NOT_ENV = re.compile(r"\b(?:looks|bf|cfg|self|snap)\.snapshot\(|def snapshot|def ambient")
+NOT_ENV = re.compile(r"\b(?:looks|bf|cfg|self|snap|wt)\.snapshot\(|def snapshot|def ambient")
 
 
 def count_source(text: str) -> int:

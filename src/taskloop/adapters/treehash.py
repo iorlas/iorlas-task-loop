@@ -1,12 +1,12 @@
 """What git says of a worktree: the tree it would commit now (without touching the real index), the state that decides that tree, and the
 paths the base's .gitignore files ignore."""
 import contextlib
-import hashlib
 import os
-import stat
 import tempfile
 from collections.abc import Iterable
 from pathlib import Path
+
+from git_porcelain import real_cache, real_parse
 
 from taskloop.contracts.ids import TreeSha
 from taskloop.contracts.ports import Git
@@ -16,7 +16,7 @@ State = tuple[bytes, tuple[object, ...]]
 
 
 class TreeHashError(RuntimeError):
-    """git could not say what the worktree would commit (read-tree, add or write-tree failed): no hash beats a half-built index's."""
+    """Porcelain could not snapshot the worktree: a failed read or temporary-index write must never become a tree id."""
 
 
 def tree_of(git: Git, wt: str | Path) -> TreeSha:
@@ -27,46 +27,19 @@ def tree_of(git: Git, wt: str | Path) -> TreeSha:
         raise TreeHashError(e.tail) from None
 
 
-def changed_paths(records: list[bytes]) -> list[bytes]:
-    """The paths of `git status --porcelain=v2 -z` records: every one that differs from HEAD or is untracked (a rename names both)."""
-    paths: list[bytes] = []
-    i = 0
-    while i < len(records):
-        rec = records[i]
-        if rec[:2] in (b"1 ", b"u "):
-            paths.append(rec.split(b" ", 8 if rec[:1] == b"1" else 10)[-1])
-        elif rec[:2] == b"2 ":
-            paths.append(rec.split(b" ", 9)[-1])
-            i += 1  # the original path follows as its own record
-            paths.append(records[i] if i < len(records) else b"")
-        elif rec[:2] == b"? ":
-            paths.append(rec[2:])
-        i += 1
-    return paths
-
-
-def file_stat(base: bytes, p: bytes) -> object:
-    """size, mtime, ctime, mode, inode and (small files) content hash. mtime can be set back and two writes can land in one
-    timestamp tick (coarse clocks), so a small file also counts by its content; ctime cannot be set from user space."""
-    try:
-        st = os.lstat(os.path.join(base, p))
-        body = None
-        if stat.S_ISREG(st.st_mode) and st.st_size <= 1 << 20:
-            with open(os.path.join(base, p), "rb") as fh:
-                body = hashlib.sha1(fh.read()).digest()
-        return (st.st_size, st.st_mtime_ns, st.st_ctime_ns, st.st_mode, st.st_ino, body)
-    except OSError:
-        return None
-
-
 def state_of(git: Git, wt: str | Path) -> State | None:
-    """Everything that decides the tree, from one `git status`: HEAD, every path that differs from it or is untracked, and the stat
-    of each of those files (status alone says 'modified' before and after a second edit). None when git cannot say."""
+    """One status plus porcelain's content signature; None when unreadable or too large to memoize.
+
+    Keep the caller's State shape while sharing snapshot's invalidation rules, including symlink text and same-tick edits.
+    Ignored untracked inputs belong to InputKeys, not this whole-tree identity.
+    """
     out = git.worktree_state(str(wt))
     if out is None:
         return None
-    base = os.fsencode(str(wt))
-    return (out, tuple(file_stat(base, p) for p in changed_paths(out.split(b"\0"))))
+    text = out.decode("utf-8", "surrogateescape")
+    state = real_parse.parse_status(text)
+    key = real_cache.tree_key(Path(wt), text, (*state.tracked, *state.untracked))
+    return (out, (key,)) if key is not None else None
 
 
 def ignore_rules(base: str, lines_of: dict[str, list[str]]) -> list[str]:

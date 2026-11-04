@@ -1,7 +1,6 @@
 """Git (the port in contracts/ports.py) on the real git binary, pinned to the checkout. git's words are read here and nowhere else:
 a failure becomes one of the typed SlotGitErrors (BranchPinned, DirtyTree, RefRace, IndexLocked) or the plain SlotGitError."""
 import os
-import tempfile
 from contextlib import suppress
 from pathlib import Path
 from typing import Literal
@@ -308,16 +307,12 @@ class RealGit(LandGit):
             return ""
 
     def tree_of(self, d: str) -> str:
-        """HEAD's tree plus every change and untracked file, written from a throwaway index in a temp folder."""
-        with tempfile.TemporaryDirectory() as tmp:
-            extra = {"GIT_INDEX_FILE": os.path.join(tmp, "index")}
-            out = ""
-            for args in (["read-tree", "HEAD"], ["add", "-A"], ["write-tree"]):
-                r = self._run(d, *args, extra=extra)
-                if r.returncode != 0:
-                    raise SlotGitError(f"git {args[0]} failed ({r.returncode}): {(r.stderr or '').strip()[:300]}")
-                out = r.stdout.strip()
-        return out
+        """The snapshot tree, without declared ignored inputs; checks key those separately in InputKeys."""
+        try:
+            wt = self._pool(d).worktree(Path(d).absolute())
+            return str(wt.snapshot("HEAD", inputs=()).tree)
+        except GitError as err:
+            raise pool_error(err) from err
 
     def worktree_state(self, d: str) -> bytes | None:
         try:
