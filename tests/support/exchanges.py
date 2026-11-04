@@ -88,7 +88,7 @@ def cases() -> list[Exchange]:
 
 def replay(test: Any, ex: Exchange) -> None:
     """Run the engine on the exchange's bead with its answer in place, and check the golden. `test` is a te.EngineTest."""
-    test.assertEqual(answers.check(ex.node, False, ex.answer), [], f"{ex.name}: the parser rejects the recorded answer")
+    assert answers.check(ex.node, False, ex.answer) == [], f"{ex.name}: the parser rejects the recorded answer"
     test.store.put(ex.bead)
     seen: list[Any] = []
     try:
@@ -96,12 +96,12 @@ def replay(test: Any, ex: Exchange) -> None:
     except Halt:
         script, rc = seen[0], 0
     calls = [role for role, _, _ in script.calls]
-    test.assertEqual(calls, ex.meta["calls"], f"{ex.name}: the engine made other calls than recorded (rc {rc})")
+    assert calls == ex.meta["calls"], f"{ex.name}: the engine made other calls than recorded (rc {rc})"
     sent = script.prompts[script.nodes.index(ex.node)].replace(str(test.wt), WT)
     role = ROLES[ex.node]
-    test.assertIsNone(caps.check(role, sent), f"{ex.name}: the recorded input is over the {role} cap")
+    assert caps.check(role, sent) is None, f"{ex.name}: the recorded input is over the {role} cap"
     if os.environ.get("UPDATE_GOLDEN"):
         ex.input_file.write_text(sent, encoding="utf-8")
-    test.assertEqual(ex.input_file.read_text(encoding="utf-8"), sent, f"{ex.name}: input.txt differs (UPDATE_GOLDEN=1 rewrites it)")
+    assert ex.input_file.read_text(encoding="utf-8") == sent, f"{ex.name}: input.txt differs (UPDATE_GOLDEN=1 rewrites it)"
     if ex.role != "planner":
-        test.assertEqual(rc, 0, f"{ex.name}: the engine did not accept the run")
+        assert rc == 0, f"{ex.name}: the engine did not accept the run"

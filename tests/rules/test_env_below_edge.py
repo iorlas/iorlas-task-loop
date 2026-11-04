@@ -11,8 +11,9 @@ hand-over (TL_REEXEC, TL_LOOP_STATE, TL_RELEASE_REEXEC) is written only through 
 import json
 import re
 import sys
-import unittest
 from pathlib import Path
+
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -102,38 +103,34 @@ def rule_breaks(root: Path = ROOT) -> list[str]:
     return out
 
 
-class EnvBelowTheEdge(unittest.TestCase):
+class EnvBelowTheEdge(Case):
     def test_no_file_reads_the_process_more_than_its_record(self):
         recorded = json.loads(RECORD.read_text(encoding="utf-8"))
-        self.assertEqual(problems(count_tree(), recorded), [])
+        assert problems(count_tree(), recorded) == []
 
     def test_only_an_edge_builds_a_real_spawner(self):
-        self.assertEqual(spawner_builders(), [])
+        assert spawner_builders() == []
 
     def test_a_spawner_built_below_the_edge_is_seen(self):
-        self.assertTrue(BUILDS_SPAWNER.search("spawn = real.spawner(env)"))
-        self.assertTrue(BUILDS_SPAWNER.search("x = RealSpawner(env)"))
+        assert BUILDS_SPAWNER.search("spawn = real.spawner(env)")
+        assert BUILDS_SPAWNER.search("x = RealSpawner(env)")
 
     def test_no_module_level_port_no_identity_below_the_edge_no_stray_hand_over(self):
-        self.assertEqual(rule_breaks(), [])
+        assert rule_breaks() == []
 
     def test_a_planted_ambient_port_identity_or_hand_over_is_seen(self):
-        self.assertTrue(ambient_ports("REAL: Final = RealGit(penv.snapshot())\n"))
-        self.assertTrue(ambient_ports("SPAWN = real.spawner(env)\n"))
-        self.assertFalse(ambient_ports("    git = real.git(env)\n"))
-        self.assertTrue(IDENTITY_CALL.search("who = ident.identity(env)"))
-        self.assertTrue(stray_handovers('os.environ["TL_REEXEC"] = text\n'))
-        self.assertTrue(stray_handovers("penv.export(EnvVar.TL_LOOP_STATE, raw)\n"))
-        self.assertFalse(stray_handovers("Reexec.parse(env.get(EnvVar.TL_REEXEC))\n"))
-        self.assertFalse(stray_handovers("childenv.exec_env(env, {EnvVar.TL_RELEASE_REEXEC: '1'})\n"))
+        assert ambient_ports("REAL: Final = RealGit(penv.snapshot())\n")
+        assert ambient_ports("SPAWN = real.spawner(env)\n")
+        assert not ambient_ports("    git = real.git(env)\n")
+        assert IDENTITY_CALL.search("who = ident.identity(env)")
+        assert stray_handovers('os.environ["TL_REEXEC"] = text\n')
+        assert stray_handovers("penv.export(EnvVar.TL_LOOP_STATE, raw)\n")
+        assert not stray_handovers("Reexec.parse(env.get(EnvVar.TL_REEXEC))\n")
+        assert not stray_handovers("childenv.exec_env(env, {EnvVar.TL_RELEASE_REEXEC: '1'})\n")
 
     def test_a_planted_read_fails(self):
-        self.assertEqual(count_source("x = penv.snapshot().vars\n"), 1)
-        self.assertTrue(problems({"a.py": 2}, {"a.py": 1}))
-        self.assertTrue(problems({"a.py": 1}, {"a.py": 2}))
-        self.assertTrue(problems({"new.py": 1}, {}))
-        self.assertEqual(problems({"a.py": 1}, {"a.py": 1}), [])
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert count_source("x = penv.snapshot().vars\n") == 1
+        assert problems({"a.py": 2}, {"a.py": 1})
+        assert problems({"a.py": 1}, {"a.py": 2})
+        assert problems({"new.py": 1}, {})
+        assert problems({"a.py": 1}, {"a.py": 1}) == []

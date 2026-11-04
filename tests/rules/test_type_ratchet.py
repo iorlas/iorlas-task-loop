@@ -8,8 +8,9 @@ import io
 import json
 import sys
 import tokenize
-import unittest
 from pathlib import Path
+
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -71,18 +72,18 @@ def open_matches(text: str) -> list[int]:
     return out
 
 
-class TypeRatchet(unittest.TestCase):
+class TypeRatchet(Case):
     def test_every_match_in_src_ends_in_assert_never(self):
         bad = [f"{p.relative_to(ROOT)}:{n}" for p in sorted((ROOT / "src").rglob("*.py")) if "_vendor" not in p.parts
                for n in open_matches(p.read_text(encoding="utf-8"))]
-        self.assertEqual(bad, [])
+        assert bad == []
 
     def test_an_open_match_is_found(self):
-        self.assertEqual(open_matches("match x:\n    case 1:\n        pass\n"), [1])
-        self.assertEqual(open_matches("match x:\n    case 1:\n        pass\n    case _:\n        assert_never(x)\n"), [])
+        assert open_matches("match x:\n    case 1:\n        pass\n") == [1]
+        assert open_matches("match x:\n    case 1:\n        pass\n    case _:\n        assert_never(x)\n") == []
 
     def test_the_counts_in_src_match_the_record_and_never_rise(self):
-        self.assertEqual(problems(count_tree(), json.loads(RECORD.read_text(encoding="utf-8"))), [])
+        assert problems(count_tree(), json.loads(RECORD.read_text(encoding="utf-8"))) == []
 
     def test_a_planted_escape_of_each_kind_is_counted(self):
         planted = {
@@ -94,13 +95,9 @@ class TypeRatchet(unittest.TestCase):
         base = dict.fromkeys(KINDS, 5)
         for kind, text in planted.items():
             with self.subTest(kind):
-                self.assertEqual(count_source(text)[kind], 1)
+                assert count_source(text)[kind] == 1
                 bumped = {k: v + (k == kind) for k, v in base.items()}
-                self.assertEqual(len(problems(bumped, base)), 1)
+                assert len(problems(bumped, base)) == 1
 
     def test_the_recorded_kinds_are_exactly_the_counted_ones(self):
-        self.assertEqual(sorted(json.loads(RECORD.read_text(encoding="utf-8"))), sorted(KINDS))
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert sorted(json.loads(RECORD.read_text(encoding="utf-8"))) == sorted(KINDS)

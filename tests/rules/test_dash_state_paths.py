@@ -3,8 +3,9 @@ state file or folder of ours (every name ConfigDir joins to the config root), bu
 ConfigDir outside the two places that take the config root (env.py, bind.py)."""
 import ast
 import sys
-import unittest
 from pathlib import Path
+
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -64,18 +65,14 @@ def problems() -> list[str]:
     return out
 
 
-class DashReadsThroughTheLocator(unittest.TestCase):
+class DashReadsThroughTheLocator(Case):
     def test_the_state_names_are_the_ones_configdir_joins(self):
         names = state_names()
-        self.assertTrue({"engine", "runs", "dash.pid", "repos.json"} <= names, names)
+        assert {"engine", "runs", "dash.pid", "repos.json"} <= names, names
 
     def test_no_dashboard_module_hardcodes_a_state_path(self):
-        self.assertEqual(problems(), [])
+        assert problems() == []
 
     def test_the_rule_sees_a_hardcoded_path(self):
         bad = ast.parse('x = cfg.root / "engine" / "a.jsonl"\ny = os.path.join(root, "runs")\nz = p.parent.parent\nConfigDir(r)\n')
-        self.assertEqual(sorted(t for _, t in path_operands(bad)), ["a.jsonl", "engine", "runs"])
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert sorted(t for _, t in path_operands(bad)) == ["a.jsonl", "engine", "runs"]

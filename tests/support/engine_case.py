@@ -19,6 +19,10 @@ from pathlib import Path
 from typing import Any, ClassVar
 from unittest import mock
 
+import pytest
+
+from support.case import Case
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import homes
@@ -136,7 +140,7 @@ HAS_F = "has-f"  # a procsim fake: exit 0 iff f.txt exists in the check's direct
 FALSE = "false"  # a procsim fake: exit 1
 
 
-RED_ONCE = "green-on-d3"  # a procsim fake (registered in setUp): exit 0 iff f.txt reads d3, red until the writer wrote it
+RED_ONCE = "green-on-d3"  # a procsim fake (registered in setup_method): exit 0 iff f.txt reads d3, red until the writer wrote it
 
 
 PLAN: dict[str, Any] = {
@@ -336,8 +340,8 @@ class Recorded(collections.abc.Sequence):
         return repr(self.read())
 
 
-class EngineTest(unittest.TestCase):
-    def setUp(self):
+class EngineTest(Case):
+    def setup_method(self):
         self.tmp = tempfile.TemporaryDirectory()
         home = Path(self.tmp.name)
         self.env = mock.patch.dict(
@@ -403,7 +407,7 @@ class EngineTest(unittest.TestCase):
         sh("git", "commit", "-qm", "add " + rel, cwd=base)
         sh("git", "push", "-q", "origin", "HEAD:main", cwd=base)
 
-    def tearDown(self):
+    def teardown_method(self):
         applog.close_all()  # tl-64i: the held log handles live in the temp dir that goes now
         self.env.stop()
         self.tmp.cleanup()
@@ -452,9 +456,9 @@ class EngineTest(unittest.TestCase):
 
     def asks_the_owner(self, q):
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [review(question=q)]})
-        self.assertEqual(rc, 2)
-        self.assertEqual(self.ask()["kind"], "decision")
-        self.assertIn(q, self.blocked[-1])
+        assert rc == 2
+        assert self.ask()["kind"] == "decision"
+        assert q in self.blocked[-1]
 
     def spawn(self, pidfile, term=False):
         """A check that starts a child sleeping 30 s and records its pid, then waits for it (term: after sending its parent, the
@@ -475,17 +479,17 @@ class EngineTest(unittest.TestCase):
         the moment the pid is there; the limit is only the give-up)."""
         if until(lambda: pidfile.exists() and pidfile.read_text().strip(), limit):
             return int(pidfile.read_text())
-        self.fail("the check never started its child")
+        pytest.fail("the check never started its child")
 
     def assertDead(self, pid):
         if not until(lambda: pid_gone(pid), 3):
             os.kill(pid, 9)
-            self.fail(f"pid {pid} outlived the engine's stop")
+            pytest.fail(f"pid {pid} outlived the engine's stop")
 
     def stoppable(self):
         """The engine's own SIGTERM handler (run_main installs it), restored after the test."""
         if os.name == "nt":
-            self.skipTest("POSIX signals")
+            pytest.skip("POSIX signals")
 
         return halting.halt_on_sigterm()
 
@@ -523,7 +527,7 @@ class EngineTest(unittest.TestCase):
         return ck
 
     def assertNoCheckpoint(self):
-        self.assertIsNone(flat_ck(stored_ck()))
+        assert flat_ck(stored_ck()) is None
 
     def admit(self, bead, comments=(), ask=None):
         if ask:
@@ -685,10 +689,6 @@ def stored_brief(name):
     return sec.get("Notes", "").strip(), comments
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 def _cells(owner, prefix, cell, cases):
     """One test per cell of a table (a subTest loop run as one test is one long test the shards cannot split)."""
     for args in cases:
@@ -760,5 +760,5 @@ class LandReviewBase(EngineTest):
     def reviewer_brief(self, cap=40000):
         script = fake_route.Script({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         with mock.patch.object(NewFiles, "STAGE_DIFF_CAP", cap):
-            self.assertEqual(self.run_with(script), 0)
+            assert self.run_with(script) == 0
         return next(p for c, p in zip(script.calls, script.prompts, strict=False) if c[0] == "reviewer")

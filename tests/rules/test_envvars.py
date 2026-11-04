@@ -2,8 +2,9 @@
 registered, and every registered name is used outside the registry. The environment is read only at the edge (contracts/env.py)."""
 import re
 import sys
-import unittest
 from pathlib import Path
+
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -25,29 +26,29 @@ def mentioned(path: Path) -> set[str]:
     return set(NAME.findall(path.read_text(encoding="utf-8", errors="replace")))
 
 
-class Registry(unittest.TestCase):
+class Registry(Case):
     def test_every_documented_name_is_registered(self):
         bad = {f"{p.relative_to(ROOT)}: {n}" for p in (*TEXTS, *CODE) for n in mentioned(p)
                if n not in NOT_VARIABLES and not registered(n) and not n.endswith("_") and n not in PREFIXES}
-        self.assertFalse(bad, "names missing from contracts/envvars.py:\n" + "\n".join(sorted(bad)))
+        assert not bad, "names missing from contracts/envvars.py:\n" + "\n".join(sorted(bad))
 
     def test_every_registered_name_is_used(self):
         reg = ROOT / "src/taskloop/contracts/envvars.py"
         text = "\n".join(p.read_text() for p in (*CODE, ROOT / "skills/task-loop/SKILL.md", *TEXTS) if p != reg)
         unused = [v.name for v in EnvVar if v.name not in text]
-        self.assertEqual(unused, [])
+        assert unused == []
 
     def test_gate_passed_is_no_variable(self):
-        self.assertNotIn("TL_GATE_PASSED", EnvVar.__members__)
+        assert "TL_GATE_PASSED" not in EnvVar.__members__
         said = [p for p in (*TEXTS, *CODE) if "TL_GATE_PASSED" in p.read_text(errors="replace")]
-        self.assertEqual(said, [])
+        assert said == []
 
 
-class EnvEdge(unittest.TestCase):
+class EnvEdge(Case):
     def test_os_environ_only_at_the_edge(self):
         hits = {str(p.relative_to(ROOT)) for p in (*(ROOT / "src/taskloop").rglob("*.py"), *(ROOT / "src/taskloop_dash").rglob("*.py"))
                 if re.search(r"\bos\.(environ|getenv|putenv)\b|from os import[^\n]*\benviron\b", p.read_text())}
-        self.assertEqual(sorted(hits - ENV_EDGE - ENV_ALLOWLIST), [], "read the environment through taskloop.contracts.env")
+        assert sorted(hits - ENV_EDGE - ENV_ALLOWLIST) == [], "read the environment through taskloop.contracts.env"
 
     def test_the_allowlist_only_shrinks(self):
-        self.assertEqual(ENV_ALLOWLIST, frozenset())
+        assert frozenset() == ENV_ALLOWLIST

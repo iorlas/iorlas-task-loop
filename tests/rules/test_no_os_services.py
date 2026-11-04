@@ -1,9 +1,10 @@
 """The factory runs detached processes; source must never install OS service definitions."""
-import unittest
 from pathlib import Path
 
+from support.case import Case
 
-class NoOsServices(unittest.TestCase):
+
+class NoOsServices(Case):
     def test_source_contains_no_service_installation_vocabulary(self):
         root = Path(__file__).resolve().parents[2] / "src"
         forbidden = ("LaunchAgents", "launchctl", "crontab", "systemd", "LaunchDaemons")
@@ -14,4 +15,4 @@ class NoOsServices(unittest.TestCase):
             text = path.read_text(encoding="utf-8")
             if path.suffix in (".plist", ".service", ".timer") or any(word in text for word in forbidden):
                 violations.append(str(path.relative_to(root)))
-        self.assertEqual(violations, [])
+        assert violations == []

@@ -1,7 +1,8 @@
 """ID-shape operations belong to the beads adapter; audit source and exercise the audit on representative regressions."""
 import ast
-import unittest
 from pathlib import Path
+
+from support.case import Case
 
 SRC = Path(__file__).resolve().parents[2] / "src"
 ID_NAMES = {"bead", "bead_id", "task_id", "bid", "parent_id"}
@@ -52,7 +53,7 @@ def outside_adapter(path: Path) -> bool:
                 and (path.stem.startswith("bd") or path.stem == "beadtools"))
 
 
-class OpaqueTaskIds(unittest.TestCase):
+class OpaqueTaskIds(Case):
     def test_source_has_no_new_id_shape_readers_outside_beads(self):
         found = []
         for path in sorted(SRC.rglob("*.py")):
@@ -62,7 +63,7 @@ class OpaqueTaskIds(unittest.TestCase):
             tree = ast.parse(path.read_text(encoding="utf-8"))
             tree.body = [node for node in tree.body if node_name(node) not in ENTANGLED.get(rel, set())]
             found.extend(f"{rel}:{line}" for line in problems(tree))
-        self.assertEqual(found, [], "Task IDs are opaque: move shape readers into the beads adapter")
+        assert found == [], "Task IDs are opaque: move shape readers into the beads adapter"
 
     def test_audit_rejects_id_parses(self):
         for source in ('bead.split("-")', 'e.bead.rsplit(".", 1)', 'task_id.startswith(prefix)',
@@ -70,8 +71,8 @@ class OpaqueTaskIds(unittest.TestCase):
                        'pattern = r"(?:[.-][a-z0-9]+)+"',
                        'def bead_ids(prefix, text):\n    return []'):
             with self.subTest(source=source):
-                self.assertTrue(problems(ast.parse(source)))
+                assert problems(ast.parse(source))
 
     def test_audit_allows_other_formats_and_opaque_lookups(self):
         source = 'version.split(".")\npath.rsplit("/", 1)\nstore.show(bead_id)\nb.parent\nprefix_of(e.bead)'
-        self.assertEqual(problems(ast.parse(source)), [])
+        assert problems(ast.parse(source)) == []

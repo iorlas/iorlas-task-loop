@@ -2,8 +2,9 @@
 
 import ast
 import sqlite3
-import unittest
 from pathlib import Path
+
+from support.case import Case
 
 from taskloop.contracts.factorydb import DDL, OWNERS
 
@@ -22,22 +23,22 @@ def receipt_file_readers(tree):
             and isinstance(n.value, ast.Name) and n.value.id == "cfg"]
 
 
-class FactoryOwnersTest(unittest.TestCase):
+class FactoryOwnersTest(Case):
     def test_each_schema_table_has_one_owner_role(self):
         with sqlite3.connect(":memory:") as con:
             con.executescript(DDL)
             tables = {row[0] for row in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-        self.assertEqual(set(OWNERS), tables)
+        assert set(OWNERS) == tables
         for table, role in OWNERS.items():
             with self.subTest(table=table):
-                self.assertIn(role, {"index", "engine", "loop", "owner"})
-        self.assertEqual(OWNERS["lease"], "loop")
-        self.assertNotIn("event", OWNERS)  # logs stay files: the DB holds state only
-        self.assertEqual(OWNERS["bead"], "index")
-        self.assertEqual(OWNERS["ask"], "engine")
-        self.assertEqual(OWNERS["ask_ledger"], "engine")
-        self.assertEqual(OWNERS["run"], "engine")
-        self.assertNotIn("family", OWNERS)
+                assert role in {"index", "engine", "loop", "owner"}
+        assert OWNERS["lease"] == "loop"
+        assert "event" not in OWNERS  # logs stay files: the DB holds state only
+        assert OWNERS["bead"] == "index"
+        assert OWNERS["ask"] == "engine"
+        assert OWNERS["ask_ledger"] == "engine"
+        assert OWNERS["run"] == "engine"
+        assert "family" not in OWNERS
 
     def test_only_the_legacy_importer_may_name_the_run_manifest_file(self):
         root = Path(__file__).resolve().parents[2] / "src"
@@ -50,12 +51,12 @@ class FactoryOwnersTest(unittest.TestCase):
                 bad.extend(f"{module}:{line}" for line in legacy_readers(ast.parse(path.read_text(encoding="utf-8"))))
             if module not in RECEIPT_FILE_READERS:
                 bad.extend(f"{module}:{line}" for line in receipt_file_readers(ast.parse(path.read_text(encoding="utf-8"))))
-        self.assertEqual(bad, [])
+        assert bad == []
 
     def test_reader_rule_sees_a_planted_file_read(self):
-        self.assertEqual(legacy_readers(ast.parse("JsonStore(cfg.run_manifest(run), RunManifest).get()")), [1])
-        self.assertEqual(legacy_readers(ast.parse("RunFiles(run_dir).done_memo().read_text()")), [1])
-        self.assertEqual(legacy_readers(ast.parse("RunFiles(run_dir).legacy_done_memo().read_text()")), [1])
-        self.assertEqual(receipt_file_readers(ast.parse("JsonStore(cfg.result(repo, check, digest), PassRecord).get()")), [1])
-        self.assertEqual(receipt_file_readers(ast.parse("cfg.base_red(repo, digest).read_bytes()")), [1])
-        self.assertEqual(receipt_file_readers(ast.parse("stores.base_red(repo).of(digest).get()")), [])
+        assert legacy_readers(ast.parse("JsonStore(cfg.run_manifest(run), RunManifest).get()")) == [1]
+        assert legacy_readers(ast.parse("RunFiles(run_dir).done_memo().read_text()")) == [1]
+        assert legacy_readers(ast.parse("RunFiles(run_dir).legacy_done_memo().read_text()")) == [1]
+        assert receipt_file_readers(ast.parse("JsonStore(cfg.result(repo, check, digest), PassRecord).get()")) == [1]
+        assert receipt_file_readers(ast.parse("cfg.base_red(repo, digest).read_bytes()")) == [1]
+        assert receipt_file_readers(ast.parse("stores.base_red(repo).of(digest).get()")) == []

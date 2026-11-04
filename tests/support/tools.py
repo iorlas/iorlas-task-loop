@@ -9,6 +9,8 @@ import shutil
 import subprocess
 from unittest import mock
 
+import pytest
+
 
 def _runs(path):
     try:
@@ -47,7 +49,7 @@ def real(tool):
 def need(test, tool):
     """Skip the running test only when no real `tool` exists on this machine at all."""
     if not real(tool):
-        test.skipTest(f"no real `{tool}` binary on this machine")
+        pytest.skip(f"no real `{tool}` binary on this machine")
 
 
 def on_path(tool):

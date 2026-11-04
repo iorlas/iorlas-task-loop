@@ -110,9 +110,9 @@ class Interrupter:
     def fix(self, this, kind, tail, resume=False):
         case, seen = self.case, self.seen
         ck = case.checkpoint()
-        case.assertEqual(ck["step"], "land-verify-red")
-        case.assertIn("retry check", ck["pending_land_validation"])
-        case.assertEqual(ck["feedback"], ck["pending_land_validation"])
+        assert ck["step"] == "land-verify-red"
+        assert "retry check" in ck["pending_land_validation"]
+        assert ck["feedback"] == ck["pending_land_validation"]
         seen["failure"] = ck["feedback"]
         seen["in_fix"] = True
         try:
@@ -124,8 +124,8 @@ class Interrupter:
         if (state or {}).get("fix"):
             # fix() has initialized its checkpoint; the pending failure must still be there.
             ck = self.case.checkpoint()
-            self.case.assertEqual(ck["step"], "land-verify-red")
-            self.case.assertEqual(ck["feedback"], self.seen["failure"])
+            assert ck["step"] == "land-verify-red"
+            assert ck["feedback"] == self.seen["failure"]
             self.seen["fix_initialized"] = True
         return self.real["stage"](this, plan, i, state)
 
@@ -166,8 +166,8 @@ class Recovery:
         pushed = cmd[-1].partition(":")[0].lstrip("+") if isinstance(cmd, list) else ""  # the land pins HEAD to its sha
         if isinstance(cmd, list) and cmd == pin_head(this.cfg.land, pushed):
             self.pushes.append(cmd)
-            self.case.assertFalse(this.pending_land_validation)
-            self.case.assertFalse(self.case.checkpoint()["pending_land_validation"])
+            assert not this.pending_land_validation
+            assert not self.case.checkpoint()["pending_land_validation"]
         return self.real_sh(this, cmd, *a, **kw)
 
     def patched(self):

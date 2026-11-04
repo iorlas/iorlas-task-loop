@@ -2,8 +2,9 @@
 CheckoutView every other check reads through has no way to stage."""
 import ast
 import sys
-import unittest
 from pathlib import Path
+
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -25,14 +26,14 @@ def users(path: Path) -> set[str]:
     return names
 
 
-class OnlyTheFixerWrites(unittest.TestCase):
+class OnlyTheFixerWrites(Case):
     def test_no_check_module_but_the_fixer_reaches_for_the_write_capability(self):
         found = {f.name: users(f) for f in sorted(CHECKS.glob("*.py")) if f.name not in ("fixer.py", "host.py") and users(f)}
-        self.assertEqual(found, {}, "a check reads the tree through CheckoutView; only fixer.py stages (host.TreeWriter)")
+        assert found == {}, "a check reads the tree through CheckoutView; only fixer.py stages (host.TreeWriter)"
 
     def test_the_fixer_does_use_it(self):
-        self.assertEqual(users(CHECKS / "fixer.py"), WRITE_NAMES)
+        assert users(CHECKS / "fixer.py") == WRITE_NAMES
 
     def test_the_read_view_cannot_stage(self):
-        self.assertNotIn("stage_all", dir(CheckoutView))
-        self.assertIn("stage_all", dir(TreeWriter))
+        assert "stage_all" not in dir(CheckoutView)
+        assert "stage_all" in dir(TreeWriter)

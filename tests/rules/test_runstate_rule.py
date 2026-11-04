@@ -8,8 +8,9 @@ Over src, as an AST scan:
  - the old inference vocabulary (CRASHED_AFTER, Liveness.CRASHED) is gone."""
 import ast
 import sys
-import unittest
 from pathlib import Path
+
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -92,34 +93,30 @@ def dash_writer_uses(tree: ast.AST) -> list[tuple[int, str]]:
     return out
 
 
-class DashWritesNothing(unittest.TestCase):
+class DashWritesNothing(Case):
     def test_nothing_under_the_dashboard_names_a_run_state_writer(self):
         bad = [f"{f.relative_to(ROOT)}:{line}: {name}" for f in sorted(DASH.rglob("*.py"))
                for line, name in dash_writer_uses(ast.parse(f.read_text(encoding="utf-8")))]
-        self.assertEqual(bad, [], "the dashboard only reads: it displays runlife.shown, only tl processes call reconcile")
+        assert bad == [], "the dashboard only reads: it displays runlife.shown, only tl processes call reconcile"
 
     def test_the_scan_sees_planted_writers(self):
         tree = ast.parse("from taskloop.contracts.runlife import reconcile\nself.locator.end(r)\nrunlife.reconcile(c, 1)\nx.shown()\n")
-        self.assertEqual([n for _, n in dash_writer_uses(tree)], ["reconcile", "end", "reconcile"])
+        assert [n for _, n in dash_writer_uses(tree)] == ["reconcile", "end", "reconcile"]
 
 
-class LivenessIsRecorded(unittest.TestCase):
+class LivenessIsRecorded(Case):
     def test_no_reader_derives_liveness_from_a_log_gap(self):
-        self.assertEqual(scan(), [])
+        assert scan() == []
 
     def test_the_scan_sees_planted_inference(self):
         src = ("from taskloop.contracts.log import Beat\nx = now - CRASHED_AFTER\nif life is Liveness.CRASHED: pass\n"
                "m.replace(state=RunState.LOST)\nok = RunState.LOST\n")
         tree = ast.parse(src)
-        self.assertIn((1, "Beat"), names(tree))
-        self.assertIn((2, "CRASHED_AFTER"), names(tree))
-        self.assertEqual(crashed_uses(tree), [3])
-        self.assertEqual(lost_sets(tree), [4])
+        assert (1, "Beat") in names(tree)
+        assert (2, "CRASHED_AFTER") in names(tree)
+        assert crashed_uses(tree) == [3]
+        assert lost_sets(tree) == [4]
 
     def test_the_allow_lists_name_files_that_exist(self):
         for rel in ALLOWS_BEAT | ALLOWS_STALE | ALLOWS_PID_ALIVE | ALLOWS_LOST:
-            self.assertTrue((ROOT / rel).is_file(), rel)
-
-
-if __name__ == "__main__":
-    unittest.main()
+            assert (ROOT / rel).is_file(), rel

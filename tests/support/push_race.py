@@ -56,7 +56,7 @@ class PushRace:
     @contextmanager
     def lock(self, this):
         with self.real["lock"](this):
-            self.case.assertFalse(self.held)
+            assert not self.held
             self.held.append(True)
             self.events.append("enter")
             try:
@@ -81,7 +81,7 @@ class PushRace:
     def checks(self, this, st, name, *a, **kw):
         state = self.state
         if name == "land retry":
-            self.case.assertTrue(self.held)
+            assert self.held
             self.events.append("checks")
             if self.failure == "checks_stop":
                 state["pidfile"] = self.home / f"retry-child-{self.n}.pid"
@@ -109,7 +109,7 @@ class PushRace:
                 return 1, "gate red"
         pushed = cmd[-1].partition(":")[0].lstrip("+") if isinstance(cmd, list) else ""  # the land pins HEAD to its sha
         if isinstance(cmd, list) and cmd == pin_head(this.cfg.land, pushed):
-            self.case.assertTrue(self.held)
+            assert self.held
             self.events.append("push")
             state["pushes"] += 1
             if state["pushes"] <= self.rejections:
@@ -129,7 +129,7 @@ class PushRace:
         sh("git", "push", "-q", "origin", "HEAD:main", cwd=self.other)
 
     def fix(self, this, kind, tail, resume=False):
-        self.case.assertFalse(self.held)
+        assert not self.held
         self.events.append("fix:" + kind)
         if self.failure in ("checks_fixed", "checks_exhausted", "review_exhausted"):
             self.state["fix_result"] = self.real["fix"](this, kind, tail, resume)
@@ -139,7 +139,7 @@ class PushRace:
     def wait(self, this, secs, what, wid=None):
         if what != WaitWhat.NETWORK:
             return self.real["wait"](this, secs, what, wid)
-        self.case.assertFalse(self.held)
+        assert not self.held
         self.events.append("wait")
         raise engine.Blocked("test stops at network wait", kind=Kind.FAULT_ENGINE)
 
@@ -161,7 +161,7 @@ class PushRace:
             rc, _ = case.run_engine({"plan": [plan], "write": [write] * 2, "review": reviews}, gate=self.gate, **cfg)
             if resume_failed_fix:
                 rc = self.resume(plan, cfg, write, reviews[-1], rc)
-        case.assertFalse(self.held)
+        assert not self.held
         return rc, self.events, state
 
     def resume(self, plan, cfg, write, last_review, first_rc):

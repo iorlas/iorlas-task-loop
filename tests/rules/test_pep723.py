@@ -2,8 +2,9 @@
 import re
 import sys
 import tomllib
-import unittest
 from pathlib import Path
+
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -20,19 +21,15 @@ def declared(script: str) -> list[str]:
     return meta["dependencies"]
 
 
-class Headers(unittest.TestCase):
+class Headers(Case):
     def test_every_script_declares_the_projects_dependencies(self):
         want = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]["dependencies"]
-        self.assertTrue(want)
+        assert want
         for script in SCRIPTS:
             with self.subTest(script):
-                self.assertEqual(declared(script), want)
+                assert declared(script) == want
 
     def test_every_script_that_runs_with_uv_names_uv_in_its_shebang(self):
         for script in SCRIPTS:
             with self.subTest(script):
-                self.assertEqual((ROOT / script).read_text(encoding="utf-8").splitlines()[0], "#!/usr/bin/env -S uv run --script")
-
-
-if __name__ == "__main__":
-    unittest.main()
+                assert (ROOT / script).read_text(encoding="utf-8").splitlines()[0] == "#!/usr/bin/env -S uv run --script"

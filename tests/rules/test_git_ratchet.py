@@ -8,8 +8,9 @@ holds the sim and real git to.
 import ast
 import json
 import sys
-import unittest
 from pathlib import Path
+
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -61,9 +62,9 @@ def problems(actual: dict[str, int], recorded: dict[str, int]) -> list[str]:
     return out
 
 
-class GitRatchet(unittest.TestCase):
+class GitRatchet(Case):
     def test_no_file_gains_a_git_call_outside_the_port(self):
-        self.assertEqual(problems(count_tree(), json.loads(RECORD.read_text(encoding="utf-8"))), [])
+        assert problems(count_tree(), json.loads(RECORD.read_text(encoding="utf-8"))) == []
 
     def test_each_kind_of_escape_is_counted(self):
         for text in (
@@ -75,18 +76,14 @@ class GitRatchet(unittest.TestCase):
             "git('x')",
         ):
             with self.subTest(text):
-                self.assertEqual(count_source(text), 1)
-        self.assertEqual(count_source("port.fetch(d)\nx = ['git']\ngit.fetch(d)\nreal.git(env)"), 0)
+                assert count_source(text) == 1
+        assert count_source("port.fetch(d)\nx = ['git']\ngit.fetch(d)\nreal.git(env)") == 0
 
     def test_what_is_left_is_only_what_cannot_go_through_the_port(self):
-        self.assertEqual(sorted(json.loads(RECORD.read_text(encoding="utf-8"))), sorted(STAYS))
+        assert sorted(json.loads(RECORD.read_text(encoding="utf-8"))) == sorted(STAYS)
 
     def test_a_new_call_fails_and_a_removed_one_asks_for_the_record_to_drop(self):
-        self.assertEqual(len(problems({"a.py": 2}, {"a.py": 1})), 1)
-        self.assertEqual(len(problems({"b.py": 1}, {})), 1)
-        self.assertEqual(len(problems({}, {"a.py": 1})), 1)
-        self.assertEqual(problems({"a.py": 1}, {"a.py": 1}), [])
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert len(problems({"a.py": 2}, {"a.py": 1})) == 1
+        assert len(problems({"b.py": 1}, {})) == 1
+        assert len(problems({}, {"a.py": 1})) == 1
+        assert problems({"a.py": 1}, {"a.py": 1}) == []

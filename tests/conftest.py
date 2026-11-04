@@ -7,6 +7,7 @@ spawns, forks or runs real git fails; a `real` test that never spawns fails. A t
 import contextlib
 import ctypes
 import importlib
+import inspect
 import os
 import pkgutil
 import resource
@@ -27,6 +28,7 @@ os.environ.pop("PYTHONDONTWRITEBYTECODE", None)
 os.environ["PYTHONPYCACHEPREFIX"] = str(PYCACHE)
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+pytest.register_assert_rewrite("support")  # the helpers of tests/support assert too: show the operands, as in a test file
 import support.paths  # noqa: E402, F401  (ROOT/src on sys.path; after the bytecode setup above)
 from support import procsim  # noqa: E402
 
@@ -108,6 +110,41 @@ def pytest_ignore_collect(collection_path, config):
         expr = (config.getoption("markexpr", "") or "").split()
         return not ("live" in expr and "not" not in expr)
     return None
+
+
+def pytest_pycollect_makeitem(collector, name, obj):
+    """A test module collects the classes it defines, never the ones it imports (a base or mixin from tests/support, a class under test)."""
+    if isinstance(collector, pytest.Module) and inspect.isclass(obj) and obj.__module__ != collector.obj.__name__:
+        return []
+    return None
+
+
+@pytest.fixture(autouse=True)
+def case_helpers(request, subtests):
+    """The unittest names the plain test classes still use: self.addCleanup (runs last-in-first-out after the test and its teardown_method),
+    self.enterContext, self.subTest (pytest's `subtests`), self._testMethodName and self.id()."""
+    case = request.instance
+    if case is None:
+        yield
+        return
+    with contextlib.ExitStack() as stack:
+        case._testMethodName = request.node.name
+        case.id = lambda: request.node.nodeid
+        case.addCleanup = stack.callback
+        case.enterContext = stack.enter_context
+
+        @contextlib.contextmanager
+        def sub_test(msg=None, **params):
+            """pytest's subtest swaps sys.stdout and sys.stderr for its own capture and puts its own back at the end: keep the test's."""
+            streams = sys.stdout, sys.stderr
+            try:
+                with subtests.test(msg, **params):
+                    sys.stdout, sys.stderr = streams
+                    yield
+            finally:
+                sys.stdout, sys.stderr = streams
+        case.subTest = sub_test
+        yield
 
 
 @pytest.fixture(autouse=True)

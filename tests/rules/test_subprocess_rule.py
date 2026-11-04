@@ -1,7 +1,8 @@
 """Only process adapters and plain-python hooks may call raw subprocess entry points."""
 import ast
-import unittest
 from pathlib import Path
+
+from support.case import Case
 
 SRC = Path(__file__).resolve().parents[2] / "src"
 HOME = {"taskloop/adapters/spawner.py", "taskloop/adapters/procs.py"}
@@ -38,7 +39,7 @@ def raw_calls(text: str) -> list[int]:
     return sorted(found)
 
 
-class SubprocessRule(unittest.TestCase):
+class SubprocessRule(Case):
     def test_raw_process_calls_stay_at_the_process_boundary(self):
         violations = []
         for path in sorted(SRC.rglob("*.py")):
@@ -46,16 +47,16 @@ class SubprocessRule(unittest.TestCase):
             if rel in HOME or rel.startswith("taskloop/hook/"):
                 continue
             violations.extend(f"{rel}:{line}" for line in raw_calls(path.read_text(encoding="utf-8")))
-        self.assertEqual(violations, [], "Use the Spawner or adapters.procs; there are no migration exceptions")
+        assert violations == [], "Use the Spawner or adapters.procs; there are no migration exceptions"
 
     def test_each_entry_point_and_import_alias_is_detected(self):
         for name in sorted(BANNED):
             with self.subTest(name=name):
-                self.assertEqual(raw_calls(f"import subprocess\nsubprocess.{name}([])"), [2])
-                self.assertEqual(raw_calls(f"import subprocess as sp\nsp.{name}([])"), [2])
-                self.assertEqual(raw_calls(f"from subprocess import {name} as launch\nlaunch([])"), [2])
-                self.assertEqual(raw_calls(f"from subprocess import *\n{name}([])"), [2])
+                assert raw_calls(f"import subprocess\nsubprocess.{name}([])") == [2]
+                assert raw_calls(f"import subprocess as sp\nsp.{name}([])") == [2]
+                assert raw_calls(f"from subprocess import {name} as launch\nlaunch([])") == [2]
+                assert raw_calls(f"from subprocess import *\n{name}([])") == [2]
 
     def test_types_exceptions_and_adapter_calls_are_allowed(self):
-        self.assertEqual(raw_calls("import subprocess\np: subprocess.Popen[bytes]\n"
-                                   "raise subprocess.TimeoutExpired([], 1)\nprocs.run([])\nspawner.run([])"), [])
+        assert raw_calls("import subprocess\np: subprocess.Popen[bytes]\n"
+                                   "raise subprocess.TimeoutExpired([], 1)\nprocs.run([])\nspawner.run([])") == []

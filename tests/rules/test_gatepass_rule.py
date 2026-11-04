@@ -2,8 +2,9 @@
 push that holds a pass holds the gate's word. pyrefly rejects a build without the seal; this test rejects a build with it."""
 import ast
 import sys
-import unittest
 from pathlib import Path
+
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -30,15 +31,15 @@ def called(path: Path, name: str) -> bool:
                for n in ast.walk(ast.parse(path.read_text(encoding="utf-8"))))
 
 
-class OnlyTheGateMints(unittest.TestCase):
+class OnlyTheGateMints(Case):
     def test_no_module_but_the_gate_names_the_makers(self):
         found = {str(f.relative_to(SRC)): named(f, MAKERS) for f in sorted(SRC.rglob("*.py")) if f != HOME and "_vendor" not in f.parts}
-        self.assertEqual({k: v for k, v in found.items() if v}, {}, "a GatePass is made by taskloop.app.land.gate only (mint, _Seal)")
+        assert {k: v for k, v in found.items() if v} == {}, "a GatePass is made by taskloop.app.land.gate only (mint, _Seal)"
 
     def test_no_module_but_the_gate_builds_a_gatepass(self):
         others = [f for f in sorted(SRC.rglob("*.py")) if f != HOME and "_vendor" not in f.parts]
         built = [str(f.relative_to(SRC)) for f in others if called(f, "GatePass")]
-        self.assertEqual(built, [])
+        assert built == []
 
     def test_the_gate_does_build_one(self):
-        self.assertTrue(called(HOME, "GatePass"))
+        assert called(HOME, "GatePass")

@@ -2,8 +2,9 @@
 ProcessLock, reached through taskloop.adapters.locks."""
 import ast
 import sys
-import unittest
 from pathlib import Path
+
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -17,7 +18,7 @@ def lock_calls(tree):
     return [n.lineno for n in ast.walk(tree) if isinstance(n, ast.Attribute) and n.attr in LOCK_CALLS]
 
 
-class OneLockPrimitive(unittest.TestCase):
+class OneLockPrimitive(Case):
     def test_no_flock_or_lockf_outside_the_vendored_packages(self):
         found = []
         for top in ("src", "skills"):
@@ -25,11 +26,7 @@ class OneLockPrimitive(unittest.TestCase):
                 if VENDOR in f.parents:
                     continue
                 found += [f"{f.relative_to(ROOT)}:{n}" for n in lock_calls(ast.parse(f.read_text(encoding="utf-8")))]
-        self.assertEqual(found, [])
+        assert found == []
 
     def test_the_scan_sees_a_planted_flock(self):
-        self.assertEqual(lock_calls(ast.parse("import fcntl\nfcntl.flock(f, 1)\n")), [2])
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert lock_calls(ast.parse("import fcntl\nfcntl.flock(f, 1)\n")) == [2]

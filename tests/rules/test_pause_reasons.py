@@ -3,10 +3,11 @@
 import ast
 import json
 import sys
-import unittest
 from collections import Counter
 from collections.abc import Mapping
 from pathlib import Path
+
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -78,22 +79,22 @@ def produced(source: str) -> set[str]:
     return found
 
 
-class Complete(unittest.TestCase):
+class Complete(Case):
     def test_all_locally_produced_reason_ids_have_a_policy(self):
         reasons: set[str] = set()
         for path in (ROOT / "src").rglob("*.py"):
             reasons.update(produced(path.read_text(encoding="utf-8")))
-        self.assertEqual(missing_policies(reasons, contract_permanences()), set())
+        assert missing_policies(reasons, contract_permanences()) == set()
 
     def test_all_recorded_delegate_contract_reasons_have_a_policy(self):
         for reason, permanence in contract_permanences().items():
             with self.subTest(reason=reason):
                 override = OVERRIDES.get(reason)
                 expected = override[0] if override is not None else permanence
-                self.assertEqual(rule(reason, "delegate", permanence).permanence, expected)
+                assert rule(reason, "delegate", permanence).permanence == expected
 
     def test_a_reason_without_any_policy_is_rejected_by_coverage(self):
-        self.assertEqual(missing_policies({"new_unclassified_reason"}, contract_permanences()), {"new_unclassified_reason"})
+        assert missing_policies({"new_unclassified_reason"}, contract_permanences()) == {"new_unclassified_reason"}
 
     def test_overrides_have_explanations_and_do_not_duplicate_table_rows(self):
         for reason, override in OVERRIDES.items():
@@ -101,16 +102,16 @@ class Complete(unittest.TestCase):
                 continue
             _, explanation = override
             with self.subTest(reason=reason):
-                self.assertTrue(explanation.strip())
-                self.assertNotIn(("delegate", reason), TABLE)
+                assert explanation.strip()
+                assert ("delegate", reason) not in TABLE
 
     def test_every_reason_has_exactly_one_policy(self):
         contract = contract_permanences()
-        self.assertEqual(missing_policies(set(Reason), contract), set())
+        assert missing_policies(set(Reason), contract) == set()
         # Overrides deliberately replace contract permanence; table rows are separate policies.
         counts = Counter(reason for _, reason in TABLE)
         counts.update({reason for reason, override in OVERRIDES.items() if override is not None} | set(contract))
-        self.assertEqual(counts, Counter(Reason))
+        assert counts == Counter(Reason)
 
     def test_table_has_no_duplicate_source_keys(self):
         source = ast.parse((ROOT / "src/taskloop/domain/lanes/pauses.py").read_text())
@@ -118,7 +119,7 @@ class Complete(unittest.TestCase):
                      and isinstance(n.target, ast.Name) and n.target.id == "TABLE")
         assert isinstance(table, ast.Dict)
         keys = [ast.dump(key) for key in table.keys if key is not None]
-        self.assertEqual(len(keys), len(set(keys)))
+        assert len(keys) == len(set(keys))
 
     def test_every_transient_pause_policy_is_capped_except_network(self):
         policies = dict(TABLE)
@@ -131,13 +132,13 @@ class Complete(unittest.TestCase):
                                        ("engine", Reason.FAULT_INFRA), ("engine", Reason.FAULT_CRASHED),
                                        ("engine", Reason.FAULT_STALE_BASE))
                     if uncapped:
-                        self.assertEqual(policy.max_attempts, 0)
+                        assert policy.max_attempts == 0
                     else:
-                        self.assertGreater(policy.max_attempts, 0)
+                        assert policy.max_attempts > 0
 
     def test_scanner_catches_new_constants_enums_and_synthesized_reasons(self):
         source = (
             'REASON_NEW: Final = "new"\nclass End(Enum):\n PAUSE_NEW = "pause_new"\n'
             'FAULT_NEW = "fault_new"\nsynth_for(c, "new_stop", facts)\ne.pause_reason = "own"\nStopFacts(reason="wire")'
         )
-        self.assertEqual(produced(source), {"new", "pause_new", "fault_new", "new_stop", "own", "wire"})
+        assert produced(source) == {"new", "pause_new", "fault_new", "new_stop", "own", "wire"}
