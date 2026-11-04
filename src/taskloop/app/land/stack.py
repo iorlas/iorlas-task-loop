@@ -56,6 +56,7 @@ class Stack:
         self.recorded = 0
         self.synced = False  # bd sync was tried
         self.last = ""  # the merge commit of the last item delivered
+        self.pending: list[rec.LandCleanup] = []
 
     def run(self, items: list[StackItem]) -> int:
         """Deliver the items in order; -> 0, or the exit code of the first failure."""
@@ -74,6 +75,9 @@ class Stack:
             if self.recorded and not self.synced:  # what landed keeps its records safe on the remote; the original exit code stays
                 with contextlib.suppress(Stop):
                     self.sync_bd()
+        finally:
+            for row in self.pending:
+                cleanup.retry(self.git, self.log, row, self.is_slot, self.slot_base)
         self.log.emit(rec.Close(outcome=Outcome.LANDED if rc == 0 else Outcome.FAILED, why_code=None if rc == 0 else WhyCode.FAILED,
                                 sha=self.last, why=why))
         return rc
@@ -217,10 +221,11 @@ class Stack:
                 self.log.note(f"PR #{old.number} is {old.state}: left as it is")
 
     def tidy(self, branch: str, head: str, sha: str) -> None:
-        """Delete the landed local branch with compare-oid, removing ad-hoc worktrees and leaving slots detached at their base.
-        The remote branch is the forge's (delete on merge); gone or not, it is not a failure."""
-        row = cleanup.record(self.log, self.repo, branch, head, sha)
-        cleanup.retry(self.git, self.log, row, self.is_slot, self.slot_base)
+        """Persist cleanup now; keep --repo alive until every item and bd sync finish.
+        Cleanup itself uses the main checkout so removing --repo cannot strand branch deletion or later retries."""
+        repo = str(Path(self.git.common_dir(self.repo)).parent)
+        row = cleanup.record(self.log, repo, branch, head, sha)
+        self.pending.append(row.replace(bead=self.log.stamp["bead"]))
 
     def sync_bd(self) -> None:
         """`bd sync --no-adopt` (pull, then push) through the store; a remote bd does not have is a quiet no-op."""

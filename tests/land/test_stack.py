@@ -96,7 +96,7 @@ class RepoGit(ScriptedGit):
     def config_get(self, d, key):
         return "git@example.com:o/r.git"
 
-    def common_dir(self, d):
+    def common_dir(self, d) -> str:
         return "/repo/.git"
 
     def dirty(self, d):
@@ -471,6 +471,96 @@ class Gated(GateCase):
 
 
 class Verb(StackCase):
+    def own_worktree(self):
+        """Remove the actual --repo directory and reject any later use of a missing cwd."""
+        main = Path(self.tmp.name) / "main"
+        main.mkdir()
+        self.git.worktrees["task/a"] = str(self.repo)
+        self.git.common_dir = lambda d: str(main / ".git")
+        self.git.checkouts = lambda d: [Checkout(path=str(main), branch="main", main=True),
+                                       *(Checkout(path=p, branch=b, main=False) for b, p in self.git.worktrees.items())]
+        remove = self.git.remove_worktree_why
+
+        def removing(repo, path):
+            self.assertTrue(Path(repo).is_dir())
+            Path(path).rmdir()
+            return remove(repo, path)
+
+        self.git.remove_worktree_why = removing
+
+        def guarded(fn):
+            def call(cwd, *args, **kw):
+                self.assertTrue(Path(cwd).is_dir(), f"{fn.__name__} used removed cwd {cwd}")
+                return fn(cwd, *args, **kw)
+            return call
+
+        for name in ("rev_parse", "common_dir", "checkouts", "fetch", "push", "ls_remote", "log", "ls_tree", "show",
+                     "delete_branch_at", "remote_url", "config_get", "is_ancestor"):
+            patch = mock.patch.object(self.git, name, side_effect=guarded(getattr(self.git, name)))
+            patch.start()
+            self.addCleanup(patch.stop)
+        run = self.sim.run
+
+        def running(argv, **kw):
+            if kw.get("cwd"):
+                self.assertTrue(Path(kw["cwd"]).is_dir())
+            return run(argv, **kw)
+
+        self.sim.run = running
+        store = self.bd("a", "b")
+
+        def sync():
+            return self.synced if self.repo.is_dir() else DoltPush(127, "cwd removed")
+
+        store.dolt_push = sync  # type: ignore[method-assign]
+        return store
+
+    def test_repo_is_the_landed_worktree_and_sync_succeeds(self):
+        store = self.own_worktree()
+        who = Identity(actor="tl-me", home=self.tmp.name, session="sess-1")
+        self.assertEqual(self.verb(["task/a"], [], who, store), 0)
+        self.assertFalse(self.repo.exists())
+        self.assertEqual(self.git.deleted, ["task/a"])
+
+    def test_repo_is_the_landed_worktree_until_sync_and_later_items_finish(self):
+        store = self.own_worktree()
+        who = Identity(actor="tl-me", home=self.tmp.name, session="sess-1")
+        self.sim.pr(5, "old", "o" * 40)
+        args = Namespace(items=["task/a", "task/b"], repo=str(self.repo), base="main", method="squash", bead=[],
+                         supersede=["task/a=5"], wait_min=None, profile_change=None)
+        with contextlib.redirect_stdout(io.StringIO()):
+            rc = cmd_land_stack(args, who, self.git, self.sim, store, ["tl"])
+        self.assertEqual(rc, 0)
+        self.assertFalse(self.repo.exists())
+        self.assertEqual(self.git.deleted, ["task/a", "task/b"])
+        self.assertEqual(self.sim.prs[5]["state"], "CLOSED")
+        (bundle,) = RunLocator(self.cfg).runs()
+        self.assertEqual(bundle.manifest.state.value, "done")
+        rows = records(bundle.log)
+        done = [row for row in rows if row["kind"] == "land_cleanup" and row["local_outcome"] == "gone"]
+        self.assertEqual([(row["branch"], row["bead"]) for row in done], [("task/a", "a"), ("task/b", "b")])
+        sync = next(i for i, row in enumerate(rows) if row.get("text") == "bd sync --no-adopt")
+        removed = next(i for i, row in enumerate(rows) if row.get("text", "").startswith("removed worktree"))
+        self.assertLess(sync, removed)
+
+    def test_repo_worktree_cleanup_after_partial_land_preserves_the_original_failure(self):
+        store = self.own_worktree()
+        self.sim.fail["gh pr merge 2"] = 9
+        who = Identity(actor="tl-me", home=self.tmp.name, session="sess-1")
+        self.assertEqual(self.verb(["task/a", "task/b"], [], who, store), 9)
+        self.assertFalse(self.repo.exists())
+        self.assertEqual(self.git.deleted, ["task/a"])
+        self.assertIn("failed (exit 9)", self.output)
+
+    def test_repo_worktree_cleanup_still_runs_after_sync_failure(self):
+        store = self.own_worktree()
+        self.synced = DoltPush(2, "conflict")
+        who = Identity(actor="tl-me", home=self.tmp.name, session="sess-1")
+        self.assertEqual(self.verb(["task/a"], [], who, store), 2)
+        self.assertFalse(self.repo.exists())
+        self.assertEqual(self.git.deleted, ["task/a"])
+        self.assertIn("bd sync failed (exit 2): conflict", self.output)
+
     def test_owner_profile_flag_lands_and_writes_one_shared_audit_row(self):
         text = 'Denis: "I approve the profile" 2026-11-02T12:00Z'
         patch = 'diff --git a/.task-loop.json b/.task-loop.json\n-old\n+new\n'
