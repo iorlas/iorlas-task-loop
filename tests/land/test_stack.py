@@ -25,6 +25,7 @@ from taskloop.app.land.cmds import Cmds
 from taskloop.app.land.forge import Forge
 from taskloop.app.land.stack import MODE, Stack
 from taskloop.app.land.stackgate import StackGate
+from taskloop.app.run.finish import answer
 from taskloop.app.track.verbs import trace
 from taskloop.app.wire import closeguard
 from taskloop.cli.land_stack import cmd_land_stack
@@ -32,16 +33,19 @@ from taskloop.contracts.bead import Bead
 from taskloop.contracts.checks import Check, CheckResult
 from taskloop.contracts.config import load
 from taskloop.contracts.env import Env
+from taskloop.contracts.finish import finish_run
 from taskloop.contracts.forge import StackItem
 from taskloop.contracts.gitfacts import LogRow, Ref, TreeEntry
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId, CheckId, TreeSha
+from taskloop.contracts.kinds import Kind
 from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.locks import LockTimeout
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import DoltPush
 from taskloop.contracts.runkey import BaseSha
 from taskloop.contracts.slots import Checkout, SlotGitError
+from taskloop.domain import outcome as oc
 from taskloop.stores.memory import fake_stores
 from taskloop.stores.real import real_stores
 from taskloop.stores.runlog import RunLog
@@ -153,7 +157,7 @@ class StackCase(unittest.TestCase):
         return self.rc_of_record
 
     def deliver(self, *items, **kw):
-        run = "land-stack-20261031-100000"
+        run = RunLocator(self.cfg).create(str(self.repo), "", 100.0, mode=MODE).run
         log = RunLog(real_stores(self.cfg).run_log(run), run_id=run, host="h")
         cmds = Cmds(self.sim, log, str(self.repo), self.cfg.run_dir(run))
         lock = landlock.land_lock_path(self.cfg, "git@example.com:o/r.git")
@@ -162,6 +166,9 @@ class StackCase(unittest.TestCase):
         stack = Stack(forge, cmds, log, self.git, str(self.repo), lock, self.record, lambda: self.synced, "tl-me", "sess-1", gate,
                       FakeBeads(actor="tl-me"), named=self.beads.append, **kw)
         self.rc = stack.run(list(items))
+        done = oc.make(Kind.LANDED if self.rc == 0 else Kind.FAULT_LAND,
+                       f"{len(items)} delivered" if self.rc == 0 else stack.failure_reason, sha=stack.last)
+        finish_run(self.cfg, run, answer(done, 200.0))
         self.rows = records(self.cfg.engine_log(run))
         return self.rc
 
@@ -185,7 +192,7 @@ class Delivery(StackCase):
         self.assertEqual((start["mode"], start["owner"], start["session"]), (MODE, "tl-me", "sess-1"))
         starts = self.kinds("cmd_start")
         self.assertGreaterEqual(len(starts), len(self.sim.calls))
-        self.assertEqual({r["run_id"] for r in self.rows}, {"land-stack-20261031-100000"})
+        self.assertEqual({r["run_id"] for r in self.rows}, {start["run_id"]})
         self.assertEqual([r["text"] for r in starts if r["text"] in self.sim.calls], self.sim.calls)
         self.assertEqual(len(starts), len(self.kinds("cmd_end")))
         self.assertEqual(self.kinds("close")[0]["outcome"], "landed")
@@ -534,7 +541,7 @@ class Verb(StackCase):
         self.assertFalse(self.repo.exists())
         self.assertEqual(self.git.deleted, ["task/a", "task/b"])
         self.assertEqual(self.sim.prs[5]["state"], "CLOSED")
-        (bundle,) = RunLocator(self.cfg).runs()
+        (bundle,) = [b for b in RunLocator(self.cfg).runs() if b.manifest.mode == MODE]
         self.assertEqual(bundle.manifest.state.value, "done")
         rows = records(bundle.log)
         done = [row for row in rows if row["kind"] == "land_cleanup" and row["local_outcome"] == "gone"]
@@ -601,7 +608,7 @@ class Verb(StackCase):
         with contextlib.redirect_stdout(io.StringIO()):
             rc = cmd_land_stack(a, who, self.git, self.sim, store, ["tl"])
         self.assertEqual(rc, 0)
-        (bundle,) = RunLocator(self.cfg).runs()
+        (bundle,) = [b for b in RunLocator(self.cfg).runs() if b.manifest.mode == MODE]
         self.assertIsNotNone(bundle.manifest.ended)
         rows = records(bundle.log)
         self.assertEqual(rows[0]["mode"], MODE)
@@ -638,7 +645,7 @@ class Verb(StackCase):
             trace(BeadId("lifesim-fvit"), 0, False, Env(vars={"XDG_CONFIG_HOME": str(root)}))
         self.assertIn("lifesim-fvit  landed", out.getvalue())
         self.assertIn("landed " + "merge293"[:12], out.getvalue())
-        (bundle,) = RunLocator(who.config).runs()
+        (bundle,) = [b for b in RunLocator(who.config).runs() if b.manifest.mode == MODE]
         self.assertEqual(bundle.manifest.bead, "lifesim-fvit")
 
     def test_after_a_pr_number_land_the_bead_closes_with_no_extra_step(self):

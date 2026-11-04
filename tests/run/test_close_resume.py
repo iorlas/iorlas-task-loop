@@ -16,9 +16,12 @@ from support.who import who
 from taskloop.app.run import ended, engine
 from taskloop.app.run.closer import Closer, closer_over
 from taskloop.app.wire import slots as wslots
+from taskloop.contracts import wire
+from taskloop.contracts.checkpoint import EndRec
 from taskloop.contracts.env import snapshot
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.kinds import Kind
+from taskloop.contracts.locator import RunLocator
 from taskloop.domain import effects as fx
 from taskloop.domain import outcome as oc
 from taskloop.domain.asks import specs as askspecs
@@ -139,7 +142,10 @@ class ColdRestart(Base):
         spec = askspecs.external_fact(["x"])
         ask = oc.make(Kind.ASK_DECISION, "needs a fact", spec=spec)
         self.assertEqual(ended.loaded(ended.stored("r", ask, None, "", []))[0], ask)
-        self.killed_at(fx.BlockBead, outcome=ask)
+        dead = self.killed_at(fx.BlockBead, outcome=ask)
+        bundle = RunLocator(dead.home).get(dead.run_id)
+        assert bundle is not None and bundle.manifest.finish is not None
+        self.assertEqual(read_ck(dead).ended, wire.load(EndRec, bundle.manifest.finish.end))
         self.cold().run()
         self.assertEqual(sum(1 for c in self.bd_calls if c[:1] == ("block",) or "blocked" in c), 1)
 

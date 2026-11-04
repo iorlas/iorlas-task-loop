@@ -11,9 +11,13 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from taskloop.adapters import locks
+from taskloop.contracts.env import Env
+from taskloop.contracts.envvars import EnvVar
+from taskloop.contracts.ids import loop_key
 from taskloop.contracts.locator import RunBundle, RunLocator
 from taskloop.contracts.paths import TASK_EXCLUDE, ConfigDir
 from taskloop.contracts.ports import Git
+from taskloop.contracts.run import RunFinish
 from taskloop.contracts.slots import git_probe
 
 
@@ -89,6 +93,23 @@ def repo_of(git: Git, wt: str | Path) -> str:
     """The repo's path as asks and decisions name it: the parent of the git common dir (the worktree when git cannot say)."""
     common = git_probe(lambda: git.common_dir(str(wt)), "")
     return str(Path(common).parent) if common else str(wt)
+
+
+def live_run(home: ConfigDir, run: str) -> str | None:
+    """Only an unfinished run can continue; a terminal network pause starts a new run of the same checkpoint."""
+    bundle = RunLocator(home).get(run)
+    return run if bundle is None or bundle.manifest.state.live else None
+
+
+def loop_of(env: Env, git: Git, wt: str) -> str | None:
+    """The loop key of the repo a loop-started run belongs to; a run started by hand has none."""
+    return loop_key(repo_of(git, wt)) if env.get(EnvVar.TASK_LOOP_LOOP_PID) else None
+
+
+def finish_of(home: ConfigDir, run: str) -> RunFinish | None:
+    """The run's recorded terminal answer, once there is one."""
+    bundle = RunLocator(home).get(run)
+    return bundle.manifest.finish if bundle else None
 
 
 @dataclass(frozen=True)

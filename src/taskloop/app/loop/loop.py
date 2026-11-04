@@ -29,6 +29,7 @@ from taskloop.contracts import runlife, wire
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.config import ConfigError
 from taskloop.contracts.ids import BeadId
+from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.loop import LoopState, LoopWait, QueueRow
 from taskloop.contracts.parks import ParkStore
 from taskloop.contracts.ports import BdFailure
@@ -385,10 +386,15 @@ class Loop(Core):
 
     def record(self, bead: str, slot: str, v: vd.Verdict) -> None:
         env = self.env
-        self.files.log_line(LoopLogLine(
-            t=env.now(), bead=bead, host=socket.gethostname(), slot=slot, outcome=v.outcome,
-            minutes=v.minutes or 0.0, rounds=v.rounds or 0, tests_added=v.tests_added or 0, asked=v.asked, run_id=v.run or "",
-            engine_log=v.log or "", run_log=v.run_log, why=v.why[:300]))
+        bundle = RunLocator(env.cfgdir).get(v.run) if v.run else None
+        finish = bundle.manifest.finish if bundle else None
+        if finish is not None:
+            v = v.with_(outcome=finish.result, kind=finish.kind, why=finish.why)
+        if bundle is None or finish is None or bundle.manifest.loop != self.files.key:
+            self.files.log_line(LoopLogLine(
+                t=finish.ended if finish else env.now(), bead=bead, host=socket.gethostname(), slot=slot, outcome=v.outcome,
+                minutes=v.minutes or 0.0, rounds=v.rounds or 0, tests_added=v.tests_added or 0, asked=v.asked, run_id=v.run or "",
+                engine_log=v.log or "", run_log=v.run_log, why=v.why[:300], sha=finish.sha if finish else ""))
         self.say(f"{bead} {v.outcome}{': ' + v.why[:160] if v.why else ''}")
 
     def maybe_move(self) -> None:

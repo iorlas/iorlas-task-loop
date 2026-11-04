@@ -11,14 +11,17 @@ from typing import Final
 from taskloop.app.track import verbs
 from taskloop.app.track.verbs import Guard
 from taskloop.app.wire import slots as wslots
-from taskloop.contracts.enums import Outcome
+from taskloop.contracts.enums import Outcome, Result
+from taskloop.contracts.finish import finish_run
+from taskloop.contracts.finish_projection import history
 from taskloop.contracts.identity import Identity
-from taskloop.contracts.ids import BeadId, RunId
+from taskloop.contracts.ids import BeadId
+from taskloop.contracts.kinds import Kind
 from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.ports import BdFailure, Beads, Git
+from taskloop.contracts.run import RunFinish, RunState
 from taskloop.contracts.slots import git_probe
 from taskloop.contracts.stores import TraceStore
-from taskloop.contracts.trace import RunTrace
 
 ENGINE: Final[Guard] = lambda bead, reason: ""  # noqa: E731  the engine's own close: its run is the record
 GATED: Final = ("task", "feature", "bug")
@@ -48,16 +51,20 @@ def has_work(who: Identity, git: Git, repo: str, bead: BeadId) -> bool:
     return bool(git.for_each_ref(repo, f"refs/heads/{TASK}{bead}", f"refs/remotes/origin/{TASK}{bead}"))
 
 
-def record_land(who: Identity, store: Beads, git: Git, repo: str, base: str, bead: BeadId, sha: str, why: str) -> int:
+def record_land(who: Identity, store: Beads, git: Git, repo: str, base: str, bead: BeadId, sha: str, why: str,
+                *, run: str = "") -> int:
     """`tl land`'s record (event and provenance, the sha only when it is on `base`), then the LANDED row of traces.jsonl."""
     rc = verbs.land(who, bead, sha, store, git, repo, base)
     if rc == 0:
         full = git.rev_parse(repo, sha + "^{commit}") or sha
         now = time.time()
-        TraceStore(who.config).append(RunTrace(
-            run=RunId.new(now), bead=bead, repo_url=git_probe(lambda: git.remote_url(repo, "origin"), "") or repo,
-            worktree=repo, branch="",
-            coordinator_session=who.session, started=now, ended=now, outcome=Outcome.LANDED, why=why, sha=full, repo_path=repo))
+        run = run or RunLocator(who.config).create(repo, bead, now, mode="stage:land",
+                                                  owner=who.actor, session=who.session).run
+        url = git_probe(lambda: git.remote_url(repo, "origin"), "") or repo
+        done = RunFinish(state=RunState.DONE, ended=now, outcome=Outcome.LANDED, result=Result.LANDED,
+                         kind=Kind.LANDED.value, why=why, sha=full)
+        finish_run(who.config, run, done,
+                   lambda m, r: history(who.config, m, r, repo_url=url))
     return rc
 
 

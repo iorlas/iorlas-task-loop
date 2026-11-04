@@ -16,9 +16,10 @@ from taskloop.contracts.events import Event, EventRec
 from taskloop.contracts.guard import guard
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId
+from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdFailure, Beads
-from taskloop.contracts.stores import ReposStore
+from taskloop.contracts.stores import EventLog, ReposStore
 
 SOURCE: Final = "task-loop"
 RETAIN_DAYS: Final = 7
@@ -31,11 +32,21 @@ def now() -> float:
 def event(by: Identity, kind: str, bead: str = "", **fields: Any) -> Event:
     """The one writer of events.jsonl (the dashboard's fast local index): a line is the typed Event record of `kind` (a name of
     contracts/events.py) with its fields, `v` first. A kind or field the contract does not name is refused here, never written."""
+    if kind == "stage" and fields.get("step") == "close":
+        bundle = RunLocator(by.config).get(str(fields.get("run_id") or ""))
+        finished = bundle.manifest.finish if bundle else None
+        if finished is not None:
+            fields.update(t=finished.ended, sha=finished.sha, text=f"close: {finished.outcome}")
     head = {"t": now(), "kind": kind, "bead": bead, "session": by.session, "actor": by.actor,
             "repo": fields.pop("repo", None) or repo_root(), "host": socket.gethostname()}
     rec = events.decode({"v": EventRec.V, **head, **{k: v for k, v in fields.items() if v is not None}})
     cfg = by.config
     with guard(events_lock(cfg)):  # prune_events rewrites the file under this lock
+        if kind == "stage" and rec.step == "close" and rec.run_id:
+            existing = next((i.rec for i in EventLog(cfg).read_from().items
+                             if i.rec.run_id == rec.run_id and i.rec.step == "close"), None)
+            if existing is not None:
+                return existing
         applog.append(cfg.events(), json.dumps(wire.dump(rec), ensure_ascii=False) + "\n")  # tl-64i: one held handle per process
     register_repo(rec.repo, cfg)
     return rec

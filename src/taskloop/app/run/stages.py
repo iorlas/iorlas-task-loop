@@ -5,9 +5,10 @@ from typing import TYPE_CHECKING
 
 from taskloop.adapters import beadtools
 from taskloop.app.land.gate import Problem
+from taskloop.app.run.closer_record import RecordRun
 from taskloop.app.run.crash import parked_crash
+from taskloop.app.run.finish import terminal_state
 from taskloop.app.run.layout import repo_of
-from taskloop.app.run.records import terminal_state
 from taskloop.app.run.run_once import RunOnce
 from taskloop.app.run.stage_run import stage_run
 from taskloop.app.slots.lease import Lease
@@ -16,7 +17,6 @@ from taskloop.app.wire.closeguard import guard_for, has_land
 from taskloop.app.write.prepare import PREPARED, Prepare
 from taskloop.app.write.state import ACCEPT, REPLAN, StageState
 from taskloop.contracts import fence, wire
-from taskloop.contracts import log as rec
 from taskloop.contracts.answers import WriteAnswerLook
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.checkpoint import Checkpoint, StageProgress
@@ -180,10 +180,7 @@ def record_stage(e: Engine) -> None:
         e.closer.pause(done)
         if done.kind is Kind.NOOP and not e.dry:
             e.closer.apply(effects.RaiseAsk(), done, "")
-    outcome = done.word
-    retry_at = ParkStore(e.home).retry_at(e.bead, e.run_id)
-    e.log.emit(rec.Close(outcome=outcome, why=e.why, sha=e.landed_sha, retry_at=retry_at))
-    e.records.file_trace(outcome, e.why, e.landed_sha)
+    e.records.finish(done, record=RecordRun(e).stage)
 
 
 def restore(e: Engine, ck: Checkpoint | None, step: Step, requested: str | None) -> tuple[Step, Checkpoint | None]:

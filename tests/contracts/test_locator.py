@@ -78,11 +78,11 @@ class Locator(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.where.end(a.run, T0 + 9, RunState.RUNNING)
 
-    def test_taking_a_run_up_makes_it_live_again(self):
+    def test_taking_a_terminal_run_up_preserves_the_first_answer(self):
         a = self.where.create("/r/x", "tl-1", T0)
         self.where.end(a.run, T0 + 9, RunState.STOPPED)
         again = self.where.take_up(a.run, "/r/x", "tl-1", T0 + 10).manifest
-        self.assertEqual((again.state, again.ended, again.reason), (RunState.CREATED, None, ""))
+        self.assertEqual((again.state, again.ended, again.reason), (RunState.STOPPED, T0 + 9, ""))
 
     def test_terminal_reason_preserves_long_diagnostics_and_evidence_paths(self):
         run = self.where.create("/r/x", "tl-1", T0)

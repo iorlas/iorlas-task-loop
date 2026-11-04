@@ -1,15 +1,16 @@
 """The run's log and trace at the close: the close node, the reflection, the owner's question."""
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import Protocol
 
 from taskloop.app.run import outcomes
-from taskloop.app.run import trace as runtrace
+from taskloop.app.run.finish import outcome as finished_outcome
 from taskloop.app.run.steps import Open
 from taskloop.contracts import log as rec
 from taskloop.contracts.enums import Outcome
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.parks import ParkStore
 from taskloop.contracts.paths import ConfigDir
+from taskloop.contracts.run import RunFinish
 from taskloop.domain import outcome as oc
 from taskloop.stores.runlog import RunLog
 
@@ -30,8 +31,10 @@ class RecordSteps(Protocol):
 
 
 class RecordRecords(Protocol):
+    def finish(self, done: oc.RunOutcome, stats: str = "",
+               record: Callable[[RunFinish, str], None] | None = None) -> oc.RunOutcome: ...
     def log_run(self) -> None: ...
-    def file_trace(self, outcome: Outcome, why: str, sha: str) -> None: ...
+    def file_trace(self, record: RunFinish) -> None: ...
 
 
 class RecordReflector(Protocol):
@@ -65,10 +68,14 @@ class RecordRun:
     def __init__(self, host: RecordHost) -> None:
         self.e = host
 
-    def run(self, done: oc.RunOutcome, stats: str) -> None:
+    def run(self, record: RunFinish, stats: str) -> None:
         """The run's log and trace: the close node, the reflection, the owner's question."""
         e = self.e
-        outcome, why, sha, spec, kind = done.word, done.detail, done.sha, done.spec, done.kind
+        if self.closed():
+            e.records.file_trace(record)
+            return
+        done = finished_outcome(record)
+        outcome, why, spec, kind = done.word, done.detail, done.spec, done.kind
         e.records.log_run()
         last = e.steps.cur or e.steps.last
         if last and (e.steps.moved_from != last.n or e.steps.moved_to not in ("ask", "pause", "close")):
@@ -76,13 +83,26 @@ class RecordRun:
             e.steps.move(to, cause, why.splitlines()[0][:200] if why else outcome)
         e.steps.end(outcomes.node_outcome(outcome, kind))
         e.steps.begin("close", f"close: {outcome}")
-        code = runtrace.why_code(kind.value, outcome)
-        retry_at = ParkStore(e.home).retry_at(e.bead, e.run_id)
-        e.log.emit(rec.Close(outcome=Outcome(outcome), why_code=code, sha=sha or "", why=why[:500], retry_at=retry_at))
+        self.close(record)
         e.steps.outcome(outcome, why.splitlines()[0][:200] if why else "")
         e.steps.end()
         e.reflection = e.reflector.reflect_run(outcome, why)  # after the close node: the outcome is decided and nothing here changes it
-        e.records.file_trace(outcome, why, sha)
+        e.records.file_trace(record)
         e.detail([stats] + ([why[:400]] if why else []) + (["question: " + spec.decision[:400]] if spec else []))
         if outcome is Outcome.FAILED:
             e.warn(f"task failed: {why.splitlines()[0][:200]}")
+
+    def close(self, record: RunFinish) -> None:
+        if self.closed():
+            return
+        retry_at = ParkStore(self.e.home).retry_at(self.e.bead, self.e.run_id)
+        self.e.log.emit(rec.Close(t=record.ended, outcome=record.outcome, why_code=record.why_code, sha=record.sha,
+                                  why=record.why[:500], retry_at=retry_at))
+
+    def closed(self) -> bool:
+        return any(isinstance(i.rec, rec.Close) for i in self.e.log.log.read_from(0).items)
+
+    def stage(self, record: RunFinish, stats: str) -> None:
+        """A standalone stage keeps its simple Close and trace; it does not run the whole engine's reflection."""
+        self.close(record)
+        self.e.records.file_trace(record)

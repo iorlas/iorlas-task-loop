@@ -12,14 +12,16 @@ from taskloop.app.release import reexec
 from taskloop.app.run import ended as stored_end
 from taskloop.app.run import requests
 from taskloop.app.run.crash import parked_crash
-from taskloop.app.run.records import terminal_state
+from taskloop.app.run.finish import outcome as finished_outcome
+from taskloop.app.run.finish import terminal_state
 from taskloop.app.run.reload import Exec
 from taskloop.app.slots.lease import Lease
 from taskloop.contracts import fence
 from taskloop.contracts.enums import AskClass, Step
 from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.kinds import Kind
-from taskloop.contracts.log import Beat, Close
+from taskloop.contracts.locator import RunLocator
+from taskloop.contracts.log import Beat
 from taskloop.contracts.plancheck import PlanData, RoundState
 from taskloop.contracts.run import RunState
 from taskloop.domain import outcome as oc
@@ -235,14 +237,21 @@ class RunOnce:
         except self.e.Blocked:
             raise
         except Exception as err:
-            e = self.e
+            self.failed_close(err, end)
+        finally:
+            self.settle(end)
+
+    def failed_close(self, err: Exception, end: Ended) -> None:
+        e = self.e
+        bundle = RunLocator(e.home).get(e.run_id)
+        if bundle is not None and bundle.manifest.finish is not None:
+            e.warn("close failed after the run's answer was recorded; keeping it\n" + "".join(traceback.format_exception(err)))
+            end.outcome = e.records.finish(finished_outcome(bundle.manifest.finish))
+        else:
             end.outcome = parked_crash(e, Step.CLOSE, err)
             e.closer.pause(end.outcome)
             e.steps.end()
-            e.log.emit(Close(outcome=end.outcome.word, why=e.why, retry_at=e.retry_after))
-            e.records.file_trace(end.outcome.word, e.why, e.landed_sha)
-        finally:
-            self.settle(end)
+            end.outcome = e.records.finish(end.outcome)
 
     def settle(self, end: Ended) -> None:
         e = self.e
@@ -275,3 +284,6 @@ class RunOnce:
                 e.reload.save_net_pause()
             e.why = end.outcome.detail
             e.closer.close(end.outcome)
+            bundle = RunLocator(e.home).get(e.run_id)
+            if bundle is not None and bundle.manifest.finish is not None:
+                end.outcome = finished_outcome(bundle.manifest.finish)

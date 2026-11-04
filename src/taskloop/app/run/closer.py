@@ -21,6 +21,7 @@ from taskloop.contracts.checkpoint import Checkpoint, Notes
 from taskloop.contracts.enums import Outcome
 from taskloop.contracts.kinds import ASKS, Kind
 from taskloop.contracts.parks import Park
+from taskloop.contracts.run import RunFinish
 from taskloop.domain import effects
 from taskloop.domain import outcome as oc
 from taskloop.domain.asks import specs as askspecs
@@ -41,7 +42,7 @@ class SlotStep(Protocol):
 
 
 class RecordStep(Protocol):
-    def run(self, done: oc.RunOutcome, stats: str) -> None: ...
+    def run(self, record: RunFinish, stats: str) -> None: ...
 
 
 class NotesStep(Protocol):
@@ -111,9 +112,6 @@ class Closer:
         if e.disp and e.disp.escalated and spec is None:
             spec = askspecs.repeated_fault(oc.KNOBS["fault_retries"], why.splitlines()[0][:200])
         done = oc.make(kind, why, sha=ended.sha, spec=spec if kind in ASKS else None)  # the final outcome: its word is the trace's
-        if not e.dry:
-            # before the first effect: a restart rebuilds the plan from it
-            e.checkpoints.keep_end(stored_end.stored(e.run_id, done, e.disp, e.fp, e.leftovers))
         self.finish(done)
 
     def resume(self, ck: Checkpoint) -> None:
@@ -133,6 +131,8 @@ class Closer:
             done = oc.make(done.kind, e.why)
         counts = "; ".join(f"{k}={v}" for k, v in e.stats.items())
         stats = f"cost=${e.cost:.2f}; minutes={int((time.time() - e.t0) / 60)}; {counts}"
+        if not e.dry:
+            done = e.records.finish(done, stats, self.recording.run)
         branch = e.git.branch(e.wt)
         plan = effects.plan_close(done, dry=e.dry, branch=branch, slot_gen=e.claim.slot_gen)
         interpret(e.bead, e.run_id, plan, CheckpointLedger(e.checkpoints), lambda eff: self.apply(eff, done, stats))
@@ -181,7 +181,7 @@ class Closer:
             case effects.SaveBranch():
                 self.branch.run(outcome, why)
             case effects.RecordRun():
-                self.recording.run(done, stats)
+                pass  # finish_run already projected the winning answer; retain the effect key for checkpoint resumes
             case effects.NoteDry():
                 e.log.note(f"dry run: bead left as it was. {stats}")
             case effects.NoteWait():  # asked already: the bead stays as the ask left it

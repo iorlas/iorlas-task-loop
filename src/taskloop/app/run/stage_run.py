@@ -6,10 +6,11 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 
 from taskloop.contracts import log as rec
-from taskloop.contracts.enums import Outcome
+from taskloop.contracts.finish import finish_run, previous_finish
+from taskloop.contracts.finish_projection import history
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.locator import RunBundle, RunLocator, host_name
-from taskloop.contracts.run import RunState
+from taskloop.contracts.run import RunFinish, RunManifest, RunState
 from taskloop.contracts.runlife import BEAT_EVERY
 from taskloop.stores.bundle import Stores
 from taskloop.stores.real import real_stores
@@ -62,9 +63,6 @@ def stage_run(who: Identity, repo: str, mode: str, *, bundle: RunBundle | None =
             raise
         else:
             rc, reason = stage.rc, stage.reason or ("" if stage.rc == 0 else f"exit {stage.rc}")
-        finally:
-            if events:
-                log.emit(rec.Close(outcome=Outcome.DONE if rc == 0 else Outcome.FAILED, why=reason))
     except BaseException:
         rc = 1
         raise
@@ -74,4 +72,15 @@ def stage_run(who: Identity, repo: str, mode: str, *, bundle: RunBundle | None =
             helper.join()
         if stage is None or not stage.continued:
             terminal = stage.terminal if stage is not None else None
-            locator.end(bundle.run, time.time(), terminal or (RunState.DONE if rc == 0 else RunState.FAILED), reason)
+            state = terminal or (RunState.DONE if rc == 0 else RunState.FAILED)
+            candidate = previous_finish(bundle.manifest.replace(state=state, ended=time.time(), reason=reason, finish=None))
+            finished_stage = stage
+
+            def project(m: RunManifest, r: RunFinish) -> None:
+                if finished_stage is None:
+                    history(who.config, m, r, with_trace=False, index=False)
+                else:
+                    history(who.config, m, r, emit=finished_stage.log.emit,
+                            append_trace=finished_stage.stores.traces.append, with_trace=False, index=False)
+
+            finish_run(who.config, bundle.run, candidate, project)

@@ -66,6 +66,7 @@ class BeadRun:
         cmd = env.run_task_argv(b.id, at.wt, at.slot, str(out), code)
         t0 = env.now()
         extra = {"TASK_LOOP_SLOT_BEAD": at.slot_bead or "", "TASK_LOOP_LOOP_PID": str(os.getpid()),  # run-task's parent is uv, not us
+                 EnvVar.TASK_LOOP_RUN_LOG.value: str(log_path), EnvVar.TASK_LOOP_SLOT.value: at.slot,
                  **({EnvVar.TL_REEXEC.value: handover.text()} if handover else {})}
         with open(log_path, "ab") as log:  # append: a rerun of the same stem never cuts a log another reader follows
             child, hold = env.spawn(cmd, log, extra)

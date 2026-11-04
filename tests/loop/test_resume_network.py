@@ -1,6 +1,6 @@
 """R21 (tl-7y6.2.13, tl-7y6.2.15, tl-kyy): a network drop is not a failure. Every workflow step goes on in the same thread after the
 network is back (no finished output rerun, no counter charged, no lane marked), the land detects a push that already went through,
-a network pause keeps its run id, cost and time budget, and a paused bead wakes when its role is usable, not at a clock."""
+a network pause keeps its work, cost and time budget, and a paused bead wakes when its role is usable, not at a clock."""
 
 import json
 import sys
@@ -28,6 +28,7 @@ from taskloop.app.loop.gate import GateRole
 from taskloop.app.release import reexec
 from taskloop.contracts.config import LoopConfig
 from taskloop.contracts.kinds import Kind
+from taskloop.contracts.locator import RunLocator
 from taskloop.domain.lanes import netgate
 from taskloop.stores import call_state as callstate
 
@@ -224,7 +225,7 @@ class Checks(NetBase):
 
 
 class Pause(NetBase):
-    """A network pause is not a stop of the bead: the next run is the same run, with the same cost and the same time budget."""
+    """A network pause keeps the bead's work and budget; a new run preserves the paused run's immutable answer."""
 
     def pause_in_review(self, probe=None, **kw):
         answers = {"plan": [PLAN], "write": [WRITE], "review": [drop("net-review")] * 40}
@@ -232,7 +233,7 @@ class Pause(NetBase):
         self.assertEqual(rc, 2)
         return s
 
-    def test_the_run_that_goes_on_has_the_same_run_id_the_cost_and_no_pause_time_in_its_budget(self):
+    def test_continuing_uses_a_new_run_id_but_keeps_cost_and_excludes_pause_time_from_its_budget(self):
         self.pause_in_review()
         first = self.eng
         r = first.result()
@@ -248,7 +249,13 @@ class Pause(NetBase):
             rc, s = self.run_engine({"review": [CLEAN]}, probe=Cycling(0))
             second = self.eng
             self.assertEqual(rc, 0, self.blocked)
-            self.assertEqual(second.log_path.stem, run)  # the same run
+            self.assertNotEqual(second.log_path.stem, run)
+            before = RunLocator(first.home).get(run)
+            after = RunLocator(second.home).get(second.run_id)
+            assert before is not None and after is not None
+            assert before.manifest.finish is not None and after.manifest.finish is not None
+            self.assertEqual(before.manifest.finish.kind, Kind.PAUSE_NETWORK.value)
+            self.assertEqual(after.manifest.finish.kind, Kind.LANDED.value)
             self.assertGreaterEqual(second.cost, cost)  # its cost goes on
             self.assertLess(second.budget.spent_min(), 30)  # the two hours of pause are not charged to the time budget
         self.assertEqual(s.nodes, ["review"])

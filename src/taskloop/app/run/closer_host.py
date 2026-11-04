@@ -9,7 +9,7 @@ from typing import Protocol
 from taskloop.app.run.closer_branch import BranchCheckpoints, BranchTree, LeaveTree, ReleaseSlotHost, SaveBranchHost
 from taskloop.app.run.closer_decide import DecideHost
 from taskloop.app.run.closer_notes import FileNotesHost, NotesCheckpoints, ReflectCheckpoints, ReflectHost
-from taskloop.app.run.closer_record import RecordHost
+from taskloop.app.run.closer_record import RecordHost, RecordRecords
 from taskloop.app.run.closer_settle import SettleHost
 from taskloop.contracts import fence
 from taskloop.contracts.checkpoint import Checkpoint, EndRec
@@ -78,6 +78,8 @@ class CloseHost(Protocol):
     def run_id(self) -> str: ...
     @property
     def checkpoints(self) -> CloseCheckpoints: ...
+    @property
+    def records(self) -> RecordRecords: ...
     @property
     def ask_flow(self) -> CloseAskFlow: ...
     @property

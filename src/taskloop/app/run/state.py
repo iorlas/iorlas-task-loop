@@ -176,7 +176,7 @@ class Checkpoints:
     def keep_end(self, end: EndRec) -> None:
         """The close's outcome goes into the record before its first effect: a restart finishes the close from it. No record, none kept."""
         with contextlib.suppress(fence.Fenced):
-            self.amend(lambda ck: ck.replace(ended=end))
+            self.amend(lambda ck: ck if ck.ended is not None and ck.ended.run == end.run else ck.replace(ended=end))
 
     def keep_notes(self, notes: Notes) -> None:
         """What FileNotes filed and what bd refused, so the Reflect comment says the same after a restart."""

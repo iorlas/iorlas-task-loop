@@ -1,6 +1,7 @@
 """A run that goes on in another process: the counters kept across a network pause or an exec into a newer install, and the exec at a
 step boundary."""
 import os
+import shutil
 import sys
 import time
 import traceback
@@ -55,9 +56,15 @@ class Reload:
         e.write_rounds = list(c.write_rounds)
         e.steps.n = c.node_n
 
+    def carry_done_memo(self, paused: Path) -> None:
+        """The answers the paused run already took go on under this run's id: no finished call is asked again."""
+        memo = RunFiles(paused).done_memo()
+        if memo.is_file():
+            shutil.copyfile(memo, RunFiles(self.e.run_dir).done_memo())
+
     def save_net_pause(self) -> None:
-        """The run paused for the network: its counters and a pointer for the next run-task of this bead, which takes the same
-        run id, cost and time budget up again (the pause itself is neither spent nor waited)."""
+        """The run paused for the network: keep its counters for the next run of this bead. Its terminal answer stays immutable;
+        the new run keeps the cost and time budget (the pause itself is neither spent nor waited)."""
         e = self.e
         try:
             JsonStore(RunFiles(e.run_dir).pause(), RunCounters).write(self.counters())

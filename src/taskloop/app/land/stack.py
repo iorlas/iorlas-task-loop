@@ -17,7 +17,6 @@ from taskloop.app.land.forge import Forge
 from taskloop.app.land.profile_change import diff_sha
 from taskloop.app.land.stackgate import StackGate
 from taskloop.contracts import log as rec
-from taskloop.contracts.enums import Outcome, WhyCode
 from taskloop.contracts.forge import CLOSED, MERGED, OPEN, Pr, StackItem
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.paths import ConfigDir
@@ -62,24 +61,22 @@ class Stack:
         """Deliver the items in order; -> 0, or the exit code of the first failure."""
         self.log.emit(rec.RunStart(worktree=self.repo, mode=MODE, owner=self.owner, session=self.session,
                                    started_because="first"))
-        rc, why = 0, f"{len(items)} delivered"
+        rc = 0
         try:
             self.validate_beads(items)
             for item in items:
                 self.item(item)
             self.sync_bd()
         except Stop as stop:
-            rc, why = stop.rc, stop.why
-            self.failure_reason = why
-            self.log.warn(why)
+            rc = stop.rc
+            self.failure_reason = stop.why
+            self.log.warn(stop.why)
             if self.recorded and not self.synced:  # what landed keeps its records safe on the remote; the original exit code stays
                 with contextlib.suppress(Stop):
                     self.sync_bd()
         finally:
             for row in self.pending:
                 cleanup.retry(self.git, self.log, row, self.is_slot, self.slot_base)
-        self.log.emit(rec.Close(outcome=Outcome.LANDED if rc == 0 else Outcome.FAILED, why_code=None if rc == 0 else WhyCode.FAILED,
-                                sha=self.last, why=why))
         return rc
 
     def validate_beads(self, items: list[StackItem]) -> None:

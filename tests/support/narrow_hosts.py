@@ -39,6 +39,7 @@ from taskloop.contracts.ids import BeadId, TreeSha
 from taskloop.contracts.kinds import Kind
 from taskloop.contracts.plancheck import PlanCheck, PlanData, StageData
 from taskloop.contracts.ports import Beads, Clock, DoltPush, Git
+from taskloop.contracts.run import RunFinish
 from taskloop.domain import outcome as oc
 from taskloop.domain.asks.spec import AskSpec
 from taskloop.domain.lanes.pause_reasons import Producer
@@ -681,6 +682,18 @@ class Asks:
         return None
 
 
+class CloseRecords:
+    def finish(self, done: oc.RunOutcome, stats: str = "",
+               record: Callable[[RunFinish, str], None] | None = None) -> oc.RunOutcome:
+        return done
+
+    def log_run(self) -> None:
+        pass
+
+    def file_trace(self, record: RunFinish) -> None:
+        pass
+
+
 class FakeCloseHost(Said):
     """CloseHost: the Closer's own flow, over an in-memory log. `dry` keeps the checkpoint out of it."""
 
@@ -701,6 +714,7 @@ class FakeCloseHost(Said):
         self.claim = fence.offline(BeadId("t-1"))
         self.run_id = "t-1-r1"
         self.checkpoints = CloseKeys()
+        self.records = CloseRecords()
         self.ask_flow = Asks()
         self.cost = 0.0
         self.t0 = 0.0
@@ -758,7 +772,7 @@ class SpySlot:
 
 
 class SpyRecord:
-    def run(self, done: oc.RunOutcome, stats: str) -> None:
+    def run(self, record: RunFinish, stats: str) -> None:
         pass
 
 

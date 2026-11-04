@@ -37,8 +37,8 @@ class FailureLogging(unittest.TestCase):
         for error in (OSError("disk"), ValueError("record")):
             with self.subTest(error=type(error).__name__):
                 host = mock.Mock(run_id="r1")
-                with mock.patch("taskloop.app.run.records.RunLocator") as locator:
-                    locator.return_value.end.side_effect = error
+                with mock.patch("taskloop.app.run.records.RunLocator"), \
+                        mock.patch("taskloop.app.run.records.finish_run", side_effect=error):
                     Records(host).settle(RunState.PARKED, "paused")
                 self.assert_traceback(host.warn.call_args.args[0], "could not settle run r1")
 

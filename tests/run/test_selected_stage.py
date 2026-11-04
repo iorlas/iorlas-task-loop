@@ -12,6 +12,8 @@ from support.tlmain import tl_main
 
 from taskloop.app.land.gate import Gate, Problem, ProblemKind
 from taskloop.app.run.blocked import Blocked
+from taskloop.app.run.closer_record import RecordRun
+from taskloop.app.run.finish import answer
 from taskloop.app.run.stages import parse_step, round_step, run_stages
 from taskloop.app.run.steps import Steps
 from taskloop.app.write.state import ACCEPT, StageState
@@ -20,6 +22,7 @@ from taskloop.contracts.bead import Bead
 from taskloop.contracts.checkpoint import Checkpoint
 from taskloop.contracts.checks import CheckRun
 from taskloop.contracts.enums import Step
+from taskloop.contracts.finish import finish_run
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.kinds import Kind
@@ -232,6 +235,13 @@ class SelectedStage(unittest.TestCase):
             )
 
         e.closer.pause.side_effect = pause
+
+        def finish(done, stats="", record=None):
+            record = record or RecordRun(e).stage  # the engine's real writer, over this test's stand-in engine
+            finish_run(e.home, e.run_id, answer(done, 200.0), lambda m, r: record(r, stats))
+            return done
+
+        e.records.finish.side_effect = finish
         rc, manifest = self.invoke("gate")
         self.assertEqual((rc, manifest.state), (1, RunState.STOPPED))
         closes = [row.rec for row in e.stores.run_log(e.run_id).read_from(0).items if isinstance(row.rec, rec.Close)]

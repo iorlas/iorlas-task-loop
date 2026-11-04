@@ -45,7 +45,7 @@ from taskloop.app.run.console import say
 from taskloop.app.run.context import RunContext
 from taskloop.app.run.delegation import Delegation
 from taskloop.app.run.fields import RunFields
-from taskloop.app.run.layout import RunLayout, repo_of
+from taskloop.app.run.layout import RunLayout, finish_of, live_run, loop_of, repo_of
 from taskloop.app.run.records import Records
 from taskloop.app.run.reflect import Reflector
 from taskloop.app.run.reload import Reload
@@ -149,16 +149,17 @@ class Engine(RunFields):
         self.reexec: Reexec | None = reexec.take_reexec(env)  # this run-task came from an exec into a newer install, or a fallback
         if self.reexec and self.reexec.bead != bead:
             self.reexec = None
-        # a run paused for the network: its run id and counters go on
+        # a network pause continues its work and budget under a new run id; the old answer remains terminal
         pause = None if self.reexec else reexec.take_net_pause(self.home, bead)
         self.stores = stores or real_stores(self.home)
         # a run that died inside its close: its id goes on (the keys of the effects it applied are under it)
         ck = None if dry_run or self.reexec or pause else self.checkpoints.read()
         self.dead = ck if ended.unfinished(ck) else None
-        # the same run id: log, run dir and trace go on
+        # exec and an unfinished close retain their run id; a completed network pause retains only its counters
         dead_run = self.dead.ended.run if self.dead and self.dead.ended else None
-        taken = (self.reexec.run if self.reexec else None) or (pause.run if pause else None) or dead_run
+        taken = (self.reexec.run if self.reexec else None) or (live_run(self.home, pause.run) if pause else None) or dead_run
         layout = RunLayout.open(bead, wt, taken, self.home, repo_of(self.git, wt), self.clock.now(),
+                                loop=loop_of(self.env, self.git, wt),
                                 mode=mode, owner=who.actor, session=who.session)
         self.log_path, self.err_path, self.run_dir, self.live_dir = layout.log_path, layout.err_path, layout.run_dir, layout.live_dir
         self.run_id = layout.run  # the run's id: TL_RUN_ID in its checks, run_id in its rows
@@ -179,8 +180,9 @@ class Engine(RunFields):
         if self.reexec:
             self.reload.restore_run(RunFiles(self.run_dir).reexec())
         elif pause:
-            self.reload.restore_run(RunFiles(self.run_dir).pause())
-            self.log.note(f"back from a network pause: run {stem} goes on")
+            self.reload.restore_run(RunFiles(self.home.run_dir(pause.run)).pause())
+            self.reload.carry_done_memo(self.home.run_dir(pause.run))
+            self.log.note(f"back from the network pause of {pause.run}: continuing as run {stem}")
 
     # the budget's numbers, read and set as the engine's own (waited: seconds spent waiting for a shared resource, not budget_min's)
     t0, waited, labels, cost = (property(lambda obj, k=k: getattr(obj.budget, k), lambda obj, v, k=k: setattr(obj.budget, k, v))
@@ -345,7 +347,8 @@ class Engine(RunFields):
         return time.time()  # looked up at each call: a test sets the wall clock
 
     def on_step(self, text: str) -> None:
-        trail.event(self.who, "stage", self.bead, text=text, run_id=self.run_id)
+        step = "close" if self.steps.cur and self.steps.cur.step == "close" else ""
+        trail.event(self.who, "stage", self.bead, text=text, run_id=self.run_id, step=step)
 
     def call_dir(self) -> Path:
         return self.home.root / "checkpoints"
@@ -404,10 +407,13 @@ class Engine(RunFields):
     def result(self) -> RunReport:
         """The run's outcome for the loop: landed (closed, done too), parked (blocked for the owner: an ask, or one
         still open), paused (the machine's trouble: lanes, login, network; the bead stays open), failed."""
-        out = oc.POLICY[self.kind].loop
-        paused = out is Result.PAUSED or self.kind is Kind.ENGINE_CRASH
-        return RunReport(outcome=out, bead=self.bead, why=self.why[:500], run=self.run_id, log=str(self.log_path),
-                         minutes=round((time.time() - self.t0) / 60, 1), rounds=self.stats["rounds"],
+        finish = finish_of(self.home, self.run_id)
+        kind = Kind(finish.kind) if finish else self.kind
+        out = finish.result if finish else oc.POLICY[kind].loop
+        paused = out is Result.PAUSED or kind is Kind.ENGINE_CRASH
+        return RunReport(outcome=out, bead=self.bead, why=(finish.why if finish else self.why)[:500],
+                         run=self.run_id, log=str(self.log_path),
+                         minutes=round(((finish.ended if finish else time.time()) - self.t0) / 60, 1), rounds=self.stats["rounds"],
                          tests_added=self.stats["tests_added"], asked=self.asked, retry_after=self.retry_after if paused else 0.0,
-                         cost=round(self.cost, 2), kind=self.kind.value, fingerprint=self.fp, storm=self.storm,
+                         cost=round(self.cost, 2), kind=kind.value, fingerprint=self.fp, storm=self.storm,
                          role=self.pause_role if paused else "", lane=self.pause_lane if paused else "")

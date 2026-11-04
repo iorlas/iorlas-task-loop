@@ -2,36 +2,30 @@
 import contextlib
 import time
 import traceback
+from collections.abc import Callable
 from typing import Any
 
 from taskloop.adapters import ident
 from taskloop.adapters.repourl import repo_url
-from taskloop.app.run import summaries
+from taskloop.app.run import ended, summaries
 from taskloop.app.run import trace as runtrace
+from taskloop.app.run.closer_record import RecordRun
+from taskloop.app.run.finish import answer
+from taskloop.app.run.finish import outcome as finished_outcome
 from taskloop.app.run.layout import repo_of
 from taskloop.app.slots import engine_lock
 from taskloop.contracts import log as rec
-from taskloop.contracts import plancheck
-from taskloop.contracts.enums import Outcome, Result
+from taskloop.contracts import plancheck, wire
+from taskloop.contracts.checkpoint import EndRec
+from taskloop.contracts.envvars import EnvVar
+from taskloop.contracts.finish import finish_run, previous_finish
+from taskloop.contracts.finish_projection import indexes
 from taskloop.contracts.locator import RunLocator
-from taskloop.contracts.run import RunState
+from taskloop.contracts.run import LoopLogLine, RunFinish, RunManifest, RunState
 from taskloop.contracts.slots import git_probe
 from taskloop.domain import outcome as oc
 from taskloop.domain.report import matchers as lifecycle
 from taskloop.domain.review import switch
-
-
-def terminal_state(outcome: oc.RunOutcome) -> RunState:
-    """The state a run ends in: its policy row's result (landed or done -> done, a fault -> failed, an ask or park -> parked, a pause
-    or a signal -> stopped)."""
-    result = outcome.rule.loop
-    if result is Result.LANDED:
-        return RunState.DONE
-    if result is Result.PARKED:
-        return RunState.PARKED
-    if result is Result.PAUSED:
-        return RunState.STOPPED
-    return RunState.FAILED
 
 
 class Records:
@@ -91,15 +85,58 @@ class Records:
     def settle(self, state: RunState, reason: str) -> None:
         """The run's one terminal state, on every exit path (the close-out calls it last, whatever happened before)."""
         try:
-            RunLocator(self.e.home).end(self.e.run_id, time.time(), state, reason)
+            e = self.e
+            bundle = RunLocator(e.home).get(e.run_id)
+            if bundle is not None:
+                candidate = previous_finish(bundle.manifest.replace(state=state, ended=time.time(), reason=reason, finish=None))
+                finish_run(e.home, e.run_id, candidate, (lambda _m, _r: None) if e.dry else None)
         except (OSError, ValueError) as err:
             self.e.warn(f"could not settle run {self.e.run_id}: {err}\n" + traceback.format_exc())
 
-    def file_trace(self, outcome: Outcome, why: str, sha: str) -> None:
+    def finish(self, done: oc.RunOutcome, stats: str = "",
+               record: Callable[[RunFinish, str], None] | None = None) -> oc.RunOutcome:
+        """Choose the run's answer before any close effect; all terminal evidence is projected by that call."""
+        e = self.e
+        kept = ended.stored(e.run_id, done, e.disp, e.fp, e.leftovers)
+        result = finish_run(e.home, e.run_id, answer(done, time.time(), kept),
+                            lambda m, r: self.project(m, r, stats, record))
+        winner = self.use(result.record)
+        if not result.won:
+            e.warn(f"run {e.run_id} already finished as {result.record.state}: keeping the first answer")
+        return winner
+
+    def use(self, record: RunFinish) -> oc.RunOutcome:
+        """Restore the winner before projecting it, including when a different process repairs its history."""
+        winner = finished_outcome(record)
+        self.e.kind, self.e.why = winner.kind, winner.detail
+        if record.end:
+            _, self.e.disp, self.e.fp = ended.loaded(wire.load(EndRec, record.end))
+        else:
+            self.e.disp = oc.apply(winner, self.e.bead, [], record.ended)
+            self.e.fp = winner.fingerprint
+        return winner
+
+    def project(self, manifest: RunManifest, record: RunFinish, stats: str,
+                emit: Callable[[RunFinish, str], None] | None = None) -> None:
+        e = self.e
+        self.use(record)
+        if not e.dry and record.end:
+            e.checkpoints.keep_end(wire.load(EndRec, record.end))
+        (emit or RecordRun(e).run)(record, stats)
+        lock = engine_lock.LOCK
+        indexes(e.home, manifest, record, LoopLogLine(
+            slot=e.env.get(EnvVar.TASK_LOOP_SLOT) or (lock.rec.slot if lock else "") or "", outcome=record.result,
+            minutes=round((record.ended - e.t0) / 60, 1), rounds=e.stats.get("rounds", 0),
+            tests_added=e.stats.get("tests_added", 0), asked=e.asked, engine_log=str(e.log_path),
+            run_log=e.env.get(EnvVar.TASK_LOOP_RUN_LOG)))
+
+    def file_trace(self, record: RunFinish) -> None:
         """One line per engine run in traces.jsonl, never pruned: bead, repo, branch, every session, the outcome."""
         e = self.e
-        kind = e.kind.value
+        outcome, why, sha, kind = record.outcome, record.why, record.sha, record.kind
         try:
+            if any(str(i.rec.run) == e.run_id for i in e.stores.traces.read_from(0).items):
+                return
             e.stores.traces.append(
                 runtrace.run_trace(
                     e.run_id,
@@ -112,13 +149,13 @@ class Records:
                         coordinator_session=e.session,
                         version=ident.plugin_version(),
                         started=e.t0,
-                        ended=time.time(),
+                        ended=record.ended,
                         outcome=outcome,
                         why=(why or "")[:500],
                         sha=sha or "",
                         kind=kind,
                         kfp=e.fp,
-                        why_code=runtrace.why_code(kind, outcome),
+                        why_code=record.why_code,
                         fingerprint=lifecycle.run_fingerprint(outcome, why),
                         cost=e.cost,
                         stats=e.stats,
@@ -137,6 +174,7 @@ class Records:
             )
         except (OSError, ValueError) as err:
             e.warn(f"could not write the trace: {err}")
+            raise
 
     def after_call(self, c: Any, res: Any) -> None:
         """A node's answer was taken: its detail lines, then what was odd about it."""

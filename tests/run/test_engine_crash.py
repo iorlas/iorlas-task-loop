@@ -81,16 +81,19 @@ class EngineCrash(EngineTest):
         self.assertIn("ValueError: refused", self.eng.log_path.read_text())
         self.assertIn("Traceback (most recent call last)", self.eng.log_path.read_text())
 
-    def test_continuous_close_crash_parks_and_keeps_its_close_ledger(self):
+    def test_a_close_projection_crash_keeps_the_winner_and_its_close_ledger(self):
         def prep(e):
             e.closer.recording.run = mock.Mock(side_effect=KeyError("record"))
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, prep=prep)
         e = self.eng
-        self.assertEqual((rc, e.kind.value, e.why), (2, "engine_crash", "close crashed: KeyError: 'record'"))
+        self.assertEqual((rc, e.kind.value, e.why), (0, "landed", ""))
         self.assertIsNotNone(read_ck(e))
         self.assertEqual(e.stats["rounds"], 0)
         self.assertIn("Traceback (most recent call last)", e.log_path.read_text())
-        self.assertEqual(must(ParkStore(e.home).get(e.bead)).reason, "engine_crash")
+        self.assertIn("KeyError: 'record'", e.log_path.read_text())
+        self.assertIsNone(ParkStore(e.home).get(e.bead))
+        manifest = must(RunLocator(e.home).get(e.run_id)).manifest
+        self.assertEqual((manifest.state, manifest.sha), (RunState.DONE, e.landed_sha))
 
     def test_crash_policy_keeps_checkpoint_and_backs_off(self):
         kind = Kind("engine_crash")

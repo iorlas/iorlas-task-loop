@@ -18,7 +18,7 @@ from support.engine_case import CLEAN, PLAN, WRITE, EngineTest
 from taskloop.app.plan.planner import Planner
 from taskloop.app.run import engine
 from taskloop.app.run.closer import Closer
-from taskloop.app.run.records import terminal_state
+from taskloop.app.run.finish import terminal_state
 from taskloop.app.run.run_once import Ended, RunOnce
 from taskloop.contracts.kinds import Kind
 from taskloop.contracts.locator import RunLocator

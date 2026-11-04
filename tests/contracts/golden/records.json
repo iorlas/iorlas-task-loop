@@ -1371,6 +1371,17 @@
   "bead": "tl-1",
   "t": 1793050200.5
  },
+ "RunFinish": {
+  "state": "done",
+  "ended": 1793050260.5,
+  "outcome": "landed",
+  "result": "landed",
+  "kind": "landed",
+  "why": "landed",
+  "sha": "1234567890abcdef",
+  "why_code": null,
+  "end": ""
+ },
  "RunManifest": {
   "v": 2,
   "run": "01KBN6Z0M4R5E8YQ2T7C9W3XHD",
@@ -1394,7 +1405,9 @@
   "next_step": null,
   "worktree": "/r/slots/s1",
   "branch": "feature/check",
-  "sha": "1234567890abcdef"
+  "sha": "1234567890abcdef",
+  "finish": null,
+  "finish_projected": false
  },
  "DoneMemo": {
   "v": 1,

@@ -1,13 +1,17 @@
-"""Where a run is: the one API that finds a run, and the one writer of its manifest. runs/<run>/manifest.json is the authority (run id,
+"""Find runs and update their live metadata; finish_run owns the terminal answer. The manifest is the authority (run id,
 repo, bead, start and end, loop, attempts); nothing else reads a bead, a repo or a time out of a file name or a path depth. Queries: a
 run id -> its bundle; (repo, bead) -> its runs; a repo -> its runs; every run, by start time. A directory scan plus the manifests, no
 index: a manifest is decoded again only when its file changed. A run folder without a manifest is not a run here. The manifest also
 holds the run's state (RunState): the engine writes it, `reconcile` marks a dead run lost, and every reader reads only that state."""
 import os
+from collections.abc import Callable
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from pathlib import Path
 
 from taskloop.contracts.enums import Step
+from taskloop.contracts.finish import FinishResult, finish_run, previous_finish
+from taskloop.contracts.guard import guard
 from taskloop.contracts.ids import RunId
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.run import RunManifest, RunState
@@ -101,20 +105,23 @@ class RunLocator:
         return hit[1]
 
     # the writer: the engine of the run, and the one reconciler
+    def held(self, run: str) -> AbstractContextManager[None]:
+        return guard(self.cfg.lock_record("run", run))
+
+    def _change(self, run: str, change: Callable[[RunManifest], RunManifest]) -> None:
+        with self.held(run):
+            old = self.get(run)
+            if old is not None:
+                self._put(change(old.manifest))
+
     def identify(self, run: str, mode: str, owner: str, session: str) -> None:
-        old = self.get(run)
-        if old is not None:
-            self._put(old.manifest.replace(mode=mode, owner=owner, session=session))
+        self._change(run, lambda m: m.replace(mode=mode, owner=owner, session=session))
 
     def advance(self, run: str, step: Step | None) -> None:
-        old = self.get(run)
-        if old is not None:
-            self._put(old.manifest.replace(next_step=step))
+        self._change(run, lambda m: m.replace(next_step=step))
 
     def worktree(self, run: str, path: str) -> None:
-        old = self.get(run)
-        if old is not None:
-            self._put(old.manifest.replace(worktree=path))
+        self._change(run, lambda m: m.replace(worktree=path))
 
     def _put(self, m: RunManifest) -> None:
         JsonStore(self.cfg.run_manifest(m.run), RunManifest).write(m)
@@ -137,42 +144,49 @@ class RunLocator:
         return self.bundle(m)
 
     def take_up(self, run: str, repo: str, bead: str, now: float) -> RunBundle:
-        """An engine process takes a run up again (after an exec, a pause or a crash in the close): one more attempt, state created,
-        owned by this process. A run folder with no manifest gets one."""
+        """An engine takes an unfinished run up after exec: one more attempt, owned by this process. A resumed close keeps its terminal
+        answer; a run folder with no manifest gets one. A terminal network pause continues under a new run id instead."""
         self.cfg.run_dir(run).mkdir(parents=True, exist_ok=True)
         self.cfg.engine_dir().mkdir(parents=True, exist_ok=True)
-        old = self.get(run)
-        own = {"state": RunState.CREATED, "ended": None, "reason": "", "heartbeat": now, "pid": os.getpid(), "host": host_name()}
-        m = (old.manifest.replace(attempts=old.manifest.attempts + 1, **own) if old
-             else RunManifest(run=run, repo=repo, bead=bead, started=now, **own))
-        self._put(m)
+        with self.held(run):
+            old = self.get(run)
+            if old is not None and not old.manifest.state.live:
+                self._put(old.manifest.replace(attempts=old.manifest.attempts + 1))  # the answer stays; the process still counts
+                return self.get(run) or old
+            own = {"heartbeat": now, "pid": os.getpid(), "host": host_name()}
+            m = (old.manifest.replace(attempts=old.manifest.attempts + 1, **own) if old
+                 else RunManifest(run=run, repo=repo, bead=bead, started=now, **own))
+            self._put(m)
         return self.bundle(m)
 
     def add_bead(self, run: str, bead: str) -> None:
         """A run learns a bead it works on: the first fills `bead`, the others join `beads` (once each)."""
-        old = self.get(run)
-        if old is None or not bead or bead == old.manifest.bead or bead in old.manifest.beads:
-            return
-        m = old.manifest
-        self._put(m.replace(bead=bead) if not m.bead else m.replace(beads=(*m.beads, bead)))
+        def add(m: RunManifest) -> RunManifest:
+            if not bead or bead == m.bead or bead in m.beads:
+                return m
+            return m.replace(bead=bead) if not m.bead else m.replace(beads=(*m.beads, bead))
+
+        self._change(run, add)
 
     def beat(self, run: str, now: float) -> None:
         """The engine's tick: the run is running and alive as of `now`. A run that already has a terminal state keeps it."""
-        old = self.get(run)
-        if old is not None and old.manifest.state.live:
-            self._put(old.manifest.replace(state=RunState.RUNNING, heartbeat=now))
+        self._change(run, lambda m: m.replace(state=RunState.RUNNING, heartbeat=now) if m.state.live else m)
 
-    def end(self, run: str, now: float, state: RunState, reason: str = "") -> None:
-        """Keep the terminal reason intact, including diagnostics and evidence paths."""
+    def end(self, run: str, now: float, state: RunState, reason: str = "") -> FinishResult | None:
+        """Compatibility entry for callers with only a state; finish_run owns every terminal write."""
         if state.live:
             raise ValueError(f"{state} is not a terminal state")
         old = self.get(run)
-        if old is not None and old.manifest.state.live:
-            self._put(old.manifest.replace(state=state, ended=now, heartbeat=now, reason=reason))
+        if old is None:
+            return None
+        candidate = previous_finish(old.manifest.replace(state=state, ended=now, reason=reason, finish=None))
+        return finish_run(self.cfg, run, candidate)
 
-    def mark_lost(self, run: str, reason: str) -> None:
+    def mark_lost(self, run: str, reason: str) -> FinishResult | None:
         """The reconciler's one write: a run still in a live state becomes `lost`, once, with its reason (`runlife.reconcile` decides)."""
         old = self.get(run)
-        if old is not None and old.manifest.state.live:
-            m = old.manifest
-            self._put(m.replace(state=RunState.LOST, ended=m.heartbeat, reason=reason[:300]))
+        if old is None:
+            return None
+        candidate = previous_finish(old.manifest.replace(state=RunState.LOST, ended=old.manifest.heartbeat,
+                                                        reason=reason[:300], finish=None))
+        return finish_run(self.cfg, run, candidate)

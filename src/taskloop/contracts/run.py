@@ -6,7 +6,7 @@ from typing import Any, ClassVar, final
 import msgspec
 
 from taskloop.contracts import wire
-from taskloop.contracts.enums import Result, Step, WhyCode
+from taskloop.contracts.enums import Outcome, Result, Step, WhyCode
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.row import Row
 from taskloop.contracts.wire import Rec, Refused
@@ -191,6 +191,21 @@ class RunState(StrEnum):
 
 
 @final
+class RunFinish(Rec):
+    """The immutable answer chosen by the first finisher, shared by every terminal projection."""
+
+    state: RunState
+    ended: float
+    outcome: Outcome
+    result: Result
+    kind: str
+    why: str = ""
+    sha: str = ""
+    why_code: WhyCode | None = None
+    end: str = ""  # serialized EndRec; checkpoint imports this module for Round
+
+
+@final
 class RunManifest(Rec):
     """runs/<run>/manifest.json: the authority on one run. The id is opaque; the bead, the repo, the times, the loop and the run's state
     live here and nowhere in a file name or a log gap. `state` is written by the engine (created, running on each heartbeat, one terminal
@@ -219,3 +234,5 @@ class RunManifest(Rec):
     worktree: str = ""
     branch: str = ""
     sha: str = ""
+    finish: RunFinish | None = None  # the first answer, including the checkpoint end payload
+    finish_projected: bool = False  # a killed projection can be repaired from finish without deciding the outcome again
