@@ -5,8 +5,9 @@ import subprocess
 import sys
 import tempfile
 import time
-import unittest
 from pathlib import Path
+
+from support.case import Case
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -54,12 +55,12 @@ def alive(pid):
     return state is not None and procs.alive(pid, state)
 
 
-class KillTree(unittest.TestCase):
-    def setUp(self):
+class KillTree(Case):
+    def setup_method(self):
         self.tmp = tempfile.mkdtemp()
         self.started = []
 
-    def tearDown(self):  # only PIDs this test started
+    def teardown_method(self):  # only PIDs this test started
         for pid in self.started:
             procs.stop_pid(pid, grace=0.2)
 
@@ -74,17 +75,13 @@ class KillTree(unittest.TestCase):
     def test_kills_same_group_and_setsid_children_and_those_that_ignore_sigterm(self):
         p, pids = self.run_shim()
         for name in ("same", "same_stubborn"):
-            self.assertEqual(os.getpgid(pids[name]), p.pid)
+            assert os.getpgid(pids[name]) == p.pid
         for name in ("setsid", "setsid_stubborn"):
-            self.assertNotEqual(os.getpgid(pids[name]), p.pid)
-        self.assertEqual(procs.stop_tree(p, grace=0.3), ())
+            assert os.getpgid(pids[name]) != p.pid
+        assert procs.stop_tree(p, grace=0.3) == ()
         kids = [pids[k] for k in ("same", "setsid", "same_stubborn", "setsid_stubborn")]
         deadline = time.time() + 60
         while time.time() < deadline and any(alive(pid) for pid in kids):
             time.sleep(0.1)
         for name in ("same", "setsid", "same_stubborn", "setsid_stubborn"):
-            self.assertFalse(alive(pids[name]), f"{name} child survived")
-
-
-if __name__ == "__main__":
-    unittest.main()
+            assert not alive(pids[name]), f"{name} child survived"

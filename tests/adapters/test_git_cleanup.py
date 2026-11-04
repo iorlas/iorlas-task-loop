@@ -1,8 +1,10 @@
 """The remote delete port is idempotent only when git authoritatively says the ref is absent."""
 import sys
-import unittest
 from pathlib import Path
 from unittest import mock
+
+import pytest
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -13,13 +15,12 @@ from taskloop.contracts.gitfacts import Ref
 from taskloop.contracts.slots import SlotGitError
 
 
-class RemoteDelete(unittest.TestCase):
+class RemoteDelete(Case):
     def test_success_uses_the_explicit_lease_without_a_probe(self):
         git = ScriptedGit()
         with mock.patch.object(git, "_must") as push, mock.patch.object(git, "ls_remote") as probe:
             git.delete_remote_at("/repo", "origin", "refs/heads/task/a", "checked")
-        self.assertEqual(push.call_args.args[1:],
-                         ("push", "-q", "--force-with-lease=refs/heads/task/a:checked", "origin", ":refs/heads/task/a"))
+        assert push.call_args.args[1:] == ("push", "-q", "--force-with-lease=refs/heads/task/a:checked", "origin", ":refs/heads/task/a")
         probe.assert_not_called()
 
     def test_already_absent_is_success_after_a_refused_delete(self):
@@ -34,7 +35,7 @@ class RemoteDelete(unittest.TestCase):
             with self.subTest(answer=answer):
                 git = ScriptedGit()
                 with (mock.patch.object(git, "_must", side_effect=SlotGitError("stale info")),
-                      mock.patch.object(git, "ls_remote") as probe, self.assertRaises(SlotGitError)):
+                      mock.patch.object(git, "ls_remote") as probe, pytest.raises(SlotGitError)):
                     if isinstance(answer, SlotGitError):
                         probe.side_effect = answer
                     else:

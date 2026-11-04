@@ -4,9 +4,10 @@ import os
 import sys
 import threading
 import time
-import unittest
 from http.server import HTTPServer
 from pathlib import Path
+
+from support.case import Case
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -21,11 +22,11 @@ DIFF = ("diff --git a/r.md b/r.md\n--- a/r.md\n+++ b/r.md\n@@ -0,0 +1,4 @@\n"
         "diff --git a/src/a.py b/src/a.py\n--- a/src/a.py\n+++ b/src/a.py\n+# https://c.org/code\n")
 
 
-class Parse(unittest.TestCase):
+class Parse(Case):
     def test_urls_come_from_added_lines_of_text_files_only(self):
         got = links.added_urls(DIFF)
-        self.assertEqual([u for _, _, u in got], ["https://en.wikipedia.org/wiki/Foo_(bar)", "https://a.org/p_", "https://b.org/q"])
-        self.assertEqual({p for p, _, _ in got}, {"r.md"})
+        assert [u for _, _, u in got] == ["https://en.wikipedia.org/wiki/Foo_(bar)", "https://a.org/p_", "https://b.org/q"]
+        assert {p for p, _, _ in got} == {"r.md"}
 
     def test_what_points_inside_or_is_not_web_is_skipped(self):
         numeric = ["http://2130706433/", "http://0x7f.1/"]  # inet_aton forms: only a POSIX resolver reads them as 127.0.0.1
@@ -38,11 +39,11 @@ class Parse(unittest.TestCase):
             "http://foo.example.com/x",
             *tuple(numeric if os.name != "nt" else ()),
         ):
-            self.assertTrue(links.skipped(u), u)
-        self.assertFalse(links.skipped("https://93.184.216.34/x"))
+            assert links.skipped(u), u
+        assert not links.skipped("https://93.184.216.34/x")
 
 
-class Check(unittest.TestCase):
+class Check(Case):
     def serve(self, handler):
         srv = HTTPServer(("127.0.0.1", 0), handler)
         threading.Thread(target=srv.serve_forever, args=(0.01,), daemon=True).start()
@@ -59,10 +60,6 @@ class Check(unittest.TestCase):
                 time.sleep(3)
             return True, ""
         out = links.check_all(["https://a.org/ok", "https://a.org/boom", "https://a.org/slow"], fn=fn, deadline=0.5)
-        self.assertEqual(out["https://a.org/ok"], (True, ""))
-        self.assertFalse(out["https://a.org/boom"][0])
-        self.assertEqual(out["https://a.org/slow"], (False, links.UNKNOWN))
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert out["https://a.org/ok"] == (True, "")
+        assert not out["https://a.org/boom"][0]
+        assert out["https://a.org/slow"] == (False, links.UNKNOWN)

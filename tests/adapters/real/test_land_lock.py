@@ -15,6 +15,7 @@ from pathlib import Path
 from unittest import mock
 
 from support import homes
+from support.case import Case
 from support.procsim import real_proc
 from support.tlmain import tl_main
 from support.waits import until
@@ -44,8 +45,8 @@ class Child:
 
 
 @NO_FCNTL
-class LandLockTests(unittest.TestCase):
-    def setUp(self):
+class LandLockTests(Case):
+    def setup_method(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.repo = self.tmp.name
@@ -78,7 +79,7 @@ class LandLockTests(unittest.TestCase):
                 release.wait(30)
         t = threading.Thread(target=hold, daemon=True)
         t.start()
-        self.assertTrue(got.wait(10), "the holder never took the lock")
+        assert got.wait(10), "the holder never took the lock"
         try:
             yield release
         finally:
@@ -107,12 +108,12 @@ class LandLockTests(unittest.TestCase):
             return 3
         self.body = body
         r = self.run_ll("--", "wrapped")
-        self.assertEqual(r.returncode, 3)
-        self.assertIn("hi", r.stdout)
-        self.assertEqual((seen, self.cmds), ([True], [["wrapped"]]))
+        assert r.returncode == 3
+        assert "hi" in r.stdout
+        assert (seen, self.cmds) == ([True], [["wrapped"]])
         self.body = lambda: 0
-        self.assertEqual(self.run_ll("--", "wrapped").returncode, 0)
-        self.assertFalse(self.held_now())
+        assert self.run_ll("--", "wrapped").returncode == 0
+        assert not self.held_now()
 
     def test_second_waits_while_first_holds(self):
         told, ran = [], []
@@ -123,26 +124,26 @@ class LandLockTests(unittest.TestCase):
         with self.holder() as release:
             t = threading.Thread(target=second, daemon=True)
             t.start()
-            self.assertTrue(until(lambda: told), "the second taker was never told it waits")
-            self.assertEqual((told, ran), (["the holder"], []))  # it waits until the holder lets go
+            assert until(lambda: told), "the second taker was never told it waits"
+            assert (told, ran) == (["the holder"], [])  # it waits until the holder lets go
             release.set()
             t.join(10)
-        self.assertEqual(ran, [1])
+        assert ran == [1]
 
     def test_released_after_failing_command(self):
         self.body = lambda: 7
-        self.assertEqual(self.run_ll("--", "wrapped").returncode, 7)
+        assert self.run_ll("--", "wrapped").returncode == 7
         self.body = lambda: 0
         r = self.run_ll("--", "wrapped")
-        self.assertEqual(r.returncode, 0)
-        self.assertNotIn("waiting", r.stdout)  # a lock still held would print "waiting"; no timing needed
+        assert r.returncode == 0
+        assert "waiting" not in r.stdout  # a lock still held would print "waiting"; no timing needed
 
     def test_wait_min_times_out_with_75(self):
         with self.holder():
             r = self.run_ll("--wait-min", "0.002", "--", "wrapped")
-        self.assertEqual(r.returncode, 75)
-        self.assertEqual(self.cmds, [])  # the command never ran
-        self.assertIn("land lock", r.stderr)
+        assert r.returncode == 75
+        assert self.cmds == []  # the command never ran
+        assert "land lock" in r.stderr
 
     @real_proc("the kernel drops the flock of a holder that is SIGKILLed (a forked child), so the next taker is not stuck")
     def test_a_holder_that_dies_frees_the_lock(self):
@@ -156,15 +157,11 @@ class LandLockTests(unittest.TestCase):
             finally:
                 os._exit(0)
         try:
-            self.assertTrue(until(ready.exists), "the holder never took the lock")
-            self.assertTrue(self.held_now())
+            assert until(ready.exists), "the holder never took the lock"
+            assert self.held_now()
             os.kill(pid, signal.SIGKILL)
             os.waitpid(pid, 0)
         finally:
             with contextlib.suppress(ProcessLookupError):
                 os.kill(pid, signal.SIGKILL)
-        self.assertEqual(self.run_ll("--wait-min", "0.05", "--", "wrapped").returncode, 0)
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert self.run_ll("--wait-min", "0.05", "--", "wrapped").returncode == 0

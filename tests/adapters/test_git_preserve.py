@@ -1,23 +1,23 @@
 """Preservation operations keep the Git port's semantics across the porcelain seam."""
-
-import unittest
 from pathlib import Path
 from unittest import mock
 
 import support.paths  # noqa: F401
 
 # isort: split
+import pytest
 from git_porcelain import errors
 from git_porcelain.api import BranchHeld, NothingToRecord, Recorded, Sha, WorktreeInfo
 from git_porcelain.testing import FakeRepo
+from support.case import Case
 
 from taskloop.adapters.git import RealGit
 from taskloop.contracts.env import Env
 from taskloop.contracts.slots import BranchPinned, DirtyTree, GitReadFailure, IndexLocked, RefRace, SlotGitError
 
 
-class GitPreserveTest(unittest.TestCase):
-    def setUp(self):
+class GitPreserveTest(Case):
+    def setup_method(self):
         self.git = RealGit(Env())
 
     def test_record_preserves_the_current_branch_and_all_work(self):
@@ -32,11 +32,11 @@ class GitPreserveTest(unittest.TestCase):
               mock.patch.object(self.git, "_must") as old):
             self.git.commit_all("/pool", "unused", "checkpoint")
         old.assert_not_called()
-        self.assertFalse(wt.dirty().raw)
-        self.assertEqual(wt.snapshot("main").branch, "main")
+        assert not wt.dirty().raw
+        assert wt.snapshot("main").branch == "main"
         tree = repo.tree("HEAD")
         assert tree is not None
-        self.assertEqual(tree.read("untracked"), b"new\n")
+        assert tree.read("untracked") == b"new\n"
 
     def test_detached_record_still_requires_exclusive_branch_creation(self):
         with (mock.patch.object(self.git, "branch", return_value=""),
@@ -52,7 +52,7 @@ class GitPreserveTest(unittest.TestCase):
         with (mock.patch.object(self.git, "branch", return_value="main"),
               mock.patch.object(self.git, "_pool") as make):
             make.return_value.worktree.return_value.record.return_value = NothingToRecord()
-            with self.assertRaisesRegex(SlotGitError, "nothing to commit"):
+            with pytest.raises(SlotGitError, match="nothing to commit"):
                 self.git.commit_all("/pool", "unused", "empty")
 
     def test_park_detaches_without_cleaning_and_leaves_the_branch_tip(self):
@@ -63,14 +63,14 @@ class GitPreserveTest(unittest.TestCase):
         before = repo.branches()
         wt.write_file("keep", "untracked\n")
         with mock.patch.object(self.git, "_pool", return_value=repo):
-            self.assertIsNone(self.git.checkout_detached("/pool", "main"))
-        self.assertIsNone(wt.snapshot("main").branch)
-        self.assertEqual(repo.branches(), before)
-        self.assertIn("keep", wt.dirty().untracked)
+            assert self.git.checkout_detached("/pool", "main") is None
+        assert wt.snapshot("main").branch is None
+        assert repo.branches() == before
+        assert "keep" in wt.dirty().untracked
 
     def test_restart_uses_non_forced_branch_replacement_without_cleanup(self):
         with mock.patch.object(self.git, "_pool") as make:
-            self.assertIsNone(self.git.checkout_reset("/pool", "task/a", "origin/main"))
+            assert self.git.checkout_reset("/pool", "task/a", "origin/main") is None
         make.return_value.worktree.assert_called_once_with(Path("/pool"))
         make.return_value.worktree.return_value.take_branch.assert_called_once_with("task/a", "origin/main", mode="restart")
 
@@ -78,9 +78,9 @@ class GitPreserveTest(unittest.TestCase):
         holder = WorktreeInfo(Path("/other"), Sha("tip"), "task/a", False, None)
         with mock.patch.object(self.git, "_pool") as make:
             make.return_value.worktree.return_value.take_branch.return_value = BranchHeld((holder,))
-            with self.assertRaises(BranchPinned) as caught:
+            with pytest.raises(BranchPinned) as caught:
                 self.git.checkout_reset("/pool", "task/a", "origin/main")
-        self.assertEqual(caught.exception.where, "/other")
+        assert caught.value.where == "/other"
 
     def test_write_failures_keep_the_port_error_family(self):
         cases = ((errors.IndexLocked("locked"), IndexLocked),
@@ -95,17 +95,17 @@ class GitPreserveTest(unittest.TestCase):
                       mock.patch.object(self.git, "branch", return_value="main"),
                       mock.patch.object(self.git, "_pool") as make):
                     getattr(make.return_value.worktree.return_value, operation).side_effect = error
-                    with self.assertRaises(expected) as caught:
+                    with pytest.raises(expected) as caught:
                         getattr(self.git, method)("/pool", *args)
-                    self.assertIs(caught.exception.__cause__, error)
+                    assert caught.value.__cause__ is error
 
     def test_branch_lookup_requires_an_exact_name_and_propagates_read_failures(self):
         with mock.patch.object(self.git, "_pool") as make:
             make.return_value.branches.return_value = (("task/ab", Sha("tip")),)
-            self.assertFalse(self.git.has_branch("/pool", "task/a"))
-            self.assertTrue(self.git.has_branch("/pool", "task/ab"))
+            assert not self.git.has_branch("/pool", "task/a")
+            assert self.git.has_branch("/pool", "task/ab")
             make.return_value.branches.return_value = ()
-            self.assertFalse(self.git.has_branch("/pool", "absent"))
+            assert not self.git.has_branch("/pool", "absent")
             make.return_value.branches.side_effect = errors.GitUnavailable("unreadable")
-            with self.assertRaises(GitReadFailure):
+            with pytest.raises(GitReadFailure):
                 self.git.has_branch("/pool", "task/a")

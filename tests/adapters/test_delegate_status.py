@@ -6,6 +6,9 @@ import sys
 import unittest
 from pathlib import Path
 
+import pytest
+from support.case import Case
+
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: E402, F401
@@ -34,23 +37,23 @@ def keys(j: dict, path: str = "") -> set[str]:
     return out
 
 
-class Reader(unittest.TestCase):
+class Reader(Case):
     def test_a_real_answer_reads_into_a_snapshot_with_every_card_field(self):
         snap = snapshot_of(REAL)
-        self.assertEqual([ln.id for ln in snap.lanes], [r["id"] for r in REAL["cockpit"]["lanes"]])
+        assert [ln.id for ln in snap.lanes] == [r["id"] for r in REAL["cockpit"]["lanes"]]
         for ln in snap.lanes:
-            self.assertTrue(ln.label and ln.family and ln.kind and ln.model and ln.state and ln.emoji and ln.reason, ln)
-        self.assertEqual(snap.at, REAL["ts"])
-        self.assertEqual(wire.load(StatusSnapshot, wire.dump(snap)), snap)
+            assert ln.label and ln.family and ln.kind and ln.model and ln.state and ln.emoji and ln.reason, ln
+        assert snap.at == REAL["ts"]
+        assert wire.load(StatusSnapshot, wire.dump(snap)) == snap
 
     def test_a_dropped_or_renamed_key_fails_the_reader(self):
         for drop in ("ts", "lanes", "cockpit"):
-            with self.subTest(drop=drop), self.assertRaises(ValueError):
+            with self.subTest(drop=drop), pytest.raises(ValueError):
                 snapshot_of({k: v for k, v in REAL.items() if k != drop})
         rows = [{k: v for k, v in r.items() if k != "state"} for r in REAL["cockpit"]["lanes"]]
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             snapshot_of(dict(REAL, cockpit=dict(REAL["cockpit"], lanes=rows)))
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             snapshot_of(dict(REAL, lanes={k: dict(v, out="no") for k, v in REAL["lanes"].items()}))
 
     def test_the_fixture_has_every_key_the_reader_consumes(self):
@@ -58,7 +61,7 @@ class Reader(unittest.TestCase):
         for need in ("ts", "lanes", "cockpit", "needs_input", "cockpit.lanes[].id", "cockpit.lanes[].state", "cockpit.lanes[].windows",
                      "cockpit.lanes[].unlock", "cockpit.lanes[].warnings", "cockpit.lanes[].model", "cockpit.lanes[].label",
                      "cockpit.lanes[].family", "cockpit.lanes[].kind", "cockpit.lanes[].emoji", "cockpit.lanes[].reason"):
-            self.assertIn(need, have)
+            assert need in have
 
 
 def key_errors(data: object, schema: dict, path: str = "$") -> list[str]:
@@ -102,27 +105,27 @@ def installed_schema() -> dict:
     return schema
 
 
-class Schema(unittest.TestCase):
+class Schema(Case):
     """The vendored status schema always checks the fixture and reader; only the live subprocess needs an install."""
 
     def test_the_real_fixture_has_exactly_the_keys_the_schema_names(self):
-        self.assertEqual(key_errors(REAL, FIXTURE_SCHEMA), [])
+        assert key_errors(REAL, FIXTURE_SCHEMA) == []
 
     def test_the_schema_catches_a_dropped_and_an_added_key(self):
         schema = FIXTURE_SCHEMA
-        self.assertTrue(key_errors({k: v for k, v in REAL.items() if k != "ts"}, schema))
-        self.assertTrue(key_errors(dict(REAL, surprise=1), schema))
+        assert key_errors({k: v for k, v in REAL.items() if k != "ts"}, schema)
+        assert key_errors(dict(REAL, surprise=1), schema)
 
     def test_every_key_the_reader_consumes_is_one_the_schema_names(self):
         props = FIXTURE_SCHEMA["properties"]
         lane = props["cockpit"]["properties"]["lanes"]["items"]["properties"]
         old = props["lanes"]["additionalProperties"]["properties"]
         for k in ("ts", "lanes", "cockpit", "needs_input"):
-            self.assertIn(k, props)
+            assert k in props
         for k in ("id", "label", "family", "kind", "model", "state", "emoji", "reason", "unlock", "windows", "warnings"):
-            self.assertIn(k, lane, "delegate's cockpit lane dropped a key snapshot_of reads")
+            assert k in lane, "delegate's cockpit lane dropped a key snapshot_of reads"
         for k in ("out", "out_until", "reason", "notes"):
-            self.assertIn(k, old, "delegate's flat lane dropped a key snapshot_of reads")
+            assert k in old, "delegate's flat lane dropped a key snapshot_of reads"
 
     @real_proc("the installed delegate's route.py status is run for real; no delegate installed, no test")
     def test_the_installed_answer_has_exactly_the_keys_the_schema_names(self):
@@ -130,9 +133,5 @@ class Schema(unittest.TestCase):
         r = subprocess.run([sys.executable, str(installed_route()), "status", "--json"],
                            capture_output=True, text=True, timeout=60, check=False)
         got = json.loads(r.stdout[r.stdout.index("{"):])
-        self.assertEqual(key_errors(got, schema), [])
+        assert key_errors(got, schema) == []
         snapshot_of(got)
-
-
-if __name__ == "__main__":
-    unittest.main()

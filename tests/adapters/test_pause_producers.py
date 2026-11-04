@@ -1,8 +1,10 @@
 """Locally synthesized no-answer stops retain engine provenance through the lane exit."""
 import sys
-import unittest
 from pathlib import Path
 from unittest import mock
+
+import pytest
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -14,7 +16,7 @@ from taskloop.contracts.delegate import RunRequest
 from taskloop.domain.lanes import pauses, policy
 
 
-class PauseProducers(unittest.TestCase):
+class PauseProducers(Case):
     def test_spawn_failure_and_missing_answer_keep_engine_provenance(self):
         resolved = delegate.Resolved(Path("."), "route.py", {}, "explicit")
         request = RunRequest(role="worker", brief_path="", schema_path="", cwd=".")
@@ -24,8 +26,8 @@ class PauseProducers(unittest.TestCase):
                 answer = delegate.call(resolved, request, "work", {}, runner, {})
                 stop = policy.stop_of(answer.res)
                 assert stop is not None
-                self.assertEqual((stop.reason, stop.producer), ("no_answer", "engine"))
-                self.assertEqual(pauses.rule(stop.reason, stop.producer).permanence, "transient")
+                assert (stop.reason, stop.producer) == ("no_answer", "engine")
+                assert pauses.rule(stop.reason, stop.producer).permanence == "transient"
 
     def test_lane_exit_uses_stop_producer_for_synthetic_and_wire_stops(self):
         for producer in ("engine", "delegate"):
@@ -42,6 +44,6 @@ class PauseProducers(unittest.TestCase):
                 worker = mock.Mock()
                 worker.ops.blocked = blocked_for
                 worker.ops.stop_why.return_value = "paused"
-                with self.assertRaises(Blocked):
+                with pytest.raises(Blocked):
                     LaneActs(host, worker).end(call, result, stop, policy.Yield("PAUSE_LANE"))
-                self.assertEqual((host.pause_reason, host.pause_producer), ("no_answer", producer))
+                assert (host.pause_reason, host.pause_producer) == ("no_answer", producer)

@@ -1,8 +1,9 @@
 """Executable paths are resolved in the check's worktree, including its execute permission."""
 import sys
 import tempfile
-import unittest
 from pathlib import Path
+
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -10,7 +11,7 @@ import support.paths  # noqa: F401
 from taskloop.adapters.check_probe import PathProbe
 
 
-class ExecutablePaths(unittest.TestCase):
+class ExecutablePaths(Case):
     def test_a_relative_executable_is_resolved_against_the_worktree(self):
         with tempfile.TemporaryDirectory() as folder:
             tool = Path(folder, "bin", "tool")
@@ -18,9 +19,9 @@ class ExecutablePaths(unittest.TestCase):
             tool.write_text("#!/bin/sh\nexit 0\n")
             tool.chmod(0o755)
             probe = PathProbe(folder, {"PATH": ""})
-            self.assertTrue(probe.has_command("./bin/tool"))
-            self.assertTrue(probe.has_command("bin/tool"))
-            self.assertTrue(probe.has_command(str(tool)))
+            assert probe.has_command("./bin/tool")
+            assert probe.has_command("bin/tool")
+            assert probe.has_command(str(tool))
 
     def test_a_file_without_execute_permission_and_a_directory_do_not_resolve(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -28,6 +29,6 @@ class ExecutablePaths(unittest.TestCase):
             tool.write_text("not executable\n")
             tool.chmod(0o644)
             probe = PathProbe(folder, {"PATH": ""})
-            self.assertFalse(probe.has_command("./tool"))
-            self.assertFalse(probe.has_command("./missing"))
-            self.assertFalse(probe.has_command(folder))
+            assert not probe.has_command("./tool")
+            assert not probe.has_command("./missing")
+            assert not probe.has_command(folder)

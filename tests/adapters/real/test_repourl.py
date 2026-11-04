@@ -2,16 +2,16 @@
 storm record by the main checkout's path, the engine wrote it by its slot's path)."""
 import subprocess
 import tempfile
-import unittest
 from pathlib import Path
 
+from support.case import Case
 from support.spawn import port_git
 
 from taskloop.adapters.repourl import repo_url
 
 
-class RepoUrl(unittest.TestCase):
-    def setUp(self):
+class RepoUrl(Case):
+    def setup_method(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.repo = str(Path(self.tmp.name, "repo").resolve())
@@ -23,14 +23,10 @@ class RepoUrl(unittest.TestCase):
         self.git = port_git()
 
     def test_with_no_remote_a_slot_and_the_main_checkout_have_one_name(self):
-        self.assertEqual(repo_url(self.git, self.slot), repo_url(self.git, self.repo))
-        self.assertNotEqual(repo_url(self.git, self.repo), self.repo)
+        assert repo_url(self.git, self.slot) == repo_url(self.git, self.repo)
+        assert repo_url(self.git, self.repo) != self.repo
 
     def test_the_origin_url_wins_when_there_is_one(self):
         subprocess.run(["git", "-C", self.repo, "remote", "add", "origin", "git@h:o/r.git"], check=True)
-        self.assertEqual(repo_url(self.git, self.slot), "git@h:o/r.git")
-        self.assertEqual(repo_url(self.git, self.repo), "git@h:o/r.git")
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert repo_url(self.git, self.slot) == "git@h:o/r.git"
+        assert repo_url(self.git, self.repo) == "git@h:o/r.git"

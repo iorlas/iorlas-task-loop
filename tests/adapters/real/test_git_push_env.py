@@ -3,8 +3,10 @@
 import os
 import subprocess
 import tempfile
-import unittest
 from pathlib import Path
+
+import pytest
+from support.case import Case
 
 from taskloop.adapters.git import RealGit
 from taskloop.contracts.env import Env, snapshot
@@ -16,8 +18,8 @@ def sh(*a, cwd, check=True):
     return subprocess.run(list(a), cwd=str(cwd), check=check, capture_output=True, text=True, env=env)
 
 
-class PortPushHasNoGateAuthority(unittest.TestCase):
-    def setUp(self):
+class PortPushHasNoGateAuthority(Case):
+    def setup_method(self):
         self.tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         self.addCleanup(self.tmp.cleanup)
         root = Path(os.path.realpath(self.tmp.name))
@@ -43,17 +45,17 @@ class PortPushHasNoGateAuthority(unittest.TestCase):
         bare = {"PATH": os.environ.get("PATH", "")}
         ran = subprocess.run([str(hook)], capture_output=True, text=True, env=bare, check=False)
         why = ran.stderr.strip() or "no output"
-        self.assertEqual(ran.returncode, 1, f"precondition: the refusing pre-push hook cannot run here ({why}): "
+        assert ran.returncode == 1, (f"precondition: the refusing pre-push hook cannot run here ({why}): "
                          f"is {hooks} on a noexec mount, or is /bin/sh missing?")
         self.port = RealGit(Env({k: v for k, v in snapshot().vars.items() if k != "TL_LAND"}), pinned=False)
 
     def test_the_port_and_plain_push_both_meet_the_refusing_hook(self):
         plain = sh("git", "push", "-q", "origin", "main", cwd=self.repo, check=False)
-        self.assertNotEqual(plain.returncode, 0, "precondition: this git ignored core.hooksPath, so the refusing hook never ran "
+        assert plain.returncode != 0, ("precondition: this git ignored core.hooksPath, so the refusing hook never ran "
                             f"({sh('git', '--version', cwd=self.repo).stdout.strip()}; push said: {plain.stderr.strip()!r})")
-        with self.assertRaises(SlotGitError):
+        with pytest.raises(SlotGitError):
             self.port.push(str(self.repo), "origin", "main")
-        self.assertNotEqual(sh("git", "rev-parse", "--verify", "main", cwd=self.remote, check=False).returncode, 0)
+        assert sh("git", "rev-parse", "--verify", "main", cwd=self.remote, check=False).returncode != 0
 
     def test_the_port_remote_delete_meets_the_refusing_hook(self):
         git = self.port
@@ -61,6 +63,6 @@ class PortPushHasNoGateAuthority(unittest.TestCase):
         sh("git", "branch", "side", cwd=self.repo)
         sh("git", "push", "--no-verify", "origin", "side", cwd=self.repo)
         oid = sh("git", "rev-parse", "side", cwd=self.repo).stdout.strip()
-        with self.assertRaises(SlotGitError):
+        with pytest.raises(SlotGitError):
             git.delete_remote_at(str(self.repo), "origin", "refs/heads/side", oid)
-        self.assertEqual(sh("git", "rev-parse", "side", cwd=self.remote).stdout.strip(), oid)
+        assert sh("git", "rev-parse", "side", cwd=self.remote).stdout.strip() == oid

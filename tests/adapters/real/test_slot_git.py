@@ -7,9 +7,11 @@ import shlex
 import subprocess
 import sys
 import tempfile
-import unittest
 from pathlib import Path
 from unittest import mock
+
+import pytest
+from support.case import Case
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -54,8 +56,8 @@ def sh(*a, cwd):
     return subprocess.run(list(a), cwd=str(cwd), check=True, capture_output=True, text=True).stdout.strip()
 
 
-class SlotGitTest(unittest.TestCase):
-    def setUp(self):
+class SlotGitTest(Case):
+    def setup_method(self):
         self.tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         home = Path(os.path.realpath(self.tmp.name))
         env = {"HOME": str(home), "XDG_CONFIG_HOME": str(home / "cfg"), "APPDATA": str(home / "cfg"),
@@ -97,20 +99,20 @@ class SlotGitTest(unittest.TestCase):
         rc = eng.run()
         closed = [c[3] for c in store.said("close")]
         blocked = [c[3] for c in store.said("comments", "add") if c[3].startswith("Blocked: ")]
-        self.assertEqual(rc, 2)
-        self.assertTrue(eng.why.startswith("failed: tree: core.worktree is set"), eng.why)
-        self.assertEqual(script.calls, [])  # no worker, reviewer or planner ever ran
-        self.assertEqual(closed, [])  # the bead is blocked, not closed
-        self.assertEqual(blocked, [])  # an engine fault: the bead stays open, nobody is asked
-        self.assertIsNone(eng.stores.asks.get(BeadId("t-1")))  # a wrong tree is the slot's fault, not a question for the owner
-        self.assertIn("git config --unset core.worktree", eng.why)
-        self.assertIn(str(self.repo), eng.why)
-        self.assertIn("config", eng.why)  # names the setting and the file it came from
+        assert rc == 2
+        assert eng.why.startswith("failed: tree: core.worktree is set"), eng.why
+        assert script.calls == []  # no worker, reviewer or planner ever ran
+        assert closed == []  # the bead is blocked, not closed
+        assert blocked == []  # an engine fault: the bead stays open, nobody is asked
+        assert eng.stores.asks.get(BeadId("t-1")) is None  # a wrong tree is the slot's fault, not a question for the owner
+        assert "git config --unset core.worktree" in eng.why
+        assert str(self.repo) in eng.why
+        assert "config" in eng.why  # names the setting and the file it came from
         trace = [json.loads(x) for x in eng.log_path.read_text().splitlines()]
-        self.assertTrue(any(r["kind"] == "transition" and r.get("cause") == "wrong_tree" for r in trace))
-        self.assertEqual(self.decoy_state(), before)
-        self.assertNotIn("decoy.txt", self.all_committed_paths())
-        self.assertEqual(sh("git", "--git-dir", str(self.repo / ".git"), "branch", "--list", "task/*", cwd=self.repo), "")
+        assert any(r["kind"] == "transition" and r.get("cause") == "wrong_tree" for r in trace)
+        assert self.decoy_state() == before
+        assert "decoy.txt" not in self.all_committed_paths()
+        assert sh("git", "--git-dir", str(self.repo / ".git"), "branch", "--list", "task/*", cwd=self.repo) == ""
 
     def test_core_bare_true_stops_the_run_too(self):
         sh("git", "config", "core.bare", "true", cwd=self.repo)
@@ -118,9 +120,9 @@ class SlotGitTest(unittest.TestCase):
             BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt), port_git()), env=snapshot(), spawner=real_spawner(),
                 git=port_git(), who=who()
         )
-        with self.assertRaises(engine.Blocked) as cm:
+        with pytest.raises(engine.Blocked) as cm:
             eng.assert_tree("write")
-        self.assertIn("core.bare", cm.exception.why)
+        assert "core.bare" in cm.value.why
 
     def test_a_clean_slot_passes_the_tree_assert(self):
         eng = engine.Engine(
@@ -135,13 +137,13 @@ class SlotGitTest(unittest.TestCase):
             BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt), port_git()), env=snapshot(), spawner=real_spawner(),
                 git=port_git(), who=who()
         )
-        self.assertEqual(os.path.realpath(eng.git.toplevel(str(self.wt))), str(self.wt))
+        assert os.path.realpath(eng.git.toplevel(str(self.wt))) == str(self.wt)
         (self.wt / "f.txt").write_text("f\n")
         eng.writer_said = "added f.txt"  # an untracked file is staged only when the writer names it (tl-bxk.10.24)
-        self.assertEqual(eng.checkout.stage_all(check=True), 0)
+        assert eng.checkout.stage_all(check=True) == 0
         staged = sh("git", "--git-dir", str(self.repo / ".git" / "worktrees" / "s1"), "--work-tree", str(self.wt),
                     "diff", "--cached", "--name-only", cwd=self.wt)
-        self.assertEqual(staged, "f.txt")  # only the slot's own path; nothing from the decoy
+        assert staged == "f.txt"  # only the slot's own path; nothing from the decoy
 
     def test_stage_all_takes_only_the_slots_status_paths_deletions_and_untracked_included(self):
         eng = engine.Engine(
@@ -151,9 +153,8 @@ class SlotGitTest(unittest.TestCase):
         (self.wt / "a.txt").unlink()
         (self.wt / "new file.txt").write_text("n\n")
         eng.writer_said = "added new file.txt"
-        self.assertEqual(eng.checkout.stage_all(check=True), 0)
-        self.assertEqual(sh("git", "diff", "--cached", "--name-status", cwd=self.wt).split("\n"),
-                         ["D\ta.txt", "A\tnew file.txt"])
+        assert eng.checkout.stage_all(check=True) == 0
+        assert sh("git", "diff", "--cached", "--name-status", cwd=self.wt).split("\n") == ["D\ta.txt", "A\tnew file.txt"]
 
     @te.POSIX_CHECK
     def test_workers_and_checks_are_not_pinned_but_the_engines_own_git_is(self):
@@ -180,13 +181,13 @@ class SlotGitTest(unittest.TestCase):
                     git=port_git(), who=who()
             )
             rc, tail = eng.sh([show])
-            self.assertEqual(r.data["env"], [])
-            self.assertEqual((rc, tail), (0, "[||]"))
+            assert r.data["env"] == []
+            assert (rc, tail) == (0, "[||]")
             rc, tail = eng.sh([pair], pin=True)
         gitdir = os.path.realpath(str(self.repo / ".git" / "worktrees" / "s1"))
         d, w = tail.split("|")
-        self.assertEqual((os.path.realpath(d), os.path.realpath(w)), (gitdir, str(self.wt)))
-        self.assertEqual(pinned_env(self.repo)["GIT_DIR"], str(self.repo / ".git"))
+        assert (os.path.realpath(d), os.path.realpath(w)) == (gitdir, str(self.wt))
+        assert pinned_env(self.repo)["GIT_DIR"] == str(self.repo / ".git")
 
     @te.POSIX_CHECK
     def test_a_check_runs_git_on_another_repo(self):
@@ -201,9 +202,9 @@ class SlotGitTest(unittest.TestCase):
                 git=port_git(), who=who()
         )
         rc, tail = eng.sh(["git", "-C", str(other), "rev-parse", "HEAD"])
-        self.assertEqual((rc, tail), (0, sha))
+        assert (rc, tail) == (0, sha)
         rc, tail = eng.sh(["git", "-C", str(other), "cat-file", "-e", sha])
-        self.assertEqual(rc, 0)
+        assert rc == 0
 
     def test_a_worker_that_redirects_git_is_caught_after_its_node(self):
         decoy = self.decoy
@@ -221,29 +222,25 @@ class SlotGitTest(unittest.TestCase):
         eng = make_engine(self.wt, script=script, store=store)
         rc = eng.run()
         landed = store.said("close") + store.said("provenance", "record")  # neither a close nor a land record
-        self.assertEqual(rc, 2)
-        self.assertIn("after write", eng.why)
-        self.assertTrue(eng.why.startswith("failed: tree: core.worktree is set"), eng.why)
-        self.assertNotIn("review", [c[0] for c in script.calls])
-        self.assertEqual(landed, [])
-        self.assertEqual(self.decoy_state(), before)
-        self.assertNotIn("decoy.txt", self.all_committed_paths())
+        assert rc == 2
+        assert "after write" in eng.why
+        assert eng.why.startswith("failed: tree: core.worktree is set"), eng.why
+        assert "review" not in [c[0] for c in script.calls]
+        assert landed == []
+        assert self.decoy_state() == before
+        assert "decoy.txt" not in self.all_committed_paths()
         # only the engine's pinned wip checkpoint of the slot's own file; nothing reached origin
-        self.assertEqual(sorted(self.all_committed_paths().split()), ["a.txt", "f.txt"])
-        self.assertNotIn("task/", sh("git", "ls-remote", "origin", cwd=self.wt))
+        assert sorted(self.all_committed_paths().split()) == ["a.txt", "f.txt"]
+        assert "task/" not in sh("git", "ls-remote", "origin", cwd=self.wt)
 
     def test_samefile_compares_folders_and_falls_back_to_realpath(self):
         link = Path(self.tmp.name) / "link"
         link.symlink_to(self.wt)
-        self.assertTrue(gitrepo.same_dir(link, self.wt))
-        self.assertFalse(gitrepo.same_dir(self.decoy, self.wt))
-        self.assertTrue(gitrepo.same_dir(link / "nope", self.wt / "nope"))
+        assert gitrepo.same_dir(link, self.wt)
+        assert not gitrepo.same_dir(self.decoy, self.wt)
+        assert gitrepo.same_dir(link / "nope", self.wt / "nope")
 
     def test_doctor_warns_when_worktree_config_is_off(self):
-        self.assertTrue(any("extensions.worktreeConfig" in w for w in doctor.git_warnings(str(self.repo), None, port_git())))
+        assert any("extensions.worktreeConfig" in w for w in doctor.git_warnings(str(self.repo), None, port_git()))
         sh("git", "config", "extensions.worktreeConfig", "true", cwd=self.repo)
-        self.assertEqual(doctor.git_warnings(str(self.repo), None, port_git()), [])
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert doctor.git_warnings(str(self.repo), None, port_git()) == []

@@ -7,10 +7,12 @@ import sqlite3
 import sys
 import tempfile
 import types
-import unittest
 from pathlib import Path
 from typing import cast
 from unittest import mock
+
+import pytest
+from support.case import Case
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -85,8 +87,8 @@ def make_db(path):
     con.close()
 
 
-class OpenCode(unittest.TestCase):
-    def setUp(self):
+class OpenCode(Case):
+    def setup_method(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.db = os.path.join(self.tmp.name, "opencode.db")
         make_db(self.db)
@@ -97,35 +99,35 @@ class OpenCode(unittest.TestCase):
         self.runs = Path(self.cfg, "agent-runs", "runs")
         self.runs.mkdir(parents=True)
 
-    def tearDown(self):
+    def teardown_method(self):
         self.env.stop()
         self.tmp.cleanup()
 
     # login hint
     def test_a_logged_out_xai_lane_says_grok_and_opencode(self):
-        self.assertEqual(names.lane_name("GROK_SUBSCRIPTION", ""), "Grok")
-        self.assertEqual(names.lane_name("x", "xai"), "Grok")
+        assert names.lane_name("GROK_SUBSCRIPTION", "") == "Grok"
+        assert names.lane_name("x", "xai") == "Grok"
 
     # reader
     # lookups
     def test_transcript_of_xai_is_the_session_reference(self):
-        self.assertEqual(opencode.transcript_of(snapshot(), "xai", SID), "opencode:" + SID)
-        self.assertEqual(opencode.transcript_of(snapshot(), "xai", "ses_zzz"), "")
-        self.assertEqual(opencode.transcript_of(snapshot(), "xai", ""), "")
+        assert opencode.transcript_of(snapshot(), "xai", SID) == "opencode:" + SID
+        assert opencode.transcript_of(snapshot(), "xai", "ses_zzz") == ""
+        assert opencode.transcript_of(snapshot(), "xai", "") == ""
 
     def test_context_is_the_last_assistant_message_with_tokens(self):
-        self.assertEqual(context_size.context_tokens("opencode:" + SID, snapshot()), 9000 + 4000 + 700)
-        self.assertEqual(context_size.context_tokens(SID, snapshot()), 13700)
-        self.assertIsNone(context_size.context_tokens("opencode:ses_nope", snapshot()))
+        assert context_size.context_tokens("opencode:" + SID, snapshot()) == 9000 + 4000 + 700
+        assert context_size.context_tokens(SID, snapshot()) == 13700
+        assert context_size.context_tokens("opencode:ses_nope", snapshot()) is None
 
     # fresh-writer limit
     def test_xai_has_its_own_fresh_writer_limit(self):
         eng = types.SimpleNamespace(cfg=cfg_with())
-        self.assertEqual(Handoff(eng, port_git()).fresh_above_k("xai"), 100.0)
+        assert Handoff(eng, port_git()).fresh_above_k("xai") == 100.0
         eng.cfg = cfg_with(write_fresh_above_k={"xai": 40})
-        self.assertEqual(Handoff(eng, port_git()).fresh_above_k("xai"), 40.0)
+        assert Handoff(eng, port_git()).fresh_above_k("xai") == 40.0
         eng.cfg = cfg_with(write_fresh_above_k={"claude": 1})
-        self.assertEqual(Handoff(eng, port_git()).fresh_above_k("xai"), 100.0)
+        assert Handoff(eng, port_git()).fresh_above_k("xai") == 100.0
 
 
     # review fixes (7e5b07d)
@@ -134,11 +136,14 @@ class OpenCode(unittest.TestCase):
         con.execute("INSERT INTO part VALUES ('p9','m3',?,?,?,'{}')", (SID, T + 9000, T + 99000))
         con.commit()
         con.close()
-        self.assertAlmostEqual(opencode.opencode_updated(snapshot(), SID) or 0.0, 1_790_000_099.0)  # a part newer than every message
+        assert (
+            (opencode.opencode_updated(snapshot(), SID) or 0.0)
+            == pytest.approx(1_790_000_099.0, abs=5e-08)
+        )  # a part newer than every message
 
     def test_a_lane_named_openai_xai_is_grok_by_family_or_name(self):
-        self.assertEqual(names.lane_name("OPENAI_XAI"), "Grok")
-        self.assertEqual(names.lane_name("OPENAI_SUBSCRIPTION"), "Codex")
+        assert names.lane_name("OPENAI_XAI") == "Grok"
+        assert names.lane_name("OPENAI_SUBSCRIPTION") == "Codex"
 
     def test_trace_with_a_missing_db_prints_and_the_engine_trace_keeps_the_session_id(self):
         os.environ["OPENCODE_DB"] = os.path.join(self.tmp.name, "gone.db")
@@ -149,8 +154,8 @@ class OpenCode(unittest.TestCase):
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
             rc = verbs.trace(BeadId("b-1"), 0, True, snapshot())
-        self.assertEqual(rc, 0)
-        self.assertEqual(json.loads(buf.getvalue())[0]["sessions"][0]["transcript"], "")
+        assert rc == 0
+        assert json.loads(buf.getvalue())[0]["sessions"][0]["transcript"] == ""
         sessions = []
         calls = Calls(
             cast(RunLog, types.SimpleNamespace(emit=lambda rec: 0)),
@@ -162,8 +167,4 @@ class OpenCode(unittest.TestCase):
         )
         r = DelegateResult(ref=SID, secs=1, cost=0, family="xai")
         calls.end("c1", "write", "writer", 1, r)
-        self.assertEqual(sessions[0]["transcript"], "opencode:" + SID)  # no DB look
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert sessions[0]["transcript"] == "opencode:" + SID  # no DB look
