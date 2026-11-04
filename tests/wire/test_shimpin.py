@@ -98,6 +98,10 @@ class ShimPin(Case):
         new = self.install("0.23.100")
         for stale in ("both", "shim", "hook"):
             with self.subTest(stale=stale):
+                if stale != "hook":  # a resolving shim is never stale: the fixed form of an older writer is
+                    shim = self.config / "bin/tl"
+                    shim.chmod(0o755)
+                    shim.write_text(hook.SHIM.replace("{tl}", str(self.old / "skills/task-loop/tl.py")))
                 if stale == "shim":
                     hook.write_hooks(new, self.env)
                 elif stale == "hook":

@@ -37,6 +37,29 @@ SHIM = (
     "command -v uv >/dev/null 2>&1 || { echo 'tl: uv is required (https://docs.astral.sh/uv/)' >&2; exit 127; }\n"
     "exec uv run --quiet --script {tl} \"$@\"\n"
 )
+# The shim of a cache install: the newest installed version is picked on every call (pure sh, a glob and integer arithmetic, no
+# subprocess), so a release or a pruned cache dir needs no rewrite; the path the writer saw is the fallback when none is found.
+RESOLVING_MARK = "# newest installed version, resolved at run time"
+RESOLVING_SHIM = (
+    "#!/bin/sh\n"
+    + RESOLVING_MARK + "\n"
+    "command -v uv >/dev/null 2>&1 || { echo 'tl: uv is required (https://docs.astral.sh/uv/)' >&2; exit 127; }\n"
+    "tl={tl}\n"
+    "best=0\n"
+    "pick() {\n"
+    "  for p in {cache}/*/skills/task-loop/tl.py; do\n"
+    "    [ -f \"$p\" ] || continue\n"
+    "    v=${p%/skills/task-loop/tl.py}; v=${v##*/}\n"
+    "    case $v in ''|*[!0-9.]*|.*|*.|*..*|0[0-9]*|*.0[0-9]*) continue;; esac\n"
+    "    IFS=.; set -- $v; unset IFS\n"
+    "    [ $# -eq 3 ] || continue\n"
+    "    k=$(( $1 * 10000000000 + $2 * 100000 + $3 ))\n"
+    "    [ \"$k\" -gt \"$best\" ] && { best=$k; tl=$p; }\n"
+    "  done\n"
+    "}\n"
+    "pick\n"
+    "exec uv run --quiet --script \"$tl\" \"$@\"\n"
+)
 
 
 def version_key(name: str) -> tuple[int, ...]:
@@ -69,7 +92,8 @@ def write_shim(plugin_root: Path, env: Env) -> None:
     install = readable_install(plugin_root)
     if install is None:
         return
-    text = SHIM.replace("{tl}", shlex.quote(str(install / "skills" / "task-loop" / "tl.py")))
+    tl = shlex.quote(str(install / "skills" / "task-loop" / "tl.py"))
+    text = (RESOLVING_SHIM.replace("{cache}", shlex.quote(str(install.parent))) if version_key(install.name) else SHIM).replace("{tl}", tl)
     with contextlib.suppress(OSError):
         put_launcher(config_dir(env) / "bin" / "tl", text)
 

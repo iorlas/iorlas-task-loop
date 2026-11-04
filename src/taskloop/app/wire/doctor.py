@@ -110,7 +110,8 @@ def launcher_problems(plugin_root: Path, env: Env) -> list[str]:
     stale = []
     for name, path in [("shim", root / "bin/tl"), *((n, root / "githooks" / n) for n in hook.HOOK_NAMES)]:
         try:
-            words = shlex.split(path.read_text(encoding="utf-8"), comments=True)
+            text = path.read_text(encoding="utf-8")
+            words = [] if hook.RESOLVING_MARK in text else shlex.split(text, comments=True)  # a resolving shim is never stale
         except (OSError, ValueError):
             continue
         for word in words:
