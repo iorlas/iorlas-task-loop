@@ -4,7 +4,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
+from taskloop.adapters import childenv
 from taskloop.contracts.config import ContainerConfig
+from taskloop.contracts.env import Env
 from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.ports import Ran
 from taskloop.contracts.runkey import Digest
@@ -32,6 +34,11 @@ HOST = ReadyExecution(Digest("host-v1"))
 def check_env() -> dict[str, str]:
     """The admitted environment shared by standalone checks and delivery queries."""
     return {EnvVar.TL_SLOT.value: "check"}
+
+
+def keyed_env(env: Env) -> dict[str, str]:
+    """The shared receipt environment, independent of the executing slot's name and state paths."""
+    return {**childenv.reaching(childenv.current_env(env)), **check_env()}
 
 
 def docker_ok(spawner: Runs) -> bool:

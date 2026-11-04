@@ -203,8 +203,11 @@ class OwnerJudge(unittest.TestCase):
         with mock.patch("taskloop.app.checks.authorization.results", return_value={"base-check": mock.Mock()}) as results:
             self.assertEqual(self.judge().status, PushStatus.ALLOWED)
         self.assertEqual([step.id for step in results.call_args.args[3].gate_checks], ["base-check"])
-        with mock.patch("taskloop.app.checks.authorization.results", return_value={"base-check": None}):
-            self.assertEqual(self.judge().status, PushStatus.REFUSED)
+        with (mock.patch("taskloop.app.checks.authorization.results", return_value={"base-check": None}),
+              mock.patch("taskloop.app.checks.authorization.explain", return_value={"base-check": "env differs (expected a1 found b2)"})):
+            decision = self.judge()
+        self.assertEqual(decision.status, PushStatus.REFUSED)
+        self.assertIn("base-check (env differs (expected a1 found b2))", decision.reasons[0])
 
     def test_missing_stale_wrong_tip_or_patch_never_authorizes(self):
         for change in (None, {"t": 399}, {"tip": "other"}, {"diff_sha": "wrong"}, {"t": 1001}):

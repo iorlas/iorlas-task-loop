@@ -10,7 +10,7 @@ from taskloop.app.checks.execution import Runs
 from taskloop.app.land.profile_change import diff_sha
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.env import Env
-from taskloop.contracts.ids import TreeSha
+from taskloop.contracts.ids import CheckId, TreeSha
 from taskloop.contracts.ports import Clock, Git
 from taskloop.contracts.runkey import BaseSha
 from taskloop.stores.bundle import Stores
@@ -57,7 +57,7 @@ class PushJudge:
         self.repo, self.stores, self.git, self.check = repo, stores, git, check
         self.env, self.spawner = env, spawner
         self.clock = clock or SystemClock()
-        self.unproven: list[str] = []
+        self.unproven: list[CheckId] = []
 
     def owner_approved(self, tip: str, base: str) -> bool:
         rows = self.stores.profile_changes.read_from().items
@@ -145,6 +145,19 @@ class PushJudge:
             return PushDecision(PushStatus.ALLOWED)
         return self.judge_delivery(deliveries)
 
+    def why(self, tip: PushTip, cfg: EngineConfig | None) -> dict[CheckId, str]:
+        """The first differing key field per unproven step; display only, so a failure to explain never changes the verdict."""
+        plain = dict.fromkeys(self.unproven, "no receipt for this tree and base")
+        if cfg is None:
+            return plain
+        try:
+            tree = TreeSha(self.git.rev_parse(self.repo, tip.sha + "^{tree}"))
+            found = authorization.explain(self.stores, self.git, self.repo, cfg, tree, BaseSha(self.base_for(tip, cfg)),
+                                          self.env, self.unproven, self.spawner)
+        except (ValueError, OSError):
+            return plain
+        return {step: found.get(step, text) for step, text in plain.items()}
+
     def judge_delivery(self, deliveries: list[tuple[PushTip, EngineConfig | None]]) -> PushDecision:
         stamped: set[str] = set()
         named: dict[str, str] = {}
@@ -153,7 +166,7 @@ class PushJudge:
             if self.green_or_checked(tip, cfg):
                 stamped.add(tip.sha)
             elif self.unproven:
-                named[tip.sha] = " for " + ", ".join(f"{s} (no receipt for this tree and base)" for s in self.unproven)
+                named[tip.sha] = " for " + ", ".join(f"{s} ({w})" for s, w in self.why(tip, cfg).items())
         refused = tuple(
             f"{tip.ref} ({tip.sha[:12]}) is not green{named.get(tip.sha, '')}; run `tl check` in its worktree, then push"
             for tip, _cfg in deliveries if tip.sha not in stamped

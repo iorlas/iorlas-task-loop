@@ -1,10 +1,10 @@
 """Delivery queries resolve the judged profile and require its complete check identities."""
 import json
 
-from taskloop.adapters import check_files, childenv
+from taskloop.adapters import check_files
 from taskloop.app.checks import keydiff
 from taskloop.app.checks.cache import InputKeys, RunMemo, plan_digest
-from taskloop.app.checks.execution import ReadyExecution, Runs, check_env, resolve_container
+from taskloop.app.checks.execution import ReadyExecution, Runs, keyed_env, resolve_container
 from taskloop.contracts import config
 from taskloop.contracts.checks import CheckResult
 from taskloop.contracts.env import Env
@@ -25,10 +25,9 @@ def profile(git: Git, wt: str, tree: TreeSha) -> config.EngineConfig:
 
 def memo_for(stores: Stores, git: Git, wt: str, cfg: config.EngineConfig, tree: TreeSha, base: BaseSha, env: Env,
              spawner: Runs | None = None) -> RunMemo:
-    """The memo a delivery asks: the judged tree's inputs as `wt` holds them (its gitignored files under `inputs` too), the env every
-    standalone check hands its children, the container identity resolved only when `wt` has the judged sources out."""
-    engine_env = {**childenv.reaching(childenv.current_env(env)), **check_env()}
-    memo = RunMemo(stores, check_files.repo_key(git, wt), InputKeys(git, wt, tree), base, engine_env)
+    """The memo a delivery asks: the judged tree's inputs as `wt` holds them (its gitignored files under `inputs` too), the shared
+    receipt environment, the container identity resolved only when `wt` has the judged sources out."""
+    memo = RunMemo(stores, check_files.repo_key(git, wt), InputKeys(git, wt, tree), base, keyed_env(env))
     memo.checks = {c.id: repo_check(c, cfg) for c in cfg.checks}
     source_matches = (cfg.container is None or not cfg.container.dockerfile
                       or git.rev_parse(wt, "HEAD^{tree}") == tree)

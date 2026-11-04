@@ -112,7 +112,7 @@ class RunMemo:
         self.receipts: dict[CheckId, PassRecord] = {}
 
     def env_of(self, c: Check) -> Digest:
-        """The env a check runs in: what the engine hands every child (the slot's, the registered names) and the check's own."""
+        """The shared receipt environment plus the check's declared env, which can override it."""
         text = json.dumps({**self.engine_env, **c.env}, sort_keys=True)
         return Digest(hashlib.sha1(text.encode("utf-8", "surrogateescape")).hexdigest())
 

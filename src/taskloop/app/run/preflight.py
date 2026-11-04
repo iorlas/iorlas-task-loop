@@ -1,10 +1,8 @@
 """Read-only admission and plans, before an engine opens files or takes a bead."""
-from dataclasses import dataclass
 from pathlib import Path
 
 from taskloop.app.checks import gateplan
 from taskloop.app.checks.runner import cached_gate
-from taskloop.app.run.bead_env import bead_env
 from taskloop.app.run.console import say
 from taskloop.app.run.layout import repo_of
 from taskloop.app.run.stages import select_step
@@ -16,18 +14,9 @@ from taskloop.contracts.env import Env
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId, TreeSha
 from taskloop.contracts.locator import RunBundle, RunLocator
-from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import Git
 from taskloop.contracts.slots import NotARepo
 from taskloop.stores.real import real_stores
-
-
-@dataclass
-class Preview:
-    git: Git
-    wt: str
-    home: ConfigDir
-    cfg: EngineConfig
 
 
 def _inspect_uncommitted(wt: str, paths: list[str], last: RunBundle | None, *, force: bool, continuous: bool) -> None:
@@ -71,12 +60,11 @@ def inspect(bead: BeadId, wt: str, repo: str, cfg: EngineConfig, *, git: Git, wh
                 raise ValueError("close refused: no land on record; run --stage land")
             if step is Step.LAND:
                 tree = TreeSha(git.rev_parse(wt, "HEAD^{tree}")) if checkout and not paths else TreeSha("")
-                view = Preview(git, wt, who.config, cfg)
                 # A preview never executes plan_cmd. Without its answer every gate step is required.
                 planned = gateplan.PlanDecision({}) if cfg.plan_cmd is not None else None
                 if planned is not None:
                     say("gate plan: producer deferred; requiring cached passes for every gate step")
-                if not cached_gate(cfg, git, wt, stores, env, bead_env(view, create=False), tree, planned, clean=True):
+                if not cached_gate(cfg, git, wt, stores, env, tree, planned, clean=True):
                     raise ValueError("land refused: no green gate for the current tree and base; run --stage gate")
         if dry:
             say("refusals: none")

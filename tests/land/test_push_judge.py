@@ -184,6 +184,25 @@ class PushJudge(unittest.TestCase):
         self.stamp(base="old-base")
         self.assertEqual(self.judge(self.request("head", remote="refs/heads/main", old="old-base")).status, PushStatus.ALLOWED)
 
+    def test_config_drift_names_the_first_differing_key_field(self):
+        old = json.dumps({"engine": {"checks": [
+            {"id": "suite", "argv": ["true"], "run": "gate", "when": ["src/**"]}]}})
+        self.stamp(profile=old)
+        decision = self.judge()
+        self.assertEqual(decision.status, PushStatus.REFUSED)
+        self.assertRegex(decision.reasons[0],
+                         r"^refs/heads/head \(head\) is not green for suite \(config differs "
+                         r"\(expected [0-9a-f]{12} found [0-9a-f]{12}\)\); "
+                         r"run `tl check` in its worktree, then push$")
+
+    def test_moved_base_reports_no_receipt_on_the_judged_base(self):
+        self.stamp(base="old-base")
+        decision = self.judge()
+        self.assertEqual(decision.status, PushStatus.REFUSED)
+        self.assertEqual(decision.reasons, (
+            "refs/heads/head (head) is not green for suite (no receipt for this tree and base); "
+            "run `tl check` in its worktree, then push",))
+
     def test_unreadable_or_undecodable_policy_profile_is_unavailable(self):
         for text in ("{", "null", "[]", '{"engine": {"checks": false}}'):
             self.tip_profile = text

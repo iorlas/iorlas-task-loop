@@ -155,7 +155,7 @@ class DeliveryIdentity(unittest.TestCase):
                     argv = Namespace(repo="/repo", step="test", tree=tree, base=base)
                     self.assertEqual(cmd_green(argv, ConfigDir("/unused"), git, lambda text: None) == 0, expected)
                 self.assertEqual(not stack.red(engine, tree, base), expected)
-                self.assertEqual(cached_gate(engine, git, "/repo", stores, Env(), {"TL_SLOT": "check"}, tree, PlanDecision({})),
+                self.assertEqual(cached_gate(engine, git, "/repo", stores, Env(), tree, PlanDecision({})),
                                  expected)
         git.ls_tree.return_value = [TreeEntry(mode="100644", kind="blob", oid="changed", path="mise.toml")]
         self.assertEqual(stack.red(cfg, tree, base), [CheckId("test")])

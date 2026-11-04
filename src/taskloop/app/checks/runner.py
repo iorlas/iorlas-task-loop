@@ -1,15 +1,15 @@
 """Checker: one round of checks, from the plan to the CheckRun every reader shares."""
 import time
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Sequence
 from typing import Any
 
-from taskloop.adapters import check_files, childenv
+from taskloop.adapters import check_files
 from taskloop.app.checks import evidence, gateplan
 from taskloop.app.checks.attempts import Attempts
 from taskloop.app.checks.base import BaseCheck
 from taskloop.app.checks.cache import InputKeys, RunMemo
 from taskloop.app.checks.clean import isolated
-from taskloop.app.checks.execution import ReadyExecution, Runs, resolve_container
+from taskloop.app.checks.execution import ReadyExecution, Runs, keyed_env, resolve_container
 from taskloop.app.checks.executor import CheckExecutor
 from taskloop.app.checks.fixer import Fixer
 from taskloop.app.checks.host import CheckFault, CheckHost, CheckStuck
@@ -29,7 +29,7 @@ from taskloop.stores.api import Doc
 from taskloop.stores.bundle import Stores
 
 
-def cached_gate(cfg: EngineConfig, git: Git, wt: str, stores: Stores, env: Env, bead_env: Mapping[str, str],
+def cached_gate(cfg: EngineConfig, git: Git, wt: str, stores: Stores, env: Env,
                 tree: TreeSha, planned: gateplan.PlanDecision | None, spawner: Runs | None = None, *, clean: bool = False,
                 slot_wt: str | None = None) -> bool:
     """Read gate evidence without running checks or a plan producer."""
@@ -40,8 +40,7 @@ def cached_gate(cfg: EngineConfig, git: Git, wt: str, stores: Stores, env: Env, 
     start = git.merge_base(wt, "HEAD", cfg.base) or base
     items = [*([diff_check(start, tree)] if start else []), *steps]
     keys = InputKeys(git, wt, tree, clean=clean)
-    engine_env = {**childenv.reaching(childenv.current_env(env)), **bead_env}
-    memo = RunMemo(stores, check_files.repo_key(git, wt), keys, BaseSha(base), engine_env)
+    memo = RunMemo(stores, check_files.repo_key(git, wt), keys, BaseSha(base), keyed_env(env))
     if clean or slot_wt is not None:
         memo.slot_keys = InputKeys(git, slot_wt or wt, tree)
     memo.checks = {c.id: repo_check(c, cfg) for c in cfg.checks}
@@ -140,7 +139,7 @@ class Checker:
             return False
         base = host.git.rev_parse(str(host.wt), host.cfg.base)
         planned = gateplan.skipped(host, tree, base)
-        return cached_gate(host.cfg, host.git, str(host.wt), host.stores, host.env, host.bead_env, tree, planned, host.spawner,
+        return cached_gate(host.cfg, host.git, str(host.wt), host.stores, host.env, tree, planned, host.spawner,
                            clean=self.clean, slot_wt=str(self.slot_host.wt) if self.slot_host is not None else None)
 
     def _history(self) -> tuple[Doc[Durations], Durations]:
@@ -150,12 +149,11 @@ class Checker:
 
     def _memo(self, tree: TreeSha, base: str) -> RunMemo:
         """The result store of this repo for this tree and base: the one place a round, `tl check` and the gate's question get theirs.
-        The env it keys on is what the engine hands every child: the slot's, and the registered names that reach it."""
+        Slot names and state paths do not distinguish receipts; each check's declared env still does."""
         host = self.host
         keys = InputKeys(host.git, host.wt, tree, clean=self.clean)
-        engine_env = {**childenv.reaching(childenv.current_env(host.env)), **host.bead_env}
         repo = check_files.repo_key(host.git, str(host.wt))
-        memo = RunMemo(host.stores, repo, keys, BaseSha(base), engine_env, host.run_id)
+        memo = RunMemo(host.stores, repo, keys, BaseSha(base), keyed_env(host.env), host.run_id)
         if self.slot_host is not None:
             # The mixed plan shares receipts, but slot requirements use a non-clean checker's ignored-input digests.
             slot_checker = Checker(self.slot_host, self.sleep, clean=False)
