@@ -8,12 +8,14 @@ tests/checks/real/test_allowlist.py. Skipped where the repo or the tool is not o
 import json
 import os
 import pwd
+import re
 import shutil
 import subprocess
 import tempfile
-import unittest
 from pathlib import Path
 
+import pytest
+from support.case import Case
 from support.tlmain import tl_main
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -26,8 +28,8 @@ def git(cwd: Path, *a: str) -> str:
     return subprocess.run(["git", *IDENT, *a], cwd=cwd, check=True, capture_output=True, text=True).stdout
 
 
-class RealGateChecks(unittest.TestCase):
-    def setUp(self):
+class RealGateChecks(Case):
+    def setup_method(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.cfg = str(Path(self.tmp.name, "cfg"))
@@ -40,23 +42,23 @@ class RealGateChecks(unittest.TestCase):
 
     def test_task_loops_own_gate_runs_through_the_allowlist(self):
         if not shutil.which("just"):
-            self.skipTest("just is not installed")
+            pytest.skip("just is not installed")
         repo = Path(self.tmp.name, "task-loop")
         git(ROOT, "rev-parse", "HEAD")
         subprocess.run(["git", "clone", "-q", "--no-hardlinks", str(ROOT), str(repo)], check=True, capture_output=True)
         (repo / ".task-loop.json").write_text(json.dumps({"engine": {"base": "main", "checks": [
             {"id": "static", "argv": ["just", "check"], "group": "static", "run": "gate"}]}}))
         rc, out = self.check(repo, "static")
-        self.assertEqual(rc, 0, out)
-        self.assertRegex(out, r"static\s+ok")
+        assert rc == 0, out
+        assert re.search(r"static\s+ok", out)
 
     def test_lifesims_registered_static_checks_run_through_the_allowlist(self):
         if not shutil.which("just") or not (LIFESIM / ".git").exists():
-            self.skipTest("just or ~/Workspaces/lifesim is not here")
+            pytest.skip("just or ~/Workspaces/lifesim is not here")
         shown = subprocess.run(["git", "-C", str(LIFESIM), "show", "origin/main:.task-loop.json"], capture_output=True, text=True,
                                check=False)
         if shown.returncode:
-            self.skipTest("lifesim has no origin/main profile")
+            pytest.skip("lifesim has no origin/main profile")
         profile = json.loads(shown.stdout)
         for gone in ("gate", "gate_only"):
             profile["engine"].pop(gone, None)
@@ -69,10 +71,6 @@ class RealGateChecks(unittest.TestCase):
         git(repo, "add", "-A")
         git(repo, "commit", "-qm", "lifesim at origin/main")
         rc, out = self.check(repo, *LIFESIM_IDS)
-        self.assertEqual(rc, 0, out)
+        assert rc == 0, out
         for check_id in LIFESIM_IDS:
-            self.assertRegex(out, rf"{check_id}\s+ok")
-
-
-if __name__ == "__main__":
-    unittest.main()
+            assert re.search(rf"{check_id}\s+ok", out)
