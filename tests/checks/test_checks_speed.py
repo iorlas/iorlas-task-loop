@@ -209,7 +209,8 @@ class InputCache(SpeedTest):
 
     def test_doctor_reports_an_input_set_no_check_uses_and_looks_through_a_used_one(self):
         (self.wt / "a.cs").write_text("1\n")
-        (self.wt / ".task-loop.json").write_text(json.dumps({"engine": {"input_sets": {"cs": ["*.cs"], "idle": ["*.md"]}, "checks": [
+        sets = {"cs": ["*.cs"], "idle": ["*.md"]}
+        (self.wt / ".task-loop.json").write_text(json.dumps({"engine": {"input_sets": sets, "checks": [
             {"id": "u", "argv": ["x"], "inputs": ["@cs"]}]}}))
         te.sh("git", "add", "-A", cwd=self.wt)
         te.sh("git", "commit", "-qm", "sets", cwd=self.wt)
