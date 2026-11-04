@@ -2,9 +2,10 @@
 import json
 import os
 import sys
-import unittest
 from pathlib import Path
 from unittest import mock
+
+from support.case import Case
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -20,11 +21,7 @@ def shown(p):
     return Path(p).resolve().as_posix() if os.name == "nt" else str(p)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
-class DoctorBeads(unittest.TestCase):
+class DoctorBeads(Case):
     """tl-f52: doctor lists the open beads whose text names material no worktree holds."""
 
     def test_doctor_lists_the_offenders_and_not_the_clean_or_escaped(self):
@@ -35,5 +32,5 @@ class DoctorBeads(unittest.TestCase):
                  {"id": "x-5", "issue_type": "epic", "description": "study 49"}]
         with mock.patch.dict(os.environ, {"TASK_LOOP_ACTOR": "tl-test"}), tlbd.bd_boundary(result=tlbd.done(json.dumps(beads))):
             out = doctor.bead_lint_warnings("/work/repo", who())
-        self.assertEqual([w.split(":")[0] for w in out], ["bead x-1", "bead x-4"])
-        self.assertTrue(all("needs inlined facts" in w for w in out))
+        assert [w.split(":")[0] for w in out] == ["bead x-1", "bead x-4"]
+        assert all("needs inlined facts" in w for w in out)

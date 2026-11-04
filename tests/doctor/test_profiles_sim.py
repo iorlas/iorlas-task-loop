@@ -3,8 +3,9 @@ import contextlib
 import json
 import sys
 import tempfile
-import unittest
 from pathlib import Path
+
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -19,8 +20,8 @@ from taskloop.contracts.env import snapshot
 BAD = {"engine": {"checks": [{"id": "t", "cmd": "just test"}]}}
 
 
-class ProfilesOnTheSim(unittest.TestCase):
-    def setUp(self) -> None:
+class ProfilesOnTheSim(Case):
+    def setup_method(self) -> None:
         gitsim.reset()
         stack = contextlib.ExitStack()
         self.addCleanup(stack.close)
@@ -44,21 +45,17 @@ class ProfilesOnTheSim(unittest.TestCase):
     def test_the_profile_is_read_from_the_commit_on_the_base_ref(self) -> None:
         self.commit_profile({"slots": {"count": 0}})
         text, src = profiles.source(self.git, self.wt)
-        self.assertEqual(json.loads(text), {"slots": {"count": 0}})
-        self.assertTrue(src.startswith("base "), src)
+        assert json.loads(text) == {"slots": {"count": 0}}
+        assert src.startswith("base "), src
 
     def test_a_bad_committed_profile_is_a_red_row_naming_the_file(self) -> None:
         self.commit_profile(BAD)
         row = profiles.red_row(self.git, self.wt)
-        self.assertTrue(row.startswith("RED "), row)
-        self.assertIn(profiles.FILE, row)
+        assert row.startswith("RED "), row
+        assert profiles.FILE in row
 
     def test_a_base_without_the_file_is_no_profile_and_a_red_row_of_none(self) -> None:
         text, src = profiles.source(self.git, self.wt)
-        self.assertEqual(text, "")
-        self.assertTrue(src.startswith("base "), src)
-        self.assertEqual(profiles.red_row(self.git, self.wt), "")
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert text == ""
+        assert src.startswith("base "), src
+        assert profiles.red_row(self.git, self.wt) == ""

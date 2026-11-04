@@ -6,9 +6,11 @@ import os
 import subprocess
 import sys
 import tempfile
-import unittest
 from pathlib import Path
 from unittest import mock
+
+import pytest
+from support.case import Case
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -28,8 +30,8 @@ def shown(p):
     return Path(p).resolve().as_posix() if os.name == "nt" else str(p)
 
 
-class DoctorSource(unittest.TestCase):
-    def setUp(self):
+class DoctorSource(Case):
+    def setup_method(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name).resolve()
@@ -77,14 +79,14 @@ class DoctorSource(unittest.TestCase):
         """The doctor's report from `cwd`: through doctor.run, or through `tl doctor` (tl.main) when `cli`."""
         if cli:
             result = tl_main("doctor", cwd=cwd or self.wt, env=self.env)
-            self.assertEqual(result.returncode, 0)
-            self.assertEqual(result.stderr, "")
+            assert result.returncode == 0
+            assert result.stderr == ""
             return result.stdout
         out, here = io.StringIO(), os.getcwd()
         os.chdir(cwd or self.wt)
         try:
             with contextlib.redirect_stdout(out):
-                self.assertEqual(doctor.run(ROOT, snapshot(), port_git(), who()), 0)
+                assert doctor.run(ROOT, snapshot(), port_git(), who()) == 0
         finally:
             os.chdir(here)
         return out.getvalue()
@@ -94,14 +96,14 @@ class DoctorSource(unittest.TestCase):
         # The worker also has stale, uncommitted config; only the base's copy counts.
         self.write_cfg(self.wt, self.config("worker-only"))
         out = self.doctor()
-        self.assertIn("check new-base:", out)
-        self.assertNotIn("check stale:", out)
-        self.assertNotIn("check worker-only:", out)
-        self.assertIn("base origin/main at commit " + commit, out)
-        self.assertIn("stale", (self.repo / ".task-loop.json").read_text())
-        self.assertNotEqual(self.git("rev-parse", "HEAD"), commit)
-        self.assertEqual(wslots.load_cfg(str(self.wt), port_git()).checks[0].id, "new-base")
-        self.assertIn("check new-base:", self.doctor(self.repo))
+        assert "check new-base:" in out
+        assert "check stale:" not in out
+        assert "check worker-only:" not in out
+        assert "base origin/main at commit " + commit in out
+        assert "stale" in (self.repo / ".task-loop.json").read_text()
+        assert self.git("rev-parse", "HEAD") != commit
+        assert wslots.load_cfg(str(self.wt), port_git()).checks[0].id == "new-base"
+        assert "check new-base:" in self.doctor(self.repo)
 
     def test_worktree_and_nested_directory_use_base(self):
         commit = self.advance_base(self.config("nested-base"))
@@ -110,39 +112,39 @@ class DoctorSource(unittest.TestCase):
         for cwd in (self.wt, nested):
             with self.subTest(cwd=cwd):
                 out = self.doctor(cwd)
-                self.assertIn("check nested-base:", out)
-                self.assertIn(commit, out)
+                assert "check nested-base:" in out
+                assert commit in out
 
     def test_custom_base_matches_engine(self):
         commit = self.advance_base(self.config("custom"), "refs/heads/release")
         self.write_cfg(self.wt, self.config("local", base="release"))
         out = self.doctor()
-        self.assertIn("base release at commit " + commit, out)
-        self.assertIn("check custom:", out)
-        self.assertNotIn("check stale:", out)
-        self.assertEqual(wslots.load_cfg(str(self.wt), port_git()).checks[0].id, "custom")
+        assert "base release at commit " + commit in out
+        assert "check custom:" in out
+        assert "check stale:" not in out
+        assert wslots.load_cfg(str(self.wt), port_git()).checks[0].id == "custom"
 
     def test_reports_exact_commit_with_warnings(self):
         commit = self.advance_base(self.config("bad-glob"))
         self.git("config", "extensions.worktreeConfig", "false")
         out = self.doctor()
-        self.assertIn("base origin/main at commit " + commit, out)
-        self.assertIn("WARN check bad-glob:", out)
-        self.assertIn("WARN extensions.worktreeConfig", out)
-        self.assertNotIn("ok:", out)
+        assert "base origin/main at commit " + commit in out
+        assert "WARN check bad-glob:" in out
+        assert "WARN extensions.worktreeConfig" in out
+        assert "ok:" not in out
 
     def test_prints_the_effective_writer_family(self):
         self.advance_base(self.config("good", "old.txt", writer_family=["openai"]))
-        self.assertIn("engine: writer_family: openai (every worker call carries --only-family", self.doctor())
+        assert "engine: writer_family: openai (every worker call carries --only-family" in self.doctor()
         self.advance_base(self.config("good", "old.txt"))
-        self.assertIn("engine: writer_family: none", self.doctor())
+        assert "engine: writer_family: none" in self.doctor()
 
     def test_reports_exact_commit_when_ok(self):
         commit = self.advance_base(self.config("good", "old.txt"))
         out = self.doctor(cli=True)  # the one run through tl.main
-        self.assertIn("base origin/main at commit " + commit, out)
-        self.assertIn("ok: no setup problems found in " + shown(self.wt), out)
-        self.assertNotIn("WARN", out)
+        assert "base origin/main at commit " + commit in out
+        assert "ok: no setup problems found in " + shown(self.wt) in out
+        assert "WARN" not in out
 
     def test_trailing_nul_does_not_match_a_directory_glob(self):
         commit = self.advance_base(self.config("directory-only", "**/"))
@@ -151,11 +153,11 @@ class DoctorSource(unittest.TestCase):
                 if not committed:
                     self.git("update-ref", "-d", "refs/remotes/origin/main")
                 out = self.doctor()
-                self.assertIn("WARN check directory-only: inputs glob **/ matches no tracked file", out)
+                assert "WARN check directory-only: inputs glob **/ matches no tracked file" in out
                 if committed:
-                    self.assertIn("base origin/main at commit " + commit, out)
+                    assert "base origin/main at commit " + commit in out
                 else:
-                    self.assertIn("base origin/main unresolved; no commit read", out)
+                    assert "base origin/main unresolved; no commit read" in out
 
     def test_base_tracked_paths(self):
         (self.wt / "old.txt").unlink()
@@ -171,9 +173,9 @@ class DoctorSource(unittest.TestCase):
         for cwd in (self.repo, self.wt):
             with self.subTest(cwd=cwd):
                 out = self.doctor(cwd)
-                self.assertIn(commit, out)
-                self.assertIn("check removed:", out)
-                self.assertNotIn("check added:", out)
+                assert commit in out
+                assert "check removed:" in out
+                assert "check added:" not in out
 
     def test_unresolved_base_uses_invoking_worktree(self):
         self.write_cfg(self.wt, self.config("fallback", "local.txt", base="missing-base"))
@@ -182,18 +184,18 @@ class DoctorSource(unittest.TestCase):
         nested = self.wt / "nested"
         nested.mkdir()
         out = self.doctor(nested)
-        self.assertIn("working tree " + shown(self.wt), out)
-        self.assertIn("base missing-base unresolved; no commit read", out)
-        self.assertIn("ok:", out)
-        self.assertEqual(wslots.load_cfg(str(self.wt), port_git()).checks[0].id, "fallback")
+        assert "working tree " + shown(self.wt) in out
+        assert "base missing-base unresolved; no commit read" in out
+        assert "ok:" in out
+        assert wslots.load_cfg(str(self.wt), port_git()).checks[0].id == "fallback"
 
     def test_default_unresolved_base_falls_back(self):
         self.git("update-ref", "-d", "refs/remotes/origin/main")
         self.write_cfg(self.wt, self.config("local-fallback"))
         out = self.doctor()
-        self.assertIn("base origin/main unresolved; no commit read", out)
-        self.assertIn("check local-fallback:", out)
-        self.assertNotIn("check stale:", out)
+        assert "base origin/main unresolved; no commit read" in out
+        assert "check local-fallback:" in out
+        assert "check stale:" not in out
 
     def test_a_missing_base_config_means_defaults_and_a_malformed_one_is_refused(self):
         for contents in (None, "{invalid json"):
@@ -208,15 +210,15 @@ class DoctorSource(unittest.TestCase):
                 self.write_cfg(self.wt, self.config("local-only"))
                 if contents is None:
                     out = self.doctor()
-                    self.assertIn("base origin/main at commit " + commit, out)
-                    self.assertIn("ok:", out)
-                    self.assertNotIn("WARN", out)
-                    self.assertEqual(wslots.load_cfg(str(self.wt), port_git()).checks, [])
+                    assert "base origin/main at commit " + commit in out
+                    assert "ok:" in out
+                    assert "WARN" not in out
+                    assert wslots.load_cfg(str(self.wt), port_git()).checks == []
                 else:
                     for refused_call in (self.doctor, lambda: wslots.load_cfg(str(self.wt), port_git())):
-                        with self.assertRaises(SystemExit) as refused:
+                        with pytest.raises(SystemExit) as refused:
                             refused_call()
-                        self.assertEqual(refused.exception.code, 78)
+                        assert refused.value.code == 78
 
     def test_config_and_paths_use_one_resolved_commit(self):
         commit = self.advance_base(self.config("good", "old.txt"))
@@ -242,14 +244,10 @@ class DoctorSource(unittest.TestCase):
 
         moving_ref = MovingRef(snapshot())
         source = wslots.cfg_source(str(self.wt), moving_ref)
-        self.assertEqual(doctor.git_warnings(str(self.wt), source, moving_ref), [])
-        self.assertEqual(source[2], commit)
-        self.assertIn(("show", commit + ":.task-loop.json"), calls)
-        self.assertIn(("ls-tree", commit), calls)
-        self.assertEqual(sum(c[0] == "rev-parse" for c in calls), 1)
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert doctor.git_warnings(str(self.wt), source, moving_ref) == []
+        assert source[2] == commit
+        assert ("show", commit + ":.task-loop.json") in calls
+        assert ("ls-tree", commit) in calls
+        assert sum(c[0] == "rev-parse" for c in calls) == 1
 
 

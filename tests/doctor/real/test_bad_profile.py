@@ -3,12 +3,14 @@ import contextlib
 import io
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
-import unittest
 from pathlib import Path
 from unittest import mock
+
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401
@@ -30,8 +32,8 @@ GIT_ENV = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.invalid", "GIT
            "GIT_COMMITTER_EMAIL": "t@example.invalid", "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
 
 
-class BadProfile(unittest.TestCase):
-    def setUp(self) -> None:
+class BadProfile(Case):
+    def setup_method(self) -> None:
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         root = Path(tmp.name).resolve()
@@ -61,44 +63,44 @@ class BadProfile(unittest.TestCase):
 
     def test_the_row_names_the_file_and_the_key(self) -> None:
         row = profiles.red_row(port_git(),self.bad)
-        self.assertTrue(row.startswith("RED "), row)
-        self.assertIn(str(self.bad / ".task-loop.json"), row)
-        self.assertIn("checks", row)
-        self.assertEqual(profiles.red_row(port_git(),self.good), "")
+        assert row.startswith("RED "), row
+        assert str(self.bad / ".task-loop.json") in row
+        assert "checks" in row
+        assert profiles.red_row(port_git(),self.good) == ""
 
     def test_doctor_in_the_good_repo_succeeds_and_shows_the_bad_repos_row(self) -> None:
         rc, text = self.doctor(self.good)
-        self.assertEqual(rc, 0, text)
-        self.assertIn(f"RED {self.bad}", text)
-        self.assertNotIn("Traceback", text)
+        assert rc == 0, text
+        assert f"RED {self.bad}" in text
+        assert "Traceback" not in text
 
     def test_doctor_fails_with_a_FAIL_line_when_the_plugin_has_no_ownership_section(self) -> None:
         bare = self.good.parent / "plugin"
         bare.mkdir()
         (bare / "AGENTS.md").write_text("# no section\n")
         rc, text = self.doctor(self.good, bare)
-        self.assertEqual(rc, 1)
-        self.assertRegex(text, r"(?m)^FAIL .*Ownership")
+        assert rc == 1
+        assert re.search(r"(?m)^FAIL .*Ownership", text)
 
     def test_doctor_in_the_bad_repo_is_a_row_and_exit_1_not_a_traceback(self) -> None:
         rc, text = self.doctor(self.bad)
-        self.assertEqual(rc, 1)
-        self.assertEqual(sum(1 for ln in text.splitlines() if ln.startswith("RED ")), 1)
+        assert rc == 1
+        assert sum(1 for ln in text.splitlines() if ln.startswith("RED ")) == 1
 
     def test_walking_the_registered_repos_skips_the_one_asked_from(self) -> None:
         rows = profiles.red_rows(port_git(),profiles.registered(ReposStore(homes.cfg())), but=str(self.good))
-        self.assertEqual(len(rows), 1)
-        self.assertEqual(profiles.red_rows(port_git(),[str(self.bad)], but=str(self.bad)), [])
+        assert len(rows) == 1
+        assert profiles.red_rows(port_git(),[str(self.bad)], but=str(self.bad)) == []
 
 
 STALE: dict[str, object] = {"engine": {"checks": [{"id": "t", "cmd": "just test"}]}}  # a string check: bad
 GOOD: dict[str, object] = {"engine": {"checks": [{"id": "t", "argv": ["just", "test"]}]}}
 
 
-class SourceIsTheBaseCommit(unittest.TestCase):
+class SourceIsTheBaseCommit(Case):
     """The loop reads the profile off the base commit; doctor must read the same one, not a stale checkout."""
 
-    def setUp(self) -> None:
+    def setup_method(self) -> None:
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         patch = mock.patch.dict(os.environ, GIT_ENV)
@@ -121,27 +123,23 @@ class SourceIsTheBaseCommit(unittest.TestCase):
     def test_a_stale_working_tree_under_a_good_base_commit_is_no_red_row(self) -> None:
         self.commit(GOOD, base=True)
         (self.repo / ".task-loop.json").write_text(json.dumps(STALE))
-        self.assertEqual(profiles.red_row(port_git(),self.repo), "")
+        assert profiles.red_row(port_git(),self.repo) == ""
         says: list[str] = []
-        self.assertFalse(profiles.report(port_git(),str(self.repo), ReposStore(ConfigDir(self.repo / "none")), says.append))
-        self.assertEqual(says, [f"profile: {self.repo} read from base {self.sha7()}"])
+        assert not profiles.report(port_git(),str(self.repo), ReposStore(ConfigDir(self.repo / "none")), says.append)
+        assert says == [f"profile: {self.repo} read from base {self.sha7()}"]
 
     def test_a_bad_base_commit_is_a_row_naming_the_source(self) -> None:
         self.commit(STALE, base=True)
         (self.repo / ".task-loop.json").write_text(json.dumps(GOOD))
         row = profiles.red_row(port_git(),self.repo)
-        self.assertTrue(row.startswith("RED "), row)
-        self.assertIn(f"(base {self.sha7()})", row)
+        assert row.startswith("RED "), row
+        assert f"(base {self.sha7()})" in row
 
     def test_no_base_commit_falls_back_to_the_working_tree(self) -> None:
         self.commit(GOOD, base=False)
-        self.assertEqual(profiles.red_row(port_git(),self.repo), "")
+        assert profiles.red_row(port_git(),self.repo) == ""
         (self.repo / ".task-loop.json").write_text(json.dumps(STALE))
-        self.assertIn("(working tree)", profiles.red_row(port_git(),self.repo))
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert "(working tree)" in profiles.red_row(port_git(),self.repo)
 
 
 class OtherViews(BadProfile):
@@ -151,15 +149,15 @@ class OtherViews(BadProfile):
         with mock.patch.object(brief.wslots, "slot_beads", return_value=[]):
             text = brief.status_text(str(self.good), ROOT, 0.0, False, snapshot(), who(), port_git())
             data = json.loads(brief.status_text(str(self.good), ROOT, 0.0, True, snapshot(), who(), port_git()))
-        self.assertIn(f"RED {self.bad}", text)
-        self.assertIn(str(self.bad / ".task-loop.json"), text)
-        self.assertEqual([r.split(":")[0] for r in data["red"]], [f"RED {self.bad}"])
-        self.assertNotIn("Traceback", text)
+        assert f"RED {self.bad}" in text
+        assert str(self.bad / ".task-loop.json") in text
+        assert [r.split(":")[0] for r in data["red"]] == [f"RED {self.bad}"]
+        assert "Traceback" not in text
 
     def test_the_dash_ports_name_the_bad_repo_only(self) -> None:
         ports = dash_ports.ports(snapshot())
-        self.assertEqual(ports.profile_error(str(self.good)), "")
-        self.assertIn(str(self.bad / ".task-loop.json"), ports.profile_error(str(self.bad)))
+        assert ports.profile_error(str(self.good)) == ""
+        assert str(self.bad / ".task-loop.json") in ports.profile_error(str(self.bad))
 
     def test_cutover_over_a_bad_repo_is_not_a_traceback(self) -> None:
-        self.assertEqual(wloop.live_work(port_git(), who()), [])
+        assert wloop.live_work(port_git(), who()) == []
