@@ -3,6 +3,7 @@ import tempfile
 from pathlib import Path
 from unittest import mock
 
+import pytest
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support.case import Case
 
@@ -30,17 +31,15 @@ class CgroupHeadroom(Case):
     def test_a_headroom_larger_than_memavailable_loses(self):
         assert self.available({"box/memory.max": str(64 * 1024 * MB), "box/memory.current": "0"}) == 8192
 
-    def test_max_means_no_limit(self):
-        assert self.available({"box/memory.max": "max\n", "box/memory.current": "5"}) == 8192
+    @pytest.mark.parametrize("p0,p1", [("max\n", "5"), ("lots", "??")], ids=['max_means_no_limit', 'garbage_means_no_limit'])
+    def test_max_means_no_limit_cases(self, p0, p1):
+        assert self.available({"box/memory.max": p0, "box/memory.current": p1}) == 8192
 
     def test_a_missing_memory_max_means_no_limit(self):
         assert self.available({"box/memory.current": "5"}) == 8192
 
     def test_a_missing_memory_current_means_no_limit(self):
         assert self.available({"box/memory.max": str(MB)}) == 8192
-
-    def test_garbage_means_no_limit(self):
-        assert self.available({"box/memory.max": "lots", "box/memory.current": "??"}) == 8192
 
     def test_the_root_path_reads_the_cgroup_root_itself(self):
         assert self.available({"memory.max": str(2048 * MB), "memory.current": str(MB)}, path="/") == 2047
