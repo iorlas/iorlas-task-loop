@@ -2,11 +2,16 @@
 a failure becomes one of the typed SlotGitErrors (BranchPinned, DirtyTree, RefRace, IndexLocked) or the plain SlotGitError."""
 import os
 import tempfile
+from pathlib import Path
 from typing import Literal
+
+from git_porcelain.errors import GitError
+from git_porcelain.real import RealRepo
 
 from taskloop.adapters import procs
 from taskloop.adapters.git_base import classify
 from taskloop.adapters.git_ops import LandGit
+from taskloop.adapters.git_pool import pool_error
 from taskloop.contracts.gitfacts import ConfigEntry, GitOutcome, GrepHit, LogRow, Pick, Ref, StatusRow, TreeEntry
 from taskloop.contracts.slots import Checkout, GitReadFailure, MissingRevision, NotARepo, NotAWorktree, RefRace, SlotGitError
 
@@ -63,6 +68,7 @@ class RealGit(LandGit):
         self._run(d, "clean", "-fdxq" if ignored else "-fdq", *[x for k in keep for x in ("-e", k)])
 
     def checkouts(self, d: str) -> list[Checkout]:
+        # Porcelain v0.8.0 lists without -z: quoted paths and truncated records do not round-trip.
         out = self._read(d, "worktree", "list", "--porcelain", "-z")
         if out and not out.endswith("\0\0"):
             raise GitReadFailure("git worktree list: incomplete checkout record")
@@ -77,14 +83,23 @@ class RealGit(LandGit):
         return found
 
     def remove_worktree(self, repo: str, path: str) -> bool:
+        # drop_worktree silently accepts absent paths and also prunes; this port reports a second removal as False.
         return self._run(repo, "worktree", "remove", path).returncode == 0
 
     def remove_worktree_why(self, repo: str, path: str) -> str:
+        # Callers display the last stderr line verbatim; drop_worktree exposes a prefixed, truncated exception instead.
         r = self._run(repo, "worktree", "remove", path)
         return "" if r.returncode == 0 else (r.stderr.strip().splitlines() or ["git worktree remove failed"])[-1]
 
     def add_worktree(self, repo: str, path: str, ref: str) -> None:
-        self._must(repo, "worktree", "add", "--detach", path, ref)
+        if not self.pinned:
+            # RealRepo always pins pool operations; keep the explicitly unpinned port's behavior.
+            self._must(repo, "worktree", "add", "--detach", path, ref)
+            return
+        try:
+            RealRepo(Path(repo).absolute(), env=self.git_env(repo), memoize=False, sleep=self.sleep).add_worktree(Path(path), ref)
+        except GitError as err:
+            raise pool_error(err) from err
 
     def init_bare(self, d: str, branch: str) -> None:
         self._must(os.path.dirname(d) or ".", "init", "-q", "--bare", "-b", branch, d)
@@ -304,6 +319,7 @@ class RealGit(LandGit):
         return out
 
     def worktree_state(self, d: str) -> bytes | None:
+        # Tree-hash memo input, not pool state: the port requires the exact v2 --branch bytes, including invalid UTF-8.
         r = procs.run_bytes(
             ["git", "--no-optional-locks", "status", "--porcelain=v2", "--branch", "-z", "--untracked-files=all"],
             cwd=d,
@@ -316,11 +332,14 @@ class RealGit(LandGit):
         return self._read(d, "diff", *(["--stat"] if stat else []), a, b, *spec).strip()
 
     def add_worktree_force(self, repo: str, path: str, ref: str) -> None:
+        # Porcelain v0.8.0 add_worktree has no force option (needed to reuse stale registrations).
         self._must(repo, "worktree", "add", "--detach", "--force", path, ref)
 
     def remove_worktree_force(self, repo: str, path: str) -> None:
+        # drop_worktree also prunes unrelated registrations; retain the remove-only operation.
         self._run(repo, "worktree", "remove", "--force", path)
 
     def prune_worktrees(self, repo: str) -> None:
+        # Porcelain v0.8.0 has no standalone prune method on Repo or RealRepo.
         self._run(repo, "worktree", "prune")
 
