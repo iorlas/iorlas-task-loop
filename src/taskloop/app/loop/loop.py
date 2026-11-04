@@ -5,6 +5,7 @@ import datetime
 import json
 import socket
 import time
+import traceback
 from dataclasses import dataclass, field
 from os import EX_CONFIG
 from pathlib import Path
@@ -110,6 +111,7 @@ class Loop(Core):
             return EX_CONFIG
         except Exception as e:
             self.left("crash", f"{type(e).__name__}: {e}")
+            self.say("loop crashed\n" + traceback.format_exc())
             self.fall_back(e)
             raise
         except BaseException as error:
@@ -127,7 +129,7 @@ class Loop(Core):
         try:
             self.env.prune(self.say)
         except Exception as e:
-            self.say(f"warn: prune failed: {type(e).__name__}: {e}"[:300])
+            self.say(f"warn: prune failed: {type(e).__name__}: {e}\n" + traceback.format_exc())
 
     def fall_back(self, err: Exception) -> None:
         """A loop that breaks soon after a move goes back to the install it came from, once, and says so in red."""
