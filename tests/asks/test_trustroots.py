@@ -53,4 +53,3 @@ class TrustRoots(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "unreadable diff"):
             self.refusal()
         self.assertTrue(trustroots.refusal(self.git, "/work", "origin/main", None))
-
