@@ -6,9 +6,10 @@ import sys
 import tempfile
 import threading
 import time
-import unittest
 from pathlib import Path
 from unittest import mock
+
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -53,8 +54,8 @@ class SlowDocs:
         return self.inner.keys()
 
 
-class Asks(unittest.TestCase):
-    def setUp(self):
+class Asks(Case):
+    def setup_method(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.cfg = ConfigDir(tmp.name)
@@ -81,25 +82,25 @@ class Asks(unittest.TestCase):
         a, b = self.store(), self.store()
         t1 = BeadId("tl-1")
         got: list = self.race(lambda: a.answer(t1, "tl-1-1", answer("A")), lambda: b.answer(t1, "tl-1-1", answer("B")))
-        self.assertEqual(sorted(why for _, why in got), ["", "answered"])
+        assert sorted(why for _, why in got) == ["", "answered"]
         winner = next(done for done, why in got if not why)
-        self.assertEqual(must(AskStore.at(self.cfg).get(BeadId("tl-1"))).answer, must(winner).answer)
+        assert must(AskStore.at(self.cfg).get(BeadId("tl-1"))).answer == must(winner).answer
 
     def test_a_run_that_goes_on_never_overwrites_an_answer_filed_meanwhile(self):
         a, b = self.store(), self.store()
         self.race(lambda: a.answer(BeadId("tl-1"), "tl-1-1", answer("A")), lambda: b.consume(BeadId("tl-1"), T + 5, unanswered=True))
         got = must(AskStore.at(self.cfg).get(BeadId("tl-1")))
         if got.consumed is not None and got.answer is None:  # the run went first: the answer must have been refused
-            self.assertEqual(AskStore.at(self.cfg).answer(BeadId("tl-1"), "tl-1-1", answer("A"))[1], "consumed")
+            assert AskStore.at(self.cfg).answer(BeadId("tl-1"), "tl-1-1", answer("A"))[1] == "consumed"
         else:
-            self.assertEqual(must(got.answer).text, "A")
+            assert must(got.answer).text == "A"
 
     def test_consume_of_an_ask_nobody_answered_is_refused(self):
         st = AskStore.at(self.cfg)
-        self.assertIsNone(st.consume(BeadId("tl-1"), T + 5))
-        self.assertEqual(must(st.get(BeadId("tl-1"))).status, AskStatus.OPEN)
-        self.assertIsNone(must(st.get(BeadId("tl-1"))).consumed)
-        self.assertEqual(must(st.consume(BeadId("tl-1"), T + 6, unanswered=True)).consumed, T + 6)
+        assert st.consume(BeadId("tl-1"), T + 5) is None
+        assert must(st.get(BeadId("tl-1"))).status == AskStatus.OPEN
+        assert must(st.get(BeadId("tl-1"))).consumed is None
+        assert must(st.consume(BeadId("tl-1"), T + 6, unanswered=True)).consumed == T + 6
 
 
 def snap(at):
@@ -121,7 +122,7 @@ def during(real, fn):
     return wrapped, started
 
 
-class Logs(unittest.TestCase):
+class Logs(Case):
     def test_a_usage_row_appended_during_prune_survives(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
@@ -131,10 +132,10 @@ class Logs(unittest.TestCase):
         h.record(snap(T))
         wrapped, started = during(UsageHistory.read_from, lambda: UsageHistory(cfg).record(snap(T + 7)))
         with mock.patch.object(UsageHistory, "read_from", wrapped):
-            self.assertEqual(h.prune(T), 1)
+            assert h.prune(T) == 1
         for t in started:
             t.join(30)
-        self.assertEqual([r.at for r in h.rows()], [T, T + 7])
+        assert [r.at for r in h.rows()] == [T, T + 7]
 
     def test_an_event_appended_during_prune_survives(self):
         tmp = tempfile.TemporaryDirectory()
@@ -148,4 +149,4 @@ class Logs(unittest.TestCase):
                 trail.prune_events(homes.cfg())
             for t in started:
                 t.join(30)
-            self.assertEqual([json.loads(ln)["kind"] for ln in f.read_text().splitlines()], ["stage"])
+            assert [json.loads(ln)["kind"] for ln in f.read_text().splitlines()] == ["stage"]

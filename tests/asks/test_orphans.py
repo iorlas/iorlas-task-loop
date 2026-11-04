@@ -2,9 +2,10 @@
 import json
 import sys
 import tempfile
-import unittest
 from argparse import Namespace
 from pathlib import Path
+
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -23,8 +24,8 @@ T = 1000.0
 
 
 @domain
-class OrphanTest(unittest.TestCase):
-    def setUp(self) -> None:
+class OrphanTest(Case):
+    def setup_method(self) -> None:
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.cfg = ConfigDir(Path(self.tmp.name))
@@ -35,29 +36,29 @@ class OrphanTest(unittest.TestCase):
         self.store.beads[BeadId("tl-7")] = Bead(id=BeadId("tl-7"), title="t", status="blocked", labels=["needs-info"])
 
     def test_it_is_listed_with_the_one_typed_line(self) -> None:
-        self.assertEqual((self.asks.get(BeadId("tl-7")), self.asks.orphans()), (None, ["tl-7"]))
+        assert (self.asks.get(BeadId("tl-7")), self.asks.orphans()) == (None, ["tl-7"])
         out: list[str] = []
-        self.assertEqual(cli.age(self.asks, T, out.append), 0)
-        self.assertEqual(out, [sweeps.orphan_lines(self.asks)[0]])
-        self.assertIn(ORPHAN, out[0])
+        assert cli.age(self.asks, T, out.append) == 0
+        assert out == [sweeps.orphan_lines(self.asks)[0]]
+        assert ORPHAN in out[0]
         listed: list[str] = []
         cli.run(Namespace(op="list"), self.asks, lambda repo: self.store, lambda: T, "denis", self.cfg, listed.append)
-        self.assertIn(ORPHAN, listed[0])
+        assert ORPHAN in listed[0]
 
     def test_the_loop_reopens_it_into_the_pick_queue_once(self) -> None:
         self.store.beads[BeadId("tl-7")].metadata[HAD_PICK] = "auto"  # the park took the label off
         marker = self.cfg.ask_marker("orphans")
-        self.assertEqual(sweeps.reask_orphans(self.asks, self.store, marker, T, "auto", "needs-info"), ["tl-7"])
+        assert sweeps.reask_orphans(self.asks, self.store, marker, T, "auto", "needs-info") == ["tl-7"]
         b = self.store.beads[BeadId("tl-7")]
-        self.assertEqual((b.status, "auto" in b.labels, "needs-info" in b.labels), ("open", True, False))
-        self.assertEqual(sweeps.reask_orphans(self.asks, self.store, marker, T + 1, "auto", "needs-info"), [])  # throttled
-        self.assertEqual(sweeps.reask_orphans(self.asks, self.store, marker, T + 1e4, "auto", "needs-info"), [])  # no longer blocked
+        assert (b.status, "auto" in b.labels, "needs-info" in b.labels) == ("open", True, False)
+        assert sweeps.reask_orphans(self.asks, self.store, marker, T + 1, "auto", "needs-info") == []  # throttled
+        assert sweeps.reask_orphans(self.asks, self.store, marker, T + 1e4, "auto", "needs-info") == []  # no longer blocked
 
     def test_the_sweep_never_adds_a_pick_label_the_bead_did_not_have(self) -> None:
         marker = self.cfg.ask_marker("orphans")
-        self.assertEqual(sweeps.reask_orphans(self.asks, self.store, marker, T, "auto", "needs-info"), ["tl-7"])
+        assert sweeps.reask_orphans(self.asks, self.store, marker, T, "auto", "needs-info") == ["tl-7"]
         b = self.store.beads[BeadId("tl-7")]
-        self.assertEqual((b.status, b.labels), ("open", []))
+        assert (b.status, b.labels) == ("open", [])
 
     def test_answer_rerun_reopens_it_and_a_closed_bead_drops_the_dead_file(self) -> None:
         out: list[str] = []
@@ -65,11 +66,7 @@ class OrphanTest(unittest.TestCase):
             Namespace(op="answer", bead="tl-7", text=[], rerun=True), self.asks, lambda repo: self.store, lambda: T, "denis",
             self.cfg, out.append
         )
-        self.assertEqual((code, self.store.beads[BeadId("tl-7")].status), (0, "open"))
+        assert (code, self.store.beads[BeadId("tl-7")].status) == (0, "open")
         self.store.beads[BeadId("tl-7")] = Bead(id=BeadId("tl-7"), title="t", status="closed")
         sweeps.reopen(self.asks, self.store, BeadId("tl-7"))
-        self.assertEqual(self.asks.orphans(), [])
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert self.asks.orphans() == []

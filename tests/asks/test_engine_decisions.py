@@ -43,60 +43,59 @@ class EngineDecisions(EngineTest):
         first = self.decide("Saves stay in format v1.")
         self.decide("Money moves weekly.")
         rc, s = self.run_engine({"plan": [dict(PLAN, cited=[first.id, "ADR-77"])], "write": [WRITE], "review": [CLEAN]})
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertIn("Decisions in force for this repo", s.prompts[0])
-        self.assertIn("ADR-1: Saves stay in format v1.", s.prompts[0])
-        self.assertIn("ADR-2: Money moves weekly.", s.prompts[0])
-        self.assertIn("`cited`", s.prompts[0])
+        assert rc == 0, self.blocked
+        assert "Decisions in force for this repo" in s.prompts[0]
+        assert "ADR-1: Saves stay in format v1." in s.prompts[0]
+        assert "ADR-2: Money moves weekly." in s.prompts[0]
+        assert "`cited`" in s.prompts[0]
         uses = self.adrs().uses()
-        self.assertEqual([(u.adr, u.bead) for u in uses], [("ADR-1", "t-1")])  # the unknown id is dropped, not counted
-        self.assertEqual(self.adrs().reuses()["ADR-1"][0], 1)
-        self.assertIn("do not exist: ADR-77", self.eng.log_path.read_text())
+        assert [(u.adr, u.bead) for u in uses] == [("ADR-1", "t-1")]  # the unknown id is dropped, not counted
+        assert self.adrs().reuses()["ADR-1"][0] == 1
+        assert "do not exist: ADR-77" in self.eng.log_path.read_text()
 
     def test_a_pruned_decision_is_no_longer_read_cited_or_matched(self):
         old = self.decide("Saves stay in format v1.")
         self.decide("Money moves weekly.")
-        self.assertEqual(self.adrs().retire(old.id, "denis", 5.0), "")
+        assert self.adrs().retire(old.id, "denis", 5.0) == ""
         rc, s = self.run_engine({"plan": [dict(PLAN, cited=[old.id, "ADR-2"])], "write": [WRITE], "review": [CLEAN]})
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertNotIn("Saves stay in format v1.", s.prompts[0])
-        self.assertIn("ADR-2: Money moves weekly.", s.prompts[0])
-        self.assertEqual([u.adr for u in self.adrs().uses()], ["ADR-2"])
+        assert rc == 0, self.blocked
+        assert "Saves stay in format v1." not in s.prompts[0]
+        assert "ADR-2: Money moves weekly." in s.prompts[0]
+        assert [u.adr for u in self.adrs().uses()] == ["ADR-2"]
 
     def test_a_repo_with_no_decisions_adds_nothing_to_the_prompt(self):
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertNotIn("Decisions in force", s.prompts[0])
-        self.assertEqual(self.adrs().uses(), [])
+        assert rc == 0, self.blocked
+        assert "Decisions in force" not in s.prompts[0]
+        assert self.adrs().uses() == []
 
     def test_a_reversible_plan_question_is_a_soft_ask_and_the_run_goes_on_with_its_default(self):
         q = dict(PLAN, question="Which file do I follow?", options=OPTS, owner_cause="requirement")
         rc, _s = self.run_engine({"plan": [q], "write": [WRITE], "review": [CLEAN]})
-        self.assertEqual(rc, 0, self.blocked)
+        assert rc == 0, self.blocked
         ask = must(self.asks().get(BeadId("t-1")))
         # the run landed on it, so the ask is closed
-        self.assertEqual((ask.blocking, ask.status, ask.owner_cause, ask.cause_by),
-                         (False, AskStatus.CLOSED, OwnerCause.REQUIREMENT, "agent"))
-        self.assertIn("planned on the bead text and the repo", ask.default)
-        self.assertEqual([r.event for r in self.asks().history(ask.id)], ["raise", "close"])
-        self.assertNotIn("t-1", [c[2] for c in self.bd_calls if c[:2] == ("labels", "remove")])  # nothing left the pick queue
+        assert (ask.blocking, ask.status, ask.owner_cause, ask.cause_by) == (False, AskStatus.CLOSED, OwnerCause.REQUIREMENT, "agent")
+        assert "planned on the bead text and the repo" in ask.default
+        assert [r.event for r in self.asks().history(ask.id)] == ["raise", "close"]
+        assert "t-1" not in [c[2] for c in self.bd_calls if c[:2] == ("labels", "remove")]  # nothing left the pick queue
 
     def test_an_irreversible_question_is_a_blocking_ask_with_the_cause_the_agent_declared(self):
         rc, _s = self.run_engine({"plan": [dict(IRREVERSIBLE, owner_cause="decision")]})
-        self.assertEqual(rc, 2)
+        assert rc == 2
         ask = must(self.asks().get(BeadId("t-1")))
-        self.assertEqual((ask.blocking, ask.default, ask.owner_cause, ask.status), (True, "", OwnerCause.DECISION, AskStatus.OPEN))
+        assert (ask.blocking, ask.default, ask.owner_cause, ask.status) == (True, "", OwnerCause.DECISION, AskStatus.OPEN)
 
     def test_a_cause_outside_the_list_is_unknown_and_none_is_unknown(self):
         self.run_engine({"plan": [dict(IRREVERSIBLE, owner_cause="unknown")]})
-        self.assertEqual(must(self.asks().get(BeadId("t-1"))).owner_cause, OwnerCause.UNKNOWN)
+        assert must(self.asks().get(BeadId("t-1"))).owner_cause == OwnerCause.UNKNOWN
 
     def test_a_repeat_ask_names_the_decision_and_the_past_answer_it_matches(self):
         key = similar.key_of(specs.open_question(PUSH, None).ask_class, PUSH)
         adr = self.decide("History is never pushed to main.", key)
         rc, _s = self.run_engine({"plan": [IRREVERSIBLE]})
-        self.assertEqual(rc, 2)
+        assert rc == 2
         first = must(self.asks().get(BeadId("t-1")))
-        self.assertEqual((first.key, first.similar), (key, [SimilarRef(kind="adr", id=adr.id)]))
+        assert (first.key, first.similar) == (key, [SimilarRef(kind="adr", id=adr.id)])
         intake.Intake(self.asks(), self.store, lambda: 5.0, "denis").answer(BeadId("t-1"), "text", "hold")
-        self.assertEqual(json.loads((homes.config_dir() / "ask-ledger.jsonl").read_text().splitlines()[0])["event"], "raise")
+        assert json.loads((homes.config_dir() / "ask-ledger.jsonl").read_text().splitlines()[0])["event"] == "raise"

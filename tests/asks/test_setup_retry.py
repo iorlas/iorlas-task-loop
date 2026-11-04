@@ -1,9 +1,10 @@
 """Missing-setup asks receive one typed engine retry per bead and release."""
 import sys
-import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
+
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -27,8 +28,8 @@ BEAD = BeadId("t-1")
 WHY = "failed: the configured check `unity` needs something this tree lacks: client/ is not set up"
 
 
-class SetupRetry(unittest.TestCase):
-    def setUp(self):
+class SetupRetry(Case):
+    def setup_method(self):
         self.asks = fake_stores().asks
         self.store = FakeBeads()
         self.store.beads[BEAD] = Bead(id=BEAD, title="T", status="blocked", labels=["needs-info"], metadata={HAD_PICK: "auto"})
@@ -46,50 +47,50 @@ class SetupRetry(unittest.TestCase):
         return setup_retry.retry_setup(self.asks, self.store, BEAD, version, 2, self.cfg, starting=starting)
 
     def test_slot_gate_configuration_answers_and_restores_the_queue(self):
-        self.assertTrue(self.retry())
+        assert self.retry()
         ask = must(self.asks.get(BEAD))
         answer = must(ask.answer)
-        self.assertEqual((ask.status, answer.action, answer.text, answer.by), (AskStatus.ANSWERED, "rerun", "retry", "engine:1.0"))
+        assert (ask.status, answer.action, answer.text, answer.by) == (AskStatus.ANSWERED, "rerun", "retry", "engine:1.0")
         bead = self.store.beads[BEAD]
-        self.assertEqual((bead.status, bead.labels), ("open", ["auto"]))
-        self.assertNotIn(HAD_PICK, bead.metadata)
-        self.assertEqual(raiser.check(self.asks, BEAD, "brief", False, 3)[0], "answer")
+        assert (bead.status, bead.labels) == ("open", ["auto"])
+        assert HAD_PICK not in bead.metadata
+        assert raiser.check(self.asks, BEAD, "brief", False, 3)[0] == "answer"
 
     def test_replacing_an_ask_and_restarting_does_not_reset_the_release_budget(self):
-        self.assertTrue(self.retry())
+        assert self.retry()
         self.file()
-        self.assertFalse(self.retry(starting=True))
-        self.assertTrue(self.retry(version="1.1", starting=True))
+        assert not self.retry(starting=True)
+        assert self.retry(version="1.1", starting=True)
         self.file()
-        self.assertFalse(self.retry(version="1.0", starting=True))
-        self.assertFalse(self.retry(version="1.1", starting=True))
+        assert not self.retry(version="1.0", starting=True)
+        assert not self.retry(version="1.1", starting=True)
 
     def test_engine_start_retries_even_before_the_profile_is_changed_to_slot(self):
         self.cfg = self.cfg.replace(checks=[self.cfg.checks[0].replace(run_in="clean")])
-        self.assertFalse(self.retry())
-        self.assertTrue(self.retry(starting=True))
+        assert not self.retry()
+        assert self.retry(starting=True)
 
     def test_engine_ask_flow_answers_and_consumes_the_setup_ask(self):
         host = SimpleNamespace(stores=SimpleNamespace(asks=self.asks), store=self.store, bead=BEAD, cfg=self.cfg,
                                dry=False, brief_hash="brief", fresh=False, briefs=mock.Mock(), log=mock.Mock())
         with mock.patch("taskloop.app.run.ask_flow.ident.plugin_version", return_value="1.0"):
             AskFlow(host).check()
-        self.assertEqual(host.answered.answer.text, "retry")
-        self.assertIsNotNone(must(self.asks.get(BEAD)).consumed)
+        assert host.answered.answer.text == "retry"
+        assert must(self.asks.get(BEAD)).consumed is not None
         host.briefs.export.assert_called_once()
 
     def test_unrelated_reasons_and_other_failing_checks_are_left_for_the_owner(self):
         for why in ("client/ is unavailable", WHY.replace("`unity`", "`unity-other`")):
             with self.subTest(why=why):
                 self.file(why)
-                self.assertFalse(self.retry())
-                self.assertIsNone(must(self.asks.get(BEAD)).answer)
+                assert not self.retry()
+                assert must(self.asks.get(BEAD)).answer is None
         self.file("client/ is unavailable")
-        self.assertFalse(self.retry(starting=True))
+        assert not self.retry(starting=True)
 
     def test_stage_only_slot_check_does_not_trigger_loop_recovery(self):
         self.cfg = self.cfg.replace(checks=[self.cfg.checks[0].replace(run="stage")])
-        self.assertFalse(self.retry())
+        assert not self.retry()
 
     def test_owner_answer_consumed_and_closed_asks_are_preserved(self):
         for changes in ({"answer": AskAnswer(action="text", text="wait", by="owner")},
@@ -97,27 +98,27 @@ class SetupRetry(unittest.TestCase):
             with self.subTest(changes=changes):
                 ask = self.file().replace(**changes)
                 self.asks.put(ask)
-                self.assertFalse(self.retry(starting=True))
-                self.assertEqual(self.asks.get(BEAD), ask)
+                assert not self.retry(starting=True)
+                assert self.asks.get(BEAD) == ask
 
     def test_parked_ask_wakes_without_granting_a_pick_label_it_never_had(self):
         self.store.beads[BEAD].metadata.clear()
         ask = must(self.asks.get(BEAD))
         self.asks.park(BEAD, ask.id)
-        self.assertTrue(self.retry())
-        self.assertEqual(self.store.beads[BEAD].labels, [])
+        assert self.retry()
+        assert self.store.beads[BEAD].labels == []
 
     def test_bad_budget_and_unknown_version_fail_closed(self):
         for value in ("broken", "{}", "[1]", '["1.0"]'):
             with self.subTest(value=value):
                 self.store.beads[BEAD].metadata[setup_retry.RETRIED] = value
-                self.assertFalse(self.retry(starting=True))
+                assert not self.retry(starting=True)
         self.store.beads[BEAD].metadata.pop(setup_retry.RETRIED)
-        self.assertFalse(self.retry(version="", starting=True))
+        assert not self.retry(version="", starting=True)
 
     def test_loop_sweep_requeues_only_asks_of_its_own_repository(self):
         ask = self.file(stuck=True)
-        self.assertEqual(ask.kind, AskKind.STUCK)
+        assert ask.kind == AskKind.STUCK
         self.asks.park(BEAD, ask.id)
         who = Identity(actor="engine", home="/unused")
         with (mock.patch.object(wire_asks, "store", return_value=self.asks),
@@ -128,9 +129,9 @@ class SetupRetry(unittest.TestCase):
               mock.patch.object(wire_asks.sweeps, "reask_orphans"),
               mock.patch.object(wire_asks.sweeps, "shout")):
             wire_asks.sweep_asks(who, who.config, cfg=self.cfg, repo="/other")
-            self.assertIsNone(must(self.asks.get(BEAD)).answer)
+            assert must(self.asks.get(BEAD)).answer is None
             wire_asks.sweep_asks(who, who.config, cfg=self.cfg, repo="/repo")
-        self.assertEqual(must(must(self.asks.get(BEAD)).answer).text, "retry")
-        self.assertEqual(self.store.beads[BEAD].status, "open")
-        self.assertEqual(self.store.beads[BEAD].labels, ["auto"])
-        self.assertFalse(self.retry())
+        assert must(must(self.asks.get(BEAD)).answer).text == "retry"
+        assert self.store.beads[BEAD].status == "open"
+        assert self.store.beads[BEAD].labels == ["auto"]
+        assert not self.retry()

@@ -1,9 +1,10 @@
 """One code path: an answer from the dashboard and `tl answer` leave the same ask record and the same bead comments."""
 import sys
 import tempfile
-import unittest
 from argparse import Namespace
 from pathlib import Path
+
+from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -30,7 +31,7 @@ def world(root: str):
     return store, asks
 
 
-class SameIntake(unittest.TestCase):
+class SameIntake(Case):
     def test_the_dash_and_tl_answer_file_the_same_record_and_comments(self):
         with tempfile.TemporaryDirectory() as a, tempfile.TemporaryDirectory() as b:
             tl_store, tl_asks = world(a)
@@ -40,13 +41,9 @@ class SameIntake(unittest.TestCase):
             cli_asks.run(args, tl_asks, lambda repo: tl_store, lambda: 1000.0, "dash", ConfigDir(a), lambda _line: None)
             dash = make_dash(answering(lambda repo: dash_store, b), config=b)
             req = {"project": "b", "ask": "b-1-1", "kind": "answer", "text": "go with A"}
-            self.assertEqual(dash.writes.post("answer", req), (200, {"ok": True, "message": ""}))
-            self.assertEqual([c.text for c in dash_store.comments(BeadId("b-1"))], [c.text for c in tl_store.comments(BeadId("b-1"))])
-            self.assertIn("Owner (tl) answer", dash_store.comments(BeadId("b-1"))[0].text)
-            self.assertEqual(dash_store.beads[BeadId("b-1")].status, tl_store.beads[BeadId("b-1")].status)
+            assert dash.writes.post("answer", req) == (200, {"ok": True, "message": ""})
+            assert [c.text for c in dash_store.comments(BeadId("b-1"))] == [c.text for c in tl_store.comments(BeadId("b-1"))]
+            assert "Owner (tl) answer" in dash_store.comments(BeadId("b-1"))[0].text
+            assert dash_store.beads[BeadId("b-1")].status == tl_store.beads[BeadId("b-1")].status
             mine, theirs = dash_asks.get(BeadId("b-1")), tl_asks.get(BeadId("b-1"))
-            self.assertEqual(must(must(mine).answer).replace(t=0), must(must(theirs).answer).replace(t=0))
-
-
-if __name__ == "__main__":
-    unittest.main()
+            assert must(must(mine).answer).replace(t=0) == must(must(theirs).answer).replace(t=0)
