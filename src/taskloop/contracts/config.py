@@ -108,6 +108,7 @@ class CheckSpec(Rec):
     reads: list[CheckId] = msgspec.field(default_factory=list)  # checks whose log and exit code it reads: it runs after them
     lane: str = ""  # checks of one lane run in order, lanes run in parallel; the first red cancels the other lanes ("": the default lane)
     needs: list[str] = msgspec.field(default_factory=list)  # engine.resources it holds a machine-wide lease on while it runs
+    pass_files: bool = False  # the changed files (those matching `when`) are appended to argv; none: the check is skipped
     # argv run in the worktree before the checks (a formatter); what it changes is checked
     fix: list[str] = msgspec.field(default_factory=list)
 

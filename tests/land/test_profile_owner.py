@@ -253,7 +253,7 @@ class PolicyCheck(unittest.TestCase):
     def test_explicit_policy_commit_supplies_the_base_registry(self):
         git = FakeGit()
         cfg = load({"engine": {"checks": [{"id": "base-check", "argv": ["true"], "run": "gate"}]}}).engine
-        args = argparse.Namespace(policy_commit="base", ids=[], all=False, list=False)
+        args = argparse.Namespace(policy_commit="base", ids=[], all=False, staged=False, list=False)
         stage = mock.Mock()
         stage.bundle.repo = "/repo"
         with (mock.patch("taskloop.app.checks.authorization.profile", return_value=cfg) as profile,

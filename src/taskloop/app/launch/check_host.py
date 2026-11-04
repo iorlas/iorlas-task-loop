@@ -8,7 +8,9 @@ from taskloop.adapters import check_files, treehash
 from taskloop.adapters.threadflag import ThreadFlag
 from taskloop.app.checks.checklog import CheckLog
 from taskloop.app.checks.execution import check_env
+from taskloop.app.checks.host import CheckoutView
 from taskloop.app.land.checkout import Checkout
+from taskloop.app.launch.staged import StagedCheckout
 from taskloop.app.run.shell import Shell
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.enums import WaitWhat
@@ -50,6 +52,7 @@ class CliHost:
         env: Env,
         spawner: Spawner,
         git: Git,
+        staged: list[str] | None = None,  # tl check --staged: the paths the commit changes, what `when` and pass_files see as changed
     ) -> None:
         self.env = env
         self.spawner = spawner
@@ -68,8 +71,10 @@ class CliHost:
         self.tree_memo: tuple[treehash.State, TreeSha] | None = None
         self.newfiles = _NewFiles()
         self.steps: Any = None  # the step book is the engine's; a person's run has none
-        self.shell, self.checkout, self.waits = Shell(self), Checkout(self), _Waits()
-        self.tree_writer = self.checkout
+        self.shell, self.waits = Shell(self), _Waits()
+        whole = Checkout(self)
+        self.tree_writer = whole
+        self.checkout: CheckoutView = StagedCheckout(whole, staged) if staged is not None else whole
 
     def sh(self, cmd: Sequence[str], timeout: float = 3600, check: bool = False, save: Path | None = None,
            env: Mapping[str, str] | None = None, pin: bool = False, what: str = "command", cwd: Path | None = None,

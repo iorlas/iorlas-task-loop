@@ -312,6 +312,14 @@ class Git(SlotGit, Protocol):
         """Whether the index holds work that is not committed."""
         ...
 
+    def staged_paths(self, d: str) -> list[str]:
+        """The paths the index adds, changes or renames to (not its deletions)."""
+        ...
+
+    def export_index(self, d: str, dest: str) -> None:
+        """Lay the index over the checkout at `dest` (a worktree of HEAD): staged content in, staged deletions out."""
+        ...
+
     def stage_literal(self, d: str, paths: list[str]) -> None:
         """Stage exactly these paths (as given, no globbing; a deleted one stages its deletion), however many there are."""
         ...

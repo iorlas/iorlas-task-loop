@@ -1,14 +1,16 @@
-"""The verb `tl check [--repo DIR] [--all] [--list] [ID ...]`: the repo's registry of checks (engine.checks of .task-loop.json), run by a
-person in the current worktree through the engine's own runner. No ID: the gate's steps (run gate or both), the steps `when` makes due; the
-IDs: just those checks, whatever their `run`, always. The engine's own `diff-check` (git diff --check from the merge-base) runs first
-in every case. It claims no bead and writes no bd; its manifest and evidence use the engine's run machinery."""
+"""The verb `tl check [--repo DIR] [--all | --staged] [--list] [ID ...]`: the repo's registry of checks (engine.checks of .task-loop.json),
+run by a person in the current worktree through the engine's own runner. No ID: the gate's steps (run gate or both), the steps `when`
+makes due; the IDs: just those checks, whatever their `run`, always. The engine's own `diff-check` (git diff --check from the
+merge-base) runs first in every case. It claims no bead and writes no bd; its manifest and evidence use the engine's run machinery."""
 import argparse
 import json
+from contextlib import ExitStack
 from pathlib import Path
 
 from taskloop.app.checks import authorization
 from taskloop.app.checks.runner import Checker
 from taskloop.app.launch.check_host import CliHost
+from taskloop.app.launch.staged import staged_tree
 from taskloop.app.run.stage_run import StageRun, stage_run
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts.argv import text_of
@@ -84,13 +86,17 @@ def run_check(a: argparse.Namespace, stage: StageRun, *, env: Env, spawner: Spaw
     items = [repo_check(k, cfg, Phase.STAGE if k.run == "stage" else Phase.GATE) for k in chosen(cfg, a.ids)] if a.ids else gate_items(cfg)
     if not items:
         print("no gate steps: no engine.checks entry says run gate or both")  # the built-in diff-check still runs
-    box = CliHost(repo, cfg, stores=stage.stores, bundle=stage.bundle, log=stage.log,
-                  env=env, spawner=spawner, git=git)
-    try:
-        run = Checker(box).run_items(items, everything=a.all or bool(a.ids), learn=False, show_clean=True)
-    except BaseException:
-        print(f"tl check: evidence kept in {box.run_dir}")
-        raise
+    if a.staged and a.all:
+        raise SystemExit("tl check: --staged and --all name two different sets of files; pick one")
+    with ExitStack() as stack:
+        wt, names = (stack.enter_context(staged_tree(git, repo))) if a.staged else (repo, None)
+        box = CliHost(wt, cfg, stores=stage.stores, bundle=stage.bundle, log=stage.log, env=env, spawner=spawner, git=git,
+                      staged=names)
+        try:
+            run = Checker(box).run_items(items, everything=a.all or bool(a.ids), learn=False, show_clean=True, all_files=a.all)
+        except BaseException:
+            print(f"tl check: evidence kept in {box.run_dir}")
+            raise
     stage.stores.check_run(stage.bundle.run, run.round).write(run)
     box.checklog.round("", run)
     print("\n".join(step_line(c) for c in run.results))

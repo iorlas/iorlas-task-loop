@@ -291,7 +291,8 @@ def check_parser(sp):
                       help="run the repo's registry of checks in this worktree: the gate's steps, or the named checks")
     p.add_argument("ids", nargs="*", metavar="ID", help="check ids to run (any check, whatever its run); none: the gate's steps")
     p.add_argument("--repo", default=".", metavar="DIR", help="the worktree (default: the current directory)")
-    p.add_argument("--all", action="store_true", help="ignore `when`: every gate step runs")
+    p.add_argument("--all", action="store_true", help="ignore `when`: every gate step runs, pass_files steps get every tracked file")
+    p.add_argument("--staged", action="store_true", help="judge the index (a pre-commit hook); pass_files steps get the staged files")
     p.add_argument("--list", action="store_true", help="print the registry (id, run, group, when, argv) and exit 0")
     p.add_argument("--policy-commit", metavar="SHA", help="run the delivery gate from this committed base profile")
 

@@ -94,8 +94,11 @@ def config_digest(check: Check) -> str:
 
 
 def selected_digest(check: Check) -> str:
-    """The tests the command resolved to ('' when it runs all of them): another set is another run."""
-    return hashlib.sha1("\0".join(sorted(check.selected)).encode("utf-8", "surrogateescape")).hexdigest() if check.selected else ""
+    """The tests the command resolved to ('' when it runs all of them) and the files it was handed: another set is another run."""
+    if not check.selected and not check.files:
+        return ""
+    text = "\0".join(sorted(check.selected)) + ("\1" + "\0".join(check.files) if check.files else "")
+    return hashlib.sha1(text.encode("utf-8", "surrogateescape")).hexdigest()
 
 
 def toolchain_digest(files: Mapping[str, str], host: str) -> str:

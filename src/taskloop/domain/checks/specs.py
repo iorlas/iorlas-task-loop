@@ -57,7 +57,7 @@ def repo_check(k: CheckSpec, cfg: EngineConfig, phase: Phase = Phase.STAGE) -> C
                  wall_min=wall_limit(k, cfg, phase), cache=k.cache is not False,
                  inputs=inputs, inputs_only=k.inputs_only, exclude=list(k.exclude), env=dict(k.env), repo=True, writer=k.writer,
                  writer_max_s=k.writer_check_max_s, tail_log=k.tail_log, keep=list(k.keep), needs=list(k.needs), lane=k.lane,
-                 run_in=k.run_in,
+                 pass_files=k.pass_files, run_in=k.run_in,
                  fix=text_of(k.fix) if k.fix else "", container=k.where == "container", reads=list(k.reads), tags=tags_of(k.id, k.cmd))
 
 

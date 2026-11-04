@@ -13,7 +13,7 @@ from taskloop.stores.real import real_stores
 
 def cmd_judge_push(a: argparse.Namespace, *, who: Identity, env: Env, spawner: Spawner, git: Git) -> int:
     def check(policy: EngineConfig) -> int:
-        args = argparse.Namespace(cmd="check", repo=a.repo, ids=[], all=False, list=False, policy_commit=None)
+        args = argparse.Namespace(cmd="check", repo=a.repo, ids=[], all=False, staged=False, list=False, policy_commit=None)
         return cmd_check(args, who=who, env=env, spawner=spawner, git=git, policy=policy)
 
     decision = judge_push(a.repo, sys.stdin.read(), real_stores(who.config), git, check, env=env, spawner=spawner)

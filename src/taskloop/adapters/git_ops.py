@@ -1,6 +1,7 @@
 """What a task's land, its close and its checks ask of git beyond the slot's life: counts, the unmerged paths, the writes that read git's
 words (commit, push, rebase --continue), and the rest of the staged-work and branch moves. RealGit (git.py) adds the rest."""
 
+from pathlib import Path
 from typing import Self
 
 from taskloop.adapters.git_base import GitBase, classify
@@ -74,6 +75,15 @@ class LandGit(GitBase):
 
     def staged(self, d: str) -> bool:
         return not self._predicate(d, "diff", "--cached", "--quiet")
+
+    def staged_paths(self, d: str) -> list[str]:
+        return self._paths(d, "diff", "--cached", "--no-ext-diff", "--name-only", "--diff-filter=ACMRT", "-z")
+
+    def export_index(self, d: str, dest: str) -> None:
+        """Lay the index over the checkout at `dest` (a worktree of HEAD): staged content in, staged deletions out."""
+        self._must(d, "checkout-index", "-a", "-f", f"--prefix={dest.rstrip('/')}/")
+        for gone in self._paths(d, "diff", "--cached", "--no-ext-diff", "--name-only", "--diff-filter=D", "-z"):
+            Path(dest, gone).unlink(missing_ok=True)
 
     def stage_literal(self, d: str, paths: list[str]) -> None:
         """Stage exactly these paths (as given, no globbing; a deleted one stages its deletion), however many there are."""

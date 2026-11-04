@@ -308,11 +308,20 @@ counts as a whitespace error): leftover conflict markers and trailing whitespace
 expensive ones, and it is cached by tree and base. Clean, it prints nothing and adds nothing to any prompt; red, the writer gets git's
 `file:line: why` lines, the first 20, then `and N more in K files` (the full output stays in the check's log). There is no setting for it.
 
-**`tl check [--repo DIR] [--all] [--list] [ID ...]`.** A person (or a session) runs the registry in the current worktree, with the profile
+**`tl check [--repo DIR] [--all | --staged] [--list] [ID ...]`.** A person (or a session) runs the registry in the current worktree, with the profile
 file of that worktree, through the engine's own runner and the same result store (under `~/.config/task-loop/results/<repo>/`, the only
 thing it writes there; no bd, no bead, no run folder). No ID: the gate's steps, those `when` makes due; `--all` ignores `when`; IDs run
 just those checks, whatever their `run`. One line per step (id, `ok` / `FAILED` / `cached` / `skipped (why)`, seconds), then the tail of
 each red step; exit 0 when all are green, 1 otherwise. `--list` prints the registry (id, run, group, when, argv), one line each, exit 0.
+**`pass_files`.** A check with `"pass_files": true` is handed the changed files as trailing argv (the pre-commit model; a linter reads only
+what changed), filtered by its `when` globs (no `when`: every changed file). A path that starts with `-` is written `./path`. Changed = in a
+stage round the bead's diff from its base; in `tl check` the diff from the merge-base with `engine.base`, untracked files included;
+`tl check --staged` the index (laid over a throwaway checkout of HEAD, so unstaged edits are out of sight and no stash is made; `when` follows
+the staged paths too, a staged deletion is not handed); `tl check --all` every tracked file, `when` ignored for the choice of checks. No file
+left: the check is skipped, and the result says so (`skipped (no change under <when>)`). The file list is part of the result key (another
+set, another run), and a pass_files check has no base run. The arguments are not chunked: a list too long for the OS (`E2BIG`) is exit 126.
+`--staged` and `--all` together are refused.
+
 A repo's `just check` is then one line, `tl check` (`~/.config/task-loop/bin/tl` is the shim), and each step's own recipe
 (`just check-dotnet`) stays available alone.
 

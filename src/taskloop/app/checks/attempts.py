@@ -73,7 +73,7 @@ class Attempts:
         ids = {**step_env(self.host, c.id), EnvVar.TL_ARTIFACT_STEP.value: c.id}  # a new attempt directory for every run, a lock rerun too
         # what the repo's check declares in its `env` (it is part of the cache key: it must reach the child too)
         env = {**c.env, **env, **ids}
-        argv, where = self.box.plan(c, argv_of(c.cmd), env)
+        argv, where = self.box.plan(c, [*argv_of(c.cmd), *c.files], env)
         try:
             rc, tail = self.host.sh(argv, timeout=c.wall_min * 60, save=log, what="check", env=env, stop=stop)
         except OSError as error:

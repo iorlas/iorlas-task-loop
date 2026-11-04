@@ -94,18 +94,19 @@ class Checker:
         return run
 
     def run_items(self, items: Sequence[Check], everything: bool = False, learn: bool = True, show_clean: bool = False,
-                  clean: bool = False) -> CheckRun:
+                  clean: bool = False, all_files: bool = False) -> CheckRun:
         """The registry's checks (the gate's steps, or the ones `tl check` names) as one block, through the same planner, executor
         and cache as a stage's round: groups in order, a red group skips the groups after it, a step green at its inputs is cached.
         A clean diff check is left out of the result (show_clean keeps it: `tl check` prints a line for it). No fix commands and no
-        base run (the tree is the rebased one: a red is red). everything: `when` is ignored. learn: the durations of what passed are
+        base run (the tree is the rebased one: a red is red). everything: `when` is ignored.
+        all_files: pass_files checks get every tracked file. learn: the durations of what passed are
         remembered. clean: judge committed HEAD, routing run_in=slot to the guarded slot and other checks to a fresh checkout.
         The rows are the check log's (start and end per step); no step book, no streak."""
         if clean:
             with isolated(self.host) as clean_host:
                 checker = Checker(clean_host, self.sleep, clean=True, slot_host=self.host)
                 checker.round = self.round
-                run = checker.run_items(items, everything, learn, show_clean)
+                run = checker.run_items(items, everything, learn, show_clean, all_files=all_files)
                 self.round = checker.round
                 return run
         host = self.host
@@ -116,7 +117,8 @@ class Checker:
         plan = CheckPlan.build([*self._diff_check(tree), *items], history)
         memo = self._memo(tree, base)
         planned = gateplan.skipped(host, tree, base) if not everything else None
-        st = self._executor(memo, history, base_run=False, everything=everything, planned=planned).run_group(plan, self.round)
+        st = self._executor(memo, history, base_run=False, everything=everything, planned=planned,
+                            all_files=all_files).run_group(plan, self.round)
         if learn and st.timings:
             history_doc.write(merged(history, st.timings))
         results = st.results if show_clean else self._quiet(st.results)
@@ -161,14 +163,15 @@ class Checker:
         return memo
 
     def _executor(self, memo: RunMemo, history: Durations, base_run: bool, fix_red: dict[str, CheckResult] | None = None,
-                  everything: bool = False, planned: gateplan.PlanDecision | None = None) -> CheckExecutor:
+                  everything: bool = False, planned: gateplan.PlanDecision | None = None,
+                  all_files: bool = False) -> CheckExecutor:
         host = self.host
         attempts = Attempts(host, BaseCheck(host, memo, base_run), self.sleep)
-        executor = CheckExecutor(host, memo, attempts, host.checklog, history, fix_red, everything, planned)
+        executor = CheckExecutor(host, memo, attempts, host.checklog, history, fix_red, everything, planned, all_files)
         if self.slot_host is not None:
             slot = self.slot_host
             slot_attempts = Attempts(slot, BaseCheck(slot, memo, base_run), self.sleep)
-            executor.slot = CheckExecutor(slot, memo, slot_attempts, slot.checklog, history, fix_red, everything, planned)
+            executor.slot = CheckExecutor(slot, memo, slot_attempts, slot.checklog, history, fix_red, everything, planned, all_files)
         return executor
 
     def _diff_check(self, tree: str) -> list[Check]:

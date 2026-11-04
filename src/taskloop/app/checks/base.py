@@ -19,8 +19,9 @@ class BaseCheck:
 
     def red(self, c: Check, stop: threading.Event | None = None) -> bool:
         """Run the check once on a clean checkout of the base commit; red there too: the task did not break it, so it is not the
-        writer's. The run is bounded by the check's wall limit; the answer is remembered by base sha. Off with engine.base_red: false."""
-        if c.container or not self.host.cfg.base_red or not self.sha:
+        writer's. The run is bounded by the check's wall limit; the answer is remembered by base sha. Off with engine.base_red: false.
+        Never for a pass_files check: the base has other files, not the ones it was handed."""
+        if c.container or c.pass_files or not self.host.cfg.base_red or not self.sha:
             return False
         with self.lock:  # two lanes may both be red: one clean checkout of the base at a time
             return self._red(c, stop)

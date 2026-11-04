@@ -1,6 +1,7 @@
 """CheckExecutor: run the steps of a round in order, deciding for each whether it runs, is skipped, is answered by an earlier
 run, or is answered by the cache."""
 import time
+from dataclasses import replace
 from pathlib import Path
 
 from taskloop.adapters import check_files
@@ -11,6 +12,7 @@ from taskloop.app.checks.execution import EnvironmentUnavailable
 from taskloop.app.checks.gateplan import PlanDecision
 from taskloop.app.checks.host import CheckFault, CheckHost
 from taskloop.app.checks.lanes import Lanes
+from taskloop.app.checks.passfiles import files_for, none_why
 from taskloop.app.checks.resources import LeaseCancelled, Resources
 from taskloop.app.checks.round import Round
 from taskloop.contracts.checks import UNVERIFIED_EXIT, Check, CheckFaultKind, CheckResult, Duration, Durations, verdict_of
@@ -30,10 +32,11 @@ FAILED_FIRST = " failed first"
 class CheckExecutor:
     def __init__(self, host: CheckHost, memo: RunMemo, attempts: Attempts, checklog: CheckLog,
                  history: Durations, fix_red: dict[str, CheckResult] | None = None, everything: bool = False,
-                 planned: PlanDecision | None = None) -> None:
+                 planned: PlanDecision | None = None, all_files: bool = False) -> None:
         self.host, self.memo, self.attempts, self.checklog, self.history = host, memo, attempts, checklog, history
         self.everything = everything  # `when` is ignored: every check is due (tl check --all)
         self.planned = planned
+        self.all_files = all_files  # pass_files checks get every tracked file, not the changed ones (tl check --all)
         self.gates = {k.id for k in host.cfg.gate_checks}
         self.fix_red = fix_red or {}  # id -> the red of a check whose fix command failed: it does not run
         self.logs = host.run_dir / "checks"
@@ -92,6 +95,7 @@ class CheckExecutor:
         self.checklog.close(step.check, res, None, st.n)
 
     def _decide(self, step: Step, n: int, st: Round) -> tuple[CheckResult, str | None]:
+        step = self._handed(step, st)
         c = step.check
         skipped = self._skip(step, st)
         if skipped:
@@ -157,6 +161,18 @@ class CheckExecutor:
     def _log_name(n: int, c: Check, rnd: int) -> str:
         return f"{n:02d}-{safe_name(c.id)}.r{rnd}.log"
 
+    def _handed(self, step: Step, st: Round) -> Step:
+        """A pass_files check with the files it is handed (its key includes them); the memo knows it as such."""
+        c = step.check
+        if not c.pass_files:
+            return step
+        if st.changed is None:
+            st.changed = self.host.checkout.changed_paths()
+        tracked = self.host.git.ls_files(str(self.host.wt), "tracked") if self.all_files else None
+        step = replace(step, check=c.replace(files=files_for(c, st.changed, tracked)))
+        self.memo.checks[c.id] = step.check
+        return step
+
     def _skip(self, step: Step, st: Round) -> CheckResult | None:
         c = step.check
         gone = self._producer_gone(step, st)
@@ -175,6 +191,8 @@ class CheckExecutor:
             if not due(c, st.changed or [], planned):
                 why = planned[c.id] if planned is not None else "no change under " + ", ".join(c.when)
                 return CheckResult.skipped(c, why).replace(planned=True)
+        if c.pass_files and not c.files:
+            return CheckResult.skipped(c, none_why(c, self.all_files))
         return None
 
     @staticmethod
