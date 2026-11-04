@@ -1,11 +1,18 @@
 """The seams of the push-race interruption cells (tests/land/test_engine_land_1.py): an engine stopped, paused or denied at one
 boundary of a failed land validation, and the later runs that recover from the checkpoint it left."""
 import signal
-from contextlib import ExitStack
+import threading
+from collections.abc import Callable, Generator
+from contextlib import ExitStack, contextmanager
+from dataclasses import replace
+from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 from support import fake_route
+from support.fake_clock import FakeClock
 from support.push_race import seam
+from taskloop.adapters import halt, landlock
 from taskloop.app.checks import evidence as check_evidence
 from taskloop.app.land.fixer import Fixer
 from taskloop.app.land.outbound import pin_head
@@ -14,6 +21,58 @@ from taskloop.app.run.state import Checkpoints
 from taskloop.app.run.steps import Steps
 from taskloop.app.write.stage_loop import StageLoop
 from taskloop.contracts.kinds import Kind
+from taskloop.contracts.paths import ConfigDir
+from taskloop.stores.bundle import Stores
+from taskloop.stores.memory import fake_stores
+
+
+class IdleHeartbeat:
+    """A periodic helper that stays idle; these cells exercise recovery, not background scheduling."""
+
+    ident = 1
+
+    def __init__(self, target: Callable[[], None], daemon: bool) -> None:
+        pass
+
+    def start(self) -> None:
+        pass
+
+    def join(self) -> None:
+        pass
+
+
+class RecoveryRig:
+    """Fake time, resource waits and log IO for the recovery cells; durable checkpoints stay real across runs."""
+
+    def __init__(self) -> None:
+        self.clock = FakeClock()
+        self.memory = fake_stores()
+        self.real_stores = engine.real_stores
+
+    def stores(self, cfg: ConfigDir) -> Stores:
+        return replace(self.real_stores(cfg), run_log=self.memory.run_log)
+
+    def nap(self, stopped: threading.Event, seconds: float) -> bool:
+        self.clock.advance(seconds)
+        return stopped.is_set()
+
+    @contextmanager
+    def locked(self, path: Path | str, holder: str, waiting: Callable[[str], None] | None = None,
+               timeout: float | None = None, check: Callable[[], None] | None = None) -> Generator[Path | str]:
+        if check is not None:
+            check()
+        yield path
+
+    def patched(self) -> ExitStack:
+        stack = ExitStack()
+        stack.enter_context(mock.patch.object(engine, "SystemClock", return_value=self.clock))
+        stack.enter_context(mock.patch.object(engine, "real_stores", self.stores))
+        stack.enter_context(mock.patch.object(halt, "nap", self.nap))
+        stack.enter_context(mock.patch.object(landlock, "os_lock", self.locked))
+        stack.enter_context(mock.patch("taskloop.app.run.run_once.Lease"))
+        stack.enter_context(mock.patch("taskloop.app.run.stage_run.threading",
+                                       SimpleNamespace(Event=threading.Event, Thread=IdleHeartbeat)))
+        return stack
 
 
 class Interrupter:

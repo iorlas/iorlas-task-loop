@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
+from taskloop.adapters.deadline import DeadlineExpired, deadline
 from taskloop.app.asks import trustroots
 from taskloop.app.land import verified
 from taskloop.app.land.commit import Commit
@@ -24,6 +25,7 @@ from taskloop.contracts import log as rec
 from taskloop.contracts.bead import Bead
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.lanes import policy as lp
+from taskloop.domain.lanes.liveness import LIVENESS
 
 
 class GateStep(Protocol):
@@ -131,6 +133,9 @@ class Lander:
         e = self.e
         st, resting = Land(), False
         while True:
+            if st.iterations >= LIVENESS.land_iterations:
+                raise e.blocked_for(f"land iteration cap ({LIVENESS.land_iterations}) reached; branch kept", "OWNER_PARK")
+            st.iterations += 1
             if resting:  # a network failure, with the lock let go: wait for the network, then fetch and look again
                 waited, back = e.worker.acts.await_net(e.worker.acts.net_up(), lp.KNOBS["net_wait_cap_s"])
                 if not back:
@@ -149,10 +154,18 @@ class Lander:
                 sha, problem = self.tries(st)
             if sha:
                 return sha
+            self.count_stale(st, problem)
             if problem is None:
                 resting = True
             elif problem.kind is not ProblemKind.STALE:  # stale: main moved under the gate: the lock is let go, the gate runs outside
                 self.fixing.run(problem)
+
+    def count_stale(self, st: Land, problem: Problem | None) -> None:
+        """In-lock STALE answers have their own budget, even after optimistic tries are exhausted."""
+        if problem is not None and problem.kind is ProblemKind.STALE:
+            st.stale += 1
+            if st.stale >= LIVENESS.stale_retries:
+                raise self.e.blocked_for(f"in-lock STALE retry cap ({LIVENESS.stale_retries}) reached; branch kept", "OWNER_PARK")
 
     def optimistic(self, st: Land) -> bool:
         """The gate runs before the lock: there is a gate, tries are allowed, and no push may have gone through unseen."""
@@ -163,7 +176,8 @@ class Lander:
     def outside(self, st: Land) -> Problem | None:
         """Without the lock: fetch, rebase, gate. -> the problem for a fix round, or None (the gate is cached for tree + base)."""
         e = self.e
-        e.steps.begin("land", f"land (gate before the lock, try {st.pushes + 1})", **{"try": st.pushes + 1})
+        st.attempts += 1
+        e.steps.begin("land", f"land (gate before the lock, try {st.attempts})", **{"try": st.attempts})
         e.newfiles.quarantine_strays()
         before, head = e.git.rev_parse(e.wt, e.cfg.base), e.git.rev_parse(e.wt, "HEAD")
         rc, tail = e.checkout.fetch()
@@ -181,7 +195,7 @@ class Lander:
         e = self.e
         e.log.emit(
             rec.LandTry(
-                n=st.pushes + 1,
+                n=st.attempts,
                 base_before=before[:12],
                 base_after=e.git.rev_parse(e.wt, e.cfg.base)[:12],
                 rebase_moved=e.git.rev_parse(e.wt, "HEAD") != head,
@@ -207,8 +221,9 @@ class Lander:
         lock; ("", None) a network error: rest first."""
         e = self.e
         while True:
+            st.attempts += 1
             if st.phase is not Phase.STEP_OPEN:
-                e.steps.begin("land", f"land (try {st.pushes + 1})", **{"try": st.pushes + 1})
+                e.steps.begin("land", f"land (try {st.attempts})", **{"try": st.attempts})
             if st.phase is Phase.STEP_OPEN:
                 st.phase = Phase.FRESH
             e.newfiles.quarantine_strays()
@@ -248,7 +263,13 @@ class Lander:
         -> (pass, None) or (None, problem)."""
         e = self.e
         if where is Placing.INSIDE:
-            got = self.gate.run()
+            try:
+                with deadline(LIVENESS.judge_s, "land judge"):
+                    got = self.gate.run()
+            except DeadlineExpired as err:
+                if err.scope != "land judge":
+                    raise
+                raise e.blocked_for(f"{err}; branch kept for retry", "PAUSE_LANE") from None
             return (None, got) if isinstance(got, Problem) else (got, None)
         gate_pass = self.gate.passed()
         if gate_pass is None:  # it was green a moment ago and is not now: main or the tree moved

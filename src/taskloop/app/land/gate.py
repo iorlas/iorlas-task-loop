@@ -23,7 +23,8 @@ from taskloop.contracts.runkey import BaseSha, Digest
 from taskloop.domain.checks.specs import engine_digest, gate_items
 from taskloop.stores.runlog import RunLog
 
-FAULTS = MappingProxyType({CheckFaultKind.STALE_BASE: "FAULT_STALE_BASE", CheckFaultKind.KILLED: "PAUSE_KILLED"})
+FAULTS = MappingProxyType({CheckFaultKind.STALE_BASE: "FAULT_STALE_BASE", CheckFaultKind.KILLED: "PAUSE_KILLED",
+                         CheckFaultKind.DIRTY_SLOT: "FAULT_SLOT",})
 
 
 class ProblemKind(StrEnum):

@@ -17,7 +17,8 @@ class StageChecks:
 
     @staticmethod
     def fault_kind(kind: CheckFaultKind) -> Any:
-        return {CheckFaultKind.STALE_BASE: Kind.FAULT_STALE_BASE, CheckFaultKind.KILLED: Kind.PAUSE_KILLED}[kind]
+        return {CheckFaultKind.STALE_BASE: Kind.FAULT_STALE_BASE, CheckFaultKind.DIRTY_SLOT: Kind.FAULT_SLOT,
+                CheckFaultKind.KILLED: Kind.PAUSE_KILLED}[kind]
 
     def stoppable(self, st: StageData, name: str, acceptance_first: bool = False, groups: Sequence[str] | None = None,
                   conflict_fix: Sequence[str] | None = None, **meta: object) -> CheckRun:

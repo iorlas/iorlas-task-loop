@@ -17,7 +17,7 @@ from typing import Any, override
 
 import stream_proc
 
-from taskloop.adapters import procs
+from taskloop.adapters import deadline, procs
 from taskloop.adapters.delegate import Stopped
 from taskloop.contracts import wire
 from taskloop.contracts.delegate import LiveEvent, LiveStart, WorkerStarted
@@ -157,7 +157,7 @@ class StreamRunner(Seam):
                     env=env,
                     on_stdout=lambda s: seen(s, True),
                     on_stderr=lambda s: seen(s, False, log),
-                    timeout=self.wall or timeout or 3600.0,
+                    timeout=deadline.remaining(self.wall or timeout or 3600.0),
                     stop=halt,
                     grace=self.grace,
                 )
@@ -169,6 +169,7 @@ class StreamRunner(Seam):
             done.set()
             helper.join(2)
         self.secs, self.obs["ended_t"] = res.secs, time.time()
+        deadline.check()
         if self.worker is None and live:
             self.worker = worker_started(live)
         if res.timed_out:

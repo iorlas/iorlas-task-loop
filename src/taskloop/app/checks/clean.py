@@ -28,6 +28,6 @@ def isolated(host: CheckHost) -> Generator[CleanHost]:
     head = host.git.rev_parse(wt, "HEAD")
     tree = host.git.rev_parse(wt, "HEAD^{tree}")
     if not head or not tree or host.checkout.tree_hash() != tree:
-        raise CheckFault(CheckFaultKind.STALE_BASE, "gate requires a committed tree; commit the slot's changes before gating")
+        raise CheckFault(CheckFaultKind.DIRTY_SLOT, "gate requires a committed tree; commit the slot's changes before gating")
     with clean_tree(host.git, wt, head) as dest:
         yield CleanHost(host, dest, CleanCheckout(host.git, dest, host.cfg.base))

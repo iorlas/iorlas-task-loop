@@ -42,7 +42,7 @@ from unittest import mock
 
 from support import fake_route, procsim
 from support.builders import cfg_with
-from support.interrupts import Interrupter, Recovery
+from support.interrupts import Interrupter, Recovery, RecoveryRig
 from support.logs import records
 from support.narrow import must
 
@@ -628,7 +628,7 @@ class EngineLand1Test(EngineTest):
 
     def push_race_interrupted_cell(self, interruption, role):
         gate = "true"
-        with self.stoppable():
+        with self.stoppable(), RecoveryRig().patched():
             cut, recovery, closed_before = Interrupter(self, interruption, role), Recovery(self), len(self.closed)
             with cut.patched():
                 rc, events, race = self.run_push_race(failure="checks_fixed", max_rounds=1, max_check_tries=1)

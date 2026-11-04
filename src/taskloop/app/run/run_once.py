@@ -6,6 +6,7 @@ from typing import Any
 
 from taskloop.adapters import beadtools, ident
 from taskloop.adapters import delegate as dg
+from taskloop.adapters.deadline import DeadlineExpired, deadline
 from taskloop.app.land.gitcall import oneline
 from taskloop.app.release import reexec
 from taskloop.app.run import ended as stored_end
@@ -23,6 +24,7 @@ from taskloop.contracts.plancheck import PlanData, RoundState
 from taskloop.contracts.run import RunState
 from taskloop.domain import outcome as oc
 from taskloop.domain.asks import specs as askspecs
+from taskloop.domain.lanes.liveness import LIVENESS
 from taskloop.domain.plan.matchers import AcceptanceText
 from taskloop.domain.review.kinds import UNCHECKED_KINDS
 
@@ -47,7 +49,10 @@ class RunOnce:
             if e.dead is not None:  # the last run died inside its close: this process only finishes it
                 self.finish_dead(end)
             else:
-                self.run(hb, end)
+                with deadline(LIVENESS.run_s, "run"):
+                    self.run(hb, end)
+        except DeadlineExpired as err:
+            end.outcome = oc.make(Kind.OWNER_PARK, f"{err}; branch and checkpoint kept")
         except e.Blocked as b:
             end.outcome = b.outcome
             if b.kind is Kind.PAUSE_KILLED and e.requests.stopped:  # the stop flag was the owner's request, not a SIGTERM
@@ -249,8 +254,8 @@ class RunOnce:
             hb.stop()
             return
         with e.stop_deferred():  # a stop here would skip the close: no trace, no bead update
-            if e.landed_sha and end.outcome.kind not in (Kind.LANDED, Kind.ENGINE_CRASH):
-                # A late engine crash keeps its retry cursor even when the push already went through.
+            if e.landed_sha and end.outcome.kind not in (Kind.LANDED, Kind.ENGINE_CRASH, Kind.PAUSE_NETWORK):
+                # Late crashes and bd sync outages keep their retry cursor after the push went through.
                 e.warn(f"{end.outcome.detail or end.outcome.word} after the land went through; closing it landed")
                 end.outcome = oc.make(Kind.LANDED, sha=e.landed_sha)
             hb.stop()

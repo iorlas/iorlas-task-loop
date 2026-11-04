@@ -6,7 +6,7 @@ import threading
 from collections.abc import Callable, Mapping
 from typing import IO, Literal
 
-from taskloop.adapters import procs
+from taskloop.adapters import deadline, procs
 from taskloop.adapters.childenv import tool_env
 from taskloop.contracts.env import Env
 from taskloop.contracts.ports import Hold, Ran, RanBytes, Streamed, WaitTimeout
@@ -27,9 +27,16 @@ class Started:
 
     def wait(self, timeout: float | None = None) -> int:
         try:
-            return self.popen.wait(timeout)
-        except subprocess.TimeoutExpired as e:
-            raise WaitTimeout(str(timeout)) from e
+            try:
+                result = self.popen.wait(deadline.remaining(timeout))
+            except subprocess.TimeoutExpired as e:
+                deadline.check()
+                raise WaitTimeout(str(timeout)) from e
+            deadline.check()
+            return result
+        except deadline.DeadlineExpired:
+            procs.stop_tree(self.popen, grace=GRACE_S)
+            raise
 
     def stop(self, grace: float) -> None:
         procs.stop_tree(self.popen, grace=grace)

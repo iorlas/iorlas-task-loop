@@ -39,3 +39,6 @@ class Land:
     flaky: int = 0  # network errors on the push while the network looked up
     phase: Phase = Phase.FRESH
     moved: int = 0  # times the lock was let go because main moved under the gate: the gate runs outside again (land_optimistic_tries)
+    stale: int = 0  # in-lock STALE answers, independent of optimistic retries
+    iterations: int = 0  # complete land cycles, including outside fixes and network waits
+    attempts: int = 0  # every outside or in-lock attempt, even when no push was reached

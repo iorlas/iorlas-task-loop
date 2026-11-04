@@ -9,6 +9,8 @@ import threading
 import time
 from collections.abc import Generator
 
+from taskloop.adapters import deadline
+
 RUN_HALT: dict[str, threading.Event | None] = {"ev": None}  # the flag of the run in this process (None: none running)
 
 
@@ -45,8 +47,9 @@ def stop_deferred(*_: object) -> Generator[list[bool]]:
 def nap(halt: threading.Event, secs: float) -> bool:
     """Wait `secs` in slices of a second, or until `halt` is set. -> whether it is set (nap(halt, 0) just looks)."""
     left = secs
+    deadline.check()
     while left > 0 and not halt.is_set():
-        time.sleep(min(1.0, left))
+        deadline.wait(min(1.0, left), time.sleep)
         left -= 1.0
     return halt.is_set()
 

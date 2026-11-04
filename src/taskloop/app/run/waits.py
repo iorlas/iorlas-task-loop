@@ -5,6 +5,7 @@ from contextlib import AbstractContextManager
 from pathlib import Path
 from typing import Protocol
 
+from taskloop.adapters import deadline
 from taskloop.app.run import outcomes
 from taskloop.app.run.blocked import Blocked
 from taskloop.app.run.steps import Open
@@ -16,6 +17,7 @@ from taskloop.contracts.kinds import Kind
 from taskloop.contracts.ports import Clock
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.checks.matchers import slot_wait_secs
+from taskloop.domain.lanes.liveness import LIVENESS
 from taskloop.stores.bundle import Stores
 from taskloop.stores.runlog import RunLog
 
@@ -101,17 +103,32 @@ class Waits:
             t_req[0] = e.clock.now()  # the wait starts when the step before it has ended
             wid.append(self.start(WaitWhat(what), w))  # a wait still going (or cut off) shows up
             e.log.note("waiting for the {} (held by {})".format(what.replace("_", " "), w))
-        with e.os_lock(path, holder or e.bead, waiting, check=e.halt_point):
+        acquired = False
+
+        def waited() -> None:
             if who:
                 secs = max(0.0, e.clock.now() - t_req[0])
                 e.waited += secs
                 e.log.emit(rec.WaitEnd(id=wid[0], wait_seconds=round(secs), in_budget=False))
-            held = e.clock.now()
-            e.log.emit(rec.Lock(what=what.removesuffix("_lock"), holder=holder or e.bead))
-            try:
-                yield path
-            finally:
-                e.log.emit(rec.Unlock(what=what.removesuffix("_lock"), secs=round(e.clock.now() - held, 1)))
+                who.clear()
+
+        try:
+            with e.os_lock(path, holder or e.bead, waiting, timeout=deadline.remaining(LIVENESS.lock_wait_s), check=e.halt_point):
+                acquired = True
+                waited()
+                held = e.clock.now()
+                e.log.emit(rec.Lock(what=what.removesuffix("_lock"), holder=holder or e.bead))
+                try:
+                    yield path
+                finally:
+                    e.log.emit(rec.Unlock(what=what.removesuffix("_lock"), secs=round(e.clock.now() - held, 1)))
+        except TimeoutError as err:
+            if acquired:
+                raise
+            deadline.check()
+            raise Blocked(f"paused: {what} wait deadline exceeded (held by {err}); retry later", kind=Kind.PAUSE_LANE) from None
+        finally:
+            waited()
 
     def note_slot_waits(self, text: str, wall: float) -> None:
         """A check's output says how long it queued for a Unity slot ("unity-slot: x got slot 0 after 686s"). The output

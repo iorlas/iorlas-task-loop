@@ -17,6 +17,11 @@ from support.narrow_hosts import BdOut, FakeOutboundHost, FakeSyncHost
 from taskloop.app.land import outbound
 from taskloop.app.land.lander import Lander
 from taskloop.app.land.sync import Sync as AfterLand
+from taskloop.app.run.blocked import Blocked, blocked_for
+from taskloop.contracts.enums import Result
+from taskloop.contracts.kinds import Kind
+from taskloop.domain import outcome as oc
+from taskloop.domain.lanes import pauses
 
 ATTR = "*.bin filter=lfs diff=lfs merge=lfs -text\n"
 RUN = ({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
@@ -51,7 +56,7 @@ class Sync(EngineTest):
         host = FakeOutboundHost(result=(1, "dolt: could not read Username for 'https://github.com'"))
         with self.assertRaises(RuntimeError) as cm:
             outbound.Outbound(host).bd_sync("abc1234567890")
-        self.assertTrue(str(cm.exception).startswith("FAULT_LAND: "))
+        self.assertTrue(str(cm.exception).startswith("PAUSE_NETWORK: "))
         self.assertIn("failed in", host.lines[0])
         self.assertIn("landed abc123456789", str(cm.exception))
         self.assertIn("could not read Username", str(cm.exception))
@@ -59,10 +64,29 @@ class Sync(EngineTest):
         outbound.Outbound(quiet).bd_sync("abc")
         self.assertEqual(quiet.lines, [])
 
+    def test_sync_failure_is_a_transient_pause_on_first_sight(self):
+        host = FakeOutboundHost(result=(1, "remote unavailable"))
+        with mock.patch.object(host, "blocked_for", blocked_for), self.assertRaises(Blocked) as stopped:
+            outbound.Outbound(host).bd_sync("abc")
+        outcome = stopped.exception.outcome
+        self.assertEqual(oc.POLICY[outcome.kind].loop, Result.PAUSED)
+        self.assertEqual(pauses.rule(outcome.kind.value, "engine").permanence, "transient")
+
     no_repo = True
 
 
 class Land(EngineTest):
+    def test_sync_failure_keeps_the_landed_bead_open_for_a_transient_retry(self):
+        def unavailable(*args):
+            raise Blocked("bd sync remote unavailable", kind=Kind.PAUSE_NETWORK)
+
+        with mock.patch.object(outbound.Outbound, "bd_sync", side_effect=unavailable):
+            rc, _ = self.run_engine(RUN)
+        self.assertEqual(rc, 2)
+        self.assertTrue(self.eng.landed_sha)
+        self.assertEqual(self.eng.result().outcome, "paused")
+        self.assertFalse(self.closed)
+
     def fake_lfs(self):
         """A git-lfs on PATH that notes its argv and what origin's main was at that moment."""
         d = Path(self.tmp.name) / "bin"
@@ -100,6 +124,8 @@ class Land(EngineTest):
             return mock.Mock(returncode=1 if argv[:1] == ("sync",) else 0, stdout="", stderr="dolt: boom")
         with mock.patch.object(Lander, "lock", lock), self.store.stub(bd_fn=bd):
             rc, _ = self.run_engine(RUN)
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertEqual([h for a, h in seen if a == ("sync",)], [False])  # once, outside the lock, and its failure did not stop
+        self.assertEqual(rc, 2, self.blocked)
+        self.assertEqual(self.eng.result().outcome, "paused")
+        self.assertFalse(self.closed)
+        self.assertEqual([h for a, h in seen if a == ("sync",)], [False])  # once, outside the lock; its outage is retryable
         self.assertTrue(any("bd sync" in r["text"] for r in records(self.eng, "warn")))

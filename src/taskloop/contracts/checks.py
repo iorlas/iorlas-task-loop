@@ -49,6 +49,7 @@ class Phase(StrEnum):
 
 class CheckFaultKind(StrEnum):
     STALE_BASE = "stale_base"  # the configured check needs something the tree lacks: older than the base's .task-loop.json
+    DIRTY_SLOT = "dirty_slot"  # the slot has uncommitted changes, so no committed gate tree exists
     KILLED = "killed"  # a signal ended the check, not its verdict
 
 

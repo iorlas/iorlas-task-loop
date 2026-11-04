@@ -136,7 +136,7 @@ class SlotGate(EngineTest):
         (self.wt / "untracked.txt").write_text("keep")
         with mock.patch.object(eng, "sh") as sh, self.assertRaises(CheckFault) as fault:
             eng.checker.run_items(gate_items(eng.cfg), clean=True)
-        self.assertEqual(fault.exception.kind, CheckFaultKind.STALE_BASE)
+        self.assertEqual(fault.exception.kind, CheckFaultKind.DIRTY_SLOT)
         sh.assert_not_called()
         self.assertFalse(eng.checker.gate_green(clean=True))
 

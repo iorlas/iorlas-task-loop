@@ -165,4 +165,4 @@ class Outbound:
         e.log.note(f"bd sync: {'ok' if rc == 0 else 'failed'} in {e.clock.monotonic() - t0:.1f}s")
         if rc != 0:
             raise e.blocked_for(f"failed: landed {sha[:12]}, but bd sync after the land failed (exit {rc}; fix bd's Dolt remote, then "
-                                f"rerun: the rerun finds the land and pushes again)\n{text.strip()[-400:]}", "FAULT_LAND")
+                                f"rerun: the rerun finds the land and pushes again)\n{text.strip()[-400:]}", "PAUSE_NETWORK")
