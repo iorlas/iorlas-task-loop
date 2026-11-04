@@ -32,26 +32,26 @@ class RealGit(LandGit):
 
     def rebasing(self, d: str) -> bool:
         try:
-            return self._pool(d).worktree(Path(d).absolute()).rebasing()
+            return self._pool(d).worktree(Path(d).resolve()).rebasing()
         except GitError as err:
             raise pool_read_error(err) from err
 
     def rebase_abort(self, d: str) -> None:
         try:
-            self._pool(d).worktree(Path(d).absolute()).abort_rebase(missing_ok=False)
+            self._pool(d).worktree(Path(d).resolve()).abort_rebase(missing_ok=False)
         except GitError as err:
             raise pool_error(err) from err
 
     def dirty(self, d: str) -> bool:
         try:
-            return self._pool(d).worktree(Path(d).absolute()).dirty().raw
+            return self._pool(d).worktree(Path(d).resolve()).dirty().raw
         except GitError as err:
             raise pool_read_error(err) from err
 
     @override
     def _pool(self, d: str) -> RealRepo:
         repo = RealRepo if self.pinned else UnpinnedRepo
-        return repo(Path(d).absolute(), env=self.git_env(d), memoize=False, sleep=self.sleep)
+        return repo(Path(d).resolve(), env=self.git_env(d), memoize=False, sleep=self.sleep)
 
     def branch(self, d: str) -> str:
         return self._ask(d, "symbolic-ref", "--short", "-q", "HEAD", missing=True)
@@ -64,7 +64,7 @@ class RealGit(LandGit):
             # take_branch(resume) accepts an existing branch; this must refuse to overwrite a checkpoint.
             self.checkout_new(d, branch, "HEAD")
         try:
-            result = self._pool(d).worktree(Path(d).absolute()).record(message, paths="all", hooks=False)
+            result = self._pool(d).worktree(Path(d).resolve()).record(message, paths="all", hooks=False)
         except GitError as err:
             raise pool_error(err) from err
         if not isinstance(result, Recorded):
@@ -78,25 +78,25 @@ class RealGit(LandGit):
 
     def checkout(self, d: str, branch: str) -> None:
         try:
-            self._pool(d).worktree(Path(d).absolute()).checkout(branch)
+            self._pool(d).worktree(Path(d).resolve()).checkout(branch)
         except GitError as err:
             raise pool_error(err) from err
 
     def checkout_new(self, d: str, branch: str, start: str) -> None:
         try:
-            self._pool(d).worktree(Path(d).absolute()).checkout_new(branch, start)
+            self._pool(d).worktree(Path(d).resolve()).checkout_new(branch, start)
         except GitError as err:
             raise pool_error(err) from err
 
     def checkout_detached(self, d: str, ref: str) -> None:
         try:
-            self._pool(d).worktree(Path(d).absolute()).park(ref)
+            self._pool(d).worktree(Path(d).resolve()).park(ref)
         except GitError as err:
             raise pool_error(err) from err
 
     def checkout_reset(self, d: str, branch: str, start: str) -> None:
         try:
-            result = self._pool(d).worktree(Path(d).absolute()).take_branch(branch, start, mode="restart")
+            result = self._pool(d).worktree(Path(d).resolve()).take_branch(branch, start, mode="restart")
         except GitError as err:
             raise pool_error(err) from err
         if isinstance(result, BranchHeld):
@@ -105,7 +105,7 @@ class RealGit(LandGit):
 
     def clean(self, d: str, keep: list[str], ignored: bool = False) -> None:
         try:
-            self._pool(d).worktree(Path(d).absolute()).clean(keep, ignored=ignored)
+            self._pool(d).worktree(Path(d).resolve()).clean(keep, ignored=ignored)
         except GitError as err:
             # The old best-effort clean ignored command refusal, but not invocation failure.
             if not str(err).startswith("git clean exited "):
@@ -256,7 +256,7 @@ class RealGit(LandGit):
 
     def reset(self, d: str, rev: str, mode: Literal["soft", "mixed", "hard"] = "mixed") -> None:
         try:
-            self._pool(d).worktree(Path(d).absolute()).reset(rev, mode=mode)
+            self._pool(d).worktree(Path(d).resolve()).reset(rev, mode=mode)
         except GitError as err:
             raise pool_error(err) from err
 
@@ -280,7 +280,7 @@ class RealGit(LandGit):
 
     def checkout_force(self, d: str, branch: str, start: str) -> None:
         try:
-            self._pool(d).worktree(Path(d).absolute()).checkout_force(branch, start)
+            self._pool(d).worktree(Path(d).resolve()).checkout_force(branch, start)
         except GitError as err:
             raise pool_error(err) from err
 
@@ -364,14 +364,14 @@ class RealGit(LandGit):
     def tree_of(self, d: str) -> str:
         """The snapshot tree, without declared ignored inputs; checks key those separately in InputKeys."""
         try:
-            wt = self._pool(d).worktree(Path(d).absolute())
+            wt = self._pool(d).worktree(Path(d).resolve())
             return str(wt.snapshot("HEAD", inputs=()).tree)
         except GitError as err:
             raise pool_error(err) from err
 
     def worktree_state(self, d: str) -> bytes | None:
         try:
-            return self._pool(d).worktree_state(Path(d).absolute())
+            return self._pool(d).worktree_state(Path(d).resolve())
         except GitError:
             return None
 

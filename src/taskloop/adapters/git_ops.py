@@ -39,7 +39,7 @@ class LandGit(GitBase):
 
     def unmerged(self, d: str) -> list[str]:
         try:
-            return list(self._pool(d).worktree(Path(d).absolute()).unmerged())
+            return list(self._pool(d).worktree(Path(d).resolve()).unmerged())
         except GitError as err:
             raise pool_read_error(err) from err
 
@@ -126,7 +126,7 @@ class LandGit(GitBase):
 
     def rebase_continue(self, d: str) -> GitOutcome:
         try:
-            result = self._pool(d).worktree(Path(d).absolute()).continue_rebase()
+            result = self._pool(d).worktree(Path(d).resolve()).continue_rebase()
         except GitError as err:
             raise pool_error(err) from err
         return GitOutcome(ok=result.ok, output=result.output)
