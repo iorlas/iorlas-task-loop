@@ -8,7 +8,7 @@ not a repository, a timeout), never an expected outcome.
 
 from __future__ import annotations
 
-from typing import TypeVar
+import re
 
 
 class GitError(Exception):
@@ -20,7 +20,7 @@ class GitError(Exception):
         self.hint = hint
 
 
-class GitUnavailable(GitError):  # noqa: N818 — the name the design gives the infrastructure failure
+class GitUnavailable(GitError):
     """Git could not answer: ``tail`` is the end of its output, ``retryable`` says a later try may succeed."""
 
     @property
@@ -28,13 +28,67 @@ class GitUnavailable(GitError):  # noqa: N818 — the name the design gives the 
         return str(self)
 
 
-__all__ = ["GitError", "GitUnavailable", "some"]
+class MissingRevision(GitUnavailable):
+    """A revision does not identify a git object."""
 
 
-_T = TypeVar("_T")
+class NotARepo(GitUnavailable):
+    """The requested path is outside a repository or does not exist."""
 
 
-def some(value: _T | None) -> _T:
+class IndexLocked(GitUnavailable):
+    """Another writer holds the index lock."""
+
+
+class RefRace(GitUnavailable):
+    """A ref changed since it was read, or another writer holds its lock."""
+
+
+class BranchPinned(GitUnavailable):
+    """Another worktree has the branch checked out; ``holder`` names it."""
+
+    def __init__(self, message: str, holder: str, *, retryable: bool = False, hint: str | None = None) -> None:
+        super().__init__(message, retryable=retryable, hint=hint)
+        self.holder = holder
+
+
+_INDEX_LOCK = re.compile(r"index\.lock")
+_REF_RACE = re.compile(r"incorrect old value|cannot lock ref|unable to update local ref|Unable to create '[^']*\.lock'")
+_PINNED = re.compile(r"already (?:checked out|used by worktree) at '?([^'\n]*)'?")
+_MISSING_REVISION = re.compile(r"fatal: (?:bad revision '.+'|Not a valid object name .+)")
+_AMBIGUOUS_REVISION = re.compile(r"fatal: ambiguous argument '.+': unknown revision or path not in the working tree\.")
+
+
+def failure(message: str, stderr: str, code: int, *, retryable: bool = False, hint: str | None = None) -> GitUnavailable:
+    """Translate git's specific diagnostics; an unknown failure remains ``GitUnavailable``."""
+    lines = [line.strip() for line in stderr.splitlines() if line.strip()]
+    tail = next((line for line in lines if line.startswith(("fatal:", "error:"))), lines[-1] if lines else "")
+    kind: type[GitUnavailable] = GitUnavailable
+    if _INDEX_LOCK.search(stderr):
+        kind, retryable = IndexLocked, True
+    elif match := _PINNED.search(stderr):
+        return BranchPinned(message, match.group(1).strip(), hint=hint)
+    elif _REF_RACE.search(stderr):
+        kind, retryable = RefRace, True
+    elif code == 128:
+        if (
+            tail == "fatal: not a git repository (or any of the parent directories): .git"
+            or re.fullmatch(r"fatal: cannot change to '.+': No such file or directory", tail)
+            or tail.startswith("fatal: not a git repository:")
+        ):
+            kind = NotARepo
+        elif _MISSING_REVISION.fullmatch(tail) or _AMBIGUOUS_REVISION.fullmatch(tail):
+            kind = MissingRevision
+    # merge reports this separately from the revision-reader diagnostics above.
+    if re.search(r"merge: .+ - not something we can merge", stderr):
+        kind = MissingRevision
+    return kind(message, retryable=retryable, hint=hint)
+
+
+__all__ = ["BranchPinned", "GitError", "GitUnavailable", "IndexLocked", "MissingRevision", "NotARepo", "RefRace", "failure", "some"]
+
+
+def some[T](value: T | None) -> T:
     """Narrow a value git or the model must have; its absence is an internal failure."""
     if value is None:
         msg = "internal: an expected value is missing"

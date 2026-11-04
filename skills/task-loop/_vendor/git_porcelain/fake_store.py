@@ -13,7 +13,7 @@ import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from git_porcelain.errors import GitUnavailable
+from git_porcelain.errors import MissingRevision
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -143,6 +143,8 @@ class RepoState:
     common: Path
     store: Store = field(default_factory=Store)
     refs: dict[str, str] = field(default_factory=dict)
+    symbolic_refs: dict[str, str] = field(default_factory=dict)
+    default_branch: str = "main"
     config: dict[str, str] = field(default_factory=dict)
     remotes: dict[str, str] = field(default_factory=dict)
     remote_repos: dict[str, RepoState] = field(default_factory=dict)
@@ -184,8 +186,15 @@ class RepoState:
         if name in {"HEAD", "@"}:
             return self.head_sha(wt)
         for prefix in ("", "refs/", "refs/heads/", "refs/remotes/"):
-            if prefix + name in self.refs:
-                return self.refs[prefix + name]
+            target = prefix + name
+            seen: set[str] = set()
+            while target in self.symbolic_refs:
+                if target in seen:
+                    return None
+                seen.add(target)
+                target = self.symbolic_refs[target]
+            if target in self.refs:
+                return self.refs[target]
         if _HEX.fullmatch(name):
             found = [sha for sha in self.store.commits if sha.startswith(name)]
             return found[0] if len(found) == 1 else None
@@ -199,7 +208,7 @@ class RepoState:
         if rev in self.store.trees:
             return self.store.trees[rev]
         msg = f"git: bad revision '{rev}'"
-        raise GitUnavailable(msg)
+        raise MissingRevision(msg)
 
     def range_commits(self, spec: str, wt: CheckoutState) -> list[CommitObj]:
         """Commits of ``A..B`` (or everything reachable from one revision), newest first."""
@@ -207,13 +216,13 @@ class RepoState:
         tip = self.commit_named(right if dots else left, wt)
         if tip is None:
             msg = f"git: bad revision '{spec}'"
-            raise GitUnavailable(msg)
+            raise MissingRevision(msg)
         skip: set[str] = set()
         if dots:
             base = self.commit_named(left or "HEAD", wt)
             if base is None:
                 msg = f"git: bad revision '{spec}'"
-                raise GitUnavailable(msg)
+                raise MissingRevision(msg)
             skip = ancestors(self.store, base)
         keep = ancestors(self.store, tip) - skip
         return sorted((self.store.commits[s] for s in keep), key=lambda c: -c.order)

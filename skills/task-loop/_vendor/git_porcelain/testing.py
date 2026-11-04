@@ -21,6 +21,7 @@ import subprocess
 from typing import TYPE_CHECKING, Final, Protocol
 
 from git_porcelain.fake import FakeRemote, FakeRepo, FakeWorktree
+from git_porcelain.fake_plumbing import FakePlumbing
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -28,7 +29,7 @@ if TYPE_CHECKING:
 
     from git_porcelain.history import Identity
 
-__all__ = ["LEAKS", "QUIET", "FakeRemote", "FakeRepo", "FakeWorktree", "apply_hermetic_env", "git", "hermetic_env"]
+__all__ = ["LEAKS", "QUIET", "FakePlumbing", "FakeRemote", "FakeRepo", "FakeWorktree", "apply_hermetic_env", "git", "hermetic_env"]
 
 #: Settings every test git process runs with unless the test asks otherwise.
 QUIET: Final[Mapping[str, str]] = {

@@ -372,8 +372,9 @@ class Worktree(Protocol):
         """Is this checkout the repository it claims to be. Never memoized: it exists to catch a stray config."""
         ...
 
-    def snapshot(self, base: str) -> Snapshot:
-        """The work as git would commit it (a throwaway index, the real one untouched), plus head, branch and base."""
+    def snapshot(self, base: str, *, inputs: Sequence[str] = ()) -> Snapshot:
+        """The work as git would commit it, plus head, branch and base. ``inputs`` are literal
+        paths (files or directories) included even when ignored; the real index is untouched."""
         ...
 
     def diff(self, a: str, b: str, *, exclude: Sequence[str] = (), cap: int | None = None) -> Diff:

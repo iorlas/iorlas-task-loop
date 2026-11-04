@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from git_porcelain.errors import GitError
+from git_porcelain.errors import GitError, failure
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -32,6 +32,7 @@ def _git_env() -> dict[str, str]:
     """Child env that fails loud instead of prompting for credentials, and acts on the repo it is pointed at."""
     env = {k: v for k, v in os.environ.items() if k not in _REDIRECTS}
     env["GIT_TERMINAL_PROMPT"] = "0"
+    env["LC_ALL"] = "C"
     env.setdefault("GIT_SSH_COMMAND", "ssh -o BatchMode=yes")
     return env
 
@@ -81,7 +82,7 @@ def run_git(
     proc = _run(vault, args, env, timeout, stdin)
     if check and proc.returncode != 0:
         msg = f"git {args[0] if args else ''} exited {proc.returncode}: {proc.stderr.strip()[:300]}"
-        raise GitError(msg, retryable=False)
+        raise failure(msg, proc.stderr, proc.returncode)
     return proc.stdout
 
 

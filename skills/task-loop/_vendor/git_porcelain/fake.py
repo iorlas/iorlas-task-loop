@@ -28,9 +28,10 @@ from git_porcelain import fake_flow as flow
 from git_porcelain import fake_read as read
 from git_porcelain import fake_write as write
 from git_porcelain.api import Sha
-from git_porcelain.errors import GitUnavailable
+from git_porcelain.errors import NotARepo
 from git_porcelain.fake_diff import grep_files
 from git_porcelain.fake_ops import branch_ref, hard_to
+from git_porcelain.fake_plumbing import FakePlumbing
 from git_porcelain.fake_store import CheckoutState, Hooks, RepoState
 
 if TYPE_CHECKING:
@@ -65,7 +66,7 @@ class FakeRemote:
     def __init__(self, url: str, *, default_branch: str = "main") -> None:
         self.url = url
         self.default_branch = default_branch
-        self.state = RepoState(common=Path(url))
+        self.state = RepoState(common=Path(url), default_branch=default_branch)
 
     @property
     def offline(self) -> bool:
@@ -120,6 +121,7 @@ class FakeRepo:
         tip = state.refs.get(f"refs/remotes/origin/{branch}")
         if tip is not None:
             state.refs[branch_ref(branch)] = tip
+            state.symbolic_refs["refs/remotes/origin/HEAD"] = f"refs/remotes/origin/{branch}"
             hard_to(state, wt, state.store.commits[tip].files, {})
         return cls(state, path)
 
@@ -134,6 +136,10 @@ class FakeRepo:
 
     def set_config(self, key: str, value: str) -> None:
         self._state.config[key.lower()] = value
+
+    def plumbing(self) -> FakePlumbing:
+        """The public path-based functions over this repository's state."""
+        return FakePlumbing(self._state)
 
     @property
     def hooks(self) -> Hooks:
@@ -218,7 +224,7 @@ class FakeWorktree:
         found = self._find()
         if found is None:
             msg = f"git exited 128: fatal: not a git repository: {self.path}"
-            raise GitUnavailable(msg)
+            raise NotARepo(msg)
         return found
 
     @property
@@ -252,8 +258,8 @@ class FakeWorktree:
     def health(self) -> Health:
         return read.health(self._repo, self._find(), self.path)
 
-    def snapshot(self, base: str) -> Snapshot:
-        return read.snapshot(self._repo, self.state(), base)
+    def snapshot(self, base: str, *, inputs: Sequence[str] = ()) -> Snapshot:
+        return read.snapshot(self._repo, self.state(), base, inputs=inputs)
 
     def diff(self, a: str, b: str, *, exclude: Sequence[str] = (), cap: int | None = None) -> Diff:
         return read.diff(self._repo, self.state(), a, b, exclude=tuple(exclude), cap=cap)

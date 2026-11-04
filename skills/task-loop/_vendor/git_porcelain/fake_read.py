@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 from git_porcelain import ignore_rules
 from git_porcelain.api import Change, Diff, Dirty, Health, LogEntry, Relation, RepoIdentity, Sha, Snapshot, Tree, TreeId, WorktreeInfo
-from git_porcelain.errors import GitUnavailable
+from git_porcelain.errors import GitUnavailable, MissingRevision
 from git_porcelain.fake_diff import diff_stat, diff_text, grep_files, status_entries
 from git_porcelain.fake_ignore import Ignore
 from git_porcelain.fake_ops import ignore_of, is_clean
@@ -69,7 +69,7 @@ def resolve_commit(repo: RepoState, wt: CheckoutState, rev: str) -> str:
     sha = repo.commit_named(rev, wt)
     if sha is None:
         msg = f"git: bad revision '{rev}'"
-        raise GitUnavailable(msg)
+        raise MissingRevision(msg)
     return sha
 
 
@@ -78,12 +78,16 @@ def _merge_base(repo: RepoState, left: str, right: str) -> str | None:
     return max(common, key=lambda s: repo.store.commits[s].order) if common else None
 
 
-def snapshot(repo: RepoState, wt: CheckoutState, base: str) -> Snapshot:
+def snapshot(repo: RepoState, wt: CheckoutState, base: str, *, inputs: Sequence[str] = ()) -> Snapshot:
     files = dict(repo.head_files(wt))
     ignore = ignore_of(repo, wt)
     for path, data in wt.files.items():
-        if path in files or not ignore.ignores(path):
+        if path in files or not ignore.ignores(path) or any(_input_matches(path, p) for p in inputs):
             files[path] = repo.store.put_blob(data)
+    for spec in inputs:
+        if not any(_input_matches(p, spec) for p in files):
+            msg = f"pathspec '{spec}' did not match any files"
+            raise GitUnavailable(msg)
     work = repo.store.put_tree({p: s for p, s in files.items() if p in wt.files})
     tip = resolve_commit(repo, wt, base)
     head = repo.head_sha(wt)
@@ -92,6 +96,10 @@ def snapshot(repo: RepoState, wt: CheckoutState, base: str) -> Snapshot:
         return Snapshot(TreeId(work), None, None, branch, Sha(tip), Sha(tip))
     fork = _merge_base(repo, tip, head)
     return Snapshot(TreeId(work), Sha(head), TreeId(repo.store.commits[head].tree), branch, Sha(fork or tip), Sha(tip))
+
+
+def _input_matches(path: str, spec: str) -> bool:
+    return spec in {".", "./"} or path == spec or path.startswith(spec.rstrip("/") + "/")
 
 
 def _letter(path: str, left: Mapping[str, object], right: Mapping[str, object]) -> Literal["A", "D", "M"]:

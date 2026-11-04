@@ -6,11 +6,10 @@ from __future__ import annotations
 import hashlib
 import tempfile
 from pathlib import Path
-from typing import TYPE_CHECKING, Final, TypeVar
+from typing import TYPE_CHECKING, Final
 
 from git_porcelain import ignore_rules, real_cache, real_env, real_parse
 from git_porcelain.api import Diff, Dirty, Health, LogEntry, Relation, RepoIdentity, Sha, Snapshot, Tree, TreeId, WorktreeInfo
-from git_porcelain.errors import GitUnavailable
 from git_porcelain.real_done import unavailable
 
 if TYPE_CHECKING:
@@ -36,12 +35,11 @@ __all__ = [
     "worktrees",
 ]
 
-_T = TypeVar("_T")
 _NO_LOCK: Final = "--no-optional-locks"
 _CONFIG_KEYS: Final = r"^(core\.(worktree|bare)|extensions\.worktreeconfig)$"
 
 
-def _rev_memo(repo: RealRepo, key: object, revs: Sequence[str], compute: Callable[[], _T]) -> _T:
+def _rev_memo[T](repo: RealRepo, key: object, revs: Sequence[str], compute: Callable[[], T]) -> T:
     """Memoize an answer about revisions: forever when all are shas, while the ref files are unchanged otherwise."""
     if all(real_cache.is_sha(r) for r in revs):
         return repo.memo(key, compute)
@@ -190,24 +188,25 @@ def health(wt: RealWorktree) -> Health:
     return Health(ok=True, problem=None, detail="", set_in=None, worktree_config=per_worktree)
 
 
-def snapshot(wt: RealWorktree, base: str) -> Snapshot:
+def snapshot(wt: RealWorktree, base: str, *, inputs: Sequence[str] = ()) -> Snapshot:
     repo = wt.repo
     text = wt.run(_NO_LOCK, "status", "--porcelain=v2", "--branch", "-z", "--untracked-files=all").out
     state = real_parse.parse_status(text)
-    key = real_cache.tree_key(wt.path, text, (*state.tracked, *state.untracked)) if repo.memoize else None
+    # An input may name a directory whose ignored contents status never lists.
+    # Rebuild when inputs are declared rather than cache an incomplete signature.
+    key = real_cache.tree_key(wt.path, text, (*state.tracked, *state.untracked)) if repo.memoize and not inputs else None
     cached = repo.snapshots.get(str(wt.path))
     if key is not None and cached is not None and cached[0] == key:
         work = TreeId(str(cached[1]))
     else:
-        work = _write_tree(wt, has_head=state.head is not None)
+        work = _write_tree(wt, has_head=state.head is not None, inputs=inputs)
         if key is not None:
             repo.snapshots[str(wt.path)] = (key, work)
     names = [f"{base}^{{commit}}"] if state.head is None else ["HEAD^{tree}", f"{base}^{{commit}}"]
     seen = wt.run("rev-parse", *names, check=False)
     lines = seen.out.split()
     if seen.rc != 0 or len(lines) != len(names):
-        msg = f"git rev-parse exited {seen.rc}: base {base!r} does not resolve: {seen.tail}"
-        raise GitUnavailable(msg)
+        raise unavailable(("rev-parse",), seen)
     base_tip = Sha(lines[-1])
     if state.head is None:
         return Snapshot(work, None, None, state.branch, base_tip, base_tip)
@@ -216,12 +215,14 @@ def snapshot(wt: RealWorktree, base: str) -> Snapshot:
     return Snapshot(work, Sha(state.head), TreeId(lines[0]), state.branch, mb, base_tip)
 
 
-def _write_tree(wt: RealWorktree, *, has_head: bool) -> TreeId:
+def _write_tree(wt: RealWorktree, *, has_head: bool, inputs: Sequence[str]) -> TreeId:
     with tempfile.TemporaryDirectory() as folder:
         env = {"GIT_INDEX_FILE": str(Path(folder) / "index")}
         if has_head:
             wt.run("read-tree", "HEAD", env=env)
         wt.run("add", "-A", env=env)
+        if inputs:
+            wt.run("--literal-pathspecs", "add", "--force", "-A", "--", *inputs, env=env)
         return TreeId(wt.run("write-tree", env=env).out.strip())
 
 

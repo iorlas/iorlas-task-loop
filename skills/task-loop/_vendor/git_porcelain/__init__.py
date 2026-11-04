@@ -49,7 +49,7 @@ from git_porcelain.api import (
     Worktree,
     WorktreeInfo,
 )
-from git_porcelain.errors import GitError, GitUnavailable
+from git_porcelain.errors import BranchPinned, GitError, GitUnavailable, IndexLocked, MissingRevision, NotARepo, RefRace
 from git_porcelain.history import (
     Commit,
     Identity,
@@ -70,6 +70,7 @@ from git_porcelain.history import (
     upstream,
 )
 from git_porcelain.lfs import lfs_available, lfs_checkout, lfs_fetch, lfs_paths, lfs_push, lfs_setup
+from git_porcelain.plumbing import Ref
 from git_porcelain.porcelain import (
     StatusEntry,
     dirty_rels,
@@ -87,10 +88,15 @@ from git_porcelain.porcelain import (
     unmerged_paths,
 )
 from git_porcelain.real import RealRepo, RealWorktree
+from git_porcelain.real_config import config_entries, config_get
+from git_porcelain.real_files import check_ignore, ls_files
+from git_porcelain.real_integrate import merge_ff, pull_rebase
+from git_porcelain.real_refs import branches, delete_ref_at, ls_remote, symbolic_ref
 
 __all__ = [
     "Aborted",
     "BranchHeld",
+    "BranchPinned",
     "BranchTaken",
     "Change",
     "Commit",
@@ -102,9 +108,12 @@ __all__ = [
     "Health",
     "HookRejected",
     "Identity",
+    "IndexLocked",
     "LogEntry",
     "MergeResult",
     "MergeState",
+    "MissingRevision",
+    "NotARepo",
     "NothingToRecord",
     "Offline",
     "Pushed",
@@ -112,6 +121,8 @@ __all__ = [
     "RealWorktree",
     "Rebased",
     "Recorded",
+    "Ref",
+    "RefRace",
     "Rejected",
     "Relation",
     "Released",
@@ -130,8 +141,13 @@ __all__ = [
     "UpToDate",
     "Worktree",
     "WorktreeInfo",
+    "branches",
+    "check_ignore",
     "classify_remote_failure",
     "commit_paths",
+    "config_entries",
+    "config_get",
+    "delete_ref_at",
     "dirty_rels",
     "fetch",
     "finish_merge",
@@ -149,14 +165,19 @@ __all__ = [
     "lfs_push",
     "lfs_setup",
     "log_grep",
+    "ls_files",
+    "ls_remote",
     "merge",
+    "merge_ff",
     "merge_in_progress",
+    "pull_rebase",
     "push",
     "readiness",
     "run_git",
     "show_at",
     "show_stage",
     "status",
+    "symbolic_ref",
     "sync_status",
     "unmerged_paths",
     "upstream",

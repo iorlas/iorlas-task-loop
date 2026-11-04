@@ -108,6 +108,9 @@ class RealRepo:
         except subprocess.TimeoutExpired as exc:
             msg = f"git {args[0] if args else ''} timed out after {timeout}s"
             raise GitUnavailable(msg, retryable=True) from exc
+        except OSError as exc:
+            msg = f"failed to invoke git: {exc}"
+            raise GitUnavailable(msg) from exc
         result = Done(done.returncode, done.stdout, done.stderr.decode("utf-8", "replace"))
         if check and result.rc != 0:
             raise unavailable(args, result)
@@ -184,8 +187,8 @@ class RealWorktree:
     def health(self) -> Health:
         return real_read.health(self)
 
-    def snapshot(self, base: str) -> Snapshot:
-        return real_read.snapshot(self, base)
+    def snapshot(self, base: str, *, inputs: Sequence[str] = ()) -> Snapshot:
+        return real_read.snapshot(self, base, inputs=inputs)
 
     def diff(self, a: str, b: str, *, exclude: Sequence[str] = (), cap: int | None = None) -> Diff:
         return real_read.diff(self, a, b, exclude=tuple(exclude), cap=cap)

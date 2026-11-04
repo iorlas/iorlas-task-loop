@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Final
 
-from git_porcelain.errors import GitUnavailable
+from git_porcelain.errors import GitUnavailable, failure
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -37,8 +37,10 @@ def unavailable(args: Sequence[str], done: Done) -> GitUnavailable:
     """The infrastructure failure of a git child that exited non-zero."""
     low = done.tail.lower()
     hint = "set user.name and user.email" if "tell me who you are" in low or "empty ident" in low else None
-    return GitUnavailable(
+    return failure(
         f"git {args[0] if args else ''} exited {done.rc}: {done.tail}",
+        done.err or done.out,
+        done.rc,
         retryable=any(mark in low for mark in _LOCKED),
         hint=hint,
     )

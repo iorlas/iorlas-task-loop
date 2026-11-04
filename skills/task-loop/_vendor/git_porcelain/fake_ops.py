@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from git_porcelain.errors import GitUnavailable
+from git_porcelain.errors import BranchPinned, GitUnavailable, IndexLocked
 from git_porcelain.fake_diff import status_entries
 from git_porcelain.fake_ignore import Ignore
 from git_porcelain.fake_store import blob_sha
@@ -38,7 +38,7 @@ def require_index(wt: CheckoutState) -> None:
     """A held ``index.lock`` stops every write that touches the index."""
     if wt.index_locked:
         msg = f"git: Unable to create '{wt.path}/.git/index.lock': File exists."
-        raise GitUnavailable(msg, retryable=True)
+        raise IndexLocked(msg, retryable=True)
 
 
 def branch_ref(name: str) -> str:
@@ -50,7 +50,7 @@ def check_branch_free(repo: RepoState, wt: CheckoutState, ref: str) -> None:
     for other in repo.worktrees.values():
         if other is not wt and other.head_ref == ref:
             msg = f"git: '{ref.removeprefix('refs/heads/')}' is already used by worktree at '{other.path}'"
-            raise GitUnavailable(msg)
+            raise BranchPinned(msg, str(other.path))
 
 
 def tracked_dirty(wt: CheckoutState, head: Mapping[str, str]) -> bool:
