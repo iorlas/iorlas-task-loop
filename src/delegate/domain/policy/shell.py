@@ -2,6 +2,8 @@
 text."""
 
 import shlex
+from collections.abc import Mapping
+from types import MappingProxyType
 
 from delegate.contracts.wire import RECIPE_RUNNERS
 from delegate.domain.policy.matchers import name_of, pieces, sed_print_only, unwrap, writes_or_substitutes
@@ -89,8 +91,12 @@ GIT_CHANGING = (
 )  # fmt: skip
 # Tools a write step has no business with: the forge (`gh`), and the tracker's writes (`bd`, `dolt`: the coordinator's). Reads pass.
 FORGE = frozenset({"gh"})
-TRACKER_READS = {"bd": frozenset({"show", "list", "ready", "search", "stats", "blocked", "prime", "memories"}),
-                 "dolt": frozenset({"status", "log", "diff", "show", "ls"})}  # fmt: skip
+TRACKER_READS: Mapping[str, frozenset[str]] = MappingProxyType(
+    {
+        "bd": frozenset({"show", "list", "ready", "search", "stats", "blocked", "prime", "memories"}),
+        "dolt": frozenset({"status", "log", "diff", "show", "ls"}),
+    }
+)
 FIND_RUNS = frozenset({"-exec", "-execdir", "-ok", "-okdir", "-delete", "-fprint", "-fprintf", "-fls"})
 
 
