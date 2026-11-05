@@ -3,7 +3,7 @@
 from delegate.app.launch import secret_in
 from delegate.contracts import events as ev
 from delegate.domain.policy.matchers import heredoc_only_hit
-from delegate.domain.policy.shell import git_write, read_only_problem
+from delegate.domain.policy.shell import git_write, read_only_problem, writer_problem
 from delegate.domain.policy.worker import denial, denial_item, is_policy_denial, judge
 
 
@@ -30,8 +30,39 @@ class Policy:
         for c in ("git commit -m x", "git -C . push", "bash -lc 'git checkout -b y'", "git stash", "git branch new"):
             assert git_write(c), c
             assert judge("Bash", {"command": c}, False).blocked, c
-        for c in ("git status", "git stash list", "git branch --list", "git worktree list", "git log -1"):
+        for c in (
+            "git -c core.pager=sh log",
+            "git -ccore.hooksPath=x log",
+            "git --config-env=a=B log",
+            "git update-ref -d refs/heads/x",
+            "git symbolic-ref HEAD refs/heads/x",
+            "git branch -D x",
+            "git tag -d v1",
+            "git push origin :main",
+            "git push --delete origin x",
+            "git reflog expire --all",
+            "git gc --prune=now",
+        ):
+            assert git_write(c), c
+        for c in ("git status", "git -C sub log", "git stash list", "git branch --list", "git worktree list", "git log -1"):
             assert git_write(c) is None, c
+
+    def test_a_write_step_may_not_use_the_forge_or_write_the_tracker(self):
+        for c in (
+            "gh pr merge 1",
+            "bash -lc 'gh api x'",
+            "bd create --title x",
+            "bd close tl-1",
+            "bd update tl-1 --claim",
+            "bd",
+            "dolt push",
+            "dolt sql -q 'delete from t'",
+            "FOO=1 gh issue list",
+        ):
+            assert writer_problem(c), c
+            assert judge("Bash", {"command": c}, False).blocked, c
+        for c in ("bd show tl-1", "bd list", "bd ready", "dolt status", "git log -1", "cat gh.txt"):
+            assert writer_problem(c) is None, c
 
     def test_a_read_only_step_allows_only_reading(self):
         assert read_only_problem("git diff | head -5 && rg x") is None
