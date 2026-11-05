@@ -121,9 +121,6 @@ class OwnerLook:
         e = self.e
         shots: list[dict[str, str]] = []
         for n in e.look_paths:
-            b = e.pictures.before_shot(n)
-            if b:
-                shots.append({"path": f"artifact:{b.parent.name}/{b.name}", "role": "before", "label": Path(n).stem})
             shots.append({"path": f"artifact:{e.bead}/{n}", "role": "after", "label": Path(n).stem})
         mine = [{"id": f"{e.bead}#{k}", "bead": e.bead, "title": t, "note": " ".join(e.look_notes)[:600], "shots": shots, "status": "open"}
                 for k, t in enumerate(e.cases.cases_of("taste"), 1)]

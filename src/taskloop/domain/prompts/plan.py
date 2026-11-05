@@ -44,7 +44,8 @@ VISUAL_PLAN: Final = """This repo has visual work (screens). Give every case a c
 A number for a look item (a contrast ratio, a size) comes only from the task, the owner or a project standard file (design
 tokens, a rule under config/). Never invent one as a check: if you think one is needed, ask it as your question (options with
 your proposal first) and plan no check for it.
-%s"""
+If the task does not say what it should look like (a mockup, a target, a screen to match), plan from the bead text and assume the look;
+say the assumption in the summary."""
 
 SHOW_PLAN: Final = """A task that asks for a picture, a video, a PDF or an audio file as its result gets a case of class `show`:
 leave `check` empty and list in `shows` each file the writer must register with the artifact_add tool ({name: the file name,

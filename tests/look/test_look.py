@@ -1,6 +1,5 @@
 """tl-bxk.10.23: look and feel. A visual change saves screenshots; the agent judges them; the land keeps them as artifacts
 (never in the repo) and files an owner-look bead for the owner's later round."""
-import os
 import sys
 from pathlib import Path
 from typing import Any, cast
@@ -19,11 +18,13 @@ from support.fakes import must_bead
 from support.spawn import port_git, real_spawner
 from support.who import who
 
+from taskloop.app.artifacts import store
 from taskloop.app.look import shots
 from taskloop.app.look.owner_look import OwnerLook
 from taskloop.app.run.closer import Closer
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts import answers, wire
+from taskloop.contracts.artifact import ArtifactSlot
 from taskloop.contracts.config import RepoProfile, VisualConfig
 from taskloop.contracts.env import snapshot
 from taskloop.contracts.ids import BeadId
@@ -149,7 +150,7 @@ class LookTest(T.EngineTest):
         assert "design/" not in body
         assert "matching the reference" in body
 
-    def test_before_shots_and_references_come_from_other_beads_artifacts_of_the_same_prefix(self):
+    def test_before_pictures_are_the_ones_the_worker_registered_as_before_in_this_run(self):
         self.eng = engine.Engine(
             BeadId("t-1"),
             str(self.wt),
@@ -158,22 +159,18 @@ class LookTest(T.EngineTest):
             env=snapshot(),
             spawner=real_spawner(),
             git=port_git(), who=who())
-        self.eng.run_dir.mkdir(parents=True, exist_ok=True)
-        (self.eng.run_dir / "brief.md").write_text("no pictures named")
-        root = homes.cfg()
-        for bead, data in (("t-0", b"old"), ("t-1", b"mine"), ("zz-9", b"other repo")):
-            root.artifacts(BeadId(bead)).mkdir(parents=True)
-            (root.artifacts(BeadId(bead)) / "home.png").write_bytes(data)
-        os.utime(root.artifacts(BeadId("t-0")) / "home.png", (1, 1))
-        root.artifacts(BeadId("t-5")).mkdir(parents=True)
-        (root.artifacts(BeadId("t-5")) / "home.png").write_bytes(b"newer")
-        assert self.eng.pictures.before_shot("home.png") == root.artifacts(BeadId("t-5")) / "home.png"
-        assert self.eng.pictures.before_shot("nothing.png") is None
-        text = self.eng.pictures.references_text()
-        assert str(root.artifacts(BeadId("t-0")) / "home.png") in text
-        assert str(root.artifacts(BeadId("t-5")) / "home.png") in text
-        assert "zz-9" not in text
-        assert str(root.artifacts(BeadId("t-1"))) not in text
+        png = self.wt / "pic.png"
+        png.write_bytes(b"\x89PNG\r\n\x1a\n" + b"0" * 32)
+        root = self.eng.home.artifact_store()
+        self.eng.artifact_repo = "repo"
+        run = self.eng.run_id
+        for stage, role, name in (("write", "before", "home-before.png"), ("write", "after", "home-after.png"),
+                                  ("write", "progress", "half.png")):
+            store.add(root, ArtifactSlot(repo="repo", bead="t-1", run=run, stage=stage, attempt=1), png, name=name,
+                      caption="c", role=role, now=1.0)
+        store.add(root, ArtifactSlot(repo="repo", bead="t-1", run="other-run", stage="write", attempt=1), png, name="old.png",
+                  caption="c", role="before", now=1.0)
+        assert [m.name for _, m in self.eng.pictures.before_pictures()] == ["home-before.png"]
 
     def test_a_profile_that_still_sets_evidence_dir_is_refused(self):
         with pytest.raises(Exception) as cm:

@@ -6,20 +6,20 @@ from pathlib import Path
 from typing import Any
 
 from taskloop.adapters import looks
-from taskloop.adapters.bdids import prefix_of
 from taskloop.adapters.check_files import repo_key
 from taskloop.app.artifacts import store
 from taskloop.app.artifacts.keep import Keeper, place
-from taskloop.contracts.artifact import ArtifactSlot
+from taskloop.contracts.artifact import ArtifactMeta, ArtifactSlot
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.log import Artifacts
 from taskloop.contracts.ports import Git
 from taskloop.contracts.slots import SlotGitError
 from taskloop.contracts.wire import Refused
 from taskloop.domain.checks.matchers import glob_re
-from taskloop.domain.look.matchers import image_names, safe_name
+from taskloop.domain.look.matchers import safe_name
 
 IMAGE_EXT = (".png", ".jpg", ".jpeg")
+IMAGE_KINDS = ("png", "jpg", "gif", "webp")
 MAX_SHOTS, MAX_SHOT_BYTES = 20, 5 * 1024 * 1024
 
 
@@ -110,33 +110,13 @@ class Pictures:
         """Where this bead's pictures are kept (the dashboard serves them): outside the repo and every worktree."""
         return self.e.home.artifacts(bead or self.e.bead)
 
-    def earlier_pictures(self, pattern: str) -> list[Path]:
-        """Pictures matching `pattern` in other beads' artifact folders of this repo's beads (same id prefix, e.g. "lifesim-"),
-        oldest first."""
+    def before_pictures(self) -> list[tuple[Path, ArtifactMeta]]:
+        """The pictures the worker registered with role `before` in this run: the worker says what is a before, nothing is matched."""
         e = self.e
-        root, prefix = self.artifacts_dir(e.bead).parent, prefix_of(e.bead) + "-"
-        found = [f for d in root.glob(glob.escape(prefix) + "*") if d.name != e.bead and d.is_dir() and not d.is_symlink()
-                 for f in d.glob(pattern) if f.is_file() and not f.is_symlink()]
-        return sorted(found, key=lambda f: f.stat().st_mtime)
-
-    def references_text(self):
-        """What the planner is told the task already has to look at: image files its text names, and the last kept shots."""
-        e = self.e
-        found = []
-        for rel in image_names(e.briefs.text()):
-            if (Path(e.wt) / rel).is_file():
-                found.append(rel)
-        before = self.earlier_pictures("*.png")[-6:]
-        if not (found or before):
-            return ("No reference image is in the task or among the kept look pictures. If the task does not say what it should "
-                    "look like (a mockup, a target, a screen to match), plan from the bead text and assume the look; "
-                    "say the assumption in the summary.")
-        return f"Reference images the task has: {', '.join(found + [str(b) for b in before])}."
-
-    def before_shot(self, name: Any):
-        """A kept picture of the same screen (same file name in another bead's artifact folder): the newest."""
-        cands = self.earlier_pictures(glob.escape(name))
-        return cands[-1] if cands else None
+        if not e.artifact_repo:
+            return []
+        slot = ArtifactSlot(repo=e.artifact_repo, bead=e.bead, run=e.run_id, stage="", attempt=0)
+        return [(f, m) for f, m in store.run_listing(e.home.artifact_store(), slot) if m.role == "before" and m.kind in IMAGE_KINDS]
 
     def render_shots(self, reqs: Any, rnd: Any) -> tuple[list[str], list[str]]:
         """([picture names under the evidence dir], [errors]): the requested shot methods run by the engine, outside any lane's

@@ -82,7 +82,7 @@ class PlanPrompt:
         if shared:
             rules.append(shared.strip())
         if e.pictures.visual_cfg() and e.pictures.shot_methods():  # the classes mean "the engine renders": only with a shot table
-            rules.append(VISUAL_PLAN % e.pictures.references_text())
+            rules.append(VISUAL_PLAN)
             rules.append(VISUAL_STAGES % (", ".join(e.pictures.visual_cfg().include)[:300], e.pictures.shot_table()))
         rules.append(SHOW_PLAN)
         rules.append("Proof files that a check reads or a reviewer looks at (screenshots, logs, probe output) go under "
