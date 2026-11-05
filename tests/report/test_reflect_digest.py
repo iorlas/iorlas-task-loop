@@ -125,12 +125,12 @@ class Clusters(Base):
         assert rd.items(homes.cfg(), NOW - 86400, NOW) == []
 
     def test_the_owner_repo_follows_the_cause(self):
-        for cause, _want in (("engine", "iorlas-task-loop"), ("prompt", "iorlas-task-loop"), ("delegate", "iorlas-delegate"),
+        for cause, _want in (("engine", "iorlas-task-loop"), ("prompt", "iorlas-task-loop"), ("delegate", "iorlas-task-loop"),
                             ("repo_profile", "lifesim"), ("sandbox", "lifesim")):
             self.trace("r-" + cause, [(f"x {cause} thing", cause, "e")])
         cs = rules.cluster(rd.items(homes.cfg(), NOW - 86400, NOW))
         owners = {c["cause"]: Path(rd.owner_repo(c, homes.cfg()) or "").name for c in cs}
-        assert owners == {"engine": "iorlas-task-loop", "prompt": "iorlas-task-loop", "delegate": "iorlas-delegate",
+        assert owners == {"engine": "iorlas-task-loop", "prompt": "iorlas-task-loop", "delegate": "iorlas-task-loop",
                                   "repo_profile": "lifesim", "sandbox": "lifesim"}
 
 

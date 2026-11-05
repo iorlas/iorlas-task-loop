@@ -17,10 +17,8 @@ claude plugin install iorlas-task-loop@iorlas-marketplace
 Then in a repo that uses bd, say "task loop". Requirements: Python 3.15+, uv, git, bd 1.3+,
 Claude Code. macOS only.
 
-Required: [iorlas-delegate](https://github.com/iorlas/iorlas-delegate) 0.14+ from the same marketplace
-(`claude plugin install iorlas-delegate@iorlas-marketplace`). The engine runs every AI step through it
-([worker-run v3](docs/contracts/worker-run-v3.md)); it picks lane and model from live plan limits. You never call it
-yourself.
+Workers come with the plugin: `src/delegate` is a library the engine calls ([delegate.api](docs/contracts/delegate-api.md)); it picks lane
+and model from live plan limits. `tl accounts` shows which worker accounts are ready and how to fix the rest.
 
 ## What the loop does
 

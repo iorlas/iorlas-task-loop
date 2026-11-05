@@ -2,7 +2,12 @@
 extend = "../../../ruff.toml"
 
 [lint.flake8-tidy-imports.banned-api]
-"delegate".msg = "task-loop and delegate share only the worker-run contract; never import the other plugin"
+"delegate.app".msg = "task-loop imports delegate.api and nothing else of delegate"
+"delegate.cli".msg = "task-loop imports delegate.api and nothing else of delegate"
+"delegate.adapters".msg = "task-loop imports delegate.api and nothing else of delegate"
+"delegate.domain".msg = "task-loop imports delegate.api and nothing else of delegate"
+"delegate.contracts".msg = "task-loop imports delegate.api and nothing else of delegate"
+"delegate.entry".msg = "task-loop imports delegate.api and nothing else of delegate"
 "subprocess".msg = "contracts never spawns a process"
 "socket".msg = "contracts never opens a socket"
 "threading".msg = "contracts never starts a thread"

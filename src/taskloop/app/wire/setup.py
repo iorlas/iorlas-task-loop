@@ -6,6 +6,7 @@ import json
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+from taskloop.adapters import delegate as dg
 from taskloop.app.wire import doctor, hook, slots
 from taskloop.contracts.env import Env
 from taskloop.contracts.paths import ConfigDir, default_root
@@ -62,7 +63,18 @@ def machine(plugin_root: Path, env: Env) -> Plan:
                         + "".join(f"; {p}" for p in problems)))
     if names or problems:
         fixes.append(Fix("githooks", "write the git hooks (pre-push asks the delivery judge) into " + str(ConfigDir(root).hooks_dir())))
+    checks.append(accounts_check())
     return Plan(checks, fixes)
+
+
+def accounts_check() -> Check:
+    """Worker accounts: at least one enabled lane that is ready. The login itself is the owner's (`tl accounts` names each fix)."""
+    try:
+        rows = dg.accounts()
+    except (ValueError, SystemExit, OSError) as e:
+        return Check("accounts", False, f"delegate has no account state yet: {e}")
+    ready = [r.lane for r in rows if r.enabled and r.ready]
+    return Check("accounts", bool(ready), ", ".join(ready) + " ready" if ready else "no enabled lane is ready; run `tl accounts`")
 
 
 def stacks(repo: Path) -> dict[str, str]:

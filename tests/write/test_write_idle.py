@@ -65,7 +65,7 @@ ROUTE = textwrap.dedent('''
 class NoEngineSideSilence(Case):
     def test_the_engine_has_no_warn_stop_cap_timer_of_its_own(self):
         assert not (hasattr(runner, "Silence") or hasattr(runner, "WATCH_S"))
-        assert "silence" not in inspect.signature(runner.StreamRunner).parameters
+        assert "silence" not in inspect.signature(runner.ApiRunner).parameters
         cfg = set(wire.names(EngineConfig))
         assert {"write_idle_min", "write_cap_min"} <= cfg
         assert not {"write_idle_warn_min", "write_idle_stop_min"} & cfg

@@ -58,8 +58,8 @@ that the argv calls, `["just", "name"]`.
 host: the writer runs Unity and tests itself, on this machine. Only the `.task-loop.json` committed on the base branch
 (`origin/main`) counts: a worker can label its own bead or edit a checkout's config, but not main without review and
 the gate. The labels `host` / `no-sandbox` alone grant nothing (a ⚠ says so); `sandbox` still turns it off for one bead.
-Workers go through delegate's contract 4 (`docs/contracts/worker-run-v4.md`; the contract itself is delegate's `contract.json`): the
-engine resolves delegate before any step and blocks the task when it speaks another contract. Delegate, not the engine,
+Workers go through `delegate.api` (`docs/contracts/delegate-api.md`; the stop facts are delegate's `contract.json`): the
+engine checks the call's grants before any step and blocks the task when delegate refuses them. Delegate, not the engine,
 tells each worker what its sandbox allows and the git and credential rules; the engine's briefs say only what the step is for.
 A stopped answer carries `stop{reason, scope, permanence, retry}`, and `taskloop.domain.lanes.policy.decide` (a pure function of those facts)
 is the whole policy: wait, retry, a new thread, reroute, pause, or fail. The engine matches no error text. A network
@@ -67,9 +67,9 @@ stop never counts as a lane failure or toward any retry, replan, ask or storm ca
 (plan, write, review, verify, look, checks, land) waits for the network on the same ref, with a short resume prompt, and
 a finished answer is not asked for again (`done.json`). Past the network wait cap the run pauses (bead open, auto
 label, run id and time budget kept; pause time is not charged) and the next run adopts it. Land detects a push that
-already went through. A paused bead wakes when its lane is usable (`route.py status --json`, loop `GateRole`), not at a
+already went through. A paused bead wakes when its lane is usable (delegate's status, loop `GateRole`), not at a
 clock. A writer is a fallback when delegate's answer says `fallback: true`; its first-choice lane is `first_lane`. Each
-later write round reads `route.py status --json`: while that lane is out the fallback thread is resumed, once it is not
+later write round reads delegate's status: while that lane is out the fallback thread is resumed, once it is not
 the engine asks fresh so the first choice takes over again (transition `fallback_retake`). The trace keeps each session's
 `reason` and `context` and the run's lane manifest. A command the worker was denied shows as a warning; a `sandbox_limit`
 denial never counts; denied with no answer, a second denied write in the bead (across lanes and runs), or a repeated
@@ -361,7 +361,7 @@ and validates both before pushing. Three lost push races stop the release. Relea
      `tl worktree start` → prints this session's worktree, made once and reused for every task.
 4. Your work directory (`WT` below) is that slot or worktree. A session cannot move its own folder: work there with
    absolute paths and `git -C "$WT"`; the shell's cwd resets between calls.
-5. Workers come from the iorlas-delegate plugin (required, see **Workers**). Feed it your Claude usage now:
+5. Workers come from the delegate library in this plugin (see **Workers**; `$TL accounts` shows which accounts are ready). Feed it your Claude usage now:
    `get_usage`, then `$TL usage '<plan.windows as JSON>'`.
 
 ## 1. Pick (before every task)
@@ -504,10 +504,8 @@ only retries of failed operations (including vendor usage-limit unlocks) carry r
   setup included); run-task heartbeats both too (`TASK_LOOP_SLOT_BEAD`), so a loop killed with SIGKILL leaves its
   slot held until the running bead ends, then the lease lapses and the next sweep (the loop's step, `run-task`, `tl prune`) frees it.
 - **Stopped means stopped:** a SIGTERM to the engine (`tl stop --now`, Ctrl-C to the loop) sends SIGTERM to the running
-  delegate call (route.py stops its worker, which runs in a process group of its own; 0.31.1+ names it on stderr,
-  `delegate: worker pid=N pgid=N`, kept in the engine lock), waits 10 s, then SIGKILLs a route.py still alive and the
-  worker's group. A route.py that named no worker: the process tree is looked at before and after the wait and only
-  processes unchanged in both (pid, group, start time) are SIGKILLed. A worker that still lives is logged and keeps the
+  delegate call: `delegate.api.cancel` stops the worker, which runs in a process group of its own (its pid, group and start
+  are in the engine lock), with SIGTERM, then SIGKILL after the grace. A worker that still lives is logged and keeps the
   slot busy (engine lock) until it ends.
 
 The queue rule is `.task-loop.json` → `engine`; the defaults take every ready bead:
@@ -575,7 +573,7 @@ duration back (`90m`, `12h`, `2d`); default the last 24 h. `--since HH:MM` is it
   anything else the owner, none is open.
 - **Crashes:** the loop saw run-task exit with no outcome; an engine log with no `close:` and no trace, quiet 30 min
   with no live `run-task <bead>`; or a trace closed `failed: engine error ...` (an exception the engine caught). A stop
-  (`failed: stopped (SIGTERM)`) is a failure, not a crash. A run's `.stderr` is route.py's (worker test tracebacks
+  (`failed: stopped (SIGTERM)`) is a failure, not a crash. A run's `.stderr` is the engine's and the worker's (worker test tracebacks
   land there) and is never read.
 - **Also:** minutes per bead (median, p90; all its runs in the window), fix rounds, replans, tokens by lane (codex,
   claude) and by role.
@@ -613,7 +611,7 @@ local to one machine, hence the host in the title.
   (two hand runs from one session share its actor, and bd lets an actor re-claim its own bead): `TAKEN: slot S held by <holder> since <t>
   (<why>)`, nothing runs. Only a run the loop started (`TASK_LOOP_SLOT_BEAD` names that slot's bead) uses the loop's
   take and does not take or release again.
-- **Engine lock:** every run-task writes `<worktree>/.task/engine.lock` (pid and start time, bead, route.py and the
+- **Engine lock:** every run-task writes `<worktree>/.task/engine.lock` (pid and start time, bead and the
   worker) and removes it at the end; the loop writes its own from the slot take through the slot reset until its
   run-task takes it over. The loop's slot choice, `tl slot reset` (exit 4, `BUSY`, with the lock's path and pid),
   `tl slot release` and another run-task keep off a worktree whose lock names a live process, even when the slot bead
@@ -632,7 +630,7 @@ local to one machine, hence the host in the title.
   per-repo lock with a fresh look at the slot bead: bd lets an actor re-claim its own bead, and hand runs of one
   session share its actor. The locks are the vendored ProcessLock (the kernel drops one with its process); POSIX only.
 - **Each slot has its own environment (tl-7y6.18).** Every command the engine runs for a bead (stage checks, the gate, the
-  land command, shot methods, and the workers it starts through `route.py run`) gets: `TMPDIR`/`TMP`/`TEMP`,
+  land command, shot methods, and the workers it starts through `delegate.api.run`) gets: `TMPDIR`/`TMP`/`TEMP`,
   `DOTNET_CLI_HOME`, `NUGET_SCRATCH`, `NUGET_HTTP_CACHE_PATH` and `NUGET_PLUGINS_CACHE_PATH` under the slot's state folder
   (`<config dir>/slot-state/<repo>/<slot>/`: outside the worktree, made on use, kept when the slot is reused),
   `SharedCompilationId` and `MSBUILDNODEHANDSHAKESALT` = `<repo>-<slot>` (no shared compiler server or MSBuild node), and
@@ -689,8 +687,8 @@ The loop needs these kinds of worker; it does not care what runs them.
 | reviewer | reads the diff against the bead and its risks; another model family than the writer | fixes |
 | hard | a subtask two writers failed | |
 
-How to get them: from the **iorlas-delegate** plugin, which every task-loop install has. You don't talk to it; the
-engine does, one `route.py run ROLE` per AI step (contract: `docs/contracts/worker-run-v4.md` in this plugin's repo).
+How to get them: from the **delegate** library in this plugin. You don't talk to it; the
+engine does, one `delegate.api.run` per AI step (contract: `docs/contracts/delegate-api.md` in this plugin's repo).
 Delegate picks lane, model and effort from its role table and live plan limits, and never spends API credit for the
 engine. Its role names (reader → `light`, writer → `worker`, reviewer → `reviewer` with the writer's family, hard →
 `hard`) are the Workers table's second column. The engine has no verifier

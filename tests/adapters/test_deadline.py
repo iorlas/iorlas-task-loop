@@ -12,9 +12,8 @@ import support.paths  # noqa: F401
 from support.case import Case
 from support.fake_deadline import FakeDeadline
 
-from taskloop.adapters import procs
+from taskloop.adapters import procs, runner
 from taskloop.adapters.deadline import DeadlineExpired, deadline, remaining
-from taskloop.adapters.runner import StreamRunner
 from taskloop.adapters.spawner import Started
 
 
@@ -58,17 +57,29 @@ class Deadlines(Case):
         with deadline(0.02, "run"), ThreadPoolExecutor(max_workers=1) as pool:
             assert pool.submit(remaining, 60).result(timeout=1) == pytest.approx(0.02, abs=5e-08)
 
-    def test_hung_delegate_uses_stream_proc_timeout_and_propagates_the_deadline(self):
-        def child(*args, timeout: float | None = None, **kwargs):
-            assert timeout is not None
-            assert timeout == pytest.approx(0.02, abs=5e-08)
-            self.timer.clock.advance(timeout)
-            return stream_proc.Result(None, None, "wall", 0, 0, None, timeout)
+    def test_hung_delegate_is_cancelled_at_the_deadline_and_propagates_it(self):
+        release = threading.Event()
+        cancelled: list[object] = []
 
-        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(stream_proc, "run", child), \
+        def hung(request, started=None):
+            assert started is not None
+            started(runner.api.Handle(run_id="r", pid=1, pgid=1, start=None))
+            release.wait(10)
+            return {}
+
+        def cancel(handle):
+            cancelled.append(handle)
+            self.timer.clock.advance(1)
+            release.set()
+            return mock.Mock(survivors=[])
+
+        request = runner.api.RunRequest(role="worker", brief_file="b.md", cwd=".")
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(runner.api, "run", hung), \
+                mock.patch.object(runner.api, "cancel", cancel), mock.patch.object(runner, "POLL_S", 0.01), \
                 pytest.raises(DeadlineExpired) as expired, deadline(0.02, "land judge"):
-            StreamRunner(Path(tmp) / "stderr", wall=60)(["judge"])
+            runner.ApiRunner(Path(tmp) / "stderr", wall=60)(["judge"], request=request)
         assert expired.value.scope == "land judge"
+        assert len(cancelled) == 1
 
     def test_started_child_wait_is_bounded_and_stops_its_tree_on_deadline(self):
         def hung(timeout: float | None = None):

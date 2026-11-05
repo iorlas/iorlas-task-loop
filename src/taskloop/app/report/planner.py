@@ -9,7 +9,7 @@ from taskloop.app.report.inputs import prefix, read_jsonl
 from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.paths import ConfigDir
 
-HISTORY = "~/.claude/plugins/data/iorlas-delegate-iorlas-marketplace/history.jsonl"
+HISTORY = "~/.config/task-loop/delegate/history.jsonl"
 
 
 def plan_class(rec: dict[str, Any]) -> str:

@@ -1,7 +1,6 @@
 """The contract tie (tl-3k5): the reader of delegate's `route.py status --json` against a real answer of delegate 0.51.0, and against
 the installed delegate's own answer when there is one. A delegate release that renames or drops a key the reader needs fails here."""
 import json
-import subprocess
 import sys
 from pathlib import Path
 
@@ -11,16 +10,13 @@ from support.case import Case
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: E402, F401
-from support import homes  # noqa: E402
-from support.procsim import real_proc  # noqa: E402
 
-from taskloop.adapters import delegate as sdelegate  # noqa: E402
 from taskloop.contracts import wire  # noqa: E402
 from taskloop.contracts.delegate_status import snapshot_of  # noqa: E402
 from taskloop.contracts.snapshots import StatusSnapshot  # noqa: E402
 
 REAL = json.loads((ROOT / "tests" / "fixtures" / "delegate_status_0.51.0_real.json").read_text())
-FIXTURE_SCHEMA = json.loads((ROOT / "tests/fixtures/delegate4/skills/delegate/contract.json").read_text(
+FIXTURE_SCHEMA = json.loads((ROOT / "src/delegate/data/contract.json").read_text(
     encoding="utf-8"))["status_schema"]
 
 
@@ -86,26 +82,8 @@ def key_errors(data: object, schema: dict, path: str = "$") -> list[str]:
     return errs
 
 
-def installed_route() -> str | None:
-    return sdelegate.find_route("", None, homes.claude_dir() / "plugins" / "cache", sdelegate.installed_dir(homes.claude_dir()))
-
-
-def installed_schema() -> dict:
-    route = installed_route()
-    if not route:
-        pytest.skip("no delegate installed")
-    try:
-        schema = json.loads((Path(route).parent / "contract.json").read_text(encoding="utf-8")).get("status_schema")
-    except (OSError, ValueError):
-        schema = None
-    if not isinstance(schema, dict):
-        pytest.skip(
-            f"the installed delegate ({route}) carries no status_schema in contract.json (older than 0.52.0): upgrade it")
-    return schema
-
-
 class Schema(Case):
-    """The vendored status schema always checks the fixture and reader; only the live subprocess needs an install."""
+    """The library's status schema checks the fixture and the reader (delegate's own tests run its status for real)."""
 
     def test_the_real_fixture_has_exactly_the_keys_the_schema_names(self):
         assert key_errors(REAL, FIXTURE_SCHEMA) == []
@@ -125,12 +103,3 @@ class Schema(Case):
             assert k in lane, "delegate's cockpit lane dropped a key snapshot_of reads"
         for k in ("out", "out_until", "reason", "notes"):
             assert k in old, "delegate's flat lane dropped a key snapshot_of reads"
-
-    @real_proc("the installed delegate's route.py status is run for real; no delegate installed, no test")
-    def test_the_installed_answer_has_exactly_the_keys_the_schema_names(self):
-        schema = installed_schema()
-        r = subprocess.run([sys.executable, str(installed_route()), "status", "--json"],
-                           capture_output=True, text=True, timeout=60, check=False)
-        got = json.loads(r.stdout[r.stdout.index("{"):])
-        assert key_errors(got, schema) == []
-        snapshot_of(got)

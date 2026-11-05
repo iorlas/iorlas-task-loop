@@ -1,4 +1,4 @@
-"""Which delegate install the next call goes through."""
+"""The delegate the next call goes through: the library, checked against the call's grants."""
 from typing import Any
 
 from taskloop.adapters import delegate as dg
@@ -10,10 +10,10 @@ class Delegation:
         self.e = host
 
     def route(self, quiet: bool = False) -> str:
-        """The delegate for the next call (tl-6ax): resolved again each call (a configured path, then the pin, then the installed
-        one). A refused one (another contract, a pin that is gone) keeps the one in use (noted); with none in use the run says why."""
+        """The delegate for the next call (tl-6ax): resolved again each call. A refused one (a grant the contract does not carry) keeps the
+        one in use (noted); with none in use the run says why."""
         e = self.e
-        new = e.router.resolve(e.cfg.delegate)
+        new = e.router.resolve()
         if isinstance(new, dg.Resolved) and e.cfg.writer_exec_allow:
             why = pin.exec_allow_problem(e.cfg.writer_exec_allow, e.cfg.writer_family, e.budget.labels,
                                          new.contract.get("contract", 0), new.contract.get("capabilities", []))
@@ -33,5 +33,5 @@ class Delegation:
         return str(e.route)
 
     def net_probe(self) -> Any:
-        """The network probe: a test's, else delegate's `route.py net`."""
-        return self.e.probe or dg.RouteProbe(self.e.route)
+        """The network probe: a test's, else delegate's."""
+        return self.e.probe or dg.RouteProbe()

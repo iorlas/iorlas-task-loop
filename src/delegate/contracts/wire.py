@@ -97,7 +97,9 @@ class RunRequest:
         default_factory=list
     )  # recipes only the engine runs: a write step's guard blocks `just RECIPE`; --engine-only once per item
     engine_only_advisory: bool = False
+    only_family: list[str] = field(default_factory=list)  # families the call may use, no fallback outside (a worker call only)
     writer_exec_allow: list[list[str]] = field(default_factory=list)  # Codex writers only; host.json bounds this per-call grant
+    worker_env: dict[str, str] = field(default_factory=dict)  # variables the worker's environment gains (the caller's per-call values)
     tools: list[ToolServer] = field(default_factory=list)  # tool servers for this call; not wired to any harness yet
 
     def to_argv(self, route: str, *, contract: dict[str, Json] | None = None) -> list[str]:
@@ -120,13 +122,15 @@ class RunRequest:
             out += ["--engine-only", recipe]
         if self.engine_only_advisory:
             out += ["--engine-only-advisory"]
+        for family in self.only_family:
+            out += ["--only-family", family]
         if self.writer_exec_allow:
             require_writer_exec_allow(contract)
             out += ["--writer-exec-allow", json.dumps(self.writer_exec_allow)]
         return out + (["--unattended"] if self.unattended else [])
 
     def env(self) -> dict[str, str]:
-        return {"DELEGATE_LIVE_FILE": self.live_file} if self.live_file else {}
+        return {**self.worker_env, **({"DELEGATE_LIVE_FILE": self.live_file} if self.live_file else {})}
 
 
 @record
