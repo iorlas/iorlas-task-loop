@@ -11,7 +11,7 @@ from git_porcelain.real import RealRepo
 
 from taskloop.adapters.git_base import classify
 from taskloop.adapters.git_ops import LandGit
-from taskloop.adapters.git_pool import UnpinnedRepo, pool_error, pool_read_error
+from taskloop.adapters.git_pool import UnpinnedRepo, pool_error, pool_errors, pool_read_error
 from taskloop.contracts.gitfacts import ConfigEntry, GitOutcome, GrepHit, LogRow, Pick, Ref, StatusRow, TreeEntry
 from taskloop.contracts.slots import BranchPinned, Checkout, GitReadFailure, MissingRevision, NotARepo, NotAWorktree, RefRace, SlotGitError
 
@@ -31,22 +31,16 @@ class RealGit(LandGit):
             self.sleep(0.1 * (i + 1))
 
     def rebasing(self, d: str) -> bool:
-        try:
+        with pool_errors(pool_read_error):
             return self._pool(d).worktree(Path(d).resolve()).rebasing()
-        except GitError as err:
-            raise pool_read_error(err) from err
 
     def rebase_abort(self, d: str) -> None:
-        try:
+        with pool_errors():
             self._pool(d).worktree(Path(d).resolve()).abort_rebase(missing_ok=False)
-        except GitError as err:
-            raise pool_error(err) from err
 
     def dirty(self, d: str) -> bool:
-        try:
+        with pool_errors(pool_read_error):
             return self._pool(d).worktree(Path(d).resolve()).dirty().raw
-        except GitError as err:
-            raise pool_read_error(err) from err
 
     @override
     def _pool(self, d: str) -> RealRepo:
@@ -63,42 +57,30 @@ class RealGit(LandGit):
         if not self.branch(d):
             # take_branch(resume) accepts an existing branch; this must refuse to overwrite a checkpoint.
             self.checkout_new(d, branch, "HEAD")
-        try:
+        with pool_errors():
             result = self._pool(d).worktree(Path(d).resolve()).record(message, paths="all", hooks=False)
-        except GitError as err:
-            raise pool_error(err) from err
         if not isinstance(result, Recorded):
             raise SlotGitError("nothing to commit")
 
     def has_branch(self, d: str, branch: str) -> bool:
-        try:
+        with pool_errors(pool_read_error):
             return any(name == branch for name, _ in self._pool(d).branches(prefix=branch))
-        except GitError as err:
-            raise pool_read_error(err) from err
 
     def checkout(self, d: str, branch: str) -> None:
-        try:
+        with pool_errors():
             self._pool(d).worktree(Path(d).resolve()).checkout(branch)
-        except GitError as err:
-            raise pool_error(err) from err
 
     def checkout_new(self, d: str, branch: str, start: str) -> None:
-        try:
+        with pool_errors():
             self._pool(d).worktree(Path(d).resolve()).checkout_new(branch, start)
-        except GitError as err:
-            raise pool_error(err) from err
 
     def checkout_detached(self, d: str, ref: str) -> None:
-        try:
+        with pool_errors():
             self._pool(d).worktree(Path(d).resolve()).park(ref)
-        except GitError as err:
-            raise pool_error(err) from err
 
     def checkout_reset(self, d: str, branch: str, start: str) -> None:
-        try:
+        with pool_errors():
             result = self._pool(d).worktree(Path(d).resolve()).take_branch(branch, start, mode="restart")
-        except GitError as err:
-            raise pool_error(err) from err
         if isinstance(result, BranchHeld):
             holder = str(result.holders[0].path)
             raise BranchPinned(f"branch {branch!r} is already used by worktree at '{holder}'", holder)
@@ -112,10 +94,8 @@ class RealGit(LandGit):
                 raise pool_error(err) from err
 
     def checkouts(self, d: str) -> list[Checkout]:
-        try:
+        with pool_errors(pool_read_error):
             return [Checkout(path=str(w.path), branch=w.branch or "", main=w.is_main) for w in self._pool(d).worktrees()]
-        except GitError as err:
-            raise pool_read_error(err) from err
 
     def remove_worktree(self, repo: str, path: str) -> bool:
         try:
@@ -134,10 +114,8 @@ class RealGit(LandGit):
         return ""
 
     def add_worktree(self, repo: str, path: str, ref: str) -> None:
-        try:
+        with pool_errors():
             self._pool(repo).add_worktree(Path(path), ref)
-        except GitError as err:
-            raise pool_error(err) from err
 
     def init_bare(self, d: str, branch: str) -> None:
         self._must(os.path.dirname(d) or ".", "init", "-q", "--bare", "-b", branch, d)
@@ -155,23 +133,19 @@ class RealGit(LandGit):
         return [Ref(name=name, oid=oid) for oid, _, name in (ln.partition(" ") for ln in out.splitlines())]
 
     def ls_remote(self, d: str, remote: str, *patterns: str) -> list[Ref]:
-        out = self._read(d, "ls-remote", remote, *patterns)
-        return [Ref(name=name, oid=oid) for oid, _, name in (ln.partition("\t") for ln in out.splitlines())]
+        with pool_errors(pool_read_error):
+            return [Ref(name=ref.name, oid=str(ref.oid)) for ref in self._pool(d).ls_remote(remote, patterns)]
 
     def cherry(self, d: str, upstream: str, head: str) -> list[Pick]:
-        try:
+        with pool_errors():
             return [Pick(oid=row.oid, upstream=row.upstream) for row in self._pool(d).cherry(upstream, head)]
-        except GitError as err:
-            raise pool_error(err) from err
 
     def merged(self, d: str, into: str) -> list[Ref]:
-        try:
+        with pool_errors(pool_read_error):
             repo = self._pool(d)
             repo.relate(into, into)  # Validate even when no local branches exist.
             return [Ref(name=name, oid=oid) for name, oid in repo.branches()
                     if not name.startswith("(") and repo.relate(oid, into).ahead == 0]
-        except GitError as err:
-            raise pool_read_error(err) from err
 
     def merge_base(self, d: str, a: str, b: str) -> str:
         try:
@@ -192,10 +166,8 @@ class RealGit(LandGit):
         return self._ask(d, "rev-parse", "--verify", "-q", rev, missing=True)
 
     def log(self, d: str, include: list[str], exclude: list[str] | None = None, limit: int = 0, grep: str = "") -> list[LogRow]:
-        try:
+        with pool_errors():
             rows = self._pool(d).history(include, not_on=exclude or [], limit=limit if limit and not grep else None)
-        except GitError as err:
-            raise pool_error(err) from err
         found = [LogRow(oid=row.sha, time=row.ts, subject=row.subject) for row in rows if grep in row.subject]
         return found[:limit] if limit else found
 
@@ -255,19 +227,16 @@ class RealGit(LandGit):
         return self._try(d, *opts, "rebase", "-q", onto)
 
     def reset(self, d: str, rev: str, mode: Literal["soft", "mixed", "hard"] = "mixed") -> None:
-        try:
+        with pool_errors():
             self._pool(d).worktree(Path(d).resolve()).reset(rev, mode=mode)
-        except GitError as err:
-            raise pool_error(err) from err
 
     def tag(self, d: str, name: str, rev: str = "HEAD") -> None:
-        self._must(d, "tag", name, rev)
+        with pool_errors():
+            self._pool(d).tag(name, rev)
 
     def delete_branch_at(self, d: str, branch: str, oid: str) -> None:
-        try:
+        with pool_errors():
             self._pool(d).delete_branch(branch, expected=Sha(oid))
-        except GitError as err:
-            raise pool_error(err) from err
 
     def delete_remote_at(self, d: str, remote: str, ref: str, oid: str) -> None:
         try:
@@ -279,20 +248,19 @@ class RealGit(LandGit):
                 raise
 
     def checkout_force(self, d: str, branch: str, start: str) -> None:
-        try:
+        with pool_errors():
             self._pool(d).worktree(Path(d).resolve()).checkout_force(branch, start)
-        except GitError as err:
-            raise pool_error(err) from err
 
     def fetch_ref(self, d: str, source: str, ref: str) -> None:
         self._must(d, "fetch", "-q", source, ref)
 
     def remote_url(self, d: str, remote: str) -> str:
-        return self._ask(d, "remote", "get-url", remote)
+        with pool_errors(pool_read_error):
+            return self._pool(d).remote_url(remote)
 
     def merge_ff(self, d: str, rev: str) -> None:
-        # The path-based porcelain helper cannot carry our injected environment and checkout pin.
-        self._must(d, "merge", "-q", "--ff-only", rev)
+        with pool_errors():
+            self._pool(d).worktree(Path(d).resolve()).merge_ff(rev)
 
     def commit_tracked(self, d: str, message: str) -> None:
         # record(tracked) loses complete refusal output and NothingToRecord's original diagnostic.
@@ -363,11 +331,9 @@ class RealGit(LandGit):
 
     def tree_of(self, d: str) -> str:
         """The snapshot tree, without declared ignored inputs; checks key those separately in InputKeys."""
-        try:
+        with pool_errors():
             wt = self._pool(d).worktree(Path(d).resolve())
             return str(wt.snapshot("HEAD", inputs=()).tree)
-        except GitError as err:
-            raise pool_error(err) from err
 
     def worktree_state(self, d: str) -> bytes | None:
         try:
@@ -380,10 +346,8 @@ class RealGit(LandGit):
         return self._read(d, "diff", *(["--stat"] if stat else []), a, b, *spec).strip()
 
     def add_worktree_force(self, repo: str, path: str, ref: str) -> None:
-        try:
+        with pool_errors():
             self._pool(repo).add_worktree(Path(path), ref, force=True)
-        except GitError as err:
-            raise pool_error(err) from err
 
     def remove_worktree_force(self, repo: str, path: str) -> None:
         with suppress(GitError):

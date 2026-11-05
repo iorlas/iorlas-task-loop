@@ -1,7 +1,8 @@
 """Translate vendored worktree-pool failures into the task-loop Git port's errors."""
 
 import re
-from collections.abc import Mapping
+from collections.abc import Callable, Generator, Mapping
+from contextlib import contextmanager
 from pathlib import Path
 from typing import override
 
@@ -14,6 +15,7 @@ from taskloop.contracts.slots import (
     DirtyTree,
     GitReadFailure,
     IndexLocked,
+    MissingRemote,
     MissingRevision,
     NotARepo,
     NotAWorktree,
@@ -37,6 +39,8 @@ def pool_read_error(error: errors.GitError) -> GitReadFailure:
     kind = type(translated) if isinstance(translated, GitReadFailure) else GitReadFailure
     if "fatal: this operation must be run in a work tree" in str(error):
         kind = NotAWorktree
+    if isinstance(error, errors.MissingRemote):
+        kind = MissingRemote
     return kind(str(error))
 
 
@@ -62,3 +66,12 @@ def pool_error(error: errors.GitError) -> SlotGitError:
     translated = classify(message)
     translated.output = message
     return translated
+
+
+@contextmanager
+def pool_errors(translate: Callable[[errors.GitError], Exception] = pool_error) -> Generator[None]:
+    """Run porcelain calls in the block; a failure leaves as the port's error (`pool_read_error` for reads)."""
+    try:
+        yield
+    except errors.GitError as err:
+        raise translate(err) from err

@@ -4,11 +4,10 @@ words (commit, push, rebase --continue), and the rest of the staged-work and bra
 from pathlib import Path
 from typing import Self
 
-from git_porcelain.errors import GitError
 from git_porcelain.real import RealRepo
 
 from taskloop.adapters.git_base import GitBase, classify
-from taskloop.adapters.git_pool import pool_error, pool_read_error
+from taskloop.adapters.git_pool import pool_errors, pool_read_error
 from taskloop.contracts.gitfacts import DiffEntry, GitOutcome
 from taskloop.contracts.slots import GitReadFailure, MissingRevision
 
@@ -32,16 +31,12 @@ class LandGit(GitBase):
             # history([]) defaults to HEAD; rev-list has no default positive revision.
             out = self._must(d, "rev-list", "--count", *(f"^{x}" for x in exclude or []))
             return int(out) if out.isdigit() else 0
-        try:
+        with pool_errors():
             return len(self._pool(d).history(include, not_on=exclude or []))
-        except GitError as err:
-            raise pool_error(err) from err
 
     def unmerged(self, d: str) -> list[str]:
-        try:
+        with pool_errors(pool_read_error):
             return list(self._pool(d).worktree(Path(d).resolve()).unmerged())
-        except GitError as err:
-            raise pool_read_error(err) from err
 
     def changed_paths(self, d: str, a: str, b: str, *, required: bool = False) -> list[str]:
         return self._diff_paths(d, a, b, "--name-only", required=required)
@@ -110,10 +105,8 @@ class LandGit(GitBase):
             raise classify(r.stderr or r.stdout)
 
     def rename_branch(self, d: str, old: str, new: str) -> None:
-        try:
+        with pool_errors():
             self._pool(d).rename_branch(old, new)
-        except GitError as err:
-            raise pool_error(err) from err
 
     def try_commit(self, d: str, message: str, verify: bool = True, allow_empty: bool = False) -> GitOutcome:
         # record() has no complete stdout+stderr for hook refusals, empty index, or successful hooks.
@@ -125,10 +118,8 @@ class LandGit(GitBase):
         self._must(d, "commit", "-q", "--no-verify", "--amend", "--no-edit")
 
     def rebase_continue(self, d: str) -> GitOutcome:
-        try:
+        with pool_errors():
             result = self._pool(d).worktree(Path(d).resolve()).continue_rebase()
-        except GitError as err:
-            raise pool_error(err) from err
         return GitOutcome(ok=result.ok, output=result.output)
 
     def push_lease(self, d: str, remote: str, refspec: str) -> GitOutcome:

@@ -216,6 +216,7 @@ def cmd_write_tree(c: Ctx) -> int:
 def cmd_merge(c: Ctx) -> int:
     """merge --ff-only <rev>: move the branch forward, or fail when it has to be a real merge."""
     _, rest = flags(c.args)
+    rest = [a for a in rest if a != "--"]
     r = c.r
     theirs, mine = r.resolve(rest[0]), r.head_sha()
     if theirs is None:

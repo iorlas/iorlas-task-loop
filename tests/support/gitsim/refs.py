@@ -46,6 +46,7 @@ def cmd_for_each_ref(c: Ctx) -> int:
 
 def cmd_ls_remote(c: Ctx) -> int:
     _, rest = flags(c.args)
+    rest = [a for a in rest if a != "--"]
     remote = remote_of(c, rest[0])
     for name, oid in all_refs(remote).items():
         wanted = len(rest) == 1 or any(fnmatch.fnmatch(name, p) or fnmatch.fnmatch(name, "*/" + p) for p in rest[1:])
@@ -81,6 +82,7 @@ def cmd_cherry(c: Ctx) -> int:
 
 def cmd_tag(c: Ctx) -> int:
     fl, rest = flags(c.args)
+    rest = [a for a in rest if a != "--"]
     r = c.r
     if "-d" in fl:
         for name in rest:
