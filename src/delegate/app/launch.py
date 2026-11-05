@@ -28,7 +28,7 @@ from delegate.contracts.state import StateDoc
 from delegate.domain.cost import accounting
 from delegate.domain.holds.book import HoldBook
 from delegate.domain.policy import worker as policy
-from delegate.domain.policy.matchers import secret_hit
+from delegate.domain.policy.matchers import heredoc_only_hit, secret_hit
 from delegate.domain.policy.worker import EDIT_RULE, GIT_RULES, SECRET_RULE
 
 DENIED_RULE = (
@@ -143,8 +143,9 @@ def lane_gone_check(lane: str, since: float) -> Callable[[], str | None]:
 
 
 def secret_in(e: ev.HarnessEvent) -> str | None:
-    """The command a Cmd or CmdEnd event names a secret path in, else None (delegate polices the stream of the CLIs that have no hook)."""
-    return e.text if isinstance(e, ev.Cmd | ev.CmdEnd) and secret_hit(e.text) else None
+    """The command a Cmd or CmdEnd event names a secret path in, else None (delegate polices the stream of the CLIs that have no hook).
+    A secret name only inside a heredoc body is code being written, not a read: it does not stop the run."""
+    return e.text if isinstance(e, ev.Cmd | ev.CmdEnd) and secret_hit(e.text) and not heredoc_only_hit(e.text) else None
 
 
 def denied_items(hx: Harness, read_only: bool | None, engine_only: tuple[str, ...] = ()) -> list[dict[str, Json]]:

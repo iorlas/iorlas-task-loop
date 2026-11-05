@@ -221,7 +221,11 @@ tree at land (see **The gate**). **Every push consults the delivery judge:** tl'
 typed profile and shared check evidence, evaluates all pushed tips and their bases, and returns allowed, refused, or unavailable.
 Only allowed permits transport; an unavailable judge, invalid profile, or hook error refuses before remote mutation. A green tip
 passes; a tip without evidence runs the application's check service when it is the clean checked-out HEAD and is refused otherwise
-(`tl judge-push --no-run` reads the evidence only and never starts a check: a missing receipt refuses).
+(with `TL_JUDGE_READ_ONLY` set, `tl judge-push` reads the evidence only and never starts a check: a missing receipt refuses). **One receipt:** the declared
+gate runs once per tree. `tl check`/`tl gate`, the land and `dev/release.py` each write the same RunKey receipt (tree, base, check command)
+into the one result store, and the judge and the release read it; a miss prints `no green run of tree X under <cmd>`. On a push the
+order is tl's dispatcher (forwards, runs nothing), `tl judge-push` (the one runner: reads the receipt, runs the declared gate only on a
+miss), then the repo's own pre-push hook, which must not run a gate of its own: the dispatcher sets `TL_JUDGE_READ_ONLY=1` for it, so a `tl judge-push` it calls only reads the receipt.
 A lower tip of a pushed stack passes when a green tip above it is pushed with it, never alone. Generic Git push, leased push, and
 remote deletion carry no checked-delivery marker; the land pusher requires a GatePass and verifies its tree and base before transport.
 The retired `TL_LAND` marker grants no authority. An intentional owner override remains `git push --no-verify` or an explicit

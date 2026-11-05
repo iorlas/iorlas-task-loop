@@ -471,7 +471,6 @@ OTHERS = {
     "Pin": snapshots.Pin(task_loop="0.23.38", delegate=None, pinned_at=T),
     "ReleaseResult": snapshots.ReleaseResult(
         ok=False, version="0.23.57", summary="s", at=T, branch="b", message="m", tests=["t"], log="/l"),
-    "SuiteGreens": snapshots.SuiteGreens(greens=[snapshots.GreenRun(tree="t" * 40, command="just check", at=T)]),
     "ReflectState": snapshots.ReflectState(until=T, tried=T, filed=[{"cause": "c", "bead": "b-1"}]),
     "StatusTried": snapshots.StatusTried(t=T),
     "RunCounters": run.RunCounters(elapsed=1.5, waited=0.5, cost=0.25, stats={"writes": 1}, sessions=[{"node": "write"}],
