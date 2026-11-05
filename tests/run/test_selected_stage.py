@@ -23,7 +23,7 @@ from taskloop.contracts import log as rec
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.checkpoint import Checkpoint
 from taskloop.contracts.checks import CheckRun
-from taskloop.contracts.enums import Step
+from taskloop.contracts.enums import Outcome, Result, Step
 from taskloop.contracts.finish import finish_run
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId
@@ -32,6 +32,7 @@ from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.parks import Park, ParkStore
 from taskloop.contracts.run import RunManifest, RunState
 from taskloop.domain import effects
+from taskloop.domain import outcome as oc
 from taskloop.stores.memory import fake_stores
 from taskloop.stores.runlog import RunLog
 
@@ -156,6 +157,26 @@ class SelectedStage(Case):
         assert rc == 1
         assert "still running" in manifest.reason
         self.e.lander.gate.run.assert_not_called()
+
+    def test_a_reset_stage_is_a_stage_not_a_landed_bead(self):
+        rc, manifest = self.invoke("reset")
+        assert rc == 0
+        assert manifest.next_step is Step.PLAN
+        finish = manifest.finish
+        assert finish is not None
+        assert (finish.outcome, finish.result, finish.kind) == (Outcome.STAGED, Result.STAGED, "stage")
+        self.e.checkpoints.keep_end.assert_not_called()  # no close outcome in the checkpoint: the next run is not a "close"
+
+    def test_only_a_land_or_a_close_can_finish_as_landed_or_done(self):
+        for stage in ("reset", "plan", "replan", "gate"):
+            _, manifest = self.invoke(stage)
+            assert manifest.finish is not None
+            assert manifest.finish.outcome not in (Outcome.LANDED, Outcome.DONE), stage
+
+    def test_a_stages_answer_keeps_no_close_outcome_for_the_checkpoint(self):
+        staged = answer(oc.make(Kind.STAGE), 1.0)
+        assert (staged.outcome, staged.result, staged.state, staged.end) == (Outcome.STAGED, Result.STAGED, RunState.DONE, "")
+        assert answer(oc.make(Kind.DONE), 1.0).end  # a bead's close still keeps one
 
     def test_close_without_land_is_refused(self):
         rc, manifest = self.invoke("close")

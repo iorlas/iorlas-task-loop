@@ -7,7 +7,6 @@ from typing import Any
 
 from taskloop.contracts.paths import TASK_EXCLUDE
 from taskloop.contracts.ports import Git
-from taskloop.domain.look.matchers import writer_names
 from taskloop.domain.prompts.review import NEW_FILES_TEXT
 
 
@@ -21,7 +20,7 @@ class NewFiles:
 
     def new_file_kind(self, path: str) -> str:
         """tl-bxk.10.24: "ignored" (engine.untracked_ignore: never staged, never listed), "meant" (a plan stage lists it or
-        its folder in files, the writer's answer names it, or a review accepted it) or "unexplained" (left out of the
+        its folder in files, or a review accepted it) or "unexplained" (left out of the
         commit, listed in the review brief). A .meta follows the file it belongs to."""
         e = self.e
         p = path.replace("\\", "/")
@@ -30,7 +29,7 @@ class NewFiles:
         if p.startswith(TASK_EXCLUDE):
             return "ignored"
         for q in (p, p[:-5]) if p.endswith(".meta") else (p,):
-            if q in e.accepted_new or q + ".meta" in e.accepted_new or writer_names(q, e.writer_said) or self.planned(q):
+            if q in e.accepted_new or q + ".meta" in e.accepted_new or self.planned(q):
                 return "meant"
         return "unexplained"
 

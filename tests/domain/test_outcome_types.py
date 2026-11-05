@@ -29,7 +29,7 @@ class FaultTable(Case):
     def test_every_kind_maps_to_one_variant_and_finishes_to_none(self):
         for k in Kind:
             f = fault_of(k)
-            if k in FINISH:
+            if k in FINISH or k is Kind.STAGE:
                 assert f is None, k
             else:
                 assert isinstance(f, (Infra, Task, Owner)), k

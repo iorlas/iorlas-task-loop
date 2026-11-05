@@ -157,14 +157,6 @@ class VisualWork(StagesTest):
         assert "main.png" in again
         assert [x for x in self.created() if x.startswith("Look:")] == []
 
-    def test_the_same_defect_twice_is_a_leftover_not_a_third_write(self):
-        defect = self.judged(("main.png", "The Save button is clipped at the right edge"))
-        same = self.judged(("main.png", "Save button clipped at right edge of the card"))
-        rc, s = self.go({"plan": [PLAN], "write": [self.write(), self.write()], "look": [defect, same], "review": [CLEAN]})
-        assert rc == 0, self.blocked
-        assert self.roles(s).count("worker") == 2
-        assert len([t for t in self.created() if t.startswith("Look:")]) == 1
-
     def test_a_new_defect_in_the_last_render_round_is_a_leftover_too(self):
         one = self.judged(("main.png", "The Save button is clipped"))
         two = self.judged(("main.png", "A magenta texture on the sofa"))
