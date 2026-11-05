@@ -341,9 +341,11 @@ class Git(SlotGit, Protocol):
         """Go on with a stopped rebase once its conflicts are staged."""
         ...
 
-    def push_lease(self, d: str, remote: str, refspec: str) -> GitOutcome:
-        """Push with ordinary hooks and force-with-lease:
-        the refspec's ref is replaced only if the remote still has what was last fetched."""
+    def push_lease(self, d: str, remote: str, refspec: str, expect_sha: str) -> GitOutcome:
+        """The one way to move a remote ref non-fast-forward: SRC:DST pushed with ordinary hooks and
+        --force-with-lease=DST:expect_sha, so DST is replaced only if the remote still holds expect_sha
+        ('' = the caller never saw DST: a plain push, which can only create it or fast-forward it).
+        `push` never forces or deletes."""
         ...
 
     def lfs_push(self, d: str, remote: str, refs: list[str]) -> GitOutcome:
