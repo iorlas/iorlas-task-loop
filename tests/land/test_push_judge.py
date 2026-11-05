@@ -1,4 +1,4 @@
-"""One application judge owns profile, evidence, stack coverage, and check retry policy."""
+"""One application judge owns profile, evidence, stack coverage, and the read-only receipt rule."""
 import json
 import re
 import sys
@@ -39,7 +39,6 @@ class PushJudge(Case):
                                  ("rev_parse", "task/x^{tree}"): "task-tree",
                                  ("rev_parse", "old-base^{tree}"): "policy-tree"})
         self.stores = fake_stores()
-        self.check = mock.Mock(return_value=1)
         self.key = mock.patch("taskloop.adapters.check_files.repo_key", return_value="repo")
         self.key.start()
         self.addCleanup(self.key.stop)
@@ -56,7 +55,7 @@ class PushJudge(Case):
         return "".join(f"refs/heads/{tip} {tip} {remote} {old}\n" for tip in tips)
 
     def judge(self, text=None):
-        return judge_push(self.repo, self.request("head") if text is None else text, self.stores, self.git, self.check,
+        return judge_push(self.repo, self.request("head") if text is None else text, self.stores, self.git,
                           env=self.env)
 
     def stamp(self, tree="tree", base="base", profile=None, planned=False):
@@ -77,7 +76,6 @@ class PushJudge(Case):
     def test_valid_profile_uses_the_application_evidence_store(self):
         self.stamp()
         assert self.judge().status == PushStatus.ALLOWED
-        self.check.assert_not_called()
 
     def test_non_base_tips_need_no_receipts_or_checks(self):
         self.git.replies[("rev_parse", "HEAD")] = "task/x"
@@ -87,14 +85,12 @@ class PushJudge(Case):
                 assert decision.status == PushStatus.ALLOWED
                 assert decision.reasons == ()
                 evidence.assert_not_called()
-        self.check.assert_not_called()
 
     def test_task_tip_pushed_to_base_still_needs_receipts(self):
         self.git.replies[("rev_parse", "HEAD")] = "task/x"
         decision = self.judge(self.request("task/x"))
         assert decision.status == PushStatus.REFUSED
         assert "suite (no green run of tree task-tree under `true`)" in decision.reasons[0]
-        self.check.assert_called_once_with(load(json.loads(self.tip_profile)).engine)
 
     def test_mixed_push_checks_only_the_base_tip(self):
         request = self.request("task/x", remote="refs/heads/task/x") + self.request("head")
@@ -105,18 +101,14 @@ class PushJudge(Case):
         assert decision.reasons[0].startswith("refs/heads/head ")
         assert evidence.call_count == 1
         assert evidence.call_args.args[4] == TreeSha("tree")
-        self.check.assert_called_once_with(load(json.loads(self.tip_profile)).engine)
-        self.check.reset_mock()
         self.stamp()
         assert self.judge(request).status == PushStatus.ALLOWED
-        self.check.assert_not_called()
 
     def test_non_base_tip_cannot_cover_an_unproven_base_tip(self):
         self.stamp()
         self.git.replies[("is_ancestor",)] = True
         request = self.request("head", remote="refs/heads/task/x") + self.request("low")
         assert self.judge(request).status == PushStatus.REFUSED
-        self.check.assert_not_called()
 
     def test_non_base_tip_still_refuses_profile_changes(self):
         original = self.ls_tree.return_value
@@ -125,7 +117,6 @@ class PushJudge(Case):
         decision = self.judge(self.request("task/x", remote="refs/heads/task/x"))
         assert decision.status == PushStatus.REFUSED
         assert decision.reasons[0].startswith("profile_changed: refs/heads/task/x ")
-        self.check.assert_not_called()
 
     def test_mixed_push_checks_every_profiles_policy_before_receipts(self):
         original = self.ls_tree.return_value
@@ -137,45 +128,21 @@ class PushJudge(Case):
         assert decision.status == PushStatus.REFUSED
         assert decision.reasons[0].startswith("profile_changed: refs/heads/task/x ")
         evidence.assert_not_called()
-        self.check.assert_not_called()
 
-    def test_a_miss_names_the_tree_before_the_declared_gate_runs(self):
-        said = []
-        judge_push(self.repo, self.request("head"), self.stores, self.git, self.check, env=self.env, note=said.append)
-        assert said == ["refs/heads/head: no green run of tree tree for suite; running the declared gate"]
-
-    def test_unknown_tip_is_refused_and_a_clean_head_can_run_checks(self):
+    def test_a_miss_refuses_naming_the_step_and_never_runs_the_gate(self):
         decision = self.judge()
         assert decision.status == PushStatus.REFUSED
         assert decision.reasons == ("refs/heads/head (head) is not green for suite (no green run of tree tree under `true`); "
-                                            "run `tl check` in its worktree, then push",)
-        self.check.assert_called_once_with(load(json.loads(self.tip_profile)).engine)
-        self.check.reset_mock()
-        self.git.replies[("dirty",)] = True
+                                    "run `tl check` in its worktree, then push",)
+
+    def test_a_receipt_written_by_tl_check_allows_the_push(self):
         assert self.judge().status == PushStatus.REFUSED
-        self.check.assert_not_called()
-
-    def test_successful_check_requires_evidence_and_unchanged_inputs(self):
-        self.check.return_value = 0
-        assert self.judge().status == PushStatus.REFUSED
-
-        def checked(policy):
-            assert policy == load(json.loads(self.tip_profile)).engine
-            self.stamp()
-            return 0
-
-        self.check.side_effect = checked
+        self.stamp()
         assert self.judge().status == PushStatus.ALLOWED
 
-    def test_a_base_change_during_checks_refuses(self):
-        def checked(policy):
-            assert policy == load(json.loads(self.tip_profile)).engine
-            self.stamp()
-            self.git.replies[("rev_parse", "origin/main")] = "moved-base"
-            return 0
-
-        self.check.side_effect = checked
-        assert self.judge().status == PushStatus.UNAVAILABLE
+    def test_a_dirty_head_with_no_receipt_is_refused_too(self):
+        self.git.replies[("dirty",)] = True
+        assert self.judge().status == PushStatus.REFUSED
 
     def test_entire_stack_is_judged_and_only_a_pushed_green_top_covers_a_lower_tip(self):
         self.stamp()
@@ -222,20 +189,11 @@ class PushJudge(Case):
         assert self.judge().status == PushStatus.ALLOWED
         assert self.judge("truncated\n").status == PushStatus.UNAVAILABLE
 
-    def test_git_and_check_failures_are_unavailable(self):
+    def test_git_failures_are_unavailable(self):
         with mock.patch.object(self.git, "rev_parse", side_effect=GitReadFailure("unknown")):
             assert self.judge().status == PushStatus.UNAVAILABLE
-        self.check.side_effect = OSError("runner unavailable")
-        assert self.judge().status == PushStatus.UNAVAILABLE
-
     def test_a_deleted_ref_needs_no_gate_evidence(self):
         assert self.judge(self.request("0" * 40)).status == PushStatus.ALLOWED
-        self.check.assert_not_called()
-
-    def test_changed_working_tree_profile_is_unavailable_before_check(self):
-        self.profile.write_text("{}")
-        assert self.judge().status == PushStatus.UNAVAILABLE
-        self.check.assert_not_called()
 
     def test_working_tree_profile_is_not_read_for_delivery(self):
         self.stamp()
@@ -267,7 +225,6 @@ class PushJudge(Case):
                     "profile_changed: refs/heads/head changes .task-loop.json; only the owner may push a profile change "
                     "(git push --no-verify)",)
                 evidence.assert_not_called()
-                self.check.assert_not_called()
 
     def test_profile_change_cannot_be_covered_by_a_green_descendant(self):
         original = self.ls_tree.return_value
@@ -276,22 +233,14 @@ class PushJudge(Case):
         self.stamp()
         self.git.replies[("is_ancestor",)] = True
         assert self.judge(self.request("low", "head")).status == PushStatus.REFUSED
-        self.check.assert_not_called()
 
     def test_unresolvable_policy_is_unavailable(self):
         self.git.replies[("merge_base",)] = ""
         assert self.judge().status == PushStatus.UNAVAILABLE
-        self.check.assert_not_called()
 
     def test_unresolvable_policy_tree_is_unavailable(self):
         self.git.replies[("rev_parse", "policy^{tree}")] = ""
         assert self.judge().status == PushStatus.UNAVAILABLE
-        self.check.assert_not_called()
-
-    def test_checkout_bytes_must_match_even_when_git_reports_clean(self):
-        self.profile.write_bytes(self.tip_profile.encode() + b"\n")
-        assert self.judge().status == PushStatus.UNAVAILABLE
-        self.check.assert_not_called()
 
     def test_default_base_target_is_used_instead_of_tip_configuration(self):
         self.git.replies[("symbolic_ref",)] = "refs/remotes/origin/trunk"
@@ -309,12 +258,11 @@ class PushJudge(Case):
                 remote = "refs/heads/" + base.removeprefix("origin/")
                 assert self.judge(self.request("task/x", remote=remote)).status == PushStatus.REFUSED
                 assert self.judge(self.request("task/x", remote="refs/heads/main")).status == PushStatus.ALLOWED
-        self.check.assert_not_called()
 
     def test_missing_profile_resolves_the_same_default_base_as_policy_commit(self):
         self.ls_tree.return_value = []
         self.git.replies[("symbolic_ref",)] = "refs/remotes/origin/trunk"
-        with mock.patch("taskloop.app.land.push_judge.PushJudge.green_or_checked", return_value=True) as green:
+        with mock.patch("taskloop.app.land.push_judge.PushJudge.is_green", return_value=True) as green:
             assert self.judge(self.request("head", remote="refs/heads/main")).status == PushStatus.ALLOWED
             green.assert_not_called()
             assert self.judge(self.request("head", remote="refs/heads/trunk")).status == PushStatus.ALLOWED
@@ -328,7 +276,6 @@ class PushJudge(Case):
     def test_empty_base_gate_allows_an_unchanged_profile(self):
         self.tip_profile = "{}"
         assert self.judge().status == PushStatus.ALLOWED
-        self.check.assert_not_called()
 
     def test_other_command_and_env_cannot_authorize_the_same_id(self):
         for change in ({"argv": ["false"]}, {"env": {"MODE": "other"}}):
