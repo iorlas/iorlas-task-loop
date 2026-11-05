@@ -11,11 +11,11 @@ import hermetic  # noqa: F401  (a home of its own for every test)
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "skills" / "delegate"))
-import test_stream_supervisor as tss
-
 from delegate.adapters.harness.codex import CodexHarness
 from delegate.app.publish import LiveSink, end_status
-from support.procsim import real_proc  # noqa: E402
+from support.procsim import real_proc
+
+import test_stream_supervisor as tss
 
 j = tss.j
 LONG = "x" * 3000

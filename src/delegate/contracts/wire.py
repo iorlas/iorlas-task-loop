@@ -3,6 +3,7 @@
 `contract.json`'s answer_schema is generated from RunResult (dev/gen_contract.py). A key the wire leaves out when nobody set it is ABSENT;
 null is a value. The live JSONL a caller may tail is contracts/live.py.
 """
+
 import json
 import sys
 from dataclasses import field
@@ -25,7 +26,7 @@ AskKind = Literal["decision"]
 @record
 class Survivor:
     pid: int
-    start: str | None = None      # lstart / starttime token: with the pid it names one process
+    start: str | None = None  # lstart / starttime token: with the pid it names one process
 
 
 @mutable
@@ -33,17 +34,25 @@ class WorkerEnd:
     """How the worker's life ended. pid, pgid and start name the process the delegate launched (it runs in its own session: pgid == pid)."""
 
     end: Literal["ok", "error", "timeout", "worker_survived"] = END_OK
-    stopped: bool = False            # the delegate stopped the worker (timeout, idle, answer given, SIGTERM to delegate), it did not exit alone
+    stopped: bool = False  # the delegate stopped the worker (timeout, idle, answer given, SIGTERM to delegate), it did not exit alone
     term_sent: bool = False
     kill_sent: bool = False
     waited_s: float = 0.0
     survivors: list[Survivor] = field(default_factory=list)
     pid: int | Absent = ABSENT
     pgid: int | Absent = ABSENT
-    start: str | None | Absent = ABSENT
+    start: str | Absent | None = ABSENT
 
 
-RECIPE_RUNNERS = ("just", "make", "mise", "npm", "yarn", "pnpm", "uv")      # the commands that take an engine-only recipe by name (one list: the Claude hook and the OpenCode rules)
+RECIPE_RUNNERS = (
+    "just",
+    "make",
+    "mise",
+    "npm",
+    "yarn",
+    "pnpm",
+    "uv",
+)  # the commands that take an engine-only recipe by name (one list: the Claude hook and the OpenCode rules)
 
 
 def require_writer_exec_allow(contract: dict | None) -> None:
@@ -60,22 +69,33 @@ class RunRequest:
     schema_file: str | None = None
     resume: str | None = None
     authored_by: str | None = None
-    timeout_s: int | None = None     # wall limit for the call; delegate stops the worker's process group at it
-    idle_s: int | None = None        # no output this long: the worker is hung (delegate's own watchdog; unset = the CLI's default)
+    timeout_s: int | None = None  # wall limit for the call; delegate stops the worker's process group at it
+    idle_s: int | None = None  # no output this long: the worker is hung (delegate's own watchdog; unset = the CLI's default)
     unattended: bool = True
     parent: str = ""
     task: str = ""
     title: str = ""
     call_id: str | None = None
-    live_file: str | None = None     # DELEGATE_LIVE_FILE
-    engine_only: list[str] = field(default_factory=list)     # recipes only the engine runs: a write step's guard blocks `just RECIPE`; --engine-only once per item
+    live_file: str | None = None  # DELEGATE_LIVE_FILE
+    engine_only: list[str] = field(
+        default_factory=list
+    )  # recipes only the engine runs: a write step's guard blocks `just RECIPE`; --engine-only once per item
     engine_only_advisory: bool = False
     writer_exec_allow: list[list[str]] = field(default_factory=list)  # Codex writers only; host.json bounds this per-call grant
 
     def to_argv(self, route: str, *, contract: dict | None = None) -> list[str]:
         out = [sys.executable, route, "run", self.role, "--brief", self.brief_file, "--cwd", self.cwd]
-        opt = [("--schema", self.schema_file), ("--resume", self.resume), ("--authored-by", self.authored_by), ("--timeout", self.timeout_s),
-               ("--idle", self.idle_s), ("--parent", self.parent), ("--task", self.task), ("--title", self.title[:120]), ("--call-id", self.call_id)]
+        opt = [
+            ("--schema", self.schema_file),
+            ("--resume", self.resume),
+            ("--authored-by", self.authored_by),
+            ("--timeout", self.timeout_s),
+            ("--idle", self.idle_s),
+            ("--parent", self.parent),
+            ("--task", self.task),
+            ("--title", self.title[:120]),
+            ("--call-id", self.call_id),
+        ]
         for flag, v in opt:
             if v not in (None, ""):
                 out += [flag, str(v)]
@@ -206,23 +226,27 @@ class RunResult:
     transcript_status: TranscriptStatus | None
     stop: StopFacts | None
     usage: Usage
-    rung: int | None | Absent = ABSENT
-    fallback: bool | None | Absent = ABSENT
-    fallback_reason: str | None | Absent = ABSENT
-    first_lane: str | None | Absent = ABSENT
+    rung: int | Absent | None = ABSENT
+    fallback: bool | Absent | None = ABSENT
+    fallback_reason: str | Absent | None = ABSENT
+    first_lane: str | Absent | None = ABSENT
     warnings: list[str] | Absent = ABSENT
     notice: str | Absent = ABSENT
     warning: str | Absent = ABSENT
     needs_input: list[str] | Absent = ABSENT
     ask_user: AskUser | Absent = ABSENT
     ask_kind: AskKind | Absent = field(default=ABSENT, metadata={"doc": "what the caller is asked, when ask_user is set"})
-    agent_model: str | Absent = field(default=ABSENT, metadata={
-        "doc": "set only on the agent-tool handoff (stop is null): the model the orchestrator's Agent tool should run"})
+    agent_model: str | Absent = field(
+        default=ABSENT,
+        metadata={"doc": "set only on the agent-tool handoff (stop is null): the model the orchestrator's Agent tool should run"},
+    )
     brief_prefix: str | Absent = ABSENT
     cwd: str | Absent = ABSENT
     context: Context | Absent = ABSENT
-    exit_code: int | None | Absent = field(default=ABSENT, metadata={"doc": "the worker's exit status (negative = killed by that signal)"})
-    first_error: str | Absent = field(default=ABSENT, metadata={"doc": "the first error the harness or the process reported, cut to 240 characters"})
+    exit_code: int | Absent | None = field(default=ABSENT, metadata={"doc": "the worker's exit status (negative = killed by that signal)"})
+    first_error: str | Absent = field(
+        default=ABSENT, metadata={"doc": "the first error the harness or the process reported, cut to 240 characters"}
+    )
     worker: WorkerEnd | Absent = field(default=ABSENT, metadata={"doc": "how the worker's life ended; absent when no worker was launched"})
 
     @property

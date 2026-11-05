@@ -5,6 +5,7 @@ Pure but for sockets and the cache file it is given. stdlib only, no subprocess,
 (socket.getaddrinfo ignores socket timeouts, so the join deadline is what bounds the call). `up` means a vendor name resolved AND connected: a
 neutral IP literal that answers while names do not is reported as `ip_up`, because that is a DNS outage and the vendor is still unreachable.
 """
+
 import json
 import re
 import socket
@@ -15,18 +16,21 @@ from pathlib import Path
 
 from atomic_io import atomic_write_text
 
-Resolve = Callable[[str, int], str]                  # name, port -> address
-Connect = Callable[[tuple[str, int], float], None]   # (address, port), timeout -> returns or raises OSError
-BUDGET_S = 2.5          # whole probe; route.py net answers in under 3 s
-CONNECT_S = 1.5         # one TCP connect
-FRESH_S = 120           # a cached probe older than this is "unknown"
-NEUTRAL = ("one.one.one.one:443",)      # a name every resolver knows: the fallback when no vendor host is given
-IP_LITERAL = "1.1.1.1:443"              # no DNS: separates "offline" from "DNS is down"
+Resolve = Callable[[str, int], str]  # name, port -> address
+Connect = Callable[[tuple[str, int], float], None]  # (address, port), timeout -> returns or raises OSError
+BUDGET_S = 2.5  # whole probe; route.py net answers in under 3 s
+CONNECT_S = 1.5  # one TCP connect
+FRESH_S = 120  # a cached probe older than this is "unknown"
+NEUTRAL = ("one.one.one.one:443",)  # a name every resolver knows: the fallback when no vendor host is given
+IP_LITERAL = "1.1.1.1:443"  # no DNS: separates "offline" from "DNS is down"
 
 # What a vendor or the OS says when the connection itself broke. `max_output_tokens` after "stream disconnected" is the model's cap, not the network.
-DROP_RE = re.compile(r"ENOTFOUND|ECONNRESET|ECONNREFUSED|ECONNABORTED|ETIMEDOUT|EAI_AGAIN|EPIPE|getaddrinfo|could not resolve host|network is unreachable"
-                     r"|cannot connect to api|unable to connect|error sending request|connection (reset|closed|refused|timed out|failed)|socket hang up"
-                     r"|dns error|network error|waiting for network|(?:TLS|SSL) handshake|stream disconnected(?!.{0,200}max_output_tokens)", re.I | re.S)
+DROP_RE = re.compile(
+    r"ENOTFOUND|ECONNRESET|ECONNREFUSED|ECONNABORTED|ETIMEDOUT|EAI_AGAIN|EPIPE|getaddrinfo|could not resolve host|network is unreachable"
+    r"|cannot connect to api|unable to connect|error sending request|connection (reset|closed|refused|timed out|failed)|socket hang up"
+    r"|dns error|network error|waiting for network|(?:TLS|SSL) handshake|stream disconnected(?!.{0,200}max_output_tokens)",
+    re.I | re.S,
+)
 
 
 def looks_dropped(text: str | None):
@@ -50,7 +54,7 @@ def _try(host: str, out: dict[str, str], connect_s: float, resolve: Resolve, con
     name, port = split_host(host)
     try:
         addr = name if literal(name) else resolve(name, port)
-    except (OSError, UnicodeError):
+    except OSError, UnicodeError:
         out[host] = "dns"
         return
     try:
@@ -68,8 +72,14 @@ def _connect(addr: tuple[str, int], timeout: float) -> None:
     socket.create_connection(addr, timeout).close()
 
 
-def probe(hosts: Iterable[str] | None = None, budget_s: float = BUDGET_S, connect_s: float = CONNECT_S, resolve: Resolve = _resolve, connect: Connect = _connect,
-          clock: Callable[[], float] = time.time):
+def probe(
+    hosts: Iterable[str] | None = None,
+    budget_s: float = BUDGET_S,
+    connect_s: float = CONNECT_S,
+    resolve: Resolve = _resolve,
+    connect: Connect = _connect,
+    clock: Callable[[], float] = time.time,
+):
     """-> {up, ip_up, why, ms, hosts: {host: ok|dns|tcp|slow}, at}. `hosts` are vendor hosts ("name" or "name:port"); the neutral ones are added when none is
     given. `why`: ok | dns (names do not resolve, the IP literal connects) | vendor (names resolve, the vendor host refuses, the IP literal connects) | offline."""
     t0 = time.monotonic()
@@ -84,10 +94,18 @@ def probe(hosts: Iterable[str] | None = None, budget_s: float = BUDGET_S, connec
     res = {h: out.get(h, "slow") for h in allh}
     up = any(res[h] == "ok" for h in names)
     ip_up = res[IP_LITERAL] == "ok"
-    return {"up": up, "ip_up": ip_up, "why": "ok" if up else "dns" if ip_up and any(res[h] == "dns" for h in names) else "vendor" if ip_up else "offline", "ms": int((time.monotonic() - t0) * 1000), "hosts": res, "at": clock()}
+    return {
+        "up": up,
+        "ip_up": ip_up,
+        "why": "ok" if up else "dns" if ip_up and any(res[h] == "dns" for h in names) else "vendor" if ip_up else "offline",
+        "ms": int((time.monotonic() - t0) * 1000),
+        "hosts": res,
+        "at": clock(),
+    }
 
 
 # ---- the cache: written by `route.py net` and by every probe a run makes, read by status --cheap (which opens no socket) --------------
+
 
 def record(path: str | Path, res: dict, clock: Callable[[], float] = time.time):
     """Store a probe in `path` (atomic replace). `since` moves only when up flips, so outages are countable. -> the stored dict. Never raises."""
@@ -106,7 +124,7 @@ def load(path: str | Path):
         with open(path, encoding="utf-8") as f:
             d = json.load(f)
         return d if isinstance(d, dict) and isinstance(d.get("at"), (int, float)) else None
-    except (OSError, ValueError):
+    except OSError, ValueError:
         return None
 
 

@@ -1,4 +1,5 @@
 """What a worker's shell command may do (D3): git is the coordinator's, and a read-only step only reads. Pure functions of the command text."""
+
 import shlex
 
 from delegate.contracts.wire import RECIPE_RUNNERS
@@ -7,22 +8,89 @@ from delegate.domain.policy.matchers import name_of, pieces, sed_print_only, unw
 # A read-only Claude step (reviewer, planner, light) gets Bash for reading only: every piece of the command line must start with one of
 # these, with no output redirection or command substitution. Codex read steps get the same from their read-only sandbox, enforced by the OS;
 # this is a filter on the command text, not a boundary.
-READ_CMDS = {"cat", "head", "tail", "wc", "ls", "rg", "grep", "egrep", "fgrep", "find", "sed", "sort", "uniq", "cut", "tr", "diff", "nl",
-             "file", "stat", "pwd", "echo", "jq", "tree", "du", "basename", "dirname", "realpath", "which", "true", "test", "cd", "git"}
-READ_GIT = {"diff", "log", "show", "status", "blame", "ls-files", "ls-tree", "rev-parse", "grep", "merge-base", "cat-file", "describe",
-            "shortlog", "rev-list", "branch"}
-READ_ONLY_HELP = ("this step is read-only: Bash allows only reading commands (git diff/log/show/status/blame/grep/ls-files, rg, grep, cat, "
-                  "head, tail, ls, find without -exec/-delete, sed without -i, wc, sort, diff, jq), no '>' and no $(...).")
-GIT_LISTING = ("--list", "-l", "-a", "-r", "--show-current", "-v", "-vv", "--contains", "--merged", "--no-merged", "--points-at", "--format", "--sort")
+READ_CMDS = {
+    "cat",
+    "head",
+    "tail",
+    "wc",
+    "ls",
+    "rg",
+    "grep",
+    "egrep",
+    "fgrep",
+    "find",
+    "sed",
+    "sort",
+    "uniq",
+    "cut",
+    "tr",
+    "diff",
+    "nl",
+    "file",
+    "stat",
+    "pwd",
+    "echo",
+    "jq",
+    "tree",
+    "du",
+    "basename",
+    "dirname",
+    "realpath",
+    "which",
+    "true",
+    "test",
+    "cd",
+    "git",
+}
+READ_GIT = {
+    "diff",
+    "log",
+    "show",
+    "status",
+    "blame",
+    "ls-files",
+    "ls-tree",
+    "rev-parse",
+    "grep",
+    "merge-base",
+    "cat-file",
+    "describe",
+    "shortlog",
+    "rev-list",
+    "branch",
+}
+READ_ONLY_HELP = (
+    "this step is read-only: Bash allows only reading commands (git diff/log/show/status/blame/grep/ls-files, rg, grep, cat, "
+    "head, tail, ls, find without -exec/-delete, sed without -i, wc, sort, diff, jq), no '>' and no $(...)."
+)
+GIT_LISTING = (
+    "--list",
+    "-l",
+    "-a",
+    "-r",
+    "--show-current",
+    "-v",
+    "-vv",
+    "--contains",
+    "--merged",
+    "--no-merged",
+    "--points-at",
+    "--format",
+    "--sort",
+)
 GIT_CHANGING = ("commit", "push", "checkout", "switch", "merge", "rebase", "reset", "cherry-pick", "revert", "am", "pull")
 FIND_RUNS = {"-exec", "-execdir", "-ok", "-okdir", "-delete", "-fprint", "-fprintf", "-fls"}
 
 
 def unsafe_options(name: str, args: list[str]) -> bool:
     """Reader options that launch programs or write files, including long-option abbreviations."""
-    long = {"sort": ("--compress-program", "--output"), "rg": ("--pre", "--pre-glob", "--hostname-bin"),
-            "git": ("--open-files-in-pager", "--ext-diff", "--textconv", "--output", "--exec-path"),
-            "jq": ("--run-tests", "--in-place", "--library-path", "--from-file"), "diff": ("--output",)}
+    long = {
+        "sort": ("--compress-program", "--output"),
+        "rg": ("--pre", "--pre-glob", "--hostname-bin"),
+        "git": ("--open-files-in-pager", "--ext-diff", "--textconv", "--output", "--exec-path"),
+        "jq": ("--run-tests", "--in-place", "--library-path", "--from-file"),
+        "diff": ("--output",),
+    }
     short = {"sort": "o", "git": "O", "jq": "Lf"}
     for word in args:
         if word == "--":
@@ -51,10 +119,15 @@ def git_write(cmd: str) -> str | None:
             continue
         args = git_args(t)
         sub, rest = (args[0] if args else ""), args[1:]
-        if sub in GIT_CHANGING \
-                or (sub == "stash" and not (rest and rest[0] in ("list", "show"))) \
-                or (sub == "worktree" and not (rest and rest[0] == "list")) \
-                or (sub in ("branch", "tag") and ((rest and not rest[0].startswith("-")) or any(x.startswith("-") and not x.startswith(GIT_LISTING) for x in rest))):
+        if (
+            sub in GIT_CHANGING
+            or (sub == "stash" and not (rest and rest[0] in ("list", "show")))
+            or (sub == "worktree" and not (rest and rest[0] == "list"))
+            or (
+                sub in ("branch", "tag")
+                and ((rest and not rest[0].startswith("-")) or any(x.startswith("-") and not x.startswith(GIT_LISTING) for x in rest))
+            )
+        ):
             return " ".join(t[:3])
     return None
 
@@ -73,7 +146,7 @@ def piece_problem(t: list[str]) -> str | None:
     if name == "git":
         args = git_args(t)
         sub = args[0] if args else ""
-        if sub not in READ_GIT | {"stash", "tag", "worktree"}:         # also catches `git -c key=value ...`, which can run a program
+        if sub not in READ_GIT | {"stash", "tag", "worktree"}:  # also catches `git -c key=value ...`, which can run a program
             return f"git {sub} is not a reading command"
         if git_write(" ".join(shlex.quote(x) for x in t)):
             return f"git {sub} may only list"
@@ -97,11 +170,13 @@ def read_only_problem(cmd: str) -> str | None:
     return None
 
 
-KILLERS = {"kill", "killall", "p" + "kill"}       # spelled apart: the no-process-lister rule scans the source for the name
+KILLERS = {"kill", "killall", "p" + "kill"}  # spelled apart: the no-process-lister rule scans the source for the name
 OWN_PIDS = ("$!", "%")
 RUNNERS = set(RECIPE_RUNNERS)
-WRITER_RULE = ("a write step may not kill processes or run the engine's checks: the engine owns the editor, the servers and the slow suites it "
-               "started, so a kill can take down its run. Do not run them; finish and report, the engine reruns the check.")
+WRITER_RULE = (
+    "a write step may not kill processes or run the engine's checks: the engine owns the editor, the servers and the slow suites it "
+    "started, so a kill can take down its run. Do not run them; finish and report, the engine reruns the check."
+)
 
 
 def after_assignments(t: list[str]) -> list[str]:

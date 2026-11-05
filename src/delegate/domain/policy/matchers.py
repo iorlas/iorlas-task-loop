@@ -1,16 +1,21 @@
 """The text matchers of the worker policy: the one place of the domain that reads shell text with a regex (D3). Pure functions of a command line."""
+
 import posixpath
 import re
 import shlex
 
 # Paths a worker must never touch: credentials outside the repo and .env files in it (.env.example and kin are fine). A tripwire for
 # accidents and lazy injections, not a boundary: a determined worker can spell a path so it does not match.
-SECRET_RE = re.compile(r"\.ssh\b|\.gnupg\b|\.aws\b|\.azure\b|\.config/gh\b|\.docker/config\.json|\.netrc\b|\.git-credentials\b|"
-                       r"\.codex/auth\.json|Library/Keychains|(?<![\w.-])\.env(?:\.(?!(?:example|sample|template|dist)\b)[\w-]+)?(?![\w.-])")
+SECRET_RE = re.compile(
+    r"\.ssh\b|\.gnupg\b|\.aws\b|\.azure\b|\.config/gh\b|\.docker/config\.json|\.netrc\b|\.git-credentials\b|"
+    r"\.codex/auth\.json|Library/Keychains|(?<![\w.-])\.env(?:\.(?!(?:example|sample|template|dist)\b)[\w-]+)?(?![\w.-])"
+)
 # Arguments that keep a path OUT of a search or listing (rg --glob '!**/.env*', grep --exclude, find -not -path, git ':!x'): a worker
 # avoiding a secret must not trip the guard.
-EXCLUDED_RE = re.compile(r"""(?:--i?glob|-g)[=\s]+(?:(['"])!.*?\1|!\S+)|--exclude(?:-dir)?[=\s]+(?:(['"]).*?\2|\S+)"""
-                         r"""|(?:-not|!)\s+-i?(?:path|name|wholename|regex)\s+(?:(['"]).*?\3|\S+)|(['"]):(?:!|\(exclude\))[^'"]*\4|(?<!\S):(?:!|\(exclude\))\S+""")
+EXCLUDED_RE = re.compile(
+    r"""(?:--i?glob|-g)[=\s]+(?:(['"])!.*?\1|!\S+)|--exclude(?:-dir)?[=\s]+(?:(['"]).*?\2|\S+)"""
+    r"""|(?:-not|!)\s+-i?(?:path|name|wholename|regex)\s+(?:(['"]).*?\3|\S+)|(['"]):(?:!|\(exclude\))[^'"]*\4|(?<!\S):(?:!|\(exclude\))\S+"""
+)
 SHELLS = {"sh", "bash", "zsh", "dash"}
 EXCL_OPTS = {"-g", "--glob", "--iglob", "--exclude", "--exclude-dir", "--exclude-from"}
 EXCL_PATH_OPTS = {"-path", "-ipath", "-name", "-iname", "-wholename", "-iwholename", "-regex", "-iregex"}
@@ -75,8 +80,15 @@ def without_excluded(text: str) -> str | None:
         glob_excl = prev in EXCL_OPTS and (x.startswith("!") or prev.startswith("--exclude"))
         path_excl = prev in EXCL_PATH_OPTS and prev2 in ("-not", "!")
         inline = EXCLUDE_WORD_RE.match(x)
-        if not (glob_excl or path_excl or inline or x in EXCL_OPTS or EXCLUDE_PATHSPEC_RE.match(x) or x in ("-not", "!")
-                or (x in EXCL_PATH_OPTS and prev in ("-not", "!"))):
+        if not (
+            glob_excl
+            or path_excl
+            or inline
+            or x in EXCL_OPTS
+            or EXCLUDE_PATHSPEC_RE.match(x)
+            or x in ("-not", "!")
+            or (x in EXCL_PATH_OPTS and prev in ("-not", "!"))
+        ):
             out.append(x)
         prev2, prev = prev, x
     return " ".join(out)
@@ -120,7 +132,7 @@ def split_unquoted(text: str) -> list[str]:
         elif c in "|;&\n":
             out.append("".join(cur))
             cur = []
-            i += 2 if text[i + 1:i + 2] == c and c in "|&" else 1
+            i += 2 if text[i + 1 : i + 2] == c and c in "|&" else 1
             continue
         cur.append(c)
         i += 1
@@ -159,5 +171,3 @@ def writes_or_substitutes(cmd: str) -> bool:
 
 def name_of(word: str) -> str:
     return posixpath.basename(word)
-
-

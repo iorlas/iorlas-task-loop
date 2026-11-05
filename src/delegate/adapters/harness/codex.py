@@ -1,5 +1,6 @@
 """CodexHarness: `codex exec --json`. Its argv, its event parser (each line parsed once, into HarnessEvents and Evidence), its transcript
 file and its login status."""
+
 import contextlib
 import json
 import re
@@ -15,15 +16,15 @@ from delegate.adapters.harness.base import Evidence, LaunchInputs, LaunchSpec, Q
 from delegate.adapters.harness.codex_overlay import CodexOverlay
 from delegate.contracts import events as ev
 
-RECONNECT_RE = re.compile(r"^\s*Reconnecting\.\.\.\s*(\d+)/(\d+)")        # codex retrying its stream: progress until n == of
+RECONNECT_RE = re.compile(r"^\s*Reconnecting\.\.\.\s*(\d+)/(\d+)")  # codex retrying its stream: progress until n == of
 ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
 LOGIN_URL_RE = re.compile(r"https://\S+")
 LOGIN_CODE_RE = re.compile(r"\b[A-Z0-9]{4,}-[A-Z0-9]{4,}\b")
-WAITING_RE = re.compile(r"^\s*Reconnecting\.\.\.\s*waiting for network", re.I)     # codex waits for the network by itself
+WAITING_RE = re.compile(r"^\s*Reconnecting\.\.\.\s*waiting for network", re.I)  # codex waits for the network by itself
 STATUS_RE = re.compile(r"(?:last status|status|HTTP)\W{0,3}(\d{3})\b")
 SHELL_ITEM = "command_execution"
 TOOL_ITEMS = ("mcp_tool_call", "file_change", "web_search", "collab_tool_call")
-WORK_ITEMS = (SHELL_ITEM, "file_change", "agent_message", "mcp_tool_call")      # a finished one of these: the worker did something
+WORK_ITEMS = (SHELL_ITEM, "file_change", "agent_message", "mcp_tool_call")  # a finished one of these: the worker did something
 
 
 def _s(x: object) -> str:
@@ -59,7 +60,7 @@ def tool_parts(item: dict) -> tuple[str, str]:
 
 class CodexHarness(Quiet):
     kind = "codex"
-    secret_event = ev.Cmd            # no hook under `codex exec`: stop the worker before it can use what it read
+    secret_event = ev.Cmd  # no hook under `codex exec`: stop the worker before it can use what it read
     EXE = "codex"
 
     def __init__(self, resume: str | None = None, clock: Callable[[], float] = time.monotonic) -> None:
@@ -104,7 +105,9 @@ class CodexHarness(Quiet):
             return self._item(kind, item)
         if kind == "turn.completed" and isinstance(raw.get("usage"), dict):
             u = raw["usage"]
-            return [ev.TurnDone(usage=ev.Tokens(in_=u.get("input_tokens"), cached=u.get("cached_input_tokens"), out=u.get("output_tokens")))]
+            return [
+                ev.TurnDone(usage=ev.Tokens(in_=u.get("input_tokens"), cached=u.get("cached_input_tokens"), out=u.get("output_tokens")))
+            ]
         if kind == "thread.started":
             return [ev.Started(ref=raw["thread_id"])] if raw.get("thread_id") else []
         if kind == "turn.started":
@@ -122,8 +125,10 @@ class CodexHarness(Quiet):
             if not done:
                 return [ev.Cmd(id=ident, text=cmd, cwd=item.get("cwd"))]
             code = item.get("exit_code")
-            out: list[ev.HarnessEvent] = [ev.CmdEnd(id=ident, text=cmd, exit=code if isinstance(code, int) else None, out=item.get("aggregated_output"))]
-            if item.get("status") == "declined":        # the reviewer refused an escalation
+            out: list[ev.HarnessEvent] = [
+                ev.CmdEnd(id=ident, text=cmd, exit=code if isinstance(code, int) else None, out=item.get("aggregated_output"))
+            ]
+            if item.get("status") == "declined":  # the reviewer refused an escalation
                 out.append(ev.Denied(tool="Bash", input={"command": item.get("command")}))
             return out
         if ity in TOOL_ITEMS:
@@ -142,7 +147,7 @@ class CodexHarness(Quiet):
         if WAITING_RE.match(text):
             return ev.WaitingForNetwork(text=text)
         m = RECONNECT_RE.match(text)
-        if m and int(m.group(1)) < int(m.group(2)):        # "Reconnecting... 2/5" is progress; 5/5 is the failure
+        if m and int(m.group(1)) < int(m.group(2)):  # "Reconnecting... 2/5" is progress; 5/5 is the failure
             return ev.Reconnecting(n=int(m.group(1)), of=int(m.group(2)), text=text)
         return ev.HarnessError(text=text, http_status=http_status(text))
 
@@ -150,7 +155,7 @@ class CodexHarness(Quiet):
         """What this line established, for the classifier and the supervisor."""
         e, kind, item = self.evidence, _s(raw.get("type")), _dict(raw.get("item"))
         if kind.startswith(("item.", "turn.")) and kind != "turn.failed":
-            e.net_at = None            # the stream moves again: the wait for the network is over
+            e.net_at = None  # the stream moves again: the wait for the network is over
         if kind == "item.completed" and item.get("type") in WORK_ITEMS:
             e.work = True
         for x in events:
@@ -180,11 +185,21 @@ class CodexHarness(Quiet):
             with contextlib.suppress(OSError):
                 text = p.read_text(encoding="utf-8", errors="replace").strip()
                 p.unlink()
-        final = bool(text) or bool(e.last and (e.turns or stop == "answer"))        # the turn finished: codex writes -o only at its end
+        final = bool(text) or bool(e.last and (e.turns or stop == "answer"))  # the turn finished: codex writes -o only at its end
         text = text or e.last
-        res = {"text": text, "ref": e.ref, "tokens": e.tokens, "turns": e.turns or None, "started": bool(e.ref), "partial": e.work, "answered": final,
-               "cumulative": e.cumulative}
-        return Summary(text=text, rc=rc, res=res, vendor=self.vendor_error(rc), stderr=err, work=e.work, stands=final and not e.error, tail=err or text)
+        res = {
+            "text": text,
+            "ref": e.ref,
+            "tokens": e.tokens,
+            "turns": e.turns or None,
+            "started": bool(e.ref),
+            "partial": e.work,
+            "answered": final,
+            "cumulative": e.cumulative,
+        }
+        return Summary(
+            text=text, rc=rc, res=res, vendor=self.vendor_error(rc), stderr=err, work=e.work, stands=final and not e.error, tail=err or text
+        )
 
     def vendor_error(self, rc: int | None) -> str:
         """The failure text the classifier reads: codex's error event, else a retry that never recovered (only when the exit was a failure)."""

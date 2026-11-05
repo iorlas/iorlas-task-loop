@@ -1,5 +1,6 @@
 """The answer of a `run`: the contract 4 object (`result`), its validation against the caller's JSON schema (`schema_problem`), and the one JSON line
 on stdout (`emit`)."""
+
 import json
 from typing import Any
 
@@ -81,14 +82,44 @@ def result(outcome: str | None = None, **kw: Any):
     resumable, partial = kw.pop("resumable", None), kw.pop("partial", None)
     stop = None
     if outcome:
-        stop = stops.stop_facts(outcome, None if outcome == "logged_out" else retry_after, fix)      # logged_out ends when the owner logs in, not at a time
-        stop["ref"] = kw.get("ref")        # ref on every outcome that has one
-        if outcome in ("network", "killed"):       # resumable: the vendor session can be continued; partial: work was done before the stop
+        stop = stops.stop_facts(
+            outcome, None if outcome == "logged_out" else retry_after, fix
+        )  # logged_out ends when the owner logs in, not at a time
+        stop["ref"] = kw.get("ref")  # ref on every outcome that has one
+        if outcome in ("network", "killed"):  # resumable: the vendor session can be continued; partial: work was done before the stop
             stop.update(resumable=bool(resumable), partial=bool(partial))
-    r: dict[str, Any] = {"contract": stops.CONTRACT["contract"], "data": None, "text": "", "ref": None, "lane": None, "model": None, "effort": None, "family": None,
-         "flag": None, "cost": 0, "tokens": None, "denied": [], "secs": 0, "run_id": None, "transcript": None, "say": "", "git_violation": [],
-         "call_id": None, "transcript_info": None, "transcript_status": None, "stop": stop,
-         "usage": {"tokens": None, "cost": 0, "secs": 0, "turns": None, "context_k": None, "answer_bytes": 0, **accounting.fields(None, None, 0)}}
+    r: dict[str, Any] = {
+        "contract": stops.CONTRACT["contract"],
+        "data": None,
+        "text": "",
+        "ref": None,
+        "lane": None,
+        "model": None,
+        "effort": None,
+        "family": None,
+        "flag": None,
+        "cost": 0,
+        "tokens": None,
+        "denied": [],
+        "secs": 0,
+        "run_id": None,
+        "transcript": None,
+        "say": "",
+        "git_violation": [],
+        "call_id": None,
+        "transcript_info": None,
+        "transcript_status": None,
+        "stop": stop,
+        "usage": {
+            "tokens": None,
+            "cost": 0,
+            "secs": 0,
+            "turns": None,
+            "context_k": None,
+            "answer_bytes": 0,
+            **accounting.fields(None, None, 0),
+        },
+    }
     r.update(kw)
     return r
 
@@ -98,6 +129,11 @@ def emit(r: dict, interactive: bool):
     The answer passes through RunResult first: a key or a type the contract does not know is a bug here, never an answer."""
     r = codec.to_json(codec.from_json(wire.RunResult, r))
     if interactive:
-        r = {k: v for k, v in r.items() if k in ("contract", "stop") or (v not in (None, "", [], 0) and k not in ("context", "usage", "transcript_info", "transcript_status"))}     # these are for scripts
+        r = {
+            k: v
+            for k, v in r.items()
+            if k in ("contract", "stop")
+            or (v not in (None, "", [], 0) and k not in ("context", "usage", "transcript_info", "transcript_status"))
+        }  # these are for scripts
     print(json.dumps(r))
-    return 0        # exit 0 whenever the object was printed; non-zero only if route.py itself crashed
+    return 0  # exit 0 whenever the object was printed; non-zero only if route.py itself crashed

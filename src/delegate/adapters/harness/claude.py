@@ -1,5 +1,6 @@
 """ClaudeHarness: `claude -p --output-format stream-json`. Its argv, its event parser (each line parsed once, into HarnessEvents and Evidence),
 the usage arithmetic of its result, its transcript file and its login status."""
+
 import json
 import re
 import shutil
@@ -11,11 +12,23 @@ from delegate.adapters import netprobe, procs
 from delegate.adapters.harness.base import Evidence, LaunchInputs, LaunchSpec, Quiet, Summary
 from delegate.contracts import events as ev
 
-ARG_KEYS = ("file_path", "filePath", "path", "pattern", "url", "query", "description", "command")      # a tool's main argument, first one present
+ARG_KEYS = (
+    "file_path",
+    "filePath",
+    "path",
+    "pattern",
+    "url",
+    "query",
+    "description",
+    "command",
+)  # a tool's main argument, first one present
 STREAM_USAGE = ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens", "output_tokens")
-CLAUDE_ERROR_RE = re.compile(r"^(API Error|Credit balance|Invalid API key|Not logged in|Please run /login|Claude (AI )?usage limit|OAuth|Failed to authenticate"
-                             r"|Request timed out|Error:)", re.I)       # how `claude -p` words its own failures; anything else in a result is the model talking
-SUBSCRIPTION_TTL_S = 3600        # prompt-cache life: a -p main conversation on a subscription gets 1 h
+CLAUDE_ERROR_RE = re.compile(
+    r"^(API Error|Credit balance|Invalid API key|Not logged in|Please run /login|Claude (AI )?usage limit|OAuth|Failed to authenticate"
+    r"|Request timed out|Error:)",
+    re.I,
+)  # how `claude -p` words its own failures; anything else in a result is the model talking
+SUBSCRIPTION_TTL_S = 3600  # prompt-cache life: a -p main conversation on a subscription gets 1 h
 
 
 def _s(x: object) -> str:
@@ -61,12 +74,18 @@ def acct_of(u: dict | None, cost: float | None) -> dict | None:
         return None
     u = u or {}
     by_ttl = u.get("cache_creation") if isinstance(u.get("cache_creation"), dict) else None
-    a: dict[str, Any] = {"in_fresh": u.get("input_tokens") or 0, "cache_read": u.get("cache_read_input_tokens") or 0,
-                         "cache_write": u.get("cache_creation_input_tokens") or 0, "out": u.get("output_tokens") or 0,
-                         "cost_usd": None if cost is None else float(cost), "cost_source": "unknown" if cost is None else "harness",
-                         "accounting": "estimated" if cost is not None else "unknown",
-                         "ttl_s": SUBSCRIPTION_TTL_S, "ttl_source": "vendor_default"}
-    if by_ttl:      # an unexpected downgrade to 5 m shows here
+    a: dict[str, Any] = {
+        "in_fresh": u.get("input_tokens") or 0,
+        "cache_read": u.get("cache_read_input_tokens") or 0,
+        "cache_write": u.get("cache_creation_input_tokens") or 0,
+        "out": u.get("output_tokens") or 0,
+        "cost_usd": None if cost is None else float(cost),
+        "cost_source": "unknown" if cost is None else "harness",
+        "accounting": "estimated" if cost is not None else "unknown",
+        "ttl_s": SUBSCRIPTION_TTL_S,
+        "ttl_source": "vendor_default",
+    }
+    if by_ttl:  # an unexpected downgrade to 5 m shows here
         a["cache_write_by_ttl"] = {"5m": by_ttl.get("ephemeral_5m_input_tokens") or 0, "1h": by_ttl.get("ephemeral_1h_input_tokens") or 0}
     return a
 
@@ -82,23 +101,35 @@ def vendor_error(j: dict) -> str:
 
 class ClaudeHarness(Quiet):
     kind = "claude"
-    secret_event: type | None = None           # its PreToolUse hook blocks the call
+    secret_event: type | None = None  # its PreToolUse hook blocks the call
     EXE = "claude"
 
     def __init__(self) -> None:
         self.evidence = Evidence()
-        self.open: dict[Any, tuple[bool, str, str]] = {}        # tool_use id -> (shell, name, arg), until its tool_result
+        self.open: dict[Any, tuple[bool, str, str]] = {}  # tool_use id -> (shell, name, arg), until its tool_result
         self.seen_usage: set[Any] = set()
 
     # -- launch ----------------------------------------------------------------------------------------------------------------------------
     def launch_spec(self, i: LaunchInputs) -> LaunchSpec:
-        tools = ["Read", "Glob", "Grep"] + (["Edit", "Write"] if i.write else []) + ["Bash"]       # read-only steps: Bash limited by the guard
+        tools = ["Read", "Glob", "Grep"] + (["Edit", "Write"] if i.write else []) + ["Bash"]  # read-only steps: Bash limited by the guard
         argv = [i.exe, "-p", "--output-format", "stream-json", "--verbose", "--model", i.model, "--effort", i.effort]
         argv += ["--resume", i.resume] if i.resume else ["--session-id", i.session]
-        argv += ["--append-system-prompt", i.system, "--restricted", "--tools", ",".join(tools), "--strict-mcp-config",
-                 "--permission-mode", "auto", "--permission-prompts", "none", "--settings", i.settings]
+        argv += [
+            "--append-system-prompt",
+            i.system,
+            "--restricted",
+            "--tools",
+            ",".join(tools),
+            "--strict-mcp-config",
+            "--permission-mode",
+            "auto",
+            "--permission-prompts",
+            "none",
+            "--settings",
+            i.settings,
+        ]
         argv += ["--json-schema", Path(i.schema).read_text(encoding="utf-8")] if i.schema else []
-        self.evidence.ref = i.resume or i.session       # claude takes the session id from us: known before the first event
+        self.evidence.ref = i.resume or i.session  # claude takes the session id from us: known before the first event
         return LaunchSpec(argv=argv, env=i.env, cwd=i.cwd, stdin=i.prompt)
 
     # -- the event stream, parsed once -----------------------------------------------------------------------------------------------------
@@ -113,7 +144,7 @@ class ClaudeHarness(Quiet):
         msg = _dict(raw.get("message"))
         blocks = [b for b in msg.get("content") or [] if isinstance(b, dict)] if isinstance(msg.get("content"), list) else []
         if kind in ("assistant", "user", "result"):
-            e.work = True           # the session exists on disk from its first message
+            e.work = True  # the session exists on disk from its first message
         if kind == "assistant":
             return self._assistant(raw, msg, blocks)
         if kind == "user":
@@ -125,7 +156,7 @@ class ClaudeHarness(Quiet):
     def _assistant(self, raw: dict, msg: dict, blocks: list[dict]) -> list[ev.HarnessEvent]:
         out: list[ev.HarnessEvent] = []
         tools = any(b.get("type") == "tool_use" for b in blocks)
-        done = msg.get("stop_reason") == "end_turn" and not tools     # the final assistant message; a later event resets the grace
+        done = msg.get("stop_reason") == "end_turn" and not tools  # the final assistant message; a later event resets the grace
         for b in blocks:
             kind = b.get("type")
             if kind == "text" and b.get("text"):
@@ -136,13 +167,15 @@ class ClaudeHarness(Quiet):
             elif kind == "tool_use":
                 out.append(self._tool(b, raw.get("cwd")))
         u = msg.get("usage")
-        if isinstance(u, dict):          # one model request: its whole input is the context size
+        if isinstance(u, dict):  # one model request: its whole input is the context size
             self.evidence.context_k = round(input_of(u) / 1000, 1)
             if msg.get("id") not in self.seen_usage:
                 self.seen_usage.add(msg.get("id"))
                 self.evidence.steps.append(u)
                 cached = u.get("cache_read_input_tokens") or 0
-                out.append(ev.Tokens(in_=input_of(u), cached=cached, out=u.get("output_tokens"), cache_write=u.get("cache_creation_input_tokens")))
+                out.append(
+                    ev.Tokens(in_=input_of(u), cached=cached, out=u.get("output_tokens"), cache_write=u.get("cache_creation_input_tokens"))
+                )
         return out
 
     def _tool(self, b: dict, cwd: object) -> ev.HarnessEvent:
@@ -161,8 +194,11 @@ class ClaudeHarness(Quiet):
                 continue
             shell, name, arg = self.open.pop(ident)
             res = text_of(b.get("content"))
-            out.append(ev.CmdEnd(id=ident, text=arg, exit=1 if b.get("is_error") else None, out=res) if shell
-                       else ev.ToolEnd(id=ident, name=name, arg=arg, out=res))
+            out.append(
+                ev.CmdEnd(id=ident, text=arg, exit=1 if b.get("is_error") else None, out=res)
+                if shell
+                else ev.ToolEnd(id=ident, name=name, arg=arg, out=res)
+            )
         return out
 
     def _result(self, raw: dict) -> list[ev.HarnessEvent]:
@@ -173,7 +209,7 @@ class ClaudeHarness(Quiet):
         e.final = raw
         e.turns = raw.get("num_turns") or 0
         out: list[ev.HarnessEvent] = [ev.TurnDone(usage=None)]
-        for x in raw.get("permission_denials") or []:        # a call the CLI's own classifier or our guard refused
+        for x in raw.get("permission_denials") or []:  # a call the CLI's own classifier or our guard refused
             if isinstance(x, dict):
                 d = ev.Denied(tool=_s(x.get("tool_name")), input=_dict(x.get("tool_input")))
                 e.denials.append(d)
@@ -184,20 +220,43 @@ class ClaudeHarness(Quiet):
     def summary(self, rc: int | None, out: str, err: str, stop: str | None, timed_out: bool) -> Summary:
         e = self.evidence
         j = e.final or {}
-        by_message = not e.final and stop == "answer" and bool(e.last)         # the final assistant message came, the result event never did
+        by_message = not e.final and stop == "answer" and bool(e.last)  # the final assistant message came, the result event never did
         if (e.final and not j.get("is_error")) or by_message:
-            rc = 0          # stopped by us after answering
+            rc = 0  # stopped by us after answering
         text = j.get("result") if isinstance(j.get("result"), str) else e.last if by_message else out.strip()[-2000:]
-        cost = float(j.get("total_cost_usd") or 0)          # the harness's own figure on every lane, subscription included (study 85)
-        u = j.get("usage") if isinstance(j.get("usage"), dict) else stream_usage(e.steps)     # no result event: what the stream's requests reported
+        cost = float(j.get("total_cost_usd") or 0)  # the harness's own figure on every lane, subscription included (study 85)
+        u = (
+            j.get("usage") if isinstance(j.get("usage"), dict) else stream_usage(e.steps)
+        )  # no result event: what the stream's requests reported
         failed = rc != 0 or bool(j.get("is_error"))
-        res = {"text": text, "ref": j.get("session_id") or e.ref, "cost": cost, "tokens": tokens_of(u), "acct": acct_of(u, j.get("total_cost_usd")),
-               "turns": j.get("num_turns"), "context_k": e.context_k, "started": e.work, "partial": e.work}
-        warn = ["answer_done_process_alive"] if by_message else ["net_after_answer"] if e.final and netprobe.looks_dropped(err) else []     # ae6v: the answer was in first
-        return Summary(text=text, rc=(rc or 1) if failed else 0, res=res, vendor=vendor_error(j), stderr=err, work=(j.get("num_turns") or 0) > 1,
-                       check=failed or timed_out, warnings=warn, cost=cost, tail=text,
-                       data=j.get("structured_output") if isinstance(j.get("structured_output"), (dict, list)) else None,
-                       facts={"http_status": j.get("api_error_status")})
+        res = {
+            "text": text,
+            "ref": j.get("session_id") or e.ref,
+            "cost": cost,
+            "tokens": tokens_of(u),
+            "acct": acct_of(u, j.get("total_cost_usd")),
+            "turns": j.get("num_turns"),
+            "context_k": e.context_k,
+            "started": e.work,
+            "partial": e.work,
+        }
+        warn = (
+            ["answer_done_process_alive"] if by_message else ["net_after_answer"] if e.final and netprobe.looks_dropped(err) else []
+        )  # ae6v: the answer was in first
+        return Summary(
+            text=text,
+            rc=(rc or 1) if failed else 0,
+            res=res,
+            vendor=vendor_error(j),
+            stderr=err,
+            work=(j.get("num_turns") or 0) > 1,
+            check=failed or timed_out,
+            warnings=warn,
+            cost=cost,
+            tail=text,
+            data=j.get("structured_output") if isinstance(j.get("structured_output"), (dict, list)) else None,
+            facts={"http_status": j.get("api_error_status")},
+        )
 
     def vendor_error(self, rc: int | None) -> str:
         return vendor_error(self.evidence.final or {})
@@ -221,6 +280,6 @@ class ClaudeHarness(Quiet):
             return None, f"{self.EXE} login check failed: {type(x).__name__}"
         try:
             logged_in = json.loads(r.stdout).get("loggedIn")
-        except (ValueError, AttributeError):
+        except ValueError, AttributeError:
             logged_in = None
         return (logged_in if isinstance(logged_in, bool) else None), (r.stdout + r.stderr).strip()[:120]

@@ -1,5 +1,6 @@
 """The cockpit: one row per known lane (state, reason, unlock time, windows, model), the pick `next worker` would make, and the text of it.
 `lane_view` is pure given its inputs."""
+
 from collections.abc import Sequence
 from typing import Any
 
@@ -24,10 +25,22 @@ def needs_input(lanes: dict[str, Lane]):
     need = []
     cs = lanes.get("CLAUDE_SUBSCRIPTION")
     if cs and not cs.usage_known and env.session_host() == "desktop":
-        need.append({"what": "claude_usage", "why": "Claude subscription use is unknown", "how": "in the Claude desktop app call the get_usage tool and pass its windows as --claude-usage JSON ({five_hour:{used,resets_at},weekly:{used,resets_at}})"})
+        need.append(
+            {
+                "what": "claude_usage",
+                "why": "Claude subscription use is unknown",
+                "how": "in the Claude desktop app call the get_usage tool and pass its windows as --claude-usage JSON ({five_hour:{used,resets_at},weekly:{used,resets_at}})",
+            }
+        )
     ox = lanes.get("OPENAI_SUBSCRIPTION")
     if ox and not ox.usage_known and not ox.out:
-        need.append({"what": "codex_login", "why": ox.notes[0] if ox.notes else "codex limits unreadable", "how": "ask the user to run `codex login`, or report the lane out with `route.py report`"})
+        need.append(
+            {
+                "what": "codex_login",
+                "why": ox.notes[0] if ox.notes else "codex limits unreadable",
+                "how": "ask the user to run `codex login`, or report the lane out with `route.py report`",
+            }
+        )
     return need
 
 
@@ -38,10 +51,22 @@ def finished_runs(n: int):
 
 
 EMOJI = {"ready": "✅", "resting": "⏳", "logged_out": "🔑", "spend": "💸", "slow": "🐢", "off": "⛔", "unknown": "❓"}
-LEGEND = {"ready": "ready", "resting": "usage limit", "logged_out": "logged out", "spend": "spend/credit limit",
-          "slow": "slow/hung", "off": "disabled", "unknown": "no read yet"}
-LABELS = {"CLAUDE_SUBSCRIPTION": "Claude subscription", "OPENAI_SUBSCRIPTION": "ChatGPT / Codex",
-          "GROK_SUBSCRIPTION": "SuperGrok / OpenCode", "DEEPSEEK_FREE": "DeepSeek / OpenCode Free", "ZAI_CODING_SUBSCRIPTION": "Z.ai GLM Coding Plan"}
+LEGEND = {
+    "ready": "ready",
+    "resting": "usage limit",
+    "logged_out": "logged out",
+    "spend": "spend/credit limit",
+    "slow": "slow/hung",
+    "off": "disabled",
+    "unknown": "no read yet",
+}
+LABELS = {
+    "CLAUDE_SUBSCRIPTION": "Claude subscription",
+    "OPENAI_SUBSCRIPTION": "ChatGPT / Codex",
+    "GROK_SUBSCRIPTION": "SuperGrok / OpenCode",
+    "DEEPSEEK_FREE": "DeepSeek / OpenCode Free",
+    "ZAI_CODING_SUBSCRIPTION": "Z.ai GLM Coding Plan",
+}
 SLOW_WINDOW = 2 * 3600  # a hang or timeout this recent, with no good run on the lane since, keeps it marked slow
 SLOW_KINDS = ("hung", "timeout")
 
@@ -101,27 +126,64 @@ def window_rows(lane: Lane, S: Settings, t: float):
     low: list[dict] = []
     for w in lane.windows:
         used = w["used"]
-        rows.append({"name": w["name"], "used_pct": None if used is None else round(used, 1), "resets_at": w["resets_at"],
-                     "resets_in_s": None if not w["resets_at"] else max(0, int(w["resets_at"] - t)), "source": w["source"],
-                     "age_s": None if w["at"] is None else max(0, int(t - w["at"]))})
+        rows.append(
+            {
+                "name": w["name"],
+                "used_pct": None if used is None else round(used, 1),
+                "resets_at": w["resets_at"],
+                "resets_in_s": None if not w["resets_at"] else max(0, int(w["resets_at"] - t)),
+                "source": w["source"],
+                "age_s": None if w["at"] is None else max(0, int(t - w["at"])),
+            }
+        )
         if used is None:
             continue
         (gwk, gfv, gname), (cwk, cfv, _) = lane.limits(S, False), lane.limits(S, True)
         gate, ceil = (gwk, cwk) if w["span"] > 1440 else (gfv, cfv)
         if used >= gate:
-            low.append({"window": w["name"], "used_pct": round(used, 1), "limit": ceil if used >= ceil else gate,
-                        "over": "ceiling" if used >= ceil else "gate", "limit_name": "hard ceiling" if used >= ceil else gname})
+            low.append(
+                {
+                    "window": w["name"],
+                    "used_pct": round(used, 1),
+                    "limit": ceil if used >= ceil else gate,
+                    "over": "ceiling" if used >= ceil else "gate",
+                    "limit_name": "hard ceiling" if used >= ceil else gname,
+                }
+            )
     return rows, low
 
 
-def lane_view(name: str, cfg: dict, lane: Lane | None, st: StateDoc, t: float, history: Sequence = (), running: int = 0, login: tuple = (None, "", None), off_why: str | None = None):
+def lane_view(
+    name: str,
+    cfg: dict,
+    lane: Lane | None,
+    st: StateDoc,
+    t: float,
+    history: Sequence = (),
+    running: int = 0,
+    login: tuple = (None, "", None),
+    off_why: str | None = None,
+):
     """One lane's cockpit row. Pure given its inputs: lane is what gather built (None = disabled or not configured), history the recent finished runs."""
     S, c = env.settings_of(cfg), cfg["lanes"][name]
-    v: dict[str, Any] = {"id": name, "label": c.get("label") or LABELS.get(name, name), "family": c["family"], "kind": c["kind"], "model": lane_model(cfg, name),
-         "state": "off", "emoji": EMOJI["off"], "reason": off_why or "disabled or not configured", "detail": None,
-         "unlock": {"locked": False, "known": False, "at": None, "in_s": None, "text": None, "why": "not in use"},
-         "windows": [], "low_tokens": [], "warnings": list(lane.warn) if lane else [], "meter": c["reader"] != "none",
-         "login": {"ok": login[0], "why": login[1], "checked_at": login[2]}, "running": running}
+    v: dict[str, Any] = {
+        "id": name,
+        "label": c.get("label") or LABELS.get(name, name),
+        "family": c["family"],
+        "kind": c["kind"],
+        "model": lane_model(cfg, name),
+        "state": "off",
+        "emoji": EMOJI["off"],
+        "reason": off_why or "disabled or not configured",
+        "detail": None,
+        "unlock": {"locked": False, "known": False, "at": None, "in_s": None, "text": None, "why": "not in use"},
+        "windows": [],
+        "low_tokens": [],
+        "warnings": list(lane.warn) if lane else [],
+        "meter": c["reader"] != "none",
+        "login": {"ok": login[0], "why": login[1], "checked_at": login[2]},
+        "running": running,
+    }
     if lane is None:
         return v
     v["windows"], v["low_tokens"] = window_rows(lane, S, t)
@@ -147,7 +209,7 @@ def lane_view(name: str, cfg: dict, lane: Lane | None, st: StateDoc, t: float, h
     elif login[0] is False:
         v["state"], locked, why = "logged_out", True, relogin
         note = f"logged out: run `{LOGIN_CMD[name]}`"
-    elif not lane.usable(S, True)[0]:               # over the hard ceiling with nothing recorded: resting until that window resets
+    elif not lane.usable(S, True)[0]:  # over the hard ceiling with nothing recorded: resting until that window resets
         v["state"], locked = "resting", True
         until, note, why = lane.back_at(S), lane.usable(S, True)[1], "no reset time for the window it is over"
     else:
@@ -192,7 +254,15 @@ def next_worker(cfg: dict, lanes: dict[str, Lane], st: StateDoc, t: float):
     cur = mark_busy(lanes, st, routing.settings, t, busy_jitter)
     d = Router(routing, HoldBook(st.holds), st.prev, t).route("worker", CallArgs(), cur).as_dict()
     if d["action"] == "run":
-        r: dict[str, Any] = {"action": "run", "lane": d["lane"], "model": d["model"], "effort": d["effort"], "pass": d["pass"], "fallback": d["fallback"], "why": None}
+        r: dict[str, Any] = {
+            "action": "run",
+            "lane": d["lane"],
+            "model": d["model"],
+            "effort": d["effort"],
+            "pass": d["pass"],
+            "fallback": d["fallback"],
+            "why": None,
+        }
         if cfg["lanes"][d["lane"]]["family"] == "claude":
             r["why"] = claude_why(cfg, cur)
         return r

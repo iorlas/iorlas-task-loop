@@ -7,13 +7,13 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from delegate.adapters.harness import opencode_sandbox as box
+from delegate.app import env, watch
+from support.procsim import real_proc
+
 import hermetic  # noqa: F401  (a home of its own for every test)
 from run_support import RunBase
 from test_route import why
-
-from delegate.adapters.harness import opencode_sandbox as box
-from delegate.app import env, watch
-from support.procsim import real_proc  # noqa: E402
 
 
 class RunOpenCode(RunBase):

@@ -1,4 +1,5 @@
 """The only code that runs git for delegate: the repo root of a folder, and the HEAD and branch a worker must leave alone."""
+
 import os
 import shutil
 import subprocess
@@ -21,7 +22,10 @@ def state(cwd: object) -> dict | None:
     """HEAD and current branch of cwd, or None when cwd is not a git work tree. Other refs and worktrees change while parallel slots work and land, so they are not compared."""
     if shutil.which("git") is None or _git(cwd, "rev-parse", "--is-inside-work-tree") is None:
         return None
-    return {"head": (_git(cwd, "rev-parse", "HEAD") or "").strip(), "branch": (_git(cwd, "symbolic-ref", "-q", "--short", "HEAD") or "").strip()}
+    return {
+        "head": (_git(cwd, "rev-parse", "HEAD") or "").strip(),
+        "branch": (_git(cwd, "symbolic-ref", "-q", "--short", "HEAD") or "").strip(),
+    }
 
 
 def changes(before: dict | None, after: dict | None) -> list[str]:

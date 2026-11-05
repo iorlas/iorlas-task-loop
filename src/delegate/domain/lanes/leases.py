@@ -1,7 +1,8 @@
 """LeaseBook: the runs in flight (state.json `leases`). A running `run` holds a lease, renewed while it lives; one that expires is dropped."""
+
 from delegate.contracts.state import Lease
 
-LEASE_TTL, LEASE_RENEW = 120, 30      # a lease expires by itself if route.py is killed
+LEASE_TTL, LEASE_RENEW = 120, 30  # a lease expires by itself if route.py is killed
 
 
 def suspect(lease: Lease, t: float) -> bool:

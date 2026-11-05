@@ -1,5 +1,6 @@
 """`route.py doctor` (and `init`): a plain lane table (lane, enabled, ready, fix) and the notes about retired config keys; and `config set|show`.
 Nothing here installs, logs in or decides for the owner: the fix column says what to run."""
+
 import json
 import os
 from typing import Any
@@ -16,29 +17,48 @@ def lane_rows(cfg: dict):
     rows: list[dict[str, Any]] = []
     for name in cfg["lanes"]:
         enabled = chosen.get(name) != "declined" and (not cfg["lanes"][name].get("opt_in") or chosen.get(name) == "enabled")
-        rows.append({"lane": name, "enabled": enabled, "ready": ready[name], "fix": "" if ready[name] and enabled else onboard.fix_hint(name)})
+        rows.append(
+            {"lane": name, "enabled": enabled, "ready": ready[name], "fix": "" if ready[name] and enabled else onboard.fix_hint(name)}
+        )
     return rows
 
 
-LEFTOVER_FILES = ("claude-credit.key", "ledger.jsonl")       # of the deleted CLAUDE_CREDIT lane
+LEFTOVER_FILES = ("claude-credit.key", "ledger.jsonl")  # of the deleted CLAUDE_CREDIT lane
 LEFTOVER_ENV = "CLAUDE_CREDIT_WORKER_KEY"
 
 
 def leftovers():
     """Notes for what the deleted CLAUDE_CREDIT lane left behind. Nothing reads or deletes them."""
-    out: list[dict[str, str]] = [{"id": "unused_file", "file": str(env.config_dir() / n), "say": f"{env.config_dir() / n}: unused, safe to delete."}
-           for n in LEFTOVER_FILES if (env.config_dir() / n).exists()]
+    out: list[dict[str, str]] = [
+        {"id": "unused_file", "file": str(env.config_dir() / n), "say": f"{env.config_dir() / n}: unused, safe to delete."}
+        for n in LEFTOVER_FILES
+        if (env.config_dir() / n).exists()
+    ]
     if os.environ.get(LEFTOVER_ENV):
         out.append({"id": "unused_env", "key": LEFTOVER_ENV, "say": f"env {LEFTOVER_ENV}: unused, safe to unset."})
     return out
 
 
 def notes(cfg: dict):
-    out: list[dict[str, str]] = [{"id": "retired_key", "key": k, "file": str(env.config_store().path), "say": f"{env.config_store().path}: '{k}' is retired and ignored; safe to delete from config.json."}
-           for k in env.retired_keys_present()]
+    out: list[dict[str, str]] = [
+        {
+            "id": "retired_key",
+            "key": k,
+            "file": str(env.config_store().path),
+            "say": f"{env.config_store().path}: '{k}' is retired and ignored; safe to delete from config.json.",
+        }
+        for k in env.retired_keys_present()
+    ]
     with open(env.DATA_DIR / "routing.json", encoding="utf-8") as f:
-        out += [{"id": "retired_key", "key": k, "file": str(env.DATA_DIR / "routing.json"), "say": f"{env.DATA_DIR / 'routing.json'}: '{k}' is retired and ignored."}
-                for k in split_retired(json.load(f).get("settings") or {})[1]]
+        out += [
+            {
+                "id": "retired_key",
+                "key": k,
+                "file": str(env.DATA_DIR / "routing.json"),
+                "say": f"{env.DATA_DIR / 'routing.json'}: '{k}' is retired and ignored.",
+            }
+            for k in split_retired(json.load(f).get("settings") or {})[1]
+        ]
     return out + leftovers() + smoke_problems(cfg)
 
 
@@ -55,14 +75,28 @@ def smoke_problems(cfg: dict):
         codec.from_json(Profile, raw)
         lanes = raw.get("lanes") or {}
     except codec.CodecError as e:
-        return [{"id": "bad_profile", "say": f"{env.config_store().path}: profile does not parse ({e}). Fix: correct or delete the \"profile\" key."}]
+        return [
+            {
+                "id": "bad_profile",
+                "say": f'{env.config_store().path}: profile does not parse ({e}). Fix: correct or delete the "profile" key.',
+            }
+        ]
     for name, v in lanes.items():
         if name not in cfg["lanes"] or v not in PROFILE_VALUES:
-            out.append({"id": "bad_profile", "lane": name, "say": f"profile.lanes.{name} = {v!r}: expected a lane of {sorted(cfg['lanes'])} "
-                        f"set to enabled or declined. Fix: `route.py config set profile.lanes.<LANE> enabled|declined`."})
+            out.append(
+                {
+                    "id": "bad_profile",
+                    "lane": name,
+                    "say": f"profile.lanes.{name} = {v!r}: expected a lane of {sorted(cfg['lanes'])} "
+                    f"set to enabled or declined. Fix: `route.py config set profile.lanes.<LANE> enabled|declined`.",
+                }
+            )
     ready = onboard.configured_lanes(cfg)
-    out += [{"id": "enabled_not_ready", "lane": n, "say": f"{n} is enabled but not ready: {onboard.fix_hint(n)}"}
-            for n, v in lanes.items() if v == "enabled" and n in ready and not ready[n]]
+    out += [
+        {"id": "enabled_not_ready", "lane": n, "say": f"{n} is enabled but not ready: {onboard.fix_hint(n)}"}
+        for n, v in lanes.items()
+        if v == "enabled" and n in ready and not ready[n]
+    ]
     return out
 
 
@@ -105,12 +139,17 @@ def config_set(key: str, value: str):
                 node[part] = {}
             node = node[part]
         node[parts[-1]] = val
+
     return env.update_config(put)
 
 
 def config_show(cfg: dict):
     p = env.config_dir() / "config.json"
-    return {"file": str(p), "overrides": json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}, "effective_settings": cfg["settings"]}
+    return {
+        "file": str(p),
+        "overrides": json.loads(p.read_text(encoding="utf-8")) if p.exists() else {},
+        "effective_settings": cfg["settings"],
+    }
 
 
 def cmd_config(a: env.Args, cfg: dict):

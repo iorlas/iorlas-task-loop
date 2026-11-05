@@ -6,13 +6,13 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-import hermetic  # noqa: F401  (a home of its own for every test)
-from test_route import CFG
-
 from delegate.adapters.harness import opencode_sandbox as box
 from delegate.adapters.harness.base import LaunchInputs
 from delegate.adapters.harness.opencode import OpenCodeHarness, Profile
 from delegate.app import cockpit, env, launch, onboard
+
+import hermetic  # noqa: F401  (a home of its own for every test)
+from test_route import CFG
 
 
 class XdgWritable(unittest.TestCase):

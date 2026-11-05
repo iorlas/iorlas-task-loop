@@ -2,11 +2,11 @@
 import json
 import unittest
 
-import hermetic  # noqa: F401
-from test_route import ROOT
-
 from delegate.adapters import procs
 from delegate.contracts import wire
+
+import hermetic  # noqa: F401
+from test_route import ROOT
 
 
 class OsProc(unittest.TestCase):

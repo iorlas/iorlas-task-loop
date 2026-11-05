@@ -1,6 +1,7 @@
 """OpenCodeHarness: `opencode run --format json --print-logs`. Its argv and sandboxed environment, its event parser (stdout events, and the
 permission lines of its log on stderr that start a tool call seconds before stdout reports it), the usage arithmetic, its exported transcript and
 its login status."""
+
 import json
 import os
 import re
@@ -16,15 +17,21 @@ from delegate.adapters.harness.base import Evidence, LaunchInputs, LaunchSpec, Q
 from delegate.contracts import events as ev
 from delegate.contracts.codec import record
 
-FINAL_REASONS = ("stop", "end_turn", "end-turn")       # step_finish part.reason of a step that ends the turn (not "tool-calls")
+FINAL_REASONS = ("stop", "end_turn", "end-turn")  # step_finish part.reason of a step that ends the turn (not "tool-calls")
 SHELL_TOOLS = ("bash", "shell")
 ARG_KEYS = ("file_path", "filePath", "path", "pattern", "url", "query", "description", "command")
 # The log line OpenCode prints the moment a tool starts: `... service=permission evaluated permission=bash pattern="sleep 6" action=allow`.
 PERMISSION_RE = re.compile(r'evaluated permission=(\S+) pattern=("(?:[^"\\]|\\.)*"|\S+)')
 ECHO_RE = re.compile(r"\b(?:permission|pattern|input|command|args)=")
 NOT_TOOLS = ("external_directory",)
-ENV_OFF = {"OPENCODE_DISABLE_PROJECT_CONFIG": "1", "OPENCODE_DISABLE_CLAUDE_CODE": "1", "OPENCODE_DISABLE_EXTERNAL_SKILLS": "1", "OPENCODE_DISABLE_AUTOUPDATE": "1",
-           "OPENCODE_DISABLE_SHARE": "1", "OPENCODE_DISABLE_LSP_DOWNLOAD": "1"}
+ENV_OFF = {
+    "OPENCODE_DISABLE_PROJECT_CONFIG": "1",
+    "OPENCODE_DISABLE_CLAUDE_CODE": "1",
+    "OPENCODE_DISABLE_EXTERNAL_SKILLS": "1",
+    "OPENCODE_DISABLE_AUTOUPDATE": "1",
+    "OPENCODE_DISABLE_SHARE": "1",
+    "OPENCODE_DISABLE_LSP_DOWNLOAD": "1",
+}
 SESSION_VARS = ("OPENCODE_CONFIG", "OPENCODE_CONFIG_DIR", "OPENCODE_AUTH_JSON", "ZHIPU_API_KEY", "ZAI_API_KEY")
 
 
@@ -32,10 +39,10 @@ SESSION_VARS = ("OPENCODE_CONFIG", "OPENCODE_CONFIG_DIR", "OPENCODE_AUTH_JSON", 
 class Profile:
     """What one lane adds to the generic OpenCode run."""
 
-    providers: tuple[str, ...] = ()    # enabled_providers: the only ones that may be used (empty: OpenCode's own choice)
-    own_data: bool = False         # a data and cache folder of its own, so no saved login or key can be spent
-    price: str = "catalog"         # "catalog" (the step's cost is the catalog price), "free", "unknown" (steps carry 0 and it cannot be verified)
-    auth_key: str = ""             # the entry in OpenCode's auth file that proves the login ("" = no login needed)
+    providers: tuple[str, ...] = ()  # enabled_providers: the only ones that may be used (empty: OpenCode's own choice)
+    own_data: bool = False  # a data and cache folder of its own, so no saved login or key can be spent
+    price: str = "catalog"  # "catalog" (the step's cost is the catalog price), "free", "unknown" (steps carry 0 and it cannot be verified)
+    auth_key: str = ""  # the entry in OpenCode's auth file that proves the login ("" = no login needed)
     need_key: bool = False
 
 
@@ -84,14 +91,14 @@ def acct_fold(steps: list[dict]) -> dict | None:
 
 class OpenCodeHarness(Quiet):
     kind = "opencode"
-    secret_event = ev.CmdEnd        # a declined or failed call still ran no further than its end row
+    secret_event = ev.CmdEnd  # a declined or failed call still ran no further than its end row
 
     def __init__(self, profile: Profile | None = None, root: Path | None = None) -> None:
         self.profile, self.root = profile or Profile(), root
         self.evidence = Evidence()
         self.exe = ""
         self.shell: Path | None = None
-        self.prov: list[tuple[str, str, str]] = []        # open provisional rows: (id, tool, pattern)
+        self.prov: list[tuple[str, str, str]] = []  # open provisional rows: (id, tool, pattern)
         self.n = 0
 
     # -- launch ----------------------------------------------------------------------------------------------------------------------------
@@ -101,13 +108,15 @@ class OpenCodeHarness(Quiet):
 
     @staticmethod
     def supported() -> bool:
-        return sys.platform == "darwin"         # the command sandbox is sandbox-exec
+        return sys.platform == "darwin"  # the command sandbox is sandbox-exec
 
     def launch_spec(self, i: LaunchInputs) -> LaunchSpec:
         """Writes the sandboxed shell this run's commands use (`cleanup` removes it). The env is `i.env` plus OpenCode's isolation."""
         assert self.root is not None
         self.exe = i.exe
-        home = self.root / "opencode-home"       # an empty config root: the user's ~/.config/opencode (MCP servers, providers, permissions) stays out
+        home = (
+            self.root / "opencode-home"
+        )  # an empty config root: the user's ~/.config/opencode (MCP servers, providers, permissions) stays out
         home.mkdir(parents=True, exist_ok=True)
         self.shell = self.root / f"opencode-shell-{i.session[:8]}.sh"
         env = dict(i.env, SHELL=str(self.shell), XDG_CONFIG_HOME=str(home), **ENV_OFF)
@@ -115,11 +124,11 @@ class OpenCodeHarness(Quiet):
         if self.profile.own_data:
             env["XDG_DATA_HOME"], env["XDG_CACHE_HOME"] = str(self.root / "opencode-free-data"), str(self.root / "opencode-free-cache")
             launcher_xdg += ["XDG_DATA_HOME", "XDG_CACHE_HOME"]
-        roots = [Path(env[k]) for k in launcher_xdg]       # every XDG dir this launcher points commands at
+        roots = [Path(env[k]) for k in launcher_xdg]  # every XDG dir this launcher points commands at
         cache = Path(env["XDG_CACHE_HOME"]) if self.profile.own_data else self.root / "opencode-cache"
-        env.update(box.cache_env(cache))                     # uv, mise and XDG state: under the writable cache, never ~/.local
+        env.update(box.cache_env(cache))  # uv, mise and XDG state: under the writable cache, never ~/.local
         caches = [Path(env[k]) for k in box.cache_env(cache)]
-        for r in (*roots, *caches):                          # created here, before any sandboxed command: a command cannot create them
+        for r in (*roots, *caches):  # created here, before any sandboxed command: a command cannot create them
             r.mkdir(parents=True, exist_ok=True)
         self.write_shell(i.cwd, i.write, self.shell, roots, caches)
         config: dict[str, Any] = {"permission": box.permissions(i.write, i.engine_only)}
@@ -128,7 +137,22 @@ class OpenCodeHarness(Quiet):
                 env.pop(key, None)
             config["enabled_providers"] = list(self.profile.providers)
         env["OPENCODE_CONFIG_CONTENT"] = json.dumps(config)
-        argv = [i.exe, "run", "--pure", "--format", "json", "--print-logs", "--log-level", "INFO", "-m", i.model, "--variant", i.effort, "--dir", i.cwd]
+        argv = [
+            i.exe,
+            "run",
+            "--pure",
+            "--format",
+            "json",
+            "--print-logs",
+            "--log-level",
+            "INFO",
+            "-m",
+            i.model,
+            "--variant",
+            i.effort,
+            "--dir",
+            i.cwd,
+        ]
         argv += ["--session", i.resume] if i.resume else []
         self.evidence.ref = i.resume
         return LaunchSpec(argv=argv, env=env, cwd=i.cwd, stdin=i.prompt)
@@ -162,9 +186,16 @@ class OpenCodeHarness(Quiet):
             obj, _ = json.JSONDecoder().raw_decode(x.stdout.split(marker, 1)[1].lstrip())
             cost = obj.get("cost") or {}
             cache = cost.get("cache") or {}
-            return (obj.get("providerID") == "opencode" and obj.get("id") == model.split("/", 1)[1] and obj.get("status") == "active"
-                    and all(type(v) in (int, float) and v == 0 for v in (cost.get("input"), cost.get("output"), cache.get("read"), cache.get("write"))))
-        except (OSError, ValueError, TypeError, AttributeError, subprocess.TimeoutExpired):
+            return (
+                obj.get("providerID") == "opencode"
+                and obj.get("id") == model.split("/", 1)[1]
+                and obj.get("status") == "active"
+                and all(
+                    type(v) in (int, float) and v == 0
+                    for v in (cost.get("input"), cost.get("output"), cache.get("read"), cache.get("write"))
+                )
+            )
+        except OSError, ValueError, TypeError, AttributeError, subprocess.TimeoutExpired:
             return False
 
     # -- the event stream, parsed once -----------------------------------------------------------------------------------------------------
@@ -204,8 +235,11 @@ class OpenCodeHarness(Quiet):
         c = _dict(u.get("cache"))
         whole = (u.get("input") or 0) + (c.get("read") or 0) + (c.get("write") or 0)
         tk = e.tokens or {"in": 0, "cached": 0, "out": 0}
-        e.tokens = {"in": (tk["in"] or 0) + whole, "cached": (tk["cached"] or 0) + (c.get("read") or 0),
-                    "out": (tk["out"] or 0) + (u.get("output") or 0) + (u.get("reasoning") or 0)}
+        e.tokens = {
+            "in": (tk["in"] or 0) + whole,
+            "cached": (tk["cached"] or 0) + (c.get("read") or 0),
+            "out": (tk["out"] or 0) + (u.get("output") or 0) + (u.get("reasoning") or 0),
+        }
         e.steps.append({"tokens": u, "cost": part.get("cost")})
         e.turns += 1
         e.context_k = round(whole / 1000, 1)
@@ -223,18 +257,31 @@ class OpenCodeHarness(Quiet):
         if status not in ("completed", "error"):
             return [ev.Unknown(type="tool_use")]
         tm, md = _dict(st.get("time")), _dict(st.get("metadata"))
-        secs = (tm["end"] - tm["start"]) / 1000.0 if isinstance(tm.get("start"), (int, float)) and isinstance(tm.get("end"), (int, float)) else None
+        secs = (
+            (tm["end"] - tm["start"]) / 1000.0
+            if isinstance(tm.get("start"), (int, float)) and isinstance(tm.get("end"), (int, float))
+            else None
+        )
         code = md.get("exit")
         out_text = st.get("output") or st.get("error")
         closed = self._close_prov(name, text, shell)
         ids = closed or [(ident, text)]
         if closed:
-            secs = None         # timed from the provisional start, which is when the tool began
+            secs = None  # timed from the provisional start, which is when the tool began
         res: list[ev.HarnessEvent] = []
         for k, (i, t) in enumerate(ids):
             o = out_text if k == 0 else None
-            res.append(ev.CmdEnd(id=i, text=text if k == 0 else t, exit=code if isinstance(code, int) else 1 if status == "error" else None, out=o, secs=secs)
-                       if shell else ev.ToolEnd(id=i, name=name, arg=text, out=o, secs=secs))
+            res.append(
+                ev.CmdEnd(
+                    id=i,
+                    text=text if k == 0 else t,
+                    exit=code if isinstance(code, int) else 1 if status == "error" else None,
+                    out=o,
+                    secs=secs,
+                )
+                if shell
+                else ev.ToolEnd(id=i, name=name, arg=text, out=o, secs=secs)
+            )
         res += self._denials(name, inp, _s(out_text))
         return res
 
@@ -279,10 +326,31 @@ class OpenCodeHarness(Quiet):
         e = self.evidence
         text = e.last.strip()
         acct = acct_close(acct_fold(e.steps), self.profile.price)
-        res = {"text": text, "ref": e.ref, "tokens": e.tokens, "turns": e.turns or None, "context_k": e.context_k, "started": bool(e.ref), "partial": e.work,
-               "acct": acct, "cost": (acct or {}).get("cost_usd") or 0}       # no `answered`: opencode has no resume-tested finished-answer signal (62-spikes-resume.md)
-        why = e.error or (err if rc != 0 and stop != "answer" else "")       # stderr after we stopped it ourselves is the shell reporting our kill
-        return Summary(text=text, rc=rc, res=res, vendor=why, stderr="", work=e.work, stands=bool(text) and not e.error, cost=float(res["cost"]), tail=err or text)
+        res = {
+            "text": text,
+            "ref": e.ref,
+            "tokens": e.tokens,
+            "turns": e.turns or None,
+            "context_k": e.context_k,
+            "started": bool(e.ref),
+            "partial": e.work,
+            "acct": acct,
+            "cost": (acct or {}).get("cost_usd") or 0,
+        }  # no `answered`: opencode has no resume-tested finished-answer signal (62-spikes-resume.md)
+        why = e.error or (
+            err if rc != 0 and stop != "answer" else ""
+        )  # stderr after we stopped it ourselves is the shell reporting our kill
+        return Summary(
+            text=text,
+            rc=rc,
+            res=res,
+            vendor=why,
+            stderr="",
+            work=e.work,
+            stands=bool(text) and not e.error,
+            cost=float(res["cost"]),
+            tail=err or text,
+        )
 
     def vendor_error(self, rc: int | None) -> str:
         return self.evidence.error
@@ -306,7 +374,7 @@ class OpenCodeHarness(Quiet):
                 f.parent.mkdir(parents=True, exist_ok=True)
                 f.write_text(x.stdout, encoding="utf-8")
                 os.chmod(f, 0o600)
-        except (OSError, subprocess.TimeoutExpired):
+        except OSError, subprocess.TimeoutExpired:
             pass
 
     def login_probe(self, timeout: float) -> tuple[bool | None, str]:
@@ -315,11 +383,11 @@ class OpenCodeHarness(Quiet):
             return None, "opencode CLI not installed"
         key = self.profile.auth_key
         if not key:
-            return True, "free access needs no login"        # the zero-price check runs at launch
+            return True, "free access needs no login"  # the zero-price check runs at launch
         f = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share") / "opencode" / "auth.json"
         try:
             v = json.loads(f.read_text(encoding="utf-8")).get(key)
-        except (OSError, ValueError, TypeError, AttributeError):
+        except OSError, ValueError, TypeError, AttributeError:
             v = None
         ok = bool(v) and (not self.profile.need_key or (isinstance(v, dict) and bool(v.get("key"))))
         return ok, f"{key} login in opencode's auth file" if ok else f"no {key} login in opencode's auth file"

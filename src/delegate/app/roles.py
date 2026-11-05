@@ -3,6 +3,7 @@
 Pure: the caller passes a domain `Router`, the lanes, and the cached network probe. No process, no socket. A full `status` computes the
 rows; `status --cheap` replays them from the snapshot and refreshes the parts that move without a spawn: `net` (the probe cache), live holds.
 """
+
 from typing import Any
 
 from delegate.adapters import netprobe
@@ -25,6 +26,7 @@ def families(node: Any):
         elif isinstance(x, list):
             for v in x:
                 walk(v)
+
     walk(node)
     return list(dict.fromkeys(found))
 
@@ -40,10 +42,18 @@ def roles_view(cfg: dict, lanes: dict[str, Lane], router: Router, doc: Any, t: f
     out: dict[str, dict[str, Any]] = {}
     for name, role in cfg["roles"].items():
         hosts = role_hosts(role)
-        row: dict[str, Any] = {"usable": None, "lane": None, "model": None, "why": None, "until": None, "hosts": hosts, "net": netprobe.view(cached_net, hosts, t)}
+        row: dict[str, Any] = {
+            "usable": None,
+            "lane": None,
+            "model": None,
+            "why": None,
+            "until": None,
+            "hosts": hosts,
+            "net": netprobe.view(cached_net, hosts, t),
+        }
         try:
             d = router.decide(name, CallArgs(unattended=True), lanes)
-        except Exception as e:      # one odd role must not take the status down
+        except Exception as e:  # one odd role must not take the status down
             row["why"] = f"{type(e).__name__}: {e}"
             out[name] = row
             continue
@@ -66,7 +76,12 @@ def refresh(roles: dict | None, holds: list[dict] | None, cached_net: dict | Non
         r = dict(r)
         r["net"] = netprobe.view(cached_net, r.get("hosts") or [], t)
         for h in holds or []:
-            if r.get("usable") and h.get("lane") == r.get("lane") and (not h.get("roles") or name in h["roles"]) and (h.get("until") or t + 1) > t:
+            if (
+                r.get("usable")
+                and h.get("lane") == r.get("lane")
+                and (not h.get("roles") or name in h["roles"])
+                and (h.get("until") or t + 1) > t
+            ):
                 r.update(usable=False, why=f"on hold: {h.get('reason') or h.get('id')}", until=h.get("until"))
         if r.get("usable") is False and r.get("until") and r["until"] <= t:
             r["due"] = True

@@ -4,10 +4,10 @@ import json
 import unittest
 from pathlib import Path
 
-import hermetic  # noqa: F401  (a home of its own for every test)
-
 from delegate.app import answer
 from delegate.contracts import codec, schema, status
+
+import hermetic  # noqa: F401  (a home of its own for every test)
 
 ROOT = Path(__file__).resolve().parents[3]
 REAL = ROOT / "tests" / "delegate" / "fixtures" / "delegate_status_0.51.0_real.json"

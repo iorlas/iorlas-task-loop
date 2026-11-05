@@ -9,13 +9,13 @@ import sys
 import unittest
 from pathlib import Path
 
+from delegate.app import doctor, env
+from delegate.contracts.stores import StateStore
+from support.procsim import real_proc
+
 import hermetic  # noqa: F401  (a home of its own for every test)
 import run_support as T
 from test_route import route
-
-from delegate.app import doctor, env
-from delegate.contracts.stores import StateStore
-from support.procsim import real_proc  # noqa: E402
 
 FIX = Path(__file__).parent / "fixtures"
 ROUTE_PY = Path(route.__file__)

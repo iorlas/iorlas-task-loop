@@ -2,13 +2,13 @@
 import copy
 import unittest
 
+from delegate.contracts.routing import CallArgs
+from delegate.domain.routing.tiers import TierPlan
+from support.procsim import real_proc
+
 import hermetic  # noqa: F401  (a home of its own for every test)
 import routing_support as support
 from test_review_order import CFG, T, lanes
-
-from delegate.contracts.routing import CallArgs
-from delegate.domain.routing.tiers import TierPlan
-from support.procsim import real_proc  # noqa: E402
 
 
 class OnlyFamilyTest(unittest.TestCase):

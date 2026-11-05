@@ -9,10 +9,6 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-import hermetic  # noqa: F401  (a home of its own for every test)
-from delegate_fakes.fake_run import replay as replay_run
-from test_route import ROOT, T, route
-
 from delegate.adapters import agent_runs, codex_account
 from delegate.adapters.harness import classify
 from delegate.adapters.harness.opencode import OpenCodeHarness
@@ -23,7 +19,11 @@ from delegate.cli import verbs
 from delegate.contracts import stops
 from delegate.domain.lanes import profiles
 from delegate.domain.policy.worker import denial, denial_item
-from support.procsim import real_proc  # noqa: E402
+from support.procsim import real_proc
+
+import hermetic  # noqa: F401  (a home of its own for every test)
+from delegate_fakes.fake_run import replay as replay_run
+from test_route import ROOT, T, route
 
 FIXTURES = sorted((ROOT / "tests" / "delegate" / "contract" / "fixtures").glob("*.json"))
 CONTRACT = json.loads((ROOT / "src" / "delegate" / "data" / "contract.json").read_text(encoding="utf-8"))

@@ -3,6 +3,7 @@
 A reader fills a Lane in as it builds the fleet; from then on nothing mutates it: a hold is passed to the question that needs it, and a
 lane that is only waiting for a slot is a COPY (`with_busy`).
 """
+
 from dataclasses import dataclass, field, replace
 
 from timefmt import fmt_span
@@ -18,26 +19,26 @@ from delegate.domain.time.spec import local
 class Lane:
     name: str
     family: str
-    kind: str                            # subscription
-    shared: bool = False                 # shared with the orchestrator: keeps its reserve
+    kind: str  # subscription
+    shared: bool = False  # shared with the orchestrator: keeps its reserve
     out: bool = False
     out_until: float | None = None
-    out_reason: str | None = None        # limit | logged_out | busy | error | credit | hung
-    read_at: float | None = None         # when the usage reading was taken (Codex only)
-    busy: bool = False                   # out only because its slots are taken: it frees up by itself in minutes
-    five: float | None = None            # percent of the 5-hour window used, None = unknown
-    week: float | None = None            # percent of the weekly window used
-    week_reset: float | None = None      # epoch
+    out_reason: str | None = None  # limit | logged_out | busy | error | credit | hung
+    read_at: float | None = None  # when the usage reading was taken (Codex only)
+    busy: bool = False  # out only because its slots are taken: it frees up by itself in minutes
+    five: float | None = None  # percent of the 5-hour window used, None = unknown
+    week: float | None = None  # percent of the weekly window used
+    week_reset: float | None = None  # epoch
     five_reset: float | None = None
-    pace: float | None = None            # weekly pace in points: elapsed share minus used share
-    burn: bool = False                   # weekly window about to reset with allowance left
+    pace: float | None = None  # weekly pace in points: elapsed share minus used share
+    burn: bool = False  # weekly window about to reset with allowance left
     notes: list[str] = field(default_factory=list)
-    windows: list[dict] = field(default_factory=list)       # every window the vendor exposes, for the cockpit
-    spend_blocked: bool = False          # the vendor says a spend or credit limit stopped it (not a usage window)
-    warn: list[str] = field(default_factory=list)           # a reading the owner should double-check (shown as `!` lines)
-    benched: dict[str, PairView] = field(default_factory=dict)      # model -> a pair the breaker benched
-    canary: dict[str, bool] = field(default_factory=dict)           # model -> the pair's bench ended: the next launch is the one canary
-    hview: dict[str, PairView] = field(default_factory=dict)        # model -> the breaker's view of every known pair
+    windows: list[dict] = field(default_factory=list)  # every window the vendor exposes, for the cockpit
+    spend_blocked: bool = False  # the vendor says a spend or credit limit stopped it (not a usage window)
+    warn: list[str] = field(default_factory=list)  # a reading the owner should double-check (shown as `!` lines)
+    benched: dict[str, PairView] = field(default_factory=dict)  # model -> a pair the breaker benched
+    canary: dict[str, bool] = field(default_factory=dict)  # model -> the pair's bench ended: the next launch is the one canary
+    hview: dict[str, PairView] = field(default_factory=dict)  # model -> the breaker's view of every known pair
 
     @property
     def usage_known(self) -> bool:
@@ -90,9 +91,11 @@ class Lane:
             return 1
         return int(s.max_parallel)
 
-    def with_busy(self, until: float, running: int, cap: int) -> "Lane":
+    def with_busy(self, until: float, running: int, cap: int) -> Lane:
         """A copy that is out only because its slots are taken: it is skipped like a refused lane."""
-        return replace(self, out=True, out_until=until, busy=True, out_reason="busy", notes=[f"busy: {running} running, {cap} allowed", *self.notes])
+        return replace(
+            self, out=True, out_until=until, busy=True, out_reason="busy", notes=[f"busy: {running} running, {cap} allowed", *self.notes]
+        )
 
     def usable_if_free(self, s: Settings) -> bool:
         """Would the lane be usable (relaxed) if its slots were free?"""
@@ -101,9 +104,13 @@ class Lane:
     def brief(self, t: float) -> str:
         bits = []
         if self.five is not None:
-            bits.append(f"5h {self.five:.0f}%" + (f" (resets {fmt_span(self.five_reset - t)})" if self.five_reset and self.five_reset > t else ""))
+            bits.append(
+                f"5h {self.five:.0f}%" + (f" (resets {fmt_span(self.five_reset - t)})" if self.five_reset and self.five_reset > t else "")
+            )
         if self.week is not None:
-            reset = f" (resets {fmt_span(self.week_reset - t)}, {local(self.week_reset)})" if self.week_reset and self.week_reset > t else ""
+            reset = (
+                f" (resets {fmt_span(self.week_reset - t)}, {local(self.week_reset)})" if self.week_reset and self.week_reset > t else ""
+            )
             bits.append(f"week {self.week:.0f}%" + reset + (f" pace {self.pace:+.0f}" if self.pace is not None else ""))
         if self.out:
             bits.append("OUT" + (f" until {local(self.out_until)}" if self.out_until else ""))
@@ -130,5 +137,10 @@ def window(used: float | None, resets_at: float | None, span_min: float, t: floa
 def apply_burn(lane: Lane, s: Settings, week_mins: float | None) -> None:
     """The weekly window is about to reset with allowance left: spend it."""
     b = s.burn
-    lane.burn = (lane.week is not None and week_mins is not None and 0 < week_mins <= b.minutes
-                 and 100 - lane.week >= b.min_left_percent and (lane.five is None or lane.five < 60))
+    lane.burn = (
+        lane.week is not None
+        and week_mins is not None
+        and 0 < week_mins <= b.minutes
+        and 100 - lane.week >= b.min_left_percent
+        and (lane.five is None or lane.five < 60)
+    )

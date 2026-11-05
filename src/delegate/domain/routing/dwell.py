@@ -1,4 +1,5 @@
 """DwellMemory: the lane last chosen per family (state.json `prev`), so a choice between two lanes of one family does not flap."""
+
 from delegate.contracts.state import Dwell
 
 

@@ -9,19 +9,19 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-import hermetic  # noqa: F401  (a home of its own for every test)
-import routing_support as support
-from run_support import RunBase
-from stream_proc import proc_start
-from test_route import at, route, why
-
 from delegate.adapters.harness import opencode_sandbox as box
 from delegate.app import env, status, usage
 from delegate.app.fleet import Fleet
 from delegate.contracts.state import UsageCache
 from delegate.domain.lanes import leases
 from delegate.domain.lanes.lane import Lane
-from support.procsim import real_proc  # noqa: E402
+from stream_proc import proc_start
+from support.procsim import real_proc
+
+import hermetic  # noqa: F401  (a home of its own for every test)
+import routing_support as support
+from run_support import RunBase
+from test_route import at, route, why
 
 
 class RunCommand(RunBase):

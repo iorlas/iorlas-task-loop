@@ -9,9 +9,6 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
 
-import hermetic  # noqa: F401  (a home of its own for every test)
-from test_route import route
-
 from delegate.adapters.harness.opencode import OpenCodeHarness
 from delegate.app import cockpit, doctor, env, onboard, usage
 from delegate.app import decide as dec
@@ -19,6 +16,9 @@ from delegate.contracts.routing import CallArgs
 from delegate.contracts.state import StateDoc
 from delegate.domain.holds.book import HoldBook
 from delegate.domain.routing.router import Router
+
+import hermetic  # noqa: F401  (a home of its own for every test)
+from test_route import route
 
 T = 1_000_000_000.0
 LANE = "DEEPSEEK_FREE"

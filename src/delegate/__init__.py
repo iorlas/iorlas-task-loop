@@ -1,5 +1,6 @@
 """delegate. Importing the package puts the vendored shelf packages (skills/task-loop/_vendor, dev/vendor.py) on sys.path, once, so src/ imports
 them by absolute name (process_lock, stream_proc, ...). This is the only bootstrap; every entry point reaches the package first."""
+
 import sys
 from pathlib import Path
 

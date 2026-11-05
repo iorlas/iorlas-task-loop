@@ -6,6 +6,7 @@ second and stops the worker's tree when one fires, on the call's timeout, or whe
 Watchers (each `poll() -> Stop | None`): the lane marked out under the worker, the harness's own log (OpenCode retries a limit forever without
 exiting), the silence/first-event deadlines, the turn rules (answer then grace, stall), the wait for the network (one probe past a grace).
 """
+
 import contextlib
 import os
 import signal
@@ -25,8 +26,8 @@ from delegate.contracts import events as ev
 from delegate.contracts import wire
 from delegate.contracts.codec import mutable
 
-LANE_GONE_EVERY = 10        # seconds between looks at whether the lane was marked out by someone else
-NET_GRACE_S = 15            # how long a worker may say "waiting for network" before one probe decides whether to stop it
+LANE_GONE_EVERY = 10  # seconds between looks at whether the lane was marked out by someone else
+NET_GRACE_S = 15  # how long a worker may say "waiting for network" before one probe decides whether to stop it
 POLL_S = 0.5
 
 
@@ -34,12 +35,12 @@ POLL_S = 0.5
 class RunHooks:
     """What the caller of a run wants to hear, for this run only."""
 
-    started: Callable[[procs.Worker], None] | None = None      # the process exists: its pid, group and start token
-    ref: Callable[[str], None] | None = None                    # the vendor named its session
-    beat: Callable[[float], None] | None = None                 # the worker printed something (wall time, at most every 30 s)
-    idle_s: float | None = None                                 # run --idle: seconds of silence before the worker is hung (None = the CLI's limit)
-    unattended: bool = False                                    # the caller is an engine: stop when it dies
-    stops: list[wire.WorkerEnd] = field(default_factory=list)   # one report per tree stop made for this run
+    started: Callable[[procs.Worker], None] | None = None  # the process exists: its pid, group and start token
+    ref: Callable[[str], None] | None = None  # the vendor named its session
+    beat: Callable[[float], None] | None = None  # the worker printed something (wall time, at most every 30 s)
+    idle_s: float | None = None  # run --idle: seconds of silence before the worker is hung (None = the CLI's limit)
+    unattended: bool = False  # the caller is an engine: stop when it dies
+    stops: list[wire.WorkerEnd] = field(default_factory=list)  # one report per tree stop made for this run
 
 
 @mutable
@@ -58,10 +59,10 @@ class RunOutcome:
     out: str = ""
     err: str = ""
     timed_out: bool = False
-    stop: str | None = None             # the turn rules' verdict: "answer" | "stall"
+    stop: str | None = None  # the turn rules' verdict: "answer" | "stall"
     watch: Stop = field(default_factory=Stop)
-    secret: str | None = None           # the secret path a command named (the worker was stopped before it could use what it read)
-    net: bool = False                   # stopped because the network is down
+    secret: str | None = None  # the secret path a command named (the worker was stopped before it could use what it read)
+    net: bool = False  # stopped because the network is down
     summary: Summary = field(default_factory=Summary)
     stream_tail: list[str] = field(default_factory=list)
     worker: procs.Worker | None = None
@@ -108,9 +109,19 @@ class LogWatcher:
 
 
 class Supervisor:
-    def __init__(self, harness: Harness, cli: str, hooks: RunHooks, live: LiveSink, *, gone: Callable[[], str | None] | None = None,
-                 log: LogWatcher | None = None, policy: Callable[[ev.HarnessEvent], str | None] | None = None,
-                 net_up: Callable[[], bool] | None = None, clock: Callable[[], float] = time.monotonic) -> None:
+    def __init__(
+        self,
+        harness: Harness,
+        cli: str,
+        hooks: RunHooks,
+        live: LiveSink,
+        *,
+        gone: Callable[[], str | None] | None = None,
+        log: LogWatcher | None = None,
+        policy: Callable[[ev.HarnessEvent], str | None] | None = None,
+        net_up: Callable[[], bool] | None = None,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
         lim = watch.limits(cli)
         self.hx, self.hooks, self.live, self.policy, self.net_up, self.clock = harness, hooks, live, policy, net_up, clock
         self.dog = watch.Watchdog(lim["first_event_s"], hooks.idle_s or lim["silence_s"], clock=clock, beat=hooks.beat)
@@ -138,7 +149,7 @@ class Supervisor:
         return stop
 
     def _on_out(self, line: str) -> bool:
-        with self.lock:         # both streams feed one harness: its state (open rows, evidence) is touched by one line at a time
+        with self.lock:  # both streams feed one harness: its state (open rows, evidence) is touched by one line at a time
             return self.feed(self.hx.parse_line(line))
 
     def _on_err(self, line: str) -> bool:
@@ -171,13 +182,15 @@ class Supervisor:
         return False
 
     # -- the run -------------------------------------------------------------------------------------------------------------------------
-    def _pump(self, stream: Any, sink: list[str], cb: Callable[[str], bool], p: subprocess.Popen, killed: list[int], tick: Callable[[], None]) -> None:
+    def _pump(
+        self, stream: Any, sink: list[str], cb: Callable[[str], bool], p: subprocess.Popen, killed: list[int], tick: Callable[[], None]
+    ) -> None:
         for raw in iter(stream.readline, b""):
             line = raw.decode("utf-8", "replace")
             sink.append(line)
             with contextlib.suppress(Exception):
                 tick()
-            if cb(line):        # the policy asks to stop the worker now
+            if cb(line):  # the policy asks to stop the worker now
                 killed.append(1)
                 self.hooks.stops.append(procs.kill_tree(p))
 
@@ -203,9 +216,12 @@ class Supervisor:
                 assert p.stdin is not None
                 p.stdin.write(spec.stdin.encode("utf-8"))
                 p.stdin.close()
-        threads = [threading.Thread(target=self._pump, args=(p.stdout, out, self._on_out, p, killed, self.dog.touch), daemon=True),
-                   threading.Thread(target=self._pump, args=(p.stderr, err, self._on_err, p, killed, self.dog.touch), daemon=True),
-                   threading.Thread(target=feed_stdin, daemon=True)]
+
+        threads = [
+            threading.Thread(target=self._pump, args=(p.stdout, out, self._on_out, p, killed, self.dog.touch), daemon=True),
+            threading.Thread(target=self._pump, args=(p.stderr, err, self._on_err, p, killed, self.dog.touch), daemon=True),
+            threading.Thread(target=feed_stdin, daemon=True),
+        ]
         for th in threads:
             th.start()
         self._wait(p, killed, timeout)
@@ -221,6 +237,7 @@ class Supervisor:
 
         def bye(signum: int, frame: object) -> None:
             raise SystemExit(128 + signum)
+
         old = {g: signal.signal(g, bye) for g in (signal.SIGTERM, signal.SIGHUP)}
         try:
             while True:
@@ -235,9 +252,13 @@ class Supervisor:
                     if self.poll():
                         self._stop(p, killed)
                         break
-                    if self.hooks.unattended and os.getppid() != ppid:     # SIGKILL on the engine cannot be caught: the parent changing is the only sign
+                    if (
+                        self.hooks.unattended and os.getppid() != ppid
+                    ):  # SIGKILL on the engine cannot be caught: the parent changing is the only sign
                         raise SystemExit(1)
-        except BaseException:       # SIGTERM, SIGHUP, Ctrl-C, parent gone: the worker is in its own group, so stop it here or it keeps burning the plan
+        except (
+            BaseException
+        ):  # SIGTERM, SIGHUP, Ctrl-C, parent gone: the worker is in its own group, so stop it here or it keeps burning the plan
             self.hooks.stops.append(procs.kill_tree(p))
             p.wait()
             raise
@@ -248,11 +269,15 @@ class Supervisor:
     def finish(self, rc: int | None, out: str, err: str, killed: bool = False) -> RunOutcome:
         """The run is over: fold what the worker printed and how it ended into the outcome (the harness's summary), and close the live file."""
         o = self.out
-        if killed and rc == 0:      # we stopped it, but a shell wrapper can exit 0 in the instant its child dies, before our kill lands: it was killed all the same
+        if (
+            killed and rc == 0
+        ):  # we stopped it, but a shell wrapper can exit 0 in the instant its child dies, before our kill lands: it was killed all the same
             rc = -signal.SIGKILL
         o.rc, o.out, o.err, o.stop, o.watch = rc, out, err, self.turn.stop, self.now
         o.summary = self.hx.summary(rc, out, err, self.turn.stop, o.timed_out)
-        if self.now.why or self.turn.stop or o.timed_out:        # the raw tail of the stream, so the call record shows what the CLI last said before it was stopped
+        if (
+            self.now.why or self.turn.stop or o.timed_out
+        ):  # the raw tail of the stream, so the call record shows what the CLI last said before it was stopped
             o.stream_tail = watch.tail(out)
         self.live.end(end_status(o.timed_out, self.now.why if self.now.why == "hung" else None, self.turn.stop, rc), o.summary.cost or None)
         return o

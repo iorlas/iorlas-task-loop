@@ -2,7 +2,6 @@
 import datetime as dt
 import json
 import os
-import re
 import sys
 import tempfile
 import time
@@ -10,11 +9,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-import hermetic  # noqa: F401  (a home of its own for every test)
-import routing_support as support
 import stream_proc
-from test_route import CFG, T, argparse_ns, lanes, route
-
 from delegate.adapters import agent_runs
 from delegate.adapters.harness import classify, reset_parse
 from delegate.adapters.harness.base import LaunchSpec
@@ -28,7 +23,11 @@ from delegate.contracts import codec, stores
 from delegate.contracts import history as hist
 from delegate.domain.health import ledger as health_ledger
 from delegate.domain.lanes.lane import Lane
-from support.procsim import real_proc  # noqa: E402
+from support.procsim import real_proc
+
+import hermetic  # noqa: F401  (a home of its own for every test)
+import routing_support as support
+from test_route import CFG, T, argparse_ns, lanes, route
 
 
 class Breaker(unittest.TestCase):

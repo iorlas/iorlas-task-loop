@@ -5,11 +5,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import hermetic  # noqa: F401  (a home of its own for every test)
-from test_route import T, argparse_ns, route
-
 from delegate.app import cockpit, doctor, env, fleet, usage
 from delegate.app import decide as dec
+
+import hermetic  # noqa: F401  (a home of its own for every test)
+from test_route import T, argparse_ns, route
 
 
 class Onboarding(unittest.TestCase):

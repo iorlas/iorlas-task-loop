@@ -1,9 +1,9 @@
 """delegate-d6f: the schema subset checker follows JSON Schema on bool vs number, integral floats and unknown types."""
 import unittest
 
-import hermetic  # noqa: F401  (a home of its own for every test)
-
 from delegate.app.answer import schema_problem
+
+import hermetic  # noqa: F401  (a home of its own for every test)
 
 
 class SchemaProblemTest(unittest.TestCase):

@@ -1,4 +1,5 @@
 """LanePicker: which lane of one family serves a model right now (the first usable one)."""
+
 from delegate.contracts.routing import Settings
 from delegate.contracts.state import Hold
 from delegate.domain.lanes.lane import Lane
@@ -7,7 +8,7 @@ from delegate.domain.lanes.lane import Lane
 class LanePicker:
     def __init__(self, settings: Settings, holds: dict[str, Hold | None], t: float) -> None:
         self.s = settings
-        self.holds = holds          # lane name -> the hold covering the role being decided
+        self.holds = holds  # lane name -> the hold covering the role being decided
         self.t = t
 
     def usable(self, lane: Lane, relaxed: bool, model: str | None = None) -> tuple[bool, str]:

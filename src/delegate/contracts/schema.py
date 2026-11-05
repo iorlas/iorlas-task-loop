@@ -4,6 +4,7 @@
 optional (defaulted) field left out of it. `strict(schema)` is the wire form OpenAI-style strict structured output takes: every
 property required, a field the contract left optional may be null. A field's description is `field(metadata={"doc": ...})`.
 """
+
 import copy
 import dataclasses
 import enum

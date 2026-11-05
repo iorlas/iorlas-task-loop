@@ -2,6 +2,7 @@
 
 The functions are the seam tests patch; `load_routing` is the one place routing.json and the owner's config.json meet.
 """
+
 import argparse
 import contextlib
 import copy
@@ -21,9 +22,9 @@ from delegate.contracts.routing import Routing, replaced_settings, split_retired
 from delegate.contracts.state import StateDoc
 from delegate.contracts.stores import ConfigStore, HistoryStore, StateStore
 
-Args = argparse.Namespace | types.SimpleNamespace      # the parsed command line (a stand-in namespace in tests)
-DATA_DIR = Path(__file__).resolve().parents[1] / "data"        # routing.json, contract.json
-ENTRY = Path(__file__).resolve().parents[1] / "entry.py"        # the script a worker's guard shim runs
+Args = argparse.Namespace | types.SimpleNamespace  # the parsed command line (a stand-in namespace in tests)
+DATA_DIR = Path(__file__).resolve().parents[1] / "data"  # routing.json, contract.json
+ENTRY = Path(__file__).resolve().parents[1] / "entry.py"  # the script a worker's guard shim runs
 
 
 def now() -> float:
@@ -51,7 +52,7 @@ def config_dir() -> Path:
         sys.exit("route.py: not running from an installed plugin; set DELEGATE_CONFIG_DIR to the folder for settings and state")
     p.mkdir(parents=True, exist_ok=True)
     with contextlib.suppress(OSError):
-        os.chmod(p, 0o700)        # holds state and history: private to the user
+        os.chmod(p, 0o700)  # holds state and history: private to the user
     return p
 
 
@@ -73,13 +74,18 @@ def load_routing() -> dict:
     moved = replaced_settings(cfg["lanes"])
     for k in config_store().overrides():
         if k in moved:
-            sys.exit(f"route.py: {config_store().path}: '{k}' is replaced by the lane profile. Fix: delete \"{k}\" from config.json, "
-                     f"then run `route.py config set profile.lanes.{moved[k]} enabled`")
+            sys.exit(
+                f"route.py: {config_store().path}: '{k}' is replaced by the lane profile. Fix: delete \"{k}\" from config.json, "
+                f"then run `route.py config set profile.lanes.{moved[k]} enabled`"
+            )
     cfg["settings"], _ = split_retired(deep_merge(cfg["settings"], config_store().overrides()))
     for k in retired_keys_present():
         if k not in _RETIRED_WARNED:
             _RETIRED_WARNED.add(k)
-            print(f"route.py: {config_store().path}: '{k}' is retired and ignored; it is safe to delete from config.json (nothing rewrites the file)", file=sys.stderr)
+            print(
+                f"route.py: {config_store().path}: '{k}' is retired and ignored; it is safe to delete from config.json (nothing rewrites the file)",
+                file=sys.stderr,
+            )
     typed_routing(cfg)
     return cfg
 
@@ -93,8 +99,10 @@ def typed_routing(cfg: dict) -> Routing:
     try:
         return codec.from_json(Routing, cfg)
     except codec.CodecError as e:
-        sys.exit(f"route.py: routing.json / config.json is not a valid routing table: {e}. "
-                 f"Fix: delete the key from {config_store().path} (or rename it to a known settings key; see `route.py config show`)")
+        sys.exit(
+            f"route.py: routing.json / config.json is not a valid routing table: {e}. "
+            f"Fix: delete the key from {config_store().path} (or rename it to a known settings key; see `route.py config show`)"
+        )
 
 
 def settings_of(cfg: dict):
@@ -143,8 +151,6 @@ def profile_lanes() -> dict:
 
 def set_profile_lane(name: str, value: str | None) -> None:
     config_store().set_lane(name, value)
-
-
 
 
 def history_add(row: HistoryRow) -> None:

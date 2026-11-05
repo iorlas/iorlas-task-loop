@@ -5,6 +5,7 @@ other with StaleRecord. `KIND` (class attribute) is the tag of a union member, w
 (`in` is a keyword) says so with `field(metadata={"name": "in"})`. A scalar class with `to_wire()` / `from_wire()` (RunId,
 Version) is stored as that wire value. Unknown keys, missing required keys and wrong types raise CodecError: no coercion.
 """
+
 import dataclasses
 import enum
 import functools
@@ -187,7 +188,7 @@ def _dec_plain(h: Any, v: Any, path: str) -> Any:
         except (ValueError, TypeError) as e:
             raise CodecError("%s: %s" % (path, e)) from None
     if h is float and isinstance(v, (int, float)) and not isinstance(v, bool):
-        return v        # an int stays an int: the bytes the wire carried are the bytes written back
+        return v  # an int stays an int: the bytes the wire carried are the bytes written back
     if h is int and isinstance(v, bool):
         raise CodecError("%s: expected int, got bool" % path)
     if h in (str, int, float, bool) and type(v) is h:

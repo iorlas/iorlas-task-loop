@@ -1,16 +1,26 @@
 """Limit prose to a reset time: when a vendor message states when a limit ends, and the guess when it does not. Regex over vendor text, so it
 lives with the harnesses (adapters). Pure: the caller passes `t` (now)."""
+
 import contextlib
 import datetime as dt
 import re
 import time
 from collections.abc import Callable
 
-RESET_LADDER_MIN = (15, 30, 60)       # a limit whose end nobody states: refusal time + this, one rung further for each consecutive guess
-RESET_AT_RE = re.compile(r"(?:reset(?:s)?|resume(?:s)?|available|renews?|until|try again|retry)\s*(?:at|on|after|:)?\s*"
-                         r"(\d{4}-\d\d-\d\d)[T ](\d\d:\d\d(?::\d\d)?)(?:\.\d+)?\s*(Z\b|UTC\b|GMT\b|[+-]\d\d:?\d\d\b)?", re.I)
-RETRY_AFTER_RE = re.compile(r"retry[- ]after\W{0,3}\s*(\d+(?:\.\d+)?)\b(?!\s*[-:/]\d)|retry[- ]after\W{0,3}\s*([A-Z][a-z]{2}, \d\d [A-Z][a-z]{2} \d{4} [\d:]{8} GMT)", re.I)
-IN_RE = re.compile(r"\bin\s+(?:about\s+|around\s+)?(\d+(?:\.\d+)?)\s*(days?|d|hours?|hrs?|h|minutes?|mins?|m|seconds?|secs?|s)\b(?:\s*(?:and\s*)?(\d+)\s*(minutes?|mins?|m)\b)?", re.I)
+RESET_LADDER_MIN = (15, 30, 60)  # a limit whose end nobody states: refusal time + this, one rung further for each consecutive guess
+RESET_AT_RE = re.compile(
+    r"(?:reset(?:s)?|resume(?:s)?|available|renews?|until|try again|retry)\s*(?:at|on|after|:)?\s*"
+    r"(\d{4}-\d\d-\d\d)[T ](\d\d:\d\d(?::\d\d)?)(?:\.\d+)?\s*(Z\b|UTC\b|GMT\b|[+-]\d\d:?\d\d\b)?",
+    re.I,
+)
+RETRY_AFTER_RE = re.compile(
+    r"retry[- ]after\W{0,3}\s*(\d+(?:\.\d+)?)\b(?!\s*[-:/]\d)|retry[- ]after\W{0,3}\s*([A-Z][a-z]{2}, \d\d [A-Z][a-z]{2} \d{4} [\d:]{8} GMT)",
+    re.I,
+)
+IN_RE = re.compile(
+    r"\bin\s+(?:about\s+|around\s+)?(\d+(?:\.\d+)?)\s*(days?|d|hours?|hrs?|h|minutes?|mins?|m|seconds?|secs?|s)\b(?:\s*(?:and\s*)?(\d+)\s*(minutes?|mins?|m)\b)?",
+    re.I,
+)
 TRY_AT_RE = re.compile(r"try again at (\d{1,2}):(\d{2})\s*([AP]M)?", re.I)
 UNIT_S = {"d": 86400, "h": 3600, "m": 60, "s": 1}
 
@@ -41,7 +51,7 @@ def parse_reset(msg: str | None, t: float):
         with contextlib.suppress(ValueError):
             naive = dt.datetime.fromisoformat(f"{day}T{clock if clock.count(':') == 2 else clock + ':00'}")
             if not z:
-                at = _ok(naive.timestamp(), t)          # naive = this machine's local zone
+                at = _ok(naive.timestamp(), t)  # naive = this machine's local zone
                 if at:
                     return at, "local " + (time.tzname[time.localtime(at).tm_isdst > 0] or "")
             else:

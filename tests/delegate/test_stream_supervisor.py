@@ -20,7 +20,7 @@ from delegate.adapters.harness import claude
 from delegate.adapters.harness.opencode import OpenCodeHarness
 from delegate.app import env, launch, watch
 from delegate.app.supervisor import RunHooks
-from support.procsim import real_proc  # noqa: E402
+from support.procsim import real_proc
 
 T = 1_000_000.0
 

@@ -13,13 +13,13 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-import hermetic  # noqa: F401  (a home of its own for every test)
-import routing_support as support
-from test_route import CFG, T, lanes, route
-
 from delegate.contracts.history import RunRow
 from delegate.contracts.routing import BreakerPolicy
 from delegate.domain.health.ledger import HealthLedger, failure_fields
+
+import hermetic  # noqa: F401  (a home of its own for every test)
+import routing_support as support
+from test_route import CFG, T, lanes, route
 
 LANES = Path(__file__).resolve().parents[2] / "src" / "delegate" / "adapters"
 from delegate.adapters import netprobe, procs

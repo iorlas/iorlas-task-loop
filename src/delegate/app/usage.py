@@ -1,5 +1,6 @@
 """The usage readers: each fills a Lane's windows, five-hour and weekly use, and out mark from what its vendor lets us read. FleetBuilder calls them
 by the `reader` key of the lane in routing.json (READERS). Also the login cache that `status`, `next` and a run share."""
+
 import os
 from collections.abc import Callable
 from typing import Any
@@ -19,8 +20,10 @@ from delegate.domain.time.spec import WEEK_MIN, local, next_weekly, to_epoch
 
 def remembering(attr: str, cache: UsageCache) -> Callable[[StateDoc], None]:
     """The state change that stores a usage reading under `attr`."""
+
     def put(s: StateDoc) -> None:
         setattr(s, attr, cache)
+
     return put
 
 
@@ -33,9 +36,20 @@ def span_name(mins: float):
     return "5-hour" if mins <= 360 else "daily" if mins <= 1500 else "weekly" if mins <= 14400 else "monthly"
 
 
-def add_window(lane: Lane, used: float | None, resets_at: float | None, span: float, source: str, at: float | None, bucket: str | None = None):
+def add_window(
+    lane: Lane, used: float | None, resets_at: float | None, span: float, source: str, at: float | None, bucket: str | None = None
+):
     if used is not None or resets_at is not None:
-        lane.windows.append({"name": (bucket + " " if bucket else "") + span_name(span), "used": used, "resets_at": resets_at, "span": span, "source": source, "at": at})
+        lane.windows.append(
+            {
+                "name": (bucket + " " if bucket else "") + span_name(span),
+                "used": used,
+                "resets_at": resets_at,
+                "span": span,
+                "source": source,
+                "at": at,
+            }
+        )
 
 
 def codex_buckets(res: dict):
@@ -60,15 +74,25 @@ def read_codex(lane: Lane, S: Settings, st: StateDoc, t: float, ai_usage: Any = 
         return
     lane.read_at = cached.at if cached and res is cached.data else t
     rl = res.get("rateLimits") or {}
-    ws = []          # (bucket label, window): every window of every bucket, by length not by slot (Pro Lite sends its only, weekly, window as primary)
+    ws = []  # (bucket label, window): every window of every bucket, by length not by slot (Pro Lite sends its only, weekly, window as primary)
     for bid, label, b in codex_buckets(res):
         for w in (b.get("primary"), b.get("secondary")):
             if w:
                 ws.append((None if bid == (rl.get("limitId") or "codex") else label, w))
     for label, w in ws:
         span = w.get("windowDurationMins") or 300
-        add_window(lane, window(w.get("usedPercent"), w.get("resetsAt"), span, t)[0], w.get("resetsAt"), span, "live read (codex app-server)", lane.read_at, label)
-    lane.spend_blocked = bool(rl.get("spendControlReached")) or any(w in str(rl.get("rateLimitReachedType") or "").lower() for w in ("credit", "spend"))
+        add_window(
+            lane,
+            window(w.get("usedPercent"), w.get("resetsAt"), span, t)[0],
+            w.get("resetsAt"),
+            span,
+            "live read (codex app-server)",
+            lane.read_at,
+            label,
+        )
+    lane.spend_blocked = bool(rl.get("spendControlReached")) or any(
+        w in str(rl.get("rateLimitReachedType") or "").lower() for w in ("credit", "spend")
+    )
     short = [w for _, w in ws if (w.get("windowDurationMins") or 300) <= 1440]
     long_ = [w for _, w in ws if (w.get("windowDurationMins") or 300) > 1440]
     pr, se = binding(short), binding(long_)
@@ -93,16 +117,24 @@ def normalize_usage(raw: Any):
         if not isinstance(w, dict) or w.get("percentUsed") is None:
             continue
         label = str(w.get("label", "")).lower()
-        key = "fable" if "fable" in label else "five_hour" if "5" in label and "hour" in label else "weekly" if "week" in label and "all" in label else None
+        key = (
+            "fable"
+            if "fable" in label
+            else "five_hour"
+            if "5" in label and "hour" in label
+            else "weekly"
+            if "week" in label and "all" in label
+            else None
+        )
         if key:
             out[key] = {"used": float(w["percentUsed"]), "resets_at": to_epoch(w.get("resetsAt"))}
     return out or None
 
 
-AUTH_TTL = 300          # a login check answers for this long: it spawns a CLI, cheap but not free
+AUTH_TTL = 300  # a login check answers for this long: it spawns a CLI, cheap but not free
 AUTH_TIMEOUT = harnesses.AUTH_TIMEOUT
 LOGOUT_CHECK_S = 15
-AUTH_FILE_TTL = 600     # what a non-cheap status, doctor, a login probe and a successful run left, as read by `next` and `status --cheap`
+AUTH_FILE_TTL = 600  # what a non-cheap status, doctor, a login probe and a successful run left, as read by `next` and `status --cheap`
 
 
 def auth_cache():
@@ -123,7 +155,7 @@ def claude_logged_out():
 def read_claude_subscription(lane: Lane, S: Settings, st: StateDoc, t: float, ai_usage: Any = None):
     stale = S.usage_stale_minutes * 60
     usage = None
-    src: tuple[str, float | None] | None = None      # (where the numbers came from, when they were taken)
+    src: tuple[str, float | None] | None = None  # (where the numbers came from, when they were taken)
     if ai_usage:
         usage = normalize_usage(ai_usage)
         if usage:
@@ -146,7 +178,7 @@ def read_claude_subscription(lane: Lane, S: Settings, st: StateDoc, t: float, ai
         lane.notes.append("claude is logged out: run `claude auth login`")
     weekly_spec = S.claude_weekly_reset
     if usage:
-        assert src is not None      # every way `usage` got a value set `src`
+        assert src is not None  # every way `usage` got a value set `src`
         f5, wk = usage.get("five_hour") or {}, usage.get("weekly") or {}
         lane.five_reset, lane.week_reset = f5.get("resets_at"), wk.get("resets_at")
         lane.five, _, _ = window(f5.get("used"), lane.five_reset, 300, t)

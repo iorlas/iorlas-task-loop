@@ -11,6 +11,7 @@ Two kinds of fact, both read from the run's outcome:
                the next rung starts at once.
 Never counted: bad_request (the caller's fault), network, killed, timeout, secrets, schema_invalid, refusals.
 """
+
 from dataclasses import dataclass
 
 from delegate.contracts.history import CanaryRow, Failure, HealthState, HistoryRow, LaneFact, PairFact, ReleaseRow, RunRow, Streak
@@ -46,9 +47,17 @@ class PairView:
     last_failures: tuple[Failure, ...] = ()
 
     def as_dict(self) -> dict:
-        return {"state": self.state, "usable": self.usable, "canary": self.canary, "until": self.until, "source": self.source,
-                "kind": self.kind, "evidence": self.evidence, "rung": self.rung,
-                "last_failures": [{"ts": f.ts, "outcome": f.outcome, "say": f.say} for f in self.last_failures]}
+        return {
+            "state": self.state,
+            "usable": self.usable,
+            "canary": self.canary,
+            "until": self.until,
+            "source": self.source,
+            "kind": self.kind,
+            "evidence": self.evidence,
+            "rung": self.rung,
+            "last_failures": [{"ts": f.ts, "outcome": f.outcome, "say": f.say} for f in self.last_failures],
+        }
 
 
 @dataclass(frozen=True)
@@ -95,11 +104,11 @@ class HealthLedger:
             self._apply(state, f)
 
     def _apply(self, state: HealthState, f: Fact) -> None:
-        if f.what == RELEASE:       # `route.py report --event ok`: the owner says the lane is fine
+        if f.what == RELEASE:  # `route.py report --event ok`: the owner says the lane is fine
             state.lanes.pop(f.lane, None)
             for k in [k for k in state.pairs if k.startswith(f.lane + "|")]:
                 state.pairs.pop(k)
-        elif f.what == DONE:        # a run that worked proves the lane and resets the ladder of its pair
+        elif f.what == DONE:  # a run that worked proves the lane and resets the ladder of its pair
             state.lanes.pop(f.lane, None)
             p = state.pairs.setdefault(f"{f.lane}|{f.model}", PairFact())
             p.streak = []
@@ -111,7 +120,7 @@ class HealthLedger:
 
     def _lane_fact(self, f: Fact) -> LaneFact:
         pol = self.pol
-        if f.what == "credit_exhausted":      # a spending limit has no timer: look again after the probe time
+        if f.what == "credit_exhausted":  # a spending limit has no timer: look again after the probe time
             until, src = f.ts + pol.credit_probe_s, "probe"
         elif f.what == "logged_out":
             until, src = f.ts + pol.logout_s, "probe"
@@ -124,17 +133,26 @@ class HealthLedger:
     def _pair_fact(self, p: PairFact, f: Fact) -> None:
         pol, ts = self.pol, f.ts
         p.fails = (p.fails + [Failure(ts=ts, outcome=f.what, say=f.say[:120])])[-3:]
-        if ts < p.until:        # launched while benched (a call already in flight): it does not count again
+        if ts < p.until:  # launched while benched (a call already in flight): it does not count again
             return
         rule = BREAKER[f.what]
         n, win = rule.get("n", pol.n), rule.get("window_min", pol.window_min)
         fp = f.fingerprint or fingerprint(f.what, "", f.say)
-        probation = p.rung > 0 and ts >= p.until           # the canary failed: the next rung starts at once
-        p.streak = [s for s in p.streak if ts - s.ts <= win * 60 and s.outcome == f.what] + [Streak(ts=ts, outcome=f.what, fp=fp, task=f.task)]
+        probation = p.rung > 0 and ts >= p.until  # the canary failed: the next rung starts at once
+        p.streak = [s for s in p.streak if ts - s.ts <= win * 60 and s.outcome == f.what] + [
+            Streak(ts=ts, outcome=f.what, fp=fp, task=f.task)
+        ]
         same = [s for s in p.streak if s.fp == fp]
         if probation or (len(same) >= n and len({s.task for s in same}) >= rule["tasks"]):
             rung = min(p.rung + 1, len(pol.ladder_min))
-            p.rung, p.until, p.kind, p.fp, p.evidence, p.source = rung, ts + pol.ladder_min[rung - 1] * 60, f.what, fp, f.say[:240], "breaker"
+            p.rung, p.until, p.kind, p.fp, p.evidence, p.source = (
+                rung,
+                ts + pol.ladder_min[rung - 1] * 60,
+                f.what,
+                fp,
+                f.say[:240],
+                "breaker",
+            )
             p.streak = []
 
     def fold(self, rows: list[HistoryRow], state: HealthState | None = None) -> HealthState:
@@ -151,13 +169,30 @@ class HealthLedger:
         rung = p.rung if p else 0
         if L:
             if t < L.until:
-                return PairView(state="logged_out" if L.kind == "logged_out" else "exhausted", usable=False, until=L.until, source=L.source,
-                                kind=L.kind, evidence=L.evidence, rung=rung, last_failures=fails)
+                return PairView(
+                    state="logged_out" if L.kind == "logged_out" else "exhausted",
+                    usable=False,
+                    until=L.until,
+                    source=L.source,
+                    kind=L.kind,
+                    evidence=L.evidence,
+                    rung=rung,
+                    last_failures=fails,
+                )
         canary, kind, evidence = bool(L), L.kind if L else None, L.evidence if L else ""
         if p and p.rung:
             if t < p.until:
-                return PairView(state="broken", usable=False, canary=bool(L), until=p.until, source=p.source, kind=p.kind,
-                                evidence=p.evidence, rung=rung, last_failures=fails)
+                return PairView(
+                    state="broken",
+                    usable=False,
+                    canary=bool(L),
+                    until=p.until,
+                    source=p.source,
+                    kind=p.kind,
+                    evidence=p.evidence,
+                    rung=rung,
+                    last_failures=fails,
+                )
             canary, kind, evidence = True, p.kind, p.evidence
         return PairView(canary=canary, kind=kind, evidence=evidence, rung=rung, last_failures=fails)
 

@@ -11,14 +11,14 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-import hermetic  # noqa: F401
-from test_route import route
-
 from delegate.adapters.harness.base import LaunchSpec
 from delegate.app import codex_policy, env
 from delegate.cli import parser
 from delegate.contracts import stops, wire
-from support.procsim import real_proc  # noqa: E402
+from support.procsim import real_proc
+
+import hermetic  # noqa: F401
+from test_route import route
 
 
 def rules_at(home):

@@ -6,6 +6,7 @@ shelf lacks: (1) stop_tree's result flags term_sent / kill_sent (it returns surv
 has run out), (2) run() with a stdin pipe (the brief goes in on stdin), (3) stop by a recorded (pid, start) without a Popen (Orphan duck-types one).
 POSIX only.
 """
+
 import os
 import subprocess
 import time
@@ -16,7 +17,7 @@ from stream_proc import alive, proc_start
 from delegate.contracts import wire
 from delegate.contracts.codec import record
 
-GRACE_S = float(os.environ.get("DELEGATE_STOP_GRACE") or 5)       # SIGTERM to SIGKILL
+GRACE_S = float(os.environ.get("DELEGATE_STOP_GRACE") or 5)  # SIGTERM to SIGKILL
 
 
 @record
@@ -30,7 +31,9 @@ class Worker:
 
 def spawn(argv: list[str], cwd: str, env: dict[str, str]) -> tuple[subprocess.Popen[bytes], Worker]:
     """Start the worker as its own session leader with piped stdio. -> (the Popen, the worker's record)."""
-    p = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=cwd, env=env, start_new_session=True)
+    p = subprocess.Popen(
+        argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=cwd, env=env, start_new_session=True
+    )
     return p, Worker(pid=p.pid, pgid=p.pid, start=proc_start(p.pid))
 
 
@@ -50,7 +53,7 @@ class Orphan:
         return self.poll()
 
 
-def stop(p: "subprocess.Popen[bytes] | Orphan", grace: float) -> wire.WorkerEnd:
+def stop(p: subprocess.Popen[bytes] | Orphan, grace: float) -> wire.WorkerEnd:
     """Stop `p` and its whole tree (stream_proc.stop_tree). -> the report: SIGTERM always goes first; SIGKILL was sent once the grace ran out."""
     t0 = time.monotonic()
     rep = wire.WorkerEnd(end=wire.END_OK, stopped=True, term_sent=True)
@@ -76,8 +79,14 @@ def worker_end(stops: list[wire.WorkerEnd], outcome: str | None) -> wire.WorkerE
     """The run's WorkerEnd, from the stops made during it and the run's outcome reason (None = done)."""
     survivors = [s for r in stops for s in r.survivors]
     end = wire.END_SURVIVED if survivors else wire.END_TIMEOUT if outcome == "timeout" else wire.END_ERROR if outcome else wire.END_OK
-    return wire.WorkerEnd(end=end, stopped=bool(stops), term_sent=any(r.term_sent for r in stops), kill_sent=any(r.kill_sent for r in stops),
-                          waited_s=round(sum(r.waited_s for r in stops), 2), survivors=survivors)
+    return wire.WorkerEnd(
+        end=end,
+        stopped=bool(stops),
+        term_sent=any(r.term_sent for r in stops),
+        kill_sent=any(r.kill_sent for r in stops),
+        waited_s=round(sum(r.waited_s for r in stops), 2),
+        survivors=survivors,
+    )
 
 
 def run_capture(argv: list[str], timeout: float, **kw: object) -> subprocess.CompletedProcess[str]:
@@ -85,7 +94,11 @@ def run_capture(argv: list[str], timeout: float, **kw: object) -> subprocess.Com
     -> CompletedProcess; TimeoutExpired on timeout."""
     out: list[str] = []
     err: list[str] = []
-    res = stream_proc.run(argv, env=kw.get("env"), cwd=kw.get("cwd"), on_stdout=out.append, on_stderr=err.append, timeout=timeout, grace=GRACE_S)  # type: ignore[arg-type]
+    res = stream_proc.run(
+        argv, env=kw.get("env"), cwd=kw.get("cwd"), on_stdout=out.append, on_stderr=err.append, timeout=timeout, grace=GRACE_S
+    )  # type: ignore[arg-type]
     if res.timed_out:
         raise subprocess.TimeoutExpired(argv, timeout, "".join(out), "".join(err))
-    return subprocess.CompletedProcess(argv, -res.signal if res.signal else -1 if res.returncode is None else res.returncode, "".join(out), "".join(err))
+    return subprocess.CompletedProcess(
+        argv, -res.signal if res.signal else -1 if res.returncode is None else res.returncode, "".join(out), "".join(err)
+    )

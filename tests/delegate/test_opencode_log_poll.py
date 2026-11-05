@@ -3,11 +3,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import hermetic  # noqa: F401  (a home of its own for every test)
-
 from delegate.adapters.harness import classify
 from delegate.adapters.harness.opencode import OpenCodeHarness
 from delegate.app.supervisor import LogWatcher
+
+import hermetic  # noqa: F401  (a home of its own for every test)
 
 ECHO = ['INFO  2026-10-26T21:32:01 +3ms service=permission evaluated permission=bash pattern="cat <<EOF\\ntry again later\\nEOF" action=allow',
         'INFO  2026-10-26T21:32:02 +1ms service=permission evaluated permission=bash pattern="echo rate limit hit" action=allow']

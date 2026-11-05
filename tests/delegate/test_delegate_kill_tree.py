@@ -11,10 +11,6 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-import hermetic  # noqa: F401  (a home of its own for every test)
-from stream_proc import alive, proc_start
-from test_route import ROOT
-
 from delegate.adapters import codex_account, procs
 from delegate.adapters.harness.base import LaunchSpec
 from delegate.adapters.harness.codex import CodexHarness
@@ -22,7 +18,11 @@ from delegate.app import lease, usage
 from delegate.app.publish import LiveSink
 from delegate.app.supervisor import RunHooks, Supervisor
 from delegate.contracts.state import Lease
-from support.procsim import real_proc  # noqa: E402
+from stream_proc import alive, proc_start
+from support.procsim import real_proc
+
+import hermetic  # noqa: F401  (a home of its own for every test)
+from test_route import ROOT
 
 # A fake of the Codex CLI: a node-shim analogue that starts a native child in a session of its own; the child ignores SIGTERM.
 CHILD = "import signal,time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(300)"

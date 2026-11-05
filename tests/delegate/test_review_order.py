@@ -11,14 +11,14 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import hermetic  # noqa: F401  (a home of its own for every test)
-import routing_support as support
-
 from delegate.app import decide as dec
 from delegate.cli import verbs
 from delegate.domain.lanes.lane import Lane
 from delegate.domain.time import spec
-from support.procsim import real_proc  # noqa: E402
+from support.procsim import real_proc
+
+import hermetic  # noqa: F401  (a home of its own for every test)
+import routing_support as support
 
 ROOT = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location("route", ROOT / "src" / "delegate" / "entry.py")

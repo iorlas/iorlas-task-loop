@@ -1,4 +1,5 @@
 """One Codex home's lifetime: generated rules plus an auth symlink, never credential contents or copied user configuration."""
+
 import json
 import tempfile
 from pathlib import Path
@@ -14,7 +15,7 @@ class CodexOverlay:
             self.prefix = [*shim, "--exec-policy", str(policy), "--exec-allow"]
             folder = self.root / "rules"
             folder.mkdir()
-            text = "".join('prefix_rule(pattern=' + json.dumps([*self.prefix, *rule]) + ', decision="allow")\n' for rule in rules)
+            text = "".join("prefix_rule(pattern=" + json.dumps([*self.prefix, *rule]) + ', decision="allow")\n' for rule in rules)
             (folder / "default.rules").write_text(text, encoding="utf-8")
             # This creates only a link. Do not stat, open, resolve, or copy its credential target.
             (self.root / "auth.json").symlink_to(real_home / "auth.json")

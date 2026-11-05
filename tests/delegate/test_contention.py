@@ -10,12 +10,12 @@ import threading
 import unittest
 from pathlib import Path
 
-import hermetic  # noqa: F401
-from stream_proc import stop_tree
-
 from delegate.contracts.state import Dwell
 from delegate.contracts.stores import StateStore
-from support.procsim import real_proc  # noqa: E402
+from stream_proc import stop_tree
+from support.procsim import real_proc
+
+import hermetic  # noqa: F401
 
 T = 1_800_000_000
 LANES = ("OPENAI_SUBSCRIPTION", "GROK_SUBSCRIPTION", "DEEPSEEK_FREE", "ZAI_CODING_SUBSCRIPTION")

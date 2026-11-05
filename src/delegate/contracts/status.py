@@ -2,6 +2,7 @@
 (dev/gen_contract.py); `app/status.py` builds the payload and passes it through these records, so a key or type the schema does not
 name cannot reach a caller. `status --cheap` prints the last snapshot with `running`, `holds`, `roles`, `network` refreshed:
 the same record plus `cheap`, `age_s`, `auth`."""
+
 from dataclasses import field
 from typing import Literal
 

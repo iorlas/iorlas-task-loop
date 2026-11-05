@@ -5,29 +5,58 @@ Pure: no state, no I/O except reading contract.json once. The three launchers (c
 error event, or the CLI's own error result) and `stderr`; the model's answer text is never an argument, so a worker that says
 "rate limit" cannot take its lane out.
 """
+
 import re
 from typing import NamedTuple
 
 # ---- PATTERNS: every regex that turns vendor text into a reason lives here --------------------------------------------------------
 LIMIT_RE = re.compile(r"usage limit|rate.?limit|quota|too many requests|\b429\b|try again (later|in)|credit balance", re.I)
-CREDIT_RE = re.compile(r"spend(ing)?[- ]?(limit|control)|out of credits|credit balance|insufficient (funds|credit)|credits? (exhausted|too low)|personal-team-blocked", re.I)
-SPEND_RE = re.compile(CREDIT_RE.pattern + r"|top[- ]?up|billing|cycle cap|cap reached", re.I)      # cockpit: any prose that means money
-LOGIN_RE = re.compile(r"not logged in|please (run|use) [`'\"]?\S*\s*login|oauth session expired|failed to authenticate|invalid api key|401 unauthorized", re.I)
-NETWORK_RE = re.compile(r"ENOTFOUND|ECONNRESET|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN|getaddrinfo|could not resolve host|network is unreachable"
-                        r"|cannot connect to api|unable to connect", re.I)
-CODEX_STATUS_RE = re.compile(r'"status":\s*4(?!29)\d\d')          # codex puts the HTTP status inside its error JSON; 429 is a limit, not a bad request
-BAD_REQUEST_RE = re.compile(CODEX_STATUS_RE.pattern + r"|invalid_request_error|invalid_json_schema|Invalid schema for response_format|unrecognized arguments:|error: unknown argument|no rollout found for thread|No conversation found with session ID", re.I)      # the vendor refused the request itself: schema, a flag its CLI no longer takes, or a --resume thread it does not know
-PATTERNS = {"limit": LIMIT_RE, "credit": CREDIT_RE, "spend": SPEND_RE, "login": LOGIN_RE, "network": NETWORK_RE, "codex_status": CODEX_STATUS_RE,
-            "bad_request": BAD_REQUEST_RE}
+CREDIT_RE = re.compile(
+    r"spend(ing)?[- ]?(limit|control)|out of credits|credit balance|insufficient (funds|credit)|credits? (exhausted|too low)|personal-team-blocked",
+    re.I,
+)
+SPEND_RE = re.compile(CREDIT_RE.pattern + r"|top[- ]?up|billing|cycle cap|cap reached", re.I)  # cockpit: any prose that means money
+LOGIN_RE = re.compile(
+    r"not logged in|please (run|use) [`'\"]?\S*\s*login|oauth session expired|failed to authenticate|invalid api key|401 unauthorized", re.I
+)
+NETWORK_RE = re.compile(
+    r"ENOTFOUND|ECONNRESET|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN|getaddrinfo|could not resolve host|network is unreachable"
+    r"|cannot connect to api|unable to connect",
+    re.I,
+)
+CODEX_STATUS_RE = re.compile(
+    r'"status":\s*4(?!29)\d\d'
+)  # codex puts the HTTP status inside its error JSON; 429 is a limit, not a bad request
+BAD_REQUEST_RE = re.compile(
+    CODEX_STATUS_RE.pattern
+    + r"|invalid_request_error|invalid_json_schema|Invalid schema for response_format|unrecognized arguments:|error: unknown argument|no rollout found for thread|No conversation found with session ID",
+    re.I,
+)  # the vendor refused the request itself: schema, a flag its CLI no longer takes, or a --resume thread it does not know
+PATTERNS = {
+    "limit": LIMIT_RE,
+    "credit": CREDIT_RE,
+    "spend": SPEND_RE,
+    "login": LOGIN_RE,
+    "network": NETWORK_RE,
+    "codex_status": CODEX_STATUS_RE,
+    "bad_request": BAD_REQUEST_RE,
+}
+
 
 class Outcome(NamedTuple):
     reason: str
     detail: str
-    source: str        # ours | event | stderr | exit
+    source: str  # ours | event | stderr | exit
 
 
-def classify(rc: int | None, vendor_err: str | None = "", stderr: str | None = "", timed_out: bool = False, work_seen: bool = False,
-             structured: dict | None = None):
+def classify(
+    rc: int | None,
+    vendor_err: str | None = "",
+    stderr: str | None = "",
+    timed_out: bool = False,
+    work_seen: bool = False,
+    structured: dict | None = None,
+):
     """-> Outcome, or None when the run is done. First match wins.
 
     rc: exit code (negative = a signal); vendor_err: the vendor's error text from its event stream; stderr: the CLI's stderr; timed_out: our

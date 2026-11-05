@@ -1,5 +1,6 @@
 """The decision a call starts with: build the fleet, route, remember the lane choice (`decision`, shared by `next` and `run`), and what a chosen
 step runs on (`how`). The codex access flags and the repo's instruction files, which both lanes get the same, are here too."""
+
 import json
 import os
 import random
@@ -24,8 +25,18 @@ from delegate.domain.routing.router import Router
 # writes only the working directory; a command it blocks may ask to run outside it, and Codex's automatic reviewer (a model, no human)
 # approves or refuses that one command. Codex permission profiles would also block reads (~/.ssh), but an approved escalation there
 # stays inside the sandbox, so Unity cannot run (codex-cli 0.162.1).
-CODEX_ACCESS = ["--ignore-user-config", "--ignore-rules", "-c", "sandbox_workspace_write.network_access=false",
-                "-c", "sandbox_workspace_write.writable_roots=[]", "-c", "approval_policy=on-request", "-c", "approvals_reviewer=auto_review"]
+CODEX_ACCESS = [
+    "--ignore-user-config",
+    "--ignore-rules",
+    "-c",
+    "sandbox_workspace_write.network_access=false",
+    "-c",
+    "sandbox_workspace_write.writable_roots=[]",
+    "-c",
+    "approval_policy=on-request",
+    "-c",
+    "approvals_reviewer=auto_review",
+]
 
 
 def codex_env(base: dict[str, str], cwd: str, sandbox: str, access: list[str] = CODEX_ACCESS) -> dict[str, str]:
@@ -68,10 +79,16 @@ def codex_isolation(cwd: str):
     (codex 0.162.1: features.multi_agent=false and agents.max_depth=0 still let a brief that asks spawn one); NO_SUBAGENTS_RULE asks, and their
     tokens are counted as child threads."""
     home = Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex")
-    roots = [home / "skills", Path.home() / ".agents" / "skills"] + [d / x / "skills" for d in repo_dirs(cwd) for x in (".agents", ".codex")]
+    roots = [home / "skills", Path.home() / ".agents" / "skills"] + [
+        d / x / "skills" for d in repo_dirs(cwd) for x in (".agents", ".codex")
+    ]
     paths = sorted({str(f.resolve()) for r in roots if r.is_dir() for f in r.rglob("SKILL.md")})
-    return ["-c", "skills.config=[" + ",".join("{path=%s,enabled=false}" % json.dumps(x) for x in paths) + "]",
-            "-c", 'project_doc_fallback_filenames=["CLAUDE.md"]']
+    return [
+        "-c",
+        "skills.config=[" + ",".join("{path=%s,enabled=false}" % json.dumps(x) for x in paths) + "]",
+        "-c",
+        'project_doc_fallback_filenames=["CLAUDE.md"]',
+    ]
 
 
 def how(lane: Lane, step: dict, cfg: dict, cwd: str | None = None, unattended: bool = False):
@@ -92,7 +109,7 @@ def how(lane: Lane, step: dict, cfg: dict, cwd: str | None = None, unattended: b
     iso = codex_isolation(wd)
     cli = ["codex", "exec", "-C", wd, "-s", sandbox, "-m", m["api"], "-c", f"model_reasoning_effort={step['effort']}"] + CODEX_ACCESS + iso
     if git.state(wd) is None:
-        cli.append("--skip-git-repo-check")      # codex refuses a directory that is not a git work tree
+        cli.append("--skip-git-repo-check")  # codex refuses a directory that is not a git work tree
     return {"kind": "codex", "model": m["api"], "cli": cli, "cwd": wd, "sandbox": sandbox, "isolation": iso}
 
 
@@ -114,15 +131,29 @@ def busy_jitter():
 
 
 def fleet_builder(cfg: dict):
-    return FleetBuilder(env.typed_routing(cfg), env.states(), env.history_store(), CheckpointStore(env.config_dir() / "health-checkpoint.json"), env.config_store(),
-                        READERS, lambda: onboard.configured_lanes(cfg))
+    return FleetBuilder(
+        env.typed_routing(cfg),
+        env.states(),
+        env.history_store(),
+        CheckpointStore(env.config_dir() / "health-checkpoint.json"),
+        env.config_store(),
+        READERS,
+        lambda: onboard.configured_lanes(cfg),
+    )
 
 
 def call_args(a: env.Args, unattended: bool):
-    return CallArgs(authored_by=a.authored_by, premium=a.premium,
-                    allow_degraded=a.allow_degraded, unattended=unattended, resume=getattr(a, "resume", None), cap=getattr(a, "cap", None),
-                    only_family=tuple(getattr(a, "only_family", None) or ()), engine_only=tuple(getattr(a, "engine_only", None) or ()),
-                    engine_only_advisory=bool(getattr(a, "engine_only_advisory", False)))
+    return CallArgs(
+        authored_by=a.authored_by,
+        premium=a.premium,
+        allow_degraded=a.allow_degraded,
+        unattended=unattended,
+        resume=getattr(a, "resume", None),
+        cap=getattr(a, "cap", None),
+        only_family=tuple(getattr(a, "only_family", None) or ()),
+        engine_only=tuple(getattr(a, "engine_only", None) or ()),
+        engine_only_advisory=bool(getattr(a, "engine_only_advisory", False)),
+    )
 
 
 RETRY_LOOKBACK_S = 6 * 3600
@@ -140,8 +171,11 @@ def decision(a: env.Args, cfg: dict, unattended: bool = False, avoid: frozenset[
     lanes = mark_busy(fleet.lanes, st, routing.settings, t, busy_jitter)
     args = call_args(a, unattended)
     if getattr(a, "task", None) and not args.resume:
-        avoid |= frozenset((r.lane, r.model) for r in env.history_store().rows(t - RETRY_LOOKBACK_S)
-                           if isinstance(r, RunRow) and r.ts <= t and r.task == a.task and r.role == a.role and r.outcome in ("timeout", "schema_invalid"))
+        avoid |= frozenset(
+            (r.lane, r.model)
+            for r in env.history_store().rows(t - RETRY_LOOKBACK_S)
+            if isinstance(r, RunRow) and r.ts <= t and r.task == a.task and r.role == a.role and r.outcome in ("timeout", "schema_invalid")
+        )
     router = Router(routing, HoldBook(st.holds), st.prev, t)
     pick = router.route(a.role, args, lanes, st.refs.get(args.resume or ""), avoid)
     d = pick.as_dict()
@@ -159,6 +193,7 @@ def decision(a: env.Args, cfg: dict, unattended: bool = False, avoid: frozenset[
                 new = DwellMemory(s.prev, routing.settings.min_dwell_minutes).note(fam, pick.lane, t)
                 if new:
                     s.prev[fam] = new
+
             if sum(1 for lane in lanes.values() if lane.family == fam) > 1:
                 env.update_state(mark)
     if fleet.offers:
@@ -171,7 +206,17 @@ def publish_lanes(lanes: dict[str, Lane], st: StateDoc, t: float):
     """Lane limits as agent-runs v1 (agent_runs.py), for dashboards. Never fails the caller."""
     try:
         outs = st.out
-        agent_runs.lanes([(n, l.out_until if l.out else None, outs[n].why if l.out and n in outs else None,
-                           [("5h", l.five, l.five_reset), ("week", l.week, l.week_reset)]) for n, l in lanes.items()], t)
+        agent_runs.lanes(
+            [
+                (
+                    n,
+                    l.out_until if l.out else None,
+                    outs[n].why if l.out and n in outs else None,
+                    [("5h", l.five, l.five_reset), ("week", l.week, l.week_reset)],
+                )
+                for n, l in lanes.items()
+            ],
+            t,
+        )
     except Exception:
         pass

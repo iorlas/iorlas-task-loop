@@ -10,15 +10,15 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import hermetic  # noqa: F401  (a home of its own for every test)
-import routing_support as support
-from test_route import CFG, T, route
-
 from delegate.adapters.harness.opencode import OpenCodeHarness
 from delegate.app import cockpit, env, harnesses, onboard, status, usage
 from delegate.domain.lanes.lane import Lane
 from delegate.domain.time import spec
-from support.procsim import real_proc  # noqa: E402
+from support.procsim import real_proc
+
+import hermetic  # noqa: F401  (a home of its own for every test)
+import routing_support as support
+from test_route import CFG, T, route
 
 HOUR = 3600
 

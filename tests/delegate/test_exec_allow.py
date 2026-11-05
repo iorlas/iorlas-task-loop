@@ -9,12 +9,12 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-import hermetic  # noqa: F401
-from test_route import route
-
 from delegate.app import env
 from delegate.domain.policy.shell import read_only_problem
-from support.procsim import real_proc  # noqa: E402
+from support.procsim import real_proc
+
+import hermetic  # noqa: F401
+from test_route import route
 
 ESCAPES = (
     "sed 'e id' f", "sed '1e id' f", "sed 's/x/id/e' f", "sed -f script f", "sed --file=script f",

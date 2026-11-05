@@ -1,11 +1,11 @@
 """The owner's whole-argv allow: only decided build/test forms and exact just recipes."""
+
 import posixpath
 import shlex
 
 from delegate.domain.policy.worker import judge
 
-BROAD = {("dotnet", "build"), ("dotnet", "test"), ("dotnet", "restore"),
-         ("python", "-m", "unittest"), ("python", "-m", "pytest")}
+BROAD = {("dotnet", "build"), ("dotnet", "test"), ("dotnet", "restore"), ("python", "-m", "unittest"), ("python", "-m", "pytest")}
 EXACT = {("dotnet", "--version")}
 
 
@@ -16,9 +16,12 @@ def words(value: object) -> list[str]:
 
 
 def valid_rule(rule: list[str]) -> bool:
-    return tuple(rule) in BROAD | EXACT or (len(rule) == 2 and rule[0] == "just" and
-                                           all(c.isascii() and (c.isalnum() or c in "_-") for c in rule[1]) and
-                                           not rule[1].startswith("-"))
+    return tuple(rule) in BROAD | EXACT or (
+        len(rule) == 2
+        and rule[0] == "just"
+        and all(c.isascii() and (c.isalnum() or c in "_-") for c in rule[1])
+        and not rule[1].startswith("-")
+    )
 
 
 def host_policy(doc: object) -> tuple[dict[str, str], list[list[str]]]:
@@ -41,8 +44,9 @@ def host_policy(doc: object) -> tuple[dict[str, str], list[list[str]]]:
     return binaries, rules
 
 
-def allowed_argv(argv: list[str], binaries: dict[str, str], rules: list[list[str]], read_only: bool,
-                 engine_only: tuple[str, ...]) -> list[str]:
+def allowed_argv(
+    argv: list[str], binaries: dict[str, str], rules: list[list[str]], read_only: bool, engine_only: tuple[str, ...]
+) -> list[str]:
     """Resolve a logical name or an exact pinned path; only decided forms accept arbitrary trailing arguments."""
     words(argv)
     if read_only:
@@ -55,7 +59,7 @@ def allowed_argv(argv: list[str], binaries: dict[str, str], rules: list[list[str
     if verdict.blocked:
         raise ValueError(verdict.reason)
     for rule in rules:
-        if logical == rule or (tuple(rule) in BROAD and logical[:len(rule)] == rule):
+        if logical == rule or (tuple(rule) in BROAD and logical[: len(rule)] == rule):
             return [binaries[name], *argv[1:]]
     raise ValueError("whole argv is not allowed by host.json")
 

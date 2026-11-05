@@ -9,13 +9,13 @@ import tempfile
 import unittest
 from unittest import mock
 
+from delegate.adapters import procs
+from delegate.app import env, harnesses, status, usage
+from support.procsim import real_proc
+
 import hermetic  # noqa: F401  (a home of its own for every test)
 import routing_support as support
 from test_route import route
-
-from delegate.adapters import procs
-from delegate.app import env, harnesses, status, usage
-from support.procsim import real_proc  # noqa: E402
 
 
 def boom(*a, **k):

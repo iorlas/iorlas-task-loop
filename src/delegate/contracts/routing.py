@@ -3,6 +3,7 @@
 `Routing` is read, never written. The owner's `profile` (lane choices, acks) is not a setting and never reaches `Settings`. A router
 `Decision` is `Run | Stop | LaneOut | Error`; `as_dict()` is the JSON that `route.py next` prints.
 """
+
 from dataclasses import field
 from typing import Any
 
@@ -11,8 +12,18 @@ from delegate.contracts.codec import record
 V = 1
 
 # Settings keys an older config.json or routing.json may still carry. Loading drops them with one warning each; any other unknown key fails.
-RETIRED_SETTINGS = ("codex_weekly_used_override", "codex_resume_after_stall", "claude_resume_after_stall", "opencode_resume_after_stall",
-                    "codex_plan_review_only", "host_lanes", "contained_network", "cache_roots", "credit")
+RETIRED_SETTINGS = (
+    "codex_weekly_used_override",
+    "codex_resume_after_stall",
+    "claude_resume_after_stall",
+    "opencode_resume_after_stall",
+    "codex_plan_review_only",
+    "host_lanes",
+    "contained_network",
+    "cache_roots",
+    "credit",
+)
+
 
 def replaced_settings(lanes: dict) -> dict[str, str]:
     """The per-lane enable settings an old config.json may carry (`<lane>_enabled`, from the lane name) -> the lane. They moved to the lane
@@ -96,7 +107,7 @@ class LaneSpec:
     label: str = ""
     ready: str = ""
     shared_with_orchestrator: bool = False
-    opt_in: bool = False        # off until profile.lanes.<lane> is "enabled"; others turn on when ready
+    opt_in: bool = False  # off until profile.lanes.<lane> is "enabled"; others turn on when ready
 
 
 @record
@@ -142,9 +153,9 @@ class CallArgs:
     unattended: bool = False
     resume: str | None = None
     cap: float | None = None
-    only_family: tuple[str, ...] = ()       # the families a call may use: the role's steps are filtered to them, no fallback outside
-    engine_only: tuple[str, ...] = ()       # recipes only the engine runs: a write step needs a lane whose harness can deny them
-    engine_only_advisory: bool = False     # allow unsupported write lanes with an explicit warning
+    only_family: tuple[str, ...] = ()  # the families a call may use: the role's steps are filtered to them, no fallback outside
+    engine_only: tuple[str, ...] = ()  # recipes only the engine runs: a write step needs a lane whose harness can deny them
+    engine_only_advisory: bool = False  # allow unsupported write lanes with an explicit warning
 
 
 @record
@@ -161,7 +172,7 @@ class Run:
     model: str
     effort: str
     mode: str
-    pass_: str                     # strict | relaxed | resume
+    pass_: str  # strict | relaxed | resume
     rung: int | None = None
     fallback: bool | None = None
     fallback_reason: str | None = None
@@ -169,12 +180,23 @@ class Run:
     cap: float | None = None
     flag: str | None = None
     warning: str | None = None
-    trace: tuple[str, ...] | None = None       # None: a resume plan reasoned about nothing
+    trace: tuple[str, ...] | None = None  # None: a resume plan reasoned about nothing
 
     def as_dict(self) -> dict[str, Any]:
-        d: dict[str, Any] = {"action": "run", "role": self.role, "pass": self.pass_, "rung": self.rung, "fallback": self.fallback,
-             "fallback_reason": self.fallback_reason, "first_lane": self.first_lane, "lane": self.lane, "model": self.model,
-             "effort": self.effort, "mode": self.mode, "cap": self.cap}
+        d: dict[str, Any] = {
+            "action": "run",
+            "role": self.role,
+            "pass": self.pass_,
+            "rung": self.rung,
+            "fallback": self.fallback,
+            "fallback_reason": self.fallback_reason,
+            "first_lane": self.first_lane,
+            "lane": self.lane,
+            "model": self.model,
+            "effort": self.effort,
+            "mode": self.mode,
+            "cap": self.cap,
+        }
         if self.pass_ != "resume" or self.flag is not None:
             d["flag"] = self.flag
         if self.trace is not None:

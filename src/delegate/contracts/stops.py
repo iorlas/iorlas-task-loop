@@ -1,4 +1,5 @@
 """The stop facts of an answer: contract.json's reasons table (scope, permanence, retry kind, health effect) and the `stop` object built from a row."""
+
 import json
 from pathlib import Path
 from typing import Any
@@ -30,11 +31,19 @@ def stop_facts(reason: str | None, retry_after: float | None = None, fix: str | 
     (open reasons, closed facts): machine / needs_owner / none."""
     row = facts(reason) or {"scope": "machine", "permanence": "needs_owner", "retry": "none"}
     perm, kind = row["permanence"], row["retry"]
-    if retry_after and kind in ("none", "predicted"):       # a time the lane ends by itself: transient, whatever the table says for the general case
+    if retry_after and kind in (
+        "none",
+        "predicted",
+    ):  # a time the lane ends by itself: transient, whatever the table says for the general case
         perm, kind = "transient", "predicted"
-    elif kind == "predicted":       # nothing to wait for: a person must act
+    elif kind == "predicted":  # nothing to wait for: a person must act
         kind, perm = "none", "needs_owner"
-    stop: dict[str, Any] = {"reason": reason, "scope": row["scope"], "permanence": perm, "retry": {"kind": kind, "at": retry_after if kind in ("predicted", "poll") else None}}
+    stop: dict[str, Any] = {
+        "reason": reason,
+        "scope": row["scope"],
+        "permanence": perm,
+        "retry": {"kind": kind, "at": retry_after if kind in ("predicted", "poll") else None},
+    }
     if fix:
         stop["fix"] = fix
     return stop

@@ -15,8 +15,6 @@ from test_route import ROOT
 
 sys.path.insert(0, str(ROOT / "skills" / "delegate"))
 import stream_proc
-from stream_proc import alive, proc_start
-
 from delegate.adapters import procs
 from delegate.adapters.harness.base import LaunchSpec
 from delegate.adapters.harness.codex import CodexHarness
@@ -24,7 +22,8 @@ from delegate.app import watch
 from delegate.app.publish import LiveSink
 from delegate.app.supervisor import RunHooks, Supervisor
 from delegate.contracts import codec, wire
-from support.procsim import real_proc  # noqa: E402
+from stream_proc import alive, proc_start
+from support.procsim import real_proc
 
 FAKE = str(Path(__file__).resolve().parent / "fakes" / "fake_agent.py")
 

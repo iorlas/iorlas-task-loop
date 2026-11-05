@@ -7,18 +7,18 @@ import time
 from pathlib import Path
 from unittest import mock
 
-import hermetic  # noqa: F401  (a home of its own for every test)
-import routing_support as support
-from run_support import RunBase
-from test_route import CFG, at, route, why
-
 from delegate.adapters.harness import reset_parse
 from delegate.app import answer, env, launch, net, usage, watch
 from delegate.app import decide as dec
 from delegate.contracts import history as hist
 from delegate.contracts import stops
 from delegate.domain.health import ledger as health_ledger
-from support.procsim import real_proc  # noqa: E402
+from support.procsim import real_proc
+
+import hermetic  # noqa: F401  (a home of its own for every test)
+import routing_support as support
+from run_support import RunBase
+from test_route import CFG, at, route, why
 
 
 class RunStops(RunBase):

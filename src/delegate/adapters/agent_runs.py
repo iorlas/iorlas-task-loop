@@ -31,7 +31,7 @@ def run(run_id: str, **fields: Any):
         f = root() / "runs" / (run_id + ".json")
         try:
             rec = json.loads(f.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
+        except OSError, ValueError:
             rec: dict[str, Any] = {"v": 1, "producer": "delegate", "id": run_id}
         rec.update({k: v for k, v in fields.items() if v is not None})
         _write(f, rec)
@@ -49,10 +49,22 @@ def run(run_id: str, **fields: Any):
 def lanes(items: Iterable[tuple[str, float | None, str | None, Iterable[tuple[str, float | None, float | None]]]], now: float):
     """items: [(name, out_until or None, why or None, [(window, used_pct, resets_at), ...]), ...]"""
     try:
-        _write(root() / "lanes" / "delegate.json", {
-            "v": 1, "producer": "delegate", "at": now,
-            "lanes": [{"name": n, "out_until": until, "why": why,
-                       "usage": [{"window": w, "used_pct": u, "resets_at": r} for w, u, r in usage if u is not None]}
-                      for n, until, why, usage in items]})
+        _write(
+            root() / "lanes" / "delegate.json",
+            {
+                "v": 1,
+                "producer": "delegate",
+                "at": now,
+                "lanes": [
+                    {
+                        "name": n,
+                        "out_until": until,
+                        "why": why,
+                        "usage": [{"window": w, "used_pct": u, "resets_at": r} for w, u, r in usage if u is not None],
+                    }
+                    for n, until, why, usage in items
+                ],
+            },
+        )
     except OSError:
         pass

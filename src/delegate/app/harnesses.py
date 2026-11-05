@@ -1,13 +1,16 @@
 """Which harness serves which lane: the OpenCode profiles per lane, the login probe per lane, the transcript finder per family."""
+
 from delegate.adapters.harness.claude import ClaudeHarness
 from delegate.adapters.harness.codex import CodexHarness
 from delegate.adapters.harness.opencode import OpenCodeHarness, Profile
 from delegate.app import env
 
 AUTH_TIMEOUT = 10
-OC_PROFILES = {"GROK_SUBSCRIPTION": Profile(auth_key="xai"),
-               "ZAI_CODING_SUBSCRIPTION": Profile(providers=("zai-coding-plan",), price="unknown", auth_key="zai-coding-plan", need_key=True),
-               "DEEPSEEK_FREE": Profile(providers=("opencode",), own_data=True, price="free")}
+OC_PROFILES = {
+    "GROK_SUBSCRIPTION": Profile(auth_key="xai"),
+    "ZAI_CODING_SUBSCRIPTION": Profile(providers=("zai-coding-plan",), price="unknown", auth_key="zai-coding-plan", need_key=True),
+    "DEEPSEEK_FREE": Profile(providers=("opencode",), own_data=True, price="free"),
+}
 ZAI_MODELS = ("zai-coding-plan/glm-5.3", "zai-coding-plan/glm-5.3-flash")
 
 
@@ -23,7 +26,7 @@ def probe_login(name: str):
 
 
 def find_transcript(ref: str | None, family: str):
-    hx = {"openai": CodexHarness(), "claude": ClaudeHarness()}.get(family) or OpenCodeHarness(root=env.config_dir())        # opencode: exported after the run
+    hx = {"openai": CodexHarness(), "claude": ClaudeHarness()}.get(family) or OpenCodeHarness(
+        root=env.config_dir()
+    )  # opencode: exported after the run
     return hx.transcript(ref)
-
-

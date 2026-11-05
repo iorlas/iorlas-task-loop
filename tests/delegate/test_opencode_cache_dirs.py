@@ -6,10 +6,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import hermetic  # noqa: F401  (a home of its own for every test)
-
 from delegate.adapters.harness.base import LaunchInputs
 from delegate.adapters.harness.opencode import OpenCodeHarness, Profile
+
+import hermetic  # noqa: F401  (a home of its own for every test)
 
 DIR_VARS = re.compile(r"^(UV_CACHE_DIR|XDG_\w+_HOME|MISE_\w*_DIR)$")
 

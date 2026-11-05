@@ -5,11 +5,11 @@ import sys
 from pathlib import Path
 from unittest import mock
 
+from delegate.app import env, launch
+from support.procsim import real_proc
+
 import hermetic  # noqa: F401
 from run_support import RunBase
-
-from delegate.app import env, launch
-from support.procsim import real_proc  # noqa: E402
 
 
 class WiredOverlay(RunBase):

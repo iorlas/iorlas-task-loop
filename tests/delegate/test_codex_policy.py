@@ -1,10 +1,11 @@
 import copy
 import unittest
 
+from support.procsim import real_proc
+
 import hermetic  # noqa: F401  (a home of its own for every test)
 import routing_support as support
 from test_route import CFG, T, lanes
-from support.procsim import real_proc  # noqa: E402
 
 
 class CodexPolicy(unittest.TestCase):

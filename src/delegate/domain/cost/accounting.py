@@ -3,11 +3,12 @@
 An accounting record `acct` is {in_fresh, cache_read, cache_write, out, cost_usd, cost_source, accounting, ttl_s, ttl_source, cache_write_by_ttl?}.
 Counts are per call, never cumulative. cache_write and cost_usd are None where the vendor does not report them. No price table here:
 cost is what the harness returned, or unknown. warm_until is telemetry (when the vendor's prompt cache probably expires); nothing routes on it."""
+
 import datetime as dt
 from collections.abc import Iterable
 from typing import Any
 
-CODEX_TTL_S = 3600                    # measured 65 min (study 85); the vendor states 5-10 min to 24 h
+CODEX_TTL_S = 3600  # measured 65 min (study 85); the vendor states 5-10 min to 24 h
 
 
 def per_call(total: dict | None, before: dict | None):
@@ -30,14 +31,35 @@ def codex(tokens: dict | None):
     """Per-call {in, cached, out} (already net of a resumed thread's earlier total) -> acct. Codex returns no cost."""
     t = tokens or {}
     cached = t.get("cached") or 0
-    return {"in_fresh": max(0, (t.get("in") or 0) - cached), "cache_read": cached, "cache_write": None, "out": t.get("out") or 0,
-            "cost_usd": None, "cost_source": "unknown", "accounting": "exact", "ttl_s": CODEX_TTL_S, "ttl_source": "observed"} if tokens else None
+    return (
+        {
+            "in_fresh": max(0, (t.get("in") or 0) - cached),
+            "cache_read": cached,
+            "cache_write": None,
+            "out": t.get("out") or 0,
+            "cost_usd": None,
+            "cost_source": "unknown",
+            "accounting": "exact",
+            "ttl_s": CODEX_TTL_S,
+            "ttl_source": "observed",
+        }
+        if tokens
+        else None
+    )
 
 
 def opencode_step(acct: dict | None, tokens: dict, cost: Any):
     """Fold one opencode step-finish (tokens {input, output, reasoning, cache{read,write}}, cost) into the running acct."""
     c = tokens.get("cache") or {}
-    a: dict[str, Any] = acct or {"in_fresh": 0, "cache_read": 0, "cache_write": 0, "out": 0, "cost_usd": None, "ttl_s": None, "ttl_source": "unknown"}
+    a: dict[str, Any] = acct or {
+        "in_fresh": 0,
+        "cache_read": 0,
+        "cache_write": 0,
+        "out": 0,
+        "cost_usd": None,
+        "ttl_s": None,
+        "ttl_source": "unknown",
+    }
     a["in_fresh"] += tokens.get("input") or 0
     a["cache_read"] += c.get("read") or 0
     a["cache_write"] += c.get("write") or 0
@@ -70,7 +92,9 @@ def merge(a: dict | None, b: dict | None):
     out = dict(b)
     for k in ("in_fresh", "cache_read", "out"):
         out[k] = (a.get(k) or 0) + (b.get(k) or 0)
-    out["cache_write"] = None if a.get("cache_write") is None and b.get("cache_write") is None else (a.get("cache_write") or 0) + (b.get("cache_write") or 0)
+    out["cache_write"] = (
+        None if a.get("cache_write") is None and b.get("cache_write") is None else (a.get("cache_write") or 0) + (b.get("cache_write") or 0)
+    )
     costs = [x["cost_usd"] for x in (a, b) if x.get("cost_usd") is not None]
     out["cost_usd"] = sum(costs) if costs else None
     if costs and out["cost_source"] == "unknown":
@@ -86,9 +110,16 @@ def fields(acct: dict | None, ref: str | None, ended_at: float):
     """-> the additive `usage` keys for a finished call (acct may be None: a call that reported nothing)."""
     a: dict[str, Any] = acct or {}
     ttl = a.get("ttl_s") if ref else None
-    return {"ref": ref, "last_activity_at": iso(ended_at) if ref else None,
-            "warm_until": iso(ended_at + ttl) if ttl else None, "ttl_s": ttl or None, "ttl_source": a.get("ttl_source") if ttl else "unknown",
-            "cost_usd": a.get("cost_usd"), "cost_source": a.get("cost_source") or "unknown", "accounting": a.get("accounting") or "unknown"}
+    return {
+        "ref": ref,
+        "last_activity_at": iso(ended_at) if ref else None,
+        "warm_until": iso(ended_at + ttl) if ttl else None,
+        "ttl_s": ttl or None,
+        "ttl_source": a.get("ttl_source") if ttl else "unknown",
+        "cost_usd": a.get("cost_usd"),
+        "cost_source": a.get("cost_source") or "unknown",
+        "accounting": a.get("accounting") or "unknown",
+    }
 
 
 def token_fields(acct: dict | None) -> dict[str, Any]:

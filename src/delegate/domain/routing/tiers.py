@@ -3,6 +3,7 @@
 A tier is a list of steps tried strict, then relaxed, before the next tier. Order: a requested premium step, then every non-Claude step,
 then every Claude step; within each, unflagged steps before LATE_FLAGS ones. Claude lanes come last for every role (delegate-m86).
 """
+
 from dataclasses import replace
 
 from delegate.contracts.routing import CallArgs, Role, Routing, Step
@@ -55,7 +56,7 @@ class TierPlan:
         if steps is None:
             return None
         steps = [x for x in steps if not self.barred(x, role)]
-        if role.order == "cost":         # cheapest configured model first inside a tier (stable: ties keep the listed order)
+        if role.order == "cost":  # cheapest configured model first inside a tier (stable: ties keep the listed order)
             steps.sort(key=lambda x: self.r.models[x.model].cost if x.model in self.r.models else 1000)
         steps = [replace(x, idx=i) for i, x in enumerate(steps)]
         first = [x for x in steps if x.flag == PREMIUM_FLAG]
@@ -66,6 +67,11 @@ class TierPlan:
             tiers += [[x for x in part if x.flag not in LATE_FLAGS], [x for x in part if x.flag in LATE_FLAGS]]
         tiers = [x for x in tiers if x]
         if args.allow_degraded and role.degraded_needs_consent:
-            tiers.append([replace(x, flag="degraded_with_consent", idx=len(steps) + i)
-                          for i, x in enumerate(role.degraded_needs_consent) if not self.barred(x, role) and self.in_family(x, args)])
+            tiers.append(
+                [
+                    replace(x, flag="degraded_with_consent", idx=len(steps) + i)
+                    for i, x in enumerate(role.degraded_needs_consent)
+                    if not self.barred(x, role) and self.in_family(x, args)
+                ]
+            )
         return tiers

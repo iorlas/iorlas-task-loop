@@ -1,4 +1,5 @@
 """The policy a worker runs under (D3): the rules told to it, the typed record of a refused call, and the verdict on one tool call."""
+
 from dataclasses import dataclass
 from typing import Any
 
@@ -7,10 +8,16 @@ from delegate.domain.policy.matchers import heredoc_only_hit, secret_hit
 from delegate.domain.policy.shell import READ_ONLY_HELP, WRITER_RULE, git_write, read_only_problem, writer_problem
 
 EDIT_RULE = "Edit files with the patch/edit tool (apply_patch), never with shell heredocs or `python -c` file rewrites."
-APPLY_PATCH_HINT = "rewrite this edit with apply_patch (the secret name is only inside a heredoc body; heredoc and `python -c` rewrites are blocked)"
-SECRET_RULE = "Never touch credential files (~/.ssh, .env, ~/.aws, tokens, keychains): it is blocked. If the task needs one, stop and say so."
-GIT_RULES = ("Git is the coordinator's. Stay in the current directory. Do not create or switch branches or worktrees; "
-             "do not commit, amend, merge, rebase, reset, stash, tag or push. Read-only git is fine. Leave changes uncommitted.")
+APPLY_PATCH_HINT = (
+    "rewrite this edit with apply_patch (the secret name is only inside a heredoc body; heredoc and `python -c` rewrites are blocked)"
+)
+SECRET_RULE = (
+    "Never touch credential files (~/.ssh, .env, ~/.aws, tokens, keychains): it is blocked. If the task needs one, stop and say so."
+)
+GIT_RULES = (
+    "Git is the coordinator's. Stay in the current directory. Do not create or switch branches or worktrees; "
+    "do not commit, amend, merge, rebase, reset, stash, tag or push. Read-only git is fine. Leave changes uncommitted."
+)
 CHECKED_FIELDS = ("command", "file_path", "path", "pattern", "glob")
 
 
@@ -59,7 +66,13 @@ def denial_item(d: ev.Denied) -> dict[str, Any]:
     return {"kind": d.kind, "tool": d.tool, "path": denied_path(d), "input": d.input}
 
 
-def is_policy_denial(tool_name: str | None, tool_input: dict[str, Any] | None, read_only: bool = False, engine_only: tuple[str, ...] = ()) -> bool:
+def is_policy_denial(
+    tool_name: str | None, tool_input: dict[str, Any] | None, read_only: bool = False, engine_only: tuple[str, ...] = ()
+) -> bool:
     """A git write the coordinator forbids, or a write on a read-only step, is delegate's policy, not a decision for the owner (a secret path stays one)."""
     cmd = str((tool_input or {}).get("command") or "").strip()
-    return tool_name == "Bash" and not secret_hit(cmd) and bool(git_write(cmd) or (read_only and read_only_problem(cmd)) or (not read_only and writer_problem(cmd, engine_only)))
+    return (
+        tool_name == "Bash"
+        and not secret_hit(cmd)
+        and bool(git_write(cmd) or (read_only and read_only_problem(cmd)) or (not read_only and writer_problem(cmd, engine_only)))
+    )

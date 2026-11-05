@@ -3,6 +3,7 @@
 Every write is atomic (temp file + replace) and private (0600) and, where two processes may race, under `locked`. A file that is missing,
 unreadable or of another shape reads as empty: a store never raises on read and never migrates.
 """
+
 import contextlib
 import json
 import os
@@ -52,14 +53,14 @@ def private(path: Path | str) -> None:
 
 
 def write_atomic(path: Path, text: str) -> None:
-    atomic_write_text(path, text, fsync=False)      # temp file + replace, private (0600); a state file is rewritten often, so no fsync
+    atomic_write_text(path, text, fsync=False)  # temp file + replace, private (0600); a state file is rewritten often, so no fsync
     private(path)
 
 
 def read_json(path: Path) -> object | None:
     try:
         return json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+    except OSError, ValueError:
         return None
 
 
@@ -79,11 +80,14 @@ class StateStore:
             for k in gone:
                 if (self.path, k) not in _STATE_WARNED:
                     _STATE_WARNED.add((self.path, k))
-                    print(f"delegate: {self.path}: '{k}' is retired and ignored; it is safe to leave (the file is not touched)", file=sys.stderr)
+                    print(
+                        f"delegate: {self.path}: '{k}' is retired and ignored; it is safe to leave (the file is not touched)",
+                        file=sys.stderr,
+                    )
         try:
             return codec.from_json(StateDoc, data)
         except codec.CodecError as e:
-            if data is not None and (self.path, "") not in _STATE_WARNED:      # a file from before the typed state: dropped, never migrated
+            if data is not None and (self.path, "") not in _STATE_WARNED:  # a file from before the typed state: dropped, never migrated
                 _STATE_WARNED.add((self.path, ""))
                 print(f"delegate: {self.path} is not a v{StateDoc.V} state file ({e}); starting from empty state", file=sys.stderr)
             return StateDoc()
@@ -117,7 +121,9 @@ class HistoryStore:
 
     def _rotate(self, cut: float) -> None:
         keep = [r for r in self._read(0.0) if r[0].ts >= cut]
-        atomic_write_text(self.path, "".join(ln for _, ln in keep), fsync=False)      # shelf lacks: jsonl_log compacts by size and file count, not by row age
+        atomic_write_text(
+            self.path, "".join(ln for _, ln in keep), fsync=False
+        )  # shelf lacks: jsonl_log compacts by size and file count, not by row age
 
     def _read(self, since: float) -> list[tuple[HistoryRow, str]]:
         out = []
@@ -128,7 +134,7 @@ class HistoryStore:
         for ln in lines:
             try:
                 row = codec.from_tagged(ROWS, json.loads(ln))
-            except ValueError:      # CodecError is a ValueError: a stale or corrupt line
+            except ValueError:  # CodecError is a ValueError: a stale or corrupt line
                 continue
             if row.ts > since:
                 out.append((row, ln + "\n"))
@@ -203,12 +209,15 @@ class ConfigStore:
                 p = Profile()
             fn(p)
             cur["profile"] = codec.to_json(p)
+
         self.update(put)
 
     def set_lane(self, name: str, value: str | None) -> None:
         """value None removes the entry (back to auto-detect)."""
+
         def put(p: Profile) -> None:
             p.lanes.pop(name, None) if value is None else p.lanes.__setitem__(name, value)
+
         self._put_profile(put)
 
     def mark_offered(self, names: list[str]) -> None:

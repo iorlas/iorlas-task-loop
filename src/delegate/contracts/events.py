@@ -1,6 +1,7 @@
 """HarnessEvent: what a harness's parser says happened, one record per fact. In memory only (never written to disk): each harness's
 `parse_line` turns one line of its output into zero or more of these, once, and the supervisor, the live sink and the classifier all read the
 same records."""
+
 from typing import Any
 
 from delegate.contracts.codec import record
@@ -16,7 +17,7 @@ class Cmd:
     id: str | None
     text: str
     cwd: str | None = None
-    prov: bool = False              # provisional: derived from a log line before the harness reported the call (closed by the next CmdEnd of its id)
+    prov: bool = False  # provisional: derived from a log line before the harness reported the call (closed by the next CmdEnd of its id)
 
 
 @record
@@ -25,7 +26,7 @@ class CmdEnd:
     text: str
     exit: int | None
     out: str | None = None
-    secs: float | None = None       # when the harness measured it; else the sink times it
+    secs: float | None = None  # when the harness measured it; else the sink times it
 
 
 @record
@@ -48,7 +49,7 @@ class ToolEnd:
 @record
 class Msg:
     text: str
-    final: bool = True              # this message ends the turn (false: the worker goes on, e.g. text before a tool call)
+    final: bool = True  # this message ends the turn (false: the worker goes on, e.g. text before a tool call)
 
 
 @record
@@ -78,7 +79,7 @@ class Stall:
 class HarnessError:
     text: str
     http_status: int | None = None
-    kind: str = "error"             # "error" (a failure) or "transient" (the harness is retrying by itself)
+    kind: str = "error"  # "error" (a failure) or "transient" (the harness is retrying by itself)
 
 
 @record
@@ -102,7 +103,7 @@ class RateLimit:
 class Denied:
     tool: str
     input: dict[str, Any]
-    kind: str = "policy"            # "policy" (a reviewer or classifier refused: the owner decides) or "sandbox_limit" (the sandbox blocked a system resource: noise)
+    kind: str = "policy"  # "policy" (a reviewer or classifier refused: the owner decides) or "sandbox_limit" (the sandbox blocked a system resource: noise)
 
 
 @record
@@ -110,5 +111,21 @@ class Unknown:
     type: str
 
 
-HarnessEvent = (Started | Cmd | CmdEnd | Tool | ToolEnd | Msg | Think | Tokens | TurnDone | Stall | HarnessError | Reconnecting
-                | WaitingForNetwork | RateLimit | Denied | Unknown)
+HarnessEvent = (
+    Started
+    | Cmd
+    | CmdEnd
+    | Tool
+    | ToolEnd
+    | Msg
+    | Think
+    | Tokens
+    | TurnDone
+    | Stall
+    | HarnessError
+    | Reconnecting
+    | WaitingForNetwork
+    | RateLimit
+    | Denied
+    | Unknown
+)

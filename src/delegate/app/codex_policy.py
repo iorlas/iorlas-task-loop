@@ -1,4 +1,5 @@
 """Guard I/O and per-call Codex host grants. Rules allow only the guard shim; it validates the whole argv before dispatch."""
+
 import dataclasses
 import json
 import os
@@ -34,8 +35,9 @@ def admit_request(value: object, engine_only: tuple[str, ...] = ()) -> None:
     call_rules(value, binaries, host, engine_only)
 
 
-def configure_writer(spec: LaunchSpec, value: object, state: Path,
-                     engine_only: tuple[str, ...] = ()) -> tuple[LaunchSpec, CodexOverlay | None]:
+def configure_writer(
+    spec: LaunchSpec, value: object, state: Path, engine_only: tuple[str, ...] = ()
+) -> tuple[LaunchSpec, CodexOverlay | None]:
     if value == []:
         return spec, None
     state = state.resolve()
@@ -52,9 +54,11 @@ def configure_writer(spec: LaunchSpec, value: object, state: Path,
         cwd = Path(spec.cwd).resolve()
         for folder in (cwd, *cwd.parents):
             argv += ["-c", f'projects.{json.dumps(str(folder))}.trust_level="untrusted"']
-        prompt = ("\n\nHost execution is restricted to these guarded commands (append arguments only to the permitted test/build forms):\n"
-                  + "\n".join(shlex.join([*overlay.prefix, *rule]) for rule in rules)
-                  + "\nUse the guard invocation exactly. Other commands remain sandboxed; no escalation or prompt is available.")
+        prompt = (
+            "\n\nHost execution is restricted to these guarded commands (append arguments only to the permitted test/build forms):\n"
+            + "\n".join(shlex.join([*overlay.prefix, *rule]) for rule in rules)
+            + "\nUse the guard invocation exactly. Other commands remain sandboxed; no escalation or prompt is available."
+        )
         return dataclasses.replace(spec, argv=argv, env=spec.env | {"CODEX_HOME": str(overlay.root)}, stdin=spec.stdin + prompt), overlay
     except BaseException:
         overlay.cleanup()
@@ -77,8 +81,7 @@ def guard(a: env.Args) -> int:
     argv = getattr(a, "exec_allow", None)
     read_only = bool(getattr(a, "read_only", False))
     engine_only = tuple(getattr(a, "engine_only", None) or ())
-    row: dict = {"v": 1, "mode": "exec" if argv is not None else "hook", "argv": argv,
-                 "allowed": False, "reason": "guard error"}
+    row: dict = {"v": 1, "mode": "exec" if argv is not None else "hook", "argv": argv, "allowed": False, "reason": "guard error"}
     result = 2
     resolved = None
     try:

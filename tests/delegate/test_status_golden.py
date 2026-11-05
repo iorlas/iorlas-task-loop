@@ -8,8 +8,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from support.procsim import real_proc
+
 import hermetic  # noqa: F401  (a home of its own for every test)
-from support.procsim import real_proc  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 FIX = ROOT / "tests" / "delegate" / "fixtures"

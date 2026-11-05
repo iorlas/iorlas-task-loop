@@ -1,5 +1,6 @@
 """Readiness: what each lane needs on this machine (CLI, login, key). `doctor` prints them as a table; `configured_lanes` tells the fleet which
 lanes the machine can run. No state is stored: every call derives it from the machine."""
+
 import json
 import os
 import shutil
@@ -33,7 +34,7 @@ def check_opencode_xai():
     f = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share") / "opencode" / "auth.json"
     try:
         return "xai" in json.loads(f.read_text(encoding="utf-8"))
-    except (OSError, ValueError, TypeError):
+    except OSError, ValueError, TypeError:
         return False
 
 
@@ -50,7 +51,7 @@ def check_opencode_zai_coding():
     try:
         auth = json.loads(f.read_text(encoding="utf-8")).get("zai-coding-plan", {})
         return isinstance(auth, dict) and auth.get("type") == "api" and bool(auth.get("key"))
-    except (OSError, ValueError, TypeError, AttributeError):
+    except OSError, ValueError, TypeError, AttributeError:
         return False
 
 
@@ -84,7 +85,11 @@ def fix_hint(name: str):
 
 def _fix_hint(name: str):
     if name == "OPENAI_SUBSCRIPTION":
-        return "run `codex login --device-auth`" if check_codex_cli() else "install the Codex CLI (`npm install -g @openai/codex`), then `codex login --device-auth`"
+        return (
+            "run `codex login --device-auth`"
+            if check_codex_cli()
+            else "install the Codex CLI (`npm install -g @openai/codex`), then `codex login --device-auth`"
+        )
     if name == "GROK_SUBSCRIPTION":
         return "macOS: install OpenCode (https://opencode.ai), then `opencode auth login` and pick xAI"
     if name == "DEEPSEEK_FREE":

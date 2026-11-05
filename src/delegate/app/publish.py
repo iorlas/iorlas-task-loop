@@ -3,6 +3,7 @@
 Unset, nothing is written. The first line of the file is the WorkerStarted of the first worker; each worker's `start` event follows it.
 A write error warns once and stops the feed; a file past LIVE_FILE_MAX stops growing (only `end` still goes out). Nothing here raises into the call.
 """
+
 import contextlib
 import json
 import os
@@ -19,10 +20,10 @@ from delegate.contracts import live
 from delegate.contracts.codec import ABSENT, to_json
 from delegate.contracts.live import LIVE_FILE_MAX
 
-EndStatus = Literal["done", "timeout", "killed", "error"]      # the contract's live end statuses
+EndStatus = Literal["done", "timeout", "killed", "error"]  # the contract's live end statuses
 ENV = "DELEGATE_LIVE_FILE"
 CMD_MAX, OUT_MAX, MSG_MAX, THINK_MAX = 2000, 1500, 2000, 500
-STALL_FIRST_S = 60       # no event this long: one "stall", then one more every STALL_EVERY_S while it lasts
+STALL_FIRST_S = 60  # no event this long: one "stall", then one more every STALL_EVERY_S while it lasts
 STALL_EVERY_S = 60
 
 
@@ -42,7 +43,7 @@ class LiveSink:
         self.lock = threading.Lock()
         self.broken = self.capped = False
         self.t0 = wall()
-        self.open: dict[Any, tuple[float, str]] = {}        # event id -> (started t, "cmd" | "tool")
+        self.open: dict[Any, tuple[float, str]] = {}  # event id -> (started t, "cmd" | "tool")
         self.stall_at = STALL_FIRST_S
         self.on = bool(self.path)
         self.info: dict[str, Any] = {}
@@ -53,7 +54,7 @@ class LiveSink:
         """One record (a LiveEvent or the WorkerStarted) as one line."""
         if not self.on or self.broken or (self.capped and not final):
             return
-        assert self.path is not None      # `on` is `bool(path)`
+        assert self.path is not None  # `on` is `bool(path)`
         try:
             with self.lock:
                 if self.fd is None:
@@ -64,7 +65,7 @@ class LiveSink:
                     self.capped = True
                     return
                 append_line(self.fd, line)
-        except Exception as e:        # a dashboard feed must never break the call
+        except Exception as e:  # a dashboard feed must never break the call
             self.broken = True
             print(f"delegate: live event file {self.path} stopped: {e}", file=sys.stderr)
 
@@ -96,7 +97,7 @@ class LiveSink:
         """Called with the supervisor's seconds-without-events about every half second."""
         if not self.on:
             return
-        if idle_s < self.stall_at - STALL_EVERY_S:       # events came back: the next silence starts at 60 again
+        if idle_s < self.stall_at - STALL_EVERY_S:  # events came back: the next silence starts at 60 again
             self.stall_at = STALL_FIRST_S
         if idle_s >= self.stall_at:
             self.write(live.LiveStall(t=self.wall(), secs=int(idle_s)))
@@ -119,11 +120,15 @@ class LiveSink:
             return
         self.open[ident] = (self.wall(), "cmd" if shell else "tool")
         if shell:
-            self.write(live.LiveCmdStart(t=self.wall(), id=str(ident), text=str(text)[:CMD_MAX], cwd=_opt(cwd), prov=True if prov else ABSENT))
+            self.write(
+                live.LiveCmdStart(t=self.wall(), id=str(ident), text=str(text)[:CMD_MAX], cwd=_opt(cwd), prov=True if prov else ABSENT)
+            )
         else:
             self.write(live.LiveToolStart(t=self.wall(), id=str(ident), text=str(text)[:CMD_MAX], prov=True if prov else ABSENT))
 
-    def finish(self, ident: Any, shell: bool, text: str | None = None, exit_: int | None = None, out: Any = None, secs: float | None = None) -> None:
+    def finish(
+        self, ident: Any, shell: bool, text: str | None = None, exit_: int | None = None, out: Any = None, secs: float | None = None
+    ) -> None:
         if ident not in self.open:
             self.begin(ident, shell, text or "")
         t, kind = self.open.pop(ident)
@@ -177,7 +182,7 @@ class LiveSink:
             case ev.Unknown():
                 self.raw(e.type)
             case ev.TurnDone():
-                pass            # a turn end with no usage to report (claude's result carries its own totals in `end`)
+                pass  # a turn end with no usage to report (claude's result carries its own totals in `end`)
 
 
 def end_status(timed_out: bool, hung: str | None, stop: str | None, rc: int | None) -> EndStatus:

@@ -6,10 +6,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import hermetic  # noqa: F401  (a home of its own for every test)
-
 from delegate.app import decide
-from support.procsim import real_proc  # noqa: E402
+from support.procsim import real_proc
+
+import hermetic  # noqa: F401  (a home of its own for every test)
 
 
 class CodexUvEnv(unittest.TestCase):

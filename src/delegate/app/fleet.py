@@ -3,6 +3,7 @@ a usage reading per lane, the out board, the health fold and the leases. Side ef
 
 `mark_busy`, `settle_holds` and `drift_warnings` are the three things a call does to the fleet before the Router sees it.
 """
+
 import contextlib
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
@@ -16,7 +17,9 @@ from delegate.domain.holds.book import HoldBook, StaleHold
 from delegate.domain.lanes.lane import Lane
 from delegate.domain.lanes.leases import LeaseBook
 
-Reader = Callable[[Lane, Settings, StateDoc, float, object], None]      # fills a lane's usage in place (the claude reader takes the caller's get_usage)
+Reader = Callable[
+    [Lane, Settings, StateDoc, float, object], None
+]  # fills a lane's usage in place (the claude reader takes the caller's get_usage)
 DRIFT_NOTE = "enabled but not ready"
 WARN_EVERY_S = 86400
 
@@ -24,12 +27,20 @@ WARN_EVERY_S = 86400
 @dataclass
 class Fleet:
     lanes: dict[str, Lane]
-    offers: list[str] = field(default_factory=list)       # lanes seen for the first time and not usable: reported once, then remembered
+    offers: list[str] = field(default_factory=list)  # lanes seen for the first time and not usable: reported once, then remembered
 
 
 class FleetBuilder:
-    def __init__(self, routing: Routing, states: StateStore, history: HistoryStore, checkpoints: CheckpointStore, config: ConfigStore,
-                 readers: Mapping[str, Reader], configured: Callable[[], dict[str, bool]]) -> None:
+    def __init__(
+        self,
+        routing: Routing,
+        states: StateStore,
+        history: HistoryStore,
+        checkpoints: CheckpointStore,
+        config: ConfigStore,
+        readers: Mapping[str, Reader],
+        configured: Callable[[], dict[str, bool]],
+    ) -> None:
         self.r, self.states, self.history, self.checkpoints, self.config = routing, states, history, checkpoints, config
         self.readers, self.configured = readers, configured
 
@@ -75,10 +86,18 @@ class FleetBuilder:
 
     def _apply_out(self, lane: Lane, doc: StateDoc, t: float) -> None:
         o = doc.out.get(lane.name)
-        if o and o.reason == "limit" and lane.read_at and lane.read_at > o.at and not lane.out and (lane.five or 0) < 95 and (lane.week or 0) < 95:
-            self.states.update(lambda s: s.out.pop(lane.name, None))       # a reading after the refusal shows room: the out was wrong or is over
+        if (
+            o
+            and o.reason == "limit"
+            and lane.read_at
+            and lane.read_at > o.at
+            and not lane.out
+            and (lane.five or 0) < 95
+            and (lane.week or 0) < 95
+        ):
+            self.states.update(lambda s: s.out.pop(lane.name, None))  # a reading after the refusal shows room: the out was wrong or is over
             o = None
-        if o and o.until > t and not lane.out:      # an out reported by the model or by a launcher
+        if o and o.until > t and not lane.out:  # an out reported by the model or by a launcher
             lane.out, lane.out_until, lane.out_reason = True, o.until, o.reason
             lane.notes.append(o.why)
 
@@ -122,11 +141,13 @@ def settle_holds(states: StateStore, lanes: dict[str, Lane], doc: StateDoc, t: f
     used = {n: lane.week if lane.week is not None else lane.five for n, lane in lanes.items()}
     stamp = HoldBook(doc.holds).to_stamp(used, t)
     if stamp:
+
         def apply(s: StateDoc) -> None:
             for k in stamp:
                 h = s.holds.get(k)
                 if h and not h.stale_at:
                     h.stale_at = t
+
         doc = states.update(apply)
     return HoldBook(doc.holds).asks(used, t), doc
 
@@ -134,13 +155,10 @@ def settle_holds(states: StateStore, lanes: dict[str, Lane], doc: StateDoc, t: f
 def drift_warnings(states: StateStore, lanes: dict[str, Lane], doc: StateDoc, t: float) -> list[str]:
     """A lane the profile enabled but the machine no longer supports: say so once a day."""
     bad = [n for n, lane in lanes.items() if lane.notes and lane.notes[0].startswith(DRIFT_NOTE)]
-    out = [f"{n} is enabled but not ready, so it is skipped (route.py doctor)"
-           for n in bad if t - doc.warned_at.get(n, 0) > WARN_EVERY_S]
+    out = [f"{n} is enabled but not ready, so it is skipped (route.py doctor)" for n in bad if t - doc.warned_at.get(n, 0) > WARN_EVERY_S]
     if out:
         states.update(lambda s: s.warned_at.update(dict.fromkeys(bad, t)))
     return out
-
-
 
 
 class AuthCache:

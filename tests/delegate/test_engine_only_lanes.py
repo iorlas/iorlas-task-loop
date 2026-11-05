@@ -9,10 +9,6 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-import hermetic  # noqa: F401  (a home of its own for every test)
-import routing_support as support
-from test_review_order import CFG, T, lanes
-
 from delegate.adapters.harness import opencode_sandbox as box
 from delegate.adapters.harness.base import LaunchInputs
 from delegate.adapters.harness.opencode import OpenCodeHarness
@@ -20,7 +16,11 @@ from delegate.app import launch
 from delegate.contracts.routing import CallArgs
 from delegate.contracts.state import RefRecord
 from delegate.contracts.wire import RECIPE_RUNNERS
-from support.procsim import real_proc  # noqa: E402
+from support.procsim import real_proc
+
+import hermetic  # noqa: F401  (a home of its own for every test)
+import routing_support as support
+from test_review_order import CFG, T, lanes
 
 ROOT = Path(__file__).resolve().parents[2]
 DENIED_BY_OPENCODE = (

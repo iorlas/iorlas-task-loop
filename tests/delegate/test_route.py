@@ -4,7 +4,6 @@ import datetime as dt
 import importlib.util
 import json
 import os
-import re
 import subprocess
 import sys
 import tempfile
@@ -19,8 +18,6 @@ spec = importlib.util.spec_from_file_location("route", ROOT / "src" / "delegate"
 route = importlib.util.module_from_spec(spec)
 sys.modules["route"] = route
 spec.loader.exec_module(route)
-import routing_support as support
-
 from delegate.app import decide as dec
 from delegate.app import env, net, usage
 from delegate.contracts.stores import locked
@@ -28,6 +25,8 @@ from delegate.domain.health import ledger as health_ledger
 from delegate.domain.lanes.lane import Lane
 from delegate.domain.time import spec
 from support.procsim import real_proc  # noqa: E402
+
+import routing_support as support
 
 net.REAL_NET_PROBE = net.net_probe
 net.net_probe = lambda hosts=None: {"up": True, "ip_up": True, "why": "ok", "ms": 1, "hosts": {}, "at": time.time()}     # tests open no socket; tests/test_net.py swaps it per case

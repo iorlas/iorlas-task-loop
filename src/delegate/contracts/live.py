@@ -4,6 +4,7 @@ The first line is a WorkerStarted (no `k`): where the worker process is. Every o
 kind's fields. Kinds that open and close something come in _start/_end pairs, matched by `id`. `prov` marks a row derived before the harness
 confirmed it. A value the harness did not give is left out of the line, not written as null (`exit` of cmd_end is the exception: null = unknown).
 """
+
 from dataclasses import field
 from typing import ClassVar, Literal
 
@@ -121,8 +122,21 @@ class LiveRaw(LiveRec):
     type: str
 
 
-LiveEvent = (LiveStart | LiveCmdStart | LiveCmdEnd | LiveToolStart | LiveToolEnd | LiveMsg | LiveThink | LiveTokens | LiveStall | LiveRetry
-             | LiveEnd | LiveRaw)
-LIVE_EVENTS = table_of(LiveStart, LiveCmdStart, LiveCmdEnd, LiveToolStart, LiveToolEnd, LiveMsg, LiveThink, LiveTokens, LiveStall, LiveRetry,
-                       LiveEnd, LiveRaw)
-LIVE_FILE_MAX = 20 * 1024 * 1024      # a live file past this stops growing; the call goes on
+LiveEvent = (
+    LiveStart
+    | LiveCmdStart
+    | LiveCmdEnd
+    | LiveToolStart
+    | LiveToolEnd
+    | LiveMsg
+    | LiveThink
+    | LiveTokens
+    | LiveStall
+    | LiveRetry
+    | LiveEnd
+    | LiveRaw
+)
+LIVE_EVENTS = table_of(
+    LiveStart, LiveCmdStart, LiveCmdEnd, LiveToolStart, LiveToolEnd, LiveMsg, LiveThink, LiveTokens, LiveStall, LiveRetry, LiveEnd, LiveRaw
+)
+LIVE_FILE_MAX = 20 * 1024 * 1024  # a live file past this stops growing; the call goes on

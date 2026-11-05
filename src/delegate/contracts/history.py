@@ -3,6 +3,7 @@
 A row is a fact, appended once and never edited. The health fold (domain/health) reads `run`, `canary` and `release` rows; the rest are for
 calibration and the dashboard. A line of another shape is skipped, never migrated.
 """
+
 from dataclasses import field
 from typing import Any
 
@@ -160,7 +161,7 @@ class LaneFact:
 class HealthState:
     V = V
     ts: float = 0.0
-    pairs: dict[str, PairFact] = field(default_factory=dict)       # "LANE|model"
+    pairs: dict[str, PairFact] = field(default_factory=dict)  # "LANE|model"
     lanes: dict[str, LaneFact] = field(default_factory=dict)
 
 

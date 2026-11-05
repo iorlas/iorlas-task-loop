@@ -1,5 +1,6 @@
 """What the Codex CLI keeps outside a run: the rate limits (`codex app-server`, one JSON-RPC exchange) and the rollout files under $CODEX_HOME/sessions
 (token totals of a thread, of its child threads, and its context size). Undocumented layouts: this is the one reader of them."""
+
 import contextlib
 import json
 import os
@@ -11,7 +12,7 @@ from pathlib import Path
 
 from delegate.adapters import procs
 
-APP_SERVER_S = 8          # seconds each codex app-server reply may take
+APP_SERVER_S = 8  # seconds each codex app-server reply may take
 
 
 def sessions_root():
@@ -28,7 +29,7 @@ def rate_limits() -> tuple[dict | None, str | None]:
     except OSError as e:
         return None, f"codex app-server failed to start: {e}"
     stdin, stdout = p.stdin, p.stdout
-    assert stdin is not None and stdout is not None      # both are PIPEs
+    assert stdin is not None and stdout is not None  # both are PIPEs
     pending = bytearray()
 
     def send(m: dict) -> None:
@@ -56,13 +57,19 @@ def rate_limits() -> tuple[dict | None, str | None]:
             pending.extend(chunk)
 
     try:
-        send({"id": 1, "method": "initialize", "params": {"clientInfo": {"name": "delegate-route", "title": "delegate route", "version": "1"}}})
+        send(
+            {
+                "id": 1,
+                "method": "initialize",
+                "params": {"clientInfo": {"name": "delegate-route", "title": "delegate route", "version": "1"}},
+            }
+        )
         if read(1, APP_SERVER_S) is None:
             return None, "codex app-server did not answer"
         send({"method": "initialized"})
         send({"id": 2, "method": "account/rateLimits/read"})
         r = read(2, APP_SERVER_S)
-    except BrokenPipeError:         # the server exited under us
+    except BrokenPipeError:  # the server exited under us
         return None, "codex app-server closed its input"
     finally:
         procs.kill_tree(p)
@@ -94,8 +101,11 @@ def child_tokens(thread: str, since: float):
                             last = line
                 if last:
                     u = json.loads(last)["payload"]["info"]["total_token_usage"]
-                    tot = {"in": tot["in"] + (u.get("input_tokens") or 0), "cached": tot["cached"] + (u.get("cached_input_tokens") or 0),
-                           "out": tot["out"] + (u.get("output_tokens") or 0)}
+                    tot = {
+                        "in": tot["in"] + (u.get("input_tokens") or 0),
+                        "cached": tot["cached"] + (u.get("cached_input_tokens") or 0),
+                        "out": tot["out"] + (u.get("output_tokens") or 0),
+                    }
                     n += 1
     return tot, n
 

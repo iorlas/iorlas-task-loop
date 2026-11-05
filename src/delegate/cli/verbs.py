@@ -1,5 +1,6 @@
 """The verbs of route.py that are not a module of their own: holds, report, capture-limits, guard, contract, next, run. Each takes the parsed
 arguments and the routing table and returns the exit code."""
+
 import json
 import sys
 import uuid
@@ -43,13 +44,15 @@ def cmd_report(a: env.Args, cfg: dict):
         sys.exit(f"route.py: unknown lane {a.lane}; lanes: {', '.join(cfg['lanes'])}")
     if a.event == "ok":
         env.update_state(lambda s: s.out.pop(a.lane, None))
-        env.history_add(hist.ReleaseRow(ts=env.now(), lane=a.lane))      # the fold forgets the lane's limits
+        env.history_add(hist.ReleaseRow(ts=env.now(), lane=a.lane))  # the fold forgets the lane's limits
         print(f"{a.lane}: marked available")
         return 0
     until = to_epoch(a.until)
     if until is None:
         st = env.load_state()
-        lane = decide.fleet_builder(cfg).build(st, t, check_config=False).lanes[a.lane]     # a lane the profile leaves out can still be reported out
+        lane = (
+            decide.fleet_builder(cfg).build(st, t, check_config=False).lanes[a.lane]
+        )  # a lane the profile leaves out can still be reported out
         until = lane.out_until or t + 3600
     launch.settler().mark_out(a.lane, until, "reported out", t, "limit", "manual" if a.until else "guess")
     print(f"{a.lane}: out until {local(until)}")
@@ -87,7 +90,7 @@ def cmd_next(a: env.Args, cfg: dict):
     d["needs_input"] = cockpit.needs_input(lanes)
     if warnings:
         d["warnings"] = warnings
-    if not a.verbose:       # the hot path stays small: reasoning and the lane table only on request
+    if not a.verbose:  # the hot path stays small: reasoning and the lane table only on request
         d.pop("trace", None)
     else:
         d["lanes"] = {n: ln.brief(t) for n, ln in lanes.items()}

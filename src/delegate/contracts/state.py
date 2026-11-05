@@ -4,6 +4,7 @@ Sections have one owner each (see domain/): `out` the OutBoard, `holds` the Hold
 `auth` the one login cache (the old auth-cache.json is merged in), `codex_limits` / `claude_usage` the usage readers' caches. Every write
 goes through `StateStore.transaction()` under one lock. A file of another shape reads as an empty document: nothing is migrated.
 """
+
 from dataclasses import field
 from typing import Any
 
@@ -32,7 +33,7 @@ class Hold:
     lane: str
     until: float
     set_at: float
-    roles: list[str] = field(default_factory=list)       # empty: every role
+    roles: list[str] = field(default_factory=list)  # empty: every role
     set_by: str = "owner"
     reason: str = ""
     stale_at: float | None = None
@@ -135,6 +136,6 @@ def split_retired_state(data: dict) -> tuple[dict, list[str]]:
 class Profile:
     """The owner's lane choices, `config.json` `profile`: never a setting, never merged into one."""
 
-    lanes: dict[str, str] = field(default_factory=dict)       # lane -> enabled | declined; a lane not listed is undecided
+    lanes: dict[str, str] = field(default_factory=dict)  # lane -> enabled | declined; a lane not listed is undecided
     ack: list[str] = field(default_factory=list)
-    offered: list[str] = field(default_factory=list)          # lanes seen not usable for the first time, reported once
+    offered: list[str] = field(default_factory=list)  # lanes seen not usable for the first time, reported once

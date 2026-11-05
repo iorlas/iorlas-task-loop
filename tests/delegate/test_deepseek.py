@@ -8,10 +8,6 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-import hermetic  # noqa: F401  (a home of its own for every test)
-from delegate_fakes.fake_run import replay
-from test_route import CFG, decide, lanes
-
 from delegate.adapters import agent_runs
 from delegate.adapters.harness.opencode import OpenCodeHarness
 from delegate.app import decide as dec
@@ -19,7 +15,11 @@ from delegate.app import env, launch, usage
 from delegate.app.settle import Settler
 from delegate.app.supervisor import RunHooks
 from delegate.domain.lanes.lane import Lane
-from support.procsim import real_proc  # noqa: E402
+from support.procsim import real_proc
+
+import hermetic  # noqa: F401  (a home of its own for every test)
+from delegate_fakes.fake_run import replay
+from test_route import CFG, decide, lanes
 
 
 class DeepSeekTests(unittest.TestCase):

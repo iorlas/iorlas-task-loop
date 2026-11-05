@@ -6,13 +6,13 @@ import sys
 import unittest
 from unittest import mock
 
-import hermetic  # noqa: F401  (a home of its own for every test)
-from test_route import route
-
 from delegate.app import decide, launch
 from delegate.cli import parser
 from delegate.contracts import wire
 from delegate.domain.policy.worker import judge
+
+import hermetic  # noqa: F401  (a home of its own for every test)
+from test_route import route
 
 KILLS = ('pkill -f "Unity.*client"', "kill 4242 4243", "killall Unity", "cd /s && pkill -9 -f Unity; echo done", "kill -9 $(pgrep Unity)",
          "for p in 1 2; do kill $p; done")

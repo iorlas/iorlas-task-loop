@@ -3,6 +3,7 @@
 A harness builds the launch (argv, env, stdin), turns each line of the CLI's output into HarnessEvents ONCE, keeps the facts those lines
 established (`evidence`), finds the transcript and probes the login. It knows nothing of lanes, state, holds or the router.
 """
+
 from dataclasses import field
 from pathlib import Path
 from typing import Any, Protocol
@@ -20,20 +21,20 @@ class LaunchInputs:
     cwd: str
     model: str
     effort: str
-    prompt: str                     # codex: rules and brief on stdin; claude and opencode: the brief (opencode: rules first)
+    prompt: str  # codex: rules and brief on stdin; claude and opencode: the brief (opencode: rules first)
     env: dict[str, str]
-    schema: str | None = None       # path of the JSON Schema file
+    schema: str | None = None  # path of the JSON Schema file
     resume: str | None = None
-    sandbox: str = ""               # codex
-    out_file: str = ""              # codex
-    cli: list[str] = field(default_factory=list)            # codex: the router's argv for a fresh run (`codex exec -C ... -s ... -m ...`), exe first
-    access: list[str] = field(default_factory=list)         # codex: delegate's fixed sandbox and network flags
-    isolation: list[str] = field(default_factory=list)      # codex: skills turned off by path
-    session: str = ""               # claude: the session id we fix up front (--session-id)
-    system: str = ""                # claude: the appended system prompt
-    settings: str = ""              # claude: --settings JSON (the PreToolUse guard)
-    write: bool = False             # claude, opencode: may the worker edit
-    engine_only: tuple[str, ...] = ()       # opencode: recipes only the engine runs, denied in the bash permission rules of a write step
+    sandbox: str = ""  # codex
+    out_file: str = ""  # codex
+    cli: list[str] = field(default_factory=list)  # codex: the router's argv for a fresh run (`codex exec -C ... -s ... -m ...`), exe first
+    access: list[str] = field(default_factory=list)  # codex: delegate's fixed sandbox and network flags
+    isolation: list[str] = field(default_factory=list)  # codex: skills turned off by path
+    session: str = ""  # claude: the session id we fix up front (--session-id)
+    system: str = ""  # claude: the appended system prompt
+    settings: str = ""  # claude: --settings JSON (the PreToolUse guard)
+    write: bool = False  # claude, opencode: may the worker edit
+    engine_only: tuple[str, ...] = ()  # opencode: recipes only the engine runs, denied in the bash permission rules of a write step
 
 
 @record
@@ -49,18 +50,20 @@ class Evidence:
     """The facts a stream established, for the supervisor and the classifier."""
 
     ref: str | None = None
-    last: str = ""                  # the last agent message
+    last: str = ""  # the last agent message
     tokens: dict[str, int | None] | None = None
-    cumulative: dict[str, int | None] | None = None      # the thread's running total on a resume
+    cumulative: dict[str, int | None] | None = None  # the thread's running total on a resume
     turns: int = 0
-    work: bool = False              # a command, edit, tool call or message finished
-    error: str = ""                 # the harness's own failure text
-    transient: str = ""             # a retry in progress ("Reconnecting... 2/5", "waiting for network")
-    net_at: float | None = None     # monotonic time the harness began waiting for the network; None = the stream moves
-    denials: list[ev.Denied] = field(default_factory=list)       # what the harness or its reviewer refused, in order
-    final: dict | None = None       # claude: the first `result` event
+    work: bool = False  # a command, edit, tool call or message finished
+    error: str = ""  # the harness's own failure text
+    transient: str = ""  # a retry in progress ("Reconnecting... 2/5", "waiting for network")
+    net_at: float | None = None  # monotonic time the harness began waiting for the network; None = the stream moves
+    denials: list[ev.Denied] = field(default_factory=list)  # what the harness or its reviewer refused, in order
+    final: dict | None = None  # claude: the first `result` event
     context_k: float | None = None  # the last request's whole input, in thousands of tokens
-    steps: list[dict] = field(default_factory=list)         # raw usage the harness reported per request or step (claude: usage, opencode: {tokens, cost})
+    steps: list[dict] = field(
+        default_factory=list
+    )  # raw usage the harness reported per request or step (claude: usage, opencode: {tokens, cost})
 
 
 @mutable
@@ -70,16 +73,16 @@ class Summary:
 
     text: str = ""
     rc: int | None = None
-    res: dict = field(default_factory=dict)         # ref, tokens, turns, context_k, started, partial, acct, ...
-    vendor: str = ""                # the CLI's own error text (never the model's answer)
-    stderr: str = ""                # the stderr the ladder may read
-    work: bool = False              # the worker did something before it failed
-    check: bool = True              # classify even when rc == 0
-    stands: bool = False            # an answer we stopped after stays an answer
-    warnings: list[str] = field(default_factory=list)         # kept when the run is otherwise clean
-    tail: str = ""                  # what an unexplained exit quotes
-    data: Any = None                # the harness's own structured answer (claude --json-schema), else the caller parses `text`
-    facts: dict = field(default_factory=dict)       # measured facts for the ladder (http_status)
+    res: dict = field(default_factory=dict)  # ref, tokens, turns, context_k, started, partial, acct, ...
+    vendor: str = ""  # the CLI's own error text (never the model's answer)
+    stderr: str = ""  # the stderr the ladder may read
+    work: bool = False  # the worker did something before it failed
+    check: bool = True  # classify even when rc == 0
+    stands: bool = False  # an answer we stopped after stays an answer
+    warnings: list[str] = field(default_factory=list)  # kept when the run is otherwise clean
+    tail: str = ""  # what an unexplained exit quotes
+    data: Any = None  # the harness's own structured answer (claude --json-schema), else the caller parses `text`
+    facts: dict = field(default_factory=dict)  # measured facts for the ladder (http_status)
     cost: float = 0.0
 
 

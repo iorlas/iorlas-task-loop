@@ -1,4 +1,5 @@
 """Times: epoch seconds everywhere; text only at the edges. `+2h` / `+3d` / ISO / epoch in, 'Sat 24 Oct 18:00' and '2h30m' out."""
+
 import datetime as dt
 
 WEEK_MIN = 7 * 24 * 60
@@ -55,7 +56,7 @@ def next_weekly(spec: str, t: float) -> float | None:
         day, hm = spec.split()
         hh, mm = (int(x) for x in hm.split(":"))
         target = DAYS.index(day[:3].lower())
-    except (ValueError, AttributeError):
+    except ValueError, AttributeError:
         return None
     base = dt.datetime.fromtimestamp(t)
     cand = base.replace(hour=hh, minute=mm, second=0, microsecond=0) + dt.timedelta(days=(target - base.weekday()) % 7)
