@@ -7,6 +7,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
 from taskloop.contracts import (
+    artifact,
     ask,
     bead,
     checkpoint,
@@ -325,6 +326,8 @@ OTHERS = {
     "ToolCall": dashruns.ToolCall(t=T, name="Bash", arg="ls"),
     "AdrUse": ledger.AdrUse(adr="ADR-3", bead="tl-2", run=str(RUN), t=T),
     "StageProgress": checkpoint.StageProgress(red=1, red_now=["a"], failed=["b"], acceptance_only=True, shots_fixed=True),
+    "ArtifactSlot": artifact.ArtifactSlot(repo="r-1", bead="tl-1", run="tl-1-1", stage="write", attempt=2),
+    "ArtifactMeta": artifact.ArtifactMeta(name="home.png", caption="home", role="after", kind="png", size=9, sha256="ab" * 32, created=T),
     "FollowupOutbox": followups.FollowupOutbox(
         pending=[{"title": "later", "why": "w", "key": "tl-1|leftover|later", "origin": "plan"}]),
     "Checkpoint": checkpoint.Checkpoint(

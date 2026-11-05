@@ -1,15 +1,19 @@
 """`tl factory`: start, inspect, stop and tail a repo's detached factory."""
 import argparse
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
+from taskloop.app.artifacts import server
 from taskloop.app.launch import dash, factory, loop, repos
 from taskloop.app.loop.exits import last_by_lane
 from taskloop.app.loop.files import LoopFiles
 from taskloop.app.wire import real
+from taskloop.contracts.artifact import ArtifactSlot
 from taskloop.contracts.env import Env
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.loop import LoopState
+from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import Spawner
 from taskloop.contracts.slots import SlotGitError
 
@@ -109,3 +113,10 @@ def add_parser(sp: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
             command.add_argument("--lane", type=_positive, default=1, metavar="K")
             command.add_argument("-n", type=int, default=50)
             command.add_argument("-f", dest="follow", action="store_true")
+
+
+def serve_artifacts(a: argparse.Namespace, cfg: ConfigDir, now: Callable[[], float]) -> int:
+    """`tl artifact-server`: the artifact_add stdio MCP server a worker's harness starts for one call. Internal, not a session command:
+    the binding comes from argv (the factory writes it, the model cannot) and stdout carries only protocol lines."""
+    slot = ArtifactSlot(repo=a.repo, bead=a.bead, run=a.run, stage=a.stage, attempt=a.attempt)
+    return server.serve(sys.stdin, sys.stdout, cfg.artifact_store(), slot, Path(a.cwd), now)
