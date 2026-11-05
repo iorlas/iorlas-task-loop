@@ -151,10 +151,15 @@ class Loop(Core):
         env = self.env
         self.carry_in = self.carry_in.replace(back=back, moved_at=env.now())
         self.st = self.st.replace(carry=self.carry())
+        # `uv run --script` keeps this pid as a waiting parent and runs the loop in a child with its own pid and state file:
+        # this pid's file would stay behind, frozen at the old version, and count as a live loop (tl-ixko).
+        with self.files.lock():
+            self.files.remove(env.pid)
         try:
             env.exec_into(d, list(self.args.argv), json.dumps(wire.dump(self.st)))
         except OSError as e:  # execv itself failed: the loop goes on where it is
             self.say(f"warn: could not move: {e}")
+            self.publish()
         return False
 
     # ---- passes ------------------------------------------------------------------------------------------------

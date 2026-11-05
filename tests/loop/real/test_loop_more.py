@@ -322,6 +322,20 @@ class LoopSelfUpdate(LoopBase):
         assert argv[5:] == ["loop", "--repo", str(self.repo), "--max-beads", "5"]
         assert json.loads(state)["carry"]["ran"] == 1
 
+    def test_the_old_pid_leaves_the_live_loops_before_the_exec(self):
+        """uv keeps the old pid alive as a parent: its state file must not count as a second loop (tl-ixko)."""
+        self.beads({"x-1": [rec("landed")]})
+        self.install("0.2.0")
+        states = []
+        exec_stub = os.execve
+
+        def spy(exe, argv, env):
+            states.append(sorted(p.name for p in (Path(homes.config_dir()) / "loop").glob(f"*.{os.getpid()}.json")))
+            return exec_stub(exe, argv, env)
+        with pytest.raises(Moved), mock.patch.object(os, "execve", side_effect=spy):
+            self.run_loop()
+        assert states and not any(states)
+
     def test_the_move_is_logged_and_the_newest_of_several_wins(self):
         self.beads({"x-1": [rec("landed")]})
         self.install("0.2.0")
