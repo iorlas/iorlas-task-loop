@@ -1,18 +1,18 @@
-"""The installed releases of the two plugins: <claude dir>/plugins/cache/<marketplace>/<plugin>/<version>, and the version Claude Code
-records as installed. The reading is any_plugin_cache's; this names the two plugins."""
+"""The installed release of the plugin: <claude dir>/plugins/cache/<marketplace>/<plugin>/<version>, and the version Claude Code
+records as installed. The reading is any_plugin_cache's; this names the plugin."""
 
 from pathlib import Path
 from typing import Final
 
 import any_plugin_cache as apc
 
-PLUGINS: Final = {"task-loop": ("iorlas-task-loop", "skills/task-loop/tl.py"), "delegate": ("iorlas-delegate", "skills/delegate/route.py")}
+PLUGINS: Final = {"task-loop": ("iorlas-task-loop", "skills/task-loop/tl.py")}
 
 version_tuple = apc.version_key
 
 
 def cache_dirs(key: str, claude: Path) -> dict[str, Path]:
-    """{version: dir} of the installed cache dirs of plugin `key` ("task-loop" | "delegate") that hold the plugin's main file."""
+    """{version: dir} of the installed cache dirs of plugin `key` ("task-loop") that hold the plugin's main file."""
     plugin, mark = PLUGINS[key]
     return apc.installs(claude, plugin, mark)
 

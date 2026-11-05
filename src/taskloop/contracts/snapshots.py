@@ -75,12 +75,11 @@ class SharedNotes(Rec):
 
 
 @final
-class Pin(Rec):
-    """pinned.json: the install a loop and run-task use; each key optional."""
+class Pin(Rec, forbid_unknown_fields=False):
+    """pinned.json: the install a loop and run-task use. An older file may still carry a `delegate` key: read, dropped on the next write."""
 
     V: ClassVar[int] = 1
     task_loop: str | None = msgspec.field(default=None, name="task-loop")
-    delegate: str | None = None
     pinned_at: float | None = None
 
 

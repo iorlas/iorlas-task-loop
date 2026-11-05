@@ -16,7 +16,7 @@ history version, health state, a delegate contract number. Each is a cutover: no
    cache dir stays on disk (nothing is deleted), so the old install can still be pinned.
 4. Check. `tl cutover check` again, then one bead through `tl run-task --dry-run`.
 5. Start. `tl loop --repo DIR` again. A bad cutover rolls back with `tl rollback` (pins the previous task-loop version),
-   `tl pin <version> --delegate <version>` for a chosen pair, `tl pin --clear` to follow the installed version again.
+   `tl pin <version>` for a chosen one, `tl pin --clear` to follow the installed version again.
    A rollback does not undo a migrated data format: that is why the window exists and why there is a tag to restore from.
 
 `tl cutover check [--json]` is also the guard of any by-hand landing inside a freeze window.
@@ -37,7 +37,7 @@ history version, health state, a delegate contract number. Each is a cutover: no
 | 4 | the Mac on the converted lifesim profile (argv checks, `wall_min`), task-loop 0.23.127 → 0.23.140 | 2026-10-29 |
 
 Records are typed file stores under src/taskloop/stores/; the records.db import was never built. Contract 3 and its consumer
-landed together; `tl pin <tl> --delegate <dg>` holds a pair while one of them is rolled back.
+landed together.
 
 The Mac moved from 0.23.127 to 0.23.140 on 2026-10-29, after lifesim's profile was converted on its base branch (`checks` as
 argv lists, `timeout_min` → `wall_min`). The order that worked, for any machine whose checkouts lag a profile change:

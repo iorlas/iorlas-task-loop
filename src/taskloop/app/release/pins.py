@@ -1,4 +1,4 @@
-"""pinned.json ({"task-loop": "0.23.38", "delegate": "0.40.1"}, each key optional) is written by `tl pin` and `tl rollback` only: the
+"""pinned.json ({"task-loop": "0.23.38"}) is written by `tl pin` and `tl rollback` only: the
 owner's override. The loop reads it, never writes it. A pin names a plugin cache dir that must exist."""
 import json
 import sys
@@ -25,7 +25,7 @@ def read_pin(env: Env) -> Pin:
 
 
 def pin_version(pin: Pin, key: str) -> str:
-    return (pin.task_loop if key == "task-loop" else pin.delegate) or ""
+    return pin.task_loop or ""
 
 
 def pinned_dir(key: str, env: Env) -> Path | None:
@@ -59,62 +59,59 @@ def pin_refusal(env: Env, version: str, old: Pin, git: Git | None) -> str:
     return mac_pin_refusal(PLUGIN_ROOT, url, version, git)
 
 
-def set_pin(env: Env, task_loop: str = "", delegate: str = "", git: Git | None = None) -> tuple[Pin, str]:
+def set_pin(env: Env, task_loop: str = "", git: Git | None = None) -> tuple[Pin, str]:
     """(the pin now, "" or why it is refused): a version that is not installed is refused, never pinned."""
     old = read_pin(env)
     if sys.platform == "darwin" and task_loop and task_loop != old.task_loop:
         why = pin_refusal(env, task_loop, old, git)
         if why:
             return old, why
-    want = {"task-loop": task_loop, "delegate": delegate}
-    for key, v in want.items():
-        if v and v not in cache_dirs(key, claude_dir(env)):
-            have = sorted(cache_dirs(key, claude_dir(env)), key=lambda x: version_tuple(x) or ())
-            return read_pin(env), "refused: {} {} is not installed under {} (installed: {})".format(
-                PLUGINS[key][0], v, claude_dir(env) / "plugins" / "cache", ", ".join(have) or "none")
-    pin = old.replace(task_loop=task_loop or old.task_loop, delegate=delegate or old.delegate, pinned_at=time.time())
+    if task_loop and task_loop not in cache_dirs("task-loop", claude_dir(env)):
+        have = sorted(cache_dirs("task-loop", claude_dir(env)), key=lambda x: version_tuple(x) or ())
+        return read_pin(env), "refused: {} {} is not installed under {} (installed: {})".format(
+            PLUGINS["task-loop"][0], task_loop, claude_dir(env) / "plugins" / "cache", ", ".join(have) or "none")
+    pin = old.replace(task_loop=task_loop or old.task_loop, pinned_at=time.time())
     pin_store(env).write(pin)
     return pin, ""
 
 
-def rollback_target(env: Env) -> tuple[str, str, str]:
-    """(task-loop version to pin, delegate version to keep, why not): the newest install below the current one."""
+def rollback_target(env: Env) -> tuple[str, str]:
+    """(task-loop version to pin, why not): the newest install below the current one."""
     claude = claude_dir(env)
     pin = read_pin(env)
     newest = max(cache_dirs("task-loop", claude), key=lambda v: version_tuple(v) or (), default="")
     cur = pin.task_loop or installed_version("task-loop", claude) or newest
     if not cur:
-        return "", "", "refused: no task-loop install to roll back from"
+        return "", "refused: no task-loop install to roll back from"
     prev = previous_version("task-loop", cur, claude)
     if not prev:
-        return "", "", f"refused: no task-loop version older than {cur} is installed"
-    keep = pin.delegate or installed_version("delegate", claude)
-    return prev, keep if keep in cache_dirs("delegate", claude) else "", ""
+        return "", f"refused: no task-loop version older than {cur} is installed"
+    return prev, ""
 
 
-def run_pin(env: Env, version: str | None, delegate: str | None, clear: bool, git: Git | None = None) -> int:
-    """`tl pin [VERSION] [--delegate V] [--clear]`: show, set or clear the pin."""
+def run_pin(env: Env, version: str | None, clear: bool, git: Git | None = None) -> int:
+    """`tl pin [VERSION] [--clear]`: show, set or clear the pin."""
     if clear:
-        if version or delegate:
+        if version:
             sys.exit("tl: pin --clear takes no version")
         print("PIN CLEARED" if clear_pin(env) else "no pin was set")
         return 0
-    if not (version or delegate):
+    if not version:
         pin = pin_store(env).get()
         print(json.dumps(pin.to_dict()) if pin else "no pin")
         return 0
-    pin, why = set_pin(env, version or "", delegate or "", git)
+    pin, why = set_pin(env, version or "", git)
     if why:
         print("tl: " + why, file=sys.stderr)
         return 2
-    print("PINNED " + " ".join(f"{k} {pin_version(pin, k)}" for k in ("task-loop", "delegate") if pin_version(pin, k)))
+    print(f"PINNED task-loop {pin.task_loop}")
     return 0
 
 
 def run_rollback(env: Env, git: Git | None = None) -> int:
-    """`tl rollback`: pin the previous task-loop version (the delegate stays as it is)."""
-    prev, keep, why = rollback_target(env)
+    """`tl rollback`: pin the previous task-loop version ."""
+    prev, why = rollback_target(env)
     if why:
         print("tl: " + why, file=sys.stderr)
         return 2
-    return run_pin(env, prev, keep, False, git)
+    return run_pin(env, prev, False, git)
