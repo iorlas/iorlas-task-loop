@@ -26,6 +26,11 @@ def pin_head(land: list[str], sha: str) -> list[str]:
     return [*land[:2], *(a.replace("HEAD", sha, 1) if a.lstrip("+").partition(":")[0] == "HEAD" else a for a in land[2:])]
 
 
+def last_fetched(git: Git, wt: str, remote: str, ref: str) -> str:
+    """What this clone last fetched of `refs/heads/<x>` on the remote, '' when it never has: the sha a lease push expects."""
+    return git.rev_parse(wt, f"refs/remotes/{remote}/{ref.removeprefix('refs/heads/')}") or ""
+
+
 def target(land: list[str]) -> tuple[str, list[str]] | None:
     """(remote, the refs pushed) from a `git push` argv; HEAD:main pushes HEAD. None for a custom command."""
     if not is_push(land):
@@ -138,14 +143,15 @@ class Outbound:
         rc, tail = self.lfs_push()  # git-lfs's hook is not on the hooks path: else the branch lacks its LFS files
         if not rc:
             t0 = e.clock.monotonic()
-            done = e.git.push_lease(e.wt, remote, f"HEAD:{ref}")
+            done = e.git.push_lease(e.wt, remote, f"HEAD:{ref}", last_fetched(e.git, e.wt, remote, ref))
             rc, tail = (0 if done.ok else 1), done.output
             e.log.note(
-                f"git push --force-with-lease {remote} HEAD:{ref}: {'ok' if rc == 0 else 'failed'} in "
+                f"git push --force-with-lease={ref}:<last fetched> {remote} HEAD:{ref}: {'ok' if rc == 0 else 'failed'} in "
                 f"{e.clock.monotonic() - t0:.1f}s"
             )
         why = failure(tail, e.run_dir, ref) if rc else ""
-        if rc and "stale info" in tail:  # the remote branch was pushed from another machine and this clone has no copy of it
+        if rc and any(w in tail for w in ("stale info", "non-fast-forward", "fetch first")):
+            # the remote branch was pushed from another machine and this clone has no copy of it
             raise e.blocked_for(f"failed: {ref} on {remote} holds work this clone has never fetched (another machine ran this bead); "
                                 f"fetch it and decide which work to keep, then rerun\n{why}", "FAULT_LAND")
         if rc:
