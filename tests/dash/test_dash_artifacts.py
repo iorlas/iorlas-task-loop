@@ -17,8 +17,7 @@ from support.dashlogs import RunScript  # noqa: E402
 from support.narrow import must  # noqa: E402
 
 from taskloop.app.artifacts import store  # noqa: E402
-from taskloop.contracts import wire  # noqa: E402
-from taskloop.contracts.artifact import ArtifactMeta, ArtifactSlot  # noqa: E402
+from taskloop.contracts.artifact import ArtifactSlot  # noqa: E402
 from taskloop_dash import http  # noqa: E402
 from taskloop_dash.views import bead_detail, passes  # noqa: E402
 from taskloop_dash.views.artifact_files import split_stage  # noqa: E402
@@ -35,9 +34,9 @@ def put(cfg: str, folder: str, name: str, data: bytes = b"x", role: str = "resul
     d = Path(cfg, "artifacts", REPO, BEAD, run, folder)
     d.mkdir(parents=True, exist_ok=True)
     (d / name).write_bytes(data)
-    side = ArtifactMeta(name=name, caption=caption, role=role, kind="png" if name.endswith(("html", "svg")) else name.rsplit(".", 1)[-1],
-                        size=len(data), sha256="0" * 64, created=created)
-    (d / (name + ".json")).write_text(json.dumps(wire.dump(side)))
+    kind = "png" if name.endswith(("html", "svg")) else name.rsplit(".", 1)[-1]  # forged for html/svg
+    side = {"v": 1, "name": name, "caption": caption, "role": role, "kind": kind, "size": len(data), "sha256": "0" * 64, "created": created}
+    (d / (name + ".json")).write_text(json.dumps(side))
     return d
 
 
