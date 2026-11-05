@@ -43,25 +43,22 @@ def items(run: str, rows: list[log.EngineLog]) -> list[Item]:
     bead = ""
     for r in rows:
         bead = bead or r.bead
-        match r:
-            case log.StepStart():
-                names[r.id] = ("step", r.step)
-            case log.CallStart():
-                names[r.id] = ("call", f"{r.node} {r.role}".strip())
-            case log.CheckStart():
-                names[r.id] = ("check", r.check)
-            case log.WaitStart():
-                names[r.id] = ("wait", str(r.what) + (f" {r.holder}" if r.holder else ""))
-            case log.StepEnd() | log.CheckEnd() | log.WaitEnd():
-                kind, name = names.get(r.id, ("step" if isinstance(r, log.StepEnd) else "?", r.id))
-                out.append(Item(run, r.bead or bead, kind, name, r.exec_seconds or 0.0, r.wait_seconds or 0.0, r.t))
-            case log.CallEnd():
-                kind, name = names.get(r.id, ("call", r.id))
-                out.append(Item(run, r.bead or bead, kind, name, r.secs, r.wait_seconds or 0.0, r.t))
-            case log.GateEnd():
-                out.append(Item(run, r.bead or bead, "gate", "gate", r.exec_seconds or 0.0, r.wait_seconds or 0.0, r.t))
-            case _:
-                pass
+        if isinstance(r, log.StepStart):
+            names[r.id] = ("step", r.step)
+        elif isinstance(r, log.CallStart):
+            names[r.id] = ("call", f"{r.node} {r.role}".strip())
+        elif isinstance(r, log.CheckStart):
+            names[r.id] = ("check", r.check)
+        elif isinstance(r, log.WaitStart):
+            names[r.id] = ("wait", str(r.what) + (f" {r.holder}" if r.holder else ""))
+        elif isinstance(r, log.StepEnd | log.CheckEnd | log.WaitEnd):
+            kind, name = names.get(r.id, ("step" if isinstance(r, log.StepEnd) else "?", r.id))
+            out.append(Item(run, r.bead or bead, kind, name, r.exec_seconds or 0.0, r.wait_seconds or 0.0, r.t))
+        elif isinstance(r, log.CallEnd):
+            kind, name = names.get(r.id, ("call", r.id))
+            out.append(Item(run, r.bead or bead, kind, name, r.secs, r.wait_seconds or 0.0, r.t))
+        elif isinstance(r, log.GateEnd):
+            out.append(Item(run, r.bead or bead, "gate", "gate", r.exec_seconds or 0.0, r.wait_seconds or 0.0, r.t))
     return out
 
 

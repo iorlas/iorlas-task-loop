@@ -419,11 +419,6 @@ def v_doctor(a: Any, c: Ctx) -> int:
     return doctor.run(c.here.parents[1], c.env, c.git, c.who, c.spawner)
 
 
-def v_runs(a: Any, c: Ctx) -> int:
-    runs = importlib.import_module("taskloop.app.track.runs")
-    return runs.show(a.run, c.who.config) if a.op == "show" else runs.slow(c.who.config, a.top, a.by, a.runs)
-
-
 def v_status(a: Any, c: Ctx) -> int:
     return status.run_status(repo_of(a, c), c.here.parents[1], c.now(), a.json, c.env, c.who, c.git)
 
@@ -445,7 +440,7 @@ VERBS: Final[dict[str, Handler]] = {
     "land": v_land,
     "close": v_close,
     "block": v_block,
-    "runs": v_runs,
+    "runs": lambda a, c: verbs.runs(a, c.who.config),
     "trace": lambda a, c: verbs.trace(a.id, a.last, a.json, c.env),
     "usage": lambda a, c: wire_usage.feed(a.windows, c.spawner, c.env),
     "lanes": lambda a, c: wire_lanes.refresh(c.spawner, c.env),
