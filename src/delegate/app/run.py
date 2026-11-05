@@ -235,7 +235,7 @@ class Run:
                 raise
             res = {"outcome": "killed", "say": f"route.py got signal {e.code - 128}; its worker was stopped first"}
         finally:
-            lease.release()
+            lease.finish(hooks.stops)
         return self._finish(res, d, lane, who, rid, lease, hooks, launched, cap, (t0, t_from, git_before))
 
     def _hooks(self, rid: str, lease: RunLease, d: dict[str, Json]) -> tuple[RunHooks, dict[str, Json]]:

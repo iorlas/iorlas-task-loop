@@ -28,6 +28,7 @@ import tl  # noqa: E402
 from support.checked import run_checked  # noqa: E402
 
 from taskloop.app.report import planner  # noqa: E402
+from taskloop.app.report.inputs import read_jsonl  # noqa: E402
 from taskloop.domain.report import matchers  # noqa: E402
 
 T0 = datetime(2026, 10, 21, 6, 0).timestamp()  # the window's start in the fixtures: local 06:00
@@ -150,7 +151,7 @@ class PlannerReport(Case):
         self.tmp.cleanup()
 
     def test_calls_are_split_into_first_again_amend_and_send_back_and_input_is_in_plus_cached(self):
-        p = planner.planner_stats(homes.cfg(), T0 - 1, T0 + 100, history=self.hist)
+        p = planner.planner_stats(homes.cfg(), T0 - 1, T0 + 100, rows=read_jsonl(self.hist))
         by = {x["bead"]: x for x in p["per_bead"]}
         assert (
             {k: by["x-1"][k] for k in ("calls", "first", "again", "amend", "back", "other", "input")}
@@ -158,9 +159,9 @@ class PlannerReport(Case):
         )
         assert (by["x-2"]["calls"], by["x-2"]["first"], by["x-2"]["input"]) == (1, 1, 1000)
         assert (p["calls"], p["beads"], p["input"]) == (6, 3, 17101)  # the worker call is no planner call
-        only = planner.planner_stats(homes.cfg(), T0 - 1, T0 + 100, {"x"}, history=self.hist)
+        only = planner.planner_stats(homes.cfg(), T0 - 1, T0 + 100, {"x"}, rows=read_jsonl(self.hist))
         assert (only["calls"], only["beads"]) == (5, 2)
-        assert planner.planner_stats(homes.cfg(), T0 + 50, T0 + 100, history=self.hist)["calls"] == 0  # outside the window
+        assert planner.planner_stats(homes.cfg(), T0 + 50, T0 + 100, rows=read_jsonl(self.hist))["calls"] == 0  # outside the window
 
     def test_input_is_in_when_in_already_holds_the_cache_else_in_plus_cached(self):
         assert planner.input_tokens({"in": 10000, "cached": 9000}) == 10000   # delegate 0.22+ and Codex
@@ -171,7 +172,7 @@ class PlannerReport(Case):
     def test_the_cli_prints_the_planner_table_read_only(self):
         before = sorted(p.name for p in self.eng.iterdir())
         out = io.StringIO()
-        with mock.patch.object(planner, "HISTORY", str(self.hist)), redirect_stdout(out):
+        with mock.patch.object(planner, "run_history", lambda since: read_jsonl(self.hist)), redirect_stdout(out):
             rc = tl.main(["report", "--planner", "--prefix", "x", "--since", "2026-10-21", "--until", "2026-10-22"])
         text = out.getvalue()
         assert rc == 0
