@@ -10,7 +10,7 @@ from git_porcelain.real import RealRepo
 from taskloop.adapters.git_base import GitBase, classify
 from taskloop.adapters.git_pool import pool_errors, pool_read_error, remote_error
 from taskloop.contracts.gitfacts import DiffEntry, GitOutcome
-from taskloop.contracts.slots import GitReadFailure, MissingRevision
+from taskloop.contracts.slots import GitReadFailure, MissingRevision, SlotGitError
 
 PUSH_WALL_S = 3600.0  # a push (or an LFS upload) that has not ended after this long is a failure with these words
 
@@ -123,9 +123,13 @@ class LandGit(GitBase):
             result = self._pool(d).worktree(Path(d).resolve()).continue_rebase()
         return GitOutcome(ok=result.ok, output=result.output)
 
-    def push_lease(self, d: str, remote: str, refspec: str) -> GitOutcome:
+    def push_lease(self, d: str, remote: str, refspec: str, expect_sha: str) -> GitOutcome:
+        src, colon, dst = refspec.partition(":")
+        if not colon or not dst or src.startswith("+"):
+            raise SlotGitError(f"a lease push needs SRC:DST without '+', got {refspec!r}")
         with pool_errors(partial(remote_error, push=True)):
-            done = self._pool(d).worktree(Path(d).resolve()).push_lease(remote, refspec, timeout=PUSH_WALL_S)
+            done = self._pool(d).worktree(Path(d).resolve()).push_request(
+                remote, [refspec], options=[f"--force-with-lease={dst}:{expect_sha}"] if expect_sha else [], timeout=PUSH_WALL_S)
         return GitOutcome(ok=done.ok, output=done.output)
 
     def lfs_push(self, d: str, remote: str, refs: list[str]) -> GitOutcome:
