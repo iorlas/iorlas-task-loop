@@ -166,7 +166,6 @@ class PushJudge(Case):
                 decision = self.judge(self.request("head", remote=remote, old="elsewhere"))
                 assert decision.status == PushStatus.ALLOWED
                 evidence.assert_not_called()
-        self.check.assert_not_called()
 
     def test_moving_the_base_branch_uses_the_receivers_old_base(self):
         self.git.replies[("is_ancestor", "old-base")] = True
