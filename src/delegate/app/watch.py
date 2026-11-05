@@ -11,7 +11,7 @@ learn the real distribution. A first event must arrive within 120 s (longest see
 
 import time
 from collections.abc import Callable, Sequence
-from typing import TypedDict
+from typing import Final, TypedDict
 
 from delegate.contracts import events as ev
 from delegate.contracts.history import GapRow
@@ -22,18 +22,18 @@ class Limit(TypedDict):
     silence_s: int
 
 
-LIMITS: dict[str, Limit] = {
+LIMITS: Final[dict[str, Limit]] = {
     "claude": {"first_event_s": 120, "silence_s": 600},
     "codex": {"first_event_s": 120, "silence_s": 3600},
     "opencode": {"first_event_s": 120, "silence_s": 900},
 }
-CLI_OF_KIND = {"claude_p": "claude", "codex": "codex", "opencode": "opencode"}  # a runner kind (route.how) -> its CLI
+CLI_OF_KIND: Final = {"claude_p": "claude", "codex": "codex", "opencode": "opencode"}  # a runner kind (route.how) -> its CLI
 SLEEP_GAP_S = 15  # poll() runs every 0.5 s: a gap this long between two polls is a suspended machine, not a quiet worker
 LONG_GAP_S = 1800  # an inter-event gap longer than this is written to history (role "gap")
 # the worker printed its completion event or final message: any later event resets this; quiet this long, its tree is stopped (delegate-itn,
 # delegate-np7)
 ANSWER_GRACE_S = 120
-GRACE_OF = {
+GRACE_OF: Final = {
     "claude": 5
     # per CLI: Claude's `result` event is an explicit end marker (not a heuristic like a codex agent_message), so its tail is short;
     # others use ANSWER_GRACE_S

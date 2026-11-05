@@ -7,6 +7,7 @@ import os
 import shutil
 import sys
 from pathlib import Path
+from typing import Final
 
 from delegate.adapters import statusline
 from delegate.adapters.harness.opencode import OpenCodeHarness
@@ -57,7 +58,7 @@ def check_opencode_zai_coding():
         return False
 
 
-READY_CHECKS = {
+READY_CHECKS: Final = {
     "opencode_zai_coding": check_opencode_zai_coding,
     "opencode_xai": check_opencode_xai,
     "opencode_deepseek_free": check_opencode_deepseek_free,
@@ -74,7 +75,7 @@ def configured_lanes(cfg: dict[str, Json]):
     return {n: lane_configured(obj(c)) for n, c in obj(cfg["lanes"]).items()}
 
 
-OPENCODE_LANES = {"GROK_SUBSCRIPTION", "DEEPSEEK_FREE", "ZAI_CODING_SUBSCRIPTION"}
+OPENCODE_LANES: Final = {"GROK_SUBSCRIPTION", "DEEPSEEK_FREE", "ZAI_CODING_SUBSCRIPTION"}
 
 
 def fix_hint(name: str):

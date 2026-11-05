@@ -4,6 +4,7 @@ by the `reader` key of the lane in routing.json (READERS). Also the login cache 
 
 import os
 from collections.abc import Callable
+from typing import Final
 
 from timefmt import fmt_span
 
@@ -227,4 +228,4 @@ def read_none(lane: Lane, S: Settings, st: StateDoc, t: float, ai_usage: Json = 
     """No usage reading (Grok): only refusals mark the lane out."""
 
 
-READERS = {"codex_app_server": read_codex, "claude_subscription": read_claude_subscription, "none": read_none}
+READERS: Final = {"codex_app_server": read_codex, "claude_subscription": read_claude_subscription, "none": read_none}

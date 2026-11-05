@@ -16,8 +16,8 @@ from delegate.adapters import agent_runs, git, procs
 from delegate.app import answer, cockpit, codex_policy, decide, env, harnesses, launch, net, usage, watch
 from delegate.app.launch import how_of
 from delegate.app.lease import RunLease
+from delegate.app.run_end import file_size, transcript_info, worker_ended
 from delegate.app.supervisor import RunHooks
-from delegate.contracts import codec
 from delegate.contracts import history as hist
 from delegate.contracts.json_types import Json, arr, as_num, as_opt_bool, as_opt_int, as_opt_obj, as_opt_str, as_str, as_strs, obj
 from delegate.contracts.state import RefRecord, StateDoc
@@ -325,38 +325,20 @@ class Run:
 
     # -- the end: history, usage, the answer
     # ----------------------------------------------------------------------------------------------------
-    def _finish(
+    def _history(
         self,
         res: dict[str, Json],
         d: dict[str, Json],
         lane: Lane,
-        who: dict[str, Json],
         rid: str,
         lease: RunLease,
-        hooks: RunHooks,
-        launched: dict[str, Json],
         cap: int | None,
-        started: tuple[float, int, dict[str, str] | None],
-    ) -> dict[str, Json]:
-        a, extra = self.a, self.extra
-        t0, t_from, git_before = started
-        fam, cwd = as_str(who["family"]), how_of(d).cwd
-        err = as_str(res.pop("stderr", ""))
-        if err:
-            print(err[-2000:], file=sys.stderr)
-        done = res.get("outcome") is None
-        lane_name, ref = as_str(d["lane"]), as_opt_str(res.get("ref"))
-        if done and lane_name in ("CLAUDE_SUBSCRIPTION", "OPENAI_SUBSCRIPTION"):
-            usage.auth_cache().remember(lane_name, True, "a worker run succeeded", env.now())
-        agent_runs.run(rid, ended=env.now(), status="completed" if done else "failed", transcript=harnesses.find_transcript(ref, fam))
-        if ref:  # every outcome: a stop, a failure and a timeout can all be resumed
-            with contextlib.suppress(Exception):
-                self.keep_ref(ref)
-        secs = round(time.time() - t0, 1)
-        transcript = harnesses.find_transcript(ref, fam)
-        detail = as_str(res.pop("detail", ""))
-        if detail:
-            res["first_error"] = detail
+        seen: tuple[str | None, str | None, float, bool, str],
+    ) -> None:
+        """The run's row in the history ledger: what the health ladder and the cockpit read."""
+        a = self.a
+        ref, transcript, secs, done, detail = seen
+        lane_name = as_str(d["lane"])
         ff = health_ledger.failure_fields(
             as_opt_str(res.get("outcome")), "", detail or as_opt_str(res.get("say")), as_num(res.get("retry_after"))
         )
@@ -394,6 +376,40 @@ class Run:
                 transcript=transcript,
             )
         )
+
+    def _finish(
+        self,
+        res: dict[str, Json],
+        d: dict[str, Json],
+        lane: Lane,
+        who: dict[str, Json],
+        rid: str,
+        lease: RunLease,
+        hooks: RunHooks,
+        launched: dict[str, Json],
+        cap: int | None,
+        started: tuple[float, int, dict[str, str] | None],
+    ) -> dict[str, Json]:
+        a, extra = self.a, self.extra
+        t0, t_from, git_before = started
+        fam, cwd = as_str(who["family"]), how_of(d).cwd
+        err = as_str(res.pop("stderr", ""))
+        if err:
+            print(err[-2000:], file=sys.stderr)
+        done = res.get("outcome") is None
+        lane_name, ref = as_str(d["lane"]), as_opt_str(res.get("ref"))
+        if done and lane_name in ("CLAUDE_SUBSCRIPTION", "OPENAI_SUBSCRIPTION"):
+            usage.auth_cache().remember(lane_name, True, "a worker run succeeded", env.now())
+        agent_runs.run(rid, ended=env.now(), status="completed" if done else "failed", transcript=harnesses.find_transcript(ref, fam))
+        if ref:  # every outcome: a stop, a failure and a timeout can all be resumed
+            with contextlib.suppress(Exception):
+                self.keep_ref(ref)
+        secs = round(time.time() - t0, 1)
+        transcript = harnesses.find_transcript(ref, fam)
+        detail = as_str(res.pop("detail", ""))
+        if detail:
+            res["first_error"] = detail
+        self._history(res, d, lane, rid, lease, cap, (ref, transcript, secs, done, detail))
         info = transcript_info(transcript, fam, t_from)
         ac = as_opt_obj(res.pop("acct", None))
         res.pop("cumulative", None)
@@ -422,33 +438,4 @@ class Run:
             transcript_status="ok" if info else "ref_unresolvable" if res.get("ref") else "died_before_session_id",
             **extra,
         )
-        wk = procs.worker_end(hooks.stops, as_opt_str(res.get("outcome")))
-        pid, pgid = as_opt_int(launched.get("pid")), as_opt_int(launched.get("pgid"))
-        if launched and pid is not None and pgid is not None:
-            wk.pid, wk.pgid, wk.start = pid, pgid, as_opt_str(launched["start"])
-        if wk.survivors and res.get("outcome") is None:  # a done answer must not hide a worker still running
-            res.update(
-                outcome="worker_survived", say="worker pids outlived SIGTERM and SIGKILL: " + ", ".join(str(x.pid) for x in wk.survivors)
-            )
-        return dict(res, worker=codec.to_json(wk))
-
-
-def transcript_info(path: str | None, family: str, start: int = 0) -> dict[str, Json] | None:
-    """-> {path, kind, from, to, bytes}: the transcript file and the byte window this call wrote (a resumed thread appends to one file), or
-    None."""
-    if not path:
-        return None
-    try:
-        size = Path(path).stat().st_size
-    except OSError:
-        return None
-    kind = {"claude": "claude", "openai": "codex"}.get(family, "opencode_export")
-    frm = start if kind != "opencode_export" and 0 <= start <= size else 0  # an opencode export is rewritten whole each run
-    return {"path": path, "kind": kind, "from": frm, "to": size, "bytes": size - frm}
-
-
-def file_size(path: str | None) -> int:
-    try:
-        return Path(path).stat().st_size if path else 0
-    except OSError:
-        return 0
+        return worker_ended(res, hooks, launched)
