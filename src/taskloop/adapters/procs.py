@@ -23,37 +23,15 @@ __all__ = ["TermHold", "alive", "popen_held", "proc_start", "stop_tree"]
 def run_bytes(argv: list[str], *, cwd: str | None = None, env: Mapping[str, str] | None = None,
               timeout: float | None = None, input: bytes | None = None, capture: bool = True,
               inherit_stdin: bool = True) -> subprocess.CompletedProcess[bytes]:
-    """A captured runner using stream-proc's held spawn and tree stop, preserving binary data and stdin.
-
-    stream_proc.run only offers decoded line callbacks and /dev/null stdin. Use its lifecycle here with communicate
-    for exact bytes, input and inherited descriptors; the vendored shelf stays byte-identical to its recorded tag.
-    """
-    timeout = deadline.remaining(timeout)
-    p, hold = popen_held(argv, cwd=cwd, env=env, start_new_session=True,
-                         stdin=subprocess.PIPE if input is not None else (None if inherit_stdin else subprocess.DEVNULL),
-                         stdout=subprocess.PIPE if capture else None, stderr=subprocess.PIPE if capture else None)
-    try:
-        hold.replay()
-        stdout, stderr = p.communicate(input=input, timeout=timeout)
-        deadline.check()
-    except subprocess.TimeoutExpired as err:
-        stop_tree(p, grace=STOP_GRACE_S)
-        # Bound the drain even if an unrelated process inherited a pipe; retain the complete partial output.
-        try:
-            err.output, err.stderr = p.communicate(timeout=2.0)
-        except subprocess.TimeoutExpired as drain:
-            err.output = drain.output if drain.output is not None else err.output
-            err.stderr = drain.stderr if drain.stderr is not None else err.stderr
-        deadline.check()
-        raise
-    except BaseException:
-        stop_tree(p, grace=STOP_GRACE_S)
-        raise
-    finally:
-        for pipe in (p.stdin, p.stdout, p.stderr):
-            if pipe is not None:
-                pipe.close()
-    return subprocess.CompletedProcess(argv, p.wait(), stdout or b"", stderr or b"")
+    """stream-proc's capture_bytes under the run's deadline, with subprocess.run's contract: exact bytes, and a timeout raises
+    TimeoutExpired carrying the partial output (stream-proc returns exit 124 and `timed_out`)."""
+    res = stream_proc.capture_bytes(argv, cwd=cwd, env=env, timeout=deadline.remaining(timeout), input=input,
+                                    stdin=None if inherit_stdin and input is None else subprocess.DEVNULL,
+                                    capture=capture, grace=STOP_GRACE_S)
+    deadline.check()
+    if res.timed_out:
+        raise subprocess.TimeoutExpired(argv, timeout or 0.0, output=res.out, stderr=res.err)
+    return subprocess.CompletedProcess(argv, res.exit, res.out, res.err)
 
 
 def run(argv: list[str], *, cwd: str | None = None, env: Mapping[str, str] | None = None,
