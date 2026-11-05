@@ -2,6 +2,7 @@
 import atexit
 import collections.abc
 import contextlib
+import copy
 import functools
 import json
 import os
@@ -503,7 +504,7 @@ class EngineTest(Case):
         "question": "",
         "options": [],
         "decided": "",
-        "cases": [],
+        "cases": PLAN["cases"],
         "leftovers": [],
     }
 
@@ -731,7 +732,7 @@ class LandReviewBase(EngineTest):
     def verifier(self, attrs=None, **cfg):
         return self.engine_at_land(dict({
             "unchecked": [], "verified": [], "steps": mock.Mock(), "comment": mock.Mock(),
-            "briefs": types.SimpleNamespace(text=lambda: "the task"), "last_flag": ""}, **(attrs or {})), **cfg)
+            "briefs": types.SimpleNamespace(text=lambda: "the task"), "last_flag": "", "plan_data": copy.deepcopy(PLAN)}, **(attrs or {})), **cfg)
 
     YXBB6 = ("I did not re-run the whole Sim.Properties suite or the just unity-* checks. The engine ran the suite, and it "
              "passed. The unity checks were skipped because nothing changed under client/**... the claim that the engine ran "
