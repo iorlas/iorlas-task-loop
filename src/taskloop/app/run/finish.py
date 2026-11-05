@@ -13,15 +13,22 @@ from taskloop.domain import outcome as oc
 
 def terminal_state(outcome: oc.RunOutcome) -> RunState:
     """The policy result's manifest state, chosen once with the rest of the finish."""
-    return {Result.LANDED: RunState.DONE, Result.PARKED: RunState.PARKED,
+    return {Result.LANDED: RunState.DONE, Result.STAGED: RunState.DONE, Result.PARKED: RunState.PARKED,
             Result.PAUSED: RunState.STOPPED}.get(outcome.rule.loop, RunState.FAILED)
 
 
 def answer(done: oc.RunOutcome, now: float, end: EndRec | None = None) -> RunFinish:
     kept = end or ended.stored("", done, None, done.fingerprint, [])
+    stage = done.kind is Kind.STAGE  # a stage's answer keeps no close outcome: the next run must not finish a close from it
     return RunFinish(state=terminal_state(done), ended=now, outcome=done.word, result=done.rule.loop,
                      kind=done.kind.value, why=done.detail, sha=done.sha,
-                     why_code=runtrace.why_code(done.kind.value, done.word), end=json.dumps(wire.dump(kept)))
+                     why_code=runtrace.why_code(done.kind.value, done.word), end="" if stage else json.dumps(wire.dump(kept)))
+
+
+def stage_answer(done: oc.RunOutcome, now: float) -> RunFinish:
+    """What a one-stage run ends with when nothing wrote its answer first: its own kind, never the close outcome of a bead."""
+    return RunFinish(state=terminal_state(done), ended=now, outcome=done.word, result=done.rule.loop, kind=done.kind.value,
+                     why=done.detail, sha=done.sha, why_code=runtrace.why_code(done.kind.value, done.word))
 
 
 def outcome(record: RunFinish) -> oc.RunOutcome:

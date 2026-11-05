@@ -9,6 +9,7 @@ from typing import ClassVar, Final, assert_never, final
 class Kind(enum.Enum):
     LANDED = "landed"
     DONE = "done"
+    STAGE = "stage"  # one engine stage ended and the bead goes on: not a finish
     NOOP = "noop"  # the plan found no work and this run wrote nothing
     CUT = "cut"  # trial cell cut short; no production code raises it
     ASK_DECISION = "ask_decision"
@@ -43,7 +44,7 @@ FAULTS: Final = tuple(k for k in Kind if k.name.startswith("FAULT_"))
 
 ASK_NAME: Final = {
     Kind.ASK_DECISION: "decision", Kind.ASK_STUCK: "stuck", Kind.ASK_BUDGET: "budget", Kind.ASK_TICKET: "ticket",
-    Kind.LANDED: "", Kind.DONE: "", Kind.NOOP: "", Kind.CUT: "", Kind.WAIT_ASK: "",
+    Kind.LANDED: "", Kind.DONE: "", Kind.STAGE: "", Kind.NOOP: "", Kind.CUT: "", Kind.WAIT_ASK: "",
     Kind.PAUSE_LANE: "", Kind.PAUSE_NETWORK: "", Kind.ENGINE_CRASH: "", Kind.PAUSE_KILLED: "", Kind.PAUSE_MOVED: "",
     Kind.OWNER_PARK: "", Kind.FAULT_INFRA: "", Kind.FAULT_SLOT: "", Kind.FAULT_DENIED: "", Kind.FAULT_STALE_BASE: "",
     Kind.FAULT_PLAN: "", Kind.FAULT_LAND: "", Kind.FAULT_ENGINE: "", Kind.FAULT_BAD_REQUEST: "",
@@ -88,7 +89,7 @@ _OWNER_KINDS: Final = (Kind.OWNER_PARK, Kind.WAIT_ASK)
 
 def fault_of(kind: Kind) -> Fault | None:
     """The Fault variant of a kind; None for a finish (LANDED, DONE)."""
-    if kind in FINISH:
+    if kind in FINISH or kind is Kind.STAGE:
         return None
     if kind in ASKS:
         return Task(kind)

@@ -24,6 +24,7 @@ class Outcome(StrEnum):
     BLOCKED = "blocked"
     FAILED = "failed"
     DONE = "done"
+    STAGED = "staged"  # a single stage ended; the bead is not finished
 
 
 class Result(StrEnum):
@@ -34,6 +35,7 @@ class Result(StrEnum):
     PARKED = "parked"
     TAKEN = "taken"
     SKIPPED = "skipped"  # the loop's own: the bead's area is busy
+    STAGED = "staged"  # `tl run-task` ran one stage and stopped: nothing landed
 
 
 class WhyCode(StrEnum):

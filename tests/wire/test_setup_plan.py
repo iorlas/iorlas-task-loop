@@ -71,6 +71,23 @@ class SetupPlan(Case):
         assert not stale.ok
         assert "cuont" in stale.detail
 
+    def test_slots_the_profile_counts_must_exist_on_disk(self):
+        (self.repo / ".task-loop.json").write_text(json.dumps({"slots": {"count": 2}}))
+        plan = setup.repo_part(self.repo)
+        slots = self.checks(plan)["slots"]
+        assert not slots.ok
+        assert ".slots" in slots.detail
+        assert [f.id for f in plan.fixes] == ["slots"]
+        (self.repo / ".slots" / "s1").mkdir(parents=True)
+        (self.repo / ".slots" / "s2").mkdir()
+        done = setup.repo_part(self.repo)
+        assert self.checks(done)["slots"].ok
+        assert done.fixes == []
+
+    def test_a_profile_with_no_slots_asks_nothing_about_them(self):
+        (self.repo / ".task-loop.json").write_text(json.dumps({}))
+        assert "slots" not in self.checks(setup.repo_part(self.repo))
+
     def test_the_command_prints_the_plan_as_json_or_text_and_exits_1_while_something_is_missing(self):
         shown = []
         args = argparse.Namespace(repo=str(self.repo), json=True, apply=False)

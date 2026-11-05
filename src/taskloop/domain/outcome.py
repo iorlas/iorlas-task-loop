@@ -64,6 +64,7 @@ def _ask(wake: str = "answer", replan: bool = False) -> Rule:
 POLICY: Final = {
     Kind.LANDED: Rule("close", Result.LANDED, "landed", False, "none"),
     Kind.DONE: Rule("close", Result.LANDED, "done", False, "none"),
+    Kind.STAGE: Rule("none", Result.STAGED, "staged", False, "none"),
     Kind.NOOP: Rule("open", Result.PARKED, "noop", False, "owner", wake="answer"),
     Kind.CUT: Rule("none", Result.PAUSED, "paused", False, "none"),
     Kind.ASK_DECISION: _ask(),
@@ -122,6 +123,8 @@ class RunOutcome:
             return Outcome.LANDED
         if self.kind is Kind.DONE:
             return Outcome.DONE
+        if self.kind is Kind.STAGE:
+            return Outcome.STAGED
         if self.kind is Kind.NOOP:
             return Outcome.NOOP
         failed = POLICY[self.kind].loop is Result.FAILED or self.kind is Kind.PAUSE_KILLED
