@@ -255,8 +255,7 @@ class RealGit(LandGit):
         self._must(d, "fetch", "-q", source, ref)
 
     def remote_url(self, d: str, remote: str) -> str:
-        with pool_errors(pool_read_error):
-            return self._pool(d).remote_url(remote)
+        return self._ask(d, "remote", "get-url", remote)  # memoized by gitmemo: the porcelain's remote_url would ask git every time
 
     def merge_ff(self, d: str, rev: str) -> None:
         with pool_errors():
