@@ -30,6 +30,7 @@ from support.engine_case import (
     stop,
 )
 from support.gitsim import verbs
+from support.waits import until
 
 # isort: split
 import contextlib
@@ -272,14 +273,14 @@ class EngineLand1Test(EngineTest):
 
     @real_proc("a SIGTERM landing in Popen still stops the new child's whole tree")
     def test_sigterm_landing_inside_popen_still_stops_the_new_child(self):
-        # tl-10s: the stop arrived before Popen() returned (a loaded machine runs the check ahead of the engine), the handler's
-        # raise left the constructor, and the check's whole tree ran on unowned
+        # tl-10s: the stop arrived before Popen() returned (a loaded machine runs the check ahead of the engine). TermHold notes the
+        # SIGTERM during Popen and replays it after; the stop then kills the group at once, so the signal waits until the child has
+        # written its pidfile (a condition, not a sleep): else the group dies before `echo $!` and child_of never sees a pid
         class SignalledPopen(subprocess.Popen):
             def __init__(self, *a, **kw):
                 super().__init__(*a, **kw)
+                assert until(lambda: pidfile.exists() and pidfile.read_text().strip(), 30), "the check never wrote its pid"
                 os.kill(os.getpid(), signal.SIGTERM)
-                for _ in range(100):  # a Python handler runs between bytecodes of this thread: give it its turn here
-                    time.sleep(0.001)
 
         pidfile = Path(self.tmp.name, "child.pid")
         eng = self.checks_engine()
