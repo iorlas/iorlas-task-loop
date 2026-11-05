@@ -267,3 +267,16 @@ Ask kinds: decision, stuck, ticket, budget. With the engine on one machine and o
 - Unity on a Windows executor works: the checkout is on Windows disk and Unity opens it natively; ssh and git only deliver the commit. My earlier worry was wrong.
 - Two factories, one per OS, are consistent with the one-working-factory-per-repo rule when each repo has exactly one: task-loop and shelf on the Mac factory, lifesim on a Windows factory. They share tasks and results through the git remote (beads, branches); an ask stays on the factory that raised it. A repo whose work needs both OSes keeps one owner factory and sends the other OS's checks to an executor.
 - Why there are no ADRs: an ADR exists only when the owner picks the "ADR" outcome ("make it stick", `app/asks/stick.py`) on an answered ask in the dashboard; 13 asks were answered here and none got that outcome. By design the engine and `tl` "never write into a checkout", so ADRs are written under the state dir. Putting them in the repo needs a landing path; see question A below.
+
+## Decisions recorded (Denis, 2026-11-05) - these supersede earlier rows
+
+| Id | Decision (his words where quoted) | Replaces |
+|---|---|---|
+| M | Executor mirrors slot names, repo names and relative layout under one configurable root, one persistent worktree per slot; setup and `run_in: slot` checks work remotely. Parity is "similar", not one-to-one between Linux and Windows. | |
+| A | ADRs are landed as files through a bead; the engine reads them from the base commit. | config-folder ADR store |
+| W | Linux executor (`pix`) first, rushed; Windows executor after; native Windows engine after that. | |
+| D2 | A task filed from another repo is admitted by factory configuration, like an agent-proposed bead the owner approved up front: auto-admit by default, a profile setting makes a repo wait for the owner. | "his merge is the gate" |
+| merge | "Things should be automatically merged unless I'll configure it to be waiting for me." Shelf PRs auto-merge; PRs stay as the review trail. A profile setting (`wait`) holds a repo for the owner. | section 2 "stops at an open PR and never merges", and the standing rule that merge approval is the owner's. Follow-up: the PR-only land mode becomes a PR-and-merge land mode with `merge: auto \| wait`. |
+| D3 | Merge the shelf Article IV amendment (commit 0243ce6) before the shelf factory starts, and "the same caps for everything". The amendment as written says the limit is "per-repo, set in the repo's linter", so it does not yet give the same numbers; follow-up: name the shared numbers (task-loop's 400 SLOC per file, 80 per function, 800 per test file, no exceptions list) in the shared linting preset so shelf and task-loop use one set. | |
+| D4 | "Shipped" = the shelf change is merged into main. PRs stay but never block. | |
+| D5 | Yes: the loop is a continuous worker. A running loop keeps polling when the queue drains (`--wait-drained`, README) and takes any ready, unblocked bead of its repo, by priority, until nothing is ready. Starting a loop stays manual (no OS service); filing does not start one. | |
