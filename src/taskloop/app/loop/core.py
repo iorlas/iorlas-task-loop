@@ -79,9 +79,7 @@ class Core:
         """loop-<pid>.log under the repo's loop folder (the newest `logs_kept` stay); its path is shown by `tl loop status`."""
         d = self.files.runs()
         self.log = d / f"loop-{self.env.pid}.log"
-        old = sorted((f for f in d.glob("loop-*.log") if f != self.log), key=lambda f: f.stat().st_mtime)
-        for f in old[:max(0, len(old) - (self.tune().logs_kept - 1))]:
-            f.unlink(missing_ok=True)
+        prune_logs(d, self.log, self.tune().logs_kept)
         return self.log
 
     # ---- the state file ----------------------------------------------------------------------------------------
@@ -140,6 +138,22 @@ class Core:
                                "reason": reason, "detail": detail, "log_path": str(self.log or "")})
         with contextlib.suppress(OSError):
             self.env.event("loop_exit", who="loop", repo=self.env.repo, pid=self.env.pid, reason=reason, detail=detail[:200])
+
+
+def prune_logs(runs: Path, own: Path, kept: int) -> None:
+    """Keep the newest `kept` loop logs, `own` among them. Lanes start together and prune the same folder, so a log can vanish between
+    the listing and its stat (or be a dead link): such a file counts as gone, never as a crash of the loop that is starting."""
+    stamped: list[tuple[float, Path]] = []
+    for f in runs.glob("loop-*.log"):
+        if f == own:
+            continue
+        try:
+            stamped.append((f.stat().st_mtime, f))
+        except OSError:
+            f.unlink(missing_ok=True)
+    stamped.sort()
+    for _, f in stamped[:max(0, len(stamped) - (kept - 1))]:
+        f.unlink(missing_ok=True)
 
 
 def prio_of(bead: object, default: int = 2) -> int:
