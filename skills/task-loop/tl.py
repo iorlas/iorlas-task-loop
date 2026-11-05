@@ -79,7 +79,6 @@ from taskloop.app.launch import dash as wire_dash
 from taskloop.app.launch import reindex
 from taskloop.app.release import pins
 from taskloop.app.track import trail, verbs
-from taskloop.app.wire import accounts as wire_accounts
 from taskloop.app.wire import asks as wire_asks
 from taskloop.app.wire import doctor, real
 from taskloop.app.wire import hook as hook_wire
@@ -437,7 +436,7 @@ VERBS: Final[dict[str, Handler]] = {
     "trace": lambda a, c: verbs.trace(a.id, a.last, a.json, c.env),
     "usage": lambda a, c: wire_usage.feed(a.windows, c.spawner, c.env),
     "lanes": lambda a, c: wire_lanes.refresh(c.spawner, c.env),
-    "accounts": lambda a, c: wire_accounts.run(a.op, a.lane),
+    "accounts": lambda a, c: wire_lanes.accounts(a.op, a.lane),
     "worktree": lambda a, c: wslots.worktree(c.git, c.who, a.op, a.self_too),
     "worktrees": lambda a, c: wslots.owned_worktrees(c.git, c.who, a.op),
     "dash": lambda a, c: wire_dash.run(a.op, c.env, c.spawner),

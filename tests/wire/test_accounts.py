@@ -8,7 +8,7 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 
 # isort: split
 from taskloop.adapters import delegate as dg
-from taskloop.app.wire import accounts, setup
+from taskloop.app.wire import lanes, setup
 
 
 def row(lane, enabled=True, ready=True, fix=""):
@@ -18,7 +18,7 @@ def row(lane, enabled=True, ready=True, fix=""):
 def shown(op="list", lane=""):
     out = io.StringIO()
     with mock.patch("sys.stdout", out):
-        return accounts.run(op, lane), out.getvalue()
+        return lanes.accounts(op, lane), out.getvalue()
 
 
 def test_the_table_names_each_lane_with_its_fix():
