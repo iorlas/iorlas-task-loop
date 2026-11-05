@@ -2,7 +2,7 @@
 `lane_view` is pure given its inputs."""
 
 from collections.abc import Sequence
-from typing import NamedTuple
+from typing import Final, NamedTuple
 
 from delegate.adapters.harness import classify
 from delegate.adapters.harness.opencode import OpenCodeHarness
@@ -53,8 +53,8 @@ def finished_runs(n: int) -> list[dict[str, Json]]:
     return [{k: getattr(r, k) for k in keys} for r in env.history_store().runs(n)]
 
 
-EMOJI = {"ready": "✅", "resting": "⏳", "logged_out": "🔑", "spend": "💸", "slow": "🐢", "off": "⛔", "unknown": "❓"}
-LEGEND = {
+EMOJI: Final = {"ready": "✅", "resting": "⏳", "logged_out": "🔑", "spend": "💸", "slow": "🐢", "off": "⛔", "unknown": "❓"}
+LEGEND: Final = {
     "ready": "ready",
     "resting": "usage limit",
     "logged_out": "logged out",
@@ -63,7 +63,7 @@ LEGEND = {
     "off": "disabled",
     "unknown": "no read yet",
 }
-LABELS = {
+LABELS: Final = {
     "CLAUDE_SUBSCRIPTION": "Claude subscription",
     "OPENAI_SUBSCRIPTION": "ChatGPT / Codex",
     "GROK_SUBSCRIPTION": "SuperGrok / OpenCode",

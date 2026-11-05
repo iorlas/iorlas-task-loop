@@ -1,4 +1,4 @@
-"""Verification uses pre-bump content and warms a shared cache before offline workers spawn."""
+"""Verification uses pre-bump content; the same tree under the same selection is verified once."""
 import tempfile
 from dataclasses import replace
 from pathlib import Path
@@ -9,8 +9,7 @@ import support.paths  # noqa: F401
 from support.case import Case
 from support.shells import quiet_shell
 
-from taskloop.adapters.childenv import tool_env
-from taskloop.app.release import flow, suite
+from taskloop.app.release import flow, gate
 from taskloop.app.release.cache import SuiteCache
 from taskloop.app.release.shell import Abort
 from taskloop.contracts.env import Env
@@ -44,8 +43,8 @@ class SuiteOnce(Case):
             seen.append(plugin.read_text())
             assert not port.commit_staged.called
 
-        with mock.patch.object(flow.suite, "verify", side_effect=verify):
-            assert flow.bump_and_commit(repo, repo, flow.Request("fix"), sh) == "1.2.4"
+        with mock.patch.object(flow.gate, "verify", side_effect=verify):
+            assert flow.bump_and_commit(repo, flow.Request("fix"), sh) == "1.2.4"
         assert seen == ['{"version":"1.2.3"}\n']
         assert "1.2.4" in plugin.read_text()
         port.commit_staged.assert_called_once_with(str(repo), "1.2.4: fix" + flow.publish.TRAILER)
@@ -53,18 +52,19 @@ class SuiteOnce(Case):
     def test_same_pre_bump_tree_reuses_green_and_red_never_records_one(self):
         port = mock.Mock()
         port.rev_parse.return_value = "pre-bump-tree"
+        port.ls_tree.return_value = []
         sh = replace(quiet_shell(), port=port, env=self.env)
         checks = mock.Mock()
-        assert not suite.verify(self.root, self.root, sh, checks)
-        assert suite.verify(self.root, self.root, sh, checks)
+        assert not gate.verify(self.root, sh, checks)
+        assert gate.verify(self.root, sh, checks)
         checks.assert_called_once()
-        port.rev_parse.assert_called_with(str(self.root), "HEAD^{tree}")
+        port.rev_parse.assert_any_call(str(self.root), "HEAD^{tree}")
         port.rev_parse.return_value = "changed-tree"
-        assert not suite.verify(self.root, self.root, sh, checks)
+        assert not gate.verify(self.root, sh, checks)
         assert checks.call_count == 2
         port.rev_parse.return_value = "red-tree"
         with pytest.raises(Abort):
-            suite.verify(self.root, self.root, sh, mock.Mock(side_effect=Abort("red")))
+            gate.verify(self.root, sh, mock.Mock(side_effect=Abort("red")))
         store = SuiteCache(ConfigDir(self.root / "cfg" / "task-loop"))
         assert not any(g.tree == "red-tree" for g in store._all())
 
@@ -97,33 +97,3 @@ class SuiteOnce(Case):
         (self.root / flow.manifest.NAME).write_text("")
         with pytest.raises(Abort, match="version or manifest"):
             flow.check_bump(self.root, "tested", "1.2.5", sh)
-
-    def test_host_suite_prewarms_the_tested_projects_dependencies(self):
-        repo = self.root / "clone"
-        repo.mkdir()
-        (repo / "pyproject.toml").write_text("[project]\nname = 'tested'\n")
-        with mock.patch.object(suite, "available_mb", return_value=8192), \
-                mock.patch.object(suite, "prewarm") as warm, \
-                mock.patch.object(suite, "run_parts", return_value=[]), \
-                mock.patch.object(suite, "merge_outputs", return_value=("", True)):
-            sh = replace(quiet_shell(), env=self.env)
-            suite._host_suite(self.root, repo, sh)
-        warm.assert_called_once_with(repo, sh)
-
-    def test_prewarm_and_isolated_workers_share_cache_and_children_stay_offline(self):
-        calls = []
-        sh = replace(quiet_shell(), env=self.env, run=mock.Mock(side_effect=lambda *a, **kw: calls.append((a, kw))))
-        suite.prewarm(self.root, sh)
-        assert calls[0][0][0][:2] == ["uv", "sync"]
-        assert len(calls) == 4
-        cache = str(self.root / "cache" / "task-loop" / "uv")
-        assert all(kw["extra"] == {"UV_CACHE_DIR": cache, "UV_OFFLINE": "0"} for _, kw in calls)
-        env = suite.isolated_env(self.root / "worker", self.env)
-        assert (env["UV_CACHE_DIR"], env["UV_OFFLINE"]) == (cache, "1")
-        child = tool_env(env)
-        assert (child["UV_CACHE_DIR"], child["UV_OFFLINE"]) == (cache, "1")
-
-    def test_isolated_workers_never_carry_the_owners_hooks_path(self):
-        env = suite.isolated_env(self.root / "worker", self.env)
-        keys = [env[f"GIT_CONFIG_KEY_{i}"].lower() for i in range(int(env.get("GIT_CONFIG_COUNT", "0")))]
-        assert "core.hookspath" not in keys

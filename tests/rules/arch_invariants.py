@@ -2,7 +2,7 @@
 import ast
 from typing import Final
 
-from rules.enumtotal import bindings, qualified
+from importgraph import bindings, qualified
 
 # The former per-slice deny contracts, expressed once as allowed direct imports.
 SLICE_IMPORTS: Final = {

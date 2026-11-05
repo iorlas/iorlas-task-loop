@@ -14,6 +14,7 @@ import time
 import types
 from collections.abc import Callable
 from pathlib import Path
+from typing import Final
 
 from child_env import scrub_current
 
@@ -69,7 +70,7 @@ def deep_merge(a: dict[str, Json], b: dict[str, Json] | None) -> dict[str, Json]
     return out
 
 
-_RETIRED_WARNED: set[str] = set()
+_RETIRED_WARNED: Final[set[str]] = set()
 
 
 def load_routing() -> dict[str, Json]:

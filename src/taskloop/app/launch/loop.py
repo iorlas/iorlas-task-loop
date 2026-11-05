@@ -22,7 +22,7 @@ from taskloop.app.loop import lintrun
 from taskloop.app.loop.env import LoopEnv, Storm
 from taskloop.app.loop.files import LoopFiles
 from taskloop.app.prune import verb as prune_verb
-from taskloop.app.release import catalog, shell, suite
+from taskloop.app.release import catalog, shell
 from taskloop.app.run import console
 from taskloop.app.run.running import area_lock, running
 from taskloop.app.slots import engine_lock
@@ -67,7 +67,7 @@ def free_bytes(cfg: paths.ConfigDir) -> int:
 
 def available_mb(spawner: Spawner) -> int | None:
     if platform.system() != "Darwin":
-        return suite.available_mb()
+        return None  # macOS only: vm_stat is the one reader
     try:
         result = spawner.run(["/usr/bin/vm_stat"], timeout_s=2)
         return ram.available_mb(result.out) if result.exit == 0 else None

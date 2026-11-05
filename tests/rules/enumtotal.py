@@ -1,23 +1,7 @@
 """Static enum vocabulary and dict-literal coverage; never imports the code being checked."""
 import ast
 
-
-def bindings(module, tree, packages=()):
-    """Resolve import aliases and local definitions to qualified names."""
-    names = {}
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            for alias in node.names:
-                names[alias.asname or alias.name.split('.')[0]] = alias.name if alias.asname else alias.name.split('.')[0]
-        elif isinstance(node, ast.ImportFrom):
-            package = module.split('.') if module in packages else module.split('.')[:-1]
-            prefix = '.'.join(package[:len(package) - node.level + 1]) if node.level else ''
-            origin = '.'.join(filter(None, (prefix, node.module)))
-            for alias in node.names:
-                names[alias.asname or alias.name] = origin + '.' + alias.name
-        elif isinstance(node, ast.ClassDef):
-            names[node.name] = module + '.' + node.name
-    return names
+from importgraph import bindings, qualified
 
 
 def resolved(name, imports):
@@ -36,14 +20,6 @@ def resolved(name, imports):
         else:
             break
     return name
-
-
-def qualified(node, names):
-    if isinstance(node, ast.Name):
-        return names.get(node.id, node.id)
-    if isinstance(node, ast.Attribute):
-        return qualified(node.value, names) + '.' + node.attr
-    return ''
 
 
 def enum_members(trees, scopes, imports):

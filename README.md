@@ -135,7 +135,7 @@ src/taskloop_dash/               the dashboard package (imports taskloop.contrac
 src/taskloop_dash/static/        the dashboard page: index.html and its ES modules (Preact + HTM vendored; no build)
 src/taskloop_dash/views/         engine logs, asks and bd -> the typed snapshot and bead records (contracts/dash.py)
 hooks/hooks.json                 SessionStart: index session id -> transcript path (uv run --script); PreToolUse: python3, no msgspec
-tests/                           uv run pytest   (pytest + xdist, the dev group of pyproject.toml; Mac gate + release suite)
+tests/                           just test   (pytest + xdist, the dev group of pyproject.toml; only the tests a change can break)
 dev/release.py                   the only way to release: release lock, version from origin, suite, marketplace, install
 docs/design/                     design notes
 docs/contracts/dash-api.md       the dashboard's HTTP API: GET /api/snapshot, /api/bead, /api/live, POST /api/<verb>

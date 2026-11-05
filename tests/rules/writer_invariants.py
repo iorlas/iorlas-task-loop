@@ -2,7 +2,7 @@
 import ast
 from typing import Final
 
-from rules.enumtotal import bindings, qualified
+from importgraph import bindings, qualified
 
 # State authority, rather than a budget of write sites. Reads are unrestricted.
 WRITERS: Final = {
