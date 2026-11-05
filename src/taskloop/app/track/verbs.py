@@ -1,4 +1,5 @@
 """`tl claim|land|close|block`: the bead's life as the person or the engine drives it, each recorded as an event and in bd's provenance."""
+import argparse
 import json
 import sys
 from collections.abc import Callable
@@ -207,6 +208,6 @@ def trace(bead: BeadId, last: int, as_json: bool, env: Env) -> int:
     return 0
 
 
-def runs(a: Any, cfg: ConfigDir) -> int:
+def runs(a: argparse.Namespace, cfg: ConfigDir) -> int:
     """`tl runs show RUN | slow [--top N] [--by exec|wait] [--runs N]`: read-only queries over the engine logs."""
     return runq.show(a.run, cfg) if a.op == "show" else runq.slow(cfg, a.top, a.by, a.runs)
