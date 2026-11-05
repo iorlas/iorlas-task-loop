@@ -1,0 +1,80 @@
+## Top 50 tests (CPU s: setup+call+teardown | call | setup+teardown)
+    9.73 |     9.65 |     0.08  tests/land/real/test_engine_real_git.py::RealGitLandTest::test_a_conflict_fix_leaving_markers_is_not_accepted_the_marker_check_still_runs
+    9.07 |     8.98 |     0.09  tests/land/real/test_engine_real_git.py::RealGitLandTest::test_a_rebase_conflict_goes_to_a_fix_round_not_blocked
+    8.97 |     8.88 |     0.09  tests/land/real/test_engine_real_git.py::RealGitLandTest::test_push_race_retry_keeps_one_land_lock_and_lands
+    5.68 |     5.61 |     0.07  tests/land/real/test_outbound.py::Land::test_an_lfs_repo_pushes_the_ref_s_objects_before_the_push
+    5.40 |     5.33 |     0.06  tests/land/real/test_engine_real_git.py::RealGitLandTest::test_happy_path_lands_and_closes
+    5.35 |     5.29 |     0.06  tests/land/real/test_cleanup.py::EngineCleanup::test_remote_that_moves_after_the_push_check_is_kept_on_retry
+    5.26 |     5.19 |     0.07  tests/land/real/test_engine_real_git.py::RealGitLandTest::test_wip_from_an_earlier_run_lands_as_one_titled_commit
+    5.08 |     5.04 |     0.05  tests/land/real/test_cleanup.py::EngineCleanup::test_remote_already_gone_is_success
+    5.08 |     5.02 |     0.06  tests/land/real/test_outbound.py::Land::test_a_pre_push_hook_that_fails_does_not_stop_the_land
+    5.06 |     5.00 |     0.06  tests/land/real/test_cleanup.py::EngineCleanup::test_engine_land_keeps_registered_slot_and_detaches_at_base
+    4.86 |     4.80 |     0.06  tests/land/real/test_stages_land.py::Contracts::test_a_network_failure_on_the_push_is_retried_with_a_rest_and_lands
+    4.84 |     4.78 |     0.06  tests/land/real/test_cleanup.py::EngineCleanup::test_engine_push_land_removes_remote_local_and_worktree_after_recording_receipt
+    4.46 |     4.41 |     0.05  tests/land/test_engine_land_1.py::EngineLand1Test::test_a_stop_during_the_push_waits_for_it_and_the_bead_lands
+    1.92 |     1.91 |     0.01  tests/delegate/test_contention.py::Contention::test_parallel_config_cli_and_update_config_lose_no_updates
+    1.92 |     1.90 |     0.01  tests/delegate/test_contention.py::Contention::test_parallel_report_and_next_preserve_out_marks_and_fresh_dwell
+    1.91 |     1.84 |     0.07  tests/delegate/test_run_vendors.py::RunVendors::test_every_answer_carries_call_id_usage_transcript_object_and_typed_stop
+    1.83 |     1.82 |     0.00  tests/delegate/test_review_order.py::ReviewOrder::test_opus_is_never_returned_for_any_loop_role
+    1.39 |     1.30 |     0.09  tests/delegate/test_run_stops.py::RunStops::test_every_answer_carries_the_stop_facts
+    1.38 |     1.19 |     0.19  tests/checks/real/test_pass_files.py::PassFiles::test_the_files_are_part_of_the_cache_key
+    1.28 |     1.12 |     0.16  tests/checks/real/test_tl_check.py::TlCheck::test_a_red_run_keeps_its_evidence_and_prints_the_path
+    1.27 |     1.18 |     0.09  tests/delegate/test_run_stops.py::RunStops::test_network_stops_never_bench_the_pair
+    1.22 |     0.96 |     0.26  tests/run/real/test_close_kill.py::CloseKill::test_a_process_killed_before_the_bd_close_is_finished_by_the_next_one_which_closes_once
+    1.21 |     1.20 |     0.01  tests/delegate/test_route.py::StateLock::test_parallel_processes_lose_no_update
+    1.18 |     1.16 |     0.02  tests/delegate/test_contention.py::Contention::test_parallel_agent_runs_keep_unique_runs_and_whole_lane_snapshots
+    1.15 |     1.00 |     0.15  tests/checks/real/test_tl_check.py::TlCheck::test_green_gate_exits_0_and_a_second_run_is_cached
+    1.08 |     0.89 |     0.19  tests/checks/real/test_pass_files.py::PassFiles::test_all_hands_every_tracked_file_that_matches_when
+    1.07 |     0.99 |     0.08  tests/delegate/test_run_stops.py::RunStops::test_bad_request_never_benches_the_pair
+    1.00 |     0.96 |     0.04  tests/run/real/test_close_kill.py::CloseKill::test_the_restart_reuses_the_dead_runs_id
+    0.99 |     0.95 |     0.04  tests/run/real/test_close_kill.py::CloseKill::test_a_process_killed_after_the_bd_close_does_not_close_again
+    0.94 |     0.90 |     0.05  tests/run/test_stages.py::Handoff::test_a_smaller_session_goes_on_and_the_limit_is_the_repos_to_set
+    0.93 |     0.89 |     0.05  tests/land/test_engine_land_1.py::EngineLand1Test::test_push_race_interrupted_validation_fix_resume_requires_acceptance_denial_reviewer
+    0.91 |     0.88 |     0.04  tests/checks/real/test_check_move.py::CheckMove::test_real_trim_commit
+    0.90 |     0.89 |     0.01  tests/delegate/test_own_contract.py::RealProcesses::test_sigterm_to_the_delegate_stops_the_worker_tree_first
+    0.88 |     0.87 |     0.01  tests/delegate/test_delegate_kill_tree.py::RealTrees::test_run_tree_timeout_stops_the_tree
+    0.88 |     0.87 |     0.01  tests/delegate/test_delegate_kill_tree.py::RealTrees::test_supervisor_timeout_leaves_no_process
+    0.84 |     0.80 |     0.04  tests/land/test_engine_land_1.py::EngineLand1Test::test_a_red_gate_replans_with_its_output_and_keeps_the_accepted_stages
+    0.82 |     0.63 |     0.19  tests/checks/real/test_pass_files.py::PassFiles::test_a_check_gets_only_the_changed_files_that_match_its_when
+    0.82 |     0.77 |     0.05  tests/land/test_engine_land_1.py::EngineLand1Test::test_push_race_interrupted_validation_fix_resume_requires_acceptance_pause_worker
+    0.82 |     0.77 |     0.05  tests/land/test_engine_land_1.py::EngineLand1Test::test_push_race_interrupted_validation_fix_resume_requires_acceptance_sigterm_transition
+    0.82 |     0.77 |     0.05  tests/land/test_engine_land_1.py::EngineLand1Test::test_push_race_interrupted_validation_fix_resume_requires_acceptance_sigterm_failed_checks
+    0.81 |     0.81 |     0.00  tests/delegate/test_engine_only_lanes.py::ClaudeHookTest::test_the_generated_hook_denies_the_recipe_with_the_rule
+    0.81 |     0.79 |     0.02  tests/checks/real/test_childenv.py::CheckHomeCanaryTest::test_cli_gate_in_real_git_checkout_cannot_find_owner_state_through_home
+    0.79 |     0.75 |     0.05  tests/land/test_engine_land_1.py::EngineLand1Test::test_push_race_interrupted_validation_fix_resume_requires_acceptance_sigterm_checkpoint
+    0.79 |     0.79 |     0.01  tests/delegate/test_own_contract.py::RealProcesses::test_call_timeout_stops_a_worker_that_ignores_sigterm
+    0.79 |     0.63 |     0.16  tests/checks/real/test_tl_check.py::TlCheck::test_it_claims_nothing_and_writes_results_and_run_evidence
+    0.78 |     0.77 |     0.02  tests/run/test_exchanges.py::Recorded::test_the_cases_replay
+    0.77 |     0.62 |     0.15  tests/checks/real/test_tl_check.py::TlCheck::test_it_runs_the_gate_steps_and_exits_1_on_a_red_one
+    0.75 |     0.57 |     0.19  tests/checks/real/test_pass_files.py::PassFiles::test_no_changed_file_that_matches_skips_the_check_and_says_so
+    0.73 |     0.57 |     0.16  tests/checks/real/test_tl_check.py::TlCheck::test_clean_repo_check_records_the_repo_plans_skip_for_green
+    0.72 |     0.68 |     0.04  tests/land/test_engine_land_1.py::EngineLand1Test::test_a_red_gate_after_a_conflict_fix_still_gets_a_fix_round_and_the_gate_ran_once_on_the_result
+
+## Top 20 fixtures (own setup CPU s, summed over uses | uses)
+    2.01 |    35  .venv/lib/python3.15/site-packages/_pytest/python.py::_xunit_setup_method_fixture_RunCommand
+    1.97 |    33  .venv/lib/python3.15/site-packages/_pytest/python.py::_xunit_setup_method_fixture_RunStops
+    1.79 |    32  .venv/lib/python3.15/site-packages/_pytest/python.py::_xunit_setup_method_fixture_RunVendors
+    1.27 |     9  .venv/lib/python3.15/site-packages/_pytest/python.py::_xunit_setup_method_fixture_TlCheck
+    1.23 |     7  .venv/lib/python3.15/site-packages/_pytest/python.py::_xunit_setup_method_fixture_PassFiles
+    1.06 |   589  tests/delegate/conftest.py::own_home
+    0.78 |     4  .venv/lib/python3.15/site-packages/_pytest/python.py::_xunit_setup_method_fixture_RealPush
+    0.66 |    66  .venv/lib/python3.15/site-packages/_pytest/python.py::_xunit_setup_method_fixture_EngineRunTest
+    0.63 |    11  .venv/lib/python3.15/site-packages/_pytest/python.py::_xunit_setup_method_fixture_RunReroute
+    0.58 |    26  .venv/lib/python3.15/site-packages/_pytest/python.py::_xunit_setup_method_fixture_VisualWork
+    0.57 |    52  .venv/lib/python3.15/site-packages/_pytest/python.py::_xunit_setup_method_fixture_EngineLand1Test
+    0.46 |     8  .venv/lib/python3.15/site-packages/_pytest/python.py::_xunit_setup_method_fixture_RunOpenCode
+    0.41 |    12  .venv/lib/python3.15/site-packages/_pytest/python.py::_xunit_setup_method_fixture_CheckMove
+    0.38 |     4  .venv/lib/python3.15/site-packages/_pytest/python.py::_xunit_setup_method_fixture_GitOwnership
+    0.35 |    34  .venv/lib/python3.15/site-packages/_pytest/python.py::_xunit_setup_method_fixture_DelegateLauncher
+    0.35 |     6  .venv/lib/python3.15/site-packages/_pytest/python.py::_xunit_setup_method_fixture_Upgrade
+    0.33 |    36  .venv/lib/python3.15/site-packages/_pytest/python.py::_xunit_setup_method_fixture_EngineChecksTest
+    0.33 |     6  .venv/lib/python3.15/site-packages/_pytest/python.py::_xunit_setup_method_fixture_LegacyConfig
+    0.29 |    27  .venv/lib/python3.15/site-packages/_pytest/python.py::_xunit_setup_method_fixture_GatePlans
+    0.29 |     5  .venv/lib/python3.15/site-packages/_pytest/python.py::_xunit_setup_method_fixture_WiredOverlay
+
+## Per directory (tests | CPU s | share | wall s); all tests 307 CPU s
+   401 |     125.5 |  40.9% |     888.2  tests/land
+   551 |      70.4 |  22.9% |    1172.5  tests/run
+   589 |      68.7 |  22.4% |    1130.6  tests/delegate
+   318 |      36.1 |  11.8% |     343.7  tests/checks
+   355 |       6.3 |   2.0% |      84.6  tests/dash
