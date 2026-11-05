@@ -4,6 +4,7 @@ import contextlib
 from collections.abc import Callable
 from pathlib import Path
 
+from taskloop.contracts.ago import ago
 from taskloop.contracts.ask import Ask
 from taskloop.contracts.enums import AskStatus
 from taskloop.contracts.ids import BeadId, is_bead_id
@@ -141,5 +142,4 @@ def shout(asks: AskStore, marker: Path, now: float, say: Callable[[str], None], 
 
 
 def fault_line(ask: Ask, now: float) -> str:
-    mins = (now - (ask.answered or now)) // 60
-    return f"FAULT: ask {ask.id} of {ask.bead} was answered {mins:.0f} min ago and no run has used the answer"
+    return f"FAULT: ask {ask.id} of {ask.bead} was answered {ago(now, ask.answered or now)} and no run has used the answer"

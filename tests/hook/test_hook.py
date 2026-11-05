@@ -76,7 +76,7 @@ class Texts(Case):
         assert status_lines(self.brief(loops=1))[0].startswith("loop RUNNING")
         first = status_lines(self.brief())[0]
         assert first.startswith("loop NOT RUNNING")
-        assert "last activity 16 min ago" in first
+        assert "last activity 16m ago" in first
 
     def test_a_huge_status_stays_within_40_lines_and_8_kb_and_says_what_it_left_out(self):
         lines = status_lines(self.brief(asks=500, loops=3))

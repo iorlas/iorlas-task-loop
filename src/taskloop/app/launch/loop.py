@@ -13,7 +13,9 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
-from taskloop.adapters import applog, beadtools, childenv, ident, pidcheck, ram
+from jsonl_log import close_held
+
+from taskloop.adapters import beadtools, childenv, ident, pidcheck, ram
 from taskloop.adapters import delegate as dg
 from taskloop.adapters import storm as storm_file
 from taskloop.adapters.locks import hold_path
@@ -204,7 +206,7 @@ def exec_into(repo: str, d: Path, argv: list[str], handover: str, env: Env, who:
         os.chdir(start_cwd)  # cmd_loop chdir'd into the repo; a relative --repo in argv means the start directory
     sys.stdout.flush()
     sys.stderr.flush()
-    applog.close_all()
+    close_held()
     try:
         cmd = [*childenv.script_argv(d / "skills" / "task-loop" / "tl.py", env), *argv]
         os.execve(cmd[0], cmd, childenv.exec_env(env, {EnvVar.TL_LOOP_STATE: handover, EnvVar.TASK_LOOP_SESSION: who.session}))

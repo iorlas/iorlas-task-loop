@@ -37,9 +37,9 @@
   },
   {
     "name": "jsonl_log",
-    "shelf_tag": "jsonl-log-v0.2.0",
-    "shelf_commit": "629935b1349d4b8f3eccc0c0812b06937cde06b5",
-    "tree_hash": "8682030b820a631ebb3dc7aebf94ecf1ddebe7c41d0fe9c2e7ee6e02426f53e4"
+    "shelf_tag": "619d2cdf9b06f4edca6c1a1597a6b25a5d4d932e",
+    "shelf_commit": "619d2cdf9b06f4edca6c1a1597a6b25a5d4d932e",
+    "tree_hash": "046c8b58a206068922b7c35ff9fc55fcc3a8e4c464da3bb53fc5258b196dbaf0"
   },
   {
     "name": "process_lock",
@@ -61,8 +61,14 @@
   },
   {
     "name": "stream_proc",
-    "shelf_tag": "stream-proc-v0.2.2",
-    "shelf_commit": "c3b4e94d40f55bf386036cd9c6246af5ea763d0d",
-    "tree_hash": "e23a7644f5f7490f5b766fc2102bc40acc79d3c679cfe3fef863f4500c9fcf40"
+    "shelf_tag": "eeffddcdd084aa3bd7352f9879a139e9a33acf6f",
+    "shelf_commit": "eeffddcdd084aa3bd7352f9879a139e9a33acf6f",
+    "tree_hash": "5344cb3b10697a23a4f8e43f30ced8ac18f5d78c6987abe9535290c60a025873"
+  },
+  {
+    "name": "timefmt",
+    "shelf_tag": "c271328b4c0af38899da8ef1f1295340dbc382f8",
+    "shelf_commit": "c271328b4c0af38899da8ef1f1295340dbc382f8",
+    "tree_hash": "fa5cce883a2daebc26fdbbc3c44a3a990b65beddba1fc5ef0d313923f34113c9"
   }
 ]

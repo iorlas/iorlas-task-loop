@@ -4,6 +4,8 @@ import time
 from dataclasses import asdict, dataclass
 from typing import Final
 
+from taskloop.contracts.ago import ago
+
 STATUS_LINES: Final = 40
 STATUS_BYTES: Final = 8 * 1024
 HANDOFF_BYTES: Final = 4 * 1024
@@ -60,13 +62,6 @@ class Brief:
     version: str = ""
     installed: str = ""
     pinned: str = ""
-
-
-def ago(now: float, t: float) -> str:
-    if t <= 0:
-        return "never"
-    mins = max(0, int((now - t) // 60))
-    return f"{mins} min ago" if mins < 120 else f"{mins // 60} h ago" if mins < 48 * 60 else f"{mins // 1440} d ago"
 
 
 def clock(t: float) -> str:

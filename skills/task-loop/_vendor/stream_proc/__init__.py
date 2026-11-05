@@ -5,28 +5,36 @@
 - :func:`stop_tree` — SIGTERM, grace, SIGKILL, a sweep of descendants that left the group, a proof.
 - :func:`alive`, :func:`proc_start` — pid-reuse-safe liveness (``/proc`` on Linux, libproc on macOS);
   :func:`table`, :func:`descendants` — the process table; :func:`group_alive` — is any process in a group.
+- :func:`capture` — :func:`run` to the end, output as text, exit 124 on a timeout, optional heartbeat ``tick``.
+- :func:`stop_pid`, :class:`PidHandle` — stop a process we did not spawn, only while its start token matches.
 - :class:`TermHold`, :func:`popen_held` — a SIGTERM landing during a spawn still stops the child.
 
 Stdlib only (``ctypes`` on macOS), POSIX.
 """
 
+from stream_proc.capture import Captured, capture
 from stream_proc.hold import TermHold, popen_held
+from stream_proc.pid import PidHandle, stop_pid
 from stream_proc.procfs import Proc
 from stream_proc.proctable import alive, descendants, group_alive, proc_start, table
 from stream_proc.runner import Kind, Result, run
 from stream_proc.tree import stop_tree
 
 __all__ = [
+    "Captured",
     "Kind",
+    "PidHandle",
     "Proc",
     "Result",
     "TermHold",
     "alive",
+    "capture",
     "descendants",
     "group_alive",
     "popen_held",
     "proc_start",
     "run",
+    "stop_pid",
     "stop_tree",
     "table",
 ]
