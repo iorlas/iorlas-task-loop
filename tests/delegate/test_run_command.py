@@ -475,3 +475,37 @@ class RunCommand(RunBase):
         assert len(self.args_seen().splitlines()) == n  # nothing was launched
         _, r = self.run_it("--resume", "nope")
         assert why(r) == "caller"
+
+
+class DepthAndPush(RunBase):
+    @real_proc("delegate: a worker, git or CLI process")
+    def test_a_caller_that_is_itself_a_worker_is_refused(self):
+        os.environ["DELEGATE_DEPTH"] = "1"
+        self.addCleanup(os.environ.pop, "DELEGATE_DEPTH", None)
+        code, r = self.run_it()
+        assert (code, why(r), r["stop"]["scope"]) == (0, "caller", "caller")
+        assert "DELEGATE_DEPTH" in r["say"]
+        assert not Path(os.environ["FAKE_ARGS"]).exists()  # nothing was launched
+
+    @real_proc("delegate: a worker, git or CLI process")
+    def test_every_worker_env_refuses_a_push_and_keeps_the_callers_git_config(self):
+        os.environ.update(GIT_CONFIG_COUNT="1", GIT_CONFIG_KEY_0="core.hooksPath", GIT_CONFIG_VALUE_0="/h")
+        for k in ("GIT_CONFIG_COUNT", "GIT_CONFIG_KEY_0", "GIT_CONFIG_VALUE_0"):
+            self.addCleanup(os.environ.pop, k, None)
+        e = env.child_env()
+        assert e["GIT_CONFIG_COUNT"] == "2"
+        assert (e["GIT_CONFIG_KEY_0"], e["GIT_CONFIG_VALUE_0"]) == ("core.hooksPath", "/h")
+        assert (e["GIT_CONFIG_KEY_1"], e["GIT_CONFIG_VALUE_1"]) == (f"url.{env.PUSH_REFUSED}.pushInsteadOf", "")
+        assert e["DELEGATE_DEPTH"] == "1"
+
+        bare = self.base / "remote.git"
+        sp.run(["git", "init", "-q", "--bare", str(bare)], check=True, capture_output=True)
+        sp.run(["git", "-C", self.repo, "remote", "add", "origin", str(bare)], check=True, capture_output=True)
+        pushed = sp.run(
+            ["git", "-C", self.repo, "push", "origin", "HEAD"], env={**os.environ, **e}, capture_output=True, text=True, check=False
+        )
+        assert pushed.returncode != 0
+        assert not list((bare / "refs" / "heads").iterdir())
+        assert (
+            sp.run(["git", "-C", self.repo, "fetch", "origin"], env={**os.environ, **e}, capture_output=True, check=False).returncode == 0
+        )
