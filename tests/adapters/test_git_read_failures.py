@@ -15,6 +15,7 @@ from git_porcelain.api import Relation
 from git_porcelain.real import Done, unavailable
 
 from taskloop.adapters.git import RealGit
+from taskloop.adapters.git_base import read_failure
 from taskloop.contracts.env import Env
 from taskloop.contracts.slots import GitReadFailure
 
@@ -102,3 +103,13 @@ class GitReadFailures(Case):
                   mock.patch.object(self.git, "_run", return_value=subprocess.CompletedProcess([], 0, out, "")),
                   pytest.raises(GitReadFailure)):
                 getattr(self.git, method)("/checkout", *args)
+
+
+@pytest.mark.parametrize("stderr", [
+    "fatal: not a git repository (or any of the parent directories): .git\n",
+    "fatal: not a git repository (or any parent up to mount point /)\n"
+    "Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).\n",
+])
+def test_not_a_repo_is_typed_whichever_way_git_words_it(stderr):
+    r = subprocess.CompletedProcess([], 128, "", stderr)
+    assert type(read_failure(("rev-parse",), r)).__name__ == "NotARepo"
