@@ -141,6 +141,8 @@ This replaces the process-boundary reading above (the `route.py run/status` rows
 
 **D4. What does "shipped" mean for a shelf dependency?** Options: (A) the shelf bead is closed, i.e. its PR merged to shelf main; the consumer vendors that commit (recommended: no release step in the way; matches how task-loop vendors today); (B) a tagged shelf release, which his standing rule says needs him each time and slows every consumer.
 
+**D5. Does a filed task start work on its own?** Context: filing needs no loop, but nothing runs the filed bead until someone runs `tl factory start --repo` for that repo (no OS service installed). Options: (A) manual start, as today (recommended for now: one shelf loop you start when you want shelf work; adding a supervisor is a new moving part); (B) the factory keeps one loop alive per registered repo that has ready beads (cross-repo dependencies resolve without you, at the cost of a supervisor and unattended 10 to 17 minute shelf gates).
+
 Not decisions (settled by existing rules, listed so they are not re-asked): merge approval for shelf PRs stays his; shelf profile lands through his profile-change approval; Mac only, no Docker; no force-push.
 
 ## Follow-ups (beads to file after the picks; not created here)
@@ -168,3 +170,10 @@ My size facts came from a stale local delegate checkout (0.39.1, dirty). Delegat
 "Yeah, we need to fix those RAF and Pyrefly issues. And we need to migrate to PyTest. And I think we need to deprecate our previous delegate skill. Not deprecate, like remove it and forget about that. [...] Yeah, uninstall the delegate skill, copy code base and move on."
 
 Verdict: ✅ plain copy of delegate origin/main into `src/delegate` (no history, no overlap, no ask to its open branches); fix the ruff ignores and the pyrefly baseline to task-loop's gate; unittest to pytest; retire `route.py`, the three skills, the wire contract and the iorlas-delegate plugin in one release with `tl accounts`; uninstall the plugin after that release is installed. The old repo is left untouched.
+
+## Filing needs no running loop (Denis question, 2026-11-05)
+
+- ✅ Filing is a store write, not a call to a process. The factory is a config folder and a CLI; only the dashboard and the per-repo loops are processes. `tl` looks the target up by name in `repos.json` and runs the create against that repo's `.beads/` (bd is embedded Dolt, no server, *read from the repo layout; a create into a store no loop has open is untested*).
+- ✅ The target must be registered (`tl register`), not running. An unregistered or unknown name refuses with the fix. ❌ A filing path that starts a loop as a side effect.
+- Consequence: a filed bead waits in the target's backlog until that repo's loop runs, and the filer's dependent bead stays blocked meanwhile. The dashboard board shows every registered repo's beads, so the wait is visible. Loops are started by hand (`tl factory start`; no OS service, README), so a filing to a repo with no loop starts nothing by itself.
+- Open as D5: should the factory run a loop for every registered repo that has ready work, or stay manual?
