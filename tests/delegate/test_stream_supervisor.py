@@ -207,7 +207,7 @@ class Replay(Case):
     )
     @real_proc("delegate: a worker, git or CLI process")
     def test_a_tool_in_flight_keeps_the_long_silence_limit(self, kind, lines):
-        self.a.timeout = 4
+        self.a.timeout = 12
         r = self.launch(kind, self.fake(kind, lines))
         assert r["outcome"] == "timeout"
         assert r["stream_tail"]
