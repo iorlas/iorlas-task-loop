@@ -151,7 +151,7 @@ def failure(
         retryable = _REF_LOCK.search(stderr) is not None and _REF_STALE.search(stderr) is None
     elif code == 128:
         if (
-            tail == "fatal: not a git repository (or any of the parent directories): .git"
+            re.fullmatch(r"fatal: not a git repository \(or any (of the )?parent (directories|up to mount point .+)\)(: \.git)?", tail)
             or re.fullmatch(r"fatal: cannot change to '.+': No such file or directory", tail)
             or tail.startswith("fatal: not a git repository:")
         ):
