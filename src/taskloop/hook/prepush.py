@@ -3,6 +3,8 @@ an unavailable or erroring judge refuses. No profile, evidence, or delivery poli
 # git-port-exempt: plain python3 in git's own hook path; it imports no port and no record (tests/hook/test_hook.py)
 from __future__ import annotations
 
+import json
+import os
 import subprocess
 import sys
 from collections.abc import Mapping
@@ -51,6 +53,45 @@ def uses_lfs() -> bool:
         return False
 
 
+def ours(tl: str) -> bool:
+    """One rule: tl judges a push only in a repo registered with it (repos.json, in the config dir `tl` lives in, keyed by the main
+    checkout; a worktree or slot of it counts). Any other repo (a test's tmp repo, a clone tl never saw) is not tl's to judge.
+    A registry that cannot be read says yes: the judge decides, never a silent skip."""
+    try:
+        text = (Path(tl).resolve().parent.parent / "repos.json").read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return False
+    except OSError:
+        return True
+    try:
+        known = {os.path.realpath(p) for p in json.loads(text)["repos"]}
+        common = subprocess.run(["git", "rev-parse", "--path-format=absolute", "--git-common-dir"], capture_output=True, text=True,
+                                check=False, timeout=15).stdout.strip()
+        if Path(common).name == ".git":
+            return os.path.realpath(Path(common).parent) in known
+        top = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True, check=False, timeout=15)
+        return os.path.realpath(top.stdout.strip()) in known
+    except Exception:
+        return True
+
+
+def without_hooks_path(environ: Mapping[str, str]) -> dict[str, str]:
+    """`environ` minus tl's injected core.hooksPath (GIT_CONFIG_COUNT/KEY_n/VALUE_n; other entries keep their order): the repo's own hook
+    and whatever it runs (a test suite that pushes in its own tmp repos) must not inherit tl's hooks dir."""
+    try:
+        count = int(environ.get("GIT_CONFIG_COUNT") or 0)
+    except ValueError:
+        return dict(environ)
+    keep = [(environ[f"GIT_CONFIG_KEY_{i}"], environ[f"GIT_CONFIG_VALUE_{i}"]) for i in range(count)
+            if f"GIT_CONFIG_KEY_{i}" in environ and environ[f"GIT_CONFIG_KEY_{i}"].lower() != "core.hookspath"]
+    out = {k: v for k, v in environ.items() if not k.startswith(("GIT_CONFIG_KEY_", "GIT_CONFIG_VALUE_"))}
+    if "GIT_CONFIG_COUNT" in out:
+        out["GIT_CONFIG_COUNT"] = str(len(keep))
+    for i, (key, value) in enumerate(keep):
+        out[f"GIT_CONFIG_KEY_{i}"], out[f"GIT_CONFIG_VALUE_{i}"] = key, value
+    return out
+
+
 def githook(name: str, argv: list[str], stdin_text: str, environ: Mapping[str, str]) -> int:
     """argv: the tl command, then git's own arguments for the hook. tl's logic first (pre-push), then the repo's own hook of this name
     with the same arguments and stdin; the first failure's exit code. A repo that uses LFS and has no pre-push hook of its own still
@@ -58,7 +99,7 @@ def githook(name: str, argv: list[str], stdin_text: str, environ: Mapping[str, s
     if not argv:
         return 1 if name == "pre-push" else 0
     tl, args = argv[0], argv[1:]
-    if name == "pre-push" and (rc := entry([tl, *args], stdin_text, environ)):
+    if name == "pre-push" and ours(tl) and (rc := entry([tl, *args], stdin_text, environ)):
         return rc
     try:
         mine = Path(original_hooks_dir(tl, environ)) / name
@@ -67,7 +108,9 @@ def githook(name: str, argv: list[str], stdin_text: str, environ: Mapping[str, s
         if not cmd:
             return 0
         # the repo's pre-push hook never runs the gate: a `tl judge-push` it calls only reads the receipt (TL_JUDGE_READ_ONLY)
-        child = {**environ, "TL_JUDGE_READ_ONLY": "1"} if name == "pre-push" else None
+        child = without_hooks_path(environ)
+        if name == "pre-push":
+            child["TL_JUDGE_READ_ONLY"] = "1"
         return subprocess.run(cmd, input=stdin_text if name in STDIN_HOOKS else None, text=True, check=False, env=child).returncode
     except Exception as err:
         if name == "pre-push":

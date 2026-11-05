@@ -39,6 +39,10 @@ class ProfileChanged(Exception):
     """An owner-only policy change cannot be authorized by check evidence."""
 
 
+class NoPolicyBase(ValueError):
+    """No commit of the base ref anchors the policy: a repo with no origin/main yet."""
+
+
 def push_tips(stdin: str) -> tuple[PushTip, ...]:
     tips = []
     for line in stdin.splitlines():
@@ -79,19 +83,24 @@ class PushJudge:
         commit = (tip.remote_sha if tip.remote_ref == remote_ref and tip.remote_sha.strip("0")
                   else self.git.merge_base(self.repo, tip.sha, base_ref))
         if not commit:
-            raise ValueError(f"cannot resolve the policy commit for {tip.ref} against {base_ref}")
+            raise NoPolicyBase(f"cannot resolve the policy commit for {tip.ref} against {base_ref}")
         return commit
 
     def policy_profile(self, tip: PushTip) -> EngineConfig | None:
-        commit = self.policy_commit(tip)
-        tree = TreeSha(self.git.rev_parse(self.repo, commit + "^{tree}"))
-        if not tree:
-            raise ValueError(f"cannot name the policy tree of {commit}")
         path = ".task-loop.json"
-        policy = self.git.ls_tree(self.repo, tree, path)
         tip_tree = self.git.rev_parse(self.repo, tip.sha + "^{tree}")
         if not tip_tree:
             raise ValueError(f"cannot name the tree of {tip.sha}")
+        try:
+            commit = self.policy_commit(tip)
+        except NoPolicyBase:
+            if self.git.ls_tree(self.repo, tip_tree, path):
+                raise  # a profile with no base to anchor it is unprovable: refused
+            return None  # no profile and no base ref: a repo that is not ours (a first push to a fresh origin)
+        tree = TreeSha(self.git.rev_parse(self.repo, commit + "^{tree}"))
+        if not tree:
+            raise ValueError(f"cannot name the policy tree of {commit}")
+        policy = self.git.ls_tree(self.repo, tree, path)
         proposed = self.git.ls_tree(self.repo, tip_tree, path)
         if ([entry.oid for entry in policy] != [entry.oid for entry in proposed]
                 and not self.owner_approved(tip.sha, commit)):
