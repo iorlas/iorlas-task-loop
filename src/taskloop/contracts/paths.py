@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Final, final
 
 from taskloop.contracts.env import Env
-from taskloop.contracts.ids import BeadId, RunId
+from taskloop.contracts.ids import BeadId, RunId, loop_key
 
 
 def default_root(env: Env) -> Path:
@@ -194,6 +194,14 @@ class ConfigDir:
     def host(self) -> Path:
         """host.json: what this machine has (the resources checks may need). A person writes it; absent: the host has every resource."""
         return self.root / "host.json"
+
+    def engine_lock(self, wt: Path | str) -> Path:
+        """The engine lock of a worktree: out of the tree, where no worker can write it (Z15). Keyed like the loop's files."""
+        return self.lock_record("engine", loop_key(wt))
+
+    def engine_take(self, wt: Path | str) -> Path:
+        """Held (locks.hold_path) while a run checks the engine lock and writes its own: two runs starting at once cannot both win."""
+        return self.lock_record("engine-take", loop_key(wt))
 
     def lock_record(self, what: str, ident: str) -> Path:
         return self.root / "locks" / (f"{what}-{ident}.lock")

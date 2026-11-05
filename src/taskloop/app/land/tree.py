@@ -10,7 +10,7 @@ from taskloop.app.slots.engine_lock import engine_busy
 from taskloop.app.slots.reset import leave_slot
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.ids import BeadId
-from taskloop.contracts.paths import TASK_EXCLUDE
+from taskloop.contracts.paths import TASK_EXCLUDE, ConfigDir
 from taskloop.contracts.ports import Git
 from taskloop.contracts.slots import SlotGitError
 from taskloop.stores.runlog import RunLog
@@ -46,6 +46,8 @@ class TreeHost(Protocol):
     def fresh(self) -> bool: ...
     @property
     def cfg(self) -> TreeConfig: ...
+    @property
+    def home(self) -> ConfigDir: ...
     @property
     def git(self) -> Git: ...
     @property
@@ -133,7 +135,7 @@ class Tree:
         here = str(Path(e.wt).resolve())
         for there in e.git.checkouts(e.wt):
             if there.branch == branch and str(Path(there.path).resolve()) != here:
-                busy = engine_busy(there.path)
+                busy = engine_busy(e.home, there.path)
                 if busy:
                     why = f"failed: {branch} is checked out in {there.path}: {busy}; left alone"
                     e.warn(why)
@@ -168,6 +170,6 @@ class Tree:
         if outcome in ("landed", "done") or not branch or branch != (e.branch or None):
             return
         try:
-            leave_slot(e.git, e.wt, e.cfg.base, branch, dirty=lambda: bool(e.checkout.dirty_status()))
+            leave_slot(e.home, e.git, e.wt, e.cfg.base, branch, dirty=lambda: bool(e.checkout.dirty_status()))
         except SlotGitError as err:
             e.warn(f"the slot could not be left at the base: {str(err).strip()}")

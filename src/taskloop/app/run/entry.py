@@ -334,7 +334,7 @@ def run_in(a: Any, repo: Any, cfg: Any, store: Any = None, *, env: Env, spawner:
         if took:
             a.slot_gen = fence.gen_of(beadtools.peek(store or beadtools.bd_store(who.actor, repo), took), SLOT_GEN)
         env = env.with_(EnvVar.TASK_LOOP_SLOT_BEAD, took) if took else env  # the engine's heartbeat keeps it
-        lock = engine_lock.EngineLock(wt, a.id, slot, env)
+        lock = engine_lock.EngineLock(who.config, wt, a.id, slot, env)
         busy = take_area(a, repo, cfg, lock, git, who, took or sb if slot else "", store)
         if busy:
             why = busy if busy.startswith("area ") else f"worktree {wt}: {busy}"

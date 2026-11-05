@@ -9,6 +9,7 @@ from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
+from support import homes
 
 from land.test_cleanup import CleanupGit
 from taskloop.app.land import cleanup
@@ -32,7 +33,7 @@ class Ownership(Case):
                          EngineLock(pid=0, started=1, bead="a", workers=[(987654, "start")])):
                 with self.subTest(slot=slot, lock=lock):
                     self.lock.return_value = lock
-                    why = cleanup.tidy_local(self.git, "/repo", self.log, "task/a", "head", lambda _, slot=slot: slot)
+                    why = cleanup.tidy_local(self.git, "/repo", self.log, "task/a", "head", lambda _, slot=slot: slot, cfg=homes.cfg())
                     assert "pid 987654" in why
                     assert self.git.calls == []
                     assert self.git.local == "head"
@@ -44,7 +45,8 @@ class Ownership(Case):
                 with self.subTest(slot=slot, lock=lock):
                     self.git = CleanupGit()
                     self.lock.return_value = lock
-                    assert cleanup.tidy_local(self.git, "/repo", self.log, "task/a", "head", lambda _, slot=slot: slot) == ""
+                    why = cleanup.tidy_local(self.git, "/repo", self.log, "task/a", "head", lambda _, slot=slot: slot, cfg=homes.cfg())
+                    assert why == ""
                     assert self.git.ran("detach" if slot else "remove")
 
     def test_tree_resume_refuses_a_busy_checkout(self):
@@ -58,11 +60,11 @@ class Ownership(Case):
     def test_leave_slot_refuses_a_busy_checkout_before_reading_dirty_status(self):
         self.lock.return_value = EngineLock(pid=987654, started=1, bead="a")
         dirty = mock.Mock(return_value=False)
-        assert not leave_slot(self.git, "/wt", "origin/main", "task/a", dirty=dirty)
+        assert not leave_slot(homes.cfg(), self.git, "/wt", "origin/main", "task/a", dirty=dirty)
         dirty.assert_not_called()
         assert not self.git.ran("detach")
 
     def test_leave_slot_reads_fresh_dirty_status_after_the_busy_check(self):
-        self.lock.side_effect = lambda _wt: setattr(self.git, "dirty_tree", True)
-        assert not leave_slot(self.git, "/wt", "origin/main", "task/a", dirty=lambda: self.git.dirty_tree)
+        self.lock.side_effect = lambda _cfg, _wt: setattr(self.git, "dirty_tree", True)
+        assert not leave_slot(homes.cfg(), self.git, "/wt", "origin/main", "task/a", dirty=lambda: self.git.dirty_tree)
         assert not self.git.ran("detach")

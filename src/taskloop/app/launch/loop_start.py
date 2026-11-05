@@ -60,7 +60,7 @@ def live_work(git: Git, who: Identity) -> list[tuple[str, str]]:
         for st in live_loops(r, who.config):
             out.append(("loop", "loop pid {} on {}{}".format(st.pid, r, (" running " + st.bead) if st.bead else "")))
         for wt in [r, *wslots.worktrees(r, git, who, slots=None if shutil.which("bd") else [])]:  # slot dirs need bd
-            busy = engine_lock.engine_busy(wt)
+            busy = engine_lock.engine_busy(who.config, wt)
             if busy:
                 out.append(("run", f"run in {wt}: {busy}"))
     return out

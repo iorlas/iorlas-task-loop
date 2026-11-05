@@ -74,7 +74,7 @@ def cmd_land_stack(a: argparse.Namespace, who: Identity, git: Git, spawner: Runs
                   StackGate(cmds, git, stores, repo, f"origin/{a.base}", tl, env), store, a.wait_min,
                   lambda bead: locator.add_bead(run, bead),
                   lambda path: bool(slot_of(slot_repo, path, who, store, strict=True)), profile_slots(slot_repo).base,
-                  profile_change=profile_change)
+                  cfg=who.config, profile_change=profile_change)
     rc = 1
     try:
         rc = stack.run(items)

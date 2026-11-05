@@ -677,6 +677,7 @@ class FakeReleaseSlotHost:
         self.git: Git = ScriptedGit()
         self.log = RunLog(fake_stores().run_log("run"))
         self.who = who()
+        self.home = self.who.config
         self.wt = "/wt"
 
 

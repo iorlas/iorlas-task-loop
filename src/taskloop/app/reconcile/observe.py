@@ -5,7 +5,6 @@ from dataclasses import replace
 from pathlib import Path
 
 from taskloop.app.release import tidy
-from taskloop.app.slots.engine_lock import engine_lock_path
 from taskloop.contracts import fence
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.ids import BeadId, is_bead_id
@@ -156,13 +155,13 @@ def last_used(d: Path, git: Git) -> float:
     return max(stamps, default=0.0)
 
 
-def worktree(d: Path, repo: Path, git: Git) -> Worktree:
+def worktree(d: Path, repo: Path, git: Git, cfg: ConfigDir) -> Worktree:
     try:
         dirty = "uncommitted or untracked files" if git.status(str(d)) else ""
     except SlotGitError:
         dirty = "git status failed"
     here = d.resolve()
-    return Worktree(str(d), str(here), str(repo), engine_lock_path(d).exists(), Path.cwd().resolve().is_relative_to(here),
+    return Worktree(str(d), str(here), str(repo), cfg.engine_lock(d).exists(), Path.cwd().resolve().is_relative_to(here),
                     dirty, tidy.on_base(git, str(d), "HEAD"), last_used(d, git))
 
 
@@ -198,5 +197,5 @@ def observe(repos: list[str], store_of: Callable[[str], Beads] | None, build: Pa
     for d in sorted(build.iterdir()) if build is not None and build.is_dir() else []:
         # a main checkout (a .git folder) or a worktree of a repo we never ran in is not ours to tidy
         if (d / ".git").is_file() and (repo := main_repo(d)) in known:
-            trees.append(worktree(d, repo, git))
+            trees.append(worktree(d, repo, git, cfg))
     return Observed(now, keep_days, tuple(views), tuple(trees))

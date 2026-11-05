@@ -22,7 +22,6 @@ from taskloop.app.prune import verb
 from taskloop.app.reconcile import apply, observe
 from taskloop.app.reconcile.sweep import sweep
 from taskloop.app.release.shell import of
-from taskloop.app.slots import engine_lock
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.config import LoopConfig
 from taskloop.contracts.env import snapshot
@@ -142,7 +141,7 @@ class Trees(Case):
 
     def test_a_tree_a_run_holds_is_kept(self):
         d = self.tree("busy")
-        lock = engine_lock.engine_lock_path(d)
+        lock = homes.cfg().engine_lock(d)
         lock.parent.mkdir(parents=True, exist_ok=True)
         lock.write_text("pid")
         _, kept = self.prune()

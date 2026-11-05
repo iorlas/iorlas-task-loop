@@ -41,6 +41,6 @@ def cmd_land(who: Identity, bead: BeadId, sha: str, store: Beads, git: Git, work
     checked_remote = remote_oid if remote_oid and git.is_ancestor(where, remote_oid, full) else ""
     prior = cleanup.previous(who.config, bead, repo, branch, full)
     row = cleanup.record(log, repo, branch, checked_head, full, "origin", checked_remote, prior)
-    cleanup.retry(git, log, row, lambda path: bool(slot_of(repo, path, who, store, strict=True)), profile_slots(repo).base)
+    cleanup.retry(git, log, row, lambda path: bool(slot_of(repo, path, who, store, strict=True)), profile_slots(repo).base, cfg=who.config)
     finish_run(who.config, run, land_answer(time.time(), sha=full))
     return 0

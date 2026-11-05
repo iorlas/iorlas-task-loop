@@ -5,7 +5,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401
-from support import gitq
+from support import gitq, homes
 from support.engine_case import CLEAN, PLAN, WRITE, EngineTest, real_git
 from support.logs import records
 from support.spawn import port_git
@@ -71,7 +71,7 @@ class EngineCleanup(EngineTest):
             rc, _ = self.run_engine(RUN)
         assert rc == 0, self.blocked
         assert moved
-        cleanup.retry_logged(self.eng.git, self.eng.log)
+        cleanup.retry_logged(self.eng.git, self.eng.log, cfg=homes.cfg())
         assert gitq.git("ls-remote", "origin", "refs/heads/task/t-1", cwd=main).split()[0] == moved[0]
         done = records(self.eng, "land_cleanup")[-1]
         assert (done["local_outcome"], done["remote_outcome"]) == ("gone", "pending")
@@ -84,7 +84,7 @@ class EngineCleanup(EngineTest):
         def gone(git, log, row, *args):
             if row.remote_outcome == "pending":
                 gitq.git("push", "-q", "origin", ":refs/heads/task/t-1", cwd=main)
-            return retry(git, log, row, *args)
+            return retry(git, log, row, *args, cfg=homes.cfg())
 
         with mock.patch.object(cleanup, "retry", gone):
             rc, _ = self.run_engine(RUN)
