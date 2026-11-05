@@ -50,3 +50,10 @@ is the point), adapters 1: after this PR land is 0 (baseline lowered), the rest 
 ## Not done, not measured
 - The (b) switch for loop, slots, doctor, prune, report, cli, release (about 280 tests) and the delegate split: each needs a read of what the test asserts; no CPU gain claimed yet. Moving a test between folders changes no CPU.
 - The class column is judged by directory, not test by test.
+
+## Real sleeps (PR3 census)
+Of the 93 tests that sleep over 0.5 s (147 s of `time.sleep`, idle pix), about 80 are in `tests/delegate` (watchdog, kill-tree and grace tests:
+the wait IS the subject, with a real child process, so a fake clock needs a clock seam in `src/delegate`), and only run when a change touches
+delegate. Outside delegate the rest are thread race windows of 10-300 ms (asks/rmw_store, checks/resources, slots, write_idle) and real-process
+waits in `real/` (slots, loop hold e2e, adapters). The one avoidable wait outside them, `tests/adapters/test_links.py` (3.0 s, a sleep standing
+in for a hung link check), now waits on an Event (0.5 s). A clock seam for delegate's watchdog is a design change in the library, not a test edit.

@@ -3,7 +3,6 @@
 import os
 import sys
 import threading
-import time
 from http.server import HTTPServer
 from pathlib import Path
 
@@ -52,12 +51,14 @@ class Check(Case):
 
 
     def test_check_all_survives_a_raising_check_and_a_deadline(self):
+        release = threading.Event()
+        self.addCleanup(release.set)  # the slow check waits on this, not on the clock; the deadline (0.5 s) is what ends the wait
 
         def fn(u):
             if u.endswith("boom"):
                 raise RuntimeError("x")
             if u.endswith("slow"):
-                time.sleep(3)
+                release.wait(3)
             return True, ""
         out = links.check_all(["https://a.org/ok", "https://a.org/boom", "https://a.org/slow"], fn=fn, deadline=0.5)
         assert out["https://a.org/ok"] == (True, "")
