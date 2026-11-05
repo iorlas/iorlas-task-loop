@@ -162,3 +162,9 @@ The README says a plugin install ships `skills/` and `hooks/`; delegate's `route
 ## Correction from the move session (2026-11-05)
 
 My size facts came from a stale local delegate checkout (0.39.1, dirty). Delegate origin/main (0.56.1) already has `route.py` as a 144-line launcher, the code in `src/delegate`, and no file over 400 SLOC or function over 80; so "split route.py first" is void. The installed task-loop plugin does ship `src/`, so the packaging check passes. Real costs found instead: delegate carries about 100 ruff per-file ignores, a 201-error pyrefly baseline and 53 unittest files, none of which task-loop's gate allows; and delegate is still released daily with about 30 open branches, so a copy drifts until the cutover.
+
+## Cutover decision (Denis, 2026-11-05)
+
+"Yeah, we need to fix those RAF and Pyrefly issues. And we need to migrate to PyTest. And I think we need to deprecate our previous delegate skill. Not deprecate, like remove it and forget about that. [...] Yeah, uninstall the delegate skill, copy code base and move on."
+
+Verdict: ✅ plain copy of delegate origin/main into `src/delegate` (no history, no overlap, no ask to its open branches); fix the ruff ignores and the pyrefly baseline to task-loop's gate; unittest to pytest; retire `route.py`, the three skills, the wire contract and the iorlas-delegate plugin in one release with `tl accounts`; uninstall the plugin after that release is installed. The old repo is left untouched.
