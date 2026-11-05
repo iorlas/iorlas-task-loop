@@ -31,7 +31,6 @@ from taskloop.contracts.snapshots import (
     SharedNotes,
     StatusSnapshot,
     StatusTried,
-    SuiteGreens,
 )
 from taskloop.contracts.trace import RunTrace
 from taskloop.contracts.usage import USAGE_KEEP_S, UsageRow, rows_of
@@ -503,11 +502,6 @@ class DashStateStore(JsonStore[DashState]):
 class BadVersionStore(JsonStore[BadVersions]):
     def __init__(self, cfg: paths.ConfigDir) -> None:
         super().__init__(cfg.bad_versions(), BadVersions)
-
-
-class SuiteGreenStore(JsonStore[SuiteGreens]):
-    def __init__(self, cfg: paths.ConfigDir) -> None:
-        super().__init__(cfg.suite_green(), SuiteGreens)
 
 
 class ReflectStateStore(JsonStore[ReflectState]):

@@ -1,5 +1,6 @@
 """domain/policy: the verdict on a worker's tool call, and the typed refusal record (D3)."""
 
+from delegate.app.launch import secret_in
 from delegate.contracts import events as ev
 from delegate.domain.policy.matchers import heredoc_only_hit
 from delegate.domain.policy.shell import git_write, read_only_problem
@@ -18,6 +19,12 @@ class Policy:
         assert heredoc_only_hit(hd)
         assert "apply_patch" in judge("Bash", {"command": hd}, False).reason
         assert not heredoc_only_hit("cat .env")
+
+    def test_the_codex_watcher_ignores_a_secret_name_only_in_a_heredoc_body_but_not_a_read(self):
+        hd = "zsh -lc \"python - <<'EOF'\nif path.name == '.env':\n    pass\nEOF\""
+        assert secret_in(ev.Cmd(id="1", text=hd)) is None
+        for read in ("cat .env", "cat .env <<'EOF'\nx\nEOF", "python -c \"open('.env')\""):
+            assert secret_in(ev.Cmd(id="1", text=read)) == read
 
     def test_git_writes_are_blocked_and_listings_pass(self):
         for c in ("git commit -m x", "git -C . push", "bash -lc 'git checkout -b y'", "git stash", "git branch new"):

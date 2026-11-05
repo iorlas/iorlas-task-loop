@@ -127,23 +127,6 @@ class SlotSetupMarker(Rec):
 
 
 @final
-class GreenRun(Rec):
-    """One green suite run: the tree it ran on and the exact command."""
-
-    tree: str
-    command: str
-    at: float
-
-
-@final
-class SuiteGreens(Rec):
-    """releases/suite-green.json: the newest green runs of the release suite (a hit needs the same tree and command)."""
-
-    V: ClassVar[int] = 1
-    greens: list[GreenRun] = msgspec.field(default_factory=list)
-
-
-@final
 class ReflectState(Rec):
     """reflect-digest.json: where the daily reflection digest stands: the end of the last one, the last try, and the beads it filed
     (each: cause, repo, bead, tokens, runs...; the digest edits them as plain dicts)."""

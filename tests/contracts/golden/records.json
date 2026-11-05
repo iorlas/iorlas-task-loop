@@ -1320,16 +1320,6 @@
   ],
   "log": "/l"
  },
- "SuiteGreens": {
-  "v": 1,
-  "greens": [
-   {
-    "tree": "tttttttttttttttttttttttttttttttttttttttt",
-    "command": "just check",
-    "at": 1793050200.5
-   }
-  ]
- },
  "ReflectState": {
   "v": 1,
   "until": 1793050200.5,

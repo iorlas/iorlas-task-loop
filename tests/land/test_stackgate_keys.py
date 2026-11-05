@@ -111,7 +111,7 @@ class StackGateKeys(Case):
 
     def test_a_step_with_no_receipt_on_this_tree_says_so(self):
         assert self.gate.red(self.engine, TREE, BASE, str(self.repo.wt)) == ["fmt", "unity-check", "unity-tests"]
-        assert set(self.gate.why.values()) == {"no receipt for this tree and base"}
+        assert set(self.gate.why.values()) == {f"no green run of tree {TREE[:12]} under `true`"}
 
     def test_a_changed_command_still_misses_and_is_named(self):
         write_receipts(self.stores, self.repo.git, str(self.repo.wt))

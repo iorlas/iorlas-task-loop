@@ -93,7 +93,7 @@ class PushJudge(Case):
         self.git.replies[("rev_parse", "HEAD")] = "task/x"
         decision = self.judge(self.request("task/x"))
         assert decision.status == PushStatus.REFUSED
-        assert "suite (no receipt for this tree and base)" in decision.reasons[0]
+        assert "suite (no green run of tree task-tree under `true`)" in decision.reasons[0]
         self.check.assert_called_once_with(load(json.loads(self.tip_profile)).engine)
 
     def test_mixed_push_checks_only_the_base_tip(self):
@@ -139,10 +139,15 @@ class PushJudge(Case):
         evidence.assert_not_called()
         self.check.assert_not_called()
 
+    def test_a_miss_names_the_tree_before_the_declared_gate_runs(self):
+        said = []
+        judge_push(self.repo, self.request("head"), self.stores, self.git, self.check, env=self.env, note=said.append)
+        assert said == ["refs/heads/head: no green run of tree tree for suite; running the declared gate"]
+
     def test_unknown_tip_is_refused_and_a_clean_head_can_run_checks(self):
         decision = self.judge()
         assert decision.status == PushStatus.REFUSED
-        assert decision.reasons == ("refs/heads/head (head) is not green for suite (no receipt for this tree and base); "
+        assert decision.reasons == ("refs/heads/head (head) is not green for suite (no green run of tree tree under `true`); "
                                             "run `tl check` in its worktree, then push",)
         self.check.assert_called_once_with(load(json.loads(self.tip_profile)).engine)
         self.check.reset_mock()
@@ -197,7 +202,7 @@ class PushJudge(Case):
         decision = self.judge()
         assert decision.status == PushStatus.REFUSED
         assert decision.reasons == (
-            "refs/heads/head (head) is not green for suite (no receipt for this tree and base); "
+            "refs/heads/head (head) is not green for suite (no green run of tree tree under `true`); "
             "run `tl check` in its worktree, then push",)
 
     def test_unreadable_or_undecodable_policy_profile_is_unavailable(self):
