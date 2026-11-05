@@ -130,17 +130,20 @@ def capture_bytes(
     out: list[bytes] = []
     err: list[bytes] = []
     quit_ = threading.Event()
-    threads = [
-        threading.Thread(target=_slurp, args=(p.stdout, out, quit_), daemon=True),
-        threading.Thread(target=_slurp, args=(p.stderr, err, quit_), daemon=True),
-    ]
-    if input is not None:
-        threads.append(threading.Thread(target=_feed, args=(p.stdin, input, quit_), daemon=True))
+    threads: list[threading.Thread] = []  # filled and started together, after the replay: _release joins only started ones
     survivors: tuple[int, ...] = ()
     timed = False
     try:
         try:
             hold.replay()
+            threads.extend(
+                (
+                    threading.Thread(target=_slurp, args=(p.stdout, out, quit_), daemon=True),
+                    threading.Thread(target=_slurp, args=(p.stderr, err, quit_), daemon=True),
+                )
+            )
+            if input is not None:
+                threads.append(threading.Thread(target=_feed, args=(p.stdin, input, quit_), daemon=True))
             for thread in threads:
                 thread.start()
             timed = _wait(p, t0=t0, last=[t0], timeout=timeout, idle=None, stop=None) is not None

@@ -67,9 +67,9 @@
   },
   {
     "name": "stream_proc",
-    "shelf_tag": "1e46132d3ed910bac362a04c3b68b8a48272b7a1",
-    "shelf_commit": "1e46132d3ed910bac362a04c3b68b8a48272b7a1",
-    "tree_hash": "0be6a7472510f54794b36785026c9450a0fb65dd1500afd62333b4c3cf8131c0"
+    "shelf_tag": "53d1bcd",
+    "shelf_commit": "53d1bcdfda2fc6ff9f0cf158d6171bf585229132",
+    "tree_hash": "be328025b80bb65c2c450e8c85ca0487834c473758d8116fe2782e2d63bf5134"
   },
   {
     "name": "timefmt",
