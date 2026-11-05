@@ -142,6 +142,12 @@ class PushJudge:
                       if tip.remote_ref == "refs/heads/" + self.base_ref(cfg).removeprefix("origin/")]
         if not deliveries:
             return PushDecision(PushStatus.ALLOWED)
+        rewinds = tuple(
+            f"{tip.ref} ({tip.sha[:12]}) rewinds {tip.remote_ref}: {tip.remote_sha[:12]} is not an ancestor of {tip.sha[:12]}; "
+            "only a fast-forward may reach the base branch"
+            for tip, _cfg in deliveries if tip.remote_sha.strip("0") and not self.git.is_ancestor(self.repo, tip.remote_sha, tip.sha))
+        if rewinds:
+            return PushDecision(PushStatus.REFUSED, rewinds)
         return self.judge_delivery(deliveries)
 
     def why(self, tip: PushTip, cfg: EngineConfig | None) -> dict[CheckId, str]:
