@@ -96,13 +96,33 @@ def profile_problem(profile: Path) -> str:
     return ""
 
 
+def slots_part(repo: Path) -> Plan:
+    """The slot folders the profile counts (`slots.count` under `slots.dir`) must exist: a run takes its worktree from one, so a missing
+    folder fails the run after its first stage. Nothing when the profile counts none."""
+    try:
+        cfg = slots.load_profile(json.loads((repo / ".task-loop.json").read_text(encoding="utf-8"))).slots
+    except (SystemExit, ValueError, OSError):
+        return Plan()
+    if cfg.count < 1:
+        return Plan()
+    root = Path(slots.slot_dir(str(repo), "x", cfg)).parent
+    missing = [n for n in (f"s{i}" for i in range(1, cfg.count + 1)) if not (root / n).is_dir()]
+    if not missing:
+        return Plan([Check("slots", True, f"{cfg.count} under {root}")])
+    return Plan([Check("slots", False, f"{', '.join(missing)} missing under {root}")], [Fix("slots", "run `tl slot init` to make them")])
+
+
 def repo_part(repo: Path) -> Plan:
     """The repo's part: its .task-loop.json (loads? stale?) and, when there is none, the questions that write one."""
     profile, found = repo / ".task-loop.json", stacks(repo)
     checks = [Check("stack", True, ", ".join(f"{k} ({v})" for k, v in found.items()) or "none recognised")]
     if profile.is_file():
         problem = profile_problem(profile)
-        return Plan([*checks, Check("profile", not problem, problem or f"{profile} loads")])
+        checks.append(Check("profile", not problem, problem or f"{profile} loads"))
+        if problem:
+            return Plan(checks)
+        more = slots_part(repo)
+        return Plan([*checks, *more.checks], more.fixes)
     checks.append(Check("profile", False, f"{profile} does not exist"))
     asks: list[Question] = []
     if "unity" in found:

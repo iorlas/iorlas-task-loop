@@ -26,6 +26,7 @@ class StageRun:
     continued: bool = False
     reason: str = ""
     terminal: RunState | None = None
+    answer: RunFinish | None = None  # a one-stage run's own answer (staged, landed, done); else the state alone says it
 
 
 @contextmanager
@@ -73,7 +74,8 @@ def stage_run(who: Identity, repo: str, mode: str, *, bundle: RunBundle | None =
         if stage is None or not stage.continued:
             terminal = stage.terminal if stage is not None else None
             state = terminal or (RunState.DONE if rc == 0 else RunState.FAILED)
-            candidate = previous_finish(bundle.manifest.replace(state=state, ended=time.time(), reason=reason, finish=None))
+            candidate = (stage.answer if stage is not None and stage.answer is not None and rc == 0 else
+                         previous_finish(bundle.manifest.replace(state=state, ended=time.time(), reason=reason, finish=None)))
             finished_stage = stage
 
             def project(m: RunManifest, r: RunFinish) -> None:

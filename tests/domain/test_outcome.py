@@ -21,8 +21,8 @@ from taskloop.domain.outcome import POLICY
 
 
 class Table(Case):
-    def test_twenty_two_kinds_and_no_ask_verify(self):
-        assert len(Kind) == 26
+    def test_twenty_seven_kinds_and_no_ask_verify(self):
+        assert len(Kind) == 27
         assert "ASK_VERIFY" not in Kind.__members__
         assert "OTHER" not in Kind.__members__
 

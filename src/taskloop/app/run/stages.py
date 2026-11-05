@@ -1,9 +1,11 @@
 """The shared run entry: continuous loop runs or one recorded engine step."""
+import time
+
 from taskloop.adapters import beadtools
 from taskloop.app.land.gate import Problem
 from taskloop.app.run.closer_record import RecordRun
 from taskloop.app.run.crash import parked_crash
-from taskloop.app.run.finish import terminal_state
+from taskloop.app.run.finish import stage_answer, terminal_state
 from taskloop.app.run.host import RunHost
 from taskloop.app.run.layout import repo_of
 from taskloop.app.run.run_once import RunOnce
@@ -33,6 +35,13 @@ def parse_step(name: str) -> Step:
         raise ValueError(f"unknown stage {name!r}; choose from: {', '.join(Step)}") from None
 
 
+def stage_kind(step: Step) -> Kind:
+    """What one stage's run ends as: only a land is landed and only a close (or the reflect after it) is done."""
+    if step is Step.LAND:
+        return Kind.LANDED
+    return Kind.DONE if step in (Step.CLOSE, Step.REFLECT) else Kind.STAGE
+
+
 def run_stages(e: RunHost, requested: str | None, *, continuous: bool) -> int:
     """Every caller enters the same lifecycle, including the loop's continuous sequence."""
     locator = RunLocator(e.home)
@@ -49,7 +58,8 @@ def run_stages(e: RunHost, requested: str | None, *, continuous: bool) -> int:
         else:
             run.rc = one_stage(e, requested, locator)
             run.reason = e.why
-            run.terminal = terminal_state(oc.make(e.kind, e.why))
+            done = oc.make(e.kind, e.why, sha=e.landed_sha if e.kind is Kind.LANDED else "")
+            run.terminal, run.answer = terminal_state(done), stage_answer(done, time.time())
         return run.rc
 
 
@@ -124,7 +134,7 @@ def one_stage(e: RunHost, requested: str | None, locator: RunLocator) -> int:
         e.steps.only = step
         following = dispatch(e, step, bead, ck)
         locator.advance(e.run_id, following)
-        e.kind, e.why = Kind.LANDED if step is Step.LAND else Kind.DONE, ""
+        e.kind, e.why = stage_kind(step), ""
         return 0
     except fence.Fenced as err:
         e.fenced = err.why
@@ -165,7 +175,9 @@ def finish_stage(e: RunHost, lease: Lease) -> None:
 
 def record_stage(e: RunHost) -> None:
     done = oc.make(e.kind, e.why, sha=e.landed_sha)
-    if done.finished and not e.dry:
+    if done.kind is Kind.STAGE:  # the bead goes on: no park dropped, no pause, no close outcome kept for the next run
+        pass
+    elif done.finished and not e.dry:
         ParkStore(e.home).drop(e.bead)
     else:
         e.closer.pause(done)
