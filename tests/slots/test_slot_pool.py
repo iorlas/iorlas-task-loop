@@ -1,6 +1,7 @@
 """The slot code (src/taskloop/app/slots) on fakes: bd in memory, git in memory with injected faults, the ticket line in a dict.
 Every test here runs in milliseconds; the real git and the real files are in test_tl (SlotReset) and test_slots."""
 import contextlib
+import os
 import sys
 import tempfile
 import time
@@ -30,6 +31,7 @@ from taskloop.contracts.slots import BranchPinned, Checkout, DirtyTree, IndexLoc
 from taskloop.stores.memory import MemTickets
 
 ME = "tl-me"
+LIVE_PID = os.getpid()  # a pid the ticket line reads as alive: pid 1 is launchd on macOS, which libproc will not show to a user process
 
 
 class Beating(FakeBeads):
@@ -57,7 +59,7 @@ class Rig(Case):
             cfgdir=paths.ConfigDir(Path(tmp.name)), actor=ME, host="h", take_lock=contextlib.nullcontext,
             busy=lambda d: self.busy_at.get(d, ""), drop_engine_lock=lambda d, pid=None: self.busy_at.pop(d, None),
             event=lambda kind, bead="", **kw: self.events.append((kind, kw.get("slot"))), run_setup=lambda cmd, d: 0,
-            exclude_local=lambda r: None, say=self.out.append, warn=self.err.append, pid=1, now=lambda: self.t[0],
+            exclude_local=lambda r: None, say=self.out.append, warn=self.err.append, pid=LIVE_PID, now=lambda: self.t[0],
             sleep=self.sleeps.append)
         self.pool = SlotPool(self.env)
         for n in ("s1", "s2"):
@@ -255,8 +257,8 @@ class Verbs(Rig):
         assert cli.run(self.env, a) == 3
 
     def test_list_names_the_slots_and_the_line(self):
-        self.tickets.take("r-1", "run-task late", 2, pid=1, now=5.0)
-        self.tickets.take("r-1", "run-task urgent", 0, pid=1, now=6.0)
+        self.tickets.take("r-1", "run-task late", 2, pid=LIVE_PID, now=5.0)
+        self.tickets.take("r-1", "run-task urgent", 0, pid=LIVE_PID, now=6.0)
         assert cli.run(self.env, SimpleNamespace(op="list")) == 0
         rows = [r.split("\t") for r in self.out]
         assert [r[0] for r in rows[:2]] == ["s1", "s2"]
@@ -265,7 +267,7 @@ class Verbs(Rig):
 
 class Line(Rig):
     def test_a_waiter_behind_a_better_ticket_does_not_take_a_free_slot(self):
-        first = self.tickets.take("r-1", "urgent", 0, pid=1, now=1.0)
+        first = self.tickets.take("r-1", "urgent", 0, pid=LIVE_PID, now=1.0)
         assert wait_slot(self.env, "late", stop=lambda: True) is None
         self.tickets.drop("r-1", first.seq)
         assert (wait_slot(self.env, "late", stop=lambda: True) or ("",))[0] == "s1"
@@ -281,8 +283,8 @@ class Line(Rig):
 
 
     def test_the_line_is_first_in_line_first(self):
-        self.tickets.take("r-1", "run-task late", 2, pid=1, now=5.0, bead="x-2")
-        self.tickets.take("r-1", "run-task urgent", 0, pid=1, now=6.0, bead="x-1")
+        self.tickets.take("r-1", "run-task late", 2, pid=LIVE_PID, now=5.0, bead="x-2")
+        self.tickets.take("r-1", "run-task urgent", 0, pid=LIVE_PID, now=6.0, bead="x-1")
         assert [(t.bead, t.prio, t.since) for t in waiting_line(self.env)] == [("x-1", 0, 6.0), ("x-2", 2, 5.0)]
 
 

@@ -29,7 +29,7 @@ a newer run in place of the one the owner saw. A cause naming an ask also verifi
 | GET `/api/cost` | `window=24h\|7d`, `last=<runs>`, `project`, `since=<version>` optional | `CostPage` with its own `version` and `ETag`; 304 for a matching token. Time, fresh tokens and cost summed per stage and bead over the kept engine logs; `last` takes that many newest runs; missing cost is counted as `unknown` calls; 400 for another window |
 | GET `/api/live` | `project`, `id`, `since=<cursor>`, `wait=<s>` | `LivePage` with lines after the cursor; long-poll over `api/live.py` and `runlife` |
 | POST `/api/<verb>` | the `WRITES[verb]` record as JSON | `Result` |
-| GET `/api/artifact` | `bead`, `name` | a file the run kept (`ConfigDir.artifacts`); HTML only as a download |
+| GET `/api/artifact` | `repo`, `bead`, `run`, `stage`, `attempt`, `name` | a registered file of the store `<config>/artifacts/<repo>/<bead>/<run>/<stage>-<attempt>/<name>` that has its `<name>.json` sidecar; images, video, audio and PDF inline, the rest (HTML, SVG too) as a download |
 | GET `/api/look-shot` | `repo`, `path` | a picture an open look item names, read from the repo |
 | GET `/api/version` | | `{version, pid, urls, started, script, binds, port, database_error}`: what `tl dash ensure` checks |
 

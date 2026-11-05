@@ -37,6 +37,7 @@ from taskloop.adapters import (  # noqa: E402
 )
 from taskloop.adapters import delegate as dl  # noqa: E402
 from taskloop.app.launch import loop as wloop  # noqa: E402
+from taskloop.app.launch import loop_start as wstart  # noqa: E402
 from taskloop.app.loop.run import BeadRun, Where  # noqa: E402
 from taskloop.app.release import (  # noqa: E402
     catalog,
@@ -204,7 +205,7 @@ class Reload(te.EngineTest):
         assert [e for e in self.events() if e["kind"] == "reload"] == []
 
     def test_a_refused_version_is_skipped_until_it_is_installed_again_and_a_newer_one_is_taken(self):
-        inst = wloop.installs(homes.cfg(), snapshot(), here=self.here)
+        inst = wstart.installs(homes.cfg(), snapshot(), here=self.here)
         self.install("0.2.0", plant=BREAK_PLAN)  # a copy: a link would share the files the install key is made of
         assert must(run_reload.newer(snapshot(), self.here.parents[1])) == ("0.2.0", self.cache / "0.2.0")
         inst.record_bad("0.2.0", "run-task died (exit 1) 3 s after the exec into it")  # what the crash fallback writes
@@ -260,7 +261,7 @@ class Reload(te.EngineTest):
         said = []
         with mock.patch.dict(os.environ, {}):
             env = wloop.build(repo, store=FakeBeads(), here=self.here, env=snapshot(), spawner=holder, git=port_git(), who=who())
-            run = BeadRun(env, looptest.files(repo), wloop.installs(env.cfgdir, snapshot(), here=self.here),
+            run = BeadRun(env, looptest.files(repo), wstart.installs(env.cfgdir, snapshot(), here=self.here),
                           lambda: env.profile().loop, lambda: "",
                           lambda running: None, lambda: None, said.append)
             # the first child is the one that exec'd: its note appears while it runs

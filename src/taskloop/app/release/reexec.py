@@ -4,7 +4,8 @@ import os
 import time
 from collections.abc import Sequence
 
-from taskloop.adapters import applog
+from jsonl_log import close_held
+
 from taskloop.contracts.env import Env
 from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.ids import BeadId
@@ -72,5 +73,5 @@ def reexec_args(argv: Sequence[str], slot: str, wt: object) -> list[str] | None:
 
 def exec_in_place(argv: list[str], environ: dict[str, str]) -> None:
     """Replace this process with `argv` under `environ` (childenv.exec_env: the whole environment plus the hand-over)."""
-    applog.close_all()
+    close_held()
     os.execve(argv[0], argv, environ)

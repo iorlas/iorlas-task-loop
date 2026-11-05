@@ -28,10 +28,14 @@ sys.pycache_prefix = str(PYCACHE)
 os.environ.pop("PYTHONDONTWRITEBYTECODE", None)
 os.environ["PYTHONPYCACHEPREFIX"] = str(PYCACHE)
 
+# The temp dir by its real path: macOS's $TMPDIR is under /var, a symlink to /private/var, and code that resolves a path (tl does, for the
+# repo and the lock names; a child's getcwd does) would otherwise name the same directory differently from the test that made it.
+os.environ["TMPDIR"] = tempfile.tempdir = os.path.realpath(tempfile.gettempdir())
+
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 pytest.register_assert_rewrite("support")  # the helpers of tests/support assert too: show the operands, as in a test file
 import support.paths  # noqa: E402, F401  (ROOT/src on sys.path; after the bytecode setup above)
-from support import procsim  # noqa: E402
+from support import procsim, work  # noqa: E402
 from support.scope import delegate_wanted  # noqa: E402
 
 from taskloop.contracts import factorydb  # noqa: E402
@@ -58,11 +62,14 @@ SERIAL = {
 WORKER_MB = int(os.environ.get("TL_WORKER_MB") or 2048)
 
 
-# Seconds a test's call may take, by kind, set from measured runs under 8 xdist workers (2026-10-30): logic max 1.4 s (the gitsim engine
-# tests; 311 of 2261 pass 0.2 s, the target the limit comes down to as they speed up), real max 4.4 s, e2e max 2.5 s.
-# TL_TIME_SCALE multiplies them. A logic test is limited by the CPU time its call used (a loaded host stretches the wall clock, not the CPU
-# time), with a wall backstop of WALL_FACTOR times the limit for a test that sleeps or waits; the other kinds spawn processes, so wall time.
+# Seconds of work a test's call may do, by kind, set from measured runs under 8 xdist workers (2026-10-30): logic max 1.4 s (the gitsim
+# engine tests; 311 of 2261 pass 0.2 s, the target the limit comes down to as they speed up), real max 4.4 s, e2e max 2.5 s.
+# TL_TIME_SCALE multiplies them. A busy host stretches the wall clock of a healthy test 5x to 100x (every core taken, swap, a virus scanner)
+# and its CPU time 2x to 4x, so neither is the measure of a logic test: it is the work, in seconds an idle host needs (support/work.py,
+# the instructions the process retired where the kernel counts them, else its CPU time). Real and e2e tests are limited by the CPU time of
+# the process and the children it waited for. The wall clock only catches a hang: HANG_S (times TL_TIME_SCALE), no limit of its own.
 WALL_FACTOR = 10
+HANG_S = 300.0
 LIMITS_S = {"logic": 2.0, "real": 15.0, "e2e": 30.0, "live": 3600.0}
 RULES_LIMIT_S = 15.0
 TESTS_DIR = Path(__file__).resolve().parent
@@ -99,16 +106,20 @@ def pytest_runtest_makereport(item, call):
     report = outcome.get_result()
     if call.when == "call" and report.skipped:
         item.stash[SKIPPED] = True  # a skipped test spawned nothing, and a real one is not failed for it
-    limit = LIMITS_S[item.stash.get(KIND, "logic")] * float(os.environ.get("TL_TIME_SCALE") or 1)
+    limit = LIMITS_S[item.stash.get(KIND, "logic")]
     if (TESTS_DIR / "rules") in Path(str(item.path)).parents:
         limit = max(limit, RULES_LIMIT_S)  # the gate's rules read the whole tree
     limit = max(limit, getattr(item.module, "LIMIT_S", 0))  # a module that says why it is heavier (a simulation) names its own
-    logic = item.stash.get(KIND, "logic") == "logic"
-    used, wall = (item.stash.get(CPU_S, call.duration) if logic else call.duration), call.duration
-    if call.when == "call" and report.passed and (used > limit or (logic and wall > limit * WALL_FACTOR)):
+    kind, wall = item.stash.get(KIND, "logic"), call.duration
+    if CPU_S not in item.stash:  # a subtest's own report, made inside the call: the whole call is judged when it ends
+        return
+    used = item.stash.get(WORK_S, item.stash[CPU_S]) if kind == "logic" else item.stash[CPU_S]
+    hang = max(HANG_S * float(os.environ.get("TL_TIME_SCALE") or 1), limit * WALL_FACTOR)
+    if call.when == "call" and report.passed and (used > limit or wall > hang):
         report.outcome = "failed"
-        report.longrepr = (f"{item.nodeid}: a {item.stash.get(KIND, 'logic')} test took {used:.2f} s of {'CPU' if logic else 'wall'} time"
-                           f" ({wall:.2f} s wall), over its {limit:.2f} s limit")
+        why = f"over its {limit:.2f} s limit" if used > limit else f"over the {hang:.0f} s a test may take before it counts as hung"
+        report.longrepr = (f"{item.nodeid}: a {kind} test took {used:.2f} s of work ({item.stash[CPU_S]:.2f} s of CPU, {wall:.2f} s wall),"
+                           f" {why}")
 
 
 def pytest_ignore_collect(collection_path, config):
@@ -146,16 +157,26 @@ def pytest_runtest_call(item):
     patched = item.stash.get(_SETUP_STD, (None, None))
     own = sys.stdout, sys.stderr
     sys.stdout, sys.stderr = (p or o for p, o in zip(patched, own, strict=True))
-    cpu = time.process_time()
+    cpu, instr = cpu_s(), work.instructions()
     try:
         return (yield)
     finally:
         sys.stdout, sys.stderr = own
-        item.stash[CPU_S] = time.process_time() - cpu
+        item.stash[CPU_S] = cpu_s() - cpu
+        done = work.instructions()
+        if work.measured() and instr is not None and done is not None:
+            item.stash[WORK_S] = work.seconds(done - instr)
+
+
+def cpu_s() -> float:
+    """CPU seconds this process has used, plus those of the children it has waited for."""
+    kids = resource.getrusage(resource.RUSAGE_CHILDREN)
+    return time.process_time() + kids.ru_utime + kids.ru_stime
 
 
 _SETUP_STD = pytest.StashKey[tuple]()
 CPU_S = pytest.StashKey[float]()
+WORK_S = pytest.StashKey[float]()
 
 
 @pytest.fixture(autouse=True)
@@ -230,13 +251,14 @@ def isolate(home):
 
 
 def pytest_configure(config):
+    work.calibrate()  # this host's speed at its best, to turn a logic test's instructions into seconds
     if not hasattr(config, "workerinput"):  # the controller (or a plain run) keeps the caller's environment
         return
     if sys.platform.startswith("linux"):
         with contextlib.suppress(OSError, AttributeError):
             ctypes.CDLL(None, use_errno=True).prctl(1, 9, 0, 0, 0)  # PR_SET_PDEATHSIG, SIGKILL: a worker leaves with its controller
     cap_memory(WORKER_MB)
-    home = Path(tempfile.mkdtemp(prefix="tl-worker-"))
+    home = Path(tempfile.mkdtemp(prefix="tl-worker-")).resolve()
     config._worker_home = home
     isolate(home)
 

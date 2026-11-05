@@ -3,8 +3,6 @@
 import json
 import math
 
-from atomic_io import atomic_write_text
-
 from taskloop.contracts.guard import guard
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.stores import TraceStore
@@ -31,16 +29,15 @@ def prune_traces(cfg: ConfigDir, days: float, now: float, dry_run: bool,
     Malformed lines, missing/invalid times, exempt beads and all LANDED rows
     survive. Preserve retained lines verbatim, including incomplete last lines.
     """
-    path = cfg.traces()
+    path, cut = cfg.traces(), now - days * 86400
     if not path.exists():
         return 0
-    with guard(TraceStore(cfg).lock_path()):
+    store = TraceStore(cfg)
+    if not dry_run:
+        return store.file.rewrite(lambda line: not _old(line.decode("utf-8", "replace"), cut, keep_beads))
+    with guard(store.lock_path()):
         try:
-            lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
+            lines = path.read_text(encoding="utf-8").splitlines()
         except (FileNotFoundError, UnicodeError):
             return 0
-        keep = [line for line in lines if not _old(line, now - days * 86400, keep_beads)]
-        gone = len(lines) - len(keep)
-        if gone and not dry_run:
-            atomic_write_text(path, "".join(keep), fsync=False)
-    return gone
+    return sum(1 for line in lines if _old(line, cut, keep_beads))

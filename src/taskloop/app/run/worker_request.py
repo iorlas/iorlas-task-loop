@@ -1,24 +1,46 @@
 """Delegate request, engine-only advisory brief, and write-stop diagnostics."""
 
 import json
-from typing import TYPE_CHECKING
+from typing import Protocol
 
 from taskloop.adapters import delegate as dg
 from taskloop.app.asks import trustroots
-from taskloop.app.run.blocked import refuse_over_cap
+from taskloop.app.checks.runner import Checker
+from taskloop.app.run.blocked import Blocked, refuse_over_cap
+from taskloop.app.run.budget import Budget
+from taskloop.app.run.call import Call
 from taskloop.contracts import log as rec
+from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.delegate import RunRequest
+from taskloop.contracts.ids import BeadId
+from taskloop.contracts.plancheck import PlanData
+from taskloop.contracts.ports import Beads, Git
 from taskloop.domain.asks import specs as askspecs
+from taskloop.domain.asks.spec import AskSpec
 from taskloop.domain.checks import planref
 from taskloop.domain.lanes import pin
 from taskloop.domain.prompts.write import ENGINE_ONLY_ADVISORY
-
-if TYPE_CHECKING:
-    from taskloop.app.run.engine import Engine
-    from taskloop.app.run.worker_call import Call
+from taskloop.stores.runlog import RunLog
 
 
-def request(e: Engine, c: Call, live: str, timeout_s: int, idle_s: int) -> RunRequest:
+class RequestHost(Protocol):
+    """What building a delegate request reads of the run."""
+
+    cfg: EngineConfig
+    bead: BeadId
+    wt: str
+    store: Beads
+    session: str
+    plan_data: PlanData | None
+    log: RunLog
+    git: Git
+    checker: Checker
+    budget: Budget
+
+    def blocked_for(self, why: str, kind: str, stop: object = None, spec: AskSpec | None = None, fix: bool = False) -> Blocked: ...
+
+
+def request(e: RequestHost, c: Call, live: str, timeout_s: int, idle_s: int) -> RunRequest:
     """Only a pinned write may ask delegate to treat the engine-only guard as advisory."""
     if c.role == "reviewer":
         why = trustroots.refusal(e.git, e.wt, e.cfg.base, e.store.show(e.bead))
@@ -55,7 +77,7 @@ def brief(c: Call, req: RunRequest) -> str:
     return text
 
 
-def note_write_stop(e: Engine, c: Call, ans: dg.Answer) -> None:
+def note_write_stop(e: RequestHost, c: Call, ans: dg.Answer) -> None:
     """Keep the actual argv and full delegate diagnostics for a pinned writer's stop."""
     res = ans.res
     if c.node == "write" and res.stop is not None and res.stop.reason in pin.STOP_REASONS:

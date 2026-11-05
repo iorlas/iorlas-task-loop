@@ -40,7 +40,7 @@ from support.tlmain import tl_main  # noqa: E402
 from support.who import who  # noqa: E402
 
 from taskloop.adapters import delegate as lroute  # noqa: E402
-from taskloop.app.launch import loop as wloop  # noqa: E402
+from taskloop.app.launch import loop_start as wstart  # noqa: E402
 from taskloop.app.release import pins  # noqa: E402
 from taskloop.app.track import trail  # noqa: E402
 from taskloop.app.wire import asks as wasks  # noqa: E402
@@ -212,6 +212,10 @@ class PinAndRollback(Base):
         p = mock.patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": str(self.claude)})
         p.start()
         self.addCleanup(p.stop)
+        # the Mac standing pin asks origin for a devbox-ok tag (tests/release/test_canary.py): these are about the pin file
+        off_mac = mock.patch.object(pins.sys, "platform", "linux")
+        off_mac.start()
+        self.addCleanup(off_mac.stop)
         for v in ("0.1.0", "0.2.0", "0.10.0"):
             self.layout("iorlas-task-loop", v, "skills/task-loop/tl.py")
         for v in ("0.5.0", "0.6.0"):
@@ -293,7 +297,7 @@ class PinAndRollback(Base):
         assert "/iorlas-delegate/0.5.0/" in must(route())
         root = self.claude / "plugins/cache/iorlas-marketplace/iorlas-task-loop/0.2.0"
         def target(**kw):
-            return wloop.installs(homes.cfg(), snapshot(), here=root / "skills" / "task-loop").target(**kw)
+            return wstart.installs(homes.cfg(), snapshot(), here=root / "skills" / "task-loop").target(**kw)
         assert target() == ("0.1.0", root.parent / "0.1.0")  # older than the running one: still the pin
         assert target(skip=["0.1.0"]) is None
         assert self.pin("--clear")[0] == 0

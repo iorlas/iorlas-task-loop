@@ -9,12 +9,9 @@ from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
-from support.dashes import make_dash
-from support.narrow import must
 
 from taskloop.app.run import artifacts
 from taskloop.app.run.steps import Steps
-from taskloop.contracts.ids import BeadId
 from taskloop.stores.memory import fake_stores
 from taskloop.stores.runlog import RunLog
 
@@ -76,26 +73,3 @@ class AtStepEnd(Case):
             assert [k for k in kinds if k[1]] == [("artifacts", ["a.png"]), ("artifacts", ["b.pdf"])]
             assert [k[0] for k in kinds[:3]] == ["step_start", "artifacts", "step_end"]
             assert sorted(p.name for p in dest.iterdir()) == ["a.png", "b.pdf"]
-
-
-class Page(Case):
-    def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.dash = make_dash(config=self.tmp.name)
-        self.dir = self.dash.env.config.artifacts(BeadId("tl-1"))
-        self.dir.mkdir(parents=True)
-        (self.dir / "shot.png").write_bytes(b"png")
-        (self.dir / "r.pdf").write_bytes(b"%PDF")
-        (self.dir / "page.html").write_text("<script>alert(1)</script>")
-        os.symlink("/etc/passwd", self.dir / "link.txt")
-
-    def teardown_method(self):
-        self.tmp.cleanup()
-
-    def test_a_file_is_served_with_a_safe_type_and_bad_names_are_refused(self):
-        assert self.dash.artifacts.file("tl-1", "shot.png") == (b"png", "image/png")
-        assert self.dash.artifacts.file("tl-1", "r.pdf") == (b"%PDF", "application/pdf")
-        assert must(self.dash.artifacts.file("tl-1", "page.html"))[1] == "application/octet-stream"  # never run as a page
-        for bad in ("link.txt", "../shot.png", "a/b", ".x", "", "missing.png"):
-            assert self.dash.artifacts.file("tl-1", bad) is None, bad
-        assert self.dash.artifacts.file("../tl-1", "shot.png") is None

@@ -18,7 +18,7 @@ import support.paths  # noqa: F401
 
 ROOT = Path(__file__).resolve().parents[2]
 EDGE = frozenset({"src/taskloop/contracts/env.py", "src/taskloop_dash/cli/dash.py",  # the owner of os.environ, and the dashboard's edge
-                  "src/taskloop/hook/session.py", "src/taskloop/adapters/container_run.py"})  # the hooks' edge, and a script run by path
+                  "src/taskloop/hook/session.py"})  # the hooks' edge
 CALL = re.compile(r"\b(?:penv\.)?(?:ambient|ambient_bead|ambient_set|snapshot)\(")
 NOT_ENV = re.compile(r"\b(?:looks|bf|cfg|self|snap|wt)\.snapshot\(|def snapshot|def ambient")
 
@@ -57,7 +57,7 @@ def spawner_builders(root: Path = ROOT) -> list[str]:
 
 AMBIENT_PORT = re.compile(r"^[A-Za-z_]\w*\s*(?::[^=\n]+)?=\s*(?:\w+\.)?(?:Real\w*|real\.(?:git|spawner))\(", re.M)
 IDENTITY_CALL = re.compile(r"\bident\.identity\(|\bidentity\(")
-IDENTITY_SITES = frozenset({"src/taskloop/adapters/ident.py", "src/taskloop/app/run/entry.py", "src/taskloop/app/launch/loop.py",
+IDENTITY_SITES = frozenset({"src/taskloop/adapters/ident.py", "src/taskloop/app/run/entry.py", "src/taskloop/app/launch/loop_start.py",
                             "src/taskloop/app/release/flow.py", "src/taskloop/app/launch/selftest.py"})  # each holds or makes an Env
 HANDOVERS = "TL_REEXEC|TL_LOOP_STATE|TL_RELEASE_REEXEC"
 HANDOVER_NAME = re.compile(rf"EnvVar\.(?:{HANDOVERS})\b|[\"'](?:{HANDOVERS})[\"']")

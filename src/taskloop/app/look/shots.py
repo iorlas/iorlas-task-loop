@@ -7,11 +7,15 @@ from typing import Any
 
 from taskloop.adapters import looks
 from taskloop.adapters.bdids import prefix_of
-from taskloop.app.look.keep import Keeper, place
+from taskloop.adapters.check_files import repo_key
+from taskloop.app.artifacts import store
+from taskloop.app.artifacts.keep import Keeper, place
+from taskloop.contracts.artifact import ArtifactSlot
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.log import Artifacts
 from taskloop.contracts.ports import Git
 from taskloop.contracts.slots import SlotGitError
+from taskloop.contracts.wire import Refused
 from taskloop.domain.checks.matchers import glob_re
 from taskloop.domain.look.matchers import image_names, safe_name
 
@@ -150,7 +154,7 @@ class Pictures:
             if err:
                 errs.append(err)
             for f in files:
-                names.append(self.keep_picture(f, names, base))
+                names.append(self.keep_picture(f, names, base, rnd))
             if m and files:
                 self.warn_if_untracked(m, files)
         e.rendered_names = sorted({*e.rendered_names, *names})
@@ -184,8 +188,9 @@ class Pictures:
             e.warn(f"shot method {m['method']} writes pictures in the worktree ({m['out'] or inside[0].parent}) and that folder is not "
                    "ignored by git: they will show up as unexplained new files; add it to .gitignore")
 
-    def keep_picture(self, f: Path, names: list[str], base: Path) -> str:
-        """The full-size copy goes to the evidence dir, the judge's shrunk one beside the round; one name per picture within a round."""
+    def keep_picture(self, f: Path, names: list[str], base: Path, rnd: int) -> str:
+        """The full-size copy goes to the evidence dir and is registered in the artifact store (stage look, attempt = the round, role
+        result), the judge's shrunk one beside the round; one name per picture within a round."""
         e = self.e
         name, j = f.name, 1
         while name in names:
@@ -193,8 +198,20 @@ class Pictures:
         e.evidence_dir.mkdir(parents=True, exist_ok=True)
         if not self.keeper().keep(f, e.evidence_dir / name):
             self.note_dropped()
+        self.register(f, name, rnd)
         looks.downscale(f, base / name, int(e.cfg.look_max_px))
         return name
+
+    def register(self, f: Path, name: str, rnd: int) -> None:
+        """The engine's render joins the artifact store through the one writer; a refusal is a warning (a picture is never worth a run)."""
+        e = self.e
+        try:
+            e.artifact_repo = e.artifact_repo or repo_key(self.git, e.wt)
+            slot = ArtifactSlot(repo=e.artifact_repo, bead=e.bead, run=e.run_id, stage="look", attempt=rnd)
+            store.add(e.home.artifact_store(), slot, f, name=name, caption=f"engine render, round {rnd}",
+                      role="result", now=e.now(), cap=int(e.cfg.evidence_cap_mb) << 20)
+        except (Refused, OSError) as err:
+            e.warn(f"render {name} not registered as an artifact: {err}")
 
     def copy_looks(self):
         """The screenshots of a visual change are kept like artifacts (config dir, the dashboard's bead page), never in the repo;

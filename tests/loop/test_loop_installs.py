@@ -22,7 +22,7 @@ from support import (
 from support.narrow import must
 
 import loop.test_loop_more as more
-from taskloop.app.launch import loop as wloop
+from taskloop.app.launch import loop_start as wstart
 
 
 class Moving(LoopBase):
@@ -57,7 +57,7 @@ class Entry(Moving):
             {"scope": "user", "installPath": str(self.cache / version)}]}}))
 
     def target(self):
-        return wloop.installs(homes.cfg(), snapshot(), here=must(self.here)).target()
+        return wstart.installs(homes.cfg(), snapshot(), here=must(self.here)).target()
 
 
     def test_with_no_entry_the_highest_directory_above_the_running_one_is_the_fallback(self):

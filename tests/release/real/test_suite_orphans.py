@@ -48,7 +48,7 @@ class Orphans(Case):
                 procs.stop_pid(pid)
 
     def worker_pid(self) -> int:
-        text = until(lambda: self.pidfile.exists() and self.pidfile.read_text().strip(), 60)
+        text = until(lambda: self.pidfile.exists() and self.pidfile.read_text().strip(), WAIT_START)
         assert text, "the worker never started its test"
         pid = int(text or 0)
         self.pids.append(pid)
@@ -72,26 +72,30 @@ class Orphans(Case):
         self.addCleanup(signal.signal, signal.SIGINT, old)
 
         def interrupt():  # once the worker is inside its test
-            until(self.pidfile.exists, 60)
+            until(self.pidfile.exists, WAIT_START)
             _thread.interrupt_main()
         threading.Thread(target=interrupt, daemon=True).start()
         with pytest.raises(KeyboardInterrupt):
             self.run_in_thread(600, ["sh", "-c", 'echo $$ > "$PIDFILE"; sleep 300'])  # the worker: a shell
         pid = self.worker_pid()
-        assert until(lambda: not stream_proc.alive(pid), 15), "the worker outlived the interrupted launcher"
+        assert until(lambda: not stream_proc.alive(pid), WAIT_END), "the worker outlived the interrupted launcher"
 
     def test_a_worker_whose_controller_died_without_a_word_exits_on_its_own(self):
         out = subprocess.DEVNULL
         controller = subprocess.Popen(self.argv, env=self.env, cwd=self.root, start_new_session=True, stdout=out, stderr=out)
         self.pids.append(controller.pid)
-        assert until(self.pidfile.exists, 90), "the worker never started its test"  # the worker is inside its test
+        assert until(self.pidfile.exists, WAIT_START), "the worker never started its test"  # the worker is inside its test
         controller.kill()  # the controller dies at once, no handler: the way a SIGKILLed pytest ends
         controller.wait()
         pid = self.worker_pid()
-        assert until(lambda: not stream_proc.alive(pid), 15), "the orphaned worker is still running"
+        assert until(lambda: not stream_proc.alive(pid), WAIT_END), "the orphaned worker is still running"
+
+# Upper bounds of waits that end when the event happens: a pytest worker takes minutes to come up on a host with every core taken.
+WAIT_START, WAIT_END = 240, 60
 
 
 class MemoryLimits(Case):
+    @pytest.mark.skipif(not sys.platform.startswith("linux"), reason="macOS does not enforce RLIMIT_AS (conftest.cap_memory is Linux only)")
     def test_a_worker_past_its_address_space_cap_is_red_with_a_memory_error(self):
         """conftest.cap_memory in a forked child (a worker, as xdist starts it, without the interpreter start): past the cap an allocation
         is a MemoryError, not the host's RAM."""

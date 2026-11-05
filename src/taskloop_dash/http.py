@@ -70,8 +70,10 @@ def route(dash: Dash, static: Path, path: str, q: Query, held: str | None = None
         got = dash.looks.look_shot(q.get("repo", ""), q.get("path", ""))
         return (200, got[0], got[1], []) if got else (404, b"not found", "text/plain", [])
     if path == "/api/artifact":
-        got = dash.artifacts.file(q.get("bead", ""), q.get("name", ""))
-        return (200, got[0], got[1], []) if got else (404, b"not found", "text/plain", [])
+        got = dash.artifacts.file(*(q.get(k, "") for k in ("repo", "bead", "run", "stage", "attempt", "name")))
+        if got is None:
+            return 404, b"not found", "text/plain", []
+        return 200, got[0], got[1], [] if got[2] else [("Content-Disposition", "attachment")]
     got = static_file(static, path)
     return (*got, []) if got[0] == 200 else None
 

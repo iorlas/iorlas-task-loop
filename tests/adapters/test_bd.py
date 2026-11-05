@@ -43,7 +43,7 @@ class RealBdContract(BeadsContract, Case):
 
     root: str = ""
     why_not: str = ""  # a skip is per test, never in setUpClass: unittest does not count the tests of a class skipped there,
-    # and the release gate fails a run whose count differs from the planned one (the container has no bd)
+    # and the release gate fails a run whose count differs from the planned one
 
     @classmethod
     def setup_class(cls) -> None:

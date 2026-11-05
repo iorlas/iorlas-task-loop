@@ -8,7 +8,6 @@ import os
 import sys
 import tempfile
 import textwrap
-import time
 from pathlib import Path
 from unittest import mock
 
@@ -36,7 +35,7 @@ POSIX = os.name != "nt"
 MIN = 60.0
 
 # route.py stand-in: starts a worker in its own session, writes WorkerStarted as the first line of the live file like delegate, then
-# waits for <cwd>/done. Mode "stubborn": the worker ignores SIGTERM. Mode "chatty": the live file keeps moving until CHAT_UNTIL.
+# waits for <cwd>/done. Mode "stubborn": the worker ignores SIGTERM. Mode "chatty": the live file keeps moving for CHAT_FOR seconds.
 ROUTE = textwrap.dedent('''
     import json, os, subprocess, sys, time
     d, mode = sys.argv[sys.argv.index("--cwd") + 1], os.environ.get("FAKE_MODE", "")
@@ -49,7 +48,8 @@ ROUTE = textwrap.dedent('''
         with open(live, "a") as f:
             f.write(json.dumps({"v": 1, "pid": w.pid, "pgid": w.pid, "run_id": "run1"}) + "\\n")
             f.flush()
-            while mode == "chatty" and time.time() < float(os.environ["CHAT_UNTIL"]):
+            until = time.time() + float(os.environ.get("CHAT_FOR", "0"))  # from the first line, not from before this started
+            while mode == "chatty" and time.time() < until:
                 f.write(json.dumps({"t": time.time(), "k": "msg", "text": "still here"}) + "\\n")
                 f.flush()
                 time.sleep(0.1)
@@ -87,7 +87,7 @@ class StreamRunnerCall(Case):
     def test_the_worker_is_read_from_the_live_files_first_line_and_a_quiet_one_is_not_stopped(self):
         """Silence is delegate's: the engine's runner stops a call only at the wall limit or a stop of the run."""
         seen = []
-        r, go = self.run_route("chatty", on_worker=seen.append, CHAT_UNTIL=str(time.time() + 0.4))
+        r, go = self.run_route("chatty", on_worker=seen.append, CHAT_FOR="0.4")
         done = go()
         assert (must(r.worker).pid, must(r.worker).run_id) == (self.worker_pid(), "run1")
         assert seen == [r.worker]

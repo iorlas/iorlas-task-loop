@@ -4,20 +4,35 @@
 import dataclasses
 from collections.abc import Callable
 
+from any_clock import PhaseClock
+
 from taskloop.contracts.config import EngineConfig
+
+WAIT = "wait"  # the clock's phase for time spent waiting for a shared resource: exempt from the minutes
 
 
 @dataclasses.dataclass
 class Budget:
     cfg: EngineConfig  # the run's config: budget_usd, budget_min, budget_min_by_label
     now: Callable[[], float]
-    t0: float = 0.0
-    waited: float = 0.0
     spent: float = 0.0
     labels: list[str] = dataclasses.field(default_factory=list)
 
     def __post_init__(self) -> None:
-        self.t0 = self.t0 or self.now()
+        self.restore(0.0, 0.0)
+
+    def restore(self, elapsed: float, waited: float) -> None:
+        """The run's clock as it stood: `elapsed` seconds old, `waited` of them spent waiting (a run that exec'd or paused)."""
+        self.clock = PhaseClock(self.now, exempt=(WAIT,), elapsed=elapsed)
+        self.clock.book(WAIT, waited)
+
+    @property
+    def t0(self) -> float:
+        return self.clock.started
+
+    @property
+    def waited(self) -> float:
+        return self.clock.total(WAIT)
 
     def limit_min(self) -> float:
         """budget_min, or the largest budget_min_by_label of this bead's labels."""
@@ -26,21 +41,17 @@ class Budget:
 
     def spent_min(self) -> float:
         """Minutes against the budget: wall clock without the time spent waiting for a shared resource."""
-        return (self.now() - self.t0 - self.waited) / 60
+        return self.clock.charged() / 60
 
     def wall_min(self) -> float:
-        return (self.now() - self.t0) / 60
+        return self.clock.wall() / 60
 
     def charge(self, usd: float) -> None:
         self.spent += usd
 
     def wait(self, secs: float) -> float:
         """Book `secs` of waiting (never more than the wall time there is); returns what was booked."""
-        secs = min(secs, self.now() - self.t0 - self.waited)
-        if secs > 0:
-            self.waited += secs
-        return max(secs, 0.0)
-
+        return self.clock.book(WAIT, secs)
     def used(self) -> float:
         """The larger share used, of the dollars and of the minutes (1.0 = all)."""
         return max(self.spent / float(self.cfg.budget_usd), self.spent_min() / self.limit_min())
