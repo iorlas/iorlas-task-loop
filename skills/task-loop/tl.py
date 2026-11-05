@@ -51,7 +51,6 @@
   tl.py status [--brief] [--json] [--repo DIR]  loop RUNNING or NOT RUNNING, asks, slots, versions, recent beads (<= 40 lines, 8 KB)
   tl.py wait --bead ID|--any [--timeout S]      block until the run ends or an ask opens; one line, the exit code says which (--help)
   tl.py green STEP [--repo DIR] --tree T --base B  is the check step green for the tree and base, from the result store (exit 0 yes, 1 no)
-  tl.py hooks install                           write the git hooks (pre-push asks tl judge-push) into <config>/githooks/
   tl.py setup --plan [--repo DIR] [--json]      what this machine and repo still need: checks, safe fixes, questions (read-only)
   tl.py ask show ID                             one ask: question, owner cause, blocking, default, similar, thread, outcome (read-only)
   tl.py handoff write|show [--repo DIR]         the <= 4 KB handoff a compaction hands to the next session (hooks/hook.py writes it)
@@ -89,7 +88,6 @@ from taskloop.cli import bd as cli_bd
 from taskloop.cli import closing as cli_closing
 from taskloop.cli import factory as cli_factory
 from taskloop.cli import green as cli_green
-from taskloop.cli import hooks as cli_hooks
 from taskloop.cli import land as cli_land
 from taskloop.cli import land_stack as cli_land_stack
 from taskloop.cli import queue as cli_queue
@@ -314,7 +312,6 @@ def build_parser():
     p.add_argument("--repo", default=".", metavar="DIR")
     p.add_argument("--no-run", action="store_true", help="read the evidence only: a missing receipt refuses, no check is started")
     cli_land_stack.add_parser(sp)
-    cli_hooks.add_parser(sp)
     cli_setup.add_parser(sp)
     return ap
 
@@ -440,7 +437,6 @@ VERBS: Final[dict[str, Handler]] = {
     "status": v_status,
     "handoff": v_handoff,
     "wait": v_wait,
-    "hooks": lambda a, c: cli_hooks.cmd_hooks(a, c.env, c.here.parents[1]),
     "setup": lambda a, c: cli_setup.cmd_setup(a, c.env, c.here.parents[1]),
     "green": lambda a, c: cli_green.cmd_green(a, c.who.config, c.git, env=c.env, spawner=c.spawner),
     "judge-push": lambda a, c: importlib.import_module("taskloop.app.launch.push_judge").cmd_judge_push(
@@ -466,6 +462,7 @@ def main(argv: list[str] | None = None, here: Path = HERE, now: Callable[[], flo
     a = build_parser().parse_args(argv)
     env = snapshot()
     ctx = Ctx(here, now, list(argv) if argv is not None else sys.argv[1:], env, real.spawner(env), real.git(env), ident.identity(env))
+    hook_wire.heal(a.cmd, here.parents[1], env)
     return cli_bd.required(VERBS[a.cmd], a, ctx)
 
 

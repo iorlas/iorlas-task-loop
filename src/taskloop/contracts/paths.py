@@ -37,7 +37,7 @@ class ConfigDir:
         return self.run_dir(run) / "manifest.json"
 
     def hooks_dir(self) -> Path:
-        """githooks/: the git hooks `tl hooks install` writes; every subprocess tl starts gets it as core.hooksPath (adapters/childenv)."""
+        """githooks/: the git hooks the engine writes at start; every subprocess tl starts gets it as core.hooksPath (adapters/childenv)."""
         return self.root / "githooks"
 
     def dash_pid(self) -> Path:

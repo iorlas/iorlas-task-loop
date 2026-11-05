@@ -26,7 +26,7 @@ tl land: record landing; tl land-lock: serialize delivery; tl land-stack: delive
 tl block: block a bead; tl trace: inspect runs; tl reflect: digest reflections.
 tl report: scorecard; tl lost: find unlanded work; tl green: inspect check evidence.
 tl usage: feed usage; tl lanes: refresh lane status; tl handoff: write or show a handoff.
-tl doctor, tl selftest, tl cutover: diagnostics; tl hooks: install git hooks.
+tl doctor, tl selftest, tl cutover: diagnostics.
 tl setup --plan: what this machine and repo still need (read-only).
 tl pin, tl rollback: owner overrides for the installed version.
 tl prune: reconcile expired leases and remove old owned data.

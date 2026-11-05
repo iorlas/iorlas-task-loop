@@ -140,7 +140,7 @@ HOOK_NAMES = ("applypatch-msg", "pre-applypatch", "post-applypatch", "pre-commit
               "post-commit", "pre-rebase", "post-checkout", "post-merge", "pre-push", "post-rewrite", "pre-auto-gc")
 GIT_HOOK = (
     "#!/bin/sh\n"
-    "# written by `tl hooks install`; plain python3, no uv. pre-push forwards stdin to `tl judge-push`; then the repo's own hook of this\n"
+    "# written by tl; plain python3, no uv. pre-push forwards stdin to `tl judge-push`; then the repo's own hook of this\n"
     "# name runs with the same arguments and stdin (hook/prepush.py), so git-lfs's and the repo's hooks are not skipped\n"
     "exec python3 {hook} githook {name} {tl} \"$@\"\n"
 )
@@ -165,6 +165,16 @@ def write_hooks(plugin_root: Path, env: Env) -> list[Path]:
             return []
         out.append(f)
     return out
+
+
+ENGINE_VERBS = frozenset({"loop", "run-task", "land-stack"})
+
+
+def heal(verb: str, plugin_root: Path, env: Env) -> None:
+    """The engine verbs make sure the hooks dir exists and is current (a file compare when it is): a missing dir would turn the delivery
+    judge silently off. Any other verb leaves it alone."""
+    if verb in ENGINE_VERBS:
+        write_hooks(plugin_root, env)
 
 
 def main_checkout(git: Git, cwd: str) -> str:
