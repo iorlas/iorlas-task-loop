@@ -117,7 +117,8 @@ class OwnerGate(Case):
         assert [check.id for check in red.call_args.args[0].gate_checks] == ["base-check"]
         with (mock.patch.object(self.git, "show", return_value=self.policy),
               mock.patch.object(self.gate, "red", return_value=["base-check"]),
-              mock.patch.object(self.gate, "worktree", return_value=""), pytest.raises(Stop)):
+              mock.patch.object(self.gate, "worktree", return_value=""),
+              mock.patch.object(self.gate, "fresh", return_value="/fresh"), pytest.raises(Stop)):
             self.gate.require("topic", "tip", profile_change=TEXT)
         assert self.stores.profile_changes.read_from().items == []
 

@@ -46,7 +46,7 @@ from taskloop.contracts.locks import LockTimeout
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import DoltPush
 from taskloop.contracts.runkey import BaseSha
-from taskloop.contracts.slots import Checkout, SlotGitError
+from taskloop.contracts.slots import Checkout, NotARepo, SlotGitError
 from taskloop.domain import outcome as oc
 from taskloop.stores.memory import fake_stores
 from taskloop.stores.real import real_stores
@@ -61,7 +61,7 @@ class RepoGit(ScriptedGit):
     def __init__(self, local: dict[str, str], sim: ForgeSim) -> None:
         super().__init__()
         self.local, self.worktrees, self.deleted, self.sim = dict(local), {}, [], sim
-        self.fetched, self.heads, self.dirty_at = set(), {}, set()  # oids fetched in, HEAD of a path, dirty paths
+        self.fetched, self.heads, self.dirty_at, self.gone = set(), {}, set(), set()  # oids fetched in, HEAD of a path, dirty paths
         self.profiles: dict[str, str] = {}
 
     def ls_tree(self, d, rev, *paths, recursive=False):
@@ -91,6 +91,8 @@ class RepoGit(ScriptedGit):
         self.fetched |= set(self.sim.remote.values())
 
     def rev_parse(self, d, rev):
+        if d in self.gone:
+            raise NotARepo(f"git rev-parse exited 128: fatal: cannot change to '{d}'")
         if rev.endswith("^{tree}"):
             return "tree-" + rev[:6]
         if rev in self.fetched or rev == "origin/main":
@@ -120,6 +122,13 @@ class RepoGit(ScriptedGit):
     def checkouts(self, d):
         return [Checkout(path="/repo", branch="main", main=True),
                 *(Checkout(path=p, branch=b, main=False) for b, p in self.worktrees.items())]
+
+    def add_worktree(self, repo, path, ref):
+        self.seen("add_worktree", path, ref)
+        self.heads[path] = ref
+
+    def remove_worktree_force(self, repo, path):
+        self.seen("remove_worktree_force", path)
 
     def remove_worktree_why(self, repo, path):
         self.worktrees = {b: p for b, p in self.worktrees.items() if p != path}
@@ -351,7 +360,7 @@ class StoredGate(StackCase):
         self.git.profiles[OID["task/a"]] = json.dumps(profile)
         self.git.profiles["origin/main"] = json.dumps(profile)
         assert self.deliver(StackItem(branch="task/a")) == 0
-        assert self.sim.ran("tl check") == []
+        assert len(self.sim.ran("tl check")) == 1  # the first delivery's fresh gate run; the second found the receipt
 
     def test_a_stored_planned_skip_satisfies_stackgate_only_for_its_tree_and_base(self):
         stores = fake_stores()
@@ -403,11 +412,37 @@ class Gated(GateCase):
         assert self.deliver(StackItem(branch="task/a")) == 0
         assert self.sim.ran("tl check") == []
 
-    def test_a_red_tree_with_no_worktree_is_refused_with_the_command_and_nothing_pushed(self):
-        assert self.deliver(StackItem(branch="task/a"), StackItem(branch="task/b")) == 1
-        assert "tl check --repo" in self.kinds("warn")[0]["text"]
+    def green_on_check(self):
+        real_run = self.sim.run
+
+        def run(argv, **kw):
+            if argv[:2] == ["tl", "check"]:
+                self.green.add("tree-" + OID["task/a"][:6])
+            return real_run(argv, **kw)
+
+        self.sim.run = run
+
+    def test_a_red_tree_with_no_worktree_is_gated_in_a_fresh_one_then_delivered(self):
+        self.green_on_check()
+        assert self.deliver(StackItem(branch="task/a")) == 0
+        (path,) = [c[1] for c in self.git.calls if c[0] == "add_worktree"]
+        assert self.git.heads[path] == OID["task/a"]
+        assert self.sim.ran("tl check --repo " + path) == ["tl check --repo " + path]
+        assert self.git.ran("remove_worktree_force", path)
+
+    def test_a_listed_worktree_whose_directory_is_gone_is_a_miss_not_a_crash(self):
+        self.git.worktrees["task/a"] = "/wt/gone"
+        self.git.gone.add("/wt/gone")
+        self.green_on_check()
+        assert self.deliver(StackItem(branch="task/a")) == 0
+        assert self.sim.ran("tl check --repo /wt/gone") == []
+        assert any(c[0] == "add_worktree" for c in self.git.calls)
+
+    def test_a_fresh_worktree_is_removed_when_the_gate_stays_red(self):
+        self.sim.fail["tl check"] = 6
+        assert self.deliver(StackItem(branch="task/a"), StackItem(branch="task/b")) == 6
         assert self.sim.ran("git push") == []
-        assert self.sim.ran("gh pr") == self.sim.ran("gh pr list")
+        assert self.git.ran("remove_worktree_force")
 
     def test_a_red_tree_in_a_clean_worktree_is_gated_then_delivered(self):
         self.git.worktrees["task/a"] = "/wt/a"
@@ -431,12 +466,13 @@ class Gated(GateCase):
         assert self.sim.ran("git push") == []
         assert "tl check --repo /wt/a" in self.kinds("warn")[0]["text"]
 
-    def test_a_dirty_worktree_is_not_gated(self):
+    def test_a_dirty_worktree_is_not_gated_a_fresh_one_is(self):
         self.git.worktrees["task/a"] = "/wt/a"
         self.git.heads["/wt/a"] = OID["task/a"]
         self.git.dirty_at.add("/wt/a")
         assert self.deliver(StackItem(branch="task/a")) == 1
-        assert self.sim.ran("tl check") == []
+        assert self.sim.ran("tl check --repo /wt/a") == []  # the dirty checkout is the caller's; the gate judges the oid in a fresh one
+        assert len(self.sim.ran("tl check")) == 1
 
     def test_a_repo_without_a_gate_step_passes(self):
         self.git.profiles[OID["task/a"]] = '{"engine": {"checks": [{"id": "x", "argv": ["true"], "run": "stage"}]}}'
