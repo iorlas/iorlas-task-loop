@@ -1,4 +1,4 @@
-"""Remote transport against a bare origin, including refusal and observation semantics."""
+"""The port's remote calls against a bare origin: what moved on the remote, and what the caller is told when it did not."""
 
 import subprocess
 import tempfile
@@ -7,13 +7,13 @@ from unittest import mock
 
 import pytest
 import support.paths  # noqa: F401
+from git_porcelain.real import Done, RealRepo
 from support.case import Case
 
-from taskloop.adapters import procs
+from taskloop.adapters import git_ops
 from taskloop.adapters.git import RealGit
-from taskloop.adapters.git_ops import PUSH_WALL_S
 from taskloop.contracts.env import Env, snapshot
-from taskloop.contracts.slots import SlotGitError
+from taskloop.contracts.slots import GitReadFailure, RefRace, SlotGitError
 from taskloop.domain.land.matchers import Push
 
 
@@ -51,17 +51,28 @@ class RealGitRemoteTest(Case):
         path.write_text("#!/bin/sh\n" + text)
         path.chmod(0o755)
 
-    def test_push_success_and_moved_base_refusal(self):
+    def remote(self, ref="refs/heads/main"):
+        return self.run_git("rev-parse", "--verify", "-q", ref, cwd=self.origin)
+
+    def test_push_moves_the_remote_ref_and_a_moved_base_is_refused_in_the_words_callers_match(self):
         directory = str(self.repo)
-        with mock.patch("taskloop.adapters.git_base.procs.run", wraps=procs.run) as run:
-            self.git.push(directory, "origin", f"{self.base}:refs/heads/main")
-        assert run.call_count == 1
+        self.git.push(directory, "origin", f"{self.base}:refs/heads/main")
+        assert self.remote() == self.base
         moved = self.commit("moved remote")
         self.git.push(directory, "origin", f"{moved}:refs/heads/main")
         with pytest.raises(SlotGitError) as caught:
             self.git.push(directory, "origin", f"{self.base}:refs/heads/main")
         assert Push.rejected(caught.value.output)
-        assert self.run_git("rev-parse", "main", cwd=self.origin) == moved
+        assert self.remote() == moved
+
+    def test_tag_and_delete_refspecs_reach_the_remote(self):
+        directory = str(self.repo)
+        self.git.push(directory, "origin", f"{self.base}:refs/heads/topic")
+        self.run_git("tag", "v1")
+        self.git.push(directory, "origin", "refs/tags/v1")
+        assert self.remote("refs/tags/v1") == self.base
+        self.git.push(directory, "origin", ":refs/heads/topic")
+        assert self.git.ls_remote(directory, "origin", "refs/heads/topic") == []
 
     def test_pre_push_hook_refusal_keeps_output_and_is_not_retryable(self):
         self.hook("pre-push", "echo 'gate: rejected by policy; fetch first will not help' >&2\nexit 1\n")
@@ -77,34 +88,90 @@ class RealGitRemoteTest(Case):
         with pytest.raises(SlotGitError) as caught:
             self.git.push(str(self.repo), "origin", f"{self.base}:refs/heads/main")
         assert "[remote rejected]" in caught.value.output
+        assert "pre-receive hook declined" in caught.value.tail
         assert not Push.rejected(caught.value.output)
 
-    def test_stale_lease_and_guarded_delete_preserve_the_moved_remote(self):
+    def test_push_lease_moves_the_ref_while_last_fetched_and_refuses_a_stale_lease(self):
+        directory = str(self.repo)
+        self.git.push(directory, "origin", f"{self.base}:refs/heads/topic")
+        self.git.fetch(directory)
+        mine = self.commit("mine")
+        outcome = self.git.push_lease(directory, "origin", "HEAD:refs/heads/topic")
+        assert outcome.ok
+        assert self.remote("refs/heads/topic") == mine
+        self.run_git("update-ref", "refs/remotes/origin/topic", self.base)
+        self.commit("local work the lease would overwrite")
+        stale = self.git.push_lease(directory, "origin", "HEAD:refs/heads/topic")
+        assert not stale.ok
+        assert "stale info" in stale.output
+        assert Push.rejected(stale.output)
+        assert self.remote("refs/heads/topic") == mine
+
+    def test_push_lease_ends_a_push_that_outlives_its_wall_with_words(self):
+        self.hook("pre-push", "exec sleep 30\n")
+        with mock.patch.object(git_ops, "PUSH_WALL_S", 0.5):
+            outcome = self.git.push_lease(str(self.repo), "origin", "HEAD:refs/heads/topic")
+        assert not outcome.ok
+        assert "timed out" in outcome.output
+        assert self.git.ls_remote(str(self.repo), "origin", "refs/heads/topic") == []
+
+    def test_guarded_delete_keeps_a_moved_ref_and_is_done_when_the_ref_is_gone(self):
         directory = str(self.repo)
         self.git.push(directory, "origin", f"{self.base}:refs/heads/topic")
         moved = self.commit("moved")
         self.git.push(directory, "origin", f"{moved}:refs/heads/topic")
-        self.run_git("update-ref", "refs/remotes/origin/topic", self.base)
-        self.commit("local work the lease would overwrite")
-        outcome = self.git.push_lease(directory, "origin", "HEAD:refs/heads/topic")
-        assert not outcome.ok
-        assert "stale info" in outcome.output
         with pytest.raises(SlotGitError):
             self.git.delete_remote_at(directory, "origin", "refs/heads/topic", self.base)
-        assert self.run_git("rev-parse", "topic", cwd=self.origin) == moved
+        assert self.remote("refs/heads/topic") == moved
         self.git.delete_remote_at(directory, "origin", "refs/heads/topic", moved)
         self.git.delete_remote_at(directory, "origin", "refs/heads/topic", moved)
         assert self.git.ls_remote(directory, "origin", "refs/heads/topic") == []
 
-    def test_scoped_fetch_writes_fetch_head_and_refusal_is_not_absence(self):
+    def test_delete_that_cannot_ask_the_remote_whether_the_ref_is_gone_is_a_fault(self):
+        self.run_git("remote", "set-url", "origin", str(self.root / "missing.git"))
+        with pytest.raises(GitReadFailure):
+            self.git.delete_remote_at(str(self.repo), "origin", "refs/heads/topic", self.base)
+
+    def test_fetch_brings_the_remote_in_and_a_missing_remote_is_the_ports_error_with_git_words(self):
+        directory = str(self.repo)
+        self.git.push(directory, "origin", f"{self.base}:refs/heads/topic")
+        self.git.fetch(directory)
+        assert self.run_git("rev-parse", "refs/remotes/origin/topic") == self.base
+        self.run_git("remote", "set-url", "origin", str(self.root / "missing.git"))
+        with pytest.raises(SlotGitError, match="fatal:") as caught:
+            self.git.fetch(directory)
+        assert "missing.git" in caught.value.output
+
+    def lose_ref_locks(self, losses):
+        """git loses `losses` fetches to a concurrent fetch's ref lock (a real lock race cannot be timed), then runs as itself."""
+        real, left = RealRepo.run, [losses]
+
+        def run(repo, cwd, *args, **kw):
+            if args[:1] == ("fetch",) and left[0] > 0:
+                left[0] -= 1
+                return Done(1, b"", "error: cannot lock ref 'refs/remotes/origin/main': is at X but expected Y")
+            return real(repo, cwd, *args, **kw)
+        return mock.patch.object(RealRepo, "run", run)
+
+    def test_fetch_waits_out_a_ref_lock_with_the_injected_sleep_and_gives_up_after_five_tries(self):
+        directory = str(self.repo)
+        self.git.push(directory, "origin", f"{self.base}:refs/heads/main")
+        self.run_git("update-ref", "refs/heads/topic", self.base, cwd=self.origin)
+        sleeps = []
+        self.git = RealGit(Env(self.env), sleeps.append, pinned=False)
+        with self.lose_ref_locks(5), pytest.raises(RefRace):
+            self.git.fetch(directory)
+        assert sleeps == pytest.approx([0.1, 0.2, 0.3, 0.4])
+        sleeps.clear()
+        with self.lose_ref_locks(1):
+            self.git.fetch(directory)
+        assert sleeps == [0.1]
+        assert self.run_git("rev-parse", "refs/remotes/origin/topic") == self.base
+
+    def test_fetch_ref_brings_one_ref_to_fetch_head_and_a_refusal_is_not_absence(self):
         self.git.push(str(self.repo), "origin", f"{self.base}:refs/heads/topic")
         self.git.fetch_ref(str(self.repo), str(self.origin), "topic")
         assert self.run_git("rev-parse", "FETCH_HEAD") == self.base
-        with pytest.raises(SlotGitError):
+        with pytest.raises(SlotGitError) as caught:
             self.git.fetch_ref(str(self.repo), str(self.origin), "absent")
-
-    def test_lfs_timeout_words_survive_without_an_installed_lfs_binary(self):
-        with mock.patch.object(self.git, "_run", side_effect=subprocess.TimeoutExpired("git", PUSH_WALL_S)):
-            outcome = self.git.lfs_push(str(self.repo), "origin", [self.base])
-        assert not outcome.ok
-        assert outcome.output == "git lfs timed out after 60 min"
+        assert "absent" in caught.value.output

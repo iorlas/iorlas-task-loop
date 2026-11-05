@@ -96,12 +96,12 @@ def textual(kw: Mapping[str, Any]) -> bool:
 
 
 def verbs(argv: Sequence[str]) -> list[str]:
-    """A call's words after the flags that only say where and how git runs (-C dir, --no-pager, ...)."""
+    """A call's words after the flags that only say where and how git runs (-C dir, -c key=value, --no-pager, ...)."""
     out, skip = [], False
     for a in argv:
         if skip:
             skip = False
-        elif a == "-C":
+        elif a in ("-C", "-c"):
             skip = True
         elif a not in GLOBAL_FLAGS:
             out.append(a)

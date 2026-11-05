@@ -1,13 +1,14 @@
 """What a task's land, its close and its checks ask of git beyond the slot's life: counts, the unmerged paths, the writes that read git's
 words (commit, push, rebase --continue), and the rest of the staged-work and branch moves. RealGit (git.py) adds the rest."""
 
+from functools import partial
 from pathlib import Path
 from typing import Self
 
 from git_porcelain.real import RealRepo
 
 from taskloop.adapters.git_base import GitBase, classify
-from taskloop.adapters.git_pool import pool_errors, pool_read_error
+from taskloop.adapters.git_pool import pool_errors, pool_read_error, remote_error
 from taskloop.contracts.gitfacts import DiffEntry, GitOutcome
 from taskloop.contracts.slots import GitReadFailure, MissingRevision
 
@@ -123,7 +124,11 @@ class LandGit(GitBase):
         return GitOutcome(ok=result.ok, output=result.output)
 
     def push_lease(self, d: str, remote: str, refspec: str) -> GitOutcome:
-        return self._try(d, "push", "--force-with-lease", remote, refspec, timeout=PUSH_WALL_S)
+        with pool_errors(partial(remote_error, push=True)):
+            done = self._pool(d).worktree(Path(d).resolve()).push_lease(remote, refspec, timeout=PUSH_WALL_S)
+        return GitOutcome(ok=done.ok, output=done.output)
 
     def lfs_push(self, d: str, remote: str, refs: list[str]) -> GitOutcome:
-        return self._try(d, "lfs", "push", remote, *refs, timeout=PUSH_WALL_S)
+        with pool_errors(remote_error):
+            done = self._pool(d).worktree(Path(d).resolve()).lfs_push(remote, refs, timeout=PUSH_WALL_S)
+        return GitOutcome(ok=done.ok, output=done.output)

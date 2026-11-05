@@ -1,15 +1,9 @@
 """Failed pushes preserve rejection details while other git errors keep their existing diagnostics."""
-import subprocess
-from unittest import mock
-
-import pytest
 import support.paths  # noqa: F401
 from support.case import Case
 
-from taskloop.adapters.git import RealGit
 from taskloop.adapters.git_base import classify, error_line, push_error_line
-from taskloop.contracts.env import Env
-from taskloop.contracts.slots import BranchPinned, DirtyTree, IndexLocked, RefRace, SlotGitError
+from taskloop.contracts.slots import BranchPinned, DirtyTree, IndexLocked, RefRace
 
 TRAILER = "error: failed to push some refs to 'origin'"
 
@@ -74,31 +68,3 @@ class PushTail(Case):
                 assert TRAILER not in error.tail
                 if isinstance(error, BranchPinned):
                     assert error.where == "/other"
-
-    def test_branch_tag_and_delete_push_errors_use_the_push_tail(self):
-        git = RealGit(Env(), pinned=False)
-        rejection = "! [remote rejected] main -> main (pre-receive hook declined)"
-        failed = subprocess.CompletedProcess([], 1, "", rejection + "\n" + TRAILER)
-        for refspec in ("HEAD:main", "refs/tags/v1.2.3", ":refs/heads/topic"):
-            with (self.subTest(refspec=refspec), mock.patch.object(git, "_run", return_value=failed),
-                  pytest.raises(SlotGitError) as raised):
-                git.push("repo", "origin", refspec)
-            assert raised.value.tail == rejection
-
-    def test_lease_push_keeps_complete_output_for_callers(self):
-        git = RealGit(Env(), pinned=False)
-        stderr = "! [rejected] HEAD -> topic (stale info)\n" + TRAILER
-        with mock.patch.object(git, "_run", return_value=subprocess.CompletedProcess([], 1, "", stderr)):
-            result = git.push_lease("repo", "origin", "HEAD:topic")
-        assert not result.ok
-        assert result.output == stderr
-
-    def test_push_failure_carries_complete_stdout_and_stderr(self):
-        git = RealGit(Env(), pinned=False)
-        stdout = "progress\n" * 500
-        stderr = "gate: refusing the push: run just check\n" + TRAILER + "\n"
-        with (mock.patch.object(git, "_run", return_value=subprocess.CompletedProcess([], 1, stdout, stderr)),
-              pytest.raises(SlotGitError) as raised):
-            git.push("repo", "origin", "HEAD:topic")
-        assert raised.value.output == stdout + stderr
-        assert raised.value.tail == "gate: refusing the push: run just check"

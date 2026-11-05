@@ -51,8 +51,14 @@ def remote_of(c: Ctx, name: str) -> Repo:
     return remote
 
 
+def plain(args: list[str]) -> tuple[list[str], list[str]]:
+    """flags() without the `--` that ends them: the porcelain always writes `-- remote refspec...`."""
+    fl, rest = flags(args)
+    return fl, [a for a in rest if a != "--"]
+
+
 def cmd_fetch(c: Ctx) -> int:
-    _, rest = flags(c.args)
+    _, rest = plain(c.args)
     if len(rest) > 1:  # fetch <path> <ref>: the ref's commit lands in FETCH_HEAD
         src = locate(rest[0], {})
         if src is None:
@@ -87,7 +93,7 @@ def cmd_pull(c: Ctx) -> int:
 
 
 def cmd_push(c: Ctx) -> int:
-    fl, rest = flags(c.args)
+    fl, rest = plain(c.args)
     remote = remote_of(c, rest[0])
     for spec in rest[1:] or [c.r.head_ref()]:
         forced = spec.startswith("+") or any(f.startswith("--force") for f in fl)

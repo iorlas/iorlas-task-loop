@@ -2,6 +2,7 @@
 a failure becomes one of the typed SlotGitErrors (BranchPinned, DirtyTree, RefRace, IndexLocked) or the plain SlotGitError."""
 import os
 from contextlib import suppress
+from functools import partial
 from pathlib import Path
 from typing import Literal, override
 
@@ -11,24 +12,16 @@ from git_porcelain.real import RealRepo
 
 from taskloop.adapters.git_base import classify
 from taskloop.adapters.git_ops import LandGit
-from taskloop.adapters.git_pool import UnpinnedRepo, pool_error, pool_errors, pool_read_error
+from taskloop.adapters.git_pool import UnpinnedRepo, pool_error, pool_errors, pool_read_error, remote_error
 from taskloop.contracts.gitfacts import ConfigEntry, GitOutcome, GrepHit, LogRow, Pick, Ref, StatusRow, TreeEntry
-from taskloop.contracts.slots import BranchPinned, Checkout, GitReadFailure, MissingRevision, NotARepo, NotAWorktree, RefRace, SlotGitError
-
-FETCH_TRIES = 5
+from taskloop.contracts.slots import BranchPinned, Checkout, GitReadFailure, MissingRevision, NotARepo, NotAWorktree, SlotGitError
 
 
 class RealGit(LandGit):
     def fetch(self, d: str) -> None:
-        """`git fetch -q origin`, again while it loses a ref lock to a concurrent fetch (worktrees share refs/remotes)."""
-        for i in range(FETCH_TRIES):
-            r = self._run(d, "fetch", "-q", "origin")
-            if r.returncode == 0:
-                return
-            err = classify(r.stderr)
-            if not isinstance(err, RefRace) or i == FETCH_TRIES - 1:
-                raise err
-            self.sleep(0.1 * (i + 1))
+        """`git fetch origin`; the porcelain retries a lost ref lock (worktrees share refs/remotes)."""
+        with pool_errors(remote_error):
+            self._pool(d).fetch("origin")
 
     def rebasing(self, d: str) -> bool:
         with pool_errors(pool_read_error):
@@ -124,7 +117,13 @@ class RealGit(LandGit):
         self._must(os.path.dirname(dst) or ".", "clone", "-q", src, dst)
 
     def push(self, d: str, remote: str, refspec: str) -> None:
-        self._must(d, "push", "-q", remote, refspec)
+        with pool_errors(partial(remote_error, push=True)):
+            done = self._pool(d).worktree(Path(d).resolve()).push_request(
+                remote, [refspec], options=["-q"], force=True, allow_delete=True)
+        if not done.ok:
+            err = classify(done.output, push=True)
+            err.output = done.output
+            raise err
 
     # -- reads that return rows ------------------------------------------------------------------------------------------------
 
@@ -239,20 +238,17 @@ class RealGit(LandGit):
             self._pool(d).delete_branch(branch, expected=Sha(oid))
 
     def delete_remote_at(self, d: str, remote: str, ref: str, oid: str) -> None:
-        try:
-            self._must(d, "push", "-q", f"--force-with-lease={ref}:{oid}", remote, ":" + ref)
-        except SlotGitError:
-            # A replay (or the forge's delete-on-merge) may have removed it already. ls-remote raises on a failed query;
-            # only an authoritative empty answer counts as success. A ref recreated meanwhile is never deleted here.
-            if self.ls_remote(d, remote, ref):
-                raise
+        """Gone is done: the porcelain treats an absent ref as success and never deletes one recreated at another oid."""
+        with pool_errors(partial(remote_error, push=True)):
+            self._pool(d).delete_remote_at(remote, ref, Sha(oid))
 
     def checkout_force(self, d: str, branch: str, start: str) -> None:
         with pool_errors():
             self._pool(d).worktree(Path(d).resolve()).checkout_force(branch, start)
 
     def fetch_ref(self, d: str, source: str, ref: str) -> None:
-        self._must(d, "fetch", "-q", source, ref)
+        with pool_errors(remote_error):
+            self._pool(d).fetch(source, refspecs=[ref])
 
     def remote_url(self, d: str, remote: str) -> str:
         return self._ask(d, "remote", "get-url", remote)  # memoized by gitmemo: the porcelain's remote_url would ask git every time

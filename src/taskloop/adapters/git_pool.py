@@ -68,6 +68,17 @@ def pool_error(error: errors.GitError) -> SlotGitError:
     return translated
 
 
+def remote_error(error: errors.GitError, *, push: bool = False) -> SlotGitError:
+    """A remote call's failure keeps git's complete words: `output` is all of them, `tail` the line that says why."""
+    full = getattr(error, "output", None) or str(error)
+    if isinstance(error, errors.GitReadFailure):
+        translated: SlotGitError = GitReadFailure(str(error))
+    else:
+        translated = classify(full, push=push)
+    translated.output = full
+    return translated
+
+
 @contextmanager
 def pool_errors(translate: Callable[[errors.GitError], Exception] = pool_error) -> Generator[None]:
     """Run porcelain calls in the block; a failure leaves as the port's error (`pool_read_error` for reads)."""
