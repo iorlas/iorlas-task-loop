@@ -64,3 +64,12 @@ def listing(attempt_dir: Path) -> list[ArtifactMeta]:
         except (OSError, ValueError):
             continue
     return sorted(found, key=lambda m: m.created)
+
+
+def run_listing(root: Path, slot: ArtifactSlot) -> list[tuple[Path, ArtifactMeta]]:
+    """Every artifact of the slot's run, oldest first: (file, meta). One fixed level, <stage>-<attempt>, no wildcard over the tree."""
+    run = run_folder(root, slot)
+    if not run.is_dir():
+        return []
+    found = [(d / m.name, m) for d in sorted(run.iterdir()) if d.is_dir() for m in listing(d)]
+    return sorted(found, key=lambda x: x[1].created)

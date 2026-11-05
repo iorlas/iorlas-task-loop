@@ -183,30 +183,14 @@ def downscale(src: str | Path, dst: str | Path, px: float) -> str:
     return "not downscaled (no sips or ImageMagick, or it failed)"
 
 
-def words(text: object) -> set[str]:
-    return set(re.findall(r"[^\W_]{3,}", str(text).lower()))
-
-
-def same_defect(a: object, b: object) -> bool:
-    """True when two defect descriptions say about the same thing: the same words, or (3+ words each) 60% of the smaller set in it."""
-    x, y = words(a), words(b)
-    if not x or not y:
-        return False
-    if x == y:
-        return True
-    return min(len(x), len(y)) >= 3 and len(x & y) >= 0.6 * min(len(x), len(y))
-
-
-def judge_prompt(items: list[str], shots: list[str], refs: list[str], befores: list[tuple[str, str]], summary: str = "") -> str:
+def judge_prompt(items: list[str], shots: list[str], befores: list[str], summary: str = "") -> str:
     """The look judge's brief: it has no repo and no task, only the pictures, what must hold, and what the screen should
     look like. Paths are relative to its folder."""
     out = ["You judge how a screen looks from pictures. You have no other context; do not look for any. Do not edit files. "
            "Open every picture below."]
     out.append("\nPictures to judge (rendered by the engine just now):\n" + "".join(f"- {s}\n" for s in shots))
     if befores:
-        out.append("\nThe same screens before this change:\n" + "".join(f"- {b} (before) <- {a}\n" for a, b in befores))
-    if refs:
-        out.append("\nWhat it should look like (reference images or descriptions):\n" + "".join(f"- {r}\n" for r in refs))
+        out.append("\nPictures the worker took before this change (compare what changed):\n" + "".join(f"- {b}\n" for b in befores))
     out.append("\nAlways check, for every picture: the screen is there and shows what it should; nothing is clipped, cut off or "
                "overlapping; no error text, magenta or missing texture, empty frame or placeholder; the state asked for is "
                "visible." + (f"\nThe change in one line: {summary}" if summary else ""))

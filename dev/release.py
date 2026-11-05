@@ -15,8 +15,9 @@ same arguments (--repo made explicit), after the lock is dropped so the exec'd r
 (<config>/locks/release-*.lock): a second release waits in line and prints who holds it. Works in a persistent clone of the repo's origin,
 <config>/release/<hash>/ (made on first use; the tool resets it as it likes): the main checkout, dirty or on any branch, is never touched.
 In the clone: fetch, check out origin/main, replay B's commits on it when --from-branch is given (B and its worktrees stay until the
-release has pushed and installed), run the repo's gate (`just check`; skipped when there is no justfile) and the full suite (red in either
-aborts with the output tail), commit the next patch version of .claude-plugin/plugin.json (--minor: the minor) as "<version>: <message>",
+release has pushed and installed), run the repo's gate (`just check`; skipped when there is no justfile) and the profile's suite check
+(`just test`: the tests the change can break; red in either aborts with the output tail),
+commit the next patch version of .claude-plugin/plugin.json (--minor: the minor) as "<version>: <message>",
 push under the land lock. The gate and suite are cached by pre-bump tree and command. When origin/main moves, the release drops the
 bump, rebases and verifies the changed tree outside the land lock, then takes the lock again to push (three attempts maximum).
 A successful push enters the devbox ring. Releases have no minimum interval.

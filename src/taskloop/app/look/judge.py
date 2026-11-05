@@ -6,7 +6,6 @@ from typing import Any
 
 from taskloop.adapters import looks
 from taskloop.contracts.checkpoint import Defect
-from taskloop.domain.look.matchers import image_names
 from taskloop.domain.prompts.write import LOOK_FEEDBACK, LOOK_WRITE_TABLE
 from taskloop.domain.review import switch
 from taskloop.domain.review.matchers import Wording
@@ -33,18 +32,12 @@ class Judge:
             e.comment("Look (engine): the look judge was skipped because review is off; the pictures are not judged")
             return [], "(look judge skipped: review is off)"
         base = e.run_dir / "looks" / f"r{rnd}"
-        shown: list[str] = []
-        for r in [r for r in image_names(e.briefs.text()) if (Path(e.wt) / r).is_file()]:
-            shutil.copy2(Path(e.wt) / r, base / f"ref-{Path(r).name}")
-            shown.append(f"ref-{Path(r).name}")
-        pairs: list[tuple[str, str]] = []
-        for n in names:
-            b = e.pictures.before_shot(n)
-            if b:
-                shutil.copy2(b, base / f"before-{n}")
-                pairs.append((n, f"before-{n}"))
+        befores: list[str] = []
+        for i, (f, m) in enumerate(e.pictures.before_pictures(), 1):
+            shutil.copy2(f, base / f"before-{i}-{m.name}")
+            befores.append(f"before-{i}-{m.name}")
         # the plan's look items are for the last stage (like the cases); an earlier stage is judged on the general checks only
-        prompt = looks.judge_prompt(e.cases.cases_of("look-objective") if last else [], names, shown, pairs, summary)
+        prompt = looks.judge_prompt(e.cases.cases_of("look-objective") if last else [], names, befores, summary)
         try:
             d, _ = e.ai("look", f"round {rnd}: {plural(len(names), 'picture')}", prompt,
                         writer_family=e.writer_family, cwd=str(base), round=rnd, at=(e.at_stage, rnd, 0))
@@ -90,12 +83,12 @@ class Judge:
         if summary:
             e.look_notes = [summary.strip()]
         e.pictures.persist_look()
-        prev, e.look_prev = e.look_prev, defects
-        again = [d for d in defects if any(looks.same_defect(d.why + " " + d.where, p.why + " " + p.where) for p in prev)]
-        fresh = [d for d in defects if d not in again]
+        e.look_prev = defects
+        fresh = defects
         out_of_rounds = e.look_done >= int(e.cfg.look_rounds)
-        for d in again + (fresh if out_of_rounds else []):  # tl-bxk.13.15.5: the same defect twice is not the writer's to fix again
-            self.look_leftover(d, names)
+        if out_of_rounds:  # the rounds are capped: what is left is a follow-up, not another write
+            for d in defects:
+                self.look_leftover(d, names)
         if not fresh or out_of_rounds:
             return ""
         e.steps.move("write", "look_defects", f"{plural(len(fresh), 'defect')} from the look judge, round {rnd}")

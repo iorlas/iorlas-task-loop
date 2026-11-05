@@ -138,7 +138,7 @@ class SlotGitTest(Case):
         )
         assert os.path.realpath(eng.git.toplevel(str(self.wt))) == str(self.wt)
         (self.wt / "f.txt").write_text("f\n")
-        eng.writer_said = "added f.txt"  # an untracked file is staged only when the writer names it (tl-bxk.10.24)
+        eng.accepted_new = ["f.txt"]  # an untracked file is staged only when a review accepts it or a plan stage lists it (tl-bxk.10.24)
         assert eng.checkout.stage_all(check=True) == 0
         staged = sh("git", "--git-dir", str(self.repo / ".git" / "worktrees" / "s1"), "--work-tree", str(self.wt),
                     "diff", "--cached", "--name-only", cwd=self.wt)
@@ -151,7 +151,7 @@ class SlotGitTest(Case):
         )
         (self.wt / "a.txt").unlink()
         (self.wt / "new file.txt").write_text("n\n")
-        eng.writer_said = "added new file.txt"
+        eng.accepted_new = ["new file.txt"]
         assert eng.checkout.stage_all(check=True) == 0
         assert sh("git", "diff", "--cached", "--name-status", cwd=self.wt).split("\n") == ["D\ta.txt", "A\tnew file.txt"]
 
