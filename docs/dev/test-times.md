@@ -1,5 +1,125 @@
 # Test times: what eats the time, and what to do
 
+## pix run: whole tests/ tree, one worker (this is the measurement that replaces the Mac numbers below)
+
+Host: OrbStack NixOS arm64 VM, 13 cores, idle. `TL_DELEGATE_TESTS=1 PYTHONPATH=dev nice -n 10 uv run pytest -p testtimes tests -m "not live"`, main `e01abeea` merged into the branch. 4696 tests recorded, **206 CPU s, 519 wall s summed over tests**; the run itself was 415 s wall.
+
+Caveats: (1) the one-process full run polluted itself: 208 failures and 73 errors (`git rev-parse exited 128: no message from git`, `Needed a single revision`) in loop/real, slots/real, ports/real, report/real, prune/real, release/real, none of which fail when their files run alone. The 29 failing files were re-run alone (151 s) and their timings replace the polluted ones; 2 failed and 10 errored in isolation (6 delegate `@real_proc` tests: no codex/claude/opencode CLI on pix; `tests/loop/real/test_loop.py::QueueRuleFromBase` x4; `rules/test_envvars`; `dash/test_dash_artifacts` serve test), not chased. The pollution source is not found (first failure in file order is tests/dash/test_dash_artifacts). (2) CPU = user+sys of the process plus waited-for children. (3) The `why slow` clauses are read from names and directories, not profiled.
+
+**Mac vs pix:** the Mac's "4.8-9.7 s per land/real test" was load (~80). On an idle host the same tests are 0.5-0.9 CPU s. CPU on the Mac was inflated too, so its table must not be used for ranking the levers.
+
+### Top 50 by CPU
+
+| # | test | CPU s | wall s | why slow | verdict |
+|---|---|---|---|---|---|
+| 1 | `rules/real/test_selection_mutations.py::test_the_selection_holds_the_test_the_mutation_breaks[a function body in a leaf module]` | 2.67 | 2.68 | mutates a tree copy and runs dev/affected.py per case | one shared tree copy, parametrize over the mutation only |
+| 2 | `rules/real/test_selection_mutations.py::test_the_selection_holds_the_test_the_mutation_breaks[a signature in contracts]` | 2.58 | 2.58 | mutates a tree copy and runs dev/affected.py per case | one shared tree copy, parametrize over the mutation only |
+| 3 | `rules/real/test_selection_mutations.py::test_the_selection_holds_the_test_the_mutation_breaks[pyproject.toml]` | 2.51 | 2.51 | mutates a tree copy and runs dev/affected.py per case | one shared tree copy, parametrize over the mutation only |
+| 4 | `rules/real/test_selection_mutations.py::test_a_change_that_reaches_no_test_selects_the_rules_only` | 2.51 | 2.51 | mutates a tree copy and runs dev/affected.py per case | one shared tree copy, parametrize over the mutation only |
+| 5 | `rules/real/test_selection_mutations.py::test_the_selection_holds_the_test_the_mutation_breaks[a changed test file]` | 2.50 | 2.50 | mutates a tree copy and runs dev/affected.py per case | one shared tree copy, parametrize over the mutation only |
+| 6 | `rules/real/test_selection_mutations.py::test_the_selection_holds_the_test_the_mutation_breaks[a contracts golden file]` | 2.50 | 2.50 | mutates a tree copy and runs dev/affected.py per case | one shared tree copy, parametrize over the mutation only |
+| 7 | `rules/real/test_selection_mutations.py::test_the_selection_holds_the_test_the_mutation_breaks[a script that tests run by path]` | 2.49 | 2.49 | mutates a tree copy and runs dev/affected.py per case | one shared tree copy, parametrize over the mutation only |
+| 8 | `rules/real/test_selection_mutations.py::test_the_selection_holds_the_test_the_mutation_breaks[a constant in a vendored package]` | 2.48 | 2.48 | mutates a tree copy and runs dev/affected.py per case | one shared tree copy, parametrize over the mutation only |
+| 9 | `rules/real/test_selection_mutations.py::test_the_selection_holds_the_test_the_mutation_breaks[a new record type with no sample]` | 2.47 | 2.47 | mutates a tree copy and runs dev/affected.py per case | one shared tree copy, parametrize over the mutation only |
+| 10 | `rules/real/test_selection_mutations.py::test_the_selection_holds_the_test_the_mutation_breaks[the import-linter contracts]` | 2.47 | 2.47 | mutates a tree copy and runs dev/affected.py per case | one shared tree copy, parametrize over the mutation only |
+| 11 | `rules/real/test_selection_mutations.py::test_the_selection_holds_the_test_the_mutation_breaks[a test support helper]` | 2.47 | 2.47 | mutates a tree copy and runs dev/affected.py per case | one shared tree copy, parametrize over the mutation only |
+| 12 | `rules/test_state_writers.py::StateFilesHaveOneWriter::test_store_mutations_and_raw_publications_belong_to_their_writer` | 2.41 | 2.41 | AST/grep walk of the whole src tree each test | parse once per session (cached fixture) |
+| 13 | `delegate/test_review_order.py::ReviewOrder::test_opus_is_never_returned_for_any_loop_role` | 1.54 | 1.54 | loop of full runs / fake CLI processes in one test | table-test the pure function; one real run |
+| 14 | `loop/real/test_loop.py::Loop::test_a_role_delegate_cannot_judge_fails_open_after_the_unknown_wait` | 1.49 | 7.17 | loop of full runs / fake CLI processes in one test | table-test the pure function; one real run |
+| 15 | `rules/test_arch_invariants.py::ArchitectureInvariants::test_slices_follow_the_allow_table` | 1.30 | 1.30 | AST/grep walk of the whole src tree each test | parse once per session (cached fixture) |
+| 16 | `rules/test_factorydb_owners.py::FactoryOwnersTest::test_only_the_legacy_importer_may_name_the_run_manifest_file` | 1.21 | 1.21 | AST/grep walk of the whole src tree each test | parse once per session (cached fixture) |
+| 17 | `rules/test_enumtotal.py::EnumTotal::test_every_production_enum_literal_is_total` | 1.17 | 1.17 | AST/grep walk of the whole src tree each test | parse once per session (cached fixture) |
+| 18 | `slots/real/test_areas.py::ReviewFixes::test_a_long_area_wait_says_how_long_and_who_holds_it_and_until_still_ends_the_loop` | 1.09 | 5.23 | real loop, waits and real git | share the repo fixture |
+| 19 | `slots/test_slot_sim.py::Sim::test_seed_2_holds_every_invariant` | 0.94 | 0.94 | seeded simulation loop | keep (it is the invariant test); fewer seeds in gate |
+| 20 | `slots/test_slot_sim.py::Sim::test_seed_6_holds_every_invariant` | 0.90 | 0.90 | seeded simulation loop | keep (it is the invariant test); fewer seeds in gate |
+| 21 | `land/real/test_engine_real_git.py::RealGitLandTest::test_a_conflict_fix_leaving_markers_is_not_accepted_the_marker_check_still_runs` | 0.88 | 1.03 | fresh bare remote + clone + engine per test (real git, processes) | template repo copied per test |
+| 22 | `rules/test_git_ratchet.py::GitRule::test_no_file_calls_git_outside_the_port_unless_it_says_why` | 0.86 | 0.86 | AST/grep walk of the whole src tree each test | parse once per session (cached fixture) |
+| 23 | `land/real/test_engine_real_git.py::RealGitLandTest::test_push_race_retry_keeps_one_land_lock_and_lands` | 0.85 | 1.05 | fresh bare remote + clone + engine per test (real git, processes) | template repo copied per test |
+| 24 | `loop/real/test_loop.py::Loop::test_a_live_storm_record_waits_before_any_claim_then_expires` | 0.85 | 5.01 | real loop with fake clock plus real git setup | share the repo fixture |
+| 25 | `loop/real/test_loop.py::Loop::test_one_instant_failure_or_a_slow_one_or_another_reason_sets_nothing_aside` | 0.84 | 3.60 | real loop with fake clock plus real git setup | share the repo fixture |
+| 26 | `hook/real/test_prepush.py::PrePush::test_a_mixed_push_with_a_stamped_base_passes_and_an_unproven_base_does_not` | 0.80 | 1.62 | fresh bare remote + clone + engine per test (real git, processes) | template repo copied per test |
+| 27 | `slots/test_slot_sim.py::Sim::test_without_the_watchdog_the_same_seeds_find_the_stall` | 0.79 | 0.79 | seeded simulation loop | keep (it is the invariant test); fewer seeds in gate |
+| 28 | `rules/test_runstate_rule.py::LivenessIsRecorded::test_no_reader_derives_liveness_from_a_log_gap` | 0.79 | 0.79 | AST/grep walk of the whole src tree each test | parse once per session (cached fixture) |
+| 29 | `delegate/test_run_vendors.py::RunVendors::test_every_answer_carries_call_id_usage_transcript_object_and_typed_stop` | 0.76 | 3.04 | loop of full runs / fake CLI processes in one test | table-test the pure function; one real run |
+| 30 | `loop/real/test_hold_e2e.py::HoldEndToEnd::test_a_hold_with_an_end_keeps_the_loop_off_the_bead_until_the_clock_passes_it` | 0.75 | 3.47 | real loop with fake clock plus real git setup | share the repo fixture |
+| 31 | `delegate/test_contention.py::Contention::test_parallel_report_and_next_preserve_out_marks_and_fresh_dwell` | 0.75 | 0.56 | loop of full runs / fake CLI processes in one test | table-test the pure function; one real run |
+| 32 | `land/real/test_engine_real_git.py::RealGitLandTest::test_a_rebase_conflict_goes_to_a_fix_round_not_blocked` | 0.74 | 0.87 | fresh bare remote + clone + engine per test (real git, processes) | template repo copied per test |
+| 33 | `loop/real/test_hold_e2e.py::HoldEndToEnd::test_a_hold_without_an_end_lasts_until_it_is_released` | 0.72 | 3.14 | real loop with fake clock plus real git setup | share the repo fixture |
+| 34 | `loop/real/test_loop.py::Loop::test_a_lane_pause_wakes_when_the_role_is_usable_not_at_the_hint` | 0.68 | 2.59 | real loop with fake clock plus real git setup | share the repo fixture |
+| 35 | `run/test_stages.py::Handoff::test_the_amend_planner_sees_what_the_rounds_did` | 0.66 | 0.68 | inferred from name only | review |
+| 36 | `delegate/test_contention.py::Contention::test_parallel_config_cli_and_update_config_lose_no_updates` | 0.65 | 0.74 | loop of full runs / fake CLI processes in one test | table-test the pure function; one real run |
+| 37 | `domain/real/test_slot_env.py::EverySpawnPath::test_checks_gate_land_and_the_worker_get_the_slot_values` | 0.65 | 0.81 | fresh bare remote + clone + engine per test (real git, processes) | template repo copied per test |
+| 38 | `delegate/test_run_stops.py::RunStops::test_network_stops_never_bench_the_pair` | 0.64 | 2.06 | loop of full runs / fake CLI processes in one test | table-test the pure function; one real run |
+| 39 | `e2e/test_selftest.py::SelfTest::test_the_scenario_through_engine_run_passes_in_a_bounded_number_of_processes` | 0.63 | 0.75 | fresh bare remote + clone + engine per test (real git, processes) | template repo copied per test |
+| 40 | `e2e/test_release.py::Release::test_a_stale_branch_is_rebased_before_the_suite` | 0.62 | 1.50 | fresh bare remote + clone + engine per test (real git, processes) | template repo copied per test |
+| 41 | `delegate/test_run_stops.py::RunStops::test_every_answer_carries_the_stop_facts` | 0.61 | 2.02 | loop of full runs / fake CLI processes in one test | table-test the pure function; one real run |
+| 42 | `rules/test_subprocess_rule.py::SubprocessRule::test_raw_process_calls_stay_at_the_process_boundary` | 0.60 | 0.60 | AST/grep walk of the whole src tree each test | parse once per session (cached fixture) |
+| 43 | `rules/test_no_whole_suite_command.py::test_no_src_or_skill_code_builds_a_pytest_command` | 0.59 | 0.59 | AST/grep walk of the whole src tree each test | parse once per session (cached fixture) |
+| 44 | `e2e/test_release.py::Release::test_two_branch_releases_queue_rebase_and_test_the_pushed_tree` | 0.59 | 1.52 | fresh bare remote + clone + engine per test (real git, processes) | template repo copied per test |
+| 45 | `delegate/test_route.py::StateLock::test_parallel_processes_lose_no_update` | 0.59 | 0.19 | loop of full runs / fake CLI processes in one test | table-test the pure function; one real run |
+| 46 | `loop/real/test_loop.py::Loop::test_a_role_that_stays_down_keeps_the_bead_waiting_while_others_run` | 0.56 | 2.72 | real loop with fake clock plus real git setup | share the repo fixture |
+| 47 | `hook/real/test_prepush.py::PrePush::test_the_head_that_is_not_green_runs_the_plan_then_passes` | 0.54 | 1.18 | fresh bare remote + clone + engine per test (real git, processes) | template repo copied per test |
+| 48 | `land/real/test_cleanup.py::EngineCleanup::test_remote_that_moves_after_the_push_check_is_kept_on_retry` | 0.54 | 0.66 | fresh bare remote + clone + engine per test (real git, processes) | template repo copied per test |
+| 49 | `land/real/test_cleanup.py::EngineCleanup::test_engine_push_land_removes_remote_local_and_worktree_after_recording_receipt` | 0.53 | 0.64 | fresh bare remote + clone + engine per test (real git, processes) | template repo copied per test |
+| 50 | `loop/real/test_loop.py::Loop::test_drained_waits_when_asked_and_polls_until_the_end_time` | 0.52 | 2.57 | real loop with fake clock plus real git setup | share the repo fixture |
+
+### Per directory
+
+| dir | tests | CPU s | wall s |
+|---|---|---|---|
+| rules | 196 | 40.3 | 40.3 |
+| loop | 246 | 26.3 | 100.4 |
+| delegate | 589 | 25.8 | 161.7 |
+| run | 551 | 20.9 | 28.7 |
+| land | 403 | 20.4 | 26.4 |
+| e2e | 29 | 9.4 | 23.0 |
+| checks | 318 | 9.0 | 23.0 |
+| slots | 159 | 8.3 | 21.3 |
+| hook | 61 | 6.6 | 11.4 |
+| plan | 103 | 5.9 | 6.7 |
+| review | 102 | 4.6 | 5.3 |
+| ports | 150 | 4.1 | 10.5 |
+| adapters | 264 | 3.4 | 14.3 |
+| dash | 355 | 3.2 | 6.0 |
+| asks | 162 | 2.8 | 4.7 |
+| doctor | 35 | 2.0 | 6.2 |
+| prune | 70 | 1.8 | 3.0 |
+| write | 30 | 1.6 | 3.2 |
+| report | 50 | 1.5 | 4.6 |
+| release | 33 | 1.3 | 5.3 |
+| look | 17 | 1.2 | 1.5 |
+| track | 36 | 1.2 | 1.4 |
+| cli | 82 | 1.1 | 2.3 |
+| contracts | 241 | 0.9 | 2.5 |
+| domain | 165 | 0.8 | 1.0 |
+| stores | 83 | 0.5 | 2.6 |
+| launch | 51 | 0.5 | 0.8 |
+| wire | 81 | 0.2 | 0.2 |
+| artifacts | 34 | 0.1 | 0.1 |
+
+### Slowest by wall (sleeps and waits, not CPU)
+
+- 8.0 s wall / 0.43 CPU: `delegate/test_delegate_kill_tree.py::RealTrees::test_supervisor_timeout_leaves_no_process`
+- 8.0 s wall / 0.45 CPU: `delegate/test_delegate_kill_tree.py::RealTrees::test_run_tree_timeout_stops_the_tree`
+- 7.2 s wall / 1.49 CPU: `loop/real/test_loop.py::Loop::test_a_role_delegate_cannot_judge_fails_open_after_the_unknown_wait`
+- 7.0 s wall / 0.40 CPU: `delegate/test_own_contract.py::RealProcesses::test_call_timeout_stops_a_worker_that_ignores_sigterm`
+- 5.6 s wall / 0.10 CPU: `delegate/test_stream_supervisor.py::Replay::test_a_stalled_stream_is_killed_and_its_tail_logged`
+- 5.5 s wall / 0.50 CPU: `delegate/test_own_contract.py::RealProcesses::test_sigterm_to_the_delegate_stops_the_worker_tree_first`
+- 5.3 s wall / 0.10 CPU: `delegate/test_run_vendors.py::RunVendors::test_a_claude_worker_waiting_on_a_background_task_is_stopped_after_its_answer`
+- 5.2 s wall / 1.09 CPU: `slots/real/test_areas.py::ReviewFixes::test_a_long_area_wait_says_how_long_and_who_holds_it_and_until_still_ends_the_loop`
+
+### Three biggest levers (pix numbers)
+
+1. **tests/rules (40 CPU s, 20% of all CPU, 196 tests):** 11 `selection_mutations` cases at 2.5 s each (28 s) plus whole-tree walks (`state_writers` 2.4, `arch_invariants` 1.3, `factorydb_owners` 1.2, `enumtotal` 1.2). Parse the tree once per session and share one mutated copy: ~35 CPU s saved, and these run on every `just test`.
+2. **Wall, not CPU, in delegate and loop (delegate 162 s wall for 26 CPU; loop 100 s for 26):** real timeouts and waits (`kill_tree` 8 s x2, `own_contract` 7 s, `stream_supervisor` 5.6 s, 7 s loop wait). Inject the clock / shorten the limits; ~120 s of wall for no CPU.
+3. **Test isolation:** a whole-tree run fails 280 tests that pass alone. Find the leaking test (cwd, env or a patched git); until then no full-tree timing or run is trustworthy, and the order-dependence can bite xdist too.
+
+Not a lever on pix: land/real fixtures (the Mac's #1) are 0.5-0.9 CPU s each; the template-repo idea is worth ~10 s, not 60.
+
+---
+
+
+## Earlier Mac run (load ~80; superseded above)
 Measured 2026-11-05/06 with `dev/testtimes.py` (local, uncommitted). **Scope: the 5 largest directories** (delegate, run, land, dash, checks: 2214 tests, 1852 subtests), once, `nice -n 10`, one worker. The full tree was started first and stopped at 6% / 16 min (23 s CPU in 16 min of wall: starved by load ~80), so `adapters`, `loop`, `contracts`, `domain`, ... are **not measured**. CPU = user+sys of the pytest process plus the children it waited for; wall = elapsed. Whole run: 307 CPU s, 3620 s wall (12x: the host, not the tests). Children that were killed rather than waited for are not in CPU, so kill-tree tests are under-counted. The "why slow" column comes from reading the test and its names, not from a profiler.
 
 ## Verdict on the suite
