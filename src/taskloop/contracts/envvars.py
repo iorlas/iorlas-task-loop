@@ -14,7 +14,7 @@ class EnvVar(StrEnum):
     TL_ATTEMPT = "TL_ATTEMPT"                    # N of this attempt (the N of TL_ARTIFACT_DIR)
     TL_WORKTREE = "TL_WORKTREE"                  # the worktree the run works in
     TL_BRANCH = "TL_BRANCH"                      # the branch checked out in it
-    TL_WORKER_MB = "TL_WORKER_MB"                # address-space cap of each xdist worker (release suite)
+    TL_WORKER_MB = "TL_WORKER_MB"                # address-space cap of each xdist worker (dev/runtests.py)
     # handovers between two processes of the engine (one typed record each, see contracts/env.py)
     TL_REEXEC = "TL_REEXEC"                      # the run that re-execs itself after a code update
     TL_LOOP_STATE = "TL_LOOP_STATE"              # the loop's state across its exec
@@ -31,7 +31,6 @@ class EnvVar(StrEnum):
     TASK_LOOP_DASH_PORT = "TASK_LOOP_DASH_PORT"
     TASK_LOOP_DASH_DEV_PUBLIC = "TASK_LOOP_DASH_DEV_PUBLIC"
     TASK_LOOP_DASH_IDLE_H = "TASK_LOOP_DASH_IDLE_H"
-    TASK_LOOP_SUITE_WORKERS = "TASK_LOOP_SUITE_WORKERS"
 
 
 # Families: a name made of a prefix and a check id (domain/checks/names.py builds them; a check reads an earlier one's log and exit code).
@@ -39,7 +38,7 @@ CHECK_LOG_PREFIX: Final = "TL_CHECK_LOG_"
 CHECK_RC_PREFIX: Final = "TL_CHECK_RC_"
 PREFIXES: Final = (CHECK_LOG_PREFIX, CHECK_RC_PREFIX)
 # Names a text may mention that are no variable: Python constants, and a name SKILL.md says is gone.
-NOT_VARIABLES: Final = frozenset({"TL_PY", "TASK_LOOP_SUITE_HOST", "TL_BOX_CWD", "TL_CHECKS_GREEN", "TL_LAND"})
+NOT_VARIABLES: Final = frozenset({"TL_PY", "TASK_LOOP_SUITE_HOST", "TASK_LOOP_SUITE_WORKERS", "TL_BOX_CWD", "TL_CHECKS_GREEN", "TL_LAND"})
 
 
 def registered(name: str) -> bool:
