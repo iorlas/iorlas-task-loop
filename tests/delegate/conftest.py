@@ -18,6 +18,22 @@ import hermetic  # noqa: E402
 ENV = ("HOME", "USERPROFILE", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "CODEX_HOME", "DELEGATE_CONFIG_DIR", "TMPDIR")
 
 
+@pytest.fixture(scope="session", autouse=True)
+def worker_clis():
+    """codex, claude and opencode answer `--version` from a folder of ours, first on PATH: a test that probes the worker CLIs spawns the
+    same processes on a host with none installed and on one with all three."""
+    bin_dir = Path(hermetic.ROOT) / "bin"
+    bin_dir.mkdir(exist_ok=True)
+    for name in ("codex", "claude", "opencode"):
+        exe = bin_dir / name
+        exe.write_text(f'#!/bin/sh\necho "{name} 0.0.0-test"\n')
+        exe.chmod(0o755)
+    saved = os.environ.get("PATH", "")
+    os.environ["PATH"] = f"{bin_dir}{os.pathsep}{saved}"
+    yield
+    os.environ["PATH"] = saved
+
+
 @pytest.fixture(autouse=True)
 def own_home():
     saved = {k: os.environ.get(k) for k in ENV}
