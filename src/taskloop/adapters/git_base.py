@@ -68,7 +68,7 @@ def read_failure(args: tuple[str, ...], r: subprocess.CompletedProcess[str]) -> 
     if args[:2] == ("remote", "get-url") and r.returncode == 2 and re.fullmatch(r"error: No such remote '.+'", tail):
         kind = MissingRemote
     if r.returncode == 128:
-        if (tail == "fatal: not a git repository (or any of the parent directories): .git"
+        if (re.fullmatch(r"fatal: not a git repository \(or any (of the )?parent (directories|up to mount point .+)\)(: \.git)?", tail)
                 or re.fullmatch(r"fatal: cannot change to '.+': No such file or directory", tail)):
             kind = NotARepo
         elif tail == "fatal: this operation must be run in a work tree":
