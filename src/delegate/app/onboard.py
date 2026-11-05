@@ -1,4 +1,5 @@
-"""Readiness: what each lane needs on this machine (CLI, login, key). `doctor` prints them as a table; `configured_lanes` tells the fleet which
+"""Readiness: what each lane needs on this machine (CLI, login, key). `doctor` prints them as a table; `configured_lanes` tells the fleet
+which
 lanes the machine can run. No state is stored: every call derives it from the machine."""
 
 import json
@@ -9,6 +10,7 @@ from pathlib import Path
 
 from delegate.adapters import statusline
 from delegate.adapters.harness.opencode import OpenCodeHarness
+from delegate.contracts.json_types import Json, as_str, obj
 
 
 def codex_home():
@@ -64,12 +66,12 @@ READY_CHECKS = {
 }
 
 
-def lane_configured(lane_cfg: dict):
-    return READY_CHECKS[lane_cfg.get("ready", "always")]()
+def lane_configured(lane_cfg: dict[str, Json]):
+    return READY_CHECKS[as_str(lane_cfg.get("ready"), "always")]()
 
 
-def configured_lanes(cfg: dict):
-    return {n: lane_configured(c) for n, c in cfg["lanes"].items()}
+def configured_lanes(cfg: dict[str, Json]):
+    return {n: lane_configured(obj(c)) for n, c in obj(cfg["lanes"]).items()}
 
 
 OPENCODE_LANES = {"GROK_SUBSCRIPTION", "DEEPSEEK_FREE", "ZAI_CODING_SUBSCRIPTION"}
@@ -95,5 +97,8 @@ def _fix_hint(name: str):
     if name == "DEEPSEEK_FREE":
         return "macOS: install OpenCode, then `route.py config set profile.lanes.DEEPSEEK_FREE enabled`"
     if name == "ZAI_CODING_SUBSCRIPTION":
-        return "macOS: install OpenCode, `opencode auth login` (Z.AI Coding Plan), then `route.py config set profile.lanes.ZAI_CODING_SUBSCRIPTION enabled`"
+        return (
+            "macOS: install OpenCode, `opencode auth login` (Z.AI Coding Plan), "
+            "then `route.py config set profile.lanes.ZAI_CODING_SUBSCRIPTION enabled`"
+        )
     return ""

@@ -1,5 +1,5 @@
-"""Settler: the one place a classified outcome (adapters/harness/classify.py) is applied to the answer and, for a lane-scoped reason, to the lane's
-state. All three launchers end here. `apply` is the only entry; one method per reason, found by name.
+"""Settler: the one place a classified outcome (adapters/harness/classify.py) is applied to the answer and, for a lane-scoped reason, to
+the lane's state. All three launchers end here. `apply` is the only entry; one method per reason, found by name.
 
 `reset` is the default end of a limit when the message names no time; `login` the hint stored
 with a logged-out lane and the text of the answer with {why}.
@@ -13,6 +13,7 @@ from delegate.adapters import netprobe
 from delegate.adapters.harness import classify, reset_parse
 from delegate.app import answer
 from delegate.app.env import Args
+from delegate.contracts.json_types import Json, as_str
 from delegate.contracts.state import OutState
 from delegate.contracts.stores import StateStore
 from delegate.domain.lanes.profiles import LOGIN_CMD
@@ -31,9 +32,9 @@ GUESS_WINDOW = 6 * 3600
 class Case:
     """One outcome being applied: the answer under construction and everything a reason's method may need."""
 
-    res: dict
+    res: dict[str, Json]
     o: classify.Outcome
-    d: dict
+    d: dict[str, Json]
     t: float
     who: str
     a: Args
@@ -45,7 +46,7 @@ class Case:
 
     @property
     def lane(self) -> str:
-        return self.d["lane"]
+        return as_str(self.d["lane"])
 
     @property
     def why(self) -> str:
@@ -79,7 +80,8 @@ class Settler:
         zone: str | None = None,
         guess_n: int = 0,
     ) -> None:
-        """Record a lane out. source: vendor (the vendor stated the end) | guess | manual (the owner said); zone: the zone the vendor's time was in;
+        """Record a lane out. source: vendor (the vendor stated the end) | guess | manual (the owner said); zone: the zone the vendor's
+        time was in;
         `set` = wall clock now (workers already running read it: a lane marked out after they started stops them)."""
         self.states.update(
             lambda s: s.out.__setitem__(
@@ -87,19 +89,20 @@ class Settler:
             )
         )
 
-    def net_pass(self, o: classify.Outcome, d: dict) -> classify.Outcome:
-        """-> `o`, or the network outcome when it was the network. classify trusts network words only before the worker did anything, and a silent
-        hang is only a network drop if the net is down: so a failure with no cause of its own is checked against the words of a dropped connection
+    def net_pass(self, o: classify.Outcome, d: dict[str, Json]) -> classify.Outcome:
+        """-> `o`, or the network outcome when it was the network. classify trusts network words only before the worker did anything, and a
+        silent hang is only a network drop if the net is down: so a failure with no cause of its own is checked against the words of a
+        dropped connection
         and then against one probe (<= 3 s, sockets only). Limits, logins, bad requests, secrets and timeouts are never second-guessed."""
-        if o.reason in NET_AMBIGUOUS and (netprobe.looks_dropped(o.detail) or not self.net_up(d["lane"])):
+        if o.reason in NET_AMBIGUOUS and (netprobe.looks_dropped(o.detail) or not self.net_up(as_str(d["lane"]))):
             return classify.Outcome("network", o.detail, o.source)
         return o
 
     def apply(
         self,
-        res: dict,
+        res: dict[str, Json],
         o: classify.Outcome,
-        d: dict,
+        d: dict[str, Json],
         t: float,
         who: str,
         a: Args,
@@ -107,8 +110,8 @@ class Settler:
         tail: str = "",
         reset: Callable[[], float | None] | None = None,
         login: tuple[str, str] | None = None,
-    ) -> dict:
-        c = Case(res, self.net_pass(o, d), d, t, who, a, rc, tail, reset, login, res.pop("answered", False))
+    ) -> dict[str, Json]:
+        c = Case(res, self.net_pass(o, d), d, t, who, a, rc, tail, reset, login, bool(res.pop("answered", False)))
         if c.o.reason != "hung":
             res.pop("hung_words", None), res.pop("hung_kind", None)
         res["outcome"] = c.o.reason
@@ -182,9 +185,10 @@ class Settler:
         if c.answered:  # the final answer was captured before the connection dropped: the work is done, say so
             self.states.update(lambda s: s.out.pop(c.lane, None))
             c.res.update(
-                outcome=None, data=answer.parse_data(c.res.get("text") or "", c.a.schema), warnings=["net_after_answer"], detail=""
+                outcome=None, data=answer.parse_data(as_str(c.res.get("text")), c.a.schema), warnings=["net_after_answer"], detail=""
             )
-        else:  # not a lane fault: nothing is marked out, the pair is not counted, and the caller decides when to resume (`resumable`, `ref`)
+        # not a lane fault: nothing is marked out, the pair is not counted, and the caller decides when to resume (`resumable`, `ref`)
+        else:
             c.res.update(
                 retry_after=self._soon(),
                 resumable=bool(c.res.get("ref") and c.res.get("started")),

@@ -1,5 +1,5 @@
-"""FleetBuilder: every `Lane` for one call. Gathers what the router needs and nothing else: the lane profile (which lanes this machine uses),
-a usage reading per lane, the out board, the health fold and the leases. Side effects go through the injected stores and readers.
+"""FleetBuilder: every `Lane` for one call. Gathers what the router needs and nothing else: the lane profile (which lanes this machine
+uses), a usage reading per lane, the out board, the health fold and the leases. Side effects go through the injected stores and readers.
 
 `mark_busy`, `settle_holds` and `drift_warnings` are the three things a call does to the fleet before the Router sees it.
 """
@@ -9,6 +9,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 
 from delegate.contracts.history import HealthState
+from delegate.contracts.json_types import Json
 from delegate.contracts.routing import LaneSpec, ModelSpec, Routing, Settings
 from delegate.contracts.state import AuthEntry, StateDoc
 from delegate.contracts.stores import CheckpointStore, ConfigStore, HistoryStore, StateStore
@@ -18,7 +19,7 @@ from delegate.domain.lanes.lane import Lane
 from delegate.domain.lanes.leases import LeaseBook
 
 Reader = Callable[
-    [Lane, Settings, StateDoc, float, object], None
+    [Lane, Settings, StateDoc, float, Json], None
 ]  # fills a lane's usage in place (the claude reader takes the caller's get_usage)
 DRIFT_NOTE = "enabled but not ready"
 WARN_EVERY_S = 86400
@@ -44,7 +45,7 @@ class FleetBuilder:
         self.r, self.states, self.history, self.checkpoints, self.config = routing, states, history, checkpoints, config
         self.readers, self.configured = readers, configured
 
-    def build(self, doc: StateDoc, t: float, usage: object = None, check_config: bool = True) -> Fleet:
+    def build(self, doc: StateDoc, t: float, usage: Json = None, check_config: bool = True) -> Fleet:
         s = self.r.settings
         fleet = Fleet({})
         conf = self.configured() if check_config else {}
@@ -102,7 +103,8 @@ class FleetBuilder:
             lane.notes.append(o.why)
 
     def _health(self, t: float) -> HealthState:
-        """The health fold over history.jsonl, continued from a cached checkpoint (a cache: no file, a damaged one or another policy = a full fold)."""
+        """The health fold over history.jsonl, continued from a cached checkpoint (a cache: no file, a damaged one or another policy = a
+        full fold)."""
         pol = self.r.settings.breaker
         base = self.checkpoints.load(pol)
         rows = self.history.rows(base.ts if base else 0.0)
@@ -113,7 +115,8 @@ class FleetBuilder:
 
 
 def apply_health(lane: Lane, models: Mapping[str, ModelSpec], ledger: HealthLedger, state: HealthState, t: float) -> None:
-    """Put the breaker's view of each (lane, model) pair on the lane: `benched` (refused), `canary` (the next launch is the probe), `hview`."""
+    """Put the breaker's view of each (lane, model) pair on the lane: `benched` (refused), `canary` (the next launch is the probe),
+    `hview`."""
     for model, m in models.items():
         if m.family != lane.family:
             continue
@@ -126,7 +129,8 @@ def apply_health(lane: Lane, models: Mapping[str, ModelSpec], ledger: HealthLedg
 
 
 def mark_busy(lanes: dict[str, Lane], doc: StateDoc, s: Settings, t: float, jitter: Callable[[], int]) -> dict[str, Lane]:
-    """A lane with all its slots taken is skipped like a refused lane (a copy that is out); `jitter` keeps retrying engines from arriving together."""
+    """A lane with all its slots taken is skipped like a refused lane (a copy that is out); `jitter` keeps retrying engines from arriving
+    together."""
     book = LeaseBook(doc.leases)
     out: dict[str, Lane] = {}
     for name, lane in lanes.items():
@@ -136,7 +140,8 @@ def mark_busy(lanes: dict[str, Lane], doc: StateDoc, s: Settings, t: float, jitt
 
 
 def settle_holds(states: StateStore, lanes: dict[str, Lane], doc: StateDoc, t: float) -> tuple[list[StaleHold], StateDoc]:
-    """A hold in force whose lane shows less than HOLD_STALE_BELOW % used is stale: it gets ONE ask, stamped on the record (`stale_at`) so no
+    """A hold in force whose lane shows less than HOLD_STALE_BELOW % used is stale: it gets ONE ask, stamped on the record (`stale_at`) so
+    no
     later call raises it again. -> (the asks, the state after)."""
     used = {n: lane.week if lane.week is not None else lane.five for n, lane in lanes.items()}
     stamp = HoldBook(doc.holds).to_stamp(used, t)
@@ -175,7 +180,7 @@ class AuthCache:
         """Never fails the caller; an unknown answer (None) is not remembered."""
         if ok is not None:
             with contextlib.suppress(Exception):
-                self.states.update(lambda s: s.auth.__setitem__(name, AuthEntry(at=t, ok=bool(ok), why=str(why)[:120])))
+                self.states.update(lambda s: s.auth.__setitem__(name, AuthEntry(at=t, ok=ok, why=why[:120])))
 
-    def rows(self, doc: StateDoc, t: float) -> dict[str, dict]:
+    def rows(self, doc: StateDoc, t: float) -> dict[str, dict[str, Json]]:
         return {n: {"ok": e.ok, "why": e.why, "age_s": int(t - e.at)} for n, e in doc.auth.items()}

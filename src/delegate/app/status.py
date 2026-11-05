@@ -1,4 +1,5 @@
-"""`status`: the payload (lanes, cockpit, running, holds, asks, health, roles, network), the snapshot it leaves for `status --cheap`, and the network
+"""`status`: the payload (lanes, cockpit, running, holds, asks, health, roles, network), the snapshot it leaves for `status --cheap`, and
+the network
 probe cache. `--cheap` spawns nothing: the last snapshot plus the cached logins, with the leases read fresh."""
 
 import contextlib
@@ -12,6 +13,7 @@ from delegate.app import cockpit, decide, env, net, roles, usage
 from delegate.app.fleet import settle_holds
 from delegate.contracts import codec
 from delegate.contracts import status as wire
+from delegate.contracts.json_types import Json, as_num
 from delegate.contracts.state import StateDoc
 from delegate.domain.health import ledger as health_ledger
 from delegate.domain.holds.book import HoldBook
@@ -20,29 +22,30 @@ from delegate.domain.lanes.leases import LeaseBook, suspect
 from delegate.domain.routing.router import Router
 
 
-def status_payload(cfg: dict, lanes: dict[str, Lane], ck: dict, st: StateDoc, t: float) -> dict:
-    """The answer, passed through contracts/status.py: a key or type the schema in contract.json does not name fails here, not at a caller."""
+def status_payload(cfg: dict[str, Json], lanes: dict[str, Lane], ck: dict[str, Json], st: StateDoc, t: float) -> dict[str, Json]:
+    """The answer, passed through contracts/status.py: a key or type the schema in contract.json does not name fails here, not at a
+    caller."""
     return codec.to_json(codec.from_json(wire.Status, _raw_payload(cfg, lanes, ck, st, t)))
 
 
-def _raw_payload(cfg: dict, lanes: dict[str, Lane], ck: dict, st: StateDoc, t: float):
+def _raw_payload(cfg: dict[str, Json], lanes: dict[str, Lane], ck: dict[str, Json], st: StateDoc, t: float):
     return {
         "v": 1,
         "ts": t,
         "lanes": {
             n: {
-                "family": l.family,
-                "kind": l.kind,
-                "out": l.out,
-                "out_until": l.out_until,
-                "reason": l.out_reason if l.out else None,
-                "five": l.five,
-                "week": l.week,
-                "pace": l.pace,
-                "burn": l.burn,
-                "notes": l.notes,
+                "family": ln.family,
+                "kind": ln.kind,
+                "out": ln.out,
+                "out_until": ln.out_until,
+                "reason": ln.out_reason if ln.out else None,
+                "five": ln.five,
+                "week": ln.week,
+                "pace": ln.pace,
+                "burn": ln.burn,
+                "notes": ln.notes,
             }
-            for n, l in lanes.items()
+            for n, ln in lanes.items()
         },
         "cockpit": ck,
         "running": running_rows(st, t),
@@ -54,7 +57,7 @@ def _raw_payload(cfg: dict, lanes: dict[str, Lane], ck: dict, st: StateDoc, t: f
     }
 
 
-def roles_payload(cfg: dict, lanes: dict[str, Lane], st: StateDoc, t: float):
+def roles_payload(cfg: dict[str, Json], lanes: dict[str, Lane], st: StateDoc, t: float):
     """roles{} (usable and net per role) and network{} for status --json; the probe is read from its cache, never run here."""
     cached = netprobe.load(str(env.net_cache_path()))
     routing = env.typed_routing(cfg)
@@ -62,42 +65,44 @@ def roles_payload(cfg: dict, lanes: dict[str, Lane], st: StateDoc, t: float):
     return {"roles": roles.roles_view(cfg, lanes, router, st, t, cached), "network": net.network_view(cached, t)}
 
 
-def health_rows(cfg: dict, lanes: dict[str, Lane], st: StateDoc, t: float):
-    """One row per (lane, model): state (up|busy|exhausted|logged_out|held|broken), until, source, evidence, leases{live,suspect}, last_failures[3]."""
-    rows: list[dict] = []
+def health_rows(cfg: dict[str, Json], lanes: dict[str, Lane], st: StateDoc, t: float):
+    """One row per (lane, model): state (up|busy|exhausted|logged_out|held|broken), until, source, evidence, leases{live,suspect},
+    last_failures[3]."""
+    rows: list[dict[str, Json]] = []
     pol = env.settings_of(cfg).breaker
-    for name, l in lanes.items():
+    for name, ln in lanes.items():
         cnt = LeaseBook(st.leases).counts(name, t)
         rec = st.out.get(name)
-        ats = [w.get("at") for w in l.windows if w.get("at")]
-        stale = health_ledger.stale_usage(max(ats) if ats else l.read_at, t, pol)
-        for model, v in l.hview.items():
-            if v.state == "up" and l.out and not l.busy:  # the lane's own out record (state.json) is the other half of "exhausted"
+        ats = [a for w in ln.windows if (a := as_num(w.get("at")))]
+        stale = health_ledger.stale_usage(max(ats) if ats else ln.read_at, t, pol)
+        for model, pv in ln.hview.items():
+            v = pv
+            if v.state == "up" and ln.out and not ln.busy:  # the lane's own out record (state.json) is the other half of "exhausted"
                 v = replace(
                     v,
-                    state="logged_out" if l.out_reason == "logged_out" else "exhausted",
-                    until=l.out_until,
+                    state="logged_out" if ln.out_reason == "logged_out" else "exhausted",
+                    until=ln.out_until,
                     source=rec.source if rec else None,
-                    kind=l.out_reason,
+                    kind=ln.out_reason,
                     evidence=(rec.why if rec else "")[:240],
                 )
-            state = health_ledger.combine(v, False, l.busy)
-            v = v.as_dict()
+            state = health_ledger.combine(v, False, ln.busy)
+            d = v.as_dict()
             rows.append(
                 {
                     "lane": name,
                     "model": model,
                     "state": state,
-                    "until": v["until"],
-                    "source": v["source"],
-                    "kind": v["kind"],
-                    "evidence": v["evidence"],
-                    "canary": v["canary"],
-                    "rung": v["rung"],
+                    "until": d["until"],
+                    "source": d["source"],
+                    "kind": d["kind"],
+                    "evidence": d["evidence"],
+                    "canary": d["canary"],
+                    "rung": d["rung"],
                     "leases": cnt,
-                    "last_failures": v["last_failures"],
-                    "needs_login": state == "logged_out" and l.family == "claude",
-                    "usage": {"known": l.usage_known and not stale, "text": f"unknown (stale {stale:g} h)" if stale else None},
+                    "last_failures": d["last_failures"],
+                    "needs_login": state == "logged_out" and ln.family == "claude",
+                    "usage": {"known": ln.usage_known and not stale, "text": f"unknown (stale {stale:g} h)" if stale else None},
                 }
             )
     return rows
@@ -120,45 +125,41 @@ def running_rows(st: StateDoc, t: float):
     ]
 
 
-def write_snapshot(payload: dict):
+def write_snapshot(payload: dict[str, Json]):
     with contextlib.suppress(Exception):
         p = env.snapshot_path()
         atomic_write_text(p, json.dumps(payload), fsync=False)
 
 
-def cmd_status_cheap(a: env.Args, cfg: dict):
+def cmd_status_cheap(a: env.Args, cfg: dict[str, Json]):
     """Zero process spawns and no network: the last full status (status-snapshot.json) with `running` read fresh from the leases and the
     cached logins from auth-cache.json. `age_s` = seconds since the snapshot was taken (null when no status has run yet)."""
     t = env.now()
     st = env.load_state()
-    snap: dict = {}
+    snap: dict[str, Json] = {}
     with contextlib.suppress(OSError, ValueError):
         d = json.loads(env.snapshot_path().read_text(encoding="utf-8"))
         snap = d if isinstance(d, dict) else {}
     at = snap.get("ts")
     out = {k: v for k, v in snap.items() if k not in ("ts", "running")}
-    out.update(
-        v=1,
-        cheap=True,
-        ts=t,
-        age_s=int(t - at) if isinstance(at, (int, float)) else None,
-        running=running_rows(st, t),
-        holds=HoldBook(st.holds).rows(t),
-        auth=usage.auth_cache().rows(st, t),
-    )
+    running = running_rows(st, t)
+    auth = usage.auth_cache().rows(st, t)
+    age_s = int(t - at) if isinstance(at, (int, float)) else None
+    holds = HoldBook(st.holds).rows(t)
+    out.update(v=1, cheap=True, ts=t, age_s=age_s, running=running, holds=holds, auth=auth)
     out.setdefault("lanes", {})
     cached = netprobe.load(str(env.net_cache_path()))  # a file, not a socket: cheap opens no connection
-    out.update(roles=roles.refresh(snap.get("roles"), out["holds"], cached, t), network=net.network_view(cached, t))
+    out.update(roles=roles.refresh(snap.get("roles"), holds, cached, t), network=net.network_view(cached, t))
     print(
         json.dumps(out)
         if a.json
-        else "\n".join(f"{n}: {c['ok']} ({c['age_s']}s old)" for n, c in out["auth"].items())
-        + f"\nrunning: {len(out['running'])}  snapshot age: {out['age_s']}s"
+        else "\n".join(f"{n}: {c['ok']} ({c['age_s']}s old)" for n, c in auth.items())
+        + f"\nrunning: {len(running)}  snapshot age: {age_s}s"
     )
     return 0
 
 
-def cmd_status(a: env.Args, cfg: dict):
+def cmd_status(a: env.Args, cfg: dict[str, Json]):
     if a.cheap:
         return cmd_status_cheap(a, cfg)
     t = env.now()

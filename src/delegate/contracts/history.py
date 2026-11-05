@@ -5,9 +5,10 @@ calibration and the dashboard. A line of another shape is skipped, never migrate
 """
 
 from dataclasses import field
-from typing import Any
+from typing import ClassVar
 
 from delegate.contracts.codec import mutable, record, table_of
+from delegate.contracts.json_types import Json
 from delegate.contracts.routing import BreakerPolicy
 
 V = 1
@@ -17,7 +18,7 @@ V = 1
 class RunRow:
     """A worker run that ended (done or not). `done` and `outcome` are the ladder's verdict (outcome None = done)."""
 
-    KIND = "run"
+    KIND: ClassVar[str] = "run"
     V = V
     ts: float
     run_id: str
@@ -36,12 +37,12 @@ class RunRow:
     schema_problem: str | None = None
     until: float | None = None
     warnings: list[str] | None = None
-    stream_tail: Any = None
+    stream_tail: Json = None
     denials: int = 0
     secs: float | None = None
     cost: float = 0
-    tokens: dict[str, Any] | None = None
-    cumulative: dict[str, Any] | None = None
+    tokens: dict[str, Json] | None = None
+    cumulative: dict[str, Json] | None = None
     five_before: float | None = None
     week_before: float | None = None
     five_after: float | None = None
@@ -55,7 +56,7 @@ class RunRow:
 class RefusalRow:
     """An answer given without launching a worker; kept so refusals are countable. Never a health fact."""
 
-    KIND = "refusal"
+    KIND: ClassVar[str] = "refusal"
     V = V
     ts: float
     outcome: str
@@ -74,7 +75,7 @@ class RefusalRow:
 class CanaryRow:
     """The one probe after a bench ended answered: a `done` for the pair."""
 
-    KIND = "canary"
+    KIND: ClassVar[str] = "canary"
     V = V
     ts: float
     run_id: str
@@ -84,7 +85,7 @@ class CanaryRow:
 
 @record
 class GapRow:
-    KIND = "gap"
+    KIND: ClassVar[str] = "gap"
     V = V
     ts: float
     lane: str
@@ -97,7 +98,7 @@ class GapRow:
 class ReleaseRow:
     """`route.py report --event ok`: the owner says the lane is fine, the fold forgets its limits."""
 
-    KIND = "release"
+    KIND: ClassVar[str] = "release"
     V = V
     ts: float
     lane: str
@@ -105,7 +106,7 @@ class ReleaseRow:
 
 @record
 class ReapRow:
-    KIND = "reap"
+    KIND: ClassVar[str] = "reap"
     V = V
     ts: float
     run_id: str

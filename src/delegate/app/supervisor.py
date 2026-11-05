@@ -1,10 +1,11 @@
-"""Supervisor: run one worker to its end (D3). It spawns the harness's launch in a session of its own, pumps each output line into the harness
-parser ONCE, routes the parsed events (the turn rules, the live file, the vendor ref, the secret policy), ticks the watchers about every half
-second and stops the worker's tree when one fires, on the call's timeout, or when the caller dies. What the caller wants to hear comes in a
-`RunHooks` for this run (no process-wide callback lists); what happened comes back as a `RunOutcome`.
+"""Supervisor: run one worker to its end (D3). It spawns the harness's launch in a session of its own, pumps each output line into the
+harness parser ONCE, routes the parsed events (the turn rules, the live file, the vendor ref, the secret policy), ticks the watchers about
+every half second and stops the worker's tree when one fires, on the call's timeout, or when the caller dies. What the caller wants to
+hear comes in a `RunHooks` for this run (no process-wide callback lists); what happened comes back as a `RunOutcome`.
 
-Watchers (each `poll() -> Stop | None`): the lane marked out under the worker, the harness's own log (OpenCode retries a limit forever without
-exiting), the silence/first-event deadlines, the turn rules (answer then grace, stall), the wait for the network (one probe past a grace).
+Watchers (each `poll() -> Stop | None`): the lane marked out under the worker, the harness's own log (OpenCode retries a limit forever
+without exiting), the silence/first-event deadlines, the turn rules (answer then grace, stall), the wait for the network (one probe past a
+grace).
 """
 
 import contextlib
@@ -16,7 +17,7 @@ import time
 from collections.abc import Callable
 from dataclasses import field
 from pathlib import Path
-from typing import Any
+from typing import IO
 
 from delegate.adapters import procs
 from delegate.adapters.harness.base import Harness, LaunchSpec, Summary
@@ -45,7 +46,8 @@ class RunHooks:
 
 @mutable
 class Stop:
-    """Why a watcher stopped the worker: "limit" (the lane is out) or "hung" (a deadline), the deadline's kind and words, the vendor's line."""
+    """Why a watcher stopped the worker: "limit" (the lane is out) or "hung" (a deadline), the deadline's kind and words, the vendor's
+    line."""
 
     why: str | None = None
     msg: str = ""
@@ -84,7 +86,8 @@ class LaneGoneWatcher:
 
 
 class LogWatcher:
-    """Stops a worker whose harness log gained a limit line since launch (OpenCode retries a limit forever without exiting). A line that only
+    """Stops a worker whose harness log gained a limit line since launch (OpenCode retries a limit forever without exiting). A line that
+    only
     echoes the worker's own tool input is never one."""
 
     def __init__(self, log_dir: Path, is_limit: Callable[[str], object], echoes: Callable[[str], bool]) -> None:
@@ -133,7 +136,8 @@ class Supervisor:
 
     # -- the lines of the worker ----------------------------------------------------------------------------------------------------------
     def feed(self, events: list[ev.HarnessEvent]) -> bool:
-        """Route one parsed line: the turn rules, the live file, the vendor ref, the secret policy. -> True when the worker must stop now."""
+        """Route one parsed line: the turn rules, the live file, the vendor ref, the secret policy. -> True when the worker must stop
+        now."""
         stop = False
         with self.lock:
             self.turn.apply(events)
@@ -183,7 +187,13 @@ class Supervisor:
 
     # -- the run -------------------------------------------------------------------------------------------------------------------------
     def _pump(
-        self, stream: Any, sink: list[str], cb: Callable[[str], bool], p: subprocess.Popen, killed: list[int], tick: Callable[[], None]
+        self,
+        stream: IO[bytes],
+        sink: list[str],
+        cb: Callable[[str], bool],
+        p: subprocess.Popen[bytes],
+        killed: list[int],
+        tick: Callable[[], None],
     ) -> None:
         for raw in iter(stream.readline, b""):
             line = raw.decode("utf-8", "replace")
@@ -194,7 +204,7 @@ class Supervisor:
                 killed.append(1)
                 self.hooks.stops.append(procs.kill_tree(p))
 
-    def _stop(self, p: subprocess.Popen, killed: list[int]) -> None:
+    def _stop(self, p: subprocess.Popen[bytes], killed: list[int]) -> None:
         killed.append(1)
         self.hooks.stops.append(procs.kill_tree(p))
         p.wait()
@@ -232,7 +242,7 @@ class Supervisor:
                 f and f.close()
         return self.finish(p.returncode, "".join(out), "".join(err), bool(killed))
 
-    def _wait(self, p: subprocess.Popen, killed: list[int], timeout: float) -> None:
+    def _wait(self, p: subprocess.Popen[bytes], killed: list[int], timeout: float) -> None:
         ppid, end = os.getppid(), time.time() + timeout if timeout else None
 
         def bye(signum: int, frame: object) -> None:
@@ -255,7 +265,7 @@ class Supervisor:
                     if (
                         self.hooks.unattended and os.getppid() != ppid
                     ):  # SIGKILL on the engine cannot be caught: the parent changing is the only sign
-                        raise SystemExit(1)
+                        raise SystemExit(1) from None
         except (
             BaseException
         ):  # SIGTERM, SIGHUP, Ctrl-C, parent gone: the worker is in its own group, so stop it here or it keeps burning the plan
@@ -267,7 +277,8 @@ class Supervisor:
                 signal.signal(g, h)
 
     def finish(self, rc: int | None, out: str, err: str, killed: bool = False) -> RunOutcome:
-        """The run is over: fold what the worker printed and how it ended into the outcome (the harness's summary), and close the live file."""
+        """The run is over: fold what the worker printed and how it ended into the outcome (the harness's summary), and close the live
+        file."""
         o = self.out
         if (
             killed and rc == 0

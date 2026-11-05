@@ -1,5 +1,4 @@
 """delegate-xzx: the read-only filter reads shell words: a quoted separator is part of the word, and for/while loops over reads pass."""
-import unittest
 
 from delegate.domain.policy.shell import read_only_problem
 
@@ -10,7 +9,7 @@ PASS = (
     'grep -n "" f | grep -E "a|b"',
     'rg -n "a\\|b" src',
     "for f in a b; do cat $f; done",
-    "for f in a.txt b.txt\ndo\n  wc -l \"$f\"\ndone",
+    'for f in a.txt b.txt\ndo\n  wc -l "$f"\ndone',
     "while true; do head -1 f; done",
     "cd x; grep | head",
     "cd x && grep -n 'a;b' f | head -5",
@@ -33,15 +32,11 @@ BLOCK = (
 )
 
 
-class ReadOnlyShellTest(unittest.TestCase):
+class ReadOnlyShellTest:
     def test_reads_with_quoted_separators_and_loops_pass(self):
         for c in PASS:
-            self.assertIsNone(read_only_problem(c), c)
+            assert read_only_problem(c) is None, c
 
     def test_writes_substitutions_and_non_reads_still_block(self):
         for c in BLOCK:
-            self.assertIsNotNone(read_only_problem(c), c)
-
-
-if __name__ == "__main__":
-    unittest.main()
+            assert read_only_problem(c) is not None, c

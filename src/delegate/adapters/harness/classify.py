@@ -7,12 +7,16 @@ error event, or the CLI's own error result) and `stderr`; the model's answer tex
 """
 
 import re
+from collections.abc import Mapping
 from typing import NamedTuple
 
-# ---- PATTERNS: every regex that turns vendor text into a reason lives here --------------------------------------------------------
+from delegate.contracts.json_types import Json
+
+# ---- PATTERNS: every regex that turns vendor text into a reason lives here -----------------------------------------------------
 LIMIT_RE = re.compile(r"usage limit|rate.?limit|quota|too many requests|\b429\b|try again (later|in)|credit balance", re.I)
 CREDIT_RE = re.compile(
-    r"spend(ing)?[- ]?(limit|control)|out of credits|credit balance|insufficient (funds|credit)|credits? (exhausted|too low)|personal-team-blocked",
+    r"spend(ing)?[- ]?(limit|control)|out of credits|credit balance|insufficient (funds|credit)|credits? (exhausted|too low)"
+    r"|personal-team-blocked",
     re.I,
 )
 SPEND_RE = re.compile(CREDIT_RE.pattern + r"|top[- ]?up|billing|cycle cap|cap reached", re.I)  # cockpit: any prose that means money
@@ -29,7 +33,8 @@ CODEX_STATUS_RE = re.compile(
 )  # codex puts the HTTP status inside its error JSON; 429 is a limit, not a bad request
 BAD_REQUEST_RE = re.compile(
     CODEX_STATUS_RE.pattern
-    + r"|invalid_request_error|invalid_json_schema|Invalid schema for response_format|unrecognized arguments:|error: unknown argument|no rollout found for thread|No conversation found with session ID",
+    + r"|invalid_request_error|invalid_json_schema|Invalid schema for response_format|unrecognized arguments:|error: unknown argument"
+    r"|no rollout found for thread|No conversation found with session ID",
     re.I,
 )  # the vendor refused the request itself: schema, a flag its CLI no longer takes, or a --resume thread it does not know
 PATTERNS = {
@@ -49,39 +54,31 @@ class Outcome(NamedTuple):
     source: str  # ours | event | stderr | exit
 
 
-def classify(
-    rc: int | None,
-    vendor_err: str | None = "",
-    stderr: str | None = "",
-    timed_out: bool = False,
-    work_seen: bool = False,
-    structured: dict | None = None,
-):
-    """-> Outcome, or None when the run is done. First match wins.
-
-    rc: exit code (negative = a signal); vendor_err: the vendor's error text from its event stream; stderr: the CLI's stderr; timed_out: our
-    --timeout fired; work_seen: the worker did something before it failed; structured: facts we measured ourselves:
-    {"secret": cmd, "watchdog": "limit"|"hung", "msg": log line, "http_status": int, "net_up": False}."""
-    s = structured or {}
-    ev, rc = (vendor_err or "").strip(), rc or 0
+def _ours(s: Mapping[str, Json], timed_out: bool) -> Outcome | None:
+    """The reasons only facts we measured ourselves give: a secret, the watchdog, our own timeout."""
     if s.get("secret"):
         return Outcome("secrets", str(s["secret"]), "ours")
     if s.get("watchdog") == "limit":
-        msg = s.get("msg") or ""
+        msg = str(s.get("msg") or "")
         return Outcome("credit_exhausted" if CREDIT_RE.search(msg) else "rate_limited", msg, "ours")
     if s.get("watchdog") == "hung":
         return Outcome("network" if s.get("net_up") is False else "hung", "", "ours")
-    if timed_out:
-        return Outcome("timeout", "", "ours")
-    text = ev + ("\n" + (stderr or "") if rc != 0 else "")
-    src = "event" if ev else "stderr"
-    http = s.get("http_status")
-    if isinstance(http, int) and 400 <= http < 500:
-        if http == 429:
-            return Outcome("rate_limited", text, src)
-        if http in (401, 403):
-            return Outcome("logged_out", text, src)
-        return Outcome("bad_request", text, src)
+    return Outcome("timeout", "", "ours") if timed_out else None
+
+
+def _by_status(http: Json, text: str, src: str) -> Outcome | None:
+    """The reason a 4xx status we measured gives."""
+    if not isinstance(http, int) or not 400 <= http < 500:
+        return None
+    if http == 429:
+        return Outcome("rate_limited", text, src)
+    if http in (401, 403):
+        return Outcome("logged_out", text, src)
+    return Outcome("bad_request", text, src)
+
+
+def _by_text(text: str, src: str, work_seen: bool) -> Outcome | None:
+    """The reason the vendor's words give, first match wins."""
     if CREDIT_RE.search(text):
         return Outcome("credit_exhausted", text, src)
     if LIMIT_RE.search(text):
@@ -92,15 +89,42 @@ def classify(
         return Outcome("bad_request", text, src)
     if NETWORK_RE.search(text) and not work_seen:
         return Outcome("network", text, src)
-    if rc < 0 and not ev:
-        return Outcome("killed", "signal %d" % -rc, "exit")
-    if ev and not work_seen:
-        return Outcome("vendor_blip", ev, "event")
-    if ev:
-        return Outcome("worker_failed", ev, "event")
-    if rc != 0:
-        return Outcome("worker_failed", (stderr or "").strip(), "stderr" if (stderr or "").strip() else "exit")
     return None
+
+
+def _by_exit(rc: int, vendor_event: str, stderr: str | None, work_seen: bool) -> Outcome | None:
+    """The reason the exit code and the vendor's error event give when no words matched."""
+    if rc < 0 and not vendor_event:
+        return Outcome("killed", f"signal {-rc}", "exit")
+    if vendor_event:
+        return Outcome("worker_failed" if work_seen else "vendor_blip", vendor_event, "event")
+    if rc != 0:
+        tail = (stderr or "").strip()
+        return Outcome("worker_failed", tail, "stderr" if tail else "exit")
+    return None
+
+
+def classify(
+    rc: int | None,
+    vendor_err: str | None = "",
+    stderr: str | None = "",
+    timed_out: bool = False,
+    work_seen: bool = False,
+    structured: Mapping[str, Json] | None = None,
+) -> Outcome | None:
+    """-> Outcome, or None when the run is done. First match wins.
+
+    rc: exit code (negative = a signal); vendor_err: the vendor's error text from its event stream; stderr: the CLI's stderr; timed_out: our
+    --timeout fired; work_seen: the worker did something before it failed; structured: facts we measured ourselves:
+    {"secret": cmd, "watchdog": "limit"|"hung", "msg": log line, "http_status": int, "net_up": False}."""
+    s = structured or {}
+    vendor_event, code = (vendor_err or "").strip(), rc or 0
+    ours = _ours(s, timed_out)
+    if ours:
+        return ours
+    text = vendor_event + ("\n" + (stderr or "") if code != 0 else "")
+    src = "event" if vendor_event else "stderr"
+    return _by_status(s.get("http_status"), text, src) or _by_text(text, src, work_seen) or _by_exit(code, vendor_event, stderr, work_seen)
 
 
 def says_login(text: str):

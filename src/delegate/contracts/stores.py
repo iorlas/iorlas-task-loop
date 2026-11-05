@@ -9,7 +9,7 @@ import json
 import os
 import sys
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Generator
 from pathlib import Path
 
 from atomic_io import atomic_write_text
@@ -18,6 +18,7 @@ from process_lock import LockHeldError, ProcessLock
 
 from delegate.contracts import codec
 from delegate.contracts.history import ROWS, HealthCheckpoint, HealthState, HistoryRow, RunRow
+from delegate.contracts.json_types import Json
 from delegate.contracts.routing import BreakerPolicy
 from delegate.contracts.state import Profile, StateDoc, split_retired_state
 
@@ -25,13 +26,14 @@ HISTORY_MAX, HISTORY_DAYS = 1_000_000, 14
 
 
 @contextlib.contextmanager
-def locked(path: Path | str, timeout: float = 10.0) -> Iterator[None]:
-    """An exclusive lock on `path` (process_lock on a sibling `.lock` file; threads of this process exclude each other too, the kernel frees a dead
+def locked(path: Path | str, timeout: float = 10.0) -> Generator[None]:
+    """An exclusive lock on `path` (process_lock on a sibling `.lock` file; threads of this process exclude each other too, the kernel
+    frees a dead
     holder's). TimeoutError when it stays held for `timeout` s."""
     try:
         lock = ProcessLock.acquire(Path(str(path) + ".lock"), timeout=timeout, reentrant=False)
     except LockHeldError as e:
-        raise TimeoutError("%s is locked by another route.py for more than %.0fs" % (path, timeout)) from e
+        raise TimeoutError(f"{path} is locked by another route.py for more than {timeout:.0f}s") from e
     try:
         yield
     finally:
@@ -57,7 +59,7 @@ def write_atomic(path: Path, text: str) -> None:
     private(path)
 
 
-def read_json(path: Path) -> object | None:
+def read_json(path: Path) -> Json:
     try:
         return json.loads(path.read_text(encoding="utf-8"))
     except OSError, ValueError:
@@ -93,7 +95,7 @@ class StateStore:
             return StateDoc()
 
     @contextlib.contextmanager
-    def transaction(self) -> Iterator[StateDoc]:
+    def transaction(self) -> Generator[StateDoc]:
         with locked(self.path):
             doc = self.load()
             yield doc
@@ -147,7 +149,7 @@ class HistoryStore:
         """The last n finished runs, newest last."""
         return [r for r in self.rows() if isinstance(r, RunRow)][-n:]
 
-    def last_cumulative(self, ref: str) -> dict | None:
+    def last_cumulative(self, ref: str) -> dict[str, Json] | None:
         """The thread total the newest row for `ref` recorded: where the rollout file is gone, a resume still knows what came before."""
         for r in reversed(self.rows()):
             if isinstance(r, RunRow) and r.ref == ref and r.cumulative:
@@ -174,20 +176,21 @@ class CheckpointStore:
 
 
 class ConfigStore:
-    """`config.json`: the owner's overrides. Top-level keys other than `profile` are settings overrides (deep-merged over routing.json by the
+    """`config.json`: the owner's overrides. Top-level keys other than `profile` are settings overrides (deep-merged over routing.json by
+    the
     caller); `profile` is the owner's lane choices and never leaves this class as a setting."""
 
     def __init__(self, path: Path) -> None:
         self.path = path
 
-    def read(self) -> dict:
+    def read(self) -> dict[str, Json]:
         d = read_json(self.path)
         return d if isinstance(d, dict) else {}
 
-    def overrides(self) -> dict:
+    def overrides(self) -> dict[str, Json]:
         return {k: v for k, v in self.read().items() if k != "profile"}
 
-    def update(self, fn: Callable[[dict], object]) -> dict:
+    def update(self, fn: Callable[[dict[str, Json]], object]) -> dict[str, Json]:
         """Locked read-modify-write: callers never save a stale snapshot."""
         with locked(self.path):
             cur = self.read()
@@ -202,7 +205,7 @@ class ConfigStore:
             return Profile()
 
     def _put_profile(self, fn: Callable[[Profile], object]) -> None:
-        def put(cur: dict) -> None:
+        def put(cur: dict[str, Json]) -> None:
             try:
                 p = codec.from_json(Profile, cur.get("profile") or {})
             except codec.CodecError:

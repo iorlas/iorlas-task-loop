@@ -5,6 +5,7 @@ import sys
 
 from delegate.app import doctor, env, net, status
 from delegate.cli import parser, verbs
+from delegate.contracts.json_types import Json
 
 TABLE = {
     "status": status.cmd_status,
@@ -22,7 +23,7 @@ TABLE = {
 }
 
 
-def cmd_net_only(a: env.Args, cfg: dict | None = None):
+def cmd_net_only(a: env.Args, cfg: dict[str, Json] | None = None):
     return net.cmd_net(a)
 
 

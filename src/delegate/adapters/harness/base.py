@@ -6,11 +6,12 @@ established (`evidence`), finds the transcript and probes the login. It knows no
 
 from dataclasses import field
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Protocol
 
 from delegate.contracts import events as ev
 from delegate.contracts.codec import mutable, record
 from delegate.contracts.events import HarnessEvent
+from delegate.contracts.json_types import Json
 
 
 @record
@@ -51,29 +52,28 @@ class Evidence:
 
     ref: str | None = None
     last: str = ""  # the last agent message
-    tokens: dict[str, int | None] | None = None
-    cumulative: dict[str, int | None] | None = None  # the thread's running total on a resume
+    tokens: dict[str, Json] | None = None
+    cumulative: dict[str, Json] | None = None  # the thread's running total on a resume
     turns: int = 0
     work: bool = False  # a command, edit, tool call or message finished
     error: str = ""  # the harness's own failure text
     transient: str = ""  # a retry in progress ("Reconnecting... 2/5", "waiting for network")
     net_at: float | None = None  # monotonic time the harness began waiting for the network; None = the stream moves
     denials: list[ev.Denied] = field(default_factory=list)  # what the harness or its reviewer refused, in order
-    final: dict | None = None  # claude: the first `result` event
+    final: dict[str, Json] | None = None  # claude: the first `result` event
     context_k: float | None = None  # the last request's whole input, in thousands of tokens
-    steps: list[dict] = field(
-        default_factory=list
-    )  # raw usage the harness reported per request or step (claude: usage, opencode: {tokens, cost})
+    # raw usage the harness reported per request or step (claude: usage, opencode: {tokens, cost})
+    steps: list[dict[str, Json]] = field(default_factory=list)
 
 
 @mutable
 class Summary:
-    """What a finished stream says, for the one place that settles a run: the answer text, the result fields the harness owns, and the inputs
-    of the outcome ladder."""
+    """What a finished stream says, for the one place that settles a run: the answer text, the result fields the harness owns, and the
+    inputs of the outcome ladder."""
 
     text: str = ""
     rc: int | None = None
-    res: dict = field(default_factory=dict)  # ref, tokens, turns, context_k, started, partial, acct, ...
+    res: dict[str, Json] = field(default_factory=dict)  # ref, tokens, turns, context_k, started, partial, acct, ...
     vendor: str = ""  # the CLI's own error text (never the model's answer)
     stderr: str = ""  # the stderr the ladder may read
     work: bool = False  # the worker did something before it failed
@@ -81,8 +81,8 @@ class Summary:
     stands: bool = False  # an answer we stopped after stays an answer
     warnings: list[str] = field(default_factory=list)  # kept when the run is otherwise clean
     tail: str = ""  # what an unexplained exit quotes
-    data: Any = None  # the harness's own structured answer (claude --json-schema), else the caller parses `text`
-    facts: dict = field(default_factory=dict)  # measured facts for the ladder (http_status)
+    data: Json = None  # the harness's own structured answer (claude --json-schema), else the caller parses `text`
+    facts: dict[str, Json] = field(default_factory=dict)  # measured facts for the ladder (http_status)
     cost: float = 0.0
 
 

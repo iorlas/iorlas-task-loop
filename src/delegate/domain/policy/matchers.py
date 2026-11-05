@@ -1,4 +1,5 @@
-"""The text matchers of the worker policy: the one place of the domain that reads shell text with a regex (D3). Pure functions of a command line."""
+"""The text matchers of the worker policy: the one place of the domain that reads shell text with a regex (D3). Pure functions of a
+command line."""
 
 import posixpath
 import re
@@ -16,13 +17,13 @@ EXCLUDED_RE = re.compile(
     r"""(?:--i?glob|-g)[=\s]+(?:(['"])!.*?\1|!\S+)|--exclude(?:-dir)?[=\s]+(?:(['"]).*?\2|\S+)"""
     r"""|(?:-not|!)\s+-i?(?:path|name|wholename|regex)\s+(?:(['"]).*?\3|\S+)|(['"]):(?:!|\(exclude\))[^'"]*\4|(?<!\S):(?:!|\(exclude\))\S+"""
 )
-SHELLS = {"sh", "bash", "zsh", "dash"}
-EXCL_OPTS = {"-g", "--glob", "--iglob", "--exclude", "--exclude-dir", "--exclude-from"}
-EXCL_PATH_OPTS = {"-path", "-ipath", "-name", "-iname", "-wholename", "-iwholename", "-regex", "-iregex"}
+SHELLS = frozenset({"sh", "bash", "zsh", "dash"})
+EXCL_OPTS = frozenset({"-g", "--glob", "--iglob", "--exclude", "--exclude-dir", "--exclude-from"})
+EXCL_PATH_OPTS = frozenset({"-path", "-ipath", "-name", "-iname", "-wholename", "-iwholename", "-regex", "-iregex"})
 HEREDOC_RE = re.compile(r"<<-?[ \t]*(['\"]?)(\w+)\1[^\n]*\n.*?(?:\n[ \t]*\2\b|\Z)", re.S)
 QUIET_REDIRECT_RE = re.compile(r"\d?>&\d|&?\d?>\s*/dev/null")
 WRITES_RE = re.compile(r"`|\$\(|[<>]\(|>")
-LOOP_HEADS = {"for", "while", "until"}
+LOOP_HEADS = frozenset({"for", "while", "until"})
 SHELL_C_RE = re.compile(r"-[a-z]*c[a-z]*")
 EXCLUDE_WORD_RE = re.compile(r"--exclude(?:-dir|-from)?=|(?:--i?glob=|-g)!")
 EXCLUDE_PATHSPEC_RE = re.compile(r":(?:!|\(exclude\))")

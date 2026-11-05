@@ -1,4 +1,5 @@
-"""The verbs of route.py that are not a module of their own: holds, report, capture-limits, guard, contract, next, run. Each takes the parsed
+"""The verbs of route.py that are not a module of their own: holds, report, capture-limits, guard, contract, next, run. Each takes the
+parsed
 arguments and the routing table and returns the exit code."""
 
 import json
@@ -9,14 +10,15 @@ from delegate.adapters import statusline
 from delegate.app import cockpit, codex_policy, decide, env, launch, run
 from delegate.contracts import codec, stops
 from delegate.contracts import history as hist
+from delegate.contracts.json_types import Json, obj
 from delegate.domain.holds.book import HoldBook, new_hold
 from delegate.domain.time.spec import local, to_epoch
 
 
-def cmd_hold(a: env.Args, cfg: dict):
+def cmd_hold(a: env.Args, cfg: dict[str, Json]):
     try:
-        if a.lane not in cfg["lanes"]:
-            raise ValueError(f"unknown lane {a.lane}; lanes: {', '.join(cfg['lanes'])}")
+        if a.lane not in obj(cfg["lanes"]):
+            raise ValueError(f"unknown lane {a.lane}; lanes: {', '.join(obj(cfg['lanes']))}")
         rec = new_hold(uuid.uuid4().hex[:8], a.lane, a.until, a.reason, [x for x in (a.roles or "").split(",") if x], a.set_by, env.now())
     except ValueError as e:
         print(json.dumps({"ok": False, "error": str(e)}))
@@ -26,22 +28,22 @@ def cmd_hold(a: env.Args, cfg: dict):
     return 0
 
 
-def cmd_release(a: env.Args, cfg: dict):
+def cmd_release(a: env.Args, cfg: dict[str, Json]):
     gone = []
     env.update_state(lambda s: gone.extend(HoldBook(s.holds).release(a.target)))
     print(json.dumps({"ok": bool(gone), "released": [codec.to_json(h) for h in gone]}))
     return 0 if gone else 1
 
 
-def cmd_holds(a: env.Args, cfg: dict):
+def cmd_holds(a: env.Args, cfg: dict[str, Json]):
     print(json.dumps({"holds": HoldBook(env.load_state().holds).rows(env.now())}))
     return 0
 
 
-def cmd_report(a: env.Args, cfg: dict):
+def cmd_report(a: env.Args, cfg: dict[str, Json]):
     t = env.now()
-    if a.lane not in cfg["lanes"]:
-        sys.exit(f"route.py: unknown lane {a.lane}; lanes: {', '.join(cfg['lanes'])}")
+    if a.lane not in obj(cfg["lanes"]):
+        sys.exit(f"route.py: unknown lane {a.lane}; lanes: {', '.join(obj(cfg['lanes']))}")
     if a.event == "ok":
         env.update_state(lambda s: s.out.pop(a.lane, None))
         env.history_add(hist.ReleaseRow(ts=env.now(), lane=a.lane))  # the fold forgets the lane's limits
@@ -59,7 +61,7 @@ def cmd_report(a: env.Args, cfg: dict):
     return 0
 
 
-def cmd_capture(a: env.Args, cfg: dict):
+def cmd_capture(a: env.Args, cfg: dict[str, Json]):
     try:
         d = json.loads(sys.stdin.read())
     except ValueError:
@@ -69,23 +71,23 @@ def cmd_capture(a: env.Args, cfg: dict):
         return 0
     if getattr(a, "print", False):
         f5, f7 = (rl.get("five_hour") or {}).get("used_percentage"), (rl.get("seven_day") or {}).get("used_percentage")
-        print("5h %s%% wk %s%%" % ("?" if f5 is None else round(f5), "?" if f7 is None else round(f7)))
+        print("5h {}% wk {}%".format("?" if f5 is None else round(f5), "?" if f7 is None else round(f7)))
     statusline.write(rl, env.now())
     return 0
 
 
-def cmd_guard(a: env.Args, cfg: dict | None = None):
+def cmd_guard(a: env.Args, cfg: dict[str, Json] | None = None):
     """Fail-closed hook or explicit argv execution, audited in delegate's own state."""
     return codex_policy.guard(a)
 
 
-def cmd_contract(a: env.Args, cfg: dict):
+def cmd_contract(a: env.Args, cfg: dict[str, Json]):
     """The handshake: the contract number, every reason with its facts, and the flags `run` accepts."""
     print(json.dumps({k: stops.CONTRACT[k] for k in ("contract", "capabilities", "reasons", "run_args")}))
     return 0
 
 
-def cmd_next(a: env.Args, cfg: dict):
+def cmd_next(a: env.Args, cfg: dict[str, Json]):
     d, lanes, warnings, t = decide.decision(a, cfg)
     d["needs_input"] = cockpit.needs_input(lanes)
     if warnings:
@@ -100,5 +102,5 @@ def cmd_next(a: env.Args, cfg: dict):
     return 0 if d["action"] != "error" else 1
 
 
-def cmd_run(a: env.Args, cfg: dict):
+def cmd_run(a: env.Args, cfg: dict[str, Json]):
     return run.Run(a, cfg, unattended=getattr(a, "unattended", False), idle_s=getattr(a, "idle", None)).go()

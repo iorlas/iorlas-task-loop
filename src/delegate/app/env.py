@@ -18,6 +18,7 @@ from child_env import scrub_current
 
 from delegate.contracts import codec
 from delegate.contracts.history import HistoryRow
+from delegate.contracts.json_types import Json, obj
 from delegate.contracts.routing import Routing, replaced_settings, split_retired
 from delegate.contracts.state import StateDoc
 from delegate.contracts.stores import ConfigStore, HistoryStore, StateStore
@@ -45,7 +46,8 @@ def plugin_data_dir(here: Path | None = None) -> Path | None:
 
 def config_dir() -> Path:
     """Where settings, profile and state live: DELEGATE_CONFIG_DIR, else Claude Code's data dir for the installed plugin.
-    CLAUDE_PLUGIN_DATA is deliberately not read (it names whichever plugin launched the process). A checkout has no default: two places would split the state."""
+    CLAUDE_PLUGIN_DATA is deliberately not read (it names whichever plugin launched the process). A checkout has no default: two places
+    would split the state."""
     explicit = os.environ.get("DELEGATE_CONFIG_DIR")
     p = Path(explicit) if explicit else plugin_data_dir()
     if p is None:
@@ -56,18 +58,19 @@ def config_dir() -> Path:
     return p
 
 
-def deep_merge(a: dict, b: dict | None) -> dict:
+def deep_merge(a: dict[str, Json], b: dict[str, Json] | None) -> dict[str, Json]:
     out = copy.deepcopy(a)
     for k, v in (b or {}).items():
-        out[k] = deep_merge(out[k], v) if isinstance(v, dict) and isinstance(out.get(k), dict) else v
+        out[k] = deep_merge(obj(out[k]), v) if isinstance(v, dict) and isinstance(out.get(k), dict) else v
     return out
 
 
 _RETIRED_WARNED: set[str] = set()
 
 
-def load_routing() -> dict:
-    """routing.json with the owner's overrides (config.json, minus its `profile`) merged into `settings`, validated into contracts.routing.Routing.
+def load_routing() -> dict[str, Json]:
+    """routing.json with the owner's overrides (config.json, minus its `profile`) merged into `settings`, validated into
+    contracts.routing.Routing.
     Retired settings keys are dropped with one stderr line each (stdout carries the answer); any other unknown key fails."""
     with open(DATA_DIR / "routing.json", encoding="utf-8") as f:
         cfg = json.load(f)
@@ -78,24 +81,25 @@ def load_routing() -> dict:
                 f"route.py: {config_store().path}: '{k}' is replaced by the lane profile. Fix: delete \"{k}\" from config.json, "
                 f"then run `route.py config set profile.lanes.{moved[k]} enabled`"
             )
-    cfg["settings"], _ = split_retired(deep_merge(cfg["settings"], config_store().overrides()))
+    cfg["settings"], _ = split_retired(deep_merge(obj(cfg["settings"]), config_store().overrides()))
     for k in retired_keys_present():
         if k not in _RETIRED_WARNED:
             _RETIRED_WARNED.add(k)
             print(
-                f"route.py: {config_store().path}: '{k}' is retired and ignored; it is safe to delete from config.json (nothing rewrites the file)",
+                f"route.py: {config_store().path}: '{k}' is retired and ignored; "
+                "it is safe to delete from config.json (nothing rewrites the file)",
                 file=sys.stderr,
             )
     typed_routing(cfg)
     return cfg
 
 
-def retired_keys_present() -> list:
+def retired_keys_present() -> list[str]:
     """The retired settings keys config.json (the owner's file) still carries."""
     return split_retired(config_store().overrides())[1]
 
 
-def typed_routing(cfg: dict) -> Routing:
+def typed_routing(cfg: dict[str, Json]) -> Routing:
     try:
         return codec.from_json(Routing, cfg)
     except codec.CodecError as e:
@@ -105,7 +109,7 @@ def typed_routing(cfg: dict) -> Routing:
         )
 
 
-def settings_of(cfg: dict):
+def settings_of(cfg: dict[str, Json]):
     return typed_routing(cfg).settings
 
 
@@ -141,11 +145,11 @@ def update_state(fn: Callable[[StateDoc], object]):
     return states().update(fn)
 
 
-def update_config(fn: Callable[[dict], object]):
+def update_config(fn: Callable[[dict[str, Json]], object]):
     return config_store().update(fn)
 
 
-def profile_lanes() -> dict:
+def profile_lanes() -> dict[str, Json]:
     return dict(config_store().profile().lanes)
 
 
@@ -173,11 +177,13 @@ def session_host() -> str:
     return "unknown" if ep else "headless"
 
 
-# The child's environment is child_env.scrub (what a Claude session exports and credential-looking variables are removed); CLAUDE_CONFIG_DIR is kept
+# The child's environment is child_env.scrub (what a Claude session exports and credential-looking variables are removed); CLAUDE_CONFIG_DIR
+# is kept
 # so a worker on a custom Claude login finds it.
 KEEP = ("CLAUDE_CONFIG_DIR",)
 
 
-def child_env(extra: dict | None = None) -> dict:
-    """The worker gets the caller's environment minus what a Claude session exports, delegate's and credential-looking variables, plus DELEGATE_DEPTH=1."""
+def child_env(extra: dict[str, str] | None = None) -> dict[str, str]:
+    """The worker gets the caller's environment minus what a Claude session exports, delegate's and credential-looking variables, plus
+    DELEGATE_DEPTH=1."""
     return scrub_current(keep=KEEP) | {"DELEGATE_DEPTH": "1"} | (extra or {})

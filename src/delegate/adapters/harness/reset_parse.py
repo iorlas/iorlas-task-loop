@@ -1,11 +1,13 @@
-"""Limit prose to a reset time: when a vendor message states when a limit ends, and the guess when it does not. Regex over vendor text, so it
-lives with the harnesses (adapters). Pure: the caller passes `t` (now)."""
+"""Limit prose to a reset time: when a vendor message states when a limit ends, and the guess when it does not. Regex over vendor text,
+so it lives with the harnesses (adapters). Pure: the caller passes `t` (now)."""
 
 import contextlib
 import datetime as dt
 import re
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
+
+from delegate.contracts.json_types import Json
 
 RESET_LADDER_MIN = (15, 30, 60)  # a limit whose end nobody states: refusal time + this, one rung further for each consecutive guess
 RESET_AT_RE = re.compile(
@@ -14,7 +16,8 @@ RESET_AT_RE = re.compile(
     re.I,
 )
 RETRY_AFTER_RE = re.compile(
-    r"retry[- ]after\W{0,3}\s*(\d+(?:\.\d+)?)\b(?!\s*[-:/]\d)|retry[- ]after\W{0,3}\s*([A-Z][a-z]{2}, \d\d [A-Z][a-z]{2} \d{4} [\d:]{8} GMT)",
+    r"retry[- ]after\W{0,3}\s*(\d+(?:\.\d+)?)\b(?!\s*[-:/]\d)"
+    r"|retry[- ]after\W{0,3}\s*([A-Z][a-z]{2}, \d\d [A-Z][a-z]{2} \d{4} [\d:]{8} GMT)",
     re.I,
 )
 IN_RE = re.compile(
@@ -30,11 +33,11 @@ def _ok(at: float | None, t: float) -> float | None:
     return at if at and t < at <= t + 40 * 86400 else None
 
 
-def parse_reset(msg: str | None, t: float):
-    """-> (epoch, zone) when a vendor message states when a limit ends, else (None, None). Forms, in order: `Retry-After: 120` or an HTTP date;
-    `will reset at 2026-10-25 14:49:00` / ISO after reset|until|try again (a stated offset or Z/UTC is kept; none = this machine's zone, since the
-    vendor shows its user local time); `try again at 5:50 AM` (local, the next such time); `in 5 hours` / `in 2h 30m`. A time already past, or
-    more than 40 days off, is not a reset time."""
+def parse_reset(msg: str | None, t: float) -> tuple[float | None, str | None]:
+    """-> (epoch, zone) when a vendor message states when a limit ends, else (None, None). Forms, in order: `Retry-After: 120` or an HTTP
+    date; `will reset at 2026-10-25 14:49:00` / ISO after reset|until|try again (a stated offset or Z/UTC is kept; none = this machine's
+    zone, since the vendor shows its user local time); `try again at 5:50 AM` (local, the next such time); `in 5 hours` / `in 2h 30m`. A
+    time already past, or more than 40 days off, is not a reset time."""
     msg = msg or ""
     m = RETRY_AFTER_RE.search(msg)
     if m:
@@ -76,16 +79,18 @@ def parse_reset(msg: str | None, t: float):
     return None, None
 
 
-def limit_until(msg: str | None, t: float, d: dict, reset: Callable[[], float | None] | None = None, guess_n: int = 0):
-    """-> (until, source, zone) for a limit refusal. source: `vendor` = the message (or the vendor's own usage reading, `reset()`) states the end;
-    `guess` = the lane's soonest window reset, else the refusal time + 15/30/60 min by how many guesses in a row (guess_n)."""
+def limit_until(
+    msg: str | None, t: float, d: Mapping[str, Json], reset: Callable[[], float | None] | None = None, guess_n: int = 0
+) -> tuple[float, str, str | None]:
+    """-> (until, source, zone) for a limit refusal. source: `vendor` = the message (or the vendor's own usage reading, `reset()`) states
+    the end; `guess` = the lane's soonest window reset, else the refusal time + 15/30/60 min by how many guesses in a row (guess_n)."""
     at, zone = parse_reset(msg, t)
     if at:
         return at, "vendor", zone
     at = reset() if reset else None
     if at and at > t:
         return at, "vendor", None
-    at = d.get("limit_reset")
-    if at and at > t:
-        return at, "guess", None
+    soonest = d.get("limit_reset")
+    if isinstance(soonest, int | float) and soonest > t:
+        return soonest, "guess", None
     return t + RESET_LADDER_MIN[min(guess_n, len(RESET_LADDER_MIN) - 1)] * 60, "guess", None

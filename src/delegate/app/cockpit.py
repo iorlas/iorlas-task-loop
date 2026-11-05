@@ -2,15 +2,16 @@
 `lane_view` is pure given its inputs."""
 
 from collections.abc import Sequence
-from typing import Any
+from typing import NamedTuple
 
 from delegate.adapters.harness import classify
 from delegate.adapters.harness.opencode import OpenCodeHarness
 from delegate.app import env, harnesses, onboard, usage
 from delegate.app.decide import busy_jitter
 from delegate.app.fleet import mark_busy
+from delegate.contracts.json_types import Json, arr, as_num, as_str, obj
 from delegate.contracts.routing import CallArgs, Settings
-from delegate.contracts.state import StateDoc
+from delegate.contracts.state import OutState, StateDoc
 from delegate.domain.holds.book import HoldBook
 from delegate.domain.lanes.lane import Lane
 from delegate.domain.lanes.leases import LeaseBook
@@ -18,18 +19,20 @@ from delegate.domain.lanes.profiles import LOGIN_CMD
 from delegate.domain.routing.router import Router
 from delegate.domain.time.spec import fmt_in, local, when
 
+Login = tuple[bool | None, str, float | None]  # (ok, why, checked_at)
 NO_SANDBOX = "unavailable (no sandbox): opencode lanes need macOS sandbox-exec"
 
 
-def needs_input(lanes: dict[str, Lane]):
-    need = []
+def needs_input(lanes: dict[str, Lane]) -> list[dict[str, Json]]:
+    need: list[dict[str, Json]] = []
     cs = lanes.get("CLAUDE_SUBSCRIPTION")
     if cs and not cs.usage_known and env.session_host() == "desktop":
         need.append(
             {
                 "what": "claude_usage",
                 "why": "Claude subscription use is unknown",
-                "how": "in the Claude desktop app call the get_usage tool and pass its windows as --claude-usage JSON ({five_hour:{used,resets_at},weekly:{used,resets_at}})",
+                "how": "in the Claude desktop app call the get_usage tool and pass its windows as --claude-usage JSON "
+                "({five_hour:{used,resets_at},weekly:{used,resets_at}})",
             }
         )
     ox = lanes.get("OPENAI_SUBSCRIPTION")
@@ -44,7 +47,7 @@ def needs_input(lanes: dict[str, Lane]):
     return need
 
 
-def finished_runs(n: int):
+def finished_runs(n: int) -> list[dict[str, Json]]:
     """The last n finished runs, newest last: the dashboard's view of history.jsonl (the file itself stays private)."""
     keys = ("run_id", "ts", "role", "task", "lane", "model", "done", "outcome", "secs", "cost", "tokens", "denials")
     return [{k: getattr(r, k) for k in keys} for r in env.history_store().runs(n)]
@@ -71,7 +74,7 @@ SLOW_WINDOW = 2 * 3600  # a hang or timeout this recent, with no good run on the
 SLOW_KINDS = ("hung", "timeout")
 
 
-def login_state(name: str, st: StateDoc, t: float):
+def login_state(name: str, st: StateDoc, t: float) -> Login:
     """-> (ok, why, checked_at): probe_login cached a few minutes in state, so a status call costs one process per lane at most."""
     c = usage.auth_cache().fresh(name, t, usage.AUTH_TTL, st)
     if c:
@@ -81,18 +84,20 @@ def login_state(name: str, st: StateDoc, t: float):
     return ok, why, t
 
 
-def lane_model(cfg: dict, name: str):
+def lane_model(cfg: dict[str, Json], name: str) -> str | None:
     """'model effort' the lane's family gets in the worker role (else the first role that uses the family, else its first model)."""
-    fam = cfg["lanes"][name]["family"]
-    for role in [cfg["roles"].get("worker")] + list(cfg["roles"].values()):
-        for step in (role or {}).get("steps", []):
+    fam = obj(obj(cfg["lanes"])[name])["family"]
+    roles = obj(cfg["roles"])
+    for role in [roles.get("worker"), *roles.values()]:
+        for raw_step in arr(obj(role).get("steps", [])):
+            step = obj(raw_step)
             if step.get("on") == fam:
                 return f"{step['model']} {step['effort']}"
-    return next((m for m, v in cfg["models"].items() if v["family"] == fam), None)
+    return next((m for m, v in obj(cfg["models"]).items() if obj(v)["family"] == fam), None)
 
 
-def off_reason(name: str, cfg: dict, login: tuple):
-    if cfg["lanes"][name].get("opt_in") and env.profile_lanes().get(name) != "enabled":
+def off_reason(name: str, cfg: dict[str, Json], login: Login) -> str:
+    if obj(obj(cfg["lanes"])[name]).get("opt_in") and env.profile_lanes().get(name) != "enabled":
         return f"disabled: `route.py config set profile.lanes.{name} enabled` turns it on"
     if env.profile_lanes().get(name) == "declined":
         return "declined: remove it from the profile in config.json to bring it back"
@@ -103,10 +108,11 @@ def off_reason(name: str, cfg: dict, login: tuple):
     return "not configured: `route.py doctor` says what it needs" + (f" ({login[1]})" if login[0] is None and login[1] else "")
 
 
-def classify_out(lane: Lane, rec: Any):
-    """Why a lane that is out is out -> logged_out | spend | slow | resting. rec is its state.json entry (older ones have no typed reason)."""
+def classify_out(lane: Lane, rec: OutState | None) -> str:
+    """Why a lane that is out is out -> logged_out | spend | slow | resting. rec is its state.json entry (older ones have no typed
+    reason)."""
     r = lane.out_reason
-    text = " ".join([rec.why if rec else ""] + lane.notes)
+    text = " ".join([rec.why if rec else "", *lane.notes])
     if r == "logged_out" or (r in (None, "error") and classify.says_login(text)):
         return "logged_out"
     if lane.spend_blocked or classify.says_spend(text):
@@ -116,30 +122,31 @@ def classify_out(lane: Lane, rec: Any):
     return "resting"
 
 
-def limit_words(text: str, lane: Lane):
-    top = max((w for w in lane.windows if w["used"] is not None), key=lambda w: w["used"], default=None)
-    return classify.limit_words(text, top["name"] if top and top["used"] >= 95 else None)
+def limit_words(text: str, lane: Lane) -> str:
+    scored = [(u, w) for w in lane.windows if (u := as_num(w["used"])) is not None]
+    top = max(scored, key=lambda p: p[0], default=None)
+    return classify.limit_words(text, as_str(top[1]["name"]) if top and top[0] >= 95 else None)
 
 
-def window_rows(lane: Lane, S: Settings, t: float):
-    rows: list[dict] = []
-    low: list[dict] = []
+def window_rows(lane: Lane, S: Settings, t: float) -> tuple[list[dict[str, Json]], list[dict[str, Json]]]:
+    rows: list[dict[str, Json]] = []
+    low: list[dict[str, Json]] = []
     for w in lane.windows:
-        used = w["used"]
+        used, resets_at, at = as_num(w["used"]), as_num(w["resets_at"]), as_num(w["at"])
         rows.append(
             {
                 "name": w["name"],
                 "used_pct": None if used is None else round(used, 1),
                 "resets_at": w["resets_at"],
-                "resets_in_s": None if not w["resets_at"] else max(0, int(w["resets_at"] - t)),
+                "resets_in_s": None if not resets_at else max(0, int(resets_at - t)),
                 "source": w["source"],
-                "age_s": None if w["at"] is None else max(0, int(t - w["at"])),
+                "age_s": None if at is None else max(0, int(t - at)),
             }
         )
         if used is None:
             continue
         (gwk, gfv, gname), (cwk, cfv, _) = lane.limits(S, False), lane.limits(S, True)
-        gate, ceil = (gwk, cwk) if w["span"] > 1440 else (gfv, cfv)
+        gate, ceil = (gwk, cwk) if (as_num(w["span"]) or 0) > 1440 else (gfv, cfv)
         if used >= gate:
             low.append(
                 {
@@ -153,20 +160,89 @@ def window_rows(lane: Lane, S: Settings, t: float):
     return rows, low
 
 
+class Verdict(NamedTuple):
+    """What a lane in use is: its state, the sentence for it, when it unlocks and why not."""
+
+    state: str
+    note: str
+    why: str
+    until: float | None
+    locked: bool
+    detail: str | None
+
+
+def _out_verdict(name: str, lane: Lane, rec: OutState | None, login: Login) -> Verdict:
+    kind = classify_out(lane, rec)
+    text = (rec.why if rec else "") or (lane.notes[0] if lane.notes else "")
+    detail = text[:160] or None
+    until = lane.out_until
+    if kind == "logged_out" or login[0] is False:
+        why = f"waits for you to log in (`{LOGIN_CMD[name]}`); re-checked every {usage.AUTH_TTL // 60} min"
+        return Verdict("logged_out", f"logged out: run `{LOGIN_CMD[name]}`", why, None, True, detail)
+    if kind == "spend":
+        note = "spending limit: " + (text[:70] or "credits used up")
+        return Verdict(kind, note, "a spending limit has no timer: it ends when you top up or the cycle resets", until, True, detail)
+    if kind == "slow":
+        note = "hung: no output inside the watchdog window, benched for a while"
+        return Verdict(kind, note, "the watchdog gave no end time", until, True, detail)
+    return Verdict(kind, limit_words(text, lane), "the vendor gave no reset time", until, True, detail)
+
+
+def _idle_verdict(
+    name: str, lane: Lane, t: float, history: Sequence[dict[str, Json]], login: Login, meter: bool, low: list[dict[str, Json]]
+) -> Verdict:
+    last = next((h for h in reversed(history) if h.get("lane") == name), None)
+    last_ts = as_num(last.get("ts")) if last else None
+    if last and last.get("outcome") in SLOW_KINDS and t - (last_ts or 0) <= SLOW_WINDOW:
+        note = f"hung {fmt_in(t - (last_ts or 0))} ago ({last['outcome']}), no good run since"
+        return Verdict("slow", note, "not locked: it clears with its next good run", None, False, None)
+    if login[0] is None or (meter and not lane.usage_known):
+        note = "no read yet: " + (login[1] if login[0] is None and login[1] else (lane.notes[0] if lane.notes else "no usage reading"))
+        return Verdict("unknown", note, "not locked", None, False, None)
+    note = "ready" + ("" if meter else ", vendor shows no usage (a limit appears only when hit)")
+    if low:
+        lt = low[0]
+        note = f"ready, low tokens: {lt['window']} {lt['used_pct']:.0f}% is over the {lt['limit_name']} {lt['limit']}%, last choice only"
+    return Verdict("ready", note, "not locked", None, False, None)
+
+
+def _verdict(
+    name: str,
+    lane: Lane,
+    S: Settings,
+    st: StateDoc,
+    t: float,
+    history: Sequence[dict[str, Json]],
+    login: Login,
+    meter: bool,
+    low: list[dict[str, Json]],
+) -> Verdict:
+    if lane.out:
+        return _out_verdict(name, lane, st.out.get(name), login)
+    if login[0] is False:
+        why = f"waits for you to log in (`{LOGIN_CMD[name]}`); re-checked every {usage.AUTH_TTL // 60} min"
+        return Verdict("logged_out", f"logged out: run `{LOGIN_CMD[name]}`", why, None, True, None)
+    if not lane.usable(S, True)[0]:  # over the hard ceiling with nothing recorded: resting until that window resets
+        return Verdict("resting", lane.usable(S, True)[1], "no reset time for the window it is over", lane.back_at(S), True, None)
+    return _idle_verdict(name, lane, t, history, login, meter, low)
+
+
 def lane_view(
     name: str,
-    cfg: dict,
+    cfg: dict[str, Json],
     lane: Lane | None,
     st: StateDoc,
     t: float,
-    history: Sequence = (),
+    history: Sequence[dict[str, Json]] = (),
     running: int = 0,
-    login: tuple = (None, "", None),
+    login: Login = (None, "", None),
     off_why: str | None = None,
-):
-    """One lane's cockpit row. Pure given its inputs: lane is what gather built (None = disabled or not configured), history the recent finished runs."""
-    S, c = env.settings_of(cfg), cfg["lanes"][name]
-    v: dict[str, Any] = {
+) -> dict[str, Json]:
+    """One lane's cockpit row. Pure given its inputs: lane is what gather built (None = disabled or not configured), history the recent
+    finished runs."""
+    S, c = env.settings_of(cfg), obj(obj(cfg["lanes"])[name])
+    meter = c["reader"] != "none"
+    v: dict[str, Json] = {
         "id": name,
         "label": c.get("label") or LABELS.get(name, name),
         "family": c["family"],
@@ -180,81 +256,52 @@ def lane_view(
         "windows": [],
         "low_tokens": [],
         "warnings": list(lane.warn) if lane else [],
-        "meter": c["reader"] != "none",
+        "meter": meter,
         "login": {"ok": login[0], "why": login[1], "checked_at": login[2]},
         "running": running,
     }
     if lane is None:
         return v
-    v["windows"], v["low_tokens"] = window_rows(lane, S, t)
-    rec = st.out.get(name)
-    relogin = f"waits for you to log in (`{LOGIN_CMD[name]}`); re-checked every {usage.AUTH_TTL // 60} min"
-    until, why, locked = None, "not locked", False
-    if lane.out:
-        kind = classify_out(lane, rec)
-        text = (rec.why if rec else "") or (lane.notes[0] if lane.notes else "")
-        v["detail"] = text[:160] or None
-        until, locked = lane.out_until, True
-        if kind == "logged_out" or login[0] is False:
-            kind, until, why = "logged_out", None, relogin
-            note = f"logged out: run `{LOGIN_CMD[name]}`"
-        elif kind == "spend":
-            note = "spending limit: " + (text[:70] or "credits used up")
-            why = "a spending limit has no timer: it ends when you top up or the cycle resets"
-        elif kind == "slow":
-            note, why = "hung: no output inside the watchdog window, benched for a while", "the watchdog gave no end time"
-        else:
-            note, why = limit_words(text, lane), "the vendor gave no reset time"
-        v["state"] = kind
-    elif login[0] is False:
-        v["state"], locked, why = "logged_out", True, relogin
-        note = f"logged out: run `{LOGIN_CMD[name]}`"
-    elif not lane.usable(S, True)[0]:  # over the hard ceiling with nothing recorded: resting until that window resets
-        v["state"], locked = "resting", True
-        until, note, why = lane.back_at(S), lane.usable(S, True)[1], "no reset time for the window it is over"
+    windows, low = window_rows(lane, S, t)
+    v["windows"], v["low_tokens"] = windows, low
+    verdict = _verdict(name, lane, S, st, t, history, login, meter, low)
+    v["detail"] = verdict.detail
+    v["state"], v["emoji"], v["reason"] = verdict.state, EMOJI[verdict.state], verdict.note
+    if verdict.until and verdict.until > t and verdict.state != "logged_out":
+        v["unlock"] = {
+            "locked": True,
+            "known": True,
+            "at": verdict.until,
+            "in_s": int(verdict.until - t),
+            "text": when(verdict.until, t),
+            "why": None,
+        }
     else:
-        last = next((h for h in reversed(history) if h.get("lane") == name), None)
-        slow = last if last and last.get("outcome") in SLOW_KINDS and t - (last.get("ts") or 0) <= SLOW_WINDOW else None
-        if slow:
-            v["state"], note = "slow", f"hung {fmt_in(t - slow['ts'])} ago ({slow['outcome']}), no good run since"
-            why = "not locked: it clears with its next good run"
-        elif login[0] is None or (v["meter"] and not lane.usage_known):
-            v["state"] = "unknown"
-            note = "no read yet: " + (login[1] if login[0] is None and login[1] else (lane.notes[0] if lane.notes else "no usage reading"))
-        else:
-            v["state"] = "ready"
-            note = "ready" + ("" if v["meter"] else ", vendor shows no usage (a limit appears only when hit)")
-            if v["low_tokens"]:
-                lt = v["low_tokens"][0]
-                note = f"ready, low tokens: {lt['window']} {lt['used_pct']:.0f}% is over the {lt['limit_name']} {lt['limit']}%, last choice only"
-    v["emoji"], v["reason"] = EMOJI[v["state"]], note
-    if until and until > t and v["state"] != "logged_out":
-        v["unlock"] = {"locked": True, "known": True, "at": until, "in_s": int(until - t), "text": when(until, t), "why": None}
-    else:
-        v["unlock"] = {"locked": locked, "known": False, "at": None, "in_s": None, "text": None, "why": why}
+        v["unlock"] = {"locked": verdict.locked, "known": False, "at": None, "in_s": None, "text": None, "why": verdict.why}
     return v
 
 
-def claude_why(cfg: dict, lanes: dict[str, Lane]):
-    """Why no non-Claude worker lane was usable when a Claude lane got the pick: 'OPENAI_SUBSCRIPTION out until ..; ZAI_CODING_SUBSCRIPTION not set up'."""
+def claude_why(cfg: dict[str, Json], lanes: dict[str, Lane]) -> str:
+    """Why no non-Claude worker lane was usable when a Claude lane got the pick: 'OPENAI_SUBSCRIPTION out until ..; ZAI_CODING_SUBSCRIPTION
+    not set up'."""
     S = env.settings_of(cfg)
-    fams = {s["on"] for s in cfg["roles"]["worker"]["steps"] if s["on"] != "claude"}
+    fams = {on for s in arr(obj(obj(cfg["roles"])["worker"])["steps"]) if (on := obj(s)["on"]) != "claude"}
     parts = []
-    for name, c in cfg["lanes"].items():
-        if c["family"] not in fams:
+    for name, c in obj(cfg["lanes"]).items():
+        if obj(c)["family"] not in fams:
             continue
-        l = lanes.get(name)
-        parts.append(f"{name} " + ("not set up" if l is None else l.usable(S, True)[1]))
+        ln = lanes.get(name)
+        parts.append(f"{name} " + ("not set up" if ln is None else ln.usable(S, True)[1]))
     return "; ".join(parts) or "no other lane exists"
 
 
-def next_worker(cfg: dict, lanes: dict[str, Lane], st: StateDoc, t: float):
+def next_worker(cfg: dict[str, Json], lanes: dict[str, Lane], st: StateDoc, t: float) -> dict[str, Json]:
     """The lane `next worker` would pick now: decide() on a copy, nothing written."""
     routing = env.typed_routing(cfg)
     cur = mark_busy(lanes, st, routing.settings, t, busy_jitter)
     d = Router(routing, HoldBook(st.holds), st.prev, t).route("worker", CallArgs(), cur).as_dict()
     if d["action"] == "run":
-        r: dict[str, Any] = {
+        r: dict[str, Json] = {
             "action": "run",
             "lane": d["lane"],
             "model": d["model"],
@@ -263,18 +310,18 @@ def next_worker(cfg: dict, lanes: dict[str, Lane], st: StateDoc, t: float):
             "fallback": d["fallback"],
             "why": None,
         }
-        if cfg["lanes"][d["lane"]]["family"] == "claude":
+        if obj(obj(cfg["lanes"])[as_str(d["lane"])])["family"] == "claude":
             r["why"] = claude_why(cfg, cur)
         return r
     return {"action": d["action"], "lane": d.get("lane"), "model": None, "effort": None, "say": d.get("say") or d.get("error")}
 
 
-def cockpit(cfg: dict, lanes: dict[str, Lane], st: StateDoc, t: float):
+def cockpit(cfg: dict[str, Json], lanes: dict[str, Lane], st: StateDoc, t: float) -> dict[str, Json]:
     """The cockpit dict: one row per known lane, configured or not, plus the pick `next worker` would make."""
     hist = finished_runs(60)
     book = LeaseBook(st.leases)
-    rows = []
-    for name, c in cfg["lanes"].items():
+    rows: list[Json] = []
+    for name in obj(cfg["lanes"]):
         lane = lanes.get(name)
         login = login_state(name, st, t)
         off = off_reason(name, cfg, login) if lane is None else None
@@ -282,28 +329,31 @@ def cockpit(cfg: dict, lanes: dict[str, Lane], st: StateDoc, t: float):
     return {"v": 1, "at": t, "legend": {EMOJI[k]: LEGEND[k] for k in EMOJI}, "next_worker": next_worker(cfg, lanes, st, t), "lanes": rows}
 
 
-def cockpit_text(ck: dict):
-    t, nw = ck["at"], ck["next_worker"]
-    pick = f"{nw['lane']} {nw['model']} {nw['effort']}" if nw["action"] == "run" else f"none ({(nw.get('say') or nw['action'])[:60]})"
-    width = max(len(r["id"]) for r in ck["lanes"])
-    mw = max(len(r["model"] or "-") for r in ck["lanes"])
+def cockpit_text(ck: dict[str, Json]) -> list[str]:
+    t, nw = as_num(ck["at"]) or 0.0, obj(ck["next_worker"])
+    rows = [obj(r) for r in arr(ck["lanes"])]
+    pick = f"{nw['lane']} {nw['model']} {nw['effort']}" if nw["action"] == "run" else f"none ({as_str(nw.get('say') or nw['action'])[:60]})"
+    width = max(len(as_str(r["id"])) for r in rows)
+    mw = max(len(as_str(r["model"]) or "-") for r in rows)
     if nw.get("why"):
         pick += f" (Claude because {nw['why']})"
-    nw_ = max([6] + [len(w["name"]) for r in ck["lanes"] for w in r["windows"]])
+    nw_ = max([6] + [len(as_str(obj(w)["name"])) for r in rows for w in arr(r["windows"])])
     out = [f"delegate lanes, {local(t)}   next worker: {pick}"]
-    for r in ck["lanes"]:
-        out.append(f"{r['emoji']} {r['id']:<{width}}  {(r['model'] or '-'):<{mw}}  {r['reason']}")
-        u = r["unlock"]
+    for r in rows:
+        out.append(f"{r['emoji']} {as_str(r['id']):<{width}}  {(as_str(r['model']) or '-'):<{mw}}  {r['reason']}")
+        u = obj(r["unlock"])
         if u["locked"]:
-            out.append("     " + ("unlocks " + u["text"] if u["known"] else "unlock time unknown: " + u["why"]))
-        for w in r["windows"]:
-            used = "?" if w["used_pct"] is None else f"{w['used_pct']:.0f}%"
-            reset = f", resets {when(w['resets_at'], t)}" if w["resets_at"] and w["resets_at"] > t else ""
-            age = "" if w["age_s"] is None else f", {fmt_in(w['age_s'])} old" if w["age_s"] >= 60 else ", just now"
-            out.append(f"     {w['name']:<{nw_}} {used:>4} used{reset}  [{w['source']}{age}]")
-        out.extend("     ! " + x for x in r["warnings"])
-    run = [r for r in ck["lanes"] if r["running"]]
+            out.append("     " + ("unlocks " + as_str(u["text"]) if u["known"] else "unlock time unknown: " + as_str(u["why"])))
+        for win in arr(r["windows"]):
+            w = obj(win)
+            used_pct, resets_at, age_s = as_num(w["used_pct"]), as_num(w["resets_at"]), as_num(w["age_s"])
+            used = "?" if used_pct is None else f"{used_pct:.0f}%"
+            reset = f", resets {when(resets_at, t)}" if resets_at and resets_at > t else ""
+            age = "" if age_s is None else f", {fmt_in(age_s)} old" if age_s >= 60 else ", just now"
+            out.append(f"     {as_str(w['name']):<{nw_}} {used:>4} used{reset}  [{w['source']}{age}]")
+        out.extend("     ! " + as_str(x) for x in arr(r["warnings"]))
+    run = [r for r in rows if r["running"]]
     if run:
         out.append("running: " + ", ".join(f"{r['id']} x{r['running']}" for r in run))
-    out.append("  ".join(f"{k} {v}" for k, v in ck["legend"].items()))
+    out.append("  ".join(f"{k} {v}" for k, v in obj(ck["legend"]).items()))
     return out

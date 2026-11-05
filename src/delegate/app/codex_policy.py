@@ -4,7 +4,6 @@ import dataclasses
 import json
 import os
 import shlex
-import subprocess
 import sys
 from pathlib import Path
 
@@ -14,6 +13,7 @@ from delegate.adapters.harness.base import LaunchSpec
 from delegate.adapters.harness.codex_overlay import CodexOverlay
 from delegate.app import env
 from delegate.contracts import stops, wire
+from delegate.contracts.json_types import Json
 from delegate.domain.policy.exec_allow import allowed_argv, call_rules, host_policy
 from delegate.domain.policy.worker import Verdict, judge
 
@@ -22,7 +22,7 @@ class ExecAllowError(ValueError):
     """A per-call host grant cannot be honored by the selected step."""
 
 
-def require_writer_mode(how: dict, value: object) -> None:
+def require_writer_mode(how: dict[str, Json], value: object) -> None:
     if value != [] and (how["kind"] != "codex" or how.get("sandbox") != "workspace-write"):
         raise ExecAllowError("writer_exec_allow requires a Codex write step")
 
@@ -81,7 +81,7 @@ def guard(a: env.Args) -> int:
     argv = getattr(a, "exec_allow", None)
     read_only = bool(getattr(a, "read_only", False))
     engine_only = tuple(getattr(a, "engine_only", None) or ())
-    row: dict = {"v": 1, "mode": "exec" if argv is not None else "hook", "argv": argv, "allowed": False, "reason": "guard error"}
+    row: dict[str, Json] = {"v": 1, "mode": "exec" if argv is not None else "hook", "argv": argv, "allowed": False, "reason": "guard error"}
     result = 2
     resolved = None
     try:
@@ -108,7 +108,8 @@ def guard(a: env.Args) -> int:
             if not audit.append_json(row):
                 raise OSError("audit append refused")
         if row["allowed"] and resolved is not None:
-            result = subprocess.run(resolved, check=False).returncode
+            # the guard's stdio is the command's own; a negative code N = killed by signal N
+            result = os.waitstatus_to_exitcode(os.waitpid(os.posix_spawnp(resolved[0], resolved, os.environ), 0)[1])
     except (Exception, SystemExit) as error:
         print(f"delegate guard: config/audit failure: {type(error).__name__}: {error}", file=sys.stderr)
         return 2

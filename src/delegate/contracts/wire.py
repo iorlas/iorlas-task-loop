@@ -7,9 +7,10 @@ null is a value. The live JSONL a caller may tail is contracts/live.py.
 import json
 import sys
 from dataclasses import field
-from typing import Any, Literal
+from typing import Literal
 
 from delegate.contracts.codec import ABSENT, Absent, mutable, record
+from delegate.contracts.json_types import Json
 
 CONTRACT = 4
 CAPABILITIES = ("writer_exec_allow",)
@@ -55,9 +56,10 @@ RECIPE_RUNNERS = (
 )  # the commands that take an engine-only recipe by name (one list: the Claude hook and the OpenCode rules)
 
 
-def require_writer_exec_allow(contract: dict | None) -> None:
+def require_writer_exec_allow(contract: dict[str, Json] | None) -> None:
     """The caller must handshake before sending a host execution grant. Never silently drop one for an older delegate."""
-    if not contract or contract.get("contract") != CONTRACT or "writer_exec_allow" not in contract.get("capabilities", ()):
+    caps: Json = contract.get("capabilities", []) if contract else []
+    if not contract or contract.get("contract") != CONTRACT or not isinstance(caps, (list, str)) or "writer_exec_allow" not in caps:
         raise ValueError("writer_exec_allow requires delegate contract 4 and capability writer_exec_allow")
 
 
@@ -83,7 +85,7 @@ class RunRequest:
     engine_only_advisory: bool = False
     writer_exec_allow: list[list[str]] = field(default_factory=list)  # Codex writers only; host.json bounds this per-call grant
 
-    def to_argv(self, route: str, *, contract: dict | None = None) -> list[str]:
+    def to_argv(self, route: str, *, contract: dict[str, Json] | None = None) -> list[str]:
         out = [sys.executable, route, "run", self.role, "--brief", self.brief_file, "--cwd", self.cwd]
         opt = [
             ("--schema", self.schema_file),
@@ -139,7 +141,7 @@ class Denied:
     kind: DenialKind
     tool: str | None
     path: str | None
-    input: dict[str, Any]
+    input: dict[str, Json]
 
 
 @record
@@ -205,7 +207,7 @@ class RunResult:
     """The answer of `route.py run`. stop is null exactly when the call is done or is the agent-tool handoff (agent_model set)."""
 
     contract: Literal[4]
-    data: Any
+    data: Json
     text: str
     ref: str | None
     lane: str | None

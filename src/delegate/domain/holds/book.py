@@ -5,6 +5,7 @@ Pure: ids and the clock come in from the caller. A hold whose lane shows little 
 
 from dataclasses import dataclass
 
+from delegate.contracts.json_types import Json
 from delegate.contracts.state import Hold
 from delegate.domain.time.spec import local, parse_until
 
@@ -26,7 +27,7 @@ class StaleHold:
     hold: Hold
     used_pct: float
 
-    def as_dict(self) -> dict:
+    def as_dict(self) -> dict[str, Json]:
         h = self.hold
         return {
             "kind": "hold_stale",
@@ -34,8 +35,8 @@ class StaleHold:
             "lane": h.lane,
             "raised_at": h.stale_at,
             "used_pct": self.used_pct,
-            "say": f"hold {h.id} on {h.lane} (until {local(h.until)}{', ' + h.reason if h.reason else ''}) is still in force but the lane shows "
-            f"{self.used_pct:.0f}% used",
+            "say": f"hold {h.id} on {h.lane} (until {local(h.until)}{', ' + h.reason if h.reason else ''}) "
+            f"is still in force but the lane shows {self.used_pct:.0f}% used",
             "answer": f"route.py release {h.id} to end it, or leave it until it expires",
         }
 
@@ -52,11 +53,12 @@ class HoldBook:
         return None
 
     @staticmethod
-    def refusal(h: Hold, say: str | None = None) -> dict:
-        """The answer fields for a refused call under a hold: the lane is out for this role until the hold ends, never `retry_after = now + 1`."""
+    def refusal(h: Hold, say: str | None = None) -> dict[str, Json]:
+        """The answer fields for a refused call under a hold: the lane is out for this role until the hold ends, never
+        `retry_after = now + 1`."""
         return {"outcome": "held", "retry_after": h.until, "say": say or f"{h.lane} is on hold, {hold_text(h)}"}
 
-    def rows(self, t: float) -> list[dict]:
+    def rows(self, t: float) -> list[dict[str, Json]]:
         """Every hold in force, with who set it and when it ends: for status --json and `holds`."""
         live = [h for h in self.holds.values() if h.until > t]
         return [
@@ -76,7 +78,7 @@ class HoldBook:
         ]
 
     def to_stamp(self, used: dict[str, float | None], t: float) -> list[str]:
-        """Ids of holds in force, not yet stamped, whose lane shows less than HOLD_STALE_BELOW % used. `used` is lane -> % (None unknown)."""
+        """Ids of holds in force, not yet stamped, whose lane shows less than HOLD_STALE_BELOW % used. `used`: lane -> % (None unknown)."""
         return [
             k
             for k, h in self.holds.items()

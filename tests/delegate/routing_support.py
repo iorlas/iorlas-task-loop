@@ -1,19 +1,17 @@
 """Test helpers for the tests that drive route.py's callers of the domain Router: a `decide` with the shape the old route.decide had
 (role, cfg, lanes, state, t, args -> the JSON answer of `next`, `how` included) and writers for state sections."""
+
 import contextlib
 import copy
-import sys
 import types
 import uuid
-from pathlib import Path
 from unittest import mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
-
-from delegate.app import cockpit, decide, env
+from delegate.app import cockpit, env
 from delegate.app import decide as dec
 from delegate.app.fleet import Fleet
 from delegate.contracts import codec
+from delegate.contracts.json_types import Json
 from delegate.contracts.routing import CallArgs, Run
 from delegate.contracts.state import Hold, Lease, OutState, StateDoc
 from delegate.domain.holds.book import HoldBook, new_hold
@@ -29,14 +27,19 @@ def doc_of(st):
 def decide(role, cfg, ls, st, t, args):
     routing = env.typed_routing(cfg)
     doc = doc_of(st)
-    ca = CallArgs(authored_by=args.get("authored_by"), premium=args.get("premium"),
-                  allow_degraded=bool(args.get("allow_degraded")), unattended=bool(args.get("unattended")),
-                  only_family=tuple(args.get("only_family") or ()), engine_only=tuple(args.get("engine_only") or ()),
-                  engine_only_advisory=bool(args.get("engine_only_advisory")))
+    ca = CallArgs(
+        authored_by=args.get("authored_by"),
+        premium=args.get("premium"),
+        allow_degraded=bool(args.get("allow_degraded")),
+        unattended=bool(args.get("unattended")),
+        only_family=tuple(args.get("only_family") or ()),
+        engine_only=tuple(args.get("engine_only") or ()),
+        engine_only_advisory=bool(args.get("engine_only_advisory")),
+    )
     d = Router(routing, HoldBook(doc.holds), doc.prev, t).decide(role, ca, ls, wait_busy=bool(args.get("wait_busy")))
     out = d.as_dict()
     if isinstance(d, Run):
-        step = {"model": d.model, "effort": d.effort, "mode": d.mode}
+        step: dict[str, Json] = {"model": d.model, "effort": d.effort, "mode": d.mode}
         if d.cap is not None:
             step["cap"] = d.cap
         out["how"] = dec.how(ls[d.lane], step, cfg, args.get("cwd"), args.get("unattended", False))
@@ -86,7 +89,20 @@ def state_json():
     return codec.to_json(env.load_state())
 
 
-__all__ = ["Hold", "add_hold", "clear_out", "copy", "decide", "fleet_patches", "holds_of", "lease", "put_hold", "put_lease", "put_out", "state_json"]
+__all__ = [
+    "Hold",
+    "add_hold",
+    "clear_out",
+    "copy",
+    "decide",
+    "fleet_patches",
+    "holds_of",
+    "lease",
+    "put_hold",
+    "put_lease",
+    "put_out",
+    "state_json",
+]
 
 
 def add_hold(lane, until, reason, roles=None, set_by="owner", t=None):

@@ -1,7 +1,8 @@
 """LiveSink: HarnessEvent -> LiveEvent lines on $DELEGATE_LIVE_FILE (contracts/live.py), flushed per line.
 
 Unset, nothing is written. The first line of the file is the WorkerStarted of the first worker; each worker's `start` event follows it.
-A write error warns once and stops the feed; a file past LIVE_FILE_MAX stops growing (only `end` still goes out). Nothing here raises into the call.
+A write error warns once and stops the feed; a file past LIVE_FILE_MAX stops growing (only `end` still goes out). Nothing here raises into
+the call.
 """
 
 import contextlib
@@ -10,14 +11,14 @@ import os
 import sys
 import threading
 import time
-from collections.abc import Callable
-from typing import Any, Literal
+from collections.abc import Callable, Hashable
+from typing import Literal, assert_never
 
 from jsonl_log import append_line, open_append
 
 from delegate.contracts import events as ev
 from delegate.contracts import live
-from delegate.contracts.codec import ABSENT, to_json
+from delegate.contracts.codec import ABSENT, Absent, to_json
 from delegate.contracts.live import LIVE_FILE_MAX
 
 EndStatus = Literal["done", "timeout", "killed", "error"]  # the contract's live end statuses
@@ -27,7 +28,7 @@ STALL_FIRST_S = 60  # no event this long: one "stall", then one more every STALL
 STALL_EVERY_S = 60
 
 
-def _opt(x: Any) -> Any:
+def _opt[T](x: T | None) -> T | Absent:
     return ABSENT if x is None else x
 
 
@@ -43,14 +44,14 @@ class LiveSink:
         self.lock = threading.Lock()
         self.broken = self.capped = False
         self.t0 = wall()
-        self.open: dict[Any, tuple[float, str]] = {}  # event id -> (started t, "cmd" | "tool")
+        self.open: dict[Hashable, tuple[float, str]] = {}  # event id -> (started t, "cmd" | "tool")
         self.stall_at = STALL_FIRST_S
         self.on = bool(self.path)
-        self.info: dict[str, Any] = {}
+        self.info: dict[str, str | Absent] = {}
         self.began = False
 
     # -- writing ---------------------------------------------------------------------------------------------------------------------------
-    def write(self, rec: Any, final: bool = False) -> None:
+    def write(self, rec: object, final: bool = False) -> None:
         """One record (a LiveEvent or the WorkerStarted) as one line."""
         if not self.on or self.broken or (self.capped and not final):
             return
@@ -78,10 +79,11 @@ class LiveSink:
 
     # -- lifecycle -------------------------------------------------------------------------------------------------------------------------
     def start(self, lane: str | None = None, model: str | None = None, effort: str | None = None, role: str | None = None) -> None:
-        self.info = dict(lane=_opt(lane), model=_opt(model), effort=_opt(effort), role=_opt(role))
+        self.info = {"lane": _opt(lane), "model": _opt(model), "effort": _opt(effort), "role": _opt(role)}
 
     def started(self, pid: int) -> None:
-        """WORKER_STARTED callback: the process exists. A new file gets the WorkerStarted first; the start event follows, once per worker."""
+        """WORKER_STARTED callback: the process exists. A new file gets the WorkerStarted first; the start event follows, once per
+        worker."""
         if not self.on or self.began:
             return
         self.began = True
@@ -115,19 +117,17 @@ class LiveSink:
                 self.fd = None
 
     # -- paired events ---------------------------------------------------------------------------------------------------------------------
-    def begin(self, ident: Any, shell: bool, text: str, cwd: str | None = None, prov: bool = False) -> None:
+    def begin(self, ident: Hashable, shell: bool, text: str, cwd: str | None = None, prov: bool = False) -> None:
         if ident in self.open:
             return
         self.open[ident] = (self.wall(), "cmd" if shell else "tool")
         if shell:
-            self.write(
-                live.LiveCmdStart(t=self.wall(), id=str(ident), text=str(text)[:CMD_MAX], cwd=_opt(cwd), prov=True if prov else ABSENT)
-            )
+            self.write(live.LiveCmdStart(t=self.wall(), id=str(ident), text=text[:CMD_MAX], cwd=_opt(cwd), prov=True if prov else ABSENT))
         else:
-            self.write(live.LiveToolStart(t=self.wall(), id=str(ident), text=str(text)[:CMD_MAX], prov=True if prov else ABSENT))
+            self.write(live.LiveToolStart(t=self.wall(), id=str(ident), text=text[:CMD_MAX], prov=True if prov else ABSENT))
 
     def finish(
-        self, ident: Any, shell: bool, text: str | None = None, exit_: int | None = None, out: Any = None, secs: float | None = None
+        self, ident: Hashable, shell: bool, text: str | None = None, exit_: int | None = None, out: object = None, secs: float | None = None
     ) -> None:
         if ident not in self.open:
             self.begin(ident, shell, text or "")
@@ -155,9 +155,7 @@ class LiveSink:
         self.write(live.LiveRetry(t=self.wall(), n=_opt(n), of=_opt(of), why=_opt(why and why[:200])))
 
     # -- a harness's parsed events ---------------------------------------------------------------------------------------------------------
-    def feed(self, e: ev.HarnessEvent) -> None:
-        if not self.on or self.broken:
-            return
+    def _feed_paired(self, e: ev.Cmd | ev.CmdEnd | ev.Tool | ev.ToolEnd) -> None:
         match e:
             case ev.Cmd():
                 self.begin(e.id, True, e.text, e.cwd, prov=e.prov)
@@ -167,6 +165,15 @@ class LiveSink:
                 self.begin(e.id, False, _text(e.name, e.arg), prov=e.prov)
             case ev.ToolEnd():
                 self.finish(e.id, False, _text(e.name, e.arg), None, e.out, e.secs)
+            case _:
+                assert_never(e)
+
+    def feed(self, e: ev.HarnessEvent) -> None:
+        if not self.on or self.broken:
+            return
+        match e:
+            case ev.Cmd() | ev.CmdEnd() | ev.Tool() | ev.ToolEnd():
+                self._feed_paired(e)
             case ev.Msg():
                 self.message(e.text)
             case ev.Think():
@@ -181,8 +188,10 @@ class LiveSink:
                 self.retry(why="http 429")
             case ev.Unknown():
                 self.raw(e.type)
-            case ev.TurnDone():
-                pass  # a turn end with no usage to report (claude's result carries its own totals in `end`)
+            case ev.TurnDone() | ev.Started() | ev.Stall() | ev.WaitingForNetwork() | ev.RateLimit() | ev.Denied() | ev.HarnessError():
+                pass  # a turn end with no usage to report (claude's `result` has its own totals in `end`); the rest no feed shows
+            case _:
+                assert_never(e)
 
 
 def end_status(timed_out: bool, hung: str | None, stop: str | None, rc: int | None) -> EndStatus:

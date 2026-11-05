@@ -1,4 +1,5 @@
-"""The command line: `route.py VERB ...`. A bad flag in `run` is the caller's fault, answered as a bad_request stop (exit 0, no usage text)."""
+"""The command line: `route.py VERB ...`. A bad flag in `run` is the caller's fault, answered as a bad_request stop (exit 0, no usage
+text)."""
 
 import argparse
 import json
@@ -15,24 +16,29 @@ The model supplies only what the script cannot read itself; the script decides.
   route.py status [--claude-usage JSON|@file|-] [--json] [--cheap]
   route.py next ROLE [--authored-by openai|claude|xai] [--premium [FAMILY]] [--allow-degraded]
                      [--claude-usage JSON|@file|-] [--cwd DIR] [--verbose]
-  route.py run ROLE [--cwd DIR] [--brief FILE] [--schema FILE] [--resume REF] [--cap USD] [--timeout SEC] [--unattended] [--authored-by W] [--premium] [--allow-degraded] [--only-family F]...
-                    [--engine-only RECIPE]... [--engine-only-advisory] [--claude-usage JSON] [--parent SESSION] [--task ID] [--title T]    brief on stdin; one JSON object on stdout, exit 0 (see docs/dev/integrations.md)
+  route.py run ROLE [--cwd DIR] [--brief FILE] [--schema FILE] [--resume REF] [--cap USD] [--timeout SEC] [--unattended]\
+ [--authored-by W] [--premium] [--allow-degraded] [--only-family F]...
+                    [--engine-only RECIPE]... [--engine-only-advisory] [--claude-usage JSON] [--parent SESSION] [--task ID]\
+ [--title T]    brief on stdin; one JSON object on stdout, exit 0 (see docs/dev/integrations.md)
   route.py net [--lane L] [--host H ...]    is the machine online? stdlib sockets, no quota, answers in under 3 s: {up, why, hosts}
   route.py report --lane LANE --event out|ok [--until EPOCH|ISO]
   route.py capture-limits [--print]  (status line JSON on stdin)
   route.py doctor [--json]   (also `init`) a table of every lane: enabled, ready, and what to run to fix it
   route.py config set KEY VALUE | show
-  route.py hold LANE --until EPOCH|ISO|+2h|+3d [--roles worker,light] [--reason TEXT] | release ID|LANE | holds   an owner hold stops a lane for some roles; --until is mandatory
+  route.py hold LANE --until EPOCH|ISO|+2h|+3d [--roles worker,light] [--reason TEXT] | release ID|LANE | holds   an owner hold\
+ stops a lane for some roles; --until is mandatory
 
 Data: routing.json next to this file (lanes, models, roles, thresholds).
 Per-user settings: <config dir>/config.json (same keys as "settings"); profile and state live in <config dir>:
-  $DELEGATE_CONFIG_DIR, else Claude Code's plugin data dir (~/.claude/plugins/data/<plugin>-<marketplace>); a checkout must set the variable.
+  $DELEGATE_CONFIG_DIR, else Claude Code's plugin data dir (~/.claude/plugins/data/<plugin>-<marketplace>); a checkout must set\
+ the variable.
 Workers never create branches or worktrees and never commit, merge, push or stash: the coordinator owns git.
 """
 
 
 class CallParser(argparse.ArgumentParser):
-    """A bad flag, a missing argument or a bad value in `run` is the caller's fault: answered as a bad_request stop (exit 0, no usage text, no
+    """A bad flag, a missing argument or a bad value in `run` is the caller's fault: answered as a bad_request stop (exit 0, no usage text,
+    no
     vendor started), so the engine never has to read English to tell it from a crash. Other commands keep argparse's own exit 2."""
 
     answers = False
@@ -49,9 +55,16 @@ class CallParser(argparse.ArgumentParser):
         sys.exit(0)
 
 
-def build():
+def build() -> CallParser:
     ap = CallParser(prog="route.py", description=USAGE, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
+    _add_status_verbs(sub)
+    _add_run(sub)
+    _add_hold_verbs(sub)
+    return ap
+
+
+def _add_status_verbs(sub: argparse._SubParsersAction[CallParser]) -> None:
     s = sub.add_parser("status")
     s.add_argument("--claude-usage")
     s.add_argument("--json", action="store_true")
@@ -86,6 +99,9 @@ def build():
     cf.add_argument("action", choices=["set", "show"])
     cf.add_argument("key", nargs="?")
     cf.add_argument("value", nargs="?")
+
+
+def _add_run(sub: argparse._SubParsersAction[CallParser]) -> None:
     ru = sub.add_parser("run")
     ru.add_argument("role")
     ru.add_argument("--authored-by")
@@ -119,8 +135,12 @@ def build():
     )
     ru.add_argument(
         "--call-id",
-        help="the caller's id for this call: echoed in the answer and written to history.jsonl, the key that joins the caller's record to ours",
+        help="the caller's id for this call: echoed in the answer and written to history.jsonl, "
+        "the key that joins the caller's record to ours",
     )
+
+
+def _add_hold_verbs(sub: argparse._SubParsersAction[CallParser]) -> None:
     ho = sub.add_parser("hold", help="stop a lane for some roles until a time; --until is mandatory")
     ho.add_argument("lane")
     ho.add_argument("--until")
@@ -129,4 +149,3 @@ def build():
     ho.add_argument("--set-by", default="owner")
     sub.add_parser("release", help="end a hold early (by id or lane)").add_argument("target")
     sub.add_parser("holds", help="every hold in force, with holder and expiry")
-    return ap

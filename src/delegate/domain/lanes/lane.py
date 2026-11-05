@@ -8,6 +8,7 @@ from dataclasses import dataclass, field, replace
 
 from timefmt import fmt_span
 
+from delegate.contracts.json_types import Json
 from delegate.contracts.routing import Settings
 from delegate.contracts.state import Hold
 from delegate.domain.health.ledger import PairView
@@ -33,7 +34,7 @@ class Lane:
     pace: float | None = None  # weekly pace in points: elapsed share minus used share
     burn: bool = False  # weekly window about to reset with allowance left
     notes: list[str] = field(default_factory=list)
-    windows: list[dict] = field(default_factory=list)  # every window the vendor exposes, for the cockpit
+    windows: list[dict[str, Json]] = field(default_factory=list)  # every window the vendor exposes, for the cockpit
     spend_blocked: bool = False  # the vendor says a spend or credit limit stopped it (not a usage window)
     warn: list[str] = field(default_factory=list)  # a reading the owner should double-check (shown as `!` lines)
     benched: dict[str, PairView] = field(default_factory=dict)  # model -> a pair the breaker benched
@@ -89,7 +90,7 @@ class Lane:
             return None
         if self.five is not None and self.five >= s.strain.five_hour:
             return 1
-        return int(s.max_parallel)
+        return s.max_parallel
 
     def with_busy(self, until: float, running: int, cap: int) -> Lane:
         """A copy that is out only because its slots are taken: it is skipped like a refused lane."""

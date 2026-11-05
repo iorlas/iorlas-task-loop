@@ -1,4 +1,5 @@
-"""The network probe: one run of adapters/netprobe (sockets only, no process, no vendor call, no quota), its cache file, and the view of the cache that
+"""The network probe: one run of adapters/netprobe (sockets only, no process, no vendor call, no quota), its cache file, and the view of
+the cache that
 `status` shows. `net_up` is the one question the outcome ladder asks when a failure names no cause."""
 
 import json
@@ -6,10 +7,11 @@ from collections.abc import Iterable
 
 from delegate.adapters import netprobe
 from delegate.app import env
+from delegate.contracts.json_types import Json
 from delegate.domain.lanes import profiles
 
 
-def network_view(cached: dict | None, t: float):
+def network_view(cached: dict[str, Json] | None, t: float):
     return dict(netprobe.view(cached, [], t), why=(cached or {}).get("why"))
 
 
@@ -21,7 +23,8 @@ def net_probe(hosts: Iterable[str] | None = None):
 
 
 def net_up(lane: str | None = None):
-    """True when `lane`'s vendor hosts (else all of them) are reachable now. The one question the outcome ladder asks when a failure names no cause."""
+    """True when `lane`'s vendor hosts (else all of them) are reachable now. The one question the outcome ladder asks when a failure names
+    no cause."""
     return bool(net_probe(list(profiles.hosts_of(lane)) or None)["up"])
 
 

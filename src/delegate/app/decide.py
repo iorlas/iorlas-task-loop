@@ -1,4 +1,5 @@
-"""The decision a call starts with: build the fleet, route, remember the lane choice (`decision`, shared by `next` and `run`), and what a chosen
+"""The decision a call starts with: build the fleet, route, remember the lane choice (`decision`, shared by `next` and `run`), and what a
+chosen
 step runs on (`how`). The codex access flags and the repo's instruction files, which both lanes get the same, are here too."""
 
 import json
@@ -6,13 +7,13 @@ import os
 import random
 import sys
 from pathlib import Path
-from typing import Any
 
 from delegate.adapters import agent_runs, git
 from delegate.app import env, onboard
 from delegate.app.fleet import FleetBuilder, drift_warnings, mark_busy, settle_holds
 from delegate.app.usage import READERS
 from delegate.contracts.history import RunRow
+from delegate.contracts.json_types import Json, as_str, obj
 from delegate.contracts.routing import CallArgs, Run
 from delegate.contracts.state import StateDoc
 from delegate.contracts.stores import CheckpointStore
@@ -41,7 +42,8 @@ CODEX_ACCESS = [
 
 def codex_env(base: dict[str, str], cwd: str, sandbox: str, access: list[str] = CODEX_ACCESS) -> dict[str, str]:
     """The environment of a codex worker: uv must not reach for ~/.cache/uv (outside the sandbox: 'Operation not permitted', then a refused
-    second escalation). A writing step caches in the git-ignored .task/ of its working folder, a reading one in no cache; with the network off
+    second escalation). A writing step caches in the git-ignored .task/ of its working folder, a reading one in no cache; with the network
+    off
     uv stays offline."""
     out = dict(base)
     if sandbox == "workspace-write":
@@ -53,7 +55,7 @@ def codex_env(base: dict[str, str], cwd: str, sandbox: str, access: list[str] = 
     return out
 
 
-def repo_dirs(cwd: str):
+def repo_dirs(cwd: str) -> list[Path]:
     """The folders from the repo root (or cwd outside a repo) down to cwd."""
     wd = Path(cwd).resolve()
     root = git.repo_root(wd)
@@ -63,8 +65,9 @@ def repo_dirs(cwd: str):
     return out[::-1]
 
 
-def repo_instructions(cwd: str):
-    """The repo's instruction files, the same for both lanes (Codex's own rule): in each folder from the root down to cwd, AGENTS.md, else CLAUDE.md."""
+def repo_instructions(cwd: str) -> list[Path]:
+    """The repo's instruction files, the same for both lanes (Codex's own rule): in each folder from the root down to cwd, AGENTS.md, else
+    CLAUDE.md."""
     found = []
     for d in repo_dirs(cwd):
         f = next((d / n for n in ("AGENTS.md", "CLAUDE.md") if (d / n).is_file()), None)
@@ -73,10 +76,11 @@ def repo_instructions(cwd: str):
     return found
 
 
-def codex_isolation(cwd: str):
+def codex_isolation(cwd: str) -> list[str]:
     """Codex sees only what delegate sends plus the repo's instruction files: every skill it would list (its own system skills, the user's,
-    the repo's .agents/skills) is turned off by path, and a repo with only CLAUDE.md is read as Claude would. Sub-agents cannot be turned off
-    (codex 0.162.1: features.multi_agent=false and agents.max_depth=0 still let a brief that asks spawn one); NO_SUBAGENTS_RULE asks, and their
+    the repo's .agents/skills) is turned off by path, and a repo with only CLAUDE.md is read as Claude would. Sub-agents cannot be turned
+    off (codex 0.162.1: features.multi_agent=false and agents.max_depth=0 still let a brief that asks spawn one); NO_SUBAGENTS_RULE asks,
+    and their
     tokens are counted as child threads."""
     home = Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex")
     roots = [home / "skills", Path.home() / ".agents" / "skills"] + [
@@ -85,16 +89,16 @@ def codex_isolation(cwd: str):
     paths = sorted({str(f.resolve()) for r in roots if r.is_dir() for f in r.rglob("SKILL.md")})
     return [
         "-c",
-        "skills.config=[" + ",".join("{path=%s,enabled=false}" % json.dumps(x) for x in paths) + "]",
+        "skills.config=[" + ",".join(f"{{path={json.dumps(x)},enabled=false}}" for x in paths) + "]",
         "-c",
         'project_doc_fallback_filenames=["CLAUDE.md"]',
     ]
 
 
-def how(lane: Lane, step: dict, cfg: dict, cwd: str | None = None, unattended: bool = False):
+def how(lane: Lane, step: dict[str, Json], cfg: dict[str, Json], cwd: str | None = None, unattended: bool = False) -> dict[str, Json]:
     """What a step runs on. Unattended callers have no Agent tool, so the subscription lane runs `claude -p` on the logged-in account."""
-    m = cfg["models"][step["model"]]
-    runner = cfg["lanes"][lane.name]["runner"]
+    m = obj(obj(cfg["models"])[as_str(step["model"])])
+    runner = obj(obj(cfg["lanes"])[lane.name])["runner"]
     wd = os.path.abspath(cwd) if cwd else os.getcwd()
     write = step.get("mode") == "write"
     if runner == "agent_tool" and unattended:
@@ -107,13 +111,26 @@ def how(lane: Lane, step: dict, cfg: dict, cwd: str | None = None, unattended: b
         return {"kind": "opencode", "model": m["api"], "write": write, "cwd": wd}
     sandbox = "workspace-write" if write else "read-only"
     iso = codex_isolation(wd)
-    cli = ["codex", "exec", "-C", wd, "-s", sandbox, "-m", m["api"], "-c", f"model_reasoning_effort={step['effort']}"] + CODEX_ACCESS + iso
+    cli = [
+        "codex",
+        "exec",
+        "-C",
+        wd,
+        "-s",
+        sandbox,
+        "-m",
+        as_str(m["api"]),
+        "-c",
+        f"model_reasoning_effort={step['effort']}",
+        *CODEX_ACCESS,
+        *iso,
+    ]
     if git.state(wd) is None:
         cli.append("--skip-git-repo-check")  # codex refuses a directory that is not a git work tree
     return {"kind": "codex", "model": m["api"], "cli": cli, "cwd": wd, "sandbox": sandbox, "isolation": iso}
 
 
-def parse_json_arg(v: str | None):
+def parse_json_arg(v: str | None) -> Json:
     if not v:
         return None
     if v == "-":
@@ -126,11 +143,11 @@ def parse_json_arg(v: str | None):
         sys.exit(f"route.py: --claude-usage is not valid JSON: {e}")
 
 
-def busy_jitter():
+def busy_jitter() -> int:
     return random.randint(60, 120)
 
 
-def fleet_builder(cfg: dict):
+def fleet_builder(cfg: dict[str, Json]):
     return FleetBuilder(
         env.typed_routing(cfg),
         env.states(),
@@ -159,8 +176,9 @@ def call_args(a: env.Args, unattended: bool):
 RETRY_LOOKBACK_S = 6 * 3600
 
 
-def decision(a: env.Args, cfg: dict, unattended: bool = False, avoid: frozenset[tuple[str, str]] = frozenset()):
-    """next and run share this: build the fleet, route, remember the lane choice. -> (d, lanes, warnings, t); d is the JSON answer of `next`."""
+def decision(a: env.Args, cfg: dict[str, Json], unattended: bool = False, avoid: frozenset[tuple[str, str]] = frozenset()):
+    """next and run share this: build the fleet, route, remember the lane choice. -> (d, lanes, warnings, t); d is the JSON answer of
+    `next`."""
     t = env.now()
     st = env.load_state()
     routing = env.typed_routing(cfg)
@@ -180,16 +198,16 @@ def decision(a: env.Args, cfg: dict, unattended: bool = False, avoid: frozenset[
     pick = router.route(a.role, args, lanes, st.refs.get(args.resume or ""), avoid)
     d = pick.as_dict()
     if isinstance(pick, Run):
-        step: dict[str, Any] = {"model": pick.model, "effort": pick.effort, "mode": pick.mode}
+        step: dict[str, Json] = {"model": pick.model, "effort": pick.effort, "mode": pick.mode}
         if pick.cap is not None or pick.pass_ == "resume":
             step["cap"] = pick.cap
-        d["how"] = how(lanes[pick.lane], step, cfg, a.cwd, unattended)
+        hw = d["how"] = how(lanes[pick.lane], step, cfg, a.cwd, unattended)
         if pick.pass_ != "resume":
             fam = lanes[pick.lane].family
             if args.cap:
-                d["cap"] = d["how"]["cap"] = args.cap if d["how"]["kind"] == "claude_p" else d["how"].get("cap")
+                d["cap"] = hw["cap"] = args.cap if hw["kind"] == "claude_p" else hw.get("cap")
 
-            def mark(s: StateDoc):
+            def mark(s: StateDoc) -> None:
                 new = DwellMemory(s.prev, routing.settings.min_dwell_minutes).note(fam, pick.lane, t)
                 if new:
                     s.prev[fam] = new
@@ -202,7 +220,7 @@ def decision(a: env.Args, cfg: dict, unattended: bool = False, avoid: frozenset[
     return d, lanes, warnings, t
 
 
-def publish_lanes(lanes: dict[str, Lane], st: StateDoc, t: float):
+def publish_lanes(lanes: dict[str, Lane], st: StateDoc, t: float) -> None:
     """Lane limits as agent-runs v1 (agent_runs.py), for dashboards. Never fails the caller."""
     try:
         outs = st.out
@@ -210,11 +228,11 @@ def publish_lanes(lanes: dict[str, Lane], st: StateDoc, t: float):
             [
                 (
                     n,
-                    l.out_until if l.out else None,
-                    outs[n].why if l.out and n in outs else None,
-                    [("5h", l.five, l.five_reset), ("week", l.week, l.week_reset)],
+                    ln.out_until if ln.out else None,
+                    outs[n].why if ln.out and n in outs else None,
+                    [("5h", ln.five, ln.five_reset), ("week", ln.week, ln.week_reset)],
                 )
-                for n, l in lanes.items()
+                for n, ln in lanes.items()
             ],
             t,
         )

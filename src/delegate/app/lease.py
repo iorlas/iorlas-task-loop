@@ -1,4 +1,5 @@
-"""The lease a run holds on its lane: claimed inside the state lock (the authoritative slot count), renewed by a heartbeat thread, stamped with the
+"""The lease a run holds on its lane: claimed inside the state lock (the authoritative slot count), renewed by a heartbeat thread, stamped
+with the
 worker's pid and the vendor ref as they appear, released when the run ends. Orphans of a SIGKILLed route.py are reaped at the claim."""
 
 import contextlib
@@ -6,7 +7,6 @@ import os
 import threading
 from collections.abc import Callable
 from dataclasses import replace
-from typing import Any
 
 from stream_proc import alive, proc_start
 
@@ -32,7 +32,7 @@ def reap(v: Lease):
     return not alive(pg, v.worker_start)
 
 
-def _set(**fields: Any) -> Callable[[Lease], None]:
+def _set(**fields: object) -> Callable[[Lease], None]:
     """The lease edit that sets these fields."""
 
     def apply(v: Lease) -> None:

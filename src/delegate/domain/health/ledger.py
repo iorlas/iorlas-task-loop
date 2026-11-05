@@ -13,18 +13,20 @@ Never counted: bad_request (the caller's fault), network, killed, timeout, secre
 """
 
 from dataclasses import dataclass
+from types import MappingProxyType
 
 from delegate.contracts.history import CanaryRow, Failure, HealthState, HistoryRow, LaneFact, PairFact, ReleaseRow, RunRow, Streak
+from delegate.contracts.json_types import Json
 from delegate.contracts.routing import BreakerPolicy
 from delegate.domain.health.matchers import fingerprint
 
 LANE_KINDS = ("rate_limited", "credit_exhausted", "logged_out")
-BREAKER = {"vendor_blip": {"tasks": 2}, "worker_failed": {"tasks": 3}, "hung": {"n": 2, "window_min": 30, "tasks": 1}}
+BREAKER = MappingProxyType({"vendor_blip": {"tasks": 2}, "worker_failed": {"tasks": 3}, "hung": {"n": 2, "window_min": 30, "tasks": 1}})
 STATES = ("up", "busy", "exhausted", "logged_out", "held", "broken")
 RELEASE, DONE = "release", "done"
 
 
-def failure_fields(outcome: str | None, source: str, say: str | None, until: float | None = None) -> dict:
+def failure_fields(outcome: str | None, source: str, say: str | None, until: float | None = None) -> dict[str, Json]:
     """-> the health fields a run or refusal row carries; {} for a done run (outcome None)."""
     if not outcome:
         return {}
@@ -46,7 +48,7 @@ class PairView:
     rung: int = 0
     last_failures: tuple[Failure, ...] = ()
 
-    def as_dict(self) -> dict:
+    def as_dict(self) -> dict[str, Json]:
         return {
             "state": self.state,
             "usable": self.usable,
@@ -132,7 +134,7 @@ class HealthLedger:
 
     def _pair_fact(self, p: PairFact, f: Fact) -> None:
         pol, ts = self.pol, f.ts
-        p.fails = (p.fails + [Failure(ts=ts, outcome=f.what, say=f.say[:120])])[-3:]
+        p.fails = [*p.fails, Failure(ts=ts, outcome=f.what, say=f.say[:120])][-3:]
         if ts < p.until:  # launched while benched (a call already in flight): it does not count again
             return
         rule = BREAKER[f.what]
@@ -167,18 +169,17 @@ class HealthLedger:
         L, p = state.lanes.get(lane), state.pairs.get(f"{lane}|{model}")
         fails = tuple(p.fails) if p else ()
         rung = p.rung if p else 0
-        if L:
-            if t < L.until:
-                return PairView(
-                    state="logged_out" if L.kind == "logged_out" else "exhausted",
-                    usable=False,
-                    until=L.until,
-                    source=L.source,
-                    kind=L.kind,
-                    evidence=L.evidence,
-                    rung=rung,
-                    last_failures=fails,
-                )
+        if L and t < L.until:
+            return PairView(
+                state="logged_out" if L.kind == "logged_out" else "exhausted",
+                usable=False,
+                until=L.until,
+                source=L.source,
+                kind=L.kind,
+                evidence=L.evidence,
+                rung=rung,
+                last_failures=fails,
+            )
         canary, kind, evidence = bool(L), L.kind if L else None, L.evidence if L else ""
         if p and p.rung:
             if t < p.until:

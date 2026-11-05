@@ -1,6 +1,6 @@
-"""OpenCodeHarness: `opencode run --format json --print-logs`. Its argv and sandboxed environment, its event parser (stdout events, and the
-permission lines of its log on stderr that start a tool call seconds before stdout reports it), the usage arithmetic, its exported transcript and
-its login status."""
+"""OpenCodeHarness: `opencode run --format json --print-logs`. Its argv and sandboxed environment, its event parser (stdout events, and
+the permission lines of its log on stderr that start a tool call seconds before stdout reports it), the usage arithmetic, its exported
+transcript and its login status."""
 
 import json
 import os
@@ -9,13 +9,16 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, override
+from typing import override
 
 from delegate.adapters import procs
 from delegate.adapters.harness import opencode_sandbox as box
 from delegate.adapters.harness.base import Evidence, LaunchInputs, LaunchSpec, Quiet, Summary
 from delegate.contracts import events as ev
 from delegate.contracts.codec import record
+from delegate.contracts.json_types import Json
+from delegate.domain.cost import accounting
+from delegate.domain.jsonval import num, obj, opt_str
 
 FINAL_REASONS = ("stop", "end_turn", "end-turn")  # step_finish part.reason of a step that ends the turn (not "tool-calls")
 SHELL_TOOLS = ("bash", "shell")
@@ -50,16 +53,13 @@ def _s(x: object) -> str:
     return x if isinstance(x, str) else "" if x is None else str(x)
 
 
-def _dict(x: object) -> dict:
-    return x if isinstance(x, dict) else {}
-
-
-def tool_text(name: str, inp: dict) -> str:
+def tool_text(name: str, inp: dict[str, Json]) -> str:
     return next((_s(inp[k]) for k in ARG_KEYS if inp.get(k)), "")
 
 
-def acct_close(acct: dict | None, price: str) -> dict | None:
-    """Name the cost's source once the steps are in. catalog: opencode's price per step. unknown: its steps carry 0 and that is unverifiable. free: free."""
+def acct_close(acct: dict[str, Json] | None, price: str) -> dict[str, Json] | None:
+    """Name the cost's source once the steps are in. catalog: opencode's price per step. unknown: its steps carry 0 and that is
+    unverifiable. free: free."""
     if not acct:
         return None
     if price == "unknown":
@@ -73,19 +73,11 @@ def acct_close(acct: dict | None, price: str) -> dict | None:
     return acct
 
 
-def acct_fold(steps: list[dict]) -> dict | None:
+def acct_fold(steps: list[dict[str, Json]]) -> dict[str, Json] | None:
     """The step_finish records (tokens {input, output, reasoning, cache{read,write}}, cost) -> one running accounting record."""
-    acct: dict[str, Any] | None = None
+    acct: dict[str, Json] | None = None
     for st in steps:
-        u, c = st["tokens"], _dict(st["tokens"].get("cache"))
-        a = acct or {"in_fresh": 0, "cache_read": 0, "cache_write": 0, "out": 0, "cost_usd": None, "ttl_s": None, "ttl_source": "unknown"}
-        a["in_fresh"] += u.get("input") or 0
-        a["cache_read"] += c.get("read") or 0
-        a["cache_write"] += c.get("write") or 0
-        a["out"] += (u.get("output") or 0) + (u.get("reasoning") or 0)
-        if isinstance(st.get("cost"), (int, float)):
-            a["cost_usd"] = (a["cost_usd"] or 0.0) + float(st["cost"])
-        acct = a
+        acct = accounting.opencode_step(acct, obj(st["tokens"]), st.get("cost"))
     return acct
 
 
@@ -131,7 +123,7 @@ class OpenCodeHarness(Quiet):
         for r in (*roots, *caches):  # created here, before any sandboxed command: a command cannot create them
             r.mkdir(parents=True, exist_ok=True)
         self.write_shell(i.cwd, i.write, self.shell, roots, caches)
-        config: dict[str, Any] = {"permission": box.permissions(i.write, i.engine_only)}
+        config: dict[str, Json] = {"permission": box.permissions(i.write, i.engine_only)}
         if self.profile.providers:
             for key in SESSION_VARS:
                 env.pop(key, None)
@@ -166,7 +158,8 @@ class OpenCodeHarness(Quiet):
 
     @override
     def echoes_input(self, line: str) -> bool:
-        """A log line that quotes the worker's own tool input (`evaluated permission=bash pattern="..."`): its words are the worker's, not OpenCode's."""
+        """A log line that quotes the worker's own tool input (`evaluated permission=bash pattern="..."`): its words are the worker's, not
+        OpenCode's."""
         return bool(ECHO_RE.search(line))
 
     @override
@@ -179,17 +172,17 @@ class OpenCodeHarness(Quiet):
         if model != "opencode/deepseek-v4.1-flash-free":
             return False
         try:
-            x = subprocess.run([self.exe, "models", "opencode", "--verbose"], env=env, capture_output=True, text=True, timeout=30)
+            x = procs.run_capture([self.exe, "models", "opencode", "--verbose"], 30, env=env)
             marker = model + "\n"
             if x.returncode or marker not in x.stdout:
                 return False
-            obj, _ = json.JSONDecoder().raw_decode(x.stdout.split(marker, 1)[1].lstrip())
-            cost = obj.get("cost") or {}
-            cache = cost.get("cache") or {}
+            entry: dict[str, Json] = json.JSONDecoder().raw_decode(x.stdout.split(marker, 1)[1].lstrip())[0]
+            cost = obj(entry.get("cost"))
+            cache = obj(cost.get("cache"))
             return (
-                obj.get("providerID") == "opencode"
-                and obj.get("id") == model.split("/", 1)[1]
-                and obj.get("status") == "active"
+                entry.get("providerID") == "opencode"
+                and entry.get("id") == model.split("/", 1)[1]
+                and entry.get("status") == "active"
                 and all(
                     type(v) in (int, float) and v == 0
                     for v in (cost.get("input"), cost.get("output"), cache.get("read"), cache.get("write"))
@@ -207,9 +200,10 @@ class OpenCodeHarness(Quiet):
         if not isinstance(raw, dict):
             return []
         out: list[ev.HarnessEvent] = []
-        e, kind, part = self.evidence, _s(raw.get("type")), _dict(raw.get("part"))
-        if raw.get("sessionID") and not e.ref:
-            e.ref = raw["sessionID"]
+        e, kind, part = self.evidence, _s(raw.get("type")), obj(raw.get("part"))
+        session = raw.get("sessionID")
+        if session and isinstance(session, str) and not e.ref:
+            e.ref = session
             out.append(ev.Started(ref=e.ref))
         if kind == "tool_use":
             out += self._tool(part)
@@ -221,34 +215,34 @@ class OpenCodeHarness(Quiet):
         elif kind == "step_finish":
             out += self._step(part)
         elif kind == "error":
-            err = _dict(raw.get("error"))
-            e.error = _s(_dict(err.get("data")).get("message") or err.get("name") or err)
+            err = obj(raw.get("error"))
+            e.error = _s(obj(err.get("data")).get("message") or err.get("name") or err)
             out.append(ev.HarnessError(text=e.error))
         elif kind not in ("step_start", "text", "reasoning"):
             out.append(ev.Unknown(type=kind[:60]))
         return out
 
-    def _step(self, part: dict) -> list[ev.HarnessEvent]:
+    def _step(self, part: dict[str, Json]) -> list[ev.HarnessEvent]:
         e, u = self.evidence, part.get("tokens")
         if not isinstance(u, dict):
             return [ev.TurnDone(usage=None)] if part.get("reason") in FINAL_REASONS else []
-        c = _dict(u.get("cache"))
-        whole = (u.get("input") or 0) + (c.get("read") or 0) + (c.get("write") or 0)
+        c = obj(u.get("cache"))
+        whole = num(u.get("input")) + num(c.get("read")) + num(c.get("write"))
         tk = e.tokens or {"in": 0, "cached": 0, "out": 0}
         e.tokens = {
-            "in": (tk["in"] or 0) + whole,
-            "cached": (tk["cached"] or 0) + (c.get("read") or 0),
-            "out": (tk["out"] or 0) + (u.get("output") or 0) + (u.get("reasoning") or 0),
+            "in": num(tk["in"]) + whole,
+            "cached": num(tk["cached"]) + num(c.get("read")),
+            "out": num(tk["out"]) + num(u.get("output")) + num(u.get("reasoning")),
         }
         e.steps.append({"tokens": u, "cost": part.get("cost")})
         e.turns += 1
         e.context_k = round(whole / 1000, 1)
-        t = ev.Tokens(in_=whole, cached=c.get("read") or 0, out=(u.get("output") or 0) + (u.get("reasoning") or 0))
+        t = ev.Tokens(in_=int(whole), cached=int(num(c.get("read"))), out=int(num(u.get("output")) + num(u.get("reasoning"))))
         return [ev.TurnDone(usage=t)] if part.get("reason") in FINAL_REASONS else [t]
 
-    def _tool(self, part: dict) -> list[ev.HarnessEvent]:
-        st, inp = _dict(part.get("state")), _dict(_dict(part.get("state")).get("input"))
-        ident, name = part.get("callID") or part.get("id"), _s(part.get("tool"))
+    def _tool(self, part: dict[str, Json]) -> list[ev.HarnessEvent]:
+        st, inp = obj(part.get("state")), obj(obj(part.get("state")).get("input"))
+        ident, name = opt_str(part.get("callID") or part.get("id")), _s(part.get("tool"))
         shell, status = name.lower() in SHELL_TOOLS, st.get("status")
         self.evidence.work = True
         text = _s(inp.get("command")) if shell else tool_text(name, inp)
@@ -256,12 +250,9 @@ class OpenCodeHarness(Quiet):
             return [ev.Cmd(id=ident, text=text) if shell else ev.Tool(id=ident, name=name, arg=text)]
         if status not in ("completed", "error"):
             return [ev.Unknown(type="tool_use")]
-        tm, md = _dict(st.get("time")), _dict(st.get("metadata"))
-        secs = (
-            (tm["end"] - tm["start"]) / 1000.0
-            if isinstance(tm.get("start"), (int, float)) and isinstance(tm.get("end"), (int, float))
-            else None
-        )
+        tm, md = obj(st.get("time")), obj(st.get("metadata"))
+        began, ended = tm.get("start"), tm.get("end")
+        secs = (ended - began) / 1000.0 if isinstance(began, int | float) and isinstance(ended, int | float) else None
         code = md.get("exit")
         out_text = st.get("output") or st.get("error")
         closed = self._close_prov(name, text, shell)
@@ -270,7 +261,7 @@ class OpenCodeHarness(Quiet):
             secs = None  # timed from the provisional start, which is when the tool began
         res: list[ev.HarnessEvent] = []
         for k, (i, t) in enumerate(ids):
-            o = out_text if k == 0 else None
+            o = opt_str(out_text) if k == 0 else None
             res.append(
                 ev.CmdEnd(
                     id=i,
@@ -286,15 +277,15 @@ class OpenCodeHarness(Quiet):
         return res
 
     def _close_prov(self, tool: str, full: str, shell: bool) -> list[tuple[str, str]]:
-        """The provisional rows this completed call closes: a bash line is logged once per sub-command, so every row of the tool whose pattern the
-        command contains; else the oldest row of the tool."""
+        """The provisional rows this completed call closes: a bash line is logged once per sub-command, so every row of the tool whose
+        pattern the command contains; else the oldest row of the tool."""
         rows = [r for r in self.prov if r[1] == tool]
         hit = [r for r in rows if shell and r[2] and r[2] in full] or rows[:1]
         for r in hit:
             self.prov.remove(r)
         return [(r[0], r[2]) for r in hit]
 
-    def _denials(self, tool: str, inp: dict, out: str) -> list[ev.HarnessEvent]:
+    def _denials(self, tool: str, inp: dict[str, Json], out: str) -> list[ev.HarnessEvent]:
         if "prevents you from using this specific tool call" in out:
             d = ev.Denied(tool=tool, input=inp, kind="policy")
         elif "Operation not permitted" in out and not box.network_refusal(out):
@@ -306,7 +297,8 @@ class OpenCodeHarness(Quiet):
 
     @override
     def parse_log_line(self, line: str) -> list[ev.HarnessEvent]:
-        """A permission line of OpenCode's log is the earliest sign a tool started: a provisional Cmd or Tool, closed by the completed tool_use."""
+        """A permission line of OpenCode's log is the earliest sign a tool started: a provisional Cmd or Tool, closed by the completed
+        tool_use."""
         m = PERMISSION_RE.search(line)
         if not m or m.group(1) in NOT_TOOLS:
             return []
@@ -326,7 +318,8 @@ class OpenCodeHarness(Quiet):
         e = self.evidence
         text = e.last.strip()
         acct = acct_close(acct_fold(e.steps), self.profile.price)
-        res = {
+        cost = num((acct or {}).get("cost_usd"))
+        res: dict[str, Json] = {
             "text": text,
             "ref": e.ref,
             "tokens": e.tokens,
@@ -335,7 +328,7 @@ class OpenCodeHarness(Quiet):
             "started": bool(e.ref),
             "partial": e.work,
             "acct": acct,
-            "cost": (acct or {}).get("cost_usd") or 0,
+            "cost": cost,
         }  # no `answered`: opencode has no resume-tested finished-answer signal (62-spikes-resume.md)
         why = e.error or (
             err if rc != 0 and stop != "answer" else ""
@@ -348,7 +341,7 @@ class OpenCodeHarness(Quiet):
             stderr="",
             work=e.work,
             stands=bool(text) and not e.error,
-            cost=float(res["cost"]),
+            cost=float(cost),
             tail=err or text,
         )
 

@@ -1,12 +1,13 @@
 """delegate-81g: `--engine-only RECIPE` is enforced by the harness of every lane that can write, or the lane is not routed a write step.
 Claude: the PreToolUse hook. OpenCode: the bash deny rules of its permission config. Codex: no enforcement point, refused at route time."""
+
 import copy
 import json
 import re
 import subprocess
 import tempfile
-import unittest
 from pathlib import Path
+from typing import Any
 from unittest import mock
 
 from delegate.adapters.harness import opencode_sandbox as box
@@ -16,6 +17,7 @@ from delegate.app import launch
 from delegate.contracts.routing import CallArgs
 from delegate.contracts.state import RefRecord
 from delegate.contracts.wire import RECIPE_RUNNERS
+from support.case import Case
 from support.procsim import real_proc
 
 import hermetic  # noqa: F401  (a home of its own for every test)
@@ -24,11 +26,28 @@ from test_review_order import CFG, T, lanes
 
 ROOT = Path(__file__).resolve().parents[2]
 DENIED_BY_OPENCODE = (
-    "just slow", "just slow --verbose", "just -f x/justfile slow", "just --justfile x/justfile slow", "FOO=1 just slow",
-    "cd client && just slow", 'sh -c "just slow"', "bash -lc 'just slow'", "(just slow)", "make slow", "uv run slow", "pnpm slow",
-    "ls && just slow | tee log")
-PASSES = ("just test-fast", "just slower", "just fmt-check tests/slow.py", "python3 -m unittest discover -s tests", "git diff --stat",
-          "ls slow")
+    "just slow",
+    "just slow --verbose",
+    "just -f x/justfile slow",
+    "just --justfile x/justfile slow",
+    "FOO=1 just slow",
+    "cd client && just slow",
+    'sh -c "just slow"',
+    "bash -lc 'just slow'",
+    "(just slow)",
+    "make slow",
+    "uv run slow",
+    "pnpm slow",
+    "ls && just slow | tee log",
+)
+PASSES = (
+    "just test-fast",
+    "just slower",
+    "just fmt-check tests/slow.py",
+    "python3 -m unittest discover -s tests",
+    "git diff --stat",
+    "ls slow",
+)
 TRAILS = ("", " *", '"*', "'*", ";*", "&*", "|*", ")*")
 
 
@@ -45,37 +64,48 @@ def opencode_verdict(rules: dict[str, str], command: str) -> str:
     return verdict
 
 
-class OpenCodeRulesTest(unittest.TestCase):
+class OpenCodeRulesTest:
     def bash(self, write: bool = True, engine_only: tuple[str, ...] = ("slow",)):
         return box.permissions(write, engine_only).get("bash", {})
 
     def test_the_rules_for_one_runner_are_exactly_these(self):
         rules = self.bash()
         want = {lead + t: "deny" for lead in ("*just slow", "*just * slow") for t in TRAILS}
-        self.assertEqual({k: v for k, v in rules.items() if k.startswith("*just ")}, want)
-        self.assertEqual(len(rules), 1 + 16 * len(RECIPE_RUNNERS))
-        self.assertEqual(next(iter(rules.items())), ("*", "allow"))        # the allow comes first: the deny rules after it win
+        assert ({k: v for k, v in rules.items() if k.startswith("*just ")}) == want
+        assert len(rules) == (1 + 16 * len(RECIPE_RUNNERS))
+        assert next(iter(rules.items())) == ("*", "allow")  # the allow comes first: the deny rules after it win
 
     def test_every_way_to_run_the_recipe_is_denied_and_ordinary_commands_are_not(self):
         rules = self.bash()
         for c in DENIED_BY_OPENCODE:
-            self.assertEqual(opencode_verdict(rules, c), "deny", c)
+            assert opencode_verdict(rules, c) == "deny", c
         for c in PASSES:
-            self.assertEqual(opencode_verdict(rules, c), "allow", c)
+            assert opencode_verdict(rules, c) == "allow", c
 
     def test_read_only_steps_and_calls_without_the_list_get_no_bash_rules(self):
-        self.assertEqual(self.bash(write=False), {})
-        self.assertEqual(self.bash(engine_only=()), {})
+        assert self.bash(write=False) == {}
+        assert self.bash(engine_only=()) == {}
 
     def test_the_launch_carries_the_rules_in_the_config_the_harness_reads(self):
         with tempfile.TemporaryDirectory() as tmp:
             hx = OpenCodeHarness(root=Path(tmp))
-            spec = hx.launch_spec(LaunchInputs(exe="opencode", cwd=tmp, model="m", effort="high", prompt="p", env={}, session="abcdefghij",
-                                               write=True, engine_only=("slow", "e2e")))
+            spec = hx.launch_spec(
+                LaunchInputs(
+                    exe="opencode",
+                    cwd=tmp,
+                    model="m",
+                    effort="high",
+                    prompt="p",
+                    env={},
+                    session="abcdefghij",
+                    write=True,
+                    engine_only=("slow", "e2e"),
+                )
+            )
             hx.cleanup()
         perm = json.loads(spec.env["OPENCODE_CONFIG_CONTENT"])["permission"]
-        self.assertEqual(perm, box.permissions(True, ("slow", "e2e")))
-        self.assertEqual(opencode_verdict(perm["bash"], "just e2e"), "deny")
+        assert perm == box.permissions(True, ("slow", "e2e"))
+        assert opencode_verdict(perm["bash"], "just e2e") == "deny"
 
     def test_the_denial_is_the_typed_policy_record(self):
         hx = OpenCodeHarness()
@@ -83,101 +113,102 @@ class OpenCodeRulesTest(unittest.TestCase):
         state = {"status": "error", "input": {"command": "just slow"}, "error": refusal}
         hx.parse_line(json.dumps({"type": "tool_use", "sessionID": "s", "part": {"callID": "c1", "tool": "bash", "state": state}}))
         want = [{"kind": "policy", "tool": "bash", "path": None, "input": {"command": "just slow"}}]
-        self.assertEqual(launch.denied_items(hx, False, ("slow",)), want)
+        assert launch.denied_items(hx, False, ("slow",)) == want
 
 
-class ClaudeHookTest(unittest.TestCase):
+class ClaudeHookTest:
     def hook(self, command: str, engine_only=("slow",), read_only=False):
         call = {"tool_name": "Bash", "tool_input": {"command": command}}
         with tempfile.TemporaryDirectory() as tmp:
             Path(tmp, "host.json").write_text('{"binaries":{},"writer_exec_allow":[]}')
             with mock.patch("delegate.app.env.config_dir", return_value=Path(tmp)):
                 argv = hook_command(launch.guard_settings(read_only, engine_only))
-            r = subprocess.run(argv, shell=True, input=json.dumps(call), capture_output=True, text=True, check=False,
-                               env={"PATH": "/usr/bin:/bin", "DELEGATE_CONFIG_DIR": tmp, "HOME": tmp})
+            r = subprocess.run(
+                argv,
+                shell=True,
+                input=json.dumps(call),
+                capture_output=True,
+                text=True,
+                check=False,
+                env={"PATH": "/usr/bin:/bin", "DELEGATE_CONFIG_DIR": tmp, "HOME": tmp},
+            )
         return r.returncode, r.stderr
 
     @real_proc("delegate: a worker, git or CLI process")
     def test_the_generated_hook_denies_the_recipe_with_the_rule(self):
         for c in ("just slow", "cd client && just slow", "FOO=1 just slow", "just -f x slow"):
             code, why = self.hook(c)
-            self.assertEqual(code, 2, c)
-            self.assertIn("`just slow` is a check only the engine runs", why)
-            self.assertIn("engine reruns the check", why)
+            assert code == 2, c
+            assert "`just slow` is a check only the engine runs" in why
+            assert "engine reruns the check" in why
 
     @real_proc("delegate: a worker, git or CLI process")
     def test_the_generated_hook_lets_other_commands_through_and_a_read_step_ignores_the_list(self):
-        self.assertEqual(self.hook("just test-fast")[0], 0)
-        self.assertEqual(self.hook("just slow", ())[0], 0)
-        self.assertNotIn("slow", hook_command(launch.guard_settings(True, ("slow",))))
+        assert self.hook("just test-fast")[0] == 0
+        assert self.hook("just slow", ())[0] == 0
+        assert "slow" not in hook_command(launch.guard_settings(True, ("slow",)))
 
 
-class RoutingTest(unittest.TestCase):
+class RoutingTest(Case):
     def decide(self, *up, role="worker", **kw):
         return support.decide(role, copy.deepcopy(CFG), lanes(*up), {}, T, dict({"authored_by": None, "unattended": True}, **kw))
 
     @real_proc("delegate: a worker, git or CLI process")
     def test_a_write_step_with_the_list_skips_codex_and_says_why(self):
         free = self.decide("openai", "xai", "claude")
-        self.assertEqual(free["lane"], "OPENAI_SUBSCRIPTION")
+        assert free["lane"] == "OPENAI_SUBSCRIPTION"
         d = self.decide("openai", "xai", "claude", engine_only=["slow"])
-        self.assertEqual((d["action"], d["lane"]), ("run", "GROK_SUBSCRIPTION"))
-        self.assertIn("OPENAI_SUBSCRIPTION: rejected, its harness cannot deny the engine-only recipes slow to a write step", d["trace"])
+        assert (d["action"], d["lane"]) == ("run", "GROK_SUBSCRIPTION")
+        assert "OPENAI_SUBSCRIPTION: rejected, its harness cannot deny the engine-only recipes slow to a write step" in d["trace"]
 
     def test_with_only_codex_up_the_call_is_refused_with_a_typed_reason(self):
         d = self.decide("openai", engine_only=["slow", "e2e"])
-        self.assertEqual((d["action"], d["reason"]), ("stop", "engine_only_unenforced"))
-        self.assertIn("--engine-only slow, e2e cannot be denied to a write step on OPENAI_SUBSCRIPTION", d["say"])
-        self.assertTrue(any(x.startswith("OPENAI_SUBSCRIPTION: rejected") for x in d["trace"]), d["trace"])
+        assert (d["action"], d["reason"]) == ("stop", "engine_only_unenforced")
+        assert "--engine-only slow, e2e cannot be denied to a write step on OPENAI_SUBSCRIPTION" in d["say"]
+        assert any(x.startswith("OPENAI_SUBSCRIPTION: rejected") for x in d["trace"]), d["trace"]
 
     def test_claude_runs_as_claude_p_when_unattended_and_is_refused_as_an_agent_tool_when_not(self):
-        self.assertEqual(self.decide("claude", engine_only=["slow"])["lane"], "CLAUDE_SUBSCRIPTION")
+        assert self.decide("claude", engine_only=["slow"])["lane"] == "CLAUDE_SUBSCRIPTION"
         d = self.decide("claude", engine_only=["slow"], unattended=False)
-        self.assertEqual((d["action"], d["reason"]), ("stop", "engine_only_unenforced"))
+        assert (d["action"], d["reason"]) == ("stop", "engine_only_unenforced")
 
     def test_pinned_codex_reports_the_enforcement_failure_and_remedy(self):
         d = self.decide("openai", "claude", only_family=["openai"], engine_only=["slow", "e2e"])
-        self.assertEqual((d["action"], d["reason"]), ("stop", "engine_only_unenforced"))
+        assert (d["action"], d["reason"]) == ("stop", "engine_only_unenforced")
         for text in ("OPENAI_SUBSCRIPTION", "--engine-only slow, e2e", "--engine-only-advisory"):
-            self.assertIn(text, d["say"])
-        self.assertNotIn("over its limit", d["say"])
+            assert text in d["say"]
+        assert "over its limit" not in d["say"]
 
     @real_proc("delegate: a worker, git or CLI process")
     def test_advisory_runs_codex_with_or_without_a_family_pin(self):
         for pin in ([], ["openai"]):
             with self.subTest(pin=pin):
                 d = self.decide("openai", "xai", "claude", only_family=pin, engine_only=["slow", "e2e"], engine_only_advisory=True)
-                self.assertEqual((d["action"], d["lane"], d["flag"]), ("run", "OPENAI_SUBSCRIPTION", "engine_only_advisory"))
-                self.assertEqual(
-                    d["warning"], "OPENAI_SUBSCRIPTION cannot deny --engine-only slow, e2e: advisory only, the brief must say so")
-                self.assertFalse(any("OPENAI_SUBSCRIPTION: rejected" in x for x in d["trace"]))
+                assert (d["action"], d["lane"], d["flag"]) == ("run", "OPENAI_SUBSCRIPTION", "engine_only_advisory")
+                assert d["warning"] == "OPENAI_SUBSCRIPTION cannot deny --engine-only slow, e2e: advisory only, the brief must say so"
+                assert not any("OPENAI_SUBSCRIPTION: rejected" in x for x in d["trace"])
 
     @real_proc("delegate: a worker, git or CLI process")
     def test_advisory_does_not_warn_when_enforcement_is_available_or_unneeded(self):
-        for up, kw in (("claude", {"engine_only": ["slow"]}), ("openai", {}),
-                       ("openai", {"role": "reviewer", "engine_only": ["slow"]})):
+        for up, kw in (("claude", {"engine_only": ["slow"]}), ("openai", {}), ("openai", {"role": "reviewer", "engine_only": ["slow"]})):
             with self.subTest(up=up, kw=kw):
                 d = self.decide(up, engine_only_advisory=True, **kw)
-                self.assertEqual(d["action"], "run")
-                self.assertNotEqual(d["flag"], "engine_only_advisory")
-                self.assertNotIn("warning", d)
+                assert d["action"] == "run"
+                assert d["flag"] != "engine_only_advisory"
+                assert "warning" not in d
 
     @real_proc("delegate: a worker, git or CLI process")
     def test_read_only_steps_ignore_the_list(self):
-        self.assertEqual(self.decide("openai", role="reviewer", engine_only=["slow"])["lane"], "OPENAI_SUBSCRIPTION")
+        assert self.decide("openai", role="reviewer", engine_only=["slow"])["lane"] == "OPENAI_SUBSCRIPTION"
 
     def test_a_resume_of_a_codex_writer_with_the_list_is_refused(self):
         rec = RefRecord(lane="OPENAI_SUBSCRIPTION", model="gpt-6.1-sol", effort="high", mode="write")
         d = support.router(copy.deepcopy(CFG), T).route("worker", CallArgs(resume="r1", engine_only=("slow",)), lanes("openai"), rec)
-        self.assertEqual((d.as_dict()["action"], d.as_dict()["reason"]), ("stop", "engine_only_unenforced"))
+        assert (d.as_dict()["action"], d.as_dict()["reason"]) == ("stop", "engine_only_unenforced")
 
     def test_advisory_resume_keeps_its_lane_and_warns(self):
         rec = RefRecord(lane="OPENAI_SUBSCRIPTION", model="gpt-6.1-sol", effort="high", mode="write")
         args = CallArgs(resume="r1", engine_only=("slow",), engine_only_advisory=True)
-        d = support.router(copy.deepcopy(CFG), T).route("worker", args, lanes("openai"), rec).as_dict()
-        self.assertEqual((d["action"], d["lane"], d["flag"]), ("run", rec.lane, "engine_only_advisory"))
-        self.assertIn("advisory only, the brief must say so", d["warning"])
-
-
-if __name__ == "__main__":
-    unittest.main()
+        d: Any = support.router(copy.deepcopy(CFG), T).route("worker", args, lanes("openai"), rec).as_dict()
+        assert (d["action"], d["lane"], d["flag"]) == ("run", rec.lane, "engine_only_advisory")
+        assert "advisory only, the brief must say so" in d["warning"]

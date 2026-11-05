@@ -1,10 +1,10 @@
 """HarnessEvent: what a harness's parser says happened, one record per fact. In memory only (never written to disk): each harness's
-`parse_line` turns one line of its output into zero or more of these, once, and the supervisor, the live sink and the classifier all read the
+`parse_line` turns one line of its output into zero or more of these, once, and the supervisor, the live sink and the classifier all read
+the
 same records."""
 
-from typing import Any
-
 from delegate.contracts.codec import record
+from delegate.contracts.json_types import Json
 
 
 @record
@@ -102,8 +102,9 @@ class RateLimit:
 @record
 class Denied:
     tool: str
-    input: dict[str, Any]
-    kind: str = "policy"  # "policy" (a reviewer or classifier refused: the owner decides) or "sandbox_limit" (the sandbox blocked a system resource: noise)
+    input: dict[str, Json]
+    # "policy" (a reviewer or classifier refused: the owner decides) or "sandbox_limit" (the sandbox blocked a system resource: noise)
+    kind: str = "policy"
 
 
 @record

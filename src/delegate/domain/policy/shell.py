@@ -1,4 +1,5 @@
-"""What a worker's shell command may do (D3): git is the coordinator's, and a read-only step only reads. Pure functions of the command text."""
+"""What a worker's shell command may do (D3): git is the coordinator's, and a read-only step only reads. Pure functions of the command
+text."""
 
 import shlex
 
@@ -8,57 +9,61 @@ from delegate.domain.policy.matchers import name_of, pieces, sed_print_only, unw
 # A read-only Claude step (reviewer, planner, light) gets Bash for reading only: every piece of the command line must start with one of
 # these, with no output redirection or command substitution. Codex read steps get the same from their read-only sandbox, enforced by the OS;
 # this is a filter on the command text, not a boundary.
-READ_CMDS = {
-    "cat",
-    "head",
-    "tail",
-    "wc",
-    "ls",
-    "rg",
-    "grep",
-    "egrep",
-    "fgrep",
-    "find",
-    "sed",
-    "sort",
-    "uniq",
-    "cut",
-    "tr",
-    "diff",
-    "nl",
-    "file",
-    "stat",
-    "pwd",
-    "echo",
-    "jq",
-    "tree",
-    "du",
-    "basename",
-    "dirname",
-    "realpath",
-    "which",
-    "true",
-    "test",
-    "cd",
-    "git",
-}
-READ_GIT = {
-    "diff",
-    "log",
-    "show",
-    "status",
-    "blame",
-    "ls-files",
-    "ls-tree",
-    "rev-parse",
-    "grep",
-    "merge-base",
-    "cat-file",
-    "describe",
-    "shortlog",
-    "rev-list",
-    "branch",
-}
+READ_CMDS = frozenset(
+    {
+        "cat",
+        "head",
+        "tail",
+        "wc",
+        "ls",
+        "rg",
+        "grep",
+        "egrep",
+        "fgrep",
+        "find",
+        "sed",
+        "sort",
+        "uniq",
+        "cut",
+        "tr",
+        "diff",
+        "nl",
+        "file",
+        "stat",
+        "pwd",
+        "echo",
+        "jq",
+        "tree",
+        "du",
+        "basename",
+        "dirname",
+        "realpath",
+        "which",
+        "true",
+        "test",
+        "cd",
+        "git",
+    }
+)
+READ_GIT = frozenset(
+    {
+        "diff",
+        "log",
+        "show",
+        "status",
+        "blame",
+        "ls-files",
+        "ls-tree",
+        "rev-parse",
+        "grep",
+        "merge-base",
+        "cat-file",
+        "describe",
+        "shortlog",
+        "rev-list",
+        "branch",
+    }
+)
 READ_ONLY_HELP = (
     "this step is read-only: Bash allows only reading commands (git diff/log/show/status/blame/grep/ls-files, rg, grep, cat, "
     "head, tail, ls, find without -exec/-delete, sed without -i, wc, sort, diff, jq), no '>' and no $(...)."
@@ -79,7 +84,7 @@ GIT_LISTING = (
     "--sort",
 )
 GIT_CHANGING = ("commit", "push", "checkout", "switch", "merge", "rebase", "reset", "cherry-pick", "revert", "am", "pull")
-FIND_RUNS = {"-exec", "-execdir", "-ok", "-okdir", "-delete", "-fprint", "-fprintf", "-fls"}
+FIND_RUNS = frozenset({"-exec", "-execdir", "-ok", "-okdir", "-delete", "-fprint", "-fprintf", "-fls"})
 
 
 def unsafe_options(name: str, args: list[str]) -> bool:
@@ -132,6 +137,19 @@ def git_write(cmd: str) -> str | None:
     return None
 
 
+def git_piece_problem(t: list[str]) -> str | None:
+    """Why one `git ...` command line (as words) is not a reading command, else None."""
+    args = git_args(t)
+    sub = args[0] if args else ""
+    if sub not in READ_GIT | {"stash", "tag", "worktree"}:  # also catches `git -c key=value ...`, which can run a program
+        return f"git {sub} is not a reading command"
+    if git_write(" ".join(shlex.quote(x) for x in t)):
+        return f"git {sub} may only list"
+    if any(x.startswith("--output") for x in args):
+        return "--output writes a file"
+    return None
+
+
 def piece_problem(t: list[str]) -> str | None:
     """Why one command line (as words) is not a reading command, else None."""
     name = name_of(t[0])
@@ -143,16 +161,7 @@ def piece_problem(t: list[str]) -> str | None:
         return "sed only allows inline print scripts"
     if unsafe_options(name, t[1:]):
         return f"{name} option may execute a program or write a file"
-    if name == "git":
-        args = git_args(t)
-        sub = args[0] if args else ""
-        if sub not in READ_GIT | {"stash", "tag", "worktree"}:  # also catches `git -c key=value ...`, which can run a program
-            return f"git {sub} is not a reading command"
-        if git_write(" ".join(shlex.quote(x) for x in t)):
-            return f"git {sub} may only list"
-        if any(x.startswith("--output") for x in args):
-            return "--output writes a file"
-    return None
+    return git_piece_problem(t) if name == "git" else None
 
 
 def read_only_problem(cmd: str) -> str | None:
@@ -170,9 +179,9 @@ def read_only_problem(cmd: str) -> str | None:
     return None
 
 
-KILLERS = {"kill", "killall", "p" + "kill"}  # spelled apart: the no-process-lister rule scans the source for the name
+KILLERS = frozenset({"kill", "killall", "p" + "kill"})  # spelled apart: the no-process-lister rule scans the source for the name
 OWN_PIDS = ("$!", "%")
-RUNNERS = set(RECIPE_RUNNERS)
+RUNNERS = frozenset(RECIPE_RUNNERS)
 WRITER_RULE = (
     "a write step may not kill processes or run the engine's checks: the engine owns the editor, the servers and the slow suites it "
     "started, so a kill can take down its run. Do not run them; finish and report, the engine reruns the check."

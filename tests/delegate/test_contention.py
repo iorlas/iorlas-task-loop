@@ -1,4 +1,5 @@
 """Real processes sharing the router's files; only readiness and usage are synthetic."""
+
 import concurrent.futures
 import contextlib
 import json
@@ -7,12 +8,12 @@ import subprocess
 import sys
 import tempfile
 import threading
-import unittest
 from pathlib import Path
 
 from delegate.contracts.state import Dwell
 from delegate.contracts.stores import StateStore
 from stream_proc import stop_tree
+from support.case import Case
 from support.procsim import real_proc
 
 import hermetic  # noqa: F401
@@ -24,7 +25,7 @@ ROUNDS = 20
 
 # A fresh interpreter calls the real launcher/CLI and the real file writers. Pipes
 # rendezvous before contention, and (for next) after routing but before its write.
-CHILD = r'''
+CHILD = r"""
 import contextlib, datetime, io, json, runpy, sys, time, uuid
 from pathlib import Path
 sys.path.insert(0, str(Path.cwd() / "src"))
@@ -81,11 +82,15 @@ for i in range(rounds):
         agent_runs.lanes([(lane, i + 1, lane, [("5h", i, i + 1)])], i)
         agent_runs.run(rid, status="completed", ended=i + 1, exit=0)
 print(json.dumps(ids), flush=True)
-'''
+"""
 
 
-class Contention(unittest.TestCase):
-    def setUp(self):
+# Each case starts several python children that import the whole delegate package (seconds apiece on a busy host), over the 15 s default.
+LIMIT_S = 60
+
+
+class Contention(Case):
+    def setup_method(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.base = Path(tmp.name)
@@ -108,13 +113,26 @@ class Contention(unittest.TestCase):
                     pipe.close()
 
     def start(self, mode):
-        child_env = dict(os.environ, HOME=str(self.base), USERPROFILE=str(self.base), PATH="",
-                         XDG_CONFIG_HOME=str(self.base / "xdg"), XDG_DATA_HOME=str(self.base / "data"),
-                         CODEX_HOME=str(self.base / "codex"), DELEGATE_CONFIG_DIR=str(self.cfg), DELEGATE_NOW=str(T))
+        child_env = dict(
+            os.environ,
+            HOME=str(self.base),
+            USERPROFILE=str(self.base),
+            PATH="",
+            XDG_CONFIG_HOME=str(self.base / "xdg"),
+            XDG_DATA_HOME=str(self.base / "data"),
+            CODEX_HOME=str(self.base / "codex"),
+            DELEGATE_CONFIG_DIR=str(self.cfg),
+            DELEGATE_NOW=str(T),
+        )
         for lane in LANES:
-            p = subprocess.Popen([sys.executable, "-c", CHILD, mode, lane, str(ROUNDS)], env=child_env,
-                                 stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                 start_new_session=True)
+            p = subprocess.Popen(
+                [sys.executable, "-c", CHILD, mode, lane, str(ROUNDS)],
+                env=child_env,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                start_new_session=True,
+            )
             self.children.append(p)
         self.ready()
 
@@ -126,7 +144,7 @@ class Contention(unittest.TestCase):
         for p, read in zip(self.children, reads, strict=True):
             line = read.result(timeout=20)
             assert p.stderr is not None
-            self.assertEqual(line, b"ready\n", line if line else p.stderr.read().decode())
+            assert line == b"ready\n", line if line else p.stderr.read().decode()
 
     def release(self):
         for p in self.children:
@@ -138,8 +156,8 @@ class Contention(unittest.TestCase):
         results = []
         for p in self.children:
             out, err = p.communicate(timeout=30)
-            self.assertEqual(p.returncode, 0, err)
-            self.assertEqual(err, b"")
+            assert p.returncode == 0, err
+            assert err == b""
             results.extend(json.loads(out))
         return results
 
@@ -168,8 +186,8 @@ class Contention(unittest.TestCase):
         finally:
             done.set()
             reader.join(timeout=5)
-        self.assertFalse(reader.is_alive())
-        self.assertEqual(errors, [])
+        assert not reader.is_alive()
+        assert errors == []
 
     @real_proc("delegate: a worker, git or CLI process")
     def test_parallel_report_and_next_preserve_out_marks_and_fresh_dwell(self):
@@ -182,12 +200,12 @@ class Contention(unittest.TestCase):
             store.update(lambda s: s.prev.__setitem__("claude", Dwell(lane="CLAUDE_SUBSCRIPTION", since=T - 1)))
             self.release()
             self.finish()
-        self.assertIn(state, seen)
+        assert state in seen
         doc = json.loads(state.read_text())
-        self.assertEqual(set(doc["out"]), set(LANES))
+        assert set(doc["out"]) == set(LANES)
         for mark in doc["out"].values():
-            self.assertEqual((mark["until"], mark["at"], mark["source"]), (T + 3600, T, "manual"))
-        self.assertEqual(doc["prev"], {"claude": {"lane": "CLAUDE_SUBSCRIPTION", "since": T - 1}})
+            assert (mark["until"], mark["at"], mark["source"]) == (T + 3600, T, "manual")
+        assert doc["prev"] == {"claude": {"lane": "CLAUDE_SUBSCRIPTION", "since": T - 1}}
 
     @real_proc("delegate: a worker, git or CLI process")
     def test_parallel_config_cli_and_update_config_lose_no_updates(self):
@@ -195,10 +213,10 @@ class Contention(unittest.TestCase):
             self.start("config")
             self.release()
             self.finish()
-        self.assertIn(self.config, seen)
+        assert self.config in seen
         doc = json.loads(self.config.read_text())
-        self.assertEqual(doc["min_dwell_minutes"], 30 + N * ROUNDS)
-        self.assertEqual(doc["profile"]["lanes"], dict.fromkeys(LANES, "enabled"))
+        assert doc["min_dwell_minutes"] == (30 + N * ROUNDS)
+        assert doc["profile"]["lanes"] == dict.fromkeys(LANES, "enabled")
 
     @real_proc("delegate: a worker, git or CLI process")
     def test_parallel_agent_runs_keep_unique_runs_and_whole_lane_snapshots(self):
@@ -208,21 +226,24 @@ class Contention(unittest.TestCase):
             self.start("records")
             self.release()
             ids = self.finish()
-        self.assertIn(lane_path, seen)
-        self.assertTrue(any(p.parent.name == "runs" for p in seen))
-        self.assertEqual(len(ids), N * ROUNDS)
-        self.assertEqual(len(set(ids)), len(ids))
-        self.assertEqual({p.stem for p in root.glob("runs/*.json")}, set(ids))
+        assert lane_path in seen
+        assert any(p.parent.name == "runs" for p in seen)
+        assert len(ids) == (N * ROUNDS)
+        assert len(set(ids)) == len(ids)
+        assert ({p.stem for p in root.glob("runs/*.json")}) == set(ids)
         for path in root.glob("runs/*.json"):
             rec = json.loads(path.read_text())
-            self.assertEqual((rec["v"], rec["producer"], rec["id"], rec["status"], rec["exit"]),
-                             (1, "delegate", path.stem, "completed", 0))
-            self.assertEqual(rec["lane"], rec["parent_session"])
-            self.assertEqual(rec["ended"], rec["started"] + 1)
+            assert (rec["v"], rec["producer"], rec["id"], rec["status"], rec["exit"]) == (1, "delegate", path.stem, "completed", 0)
+            assert rec["lane"] == rec["parent_session"]
+            assert rec["ended"] == (rec["started"] + 1)
         rec = json.loads(lane_path.read_text())
-        self.assertEqual((rec["v"], rec["producer"]), (1, "delegate"))
-        self.assertEqual(len(rec["lanes"]), 1)
+        assert (rec["v"], rec["producer"]) == (1, "delegate")
+        assert len(rec["lanes"]) == 1
         lane = rec["lanes"][0]
-        self.assertIn(lane["name"], LANES)
-        self.assertEqual(lane, {"name": lane["name"], "out_until": rec["at"] + 1, "why": lane["name"],
-                                "usage": [{"window": "5h", "used_pct": rec["at"], "resets_at": rec["at"] + 1}]})
+        assert lane["name"] in LANES
+        assert lane == {
+            "name": lane["name"],
+            "out_until": rec["at"] + 1,
+            "why": lane["name"],
+            "usage": [{"window": "5h", "used_pct": rec["at"], "resets_at": rec["at"] + 1}],
+        }

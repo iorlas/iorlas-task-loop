@@ -1,42 +1,48 @@
 """Per-call usage and cost accounting (delegate-uk0, study 85). Pure functions: the launchers feed them what their harness reported.
 
-An accounting record `acct` is {in_fresh, cache_read, cache_write, out, cost_usd, cost_source, accounting, ttl_s, ttl_source, cache_write_by_ttl?}.
-Counts are per call, never cumulative. cache_write and cost_usd are None where the vendor does not report them. No price table here:
-cost is what the harness returned, or unknown. warm_until is telemetry (when the vendor's prompt cache probably expires); nothing routes on it."""
+An accounting record `acct` is {in_fresh, cache_read, cache_write, out, cost_usd, cost_source, accounting, ttl_s, ttl_source,
+cache_write_by_ttl?}. Counts are per call, never cumulative. cache_write and cost_usd are None where the vendor does not report them. No
+price table here: cost is what the harness returned, or unknown. warm_until is telemetry (when the vendor's prompt cache probably expires);
+nothing routes on it."""
 
 import datetime as dt
-from collections.abc import Iterable
-from typing import Any
+from collections.abc import Iterable, Mapping
+
+from delegate.contracts.json_types import Json
+from delegate.domain.jsonval import num, obj
+
+type Acct = dict[str, Json]
 
 CODEX_TTL_S = 3600  # measured 65 min (study 85); the vendor states 5-10 min to 24 h
 
 
-def per_call(total: dict | None, before: dict | None):
+def per_call(total: Mapping[str, Json] | None, before: Mapping[str, Json] | None) -> Mapping[str, Json] | None:
     """A running thread total ({in, cached, out}) minus the total the thread held before this call. `codex exec resume` reports the
     running total; a total lower than before is not a running total of that thread, so it stands as given."""
-    if not total or not before or (total.get("in") or 0) < before["in"]:
+    if not total or not before or num(total.get("in")) < num(before["in"]):
         return total
-    return {k: max(0, (total.get(k) or 0) - before[k]) for k in before}
+    return {k: max(0, num(total.get(k)) - num(before[k])) for k in before}
 
 
-def last_cumulative(rows: Iterable[dict], ref: str | None):
+def last_cumulative(rows: Iterable[Mapping[str, Json]], ref: str | None) -> dict[str, Json] | None:
     """The thread total a history row recorded for `ref` (newest wins), or None."""
     for r in reversed(list(rows)):
-        if r.get("ref") == ref and isinstance(r.get("cumulative"), dict):
-            return r["cumulative"]
+        cumulative = r.get("cumulative")
+        if r.get("ref") == ref and isinstance(cumulative, dict):
+            return cumulative
     return None
 
 
-def codex(tokens: dict | None):
+def codex(tokens: Mapping[str, Json] | None) -> Acct | None:
     """Per-call {in, cached, out} (already net of a resumed thread's earlier total) -> acct. Codex returns no cost."""
     t = tokens or {}
-    cached = t.get("cached") or 0
+    cached = num(t.get("cached"))
     return (
         {
-            "in_fresh": max(0, (t.get("in") or 0) - cached),
+            "in_fresh": max(0, num(t.get("in")) - cached),
             "cache_read": cached,
             "cache_write": None,
-            "out": t.get("out") or 0,
+            "out": num(t.get("out")),
             "cost_usd": None,
             "cost_source": "unknown",
             "accounting": "exact",
@@ -48,10 +54,10 @@ def codex(tokens: dict | None):
     )
 
 
-def opencode_step(acct: dict | None, tokens: dict, cost: Any):
+def opencode_step(acct: Acct | None, tokens: Mapping[str, Json], cost: Json) -> Acct:
     """Fold one opencode step-finish (tokens {input, output, reasoning, cache{read,write}}, cost) into the running acct."""
-    c = tokens.get("cache") or {}
-    a: dict[str, Any] = acct or {
+    c = obj(tokens.get("cache"))
+    a: Acct = acct or {
         "in_fresh": 0,
         "cache_read": 0,
         "cache_write": 0,
@@ -60,16 +66,16 @@ def opencode_step(acct: dict | None, tokens: dict, cost: Any):
         "ttl_s": None,
         "ttl_source": "unknown",
     }
-    a["in_fresh"] += tokens.get("input") or 0
-    a["cache_read"] += c.get("read") or 0
-    a["cache_write"] += c.get("write") or 0
-    a["out"] += (tokens.get("output") or 0) + (tokens.get("reasoning") or 0)
-    if isinstance(cost, (int, float)):
-        a["cost_usd"] = (a["cost_usd"] or 0.0) + float(cost)
+    a["in_fresh"] = num(a["in_fresh"]) + num(tokens.get("input"))
+    a["cache_read"] = num(a["cache_read"]) + num(c.get("read"))
+    a["cache_write"] = num(a["cache_write"]) + num(c.get("write"))
+    a["out"] = num(a["out"]) + num(tokens.get("output")) + num(tokens.get("reasoning"))
+    if isinstance(cost, int | float):
+        a["cost_usd"] = (num(a["cost_usd"]) or 0.0) + float(cost)
     return a
 
 
-def opencode_close(acct: dict | None, lane: str):
+def opencode_close(acct: Acct | None, lane: str) -> Acct | None:
     """Name the cost's source once the steps are in. Grok: opencode's catalog price per step. zai: its steps carry 0 and study 81 found
     that unverifiable, so unknown. Free DeepSeek: free."""
     if not acct:
@@ -85,31 +91,31 @@ def opencode_close(acct: dict | None, lane: str):
     return acct
 
 
-def merge(a: dict | None, b: dict | None):
+def merge(a: Acct | None, b: Acct | None) -> Acct | None:
     """Two calls of one run (the schema re-ask) -> one acct; unknown cost stays unknown only if both are."""
     if not a or not b:
         return a or b
     out = dict(b)
     for k in ("in_fresh", "cache_read", "out"):
-        out[k] = (a.get(k) or 0) + (b.get(k) or 0)
+        out[k] = num(a.get(k)) + num(b.get(k))
     out["cache_write"] = (
-        None if a.get("cache_write") is None and b.get("cache_write") is None else (a.get("cache_write") or 0) + (b.get("cache_write") or 0)
+        None if a.get("cache_write") is None and b.get("cache_write") is None else num(a.get("cache_write")) + num(b.get("cache_write"))
     )
-    costs = [x["cost_usd"] for x in (a, b) if x.get("cost_usd") is not None]
+    costs = [num(x["cost_usd"]) for x in (a, b) if x.get("cost_usd") is not None]
     out["cost_usd"] = sum(costs) if costs else None
     if costs and out["cost_source"] == "unknown":
         out["cost_source"] = "harness"
     return out
 
 
-def iso(ts: float):
+def iso(ts: float) -> str:
     return dt.datetime.fromtimestamp(ts, dt.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def fields(acct: dict | None, ref: str | None, ended_at: float):
+def fields(acct: Acct | None, ref: str | None, ended_at: float) -> dict[str, Json]:
     """-> the additive `usage` keys for a finished call (acct may be None: a call that reported nothing)."""
-    a: dict[str, Any] = acct or {}
-    ttl = a.get("ttl_s") if ref else None
+    a: Acct = acct or {}
+    ttl = num(a.get("ttl_s")) if ref else None
     return {
         "ref": ref,
         "last_activity_at": iso(ended_at) if ref else None,
@@ -122,7 +128,7 @@ def fields(acct: dict | None, ref: str | None, ended_at: float):
     }
 
 
-def token_fields(acct: dict | None) -> dict[str, Any]:
+def token_fields(acct: Acct | None) -> dict[str, Json]:
     """The per-call counts, added to usage.tokens beside the old in/cached/out."""
     if not acct:
         return {}

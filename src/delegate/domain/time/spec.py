@@ -1,10 +1,12 @@
 """Times: epoch seconds everywhere; text only at the edges. `+2h` / `+3d` / ISO / epoch in, 'Sat 24 Oct 18:00' and '2h30m' out."""
 
+import contextlib
 import datetime as dt
+from types import MappingProxyType
 
 WEEK_MIN = 7 * 24 * 60
 DAYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
-UNIT_S = {"m": 60, "h": 3600, "d": 86400}
+UNIT_S = MappingProxyType({"m": 60, "h": 3600, "d": 86400})
 
 
 def fmt_in(secs: float) -> str:
@@ -43,10 +45,8 @@ def parse_until(v: object, t: float) -> float | None:
     s = str(v or "").strip()
     if len(s) > 2 and s[0] == "+" and s[-1] in UNIT_S and s[1:-1].isdigit():
         return t + int(s[1:-1]) * UNIT_S[s[-1]]
-    try:
+    with contextlib.suppress(ValueError):
         v = float(s)
-    except ValueError:
-        pass
     return to_epoch(v)
 
 

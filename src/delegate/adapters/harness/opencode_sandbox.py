@@ -1,6 +1,6 @@
-"""What keeps an OpenCode worker inside the sandbox: the shell its commands run with (macOS sandbox-exec: no network, no secret paths, writes only
-in the work folder and temp) and the permission table OpenCode itself enforces. OpenCode stays outside the sandbox: it needs the network for its
-model, and macOS cannot nest one sandbox inside another."""
+"""What keeps an OpenCode worker inside the sandbox: the shell its commands run with (macOS sandbox-exec: no network, no secret paths,
+writes only in the work folder and temp) and the permission table OpenCode itself enforces. OpenCode stays outside the sandbox: it needs
+the network for its model, and macOS cannot nest one sandbox inside another."""
 
 import json
 import os
@@ -11,6 +11,7 @@ from pathlib import Path
 
 from app_dirs import config_dir
 
+from delegate.contracts.json_types import Json
 from delegate.contracts.wire import RECIPE_RUNNERS
 
 SECRETS = (
@@ -31,13 +32,15 @@ SECRETS = (
 )
 RULE = (
     "You run unattended. Every command runs in a sandbox: no network, no credential files, no writes outside this directory. If a command "
-    "fails because of it, do not work around it or change code to avoid it: say which command and why in your final message, and go on without it."
+    "fails because of it, do not work around it or change code to avoid it: say which command and why in your final message, "
+    "and go on without it."
 )
 NETWORK_REFUSALS = ("tcp connect error", "Network is unreachable", "Failed to connect", "error sending request")
 
 
 def readable_outside() -> list[str]:
-    """Folders outside the work folder a read-only worker may read: the caller's runs folder (the engine points reviewers at its files) and temp dirs."""
+    """Folders outside the work folder a read-only worker may read: the caller's runs folder (the engine points reviewers at its files)
+    and temp dirs."""
     return [str(config_dir("task-loop") / "runs"), "/private/tmp", "/private/var/folders", "/tmp", "/var/folders"]
 
 
@@ -59,8 +62,8 @@ def engine_only_rules(engine_only: Sequence[str]) -> dict[str, str]:
     }
 
 
-def permissions(write: bool, engine_only: Sequence[str] = ()) -> dict:
-    reads = {
+def permissions(write: bool, engine_only: Sequence[str] = ()) -> dict[str, Json]:
+    reads: dict[str, Json] = {
         "*": "allow",
         ".env": "deny",
         "*.env": "deny",
@@ -71,8 +74,9 @@ def permissions(write: bool, engine_only: Sequence[str] = ()) -> dict:
     }
     for x in SECRETS:
         reads[str(Path.home() / x)] = reads[str(Path.home() / x) + "/*"] = "deny"
-    outside = "deny" if write else {"*": "deny", **{x + "/**": "allow" for x in readable_outside()}}
-    bash = {"*": "allow", **engine_only_rules(engine_only)} if write and engine_only else None  # a read-only step ignores the list
+    outside: Json = "deny" if write else {"*": "deny", **{x + "/**": "allow" for x in readable_outside()}}
+    # a read-only step ignores the list
+    bash: dict[str, Json] | None = {"*": "allow", **engine_only_rules(engine_only)} if write and engine_only else None
     return {
         "*": "allow",
         **({"bash": bash} if bash else {}),
@@ -86,8 +90,8 @@ def permissions(write: bool, engine_only: Sequence[str] = ()) -> dict:
 
 
 def cache_env(cache: Path) -> dict[str, str]:
-    """The cache and state dirs a worker's tools (uv, mise, just, anything on XDG) write, all under one writable `cache` root: nothing is left to
-    default to ~/.local/state or ~/.cache. The launcher creates each before the sandbox starts."""
+    """The cache and state dirs a worker's tools (uv, mise, just, anything on XDG) write, all under one writable `cache` root: nothing is
+    left to default to ~/.local/state or ~/.cache. The launcher creates each before the sandbox starts."""
     return {
         "XDG_STATE_HOME": str(cache / "state"),
         "UV_CACHE_DIR": str(cache / "uv"),
@@ -97,7 +101,8 @@ def cache_env(cache: Path) -> dict[str, str]:
 
 
 def network_refusal(out: str) -> bool:
-    """True when a command's output shows it was refused the network (the shell's sandbox blocks it): that is not an owner decision."""
+    """True when a command's output shows it was refused the network (the shell's sandbox blocks it): that is not an owner
+    decision."""
     return any(x in out for x in NETWORK_REFUSALS)
 
 
@@ -106,13 +111,14 @@ def _quote(x: object) -> str:
 
 
 def write_shell(cwd: str, write: bool, path: Path, roots: Sequence[Path] = (), caches: Sequence[Path] = ()) -> None:
-    """The $SHELL OpenCode runs commands with: each one under sandbox-exec. `roots` are the XDG dirs the launcher points commands at (their tools
-    cache and keep state there), writable like temp. `caches` are the tool cache dirs (they may sit under a SECRETS folder such as
-    ~/.claude/plugins/data): read and write is allowed there after the secrets rule, and nowhere wider."""
+    """The $SHELL OpenCode runs commands with: each one under sandbox-exec. `roots` are the XDG dirs the launcher points commands at
+    (their tools cache and keep state there), writable like temp. `caches` are the tool cache dirs (they may sit under a SECRETS folder
+    such as ~/.claude/plugins/data): read and write is allowed there after the secrets rule, and nowhere wider."""
     home = Path.home()
     secrets = " ".join(f"(subpath {_quote(home / x)})" for x in SECRETS)
     scratch = Path(cwd) / ".task"  # the task-loop engine's git-ignored scratch folder: a reviewer's test run writes its temp files there
-    writable = [cwd if write else scratch] + [
+    writable: list[str | Path] = [
+        cwd if write else scratch,
         "/private/tmp",
         "/private/var/folders",
         home / "Library" / "Caches",
@@ -132,7 +138,8 @@ def write_shell(cwd: str, write: bool, path: Path, roots: Sequence[Path] = (), c
     xdg = os.environ.get("XDG_CONFIG_HOME")
     head = f"export XDG_CONFIG_HOME={shlex.quote(xdg)}" if xdg else "unset XDG_CONFIG_HOME"  # commands get the user's config root back
     path.write_text(
-        f'#!/bin/sh\n{head}\nexport SHELL=/bin/zsh\nexport UV_OFFLINE=1\nexec /usr/bin/sandbox-exec -p {shlex.quote(profile)} /bin/zsh "$@"\n',
+        f"#!/bin/sh\n{head}\nexport SHELL=/bin/zsh\nexport UV_OFFLINE=1\n"
+        f'exec /usr/bin/sandbox-exec -p {shlex.quote(profile)} /bin/zsh "$@"\n',
         encoding="utf-8",
     )
     path.chmod(0o700)
@@ -143,8 +150,8 @@ _probed: list[str | None] = []
 
 
 def preflight(run: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run) -> str | None:
-    """None when this process can start a sandboxed command, else why not (once per process). macOS cannot nest a sandbox in a sandbox: when
-    delegate itself runs inside one (a sandboxed agent session), sandbox-exec exits 71 and every command of the worker would fail."""
+    """None when this process can start a sandboxed command, else why not (once per process). macOS cannot nest a sandbox in a sandbox:
+    when delegate itself runs inside one (a sandboxed agent session), sandbox-exec exits 71 and every command of the worker would fail."""
     if not _probed:
         try:
             r = run(PROBE, capture_output=True, text=True, timeout=20, check=False)

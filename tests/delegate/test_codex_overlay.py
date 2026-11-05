@@ -1,4 +1,5 @@
 """UNITYCODEX: per-call rules grant only a guard invocation, never a raw executable."""
+
 import ast
 import contextlib
 import io
@@ -7,17 +8,18 @@ import os
 import subprocess
 import sys
 import tomllib
-import unittest
 from pathlib import Path
 from unittest import mock
 
+import pytest
 from delegate.adapters.harness.base import LaunchSpec
 from delegate.app import codex_policy, env
 from delegate.cli import parser
 from delegate.contracts import stops, wire
+from delegate.contracts.json_types import Json, arr
+from support.case import Case
 from support.procsim import real_proc
 
-import hermetic  # noqa: F401
 from test_route import route
 
 
@@ -31,15 +33,29 @@ def rules_at(home):
     return result
 
 
-class Overlay(unittest.TestCase):
-    def setUp(self):
+class Overlay(Case):
+    def setup_method(self):
         self.root = env.config_dir()
-        self.policy = {"binaries": {"python": sys.executable, "just": "/opt/just"},
-                       "writer_exec_allow": [["python", "-m", "unittest"], ["python", "-m", "pytest"], ["just", "check"]]}
+        self.policy = {
+            "binaries": {"python": sys.executable, "just": "/opt/just"},
+            "writer_exec_allow": [["python", "-m", "unittest"], ["python", "-m", "pytest"], ["just", "check"]],
+        }
         (self.root / "host.json").write_text(json.dumps(self.policy))
-        self.spec = LaunchSpec(argv=["codex", "exec", "--ignore-rules", "--ignore-user-config", "-c", "approval_policy=on-request",
-                                     "-c", "sandbox_workspace_write.network_access=false"],
-                               env={"PATH": "/bad/path"}, cwd=str(self.root), stdin="brief")
+        self.spec = LaunchSpec(
+            argv=[
+                "codex",
+                "exec",
+                "--ignore-rules",
+                "--ignore-user-config",
+                "-c",
+                "approval_policy=on-request",
+                "-c",
+                "sandbox_workspace_write.network_access=false",
+            ],
+            env={"PATH": "/bad/path"},
+            cwd=str(self.root),
+            stdin="brief",
+        )
 
     def configure(self, rules):
         spec, overlay = codex_policy.configure_writer(self.spec, rules, self.root)
@@ -53,70 +69,73 @@ class Overlay(unittest.TestCase):
             spec, overlay = self.configure([["python", "-m", "unittest"], ["just", "check"]])
         assert overlay is not None
         home = Path(spec.env["CODEX_HOME"])
-        self.assertEqual(home, overlay.root)
-        self.assertEqual(os.readlink(home / "auth.json"), str(real / "auth.json"))
-        self.assertFalse((real / "auth.json").exists())  # no credential target was created or copied
-        self.assertEqual({p.name for p in home.iterdir()}, {"auth.json", "rules", "exec-allow.json", "sessions", "archived_sessions"})
+        assert home == overlay.root
+        assert os.readlink(home / "auth.json") == str(real / "auth.json")
+        assert not (real / "auth.json").exists()  # no credential target was created or copied
+        assert {p.name for p in home.iterdir()} == {"auth.json", "rules", "exec-allow.json", "sessions", "archived_sessions"}
         rules = rules_at(home)
-        self.assertEqual(len(rules), 2)
+        assert len(rules) == 2
         for rule, tail in zip(rules, (["python", "-m", "unittest"], ["just", "check"]), strict=True):
-            self.assertEqual(rule, {"pattern": [*overlay.prefix, *tail], "decision": "allow"})
-        self.assertNotIn("--ignore-rules", spec.argv)
-        self.assertIn("--ignore-user-config", spec.argv)
-        self.assertIn("approval_policy=never", spec.argv)
-        self.assertNotIn("approval_policy=on-request", spec.argv)
-        self.assertIn("sandbox_workspace_write.network_access=false", spec.argv)
-        self.assertIn("--exec-allow", spec.stdin)
-        self.assertEqual(self.spec.env, {"PATH": "/bad/path"})
+            assert rule == {"pattern": [*overlay.prefix, *tail], "decision": "allow"}
+        assert "--ignore-rules" not in spec.argv
+        assert "--ignore-user-config" in spec.argv
+        assert "approval_policy=never" in spec.argv
+        assert "approval_policy=on-request" not in spec.argv
+        assert "sandbox_workspace_write.network_access=false" in spec.argv
+        assert "--exec-allow" in spec.stdin
+        assert self.spec.env == {"PATH": "/bad/path"}
 
     @real_proc("delegate: a worker, git or CLI process")
     def test_an_allowed_argv_runs_the_real_shim_without_a_prompt(self):
         spec, overlay = self.configure([["python", "-m", "unittest"]])
         assert overlay is not None
         command = [*overlay.prefix, "python", "-m", "unittest", "--help"]
-        matching = [r for r in rules_at(overlay.root) if command[:len(r["pattern"])] == r["pattern"]]
-        self.assertEqual([r["decision"] for r in matching], ["allow"])
+        matching = [r for r in rules_at(overlay.root) if command[: len(r["pattern"])] == r["pattern"]]
+        assert [r["decision"] for r in matching] == ["allow"]
         result = subprocess.run(command, env=os.environ | {"PATH": ""}, capture_output=True, text=True, check=False)
-        self.assertEqual(result.returncode, 0, result.stderr)
+        assert result.returncode == 0, result.stderr
         row = json.loads((self.root / "guard.jsonl").read_text())
-        self.assertTrue(row["allowed"])
-        self.assertEqual(row["resolved_argv"][0], sys.executable)
-        self.assertIn("approval_policy=never", spec.argv)
+        assert row["allowed"]
+        assert row["resolved_argv"][0] == sys.executable
+        assert "approval_policy=never" in spec.argv
 
     def test_another_argv_has_no_outside_sandbox_allow_and_call_scope_is_enforced(self):
         _, overlay = self.configure([["python", "-m", "unittest"]])
         assert overlay is not None
         rules = rules_at(overlay.root)
-        for command in (["python", "-m", "unittest"], [*overlay.prefix, "python", "-m", "pytest"],
-                        [*overlay.prefix, "python", "-c", "pass"]):
-            self.assertFalse(any(command[:len(r["pattern"])] == r["pattern"] for r in rules))
+        for command in (
+            ["python", "-m", "unittest"],
+            [*overlay.prefix, "python", "-m", "pytest"],
+            [*overlay.prefix, "python", "-c", "pass"],
+        ):
+            assert not any(command[: len(r["pattern"])] == r["pattern"] for r in rules)
         # Even an explicit direct call to the shim cannot borrow the host's broader allow.
-        with mock.patch("sys.stderr", io.StringIO()), mock.patch("delegate.app.codex_policy.subprocess.run") as run:
+        with mock.patch("sys.stderr", io.StringIO()), mock.patch("os.posix_spawnp") as run:
             code = route.main([*overlay.prefix[2:], "python", "-m", "pytest"])
-        self.assertEqual(code, 2)
+        assert code == 2
         run.assert_not_called()
 
     def test_empty_list_keeps_the_exact_existing_launch_and_creates_nothing(self):
         before = set(self.root.iterdir())
         spec, overlay = self.configure([])
-        self.assertIs(spec, self.spec)
-        self.assertIsNone(overlay)
-        self.assertEqual(set(self.root.iterdir()), before)
-        self.assertIn("--ignore-rules", spec.argv)
+        assert spec is self.spec
+        assert overlay is None
+        assert set(self.root.iterdir()) == before
+        assert "--ignore-rules" in spec.argv
 
     def test_project_rule_layers_are_explicitly_untrusted(self):
         spec, _ = self.configure([["python", "-m", "unittest"]])
         config = tomllib.loads("\n".join(word for word in spec.argv if word.startswith("projects.")))
         cwd = Path(spec.cwd).resolve()
         for folder in (cwd, *cwd.parents):
-            self.assertEqual(config["projects"][str(folder)]["trust_level"], "untrusted")
+            assert config["projects"][str(folder)]["trust_level"] == "untrusted"
 
     def test_cleanup_removes_overlay_and_not_the_auth_target(self):
         _, overlay = self.configure([["python", "-m", "unittest"]])
         assert overlay is not None
         root = overlay.root
         overlay.cleanup()
-        self.assertFalse(root.exists())
+        assert not root.exists()
         overlay.cleanup()
 
     def test_session_data_survives_overlay_cleanup_without_being_copied(self):
@@ -126,49 +145,52 @@ class Overlay(unittest.TestCase):
         assert overlay is not None
         session = overlay.root / "sessions/rollout-test.jsonl"
         session.write_text("session data")
-        self.assertEqual(os.readlink(overlay.root / "sessions"), str(real / "sessions"))
-        self.assertIn("sqlite_home=" + json.dumps(str(real)), spec.argv)
+        assert os.readlink(overlay.root / "sessions") == str(real / "sessions")
+        assert ("sqlite_home=" + json.dumps(str(real))) in spec.argv
         overlay.cleanup()
-        self.assertEqual((real / "sessions/rollout-test.jsonl").read_text(), "session data")
+        assert (real / "sessions/rollout-test.jsonl").read_text() == "session data"
 
     def test_invalid_unpinned_or_engine_only_lists_refuse_before_allocating_overlay(self):
         before = set(self.root.iterdir())
         for rules in ([["env", "python"]], [["just", "-f", "x", "check"]], [["python", "-c", "pass"]], "python", [3]):
-            with self.subTest(rules=rules), self.assertRaises(ValueError):
+            with self.subTest(rules=rules), pytest.raises(ValueError):
                 self.configure(rules)
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             codex_policy.configure_writer(self.spec, [["just", "check"]], self.root, ("check",))
-        self.assertEqual(set(self.root.iterdir()), before)
+        assert set(self.root.iterdir()) == before
 
 
-class Admission(unittest.TestCase):
+class Admission(Case):
     def test_new_field_round_trips_and_is_advertised(self):
         req = wire.RunRequest(role="worker", brief_file="b", cwd="/w", writer_exec_allow=[["dotnet", "test"]])
         args = req.to_argv("route.py", contract=stops.CONTRACT)
         ns = parser.build().parse_args(args[2:])
-        self.assertEqual(ns.writer_exec_allow, [["dotnet", "test"]])
-        self.assertEqual(stops.CONTRACT["contract"], 4)
-        self.assertIn("writer_exec_allow", stops.CONTRACT["capabilities"])
+        assert ns.writer_exec_allow == [["dotnet", "test"]]
+        assert stops.CONTRACT["contract"] == 4
+        assert "writer_exec_allow" in arr(stops.CONTRACT["capabilities"])
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             route.main(["contract", "--json"])
-        self.assertIn("writer_exec_allow", json.loads(out.getvalue())["capabilities"])
+        assert "writer_exec_allow" in json.loads(out.getvalue())["capabilities"]
 
     def test_old_or_missing_capability_is_refused_before_serialization(self):
         req = wire.RunRequest(role="worker", brief_file="b", cwd="/w", writer_exec_allow=[["dotnet", "test"]])
-        for contract in (None, {"contract": 3, "capabilities": ["writer_exec_allow"]},
-                         {"contract": 4, "capabilities": []}):
-            with self.subTest(contract=contract), self.assertRaises(ValueError):
+        contracts: list[dict[str, Json] | None] = [
+            None,
+            {"contract": 3, "capabilities": ["writer_exec_allow"]},
+            {"contract": 4, "capabilities": []},
+        ]
+        for contract in contracts:
+            with self.subTest(contract=contract), pytest.raises(ValueError):
                 req.to_argv("route.py", contract=contract)
 
     def test_receiver_without_the_capability_refuses_before_routing(self):
         out = io.StringIO()
-        with mock.patch.dict(stops.CONTRACT, {"capabilities": []}), \
-                mock.patch("delegate.app.decide.decision") as decide, contextlib.redirect_stdout(out):
+        with (
+            mock.patch.dict(stops.CONTRACT, {"capabilities": []}),
+            mock.patch("delegate.app.decide.decision") as decide,
+            contextlib.redirect_stdout(out),
+        ):
             route.main(["run", "worker", "--unattended", "--writer-exec-allow", '[["dotnet","test"]]'])
         decide.assert_not_called()
-        self.assertEqual(json.loads(out.getvalue())["stop"]["reason"], "bad_request")
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert json.loads(out.getvalue())["stop"]["reason"] == "bad_request"

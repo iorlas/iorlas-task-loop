@@ -4,6 +4,7 @@ in the HoldBook and handed to the picker.
 """
 
 from dataclasses import replace
+from types import MappingProxyType
 
 from delegate.contracts.routing import AskUser, CallArgs, Decision, Error, LaneOut, Role, Routing, Run, Step, Stop
 from delegate.contracts.state import Dwell, RefRecord
@@ -15,10 +16,11 @@ from delegate.domain.routing.tiers import LATE_FLAGS, TierPlan
 from delegate.domain.time.spec import local
 
 # The runners whose harness denies an engine-only recipe to a write step: claude -p through its PreToolUse hook, OpenCode through its bash
-# permission rules. Codex has no hook under `codex exec` and `--ignore-rules` drops its execpolicy, and the Agent tool is the orchestrator's own.
+# permission rules. Codex has no hook under `codex exec` and `--ignore-rules` drops its execpolicy, and the Agent tool is the
+# orchestrator's own.
 ENGINE_ONLY_RUNNERS = ("claude_p", "opencode")
 NO_ENGINE_ONLY = "rejected, its harness cannot deny the engine-only recipes {recipes} to a write step"
-OUTCOME_OF_OUT = {"logged_out": "logged_out", "hung": "hung", "credit": "credit_exhausted"}
+OUTCOME_OF_OUT = MappingProxyType({"logged_out": "logged_out", "hung": "hung", "credit": "credit_exhausted"})
 
 
 class Router:
@@ -57,8 +59,8 @@ class Router:
         rec: RefRecord | None = None,
         avoid: frozenset[tuple[str, str]] = frozenset(),
     ) -> Decision:
-        """The call's decision: `--resume` continues its thread on its lane; otherwise the role's chain. An unattended caller (an engine) has
-        no one to ask, and waits for a busy first choice."""
+        """The call's decision: `--resume` continues its thread on its lane; otherwise the role's chain. An unattended caller (an engine)
+        has no one to ask, and waits for a busy first choice."""
         if args.resume:
             return self.resume(role, args, rec, lanes)
         args = replace(args, allow_degraded=args.allow_degraded and not args.unattended)
@@ -100,16 +102,7 @@ class Router:
         mine = [lane for lane in lanes.values() if first and lane.family == first.on]
         busy = [lane for lane in mine if lane.busy and lane.usable_if_free(s)]
         if busy and wait_busy and not args.only_family and not any(picker.usable(lane, True)[0] for lane in mine):
-            until = min(
-                lane.out_until or 0 for lane in busy
-            )  # the first choice is only waiting for a slot: a minute beats a round on the next rung
-            return Stop(
-                reason="busy",
-                lane=busy[0].name,
-                retry_after=until,
-                trace=(),
-                say=f"{busy[0].name} (the role's first choice) has no free slot: {busy[0].notes[0]}",
-            )
+            return self._first_choice_busy(busy)
         why_not_first = "busy" if busy else "out" if any(lane.out for lane in mine) else "ceiling"
         first_lane = next((lane.name for lane in mine if lane.kind == "subscription"), mine[0].name if mine else None)
         for tier in tiers:
@@ -149,27 +142,45 @@ class Router:
                         lane,
                         args,
                     )
-        if args.only_family:
-            busy = [
-                lane
-                for step in steps
-                for lane in self._writable(step, args, lanes, trace, skipped).values()
-                if lane.family == step.on
-                and (lane.busy or lane.out_reason == "busy")
-                and not (lane.out and lane.out_reason != "busy")
-                and picker.usable(replace(lane, out=False), True, step.model)[0]
-            ]
-            if busy:
-                lane = min(busy, key=lambda lane: lane.out_until or 0)
-                return Stop(
-                    reason="busy",
-                    lane=lane.name,
-                    retry_after=lane.out_until,
-                    trace=tuple(trace),
-                    say=f"--only-family {', '.join(args.only_family)}: {self._family_state(lane.family, {lane.name: lane})}",
-                )
+        if args.only_family and (waiting := self._family_busy(steps, args, lanes, picker, trace, skipped)):
+            return waiting
         stop = self._stop(role_name, role, tiers, args, lanes, trace)
         return self._typed_stop(stop, args, lanes, skipped)
+
+    @staticmethod
+    def _first_choice_busy(busy: list[Lane]) -> Stop:
+        """The role's first choice is only waiting for a slot: a minute beats a round on the next rung."""
+        return Stop(
+            reason="busy",
+            lane=busy[0].name,
+            retry_after=min(lane.out_until or 0 for lane in busy),
+            trace=(),
+            say=f"{busy[0].name} (the role's first choice) has no free slot: {busy[0].notes[0]}",
+        )
+
+    def _family_busy(
+        self, steps: list[Step], args: CallArgs, lanes: dict[str, Lane], picker: LanePicker, trace: list[str], skipped: list[str]
+    ) -> Stop | None:
+        """`--only-family` with a lane of that family only waiting for a slot: the stop that says so, else None."""
+        busy = [
+            lane
+            for step in steps
+            for lane in self._writable(step, args, lanes, trace, skipped).values()
+            if lane.family == step.on
+            and (lane.busy or lane.out_reason == "busy")
+            and not (lane.out and lane.out_reason != "busy")
+            and picker.usable(replace(lane, out=False), True, step.model)[0]
+        ]
+        if not busy:
+            return None
+        lane = min(busy, key=lambda lane: lane.out_until or 0)
+        return Stop(
+            reason="busy",
+            lane=lane.name,
+            retry_after=lane.out_until,
+            trace=tuple(trace),
+            say=f"--only-family {', '.join(args.only_family)}: {self._family_state(lane.family, {lane.name: lane})}",
+        )
 
     def _typed_stop(self, stop: Stop, args: CallArgs, lanes: dict[str, Lane], skipped: list[str]) -> Stop:
         """Explain enforcement rejections before the generic family-unready stop."""
@@ -181,7 +192,8 @@ class Router:
                 stop,
                 reason="engine_only_unenforced",
                 ask_user=None,
-                say=f"{stop.say} --engine-only {', '.join(args.engine_only)} cannot be denied to a write step on {names}: the lane is not used for it. Use --engine-only-advisory to proceed with a warning; the brief must say so.",
+                say=f"{stop.say} --engine-only {', '.join(args.engine_only)} cannot be denied to a write step on {names}: "
+                "the lane is not used for it. Use --engine-only-advisory to proceed with a warning; the brief must say so.",
             )
         if args.only_family:
             return self._only_family_stop(stop, args, lanes)
@@ -199,7 +211,8 @@ class Router:
             stop,
             reason="only_family_unready",
             ask_user=None,
-            say=f"{stop.say} --only-family {', '.join(args.only_family)}: no step of that family is ready ({down}); no other family is used.",
+            say=f"{stop.say} --only-family {', '.join(args.only_family)}: no step of that family is ready ({down}); "
+            "no other family is used.",
         )
 
     def _tier_error(self, role: Role, args: CallArgs) -> str:
@@ -286,7 +299,8 @@ class Router:
                 lane=rec.lane,
                 outcome="held",
                 retry_after=hold.until,
-                say=f"{rec.lane} is on hold, {hold_text(hold)}. Continue with a fresh writer on another lane; existing file changes remain in the working directory.",
+                say=f"{rec.lane} is on hold, {hold_text(hold)}. Continue with a fresh writer on another lane; "
+                "existing file changes remain in the working directory.",
             )
         s, lane = self.r.settings, lanes.get(rec.lane)
         if (
@@ -301,7 +315,8 @@ class Router:
                 reason="engine_only_unenforced",
                 lane=lane.name,
                 trace=(f"{lane.name}: " + NO_ENGINE_ONLY.format(recipes=", ".join(args.engine_only)),),
-                say=f"{ref} runs on {lane.name}, whose harness cannot deny --engine-only {', '.join(args.engine_only)} to a write step. Start a fresh writer on another lane or use --engine-only-advisory; the brief must say so.",
+                say=f"{ref} runs on {lane.name}, whose harness cannot deny --engine-only {', '.join(args.engine_only)} to a write step. "
+                "Start a fresh writer on another lane or use --engine-only-advisory; the brief must say so.",
             )
         if lane is not None and lane.usable(s, True, rec.model)[0]:
             return self._advisory(

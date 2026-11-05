@@ -5,8 +5,10 @@ import shlex
 
 from delegate.domain.policy.worker import judge
 
-BROAD = {("dotnet", "build"), ("dotnet", "test"), ("dotnet", "restore"), ("python", "-m", "unittest"), ("python", "-m", "pytest")}
-EXACT = {("dotnet", "--version")}
+BROAD = frozenset(
+    {("dotnet", "build"), ("dotnet", "test"), ("dotnet", "restore"), ("python", "-m", "unittest"), ("python", "-m", "pytest")}
+)
+EXACT = frozenset({("dotnet", "--version")})
 
 
 def words(value: object) -> list[str]:

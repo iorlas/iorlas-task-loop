@@ -6,16 +6,17 @@ goes through `StateStore.transaction()` under one lock. A file of another shape 
 """
 
 from dataclasses import field
-from typing import Any
 
 from delegate.contracts.codec import mutable
+from delegate.contracts.json_types import Json
 
 V = 1
 
 
 @mutable
 class OutState:
-    """A lane marked out. source: vendor (the vendor stated the end) | guess | manual; `set` is the wall clock of the write (running workers read it)."""
+    """A lane marked out. source: vendor (the vendor stated the end) | guess | manual; `set` is the wall clock of the write (running
+    workers read it)."""
 
     until: float
     why: str = "reported out"
@@ -89,7 +90,7 @@ class AuthEntry:
 @mutable
 class UsageCache:
     at: float
-    data: Any = None
+    data: Json = None
 
 
 @mutable
@@ -111,16 +112,17 @@ RETIRED_STATE = ("codex_login_pid",)
 RETIRED_LANES = ("CLAUDE_CREDIT",)
 
 
-def split_retired_state(data: dict) -> tuple[dict, list[str]]:
-    """(data without retired top-level keys and without entries of a retired lane, what was dropped as 'key' or 'section.entry', in file order).
+def split_retired_state(data: dict[str, Json]) -> tuple[dict[str, Json], list[str]]:
+    """(data without retired top-level keys and without entries of a retired lane, what was dropped as 'key' or 'section.entry', in file
+    order).
     A per-lane entry is one keyed by the lane or carrying `lane`; every other entry, and the input, are untouched."""
     gone: list[str] = []
-    out: dict = {}
+    out: dict[str, Json] = {}
     for k, v in data.items():
         if k in RETIRED_STATE:
             gone.append(k)
         elif isinstance(v, dict) and k in ("out", "holds", "leases", "refs", "prev", "auth", "warned_at"):
-            keep = {}
+            keep: dict[str, Json] = {}
             for name, e in v.items():
                 if name in RETIRED_LANES or (isinstance(e, dict) and e.get("lane") in RETIRED_LANES):
                     gone.append(f"{k}.{name}")

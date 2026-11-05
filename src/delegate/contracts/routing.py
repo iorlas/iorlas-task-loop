@@ -5,9 +5,9 @@
 """
 
 from dataclasses import field
-from typing import Any
 
 from delegate.contracts.codec import record
+from delegate.contracts.json_types import Json
 
 V = 1
 
@@ -25,13 +25,13 @@ RETIRED_SETTINGS = (
 )
 
 
-def replaced_settings(lanes: dict) -> dict[str, str]:
+def replaced_settings(lanes: dict[str, dict[str, Json]]) -> dict[str, str]:
     """The per-lane enable settings an old config.json may carry (`<lane>_enabled`, from the lane name) -> the lane. They moved to the lane
     profile: loading fails loudly with the exact fix, the old key is never honored."""
     return {f"{n.removesuffix('_SUBSCRIPTION').lower()}_enabled": n for n, spec in lanes.items() if spec.get("opt_in")}
 
 
-def split_retired(settings: dict) -> tuple[dict, list[str]]:
+def split_retired(settings: dict[str, Json]) -> tuple[dict[str, Json], list[str]]:
     """(settings without the retired keys, the retired keys that were there, in file order)."""
     gone = [k for k in settings if k in RETIRED_SETTINGS]
     return {k: v for k, v in settings.items() if k not in RETIRED_SETTINGS}, gone
@@ -182,8 +182,8 @@ class Run:
     warning: str | None = None
     trace: tuple[str, ...] | None = None  # None: a resume plan reasoned about nothing
 
-    def as_dict(self) -> dict[str, Any]:
-        d: dict[str, Any] = {
+    def as_dict(self) -> dict[str, Json]:
+        d: dict[str, Json] = {
             "action": "run",
             "role": self.role,
             "pass": self.pass_,
@@ -219,11 +219,11 @@ class Stop:
     ask_user: AskUser | None = None
     trace: tuple[str, ...] | None = None
 
-    def as_dict(self) -> dict[str, Any]:
-        d: dict[str, Any] = {"action": "stop"}
+    def as_dict(self) -> dict[str, Json]:
+        d: dict[str, Json] = {"action": "stop"}
         if self.reason == "busy":
             d |= {"reason": "busy", "lane": self.lane, "retry_after": self.retry_after, "say": self.say}
-            extra: dict[str, Any] = {} if self.trace is None else {"trace": list(self.trace)}
+            extra: dict[str, Json] = {} if self.trace is None else {"trace": list(self.trace)}
             return d | extra
         d |= {"role": self.role, "say": self.say, "resets": dict(self.resets), "trace": list(self.trace or ())}
         if self.reason:
@@ -242,7 +242,7 @@ class LaneOut:
     say: str
     retry_after: float | None = None
 
-    def as_dict(self) -> dict[str, Any]:
+    def as_dict(self) -> dict[str, Json]:
         return {"action": "stop", "lane": self.lane, "retry_after": self.retry_after, "outcome": self.outcome, "say": self.say}
 
 
@@ -250,7 +250,7 @@ class LaneOut:
 class Error:
     error: str
 
-    def as_dict(self) -> dict[str, Any]:
+    def as_dict(self) -> dict[str, Json]:
         return {"action": "error", "error": self.error}
 
 
