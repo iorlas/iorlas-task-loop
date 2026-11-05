@@ -218,4 +218,29 @@ Per machine: one dashboard (port 7878, `dash ensure` is idempotent and replaces 
 - The reason for the container is the endpoint scanner's per-file cost on the Mac (about 20 ms a file, bead memory 2026-10-29). Cheaper than any of the above if allowed: a Defender folder exclusion for the factory's worktree and slot folders. Untested and policy-dependent (see D6).
 - Needs a server? No for one-way jobs over ssh (the engine starts the job, streams the log, collects the result). A server is only needed when the remote machine must start work on its own, which the git-remote bus already covers.
 
-**D6. Can this Mac exclude the factory's worktree folders (`~/Workspaces/wt`, the slots dirs) from Defender?** If yes, the container checks and their images can be deleted and review/land/gate run natively; if the policy forbids it, the ssh Linux executor is the replacement and the container backend stays until it exists.
+**D6 (answered 2026-11-05: no, this Mac cannot exclude folders from Defender; so the ssh Linux executor is the replacement and the container backend is frozen until it exists).** Can this Mac exclude the factory's worktree folders (`~/Workspaces/wt`, the slots dirs) from Defender?** If yes, the container checks and their images can be deleted and review/land/gate run natively; if the policy forbids it, the ssh Linux executor is the replacement and the container backend stays until it exists.
+
+## What another machine needs that is not in the bead or git yet (read; sources named)
+
+Today's homes (read): `factory.db` tables `ask, ask_ledger, attempt, bead, check_pass, check_round, effect, kv, lease, run, signal, source, step, wait`; files in the config folder `asks/`, `parks/`, `followups/`, `landed/`, `handoff/`, `decisions/<repo>-<hash>/ADR-n.json`, `slots/`. Bead metadata already carries `branch`, `slot`, the override and held keys (`app/track/verbs.py`, `app/asks/intake.py`, `app/reconcile/apply.py`).
+
+| Fact | Today | Needed on another machine? | Verdict |
+|---|---|---|---|
+| Bead status, claim, landed sha, PR link, park reason | bead + `landed/` file | the filer and any dashboard: yes | ✅ the bead must show all four (landed sha and PR link as metadata; checked: only branch and slot are confirmed written) |
+| Ask (question, choices) and the owner's answer | `ask` table / `asks/` file; an answer is a typed `AskAnswer` record, prose in a bd comment never acts | the owner may sit at another machine than the factory | ✅ the ask stays with the working factory (one repo, one factory); the bead gets a typed marker (label or metadata `asking`, ask id, dashboard URL) so any machine's `tl status` shows "2 asks waiting on <machine>". ❌ copying ask bodies to every machine (second record). Answering = that factory's dashboard |
+| Owner typed decisions on a bead (`hint`, `hold`, `override`, `park`, `note`) | override is bead metadata; the others not checked | yes if the owner acts from another machine | ✅ every typed owner record about a bead is bead metadata; only machine settings stay in the config folder |
+| Decisions in force (`decisions/.../ADR-n.json`, `uses.jsonl`) | config folder, per machine | **yes: a repo moved to another machine would lose them** | ✅ move them into the repo (files are the unit of truth, shelf Article I); the config copy is deleted (single path). The real gap. |
+| Profile | git base commit | yes | ✅ already |
+| Reflections, traces, run history, usage history | config files / `factory.db` | no (history of that machine; the dashboard reads it there) | ✅ stays local; ❌ syncing history |
+| Slots, leases, `host.json`, `repos.json` | config folder | no: machine facts | ✅ stays local |
+| Handoff notes (`handoff/`) | config folder, per session | no | ✅ stays local |
+
+## Remote executor over ssh (Denis, 2026-11-05: "SSH Linux executor is what we actually need")
+
+Good idea, in two phases; the second only if the first leaves a real pain.
+
+- **Phase 1 ✅: remote checks.** A new check location `"in": "linux"` replaces `"in": "container"`. Same shape as `container_run` today (tracked files as a tar on stdin, unpacked on the remote's own disk, exit code and `$TL_ARTIFACT_DIR` back), over ssh to a persistent Linux host with its toolchain installed once (mise, uv, just) and warm caches. No image to build, nothing to clean. What stays on the Mac: anything needing the Mac or Unity editor (`"in": "host"`). Costs: the host must exist and stay up; a tar upload per check; check secrets and env stripping rules must hold on the remote; a down host must fail the check loudly, never fall back to the Mac silently (single path).
+- **Phase 2 ❌ now: remote slots.** Worker, worktree and engine git all on the remote means the Spawner and Git ports get ssh implementations, the delegate accounts must be logged in on the remote (one subscription on two machines, see above), and every engine file read crosses ssh. Worth designing only when phase 1 proves a stage that cannot be a stateless check.
+- The executor term (glossary, `planned`) is this host. One more rule: the engine never runs phase-1 work in two places for one check.
+
+**D7. Which Linux host first?** Options: (A) a Linux machine already running (NixOS/homelab if one is up 24/7) — cheapest, no new bill; (B) a small cloud VM — always on, a monthly cost, needs the repo's toolchain and network egress; (C) a Linux VM on this Mac, reached over ssh like the others — no network, but it shares the Mac's CPU and RAM and ends the hardware split. The check interface is the same for all three, so the first pick is reversible.
