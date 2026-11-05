@@ -23,6 +23,7 @@ from support.logs import records
 # isort: split
 from taskloop.adapters import check_files, landlock, locks
 from taskloop.app.checks.cache import InputKeys, RunMemo, plan_digest
+from taskloop.app.land.carry import Carry
 from taskloop.app.land.cmds import Cmds
 from taskloop.app.land.forge import Forge
 from taskloop.app.land.stack import MODE, Stack
@@ -429,6 +430,21 @@ class Gated(GateCase):
         assert self.git.heads[path] == OID["task/a"]
         assert self.sim.ran("tl check --repo " + path) == ["tl check --repo " + path]
         assert self.git.ran("remove_worktree_force", path)
+
+    def test_a_carried_pass_is_delivered_without_running_the_check(self):
+        def carried(carry, engine, step, oid, tree, base, wt):
+            self.green.add(tree)
+            return True
+
+        with mock.patch.object(Carry, "carried", carried):
+            assert self.deliver(StackItem(branch="task/a")) == 0
+        assert self.sim.ran("tl check") == []
+
+    def test_a_pass_that_is_not_carried_runs_the_check(self):
+        self.green_on_check()
+        with mock.patch.object(Carry, "carried", lambda *a: False):
+            assert self.deliver(StackItem(branch="task/a")) == 0
+        assert len(self.sim.ran("tl check")) == 1
 
     def test_a_listed_worktree_whose_directory_is_gone_is_a_miss_not_a_crash(self):
         self.git.worktrees["task/a"] = "/wt/gone"

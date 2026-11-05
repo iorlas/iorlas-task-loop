@@ -222,19 +222,20 @@ def select(repo, changed):
     return sorted(chosen)
 
 
-CONFIG_FILES = ("pyproject.toml", "uv.lock", "mise.toml", "mise.lock", ".importlinter", "ruff.toml", "pyrefly.toml", "justfile", ".task-loop.json")
+CONFIG_FILES = ("pyproject.toml", "uv.lock", "mise.toml", "mise.lock", ".importlinter", "ruff.toml", "pyrefly.toml", "justfile",
+                ".task-loop.json")
 
 
 def closure(repo, tests, tracked=None):
     """Every file the result of running `tests` can depend on, sorted: the tests (those of the always-run tests/rules folder left out: they
-    read the whole tree and are a check of their own), the conftest.py above each, everything they import (forward, lazy imports too), every
-    non-Python file under tests/ and every one a reached file names by basename, and the root config files. Deliberately wide: a file
-    in the closure that did not matter costs a rerun, a file that mattered and is missing is a wrong pass."""
+    read the whole tree and are a check of their own), the conftest.py above each, everything they import (forward, lazy imports too),
+    every non-Python file under tests/ and every one a reached file names by basename, and the root config files. Deliberately wide: a
+    file in the closure that did not matter costs a rerun, a file that mattered and is missing is a wrong pass."""
     tests = [t for t in tests if not t.startswith(ALWAYS + "/")]
     reached = set(tests)
     for t in tests:
         parts = t.split("/")
-        reached |= {c for c in ("/".join(parts[:i] + ["conftest.py"]) for i in range(1, len(parts))) if c in repo.trees}
+        reached |= {c for c in ("/".join([*parts[:i], "conftest.py"]) for i in range(1, len(parts))) if c in repo.trees}
     todo = list(reached)
     while todo:
         for target in repo.edges.get(todo.pop(), ()):

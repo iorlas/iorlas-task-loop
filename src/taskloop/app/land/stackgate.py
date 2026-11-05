@@ -8,6 +8,7 @@ import json
 import tempfile
 
 from taskloop.app.checks import authorization
+from taskloop.app.land.carry import Carry
 from taskloop.app.land.cmds import Cmds, Stop
 from taskloop.app.land.profile_change import owner_refusal
 from taskloop.contracts import config
@@ -90,14 +91,17 @@ class StackGate:
         if profile_change is not None:
             argv.extend(["--policy-commit", base])
         try:
-            ran = self.cmds.run(argv)
-            red = self.red(engine, tree, base, wt)
+            carry = Carry(self.cmds, self.git, self.stores, self.repo, self.env)
+            if sum(carry.carried(engine, step, oid, tree, base, wt) for step in red):  # a pass on an earlier base that still holds
+                red = self.red(engine, tree, base, wt)
+            ran = self.cmds.run(argv) if red else None
+            red = self.red(engine, tree, base, wt) if ran else red
         finally:
             if made:
                 self.cmds.row(f"git worktree remove {made}", lambda: self.git.remove_worktree_force(self.repo, made))
         if red:
-            raise Stop(ran.exit or 1, f"{branch} ({oid[:12]}) is still not green for {self.named(red)} after "
-                                      f"`{text_of(argv)}` (exit {ran.exit})")
+            raise Stop(ran.exit if ran and ran.exit else 1, f"{branch} ({oid[:12]}) is still not green for {self.named(red)} after "
+                                      f"`{text_of(argv)}` (exit {ran.exit if ran else 'not run'})")
         return base
 
     def fresh(self, oid: str) -> str:

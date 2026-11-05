@@ -225,7 +225,7 @@ class RunMemo:
         self._put(PassRecord(key=key, result=res, tree=self.keys.tree, base=self.base, run_id=self.run_id, host=self.host,
                              ts=time.time(), round=rnd, log_abs=log_abs))
 
-    def reuse(self, key: RunKey, found: PassRecord) -> None:
+    def carry_over(self, key: RunKey, found: PassRecord) -> None:
         """A pass of the same check on an earlier base, proven to hold for this key too (app/land/carry.py): stored under this key, its
         `origin` naming the run that really made it."""
         self._put(PassRecord(key=key, result=found.result, tree=self.keys.tree, base=self.base, run_id=self.run_id, host=self.host,

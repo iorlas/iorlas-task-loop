@@ -9,20 +9,21 @@ import tempfile
 from pathlib import Path
 
 from taskloop.app.checks import authorization
-from taskloop.app.checks.cache import PassRecord, satisfied
+from taskloop.app.checks.cache import satisfied
 from taskloop.app.land.cmds import Cmds
 from taskloop.contracts import config
+from taskloop.contracts.checks import PassRecord
 from taskloop.contracts.env import Env
 from taskloop.contracts.ids import TreeSha
 from taskloop.contracts.ports import Git
-from taskloop.contracts.runkey import BaseSha
+from taskloop.contracts.runkey import BaseSha, RunKey
 from taskloop.domain.checks.specs import repo_check
 from taskloop.stores.bundle import Stores
 
 MERGE = ["git", "-c", "user.name=task-loop", "-c", "user.email=task-loop@localhost", "merge", "--no-ff", "--no-edit", "-q"]
 
 
-def earlier_pass(memo: authorization.RunMemo, check_id: str, expected, repo: str, stores: Stores) -> PassRecord | None:
+def earlier_pass(check_id: str, expected: RunKey, repo: str, stores: Stores) -> PassRecord | None:
     """The newest pass whose key differs from `expected` only in the base."""
     docs = stores.results(repo, check_id)
     found = [rec for name in docs.keys() if (rec := docs.of(name).get()) is not None  # noqa: SIM118 (a DocSet is not iterable)
@@ -71,7 +72,7 @@ class Carry:
         memo = authorization.memo_for(self.stores, self.git, wt, engine, TreeSha(tree), BaseSha(base), self.env)
         check = repo_check(spec, engine)
         key = memo.key(check)
-        found = earlier_pass(memo, check.id, key, memo.repo, self.stores) if key is not None else None
+        found = earlier_pass(check.id, key, memo.repo, self.stores) if key is not None else None
         if found is None or key is None:
             return False
         merged = self.merged(oid, base)
@@ -85,5 +86,5 @@ class Carry:
         if mine is None or theirs is None or mine != theirs:
             return False
         memo.run_id = "carry"
-        memo.reuse(key, found)
+        memo.carry_over(key, found)
         return True

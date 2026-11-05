@@ -16,8 +16,10 @@ def tree(root, files):
 
 
 BASE = {
-    "src/pkg/__init__.py": "", "src/pkg/a.py": "import pkg.b\n", "src/pkg/b.py": "X = 1\n", "src/pkg/unrelated.py": "Y = 2\n",
-    "tests/conftest.py": "", "tests/x/test_a.py": "import pkg.a\n", "tests/x/data.json": "{}", "tests/y/test_u.py": "import pkg.unrelated\n",
+    "src/pkg/__init__.py": "", "src/pkg/a.py": "import pkg.b\n", "src/pkg/b.py": "X = 1\n",
+    "src/pkg/unrelated.py": "Y = 2\n",
+    "tests/conftest.py": "", "tests/x/test_a.py": "import pkg.a\n", "tests/x/data.json": "{}",
+    "tests/y/test_u.py": "import pkg.unrelated\n",
     "tests/rules/test_all.py": "def test_x(): pass\n", "pyproject.toml": "",
 }
 
