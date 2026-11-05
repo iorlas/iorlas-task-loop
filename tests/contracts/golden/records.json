@@ -1743,7 +1743,31 @@
   "only_family": [
    "openai"
   ],
-  "writer_exec_allow": []
+  "writer_exec_allow": [],
+  "tools": [
+   {
+    "name": "factory",
+    "command": [
+     "tl",
+     "artifact-server"
+    ],
+    "bead": "t",
+    "run": "r1",
+    "stage": "write",
+    "attempt": 2
+   }
+  ]
+ },
+ "ToolBinding": {
+  "name": "factory",
+  "command": [
+   "tl",
+   "artifact-server"
+  ],
+  "bead": "t",
+  "run": "r1",
+  "stage": "write",
+  "attempt": 2
  },
  "DelegateResult": {
   "contract": 4,

@@ -27,6 +27,19 @@ REASON_OVERRUN: Final = "overrun"  # made by the engine: a reviewer call used it
 
 
 @final
+class ToolBinding(Rec):
+    """A tool server the engine gives one worker call: the argv a harness starts it with, bound by it to the bead, run, stage and
+    attempt it serves. The model passes none of these."""
+
+    name: str
+    command: list[str]
+    bead: str
+    run: str
+    stage: str
+    attempt: int
+
+
+@final
 class RunRequest(Rec):
     """One `route.py run`. The engine's limits travel as flags (`timeout_s`, `idle_s`): delegate stops the worker's tree at them."""
 
@@ -50,6 +63,7 @@ class RunRequest(Rec):
     # families the call may use (--only-family once each): set on a worker call only (domain/lanes/pin.py)
     only_family: list[str] = msgspec.field(default_factory=list)
     writer_exec_allow: list[list[str]] = msgspec.field(default_factory=list)
+    tools: list[ToolBinding] = msgspec.field(default_factory=list)  # not part of the route.py argv: delegate.api takes them typed
 
     def to_argv(self, python: str, route: str) -> list[str]:
         out = [python, route, "run", self.role, "--brief", self.brief_path, "--cwd", self.cwd, "--schema", self.schema_path]
