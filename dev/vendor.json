@@ -1,5 +1,11 @@
 [
   {
+    "name": "any_clock",
+    "shelf_tag": "9eabbd2f191ac4d99a0ab3b969c6eba1f9526c1b",
+    "shelf_commit": "9eabbd2f191ac4d99a0ab3b969c6eba1f9526c1b",
+    "tree_hash": "5a8d73fd64cb794bbf5fe93b681bd0e543877c489f9c18149fb1e53bb9aa4328"
+  },
+  {
     "name": "any_json_doc",
     "shelf_tag": "c548c10bbcce80a6e85ab5eab0e0fe78c67ebe82",
     "shelf_commit": "c548c10bbcce80a6e85ab5eab0e0fe78c67ebe82",
@@ -61,9 +67,9 @@
   },
   {
     "name": "stream_proc",
-    "shelf_tag": "eeffddcdd084aa3bd7352f9879a139e9a33acf6f",
-    "shelf_commit": "eeffddcdd084aa3bd7352f9879a139e9a33acf6f",
-    "tree_hash": "5344cb3b10697a23a4f8e43f30ced8ac18f5d78c6987abe9535290c60a025873"
+    "shelf_tag": "262a5999d0fc2380b0325e910996bbb5810aa76c",
+    "shelf_commit": "262a5999d0fc2380b0325e910996bbb5810aa76c",
+    "tree_hash": "0056ff7823329e01e3707f27967d214b2e2d17d8926a55066809604da0bb2c1a"
   },
   {
     "name": "timefmt",

@@ -1,8 +1,14 @@
-"""Import SCCs and fan-out, measured statically over the owned Python tree. Size is the per-file caps of gate_rules.py; no total is kept."""
+"""Hard architecture rules over the owned Python tree, measured statically: no import cycle, and no module imports more than
+MAX_FANOUT distinct project modules (lazy and TYPE_CHECKING imports count; the parent packages of an imported module do not,
+`from a.b import c` is one module, not three). 40 is the cap the probe could meet by splitting modules by concern (the two
+widest, app/launch/loop.py and skills/task-loop/tl.py, sit on it); past it a module does several jobs. Size is the per-file
+caps of gate_rules.py. Nothing is stored."""
 import ast
 
 from rules.enumtotal import bindings, qualified
 from rules.gate_rules import ROOT, parsed, py_files
+
+MAX_FANOUT = 40
 
 
 def production_trees(root=ROOT):
@@ -77,20 +83,18 @@ def cyclic_components(graph):
     return sorted(components)
 
 
-def growth_problems(actual, recorded):
-    problems = []
-    for metric, value in actual.items():
-        limit = recorded[metric]
-        if value > limit:
-            problems.append(f'{metric} grew: {value} > {limit}; the count may only shrink')
-        elif value < limit:
-            problems.append(f'{metric} shrank: lower rules_ratchet.json from {limit} to {value}')
-    return problems
+def imported_modules(targets):
+    """The modules a module names in its imports: a package that is only the parent of another imported module is not counted."""
+    return {name for name in targets if not any(other.startswith(name + '.') for other in targets)}
 
 
-def metrics(root=ROOT):
+def fanout_problems(graph, cap=MAX_FANOUT):
+    counted = {module: imported_modules(targets) for module, targets in graph.items()}
+    return [f'{module} imports {len(targets)} project modules; the cap is {cap}: split it by concern'
+            for module, targets in sorted(counted.items()) if len(targets) > cap]
+
+
+def problems(root=ROOT):
     graph = graph_of(production_trees(root))
-    return {
-        'scc': len(cyclic_components(graph)),
-        'fanout': max(map(len, graph.values()), default=0),
-    }
+    cycles = [f'import cycle: {" -> ".join(component)}' for component in cyclic_components(graph)]
+    return cycles + fanout_problems(graph)

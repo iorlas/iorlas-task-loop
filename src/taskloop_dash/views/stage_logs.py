@@ -1,16 +1,13 @@
 """Pure stage logs from retained engine rows and the existing per-call live-event reader."""
 
 from collections.abc import Sequence
-from typing import TYPE_CHECKING
 
 from taskloop.contracts import delegate, log
 from taskloop.contracts.dash import Phase, StageAttempt, StageLog, StageRole, TermLine
 from taskloop.contracts.runlife import Liveness
 from taskloop_dash.views import live_lines
+from taskloop_dash.views.passview import PassView
 from taskloop_dash.views.runfacts import Run, Span
-
-if TYPE_CHECKING:
-    from taskloop_dash.views.passes import PassView
 
 
 def rows_of(run: Run, span: Span) -> list[log.EngineLog]:

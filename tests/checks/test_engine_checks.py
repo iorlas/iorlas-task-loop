@@ -7,6 +7,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import gitq, procsim
+from support.aging import age
 from support.engine_case import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, EngineTest, no_repo, sh
 
 # isort: split
@@ -155,11 +156,11 @@ class EngineChecksTest(EngineTest):
 
     def test_budget_min_by_label_raises_the_budget_for_a_labelled_bead(self):
         eng = self.checks_engine(budget_min=5, budget_min_by_label={"unity": 300})
-        eng.t0 -= 8 * 60
+        age(eng, 8 * 60)
         with pytest.raises(engine.Blocked):
             eng.waits.budget_check()
         labelled = self.checks_engine(attrs={"labels": ["unity"]}, budget_min=5, budget_min_by_label={"unity": 300})
-        labelled.t0 -= 8 * 60
+        age(labelled, 8 * 60)
         labelled.waits.budget_check()
 
     def test_a_compile_error_amid_library_or_asset_import_lines_is_retried_once(self):

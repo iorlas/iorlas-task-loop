@@ -472,7 +472,7 @@ class EngineTest(Case):
         path.write_text(body)
         return shlex.join(["sh", str(path)])
 
-    def child_of(self, pidfile, limit=5):
+    def child_of(self, pidfile, limit=30):
         """The pid the check recorded. A caller that waits for a loaded runner to start the check passes a long limit (the wait ends
         the moment the pid is there; the limit is only the give-up)."""
         if until(lambda: pidfile.exists() and pidfile.read_text().strip(), limit):

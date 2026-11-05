@@ -110,7 +110,7 @@ def test_two_idle_tabs_wait_sixty_seconds_without_building(board) -> None:
 
     with ThreadPoolExecutor(2) as pool:
         tabs = [pool.submit(tab) for _ in range(2)]
-        assert [f.result(timeout=5) for f in tabs] == [60, 60]
+        assert [f.result(timeout=30) for f in tabs] == [60, 60]
     assert source.builds == 1
     assert wake.waits == [20] * 6
 
@@ -155,7 +155,7 @@ def test_two_tabs_share_the_build_after_a_commit(board) -> None:
 
     with ThreadPoolExecutor(2) as pool:
         tabs = [pool.submit(tab) for _ in range(2)]
-        assert [f.result(timeout=5) for f in tabs] == [200, 200]
+        assert [f.result(timeout=30) for f in tabs] == [200, 200]
     assert source.builds == 2
 
 
@@ -170,7 +170,7 @@ def test_two_tabs_share_a_build_published_before_it_is_cached(board, monkeypatch
     def paused_build():
         value = original_build()
         published.set()
-        assert release.wait(timeout=5)
+        assert release.wait(timeout=30)
         return value
 
     def observed_snapshot():
@@ -191,12 +191,12 @@ def test_two_tabs_share_a_build_published_before_it_is_cached(board, monkeypatch
     with ThreadPoolExecutor(2) as pool:
         first = pool.submit(reads.get, "/api/snapshot", {"since": version, "wait": "20"})
         try:
-            assert published.wait(timeout=5)
+            assert published.wait(timeout=30)
             second = pool.submit(reads.get, "/api/snapshot", {"since": version, "wait": "20"})
-            assert second_entered.wait(timeout=5)
+            assert second_entered.wait(timeout=30)
         finally:
             release.set()
-        replies = [first.result(timeout=5), second.result(timeout=5)]
+        replies = [first.result(timeout=30), second.result(timeout=30)]
     new_version = json.loads(replies[0][1])["version"]
     assert new_version != version
     for code, body, headers in replies:

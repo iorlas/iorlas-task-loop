@@ -92,11 +92,10 @@ def repo_part(repo: Path) -> Plan:
         problem = profile_problem(profile)
         return Plan([*checks, Check("profile", not problem, problem or f"{profile} loads")])
     checks.append(Check("profile", False, f"{profile} does not exist"))
-    asks = [Question("lanes", "How many work slots may run in parallel?", ["1", "2", "4", "8"], "4",
-                     "slots.count: each bead runs in its own slot; more lanes need more CPU, memory and delegate capacity")]
+    asks: list[Question] = []
     if "unity" in found:
         asks.append(Question("unity-lease", "Unity project found: serialize editor runs with a concurrency lease?", ["yes", "no"], "yes",
-                             "two Unity editors on one project corrupt its Library; a lease makes slots take turns"))
+                             "two editors on one project corrupt its Library; a lease makes slots take turns; yes also writes host.json"))
     if "just" in found:
         asks.append(Question("gate", "Is `just check` the repo gate?", ["yes", "no"], "yes", "the command a bead must pass to land"))
     return Plan(checks, [], asks)

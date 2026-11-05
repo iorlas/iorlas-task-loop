@@ -6,7 +6,6 @@ from pathlib import Path
 
 from taskloop.adapters.clock import SystemClock
 from taskloop.app.checks import authorization
-from taskloop.app.checks.execution import Runs
 from taskloop.app.land.profile_change import diff_sha
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.env import Env
@@ -52,10 +51,10 @@ def push_tips(stdin: str) -> tuple[PushTip, ...]:
 
 
 class PushJudge:
-    def __init__(self, repo: str, stores: Stores, git: Git, check: Callable[[EngineConfig], int], env: Env, spawner: Runs | None,
+    def __init__(self, repo: str, stores: Stores, git: Git, check: Callable[[EngineConfig], int], env: Env,
                  clock: Clock | None = None) -> None:
         self.repo, self.stores, self.git, self.check = repo, stores, git, check
-        self.env, self.spawner = env, spawner
+        self.env = env
         self.clock = clock or SystemClock()
         self.unproven: list[CheckId] = []
 
@@ -109,8 +108,7 @@ class PushJudge:
         if not tree or not base:
             self.unproven = [step.id for step in cfg.gate_checks]
             return False
-        found = authorization.results(self.stores, self.git, self.repo, cfg, tree, BaseSha(base), self.env,
-                                      spawner=self.spawner)
+        found = authorization.results(self.stores, self.git, self.repo, cfg, tree, BaseSha(base), self.env)
         self.unproven = [step.id for step in cfg.gate_checks if found.get(step.id) is None]
         return not self.unproven
 
@@ -153,7 +151,7 @@ class PushJudge:
         try:
             tree = TreeSha(self.git.rev_parse(self.repo, tip.sha + "^{tree}"))
             found = authorization.explain(self.stores, self.git, self.repo, cfg, tree, BaseSha(self.base_for(tip, cfg)),
-                                          self.env, self.unproven, self.spawner)
+                                          self.env, self.unproven)
         except (ValueError, OSError):
             return plain
         return {step: found.get(step, text) for step, text in plain.items()}
@@ -175,10 +173,10 @@ class PushJudge:
 
 
 def judge_push(repo: str, stdin: str, stores: Stores, git: Git, check: Callable[[EngineConfig], int], *,
-               env: Env, spawner: Runs | None = None, clock: Clock | None = None) -> PushDecision:
+               env: Env, clock: Clock | None = None) -> PushDecision:
     """Only this application boundary interprets the request. Failed observations never authorize transport."""
     try:
         tips = push_tips(stdin)
-        return PushJudge(repo, stores, git, check, env, spawner, clock).judge(tips)
+        return PushJudge(repo, stores, git, check, env, clock).judge(tips)
     except Exception as err:
         return PushDecision(PushStatus.UNAVAILABLE, (f"delivery judge unavailable: {err}",))

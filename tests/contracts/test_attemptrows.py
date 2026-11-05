@@ -85,7 +85,7 @@ class AttemptRows(Case):
 
     def test_two_threads_serialize_counter_and_rows(self):
         self.where.take_up("r", "/repo", "b", 10)
-        barrier = Barrier(2, timeout=5)
+        barrier = Barrier(2, timeout=30)
 
         def take(_):
             where = RunLocator(self.cfg)

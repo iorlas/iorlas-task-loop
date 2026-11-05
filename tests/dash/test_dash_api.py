@@ -21,6 +21,7 @@ from support.fakes import FakeBeadStore
 from support.narrow import must
 from support.repos import write_repos
 
+from taskloop.adapters.ident import hostname
 from taskloop.contracts import wire
 from taskloop.contracts.ask import Ask, AskOption
 from taskloop.contracts.dash import BeadDetail, Snapshot
@@ -81,7 +82,7 @@ class ApiFixture(Case):
             return real_find(query)
 
         self.store.find = counting
-        self.store.put(bead("s-a", f"slot {socket.gethostname()} a", "in_progress", labels=["slot"], assignee="tl-a"))
+        self.store.put(bead("s-a", f"slot {hostname()} a", "in_progress", labels=["slot"], assignee="tl-a"))
         self.now = NOW
         ports = Ports(store=lambda repo: self.store)
         seed_beads(self.cfg, self.repo, self.store.find(BeadQuery(include_closed=True)), self.now)

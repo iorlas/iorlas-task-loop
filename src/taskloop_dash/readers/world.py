@@ -66,7 +66,7 @@ class Worlds:
         rows = typed_beads(raw)
         bd_ok_at, bd_error = self.beads.health(path)
         slot_source = self.slot_source(path)
-        slots = slots_of(rows, slot_source.host)
+        slots = slots_of(rows, slot_source.host.split(".")[0].lower())  # titled as ident.hostname() names this machine
         states = [s for s in (JsonStore(f, LoopState).get() for f in sorted(env.config.loop_state(loop_key(path)).parent.glob(
             loop_key(path) + ".*.json"))) if s is not None]
         _, items = self.looks.look_items(id, raw)

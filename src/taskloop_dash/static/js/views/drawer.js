@@ -6,7 +6,8 @@ import * as api from '../api.js';
 import { allProjects, causeOf, muted, piecesOf } from '../data.js';
 import { age, bid, dur, projectName, tokens } from '../format.js';
 import { rememberScroll, scrollOf, set, ui } from '../state.js';
-import { AskCard, Gallery, LookCard, StopActions } from '../ui/ask.js';
+import { AskCard, LookCard, StopActions } from '../ui/ask.js';
+import { ArtifactGallery } from '../ui/artifacts.js';
 import { BeadRow, EmptyState, Md, MsgLine, Popover, Tabs, Totals } from '../ui/kit.js';
 import { Trace } from '../ui/line.js';
 import { END, passNum, StageCard } from '../ui/stage.js';
@@ -95,11 +96,8 @@ function BeadTab({ d, snap, now }) {
     const b = snap.beads.find((x) => x.id === id && x.project === d.card.project);
     return b ? html`<${BeadRow} key=${id} card=${b} all=${all} onOpen=${(x) => set({ bead: x.id, dtab: '' })} />` : html`<div key=${id} class="tr done"><span class="id">${id}</span></div>`;
   };
-  const shots = d.artifacts.filter((a) => a.kind === 'image').sort((a, b) => b.t - a.t).map((a) => a.url);
-  const files = d.artifacts.filter((a) => a.kind === 'file');
   return html`<div class="bead">
-    ${(shots.length > 0 || files.length > 0) && html`<h4>Screenshots and files · ${d.artifacts.length}</h4><${Gallery} shots=${shots} />
-      ${files.map((f) => html`<a key=${f.url} class="file" href=${f.url} target="_blank" rel="noopener">📎 ${f.name}</a>`)}`}
+    ${d.artifacts.length > 0 && html`<h4>Artifacts · ${d.artifacts.length}</h4><${ArtifactGallery} items=${d.artifacts} />`}
     <h4>Description</h4>${d.description ? html`<${Md} text=${d.description} cls="desc" />` : html`<p>—</p>`}
     <h4>Acceptance</h4>${d.acceptance ? html`<${Md} text=${d.acceptance} cls="desc" />` : html`<p>—</p>`}
     ${d.waits_for.length > 0 && html`<h4>Waits for</h4>${d.waits_for.map(row)}`}
