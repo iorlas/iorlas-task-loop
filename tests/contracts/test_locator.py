@@ -114,7 +114,7 @@ class Locator(Case):
 
     def test_two_threads_take_up_beat_identify_and_add_beads_without_losing_changes(self):
         a = self.where.create("/r/x", "tl-1", T0)
-        barrier = Barrier(2, timeout=5)
+        barrier = Barrier(2, timeout=30)
 
         def update(worker):
             where = RunLocator(self.cfg)

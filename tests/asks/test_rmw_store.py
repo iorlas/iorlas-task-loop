@@ -130,8 +130,8 @@ class Logs(Case):
         h = UsageHistory(cfg)
         h.record(snap(T - USAGE_KEEP_S - 5))
         h.record(snap(T))
-        wrapped, started = during(UsageHistory.read_from, lambda: UsageHistory(cfg).record(snap(T + 7)))
-        with mock.patch.object(UsageHistory, "read_from", wrapped):
+        wrapped, started = during(os.replace, lambda: UsageHistory(cfg).record(snap(T + 7)))
+        with mock.patch("os.replace", wrapped):
             assert h.prune(T) == 1
         for t in started:
             t.join(30)

@@ -2,7 +2,7 @@
 test *args:
     uv run pytest {{args}}
 
-# just test-live [pytest args]: the explicit-only scenarios of tests/live (real git remote, real processes, real tl and dashboard, docker when it answers); no default run collects them
+# just test-live [pytest args]: the explicit-only scenarios of tests/live (real git remote, real processes, real tl and dashboard); no default run collects them
 test-live *args:
     uv run pytest -m live -s tests/live {{args}}
 
@@ -29,12 +29,25 @@ check: lint types rules
 check-all: check
     python3 dev/suite.py
 
+# lint and types look only at the .py files this change touches (against origin/main, plus the working tree); lint-all and types-all read the whole tree.
 lint:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    files=$(just changed)
+    [ -z "$files" ] || echo "$files" | xargs uv tool run "ruff@$(just pin ruff)" check
+
+lint-all:
     #!/usr/bin/env bash
     set -euo pipefail
     uv tool run "ruff@$(just pin ruff)" check
 
 types:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    files=$(just changed)
+    [ -z "$files" ] || { unset VIRTUAL_ENV; uv sync --frozen -q; echo "$files" | xargs uv tool run "pyrefly@$(just pin pipx:pyrefly)" check; }
+
+types-all:
     #!/usr/bin/env bash
     set -euo pipefail
     unset VIRTUAL_ENV  # a caller under `uv run --script` (release.py) passes its script env, which has no dev group
@@ -48,6 +61,13 @@ rules:
     # --with msgspec: .importlinter names msgspec as a root package (the hook contract), and grimp must find it
     PYTHONPATH=src:skills/task-loop/_vendor uv tool run --with msgspec --from "import-linter@$(just pin pipx:import-linter)" lint-imports
     uv run pytest tests/rules/gate_rules.py tests/rules -q -m ""  # every invariant and ratchet runs in the gate
+
+# The .py files this change touches: committed since origin/main, edited, or new; deleted ones, the vendored copy and fixtures left out.
+[private]
+changed:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    { git diff --name-only --diff-filter=d origin/main...HEAD; git diff --name-only --diff-filter=d HEAD; git ls-files --others --exclude-standard; } | sort -u | grep '\.py$' | grep -v '/_vendor/' | grep -v '^tests/fixtures/' || true
 
 # The version mise.toml pins for a tool (one source for the pins).
 [private]

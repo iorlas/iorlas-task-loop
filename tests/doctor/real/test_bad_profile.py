@@ -21,7 +21,7 @@ from support.who import who
 
 from taskloop.app.doctor import profiles
 from taskloop.app.launch import dash_ports
-from taskloop.app.launch import loop as wloop
+from taskloop.app.launch import loop_start as wstart
 from taskloop.app.wire import brief, doctor
 from taskloop.contracts.env import snapshot
 from taskloop.contracts.paths import ConfigDir
@@ -160,4 +160,4 @@ class OtherViews(BadProfile):
         assert str(self.bad / ".task-loop.json") in ports.profile_error(str(self.bad))
 
     def test_cutover_over_a_bad_repo_is_not_a_traceback(self) -> None:
-        assert wloop.live_work(port_git(), who()) == []
+        assert wstart.live_work(port_git(), who()) == []

@@ -4,7 +4,9 @@
 import { html, useEffect } from '../../vendor/ui-runtime.js';
 import { causeOf, idx, key, liveSegment, MACHINE_ICON, machineOf, muted, visible } from '../data.js';
 import { bid, clock, dur } from '../format.js';
+import * as api from '../api.js';
 import { set, ui } from '../state.js';
+import { AttemptFiles } from '../ui/artifacts.js';
 import { EmptyState } from '../ui/kit.js';
 import { BeadLine, Strip, useWidth } from '../ui/line.js';
 import { openBead } from './shell.js';
@@ -72,6 +74,16 @@ function walls(snap, rows, x, now) {
     ${i === 0 && html`<div key=${`${l.id}h`} class="wall lbl" style=${`left:${x(now)}px;top:0;height:${AXIS}px`}><span>⛔ ${l.name} locked${l.locked_until ? ` until ${clock(l.locked_until)}` : ''}</span></div>`}`));
 }
 
+// what the slot's worker has registered in its current pass (the bead resource the drawer polls; mounted only for a busy slot)
+function NowFiles({ slot }) {
+  const { data } = api.useResource(`/api/bead?project=${encodeURIComponent(slot.project)}&id=${encodeURIComponent(slot.bead)}`);
+  const last = data && data.passes.length ? data.passes[data.passes.length - 1].n : null;
+  const mine = data && last != null ? data.artifacts.filter((a) => a.pass_n === last) : [];
+  return mine.length ? html`<div class="nowfiles"><span class="al">${slot.name}</span><${AttemptFiles} items=${mine} any=${false} /></div>` : null;
+}
+
+const busyBead = (s) => s.bead && s.project && ['running', 'stuck', 'look'].includes(s.state);
+
 export function Floor({ snap, now, filters }) {
   const [ref, w] = useWidth();
   const zoom = zoomOf();
@@ -109,7 +121,8 @@ export function Floor({ snap, now, filters }) {
         <div class="fut" style=${`left:${x(now)}px;width:${W - x(now)}px`}></div>
         <div class="now" style=${`left:${x(now)}px`}></div>
         <svg class="jmp" width=${W} height=${H}>${jumps(snap, rows, x)}</svg>
-        ${walls(snap, rows, x, now)}${trks}</div>`}</div></div><${Runs} snap=${snap} now=${now} />`;
+        ${walls(snap, rows, x, now)}${trks}</div>`}</div></div>
+    ${gs.flatMap((g) => g.slots).filter(busyBead).map((s) => html`<${NowFiles} key=${key(s.project, s.id)} slot=${s} />`)}<${Runs} snap=${snap} now=${now} />`;
 }
 
 // ---- phone: counts, then one card per slot
@@ -144,7 +157,7 @@ function SlotCard({ snap, slot, now }) {
   const m = machineOf(slot);
   return html`<article class=${`slc ${busy ? '' : 'idle'}`} role=${b ? 'button' : undefined} onClick=${b ? () => openBead(b) : undefined}>
     <div class="h"><b>${MACHINE_ICON(m)} ${slot.name}</b><span>${slot.lane}</span><span class=${`pill ${PILL[st]}`}>${pill}</span></div>
-    ${body}<${Strip} pieces=${pieces} pulses=${pieces.map((p) => liveSegment(snap, p))} now=${now} /></article>`;
+    ${body}<${Strip} pieces=${pieces} pulses=${pieces.map((p) => liveSegment(snap, p))} now=${now} />${busy && b && html`<${NowFiles} slot=${slot} />`}</article>`;
 }
 
 export function PhoneFloor({ snap, now }) {

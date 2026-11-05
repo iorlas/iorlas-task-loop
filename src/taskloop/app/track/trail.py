@@ -4,12 +4,12 @@ import json
 import socket
 import sys
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Final
 
-from atomic_io import atomic_write_text
+from jsonl_log import JsonlLog, held
 
-from taskloop.adapters import applog
 from taskloop.adapters.gitrepo import repo_root
 from taskloop.contracts import events, wire
 from taskloop.contracts.events import Event, EventRec
@@ -19,6 +19,7 @@ from taskloop.contracts.ids import BeadId
 from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdFailure, Beads
+from taskloop.contracts.rotating import NO_ROTATION
 from taskloop.contracts.stores import EventLog, ReposStore
 
 SOURCE: Final = "task-loop"
@@ -47,7 +48,7 @@ def event(by: Identity, kind: str, bead: str = "", **fields: Any) -> Event:
                              if i.rec.run_id == rec.run_id and i.rec.step == "close"), None)
             if existing is not None:
                 return existing
-        applog.append(cfg.events(), json.dumps(wire.dump(rec), ensure_ascii=False) + "\n")  # tl-64i: one held handle per process
+        events_log(cfg).append(json.dumps(wire.dump(rec), ensure_ascii=False).encode("utf-8", "surrogateescape"))  # tl-64i: one held handle
     register_repo(rec.repo, cfg)
     return rec
 
@@ -76,17 +77,21 @@ def events_lock(cfg: ConfigDir) -> Path:
     return cfg.lock_record("log", "events")
 
 
+def events_log(cfg: ConfigDir) -> JsonlLog:
+    """The process's one open events.jsonl: never rotated (pruned by age), its prune lock is the one `event` holds."""
+    return held(cfg.events(), rotate_bytes=NO_ROTATION, rotate_lock=events_lock(cfg))
+
+
+def _newer(cut: float) -> Callable[[bytes], bool]:
+    def keep(line: bytes) -> bool:
+        try:
+            return json.loads(line).get("t", 0) >= cut
+        except ValueError:
+            return False
+    return keep
+
+
 def prune_events(cfg: ConfigDir, days: float = RETAIN_DAYS) -> None:
     f = cfg.events()
-    if not f.exists() or f.stat().st_size < 2_000_000:
-        return
-    cut = now() - days * 86400
-    with guard(events_lock(cfg)):  # read, filter, replace as one step: a line appended meanwhile waits
-        keep: list[str] = []
-        for ln in f.read_text(encoding="utf-8", errors="replace").splitlines():
-            try:
-                if json.loads(ln).get("t", 0) >= cut:
-                    keep.append(ln)
-            except ValueError:
-                pass
-        atomic_write_text(f, "\n".join(keep) + ("\n" if keep else ""), fsync=False)
+    if f.exists() and f.stat().st_size >= 2_000_000:
+        events_log(cfg).rewrite(_newer(now() - days * 86400))

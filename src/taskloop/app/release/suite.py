@@ -1,10 +1,9 @@
-"""The gate and the suite a release runs before it pushes: `just check`, then the whole suite through pytest-xdist workers (or the
-container's), skipped when this exact tree already passed this exact command."""
+"""The gate and the suite a release runs before it pushes: `just check`, then the whole suite through pytest-xdist workers,
+skipped when this exact tree already passed this exact command."""
 import contextlib
 import os
 import shutil
 import signal
-import sys
 import tempfile
 import threading
 import time
@@ -31,12 +30,11 @@ from taskloop.stores.real import real_stores
 
 LONG = 3 * 3600.0  # a hang guard for a whole gate run
 STALE_TMP_S = 2 * LONG  # a tl-suite-* dir this old belongs to a suite that was killed without unwinding (SIGKILL): no live one runs so long
-RUN_WALL_S = 1200.0  # one pytest run's wall limit (the whole parallel run takes under a minute here: 20x); then its tree is stopped
+RUN_WALL_S = 3600.0  # one pytest run's wall limit, a hang guard (14 workers take 11 min on a Mac, over 20 shared); its tree is stopped
 WORKER_BUDGET_MB = 2048  # per worker: sets the worker count (RAM / budget), caps its address space (healthy ~430 MB) and is the refusal bar
+SUITE_COMMAND = ("uv", "run", "--script", "dev/suite.py")  # the repo profile's suite check; the cache key and receipt name it
 NO_TESTS = 5  # pytest's exit code for "no tests collected"
 MEMINFO = Path("/proc/meminfo")
-PROC_CGROUP = Path("/proc/self/cgroup")
-CGROUP_ROOT = Path("/sys/fs/cgroup")
 
 
 def save_output(out: str, env: Env) -> Path:
@@ -54,28 +52,8 @@ def red(out: str, lines: list[str], env: Env) -> Abort:
                  log, failing_tests(out))
 
 
-def cgroup_headroom_mb() -> int | None:
-    """memory.max minus memory.current of this process's cgroup v2, MB; None when there is no numeric limit (v1, "max", missing or
-    garbage files)."""
-    try:
-        line = next(ln for ln in PROC_CGROUP.read_text(encoding="utf-8").splitlines() if ln.startswith("0::"))
-        d = CGROUP_ROOT / line[3:].strip().lstrip("/")
-        limit = int((d / "memory.max").read_text(encoding="utf-8").strip())
-        used = int((d / "memory.current").read_text(encoding="utf-8").strip())
-    except (OSError, ValueError, StopIteration):
-        return None
-    return max(0, limit - used) // (1024 * 1024)
-
-
 def available_mb() -> int | None:
-    """RAM that can be used now, MB: MemAvailable on Linux, else the free pages sysconf reports (macOS: physical pages); on Linux capped
-    by the cgroup headroom, because inside a container /proc/meminfo shows the HOST's memory, not the container's limit."""
-    host = host_available_mb()
-    cap = cgroup_headroom_mb()
-    return host if cap is None else cap if host is None else min(host, cap)
-
-
-def host_available_mb() -> int | None:
+    """RAM that can be used now, MB: MemAvailable where /proc/meminfo exists, else the free pages sysconf reports (macOS)."""
     try:
         for line in MEMINFO.read_text(encoding="utf-8").splitlines():
             if line.startswith("MemAvailable:"):
@@ -125,7 +103,7 @@ def isolated_env(home: Path, base: Env) -> dict[str, str]:
 
 
 def suite_lock_path(env: Env) -> Path:
-    """One full suite per host: every host_suite run (a release's, dev/suite.py's, the container wrapper's fallback) takes this lock."""
+    """One full suite per host: every host_suite run (a release's, dev/suite.py's) takes this lock."""
     return config_dir(env) / "locks" / "suite-host.lock"
 
 
@@ -225,19 +203,6 @@ def prewarm(tool_root: Path, sh: Shell) -> None:
         sh.run(["uv", "run", "--script", str(tool_root / script), "--help"], tool_root, extra=extra)
 
 
-def container_suite(tool_root: Path, repo: Path, sh: Shell) -> None:
-    """The suite through dev/suite-docker.py (a Linux container's own disk; the host suite when docker is not reachable).
-    TASK_LOOP_SUITE_HOST=1 runs it on the host. A fake repo (the tests') has no runner of its own: it takes the host runner."""
-    if sh.env.get(EnvVar.TASK_LOOP_SUITE_HOST) or not (repo / "dev" / "suite.py").is_file():
-        return host_suite(tool_root, repo, sh)
-    say("running the full suite in a container (dev/suite-docker.py)")
-    ran = sh.run([sys.executable, str(tool_root / "dev" / "suite-docker.py"), "--repo", str(repo)], None, check=False, timeout_s=LONG)
-    out = ran.stdout + ran.stderr
-    sys.stdout.write(out)
-    if ran.returncode:
-        raise red(out, out.splitlines(), sh.env)
-
-
 def gate_command() -> list[str]:
     return ["just", "check"] if shutil.which("just") else ["mise", "exec", "--", "just", "check"]
 
@@ -259,14 +224,14 @@ def gate(repo: Path, sh: Shell) -> None:
 
 def run_checks(tool_root: Path, repo: Path, sh: Shell) -> None:
     gate(repo, sh)
-    container_suite(tool_root, repo, sh)
+    host_suite(tool_root, repo, sh)
 
 
 def verify(tool_root: Path, repo: Path, sh: Shell, checks: Callable[[Path, Path, Shell], None] = run_checks) -> bool:
     """The gate and the suite on the tree at `repo`'s HEAD (nothing uncommitted). The same tree under the same command passed before:
     both are skipped, and the log says so (True). Only a green run is remembered; a red one raises and remembers nothing."""
     tree = sh.port.rev_parse(str(repo), "HEAD^{tree}")
-    command = " ".join(gate_command()) + " + " + ("host" if sh.env.get(EnvVar.TASK_LOOP_SUITE_HOST) else "container") + " suite"
+    command = " ".join(gate_command()) + " + " + " ".join(SUITE_COMMAND)
     cache = SuiteCache(ConfigDir(config_dir(sh.env)))
     if cache.hit(tree, command):
         say(f"suite cache hit: tree {tree[:12]} already passed `{command}`")
@@ -289,9 +254,9 @@ def record_receipt(repo: Path, sh: Shell) -> None:
     if not checks:
         return
     stores = real_stores(ConfigDir(config_dir(sh.env)))
-    memo = authorization.memo_for(stores, sh.port, d, cfg, tree, base, sh.env, sh.spawner)
+    memo = authorization.memo_for(stores, sh.port, d, cfg, tree, base, sh.env)
     for check in checks:
-        if check.cmd != "python3 dev/suite-docker.py" or check.env or check.fix or check.container or check.reads:
+        if check.cmd != " ".join(SUITE_COMMAND) or check.env or check.fix or check.reads:
             raise Abort("release cannot attest a customized suite check; run `tl check` for this registry")
         key = memo.key(check)
         if key is None:

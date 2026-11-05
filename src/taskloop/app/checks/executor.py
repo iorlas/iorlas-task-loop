@@ -8,7 +8,6 @@ from taskloop.adapters import check_files
 from taskloop.app.checks.attempts import Attempts, Outcome
 from taskloop.app.checks.cache import RunMemo
 from taskloop.app.checks.checklog import CheckLog
-from taskloop.app.checks.execution import EnvironmentUnavailable
 from taskloop.app.checks.gateplan import PlanDecision
 from taskloop.app.checks.host import CheckFault, CheckHost
 from taskloop.app.checks.lanes import Lanes
@@ -65,11 +64,6 @@ class CheckExecutor:
             for n, res in st.by_step.items():
                 if res.status == "skipped" and res.planned:
                     check = plan.steps[n].check
-                    runner = self.slot if self.slot is not None and check.run_in == "slot" else self
-                    execution = runner.attempts.box.resolve(check)
-                    if isinstance(execution, EnvironmentUnavailable):
-                        continue
-                    self.memo.executions[check.id] = execution.identity
                     decision = self.planned if check.id in self.gates else None
                     key = (self.memo.planned_key(check, decision.command, decision.output) if decision is not None
                            else self.memo.planned_key(check))
@@ -138,11 +132,6 @@ class CheckExecutor:
         if c.id in self.fix_red:
             st.red = c.group
             return self.fix_red[c.id]
-        execution = self.attempts.box.resolve(c)
-        if isinstance(execution, EnvironmentUnavailable):
-            return CheckResult(id=c.id, cmd=c.cmd, group=c.group, exit=UNVERIFIED_EXIT, status="unverified",
-                               why="environment unavailable: " + execution.reason, inputs_changed=True, lane=c.lane)
-        self.memo.executions[c.id] = execution.identity
         return None
 
     def _deferred(self, c: Check, st: Round) -> CheckResult:

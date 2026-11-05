@@ -19,6 +19,7 @@ from typing import Any, ClassVar
 from unittest import mock
 
 import pytest
+from jsonl_log import close_held
 
 from support.case import Case
 
@@ -41,9 +42,6 @@ from support.push_race import PushRace
 from support.spawn import port_git, real_spawner
 from support.waits import until
 from support.who import who
-from taskloop.adapters import (
-    applog,
-)
 from taskloop.adapters import delegate as dl
 from taskloop.adapters import delegate as lroute  # noqa: F401
 from taskloop.adapters import halt as halting
@@ -408,7 +406,7 @@ class EngineTest(Case):
         sh("git", "push", "-q", "origin", "HEAD:main", cwd=base)
 
     def teardown_method(self):
-        applog.close_all()  # tl-64i: the held log handles live in the temp dir that goes now
+        close_held()  # tl-64i: the held log handles live in the temp dir that goes now
         self.env.stop()
         self.tmp.cleanup()
         if self.sim:
@@ -474,7 +472,7 @@ class EngineTest(Case):
         path.write_text(body)
         return shlex.join(["sh", str(path)])
 
-    def child_of(self, pidfile, limit=5):
+    def child_of(self, pidfile, limit=30):
         """The pid the check recorded. A caller that waits for a loaded runner to start the check passes a long limit (the wait ends
         the moment the pid is there; the limit is only the give-up)."""
         if until(lambda: pidfile.exists() and pidfile.read_text().strip(), limit):

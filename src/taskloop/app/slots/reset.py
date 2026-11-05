@@ -4,17 +4,15 @@ import hashlib
 import os
 from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, TypeVar
+from typing import TypeVar
 
 from taskloop.app.slots import owned
 from taskloop.app.slots.engine_lock import engine_busy
 from taskloop.app.slots.env import SlotEnv, stamp
+from taskloop.app.slots.surface import SlotView
 from taskloop.contracts.ports import SlotGit
 from taskloop.contracts.slots import BranchPinned, DirtyTree, IndexLocked, RefRace, SlotFail, SlotGitError
 from taskloop.domain.land.matchers import NetText
-
-if TYPE_CHECKING:
-    from taskloop.app.slots.pool import Slot
 
 T = TypeVar("T")
 TRIES = 3  # a git lock (index.lock, a ref) held by another process is waited for this many times before the slot is broken
@@ -38,7 +36,7 @@ def retrying[T](env: SlotEnv, what: str, call: Callable[[], T]) -> T:
     raise AssertionError("unreachable")
 
 
-def ready_for(slot: Slot, bead: str, *, force: bool = False) -> None:
+def ready_for(slot: SlotView, bead: str, *, force: bool = False) -> None:
     env, d = slot.env, slot.dir
     holder = env.lock_pid(d)  # the lock judged busy below is the one dropped
     busy = reset_busy(slot)
@@ -60,7 +58,7 @@ def ready_for(slot: Slot, bead: str, *, force: bool = False) -> None:
     setup(slot, force=recreated)
 
 
-def reset_busy(slot: Slot) -> str:
+def reset_busy(slot: SlotView) -> str:
     """The ownership checks shared by reset and its read-only diagnostic."""
     busy = slot.env.busy(slot.dir)
     hold = slot.hold()
@@ -69,7 +67,7 @@ def reset_busy(slot: Slot) -> str:
     return busy
 
 
-def check_ready(slot: Slot) -> None:
+def check_ready(slot: SlotView) -> None:
     """Read current facts only: a released slot may already belong to another loop."""
     busy = reset_busy(slot) or slot.free_reason()
     if busy:
@@ -83,7 +81,7 @@ def check_ready(slot: Slot) -> None:
         raise SlotFail("slot_broken", f"slot {slot.name}: uncommitted work")
 
 
-def keep_work(slot: Slot) -> None:
+def keep_work(slot: SlotView) -> None:
     """A dead session's work: committed where it was (on a wip branch when HEAD was detached), never wiped."""
     env, d = slot.env, slot.dir
     if retrying(env, f"slot {slot.name}", lambda: env.git.rebasing(d)):
@@ -98,7 +96,7 @@ def keep_work(slot: Slot) -> None:
     env.say("WIP committed on " + branch)
 
 
-def check_out(slot: Slot, bead: str) -> None:
+def check_out(slot: SlotView, bead: str) -> None:
     env, d, base = slot.env, slot.dir, slot.env.cfg.base
     what = f"slot {slot.name}"
     if bead and retrying(env, what, lambda: env.git.has_branch(d, "task/" + bead)):
@@ -114,7 +112,7 @@ def check_out(slot: Slot, bead: str) -> None:
         retrying(env, what, lambda: env.git.checkout_detached(d, base))
 
 
-def free_branch(slot: Slot, branch: str) -> str:
+def free_branch(slot: SlotView, branch: str) -> str:
     """Make `branch` free to check out in the slot. Another worktree holding it (a pre-slot worktree, a dead run's) is
     removed when clean, else detached where it stands: its files and commits stay (tl-bxk.10.26, lifesim 2026-10-22).
     "" when free, else why a live run keeps it (the repo's own checkout counts as live)."""
@@ -158,7 +156,7 @@ def inputs_hash(d: str, patterns: list[str]) -> str:
     return h.hexdigest()
 
 
-def setup(slot: Slot, force: bool = False) -> None:
+def setup(slot: SlotView, force: bool = False) -> None:
     """Run the profile's setup only when its inputs changed since the last setup in this slot."""
     env, d, cfg = slot.env, slot.dir, slot.env.cfg
     recreated = retrying(env, f"recreate slot {slot.name}", lambda: ensure_tree(slot))
@@ -181,7 +179,7 @@ def setup(slot: Slot, force: bool = False) -> None:
     env.say("READY " + d)
 
 
-def ensure_tree(slot: Slot) -> bool:
+def ensure_tree(slot: SlotView) -> bool:
     """The same creation and ownership path as slot init, including stale registration recovery."""
     env = slot.env
     if Path(slot.dir).is_dir():

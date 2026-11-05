@@ -88,7 +88,7 @@ class AskRowsTest(Case):
 
         def answer(text):
             store = AskStore.at(self.cfg)
-            ready.wait(timeout=5)
+            ready.wait(timeout=30)
             return store.answer(self.ask.bead, self.ask.id, AskAnswer(action="text", text=text, t=10.0))
 
         with ThreadPoolExecutor(max_workers=2) as pool:

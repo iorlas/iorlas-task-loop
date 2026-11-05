@@ -1,5 +1,11 @@
 [
   {
+    "name": "any_clock",
+    "shelf_tag": "9eabbd2f191ac4d99a0ab3b969c6eba1f9526c1b",
+    "shelf_commit": "9eabbd2f191ac4d99a0ab3b969c6eba1f9526c1b",
+    "tree_hash": "5a8d73fd64cb794bbf5fe93b681bd0e543877c489f9c18149fb1e53bb9aa4328"
+  },
+  {
     "name": "any_json_doc",
     "shelf_tag": "c548c10bbcce80a6e85ab5eab0e0fe78c67ebe82",
     "shelf_commit": "c548c10bbcce80a6e85ab5eab0e0fe78c67ebe82",
@@ -43,9 +49,9 @@
   },
   {
     "name": "jsonl_log",
-    "shelf_tag": "jsonl-log-v0.2.0",
-    "shelf_commit": "629935b1349d4b8f3eccc0c0812b06937cde06b5",
-    "tree_hash": "8682030b820a631ebb3dc7aebf94ecf1ddebe7c41d0fe9c2e7ee6e02426f53e4"
+    "shelf_tag": "619d2cdf9b06f4edca6c1a1597a6b25a5d4d932e",
+    "shelf_commit": "619d2cdf9b06f4edca6c1a1597a6b25a5d4d932e",
+    "tree_hash": "046c8b58a206068922b7c35ff9fc55fcc3a8e4c464da3bb53fc5258b196dbaf0"
   },
   {
     "name": "process_lock",
@@ -67,9 +73,9 @@
   },
   {
     "name": "stream_proc",
-    "shelf_tag": "eeffddcdd084aa3bd7352f9879a139e9a33acf6f",
-    "shelf_commit": "eeffddcdd084aa3bd7352f9879a139e9a33acf6f",
-    "tree_hash": "5344cb3b10697a23a4f8e43f30ced8ac18f5d78c6987abe9535290c60a025873"
+    "shelf_tag": "262a5999d0fc2380b0325e910996bbb5810aa76c",
+    "shelf_commit": "262a5999d0fc2380b0325e910996bbb5810aa76c",
+    "tree_hash": "0056ff7823329e01e3707f27967d214b2e2d17d8926a55066809604da0bb2c1a"
   },
   {
     "name": "timefmt",

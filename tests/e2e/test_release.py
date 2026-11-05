@@ -47,7 +47,7 @@ class Release(Case):
         self.morigin, self.market = h / "m.git", h / "market"
         self.world = World(h, self.repo, self.market)
         self.sh = shell.of(self.world.spawner, self.world.port, snapshot())
-        env = dict(IDENTITY, TASK_LOOP_SUITE_HOST="1", TASK_LOOP_SUITE_WORKERS="1", XDG_CONFIG_HOME=str(h / "cfg"),
+        env = dict(IDENTITY, TASK_LOOP_SUITE_WORKERS="1", XDG_CONFIG_HOME=str(h / "cfg"),
                    CLAUDE_CONFIG_DIR=str(h / "claude"))
         self.enterContext(self.world.active(env))
         self.git("init", "-q", "--bare", "-b", "main", str(self.origin), cwd=h)

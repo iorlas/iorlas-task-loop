@@ -7,6 +7,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
 from taskloop.contracts import (
+    artifact,
     ask,
     bead,
     checkpoint,
@@ -99,11 +100,9 @@ LOCK = locks.EngineLock(pid=1789, bead="tl-1", started=T, by="tl-abc", start="99
 CMD = {"pick_label": "auto", "skip_review": config.ReviewSkipConfig(tests=["t/**"]),
        "prepare": config.PrepareConfig(cmd=["dotnet", "restore"], inputs=["**/*.csproj"]),
        "visual_paths": config.VisualConfig(include=["a/**"]), "write_fresh_above_k": 150.0, "max_rounds": 4,
-       "checks": [config.CheckSpec(id=CheckId("fmt"), argv=["just", "fmt"], group="static", when=["x/**"], inputs="a/**",
-                                  where="container"),
+       "checks": [config.CheckSpec(id=CheckId("fmt"), argv=["just", "fmt"], group="static", when=["x/**"], inputs="a/**"),
                   config.CheckSpec(id=CheckId("unity"), argv=["just", "check-unity"], run="gate", run_in="slot", needs=["unity"])],
-       "resources": {"unity": config.ResourceSpec(limit=2)},
-       "container": config.ContainerConfig(image="img:1")}
+       "resources": {"unity": config.ResourceSpec(limit=2)}}
 
 
 RUNKEY = RunKey(check=CheckId("lint"), cmd=Digest("c1"), config=Digest("g1"), toolchain=Digest("t1"), tree=TreeSha("deadbeef"),
@@ -325,6 +324,8 @@ OTHERS = {
     "ToolCall": dashruns.ToolCall(t=T, name="Bash", arg="ls"),
     "AdrUse": ledger.AdrUse(adr="ADR-3", bead="tl-2", run=str(RUN), t=T),
     "StageProgress": checkpoint.StageProgress(red=1, red_now=["a"], failed=["b"], acceptance_only=True, shots_fixed=True),
+    "ArtifactSlot": artifact.ArtifactSlot(repo="r-1", bead="tl-1", run="tl-1-1", stage="write", attempt=2),
+    "ArtifactMeta": artifact.ArtifactMeta(name="home.png", caption="home", role="after", kind="png", size=9, sha256="ab" * 32, created=T),
     "FollowupOutbox": followups.FollowupOutbox(
         pending=[{"title": "later", "why": "w", "key": "tl-1|leftover|later", "origin": "plan"}]),
     "Checkpoint": checkpoint.Checkpoint(

@@ -1,45 +1,35 @@
-"""Captured runner lifecycle: held signals and exceptional waits stop the tree and close all descriptors."""
+"""The run_bytes adapter over stream-proc's capture_bytes: the run's deadline, subprocess.run's contract, text decoding."""
 import subprocess
 from unittest import mock
 
 import pytest
+import stream_proc
 import support.paths  # noqa: F401
 from support.case import Case
 
 from taskloop.adapters import procs
 
 
-class CaptureRunner(Case):
-    def test_timeout_stops_the_tree_and_drains_partial_output_before_raising(self):
-        child, hold = mock.Mock(), mock.Mock()
-        child.communicate.side_effect = [subprocess.TimeoutExpired(["slow"], 1, output=b"part"), (b"partial", b"err")]
-        # Enter below the simulator's run_bytes boundary: this tests the real captured runner with a fake Popen.
-        with (mock.patch.object(procs, "popen_held", return_value=(child, hold)), mock.patch.object(procs, "stop_tree") as stop,
-              pytest.raises(subprocess.TimeoutExpired) as raised):
-            procs.run(["capture-runner-timeout"], timeout=1)
-        assert (raised.value.output, raised.value.stderr) == (b"partial", b"err")
-        stop.assert_called_once_with(child, grace=procs.STOP_GRACE_S)
-        hold.replay.assert_called_once_with()
-        child.communicate.assert_has_calls([mock.call(input=None, timeout=1), mock.call(timeout=2.0)])
-        for pipe in (child.stdin, child.stdout, child.stderr):
-            pipe.close.assert_called_once_with()
+def _bytes(exit_: int = 0, out: bytes = b"", err: bytes = b"", timed_out: bool = False) -> stream_proc.CapturedBytes:
+    return stream_proc.CapturedBytes(exit_, out, err, 0.0, timed_out, ())
 
-    def test_a_held_signal_that_raises_stops_the_tree_before_propagating(self):
-        child, hold = mock.Mock(), mock.Mock()
-        hold.replay.side_effect = KeyboardInterrupt
-        with (mock.patch.object(procs, "popen_held", return_value=(child, hold)), mock.patch.object(procs, "stop_tree") as stop,
-              pytest.raises(KeyboardInterrupt)):
-            procs.run(["capture-runner-interrupted"])
-        stop.assert_called_once_with(child, grace=procs.STOP_GRACE_S)
-        child.communicate.assert_not_called()
-        for pipe in (child.stdin, child.stdout, child.stderr):
-            pipe.close.assert_called_once_with()
+
+class CaptureRunner(Case):
+    def test_a_timeout_raises_timeout_expired_with_the_partial_bytes(self):
+        with mock.patch.object(stream_proc, "capture_bytes", return_value=_bytes(124, b"partial", b"err", True)), \
+                pytest.raises(subprocess.TimeoutExpired) as raised:
+            procs.run_bytes(["slow"], timeout=1)
+        assert (raised.value.output, raised.value.stderr) == (b"partial", b"err")
+
+    def test_inherited_stdin_is_passed_through_unless_input_is_given(self):
+        with mock.patch.object(stream_proc, "capture_bytes", return_value=_bytes()) as cap:
+            procs.run_bytes(["a"])
+            procs.run_bytes(["b"], input=b"x")
+            procs.run_bytes(["c"], inherit_stdin=False)
+        assert [c.kwargs["stdin"] for c in cap.call_args_list] == [None, subprocess.DEVNULL, subprocess.DEVNULL]
+        assert cap.call_args_list[1].kwargs["input"] == b"x"
 
     def test_adapter_text_decodes_utf8_and_converts_newlines(self):
-        child, hold = mock.Mock(), mock.Mock()
-        child.communicate.return_value = (b"a\r\nb\rc\xff", b"err\r\n")
-        child.wait.return_value = 3
-        with mock.patch.object(procs, "popen_held", return_value=(child, hold)):
-            r = procs.run(["capture-runner-text"], input="hello\u00e9", env={"SENTINEL": "present"})
-        assert (r.returncode, r.stdout, r.stderr) == (3, "a\nb\nc\ufffd", "err\n")
-        child.communicate.assert_called_once_with(input=b"hello\xc3\xa9", timeout=None)
+        with mock.patch.object(stream_proc, "capture_bytes", return_value=_bytes(3, b"a\r\nb\rc\xff", b"err\r\n")):
+            r = procs.run(["capture-runner-text"], input="helloé", env={"SENTINEL": "present"})
+        assert (r.returncode, r.stdout, r.stderr) == (3, "a\nb\nc�", "err\n")

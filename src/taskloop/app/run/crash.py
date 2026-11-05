@@ -2,16 +2,13 @@
 import traceback
 from hashlib import sha1
 from pathlib import Path
-from typing import TYPE_CHECKING
 
+from taskloop.app.run.host import RunHost
 from taskloop.contracts.kinds import Kind
 from taskloop.domain import outcome as oc
 
-if TYPE_CHECKING:
-    from taskloop.app.run.engine import Engine
 
-
-def parked_crash(e: Engine, step: str, err: Exception) -> oc.RunOutcome:
+def parked_crash(e: RunHost, step: str, err: Exception) -> oc.RunOutcome:
     if isinstance(err, ValueError):
         why = f"{step} refused: {type(err).__name__}: {err}"
         e.kind, e.why = Kind.PAUSE_LANE, why

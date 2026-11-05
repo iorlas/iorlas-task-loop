@@ -14,7 +14,7 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from taskloop.adapters import check_files
-from taskloop.app.checks.execution import HOST
+from taskloop.app.checks.execution import HOST_IDENTITY
 from taskloop.contracts import config, wire
 from taskloop.contracts.checks import BaseRedRecord, Check, CheckResult, PassRecord
 from taskloop.contracts.ids import CheckId, TreeSha
@@ -104,7 +104,6 @@ class RunMemo:
         self.run_id, self.host = run_id, platform.node()
         self.system = f"{platform.system()}-{platform.machine()}"
         self.ran: dict[RunKey, tuple[CheckResult, float]] = {}  # this block's runs by command -> result, wall limit
-        self.executions: dict[CheckId, Digest] = {}
         self.slot_keys: InputKeys | None = None
         self.checks: dict[CheckId, Check] = {}
         self.receipts: dict[CheckId, PassRecord] = {}
@@ -118,7 +117,7 @@ class RunMemo:
         """The key of a run of this check on this tree; None when it may not be cached, or its `inputs` select nothing (a green over
         changed code would be a wrong hit). A check with `inputs_only` has neither tree nor base in its key: it is true for any base
         and any tree that reads the same inputs."""
-        if not c.cache or (c.container and c.id not in self.executions):
+        if not c.cache:
             return None
         dependencies = self.dependencies_of(c)
         if dependencies is None:
@@ -152,10 +151,9 @@ class RunMemo:
         return Digest(hashlib.sha256(json.dumps(records, sort_keys=True).encode()).hexdigest()) if records else NO_DIGEST
 
     def execution(self, c: Check) -> Digest:
-        identity = self.executions.get(c.id, Digest("")) if c.container else HOST.identity
         if c.run_in == "slot":
-            return Digest("slot-v1:" + identity)
-        return Digest("clean-v1:" + identity) if self.keys.clean else identity
+            return Digest("slot-v1:" + HOST_IDENTITY)
+        return Digest("clean-v1:" + HOST_IDENTITY) if self.keys.clean else HOST_IDENTITY
 
     def command_key(self, c: Check) -> RunKey:
         """Only the same registry requirement and resolved execution may share a result."""
@@ -186,8 +184,6 @@ class RunMemo:
 
     def result(self, c: Check, plan: Digest = NO_DIGEST) -> CheckResult | None:
         """Authorize only evidence for the entire expected key; historical ID queries are display only."""
-        if c.container and c.id not in self.executions:
-            return None
         hit = self.hit(self.key(c))
         if hit is not None:
             return hit.result

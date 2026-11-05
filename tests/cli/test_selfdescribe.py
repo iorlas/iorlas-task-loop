@@ -6,8 +6,8 @@ from support.tlmain import tl
 
 from taskloop.domain import selfdescribe
 
-# The git pre-push hook's internal protocol is not a session command.
-EXCLUDED = {"judge-push"}
+# The git pre-push hook's and the artifact_add tool server's internal protocols are not session commands.
+EXCLUDED = {"judge-push", "artifact-server"}
 
 
 class CommandCoverage(Case):

@@ -2,16 +2,24 @@
 (`.1` ... `.{keep-1}`, the oldest dropped), so a store is bounded by rotate_bytes x keep. Reads (cursor, tail) are the Jsonl ones, over
 the current file: a cursor past the end of a freshly rotated file reads from 0."""
 import json
+import sys
+from collections.abc import Callable
 from pathlib import Path
 from typing import override
 
 from jsonl_log import KEEP, ROTATE_BYTES, Jsonl, JsonlLog
 
+NO_ROTATION = sys.maxsize  # rotate_bytes of a log that is pruned by age (rewrite) and never shifted into .1 files
+
 
 class RotatingJsonl(Jsonl):
-    def __init__(self, path: Path, rotate_bytes: int = ROTATE_BYTES, keep: int = KEEP) -> None:
+    def __init__(self, path: Path, rotate_bytes: int = ROTATE_BYTES, keep: int = KEEP, rotate_lock: Path | bool = False) -> None:
         super().__init__(path)
-        self.log = JsonlLog(path, rotate_bytes=rotate_bytes, keep=keep)
+        self.log = JsonlLog(path, rotate_bytes=rotate_bytes, keep=keep, rotate_lock=rotate_lock)
+
+    def rewrite(self, keep: Callable[[bytes], bool]) -> int:
+        """Keep the lines `keep` accepts, under the rotate lock; -> how many lines went."""
+        return self.log.rewrite(keep)
 
     @override
     def append(self, data: dict[str, object]) -> int:
