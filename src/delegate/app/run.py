@@ -35,8 +35,20 @@ IDENTITY = ("lane", "model", "effort", "family", "flag", "rung", "fallback", "fa
 
 
 class Run:
-    def __init__(self, a: env.Args, cfg: dict[str, Json], unattended: bool = False, idle_s: float | None = None):
-        self.a, self.cfg, self.unattended, self.idle_s = a, cfg, unattended, idle_s
+    def __init__(
+        self,
+        a: env.Args,
+        cfg: dict[str, Json],
+        unattended: bool = False,
+        idle_s: float | None = None,
+        brief: str | None = None,
+        log: Callable[[str], None] | None = None,
+    ):
+        """`brief` given: the call reads no file and no stdin. `log` receives the lines the CLI prints on stderr (default: stderr)."""
+        self.a, self.cfg, self.unattended, self.idle_s, self.given_brief = a, cfg, unattended, idle_s, brief
+        self.log = log or (lambda line: print(line, file=sys.stderr, flush=True))
+        self.out: dict[str, Json] = {}  # the answer, set by emit
+        self.on_started: Callable[[str, procs.Worker], None] | None = None  # (run_id, worker): the worker exists
         self.extra: dict[str, Json] = {}  # fields every answer of this call carries: warnings, notice, needs_input
         self.settler = launch.settler()
         self.git_before: dict[str, str] | None = None
@@ -47,7 +59,13 @@ class Run:
 
     # -- the answer ----------------------------------------------------------------------------------------------------------------------
     def emit(self, outcome: str | None, **kw: Json) -> int:
-        return answer.emit(answer.result(outcome, **kw), not self.unattended)
+        self.out = answer.result(outcome, **kw)
+        return 0
+
+    def call(self) -> dict[str, Json]:
+        """The call, end to end: the contract 4 answer object, validated by the caller (api.py) or printed by `go`."""
+        self.go()
+        return self.out
 
     def refuse(self, outcome: str, say: str, retry_after: float | None, **who: Json) -> int:
         """An answer given without launching a worker; history keeps it too, so refusals are countable."""
@@ -91,7 +109,7 @@ class Run:
             if d.get(key):
                 self.extra[key] = d[key]
         if d.get("warning"):
-            print("warning: " + as_str(d["warning"]), file=sys.stderr)
+            self.log("warning: " + as_str(d["warning"]))
         if d["action"] in ("error", "stop"):
             return self._stopped(d, lanes, t)
         h = how_of(d)
@@ -116,7 +134,7 @@ class Run:
                 cwd=h.cwd,
                 **self.extra,
             )
-        brief = Path(self.a.brief).read_text(encoding="utf-8", errors="replace") if self.a.brief else sys.stdin.read()
+        brief = self._brief()
         if not brief.strip():
             return self.emit("caller", **who, call_id=call_id, say="empty brief: pass it on stdin or with --brief FILE", **self.extra)
         self.git_before = git.state(h.cwd)
@@ -124,6 +142,11 @@ class Run:
         if isinstance(res, dict) and res.get("outcome") == "schema_invalid" and not self.a.resume:
             res = self._reroute(res, brief)
         return self.emit(as_opt_str(res.pop("outcome", None)), **res) if isinstance(res, dict) else res
+
+    def _brief(self) -> str:
+        if self.given_brief is not None:
+            return self.given_brief
+        return Path(self.a.brief).read_text(encoding="utf-8", errors="replace") if self.a.brief else sys.stdin.read()
 
     def _reroute(self, res: dict[str, Json], brief: str) -> dict[str, Json] | int:
         """One fresh attempt after the re-ask failed; each attempt has already kept its own history and usage."""
@@ -144,7 +167,7 @@ class Run:
         self.extra.pop("warning", None)
         if d.get("warning"):
             self.extra["warning"] = d["warning"]
-            print("warning: " + as_str(d["warning"]), file=sys.stderr)
+            self.log("warning: " + as_str(d["warning"]))
         who = {k: d.get(k) for k in IDENTITY}
         who["family"] = self._family(d)
         return self._run(d, lanes, t, who, brief)
@@ -229,9 +252,11 @@ class Run:
             """The worker runs in its own process group (pgid = pid), so a SIGKILL on route.py leaves it running: say where it is, before
             any
             work, on stderr and in the lease (status --json `running`), so the caller can kill the group itself."""
-            print(f"delegate: worker pid={w.pid} pgid={w.pgid} run_id={rid}", file=sys.stderr, flush=True)
+            self.log(f"delegate: worker pid={w.pid} pgid={w.pgid} run_id={rid}")
             launched.update(pid=w.pid, pgid=w.pgid, start=w.start)
             lease.worker_started(w.pid, w.start)
+            if self.on_started:
+                self.on_started(rid, w)
 
         def keep_ref(ref: str) -> None:
             """Remember the ref for `--resume` whatever the outcome."""
@@ -249,7 +274,7 @@ class Run:
             """The vendor revealed its session id: store it, stamp the lease, and print it on stderr (the engine reads `delegate: ref=`)
             before any work is lost."""
             keep_ref(ref)
-            print(f"delegate: ref={ref} run_id={rid}", file=sys.stderr, flush=True)
+            self.log(f"delegate: ref={ref} run_id={rid}")
             lease.stamp_ref(ref)
 
         hooks.started, hooks.beat, hooks.ref = worker_started, lease.stamp_event, ref_seen
@@ -343,7 +368,7 @@ class Run:
         fam, cwd = as_str(who["family"]), how_of(d).cwd
         err = as_str(res.pop("stderr", ""))
         if err:
-            print(err[-2000:], file=sys.stderr)
+            self.log(err[-2000:])
         done = res.get("outcome") is None
         lane_name, ref = as_str(d["lane"]), as_opt_str(res.get("ref"))
         if done and lane_name in ("CLAUDE_SUBSCRIPTION", "OPENAI_SUBSCRIPTION"):

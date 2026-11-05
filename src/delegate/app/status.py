@@ -159,16 +159,22 @@ def cmd_status_cheap(a: env.Args, cfg: dict[str, Json]):
     return 0
 
 
-def cmd_status(a: env.Args, cfg: dict[str, Json]):
-    if a.cheap:
-        return cmd_status_cheap(a, cfg)
+def full_status(cfg: dict[str, Json], claude_usage: Json = None) -> tuple[dict[str, Json], dict[str, Lane], dict[str, Json]]:
+    """The full status: probes the fleet, publishes the lanes, leaves the snapshot `--cheap` reads. -> (payload, lanes, cockpit)."""
     t = env.now()
     st = env.load_state()
-    lanes = decide.fleet_builder(cfg).build(st, t, decide.parse_json_arg(a.claude_usage)).lanes
+    lanes = decide.fleet_builder(cfg).build(st, t, claude_usage).lanes
     decide.publish_lanes(lanes, st, t)
     ck = cockpit.cockpit(cfg, lanes, st, t)
     payload = status_payload(cfg, lanes, ck, st, t)
     write_snapshot(payload)
+    return payload, lanes, ck
+
+
+def cmd_status(a: env.Args, cfg: dict[str, Json]):
+    if a.cheap:
+        return cmd_status_cheap(a, cfg)
+    payload, lanes, ck = full_status(cfg, decide.parse_json_arg(a.claude_usage))
     if a.json:
         print(json.dumps(payload))
         return 0

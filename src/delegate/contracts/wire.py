@@ -64,6 +64,20 @@ def require_writer_exec_allow(contract: dict[str, Json] | None) -> None:
 
 
 @record
+class ToolServer:
+    """A tool server the factory provides for one worker call, bound to the bead, run, stage and attempt it serves. Carried, not wired:
+    no harness gets it yet (claude -p, codex and opencode block MCP on purpose); a spike proves injection per harness."""
+
+    name: str
+    command: list[str]
+    env: dict[str, str] = field(default_factory=dict)
+    bead: str = ""
+    run: str = ""
+    stage: str = ""
+    attempt: int = 1
+
+
+@record
 class RunRequest:
     role: str
     brief_file: str
@@ -84,6 +98,7 @@ class RunRequest:
     )  # recipes only the engine runs: a write step's guard blocks `just RECIPE`; --engine-only once per item
     engine_only_advisory: bool = False
     writer_exec_allow: list[list[str]] = field(default_factory=list)  # Codex writers only; host.json bounds this per-call grant
+    tools: list[ToolServer] = field(default_factory=list)  # tool servers for this call; not wired to any harness yet
 
     def to_argv(self, route: str, *, contract: dict[str, Json] | None = None) -> list[str]:
         out = [sys.executable, route, "run", self.role, "--brief", self.brief_file, "--cwd", self.cwd]
