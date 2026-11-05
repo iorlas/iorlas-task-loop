@@ -3,10 +3,20 @@ an unavailable or erroring judge refuses. No profile, evidence, or delivery poli
 # git-port-exempt: plain python3 in git's own hook path; it imports no port and no record (tests/hook/test_hook.py)
 from __future__ import annotations
 
+import shutil
 import subprocess
 import sys
 from collections.abc import Mapping
 from pathlib import Path
+
+JUDGE_TL = "TL_JUDGE_TL"  # contracts/envvars.py: the tl.py of the install that started this engine child (adapters/childenv.hooks_vars)
+
+
+def judge_command(tl: str, environ: Mapping[str, str]) -> list[str]:
+    """The command that judges a push: the engine's own install when it named one (an engine on install X is judged by X, whatever the
+    shim points at now), else the shim `tl` the hook was written with (a push by hand)."""
+    own = environ.get(JUDGE_TL, "")
+    return [shutil.which("uv") or "uv", "run", "--quiet", "--script", own] if own and Path(own).is_file() else [tl]
 
 
 def entry(argv: list[str], stdin_text: str, environ: Mapping[str, str]) -> int:
@@ -17,7 +27,7 @@ def entry(argv: list[str], stdin_text: str, environ: Mapping[str, str]) -> int:
         top = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True, check=False, timeout=15)
         if top.returncode or not top.stdout.strip():
             raise ValueError("cannot locate the repository")
-        result = subprocess.run([argv[0], "judge-push", "--repo", top.stdout.strip()], input=stdin_text,
+        result = subprocess.run([*judge_command(argv[0], environ), "judge-push", "--repo", top.stdout.strip()], input=stdin_text,
                                 text=True, check=False, timeout=3600)
         if result.returncode == 0:
             return 0
