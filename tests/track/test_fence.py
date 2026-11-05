@@ -26,9 +26,11 @@ from taskloop.app.wire import closeguard
 from taskloop.contracts import fence
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.ids import BeadId
+from taskloop.contracts.ports import BdError, BdFailure, BeadPatch
 from taskloop.stores.memory import fake_stores
 
 ME = "tl-run00001"
+LOCKED = BdFailure(BdError(kind="other", text="locked"))
 
 
 def world() -> FakeBeads:
@@ -65,11 +67,38 @@ class Generation(Case):
         bd.beads[slot] = bd.beads[slot].replace(metadata={fence.SLOT_GEN: "4"})  # the same actor takes it again: a higher number
         assert "slot bead sl-1 was taken again (generation 4, this run holds 3)" in fence.stale(bd, c)
 
-    def test_a_bd_that_cannot_be_asked_fences_nothing(self):
+    def test_a_bead_that_is_not_there_fences_nothing(self):
         bd = world()
         c = taken(bd)
         del bd.beads[BeadId("x-1")]
         assert fence.stale(bd, c) == ""
+
+    def test_a_bd_that_cannot_be_asked_refuses_the_claim(self):
+        bd = world()
+        c = taken(bd, "sl-1")
+        with mock.patch.object(bd, "show", side_effect=LOCKED):
+            assert "x-1: ownership unreadable (other: locked)" in fence.stale(bd, c)
+            with pytest.raises(fence.Fenced):
+                fence.check(bd, c)
+
+    def test_a_slot_that_cannot_be_read_refuses_the_claim(self):
+        bd = world()
+        c = taken(bd, "sl-1")
+        real = bd.show
+        with mock.patch.object(bd, "show", side_effect=lambda b: real(b) if b == BeadId("x-1") else (_ for _ in ()).throw(LOCKED)):
+            assert "slot bead sl-1: ownership unreadable" in fence.stale(bd, c)
+
+    def test_a_take_that_a_second_run_bumped_at_once_is_refused(self):
+        bd = world()
+        assert bd.claim(BeadId("x-1"))
+        real = bd.update
+
+        def racing(bead, patch):
+            real(bead, patch)
+            real(bead, BeadPatch(set_metadata={fence.BEAD_GEN: "9"}))  # the other run wrote after ours
+
+        with mock.patch.object(bd, "update", racing), pytest.raises(fence.Fenced, match="taken by another run while this one took it"):
+            fence.take(bd, BeadId("x-1"), ME)
 
 
 class Refused(Case):
