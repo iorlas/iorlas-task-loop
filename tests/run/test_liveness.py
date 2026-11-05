@@ -15,23 +15,38 @@ from taskloop.app.run.blocked import Blocked
 from taskloop.app.run.run_once import RunOnce
 from taskloop.app.run.waits import Waits
 from taskloop.contracts import log as rec
+from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.kinds import Kind
-from taskloop.domain.lanes.liveness import LIVENESS, LivenessCaps
+from taskloop.domain.lanes.liveness import LIVENESS
 
 
 class RunDeadline(Case):
     def test_deadline_parks_and_still_closes_a_hung_run(self):
         host = SimpleNamespace(store=None, bead="b", env=mock.Mock(), checkpoints=mock.Mock(), dead=None,
-                               Blocked=Blocked, moved=False)
+                               Blocked=Blocked, moved=False, cfg=EngineConfig(run_deadline_min=0.02 / 60))
         once = RunOnce(host)
         timer = FakeDeadline()
         with timer.patched(), mock.patch("taskloop.app.run.run_once.Lease"), \
-                mock.patch("taskloop.app.run.run_once.LIVENESS", LivenessCaps(run_s=0.02)), \
                 mock.patch.object(once, "run", side_effect=lambda *a: timer.wait(0.5)), \
                 mock.patch.object(once, "close_out") as close:
             assert once.go() == 2
         assert close.call_args.args[1].outcome.kind is Kind.OWNER_PARK
         assert "deadline" in close.call_args.args[1].outcome.detail
+
+
+    def test_a_run_longer_than_twenty_minutes_is_not_parked_while_the_profile_allows_it(self):
+        assert EngineConfig().run_deadline_min == 45
+        host = SimpleNamespace(store=None, bead="b", env=mock.Mock(), checkpoints=mock.Mock(), dead=None,
+                               Blocked=Blocked, moved=False, cfg=EngineConfig())
+        once = RunOnce(host)
+        seen: list[float] = []
+        def timed(secs: float, what: str) -> contextlib.AbstractContextManager[None]:
+            seen.append(secs)
+            return contextlib.nullcontext()
+        with mock.patch("taskloop.app.run.run_once.Lease"), mock.patch("taskloop.app.run.run_once.deadline", side_effect=timed), \
+                mock.patch.object(once, "run"), mock.patch.object(once, "close_out"):
+            once.go()
+        assert seen == [45 * 60]
 
 
 class LockWait(Case):

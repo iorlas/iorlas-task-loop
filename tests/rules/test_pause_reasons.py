@@ -142,3 +142,25 @@ class Complete(Case):
             'FAULT_NEW = "fault_new"\nsynth_for(c, "new_stop", facts)\ne.pause_reason = "own"\nStopFacts(reason="wire")'
         )
         assert produced(source) == {"new", "pause_new", "fault_new", "new_stop", "own", "wire"}
+
+
+def documented() -> dict[str, tuple[str, ...]]:
+    rows: dict[str, tuple[str, ...]] = {}
+    for line in (ROOT / "docs/dev/pause-reasons.md").read_text().splitlines():
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if line.startswith("|") and len(cells) == 6 and cells[0] not in ("reason", "---"):
+            rows[cells[0]] = tuple(cells[1:])
+    return rows
+
+
+class Documented(Case):
+    def test_the_doc_table_holds_every_reason_with_the_class_the_code_gives_it(self):
+        contract = contract_permanences()
+        expected: dict[str, tuple[str, ...]] = {}
+        for reason in Reason:
+            producer = "engine" if ("engine", reason) in TABLE else "delegate"
+            policy = rule(reason.value, producer, contract.get(reason.value))
+            transient = policy.permanence == "transient"
+            expected[reason.value] = (producer, policy.permanence, f"{policy.base_s:g}" if transient else "-",
+                                      f"{policy.cap_s:g}" if transient else "-", str(policy.max_attempts) if transient else "-")
+        assert documented() == expected

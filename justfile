@@ -1,5 +1,6 @@
-# The gate is two recipes: `just check` (static: ruff, pyrefly, import-linter) and `just test` (the tests). Neither runs the other's work.
+# The gate is `just gate` = `just check` (static: ruff, pyrefly, import-linter) then `just test` (the tests). The suite receipt (RunKey) is written only after both.
 # `uv run pytest <path>` is the inner loop while you edit, not a gate.
+gate: check test
 
 # The tests this change can break (dev/affected.py picks them from the diff against origin/main; tests/rules always; all kinds, one run). Each test runs once per tree.
 test:

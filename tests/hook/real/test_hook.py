@@ -137,3 +137,13 @@ class Speed(Case):
         r = subprocess.run([str(system), str(HOOK), "pretool"], input=event, capture_output=True, text=True, env=self.env, check=False)
         assert r.returncode == 0, r.stderr
         assert "deny" in r.stdout
+
+
+def test_pre_push_refuses_when_the_hook_package_is_unimportable(tmp_path):
+    """hooks/hook.py with no importable taskloop: the push is refused (exit 1), never waved through."""
+    (tmp_path / "hooks").mkdir()
+    (tmp_path / "hooks" / "hook.py").write_text(HOOK.read_text(encoding="utf-8"), encoding="utf-8")
+    (tmp_path / "src").mkdir()
+    done = subprocess.run([sys.executable, "-I", str(tmp_path / "hooks" / "hook.py"), "githook", "pre-push", "tl"],
+                          input="", capture_output=True, text=True, check=False, timeout=60)
+    assert done.returncode != 0
