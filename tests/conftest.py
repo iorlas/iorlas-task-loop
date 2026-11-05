@@ -32,6 +32,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 pytest.register_assert_rewrite("support")  # the helpers of tests/support assert too: show the operands, as in a test file
 import support.paths  # noqa: E402, F401  (ROOT/src on sys.path; after the bytecode setup above)
 from support import procsim  # noqa: E402
+from support.scope import delegate_wanted  # noqa: E402
 
 from taskloop.contracts import factorydb  # noqa: E402
 
@@ -112,10 +113,13 @@ def pytest_runtest_makereport(item, call):
 
 def pytest_ignore_collect(collection_path, config):
     """tests/live (the explicit-only kind) is collected only by a run that selects `-m live` (just test-live): never by the default run,
-    just test-fast or the release suite, whose `-m` is something else."""
+    just test-fast or the release suite, whose `-m` is something else. tests/delegate is collected only when the change touches delegate
+    (tests/support/scope.py): a change to task-loop or its dashboard runs none of them."""
     if "live" in collection_path.relative_to(Path(__file__).parent).parts[:1]:
         expr = (config.getoption("markexpr", "") or "").split()
         return not ("live" in expr and "not" not in expr)
+    if "delegate" in collection_path.relative_to(Path(__file__).parent).parts[:1]:
+        return not delegate_wanted(config.args, Path(config.invocation_params.dir))
     return None
 
 
