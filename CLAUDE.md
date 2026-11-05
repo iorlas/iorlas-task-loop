@@ -72,11 +72,20 @@ Whole-suite runs (`just test-full`) and `just test-live` (tests/live: scenarios 
 
 Tests live in `tests/<slice>/`, mirroring `src/taskloop/app/<slice>` (a test's home is the slice whose code changes if its assertion breaks);
 the other layers have their own folders (`contracts`, `stores`, `adapters`, `ports`, `domain`, `cli`, `hook`, `dash`, `rules` for the gate).
-A test's kind comes from its path (tests/conftest.py), never from a hand marker: unmarked = logic (fakes, in process, fast);
-`tests/<slice>/real/` = real (real git, processes, sockets; only where one exists; `@real_proc` / `@real_git` on a single test also mean real);
-`tests/e2e/` = a whole flow (selftest, release). `serial` stays a marker (shared clock, port or lock). Guards (tests/support/procsim.py): a
-logic test that spawns, forks or runs real git fails; a real test that never spawns fails. A test over its kind's limit fails (LIMITS_S in
-conftest).
+**Test layers. A test's layer comes from its path (tests/conftest.py), never from a hand marker; a guard fails a test that touches more than its layer allows.**
+
+| layer | path | may touch | per test (CPU) | layer total (affected-only, 1 worker) |
+|---|---|---|---|---|
+| unit | `tests/<slice>/` | memory; files and sqlite only through the `workdir` fixture; git, processes and time only as fakes (gitsim, procsim, fake_clock); no `time.sleep` | 100 ms | 60 s |
+| real | `tests/<slice>/real/`, `tests/ports/`, `tests/adapters/` | a real git, process or socket, because the port's real adapter is the thing under test | 1 s | 60 s |
+| e2e | `tests/e2e/` | a whole flow; at most 10 tests | 10 s | 60 s |
+
+- **Contract, then consumers.** Each port (git, process, clock, ...) has ONE contract suite, run against the real adapter (in the real layer) and against its fake (gitsim, procsim, fake_clock), so the fake cannot drift. A consumer of the port (land, run, loop, ...) is tested against the fake, with one wiring test on the real adapter per consumer. Real git is re-tested once per port, never once per consumer.
+- Budget of the affected-only run: 120 s CPU on one worker; the gate runs that selection and nothing wider. `dev/runtests.py` loads `dev/testtimes.py`, prints a selection above 50% of all tests (the change reaches too far) and, at the end, the tests over 5 s CPU (10 lines, '+N more', with the fix class).
+- Guards: `tests/support/procsim.py` (a unit test that spawns, forks or runs real git fails; a real test that spawns nothing fails), LIMITS_S in conftest (a test over its kind's limit fails), and `tests/rules/test_layer_ratchet.py` (RATCHET: `tests/rules/layer_baseline.json` lists today's offenders per directory, a `@real_proc` / `@real_git` mark outside `real/` and a `time.sleep` in a test; only an increase fails; a cleanup lowers the baseline with `PYTHONPATH=tests uv run python -m rules.layer_ratchet --write`).
+- `serial` stays a marker (shared clock, port or lock). A new `@real_proc` / `@real_git` or `time.sleep` outside `real/` is refused; a sleep is a bug: inject the clock and advance it.
+- A table of cases is one parametrized test, never a loop of full runs inside one test; `subTest` and `setup_method` are for the legacy classes only.
+- The unit layer holds no path literals, `os.fork`, signals or shell (Windows comes later); POSIX-only tests live in `real/`.
 
 Dev and test tools (pytest, pytest-xdist) are the `dev` group of pyproject.toml, locked in uv.lock; `uv run` syncs them.
 There is no hosted CI: the factory is the CI. `just check` and `just test` run on the release path (`dev/release.py`) before any push to main; each test runs once per tree.

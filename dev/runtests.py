@@ -19,12 +19,14 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).resolve().parent.parent / "skills" / "task-loop" / "_vendor"))  # the vendored shelf packages
 import affected
 import stream_proc
+import testtimes_report
 
 CHUNK = 150          # tests per worker: a worker costs ~2 s to start and a few hundred MB, so a smaller share is not worth one
 MAX_WORKERS = 4      # the box also runs the implementer workers; the tests must not starve them
 WORKER_MB = 2048     # RAM budget of one worker
 WALL_S = 3600.0      # a hang guard for one pytest run (a wide selection takes 15 min in 4 workers); its process tree is killed
 NO_TESTS = 5         # pytest's exit code for "no tests collected" (a selection without a serial test)
+WIDE = 0.5          # a selection above this share of all tests is a finding: the change reaches too far
 DROP = ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "PYTHONPATH", "VIRTUAL_ENV")
 
 
@@ -60,13 +62,15 @@ def isolated_env(home):
         (home / ".gitconfig").write_bytes(real.read_bytes())
     # GIT_CONFIG_*: a release's core.hooksPath would fire tl's pre-push judge in the tests' repos
     env = {k: v for k, v in os.environ.items() if k not in DROP and not k.startswith("GIT_CONFIG_")}
-    env.update(HOME=str(home), XDG_CONFIG_HOME=str(home / ".config"), TMPDIR=str(home / "tmp"), TL_WORKER_MB=str(WORKER_MB))
+    env.update(HOME=str(home), XDG_CONFIG_HOME=str(home / ".config"), TMPDIR=str(home / "tmp"), TL_WORKER_MB=str(WORKER_MB),
+               TL_TEST_TIMES=str(home / "times-%p.json"), PYTHONPATH=str(Path(__file__).resolve().parent))  # dev/testtimes.py records
     return env
 
 
 def pytest(root, env, mark, tests, n):
     """One pytest run in a session of its own; the wall limit, an interrupt or SIGTERM stop it with its workers (stream_proc). Exit code."""
-    argv = [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "-rfE", *(["-n", str(n)] if n > 1 else []), "-m", mark, *tests]
+    argv = [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "-rfE", "-p", "testtimes",
+            *(["-n", str(n)] if n > 1 else []), "-m", mark, *tests]
 
     def term(signum, _frame):
         raise SystemExit(128 + signum)
@@ -82,6 +86,17 @@ def pytest(root, env, mark, tests, n):
     return res.returncode if res.returncode is not None else 128 + (res.signal or 0)
 
 
+def wide_note(root, n_tests):
+    """'' or one line when the selection holds more than WIDE of all the tests (delegate aside)."""
+    tests = Path(root) / "tests"
+    files = [p.relative_to(root).as_posix() for p in tests.rglob("test_*.py") if "delegate" not in p.relative_to(tests).parts[:1]]
+    total = count_tests(root, files)
+    if total and n_tests > WIDE * total:
+        return (f"runtests: the selection is {n_tests} of {total} tests ({100 * n_tests // total}%): "
+                "this change reaches too far (a contract or the justfile?)")
+    return ""
+
+
 def main():
     root = Path(__file__).resolve().parent.parent
     base = affected.base_of(root)
@@ -89,11 +104,17 @@ def main():
     n_tests = count_tests(root, tests)
     n = workers(n_tests)
     print(f"runtests: {len(tests)} test files, {n_tests} tests, {n} worker{'s' if n > 1 else ''} (change against {base[:12]})", flush=True)
+    note = wide_note(root, n_tests)
+    if note:
+        print(note, flush=True)
     home = Path(tempfile.mkdtemp(prefix="tl-run-"))
     try:
         env = isolated_env(home)
         parallel = pytest(root, env, "not serial", tests, n)
         serial = pytest(root, env, "serial", tests, 1)
+        warning = testtimes_report.budget_warning(sorted(str(p) for p in home.glob("times-*.json")))
+        if warning:
+            print(warning, flush=True)
     finally:
         shutil.rmtree(home, ignore_errors=True)
     return next((code for code in (parallel, serial) if code not in (0, NO_TESTS)), 0)
