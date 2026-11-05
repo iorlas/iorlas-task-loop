@@ -57,7 +57,7 @@
   tl.py ask show ID                             one ask: question, owner cause, blocking, default, similar, thread, outcome (read-only)
   tl.py handoff write|show [--repo DIR]         the <= 4 KB handoff a compaction hands to the next session (hooks/hook.py writes it)
 
-State: ~/.config/task-loop : factory.db (state), logs and transcripts as files; the Stores table in docs/architecture/c4-task-loop.md lists every kind.
+State: ~/.config/task-loop : factory.db (state); logs and transcripts stay files (docs/architecture/c4-task-loop.md, Stores).
 """
 
 import argparse
