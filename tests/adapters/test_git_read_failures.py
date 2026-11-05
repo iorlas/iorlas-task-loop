@@ -107,7 +107,8 @@ class GitReadFailures(Case):
 
 @pytest.mark.parametrize("stderr", [
     "fatal: not a git repository (or any of the parent directories): .git\n",
-    "fatal: not a git repository (or any parent up to mount point /)\nStopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).\n",
+    "fatal: not a git repository (or any parent up to mount point /)\n"
+    "Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).\n",
 ])
 def test_not_a_repo_is_typed_whichever_way_git_words_it(stderr):
     r = subprocess.CompletedProcess([], 128, "", stderr)
