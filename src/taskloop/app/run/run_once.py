@@ -27,7 +27,6 @@ from taskloop.contracts.run import RunState
 from taskloop.domain import outcome as oc
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.lanes import pin
-from taskloop.domain.lanes.liveness import LIVENESS
 from taskloop.domain.plan.matchers import AcceptanceText
 from taskloop.domain.review.kinds import UNCHECKED_KINDS
 
@@ -52,7 +51,7 @@ class RunOnce:
             if e.dead is not None:  # the last run died inside its close: this process only finishes it
                 self.finish_dead(end)
             else:
-                with deadline(LIVENESS.run_s, "run"):
+                with deadline(e.cfg.run_deadline_min * 60, "run"):
                     self.run(hb, end)
         except DeadlineExpired as err:
             end.outcome = oc.make(Kind.OWNER_PARK, f"{err}; branch and checkpoint kept")
