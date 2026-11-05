@@ -70,7 +70,9 @@ class RealGitRemoteTest(Case):
         self.run_git("tag", "v1")
         self.git.push(directory, "origin", "refs/tags/v1")
         assert self.remote("refs/tags/v1") == self.base
-        self.git.push(directory, "origin", ":refs/heads/topic")
+        with pytest.raises(SlotGitError):
+            self.git.push(directory, "origin", ":refs/heads/topic")
+        self.git.delete_remote_at(directory, "origin", "refs/heads/topic", self.base)
         assert self.git.ls_remote(directory, "origin", "refs/heads/topic") == []
 
     def test_pre_push_hook_refusal_keeps_output_and_is_not_retryable(self):
@@ -95,12 +97,12 @@ class RealGitRemoteTest(Case):
         self.git.push(directory, "origin", f"{self.base}:refs/heads/topic")
         self.git.fetch(directory)
         mine = self.commit("mine")
-        outcome = self.git.push_lease(directory, "origin", "HEAD:refs/heads/topic")
+        outcome = self.git.push_lease(directory, "origin", "HEAD:refs/heads/topic", self.base)
         assert outcome.ok
         assert self.remote("refs/heads/topic") == mine
         self.run_git("update-ref", "refs/remotes/origin/topic", self.base)
         self.commit("local work the lease would overwrite")
-        stale = self.git.push_lease(directory, "origin", "HEAD:refs/heads/topic")
+        stale = self.git.push_lease(directory, "origin", "HEAD:refs/heads/topic", self.base)
         assert not stale.ok
         assert "stale info" in stale.output
         assert Push.rejected(stale.output)
@@ -109,7 +111,7 @@ class RealGitRemoteTest(Case):
     def test_push_lease_ends_a_push_that_outlives_its_wall_with_words(self):
         self.hook("pre-push", "exec sleep 30\n")
         with mock.patch.object(git_ops, "PUSH_WALL_S", 0.5):
-            outcome = self.git.push_lease(str(self.repo), "origin", "HEAD:refs/heads/topic")
+            outcome = self.git.push_lease(str(self.repo), "origin", "HEAD:refs/heads/topic", "")
         assert not outcome.ok
         assert "timed out" in outcome.output
         assert self.git.ls_remote(str(self.repo), "origin", "refs/heads/topic") == []
