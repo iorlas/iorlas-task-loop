@@ -516,7 +516,9 @@ OTHERS = {
         engine_only=["check"],
         engine_only_advisory=True,
         only_family=["openai"],
+        tools=[delegate.ToolBinding(name="factory", command=["tl", "artifact-server"], bead="t", run="r1", stage="write", attempt=2)],
     ),
+    "ToolBinding": delegate.ToolBinding(name="factory", command=["tl", "artifact-server"], bead="t", run="r1", stage="write", attempt=2),
     "DelegateResult": delegate.DelegateResult(
         data={"summary": "s"},
         text="t",

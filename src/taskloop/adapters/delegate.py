@@ -133,6 +133,8 @@ def api_request(req: RunRequest, env: Mapping[str, str]) -> api.RunRequest:
         engine_only=list(req.engine_only), engine_only_advisory=req.engine_only_advisory, only_family=list(req.only_family),
         writer_exec_allow=[list(x) for x in req.writer_exec_allow],
         worker_env=dict(env),
+        tools=[api.ToolServer(name=t.name, command=list(t.command), bead=t.bead, run=t.run, stage=t.stage, attempt=t.attempt)
+               for t in req.tools],
     )
 
 

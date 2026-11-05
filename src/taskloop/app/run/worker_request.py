@@ -3,7 +3,9 @@
 import json
 from typing import Protocol
 
+from taskloop.adapters import childenv, ident
 from taskloop.adapters import delegate as dg
+from taskloop.adapters.check_files import repo_key
 from taskloop.app.asks import trustroots
 from taskloop.app.checks.runner import Checker
 from taskloop.app.run.blocked import Blocked, refuse_over_cap
@@ -11,7 +13,8 @@ from taskloop.app.run.budget import Budget
 from taskloop.app.run.call import Call
 from taskloop.contracts import log as rec
 from taskloop.contracts.config import EngineConfig
-from taskloop.contracts.delegate import RunRequest
+from taskloop.contracts.delegate import RunRequest, ToolBinding
+from taskloop.contracts.env import Env
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.plancheck import PlanData
 from taskloop.contracts.ports import Beads, Git
@@ -66,6 +69,29 @@ def request(e: RequestHost, c: Call, live: str, timeout_s: int, idle_s: int) -> 
         engine_only=recipes,
         engine_only_advisory=bool(only_family and recipes),
     )
+
+
+class ToolHost(Protocol):
+    """What binding the artifact_add server reads of the run."""
+
+    bead: BeadId
+    wt: str
+    git: Git
+    env: Env
+    run_id: str
+    live_n: int
+    artifact_repo: str
+
+
+def artifact_tool(e: ToolHost, c: Call) -> ToolBinding:
+    """The artifact_add server for one worker call, visual or not. Its slot is in its argv: the repo, bead, run, stage and the call's
+    number in this run (the attempt, so every delegate call has its own folder). `--cwd` is the worker's folder."""
+    e.artifact_repo = e.artifact_repo or repo_key(e.git, e.wt)
+    stage, attempt = c.step or c.node, e.live_n
+    tl = ident.PLUGIN_ROOT / "skills" / "task-loop" / "tl.py"
+    argv = [*childenv.script_argv(tl, e.env), "artifact-server", "--repo", e.artifact_repo, "--bead", str(e.bead), "--run", e.run_id,
+            "--stage", stage, "--attempt", str(attempt), "--cwd", str(c.cwd)]
+    return ToolBinding(name="factory", command=argv, bead=str(e.bead), run=e.run_id, stage=stage, attempt=attempt)
 
 
 def brief(c: Call, req: RunRequest) -> str:

@@ -18,8 +18,8 @@ TOOL: Final[Obj] = {
     "description": (
         "Register a picture, PDF, video or audio file you made as an artifact of this step; it is copied into the factory's store and "
         "shown on the bead's page. The file must be inside your working folder. Register progress pictures even when the task does not "
-        "ask for any. When the change touches what the user sees, register a 'before' picture before you start and an 'after' "
-        "picture when you are done."),
+        "ask for any. When the change touches what the user sees, register a picture with role 'before' before you start and one with "
+        "role 'after' when you are done."),
     "inputSchema": {
         "type": "object", "required": list(FIELDS), "additionalProperties": False,
         "properties": {

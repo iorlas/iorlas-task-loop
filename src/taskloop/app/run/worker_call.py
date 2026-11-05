@@ -216,7 +216,7 @@ class WorkerCall:
         live = e.live(c.step or c.node)
         c.prepared = self.prepare(c)
         c.sha = c.prepared.execution_id
-        req = c.prepared.request.replace(live_file=live)
+        req = c.prepared.request.replace(live_file=live, tools=[worker_request.artifact_tool(e, c)])  # per call: not in the call's identity
         c.limit_s = float(req.timeout_s)
         brief = worker_request.brief(c, req)
         runner = e.router.runner(e.err_path, None, live, e.lock_worker)
