@@ -9,6 +9,7 @@ import os
 import re
 import stat
 import subprocess
+import sys
 import tempfile
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
@@ -169,6 +170,8 @@ class Sim:
         stack.enter_context(mock.patch.object(subprocess, "run", self.sp_run(subprocess.run)))
         stack.enter_context(mock.patch.object(procs, "run_bytes", self.sp_run(procs.run_bytes, captured=True)))
         stack.enter_context(mock.patch.object(stream_proc, "run", self.sp_stream(stream_proc.run)))
+        # stream_proc.capture (the function) shadows its module; capture() calls the module-level `run`, so patch it there too
+        stack.enter_context(mock.patch.object(sys.modules["stream_proc.capture"], "run", self.sp_stream(stream_proc.run)))
         stack.enter_context(mock.patch.object(subprocess.Popen, "__init__", self.guard(subprocess.Popen.__init__)))
         shim = Path(stack.enter_context(tempfile.TemporaryDirectory(prefix="tl-nogit-")))
         (shim / "git").write_text(SHIM.replace("SHIM_DIR", str(shim)))

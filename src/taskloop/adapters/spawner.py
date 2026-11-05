@@ -94,4 +94,4 @@ class RealSpawner:
         return Started(p), hold
 
     def stop_pid(self, pid: int, start: str | None = None, grace: float = GRACE_S) -> tuple[int, ...]:
-        return procs.stop_pid(pid, start, grace)
+        return procs.stop_pid(pid, start, grace=grace)

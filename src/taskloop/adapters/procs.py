@@ -6,9 +6,7 @@ Nothing here (nor anywhere in the repo outside `_vendor/`) sends a signal: a sto
 
 import subprocess
 import threading
-import time
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
 from typing import Any
 
 import stream_proc
@@ -69,13 +67,7 @@ def run(argv: list[str], *, cwd: str | None = None, env: Mapping[str, str] | Non
     return subprocess.CompletedProcess(argv, res.returncode, out, err)
 
 
-@dataclass(frozen=True)
-class Ran:
-    exit: int
-    out: str
-    err: str
-    secs: float
-    timed_out: bool
+Ran = stream_proc.Captured
 
 
 def capture(
@@ -86,37 +78,11 @@ def capture(
     tick: Callable[[], None] | None = None,
     poll_s: float = 0.2,
 ) -> Ran:
-    """Run a child to its end (or `timeout_s`), collecting stdout and stderr. `tick` runs every `poll_s` on a helper thread while
-    the child lives, and once more after it ends. The tree is stopped on a timeout and on any exception (a raising SIGTERM handler)."""
-    out: list[str] = []
-    err: list[str] = []
-    done = threading.Event()
-
-    def ticker(beat: Callable[[], None]) -> None:
-        while not done.wait(poll_s):
-            beat()
-
-    helper = threading.Thread(target=ticker, args=(tick,), daemon=True) if tick else None
-    if helper:
-        helper.start()
-    try:
-        res = stream_proc.run(argv, cwd=cwd, env=env, on_stdout=out.append, on_stderr=err.append,
-                              timeout=deadline.remaining(timeout_s), grace=STOP_GRACE_S)
-    finally:
-        done.set()
-        if helper:
-            helper.join(2)
-    if tick:
-        tick()
+    """Run a child to its end (or `timeout_s`), collecting stdout and stderr (stream-proc's capture, under the run's deadline)."""
+    res = stream_proc.capture(argv, cwd=cwd, env=env, timeout=deadline.remaining(timeout_s), tick=tick, poll_s=poll_s,
+                              grace=STOP_GRACE_S)
     deadline.check()
-    timed = res.timed_out is not None
-    return Ran(
-        124 if timed else (res.returncode if res.returncode is not None else -(res.signal or 1)),
-        "".join(out),
-        "".join(err),
-        res.secs,
-        timed,
-    )
+    return res
 
 
 def stream(argv: list[str], *, cwd: str | None, env: Mapping[str, str], on_output: Callable[[str], None], timeout_s: float | None,
@@ -141,32 +107,8 @@ def spawn(argv: list[str] | str, **kw: Any) -> subprocess.Popen[bytes]:
     return p
 
 
-class PidHandle:
-    """A running process this program did not spawn, as `stop_tree` wants it: pid, returncode, poll() and wait(). It is the
-    process named by (pid, start token) or nothing: a pid that is another process now reads as gone."""
-
-    def __init__(self, pid: int, start: str | None = None) -> None:
-        self.pid, self.start = pid, start or proc_start(pid)
-        self.returncode: int | None = None
-        self.args: list[str] = []
-
-    def poll(self) -> int | None:
-        if self.returncode is None and not alive(self.pid, self.start):
-            self.returncode = 0
-        return self.returncode
-
-    def wait(self, timeout: float | None = None) -> int:
-        end = None if timeout is None else time.monotonic() + timeout
-        while self.poll() is None:
-            if end is not None and time.monotonic() >= end:
-                raise subprocess.TimeoutExpired(self.args, timeout or 0)
-            time.sleep(0.02)
-        return self.returncode or 0
-
-
-def stop_pid(pid: int, start: str | None = None, grace: float = STOP_GRACE_S) -> tuple[int, ...]:
-    """Stop the process (pid, start) and its tree through stream-proc; -> pids still alive after the proof."""
-    return stop_tree(PidHandle(pid, start), grace=grace)  # type: ignore[arg-type]
+PidHandle = stream_proc.PidHandle
+stop_pid = stream_proc.stop_pid
 
 
 Proc = stream_proc.Proc
