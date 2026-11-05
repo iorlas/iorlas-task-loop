@@ -64,6 +64,15 @@ class PushClient(Case):
               redirect_stderr(io.StringIO())):
             assert prepush.githook("pre-push", ["tl"], self.request, {"TL_LAND": "1"}) != 0
 
+    def test_the_repos_own_pre_push_hook_runs_read_only(self):
+        with (mock.patch.object(prepush, "entry", return_value=0),
+              mock.patch.object(prepush, "original_hooks_dir", return_value="/h"),
+              mock.patch.object(prepush, "os_executable", return_value=True),
+              mock.patch.object(prepush.Path, "is_file", return_value=True),
+              mock.patch.object(prepush.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)) as run):
+            assert prepush.githook("pre-push", ["tl"], self.request, {"A": "b"}) == 0
+        assert run.call_args.kwargs["env"] == {"A": "b", "TL_JUDGE_READ_ONLY": "1"}
+
     def test_dispatcher_refuses_unexpected_pre_push_errors(self):
         stderr = io.StringIO()
         with (mock.patch.object(main.importlib, "import_module", side_effect=RuntimeError("judge failed")),
@@ -80,3 +89,15 @@ class PushClient(Case):
     def test_dispatcher_preserves_pretool_error_behavior(self):
         with mock.patch.object(main.importlib, "import_module", side_effect=RuntimeError("hook failed")):
             assert main.main(["pretool"], "{}", Path("/plugin"), {}) == 0
+
+    def test_fail_mode_table_closes_only_pre_push(self):
+        assert main.fail_exit(["githook", "pre-push", "tl"]) == main.FAIL_CLOSED
+        for argv in (["pretool"], ["session-start"], ["precompact"], ["githook", "post-rewrite", "tl"], ["githook", "pre-commit"], []):
+            assert main.fail_exit(argv) == main.FAIL_OPEN
+
+    def test_unimportable_prepush_module_refuses(self):
+        stderr = io.StringIO()
+        with (mock.patch.object(main.importlib, "import_module", side_effect=ModuleNotFoundError("taskloop.hook.prepush")),
+              redirect_stderr(stderr)):
+            assert main.main(["githook", "pre-push", "tl"], self.request, Path("/plugin"), {}) == 1
+        assert "prepush" in stderr.getvalue()

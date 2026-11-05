@@ -221,9 +221,6 @@ class ConfigDir:
     def release_result(self) -> Path:
         return self.root / "releases" / "last.json"
 
-    def suite_green(self) -> Path:
-        return self.root / "releases" / "suite-green.json"
-
     def suite_logs(self) -> list[Path]:
         """The saved full output of every red release suite (releases/suite-*.log); nothing sweeps them but `tl prune`."""
         return sorted((self.root / "releases").glob("suite-*.log"))

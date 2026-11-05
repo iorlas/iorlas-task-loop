@@ -9,12 +9,10 @@ import support.paths  # noqa: F401
 from support.case import Case
 from support.shells import quiet_shell
 
-from taskloop.app.release import flow, gate
-from taskloop.app.release.cache import SuiteCache
+from taskloop.app.release import flow
 from taskloop.app.release.shell import Abort
 from taskloop.contracts.env import Env
 from taskloop.contracts.gitfacts import StatusRow
-from taskloop.contracts.paths import ConfigDir
 
 
 class SuiteOnce(Case):
@@ -48,25 +46,6 @@ class SuiteOnce(Case):
         assert seen == ['{"version":"1.2.3"}\n']
         assert "1.2.4" in plugin.read_text()
         port.commit_staged.assert_called_once_with(str(repo), "1.2.4: fix" + flow.publish.TRAILER)
-
-    def test_same_pre_bump_tree_reuses_green_and_red_never_records_one(self):
-        port = mock.Mock()
-        port.rev_parse.return_value = "pre-bump-tree"
-        port.ls_tree.return_value = []
-        sh = replace(quiet_shell(), port=port, env=self.env)
-        checks = mock.Mock()
-        assert not gate.verify(self.root, sh, checks)
-        assert gate.verify(self.root, sh, checks)
-        checks.assert_called_once()
-        port.rev_parse.assert_any_call(str(self.root), "HEAD^{tree}")
-        port.rev_parse.return_value = "changed-tree"
-        assert not gate.verify(self.root, sh, checks)
-        assert checks.call_count == 2
-        port.rev_parse.return_value = "red-tree"
-        with pytest.raises(Abort):
-            gate.verify(self.root, sh, mock.Mock(side_effect=Abort("red")))
-        store = SuiteCache(ConfigDir(self.root / "cfg" / "task-loop"))
-        assert not any(g.tree == "red-tree" for g in store._all())
 
     def test_post_bump_check_rejects_unexpected_changes_dirty_tree_and_corrupt_metadata(self):
         plugin = self.root / flow.publish.PLUGIN
