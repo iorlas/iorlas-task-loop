@@ -1,24 +1,49 @@
 """Throwaway spike: stdio MCP server exposing artifact_add. Binding comes from argv, never from the model."""
-import argparse, datetime, hashlib, json, os, re, shutil, sys
+
+import argparse
+import datetime
+import hashlib
+import json
+import os
+import pathlib
+import re
+import shutil
+import sys
 
 ROLES = ("shot", "scene", "page", "pdf", "video", "audio", "other")
 CAP = 200
 NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._ -]{0,99}$")
-MAGIC = [(b"\x89PNG\r\n\x1a\n", "png"), (b"\xff\xd8\xff", "jpg"), (b"GIF8", "gif"), (b"%PDF-", "pdf"),
-         (b"RIFF", "riff"), (b"\x1aE\xdf\xa3", "webm"), (b"OggS", "ogg"), (b"ID3", "mp3")]
+MAGIC = [
+    (b"\x89PNG\r\n\x1a\n", "png"),
+    (b"\xff\xd8\xff", "jpg"),
+    (b"GIF8", "gif"),
+    (b"%PDF-", "pdf"),
+    (b"RIFF", "riff"),
+    (b"\x1aE\xdf\xa3", "webm"),
+    (b"OggS", "ogg"),
+    (b"ID3", "mp3"),
+]
 
 ap = argparse.ArgumentParser()
 for k in ("bead", "run", "stage", "attempt", "store", "cwd"):
     ap.add_argument("--" + k, required=True)
 A = ap.parse_args()
 
-TOOL = {"name": "artifact_add",
-        "description": "Register a file you made (picture, PDF, video) as an artifact of this step. The file must be inside your working folder.",
-        "inputSchema": {"type": "object", "required": ["path", "caption", "role", "name"], "properties": {
+TOOL = {
+    "name": "artifact_add",
+    "description": "Register a file you made (picture, PDF, video) as an artifact of this step. "
+    "The file must be inside your working folder.",
+    "inputSchema": {
+        "type": "object",
+        "required": ["path", "caption", "role", "name"],
+        "properties": {
             "path": {"type": "string", "description": "Path of the file inside the working folder"},
             "caption": {"type": "string", "description": f"What it shows, up to {CAP} characters"},
             "role": {"type": "string", "enum": list(ROLES)},
-            "name": {"type": "string", "description": "Plain file name for the store, no folders, e.g. home.png"}}}}
+            "name": {"type": "string", "description": "Plain file name for the store, no folders, e.g. home.png"},
+        },
+    },
+}
 
 
 def sniff(head):
@@ -58,14 +83,24 @@ def add(a):
     dest = os.path.join(d, n)
     tmp = dest + ".tmp"
     shutil.copyfile(rp, tmp)
-    os.replace(tmp, dest)                                    # file first
-    h = hashlib.sha256(open(dest, "rb").read()).hexdigest()
-    side = {"bead": A.bead, "run": A.run, "stage": A.stage, "attempt": A.attempt, "name": n, "role": a["role"],
-            "caption": a["caption"], "kind": kind, "size": os.path.getsize(dest), "sha256": h,
-            "at": datetime.datetime.now(datetime.timezone.utc).isoformat()}
+    os.replace(tmp, dest)  # file first
+    h = hashlib.sha256(pathlib.Path(dest).read_bytes()).hexdigest()
+    side = {
+        "bead": A.bead,
+        "run": A.run,
+        "stage": A.stage,
+        "attempt": A.attempt,
+        "name": n,
+        "role": a["role"],
+        "caption": a["caption"],
+        "kind": kind,
+        "size": os.path.getsize(dest),
+        "sha256": h,
+        "at": datetime.datetime.now(datetime.UTC).isoformat(),
+    }
     stmp = dest + ".json.tmp"
-    open(stmp, "w").write(json.dumps(side))
-    os.replace(stmp, dest + ".json")                         # sidecar last
+    pathlib.Path(stmp).write_text(json.dumps(side))
+    os.replace(stmp, dest + ".json")  # sidecar last
     return f"registered {n} ({kind}, {side['size']} bytes) as artifact {A.bead}/{A.run}/{A.stage}/{A.attempt}/{n}"
 
 
@@ -88,8 +123,14 @@ for line in sys.stdin:
         continue
     meth, i = m.get("method"), m.get("id")
     if meth == "initialize":
-        reply(i, result={"protocolVersion": m["params"].get("protocolVersion", "2025-06-18"), "capabilities": {"tools": {}},
-                         "serverInfo": {"name": "spike-artifacts", "version": "0"}})
+        reply(
+            i,
+            result={
+                "protocolVersion": m["params"].get("protocolVersion", "2025-06-18"),
+                "capabilities": {"tools": {}},
+                "serverInfo": {"name": "spike-artifacts", "version": "0"},
+            },
+        )
     elif meth == "tools/list":
         reply(i, result={"tools": [TOOL]})
     elif meth == "tools/call":
@@ -100,7 +141,7 @@ for line in sys.stdin:
         try:
             out = add(p.get("arguments") or {})
             reply(i, result={"content": [{"type": "text", "text": out}]})
-        except Exception as e:                            # tool error goes back to the model
+        except Exception as e:  # tool error goes back to the model
             reply(i, result={"isError": True, "content": [{"type": "text", "text": f"artifact_add refused: {e}"}]})
     elif i is not None:
         reply(i, result={})
