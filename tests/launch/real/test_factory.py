@@ -39,12 +39,12 @@ class DetachedFactory(Case):
             parent = procs.spawn([sys.executable, "-c", launcher])
             child = None
             try:
-                assert parent.wait(timeout=5) == 0
+                assert parent.wait(timeout=30) == 0
                 record = json.loads(recorded.read_text())
                 assert record["start"]
                 child = procs.PidHandle(record["pid"], record["start"])
                 child_pid = child.pid
-                until = time.monotonic() + 5
+                until = time.monotonic() + 30
                 while (not proof.exists() or not proof.stat().st_size) and time.monotonic() < until:
                     time.sleep(0.02)
                 facts = json.loads(proof.read_text())

@@ -2,7 +2,7 @@
 
 from support.case import Case
 
-from rules.arch_ratchets import production_trees
+from rules.arch_rules import production_trees
 from rules.writer_invariants import WRITERS, writer_tree_problems
 
 

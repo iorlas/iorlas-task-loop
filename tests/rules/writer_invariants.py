@@ -2,11 +2,12 @@
 import ast
 from typing import Final
 
-from rules.enumtotal import bindings, qualified
+from importgraph import bindings, qualified
 
 # State authority, rather than a budget of write sites. Reads are unrestricted.
 WRITERS: Final = {
     'PinStore': {'taskloop.app.release.pins'},
+    'HostResourcesStore': {'taskloop.app.wire.setup_apply'},
     'StatusStore': {'taskloop.app.wire.lanes'},
     'StatusTriedStore': {'taskloop.app.wire.lanes'},
     'ReposStore': {'taskloop.app.track.trail', 'taskloop.contracts.stores'},
@@ -14,7 +15,7 @@ WRITERS: Final = {
     'SuiteGreenStore': {'taskloop.app.release.cache'},
     'ReflectStateStore': {'taskloop.app.report.reflect'},
     'ParkStore': {'taskloop.app.asks.parks', 'taskloop.app.loop.take', 'taskloop.app.run.stages', 'taskloop.contracts.parks'},
-    'LandedStore': {'taskloop.app.run.engine', 'taskloop.cli.land', 'taskloop.contracts.landed'},
+    'LandedStore': {'taskloop.app.run.parts_land', 'taskloop.cli.land', 'taskloop.contracts.landed'},
     'TraceStore': {'taskloop.app.run.records', 'taskloop.contracts.finish_projection'},
     'LoopStateStore': {'taskloop.app.loop.files'},
     'LoopCommandStore': {'taskloop.app.loop.files'},
@@ -72,7 +73,7 @@ def raw_json_allowed(module, receiver):
     left, right = receiver.left, receiver.right
     if not isinstance(left, ast.Attribute) or left.attr != 'run_dir':
         return False
-    if module == 'taskloop.app.run.engine':
+    if module == 'taskloop.app.run.parts_plan':
         return isinstance(right, ast.Name) and right.id == 'PLAN_FILE'
     if module == 'taskloop.app.run.worker_call' and isinstance(right, ast.JoinedStr):
         return (len(right.values) == 4 and isinstance(right.values[0], ast.FormattedValue)

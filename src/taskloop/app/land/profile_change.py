@@ -9,7 +9,7 @@ from taskloop.contracts.ports import Git
 def owner_refusal(text: str | None, env: Env) -> str:
     if text is None:
         return ""
-    settings = ("TASK_LOOP_DASH_", "TASK_LOOP_SUITE_")
+    settings = ("TASK_LOOP_DASH_",)
     if any(registered(name) and not name.startswith(settings) for name in env.vars):
         return "profile change is an owner decision; not available to the engine or a lane"
     if len(text.strip()) < 12 or not any(char.isdigit() for char in text):

@@ -141,6 +141,8 @@ class EngineLand1Test(EngineTest):
     def test_a_land_lock_wait_is_not_budget(self):
         # tl-y35: 2251 s on the fake clock waiting for the land lock move the budget by exactly that
         eng = self.checks_engine(budget_min=180)
+        eng.budget.now = eng.clock.now  # the budget counts on the clock the wait is measured on, as in a run
+        eng.budget.restore(0.0, 0.0)
         before = eng.budget.spent_min()
 
         @contextlib.contextmanager
@@ -152,7 +154,7 @@ class EngineLand1Test(EngineTest):
         with eng.waits.locked("land_lock", Path(self.tmp.name) / "land.lock"):
             pass
         assert eng.waited == 2251
-        assert before - eng.budget.spent_min() == pytest.approx(2251 / 60, abs=0.5)  # real time moved by ms; no real sleep
+        assert eng.budget.spent_min() == before  # the wait moved the clock and the budget minutes by nothing
         (start,), (end,) = records(eng, "wait_start"), records(eng, "wait_end")
         assert (
             (start["holder"], start["id"], end["id"], end["wait_seconds"], end["in_budget"])

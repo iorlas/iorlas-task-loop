@@ -1,7 +1,8 @@
 // StageCard: one pass in the drawer, the 1k slot card living on (dash-spec §6): six phase cells over minutes and tokens,
-// thumbnails under the phase that made them, the resumed note, the pass ending, then the messages of this pass.
+// the files of each stage attempt, the resumed note, the pass ending, then the messages of this pass.
 import { html, useState } from '../../vendor/ui-runtime.js';
 import { dur, tokens } from '../format.js';
+import { AttemptFiles } from './artifacts.js';
 import { MsgLine } from './kit.js';
 
 export const PHASES = ['plan', 'write', 'test', 'review', 'look', 'land'];
@@ -40,14 +41,9 @@ function StageLog({ log, phase }) {
       })}</section>`)}</section>`;
 }
 
-// artifacts of this pass, under the phase that made them (or the running phase on the live pass)
-function Thumbs({ pass, artifacts, livePhase }) {
-  const mine = artifacts.filter((a) => a.kind === 'image' && a.pass_n === pass.n);
-  if (!mine.length) return null;
-  return html`<div class="row6 th">${PHASES.map((p) => {
-    const here = mine.filter((a) => (a.phase || livePhase) === p);
-    return html`<div key=${p}>${here.map((a) => html`<a key=${a.url} href=${a.url} target="_blank" rel="noopener"><img src=${a.url} alt=${a.name} loading="lazy" /></a>`)}</div>`;
-  })}</div>`;
+// the files of this pass, per stage attempt (the bead's other passes made files too: then an empty pass says so)
+function Thumbs({ pass, artifacts }) {
+  return html`<${AttemptFiles} items=${artifacts.filter((a) => a.pass_n === pass.n)} any=${artifacts.length > 0} />`;
 }
 
 export function StageCard({ pass, now, artifacts = [], livePhase, live, children }) {
@@ -56,7 +52,7 @@ export function StageCard({ pass, now, artifacts = [], livePhase, live, children
   return html`<div class="stagecard">
     <div class="row6 hd">${PHASES.map((p) => html`<button key=${p} class="e" onClick=${() => pick(p)} aria-expanded=${selected === p}>${p}</button>`)}</div>
     <div class="row6">${pass.cells.map((c) => html`<${Cell} key=${c.phase} c=${c} onPick=${pick} selected=${selected === c.phase} />`)}</div>
-    <${Thumbs} pass=${pass} artifacts=${artifacts} livePhase=${livePhase} />
+    <${Thumbs} pass=${pass} artifacts=${artifacts} />
     ${selected && html`<${StageLog} phase=${selected} log=${pass.logs?.find((l) => l.phase === selected)} />`}
     ${pass.resumed && html`<div class="pend">↪ Resumed on <b>${pass.resumed.slot}</b> from branch <code>${pass.resumed.branch}</code> after ${dur(pass.resumed.waited_secs)} waiting for a slot</div>`}
     ${(pass.end || pass.end_text || pass.detail) && html`<div class="pend pass-why" title=${`${pass.end_text || pass.end.replace('_', ' ')}${pass.detail ? ` · ${pass.detail}` : ''}`}>

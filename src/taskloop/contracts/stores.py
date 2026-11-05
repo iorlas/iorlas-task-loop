@@ -5,7 +5,6 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Final, Protocol, override
 
-from atomic_io import atomic_write_bytes
 from jsonl_log import KEEP, ROTATE_BYTES, Entry
 
 from taskloop.contracts import docstore, events, log, paths, wire
@@ -46,8 +45,9 @@ type Read[T] = docstore.Read[T]
 class JsonlStore[T]:
     """An append-only family: one record per line, read back by byte cursor."""
 
-    def __init__(self, path: Path, decode: Any, cls: type[Any] | None = None, rotate_bytes: int = ROTATE_BYTES, keep: int = KEEP) -> None:
-        self.file = RotatingJsonl(path, rotate_bytes, keep)
+    def __init__(self, path: Path, decode: Any, cls: type[Any] | None = None, rotate_bytes: int = ROTATE_BYTES, keep: int = KEEP,
+                 rotate_lock: Path | bool = False) -> None:
+        self.file = RotatingJsonl(path, rotate_bytes, keep, rotate_lock)
         self._decode = decode
         self._cls = cls
 
@@ -70,6 +70,10 @@ class JsonlStore[T]:
         return Page(items, cursor, len(entries) - len(items))
 
 
+def _beside(path: Path, suffix: str) -> Path:
+    return path.with_name(path.name + suffix)
+
+
 def _one(cls: type) -> Any:
     def decode(data: Any) -> Any:
         return wire.load(cls, data)
@@ -90,7 +94,7 @@ class TraceStore(JsonlStore[RunTrace]):
     """Run traces; append and age retention share one outer lock."""
 
     def __init__(self, cfg: paths.ConfigDir) -> None:
-        super().__init__(cfg.traces(), _one(RunTrace))
+        super().__init__(cfg.traces(), _one(RunTrace), rotate_lock=_beside(cfg.traces(), ".prune.lock"))
 
     def lock_path(self) -> Path:
         return self.file.path.with_name(self.file.path.name + ".prune.lock")
@@ -112,7 +116,7 @@ class UsageHistory(JsonlStore[UsageRow]):
     """The lane usage history: `tl lanes` is its one writer (`record`), age its only prune."""
 
     def __init__(self, cfg: paths.ConfigDir) -> None:
-        super().__init__(cfg.usage_history(), _one(UsageRow))
+        super().__init__(cfg.usage_history(), _one(UsageRow), rotate_lock=_beside(cfg.usage_history(), ".lock"))
 
     def lock_path(self) -> Path:
         return self.file.path.with_name(self.file.path.name + ".lock")
@@ -131,17 +135,14 @@ class UsageHistory(JsonlStore[UsageRow]):
 
     def prune(self, now: float) -> int:
         """Drop rows older than USAGE_KEEP_S (and lines that are no row); -> how many lines went. Rewrites only when one goes."""
-        with guard(self.lock_path()):
-            try:
-                data = self.file.path.read_bytes()
-            except OSError:
-                return 0
-            page = self.read_from(0)
-            keep = [data[i.start:i.end] for i in page.items if i.rec.at >= now - USAGE_KEEP_S]
-            gone = len(page.items) + page.skipped - len(keep)
-            if gone:
-                atomic_write_bytes(self.file.path, b"".join(keep), fsync=False)
-            return gone
+        cut = now - USAGE_KEEP_S
+        return self.file.rewrite(lambda line: self._at(line) >= cut)
+
+    def _at(self, line: bytes) -> float:
+        try:
+            return self._decode(json.loads(line)).at
+        except ValueError:
+            return float("-inf")
 
 
 class LedgerStore(DbLedger):

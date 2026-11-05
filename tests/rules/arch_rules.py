@@ -1,8 +1,14 @@
-"""Import SCCs and fan-out, measured statically over the owned Python tree. Size is the per-file caps of gate_rules.py; no total is kept."""
-import ast
+"""Hard architecture rules over the owned Python tree, measured statically: no import cycle, and no module imports more than
+MAX_FANOUT distinct project modules (lazy and TYPE_CHECKING imports count; the parent packages of an imported module do not,
+`from a.b import c` is one module, not three). 40 is the cap the probe could meet by splitting modules by concern (the two
+widest, app/launch/loop.py and skills/task-loop/tl.py, sit on it); past it a module does several jobs. Size is the per-file
+caps of gate_rules.py. Nothing is stored."""
 
-from rules.enumtotal import bindings, qualified
+from importgraph import targets_of
+
 from rules.gate_rules import ROOT, parsed, py_files
+
+MAX_FANOUT = 40
 
 
 def production_trees(root=ROOT):
@@ -22,28 +28,14 @@ def graph_of(trees):
     packages = {name for name in trees if any(other.startswith(name + '.') for other in trees)}
     graph = {module: set() for module in trees}
     for module, tree in trees.items():
-        names = bindings(module, tree, packages)
-        for node in ast.walk(tree):
-            targets = import_targets(module, node, names, packages)
-            for target in targets:
-                # `from module import symbol` depends on module; `from package import module` on both.
-                parts = target.split('.')
-                for end in range(1, len(parts) + 1):
-                    name = '.'.join(parts[:end])
-                    if name in trees and (name != module or target == module):
-                        graph[module].add(name)
+        for target in targets_of(module, tree, packages):
+            # `from module import symbol` depends on module; `from package import module` on both.
+            parts = target.split('.')
+            for end in range(1, len(parts) + 1):
+                name = '.'.join(parts[:end])
+                if name in trees and (name != module or target == module):
+                    graph[module].add(name)
     return graph
-
-
-def import_targets(module, node, names, packages):
-    if isinstance(node, ast.Import):
-        return [alias.name for alias in node.names]
-    if isinstance(node, ast.ImportFrom):
-        return bindings(module, ast.Module(body=[node], type_ignores=[]), packages).values()
-    if (isinstance(node, ast.Call) and qualified(node.func, names) in {'importlib.import_module', '__import__'}
-            and node.args and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str)):
-        return [node.args[0].value]
-    return ()
 
 
 def cyclic_components(graph):
@@ -77,20 +69,18 @@ def cyclic_components(graph):
     return sorted(components)
 
 
-def growth_problems(actual, recorded):
-    problems = []
-    for metric, value in actual.items():
-        limit = recorded[metric]
-        if value > limit:
-            problems.append(f'{metric} grew: {value} > {limit}; the count may only shrink')
-        elif value < limit:
-            problems.append(f'{metric} shrank: lower rules_ratchet.json from {limit} to {value}')
-    return problems
+def imported_modules(targets):
+    """The modules a module names in its imports: a package that is only the parent of another imported module is not counted."""
+    return {name for name in targets if not any(other.startswith(name + '.') for other in targets)}
 
 
-def metrics(root=ROOT):
+def fanout_problems(graph, cap=MAX_FANOUT):
+    counted = {module: imported_modules(targets) for module, targets in graph.items()}
+    return [f'{module} imports {len(targets)} project modules; the cap is {cap}: split it by concern'
+            for module, targets in sorted(counted.items()) if len(targets) > cap]
+
+
+def problems(root=ROOT):
     graph = graph_of(production_trees(root))
-    return {
-        'scc': len(cyclic_components(graph)),
-        'fanout': max(map(len, graph.values()), default=0),
-    }
+    cycles = [f'import cycle: {" -> ".join(component)}' for component in cyclic_components(graph)]
+    return cycles + fanout_problems(graph)

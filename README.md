@@ -15,7 +15,7 @@ claude plugin install iorlas-task-loop@iorlas-marketplace
 ```
 
 Then in a repo that uses bd, say "task loop". Requirements: Python 3.15+, uv, git, bd 1.3+,
-Claude Code. macOS and Linux (also inside a container); Windows is not supported.
+Claude Code. macOS only.
 
 Workers come with the plugin: `src/delegate` is a library the engine calls ([delegate.api](docs/contracts/delegate-api.md)); it picks lane
 and model from live plan limits. `tl accounts` shows which worker accounts are ready and how to fix the rest.
@@ -115,7 +115,7 @@ on a normal loop pass; there is no timed set-aside. Resource and lane waits poll
 It works on a phone (below 600 px it switches to a phone layout).
 
 It listens on 127.0.0.1 and on the Tailscale address when Tailscale is up, so a phone on the tailnet can open it.
-In a container: `TASK_LOOP_DASH_BIND=0.0.0.0` and publish the port. `TASK_LOOP_DASH_PORT` changes the port.
+`TASK_LOOP_DASH_PORT` changes the port.
 
 It reads only local files: the records the engine and `tl.py` write (`~/.config/task-loop`) and bd. Its API is
 [docs/contracts/dash-api.md](docs/contracts/dash-api.md).
@@ -135,12 +135,12 @@ src/taskloop_dash/               the dashboard package (imports taskloop.contrac
 src/taskloop_dash/static/        the dashboard page: index.html and its ES modules (Preact + HTM vendored; no build)
 src/taskloop_dash/views/         engine logs, asks and bd -> the typed snapshot and bead records (contracts/dash.py)
 hooks/hooks.json                 SessionStart: index session id -> transcript path (uv run --script); PreToolUse: python3, no msgspec
-tests/                           uv run pytest   (pytest + xdist, the dev group of pyproject.toml; Mac gate + release suite)
+tests/                           just test   (pytest + xdist, the dev group of pyproject.toml; only the tests a change can break)
 dev/release.py                   the only way to release: release lock, version from origin, suite, marketplace, install
 docs/design/                     design notes
 docs/contracts/dash-api.md       the dashboard's HTTP API: GET /api/snapshot, /api/bead, /api/live, POST /api/<verb>
 docs/dev/integrations.md         for developers: every external format read, and how delegate connects
-docs/dev/runaway-process.md      for developers: capture a runaway process (/proc, py-spy, cgroup) before killing it
+docs/dev/runaway-process.md      for developers: capture a runaway process (/proc, py-spy) before killing it
 ```
 
 Work on this plugin is tracked with beads (`bd ready`).

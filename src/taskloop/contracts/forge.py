@@ -1,4 +1,5 @@
 """A pull request as the forge shows it, and one branch of a stack to deliver."""
+from collections.abc import Mapping
 from typing import final
 
 import msgspec
@@ -6,6 +7,13 @@ import msgspec
 from taskloop.contracts.wire import Rec
 
 OPEN, MERGED, CLOSED = "OPEN", "MERGED", "CLOSED"
+PR_NUMBER, PR_URL = "land_pr", "land_pr_url"  # bead metadata: the PR a PR-mode land waits on
+
+
+def pr_waited_on(metadata: Mapping[str, object]) -> int:
+    """The number of the PR a bead's land waits on, 0 when it waits on none."""
+    raw = str(metadata.get(PR_NUMBER, ""))
+    return int(raw) if raw.isdigit() else 0
 
 
 @final

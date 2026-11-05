@@ -27,8 +27,6 @@ def unkeyed(memo: RunMemo, c: Check) -> str:
     """Why this check has no key here at all."""
     if not c.cache:
         return "it is not cacheable (cache: false): no receipt can count"
-    if c.container and c.id not in memo.executions:
-        return "its container could not be resolved here"
     if c.reads and memo.dependencies_of(c) is None:
         return f"a producer it reads ({', '.join(c.reads)}) has no matching receipt"
     return "its inputs select nothing in this tree"
@@ -36,8 +34,6 @@ def unkeyed(memo: RunMemo, c: Check) -> str:
 
 def why_red(memo: RunMemo, c: Check, plan: Digest) -> str:
     """The first differing field against the newest receipt of the check on this tree and base, or why there is nothing to compare."""
-    if c.container and c.id not in memo.executions:
-        return unkeyed(memo, c)
     found = memo.latest(c)
     if found is None:
         return "no receipt for this tree and base"

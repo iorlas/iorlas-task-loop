@@ -1,4 +1,4 @@
-"""The release gate's suite cache: a hit needs the same tree and the same command, only a green run is remembered."""
+"""The release gate's cache: a hit needs the same tree and the same test selection, only a green run is remembered."""
 import json
 import os
 import subprocess
@@ -14,7 +14,7 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 
 from taskloop.adapters.git import RealGit
 from taskloop.adapters.spawner import RealSpawner
-from taskloop.app.release import shell, suite
+from taskloop.app.release import gate, shell
 from taskloop.app.release.cache import SuiteCache
 from taskloop.app.release.shell import Abort, Shell
 from taskloop.contracts.env import snapshot
@@ -28,7 +28,7 @@ class Verify(Case):
         root = Path(self.tmp.name)
         self.repo = root / "repo"
         self.repo.mkdir()
-        self.env = {"XDG_CONFIG_HOME": str(root / "cfg"), "TASK_LOOP_SUITE_HOST": "1", "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
+        self.env = {"XDG_CONFIG_HOME": str(root / "cfg"), "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
                     "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
         saved = {k: os.environ.get(k) for k in self.env}
         os.environ.update(self.env)
@@ -50,43 +50,47 @@ class Verify(Case):
         self.git("add", "-A")
         self.git("commit", "-qm", text)
 
-    def checks(self, tool_root: Path, repo: Path, sh: Shell) -> None:
+    def checks(self, repo: Path, sh: Shell) -> None:
         self.ran.append("ran")
 
-    def red(self, tool_root: Path, repo: Path, sh: Shell) -> None:
+    def red(self, repo: Path, sh: Shell) -> None:
         self.ran.append("red")
         raise Abort("the suite is red")
 
     def test_the_same_tree_under_the_same_command_runs_once(self):
-        assert not suite.verify(self.repo, self.repo, self.sh, self.checks)
-        assert suite.verify(self.repo, self.repo, self.sh, self.checks)
+        assert not gate.verify(self.repo, self.sh, self.checks)
+        assert gate.verify(self.repo, self.sh, self.checks)
         assert self.ran == ["ran"]
 
     def test_a_changed_tree_runs_again(self):
-        suite.verify(self.repo, self.repo, self.sh, self.checks)
+        gate.verify(self.repo, self.sh, self.checks)
         self.commit("a.txt", "two")
-        assert not suite.verify(self.repo, self.repo, self.sh, self.checks)
+        assert not gate.verify(self.repo, self.sh, self.checks)
         assert self.ran == ["ran", "ran"]
 
     def test_a_red_run_is_never_remembered_so_the_next_run_is_real(self):
         with pytest.raises(Abort):
-            suite.verify(self.repo, self.repo, self.sh, self.red)
+            gate.verify(self.repo, self.sh, self.red)
         with pytest.raises(Abort):
-            suite.verify(self.repo, self.repo, self.sh, self.red)
+            gate.verify(self.repo, self.sh, self.red)
         assert self.ran == ["red", "red"]
 
-    def test_another_command_is_a_miss(self):
-        suite.verify(self.repo, self.repo, self.sh, self.checks)
-        del os.environ["TASK_LOOP_SUITE_HOST"]  # the container suite is another command
-        self.sh = self.shell_now()
-        assert not suite.verify(self.repo, self.repo, self.sh, self.checks)
+    def test_another_test_selection_is_a_miss(self):
+        (self.repo / "dev").mkdir()
+        (self.repo / "dev" / "affected.py").write_text("print(open('selection').read())\n")
+        self.git("add", "-A")
+        self.git("commit", "-qm", "selector")
+        (self.repo / "selection").write_text("tests/a.py\n")  # untracked: the tree stays, the selection (a moved origin/main) changes
+        gate.verify(self.repo, self.sh, self.checks)
+        (self.repo / "selection").write_text("tests/a.py\ntests/b.py\n")
+        assert not gate.verify(self.repo, self.sh, self.checks)
         assert self.ran == ["ran", "ran"]
 
     def test_a_torn_cache_file_is_a_miss_not_a_crash(self):
-        suite.verify(self.repo, self.repo, self.sh, self.checks)
+        gate.verify(self.repo, self.sh, self.checks)
         f = Path(self.tmp.name) / "cfg" / "task-loop" / "releases" / "suite-green.json"
         f.write_text("{torn")
-        assert not suite.verify(self.repo, self.repo, self.sh, self.checks)
+        assert not gate.verify(self.repo, self.sh, self.checks)
         greens = json.loads(f.read_text())["greens"]
         assert len(greens) == 1
         assert SuiteCache(ConfigDir(f.parents[1])).hit(greens[0]["tree"], greens[0]["command"])

@@ -6,13 +6,15 @@
 - :func:`alive`, :func:`proc_start` — pid-reuse-safe liveness (``/proc`` on Linux, libproc on macOS);
   :func:`table`, :func:`descendants` — the process table; :func:`group_alive` — is any process in a group.
 - :func:`capture` — :func:`run` to the end, output as text, exit 124 on a timeout, optional heartbeat ``tick``.
+- :func:`capture_bytes` — the same, output as exact bytes, optional ``input`` on stdin, stdin devnull or inherited,
+  or ``capture=False`` to inherit stdout/stderr.
 - :func:`stop_pid`, :class:`PidHandle` — stop a process we did not spawn, only while its start token matches.
 - :class:`TermHold`, :func:`popen_held` — a SIGTERM landing during a spawn still stops the child.
 
 Stdlib only (``ctypes`` on macOS), POSIX.
 """
 
-from stream_proc.capture import Captured, capture
+from stream_proc.capture import Captured, CapturedBytes, capture, capture_bytes
 from stream_proc.hold import TermHold, popen_held
 from stream_proc.pid import PidHandle, stop_pid
 from stream_proc.procfs import Proc
@@ -22,6 +24,7 @@ from stream_proc.tree import stop_tree
 
 __all__ = [
     "Captured",
+    "CapturedBytes",
     "Kind",
     "PidHandle",
     "Proc",
@@ -29,6 +32,7 @@ __all__ = [
     "TermHold",
     "alive",
     "capture",
+    "capture_bytes",
     "descendants",
     "group_alive",
     "popen_held",

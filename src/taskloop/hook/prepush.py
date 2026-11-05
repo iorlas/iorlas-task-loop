@@ -1,6 +1,8 @@
 """The stdlib pre-push client forwards git's complete request to the application delivery judge. Only exit zero authorizes a push;
 an unavailable or erroring judge refuses. No profile, evidence, or delivery policy is interpreted in this plain-python3 process."""
 # git-port-exempt: plain python3 in git's own hook path; it imports no port and no record (tests/hook/test_hook.py)
+from __future__ import annotations
+
 import subprocess
 import sys
 from collections.abc import Mapping

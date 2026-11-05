@@ -7,6 +7,7 @@ import os
 import random
 import sys
 from pathlib import Path
+from typing import Final
 
 from delegate.adapters import agent_runs, git
 from delegate.app import env, onboard
@@ -26,7 +27,7 @@ from delegate.domain.routing.router import Router
 # writes only the working directory; a command it blocks may ask to run outside it, and Codex's automatic reviewer (a model, no human)
 # approves or refuses that one command. Codex permission profiles would also block reads (~/.ssh), but an approved escalation there
 # stays inside the sandbox, so Unity cannot run (codex-cli 0.162.1).
-CODEX_ACCESS = [
+CODEX_ACCESS: Final = [
     "--ignore-user-config",
     "--ignore-rules",
     "-c",

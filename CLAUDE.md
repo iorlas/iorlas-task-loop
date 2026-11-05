@@ -61,14 +61,14 @@ This protocol applies when ending a Beads implementation workflow. It is subordi
 ## Build & Test
 
 ```bash
-just test-fast -n auto         # the inner loop: logic tests only (-m "not real and not e2e"; also what plain `just test` / `uv run pytest` run)
-uv run pytest tests/land -q    # one slice folder, module or test (tests/land/test_x.py::Class::test); the tests are plain pytest classes: `assert`, `setup_method`, fixtures; `support.case.Case` still gives `addCleanup` and `subTest`; write new tests as pytest functions or classes, never `unittest`
-just test-all -n auto          # every kind: logic, real, e2e (`serial` ones need dev/suite.py to run alone)
-uv run --script dev/suite.py  # what a release runs: every kind, xdist workers, then the serial group alone; takes the host-wide suite lock
-just check                     # ruff + pyrefly + import-linter + tests/rules/gate_rules.py (tools pinned in mise.toml; `mise install`)
-just test-delegate -n auto     # tests/delegate (real processes, minutes): collected by no other run unless the change touches src/delegate, tests/delegate or skills/task-loop/_vendor (tests/support/scope.py); a task-loop or dashboard change never runs them
-just test-live                 # tests/live: scenarios that run the real pieces (git remote, processes, dashboard, docker); explicit only, no other run collects them
+just test                      # THE test command: runs only the tests this change can break (dev/affected.py: the diff against origin/main followed up the import graph; tests/rules always), all kinds, once per tree, in at most 4 workers; the gate and the release run this and nothing else
+uv run pytest tests/land -q    # one slice folder, module or test (tests/land/test_x.py::Class::test) while you edit; the tests are plain pytest classes: `assert`, `setup_method`, fixtures; `support.case.Case` still gives `addCleanup` and `subTest`; write new tests as pytest functions or classes, never `unittest`
+just check                     # ruff + pyrefly on the changed .py files only (`just lint-all` / `types-all`: whole tree), then import-linter (tools pinned in mise.toml; `mise install`)
+just test-delegate            # tests/delegate (real processes, minutes): collected by no other run unless the change touches src/delegate, tests/delegate or skills/task-loop/_vendor (tests/support/scope.py); a task-loop or dashboard change never runs them
 ```
+
+Never run pytest over the whole suite; for broad coverage run `just test` (affected-only).
+Whole-suite runs (`just test-full`) and `just test-live` (tests/live: scenarios that run the real pieces) are started by a person, never by an agent, the gate, a release, a cron or a background job.
 
 Tests live in `tests/<slice>/`, mirroring `src/taskloop/app/<slice>` (a test's home is the slice whose code changes if its assertion breaks);
 the other layers have their own folders (`contracts`, `stores`, `adapters`, `ports`, `domain`, `cli`, `hook`, `dash`, `rules` for the gate).
@@ -79,7 +79,7 @@ logic test that spawns, forks or runs real git fails; a real test that never spa
 conftest).
 
 Dev and test tools (pytest, pytest-xdist) are the `dev` group of pyproject.toml, locked in uv.lock; `uv run` syncs them.
-There is no hosted CI: the factory is the CI. `just check` and the full suite (`dev/suite.py`) run on the release path (`dev/release.py`) before any push to main. Linux locally: `docker run --rm -v "$PWD":/src:ro python:3.15-slim ...`.
+There is no hosted CI: the factory is the CI. `just check` and `just test` run on the release path (`dev/release.py`) before any push to main; each test runs once per tree.
 Caps (tests/rules/gate_rules.py): 400 SLOC per file, 80 per function, 800 per test file; no exceptions table: an oversize file or function is split. No SLOC total and no `Any` count is stored (parallel releases would conflict on it): the caps are per file, and tests/rules/real/test_changed_files.py compares the files a change touches with the merge base on origin/main (no new `Any`, `cast` or ignore on net).
 Architecture (layers, app slices, dashboard, `import re` placement): the `.importlinter` contracts; lazy imports, banned modules, module docstrings: ruff (PLC0415, TID251, D100). Both run in `just rules`.
 
@@ -95,11 +95,13 @@ reader, and how delegate connects (`delegate.api`, one table in SKILL.md).
 
 ## Conventions & Patterns
 
+- Decisions live in docs (the design note's Decisions recorded table or the repo's ADR); beads are work only; a decision bead is closed the moment it is decided.
+
 - "We need to use only our database": factory.db is for state, with no file fallback. Logs (engine, worker console, transcripts) stay files behind a log reader, rotated by age.
 
-- Python 3.15+; macOS and Linux (in containers too), POSIX only. Dependencies: runtime ones are declared inline in `skills/task-loop/tl.py`
+- Python 3.15+; macOS only, POSIX. Dependencies: runtime ones are declared inline in `skills/task-loop/tl.py`
   (PEP 723, the same pin as pyproject.toml's `dependencies`; tests/rules/test_pep723.py holds them equal) and run with `uv run --script`: the
-  `tl` shim, the loop's own spawns, dev/release.py and dev/suite.py. Dev and test tools live in pyproject.toml's `dev` group. The
+  `tl` shim, the loop's own spawns, and dev/release.py. Dev and test tools live in pyproject.toml's `dev` group. The
   PreToolUse hook (every Bash call) stays on plain `python3` and imports no msgspec and no record (.importlinter, tests/hook/test_hook.py).
 - The page is one HTML file, no build, no CDN.
 - delegate is a library in this repo (`src/delegate`). The engine imports `delegate.api` and nothing else of it, and has no launcher of

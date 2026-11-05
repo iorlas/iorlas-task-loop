@@ -4,14 +4,14 @@
 open Stuck episode. Left at its default: the live box's `subtasks` (no source)."""
 
 from collections.abc import Sequence
-from urllib.parse import quote
 
 from taskloop.contracts.bead import Bead, Comment
 from taskloop.contracts.dash import Artifact, AskCard, BeadDetail, CheckCount, LiveBox, Marker, Msg, Phase
 from taskloop.contracts.delegate import LiveCmdEnd, LiveCmdStart, LiveEvent, LiveTokens
 from taskloop.contracts.runlife import Liveness
 from taskloop_dash.tails import parse_ts
-from taskloop_dash.views import ledger, names, passes, phases, stage_logs
+from taskloop_dash.views import ledger, passes, phases, stage_logs
+from taskloop_dash.views.artifact_files import Item, url_of
 from taskloop_dash.views.askcards import ask_card, look_card, stale_of
 from taskloop_dash.views.board import Board, blockers, is_work
 from taskloop_dash.views.runfacts import Run
@@ -25,17 +25,22 @@ def comment_msg(c: Comment) -> Msg:
     return Msg(t=parse_ts(c.created_at) or 0.0, icon=COMMENT_ICON, who=c.author, md=c.text)
 
 
-def artifacts_of(bead: str, runs: Sequence[Run], ps: Sequence[passes.PassView]) -> list[Artifact]:
-    """The files the runs left, newest first; each knows the pass and phase of the step that made it."""
-    found: dict[str, Artifact] = {}
-    for r in runs:
-        for rec in r.artifacts:
-            n = next((p.n for p in ps if p.run is r and any(s.id == rec.id for s in p.spans)), None)
-            for name in rec.names:
-                kind = "image" if names.kind_of(name) == "image" else "file"
-                found[name] = Artifact(name=name, url=f"/api/artifact?bead={quote(bead)}&name={quote(name)}", kind=kind, t=rec.t,
-                                       pass_n=n, phase=phases.phase_of(rec.step))
-    return sorted(found.values(), key=lambda a: -a.t)
+def artifacts_of(repo: str, bead: str, found: Sequence[Item], ps: Sequence[passes.PassView]) -> list[Artifact]:
+    """The registered files, newest first (sidecar time); each knows the pass and phase of the stage attempt that made it: the n-th
+    span of a step in a run is that step's attempt n."""
+    where: dict[tuple[str, str, int], tuple[int, Phase | None]] = {}
+    seen: dict[tuple[str, str], int] = {}
+    for p in ps:
+        for s in p.spans:
+            k = (p.run.name, s.step)
+            seen[k] = seen.get(k, 0) + 1
+            where[(*k, seen[k])] = (p.n, s.phase)
+    out: list[Artifact] = []
+    for i in found:
+        n, phase = where.get((i.run, i.stage, i.attempt), (None, None))
+        out.append(Artifact(name=i.name, url=url_of(repo, bead, i), kind=i.kind, t=i.t, pass_n=n, phase=phase, role=i.role,
+                            caption=i.caption, run=i.run, stage=i.stage, attempt=i.attempt))
+    return out
 
 
 def live_box(run: Run, ps: Sequence[passes.PassView], events: Sequence[LiveEvent]) -> LiveBox | None:
@@ -66,7 +71,7 @@ def live_box(run: Run, ps: Sequence[passes.PassView], events: Sequence[LiveEvent
 
 
 def build(board: Board, p: ProjectIn, b: Bead, comments: Sequence[Comment], events: Sequence[LiveEvent],
-          stage_events: dict[str, dict[int, Sequence[LiveEvent]]] | None = None) -> BeadDetail:
+          stage_events: dict[str, dict[int, Sequence[LiveEvent]]] | None = None, found: Sequence[Item] = ()) -> BeadDetail:
     w = board.w
     runs = list(w.runs.get((p.id, b.id), ()))
     ps = board.passes_of((p.id, b.id))
@@ -81,7 +86,7 @@ def build(board: Board, p: ProjectIn, b: Bead, comments: Sequence[Comment], even
     return BeadDetail(
         t=w.now, card=card, description=b.description, acceptance=b.acceptance_criteria, comments=[comment_msg(c) for c in comments],
         passes=[passes.pass_rec(x).replace(logs=stage_logs.logs_of(x, (stage_events or {}).get(x.run.name, {}))) for x in ps],
-        artifacts=artifacts_of(b.id, runs, ps), waits_for=blockers(b, by_id),
+        artifacts=artifacts_of(p.id, b.id, found, ps), waits_for=blockers(b, by_id),
         unblocks=[x.id for x in p.beads if is_work(x) and x.status != "closed" and b.id in blockers_ids(x)],
         live=live_box(runs[-1], ps, events) if runs else None, ask=ask)
 

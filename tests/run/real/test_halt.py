@@ -33,16 +33,16 @@ class Halt(te.EngineTest):
     def test_sigterm_during_a_real_sleeping_check_ends_the_check_and_its_tree_and_the_run_closes_cleanly(self):
         pidfile = Path(self.tmp.name, "child.pid")
         plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[self.spawn(pidfile)])])
-        # the signal goes when the check's child exists, however late a loaded runner starts it (a 5 s give-up here once left the run
-        # unsignalled: the check slept its 30 s out and the run closed normally)
-        waiter = threading.Thread(target=lambda: (self.child_of(pidfile, WAIT), signal.raise_signal(signal.SIGTERM)), daemon=True)
+        # the signal goes when the check's child exists, however late a loaded runner starts it (a 5 s give-up left it unsignalled)
+        sent = []  # when the signal went: the bound is on the stop, not on the steps before it
+        waiter = threading.Thread(daemon=True, target=lambda: (
+            self.child_of(pidfile, WAIT), sent.append(time.time()), signal.raise_signal(signal.SIGTERM)))
         waiter.start()
-        t = time.time()
         with halting.halt_on_sigterm():
             rc, _ = self.run_engine({"plan": [plan], "write": [WRITE], "review": [CLEAN]})
         waiter.join(5)
         assert not waiter.is_alive()
-        assert time.time() - t < 60
+        assert time.time() - sent[0] < 60  # the check's child sleeps 30 s
         assert rc == 2
         assert "stopped (SIGTERM)" in self.said()
         self.assertDead(self.child_of(pidfile))

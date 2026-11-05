@@ -12,7 +12,7 @@ from taskloop.adapters.git import RealGit
 from taskloop.adapters.spawner import RealSpawner
 from taskloop.app.checks import authorization
 from taskloop.app.land.push_judge import PushStatus, judge_push
-from taskloop.app.release import flow, shell, suite
+from taskloop.app.release import flow, gate, shell
 from taskloop.app.release.push import push_main
 from taskloop.contracts.env import Env
 from taskloop.contracts.ids import CheckId, TreeSha
@@ -32,7 +32,7 @@ class ReleaseReceipt(Case):
         repo, origin = root / "repo", root / "origin.git"
         repo.mkdir()
         env = Env({"PATH": os.environ["PATH"], "HOME": str(root), "XDG_CONFIG_HOME": str(root / "config"),
-                   "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": "/dev/null", "TASK_LOOP_SUITE_HOST": "1",
+                   "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": "/dev/null",
                    "GIT_AUTHOR_NAME": "Release", "GIT_AUTHOR_EMAIL": "release@example.invalid",
                    "GIT_COMMITTER_NAME": "Release", "GIT_COMMITTER_EMAIL": "release@example.invalid"})
         def git(*args):
@@ -44,7 +44,7 @@ class ReleaseReceipt(Case):
         plugin.parent.mkdir(parents=True)
         plugin.write_text('{"version":"1.2.3"}\n')
         (repo / ".task-loop.json").write_text(json.dumps({"engine": {"checks": [
-            {"id": "suite", "argv": ["python3", "dev/suite-docker.py"], "run": "gate"}]}}))
+            {"id": "suite", "argv": ["just", "test"], "run": "gate"}]}}))
         git("add", ".")
         git("commit", "-m", "before release")
         git("remote", "add", "origin", str(origin))
@@ -53,9 +53,9 @@ class ReleaseReceipt(Case):
         port = RealGit(env)
         sh = shell.of(RealSpawner(env), port, env)
         checks = mock.Mock()
-        verify = suite.verify
+        verify = gate.verify
         if cached:
-            verify(repo, repo, sh, checks)
+            verify(repo, sh, checks)
         stores = real_stores(ConfigDir(root / "config/task-loop"))
         run_check = mock.Mock(return_value=1)
         actual_push = port.push
@@ -63,20 +63,20 @@ class ReleaseReceipt(Case):
             tip, tree = git("rev-parse", "HEAD"), git("rev-parse", "HEAD^{tree}")
             assert tree != before_tree
             request = f"refs/heads/main {tip} refs/heads/main {base}\n"
-            decision = judge_push(d, request, stores, port, run_check, env=env, spawner=sh.spawner)
+            decision = judge_push(d, request, stores, port, run_check, env=env)
             assert decision.status == PushStatus.ALLOWED, decision.reasons
             run_check.assert_not_called()
             cfg = authorization.profile(port, d, TreeSha(base))
-            memo = authorization.memo_for(stores, port, d, cfg, TreeSha(tree), BaseSha(base), env, sh.spawner)
+            memo = authorization.memo_for(stores, port, d, cfg, TreeSha(tree), BaseSha(base), env)
             check = next(c for c in gate_items(cfg) if c.id == CheckId("suite"))
             rec = memo.hit(memo.key(check))
             assert rec is not None
             assert (rec.tree, rec.base, rec.result.status) == (tree, base, "passed")
             actual_push(d, remote, refspec)
-        with (mock.patch.object(suite, "verify", side_effect=lambda tool, at, shell: verify(tool, at, shell, checks)),
+        with (mock.patch.object(gate, "verify", side_effect=lambda at, shell: verify(at, shell, checks)),
               mock.patch.object(port, "push", side_effect=judged_push)):
             def bump():
-                return flow.bump_and_commit(repo, repo, flow.Request("receipt"), sh)
+                return flow.bump_and_commit(repo, flow.Request("receipt"), sh)
             version = push_main(repo, "receipt", bump(), base, bump, sh)
         assert version == "1.2.4"
         assert git("rev-parse", "HEAD") == git("--git-dir", str(origin), "rev-parse", "main")

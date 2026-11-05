@@ -62,14 +62,6 @@ class ReviewSkipConfig(Rec):
 
 
 @final
-class ContainerConfig(Rec):
-    """Where a container check runs: an image or a Dockerfile, resolved to an immutable image before checking evidence."""
-
-    image: str = ""
-    dockerfile: str = ""
-
-
-@final
 class ResourceSpec(Rec):
     """One scarce tool a check can need (engine.resources): at most `limit` checks hold it at once on a machine, across slots."""
 
@@ -103,7 +95,6 @@ class CheckSpec(Rec):
     writer_check_max_s: float | None = None  # this check's own cut for "too slow for the writer" (else engine.writer_check_max_s)
     tail_log: str = ""  # a log of the tree whose first compile errors join this check's red output when it shows none
     keep: list[str] = msgspec.field(default_factory=list)  # tree globs (a Unity log, a result XML) copied after each attempt
-    where: Literal["host", "container"] = msgspec.field(default="host", name="in")  # container: needs engine.container
     why: str = ""  # run gate: why no plan check may run this command (it is told to the planner)
     reads: list[CheckId] = msgspec.field(default_factory=list)  # checks whose log and exit code it reads: it runs after them
     lane: str = ""  # checks of one lane run in order, lanes run in parallel; the first red cancels the other lanes ("": the default lane)
@@ -177,6 +168,7 @@ class EngineConfig(Rec):
 
     land: list[str] = msgspec.field(default_factory=lambda: list(LAND_PUSH))
     land_optimistic_tries: int = 2  # gate re-runs outside the land lock when main moved under it, then inside (0: inside)
+    land_mode: Literal["push", "pr"] = "push"  # pr: the land opens a PR and waits for the owner to merge it; the engine never merges
     base: str = "origin/main"
     check_links: bool = True
     owner_author: str = ""  # exact bd comment author; unset means no comment is an owner instruction
@@ -203,7 +195,6 @@ class EngineConfig(Rec):
     prepare: PrepareConfig | None = None
     # added to (over) the slot's environment; {slot} {slot_dir} {repo} filled in
     slot_env: dict[str, str] = msgspec.field(default_factory=dict)
-    container: ContainerConfig | None = None
     host: bool = False
     worker_rules: str = ""
     test_pattern: str = TEST_PATTERN
@@ -405,12 +396,6 @@ def load(data: Any, say_to: TextIO | None = None) -> RepoProfile:
         profile = wire.load(RepoProfile, data or {})
     except ValueError as e:
         raise ConfigError(f"the repo profile: {e}") from None
-    box = profile.engine.container
-    if box and bool(box.image) == bool(box.dockerfile):
-        raise ConfigError("the repo profile: engine.container takes exactly one of image or dockerfile")
-    boxed = [k.id for k in profile.engine.checks if k.where == "container"]
-    if boxed and not box:
-        raise ConfigError(f"the repo profile: check {boxed[0]} says \"in\": \"container\" but engine.container is not set")
     bad_needs = resource_problem(profile.engine) or inputsets.problem(profile.engine) or grant_problem(profile.engine)
     if bad_needs:
         raise ConfigError(f"the repo profile: {bad_needs}")

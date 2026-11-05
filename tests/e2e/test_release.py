@@ -47,7 +47,7 @@ class Release(Case):
         self.morigin, self.market = h / "m.git", h / "market"
         self.world = World(h, self.repo, self.market)
         self.sh = shell.of(self.world.spawner, self.world.port, snapshot())
-        env = dict(IDENTITY, TASK_LOOP_SUITE_HOST="1", TASK_LOOP_SUITE_WORKERS="1", XDG_CONFIG_HOME=str(h / "cfg"),
+        env = dict(IDENTITY, XDG_CONFIG_HOME=str(h / "cfg"),
                    CLAUDE_CONFIG_DIR=str(h / "claude"))
         self.enterContext(self.world.active(env))
         self.git("init", "-q", "--bare", "-b", "main", str(self.origin), cwd=h)
@@ -318,7 +318,7 @@ class Release(Case):
                 runs = len(self.world.trees)
                 r = self.release("z", "--from-branch", name)
                 assert r.returncode == 0, r.stdout + r.stderr
-                assert r.stdout.count("running the full suite") == 1
+                assert r.stdout.count("running the tests") == 1
                 tested = self.world.trees[runs:]  # the suite saw both changes: the branch's and the one origin moved on with
                 assert [(t["z.txt"], t["other.txt"]) for t in tested] == [((name + "\n").encode(),) * 2]
                 if remote_only:  # no local branch to remove: the remote one stays
@@ -344,7 +344,7 @@ class Release(Case):
         r = self.release("conflict", "--from-branch", "task/conflict")
         assert r.returncode != 0
         assert "rebase" in r.stderr
-        assert "running the full suite" not in r.stdout
+        assert "running the tests" not in r.stdout
         assert self.git("rev-parse", "HEAD", cwd=self.repo) == start
         assert self.git("branch", "--show-current", cwd=self.repo) == "main"
         assert self.git("status", "--porcelain", cwd=self.repo) == ""
@@ -413,7 +413,7 @@ class Release(Case):
         for name in ("first", "second"):
             assert self.git("branch", "--list", "task/" + name, cwd=self.repo) == ""  # landed: removed after the install
             assert self.git("show", "main:" + name + ".txt", cwd=self.origin) == name
-            assert results[name].stdout.count("running the full suite") == 1
+            assert results[name].stdout.count("running the tests") == 1
         assert self.version(self.origin)["version"] == "0.1.2"
         assert self.market_versions()["iorlas-task-loop"] == "0.1.2"
         assert self.updates() == 2

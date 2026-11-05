@@ -1,4 +1,6 @@
 """The PreToolUse hook. Imports nothing but the rules: it runs before every tool call and must finish in well under a second."""
+from __future__ import annotations
+
 import json
 
 from taskloop.hook.rules import deny_reason
