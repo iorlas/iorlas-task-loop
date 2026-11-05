@@ -9,4 +9,3 @@ def safe_name(text: str) -> str:
 def sections(body: str) -> list[str]:
     """An owner-look bead's body split at its `## bead: title` headings."""
     return [x for x in re.split(r"\n\n(?=## )", body.strip()) if x]
-
