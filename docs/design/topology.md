@@ -177,3 +177,11 @@ Verdict: ✅ plain copy of delegate origin/main into `src/delegate` (no history,
 - ✅ The target must be registered (`tl register`), not running. An unregistered or unknown name refuses with the fix. ❌ A filing path that starts a loop as a side effect.
 - Consequence: a filed bead waits in the target's backlog until that repo's loop runs, and the filer's dependent bead stays blocked meanwhile. The dashboard board shows every registered repo's beads, so the wait is visible. Loops are started by hand (`tl factory start`; no OS service, README), so a filing to a repo with no loop starts nothing by itself.
 - Open as D5: should the factory run a loop for every registered repo that has ready work, or stay manual?
+
+## repos.json, registration and detached mode (Denis questions, 2026-11-05)
+
+- Where: `~/.config/task-loop/repos.json`, one per machine (read).
+- When it fills: automatically. `register_repo` runs on every `tl` event inside a repo (`app/track/trail.py`), so the first `tl` command, loop or task in a clone registers it; `tl register DIR` is only the manual form. A clone `tl` has never touched is unknown, so a filing to it refuses with "run tl in it once or `tl register DIR`" (design choice, not built).
+- A removed folder: readers skip it (`doctor` keeps only `Path(r).is_dir()`; the reflect digest only repos with `.beads/`), but nothing deletes the entry; I found no verb or prune step that removes one (read, not run). ❌ Leave stale rows forever; ✅ `tl prune` drops an entry whose folder is gone (follow-up bead). Whether the dashboard board shows or skips a vanished repo is untested.
+- Name to path for filing: repos.json holds paths only. Resolution by folder name, refusing an ambiguous one (design choice, not built).
+- Detached mode: `tl factory start` starts the loop through `Spawner.start`, which detaches it into its own session with no terminal input, so closing the terminal does not stop it. It is a plain child of launchd, not a service: a pidfile (`loop/<repo>/loop.pid`) and a state file in the config folder let `tl factory status/stop` find it; `caffeinate` is attached for its life; a reboot ends it. ✅ Keep both: `tl loop` in a terminal when Denis watches it, `tl factory start` when a session starts it for him. No OS service (his rule).
