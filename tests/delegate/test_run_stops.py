@@ -11,7 +11,7 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
-from delegate.adapters.harness import reset_parse
+from delegate.adapters.harness import classify, reset_parse
 from delegate.app import answer, env, launch, net, usage, watch
 from delegate.app import decide as dec
 from delegate.app.supervisor import LaneGoneWatcher
@@ -375,6 +375,14 @@ class RunStops(RunBase):
         launch.settler().mark_out("OPENAI_SUBSCRIPTION", env.now() + 3600, "limit refusal: usage limit", env.now())
         stop = need(w.poll())
         assert stop.why == "limit"
+        for reason, want in (
+            ("logged_out", "logged_out"),
+            ("credit", "credit_exhausted"),
+        ):  # the mark's reason is kept, not collapsed to a limit
+            launch.settler().mark_out("OPENAI_SUBSCRIPTION", env.now() + 3600, "other words", env.now(), reason)
+            stop = need(w.poll())
+            assert stop.why == reason
+            assert need(classify.classify(None, structured={"watchdog": stop.why, "msg": stop.msg})).reason == want
         late = LaneGoneWatcher(
             launch.lane_gone_check("OPENAI_SUBSCRIPTION", time.time() + 5), every=0
         )  # a worker that started after the mark is not affected

@@ -46,8 +46,8 @@ class RunHooks:
 
 @mutable
 class Stop:
-    """Why a watcher stopped the worker: "limit" (the lane is out) or "hung" (a deadline), the deadline's kind and words, the vendor's
-    line."""
+    """Why a watcher stopped the worker: "limit" | "credit" | "logged_out" (the lane is out) or "hung" (a deadline), the deadline's kind
+    and words, the vendor's line."""
 
     why: str | None = None
     msg: str = ""
@@ -73,7 +73,7 @@ class RunOutcome:
 class LaneGoneWatcher:
     """Stops a worker whose lane another process marked out for a limit, credit or login reason: it is burning an exhausted lane."""
 
-    def __init__(self, gone: Callable[[], str | None], every: float = LANE_GONE_EVERY) -> None:
+    def __init__(self, gone: Callable[[], tuple[str, str] | None], every: float = LANE_GONE_EVERY) -> None:
         self.gone, self.every = gone, every
         self.last: float | None = None
 
@@ -81,8 +81,8 @@ class LaneGoneWatcher:
         if self.last is not None and time.monotonic() - self.last < self.every:
             return None
         self.last = time.monotonic()
-        msg = self.gone()
-        return Stop(why="limit", msg=msg) if msg is not None else None
+        mark = self.gone()
+        return Stop(why=mark[0], msg=mark[1]) if mark is not None else None  # the mark's own reason: limit | credit | logged_out
 
 
 class LogWatcher:
@@ -119,7 +119,7 @@ class Supervisor:
         hooks: RunHooks,
         live: LiveSink,
         *,
-        gone: Callable[[], str | None] | None = None,
+        gone: Callable[[], tuple[str, str] | None] | None = None,
         log: LogWatcher | None = None,
         policy: Callable[[ev.HarnessEvent], str | None] | None = None,
         net_up: Callable[[], bool] | None = None,

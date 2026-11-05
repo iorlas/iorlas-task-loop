@@ -75,7 +75,6 @@ def is_policy_denial(
     """A git write the coordinator forbids, or a write on a read-only step, is delegate's policy, not a decision for the owner (a secret
     path stays one)."""
     cmd = str((tool_input or {}).get("command") or "").strip()
-    return (
-        not secret_hit(cmd)
-        and bool(git_write(cmd) or (read_only and read_only_problem(cmd)) or (not read_only and writer_problem(cmd, engine_only)))
+    return not secret_hit(cmd) and bool(
+        git_write(cmd) or (read_only and read_only_problem(cmd)) or (not read_only and writer_problem(cmd, engine_only))
     )
