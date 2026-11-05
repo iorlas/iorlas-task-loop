@@ -15,6 +15,11 @@ One canonical name per concept. A word in the "never" column is not used for tha
 | run | One engine pass over one bead, stage by stage. | job |
 | stage / gate / land | A step of the engine (plan, write, review, ...) / the checks that must be green at land / the push or merge to the base branch. | |
 | ask | A question the engine parks a bead on until the owner answers. | prompt |
+| artifact `planned` | A file a worker or the engine registered on purpose (picture, video, PDF, audio, other): copied into the global store with a JSON sidecar (caption, role, name, time, size, sha256). Unregistered files are never artifacts. Registered through the `artifact_add` tool, never the CLI. Design: the `tl-jvpm` decisions. | shot, screenshot (as the name of the thing), output, attachment |
+| artifact role `planned` | What an artifact is for, set by the registrant: `before`, `after`, `progress`, `result`. The gallery pairs before and after by role within one bead; nothing is matched by name or text. | kind (kind is the file type, from magic bytes) |
+| store `planned` | The one global artifact folder, `<config>/artifacts/<repo>/<bead>/<run>/<stage>-<attempt>/`. The directory is the index; no table in `factory.db`. | gallery (that is the view) |
+| gallery `planned` | The bead page's top block of its artifacts; the timeline shows the same artifacts per stage attempt. | |
+| show `planned` | An acceptance class: the bead must register named artifacts; the engine checks that mechanically, per current attempt. | |
 | owner | Denis. Merge approval, profile-change approval and `owner-approved` are his. | user, admin |
 | worker | One headless model call, made through the `delegate.api` library. | agent (ambiguous) |
 | role | The kind of worker job delegate routes (planner, reviewer, worker, hard, light). | persona |
@@ -32,3 +37,7 @@ One canonical name per concept. A word in the "never" column is not used for tha
 1. Delegate: `lane` becomes `account` in routing.json, `route.py status`/`run` output, docs, skills. The interface is the typed `delegate.api` (docs/design/topology.md), so there is no wire contract to version. 122 files in task-loop mention "lane" today, so the task-loop side is the larger edit.
 2. Dashboard: the "Lanes" panel becomes "Accounts"; the "Floor" tab becomes "Slots".
 3. `tl lanes` becomes `tl accounts`; `tl setup` stops asking about lanes; `checks[].lane` becomes `track` (profile key: a hard cut, shipped one release after the code that reads it, per CLAUDE.md); `tl factory status` prints loops, not lanes.
+
+## Visuals rename (with the visuals epic, hard cut)
+
+`shots` (ask field) becomes `artifacts`; "shot" survives only as lifesim's own `shot` request method. `earlier_pictures`, `IMAGE_NAME`, `writer_names`, `same_defect` and `words` are deleted, not renamed.
