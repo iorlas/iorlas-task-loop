@@ -84,7 +84,6 @@ from taskloop.app.wire import hook as hook_wire
 from taskloop.app.wire import lanes as wire_lanes
 from taskloop.app.wire import slots as wslots
 from taskloop.app.wire import usage as wire_usage
-from taskloop.cli import artifact_server as cli_artifact_server
 from taskloop.cli import asks as cli_asks
 from taskloop.cli import bd as cli_bd
 from taskloop.cli import closing as cli_closing
@@ -448,7 +447,7 @@ VERBS: Final[dict[str, Handler]] = {
     "status": v_status,
     "handoff": v_handoff,
     "wait": v_wait,
-    "artifact-server": lambda a, c: cli_artifact_server.run(a, c.who.config, c.now),
+    "artifact-server": lambda a, c: cli_factory.serve_artifacts(a, c.who.config, c.now),
     "setup": lambda a, c: cli_setup.cmd_setup(a, c.env, c.here.parents[1], sh=c.spawner),
     "green": lambda a, c: cli_green.cmd_green(a, c.who.config, c.git, env=c.env),
     "judge-push": lambda a, c: importlib.import_module("taskloop.app.launch.push_judge").cmd_judge_push(
