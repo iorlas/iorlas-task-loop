@@ -9,6 +9,7 @@ from taskloop.contracts import wire
 from taskloop.contracts.dash import BeadDetail, Snapshot
 from taskloop.contracts.dashcost import CostPage
 from taskloop.contracts.ids import BeadId, is_bead_id
+from taskloop_dash.api.artifacts import Artifacts
 from taskloop_dash.env import Env
 from taskloop_dash.readers.wake import Wake, wait_seconds
 from taskloop_dash.readers.world import Worlds
@@ -40,8 +41,8 @@ def versioned(rec: Snapshot | BeadDetail | CostPage, q: dict[str, str], held: st
 
 
 class Reads:
-    def __init__(self, env: Env, worlds: Worlds) -> None:
-        self.env, self.worlds = env, worlds
+    def __init__(self, env: Env, worlds: Worlds, artifacts: Artifacts) -> None:
+        self.env, self.worlds, self.artifacts = env, worlds, artifacts
         self.cache: RefreshCache[tuple[World, Snapshot]] = RefreshCache(env.clock)
         self.details: RefreshCache[BeadDetail | None] = RefreshCache(env.clock)
         self.wake = Wake(env.config)
@@ -125,7 +126,9 @@ class Reads:
         comments = self.worlds.comments(path, bead)
         bd_ok_at, bd_error = self.worlds.beads.health(path, bead)
         return bead_detail.build(Board(w), p, b, comments, self.worlds.live_events(newest),
-                                 self.worlds.stage_events(runs)).replace(bd_ok_at=bd_ok_at, bd_error=bd_error)
+                                 self.worlds.stage_events(runs),
+                                 self.artifacts.listing(project, bead, [r.name for r in runs])
+                                 ).replace(bd_ok_at=bd_ok_at, bd_error=bd_error)
 
     def cost(self, window: str, last: int, project: str) -> CostPage:
         self.env.touch()

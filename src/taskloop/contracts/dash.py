@@ -354,12 +354,20 @@ class Pass(Rec):
 
 @final
 class Artifact(Rec):
+    """One registered file of a bead (the store `<config>/artifacts/<repo>/<bead>/<run>/<stage>-<attempt>/`): `t` is the sidecar's
+    `created`; `kind` is what the file is served as (image, video, audio and pdf play inline, `file` downloads)."""
+
     name: str
     url: str
-    kind: Literal["image", "file"]
+    kind: Literal["image", "video", "audio", "pdf", "file"]
     t: float
     pass_n: int | None = None
     phase: Phase | None = None
+    role: Literal["", "before", "after", "progress", "result"] = ""
+    caption: str = ""
+    run: str = ""
+    stage: str = ""
+    attempt: int = 0
 
 
 @final
