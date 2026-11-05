@@ -10,14 +10,14 @@ from support.case import Case
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401
 from support import gitq
+from support.argv_checks import ArgvChecks
 from support.engine_case import real_git
+from support.memstores import fake_stores
 
-from taskloop.adapters.checks_argv import ArgvChecks
 from taskloop.adapters.git import RealGit
 from taskloop.app.land.push_judge import PushStatus, judge_push
 from taskloop.contracts.env import snapshot
 from taskloop.contracts.ports import CheckSpec
-from taskloop.stores.memory import fake_stores
 
 
 class PushPolicy(Case):

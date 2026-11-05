@@ -7,6 +7,7 @@ from unittest import mock
 from support import procsim
 from support.case import Case
 from support.engine_case import EngineTest
+from support.memstores import fake_stores
 from support.spawn import port_git
 
 from taskloop.adapters import check_files
@@ -26,7 +27,6 @@ from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import Git
 from taskloop.contracts.runkey import BaseSha, Digest
 from taskloop.domain.checks.specs import diff_check, gate_items
-from taskloop.stores.memory import fake_stores
 from taskloop.stores.real import real_stores
 from taskloop.stores.runlog import RunLog
 

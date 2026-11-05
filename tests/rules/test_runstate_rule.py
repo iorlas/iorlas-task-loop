@@ -27,7 +27,7 @@ ALLOWS_BEAT = {
 }
 ALLOWS_STALE = {"src/taskloop/contracts/runlife.py"}
 ALLOWS_PID_ALIVE = {  # the lock table's and the loop's own pid probes, and the reconciler
-    "src/taskloop/contracts/locks.py", "src/taskloop/contracts/runlife.py", "src/taskloop/stores/memory.py",
+    "src/taskloop/contracts/locks.py", "src/taskloop/contracts/runlife.py",
     "src/taskloop/app/launch/loop.py", "src/taskloop/app/wire/brief.py", "src/taskloop/app/loop/env.py", "src/taskloop/app/loop/files.py"}
 ALLOWS_LOST = {"src/taskloop/contracts/locator.py"}
 GONE = {"CRASHED_AFTER"}

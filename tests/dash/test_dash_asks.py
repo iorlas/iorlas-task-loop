@@ -15,6 +15,7 @@ from asks.dash_ports import answering
 from support.dashes import make_dash
 from support.dashlogs import T, bead
 from support.fake_beads import FakeBeads
+from support.memstores import fake_stores
 from support.narrow import must
 from support.repos import write_repos
 
@@ -27,7 +28,6 @@ from taskloop.contracts.ids import BeadId, loop_key
 from taskloop.contracts.ledger import Adr
 from taskloop.contracts.stores import AskStore
 from taskloop.domain.asks import specs
-from taskloop.stores.memory import fake_stores
 from taskloop_dash.views import bead_detail, snapshot
 from taskloop_dash.views.board import Board
 from taskloop_dash.views.world import AdrIn, Landing, ProjectIn, World

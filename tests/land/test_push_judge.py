@@ -11,6 +11,7 @@ from support.case import Case
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support.fakegit import FakeGit
+from support.memstores import fake_stores
 
 from taskloop.app.checks.cache import InputKeys, RunMemo, plan_digest
 from taskloop.app.land.push_judge import PushStatus, judge_push
@@ -22,7 +23,6 @@ from taskloop.contracts.ids import TreeSha
 from taskloop.contracts.runkey import BaseSha
 from taskloop.contracts.slots import GitReadFailure
 from taskloop.domain.checks.specs import gate_items
-from taskloop.stores.memory import fake_stores
 
 
 class PushJudge(Case):
