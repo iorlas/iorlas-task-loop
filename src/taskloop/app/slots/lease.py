@@ -16,8 +16,10 @@ JOIN_WAIT = 30.0  # seconds stop() waits for a beat in flight (a bd call that ha
 
 
 class Lease:
-    def __init__(self, store: Beads, *ids: BeadId | None, every: float = EVERY, on_beat: Callable[[], None] | None = None) -> None:
-        self.store, self.every, self.on_beat = store, every, on_beat
+    def __init__(self, store: Beads, *ids: BeadId | None, every: float = EVERY, on_beat: Callable[[], None] | None = None,
+                 on_death: Callable[[BaseException], None] | None = None) -> None:
+        self.store, self.every, self.on_beat, self.on_death = store, every, on_beat, on_death
+        self.died: BaseException | None = None
         self.ids: list[BeadId] = [i for i in ids if i]
         self.stopped = threading.Event()
         self.thread = threading.Thread(target=self.run, daemon=True)
@@ -41,8 +43,15 @@ class Lease:
             self.on_beat()
 
     def run(self) -> None:
-        while not self.stopped.wait(self.every):
-            self.beat()
+        """The beat loop; an error out of a beat ends it, and the death is kept (`died`) and told to `on_death`, not lost."""
+        try:
+            while not self.stopped.wait(self.every):
+                self.beat()
+        except Exception as err:
+            self.died = err
+            if self.on_death is not None:
+                with contextlib.suppress(Exception):
+                    self.on_death(err)
 
     def stop(self) -> None:
         """Ends the beats and waits out a beat in flight: a thread left running past this call uses stores its owner is about to close."""

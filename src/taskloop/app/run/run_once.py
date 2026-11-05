@@ -44,7 +44,7 @@ class RunOnce:
     def go(self) -> int:
         e = self.e
         end = Ended()
-        hb = Lease(e.store, e.bead, e.env.bead(EnvVar.TASK_LOOP_SLOT_BEAD), on_beat=self.beat)
+        hb = Lease(e.store, e.bead, e.env.bead(EnvVar.TASK_LOOP_SLOT_BEAD), on_beat=self.beat, on_death=self.beat_died)
         ck = e.checkpoints.read()
         e.prev_ck = ck.run if ck else ""
         try:
@@ -91,6 +91,10 @@ class RunOnce:
             self.e.log.emit(Beat())
         self.e.stuck.tick()
         self.e.requests.at_beat()
+
+    def beat_died(self, err: BaseException) -> None:
+        """The heartbeat thread ended on an error: the run goes on without a beat, so the log says so before the lease lapses."""
+        self.e.log.warn("the heartbeat thread died, the lease will lapse: " + "".join(traceback.format_exception(err)))
 
     def run(self, hb: Any, end: Ended) -> None:
         e = self.e
