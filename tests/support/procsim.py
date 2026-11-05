@@ -90,6 +90,7 @@ def hangs(out: str = "") -> Fake:
 
 
 # Always there: the checks every plan and stage list names. `has-f` is exit 0 iff f.txt exists in the check's directory.
+NICE = ("nice", "-n", "10")  # what the engine puts before every check (app/run/shell.py CHECK_NICE)
 DEFAULTS: dict[tuple[str, ...], Fake] = {
     ("has-f",): has_f,
     ("true",): exits(0),
@@ -118,7 +119,9 @@ class Procs:
         if not isinstance(argv, (list, tuple)) or not argv:
             return None
         words, extra = tuple(str(a) for a in argv), {}
-        if words[0] == "env":
+        if words[:3] == NICE:  # the engine runs every check under nice (app/run/shell.py CHECK_NICE)
+            words = words[3:]
+        if words and words[0] == "env":
             i = 1
             while i < len(words) and "=" in words[i] and not words[i].startswith("-"):
                 extra[words[i].partition("=")[0]] = words[i].partition("=")[2]
@@ -137,7 +140,8 @@ class Procs:
 
     def answer(self, hit: tuple[Fake, dict[str, str]], argv: Any, cwd: Any, env: Any, timeout: Any) -> tuple[int, str, bool | str]:
         """(exit, output, hit the wall limit or "blocks") of a fake command."""
-        self.calls.append(tuple(str(a) for a in argv))
+        words = tuple(str(a) for a in argv)
+        self.calls.append(words[3:] if words[:3] == NICE else words)
         rc, out, *rest = hit[0](Path(cwd or os.getcwd()), {**(os.environ if env is None else env), **hit[1]})
         if rest and rest[0] == BLOCKS:
             return rc, out, "blocks"

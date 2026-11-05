@@ -149,9 +149,10 @@ class Sim:
 
     def sp_stream(self, real: Callable[..., Any]) -> Callable[..., Any]:
         def run(argv: Any, *, cwd: Any = None, env: Any = None, on_stdout: Any = None, on_stderr: Any = None, **kw: Any) -> Any:
-            if not is_git(argv):
+            bare = argv[3:] if isinstance(argv, (list, tuple)) and tuple(argv[:3]) == ("nice", "-n", "10") else argv  # app/run/shell.py
+            if not is_git(bare):
                 return real(argv, cwd=cwd, env=env, on_stdout=on_stdout, on_stderr=on_stderr, **kw)
-            rc, out, err = self.answer(list(argv), cwd, env, b"")
+            rc, out, err = self.answer(list(bare), cwd, env, b"")
             for text, cb in ((out.decode("utf-8", "replace"), on_stdout), (err, on_stderr)):
                 if cb and text:
                     cb(text)
