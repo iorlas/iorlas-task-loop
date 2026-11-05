@@ -1,4 +1,4 @@
-"""pytest wiring: per-worker isolation for `pytest -n N`, the address-space cap, the serial group and the three test kinds.
+"""pytest wiring: per-worker isolation under xdist, the address-space cap, the serial group and the three test kinds.
 
 A test's kind comes from its path, never from a hand marker: a file under tests/e2e/ is `e2e` (a whole flow), a file under a `real/`
 folder (tests/<slice>/real/) is `real` (real git, processes or sockets), anything else is logic (fakes, in process, fast). The older
@@ -124,7 +124,7 @@ def pytest_runtest_makereport(item, call):
 
 def pytest_ignore_collect(collection_path, config):
     """tests/live (the explicit-only kind) is collected only by a run that selects `-m live` (just test-live): never by the default run,
-    just test-fast or the release suite, whose `-m` is something else. tests/delegate is collected only when the change touches delegate
+    `just test` or the release gate, whose `-m` is something else. tests/delegate is collected only when the change touches delegate
     (tests/support/scope.py): a change to task-loop or its dashboard runs none of them."""
     if "live" in collection_path.relative_to(Path(__file__).parent).parts[:1]:
         expr = (config.getoption("markexpr", "") or "").split()
