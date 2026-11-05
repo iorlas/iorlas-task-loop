@@ -16,7 +16,7 @@ One canonical name per concept. A word in the "never" column is not used for tha
 | stage / gate / land | A step of the engine (plan, write, review, ...) / the checks that must be green at land / the push or merge to the base branch. | |
 | ask | A question the engine parks a bead on until the owner answers. | prompt |
 | owner | Denis. Merge approval, profile-change approval and `owner-approved` are his. | user, admin |
-| worker | One headless model call, made through delegate. | agent (ambiguous) |
+| worker | One headless model call, made through the `delegate.api` library. | agent (ambiguous) |
 | role | The kind of worker job delegate routes (planner, reviewer, worker, hard, light). | persona |
 | account `planned` | A metered connection to a model vendor: a subscription or API key with usage windows, reset times and models. Delegate owns it. | lane (delegate), license, supplier, provider, token source |
 | lane | Within one gate block, a parallel sequence of checks; the first red cancels the other lanes. After the account rename this is its only meaning. | a delegate vendor connection, a dashboard swim lane |
@@ -27,6 +27,6 @@ One canonical name per concept. A word in the "never" column is not used for tha
 
 ## Rename plan (hard cut, one bead each)
 
-1. Delegate: `lane` becomes `account` in routing.json, `route.py status`/`run` output, docs, skills. Worker-run contract gets a new major version. 122 files in task-loop mention "lane" today, so the task-loop side is the larger edit.
+1. Delegate: `lane` becomes `account` in routing.json, `route.py status`/`run` output, docs, skills. The interface is the typed `delegate.api` (docs/design/topology.md), so there is no wire contract to version. 122 files in task-loop mention "lane" today, so the task-loop side is the larger edit.
 2. Dashboard: the "Lanes" panel becomes "Accounts"; "floor" does not appear.
 3. `tl lanes` becomes `tl accounts`; `tl setup` stops asking about lanes.

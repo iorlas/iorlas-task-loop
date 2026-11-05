@@ -103,6 +103,22 @@ What it costs (so it is not a free move):
 
 Order: (1) split route.py in the delegate repo, (2) extend release.py for two entries, (3) move with history, (4) archive the old repo. Nothing moves before D1.
 
+## Owner amendment, 2026-11-05 (later): delegate is a library, imported
+
+Denis: "When we use delegate inside of task loop, it should always be proper import. [...] we could forget about the use case when AI runs delegate directly. For task loop, the delegate is abstraction over all the harnesses, which encapsulates all the experiences and guarantees stability of running things based on inputs."
+
+This replaces the process-boundary reading above (the `route.py run/status` rows and "stays JSON-only"). Verdicts:
+
+| Point | Verdict | Reason |
+|---|---|---|
+| Interface | ✅ one public module, `delegate.api`: run(request) -> result, status() -> snapshot, cancel(handle); typed (msgspec) request, result and snapshot. task-loop imports only that module (import-linter: nothing else from `delegate`, and `delegate` imports nothing from `taskloop`). | A thin, designed interface, as he asked; internals can change without touching the engine. |
+| `route.py` command line, the three delegate skills (`delegate`, `init`, `status`), the iorlas-delegate plugin and its marketplace entry | ❌ retire, hard cut. | The only reason for a command line was a model calling it directly; that use is dropped. Keeping it is a second path to the same function. Account setup and status become `tl setup` and `tl accounts`, which call the API. |
+| worker-run v3 JSON contract | ❌ retire as a wire format; its fields become the typed api structs. | No process boundary, no JSON to parse. |
+| stdlib-only and Python 3.8 floor | ❌ drop. Delegate runs on task-loop's interpreter and may use msgspec and the shelf packages directly. | Both only existed so a script could run anywhere without install. |
+| Crash and kill isolation | ✅ keep, inside the library. Workers are still child processes (process group, SIGTERM then SIGKILL after a grace) behind `run`/`cancel`; a delegate fault returns a typed failed result, never an exception through the engine. | Each loop is its own process, so a bug still costs one loop, not the factory. |
+| Several loops import delegate at once | ⚠️ account state (usage windows, leases, ledger) must stay safe across processes (file locks as today). Not re-verified; the move's tests cover two processes. | |
+| Packaging | The plugin check below is now mandatory: `src/delegate` must be in what the installed plugin ships. | |
+
 ## Owner answers, 2026-11-05 (after the first PR)
 
 | Point | Verdict | Reason |
