@@ -26,6 +26,36 @@ tests                        ~76 files use POSIX primitives      M-L
 
 ---
 
+## 0. Requirement (Denis, 2026-11-05): all four, natively, for now
+
+The engine, delegate and dashboard must run natively on macOS, Linux, WSL and native Windows. Isolation (executor, runner, separate dashboard) may relax this later; until then every host runs everything. This replaces the framing "Windows later, POSIX engine" and the WSL-versus-native question: WSL is a required platform, not a fallback.
+
+Where each platform stands today (read from the code; not tested except where tl-6vb says):
+
+| Area | macOS | Linux | WSL2 | Windows native |
+|---|---|---|---|---|
+| Process table (P3) | libproc, done | `/proc`, done | `/proc`, same code as Linux | missing |
+| Tree kill, groups (P1, P2) | done | done | done (Linux kernel) | missing (Job Objects) |
+| `flock` (L1) | done | done | done on the Linux filesystem; on `/mnt/c` (9p) unknown | missing |
+| Stop by SIGTERM (P5, P6) | done | done | done inside WSL; a Windows-side `tl stop` cannot signal a WSL process | missing |
+| Shim and hooks (H1-H4) | sh | sh | sh | missing |
+| Sandbox for OpenCode (H5) | `sandbox-exec` | **none** | **none** | none |
+| Keep-awake, RAM (P9, F17) | caffeinate, vm_stat | RAM via cgroup; no keep-awake | as Linux | missing |
+| Test suite | green (Mac is the reference) | **red: 6 failures, 8 errors (tl-6vb, 2026-10-27)** | not run | not run |
+
+What this changes against the first draft:
+
+- Linux and WSL are not "free". The suite is red on Linux today (tl-6vb), and OpenCode already works on macOS only (`opencode.py:103`, `onboard.py:35-51`): the four-platform requirement is already broken for Linux. Fixing Linux first is the cheapest step toward all four, and WSL then needs only its own checks.
+- WSL-specific risks (each not tested):
+  - W1. A checkout or `~/.config/task-loop` on `/mnt/c` (9p/drvfs): flock, SQLite WAL, `os.replace` and mtime-based invalidation behave differently, and every file touch is slow. `_vendor/sqlite_store/filesystem.py:19-45` reads `/proc/mounts` but refuses only `nfs`, `cifs`, `fuse`, `smb` prefixes, so `9p` and `drvfs` pass as safe. Add them, and make setup warn when the repo or the state dir is on `/mnt/*` (S).
+  - W2. Two factories on one PC: a WSL `~/.config/task-loop` and a Windows `%USERPROFILE%\.config\task-loop` are two state dirs. `topology.md` says scarce things (lane usage windows, the Unity lease, disk, the dashboard port) are per machine, "one factory per machine". Decision D10.
+  - W3. A WSL engine cannot start Unity or a GUI game on the Windows side except by calling `*.exe` through interop or ssh to the Windows executor; this is the original reason for the native Windows engine (tl-w7lt.38). Path translation (`wslpath`) is needed wherever a path crosses the boundary (S-M).
+  - W4. `/dev/null`, `/tmp`, symlinks, `chmod` and shell policies all work as on Linux inside WSL; the only change is W1.
+- Because four platforms share one code base, the unit of work is a **platform seam**, not "Windows patches": one interface per primitive (`FileLock`, `TreeKiller`, `ProcessTable`, `StopChannel`, `ShimWriter`, `HostResources`), one implementation per platform family (posix+libproc, posix+procfs, win32), and one contract test per interface that runs unchanged on all four hosts. The POSIX implementations are what ships today, moved behind the interface with no behavior change (the "no-regret" item in section 7). The Windows work is then one new implementation per interface, not edits spread over 40 files.
+- There is no hosted CI ("the factory is the CI"). Four platforms need four hosts running the same contract tests. Cheapest order: Linux in a container (tl-6vb, already designed), WSL on the Windows box (the Linux code path, plus W1), Windows native on the same box.
+
+---
+
 ## 1. Process control
 
 | # | Where | What it does | Windows equivalent / design choice | Size |
@@ -169,7 +199,7 @@ Do not do now: any Job Object code, any ctypes Windows backend, new shims, the C
 
 ### (3) Decisions Denis must make
 
-Already decided and recorded (`docs/design/topology.md`, "Windows and Unity" and "Mirrored executor layout", 2026-11-05): the engine runs natively on Windows ("not a discussion"); Linux executor first, Windows executor second, native Windows engine third. So WSL is out, and the question "native vs WSL vs OpenSSH" is answered: native engine (WINENGINE), OpenSSH only as the transport to a remote executor (WINEXEC). What is left:
+Already decided and recorded (`docs/design/topology.md`, "Windows and Unity" and "Mirrored executor layout", 2026-11-05): the engine runs natively on Windows ("not a discussion"); Linux executor first, Windows executor second, native Windows engine third. Denis's later instruction (section 0) adds: macOS, Linux, WSL and Windows all native at once. So "native vs WSL vs OpenSSH" is not a choice: all four are required platforms, and OpenSSH is only the transport to a remote executor (WINEXEC). What is left:
 
 | # | Decision | Options | Recommendation | Why |
 |---|---|---|---|---|
@@ -177,7 +207,9 @@ Already decided and recorded (`docs/design/topology.md`, "Windows and Unity" and
 | D2 | Process tree backend | A) Job Objects via ctypes in stream_proc, stdlib only; B) add `psutil` | A for kill and group (Job Objects are the right primitive and psutil does not wrap them); allow `psutil` or ctypes for the process table only. | Keeps the vendored packages stdlib-only, as now. |
 | D3 | Shell for workers and policies on Windows | A) Git Bash everywhere (Claude Code itself does this; `shlex` policies keep working); B) PowerShell support | A. | B means a second command grammar for every safety rule (H6); an error there is a security hole. |
 | D4 | Stop semantics: is a "grace" period still promised on Windows? | A) hard kill via Job Object, grace only for processes that accept `CTRL_BREAK`; B) engine-level cooperative stop (stop flag file/event) first, hard kill after N seconds | B: the engine already has a stop flag; use it for the grace and `TerminateJobObject` as the SIGKILL. Change `delegate-api.md` report fields (`term_sent`, `kill_sent`) to say "graceful requested" / "forced". | Honest contract, no fake SIGTERM. |
-| D5 | OpenCode lane and macOS sandbox on Windows | A) no OpenCode lane on Windows; B) design a Windows containment | A until someone needs it. | No per-command sandbox exists on Windows at the strength of `sandbox-exec`; shipping a weaker one under the same name misleads. |
+| D5 | OpenCode lane and its macOS sandbox. This is already an exception to the four-platform rule: it works on macOS only, today | A) record "OpenCode is macOS-only" as the one named exception; B) contain it per platform (Linux/WSL: bubblewrap or Landlock; Windows: nothing at that strength) | A for now, written down as an exception with its bead. B for Linux/WSL later if OpenCode is wanted there. | No per-command sandbox on Windows matches `sandbox-exec`; shipping a weaker one under the same name misleads. |
+| D10 | One PC with both WSL and Windows: one factory or two | A) two factories, two state dirs, lanes and Unity lease split by hand; B) one factory (Windows native), WSL used only as a worker host/executor; C) one factory (WSL), Windows only as executor | B for a PC that must run Unity or a GUI (W3); A is allowed but breaks "one factory per machine" (`topology.md`), so the two would count the same lane budget twice. | Scarce things are per machine; a second state dir is a second lease table. |
+| D11 | Which hosts the gate runs on before a release | A) macOS only (today); B) macOS + Linux container (tl-6vb); C) all four | B now, C once a Windows runner exists. Make the contract tests (lock, tree kill, process table, atomic write, shim) the cross-platform set; the full suite stays on the reference host. | No hosted CI; each added host costs a box and minutes per release. |
 | D6 | State location | A) keep `~/.config/task-loop` (`%USERPROFILE%\.config\task-loop`); B) `%APPDATA%` / `%LOCALAPPDATA%` | A. | One path in docs, shims, tests; Claude Code uses `%USERPROFILE%\.claude`. |
 | D7 | Symlink policy | A) never create symlinks (files and junctions instead); B) require Developer Mode | A. | Zero setup, same behavior on every OS. |
 | D8 | Test policy | A) a Windows runner (a real box) for `tests/*/real`; B) skip-marks only | A, but only a small set: lock, tree kill, shim, hooks, atomic write. A skip-mark without a Windows run is a green that tests nothing. | The lifesim box is the only Windows machine; use it once WINEXEC works. |
