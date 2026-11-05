@@ -7,7 +7,7 @@ import sys
 import uuid
 
 from delegate.adapters import statusline
-from delegate.app import cockpit, codex_policy, decide, env, launch, run
+from delegate.app import answer, cockpit, codex_policy, decide, env, launch, run
 from delegate.contracts import codec, stops
 from delegate.contracts import history as hist
 from delegate.contracts.json_types import Json, obj
@@ -103,4 +103,6 @@ def cmd_next(a: env.Args, cfg: dict[str, Json]):
 
 
 def cmd_run(a: env.Args, cfg: dict[str, Json]):
-    return run.Run(a, cfg, unattended=getattr(a, "unattended", False), idle_s=getattr(a, "idle", None)).go()
+    unattended = getattr(a, "unattended", False)
+    call = run.Run(a, cfg, unattended=unattended, idle_s=getattr(a, "idle", None))
+    return answer.emit(call.call(), not unattended)

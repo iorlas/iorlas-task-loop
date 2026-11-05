@@ -13,10 +13,8 @@
       {
         "id": "suite",
         "argv": [
-          "uv",
-          "run",
-          "--script",
-          "dev/suite.py"
+          "just",
+          "test"
         ],
         "group": "tests",
         "run": "gate"

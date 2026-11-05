@@ -248,7 +248,8 @@ class Supervisor:
         def bye(signum: int, frame: object) -> None:
             raise SystemExit(128 + signum)
 
-        old = {g: signal.signal(g, bye) for g in (signal.SIGTERM, signal.SIGHUP)}
+        mine = threading.current_thread() is threading.main_thread()  # a library caller runs on any thread; only the main one takes signals
+        old = {g: signal.signal(g, bye) for g in (signal.SIGTERM, signal.SIGHUP)} if mine else {}
         try:
             while True:
                 try:

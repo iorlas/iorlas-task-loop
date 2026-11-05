@@ -151,9 +151,10 @@ forbidden_modules =
 allow_indirect_imports = True
 
 [importlinter:contract:delegate-layers]
-name = Delegate layers: cli > app > adapters > domain > contracts
+name = Delegate layers: api > cli > app > adapters > domain > contracts
 type = layers
 layers =
+    delegate.api
     delegate.cli
     delegate.app
     delegate.adapters
@@ -170,10 +171,16 @@ forbidden_modules =
 allow_indirect_imports = True
 
 [importlinter:contract:taskloop-does-not-import-delegate]
-name = taskloop and taskloop_dash import nothing of delegate (they call it as a process until delegate.api exists)
+name = taskloop and taskloop_dash import only delegate.api of delegate
 type = forbidden
 source_modules =
     taskloop
     taskloop_dash
-forbidden_modules = delegate
+forbidden_modules =
+    delegate.app
+    delegate.cli
+    delegate.adapters
+    delegate.domain
+    delegate.contracts
+    delegate.entry
 allow_indirect_imports = True
