@@ -8,27 +8,12 @@ import os
 import threading
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Final
 
 from taskloop.contracts import wire
+from taskloop.contracts.artifact import SIDECAR_SUFFIX, ArtifactMeta
 from taskloop.contracts.ids import is_bead_id
 from taskloop_dash.env import Env
-from taskloop_dash.tails import parse_ts
-from taskloop_dash.views.artifact_files import Item, Role, plain, served, split_stage
-
-SIDECAR: Final = ".json"
-
-
-class Sidecar(wire.Rec):
-    """What the store writer leaves next to a file (tl-jvpm.13): all fields, no others."""
-
-    caption: str
-    role: Role
-    name: str
-    created: float | str
-    size: int
-    sha256: str
-    kind: str
+from taskloop_dash.views.artifact_files import Item, plain, served, split_stage
 
 
 def mtime(path: Path) -> int | None:
@@ -46,7 +31,7 @@ class Artifacts:
         self.folders: dict[Path, tuple[int, tuple[Item, ...]]] = {}  # stage folder -> (its mtime, its items)
 
     def root(self, repo: str, bead: str) -> Path:
-        return self.env.config.bead_artifacts(repo, bead)
+        return self.env.config.artifact_store() / repo / bead
 
     def listing(self, repo: str, bead: str, runs: Sequence[str]) -> list[Item]:
         """The bead's artifacts, newest first: the folders of the runs the bead is known to have, nothing else."""
@@ -93,19 +78,18 @@ class Artifacts:
             return ()
         out: list[Item] = []
         for fname in sorted(entries):
-            name = fname.removesuffix(SIDECAR)
+            name = fname.removesuffix(SIDECAR_SUFFIX)
             if fname == name or name not in entries or not entries[name].is_file(follow_symlinks=False):
                 continue
             side = self.sidecar(folder / fname)
             if side is None or side.name != name:
                 continue
-            created = parse_ts(side.created) if isinstance(side.created, str) else side.created
-            out.append(Item(run, stage, attempt, name, served(name)[0], side.caption, side.role, created or 0.0))
+            out.append(Item(run, stage, attempt, name, served(name)[0], side.caption, side.role, side.created))
         return tuple(out)
 
-    def sidecar(self, path: Path) -> Sidecar | None:
+    def sidecar(self, path: Path) -> ArtifactMeta | None:
         try:
-            return wire.load(Sidecar, path.read_bytes())
+            return wire.load(ArtifactMeta, path.read_bytes())
         except (OSError, ValueError):
             return None
 
@@ -119,7 +103,7 @@ class Artifacts:
         try:
             if p.is_symlink() or not p.is_file():
                 return None
-            side = self.sidecar(folder / (name + SIDECAR))
+            side = self.sidecar(folder / (name + SIDECAR_SUFFIX))
             if side is None or side.name != name:
                 return None
             data = p.read_bytes()

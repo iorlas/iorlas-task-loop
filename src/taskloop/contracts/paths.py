@@ -143,9 +143,9 @@ class ConfigDir:
         """The plain files a bead's runs left (screenshots, PDFs): one flat directory per bead, outside every worktree."""
         return self.root / "artifacts" / str(bead)
 
-    def bead_artifacts(self, repo_key: str, bead: str) -> Path:
-        """A bead's registered files in the global store: `<run>/<stage>-<attempt>/<name>` and `<name>.json` under it (tl-jvpm.4)."""
-        return self.root / "artifacts" / repo_key / bead
+    def artifact_store(self) -> Path:
+        """The artifact store's root: <root>/<repo>/<bead>/<run>/<stage>-<attempt>/<name> (contracts/artifact.py)."""
+        return self.root / "artifacts"
 
     def result(self, repo_key: str, check: str, digest: str) -> Path:
         """Legacy importer only: receipt rollback copy under the hashed check ID; current receipts live in factory.db."""

@@ -299,6 +299,14 @@ def check_parser(sp):
     p.add_argument("--policy-commit", metavar="SHA", help="run the delivery gate from this committed base profile")
 
 
+def artifact_parser(sp):
+    p = sp.add_parser("artifact-server", help="internal: the artifact_add stdio MCP server, bound by these arguments")
+    for k in ("repo", "bead", "run", "stage"):
+        p.add_argument("--" + k, required=True)
+    p.add_argument("--attempt", type=int, required=True)
+    p.add_argument("--cwd", required=True, metavar="DIR", help="the worker's working folder: files outside it are refused")
+
+
 def build_parser():
     ap = argparse.ArgumentParser(prog="tl.py", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sp = ap.add_subparsers(dest="cmd", required=True)
@@ -309,6 +317,7 @@ def build_parser():
     cli_queue.add_parsers(sp)
     check_parser(sp)
     cli_green.add_parser(sp)
+    artifact_parser(sp)
     p = sp.add_parser("judge-push", help="judge the complete Git pre-push request on stdin; unavailable refuses")
     p.add_argument("--repo", default=".", metavar="DIR")
     p.add_argument("--no-run", action="store_true", help="read the evidence only: a missing receipt refuses, no check is started")
@@ -438,6 +447,7 @@ VERBS: Final[dict[str, Handler]] = {
     "status": v_status,
     "handoff": v_handoff,
     "wait": v_wait,
+    "artifact-server": lambda a, c: cli_factory.serve_artifacts(a, c.who.config, c.now),
     "setup": lambda a, c: cli_setup.cmd_setup(a, c.env, c.here.parents[1], sh=c.spawner),
     "green": lambda a, c: cli_green.cmd_green(a, c.who.config, c.git, env=c.env),
     "judge-push": lambda a, c: importlib.import_module("taskloop.app.launch.push_judge").cmd_judge_push(

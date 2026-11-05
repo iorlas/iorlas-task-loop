@@ -16,6 +16,9 @@ from support.dashes import make_dash  # noqa: E402
 from support.dashlogs import RunScript  # noqa: E402
 from support.narrow import must  # noqa: E402
 
+from taskloop.app.artifacts import store  # noqa: E402
+from taskloop.contracts import wire  # noqa: E402
+from taskloop.contracts.artifact import ArtifactMeta, ArtifactSlot  # noqa: E402
 from taskloop_dash import http  # noqa: E402
 from taskloop_dash.views import bead_detail, passes  # noqa: E402
 from taskloop_dash.views.artifact_files import split_stage  # noqa: E402
@@ -32,9 +35,9 @@ def put(cfg: str, folder: str, name: str, data: bytes = b"x", role: str = "resul
     d = Path(cfg, "artifacts", REPO, BEAD, run, folder)
     d.mkdir(parents=True, exist_ok=True)
     (d / name).write_bytes(data)
-    side = {"caption": caption, "role": role, "name": name, "created": created, "size": len(data), "sha256": "0" * 64,
-            "kind": "image"}
-    (d / (name + ".json")).write_text(json.dumps(side))
+    side = ArtifactMeta(name=name, caption=caption, role=role, kind="png" if name.endswith(("html", "svg")) else name.rsplit(".", 1)[-1],
+                        size=len(data), sha256="0" * 64, created=created)
+    (d / (name + ".json")).write_text(json.dumps(wire.dump(side)))
     return d
 
 
@@ -73,14 +76,8 @@ class Store(Case):
 
     def test_a_sidecar_that_does_not_fit_the_schema_is_skipped(self):
         d = put(self.tmp.name, "write-1", "a.png")
-        (d / "a.png.json").write_text(json.dumps({"caption": "", "role": "weird", "name": "a.png"}))
+        (d / "a.png.json").write_text(json.dumps({"v": 1, "caption": "", "role": "weird", "name": "a.png"}))
         assert self.names() == []
-
-    def test_iso_created_is_read_too(self):
-        d = put(self.tmp.name, "write-1", "a.png")
-        side = json.loads((d / "a.png.json").read_text())
-        (d / "a.png.json").write_text(json.dumps({**side, "created": "2026-11-05T10:00:00Z"}))
-        assert self.art.listing(REPO, BEAD, [RUN])[0].t > 1.7e9
 
     def test_only_the_runs_asked_for_are_read(self):
         put(self.tmp.name, "write-1", "a.png", run="other-run")
@@ -213,3 +210,17 @@ class Detail(Case):
         assert got[1].url.startswith("/api/artifact?repo=lifesim&bead=tl-9&run=" + run.name)
         assert "stage=write&attempt=2&name=b.png" in got[1].url
         assert (got[1].caption, got[1].kind, got[1].t) == ("fixed", "image", 2.0)
+
+
+class WithTheWriter(Case):
+    def test_what_the_store_writer_leaves_is_what_the_reader_lists_and_serves(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            src = Path(tmp, "shot.png")
+            src.write_bytes(b"\x89PNG\r\n\x1a\n" + b"0" * 16)
+            dash = make_dash(config=tmp)
+            slot = ArtifactSlot(repo=REPO, bead=BEAD, run=RUN, stage="write", attempt=2)
+            store.add(dash.env.config.artifact_store(), slot, src, name="shot.png", caption="the dialog", role="after", now=50.0)
+            got = dash.artifacts.listing(REPO, BEAD, [RUN])
+            assert [(i.stage, i.attempt, i.name, i.role, i.t) for i in got] == [("write", 2, "shot.png", "after", 50.0)]
+            served = must(http.route(dash, STATIC, "/api/artifact", {**Q, "stage": "write", "attempt": "2", "name": "shot.png"}))
+            assert (served[0], served[2]) == (200, "image/png")
