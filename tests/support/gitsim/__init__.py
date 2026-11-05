@@ -18,6 +18,7 @@ from unittest import mock
 
 import stream_proc
 
+from support import procsim
 from taskloop.adapters import procs
 
 from . import diffs, read, rebase, refs, remote, status, trees, write
@@ -149,7 +150,7 @@ class Sim:
 
     def sp_stream(self, real: Callable[..., Any]) -> Callable[..., Any]:
         def run(argv: Any, *, cwd: Any = None, env: Any = None, on_stdout: Any = None, on_stderr: Any = None, **kw: Any) -> Any:
-            bare = argv[3:] if isinstance(argv, (list, tuple)) and tuple(argv[:3]) == ("nice", "-n", "10") else argv  # app/run/shell.py
+            bare = procsim.unniced(argv) if isinstance(argv, (list, tuple)) else argv  # app/run/shell.py
             if not is_git(bare):
                 return real(argv, cwd=cwd, env=env, on_stdout=on_stdout, on_stderr=on_stderr, **kw)
             rc, out, err = self.answer(list(bare), cwd, env, b"")

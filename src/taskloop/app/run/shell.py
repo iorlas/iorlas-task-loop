@@ -1,4 +1,5 @@
 """A command of the run: an argv list run by stream-proc in a group of its own, recorded in the engine log."""
+import shutil
 import threading
 import time
 from pathlib import Path
@@ -12,6 +13,12 @@ from taskloop.contracts.argv import text_of
 from taskloop.contracts.kinds import Kind
 
 CHECK_NICE = ("nice", "-n", "10")  # a check runs below the owner's editor, browser and network clients (docs/design/gate-host.md 2.2 C)
+
+
+def check_nice(path: str) -> tuple[str, ...]:
+    """CHECK_NICE with `nice` resolved on the engine's PATH (the child's allowlisted PATH may lack it: NixOS); none: unniced."""
+    found = shutil.which("nice", path=path or None)
+    return (found, *CHECK_NICE[1:]) if found else ()
 
 
 class Shell:
@@ -62,7 +69,8 @@ class Shell:
         try:
             if what in {"check", "check fix"}:
                 with childenv.check_environment(e.env.vars, extra, scratch_home=e.cfg.check_scratch_home) as clean:
-                    return e.spawner.stream([*CHECK_NICE, *cmd], cwd=None if cwd is None else str(cwd), env={}, extra=clean,
+                    argv = [*check_nice(e.env.vars.get("PATH", "")), *cmd]
+                    return e.spawner.stream(argv, cwd=None if cwd is None else str(cwd), env={}, extra=clean,
                                             on_output=chunks.append, timeout_s=timeout, stop=stop)
             return e.spawner.stream(list(cmd), cwd=None if cwd is None else str(cwd), extra=extra, on_output=chunks.append,
                                     timeout_s=timeout, stop=stop)

@@ -1,4 +1,5 @@
 """A check child starts under `nice -n 10`; a git or worker command does not."""
+import os
 import threading
 from types import SimpleNamespace
 
@@ -18,7 +19,7 @@ class Spawns:
 
 
 def shell(spawner: Spawns) -> Shell:
-    host = SimpleNamespace(env=Env({"PATH": "/usr/bin"}), cfg=SimpleNamespace(check_scratch_home=False), bead_env={}, wt="/repo",
+    host = SimpleNamespace(env=Env({"PATH": os.environ["PATH"]}), cfg=SimpleNamespace(check_scratch_home=False), bead_env={}, wt="/repo",
                            spawner=spawner, halt=threading.Event(), log=None, killed=False)
     return Shell(host)
 
@@ -26,10 +27,18 @@ def shell(spawner: Spawns) -> Shell:
 def test_check_runs_under_nice():
     spawns = Spawns()
     shell(spawns).stream(["just", "test"], "/repo", None, False, [], 60.0, "m1", "check", 0.0, threading.Event())
-    assert spawns.argv == ["nice", "-n", "10", "just", "test"]
+    assert [os.path.basename(spawns.argv[0]), *spawns.argv[1:]] == ["nice", "-n", "10", "just", "test"]
 
 
 def test_other_commands_do_not():
     spawns = Spawns()
     shell(spawns).stream(["git", "status"], "/repo", None, False, [], 60.0, "m1", "command", 0.0, threading.Event())
     assert spawns.argv == ["git", "status"]
+
+
+def test_a_path_without_nice_runs_the_check_unniced():
+    spawns = Spawns()
+    host = SimpleNamespace(env=Env({"PATH": "/nonexistent"}), cfg=SimpleNamespace(check_scratch_home=False), bead_env={}, wt="/repo",
+                           spawner=spawns, halt=threading.Event(), log=None, killed=False)
+    Shell(host).stream(["just", "test"], "/repo", None, False, [], 60.0, "m1", "check", 0.0, threading.Event())
+    assert spawns.argv == ["just", "test"]
