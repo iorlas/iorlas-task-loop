@@ -2,7 +2,6 @@
 import io
 import json
 import os
-import shlex
 import shutil
 import stat
 import subprocess
@@ -23,6 +22,8 @@ import support.paths  # noqa: E402, F401
 from support import homes  # noqa: E402
 from support.spawn import port_git  # noqa: E402
 
+from taskloop.app.release import pins  # noqa: E402
+from taskloop.app.wire import usage as usage_cmd  # noqa: E402
 from taskloop.contracts.env import snapshot  # noqa: E402
 
 # isort: split
@@ -31,7 +32,6 @@ import contextlib  # noqa: E402
 import tl  # noqa: E402
 from contracts import samples as S  # noqa: E402
 from support import (  # noqa: E402
-    procsim,
     tlbd,
 )
 from support.narrow import must  # noqa: E402
@@ -39,9 +39,7 @@ from support.spawn import real_spawner  # noqa: E402
 from support.tlmain import tl_main  # noqa: E402
 from support.who import who  # noqa: E402
 
-from taskloop.adapters import delegate as lroute  # noqa: E402
 from taskloop.app.launch import loop as wloop  # noqa: E402
-from taskloop.app.release import pins  # noqa: E402
 from taskloop.app.track import trail  # noqa: E402
 from taskloop.app.wire import asks as wasks  # noqa: E402
 from taskloop.contracts import wire  # noqa: E402
@@ -140,21 +138,19 @@ class Records(Base):
 
 
 class UsageCLI(Base):
-    def test_usage_feeds_the_installed_delegate(self):
-        d = self.home / ".claude/plugins/cache/iorlas-marketplace/iorlas-delegate/0.15.0/skills/delegate"
-        d.mkdir(parents=True)
-        (d / "route.py").write_text("")
+    def test_usage_feeds_delegate(self):
         got = []
 
-        def route(cwd, env):  # the delegate's route.py is a process by contract; here it is a fake that notes its argv
-            got.append(list(procsim.argv()[2:]))
-            return 0, json.dumps({"lanes": {"CLAUDE_SUBSCRIPTION": {"five": 6.0, "week": 4.0, "out": False}}})
-        procsim.fake(shlex.join([sys.executable, str(d / "route.py")]), route, args=True)
-        env = dict(os.environ, HOME=str(self.home), USERPROFILE=str(self.home))
-        r = tl_main("usage", "[]", cwd=self.home, env=env)
-        assert r.returncode == 0, r.stdout + r.stderr
-        assert "5h 6.0%, week 4.0%" in r.stdout
-        assert got == [["status", "--claude-usage", "[]", "--json"]]
+        def status(reading):
+            got.append(reading)
+            return {"lanes": {"CLAUDE_SUBSCRIPTION": {"five": 6.0, "week": 4.0, "out": False}}}
+        with mock.patch.object(usage_cmd.dg, "status_json", side_effect=status):
+            out = io.StringIO()
+            with mock.patch.object(sys, "stdout", out):
+                rc = usage_cmd.feed("[]", real_spawner(), snapshot())
+        assert rc == 0, out.getvalue()
+        assert "5h 6.0%, week 4.0%" in out.getvalue()
+        assert got == [[]]
 
 
 class TraceCLI(Base):
@@ -275,22 +271,8 @@ class PinAndRollback(Base):
             assert tl.main(["rollback"]) == 2  # nothing older
         assert self.pinned()["task-loop"] == "0.1.0"
 
-    def test_find_route_follows_the_pin_then_the_installed_entry_not_the_newest_directory(self):
-        self.record("iorlas-delegate", "0.5.0")  # the plugin manager installed 0.5.0; 0.6.0 is only a directory
-        def route():
-            return lroute.find_route("", pins.pinned_dir("delegate", snapshot()), homes.claude_dir() / "plugins" / "cache",
-                                                  lroute.installed_dir(homes.claude_dir()))
-        assert "/iorlas-delegate/0.5.0/" in must(route())
-        assert self.pin("0.1.0", "--delegate", "0.6.0")[0] == 0
-        assert "/iorlas-delegate/0.6.0/" in must(route())
-
-    def test_the_drill_pin_decides_what_loop_and_find_route_pick_then_clear_returns_to_the_newest(self):
-
-        def route():
-            return lroute.find_route("", pins.pinned_dir("delegate", snapshot()), homes.claude_dir() / "plugins" / "cache")
-        assert "0.6.0" in must(route())  # no pin: the newest
+    def test_the_drill_pin_decides_what_loop_picks_then_clear_returns_to_the_newest(self):
         assert self.pin("0.1.0", "--delegate", "0.5.0")[0] == 0
-        assert "/iorlas-delegate/0.5.0/" in must(route())
         root = self.claude / "plugins/cache/iorlas-marketplace/iorlas-task-loop/0.2.0"
         def target(**kw):
             return wloop.installs(homes.cfg(), snapshot(), here=root / "skills" / "task-loop").target(**kw)
@@ -298,13 +280,12 @@ class PinAndRollback(Base):
         assert target(skip=["0.1.0"]) is None
         assert self.pin("--clear")[0] == 0
         assert target() == ("0.10.0", root.parent / "0.10.0")
-        assert "0.6.0" in must(route())
         # the CLI end to end, main(argv) with only the scratch dirs in its environment
         cli = ["pin"]
-        r = tl_main(*cli, "0.2.0", "--delegate", "0.5.0", cwd=self.home, env={"HOME": str(self.home)})
-        assert r.returncode == 0, r.stderr
-        assert "/iorlas-delegate/0.5.0/" in must(route())
-        r = tl_main(*cli, "0.4.0", cwd=self.home, env={"HOME": str(self.home)})
+        with mock.patch.object(pins.sys, "platform", "linux"):  # the Mac devbox-ok rule reads origin: not what this test is about
+            r = tl_main(*cli, "0.2.0", "--delegate", "0.5.0", cwd=self.home, env={"HOME": str(self.home)})
+            assert r.returncode == 0, r.stderr
+            r = tl_main(*cli, "0.4.0", cwd=self.home, env={"HOME": str(self.home)})
         assert r.returncode == 2
         assert self.pinned()["task-loop"] == "0.2.0"
 

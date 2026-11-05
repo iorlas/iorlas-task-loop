@@ -17,7 +17,7 @@ import support.paths  # noqa: F401
 from taskloop.contracts import delegate, schema
 from taskloop.contracts.snapshots import StatusSnapshot
 
-CONTRACT = json.loads((Path(__file__).resolve().parents[1] / "fixtures/delegate4/skills/delegate/contract.json").read_text(
+CONTRACT = json.loads((Path(__file__).resolve().parents[2] / "src/delegate/data/contract.json").read_text(
     encoding="utf-8"))
 
 # Exact projection differences, never wildcards; a resolved exception fails until removed.

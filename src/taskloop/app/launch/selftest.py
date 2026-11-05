@@ -95,11 +95,7 @@ def git_repo(home: Path, wt: Path, git: Git) -> str | None:
 def run_engine(home: Path, wt: Path, env: Env) -> tuple[int, Bead]:
     """(exit code, the bead as the fake bd holds it) after one bead ran through the engine on the scripted lane."""
     cfg = wslots.load_cfg(str(wt), real.git(env))
-    res = seams.resolve_delegate(env, cfg.delegate)  # the configured delegate's own contract when there is one; else a bare one
-    contract = res.contract if isinstance(res, dg.Resolved) else {
-        "contract": dg.CONTRACT, "capabilities": ["writer_exec_allow"], "reasons": {}, "run_args": [],
-    }
-    resolved = dg.Resolved(Path("/selftest"), "/selftest/route.py", contract, "explicit")
+    resolved = dg.Resolved(Path("/selftest"), "/selftest/route.py", dg.resolve().contract, "explicit")
     store = MemoryBeads()
     t1 = parse_bead_id("t-1")
     store.beads[t1] = Bead(id=t1, title="Add f", status="open", acceptance_criteria="f.txt exists")

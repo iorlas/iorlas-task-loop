@@ -27,7 +27,7 @@ from taskloop.app.loop.loop import parse_handover
 from taskloop.app.loop.versions import Installs
 from taskloop.app.prune import verb as prune_verb
 from taskloop.app.reconcile import leases
-from taskloop.app.release import catalog, pins, reexec, seams, shell, suite
+from taskloop.app.release import catalog, pins, reexec, shell, suite
 from taskloop.app.report import reflect
 from taskloop.app.run import console, entry
 from taskloop.app.run.running import area_lock, running
@@ -92,21 +92,20 @@ def live_loops(repo: str, cfg: paths.ConfigDir) -> list[LoopState]:
 
 
 def delegate_route(repo: str | Path, env: Env, git: Git) -> str | None:
-    """The route.py of the delegate this repo's engine would use (its `delegate` config, the pin, the install), or None."""
-    res = seams.resolve_delegate(env, wslots.load_cfg(str(repo), git).delegate)
-    return res.route if isinstance(res, dg.Resolved) else None
+    """What the engine's calls go through: the delegate library."""
+    return dg.resolve().route
 
 
 def roles(repo: str | Path, env: Env, git: Git) -> dict[str, bool | None] | None:
     route = delegate_route(repo, env, git)
     if not route:
         return None
-    return {role: v.get("usable") if isinstance((v or {}).get("usable"), bool) else None for role, v in dg.role_status(route, env).items()}
+    return {role: v.get("usable") if isinstance((v or {}).get("usable"), bool) else None for role, v in dg.role_status(env).items()}
 
 
 def make_probe(repo: str | Path, env: Env, git: Git) -> dg.RouteProbe | None:
     route = delegate_route(repo, env, git)
-    return dg.RouteProbe(route, ("github.com",)) if route else None
+    return dg.RouteProbe(("github.com",)) if route else None
 
 
 def storm(repo: str, cfg: paths.ConfigDir, now: Callable[[], float] = trail.now, *, git: Git) -> Storm | None:

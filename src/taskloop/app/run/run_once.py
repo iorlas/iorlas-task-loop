@@ -133,9 +133,7 @@ class RunOnce:
         e.delegation.route()
         if not e.route:
             why = e.refusal or dg.Refusal("not_installed")
-            raise e.Blocked(f"failed: the engine needs the iorlas-delegate plugin that speaks contract {dg.CONTRACT} "
-                            f"({why.kind} {why.detail}); update both: claude plugin update iorlas-delegate@iorlas-marketplace",
-                            kind=Kind.FAULT_CONTRACT_SKEW)
+            raise e.Blocked(f"failed: delegate refused the call setup ({why.kind} {why.detail})", kind=Kind.FAULT_CONTRACT_SKEW)
         problem = pin.exec_allow_problem(e.cfg.writer_exec_allow, e.cfg.writer_family, bead.labels,
                                          e.contract.get("contract", 0), e.contract.get("capabilities", []))
         if problem:

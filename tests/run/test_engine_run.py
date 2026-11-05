@@ -697,7 +697,7 @@ class EngineRunTest(EngineTest):
         trace = [json.loads(ln) for ln in (homes.config_dir() / "traces.jsonl").read_text().splitlines()][-1]
         assert trace["lanes"] == {}
 
-    def test_a_delegate_of_another_contract_blocks_before_any_step(self):
+    def test_a_refused_delegate_blocks_before_any_step(self):
         c = wslots.load_cfg(str(self.wt), port_git())
         refusal = dl.Refusal("skew_delegate_older", "delegate speaks contract 2")
         script = fake_route.Script({})
@@ -710,8 +710,7 @@ class EngineRunTest(EngineTest):
             ).run()
         assert rc == 2
         assert script.calls == []
-        assert "contract 4" in self.said()
-        assert "update" in self.said()
+        assert "delegate refused the call setup (skew_delegate_older" in self.said()
 
     @no_repo
     def test_the_brief_hash_ignores_engine_comments_and_notes_lines(self):

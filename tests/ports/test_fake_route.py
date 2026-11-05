@@ -1,11 +1,9 @@
 """The fake route.py process (tl-7y6.4.3), contract 4, and the network-resume done-when (tl-7y6.2.13): a vendor that drops
-mid-stream twice and then succeeds is one step, one ref, no lane out, no retry counted. The contract is FAKE_ROUTE_DELEGATE's, else
-the copy in tests/fixtures/delegate4 (compared to a real delegate checkout when ~/Workspaces/iorlas-delegate-R20 or the env names one)."""
+mid-stream twice and then succeeds is one step, one ref, no lane out, no retry counted. """
 import contextlib
 import io
 import json
 import os
-import shlex
 import subprocess
 import sys
 import tempfile
@@ -13,7 +11,6 @@ from pathlib import Path
 from typing import Any
 from unittest import mock
 
-import pytest
 from support.case import Case
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -23,9 +20,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: E402, F401
 
 # isort: split
-from support import dlcall, fake_route, procsim  # noqa: E402
+from support import dlcall, fake_route  # noqa: E402
 from support.fake_clock import FakeClock  # noqa: E402
-from support.narrow import must, only  # noqa: E402
+from support.narrow import must  # noqa: E402
 
 from taskloop.adapters import childenv, delegate_wire  # noqa: E402
 from taskloop.adapters import delegate as dl  # noqa: E402
@@ -38,8 +35,8 @@ from taskloop.domain.lanes import policy as lp  # noqa: E402
 from taskloop.stores import call_state as cs  # noqa: E402
 
 DELEGATE = fake_route.delegate_dir()
-CONTRACT = dl.read_contract_file(DELEGATE / "skills" / "delegate" / "contract.json") or {}
-FIXTURES = sorted((DELEGATE / "tests" / "contract" / "fixtures").glob("*.json"))
+CONTRACT = dl.resolve().contract
+FIXTURES = sorted(fake_route.FIXTURE_DIR.glob("*.json"))
 FAKE = str(Path(__file__).resolve().parents[1] / "support" / "fake_route.py")
 
 
@@ -75,22 +72,6 @@ class Fake(Case):
         return [json.loads(x) for x in Path(str(self.script) + ".log").read_text().splitlines()]
 
     # --- the seam itself -------------------------------------------------------------------------------------------
-
-    def test_the_fake_speaks_the_handshake_and_the_net_probe(self):  # route.py as the engine starts it: argv in, JSON out, exit code
-        self.script_with(["done"], net=[False, True])
-
-        def route(cwd, env):  # the process, as a procsim fake over fake_route.main
-            done = self.runner([sys.executable, FAKE, *procsim.argv()[2:]])
-            return done.returncode, done.stdout
-        procsim.fake(shlex.join([sys.executable, FAKE]), route, args=True)
-        out = subprocess.run([sys.executable, FAKE, "contract", "--json"], capture_output=True, text=True, env=self.env, check=False).stdout
-        assert sorted(json.loads(out)) == ["capabilities", "contract", "reasons", "run_args"]
-        assert json.loads(out)["contract"] == 4
-        assert json.loads(out)["capabilities"] == ["writer_exec_allow"]
-        with mock.patch.dict(os.environ, self.env):
-            probe = dl.RouteProbe(FAKE)
-            got = [probe.up(), probe.up(), probe.up()]
-        assert got == [False, True, True]
 
     def test_argv_uses_only_flags_the_contract_lists(self):
         argv = self.req(resume="r", authored_by="a", call_id="c", brief_path="b.md", schema_path="s.json",
@@ -195,13 +176,6 @@ class Fake(Case):
         }
         assert [d.kind for d in delegate_wire.denied_of(j["denied"])] == ["policy"]
 
-    def test_the_copy_of_the_contract_in_this_repo_is_delegates(self):
-        real = Path(os.environ.get("DELEGATE_R20") or Path.home() / "Workspaces" / "iorlas-delegate-R20")
-        mine = fake_route.VENDORED / "skills" / "delegate" / "contract.json"
-        if not (real / "skills" / "delegate" / "contract.json").is_file():
-            pytest.skip("no delegate checkout of contract 4 here")
-        assert json.loads(mine.read_text()) == json.loads((real / "skills" / "delegate" / "contract.json").read_text())
-
     # --- the done-when: drops twice, then succeeds ------------------------------------------------------------------
 
     def drive(self, steps, probe, key=("write", 1, 0, 1)):
@@ -265,31 +239,3 @@ class Fake(Case):
 def lp_facts(reason):
     r = CONTRACT["reasons"][reason]
     return (r["scope"], r["permanence"], r["retry"])
-
-
-class Resolve(Case):
-    def make(self, root, contract):
-        d = Path(root) / "delegate"
-        (d / "skills" / "delegate").mkdir(parents=True)
-        (d / "skills" / "delegate" / "contract.json").write_text(json.dumps({"contract": contract, "reasons": {}}))
-        return d
-
-    def test_an_explicit_dir_wins_a_missing_pin_refuses_and_skew_refuses(self):
-        with tempfile.TemporaryDirectory() as t:
-            d = self.make(t, dl.CONTRACT)
-            assert only(dl.Resolved, dl.resolve(path=str(d))).source == "explicit"
-            assert only(dl.Refusal, dl.resolve(pinned=Path(t) / "gone", installed=d)).kind == "pin_missing_dir"  # a pin never falls through
-            assert only(dl.Resolved, dl.resolve(pinned=d, installed=None)).source == "pinned"
-            assert only(dl.Refusal, dl.resolve(pinned=Path(t), installed=None)).kind == "pin_unreadable"
-            with mock.patch.object(dl, "installed_dir", return_value=None):
-                assert only(dl.Refusal, dl.resolve(pinned=None)).kind == "not_installed"
-            assert only(dl.Refusal, dl.resolve(path=str(self.make(Path(t) / "n", dl.CONTRACT + 1)))).kind == "skew_delegate_newer_no_match"
-            assert only(dl.Refusal, dl.resolve(path=str(self.make(Path(t) / "o", dl.CONTRACT - 1)))).kind == "skew_delegate_older"
-
-    def test_installed_dir_reads_the_user_scope_record_not_a_glob(self):
-        with tempfile.TemporaryDirectory() as t:
-            (Path(t) / "plugins").mkdir()
-            (Path(t) / "plugins" / "installed_plugins.json").write_text(json.dumps({"plugins": {
-                "iorlas-delegate@m": [{"scope": "project", "installPath": "/p"}, {"scope": "user", "installPath": "/u"}]}}))
-            assert dl.installed_dir(Path(t)) == Path("/u")
-            assert dl.installed_dir(Path(t) / "none") is None

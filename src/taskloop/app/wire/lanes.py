@@ -1,13 +1,11 @@
 """`tl lanes`: ask delegate for its status once (`route.py status --json`, spends no quota) and file it as the StatusSnapshot the
 dashboard reads, and each window's use into the usage history. `tl usage` files it too, on its way. The dashboard never runs delegate."""
 import json
-import sys
 import time
 from collections.abc import Callable
 
 from taskloop.adapters import delegate as sdelegate
-from taskloop.adapters.ident import claude_dir, config_dir
-from taskloop.app.release.pins import pinned_dir
+from taskloop.adapters.ident import config_dir
 from taskloop.contracts import paths
 from taskloop.contracts.delegate_status import snapshot_of
 from taskloop.contracts.env import Env
@@ -16,11 +14,6 @@ from taskloop.contracts.snapshots import StatusTried
 from taskloop.contracts.stores import StatusStore, StatusTriedStore, UsageHistory
 
 EVERY_S = 20 * 60  # the loop files delegate's status again when the snapshot is this old
-
-
-def find(env: Env) -> str | None:
-    claude = claude_dir(env)
-    return sdelegate.find_route("", pinned_dir("delegate", env), claude / "plugins" / "cache", sdelegate.installed_dir(claude))
 
 
 def file_answer(text: str, cfg: paths.ConfigDir) -> str | None:
@@ -37,20 +30,14 @@ def file_answer(text: str, cfg: paths.ConfigDir) -> str | None:
 
 
 def file_status(spawner: Spawner, env: Env) -> str | None:
-    """Ask delegate and file the answer. None when filed, else a line saying why not (no delegate is not a failure: None)."""
-    route = find(env)
-    if not route:
-        return None
-    r = spawner.run([sys.executable, route, "status", "--json"], timeout_s=60.0)
-    if r.exit != 0:
-        return f"delegate status exited {r.exit}: {(r.err or r.out)[-200:]}"
-    return file_answer(r.out, paths.ConfigDir(config_dir(env)))
+    """Ask delegate and file the answer. None when filed, else a line saying why not."""
+    status = sdelegate.status_json()
+    if not status:
+        return "delegate status could not be built"
+    return file_answer(json.dumps(status), paths.ConfigDir(config_dir(env)))
 
 
 def refresh(spawner: Spawner, env: Env) -> int:
-    if not find(env):
-        print("no delegate installed: nothing to file")
-        return 0
     why = file_status(spawner, env)
     print(why or f"filed delegate status at {time.strftime('%H:%M:%S')}")
     return 1 if why else 0

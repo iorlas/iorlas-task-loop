@@ -7,7 +7,7 @@ answer's `worker.end`, never from ps or a stderr line."""
 import os
 import sys
 import tempfile
-import textwrap
+import threading
 import time
 from pathlib import Path
 from unittest import mock
@@ -21,6 +21,7 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 # isort: split
 from support import engine_case as te
 from support import fake_route
+from support.fake_api import FakeApi
 from support.narrow import must
 from support.spawn import port_git, real_spawner
 from support.who import who
@@ -35,35 +36,11 @@ from taskloop.contracts.ids import BeadId
 POSIX = os.name != "nt"
 MIN = 60.0
 
-# route.py stand-in: starts a worker in its own session, writes WorkerStarted as the first line of the live file like delegate, then
-# waits for <cwd>/done. Mode "stubborn": the worker ignores SIGTERM. Mode "chatty": the live file keeps moving until CHAT_UNTIL.
-ROUTE = textwrap.dedent('''
-    import json, os, subprocess, sys, time
-    d, mode = sys.argv[sys.argv.index("--cwd") + 1], os.environ.get("FAKE_MODE", "")
-    body = ("trap '' TERM\\n" if mode == "stubborn" else "") + "while [ ! -e '%s' ]; do sleep 0.02; done\\n" % os.path.join(d, "done")
-    w = subprocess.Popen(["sh", "-c", body], start_new_session=True)  # a shell worker: the interpreter start is not what is tested
-    open(os.path.join(d, "w.pid"), "w").write(str(w.pid))
-    live = os.environ.get("DELEGATE_LIVE_FILE")
-    if live:
-        os.makedirs(os.path.dirname(live), exist_ok=True)
-        with open(live, "a") as f:
-            f.write(json.dumps({"v": 1, "pid": w.pid, "pgid": w.pid, "run_id": "run1"}) + "\\n")
-            f.flush()
-            while mode == "chatty" and time.time() < float(os.environ["CHAT_UNTIL"]):
-                f.write(json.dumps({"t": time.time(), "k": "msg", "text": "still here"}) + "\\n")
-                f.flush()
-                time.sleep(0.1)
-            if mode == "chatty":
-                open(os.path.join(d, "done"), "w").close()
-    w.wait()
-    print(json.dumps({"contract": 4, "data": {}, "ref": "r"}))
-''')
 @pytest.mark.skipif(not (POSIX), reason="process groups")
-class StreamRunnerCall(Case):
+class ApiRunnerCall(Case):
     def setup_method(self):
         self.tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         self.d = Path(self.tmp.name)
-        (self.d / "route.py").write_text(ROUTE)
         self.live = str(self.d / "x.live" / "01-write.jsonl")
         for p in (mock.patch.object(runner, "POLL_S", 0.05),):
             p.start()
@@ -76,10 +53,12 @@ class StreamRunnerCall(Case):
             procs.stop_pid(int(f.read_text()), grace=0.2)
         self.tmp.cleanup()
 
-    def run_route(self, mode="", wall=60.0, on_worker=None, **env):
-        r = runner.StreamRunner(self.d / "err.log", wall, self.live, on_worker, grace=0.5)
-        cmd = [sys.executable, str(self.d / "route.py"), "--cwd", str(self.d)]
-        return r, lambda: r(cmd, cwd=str(self.d), env=dict(os.environ, FAKE_MODE=mode, DELEGATE_LIVE_FILE=self.live, **env), timeout=wall)
+    def run_call(self, chat_until=0.0, wall=60.0, on_worker=None):
+        body = "while [ ! -e '%s' ]; do sleep 0.02; done" % (self.d / "done")
+        fake = FakeApi(self.d, body, chat_until)
+        r = runner.ApiRunner(self.d / "err.log", wall, self.live, on_worker, grace=0.5)
+        request = runner.api.RunRequest(role="worker", brief_file="b.md", cwd=str(self.d), live_file=self.live)
+        return r, fake, lambda: r(["delegate"], cwd=str(self.d), timeout=wall, request=request)
 
     def worker_pid(self):
         return int((self.d / "w.pid").read_text())
@@ -87,16 +66,18 @@ class StreamRunnerCall(Case):
     def test_the_worker_is_read_from_the_live_files_first_line_and_a_quiet_one_is_not_stopped(self):
         """Silence is delegate's: the engine's runner stops a call only at the wall limit or a stop of the run."""
         seen = []
-        r, go = self.run_route("chatty", on_worker=seen.append, CHAT_UNTIL=str(time.time() + 0.4))
-        done = go()
+        r, fake, go = self.run_call(chat_until=time.time() + 0.4, on_worker=seen.append)
+        threading.Thread(target=lambda: (time.sleep(0.6), (self.d / "done").write_text("")), daemon=True).start()
+        with fake.patch():
+            done = go()
         assert (must(r.worker).pid, must(r.worker).run_id) == (self.worker_pid(), "run1")
         assert seen == [r.worker]
         assert done.returncode == 0
         assert r.stop == {}
 
-    def test_the_wall_limit_stops_the_call_through_stream_proc(self):
-        r, go = self.run_route("", wall=0.8)
-        with pytest.raises(Stopped):
+    def test_the_wall_limit_stops_the_call_through_cancel(self):
+        r, fake, go = self.run_call(wall=0.8)
+        with fake.patch(), pytest.raises(Stopped):
             go()
         assert r.stop["kind"] == "wall"
         assert not procs.alive(self.worker_pid())

@@ -18,7 +18,12 @@ ignore = [
 # Banned imports (TID251). The two plugins never import each other; src/taskloop/{contracts,stores}/ruff.toml add the modules those layers never import.
 # The other architecture rules (layers, app slices, `import re` placement) are the `.importlinter` contracts, run by `just rules`.
 [lint.flake8-tidy-imports.banned-api]
-"delegate".msg = "task-loop and delegate share only the worker-run contract; never import the other plugin"
+"delegate.app".msg = "task-loop imports delegate.api and nothing else of delegate"
+"delegate.cli".msg = "task-loop imports delegate.api and nothing else of delegate"
+"delegate.adapters".msg = "task-loop imports delegate.api and nothing else of delegate"
+"delegate.domain".msg = "task-loop imports delegate.api and nothing else of delegate"
+"delegate.contracts".msg = "task-loop imports delegate.api and nothing else of delegate"
+"delegate.entry".msg = "task-loop imports delegate.api and nothing else of delegate"
 
 [lint.mccabe]
 max-complexity = 12
