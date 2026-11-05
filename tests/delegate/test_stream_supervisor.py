@@ -16,6 +16,7 @@ from unittest import mock
 import pytest
 from any_agent.harnesses import opencode_sandbox
 from support.case import Case
+from support.fake_clock import SteppingClock
 
 import hermetic  # noqa: F401  (a home of its own for every test)
 
@@ -93,6 +94,9 @@ class Replay(Case):
         limits = mock.patch.dict(harnesses.LIMITS, {k: dataclasses.replace(v, grace_s=1) for k, v in harnesses.LIMITS.items()})
         limits.start()
         self.addCleanup(limits.stop)
+        clock = mock.patch.object(harnesses, "CLOCK", SteppingClock(0.25))  # a silence or a grace passes in polls, not seconds
+        clock.start()
+        self.addCleanup(clock.stop)
         penv = dict(os.environ, DELEGATE_CONFIG_DIR=str(self.cfg), HOME=str(self.base), CODEX_HOME=str(self.base))
         for p in (
             mock.patch.dict(os.environ, penv),
@@ -178,6 +182,7 @@ class Replay(Case):
 
     @real_proc("delegate: a worker, git or CLI process")
     def test_a_later_event_resets_the_grace(self):
+        self.enterContext(mock.patch.object(harnesses, "CLOCK", time.monotonic))  # the gap between the two events is real time
         script = self.base / "slowclaude"
         script.write_text(
             f"#!/bin/sh\ncat >/dev/null\necho '{CLAUDE_RESULT}'\nsleep 0.7\necho '{CLAUDE_RESULT}'\n"
