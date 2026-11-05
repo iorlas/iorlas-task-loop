@@ -66,12 +66,14 @@ class Git(ScriptedGit):
         self.sim, self.head = sim, HEAD
 
     def rev_parse(self, d, rev):
+        if rev.startswith("refs/remotes/"):
+            return ""
         return {"HEAD": self.head, "HEAD^{tree}": "tree", "origin/main": "base"}[rev]
 
     def log(self, d, include, exclude=None, limit=0, grep=""):
         return [LogRow(oid=self.head, time=0, subject="Do it (t-1)")]
 
-    def push_lease(self, d, remote, refspec):
+    def push_lease(self, d, remote, refspec, expect_sha):
         ran = self.sim.run(["git", "push", remote, refspec])
         return GitOutcome(ok=ran.exit == 0, output=ran.err)
 

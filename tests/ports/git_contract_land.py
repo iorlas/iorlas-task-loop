@@ -162,10 +162,11 @@ class LandContract(_Base):
         r = str(self.repo)
         sh(self.repo, "checkout", "-qb", "task/w")
         first = self.commit_file(self.repo, "w.txt", "1\n", "w1")
-        assert self.git.push_lease(r, "origin", "HEAD:refs/heads/task/w").ok
+        seen = lambda: self.git.rev_parse(r, "refs/remotes/origin/task/w") or ""  # noqa: E731
+        assert self.git.push_lease(r, "origin", "HEAD:refs/heads/task/w", seen()).ok
         sh(self.repo, "fetch", "-q", "origin")
         sh(self.repo, "commit", "-q", "--amend", "-m", "w1 again")
-        assert self.git.push_lease(r, "origin", "HEAD:refs/heads/task/w").ok
+        assert self.git.push_lease(r, "origin", "HEAD:refs/heads/task/w", seen()).ok
         other = self.home / "other"
         sh(self.home, "clone", "-q", str(self.origin), str(other))
         sh(other, "checkout", "-q", "task/w")
@@ -174,7 +175,7 @@ class LandContract(_Base):
         sh(other, "commit", "-qm", "from elsewhere")
         sh(other, "push", "-q", "origin", "task/w")
         sh(self.repo, "commit", "-q", "--allow-empty", "-m", "w2")
-        late = self.git.push_lease(r, "origin", "HEAD:refs/heads/task/w")
+        late = self.git.push_lease(r, "origin", "HEAD:refs/heads/task/w", seen())
         assert not late.ok
         assert "stale info" in late.output
         assert first != self.git.rev_parse(str(self.origin), "refs/heads/task/w")
