@@ -1,6 +1,5 @@
 """Poll latency, build concurrency, and append-only engine-log regression tests."""
 
-import socket
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import patch
@@ -10,6 +9,7 @@ from support.factory_index import seed_beads
 from support.narrow import must
 
 from dash import test_dash_api as fixtures
+from taskloop.adapters.ident import hostname
 from taskloop.contracts.ids import loop_key
 
 
@@ -26,7 +26,7 @@ class FastReads(fixtures.ApiFixture):
             assert row.call_count == 2
 
     def test_cached_listing_supplies_floor_slots_and_profile_is_cached(self):
-        self.store.put(bead("s-z", f"slot {socket.gethostname()} z", labels=["slot"]))
+        self.store.put(bead("s-z", f"slot {hostname()} z", labels=["slot"]))
         seed_beads(self.cfg, self.repo, self.store.beads.values(), self.now)
         with patch.object(self.dash.env.ports, "profile_error", return_value="") as profile:
             snap = self.dash.reads.snapshot()

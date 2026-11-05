@@ -347,6 +347,23 @@
   "acceptance_first": false,
   "shots_fixed": true
  },
+ "ArtifactSlot": {
+  "repo": "r-1",
+  "bead": "tl-1",
+  "run": "tl-1-1",
+  "stage": "write",
+  "attempt": 2
+ },
+ "ArtifactMeta": {
+  "v": 1,
+  "name": "home.png",
+  "caption": "home",
+  "role": "after",
+  "kind": "png",
+  "size": 9,
+  "sha256": "abababababababababababababababababababababababababababababababab",
+  "created": 1793050200.5
+ },
  "FollowupOutbox": {
   "v": 1,
   "pending": [
@@ -696,7 +713,6 @@
    "client/TestResults/*.xml"
   ],
   "fix": "",
-  "container": false,
   "reads": [
    "unity-build"
   ],
@@ -1510,6 +1526,7 @@
     "HEAD:main"
    ],
    "land_optimistic_tries": 2,
+   "land_mode": "push",
    "base": "origin/main",
    "check_links": true,
    "owner_author": "",
@@ -1552,7 +1569,6 @@
      "writer_check_max_s": null,
      "tail_log": "",
      "keep": [],
-     "in": "container",
      "why": "",
      "reads": [],
      "lane": "",
@@ -1581,7 +1597,6 @@
      "writer_check_max_s": null,
      "tail_log": "",
      "keep": [],
-     "in": "host",
      "why": "",
      "reads": [],
      "lane": "",
@@ -1611,10 +1626,6 @@
     "timeout_min": 30
    },
    "slot_env": {},
-   "container": {
-    "image": "img:1",
-    "dockerfile": ""
-   },
    "host": false,
    "worker_rules": "",
    "test_pattern": "^\\s*(def test_|async def test_|\\[(Test|UnityTest|Fact|Theory|TestMethod|TestCase)\\b|#\\[test\\]|(it|test)\\(|func Test)",

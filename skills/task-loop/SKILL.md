@@ -256,8 +256,6 @@ base sha. `"inputs_only": true` drops the last two groups, so only the globs cou
 `"exclude": ["client/Assets/Features/*/Generated/**", "client/Assets/Views/*/Generated/**", "client/Assets/Kit/UI/Fonts/**"]`.
 The ignored walk lists only under the globs' literal folders (`client/Assets/{App,Core}/**` walks `client/Assets/App/` and `.../Core/`), so a `Library/` the globs do not name is never read. An `inputs` glob that matches no tracked file switches the cache off for that check (logged `inputs glob X matches no tracked file; not cached`; `tl doctor` reports it). A hit is logged
 `cached: unity-tests, inputs unchanged since round N`. No `inputs`: the key stays the whole tree plus the base (`tl doctor` says so: such a check is rerun whenever anything moves). **The inputs rule.** `inputs` must list every file the check reads, directly or through what it runs: the scripts and helpers its recipe calls and their imports, config and pin files, generated-source feeders. A file the check reads but `inputs` misses is a stale green: a change to it is a cache hit and lands untested. The engine does not sample or re-audit hits (owner, 2026-10-29: fail fast, fix the root cause). When a bug is traced to a missed input, add the glob to the check in the profile in the same fix; an unsure author omits `inputs` (rerun on any change) rather than guess a short list. Only a pass is remembered; whether a check was red on the untouched base is remembered too, per repo.
-**Checks in a container.** A check with `"in": "container"` (default `"host"`) runs in a Docker container on a copy of the worktree: its tracked files plus the untracked non-ignored ones go in as a tar on stdin and are unpacked on the container's own disk (never a bind mount, which is as slow as the host where an endpoint scanner taxes file access); the agent still edits the worktree on the host. `engine.container` names where: `{"image": "<name>"}` or `{"dockerfile": "<repo path>"}` (built once, tagged by the file's hash); exactly one, and a check that says `"in": "container"` needs it, or the config fails to load. What comes back is the output, the exit code and the files the check put under `$TL_ARTIFACT_DIR`; nothing else it writes comes back, so a container check must not need to write the worktree, and it cannot read `$TL_CHECK_LOG_<ID>` files of the host. Each check's log starts with where it ran (`in container IMG` or `on host (docker not reachable)`). When `docker info` fails or times out (asked once per round) the round warns once and the check runs on the host. A stop or the wall limit kills the container by its name (`tl-check-<run>-<id>`). The base run of a red check (`base_red`) still runs on the host. Checks that need the host's tools (the Unity editor) stay `"host"`.
-
 **Unverified (exit 86).** A check that ends with exit 86 could not run its proof (a tool, host or resource it needs is missing). The engine records it as `unverified`, never `passed`: it is not retried, never cached or reused as a pass, and not a red for the writer to fix (the round goes on to review as `checks_unverified`, not `checks_green`). Review and verify read it as not passed; the land refuses to land while a required check is unverified, naming the check, and keeps the branch. A gate step that exits 86 refuses the land the same way. The dashboard shows the word `unverified` in amber, apart from passed and failed. A check should exit 86 rather than print "skipped" or "cannot verify" and exit 0. (`taskloop.app.land.verified.deferred` is the one place a later resource rule may defer an unverified check.)
 
 **Wall limit, no hang watchdog.** A check runs through stream-proc and is stopped only when it runs past its wall limit (or the engine itself is stopped): `wall_min` on the check, else `engine.check_wall_min` (60). The whole group is killed, descendants that called setsid too, the output so far stays in the log, the result is exit 124 and is never retried, and the bead parks at once (`check NAME timed out after N min (wall_min=N)`): the writer is not asked to fix a timeout. A check that prints nothing and uses no CPU is not stopped: it may be asleep, on a lock, on the network or Unity importing, so a really stuck one costs up to its wall limit (give a known-quick check a short `wall_min`). Each check leaves a `check_start` and a `check_end` under one id (`secs`, `exit`, `wall_hit`: the limit stopped it). `engine.check_idle_min` and a check's `idle_min` are retired: a profile that still has them loads, `tl` says `retired and ignored; safe to delete` once, and they do nothing. Renamed keys (`engine.check_timeout_min` -> `check_wall_min`, a check's `timeout_min` -> `wall_min`) fail with a message naming the new key.
@@ -447,8 +445,7 @@ eligible bead before retaking it there. Different beads never accumulate toward 
 the slot until a probe succeeds on a normal loop pass, with no timed hold. Resource and lane waits poll wake conditions;
 only retries of failed operations (including vendor usage-limit unlocks) carry retry times.
 
-`tl loop` runs the queue by itself, one bead at a time, in the foreground of any shell (a background job, tmux, a
-container); the session that starts it only watches it.
+`tl loop` runs the queue by itself, one bead at a time, in the foreground of any shell (a background job, tmux); the session that starts it only watches it.
 
 - **Start:** `tl loop [--repo DIR] [--max-beads N] [--until HH:MM] [--wait-slot-min M] [--wait-drained] [--pin]`. Several loops
   may run on one repo, each with its own actor (never its session's: bd lets an actor re-claim its own bead) and its
@@ -641,7 +638,7 @@ local to one machine, hence the host in the title.
   `SharedCompilationId` and `MSBUILDNODEHANDSHAKESALT` = `<repo>-<slot>` (no shared compiler server or MSBuild node), and
   `TL_SLOT`. A run with no slot (a plain worktree) uses the worktree's name as the slot. `engine.slot_env` (str to str) adds or
   overrides keys; values may use `{slot}`, `{slot_dir}` (the state folder) and `{repo}`, any other `{name}` is refused when
-  the profile loads. A check that runs in a container gets `TL_SLOT` only (host paths mean nothing inside).
+  the profile loads.
   **Still shared:** the Unity licence, the user's NuGet package folder (`~/.nuget/packages`), and whatever a repo's own tools keep
   under `~/.cache` or the home folder; give those a `slot_env` key when they collide.
 - `tl slot list`: name, bead, status, holder, why (and since when, or until when for a hold), the live engine if any,
@@ -660,8 +657,7 @@ refusal prints what it would lose.
 
 `tl dash ensure` starts one server per machine (`tl dash url` prints its addresses, `tl dash stop` stops it; it
 restarts by itself when the plugin's code changes and exits after hours without a loop). It listens on 127.0.0.1 and,
-when Tailscale is up, on the machine's Tailscale address; `TASK_LOOP_DASH_BIND=0.0.0.0` (e.g. in a container with a
-published port) overrides; `TASK_LOOP_DASH_PORT` changes the port (default 7878). `ensure` replaces a running server whose
+when Tailscale is up, on the machine's Tailscale address; `TASK_LOOP_DASH_BIND=0.0.0.0` overrides; `TASK_LOOP_DASH_PORT` changes the port (default 7878). `ensure` replaces a running server whose
 files are gone, whose version differs, or that lacks an address the installed one would bind; a bind failure exits non-zero
 naming the address and holder pid. A copy run from a git checkout (tests, dev) uses a random loopback port unless `--port`/`--bind` are given.
 

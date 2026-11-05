@@ -158,6 +158,14 @@ class Sim:
             return stream_proc.Result(rc, None, None, 0, 0, None, 0.0)
         return run
 
+    def sp_bytes(self, real: Callable[..., Any]) -> Callable[..., Any]:
+        def run(argv: Any, *, cwd: Any = None, env: Any = None, input: Any = None, **kw: Any) -> Any:
+            if not is_git(argv):
+                return real(argv, cwd=cwd, env=env, input=input, **kw)
+            rc, out, err = self.answer(list(argv), cwd, env, input or b"")
+            return stream_proc.CapturedBytes(rc, out, err.encode(), 0.0, False, ())
+        return run
+
     def guard(self, real_init: Callable[..., Any]) -> Callable[..., Any]:
         def init(popen: Any, args: Any, *a: Any, **kw: Any) -> Any:
             if is_git(args):
@@ -170,8 +178,10 @@ class Sim:
         stack.enter_context(mock.patch.object(subprocess, "run", self.sp_run(subprocess.run)))
         stack.enter_context(mock.patch.object(procs, "run_bytes", self.sp_run(procs.run_bytes, captured=True)))
         stack.enter_context(mock.patch.object(stream_proc, "run", self.sp_stream(stream_proc.run)))
-        # stream_proc.capture (the function) shadows its module; capture() calls the module-level `run`, so patch it there too
-        stack.enter_context(mock.patch.object(sys.modules["stream_proc.capture"], "run", self.sp_stream(stream_proc.run)))
+        # capture() calls the module-level capture_bytes of stream_proc.capture (the function shadows its module)
+        stack.enter_context(mock.patch.object(stream_proc, "capture_bytes", self.sp_bytes(stream_proc.capture_bytes)))
+        fake = self.sp_bytes(stream_proc.capture_bytes)
+        stack.enter_context(mock.patch.object(sys.modules["stream_proc.capture"], "capture_bytes", fake))
         stack.enter_context(mock.patch.object(subprocess.Popen, "__init__", self.guard(subprocess.Popen.__init__)))
         shim = Path(stack.enter_context(tempfile.TemporaryDirectory(prefix="tl-nogit-")))
         (shim / "git").write_text(SHIM.replace("SHIM_DIR", str(shim)))

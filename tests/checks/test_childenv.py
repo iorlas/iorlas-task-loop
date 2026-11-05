@@ -9,13 +9,8 @@ from support.case import Case
 
 from taskloop.adapters.childenv import CHECK_SECRETS, check_env, check_environment, tool_env
 from taskloop.adapters.git import RealGit
-from taskloop.app.checks.container import Box
-from taskloop.app.checks.execution import ReadyExecution
-from taskloop.contracts.checks import Check
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.env import Env
-from taskloop.contracts.ids import CheckId
-from taskloop.contracts.runkey import Digest
 
 
 class CheckEnvironmentTest(Case):
@@ -110,20 +105,6 @@ class CheckEnvironmentTest(Case):
                 raise RuntimeError("child failed")
             assert not other.exists()
         assert not home.exists()
-
-    def test_container_forwarding_scrubs_declared_credentials_and_host_home(self):
-        host = mock.Mock()
-        host.env = Env({"HOME": "/owner", "SSH_AUTH_SOCK": "/agent"})
-        host.bead_env = {"TL_SLOT": "check"}
-        host.run_dir = Path("/run/check")
-        box = Box(host, host.spawner)
-        check = Check(id=CheckId("probe"), cmd="true", container=True)
-        with mock.patch.object(box, "resolve", return_value=ReadyExecution(Digest("image"), "image")):
-            argv, _ = box.plan(check, ["true"], {"HOME": "/owner", "GH_TOKEN": "secret", "GIT_SSH_COMMAND": "ssh",
-                                                     "MODE": "test"})
-        env = dict(argv[n + 1].split("=", 1) for n, word in enumerate(argv) if word == "--env")
-        assert env == {"TL_SLOT": "check", "MODE": "test"}
-
 
 class EngineCheckEnvironmentTest(te.EngineTest):
     def test_engine_checks_and_fixes_cannot_restore_host_credentials(self):

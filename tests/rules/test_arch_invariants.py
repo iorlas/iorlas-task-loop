@@ -4,7 +4,7 @@ import ast
 from support.case import Case
 
 from rules.arch_invariants import domain_world_problems, slice_problems
-from rules.arch_ratchets import graph_of, production_trees
+from rules.arch_rules import graph_of, production_trees
 
 
 class ArchitectureInvariants(Case):

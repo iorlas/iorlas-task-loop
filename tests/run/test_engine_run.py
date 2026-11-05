@@ -10,6 +10,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import gitq, homes, procsim
+from support.aging import age
 from support.checks import ck
 from support.engine_case import (
     BEAD,
@@ -121,12 +122,12 @@ class EngineRunTest(EngineTest):
 
     def test_a_wait_is_not_counted_in_the_budget(self):
         eng = self.checks_engine(budget_min=5)
-        eng.t0 -= 8 * 60  # eight minutes wall
+        age(eng, 8 * 60)  # eight minutes wall
         with pytest.raises(engine.Blocked):
             eng.waits.budget_check()
         eng.waits.add(600, WaitWhat.UNITY_SLOT)  # capped at the 8 min there are: inside the budget
         eng.waits.budget_check()
-        eng.t0 -= 16 * 60
+        age(eng, 16 * 60)
         with pytest.raises(engine.Blocked) as e:
             eng.waits.budget_check()
         assert "8 min waiting for shared resources not counted" in str(e.value)
@@ -402,7 +403,7 @@ class EngineRunTest(EngineTest):
 
     def test_a_wait_is_logged_as_its_own_segment(self):
         eng = self.checks_engine()
-        eng.t0 -= 600
+        age(eng, 600)
         eng.waits.add(120, WaitWhat.LANE)
         (start,), (w,) = records(eng, "wait_start"), self.wait_records(eng)
         assert (start["what"], start["id"] == w["id"], w["wait_seconds"], w["in_budget"]) == ("lane", True, 120, False)

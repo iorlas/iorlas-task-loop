@@ -38,7 +38,8 @@ class WaitsSteps(Protocol):
 class WaitsHost(Protocol):
     """What Waits reads of the engine: the log, the clock, the budget and the counters it books waits against."""
 
-    waited: float  # seconds spent waiting for a shared resource, not counted in budget_min
+    @property
+    def waited(self) -> float: ...  # seconds spent waiting for a shared resource, not counted in budget_min
 
     @property
     def bead(self) -> BeadId: ...
@@ -108,7 +109,7 @@ class Waits:
         def waited() -> None:
             if who:
                 secs = max(0.0, e.clock.now() - t_req[0])
-                e.waited += secs
+                e.budget.wait(secs)
                 e.log.emit(rec.WaitEnd(id=wid[0], wait_seconds=round(secs), in_budget=False))
                 who.clear()
 

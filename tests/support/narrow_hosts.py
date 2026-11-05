@@ -63,8 +63,11 @@ class FakeWaitsHost:
         self.stats = {"tokens_in": 0, "tokens_out": 0}
         self.log_path = Path("run.jsonl")
         self.run_id = "run"
-        self.waited = 0.0
         self.halted: list[str] = []
+
+    @property
+    def waited(self) -> float:
+        return self.budget.waited
 
     @contextlib.contextmanager
     def os_lock(

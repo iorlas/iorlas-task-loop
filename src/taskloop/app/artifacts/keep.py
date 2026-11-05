@@ -3,9 +3,10 @@ earlier round's, an earlier run of the bead) becomes a hard link to it (a copy w
 at most `cap` bytes of new content, counting what it dropped."""
 import filecmp
 import os
-import shutil
 from collections.abc import Iterable
 from pathlib import Path
+
+from atomic_io import atomic_write_bytes
 
 CAP_BYTES = 200 << 20
 
@@ -31,8 +32,9 @@ def used_bytes(mine: Iterable[Path], seen: Iterable[Path] = ()) -> int:
 
 
 def place(src: Path, dst: Path, twin: Path | None) -> None:
-    """`dst` is `src`'s content: a hard link to `twin` when there is one and the disk allows it, else a copy. A file already at
-    `dst` is replaced, never written through (it may be another file's inode)."""
+    """`dst` is `src`'s content: a hard link to `twin` when there is one and the disk allows it, else a copy written whole (tmp and
+    rename, so a reader never sees half a file). A file already at `dst` is replaced, never written through (it may be another file's
+    inode)."""
     dst.parent.mkdir(parents=True, exist_ok=True)
     dst.unlink(missing_ok=True)
     if twin is not None:
@@ -41,7 +43,7 @@ def place(src: Path, dst: Path, twin: Path | None) -> None:
             return
         except OSError:  # another disk (EXDEV), or a file system without links
             pass
-    shutil.copy2(src, dst)
+    atomic_write_bytes(dst, src.read_bytes(), fsync=False)
 
 
 class Keeper:

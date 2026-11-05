@@ -92,7 +92,7 @@ class SlotGate(EngineTest):
 
         def preview_green():
             return cached_gate(eng.cfg, eng.git, str(self.wt), eng.stores, eng.env,
-                               eng.checkout.tree_hash(), None, eng.spawner, clean=True, slot_wt=str(self.wt))
+                               eng.checkout.tree_hash(), None, clean=True, slot_wt=str(self.wt))
 
         assert eng.checker.gate_green(clean=True)
         assert Gate(eng).green()
@@ -112,7 +112,7 @@ class SlotGate(EngineTest):
         with isolated(eng) as fresh:
             assert not (Path(fresh.wt) / "setup.txt").exists()
             assert not cached_gate(eng.cfg, eng.git, str(fresh.wt), eng.stores, eng.env,
-                                         eng.checkout.tree_hash(), None, eng.spawner, clean=True)
+                                         eng.checkout.tree_hash(), None, clean=True)
 
     def test_clean_reader_consumes_the_slot_producers_receipt_and_log(self):
         def producer(cwd, env):

@@ -49,7 +49,7 @@ class LandLockTests(Case):
     def setup_method(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        self.repo = self.tmp.name
+        self.repo = str(Path(self.tmp.name).resolve())  # tl land-lock resolves --repo: /var is /private/var on macOS
         self.env = {"XDG_CONFIG_HOME": str(Path(self.tmp.name) / "cfg")}
         subprocess.run(["git", "init", "-q", self.repo], check=True)
         self.cmds = []

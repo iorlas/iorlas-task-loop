@@ -1,15 +1,11 @@
 """A failed reset excludes a slot until a real reset and setup probe passes."""
-from typing import TYPE_CHECKING
-
 from taskloop.app.slots.reset import setup
+from taskloop.app.slots.surface import SlotView
 from taskloop.contracts.ports import BdFailure, BeadPatch
 from taskloop.contracts.slots import SlotFail, SlotGitError
 
-if TYPE_CHECKING:
-    from taskloop.app.slots.pool import Slot
 
-
-def check(slot: Slot) -> bool:
+def check(slot: SlotView) -> bool:
     """Probe a claimed slot, including setup even when its inputs have not changed."""
     env, bead = slot.env, slot.slot_bead()
     try:
@@ -24,7 +20,7 @@ def check(slot: Slot) -> bool:
     return True
 
 
-def probe(slot: Slot, *, required: bool = False) -> bool:
+def probe(slot: SlotView, *, required: bool = False) -> bool:
     """Caller holds the take lock. Claim before resetting; release even after failure."""
     if not required and slot.slot_bead().metadata.get("aside_probe") != "pending":
         return True

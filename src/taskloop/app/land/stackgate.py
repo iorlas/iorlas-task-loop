@@ -36,11 +36,10 @@ class StackGate:
             raise Stop(1, f"cannot read the gate from {oid}:{path}: {e}") from None
 
     def red(self, engine: config.EngineConfig, tree: str, base: str, wt: str = "") -> list[CheckId]:
-        found = authorization.results(self.stores, self.git, wt or self.repo, engine, TreeSha(tree), BaseSha(base), self.env,
-                                      spawner=self.cmds.spawner)
+        found = authorization.results(self.stores, self.git, wt or self.repo, engine, TreeSha(tree), BaseSha(base), self.env)
         red = [step for step, result in found.items() if result is None]
-        self.why = authorization.explain(self.stores, self.git, wt or self.repo, engine, TreeSha(tree), BaseSha(base), self.env, red,
-                                         spawner=self.cmds.spawner) if red else {}
+        self.why = (authorization.explain(self.stores, self.git, wt or self.repo, engine, TreeSha(tree), BaseSha(base), self.env, red)
+                    if red else {})
         return red
 
     def named(self, red: list[CheckId]) -> str:
