@@ -3,8 +3,9 @@ import json
 from collections.abc import Callable
 from pathlib import Path
 
+from any_plugin_cache import NoVersionError, entry_offset, set_json_version
+
 from taskloop.adapters.ident import claude_dir
-from taskloop.adapters.versionfile import NoVersion, entry_offset, set_version
 from taskloop.app.release.shell import Abort, Shell, fetch_or_abort
 from taskloop.contracts.ids import MARKETPLACE
 from taskloop.contracts.slots import SlotGitError
@@ -26,8 +27,8 @@ def bump_marketplace(market: Path, version: str, sh: Shell) -> None:
     if at is None:
         raise Abort(f"{f} has no {NAME} entry")
     try:
-        text = set_version(text, version, at)
-    except NoVersion as e:
+        text = set_json_version(text, version, at)
+    except NoVersionError as e:
         raise Abort(f"could not set {NAME}'s version in {f}: {e}") from None
     entry = [p for p in json.loads(text)["plugins"] if p.get("name") == NAME]
     if not entry or entry[0].get("version") != version:

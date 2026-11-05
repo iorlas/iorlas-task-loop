@@ -12,6 +12,12 @@
     "tree_hash": "909590137df1b78aa653f3eecce316985358b07297b5a4b4077f328efbe61ce5"
   },
   {
+    "name": "any_plugin_cache",
+    "shelf_tag": "6938ef0508b2ac65e995a5bec8a04be1a9b389a6",
+    "shelf_commit": "6938ef0508b2ac65e995a5bec8a04be1a9b389a6",
+    "tree_hash": "72468f96edd8dafe6ce172f75e2079104b379dcd44742dc7dbf8d1fc5265a2a8"
+  },
+  {
     "name": "atomic_io",
     "shelf_tag": "atomic-io-v0.2.0",
     "shelf_commit": "8bc0850c3385226d0ef2f6a71f94373ad845a305",

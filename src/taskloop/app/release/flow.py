@@ -8,9 +8,10 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+from any_plugin_cache import NoVersionError, set_json_version
+
 from taskloop.adapters import beadtools, gitrepo, ident, landlock
 from taskloop.adapters.ident import config_dir
-from taskloop.adapters.versionfile import NoVersion, set_version
 from taskloop.app.release import canary, clone, manifest, publish, selfupdate, shell, suite, tidy
 from taskloop.app.release.push import push_main, release_lock_path
 from taskloop.app.release.shell import Abort, Shell, say
@@ -57,8 +58,8 @@ def bump_and_commit(tool_root: Path, where: Path, req: Request, sh: Shell) -> st
     version = next_version(where, req.minor, sh)
     f = where / publish.PLUGIN
     try:
-        f.write_text(set_version(f.read_text(encoding="utf-8"), version), encoding="utf-8")
-    except NoVersion as e:
+        f.write_text(set_json_version(f.read_text(encoding="utf-8"), version), encoding="utf-8")
+    except NoVersionError as e:
         raise Abort(str(e)) from None
     manifest.write(where, publish.git_must(lambda: sh.port.ls_files(str(where)), where))  # after the bump: it lists plugin.json as it ships
     publish.git_must(lambda: sh.port.stage(str(where), publish.PLUGIN, manifest.NAME), where)
