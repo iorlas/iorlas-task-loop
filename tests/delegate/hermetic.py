@@ -6,7 +6,6 @@ import os
 import shutil
 import sys
 import tempfile
-import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))      # delegate.*: next to skills/ in the plugin tree
@@ -46,16 +45,3 @@ if not getattr(sys, "_delegate_hermetic", False):
     from delegate.adapters.harness import opencode_sandbox
     opencode_sandbox._probed[:] = [None]        # no test starts a real sandbox-exec; tests of the preflight clear it
     home(ROOT)
-    _run = unittest.TestCase.run
-
-    def run(self, result=None):
-        saved = {k: os.environ.get(k) for k in _ENV}
-        d = tempfile.mkdtemp(prefix="t-", dir=ROOT)
-        home(d)
-        try:
-            return _run(self, result)
-        finally:
-            for k, v in saved.items():
-                os.environ.pop(k, None) if v is None else os.environ.__setitem__(k, v)
-            shutil.rmtree(d, ignore_errors=True)
-    unittest.TestCase.run = run

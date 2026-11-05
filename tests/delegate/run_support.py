@@ -4,7 +4,7 @@ import os
 import sys
 import tempfile
 import time
-import unittest
+import pytest
 from pathlib import Path
 
 from delegate.app import env, usage
@@ -13,10 +13,11 @@ from delegate.domain.health import ledger as health_ledger
 
 import hermetic  # noqa: F401  (a home of its own for every test)
 import routing_support as support
+from support.case import Case
 from test_route import route
 
 
-class RunBase(unittest.TestCase):
+class RunBase(Case):
     """route.py run executes a step against fake `codex` and `claude` on PATH and prints one JSON object (worker-run v1)."""
 
     FAKE_CODEX = """#!/bin/sh
@@ -97,7 +98,7 @@ fi
 printf '{"type":"result","result":"claude says hi","session_id":"sess-1","total_cost_usd":0.5,"is_error":false,"usage":{"input_tokens":3,"cache_read_input_tokens":50,"cache_creation_input_tokens":20,"output_tokens":9}}'
 """
 
-    def setUp(self):
+    def setup_method(self):
         import subprocess as sp
         self.tmp = tempfile.TemporaryDirectory()
         base = Path(self.tmp.name)
@@ -132,7 +133,7 @@ printf '{"type":"result","result":"claude says hi","session_id":"sess-1","total_
         f.write_text(json.dumps({"updated": time.time() - age, "rate_limits": {"five_hour": {"used_percentage": 10, "resets_at": soon},
                                                                               "seven_day": {"used_percentage": 20, "resets_at": soon * 100}}}))
 
-    def tearDown(self):
+    def teardown_method(self):
         usage.READERS.update(self.real)
         for k, v in self.saved.items():
             os.environ.pop(k, None) if v is None else os.environ.__setitem__(k, v)
@@ -164,7 +165,7 @@ printf '{"type":"result","result":"claude says hi","session_id":"sess-1","total_
 
     def pid_dead(self):
         time.sleep(0.3)
-        with self.assertRaises(OSError):
+        with pytest.raises(OSError):
             os.kill(int(Path(os.environ["FAKE_PIDFILE"]).read_text()), 0)
 
     def config(self, **kw):
@@ -205,7 +206,7 @@ echo '{"type":"step_finish","sessionID":"ses_1","part":{"type":"step-finish","co
     def assert_child_gone(self, pidfile):
         pid = int(pidfile.read_text())
         time.sleep(0.3)
-        with self.assertRaises(OSError):
+        with pytest.raises(OSError):
             os.kill(pid, 0)
 
     def launches(self):
