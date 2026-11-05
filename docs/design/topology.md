@@ -158,3 +158,7 @@ Not decisions (settled by existing rules, listed so they are not re-asked): merg
 ## D1 move: open check before it starts
 
 The README says a plugin install ships `skills/` and `hooks/`; delegate's `route.py` runs from `skills/delegate/` in its plugin. Before moving code to `src/delegate`, read what the installed task-loop plugin actually contains (is `src/` present?). If it is not, delegate keeps a thin `skills/delegate/route.py` entry that only calls into `src/delegate`, or release.py copies it; either way the interface stays `route.py run/status`. Order stays: split route.py (400 SLOC cap) first, then move with history.
+
+## Correction from the move session (2026-11-05)
+
+My size facts came from a stale local delegate checkout (0.39.1, dirty). Delegate origin/main (0.56.1) already has `route.py` as a 144-line launcher, the code in `src/delegate`, and no file over 400 SLOC or function over 80; so "split route.py first" is void. The installed task-loop plugin does ship `src/`, so the packaging check passes. Real costs found instead: delegate carries about 100 ruff per-file ignores, a 201-error pyrefly baseline and 53 unittest files, none of which task-loop's gate allows; and delegate is still released daily with about 30 open branches, so a copy drifts until the cutover.
