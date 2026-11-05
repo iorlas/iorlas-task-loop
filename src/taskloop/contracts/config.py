@@ -100,6 +100,9 @@ class CheckSpec(Rec):
     lane: str = ""  # checks of one lane run in order, lanes run in parallel; the first red cancels the other lanes ("": the default lane)
     needs: list[str] = msgspec.field(default_factory=list)  # engine.resources it holds a machine-wide lease on while it runs
     pass_files: bool = False  # the changed files (those matching `when`) are appended to argv; none: the check is skipped
+    # argv + `--base REV` prints the files the check's result depends on for the diff against REV, one per line (dev/affected.py --closure).
+    # A pass on an earlier base is carried to a moved base when that closure is the same in the branch and in its merge with the base.
+    closure_cmd: list[str] = msgspec.field(default_factory=list)
     # argv run in the worktree before the checks (a formatter); what it changes is checked
     fix: list[str] = msgspec.field(default_factory=list)
 
