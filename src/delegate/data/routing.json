@@ -1,0 +1,475 @@
+{
+  "v": 1,
+  "settings": {
+    "orchestrator_reserve": {
+      "weekly": 90,
+      "five_hour": 85
+    },
+    "worker_lane_gate": {
+      "five_hour": 90,
+      "weekly": 95
+    },
+    "relaxed_ceiling": {
+      "five_hour": 97,
+      "weekly": 98,
+      "orchestrator_five_hour": 95,
+      "orchestrator_weekly": 95
+    },
+    "strain": {
+      "five_hour": 80,
+      "weekly_pace": -15
+    },
+    "recover": {
+      "five_hour": 50,
+      "weekly_pace": -5
+    },
+    "burn": {
+      "minutes": 120,
+      "min_left_percent": 10
+    },
+    "max_parallel": 4,
+    "min_dwell_minutes": 30,
+    "usage_stale_minutes": 30,
+    "claude_weekly_reset": ""
+  },
+  "models": {
+    "opus-5.5": {
+      "family": "claude",
+      "api": "claude-opus-5-5",
+      "agent": "opus",
+      "cost": 90,
+      "loop": false
+    },
+    "sonnet-5.5": {
+      "family": "claude",
+      "api": "claude-sonnet-5-5",
+      "agent": "sonnet",
+      "cost": 20
+    },
+    "haiku-5.5": {
+      "family": "claude",
+      "api": "claude-haiku-5-5",
+      "agent": "haiku",
+      "cost": 10
+    },
+    "fable-5.1": {
+      "family": "claude",
+      "api": "claude-fable-5-1",
+      "agent": "fable",
+      "cost": 100
+    },
+    "gpt-6.1-sol": {
+      "family": "openai",
+      "api": "gpt-6.1-sol",
+      "cost": 1
+    },
+    "gpt-6-luna": {
+      "family": "openai",
+      "api": "gpt-6-luna",
+      "cost": 1
+    },
+    "grok-4.7": {
+      "family": "xai",
+      "api": "xai/grok-4.7",
+      "cost": 4
+    },
+    "deepseek-v4.1-flash-free": {
+      "family": "deepseek",
+      "api": "opencode/deepseek-v4.1-flash-free",
+      "cost": 3
+    },
+    "glm-5.3": {
+      "family": "zai",
+      "api": "zai-coding-plan/glm-5.3",
+      "cost": 2
+    },
+    "glm-5.3-flash": {
+      "family": "zai",
+      "api": "zai-coding-plan/glm-5.3-flash",
+      "cost": 2
+    }
+  },
+  "lanes": {
+    "CLAUDE_SUBSCRIPTION": {
+      "family": "claude",
+      "kind": "subscription",
+      "reader": "claude_subscription",
+      "runner": "agent_tool",
+      "shared_with_orchestrator": true,
+      "ready": "always"
+    },
+    "OPENAI_SUBSCRIPTION": {
+      "family": "openai",
+      "kind": "subscription",
+      "reader": "codex_app_server",
+      "runner": "codex",
+      "ready": "codex"
+    },
+    "GROK_SUBSCRIPTION": {
+      "family": "xai",
+      "kind": "subscription",
+      "reader": "none",
+      "runner": "opencode",
+      "ready": "opencode_xai"
+    },
+    "DEEPSEEK_FREE": {
+      "family": "deepseek",
+      "kind": "subscription",
+      "reader": "none",
+      "runner": "opencode",
+      "opt_in": true,
+      "ready": "opencode_deepseek_free"
+    },
+    "ZAI_CODING_SUBSCRIPTION": {
+      "label": "Z.ai GLM Coding Plan",
+      "family": "zai",
+      "kind": "subscription",
+      "reader": "none",
+      "runner": "opencode",
+      "opt_in": true,
+      "ready": "opencode_zai_coding"
+    }
+  },
+  "roles": {
+    "planner": {
+      "about": "brainstorm, plan, design, split a ticket. Never degrades without the user's yes.",
+      "advance": "on_unavailable",
+      "steps": [
+        {
+          "model": "gpt-6.1-sol",
+          "effort": "high",
+          "on": "openai",
+          "mode": "read_only"
+        },
+        {
+          "model": "sonnet-5.5",
+          "effort": "high",
+          "on": "claude",
+          "cap": 2
+        }
+      ],
+      "degraded_needs_consent": [
+        {
+          "model": "sonnet-5.5",
+          "effort": "low",
+          "on": "claude",
+          "cap": 2
+        }
+      ],
+      "stop": "No adequate reasoning model is available now."
+    },
+    "worker": {
+      "about": "implement, debug, write tests.",
+      "advance": "on_unavailable",
+      "steps": [
+        {
+          "model": "deepseek-v4.1-flash-free",
+          "effort": "high",
+          "on": "deepseek",
+          "mode": "write"
+        },
+        {
+          "model": "glm-5.3",
+          "effort": "high",
+          "on": "zai",
+          "mode": "write"
+        },
+        {
+          "model": "gpt-6.1-sol",
+          "effort": "medium",
+          "on": "openai",
+          "mode": "write"
+        },
+        {
+          "model": "grok-4.7",
+          "effort": "medium",
+          "on": "xai",
+          "mode": "write"
+        },
+        {
+          "model": "sonnet-5.5",
+          "effort": "medium",
+          "on": "claude",
+          "mode": "write",
+          "cap": 2
+        }
+      ],
+      "stop": "No worker lane is available. Hold the task; a few lines the orchestrator may write itself."
+    },
+    "reviewer": {
+      "about": "verify, review a diff. Prefer a different family than the author (--authored-by openai|claude|xai|deepseek|zai, optional); order: Codex, then the other non-Claude families (cheapest configured model cost first), then the author's own non-Claude family (flagged same_family, never blocks), then Claude Sonnet last. Grok/opencode never reviews (study 81: 74% of review tokens, same send-back rate as Sonnet, ~10x wall time); it stays on for other roles. Claude Opus never runs in the loop. Always rerun the acceptance check.",
+      "advance": "on_unavailable",
+      "by_author": {
+        "openai": [
+          {
+            "model": "sonnet-5.5",
+            "effort": "medium",
+            "on": "claude",
+            "mode": "read_only",
+            "cap": 2
+          },
+          {
+            "model": "deepseek-v4.1-flash-free",
+            "effort": "high",
+            "on": "deepseek",
+            "mode": "read_only"
+          },
+          {
+            "model": "glm-5.3",
+            "effort": "high",
+            "on": "zai",
+            "mode": "read_only"
+          },
+          {
+            "model": "sonnet-5.5",
+            "effort": "low",
+            "on": "claude",
+            "mode": "read_only",
+            "cap": 2,
+            "flag": "degraded"
+          },
+          {
+            "model": "gpt-6.1-sol",
+            "effort": "medium",
+            "on": "openai",
+            "mode": "read_only",
+            "flag": "same_family"
+          }
+        ],
+        "claude": [
+          {
+            "model": "gpt-6.1-sol",
+            "effort": "medium",
+            "on": "openai",
+            "mode": "read_only"
+          },
+          {
+            "model": "deepseek-v4.1-flash-free",
+            "effort": "high",
+            "on": "deepseek",
+            "mode": "read_only"
+          },
+          {
+            "model": "glm-5.3",
+            "effort": "high",
+            "on": "zai",
+            "mode": "read_only"
+          },
+          {
+            "model": "sonnet-5.5",
+            "effort": "medium",
+            "on": "claude",
+            "mode": "read_only",
+            "cap": 2,
+            "flag": "same_family"
+          },
+          {
+            "model": "sonnet-5.5",
+            "effort": "low",
+            "on": "claude",
+            "mode": "read_only",
+            "cap": 2,
+            "flag": "same_family"
+          }
+        ],
+        "xai": [
+          {
+            "model": "gpt-6.1-sol",
+            "effort": "medium",
+            "on": "openai",
+            "mode": "read_only"
+          },
+          {
+            "model": "sonnet-5.5",
+            "effort": "medium",
+            "on": "claude",
+            "mode": "read_only",
+            "cap": 2
+          },
+          {
+            "model": "deepseek-v4.1-flash-free",
+            "effort": "high",
+            "on": "deepseek",
+            "mode": "read_only"
+          },
+          {
+            "model": "glm-5.3",
+            "effort": "high",
+            "on": "zai",
+            "mode": "read_only"
+          },
+          {
+            "model": "sonnet-5.5",
+            "effort": "low",
+            "on": "claude",
+            "mode": "read_only",
+            "cap": 2,
+            "flag": "degraded"
+          }
+        ],
+        "unknown": [
+          {
+            "model": "gpt-6.1-sol",
+            "effort": "medium",
+            "on": "openai",
+            "mode": "read_only"
+          },
+          {
+            "model": "sonnet-5.5",
+            "effort": "medium",
+            "on": "claude",
+            "mode": "read_only",
+            "cap": 2
+          },
+          {
+            "model": "deepseek-v4.1-flash-free",
+            "effort": "high",
+            "on": "deepseek",
+            "mode": "read_only"
+          },
+          {
+            "model": "glm-5.3",
+            "effort": "high",
+            "on": "zai",
+            "mode": "read_only"
+          },
+          {
+            "model": "sonnet-5.5",
+            "effort": "low",
+            "on": "claude",
+            "mode": "read_only",
+            "cap": 2,
+            "flag": "degraded"
+          }
+        ],
+        "deepseek": [
+          {
+            "model": "gpt-6.1-sol",
+            "effort": "medium",
+            "on": "openai",
+            "mode": "read_only"
+          },
+          {
+            "model": "sonnet-5.5",
+            "effort": "medium",
+            "on": "claude",
+            "mode": "read_only",
+            "cap": 2
+          },
+          {
+            "model": "sonnet-5.5",
+            "effort": "low",
+            "on": "claude",
+            "mode": "read_only",
+            "cap": 2,
+            "flag": "degraded"
+          },
+          {
+            "model": "glm-5.3",
+            "effort": "high",
+            "on": "zai",
+            "mode": "read_only"
+          },
+          {
+            "model": "deepseek-v4.1-flash-free",
+            "effort": "high",
+            "on": "deepseek",
+            "mode": "read_only",
+            "flag": "same_family"
+          }
+        ],
+        "zai": [
+          {
+            "model": "deepseek-v4.1-flash-free",
+            "effort": "high",
+            "on": "deepseek",
+            "mode": "read_only"
+          },
+          {
+            "model": "gpt-6.1-sol",
+            "effort": "medium",
+            "on": "openai",
+            "mode": "read_only"
+          },
+          {
+            "model": "sonnet-5.5",
+            "effort": "medium",
+            "on": "claude",
+            "mode": "read_only",
+            "cap": 2
+          },
+          {
+            "model": "sonnet-5.5",
+            "effort": "low",
+            "on": "claude",
+            "mode": "read_only",
+            "cap": 2,
+            "flag": "degraded"
+          },
+          {
+            "model": "glm-5.3",
+            "effort": "high",
+            "on": "zai",
+            "mode": "read_only",
+            "flag": "same_family"
+          }
+        ]
+      },
+      "stop": "No reviewer is available. Mark the diff unreviewed; the orchestrator reads it only if small or risk-flagged.",
+      "order": "cost",
+      "exclude_families": [
+        "xai"
+      ]
+    },
+    "light": {
+      "about": "simple, low-risk, low-reasoning work: read many files, summarise logs, classify, mechanical small edits. Not about parallelism.",
+      "advance": "on_unavailable",
+      "steps": [
+        {
+          "model": "deepseek-v4.1-flash-free",
+          "effort": "low",
+          "on": "deepseek",
+          "mode": "read_only"
+        },
+        {
+          "model": "glm-5.3-flash",
+          "effort": "low",
+          "on": "zai",
+          "mode": "read_only"
+        },
+        {
+          "model": "gpt-6-luna",
+          "effort": "low",
+          "on": "openai",
+          "mode": "read_only"
+        },
+        {
+          "model": "haiku-5.5",
+          "effort": "low",
+          "on": "claude",
+          "mode": "read_only",
+          "cap": 0.25
+        },
+        {
+          "model": "sonnet-5.5",
+          "effort": "low",
+          "on": "claude",
+          "mode": "write",
+          "cap": 1
+        }
+      ],
+      "stop": "No light lane is available. Do it directly if it is tiny."
+    }
+  },
+  "premium": {
+    "claude": {
+      "model": "fable-5.1",
+      "effort": "medium",
+      "on": "claude",
+      "mode": "write",
+      "cap": 6,
+      "flag": "user_requested_premium"
+    },
+    "openai": null
+  }
+}
