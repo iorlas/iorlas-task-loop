@@ -81,7 +81,7 @@ class EngineCleanup(EngineTest):
         main = self.linked()
         retry = cleanup.retry
 
-        def gone(git, log, row, *args):
+        def gone(git, log, row, *args, **kw):
             if row.remote_outcome == "pending":
                 gitq.git("push", "-q", "origin", ":refs/heads/task/t-1", cwd=main)
             return retry(git, log, row, *args, cfg=homes.cfg())

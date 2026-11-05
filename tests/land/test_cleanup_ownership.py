@@ -51,7 +51,8 @@ class Ownership(Case):
 
     def test_tree_resume_refuses_a_busy_checkout(self):
         self.lock.return_value = EngineLock(pid=987654, started=1, bead="a")
-        host = SimpleNamespace(wt="/here", git=self.git, log=self.log, warn=mock.Mock(), blocked_for=lambda why, kind: RuntimeError(why))
+        host = SimpleNamespace(wt="/here", home=mock.Mock(), git=self.git, log=self.log, warn=mock.Mock(),
+                               blocked_for=lambda why, kind: RuntimeError(why))
         with pytest.raises(RuntimeError, match="pid 987654"):
             Tree(host).free_branch("task/a")
         host.warn.assert_called_once()
