@@ -130,8 +130,9 @@ class RunBase(Case):
         )
 
     def fast_clock(self, grace=1, stall=1):
-        self.addCleanup(setattr, watch, "STALL_S", watch.STALL_S)
-        watch.STALL_S = stall
+        stall_patch = mock.patch.object(watch, "STALL_S", stall)
+        stall_patch.start()
+        self.addCleanup(stall_patch.stop)
         p = mock.patch.dict(harnesses.LIMITS, {k: dataclasses.replace(v, grace_s=grace) for k, v in harnesses.LIMITS.items()})
         p.start()
         self.addCleanup(p.stop)

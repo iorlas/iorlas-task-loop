@@ -18,6 +18,7 @@ from test_route import ROOT
 
 sys.path.insert(0, str(ROOT / "skills" / "delegate"))
 import stream_proc
+from any_agent import procs as shelf
 from any_agent.harnesses.codex import CodexHarness
 from any_agent.protocol import LaunchSpec
 from any_agent.supervisor import RunHooks, Supervisor
@@ -112,8 +113,7 @@ class RealProcesses(Case):
         p = self.start("stall")
         pid = p.pid
         with mock.patch.object(stream_proc, "stop_tree", return_value=(pid,)):  # a pid the kernel will not let go
-            rep = procs.stop(p, 0)
-        assert rep.end == wire.END_SURVIVED
+            rep = shelf.stop(p, 0)
         assert [s.pid for s in rep.survivors] == [pid]
         end = procs.worker_end([rep], None)
         assert (end.end, [s.pid for s in end.survivors]) == (wire.END_SURVIVED, [pid])

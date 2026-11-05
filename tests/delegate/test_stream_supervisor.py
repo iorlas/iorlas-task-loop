@@ -87,8 +87,9 @@ class Replay(Case):
         self.pidfile = self.base / "pid"
         self.cfg = self.base / "cfg"
         self.cfg.mkdir()
-        self.addCleanup(setattr, watch, "STALL_S", watch.STALL_S)
-        watch.STALL_S = 1
+        stall_patch = mock.patch.object(watch, "STALL_S", 1)
+        stall_patch.start()
+        self.addCleanup(stall_patch.stop)
         limits = mock.patch.dict(harnesses.LIMITS, {k: dataclasses.replace(v, grace_s=1) for k, v in harnesses.LIMITS.items()})
         limits.start()
         self.addCleanup(limits.stop)
