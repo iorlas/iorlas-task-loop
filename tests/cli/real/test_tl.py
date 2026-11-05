@@ -30,6 +30,7 @@ from support import (  # noqa: E402
     procsim,
     tlbd,
 )
+from support.checked import run_checked  # noqa: E402
 from support.engine_locks import put_lock  # noqa: E402
 from support.spawn import port_git  # noqa: E402
 from support.tlmain import tl_main  # noqa: E402
@@ -42,7 +43,7 @@ from taskloop.app.wire import slots as wslots  # noqa: E402
 
 
 def sh(*args, cwd):
-    subprocess.run(list(args), cwd=cwd, check=True, capture_output=True)
+    run_checked(list(args), cwd)
 
 
 class Base(Case):

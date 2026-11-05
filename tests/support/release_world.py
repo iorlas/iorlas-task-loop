@@ -20,6 +20,7 @@ import support.paths  # noqa: F401
 from support import homes
 
 # isort: split
+from support.checked import run_checked
 from support.fakes import FakeBeadStore
 from taskloop.adapters import beadtools
 from taskloop.adapters.git import RealGit
@@ -36,7 +37,7 @@ FETCH_PACK = "fatal: fetch-pack: invalid index-pack output\n"
 
 
 def git(*a, cwd):
-    return subprocess.run(["git", *a], cwd=cwd, check=True, capture_output=True, text=True).stdout.strip()
+    return run_checked(["git", *a], cwd, text=True).stdout.strip()
 
 
 class Out:

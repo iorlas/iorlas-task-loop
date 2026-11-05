@@ -12,6 +12,7 @@ import pytest
 from git_porcelain import real_env
 from git_porcelain.real import RealRepo
 from support.case import Case
+from support.checked import run_checked
 
 from taskloop.adapters import treehash
 from taskloop.adapters.git import RealGit
@@ -32,7 +33,7 @@ class RealGitPoolTest(Case):
         self.git = RealGit(snapshot())
 
     def run_git(self, path, *args):
-        return subprocess.run(["git", "-C", str(path), *args], check=True, capture_output=True, text=True).stdout.strip()
+        return run_checked(["git", "-C", str(path), *args], None, text=True).stdout.strip()
 
     def test_add_worktree_is_detached_at_the_requested_revision(self):
         slot = self.home / "slot"

@@ -1,5 +1,4 @@
 """adapters/git.py on real git, in a throwaway repo: the same Git contract the gitsim runs."""
-import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -9,6 +8,7 @@ from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401
+from support.checked import run_checked
 
 from ports.git_contract import GitContract, contract
 from ports.git_contract_land import LandContract
@@ -32,7 +32,7 @@ class IgnoreSpaceDoesNotDependOnTheGitVersion(Case):
     def test_a_whitespace_only_m_row_from_git_is_dropped_and_a_real_edit_kept(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             def sh(*a: str) -> None:
-                subprocess.run(["git", "-C", tmp, "-c", "user.name=t", "-c", "user.email=t@t", *a], check=True, capture_output=True)
+                run_checked(["git", "-C", tmp, "-c", "user.name=t", "-c", "user.email=t@t", *a], None)
             sh("init", "-q")
             (Path(tmp) / "w.txt").write_text("a  b\n")
             (Path(tmp) / "x.txt").write_text("x\n")

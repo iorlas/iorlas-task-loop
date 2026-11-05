@@ -5,7 +5,6 @@ import os
 import re
 import shutil
 import stat
-import subprocess
 import sys
 import tempfile
 import time
@@ -26,6 +25,7 @@ from support.runs import manifest  # noqa: E402
 
 # isort: split
 import tl  # noqa: E402
+from support.checked import run_checked  # noqa: E402
 
 from taskloop.app.report import planner  # noqa: E402
 from taskloop.domain.report import matchers  # noqa: E402
@@ -38,7 +38,7 @@ def git(repo, *args, t=None):
     env = dict(os.environ)
     if t is not None:
         env["GIT_AUTHOR_DATE"] = env["GIT_COMMITTER_DATE"] = f"@{int(t)} +0000"
-    r = subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True, text=True, env=env)
+    r = run_checked(["git", "-C", str(repo), *args], None, text=True, env=env)
     return r.stdout.strip()
 
 

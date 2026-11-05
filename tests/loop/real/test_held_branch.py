@@ -22,6 +22,7 @@ from support import (  # noqa: E402
     looptest,
     tlbd,
 )
+from support.checked import run_checked  # noqa: E402
 from support.engine_locks import put_lock  # noqa: E402
 from support.procsim import real_proc  # noqa: E402
 from support.spawn import (  # noqa: E402
@@ -43,7 +44,7 @@ LIVE_PID = "a live pid that is not this process: a real sleep child (an engine l
 
 
 def sh(*a, cwd):
-    return subprocess.run(list(a), cwd=str(cwd), check=True, capture_output=True, text=True).stdout.strip()
+    return run_checked(list(a), str(cwd), text=True).stdout.strip()
 
 
 class HeldBranch(Case):

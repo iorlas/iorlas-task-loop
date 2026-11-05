@@ -69,7 +69,8 @@ def gate(repo: Path, sh: Shell) -> None:
     home = os.path.expanduser("~")
     trusted = {"MISE_TRUSTED_CONFIG_PATHS": os.pathsep.join([home + "/.config/mise", home + "/Workspaces"])}
     found = suite_check(repo, sh)
-    for cmd in (just("check"), shlex.split(found[0].cmd) if found else []):
+    profile = shlex.split(found[0].cmd) if found else []
+    for cmd in (just("check"), just(*profile[1:]) if profile[:1] == ["just"] else profile):
         if not cmd:
             continue
         say("running the gate: " + " ".join(cmd))

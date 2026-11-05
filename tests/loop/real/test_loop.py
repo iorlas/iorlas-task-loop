@@ -30,6 +30,7 @@ from support import (  # noqa: E402
     looptest,
     tlbd,
 )
+from support.checked import run_checked  # noqa: E402
 from support.narrow import must  # noqa: E402
 from support.spawn import port_git  # noqa: E402
 from support.waits import until  # noqa: E402
@@ -300,7 +301,7 @@ class QueueRuleFromBase(Base):
         self.sh("git", "clone", "-q", str(self.origin), str(self.repo), cwd=self.home)
 
     def sh(self, *a, cwd):
-        subprocess.run(list(a), cwd=cwd, check=True, capture_output=True)
+        run_checked(list(a), cwd)
 
     def push_rule(self, cfg):
         """Another worktree pushes a new .task-loop.json; the main checkout is not pulled."""

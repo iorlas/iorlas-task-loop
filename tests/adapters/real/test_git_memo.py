@@ -15,6 +15,7 @@ import pytest
 from git_porcelain.errors import GitUnavailable
 from git_porcelain.real import RealWorktree
 from support.case import Case
+from support.checked import run_checked
 
 from taskloop.adapters import slotcheck, treehash
 from taskloop.adapters.git import RealGit
@@ -23,7 +24,7 @@ from taskloop.contracts.env import snapshot
 
 
 def sh(*a, cwd):
-    return subprocess.run(list(a), cwd=str(cwd), check=True, capture_output=True, text=True).stdout.strip()
+    return run_checked(list(a), str(cwd), text=True).stdout.strip()
 
 
 class GitMemoTest(Case):

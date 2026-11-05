@@ -1,11 +1,11 @@
 """Seeded mutations prove the test selection (dev/affected.py): each one changes a file in a temp copy of the tree, and the selection the
 real script prints must hold the test that would fail. A selector that misses one of these lets a break through `just test`."""
 import shutil
-import subprocess
 import sys
 from pathlib import Path
 
 import pytest
+from support.checked import run_checked
 
 ROOT = Path(__file__).resolve().parents[3]
 LIMIT_S = 45.0  # each case starts the selector on a fresh copy of the tree (about 10 s on a loaded Mac)
@@ -58,8 +58,7 @@ def mutate(tree, path):
 
 
 def selected(tree, path):
-    ran = subprocess.run([sys.executable, str(tree / "dev" / "affected.py"), "--root", str(tree), "--changed", path],
-                         capture_output=True, text=True, check=True)
+    ran = run_checked([sys.executable, str(tree / "dev" / "affected.py"), "--root", str(tree), "--changed", path], None, text=True)
     return set(ran.stdout.split())
 
 

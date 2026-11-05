@@ -32,6 +32,7 @@ from contracts import samples as S
 
 from support import fake_route, gitq, gitsim, procsim
 from support.builders import argv_cfg, cfg_with, make_engine
+from support.checked import run_checked
 from support.checkpoints import flat_ck, stored_ck
 from support.checks import res
 from support.fakes import FakeBeadStore
@@ -83,7 +84,7 @@ def pid_gone(pid):
 
 
 def sh(*a, cwd):
-    subprocess.run(list(a), cwd=cwd, check=True, capture_output=True)
+    run_checked(list(a), cwd)
 
 
 POSIX_CHECK = pytest.mark.skipif(os.name == "nt", reason="the check is bash (operators, $VAR, rm, test, grep, sleep, /dev/null); "
@@ -261,7 +262,7 @@ def _template():
         env = {**os.environ, **NO_GC}
         env.update(GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t", GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t")
         def g(*a, cwd):
-            subprocess.run(list(a), cwd=cwd, check=True, capture_output=True, env=env)
+            run_checked(list(a), cwd, env=env)
         g("git", "init", "-q", "--bare", "-b", "main", str(d / "o.git"), cwd=d)
         g("git", "clone", "-q", str(d / "o.git"), str(d / "wt"), cwd=d)
         for repo in ("o.git", "wt"):

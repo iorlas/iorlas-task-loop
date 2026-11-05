@@ -1,6 +1,7 @@
 """Scenario 1: a bead goes plan, write, checks, review, land and push on a real git remote (a bare repo), with real git and a real check
 process; the worker is the stub lane `tl selftest` uses (a route.py answer per node), never a model and never a real bd."""
-import subprocess
+
+from support.checked import run_checked
 
 from taskloop.adapters.git import RealGit
 from taskloop.app.launch import selftest
@@ -8,7 +9,7 @@ from taskloop.contracts.env import snapshot
 
 
 def git(cwd, *args):
-    return subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, check=True).stdout.strip()
+    return run_checked(["git", *args], cwd, text=True).stdout.strip()
 
 
 def test_given_a_bead_on_a_real_remote_when_the_engine_runs_then_it_lands_and_pushes(world):
