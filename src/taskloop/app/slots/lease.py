@@ -12,6 +12,7 @@ from taskloop.contracts.ports import BdFailure, Beads
 from taskloop.contracts.runlife import BEAT_EVERY
 
 EVERY = BEAT_EVERY  # seconds between beats; bd leases last 5 minutes
+JOIN_WAIT = 30.0  # seconds stop() waits for a beat in flight (a bd call that hangs must not hang the close)
 
 
 class Lease:
@@ -44,7 +45,10 @@ class Lease:
             self.beat()
 
     def stop(self) -> None:
+        """Ends the beats and waits out a beat in flight: a thread left running past this call uses stores its owner is about to close."""
         self.stopped.set()
+        if self.thread.is_alive() and self.thread is not threading.current_thread():
+            self.thread.join(JOIN_WAIT)
 
     def __enter__(self) -> Self:
         return self.start()
