@@ -150,7 +150,26 @@ class PushJudge(Case):
         assert self.judge(self.request("low", "head")).status == PushStatus.ALLOWED
         assert self.judge(self.request("low")).status == PushStatus.REFUSED
 
+    def test_a_push_to_the_base_branch_must_fast_forward_it(self):
+        self.stamp(base="old-base")
+        rewind = self.request("head", remote="refs/heads/main", old="old-base")
+        decision = self.judge(rewind)
+        assert decision.status == PushStatus.REFUSED
+        assert decision.reasons == ("refs/heads/head (head) rewinds refs/heads/main: old-base is not an ancestor of head; "
+                                    "only a fast-forward may reach the base branch",)
+        self.git.replies[("is_ancestor", "old-base")] = True
+        assert self.judge(rewind).status == PushStatus.ALLOWED
+
+    def test_a_feature_branch_may_be_rewritten_with_only_the_profile_check(self):
+        for remote in ("refs/heads/task/x", "refs/heads/topic"):
+            with self.subTest(remote=remote), mock.patch("taskloop.app.checks.authorization.results") as evidence:
+                decision = self.judge(self.request("head", remote=remote, old="elsewhere"))
+                assert decision.status == PushStatus.ALLOWED
+                evidence.assert_not_called()
+        self.check.assert_not_called()
+
     def test_moving_the_base_branch_uses_the_receivers_old_base(self):
+        self.git.replies[("is_ancestor", "old-base")] = True
         self.stamp(base="old-base")
         assert self.judge(self.request("head", remote="refs/heads/main", old="old-base")).status == PushStatus.ALLOWED
 
