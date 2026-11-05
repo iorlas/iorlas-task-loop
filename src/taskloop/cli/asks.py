@@ -92,6 +92,7 @@ def show(asks: AskStore, key: BeadId | None, out: Out) -> int:
     out("thread: " + ("" if ask.thread else "-"))
     for t in ask.thread:
         out(f"  [{t.by}] {t.md}")
+    out("artifacts: " + (", ".join(ask.artifacts) or "-"))
     out(f"outcome: {ask.outcome.value if ask.outcome else '-'}" + (f" ({ask.outcome_ref})" if ask.outcome_ref else ""))
     return 0
 

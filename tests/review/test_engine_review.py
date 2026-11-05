@@ -114,7 +114,7 @@ class EngineReviewTest(EngineTest):
         rv = s.prompts[2]
         assert "added by the writer" in rv
         assert "found an edge" in rv
-        assert must(self.eng.plan_data)["cases"][0]["by"] == "writer"
+        assert must(self.eng.plan_data)["cases"][-1]["by"] == "writer"
 
     def test_a_verify_ask_is_a_decision_and_takes_the_bead_out_of_the_pick_queue(self):
         r = dict(CLEAN, unchecked=[{"what": "the cited spec link did not open", "kind": "link"}])

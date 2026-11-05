@@ -70,7 +70,7 @@ class Worlds:
         states = [s for s in (JsonStore(f, LoopState).get() for f in sorted(env.config.loop_state(loop_key(path)).parent.glob(
             loop_key(path) + ".*.json"))) if s is not None]
         _, items = self.looks.look_items(id, raw)
-        looks = [LookItem(bead=i["bead"], title=i["title"], shots=tuple(
+        looks = [LookItem(bead=i["bead"], title=i["title"], artifacts=tuple(
             self.looks.shot_url(id, s["path"]) for s in i["shots"] if s["role"] == "after"))
             for i in items if i["status"] == "open" and i["bead"]]
         return ProjectIn(id=id, name=basename(path), beads=rows, slots=slots, loops=states, looks=looks, adrs=self.adrs(path),

@@ -13,14 +13,15 @@ from taskloop.contracts.ports import BeadQuery
 from taskloop.domain.review.followups import key_label, unchecked
 
 PLAIN = dict(BEAD, labels=[])  # f.txt, "f.txt exists": nothing visual about it
+NOT_VISUAL = dict(PLAN, cases=[])  # no look-objective, taste or show case: the planner says nothing is to be seen
 GAP = {"what": "f.txt exists on a clean checkout", "kind": "checkable"}
 CRITERION = {"what": "whether f.txt exists once the stage has run twice", "kind": "owner_decision"}
 SETTLED = {"items": [verdict(1, "settled", evidence="\"x\"")]}
 
 
 class VerifyVisual(T.LandReviewBase):
-    def go(self, items, bead=PLAIN, verify=None, **cfg):
-        answers = {"plan": [PLAN], "write": [WRITE], "review": [dict(CLEAN, unchecked=items)]}
+    def go(self, items, bead=PLAIN, verify=None, plan=NOT_VISUAL, **cfg):
+        answers = {"plan": [plan], "write": [WRITE], "review": [dict(CLEAN, unchecked=items)]}
         if verify:
             answers["verify"] = verify
         with self.store.stub(show=bead):
@@ -71,14 +72,15 @@ class VerifyVisual(T.LandReviewBase):
         assert "f.txt exists once the stage has run twice" in str(self.ask())
 
     def test_a_visual_bead_still_runs_verify(self):
-        rc, s = self.go([GAP], bead=dict(BEAD, labels=["ui"]), verify=[SETTLED])
+        rc, s = self.go([GAP], plan=PLAN, verify=[SETTLED])
         assert rc == 0, self.blocked
         assert [c[0] for c in s.calls] == ["planner", "worker", "reviewer", "reviewer"]  # the last one is verify
         assert self.creates() == []
 
-    def test_visual_words_in_the_acceptance_run_verify(self):
-        _, s = self.go([GAP], bead=dict(PLAIN, acceptance_criteria="a screenshot shows that f.txt exists"), verify=[SETTLED])
-        assert [c[0] for c in s.calls] == ["planner", "worker", "reviewer", "reviewer"]  # the last one is verify
+    def test_visual_words_and_labels_no_longer_decide_only_the_plan_does(self):
+        bead = dict(PLAIN, labels=["ui"], acceptance_criteria="a screenshot shows that f.txt exists")
+        _, s = self.go([GAP], bead=bead)
+        assert [c[0] for c in s.calls] == ["planner", "worker", "reviewer"]
 
     def test_a_non_visual_bead_still_gets_its_acceptance_mapping_review(self):
         rc, s = self.go([], skip_review=ReviewSkipConfig(tests=["f.txt"]))

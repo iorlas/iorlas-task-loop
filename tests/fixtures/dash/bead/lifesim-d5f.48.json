@@ -58,7 +58,7 @@
   "retry_at": 0.0,
   "shots": 4
  },
- "version": "cce01fbc6e2b5e54",
+ "version": "b3fbee9073741a5d",
  "bd_ok_at": null,
  "bd_error": "",
  "description": "Fix save corruption on quit. Part of Save system.",
@@ -489,7 +489,7 @@
   "default": "",
   "owner_cause": "unknown",
   "cause_by": "agent",
-  "shots": [
+  "artifacts": [
    "/api/artifact?project=lifesim-56f42031&bead=lifesim-d5f.48&name=shot-1.png",
    "/api/artifact?project=lifesim-56f42031&bead=lifesim-d5f.48&name=shot-2.png",
    "/api/artifact?project=lifesim-56f42031&bead=lifesim-d5f.48&name=shot-3.png",

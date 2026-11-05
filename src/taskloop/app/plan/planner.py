@@ -23,7 +23,8 @@ from taskloop.domain.matchers import clip
 from taskloop.domain.plan.brief import COMMENTS_ONLY
 from taskloop.domain.plan.stored import stored
 from taskloop.domain.prompts.common import DECIDED_TEXT
-from taskloop.domain.prompts.plan import ASSUME_TEXT, PLAN_BRIEF_KB, PLAN_DECIDED_TEXT
+from taskloop.domain.prompts.plan import ASSUME_TEXT, PLAN_BRIEF_KB, PLAN_DECIDED_TEXT, VISUAL_BACK
+from taskloop.domain.review import visual
 
 REPLAN_TAIL = 12500  # characters of replan.md the planner reads
 
@@ -108,7 +109,23 @@ class Planner:
             e.warn(f"the planner's brief is {len(prompt.encode('utf-8')) / 1024:.0f} KB (over {PLAN_BRIEF_KB} KB)")
         step = "replan" if again else "plan"
         data = self.settle_question(self.ask(prompt, step, "amend" if old else "plan", "amend" if old else "plan"), prompt, step)
-        return self.accept(data, again)
+        return self.accept(self.cover_visual(data, prompt, step), again)
+
+    def cover_visual(self, data: PlanData, prompt: str, step: str) -> PlanData:
+        """tl-jvpm.15: `visual_paths` only checks the planner's judgement. A plan that has stages in a visual path and no look-objective,
+        taste or show case goes back once (not a counted re-plan); the second answer stands."""
+        e = self.e
+        vp = e.cfg.visual_paths
+        if e.plan_visual_back or not (vp and vp.include) or not data["stages"] or visual.is_visual(data.get("cases") or []):
+            return data
+        files = [f for st in data["stages"] for f in st["files"]]
+        if not visual.touches_visual_path(files, vp.include, vp.exclude):
+            return data
+        e.plan_visual_back = True
+        e.warn("the plan touches a visual path and has no look-objective, taste or show case: sent back once")
+        e.steps.outcome("sent back", "a visual path is touched and no case is look-objective, taste or show")
+        e.steps.move(step, "plan_visual_back", "a visual path is touched and no case is look-objective, taste or show")
+        return copy.deepcopy(self.ask(prompt + VISUAL_BACK % ", ".join(vp.include)[:300], step, "plan with a look class", "checks_back"))
 
     def settle_question(self, data: PlanData, prompt: str, step: str) -> PlanData:
         """A question an accepted requirement answers, or about a step that can be undone, is no ask: the planner plans again once."""

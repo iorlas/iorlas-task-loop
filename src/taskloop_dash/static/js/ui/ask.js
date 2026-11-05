@@ -31,9 +31,9 @@ function CauseMark({ ask, onCause }) {
     cause (${ask.cause_by}): ${CAUSES[ask.owner_cause]} ✎</button>`;
 }
 
-export function Gallery({ shots, onOpen }) {
-  if (!shots.length) return null;
-  return html`<div class="gal">${shots.map((u, i) => html`<a key=${u} class=${i === 0 ? 'big' : ''} href=${u} target="_blank" rel="noopener"
+export function Gallery({ artifacts, onOpen }) {
+  if (!artifacts.length) return null;
+  return html`<div class="gal">${artifacts.map((u, i) => html`<a key=${u} class=${i === 0 ? 'big' : ''} href=${u} target="_blank" rel="noopener"
     onClick=${onOpen ? (e) => { e.preventDefault(); onOpen(i); } : undefined}><img src=${u} alt=${`screen ${i + 1}`} loading="lazy" /></a>`)}</div>`;
 }
 
@@ -66,7 +66,7 @@ export function AskCard({ ask, now, sent, onPick, onAskBack, onUndo, onStick, on
       <p class="q">${ask.question}</p>
       ${(ask.why || ask.tried.length > 0) && html`<ul>${ask.why && html`<li>${ask.why}</li>`}${ask.tried.map((t, i) => html`<li key=${i}>${t}</li>`)}</ul>`}
       ${ask.stale > 0 && html`<p class="stale">⚠ ${ask.stale} bead${ask.stale > 1 ? 's' : ''} landed since this was asked</p>`}
-      <${Gallery} shots=${ask.shots} />
+      <${Gallery} artifacts=${ask.artifacts} />
       ${ask.options.map((o, i) => html`<button key=${i} class=${`op ${o.recommended ? 'rec' : ''} ${sent && sent.option === i ? 'chosen' : ''}`}
         disabled=${!!sent} onClick=${() => onPick(i)}>${o.recommended && html`<span class="r">${ask.blocking ? 'recommended' : 'running default'}</span>`}${o.label}<small>${o.consequence}</small></button>`)}
       ${ask.thread.length > 0 && html`<div class="thread">${ask.thread.map((m, i) => html`<div key=${i} class=${`tm ${m.by}`}>
@@ -83,8 +83,8 @@ export function LookCard({ ask, now, busy, onApprove, onSendBack, head }) {
   const k = `look:${ask.bead}`;
   const [text, setText] = useState(ui.drafts[k] || '');
   return html`<div class="box you askcard">
-    <div class="bh">📸 Your look · ${ask.shots.length} screen${ask.shots.length === 1 ? '' : 's'}<span class="cause">${age(ask.t, now)} ago</span></div>
-    <div class="bb">${head}<p class="q">${ask.question}</p><${Gallery} shots=${ask.shots} />
+    <div class="bh">📸 Your look · ${ask.artifacts.length} screen${ask.artifacts.length === 1 ? '' : 's'}<span class="cause">${age(ask.t, now)} ago</span></div>
+    <div class="bb">${head}<p class="q">${ask.question}</p><${Gallery} artifacts=${ask.artifacts} />
       <button class="op rec" disabled=${busy} onClick=${onApprove}>✅ Approve → land</button>
       ${redo ? html`<form class="askb" onSubmit=${(e) => { e.preventDefault(); if (text.trim()) onSendBack(text.trim(), k); }}>
           <input value=${text} placeholder="What is wrong? (required)" aria-label="Send back: what is wrong"

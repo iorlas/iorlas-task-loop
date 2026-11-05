@@ -114,3 +114,4 @@ class Ask(Rec):
     thread: list[ThreadEntry] = msgspec.field(default_factory=list)
     outcome: Stick | None = None
     outcome_ref: str = ""
+    artifacts: list[str] = msgspec.field(default_factory=list)  # artifact ids: <repo>/<bead>/<run>/<stage>-<attempt>/<name> in the store

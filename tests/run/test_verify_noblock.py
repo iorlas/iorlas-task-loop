@@ -16,6 +16,7 @@ from support.builders import make_engine, plan_of
 from support.engine_case import BEAD, CLEAN, PLAN, WRITE, engine, verdict
 
 from taskloop.contracts import answers
+from taskloop.contracts.plancheck import PlanData
 from taskloop.domain.prompts import common as cp
 from taskloop.domain.prompts import verify as vp
 
@@ -63,7 +64,7 @@ class NoBlock(T.LandReviewBase):
     def unit(self):
         """An engine at land with the verifier's plumbing stubbed (no model, no tree)."""
         e = self.verifier({"changed_paths": lambda: [], "diff_text": lambda: ""})
-        e.budget.labels = ["visual"]  # verify runs only on a visual bead
+        e.plan_data = cast(PlanData, PLAN)  # verify runs only on a visual bead: the plan has a show case
         return e
 
     def comments(self):

@@ -58,7 +58,7 @@
   "retry_at": 0.0,
   "shots": 0
  },
- "version": "43a78ea1f310dad0",
+ "version": "a4e875b50cb3dcbd",
  "bd_ok_at": null,
  "bd_error": "",
  "description": "Rent and bills every week. Part of Economy.",
@@ -215,7 +215,7 @@
   "default": "",
   "owner_cause": "requirement",
   "cause_by": "agent",
-  "shots": [],
+  "artifacts": [],
   "thread": [
    {
     "by": "owner",

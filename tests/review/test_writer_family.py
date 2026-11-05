@@ -12,7 +12,7 @@ from support import fake_route
 from support.engine_case import BEAD, CLEAN, HAS_F, PLAN, WRITE, adhoc, verdict
 
 CASE = {"criterion": "the file f.txt exists", "check": adhoc(HAS_F), "class": "test"}
-COVERED = dict(PLAN, cases=[CASE])
+COVERED = dict(PLAN, cases=[CASE, *PLAN["cases"]])
 
 
 def flag(argv, name):

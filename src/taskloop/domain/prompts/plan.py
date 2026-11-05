@@ -46,11 +46,22 @@ tokens, a rule under config/). Never invent one as a check: if you think one is 
 your proposal first) and plan no check for it.
 %s"""
 
+SHOW_PLAN: Final = """A task that asks for a picture, a video, a PDF or an audio file as its result gets a case of class `show`:
+leave `check` empty and list in `shows` each file the writer must register with the artifact_add tool ({name: the file name,
+role: before, after, progress or result}). The engine checks that those names exist with those roles; whether the result is good
+stays with the owner.
+A case of class look-objective, taste or show makes the bead visual (it gets the verify and look stages); a bead with none is not.
+Give a change to a screen such a case; a refactor that shows nothing needs none."""
+
+VISUAL_BACK: Final = ("\n\nYour plan changes files under this repo's visual paths (%s) and none of its cases is of class "
+                      "look-objective, taste or show. If the change can be seen, add the case that says what must be seen (class "
+                      "look-objective, taste or show); if it cannot be seen, return the same plan.")
+
 VISUAL_STAGES: Final = """A stage whose files match this repo's visual paths (%s) changes how something looks. Its writer cannot \
 render: it names the
 pictures to render in `shots` (a method from the table below, its args, names) or gives a `logic_only` reason; an answer with
 neither is sent back. Plan such stages knowing that, and never plan a check that needs a picture the writer is to make.
-Verify runs after the stages only on a visual bead (such a stage, or criteria that ask for a picture): plan a check for every
+Verify runs after the stages only on a visual bead (some case of class look-objective, taste or show): plan a check for every
 other criterion.
 Shot methods:
 %s"""

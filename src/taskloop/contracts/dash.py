@@ -185,7 +185,7 @@ class AskCard(Rec):
     default: Annotated[str, msgspec.Meta(description="what a non-blocking ask went on with")] = ""
     owner_cause: OwnerCause = OwnerCause.UNKNOWN
     cause_by: Literal["agent", "owner"] = "agent"
-    shots: Annotated[list[str], msgspec.Meta(description="artifact urls")] = msgspec.field(default_factory=list)
+    artifacts: Annotated[list[str], msgspec.Meta(description="artifact urls")] = msgspec.field(default_factory=list)
     thread: list[ThreadMsg] = msgspec.field(default_factory=list)
     ask_backs: int = 0
     similar: Similar | None = None

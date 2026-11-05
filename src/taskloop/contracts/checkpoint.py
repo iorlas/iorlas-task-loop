@@ -156,6 +156,7 @@ class StageProgress(Rec):
     acceptance_only: bool = False
     acceptance_first: bool = False
     shots_fixed: bool = False
+    show_fixed: bool = False
 
 
 @final

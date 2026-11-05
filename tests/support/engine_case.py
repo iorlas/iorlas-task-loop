@@ -156,7 +156,7 @@ PLAN: dict[str, Any] = {
     "question": "",
     "options": [],
     "decided": "",
-    "cases": [],
+    "cases": [{"criterion": "f.txt is shown", "check": None, "class": "show", "shows": []}],  # a visual bead: verify runs
     "leftovers": [],
 }
 

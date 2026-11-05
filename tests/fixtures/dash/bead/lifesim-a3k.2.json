@@ -58,7 +58,7 @@
   "retry_at": 0.0,
   "shots": 0
  },
- "version": "0775cb7561bd48a6",
+ "version": "60243eebc320040a",
  "bd_ok_at": null,
  "bd_error": "",
  "description": "Prices with a currency sign. Part of Economy.",
@@ -259,7 +259,7 @@
   "default": "\"$\" only",
   "owner_cause": "decision",
   "cause_by": "agent",
-  "shots": [],
+  "artifacts": [],
   "thread": [],
   "ask_backs": 0,
   "similar": null,

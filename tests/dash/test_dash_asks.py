@@ -97,6 +97,14 @@ class Cards(Case):
         assert must(card.similar).answer == "Rent is weekly"
         assert (must(card.similar).bead, must(card.similar).t) == ("b-0", NOW - 5 * DAY)
 
+    def test_an_ask_card_lists_its_artifacts_by_url(self):
+        a = self.raise_("b-1", NOW - DAY)
+        self.asks.put(a.replace(artifacts=["lifesim/b-1/run1/write-2/board.png", "not-an-id"]))
+        card = {x.bead: x for x in self.snap([bead("b-1", "Bills")]).asks}["b-1"]
+        assert len(card.artifacts) == 1
+        url = card.artifacts[0]
+        assert url.startswith("/api/artifact?") and "name=board.png" in url and "stage=write" in url
+
     def test_a_card_matches_a_past_answered_ask_when_no_decision_is_in_force(self):
         first = self.raise_("b-0", NOW - 9 * DAY)
         self.verbs.answer(BeadId("b-0"), "text", "rent weekly")
