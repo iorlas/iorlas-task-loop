@@ -11,7 +11,7 @@ import sys
 import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import NamedTuple
+from typing import Final, NamedTuple
 
 from delegate.adapters import agent_runs, codex_account
 from delegate.adapters.harness import classify, opencode_sandbox
@@ -21,7 +21,7 @@ from delegate.adapters.harness.codex import CodexHarness
 from delegate.adapters.harness.opencode import OpenCodeHarness, Profile
 from delegate.app import answer, codex_policy, decide, env, harnesses, net, settle, watch
 from delegate.app.publish import LiveSink
-from delegate.app.supervisor import LogWatcher, RunHooks, Supervisor
+from delegate.app.supervisor import LogWatcher, RunHooks, RunOutcome, Supervisor
 from delegate.contracts import events as ev
 from delegate.contracts.json_types import Json, as_num, as_opt_obj, as_opt_str, as_str, as_strs, obj
 from delegate.contracts.state import StateDoc
@@ -290,9 +290,9 @@ def prepare_opencode(d: dict[str, Json], brief: str, a: env.Args, rid: str, t: f
     return Prep(hx, spec, {})
 
 
-PREPARE = {"codex": prepare_codex, "claude_p": prepare_claude, "opencode": prepare_opencode}
-REF_FIELD = {"codex": "thread", "claude_p": "session", "opencode": "session"}  # the agent-runs field the vendor's session id goes in
-AGENT_KIND = {"codex": "codex", "claude_p": "claude-p", "opencode": "opencode"}
+PREPARE: Final = {"codex": prepare_codex, "claude_p": prepare_claude, "opencode": prepare_opencode}
+REF_FIELD: Final = {"codex": "thread", "claude_p": "session", "opencode": "session"}  # the agent-runs field the vendor's session id goes in
+AGENT_KIND: Final = {"codex": "codex", "claude_p": "claude-p", "opencode": "opencode"}
 
 
 def login_text(kind: str, lane: str) -> tuple[str, str]:
@@ -399,6 +399,12 @@ def run_prepared(
         Exception
     ):  # one history row per inter-event gap over watch.LONG_GAP_S (role "gap"): the health fold ignores it
         sup.dog.flush(env.history_add, lane, as_str(d["model"]), out.watch.why is None)
+    return finish_run(hx, h, a, d, t, out, x)
+
+
+def finish_run(hx: Harness, h: How, a: env.Args, d: dict[str, Json], t: float, out: RunOutcome, x: dict[str, Json]) -> dict[str, Json]:
+    """The result dict of a finished supervised run: the CLI's own error is classified and applied, a clean run clears its lane."""
+    lane = as_str(d["lane"])
     sm, w = out.summary, out.watch
     res: dict[str, Json] = dict(sm.res, stderr=out.err, denied=denied_items(hx, h.read_only, tuple(getattr(a, "engine_only", None) or ())))
     if h.kind == "codex":
