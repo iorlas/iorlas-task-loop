@@ -91,6 +91,15 @@ def role_status(env: Env | None = None) -> dict[str, Any]:
     return roles if isinstance(roles, dict) else {}
 
 
+def accounts() -> list[api.Account]:
+    """Every lane with its state (enabled, ready, the fix). Raises what delegate raises when it has no config dir."""
+    return api.accounts()
+
+
+def set_account(lane: str, enabled: bool) -> None:
+    api.set_account(lane, enabled)
+
+
 class RouteProbe:
     """delegate's network probe (sockets only). up() -> True, False, or None (the probe could not run)."""
 

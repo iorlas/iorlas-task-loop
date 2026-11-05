@@ -25,6 +25,7 @@
   tl.py worktree start|sunset ...               one worktree per loop session when slots are off
   tl.py worktrees [clean]                       list the repo's worktrees (owned, foreign, orphaned); clean removes owned merged clean ones
   tl.py usage '<plan.windows JSON>'             feed get_usage to delegate (every 20 min while an engine runs)
+  tl.py accounts [enable|decline LANE]          the worker accounts: ready or not, the fix; enable or decline one
   tl.py lanes                                   file delegate's lane status for the dashboard (the dashboard runs no delegate)
   tl.py reflect digest [--since 24h] [--dry-run]  the last day's run reflections into one bead per recurring cause
   tl.py trace [ID] [--last N] [--json]          engine runs and every worker session of each (for reflection)
@@ -78,6 +79,7 @@ from taskloop.app.launch import dash as wire_dash
 from taskloop.app.launch import reindex
 from taskloop.app.release import pins
 from taskloop.app.track import trail, verbs
+from taskloop.app.wire import accounts as wire_accounts
 from taskloop.app.wire import asks as wire_asks
 from taskloop.app.wire import doctor, real
 from taskloop.app.wire import hook as hook_wire
@@ -215,6 +217,9 @@ def engine_parsers(sp):
     p.add_argument("--force", action="store_true", help="allow the run to commit uncommitted work left in its worktree")
     p.add_argument("--quiet", action="store_true", help="only steps and ⚠ lines (default: verbose, for a watching coordinator)")
     p.add_argument("--outcome-file", help="also write the outcome (the last stdout line, JSON) to this file")
+    p = sp.add_parser("accounts", help="the worker accounts delegate can use: ready or not, the fix, and enable/decline one")
+    p.add_argument("op", nargs="?", choices=["list", "enable", "decline"], default="list")
+    p.add_argument("lane", nargs="?", default="")
     sp.add_parser("lanes", help="file delegate's lane status (route.py status --json) as the snapshot the dashboard reads")
     p = sp.add_parser("usage", help="pass get_usage's plan.windows (JSON) to delegate, so headless Claude steps may run")
     p.add_argument("windows")
@@ -423,6 +428,7 @@ VERBS: Final[dict[str, Handler]] = {
     "trace": lambda a, c: verbs.trace(a.id, a.last, a.json, c.env),
     "usage": lambda a, c: wire_usage.feed(a.windows, c.spawner, c.env),
     "lanes": lambda a, c: wire_lanes.refresh(c.spawner, c.env),
+    "accounts": lambda a, c: wire_accounts.run(a.op, a.lane),
     "worktree": lambda a, c: wslots.worktree(c.git, c.who, a.op, a.self_too),
     "worktrees": lambda a, c: wslots.owned_worktrees(c.git, c.who, a.op),
     "dash": lambda a, c: wire_dash.run(a.op, c.env, c.spawner),

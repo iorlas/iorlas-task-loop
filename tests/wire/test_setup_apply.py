@@ -50,7 +50,8 @@ class SetupApply(Case):
         code, lines = setup_apply.apply(self.plugin, self.env, None, {}, Recorder())
         assert code == 0
         assert {"shim", "githooks"} <= {line.removeprefix("fixed ") for line in lines}
-        assert all(c.ok for c in setup.machine(self.plugin, self.env).checks if c.id != "path-link")
+        machine = setup.machine(self.plugin, self.env).checks
+        assert all(c.ok for c in machine if c.id not in ("path-link", "accounts"))  # accounts: this machine's logins
         assert setup_apply.apply(self.plugin, self.env, None, {}, Recorder())[1] == ["machine: nothing to fix"]
 
     def test_the_answers_make_a_profile_the_loader_accepts(self):

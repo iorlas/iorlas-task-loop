@@ -10,18 +10,34 @@ import os
 from collections.abc import Callable
 
 from delegate.adapters import procs
-from delegate.app import answer, env, net
+from delegate.app import answer, doctor, env, net
 from delegate.app import run as run_app
 from delegate.app import status as status_app
 from delegate.cli import parser
 from delegate.contracts import codec, wire
 from delegate.contracts import status as status_wire
 from delegate.contracts.codec import record
-from delegate.contracts.json_types import Json
+from delegate.contracts.json_types import Json, as_str
 from delegate.contracts.status import Status
 from delegate.contracts.wire import RunRequest, RunResult, ToolServer, WorkerEnd
 
-__all__ = ["Handle", "RunRequest", "RunResult", "Status", "ToolServer", "WorkerEnd", "cancel", "run", "status"]
+__all__ = [
+    "Account",
+    "Handle",
+    "RunRequest",
+    "RunResult",
+    "Status",
+    "ToolServer",
+    "WorkerEnd",
+    "accounts",
+    "as_json",
+    "cancel",
+    "contract",
+    "network",
+    "run",
+    "set_account",
+    "status",
+]
 
 
 @record
@@ -66,6 +82,30 @@ def status(claude_usage: Json = None) -> Status:
     has them (the status line is the only place a headless run can read them from)."""
     payload, _lanes, _ck = status_app.full_status(env.load_routing(), claude_usage)
     return codec.from_json(status_wire.Status, payload)
+
+
+@record
+class Account:
+    """One lane of the fleet: whether the router may use it, whether this machine can run it, and what fixes it when it cannot."""
+
+    lane: str
+    enabled: bool
+    ready: bool
+    fix: str
+
+
+def accounts() -> list[Account]:
+    """Every lane with its state: the setup view. `fix` names the one step that makes a lane ready (a login, a CLI)."""
+    rows = doctor.lane_rows(env.load_routing())
+    return [Account(lane=as_str(r["lane"]), enabled=bool(r["enabled"]), ready=bool(r["ready"]), fix=as_str(r["fix"])) for r in rows]
+
+
+def set_account(lane: str, enabled: bool) -> None:
+    """The owner's choice for a lane: enabled or declined. A lane that is not in the fleet raises ValueError."""
+    known = [a.lane for a in accounts()]
+    if lane not in known:
+        raise ValueError(f"unknown lane {lane}; lanes: {', '.join(known)}")
+    doctor.config_set(f"profile.lanes.{lane}", "enabled" if enabled else "declined")
 
 
 def as_json(record: Status | RunResult) -> dict[str, Json]:
