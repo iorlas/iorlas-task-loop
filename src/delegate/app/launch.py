@@ -422,7 +422,7 @@ def finish_run(hx: Harness, h: How, a: env.Args, d: dict[str, Json], t: float, o
         o = None
         res["warnings"] = ["answer_done_process_alive"]
     if out.net and (o is None or o.reason == "killed"):  # we stopped it because the network is down
-        o = classify.Outcome("network", hx.evidence.transient, "event")
+        o = classify.network_stop(hx.evidence.transient)
     if o:  # the CLI's own error or stderr, never the model's answer
         settler().apply(
             res,
