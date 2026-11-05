@@ -150,7 +150,7 @@ class SweepTest(Case):
         assert sweeps.unused_answers(self.asks, T + 20) == []
         late = sweeps.unused_answers(self.asks, T + 10 + sweeps.UNUSED_ANSWER_S + 1)
         assert [a.bead for a in late] == ["fk-1"]
-        assert "answered 30 min ago" in sweeps.fault_line(late[0], T + 10 + 1800)
+        assert "answered 30m ago" in sweeps.fault_line(late[0], T + 10 + 1800)
         self.asks.consume(BeadId("fk-1"), T + 3000)
         assert sweeps.unused_answers(self.asks, T + 5000) == []
 

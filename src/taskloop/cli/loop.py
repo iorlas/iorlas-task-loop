@@ -12,6 +12,7 @@ from taskloop.app.loop.queue import rank_ready
 from taskloop.app.loop.versions import Installs
 from taskloop.app.reconcile.loopwatch import absent_loop
 from taskloop.contracts.loop import LoopState
+from taskloop.domain.brief import ago
 
 
 def cmd_next(env: LoopEnv, a: Any) -> int:
@@ -43,10 +44,6 @@ def cmd_stop(env: LoopEnv, files: LoopFiles, a: Any) -> int:
     for st in loops:
         print(f"STOP {'NOW' if a.now else 'after the current bead'}: loop pid {st.pid}" + (f", running {st.bead}" if st.bead else ""))
     return 0
-
-
-def ago(now: float, t: float) -> str:
-    return f"{(now - t) // 60:.0f} min ago"
 
 
 def health_lines(env: LoopEnv, files: LoopFiles, loops: list[LoopState]) -> list[str]:

@@ -4,6 +4,8 @@ import time
 from dataclasses import asdict, dataclass
 from typing import Final
 
+import timefmt
+
 STATUS_LINES: Final = 40
 STATUS_BYTES: Final = 8 * 1024
 HANDOFF_BYTES: Final = 4 * 1024
@@ -63,10 +65,7 @@ class Brief:
 
 
 def ago(now: float, t: float) -> str:
-    if t <= 0:
-        return "never"
-    mins = max(0, int((now - t) // 60))
-    return f"{mins} min ago" if mins < 120 else f"{mins // 60} h ago" if mins < 48 * 60 else f"{mins // 1440} d ago"
+    return "never" if t <= 0 else f"{timefmt.fmt_span(now - t)} ago"
 
 
 def clock(t: float) -> str:
