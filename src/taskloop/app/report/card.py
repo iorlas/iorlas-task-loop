@@ -10,7 +10,7 @@ from typing import Any, Final
 from taskloop.adapters import beadtools, gitrepo
 from taskloop.app.asks import intake
 from taskloop.app.reconcile.lost import lost_work
-from taskloop.app.report.inputs import bead_status, read_jsonl, repo_traces
+from taskloop.app.report.inputs import bead_status, landed_of, read_jsonl, repo_traces
 from taskloop.app.report.planner import input_tokens
 from taskloop.contracts import paths, runlife
 from taskloop.contracts.bead import Comment
@@ -183,7 +183,8 @@ def scorecard(repo: str, since: float, until: float, base: str, comments_of: Cal
         beads.setdefault(c["bead"], {"runs": [], "crashes": []})["crashes"].append(c)
     rows, asks = _bead_rows(beads, comments_of)
     tokens = _tokens(runs)
-    lost = [x for x in lost_work(repo, base, status_of or (lambda b: bead_status(b, repo, who)), traces, git, who.config, since=since)
+    lost = [x for x in lost_work(repo, base, status_of or (lambda b: bead_status(b, repo, who)), traces, git,
+                                 lambda b: landed_of(b, repo, who), since=since)
             if x["class"] in ("lost", "pending", "unknown")]
     mins = [x["minutes"] for x in rows if x["runs"]]
     c: dict[str, Any] = {"repo": repo, "since": since, "until": until, "beads": len(rows),

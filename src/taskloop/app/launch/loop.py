@@ -36,7 +36,7 @@ from taskloop.contracts.env import Env
 from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId
-from taskloop.contracts.landed import LandedStore
+from taskloop.contracts.landed import landed_by
 from taskloop.contracts.loop import LoopState
 from taskloop.contracts.ports import Beads, Git, Spawner
 from taskloop.contracts.slots import SlotGitError, git_probe
@@ -123,7 +123,7 @@ def _landed_on_base(repo: str, cfg: paths.ConfigDir, store: Beads, wt: str, bead
     if not os.path.isdir(wt):
         return False
     base = wslots.load_cfg(repo, git).base
-    rec = LandedStore(cfg).get(bead_id)
+    rec = landed_by(store)(bead_id)
     if rec is not None:
         return git.is_ancestor(wt, rec.sha, base)
     branch = getattr(beadtools.peek(store, bead_id), "metadata", {}).get("branch") or "task/" + bead_id

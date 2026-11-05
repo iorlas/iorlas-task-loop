@@ -1,6 +1,7 @@
 """`tl claim|land|close|block`: the bead's life as the person or the engine drives it, each recorded as an event and in bd's provenance."""
 import json
 import sys
+import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -16,6 +17,7 @@ from taskloop.contracts.bead import Bead
 from taskloop.contracts.env import Env
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId
+from taskloop.contracts.landed import Landed, landed_meta
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdFailure, BeadPatch, Beads, Git
 from taskloop.contracts.slots import SlotGitError, git_probe
@@ -58,6 +60,13 @@ def land(who: Identity, bead: BeadId, sha: str, store: Beads, git: Git, worktree
         sys.stderr.write(f"{bead}: {full[:12]} is not on {base}: no land recorded in provenance\n")
         return 1
     provenance(st, bead, "land", full, "git-sha")
+    if base:  # the base is checked above: the bead's metadata says it landed there
+        try:
+            st.update(bead, BeadPatch(set_metadata=landed_meta(Landed(bead=bead, sha=full, base=base, t=time.time())),
+                                      if_assignee=fence.guard(claim) if claim else ""))
+        except BdFailure as e:
+            sys.stderr.write(f"{bead}: land not recorded in the bead: {e.error.text.strip()}\n")
+            return 1
     return 0
 
 

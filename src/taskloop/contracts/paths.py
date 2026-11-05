@@ -99,10 +99,6 @@ class ConfigDir:
     def adr_uses(self, repo_key: str) -> Path:
         return self.adr_dir(repo_key) / "uses.jsonl"
 
-    def landed(self, bead: BeadId) -> Path:
-        """The record that a bead's work reached its base (contracts/landed.py)."""
-        return self.root / "landed" / (f"{bead}.json")
-
     def park(self, bead: BeadId) -> Path:
         """What the runs that ended on a question say of a bead (contracts/parks.py)."""
         return self.root / "parks" / (f"{bead}.json")
