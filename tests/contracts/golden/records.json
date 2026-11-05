@@ -1566,6 +1566,7 @@
      "lane": "",
      "needs": [],
      "pass_files": false,
+     "closure_cmd": [],
      "fix": []
     },
     {
@@ -1596,6 +1597,7 @@
       "unity"
      ],
      "pass_files": false,
+     "closure_cmd": [],
      "fix": []
     }
    ],

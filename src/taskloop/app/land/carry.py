@@ -20,7 +20,8 @@ from taskloop.contracts.runkey import BaseSha, RunKey
 from taskloop.domain.checks.specs import repo_check
 from taskloop.stores.bundle import Stores
 
-MERGE = ["git", "-c", "user.name=task-loop", "-c", "user.email=task-loop@localhost", "merge", "--no-ff", "--no-edit", "-q"]
+# git-port-exempt: a throwaway merge in a scratch worktree beside the closure command; a Git port method waits for a second caller
+MERGE = ("git", "-c", "user.name=task-loop", "-c", "user.email=task-loop@localhost", "merge", "--no-ff", "--no-edit", "-q")
 
 
 def earlier_pass(check_id: str, expected: RunKey, repo: str, stores: Stores) -> PassRecord | None:

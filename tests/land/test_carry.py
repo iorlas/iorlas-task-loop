@@ -37,7 +37,7 @@ class Spawns:
 
     def run(self, argv, cwd=None, **_kw):
         self.calls.append(list(argv))
-        if argv[: len(MERGE)] == MERGE:
+        if tuple(argv[: len(MERGE)]) == MERGE:
             for path, text in {**BRANCH, **self.main}.items():
                 (Path(cwd) / path).parent.mkdir(parents=True, exist_ok=True)
                 (Path(cwd) / path).write_text(text)
