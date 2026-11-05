@@ -87,7 +87,7 @@ Without slots, each loop session makes one worktree at start and reuses it.
 
 ## Dashboard
 
-One read-only server per machine, started by the loop (`tl.py dash ensure`), default port 7878.
+One server per machine, reading state and taking the owner's commands through its write verbs (`contracts.dash.WRITES`), started by the loop (`tl.py dash ensure`), default port 7878.
 `tl factory start` starts a detached loop for the current directory's repo and ensures the dashboard; it needs no Claude Code
 Desktop session or open terminal. It keeps polling when the queue drains. Repeating it reports `already running`.
 Use `tl factory status`, `tl factory stop` (finish the current bead), `tl factory stop --now`, and
