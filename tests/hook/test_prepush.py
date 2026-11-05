@@ -80,3 +80,15 @@ class PushClient(Case):
     def test_dispatcher_preserves_pretool_error_behavior(self):
         with mock.patch.object(main.importlib, "import_module", side_effect=RuntimeError("hook failed")):
             assert main.main(["pretool"], "{}", Path("/plugin"), {}) == 0
+
+    def test_fail_mode_table_closes_only_pre_push(self):
+        assert main.fail_exit(["githook", "pre-push", "tl"]) == main.FAIL_CLOSED
+        for argv in (["pretool"], ["session-start"], ["precompact"], ["githook", "post-rewrite", "tl"], ["githook", "pre-commit"], []):
+            assert main.fail_exit(argv) == main.FAIL_OPEN
+
+    def test_unimportable_prepush_module_refuses(self):
+        stderr = io.StringIO()
+        with (mock.patch.object(main.importlib, "import_module", side_effect=ModuleNotFoundError("taskloop.hook.prepush")),
+              redirect_stderr(stderr)):
+            assert main.main(["githook", "pre-push", "tl"], self.request, Path("/plugin"), {}) == 1
+        assert "prepush" in stderr.getvalue()
