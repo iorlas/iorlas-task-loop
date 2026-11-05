@@ -15,8 +15,7 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any, override
 
-import stream_proc
-
+from delegate import api
 from taskloop.adapters import deadline, procs
 from taskloop.adapters.delegate import Stopped
 from taskloop.contracts import wire
@@ -97,7 +96,10 @@ class Seam:
         return None
 
 
-class StreamRunner(Seam):
+class ApiRunner(Seam):
+    """The real seam: `delegate.api.run` on a thread of its own. The engine's stop flag, its wall limit and the deadline end the call by
+    `api.cancel` on the worker's handle; the call then raises `Stopped`."""
+
     def __init__(
         self,
         log_path: str | Path,
@@ -114,72 +116,67 @@ class StreamRunner(Seam):
         """The harness, lane and model the call ran on, from the live file's `start` event."""
         return worker_start(self.live) if self.live else None
 
-    def watch(self, done: threading.Event, halt: threading.Event, live: str) -> None:
-        """While the call runs: note the worker the live file names, and stop the call when the run is stopped."""
-        while not done.wait(POLL_S):
-            if self.outer is not None and self.outer.is_set():
-                self.obs.update(kill_t=time.time(), why="interrupted")
-                halt.set()
-                return
-            if self.worker is None and live:
-                self.worker = worker_started(live)
-                if self.worker and self.on_worker:
-                    self.on_worker(self.worker)
-
     def __call__(
-        self, cmd: Sequence[str], cwd: str | None = None, env: dict[str, str] | None = None, timeout: float | None = None, **_: Any
+        self,
+        cmd: Sequence[str],
+        cwd: str | None = None,
+        env: dict[str, str] | None = None,
+        timeout: float | None = None,
+        request: api.RunRequest | None = None,
+        **_: Any,
     ) -> subprocess.CompletedProcess[str]:
-        live = self.live or (env or {}).get("DELEGATE_LIVE_FILE", "")
+        if request is None:
+            raise ValueError("ApiRunner needs the delegate.api request")
+        live = self.live or request.live_file or ""
         t0 = time.time()
         self.obs.update(started_t=t0, ended_t=None, first_error_t=None, last_event_t=None, kill_t=None, why="", alive=[])
         self.stop.clear()
         self.worker = None
-        out: list[str] = []
-        done, halt = threading.Event(), threading.Event()
+        handles: list[api.Handle] = []
+        box: list[api.RunResult] = []
+        finished = threading.Event()
 
-        def seen(text: str, keep: bool, log: Any = None) -> None:
-            if self.obs["kill_t"] is None:
-                self.obs["last_event_t"] = time.time()  # frozen at the stop: shutdown output never moves the boundary
-            if keep:
-                out.append(text)
-            if log is not None:
-                with contextlib.suppress(ValueError, OSError):  # the call is over and its log closed
-                    log.write(text.encode("utf-8", "replace"))
-                    log.flush()
+        def work() -> None:
+            try:
+                box.append(api.run(request, started=handles.append))
+            finally:
+                finished.set()
 
-        helper = threading.Thread(target=self.watch, args=(done, halt, live), daemon=True)
-        helper.start()
+        thread = threading.Thread(target=work, daemon=True)
+        thread.start()
+        limit = deadline.remaining(self.wall or timeout or 3600.0)
+        why = ""
         try:
-            with open(self.log_path, "ab") as log:
-                res = stream_proc.run(
-                    list(cmd),
-                    cwd=cwd,
-                    env=env,
-                    on_stdout=lambda s: seen(s, True),
-                    on_stderr=lambda s: seen(s, False, log),
-                    timeout=deadline.remaining(self.wall or timeout or 3600.0),
-                    stop=halt,
-                    grace=self.grace,
-                )
-        except BaseException:  # stopped (a raising SIGTERM handler): stream-proc stopped the tree before this
+            while not finished.wait(POLL_S):
+                if self.worker is None and live:
+                    self.worker = worker_started(live)
+                    if self.worker and self.on_worker:
+                        self.on_worker(self.worker)
+                if self.outer is not None and self.outer.is_set():
+                    why = "interrupted"
+                elif time.time() - t0 >= limit:
+                    why = f"timeout {int((self.wall or timeout or 3600) // 60)} min"
+                if why:
+                    self._cancel(handles, thread, why)
+                    break
+        except BaseException:  # the engine itself is stopped (a raising SIGTERM handler): end the worker's tree first
             self.obs.update(kill_t=self.obs["kill_t"] or time.time(), why=self.obs["why"] or "interrupted", ended_t=time.time())
+            self._cancel(handles, thread, self.obs["why"])
             self.stop.update(self.obs)
             raise
-        finally:
-            done.set()
-            helper.join(2)
-        self.secs, self.obs["ended_t"] = res.secs, time.time()
+        self.secs, self.obs["ended_t"] = time.time() - t0, time.time()
         deadline.check()
         if self.worker is None and live:
             self.worker = worker_started(live)
-        if res.timed_out:
-            self.obs.update(
-                kill_t=self.obs["kill_t"] or time.time(),
-                why=self.obs["why"] or f"timeout {int((self.wall or timeout or 3600) // 60)} min",
-                alive=list(res.survivors),
-            )
-            self.stop.update(self.obs, kind=res.timed_out)
-            raise Stopped(self.obs["why"])
-        return subprocess.CompletedProcess(
-            list(cmd), res.returncode if res.returncode is not None else -(res.signal or 1), "".join(out), ""
-        )
+        if why:
+            self.stop.update(self.obs, kind="wall" if why.startswith("timeout") else "stop")
+            raise Stopped(why)
+        return subprocess.CompletedProcess(list(cmd), 0, json.dumps(api.as_json(box[0])), "")
+
+    def _cancel(self, handles: list[api.Handle], thread: threading.Thread, why: str) -> None:
+        """End the worker (SIGTERM, then SIGKILL after the grace) and wait for the call's thread to hand back."""
+        self.obs.update(kill_t=self.obs["kill_t"] or time.time(), why=self.obs["why"] or why)
+        if handles:
+            end = api.cancel(handles[0])
+            self.obs["alive"] = [x.pid for x in end.survivors]
+        thread.join(self.grace + 10)

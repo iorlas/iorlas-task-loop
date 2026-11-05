@@ -5,7 +5,6 @@ import json
 import os
 import shutil
 import stat
-import subprocess
 import sys
 import tempfile
 import time
@@ -28,6 +27,7 @@ from support import (  # noqa: E402
     looptest,
     tlbd,
 )
+from support.checked import run_checked  # noqa: E402
 from support.fakes import FakeBeadStore, as_comment  # noqa: E402
 from support.logs import typed  # noqa: E402
 from support.runs import manifest  # noqa: E402
@@ -56,7 +56,7 @@ def git(repo, *args, t=None):
     env = dict(os.environ)
     if t is not None:
         env["GIT_AUTHOR_DATE"] = env["GIT_COMMITTER_DATE"] = f"@{int(t)} +0000"
-    r = subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True, text=True, env=env)
+    r = run_checked(["git", "-C", str(repo), *args], None, text=True, env=env)
     return r.stdout.strip()
 
 

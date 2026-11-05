@@ -1,12 +1,12 @@
 """The engine side of asks and decisions: the planner reads the repo's decisions and cites them, a reversible plan question becomes a
 soft ask the run goes on past, an agent's declared cause reaches the ask, and a repeat is matched when it is raised."""
-import subprocess
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support import homes
+from support.checked import run_checked
 from support.engine_case import CLEAN, PLAN, WRITE, EngineTest
 from support.narrow import must
 
@@ -28,8 +28,7 @@ IRREVERSIBLE = dict(PLAN, question=PUSH, irreversible="push_shared", options=OPT
 class EngineDecisions(EngineTest):
     def repo(self) -> str:
         """The repo path as the engine names it (the parent of the git common dir)."""
-        common = subprocess.run(["git", "rev-parse", "--path-format=absolute", "--git-common-dir"], cwd=self.wt, capture_output=True,
-                                text=True, check=True).stdout.strip()
+        common = run_checked(["git", "rev-parse", "--path-format=absolute", "--git-common-dir"], self.wt, text=True).stdout.strip()
         return str(Path(common).parent)
 
     def adrs(self) -> AdrStore:

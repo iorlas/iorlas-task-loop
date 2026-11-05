@@ -30,6 +30,7 @@ from support import (  # noqa: E402
     looptest,
     tlbd,
 )
+from support.checked import run_checked  # noqa: E402
 from support.narrow import must  # noqa: E402
 from support.spawn import port_git  # noqa: E402
 from support.waits import until  # noqa: E402
@@ -300,7 +301,7 @@ class QueueRuleFromBase(Base):
         self.sh("git", "clone", "-q", str(self.origin), str(self.repo), cwd=self.home)
 
     def sh(self, *a, cwd):
-        subprocess.run(list(a), cwd=cwd, check=True, capture_output=True)
+        run_checked(list(a), cwd)
 
     def push_rule(self, cfg):
         """Another worktree pushes a new .task-loop.json; the main checkout is not pulled."""
@@ -416,7 +417,7 @@ class LoopBase(Base):
         self.script, self.hold, self.started, self.during, self.children = {}, {}, [], [], []
         for p in (mock.patch.object(Core, "nap", self.clock.nap),
                   mock.patch.object(wloop, "delegate_route", return_value="/fake/route.py"),
-                  mock.patch.object(wloop.dg, "role_status", side_effect=lambda route, env: self.roles()),
+                  mock.patch.object(wloop.dg, "role_status", side_effect=lambda env: self.roles()),
                   mock.patch.object(real, "spawner", return_value=mock.Mock(
                       start_held=lambda cmd, out=None, extra=None, **kw: (FakeChild(self, cmd, extra), mock.Mock()))),
                   mock.patch.object(Taker, "prepare", return_value=None)):

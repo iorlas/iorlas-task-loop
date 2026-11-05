@@ -10,8 +10,7 @@ In process: `Script`/`DelegateScript`, a `runner` for delegate_link.call (the en
 from queues, the way the engine's own tests need; `stop_answer(reason, ...)` builds one stopped answer. Both build answers from
 `answer()`, which reads contract.json, so a field delegate adds is a field the fakes answer with.
 
-The contract comes from FAKE_ROUTE_DELEGATE (a delegate checkout), else the copy in tests/fixtures/delegate4 (tests compare it to a
-real checkout when one is there). Python 3.8+, stdlib only.
+The contract is src/delegate/data/contract.json and the replayed fixtures are tests/delegate/contract/fixtures: the library's own.
 """
 
 import json
@@ -24,15 +23,17 @@ from pathlib import Path
 from typing import ClassVar
 
 HERE = Path(__file__).resolve().parent
-VENDORED = HERE.parent / "fixtures" / "delegate4"
+ROOT = HERE.parents[1]
+CONTRACT_FILE = ROOT / "src" / "delegate" / "data" / "contract.json"
+FIXTURE_DIR = ROOT / "tests" / "delegate" / "contract" / "fixtures"
 
 
 def delegate_dir():
-    return Path(os.environ.get("FAKE_ROUTE_DELEGATE") or VENDORED)
+    return ROOT
 
 
 def contract(delegate=None):
-    return json.loads((Path(delegate or delegate_dir()) / "skills" / "delegate" / "contract.json").read_text(encoding="utf-8"))
+    return json.loads(CONTRACT_FILE.read_text(encoding="utf-8"))
 
 
 def handshake(delegate=None):
@@ -133,7 +134,7 @@ def step_answer(delegate, step, ref, resumed):
     name = step["step"]
     if name == "done":
         return answer(c, None, ref, resumed, step.get("data"), step.get("text", "ok"))
-    fx = Path(delegate) / "tests" / "contract" / "fixtures" / (name + ".json")
+    fx = FIXTURE_DIR / (name + ".json")
     reason = json.loads(fx.read_text(encoding="utf-8"))["expected_stop"]["reason"] if fx.is_file() else name
     return answer(c, reason, ref, resumed, step.get("data"), partial=step.get("partial", False), at=step.get("at"),
                   fix=step.get("fix"), signal=step.get("signal"),

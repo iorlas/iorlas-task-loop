@@ -58,7 +58,8 @@ def isolated_env(home):
     real = Path.home() / ".gitconfig"
     if real.is_file():
         (home / ".gitconfig").write_bytes(real.read_bytes())
-    env = {k: v for k, v in os.environ.items() if k not in DROP}
+    # GIT_CONFIG_*: a release's core.hooksPath would fire tl's pre-push judge in the tests' repos
+    env = {k: v for k, v in os.environ.items() if k not in DROP and not k.startswith("GIT_CONFIG_")}
     env.update(HOME=str(home), XDG_CONFIG_HOME=str(home / ".config"), TMPDIR=str(home / "tmp"), TL_WORKER_MB=str(WORKER_MB))
     return env
 

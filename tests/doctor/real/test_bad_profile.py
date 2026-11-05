@@ -15,6 +15,7 @@ from support.case import Case
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401
 from support import homes
+from support.checked import run_checked
 from support.repos import write_repos
 from support.spawn import port_git
 from support.who import who
@@ -117,8 +118,8 @@ class SourceIsTheBaseCommit(Case):
             subprocess.run(["git", "-C", str(self.repo), "update-ref", "refs/remotes/origin/main", "HEAD"], check=True, env=os.environ)
 
     def sha7(self) -> str:
-        return subprocess.run(["git", "-C", str(self.repo), "rev-parse", "--short=7", "origin/main"], check=True, env=os.environ,
-                              capture_output=True, text=True).stdout.strip()
+        done = run_checked(["git", "-C", str(self.repo), "rev-parse", "--short=7", "origin/main"], None, env=os.environ, text=True)
+        return done.stdout.strip()
 
     def test_a_stale_working_tree_under_a_good_base_commit_is_no_red_row(self) -> None:
         self.commit(GOOD, base=True)

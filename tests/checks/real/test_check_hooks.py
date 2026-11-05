@@ -5,6 +5,7 @@ import tempfile
 from pathlib import Path
 
 from support.case import Case
+from support.checked import run_checked
 
 from taskloop.adapters.checks_argv import ArgvChecks
 from taskloop.adapters.git import RealGit
@@ -31,13 +32,12 @@ class CheckHooks(Case):
             hook.chmod(0o755)
             for args in (("init", "--bare", str(origin)), ("init", "-b", "main"),
                          ("commit", "--allow-empty", "-m", "suite fixture"), ("remote", "add", "origin", str(origin))):
-                subprocess.run(["git", *args], cwd=repo, env=base, capture_output=True, check=True)
+                run_checked(["git", *args], repo, env=base)
             refused = subprocess.run(["git", "push", "origin", "HEAD:main"], cwd=repo, env=pinned,
                                      capture_output=True, text=True, check=False)
             assert refused.returncode != 0
             assert "no suite receipt" in refused.stderr
             result = ArgvChecks(Env(pinned)).run(CheckSpec(argv=["git", "push", "origin", "HEAD:main"], cwd=str(repo)))
             assert result.exit == 0, result.out
-            tip = subprocess.run(["git", "--git-dir", str(origin), "rev-parse", "refs/heads/main"],
-                                 env=base, capture_output=True, text=True, check=True).stdout.strip()
+            tip = run_checked(["git", "--git-dir", str(origin), "rev-parse", "refs/heads/main"], None, env=base, text=True).stdout.strip()
             assert tip == port.rev_parse(str(repo), "HEAD")

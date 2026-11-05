@@ -4,6 +4,7 @@ import os
 import threading
 import time
 
+import pytest
 from delegate import api
 from delegate.contracts.wire import RunResult
 from support.procsim import real_proc
@@ -60,3 +61,18 @@ def test_a_request_carries_tool_servers_it_does_not_yet_wire():
     req = api.RunRequest(role="worker", brief_file="b.md", cwd=".", tools=[tool])
     assert req.tools == [tool]
     assert "srv" not in req.to_argv("route.py")
+
+
+def test_accounts_lists_every_lane_and_set_account_records_the_owners_choice():
+    rows = api.accounts()
+    assert rows
+    lane = rows[0].lane
+    api.set_account(lane, False)
+    assert next(a for a in api.accounts() if a.lane == lane).enabled is False
+    api.set_account(lane, True)
+    assert next(a for a in api.accounts() if a.lane == lane).enabled is True
+
+
+def test_an_unknown_account_is_refused():
+    with pytest.raises(ValueError, match="unknown lane"):
+        api.set_account("NO_SUCH_LANE", True)

@@ -12,7 +12,7 @@ MIN_RUNS: Final = 2
 SIMILAR: Final = 0.35  # token overlap (Jaccard) that makes two went_badly items one cause
 FILE_SIMILAR: Final = 0.1  # ... or this much when they also name the same file (a bare tl.py or README.md must not merge unrelated items)
 TITLE_SIMILAR: Final = 0.5  # ... and an open bead's title the same as a cluster
-OWNERS: Final = {"engine": "iorlas-task-loop", "prompt": "iorlas-task-loop", "delegate": "iorlas-delegate"}
+OWNERS: Final = {"engine": "iorlas-task-loop", "prompt": "iorlas-task-loop", "delegate": "iorlas-task-loop"}
 STOP: Final = frozenset({
     "the",
     "and",

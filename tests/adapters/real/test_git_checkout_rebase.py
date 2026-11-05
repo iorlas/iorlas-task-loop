@@ -8,6 +8,7 @@ from unittest import mock
 import pytest
 import support.paths  # noqa: F401
 from support.case import Case
+from support.checked import run_checked
 
 from taskloop.adapters.git import RealGit
 from taskloop.contracts.env import Env, snapshot
@@ -31,8 +32,7 @@ class RealGitCheckoutRebaseTest(Case):
         self.base = self.commit_file("file", "base\n", "initial")
 
     def run_git(self, *args):
-        return subprocess.run(["git", "-C", str(self.repo), *args], env=self.env,
-                              check=True, capture_output=True, text=True).stdout.strip()
+        return run_checked(["git", "-C", str(self.repo), *args], None, env=self.env, text=True).stdout.strip()
 
     def commit_file(self, name, text, message):
         (self.repo / name).write_text(text)

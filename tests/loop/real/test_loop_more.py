@@ -3,7 +3,6 @@ import io
 import json
 import os
 import shutil
-import subprocess
 import sys
 import tempfile
 from contextlib import redirect_stdout
@@ -27,6 +26,7 @@ from support import (  # noqa: E402
     eventlog,
     looptest,
 )
+from support.checked import run_checked  # noqa: E402
 
 from loop.test_loop import Base, LoopBase, bead, rec  # noqa: E402
 from taskloop.adapters import (  # noqa: E402
@@ -464,7 +464,7 @@ class LoopSelfUpdate(LoopBase):
 class LandedOnBase(Base):
     def git_repo(self):
         def sh(*a, cwd):
-            subprocess.run(list(a), cwd=cwd, check=True, capture_output=True)
+            run_checked(list(a), cwd)
         os.environ.update(GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t", GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t")
         origin, wt = self.home / "o.git", self.home / "wt"
         sh("git", "init", "-q", "--bare", "-b", "main", str(origin), cwd=self.home)

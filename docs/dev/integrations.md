@@ -10,7 +10,7 @@ returns an error for that request; parsers skip lines they cannot read).
 |---|---|---|---|
 | asks `~/.config/task-loop/asks/<bead>.json` (`v` 3), the ask ledger `ask-ledger.jsonl`, decisions `decisions/<repo>-<hash>/ADR-n.json` + `uses.jsonl` | **us** (`taskloop.contracts.ask.Ask`) | `AskStore` and `LedgerStore` (`taskloop.contracts.stores`), `AdrStore` (`taskloop.contracts.adrs`): the engine, `tl` and the dashboard all read and write through them | an older or unknown `v` reads as no ask; the card text is rendered from the record's fields by `domain/asks/text.py` |
 | loop state `~/.config/task-loop/loop/<repo>-<hash>.<pid>.json` (`v` 2), commands `...command.json` (`v` 1) | **us** (`taskloop.contracts.loop.LoopState`, `LoopCommand`) | `LoopFiles` (`taskloop.app.loop.files`): the loop writes both, `tl` writes commands; the dashboard (`taskloop_dash.readers.world`) reads | a file of another `v` is no loop; the dashboard shows no queue without a live loop |
-| `route.py status --json` (delegate's lane status, `v` 1) | delegate | `taskloop.contracts.delegate_status.snapshot_of`, run by `tl lanes` / `tl usage` and by the loop's `chores` step when the snapshot is 20 min old (`app/wire/lanes.chore`); the dashboard reads the `StatusSnapshot` they file and runs nothing | lane cards and banner; `tests/adapters/test_delegate_status.py` runs the reader on `tests/fixtures/delegate_status_0.51.0_real.json` and on the installed delegate's own answer |
+| `delegate.api.status()` (delegate's lane status, `v` 1) | delegate (in this repo, `src/delegate`) | `taskloop.contracts.delegate_status.snapshot_of`, run by `tl lanes` / `tl usage` and by the loop's `chores` step when the snapshot is 20 min old (`app/wire/lanes.chore`); the dashboard reads the `StatusSnapshot` they file and runs nothing | lane cards and banner; `tests/adapters/test_delegate_status.py` runs the reader on `tests/fixtures/delegate_status_0.51.0_real.json` and delegate's own tests run its status for real |
 | `$CLAUDE_CODE_SESSION_ID`, `$CLAUDE_PID` in a session's Bash env; SessionStart hook stdin (`session_id`, `transcript_path`) | Anthropic | `ident.actor`, `app/wire/hook.py` (run by `hooks/hook.py`) | the per-session bd actor (fallbacks exist), log lookup |
 | OpenCode sessions, SQLite `~/.local/share/opencode/opencode.db` (`OPENCODE_DB` overrides), tables `session`, `message`, `part` only (never the credential tables); delegate's family `xai`, kind `opencode` | OpenCode | `adapters/opencode.py` (`transcript_of("xai", ses_...)` -> `opencode:ses_...`), `adapters/context_size.py` `context_tokens` | Grok lane runs; read only, short timeout, a missing DB or unknown id is empty |
 | `bd list --json`, `bd show --json`, `bd update --claim`, `bd heartbeat`, `bd unclaim`, `bd provenance record` | beads (bd 1.3+) | `adapters/bd.py` `BdStore` (the one process site); the dashboard gets it as `Ports.store` and reads and writes only through the typed `Beads` port (`taskloop_dash.readers.beads`), so no raw `bd` argv lives in `taskloop_dash` (a rules test greps for it) | the tree, claims, slots, provenance (provenance failures only warn), the dashboard's bead lists, the look gallery's writes |
@@ -76,32 +76,29 @@ cannot authorize delivery. Passes from clean gates remain reusable for the same 
 
 ## Delegate
 
-task-loop requires delegate for the engine (decided 2026-10-18: everyone installs both; power users never call
-delegate directly). The two touch in three places only:
+delegate is a library of this repo (`src/delegate`, decided 2026-11-05; the iorlas-delegate plugin is retired). task-loop imports
+`delegate.api` and nothing else of it (`docs/contracts/delegate-api.md`; import-linter and ruff hold it). They touch in three places only:
 
-1. **`route.py status --json`**: the lane status the dashboard's lane cards come from (the table above).
+1. **`delegate.api.status()`**: the lane status the dashboard's lane cards come from (the table above).
 2. **The Workers table in `skills/task-loop/SKILL.md`** maps the loop's worker kinds (reader, writer,
    reviewer, hard) to delegate's role names. That mapping is the only delegate vocabulary in this plugin. When
    delegate renames roles or changes how it is asked, update that table.
 
-3. **worker-run v4** (`docs/contracts/worker-run-v4.md`): the engine runs each AI step with `route.py run ROLE` and
-   feeds usage with `route.py status --claude-usage` (`tl usage`). Code: `WorkerCall` in `app/run/worker_call.py`,
-   `worker_request.request`, `RunRequest.to_argv`, `tl.py` `usage`. Before recovery, WorkerCall prepares the effective request
+3. **`delegate.api.run`** (`docs/contracts/delegate-api.md`): the engine runs each AI step with `api.run(request)` on a thread (`ApiRunner`) and
+   feeds usage with `api.status(claude_usage)` (`tl usage`). Code: `WorkerCall` in `app/run/worker_call.py`,
+   `worker_request.request`, `adapters/delegate.api_request`, `tl.py` `usage`. Before recovery, WorkerCall prepares the effective request
    and identifies the worktree, cwd, HEAD, tree contents, policy, schema and answer producer contract. Completed writer
    effects are bound to their resulting tree; interrupted threads resume only with a matching identity. Log destinations
    are excluded. Legacy prompt-only records require execution again; their raw output is retained for inspection.
    The write step passes `--engine-only RECIPE` once per bare `just` recipe of
-   a configured check (or the gate) its writer must not run (delegate 0.50+; `RunRequest.engine_only`, built only by `to_argv`); read-only
+   a configured check (or the gate) its writer must not run (`RunRequest.engine_only`, `api_request`); read-only
    steps pass none. A worker call also passes `--only-family F` once per family of `engine.writer_family` (or the bead's `writer-family:<f>`
    labels; delegate PINFAMILY; `RunRequest.only_family`, `domain/lanes/pin.py`); the planner, reviewer and reflect calls pass none. A `stop`
-   with reason `only_family_unready` (or `no_lane` while pinned) pauses the run with the pin in words (`lane_acts.end`). Only route.py from delegate 0.56.0 or later speaking contract 4 is used; none installed, or an
-   answer with another `contract`, blocks the task with what to do. Delegate keeps its state in its plugin data dir, so always call the
-   installed route.py, never a checkout's (a checkout reads `~/.config/delegate`, another store).
+   with reason `only_family_unready` (or `no_lane` while pinned) pauses the run with the pin in words (`lane_acts.end`). Delegate keeps its state in `~/.config/task-loop/delegate` (`DELEGATE_CONFIG_DIR` overrides): the same place for an install and a checkout.
 
 The profile's `engine.writer_exec_allow` optionally grants argv prefixes to the Codex writer. A nonempty grant requires
 contract 4 and capability `writer_exec_allow`, plus `engine.writer_family` exactly `["openai"]` and no conflicting bead pin.
-Only writer calls carry `--writer-exec-allow` with compact JSON; an empty grant sends no flag. Delegate checks binaries
-against its host policy. See worker-run v4 for the host execution boundary and NETISO limitation.
+Only writer calls carry `writer_exec_allow`; an empty grant sends nothing. Delegate checks binaries
+against its host policy. See `docs/contracts/delegate-api.md` for the host execution boundary and NETISO limitation.
 
-Never read delegate's private state, and call `route.py` only through worker-run v4. A breaking contract change replaces
-the supported version on both sides; task-loop has no compatibility shim.
+Never read delegate's private state, and import only `delegate.api`. Delegate and task-loop release together; there is no compatibility shim.

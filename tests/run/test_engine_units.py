@@ -24,7 +24,6 @@ from support import gitq  # noqa: E402
 from support.checkpoints import read_ck  # noqa: E402
 
 from taskloop.adapters import delegate as dl  # noqa: E402
-from taskloop.adapters import procs as sproc  # noqa: E402
 from taskloop.app.plan.planner import Planner  # noqa: E402
 from taskloop.app.wire import slots as wslots  # noqa: E402
 from taskloop.contracts import answers  # noqa: E402
@@ -377,15 +376,11 @@ class DelegateLauncher(T.EngineTest):
         assert [c[1] for c in s.calls if c[0] == "worker"] == [None, "w3"]
         st.assert_not_called()
 
-    def test_lane_status_reads_route_status_json(self):
-        out = json.dumps({"v": 1, "lanes": {"OPENAI_SUBSCRIPTION": {"out": True}}})
-        def ran(text, rc=0):
-            return sproc.Ran(rc, text, "", 0.1, False)
-        with mock.patch.object(sproc, "capture", return_value=ran(out + "\n")) as cap:
-            assert lroute.lane_status("/r/route.py", snapshot()) == {"OPENAI_SUBSCRIPTION": {"out": True}}
-        assert cap.call_args[0][0][1:] == ["/r/route.py", "status", "--json"]
-        with mock.patch.object(sproc, "capture", return_value=ran("", 1)):
-            assert lroute.lane_status("/r/route.py", snapshot()) == {}
+    def test_lane_status_reads_the_status_lanes(self):
+        with mock.patch.object(lroute, "status_json", return_value={"v": 1, "lanes": {"OPENAI_SUBSCRIPTION": {"out": True}}}):
+            assert lroute.lane_status(snapshot()) == {"OPENAI_SUBSCRIPTION": {"out": True}}
+        with mock.patch.object(lroute, "status_json", return_value={}):
+            assert lroute.lane_status(snapshot()) == {}
 
     # lifesim-5ar.6 2026-10-21: the resumed writer's lane_out came with no retry_after, so next was owner, and the bead
     # blocked "needs a human" after 114 min of work
@@ -569,14 +564,14 @@ class DelegateLauncher(T.EngineTest):
         assert rc == 2
         assert "contract_violation" in self.said()
 
-    def test_no_delegate_blocks_with_the_install_command(self):
+    def test_a_refused_delegate_blocks_with_its_reason(self):
         c = wslots.load_cfg(str(self.wt), port_git())
         with mock.patch.object(dl, "resolve", return_value=dl.Refusal("not_installed")):
             rc = engine.Engine(
                 BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(), git=port_git(), who=who()
             ).run()
         assert rc == 2
-        assert "claude plugin update iorlas-delegate" in self.said()
+        assert "delegate refused the call setup (not_installed" in self.said()
 
 
 ENGINE_LINE = re.compile(

@@ -3,7 +3,6 @@
 
 import json
 import os
-import shlex
 import subprocess
 import sys
 import tempfile
@@ -25,6 +24,7 @@ from support import (  # noqa: E402
 )
 from support import engine_case as te  # noqa: E402
 from support.builders import make_engine  # noqa: E402
+from support.checked import run_checked  # noqa: E402
 from support.fakes import FakeBeadStore  # noqa: E402
 from support.spawn import port_git, real_spawner  # noqa: E402
 from support.who import who  # noqa: E402
@@ -32,7 +32,6 @@ from support.who import who  # noqa: E402
 from taskloop.adapters import delegate as dl  # noqa: E402
 from taskloop.adapters import (  # noqa: E402
     gitrepo,
-    runner,
 )
 from taskloop.adapters.gitrepo import pinned_env  # noqa: E402
 from taskloop.app.run import engine  # noqa: E402
@@ -53,7 +52,7 @@ def env_pair(cwd, env):
 
 
 def sh(*a, cwd):
-    return subprocess.run(list(a), cwd=str(cwd), check=True, capture_output=True, text=True).stdout.strip()
+    return run_checked(list(a), str(cwd), text=True).stdout.strip()
 
 
 class SlotGitTest(Case):
@@ -158,22 +157,19 @@ class SlotGitTest(Case):
 
     @te.POSIX_CHECK
     def test_workers_and_checks_are_not_pinned_but_the_engines_own_git_is(self):
-        route = Path(self.tmp.name) / "route.py"
-        route.write_text("")
-
-        def worker(cwd, env):  # the route.py of the worker call: what git variables its environment holds
-            env_names = [k for k in GIT_KEYS if k in env]
-            return 0, json.dumps(fake_route.answer(fake_route.contract(), None, "r1", False, {"env": env_names}))
-        procsim.fake(shlex.join([sys.executable, str(route)]), worker, args=True)
+        def worker(cmd, **kw):  # the delegate call: what git variables its request hands the worker's environment
+            env_names = [k for k in GIT_KEYS if k in kw["request"].worker_env]
+            return subprocess.CompletedProcess(cmd, 0, json.dumps(fake_route.answer(fake_route.contract(), None, "r1", False,
+                                                                                    {"env": env_names})), "")
         show, pair = procsim.fake("env-show", env_show), procsim.fake("env-pair", env_pair)
         with mock.patch.dict(os.environ, {"GIT_DIR": "/x", "GIT_WORK_TREE": "/y", "GIT_INDEX_FILE": "/z"}):
             r = dlcall.call(
-                dl.Resolved(route.parent, str(route), fake_route.CONTRACT, "explicit"),
+                dl.Resolved(Path(self.tmp.name), "delegate.api", fake_route.CONTRACT, "explicit"),
                 "worker",
                 "p",
                 {"type": "object"},
                 str(self.wt),
-                runner.StreamRunner(Path(self.tmp.name) / "err.log", 30.0),
+                worker,
                 timeout_s=30,
             )
             eng = engine.Engine(

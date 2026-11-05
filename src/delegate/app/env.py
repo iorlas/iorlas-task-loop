@@ -8,6 +8,7 @@ import contextlib
 import copy
 import json
 import os
+import shutil
 import sys
 import time
 import types
@@ -34,25 +35,28 @@ def now() -> float:
     return float(v) if v else time.time()
 
 
-def plugin_data_dir(here: Path | None = None) -> Path | None:
-    """Claude Code's persistent data dir for this plugin: <plugins>/data/<plugin>-<marketplace>, derived from where this copy is installed
-    (<plugins>/cache/<marketplace>/<plugin>/<version>/...). None when running from a checkout."""
-    parts = (here or DATA_DIR).parts
-    for i in range(1, len(parts) - 3):
-        if parts[i] == "cache" and parts[i - 1] == "plugins":
-            ident = "".join(c if c.isascii() and (c.isalnum() or c in "_-") else "-" for c in f"{parts[i + 2]}@{parts[i + 1]}")
-            return Path(*parts[:i]) / "data" / ident
-    return None
+LEGACY_DATA = "iorlas-delegate-iorlas-marketplace"  # the data dir of the retired iorlas-delegate plugin
+
+
+def home_dir() -> Path:
+    """task-loop's own folder: <XDG_CONFIG_HOME or ~/.config>/task-loop/delegate (the only place the factory keeps state)."""
+    return Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "task-loop" / "delegate"
+
+
+def adopt_legacy(target: Path) -> None:
+    """The first use after the plugin was retired: the old plugin's settings, state and history become this folder's. Once."""
+    old = Path.home() / ".claude" / "plugins" / "data" / LEGACY_DATA
+    if not target.exists() and old.is_dir():
+        with contextlib.suppress(OSError):
+            shutil.copytree(old, target)
 
 
 def config_dir() -> Path:
-    """Where settings, profile and state live: DELEGATE_CONFIG_DIR, else Claude Code's data dir for the installed plugin.
-    CLAUDE_PLUGIN_DATA is deliberately not read (it names whichever plugin launched the process). A checkout has no default: two places
-    would split the state."""
+    """Where settings, profile and state live: DELEGATE_CONFIG_DIR, else task-loop's folder for them (`home_dir`)."""
     explicit = os.environ.get("DELEGATE_CONFIG_DIR")
-    p = Path(explicit) if explicit else plugin_data_dir()
-    if p is None:
-        sys.exit("route.py: not running from an installed plugin; set DELEGATE_CONFIG_DIR to the folder for settings and state")
+    p = Path(explicit) if explicit else home_dir()
+    if not explicit:
+        adopt_legacy(p)
     p.mkdir(parents=True, exist_ok=True)
     with contextlib.suppress(OSError):
         os.chmod(p, 0o700)  # holds state and history: private to the user

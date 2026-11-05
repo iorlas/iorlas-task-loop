@@ -254,7 +254,7 @@ class TokenBudget(Case):
 
 
 class ConfigLocation(Case):
-    """Settings, state and the key live in Claude Code's plugin data dir when installed, ~/.config/delegate in a checkout."""
+    """Settings, state and the key live in task-loop's folder (<config>/task-loop/delegate); the retired plugin's data is adopted once."""
 
     def setup_method(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -273,23 +273,26 @@ class ConfigLocation(Case):
             os.environ.pop(k, None) if v is None else os.environ.__setitem__(k, v)
         self.tmp.cleanup()
 
-    def installed(self):
-        root = Path(self.tmp.name) / ".claude" / "plugins"
-        env.DATA_DIR = root / "cache" / "iorlas-marketplace" / "iorlas-delegate" / "0.12.0" / "skills" / "delegate"
-        return root / "data" / "iorlas-delegate-iorlas-marketplace"
-
-    def test_checkout_without_an_override_refuses_instead_of_splitting_the_state(self):
-        with pytest.raises(SystemExit):
-            env.config_dir()
-
-    def test_installed_copy_uses_the_plugin_data_dir_and_ignores_foreign_env(self):
-        want = self.installed()
-        assert env.plugin_data_dir() == want
+    def test_without_an_override_the_state_lives_in_task_loops_folder(self):
+        os.environ.pop("DELEGATE_CONFIG_DIR", None)
+        os.environ["XDG_CONFIG_HOME"] = str(Path(self.tmp.name) / "xdg")
+        want = Path(self.tmp.name) / "xdg" / "task-loop" / "delegate"
         assert env.config_dir() == want
-        assert not (Path(self.tmp.name) / "someone-elses-data").exists()
+        assert want.is_dir()
+
+    def test_the_retired_plugins_data_is_adopted_once(self):
+        os.environ.pop("DELEGATE_CONFIG_DIR", None)
+        os.environ["XDG_CONFIG_HOME"] = str(Path(self.tmp.name) / "xdg")
+        os.environ["HOME"] = self.tmp.name
+        old = Path(self.tmp.name) / ".claude" / "plugins" / "data" / env.LEGACY_DATA
+        old.mkdir(parents=True)
+        (old / "config.json").write_text('{"profile": {"lanes": {}}}')
+        got = env.config_dir()
+        assert (got / "config.json").read_text() == '{"profile": {"lanes": {}}}'
+        (old / "config.json").write_text("changed later")
+        assert (env.config_dir() / "config.json").read_text() == '{"profile": {"lanes": {}}}'
 
     def test_explicit_override_wins(self):
-        self.installed()
         os.environ["DELEGATE_CONFIG_DIR"] = str(Path(self.tmp.name) / "mine")
         assert env.config_dir() == Path(self.tmp.name) / "mine"
 

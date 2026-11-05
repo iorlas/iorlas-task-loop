@@ -2,12 +2,12 @@
 the real land lock held around the land and a trace of what ran inside it (events). Used by EngineTest.run_push_race."""
 import os
 import signal
-import subprocess
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 from unittest import mock
 
+from support.checked import run_checked
 from support.checks import ck, res
 from taskloop.adapters.git import RealGit
 from taskloop.app.land.checkout import Checkout
@@ -24,7 +24,7 @@ RETRY_RED = ("checks", "checks_fixed", "checks_exhausted", "review_exhausted")
 
 
 def sh(*a, cwd):
-    subprocess.run(list(a), cwd=cwd, check=True, capture_output=True)
+    run_checked(list(a), cwd)
 
 
 def seam(method):

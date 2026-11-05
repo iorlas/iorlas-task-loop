@@ -18,6 +18,7 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as te
 from support import gitq
 from support.engine_case import CLEAN, PLAN, WRITE
+from support.fake_api import FakeApi
 
 from taskloop.adapters import delegate, runner
 from taskloop.adapters import halt as halting
@@ -52,15 +53,17 @@ class Halt(te.EngineTest):
     def test_a_worker_call_is_stopped_by_the_run_flag_and_its_process_is_gone(self):
         d = Path(tempfile.mkdtemp())
         self.addCleanup(lambda: __import__("shutil").rmtree(d, ignore_errors=True))
-        pidfile = d / "pid"
-        r = runner.StreamRunner(d / "err.log", 60.0, "", None, grace=0.5)
+        pidfile = d / "w.pid"
+        fake = FakeApi(d, "sleep 30")
+        r = runner.ApiRunner(d / "err.log", 60.0, "", None, grace=0.5)
         r.outer = threading.Event()
+        request = runner.api.RunRequest(role="worker", brief_file="b.md", cwd=str(d))
         # the flag goes when the call's process has written its pid (a fixed delay can beat a loaded runner's start)
         threading.Thread(target=lambda: (te.until(pidfile.exists, WAIT), te.until(lambda: pidfile.read_text().strip(), WAIT),
                                          r.outer.set()), daemon=True).start()
         t = time.time()
-        with pytest.raises(delegate.Stopped):
-            r(["sh", "-c", 'echo $$ > "$0"; sleep 30', str(pidfile)])
+        with fake.patch(), pytest.raises(delegate.Stopped):
+            r(["delegate"], request=request)
         assert time.time() - t < 20
         assert r.obs["why"] == "interrupted"
         te.until(lambda: te.pid_gone(int(pidfile.read_text())), 3)

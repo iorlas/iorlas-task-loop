@@ -1,15 +1,13 @@
 """CallState (the vendor call on disk) and the network gate (tl-7y6.2.13): checkpoints survive, finished output is never discarded."""
 import json
-import shlex
-import sys
 import tempfile
 from pathlib import Path
+from unittest import mock
 
 from support.case import Case
 
 ROOT = Path(__file__).resolve().parents[2]
 import support.paths  # noqa: E402, F401
-from support import procsim  # noqa: E402
 from support.narrow import must  # noqa: E402
 
 from taskloop.adapters import delegate as dl  # noqa: E402
@@ -123,23 +121,14 @@ class Gate(Case):
         assert not s.poll(p, 0.0)
         assert s.poll(p, 60.0)
 
-    def probe(self, out, code=0):
-        """A RouteProbe over a route.py that is a procsim fake printing `out`; the fake notes the argv it was run with."""
-        seen = []
+    def test_route_probe_reads_a_failure_as_unknown(self):
+        probe = dl.RouteProbe(("a.com", "b.com"))
+        for answer, want in ((True, True), (False, False), (RuntimeError("no config"), None), (SystemExit("no state dir"), None)):
+            with mock.patch.object(dl.api, "network", side_effect=[answer] if isinstance(answer, BaseException) else None,
+                                   return_value=answer):
+                assert probe.up() is want, answer
 
-        def route(cwd, env):
-            seen.append(" ".join(procsim.argv()[2:]))
-            return code, out
-        procsim.fake(f"{shlex.quote(sys.executable)} /fake/route.py", route, args=True)
-        return dl.RouteProbe("/fake/route.py", ("a.com", "b.com")), seen
-
-    def test_route_probe_parses_the_last_line_and_reads_a_failure_as_unknown(self):
-        for out, code, want in (("noise\n{\"v\": 1, \"up\": true}", 0, True), ("{\"v\": 1, \"up\": false}", 0, False),
-                                ("", 0, None), ("Traceback", 1, None)):
-            probe, _ = self.probe(out, code)
-            assert probe.up() is want, out
-
-    def test_route_probe_asks_route_py_net_with_the_hosts(self):
-        probe, seen = self.probe("{\"up\": true}")
-        probe.up()
-        assert seen == ["net --host a.com --host b.com"]
+    def test_route_probe_asks_delegate_with_the_hosts(self):
+        with mock.patch.object(dl.api, "network", return_value=True) as ask:
+            dl.RouteProbe(("a.com", "b.com")).up()
+        ask.assert_called_once_with(("a.com", "b.com"))
