@@ -1,87 +1,49 @@
 """Typed document reads shared by file stores and authoritative database rows."""
 
 import json
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import Protocol, override
 
-from atomic_io import atomic_write_json
+from any_json_doc import Absent, Doc, ForeignVersion, ForeignVersionError, Present, Read, Torn, refusal
 
 from taskloop.contracts import wire
 from taskloop.contracts.wire import Refused
 
-
-@dataclass(frozen=True)
-class Present[T]:
-    rec: T
+__all__ = ["Absent", "ForeignVersion", "Item", "JsonStore", "Ledger", "Page", "Present", "Read", "Torn", "refusal"]
 
 
-@dataclass(frozen=True)
-class Absent:
-    """No document was written, or it was deleted."""
+def _loader[T](cls: type[T]) -> Callable[[object], T]:
+    def load(data: object) -> T:
+        try:
+            return wire.load(cls, data)
+        except wire.StaleRecord as err:
+            raise ForeignVersionError(err.found, err.want) from err
+
+    return load
 
 
-@dataclass(frozen=True)
-class Torn:
-    path: Path
-    why: str
-
-
-@dataclass(frozen=True)
-class ForeignVersion:
-    path: Path
-    found: object
-    want: int
-
-
-type Read[T] = Present[T] | Absent | Torn | ForeignVersion
-
-
-def refusal(r: Torn | ForeignVersion) -> str:
-    if isinstance(r, Torn):
-        return f"{r.path} is torn or not a record of this version ({r.why}): fix or delete it; it is not read as empty"
-    return f"{r.path} is v{r.found!r}, this install reads v{r.want}: delete it or run the install that wrote it"
-
-
-class JsonStore[T]:
-    """Atomic JSON documents; get is lossy, need refuses an unreadable document."""
+class JsonStore[T](Doc[T]):
+    """Atomic JSON documents of one wire record; get is lossy, need refuses an unreadable document."""
 
     def __init__(self, path: Path, cls: type[T]) -> None:
-        self.path = Path(path)
-        self.cls = cls
+        super().__init__(path, _loader(cls), wire.dump)
 
     def decode(self, text: str) -> Read[T]:
         try:
-            return Present(wire.load(self.cls, json.loads(text)))
-        except wire.StaleRecord as err:
+            return Present(self._load(json.loads(text)))
+        except ForeignVersionError as err:
             return ForeignVersion(self.path, err.found, err.want)
         except ValueError as err:
             return Torn(self.path, str(err))
 
-    def read(self) -> Read[T]:
-        try:
-            text = self.path.read_text(encoding="utf-8")
-        except FileNotFoundError:
-            return Absent()
-        except OSError as err:
-            return Torn(self.path, str(err))
-        return self.decode(text)
-
-    def get(self) -> T | None:
-        r = self.read()
-        return r.rec if isinstance(r, Present) else None
-
+    @override
     def need(self) -> T | None:
         r = self.read()
         if isinstance(r, (Torn, ForeignVersion)):
             raise Refused(refusal(r))
         return r.rec if isinstance(r, Present) else None
-
-    def write(self, rec: T) -> None:
-        atomic_write_json(self.path, wire.dump(rec), indent=1, fsync=False)
-
-    def delete(self) -> None:
-        self.path.unlink(missing_ok=True)
 
 
 @dataclass(frozen=True)
