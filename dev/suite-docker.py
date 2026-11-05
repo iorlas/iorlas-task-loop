@@ -25,6 +25,7 @@ import stream_proc  # noqa: E402
 
 _DOCKERFILE_SHA = hashlib.sha1((HERE / "Dockerfile.suite").read_bytes()).hexdigest()[:10]
 DEFAULT_IMAGE = "task-loop-suite:" + _DOCKERFILE_SHA  # a new Dockerfile is a new image
+TIME_SCALE = "TL_TIME_SCALE=3"  # the container shares a box with other releases and 7 workers: conftest.py multiplies its time limits
 SUITE_WALL_S = 3 * 3600.0  # a hang guard for the whole host suite; each shard has its own, shorter, limit
 INSIDE = ("git clone -q /src.git /w && cd /w && git checkout -q \"$SHA\" && cat > /tmp/p"
           " && { [ ! -s /tmp/p ] || git apply /tmp/p; } && uv run --script dev/suite.py")
@@ -79,8 +80,8 @@ def main(argv=None):
     patch = git(repo, "diff", "HEAD", "--binary")
     name = f"tl-suite-{os.getpid():d}-{int(time.time()):d}"
     inside = os.environ.get("TASK_LOOP_SUITE_INSIDE") or INSIDE  # the override is for the wrapper's own test
-    cmd = ["docker", "run", "--rm", "--init", "-i", "--name", name, "-w", "/", "-e", "SHA=" + sha, "-v", f"{common}:/src.git:ro",
-           args.image, "sh", "-c", inside]
+    cmd = ["docker", "run", "--rm", "--init", "-i", "--name", name, "-w", "/", "-e", "SHA=" + sha, "-e", TIME_SCALE,
+           "-v", f"{common}:/src.git:ro", args.image, "sh", "-c", inside]
     p = subprocess.Popen(cmd, stdin=subprocess.PIPE)
 
     def stop(signum, _frame):

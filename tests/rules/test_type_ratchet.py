@@ -1,61 +1,12 @@
-"""A ratchet on the escapes from the type checker in src/: explicit `Any`, `# pyrefly: ignore`, `# type: ignore` and `cast(`.
-
-tests/rules/type_ratchet.json records today's counts. A count above its record fails; a count below it fails too until the
-record is lowered to match (so the number only goes down and a freed slot cannot be spent again).
-"""
+"""The escapes from the type checker in src/ (explicit `Any`, `# pyrefly: ignore`, `# type: ignore`, `cast(`) never rise in a change, and
+every match ends in assert_never. No total is stored: tests/rules/real/test_changed_files.py compares the files a change touches with their
+merge base, so two parallel releases never write the same file."""
 import ast
-import io
-import json
-import sys
-import tokenize
-from pathlib import Path
 
 from support.case import Case
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
-
-ROOT = Path(__file__).resolve().parents[2]
-RECORD = Path(__file__).with_name("type_ratchet.json")
-KINDS = ("any", "pyrefly_ignore", "type_ignore", "cast")
-
-
-def count_source(text: str) -> dict[str, int]:
-    """The four counts in one module's source: Any names and attributes outside imports, ignore comments, cast calls."""
-    out = dict.fromkeys(KINDS, 0)
-    for node in ast.walk(ast.parse(text)):
-        if (isinstance(node, ast.Name) and node.id == "Any") or (isinstance(node, ast.Attribute) and node.attr == "Any"):
-            out["any"] += 1
-        elif isinstance(node, ast.Call):
-            fn = node.func
-            if (isinstance(fn, ast.Name) and fn.id == "cast") or (isinstance(fn, ast.Attribute) and fn.attr == "cast"):
-                out["cast"] += 1
-    for tok in tokenize.generate_tokens(io.StringIO(text).readline):
-        if tok.type == tokenize.COMMENT:
-            body = tok.string.lstrip("# ").lower()
-            out["pyrefly_ignore"] += body.startswith("pyrefly: ignore")
-            out["type_ignore"] += body.startswith("type: ignore")
-    return out
-
-
-def count_tree(root: Path = ROOT) -> dict[str, int]:
-    total = dict.fromkeys(KINDS, 0)
-    for path in sorted((root / "src").rglob("*.py")):
-        if "_vendor" in path.parts:
-            continue
-        for kind, n in count_source(path.read_text(encoding="utf-8")).items():
-            total[kind] += n
-    return total
-
-
-def problems(actual: dict[str, int], recorded: dict[str, int]) -> list[str]:
-    out = []
-    for kind in KINDS:
-        if actual[kind] > recorded[kind]:
-            out.append(f"{kind}: {actual[kind]} in src/, recorded {recorded[kind]}: remove the new one, do not raise the record")
-        elif actual[kind] < recorded[kind]:
-            out.append(f"{kind}: {actual[kind]} in src/, recorded {recorded[kind]}: lower it in tests/rules/type_ratchet.json")
-    return out
+from rules.gate_rules import ROOT
+from rules.type_counts import KINDS, change_problems, count_source
 
 
 def open_matches(text: str) -> list[int]:
@@ -82,22 +33,21 @@ class TypeRatchet(Case):
         assert open_matches("match x:\n    case 1:\n        pass\n") == [1]
         assert open_matches("match x:\n    case 1:\n        pass\n    case _:\n        assert_never(x)\n") == []
 
-    def test_the_counts_in_src_match_the_record_and_never_rise(self):
-        assert problems(count_tree(), json.loads(RECORD.read_text(encoding="utf-8"))) == []
-
-    def test_a_planted_escape_of_each_kind_is_counted(self):
+    def test_a_planted_escape_of_each_kind_is_counted_and_fails_a_change(self):
         planted = {
             "any": "from typing import Any\nx: Any = 1\n",
             "pyrefly_ignore": "x = 1  # pyrefly: ignore[bad-assignment]\n",
             "type_ignore": "x = 1  # type: ignore\n",
             "cast": "from typing import cast\nx = cast(int, 1)\n",
         }
-        base = dict.fromkeys(KINDS, 5)
         for kind, text in planted.items():
             with self.subTest(kind):
                 assert count_source(text)[kind] == 1
-                bumped = {k: v + (k == kind) for k, v in base.items()}
-                assert len(problems(bumped, base)) == 1
+                assert len(change_problems({"m.py": "x = 1\n"}, {"m.py": text})) == 1
+                assert change_problems({"m.py": text}, {"m.py": "x = 1\n"}) == []
 
-    def test_the_recorded_kinds_are_exactly_the_counted_ones(self):
-        assert sorted(json.loads(RECORD.read_text(encoding="utf-8"))) == sorted(KINDS)
+    def test_moving_an_escape_between_files_is_free_and_a_new_file_pays(self):
+        any_x = "from typing import Any\nx: Any = 1\n"
+        assert change_problems({"a.py": any_x}, {"a.py": "x = 1\n", "b.py": any_x}) == []
+        assert change_problems({}, {"new.py": any_x})
+        assert set(KINDS) == {"any", "pyrefly_ignore", "type_ignore", "cast"}

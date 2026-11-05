@@ -43,15 +43,6 @@ class ArchitectureRatchets(Case):
         assert growth_problems({"scc": 0}, {"scc": 1})
         assert growth_problems({"scc": 1}, {"scc": 1}) == []
 
-    def test_sloc_growth_needs_a_reason_for_that_exact_increase(self):
-        assert growth_problems({"sloc": 12}, {"sloc": 10})
-        assert growth_problems({"sloc": 8}, {"sloc": 10})
-        assert growth_problems({"sloc": 12}, {"sloc": 10, "sloc_growth": {"from": 10, "to": 12, "why": ""}})
-        assert growth_problems({"sloc": 12}, {
-            "sloc": 10, "sloc_growth": {"from": 10, "to": 12, "why": "ENUMTOTAL adds architecture rules and regression tests"},
-        }) == []
-
-    def test_a_reason_does_not_buy_an_unrecorded_increase(self):
-        assert growth_problems({"sloc": 13}, {
-            "sloc": 10, "sloc_growth": {"from": 10, "to": 12, "why": "new invariant"},
-        })
+    def test_no_total_size_is_stored_so_a_release_never_rewrites_the_ratchet(self):
+        assert sorted(json.loads(RATCHET.read_text())) == ["_", "fanout", "oversize", "oversize_functions", "scc"]
+        assert sorted(metrics()) == ["fanout", "scc"]

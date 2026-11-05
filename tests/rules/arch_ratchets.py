@@ -1,8 +1,8 @@
-"""Import SCCs, fan-out and total SLOC, measured statically over the owned Python tree."""
+"""Import SCCs and fan-out, measured statically over the owned Python tree. Size is the per-file caps of gate_rules.py; no total is kept."""
 import ast
 
 from rules.enumtotal import bindings, qualified
-from rules.gate_rules import ROOT, measure, parsed, py_files
+from rules.gate_rules import ROOT, parsed, py_files
 
 
 def production_trees(root=ROOT):
@@ -79,17 +79,10 @@ def cyclic_components(graph):
 
 def growth_problems(actual, recorded):
     problems = []
-    growth = recorded.get('sloc_growth')
-    if growth is not None:
-        valid = (bool(growth.get('why', '').strip()) and growth.get('from') == recorded['sloc']
-                 and growth.get('to', 0) > recorded['sloc'])
-        if not valid:
-            problems.append('sloc_growth needs a nonempty why and an exact from/to increase over the baseline')
     for metric, value in actual.items():
-        limit = growth.get('to', recorded[metric]) if metric == 'sloc' and growth is not None else recorded[metric]
+        limit = recorded[metric]
         if value > limit:
-            advice = 'remove growth or record an explained SLOC increase' if metric == 'sloc' else 'the count may only shrink'
-            problems.append(f'{metric} grew: {value} > {limit}; {advice}')
+            problems.append(f'{metric} grew: {value} > {limit}; the count may only shrink')
         elif value < limit:
             problems.append(f'{metric} shrank: lower rules_ratchet.json from {limit} to {value}')
     return problems
@@ -100,5 +93,4 @@ def metrics(root=ROOT):
     return {
         'scc': len(cyclic_components(graph)),
         'fanout': max(map(len, graph.values()), default=0),
-        'sloc': sum(measure(path)[0] for path in py_files(root)),
     }
