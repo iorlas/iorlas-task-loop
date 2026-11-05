@@ -14,6 +14,7 @@ from taskloop.app.report.inputs import bead_status, read_jsonl, repo_traces
 from taskloop.app.report.planner import input_tokens
 from taskloop.contracts import paths, runlife
 from taskloop.contracts.bead import Comment
+from taskloop.contracts.dashhealth import Score
 from taskloop.contracts.enums import Outcome, Result
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId, is_bead_id, loop_key
@@ -165,6 +166,12 @@ def _tokens(runs: Sequence[RunTrace]) -> dict[str, dict[str, dict[str, int]]]:
                 d["cached"] += tk["cached"]
                 d["out"] += tk["out"]
     return tokens
+
+
+def score_of(c: dict[str, Any]) -> Score:
+    """The dashboard strip's numbers of a scorecard: nothing is recounted, so the strip and `tl report` cannot disagree."""
+    return Score(since=c["since"], until=c["until"], beads=c["beads"], landed=c["landed"], landed_no_ask=c["landed_no_ask"],
+                 asks=c["asks"]["count"], lost=c["lost"], crashes=c["crashes"], m2_pass=c["m2"]["pass"])
 
 
 def scorecard(repo: str, since: float, until: float, base: str, comments_of: Callable[[BeadId], Sequence[Comment]] | None = None,
