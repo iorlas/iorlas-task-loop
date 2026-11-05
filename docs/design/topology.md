@@ -203,3 +203,19 @@ Verdict: ✅ plain copy of delegate origin/main into `src/delegate` (no history,
 ## Processes (answer to Denis, 2026-11-05)
 
 Per machine: one dashboard (port 7878, `dash ensure` is idempotent and replaces a stale one) and, per repo, up to its wanted count of loops (`tl factory start` tops up; a second call starts nothing). There is no engine server: the loops and `tl` write `factory.db` and files, the dashboard reads them, and its POST verbs (park, stop, note) go through the same typed stores. A central engine process with an API would be a new single point of failure and a new process to supervise; ❌ for now (untested alternative: only worth it when an executor runs on another machine).
+
+## Later: more than one machine (Denis, 2026-11-05; thinking, nothing built)
+
+- ✅ The bus is the git remote, not a new server. Code, the profile (read from the base commit) and bd's data (`refs/dolt/data`, README of the beads block) already travel through it. A factory on another PC or in the cloud (Linux is enough) is a second machine's factory registered for a repo by canonical name. Handing it a task = file a bead, push bd data; it pulls at each loop pass and picks it up. Done = the bead closes after its PR merges; the filer sees it when it next pulls (its `external:` dependency resolves then). No timers and no push channel: the existing pass-interval poll plus a sync at pass start. Untested: bd sync cadence and conflict behavior across two machines.
+- ✅ Rule: one repo has one working factory at a time. ❌ Two machines looping the same repo: a claim is atomic only inside one store, and across a sync a double claim is possible (untested). Which machine works a repo is a registry fact, not a lock to race for.
+- ✅ Everything another machine needs must be in the bead, not only in `factory.db`: outcome, block reason, owner-needed. This is already the rule ("everything is recorded in the bead"); the remote asks and runs panel are the exception to check.
+- ✅ Dashboard stays one per machine and shows that machine's factory. ❌ A central dashboard or engine server now. A remote factory's live view is its own dashboard (it already binds the Tailscale address); a repo's registry entry can carry that URL.
+- ⚠️ Accounts are per machine: one subscription used from two machines is counted by two delegates that cannot see each other's usage windows.
+
+### Splitting one repo's stages across machines (executor affinity)
+
+- ✅ It is the executor split of section 1, minimal form: one factory, remote executors. The first useful boundary already exists as a shape: a check with `run_in: clean` runs a committed tree, and the container backend ships tracked files as a tar on stdin and returns exit code plus `$TL_ARTIFACT_DIR`. One port: "run this argv on this commit, return result and artifacts". Backends: local (today), container (today, the one he calls hell), ssh to a Linux box (later). ❌ Add more container machinery (images, caches) meanwhile; freeze `in: container`. ✅ delete it when the ssh backend or the Defender fix below replaces it.
+- The reason for the container is the endpoint scanner's per-file cost on the Mac (about 20 ms a file, bead memory 2026-10-29). Cheaper than any of the above if allowed: a Defender folder exclusion for the factory's worktree and slot folders. Untested and policy-dependent (see D6).
+- Needs a server? No for one-way jobs over ssh (the engine starts the job, streams the log, collects the result). A server is only needed when the remote machine must start work on its own, which the git-remote bus already covers.
+
+**D6. Can this Mac exclude the factory's worktree folders (`~/Workspaces/wt`, the slots dirs) from Defender?** If yes, the container checks and their images can be deleted and review/land/gate run natively; if the policy forbids it, the ssh Linux executor is the replacement and the container backend stays until it exists.
