@@ -44,5 +44,5 @@ class ArchitectureRatchets(Case):
         assert growth_problems({"scc": 1}, {"scc": 1}) == []
 
     def test_no_total_size_is_stored_so_a_release_never_rewrites_the_ratchet(self):
-        assert sorted(json.loads(RATCHET.read_text())) == ["_", "fanout", "oversize", "oversize_functions", "scc"]
+        assert sorted(json.loads(RATCHET.read_text())) == ["_", "fanout", "scc"]
         assert sorted(metrics()) == ["fanout", "scc"]

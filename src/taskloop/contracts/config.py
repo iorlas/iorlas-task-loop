@@ -168,11 +168,14 @@ class PrepareConfig(Rec):
     timeout_min: float = 30
 
 
+LAND_PUSH = ("git", "push", "origin", "HEAD:main")  # the default `engine.land` argv: data, not a git call
+
+
 @final
 class EngineConfig(Rec):
     """The `engine` block; every key has the default the engine uses today."""
 
-    land: list[str] = msgspec.field(default_factory=lambda: ["git", "push", "origin", "HEAD:main"])
+    land: list[str] = msgspec.field(default_factory=lambda: list(LAND_PUSH))
     land_optimistic_tries: int = 2  # gate re-runs outside the land lock when main moved under it, then inside (0: inside)
     base: str = "origin/main"
     check_links: bool = True

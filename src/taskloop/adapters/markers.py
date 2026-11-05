@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """The conflict-marker check: print the lines and exit 1 when the tree holds `<<<<<<<` or `>>>>>>>` markers, else exit 0."""
+# git-port-exempt: a script run by path from a slot; it runs `git grep` there and imports no port
 import sys
 from pathlib import Path
 

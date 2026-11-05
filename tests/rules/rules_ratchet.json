@@ -1,7 +1,5 @@
 {
-  "_": "Caps (the oversize tables), module SCC count and maximum module fan-out. Counts must match and may only shrink. File size is the per-file caps of gate_rules.py; no total is stored, so parallel releases do not touch this file. Vendor and fixture exclusions are shared with gate_rules.py.",
-  "oversize": {},
-  "oversize_functions": {},
+  "_": "Module SCC count and maximum module fan-out. Counts must match and may only shrink. File size is the per-file caps of gate_rules.py; no total is stored, so parallel releases do not touch this file. Vendor and fixture exclusions are shared with gate_rules.py.",
   "scc": 3,
   "fanout": 104
 }

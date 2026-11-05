@@ -1,12 +1,10 @@
-"""A ratchet on git calls that skip the Git port (contracts/ports.py): a process started for `git` (an argv list that begins
-"git", run_git), or a call to a string-in string-out `git(...)` helper (gitrepo.git, the engine's e.git), anywhere in src/ but the
-modules that hold git itself. tests/rules/git_ratchet.json records the count per file left today; a file may only get
-fewer (above its record, or absent from it, fails; below fails until the record is lowered), so the remainder cannot grow back.
-New git work goes through a Git port method (adapters/git.py RealGit, contracts/ports.py Git) that tests/ports/git_contract.py
-holds the sim and real git to.
+"""No git call skips the Git port (contracts/ports.py): a process started for `git` (argv list beginning "git", run_git), or a call to a
+string-in string-out `git(...)` helper (gitrepo.git, the engine's e.git), anywhere in src/ but the modules that hold git itself. No table:
+a file that cannot go through the port (a plain-python3 hook in git's own path, a script run by path from a slot) says so with one
+`# git-port-exempt: <why>` comment line. New git work goes through a Git port method (adapters/git.py RealGit, contracts/ports.py Git) that
+tests/ports/git_contract.py holds the sim and real git to.
 """
 import ast
-import json
 import sys
 from pathlib import Path
 
@@ -16,14 +14,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
 ROOT = Path(__file__).resolve().parents[2]
-RECORD = Path(__file__).with_name("git_ratchet.json")
+PRAGMA = "# git-port-exempt:"
 HOME = frozenset({"src/taskloop/adapters/git.py", "src/taskloop/adapters/git_base.py", "src/taskloop/adapters/git_ops.py"})
-# Why a file outside HOME still names git, each one a command that is data or a script git cannot be asked through.
-STAYS = {
-    "src/taskloop/hook/prepush.py": "the git pre-push hook: plain python3 in git's hook path, it imports no port and no record",
-    "src/taskloop/adapters/markers.py": "the conflict-marker script uses procs to run git grep from the slot",
-    "src/taskloop/contracts/config.py": "the default of the repo's land command, an argv the shell runs: data, not a call",
-}
 
 
 def count_source(text: str) -> int:
@@ -44,27 +36,17 @@ def count_tree(root: Path = ROOT) -> dict[str, int]:
     found = {}
     for path in sorted((root / "src").rglob("*.py")):
         rel = path.relative_to(root).as_posix()
-        if "_vendor" in path.parts or rel in HOME:
+        text = path.read_text(encoding="utf-8")
+        if "_vendor" in path.parts or rel in HOME or PRAGMA in text:
             continue
-        if n := count_source(path.read_text(encoding="utf-8")):
+        if n := count_source(text):
             found[rel] = n
     return found
 
 
-def problems(actual: dict[str, int], recorded: dict[str, int]) -> list[str]:
-    out = []
-    for rel in sorted(set(actual) | set(recorded)):
-        a, r = actual.get(rel, 0), recorded.get(rel, 0)
-        if a > r:
-            out.append(f"{rel}: {a} git calls outside the Git port, recorded {r}: use a port method, do not raise the record")
-        elif a < r:
-            out.append(f"{rel}: {a} git calls outside the Git port, recorded {r}: lower it in tests/rules/git_ratchet.json")
-    return out
-
-
-class GitRatchet(Case):
-    def test_no_file_gains_a_git_call_outside_the_port(self):
-        assert problems(count_tree(), json.loads(RECORD.read_text(encoding="utf-8"))) == []
+class GitRule(Case):
+    def test_no_file_calls_git_outside_the_port_unless_it_says_why(self):
+        assert count_tree() == {}
 
     def test_each_kind_of_escape_is_counted(self):
         for text in (
@@ -79,11 +61,6 @@ class GitRatchet(Case):
                 assert count_source(text) == 1
         assert count_source("port.fetch(d)\nx = ['git']\ngit.fetch(d)\nreal.git(env)") == 0
 
-    def test_what_is_left_is_only_what_cannot_go_through_the_port(self):
-        assert sorted(json.loads(RECORD.read_text(encoding="utf-8"))) == sorted(STAYS)
-
-    def test_a_new_call_fails_and_a_removed_one_asks_for_the_record_to_drop(self):
-        assert len(problems({"a.py": 2}, {"a.py": 1})) == 1
-        assert len(problems({"b.py": 1}, {})) == 1
-        assert len(problems({}, {"a.py": 1})) == 1
-        assert problems({"a.py": 1}, {"a.py": 1}) == []
+    def test_every_exemption_names_a_reason(self):
+        pragmas = [(p.name, ln) for p in (ROOT / "src").rglob("*.py") for ln in p.read_text(encoding="utf-8").splitlines() if PRAGMA in ln]
+        assert pragmas and all(ln.split(PRAGMA)[1].strip() for _, ln in pragmas)

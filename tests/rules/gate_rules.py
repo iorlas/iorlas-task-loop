@@ -2,9 +2,8 @@
 
 What it enforces, over every .py under src/, skills/, dev/ and tests/ (EXEMPT_DIRS is skipped by the caps):
   caps      400 SLOC per file, 80 per function, 800 per test file; SLOC = non-blank, non-comment, non-docstring lines by tokenize.
-            Every cap violation that exists today is listed by file name in tests/rules/rules_ratchet.json
-            ("oversize" / "oversize_functions"). A listed entry may be removed or lowered, never added.
-            Run `python3 tests/rules/gate_rules.py --measure` to see the current table.
+            No table and no exceptions: a file or function over its cap fails, and is split.
+            Run `python3 tests/rules/gate_rules.py --measure` to see the current sizes.
   layers    not here: the `.importlinter` contracts (layers, app slices, dashboard, `import re` placement) run in `just rules`;
             lazy imports are ruff PLC0415, banned modules TID251, module docstrings D100 (ruff.toml).
   placement our file names only in contracts/paths.py; no mutable module global in domain/app/cli/hook/dash.
@@ -16,7 +15,6 @@ import ast
 import functools
 import importlib
 import io
-import json
 import os
 import re
 import shutil
@@ -145,31 +143,10 @@ def measure_tree(root):
     return {"files": files, "functions": funcs}
 
 
-def load_ratchet():
-    return json.loads(RATCHET.read_text(encoding="utf-8"))
-
-
-def ratchet_problems(actual, known, label, ceiling=lambda key: True):
-    """A violation absent from `known` fails; `known` entries that are fixed (or gone) must be removed; a ceiling may not be exceeded.
-    `ceiling(key)` False means membership only (test files: the loops keep adding tests to the big ones)."""
-    out = []
-    for key, size in sorted(actual.items()):
-        if key not in known:
-            out.append(f'{label} over cap: {key} = {int(size)}. Split it; do not add it to the table.')
-        elif ceiling(key) and size > known[key]:
-            out.append(f"{label} grew: {key} = {int(size)} > recorded {int(known[key])}")
-    for key in sorted(set(known) - set(actual)):
-        out.append(f'{label} now within its cap (or gone): delete "{key}" from tests/rules/rules_ratchet.json')
-    return out
-
-
-def cap_problems(root=ROOT, known=None):
-    known = load_ratchet() if known is None else known
+def cap_problems(root=ROOT):
     actual = measure_tree(root)
-    def not_test(key):
-        return not key.startswith("tests/")
-    return (ratchet_problems(actual["files"], known["oversize"], "file", not_test)
-            + ratchet_problems(actual["functions"], known["oversize_functions"], "function", not_test))
+    return ([f"file over cap: {key} = {size}. Split it." for key, size in sorted(actual["files"].items())]
+            + [f"function over cap: {key} = {size}. Split it." for key, size in sorted(actual["functions"].items())])
 
 
 # -- import graph over src/ ------------------------------------------------------------------------------------------------------------
@@ -507,16 +484,8 @@ def violations(skill=SKILL):
 
 # -- tests: the real tree --------------------------------------------------------------------------------------------------------------
 class RealTree(Case):
-    def test_caps_hold_except_the_known_oversize_table(self):
+    def test_every_file_and_function_is_within_its_cap(self):
         assert cap_problems() == []
-
-    def test_the_ratchet_file_names_only_existing_keys_in_sorted_form(self):
-        known = load_ratchet()
-        for table in ("oversize", "oversize_functions"):
-            assert list(known[table]) == sorted(known[table]), table
-            for key, size in known[table].items():
-                assert (ROOT / key.split("::")[0]).is_file(), key
-                assert size > (FUNC_CAP if "::" in key else FILE_CAP), key
 
     def test_src_has_no_mutable_globals_and_names_its_files_only_in_paths(self):
         assert src_problems() == []
@@ -562,26 +531,20 @@ class Planted(Case):
         size, funcs = measure(root / "skills" / "a.py")
         assert (size, funcs["f"], funcs["f.g"]) == (6, 5, 2)
 
-    def test_a_file_over_its_cap_fails_unless_listed_and_a_fixed_one_must_leave_the_table(self):
+    def test_a_file_over_its_cap_fails(self):
         body = "x = 1\n" * (FILE_CAP + 1)
         root = self.tree({"skills/big.py": body, "tests/test_big.py": body})
-        empty = {"oversize": {}, "oversize_functions": {}}
-        assert len(cap_problems(root, empty)) == 1
-        listed = {"oversize": {"skills/big.py": FILE_CAP + 1}, "oversize_functions": {}}
-        assert cap_problems(root, listed) == []
-        grown = {"oversize": {"skills/big.py": FILE_CAP}, "oversize_functions": {}}
-        assert "grew" in cap_problems(root, grown)[0]
-        stale = {"oversize": {"skills/big.py": 500, "skills/gone.py": 500}, "oversize_functions": {}}
-        assert "skills/gone.py" in cap_problems(root, stale)[0]
+        found = cap_problems(root)
+        assert len(found) == 1
+        assert "skills/big.py" in found[0]
 
     def test_a_test_file_may_be_over_400_up_to_800(self):
         root = self.tree({"tests/test_mid.py": "x = 1\n" * 700})
-        assert cap_problems(root, {"oversize": {}, "oversize_functions": {}}) == []
+        assert cap_problems(root) == []
 
-    def test_a_function_over_80_fails_unless_listed(self):
+    def test_a_function_over_80_fails(self):
         root = self.tree({"dev/f.py": "def f():\n" + "    x = 1\n" * 81})
-        assert len(cap_problems(root, {"oversize": {}, "oversize_functions": {}})) == 1
-        assert cap_problems(root, {"oversize": {}, "oversize_functions": {"dev/f.py::f": 82}}) == []
+        assert len(cap_problems(root)) == 1
 
     def test_mutable_module_globals(self):
         self.only({"src/taskloop/domain/a.py": "CACHE = {}\n"}, "mutable module global CACHE")
