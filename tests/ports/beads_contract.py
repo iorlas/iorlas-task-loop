@@ -1,16 +1,15 @@
 """The Beads contract, one suite for every implementation: the in-memory fake and `bd` itself in a throwaway database.
 A subclass sets `make() -> Beads` (a fresh, empty store) and gets every test below."""
-import unittest
-from typing import TYPE_CHECKING
 
 import pytest
+from support.case import Case
 from support.tags import contract  # noqa: F401  (re-exported for the subclasses)
 
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ports import BdFailure, BeadPatch, BeadQuery, Beads, NewBead
 
-# A mixin: only a subclass that is also a TestCase runs; the checker sees the assert methods through this base.
-_Base = unittest.TestCase if TYPE_CHECKING else object
+# A mixin: only a subclass that is also collected runs; the checker sees addCleanup and subTest through this base.
+_Base = Case
 
 
 class BeadsContract(_Base):

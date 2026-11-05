@@ -14,6 +14,10 @@ test-fast *args:
 test-all *args:
     uv run pytest -m "" {{args}}
 
+# The delegate tests (tests/delegate; real processes, several minutes). No other run collects them unless the change touches src/delegate, tests/delegate or the vendored packages (tests/support/scope.py).
+test-delegate *args:
+    TL_DELEGATE_TESTS=1 uv run pytest -m "" tests/delegate {{args}}
+
 # Install the exact tool versions recorded in mise.lock.
 tools:
     MISE_IGNORED_CONFIG_PATHS=$HOME/.config/mise mise install --locked

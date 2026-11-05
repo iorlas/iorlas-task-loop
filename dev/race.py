@@ -10,7 +10,7 @@ delegate, fake marketplace). About 40 s per seed, more under load; NOT in the ga
 
     uv run --script dev/race.py                  seeds 1..5, one after another
     uv run --script dev/race.py --seeds 3        one seed (or 1,4,7 or 2-6)
-    TASK_LOOP_RACE=1 python3 -m unittest dev.race     the same, one seed (RACE_SEED, default 1)
+    TASK_LOOP_RACE=1 uv run pytest dev/race.py   the same, one seed (RACE_SEED, default 1)
 
 Exit 0 when every seed passed, 1 when one failed. A failed seed prints `RACE_SEED=n FAILED` and then the checks that broke,
 the stderr of every process that exited non-zero, and the tail of every process log; rerun that seed alone to reproduce
@@ -27,6 +27,8 @@ RACE_SEED sets the jitter (default 1); every process gets one Claude session id,
 """
 
 import argparse
+import contextlib
+import importlib.util
 import io
 import json
 import os
@@ -37,10 +39,13 @@ import sys
 import tempfile
 import threading
 import time
-import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+if __name__ == "__main__" and importlib.util.find_spec("pytest") is None:  # `uv run --script` has msgspec only: rerun in the project env
+    os.execvp("uv", ["uv", "run", "--project", str(ROOT), "python", __file__, *sys.argv[1:]])
+import pytest  # noqa: E402
+
 FIX = ROOT / "tests" / "fixtures" / "race"
 TL = ROOT / "skills" / "task-loop" / "tl.py"
 RELEASE = ROOT / "dev" / "release.py"
@@ -90,12 +95,12 @@ def shim(path, script):
     path.chmod(0o755)
 
 
-@unittest.skipIf(os.name == "nt", "fcntl locks and POSIX process groups")
-@unittest.skipUnless(
-    __name__ == "__main__" or os.environ.get("TASK_LOOP_RACE"), "a real-process race: uv run --script dev/race.py, or TASK_LOOP_RACE=1"
+@pytest.mark.skipif(
+    __name__ != "__main__" and not os.environ.get("TASK_LOOP_RACE"),
+    reason="a real-process race: uv run --script dev/race.py, or TASK_LOOP_RACE=1",
 )
-class Race(unittest.TestCase):
-    def setUp(self):
+class Race:
+    def setup_method(self):
         self.seed = os.environ.get("RACE_SEED", "1")
         self.rnd = random.Random(self.seed)
         self.tmp = tempfile.TemporaryDirectory(prefix="tl-race-")
@@ -182,7 +187,7 @@ class Race(unittest.TestCase):
         sh("git", "commit", "-qm", "seed", cwd=self.market, env=env)
         sh("git", "push", "-q", "origin", "HEAD:main", cwd=self.market, env=env)
 
-    def tearDown(self):
+    def teardown_method(self):
         self.kill_all()
         self.tmp.cleanup()
 
@@ -294,15 +299,15 @@ class Race(unittest.TestCase):
                 p.wait(max(1, DEADLINE - (time.time() - t0)))
             except subprocess.TimeoutExpired:
                 self.kill_all()
-                self.fail(f"{name} still ran after {int(DEADLINE)} s\n{self.dump()}")
+                pytest.fail(f"{name} still ran after {int(DEADLINE)} s\n{self.dump()}")
         self.check(time.time() - t0)
 
     def check(self, secs):
         msg = "\n" + self.dump()
-        self.assertEqual(self.errors, [], msg)
+        assert self.errors == [], msg
         for name, p in self.procs:
             if name.startswith(("loop", "release", "hold-release")):
-                self.assertEqual(p.returncode, 0, f"{name} exit {p.returncode}{msg}")
+                assert p.returncode == 0, f"{name} exit {p.returncode}{msg}"
         beads = self.store()
         claims, runs = self.check_landed_once(beads, msg)
         self.check_slot_and_area_exclusion(claims, runs, msg)
@@ -313,33 +318,33 @@ class Race(unittest.TestCase):
 
     def check_landed_once(self, beads, msg):
         # every bead landed once, claimed by one actor, its worker run once
-        self.assertEqual({b: beads[b]["status"] for b in BEADS}, dict.fromkeys(BEADS, "closed"), msg)
+        assert {b: beads[b]["status"] for b in BEADS} == dict.fromkeys(BEADS, "closed"), msg
         claims = jsonl(self.h / "bd" / "claims.jsonl")
         for b in BEADS:
             who = {(c["tree"], c["by"]) for c in claims if c["bead"] == b and c["op"] in ("claim", "reclaim")}
-            self.assertEqual(len(who), 1, f"{b} claimed by {sorted(who)}{msg}")
+            assert len(who) == 1, f"{b} claimed by {sorted(who)}{msg}"
         runs = jsonl(self.h / "route.jsonl")
-        self.assertEqual(sorted(r["bead"] for r in runs), sorted(BEADS), msg)
+        assert sorted(r["bead"] for r in runs) == sorted(BEADS), msg
 
         return claims, runs
 
     def check_slot_and_area_exclusion(self, claims, runs, msg):
         # no worktree changed under a live engine; one user per slot at a time, the hold included
         for r in runs:
-            self.assertEqual((r["start"]["branch"], r["end"]["branch"]), ("task/" + r["bead"],) * 2, r)
-            self.assertEqual((r["start"]["lock"], r["end"]["lock"]), (r["engine"],) * 2, r)
+            assert (r["start"]["branch"], r["end"]["branch"]) == ("task/" + r["bead"],) * 2, r
+            assert (r["start"]["lock"], r["end"]["lock"]) == (r["engine"],) * 2, r
         checkouts = jsonl(self.h / "checkout.jsonl")
-        self.assertEqual([c for c in checkouts if not c["ok"]], [], "checkouts under another's live engine lock" + msg)
-        self.assertTrue([c for c in checkouts if c.get("lock")], "the hook saw no checkout under a live lock" + msg)
+        assert [c for c in checkouts if not c["ok"]] == [], "checkouts under another's live engine lock" + msg
+        assert [c for c in checkouts if c.get("lock")], "the hook saw no checkout under a live lock" + msg
         spans = sorted((r["start"]["t"], r["end"]["t"], r["cwd"], r["bead"]) for r in runs)
         held, released = self.notes["hold"]
         s2 = os.path.realpath(str(self.repo / ".slots" / "s2"))
         spans_s2 = [s for s in spans if s[2] == s2]
-        self.assertFalse([s for s in spans_s2 if s[0] < released and s[1] > held], "ran in s2 during the hold" + msg)
+        assert not ([s for s in spans_s2 if s[0] < released and s[1] > held]), "ran in s2 during the hold" + msg
         for i, a in enumerate(spans):
             for b in spans[i + 1:]:
                 if b[0] < a[1]:
-                    self.assertNotEqual(a[2], b[2], f"{a[3]} and {b[3]} in one slot at once{msg}")
+                    assert a[2] != b[2], f"{a[3]} and {b[3]} in one slot at once{msg}"
         # areas: no two beads of one area held at once, from each won claim to the release that follows it
         held: dict[str, list[list[float | None]]] = {}
         for c in claims:
@@ -351,15 +356,15 @@ class Race(unittest.TestCase):
         for i, (_a0, a1, a) in enumerate(spans_area):
             for b0, _b1, b in spans_area[i + 1:]:
                 if b0 < a1 and AREA[a] == AREA[b]:
-                    self.fail(f"{a} and {b} of area {AREA[a]} held at once{msg}")
+                    pytest.fail(f"{a} and {b} of area {AREA[a]} held at once{msg}")
 
     def check_the_slot_line(self, msg):
         # the slot line: takes by waiters in ticket order; no ticket left
         events = jsonl(self.h / "cfg" / "task-loop" / "events.jsonl")
         tickets = [e["ticket"] for e in events if e["kind"] == "slot_take" and "ticket" in e]
-        self.assertGreaterEqual(len(tickets), 2, msg)
-        self.assertEqual(tickets, sorted(set(tickets)), "slots not served in ticket order" + msg)
-        self.assertEqual(list((self.h / "cfg" / "task-loop" / "slots").glob("*/*.json")), [], msg)
+        assert len(tickets) >= 2, msg
+        assert tickets == sorted(set(tickets)), "slots not served in ticket order" + msg
+        assert list((self.h / "cfg" / "task-loop" / "slots").glob("*/*.json")) == [], msg
 
         # the race happened: two slots were in use at once (from the slot takes and releases tl.py records)
         inuse, busy = {}, 0
@@ -369,38 +374,38 @@ class Race(unittest.TestCase):
             elif e["kind"] == "slot_release":
                 inuse.pop(e["slot"], None)
             busy = max(busy, len(inuse))
-        self.assertGreaterEqual(busy, 2, "never two slots in use at once: the race never happened" + msg)
+        assert busy >= 2, "never two slots in use at once: the race never happened" + msg
 
     def check_origin(self, msg):
         # origin: linear, one commit per bead, one per release, distinct versions
         log = sh("git", "--git-dir", str(self.origin), "log", "--format=%P|%s", "main", cwd=self.h, env=self.env)
         lines = [ln.split("|", 1) for ln in log.splitlines()]
-        self.assertFalse([s for p, s in lines if len(p.split()) > 1], "a merge on main" + msg)
+        assert not ([s for p, s in lines if len(p.split()) > 1]), "a merge on main" + msg
         subjects = [s for _, s in lines]
         for b in BEADS:
-            self.assertEqual(sum(s.endswith(f"({b})") for s in subjects), 1, f"{b} on main{msg}")
+            assert sum(s.endswith(f"({b})") for s in subjects) == 1, f"{b} on main{msg}"
         versions = [s.split(":")[0] for s in subjects if "race release" in s]
-        self.assertEqual(len(versions), 2, msg)
-        self.assertEqual(sorted(versions), ["0.1.1", "0.1.2"], msg)
-        self.assertEqual(len(subjects), 1 + len(BEADS) + 2, subjects)
+        assert len(versions) == 2, msg
+        assert sorted(versions) == ["0.1.1", "0.1.2"], msg
+        assert len(subjects) == 1 + len(BEADS) + 2, subjects
         market = sh("git", "--git-dir", str(self.h / "m.git"), "show", "main:.claude-plugin/marketplace.json",
                     cwd=self.h, env=self.env)
-        self.assertEqual(json.loads(market)["plugins"][0]["version"], "0.1.2")
+        assert json.loads(market)["plugins"][0]["version"] == "0.1.2"
 
     def check_nothing_held(self, beads):
         # nothing left held
         for i, s in enumerate(SLOTS, 1):
             sb = beads[f"sl-{i}"]
-            self.assertEqual((sb["status"], sb.get("assignee") or ""), ("open", ""), sb)
-            self.assertFalse(set(sb.get("metadata") or {}) & set(marks.HELD_KEYS), sb)
-            self.assertFalse(engine_lock.engine_lock_path(str(self.repo / ".slots" / s)).exists(), s)
+            assert (sb["status"], sb.get("assignee") or "") == ("open", ""), sb
+            assert not (set(sb.get("metadata") or {}) & set(marks.HELD_KEYS)), sb
+            assert not (engine_lock.engine_lock_path(str(self.repo / ".slots" / s)).exists()), s
         cfg = self.h / "cfg" / "task-loop"
         for lock in (cfg / "locks").glob("*.lock"):
             try:
                 ProcessLock.acquire(lock).release()  # LockHeldError while a process still holds it
             except LockHeldError as e:
-                self.fail(f"lock left held: {e}")
-        self.assertEqual(sorted(p.name for p in (cfg / "loop").glob("*") if p.suffix == ".json"), [])
+                pytest.fail(f"lock left held: {e}")
+        assert sorted(p.name for p in (cfg / "loop").glob("*") if p.suffix == ".json") == []
 
 
 def seeds_of(text):
@@ -421,8 +426,9 @@ def main(argv=None):
         os.environ["RACE_SEED"] = str(seed)
         out = io.StringIO()
         t = time.time()
-        res = unittest.TextTestRunner(stream=out, verbosity=0).run(unittest.defaultTestLoader.loadTestsFromTestCase(Race))
-        ok = res.wasSuccessful() and not res.skipped
+        with contextlib.redirect_stdout(out):
+            code = pytest.main(["-q", "-p", "no:cacheprovider", "-rs", f"{__file__}::Race"])
+        ok = code == 0 and " skipped" not in out.getvalue()
         print("RACE_SEED={:d} {} in {:.0f} s".format(int(seed), "ok" if ok else "FAILED", time.time() - t), flush=True)
         if not ok:
             failed.append(seed)
