@@ -6,6 +6,9 @@
 login server). A worker should also not inherit the launcher's tokens and keys. ``scrub(env)`` returns a new
 dict without those; ``keep`` rescues names, ``drop`` removes more.
 
+``without_venv(env)`` (or ``scrub(..., strip_venv=True)``) also strips an active Python virtualenv: the
+interpreter variables it sets, and its ``bin`` folder in ``PATH``. Nothing else is touched.
+
 Pure: the input mapping is never mutated and ``os.environ`` is read only by ``scrub_current``.
 
 An entry in ``keep`` / ``drop`` is an exact variable name, or a prefix when it ends with ``*``
@@ -50,6 +53,14 @@ CREDENTIAL_MARKERS: tuple[str, ...] = (
     "PRIVATE_KEY",
     "PRIVATEKEY",
 )
+#: Variables an active Python virtualenv (or a launcher that runs inside one) sets; a child that inherits them runs in our venv.
+VENV_NAMES: tuple[str, ...] = (
+    "VIRTUAL_ENV",
+    "VIRTUAL_ENV_PROMPT",
+    "PYTHONHOME",
+    "__PYVENV_LAUNCHER__",
+    "PYTHONEXECUTABLE",
+)
 
 
 def _matches(name: str, patterns: Iterable[str]) -> bool:
@@ -67,19 +78,44 @@ def _default_drop(name: str) -> bool:
     )
 
 
-def scrub(env: Mapping[str, str], *, keep: Iterable[str] = (), drop: Iterable[str] = ()) -> dict[str, str]:
+def without_venv(env: Mapping[str, str]) -> dict[str, str]:
+    """A new dict: ``env`` without the active virtualenv.
+
+    Removes ``VENV_NAMES`` and, when ``VIRTUAL_ENV`` is set, the entry ``$VIRTUAL_ENV/bin`` from ``PATH`` (an exact
+    match; other entries, their order and an empty PATH entry stay). Without ``VIRTUAL_ENV`` the PATH is untouched.
+    """
+    return _strip_venv(env, env.get("VIRTUAL_ENV"))
+
+
+def _strip_venv(env: Mapping[str, str], venv: str | None) -> dict[str, str]:
+    out = {k: v for k, v in env.items() if k not in VENV_NAMES}
+    if venv and "PATH" in out:
+        bin_dir = os.path.join(venv, "bin")  # noqa: PTH118 - string-exact join, as the PATH entry is compared as text
+        out["PATH"] = os.pathsep.join(p for p in out["PATH"].split(os.pathsep) if p != bin_dir)
+    return out
+
+
+def scrub(
+    env: Mapping[str, str],
+    *,
+    keep: Iterable[str] = (),
+    drop: Iterable[str] = (),
+    strip_venv: bool = False,
+) -> dict[str, str]:
     """A new dict: ``env`` without agent-session and credential variables.
 
     ``keep`` names (or ``PREFIX*``) survive the default rules; ``drop`` names (or ``PREFIX*``) are removed
-    even when they would otherwise stay, and win over ``keep``.
+    even when they would otherwise stay, and win over ``keep``. ``strip_venv=True`` also applies
+    ``without_venv`` (it wins over ``keep``, like ``drop``).
     """
     keep_, drop_ = tuple(keep), tuple(drop)
-    return {k: v for k, v in env.items() if not _matches(k, drop_) and (_matches(k, keep_) or not _default_drop(k))}
+    out = {k: v for k, v in env.items() if not _matches(k, drop_) and (_matches(k, keep_) or not _default_drop(k))}
+    return _strip_venv(out, env.get("VIRTUAL_ENV")) if strip_venv else out
 
 
-def scrub_current(*, keep: Iterable[str] = (), drop: Iterable[str] = ()) -> dict[str, str]:
+def scrub_current(*, keep: Iterable[str] = (), drop: Iterable[str] = (), strip_venv: bool = False) -> dict[str, str]:
     """``scrub(os.environ, ...)``: the only place this package reads the process environment."""
-    return scrub(os.environ, keep=keep, drop=drop)
+    return scrub(os.environ, keep=keep, drop=drop, strip_venv=strip_venv)
 
 
 __all__ = [
@@ -88,6 +124,8 @@ __all__ = [
     "CREDENTIAL_MARKERS",
     "CREDENTIAL_NAMES",
     "CREDENTIAL_PREFIXES",
+    "VENV_NAMES",
     "scrub",
     "scrub_current",
+    "without_venv",
 ]

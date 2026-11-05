@@ -25,9 +25,9 @@
   },
   {
     "name": "child_env",
-    "shelf_tag": "child-env-v0.1.0",
-    "shelf_commit": "cba649f4c9da2aec9377947ff2fdfb21f40957d3",
-    "tree_hash": "27af15f88254849026bf32420f18ca93412c15916fe6cd723865ff0e011318d2"
+    "shelf_tag": "0378d34a67b09557449f204c2c35d5e5a8890b08",
+    "shelf_commit": "0378d34a67b09557449f204c2c35d5e5a8890b08",
+    "tree_hash": "49e38582d3a72aa79e5811f37c597f540be47c6c5d7a761d1abfdf2edc996117"
   },
   {
     "name": "git_porcelain",

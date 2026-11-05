@@ -1,7 +1,6 @@
 """The one builder of a child process's environment: a base mapping (an `Env` or the process's), cleaned, plus what the caller adds.
 Never a copy of the whole process environment: a Python virtualenv of ours must not leak into a repo's gate (VIRTUAL_ENV,
 2026-10-30), and a TL_* or TASK_LOOP_* name that is not in the registry (contracts/envvars.py) is not handed on."""
-import os
 import shutil
 import tempfile
 from collections.abc import Generator, Mapping
@@ -15,24 +14,11 @@ from taskloop.contracts.envvars import PREFIXES, EnvVar, registered
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.paths import ConfigDir, default_root
 
-VENV_VARS = ("VIRTUAL_ENV", "VIRTUAL_ENV_PROMPT", "PYTHONHOME", "__PYVENV_LAUNCHER__", "PYTHONEXECUTABLE")
-
-
-def without_venv(env: Mapping[str, str]) -> dict[str, str]:
-    """`env` without the active virtualenv: its variables, and its bin folder in PATH."""
-    out = {k: v for k, v in env.items() if k not in VENV_VARS}
-    venv = env.get("VIRTUAL_ENV")
-    if venv and "PATH" in out:
-        bin_dir = os.path.join(venv, "bin")
-        out["PATH"] = os.pathsep.join(p for p in out["PATH"].split(os.pathsep) if p != bin_dir)
-    return out
-
-
 # The only names (besides the registered engine ones and LC_*) a tool, a check or git inherits. Anything else is declared by the repo's
 # check (its `env`) or by the engine (`extra`), never picked up from whoever started the engine. A name is added below only when a real
 # tool needed it (tests/checks/real/test_allowlist.py runs lifesim's and task-loop's own checks), with the reason.
 ALLOWED = frozenset({
-    "PATH",  # cleaned of the virtualenv's bin (without_venv)
+    "PATH",  # cleaned of the virtualenv's bin (child_env.without_venv)
     "HOME", "USER", "LANG", "TERM", "TMPDIR", "SHELL",
     # Added after the real-git tests and the real-tool checks (tests/checks/real/test_allowlist.py, the suite) went red without them:
     # git's identity where no user.name is configured (CI, a fresh HOME)
@@ -71,7 +57,7 @@ def hooks_vars(env: Mapping[str, str], source: Mapping[str, str]) -> dict[str, s
 def tool_env(base: Mapping[str, str], extra: Mapping[str, str] | None = None) -> dict[str, str]:
     """For a tool, a check or git: only the allowlisted names of `base` (PATH without the virtualenv, no exec hand-over), then `extra`
     over it."""
-    env = {k: v for k, v in without_venv(base).items() if allowed(k) and k not in HANDOVERS}
+    env = {k: v for k, v in child_env.without_venv(base).items() if allowed(k) and k not in HANDOVERS}
     env.update(hooks_vars(env, base))
     env.update(extra or {})
     return env
@@ -173,7 +159,7 @@ def child_env_of(env: Mapping[str, str], extra: Mapping[str, str] | None = None)
     app-only scrub does the same for route.py); a worker never delegates further (DELEGATE_DEPTH=1)."""
     gone = (*child_env.APP_PREFIXES, "TASK_LOOP_")
     drop = (*child_env.APP_NAMES, *GIT_PIN_VARS)
-    out = {k: v for k, v in without_venv(env).items() if k in KEEP or not (k.startswith(gone) or k in drop or k in HANDOVERS)}
+    out = {k: v for k, v in child_env.without_venv(env).items() if k in KEEP or not (k.startswith(gone) or k in drop or k in HANDOVERS)}
     out.update(WORKER_MARK)
     out.update(hooks_vars(out, env))
     out.update(extra or {})
