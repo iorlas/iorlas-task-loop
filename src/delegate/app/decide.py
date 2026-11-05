@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 from typing import Final
 
-from delegate.adapters import agent_runs, git
+from delegate.adapters import git
 from delegate.app import env, onboard
 from delegate.app.fleet import FleetBuilder, drift_warnings, mark_busy, settle_holds
 from delegate.app.usage import READERS
@@ -186,7 +186,6 @@ def decision(a: env.Args, cfg: dict[str, Json], unattended: bool = False, avoid:
     fleet = fleet_builder(cfg).build(st, t, parse_json_arg(a.claude_usage))
     warnings = drift_warnings(env.states(), fleet.lanes, st, t)
     _, st = settle_holds(env.states(), fleet.lanes, st, t)
-    publish_lanes(fleet.lanes, st, t)
     lanes = mark_busy(fleet.lanes, st, routing.settings, t, busy_jitter)
     args = call_args(a, unattended)
     if getattr(a, "task", None) and not args.resume:
@@ -221,21 +220,3 @@ def decision(a: env.Args, cfg: dict[str, Json], unattended: bool = False, avoid:
     return d, lanes, warnings, t
 
 
-def publish_lanes(lanes: dict[str, Lane], st: StateDoc, t: float) -> None:
-    """Lane limits as agent-runs v1 (agent_runs.py), for dashboards. Never fails the caller."""
-    try:
-        outs = st.out
-        agent_runs.lanes(
-            [
-                (
-                    n,
-                    ln.out_until if ln.out else None,
-                    outs[n].why if ln.out and n in outs else None,
-                    [("5h", ln.five, ln.five_reset), ("week", ln.week, ln.week_reset)],
-                )
-                for n, ln in lanes.items()
-            ],
-            t,
-        )
-    except Exception:
-        pass
