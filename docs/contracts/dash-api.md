@@ -24,7 +24,7 @@ a newer run in place of the one the owner saw. A cause naming an ask also verifi
 
 | method, path | body / query | answer |
 |---|---|---|
-| GET `/api/snapshot` | `since=<version>` optional | `Snapshot` with `ETag: "<version>"`; 304 when `since` or `If-None-Match` equals the current `version` |
+| GET `/api/snapshot` | optional `since=<version>`, `wait=<seconds>` (max 25) | `Snapshot` with `ETag: "<version>"`; 304 when `since` or `If-None-Match` equals the current `version`, including a long-poll timeout |
 | GET `/api/bead` | `project`, `id`, `since=<version>` optional | `BeadDetail` with its own content-hash `version` and `ETag`; 304 for a matching `since` or `If-None-Match`; 404 for an unknown bead |
 | GET `/api/cost` | `window=24h\|7d`, `last=<runs>`, `project`, `since=<version>` optional | `CostPage` with its own `version` and `ETag`; 304 for a matching token. Time, fresh tokens and cost summed per stage and bead over the kept engine logs; `last` takes that many newest runs; missing cost is counted as `unknown` calls; 400 for another window |
 | GET `/api/live` | `project`, `id`, `since=<cursor>`, `wait=<s>` | `LivePage` with lines after the cursor; long-poll over `api/live.py` and `runlife` |
@@ -32,6 +32,16 @@ a newer run in place of the one the owner saw. A cause naming an ask also verifi
 | GET `/api/artifact` | `bead`, `name` | a file the run kept (`ConfigDir.artifacts`); HTML only as a download |
 | GET `/api/look-shot` | `repo`, `path` | a picture an open look item names, read from the repo |
 | GET `/api/version` | | `{version, pid, urls, started, script, binds, port, database_error}`: what `tl dash ensure` checks |
+
+With a matching `since` and positive `wait`, snapshot reads wait on factory.db's `PRAGMA data_version`, checked every
+50 ms through one long-lived read-only connection shared under a lock. An idle timeout returns 304 with the same ETag
+without building or hashing a snapshot. A committed indexer/engine change wakes the request and refreshes the shared build.
+The token is read before building, so a commit during a build wakes the next request. First loads, unmatched versions,
+absent/zero/invalid waits, unavailable watchers, and database health errors use the ordinary snapshot path and its existing TTL.
+Negative waits mean zero; waits above 25 seconds are capped. `If-None-Match` alone does not hold a request.
+The page sends `wait=20` after loading and retries 50 ms after completion; bead, live and cost keep their separate read patterns.
+Non-DB inputs (bd cache and transcripts) cannot wake this counter until DB-BEADS lands. The timeout bounds each wait,
+but an idle 304 does not refresh those inputs: they become visible on a subsequent DB wake or ordinary snapshot refresh.
 
 Verbs: `answer`, `look`, `stick`, `prune`, `cause`, `ack`, `park`, `stop`, `note`. The dashboard runs no process: a write is an
 in-process Port call (as `Ports.answer` is today), never a raw bd argv. There is no auth (the bind is loopback and Tailscale only). A refused write is

@@ -2,14 +2,15 @@
 `version` is its ETag: a request that already holds it (`since=` or If-None-Match) gets a 304 and no body."""
 
 import json
+import threading
 from dataclasses import replace
-from typing import Any
 
 from taskloop.contracts import wire
 from taskloop.contracts.dash import BeadDetail, Snapshot
 from taskloop.contracts.dashcost import CostPage
 from taskloop.contracts.ids import BeadId, is_bead_id
 from taskloop_dash.env import Env
+from taskloop_dash.readers.wake import Wake, wait_seconds
 from taskloop_dash.readers.world import Worlds
 from taskloop_dash.refresh import RefreshCache
 from taskloop_dash.views import bead_detail, cost, snapshot
@@ -21,7 +22,7 @@ SNAPSHOT_TTL = 3.0  # at least the page's polling interval
 Reply = tuple[int, bytes, dict[str, str]]
 
 
-def encode(rec: Any) -> bytes:
+def encode(rec: Snapshot | BeadDetail | CostPage) -> bytes:
     return json.dumps(wire.dump(rec), separators=(",", ":")).encode("utf-8")
 
 
@@ -43,6 +44,10 @@ class Reads:
         self.env, self.worlds = env, worlds
         self.cache: RefreshCache[tuple[World, Snapshot]] = RefreshCache(env.clock)
         self.details: RefreshCache[BeadDetail | None] = RefreshCache(env.clock)
+        self.wake = Wake(env.config)
+        self.lock = threading.Lock()
+        self.refresh_lock = threading.Lock()
+        self.remembered: tuple[int | None, str] | None = None
 
     def wait(self) -> None:
         self.details.wait()
@@ -50,12 +55,47 @@ class Reads:
 
     def built(self) -> tuple[World, Snapshot]:
         """Publish a snapshot and its source world atomically."""
-        def build() -> tuple[World, Snapshot]:
-            world = self.worlds.world()
-            return world, snapshot.build(world)
         if self.worlds.database_error():
-            return build()
-        return self.cache.get("snapshot", SNAPSHOT_TTL, build)
+            return self._build()
+        return self.cache.get("snapshot", SNAPSHOT_TTL, self._build)
+
+    def _build(self) -> tuple[World, Snapshot]:
+        token = self.wake.token()
+        world = self.worlds.world()
+        rec = snapshot.build(world)
+        with self.lock:
+            self.remembered = token, rec.version
+        return world, rec
+
+    def _current(self) -> Snapshot:
+        """Share a completed refresh after a commit, including inside the normal TTL."""
+        with self.refresh_lock:
+            self.cache.wait()
+            token = self.wake.token()
+            with self.lock:
+                remembered = self.remembered
+            if remembered is None or remembered[0] != token:
+                self.cache.get("snapshot", 0, self._build)
+                self.cache.wait()
+            hit = self.cache.peek("snapshot")
+            return hit[1] if hit is not None else self.snapshot()
+
+    def _snapshot_reply(self, q: dict[str, str], held: str | None) -> Reply:
+        seconds, since = wait_seconds(q.get("wait", "0")), q.get("since")
+        if seconds <= 0 or not since or self.worlds.database_error():
+            return versioned(self.snapshot(), q, held)
+        self.env.touch()
+        token = self.wake.token()
+        with self.lock:
+            remembered = self.remembered
+        if token is None or remembered is None or remembered[1] != since:
+            return versioned(self.snapshot(), q, held)
+        after = self.wake.wait(token, seconds) if remembered[0] == token else token
+        if after is None or self.worlds.database_error():
+            return versioned(self.snapshot(), q, held)
+        if after == remembered[0]:
+            return 304, b"", {"ETag": etag(since)}
+        return versioned(self._current(), q, held)
 
     def snapshot(self) -> Snapshot:
         self.env.touch()
@@ -95,7 +135,7 @@ class Reads:
     def get(self, path: str, q: dict[str, str], if_none_match: str | None = None) -> Reply:
         """(status, body, extra headers) of a polled resource GET."""
         if path == "/api/snapshot":
-            return versioned(self.snapshot(), q, if_none_match)
+            return self._snapshot_reply(q, if_none_match)
         if path == "/api/bead":
             if not q.get("project") or not q.get("id"):
                 return 400, b'{"error": "project and id"}', {}

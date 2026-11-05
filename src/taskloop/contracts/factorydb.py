@@ -122,6 +122,11 @@ def open_ro(path: str | os.PathLike[str]) -> sqlite3.Connection | None:
     return _STORE.open_ro(path)
 
 
+def open_watch(path: str | os.PathLike[str]) -> sqlite3.Connection | None:
+    """Open read-only for a watcher whose caller serializes access across threads."""
+    return _STORE._open(path, readonly=True, shared=True)
+
+
 def shared_rw(path: str | os.PathLike[str]) -> sqlite3.Connection | None:
     """Reuse this thread's idle writer while its process and file identity match."""
     return _STORE.shared_rw(path)

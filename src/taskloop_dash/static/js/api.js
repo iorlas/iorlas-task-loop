@@ -1,6 +1,6 @@
-// The server side of the page: /api (docs/contracts/dash-api.md). Polls the snapshot every 2.5 s while the page is
-// visible and at once on focus; sends `since` so an unchanged snapshot is a 304. A failed poll keeps the last data and
-// backs off up to 30 s.
+// The server side of the page: /api (docs/contracts/dash-api.md). Once loaded, the snapshot waits up to 20 s for a
+// database commit, then polls again after 50 ms while visible. Bead/cost poll every 2.5 s; focus polls immediately.
+// Matching `since` gets 304; errors keep the last data and back off up to 30 s.
 
 import { useEffect, useState } from '../vendor/ui-runtime.js';
 import { reconcileProjects } from './state.js';
@@ -22,7 +22,9 @@ async function refresh(r) {
   if (document.hidden || r.pending || Date.now() < r.nextAt) return;
   r.pending = true;
   try {
-    const q = r.data ? `${r.url.includes('?') ? '&' : '?'}since=${encodeURIComponent(r.data.version)}` : '';
+    const waiting = r === net && r.data;
+    const q = r.data ? `${r.url.includes('?') ? '&' : '?'}since=${encodeURIComponent(r.data.version)}${waiting ? '&wait=20' : ''}` : '';
+    if (waiting) r.fetchedAt = Date.now();
     const res = await fetch(r.url + q, { cache: 'no-store' });
     if (res.status !== 304) {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -35,7 +37,7 @@ async function refresh(r) {
     r.fetchedAt = Date.now();
     r.error = '';
     r.failures = 0;
-    r.nextAt = 0;
+    r.nextAt = Date.now() + (r === net ? 50 : POLL_MS);
   } catch (e) {
     r.error = String(e.message || e);
     r.failures += 1;
@@ -44,22 +46,27 @@ async function refresh(r) {
   r.pending = false;
   r.notify?.();
   emit();
+  if (r === net && !document.hidden) {
+    clearTimeout(timer);
+    timer = setTimeout(poll, Math.max(50, Math.min(POLL_MS, r.nextAt - Date.now())));
+  }
 }
 
-function poll() {
+function poll(immediate = false) {
   clearTimeout(timer);
   if (document.hidden) return;
+  if (immediate) [net, ...resources.values()].forEach((r) => { if (!r.failures) r.nextAt = 0; });
   [net, ...resources.values()].forEach(refresh);
-  timer = setTimeout(poll, POLL_MS);
+  timer = setTimeout(poll, net.pending ? POLL_MS : Math.max(50, Math.min(POLL_MS, net.nextAt - Date.now())));
 }
 
 export function start() {
-  document.addEventListener('visibilitychange', () => { clearTimeout(timer); if (!document.hidden) poll(); });
-  addEventListener('focus', poll);
+  document.addEventListener('visibilitychange', () => { clearTimeout(timer); if (!document.hidden) poll(true); });
+  addEventListener('focus', () => poll(true));
   poll();
 }
 
-export const retry = poll;
+export const retry = () => poll(true);
 
 // the server's now: Snapshot.t plus the browser time since that fetch (a 304 keeps the old t)
 export const now = () => (net.snap ? net.snap.t + (Date.now() - net.loadedAt) / 1000 : Date.now() / 1000);
