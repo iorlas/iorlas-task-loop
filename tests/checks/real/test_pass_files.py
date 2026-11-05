@@ -8,6 +8,7 @@ import tempfile
 from pathlib import Path
 
 from support.case import Case
+from support.checked import run_checked
 from support.tlmain import tl_main
 
 SEES = "import sys; open(sys.argv[1], 'a').write(' '.join(f'{p}={open(p).read().strip()}' for p in sys.argv[2:]) + '\\n')"
@@ -32,7 +33,7 @@ class PassFiles(Case):
         self.git("checkout", "-qb", "work")
 
     def git(self, *a):
-        subprocess.run(["git", *a], cwd=self.repo, check=True, capture_output=True)
+        run_checked(["git", *a], self.repo)
 
     def profile(self, checks):
         (self.repo / ".task-loop.json").write_text(json.dumps({"engine": {"checks": checks, "base": "main"}}))

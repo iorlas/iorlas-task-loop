@@ -1,6 +1,5 @@
 """Real check children retain the caller's HOME by default and isolate it when the profile opts in."""
 import json
-import subprocess
 import sys
 import tempfile
 import threading
@@ -9,6 +8,7 @@ from types import SimpleNamespace
 from unittest import mock
 
 from support.case import Case
+from support.checked import run_checked
 from support.tlmain import tl_main
 
 from taskloop.adapters import childenv
@@ -120,8 +120,7 @@ class CheckHomeCanaryTest(Case):
             engine["check_scratch_home"] = True
         (repo / ".task-loop.json").write_text(json.dumps({"engine": engine}))
         for args in (("init", "-q", "-b", "main"), ("add", ".task-loop.json"), ("commit", "-qm", "canary")):
-            subprocess.run(["git", "-c", "user.name=Canary", "-c", "user.email=canary@example.invalid", *args],
-                           cwd=repo, capture_output=True, check=True)
+            run_checked(["git", "-c", "user.name=Canary", "-c", "user.email=canary@example.invalid", *args], repo)
         ran = tl_main("check", "--repo", str(repo), "--all", "probe", cwd=repo,
                       env={"HOME": str(self.owner), "XDG_CONFIG_HOME": str(self.root / "config"),
                            "SSH_AUTH_SOCK": "/synthetic-agent", "GIT_SSH_COMMAND": "synthetic-ssh"})

@@ -1,6 +1,5 @@
 """The port's remote calls against a bare origin: what moved on the remote, and what the caller is told when it did not."""
 
-import subprocess
 import tempfile
 from pathlib import Path
 from unittest import mock
@@ -9,6 +8,7 @@ import pytest
 import support.paths  # noqa: F401
 from git_porcelain.real import Done, RealRepo
 from support.case import Case
+from support.checked import run_checked
 
 from taskloop.adapters import git_ops
 from taskloop.adapters.git import RealGit
@@ -38,8 +38,7 @@ class RealGitRemoteTest(Case):
         self.base = self.commit("initial")
 
     def run_git(self, *args, cwd=None):
-        return subprocess.run(["git", "-C", str(cwd or self.repo), *args], env=self.env,
-                              check=True, capture_output=True, text=True).stdout.strip()
+        return run_checked(["git", "-C", str(cwd or self.repo), *args], None, env=self.env, text=True).stdout.strip()
 
     def commit(self, message):
         self.run_git("commit", "--allow-empty", "-qm", message)

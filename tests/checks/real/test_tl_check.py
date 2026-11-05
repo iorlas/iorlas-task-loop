@@ -9,6 +9,7 @@ from pathlib import Path
 
 from support import procsim
 from support.case import Case
+from support.checked import run_checked
 from support.tlmain import tl_main
 
 CHECKS = [
@@ -54,7 +55,7 @@ class TlCheck(Case):
         self.git("commit", "-qm", "init")
 
     def git(self, *a):
-        subprocess.run(["git", *a], cwd=self.repo, check=True, capture_output=True)
+        run_checked(["git", *a], self.repo)
 
     def profile(self, checks):
         (self.repo / ".task-loop.json").write_text(json.dumps({"engine": {"checks": checks, "base": "main"}}))

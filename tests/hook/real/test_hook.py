@@ -19,6 +19,7 @@ sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: E402, F401
 import tl  # noqa: E402
+from support.checked import run_checked  # noqa: E402
 from support.spawn import port_git  # noqa: E402
 
 from taskloop.contracts.env import snapshot  # noqa: E402
@@ -49,7 +50,7 @@ class Sessions(Case):
         self.addCleanup(env.stop)
         self.repo = self.home / "repo"
         self.repo.mkdir()
-        subprocess.run(["git", "init", "-q", "-b", "main", str(self.repo)], check=True, capture_output=True)
+        run_checked(["git", "init", "-q", "-b", "main", str(self.repo)], None)
         self.root = self.home / "plugin"
         (self.root / ".claude-plugin").mkdir(parents=True)
         (self.root / ".claude-plugin" / "plugin.json").write_text('{"version": "9.9.9"}')
@@ -86,9 +87,9 @@ class Sessions(Case):
         assert fresh == ""  # a fresh session gets no handoff
 
     def test_a_worktree_shares_the_handoff_of_its_main_checkout(self):
-        subprocess.run(["git", "-C", str(self.repo), "commit", "-q", "--allow-empty", "-m", "x"], check=True, capture_output=True)
+        run_checked(["git", "-C", str(self.repo), "commit", "-q", "--allow-empty", "-m", "x"], None)
         wt = self.home / "wt"
-        subprocess.run(["git", "-C", str(self.repo), "worktree", "add", "-q", "-b", "b", str(wt)], check=True, capture_output=True)
+        run_checked(["git", "-C", str(self.repo), "worktree", "add", "-q", "-b", "b", str(wt)], None)
         session.precompact(self.event(cwd=str(wt)), self.root, snapshot(), port_git())
         assert (
             "loop NOT RUNNING"
@@ -126,7 +127,7 @@ class Speed(Case):
             "print([m for m in sys.modules if m.startswith(('taskloop.app', 'taskloop.adapters', 'taskloop.stores', 'taskloop.contracts', "
             "'msgspec'))])"
         ).format(str(ROOT / "src"))
-        r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
+        r = run_checked([sys.executable, "-c", code], None, text=True)
         assert r.stdout.strip() == "[]"
     def test_pretool_runs_on_the_system_python3_without_uv_or_python_3_15(self):
         system = Path("/usr/bin/python3")

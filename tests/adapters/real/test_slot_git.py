@@ -24,6 +24,7 @@ from support import (  # noqa: E402
 )
 from support import engine_case as te  # noqa: E402
 from support.builders import make_engine  # noqa: E402
+from support.checked import run_checked  # noqa: E402
 from support.fakes import FakeBeadStore  # noqa: E402
 from support.spawn import port_git, real_spawner  # noqa: E402
 from support.who import who  # noqa: E402
@@ -51,7 +52,7 @@ def env_pair(cwd, env):
 
 
 def sh(*a, cwd):
-    return subprocess.run(list(a), cwd=str(cwd), check=True, capture_output=True, text=True).stdout.strip()
+    return run_checked(list(a), str(cwd), text=True).stdout.strip()
 
 
 class SlotGitTest(Case):

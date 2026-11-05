@@ -1,14 +1,15 @@
 """A repo reached through a symlinked folder (/var is a symlink to /private/var on a Mac) is the same repo to git."""
 
-import subprocess
 from pathlib import Path
+
+from support.checked import run_checked
 
 from taskloop.adapters.git import RealGit
 from taskloop.contracts.env import snapshot
 
 
 def git(cwd: Path, *args: str) -> None:
-    subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", *args], cwd=cwd, check=True, capture_output=True)
+    run_checked(["git", "-c", "user.name=t", "-c", "user.email=t@t", *args], cwd)
 
 
 def conflicted_repo(real: Path) -> None:

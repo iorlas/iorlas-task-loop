@@ -16,6 +16,7 @@ from pathlib import Path
 
 import pytest
 from support.case import Case
+from support.checked import run_checked
 from support.tlmain import tl_main
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -25,7 +26,7 @@ IDENT = ["-c", "user.email=t@t", "-c", "user.name=t"]
 
 
 def git(cwd: Path, *a: str) -> str:
-    return subprocess.run(["git", *IDENT, *a], cwd=cwd, check=True, capture_output=True, text=True).stdout
+    return run_checked(["git", *IDENT, *a], cwd, text=True).stdout
 
 
 class RealGateChecks(Case):
@@ -45,7 +46,7 @@ class RealGateChecks(Case):
             pytest.skip("just is not installed")
         repo = Path(self.tmp.name, "task-loop")
         git(ROOT, "rev-parse", "HEAD")
-        subprocess.run(["git", "clone", "-q", "--no-hardlinks", str(ROOT), str(repo)], check=True, capture_output=True)
+        run_checked(["git", "clone", "-q", "--no-hardlinks", str(ROOT), str(repo)], None)
         (repo / ".task-loop.json").write_text(json.dumps({"engine": {"base": "main", "checks": [
             {"id": "static", "argv": ["just", "check"], "group": "static", "run": "gate"}]}}))
         rc, out = self.check(repo, "static")
@@ -64,7 +65,7 @@ class RealGateChecks(Case):
             profile["engine"].pop(gone, None)
         repo = Path(self.tmp.name, "lifesim")
         repo.mkdir()
-        archive = subprocess.run(["git", "-C", str(LIFESIM), "archive", "origin/main"], capture_output=True, check=True)
+        archive = run_checked(["git", "-C", str(LIFESIM), "archive", "origin/main"], None)
         subprocess.run(["tar", "-x", "-C", str(repo)], input=archive.stdout, check=True)
         (repo / ".task-loop.json").write_text(json.dumps(profile))
         git(repo, "init", "-q", "-b", "main")

@@ -3,7 +3,6 @@ import contextlib
 import io
 import json
 import os
-import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -15,6 +14,7 @@ from support.case import Case
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: E402, F401
+from support.checked import run_checked  # noqa: E402
 from support.spawn import port_git  # noqa: E402
 from support.tlmain import tl_main  # noqa: E402
 from support.who import who  # noqa: E402
@@ -61,8 +61,7 @@ class DoctorSource(Case):
         (repo / ".task-loop.json").write_text(json.dumps(data))
 
     def git(self, *args, cwd=None):
-        return subprocess.run(["git", *args], cwd=cwd or self.repo, env=self.env,
-                              text=True, capture_output=True, check=True).stdout.strip()
+        return run_checked(["git", *args], cwd or self.repo, env=self.env, text=True).stdout.strip()
 
     def commit(self, repo):
         self.git("add", "-A", cwd=repo)

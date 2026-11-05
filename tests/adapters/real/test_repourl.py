@@ -5,6 +5,7 @@ import tempfile
 from pathlib import Path
 
 from support.case import Case
+from support.checked import run_checked
 from support.spawn import port_git
 
 from taskloop.adapters.repourl import repo_url
@@ -19,7 +20,7 @@ class RepoUrl(Case):
         ident = ["-c", "user.email=t@t", "-c", "user.name=t"]
         for argv in (["init", "-q", "-b", "main", self.repo], ["-C", self.repo, *ident, "commit", "-q", "--allow-empty", "-m", "i"],
                      ["-C", self.repo, "worktree", "add", "-q", "--detach", self.slot]):
-            subprocess.run(["git", *argv], check=True, capture_output=True)
+            run_checked(["git", *argv], None)
         self.git = port_git()
 
     def test_with_no_remote_a_slot_and_the_main_checkout_have_one_name(self):

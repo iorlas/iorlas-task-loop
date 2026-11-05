@@ -4,7 +4,6 @@ import json
 import os
 import shutil
 import stat
-import subprocess
 import sys
 import tempfile
 import threading
@@ -34,6 +33,7 @@ from contracts import samples as S  # noqa: E402
 from support import (  # noqa: E402
     tlbd,
 )
+from support.checked import run_checked  # noqa: E402
 from support.narrow import must  # noqa: E402
 from support.spawn import real_spawner  # noqa: E402
 from support.tlmain import tl_main  # noqa: E402
@@ -56,7 +56,7 @@ def ctx() -> tl.Ctx:
 
 
 def sh(*args, cwd):
-    subprocess.run(list(args), cwd=cwd, check=True, capture_output=True)
+    run_checked(list(args), cwd)
 
 
 class Base(Case):

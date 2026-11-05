@@ -1,12 +1,12 @@
 """The release bump is authorized by the judge's ordinary suite receipt, including cached verification."""
 import json
 import os
-import subprocess
 import tempfile
 from pathlib import Path
 from unittest import mock
 
 from support.case import Case
+from support.checked import run_checked
 
 from taskloop.adapters.git import RealGit
 from taskloop.adapters.spawner import RealSpawner
@@ -36,8 +36,7 @@ class ReleaseReceipt(Case):
                    "GIT_AUTHOR_NAME": "Release", "GIT_AUTHOR_EMAIL": "release@example.invalid",
                    "GIT_COMMITTER_NAME": "Release", "GIT_COMMITTER_EMAIL": "release@example.invalid"})
         def git(*args):
-            return subprocess.run(["git", *args], cwd=repo, env=env.vars, capture_output=True,
-                                  text=True, check=True).stdout.strip()
+            return run_checked(["git", *args], repo, env=env.vars, text=True).stdout.strip()
         git("init", "--bare", str(origin))
         git("init", "-b", "main")
         plugin = repo / flow.publish.PLUGIN

@@ -1,7 +1,6 @@
 """The release gate's cache: a hit needs the same tree and the same test selection, only a green run is remembered."""
 import json
 import os
-import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -11,6 +10,7 @@ from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
+from support.checked import run_checked
 
 from taskloop.adapters.git import RealGit
 from taskloop.adapters.spawner import RealSpawner
@@ -43,7 +43,7 @@ class Verify(Case):
         return shell.of(RealSpawner(snapshot()), RealGit(snapshot()), snapshot())
 
     def git(self, *a: str) -> None:
-        subprocess.run(["git", *a], cwd=self.repo, check=True, capture_output=True)
+        run_checked(["git", *a], self.repo)
 
     def commit(self, name: str, text: str) -> None:
         (self.repo / name).write_text(text)

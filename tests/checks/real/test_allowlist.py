@@ -6,11 +6,11 @@ tests/live/test_allowlist_gates.py."""
 import json
 import os
 import pwd
-import subprocess
 import tempfile
 from pathlib import Path
 
 from support.case import Case
+from support.checked import run_checked
 from support.tlmain import tl_main
 
 from taskloop.adapters.childenv import CHECK_HOME_NAMES, allowed, check_caches
@@ -20,7 +20,7 @@ IDENT = ["-c", "user.email=t@t", "-c", "user.name=t"]
 
 
 def git(cwd: Path, *a: str) -> str:
-    return subprocess.run(["git", *IDENT, *a], cwd=cwd, check=True, capture_output=True, text=True).stdout
+    return run_checked(["git", *IDENT, *a], cwd, text=True).stdout
 
 
 class ProbeChecks(Case):
