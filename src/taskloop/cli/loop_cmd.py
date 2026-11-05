@@ -7,6 +7,7 @@ from typing import Any
 
 from taskloop.app.doctor import profiles
 from taskloop.app.launch import loop as wloop
+from taskloop.app.launch import loop_start as wstart
 from taskloop.app.launch import repos
 from taskloop.app.track import trail
 from taskloop.cli import loop as cli
@@ -37,16 +38,16 @@ def cmd_loop(a: Any, env: Env, spawner: Spawner, git: Git, who: Identity, here: 
     loop_env = wloop.build(repo, here=here, now=now, env=env, spawner=spawner, git=git, who=who)
     files = wloop.files_of(repo, who.config, now)
     if a.op == "status":
-        for row in wloop.other_red_rows(git, repo, who.config):
+        for row in wstart.other_red_rows(git, repo, who.config):
             print(row)  # another repo's bad profile: its red row here, nothing else changes
-        return cli.cmd_status(loop_env, files, wloop.installs(loop_env.cfgdir, env, here, now), a)
-    start_cwd, session, who = wloop.begin_loop(repo, env)
+        return cli.cmd_status(loop_env, files, wstart.installs(loop_env.cfgdir, env, here, now), a)
+    start_cwd, session, who = wstart.begin_loop(repo, env)
     loop_env = wloop.build(repo, session_actor=session, here=here, now=now, start_cwd=start_cwd, env=env, spawner=spawner, git=git, who=who)
-    return cli.cmd_loop(loop_env, files, wloop.installs(loop_env.cfgdir, env, here, now), a)
+    return cli.cmd_loop(loop_env, files, wstart.installs(loop_env.cfgdir, env, here, now), a)
 
 
 def cmd_cutover(a: Any, git: Git, who: Identity) -> int:
-    live = wloop.live_work(git, who)
+    live = wstart.live_work(git, who)
     if a.json:
         print(json.dumps({"live": [{"kind": k, "what": w} for k, w in live]}))
     elif live:

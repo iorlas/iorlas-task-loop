@@ -24,7 +24,7 @@ STEP = 45.0
 SLACK = watchdog.EVERY + 2 * STEP  # a look every EVERY s, a step of up to STEP s before it, one more before the check
 SEEDS = range(10)
 STEPS = 140
-LIMIT_S = 6.0  # a CPU-bound simulation: 0.4 s a seed on an M-series Mac, 2.6 s in the release container with 7 workers
+LIMIT_S = 6.0  # a CPU-bound simulation: 0.4 s a seed on an M-series Mac, 2.6 s under 7 xdist workers
 
 
 class Broken(AssertionError):

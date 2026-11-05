@@ -56,6 +56,15 @@ class PushHost(Protocol):
     def blocked_for(self, why: str, kind: str) -> Exception: ...
 
 
+def stale(git: Git, wt: str, base_ref: str, gate_pass: GatePass) -> Problem | None:
+    """A stale Problem when the tree or the base is no longer the one the pass is for (nothing may be sent), else None."""
+    tree, base = git.rev_parse(wt, "HEAD^{tree}"), git.rev_parse(wt, base_ref)
+    if (tree, base) == (gate_pass.tree, gate_pass.base):
+        return None
+    was, now = f"{gate_pass.tree[:12]} on {gate_pass.base[:12]}", f"{tree[:12]} on {base[:12]}"
+    return Problem(ProblemKind.STALE, f"the gate passed tree {was}; now {now}")
+
+
 class Pusher:
     def __init__(self, host: PushHost, out: Lfs) -> None:
         self.e = host
@@ -65,10 +74,9 @@ class Pusher:
         """-> the sha landed; Next.AGAIN rejected, try again; Next.REST a network error, rest first; a stale Problem when the tree or the
         base is no longer the one the pass is for (nothing is pushed). Anything else raises."""
         e = self.e
-        tree, base = e.git.rev_parse(e.wt, "HEAD^{tree}"), e.git.rev_parse(e.wt, e.cfg.base)
-        if (tree, base) != (gate_pass.tree, gate_pass.base):
-            now = f"{tree[:12]} on {base[:12]}"
-            return Problem(ProblemKind.STALE, f"the gate passed tree {gate_pass.tree[:12]} on {gate_pass.base[:12]}; now {now}")
+        problem = stale(e.git, e.wt, e.cfg.base, gate_pass)
+        if problem is not None:
+            return problem
         fence.check(e.store, e.claim)  # a run whose bead or slot was taken again pushes nothing (Fenced; RunOnce closes nothing)
         want = target(e.cfg.land)
         e.land_remote_oid = cleanup.remote_oid(e.git, e.wt, want[0], e.task_branch) if want and e.task_branch else ""

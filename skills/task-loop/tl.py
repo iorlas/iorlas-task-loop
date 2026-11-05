@@ -450,7 +450,7 @@ VERBS: Final[dict[str, Handler]] = {
     "wait": v_wait,
     "artifact-server": lambda a, c: cli_artifact_server.run(a, c.who.config, c.now),
     "setup": lambda a, c: cli_setup.cmd_setup(a, c.env, c.here.parents[1], sh=c.spawner),
-    "green": lambda a, c: cli_green.cmd_green(a, c.who.config, c.git, env=c.env, spawner=c.spawner),
+    "green": lambda a, c: cli_green.cmd_green(a, c.who.config, c.git, env=c.env),
     "judge-push": lambda a, c: importlib.import_module("taskloop.app.launch.push_judge").cmd_judge_push(
         a, who=c.who, env=c.env, spawner=c.spawner, git=c.git),
     "run-task": lambda a, c: importlib.import_module("taskloop.app.run.entry").main(a, env=c.env, spawner=c.spawner, git=c.git, who=c.who),

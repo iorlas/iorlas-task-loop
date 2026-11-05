@@ -64,8 +64,3 @@ class DiagnosticsTest(Base):
         rc, s = self.run_engine_with_writer()
         assert rc == 0
         assert len(self.writer_prompts(s)) == 2  # the write, then one fix round that the green check ends
-
-    def test_a_container_check_is_not_one_the_writer_is_told_to_run(self):
-        eng = self.checks_engine(checks=[{"id": "lint", "cmd": "true", "group": "static", "in": "container", "writer": True}],
-                                 container={"image": "x"})
-        assert eng.checker.split().engine_only("true")

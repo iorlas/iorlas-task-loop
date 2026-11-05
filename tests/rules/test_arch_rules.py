@@ -1,16 +1,14 @@
-"""Regression cases for the module graph and source size ratchets."""
+"""Cases for the module graph rules: no import cycle, a fan-out cap."""
 import ast
-import json
 
 from support.case import Case
 
-from rules.arch_ratchets import cyclic_components, graph_of, growth_problems, metrics
-from rules.gate_rules import RATCHET
+from rules.arch_rules import cyclic_components, fanout_problems, graph_of, problems
 
 
-class ArchitectureRatchets(Case):
-    def test_repository_scc_fanout_and_sloc_match_the_ratchet(self):
-        assert growth_problems(metrics(), json.loads(RATCHET.read_text())) == []
+class ArchitectureRules(Case):
+    def test_repository_has_no_import_cycle_and_no_module_over_the_fanout_cap(self):
+        assert problems() == []
 
     def graph(self, sources):
         return graph_of({name: ast.parse(text) for name, text in sources.items()})
@@ -38,11 +36,11 @@ class ArchitectureRatchets(Case):
         graph = self.graph({"a": "import pkg.b", "pkg.b": "import a"})
         assert cyclic_components(graph) == [("a", "pkg.b")]
 
-    def test_new_cycles_and_stale_cycle_budget_fail(self):
-        assert growth_problems({"scc": 2}, {"scc": 1})
-        assert growth_problems({"scc": 0}, {"scc": 1})
-        assert growth_problems({"scc": 1}, {"scc": 1}) == []
+    def test_the_parent_packages_of_an_imported_module_are_not_fanout(self):
+        sources = {"hub": "from pkg.sub import leaf", "pkg": "", "pkg.sub": "", "pkg.sub.leaf": ""}
+        assert fanout_problems(self.graph(sources), cap=1) == []
 
-    def test_no_total_size_is_stored_so_a_release_never_rewrites_the_ratchet(self):
-        assert sorted(json.loads(RATCHET.read_text())) == ["_", "fanout", "scc"]
-        assert sorted(metrics()) == ["fanout", "scc"]
+    def test_a_module_over_the_fanout_cap_is_named_and_one_at_the_cap_is_not(self):
+        sources = {"hub": "import a, b, c", "a": "", "b": "", "c": ""}
+        assert fanout_problems(self.graph(sources), cap=3) == []
+        assert [line.split()[0] for line in fanout_problems(self.graph(sources), cap=2)] == ["hub"]

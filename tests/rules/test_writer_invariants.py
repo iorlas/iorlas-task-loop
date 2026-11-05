@@ -35,9 +35,9 @@ class WriterInvariants(Case):
             "def unrelated(s):\n s.write('text')") == []
 
     def test_only_plan_and_raw_answer_destinations_are_allowed_to_write_json(self):
-        assert self.problems("taskloop.app.run.engine",
+        assert self.problems("taskloop.app.run.parts_plan",
             "import json\n(self.run_dir / PLAN_FILE).write_text(json.dumps(plancheck.to_wire(self.plan_data)))") == []
-        assert self.problems("taskloop.app.run.engine", "import json\np.write_text(json.dumps(state))")
+        assert self.problems("taskloop.app.run.parts_plan", "import json\np.write_text(json.dumps(state))")
         assert self.problems("taskloop.app.other", "import os as o\no.replace(a, b)")
 
     def test_events_path_has_one_owner_and_is_found_with_whitespace(self):
@@ -61,7 +61,7 @@ class WriterInvariants(Case):
             " def __init__(self):\n  self.store = PinStore(cfg)\n def act(self):\n  self.store.write(pin)")
 
     def test_json_payload_aliases_cannot_hide_a_state_write(self):
-        assert self.problems("taskloop.app.run.engine",
+        assert self.problems("taskloop.app.run.parts_plan",
             "import json as j\nraw = j.dumps(state)\np.write_text(raw)")
 
     def test_new_store_types_need_an_explicit_writer(self):

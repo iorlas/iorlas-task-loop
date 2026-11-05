@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from taskloop.app.checks.base import BaseCheck
-from taskloop.app.checks.container import Box
 from taskloop.app.checks.host import CheckHost
 from taskloop.app.checks.keep import keep
 from taskloop.app.checks.step_env import step_env
@@ -33,7 +32,6 @@ class Outcome:
 class Attempts:
     def __init__(self, host: CheckHost, base: BaseCheck, sleep: Callable[[float], None] = time.sleep) -> None:
         self.host, self.base, self.sleep = host, base, sleep
-        self.box = Box(host, host.spawner)
 
     def run(self, c: Check, log: Path, env: Mapping[str, str], stop: threading.Event | None = None) -> Outcome:
         """Run the check; a red one again when that can change the answer: only when the first two failures differ, never for a hang,
@@ -69,19 +67,17 @@ class Attempts:
         return rc, tail, seen, took
 
     def _exec(self, c: Check, log: Path, env: Mapping[str, str], stop: threading.Event | None) -> tuple[int, str]:
-        """The admitted execution's argv; a required container never falls back to the host."""
+        """One run of the check on the host: its argv, its log, its kept files."""
         ids = {**step_env(self.host, c.id), EnvVar.TL_ARTIFACT_STEP.value: c.id}  # a new attempt directory for every run, a lock rerun too
         # what the repo's check declares in its `env` (it is part of the cache key: it must reach the child too)
         env = {**c.env, **env, **ids}
-        argv, where = self.box.plan(c, [*argv_of(c.cmd), *c.files], env)
+        argv = [*argv_of(c.cmd), *c.files]
         try:
             rc, tail = self.host.sh(argv, timeout=c.wall_min * 60, save=log, what="check", env=env, stop=stop)
         except OSError as error:
             rc = 127 if isinstance(error, FileNotFoundError) else 126
             tail = f"check `{c.id}` could not start `{argv[0]}`: {error}"
             log.write_text(tail + "\n", encoding="utf-8")
-        if where:
-            log.write_text(where + "\n" + self._read(log, ""), encoding="utf-8")
         # before a retry, the next check or the slot's reset overwrites what this attempt left
         keep(self.host, c, log, Path(ids[EnvVar.TL_ARTIFACT_DIR.value]))
         return rc, tail

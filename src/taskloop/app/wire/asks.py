@@ -4,11 +4,14 @@ from collections.abc import Callable
 
 from taskloop.adapters import ident
 from taskloop.adapters.beadtools import bd_store
-from taskloop.app.asks import setup_retry, sweeps
+from taskloop.app.asks import pr_wake, setup_retry, sweeps
+from taskloop.app.land import forge
+from taskloop.app.land.cmds import Runs
 from taskloop.app.track.trail import now
 from taskloop.contracts.bd_errors import BdCommandFailure
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.identity import Identity
+from taskloop.contracts.ids import BeadId
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdFailure
 from taskloop.contracts.stores import AskStore
@@ -27,6 +30,14 @@ def sweep(which: str, who: Identity, home: ConfigDir, every: int = 600) -> list[
             every))
     except BdCommandFailure:  # no bd on this machine
         return []
+
+
+def wake_prs(who: Identity, home: ConfigDir, spawner: Runs, cfg: EngineConfig, repo: str, every: int = 120) -> list[BeadId]:
+    """The loop's look at the PRs its PR-mode lands wait on (throttled by a marker): a merged or closed one wakes its bead."""
+    if cfg.land_mode != "pr" or not sweeps.due(home.ask_marker("pr"), every, now()):
+        return []
+    sweeps.touch(home.ask_marker("pr"))
+    return pr_wake.wake_decided(store(home), bd_store(who.actor, repo), lambda n: forge.peek(spawner, repo, n), repo, now(), cfg)
 
 
 def sweep_asks(who: Identity, home: ConfigDir, say: Callable[[str], None] = print, cfg: EngineConfig | None = None,

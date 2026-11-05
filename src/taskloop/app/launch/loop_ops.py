@@ -1,0 +1,108 @@
+"""What the loop does to the world, one verb each: claim a bead, spawn and stop its run-task, exec into a newer install, the chores
+of a quiet moment. Each is a function of ports; app/launch/loop.py closes them over a repo into the LoopEnv."""
+import contextlib
+import os
+import sys
+from collections.abc import Callable, Mapping
+from pathlib import Path
+from typing import Any
+
+from jsonl_log import close_held
+
+from taskloop.adapters import childenv, ident
+from taskloop.app.loop.env import ReloadNote
+from taskloop.app.reconcile import leases
+from taskloop.app.release import reexec
+from taskloop.app.report import reflect
+from taskloop.app.run import console, entry
+from taskloop.app.run.running import running
+from taskloop.app.slots import engine_lock
+from taskloop.app.track import trail, verbs
+from taskloop.app.wire import asks as wasks
+from taskloop.app.wire import lanes as wlanes
+from taskloop.app.wire import slots as wslots
+from taskloop.contracts import factorybackup, paths
+from taskloop.contracts.env import Env
+from taskloop.contracts.envvars import EnvVar
+from taskloop.contracts.identity import Identity
+from taskloop.contracts.ids import BeadId
+from taskloop.contracts.ports import Beads, Child, Git, Hold, Spawner
+from taskloop.contracts.slots import SlotGitError
+
+STOP_GRACE_S = 300.0  # a stopped run-task is given this long to run its close step before stream-proc ends it
+
+
+def reload_note(cfg: paths.ConfigDir, bead: BeadId) -> ReloadNote | None:
+    rec = reexec.read_reexec(cfg, bead)
+    reexec.drop_reexec(cfg, bead)
+    if not rec:
+        return None
+    return ReloadNote(run=rec.run, to=rec.to, frm=rec.frm, from_dir=rec.from_dir, t=rec.t)
+
+
+def fetch(repo: str, git: Git) -> None:
+    with contextlib.suppress(SlotGitError):
+        git.fetch(repo)
+
+
+def release_dead(repo: str, store: Beads, now: float, git: Git, who: Identity) -> list[str]:
+    return leases.release_dead(repo, store, running(repo, git, who, store), ident.hostname(), now)
+
+
+def chores(repo: str, spawner: Spawner, env: Env, git: Git, who: Identity) -> None:
+    wlanes.chore(console.say, spawner, env)  # delegate's lane status filed again when the snapshot is 20 min old (the dash reads the file)
+    # asks of closed beads closed, unanswered ones parked, answers no run used flagged
+    cfg = wslots.load_cfg(repo, git)
+    wasks.sweep_asks(who, who.config, console.say, cfg, repo)
+    wasks.wake_prs(who, who.config, spawner, cfg, repo)  # a PR-mode land's PR the owner merged or closed: its bead runs again
+    try:
+        reflect.maybe_run(spawner, env, who.config)  # the run reflections into beads, once a day (tl-bl5)
+    except Exception as e:
+        console.say(f"loop: reflect digest: {e}")
+    try:
+        factorybackup.backup(who.config, trail.now())
+    except Exception as e:
+        console.say(f"loop: db backup: {e}")
+
+
+def claim(repo: str, store: Beads, bead: BeadId, wt: str, slot: str, git: Git, who: Identity,
+          now: Callable[[], float] = trail.now) -> tuple[bool, str]:
+    # a paused run's claim was released by the step's sweep; a live claim stops here
+    ok, why = entry.admit(bead, repo, git, who, store, now())
+    if not ok:
+        return False, why
+    return verbs.claim(who, bead, store, git, wt, slot) == 0, "claimed by another session"
+
+
+def spawn(spawner: Spawner, cmd: list[str], log: Any, extra: Mapping[str, str]) -> tuple[Child, Hold]:
+    """run-task as a child in its own process group: Ctrl-C to the loop reaches it only as the loop's SIGTERM.
+    -> (the child, the hold of its spawn): the caller replays the hold first inside the try that stops the child."""
+    return spawner.start_held(cmd, out=log, extra=extra)
+
+
+def stop_now(child: Child) -> None:
+    child.stop_async(STOP_GRACE_S)
+
+
+def stop_tree(child: Child) -> None:
+    child.stop(STOP_GRACE_S)
+
+
+def exec_into(repo: str, d: Path, argv: list[str], handover: str, env: Env, who: Identity, start_cwd: str = "") -> None:
+    if start_cwd:
+        os.chdir(start_cwd)  # cmd_loop chdir'd into the repo; a relative --repo in argv means the start directory
+    sys.stdout.flush()
+    sys.stderr.flush()
+    close_held()
+    try:
+        cmd = [*childenv.script_argv(d / "skills" / "task-loop" / "tl.py", env), *argv]
+        os.execve(cmd[0], cmd, childenv.exec_env(env, {EnvVar.TL_LOOP_STATE: handover, EnvVar.TASK_LOOP_SESSION: who.session}))
+    except OSError:
+        with contextlib.suppress(OSError):
+            os.chdir(repo)
+        raise
+
+
+def loop_lock(wt: str, slot: str, slot_bead: str | None, bead: str) -> None:
+    if os.path.isdir(wt):
+        engine_lock.loop_lock(wt, slot, slot_bead or "", bead=bead)

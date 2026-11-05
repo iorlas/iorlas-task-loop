@@ -12,10 +12,8 @@ Read the state first: a kill destroys the evidence. Everything below reads /proc
    rights (`kernel.yama.ptrace_scope`). Without it, the thread list from step 2 is what you get.
 5. The parent chain: follow `PPid` from `/proc/<pid>/status` upward until pid 1. A PPid of 1 means it was orphaned.
    Note which test shard, release run or slot started it (cmdline of each parent).
-6. The cgroup: `cat /proc/<pid>/cgroup` gives `0::/path`; then read `/sys/fs/cgroup/<path>/memory.current` and `memory.max`.
-   Inside a container /proc/meminfo shows the HOST's memory, so `memory.max` is the real limit (suite.available_mb reads it).
-7. Save it all to a file (a loop over the files above into `$TMPDIR/runaway-<pid>.txt`) before going on.
-8. Only then kill, and only a PID you spawned or confirmed: re-read `/proc/<pid>/cmdline` right before `kill <pid>`,
+6. Save it all to a file (a loop over the files above into `$TMPDIR/runaway-<pid>.txt`) before going on.
+7. Only then kill, and only a PID you spawned or confirmed: re-read `/proc/<pid>/cmdline` right before `kill <pid>`,
    SIGTERM first, SIGKILL after a wait. Never `pkill`, `killall` or kill by pattern: the pattern also matches other people's
    runs and other sessions' shards.
 
