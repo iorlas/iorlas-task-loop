@@ -16,7 +16,6 @@ from taskloop.contracts import fence, wire
 from taskloop.contracts.checkpoint import (
     BriefSnap,
     Checkpoint,
-    Defect,
     EndRec,
     Handoff,
     Notes,
@@ -77,12 +76,9 @@ class StateAttrs:
     writer_family: str | None
     writer_fallback: bool
     fallback_lane: str
-    writer_said: str
-    look_paths: list[str]
     look_notes: list[str]
     look_unjudged: dict[str, str]
     look_done: int
-    look_prev: list[Defect]
     rendered_names: list[str]
     last_reqs: list[Open]
     render_stale: bool
@@ -220,7 +216,7 @@ class Checkpoints:
         """What the owner-look bead needs goes into the record, so a crash after the land still files it."""
         ck, e = self.read(), self.e
         if ck is not None:
-            kept = ck.state.replace(look_paths=list(e.look_paths),
+            kept = ck.state.replace(
                 look_notes=list(e.look_notes),
                 look_unjudged=dict(e.look_unjudged),
                 review=review_of(e))

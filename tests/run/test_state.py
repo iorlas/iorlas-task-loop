@@ -15,7 +15,7 @@ from support.fakegit import ScriptedGit
 from taskloop.app.run.resume import KEEP_FOR_ACTIVE, LATE, Resume
 from taskloop.app.run.state import Checkpoints, StateAttrs, carries_state, state_names
 from taskloop.contracts import fence, wire
-from taskloop.contracts.checkpoint import BriefSnap, Checkpoint, Defect, Handoff, PlanStep, RunState, WriterSession
+from taskloop.contracts.checkpoint import BriefSnap, Checkpoint, Handoff, PlanStep, RunState, WriterSession
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.review import (
     ReviewState,
@@ -45,12 +45,9 @@ SAMPLE: dict[str, Any] = {
     "writer_family": "codex",
     "writer_fallback": True,
     "fallback_lane": "L",
-    "writer_said": "said",
-    "look_paths": ["p.png"],
     "look_notes": ["n"],
     "look_unjudged": {"i": "why"},
     "look_done": 1,
-    "look_prev": [Defect(item="i", why="w")],
     "rendered_names": ["a.png"],
     "last_reqs": [{"method": "m"}],
     "render_stale": True,
@@ -82,7 +79,7 @@ class Host(StateAttrs):
         self.run_id = "t-1-20260101-000000"
         self.unchecked = [{"what": "u", "kind": "", "source": "", "why": "", "proof_round": False}]
         self.unverified, self.filed, self.unfiled = [{"what": "v", "kind": "", "why": "", "source": ""}], [], []
-        self.look_paths, self.look_notes, self.look_unjudged = [], [], {}
+        self.look_notes, self.look_unjudged = [], {}
         self.task_branch, self.gate_log, self.head = "task/t-1", None, "h0"
 
     @property
@@ -159,7 +156,6 @@ class Park(Case):
         for name in LATE:
             assert getattr(b, name) == getattr(RunState(), name), name
         assert (b.filed, b.unfiled) == ([], [])  # filed titles are the late ones too
-        assert b.look_paths == ["p.png"]
 
     def test_a_pending_land_validation_parks_at_land_verify_red(self):
         a, _ = self.parked()

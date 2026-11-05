@@ -233,11 +233,6 @@ class Strays:
         return []
 
 
-class Looks:
-    def copy_looks(self) -> object:
-        return None
-
-
 class Keys:
     """The checkpoint's ledger of applied effects, and the saves the land makes."""
 
@@ -321,7 +316,6 @@ class FakeCommitHost:
         self.bead = BeadId("t-1")
         self.git, self.sh = git, sh
         self.wt = "/wt"
-        self.pictures = Looks()
         self.checkout = Stages()
         self.newfiles = Strays()
 

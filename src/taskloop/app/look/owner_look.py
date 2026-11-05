@@ -5,7 +5,7 @@ import hashlib
 from collections.abc import Generator
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import urlencode
 
 from taskloop.adapters import bdcreate, beadtools
 from taskloop.adapters.repourl import repo_url
@@ -54,8 +54,9 @@ class OwnerLook:
         """This bead's section of the owner-look bead's body."""
         e = self.e
         parts = [f"## {e.bead}: {e.bead_title}"]
-        if e.look_paths or e.look_unjudged or not e.unverified:
-            shots = "\n".join(f"- [{n}]({self.link(n)})" for n in e.look_paths) or "(none)"
+        kept = e.pictures.show_pictures()
+        if kept or e.look_unjudged or not e.unverified:
+            shots = "\n".join(f"- [{m.name}]({self.link(ref)})" for ref, m in kept) or "(none)"
             judged = " ".join(e.look_notes) or "(the reviewer gave no judgement)"
             unjudged = ("\n" + "\n".join(f"{w} ({u})" for u, w in e.look_unjudged.items()) + "\n") if e.look_unjudged else ""
             parts.append(f"Screenshots of {e.bead} ({e.bead_title}), kept on the dashboard (bead page {e.bead}), not in the repo:\n"
@@ -68,15 +69,18 @@ class OwnerLook:
             parts.append(self.unverified_text())
         return "\n".join(parts)
 
-    def link(self, name: str) -> str:
+    @staticmethod
+    def link(ref: str) -> str:
         """The dashboard's own address of a kept picture (relative to the dashboard: the engine does not know its host)."""
-        return f"/api/artifact?bead={quote(self.e.bead)}&name={quote(name)}"
+        repo, bead, run, folder, name = ref[len("artifact:"):].split("/", 4)
+        stage, _, attempt = folder.rpartition("-")
+        return "/api/artifact?" + urlencode({"repo": repo, "bead": bead, "run": run, "stage": stage, "attempt": attempt, "name": name})
 
     def file_owner_look(self) -> None:
         """After the land: one bead per epic for the owner's later round (look and feel, and what no check could prove),
         filed once and appended to by each later bead of the epic (a re-land replaces its own section)."""
         e = self.e
-        if e.look_filed or not (e.look_paths or e.look_unjudged or e.unverified or e.cases.cases_of("taste")):
+        if e.look_filed or not (e.pictures.show_pictures() or e.look_unjudged or e.unverified or e.cases.cases_of("taste")):
             return
         section = self.section()
         with self.review_lock():  # list + create/update is one step: three beads of an epic landing together file one bead
@@ -101,7 +105,7 @@ class OwnerLook:
                 err = "bd refused the update"
         else:
             made, err = bdcreate.create_checked(e.store, NewBead(
-                title=("Look review: " if e.look_paths or e.look_unjudged else "Owner review: ") + (e.bead_title or e.bead),
+                title=("Look review: " if e.pictures.show_pictures() or e.look_unjudged else "Owner review: ") + (e.bead_title or e.bead),
                 labels=[LOOK_LABEL], no_inherit_labels=True, description=section, deps=["related:" + e.bead],
                 parent=self.look_epic() or e.bead), e.bead, e.log.note)  # no epic: the review bead sits under the bead itself
         if err:
@@ -119,9 +123,8 @@ class OwnerLook:
         title, note, shots[{path, role before|after, label}], status). A re-land of this bead replaces its own entries and
         keeps one the owner already answered (good or redo)."""
         e = self.e
-        shots: list[dict[str, str]] = []
-        for n in e.look_paths:
-            shots.append({"path": f"artifact:{e.bead}/{n}", "role": "after", "label": Path(n).stem})
+        shots = [{"path": ref, "role": "before" if m.role == "before" else "after", "label": Path(m.name).stem}
+                 for ref, m in e.pictures.show_pictures()]
         mine = [{"id": f"{e.bead}#{k}", "bead": e.bead, "title": t, "note": " ".join(e.look_notes)[:600], "shots": shots, "status": "open"}
                 for k, t in enumerate(e.cases.cases_of("taste"), 1)]
         shown = beadtools.peek(e.store, bead_id)
