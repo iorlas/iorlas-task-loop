@@ -16,7 +16,6 @@ from support.narrow import must
 
 from taskloop.app.run import engine
 from taskloop.contracts.checks import CheckRun
-from taskloop.domain.look.matchers import writer_names
 
 
 class LandReview(LandReviewBase):
@@ -28,21 +27,11 @@ class LandReview(LandReviewBase):
         assert self.staged() == ["a.txt", "docs/a/b.md", "docs/a/b.md.meta", "f.txt"]
         assert e.newfiles.new_by_kind()["unexplained"] == self.STRAY
 
-    def test_an_untracked_file_the_writer_names_or_a_review_accepts_is_staged(self):
+    def test_an_untracked_file_a_review_accepts_is_staged(self):
         self.make_files("g.txt", *self.STRAY)
-        e = self.engine_at_land({"writer_said": "I also added g.txt for the fixture",
-                                 "accepted_new": [self.STRAY[0]]})  # the .meta follows its file
+        e = self.engine_at_land({"accepted_new": [self.STRAY[0]]})  # the .meta follows its file
         e.checkout.stage_all()
-        assert self.staged() == sorted(["g.txt", *self.STRAY])
-
-    def test_writer_said_matches_the_path_or_basename_on_word_boundaries(self):
-        e = self.engine_at_land({"writer_said": "added tools/g.txt, and `h.cfg`. Not ab.md or c.txt.bak"})
-        assert writer_names("tools/g.txt", e.writer_said)
-        assert writer_names("other/g.txt", e.writer_said)  # the basename
-        assert writer_names("h.cfg", e.writer_said)
-        assert not writer_names("b.md", e.writer_said)
-        assert not writer_names("c.txt", e.writer_said)
-        assert not writer_names("tools/g", e.writer_said)
+        assert self.staged() == sorted(self.STRAY)
 
     def test_a_replanned_first_stage_starts_from_the_current_tree_not_the_task_base(self):
         e = self.engine_at_land({"stage_tree": "old", "amended": True})

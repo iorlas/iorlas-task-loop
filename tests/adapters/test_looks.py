@@ -115,22 +115,14 @@ class Table(Case):
 
 
 class Judge(Case):
-    def test_same_defect_is_about_the_same_words(self):
-        assert looks.same_defect("The Save button is clipped at the right edge", "save button clipped on the right edge of the card")
-        assert not looks.same_defect("The Save button is clipped", "Magenta texture on the sofa")
-        assert not looks.same_defect("", "anything")
-        assert not looks.same_defect("clipped", "The Save button is clipped at the right edge")  # one word is no match
-        assert looks.same_defect("Clipped", "clipped")
-
-    def test_the_judges_brief_has_pictures_references_befores_items_and_no_repo(self):
+    def test_the_judges_brief_has_pictures_befores_items_and_no_repo(self):
         text = looks.judge_prompt(
             ["The picker shows a hue gradient"],
             ["build-6.png"],
-            ["ref-mock.png"],
-            [("build-6.png", "before-build-6.png")],
+            ["before-1-build-6.png"],
             "recoloured the picker",
         )
-        for part in ("You have no other context", "- build-6.png", "- ref-mock.png", "before-build-6.png (before)", "hue gradient",
+        for part in ("You have no other context", "- build-6.png", "- before-1-build-6.png", "hue gradient",
                      "recoloured the picker", "a matter of taste is never a defect", "magenta"):
             assert part in text
 
