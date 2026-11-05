@@ -1819,7 +1819,7 @@
    "default": "",
    "owner_cause": "unknown",
    "cause_by": "agent",
-   "shots": [
+   "artifacts": [
     "/api/artifact?project=lifesim-56f42031&bead=lifesim-d5f.48&name=shot-1.png",
     "/api/artifact?project=lifesim-56f42031&bead=lifesim-d5f.48&name=shot-2.png",
     "/api/artifact?project=lifesim-56f42031&bead=lifesim-d5f.48&name=shot-3.png",
@@ -1864,7 +1864,7 @@
    "default": "",
    "owner_cause": "requirement",
    "cause_by": "agent",
-   "shots": [],
+   "artifacts": [],
    "thread": [
     {
      "by": "owner",
@@ -1912,7 +1912,7 @@
    "default": "\"$\" only",
    "owner_cause": "decision",
    "cause_by": "agent",
-   "shots": [],
+   "artifacts": [],
    "thread": [],
    "ask_backs": 0,
    "similar": null,

@@ -10,7 +10,7 @@ from taskloop.contracts import plancheck
 from taskloop.contracts.ports import Git
 from taskloop.domain.checks import lint
 from taskloop.domain.checks.names import norm
-from taskloop.domain.prompts.plan import PLAN_PROMPT, VISUAL_PLAN, VISUAL_STAGES
+from taskloop.domain.prompts.plan import PLAN_PROMPT, SHOW_PLAN, VISUAL_PLAN, VISUAL_STAGES
 
 REPLAN_CALLS = 6  # the calls a replan may spend looking (study 63: the median replan used 4)
 
@@ -84,6 +84,7 @@ class PlanPrompt:
         if e.pictures.visual_cfg() and e.pictures.shot_methods():  # the classes mean "the engine renders": only with a shot table
             rules.append(VISUAL_PLAN % e.pictures.references_text())
             rules.append(VISUAL_STAGES % (", ".join(e.pictures.visual_cfg().include)[:300], e.pictures.shot_table()))
+        rules.append(SHOW_PLAN)
         rules.append("Proof files that a check reads or a reviewer looks at (screenshots, logs, probe output) go under "
                      f"{e.evidence_dir}: it is kept across runs, and nothing else under {e.task_dir} is.")
         repo = e.cfg.stage_checks

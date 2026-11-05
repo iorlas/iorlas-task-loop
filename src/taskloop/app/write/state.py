@@ -25,6 +25,7 @@ class StageState:
         self.prepare_retried = False
         self.failed_cmds: list[str] | None = self.state.get("failed")  # the commands the last engine run found red (None: none ran red yet)
         self.shots_fixed = False  # a visual write without shots or a reason is sent back once, at no cost to the rounds (tl-tno)
+        self.show_fixed = False  # a show item without its artifacts is sent back once, at no cost to the rounds (tl-jvpm.25)
         self.red_now: set[str] = set()  # the commands the last round found red
         self.acc_first = False  # the last round ran acceptance first
         self.acc_only = False  # the last round's red checks were all acceptance ones (tl-bxk.13.14)

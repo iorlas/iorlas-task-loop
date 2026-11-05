@@ -2,6 +2,8 @@
 means (a question, an accepted requirement that decides it, shots a visual stage owes) and the cases it adds."""
 from typing import Any
 
+from taskloop.adapters.check_files import repo_key
+from taskloop.app.write import show_check
 from taskloop.app.write.prepare import PREPARED, Prepare
 from taskloop.app.write.state import AGAIN, REPLAN, StageState
 from taskloop.contracts.paths import RepoDirs
@@ -41,6 +43,9 @@ class WriteRound:
         e.cases.add_cases(s.w.get("new_cases") or [])
         if e.pictures.shot_methods() and e.pictures.stage_visual(s.st):
             e.render_stale = True  # a write after the last render: its pictures show an older tree
+        back = self.show_contract(s)
+        if back:  # a show item lacks its artifacts: the writer registers them before any check runs
+            return back
         back = e.judge.look_step(s.st, s.w, s.name, s.last) if look else ""
         if back:  # the look judge found defects: the writer fixes them before the full checks run once
             s.feedback = back
@@ -107,6 +112,25 @@ class WriteRound:
             return REPLAN
         e.steps.move("write", "writer_decided", f"an accepted requirement decides it: {w['decided']}")
         s.feedback = DECIDED_TEXT % (w["question"], w["decided"])
+        return AGAIN
+
+    def show_contract(self, s: StageState) -> str:
+        """tl-jvpm.25: a show item whose artifacts are not in the store for this write is a retry reason, once (AGAIN, no counted round);
+        a second miss is a warning and the run goes on. It never parks."""
+        e = self.e
+        if not s.last or s.fix:
+            return ""
+        e.artifact_repo = e.artifact_repo or repo_key(e.git, e.wt)
+        miss = show_check.missing((e.plan_data or {}).get("cases") or [], e.home.artifact_store(),
+                                  show_check.slot_of(e.artifact_repo, e.bead, e.run_id, s.n))
+        if not miss:
+            return ""
+        if s.show_fixed:
+            e.warn(f"{s.name}: show items still unmet after the retry: {'; '.join(miss)[:300]}")
+            return ""
+        s.show_fixed = True
+        e.steps.move("write", "show_missing", f"{len(miss)} show item(s) lack their artifacts: the writer is asked once more")
+        s.feedback = show_check.SHOW_BACK % "\n".join("- " + m for m in miss)
         return AGAIN
 
     def shots_contract(self, s: StageState, prompt: str) -> None:

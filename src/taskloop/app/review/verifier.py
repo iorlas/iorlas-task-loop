@@ -9,7 +9,6 @@ from taskloop.domain.prompts.verify import VERIFY_PROMPT
 from taskloop.domain.review import followups, switch, visual
 from taskloop.domain.review.kinds import UNCHECKED_KINDS
 from taskloop.domain.review.skip import SkipKind
-from taskloop.domain.review.visual import VisualWhy
 
 Item = dict[str, Any]
 RAISE_KINDS = ("FAULT_BAD_REQUEST", "PAUSE_NETWORK", "PAUSE_KILLED")
@@ -34,8 +33,8 @@ class Verifier:
         gaps, failed = e.settles.settle(gaps)  # tl-bxk.10.19: what the engine proves itself is never asked
         gaps = e.routing.engine_steps(gaps)
         off = switch.mode(e.cfg.review, e.budget.labels) == "off"
-        if gaps and (off or not self.visual(gaps)):
-            asked = self.defer(gaps, review_off=off and bool(self.visual(gaps)))
+        if gaps and (off or not self.visual()):
+            asked = self.defer(gaps, review_off=off and self.visual())
             if failed:  # what the engine itself found wrong still goes back to the writer
                 return self.settle_wrong(asked, failed)
             return self.after_clean(asked, self.counts()) if asked else []
@@ -45,16 +44,9 @@ class Verifier:
         still, wrong = self.judge(gaps, d, failed)
         return self.settle_wrong(still, wrong) if wrong else self.after_clean(still, self.counts())
 
-    def visual(self, gaps: list[Item]) -> tuple[VisualWhy, ...]:
-        """Why this bead is visual (verify runs), () when it is not: the plan's stages, the bead's labels and acceptance, the files
-        touched, the profile's visual paths (domain/review/visual.py)."""
-        e = self.e
-        vp = e.cfg.visual_paths
-        stages = list((e.plan_data or {}).get("stages") or [])
-        paths = [p for st in stages for p in st.get("files") or []] + list(e.checkout.changed_paths())
-        return visual.why(visual.VisualFacts(
-            paths=paths, labels=list(e.budget.labels), acceptance=e.scope or "", goals=[str(st.get("goal") or "") for st in stages],
-            include=vp.include if vp else (), exclude=vp.exclude if vp else (), look_item=any(e.judge.is_look(u) for u in gaps)))
+    def visual(self) -> bool:
+        """Verify runs only on a visual bead: some plan case is look-objective, taste or show (domain/review/visual.py)."""
+        return visual.is_visual((self.e.plan_data or {}).get("cases") or [])
 
     def defer(self, gaps: list[Item], review_off: bool = False) -> list[Item]:
         """The items to ask. A bead that is not visual does not run verify: an item about one of its acceptance lines

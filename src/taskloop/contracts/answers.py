@@ -8,13 +8,14 @@ from typing import Annotated, Any, Final, Literal, final, get_args
 import msgspec
 
 from taskloop.contracts import schema
+from taskloop.contracts.artifact import Role
 from taskloop.contracts.plancheck import CHECK_DOC, PlanCheck
 from taskloop.contracts.wire import Rec, load
 
 Kind = Literal["engine_step", "checkable", "external_fact", "taste", "owner_decision", "requirement", "number", "deletion", "link",
                "case", "tooling", "other"]
 InputKind = Literal["file", "platform", "object", "engine", "tool", "other"]
-CaseClass = Literal["test", "look-objective", "taste"]
+CaseClass = Literal["test", "look-objective", "taste", "show"]
 ProvedBy = Literal["check", "stage", "leftover", "engine_step"]
 Irreversible = Literal["", "push_shared", "delete_outside", "close_epic", "spend_money"]
 AskCause = Literal["requirement", "decision", "environment", "process", "unknown"]
@@ -100,10 +101,18 @@ class Unresolved(Rec):
     path: str
 
 
+@final
+class ShowRef(Rec):
+    name: str
+    role: Role
+
+
 class Case(Rec):
     criterion: str
     check: Annotated[PlanCheck | None, msgspec.Meta(description=ARGV_DOC)]
     class_: CaseClass = msgspec.field(default="test", name="class")
+    shows: Annotated[list[ShowRef], msgspec.Meta(description="class show only: the artifacts (name, role) the writer registers")] = (
+        msgspec.field(default_factory=list))
     proved_by: ProvedBy = "check"
     via: str = ""
 

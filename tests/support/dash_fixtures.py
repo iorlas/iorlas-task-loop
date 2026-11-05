@@ -209,7 +209,7 @@ ASKS: dict[str, dict[str, Any]] = {  # keyed by the mock's short id
 def ask_card(b: dict) -> D.AskCard:
     if b["col"] == "look":
         return D.AskCard(id=f"{b['id']}-look", bead=b["id"], project=b["proj"], source="look", question="4 screens of the quit dialog",
-                         t=ago(b["age"]), shots=[shot_url(b["id"], i) for i in range(b.get("shots", 4))])
+                         t=ago(b["age"]), artifacts=[shot_url(b["id"], i) for i in range(b.get("shots", 4))])
     a = ASKS[b["short"]]
     return D.AskCard(
         id=f"{b['id']}-1", bead=b["id"], project=b["proj"], source="ask", run=f"{b['id']}-fixture", question=a["question"], t=ago(b["age"]),

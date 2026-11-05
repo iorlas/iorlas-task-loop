@@ -65,7 +65,8 @@
       "enum": [
        "test",
        "look-objective",
-       "taste"
+       "taste",
+       "show"
       ],
       "type": "string"
      },
@@ -83,6 +84,31 @@
      },
      "via": {
       "type": "string"
+     },
+     "shows": {
+      "items": {
+       "additionalProperties": false,
+       "properties": {
+        "name": {
+         "type": "string"
+        },
+        "role": {
+         "enum": [
+          "before",
+          "after",
+          "progress",
+          "result"
+         ],
+         "type": "string"
+        }
+       },
+       "required": [
+        "name",
+        "role"
+       ],
+       "type": "object"
+      },
+      "type": "array"
      }
     },
     "required": [

@@ -41,7 +41,7 @@ Methods = dict[str, Method]
 
 DEFAULT_ARG = r"[\w.=,:@/+][\w.=,:@/+-]{0,199}"   # no space, quote or shell character, and no leading dash (never an option)
 MAX_REQUESTS = 6                        # shot requests one write may make
-CLASSES = ("test", "look-objective", "taste")
+CLASSES = ("test", "look-objective", "taste", "show")
 
 
 def parse_row(r: object) -> tuple[Method | None, str]:

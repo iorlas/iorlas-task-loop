@@ -49,7 +49,7 @@ function quick(snap) {
     if (!ask) return null;
     if (ask.source === 'look') {
       return html`<div class="qa"><button class="pri ok" onClick=${stop(() => act.look(ask, 'good'))}>✅ Approve → land</button>
-        <button onClick=${stop(() => { openBead(b); set({ dtab: 'bead' }); })}>📸 ${ask.shots.length}</button></div>`;
+        <button onClick=${stop(() => { openBead(b); set({ dtab: 'bead' }); })}>📸 ${ask.artifacts.length}</button></div>`;
     }
     const i = ask.options.findIndex((o) => o.recommended);
     if (i < 0) return html`<div class="qa"><button onClick=${stop(() => openBead(b))}>Answer…</button></div>`;

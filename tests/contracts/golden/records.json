@@ -252,7 +252,8 @@
    }
   ],
   "outcome": "adr",
-  "outcome_ref": "ADR-3"
+  "outcome_ref": "ADR-3",
+  "artifacts": []
  },
  "LedgerEntry": {
   "v": 1,
@@ -345,7 +346,8 @@
   ],
   "acceptance_only": true,
   "acceptance_first": false,
-  "shots_fixed": true
+  "shots_fixed": true,
+  "show_fixed": false
  },
  "ArtifactSlot": {
   "repo": "r-1",

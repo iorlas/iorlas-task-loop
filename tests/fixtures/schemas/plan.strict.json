@@ -66,6 +66,7 @@
        "test",
        "look-objective",
        "taste",
+       "show",
        null
       ],
       "type": [
@@ -94,6 +95,34 @@
        "string",
        "null"
       ]
+     },
+     "shows": {
+      "items": {
+       "additionalProperties": false,
+       "properties": {
+        "name": {
+         "type": "string"
+        },
+        "role": {
+         "enum": [
+          "before",
+          "after",
+          "progress",
+          "result"
+         ],
+         "type": "string"
+        }
+       },
+       "required": [
+        "name",
+        "role"
+       ],
+       "type": "object"
+      },
+      "type": [
+       "array",
+       "null"
+      ]
      }
     },
     "required": [
@@ -101,7 +130,8 @@
      "check",
      "class",
      "proved_by",
-     "via"
+     "via",
+     "shows"
     ],
     "type": "object"
    },

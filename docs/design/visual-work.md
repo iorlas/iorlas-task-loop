@@ -25,6 +25,12 @@ Rendering is the engine's job. Judging taste is the owner's job. The writer writ
    - `look-objective`: a render can prove it. It shows, is not clipped or overlapped, has no error or magenta textures,
      and the state is visible.
    - `taste`: someone has to like it. "Owner approves", "reads well", "feels like the Sims".
+   - `show`: the task demands an artifact (a picture, video, PDF or audio file). The case lists `shows: [{name, role}]`; the engine
+     checks mechanically, by role and name, that each is registered for the last stage's write (tl-jvpm.25). A miss is one retry
+     round for the writer, never a park. Whether it is good is the owner's.
+   A bead is visual iff some case is `look-objective`, `taste` or `show`; `visual_paths` only checks that (a visual path touched with
+   no such case sends the plan back once). The plan stage runs on any host; the write and look stages need the host that has the
+   picture resource (`needs:<resource>`, host.json).
    A number for a look item comes only from the bead, the owner, or a project standard file (for example design
    tokens or a contrast rule in `config/`). The planner may propose one, but a proposal is a plan-time question to the
    owner (revives 13.10), never a check.

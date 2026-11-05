@@ -534,7 +534,10 @@ under one per-repo area lock (`<config dir>/locks/area-<repo>.lock`), so two loo
 from the base branch) the writer on a visual stage does not save screenshots: it returns `shots` (a method from the table,
 its args, names) and the engine renders them (static checks first), a look judge (fresh, other family, only the shrunk
 pictures, references and 'before' shots) returns text findings, and the writer fixes them: at most `look_rounds` (2) render
-rounds per stage, a defect that comes back is a leftover. The plan's cases carry a class (test / look-objective / taste);
+rounds per stage, a defect that comes back is a leftover. The plan's cases carry a class (test / look-objective / taste / show). A bead is visual (runs verify and look) iff some case is
+look-objective, taste or show; `visual_paths` only checks that: a visual path touched with no such case sends the plan back once.
+`show` (tl-jvpm.25): `shows: [{name, role}]` names the files the writer registers with `artifact_add` (role before / after / progress / result);
+the engine checks by role and name that they exist for the last stage's write, a miss goes back to the writer once (never a park), whether the result is good stays with the owner;
 taste goes to the owner-look bead (metadata `looks` for the gallery) and never blocks the land. Without `shot_table` the
 old way below stands.
 

@@ -119,6 +119,7 @@ class RunFields(StateAttrs):
         self.budget_warned: set[float] = set()
         self.plan_assumed = False  # tl-ntp: the planner was sent back once to plan on assumptions
         self.plan_decided = False  # the planner was sent back once with the requirement that answers its question
+        self.plan_visual_back = False  # the planner was sent back once for a visual path touched with no look-objective, taste or show case
         self.land_fields()
 
     def land_fields(self) -> None:

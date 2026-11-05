@@ -152,7 +152,7 @@ class Case(Case):
                 LookItem(
                     bead="b-look",
                     title="4 screens of the quit dialog",
-                    shots=("/api/look-shot?repo=lifesim&path=a.png", "/api/look-shot?repo=lifesim&path=b.png"),
+                    artifacts=("/api/look-shot?repo=lifesim&path=a.png", "/api/look-shot?repo=lifesim&path=b.png"),
                 )
             ],
         )
@@ -290,7 +290,7 @@ class Parts(Case):
             == (["Rent weekly", "All weekly"], True, ["read the design doc"], "the bead and the doc disagree")
         )
         assert (
-            next(x for x in s.asks if x.source == "look").shots
+            next(x for x in s.asks if x.source == "look").artifacts
             == ["/api/look-shot?repo=lifesim&path=a.png", "/api/look-shot?repo=lifesim&path=b.png"]
         )
         assert (s.server.version, s.server.host, s.projects[0].id) == ("v1", "box", "lifesim")
@@ -387,7 +387,7 @@ class Detail(Case):
     def test_ask_and_look_ride_with_the_bead(self):
         assert must(self.detail("b-ask").ask).question == "Which bills are weekly?"
         look = must(self.detail("b-look").ask)
-        assert (look.source, look.id, len(look.shots)) == ("look", "b-look-look", 2)
+        assert (look.source, look.id, len(look.artifacts)) == ("look", "b-look-look", 2)
         assert self.detail("b-run").ask is None
 
     def test_the_drawers_artifacts_come_from_the_store_never_from_the_runs_artifact_records(self):

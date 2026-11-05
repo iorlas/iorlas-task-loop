@@ -24,7 +24,7 @@ class LookItem:
 
     bead: str
     title: str
-    shots: tuple[str, ...]
+    artifacts: tuple[str, ...]
 
 
 @dataclass(frozen=True)
