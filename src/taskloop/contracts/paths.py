@@ -202,9 +202,6 @@ class ConfigDir:
     def snapshot(self, repo_key: str, name: str) -> Path:
         return self.root / "snapshots" / (f"{repo_key}.{name}.json")
 
-    def session(self, session_id: str) -> Path:
-        return self.root / "sessions" / (f"{session_id}.json")
-
     def repos(self) -> Path:
         return self.root / "repos.json"
 

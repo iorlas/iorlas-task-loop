@@ -1,35 +1,20 @@
 """The SessionStart hook: index the session id -> its transcript path. Must never fail the session."""
 import contextlib
-import json
 import os
 import shlex
 from pathlib import Path
 
 from taskloop.adapters import gitrepo
 from taskloop.adapters.ident import config_dir
-from taskloop.app.track.trail import now
 from taskloop.contracts.env import Env
 from taskloop.contracts.paths import ConfigDir, default_root
 from taskloop.contracts.ports import Git
-from taskloop.contracts.snapshots import SessionIndex
-from taskloop.contracts.stores import SessionStore
 from taskloop.domain import selfdescribe
 
 
 def self_description(repo: str) -> str:
     """A cheap profile presence check; sessions need no profile parsing or tracker calls."""
     return selfdescribe.text() if repo and (Path(repo) / ".task-loop.json").is_file() else ""
-
-
-def session_start(stdin_text: str, env: Env) -> None:
-    try:
-        d = json.loads(stdin_text or "{}")
-        sid = d.get("session_id")
-        if sid:
-            SessionStore(ConfigDir(config_dir(env)), sid).write(SessionIndex(
-                session=sid, transcript=d.get("transcript_path") or "", cwd=d.get("cwd") or "", source=d.get("source") or "", t=now()))
-    except Exception:
-        pass
 
 
 SHIM = (

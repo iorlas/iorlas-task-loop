@@ -56,7 +56,7 @@
   tl.py ask show ID                             one ask: question, owner cause, blocking, default, similar, thread, outcome (read-only)
   tl.py handoff write|show [--repo DIR]         the <= 4 KB handoff a compaction hands to the next session (hooks/hook.py writes it)
 
-State: ~/.config/task-loop : repos.json, events.jsonl, sessions/, dash.*.
+State: ~/.config/task-loop : repos.json, events.jsonl, dash.*.
 """
 
 import argparse

@@ -60,9 +60,9 @@ class Sessions(Case):
     def event(self, **kw):
         return json.dumps({"session_id": "s1", "transcript_path": "/t.jsonl", "cwd": str(self.repo), **kw})
 
-    def test_session_start_indexes_the_session_and_points_the_tl_shim_at_this_install(self):
+    def test_session_start_writes_no_session_index_and_points_the_tl_shim_at_this_install(self):
         assert session.start(self.event(source="startup"), self.root, snapshot(), port_git()) == ""
-        assert json.loads((self.cfg / "sessions" / "s1.json").read_text())["transcript"] == "/t.jsonl"
+        assert not (self.cfg / "sessions").exists()
         shim = (self.cfg / "bin" / "tl").read_text()
         assert "exec uv run --quiet --script " + str(self.root / "skills" / "task-loop" / "tl.py") in shim
         assert os.access(self.cfg / "bin" / "tl", os.X_OK)

@@ -10,7 +10,6 @@ WRITERS: Final = {
     'StatusStore': {'taskloop.app.wire.lanes'},
     'StatusTriedStore': {'taskloop.app.wire.lanes'},
     'ReposStore': {'taskloop.app.track.trail', 'taskloop.contracts.stores'},
-    'SessionStore': {'taskloop.app.wire.hook'},
     'ReleaseResultStore': {'taskloop.app.release.flow'},
     'SuiteGreenStore': {'taskloop.app.release.cache'},
     'ReflectStateStore': {'taskloop.app.report.reflect'},
@@ -30,7 +29,7 @@ WRITERS: Final = {
 }
 PATH_STORES: Final = {
     'pin': 'PinStore', 'status': 'StatusStore', 'status_tried': 'StatusTriedStore', 'repos': 'ReposStore',
-    'session': 'SessionStore', 'release_result': 'ReleaseResultStore', 'reflect_state': 'ReflectStateStore',
+    'release_result': 'ReleaseResultStore', 'reflect_state': 'ReflectStateStore',
     'park': 'ParkStore', 'landed': 'LandedStore', 'traces': 'TraceStore',
     'loop_state': 'LoopStateStore', 'loop_command': 'LoopCommandStore', 'loop_rest': 'RestStore',
     'bad_versions': 'BadVersionStore', 'suite_green': 'SuiteGreenStore',

@@ -27,7 +27,6 @@ from taskloop.contracts.snapshots import (
     ReleaseResult,
     RepoEntry,
     ReposIndex,
-    SessionIndex,
     SharedNotes,
     StatusSnapshot,
     StatusTried,
@@ -396,11 +395,6 @@ class StatusTriedStore(JsonStore[StatusTried]):
 class SharedNotesStore(JsonStore[SharedNotes]):
     def __init__(self, cfg: paths.ConfigDir, repo_key: str) -> None:
         super().__init__(cfg.shared(repo_key), SharedNotes)
-
-
-class SessionStore(JsonStore[SessionIndex]):
-    def __init__(self, cfg: paths.ConfigDir, session: str) -> None:
-        super().__init__(cfg.session(session), SessionIndex)
 
 
 class ReposStore(JsonStore[ReposIndex]):

@@ -17,7 +17,6 @@ def context_out(text: str) -> str:
 def start(stdin_text: str, plugin_root: Path, env: Env, git: Git) -> str:
     """Introduce task-loop in profile repos; after compaction append the handoff. Never fail the session."""
     try:
-        index.session_start(stdin_text, env)
         index.ensure_machine(plugin_root, env)
         data = json.loads(stdin_text or "{}")
         repo = index.repo_of(git, data)

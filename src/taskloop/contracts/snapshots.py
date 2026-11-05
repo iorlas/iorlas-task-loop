@@ -55,18 +55,6 @@ class StatusSnapshot(Rec):
 
 
 @final
-class SessionIndex(Rec):
-    """sessions/<id>.json: a Claude session id -> its transcript."""
-
-    V: ClassVar[int] = 1
-    session: str
-    transcript: str
-    cwd: str = ""
-    source: str = ""
-    t: float = 0.0
-
-
-@final
 class RepoEntry(Rec):
     added: float
 

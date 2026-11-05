@@ -138,6 +138,14 @@ def path_link_line(env: Env) -> tuple[str, bool]:
     return f"PATH tl: {link} {'-> the shim' if state == 'ours' else 'is missing (the next session start links it)'}; {where}", False
 
 
+def legacy_line(env: Env) -> str:
+    """'' or a line naming the retired session index folder (SessionStart no longer writes it, nothing reads it): safe to delete by hand."""
+    folder = config_dir(env) / "sessions"
+    if not folder.is_dir():
+        return ""
+    return f"legacy: {folder} ({sum(1 for _ in folder.iterdir())} files) is the retired session index; nothing reads it, delete it"
+
+
 def install_problems(plugin_root: Path, env: Env) -> list[str]:
     """What is wrong with the plugin install this tl runs from and the one Claude Code records as installed: a file that differs from
     MANIFEST.sha256 (named), an AGENTS.md without its ownership section. A source checkout has no manifest and is checked for none."""
@@ -175,6 +183,8 @@ def run(plugin_root: Path, env: Env, git: Git, who: Identity, spawner: Spawner |
     print(f"engine: {pin.describe(pin.families(source[0].engine.writer_family, []))}")
     for w in warns:
         print("WARN " + w)
+    if legacy := legacy_line(env):
+        print(legacy)
     fails = install_problems(plugin_root, env)
     for p in fails:
         print("FAIL " + p)

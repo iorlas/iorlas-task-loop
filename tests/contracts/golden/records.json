@@ -1265,14 +1265,6 @@
   "state": "next",
   "why": "1st of 2 chosen"
  },
- "SessionIndex": {
-  "v": 1,
-  "session": "s",
-  "transcript": "/t.jsonl",
-  "cwd": "/w",
-  "source": "startup",
-  "t": 1793050200.5
- },
  "ReposIndex": {
   "v": 1,
   "repos": {
