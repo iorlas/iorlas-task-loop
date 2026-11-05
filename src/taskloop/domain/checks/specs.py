@@ -59,7 +59,7 @@ def repo_check(k: CheckSpec, cfg: EngineConfig, phase: Phase = Phase.STAGE) -> C
                  exclude=inputsets.expand(cfg, k.exclude), env=dict(k.env), repo=True, writer=k.writer,
                  writer_max_s=k.writer_check_max_s, tail_log=k.tail_log, keep=list(k.keep), needs=list(k.needs), lane=k.lane,
                  pass_files=k.pass_files, run_in=k.run_in,
-                 fix=text_of(k.fix) if k.fix else "", container=k.where == "container", reads=list(k.reads), tags=tags_of(k.id, k.cmd))
+                 fix=text_of(k.fix) if k.fix else "", reads=list(k.reads), tags=tags_of(k.id, k.cmd))
 
 
 def adhoc_check(a: Adhoc, cfg: EngineConfig) -> Check:

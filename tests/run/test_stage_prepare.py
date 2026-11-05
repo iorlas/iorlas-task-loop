@@ -4,7 +4,7 @@ from unittest import mock
 from support.builders import plan_of
 from support.engine_case import PLAN, EngineTest
 
-from taskloop.app.run.stages import run_round_step
+from taskloop.app.run.stage_rounds import run_round_step
 from taskloop.app.write.prepare import PREPARED, Prepare
 from taskloop.app.write.state import StageState
 from taskloop.contracts.enums import Step

@@ -17,6 +17,7 @@ from taskloop.app.land.land_rebase import LandRebase
 from taskloop.app.land.landed import Landed
 from taskloop.app.land.lander_host import LanderHost, LandHost
 from taskloop.app.land.outbound import Outbound
+from taskloop.app.land.pr_land import PrLand
 from taskloop.app.land.push import Pusher
 from taskloop.app.land.recheck import Recheck
 from taskloop.app.land.state import Land, Next, Phase, Placing
@@ -67,9 +68,15 @@ class WipOut(Protocol):
     def wip_push(self, stage: int) -> None: ...
 
 
+class PrStep(Protocol):
+    def settled(self) -> str: ...
+    def done(self) -> None: ...
+
+
 @dataclass(frozen=True)
 class LandParts:
-    """The steps the Lander composes; each is built over its own small host (see Lander.of)."""
+    """The steps the Lander composes; each is built over its own small host (see Lander.of). `pr` is the PR land (land_mode pr),
+    which is also the `push`; None in push mode."""
 
     gate: GateStep
     commit: CommitStep
@@ -80,6 +87,7 @@ class LandParts:
     fix: FixStep
     sync: SyncStep
     out: WipOut
+    pr: PrStep | None = None
 
 
 class Lander:
@@ -94,6 +102,7 @@ class Lander:
         self.fixing = parts.fix
         self.syncing = parts.sync
         self.out = parts.out
+        self.pr = parts.pr
 
     def finish(self, bead: Bead) -> str:
         """The task's one commit, then the land. -> the landed sha, or "" (nothing changed, or a dry run)."""
@@ -106,6 +115,9 @@ class Lander:
         skipped = verified.refuse(verified.latest(e.last_run, lambda: e.stores.check_run(e.run_dir.name, None).get()), e)
         if skipped:
             e.log.note(f"landing with deferred checks (no such resource here, inputs unchanged): {', '.join(skipped)}")
+        merged = self.pr.settled() if self.pr else ""  # a PR the owner merged since: its merge commit is the land
+        if merged:
+            return self.synced(merged)
         found = self.landed.already()  # the last run's push may have gone through before the network cut its answer
         if found:
             return self.synced(self.landed.found(found))
@@ -123,7 +135,10 @@ class Lander:
 
     def synced(self, sha: str) -> str:
         """The land is done and the lock is let go: bd's data and the landed fact follow (see Sync)."""
-        return self.syncing.run(sha)
+        done = self.syncing.run(sha)
+        if self.pr and done:
+            self.pr.done()  # recorded and synced: the bead waits on no PR any more
+        return done
 
     def lock(self) -> AbstractContextManager[Path | str]:
         """One land at a time per repo, across slots and sessions: an flock the OS drops when the process dies."""
@@ -282,5 +297,7 @@ class Lander:
 def lander_over(host: LanderHost) -> Lander:
     """The Lander over the engine: each step gets the host typed as that step's own Protocol."""
     out = Outbound(host)
+    pr = PrLand(host) if host.cfg.land_mode == "pr" else None
     return Lander(host, LandParts(gate=Gate(host), commit=Commit(host), landed=Landed(host), rebase=LandRebase(host),
-                                  recheck=Recheck(host), push=Pusher(host, out), fix=FixOutside(host), sync=Sync(host, out), out=out))
+                                  recheck=Recheck(host), push=pr or Pusher(host, out), fix=FixOutside(host), sync=Sync(host, out), out=out,
+                                  pr=pr))

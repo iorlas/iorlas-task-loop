@@ -75,13 +75,16 @@ def stop_tree(p: subprocess.Popen[bytes], *, grace: float = 5.0, prove: float = 
     led = _leads(p)
     rows = proctable.table()
     noted = {r.pid: r.start for r in proctable.descendants(p.pid, rows)}
-    for pid in noted:
-        _hit(pid, signal.SIGTERM)
+    # The child and its group first: a shell that `wait`s on a background job whose own SIGTERM arrives first sees the job end and exits 0
+    # (macOS bash 3.2 does, on most runs), so a stopped tree would read as a success; with the group signalled at once the shell dies too.
     if led and p.pid not in own_ids():
         with contextlib.suppress(OSError):
+            os.kill(p.pid, signal.SIGTERM)  # the leader alone, then everyone: the group walk reaches a member before the leader
             os.killpg(p.pid, signal.SIGTERM)
     elif p.returncode is None:
         _hit(p.pid, signal.SIGTERM, group=False)
+    for pid in noted:
+        _hit(pid, signal.SIGTERM)
     end = time.monotonic() + grace
     while time.monotonic() < end:
         p.poll()

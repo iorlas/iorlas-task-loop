@@ -13,14 +13,13 @@ import support.paths  # noqa: F401
 from support.fakegit import FakeGit
 
 from taskloop.app.checks.cache import InputKeys, RunMemo, plan_digest
-from taskloop.app.checks.execution import EnvironmentUnavailable, ReadyExecution
 from taskloop.app.land.push_judge import PushStatus, judge_push
 from taskloop.contracts.checks import CheckResult
 from taskloop.contracts.config import load
 from taskloop.contracts.env import Env
 from taskloop.contracts.gitfacts import TreeEntry
 from taskloop.contracts.ids import TreeSha
-from taskloop.contracts.runkey import BaseSha, Digest
+from taskloop.contracts.runkey import BaseSha
 from taskloop.contracts.slots import GitReadFailure
 from taskloop.domain.checks.specs import gate_items
 from taskloop.stores.memory import fake_stores
@@ -52,24 +51,21 @@ class PushJudge(Case):
         self.show = self.show_patch.start()
         self.addCleanup(self.show_patch.stop)
         self.env = Env({"PATH": "/tools"})
-        self.spawner = mock.Mock()
 
     def request(self, *tips, remote="refs/heads/main", old="0" * 40):
         return "".join(f"refs/heads/{tip} {tip} {remote} {old}\n" for tip in tips)
 
     def judge(self, text=None):
         return judge_push(self.repo, self.request("head") if text is None else text, self.stores, self.git, self.check,
-                          env=self.env, spawner=self.spawner)
+                          env=self.env)
 
-    def stamp(self, tree="tree", base="base", profile=None, execution=None, planned=False):
+    def stamp(self, tree="tree", base="base", profile=None, planned=False):
         from_env = {"TL_SLOT": "check"}
         cfg = load(json.loads(profile or self.tip_profile)).engine
         keys = InputKeys(self.git, self.repo, TreeSha(tree))
         memo = RunMemo(self.stores, "repo", keys, BaseSha(base), from_env)
         memo.checks = {c.id: c for c in gate_items(cfg)}
         for step in gate_items(cfg):
-            if execution is not None:
-                memo.executions[step.id] = Digest(execution)
             result = CheckResult(id=step.id, cmd=step.cmd, group=step.group, exit=0, status="passed")
             key = memo.key(step)
             if planned:
@@ -329,25 +325,12 @@ class PushJudge(Case):
         assert self.judge().status == PushStatus.ALLOWED
         self.check.assert_not_called()
 
-    def test_other_command_and_execution_cannot_authorize_the_same_id(self):
+    def test_other_command_and_env_cannot_authorize_the_same_id(self):
         for change in ({"argv": ["false"]}, {"env": {"MODE": "other"}}):
             other = json.dumps({"engine": {"checks": [{"id": "suite", "argv": ["true"], "run": "gate", **change}]}})
             with self.subTest(change=change):
                 self.stamp(profile=other)
                 assert self.judge().status == PushStatus.REFUSED
-        self.tip_profile = json.dumps({"engine": {"container": {"image": "mutable"}, "checks": [
-            {"id": "suite", "argv": ["true"], "run": "gate", "in": "container"}]}})
-        self.profile.write_text(self.tip_profile)
-        self.git.replies[("rev_parse", "HEAD^{tree}")] = "tree"
-        self.stamp(execution="sha256:old")
-        with mock.patch("taskloop.app.checks.authorization.resolve_container",
-                        return_value=ReadyExecution(Digest("sha256:new"))):
-            assert self.judge().status == PushStatus.REFUSED
-        with mock.patch("taskloop.app.checks.authorization.resolve_container",
-                        return_value=ReadyExecution(Digest("sha256:old"))):
-            assert self.judge().status == PushStatus.ALLOWED
-        with mock.patch("taskloop.app.checks.authorization.resolve_container", return_value=EnvironmentUnavailable("offline")):
-            assert self.judge().status == PushStatus.REFUSED
 
     def test_planned_skip_requires_the_exact_producer(self):
         self.tip_profile = json.dumps({"engine": {"plan_cmd": ["new-plan"], "checks": [

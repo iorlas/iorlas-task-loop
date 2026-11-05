@@ -1,4 +1,6 @@
 """What a PreToolUse hook refuses, one pure function per rule: tool name and input in, a one-line reason out ("" = allowed)."""
+from __future__ import annotations
+
 import os
 import shlex
 from collections.abc import Mapping

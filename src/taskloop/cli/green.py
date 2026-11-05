@@ -5,7 +5,6 @@ from collections.abc import Callable
 from pathlib import Path
 
 from taskloop.app.checks import authorization
-from taskloop.app.checks.execution import Runs
 from taskloop.contracts.env import Env
 from taskloop.contracts.ids import CheckId, TreeSha
 from taskloop.contracts.paths import ConfigDir
@@ -17,12 +16,11 @@ from taskloop.stores.real import real_stores
 GREEN, NOT_GREEN = 0, 1
 
 
-def cmd_green(a: argparse.Namespace, cfg: ConfigDir, git: Git, out: Callable[[str], None] = print, *, env: Env | None = None,
-              spawner: Runs | None = None) -> int:
+def cmd_green(a: argparse.Namespace, cfg: ConfigDir, git: Git, out: Callable[[str], None] = print, *, env: Env | None = None) -> int:
     wt, tree, base, step = str(Path(a.repo).resolve()), TreeSha(a.tree), BaseSha(a.base), CheckId(a.step)
     try:
         engine = authorization.profile(git, wt, tree)
-        res = authorization.results(real_stores(cfg), git, wt, engine, tree, base, env or Env(), step, spawner).get(step)
+        res = authorization.results(real_stores(cfg), git, wt, engine, tree, base, env or Env(), step).get(step)
     except (OSError, ValueError, SlotGitError):
         res = None
     ok = res is not None

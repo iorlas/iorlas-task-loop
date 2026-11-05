@@ -9,7 +9,7 @@ from taskloop.app.checks.attempts import Attempts
 from taskloop.app.checks.base import BaseCheck
 from taskloop.app.checks.cache import InputKeys, RunMemo
 from taskloop.app.checks.clean import isolated
-from taskloop.app.checks.execution import ReadyExecution, Runs, keyed_env, resolve_container
+from taskloop.app.checks.execution import keyed_env
 from taskloop.app.checks.executor import CheckExecutor
 from taskloop.app.checks.fixer import Fixer
 from taskloop.app.checks.host import CheckFault, CheckHost, CheckStuck
@@ -30,7 +30,7 @@ from taskloop.stores.bundle import Stores
 
 
 def cached_gate(cfg: EngineConfig, git: Git, wt: str, stores: Stores, env: Env,
-                tree: TreeSha, planned: gateplan.PlanDecision | None, spawner: Runs | None = None, *, clean: bool = False,
+                tree: TreeSha, planned: gateplan.PlanDecision | None, *, clean: bool = False,
                 slot_wt: str | None = None) -> bool:
     """Read gate evidence without running checks or a plan producer."""
     steps = gate_items(cfg)
@@ -45,12 +45,6 @@ def cached_gate(cfg: EngineConfig, git: Git, wt: str, stores: Stores, env: Env,
         memo.slot_keys = InputKeys(git, slot_wt or wt, tree)
     memo.checks = {c.id: repo_check(c, cfg) for c in cfg.checks}
     memo.checks.update({c.id: c for c in steps})
-    for location in {c.run_in for c in items if c.container}:
-        root = slot_wt if location == "slot" and slot_wt is not None else wt
-        execution = resolve_container(cfg.container, root, spawner) if spawner is not None else None
-        if not isinstance(execution, ReadyExecution):
-            return False
-        memo.executions.update({c.id: execution.identity for c in items if c.container and c.run_in == location})
     changed = git.changed_paths(wt, start, tree, required=True) if planned is None and any(c.when for c in items) else []
     return all(memo.has(c) or not due(c, changed, planned.skips if planned is not None else None) for c in items)
 
@@ -139,7 +133,7 @@ class Checker:
             return False
         base = host.git.rev_parse(str(host.wt), host.cfg.base)
         planned = gateplan.skipped(host, tree, base)
-        return cached_gate(host.cfg, host.git, str(host.wt), host.stores, host.env, tree, planned, host.spawner,
+        return cached_gate(host.cfg, host.git, str(host.wt), host.stores, host.env, tree, planned,
                            clean=self.clean, slot_wt=str(self.slot_host.wt) if self.slot_host is not None else None)
 
     def _history(self) -> tuple[Doc[Durations], Durations]:

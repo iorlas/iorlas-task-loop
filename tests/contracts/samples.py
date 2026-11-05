@@ -99,11 +99,9 @@ LOCK = locks.EngineLock(pid=1789, bead="tl-1", started=T, by="tl-abc", start="99
 CMD = {"pick_label": "auto", "skip_review": config.ReviewSkipConfig(tests=["t/**"]),
        "prepare": config.PrepareConfig(cmd=["dotnet", "restore"], inputs=["**/*.csproj"]),
        "visual_paths": config.VisualConfig(include=["a/**"]), "write_fresh_above_k": 150.0, "max_rounds": 4,
-       "checks": [config.CheckSpec(id=CheckId("fmt"), argv=["just", "fmt"], group="static", when=["x/**"], inputs="a/**",
-                                  where="container"),
+       "checks": [config.CheckSpec(id=CheckId("fmt"), argv=["just", "fmt"], group="static", when=["x/**"], inputs="a/**"),
                   config.CheckSpec(id=CheckId("unity"), argv=["just", "check-unity"], run="gate", run_in="slot", needs=["unity"])],
-       "resources": {"unity": config.ResourceSpec(limit=2)},
-       "container": config.ContainerConfig(image="img:1")}
+       "resources": {"unity": config.ResourceSpec(limit=2)}}
 
 
 RUNKEY = RunKey(check=CheckId("lint"), cmd=Digest("c1"), config=Digest("g1"), toolchain=Digest("t1"), tree=TreeSha("deadbeef"),

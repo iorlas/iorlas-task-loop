@@ -41,7 +41,7 @@ class MemoryLimits(Case):
         with tempfile.TemporaryDirectory() as d:
             info = Path(d) / "meminfo"
             info.write_text("MemTotal: 99999999 kB\nMemAvailable:     3145728 kB\nMemFree: 1 kB\n")
-            with mock.patch.object(suite, "MEMINFO", info), mock.patch.object(suite, "PROC_CGROUP", Path(d) / "no-cgroup"):
+            with mock.patch.object(suite, "MEMINFO", info):
                 assert suite.available_mb() == 3072
                 suite.refuse_if_short(1, suite.available_mb())  # 3072 MB covers one worker
                 with pytest.raises(Abort) as raised:
@@ -55,7 +55,7 @@ class MemoryLimits(Case):
         with tempfile.TemporaryDirectory() as d:
             info = Path(d) / "meminfo"
             info.write_text("MemAvailable:     1024 kB\n")
-            with mock.patch.object(suite, "MEMINFO", info), mock.patch.object(suite, "PROC_CGROUP", Path(d) / "no-cgroup"), \
+            with mock.patch.object(suite, "MEMINFO", info), \
                     mock.patch.object(suite, "suite_lock_path", return_value=Path(d) / "l.lock"), \
                     mock.patch.object(suite, "run_parts") as ran, mock.patch.dict(os.environ, {"TASK_LOOP_SUITE_WORKERS": "2"}), \
                     pytest.raises(Abort):

@@ -10,9 +10,7 @@ from support.engine_case import EngineTest
 from support.spawn import port_git
 
 from taskloop.adapters import check_files
-from taskloop.app.checks.attempts import Attempts, Outcome
 from taskloop.app.checks.cache import KEEP, InputKeys, RunMemo
-from taskloop.app.checks.execution import EnvironmentUnavailable, ReadyExecution, image_identity, resolve_container
 from taskloop.app.checks.gateplan import PlanDecision
 from taskloop.app.checks.runner import cached_gate
 from taskloop.app.land.cmds import Cmds
@@ -20,12 +18,12 @@ from taskloop.app.land.stackgate import StackGate
 from taskloop.cli.green import cmd_green
 from taskloop.contracts import factorydb, wire
 from taskloop.contracts.checks import Check, CheckResult, PassRecord
-from taskloop.contracts.config import ContainerConfig, load
+from taskloop.contracts.config import load
 from taskloop.contracts.env import Env
 from taskloop.contracts.gitfacts import TreeEntry
 from taskloop.contracts.ids import CheckId, TreeSha
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import Git, Ran
+from taskloop.contracts.ports import Git
 from taskloop.contracts.runkey import BaseSha, Digest
 from taskloop.domain.checks.specs import diff_check, gate_items
 from taskloop.stores.memory import fake_stores
@@ -55,16 +53,6 @@ class Identity(Case):
 
     def test_command_reuse_keeps_registry_and_execution_identity(self):
         assert self.memo.command_key(self.check) != self.memo.command_key(self.check.replace(id=CheckId("other")))
-        assert self.memo.command_key(self.check) != self.memo.command_key(self.check.replace(container=True))
-
-    def test_receipts_name_the_resolved_image(self):
-        boxed = self.check.replace(container=True)
-        self.memo.executions[boxed.id] = Digest("sha256:first")
-        first = self.memo.key(boxed)
-        self.memo.executions[boxed.id] = Digest("sha256:second")
-        assert first != self.memo.key(boxed)
-        self.memo.executions.clear()
-        assert self.memo.key(boxed) is None
 
     def test_dependency_readers_cannot_reuse_an_unresolved_receipt(self):
         assert self.memo.key(self.check.replace(reads=[CheckId("producer")])) is None
@@ -151,28 +139,6 @@ class DatabaseIdentity(Identity):
         assert self.memo.latest(self.check) == self.memo.hit(keys[-1])
 
 
-class Resolution(Case):
-    def test_image_inspection_resolves_an_immutable_identity(self):
-        spawner = mock.Mock()
-        spawner.run.return_value = Ran(exit=0, out="sha256:resolved\n")
-        assert image_identity(spawner, "mutable:tag") == "sha256:resolved"
-        spawner.run.assert_called_once_with(
-            ["docker", "image", "inspect", "--format", "{{.Id}}", "mutable:tag"], timeout_s=15)
-
-    def test_missing_image_is_unavailable(self):
-        spawner = mock.Mock()
-        spawner.run.side_effect = [Ran(exit=0), Ran(exit=1)]
-        result = resolve_container(ContainerConfig(image="missing"), "/unused", spawner)
-        assert isinstance(result, EnvironmentUnavailable)
-
-    def test_dockerfile_context_is_rebuilt_before_identifying_the_image(self):
-        spawner = mock.Mock()
-        spawner.run.side_effect = [Ran(exit=0), Ran(exit=0, out="built"), Ran(exit=0, out="sha256:new-context")]
-        result = resolve_container(ContainerConfig(dockerfile="build/Dockerfile"), "/repo", spawner)
-        assert result == ReadyExecution(Digest("sha256:new-context"), "sha256:new-context")
-        assert spawner.run.call_args_list[1].args[0] == ["docker", "build", "-q", "-f", "/repo/build/Dockerfile", "/repo/build"]
-
-
 class DeliveryIdentity(Case):
     def stores(self):
         return fake_stores()
@@ -218,55 +184,10 @@ class DatabaseDeliveryIdentity(DeliveryIdentity):
         return real_stores(ConfigDir(Path(tmp.name)))
 
 
-class UnavailableContainer(EngineTest):
+class StepIdentity(EngineTest):
     def test_distinct_ids_receive_their_own_injected_step_identity(self):
         seen = []
         cmd = procsim.fake("record-step", lambda cwd, env: (seen.append(env["TL_ARTIFACT_STEP"]) or 0, ""))
         eng = self.checks_engine(checks=[{"id": "first", "cmd": cmd}, {"id": "second", "cmd": cmd}])
         eng.run_checks({"checks": [], "files": []}, "s")
         assert seen == ["first", "second"]
-
-    def test_unavailable_container_never_launches_a_host_check_or_records_a_pass(self):
-        eng = self.checks_engine(container={"image": "missing"}, checks=[
-            {"id": "boxed", "cmd": "true", "in": "container", "run": "gate"}])
-        with (mock.patch("taskloop.app.checks.execution.docker_ok", return_value=False), mock.patch.object(eng, "sh") as sh,
-              mock.patch.object(eng.checker, "_diff_check", return_value=[])):
-            run = eng.checker.run_items(gate_items(eng.cfg))
-            assert run[0].status == "unverified"
-            assert "environment unavailable" in run[0].why
-            sh.assert_not_called()
-            assert not eng.checker.gate_green()
-
-    def test_host_and_container_requirements_execute_separately(self):
-        eng = self.checks_engine(container={"image": "mutable"}, checks=[
-            {"id": "host", "cmd": "true", "run": "gate"},
-            {"id": "boxed", "cmd": "true", "in": "container", "run": "gate"}])
-        launched = []
-
-        def run(check, *args):
-            launched.append(check.id)
-            return Outcome(int(check.container), "", "", 1, 0)
-
-        ready = ReadyExecution(Digest("sha256:image"), "sha256:image")
-        with (mock.patch("taskloop.app.checks.container.resolve_container", return_value=ready),
-              mock.patch.object(Attempts, "run", side_effect=run), mock.patch.object(eng.checker, "_diff_check", return_value=[])):
-            result = eng.checker.run_items(gate_items(eng.cfg))
-        assert launched == ["host", "boxed"]
-        assert [r.status for r in result] == ["passed", "failed"]
-        memo = eng.checker._memo(result.tree, str(result.base))
-        memo.executions[CheckId("boxed")] = ready.identity
-        assert memo.result(gate_items(eng.cfg)[1]) is None
-
-    def test_restored_docker_and_changed_image_each_require_execution(self):
-        eng = self.checks_engine(container={"image": "mutable"}, checks=[
-            {"id": "boxed", "cmd": "true", "in": "container", "run": "gate"}])
-        resolutions = [EnvironmentUnavailable("offline"), ReadyExecution(Digest("sha256:first"), "sha256:first"),
-                       ReadyExecution(Digest("sha256:first"), "sha256:first"),
-                       ReadyExecution(Digest("sha256:changed"), "sha256:changed")]
-        with (mock.patch("taskloop.app.checks.container.resolve_container", side_effect=resolutions),
-              mock.patch.object(Attempts, "run", return_value=Outcome(0, "", "", 1, 0)) as run,
-              mock.patch.object(eng.checker, "_diff_check", return_value=[])):
-            results = [eng.checker.run_items(gate_items(eng.cfg))[0] for _ in resolutions]
-        assert [r.status for r in results] == ["unverified", "passed", "passed", "passed"]
-        assert [r.cached for r in results] == [False, False, True, False]
-        assert run.call_count == 2

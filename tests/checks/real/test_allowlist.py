@@ -51,7 +51,7 @@ class ProbeChecks(Case):
         assert rc == 0, out
         seen = json.loads(out_file.read_text())
         engine_marks = ("DECLARED", "DELEGATE_DEPTH", "TASK_LOOP_WORKER")  # the check's own env, and what a child of the engine is told
-        admitted = (*engine_marks, *CHECK_HOME_NAMES, *check_caches({}), "PWD", "SHLVL", "_")
+        admitted = (*engine_marks, *CHECK_HOME_NAMES, *check_caches({}), "PWD", "SHLVL", "_", "__CF_USER_TEXT_ENCODING")  # macOS
         stray = [k for k in seen if not allowed(k) and k not in admitted and not k.startswith("XDG_")]
         assert stray == [], "names outside the allowlist reached the child"
         assert "NOT_ON_THE_LIST" not in seen
