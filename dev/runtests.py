@@ -3,23 +3,37 @@
     python3 dev/runtests.py
 
 Workers: min(cpus, free RAM / 2 GB, ceil(tests / 150), 4). A selection of 150 tests or fewer runs in this one pytest process, no xdist.
-Isolation: the run has its own HOME, config and temp dirs (the real git identity is copied in); xdist workers take one each on top
+Isolation: the run has its own HOME, config and temp dirs (under the scratch root, src/taskloop/contracts/scratch.py; the test
+git identity, not the host's); xdist workers take one each on top
 (tests/conftest.py). The tests marked `serial` run alone, after the parallel ones, and only those the selection holds.
 Whole-suite runs are `just test-full`, started by a person; this script has no such mode. Standard library only.
 """
 import ast
+import importlib.util
 import math
 import os
 import shutil
 import signal
 import sys
-import tempfile
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parent.parent / "skills" / "task-loop" / "_vendor"))  # the vendored shelf packages
 import affected
 import stream_proc
 import testtimes_report
+
+
+def load_scratch():
+    """src/taskloop/contracts/scratch.py by path: the owner of scratch paths and the test git identity, without the package."""
+    path = Path(__file__).resolve().parent.parent / "src" / "taskloop" / "contracts" / "scratch.py"
+    spec = importlib.util.spec_from_file_location("scratch", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+scratch = load_scratch()
 
 CHUNK = 150          # tests per worker: a worker costs ~2 s to start and a few hundred MB, so a smaller share is not worth one
 MAX_WORKERS = 4      # the box also runs the implementer workers; the tests must not starve them
@@ -57,9 +71,7 @@ def isolated_env(home):
     """The environment of the run: its own HOME, config and temp dirs; the real git config copied in, since tests commit with it."""
     for sub in ("tmp", ".config"):
         (home / sub).mkdir(parents=True, exist_ok=True)
-    real = Path.home() / ".gitconfig"
-    if real.is_file():
-        (home / ".gitconfig").write_bytes(real.read_bytes())
+    scratch.write_git_config(home)
     # GIT_CONFIG_*: a release's core.hooksPath would fire tl's pre-push judge in the tests' repos
     env = {k: v for k, v in os.environ.items() if k not in DROP and not k.startswith("GIT_CONFIG_")}
     env.update(HOME=str(home), XDG_CONFIG_HOME=str(home / ".config"), TMPDIR=str(home / "tmp"), TL_WORKER_MB=str(WORKER_MB),
@@ -87,9 +99,9 @@ def pytest(root, env, mark, tests, n):
 
 
 def wide_note(root, n_tests):
-    """'' or one line when the selection holds more than WIDE of all the tests (delegate aside)."""
+    """'' or one line when the selection holds more than WIDE of all the tests (tests/delegate too)."""
     tests = Path(root) / "tests"
-    files = [p.relative_to(root).as_posix() for p in tests.rglob("test_*.py") if "delegate" not in p.relative_to(tests).parts[:1]]
+    files = [p.relative_to(root).as_posix() for p in tests.rglob("test_*.py")]
     total = count_tests(root, files)
     if total and n_tests > WIDE * total:
         return (f"runtests: the selection is {n_tests} of {total} tests ({100 * n_tests // total}%): "
@@ -107,7 +119,7 @@ def main():
     note = wide_note(root, n_tests)
     if note:
         print(note, flush=True)
-    home = Path(tempfile.mkdtemp(prefix="tl-run-"))
+    home = scratch.scratch_dir(os.environ, "tl-run-")
     try:
         env = isolated_env(home)
         parallel = pytest(root, env, "not serial", tests, n)

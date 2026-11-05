@@ -38,7 +38,7 @@ import support.paths  # noqa: E402, F401  (ROOT/src on sys.path; after the bytec
 from support import procsim, work  # noqa: E402
 from support.scope import delegate_wanted  # noqa: E402
 
-from taskloop.contracts import factorydb  # noqa: E402
+from taskloop.contracts import factorydb, scratch  # noqa: E402
 
 
 def preload_src():
@@ -230,6 +230,13 @@ def procs(request):
     world.check(must_spawn=kind == "real" and not request.node.stash.get(SKIPPED, False))
 
 
+@pytest.fixture
+def workdir():
+    """A scratch folder (contracts/scratch.py) on the checkout's disk, for the length of the test: the one place a test writes."""
+    with scratch.scratch(os.environ, "wd-") as folder:
+        yield folder
+
+
 def cap_memory(megabytes):
     """Linux only (macOS does not enforce RLIMIT_AS): cap this process's address space, and its children's each; a lower cap stays."""
     limit = megabytes << 20
@@ -240,12 +247,10 @@ def cap_memory(megabytes):
 
 
 def isolate(home):
-    """Its own HOME, config dir and temp dir; the real git config is copied in, since tests commit with the identity it holds."""
+    """Its own HOME, config dir and temp dir; the test git identity (contracts/scratch.py) is written in, never the host's."""
     for sub in ("tmp", ".config"):
         (home / sub).mkdir(parents=True, exist_ok=True)
-    real = Path.home() / ".gitconfig"
-    if real.is_file():
-        (home / ".gitconfig").write_bytes(real.read_bytes())
+    scratch.write_git_config(home)
     os.environ.update(HOME=str(home), XDG_CONFIG_HOME=str(home / ".config"), TMPDIR=str(home / "tmp"))
     tempfile.tempdir = None
 
@@ -258,7 +263,7 @@ def pytest_configure(config):
         with contextlib.suppress(OSError, AttributeError):
             ctypes.CDLL(None, use_errno=True).prctl(1, 9, 0, 0, 0)  # PR_SET_PDEATHSIG, SIGKILL: a worker leaves with its controller
     cap_memory(WORKER_MB)
-    home = Path(tempfile.mkdtemp(prefix="tl-worker-")).resolve()
+    home = scratch.scratch_dir(os.environ, "tl-worker-")
     config._worker_home = home
     isolate(home)
 
