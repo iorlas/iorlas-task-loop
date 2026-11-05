@@ -337,6 +337,13 @@ No `slots` (or `count` 0): slots are off. No profile: say so in one line, use
 
 ## 0. Start (once)
 
+**First, set up.** Run `tl setup --plan --json` (before the shim exists: `uv run --script <this skill's folder>/tl.py setup --plan --json`).
+It is read-only and returns `checks`, the `fixes` that are safe, and `questions` only the owner can answer; exit 1 means something is to
+do. Ask the owner each question (every one has a default and a reason), write the answers as a JSON object `{"lanes": "4", ...}`, then
+`tl setup --apply --answers FILE` (or `--yes` for the defaults) makes the machine fixes (config folder, shim, `tl` on PATH, git hooks)
+and opens a PR with the repo's `.task-loop.json` through `gh`; the loop reads the profile from the base commit, so it counts once that
+PR is merged. This works on any host: nothing here needs the SessionStart hook.
+
 At Night start, run `tl pin VERSION` with the chosen installed task-loop version before starting loops, and start
 the Night loop with `--pin`. The Mac standing pin may move only after the release's devbox canary is confirmed:
 `uv run --script dev/release.py --devbox-ok VERSION` publishes a `devbox-ok/vVERSION` tag on origin. Both machines

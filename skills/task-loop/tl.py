@@ -52,6 +52,7 @@
   tl.py wait --bead ID|--any [--timeout S]      block until the run ends or an ask opens; one line, the exit code says which (--help)
   tl.py green STEP [--repo DIR] --tree T --base B  is the check step green for the tree and base, from the result store (exit 0 yes, 1 no)
   tl.py setup --plan [--repo DIR] [--json]      what this machine and repo still need: checks, safe fixes, questions (read-only)
+  tl.py setup --apply [--repo DIR] [--answers FILE | --yes]   make the safe fixes; a repo with no profile gets a PR with it
   tl.py ask show ID                             one ask: question, owner cause, blocking, default, similar, thread, outcome (read-only)
   tl.py handoff write|show [--repo DIR]         the <= 4 KB handoff a compaction hands to the next session (hooks/hook.py writes it)
 
@@ -437,7 +438,7 @@ VERBS: Final[dict[str, Handler]] = {
     "status": v_status,
     "handoff": v_handoff,
     "wait": v_wait,
-    "setup": lambda a, c: cli_setup.cmd_setup(a, c.env, c.here.parents[1]),
+    "setup": lambda a, c: cli_setup.cmd_setup(a, c.env, c.here.parents[1], sh=c.spawner),
     "green": lambda a, c: cli_green.cmd_green(a, c.who.config, c.git, env=c.env, spawner=c.spawner),
     "judge-push": lambda a, c: importlib.import_module("taskloop.app.launch.push_judge").cmd_judge_push(
         a, who=c.who, env=c.env, spawner=c.spawner, git=c.git),

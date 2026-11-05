@@ -73,7 +73,7 @@ class SetupPlan(Case):
 
     def test_the_command_prints_the_plan_as_json_or_text_and_exits_1_while_something_is_missing(self):
         shown = []
-        args = argparse.Namespace(repo=str(self.repo), json=True)
+        args = argparse.Namespace(repo=str(self.repo), json=True, apply=False)
         assert cli_setup.cmd_setup(args, self.env, self.plugin, shown.append) == 1
         assert [c["id"] for c in json.loads(shown[0])["checks"]][:2] == ["config", "shim"]
         args.json = False

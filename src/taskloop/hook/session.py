@@ -18,9 +18,7 @@ def start(stdin_text: str, plugin_root: Path, env: Env, git: Git) -> str:
     """Introduce task-loop in profile repos; after compaction append the handoff. Never fail the session."""
     try:
         index.session_start(stdin_text, env)
-        index.write_shim(plugin_root, env)
-        index.ensure_path_link(env)
-        index.write_hooks(plugin_root, env)
+        index.ensure_machine(plugin_root, env)
         data = json.loads(stdin_text or "{}")
         repo = index.repo_of(git, data)
         parts = [index.self_description(repo)]

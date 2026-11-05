@@ -167,6 +167,15 @@ def write_hooks(plugin_root: Path, env: Env) -> list[Path]:
     return out
 
 
+def ensure_machine(plugin_root: Path, env: Env) -> None:
+    """The per-user setup, idempotent: the config folder, the shim, the PATH link, the git hooks. `tl setup --apply` and SessionStart
+    both run exactly this."""
+    config_dir(env).mkdir(parents=True, exist_ok=True)
+    write_shim(plugin_root, env)
+    ensure_path_link(env)
+    write_hooks(plugin_root, env)
+
+
 ENGINE_VERBS = frozenset({"loop", "run-task", "land-stack"})
 
 

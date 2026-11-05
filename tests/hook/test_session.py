@@ -19,7 +19,7 @@ class SessionContext(Case):
         self.env = Env()
         self.git = mock.Mock()
         self.git.common_dir.return_value = str(self.repo / ".git")
-        for name in ("session_start", "write_shim", "ensure_path_link", "write_hooks"):
+        for name in ("session_start", "ensure_machine"):
             patch = mock.patch.object(session.index, name)
             patch.start()
             self.addCleanup(patch.stop)
@@ -77,7 +77,7 @@ class SessionContext(Case):
             assert self.start("startup") == ""
 
     def test_hook_failures_return_empty_text(self):
-        for name in ("session_start", "write_shim", "ensure_path_link", "write_hooks", "repo_of", "self_description"):
+        for name in ("session_start", "ensure_machine", "repo_of", "self_description"):
             with self.subTest(name=name), mock.patch.object(session.index, name, side_effect=RuntimeError("unavailable")):
                 assert self.start("startup") == ""
         with mock.patch.object(session.handoff, "read", side_effect=OSError("unavailable")):
