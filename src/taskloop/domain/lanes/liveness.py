@@ -8,7 +8,6 @@ class LivenessCaps:
     stale_retries: int = 3
     land_iterations: int = 20
     lock_wait_s: float = 300
-    run_s: float = 1200
     judge_s: float = 300
 
 
