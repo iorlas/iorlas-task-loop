@@ -196,6 +196,10 @@ class EngineConfig(Rec):
     # added to (over) the slot's environment; {slot} {slot_dir} {repo} filled in
     slot_env: dict[str, str] = msgspec.field(default_factory=dict)
     host: bool = False
+    queued_match: str = ""  # regex over a repo check's "<id> <cmd>": the checks that queue for a scarce slot and run late (none: no group)
+    lock_fail: str = ""  # regex over a red check's output: an editor or project lock held by another run (wait, then rerun)
+    slow_cmd: str = ""  # regex over an untimed command: named like a slow run, so the engine's and not the writer's
+    project_log: str = ""  # a path in the worktree: the log the toolchain wrote when the project files could not be regenerated
     worker_rules: str = ""
     test_pattern: str = TEST_PATTERN
     area_label_prefix: str = ""
