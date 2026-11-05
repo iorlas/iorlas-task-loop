@@ -73,6 +73,7 @@ What this changes against the first draft:
 | P11 | `src/delegate/app/codex_policy.py:112` | `os.waitpid(os.posix_spawnp(...))` | `posix_spawnp` does not exist on Windows; use `subprocess.run`. | S |
 | P12 | `src/delegate/adapters/procs.py:23,80`, `src/taskloop/adapters/runner.py:162-177` | Stop = SIGTERM, 5 s grace (`DELEGATE_STOP_GRACE`), SIGKILL | Same as P1; the "term_sent/kill_sent" report fields lose meaning (Windows has one hard kill). Contract change in `docs/contracts/delegate-api.md` if the report keeps both flags. | M |
 | P13 | `skills/task-loop/_vendor/any_lease/__main__.py:77` | `preexec_fn=lambda: signal.pthread_sigmask(...)` | `preexec_fn` is not supported on Windows (raises `ValueError`); `pthread_sigmask` does not exist. Drop on Windows (no signal mask is inherited there). | S |
+| P14 | `stream_proc/runner.py:67`, `capture.py:56,72,76`, `src/delegate/adapters/codex_account.py:43`; `tree.py:27` (`os.getpgrp`) | Worker stdout/stderr are pumped with `select.select([fd])` + `os.read`; `os.set_blocking(fd, False)` on pipes; `os.getpgrp()` in the stop sweep | Windows `select` accepts sockets only, and non-blocking pipes via `set_blocking` do not work: no worker output reaches a log. Needs reader threads (simplest) or overlapped I/O. `os.getpgrp` is an AttributeError. Missed in the first draft (found in review, lines checked). | M-L |
 
 ## 2. Locking
 
@@ -168,9 +169,10 @@ Rank = how much of the system stops working, then size.
 | 2 | Process table and pid liveness: no Windows backend; `os.kill(pid, 0)` would kill instead of probe | P3 P4 | Pid reuse protection, orphan reaping, `tl stop`, lease holder checks. Failure is silent (no table = nothing stopped). | L |
 | 3 | `flock` foundation: `process_lock` and everything standing on it | L1 L2 L5 | Land lock, slot leases, writer guards, check resources. Import error at module load, so the engine does not start. | L |
 | 4 | Stop channel: SIGTERM is the engine's only stop signal, handlers in ~12 places, `SIGHUP` absent | P5 P6 P7 | `tl stop --now`, owner stop, delegate supervision. The file channel exists but is step-boundary only. | M-L |
+| 4b | Pipe I/O: `select` on pipe fds and `set_blocking` in the worker output path | P14 | No worker output without it; ranks with P1 as part of the same backend (WIN-PROC). | M-L |
 | 5 | `import fcntl` at module scope in the run entry (`entry.py:3`) and in `quarantine.py`, `leases.py`, `process_lock` | P10 L1 L5 | A hard ImportError: `tl run-task` cannot even import. Cheap to fix once, so it hides behind rank 3 but must come first to run anything. | S |
 | 6 | The `tl` shim and hooks launcher: `#!/bin/sh`, shebangs, `python3` in hooks.json | H1 H2 H3 | Nothing can be invoked: no `tl` on PATH, the PreToolUse guard silently off. | M |
-| 7 | Atomic replace and append with open files: `os.replace` fails when another process holds the file | L8 L9 | The dashboard reads what the engine replaces all day; intermittent `PermissionError`, found only under load. | M |
+| 7 | Atomic replace and append with open files: `os.replace` fails when another process holds the file | L8 L9 | The dashboard reads what the engine replaces all day; intermittent `PermissionError`, found only under load. Review (section 8) rates it the highest-risk item: fixing it needs a `CreateFileW` wrapper with `FILE_SHARE_DELETE` behind `atomic_io`, plus a retry. | M-L |
 | 8 | Worker command policy and sandbox: `shlex`/POSIX shell grammar and macOS `sandbox-exec` | H5 H6 H8 | Decides what a worker may run. Wrong on Windows = unsafe or useless; needs the Git Bash decision (D3). | L |
 | 9 | Hash identity across OSes: CRLF checkouts, `core.symlinks=false`, filemode | F6 F14 F15 | MANIFEST, tree hash/RunKey receipt differ on Windows for the same commit: gate receipts and `tl doctor` fail or lie. | M |
 | 10 | Symlinks as design: factory pid index, Codex overlay, PATH link, tests | P8 F9 F10 H1 T1 | Needs privilege or Developer Mode; replace with files and junctions. | M |
@@ -231,4 +233,42 @@ Already decided and recorded (`docs/design/topology.md`, "Windows and Unity" and
 - Greps over `src/`, `dev/`, `hooks/`, `skills/task-loop/`, `justfile`, `mise.toml` for: fcntl/flock, fork, signal, kill/killpg/setsid, `/proc`, ps/pgrep, sh/bash/zsh, `/tmp` and `/private`, symlink/readlink/link, chmod/umask/st_mode/st_ino, caffeinate/sandbox-exec/vm_stat, shebangs, `HOME`, newline handling; a few files read in full (`hook.py` shims, `procfs.py`, `proctable.py`, `process_lock`, `factory.py`).
 - No file was run on Windows; Windows behavior is stated from the documented API behavior and marked "not tested" where it matters. Items worth a 10-minute Windows check first: `os.kill(pid, 0)` behavior (P4), `/dev/null` in git config (F4), Git Bash hook execution (H4), `bd` build (X3).
 - `src/taskloop/adapters/landlock.py` is the repo land lock (name misleads; it is not the Linux Landlock sandbox).
-- Not covered: the dashboard's HTTP binding (Tailscale address in `taskloop_dash/bind.py`) beyond file identity, `docs/contracts`, GitHub-hosted anything. No `ctypes`/network socket primitives beyond procmac were found (`AF_UNIX`, `mkfifo`, `pty`, `termios` greps are empty), which is good news: no hidden IPC.
+- Review by an Opus subagent (section 8) and 4 web lookups added P14 and the topology comparison; the subagent ran nothing on Windows either.
+- Not covered: the dashboard's HTTP binding (Tailscale address in `taskloop_dash/bind.py`) beyond file identity, `docs/contracts`, GitHub-hosted anything. No `AF_UNIX`, `mkfifo`, `pty` or `termios` use was found. The first draft said "no hidden IPC"; that missed `select` on pipe fds (P14).
+
+---
+
+## 8. Does Unity-native require engine-native? Three topologies
+
+Denis's chain: Unity must run natively, so the whole engine runs natively on Windows. The arrow is tested here against the code and a few lookups. Facts first (web, 2026-11-05; mostly forum and tracker posts, not vendor docs):
+
+| Fact | Result | Source quality |
+|---|---|---|
+| Kill a WSL-launched Windows `.exe` from the Linux side | The Linux pid is a proxy; killing it does not stop the Windows process; only `taskkill.exe` with the Windows pid does | One user report (microsoft/WSL#8056) plus WSL interop docs |
+| Unity on a project created or cloned through WSL | A project cloned by WSL git into the Windows filesystem failed to open for one user; `\\wsl$` and `/mnt/c` access is far slower than native | microsoft/WSL#3356, #1047; no Unity doc found |
+| `flock` on `/mnt/c` (9p/drvfs) | not found, untested | none |
+| Codex CLI native Windows | native sandbox exists (restricted tokens, ACLs); still labelled experimental by a 2026 guide | third-party guides, not OpenAI docs |
+| `bd` (beads) and `just` Windows builds | `bd` v1.3.4 has `windows_amd64` and `windows_arm64`; `just` 1.59 has Windows zips | GitHub release assets (checked with `gh`) |
+
+| Topology | What it is | Cost (this audit) | Verdict |
+|---|---|---|---|
+| A. Native Windows engine | Everything runs on Windows | Sections 1-6: about 8 L items plus the pipe layer, a red Linux suite, no Windows host in any gate | ✅ required end state (Denis); ❌ as the first step: weeks before one Unity run |
+| B. Engine in WSL, `Unity.exe` through interop | Engine stays Linux code | Path translation, project must live on `C:\` (slow from WSL) or on WSL (Unity trouble); a stopped bead leaves Unity running (proxy pid) | ❌ refuted by the kill fact; the lease and stop model break |
+| C. Engine on Mac/Linux/WSL, thin Windows executor over OpenSSH | `topology.md` WINEXEC | Spawn + Job Object kill + pipe reader + liveness + a lease/pid file on the Windows side; no engine port | ✅ smallest Windows surface; untested; does not meet "engine native on Windows" alone |
+
+Conclusion: the arrow "Unity native, so engine native" is not forced by the code, because C runs Unity natively without a native engine. It is forced by Denis's requirement that every platform runs the engine (section 0) and by "some people don't have Linux or Mac". So: C is the first deliverable (it is WINEXEC, bead tl-w7lt.38.12), A is the commitment (WINENGINE, tl-w7lt.38.13), and the primitives are built once in shelf for both. This agrees with D1. Do not call the requirement met until A passes the contract tests on a real Windows box.
+
+Review notes (Opus subagent, nothing run on Windows; each claim is from API knowledge):
+- Run the Windows engine and every worker inside one Job Object with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`: a kill is closing the handle, and an engine that dies takes its workers with it, which matches the "kernel drops the lock" model on POSIX. Unity spawns shader compilers and import workers; a job catches them. Nested jobs need Windows 8+.
+- `msvcrt.locking` is a poor lock: per handle, no shared mode. Use `LockFileEx` via ctypes. After a kill the next `LockFileEx` may fail briefly: the backend needs a short retry.
+- The seam plan is sound, with two more seams: `PipeReader` (P14) and `AtomicFile` (L8). It only works if built test-first on a real Windows box, because the contract tests have no hosts today.
+- `psutil` for `ProcessTable` only is cheaper than a ctypes snapshot backend (one maintained dependency replaces procfs, procmac and the libproc ctypes), at the cost of the stdlib-only vendored rule; it gives no Job Objects or pipe reader. A Rust/Go helper binary is the fallback if ctypes proves flaky, not the first move.
+- `os.kill` has only 4 call sites in `src` and `_vendor`: P4 is small and greppable, fence it with a test. F14 (CRLF) is a one-file fix and belongs in "do now", not in the top 10 beside real blockers.
+- On WSL keep state and checkouts on the Linux filesystem as a hard rule, and add `9p` and `drvfs` to the SQLite refusal list (W1).
+- Hook execution of `#!/bin/sh` (H4) needs the Git for Windows build of git; a WSL git over a Windows repo differs.
+
+New decision for Denis:
+
+| # | Decision | Options | Recommendation |
+|---|---|---|---|
+| D12 | `psutil` for the process table on Windows (and later all platforms) | A) add the dependency; B) ctypes `CreateToolhelp32Snapshot` backend, stdlib only | A for ProcessTable only: it removes procmac and procfs maintenance; keep Job Objects and the pipe reader in ctypes. Untested. |
