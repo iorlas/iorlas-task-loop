@@ -347,6 +347,23 @@
   "acceptance_first": false,
   "shots_fixed": true
  },
+ "ArtifactSlot": {
+  "repo": "r-1",
+  "bead": "tl-1",
+  "run": "tl-1-1",
+  "stage": "write",
+  "attempt": 2
+ },
+ "ArtifactMeta": {
+  "v": 1,
+  "name": "home.png",
+  "caption": "home",
+  "role": "after",
+  "kind": "png",
+  "size": 9,
+  "sha256": "abababababababababababababababababababababababababababababababab",
+  "created": 1793050200.5
+ },
  "FollowupOutbox": {
   "v": 1,
   "pending": [

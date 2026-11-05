@@ -133,6 +133,7 @@ class RunFields(StateAttrs):
         self.salvage_tail, self.rebase_orig = "", ""
         self.rebase_pre: list[str] = []
         self.shot_cache: dict[str, Any] | None = None
+        self.artifact_repo = ""  # the repo's store key (adapters.check_files.repo_key), taken at the first registered render
         self.salvaged = False  # a resume conflict was fixed in place, not by starting again (tl-7y6.2.19)
         self.lane_notes: list[str] = []  # steps that ran on the writer's own family, with delegate's warning
         self.taste: list[Open] = []  # [{id, title}] taste items for the owner-look bead
