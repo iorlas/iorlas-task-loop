@@ -1315,16 +1315,6 @@
   ],
   "log": "/l"
  },
- "SuiteGreens": {
-  "v": 1,
-  "greens": [
-   {
-    "tree": "tttttttttttttttttttttttttttttttttttttttt",
-    "command": "just check",
-    "at": 1793050200.5
-   }
-  ]
- },
  "ReflectState": {
   "v": 1,
   "until": 1793050200.5,
@@ -1664,6 +1654,7 @@
    "max_total_reviews": 12,
    "check_wall_min": 60,
    "gate_timeout_min": 90,
+   "run_deadline_min": 45,
    "lane_wait_min": 10,
    "look_rounds": 2,
    "look_max_px": 1280,
