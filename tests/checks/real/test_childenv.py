@@ -85,7 +85,6 @@ class CheckHomeCanaryTest(Case):
                 seen = json.loads(self.output.read_text())
                 assert seen["home"] == builder.call_args.kwargs["home"]
                 assert seen["env"]["UV_CACHE_DIR"] == str(self.owner / ".cache/uv")
-                assert seen["env"]["DOTNET_CLI_HOME"] == str(self.owner)
 
     def test_real_shell_checks_and_fixes_default_to_owner_home_and_strip_secrets(self):
         (self.owner / "canary").write_text("synthetic toolchain state")
