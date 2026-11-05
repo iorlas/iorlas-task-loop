@@ -1,0 +1,157 @@
+"""The size caps (88 section 4): a file has at most 400 lines of code (800 for a test file), a function at most 80. KNOWN_OVERSIZE names what is over
+today and may only shrink: a file or function that is not in the table and is over fails, and an entry that is no longer over fails too."""
+import ast
+import json
+import re
+import subprocess
+import sys
+import tomllib
+import unittest
+from pathlib import Path
+
+import hermetic  # noqa: F401  (a home of its own for every test)
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "dev"))
+import vendor  # noqa: E402
+
+import delegate  # noqa: E402  (puts the vendored packages on sys.path)
+
+EXEMPT_DIRS = ("skills/delegate/_vendor",)      # the one place the caps skip: the vendored shelf copy, byte-identical to its tag (dev/vendor.py)
+FILE_CAP, TEST_FILE_CAP, FUNCTION_CAP = 400, 800, 80
+KNOWN_OVERSIZE: dict[str, int] = {}          # "path" or "path:function" -> the size it may not grow past; delete the line when it is fixed
+
+
+def code_files():
+    for base in ("src", "skills", "dev"):
+        yield from (p for p in sorted((ROOT / base).rglob("*.py")) if not str(p.relative_to(ROOT)).startswith(EXEMPT_DIRS))
+    yield from sorted((ROOT / "tests").rglob("*.py"))
+
+
+def sloc(path):
+    return sum(1 for line in path.read_text(encoding="utf-8").splitlines() if line.strip() and not line.strip().startswith("#"))
+
+
+def oversize():
+    found = {}
+    for p in code_files():
+        rel = str(p.relative_to(ROOT))
+        cap = TEST_FILE_CAP if rel.startswith("tests/") else FILE_CAP
+        if sloc(p) > cap:
+            found[rel] = sloc(p)
+        for n in ast.walk(ast.parse(p.read_text(encoding="utf-8"))):
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.end_lineno - n.lineno + 1 > FUNCTION_CAP and not rel.startswith("tests/"):
+                found[f"{rel}:{n.name}"] = n.end_lineno - n.lineno + 1
+    return found
+
+
+class Caps(unittest.TestCase):
+    def test_nothing_is_over_a_cap_unless_it_is_known_and_has_not_grown(self):
+        for key, size in oversize().items():
+            self.assertIn(key, KNOWN_OVERSIZE, f"{key} is {size}: over its cap")
+            self.assertLessEqual(size, KNOWN_OVERSIZE[key], f"{key} grew")
+
+    def test_the_table_only_shrinks(self):
+        found = oversize()
+        for key in KNOWN_OVERSIZE:
+            self.assertIn(key, found, f"{key} is under its cap now: delete its line")
+
+
+# Nothing sends a signal except the vendored stream_proc (stop_tree / run); a pid-liveness read is stream_proc.alive. Installing a handler (signal.signal) is not a send.
+SENDS = (r"\bos\.kill(pg)?\(", r"\bsignal\.(raise_signal|pthread_kill|alarm|setitimer)\(", r"\.send_signal\(", r"\.terminate\(\)", r"\.kill\(\)", r"\bkillpg\(")
+SIGNAL_EXCEPTIONS: dict[str, str] = {}      # "path" -> why it still sends a signal itself (shelf lacks: ...); may only shrink
+
+
+def signal_sends():
+    found = {}
+    for base in ("src", "skills", "dev"):
+        for p in sorted((ROOT / base).rglob("*.py")):
+            rel = str(p.relative_to(ROOT))
+            if rel.startswith(EXEMPT_DIRS):
+                continue
+            if any(re.search(pat, line) for line in p.read_text(encoding="utf-8").splitlines() if not line.lstrip().startswith("#") for pat in SENDS):
+                found[rel] = True
+    return found
+
+
+class Signals(unittest.TestCase):
+    def test_no_signal_is_sent_outside_stream_proc(self):
+        for rel in signal_sends():
+            self.assertIn(rel, SIGNAL_EXCEPTIONS, f"{rel} sends a signal: go through stream_proc (stop_tree / run / alive)")
+
+    def test_the_exception_table_only_shrinks(self):
+        for rel in SIGNAL_EXCEPTIONS:
+            self.assertIn(rel, signal_sends(), f"{rel} no longer sends a signal: delete its line")
+
+
+class VendorGuard(unittest.TestCase):
+    def test_vendor_is_unedited(self):
+        self.assertEqual(vendor.problems(None), [], "vendored files edited; change the shelf and run dev/vendor.py sync")
+
+    def test_manifest_lists_every_vendored_package(self):
+        self.assertEqual([e["name"] for e in vendor.load()], sorted(p.name for p in vendor.VENDOR_DIR.iterdir() if p.is_dir() and p.name != "__pycache__"))
+
+    def test_every_vendored_package_imports_by_its_absolute_name(self):
+        import importlib
+        for e in vendor.load():
+            mod = importlib.import_module(e["name"])
+            self.assertEqual(Path(mod.__file__).resolve().parent, (vendor.VENDOR_DIR / e["name"]).resolve())
+
+    def test_an_edit_or_an_added_file_changes_the_hash(self):
+        for e in vendor.load():
+            files = vendor.dir_files(vendor.VENDOR_DIR / e["name"])
+            self.assertNotEqual(vendor.tree_hash(dict(files, **{"extra.py": b""})), e["tree_hash"])
+            first = sorted(files)[0]
+            self.assertNotEqual(vendor.tree_hash(dict(files, **{first: files[first] + b"#"})), e["tree_hash"])
+
+    def test_only_the_vendor_dir_is_exempt_and_it_is_the_one_on_the_path(self):
+        self.assertEqual(EXEMPT_DIRS, ("skills/delegate/_vendor",))
+        self.assertEqual(Path(delegate.VENDOR_DIR), ROOT / EXEMPT_DIRS[0])
+
+    def test_vendor_drift(self):
+        shelf = vendor.shelf_home()
+        if not shelf:
+            self.skipTest("no shelf checkout (SHELF_HOME)")
+        r = subprocess.run([sys.executable, str(ROOT / "dev" / "vendor.py"), "check", "--shelf", str(shelf)], capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+
+
+RATCHET = ROOT / "tests" / "rules_ratchet.json"
+
+
+def shrink_problems(actual, known, label):
+    """An entry in `actual` that is absent from `known` or bigger fails; a `known` entry no longer in `actual` must be deleted."""
+    out = [f"{label}: {k} = {v} is not allowed (recorded {known.get(k)})" for k, v in sorted(actual.items()) if v > known.get(k, 0)]
+    out += [f'{label}: {k} is fixed; delete it from tests/rules_ratchet.json' for k in sorted(set(known) - set(actual))]
+    return out
+
+
+class Gate(unittest.TestCase):
+    """The ratchets behind `just check`: the pyrefly baseline and the ruff ignores may only shrink; src/ gets no new baseline entry."""
+
+    def setUp(self):
+        self.known = json.loads(RATCHET.read_text(encoding="utf-8"))
+
+    def baseline(self):
+        return json.loads((ROOT / "pyrefly-baseline.json").read_text(encoding="utf-8"))["errors"]
+
+    def test_the_pyrefly_baseline_error_count_may_only_shrink(self):
+        count, recorded = len(self.baseline()), self.known["pyrefly_baseline_errors"]
+        self.assertLessEqual(count, recorded, "the baseline grew: fix the new errors instead")
+        self.assertEqual(count, recorded, f"the baseline shrank: lower pyrefly_baseline_errors in tests/rules_ratchet.json to {count}")
+
+    def test_no_file_under_src_joins_the_pyrefly_baseline(self):
+        actual = {}
+        for e in self.baseline():
+            if e["path"].startswith("src/"):
+                actual[e["path"]] = actual.get(e["path"], 0) + 1
+        self.assertEqual(shrink_problems(actual, self.known["pyrefly_baseline_src"], "pyrefly baseline (src is strict)"), [])
+
+    def test_the_ruff_ignores_may_only_shrink(self):
+        table = tomllib.loads((ROOT / "ruff.toml").read_text(encoding="utf-8"))["lint"]["per-file-ignores"]
+        actual = {f"{g}::{c}": 1 for g, codes in table.items() for c in codes}
+        self.assertEqual(shrink_problems(actual, self.known["ruff_baseline"], "ruff baseline"), [])
+
+
+if __name__ == "__main__":
+    unittest.main()
