@@ -4,7 +4,9 @@ import os
 from collections.abc import Sequence
 from pathlib import Path
 
-from taskloop.adapters import applog, childenv
+from jsonl_log import close_held
+
+from taskloop.adapters import childenv
 from taskloop.app.release.shell import Shell, say
 from taskloop.contracts.env import Env
 from taskloop.contracts.envvars import EnvVar
@@ -32,6 +34,6 @@ def exec_release(script: Path, argv: Sequence[str], repo: Path, env: Env) -> Non
     holds no lock: the exec'd release takes it."""
     args = list(argv) + ([] if any(a == "--repo" or a.startswith("--repo=") for a in argv) else ["--repo", str(repo)])
     say(f"this checkout's release code is not origin/main's; running {script}")
-    applog.close_all()
+    close_held()
     cmd = [*childenv.script_argv(script, env), *args]
     os.execve(cmd[0], cmd, childenv.exec_env(env, {EnvVar.TL_RELEASE_REEXEC: "1"}))
