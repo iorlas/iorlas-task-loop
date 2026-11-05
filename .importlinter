@@ -129,7 +129,7 @@ layers =
     reconcile
     release
     checks
-    track | doctor
+    track | doctor | artifacts
     slots
     asks
 

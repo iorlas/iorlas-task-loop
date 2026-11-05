@@ -194,3 +194,25 @@ def repeated_fault(n: int, first_line: str) -> AskSpec:
                               text="run again", recommended=True),
                     AskOption(label="Say how to go on", consequence="The engine follows your words on the next run.",
                     action="text", edit=True)])
+
+
+def pr_open(bead: str, number: int, url: str) -> AskSpec:
+    """The PR-mode land opened a PR; only the owner merges it (the engine never does). The merge wakes the bead by itself."""
+    return AskSpec(AskClass.PR_OPEN, f"Merge PR #{number} to land {clip(bead, 40)}?",
+                   bullets([f"the land opened PR #{number}", "the engine never merges", "the bead closes once the PR is merged"]),
+                   [AskOption(label="I merged it", consequence="The bead closes with the PR's merge commit as its landing.",
+                              action="rerun", text="merged", recommended=True),
+                    AskOption(label="Change it: say what", consequence="The engine follows your words, then updates the PR.",
+                              action="text", edit=True, cost="One more run")],
+                   AskDetail(text=url[:RAW_CAP]))
+
+
+def pr_closed(bead: str, number: int, url: str) -> AskSpec:
+    """The PR was closed without a merge: nothing landed."""
+    return AskSpec(AskClass.PR_CLOSED, f"PR #{number} was closed without a merge; open a new one for {clip(bead, 40)}?",
+                   bullets([f"PR #{number} was closed, not merged", "nothing landed"]),
+                   [AskOption(label="Open a new PR", consequence="The land opens a new PR from the task branch.",
+                              action="rerun", text="run again", recommended=True),
+                    AskOption(label="Say what to change", consequence="The engine follows your words, then opens a new PR.",
+                              action="text", edit=True, cost="One more run")],
+                   AskDetail(text=url[:RAW_CAP]))

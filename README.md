@@ -15,7 +15,7 @@ claude plugin install iorlas-task-loop@iorlas-marketplace
 ```
 
 Then in a repo that uses bd, say "task loop". Requirements: Python 3.15+, uv, git, bd 1.3+,
-Claude Code. macOS and Linux (also inside a container); Windows is not supported.
+Claude Code. macOS only.
 
 Required: [iorlas-delegate](https://github.com/iorlas/iorlas-delegate) 0.14+ from the same marketplace
 (`claude plugin install iorlas-delegate@iorlas-marketplace`). The engine runs every AI step through it
@@ -117,7 +117,7 @@ on a normal loop pass; there is no timed set-aside. Resource and lane waits poll
 It works on a phone (below 600 px it switches to a phone layout).
 
 It listens on 127.0.0.1 and on the Tailscale address when Tailscale is up, so a phone on the tailnet can open it.
-In a container: `TASK_LOOP_DASH_BIND=0.0.0.0` and publish the port. `TASK_LOOP_DASH_PORT` changes the port.
+`TASK_LOOP_DASH_PORT` changes the port.
 
 It reads only local files: the records the engine and `tl.py` write (`~/.config/task-loop`) and bd. Its API is
 [docs/contracts/dash-api.md](docs/contracts/dash-api.md).
@@ -142,7 +142,7 @@ dev/release.py                   the only way to release: release lock, version 
 docs/design/                     design notes
 docs/contracts/dash-api.md       the dashboard's HTTP API: GET /api/snapshot, /api/bead, /api/live, POST /api/<verb>
 docs/dev/integrations.md         for developers: every external format read, and how delegate connects
-docs/dev/runaway-process.md      for developers: capture a runaway process (/proc, py-spy, cgroup) before killing it
+docs/dev/runaway-process.md      for developers: capture a runaway process (/proc, py-spy) before killing it
 ```
 
 Work on this plugin is tracked with beads (`bd ready`).

@@ -54,38 +54,50 @@ class SetupApply(Case):
         assert setup_apply.apply(self.plugin, self.env, None, {}, Recorder())[1] == ["machine: nothing to fix"]
 
     def test_the_answers_make_a_profile_the_loader_accepts(self):
-        for answers in ({"lanes": "2"}, {"lanes": "4", "unity-lease": "yes", "gate": "yes"}, {"lanes": "1", "gate": "yes"}):
+        for answers in ({"gate": "no"}, {"unity-lease": "yes", "gate": "yes"}, {"gate": "yes"}):
             with self.subTest(answers=answers):
                 slots.load_profile(setup_apply.profile_of(answers))
 
     def test_a_profile_goes_in_as_a_pr_over_gh_alone(self):
         sh = Recorder()
-        code, lines = setup_apply.apply(self.plugin, self.env, self.repo, {"lanes": "2", "gate": "yes"}, sh)
+        code, lines = setup_apply.apply(self.plugin, self.env, self.repo, {"gate": "yes"}, sh)
         assert code == 0
         assert lines[-1] == "profile: PR https://example.test/pr/1"
-        assert sh.committed()["slots"] == {"count": 2}
+        assert sh.committed() == {"engine": {"checks": [{"id": "gate", "argv": ["just", "check"]}]}}
         assert {c[0] for c in sh.calls} == {"gh"}
         assert [c[1] for c in sh.calls] == ["repo", "api", "api", "api", "pr"]
         assert "--base" in sh.calls[-1]
         assert sh.calls[-1][sh.calls[-1].index("--base") + 1] == "main"
 
+    def test_the_unity_lease_answer_writes_host_json_once_and_keeps_a_persons_file(self):
+        (self.repo / "ProjectSettings").mkdir()
+        (self.repo / "ProjectSettings" / "ProjectVersion.txt").write_text("m_EditorVersion: 6000.0\n")
+        answers = {"unity-lease": "yes", "gate": "yes"}
+        setup_apply.apply(self.plugin, self.env, self.repo, answers, Recorder())
+        host = self.home / ".config" / "task-loop" / "host.json"
+        assert json.loads(host.read_text())["resources"] == ["unity"]
+        host.write_text(json.dumps({"resources": []}))
+        _, lines = setup_apply.apply(self.plugin, self.env, self.repo, answers, Recorder())
+        assert json.loads(host.read_text())["resources"] == []
+        assert not any("host.json" in line for line in lines)
+
     def test_a_missing_answer_opens_nothing_and_a_failed_step_is_named(self):
         sh = Recorder()
-        code, lines = setup_apply.apply(self.plugin, self.env, self.repo, {"lanes": "2"}, sh)
+        code, lines = setup_apply.apply(self.plugin, self.env, self.repo, {}, sh)
         assert code == 1
         assert "no answer for gate" in lines[-1]
         assert sh.calls == []
-        code, lines = setup_apply.apply(self.plugin, self.env, self.repo, {"lanes": "2", "gate": "no"}, Recorder(fail_on="PUT"))
+        code, lines = setup_apply.apply(self.plugin, self.env, self.repo, {"gate": "no"}, Recorder(fail_on="PUT"))
         assert code == 1
         assert "gh api contents failed: refused" in lines[-1]
 
     def test_the_command_reads_answers_from_a_file_and_yes_takes_the_defaults(self):
         shown: list[str] = []
         path = self.home / "answers.json"
-        path.write_text(json.dumps({"lanes": 8, "gate": "no"}))
+        path.write_text(json.dumps({"gate": "no"}))
         args = argparse.Namespace(repo=str(self.repo), apply=True, json=False, answers=str(path), yes=False)
         assert cli_setup.cmd_setup(args, self.env, self.plugin, shown.append, Recorder()) == 0
         sh = Recorder()
         args = argparse.Namespace(repo=str(self.repo), apply=True, json=False, answers=None, yes=True)
         assert cli_setup.cmd_setup(args, self.env, self.plugin, shown.append, sh) == 0
-        assert sh.committed()["slots"] == {"count": 4}
+        assert sh.committed() == {"engine": {"checks": [{"id": "gate", "argv": ["just", "check"]}]}}

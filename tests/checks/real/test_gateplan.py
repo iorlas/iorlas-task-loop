@@ -1,6 +1,7 @@
 """A real producer receives the full argv and NUL-delimited paths in the judged checkout."""
 import hashlib
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -31,7 +32,7 @@ class RealGatePlan(te.EngineTest):
         script.write_text(
             "import os, sys\n"
             f"assert sys.argv[1:] == {['steps', '--json', '--base', base, '--paths-stdin']!r}\n"
-            f"assert os.getcwd() == {str(self.eng.wt)!r}\n"
+            f"assert os.path.realpath(os.getcwd()) == {os.path.realpath(self.eng.wt)!r}\n"  # /var is /private/var on macOS
             f"assert {name.encode()!r} in sys.stdin.buffer.read().split(b'\\0')\n"
             f"print({json.dumps(body)!r})\n")
         run = self.eng.checker.run_items(gate_items(self.eng.cfg))

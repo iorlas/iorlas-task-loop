@@ -1,4 +1,4 @@
-"""The live kind: scenarios that run the real pieces (git, processes, docker, tl, the dashboard) and run only when asked for.
+"""The live kind: scenarios that run the real pieces (git, processes, tl, the dashboard) and run only when asked for.
 
 tests/conftest.py ignores this folder unless the run selects `-m live` (just test-live); here every test is marked `live` and
 `real_proc` (the process guard is off: the real thing is the point), has an isolated HOME and config dir, and prints its wall time."""

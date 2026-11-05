@@ -58,7 +58,7 @@
   "retry_at": 0.0,
   "shots": 3
  },
- "version": "fefbd1b6468bd178",
+ "version": "afd2965aa3791c0f",
  "bd_ok_at": null,
  "bd_error": "",
  "description": "Save/load screen polish. Part of Save system.",
@@ -168,7 +168,12 @@
    "kind": "image",
    "t": 1793049840.0,
    "pass_n": 1,
-   "phase": "look"
+   "phase": "look",
+   "role": "",
+   "caption": "",
+   "run": "",
+   "stage": "",
+   "attempt": 0
   },
   {
    "name": "shot-2.png",
@@ -176,7 +181,12 @@
    "kind": "image",
    "t": 1793049840.0,
    "pass_n": 1,
-   "phase": "look"
+   "phase": "look",
+   "role": "",
+   "caption": "",
+   "run": "",
+   "stage": "",
+   "attempt": 0
   },
   {
    "name": "shot-3.png",
@@ -184,7 +194,12 @@
    "kind": "image",
    "t": 1793049840.0,
    "pass_n": 1,
-   "phase": "look"
+   "phase": "look",
+   "role": "",
+   "caption": "",
+   "run": "",
+   "stage": "",
+   "attempt": 0
   }
  ],
  "waits_for": [],

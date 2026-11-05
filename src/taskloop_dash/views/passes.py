@@ -6,7 +6,6 @@ run's last pass, by the run's Close. A piece is the bead's stretch on one slot (
 one piece, a run on another slot starts the next, and `from_slot`/`to_slot` link the comeback."""
 
 from collections.abc import Sequence
-from dataclasses import dataclass
 from typing import Final
 
 from taskloop.contracts.dash import Cell, CellState, Msg, PassEnd, Phase, Piece, Resumed, Seg, SegKind
@@ -15,35 +14,12 @@ from taskloop.contracts.enums import Outcome
 from taskloop.contracts.log import Said, Stuck, Transition
 from taskloop.contracts.runlife import Liveness
 from taskloop_dash.views import phases, stage_logs
+from taskloop_dash.views.passview import PassView
 from taskloop_dash.views.runfacts import Run, Span
 
 SAID_ICON: Final = {"engine": "⚙️", "owner": "✉️"}  # who said it -> the message's icon (dash-spec 2.4: ✉️ is a note to the worker)
 STUCK_ICON: Final = "🛑"
 LAST_MAX = 160  # characters of a cell's last comment (the hover)
-
-
-@dataclass(frozen=True)
-class PassView:
-    n: int
-    run: Run
-    spans: tuple[Span, ...]
-    end: PassEnd
-    text: str
-    resumed: Resumed | None
-    detail: str = ""
-
-    @property
-    def t0(self) -> float:
-        return self.spans[0].t0
-
-    @property
-    def t1(self) -> float:
-        return self.run.end_of(self.spans[-1])
-
-    @property
-    def live(self) -> bool:
-        """The run still writes and this is its last pass."""
-        return self.run.life is Liveness.LIVE and self.end == "" and self.spans[-1].t1 is None
 
 
 def groups_of(spans: Sequence[Span], transitions: Sequence[Transition] = ()) -> list[list[Span]]:

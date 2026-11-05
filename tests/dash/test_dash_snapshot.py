@@ -390,22 +390,15 @@ class Detail(Case):
         assert (look.source, look.id, len(look.shots)) == ("look", "b-look-look", 2)
         assert self.detail("b-run").ask is None
 
-    def test_artifacts_know_their_pass_and_phase(self):
+    def test_the_drawers_artifacts_come_from_the_store_never_from_the_runs_artifact_records(self):
         w = self.world()
-        s = (
-            RunScript("b-look", slot="b", at=400)
-            .step("write", 100, 5, "OC Go")
-            .step("look", 10)
-            .artifacts(2, "look", "shot-1.png", "notes.pdf")
-            .close("landed")
-        )
+        s = RunScript("b-look", slot="b", at=400).step("write", 100, 5, "OC Go").step("look", 10)
+        s = s.artifacts(2, "look", "shot-1.png").close("landed")
         w = dataclasses.replace(w, runs={**w.runs, ("lifesim", "b-look"): [s.run(NOW)]})
         p = w.projects[0]
         d = bead_detail.build(Board(w), p, next(x for x in p.beads if x.id == "b-look"), [], [])
-        got = {a.name: (a.kind, a.pass_n, must(a.phase).value, a.url) for a in d.artifacts}
-        assert got["shot-1.png"] == ("image", 1, "look", "/api/artifact?bead=b-look&name=shot-1.png")
-        assert got["notes.pdf"][0] == "file"
-        assert self.card(snapshot.build(w), "b-look").shots == 1  # pictures only
+        assert d.artifacts == []  # the store listing (tests/dash/test_dash_artifacts.py) is the one source
+        assert self.card(snapshot.build(w), "b-look").shots == 1  # the card counts the run's records, touching no file
 
 
 class EngineFacts(Case):

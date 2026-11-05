@@ -6,9 +6,13 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Protocol
 
+from taskloop.adapters.ident import config_dir
 from taskloop.app.wire import hook, setup
+from taskloop.contracts.config import HostResources
 from taskloop.contracts.env import Env
+from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import Ran
+from taskloop.contracts.stores import JsonStore
 
 BRANCH = "tl-setup-profile"
 REF = "repos/{owner}/{repo}/git/ref/heads/"  # gh fills {owner} and {repo} from the repo it runs in
@@ -26,15 +30,25 @@ def machine_fixes(plugin_root: Path, env: Env) -> list[str]:
 
 
 def profile_of(answers: Mapping[str, str]) -> dict[str, object]:
-    """The .task-loop.json the answers describe: slot count, a Unity lease, the repo gate."""
-    profile: dict[str, object] = {"slots": {"count": int(answers.get("lanes", "4"))}}
+    """The .task-loop.json the answers describe: a Unity lease, the repo gate."""
     engine: dict[str, object] = {}
     unity = answers.get("unity-lease") == "yes"
     if unity:
         engine["resources"] = {"unity": {"limit": 1}}
     if answers.get("gate") == "yes":
         engine["checks"] = [{"id": "gate", "argv": ["just", "check"], **({"needs": ["unity"]} if unity else {})}]
-    return {**profile, "engine": engine} if engine else profile
+    return {"engine": engine}
+
+
+def host_fix(answers: Mapping[str, str], env: Env) -> list[str]:
+    """host.json from the unity-lease answer: a host that answered yes has the unity resource. An existing file is the person's: kept."""
+    if answers.get("unity-lease") != "yes":
+        return []
+    store = JsonStore(ConfigDir(config_dir(env)).host(), HostResources)
+    if store.get() is not None:
+        return []
+    store.write(HostResources(resources=["unity"]))
+    return ["wrote host.json: this machine has unity"]
 
 
 def open_pr(repo: Path, profile: dict[str, object], sh: Runs) -> tuple[bool, str]:
@@ -77,5 +91,6 @@ def apply(plugin_root: Path, env: Env, repo: Path | None, answers: Mapping[str, 
     missing = [q.id for q in asks if q.id not in answers]
     if missing:
         return 1, [*lines, "profile: no answer for " + ", ".join(missing) + " (--answers FILE or --yes)"]
+    lines += host_fix(answers, env)
     ok, detail = open_pr(repo, profile_of(answers), sh)
     return (0, [*lines, f"profile: PR {detail}"]) if ok else (1, [*lines, f"profile: {detail}"])

@@ -1,29 +1,79 @@
 """What an engine remembers across the steps of one run: the plain fields, with their meaning. The Engine adds its parts to them."""
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
-from taskloop.adapters import beadtools
+from taskloop.adapters import beadtools, ident, treehash
 from taskloop.adapters import delegate as dg
+from taskloop.adapters.check_probe import PathProbe
 from taskloop.adapters.threadflag import ThreadFlag
+from taskloop.app.checks.checklog import CheckLog
+from taskloop.app.checks.runner import Checker
+from taskloop.app.run.budget import Budget
+from taskloop.app.run.calls import Calls
+from taskloop.app.run.context import RunContext
 from taskloop.app.run.state import Checkpoints, StateAttrs
+from taskloop.app.run.steps import Steps
 from taskloop.contracts import fence
+from taskloop.contracts.argv import text_of
 from taskloop.contracts.checkpoint import Checkpoint, RunState
 from taskloop.contracts.checks import CheckRun
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.delegate import Permanence
+from taskloop.contracts.env import Env
 from taskloop.contracts.identity import Identity
-from taskloop.contracts.ids import BeadId
+from taskloop.contracts.ids import BeadId, TreeSha
 from taskloop.contracts.kinds import Kind
+from taskloop.contracts.paths import ConfigDir
+from taskloop.contracts.ports import Clock, Git, Spawner
 from taskloop.contracts.review import Unfiled
+from taskloop.contracts.run import Reexec
 from taskloop.contracts.wire import Open
 from taskloop.domain import outcome as oc
 from taskloop.domain.lanes.pause_reasons import Producer
+from taskloop.stores.bundle import Stores
+from taskloop.stores.runlog import RunLog
 
 
 class RunFields(StateAttrs):
     killed = ThreadFlag()  # the last sh() of the calling thread was stopped by the engine
     wall_hit = ThreadFlag()  # ...at its wall limit
+    tree_memo: tuple[treehash.State, TreeSha] | None = None  # (git status, file stats) -> tree hash, of the last tree_hash()
+    stop_pending = False  # run_bead sets it when a SIGTERM came during the claim
+    live_n = 0  # the number of delegate calls with a live file so far
+    live_now = ""  # the live file of the newest delegate call (the stuck tick reads when it was last written)
+    _probe: PathProbe | None = None
+    MARKERS_ARGV: ClassVar[list[str]] = ["python3", str(ident.PLUGIN_ROOT / "src" / "taskloop" / "adapters" / "markers.py")]
+    MARKERS = text_of(MARKERS_ARGV)
+
+    # Set by Engine.__init__ from the edge (env, spawner, who, git, clock, stores) and from the run's layout and context.
+    env: Env
+    spawner: Spawner
+    who: Identity
+    home: ConfigDir
+    git: Git
+    clock: Clock
+    stores: Stores
+    reexec: Reexec | None
+    log_path: Path
+    err_path: Path
+    run_dir: Path
+    live_dir: Path
+    run_id: str
+    task_dir: Path
+    brief_file: Path
+    evidence_dir: Path
+    exec_fn: Callable[..., object] | None  # a test's exec, newer-install lookup and run-task argv
+    newer_fn: Callable[..., object] | None
+    argv: list[str] | None
+    moved: bool
+    ctx: RunContext
+    log: RunLog
+    steps: Steps
+    budget: Budget
+    calls: Calls
+    checklog: CheckLog
+    checker: Checker
 
     def __init__(self, bead: BeadId, wt: str, cfg: EngineConfig, dry_run: bool, verbose: bool, store: Any, route: Any,
                  fresh: bool, claim: fence.Claim | None, who: Identity) -> None:
@@ -83,6 +133,7 @@ class RunFields(StateAttrs):
         self.salvage_tail, self.rebase_orig = "", ""
         self.rebase_pre: list[str] = []
         self.shot_cache: dict[str, Any] | None = None
+        self.artifact_repo = ""  # the repo's store key (adapters.check_files.repo_key), taken at the first registered render
         self.salvaged = False  # a resume conflict was fixed in place, not by starting again (tl-7y6.2.19)
         self.lane_notes: list[str] = []  # steps that ran on the writer's own family, with delegate's warning
         self.taste: list[Open] = []  # [{id, title}] taste items for the owner-look bead

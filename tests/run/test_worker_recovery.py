@@ -10,7 +10,7 @@ import support.paths  # noqa: F401
 from support.case import Case
 from support.narrow import must
 
-from taskloop.app.run import done_memo, worker_call
+from taskloop.app.run import call, done_memo, worker_call
 from taskloop.contracts import factorydb, wire
 from taskloop.contracts.delegate import RunRequest
 from taskloop.contracts.locator import RunLocator
@@ -42,7 +42,7 @@ class Recovery(Case):
         self.worker.request = mock.Mock(side_effect=lambda c, *args: self.req.replace(cwd=str(c.cwd)))
 
     def call(self, cwd="/repo", schema=None):
-        return worker_call.Call(
+        return call.Call(
             "write", "worker", schema or {"type": "object"}, cwd, "same prompt", "same prompt",
             None, None, ("write", 1, 0, 0), True, None, "write", "Write",
         )

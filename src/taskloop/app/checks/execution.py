@@ -1,34 +1,10 @@
-"""Resolve execution before a receipt can be read or minted."""
-from collections.abc import Mapping
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Protocol
-
+"""Where a check runs (on the host) and the environment its receipt is keyed by."""
 from taskloop.adapters import childenv
-from taskloop.contracts.config import ContainerConfig
 from taskloop.contracts.env import Env
 from taskloop.contracts.envvars import EnvVar
-from taskloop.contracts.ports import Ran
 from taskloop.contracts.runkey import Digest
 
-
-class Runs(Protocol):
-    def run(self, argv: list[str], *, cwd: str | None = None, extra: Mapping[str, str] | None = None,
-            timeout_s: float | None = None) -> Ran: ...
-
-
-@dataclass(frozen=True)
-class ReadyExecution:
-    identity: Digest
-    image: str = ""
-
-
-@dataclass(frozen=True)
-class EnvironmentUnavailable:
-    reason: str
-
-
-HOST = ReadyExecution(Digest("host-v1"))
+HOST_IDENTITY = Digest("host-v1")  # every check runs on this machine: the execution field of its run key
 
 
 def check_env() -> dict[str, str]:
@@ -39,33 +15,3 @@ def check_env() -> dict[str, str]:
 def keyed_env(env: Env) -> dict[str, str]:
     """The shared receipt environment, independent of the executing slot's name and state paths."""
     return {**childenv.reaching(childenv.current_env(env)), **check_env()}
-
-
-def docker_ok(spawner: Runs) -> bool:
-    try:
-        return spawner.run(["docker", "info"], timeout_s=15).exit == 0
-    except OSError:
-        return False
-
-
-def image_identity(spawner: Runs, image: str) -> str:
-    ran = spawner.run(["docker", "image", "inspect", "--format", "{{.Id}}", image], timeout_s=15)
-    identity = ran.out.strip()
-    return identity if ran.exit == 0 and identity.startswith("sha256:") else ""
-
-
-def resolve_container(spec: ContainerConfig | None, wt: str, spawner: Runs) -> ReadyExecution | EnvironmentUnavailable:
-    try:
-        if spec is None:
-            return EnvironmentUnavailable("container configuration missing")
-        if not docker_ok(spawner):
-            return EnvironmentUnavailable("docker not reachable")
-        image = spec.image
-        if not image:
-            path = Path(wt) / spec.dockerfile
-            built = spawner.run(["docker", "build", "-q", "-f", str(path), str(path.parent)])
-            image = built.out.strip() if built.exit == 0 else ""
-        identity = image_identity(spawner, image) if image else ""
-        return ReadyExecution(Digest(identity), identity) if identity else EnvironmentUnavailable("container image not available")
-    except OSError as err:
-        return EnvironmentUnavailable(str(err))

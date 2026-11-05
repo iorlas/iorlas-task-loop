@@ -20,5 +20,5 @@ class Dash:
         self.looks = Looks(env, self.records, self.beads)
         self.artifacts = Artifacts(env)
         self.live = Live(env, self.records)
-        self.reads = Reads(env, Worlds(env, self.records, self.beads, self.looks))
+        self.reads = Reads(env, Worlds(env, self.records, self.beads, self.looks), self.artifacts)
         self.writes = Writes(env, self.records, self.beads, self.looks)
