@@ -3,6 +3,7 @@ the branch merged into the moved base; a changed file, a new test of main that i
 closure command each make it run again."""
 import json
 import tempfile
+from collections.abc import Mapping
 from pathlib import Path
 from unittest import mock
 
@@ -17,13 +18,15 @@ from taskloop.contracts.checks import CheckResult
 from taskloop.contracts.config import load
 from taskloop.contracts.env import Env
 from taskloop.contracts.gitfacts import TreeEntry
-from taskloop.contracts.ids import TreeSha
+from taskloop.contracts.ids import CheckId, TreeSha
 from taskloop.contracts.ports import Git, Ran
+from taskloop.contracts.runkey import BaseSha
 from taskloop.domain.checks.specs import repo_check
 from taskloop.stores.memory import fake_stores
 from taskloop.stores.runlog import RunLog
 
 OID, TREE, B1, B2 = "1550b77c" + "0" * 32, TreeSha("tree-1"), "base-1", "base-2"
+SUITE = CheckId("suite")
 PROFILE = {"engine": {"checks": [{"id": "suite", "argv": ["true"], "run": "gate", "closure_cmd": ["affected", "--closure"]}]}}
 BRANCH = {"src/a.py": "A = 1\n", "tests/test_a.py": "import a\n"}
 
@@ -35,7 +38,9 @@ class Spawns:
         self.tdir, self.main, self.listed, self.merge_exit, self.closure_exit = tdir, main, listed, merge_exit, closure_exit
         self.calls: list[list[str]] = []
 
-    def run(self, argv, cwd=None, **_kw):
+    def run(self, argv: list[str], *, cwd: str | None = None, env: Mapping[str, str] | None = None,
+            extra: Mapping[str, str] | None = None, timeout_s: float | None = None, capture: bool = True) -> Ran:
+        assert cwd is not None
         self.calls.append(list(argv))
         if tuple(argv[: len(MERGE)]) == MERGE:
             for path, text in {**BRANCH, **self.main}.items():
@@ -74,7 +79,8 @@ class CarryCase(Case):
 
     def memo_at(self, base: str) -> RunMemo:
         env = {**childenv.reaching(childenv.current_env(Env())), **check_env()}
-        return RunMemo(self.stores, check_files.repo_key(self.git, str(self.tdir)), InputKeys(self.git, str(self.tdir), TREE), base, env)
+        keys = InputKeys(self.git, str(self.tdir), TREE)
+        return RunMemo(self.stores, check_files.repo_key(self.git, str(self.tdir)), keys, BaseSha(base), env)
 
     def carry(self, main: dict[str, str], listed: list[str], **kw) -> tuple[bool, Spawns]:
         spawns = Spawns(self.tdir, main, listed, **kw)
@@ -86,7 +92,7 @@ class CarryCase(Case):
     def hits(self) -> bool:
         memo = self.memo_at(B2)
         memo.checks = {c.id: repo_check(c, self.engine) for c in self.engine.checks}
-        return memo.result(memo.checks["suite"]) is not None
+        return memo.result(memo.checks[SUITE]) is not None
 
     def test_an_unchanged_closure_carries_the_pass_to_the_moved_base(self):
         assert not self.hits()
@@ -94,7 +100,8 @@ class CarryCase(Case):
         assert carried and self.hits()
         got = self.memo_at(B2)
         got.checks = {c.id: repo_check(c, self.engine) for c in self.engine.checks}
-        assert got.hit(got.key(got.checks["suite"])).origin == "check-run"
+        hit = got.hit(got.key(got.checks[SUITE]))
+        assert hit is not None and hit.origin == "check-run"
 
     def test_a_file_of_the_closure_that_main_changed_is_a_miss(self):
         carried, _ = self.carry(main={"src/a.py": "A = 2\n"}, listed=["src/a.py", "tests/test_a.py"])
