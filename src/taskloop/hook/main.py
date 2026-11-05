@@ -5,6 +5,18 @@ import importlib
 import sys
 from collections.abc import Mapping
 from pathlib import Path
+from types import MappingProxyType
+
+# What an exception in a hook means, one table: PreToolUse, SessionStart and PreCompact must never break a session (fail open, exit 0);
+# the pre-push githook is the delivery gate, so anything that goes wrong in it refuses the push (fail closed, exit 1).
+FAIL_OPEN, FAIL_CLOSED = 0, 1
+FAIL_MODE: Mapping[str, int] = MappingProxyType({"pretool": FAIL_OPEN, "session-start": FAIL_OPEN, "precompact": FAIL_OPEN,
+                                                 "githook": FAIL_OPEN, "githook pre-push": FAIL_CLOSED})
+
+
+def fail_exit(argv: list[str]) -> int:
+    """The exit code for an exception while handling `argv`: the most specific FAIL_MODE row, an unlisted event fails open."""
+    return FAIL_MODE.get(" ".join(argv[:2]), FAIL_MODE.get(argv[0] if argv else "", FAIL_OPEN))
 
 
 def main(argv: list[str], stdin_text: str, plugin_root: Path, environ: Mapping[str, str] | None = None) -> int:
@@ -22,10 +34,10 @@ def main(argv: list[str], stdin_text: str, plugin_root: Path, environ: Mapping[s
             print(f"hook.py: unknown event {event!r}", file=sys.stderr)
             return 2
     except Exception as err:
-        if argv[:2] == ["githook", "pre-push"]:
+        code = fail_exit(argv)
+        if code:
             print(f"tl pre-push: refused: delivery judge unavailable: {err}", file=sys.stderr)
-            return 1
-        return 0
+        return code
     if out:
         print(out)
     return 0
