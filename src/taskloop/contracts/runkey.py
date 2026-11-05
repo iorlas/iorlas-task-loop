@@ -9,6 +9,7 @@ BaseSha = NewType("BaseSha", str)  # a commit sha of the base branch: never a tr
 Digest = NewType("Digest", str)  # a sha1 hex of what a check reads (`inputs`) or of the environment it runs in (`env`)
 
 
+# `selected` stays empty for the suite: tree + base fully determine the tests `just test` selects (dev/affected.py diffs tree against base).
 @final
 class RunKey(Rec):
     """check: the check's id. cmd: the command. config: the check's declared settings that change what it reads or how it runs.

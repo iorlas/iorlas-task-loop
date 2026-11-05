@@ -93,7 +93,7 @@ class PushJudge(Case):
         self.git.replies[("rev_parse", "HEAD")] = "task/x"
         decision = self.judge(self.request("task/x"))
         assert decision.status == PushStatus.REFUSED
-        assert "suite (no receipt for this tree and base)" in decision.reasons[0]
+        assert "suite (no green run of tree task-tree under `true`)" in decision.reasons[0]
         self.check.assert_called_once_with(load(json.loads(self.tip_profile)).engine)
 
     def test_mixed_push_checks_only_the_base_tip(self):
@@ -139,10 +139,15 @@ class PushJudge(Case):
         evidence.assert_not_called()
         self.check.assert_not_called()
 
+    def test_a_miss_names_the_tree_before_the_declared_gate_runs(self):
+        said = []
+        judge_push(self.repo, self.request("head"), self.stores, self.git, self.check, env=self.env, note=said.append)
+        assert said == ["refs/heads/head: no green run of tree tree for suite; running the declared gate"]
+
     def test_unknown_tip_is_refused_and_a_clean_head_can_run_checks(self):
         decision = self.judge()
         assert decision.status == PushStatus.REFUSED
-        assert decision.reasons == ("refs/heads/head (head) is not green for suite (no receipt for this tree and base); "
+        assert decision.reasons == ("refs/heads/head (head) is not green for suite (no green run of tree tree under `true`); "
                                             "run `tl check` in its worktree, then push",)
         self.check.assert_called_once_with(load(json.loads(self.tip_profile)).engine)
         self.check.reset_mock()
@@ -178,7 +183,26 @@ class PushJudge(Case):
         assert self.judge(self.request("low", "head")).status == PushStatus.ALLOWED
         assert self.judge(self.request("low")).status == PushStatus.REFUSED
 
+    def test_a_push_to_the_base_branch_must_fast_forward_it(self):
+        self.stamp(base="old-base")
+        rewind = self.request("head", remote="refs/heads/main", old="old-base")
+        decision = self.judge(rewind)
+        assert decision.status == PushStatus.REFUSED
+        assert decision.reasons == ("refs/heads/head (head) rewinds refs/heads/main: old-base is not an ancestor of head; "
+                                    "only a fast-forward may reach the base branch",)
+        self.git.replies[("is_ancestor", "old-base")] = True
+        assert self.judge(rewind).status == PushStatus.ALLOWED
+
+    def test_a_feature_branch_may_be_rewritten_with_only_the_profile_check(self):
+        for remote in ("refs/heads/task/x", "refs/heads/topic"):
+            with self.subTest(remote=remote), mock.patch("taskloop.app.checks.authorization.results") as evidence:
+                decision = self.judge(self.request("head", remote=remote, old="elsewhere"))
+                assert decision.status == PushStatus.ALLOWED
+                evidence.assert_not_called()
+        self.check.assert_not_called()
+
     def test_moving_the_base_branch_uses_the_receivers_old_base(self):
+        self.git.replies[("is_ancestor", "old-base")] = True
         self.stamp(base="old-base")
         assert self.judge(self.request("head", remote="refs/heads/main", old="old-base")).status == PushStatus.ALLOWED
 
@@ -197,7 +221,7 @@ class PushJudge(Case):
         decision = self.judge()
         assert decision.status == PushStatus.REFUSED
         assert decision.reasons == (
-            "refs/heads/head (head) is not green for suite (no receipt for this tree and base); "
+            "refs/heads/head (head) is not green for suite (no green run of tree tree under `true`); "
             "run `tl check` in its worktree, then push",)
 
     def test_unreadable_or_undecodable_policy_profile_is_unavailable(self):

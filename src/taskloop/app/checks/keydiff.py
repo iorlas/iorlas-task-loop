@@ -36,7 +36,7 @@ def why_red(memo: RunMemo, c: Check, plan: Digest) -> str:
     """The first differing field against the newest receipt of the check on this tree and base, or why there is nothing to compare."""
     found = memo.latest(c)
     if found is None:
-        return "no receipt for this tree and base"
+        return f"no green run of tree {memo.keys.tree[:12]} under `{c.cmd}`"
     expected = memo.planned_key(c, plan, found.key.plan_output) if found.result.planned else memo.key(c)
     if expected is None:
         return unkeyed(memo, c)

@@ -52,9 +52,9 @@ def push_tips(stdin: str) -> tuple[PushTip, ...]:
 
 class PushJudge:
     def __init__(self, repo: str, stores: Stores, git: Git, check: Callable[[EngineConfig], int], env: Env,
-                 clock: Clock | None = None) -> None:
+                 clock: Clock | None = None, note: Callable[[str], None] = lambda _: None) -> None:
         self.repo, self.stores, self.git, self.check = repo, stores, git, check
-        self.env = env
+        self.env, self.note = env, note
         self.clock = clock or SystemClock()
         self.unproven: list[CheckId] = []
 
@@ -123,6 +123,7 @@ class PushJudge:
             return True
         if tip.sha != self.git.rev_parse(self.repo, "HEAD") or self.git.dirty(self.repo):
             return False
+        self.note(f"{tip.ref}: no green run of tree {tree[:12]} for {', '.join(self.unproven)}; running the declared gate")
         if (Path(self.repo) / ".task-loop.json").read_bytes() != self.git.show(self.repo, tip.sha, ".task-loop.json").encode("utf-8"):
             raise ValueError("worktree .task-loop.json differs from the judged profile")
         if self.check(cfg) != 0:
@@ -141,11 +142,17 @@ class PushJudge:
                       if tip.remote_ref == "refs/heads/" + self.base_ref(cfg).removeprefix("origin/")]
         if not deliveries:
             return PushDecision(PushStatus.ALLOWED)
+        rewinds = tuple(
+            f"{tip.ref} ({tip.sha[:12]}) rewinds {tip.remote_ref}: {tip.remote_sha[:12]} is not an ancestor of {tip.sha[:12]}; "
+            "only a fast-forward may reach the base branch"
+            for tip, _cfg in deliveries if tip.remote_sha.strip("0") and not self.git.is_ancestor(self.repo, tip.remote_sha, tip.sha))
+        if rewinds:
+            return PushDecision(PushStatus.REFUSED, rewinds)
         return self.judge_delivery(deliveries)
 
     def why(self, tip: PushTip, cfg: EngineConfig | None) -> dict[CheckId, str]:
         """The first differing key field per unproven step; display only, so a failure to explain never changes the verdict."""
-        plain = dict.fromkeys(self.unproven, "no receipt for this tree and base")
+        plain = dict.fromkeys(self.unproven, "no green run of this tree and base")
         if cfg is None:
             return plain
         try:
@@ -173,10 +180,10 @@ class PushJudge:
 
 
 def judge_push(repo: str, stdin: str, stores: Stores, git: Git, check: Callable[[EngineConfig], int], *,
-               env: Env, clock: Clock | None = None) -> PushDecision:
+               env: Env, clock: Clock | None = None, note: Callable[[str], None] = lambda _: None) -> PushDecision:
     """Only this application boundary interprets the request. Failed observations never authorize transport."""
     try:
         tips = push_tips(stdin)
-        return PushJudge(repo, stores, git, check, env, clock).judge(tips)
+        return PushJudge(repo, stores, git, check, env, clock, note).judge(tips)
     except Exception as err:
         return PushDecision(PushStatus.UNAVAILABLE, (f"delivery judge unavailable: {err}",))
