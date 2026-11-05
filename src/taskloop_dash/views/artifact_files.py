@@ -11,7 +11,9 @@ from taskloop_dash.views import names
 Kind = Literal["image", "video", "audio", "pdf", "file"]
 Role = Literal["before", "after", "progress", "result"]
 INLINE_VIDEO: Final = ("video/mp4", "video/webm", "video/ogg")
-INLINE_AUDIO: Final = ("audio/mpeg", "audio/wav", "audio/x-wav", "audio/vnd.wave", "audio/ogg", "audio/mp4", "audio/webm", "audio/aac", "audio/flac")
+INLINE_AUDIO: Final = (
+    "audio/mpeg", "audio/wav", "audio/x-wav", "audio/vnd.wave", "audio/ogg", "audio/mp4", "audio/webm", "audio/aac", "audio/flac",
+)
 DOWNLOAD: Final = "application/octet-stream"
 
 

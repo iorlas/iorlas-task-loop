@@ -172,7 +172,8 @@ class Serve(Case):
         return http.route(self.dash, STATIC, "/api/artifact", {**Q, "stage": "write", "attempt": "1", "name": name, **over})
 
     def test_media_plays_inline_and_everything_else_is_a_download(self):
-        inline = [("a.png", "image/png"), ("report.pdf", "application/pdf"), ("clip.mp4", "video/mp4"), ("voice.wav", mimetypes.guess_type("voice.wav")[0])]  # audio/x-wav or audio/vnd.wave, by Python version
+        wav = mimetypes.guess_type("voice.wav")[0]  # audio/x-wav or audio/vnd.wave, by Python version
+        inline = [("a.png", "image/png"), ("report.pdf", "application/pdf"), ("clip.mp4", "video/mp4"), ("voice.wav", wav)]
         for name, ctype in inline:
             code, _body, got, extra = must(self.get(name))
             assert (code, got, extra) == (200, ctype, []), name
