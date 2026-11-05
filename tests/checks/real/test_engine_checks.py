@@ -12,20 +12,20 @@ from support.engine_case import CLEAN, PLAN, WRITE, EngineTest, pid_gone
 # isort: split
 import os
 import shlex
-import signal
+import threading
 from pathlib import Path
 
 from support.spawn import port_git, real_spawner
 from support.waits import until
 from support.who import who
 
+from taskloop.adapters import halt as halting
 from taskloop.app.run import (
     engine,
 )
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts.env import snapshot
 from taskloop.contracts.ids import BeadId
-from taskloop.contracts.kinds import Kind
 
 
 class EngineChecksTest(EngineTest):
@@ -37,25 +37,27 @@ class EngineChecksTest(EngineTest):
     def test_a_stop_during_a_check_stops_the_check_and_everything_it_started(self):
         if os.name == "nt":
             pytest.skip("POSIX process groups")
-        eng = engine.Engine(
-            BeadId("t-1"),
-            str(self.wt),
-            wslots.load_cfg(str(self.wt), port_git()),
-            store=self.store,
-            env=snapshot(),
-            spawner=real_spawner(),
-            git=port_git(), who=who())
         pidfile = Path(self.wt, "child.pid")
+        with self.stoppable():  # the run's own halt event; the stop is delivered once the check has started its child
+            eng = engine.Engine(
+                BeadId("t-1"),
+                str(self.wt),
+                wslots.load_cfg(str(self.wt), port_git()),
+                store=self.store,
+                env=snapshot(),
+                spawner=real_spawner(),
+                git=port_git(), who=who())
+            halt = halting.RUN_HALT["ev"]
+            assert halt is not None
 
-        def stopped(*_):  # what the run's SIGTERM handler does, from the same thread, once the check has started its child
-            until(lambda: pidfile.exists() and pidfile.read_text().strip(), 5)
-            raise engine.Blocked("failed: stopped (SIGTERM)", kind=Kind.PAUSE_KILLED)
-        old = signal.signal(signal.SIGALRM, stopped)
-        self.addCleanup(signal.signal, signal.SIGALRM, old)
-        signal.setitimer(signal.ITIMER_REAL, 0.5)
-        self.addCleanup(signal.setitimer, signal.ITIMER_REAL, 0)
-        with pytest.raises(engine.Blocked):
-            eng.sh(shlex.split(self.spawn(pidfile)))
+            def stop_when_started():
+                until(lambda: pidfile.exists() and pidfile.read_text().strip(), 30)
+                halt.set()  # what the run's SIGTERM handler does
+            stopper = threading.Thread(target=stop_when_started, daemon=True)
+            stopper.start()
+            with pytest.raises(engine.Blocked):
+                eng.sh(shlex.split(self.spawn(pidfile)))
+            stopper.join(5)
         child = int(pidfile.read_text())
         if not until(lambda: pid_gone(child), 2.5):
             os.kill(child, 9)

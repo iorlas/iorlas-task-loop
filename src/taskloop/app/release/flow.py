@@ -1,4 +1,4 @@
-"""One release, start to end: the clone, the gate and suite, the bump, the push, the marketplace, the install, the record."""
+"""One release, start to end: the clone, the gate, the bump, the push, the marketplace, the install, the record."""
 import argparse
 import json
 import os
@@ -12,7 +12,7 @@ from any_plugin_cache import NoVersionError, set_json_version
 
 from taskloop.adapters import beadtools, gitrepo, ident, landlock
 from taskloop.adapters.ident import config_dir
-from taskloop.app.release import canary, clone, manifest, publish, selfupdate, shell, suite, tidy
+from taskloop.app.release import canary, clone, gate, manifest, publish, selfupdate, shell, tidy
 from taskloop.app.release.push import push_main, release_lock_path
 from taskloop.app.release.shell import Abort, Shell, say
 from taskloop.contracts.bd_errors import BdCommandFailure
@@ -49,10 +49,10 @@ def require_clean_main(wt: Path, what: str, sh: Shell) -> None:
         raise Abort(f"the {what} checkout {wt} is dirty; commit or stash first:\n{dirty}")
 
 
-def bump_and_commit(tool_root: Path, where: Path, req: Request, sh: Shell) -> str:
+def bump_and_commit(where: Path, req: Request, sh: Shell) -> str:
     """Verify the pre-bump tree once, then commit only the version and generated manifest."""
     before = sh.port.rev_parse(str(where), "HEAD")
-    suite.verify(tool_root, where, sh)
+    gate.verify(where, sh)
     if sh.port.rev_parse(str(where), "HEAD") != before:
         raise Abort("release clone HEAD changed during the suite; nothing pushed")
     version = next_version(where, req.minor, sh)
@@ -65,7 +65,7 @@ def bump_and_commit(tool_root: Path, where: Path, req: Request, sh: Shell) -> st
     publish.git_must(lambda: sh.port.stage(str(where), publish.PLUGIN, manifest.NAME), where)
     publish.git_must(lambda: sh.port.commit_staged(str(where), f"{version}: {req.message}{publish.TRAILER}"), where)
     check_bump(where, before, version, sh)
-    suite.record_receipt(where, sh)
+    gate.record_receipt(where, sh)
     return version
 
 
@@ -117,7 +117,7 @@ def close_bead(req: Request, repo: Path, who: Identity, store: Beads | None, whe
         say(f"warning: bd close {req.bead} failed: {why}")
 
 
-def release(req: Request, repo: Path, market: Path, tool_root: Path, sh: Shell, who: Identity, closer: Closer,
+def release(req: Request, repo: Path, market: Path, sh: Shell, who: Identity, closer: Closer,
             store: Beads | None = None) -> str:
     """Release `repo` from the clone: its main checkout may be dirty or on any branch and is left as it was. The marketplace
     checkout must be clean on main (it is pushed from)."""
@@ -132,7 +132,7 @@ def release(req: Request, repo: Path, market: Path, tool_root: Path, sh: Shell, 
         clone.replay_branch(where, repo, req.from_branch, sh)
     base = sh.port.rev_parse(str(where), "origin/main")
     def again() -> str:
-        return bump_and_commit(tool_root, where, req, sh)
+        return bump_and_commit(where, req, sh)
     version = push_main(where, req.message, again(), base, again, sh)
     say(f"pushed {version}: {req.message}")
     publish.tag(where, "v" + version, "the plugin repo", sh)
@@ -203,7 +203,7 @@ def main(argv: list[str] | None, tool_root: Path, spawner: Spawner, port: Git, e
                 say(f"ring devbox-ok: {a.devbox_ok}; Mac standing pin may now move through tl pin")
                 return 0
             newer = selfupdate.newer_release(tool_root, clone.ready(home.root, url, sh), sh, env)
-            version = "" if newer else release(req, repo, market, tool_root, sh, who, closer)
+            version = "" if newer else release(req, repo, market, sh, who, closer)
         if newer:  # the lock is released above: the exec'd release takes it
             selfupdate.exec_release(newer, sys.argv[1:] if argv is None else argv, repo, env)
         record(ReleaseResult(ok=True, version=version, summary="released " + version, at=clock(), branch=req.from_branch or "main",

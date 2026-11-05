@@ -61,8 +61,7 @@ class OwnerText(Case):
                 locator.assert_not_called()
 
     def test_engine_loop_run_and_lane_markers_refuse_even_when_empty(self):
-        markers = [var.value for var in EnvVar if not var.name.startswith("TASK_LOOP_DASH_")
-                   and not var.name.startswith("TASK_LOOP_SUITE_")]
+        markers = [var.value for var in EnvVar if not var.name.startswith("TASK_LOOP_DASH_")]
         for name in (*markers, "TL_CHECK_LOG_SUITE", "TL_CHECK_RC_SUITE"):
             with self.subTest(name=name):
                 assert registered(name)

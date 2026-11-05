@@ -2,12 +2,13 @@
 
 import contextlib
 import sys
+from typing import Final
 
 from delegate.app import doctor, env, net, status
 from delegate.cli import parser, verbs
 from delegate.contracts.json_types import Json
 
-TABLE = {
+TABLE: Final = {
     "status": status.cmd_status,
     "next": verbs.cmd_next,
     "report": verbs.cmd_report,
@@ -27,7 +28,7 @@ def cmd_net_only(a: env.Args, cfg: dict[str, Json] | None = None):
     return net.cmd_net(a)
 
 
-NO_CONFIG = {"guard": verbs.cmd_guard, "net": cmd_net_only}  # guard loads host policy itself; neither needs routing.json
+NO_CONFIG: Final = {"guard": verbs.cmd_guard, "net": cmd_net_only}  # guard loads host policy itself; neither needs routing.json
 
 
 def main(argv: list[str] | None = None):
