@@ -38,6 +38,7 @@ class PushTiming(Case):
         self.clock.advance(559)
         self.enterContext(mock.patch("taskloop.app.land.outbound.uses_lfs", return_value=False))
         self.enterContext(mock.patch.object(self.host.git, "staged", return_value=False))
+        self.enterContext(mock.patch("taskloop.app.land.outbound.last_fetched", return_value=""))
 
     def records(self):
         return [item.rec for item in self.host.log.log.read_from().items]
@@ -46,7 +47,7 @@ class PushTiming(Case):
         return [(r.step, r.exec_seconds, r.outcome) for r in self.records() if isinstance(r, rec.StepEnd)]
 
     def test_long_push_is_booked_to_push_without_a_review_silence_warning(self):
-        def push(_wt, _remote, _ref):
+        def push(_wt, _remote, _ref, _expect):
             assert must(self.host.steps.cur).step == "push"
             self.clock.advance(2900)
             self.host.log.emit(rec.Beat())
@@ -69,7 +70,7 @@ class PushTiming(Case):
                 self.host.steps.begin("review", "next review")
                 self.clock.advance(60)
 
-                def push(_wt, _remote, _ref, result=result):
+                def push(_wt, _remote, _ref, _expect, result=result):
                     self.clock.advance(2900)
                     if isinstance(result, OSError):
                         raise result
@@ -89,7 +90,7 @@ class PushTiming(Case):
             self.clock.advance(300)
             return 0, ""
 
-        def push(_wt, _remote, _ref):
+        def push(_wt, _remote, _ref, _expect):
             self.clock.advance(2900)
             self.tick.tick()
             return GitOutcome(ok=True, output="")
@@ -116,7 +117,7 @@ class PushTiming(Case):
         assert not [r for r in self.records() if isinstance(r, rec.Stuck)]
 
     def test_push_has_its_own_silence_limit_and_the_next_review_keeps_its_limit(self):
-        def push(_wt, _remote, _ref):
+        def push(_wt, _remote, _ref, _expect):
             self.clock.advance(silent_limit("push") - 1)
             self.tick.tick()
             assert not [r for r in self.records() if isinstance(r, rec.Stuck)]
