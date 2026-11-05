@@ -4,12 +4,15 @@ import contextlib
 import io
 import json
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from unittest import mock
 
 from delegate.app import env
+from delegate.app.codex_policy import worktree_head
 from delegate.domain.policy.shell import read_only_problem
 from support.case import Case
 from support.procsim import real_proc
@@ -64,7 +67,7 @@ class ExecAllow(Case):
         self.root = env.config_dir()
         self.host = self.root / "host.json"
         self.doc = {
-            "binaries": {"python": sys.executable, "dotnet": "/opt/pinned/dotnet", "just": "/opt/pinned/just"},
+            "binaries": {"python": sys.executable, "uv": "/opt/pinned/uv", "dotnet": "/opt/pinned/dotnet", "just": "/opt/pinned/just"},
             "writer_exec_allow": [
                 ["dotnet", "build"],
                 ["dotnet", "test"],
@@ -72,6 +75,9 @@ class ExecAllow(Case):
                 ["dotnet", "--version"],
                 ["python", "-m", "unittest"],
                 ["python", "-m", "pytest"],
+                ["python", "-I", "-B", "-m", "unittest"],
+                ["python", "-I", "-B", "-m", "pytest"],
+                ["uv", "run", "--no-sync", "--project", ".", "python", "-m", "pytest"],
                 ["just", "check"],
             ],
         }
@@ -87,11 +93,19 @@ class ExecAllow(Case):
             contextlib.redirect_stderr(err),
             mock.patch("delegate.app.codex_policy.os.posix_spawnp", spawn or mock.Mock(return_value=4242)) as run,
             mock.patch("delegate.app.codex_policy.os.waitpid", return_value=(4242, exit_code << 8)),
+            mock.patch("delegate.app.codex_policy.worktree_head", return_value="abc123"),
         ):
             code = route.main(["guard", *flags, "--exec-allow", *argv])
         return code, run, err.getvalue()
 
     def rows(self):
+        """The authorization rows; the `exit` row a started command leaves after it ends is read with `exits`."""
+        return [r for r in self.all_rows() if r["mode"] != "exit"]
+
+    def exits(self):
+        return [r for r in self.all_rows() if r["mode"] == "exit"]
+
+    def all_rows(self):
         return [json.loads(line) for line in (self.root / "guard.jsonl").read_text().splitlines()]
 
     def test_decided_broad_forms_use_only_pinned_absolute_binaries(self):
@@ -101,6 +115,9 @@ class ExecAllow(Case):
             ["dotnet", "restore", "x.csproj"],
             ["dotnet", "--version"],
             ["python", "-m", "pytest", "-q", "tests"],
+            ["python", "-I", "-B", "-m", "pytest", "-q", "tests"],
+            ["python", "-I", "-B", "-m", "unittest", "discover"],
+            ["uv", "run", "--no-sync", "--project", ".", "python", "-m", "pytest", "-q"],
             [sys.executable, "-m", "unittest", "discover", "-s", "tests"],
             ["just", "check"],
         ):
@@ -109,8 +126,9 @@ class ExecAllow(Case):
                 assert code == 0
                 want = self.doc["binaries"].get(argv[0], argv[0])
                 assert run.call_args.args[1] == [want, *argv[1:]]  # an argv list, never a shell line
-        assert len(self.rows()) == 7
+        assert len(self.rows()) == 10
         assert all(r["allowed"] for r in self.rows())
+        assert len(self.exits()) == 10
 
     def test_denial_corpus_never_starts_a_child_and_audits_once(self):
         denied = [
@@ -122,6 +140,12 @@ class ExecAllow(Case):
             ["python", "-c", "pass"],
             ["python", "-m", "pytest.evil"],
             ["python", "-I", "-m", "pytest"],
+            ["python", "-B", "-m", "pytest"],
+            ["python", "-I", "-B", "-c", "pass"],
+            ["uv", "run", "python", "-m", "pytest"],
+            ["uv", "run", "--no-sync", "--project", "/x", "python", "-m", "pytest"],
+            ["uv", "run", "--no-sync", "--project", ".", "python", "-c", "pass"],
+            ["uv", "run", "--no-sync", "--project", ".", "pytest"],
             ["just", "check", "evil"],
             ["just", "-f", "other", "check"],
             ["just", "--justfile=other", "check"],
@@ -208,6 +232,7 @@ class ExecAllow(Case):
         code, _, _ = self.call(["dotnet", "test"], spawn=spawn, exit_code=7)
         assert code == 7
         assert len(self.rows()) == 1
+        assert [(r["exit"], r["head"], r["argv"]) for r in self.exits()] == [(7, "abc123", ["dotnet", "test"])]
 
     @real_proc("delegate: a worker, git or CLI process")
     def test_actual_pinned_python_runs_with_an_empty_path(self):
@@ -259,3 +284,23 @@ class HookFailures:
             assert self.invoke(json.dumps({"tool_name": "Bash", "tool_input": {"command": command}})) == expected
         rows = [json.loads(line) for line in (env.config_dir() / "guard.jsonl").read_text().splitlines()]
         assert [row["allowed"] for row in rows] == [True, False, False]
+
+
+class WorktreeHead(Case):
+    def test_head_is_read_from_the_git_files_of_a_plain_checkout_and_a_linked_worktree(self):
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, root)
+        (root / "main" / ".git" / "refs" / "heads").mkdir(parents=True)
+        (root / "main" / ".git" / "HEAD").write_text("ref: refs/heads/b\n")
+        (root / "main" / ".git" / "refs" / "heads" / "b").write_text("c0ffee\n")
+        link = root / "main" / ".git" / "worktrees" / "w"
+        link.mkdir(parents=True)
+        (link / "HEAD").write_text("ref: refs/heads/b\n")
+        (link / "commondir").write_text("../..\n")
+        (root / "w").mkdir()
+        (root / "w" / ".git").write_text(f"gitdir: {link}\n")
+        for where in ("main", "w"):
+            with contextlib.chdir(root / where):
+                assert worktree_head() == "c0ffee"
+        with contextlib.chdir(root):
+            assert worktree_head() == ""
