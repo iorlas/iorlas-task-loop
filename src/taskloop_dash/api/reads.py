@@ -88,8 +88,10 @@ class Reads:
         token = self.wake.token()
         with self.lock:
             remembered = self.remembered
-        if token is None or remembered is None or remembered[1] != since:
+        if token is None or remembered is None:
             return versioned(self.snapshot(), q, held)
+        if remembered[1] != since:
+            return versioned(self._current(), q, held)
         after = self.wake.wait(token, seconds) if remembered[0] == token else token
         if after is None or self.worlds.database_error():
             return versioned(self.snapshot(), q, held)

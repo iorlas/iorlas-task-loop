@@ -159,6 +159,53 @@ def test_two_tabs_share_the_build_after_a_commit(board) -> None:
     assert source.builds == 2
 
 
+def test_two_tabs_share_a_build_published_before_it_is_cached(board, monkeypatch: pytest.MonkeyPatch) -> None:
+    reads, wake, _, source = board
+    version = load(reads)
+    wake.value += 1
+    source.revision += 1
+    published, release, second_entered = threading.Event(), threading.Event(), threading.Event()
+    original_build, original_snapshot, original_current = reads._build, reads.snapshot, reads._current
+
+    def paused_build():
+        value = original_build()
+        published.set()
+        assert release.wait(timeout=5)
+        return value
+
+    def observed_snapshot():
+        value = original_snapshot()
+        # On the old path, capture the stale value before releasing the build.
+        second_entered.set()
+        return value
+
+    def observed_current():
+        if published.is_set():
+            # The second tab must now wait for the first tab's refresh lock.
+            second_entered.set()
+        return original_current()
+
+    monkeypatch.setattr(reads, "_build", paused_build)
+    monkeypatch.setattr(reads, "snapshot", observed_snapshot)
+    monkeypatch.setattr(reads, "_current", observed_current)
+    with ThreadPoolExecutor(2) as pool:
+        first = pool.submit(reads.get, "/api/snapshot", {"since": version, "wait": "20"})
+        try:
+            assert published.wait(timeout=5)
+            second = pool.submit(reads.get, "/api/snapshot", {"since": version, "wait": "20"})
+            assert second_entered.wait(timeout=5)
+        finally:
+            release.set()
+        replies = [first.result(timeout=5), second.result(timeout=5)]
+    new_version = json.loads(replies[0][1])["version"]
+    assert new_version != version
+    for code, body, headers in replies:
+        assert code == 200
+        assert json.loads(body)["version"] == new_version
+        assert headers["ETag"] == f'"{new_version}"'
+    assert source.builds == 2
+
+
 def test_commit_during_build_is_seen_on_the_next_round(board, monkeypatch: pytest.MonkeyPatch) -> None:
     reads, wake, _, source = board
 
