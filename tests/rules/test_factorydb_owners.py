@@ -6,6 +6,7 @@ from pathlib import Path
 
 from support.case import Case
 
+from rules.gate_rules import parsed
 from taskloop.contracts.factorydb import DDL, OWNERS
 
 RUN_FILE_READERS = {"taskloop.contracts.runrows"}
@@ -55,12 +56,13 @@ class FactoryOwnersTest(Case):
             if "_vendor" in path.parts:
                 continue
             module = ".".join(path.relative_to(root).with_suffix("").parts)
+            tree = parsed(path)[1]  # the gate's cache: one parse per file for every rule
             if module not in RUN_FILE_READERS:
-                bad.extend(f"{module}:{line}" for line in legacy_readers(ast.parse(path.read_text(encoding="utf-8"))))
+                bad.extend(f"{module}:{line}" for line in legacy_readers(tree))
             if module not in RECEIPT_FILE_READERS:
-                bad.extend(f"{module}:{line}" for line in receipt_file_readers(ast.parse(path.read_text(encoding="utf-8"))))
+                bad.extend(f"{module}:{line}" for line in receipt_file_readers(tree))
             if module not in ASK_FILE_READERS and module != "taskloop.contracts.paths":
-                bad.extend(f"{module}:{line}" for line in ask_file_readers(ast.parse(path.read_text(encoding="utf-8"))))
+                bad.extend(f"{module}:{line}" for line in ask_file_readers(tree))
         assert bad == []
 
     def test_reader_rule_sees_a_planted_file_read(self):

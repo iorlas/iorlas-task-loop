@@ -12,6 +12,8 @@ from pathlib import Path
 
 from support.case import Case
 
+from rules.gate_rules import parsed
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
@@ -62,7 +64,7 @@ def scan() -> list[str]:
         rel = str(f.relative_to(ROOT))
         if "_vendor" in rel:
             continue
-        tree = ast.parse(f.read_text(encoding="utf-8"))
+        tree = parsed(f)[1]
         for line, name in names(tree):
             if name == "Beat" and rel not in ALLOWS_BEAT:
                 bad.append(f"{rel}:{line}: names Beat: liveness is the manifest's recorded state, not a gap in the log")
@@ -96,7 +98,7 @@ def dash_writer_uses(tree: ast.AST) -> list[tuple[int, str]]:
 class DashWritesNothing(Case):
     def test_nothing_under_the_dashboard_names_a_run_state_writer(self):
         bad = [f"{f.relative_to(ROOT)}:{line}: {name}" for f in sorted(DASH.rglob("*.py"))
-               for line, name in dash_writer_uses(ast.parse(f.read_text(encoding="utf-8")))]
+               for line, name in dash_writer_uses(parsed(f)[1])]
         assert bad == [], "the dashboard only reads: it displays runlife.shown, only tl processes call reconcile"
 
     def test_the_scan_sees_planted_writers(self):
