@@ -28,7 +28,7 @@ One canonical name per concept. A word in the "never" column is not used for tha
 
 ## Rename plan (hard cut, one bead each)
 
-0. Purge: the word "lane" leaves code, docs, tests, dashboard and the delegate copy in one cut (no alias). Three meanings, three names: delegate lane -> account; check lane -> track; factory lane (a loop process) -> loop. Occurrence counts come from the naming audit (docs/design/naming-audit.md).
+0. Purge: the word "lane" leaves code, docs, tests, dashboard and the delegate copy in one cut (no alias). Three meanings, three names: delegate lane -> account; check lane -> track; factory lane (a loop process) -> loop. Occurrence counts come from the naming audit (docs/design/naming-audit.md: about 1,760 lines in task-loop and 2,019 in delegate).
 1. Delegate: `lane` becomes `account` in routing.json, `route.py status`/`run` output, docs, skills. The interface is the typed `delegate.api` (docs/design/topology.md), so there is no wire contract to version. 122 files in task-loop mention "lane" today, so the task-loop side is the larger edit.
-2. Dashboard: the "Lanes" panel becomes "Accounts"; "floor" does not appear.
+2. Dashboard: the "Lanes" panel becomes "Accounts"; the "Floor" tab becomes "Slots".
 3. `tl lanes` becomes `tl accounts`; `tl setup` stops asking about lanes; `checks[].lane` becomes `track` (profile key: a hard cut, shipped one release after the code that reads it, per CLAUDE.md); `tl factory status` prints loops, not lanes.
