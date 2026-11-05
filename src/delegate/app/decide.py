@@ -218,5 +218,3 @@ def decision(a: env.Args, cfg: dict[str, Json], unattended: bool = False, avoid:
         env.config_store().mark_offered(fleet.offers)
         d["notice"] = "not set up: " + ", ".join(fleet.offers) + " (route.py doctor)"
     return d, lanes, warnings, t
-
-
