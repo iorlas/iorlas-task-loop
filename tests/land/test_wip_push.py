@@ -33,11 +33,14 @@ class WipPush(EngineTest):
         seen = []
         real = RealGit.push_lease
 
-        def spy(this, d, remote, refspec):
+        def spy(this, d, remote, refspec, expect):
             seen.append((remote, refspec))
-            return real(this, d, remote, refspec)
+            return real(this, d, remote, refspec, expect)
 
-        with mock.patch.object(RealGit, "push_lease", spy):
+        def fetched(_git, wt, remote, ref):  # the engine's git is scripted here: read the real clone for what it last fetched
+            return gitq.git("rev-parse", "--verify", "-q", f"refs/remotes/{remote}/{ref.removeprefix('refs/heads/')}", cwd=str(wt))
+
+        with mock.patch.object(RealGit, "push_lease", spy), mock.patch("taskloop.app.land.outbound.last_fetched", fetched):
             rc, _ = self.run_engine(RUN)
         assert rc == 0, self.blocked
         assert seen == [WIP] * len(seen)
@@ -105,7 +108,8 @@ class WipPush(EngineTest):
             git=SimpleNamespace(
                 staged=lambda _d: False,
                 lfs_push=lambda d, r, refs: calls.append(("lfs", r, *refs)) or GitOutcome(ok=True, output=""),
-                push_lease=lambda d, r, spec: calls.append(("push", r, spec)) or GitOutcome(ok=True, output=""),
+                rev_parse=lambda d, rev: "",
+                push_lease=lambda d, r, spec, expect: calls.append(("push", r, spec)) or GitOutcome(ok=True, output=""),
             ),
         )
         (self.wt / ".gitattributes").write_text("*.bin filter=lfs diff=lfs merge=lfs -text\n")
