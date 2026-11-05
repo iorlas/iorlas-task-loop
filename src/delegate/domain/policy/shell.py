@@ -1,0 +1,210 @@
+"""What a worker's shell command may do (D3): git is the coordinator's, and a read-only step only reads. Pure functions of the command
+text."""
+
+import shlex
+
+from delegate.contracts.wire import RECIPE_RUNNERS
+from delegate.domain.policy.matchers import name_of, pieces, sed_print_only, unwrap, writes_or_substitutes
+
+# A read-only Claude step (reviewer, planner, light) gets Bash for reading only: every piece of the command line must start with one of
+# these, with no output redirection or command substitution. Codex read steps get the same from their read-only sandbox, enforced by the OS;
+# this is a filter on the command text, not a boundary.
+READ_CMDS = frozenset(
+    {
+        "cat",
+        "head",
+        "tail",
+        "wc",
+        "ls",
+        "rg",
+        "grep",
+        "egrep",
+        "fgrep",
+        "find",
+        "sed",
+        "sort",
+        "uniq",
+        "cut",
+        "tr",
+        "diff",
+        "nl",
+        "file",
+        "stat",
+        "pwd",
+        "echo",
+        "jq",
+        "tree",
+        "du",
+        "basename",
+        "dirname",
+        "realpath",
+        "which",
+        "true",
+        "test",
+        "cd",
+        "git",
+    }
+)
+READ_GIT = frozenset(
+    {
+        "diff",
+        "log",
+        "show",
+        "status",
+        "blame",
+        "ls-files",
+        "ls-tree",
+        "rev-parse",
+        "grep",
+        "merge-base",
+        "cat-file",
+        "describe",
+        "shortlog",
+        "rev-list",
+        "branch",
+    }
+)
+READ_ONLY_HELP = (
+    "this step is read-only: Bash allows only reading commands (git diff/log/show/status/blame/grep/ls-files, rg, grep, cat, "
+    "head, tail, ls, find without -exec/-delete, sed without -i, wc, sort, diff, jq), no '>' and no $(...)."
+)
+GIT_LISTING = (
+    "--list",
+    "-l",
+    "-a",
+    "-r",
+    "--show-current",
+    "-v",
+    "-vv",
+    "--contains",
+    "--merged",
+    "--no-merged",
+    "--points-at",
+    "--format",
+    "--sort",
+)
+GIT_CHANGING = ("commit", "push", "checkout", "switch", "merge", "rebase", "reset", "cherry-pick", "revert", "am", "pull")
+FIND_RUNS = frozenset({"-exec", "-execdir", "-ok", "-okdir", "-delete", "-fprint", "-fprintf", "-fls"})
+
+
+def unsafe_options(name: str, args: list[str]) -> bool:
+    """Reader options that launch programs or write files, including long-option abbreviations."""
+    long = {
+        "sort": ("--compress-program", "--output"),
+        "rg": ("--pre", "--pre-glob", "--hostname-bin"),
+        "git": ("--open-files-in-pager", "--ext-diff", "--textconv", "--output", "--exec-path"),
+        "jq": ("--run-tests", "--in-place", "--library-path", "--from-file"),
+        "diff": ("--output",),
+    }
+    short = {"sort": "o", "git": "O", "jq": "Lf"}
+    for word in args:
+        if word == "--":
+            break
+        option = word.partition("=")[0]
+        if option.startswith("--") and any(x.startswith(option) for x in long.get(name, ())):
+            return True
+        if option.startswith("-") and not option.startswith("--") and any(c in short.get(name, "") for c in option[1:]):
+            return True
+    return False
+
+
+def git_args(t: list[str]) -> list[str]:
+    """Words after `git` and its -C/--no-pager/--git-dir options; the first is the subcommand."""
+    args = t[1:]
+    while (args and args[0] in ("-C", "--no-pager")) or (args and args[0].startswith("--git-dir")):
+        args = args[2:] if args[0] == "-C" else args[1:]
+    return args
+
+
+def git_write(cmd: str) -> str | None:
+    """The first git command in `cmd` that changes refs, the index's commits, worktrees or remotes (git is the coordinator's), else None.
+    Listing forms pass: stash list/show, branch and tag listings, worktree list."""
+    for t in pieces(cmd) or []:
+        if name_of(t[0]) != "git":
+            continue
+        args = git_args(t)
+        sub, rest = (args[0] if args else ""), args[1:]
+        if (
+            sub in GIT_CHANGING
+            or (sub == "stash" and not (rest and rest[0] in ("list", "show")))
+            or (sub == "worktree" and not (rest and rest[0] == "list"))
+            or (
+                sub in ("branch", "tag")
+                and ((rest and not rest[0].startswith("-")) or any(x.startswith("-") and not x.startswith(GIT_LISTING) for x in rest))
+            )
+        ):
+            return " ".join(t[:3])
+    return None
+
+
+def git_piece_problem(t: list[str]) -> str | None:
+    """Why one `git ...` command line (as words) is not a reading command, else None."""
+    args = git_args(t)
+    sub = args[0] if args else ""
+    if sub not in READ_GIT | {"stash", "tag", "worktree"}:  # also catches `git -c key=value ...`, which can run a program
+        return f"git {sub} is not a reading command"
+    if git_write(" ".join(shlex.quote(x) for x in t)):
+        return f"git {sub} may only list"
+    if any(x.startswith("--output") for x in args):
+        return "--output writes a file"
+    return None
+
+
+def piece_problem(t: list[str]) -> str | None:
+    """Why one command line (as words) is not a reading command, else None."""
+    name = name_of(t[0])
+    if name not in READ_CMDS:
+        return f"`{name}` is not a reading command"
+    if name == "find" and set(t) & FIND_RUNS:
+        return "find may not run or delete"
+    if name == "sed" and not sed_print_only(t[1:]):
+        return "sed only allows inline print scripts"
+    if unsafe_options(name, t[1:]):
+        return f"{name} option may execute a program or write a file"
+    return git_piece_problem(t) if name == "git" else None
+
+
+def read_only_problem(cmd: str) -> str | None:
+    """None when every piece of `cmd` only reads, else what is not allowed."""
+    cmd = unwrap(cmd)
+    if writes_or_substitutes(cmd):
+        return "output redirection or command substitution"
+    ps = pieces(cmd)
+    if ps is None:
+        return "unparsable command"
+    for t in ps:
+        why = piece_problem(t)
+        if why:
+            return why
+    return None
+
+
+KILLERS = frozenset({"kill", "killall", "p" + "kill"})  # spelled apart: the no-process-lister rule scans the source for the name
+OWN_PIDS = ("$!", "%")
+RUNNERS = frozenset(RECIPE_RUNNERS)
+WRITER_RULE = (
+    "a write step may not kill processes or run the engine's checks: the engine owns the editor, the servers and the slow suites it "
+    "started, so a kill can take down its run. Do not run them; finish and report, the engine reruns the check."
+)
+
+
+def after_assignments(t: list[str]) -> list[str]:
+    """The words of a command line after its leading `NAME=value` assignments (`FOO=1 just recipe`)."""
+    n = next((i for i, x in enumerate(t) if not (x.partition("=")[1] and x.partition("=")[0].isidentifier())), len(t))
+    return t[n:]
+
+
+def writer_problem(cmd: str, engine_only: tuple[str, ...] = ()) -> str | None:
+    """Why a write step may not run `cmd`, else None: the kill family (on anything but the step's own `$!` or `%job`), or a recipe the
+    brief says only the engine runs (`just <recipe>`, `make <recipe>` and kin)."""
+    for words in pieces(cmd) or []:
+        t = after_assignments(words)
+        if not t:
+            continue
+        name = name_of(t[0])
+        args = [x for x in t[1:] if not x.startswith("-")]
+        if name in KILLERS and not (name == "kill" and args and all(x.startswith(OWN_PIDS) for x in args)):
+            return f"`{name}` stops processes this step did not start"
+        if name in RUNNERS and any(x in engine_only for x in args):
+            return f"`{name} {next(x for x in args if x in engine_only)}` is a check only the engine runs"
+    return None

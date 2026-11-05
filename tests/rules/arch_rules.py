@@ -3,9 +3,9 @@ MAX_FANOUT distinct project modules (lazy and TYPE_CHECKING imports count; the p
 `from a.b import c` is one module, not three). 40 is the cap the probe could meet by splitting modules by concern (the two
 widest, app/launch/loop.py and skills/task-loop/tl.py, sit on it); past it a module does several jobs. Size is the per-file
 caps of gate_rules.py. Nothing is stored."""
-import ast
 
-from rules.enumtotal import bindings, qualified
+from importgraph import targets_of
+
 from rules.gate_rules import ROOT, parsed, py_files
 
 MAX_FANOUT = 40
@@ -28,28 +28,14 @@ def graph_of(trees):
     packages = {name for name in trees if any(other.startswith(name + '.') for other in trees)}
     graph = {module: set() for module in trees}
     for module, tree in trees.items():
-        names = bindings(module, tree, packages)
-        for node in ast.walk(tree):
-            targets = import_targets(module, node, names, packages)
-            for target in targets:
-                # `from module import symbol` depends on module; `from package import module` on both.
-                parts = target.split('.')
-                for end in range(1, len(parts) + 1):
-                    name = '.'.join(parts[:end])
-                    if name in trees and (name != module or target == module):
-                        graph[module].add(name)
+        for target in targets_of(module, tree, packages):
+            # `from module import symbol` depends on module; `from package import module` on both.
+            parts = target.split('.')
+            for end in range(1, len(parts) + 1):
+                name = '.'.join(parts[:end])
+                if name in trees and (name != module or target == module):
+                    graph[module].add(name)
     return graph
-
-
-def import_targets(module, node, names, packages):
-    if isinstance(node, ast.Import):
-        return [alias.name for alias in node.names]
-    if isinstance(node, ast.ImportFrom):
-        return bindings(module, ast.Module(body=[node], type_ignores=[]), packages).values()
-    if (isinstance(node, ast.Call) and qualified(node.func, names) in {'importlib.import_module', '__import__'}
-            and node.args and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str)):
-        return [node.args[0].value]
-    return ()
 
 
 def cyclic_components(graph):

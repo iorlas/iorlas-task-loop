@@ -2,17 +2,16 @@
 rebase outcomes that carry git's words. Mixed into the same two runs as git_contract.py (the gitsim, real git)."""
 
 import os
-import unittest
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 import pytest
+from support.case import Case
 
 from ports.git_contract import sh
 from taskloop.contracts.ports import Git
 from taskloop.contracts.slots import DirtyTree, SlotGitError
 
-_Base = unittest.TestCase if TYPE_CHECKING else object
+_Base = Case
 
 
 class LandContract(_Base):

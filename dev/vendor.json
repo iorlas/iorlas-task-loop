@@ -24,6 +24,12 @@
     "tree_hash": "72468f96edd8dafe6ce172f75e2079104b379dcd44742dc7dbf8d1fc5265a2a8"
   },
   {
+    "name": "app_dirs",
+    "shelf_tag": "app-dirs-v0.1.0",
+    "shelf_commit": "57720d92b344d4ab9d937412bdb13ee79fbf3d5d",
+    "tree_hash": "43642d8d7bc23903ba41678dc749e7508b42d190e813691ec7d40df3869ca928"
+  },
+  {
     "name": "atomic_io",
     "shelf_tag": "atomic-io-v0.2.0",
     "shelf_commit": "8bc0850c3385226d0ef2f6a71f94373ad845a305",

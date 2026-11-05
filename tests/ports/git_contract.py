@@ -5,17 +5,17 @@ import os
 import re
 import subprocess
 import tempfile
-import unittest
 from pathlib import Path
-from typing import TYPE_CHECKING
+from unittest import mock
 
 import pytest
+from support.case import Case
 from support.tags import contract  # noqa: F401  (re-exported for the subclasses)
 
 from taskloop.contracts.ports import Git
 from taskloop.contracts.slots import BranchPinned, DirtyTree, GitReadFailure, SlotGitError
 
-_Base = unittest.TestCase if TYPE_CHECKING else object
+_Base = Case
 IDENT = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t",
          "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "gc.auto",
          "GIT_CONFIG_VALUE_0": "0"}
@@ -39,7 +39,7 @@ class GitContract(_Base):
         tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         self.addCleanup(tmp.cleanup)
         self.home = Path(os.path.realpath(tmp.name))
-        env = unittest.mock.patch.dict(os.environ, {**IDENT, "HOME": str(self.home), "XDG_CONFIG_HOME": str(self.home / "cfg")})
+        env = mock.patch.dict(os.environ, {**IDENT, "HOME": str(self.home), "XDG_CONFIG_HOME": str(self.home / "cfg")})
         env.start()
         self.addCleanup(env.stop)
         self.start()
