@@ -12,6 +12,7 @@ from taskloop.app.land.land_rebase import LandRebaseHost
 from taskloop.app.land.landed import LandedHost
 from taskloop.app.land.outbound import OutboundCheckout, OutboundHost, OutboundSteps
 from taskloop.app.land.parts import BeginSteps, FetchCheckout, LandLocks, MoveSteps, NetWorker, OutcomeSteps, StageCheckout, Strays
+from taskloop.app.land.pr_land import PrHost
 from taskloop.app.land.push import PushHost
 from taskloop.app.land.recheck import RecheckCheckpoints, RecheckHost
 from taskloop.app.land.sync import SyncCheckpoints, SyncHost
@@ -30,6 +31,8 @@ class LandConfig(Protocol):
     def gate_checks(self) -> object: ...
     @property
     def land_optimistic_tries(self) -> int: ...
+    @property
+    def land_mode(self) -> str: ...
 
 
 class LandHost(Protocol):
@@ -86,7 +89,7 @@ class LandCheckpoints(SyncCheckpoints, RecheckCheckpoints, Protocol):
 
 
 class LanderHost(LandHost, CommitHost, LandedHost, LandRebaseHost, RecheckHost, PushHost, FixOutsideHost, SyncHost, GateHost,
-                 OutboundHost, Protocol):
+                 OutboundHost, PrHost, Protocol):
     """The engine, as the land reads it: the sum of the parts above (no member of its own)."""
 
     # the parts that two steps type differently: the sum of what each reads

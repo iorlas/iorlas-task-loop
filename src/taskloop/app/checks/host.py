@@ -85,7 +85,7 @@ class CheckHost(Protocol):
     @property
     def stores(self) -> Stores: ...
     @property
-    def spawner(self) -> Spawner: ...  # how a check's helper processes (docker) are started
+    def spawner(self) -> Spawner: ...  # how a check's helper processes are started
     @property
     def env(self) -> Env: ...  # the process environment, taken once at the edge: what the children are built from
     @property

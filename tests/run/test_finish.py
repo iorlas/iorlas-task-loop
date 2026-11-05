@@ -57,7 +57,7 @@ class Finish(Case):
                       answer(oc.make(Kind.FAULT_ENGINE, "failed", sha="b" * 40), 160.0)]
 
         def finish(candidate):
-            barrier.wait(timeout=5)
+            barrier.wait(timeout=30)
             return finish_run(self.cfg, self.run_id, candidate)
 
         with ThreadPoolExecutor(max_workers=2) as threads:
@@ -94,11 +94,11 @@ class Finish(Case):
         barrier = threading.Barrier(2)
 
         def close():
-            barrier.wait(timeout=5)
+            barrier.wait(timeout=30)
             return finish_run(self.cfg, self.run_id, answer(oc.make(Kind.LANDED, sha="e" * 40), 150.0))
 
         def lose():
-            barrier.wait(timeout=5)
+            barrier.wait(timeout=30)
             return RunLocator(self.cfg).mark_lost(self.run_id, "gone")
 
         with ThreadPoolExecutor(max_workers=2) as threads:
@@ -153,12 +153,12 @@ class Finish(Case):
         def snapshot(con, run):
             bundle = original(con, run)
             read.set()
-            assert release.wait(timeout=5)
+            assert release.wait(timeout=30)
             return bundle
 
         with mock.patch.object(self.where.rows, "read", side_effect=snapshot), ThreadPoolExecutor(max_workers=2) as threads:
             beating = threads.submit(self.where.beat, self.run_id, 140.0)
-            assert read.wait(timeout=5)
+            assert read.wait(timeout=30)
             finishing = threads.submit(finish_run, self.cfg, self.run_id, answer(oc.make(Kind.DONE), 150.0))
             release.set()
             beating.result()

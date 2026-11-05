@@ -50,8 +50,8 @@ class SetupPlan(Case):
         (self.repo / "ProjectSettings" / "ProjectVersion.txt").write_text("m_EditorVersion: 6000.0\n")
         (self.repo / "justfile").write_text("check:\n    true\n")
         plan = setup.plan(self.plugin, self.env, self.repo)
-        assert [q.id for q in plan.questions] == ["lanes", "unity-lease", "gate"]
-        assert plan.questions[0].default == "4"
+        assert [q.id for q in plan.questions] == ["unity-lease", "gate"]
+        assert plan.questions[0].default == "yes"
         assert "unity" in self.checks(plan)["stack"].detail
         assert not self.checks(plan)["profile"].ok
 

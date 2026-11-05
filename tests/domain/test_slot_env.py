@@ -1,10 +1,8 @@
 """tl-7y6.18: every command a bead runs in a slot gets that slot's environment (temp, dotnet, NuGet, compiler-server id, TL_SLOT)."""
 import json
-import os
 import subprocess
 import sys
 from pathlib import Path
-from unittest import mock
 
 import pytest
 from support.case import Case
@@ -14,11 +12,7 @@ import support.paths  # noqa: F401
 from support import engine_case as te
 from support.builders import make_engine
 
-from taskloop.app.checks.container import Box
-from taskloop.app.checks.execution import ReadyExecution
 from taskloop.contracts import config
-from taskloop.contracts.env import snapshot
-from taskloop.contracts.runkey import Digest
 from taskloop.domain import slot_env
 
 KEYS = ("TMPDIR", "TMP", "TEMP", "DOTNET_CLI_HOME", "NUGET_SCRATCH", "NUGET_HTTP_CACHE_PATH", "NUGET_PLUGINS_CACHE_PATH",
@@ -65,17 +59,3 @@ class EverySpawnPath(te.EngineTest):
         assert a1 == a2
         assert a1["TMPDIR"] != b["TMPDIR"]
         assert a1["SharedCompilationId"] != b["SharedCompilationId"]
-
-    def test_a_container_check_is_given_the_slot_name_only(self):
-        e = make_engine(self.wt, store=self.store)
-        clean = {k: v for k, v in os.environ.items() if not k.startswith("TL_")}  # `tl check` exports its run (TL_BRANCH, TL_CHECK_*...)
-        with mock.patch.dict(os.environ, clean, clear=True):
-            env = snapshot()
-        host = mock.Mock(env=env, bead_env=e.bead_env, run_dir=Path("r"), cfg=mock.Mock(container=None))
-        box = Box(host, mock.Mock())
-        check = mock.Mock(container=True, id="c")
-        with mock.patch.object(box, "resolve", return_value=ReadyExecution(Digest("sha256:image"), "sha256:image")):
-            argv, _ = box.plan(check, ["just", "x"], {})
-        passed = [argv[i + 1] for i, a in enumerate(argv) if a == "--env"]
-        assert f"TL_SLOT={self.wt.name}" in passed
-        assert [p for p in passed if "tmp" in p.lower() or "/" in p] == []

@@ -1,12 +1,13 @@
 """One automatic retry of a missing-setup ask per bead and installed release."""
 import json
 
+from taskloop.app.asks import release
 from taskloop.contracts.ask import AskAnswer
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.enums import AskStatus
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ports import BeadPatch, Beads
-from taskloop.contracts.stores import HAD_PICK, AskStore
+from taskloop.contracts.stores import AskStore
 
 RETRIED = "setup_retry_versions"
 
@@ -47,11 +48,5 @@ def retry_setup(asks: AskStore, store: Beads, bead: BeadId, version: str, now: f
     _, why = asks.answer(bead, ask.id, AskAnswer(action="rerun", text="retry", t=now, by=f"engine:{version}"))
     if why:
         return False
-    store.update(bead, BeadPatch(status="open"))
-    pick, info = cfg.pick_label or "", cfg.needs_info_label or ""
-    if pick and shown.metadata.get(HAD_PICK) == pick:
-        store.add_label(bead, pick)
-        store.update(bead, BeadPatch(unset_metadata=[HAD_PICK]))
-    if info and info in shown.labels:
-        store.remove_label(bead, info)
+    release.requeue(store, bead, shown, cfg)
     return True

@@ -4,7 +4,7 @@ import json
 from collections.abc import Mapping
 from types import MappingProxyType
 
-from taskloop.app.land.cmds import Cmds, Stop
+from taskloop.app.land.cmds import Cmds, Runs, Stop
 from taskloop.contracts.forge import MERGED, OPEN, Pr, gh_pr
 from taskloop.contracts.ports import Git
 
@@ -19,6 +19,15 @@ def loads(text: str, what: str, many: bool = False) -> list[Pr]:
         return [gh_pr(d) for d in (data if many else [data])]
     except ValueError:  # a bad JSON text, or a ValidationError (a ValueError) from the record
         raise Stop(1, f"{what}: gh answered something that is not a PR: {text.strip()!r}") from None
+
+
+def peek(runs: Runs, repo: str, number: int) -> Pr | None:
+    """One PR as the forge shows it now, with no log: None when gh cannot say (a sweep skips it and asks again later)."""
+    try:
+        ran = runs.run(["gh", "pr", "view", str(number), "--json", FIELDS], cwd=repo)
+        return None if ran.exit else loads(ran.out, f"gh pr view {number}")[0]
+    except (OSError, Stop):
+        return None
 
 
 class Forge:

@@ -5,6 +5,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from unittest import mock
 
 import pytest
 from support.case import Case
@@ -28,7 +29,7 @@ class Verify(Case):
         root = Path(self.tmp.name)
         self.repo = root / "repo"
         self.repo.mkdir()
-        self.env = {"XDG_CONFIG_HOME": str(root / "cfg"), "TASK_LOOP_SUITE_HOST": "1", "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
+        self.env = {"XDG_CONFIG_HOME": str(root / "cfg"), "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
                     "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
         saved = {k: os.environ.get(k) for k in self.env}
         os.environ.update(self.env)
@@ -77,9 +78,8 @@ class Verify(Case):
 
     def test_another_command_is_a_miss(self):
         suite.verify(self.repo, self.repo, self.sh, self.checks)
-        del os.environ["TASK_LOOP_SUITE_HOST"]  # the container suite is another command
-        self.sh = self.shell_now()
-        assert not suite.verify(self.repo, self.repo, self.sh, self.checks)
+        with mock.patch.object(suite, "SUITE_COMMAND", ("another", "suite")):
+            assert not suite.verify(self.repo, self.repo, self.shell_now(), self.checks)
         assert self.ran == ["ran", "ran"]
 
     def test_a_torn_cache_file_is_a_miss_not_a_crash(self):

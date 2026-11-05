@@ -75,7 +75,6 @@ class Check(Rec):
     tail_log: str = ""  # a log of the tree whose compile errors join a red check's output when it shows none (project files not made)
     keep: list[str] = msgspec.field(default_factory=list)  # globs in the tree of files copied into the run folder after each attempt
     fix: str = ""  # a command (text) run before the round on the worktree: it rewrites what the check would only complain of
-    container: bool = False  # requires an admitted container; unavailable environments cannot produce passes
     reads: list[CheckId] = msgspec.field(default_factory=list)  # registered checks whose log and exit code it reads: it runs after them
     tags: list[Tag] = msgspec.field(default_factory=list)
     needs: list[str] = msgspec.field(default_factory=list)  # resources it holds a machine-wide lease on while it runs

@@ -522,7 +522,8 @@ class Invariants(test_loop.Base):
         self.tracker()
         url = "file:///origin.git"
         def eng():
-            return types.SimpleNamespace(land_lock_path=lambda: landlock.land_lock_path(homes.cfg(), url),
+            return types.SimpleNamespace(cfg=types.SimpleNamespace(land_mode="push"),
+                                                    land_lock_path=lambda: landlock.land_lock_path(homes.cfg(), url),
                                                     waits=types.SimpleNamespace(locked=lambda what, path: landlock.os_lock(path, "bead")))
         mu, inside, most, entered, joined = threading.Lock(), [0], [0], [], threading.Event()
 

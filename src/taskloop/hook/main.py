@@ -1,4 +1,6 @@
 """The entry of hooks/hook.py: the event name picks the module, so a PreToolUse call never imports the stores."""
+from __future__ import annotations
+
 import importlib
 import sys
 from collections.abc import Mapping

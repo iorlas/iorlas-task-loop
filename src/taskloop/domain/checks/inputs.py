@@ -86,9 +86,9 @@ def cmd_digest(check: Check) -> str:
 
 
 def config_digest(check: Check) -> str:
-    """The declared settings of a check that change what it reads or where it runs: a changed glob, exclude, inputs_only, container or
+    """The declared settings of a check that change what it reads or where it runs: a changed glob, exclude, inputs_only or
     fix command is another check, whatever its id."""
-    text = json.dumps([list(check.inputs), list(check.exclude), check.inputs_only, check.container, check.fix,
+    text = json.dumps([list(check.inputs), list(check.exclude), check.inputs_only, check.fix,
                        check.when, check.needs, check.reads], separators=(",", ":"))
     return hashlib.sha1(text.encode("utf-8", "surrogateescape")).hexdigest()
 

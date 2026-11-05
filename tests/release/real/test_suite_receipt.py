@@ -32,7 +32,7 @@ class ReleaseReceipt(Case):
         repo, origin = root / "repo", root / "origin.git"
         repo.mkdir()
         env = Env({"PATH": os.environ["PATH"], "HOME": str(root), "XDG_CONFIG_HOME": str(root / "config"),
-                   "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": "/dev/null", "TASK_LOOP_SUITE_HOST": "1",
+                   "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": "/dev/null",
                    "GIT_AUTHOR_NAME": "Release", "GIT_AUTHOR_EMAIL": "release@example.invalid",
                    "GIT_COMMITTER_NAME": "Release", "GIT_COMMITTER_EMAIL": "release@example.invalid"})
         def git(*args):
@@ -44,7 +44,7 @@ class ReleaseReceipt(Case):
         plugin.parent.mkdir(parents=True)
         plugin.write_text('{"version":"1.2.3"}\n')
         (repo / ".task-loop.json").write_text(json.dumps({"engine": {"checks": [
-            {"id": "suite", "argv": ["python3", "dev/suite-docker.py"], "run": "gate"}]}}))
+            {"id": "suite", "argv": ["uv", "run", "--script", "dev/suite.py"], "run": "gate"}]}}))
         git("add", ".")
         git("commit", "-m", "before release")
         git("remote", "add", "origin", str(origin))
@@ -63,11 +63,11 @@ class ReleaseReceipt(Case):
             tip, tree = git("rev-parse", "HEAD"), git("rev-parse", "HEAD^{tree}")
             assert tree != before_tree
             request = f"refs/heads/main {tip} refs/heads/main {base}\n"
-            decision = judge_push(d, request, stores, port, run_check, env=env, spawner=sh.spawner)
+            decision = judge_push(d, request, stores, port, run_check, env=env)
             assert decision.status == PushStatus.ALLOWED, decision.reasons
             run_check.assert_not_called()
             cfg = authorization.profile(port, d, TreeSha(base))
-            memo = authorization.memo_for(stores, port, d, cfg, TreeSha(tree), BaseSha(base), env, sh.spawner)
+            memo = authorization.memo_for(stores, port, d, cfg, TreeSha(tree), BaseSha(base), env)
             check = next(c for c in gate_items(cfg) if c.id == CheckId("suite"))
             rec = memo.hit(memo.key(check))
             assert rec is not None
