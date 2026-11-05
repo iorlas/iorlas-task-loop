@@ -185,8 +185,16 @@ class Engine(RunFields):
             self.log.note(f"back from the network pause of {pause.run}: continuing as run {stem}")
 
     # the budget's numbers, read and set as the engine's own (waited: seconds spent waiting for a shared resource, not budget_min's)
-    t0, waited, labels, cost = (property(lambda obj, k=k: getattr(obj.budget, k), lambda obj, v, k=k: setattr(obj.budget, k, v))
-                                for k in ("t0", "waited", "labels", "spent"))
+    labels, cost = (property(lambda obj, k=k: getattr(obj.budget, k), lambda obj, v, k=k: setattr(obj.budget, k, v))
+                    for k in ("labels", "spent"))
+    @property
+    def t0(self) -> float:
+        return self.budget.t0
+
+    @property
+    def waited(self) -> float:
+        return self.budget.waited
+
 
     # the parts: each is built when first asked for, from this engine
     tree = cached_property(Tree)

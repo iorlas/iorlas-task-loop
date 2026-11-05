@@ -49,8 +49,8 @@ class Reload:
         c = JsonStore(file, RunCounters).get()
         if c is None:
             return
-        e.t0 = time.time() - c.elapsed
-        e.waited, e.cost = c.waited, c.cost
+        e.budget.restore(c.elapsed, c.waited)
+        e.cost = c.cost
         e.stats.update(c.stats)
         e.sessions[:] = c.sessions
         e.write_rounds = list(c.write_rounds)
