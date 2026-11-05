@@ -215,8 +215,11 @@ class Supervisor:
         self.out.worker = worker
         self.live.started(worker.pid)
         if self.hooks.started:
-            with contextlib.suppress(Exception):
+            try:
                 self.hooks.started(worker)
+            except Exception:  # an unregistered worker could never be reaped: stop its tree now, and the run answers `crash`
+                self.hooks.stops.append(procs.kill_tree(p))
+                raise
         out: list[str] = []
         err: list[str] = []
         killed: list[int] = []

@@ -82,6 +82,19 @@ class RealTrees(Case):
         assert gone(seen["shim"], seen["shim_start"])
 
     @real_proc("delegate: a worker, git or CLI process")
+    def test_a_worker_that_cannot_be_registered_is_stopped_and_the_run_fails(self):
+        seen: dict[str, Any] = {}
+
+        def refuse(w: Any) -> None:
+            seen.update(pid=w.pid, start=proc_start(w.pid))
+            raise OSError("state is locked")
+
+        sup = Supervisor(CodexHarness(), "codex", RunHooks(started=refuse), LiveSink("codex", ""))
+        with pytest.raises(OSError, match="state is locked"):
+            sup.run(LaunchSpec(argv=[sys.executable, "-c", SHIM, self.pidfile], env=dict(os.environ), cwd=self.d.name, stdin=""), 30)
+        assert gone(seen["pid"], seen["start"]), "an unregistered worker was left running"
+
+    @real_proc("delegate: a worker, git or CLI process")
     def test_reap_leaves_no_process(self):
         p = subprocess.Popen([sys.executable, "-c", SHIM, self.pidfile], start_new_session=True)
         self.addCleanup(lambda: (p.kill(), p.wait()))

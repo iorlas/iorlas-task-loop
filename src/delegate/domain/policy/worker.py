@@ -36,7 +36,7 @@ def judge(tool_name: str | None, tool_input: dict[str, Json], read_only: bool, e
     if hit:
         hint = f" {APPLY_PATCH_HINT}." if heredoc_only_hit(str(tool_input.get("command") or "")) else ""
         return Verdict(True, f"blocked by delegate: {hit} is a secret path.{hint} {SECRET_RULE}")
-    cmd = str(tool_input.get("command") or "") if tool_name == "Bash" else ""
+    cmd = str(tool_input.get("command") or "")  # any tool that carries a command is a shell, whatever it is named
     gw = git_write(cmd)
     if gw:
         return Verdict(True, f"blocked by delegate: `{gw}` changes git, which is the coordinator's. {GIT_RULES}")
@@ -76,7 +76,6 @@ def is_policy_denial(
     path stays one)."""
     cmd = str((tool_input or {}).get("command") or "").strip()
     return (
-        tool_name == "Bash"
-        and not secret_hit(cmd)
+        not secret_hit(cmd)
         and bool(git_write(cmd) or (read_only and read_only_problem(cmd)) or (not read_only and writer_problem(cmd, engine_only)))
     )
